@@ -48,3 +48,37 @@ func TestNamedStrings_RunningHeaders(t *testing.T) {
 		t.Error("the second running element shows on the first page")
 	}
 }
+
+func TestFootnotes_CallsAndBodies(t *testing.T) {
+	src := `<style>
+		@page { size: 300pt 200pt; margin: 20pt; @footnote { border-top: 1pt solid black; padding-top: 2pt } }
+		body { margin: 0; font: 10pt "Test Serif" }
+		p { margin: 0 }
+		.fn { float: footnote }
+	</style>
+	<p>One<span class=fn>First note</span> two.</p>
+	<p>Three<span class=fn>Second note</span>.</p>`
+	doc := convertDoc(t, src, Options{PreferCSSPageSize: true})
+	if len(doc.Pages) != 1 {
+		t.Fatalf("%d pages, want 1", len(doc.Pages))
+	}
+	pg := doc.Pages[0]
+	one, two := find(t, pg, "1. First note"), find(t, pg, "2. Second note")
+	if !(one.y > 150 && two.y > one.y) {
+		t.Errorf("bodies at %v and %v, want at the bottom of the page area in order", one.y, two.y)
+	}
+	call := find(t, pg, "One")
+	runs := pageTexts(pg)
+	found := false
+	for _, r := range runs {
+		if r.text == "1" && r.size < 10 && r.y < call.y {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no superscript call 1 after One in %+v", runs)
+	}
+	if hasText(pg, "One First") {
+		t.Error("the footnote body stayed in the flow")
+	}
+}

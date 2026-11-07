@@ -1,6 +1,7 @@
 package html
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"unicode"
@@ -247,6 +248,40 @@ func (g *gcpmState) pick(list []assignment, name string, p css.PagePick, index i
 		}
 	}
 	return entry, hasEntry
+}
+
+// footnoteCounter is the counter that numbers footnotes (CSS GCPM 3,
+// 3.5).
+const footnoteCounter = "footnote"
+
+// footnote turns the element n, built as node and styled st, into a
+// footnote (CSS GCPM 3, 3.2): the ::footnote-call it leaves in the flow,
+// which carries its body, the element as footnote-display lays it out with
+// its ::footnote-marker first (CSS GCPM 3, 3.3, 3.6 and 3.7). A call
+// without content still anchors the body.
+func (b *builder) footnote(ctx context.Context, n *dom.Node, node *layout.Node, st *css.Style) *layout.Node {
+	bs := *st
+	bs.Display = css.Block
+	if st.FootnoteDisplay == css.FootnoteInline {
+		bs.Display = css.Inline
+	}
+	node.Style = &bs
+	if m := b.pseudo(ctx, n, css.PseudoFootnoteMarker); m != nil {
+		node.Children = append([]*layout.Node{m}, node.Children...)
+	}
+	if node.Role == "" || node.Role == "Span" || node.Role == "P" {
+		node.Role = "Note"
+	}
+	call := b.pseudo(ctx, n, css.PseudoFootnoteCall)
+	if call == nil {
+		call = &layout.Node{Kind: layout.Element, Style: anonInline(st)}
+	} else if call.Style.Display != css.Inline {
+		cs := *call.Style
+		cs.Display = css.Inline
+		call.Style = &cs
+	}
+	call.Footnote = node
+	return call
 }
 
 // pageTopSlack is how far below the page area's top an element still

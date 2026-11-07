@@ -103,6 +103,11 @@ func (b *builder) buildRoot(ctx context.Context, root *dom.Node) (*layout.Node, 
 		return n, nil
 	}
 	v := b.applyCounters(root, st)
+	if b.counters.innermost(footnoteCounter) == nil {
+		// The footnote counter numbers the footnotes of the whole
+		// document unless an element resets it (CSS GCPM 3, 3.5.2).
+		_ = b.counters.instantiate(footnoteCounter, 0, false)
+	}
 	err := b.content(ctx, n, root, st, v, 1)
 	return n, err
 }
@@ -226,6 +231,9 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 	b.semantics(node, n)
 	if err := b.content(ctx, node, n, st, v, depth+1); err != nil {
 		return nil, err
+	}
+	if st.Footnote {
+		return []*layout.Node{b.footnote(ctx, n, node, st)}, nil
 	}
 	if st.Running != "" {
 		if keep := b.runAway(node, st); keep != nil {

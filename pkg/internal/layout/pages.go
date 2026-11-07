@@ -52,12 +52,11 @@ type geometry struct {
 // init sets up the geometry of e, whose first page box is first.
 func (g *geometry) init(e *engine, first PageBox) {
 	g.e = e
-	if e.opts.PageAt == nil && e.opts.PageFor == nil {
+	if e.opts.PageAt == nil && e.opts.PageFor == nil && e.foot == nil {
 		return
 	}
-	_, h := areaOf(first)
 	g.boxes = []PageBox{first}
-	g.tops = []float64{0, h}
+	g.tops = []float64{0, e.usableH(0, first, 0)}
 	g.infos = []PageInfo{e.infoOf(0)}
 }
 
@@ -73,19 +72,19 @@ func (g *geometry) grow() bool {
 		return false
 	}
 	info := e.infoOf(n)
-	var pb PageBox
-	if e.opts.PageFor != nil {
+	pb := e.opts.Page
+	switch {
+	case e.opts.PageFor != nil:
 		pb = e.opts.PageFor(info)
-	} else {
+	case e.opts.PageAt != nil:
 		pb = e.opts.PageAt(n)
 	}
 	if err := checkPage(pb); err != nil {
 		e.fail(fmt.Errorf("page %d: %w", n+1, err))
 		return false
 	}
-	_, h := areaOf(pb)
 	g.boxes = append(g.boxes, pb)
-	g.tops = append(g.tops, g.tops[n]+h)
+	g.tops = append(g.tops, g.tops[n]+e.usableH(n, pb, g.tops[n]))
 	g.infos = append(g.infos, info)
 	return true
 }

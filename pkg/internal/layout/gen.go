@@ -244,6 +244,7 @@ func (e *engine) genInline(n *Node, st *css.Style, ctx genCtx, ordinal *int) []*
 	ib.inline = true
 	cctx := e.enter(n, ib, ctx)
 	ib.decos = cctx.decos
+	e.genFootnote(n, ib, ctx)
 	if st.Display == css.InlineListItem {
 		*ordinal++
 		if n.ListValue != 0 {

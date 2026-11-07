@@ -85,6 +85,8 @@ type engine struct {
 	clamp *clampState
 	// leaders are the strings of the leaders laid out, by box.
 	leaders map[*box]*leaderInfo
+	// foot is the footnotes' state, nil for a document without any.
+	foot *footState
 }
 
 // fail records the first error; the layout unwinds once it is set.

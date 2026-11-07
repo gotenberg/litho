@@ -115,6 +115,11 @@ type Node struct {
 	// it in its parent on its line, and fills the room the line leaves
 	// with copies of the string aligned on the line's end edge.
 	Leader bool
+	// Footnote, set on an inline Element, makes it a footnote call: the
+	// node is laid out in the flow, and the footnote body Footnote holds
+	// is laid out in the footnote area of the page the call lands on, or
+	// of a later page when that one has no room (CSS GCPM 3, 3).
+	Footnote *Node
 }
 
 // Options parametrises one [Layout] call.
@@ -207,6 +212,10 @@ type PageBox struct {
 	// Marks are the page marks painted in the bleed area (CSS Page 3,
 	// 7.1).
 	Marks css.Marks
+	// Footnote is the style of the page's footnote area, the @footnote
+	// rule (CSS GCPM 3, 3.4): its margins, borders, padding, background
+	// and max-height apply. nil lays the area out unstyled.
+	Footnote *css.Style
 }
 
 // Result is what [Layout] produced.

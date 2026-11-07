@@ -11,9 +11,12 @@
  * table border spacing, the padding, vertical alignment and weight of
  * cells, the alignment of captions, the grey of table borders, and the
  * page margin; and it gives the body the orphans and widows of
- * tests_ua.css. It is an author stylesheet placed before the test's own,
- * and its selectors are type selectors, so a rule of the test wins over it
- * where they meet unless the test's selector is the universal one alone.
+ * tests_ua.css, and the footnote pseudo-elements the content tests_ua.css
+ * gives them: a call at the text's size on its baseline, and a marker
+ * without a space. It is an author stylesheet placed before the test's
+ * own, and its selectors are type selectors, so a rule of the test wins
+ * over it where they meet unless the test's selector is the universal one
+ * alone.
  */
 @page {
   margin: 0;
@@ -95,4 +98,12 @@ th {
 body {
   orphans: 1;
   widows: 1;
+}
+::footnote-call {
+  content: counter(footnote);
+  vertical-align: baseline;
+  font-size: inherit;
+}
+::footnote-marker {
+  content: counter(footnote) ".";
 }

@@ -173,6 +173,9 @@ type box struct {
 	// 3.2).
 	orig                     *css.Style
 	minHContent, maxHContent bool
+	// fnBody is the footnote body of a footnote call, laid out in the
+	// footnote area of a page rather than in the flow (CSS GCPM 3, 3.2).
+	fnBody *box
 }
 
 // markerBox is the outside marker of a list item (CSS 2.1, 12.5).

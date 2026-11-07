@@ -517,6 +517,11 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				}
 			}
 			top := y
+			if e.foot != nil && e.paginating() {
+				// The bodies waiting for a page take their place on this
+				// line's page before it is laid out.
+				e.flushNotes(e.pageOf(top+eps), top)
+			}
 			if first {
 				// The margins resolve here: the floats placed under them
 				// take their place before the line fits beside them.
@@ -561,6 +566,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			s.lines = append(s.lines, l)
 			s.recordAnchors(l)
 			s.recordEmptyAnchors(p, pos, end, l)
+			e.noteLine(p, pos, end, l)
 			s.staticLine(p, pos, end, l)
 			y = top + e.advance(l)
 			s.placeFloats(p, pos+1, end, y, mc, false)

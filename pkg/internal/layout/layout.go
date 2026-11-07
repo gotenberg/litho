@@ -46,6 +46,11 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	if e.err != nil {
 		return nil, e.err
 	}
+	if e.foot != nil && !e.geom.varies() {
+		// Footnote areas shorten the slices of the flow the pages show.
+		e.geom = geometry{}
+		e.geom.init(e, first)
+	}
 	if name := pageStart(rb); name != "" {
 		// The first page's type is the root's start page value (CSS Page
 		// 3, 4.1): its box, and the flow's width, follow it.
@@ -63,10 +68,12 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	e.rootBox = rb
 	e.layoutRoot(rb)
 	e.layoutPositioned(rb)
+	e.finishNotes(rb.y + rb.borderH())
 	if e.err != nil {
 		return nil, e.err
 	}
 	disp, links, canvas := e.paint(rb)
+	e.paintNotes()
 	if e.err != nil {
 		return nil, e.err
 	}
@@ -157,7 +164,7 @@ func (e *engine) pageCount(rb *box, d *ditem) int {
 		}
 	}
 	walk(d, math.Inf(-1), math.Inf(1))
-	n = max(n, e.positionedPages(rb, clipped))
+	n = max(n, e.positionedPages(rb, clipped), e.notePages())
 	return max(min(n, e.maxPages+1), 1)
 }
 
@@ -250,7 +257,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 			for j < len(frags) && free[frags[j]] == free[frags[i]] {
 				j++
 			}
-			clip := compose.Rect{X: -pb.Margin[css.Left], Y: top, Width: pb.Width, Height: e.areaH(k)}
+			clip := compose.Rect{X: -pb.Margin[css.Left], Y: top, Width: pb.Width, Height: e.sliceH(k)}
 			if free[frags[i]] {
 				clip = compose.Rect{X: -pb.Margin[css.Left], Y: top - pb.Margin[css.Top], Width: pb.Width, Height: pb.Height}
 			}
@@ -262,6 +269,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 			})
 			i = j
 		}
+		e.assembleNotes(pg, k, pb, used)
 		trim(pg, pb, sheet)
 		pages[k] = pg
 	}
@@ -615,7 +623,7 @@ func (e *engine) links(res *Result, links []pendingLink, used map[*compose.Struc
 		for p := p0; p <= p1 && p < len(res.Pages); p++ {
 			top := e.pageTop(p)
 			pb := e.box(p)
-			y0, y1 := max(r.Y, top), min(r.Y+r.Height, top+e.areaH(p))
+			y0, y1 := max(r.Y, top), min(r.Y+r.Height, top+e.sliceH(p))
 			if y1 <= y0 {
 				continue
 			}
