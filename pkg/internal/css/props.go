@@ -155,6 +155,11 @@ const (
 	pContinue
 	pWebkitLineClamp
 	pWebkitBoxOrient
+	pTextJustify
+	pTextAutospace
+	pFontStretch
+	pFontSynthesisWeight
+	pFontSynthesisStyle
 	numProps
 )
 
@@ -700,11 +705,9 @@ func init() {
 			}
 		}, copyFrom: field(func(s *Style) *[]string { return &s.FontFamilies })}},
 		{pFontWeight, propDef{name: "font-weight", inherited: true, parse: parseFontWeight, compute: computeFontWeight, copyFrom: field(func(s *Style) *int { return &s.FontWeight })}},
-		{pFontStyle, propDef{name: "font-style", inherited: true, parse: parseFontStyle, compute: func(_ *styler, st *Style, v any) {
-			if f, ok := v.(FontStyle); ok {
-				st.FontStyle = f
-			}
-		}, copyFrom: field(func(s *Style) *FontStyle { return &s.FontStyle })}},
+		{pFontStyle, propDef{name: "font-style", inherited: true, parse: parseFontStyle, compute: computeFontStyle, copyFrom: func(dst, src *Style) {
+			dst.FontStyle, dst.FontObliqueAngle = src.FontStyle, src.FontObliqueAngle
+		}}},
 		{pFontVariant, enumProp("font-variant", true, func(s *Style) *FontVariant { return &s.FontVariant }, map[string]FontVariant{
 			"normal": VariantNormal, "small-caps": SmallCaps, "all-small-caps": SmallCaps,
 		})},
@@ -858,6 +861,9 @@ func init() {
 		props[id] = def
 	}
 	for id, def := range textOverflowProps() {
+		props[id] = def
+	}
+	for id, def := range textFontProps() {
 		props[id] = def
 	}
 	longhandByName = map[string]propID{}

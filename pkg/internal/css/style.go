@@ -416,8 +416,8 @@ const (
 	ContainPaint
 )
 
-// FontStyle is the font-style property (CSS Fonts 4, 2.4). Oblique is
-// treated as italic.
+// FontStyle is the font-style property (CSS Fonts 4, 2.4). Oblique
+// matches as italic does, its angle in [Style.FontObliqueAngle].
 type FontStyle uint8
 
 // The font-style values.
@@ -907,6 +907,16 @@ type Style struct {
 	FontWeight  int
 	FontStyle   FontStyle
 	FontVariant FontVariant
+	// FontObliqueAngle is the angle of font-style: oblique in degrees,
+	// 14 for a bare oblique, 0 for normal and italic (CSS Fonts 4, 2.4).
+	FontObliqueAngle float64
+	// FontStretch is font-stretch in percent of the normal width, 0
+	// standing for normal, 100% (CSS Fonts 4, 2.3).
+	FontStretch float64
+	// NoSynthesizeWeight and NoSynthesizeStyle are font-synthesis without
+	// weight and without style: the bold and the slant a face lacks are
+	// not synthesised (CSS Fonts 4, 5.5).
+	NoSynthesizeWeight, NoSynthesizeStyle bool
 	// LineHeight takes Normal, Points or Number (CSS 2.1, 10.8.1): a
 	// percentage has become Points, a number stays a factor of the
 	// font size of each descendant.
@@ -943,6 +953,11 @@ type Style struct {
 	LineBreak     LineBreak
 	// WordSpaceTransform turns word separators into another one.
 	WordSpaceTransform WordSpaceTransform
+	// TextJustify is the justification method (CSS Text 3, 7.4).
+	TextJustify TextJustify
+	// TextAutospace is the spacing between ideographs and other scripts
+	// (CSS Text 4, 8.2).
+	TextAutospace TextAutospace
 	// TabSize takes Number (a count of spaces) or Points.
 	TabSize       Dimension
 	VerticalAlign VerticalAlign

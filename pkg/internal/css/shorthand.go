@@ -162,7 +162,7 @@ func initShorthands() {
 		"outline":       {longhands: ids(pOutlineStyle, 3), expand: expandOutline},
 		"background":    {longhands: append(ids(pBgColor, 7), pBgAttachment), expand: expandBackground},
 		"font": {
-			longhands: []propID{pFontStyle, pFontVariant, pFontWeight, pFontSize, pLineHeight, pFontFamily},
+			longhands: []propID{pFontStyle, pFontVariant, pFontWeight, pFontSize, pLineHeight, pFontFamily, pFontStretch},
 			expand:    expandFont,
 		},
 		"list-style": {longhands: []propID{pListStyleType, pListStylePosition, pListStyleImage}, expand: expandListStyle},
@@ -200,6 +200,9 @@ func initShorthands() {
 		shorthands[name] = def
 	}
 	for name, def := range logicalShorthands() {
+		shorthands[name] = def
+	}
+	for name, def := range textFontShorthands() {
 		shorthands[name] = def
 	}
 	delete(longhandByName, "word-break")
@@ -278,9 +281,9 @@ var systemFonts = map[string]bool{
 	"caption": true, "icon": true, "menu": true, "message-box": true, "small-caption": true, "status-bar": true,
 }
 
-// expandFont expands the font shorthand (CSS Fonts 4, 2.8): up to three of
-// style, variant and weight (normal matching any, a font-stretch keyword
-// ignored), the size, an optional slash and line height, then the
+// expandFont expands the font shorthand (CSS Fonts 4, 2.8): up to four of
+// style, variant, weight and stretch keyword (normal matching any), the
+// size, an optional slash and line height, then the
 // families. A system font keyword resets every longhand with a warning.
 func expandFont(v []token, c *declCtx) ([]entry, bool) {
 	out := []entry{
@@ -290,6 +293,7 @@ func expandFont(v []token, c *declCtx) ([]entry, bool) {
 		{pFontSize, wideInitial},
 		{pLineHeight, wideInitial},
 		{pFontFamily, wideInitial},
+		{pFontStretch, wideInitial},
 	}
 	if k, ok := keyword(v); ok && systemFonts[k] {
 		c.warn("unsupported-css-value", "font: the system font %s is not supported and computes to the initial font", k)
@@ -323,7 +327,8 @@ func expandFont(v []token, c *declCtx) ([]entry, bool) {
 				continue
 			}
 		}
-		if t.typ == tIdent && fontStretch[lower(t.value)] {
+		if p, ok := stretchKeywords[lower(t.value)]; ok && t.typ == tIdent {
+			out[6].v = p
 			i++
 			continue
 		}
@@ -355,13 +360,6 @@ func expandFont(v []token, c *declCtx) ([]entry, bool) {
 	}
 	out[5].v = fam
 	return out, true
-}
-
-// fontStretch are the font-stretch keywords (CSS Fonts 4, 2.3), accepted
-// by the font shorthand and ignored.
-var fontStretch = map[string]bool{
-	"ultra-condensed": true, "extra-condensed": true, "condensed": true, "semi-condensed": true,
-	"semi-expanded": true, "expanded": true, "extra-expanded": true, "ultra-expanded": true,
 }
 
 // expandListStyle expands list-style (CSS Lists 3, 3.4): type, position

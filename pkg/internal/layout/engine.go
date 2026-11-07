@@ -256,15 +256,23 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 	if size <= 0 {
 		size = 1
 	}
+	oblique := 0.0
+	if st.FontStyle == css.FontOblique {
+		oblique = min(max(st.FontObliqueAngle, -90), 90)
+	}
 	return text.Style{
-		Families:      text.BrowserFamilies(st.FontFamilies),
-		Weight:        st.FontWeight,
-		Italic:        st.FontStyle != css.FontNormal,
-		Size:          size,
-		Lang:          lang,
-		Color:         c,
-		LetterSpacing: spacing(st.LetterSpacing),
-		WordSpacing:   spacing(st.WordSpacing),
+		Families:          text.BrowserFamilies(st.FontFamilies),
+		Weight:            st.FontWeight,
+		Italic:            st.FontStyle == css.FontItalic || oblique != 0,
+		Oblique:           oblique,
+		Stretch:           min(max(st.FontStretch, 0), 1000),
+		NoSyntheticBold:   st.NoSynthesizeWeight,
+		NoSyntheticItalic: st.NoSynthesizeStyle,
+		Size:              size,
+		Lang:              lang,
+		Color:             c,
+		LetterSpacing:     spacing(st.LetterSpacing),
+		WordSpacing:       spacing(st.WordSpacing),
 	}
 }
 

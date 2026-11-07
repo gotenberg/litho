@@ -263,8 +263,11 @@ func computeFontWeight(s *styler, st *Style, v any) {
 	st.FontWeight = max(100, min(900, n))
 }
 
-// parseFontStyle parses font-style (CSS Fonts 4, 2.4); an oblique angle is
-// accepted and ignored.
+// obliqueStyle is a specified font-style: oblique with its angle.
+type obliqueStyle struct{ angle float64 }
+
+// parseFontStyle parses font-style (CSS Fonts 4, 2.4): normal, italic, or
+// oblique with an optional angle from -90 to 90 degrees, 14 by default.
 func parseFontStyle(v []token, _ *declCtx) (any, bool) {
 	if len(v) == 0 || v[0].typ != tIdent {
 		return nil, false
@@ -275,14 +278,26 @@ func parseFontStyle(v []token, _ *declCtx) (any, bool) {
 	case "italic":
 		return FontItalic, len(v) == 1
 	case "oblique":
-		if len(v) == 2 {
-			if _, ok := parseAngle(v[1]); !ok || v[1].typ != tDimension {
-				return nil, false
+		if len(v) == 1 {
+			return obliqueStyle{angle: defaultObliqueAngle}, true
+		}
+		if len(v) == 2 && v[1].typ == tDimension {
+			if a, ok := parseAngle(v[1]); ok && a >= -maxObliqueAngle && a <= maxObliqueAngle {
+				return obliqueStyle{angle: a}, true
 			}
 		}
-		return FontOblique, len(v) <= 2
 	}
 	return nil, false
+}
+
+// computeFontStyle computes font-style: an oblique keeps its angle.
+func computeFontStyle(_ *styler, st *Style, v any) {
+	switch f := v.(type) {
+	case FontStyle:
+		st.FontStyle, st.FontObliqueAngle = f, 0
+	case obliqueStyle:
+		st.FontStyle, st.FontObliqueAngle = FontOblique, f.angle
+	}
 }
 
 func parseLineHeight(v []token, _ *declCtx) (any, bool) {
