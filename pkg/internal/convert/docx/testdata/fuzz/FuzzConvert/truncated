@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<w:p><w:pPr><w:numPr><w:ilvl w:val=\"0\"/><w:numId w:val=\"1\"/></w:numPr><w:tabs><w:tab w:val=\"right\" w:pos=\"4000\"/></w:tabs></w:pPr><w:r><w:rPr><w:b/><w:sz w:val=\"30\"/></w:rPr><w:t>a</w:t><w:tab/><w:br w:type=\"page\"/></w:r><w:hyperlink w:anchor=\"x\"><w:r><w:t>b</w:t></w:r></w:hyperlink><w:r><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r><w:instrText>PAGE</w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"end\"/></w:r></w:p><w:tbl><w:tblGri")

@@ -1,0 +1,128 @@
+package docx
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
+)
+
+func TestSections_PageBoxes(t *testing.T) {
+	t.Parallel()
+	sect := func(extra string) string {
+		return `<w:p><w:pPr><w:sectPr>` + extra + `</w:sectPr></w:pPr><w:r><w:t>s</w:t></w:r></w:p>`
+	}
+	body := sect(`<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="720" w:bottom="1440" w:left="720" w:header="360" w:footer="360" w:gutter="360"/>`) +
+		sect(`<w:type w:val="continuous"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="720" w:bottom="1440" w:left="720" w:header="360" w:footer="360" w:gutter="360"/><w:cols w:num="2" w:space="360" w:sep="1"/>`) +
+		sect(`<w:type w:val="continuous"/><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/>`) +
+		sect(`<w:type w:val="oddPage"/><w:pgBorders w:offsetFrom="page"><w:top w:val="single" w:sz="8" w:space="24"/><w:left w:val="single" w:sz="8" w:space="24"/><w:bottom w:val="single" w:sz="8" w:space="24"/><w:right w:val="single" w:sz="8" w:space="24"/></w:pgBorders>`) +
+		`<w:sectPr/>`
+	b := build(t, body, nil)
+	if len(b.secs) != 5 {
+		t.Fatalf("%d sections", len(b.secs))
+	}
+	if b.secs[1].name != b.secs[0].name || b.secs[2].name == b.secs[1].name {
+		t.Errorf("page names %q %q %q: a continuous break keeps the page only with the same setup", b.secs[0].name, b.secs[1].name, b.secs[2].name)
+	}
+	pg := b.d.newPages(b.secs)
+	box := pg.box(layout.PageInfo{Name: b.secs[0].name})
+	if abs(box.Width-595.3) > 0.1 || box.Margin != [4]float64{72, 36, 72, 54} {
+		t.Errorf("first box %+v", box)
+	}
+	if land := pg.box(layout.PageInfo{Name: b.secs[2].name}); land.Width < land.Height {
+		t.Errorf("landscape box %v x %v", land.Width, land.Height)
+	}
+	if f := pg.box(layout.PageInfo{Name: b.secs[3].name}).Frame; f == nil || f.Inset != [4]float64{24, 24, 24, 24} || f.Style.Border[css.Top].Width != 1 {
+		t.Errorf("page frame %+v", f)
+	}
+	cols := b.root.Children[1].Style
+	if cols.Columns.Count != 2 || cols.ColumnGap != css.Pts(18) || cols.Columns.RuleStyle != css.Solid {
+		t.Errorf("columns %+v gap %v", cols.Columns, cols.ColumnGap)
+	}
+	if b.root.Children[3].Style.BreakBefore != css.RightPage {
+		t.Errorf("odd page section breaks %v", b.root.Children[3].Style.BreakBefore)
+	}
+}
+
+func TestSections_EmptySectionParagraphDropped(t *testing.T) {
+	t.Parallel()
+	b := build(t, `<w:p><w:r><w:t>a</w:t></w:r></w:p><w:p><w:pPr><w:sectPr/></w:pPr></w:p><w:p><w:r><w:t>b</w:t></w:r></w:p><w:sectPr/>`, nil)
+	if n := len(role(b.root, "P")); n != 2 {
+		t.Errorf("%d paragraphs, want 2", n)
+	}
+}
+
+func TestHeadersFooters_Fields(t *testing.T) {
+	t.Parallel()
+	fld := func(instr string) string {
+		return `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ` + instr + ` </w:instrText></w:r>` +
+			`<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>99</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`
+	}
+	hdr := func(tag, inner string) string {
+		return `<w:` + tag + ` ` + nsDecl + `><w:p>` + inner + `</w:p></w:` + tag + `>`
+	}
+	extra := map[string]string{
+		"word/header1.xml": hdr("hdr", `<w:r><w:t>Head</w:t></w:r>`),
+		"word/header2.xml": hdr("hdr", `<w:r><w:t>First</w:t></w:r>`),
+		"word/footer1.xml": hdr("ftr", `<w:r><w:t xml:space="preserve">P </w:t></w:r>`+fld("PAGE")+`<w:r><w:t xml:space="preserve"> of </w:t></w:r>`+fld("NUMPAGES")+
+			`<w:r><w:t xml:space="preserve"> s</w:t></w:r>`+fld("SECTIONPAGES")+`<w:fldSimple w:instr="PAGE \* ROMAN"><w:r><w:t>X</w:t></w:r></w:fldSimple>`),
+	}
+	page := `<w:p><w:r><w:t>body</w:t></w:r><w:r><w:br w:type="page"/></w:r><w:r><w:t>more</w:t></w:r></w:p>`
+	body := page + `<w:p><w:pPr><w:sectPr><w:headerReference w:type="default" r:id="rIdheader1"/><w:footerReference w:type="default" r:id="rIdfooter1"/></w:sectPr></w:pPr></w:p>` +
+		page + `<w:sectPr><w:headerReference w:type="first" r:id="rIdheader2"/><w:pgNumType w:start="1" w:fmt="lowerRoman"/><w:titlePg/></w:sectPr>`
+	doc := convertBytes(t, docx(t, body, extra), office.Options{})
+	if len(doc.Pages) != 4 {
+		t.Fatalf("%d pages: %q", len(doc.Pages), docText(doc))
+	}
+	// PAGE and NUMPAGES take the section's format, SECTIONPAGES keeps
+	// its cached result, the title page of the second section takes its
+	// first header.
+	want := [][]string{
+		{"Head", "body", "P1of4s99I"},
+		{"Head", "more", "P2of4s99II"},
+		{"First", "body", "Piofivs99I"},
+		{"Head", "more", "Piiofivs99II"},
+	}
+	squash := strings.NewReplacer(" ", "", "\n", "")
+	for i, pg := range doc.Pages {
+		got := squash.Replace(pageText(pg))
+		for _, w := range want[i] {
+			if !strings.Contains(got, w) {
+				t.Errorf("page %d = %q, want %q in it", i+1, got, w)
+			}
+		}
+		for _, f := range pg.Content {
+			if tx, ok := f.(*compose.Text); ok && strings.HasPrefix(glyphText(tx), "Head") && tx.Parent != nil {
+				t.Errorf("header text is not an artifact")
+			}
+		}
+	}
+}
+
+// glyphText returns the text of a run.
+func glyphText(tx *compose.Text) string {
+	var b strings.Builder
+	for _, g := range tx.Glyphs {
+		b.WriteString(g.Text)
+	}
+	return b.String()
+}
+
+func TestHeaders_GrowTheMargin(t *testing.T) {
+	t.Parallel()
+	var lines strings.Builder
+	for range 6 {
+		lines.WriteString(`<w:p><w:r><w:t>header line</w:t></w:r></w:p>`)
+	}
+	extra := map[string]string{"word/header1.xml": `<w:hdr ` + nsDecl + `>` + lines.String() + `</w:hdr>`}
+	body := `<w:p><w:r><w:t>x</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rIdheader1"/><w:pgMar w:top="720" w:bottom="720" w:left="720" w:right="720" w:header="360" w:footer="360"/></w:sectPr>`
+	b := build(t, body, extra)
+	pg := b.d.newPages(b.secs)
+	box := pg.box(layout.PageInfo{Name: b.secs[0].name})
+	if box.Margin[css.Top] <= 36 {
+		t.Errorf("top margin %v not grown for a six-line header", box.Margin[css.Top])
+	}
+}
