@@ -126,17 +126,15 @@ func (b *pageBuilder) display(u *unit) (display, bool) {
 	}
 	d.wrap = (st.Align.Wrap || st.Align.Horizontal == HJustify || st.Align.Horizontal == HDistributed) && (!d.value || c.Value.Kind != Number)
 	d.shrink = st.Align.Shrink && !d.wrap && st.Align.Horizontal != HFill
-	if !d.wrap && !st.Align.Stacked {
-		// A line break in a cell that does not wrap draws nothing: Calc
-		// sets the lines one after the other.
-		d.text = dropBreaks(d.text)
-		if len(d.runs) > 0 {
-			runs := make([]Run, len(d.runs))
-			for i, r := range d.runs {
-				runs[i] = Run{Text: dropBreaks(r.Text), Font: r.Font}
-			}
-			d.runs = runs
+	// Every line break starts a line, wrapped or not: a carriage return
+	// alone too, as Calc's edit engine reads one.
+	d.text = normalizeBreaks(d.text)
+	if len(d.runs) > 0 {
+		runs := make([]Run, len(d.runs))
+		for i, r := range d.runs {
+			runs[i] = Run{Text: normalizeBreaks(r.Text), Font: r.Font}
 		}
+		d.runs = runs
 	}
 	if st.Align.Stacked {
 		// Stacked text sets one character a line, centred (ODF
@@ -463,16 +461,16 @@ func stack(s string) string {
 	return b.String()
 }
 
-// dropBreaks returns s without its line breaks.
+// normalizeBreaks returns s with its CR LF and CR line breaks written LF.
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/cell-multi-line.xlsx and sc/preserve_space.xlsx, cells
-//     whose text holds line breaks without wrapping, print
-//     "Line1Line2Line3" and "123456" on one line.
-func dropBreaks(s string) string {
-	if !strings.ContainsAny(s, "\r\n") {
+//   - xlsx: sc/escape-unicode.xlsx, a cell that does not wrap holding
+//     "Line 1\r\nLine 2\r\nLine 3\r\nLine 4", prints four lines in a
+//     row grown to them.
+func normalizeBreaks(s string) string {
+	if !strings.ContainsRune(s, '\r') {
 		return s
 	}
-	return strings.NewReplacer("\r\n", "", "\n", "", "\r", "").Replace(s)
+	return strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(s)
 }

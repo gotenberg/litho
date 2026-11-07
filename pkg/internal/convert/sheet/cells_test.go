@@ -45,7 +45,7 @@ func TestConvert_CellText(t *testing.T) {
 		{"general narrows", []Cell{numCell(0, 1234.5678, nil)}, func(sh *Sheet) { sh.DefaultColumnWidth = 30 }, []string{"1235"}},
 		{"clipped text", []Cell{textCell(0, "Cloud hosting", nil), numCell(1, 120000, nil)}, func(sh *Sheet) { sh.DefaultColumnWidth = 48.15 }, []string{"Cloud host", "120000"}},
 		{"hidden zero", []Cell{numCell(0, 0, nil), numCell(1, 1, nil)}, func(sh *Sheet) { sh.HideZeros = true }, []string{"1"}},
-		{"line breaks without wrap", []Cell{textCell(0, "Line1\nLine2", nil)}, nil, []string{"Line1Line2"}},
+		{"line breaks without wrap", []Cell{textCell(0, "Line1\r\nLine2", nil)}, nil, []string{"Line1", "Line2"}},
 		{"boolean", []Cell{{Column: 0, Value: Value{Kind: Bool, Number: 1}}}, nil, []string{"TRUE"}},
 		{"error", []Cell{{Column: 0, Value: Value{Kind: Error, Text: "#DIV/0!"}}}, nil, []string{"#DIV/0!"}},
 		{"rich text", []Cell{{Column: 0, Value: Value{Kind: Text, Text: "Red Green"}, Runs: []Run{
