@@ -9,6 +9,7 @@ import (
 func FuzzShape(f *testing.F) {
 	f.Add("AB CA\u05d0\u05d1 ABC", 3.5, uint8(0))
 	f.Add("\x00\x01\u2028\ufeff\u200dA\u0301\u2067\u05d0\u2069 \u00a0D", -2.0, uint8(7))
+	f.Add("\u202b\u2068\u202e\u2069\u202c1,2 \u05d0 34", 1.0, uint8(16))
 	fuzzFonts := newFuzzFonts(f, f.TempDir())
 	f.Fuzz(func(t *testing.T, text string, objWidth float64, flags uint8) {
 		if len(text) > 1<<12 {
@@ -21,10 +22,13 @@ func FuzzShape(f *testing.F) {
 		if flags&2 != 0 {
 			s.WordSpacing = 3
 		}
+		// The text's first characters double as explicit formatting
+		// characters opened and closed around the runs.
+		controls := []rune(text)[:min(len([]rune(text)), 4)]
 		runs := []ParagraphRun{
-			{Text: text, Style: s, Override: Direction(flags >> 2 % 3)},
-			{Object: &Object{Width: math.Abs(objWidth), Ascent: 2, Descent: 1}},
-			{Text: text, Style: Style{Size: 13.7, Italic: true}},
+			{Text: text, Style: s, Override: Direction(flags >> 2 % 3), Open: controls},
+			{Object: &Object{Width: math.Abs(objWidth), Ascent: 2, Descent: 1}, Open: []rune{RLI, LRO}, Close: controls},
+			{Text: text, Style: Style{Size: 13.7, Italic: true}, Close: []rune{PDF, PDI}},
 		}
 		p, _, err := fuzzFonts.Shape(context.Background(), runs, ParagraphOptions{Direction: Direction(flags >> 4 % 3)})
 		if err != nil {

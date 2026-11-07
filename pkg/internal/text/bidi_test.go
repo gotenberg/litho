@@ -18,6 +18,9 @@ func TestShape_ExplicitEmbeddings(t *testing.T) {
 		{"override", []ParagraphRun{{Text: "AB ", Style: s}, {Text: "BC", Style: s, Open: []rune{RLO}, Close: []rune{PDF}}}, LeftToRight, "AB CB"},
 		{"left-to-right isolate in right-to-left", []ParagraphRun{{Text: "א ", Style: s}, {Text: "AB C", Style: s, Open: []rune{LRI}, Close: []rune{PDI}}}, RightToLeft, "AB C א"},
 		{"first strong isolate", []ParagraphRun{{Text: "AB ", Style: s}, {Text: "אב", Style: s, Open: []rune{FSI}, Close: []rune{PDI}}}, LeftToRight, "AB בא"},
+		{"number after right-to-left letters", []ParagraphRun{{Text: "AB אב 12", Style: s}}, LeftToRight, "AB 12 בא"},
+		{"number in a right-to-left isolate", []ParagraphRun{{Text: "AB ", Style: s}, {Text: "1,2 אב", Style: s, Open: []rune{RLI}, Close: []rune{PDI}}, {Text: " C", Style: s}}, LeftToRight, "AB בא 1,2 C"},
+		{"number after left-to-right letters", []ParagraphRun{{Text: "אב AB 12", Style: s}}, RightToLeft, "AB 12 בא"},
 		{"unclosed and stray controls", []ParagraphRun{{Text: "AB", Style: s, Close: []rune{PDI, 'x'}}, {Text: "C", Style: s, Open: []rune{'y', RLI}}}, LeftToRight, "ABC"},
 	}
 	for _, tt := range tests {
