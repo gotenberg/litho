@@ -247,6 +247,14 @@ func (p *chartReader) read(root *Element) {
 		s.Border = &b
 	}
 	p.readTitle(ch)
+	for _, g := range c.Groups {
+		for _, s := range g.Series {
+			if s.Name == "" {
+				// The name LibreOffice gives a series without one.
+				s.Name = "Series" + strconv.Itoa(s.Index+1)
+			}
+		}
+	}
 	if lg := ch.Child(NSChart, "legend"); lg != nil {
 		p.readLegend(lg)
 	}
@@ -637,7 +645,7 @@ func (p *chartReader) readTitle(ch *Element) {
 	}
 	text := richText(t.Child(NSChart, "tx"))
 	if text == "" {
-		if len(p.c.Groups) > 0 && (len(p.c.Groups[0].Series) == 1 || p.c.Groups[0].Kind == chart.Pie) && len(p.c.Groups[0].Series) > 0 {
+		if len(p.c.Groups) == 1 && (len(p.c.Groups[0].Series) == 1 || p.c.Groups[0].Kind == chart.Pie) && len(p.c.Groups[0].Series) > 0 {
 			text = p.c.Groups[0].Series[0].Name
 		}
 		if text == "" && t != nil {

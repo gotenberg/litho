@@ -431,7 +431,8 @@ func (r *chartReader) plotArea(ch, pa *Element) {
 		if sClass == "" {
 			sClass = class
 		}
-		g := groups[sClass]
+		key := sClass + "|" + se.A(NSChart, "attached-axis")
+		g := groups[key]
 		if g == nil {
 			g = r.group(sClass, pName, xAxis, yAxis)
 			if g == nil {
@@ -443,8 +444,8 @@ func (r *chartReader) plotArea(ch, pa *Element) {
 					g.YAxis = i
 				}
 			}
-			groups[sClass] = g
-			order = append(order, sClass)
+			groups[key] = g
+			order = append(order, key)
 		}
 		g.Series = append(g.Series, r.series(se, g, i, cats))
 	}
@@ -454,9 +455,9 @@ func (r *chartReader) plotArea(ch, pa *Element) {
 	if len(c.Groups) > 0 {
 		g := c.Groups[0]
 		if (g.Kind == chart.Pie || g.Kind == chart.Doughnut) && xAxis >= 0 {
-			// LibreOffice reverses the angle axis of its pies to draw them
-			// clockwise.
-			g.CounterClockwise = !c.Axes[xAxis].Reverse
+			// A reversed angle axis turns a pie counter-clockwise, as
+			// LibreOffice draws its own pies by default.
+			g.CounterClockwise = c.Axes[xAxis].Reverse
 		}
 		if g.Kind == chart.Bar && g.Horizontal && xAxis >= 0 {
 			c.Axes[xAxis].Position = chart.AxisLeft
@@ -646,17 +647,31 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 	if !s.Values.Cached && s.Values.Ref != "" {
 		r.warn(CodeChartNoData, "a series has no values in the chart's table and is drawn empty")
 	}
+	s.Categories = cats
+	if r.table != nil {
+		if row, col, ok := r.table.find(addr); ok && row >= r.table.headerRows {
+			name, rowCats := r.table.headers(row, col, addr)
+			if s.Name == "" {
+				s.Name = name
+			}
+			if rowCats.Values != nil {
+				s.Categories = rowCats
+			}
+		}
+	}
+	if se.A(NSChart, "label-cell-address") == "" {
+		// LibreOffice names a series without a label cell after its range:
+		// "Column B" for a range down a column, "Row 3" across a row.
+		s.Name = rangeName(addr)
+	}
 	if label := se.A(NSChart, "label-cell-address"); label != "" {
-		if d := r.data(label, true); len(d.Values) > 0 {
+		if d := r.data(label, true); len(d.Values) > 0 && d.Values[0].Text != "" {
 			s.Name = d.Values[0].Text
 		}
-	} else if r.table != nil {
-		s.Name = r.table.header(r.table.columnOf(addr, r.table.firstData+i))
 	}
 	if s.Name == "" {
 		s.Name = "Series" + strconv.Itoa(i+1)
 	}
-	s.Categories = cats
 	domains := se.All(NSChart, "domain")
 	if g.Kind == chart.Bubble {
 		s.Sizes = s.Values
@@ -670,10 +685,10 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 	} else if len(domains) > 0 {
 		s.Categories = r.data(domains[0].A(NSTable, "cell-range-address"), false)
 	}
-	if d, ok := r.styles[name]; ok && d != nil {
-		if f := r.styles[name].A(NSStyle, "data-style-name"); f != "" && s.Values.Format == "" {
-			s.Values.Format = r.numberFormat(f)
-		}
+	labelFormat := ""
+	if st := r.styles[name]; st != nil && !r.boolProp(name, "link-data-style-to-source", false) {
+		// The series' data style formats its data labels, not the axis.
+		labelFormat = r.numberFormat(st.A(NSStyle, "data-style-name"))
 	}
 	switch g.Kind {
 	case chart.Line, chart.Scatter, chart.Radar:
@@ -696,6 +711,7 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 		s.Explosion = v
 	}
 	s.Labels = r.labels(name, g.Labels, g)
+	s.Labels.Format = labelFormat
 	idx := 0
 	for _, dp := range se.All(NSChart, "data-point") {
 		rep := 1
@@ -739,10 +755,16 @@ func (r *chartReader) point(name string, idx int, s *chart.Series, g *chart.Grou
 	if v := r.numProp(name, "pie-offset"); !math.IsNaN(v) {
 		p.Explosion, p.HasExplosion = v, true
 	}
-	if _, ok := r.prop(name, "chart-properties", NSChart, "data-label-number"); ok {
+	_, number := r.prop(name, "chart-properties", NSChart, "data-label-number")
+	_, text := r.prop(name, "chart-properties", NSChart, "data-label-text")
+	linked := r.boolProp(name, "link-data-style-to-source", false)
+	if number || text || linked {
 		p.Labels, p.HasLabels = r.labels(name, s.Labels, g), true
-	} else if _, ok := r.prop(name, "chart-properties", NSChart, "data-label-text"); ok {
-		p.Labels, p.HasLabels = r.labels(name, s.Labels, g), true
+		if linked {
+			// A point linked to its source's format shows the value as
+			// the cell does, General in the embedded table.
+			p.Labels.Format = "General"
+		}
 	}
 	if _, ok := r.prop(name, "chart-properties", NSChart, "symbol-type"); ok {
 		p.Marker, p.HasMarker = r.marker(name, g.Kind), true
@@ -846,16 +868,15 @@ func (r *chartReader) data(addr string, labels bool) chart.Data {
 	if addr == "" || r.table == nil {
 		return d
 	}
-	col := r.table.columnOf(addr, -1)
-	if col < 0 {
-		if labels {
-			if v, ok := r.table.headerOf(addr); ok {
-				d.Values, d.Cached = []chart.Value{chart.Str(v)}, true
-			}
-		}
+	row, col, ok := r.table.find(addr)
+	if !ok {
 		return d
 	}
-	d = r.table.column(col)
+	if labels && row < r.table.headerRows {
+		d.Values, d.Cached = []chart.Value{r.table.rows[row][col].value}, true
+		return d
+	}
+	d = r.table.run(row, col, addr)
 	d.Ref = addr
 	return d
 }

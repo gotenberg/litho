@@ -202,25 +202,27 @@ func (rd *renderer) cartesian(avail compose.Rect) {
 		rd.radar(avail)
 		return
 	}
-	x, y := rd.dims(g0)
-	if x == nil || y == nil {
+	x, ys, yOf := rd.dims(g0)
+	if x == nil {
 		return
 	}
-	avail = rd.reserveTitles(avail, x, y)
+	all := append([]*dim{x}, ys...)
+	avail = rd.reserveTitles(avail, all...)
 	inner := avail
-	for pass := 0; pass < layoutPasses; pass++ {
-		x.inner, y.inner = inner, inner
-		rd.fitScale(x)
-		rd.fitScale(y)
-		rd.placeLabels(x)
-		rd.placeLabels(y)
-		bb := inner
-		for _, d := range []*dim{x, y} {
-			for _, l := range d.labels {
-				w, h := l.b.rotated()
-				bb = union(bb, compose.Rect{X: l.cx - w/2, Y: l.cy - h/2, Width: w, Height: h})
-			}
+	fit := func() {
+		for _, d := range all {
+			d.inner = inner
 		}
+		for _, d := range all {
+			rd.fitScale(d)
+		}
+		for _, d := range all {
+			rd.placeLabels(d)
+		}
+	}
+	for pass := 0; pass < layoutPasses; pass++ {
+		fit()
+		bb := labelBounds(inner, all)
 		next := compose.Rect{X: avail.X + (inner.X - bb.X), Y: avail.Y + (inner.Y - bb.Y)}
 		next.Width = avail.X + avail.Width - (bb.X + bb.Width - (inner.X + inner.Width)) - next.X
 		next.Height = avail.Y + avail.Height - (bb.Y + bb.Height - (inner.Y + inner.Height)) - next.Y
@@ -232,49 +234,53 @@ func (rd *renderer) cartesian(avail compose.Rect) {
 		}
 		inner = next
 	}
-	x.inner, y.inner = inner, inner
-	rd.fitScale(x)
-	rd.fitScale(y)
-	rd.placeLabels(x)
-	rd.placeLabels(y)
+	fit()
 	if rd.ctx.Err() != nil {
 		return
 	}
 	rd.frame(inner, c.PlotArea)
-	rd.grids(x, inner)
-	rd.grids(y, inner)
-	rd.axisLine(x)
-	rd.axisLine(y)
+	for _, d := range all {
+		rd.grids(d, inner)
+	}
+	for _, d := range all {
+		rd.axisLine(d)
+	}
 	var labels []func()
 	for _, g := range c.Groups {
 		if rd.ctx.Err() != nil {
 			return
 		}
-		gx, gy := x, y
-		if g != g0 {
-			if !compatible(g0, g) {
-				continue
-			}
+		y := yOf[g]
+		if y == nil {
+			continue
 		}
-		labels = append(labels, rd.series(g, gx, gy)...)
+		labels = append(labels, rd.series(g, x, y)...)
 	}
 	for _, f := range labels {
 		f()
 	}
-	for _, d := range []*dim{x, y} {
+	for _, d := range all {
 		for _, l := range d.labels {
 			rd.out = append(rd.out, l.b.draw(l.cx, l.cy, alignCenter)...)
 		}
 	}
-	ext := inner
-	for _, d := range []*dim{x, y} {
+	ext := labelBounds(inner, all)
+	for _, d := range all {
+		rd.axisTitle(d, ext)
+	}
+}
+
+// labelBounds returns the smallest rectangle holding inner and the axis
+// labels of dims.
+func labelBounds(inner compose.Rect, dims []*dim) compose.Rect {
+	bb := inner
+	for _, d := range dims {
 		for _, l := range d.labels {
 			w, h := l.b.rotated()
-			ext = union(ext, compose.Rect{X: l.cx - w/2, Y: l.cy - h/2, Width: w, Height: h})
+			bb = union(bb, compose.Rect{X: l.cx - w/2, Y: l.cy - h/2, Width: w, Height: h})
 		}
 	}
-	rd.axisTitle(x, ext)
-	rd.axisTitle(y, ext)
+	return bb
 }
 
 // compatible reports a group that can share the plot area of g0.
@@ -301,15 +307,26 @@ func (c *Chart) axisAt(i int) *Axis {
 	return c.Axes[i]
 }
 
-// dims builds the two dimensions of g0's plot area and the value ranges
-// of every group drawn in it.
-func (rd *renderer) dims(g0 *Group) (*dim, *dim) {
+// dims builds the dimensions of g0's plot area: the category (or x)
+// dimension, and a value dimension per value axis the groups drawn in it
+// name, the first g0's, with the value ranges of their groups.
+func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 	c := rd.c
 	xy := g0.Kind == Scatter || g0.Kind == Bubble
-	x := &dim{ax: c.axisAt(g0.XAxis)}
-	y := &dim{ax: c.axisAt(g0.YAxis), zero: true, border: true}
-	x.other, y.other = y, x
-	y.lo, y.hi = math.Inf(1), math.Inf(-1)
+	xAxis, xGroup := g0.XAxis, g0
+	if a := c.axisAt(xAxis); a != nil && a.Deleted {
+		// A combined chart draws the category axis of a group that shows
+		// one, against that group's value axis.
+		for _, g := range c.Groups {
+			if b := c.axisAt(g.XAxis); b != nil && !b.Deleted && compatible(g0, g) {
+				xAxis, xGroup = g.XAxis, g
+				break
+			}
+		}
+	}
+	x := &dim{ax: c.axisAt(xAxis)}
+	horizontal := g0.Kind == Bar && g0.Horizontal
+	x.vertical = horizontal
 	if xy {
 		x.border = true
 		x.lo, x.hi = math.Inf(1), math.Inf(-1)
@@ -320,18 +337,35 @@ func (rd *renderer) dims(g0 *Group) (*dim, *dim) {
 			x.between = false
 		}
 	}
-	horizontal := g0.Kind == Bar && g0.Horizontal
-	x.vertical, y.vertical = horizontal, !horizontal
 	if x.ax != nil {
 		x.format = x.ax.Format
 	}
-	if y.ax != nil {
-		y.format = y.ax.Format
-	}
+	var ys []*dim
+	byAxis := map[int]*dim{}
+	yOf := map[*Group]*dim{}
 	for _, g := range c.Groups {
 		if g != g0 && !compatible(g0, g) {
 			continue
 		}
+		key := g.YAxis
+		if a := c.axisAt(key); a == nil || a.Kind != ValueAxis {
+			key = g0.YAxis
+		}
+		y := byAxis[key]
+		if y == nil {
+			if len(ys) >= maxValueAxes {
+				y = ys[len(ys)-1]
+			} else {
+				y = &dim{ax: c.axisAt(key), zero: true, border: true, other: x, vertical: !horizontal}
+				y.lo, y.hi = math.Inf(1), math.Inf(-1)
+				if y.ax != nil {
+					y.format = y.ax.Format
+				}
+				ys = append(ys, y)
+			}
+			byAxis[key] = y
+		}
+		yOf[g] = y
 		for _, s := range g.Series {
 			vals := rd.data(s.Values)
 			if y.format == "" {
@@ -342,16 +376,16 @@ func (rd *renderer) dims(g0 *Group) (*dim, *dim) {
 				if x.format == "" && cats.numeric() {
 					x.format = cats.Format
 				}
-				for i := range vals.Len() {
+				for i := range min(vals.Len(), MaxPoints) {
 					xv, ok := xValue(cats, i)
 					if _, vok := vals.number(i); ok && vok {
 						x.lo, x.hi = math.Min(x.lo, xv), math.Max(x.hi, xv)
 					}
 				}
 			} else {
-				x.n = max(x.n, vals.Len(), cats.Len())
+				x.n = min(max(x.n, vals.Len(), cats.Len()), MaxPoints)
 				if x.names == nil && cats.Len() > 0 {
-					for i := range cats.Len() {
+					for i := range min(cats.Len(), MaxPoints) {
 						x.names = append(x.names, cats.label(i))
 					}
 				}
@@ -361,17 +395,26 @@ func (rd *renderer) dims(g0 *Group) (*dim, *dim) {
 		y.lo, y.hi = math.Min(y.lo, lo), math.Max(y.hi, hi)
 		y.percent = y.percent || pct
 	}
-	if math.IsInf(y.lo, 0) || math.IsInf(y.hi, 0) {
-		y.lo, y.hi = 0, 0
+	if len(ys) == 0 {
+		return nil, nil, nil
+	}
+	x.other = ys[0]
+	if y := yOf[xGroup]; y != nil {
+		x.other = y
+	}
+	for _, y := range ys {
+		if math.IsInf(y.lo, 0) || math.IsInf(y.hi, 0) {
+			y.lo, y.hi = 0, 0
+		}
+		if y.percent {
+			y.border = false
+			if y.ax == nil || y.ax.Format == "" {
+				y.format = "0%"
+			}
+		}
 	}
 	if xy && (math.IsInf(x.lo, 0) || math.IsInf(x.hi, 0)) {
 		x.lo, x.hi = 0, 0
-	}
-	if y.percent {
-		y.border = false
-		if y.format == "" || y.format == "General" || y.ax == nil || y.ax.Format == "" {
-			y.format = "0%"
-		}
 	}
 	if !xy {
 		for len(x.names) < x.n {
@@ -381,8 +424,12 @@ func (rd *renderer) dims(g0 *Group) (*dim, *dim) {
 			x.n = 1
 		}
 	}
-	return x, y
+	return x, ys, yOf
 }
+
+// maxValueAxes caps the value axes of a plot area: a primary and a
+// secondary, as Office and LibreOffice offer.
+const maxValueAxes = 2
 
 // xValue returns the x value of point i of a scatter series: the number,
 // or the 1-based index when the x data is not numeric.
@@ -508,6 +555,10 @@ func (rd *renderer) placeLabels(d *dim) {
 			maxW = d.length() / float64(max(d.n, 1))
 			if !d.between && d.n > 1 {
 				maxW = d.length() / float64(d.n-1)
+			}
+			if s := math.Abs(math.Sin(st.Rotation * math.Pi / 180)); s > 0.5 {
+				// A turned label breaks at a share of the chart's height.
+				maxW = rd.page.Height * 0.4 / s
 			}
 		} else {
 			maxW = d.inner.Width * 0.3

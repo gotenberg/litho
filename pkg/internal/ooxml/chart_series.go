@@ -2,7 +2,6 @@ package ooxml
 
 import (
 	"math"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
@@ -144,9 +143,6 @@ func (p *chartReader) series(e *Element, g *chart.Group, scatterLines, lineMarke
 	}
 	s.Index = max(0, min(order, chart.MaxSeries*8))
 	s.Name = richText(e.Child(NSChart, "tx"))
-	if s.Name == "" {
-		s.Name = "Series" + strconv.Itoa(s.Index+1)
-	}
 	switch g.Kind {
 	case chart.Scatter, chart.Bubble:
 		s.Categories = p.data(e.Child(NSChart, "xVal"), "x values")

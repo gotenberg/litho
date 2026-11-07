@@ -108,32 +108,106 @@ func readRow(row *Element, budget *int) []tableCell {
 	return out
 }
 
-// columnOf returns the column whose cells name the range addr, def when
-// none does.
-func (t *localTable) columnOf(addr string, def int) int {
+// find returns the row and column of the cell that names the range
+// addr.
+func (t *localTable) find(addr string) (int, int, bool) {
 	if addr == "" {
-		return def
+		return 0, 0, false
 	}
-	for _, row := range t.rows[min(t.headerRows, len(t.rows)):] {
+	for i, row := range t.rows {
 		for j, c := range row {
 			if c.desc == addr {
-				return j
+				return i, j, true
 			}
 		}
 	}
-	return def
+	return 0, 0, false
 }
 
-// headerOf returns the header cell that names the range addr.
-func (t *localTable) headerOf(addr string) (string, bool) {
-	for _, row := range t.rows[:min(t.headerRows, len(t.rows))] {
-		for _, c := range row {
-			if c.desc == addr {
-				return c.value.Text, true
-			}
+// run returns the cells of the range addr from its first cell (row, col):
+// along the row for a range one row high and several columns wide, as a
+// series in rows is, else down the column to the end of the data.
+func (t *localTable) run(row, col int, addr string) chart.Data {
+	d := chart.Data{Cached: true}
+	if cols, rows, ok := rangeShape(addr); ok && rows == 1 && cols > 1 {
+		for j := col; j < col+cols && j < len(t.rows[row]); j++ {
+			d.Values = append(d.Values, t.rows[row][j].value)
+		}
+		return d
+	}
+	for _, r := range t.rows[row:] {
+		if col < len(r) {
+			d.Values = append(d.Values, r[col].value)
+		} else {
+			d.Values = append(d.Values, chart.Value{})
 		}
 	}
-	return "", false
+	return d
+}
+
+// headers returns the name and categories of the series whose values
+// start at (row, col): for a series in rows, the header column's cell and
+// the header row's cells over its columns; for one in columns, the header
+// row's cell, and no categories of its own.
+func (t *localTable) headers(row, col int, addr string) (string, chart.Data) {
+	if cols, rows, ok := rangeShape(addr); ok && rows == 1 && cols > 1 {
+		name := ""
+		if t.firstData > 0 && len(t.rows[row]) > 0 {
+			name = t.rows[row][0].value.Text
+		}
+		cats := chart.Data{Cached: true}
+		if t.headerRows > 0 {
+			for j := col; j < col+cols && j < len(t.rows[0]); j++ {
+				cats.Values = append(cats.Values, chart.Str(t.rows[0][j].value.Text))
+			}
+		}
+		return name, cats
+	}
+	return t.header(col), chart.Data{}
+}
+
+// rangeShape returns the columns and rows a cell range address spans,
+// "Sheet1.A1:Sheet1.E1" or "$'My sheet'.$A$1:.$A$5" (ODF 1.3 Part 3,
+// 18.3.6 cellRangeAddress), and whether it parsed.
+func rangeShape(addr string) (int, int, bool) {
+	from, to, ok := strings.Cut(addr, ":")
+	if !ok {
+		return 1, 1, cellRef(from) != nil
+	}
+	a, b := cellRef(from), cellRef(to)
+	if a == nil || b == nil {
+		return 0, 0, false
+	}
+	return abs(b[0]-a[0]) + 1, abs(b[1]-a[1]) + 1, true
+}
+
+// cellRef returns the column and row of a cell address's cell part, nil
+// when it does not parse.
+func cellRef(s string) []int {
+	if i := strings.LastIndexByte(s, '.'); i >= 0 {
+		s = s[i+1:]
+	}
+	s = strings.ReplaceAll(s, "$", "")
+	col, i := 0, 0
+	for ; i < len(s) && s[i] >= 'A' && s[i] <= 'Z'; i++ {
+		col = col*26 + int(s[i]-'A'+1)
+		if col > 1<<20 {
+			return nil
+		}
+	}
+	row, err := strconv.Atoi(s[i:])
+	if i == 0 || err != nil || row < 1 {
+		return nil
+	}
+	return []int{col - 1, row - 1}
+}
+
+// abs returns the magnitude of n.
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 // header returns the series name over column j.
@@ -291,8 +365,10 @@ func digits(e *Element) string {
 		return intPartOf(e, minInt) + ".##########"
 	}
 	minDec := dec
-	if v, err := strconv.Atoi(e.A(NSNumber, "min-decimal-places")); err == nil && v >= 0 && v <= dec {
-		minDec = v
+	for _, ns := range []string{NSNumber, NSLOExt} {
+		if v, err := strconv.Atoi(e.A(ns, "min-decimal-places")); err == nil && v >= 0 && v <= dec {
+			minDec = v
+		}
 	}
 	intPart := intPartOf(e, minInt)
 	if dec == 0 {
@@ -325,4 +401,24 @@ func elementKids(e *Element) []*Element {
 		}
 	}
 	return out
+}
+
+// rangeName returns the name LibreOffice gives a series of the values
+// range addr without a label: "Column B" or "Row 3", "" when addr does not
+// parse.
+func rangeName(addr string) string {
+	from, _, _ := strings.Cut(addr, ":")
+	cell := cellRef(from)
+	cols, rows, ok := rangeShape(addr)
+	if cell == nil || !ok {
+		return ""
+	}
+	if rows == 1 && cols > 1 {
+		return "Row " + strconv.Itoa(cell[1]+1)
+	}
+	name := ""
+	for c := cell[0] + 1; c > 0; c = (c - 1) / 26 {
+		name = string(rune('A'+(c-1)%26)) + name
+	}
+	return "Column " + name
 }

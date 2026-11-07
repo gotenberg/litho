@@ -225,11 +225,19 @@ func (rd *renderer) barLabel(g *Group, s *Series, j int, v float64, lb Labels, r
 	}
 	w, h := b.rotated()
 	pl := lb.Placement
-	if pl == LabelAuto || pl == LabelBestFit {
+	switch pl {
+	case LabelAuto, LabelBestFit:
 		pl = LabelOutsideEnd
 		if stacked {
 			pl = LabelCenter
 		}
+	case LabelAbove, LabelRight:
+		// Above a bar is past its end, as LibreOffice places a bar's "top"
+		// label.
+		pl = LabelOutsideEnd
+	case LabelBelow, LabelLeft:
+		pl = LabelInsideBase
+	case LabelCenter, LabelInsideEnd, LabelInsideBase, LabelOutsideEnd:
 	}
 	cx, cy := r.X+r.Width/2, r.Y+r.Height/2
 	end := func(inside bool) {

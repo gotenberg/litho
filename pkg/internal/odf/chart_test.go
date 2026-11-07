@@ -160,12 +160,12 @@ func TestChartFromDocument_AxesTitlesLegend(t *testing.T) {
 func TestChartFromDocument_PieDirection(t *testing.T) {
 	plot := `<chart:axis chart:dimension="x" chart:name="primary-x" chart:style-name="x"/>` + series
 	st := chartStyles + `<style:style style:name="x" style:family="chart"><style:chart-properties chart:reverse-direction="true"/></style:style>`
-	if g := readODFChart(t, chartContent(st, "circle", "", plot)).Groups[0]; g.CounterClockwise {
-		t.Error("a pie with a reversed angle axis runs counter-clockwise")
+	if g := readODFChart(t, chartContent(st, "circle", "", plot)).Groups[0]; !g.CounterClockwise {
+		t.Error("a pie with a reversed angle axis runs clockwise")
 	}
 	st = chartStyles + `<style:style style:name="x" style:family="chart"/>`
-	if g := readODFChart(t, chartContent(st, "circle", "", plot)).Groups[0]; !g.CounterClockwise {
-		t.Error("a pie with its angle axis as is runs clockwise")
+	if g := readODFChart(t, chartContent(st, "circle", "", plot)).Groups[0]; g.CounterClockwise {
+		t.Error("a pie with its angle axis as is runs counter-clockwise")
 	}
 }
 

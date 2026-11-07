@@ -137,7 +137,7 @@ type Group struct {
 	// firstSliceAng).
 	FirstSliceAngle float64
 	// CounterClockwise draws a pie's sectors counter-clockwise, as an
-	// OpenDocument pie does unless its angle axis is reversed.
+	// OpenDocument pie with a reversed angle axis does.
 	CounterClockwise bool
 	// BubbleScale is the size of the largest bubble as a percentage of the
 	// default, 100 by default (21.2.2.21 bubbleScale).
