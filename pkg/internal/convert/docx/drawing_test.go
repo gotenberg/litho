@@ -42,11 +42,12 @@ func TestDrawings(t *testing.T) {
 		`<wps:wsp><wps:spPr><a:prstGeom prst="rect"/><a:ln w="12700"><a:solidFill><a:srgbClr val="0000FF"/></a:solidFill></a:ln></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>boxed</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp>` +
 		`</a:graphicData></a:graphic></wp:inline></w:drawing></mc:Choice><mc:Fallback><w:pict><w:r><w:t>FALLBACK</w:t></w:r></w:pict></mc:Fallback></mc:AlternateContent></w:r></w:p>`
 	body := inline + anchor(`<wp:wrapSquare wrapText="bothSides"/>`, `<wp:align>right</wp:align>`) +
-		anchor(`<wp:wrapTopAndBottom/>`, `<wp:align>center</wp:align>`) + anchor(`<wp:wrapNone/>`, `<wp:posOffset>254000</wp:posOffset>`) + shape + textBox
+		anchor(`<wp:wrapTopAndBottom/>`, `<wp:align>center</wp:align>`) + anchor(`<wp:wrapNone/>`, `<wp:posOffset>254000</wp:posOffset>`) + shape + textBox +
+		anchor(`<wp:wrapNone/>`, ``)
 	b := build(t, body, map[string]string{"word/media/a.png": pngData(t, 40, 20)})
 	pics := find(b.root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
-	if len(pics) != 5 {
-		t.Fatalf("%d replaced boxes, want 5", len(pics))
+	if len(pics) != 6 {
+		t.Fatalf("%d replaced boxes, want 6", len(pics))
 	}
 	p := pics[0]
 	if p.Role != "Figure" || p.Alt != "A chart" || p.Style.Width != css.Pts(100) || p.Style.Height != css.Pts(50) || p.Picture.Vector == nil || len(p.Style.Transform) != 2 {
@@ -70,6 +71,9 @@ func TestDrawings(t *testing.T) {
 	}
 	if got := textOf(b.root); !contains(got, "boxed") || contains(got, "FALLBACK") {
 		t.Errorf("text box content %q", got)
+	}
+	if f := pics[5].Style; f.Position != css.Absolute || f.Left != css.Pts(0) {
+		t.Errorf("a positionH without align or posOffset: position %v left %v, want absolute at 0", f.Position, f.Left)
 	}
 }
 

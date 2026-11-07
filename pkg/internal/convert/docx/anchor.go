@@ -82,7 +82,9 @@ func (d *document) anchor(k *ooxml.Element, n *layout.Node, sink *inlineSink) {
 }
 
 // position reads a wp:positionH or wp:positionV (20.4.2.10, 20.4.2.11):
-// its offset in points, its alignment and what it is relative to.
+// its offset in points, its alignment and what it is relative to. An
+// element with neither child, which the schema forbids but documents
+// carry, positions at offset zero.
 func position(e *ooxml.Element) (float64, string, string) {
 	if e == nil {
 		return 0, "", ""
@@ -91,7 +93,10 @@ func position(e *ooxml.Element) (float64, string, string) {
 	if a := e.Child(ooxml.NSWP, "align"); a != nil {
 		return 0, strings.TrimSpace(a.Text), rel
 	}
-	off, _ := ooxml.EMU(strings.TrimSpace(e.Child(ooxml.NSWP, "posOffset").Text))
+	var off float64
+	if o := e.Child(ooxml.NSWP, "posOffset"); o != nil {
+		off, _ = ooxml.EMU(strings.TrimSpace(o.Text))
+	}
 	return off, "", rel
 }
 
