@@ -438,6 +438,12 @@ func (b *builder) spanText(t textState, name string) textState {
 
 // run returns the inline node of the text s in the text properties t.
 func (b *builder) run(s string, t textState, preserve bool) *layout.Node {
+	if t.outline {
+		b.warn("text-outline", "outlined text is drawn filled")
+	}
+	if t.relief != "" {
+		b.warn("text-relief", "embossed and engraved text is approximated by a grey shadow")
+	}
 	st := baseStyle()
 	applyText(st, t, true)
 	if t.auto != 0 {

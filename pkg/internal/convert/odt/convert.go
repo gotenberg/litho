@@ -63,6 +63,9 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 		tabsRelative: configBool(pkg.Settings, "TabsRelativeToIndent", true),
 	}
 	b.pages = newPageFlow(b, opts)
+	if lc := odf.Section(pkg.Styles, "styles").Child(odf.NSText, "linenumbering-configuration"); lc.A(odf.NSText, "number-lines") == "true" {
+		b.warn("line-numbering", "line numbers are not drawn")
+	}
 	root, first := b.document(body)
 	if b.err != nil {
 		return nil, b.err

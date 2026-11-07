@@ -17,7 +17,7 @@ type builtinStyle struct {
 // doc/DocumentStylePoolManager.cxx): "Heading" in Liberation Sans 14pt
 // with its spacing and keep-with-next, the headings of levels 1 to 3 in
 // bold at 18, 16 and 14pt, and the note styles at 10pt with a hanging
-// indent of 0.6 cm.
+// indent of 0.6 cm, and the title of a table of contents at 16pt bold.
 var builtins = map[string]builtinStyle{
 	"Heading": {
 		para: [][2]string{{"fo:margin-top", "0.423cm"}, {"fo:margin-bottom", "0.212cm"}, {"fo:keep-with-next", "always"}},
@@ -26,6 +26,7 @@ var builtins = map[string]builtinStyle{
 	"Heading_20_1": {parent: "Heading", text: [][2]string{{"fo:font-size", "18pt"}, {"fo:font-weight", "bold"}}},
 	"Heading_20_2": {parent: "Heading", text: [][2]string{{"fo:font-size", "16pt"}, {"fo:font-weight", "bold"}}},
 	"Heading_20_3": {parent: "Heading", text: [][2]string{{"fo:font-size", "14pt"}, {"fo:font-weight", "bold"}}},
+	"Contents_20_Heading": {parent: "Heading", text: [][2]string{{"fo:font-size", "16pt"}, {"fo:font-weight", "bold"}}},
 	"Footnote": {
 		para: [][2]string{{"fo:margin-left", "0.5985cm"}, {"fo:text-indent", "-0.5985cm"}},
 		text: [][2]string{{"fo:font-size", "10pt"}},

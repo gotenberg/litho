@@ -89,9 +89,14 @@ func (b *builder) tocBody(t *toc, pages []string) ([]*layout.Node, string) {
 	}
 	var sig strings.Builder
 	var paras []*odf.Element
+	// Without a title template Writer titles the table "Table of
+	// Contents" in its "Contents Heading" style.
+	title, titleStyle := "Table of Contents", "Contents_20_Heading"
 	if tt := t.src.Child(odf.NSText, "index-title-template"); tt != nil {
-		title := strings.TrimSpace(tt.TextContent())
-		paras = append(paras, para(tt.A(odf.NSText, "style-name"), &odf.Element{Text: title}))
+		title, titleStyle = strings.TrimSpace(tt.TextContent()), tt.A(odf.NSText, "style-name")
+	}
+	if title != "" {
+		paras = append(paras, para(titleStyle, &odf.Element{Text: title}))
 		sig.WriteString(title)
 	}
 	templates := map[int]*odf.Element{}
