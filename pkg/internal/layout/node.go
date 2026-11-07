@@ -205,9 +205,10 @@ type Result struct {
 	// ContentWidth is the right edge of the flow's scrollable overflow,
 	// in points from the left edge of the first page's area (CSS Overflow
 	// 3, 2.2): the border boxes and line contents of every box, those
-	// inside a box that clips its overflow left out. It is at least zero
-	// and exceeds the area's width when content overflows it, which a
-	// converter shrinks to fit as browsers print.
+	// inside a box that clips its overflow left out, what a page of
+	// another width holds scaled to the first page's area width. It is at
+	// least zero and exceeds the area's width when content overflows its
+	// page, which a converter shrinks to fit as browsers print.
 	ContentWidth float64
 	// Extents maps every non-empty Node.ID of a block-level, inline-block
 	// or replaced box that landed on a page to its border box less its

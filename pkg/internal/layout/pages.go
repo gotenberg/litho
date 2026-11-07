@@ -121,6 +121,15 @@ func (e *engine) box(p int) PageBox {
 	return g.boxes[min(max(p, 0), len(g.boxes)-1)]
 }
 
+// areaW returns the page area width of page p.
+func (e *engine) areaW(p int) float64 {
+	if !e.geom.varies() {
+		return e.pageW
+	}
+	w, _ := areaOf(e.box(p))
+	return w
+}
+
 // areaH returns the page area height of page p.
 func (e *engine) areaH(p int) float64 {
 	if !e.geom.varies() {
@@ -131,15 +140,27 @@ func (e *engine) areaH(p int) float64 {
 }
 
 // overflowRight returns the right edge of the scrollable overflow of the
-// root box rb, from the left edge of the page area (CSS Overflow 3, 2.2):
-// the border box of every box laid out, the line contents of every block
-// container, without descending into a box that clips its overflow. The
-// box whose overflow went to the viewport does not clip its own content
-// (CSS Overflow 3, 3.3), so the page area's overflow counts it all. The
-// walk keeps its own stack: the tree is as deep as the document.
-func overflowRight(rb *box) float64 {
+// root box rb, from the left edge of the first page's area (CSS Overflow
+// 3, 2.2): the border box of every box laid out, the line contents of
+// every block container, without descending into a box that clips its
+// overflow. The box whose overflow went to the viewport does not clip its
+// own content (CSS Overflow 3, 3.3), so the page area's overflow counts it
+// all. When the pages differ in width, what a page holds counts in
+// proportion to that page's area width, scaled to the first page's: the
+// content a wider named page holds is no overflow, and Chromium prints
+// such a page without shrinking the document. The walk keeps its own
+// stack: the tree is as deep as the document.
+func (e *engine) overflowRight(rb *box) float64 {
 	vp := viewportBox(rb)
 	right := 0.0
+	count := func(edge, y float64) {
+		if e.geom.varies() {
+			if w := e.areaW(e.pageOf(y)); w > 0 {
+				edge = edge / w * e.pageW
+			}
+		}
+		right = max(right, clamp(edge))
+	}
 	stack := []*box{rb}
 	for len(stack) > 0 {
 		b := stack[len(stack)-1]
@@ -148,7 +169,7 @@ func overflowRight(rb *box) float64 {
 			continue
 		}
 		if b.kind == kindBlock || b.kind == kindReplaced {
-			right = max(right, clamp(b.x+b.borderW()))
+			count(b.x+b.borderW(), b.y)
 		}
 		if b.kind == kindBlock && b.parent != nil && b.st.Overflow == css.OverflowHidden && b != vp {
 			// The box clips its content: its border box alone counts.
@@ -156,10 +177,10 @@ func overflowRight(rb *box) float64 {
 		}
 		for _, l := range b.lines {
 			for _, it := range l.items {
-				right = max(right, clamp(l.x+it.x+it.w))
+				count(l.x+it.x+it.w, l.y)
 			}
 			for _, f := range l.frags {
-				right = max(right, clamp(l.x+f.x1))
+				count(l.x+f.x1, l.y)
 			}
 		}
 		stack = append(stack, b.kids...)

@@ -124,3 +124,28 @@ func TestLayout_Extents(t *testing.T) {
 		t.Error("an inline box has an extent")
 	}
 }
+
+func TestNamedPages_OverflowCountsAgainstEachPage(t *testing.T) {
+	// A block as wide as the wide page it lands on overflows nothing: the
+	// result's width is the first page's. One twice as wide as the wide
+	// page overflows it twice over, on the first page's scale.
+	w0, _ := areaOf(page(20, 30))
+	for _, tt := range []struct {
+		name string
+		root *Node
+		want float64
+	}{
+		{"fills its page", doc(el(sty(height(5))), el(sty(height(5), named("wide")))), w0},
+		{"overflows its page", doc(el(sty(height(5))), el(sty(height(5), width(80), named("wide")))), 2 * w0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			res, _ := namedRun(t, tt.root)
+			if len(res.Pages) != 2 {
+				t.Fatalf("%d pages, want 2", len(res.Pages))
+			}
+			if d := res.ContentWidth - tt.want; d > 1e-6 || d < -1e-6 {
+				t.Errorf("content width %v, want %v", res.ContentWidth, tt.want)
+			}
+		})
+	}
+}

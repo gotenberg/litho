@@ -70,7 +70,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	if e.err != nil {
 		return nil, e.err
 	}
-	res := &Result{Structure: e.root, ContentWidth: overflowRight(rb)}
+	res := &Result{Structure: e.root, ContentWidth: e.overflowRight(rb)}
 	used := map[*compose.StructElem]bool{}
 	res.Pages = e.assemble(disp, canvas, rb, used)
 	if len(res.Pages) > e.maxPages {
