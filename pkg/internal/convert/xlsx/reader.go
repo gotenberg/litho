@@ -201,6 +201,14 @@ func attr(e *ooxml.Element, local string) string {
 	return v
 }
 
+// textOf returns e's text, "" for a nil e.
+func textOf(e *ooxml.Element) string {
+	if e == nil {
+		return ""
+	}
+	return e.Text
+}
+
 // boolAttr returns e's ST_Boolean attribute local, def when absent.
 func boolAttr(e *ooxml.Element, local string, def bool) bool {
 	v, ok := e.Attr(local)

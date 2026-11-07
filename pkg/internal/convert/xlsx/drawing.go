@@ -103,15 +103,15 @@ func anchorOf(m *ooxml.Element) sheet.Anchor {
 	}
 	a.Column = max(0, min(childInt(m, "col"), maxColumns-1))
 	a.Row = max(0, min(childInt(m, "row"), maxRows-1))
-	a.DX, _ = ooxml.EMU(m.Child(nsXDR, "colOff").Text)
-	a.DY, _ = ooxml.EMU(m.Child(nsXDR, "rowOff").Text)
+	a.DX, _ = ooxml.EMU(textOf(m.Child(nsXDR, "colOff")))
+	a.DY, _ = ooxml.EMU(textOf(m.Child(nsXDR, "rowOff")))
 	a.DX, a.DY = max(0, a.DX), max(0, a.DY)
 	return a
 }
 
 // childInt returns the integer text of m's child local, 0 for none.
 func childInt(m *ooxml.Element, local string) int {
-	n, _ := ooxml.Int(m.Child(nsXDR, local).Text)
+	n, _ := ooxml.Int(textOf(m.Child(nsXDR, local)))
 	return n
 }
 
@@ -198,7 +198,7 @@ func (w *sheetReader) leaves(part string, obj *ooxml.Element, x, y, bw, bh float
 	r := w.r
 	switch obj.Local {
 	case "pic":
-		ref := ooxml.ParsePicture(obj)
+		ref := ooxml.ParsePicture(asPicture(obj))
 		var pic *layout.Picture
 		if ref.SVG != "" {
 			pic = r.loadPicture(part, ref.SVG)
@@ -269,6 +269,22 @@ func (w *sheetReader) leaves(part string, obj *ooxml.Element, x, y, bw, bh float
 			w.leaves(part, k, x+(ox-cx)/cw*bw, y+(oy-cy)/ch*bh, ew/cw*bw, eh/ch*bh, depth+1, out)
 		}
 	}
+}
+
+// asPicture returns an xdr:pic as the DrawingML picture shape it mirrors
+// (ECMA-376 Part 1, 20.5.2.25 pic, whose blipFill and spPr are the
+// spreadsheet drawing's), so the shared picture reader finds its parts.
+func asPicture(obj *ooxml.Element) *ooxml.Element {
+	out := &ooxml.Element{Space: ooxml.NSPic, Local: "pic"}
+	for _, c := range obj.Kids() {
+		if c.Space == nsXDR {
+			alias := *c
+			alias.Space = ooxml.NSPic
+			c = &alias
+		}
+		out.Children = append(out.Children, c)
+	}
+	return out
 }
 
 // xfrmOf returns the transform of a group member: its shape properties'

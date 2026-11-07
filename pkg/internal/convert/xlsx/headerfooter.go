@@ -15,34 +15,31 @@ const maxHeaderRunes = 4096
 
 // headerFooter reads a headerFooter element (ECMA-376 Part 1, 18.3.1.46):
 // the odd, even and first page texts, each parsed into its left, centre
-// and right parts. As LibreOffice imports it, the even and first page
-// texts apply only when their flag is set and they hold something, the
-// header and the footer deciding apart; scaleWithDoc is not read.
+// and right parts. As LibreOffice imports it, differentOddEven and
+// differentFirst give the even and first pages their own texts even when
+// those are empty, which then print nothing; scaleWithDoc is not read.
+//
+// # Corpus evidence
+//
+//   - LibreOffice 26.8.2.2: a sheet with differentFirst, an odd header
+//     and footer and a first header alone prints its first page with the
+//     first header and no footer.
 func (r *reader) headerFooter(e *ooxml.Element) sheet.HeaderFooter {
-	var hf sheet.HeaderFooter
-	text := func(local string) string { return e.Child(nsMain, local).Text }
 	base := r.normal().Font
-	odd := [2]string{text("oddHeader"), text("oddFooter")}
-	even := [2]string{text("evenHeader"), text("evenFooter")}
-	first := [2]string{text("firstHeader"), text("firstFooter")}
-	useEven := boolAttr(e, "differentOddEven", false) && (even[0] != "" || even[1] != "")
-	useFirst := boolAttr(e, "differentFirst", false) && (first[0] != "" || first[1] != "")
-	for i := range 2 {
-		if !useEven || even[i] == "" {
-			even[i] = odd[i]
-		}
-		if !useFirst || first[i] == "" {
-			first[i] = odd[i]
+	margins := func(header, footer string) sheet.Margins {
+		return sheet.Margins{
+			Header: parseHeaderFooter(textOf(e.Child(nsMain, header)), base, r.theme),
+			Footer: parseHeaderFooter(textOf(e.Child(nsMain, footer)), base, r.theme),
 		}
 	}
-	hf.Odd = sheet.Margins{Header: parseHeaderFooter(odd[0], base, r.theme), Footer: parseHeaderFooter(odd[1], base, r.theme)}
-	if useEven {
+	hf := sheet.HeaderFooter{Odd: margins("oddHeader", "oddFooter")}
+	if boolAttr(e, "differentOddEven", false) {
 		hf.DifferentOddEven = true
-		hf.Even = sheet.Margins{Header: parseHeaderFooter(even[0], base, r.theme), Footer: parseHeaderFooter(even[1], base, r.theme)}
+		hf.Even = margins("evenHeader", "evenFooter")
 	}
-	if useFirst {
+	if boolAttr(e, "differentFirst", false) {
 		hf.DifferentFirst = true
-		hf.First = sheet.Margins{Header: parseHeaderFooter(first[0], base, r.theme), Footer: parseHeaderFooter(first[1], base, r.theme)}
+		hf.First = margins("firstHeader", "firstFooter")
 	}
 	return hf
 }

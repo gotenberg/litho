@@ -68,7 +68,7 @@ func (r *reader) richText(e *ooxml.Element) richText {
 			s := add(c.Text)
 			rt.runs = append(rt.runs, sheet.Run{Text: s})
 		case c.Is(nsMain, "r"):
-			s := add(c.Child(nsMain, "t").Text)
+			s := add(textOf(c.Child(nsMain, "t")))
 			run := sheet.Run{Text: s}
 			if pr := c.Child(nsMain, "rPr"); pr != nil {
 				f := r.font(pr)
