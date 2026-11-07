@@ -216,6 +216,23 @@ type PageBox struct {
 	// rule (CSS GCPM 3, 3.4): its margins, borders, padding, background
 	// and max-height apply. nil lays the area out unstyled.
 	Footnote *css.Style
+	// Frame, when not nil, is a border drawn on the page (WordprocessingML
+	// pgBorders, ODF page-layout borders), over the page background and
+	// under the margin content and the page area's content.
+	Frame *PageFrame
+}
+
+// PageFrame is a border box drawn on every page it applies to.
+type PageFrame struct {
+	// Inset is how far the frame's border box sits from each page edge,
+	// in points, indexed by [css.Side]; finite, and leaving a positive
+	// box.
+	Inset [4]float64
+	// Style supplies the frame's borders: its Border fields and BorderRadius
+	// alone are read. Its padding, when any, is the room between the
+	// border and the content, which the converter folds into Inset or the
+	// margins; the engine draws the border where Inset puts it.
+	Style *css.Style
 }
 
 // Result is what [Layout] produced.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/plaintext"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
@@ -379,7 +380,7 @@ var (
 	// ErrEncryptedNotAuthenticated is returned by [Writer.WriteTo] when the
 	// source document is encrypted but was never authenticated, so its
 	// strings and streams cannot be decrypted for re-serialization. Reopen
-	// the document with [WithPassword] before writing.
+	// the document with [WithConvertPassword] before writing.
 	ErrEncryptedNotAuthenticated = errors.New("source document is encrypted and not authenticated; reopen with WithPassword before writing")
 
 	// ErrPasswordRejected is returned by [Writer.WriteTo] when an
@@ -797,6 +798,16 @@ var (
 	// written.
 	ErrConvertTooManyPages = plaintext.ErrTooManyPages
 
+	// ErrConvertMalformed is returned, wrapped, by [Convert] for a
+	// [FormatDOCX] or [FormatODT] source that is not a package of its
+	// format, or whose required parts are missing or unreadable.
+	ErrConvertMalformed = office.ErrMalformed
+
+	// ErrConvertEncrypted is returned, wrapped, by [Convert] for an encrypted
+	// [FormatDOCX] or [FormatODT] source that [WithConvertPassword] does not open:
+	// no password, a wrong one, or a scheme litho does not read.
+	ErrConvertEncrypted = office.ErrEncrypted
+
 	// ErrConvertNoFonts is returned, wrapped, by [Convert] when the font
 	// directories it reads hold no usable font. Nothing is written.
 	ErrConvertNoFonts = text.ErrNoFonts
@@ -1069,6 +1080,8 @@ var invalidInputErrors = []error{
 	ErrInvalidConvertOptions,
 	ErrConvertInputTooLarge,
 	ErrConvertTooManyPages,
+	ErrConvertMalformed,
+	ErrConvertEncrypted,
 	ErrStreamTooLarge,
 	ErrDamagedStream,
 	ErrPageContentTooLarge,

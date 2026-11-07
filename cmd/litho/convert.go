@@ -17,10 +17,10 @@ import (
 )
 
 // convertUsage is the synopsis litho convert prints on a missing argument.
-const convertUsage = "Usage: litho convert [--from text|html|markdown] [--paper A4|Letter|WxH] [--landscape] [--margin PT | --margin T,R,B,L] " +
+const convertUsage = "Usage: litho convert [--from text|html|markdown|docx|odt] [--paper A4|Letter|WxH] [--landscape] [--margin PT | --margin T,R,B,L] " +
 	"[--font FAMILY] [--font-size PT] [--media print|screen] [--media-feature NAME=VALUE]... [--resources DIR] [--base-url URL] " +
 	"[--prefer-css-page-size] [--scale N] [--single-page] [--pages RANGES] [--background=false] [--outline=false] " +
-	"[--header FILE] [--footer FILE] [--date RFC3339|now] [--font-dir DIR]... [-f json] -o out.pdf <file|http(s) URL>"
+	"[--header FILE] [--footer FILE] [--date RFC3339|now] [--password PASSWORD] [--font-dir DIR]... [-f json] -o out.pdf <file|http(s) URL>"
 
 // convertFormats maps the --from values, and the file extensions that imply
 // them, to the formats [pdf.Convert] reads. Immutable lookup tables.
@@ -29,6 +29,8 @@ var (
 		"text":     pdf.FormatText,
 		"html":     pdf.FormatHTML,
 		"markdown": pdf.FormatMarkdown,
+		"docx":     pdf.FormatDOCX,
+		"odt":      pdf.FormatODT,
 	}
 	convertExtensions = map[string]pdf.Format{
 		".txt":      pdf.FormatText,
@@ -37,6 +39,8 @@ var (
 		".htm":      pdf.FormatHTML,
 		".md":       pdf.FormatMarkdown,
 		".markdown": pdf.FormatMarkdown,
+		".docx":     pdf.FormatDOCX,
+		".odt":      pdf.FormatODT,
 	}
 )
 
@@ -117,7 +121,7 @@ func (f *marginFlag) Set(value string) error {
 func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("convert", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	from := fs.String("from", "", "Input format: text, html or markdown. Without it, the file extension decides: .txt and .text are text, .html and .htm are html, .md and .markdown are markdown; "+
+	from := fs.String("from", "", "Input format: text, html, markdown, docx or odt. Without it, the file extension decides: .txt and .text are text, .html and .htm are html, .md and .markdown are markdown, .docx is docx, .odt is odt; "+
 		"for an http(s) URL, the Content-Type, then the URL's extension, then html")
 	output := fs.String("o", "", "Output file (required), - for stdout")
 	format := fs.String("f", "text", "Report format: text (warnings on stderr) or json (the report on stdout)")
@@ -146,6 +150,7 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		"and the CLI fetches every http(s) resource the document names (30 s timeout a request); a service embedding litho brings its own HTTP client")
 	var mediaFeatures stringsFlag
 	fs.Var(&mediaFeatures, "media-feature", "Media feature an HTML file's @media rules see, as NAME=VALUE such as prefers-color-scheme=dark; repeatable")
+	password := fs.String("password", "", "Password of an encrypted DOCX or ODT file; --landscape, --paper, --pages and --outline apply to such a file too, over its own page setup")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
@@ -211,6 +216,7 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		}
 	}
 	htmlLike := inFormat == pdf.FormatHTML || inFormat == pdf.FormatMarkdown
+	officeLike := inFormat == pdf.FormatDOCX || inFormat == pdf.FormatODT
 	resDir := *resources
 	if resDir == "" && input != "-" && !remote {
 		resDir = filepath.Dir(input)
@@ -246,6 +252,9 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 			defer root.Close() //nolint:errcheck // read-only directory handle
 			opts = append(opts, pdf.WithResources(root.FS()))
 		}
+	}
+	if officeLike {
+		opts = append(opts, pdf.WithLandscape(*landscape), pdf.WithPageRanges(*pages), pdf.WithOutline(*outlineFlag), pdf.WithConvertPassword(*password))
 	}
 	if paper.set {
 		opts = append(opts, pdf.WithPaperSize(paper.width, paper.height))
@@ -362,12 +371,12 @@ func convertFormat(from, path string) (pdf.Format, error) {
 	if from != "" {
 		f, ok := convertFormats[strings.ToLower(from)]
 		if !ok {
-			return "", fmt.Errorf("unsupported --from %q: litho convert reads text, html and markdown", from)
+			return "", fmt.Errorf("unsupported --from %q: litho convert reads text, html, markdown, docx and odt", from)
 		}
 		return f, nil
 	}
 	if path == "-" {
-		return "", errors.New("standard input has no extension to tell its format: pass --from text, html or markdown")
+		return "", errors.New("standard input has no extension to tell its format: pass --from text, html, markdown, docx or odt")
 	}
 	ext := strings.ToLower(filepath.Ext(path))
 	f, ok := convertExtensions[ext]

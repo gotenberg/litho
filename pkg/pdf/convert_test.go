@@ -131,7 +131,7 @@ func TestConvert_RefusesBadInput(t *testing.T) {
 		src    string
 		want   error
 	}{
-		"unknown format":     {format: "docx", want: ErrUnsupportedFormat},
+		"unknown format":     {format: "rtf", want: ErrUnsupportedFormat},
 		"empty format":       {format: "", want: ErrUnsupportedFormat},
 		"bad paper":          {format: FormatText, opts: []ConvertOption{WithPaperSize(-1, 10)}, want: ErrInvalidConvertOptions},
 		"no room":            {format: FormatText, opts: []ConvertOption{WithMargins(500, 0, 500, 0)}, want: ErrInvalidConvertOptions},

@@ -19,7 +19,12 @@ pkg/internal/layout/             Box layout and pagination: a styled Node tree i
 pkg/internal/svg/                SVG renderer: an SVG document in, vector fragments out, for images, backgrounds and inline <svg> (wave 2).
 pkg/internal/convert/html/       HTML converter: parses with x/net/html, styles with css, builds the layout tree (wave 1 onward).
 pkg/internal/convert/markdown/   Markdown converter: renders with gomarkdown at Gotenberg's defaults, lays out through html (wave 2).
-pkg/internal/convert/ooxml/      DOCX, XLSX and PPTX converters (waves 4 to 6).
+pkg/internal/ooxml/              OOXML package reading (ECMA-376 Part 2): parts, relationships, content types, the shared DrawingML and theme (wave 4 onward).
+pkg/internal/odf/                OpenDocument package reading (ODF 1.3 Part 2): manifest, content and styles, page layouts (wave 4 onward).
+pkg/internal/offcrypto/          Office document encryption: MS-OFFCRYPTO containers and ODF encrypted entries, opened with a password (wave 4).
+pkg/internal/convert/office/     What the Office converters share: options, errors, the source read.
+pkg/internal/convert/docx/       DOCX converter: WordprocessingML to the layout tree (wave 4).
+pkg/internal/convert/odt/        ODT converter: OpenDocument text to the layout tree (wave 4).
 pkg/pdf/convert.go               Public entry point: pdf.Convert.
 cmd/litho/convert.go             CLI: litho convert.
 ```

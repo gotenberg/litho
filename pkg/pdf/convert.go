@@ -15,8 +15,11 @@ import (
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/convert/docx"
 	htmlconv "github.com/gotenberg/litho/pkg/internal/convert/html"
 	"github.com/gotenberg/litho/pkg/internal/convert/markdown"
+	"github.com/gotenberg/litho/pkg/internal/convert/odt"
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/plaintext"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -37,6 +40,12 @@ const (
 	// FormatMarkdown is a Markdown document, rendered to HTML and laid out
 	// as [FormatHTML] is. See [Convert].
 	FormatMarkdown Format = "markdown"
+	// FormatDOCX is a WordprocessingML document, a DOCX file (ECMA-376).
+	// See [Convert] for what is drawn.
+	FormatDOCX Format = "docx"
+	// FormatODT is an OpenDocument text document, an ODT file (ODF 1.3).
+	// See [Convert] for what is drawn.
+	FormatODT Format = "odt"
 )
 
 // ConvertOption tunes [Convert].
@@ -47,6 +56,7 @@ type convertOptions struct {
 	logger                               *slog.Logger
 	fontDirs                             []string
 	width, height                        float64
+	paperSet                             bool
 	marginTop, marginRight, marginBottom float64
 	marginLeft                           float64
 	marginsSet                           bool
@@ -69,6 +79,7 @@ type convertOptions struct {
 	baseURL                              string
 	httpClient                           *http.Client
 	mediaFeatures                        map[string]string
+	password                             string
 }
 
 // WithConvertLogger injects a structured logger for the diagnostics of a
@@ -104,10 +115,14 @@ func WithConvertFontDirs(dirs ...string) ConvertOption {
 // WithPaperSize sets the page size in points, width then height. The default
 // is A4, 595.276 by 841.890 points. Each side must be finite, positive and at
 // most 14,400 points (ISO 32000-1, Annex C.2), or [Convert] fails with
-// [ErrInvalidConvertOptions]. Both zero keep the default.
+// [ErrInvalidConvertOptions]. Both zero keep the default. A [FormatDOCX] or
+// [FormatODT] source has a page size of its own, per section, which
+// applies unless this option names another: then every section is laid
+// out on this paper.
 func WithPaperSize(width, height float64) ConvertOption {
 	return func(o *convertOptions) {
 		o.width, o.height = width, height
+		o.paperSet = width != 0 || height != 0
 	}
 }
 
@@ -171,7 +186,9 @@ func WithResources(fsys fs.FS) ConvertOption {
 
 // WithLandscape swaps the paper's width and height of a [FormatHTML]
 // source, so the page is as wide as the paper is tall: [WithPaperSize]
-// names the portrait sheet.
+// names the portrait sheet. It lays every section of a [FormatDOCX] or
+// [FormatODT] source out in landscape: a portrait section's width and
+// height are swapped, a landscape one is kept.
 func WithLandscape(landscape bool) ConvertOption {
 	return func(o *convertOptions) { o.landscape = landscape }
 }
@@ -207,9 +224,9 @@ func WithSinglePage(single bool) ConvertOption {
 	return func(o *convertOptions) { o.singlePage = single }
 }
 
-// WithPageRanges selects the pages of a [FormatHTML] source written,
-// one-based, in document order, as "1-5, 8, 11-13"; empty, the default,
-// writes every page. A range past the last page is ignored. A selection
+// WithPageRanges selects the pages of a [FormatHTML], [FormatDOCX] or
+// [FormatODT] source written, one-based, in document order, as "1-5, 8,
+// 11-13"; empty, the default, writes every page. A range past the last page is ignored. A selection
 // that keeps no page, a range whose start exceeds its end and a malformed
 // specification are refused with [ErrInvalidConvertOptions]. Page
 // counters in headers, footers and margin boxes count the whole document.
@@ -246,10 +263,18 @@ func WithFractionalFontMetrics(fractional bool) ConvertOption {
 	return func(o *convertOptions) { o.fractionalFontMetrics = fractional }
 }
 
-// WithOutline sets whether the headings of a [FormatHTML] source become
-// the document outline. true is the default.
+// WithOutline sets whether the headings of a [FormatHTML] source, or the
+// paragraphs of a [FormatDOCX] or [FormatODT] source whose style has an
+// outline level, become the document outline. true is the default.
 func WithOutline(outline bool) ConvertOption {
 	return func(o *convertOptions) { o.omitOutline = !outline }
+}
+
+// WithConvertPassword opens an encrypted [FormatDOCX] or [FormatODT] source with
+// password. Without it, or with a wrong one, an encrypted source fails
+// with [ErrConvertEncrypted]. Other formats ignore it.
+func WithConvertPassword(password string) ConvertOption {
+	return func(o *convertOptions) { o.password = password }
 }
 
 // WithHeaderTemplate draws the HTML fragment html in the top margin of
@@ -421,6 +446,21 @@ type ConvertWarning struct {
 // [Limits.MaxConvertInputBytes] caps the Markdown, not the HTML it renders
 // to.
 //
+// # DOCX and ODT
+//
+// [FormatDOCX] reads a WordprocessingML package and [FormatODT] an
+// OpenDocument text package, and lays each out as LibreOffice prints it:
+// the document's sections with their page size, orientation, margins,
+// columns, headers and footers, its paragraph and character styles,
+// numbering and lists, tables, pictures, footnotes and endnotes, fields,
+// hyperlinks and bookmarks. [WithPaperSize] and [WithLandscape] override
+// the sections' page setup; [WithPageRanges], [WithOutline] and
+// [WithConvertPassword] apply; the other options of an HTML source are ignored,
+// and so are [WithMargins], [WithFontFamilies] and [WithFontSize]: the
+// document carries its own. A construct that is not drawn is reported as a
+// warning. Macros never run; embedded objects draw as their preview
+// picture when the package holds one.
+//
 // # All formats
 //
 // The fonts are embedded, each subset to the glyphs drawn. Nothing is
@@ -434,8 +474,10 @@ type ConvertWarning struct {
 // [Limits.MaxConvertInputBytes] or for an HTML document past the
 // converter's element, cascade or box caps, [ErrConvertTooManyPages] past
 // [Limits.MaxConvertPages], [ErrConvertNoFonts] when the font directories
-// hold no usable font, [ErrInternalPanic] for a recovered panic, and ctx's
-// error when ctx ends first. On an error other than a write error on dst,
+// hold no usable font, [ErrConvertMalformed] for a DOCX or ODT source that
+// is not a package of its format, [ErrConvertEncrypted] for one
+// [WithConvertPassword] does not open, [ErrInternalPanic] for a recovered panic,
+// and ctx's error when ctx ends first. On an error other than a write error on dst,
 // nothing reaches dst: the whole file is built before it is written.
 //
 // # Ownership and concurrency
@@ -451,7 +493,7 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	}
 	defer recoverToError(o.logger, "Convert", &err)
 
-	if format != FormatText && format != FormatHTML && format != FormatMarkdown {
+	if format != FormatText && format != FormatHTML && format != FormatMarkdown && format != FormatDOCX && format != FormatODT {
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
 	}
 	if src == nil {
@@ -478,9 +520,12 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 		o.marginTop, o.marginRight, o.marginBottom, o.marginLeft = plaintext.DefaultMargin, plaintext.DefaultMargin, plaintext.DefaultMargin, plaintext.DefaultMargin
 	}
 	var doc *compose.Document
-	if format == FormatHTML || format == FormatMarkdown {
+	switch format {
+	case FormatHTML, FormatMarkdown:
 		doc, err = convertHTML(ctx, src, format, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages)
-	} else {
+	case FormatDOCX, FormatODT:
+		doc, err = convertOffice(ctx, src, format, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages)
+	case FormatText:
 		doc, err = plaintext.Convert(ctx, src, fonts, plaintext.Options{
 			PageWidth:     o.width,
 			PageHeight:    o.height,
@@ -561,6 +606,47 @@ func convertHTML(ctx context.Context, src io.Reader, format Format, fonts *text.
 	case errors.Is(err, htmlconv.ErrTooManyPages):
 		return nil, fmt.Errorf("converting %s: %w: %w", name, ErrConvertTooManyPages, err)
 	default:
+		return nil, fmt.Errorf("converting %s: %w", name, err)
+	}
+}
+
+// convertOffice lays a DOCX or ODT source out, mapping the Office
+// converters' errors onto the public sentinels: their option errors to
+// [ErrInvalidConvertOptions], their size caps to [ErrConvertInputTooLarge],
+// their page cap to [ErrConvertTooManyPages], a package that is not one
+// to [ErrConvertMalformed], an encrypted one to [ErrConvertEncrypted], and
+// a converter not written yet to [ErrUnsupportedFormat].
+func convertOffice(ctx context.Context, src io.Reader, format Format, fonts *text.Fonts, o *convertOptions, maxBytes int64, maxPages int) (*compose.Document, error) {
+	conv, name := docx.Convert, "DOCX"
+	if format == FormatODT {
+		conv, name = odt.Convert, "ODT"
+	}
+	opts := office.Options{
+		Landscape:     o.landscape,
+		Password:      o.password,
+		PageRanges:    o.pageRanges,
+		OmitOutline:   o.omitOutline,
+		MaxInputBytes: maxBytes,
+		MaxPages:      maxPages,
+		Logger:        o.logger,
+	}
+	if o.paperSet {
+		opts.PageWidth, opts.PageHeight = o.width, o.height
+	}
+	doc, err := conv(ctx, src, fonts, opts)
+	switch {
+	case err == nil:
+		return doc, nil
+	case errors.Is(err, office.ErrNotImplemented):
+		return nil, fmt.Errorf("converting %s: %w: %w", name, ErrUnsupportedFormat, err)
+	case errors.Is(err, office.ErrInvalidOptions):
+		return nil, fmt.Errorf("converting %s: %w: %w", name, ErrInvalidConvertOptions, err)
+	case errors.Is(err, office.ErrInputTooLarge), errors.Is(err, layout.ErrTooManyBoxes):
+		return nil, fmt.Errorf("converting %s: %w: %w", name, ErrConvertInputTooLarge, err)
+	case errors.Is(err, office.ErrTooManyPages):
+		return nil, fmt.Errorf("converting %s: %w: %w", name, ErrConvertTooManyPages, err)
+	default:
+		// ErrMalformed and ErrEncrypted are the public sentinels themselves.
 		return nil, fmt.Errorf("converting %s: %w", name, err)
 	}
 }

@@ -987,7 +987,21 @@ type Style struct {
 	// fullwidth punctuation full width (CSS Text 4, 8.3).
 	NoSpacingTrim bool
 	// TabSize takes Number (a count of spaces) or Points.
-	TabSize       Dimension
+	TabSize Dimension
+	// TabStops are the tab stops of a block container, in increasing Pos,
+	// which a tab character in its lines advances to before the TabSize
+	// multiples (WordprocessingML tabs, ODF style:tab-stops). No CSS
+	// property sets them: an Office converter fills them; see [TabStop].
+	TabStops []TabStop
+	// MinLineHeight is the least height of a line box, in points, 0 for
+	// none: the line is at least this tall and grows with its content
+	// (WordprocessingML spacing lineRule atLeast, ODF
+	// fo:line-height-at-least). No CSS property sets it.
+	MinLineHeight float64
+	// TextScale scales the glyphs of the text horizontally, 1 for the
+	// natural width, 0 for 1 (WordprocessingML w, ODF style:text-scale). No
+	// CSS property sets it; the engine writes it as compose.Text.HScale.
+	TextScale     float64
 	VerticalAlign VerticalAlign
 	Direction     Direction
 	UnicodeBidi   UnicodeBidi

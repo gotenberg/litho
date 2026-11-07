@@ -155,7 +155,21 @@ type Text struct {
 	// Zero draws upright; a negative value leans left. Its magnitude is at
 	// most 1.
 	Skew float64
+	// HScale scales the glyphs horizontally about their origins, the text
+	// state's horizontal scaling (ISO 32000-1, 9.3.4): the glyph shapes
+	// and the positions along the baseline are both scaled, so a converter
+	// lays the run out at the scaled advances and writes the unscaled
+	// positions. 1 and 0 draw at the natural width. It lies in [MinHScale,
+	// MaxHScale].
+	HScale float64
 }
+
+// The bounds of [Text.HScale] (ISO 32000-1, 9.3.4 puts no bound on Tz; the
+// Office formats scale text between 1% and 600%).
+const (
+	MinHScale = 0.01
+	MaxHScale = 6
+)
 
 // ImageSource is the pixels of an [Image], shared by every placement of it.
 // Exactly one of Image and JPEG is set.
