@@ -105,7 +105,9 @@ func TestWriteClusterSpreadsItsText(t *testing.T) {
 			glyphs: []shaped{
 				{"a", 5, "a"}, {"c", 5, "bc"}, {"b", 5, ""}, {"a", 5, "a"},
 			},
-			want:   "acba",
+			// The extractor reads the span's ActualText, the glyphs'
+			// characters in text order.
+			want:   "abca",
 			actual: []string{"bc"},
 		},
 		{

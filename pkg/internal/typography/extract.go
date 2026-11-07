@@ -178,6 +178,9 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		marked = runs.next()
 	}
 
+	// spans are the marked-content sequences with an ActualText open in
+	// this stream.
+	var spans []actualSpan
 	var currentFont *Font
 	var currentFontName string
 	// The object number of the font dictionary currently selected by Tf, so a
@@ -231,13 +234,23 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 
 		state := machine.Current()
 
-		// Text extraction returns the rendered glyphs and does not
-		// honour /ActualText; the substitution is reserved for
-		// accessibility consumers and would surface lowercase 'v' in
-		// place of the small-caps 'V' actually drawn on the page. Drop
-		// any PendingActualText that BDC may have set so it does not
-		// affect downstream state, and let the glyph-rendering
+		// Text extraction returns the rendered glyphs and honours
+		// /ActualText only for a cluster drawn out of order (see
+		// [reorderActualText]); the substitution would otherwise surface
+		// lowercase 'v' in place of the small-caps 'V' actually drawn on
+		// the page. Drop any PendingActualText that BDC may have set so it
+		// does not affect downstream state, and let the glyph-rendering
 		// operators emit normally.
+		switch {
+		case op.Operator == "BDC" && machine.PendingActualText != "":
+			spans = append(spans, actualSpan{start: len(*elements), text: actualTextOf(machine.PendingActualText), depth: len(machine.MarkedContent)})
+		case op.Operator == "EMC" && len(spans) > 0 && len(machine.MarkedContent) < spans[len(spans)-1].depth:
+			sp := spans[len(spans)-1]
+			spans = spans[:len(spans)-1]
+			if sp.start <= len(*elements) {
+				reorderActualText((*elements)[sp.start:], sp.text)
+			}
+		}
 		machine.PendingActualText = ""
 
 		if state.SkipExtraction {
