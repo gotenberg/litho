@@ -23,6 +23,9 @@ func TestLineBreak_Strictness(t *testing.T) {
 		{"normal keeps iteration marks", sty(lb(css.LineBreakNormal)), "漢字漢々漢", []string{"漢字", "漢々漢"}},
 		{"loose breaks before iteration marks", sty(lb(css.LineBreakLoose)), "漢字漢々漢", []string{"漢字漢", "々漢"}},
 		{"no break after an opening bracket", sty(), "漢字「ー漢", []string{"漢字", "「ー漢"}},
+		// keep-all closes the opportunities between CJK letters, the ones
+		// line-break opens included (CSS Text 3, 5.3).
+		{"keep-all keeps small kana", sty(lb(css.LineBreakNormal), func(s *css.Style) { s.WordBreak = css.KeepAll }), "漢字漢ぁ漢", []string{"漢字漢ぁ漢"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

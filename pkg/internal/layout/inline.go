@@ -202,12 +202,20 @@ func (p *ifcPara) allowed(i int) bool {
 		if breakAll && p.p.GraphemeStart(i) && !unicode.IsSpace(b) && !unicode.IsPunct(b) && !unicode.IsSpace(a) {
 			return true
 		}
-		return p.tailoredBreak(i)
+		return p.tailoredBreak(i) && !p.keptTogether(i, a, b)
 	}
 	if p.strictBreak(i) {
 		return false
 	}
-	return p.styleAt(i).WordBreak != css.KeepAll || !isWordChar(a) || !isWordChar(b)
+	return !p.keptTogether(i, a, b)
+}
+
+// keptTogether reports a boundary between two letters or digits that
+// word-break: keep-all closes (CSS Text 3, 5.3): the opportunities of UAX
+// #14 and those line-break opens between the typographic letter units of
+// CJK alike.
+func (p *ifcPara) keptTogether(i int, a, b rune) bool {
+	return p.styleAt(i).WordBreak == css.KeepAll && isWordChar(a) && isWordChar(b)
 }
 
 // isPreservedSpace reports a space or tab that break-spaces keeps and
