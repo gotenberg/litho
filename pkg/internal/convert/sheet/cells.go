@@ -126,6 +126,18 @@ func (b *pageBuilder) display(u *unit) (display, bool) {
 	}
 	d.wrap = (st.Align.Wrap || st.Align.Horizontal == HJustify || st.Align.Horizontal == HDistributed) && (!d.value || c.Value.Kind != Number)
 	d.shrink = st.Align.Shrink && !d.wrap && st.Align.Horizontal != HFill
+	if !d.wrap && !st.Align.Stacked {
+		// A line break in a cell that does not wrap draws nothing: Calc
+		// sets the lines one after the other.
+		d.text = dropBreaks(d.text)
+		if len(d.runs) > 0 {
+			runs := make([]Run, len(d.runs))
+			for i, r := range d.runs {
+				runs[i] = Run{Text: dropBreaks(r.Text), Font: r.Font}
+			}
+			d.runs = runs
+		}
+	}
 	if st.Align.Stacked {
 		// Stacked text sets one character a line, centred (ODF
 		// style:direction ttb; ECMA-376 Part 1, 18.8.1 textRotation 255).
@@ -449,4 +461,18 @@ func stack(s string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+// dropBreaks returns s without its line breaks.
+//
+// # Corpus evidence
+//
+//   - xlsx: sc/cell-multi-line.xlsx and sc/preserve_space.xlsx, cells
+//     whose text holds line breaks without wrapping, print
+//     "Line1Line2Line3" and "123456" on one line.
+func dropBreaks(s string) string {
+	if !strings.ContainsAny(s, "\r\n") {
+		return s
+	}
+	return strings.NewReplacer("\r\n", "", "\n", "", "\r", "").Replace(s)
 }
