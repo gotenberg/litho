@@ -20,8 +20,7 @@ import (
 // chromium.sh asks for (paperWidth=210mm, paperHeight=297mm) with the
 // Chromium route's default margins of 0.39 inch. Chromium's references carry
 // a 595.92 by 841.92 point media box and a text column 27.75 points in (37
-// CSS pixels: it rounds the margin to whole pixels before scaling), measured
-// on the committed PDFs; converting on the exact A4 of 595.276 by 841.89
+// CSS pixels, see [Source.Margins]), measured on the committed PDFs; converting on the exact A4 of 595.276 by 841.89
 // points with 28.08 point margins wraps some paragraphs one line longer and
 // shifts every page break after.
 const (
@@ -276,17 +275,35 @@ func (s *Source) Paper() (width, height float64) {
 }
 
 // Margins returns the margins in points: 27.75 for a side the options leave
-// out, else the inches rounded to whole CSS pixels (96 per inch) at 0.75
-// point each, as Chromium lays them out.
+// out, else what Chromium lays out for the inches: printToPDF keeps the
+// margins in whole points, truncating the inches times 72 (printing's
+// PageMargins holds integers), and Blink then lays the page out in whole
+// CSS pixels, rounding those points times 4/3 to the nearest; the margin is
+// that many pixels at 0.75 point each. A whole number of points times 4/3
+// never ends in a half, so the rounding has no tie.
+//
+// # Corpus evidence
+//
+//   - html: margins of 0.0104, 0.1, 0.2, 0.3, 0.35, 0.37, 0.42917 and 0.6
+//     inch put the content box of Chromium's page at 0, 6.75, 14.25, 21,
+//     24.75, 26.25, 30 and 42.75 points; rounding the inches to whole
+//     pixels instead gives 0.75, 7.5, 14.25, 21.75, 25.5, 27, 30.75 and 43.5,
+//     and truncating them to whole pixels 30.75 at 0.42917.
 func (s *Source) Margins() (top, right, bottom, left float64) {
 	m := func(v *float64) float64 {
 		if v == nil {
 			return DefaultMargin
 		}
-		return math.Round(*v*96) * 0.75
+		return chromiumMargin(*v)
 	}
 	o := s.Options
 	return m(o.MarginTop), m(o.MarginRight), m(o.MarginBottom), m(o.MarginLeft)
+}
+
+// chromiumMargin returns the margin in points Chromium lays out for a
+// margin of inches (see [Source.Margins]).
+func chromiumMargin(inches float64) float64 {
+	return math.Round(math.Trunc(inches*72)*4/3) * 0.75
 }
 
 // MediaType returns the media type the stylesheets are evaluated for.
