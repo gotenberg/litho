@@ -255,7 +255,13 @@ func (e *engine) colContrib(it *gitem, k contribKind, tracks []*gtrack) float64 
 	}
 	out := outerW(b, 0)
 	if autoMinApplies(it, colAxis, tracks, b.st.MinWidthAuto) {
-		return e.colAutoMin(b) + out
+		m := e.colAutoMin(b)
+		if fs, ok := fixedSpan(tracks, it.start[colAxis], it.end[colAxis], 0); ok {
+			// Clamped by the stretch fit of an area of fixed tracks (CSS
+			// Grid 1, 6.6).
+			m = min(m, max(fs-out, 0))
+		}
+		return m + out
 	}
 	if mn, ok := specWidth(b, b.st.MinWidth, 0); ok && b.st.MinWidth.Kind == css.Points {
 		return mn + out
@@ -360,6 +366,12 @@ func (e *engine) layoutGrid(b *box, cb cblock, top float64) float64 {
 		innerH = max(min(zr.sum(), maxH), minH)
 	}
 	l.inner[rowAxis] = innerH
+	if st.RowGap.Kind == css.Percent && !pcb.hDefinite {
+		// A percentage gap of an indefinite height counts as 0 for the
+		// sizing, then resolves against the height laid out, as Chromium
+		// resolves it (CSS Box Alignment 3, 8.1).
+		l.gap[rowAxis] = gapOf(st.RowGap, innerH, true)
+	}
 	rowPos := l.position(rowAxis, st.AlignContent, innerH)
 
 	end := l.place(top, colPos, rowPos)
@@ -569,6 +581,9 @@ func (l *gridLayout) rowContrib(it *gitem, kd contribKind) float64 {
 		}
 		if mx, ok := specHeight(k, k.st.MaxHeight, cblock{}); ok {
 			c = min(c, mx)
+		}
+		if fs, ok := fixedSpan(l.tracks[rowAxis], it.start[rowAxis], it.end[rowAxis], l.gap[rowAxis]); ok {
+			c = min(c, max(fs-out, 0))
 		}
 		return c + out
 	}

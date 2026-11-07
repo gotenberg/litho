@@ -1101,7 +1101,7 @@ func (p *placement) inLine(it *fitem, ln *flexLine) float64 {
 // reference: a flex container, a table, or a box with a child whose
 // height is a percentage. Another one stretches without a new layout.
 func dependsOnHeight(k *box) bool {
-	if k.flex != nil || k.tpart == partWrapper {
+	if k.flex != nil || k.grid != nil || k.tpart == partWrapper {
 		return true
 	}
 	for _, c := range k.kids {

@@ -47,7 +47,9 @@ type gtrack struct {
 	start float64
 }
 
-func (t *gtrack) flexible() bool { return t.max.Kind == css.TrackFlex }
+// flexible reports a flexible track; a collapsed one has none (CSS Grid
+// 1, 7.2.3.2).
+func (t *gtrack) flexible() bool { return t.max.Kind == css.TrackFlex && !t.collapsed }
 
 func (t *gtrack) intrinsicMin() bool {
 	return t.min.Kind == css.TrackAuto || t.min.Kind == css.TrackMinContent || t.min.Kind == css.TrackMaxContent
@@ -241,6 +243,9 @@ func (z *gridSizer) intrinsic(items []*gitem) {
 func (z *gridSizer) spanGroup(group []*gitem, flex bool) {
 	minFn := func(it *gitem) float64 {
 		switch {
+		case flex:
+			// An item crossing flexible tracks contributes its minimum
+			// alone, under any constraint, as Chromium sizes it.
 		case z.mode == sizeMin && z.spansAutoMin(it):
 			return z.limited(it, contribMinContent)
 		case z.mode == sizeMax && z.spansAutoMin(it):
