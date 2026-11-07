@@ -28,7 +28,7 @@ func (e *engine) intrinsic(b *box) (float64, float64) {
 	}
 	b.measured = true
 	src := b.sizeSrc()
-	var lo, hi float64
+	var lo, hi, clo, chi float64
 	pd, bd, _ := edgesOf(b, 0)
 	edges := pd[css.Left] + pd[css.Right] + bd[css.Left] + bd[css.Right]
 	if b.kind == kindReplaced {
@@ -44,9 +44,7 @@ func (e *engine) intrinsic(b *box) (float64, float64) {
 		lo, hi = w, w
 	} else {
 		lo, hi = formatterFor(b).intrinsic(e, b)
-		if hasSizing(src) {
-			lo, hi = keywordIntrinsic(src, lo, hi, lo, hi)
-		}
+		clo, chi = lo, hi
 		if src.Width.Kind == css.Points {
 			w := max(clamp(src.Width.Value), 0)
 			if src.BoxSizing == css.BorderBox {
@@ -68,6 +66,9 @@ func (e *engine) intrinsic(b *box) (float64, float64) {
 			mn -= edges
 		}
 		lo, hi = max(lo, mn), max(hi, mn)
+	}
+	if hasSizing(src) && b.kind != kindReplaced {
+		lo, hi = keywordIntrinsic(src, lo, hi, clo, chi)
 	}
 	hi = max(hi, lo)
 	b.minW, b.maxW = lo, hi
