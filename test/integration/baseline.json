@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-07T07:06:03Z",
+  "captured_at": "2026-11-07T07:21:14Z",
   "corpora": {
     "compose": {
       "features": {
@@ -278,8 +278,8 @@
     "html": {
       "features": {
         "diff": {
-          "matched": 24,
-          "mismatched": 5,
+          "matched": 27,
+          "mismatched": 2,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -340,7 +340,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.3333
+              "text_f1": 1
             },
             "header-footer": {
               "layout": 0.906,
@@ -348,7 +348,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.4444
+              "text_f1": 1
             },
             "i18n": {
               "layout": 0.8943,
@@ -404,7 +404,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9065
+              "text_f1": 1
             },
             "markdown": {
               "layout": 0.9571,
@@ -431,11 +431,11 @@
               "text_f1": 1
             },
             "named-pages": {
-              "layout": 0.1996,
+              "layout": 0.9443,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.3333,
+              "strict": 1,
               "text_f1": 1
             },
             "no-background": {
@@ -1673,8 +1673,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 704,
-          "mismatched": 70,
+          "matched": 705,
+          "mismatched": 69,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -2327,7 +2327,7 @@
             "css/css-page/page-name-siblings-004-print.html": "pass",
             "css/css-page/page-name-table-001-print.html": "pass",
             "css/css-page/page-name-zero-height-001-print.html": "pass",
-            "css/css-page/page-size-007-print.html": "fail",
+            "css/css-page/page-size-007-print.html": "pass",
             "css/css-page/page-size-008-print.html": "fail",
             "css/css-page/page-size-009-print.html": "fail",
             "css/css-page/page-size-011-print.html": "pass",
