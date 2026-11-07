@@ -69,7 +69,7 @@ func (g *treeGen) style() *css.Style {
 	displays := []css.Display{
 		css.Block, css.Inline, css.InlineBlock, css.ListItem, css.Inline, css.Block, css.Table, css.TableCell, css.DisplayNone, css.InlineTable, css.TableColumn,
 		css.TableRow, css.TableRowGroup, css.TableHeaderGroup, css.TableFooterGroup, css.TableColumnGroup, css.TableCaption, css.TableCell, css.TableRow,
-		css.FlowRoot, css.Flex, css.InlineFlex, css.Flex,
+		css.FlowRoot, css.Flex, css.InlineFlex, css.Flex, css.Grid, css.InlineGrid, css.Grid,
 	}
 	st.Display = displays[int(b)%len(displays)]
 	if b&0x80 != 0 {
@@ -167,6 +167,9 @@ func (g *treeGen) style() *css.Style {
 		st.Order = int(int8(g.next())) % 3
 		st.RowGap, st.ColumnGap = g.length(false), g.length(false)
 		st.MinWidthAuto, st.MinHeightAuto = ff&0x40 != 0, ff&0x20 != 0
+	}
+	if st.Display == css.Grid || st.Display == css.InlineGrid || b&0x20 != 0 {
+		g.grid(st)
 	}
 	if st.Display >= css.Table && st.Display <= css.TableCaption {
 		tf := g.next()
@@ -281,4 +284,52 @@ func FuzzLayout(f *testing.F) {
 			t.Fatalf("Validate: %v", err)
 		}
 	})
+}
+
+// track returns a grid track size drawn from the bytes.
+func (g *treeGen) track() css.TrackSize {
+	br := func() css.TrackBreadth {
+		k := css.TrackKind(g.next() % 6)
+		return css.TrackBreadth{Kind: k, Value: float64(g.next()%40) * [6]float64{0, 1, 0.02, 0.5, 0, 0}[k]}
+	}
+	lo, hi := br(), br()
+	if lo.Kind == css.TrackFlex {
+		lo = css.TrackBreadth{}
+	}
+	return css.TrackSize{Min: lo, Max: hi, FitContent: g.next()%7 == 0 && (hi.Kind == css.TrackLength || hi.Kind == css.TrackPercent)}
+}
+
+// grid sets the grid properties of st from the bytes.
+func (g *treeGen) grid(st *css.Style) {
+	list := func() css.TrackList {
+		n := int(g.next() % 4)
+		l := css.TrackList{Names: make([][]string, n+1)}
+		for range n {
+			l.Sizes = append(l.Sizes, g.track())
+		}
+		if g.next()%3 == 0 {
+			l.Names = append(l.Names, []string{"a"})
+			l.Auto = &css.TrackRepeat{Fit: g.next()&1 == 0, At: int(g.next()) % (n + 1), Names: [][]string{{"a"}, nil}, Sizes: []css.TrackSize{g.track()}}
+		}
+		l.Names[0] = []string{"a"}
+		return l
+	}
+	st.GridTemplateColumns, st.GridTemplateRows = list(), list()
+	if g.next()%4 == 0 {
+		st.GridTemplateAreas = &css.GridAreas{Rows: 2, Cols: 2, Areas: []css.GridArea{{Name: "a", Row0: 0, Row1: 2, Col0: 1, Col1: 2}}}
+	}
+	st.GridAutoRows = []css.TrackSize{g.track()}
+	st.GridAutoFlow = css.GridAutoFlow(g.next() % 4)
+	line := func() css.GridLine {
+		v := g.next()
+		names := []string{"", "a", "b"}
+		return css.GridLine{Span: v&0x80 != 0, N: int(int8(v<<1)) / 16, Name: names[int(v>>4)%3]}
+	}
+	st.GridRowStart, st.GridRowEnd, st.GridColumnStart, st.GridColumnEnd = line(), line(), line(), line()
+	st.JustifyItems, st.JustifySelf = css.BoxAlign(g.next()%17), css.BoxAlign(g.next()%17)
+	kinds := []css.DimKind{css.Auto, css.MinContent, css.MaxContent, css.FitContent, css.Stretch}
+	if v := g.next(); v%3 == 0 {
+		st.Width = css.Dimension{Kind: kinds[int(v/3)%len(kinds)]}
+		st.MinHeight = css.Dimension{Kind: kinds[int(v/7)%len(kinds)]}
+	}
 }
