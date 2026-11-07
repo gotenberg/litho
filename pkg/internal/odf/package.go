@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/offcrypto"
 )
 
 // The caps of one package.
@@ -32,7 +33,29 @@ const (
 	// it bounds the work a package of many entries each under
 	// [MaxEntryBytes] can make a converter do.
 	MaxTotalBytes = 512 << 20
+	// MaxDecryptedEntries bounds the encrypted entries one package
+	// decrypts: 256. Anti-DoS guard, not spec-mandated: each decryption
+	// derives its key anew at the cost the manifest names (PBKDF2 up to
+	// offcrypto's iteration cap), and a document holds its four XML
+	// documents, a thumbnail and its pictures, a few dozen entries.
+	MaxDecryptedEntries = 256
 )
+
+// encryptedPackage is the entry of LibreOffice's whole-package encryption
+// (ODF 1.4 extended mode, LibreOffice 24.2 and later): one encrypted
+// entry holding the zip archive of the document, beside the mimetype and
+// a manifest that describes it alone.
+const encryptedPackage = "encrypted-package"
+
+// Options configure [Open]. The zero value opens a document stored in the
+// clear.
+type Options struct {
+	// Password opens the encrypted entries of a package (ODF 1.3, Part 2,
+	// 3.4). Empty, an encrypted entry fails with office.ErrEncrypted; a
+	// wrong password fails alike. A flat document is never encrypted and
+	// ignores it.
+	Password string
+}
 
 // The media types of the ODF documents (ODF 1.3, Part 2, 3.3 and Part 3,
 // Appendix C).
@@ -109,10 +132,12 @@ type Package struct {
 	// for a document the package does not hold.
 	Content, Styles, Meta, Settings *Element
 
-	files map[string]*zip.File
-	enc   map[string]*EncryptionData
-	mu    sync.Mutex
-	read  int64
+	files    map[string]*zip.File
+	enc      map[string]*EncryptionData
+	password string
+	mu       sync.Mutex
+	read     int64
+	opened   int
 }
 
 // zipMagic starts a zip archive's first local file header.
@@ -120,13 +145,23 @@ var zipMagic = []byte("PK\x03\x04")
 
 // Open reads the ODF document data: a zip package (told by its first
 // bytes), else a flat XML document. A package needs content.xml; a flat
-// document an office:document root. It fails with office.ErrMalformed
-// for anything else, office.ErrEncrypted for a package whose content or
-// styles are encrypted, office.ErrInputTooLarge past the caps, and ctx's
-// error when ctx ends first.
-func Open(ctx context.Context, data []byte) (*Package, error) {
+// document an office:document root.
+//
+// The encrypted entries of a package (ODF 1.3, Part 2, 3.4: every entry
+// whose manifest entry holds a manifest:encryption-data) are decrypted
+// with opts.Password through offcrypto when they are read: content.xml,
+// styles.xml, meta.xml and settings.xml by Open, the others by
+// [Package.ReadFile]. A package LibreOffice encrypted whole, its one
+// encrypted-package entry holding the document's zip archive, is
+// decrypted and opened in its place.
+//
+// It fails with office.ErrMalformed for anything else, office.ErrEncrypted
+// for a package whose content or styles are encrypted and opts.Password
+// is empty or does not open, office.ErrInputTooLarge past the caps, and
+// ctx's error when ctx ends first.
+func Open(ctx context.Context, data []byte, opts Options) (*Package, error) {
 	if bytes.HasPrefix(data, zipMagic) {
-		return openZip(ctx, data)
+		return openZip(ctx, data, opts.Password, true)
 	}
 	return openFlat(ctx, data)
 }
@@ -147,8 +182,10 @@ func openFlat(ctx context.Context, data []byte) (*Package, error) {
 	}, nil
 }
 
-// openZip reads a zip package (ODF 1.3, Part 2, 3).
-func openZip(ctx context.Context, data []byte) (*Package, error) {
+// openZip reads a zip package (ODF 1.3, Part 2, 3). outer allows the
+// whole-package encryption: the package it decrypts is opened with outer
+// false, so an encrypted package nests once at most.
+func openZip(ctx context.Context, data []byte, password string, outer bool) (*Package, error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return nil, fmt.Errorf("%w: reading the zip archive: %w", office.ErrMalformed, err)
@@ -156,7 +193,7 @@ func openZip(ctx context.Context, data []byte) (*Package, error) {
 	if len(zr.File) > MaxEntries {
 		return nil, fmt.Errorf("%w: more than %d package entries", office.ErrInputTooLarge, MaxEntries)
 	}
-	p := &Package{files: make(map[string]*zip.File, len(zr.File)), enc: map[string]*EncryptionData{}}
+	p := &Package{files: make(map[string]*zip.File, len(zr.File)), enc: map[string]*EncryptionData{}, password: password}
 	for _, f := range zr.File {
 		name := strings.TrimPrefix(path.Clean("/"+f.Name), "/")
 		if _, dup := p.files[name]; !dup {
@@ -175,6 +212,26 @@ func openZip(ctx context.Context, data []byte) (*Package, error) {
 	} else if !errors.Is(err, errNoEntry) {
 		return nil, err
 	}
+	if p.enc[encryptedPackage] != nil && !p.Has("content.xml") {
+		if !outer {
+			return nil, fmt.Errorf("%w: an encrypted package inside an encrypted package", office.ErrMalformed)
+		}
+		inner, err := p.ReadFile(ctx, encryptedPackage)
+		if err != nil {
+			return nil, err
+		}
+		if !bytes.HasPrefix(inner, zipMagic) {
+			return nil, fmt.Errorf("%w: the encrypted package is not a zip archive", office.ErrMalformed)
+		}
+		q, err := openZip(ctx, inner, password, false)
+		if err != nil {
+			return nil, fmt.Errorf("opening the encrypted package: %w", err)
+		}
+		if q.MimeType == "" {
+			q.MimeType = p.MimeType
+		}
+		return q, nil
+	}
 	for _, d := range []struct {
 		name string
 		dst  **Element
@@ -185,7 +242,7 @@ func openZip(ctx context.Context, data []byte) (*Package, error) {
 		{"meta.xml", &p.Meta, false},
 		{"settings.xml", &p.Settings, false},
 	} {
-		raw, err := p.ReadFile(d.name)
+		raw, err := p.ReadFile(ctx, d.name)
 		if errors.Is(err, errNoEntry) {
 			if d.need {
 				return nil, fmt.Errorf("%w: the package has no %s", office.ErrMalformed, d.name)
@@ -228,17 +285,64 @@ func (p *Package) Encryption(name string) *EncryptionData {
 	return p.enc[cleanName(name)]
 }
 
-// ReadFile returns the uncompressed bytes of the entry name. It fails
+// ReadFile returns the uncompressed bytes of the entry name, decrypted
+// with [Options.Password] when the manifest marks it encrypted. It fails
 // with an error [IsNotExist] reports for an entry the package does not
-// hold, office.ErrEncrypted for an encrypted one (the package reads no
-// password: [Package.Encryption] gives what a decryptor needs), and
-// office.ErrInputTooLarge past [MaxEntryBytes] or [MaxTotalBytes].
-func (p *Package) ReadFile(name string) ([]byte, error) {
+// hold; office.ErrEncrypted for an encrypted one when the password is
+// empty or does not open it, or past [MaxDecryptedEntries] decryptions;
+// office.ErrInputTooLarge past [MaxEntryBytes] or [MaxTotalBytes]; and
+// ctx's error when ctx ends first.
+func (p *Package) ReadFile(ctx context.Context, name string) ([]byte, error) {
 	name = cleanName(name)
-	if p.enc[name] != nil {
-		return nil, fmt.Errorf("%w: the package entry %s is encrypted", office.ErrEncrypted, name)
+	if ed := p.enc[name]; ed != nil {
+		return p.readEncrypted(ctx, name, ed)
 	}
 	return p.readRaw(name)
+}
+
+// readEncrypted decrypts the entry name (ODF 1.3, Part 2, 3.4): its
+// stored bytes, which the archive holds STORED (3.4.1), go to offcrypto
+// with the manifest's parameters.
+func (p *Package) readEncrypted(ctx context.Context, name string, ed *EncryptionData) ([]byte, error) {
+	if p.password == "" {
+		return nil, fmt.Errorf("%w: the package entry %s is encrypted and no password was given", office.ErrEncrypted, name)
+	}
+	f := p.files[name]
+	if f == nil {
+		return nil, fmt.Errorf("%w: %s", errNoEntry, name)
+	}
+	if f.Method != zip.Store {
+		return nil, fmt.Errorf("%w: the encrypted package entry %s is compressed, not STORED", office.ErrMalformed, name)
+	}
+	if f.CompressedSize64 > MaxEntryBytes {
+		return nil, fmt.Errorf("%w: the package entry %s is past the caps", office.ErrInputTooLarge, name)
+	}
+	p.mu.Lock()
+	if p.opened >= MaxDecryptedEntries {
+		p.mu.Unlock()
+		return nil, fmt.Errorf("%w: more than %d encrypted package entries", office.ErrEncrypted, MaxDecryptedEntries)
+	}
+	p.opened++
+	p.mu.Unlock()
+	rc, err := f.OpenRaw()
+	if err != nil {
+		return nil, fmt.Errorf("%w: opening the package entry %s: %w", office.ErrMalformed, name, err)
+	}
+	stored, err := io.ReadAll(io.LimitReader(rc, MaxEntryBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("%w: reading the package entry %s: %w", office.ErrMalformed, name, err)
+	}
+	data, err := offcrypto.OpenODFEntry(ctx, stored, ed.params(), p.password)
+	if err != nil {
+		return nil, fmt.Errorf("decrypting the package entry %s: %w", name, err)
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if int64(len(data)) > min(int64(MaxEntryBytes), MaxTotalBytes-p.read) {
+		return nil, fmt.Errorf("%w: the package entry %s inflates past the caps", office.ErrInputTooLarge, name)
+	}
+	p.read += int64(len(data))
+	return data, nil
 }
 
 // readRaw reads the entry name as stored, decompressed, within the caps.
@@ -339,4 +443,16 @@ func parseEncryption(fe, ed *Element) *EncryptionData {
 // office:font-face-decls, office:body or office:meta. nil when absent.
 func Section(part *Element, name string) *Element {
 	return part.Child(NSOffice, name)
+}
+
+// params returns the parameters offcrypto reads, field for field.
+func (d *EncryptionData) params() offcrypto.ODFParams {
+	return offcrypto.ODFParams{
+		Size:         d.Size,
+		ChecksumType: d.ChecksumType, Checksum: d.Checksum,
+		AlgorithmName: d.AlgorithmName, InitialisationVector: d.InitialisationVector,
+		StartKeyGenerationName: d.StartKeyGenerationName, StartKeySize: d.StartKeySize,
+		KeyDerivationName: d.KeyDerivationName, KeySize: d.KeySize, IterationCount: d.IterationCount, Salt: d.Salt,
+		Argon2Iterations: d.Argon2Iterations, Argon2Memory: d.Argon2Memory, Argon2Lanes: d.Argon2Lanes,
+	}
 }

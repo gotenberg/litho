@@ -20,7 +20,7 @@ func FuzzBuild(f *testing.F) {
 	f.Add(flat(`<table:table><table:table-column table:number-columns-repeated="3"/><table:table-row><table:table-cell table:number-columns-spanned="2"><text:p>c</text:p></table:table-cell></table:table-row></table:table>`))
 	f.Add(flat(`<text:p>n<text:note><text:note-citation>1</text:note-citation><text:note-body><text:p>b</text:p></text:note-body></text:note></text:p>`)[:120])
 	f.Fuzz(func(t *testing.T, data []byte) {
-		pkg, err := odf.Open(context.Background(), data)
+		pkg, err := odf.Open(context.Background(), data, odf.Options{})
 		if err != nil {
 			return
 		}

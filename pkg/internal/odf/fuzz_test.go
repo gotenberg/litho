@@ -10,7 +10,7 @@ func FuzzOpen(f *testing.F) {
 	f.Add(zipOf(f, "mimetype", MimeText, "content.xml", minimalContent)[:60])
 	f.Add([]byte(`<office:document ` + ns + `><office:body><office:text/></office:body></office:document>`))
 	f.Fuzz(func(t *testing.T, data []byte) {
-		p, err := Open(context.Background(), data)
+		p, err := Open(context.Background(), data, Options{})
 		if err != nil {
 			return
 		}

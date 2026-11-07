@@ -53,7 +53,7 @@ func TestOpen_Package(t *testing.T) {
 		`<manifest:key-derivation manifest:key-derivation-name="PBKDF2" manifest:key-size="32" manifest:iteration-count="100000" manifest:salt="BQY=" loext:argon2-memory="65536"/>` +
 		`</manifest:encryption-data></manifest:file-entry></manifest:manifest>`
 	data := zipOf(t, "mimetype", MimeText, "META-INF/manifest.xml", manifest, "content.xml", minimalContent, "Pictures/a.png", "xx", "Pictures/b.png", "png")
-	p, err := Open(context.Background(), data)
+	p, err := Open(context.Background(), data, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,13 +69,13 @@ func TestOpen_Package(t *testing.T) {
 		!strings.HasSuffix(e.StartKeyGenerationName, "sha256") || e.KeyDerivationName != "PBKDF2" || !strings.HasSuffix(e.ChecksumType, "sha256-1k") {
 		t.Fatalf("encryption = %+v", e)
 	}
-	if _, err := p.ReadFile("Pictures/a.png"); !errors.Is(err, office.ErrEncrypted) {
+	if _, err := p.ReadFile(context.Background(), "Pictures/a.png"); !errors.Is(err, office.ErrEncrypted) {
 		t.Errorf("encrypted entry: err = %v", err)
 	}
-	if b, err := p.ReadFile("/Pictures/b.png"); err != nil || string(b) != "png" {
+	if b, err := p.ReadFile(context.Background(), "/Pictures/b.png"); err != nil || string(b) != "png" {
 		t.Errorf("clear entry = %q, %v", b, err)
 	}
-	if _, err := p.ReadFile("Pictures/c.png"); !IsNotExist(err) {
+	if _, err := p.ReadFile(context.Background(), "Pictures/c.png"); !IsNotExist(err) {
 		t.Errorf("missing entry: err = %v", err)
 	}
 }
@@ -99,7 +99,7 @@ func TestOpen_Refusals(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := Open(context.Background(), tc.data); !errors.Is(err, tc.want) {
+			if _, err := Open(context.Background(), tc.data, Options{}); !errors.Is(err, tc.want) {
 				t.Errorf("err = %v, want %v", err, tc.want)
 			}
 		})
@@ -167,7 +167,7 @@ func TestStyles_Resolve(t *testing.T) {
 		`<office:master-styles><style:master-page style:name="Standard" style:page-layout-name="pm1" style:next-style-name="Next"><style:header><text:p>H</text:p></style:header></style:master-page></office:master-styles>` +
 		`</office:document-styles>`
 	content := `<office:document-content ` + ns + `><office:automatic-styles><style:style style:name="P1" style:family="paragraph" style:parent-style-name="Child"/></office:automatic-styles><office:body><office:text/></office:body></office:document-content>`
-	p, err := Open(context.Background(), zipOf(t, "mimetype", MimeText, "content.xml", content, "styles.xml", styles))
+	p, err := Open(context.Background(), zipOf(t, "mimetype", MimeText, "content.xml", content, "styles.xml", styles), Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

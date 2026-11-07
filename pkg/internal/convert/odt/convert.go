@@ -21,7 +21,8 @@ import (
 // lays it out as a paged document, with the fonts of the index fonts. It
 // returns ctx's error when ctx ends first, and the errors office.Options
 // documents: office.ErrMalformed for a source that is not an
-// OpenDocument text document, office.ErrEncrypted for an encrypted one,
+// OpenDocument text document, office.ErrEncrypted for an encrypted one
+// opts.Password does not open (ODF 1.3, Part 2, 3.4),
 // office.ErrInputTooLarge past the package, XML or layout caps,
 // office.ErrTooManyPages past opts.MaxPages. The output depends on src,
 // fonts' index and opts alone. See the package documentation for what is
@@ -47,7 +48,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err != nil {
 		return nil, fmt.Errorf("reading ODT: %w", err)
 	}
-	pkg, err := odf.Open(ctx, data)
+	pkg, err := odf.Open(ctx, data, odf.Options{Password: opts.Password})
 	if err != nil {
 		return nil, fmt.Errorf("reading ODT: %w", err)
 	}

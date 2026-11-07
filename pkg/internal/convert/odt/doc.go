@@ -46,10 +46,14 @@
 //     them before printing.
 //   - The outline from the headings, the structure roles, and the
 //     document information of meta.xml.
+//   - Encrypted packages (ODF 1.3, Part 2, 3.4), opened with the options'
+//     password: Blowfish, AES-CBC and AES-GCM entries, and LibreOffice's
+//     whole-package encryption. A missing or wrong password fails with
+//     office.ErrEncrypted.
 //
 // # What is not
 //
-// Encrypted documents are refused; WMF, EMF and SVM pictures, form
+// WMF, EMF and SVM pictures, form
 // controls' content, the text of drawing shapes, other custom shape
 // geometries, ruby annotations, line numbering, drop caps, tracked
 // change marks and comments are not drawn, each with a warning where the

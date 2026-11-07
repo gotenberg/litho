@@ -95,7 +95,7 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 			b.warn("missing-picture", fmt.Sprintf("the picture %s is not in the document", href))
 			return nil
 		}
-		d, err := b.pkg.ReadFile(href)
+		d, err := b.pkg.ReadFile(b.ctx, href)
 		if err != nil {
 			b.warn("missing-picture", fmt.Sprintf("the picture %s is not read: %v", href, err))
 			return nil
