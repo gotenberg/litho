@@ -2,6 +2,7 @@ package ooxml
 
 import (
 	"context"
+	"math"
 	"testing"
 )
 
@@ -31,6 +32,27 @@ func FuzzParse(f *testing.F) {
 		root, err := Parse(context.Background(), data, []string{NSMC})
 		if err == nil && root == nil {
 			t.Fatal("nil root without error")
+		}
+	})
+}
+
+func FuzzParseVMLStyle(f *testing.F) {
+	f.Add("position:absolute;margin-left:12pt;width:100px;height:2in;fillcolor:#396")
+	f.Add("width:1")
+	f.Fuzz(func(t *testing.T, s string) {
+		st := ParseVMLStyle(s)
+		for name := range st {
+			if v, ok := st.Length(name, 0.75); ok && (math.IsNaN(v) || math.IsInf(v, 0)) {
+				t.Fatalf("length %v", v)
+			}
+			_, _ = VMLColor(st[name])
+			if v, ok := VMLFraction(st[name]); ok && (v < 0 || v > 1) {
+				t.Fatalf("fraction %v", v)
+			}
+			x, y := VMLPair(st[name], 0)
+			if math.IsNaN(x) || math.IsNaN(y) {
+				t.Fatal("NaN pair")
+			}
 		}
 	})
 }

@@ -39,6 +39,7 @@ const (
 	NSW14  = "http://schemas.microsoft.com/office/word/2010/wordml"
 	NSV    = "urn:schemas-microsoft-com:vml"
 	NSO    = "urn:schemas-microsoft-com:office:office"
+	NSW10  = "urn:schemas-microsoft-com:office:word"
 	NSASVG = "http://schemas.microsoft.com/office/drawing/2016/SVG/main"
 	NSCP   = "http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
 	NSDC   = "http://purl.org/dc/elements/1.1/"
