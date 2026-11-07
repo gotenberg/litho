@@ -149,6 +149,12 @@ const (
 	pGridColumnEnd
 	pJustifyItems
 	pJustifySelf
+	pTextOverflow
+	pMaxLines
+	pBlockEllipsis
+	pContinue
+	pWebkitLineClamp
+	pWebkitBoxOrient
 	numProps
 )
 
@@ -374,7 +380,7 @@ func parseDisplay(v []token, c *declCtx) (any, bool) {
 		if d, ok := displays3[k]; ok {
 			c.warn("unsupported-css-value", "display: %s is laid out as %s", k, displayName(d))
 			if flexOrGrid[k] {
-				return laidAs{d}, true
+				return laidAs{d: d, webkitBox: k == "-webkit-box" || k == "-webkit-inline-box"}, true
 			}
 			return d, true
 		}
@@ -611,11 +617,13 @@ func init() {
 		{pDisplay, propDef{name: "display", parse: parseDisplay, compute: func(_ *styler, st *Style, v any) {
 			switch d := v.(type) {
 			case Display:
-				st.Display, st.flexOrGrid = d, false
+				st.Display, st.flexOrGrid, st.LineClamp.webkitBox = d, false, false
 			case laidAs:
-				st.Display, st.flexOrGrid = d.d, true
+				st.Display, st.flexOrGrid, st.LineClamp.webkitBox = d.d, true, d.webkitBox
 			}
-		}, copyFrom: func(dst, src *Style) { dst.Display, dst.flexOrGrid = src.Display, src.flexOrGrid }}},
+		}, copyFrom: func(dst, src *Style) {
+			dst.Display, dst.flexOrGrid, dst.LineClamp.webkitBox = src.Display, src.flexOrGrid, src.LineClamp.webkitBox
+		}}},
 		{pPosition, enumProp("position", false, func(s *Style) *Position { return &s.Position }, map[string]Position{
 			"static": Static, "relative": Relative, "absolute": Absolute, "fixed": Fixed, "sticky": Relative, "-webkit-sticky": Relative,
 		})},
@@ -847,6 +855,9 @@ func init() {
 		props[pMaskBorderSource+propID(i)] = def
 	}
 	for id, def := range gridProps() {
+		props[id] = def
+	}
+	for id, def := range textOverflowProps() {
 		props[id] = def
 	}
 	longhandByName = map[string]propID{}

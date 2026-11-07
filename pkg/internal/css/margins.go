@@ -89,8 +89,13 @@ func (s *Style) flexOrGridContainer() bool {
 	return s.flexOrGrid || isFlexContainer(s.Display) || isGridContainer(s.Display)
 }
 
-// laidAs is a flex or grid display value laid out as d.
-type laidAs struct{ d Display }
+// laidAs is a flex or grid display value laid out as d; webkitBox
+// records the legacy -webkit-box and -webkit-inline-box, whose
+// -webkit-line-clamp Chromium honours (CSS Overflow 4, 6.5).
+type laidAs struct {
+	d         Display
+	webkitBox bool
+}
 
 // flexOrGrid are the single display keywords of flex and grid containers.
 var flexOrGrid = map[string]bool{

@@ -427,7 +427,9 @@ func (e *engine) absContent(b *box, ccb cblock, h float64, hSet bool) {
 	own := &bfc{}
 	mc := &marginState{}
 	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: h, hDefinite: hSet}, ccb)
+	saved := e.enterClamp(b, ccb, b.contentY())
 	end := formatterFor(b).layout(e, b, kcb, own, b.contentY(), mc)
+	e.leaveClamp(saved)
 	end += mc.strut.sum()
 	mc.commit(end)
 	end = max(end, own.bottom(), b.contentY())

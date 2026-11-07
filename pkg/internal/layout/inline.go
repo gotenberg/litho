@@ -343,6 +343,9 @@ type inlineState struct {
 	glyphs int
 	// placed holds the floats already placed.
 	placed map[*box]bool
+	// keep makes buildLine keep the spaces at the line end, which a line
+	// cut before an overflow mark draws (CSS Overflow 4, 5.1).
+	keep bool
 }
 
 // layoutInline lays out the inline formatting context of b in the content
@@ -358,8 +361,10 @@ func (e *engine) layoutInline(b *box, cb cblock, bc *bfc, cursor float64, mc *ma
 	forced := map[int]bool{}
 	floats, warnings := len(bc.floats), len(e.warnings)
 	saved := mc.clone()
+	clampSaved := e.clampSnapshot()
 	var end float64
 	for pass := range maxFragmentationPasses {
+		e.clampRestore(clampSaved)
 		end = e.flowLines(b, d, cb, bc, cursor, mc, forced)
 		if !e.paginating() || e.err != nil || pass == maxFragmentationPasses-1 {
 			break
@@ -430,6 +435,11 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 		if e.err != nil {
 			return y
 		}
+		if (p.forced || p.p != nil && p.p.Len() > 0) && e.clampDiscards() {
+			// A line clamp container discards what follows its last line
+			// (CSS Overflow 4, 6).
+			return s.discard(d, p, y)
+		}
 		if p.p == nil || p.p.Len() == 0 {
 			s.placeFloats(p, 0, math.MaxInt, pendingTop(y, mc, first), mc, first)
 			s.staticRest(p, y, mc, first)
@@ -472,6 +482,9 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				if pos >= n {
 					break
 				}
+				if e.clampDiscards() {
+					return s.discard(d, p, y)
+				}
 			}
 			top := y
 			if first {
@@ -500,7 +513,14 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				}
 				l.x, l.w = nl, nw
 			}
+			if e.clampOverflows(top, l.h) {
+				return s.discard(d, p, y)
+			}
+			l = s.overflowMark(p, l, pos, end, lineIndent)
 			last := end == n && (p.forced || isLastPara(d, p))
+			if e.clampKeep(&clampLine{s: s, p: p, l: l, start: pos, end: end, indent: lineIndent}) {
+				last = true
+			}
 			s.align(l, lineIndent, last)
 			if first {
 				mc.commit(top)
@@ -748,7 +768,7 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 	// The spaces at the line end hang (CSS Text 3, 4.1.3): they are drawn
 	// but neither fit nor align. The collapsible ones among them are
 	// removed instead (4.1.2) and draw nothing.
-	hang := end > start && !keepsSpaces(p.wsAt(end-1))
+	hang := !s.keep && end > start && !keepsSpaces(p.wsAt(end-1))
 	hangFrom := end
 	for hang && hangFrom > start && text.IsHangingSpace(p.p.Rune(hangFrom-1)) {
 		hangFrom--

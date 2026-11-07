@@ -1414,7 +1414,9 @@ func (e *engine) layoutItemAt(k *box, x, y, w, h float64, hDef bool, pcb cblock)
 	own := &bfc{}
 	mc := &marginState{kept: true}
 	kcb := wrapperCB(k, cblock{x: k.contentX(), w: w, h: h, hDefinite: hDef}, pcb)
+	saved := e.enterClamp(k, pcb, k.contentY())
 	end := formatterFor(k).layout(e, k, kcb, own, k.contentY(), mc)
+	e.leaveClamp(saved)
 	end = e.pastMargin(end, mc.strut, false)
 	mc.commit(end)
 	end = max(end, own.bottom(), k.contentY())

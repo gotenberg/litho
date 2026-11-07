@@ -948,6 +948,13 @@ type Style struct {
 	VerticalAlign VerticalAlign
 	Direction     Direction
 	UnicodeBidi   UnicodeBidi
+	// TextOverflow is the mark a line of a block container whose overflow
+	// is not visible shows where its content overflows the end edge (CSS
+	// Overflow 4, 5.1).
+	TextOverflow OverflowMark
+	// LineClamp is max-lines, line-clamp: auto, continue, block-ellipsis
+	// and the legacy -webkit-line-clamp (CSS Overflow 4, 6).
+	LineClamp LineClamp
 
 	// Lists.
 

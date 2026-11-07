@@ -684,7 +684,9 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	own := &bfc{}
 	mc := &marginState{kept: true}
 	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: specH, hDefinite: hSet}, cb)
+	saved := e.enterClamp(b, cb, b.contentY())
 	end := formatterFor(b).layout(e, b, kcb, own, b.contentY(), mc)
+	e.leaveClamp(saved)
 	end = e.pastMargin(end, mc.strut, false)
 	mc.commit(end)
 	end = max(end, own.bottom(), b.contentY())
@@ -708,11 +710,13 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		mc       marginState
 		floats   int
 		warnings int
+		clamp    *clampState
 	}
 	take := func(c float64) snapshot {
-		return snapshot{cursor: c, mc: mc.clone(), floats: len(bc.floats), warnings: len(e.warnings)}
+		return snapshot{cursor: c, mc: mc.clone(), floats: len(bc.floats), warnings: len(e.warnings), clamp: e.clampSnapshot()}
 	}
 	restore := func(s snapshot) float64 {
+		e.clampRestore(s.clamp)
 		*mc = s.mc.clone()
 		bc.floats = bc.floats[:s.floats]
 		e.warnings = e.warnings[:s.warnings]
@@ -745,6 +749,13 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		if e.err != nil {
 			return cursor
 		}
+		if e.clamp != nil && e.clamp.done && !k.abs {
+			// A line clamp container discards what follows its last line
+			// (CSS Overflow 4, 6): the box is not laid out, nor painted.
+			e.clampDiscards()
+			k.laidOut = false
+			continue
+		}
 		if k.float != css.FloatNone {
 			top := cursor + mc.strut.sum()
 			mc.floatPlaced(k, bc, e.layoutFloat(k, cb, bc, top), top)
@@ -769,6 +780,11 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		start := e.startPage(cursor+mc.strut.sum(), mode)
 		kcb := cbFor(start)
 		cursor = e.layoutBlock(k, kcb, bc, cursor, mc, mode)
+		if e.clampBlock(k) {
+			cursor = restore(snap)
+			e.clampCut(k)
+			continue
+		}
 		if adapt && cbFor(e.pageOf(k.y)).w != kcb.w && e.relayout(k.y) {
 			// k landed on a page of another width than the one it was laid
 			// out for, or the page it starts took its own page name and

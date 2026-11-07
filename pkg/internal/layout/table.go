@@ -725,7 +725,9 @@ func (e *engine) layoutCell(td *tableData, c *box, cbw float64) {
 	own := &bfc{}
 	mc := &marginState{}
 	kcb := cblock{x: c.contentX(), w: c.w}
+	saved := e.enterClamp(c, kcb, c.contentY())
 	end := formatterFor(c).layout(e, c, kcb, own, c.contentY(), mc)
+	e.leaveClamp(saved)
 	end += mc.strut.sum()
 	mc.commit(end)
 	end = max(end, own.bottom(), c.contentY())

@@ -196,6 +196,9 @@ func initShorthands() {
 	for name, def := range gridShorthands() {
 		shorthands[name] = def
 	}
+	for name, def := range textOverflowShorthands() {
+		shorthands[name] = def
+	}
 	delete(longhandByName, "word-break")
 }
 
