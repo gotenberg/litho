@@ -66,3 +66,17 @@ func TestDataStyles_Code(t *testing.T) {
 		t.Errorf("missing = %q", got)
 	}
 }
+
+func TestDataStyles_OtherScope(t *testing.T) {
+	content := `<office:document-content ` + ns + `><office:body/></office:document-content>`
+	styles := `<office:document-styles ` + ns + ` xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"><office:automatic-styles>` +
+		`<number:number-style style:name="N2"><number:number number:decimal-places="2" number:min-integer-digits="1"/></number:number-style>` +
+		`</office:automatic-styles></office:document-styles>`
+	p, err := Open(context.Background(), zipOf(t, "mimetype", MimeSpreadsheet, "content.xml", content, "styles.xml", styles), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := NewDataStyles(p).Code(ScopeContent, "N2"); got != "0.00" {
+		t.Errorf("N2 from content = %q", got)
+	}
+}

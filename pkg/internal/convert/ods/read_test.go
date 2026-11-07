@@ -119,6 +119,7 @@ func TestRead_Values(t *testing.T) {
 		{`<table:table-cell office:value-type="date" office:date-value="1899-12-31T12:00:00"><text:p>x</text:p></table:table-cell>`, sheet.Value{Kind: sheet.Number, Number: 1.5, Text: "x"}, ""},
 		{`<table:table-cell office:value-type="time" office:time-value="PT36H00M00S"><text:p>x</text:p></table:table-cell>`, sheet.Value{Kind: sheet.Number, Number: 1.5, Text: "x"}, ""},
 		{`<table:table-cell office:value-type="boolean" office:boolean-value="true"><text:p>TRUE</text:p></table:table-cell>`, sheet.Value{Kind: sheet.Bool, Number: 1, Text: "TRUE"}, ""},
+		{`<table:table-cell office:value-type="boolean" office:boolean-value="8"><text:p>TRUE</text:p></table:table-cell>`, sheet.Value{Kind: sheet.Bool, Number: 1, Text: "TRUE"}, ""},
 		{`<table:table-cell office:value-type="string"><text:p>a<text:s text:c="3"/>b<text:tab/>c<text:line-break/>d</text:p><text:p>e  f</text:p></table:table-cell>`, sheet.Value{Kind: sheet.Text, Text: "a   b\tc\nd\ne f"}, ""},
 		{`<table:table-cell office:value-type="string" office:string-value="stored"><text:p>shown</text:p></table:table-cell>`, sheet.Value{Kind: sheet.Text, Text: "stored"}, ""},
 		{`<table:table-cell office:value-type="float" office:value="0" calcext:value-type="error"><text:p>#DIV/0!</text:p></table:table-cell>`, sheet.Value{Kind: sheet.Error, Text: "#DIV/0!"}, ""},

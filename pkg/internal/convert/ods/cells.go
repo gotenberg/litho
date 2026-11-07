@@ -92,9 +92,11 @@ func value(el *odf.Element, shown string) sheet.Value {
 			return sheet.Value{Kind: sheet.Number, Number: v, Text: shown}
 		}
 	case "boolean":
+		// A number stands for true unless it is zero, as Calc reads the
+		// boolean-value of older files.
 		b := strings.TrimSpace(el.A(odf.NSOffice, "boolean-value"))
 		v := 0.0
-		if b == "true" || b == "1" {
+		if n, err := strconv.ParseFloat(b, 64); b == "true" || err == nil && n != 0 {
 			v = 1
 		}
 		return sheet.Value{Kind: sheet.Bool, Number: v, Text: shown}

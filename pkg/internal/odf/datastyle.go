@@ -78,12 +78,24 @@ func (d *DataStyles) add(sec *Element, m map[string]*Element) {
 }
 
 // Element returns the data style name as scope sees it, the automatic
-// one first; nil when none.
+// one first, then the common one, then the other scope's automatic one:
+// LibreOffice keeps one number formatter for both documents and resolves
+// a cell's data style written among styles.xml's automatic styles,
+// which ODF 1.3, Part 3, 16.4 does not let content.xml name. nil when
+// none.
+//
+// # Corpus evidence
+//
+//   - ods: sc/formats.ods's cell style ce28 names N2, which only
+//     styles.xml's automatic styles hold; Calc prints its 2 as 2.00.
 func (d *DataStyles) Element(scope Scope, name string) *Element {
 	if el := d.auto[scope][name]; el != nil {
 		return el
 	}
-	return d.common[name]
+	if el := d.common[name]; el != nil {
+		return el
+	}
+	return d.auto[1-scope][name]
 }
 
 // Code returns the SpreadsheetML format code of the data style name as
