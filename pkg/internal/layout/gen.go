@@ -390,6 +390,12 @@ func anonStyle(parent *css.Style) *css.Style {
 	st.WordBreak = parent.WordBreak
 	st.OverflowWrap = parent.OverflowWrap
 	st.TabSize = parent.TabSize
+	// The Office paragraph properties reach the anonymous block that holds
+	// a paragraph's lines, as the inherited text properties do.
+	st.TabStops = parent.TabStops
+	st.MinLineHeight = parent.MinLineHeight
+	st.LineRule = parent.LineRule
+	st.TextScale = parent.TextScale
 	st.Direction = parent.Direction
 	st.ListStyleType = parent.ListStyleType
 	st.ListStylePosition = parent.ListStylePosition

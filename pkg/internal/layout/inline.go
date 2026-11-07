@@ -495,6 +495,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 					mc.commitFloats(top)
 				}
 				l := &lineBox{x: cb.x, w: cb.w, h: strutH, baseline: s.rootV.above}
+				s.officeLine(l)
 				top = s.position(top, strutH, forced)
 				l.y = top
 				if first {
@@ -1145,6 +1146,7 @@ func (s *inlineState) vertical(l *lineBox) {
 		f.top = b - v.ca - f.box.pd[css.Top] - f.box.bd[css.Top]
 		f.bottom = b + v.cd + f.box.pd[css.Bottom] + f.box.bd[css.Bottom]
 	}
+	s.officeLine(l)
 }
 
 // wider returns a when it exceeds b by more than the rounding of shaped
