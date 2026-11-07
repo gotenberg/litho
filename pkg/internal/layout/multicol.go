@@ -56,6 +56,12 @@ const maxBalancePasses = 30
 // CSS pixel, the layout unit of Chromium, which balances to it.
 const balanceSlack = css.Pt / 64
 
+// maxClimbPasses bounds the layouts that balancing takes climbing from
+// the least height by the content's shortages before it halves the range.
+// Anti-DoS guard, not spec-mandated: each climb moves one piece back into
+// a column, and a few settle a row.
+const maxClimbPasses = 8
+
 // maxBalanceLayouts bounds the layouts of column content that balancing
 // takes in one [Layout] call, nested containers included: past it the
 // columns keep the heights found so far, with a warning. Anti-DoS guard,
@@ -483,7 +489,7 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 		ctx.balanceRow, ctx.balanceH = row, h
 		ctx.frags, ctx.rows = nil, nil
 		end = e.layoutColumns(b, s, cb, ctx)
-		return ctx.consumed(s.kids, end)
+		return ctx.consumed(b, s.kids, end, true)
 	}
 	cons := pass(-1, 0)
 	last := ctx.lastFrag(cons)
@@ -520,9 +526,34 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 		if hi >= unbounded {
 			hi = total
 		}
-		lo := total / float64(ctx.n)
+		// The search starts from the in-flow content shared out: an
+		// absolutely positioned box adds no room of its own.
+		flow := 0.0
+		inFlow := ctx.consumed(b, s.kids, end, false)
+		for i := row.first; i <= last && i < len(inFlow); i++ {
+			flow += inFlow[i]
+		}
+		lo := min(flow, total) / float64(ctx.n)
 		best := hi
 		bestFits := row.h == hi
+		// Climb from the least height as Chromium does, by the least
+		// stretch that moves a piece back, so a height that fits below
+		// one that does not is found; the halving search then narrows
+		// what is left.
+		failed := lo
+		for range maxClimbPasses {
+			if hi-lo < balanceSlack || !e.relayout(y) || !e.balanceBudget(y) {
+				break
+			}
+			cons = pass(r, lo)
+			if fits() {
+				hi, best, bestFits = lo, lo, true
+				break
+			}
+			failed = lo
+			lo = min(lo+ctx.shortage(cons, r, lo), hi)
+		}
+		lo = failed
 		for range maxBalancePasses {
 			if hi-lo < balanceSlack || !e.relayout(y) || !e.balanceBudget(y) {
 				break
@@ -577,21 +608,75 @@ func (e *engine) layoutColumns(b *box, s *colSet, cb cblock, ctx *colCtx) float6
 	mc.commit(end)
 	end = max(end, own.bottom())
 	e.reach(end)
+	e.noPaginate++
+	e.layoutMonolithicAbs(s.kids, 0)
+	e.noPaginate--
 	return end
 }
 
-// consumed returns how much of each column the content of kids, ending at
+// monolithicAbs reports an absolutely positioned box that cannot break: a
+// replaced box or one with size containment (CSS Fragmentation 3, 4.1).
+// It stays whole in the column its top is in, which balancing makes tall
+// enough for it, as Chromium balances columns around it.
+func monolithicAbs(k *box) bool {
+	return k.abs && !k.fixed && (k.kind == kindReplaced || k.st.Contain&css.ContainSize != 0)
+}
+
+// layoutMonolithicAbs lays out the monolithic absolutely positioned boxes
+// among kids and their descendants, for balancing to measure.
+func (e *engine) layoutMonolithicAbs(kids []*box, depth int) {
+	for _, k := range kids {
+		if e.err != nil || depth > maxTreeDepth {
+			return
+		}
+		if monolithicAbs(k) {
+			if k.staticSet {
+				e.layoutAbs(k)
+			}
+			continue
+		}
+		if k.mc == nil {
+			e.layoutMonolithicAbs(k.kids, depth+1)
+		}
+	}
+}
+
+// consumed returns how much of each column the content of the container
+// b, its lines or its kids, ending at
 // end, takes: the bottom of the last piece in it, from its top. A box
-// counts in the column it ends in, its lines and its boxes in theirs.
-func (c *colCtx) consumed(kids []*box, end float64) []float64 {
+// counts in the column it ends in, its lines and its boxes in theirs; with
+// abs, a monolithic absolutely positioned box counts whole in the column
+// its top is in.
+func (c *colCtx) consumed(b *box, kids []*box, end float64, abs bool) []float64 {
 	out := make([]float64, len(c.frags))
 	add := func(i int, bottom float64) {
 		if i >= 0 && i < len(out) {
 			out[i] = max(out[i], bottom-c.frags[i].vtop)
 		}
 	}
+	lines := func(k *box) {
+		for _, l := range k.lines {
+			i := c.index(l.y)
+			add(i, l.y+l.h)
+			for _, it := range l.items {
+				if a := it.atomic; a != nil && a.laidOut {
+					// An atomic inline sticking out of its line box takes
+					// its column's room too.
+					add(i, a.y+a.borderH())
+				}
+			}
+		}
+	}
+	if b.inlineKids {
+		// The container's own lines are its content.
+		lines(b)
+	}
 	var walk func(k *box, depth int)
 	walk = func(k *box, depth int) {
+		if abs && monolithicAbs(k) && k.laidOut {
+			add(c.index(k.y+eps), k.y+k.borderH())
+			return
+		}
 		if !k.laidOut && k.kind != kindInline || k.abs || k.fixed || depth > maxTreeDepth {
 			return
 		}
@@ -615,17 +700,7 @@ func (c *colCtx) consumed(kids []*box, end float64) []float64 {
 			}
 			return
 		}
-		for _, l := range k.lines {
-			i := c.index(l.y)
-			add(i, l.y+l.h)
-			for _, it := range l.items {
-				if a := it.atomic; a != nil && a.laidOut {
-					// An atomic inline sticking out of its line box takes
-					// its column's room too.
-					add(i, a.y+a.borderH())
-				}
-			}
-		}
+		lines(k)
 		for _, kk := range k.kids {
 			walk(kk, depth+1)
 		}
@@ -1019,4 +1094,26 @@ func (e *engine) cloneEdges(b *box, hSet bool) {
 		}
 		b.h = want
 	}
+}
+
+// shortage returns how much taller the columns of row r, h tall, must grow
+// for the content laid out in them, cons taken of each, to move: the least
+// a column overflows by, or the room the first piece past the row's
+// columns takes, at least [balanceSlack].
+func (c *colCtx) shortage(cons []float64, r int, h float64) float64 {
+	s := math.Inf(1)
+	first := c.rows[r].first
+	for i := first; i < len(cons) && c.frags[i].row == r; i++ {
+		if cons[i] > h+eps {
+			s = min(s, cons[i]-h)
+		}
+		if i >= first+c.target() && cons[i] > eps {
+			s = min(s, cons[i])
+			break
+		}
+	}
+	if math.IsInf(s, 1) {
+		s = h / float64(max(c.n, 1))
+	}
+	return max(s, balanceSlack)
 }
