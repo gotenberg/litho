@@ -26,10 +26,11 @@
 // indents, spacing (the space between two paragraphs is the larger of
 // the space after one and before the next, as LibreOffice lays DOCX
 // documents out, and contextual spacing drops it between paragraphs of
-// one style), line spacing (proportional spacing on the faces' ascent,
-// descent and line gap rounded to twips, exact and at-least spacing),
-// keep with next, keep lines together, widow control, page break before,
-// borders with the between border of a group, shading, tab stops with
+// one style), line spacing (proportional and exact spacing placed as
+// Writer places them, at-least spacing), keep with next, keep lines
+// together, widow control, page break before, borders with the between
+// border of a group, drawn whole on every page as Writer draws them,
+// shading, tab stops with
 // the default interval, outline levels and right-to-left direction. A
 // frame or a drop cap floats. Spaces are preserved, as Word lays them out.
 //

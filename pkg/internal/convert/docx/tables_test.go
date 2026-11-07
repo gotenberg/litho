@@ -53,7 +53,7 @@ func TestTables(t *testing.T) {
 	if c := byText["tall"]; c.RowSpan != 2 || c.Style.VerticalAlign.Kind != css.Middle {
 		t.Errorf("merged cell row span %d align %v", c.RowSpan, c.Style.VerticalAlign)
 	}
-	if c := byText["a"]; c.Style.BackgroundColor.R < 0.9 || c.Style.Border[css.Top].Color != (css.Color{R: 1, A: 1}) || c.Style.Border[css.Bottom].Width != 1 {
+	if c := byText["a"]; c.Style.BackgroundColor.R < 0.9 || c.Style.Border[css.Top].Color != (css.Color{R: 1, A: 1}) || c.Style.Border[css.Bottom].Width != 1 || c.Style.BoxDecorationBreak != css.DecorationCloneAll {
 		t.Errorf("band 2 cell: background %+v borders %+v", c.Style.BackgroundColor, c.Style.Border)
 	}
 	if c := byText["b"]; c.Style.BackgroundColor != (css.Color{R: 1, A: 1}) || c.Style.Padding[css.Left] != css.Pts(20) || c.Style.Padding[css.Right] != css.Pts(5) {

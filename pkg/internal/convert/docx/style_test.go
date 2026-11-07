@@ -104,6 +104,8 @@ func TestParagraphProperties(t *testing.T) {
 		p(`<w:ind w:left="1440" w:hanging="720"/><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="5000"/><w:tab w:val="bar" w:pos="3000"/><w:tab w:val="left" w:pos="100"/></w:tabs>`, "tabs") +
 		p(`<w:spacing w:line="360" w:lineRule="exact"/>`, "exact") +
 		p(`<w:spacing w:line="480" w:lineRule="atLeast"/>`, "atleast") +
+		p(`<w:spacing w:line="360" w:lineRule="auto"/>`, "proportional") +
+		p(`<w:spacing w:line="240" w:lineRule="auto"/>`, "single") +
 		p(`<w:keepNext/><w:keepLines/><w:widowControl w:val="0"/>`, "keep") +
 		p(`<w:bidi/>`, "rtl") +
 		p(`<w:pBdr><w:top w:val="single" w:sz="8" w:space="2" w:color="FF0000"/><w:left w:val="double" w:sz="4" w:space="4"/></w:pBdr><w:shd w:val="clear" w:color="auto" w:fill="EEEEEE"/>`, "border") +
@@ -142,15 +144,21 @@ func TestParagraphProperties(t *testing.T) {
 			}
 			return s.TextIndent == css.Pts(-36)
 		}},
-		{"exact", func(s *css.Style) bool { return s.LineHeight == css.Pts(18) }},
-		{"atleast", func(s *css.Style) bool { return s.MinLineHeight == 24 && s.LineHeight.Kind == css.Normal }},
+		{"exact", func(s *css.Style) bool { return s.LineHeight == css.Pts(18) && s.LineRule == css.LineRuleExact }},
+		{"atleast", func(s *css.Style) bool {
+			return s.MinLineHeight == 24 && s.LineHeight.Kind == css.Normal && s.LineRule == css.LineRuleCSS
+		}},
+		{"proportional", func(s *css.Style) bool {
+			return s.LineRule == css.LineRuleMultiple && s.LineHeight == css.Dimension{Kind: css.Number, Value: 1.5}
+		}},
+		{"single", func(s *css.Style) bool { return s.LineRule == css.LineRuleCSS && s.LineHeight.Kind == css.Normal }},
 		{"keep", func(s *css.Style) bool {
 			return s.BreakAfter == css.BreakAvoidPage && s.BreakInside == css.InsideAvoidPage && s.Orphans == 1 && s.Widows == 1
 		}},
 		{"rtl", func(s *css.Style) bool { return s.Direction == css.RTL }},
 		{"border", func(s *css.Style) bool {
 			return s.Border[css.Top] == css.Border{Width: 1, Style: css.Solid, Color: css.Color{R: 1, A: 1}} && s.Padding[css.Top] == css.Pts(2) &&
-				s.Border[css.Left].Style == css.Double && s.BackgroundColor.R > 0.9
+				s.Border[css.Left].Style == css.Double && s.BackgroundColor.R > 0.9 && s.BoxDecorationBreak == css.DecorationCloneAll
 		}},
 		{"styled", func(s *css.Style) bool { return s.Margin[css.Left] == css.Pts(18) && s.Margin[css.Top] == css.Pts(12) }},
 	} {

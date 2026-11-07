@@ -372,26 +372,37 @@ func hasContent(nodes []*layout.Node) bool {
 func (d *document) paraStyle(pp paraProps, mark runProps) (*css.Style, float64) {
 	st := d.blockStyle()
 	lineMult := 0.0
+	rule := css.LineRuleCSS
 	if pp.line != nil {
-		rule := "auto"
+		kind := "auto"
 		if pp.lineRule != nil {
-			rule = *pp.lineRule
+			kind = *pp.lineRule
 		}
-		switch rule {
+		switch kind {
 		case "exact":
 			st.LineHeight = css.Pts(max(1, *pp.line*ooxml.TwipPt))
-			setLineRule(st, ruleExact)
+			rule = css.LineRuleExact
 		case "atLeast":
 			st.MinLineHeight = max(0, *pp.line*ooxml.TwipPt)
 		default:
 			// 240ths of a line (17.18.48, ST_LineSpacingRule auto).
 			if m := *pp.line / 240; m > 0 && abs(m-1) > 0.001 {
 				lineMult = min(m, 10)
-				setLineRule(st, ruleMultiple)
+				rule = css.LineRuleMultiple
 			}
 		}
 	}
 	d.applyRun(st, mark, lineMult)
+	// Exact and proportional spacing place the lines as Writer does
+	// (css.LineRule): an exact height with the baseline at four fifths of
+	// it, a multiple of the natural height. Single spacing keeps the
+	// face's normal line height, which is Writer's single line. The runs
+	// keep their proportional line height, for the empty lines sized from
+	// them.
+	st.LineRule = rule
+	if rule == css.LineRuleMultiple {
+		st.LineHeight = css.Dimension{Kind: css.Number, Value: lineMult}
+	}
 	st.TextDecoration = 0
 	st.BackgroundColor = css.Transparent
 	st.VerticalAlign = css.VerticalAlign{}
@@ -475,7 +486,9 @@ func (d *document) paraStyle(pp paraProps, mark runProps) (*css.Style, float64) 
 		st.BackgroundColor = *pp.shading
 	}
 	if len(pp.borders) > 0 {
-		cloneDecorations(st)
+		// Writer draws a bordered paragraph's border whole on every page
+		// it spans.
+		st.BoxDecorationBreak = css.DecorationCloneAll
 	}
 	// Word measures tab stops from the margin, the layout from the
 	// paragraph's content box: a stop moves left by the start indent, and
