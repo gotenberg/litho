@@ -103,10 +103,12 @@ func (d *document) blocksInto(s *story, c *cond, parent *ooxml.Element, depth in
 const maxNesting = 64
 
 // finish applies what depends on neighbouring paragraphs: the spacing
-// between them, which Word and Writer add rather than collapse, the
-// contextual spacing that drops it between paragraphs of one style
-// (17.3.1.9), and the borders paragraphs with the same borders share
-// (17.3.1.24: the group draws one box, the between border inside it).
+// between them, the larger of the space after one and before the next as
+// LibreOffice lays a DOCX document out (which the margins collapsing
+// gives), the contextual spacing that drops it between paragraphs of one
+// style (17.3.1.9), and the borders paragraphs with the same borders
+// share (17.3.1.24: the group draws one box, the between border inside
+// it).
 func finish(bs []blockNode) []*layout.Node {
 	out := make([]*layout.Node, 0, len(bs))
 	for i, b := range bs {
@@ -116,35 +118,21 @@ func finish(bs []blockNode) []*layout.Node {
 			continue
 		}
 		st := b.node.Style
-		before := info.before
-		var prev *paraInfo
+		var prev, next *paraInfo
 		if i > 0 {
 			prev = bs[i-1].info
 		}
-		if prev != nil && info.contextual && prev.style == info.style {
-			before = 0
-		}
-		switch {
-		case i == 0:
-			st.Margin[css.Top] = css.Pts(before)
-		case prev != nil:
-			// The gap goes in the previous paragraph's bottom margin, so
-			// that no margin collapses with it.
-			gap := prev.after
-			if prev.contextual && prev.style == info.style {
-				gap = 0
-			}
-			bs[i-1].node.Style.Margin[css.Bottom] = css.Pts(gap + before)
-		default:
-			st.Margin[css.Top] = css.Pts(before)
-		}
-		var next *paraInfo
 		if i+1 < len(bs) {
 			next = bs[i+1].info
 		}
-		if next == nil {
-			st.Margin[css.Bottom] = css.Pts(info.after)
+		before, after := info.before, info.after
+		if info.contextual && prev != nil && prev.style == info.style {
+			before = 0
 		}
+		if info.contextual && next != nil && next.style == info.style {
+			after = 0
+		}
+		st.Margin[css.Top], st.Margin[css.Bottom] = css.Pts(before), css.Pts(after)
 		if len(info.borders) > 0 {
 			if prev != nil && sameBorders(prev, info) {
 				st.Border[css.Top] = css.Border{}
@@ -485,10 +473,10 @@ func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
 	ms := inlineStyle(st)
 	d.applyRun(ms, mr, 0)
 	ms.LineHeight = st.LineHeight
-	if fam := families(mr); len(fam) > 0 {
+	if fam := d.families(mr); len(fam) > 0 {
 		if mapped, drop := mapSymbolText(label, fam[0]); drop {
 			label = mapped
-			ms.FontFamilies = families(rp.mark)
+			ms.FontFamilies = d.families(rp.mark)
 		}
 	}
 	n.Style.Display = css.ListItem

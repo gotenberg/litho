@@ -55,9 +55,11 @@ type document struct {
 	// pixels decoded against [maxTotalPixels].
 	pictures map[string]*layout.Picture
 	pixels   int64
-	// lineFactors caches the normal line height of a font, as a factor of
-	// its size.
-	lineFactors map[string]float64
+	// lineFactors caches the ascent, descent and line gap of a font, as
+	// factors of its size.
+	lineFactors map[string][3]float64
+	// fontClass maps a lower-cased family to its fallback face.
+	fontClass map[string]string
 	// noteNumber counts the footnotes and endnotes numbered so far.
 	footnoteNumber, endnoteNumber int
 	endnoteBodies                 []*layout.Node
@@ -91,10 +93,11 @@ func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	}
 	d := &document{
 		ctx: ctx, pkg: pkg, main: main, fonts: fonts, opts: opts,
-		warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, lineFactors: map[string]float64{},
+		warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, lineFactors: map[string][3]float64{},
 		settings: settings{defaultTab: 36},
 	}
 	d.theme = &ooxml.Theme{}
+	d.readFontTable(nil)
 	if name := pkg.RelatedPart(main, ooxml.RelTheme); name != "" {
 		if root, err := d.part(name); err == nil {
 			d.theme = ooxml.ParseTheme(root)
@@ -123,6 +126,13 @@ func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 		}
 	}
 	d.numbering = d.parseNumbering(numRoot)
+	var fontRoot *ooxml.Element
+	if name := pkg.RelatedPart(main, ooxml.RelFontTable); name != "" {
+		if fontRoot, err = d.part(name); err != nil && !isSoft(err) {
+			return nil, err
+		}
+	}
+	d.readFontTable(fontRoot)
 	d.footnotesPart = pkg.RelatedPart(main, ooxml.RelFootnotes)
 	if d.footnotes, err = d.readNotes(d.footnotesPart, "footnote"); err != nil {
 		return nil, err

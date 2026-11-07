@@ -1,6 +1,7 @@
 package docx
 
 import (
+	"math"
 	"strings"
 	"unicode"
 
@@ -13,11 +14,6 @@ import (
 // 17.7.5.1 leaves the default to the application).
 const defaultFamily = "Times New Roman"
 
-// fallbackFamily ends every family list: the face fontconfig substitutes
-// for an unknown family where LibreOffice runs Gotenberg, the first of
-// 60-latin.conf's sans-serif preference list.
-const fallbackFamily = "DejaVu Sans"
-
 // defaultFontSize is the font size of text whose properties set none, 10
 // points (ECMA-376 Part 1, 17.3.2.38: sz absent is 20 half-points).
 const defaultFontSize = 10
@@ -29,7 +25,7 @@ func (d *document) blockStyle() *css.Style {
 	st := css.Initial()
 	st.Display = css.Block
 	st.WhiteSpace = css.PreWrap
-	st.FontFamilies = []string{defaultFamily, fallbackFamily}
+	st.FontFamilies = []string{defaultFamily, fallbackSerif}
 	st.FontSize = defaultFontSize
 	st.TabSize = css.Pts(d.settings.defaultTab)
 	st.OverflowWrap = css.BreakWord
@@ -39,8 +35,8 @@ func (d *document) blockStyle() *css.Style {
 // families returns the font family list of run properties: the ASCII,
 // high ANSI, East Asian and complex script typefaces in that order, so
 // the text stack's per-character fallback picks the East Asian face for
-// CJK text, then the fallback family.
-func families(r runProps) []string {
+// CJK text, then the fallback face of the first family's class.
+func (d *document) families(r runProps) []string {
 	var out []string
 	add := func(f string) {
 		f = strings.TrimSpace(f)
@@ -61,7 +57,7 @@ func families(r runProps) []string {
 	if len(out) == 0 {
 		add(defaultFamily)
 	}
-	add(fallbackFamily)
+	add(d.fallbackFor(out[0]))
 	return out
 }
 
@@ -69,7 +65,7 @@ func families(r runProps) []string {
 // 17.3.2), which already holds the paragraph's inherited properties.
 // lineMult is the paragraph's proportional line spacing, 0 for none.
 func (d *document) applyRun(st *css.Style, r runProps, lineMult float64) {
-	st.FontFamilies = families(r)
+	st.FontFamilies = d.families(r)
 	st.FontSize = defaultFontSize
 	if r.size != nil {
 		st.FontSize = *r.size
@@ -162,7 +158,7 @@ func (d *document) applyRun(st *css.Style, r runProps, lineMult float64) {
 		st.TextShadow = []css.Shadow{{X: off, Y: off, Color: css.Color{R: 0.6, G: 0.6, B: 0.6, A: 1}}}
 	}
 	if lineMult > 0 {
-		st.LineHeight = css.Dimension{Kind: css.Number, Value: lineMult * d.lineFactor(st)}
+		st.LineHeight = css.Pts(d.proportionalLine(st, lineMult))
 	}
 }
 
@@ -178,10 +174,19 @@ func runBackground(r runProps) *css.Color {
 // luminance returns the relative luminance of c, roughly.
 func luminance(c css.Color) float64 { return 0.299*c.R + 0.587*c.G + 0.114*c.B }
 
-// lineFactor returns the normal line height of st's first available face,
-// ascent plus descent plus line gap, as a factor of the font size: what a
-// proportional line spacing multiplies (17.3.1.33, lineRule auto).
-func (d *document) lineFactor(st *css.Style) float64 {
+// proportionalLine returns the height of a line of text in st under a
+// proportional line spacing mult (17.3.1.33, lineRule auto): the face's
+// ascent, descent and line gap each rounded to twips, their sum times mult
+// truncated to twips, as LibreOffice computes it.
+func (d *document) proportionalLine(st *css.Style, mult float64) float64 {
+	a, de, g := d.lineMetrics(st)
+	twips := math.Round(a*st.FontSize*20) + math.Round(de*st.FontSize*20) + math.Round(g*st.FontSize*20)
+	return math.Max(1, math.Floor(twips*mult)/20)
+}
+
+// lineMetrics returns the ascent, descent and line gap of st's first
+// available face as factors of the font size.
+func (d *document) lineMetrics(st *css.Style) (float64, float64, float64) {
 	key := strings.Join(st.FontFamilies, ",")
 	if st.FontWeight >= 600 {
 		key += ",b"
@@ -190,21 +195,21 @@ func (d *document) lineFactor(st *css.Style) float64 {
 		key += ",i"
 	}
 	if f, ok := d.lineFactors[key]; ok {
-		return f
+		return f[0], f[1], f[2]
 	}
-	f := 1.15
+	f := [3]float64{0.9, 0.25, 0}
 	if d.fonts != nil {
 		const size = 100
 		fc := d.fonts.Match(text.Style{Families: text.BrowserFamilies(st.FontFamilies), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: size})
 		if fc != nil {
 			m := fc.Metrics(size)
 			if v := (m.Ascent + m.Descent + m.LineGap) / size; v > 0.5 && v < 5 {
-				f = v
+				f = [3]float64{m.Ascent / size, m.Descent / size, m.LineGap / size}
 			}
 		}
 	}
 	d.lineFactors[key] = f
-	return f
+	return f[0], f[1], f[2]
 }
 
 // inlineStyle returns a copy of the paragraph style ps as an inline box,
