@@ -162,9 +162,9 @@ func (e *engine) containerOf(b *box) absCB {
 			w: a.w + a.pd[css.Left] + a.pd[css.Right], h: a.h + a.pd[css.Top] + a.pd[css.Bottom],
 			box: a,
 		}
-		if a.grid != nil && b.parent == a {
-			// A grid container's child takes its grid area (CSS Grid 1,
-			// 9.1).
+		if a.grid != nil {
+			// A box whose containing block a grid container generates
+			// takes the grid area its placement names (CSS Grid 1, 9).
 			return gridAbsCB(a, b, pad)
 		}
 		return pad

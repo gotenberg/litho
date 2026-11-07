@@ -1488,6 +1488,9 @@ func flexBaseline(b *box, last bool) (float64, bool) {
 // cross axis (CSS Flexbox 1, 4.1).
 func flexStaticShift(b *box, horizontal bool) float64 {
 	c := b.parent
+	if c != nil && c.grid != nil && b.staticSet {
+		return gridStaticShift(b, horizontal)
+	}
 	if c == nil || c.flex == nil || !b.staticSet {
 		return 0
 	}

@@ -1019,3 +1019,33 @@ func gridAbsCB(c, k *box, pad absCB) absCB {
 	return out
 }
 
+
+// gridStaticShift returns how far the absolutely positioned child b of a
+// grid container moves from the content box corner its static position
+// records, horizontally or vertically: it is aligned by its justify-self
+// and align-self, normal and stretch standing for start, in the grid area
+// its placement names when the container is its containing block, else
+// in the container's content box (CSS Grid 1, 9.2; CSS Box Alignment 3,
+// 6.1).
+func gridStaticShift(b *box, horizontal bool) float64 {
+	c := b.parent
+	cx, cy, cw, ch := c.contentX(), c.contentY(), c.w, c.h
+	x, y, w, h := cx, cy, cw, ch
+	if b.cbBox == c {
+		pad := absCB{
+			x: c.x + c.bd[css.Left], y: c.y + c.bd[css.Top],
+			w: c.w + c.pd[css.Left] + c.pd[css.Right], h: c.h + c.pd[css.Top] + c.pd[css.Bottom], box: c,
+		}
+		a := gridAbsCB(c, b, pad)
+		x, y, w, h = a.x, a.y, a.w, a.h
+	}
+	if horizontal {
+		rtl := c.st.Direction == css.RTL
+		off := selfOffset(justifySelf(b.st, c.st), w-b.marginW(), true, rtl, b.st.Direction == css.RTL)
+		if rtl {
+			return (x + w) - (cx + cw) - off
+		}
+		return x - cx + off
+	}
+	return y - cy + selfOffset(alignSelfOf(b.st, c.st), h-b.marginH(), false, false, false)
+}
