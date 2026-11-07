@@ -197,3 +197,34 @@ func TestBorderImage_CropSource(t *testing.T) {
 		t.Errorf("top edge pixel = %v, want red", got)
 	}
 }
+
+func TestBorderImage_InlineStrip(t *testing.T) {
+	// An inline box broken across two lines draws its border image over
+	// the strip of its fragments end to end: a left-to-right gradient is
+	// red where the first line's fragment ends and blue where the second
+	// one's ends (CSS Backgrounds 3, 6.6).
+	g := &css.Gradient{Angle: 90, Stops: []css.GradientStop{
+		{Color: red, Position: css.Dimension{Kind: css.Auto}},
+		{Color: blue, Position: css.Dimension{Kind: css.Auto}},
+	}}
+	one := css.Dimension{Kind: css.Number, Value: 1}
+	sp := inlineSty(border(2, css.Solid, css.Color{A: 1}), func(s *css.Style) {
+		s.BorderImage = css.BorderImage{Gradient: g, Slice: [4]css.Dimension{one, one, one, one}, Width: [4]css.Dimension{one, one, one, one}}
+		s.Color = css.Color{}
+	})
+	root := doc(el(sty(width(40), func(s *css.Style) { s.LineHeight = css.Pts(px(20)) }), el(sp, txt(sp, "XX XX"))))
+	img := render(t, run(t, root, page(60, 40)), 1)
+	// Line 1: the fragment runs from x 0 to 22 (a left border and two
+	// glyphs), its top edge at y 3; line 2's from 0 to 22 at y 23, with a
+	// right border alone.
+	end1, end2 := at(img, 19, 3), at(img, 19, 23)
+	if !(end1.R > end1.B) || !(end2.B > end2.R) {
+		t.Errorf("fragment ends: line 1 %v, line 2 %v; want reddish then bluish", end1, end2)
+	}
+	if c := at(img, 21, 8); c != (color.NRGBA{255, 255, 255, 255}) {
+		t.Errorf("line 1 draws a right edge: %v", c)
+	}
+	if c := at(img, 0, 28); c != (color.NRGBA{255, 255, 255, 255}) {
+		t.Errorf("line 2 draws a left edge: %v", c)
+	}
+}

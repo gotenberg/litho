@@ -86,6 +86,9 @@ type painter struct {
 	outlines map[*compose.Face]*gofont.Face
 	// crops caches the parts of raster images border images cut out.
 	crops map[cropKey]*compose.ImageSource
+	// strip is the inline box fragment being painted, laid on the strip
+	// of all its fragments for its border image; nil for none.
+	strip *imageStrip
 }
 
 // paint returns the display list of the box tree rooted at root.
@@ -748,6 +751,11 @@ func (p *painter) lineFrag(l *lineBox, f *inlineFrag, page int) {
 	if !f.right {
 		bd[css.Right], pd[css.Right] = 0, 0
 		radii[css.TopRight], radii[css.BottomRight] = [2]float64{}, [2]float64{}
+	}
+	if f.box.st.BorderImage.HasImage() && (!f.left || !f.right) {
+		// A border image spans the inline box's fragments as one strip.
+		p.strip = p.imageStrip(f, r)
+		defer func() { p.strip = nil }()
 	}
 	p.inlineFrag(f.box, r, radii, bd, pd, sides, page)
 }

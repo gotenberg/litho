@@ -31,6 +31,16 @@ func (p *painter) borderImage(b *box, st *css.Style, r compose.Rect, bd [4]float
 	if !bi.HasImage() {
 		return false
 	}
+	frag, strip := r, p.strip
+	if strip != nil && strip.box == b {
+		// CSS Backgrounds 3, 6.6 with box-decoration-break: slice: the
+		// image is drawn over the strip of the inline box's fragments
+		// laid end to end, and this fragment shows its part of it.
+		r = compose.Rect{X: r.X - strip.before, Y: r.Y, Width: strip.total, Height: r.Height}
+		bd, draw = b.bd, [4]bool{true, true, true, true}
+	} else {
+		strip = nil
+	}
 	// CSS Backgrounds 3, 6.5: the border image area is the border box
 	// grown by the outsets, a number multiplying the border width.
 	var out [4]float64
@@ -80,9 +90,69 @@ func (p *painter) borderImage(b *box, st *css.Style, r compose.Rect, bd [4]float
 	if len(g.kids) == 0 {
 		return true
 	}
+	if strip != nil {
+		// The fragment's part: its own span, reaching the area's ends on
+		// the edges it draws.
+		x0, x1 := frag.X, frag.X+frag.Width
+		if strip.left {
+			x0 = min(x0, area.X)
+		}
+		if strip.right {
+			x1 = max(x1, area.X+area.Width)
+		}
+		g.clip = &compose.Path{Ops: rectOps(compose.Rect{X: x0, Y: area.Y, Width: x1 - x0, Height: area.Height}), Fill: &compose.Fill{}}
+	}
 	c := p.sync(p.chain(b, false))
 	c.kids = append(c.kids, g)
 	return true
+}
+
+// imageStrip places one fragment of an inline box on the strip of all its
+// fragments, laid end to end in the box's direction.
+type imageStrip struct {
+	box *box
+	// before is the width of the strip before the fragment, total the
+	// strip's width.
+	before, total float64
+	// left and right report the fragment draws the box's left or right
+	// edge.
+	left, right bool
+}
+
+// imageStrip returns the place of the fragment f, painted over
+// r, on the strip of its box's fragments in the lines of its block
+// container (CSS Backgrounds 3, 6.6 and CSS Fragmentation 3, 5.4).
+func (p *painter) imageStrip(f *inlineFrag, r compose.Rect) *imageStrip {
+	s := &imageStrip{box: f.box, left: f.left, right: f.right}
+	c := f.box.parent
+	for c != nil && c.kind == kindInline {
+		c = c.parent
+	}
+	if c == nil {
+		s.total = r.Width
+		return s
+	}
+	rtl := f.box.st.Direction == css.RTL
+	seen := false
+	for _, cl := range c.lines {
+		for _, g := range cl.frags {
+			if g.box != f.box {
+				continue
+			}
+			w := g.x1 - g.x0
+			s.total += w
+			if g == f {
+				seen = true
+				continue
+			}
+			// Right to left, the fragments run from the strip's right
+			// end: those after this one lie left of it.
+			if !seen && !rtl || seen && rtl {
+				s.before += w
+			}
+		}
+	}
+	return s
 }
 
 // nineSource loads the image of bi for the border image area: a picture
