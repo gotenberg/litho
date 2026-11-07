@@ -123,9 +123,13 @@ func (d *document) place(p placement, n *layout.Node, sink *inlineSink) {
 			st.Float = css.FloatRight
 		}
 		st.Margin = [4]css.Dimension{css.Pts(p.dist[0]), css.Pts(p.dist[1]), css.Pts(p.dist[2]), css.Pts(p.dist[3])}
-		if !fromPageV(p.relV) && p.alignV == "" && p.posV > 0 {
+		// LibreOffice keeps a drawing anchored in the body inside the
+		// page its paragraph is on.
+		st.PageClamp = d.pageAnchors()
+		if !fromPageV(p.relV) && p.alignV == "" && (p.posV > 0 || st.PageClamp) {
 			// A float lower than its paragraph's top starts that much
-			// lower, an approximation of its vertical offset.
+			// lower, an approximation of its vertical offset; one higher
+			// starts that much higher, inside its page.
 			st.Margin[css.Top] = css.Pts(p.posV)
 		}
 		if st.Float == css.FloatLeft && p.alignH == "" {
@@ -175,6 +179,9 @@ func (d *document) place(p placement, n *layout.Node, sink *inlineSink) {
 			return
 		}
 		st.Left, st.Top = css.Pts(p.posH), css.Pts(p.posV)
+		// LibreOffice keeps a drawing positioned from its paragraph
+		// inside the page its paragraph is on.
+		st.PageClamp = d.pageAnchors()
 		if fromPageV(p.relV) {
 			d.warn("approximated", "a drawing positioned from the page in a header, footer, note, text box or table is positioned from its paragraph")
 			st.Top = css.Pts(0)
