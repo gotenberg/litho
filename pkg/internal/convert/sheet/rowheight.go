@@ -93,7 +93,9 @@ func (b *builder) optimalHeights(g *grid) {
 				a := math.Abs(rot) * math.Pi / 180
 				h = d.textW*math.Sin(a) + h*math.Cos(a)
 			}
-			need = max(need, (pixels(h)+pixels(d.padding[css.Top])+pixels(d.padding[css.Bottom]))*screenPixel)
+			px := pixels(h) + pixels(d.padding[css.Top]) + pixels(d.padding[css.Bottom])
+			// Calc keeps a row height in whole twips.
+			need = max(need, math.Floor(px*screenPixel*20+1e-6)/20)
 		}
 		if need > base+epsilon {
 			g.heights[ri] = min(need, maxSide)
