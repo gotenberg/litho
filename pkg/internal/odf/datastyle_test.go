@@ -41,6 +41,9 @@ func TestDataStyles_Code(t *testing.T) {
 		{"N16", `<number:number-style style:name="N16"><number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="7"><number:embedded-text number:position="4">-</number:embedded-text></number:number></number:number-style>`, `000\-0000.00`},
 		{"N17", `<number:number-style style:name="N17"><number:number number:decimal-places="0" number:min-integer-digits="1"/><style:map style:condition="value()&gt;0" style:apply-style-name="N3P0"/><style:map style:condition="value()&lt;0" style:apply-style-name="N1"/></number:number-style>`, `#,##0.00\ [$€-407];#,##0.00;0`},
 		{"N18", `<number:number-style style:name="N18"><number:number number:decimal-places="0" number:min-integer-digits="1"/><style:map style:condition="value()=1" style:apply-style-name="N1"/></number:number-style>`, `[=1]#,##0.00;0`},
+		{"N20", `<number:date-style style:name="N20" number:automatic-order="true"><number:day number:style="long"/><number:text>.</number:text><number:month number:style="long"/><number:text>.</number:text><number:year/></number:date-style>`, "mm/dd/yy"},
+		{"N21", `<number:date-style style:name="N21" number:automatic-order="true" number:language="de"><number:day/><number:text>.</number:text><number:month/><number:text>.</number:text><number:year/></number:date-style>`, `d\.m\.yy`},
+		{"N22", `<number:number-style style:name="N22"><number:scientific-number number:decimal-places="2" number:min-integer-digits="1" number:min-exponent-digits="1" loext:forced-exponent-sign="false"/></number:number-style>`, "0.00E-0"},
 		{"N19", `<number:currency-style style:name="N19"><number:currency-symbol number:language="xx" number:country="YY">¤</number:currency-symbol><number:number number:decimal-places="0" number:min-integer-digits="1"/></number:currency-style>`, `[$¤]0`},
 	}
 	var styles string
@@ -48,7 +51,7 @@ func TestDataStyles_Code(t *testing.T) {
 		styles += tt.xml
 	}
 	styles += `<number:currency-style style:name="N3P0" style:volatile="true"><number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="1" number:grouping="true"/><number:text> </number:text><number:currency-symbol number:language="de" number:country="DE">€</number:currency-symbol></number:currency-style>`
-	doc := `<office:document ` + ns + ` xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"><office:styles>` + styles + `</office:styles></office:document>`
+	doc := `<office:document ` + ns + ` xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0" xmlns:loext="urn:org:documentfoundation:names:experimental:office:xmlns:loext:1.0"><office:styles>` + styles + `</office:styles></office:document>`
 	p, err := Open(context.Background(), []byte(doc), Options{})
 	if err != nil {
 		t.Fatal(err)

@@ -182,6 +182,9 @@ func sectionCode(el *Element) string {
 	if kind == "boolean-style" {
 		return `"TRUE";"TRUE";"FALSE"`
 	}
+	if code, ok := autoOrderDate(el); ok {
+		return b.String() + code
+	}
 	// Minutes follow hours or precede seconds in a code; an isolated
 	// minutes element of a time style is written as minutes by its
 	// context alone, as Excel reads "mm" after "h".
@@ -250,6 +253,49 @@ func sectionCode(el *Element) string {
 		}
 	}
 	return b.String()
+}
+
+// autoOrderDate writes a date style of number:automatic-order (ODF 1.3,
+// Part 3, 19.340) whose elements are a day, a month and a year in the
+// en-US order Calc takes them in, the month, the day, the year, with
+// slashes between: the order and separators of the locale, en-US for a
+// style that names none or English. ok is false for any other style,
+// written as its elements come.
+//
+// # Corpus evidence
+//
+//   - ods: sc/tdf162177_Eastersunday.fods's "dd.mm.yy" style of automatic
+//     order prints 03/31/24, and sc/tdf125099.ods's "dd-mm-yyyy" prints
+//     04/17/2019.
+func autoOrderDate(el *Element) (string, bool) {
+	if el.Name.Local != "date-style" || el.A(NSNumber, "automatic-order") != "true" {
+		return "", false
+	}
+	if lang := el.A(NSNumber, "language"); lang != "" && lang != "en" {
+		return "", false
+	}
+	var day, month, year string
+	for _, c := range el.Children {
+		if c.IsText() || c.Is(NSStyle, "text-properties") || c.Is(NSStyle, "map") {
+			continue
+		}
+		long := c.A(NSNumber, "style") == "long"
+		switch {
+		case c.Is(NSNumber, "day") && day == "":
+			day = pick(long, "dd", "d")
+		case c.Is(NSNumber, "month") && month == "" && c.A(NSNumber, "textual") != "true":
+			month = pick(long, "mm", "m")
+		case c.Is(NSNumber, "year") && year == "":
+			year = pick(long, "yyyy", "yy")
+		case c.Is(NSNumber, "text"):
+		default:
+			return "", false
+		}
+	}
+	if day == "" || month == "" || year == "" {
+		return "", false
+	}
+	return month + "/" + day + "/" + year, true
 }
 
 // pick returns a when cond holds, else b.
@@ -383,7 +429,13 @@ func scientificCode(el *Element) string {
 	if !ok {
 		exp = 2
 	}
-	return code + "E+" + strings.Repeat("0", max(exp, 1))
+	// number:forced-exponent-sign false shows the exponent's sign only
+	// when it is negative (ODF 1.4, 19.348.2; LibreOffice since 7.6).
+	sign := "E+"
+	if el.A(NSNumber, "forced-exponent-sign") == "false" || el.A(NSLOExt, "forced-exponent-sign") == "false" {
+		sign = "E-"
+	}
+	return code + sign + strings.Repeat("0", max(exp, 1))
 }
 
 // fractionCode translates number:fraction (ODF 1.3, Part 3, 16.29.7):
