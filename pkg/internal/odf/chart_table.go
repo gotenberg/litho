@@ -295,7 +295,9 @@ func (r *chartReader) formatCode(name string, depth int) string {
 		case "fraction":
 			b.WriteString("# ?/?")
 		case "text":
-			if t := part.TextContent(); t != "" {
+			if t := part.TextContent(); t == "%" && st.Name.Local == "percentage-style" {
+				b.WriteString("%")
+			} else if t != "" {
 				b.WriteString(`"` + strings.ReplaceAll(t, `"`, ``) + `"`)
 			}
 		case "currency-symbol":

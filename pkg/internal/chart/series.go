@@ -321,7 +321,14 @@ func (rd *renderer) labelText(g *Group, s *Series, j int, v float64, lb Labels, 
 		parts = append(parts, formatLabel(f, v))
 	}
 	if lb.ShowPercent && !math.IsNaN(pct) && (g.Kind == Pie || g.Kind == Doughnut || g.Grouping == PercentStacked) {
-		parts = append(parts, formatLabel("0%", pct))
+		f := lb.PercentFormat
+		if f == "" {
+			f = "0%"
+			if !lb.ShowValue && strings.Contains(lb.Format, "%") {
+				f = lb.Format
+			}
+		}
+		parts = append(parts, formatLabel(f, pct))
 	}
 	sep := lb.Separator
 	if sep == "" {

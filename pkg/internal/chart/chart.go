@@ -436,8 +436,11 @@ type Labels struct {
 	Placement LabelPlacement
 	// Format is the number format code of the values, "" for the source's.
 	Format string
-	Style  TextStyle
-	Frame  Frame
+	// PercentFormat is the number format code of the percentages, ""
+	// for Format when the label shows no value, else "0%".
+	PercentFormat string
+	Style         TextStyle
+	Frame         Frame
 }
 
 // Any reports labels that show something.

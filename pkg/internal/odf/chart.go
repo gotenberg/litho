@@ -712,6 +712,11 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 	}
 	s.Labels = r.labels(name, g.Labels, g)
 	s.Labels.Format = labelFormat
+	if st := r.styles[name]; st != nil {
+		if pf := st.A(NSStyle, "percentage-data-style-name"); pf != "" {
+			s.Labels.PercentFormat = r.numberFormat(pf)
+		}
+	}
 	idx := 0
 	for _, dp := range se.All(NSChart, "data-point") {
 		rep := 1
