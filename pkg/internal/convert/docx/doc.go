@@ -20,7 +20,8 @@
 // hidden text, letter spacing, horizontal scale, raised and lowered text,
 // superscript and subscript (58% of the size, as LibreOffice draws them),
 // language, and shadow, emboss and imprint as a grey text shadow are read;
-// outline text draws as plain text.
+// outline text draws as plain text. A run is kerned only at or above the
+// size its kern property sets, as LibreOffice kerns.
 //
 // Paragraphs read their alignment, indents with first-line and hanging
 // indents, spacing (the space between two paragraphs is the larger of
@@ -62,11 +63,13 @@
 // Tables are laid out with the fixed algorithm over their grid, borders
 // collapsed, with the table width, alignment and indent (measured to the
 // first cell's text before Word 2013's compatibility mode, as LibreOffice
-// places it), the borders, shading and cell margins of the table, its
+// places it; a row's alignment aligns a table that sets none), the
+// borders, shading and cell margins of the table, its
 // style's conditional formatting under its look, and of each cell, column
 // spans, vertical merges, row heights, rows that do not split, header
 // rows repeated across pages, vertical alignment and nested tables. A
-// floating table floats on its side.
+// floating table floats on its side; a centred one is centred on its own
+// line.
 //
 // # Drawings
 //
@@ -83,10 +86,11 @@
 //
 // # Notes, links and revisions
 //
-// Footnotes go to the footnote area of their page, endnotes after the
-// text. Hyperlinks to a URI or a bookmark, HYPERLINK fields and bookmarks
+// Footnotes go to the footnote area of their page, under the separator
+// LibreOffice draws, endnotes after the text. Hyperlinks to a URI or a bookmark, HYPERLINK fields and bookmarks
 // become links and anchors. Insertions print as text and deletions do not,
-// as LibreOffice prints a document with tracked changes; comments are
+// as LibreOffice prints a document with tracked changes; a paragraph whose
+// mark is deleted or hidden joins the next one; comments are
 // left out; equations draw as their text with a warning.
 //
 // # Document
