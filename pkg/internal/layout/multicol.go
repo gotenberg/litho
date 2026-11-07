@@ -51,6 +51,10 @@ const maxColumns = 1 << 16
 // height down to a millionth of a point.
 const maxBalancePasses = 30
 
+// balanceSlack is the precision of a balanced column height: a 64th of a
+// CSS pixel, the layout unit of Chromium, which balances to it.
+const balanceSlack = css.Pt / 64
+
 // unbounded is the height of a column nothing limits: the content of an
 // unfragmented container that balances is first laid out in one column
 // that tall, to measure it.
@@ -189,7 +193,13 @@ func (c *colCtx) newRow(top float64) {
 		h, paged = rem, false
 	}
 	next := paged || c.wrap && c.colH > 0 && top+h+c.gap < c.limit
-	if r == c.balanceRow {
+	switch {
+	case h <= 0:
+		// A container of no height has nowhere to break: its content
+		// stays in its first column and overflows it, as Chromium lays
+		// it out.
+		h, next = unbounded, false
+	case r == c.balanceRow:
 		h = min(h, c.balanceH)
 	}
 	if math.IsInf(h, 1) {
@@ -461,7 +471,7 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 		l := ctx.lastFrag(cons)
 		return ctx.frags[l].row == r && l < ctx.rows[r].first+ctx.n && ctx.rowMax(cons, r) <= ctx.rows[r].h+eps
 	}
-	balance := (st.Fill != css.FillAuto || spanned || row.h >= unbounded) && ctx.colH <= 0
+	balance := (st.Fill != css.FillAuto || spanned || row.h >= unbounded) && ctx.colH <= 0 && row.top < limit
 	if balance && fits() {
 		hi := row.h
 		total := 0.0
@@ -475,7 +485,7 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 		best := hi
 		bestFits := row.h == hi
 		for range maxBalancePasses {
-			if hi-lo < 0.01 || !e.relayout(y) {
+			if hi-lo < balanceSlack || !e.relayout(y) {
 				break
 			}
 			mid := (lo + hi) / 2
@@ -559,7 +569,15 @@ func (c *colCtx) consumed(kids []*box, end float64) []float64 {
 			return
 		}
 		for _, l := range k.lines {
-			add(c.index(l.y), l.y+l.h)
+			i := c.index(l.y)
+			add(i, l.y+l.h)
+			for _, it := range l.items {
+				if a := it.atomic; a != nil && a.laidOut {
+					// An atomic inline sticking out of its line box takes
+					// its column's room too.
+					add(i, a.y+a.borderH())
+				}
+			}
 		}
 		for _, kk := range k.kids {
 			walk(kk, depth+1)
@@ -613,6 +631,9 @@ func (c *colCtx) finish(b *box, s *colSet, cons []float64, end float64, balanced
 			// A row of no content takes no room, whatever the least
 			// height of its columns.
 			row.used = c.rowMax(cons, r)
+		}
+		if !math.IsInf(c.limit, 1) {
+			row.used = max(min(row.used, c.limit-row.top), 0)
 		}
 		lastCol := row.first
 		for i := row.first; i < len(c.frags) && c.frags[i].row == r && i <= last; i++ {

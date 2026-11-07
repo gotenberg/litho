@@ -227,7 +227,9 @@ func (e *engine) cutItem(it *ditem, b *box, s *colSet, oy float64, depth int) (m
 			continue
 		}
 		if k.page >= 0 || k.page == pageMono {
-			i := s.fragOf(b, k.y0-oy+eps)
+			// A glyph run's extent reaches above and below its line box
+			// by its ascent and descent: its middle is on its line.
+			i := s.fragOf(b, (k.y0+max(k.y1, k.y0))/2-oy)
 			_, dy := b.mc.shiftOf(b, s, i)
 			leaf := *k
 			leaf.y0, leaf.y1, leaf.page = k.y0+dy, k.y1+dy, pageMono

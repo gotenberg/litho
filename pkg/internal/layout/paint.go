@@ -338,8 +338,10 @@ func (p *painter) unit(b *box, own bool) {
 	}
 	defer func() { p.frames = p.frames[:len(p.frames)-pushed] }()
 	if b.monoCol {
-		// A monolithic box in columns moves to its column whole.
+		// A monolithic box in columns moves to its column whole; the
+		// positioned boxes it holds paint from its stacking context.
 		push(&ditem{group: true, opacity: 1, page: pageMono, y0: b.y + p.dy})
+		own = own && b.isStackingContext()
 	}
 	if b.fixed {
 		savedMono := p.mono
@@ -476,10 +478,16 @@ func (p *painter) collect(b *box, blocks, floats, layers *[]*box) {
 			// 6.3).
 		case k.layered():
 			*layers = append(*layers, k)
-		case k.float != css.FloatNone || k.mc != nil || k.monoCol:
-			// A multi-column container paints its columns as a unit, and
-			// a monolithic box in columns paints in its column.
+		case k.float != css.FloatNone || k.mc != nil:
+			// A multi-column container paints its columns as a unit.
 			*floats = append(*floats, k)
+		case k.monoCol:
+			// A monolithic box in columns paints as a unit in its column;
+			// its positioned descendants stay in the stacking context's
+			// layers, and follow the columns on their own.
+			*floats = append(*floats, k)
+			var bl, fl []*box
+			p.collect(k, &bl, &fl, layers)
 		case k.tpart == partTable:
 			// A table paints its rows and cells itself (CSS 2.1, 17.5.1).
 			*blocks = append(*blocks, k)
