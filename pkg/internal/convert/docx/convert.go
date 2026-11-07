@@ -40,6 +40,9 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err != nil {
 		return nil, fmt.Errorf("reading DOCX: %w", err)
 	}
+	if data, err = decrypt(ctx, data, opts.Password); err != nil {
+		return nil, fmt.Errorf("decrypting DOCX: %w", err)
+	}
 	pkg, err := ooxml.Open(data)
 	if err != nil {
 		return nil, fmt.Errorf("opening DOCX: %w", err)

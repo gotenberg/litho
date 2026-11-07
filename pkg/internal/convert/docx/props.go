@@ -612,7 +612,9 @@ func parseTab(t *ooxml.Element) (tabSpec, bool) {
 	case "decimal":
 		ts.stop.Align = css.TabDecimal
 	case "bar":
-		ts.stop.Align = css.TabBar
+		// LibreOffice draws no rule for a bar tab and stops at it as at a
+		// left one.
+		ts.stop.Align = css.TabLeft
 	}
 	switch attrOr(t, "leader") {
 	case "dot":

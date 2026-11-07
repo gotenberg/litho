@@ -63,7 +63,8 @@ func (d *document) anchor(k *ooxml.Element, n *layout.Node, sink *inlineSink) {
 			st.Display = css.Block
 		}
 		st.Left, st.Top = css.Pts(posH), css.Pts(posV)
-		if relV == "page" || relV == "margin" || relV == "topMargin" || relV == "bottomMargin" {
+		fromPage := relV == "page" || relV == "margin" || relV == "topMargin" || relV == "bottomMargin"
+		if fromPage && !anchorToPage(st) {
 			d.warn("approximated", "a drawing positioned from the page is positioned from its paragraph")
 			st.Top = css.Pts(0)
 		}

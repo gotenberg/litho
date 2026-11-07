@@ -65,6 +65,9 @@ func (p *pages) root(part string) *ooxml.Element {
 func (p *pages) content(part string, v *fieldValues) *layout.Node {
 	r := p.root(part)
 	st := p.d.blockStyle()
+	// A flow root keeps its paragraphs' margins inside it, as the header
+	// and footer areas of Writer do.
+	st.Display = css.FlowRoot
 	n := &layout.Node{Kind: layout.Element, Style: st}
 	if r == nil {
 		return n
@@ -195,7 +198,8 @@ func (p *pages) numbering(page, total int) (*section, int, int) {
 // section's header and footer for the page's kind (17.10.1: the first
 // page of a section with a title page takes the first header, even pages
 // the even one when the settings ask for them, every other page the
-// default), with the page fields of the page.
+// default; a first or even one the sections leave undefined takes the
+// default, as LibreOffice shows it), with the page fields of the page.
 func (p *pages) margins(info layout.PageInfo, total int) []compose.Fragment {
 	if info.Blank {
 		return nil
@@ -226,9 +230,17 @@ func (p *pages) margins(info layout.PageInfo, total int) []compose.Fragment {
 		n.Style.Top = css.Pts(max(0, y))
 		root.Children = append(root.Children, n)
 	}
-	header, footer := s.headers[kind], s.footers[kind]
-	place(header, s.header, false, s.headerH[kind])
-	place(footer, s.footer, true, s.footerH[kind])
+	// A first or even header or footer the section chain does not define
+	// takes the default one, as LibreOffice shows it.
+	hk, fk := kind, kind
+	if s.headers[hk] == "" {
+		hk = "default"
+	}
+	if s.footers[fk] == "" {
+		fk = "default"
+	}
+	place(s.headers[hk], s.header, false, s.headerH[hk])
+	place(s.footers[fk], s.footer, true, s.footerH[fk])
 	if len(root.Children) == 0 {
 		return nil
 	}

@@ -532,6 +532,18 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	if tp.ind != nil {
 		indent = *tp.ind
 	}
+	if d.settings.compat < 15 {
+		// Before Word 2013 the indent places the first cell's text, so the
+		// table's edge sits its left margin further out, as LibreOffice
+		// lays such documents out (MS-DOCX, 2.3.4).
+		left := cellMar["left"]
+		if cells := placed[0].cells; len(cells) > 0 {
+			if m, ok := cells[0].props.margins["left"]; ok {
+				left = m
+			}
+		}
+		indent -= left
+	}
 	tableSt.Margin[css.Left] = css.Pts(indent)
 	if tp.jc != nil {
 		switch *tp.jc {
@@ -742,6 +754,9 @@ func (d *document) cellStyle(cp cellProps, tableMar map[string]float64, tb map[s
 	}
 	if boolOf(cp.noWrap) {
 		st.WhiteSpace = css.Pre
+	}
+	if st.Border != ([4]css.Border{}) {
+		cloneDecorations(st)
 	}
 	if cp.textDir != "" && cp.textDir != "lrTb" && cp.textDir != "tb" {
 		d.warn("approximated", "vertical text in a table cell is laid out horizontally")

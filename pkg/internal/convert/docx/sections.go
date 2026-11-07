@@ -251,11 +251,17 @@ func (d *document) body(root *ooxml.Element) []*section {
 			if e.Is(w, "sectPr") {
 				continue
 			}
-			d.blocksInto(st, nil, &ooxml.Element{Children: []*ooxml.Element{e}}, 0, &cur)
-			if e.Is(w, "p") {
-				if sp := e.Child(w, "pPr").Child(w, "sectPr"); sp != nil {
-					closeSection(sp)
-				}
+			sp := e.Child(w, "pPr").Child(w, "sectPr")
+			if !e.Is(w, "p") {
+				sp = nil
+			}
+			// An empty paragraph that only carries a section break is not
+			// laid out, as LibreOffice imports it.
+			if sp == nil || !emptyParagraph(e) {
+				d.blocksInto(st, nil, &ooxml.Element{Children: []*ooxml.Element{e}}, 0, &cur)
+			}
+			if sp != nil {
+				closeSection(sp)
 			}
 		}
 	}
@@ -274,6 +280,16 @@ func (d *document) body(root *ooxml.Element) []*section {
 		}
 	}
 	return secs
+}
+
+// emptyParagraph reports a w:p without runs, fields or drawings.
+func emptyParagraph(p *ooxml.Element) bool {
+	for _, c := range p.Children {
+		if !c.Is(w, "pPr") && !c.Is(w, "bookmarkStart") && !c.Is(w, "bookmarkEnd") && !c.Is(w, "proofErr") {
+			return false
+		}
+	}
+	return true
 }
 
 // sectionNode returns the block of section s: its page name, its columns,

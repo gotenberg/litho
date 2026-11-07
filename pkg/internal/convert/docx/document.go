@@ -26,6 +26,10 @@ type settings struct {
 	// (17.10.1).
 	evenAndOdd bool
 	lang       string
+	// compat is the Word version the document asks to be laid out as
+	// (MS-DOCX, 2.3.4 compatibilityMode): 15 for Word 2013 and later, 0
+	// when unset, which reads as an earlier version.
+	compat int
 }
 
 // document is one conversion's state: the package, its resolved parts
@@ -169,6 +173,13 @@ func (d *document) readSettings(root *ooxml.Element) {
 	}
 	if t := root.Child(w, "themeFontLang"); t != nil {
 		d.settings.lang = attrOr(t, "val")
+	}
+	for _, c := range root.Child(w, "compat").Kids() {
+		if c.Is(w, "compatSetting") && attrOr(c, "name") == "compatibilityMode" {
+			if v, ok := ooxml.Int(attrOr(c, "val")); ok {
+				d.settings.compat = v
+			}
+		}
 	}
 }
 

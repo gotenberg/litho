@@ -114,8 +114,10 @@ func (d *document) simpleField(s *story, rp resolvedPara, ps *css.Style, lineMul
 }
 
 // computeField returns the value of the page fields in a header or
-// footer, false for any other field or outside one (17.16.5.43 PAGE,
-// 17.16.5.38 NUMPAGES, 17.16.5.55 SECTIONPAGES, with a \* format switch).
+// footer, false for any other field or outside one (17.16.5.43 PAGE and
+// 17.16.5.38 NUMPAGES, with a \* format switch). Both take the page
+// number format of the section, as LibreOffice shows them; SECTIONPAGES
+// keeps its cached result, as LibreOffice does.
 func (d *document) computeField(s *story, instr string) (string, bool) {
 	if s.fields == nil {
 		return "", false
@@ -131,9 +133,7 @@ func (d *document) computeField(s *story, instr string) (string, bool) {
 	case "PAGE":
 		n, format = v.page, v.format
 	case "NUMPAGES":
-		n = v.pages
-	case "SECTIONPAGES":
-		n = v.sectionPages
+		n, format = v.pages, v.format
 	default:
 		return "", false
 	}

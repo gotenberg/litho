@@ -347,12 +347,14 @@ func (d *document) paraStyle(pp paraProps, mark runProps) (*css.Style, float64) 
 		switch rule {
 		case "exact":
 			st.LineHeight = css.Pts(max(1, *pp.line*ooxml.TwipPt))
+			setLineRule(st, ruleExact)
 		case "atLeast":
 			st.MinLineHeight = max(0, *pp.line*ooxml.TwipPt)
 		default:
 			// 240ths of a line (17.18.48, ST_LineSpacingRule auto).
 			if m := *pp.line / 240; m > 0 && abs(m-1) > 0.001 {
 				lineMult = min(m, 10)
+				setLineRule(st, ruleMultiple)
 			}
 		}
 	}
@@ -439,9 +441,25 @@ func (d *document) paraStyle(pp paraProps, mark runProps) (*css.Style, float64) 
 	if pp.shading != nil {
 		st.BackgroundColor = *pp.shading
 	}
-	stops := make([]css.TabStop, 0, len(pp.tabs))
+	if len(pp.borders) > 0 {
+		cloneDecorations(st)
+	}
+	// Word measures tab stops from the margin, the layout from the
+	// paragraph's content box: a stop moves left by the start indent, and
+	// one before the content box is dropped. A hanging indent is a stop of
+	// its own (17.3.1.37). The slice is never nil, so that the paragraph
+	// lays its tabs out the Office way.
+	stops := make([]css.TabStop, 0, len(pp.tabs)+1)
 	for _, t := range pp.tabs {
-		stops = append(stops, t.stop)
+		s := t.stop
+		s.Pos -= left
+		if s.Pos < 0 {
+			continue
+		}
+		stops = append(stops, s)
+	}
+	if pp.firstLine != nil && *pp.firstLine < 0 {
+		stops = append(stops, css.TabStop{Pos: 0})
 	}
 	sortStops(stops)
 	st.TabStops = stops
@@ -458,9 +476,11 @@ func sortStops(s []css.TabStop) {
 }
 
 // number makes the paragraph n a list item of its numbering: its ordinal
-// and its label as a marker (17.9). The label sits in a marker box as wide
-// as the hanging indent when the indent hangs, the text after it at the
-// indent; otherwise it opens the first line, followed by its suffix.
+// and its label as a marker (17.9). The label of a hanging indent followed
+// by a tab sits in a marker box as wide as the hanging indent, aligned on
+// the number position by its lvlJc, the text at the indent; any other
+// label opens the first line, followed by its suffix, as LibreOffice
+// draws a label followed by a space.
 func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
 	label, ordinal := rp.num.next(rp.ilvl)
 	lv := rp.num.levelOf(rp.ilvl)
@@ -494,14 +514,14 @@ func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
 	if st.TextIndent.Kind == css.Points && st.TextIndent.Value < 0 {
 		hang = -st.TextIndent.Value
 	}
-	if hang > 0 && lv.suffix != "nothing" {
-		// The marker box spans the hanging indent: the label at the number
-		// position, the text at the indent.
+	if hang > 0 && lv.suffix == "tab" {
+		// The marker box spans the hanging indent: the label aligned on the
+		// number position, the text at the indent on every line.
 		n.Style.ListStylePosition = css.Outside
 		n.Style.TextIndent = css.Pts(0)
 		ms.Width = css.Pts(hang)
 		ms.Display = css.Inline
-		n.Marker = &layout.Node{Kind: layout.Element, Style: ms, Children: []*layout.Node{{Kind: layout.Text, Style: ms, Text: label + " "}}}
+		n.Marker = &layout.Node{Kind: layout.Element, Style: ms, Children: []*layout.Node{{Kind: layout.Text, Style: ms, Text: label}}}
 		return
 	}
 	suffix := "\t"
