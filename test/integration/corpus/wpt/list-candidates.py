@@ -57,6 +57,12 @@ DIRS = [
     "css/css-break",
     "css/css-flexbox",
     "css/css-align",
+    "css/css-grid",
+    "css/css-multicol",
+    "css/css-writing-modes",
+    "css/css-overflow",
+    "css/css-text-decor",
+    "css/css-sizing",
 ]
 
 # AREA_CAP bounds the tests one area contributes, an area being a CSS2
@@ -73,6 +79,12 @@ AREA_CAP = {
     "css/css-break": 40,
     "css/css-flexbox": 200,
     "css/css-align": 20,
+    "css/css-grid": 200,
+    "css/css-multicol": 80,
+    "css/css-writing-modes": 60,
+    "css/css-overflow": 40,
+    "css/css-text-decor": 40,
+    "css/css-sizing": 40,
 }
 
 # AREA_FORBIDDEN are the constructs that keep a test of an area out on top
@@ -104,15 +116,48 @@ FLEX_FORBIDDEN = [
     ]
 ]
 
+# LAYOUT_FORBIDDEN keeps the tests of the wave 3 areas (grid, multi-column,
+# bidirectional text, overflow, text decoration, intrinsic sizing) to what those areas add: no subgrid or
+# masonry, no display: contents, aspect-ratio, containment, sticky
+# positioning, zoom, anchor positioning, <details> or <fieldset>, and no
+# writing mode other than horizontal-tb.
+LAYOUT_FORBIDDEN = [
+    re.compile(p, re.I)
+    for p in [
+        r"\bsubgrid\b",
+        r"\bmasonry\b",
+        r"\baspect-ratio\b",
+        r"display\s*:\s*contents",
+        r"\bcontain(-intrinsic-[a-z-]+)?\s*:",
+        r"\bsticky\b",
+        r"\bzoom\s*:",
+        r"writing-mode\s*:\s*(?!horizontal-tb)",
+        r"text-orientation",
+        r"text-combine-upright",
+        r"\banchor",
+        r"<details\b",
+        r"<fieldset\b",
+        r"flex-wrap\s*:\s*balance",
+        r"flex-line-count",
+    ]
+]
+
 AREA_FORBIDDEN = {
     "css/css-flexbox": FLEX_FORBIDDEN,
     "css/css-align": FLEX_FORBIDDEN,
+    "css/css-grid": LAYOUT_FORBIDDEN,
+    "css/css-multicol": LAYOUT_FORBIDDEN,
+    "css/css-writing-modes": LAYOUT_FORBIDDEN,
+    "css/css-overflow": LAYOUT_FORBIDDEN,
+    "css/css-text-decor": LAYOUT_FORBIDDEN,
+    "css/css-sizing": LAYOUT_FORBIDDEN,
 }
 
 # AREA_REQUIRED is what every test of an area must hold: the css-align tests
 # kept are the ones that align flex items.
 AREA_REQUIRED = {
     "css/css-align": re.compile(r"display\s*:\s*(inline-)?flex\b", re.I),
+    "css/css-writing-modes": re.compile(r"direction\s*:\s*rtl|unicode-bidi|\bdir\s*=\s*[\"']?(rtl|auto)", re.I),
 }
 
 # SKIP_DIR_NAMES are directories that hold no reftest of their own (support,
@@ -133,6 +178,18 @@ SKIP_DIR_NAMES = {
     "table",
     "multicol",
     "writing-mode",
+    "subgrid",
+    "masonry",
+    "grid-lanes",
+    "test-plan",
+    "tools",
+    "forms",
+    "scroll-markers",
+    "invalidation",
+    "responsive-iframe",
+    "contain-intrinsic-size",
+    "aspect-ratio",
+    "animation",
 }
 
 FORBIDDEN = [

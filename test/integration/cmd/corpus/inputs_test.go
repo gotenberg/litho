@@ -67,7 +67,7 @@ func TestListInputFixtures_NamesTheMakeTargetForMissingFiles(t *testing.T) {
 
 // TestWPTListAndHashesAgree pins that every file a reftest of
 // corpus/wpt/reftests.json reads is in corpus/wpt/files.sha256, which is
-// what wpt/fetch.sh downloads, and that the list holds the 300 to 900 tests
+// what wpt/fetch.sh downloads, and that the list holds the 300 to 1300 tests
 // the corpus is sized for.
 func TestWPTListAndHashesAgree(t *testing.T) {
 	t.Parallel()
@@ -81,8 +81,8 @@ func TestWPTListAndHashesAgree(t *testing.T) {
 	if err := json.Unmarshal(data, &tests); err != nil {
 		t.Fatal(err)
 	}
-	if len(tests) < 300 || len(tests) > 900 {
-		t.Errorf("%d reftests, want 300 to 900", len(tests))
+	if len(tests) < 300 || len(tests) > 1300 {
+		t.Errorf("%d reftests, want 300 to 1300", len(tests))
 	}
 	hashes, err := os.ReadFile(filepath.Join(dir, "files.sha256"))
 	if err != nil {
