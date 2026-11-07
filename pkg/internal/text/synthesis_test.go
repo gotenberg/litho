@@ -18,30 +18,37 @@ func TestSynthesis_BoldAndItalic(t *testing.T) {
 		italic       bool
 		size         float64
 		stroke, skew float64
+		mod          func(*Style)
 	}{
-		{"regular", regular, 400, false, 10, 0, 0},
+		{"oblique angle", regular, 400, true, 10, 0, math.Tan(30 * math.Pi / 180), func(s *Style) { s.Oblique = 30 }},
+		{"no synthetic bold", regular, 700, false, 10, 0, 0, func(s *Style) { s.NoSyntheticBold = true }},
+		{"no synthetic italic", regular, 700, true, 9, 9.0 / 24, 0, func(s *Style) { s.NoSyntheticItalic = true }},
+		{"regular", regular, 400, false, 10, 0, 0, nil},
 		// Chromium emboldens past 200 heavier than the face: 700 on 400,
 		// not 600.
-		{"semibold", regular, 600, false, 10, 0, 0},
-		{"bold small", regular, 700, false, 9, 9.0 / 24, 0},
-		{"bold large", regular, 700, false, 36, 36.0 / 32, 0},
-		{"bold between", regular, 700, false, 22.5, 22.5 * (1.0/24 + 0.5*(1.0/32-1.0/24)), 0},
-		{"italic", regular, 400, true, 10, 0, 0.25},
-		{"bold italic", regular, 700, true, 10, 10.0 * (1.0/24 + (1.0/27)*(1.0/32-1.0/24)), 0.25},
-		{"bold face", sansFamily(), 700, false, 10, 0, 0},
-		{"italic face", sansFamily(), 400, true, 10, 0, 0},
+		{"semibold", regular, 600, false, 10, 0, 0, nil},
+		{"bold small", regular, 700, false, 9, 9.0 / 24, 0, nil},
+		{"bold large", regular, 700, false, 36, 36.0 / 32, 0, nil},
+		{"bold between", regular, 700, false, 22.5, 22.5 * (1.0/24 + 0.5*(1.0/32-1.0/24)), 0, nil},
+		{"italic", regular, 400, true, 10, 0, 0.25, nil},
+		{"bold italic", regular, 700, true, 10, 10.0 * (1.0/24 + (1.0/27)*(1.0/32-1.0/24)), 0.25, nil},
+		{"bold face", sansFamily(), 700, false, 10, 0, 0, nil},
+		{"italic face", sansFamily(), 400, true, 10, 0, 0, nil},
 		// Bold italic in a family of regular, bold and italic takes the
 		// italic face, which is emboldened.
-		{"bold italic face", sansFamily(), 700, true, 10, 10.0 * (1.0/24 + (1.0/27)*(1.0/32-1.0/24)), 0},
+		{"bold italic face", sansFamily(), 700, true, 10, 10.0 * (1.0/24 + (1.0/27)*(1.0/32-1.0/24)), 0, nil},
 	} {
 		f := newTestFonts(t, tc.files...)
 		s := style()
 		s.Weight, s.Italic, s.Size = tc.weight, tc.italic, tc.size
+		if tc.mod != nil {
+			tc.mod(&s)
+		}
 		lines, _ := layout(t, f, "AB", s, 1000, Collapse)
 		p := shape(t, f, []ParagraphRun{{Text: "AB", Style: s}}, ParagraphOptions{})
 		sp := p.Line(0, p.Len(), false).Spans
 		for _, got := range [][2]float64{{lines[0].Runs[0].Stroke, lines[0].Runs[0].Skew}, {sp[0].Text.Stroke, sp[0].Text.Skew}} {
-			if math.Abs(got[0]-tc.stroke) > 1e-9 || got[1] != tc.skew {
+			if math.Abs(got[0]-tc.stroke) > 1e-9 || math.Abs(got[1]-tc.skew) > 1e-9 {
 				t.Errorf("%s: stroke %v skew %v, want %v and %v", tc.name, got[0], got[1], tc.stroke, tc.skew)
 			}
 		}

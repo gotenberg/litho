@@ -1,6 +1,7 @@
 package text
 
 import (
+	"math"
 	"slices"
 	"strings"
 
@@ -386,16 +387,65 @@ func scriptFamilies(script language.Script, g generic, region string) []string {
 type request struct {
 	weight int
 	slant  uint8
+	// stretch is the width in percent; oblique the angle of an oblique
+	// request, 0 for italic.
+	stretch float64
+	oblique float64
+	// noBold and noItalic forbid synthesis.
+	noBold, noItalic bool
 }
 
-// requestOf returns the aspect style asks for. A normal width is always
-// asked for: [Style] has no width.
+// requestOf returns the aspect style asks for.
 func requestOf(style Style) request {
-	req := request{weight: int(style.weight())}
+	req := request{weight: int(style.weight()), stretch: style.stretch(), noBold: style.NoSyntheticBold, noItalic: style.NoSyntheticItalic}
 	if style.Italic {
 		req.slant = slantItalic
+		req.oblique = style.Oblique
 	}
 	return req
+}
+
+// width returns the width r asks for in percent, 100 when unset.
+func (r request) width() float64 {
+	if r.stretch <= 0 {
+		return 100
+	}
+	return r.stretch
+}
+
+// widthPercents maps an OS/2 usWidthClass, 1 to 9, to its font-stretch
+// percentage (CSS Fonts 4, 2.3, Table 2).
+var widthPercents = [10]float64{100, 50, 62.5, 75, 87.5, 100, 112.5, 125, 150, 200}
+
+// widthPercent returns the font-stretch percentage of an OS/2 width class.
+func widthPercent(class int) float64 {
+	if class < 1 || class >= len(widthPercents) {
+		return 100
+	}
+	return widthPercents[class]
+}
+
+// stretchOrder ranks a face of width have for a request of width want
+// (CSS Fonts 4, 5.2, step 4a): the width itself, then, for a width up to
+// 100%, the narrower ones, nearest first, then the wider ones; above
+// 100%, the wider ones first.
+func stretchOrder(want, have float64) (int, float64) {
+	switch {
+	case have == want:
+		return 0, 0
+	case want <= 100 && have < want, want > 100 && have > want:
+		return 1, math.Abs(have - want)
+	}
+	return 2, math.Abs(have - want)
+}
+
+// skewOf returns the synthetic shear of a slanted request: its oblique
+// angle's tangent, else Chromium's default.
+func skewOf(req request) float64 {
+	if req.oblique != 0 {
+		return math.Tan(req.oblique * math.Pi / 180)
+	}
+	return syntheticItalicSkew
 }
 
 // aspectRank orders fc for req: lower is better, compared field by field.
@@ -414,11 +464,8 @@ type aspectRank [6]int
 // first, above 500 heavier ones. Index order breaks ties.
 func rankFace(req request, fc *Face) aspectRank {
 	var r aspectRank
-	if fc.width <= widthNormal {
-		r[0], r[1] = 0, widthNormal-fc.width
-	} else {
-		r[0], r[1] = 1, fc.width-widthNormal
-	}
+	k, d := stretchOrder(req.width(), widthPercent(fc.width))
+	r[0], r[1] = k, int(d*8)
 	if fc.slant != req.slant {
 		r[2] = 2
 		if fc.slant == slantOblique {
@@ -509,11 +556,11 @@ func synthesis(req request, fc *Face, size float64) (stroke, skew float64) {
 	if fc.doc != nil {
 		return fc.doc.synthesis(req, size)
 	}
-	if req.weight > fc.weight+syntheticBoldDelta {
+	if req.weight > fc.weight+syntheticBoldDelta && !req.noBold {
 		stroke = fakeBoldStroke(size)
 	}
-	if req.slant != slantNormal && fc.slant == slantNormal {
-		skew = syntheticItalicSkew
+	if req.slant != slantNormal && fc.slant == slantNormal && !req.noItalic {
+		skew = skewOf(req)
 	}
 	return stroke, skew
 }

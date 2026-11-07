@@ -146,27 +146,34 @@ func TestSelectFaces_Descriptors(t *testing.T) {
 		mk("oblique20", FaceDescriptor{Style: FaceOblique, ObliqueMin: 20, ObliqueMax: 20}),
 		mk("condensed", FaceDescriptor{StretchMin: 75, StretchMax: 75, Style: FaceItalic}),
 	}
+	expanded := mk("expanded", FaceDescriptor{StretchMin: 125, StretchMax: 150})
+	narrow := mk("narrow", FaceDescriptor{StretchMin: 50, StretchMax: 62.5})
 	tests := []struct {
-		weight int
-		slant  uint8
-		faces  []*Face
-		want   string
+		weight  int
+		slant   uint8
+		faces   []*Face
+		want    string
+		stretch float64
 	}{
-		{400, slantNormal, faces, "w400"},
-		{500, slantNormal, faces, "w400"},
-		{700, slantNormal, faces, "w600-800"},
-		{900, slantNormal, faces, "w600-800"},
-		{200, slantNormal, faces, "w300"},
-		{450, slantNormal, faces[:3], "w400"},
-		{350, slantNormal, faces[1:3], "w400"},
-		{400, slantItalic, faces, "italic"},
-		{400, slantItalic, faces[:3], "w400"},
-		{400, slantItalic, append(append([]*Face{}, faces[:3]...), faces[4]), "oblique20"},
-		{400, slantNormal, []*Face{faces[3], faces[4]}, "oblique20"},
-		{400, slantItalic, []*Face{faces[5], faces[1]}, "w400"},
+		{400, slantNormal, faces, "w400", 0},
+		{500, slantNormal, faces, "w400", 0},
+		{700, slantNormal, faces, "w600-800", 0},
+		{900, slantNormal, faces, "w600-800", 0},
+		{200, slantNormal, faces, "w300", 0},
+		{450, slantNormal, faces[:3], "w400", 0},
+		{350, slantNormal, faces[1:3], "w400", 0},
+		{400, slantItalic, faces, "italic", 0},
+		{400, slantItalic, faces[:3], "w400", 0},
+		{400, slantItalic, append(append([]*Face{}, faces[:3]...), faces[4]), "oblique20", 0},
+		{400, slantNormal, []*Face{faces[3], faces[4]}, "oblique20", 0},
+		{400, slantItalic, []*Face{faces[5], faces[1]}, "w400", 0},
+		{400, slantNormal, []*Face{faces[1], expanded, narrow}, "narrow", 75},
+		{400, slantNormal, []*Face{faces[1], expanded, narrow}, "expanded", 112.5},
+		{400, slantNormal, []*Face{expanded, narrow}, "narrow", 87.5},
+		{400, slantNormal, []*Face{expanded, narrow}, "expanded", 200},
 	}
 	for _, tt := range tests {
-		got := selectFaces(tt.faces, request{weight: tt.weight, slant: tt.slant})
+		got := selectFaces(tt.faces, request{weight: tt.weight, slant: tt.slant, stretch: tt.stretch})
 		if len(got) == 0 || got[0].family != tt.want {
 			names := make([]string, len(got))
 			for i, fc := range got {

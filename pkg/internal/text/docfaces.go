@@ -96,12 +96,12 @@ const (
 // stop below 20 degrees, so oblique 10deg is slanted again as Chromium
 // slants it.
 func (d *FaceDescriptor) synthesis(req request, size float64) (stroke, skew float64) {
-	if req.weight >= syntheticBoldThreshold && d.WeightMax < syntheticBoldThreshold {
+	if req.weight >= syntheticBoldThreshold && d.WeightMax < syntheticBoldThreshold && !req.noBold {
 		stroke = fakeBoldStroke(size)
 	}
 	upright := d.Style == FaceNormal || (d.Style == FaceOblique && d.ObliqueMax < syntheticItalicMinSlope)
-	if req.slant != slantNormal && upright {
-		skew = syntheticItalicSkew
+	if req.slant != slantNormal && upright && !req.noItalic {
+		skew = skewOf(req)
 	}
 	return stroke, skew
 }
@@ -433,23 +433,29 @@ func (a descRank) less(b descRank) bool {
 	return a[0] < b[0] || (a[0] == b[0] && a[1] < b[1])
 }
 
-// stretchRank ranks d for a normal width (CSS Fonts 4, 5.2, step 4a,
-// font-stretch 100%): a range including it, then narrower faces, nearest
-// first, then wider ones.
-func stretchRank(d *FaceDescriptor) descRank {
-	const want = 100
+// stretchRank ranks d for the width req asks for (CSS Fonts 4, 5.2, step
+// 4a): a range including it, then, for a width up to 100%, narrower
+// faces, nearest first, then wider ones; above 100%, wider ones first.
+func stretchRank(d *FaceDescriptor, req request) descRank {
+	want := req.width()
 	switch {
 	case d.StretchMin <= want && want <= d.StretchMax:
 		return descRank{0, 0}
 	case d.StretchMax < want:
-		return descRank{1, want - d.StretchMax}
+		if want <= 100 {
+			return descRank{1, want - d.StretchMax}
+		}
+		return descRank{2, want - d.StretchMax}
 	}
-	return descRank{2, d.StretchMin - want}
+	if want <= 100 {
+		return descRank{2, d.StretchMin - want}
+	}
+	return descRank{1, d.StretchMin - want}
 }
 
 // italicAngle is the angle an italic request ranks oblique faces against:
 // the default oblique angle (CSS Fonts 4, 2.4).
-const italicAngle = 14
+const italicAngle = 14.0
 
 // styleRank ranks d for req (CSS Fonts 4, 5.2, step 4b). An italic request
 // takes italic faces, then oblique faces with a positive angle, closest to
@@ -459,15 +465,21 @@ const italicAngle = 14
 // then oblique faces with a negative angle, closest to 0 first.
 func styleRank(d *FaceDescriptor, req request) descRank {
 	if req.slant != slantNormal {
+		// An oblique request ranks the oblique faces against its own angle
+		// (CSS Fonts 4, 5.2, step 4b).
+		angle := italicAngle
+		if req.oblique != 0 {
+			angle = req.oblique
+		}
 		switch {
 		case d.Style == FaceItalic:
 			return descRank{0, 0}
 		case d.Style == FaceOblique && d.ObliqueMax > 0:
 			lo, hi := d.ObliqueMin, d.ObliqueMax
-			if lo <= italicAngle && italicAngle <= hi {
+			if lo <= angle && angle <= hi {
 				return descRank{1, 0}
 			}
-			return descRank{1, math.Min(math.Abs(lo-italicAngle), math.Abs(hi-italicAngle))}
+			return descRank{1, math.Min(math.Abs(lo-angle), math.Abs(hi-angle))}
 		case d.Style == FaceNormal:
 			return descRank{2, 0}
 		}
@@ -524,7 +536,7 @@ func weightRank(d *FaceDescriptor, req request) descRank {
 func selectFaces(faces []*Face, req request) []*Face {
 	cands := slices.Clone(faces)
 	for _, rank := range []func(*FaceDescriptor) descRank{
-		stretchRank,
+		func(d *FaceDescriptor) descRank { return stretchRank(d, req) },
 		func(d *FaceDescriptor) descRank { return styleRank(d, req) },
 		func(d *FaceDescriptor) descRank { return weightRank(d, req) },
 	} {

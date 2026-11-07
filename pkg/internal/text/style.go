@@ -53,6 +53,18 @@ type Style struct {
 	Weight int
 	// Italic asks for an italic face, then an oblique one.
 	Italic bool
+	// Oblique, when not zero with Italic, asks for an oblique face of that
+	// angle in degrees, CSS font-style: oblique <angle>: a face without
+	// one is slanted by it rather than by the default synthetic angle
+	// (CSS Fonts 4, 2.4 and 5.5).
+	Oblique float64
+	// Stretch is the width asked for, in percent of the normal width, CSS
+	// font-stretch (CSS Fonts 4, 2.3); 0 means 100.
+	Stretch float64
+	// NoSyntheticBold and NoSyntheticItalic forbid synthesising the bold
+	// and the italic a face lacks, CSS font-synthesis without weight or
+	// without style (CSS Fonts 4, 5.5).
+	NoSyntheticBold, NoSyntheticItalic bool
 	// Size is the font size in points, greater than 0 and at most 1000.
 	Size float64
 	// Lang is the BCP 47 language tag of the text, "" when unknown. It
@@ -79,6 +91,9 @@ func (s Style) validate() error {
 	if !finiteWithin(s.LetterSpacing, maxFontSize) {
 		return fmt.Errorf("%w: letter spacing %v outside [-%d, %d]", ErrInvalidStyle, s.LetterSpacing, maxFontSize, maxFontSize)
 	}
+	if !finiteWithin(s.Oblique, 90) || !finiteWithin(s.Stretch, 1000) || s.Stretch < 0 {
+		return fmt.Errorf("%w: oblique angle %v or stretch %v out of range", ErrInvalidStyle, s.Oblique, s.Stretch)
+	}
 	if !finiteWithin(s.WordSpacing, maxFontSize) {
 		return fmt.Errorf("%w: word spacing %v outside [-%d, %d]", ErrInvalidStyle, s.WordSpacing, maxFontSize, maxFontSize)
 	}
@@ -101,4 +116,12 @@ func (s Style) weight() float32 {
 		return 1000
 	}
 	return float32(s.Weight)
+}
+
+// stretch returns the width s asks for in percent, defaulted.
+func (s Style) stretch() float64 {
+	if s.Stretch <= 0 {
+		return 100
+	}
+	return s.Stretch
 }
