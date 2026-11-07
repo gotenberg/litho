@@ -99,9 +99,9 @@ func (r *reader) readPage(mp *odf.MasterPage) pageResult {
 	if h, ok := odf.Length(pp.Get("fo:page-height")); ok && h > 0 {
 		pg.Height = h
 	}
-	if land := pp.Get("style:print-orientation") == "landscape"; land && pg.Width < pg.Height {
-		pg.Width, pg.Height = pg.Height, pg.Width
-	}
+	// style:print-orientation is not read: the page size is written
+	// oriented, and Calc prints a page layout that names landscape without
+	// a size on its default portrait paper.
 	all, hasAll := odf.Length(pp.Get("fo:margin"))
 	for i, side := range sideNames {
 		pg.Margin[i] = defaultMargin

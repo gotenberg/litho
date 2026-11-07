@@ -231,11 +231,11 @@ func TestRead_Styles(t *testing.T) {
 func TestRead_Pages(t *testing.T) {
 	f := flat{
 		styles: `<style:style style:name="Hd" style:family="text"><style:text-properties fo:font-weight="bold"/></style:style>`,
-		auto: `<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" style:print-orientation="landscape" ` +
+		auto: `<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="29.7cm" fo:page-height="21cm" style:print-orientation="landscape" ` +
 			`fo:margin="1cm" fo:margin-left="3cm" style:print="grid headers" style:print-page-order="ltr" style:first-page-number="5" style:scale-to="80%" style:table-centering="both"/>` +
 			`<style:header-style><style:header-footer-properties fo:min-height="2cm" fo:margin-bottom="0.5cm"/></style:header-style>` +
 			`<style:footer-style><style:header-footer-properties fo:min-height="1.5cm" fo:margin-top="0.3cm"/></style:footer-style></style:page-layout>` +
-			`<style:page-layout style:name="pm2"><style:page-layout-properties style:scale-to-X="2" style:scale-to-Y="0"/></style:page-layout>` +
+			`<style:page-layout style:name="pm2"><style:page-layout-properties style:print-orientation="landscape" style:scale-to-X="2" style:scale-to-Y="0"/></style:page-layout>` +
 			`<style:style style:name="ta1" style:family="table" style:master-page-name="Report"/><style:style style:name="ta2" style:family="table" style:master-page-name="Fit"/>`,
 		master: `<style:master-page style:name="Report" style:page-layout-name="pm1">` +
 			`<style:header><style:region-left><text:p><text:sheet-name>?</text:sheet-name><text:s/>(<text:title>?</text:title>)</text:p></style:region-left>` +
