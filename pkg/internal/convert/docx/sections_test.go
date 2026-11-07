@@ -126,3 +126,32 @@ func TestHeaders_GrowTheMargin(t *testing.T) {
 		t.Errorf("top margin %v not grown for a six-line header", box.Margin[css.Top])
 	}
 }
+
+func TestSections_ColumnBreaks(t *testing.T) {
+	t.Parallel()
+	body := func(cols string) string {
+		return `<w:p><w:r><w:t>one</w:t></w:r><w:r><w:br w:type="column"/></w:r><w:r><w:t>two</w:t></w:r></w:p>` +
+			`<w:p><w:r><w:t>three</w:t></w:r><w:r><w:br w:type="column"/></w:r></w:p><w:p><w:r><w:t>four</w:t></w:r></w:p>` +
+			`<w:sectPr>` + cols + `</w:sectPr>`
+	}
+	for _, tc := range []struct {
+		name string
+		cols string
+		want css.Break
+	}{
+		{"one column", ``, css.Page},
+		{"two columns", `<w:cols w:num="2"/>`, css.BreakAuto},
+	} {
+		b := build(t, body(tc.cols), nil)
+		for _, text := range []string{"two", "four"} {
+			for _, p := range role(b.root, "P") {
+				if textOf(p) == text && p.Style.BreakBefore != tc.want {
+					t.Errorf("%s: %q breaks %v, want %v", tc.name, text, p.Style.BreakBefore, tc.want)
+				}
+			}
+		}
+		if n := len(role(b.root, "P")); n != 4 {
+			t.Errorf("%s: %d paragraphs, want 4", tc.name, n)
+		}
+	}
+}

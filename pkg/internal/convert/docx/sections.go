@@ -246,6 +246,18 @@ func (d *document) body(root *ooxml.Element) []*section {
 		s.blocks = cur
 		s.pending = d.pending
 		cur, d.pending = nil, nil
+		// A column break starts a page in a section of one column. In
+		// columns it starts the next line, an approximation: the model has
+		// no column break.
+		for _, st := range d.columnBreaks {
+			if s.cols <= 1 {
+				st.BreakBefore = css.Page
+			}
+		}
+		if s.cols > 1 && len(d.columnBreaks) > 0 {
+			d.warn("approximated", "a column break in columns is laid out as a line break")
+		}
+		d.columnBreaks = nil
 		secs = append(secs, s)
 		prev = s
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/pagerange"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -77,7 +78,10 @@ type document struct {
 	// nested counts the table cells, text boxes and notes being built,
 	// whose drawings are not anchored to the page.
 	pending []pendingAnchor
-	inBody  bool
+	// columnBreaks collects the paragraphs of the section being read
+	// that a column break starts.
+	columnBreaks []*css.Style
+	inBody       bool
 	nested  int
 	// vmlTypes maps a VML shape type's id to its shape type number
 	// (o:spt, Part 4, 14.1.2.20), for the shapes that name it.

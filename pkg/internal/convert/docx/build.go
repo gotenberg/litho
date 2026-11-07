@@ -23,8 +23,9 @@ type story struct {
 	// open is the stack of complex fields being read (17.16.18).
 	open []*field
 	// breakNext defers a page break that ended a paragraph to the next
-	// one, as LibreOffice imports it.
-	breakNext bool
+	// one, as LibreOffice imports it; breakColumn says it was a column
+	// break.
+	breakNext, breakColumn bool
 	// note is the note a footnoteRef or endnoteRef run inside a note body
 	// numbers, "" outside one.
 	note string
@@ -263,7 +264,7 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 		if len(segs) > 1 && len(seg.nodes) == 0 && seg.id == "" {
 			if i == len(segs)-1 {
 				// A page break ending the paragraph moves the next one.
-				s.breakNext = true
+				s.breakNext, s.breakColumn = true, seg.column
 				break
 			}
 			if i == 0 {
@@ -278,10 +279,20 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 		// A hard page break drops the space before the text it moves, as
 		// LibreOffice lays DOCX documents out.
 		hardBreak := i > 0 || s.breakNext
-		if hardBreak || boolOf(pp.pageBreakBefore) {
+		column := i > 0 && seg.column || i == 0 && s.breakNext && s.breakColumn
+		switch {
+		case hardBreak && column:
+			// A column break is a page break in a section of one column
+			// (17.18.3 ST_BrType column); the section's properties, at its
+			// end, say which.
+			d.columnBreaks = append(d.columnBreaks, pst)
+		case hardBreak || boolOf(pp.pageBreakBefore):
 			pst.BreakBefore = css.Page
-			s.breakNext = false
 		}
+		if boolOf(pp.pageBreakBefore) {
+			pst.BreakBefore = css.Page
+		}
+		s.breakNext, s.breakColumn = false, false
 		if i == 0 && rp.num != nil {
 			d.number(n, rp, st)
 		}
@@ -597,6 +608,8 @@ type inlineSink struct {
 type segment struct {
 	nodes []*layout.Node
 	id    string
+	// column is set when a column break, not a page break, starts it.
+	column bool
 }
 
 // linkFrame is a hyperlink being collected.
@@ -619,13 +632,13 @@ func (k *inlineSink) add(n *layout.Node) {
 	k.cur.nodes = append(k.cur.nodes, n)
 }
 
-// pageBreak starts a new segment.
-func (k *inlineSink) pageBreak() {
+// pageBreak starts a new segment, after a column break when column.
+func (k *inlineSink) pageBreak(column bool) {
 	if k.cur == nil {
 		k.cur = &segment{}
 		k.segs = append(k.segs, k.cur)
 	}
-	k.cur = &segment{}
+	k.cur = &segment{column: column}
 	k.segs = append(k.segs, k.cur)
 }
 
@@ -817,15 +830,9 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 			buf.WriteByte('\t')
 		case c.Is(w, "br"):
 			switch attrOr(c, "type") {
-			case "page":
+			case "page", "column":
 				emit()
-				sink.pageBreak()
-			case "column":
-				// Column breaks need a column fragmentation break the model
-				// lacks: a page break stands in for one outside columns.
-				emit()
-				d.warn("approximated", "a column break is laid out as a line break")
-				el.Children = append(el.Children, &layout.Node{Kind: layout.LineBreak, Style: st})
+				sink.pageBreak(attrOr(c, "type") == "column")
 			default:
 				flush()
 				el.Children = append(el.Children, &layout.Node{Kind: layout.LineBreak, Style: st})
