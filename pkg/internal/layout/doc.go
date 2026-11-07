@@ -8,6 +8,7 @@
 // formatting with line boxes (sections 9.4.2, 10.8 and CSS Text 3), lists
 // (section 12.5), tables (chapter 17), flexible boxes (CSS Flexbox 1),
 // grids (CSS Grid 1), the sizing keywords (CSS Sizing 3 and 4),
+// multi-column layout (CSS Multicol 1),
 // backgrounds and borders (CSS Backgrounds 3), and page fragmentation (CSS Fragmentation 3 and CSS 2.1
 // section 13.3).
 //
@@ -117,6 +118,24 @@
 // the margins (CSS Sizing 3, 3; CSS Sizing 4, 3.1), when a box is laid out;
 // in the block axis they size as auto, and bound min-height and max-height
 // to the content height.
+// # Multi-column layout
+//
+// A multi-column container lays its content out in columns (CSS Multicol
+// 1), a fragmentation context of its own: the content is laid out in one
+// column of the column width whose cuts are the columns, by the same break
+// logic as the pages, and painting moves each column's slice to its place.
+// The column count and width follow the pseudo-algorithm of CSS Multicol
+// 1, 3.4; rules paint between the columns of a row that both hold content.
+// column-fill: balance finds the least column height the content fits in
+// by laying it out again, the content before a spanner always balancing;
+// column-fill: auto fills the columns in turn. A spanner, column-span: all,
+// splits the container, and the boxes around it, into column sets. A row
+// the end of a page cuts continues on the next page with a new row, the
+// last row balancing; content past the last column of an unfragmented row
+// goes to overflow columns. column-height and column-wrap (CSS Multicol 2)
+// wrap rows. Scroll containers and boxes with overflow: hidden are
+// monolithic in columns, and absolutely positioned boxes break at the
+// columns as the flow does.
 //
 // # Positioning
 //
@@ -133,10 +152,10 @@
 //
 // # Not supported
 //
-// Vertical writing modes, 3D transforms, generated content,
-// hyphenation and multi-column layout are out of scope; a footnote call
-// inside an inline block, a table cell or a flex item is laid out off the
-// page cuts, and its body goes to a page after the flow; visibility:
+// Vertical writing modes, 3D transforms and hyphenation are out of scope;
+// a footnote call inside an inline block, a table cell or a flex item is
+// laid out off the page cuts, and its body goes to a page after the flow;
+// visibility:
 // collapse on a flex item hides it as visibility: hidden does.
 //
 // # Concurrency
