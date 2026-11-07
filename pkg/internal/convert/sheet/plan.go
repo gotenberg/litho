@@ -208,7 +208,13 @@ func (sp *sheetPlan) layoutPages(a Range, zoom int) ([]band, []band, [][]bool) {
 const epsilon = 1e-6
 
 // empty reports a range Calc does not print a page for: no cell in it
-// shows a value and no drawing overlaps it (ScDocument::IsPrintEmpty).
+// shows a value, hidden rows and columns aside, and no drawing overlaps it
+// (ScDocument::IsPrintEmpty).
+//
+// # Corpus evidence
+//
+//   - ods: sc/tdf104502_hiddenColsCountedInPageCount.ods, values below
+//     the first page in a hidden column alone, prints one page.
 func (g *grid) empty(a Range) bool {
 	i := sort.SearchInts(g.rowOrder, a.FirstRow)
 	for ; i < len(g.rowOrder) && g.rowOrder[i] <= a.LastRow; i++ {
@@ -216,7 +222,7 @@ func (g *grid) empty(a Range) bool {
 		cells := row.Cells
 		j := sort.Search(len(cells), func(j int) bool { return cells[j].Column >= a.FirstColumn })
 		for ; j < len(cells) && cells[j].Column <= a.LastColumn; j++ {
-			if hasContent(&cells[j]) {
+			if hasContent(&cells[j]) && !g.colHidden(cells[j].Column) && !row.Hidden {
 				return false
 			}
 		}
