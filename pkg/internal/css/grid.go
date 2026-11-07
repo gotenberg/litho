@@ -1155,8 +1155,12 @@ func expandGrid(v []token, _ *declCtx) ([]entry, bool) {
 			auto = l
 		}
 		return []entry{
-			{pGridTemplateRows, rows}, {pGridTemplateColumns, trackListSpec{}}, {pGridTemplateAreas, (*GridAreas)(nil)},
-			{pGridAutoFlow, f | GridFlowColumn}, {pGridAutoColumns, auto}, {pGridAutoRows, wideInitial},
+			{pGridTemplateRows, rows},
+			{pGridTemplateColumns, trackListSpec{}},
+			{pGridTemplateAreas, (*GridAreas)(nil)},
+			{pGridAutoFlow, f | GridFlowColumn},
+			{pGridAutoColumns, auto},
+			{pGridAutoRows, wideInitial},
 		}, true
 	}
 	if f, rest, ok := flowOf(parts[0]); ok {
@@ -1173,8 +1177,12 @@ func expandGrid(v []token, _ *declCtx) ([]entry, bool) {
 			auto = l
 		}
 		return []entry{
-			{pGridTemplateRows, trackListSpec{}}, {pGridTemplateColumns, cols}, {pGridTemplateAreas, (*GridAreas)(nil)},
-			{pGridAutoFlow, f}, {pGridAutoRows, auto}, {pGridAutoColumns, wideInitial},
+			{pGridTemplateRows, trackListSpec{}},
+			{pGridTemplateColumns, cols},
+			{pGridTemplateAreas, (*GridAreas)(nil)},
+			{pGridAutoFlow, f},
+			{pGridAutoRows, auto},
+			{pGridAutoColumns, wideInitial},
 		}, true
 	}
 	return nil, false

@@ -225,7 +225,7 @@ func (e *engine) measureColumns(td *tableData) []colMeasure {
 				cm[i].fixed, cm[i].hasFixed = max(clamp(b.st.Width.Value), 0), true
 			case css.Percent:
 				cm[i].pct = max(clamp(b.st.Width.Value), 0)
-			case css.Auto, css.None, css.Normal, css.Number, css.FlexContent:
+			case css.Auto, css.None, css.Normal, css.Number, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch:
 			}
 			if b.st.MinWidth.Kind == css.Points {
 				// A column's or column group's min-width is a floor on
@@ -506,7 +506,7 @@ func (e *engine) fixedWidths(td *tableData, avail float64) []float64 {
 				w[i], set[i] = max(clamp(b.st.Width.Value), 0), true
 			case css.Percent:
 				w[i], set[i] = max(resolve(b.st.Width, avail), 0), true
-			case css.Auto, css.None, css.Normal, css.Number, css.FlexContent:
+			case css.Auto, css.None, css.Normal, css.Number, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch:
 			}
 		}
 	}
@@ -785,7 +785,7 @@ func (e *engine) rowHeights(td *tableData, cb cblock) ([]float64, []float64, []b
 			fixed[cd.row] = true
 		case css.Percent:
 			pct[cd.row] = max(pct[cd.row], clamp(c.st.Height.Value))
-		case css.Auto, css.None, css.Normal, css.Number, css.FlexContent:
+		case css.Auto, css.None, css.Normal, css.Number, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch:
 		}
 		rowH[cd.row] = max(rowH[cd.row], cd.natH)
 		if vaKind(c.st) == css.Baseline && cd.hasBase {

@@ -62,7 +62,7 @@ func newDeco(st *css.Style) deco {
 		d.thick = max(resolve(t, size), 0)
 	case css.Normal:
 		d.thick = fromFont
-	case css.Auto, css.None, css.Number, css.FlexContent:
+	case css.Auto, css.None, css.Number, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch:
 	}
 	if o := st.TextUnderlineOffset; o.Kind == css.Points || o.Kind == css.Percent {
 		d.offset, d.hasOffset = resolve(o, size), true

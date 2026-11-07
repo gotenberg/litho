@@ -959,24 +959,25 @@ func (e *engine) layoutAtomic(a *box, cbw float64) {
 	e.layoutOwnContext(a, cb)
 	e.noPaginate--
 	a.hasBaseline = false
-	if td := a.tdata; td != nil {
+	switch td := a.tdata; {
+	case td != nil:
 		// An inline table's baseline is its first row's (CSS 2.1, 10.8.1).
 		if td.hasBaseline {
 			a.baseline, a.hasBaseline = td.table.y+td.baseline-a.y, true
 		}
-	} else if a.flex != nil {
+	case a.flex != nil:
 		// An inline flex container's baseline is its first main-axis
 		// baseline (CSS Flexbox 1, 8.5).
 		if y, ok := flexBaseline(a, false); ok {
 			a.baseline, a.hasBaseline = y-a.y, true
 		}
-	} else if a.grid != nil {
+	case a.grid != nil:
 		// An inline grid container's baseline is its first one (CSS
 		// Grid 1, 10.7).
 		if y, ok := gridBaseline(a, false); ok {
 			a.baseline, a.hasBaseline = y-a.y, true
 		}
-	} else if a.st.Overflow == css.OverflowVisible {
+	case a.st.Overflow == css.OverflowVisible:
 		if y, ok := lastBaseline(a); ok {
 			a.baseline, a.hasBaseline = y-a.y, true
 		}

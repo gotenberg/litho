@@ -7,6 +7,7 @@
 // floats and clearance (sections 8.3.1, 9.4.1, 9.5, 10.3, 10.6), inline
 // formatting with line boxes (sections 9.4.2, 10.8 and CSS Text 3), lists
 // (section 12.5), tables (chapter 17), flexible boxes (CSS Flexbox 1),
+// grids (CSS Grid 1), the sizing keywords (CSS Sizing 3 and 4),
 // backgrounds and borders (CSS Backgrounds 3), and page fragmentation (CSS Fragmentation 3 and CSS 2.1
 // section 13.3).
 //
@@ -74,6 +75,31 @@
 // paint as inline blocks do, in order-modified document order, and an item
 // with a z-index creates a stacking context.
 //
+// # Grids
+//
+// A grid container's in-flow children are its grid items, a run of text
+// among them an anonymous one, in order-modified document order. The grid
+// formatter expands the explicit grid's repeat() against the available
+// space, places the items with the auto-placement algorithm (CSS Grid 1,
+// 7 and 8), and sizes the columns, then the rows from the items laid out
+// at their column widths, with the track sizing algorithm of section 11:
+// intrinsic contributions by span, flexible tracks by the size of an fr,
+// auto tracks stretched. justify-content and align-content distribute the
+// free space, justify-self, align-self, auto margins and first baselines
+// place each item in its area, and an absolutely positioned box whose
+// containing block the grid generates takes the area its placement names.
+// The rows are laid out top down where they land: a row whose items cannot
+// start on its page moves to the next one, a taller one breaks inside its
+// items. Subgrids, masonry and vertical writing modes are not laid out.
+//
+// # Sizing keywords
+//
+// min-content, max-content and fit-content widths resolve against the
+// content's intrinsic widths, stretch against the containing block less
+// the margins (CSS Sizing 3, 3; CSS Sizing 4, 3.1), when a box is laid out;
+// in the block axis they size as auto, and bound min-height and max-height
+// to the content height.
+//
 // # Positioning
 //
 // Relative positioning moves a box, inline boxes included, when it paints
@@ -89,7 +115,7 @@
 //
 // # Not supported
 //
-// Grid, vertical writing modes, 3D transforms, generated content,
+// Vertical writing modes, 3D transforms, generated content,
 // hyphenation and multi-column layout are out of scope; visibility:
 // collapse on a flex item hides it as visibility: hidden does.
 //

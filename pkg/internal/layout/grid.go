@@ -307,8 +307,10 @@ func (e *engine) layoutGrid(b *box, cb cblock, top float64) float64 {
 	if pcb.hDefinite {
 		pcb.h = max(min(pcb.h, maxH), minH)
 	}
-	l := &gridLayout{e: e, b: b, cb: pcb, rtl: st.Direction == css.RTL,
-		widths: map[*gitem]float64{}, ms: map[*gitem]itemMeasure{}, shims: map[*gitem]float64{}}
+	l := &gridLayout{
+		e: e, b: b, cb: pcb, rtl: st.Direction == css.RTL,
+		widths: map[*gitem]float64{}, ms: map[*gitem]itemMeasure{}, shims: map[*gitem]float64{},
+	}
 	l.gap[colAxis] = gapOf(st.ColumnGap, cb.w, true)
 	l.gap[rowAxis] = gapOf(st.RowGap, pcb.h, pcb.hDefinite)
 	var items []*box
@@ -819,7 +821,6 @@ func (l *gridLayout) pushRow(items []*gitem, rowTop float64) bool {
 func (l *gridLayout) put(it *gitem, colPos []float64, rowTop, shift float64) float64 {
 	e := l.e
 	k := it.b
-	st := k.st
 	rows := l.tracks[rowAxis]
 	r0, r1 := it.start[rowAxis], it.end[rowAxis]
 	ah := 0.0
@@ -835,7 +836,7 @@ func (l *gridLayout) put(it *gitem, colPos []float64, rowTop, shift float64) flo
 	resolveEdges(k, aw)
 	acb := cblock{x: l.cb.x, w: aw, h: ah, hDefinite: true}
 	e.resolveSizing(k, acb, -1, -1)
-	st = k.st
+	st := k.st
 
 	// Inline axis: auto margins take the free space, else justify-self.
 	outerWd := w + hEdges(k) + k.m[css.Left] + k.m[css.Right]
@@ -853,7 +854,6 @@ func (l *gridLayout) put(it *gitem, colPos []float64, rowTop, shift float64) flo
 		default:
 			k.m[css.Right] += free
 		}
-		free = 0
 	case lAuto || rAuto:
 	default:
 		off = selfOffset(justifySelf(st, l.b.st), free, true, l.rtl, st.Direction == css.RTL)
@@ -1047,7 +1047,6 @@ func gridAbsCB(c, k *box, pad absCB) absCB {
 	}
 	return out
 }
-
 
 // gridStaticShift returns how far the absolutely positioned child b of a
 // grid container moves from the content box corner its static position

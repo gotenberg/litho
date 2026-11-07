@@ -34,9 +34,12 @@
 // physical ones of a horizontal left-to-right box. The input is UTF-8.
 // The flexible box layout properties and the box alignment properties that
 // apply to it compute in full (CSS Flexbox 1; CSS Box Alignment 3), and
-// the children of a flex container are blockified. Generated content, 3D
-// transforms, columns and grid layout parse and compute to the nearest
-// supported value, with a warning.
+// the children of a flex container are blockified; so do the grid layout
+// properties (CSS Grid 1, without subgrid), whose items are blockified
+// too, and the sizing keywords min-content, max-content, fit-content and
+// stretch of the size properties (CSS Sizing 3 and 4). Generated content,
+// 3D transforms and columns parse and compute to the nearest supported
+// value, with a warning.
 //
 // # Concurrency
 //

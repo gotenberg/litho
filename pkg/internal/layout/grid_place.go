@@ -445,7 +445,6 @@ func placeGrid(b *box, items []*box, rep [2]int) *gridPlacement {
 			} else if cs < curC {
 				curF++
 			}
-			curC = cs
 			for !occ.free(flow, curF, curF+spanF, cs, ce) && curF < MaxTracksPerAxis {
 				curF++
 			}

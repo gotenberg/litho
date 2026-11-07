@@ -584,7 +584,7 @@ func (e *engine) baseSize(fd *flexData, it *fitem, ax flexAxes, cb, pcb cblock, 
 		}
 	case css.Auto:
 		base, ok = mainSpec(mainProp(sst, ax), pcb)
-	case css.FlexContent, css.None, css.Normal, css.Number:
+	case css.FlexContent, css.None, css.Normal, css.Number, css.MinContent, css.MaxContent, css.FitContent, css.Stretch:
 	}
 	if !ok {
 		base = contentSize()
