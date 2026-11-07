@@ -378,6 +378,7 @@ func (p *prepared) assemble(ctx context.Context, res *layout.Result, ranges []pa
 		Structure: res.Structure,
 		Warnings:  p.warnings,
 	}
+	culled := false
 	for _, k := range keep {
 		pg := places[k].page(res.Pages[k])
 		links := pg.Links[:0:0]
@@ -395,6 +396,7 @@ func (p *prepared) assemble(ctx context.Context, res *layout.Result, ranges []pa
 		if err := p.decorate(ctx, pg, k, len(res.Pages)); err != nil {
 			return nil, err
 		}
+		culled = cullPage(pg) || culled
 		doc.Pages = append(doc.Pages, pg)
 	}
 	if !p.o.OmitOutline {
@@ -406,7 +408,7 @@ func (p *prepared) assemble(ctx context.Context, res *layout.Result, ranges []pa
 		}
 		doc.Outline = outline(p.headings, anchors)
 	}
-	if len(keep) < len(res.Pages) {
+	if len(keep) < len(res.Pages) || culled {
 		pruneStructure(doc)
 	}
 	if p.svg != nil {

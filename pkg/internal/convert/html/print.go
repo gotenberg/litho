@@ -208,7 +208,8 @@ func rectPath(r compose.Rect) []compose.PathOp {
 
 // pruneStructure drops from doc's structure tree the elements no fragment
 // or link of its pages hangs from, directly or through their kids, once a
-// page selection left pages out. The root stays.
+// page selection left pages out or culling left content out. The root
+// stays.
 func pruneStructure(doc *compose.Document) {
 	if doc.Structure == nil {
 		return
