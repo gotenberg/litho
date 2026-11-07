@@ -223,6 +223,9 @@ func (f *pageFlow) buildGeom(mp *odf.MasterPage, left, first bool) *pageGeom {
 		pl = &odf.PageLayout{}
 	}
 	pp := pl.Page
+	if va := pp.Get("style:vertical-align"); va != "" && va != "top" && va != "auto" {
+		f.b.warn("page-vertical-align", "a page's text is laid out from the top, not "+va)
+	}
 	g := &pageGeom{format: pp.Get("style:num-format"), mirrored: pl.PageUsage == "mirrored"}
 	if _, ok := pp.Lookup("style:num-format"); !ok {
 		g.format = "1"

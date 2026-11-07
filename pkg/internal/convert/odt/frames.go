@@ -274,8 +274,10 @@ func (b *builder) inlineFrame(c *odf.Element, t textState, out *[]*layout.Node, 
 			}
 		}
 		*out = append(*out, n)
-	case "page", "frame":
+	case "page":
 		b.place(n, g, true)
+	case "frame":
+		b.place(n, g, false)
 		*out = append(*out, n)
 	default:
 		b.place(n, g, false)
@@ -291,7 +293,7 @@ func (b *builder) blockFrame(c *odf.Element, ctx blockCtx) []*layout.Node {
 		return nil
 	}
 	g := b.geometry(c)
-	b.place(n, g, g.anchor == "page")
+	b.place(n, g, g.anchor == "page" || g.hrel == "page" || g.props.Get("style:vertical-rel") == "page")
 	if n.Style.Position == css.Static && n.Style.Float == css.FloatNone && n.Style.Display != css.Block {
 		st := *n.Style
 		st.Display = css.Block
@@ -308,15 +310,10 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 	n.Style = &st
 	if page || g.wrap == "run-through" {
 		st.Position = css.Absolute
-		x, y := g.x, g.y
+		st.Left, st.Top = css.Pts(g.x), css.Pts(g.y)
 		if page {
-			// The frame's offsets count from the page's corner; the
-			// positioned box's from the first page's area.
-			x -= b.pageOrigin[0]
-			y -= b.pageOrigin[1]
-			b.warn("page-anchor", "frames anchored to a page are placed on the first page of their section")
+			b.pageAnchor(&st, g.x, g.y)
 		}
-		st.Left, st.Top = css.Pts(x), css.Pts(y)
 		st.Right, st.Bottom = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
 		st.ZIndex = css.ZIndex{Level: 0}
 		return

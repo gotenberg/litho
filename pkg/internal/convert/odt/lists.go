@@ -328,12 +328,12 @@ func (item *itemCtx) attach(b *builder, n *layout.Node, t textState) {
 	marker := &layout.Node{Kind: layout.Element, Style: mst}
 	label := item.label
 	lp := lvl.Props
-	align := css.AlignLeft
+	align := css.AlignStart
 	switch lp.Get("fo:text-align") {
 	case "center":
 		align = css.AlignCenter
 	case "end", "right":
-		align = css.AlignRight
+		align = css.AlignEnd
 	}
 	mst.TextAlign = align
 	if lp.Get("text:list-level-position-and-space-mode") == "label-alignment" {

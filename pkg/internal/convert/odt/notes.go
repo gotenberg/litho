@@ -57,7 +57,7 @@ func (b *builder) note(c *odf.Element, t textState, out *[]*layout.Node, ws *wsS
 	if name := cfg.A(odf.NSText, "citation-body-style-name"); name != "" && b.styles.Style(b.scope, odf.FamilyText, name) != nil {
 		at = b.spanText(at, name)
 	} else {
-		at.pos, at.rel = noteAnchorRaise, noteAnchorScale
+		at.pos, at.rel, at.auto = noteAnchorRaise, noteAnchorScale, 1
 	}
 	call := b.run(label, at, false)
 	ws.space = false
@@ -69,7 +69,9 @@ func (b *builder) note(c *odf.Element, t textState, out *[]*layout.Node, ws *wsS
 	para := b.notePara(cfg, class)
 	for _, p := range bodyEl.Children {
 		if p.Is(odf.NSText, "p") || p.Is(odf.NSText, "h") {
-			para = b.paraStyleName(p)
+			if p.A(odf.NSText, "style-name") != "" {
+				para = b.paraStyleName(p)
+			}
 			break
 		}
 	}
@@ -79,9 +81,18 @@ func (b *builder) note(c *odf.Element, t textState, out *[]*layout.Node, ws *wsS
 	}
 	saved := b.hf
 	b.hf = nil
-	body := b.blocks(bodyEl, blockCtx{depth: depth})
+	body := b.blocks(bodyEl, blockCtx{depth: depth, defStyle: b.notePara(cfg, class)})
 	b.hf = saved
 	prefix := b.run(label, bt, false)
+	if len(body) > 0 && body[0].Style.Display != css.Table && body[0].Style.TextIndent.Value < 0 {
+		// Writer sets the number in a hanging first-line indent and
+		// starts the text at the paragraph's indent, as a list label.
+		ps := baseStyle()
+		applyText(ps, bt, false)
+		ps.Display = css.InlineBlock
+		ps.MinWidth = css.Pts(-body[0].Style.TextIndent.Value)
+		prefix = b.node(&layout.Node{Kind: layout.Element, Style: ps, Children: []*layout.Node{prefix}})
+	}
 	if len(body) > 0 && body[0].Style.Display != css.Table {
 		body[0].Children = append([]*layout.Node{prefix}, body[0].Children...)
 	} else {

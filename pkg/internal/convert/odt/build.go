@@ -27,7 +27,9 @@ type builder struct {
 	styles *odf.Styles
 	scope  odf.Scope
 	fonts  *text.Fonts
-	ratios map[string]float64
+	// metricsCache holds the faces' ascents and descents, by family list,
+	// weight and slant.
+	metricsCache map[string][2]float64
 
 	warnings []compose.Warning
 	warned   map[string]bool
@@ -102,6 +104,9 @@ type blockCtx struct {
 	// outside a list or once the label is placed; indent is the item
 	// whose level indents every paragraph of it.
 	item, indent *itemCtx
+	// defStyle is the paragraph style of a paragraph that names none: a
+	// note's default style in a note body, "" elsewhere.
+	defStyle string
 	// depth is the nesting of the content, against odf.MaxDepth.
 	depth int
 }
@@ -251,6 +256,9 @@ func (b *builder) paraText(name string) textState {
 	for _, l := range b.styles.Layers(b.scope, odf.FamilyParagraph, name, odf.TextProps) {
 		t = b.foldText(t, l)
 	}
+	for _, l := range b.builtinLayers(name, odf.TextProps) {
+		t = b.foldText(t, l)
+	}
 	return t
 }
 
@@ -258,6 +266,9 @@ func (b *builder) paraText(name string) textState {
 func (b *builder) paraProps(name string) paraState {
 	p := paraState{joinBorder: true}
 	for _, l := range b.styles.Layers(b.scope, odf.FamilyParagraph, name, odf.ParagraphProps) {
+		p = foldPara(p, l)
+	}
+	for _, l := range b.builtinLayers(name, odf.ParagraphProps) {
 		p = foldPara(p, l)
 	}
 	return p
@@ -268,6 +279,14 @@ func (b *builder) paraProps(name string) paraState {
 // level giving it its structure role, a list item's label first.
 func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *layout.Node {
 	name := b.paraStyleName(el)
+	if ctx.defStyle != "" && el.A(odf.NSText, "style-name") == "" {
+		name = ctx.defStyle
+	}
+	if isHeading && el.A(odf.NSText, "style-name") == "" {
+		// Writer gives a heading without a style the heading style of
+		// its outline level.
+		name = "Heading_20_" + strconv.Itoa(max(b.outlineLevel(el, name), 1))
+	}
 	t := b.paraText(name)
 	p := b.paraProps(name)
 	if ctx.indent != nil {
@@ -276,11 +295,6 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 	st := baseStyle()
 	applyText(st, t, false)
 	b.applyPara(st, p, t)
-	if !b.tabsRelative {
-		for i := range st.TabStops {
-			st.TabStops[i].Pos = max(st.TabStops[i].Pos-p.margin[css.Left], 0)
-		}
-	}
 	if p.dropCap != nil {
 		b.warn("drop-cap", "drop caps are drawn as the paragraph's first letters in line")
 	}
@@ -298,6 +312,15 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 		kids = append(kids, b.node(&layout.Node{Kind: layout.LineBreak, Style: st}))
 	}
 	n.Children = kids
+	for _, k := range kids {
+		if k.Style.Position == css.Absolute && k.Kind != layout.Text {
+			// A run-through frame anchored to the paragraph is placed from
+			// the paragraph's corner: the paragraph is its containing
+			// block.
+			st.Position = css.Relative
+			break
+		}
+	}
 	if isHeading {
 		level := b.outlineLevel(el, name)
 		if level > 0 {
@@ -396,6 +419,13 @@ func (b *builder) spanText(t textState, name string) textState {
 func (b *builder) run(s string, t textState, preserve bool) *layout.Node {
 	st := baseStyle()
 	applyText(st, t, true)
+	if t.auto != 0 {
+		st.VerticalAlign = css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(b.raise(t))}
+		// Automatic escapement keeps the run inside the full-size line:
+		// Writer's line does not grow for it, so its inline box takes no
+		// height.
+		st.LineHeight = css.Pts(0)
+	}
 	if preserve {
 		st.WhiteSpace = css.Pre
 	}

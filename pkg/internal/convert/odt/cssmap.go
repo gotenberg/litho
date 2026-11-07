@@ -2,6 +2,7 @@ package odt
 
 import (
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -140,6 +141,43 @@ func (t textState) langTag() string {
 	return t.lang
 }
 
+// faceMetrics returns the ascent with the line gap and the descent of the
+// face t selects, over its font size, as LibreOffice measures a font: the
+// external leading counts above the ascent. Liberation Serif's without
+// fonts or a face.
+func (b *builder) faceMetrics(t textState) (ascent, descent float64) {
+	const fallbackAscent, fallbackDescent = 0.933, 0.216
+	if b.fonts == nil {
+		return fallbackAscent, fallbackDescent
+	}
+	key := strings.Join(t.families(), ",") + "|" + strconv.Itoa(t.weight) + "|" + strconv.FormatBool(t.italic)
+	if m, ok := b.metricsCache[key]; ok {
+		return m[0], m[1]
+	}
+	const size = 100
+	ascent, descent = fallbackAscent, fallbackDescent
+	if fc := b.fonts.Match(text.Style{Families: text.BrowserFamilies(t.families()), Weight: max(t.weight, 100), Italic: t.italic, Size: size}); fc != nil {
+		m := fc.Metrics(size)
+		if a, d := (m.Ascent+m.LineGap)/size, m.Descent/size; a > 0 && a < 10 && d >= 0 && d < 10 {
+			ascent, descent = a, d
+		}
+	}
+	b.metricsCache[key] = [2]float64{ascent, descent}
+	return ascent, descent
+}
+
+// raise returns the baseline shift of a run in Writer's automatic
+// escapement (ODF 1.3, Part 3, 20.374, "super" and "sub"): a superscript
+// rises until its ascent meets the full-size ascent, a subscript drops
+// until its descent meets the full-size descent.
+func (b *builder) raise(t textState) float64 {
+	asc, desc := b.faceMetrics(t)
+	if t.auto > 0 {
+		return asc * t.size * (1 - t.rel)
+	}
+	return -desc * t.size * (1 - t.rel)
+}
+
 // lineRatio returns the height of a line of the face t selects in
 // LibreOffice's measure, ascent, descent and line gap, over its font size;
 // 1.15, Liberation Serif's, without fonts.
@@ -148,21 +186,11 @@ func (b *builder) lineRatio(t textState) float64 {
 	if b.fonts == nil {
 		return fallback
 	}
-	key := strings.Join(t.families(), ",") + "|" + strings.Repeat("b", t.weight/100) + map[bool]string{true: "i"}[t.italic]
-	if r, ok := b.ratios[key]; ok {
+	asc, desc := b.faceMetrics(t)
+	if r := asc + desc; r > 0 {
 		return r
 	}
-	const size = 100
-	fc := b.fonts.Match(text.Style{Families: text.BrowserFamilies(t.families()), Weight: max(t.weight, 100), Italic: t.italic, Size: size})
-	r := fallback
-	if fc != nil {
-		m := fc.Metrics(size)
-		if s := (m.Ascent + m.Descent + m.LineGap) / size; s > 0 && s < 10 {
-			r = s
-		}
-	}
-	b.ratios[key] = r
-	return r
+	return fallback
 }
 
 // textAligns maps fo:text-align (ODF 1.3, Part 3, 20.216; XSL 1.0, 7.16.9)
@@ -198,16 +226,7 @@ func (b *builder) applyPara(st *css.Style, p paraState, t textState) {
 			st.TextAlignLast = css.AlignStart
 		}
 	}
-	switch p.line { //nolint:exhaustive // lineNormal keeps the initial line-height
-	case lineProportional:
-		st.LineHeight = css.Dimension{Kind: css.Number, Value: p.lineVal * b.lineRatio(t)}
-	case lineFixed:
-		st.LineHeight = css.Pts(p.lineVal)
-	case lineAtLeast:
-		st.MinLineHeight = p.lineVal
-	case lineSpacing:
-		st.LineHeight = css.Dimension{Kind: css.Number, Value: b.lineRatio(t) + p.lineVal/math.Max(t.size, 1)}
-	}
+	b.lineRule(st, p, t)
 	if p.keepNext {
 		st.BreakAfter = css.BreakAvoid
 	}
@@ -224,7 +243,10 @@ func (b *builder) applyPara(st *css.Style, p paraState, t textState) {
 		b.backgroundImage(st, p.bgImage)
 	}
 	st.BoxShadow = p.shadow
-	st.TabStops = b.tabStops(p.tabs)
+	if hasBorder(st.Border) {
+		cloneDecorations(st)
+	}
+	st.TabStops = b.tabStops(p.tabs, p.margin[css.Left])
 	if p.tabDist > 0 {
 		st.TabSize = css.Pts(p.tabDist)
 	}
@@ -254,18 +276,26 @@ func pageBreak(v string, cur css.Break) css.Break {
 // 19.502) to its alignment.
 var tabTypes = map[string]css.TabAlign{"left": css.TabLeft, "center": css.TabCenter, "right": css.TabRight, "char": css.TabDecimal}
 
-// tabStops reads a style:tab-stops element (ODF 1.3, Part 3, 17.8): the
-// stops in increasing position, measured from the paragraph's left margin
-// as Writer does for a document that sets TabsRelativeToIndent, its
-// default, or from the page area's left edge otherwise.
-func (b *builder) tabStops(ts *odf.Element) []css.TabStop {
-	var out []css.TabStop
+// tabStops reads a style:tab-stops element (ODF 1.3, Part 3, 17.8) of a
+// paragraph whose start indent is indent: the stops in increasing
+// position, measured from the containing block's content box. Writer
+// counts the positions from the paragraph's indent when the document sets
+// TabsRelativeToIndent, its default, and from the page area's edge
+// otherwise. The slice is never nil: a paragraph lays its tabs out the
+// Office way, its custom stops first, then the multiples of TabSize.
+func (b *builder) tabStops(ts *odf.Element, indent float64) []css.TabStop {
+	out := []css.TabStop{}
+	if b.tabsRelative {
+		indent = max(indent, 0)
+	} else {
+		indent = 0
+	}
 	for _, t := range ts.All(odf.NSStyle, "tab-stop") {
 		pos, ok := odf.Length(t.A(odf.NSStyle, "position"))
 		if !ok || pos < 0 || len(out) >= maxTabStops {
 			continue
 		}
-		stop := css.TabStop{Pos: pos, Align: tabTypes[t.A(odf.NSStyle, "type")]}
+		stop := css.TabStop{Pos: pos + indent, Align: tabTypes[t.A(odf.NSStyle, "type")]}
 		switch t.A(odf.NSStyle, "leader-text") {
 		case ".", "…":
 			stop.Leader = css.TabLeaderDots
@@ -276,6 +306,9 @@ func (b *builder) tabStops(ts *odf.Element) []css.TabStop {
 		case "·":
 			stop.Leader = css.TabLeaderMiddleDots
 		case "", " ":
+			if t.A(odf.NSStyle, "leader-text") == " " || t.A(odf.NSStyle, "leader-style") == "none" {
+				break
+			}
 			switch t.A(odf.NSStyle, "leader-style") {
 			case "dotted":
 				stop.Leader = css.TabLeaderDots
@@ -284,6 +317,11 @@ func (b *builder) tabStops(ts *odf.Element) []css.TabStop {
 			case "solid":
 				stop.Leader = css.TabLeaderUnderscore
 			}
+		default:
+			// A leader character the contract has no value for fills
+			// with the nearest: dots.
+			stop.Leader = css.TabLeaderDots
+			b.warn("tab-leader", "a tab leader character other than . - _ · is drawn as dots")
 		}
 		out = append(out, stop)
 	}

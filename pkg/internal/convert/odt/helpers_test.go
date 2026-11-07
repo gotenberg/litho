@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"image"
+	"image/png"
 	"math"
 	"os"
 	"path/filepath"
@@ -152,14 +154,15 @@ type textLine struct {
 	text       string
 }
 
-// lines returns the text of a page grouped by baseline, top to bottom,
-// each line's runs in x order.
-func lines(pg *compose.Page) []textLine {
-	type run struct {
-		x, y, size float64
-		s          string
-	}
-	var runs []run
+// run is one text run of a page in page coordinates.
+type run struct {
+	x, y, size float64
+	text       string
+}
+
+// runs returns the text runs of a page, groups' translations applied.
+func runs(pg *compose.Page) []run {
+	var out []run
 	var walk func(frags []compose.Fragment, dx, dy float64)
 	walk = func(frags []compose.Fragment, dx, dy float64) {
 		for _, f := range frags {
@@ -173,28 +176,34 @@ func lines(pg *compose.Page) []textLine {
 				if len(v.Glyphs) > 0 {
 					x += v.Glyphs[0].X
 				}
-				runs = append(runs, run{x: x, y: v.Origin.Y + dy, size: v.Size, s: sb.String()})
+				out = append(out, run{x: x, y: v.Origin.Y + dy, size: v.Size, text: sb.String()})
 			case *compose.Group:
-				m := v.Transform
-				walk(v.Content, dx+m.E, dy+m.F)
+				walk(v.Content, dx+v.Transform.E, dy+v.Transform.F)
 			}
 		}
 	}
 	walk(pg.Content, 0, 0)
+	return out
+}
+
+// lines returns the text of a page grouped by baseline, top to bottom,
+// each line's runs in x order.
+func lines(pg *compose.Page) []textLine {
+	runs := runs(pg)
 	sort.SliceStable(runs, func(i, j int) bool { return runs[i].y < runs[j].y })
 	var out []textLine
 	for _, r := range runs {
 		if n := len(out); n > 0 && math.Abs(out[n-1].y-r.y) < 1.5 {
 			l := &out[n-1]
 			if r.x < l.x {
-				l.text = r.s + l.text
+				l.text = r.text + l.text
 				l.x = r.x
 			} else {
-				l.text += r.s
+				l.text += r.text
 			}
 			continue
 		}
-		out = append(out, textLine{y: r.y, x: r.x, size: r.size, text: r.s})
+		out = append(out, textLine{y: r.y, x: r.x, size: r.size, text: r.text})
 	}
 	return out
 }
@@ -222,3 +231,17 @@ func docText(d *compose.Document) string {
 
 // near reports a and b within tol.
 func near(a, b, tol float64) bool { return math.Abs(a-b) <= tol }
+
+// tinyPNG returns a 4 by 2 red PNG.
+func tinyPNG(t testing.TB) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 4, 2))
+	for i := range img.Pix {
+		img.Pix[i] = 0xff
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}

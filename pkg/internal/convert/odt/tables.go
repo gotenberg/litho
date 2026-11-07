@@ -209,6 +209,9 @@ func (b *builder) cell(c *odf.Element, tb *tableBuild, header bool) *layout.Node
 			st.BackgroundColor = cssColor(col)
 		}
 	}
+	if hasBorder(st.Border) {
+		cloneDecorations(st)
+	}
 	st.VerticalAlign = css.VerticalAlign{Kind: css.AlignTop}
 	if k, ok := cellAligns[props.Get("style:vertical-align")]; ok {
 		st.VerticalAlign = css.VerticalAlign{Kind: k}

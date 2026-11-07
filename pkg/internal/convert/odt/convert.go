@@ -59,7 +59,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	}
 	b := &builder{
 		ctx: ctx, pkg: pkg, styles: odf.NewStyles(pkg), fonts: fonts,
-		ratios: map[string]float64{}, warned: map[string]bool{}, pics: map[string]picResult{}, meta: map[*layout.Node]paraMeta{},
+		metricsCache: map[string][2]float64{}, warned: map[string]bool{}, pics: map[string]picResult{}, meta: map[*layout.Node]paraMeta{},
 		tabsRelative: configBool(pkg.Settings, "TabsRelativeToIndent", true),
 	}
 	b.pages = newPageFlow(b, opts)

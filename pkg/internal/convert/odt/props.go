@@ -39,7 +39,11 @@ type textState struct {
 	over       decoLine
 	// pos and rel are style:text-position: the raise as a fraction of the
 	// font size and the scale of the raised text, rel 0 for none.
-	pos, rel  float64
+	pos, rel float64
+	// auto is +1 for "super" and -1 for "sub", Writer's automatic
+	// escapement, which [builder.raise] measures on the face; pos then
+	// holds the default raise for a face it cannot measure.
+	auto      int
 	transform css.TextTransform
 	smallCaps bool
 	letter    float64
@@ -116,6 +120,10 @@ func (b *builder) foldText(t textState, layer odf.Props) textState {
 	t.over = foldDeco(t.over, layer, "overline")
 	if v, ok := layer.Lookup("style:text-position"); ok {
 		t.pos, t.rel = textPosition(v)
+		t.auto = 0
+		if f := strings.Fields(v); len(f) > 0 && t.rel > 0 {
+			t.auto = map[string]int{"super": 1, "sub": -1}[f[0]]
+		}
 	}
 	if v, ok := layer.Lookup("fo:text-transform"); ok {
 		t.transform = map[string]css.TextTransform{"uppercase": css.Uppercase, "lowercase": css.Lowercase, "capitalize": css.Capitalize}[v]
