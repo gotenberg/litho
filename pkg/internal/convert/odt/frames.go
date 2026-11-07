@@ -464,7 +464,7 @@ func (b *builder) pagePosition(g frameGeom) (float64, float64) {
 		x = x1 - w
 	}
 	y0, y1 := 0.0, ph
-	if g.vrel == "page-content" || g.vrel != "page" && !(g.vrel == "" && g.anchor == "page") {
+	if g.vrel == "page-content" || g.vrel != "page" && (g.vrel != "" || g.anchor != "page") {
 		y0, y1 = pg.top, pg.bottom
 	}
 	y := y0 + g.y
@@ -877,7 +877,7 @@ func xmlEscape(s string) string {
 // paragraphs, is left out with a warning.
 func (b *builder) shape(c *odf.Element, g frameGeom, depth int) *layout.Node {
 	n := b.shapeBody(c, g)
-	if text := b.shapeText(c, g, depth); text != nil && n != nil {
+	if text := b.shapeText(c, depth); text != nil && n != nil {
 		return b.withText(n, text, g)
 	}
 	return n
@@ -886,7 +886,7 @@ func (b *builder) shape(c *odf.Element, g frameGeom, depth int) *layout.Node {
 // shapeText returns the text a drawing shape holds (ODF 1.3, Part 3,
 // 10.3: its paragraphs, headings and lists), nil when it holds none
 // that draws.
-func (b *builder) shapeText(c *odf.Element, g frameGeom, depth int) *layout.Node {
+func (b *builder) shapeText(c *odf.Element, depth int) *layout.Node {
 	var kids []*layout.Node
 	ctx := blockCtx{depth: depth + 1}
 	for _, k := range c.Children {

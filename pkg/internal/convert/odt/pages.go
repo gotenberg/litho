@@ -531,8 +531,10 @@ var sepLines = map[string]css.BorderStyle{
 // and below it; Writer's defaults where the element or an attribute is
 // absent. A rule of no thickness is not drawn: its room stays.
 func footnoteRule(pp odf.Props) *layout.FootnoteRule {
-	r := &layout.FootnoteRule{Width: defaultSepWidth, Thickness: defaultSepThickness, Color: css.Color{A: 1},
-		Align: css.AlignLeft, Line: css.Solid, SpaceAbove: defaultSepSpace, SpaceBelow: defaultSepSpace}
+	r := &layout.FootnoteRule{
+		Width: defaultSepWidth, Thickness: defaultSepThickness, Color: css.Color{A: 1},
+		Align: css.AlignLeft, Line: css.Solid, SpaceAbove: defaultSepSpace, SpaceBelow: defaultSepSpace,
+	}
 	sep := pp.Child("style:footnote-sep")
 	if sep == nil {
 		return r
