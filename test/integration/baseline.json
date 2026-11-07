@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-07T08:02:42Z",
+  "captured_at": "2026-11-07T08:42:09Z",
   "corpora": {
     "compose": {
       "features": {
@@ -278,12 +278,12 @@
     "html": {
       "features": {
         "diff": {
-          "matched": 28,
+          "matched": 29,
           "mismatched": 1,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 29
+            "pages_equal": 30
           },
           "scores": {
             "article": {
@@ -309,6 +309,14 @@
               "pages": 1,
               "strict": 1,
               "text_f1": 1
+            },
+            "borders-cards": {
+              "layout": 0.9566,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9674
             },
             "flex": {
               "layout": 0.9879,
@@ -1344,8 +1352,8 @@
     "weasyprint": {
       "features": {
         "draw": {
-          "matched": 205,
-          "mismatched": 110,
+          "matched": 215,
+          "mismatched": 100,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -1394,17 +1402,17 @@
             "test_background__test_marks_cross": "fail",
             "test_background__test_page_background_fixed": "fail",
             "test_background__test_page_background_fixed_bleed": "fail",
-            "test_box__test_border_image_default_slice": "fail",
-            "test_box__test_border_image_fill": "fail",
-            "test_box__test_border_image_gradient": "fail",
-            "test_box__test_border_image_gradient_units": "fail",
-            "test_box__test_border_image_not_percent": "fail",
-            "test_box__test_border_image_outset": "fail",
+            "test_box__test_border_image_default_slice": "pass",
+            "test_box__test_border_image_fill": "pass",
+            "test_box__test_border_image_gradient": "pass",
+            "test_box__test_border_image_gradient_units": "pass",
+            "test_box__test_border_image_not_percent": "pass",
+            "test_box__test_border_image_outset": "pass",
             "test_box__test_border_image_repeat": "fail",
-            "test_box__test_border_image_space": "fail",
-            "test_box__test_border_image_stretch": "fail",
-            "test_box__test_border_image_uneven_width": "fail",
-            "test_box__test_border_image_width": "fail",
+            "test_box__test_border_image_space": "pass",
+            "test_box__test_border_image_stretch": "pass",
+            "test_box__test_border_image_uneven_width": "pass",
+            "test_box__test_border_image_width": "pass",
             "test_box__test_borders_box_sizing": "pass",
             "test_box__test_box_shadow_inset": "pass",
             "test_box__test_box_shadow_inset_big_negative_spread": "pass",
@@ -1673,8 +1681,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 939,
-          "mismatched": 238,
+          "matched": 956,
+          "mismatched": 221,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -1833,7 +1841,7 @@
             "css/CSS2/margin-padding-clear/margin-collapse-min-height-002.xht": "pass",
             "css/CSS2/margin-padding-clear/margin-collapse-quirks-mode-001.html": "pass",
             "css/CSS2/margin-padding-clear/margin-left-applies-to-008.xht": "pass",
-            "css/CSS2/margin-padding-clear/margin-right-114.html": "fail",
+            "css/CSS2/margin-padding-clear/margin-right-114.html": "pass",
             "css/CSS2/margin-padding-clear/padding-left-036.xht": "pass",
             "css/CSS2/margin-padding-clear/padding-left-047.xht": "pass",
             "css/CSS2/margin-padding-clear/padding-left-applies-to-008.xht": "pass",
@@ -1934,7 +1942,7 @@
             "css/css-align/self-alignment/self-align-safe-unsafe-flex-002.html": "pass",
             "css/css-align/self-alignment/self-align-safe-unsafe-flex-003.html": "pass",
             "css/css-align/self-alignment/self-align-start-end-flex-001.html": "pass",
-            "css/css-backgrounds/background-attachment-350.html": "fail",
+            "css/css-backgrounds/background-attachment-350.html": "pass",
             "css/css-backgrounds/background-clip-003.html": "pass",
             "css/css-backgrounds/background-clip-005.html": "pass",
             "css/css-backgrounds/background-clip-006.html": "pass",
@@ -1947,12 +1955,12 @@
             "css/css-backgrounds/background-clip/clip-border-area-on-body-propagated-to-root.html": "pass",
             "css/css-backgrounds/background-clip/clip-rounded-corner.html": "pass",
             "css/css-backgrounds/background-clip/clip-text-background-table-cell.html": "pass",
-            "css/css-backgrounds/background-clip/clip-text-constrain-geometry.html": "fail",
+            "css/css-backgrounds/background-clip/clip-text-constrain-geometry.html": "pass",
             "css/css-backgrounds/background-clip/clip-text-descendants.html": "pass",
-            "css/css-backgrounds/background-clip/clip-text-inline-block-child.html": "fail",
+            "css/css-backgrounds/background-clip/clip-text-inline-block-child.html": "pass",
             "css/css-backgrounds/background-clip/clip-text-on-root.html": "pass",
-            "css/css-backgrounds/background-clip/clip-text-relative-child.html": "fail",
-            "css/css-backgrounds/background-clip/clip-text-text-emphasis.html": "fail",
+            "css/css-backgrounds/background-clip/clip-text-relative-child.html": "pass",
+            "css/css-backgrounds/background-clip/clip-text-text-emphasis.html": "pass",
             "css/css-backgrounds/background-clip/clip-text-transform.html": "pass",
             "css/css-backgrounds/background-color-body-propagation-008.html": "pass",
             "css/css-backgrounds/background-color-body-propagation-009.html": "pass",
@@ -1971,20 +1979,20 @@
             "css/css-backgrounds/background-repeat-space-3.html": "pass",
             "css/css-backgrounds/background-size-021.html": "pass",
             "css/css-backgrounds/background-size-with-negative-value.html": "pass",
-            "css/css-backgrounds/background-size/background-size-near-zero-gradient.html": "fail",
+            "css/css-backgrounds/background-size/background-size-near-zero-gradient.html": "pass",
             "css/css-backgrounds/border-bottom-left-radius-004.xht": "pass",
             "css/css-backgrounds/border-bottom-width-medium.html": "pass",
             "css/css-backgrounds/border-bottom-width-thin.html": "pass",
-            "css/css-backgrounds/border-image-006.html": "fail",
-            "css/css-backgrounds/border-image-displayed-with-transparent-border-color.html": "fail",
-            "css/css-backgrounds/border-image-outset-003.html": "fail",
-            "css/css-backgrounds/border-image-repeat-repeat-001.html": "fail",
+            "css/css-backgrounds/border-image-006.html": "pass",
+            "css/css-backgrounds/border-image-displayed-with-transparent-border-color.html": "pass",
+            "css/css-backgrounds/border-image-outset-003.html": "pass",
+            "css/css-backgrounds/border-image-repeat-repeat-001.html": "pass",
             "css/css-backgrounds/border-image-repeat-round-2.html": "pass",
-            "css/css-backgrounds/border-image-repeat-space-011.html": "fail",
-            "css/css-backgrounds/border-image-repeat-space-6.html": "fail",
-            "css/css-backgrounds/border-image-shorthand-002.htm": "fail",
-            "css/css-backgrounds/border-image-slice-004.htm": "fail",
-            "css/css-backgrounds/border-image-slice-fill-002.html": "fail",
+            "css/css-backgrounds/border-image-repeat-space-011.html": "pass",
+            "css/css-backgrounds/border-image-repeat-space-6.html": "pass",
+            "css/css-backgrounds/border-image-shorthand-002.htm": "pass",
+            "css/css-backgrounds/border-image-slice-004.htm": "pass",
+            "css/css-backgrounds/border-image-slice-fill-002.html": "pass",
             "css/css-backgrounds/border-left-width-thick.html": "pass",
             "css/css-backgrounds/border-radius-001.xht": "pass",
             "css/css-backgrounds/border-radius-004.xht": "pass",
@@ -2848,7 +2856,7 @@
             "css/css-text/word-break/word-break-keep-all-063.html": "pass",
             "css/css-text/word-break/word-break-keep-all-u002d.html": "pass",
             "css/css-text/word-break/word-break-manual-001.html": "pass",
-            "css/css-text/word-space-transform/word-space-transform-010.html": "fail",
+            "css/css-text/word-space-transform/word-space-transform-010.html": "pass",
             "css/css-text/word-space-transform/word-space-transform-014.html": "pass",
             "css/css-text/wrap-inside/wrap-inside-avoid-inline-table-child.html": "pass",
             "css/css-text/wrap-inside/wrap-inside-avoid-last-resort.html": "pass",
