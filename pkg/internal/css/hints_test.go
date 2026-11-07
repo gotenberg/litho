@@ -184,7 +184,8 @@ func TestHint_AndParseDeclarations(t *testing.T) {
 func TestHTMLHints_DirAuto(t *testing.T) {
 	t.Parallel()
 	c := compute(t, `<body><p id=rtl dir=auto>&rlm;<b>א</b> a</p><p id=ltr dir=auto>1 <bdi>א</bdi> a</p>
-<p id=none dir=auto>123</p><div dir=rtl><p id=inh dir=auto>!</p></div><p id=skip dir=auto><span dir=rtl>א</span>a</p></body>`, ``)
+<p id=none dir=auto>123</p><div dir=rtl><p id=inh dir=auto>!</p></div><p id=skip dir=auto><span dir=rtl>א</span>a</p>
+<p>a <bdi id=bdi>א b</bdi> <bdi id=bdiltr dir=ltr>א</bdi> <bdi id=bdibad dir=x>א</bdi></p></body>`, ``)
 	tests := []struct {
 		id   string
 		want Direction
@@ -194,6 +195,9 @@ func TestHTMLHints_DirAuto(t *testing.T) {
 		{"none", LTR},
 		{"inh", RTL},
 		{"skip", LTR},
+		{"bdi", RTL},
+		{"bdiltr", LTR},
+		{"bdibad", RTL},
 	}
 	for _, tt := range tests {
 		if got := c.of(tt.id).Direction; got != tt.want {

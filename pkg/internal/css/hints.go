@@ -212,7 +212,9 @@ func HTMLHints(n *html.Node) []Declaration {
 			}
 		}
 	}
-	if v, ok := attr(n, "dir"); ok && lower(strings.TrimSpace(v)) == "auto" {
+	// A bdi element without a valid dir attribute takes its direction from
+	// its text, as dir=auto does (HTML Standard, 4.5.24 and 3.2.6.4).
+	if v, ok := attr(n, "dir"); ok && lower(strings.TrimSpace(v)) == "auto" || n.Data == "bdi" && !validDir(n) {
 		if d, ok := autoDirection(n); ok {
 			h.add("direction", d)
 		}
@@ -577,4 +579,14 @@ func legacyColor(input string) (string, bool) {
 		out.WriteString(string(p))
 	}
 	return out.String(), true
+}
+
+// validDir reports an element whose dir attribute is ltr, rtl or auto.
+func validDir(n *html.Node) bool {
+	v, ok := attr(n, "dir")
+	switch lower(strings.TrimSpace(v)) {
+	case "ltr", "rtl", "auto":
+		return ok
+	}
+	return false
 }
