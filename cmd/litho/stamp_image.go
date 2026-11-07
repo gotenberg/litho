@@ -25,7 +25,7 @@ func runStampImage(ctx context.Context, args []string, _stdout, stderr io.Writer
 	width := fs.Float64("width", 0, "Width in points (0 = proportional or natural)")
 	height := fs.Float64("height", 0, "Height in points (0 = proportional or natural)")
 	opacity := fs.Float64("opacity", 1.0, "Opacity (0.0-1.0)")
-	pages := fs.String("pages", "", "Page range (default: all)")
+	pages := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (default: all)")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code

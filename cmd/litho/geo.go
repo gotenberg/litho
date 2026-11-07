@@ -24,7 +24,7 @@ func runGeo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	format := fs.String("f", "text", "Output format: text or json")
 	password := fs.String("p", "", "PDF password")
-	pagesFlag := fs.String("pages", "", "Page range (e.g., 1-3,5,last)")
+	pagesFlag := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (default: all)")
 	geojson := fs.Bool("geojson", false, "Emit GeoJSON (text mode) via GeoData.ToGeoJSON()")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {

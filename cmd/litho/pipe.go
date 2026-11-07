@@ -892,7 +892,7 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 		fs := flag.NewFlagSet("rotate", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		angle := fs.Int("angle", 0, "Rotation angle (multiple of 90)")
-		pages := fs.String("pages", "", "Page range")
+		pages := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (default: all)")
 		if err := fs.Parse(args); err != nil {
 			return nil, err
 		}
@@ -912,7 +912,7 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 	case "split":
 		fs := flag.NewFlagSet("split", flag.ContinueOnError)
 		fs.SetOutput(stderr)
-		pages := fs.String("pages", "", "Page range (required)")
+		pages := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (required)")
 		if err := fs.Parse(args); err != nil {
 			return nil, err
 		}
@@ -960,7 +960,7 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 	case "delete":
 		fs := flag.NewFlagSet("delete", flag.ContinueOnError)
 		fs.SetOutput(stderr)
-		pages := fs.String("pages", "", "Page range (required)")
+		pages := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (required)")
 		if err := fs.Parse(args); err != nil {
 			return nil, err
 		}
@@ -1082,7 +1082,7 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 		fontSize := fs.Float64("font-size", 36, "Font size")
 		x := fs.Float64("x", 0, "X position")
 		y := fs.Float64("y", 0, "Y position")
-		pages := fs.String("pages", "", "Page range (default: all)")
+		pages := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (default: all)")
 		if err := fs.Parse(args); err != nil {
 			return nil, err
 		}
@@ -1147,7 +1147,7 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 		y := fs.Float64("y", 0, "Y position")
 		width := fs.Float64("width", 0, "Width")
 		height := fs.Float64("height", 0, "Height")
-		pages := fs.String("pages", "", "Page range (default: all)")
+		pages := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (default: all)")
 		if err := fs.Parse(args); err != nil {
 			return nil, err
 		}
@@ -1362,7 +1362,7 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 		fs.SetOutput(stderr)
 		source := fs.String("source", "", "Source PDF file (required)")
 		pos := fs.Int("pos", -1, "0-based insertion position (required)")
-		sourcePages := fs.String("source-pages", "", "Source page range (default: all)")
+		sourcePages := fs.String("source-pages", "", "Source pages, such as 1-3,5, 2-, !1 or last (default: all)")
 		if err := fs.Parse(args); err != nil {
 			return nil, err
 		}
@@ -1436,7 +1436,7 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 		stampPage := fs.Int("stamp-page", 1, "1-based page number in the stamp PDF")
 		x := fs.Float64("x", 0, "X position in points from bottom-left")
 		y := fs.Float64("y", 0, "Y position in points from bottom-left")
-		pages := fs.String("pages", "", "Page range (default: all)")
+		pages := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (default: all)")
 		if err := fs.Parse(args); err != nil {
 			return nil, err
 		}

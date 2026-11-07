@@ -34,7 +34,7 @@ func runText(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	format := fs.String("f", "text", "Output format: text or json")
 	password := fs.String("p", "", "PDF password")
-	pagesFlag := fs.String("pages", "", "Page range (e.g., 1-3,5,last)")
+	pagesFlag := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (default: all)")
 	// Text a viewer does not paint is still text. Rendering mode 3 (ISO 32000-1,
 	// Table 106) is how a scanned page carries its OCR layer, so a searchable
 	// scan reads as empty without -invisible.

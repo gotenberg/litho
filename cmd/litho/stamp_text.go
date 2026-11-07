@@ -28,7 +28,7 @@ func runStampText(ctx context.Context, args []string, _stdout, stderr io.Writer)
 	fontSize := fs.Float64("font-size", 36, "Font size in points")
 	x := fs.Float64("x", 0, "X position in points from bottom-left")
 	y := fs.Float64("y", 0, "Y position in points from bottom-left")
-	pages := fs.String("pages", "", "Page range (default: all)")
+	pages := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (default: all)")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code

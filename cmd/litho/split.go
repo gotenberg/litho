@@ -15,7 +15,7 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	defaultPageSize := registerDefaultPageSizeFlag(fs)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
-	pages := fs.String("pages", "", "Page range (required)")
+	pages := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (required)")
 	userPwd := fs.String("user-password", "", "Encrypt the output with this user password")
 	ownerPwd := fs.String("owner-password", "", "Owner password for the encrypted output")
 	algorithm := fs.String("algorithm", "aes256", "Algorithm for the encrypted output: rc4-128, aes128, aes256")

@@ -15,7 +15,7 @@ func runDelete(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 	defaultPageSize := registerDefaultPageSizeFlag(fs)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
-	pages := fs.String("pages", "", "Page range (required)")
+	pages := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (required)")
 	compactFlags := registerCompactFlags(fs)
 
 	if code, ok := parseCommandFlags(fs, args); !ok {

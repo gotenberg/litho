@@ -17,7 +17,7 @@ func runInsert(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 	password := fs.String("p", "", "PDF password")
 	source := fs.String("source", "", "Source PDF file (required)")
 	pos := fs.Int("pos", -1, "0-based insertion position (required)")
-	sourcePages := fs.String("source-pages", "", "Source page range (default: all)")
+	sourcePages := fs.String("source-pages", "", "Source pages, such as 1-3,5, 2-, !1 or last (default: all)")
 	compactFlags := registerCompactFlags(fs)
 
 	if code, ok := parseCommandFlags(fs, args); !ok {

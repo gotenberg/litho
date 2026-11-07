@@ -43,7 +43,7 @@ func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	fs := flag.NewFlagSet("render", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	password := fs.String("p", "", "PDF password")
-	pagesFlag := fs.String("pages", "", "Page range (e.g., 1-3,5,last); every page by default")
+	pagesFlag := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (default: all)")
 	dpi := fs.Float64("dpi", pdf.DefaultRenderDPI, "Resolution in pixels per inch")
 	output := fs.String("o", "", "Output prefix: page N is written to PREFIX-N.png")
 	fontDir := fs.String("font-dir", "",

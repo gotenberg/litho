@@ -32,7 +32,7 @@ func runContrast(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	fs.SetOutput(stderr)
 	format := fs.String("f", "text", "Output format: text or json")
 	password := fs.String("p", "", "PDF password")
-	pagesFlag := fs.String("pages", "", "Page range (e.g., 1-3,5,last)")
+	pagesFlag := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (default: all)")
 	enhanced := fs.Bool("enhanced", false, "Judge WCAG 2.x 1.4.6 (AAA: 7:1, 4.5:1 large) rather than 1.4.3 (AA: 4.5:1, 3:1 large)")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {

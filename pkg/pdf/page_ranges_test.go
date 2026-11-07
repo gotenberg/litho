@@ -33,6 +33,51 @@ func TestParsePageRanges(t *testing.T) {
 		// as a set, Split honors both.
 		{"3,1", 5, []int{3, 1}, false},
 		{"1,1", 5, []int{1, 1}, false},
+		// Open ranges run to the last page or from the first.
+		{"2-", 5, []int{2, 3, 4, 5}, false},
+		{"5-", 5, []int{5}, false},
+		{"-2", 5, []int{1, 2}, false},
+		{" 2 - ", 5, []int{2, 3, 4, 5}, false},
+		{" - 2", 5, []int{1, 2}, false},
+		// Exclusions remove pages wherever they appear; without an inclusion
+		// the selection starts from every page.
+		{"!1", 5, []int{2, 3, 4, 5}, false},
+		{" !1 ", 5, []int{2, 3, 4, 5}, false},
+		{"! 1", 5, []int{2, 3, 4, 5}, false},
+		{"!3-", 5, []int{1, 2}, false},
+		{"!last", 5, []int{1, 2, 3, 4}, false},
+		{"!LAST", 5, []int{1, 2, 3, 4}, false},
+		{"!even", 5, []int{1, 3, 5}, false},
+		{"!1,!2", 3, []int{3}, false},
+		{"3,1,!2", 5, []int{3, 1}, false},
+		{"!2,3,1", 5, []int{3, 1}, false},
+		{"2-,!4", 5, []int{2, 3, 5}, false},
+		{"-2,!1", 5, []int{2}, false},
+		{"1-2,!3", 5, []int{1, 2}, false},
+		{"1,1,!2", 5, []int{1, 1}, false},
+		// Keywords are ordinary parts.
+		{"odd,!1", 5, []int{3, 5}, false},
+		{"1-3,last", 5, []int{1, 2, 3, 5}, false},
+		{"odd,last", 5, []int{1, 3, 5, 5}, false},
+		{"even,1", 5, []int{2, 4, 1}, false},
+		// Malformed parts.
+		{"-", 5, nil, true},
+		{" - ", 5, nil, true},
+		{"!", 5, nil, true},
+		{"!!1", 5, nil, true},
+		{"!-", 5, nil, true},
+		{"1,!", 5, nil, true},
+		{"1-last", 5, nil, true},
+		{"last-", 5, nil, true},
+		{"n1", 5, nil, true},
+		{"odd,,1", 5, nil, true},
+		{"1-a", 5, nil, true},
+		// Every named page lies in [1, pageCount], excluded or open.
+		{"6-", 5, nil, true},
+		{"-6", 5, nil, true},
+		{"!6", 5, nil, true},
+		{"!0", 5, nil, true},
+		{"!3-1", 5, nil, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.spec, func(t *testing.T) {
@@ -65,6 +110,14 @@ func TestParsePageRanges_EmptySelectionIsAnError(t *testing.T) {
 		{"even", 0},
 		{"odd", 0},
 		{"last", 0},
+		{"!1", 1},
+		{"!last", 1},
+		{"1-3,!1-3", 5},
+		{"!odd,!even", 5},
+		{"!1-", 5},
+		{"!-5", 5},
+		{"2,!2", 5},
+		{"!1", 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.spec, func(t *testing.T) {
@@ -91,6 +144,14 @@ func TestParsePageRanges_OutOfRangeNamesTheFirstEndpoint(t *testing.T) {
 		{"7-9,1", 5, "invalid page range: page 7 out of range [1, 5]"},
 		{"1-3,0", 5, "invalid page range: page 0 out of range [1, 5]"},
 		{"3-1", 5, "invalid page range: range 3-1 starts after it ends"},
+		{"6-", 5, "invalid page range: page 6 out of range [1, 5]"},
+		{"-6", 5, "invalid page range: page 6 out of range [1, 5]"},
+		{"0-", 5, "invalid page range: page 0 out of range [1, 5]"},
+		{"!6", 5, "invalid page range: page 6 out of range [1, 5]"},
+		{"!0-6", 5, "invalid page range: page 0 out of range [1, 5]"},
+		{"1,!9,7", 5, "invalid page range: page 9 out of range [1, 5]"},
+		{"!1", 1, `invalid page range: "!1" selects no pages in a 1-page document`},
+		{"1-3,!1-3", 5, `invalid page range: "1-3,!1-3" selects no pages in a 5-page document`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.spec, func(t *testing.T) {
@@ -122,12 +183,14 @@ func parsePageRangesAlloc(t *testing.T, spec string, pageCount int) (uint64, []i
 func TestParsePageRanges_RejectsAHugeRangeWithoutExpandingIt(t *testing.T) {
 	const maxBytes = 1 << 20
 
-	alloc, got, err := parsePageRangesAlloc(t, "1-10000000", 5)
-	if err == nil {
-		t.Fatalf("ParsePageRanges(\"1-10000000\", 5) = %v, want an out-of-range error", got)
-	}
-	if alloc > maxBytes {
-		t.Errorf("ParsePageRanges(\"1-10000000\", 5) allocated %d bytes, want under %d", alloc, maxBytes)
+	for _, spec := range []string{"1-10000000", "!1-10000000", "10000000-", "-10000000", "!10000000-"} {
+		alloc, got, err := parsePageRangesAlloc(t, spec, 5)
+		if err == nil {
+			t.Fatalf("ParsePageRanges(%q, 5) = %v, want an out-of-range error", spec, got)
+		}
+		if alloc > maxBytes {
+			t.Errorf("ParsePageRanges(%q, 5) allocated %d bytes, want under %d", spec, alloc, maxBytes)
+		}
 	}
 }
 
