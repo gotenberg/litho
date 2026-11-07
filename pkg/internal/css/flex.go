@@ -381,8 +381,8 @@ func expandGap(v []token, c *declCtx) ([]entry, bool) {
 // placeShorthand expands place-content, place-items or place-self (CSS
 // Box Alignment 3, 5.3, 6.3 and 6.4): the align value, then the justify
 // one, which defaults to the align one. justify is the justify longhand,
-// numProps for place-items and place-self, whose justify half applies to
-// no flex layout and is checked for its shape alone.
+// or numProps for a shorthand whose justify half is checked for its shape
+// alone.
 func placeShorthand(align, justify propID) shorthandDef {
 	ids := []propID{align}
 	if justify != numProps {
@@ -438,8 +438,8 @@ func flexShorthands() map[string]shorthandDef {
 		"flex-flow": flow, "-webkit-flex-flow": flow,
 		"gap": gap, "grid-gap": gap,
 		"place-content": placeShorthand(pAlignContent, pJustifyContent),
-		"place-items":   placeShorthand(pAlignItems, numProps),
-		"place-self":    placeShorthand(pAlignSelf, numProps),
+		"place-items":   placeShorthand(pAlignItems, pJustifyItems),
+		"place-self":    placeShorthand(pAlignSelf, pJustifySelf),
 	}
 }
 
@@ -456,6 +456,8 @@ func blockify(d Display) (Display, bool) {
 		return ListItem, true
 	case InlineFlex:
 		return Flex, true
+	case InlineGrid:
+		return Grid, true
 	case TableRowGroup, TableColumn, TableColumnGroup,
 		TableHeaderGroup, TableFooterGroup, TableRow, TableCell, TableCaption:
 		return Block, false

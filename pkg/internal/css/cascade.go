@@ -592,9 +592,10 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 		}
 	}
 	fixupDisplay(st, isRoot)
-	if !isRoot && isFlexContainer(parent.Display) {
-		// The children of a flex container are its flex items, blockified
-		// (CSS Flexbox 1, 4; CSS Display 3, 2.7).
+	if !isRoot && (isFlexContainer(parent.Display) || isGridContainer(parent.Display)) {
+		// The children of a flex or grid container are its items,
+		// blockified (CSS Flexbox 1, 4; CSS Grid 1, 6; CSS Display 3,
+		// 2.7).
 		st.Display, _ = blockify(st.Display)
 	}
 	return st

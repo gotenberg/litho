@@ -161,6 +161,11 @@ type box struct {
 	// nil for any other box; flexItem reports a flex item.
 	flex     *flexData
 	flexItem bool
+
+	// grid is the grid layout state of a grid container (CSS Grid 1),
+	// nil for any other box; gridItem reports a grid item.
+	grid     *gridData
+	gridItem bool
 }
 
 // markerBox is the outside marker of a list item (CSS 2.1, 12.5).
@@ -212,7 +217,7 @@ func (b *box) establishesBFC() bool {
 	return b.parent == nil || b.float != css.FloatNone || b.abs || (b.inline && b.kind == kindBlock) ||
 		b.st.Overflow != css.OverflowVisible || b.kind == kindReplaced || b.st.Display == css.FlowRoot ||
 		b.tpart == partWrapper || b.tpart == partCaption || b.tpart == partCell ||
-		b.flex != nil || b.flexItem
+		b.flex != nil || b.flexItem || b.grid != nil || b.gridItem
 }
 
 // layered reports whether the box paints in the positioned layers of its
@@ -224,7 +229,7 @@ func (b *box) layered() bool {
 	if b.parent == nil || b.tpart.internal() || b.kind == kindText || b.kind == kindInline || b.kind == kindBreak {
 		return false
 	}
-	return b.st.Position != css.Static || b.st.Opacity < 1 || b.transformed() || b.flexItem && !b.st.ZIndex.Auto
+	return b.st.Position != css.Static || b.st.Opacity < 1 || b.transformed() || b.isItem() && !b.st.ZIndex.Auto
 }
 
 // isStackingContext reports whether the box creates a stacking context: a
@@ -235,13 +240,13 @@ func (b *box) isStackingContext() bool {
 	if !b.layered() {
 		return false
 	}
-	return (b.st.Position != css.Static || b.flexItem) && !b.st.ZIndex.Auto || b.st.Position == css.Fixed || b.st.Opacity < 1 || b.transformed()
+	return (b.st.Position != css.Static || b.isItem()) && !b.st.ZIndex.Auto || b.st.Position == css.Fixed || b.st.Opacity < 1 || b.transformed()
 }
 
 // zLevel returns the stack level of a stacking context: its z-index, 0
 // for one that a positioned z-index does not create.
 func (b *box) zLevel() int {
-	if b.st.Position == css.Static && !b.flexItem || b.st.ZIndex.Auto {
+	if b.st.Position == css.Static && !b.isItem() || b.st.ZIndex.Auto {
 		return 0
 	}
 	return b.st.ZIndex.Level

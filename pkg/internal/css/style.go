@@ -32,6 +32,15 @@ const (
 	// FlexContent is the content keyword of flex-basis (CSS Flexbox 1,
 	// 7.3.3).
 	FlexContent
+	// MinContent, MaxContent and FitContent are the intrinsic sizing
+	// keywords min-content, max-content and fit-content of width, height
+	// and their minimums and maximums (CSS Sizing 3, 3.1 and 3.2), and
+	// Stretch the stretch keyword (CSS Sizing 4, 3.1), which fills the
+	// containing block less the box's margins.
+	MinContent
+	MaxContent
+	FitContent
+	Stretch
 )
 
 // Dimension is a computed length, percentage, number or keyword.
@@ -57,8 +66,9 @@ type Color struct {
 var Transparent = Color{}
 
 // Display is the display property (CSS 2.1, 9.2.4). flex and inline-flex
-// are laid out (CSS Flexbox 1, 3); grid and the other CSS 3 values compute
-// to Block until a later wave lays them out.
+// are laid out (CSS Flexbox 1, 3), grid and inline-grid too (CSS Grid 1,
+// 5.1); the other CSS 3 values compute to Block until a later wave lays
+// them out.
 type Display uint8
 
 // The display values.
@@ -91,6 +101,12 @@ const (
 	// children of a flex container are blockified (CSS Display 3, 2.7).
 	Flex
 	InlineFlex
+	// Grid is a block-level grid container and InlineGrid an
+	// inline-level one (CSS Grid 1, 5.1). Blockified, InlineGrid becomes
+	// Grid. The children of a grid container are blockified (CSS Display
+	// 3, 2.7).
+	Grid
+	InlineGrid
 )
 
 // Position is the position property (CSS 2.1, 9.3.1). Sticky computes to
@@ -1016,6 +1032,30 @@ type Style struct {
 	// instead (CSS Flexbox 1, 4.5).
 	MinWidthAuto, MinHeightAuto bool
 
+	// Grid layout (CSS Grid 1) and the box alignment of grid items (CSS
+	// Box Alignment 3). None is inherited.
+
+	// GridTemplateRows and GridTemplateColumns are the explicit grid's
+	// track lists (CSS Grid 1, 7.2); the zero value is none.
+	GridTemplateRows, GridTemplateColumns TrackList
+	// GridTemplateAreas names the explicit grid's areas (CSS Grid 1,
+	// 7.3), nil for none.
+	GridTemplateAreas *GridAreas
+	// GridAutoRows and GridAutoColumns size the implicit tracks, cycled
+	// (CSS Grid 1, 7.6); empty is a single auto track.
+	GridAutoRows, GridAutoColumns []TrackSize
+	// GridAutoFlow is the auto-placement algorithm's direction and
+	// packing (CSS Grid 1, 7.7).
+	GridAutoFlow GridAutoFlow
+	// GridRowStart, GridRowEnd, GridColumnStart and GridColumnEnd place a
+	// grid item (CSS Grid 1, 8.3); the zero value is auto.
+	GridRowStart, GridRowEnd, GridColumnStart, GridColumnEnd GridLine
+	// JustifyItems is the default JustifySelf of a grid container's items,
+	// and JustifySelf aligns a grid item in its area's inline axis (CSS
+	// Box Alignment 3, 6.1 and 6.2); legacy computes to BoxNormal, and
+	// JustifySelf alone takes BoxAuto. Flex layout ignores both.
+	JustifyItems, JustifySelf BoxAlign
+
 	// currentColor records the colour longhands whose computed value is
 	// the currentColor keyword (CSS Color 4, 4.4): the exported field
 	// holds it resolved, and an element that inherits it explicitly
@@ -1075,6 +1115,7 @@ func Initial() *Style {
 		Widows:              2,
 		FlexShrink:          1,
 		AlignSelf:           BoxAuto,
+		JustifySelf:         BoxAuto,
 		RowGap:              Dimension{Kind: Normal},
 		ColumnGap:           Dimension{Kind: Normal},
 		MinWidthAuto:        true,

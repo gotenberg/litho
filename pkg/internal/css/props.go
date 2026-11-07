@@ -137,6 +137,18 @@ const (
 	pMaskBorderOutset
 	pMaskBorderRepeat
 	pBgAttachment
+	pGridTemplateRows
+	pGridTemplateColumns
+	pGridTemplateAreas
+	pGridAutoRows
+	pGridAutoColumns
+	pGridAutoFlow
+	pGridRowStart
+	pGridRowEnd
+	pGridColumnStart
+	pGridColumnEnd
+	pJustifyItems
+	pJustifySelf
 	numProps
 )
 
@@ -317,36 +329,20 @@ var (
 	kwAuto      = map[string]DimKind{"auto": Auto}
 	kwNormal    = map[string]DimKind{"normal": Normal}
 	kwNoKw      = map[string]DimKind{}
-	// kwSizing are the intrinsic sizing keywords of CSS Sizing 3, 3.1,
-	// which compute to auto in this version.
-	kwSizing = map[string]DimKind{
-		"auto": Auto, "min-content": Auto, "max-content": Auto, "fit-content": Auto,
-		"-moz-fit-content": Auto, "-webkit-fit-content": Auto, "stretch": Auto,
-		"-webkit-fill-available": Auto, "-moz-available": Auto,
-	}
-	kwMinSizing = map[string]DimKind{
-		"auto": Points, "min-content": Points, "max-content": Points, "fit-content": Points,
-	}
-	kwMaxSizing = map[string]DimKind{
-		"none": None, "min-content": None, "max-content": None, "fit-content": None,
-	}
+	// kwSizing are auto and the sizing keywords of width and height (CSS
+	// Sizing 3, 3.1 and CSS Sizing 4, 3.1, with the prefixed spellings
+	// Chromium accepts), kwMinSizing those of min-width and min-height,
+	// kwMaxSizing those of max-width and max-height.
+	kwSizing = withSizing(map[string]DimKind{"auto": Auto})
+	// kwMinSizing maps auto to Points: [minSizeProp] parses auto itself.
+	kwMinSizing = withSizing(map[string]DimKind{"auto": Points})
+	kwMaxSizing = withSizing(map[string]DimKind{"none": None})
 )
 
-// sizeProp defines width or height: auto, a non-negative length or
-// percentage, or an intrinsic sizing keyword computed to auto with a
-// warning.
+// sizeProp defines width, height, max-width or max-height: the keywords
+// kws, or a non-negative length or percentage.
 func sizeProp(name string, f func(*Style) *Dimension, kws map[string]DimKind) propDef {
-	def := dimProp(name, false, f, allowPct|nonNeg, kws, false)
-	base := def.parse
-	def.parse = func(v []token, c *declCtx) (any, bool) {
-		if k, ok := keyword(v); ok && k != "auto" && k != "none" {
-			if _, known := kws[k]; known {
-				c.warn("unsupported-css-value", "%s: %s is not supported and computes to its initial value", name, k)
-			}
-		}
-		return base(v, c)
-	}
-	return def
+	return dimProp(name, false, f, allowPct|nonNeg, kws, false)
 }
 
 var displays = map[string]Display{
@@ -357,14 +353,14 @@ var displays = map[string]Display{
 	"table-cell": TableCell, "table-caption": TableCaption, "none": DisplayNone,
 	"run-in": Block, "flow-root": FlowRoot,
 	"flex": Flex, "inline-flex": InlineFlex, "-webkit-flex": Flex, "-ms-flexbox": Flex,
+	"grid": Grid, "inline-grid": InlineGrid, "-ms-grid": Grid, "-ms-inline-grid": InlineGrid,
 	"-webkit-inline-flex": InlineFlex, "-ms-inline-flexbox": InlineFlex,
 }
 
 // displays3 are the CSS Display 3 values laid out as Block or InlineBlock
 // in this version, with a warning.
 var displays3 = map[string]Display{
-	"grid": Block, "contents": Block,
-	"inline-grid": InlineBlock, "-webkit-box": Block, "-webkit-inline-box": InlineBlock,
+	"contents": Block, "-webkit-box": Block, "-webkit-inline-box": InlineBlock,
 	"ruby": Inline, "ruby-text": Inline, "ruby-base": Inline,
 }
 
@@ -436,12 +432,10 @@ func parseDisplay(v []token, c *declCtx) (any, bool) {
 		}
 		return Flex, true
 	case words["grid"]:
-		d := Block
 		if inline {
-			d = InlineBlock
+			return InlineGrid, true
 		}
-		c.warn("unsupported-css-value", "a two-keyword display is laid out as %s", displayName(d))
-		return laidAs{d}, true
+		return Grid, true
 	}
 	return nil, false
 }
@@ -851,6 +845,9 @@ func init() {
 	}
 	for i, def := range borderImageProps("mask-border", func(s *Style) *BorderImage { return &s.MaskBorder }, true) {
 		props[pMaskBorderSource+propID(i)] = def
+	}
+	for id, def := range gridProps() {
+		props[id] = def
 	}
 	longhandByName = map[string]propID{}
 	for i := range props {

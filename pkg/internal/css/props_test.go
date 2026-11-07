@@ -115,13 +115,13 @@ func TestProperties_Longhands(t *testing.T) {
 		{"display: inline flow-root", func(s *Style) bool { return s.Display == InlineBlock }},
 		{"display: flow-root", func(s *Style) bool { return s.Display == FlowRoot }},
 		{"display: block flow-root", func(s *Style) bool { return s.Display == FlowRoot }},
-		{"display: inline-grid", func(s *Style) bool { return s.Display == InlineBlock }},
+		{"display: inline-grid", func(s *Style) bool { return s.Display == InlineGrid }},
 		{"position: sticky", func(s *Style) bool { return s.Position == Relative }},
 		{"opacity: 150%", func(s *Style) bool { return s.Opacity == 1 }},
 		{"opacity: 0.25", func(s *Style) bool { return s.Opacity == 0.25 }},
 		{"width: 50%; height: 2em", func(s *Style) bool { return s.Width == pct(0.5) && s.Height == pts(30) }},
 		{"width: -1px", func(s *Style) bool { return s.Width.Kind == Auto }},
-		{"width: max-content", func(s *Style) bool { return s.Width.Kind == Auto }},
+		{"width: max-content", func(s *Style) bool { return s.Width.Kind == MaxContent }},
 		{"min-width: auto; max-height: none", func(s *Style) bool { return s.MinWidth == pts(0) && s.MaxHeight.Kind == None }},
 		{"max-width: 10vw", func(s *Style) bool { return near(s.MaxWidth.Value, 59.528) }},
 		{"line-height: normal", func(s *Style) bool { return s.LineHeight.Kind == Normal }},
@@ -235,14 +235,14 @@ func TestProperties_DisplayFixups(t *testing.T) {
 
 func TestProperties_UnknownWarnedOnce(t *testing.T) {
 	t.Parallel()
-	s := mustParse(t, `p { foo: 1; foo: 2; -webkit-foo: 1; cursor: pointer } div { foo: 3; display: grid; display: grid }`)
+	s := mustParse(t, `p { foo: 1; foo: 2; -webkit-foo: 1; cursor: pointer } div { foo: 3; display: contents; display: contents }`)
 	n := 0
 	for _, w := range s.Warnings() {
 		if w.Code == "unsupported-css-property" {
 			n++
 		}
 	}
-	if n != 1 || !hasWarning(s.Warnings(), "unsupported-css-value", "display: grid") {
+	if n != 1 || !hasWarning(s.Warnings(), "unsupported-css-value", "display: contents") {
 		t.Errorf("warnings = %v", s.Warnings())
 	}
 }

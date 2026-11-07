@@ -193,6 +193,9 @@ func initShorthands() {
 	for name, def := range flexShorthands() {
 		shorthands[name] = def
 	}
+	for name, def := range gridShorthands() {
+		shorthands[name] = def
+	}
 	delete(longhandByName, "word-break")
 }
 

@@ -148,7 +148,7 @@ func TestCompute_Cascade(t *testing.T) {
 func TestCompute_Deterministic(t *testing.T) {
 	t.Parallel()
 	doc := parseHTML(t, cascadeDoc)
-	css := cascadeCSS + `.box { background: conic-gradient(red, blue); display: grid; foo: bar; --x: 1px; width: var(--x) }`
+	css := cascadeCSS + `.box { background: conic-gradient(red, blue); display: contents; foo: bar; --x: 1px; width: var(--x) }`
 	r := NewResolver(a4, []Sheet{{Sheet: HTMLUserAgent(), Origin: UserAgent}, {Sheet: mustParse(t, css), Origin: Author}})
 	a, err := r.Compute(context.Background(), doc, ComputeOptions{Hints: HTMLHints})
 	if err != nil {
@@ -171,7 +171,7 @@ func TestCompute_Deterministic(t *testing.T) {
 	}
 	for _, want := range []struct{ code, part string }{
 		{"unsupported-css-value", "conic-gradient"},
-		{"unsupported-css-value", "display: grid"},
+		{"unsupported-css-value", "display: contents"},
 		{"unsupported-css-property", `"foo"`},
 	} {
 		if !hasWarning(a.Warnings(), want.code, want.part) {

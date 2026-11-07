@@ -48,6 +48,10 @@ func (e *engine) generate(root *Node) *box {
 		e.genFlex(rb, root.Children, cctx)
 		return rb
 	}
+	if isGrid(st.Display) {
+		e.genGrid(rb, root.Children, cctx)
+		return rb
+	}
 	e.genChildren(rb, root.Children, cctx)
 	return rb
 }
@@ -186,16 +190,20 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		return []*box{w}
 	case float == css.FloatNone && isTablePart(st.Display):
 		return []*box{e.genPart(n, st, ctx)}
-	case st.Display == css.Flex || st.Display == css.InlineFlex:
+	case st.Display == css.Flex || st.Display == css.InlineFlex || isGrid(st.Display):
 		b := e.newBox(n, st, kindBlock, ctx)
 		b.float = float
 		b.abs = isAbs(st)
-		b.inline = float == css.FloatNone && !b.abs && st.Display == css.InlineFlex
+		b.inline = float == css.FloatNone && !b.abs && (st.Display == css.InlineFlex || st.Display == css.InlineGrid)
 		cctx := e.enter(n, b, ctx)
 		if float != css.FloatNone || b.abs || b.inline {
 			cctx.decos = ownDecos(b.st)
 		}
-		e.genFlex(b, n.Children, cctx)
+		if isGrid(st.Display) {
+			e.genGrid(b, n.Children, cctx)
+		} else {
+			e.genFlex(b, n.Children, cctx)
+		}
 		return []*box{b}
 	case float == css.FloatNone && st.Display == css.InlineBlock:
 		b := e.newBox(n, st, kindBlock, ctx)
@@ -285,7 +293,7 @@ func isAbs(st *css.Style) bool {
 
 // isInlineLevel reports whether a display value is inline-level.
 func isInlineLevel(d css.Display) bool {
-	return d == css.Inline || d == css.InlineBlock || d == css.InlineTable || d == css.InlineListItem || d == css.InlineFlex
+	return d == css.Inline || d == css.InlineBlock || d == css.InlineTable || d == css.InlineListItem || d == css.InlineFlex || d == css.InlineGrid
 }
 
 // isTablePart reports a display value of a caption or an internal table

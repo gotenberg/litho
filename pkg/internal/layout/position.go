@@ -157,11 +157,17 @@ func (e *engine) containerOf(b *box) absCB {
 		if a.kind == kindInline {
 			return inlineCB(a)
 		}
-		return absCB{
+		pad := absCB{
 			x: a.x + a.bd[css.Left], y: a.y + a.bd[css.Top],
 			w: a.w + a.pd[css.Left] + a.pd[css.Right], h: a.h + a.pd[css.Top] + a.pd[css.Bottom],
 			box: a,
 		}
+		if a.grid != nil && b.parent == a {
+			// A grid container's child takes its grid area (CSS Grid 1,
+			// 9.1).
+			return gridAbsCB(a, b, pad)
+		}
+		return pad
 	}
 	return absCB{w: e.pageW, h: e.pageH, page: fixed}
 }

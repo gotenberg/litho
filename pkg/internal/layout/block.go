@@ -239,6 +239,9 @@ func formatterFor(b *box) formatter {
 	if b.flex != nil {
 		return flexFormatter{}
 	}
+	if b.grid != nil {
+		return gridFormatter{}
+	}
 	return flowFormatter{}
 }
 
@@ -961,6 +964,12 @@ func (e *engine) layoutAtomic(a *box, cbw float64) {
 		if y, ok := flexBaseline(a, false); ok {
 			a.baseline, a.hasBaseline = y-a.y, true
 		}
+	} else if a.grid != nil {
+		// An inline grid container's baseline is its first one (CSS
+		// Grid 1, 10.7).
+		if y, ok := gridBaseline(a, false); ok {
+			a.baseline, a.hasBaseline = y-a.y, true
+		}
 	} else if a.st.Overflow == css.OverflowVisible {
 		if y, ok := lastBaseline(a); ok {
 			a.baseline, a.hasBaseline = y-a.y, true
@@ -973,6 +982,9 @@ func (e *engine) layoutAtomic(a *box, cbw float64) {
 func lastBaseline(b *box) (float64, bool) {
 	if b.flex != nil {
 		return flexBaseline(b, true)
+	}
+	if b.grid != nil {
+		return gridBaseline(b, true)
 	}
 	if len(b.lines) > 0 {
 		l := b.lines[len(b.lines)-1]
@@ -995,6 +1007,9 @@ func lastBaseline(b *box) (float64, bool) {
 func firstBaseline(b *box) (float64, bool) {
 	if b.flex != nil {
 		return flexBaseline(b, false)
+	}
+	if b.grid != nil {
+		return gridBaseline(b, false)
 	}
 	if len(b.lines) > 0 {
 		l := b.lines[0]

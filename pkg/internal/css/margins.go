@@ -86,7 +86,7 @@ var marginDefaultDecls = sync.OnceValue(func() *[NumMarginBoxes][2]Declaration {
 // items: s is a flex container, or a flex or grid container laid out as a
 // block in this version.
 func (s *Style) flexOrGridContainer() bool {
-	return s.flexOrGrid || s.Display == Flex || s.Display == InlineFlex
+	return s.flexOrGrid || isFlexContainer(s.Display) || isGridContainer(s.Display)
 }
 
 // laidAs is a flex or grid display value laid out as d.
