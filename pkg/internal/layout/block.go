@@ -945,6 +945,14 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 		// 2.1, 9.5.2: clear on a floating box adds rule 10 to 9.5.1).
 		minY = max(minY, bc.clearTo(f.st.Clear))
 	}
+	clampPage := -1
+	if f.st.PageClamp && e.paginating() && e.cols == nil {
+		// The float lies on its anchor's page whole, inside the page box
+		// (css.Style.PageClamp): no page cut runs through it.
+		clampPage = e.pageOf(max(minY, 0))
+		e.noPaginate++
+		defer func() { e.noPaginate-- }()
+	}
 	place := func(x, y float64) {
 		if f.kind == kindReplaced {
 			w, h := e.replacedSize(f, cb)
@@ -972,14 +980,25 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 			f.shift(x+f.m[css.Left]-f.x, dy)
 		}
 	}
+	if clampPage >= 0 {
+		e.clampToPage(f, clampPage)
+	}
 	if len(bc.floats) >= maxFloats {
 		e.warnOnce(codeTooManyFloats, fmt.Sprintf("more than %d floats in one formatting context: later ones do not push content aside", maxFloats), f.y)
 		return -1
 	}
-	bc.floats = append(bc.floats, floatRect{
+	r := floatRect{
 		side: f.float, x0: f.x - f.m[css.Left], y0: f.y - f.m[css.Top],
 		x1: f.x - f.m[css.Left] + f.marginW(), y1: f.y - f.m[css.Top] + f.marginH(),
-	})
+	}
+	if clampPage >= 0 {
+		// The text wraps around the part of the float over the page
+		// area, which ends no lower than the page's.
+		top := e.pageTop(clampPage)
+		r.y0 = max(f.y-f.m[css.Top], top)
+		r.y1 = max(min(f.y-f.m[css.Top]+f.marginH(), top+e.areaH(clampPage)), r.y0)
+	}
+	bc.floats = append(bc.floats, r)
 	return len(bc.floats) - 1
 }
 

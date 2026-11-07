@@ -1029,6 +1029,23 @@ type Style struct {
 	// page): it paints on that page alone, over its margins too. No CSS
 	// property sets it; it applies to Position Absolute alone.
 	PageAnchor bool
+	// AnchorPage is the page, counted from 1, whose page box a
+	// page-anchored box sits in, 0 for the page its static position falls
+	// on (ODF 1.3 Part 3, 19.758 text:anchor-page-number); see
+	// [Style.PageAnchor]. No CSS property sets it.
+	AnchorPage int
+	// PageClamp keeps a float, or an absolutely positioned box that is not
+	// page-anchored, on the page its anchor falls on, the float's place in
+	// the flow or the box's static position: laid out as any other, it
+	// moves whole onto that page's page box, down to its top edge when it starts above it, else up
+	// until its bottom edge meets the page box's, the top edge winning for
+	// a box taller than the page; it paints on that page alone, over the
+	// margins too, and adds no page; the text beside a float wraps around
+	// its part over the page area. Writer keeps an object anchored to a
+	// paragraph or a character inside its page so (ODF 1.3 Part 3, 20.267
+	// style:flow-with-text false, LibreOffice's default for ODF and
+	// WordprocessingML alike). No CSS property sets it.
+	PageClamp bool
 	// TextScale scales the glyphs of the text horizontally, 1 for the
 	// natural width, 0 for 1 (WordprocessingML w, ODF style:text-scale). No
 	// CSS property sets it; the engine writes it as compose.Text.HScale.

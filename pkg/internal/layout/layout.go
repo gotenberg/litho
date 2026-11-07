@@ -175,7 +175,8 @@ func (e *engine) pageCount(rb *box, d *ditem) int {
 // whole, as Chromium prints it: a tall positioned box with nothing to paint
 // still takes its pages. A fixed box is on every page already, and the boxes
 // a clipping or transformed box holds are left to the display list, which
-// knows where they paint. With clipped, a viewport that clips each page, a
+// knows where they paint. A page-anchored box takes its anchor page alone.
+// With clipped, a viewport that clips each page, a
 // box takes only the page its top is on.
 func (e *engine) positionedPages(rb *box, clipped bool) int {
 	n := 0
@@ -183,6 +184,13 @@ func (e *engine) positionedPages(rb *box, clipped bool) int {
 	walk = func(b *box) {
 		for _, k := range b.kids {
 			if k.fixed || k.transformed() {
+				continue
+			}
+			if k.pageAnchored && k.laidOut {
+				// A page-anchored box lies on its anchor page whole, its
+				// margins included: it takes that page and no other,
+				// whatever its height in flow coordinates.
+				n = max(n, k.anchorPage+1)
 				continue
 			}
 			if k.abs && k.laidOut {

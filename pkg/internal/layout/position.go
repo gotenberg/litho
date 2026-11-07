@@ -259,6 +259,24 @@ func (e *engine) layoutAbs(b *box) {
 			a = a.parent
 		}
 	}
+	if !cb.anchored && !cb.page {
+		// A box inside a box that lies on one page whole lies there too.
+		for a := b.parent; a != nil; a = a.parent {
+			if a.pageAnchored {
+				b.pageAnchored, b.anchorPage = true, a.anchorPage
+				e.noPaginate++
+				defer func() { e.noPaginate-- }()
+				break
+			}
+		}
+	}
+	if b.st.PageClamp && !b.pageAnchored && !cb.anchored && !cb.page && b.st.Position == css.Absolute {
+		// The box lies on its anchor's page whole: no page cut runs
+		// through it.
+		e.noPaginate++
+		defer func() { e.noPaginate-- }()
+		defer e.clampToPage(b, e.pageOf(b.sy))
+	}
 	if b.fixed {
 		// A fixed box sits on the page its static position falls on, then
 		// on every page (CSS 2.1, 9.6.1).
@@ -547,15 +565,35 @@ func absRoom(b *box, cb absCB) (float64, float64) {
 }
 
 // pageCB returns the containing block of the page-anchored box b: the
-// page box, margins included, of the page its static position falls on,
-// in flow coordinates, where the page area's top-left corner is the
-// flow's left edge at the page's top.
+// page box, margins included, of the page its css.Style.AnchorPage names,
+// else of the page its static position falls on, in flow coordinates,
+// where the page area's top-left corner is the flow's left edge at the
+// page's top. A page past the page cap is the last one the cap allows,
+// which the page count then refuses.
 func (e *engine) pageCB(b *box) absCB {
 	p := e.pageOf(b.sy)
+	if n := b.st.AnchorPage; n > 0 {
+		p = min(n, e.maxPages+1) - 1
+	}
 	pb := e.box(p)
 	return absCB{
 		x: -pb.Margin[css.Left], y: e.pageTop(p) - pb.Margin[css.Top],
 		w: pb.Width, h: pb.Height,
 		anchored: true, anchorPage: p,
 	}
+}
+
+// clampToPage moves the absolutely positioned box b, laid out, whole onto
+// the page box of page p (css.Style.PageClamp): down to its top edge when
+// b starts above it, else up until b's bottom edge meets its bottom edge,
+// the top edge winning; b then paints on page p alone.
+func (e *engine) clampToPage(b *box, p int) {
+	if e.err != nil {
+		return
+	}
+	pb := e.box(p)
+	top := e.pageTop(p) - pb.Margin[css.Top]
+	ny := max(min(b.y, top+pb.Height-b.borderH()), top)
+	b.shift(0, ny-b.y)
+	b.pageAnchored, b.anchorPage = true, p
 }

@@ -233,6 +233,8 @@ func (g *treeGen) office(st *css.Style) {
 	if g.next()%2 == 0 {
 		st.BoxDecorationBreak = css.DecorationCloneAll
 	}
+	st.AnchorPage = int(g.next() % 5)
+	st.PageClamp = g.next()%2 == 0
 }
 
 // node returns a node drawn from the bytes, at most maxDepth deep.
