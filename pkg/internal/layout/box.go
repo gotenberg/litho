@@ -166,6 +166,13 @@ type box struct {
 	// nil for any other box; gridItem reports a grid item.
 	grid     *gridData
 	gridItem bool
+
+	// orig is the computed style whose sizing keywords st resolves, nil
+	// when st is the computed style; minHContent and maxHContent report a
+	// min-height or max-height bound to the content height (CSS Sizing 3,
+	// 3.2).
+	orig                     *css.Style
+	minHContent, maxHContent bool
 }
 
 // markerBox is the outside marker of a list item (CSS 2.1, 12.5).

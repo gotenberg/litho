@@ -250,6 +250,10 @@ func (e *engine) layoutAbs(b *box) {
 	}
 	resolveEdges(b, cb.w)
 	ccb := cblock{x: cb.x, w: cb.w, h: cb.h, hDefinite: true}
+	if hasSizing(b.sizeSrc()) {
+		aw, ah := absRoom(b, cb)
+		e.resolveSizing(b, ccb, aw, ah)
+	}
 	var rw, rh float64
 	if b.kind == kindReplaced {
 		rw, rh = e.replacedSize(b, ccb)
@@ -495,4 +499,28 @@ func mul(a, b compose.Matrix) compose.Matrix {
 		E: a.A*b.E + a.C*b.F + a.E,
 		F: a.B*b.E + a.D*b.F + a.F,
 	}
+}
+
+// absRoom returns the width and height the stretch keyword fills for the
+// absolutely positioned box b in cb: the inset-modified containing block,
+// an auto inset standing at the static position (CSS Sizing 4, 3.1; CSS
+// Position 3, 4.1), less the box's margins, borders and padding.
+func absRoom(b *box, cb absCB) (float64, float64) {
+	st := b.sizeSrc()
+	l, lSet := insetOf(st.Left, cb.w)
+	r, rSet := insetOf(st.Right, cb.w)
+	if !lSet && !b.srtl {
+		l = b.sx - cb.x
+	}
+	if !rSet && b.srtl {
+		r = cb.x + cb.w - b.sx
+	}
+	t, tSet := insetOf(st.Top, cb.h)
+	bo, _ := insetOf(st.Bottom, cb.h)
+	if !tSet {
+		t = b.sy - cb.y
+	}
+	w := cb.w - l - r - hEdges(b) - nonAuto(b.m[css.Left], st.Margin[css.Left].Kind == css.Auto) - nonAuto(b.m[css.Right], st.Margin[css.Right].Kind == css.Auto)
+	h := cb.h - t - bo - vEdges(b) - nonAuto(b.m[css.Top], st.Margin[css.Top].Kind == css.Auto) - nonAuto(b.m[css.Bottom], st.Margin[css.Bottom].Kind == css.Auto)
+	return max(w, 0), max(h, 0)
 }

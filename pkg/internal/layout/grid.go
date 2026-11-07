@@ -476,6 +476,7 @@ func (l *gridLayout) itemWidth(it *gitem, aw float64) float64 {
 	e := l.e
 	k := it.b
 	resolveEdges(k, aw)
+	e.resolveSizing(k, cblock{w: aw}, -1, -1)
 	st := k.st
 	autoMargin := st.Margin[css.Left].Kind == css.Auto || st.Margin[css.Right].Kind == css.Auto
 	room := max(aw-hEdges(k)-nonAuto(k.m[css.Left], st.Margin[css.Left].Kind == css.Auto)-nonAuto(k.m[css.Right], st.Margin[css.Right].Kind == css.Auto), 0)
@@ -813,6 +814,8 @@ func (l *gridLayout) put(it *gitem, colPos []float64, rowTop, shift float64) flo
 	ax0 := l.tracks[colAxis][it.start[colAxis]].start
 	resolveEdges(k, aw)
 	acb := cblock{x: l.cb.x, w: aw, h: ah, hDefinite: true}
+	e.resolveSizing(k, acb, -1, -1)
+	st = k.st
 
 	// Inline axis: auto margins take the free space, else justify-self.
 	outerWd := w + hEdges(k) + k.m[css.Left] + k.m[css.Right]
@@ -852,7 +855,8 @@ func (l *gridLayout) put(it *gitem, colPos []float64, rowTop, shift float64) flo
 	vOut := vEdges(k) + k.m[css.Top] + k.m[css.Bottom]
 	sh, hSet := specHeight(k, st.Height, acb)
 	h := l.usedHeight(it, ah, true)
-	stretch := !hSet && st.Height.Kind != css.Points && !tAuto && !bAuto && stretches(a, k.kind == kindReplaced)
+	srcH := k.sizeSrc().Height.Kind
+	stretch := !hSet && srcH == css.Auto && !tAuto && !bAuto && stretches(a, k.kind == kindReplaced)
 	if bl, _ := l.baselineAligned(it); bl {
 		stretch = false
 	}

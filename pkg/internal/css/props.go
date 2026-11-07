@@ -733,7 +733,7 @@ func init() {
 			"pre-line": PreLine, "break-spaces": BreakSpaces, "-moz-pre-wrap": PreWrap, "-o-pre-wrap": PreWrap,
 		})},
 		{pWordBreak, enumProp("word-break", true, func(s *Style) *WordBreak { return &s.WordBreak }, map[string]WordBreak{
-			"normal": WordBreakNormal, "break-all": BreakAll, "keep-all": KeepAll, "auto-phrase": WordBreakNormal,
+			"normal": WordBreakNormal, "break-all": BreakAll, "keep-all": KeepAll, "auto-phrase": KeepAll,
 		})},
 		{pOverflowWrap, enumProp("overflow-wrap", true, func(s *Style) *OverflowWrap { return &s.OverflowWrap }, map[string]OverflowWrap{
 			"normal": OverflowWrapNormal, "break-word": BreakWord, "anywhere": Anywhere,

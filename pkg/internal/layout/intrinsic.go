@@ -20,46 +20,51 @@ func edgesOf(b *box, cbw float64) (pd, bd, m [4]float64) {
 
 // intrinsic returns the min- and max-content widths of b's content box
 // (CSS Sizing 3, 5.1), memoized: a percentage width counts as auto, a
-// fixed one as itself, and min-width and max-width apply.
+// fixed one as itself, a sizing keyword as [keywordIntrinsic] says, and
+// min-width and max-width apply.
 func (e *engine) intrinsic(b *box) (float64, float64) {
 	if b.measured {
 		return b.minW, b.maxW
 	}
 	b.measured = true
+	src := b.sizeSrc()
 	var lo, hi float64
 	pd, bd, _ := edgesOf(b, 0)
 	edges := pd[css.Left] + pd[css.Right] + bd[css.Left] + bd[css.Right]
 	if b.kind == kindReplaced {
 		w := 0.0
-		if b.st.Width.Kind == css.Points {
-			w = max(clamp(b.st.Width.Value), 0)
-			if b.st.BoxSizing == css.BorderBox {
+		if src.Width.Kind == css.Points {
+			w = max(clamp(src.Width.Value), 0)
+			if src.BoxSizing == css.BorderBox {
 				w = max(w-edges, 0)
 			}
 		} else if b.picture != nil {
-			w, _ = e.replacedSize(&box{st: autoWidth(b.st), picture: b.picture, kind: kindReplaced}, cblock{})
+			w, _ = e.replacedSize(&box{st: autoWidth(src), picture: b.picture, kind: kindReplaced}, cblock{})
 		}
 		lo, hi = w, w
 	} else {
 		lo, hi = formatterFor(b).intrinsic(e, b)
-		if b.st.Width.Kind == css.Points {
-			w := max(clamp(b.st.Width.Value), 0)
-			if b.st.BoxSizing == css.BorderBox {
+		if hasSizing(src) {
+			lo, hi = keywordIntrinsic(src, lo, hi, lo, hi)
+		}
+		if src.Width.Kind == css.Points {
+			w := max(clamp(src.Width.Value), 0)
+			if src.BoxSizing == css.BorderBox {
 				w = max(w-edges, 0)
 			}
 			lo, hi = w, w
 		}
 	}
-	if b.st.MaxWidth.Kind == css.Points {
-		mx := clamp(b.st.MaxWidth.Value)
-		if b.st.BoxSizing == css.BorderBox {
+	if src.MaxWidth.Kind == css.Points {
+		mx := clamp(src.MaxWidth.Value)
+		if src.BoxSizing == css.BorderBox {
 			mx -= edges
 		}
 		lo, hi = min(lo, max(mx, 0)), min(hi, max(mx, 0))
 	}
-	if b.st.MinWidth.Kind == css.Points {
-		mn := clamp(b.st.MinWidth.Value)
-		if b.st.BoxSizing == css.BorderBox {
+	if src.MinWidth.Kind == css.Points {
+		mn := clamp(src.MinWidth.Value)
+		if src.BoxSizing == css.BorderBox {
 			mn -= edges
 		}
 		lo, hi = max(lo, mn), max(hi, mn)

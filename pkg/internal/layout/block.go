@@ -470,6 +470,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	}
 	b.laidOut = true
 	resolveEdges(b, cb.w)
+	e.resolveSizing(b, cb, -1, -1)
 	if mc.absorb {
 		b.m[css.Top] = 0
 	}
@@ -592,10 +593,11 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		inner.commit(contentBottom)
 	}
 	h := contentBottom - b.contentY()
+	content := h
 	if hSet {
 		h = specH
 	}
-	b.h = constrainHeight(b, max(h, 0), cb)
+	b.h = contentHeightBounds(b, constrainHeight(b, max(h, 0), cb), max(content, 0))
 	e.placeMarker(b)
 	bottom := b.y + b.borderH()
 	if collapseBottom && math.Abs(b.h-h) < eps {
@@ -627,6 +629,7 @@ func (e *engine) layoutBFCRoot(b *box, cb cblock, bc *bfc, top float64) {
 	l, r := bc.band(top, 0, left, right)
 	for pass := range maxFitPasses {
 		resolveEdges(b, cb.w)
+		e.resolveSizing(b, cblock{w: r - l, h: cb.h, hDefinite: cb.hDefinite}, -1, -1)
 		if b.kind == kindReplaced {
 			w, h := e.replacedSize(b, cb)
 			blockWidths(b, r-l, rtl, w, true)
@@ -686,10 +689,11 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	mc.commit(end)
 	end = max(end, own.bottom(), b.contentY())
 	h := end - b.contentY()
+	content := h
 	if hSet {
 		h = specH
 	}
-	b.h = constrainHeight(b, h, cb)
+	b.h = contentHeightBounds(b, constrainHeight(b, h, cb), content)
 	e.placeMarker(b)
 	e.reach(b.y + b.borderH())
 }
@@ -884,6 +888,7 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 	}
 	f.laidOut = true
 	resolveEdges(f, cb.w)
+	e.resolveSizing(f, cb, -1, -1)
 	if f.st.Clear != css.ClearNone {
 		// A float's top outer edge goes below the floats it clears (CSS
 		// 2.1, 9.5.2: clear on a floating box adds rule 10 to 9.5.1).
@@ -934,6 +939,7 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 func (e *engine) layoutAtomic(a *box, cbw float64) {
 	a.laidOut = true
 	resolveEdges(a, cbw)
+	e.resolveSizing(a, cblock{w: cbw}, -1, -1)
 	cb := cblock{w: cbw}
 	if a.kind == kindReplaced {
 		a.w, a.h = e.replacedSize(a, cb)

@@ -347,6 +347,7 @@ func (e *engine) layoutFlex(b *box, cb cblock, top float64) float64 {
 		}
 		k.laidOut = true
 		resolveEdges(k, cb.w)
+		e.resolveSizing(k, pcb, -1, -1)
 		st := k.st
 		it := &fitem{b: k, grow: st.FlexGrow, shrink: st.FlexShrink, align: usedAlign(st, b.st)}
 		it.mm = [2]float64{k.m[ms], k.m[me]}
