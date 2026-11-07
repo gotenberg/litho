@@ -16,6 +16,11 @@ type floatRect struct {
 // it (CSS 2.1, 9.4.1 and 9.5).
 type bfc struct {
 	floats []floatRect
+	// cols and mcol, in the column flow of a container whose columns
+	// differ in width, narrow the band of a column narrower than the flow
+	// at its end edge.
+	cols *colCtx
+	mcol *mcolData
 }
 
 // overlaps reports whether f overlaps the band [y, y+h), a zero-height
@@ -30,6 +35,16 @@ func (f floatRect) overlaps(y, h float64) bool {
 // band returns the left and right edges of the space beside the floats in
 // the band [y, y+h), within the containing block edges left and right.
 func (c *bfc) band(y, h, left, right float64) (float64, float64) {
+	if c.cols != nil && c.mcol != nil && len(c.cols.frags) > 0 {
+		f := c.cols.frags[min(c.cols.of(y+eps), len(c.cols.frags)-1)]
+		right = max(right-c.mcol.shrink(f.col), left)
+	}
+	return c.floatBand(y, h, left, right)
+}
+
+// floatBand returns the left and right edges of the space beside the
+// floats alone in the band [y, y+h), within left and right.
+func (c *bfc) floatBand(y, h, left, right float64) (float64, float64) {
 	l, r := left, right
 	for _, f := range c.floats {
 		if !f.overlaps(y, h) {
@@ -47,7 +62,7 @@ func (c *bfc) band(y, h, left, right float64) (float64, float64) {
 // narrowed reports whether a float narrows the band [y, y+h) within left
 // and right.
 func (c *bfc) narrowed(y, h, left, right float64) bool {
-	l, r := c.band(y, h, left, right)
+	l, r := c.floatBand(y, h, left, right)
 	return l > left+eps || r < right-eps
 }
 

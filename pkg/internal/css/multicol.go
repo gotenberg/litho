@@ -38,6 +38,11 @@ type Columns struct {
 	// scroller records an overflow of scroll or auto, read through
 	// [Style.ScrollContainer].
 	scroller bool
+	// Tracks, when not empty, gives each column of a row its own width and
+	// the gap after it, as the Office formats lay columns of different
+	// widths out (see [ColumnTrack]); no CSS property sets it. The column
+	// count is then len(Tracks), Count and Width aside.
+	Tracks []ColumnTrack
 }
 
 // scrollOverflow is a specified overflow of scroll or auto, which
@@ -89,7 +94,7 @@ const InsideAvoidColumn = InsideAvoidPage + 1
 // container: a column-count or a column-width other than auto (CSS
 // Multicol 1, 2).
 func (c *Columns) Multicol() bool {
-	return c.Count > 0 || c.Width.Kind == Points
+	return c.Count > 0 || c.Width.Kind == Points || len(c.Tracks) > 0
 }
 
 // columnFills are the column-fill keywords.

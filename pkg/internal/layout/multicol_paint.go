@@ -308,10 +308,7 @@ func (p *painter) columnRules(b *box) {
 		}
 		for _, r := range s.rows {
 			for j := 0; j+1 < r.cols; j++ {
-				mid := d.columnX(j) + d.w + d.gap/2
-				if d.rtl {
-					mid = d.columnX(j) - d.gap/2
-				}
+				mid := d.ruleX(j)
 				rect := compose.Rect{X: b.contentX() + mid - w/2 + p.dx, Y: b.y + r.top + p.dy, Width: w, Height: r.used}
 				if rect.Height <= 0 {
 					continue
@@ -320,6 +317,23 @@ func (p *painter) columnRules(b *box) {
 			}
 		}
 	}
+}
+
+// ruleX returns the offset from the first column's left edge of the
+// middle of the gap after column j of a row.
+func (d *mcolData) ruleX(j int) float64 {
+	if d.xs != nil {
+		x, w := d.track(j)
+		gap := d.gapAfter(j)
+		if d.rtl {
+			return d.span - x - w - gap/2
+		}
+		return x + w + gap/2
+	}
+	if d.rtl {
+		return d.columnX(j) - d.gap/2
+	}
+	return d.columnX(j) + d.w + d.gap/2
 }
 
 // moveItem returns a copy of the display item it with its extents, and

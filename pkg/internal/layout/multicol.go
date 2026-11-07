@@ -84,6 +84,12 @@ type mcolData struct {
 	// across from its right edge.
 	span float64
 	rtl  bool
+	// xs and ws are the offset from the content box's start edge and the
+	// width of each column of a row whose columns differ in width
+	// ([css.Columns.Tracks]), nil when they are alike; w is then the
+	// widest, the width the column flow is laid out at, and gaps the gap
+	// after each column.
+	xs, ws, gaps []float64
 	// sets are the column sets and spanners in order.
 	sets []*colSet
 }
@@ -378,7 +384,10 @@ func (multicolFormatter) intrinsic(e *engine, b *box) (float64, float64) {
 		hi = max(hi, lo)
 	}
 	n := 1
-	if c.Count > 0 {
+	switch {
+	case len(c.Tracks) > 0:
+		n = min(len(c.Tracks), maxColumns)
+	case c.Count > 0:
 		n = min(c.Count, maxColumns)
 	}
 	g := 0.0
@@ -397,8 +406,17 @@ func (multicolFormatter) intrinsic(e *engine, b *box) (float64, float64) {
 // to 6). The content of b's content box starts at cursor.
 func (multicolFormatter) layout(e *engine, b *box, cb cblock, bc *bfc, cursor float64, mc *marginState) float64 {
 	g := e.columnGap(b, cb.w)
-	n, w := columnLayout(&b.st.Columns, cb.w, g)
+	cols := b.st.Columns
+	if len(cols.Tracks) > 0 {
+		// Tracks that do not resolve lay out as as many equal columns.
+		cols.Count, cols.Width = min(len(cols.Tracks), maxColumns), css.Dimension{Kind: css.Auto}
+	}
+	n, w := columnLayout(&cols, cb.w, g)
 	d := &mcolData{n: n, w: w, gap: g, span: cb.w, rtl: b.st.Direction == css.RTL}
+	if xs, ws, gaps := columnTracks(b.st.Columns.Tracks, cb.w); xs != nil {
+		d.n, d.w, d.xs, d.ws, d.gaps = len(xs), slices.Max(ws), xs, ws, gaps
+		w = d.w
+	}
 	b.mc = d
 	limit := math.Inf(1)
 	if cb.hDefinite {
@@ -624,6 +642,9 @@ func (e *engine) layoutColumns(b *box, s *colSet, cb cblock, ctx *colCtx) float6
 	defer func() { e.cols, e.noPaginate = saved, savedN }()
 	ctx.of(ctx.start)
 	own := &bfc{}
+	if b.mc.xs != nil {
+		own.cols, own.mcol = ctx, b.mc
+	}
 	mc := &marginState{kept: true}
 	var end float64
 	if b.inlineKids {
@@ -809,11 +830,85 @@ func (c *colCtx) finish(b *box, s *colSet, cons []float64, balanced bool) float6
 // column's left edge: columns run left to right, right to left in an rtl
 // container (CSS Multicol 1, 2).
 func (d *mcolData) columnX(col int) float64 {
+	if d.xs != nil {
+		x, w := d.track(col)
+		if d.rtl {
+			return d.span - x - w
+		}
+		return x
+	}
 	step := float64(col) * (d.w + d.gap)
 	if d.rtl {
 		return d.span - d.w - step
 	}
 	return step
+}
+
+// track returns the offset from the start edge and the width of column
+// col of a row of columns of different widths; an overflow column past
+// the last repeats the last one's width and gap.
+func (d *mcolData) track(col int) (float64, float64) {
+	n := len(d.xs)
+	if col < n {
+		return d.xs[max(col, 0)], d.ws[max(col, 0)]
+	}
+	return d.xs[n-1] + float64(col-n+1)*(d.ws[n-1]+d.gapAfter(n-1)), d.ws[n-1]
+}
+
+// gapAfter returns the gap after column col of a row of columns of
+// different widths: the last column and the overflow columns past it take
+// the gap before the last one.
+func (d *mcolData) gapAfter(col int) float64 {
+	n := len(d.gaps)
+	switch {
+	case col >= 0 && col < n-1:
+		return d.gaps[col]
+	case n > 1:
+		return d.gaps[n-2]
+	}
+	return 0
+}
+
+// shrink returns how much narrower column col is than the column flow.
+func (d *mcolData) shrink(col int) float64 {
+	if d.xs == nil {
+		return 0
+	}
+	_, w := d.track(col)
+	return max(d.w-w, 0)
+}
+
+// columnTracks resolves the columns of different widths of tracks in a
+// content box u wide: each column's offset from the start edge, its width
+// and the gap after it (see [css.ColumnTrack]). It returns nil for no
+// tracks, or tracks with a width not greater than 0, a gap below 0, or a
+// length that is not finite, which lay out as equal columns.
+func columnTracks(tracks []css.ColumnTrack, u float64) (xs, ws, gaps []float64) {
+	if len(tracks) == 0 {
+		return nil, nil, nil
+	}
+	tracks = tracks[:min(len(tracks), maxColumns)]
+	sum, gapSum := 0.0, 0.0
+	for i, t := range tracks {
+		if math.IsNaN(t.Width) || math.IsInf(t.Width, 0) || t.Width <= 0 || math.IsNaN(t.Gap) || math.IsInf(t.Gap, 0) || t.Gap < 0 {
+			return nil, nil, nil
+		}
+		sum += t.Width
+		if i+1 < len(tracks) {
+			gapSum += t.Gap
+		}
+	}
+	room := max(u-gapSum, 0)
+	xs, ws, gaps = make([]float64, len(tracks)), make([]float64, len(tracks)), make([]float64, len(tracks))
+	x := 0.0
+	for i, t := range tracks {
+		xs[i], ws[i] = x, room*t.Width/sum
+		if i+1 < len(tracks) {
+			gaps[i] = t.Gap
+		}
+		x += ws[i] + gaps[i]
+	}
+	return xs, ws, gaps
 }
 
 // shiftOf returns how far column i of s moves its slice of the column

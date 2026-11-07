@@ -2,7 +2,8 @@ package css
 
 // The fields of [Style] that no CSS property sets, which the Office
 // converters fill from their document models and the layout engine
-// honours: [Style.TabStops], [Style.MinLineHeight] and [Style.TextScale].
+// honours: [Style.TabStops], [Style.MinLineHeight], [Style.TextScale] and
+// [Columns.Tracks].
 
 // TabStop is one tab stop of a block container (ECMA-376 Part 1,
 // 17.3.1.37; ODF 1.3 Part 3, 17.8): a tab character in a line of the
@@ -119,3 +120,31 @@ const (
 // the top edges after it. [DecorationClone] clones at column breaks alone,
 // as Chromium prints. No CSS value sets it.
 const DecorationCloneAll = DecorationClone + 1
+
+// ColumnTrack is one column of a row of columns of different widths, as
+// WordprocessingML lists them (ECMA-376 Part 1, 17.6.4 cols with
+// w:equalWidth="0", each 17.6.3 col giving w:w and w:space) and ODF
+// gives them (ODF 1.3 Part 3, 17.13 style:columns, each style:column with
+// style:rel-width, fo:start-indent and fo:end-indent).
+//
+// The columns of a container whose [Columns.Tracks] is not empty sit side
+// by side, the first at the start edge of its content box: each Gap after
+// its column but the last's, and the content width less those gaps shared
+// out between the columns in proportion to their Width. Column rules sit
+// in the middle of the gaps. Content flowing from one column into a
+// narrower or wider one breaks its lines at that column's width; a block
+// keeps the width of the widest column, so its background and borders do.
+//
+// A WordprocessingML col maps to Width w:w and Gap w:space, in points
+// both. An ODF style:column of rel-width r with indents s and e on a
+// content width W maps to Width r/R*W - s - e, R the sum of the
+// rel-widths, and Gap e plus the next column's s; the first column's s and
+// the last one's e are the container's padding.
+type ColumnTrack struct {
+	// Width is the column's share of the room the gaps leave, finite and
+	// greater than 0; the shares are relative to their sum.
+	Width float64
+	// Gap is the room after the column in points, finite and at least 0;
+	// the last column's is ignored.
+	Gap float64
+}
