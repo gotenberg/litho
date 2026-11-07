@@ -25,6 +25,7 @@ func TestParse_Records(t *testing.T) {
 		{"quotes", "\"a,b\",\"say \"\"hi\"\"\",c\"d\n", []record{{"a,b", `say "hi"`, `c"d`}}},
 		{"line ends", "a\r\nb\rc\nd", []record{{"a"}, {"b"}, {"c"}, {"d"}}},
 		{"quoted newline", "\"x\ny\",z\n", []record{{"x\ny", "z"}}},
+		{"quoted CR", "\"a\r\rb\",\"c\r\nd\"\r\n", []record{{"a\n\nb", "c\nd"}}},
 		{"ragged", "a,b,c\n1\n,,\n", []record{{"a", "b", "c"}, {"1"}, {"", "", ""}}},
 		{"empty line", "a\n\nb\n", []record{{"a"}, {""}, {"b"}}},
 		{"spaces kept", " a , b \n", []record{{" a ", " b "}}},

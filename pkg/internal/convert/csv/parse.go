@@ -127,6 +127,16 @@ func parse(ctx context.Context, text string) ([]record, limits, error) {
 					i++
 					continue
 				}
+				if text[i] == '\r' {
+					// A line end inside quotes is a line feed of the field,
+					// CRLF or CR alike.
+					addRune('\n')
+					i++
+					if i < n && text[i] == '\n' {
+						i++
+					}
+					continue
+				}
 				r, size := utf8.DecodeRuneInString(text[i:])
 				addRune(r)
 				i += size
