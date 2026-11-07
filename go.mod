@@ -9,6 +9,7 @@ require (
 	github.com/dop251/goja v0.0.0-20261124141918-d9d211bc2d23
 	github.com/go-text/typesetting v0.3.5
 	github.com/gomarkdown/markdown v0.0.0-20261105214116-27ca101938a9
+	golang.org/x/crypto v0.59.0
 	golang.org/x/image v0.23.0
 	golang.org/x/net v0.63.0
 	golang.org/x/text v0.44.0
@@ -19,4 +20,5 @@ require (
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/pprof v0.0.0-20261118010117-084b33a85f63 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 )
