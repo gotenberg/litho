@@ -38,6 +38,9 @@ func TestMulticol_Longhands(t *testing.T) {
 		{"break-after: avoid-column", func(s *Style) bool { return s.BreakAfter == BreakAvoidColumn }},
 		{"break-inside: avoid-column", func(s *Style) bool { return s.BreakInside == InsideAvoidColumn }},
 		{"break-before: region", func(s *Style) bool { return s.BreakBefore == BreakAuto }},
+		{"box-decoration-break: clone", func(s *Style) bool { return s.BoxDecorationBreak == DecorationClone }},
+		{"-webkit-box-decoration-break: clone", func(s *Style) bool { return s.BoxDecorationBreak == DecorationClone }},
+		{"box-decoration-break: slice", func(s *Style) bool { return s.BoxDecorationBreak == DecorationSlice }},
 	}
 	for _, tt := range tests {
 		if s := styleOf(t, tt.decls); !tt.check(s) {

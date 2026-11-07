@@ -601,6 +601,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		h = specH
 	}
 	b.h = contentHeightBounds(b, constrainHeight(b, max(h, 0), cb), max(content, 0))
+	e.cloneEdges(b, hSet)
 	e.placeMarker(b)
 	bottom := b.y + b.borderH()
 	if collapseBottom && math.Abs(b.h-h) < eps {
@@ -699,6 +700,7 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 		h = specH
 	}
 	b.h = contentHeightBounds(b, constrainHeight(b, h, cb), content)
+	e.cloneEdges(b, hSet)
 	e.placeMarker(b)
 	e.reach(b.y + b.borderH())
 }

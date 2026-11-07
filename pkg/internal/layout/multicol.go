@@ -1000,3 +1000,23 @@ func (e *engine) balanceBudget(y float64) bool {
 	e.warnOnce(codeRelayoutBudget, fmt.Sprintf("more than %d layouts to balance columns: later columns keep their unbalanced heights", maxBalanceLayouts), y)
 	return false
 }
+
+// cloneEdges grows the block b of a specified height, hSet, whose
+// box-decoration-break is clone, by its top and bottom borders and padding
+// at each column break it crosses: each fragment holds them whole (CSS
+// Fragmentation 3, 5.4). At page breaks the box stays sliced, as Chromium
+// prints it (WPT css-page, monolithic-overflow-031-print).
+func (e *engine) cloneEdges(b *box, hSet bool) {
+	if !hSet || b.st.BoxDecorationBreak != css.DecorationClone || !e.paginating() || e.cols == nil {
+		return
+	}
+	base, edges := b.h, vEdges(b)
+	for range maxFitPasses {
+		k := e.pageOf(b.y+b.borderH()-eps) - e.pageOf(b.y)
+		want := base + float64(k)*edges
+		if k <= 0 || want <= b.h+eps {
+			return
+		}
+		b.h = want
+	}
+}

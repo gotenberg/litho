@@ -151,3 +151,21 @@ func TestMulticol_Anchors(t *testing.T) {
 		t.Errorf("anchor in the second column: got %+v, want x 3px, y 0", d)
 	}
 }
+
+func TestMulticol_CloneDecoration(t *testing.T) {
+	t.Parallel()
+	auto := func(s *css.Style) { s.Columns.Fill = css.FillAuto }
+	clone := func(s *css.Style) {
+		s.BoxDecorationBreak = css.DecorationClone
+		s.Border[css.Top] = css.Border{Width: px(1), Style: css.Solid, Color: red}
+		s.Border[css.Bottom] = css.Border{Width: px(1), Style: css.Solid, Color: red}
+	}
+	// Each column's fragment holds the box's top and bottom borders: the
+	// box grows by them at the break.
+	res := run(t, doc(el(sty(cols(2, 1), height(3), auto), el(sty(height(2), bg(blue), clone)))), page(5, 4))
+	assertPixels(t, res, 1, `
+		RR_RR
+		BB_BB
+		RR_RR
+		_____`)
+}

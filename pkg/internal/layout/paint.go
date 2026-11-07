@@ -47,8 +47,10 @@ type frame struct {
 	open      []openClip
 	root      *box
 	// columns reports the frame of a column set of root, a multi-column
-	// container: root's own clip applies outside, to the columns.
+	// container: root's own clip applies outside, to the columns. set is
+	// that column set.
 	columns bool
+	set     *colSet
 }
 
 // pendingLink is a link region in flow coordinates.
@@ -512,12 +514,13 @@ func (p *painter) decorations(b *box) {
 	if b.hidden || b.kind == kindInline || b.kind == kindText {
 		return
 	}
-	r := p.borderRect(b)
-	radii := radiiOf(b, r.Width, r.Height)
-	p.shadows(b, b.st, r, radii, b.bd, false)
-	p.background(b, b.st, r, radii, b.bd, b.pd)
-	p.shadows(b, b.st, r, radii, b.bd, true)
-	p.border(b, b.st, r, radii, b.bd, [4]bool{true, true, true, true})
+	for _, r := range p.fragments(b) {
+		radii := radiiOf(b, r.Width, r.Height)
+		p.shadows(b, b.st, r, radii, b.bd, false)
+		p.background(b, b.st, r, radii, b.bd, b.pd)
+		p.shadows(b, b.st, r, radii, b.bd, true)
+		p.border(b, b.st, r, radii, b.bd, [4]bool{true, true, true, true})
+	}
 }
 
 // borders paints the shadows and borders of b, whose background paints

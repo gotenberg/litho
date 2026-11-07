@@ -42,7 +42,7 @@ func (p *painter) multicol(b *box) {
 		}
 		g := &ditem{group: true, opacity: 1}
 		nl := len(p.links)
-		p.frames = append(p.frames, &frame{container: g, root: b, columns: true})
+		p.frames = append(p.frames, &frame{container: g, root: b, columns: true, set: s})
 		kids := b.kids
 		b.kids = s.kids
 		outer := p.setBody(b)
@@ -342,4 +342,44 @@ func moveItem(it *ditem, dy float64, depth int) *ditem {
 		cp.kids[i] = moveItem(k, dy, depth+1)
 	}
 	return &cp
+}
+
+// fragments returns the border boxes b paints its background and borders
+// in: its own, sliced at the breaks, or with box-decoration-break: clone
+// one per column of the column set being painted it crosses, each with
+// all its edges (CSS Fragmentation 3, 5.4); pages slice it, as Chromium
+// prints it.
+func (p *painter) fragments(b *box) []compose.Rect {
+	r := p.borderRect(b)
+	if b.st.BoxDecorationBreak != css.DecorationClone || b.parent == nil {
+		return []compose.Rect{r}
+	}
+	var top func(i int) (float64, float64)
+	var at func(y float64) int
+	for i := len(p.frames) - 1; i >= 0; i-- {
+		f := p.frames[i]
+		if !f.columns || f.set == nil || len(f.set.frags) == 0 {
+			continue
+		}
+		c, s := f.root, f.set
+		at = func(y float64) int { return s.fragOf(c, y) }
+		top = func(i int) (float64, float64) { return s.band(c, i) }
+		break
+	}
+	if at == nil {
+		return []compose.Rect{r}
+	}
+	i0, i1 := at(r.Y-p.dy+eps), at(r.Y+r.Height-p.dy-eps)
+	if i1 <= i0 || i1-i0 > maxColumns {
+		return []compose.Rect{r}
+	}
+	out := make([]compose.Rect, 0, i1-i0+1)
+	for i := i0; i <= i1; i++ {
+		y0, y1 := top(i)
+		y0, y1 = max(y0+p.dy, r.Y), min(y1+p.dy, r.Y+r.Height)
+		if y1 > y0 {
+			out = append(out, compose.Rect{X: r.X, Y: y0, Width: r.Width, Height: y1 - y0})
+		}
+	}
+	return out
 }

@@ -175,6 +175,7 @@ const (
 	pColumnFill
 	pColumnHeight
 	pColumnWrap
+	pBoxDecorationBreak
 	numProps
 )
 
@@ -912,8 +913,9 @@ func init() {
 		"inline-size": pWidth, "block-size": pHeight,
 		"min-inline-size": pMinWidth, "min-block-size": pMinHeight,
 		"max-inline-size": pMaxWidth, "max-block-size": pMaxHeight,
-		"page-break-inside":       pBreakInside,
-		"-webkit-background-clip": pBgClip,
+		"page-break-inside":            pBreakInside,
+		"-webkit-background-clip":      pBgClip,
+		"-webkit-box-decoration-break": pBoxDecorationBreak,
 	} {
 		longhandByName[alias] = id
 	}

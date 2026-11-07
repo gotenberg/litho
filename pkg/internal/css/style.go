@@ -1076,6 +1076,9 @@ type Style struct {
 	RowGap, ColumnGap Dimension
 	// Columns is the multi-column style (CSS Multicol 1, multicol.go).
 	Columns Columns
+	// BoxDecorationBreak says whether a box broken across fragmentainers
+	// is sliced or cloned at the breaks (CSS Fragmentation 3, 5.4).
+	BoxDecorationBreak BoxDecorationBreak
 	// MinWidthAuto and MinHeightAuto report a min-width or min-height of
 	// auto, the initial value (CSS Sizing 3, 4.4): MinWidth or MinHeight
 	// then holds Pts(0), its used value on a box that is not a flex item,

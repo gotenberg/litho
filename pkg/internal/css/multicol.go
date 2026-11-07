@@ -151,9 +151,26 @@ const (
 	wrapYes
 )
 
-// multicolProps returns the longhands of multi-column layout.
+// BoxDecorationBreak is the box-decoration-break property (CSS
+// Fragmentation 3, 5.4).
+type BoxDecorationBreak uint8
+
+// The box-decoration-break values.
+const (
+	// DecorationSlice paints a box broken across fragmentainers as one box
+	// sliced at the breaks, the initial value.
+	DecorationSlice BoxDecorationBreak = iota
+	// DecorationClone gives each fragment of the box its own borders,
+	// padding, radii, shadows and background.
+	DecorationClone
+)
+
+// multicolProps returns the longhands of multi-column layout, and
+// box-decoration-break, which fragmentation in columns and pages reads.
 func multicolProps() map[propID]propDef {
 	return map[propID]propDef{
+		pBoxDecorationBreak: enumProp("box-decoration-break", false, func(s *Style) *BoxDecorationBreak { return &s.BoxDecorationBreak },
+			map[string]BoxDecorationBreak{"slice": DecorationSlice, "clone": DecorationClone}),
 		pColumnCount: {
 			name: "column-count", parse: parseColumnCount,
 			compute: func(_ *styler, st *Style, v any) {
