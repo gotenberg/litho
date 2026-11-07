@@ -1,8 +1,11 @@
 package sheet
 
 import (
+	"bytes"
+	"context"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 )
 
@@ -51,5 +54,27 @@ func TestConvert_CellPlacement(t *testing.T) {
 		if !near(r.x, tt.x, 0.6) || !near(r.endX, tt.endX, 0.6) || !near(r.y, tt.y, 0.6) {
 			t.Errorf("%q at x %.2f..%.2f y %.2f, want %.2f..%.2f y %.2f\n%s", tt.text, r.x, r.endX, r.y, tt.x, tt.endX, tt.y, dump(pg))
 		}
+	}
+}
+
+// TestConvert_Deterministic locks that a document converts to the same
+// bytes twice, and that its structure is a Table of rows of cells.
+func TestConvert_Deterministic(t *testing.T) {
+	write := func() []byte {
+		sh := grid150(a4())
+		sh.Page.GridLines = true
+		sh.Merges = []Range{{FirstRow: 0, LastRow: 1, FirstColumn: 0, LastColumn: 1}}
+		out := convert(t, newDoc(sh), office.Options{})
+		var buf bytes.Buffer
+		if err := compose.Write(context.Background(), out, &buf, compose.Options{}); err != nil {
+			t.Fatalf("Write: %v", err)
+		}
+		if len(out.Structure.Kids) == 0 || out.Structure.Kids[0].Role != "Table" || out.Structure.Kids[0].Kids[0].Role != "TR" {
+			t.Errorf("structure %+v", out.Structure.Kids)
+		}
+		return buf.Bytes()
+	}
+	if !bytes.Equal(write(), write()) {
+		t.Error("two conversions differ")
 	}
 }
