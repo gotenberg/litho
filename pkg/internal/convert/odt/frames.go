@@ -395,6 +395,12 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 	if g.vpos == "from-top" || g.vpos == "" {
 		st.Margin[css.Top] = css.Pts(margins[css.Top] + max(g.y, 0))
 	}
+	if g.wrap != "none" {
+		if b.floats == nil {
+			b.floats = map[*layout.Node]frameGeom{}
+		}
+		b.floats[n] = g
+	}
 	if g.wrap == "none" {
 		st.Display = css.Block
 		st.Float = css.FloatNone
@@ -485,6 +491,78 @@ func (b *builder) currentGeom() *pageGeom {
 		mp = b.pages.defaultMaster()
 	}
 	return b.pages.geom(mp, false, false)
+}
+
+// hasText reports inline content that draws a character other than white
+// space, frames left out.
+func hasText(kids []*layout.Node) bool {
+	for _, k := range kids {
+		switch {
+		case k.Kind == layout.Text && strings.TrimSpace(k.Text) != "":
+			return true
+		case k.Kind == layout.Element && k.Style.Float == css.FloatNone && k.Style.Position == css.Static && hasText(k.Children):
+			return true
+		}
+	}
+	return false
+}
+
+// floatCount returns the floating frames among kids.
+func (b *builder) floatCount(kids []*layout.Node) int {
+	n := 0
+	for _, k := range kids {
+		if _, ok := b.floats[k]; ok {
+			n++
+		}
+	}
+	return n
+}
+
+// pinFloats places the floating frames among kids, the content of a
+// paragraph p without text that anchors several, at their offsets from
+// the paragraph's corner (ODF 1.3, Part 3, 20.290 and 20.386,
+// style:horizontal-pos and style:vertical-pos against the paragraph):
+// Writer puts each where its svg:x and svg:y say, beside or over its
+// neighbours, where floats would stack below one another. A lone frame
+// keeps floating: the text after it wraps around it as Writer wraps it.
+func (b *builder) pinFloats(kids []*layout.Node, p paraState) {
+	for _, k := range kids {
+		g, ok := b.floats[k]
+		if !ok {
+			continue
+		}
+		st := *k.Style
+		k.Style = &st
+		st.Float = css.FloatNone
+		st.Position = css.Absolute
+		if k.Kind != layout.Replaced {
+			st.Display = css.Block
+		}
+		for i := range st.Margin {
+			st.Margin[i] = css.Pts(0)
+		}
+		pg := b.currentGeom()
+		area := pg.box.Width - pg.box.Margin[css.Left] - pg.box.Margin[css.Right] - p.margin[css.Left] - p.margin[css.Right]
+		w := 0.0
+		if g.hasW {
+			w = g.w
+		}
+		x := g.x
+		switch g.hpos {
+		case "left", "inside":
+			x = 0
+		case "center":
+			x = (area - w) / 2
+		case "right", "outside":
+			x = area - w
+		}
+		y := g.y
+		if g.vpos == "top" {
+			y = 0
+		}
+		st.Left, st.Top = css.Pts(x), css.Pts(y)
+		st.Right, st.Bottom = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
+	}
 }
 
 // frameMargins returns the fo:margin of a graphic style, the room the

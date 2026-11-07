@@ -181,3 +181,24 @@ func TestFootnoteRule(t *testing.T) {
 		})
 	}
 }
+
+// TestConvert_PinnedFrames places two frames anchored to a paragraph
+// without text at their offsets from its corner, side by side, the next
+// paragraph right below the empty one, as LibreOffice prints them (the
+// pinned image: the frames' text at the same pixels at 72 dpi).
+func TestConvert_PinnedFrames(t *testing.T) {
+	auto := `<style:style style:name="fr" style:family="graphic"><style:graphic-properties style:wrap="parallel" style:vertical-pos="from-top" style:vertical-rel="paragraph" style:horizontal-pos="from-left" style:horizontal-rel="paragraph"/></style:style>`
+	body := `<text:p>Before</text:p><text:p><draw:frame draw:style-name="fr" text:anchor-type="paragraph" svg:x="1cm" svg:y="1cm" svg:width="2cm" svg:height="1cm"><draw:text-box><text:p>A</text:p></draw:text-box></draw:frame>` +
+		`<draw:frame draw:style-name="fr" text:anchor-type="paragraph" svg:x="4cm" svg:y="0.5cm" svg:width="2cm" svg:height="1cm"><draw:text-box><text:p>B</text:p></draw:text-box></draw:frame></text:p><text:p>After</text:p>`
+	res := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{})
+	got := map[string]run{}
+	for _, r := range runs(res.Pages[0]) {
+		got[r.text] = r
+	}
+	want := map[string][2]float64{"Before": {56.7, 67.6}, "After": {56.7, 95.2}, "A": {85.0, 109.8}, "B": {170.1, 95.6}}
+	for text, w := range want {
+		if r, ok := got[text]; !ok || !near(r.x, w[0], 1) || !near(r.y, w[1], 1) {
+			t.Errorf("%s at %+v, want %v", text, r, w)
+		}
+	}
+}

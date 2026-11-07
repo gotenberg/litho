@@ -31,6 +31,11 @@ type builder struct {
 	// weight and slant.
 	metricsCache map[string][2]float64
 
+	// floats holds the geometry of the frames [builder.place] floats
+	// beside their paragraph's text, which a paragraph without text
+	// places at their offsets instead.
+	floats map[*layout.Node]frameGeom
+
 	warnings []compose.Warning
 	warned   map[string]bool
 	headings []heading
@@ -324,6 +329,9 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 	ws := &wsState{space: true}
 	var kids []*layout.Node
 	b.inline(el, t, &kids, ws, ctx.depth)
+	if !hasText(kids) && b.floatCount(kids) > 1 {
+		b.pinFloats(kids, p)
+	}
 	if visible(kids) == 0 {
 		kids = append(kids, b.node(&layout.Node{Kind: layout.LineBreak, Style: st}))
 	} else if last := kids[len(kids)-1]; last.Kind == layout.LineBreak {
@@ -388,11 +396,16 @@ func (b *builder) outlineLevel(el *odf.Element, style string) int {
 	return 1
 }
 
-// visible counts the nodes of kids that draw something: everything but
-// the empty anchors bookmarks leave.
+// visible counts the nodes of kids that take room on the paragraph's
+// lines: everything but the empty anchors bookmarks leave and the
+// positioned and floating frames, beside which Writer keeps the
+// paragraph's empty line.
 func visible(kids []*layout.Node) int {
 	n := 0
 	for _, k := range kids {
+		if k.Style != nil && (k.Style.Position == css.Absolute || k.Style.Float != css.FloatNone) {
+			continue
+		}
 		if k.Kind != layout.Element || len(k.Children) > 0 || k.Footnote != nil || k.Style.Display != css.Inline {
 			n++
 		}
