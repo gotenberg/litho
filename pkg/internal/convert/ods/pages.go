@@ -212,7 +212,7 @@ const maxScaleTo = 1000
 
 // scale reads the print scale (ODF 1.3, Part 3, 20.354 style:scale-to,
 // 20.355 style:scale-to-pages, and style:scale-to-X and -Y): a
-// percentage, or a page count. A total page count reads as as many
+// percentage, or a page count. A total page count reads as that many
 // pages across and down, which fits a sheet of one page exactly.
 func (r *reader) scale(pg *sheet.PageSetup, pp odf.Props) {
 	count := func(key string) (int, bool) {

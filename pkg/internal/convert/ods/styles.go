@@ -239,9 +239,21 @@ func color(v string) (css.Color, bool) {
 // in css.Side order.
 var sideNames = [4]string{"top", "right", "bottom", "left"}
 
+// cellPadding is Calc's default cell margin, 20 twips on every side
+// (SvxMarginItem's default, the Default cell style's ATTR_MARGIN), which a
+// style without fo:padding keeps.
+//
+// # Corpus evidence
+//
+//   - litho: figures.ods prints its left-aligned text 1 point right of the
+//     column's edge, its right-aligned numbers 1 point left of the next
+//     column's, and its baselines 1 point above the descent from the
+//     row's bottom.
+const cellPadding = 1
+
 // borders reads fo:border, fo:padding and their sides (ODF 1.3, Part 3,
 // 20.183 and 20.230), with style:border-line-width for the double lines
-// (20.252).
+// (20.252); a side without padding keeps [cellPadding].
 func borders(cp odf.Props) ([4]sheet.Border, [4]float64) {
 	var bd [4]sheet.Border
 	var pad [4]float64
@@ -257,6 +269,7 @@ func borders(cp odf.Props) ([4]sheet.Border, [4]float64) {
 			w = allW
 		}
 		bd[i] = border(v, w)
+		pad[i] = cellPadding
 		if p, ok := odf.Length(cp.Get("fo:padding-" + side)); ok && p >= 0 {
 			pad[i] = p
 		} else if hasAllP && allP >= 0 {
@@ -406,7 +419,7 @@ func angle(v string) (float64, bool) {
 		d += 360
 	}
 	switch {
-	case d > 270:
+	case d >= 270:
 		d -= 360
 	case d > 90:
 		d -= 180

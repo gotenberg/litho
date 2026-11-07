@@ -239,6 +239,15 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 	pr := r.pageSetup(master)
 	sh.Page, sh.HeaderFooter, sh.HideZeros = pr.page, pr.hf, pr.hideZeros
 	ts := &tableState{sh: sh, colX: []float64{0}}
+	// The sheet's own shapes come first in drawing order, as they come
+	// first in the table (ODF 1.3, Part 3, 9.1.2).
+	for _, c := range el.All(odf.NSTable, "shapes") {
+		for _, s := range c.Children {
+			if !s.IsText() {
+				r.drawing(ts, s, nil)
+			}
+		}
+	}
 	r.columns(ts, el, false, false, 0)
 	r.rowsOf(ts, el, false, false, 0)
 	r.flushPending(ts, ts.row)
@@ -259,12 +268,6 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 	}
 	for _, c := range el.Children {
 		switch {
-		case c.Is(odf.NSTable, "shapes"):
-			for _, s := range c.Children {
-				if !s.IsText() {
-					r.drawing(ts, s, nil)
-				}
-			}
 		case c.Is(odf.NSTable, "named-expressions"):
 			if len(c.Children) > 0 {
 				r.warn("named-expressions", "named ranges and expressions are not read")
@@ -330,8 +333,10 @@ func (r *reader) column(ts *tableState, el *odf.Element, hidden, header bool) {
 		width = w
 	}
 	hidden = hidden || el.A(odf.NSTable, "visibility") == "collapse" || el.A(odf.NSTable, "visibility") == "filter"
-	col := sheet.Column{First: first, Last: first + n - 1, Width: width, Hidden: hidden,
-		Style: r.cellStyle(el.A(odf.NSTable, "default-cell-style-name"))}
+	col := sheet.Column{
+		First: first, Last: first + n - 1, Width: width, Hidden: hidden,
+		Style: r.cellStyle(el.A(odf.NSTable, "default-cell-style-name")),
+	}
 	if width > 0 || hidden || col.Style != nil {
 		ts.sh.Columns = append(ts.sh.Columns, col)
 	}
