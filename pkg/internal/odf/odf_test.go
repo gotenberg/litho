@@ -64,8 +64,9 @@ func TestOpen_Package(t *testing.T) {
 		t.Fatalf("manifest = %+v", p.Manifest)
 	}
 	e := p.Encryption("./Pictures/a.png")
-	if e == nil || e.IterationCount != 100000 || e.KeySize != 32 || e.StartKeySize != 32 || !bytes.Equal(e.IV, []byte{3, 4}) ||
-		!bytes.Equal(e.Salt, []byte{5, 6}) || !bytes.Equal(e.Checksum, []byte{0, 1, 2}) || e.ArgonMemory != 65536 || !strings.HasSuffix(e.AlgorithmName, "aes256-cbc") {
+	if e == nil || e.IterationCount != "100000" || e.KeySize != "32" || e.StartKeySize != "32" || e.InitialisationVector != "AwQ=" ||
+		e.Salt != "BQY=" || e.Checksum != "AAEC" || e.Argon2Memory != "65536" || e.Size != "12" || !strings.HasSuffix(e.AlgorithmName, "aes256-cbc") ||
+		!strings.HasSuffix(e.StartKeyGenerationName, "sha256") || e.KeyDerivationName != "PBKDF2" || !strings.HasSuffix(e.ChecksumType, "sha256-1k") {
 		t.Fatalf("encryption = %+v", e)
 	}
 	if _, err := p.ReadFile("Pictures/a.png"); !errors.Is(err, office.ErrEncrypted) {

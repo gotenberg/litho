@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -65,35 +64,32 @@ type ManifestEntry struct {
 }
 
 // EncryptionData is the manifest:encryption-data of an encrypted entry
-// (ODF 1.3, Part 2, 4.8 to 4.12), with the values decoded from base64:
-// what a decryptor needs to open the entry with a password.
+// (ODF 1.3, Part 2, 4.8 to 4.12), each value as the manifest spells it:
+// base64 for the binary ones, decimal for the numbers, "" when absent.
+// It is what a decryptor needs to open the entry with a password; the
+// decryptor decodes and checks the values.
 type EncryptionData struct {
-	// ChecksumType names the digest of the start of the entry's
-	// decrypted bytes, as written: a URI or LibreOffice's
-	// "SHA1/1K" and "urn:oasis:names:tc:opendocument:xmlns:manifest:1.0#sha256-1k".
-	ChecksumType string
-	Checksum     []byte
-	// AlgorithmName names the cipher (4.9), as written; IV is its
-	// initialisation vector.
-	AlgorithmName string
-	IV            []byte
-	// StartKeyName names the digest of the password that starts the key
-	// derivation (4.11), as written, and StartKeySize its size in bytes, 0
-	// when absent.
-	StartKeyName string
-	StartKeySize int
-	// KeyDerivationName names the key derivation (4.10), as written:
-	// PBKDF2 or Argon2id.
-	KeyDerivationName string
-	Salt              []byte
-	IterationCount    int
-	// KeySize is the derived key's size in bytes, 0 when absent (16 then,
-	// as ODF 1.3 specifies for Blowfish).
-	KeySize int
-	// ArgonIterations, ArgonMemory (in KiB) and ArgonLanes are the
-	// Argon2id parameters LibreOffice 24.2 and later write (loext:
-	// argon2-iterations, argon2-memory and argon2-lanes), 0 when absent.
-	ArgonIterations, ArgonMemory, ArgonLanes int
+	// ChecksumType and Checksum are manifest:checksum-type and
+	// manifest:checksum: the digest of the start of the decrypted entry.
+	ChecksumType, Checksum string
+	// AlgorithmName and InitialisationVector are manifest:algorithm's
+	// manifest:algorithm-name and manifest:initialisation-vector (4.9).
+	AlgorithmName, InitialisationVector string
+	// StartKeyGenerationName and StartKeySize are
+	// manifest:start-key-generation's manifest:start-key-generation-name
+	// and manifest:key-size (4.11).
+	StartKeyGenerationName, StartKeySize string
+	// KeyDerivationName, KeySize, IterationCount and Salt are
+	// manifest:key-derivation's attributes (4.10).
+	KeyDerivationName, KeySize, IterationCount, Salt string
+	// Argon2Iterations, Argon2Memory and Argon2Lanes are the Argon2id
+	// parameters of manifest:key-derivation: loext:argon2-iterations,
+	// argon2-memory and argon2-lanes as LibreOffice 24.2 and later writes
+	// them, or their manifest: namespace spelling.
+	Argon2Iterations, Argon2Memory, Argon2Lanes string
+	// Size is the file entry's manifest:size, the entry's size before
+	// encryption.
+	Size string
 }
 
 // Package is an opened ODF document: a zip package or a flat XML document
@@ -234,7 +230,8 @@ func (p *Package) Encryption(name string) *EncryptionData {
 
 // ReadFile returns the uncompressed bytes of the entry name. It fails
 // with an error [IsNotExist] reports for an entry the package does not
-// hold, office.ErrEncrypted for an encrypted one, and
+// hold, office.ErrEncrypted for an encrypted one (the package reads no
+// password: [Package.Encryption] gives what a decryptor needs), and
 // office.ErrInputTooLarge past [MaxEntryBytes] or [MaxTotalBytes].
 func (p *Package) ReadFile(name string) ([]byte, error) {
 	name = cleanName(name)
@@ -290,7 +287,7 @@ func (p *Package) parseManifest(ctx context.Context, data []byte) error {
 			e.Size = s
 		}
 		if ed := fe.Child(NSManifest, "encryption-data"); ed != nil {
-			e.Encryption = parseEncryption(ed)
+			e.Encryption = parseEncryption(fe, ed)
 			if e.FullPath != "/" {
 				p.enc[cleanName(e.FullPath)] = e.Encryption
 			}
@@ -304,43 +301,35 @@ func (p *Package) parseManifest(ctx context.Context, data []byte) error {
 }
 
 // parseEncryption reads a manifest:encryption-data element (ODF 1.3,
-// Part 2, 4.8 to 4.12). A value that does not decode is left empty: the
-// decryptor then refuses the entry.
-func parseEncryption(ed *Element) *EncryptionData {
-	b64 := func(s string) []byte {
-		v, err := base64.StdEncoding.DecodeString(strings.TrimSpace(s))
-		if err != nil {
-			return nil
+// Part 2, 4.8 to 4.12) of the file entry fe.
+func parseEncryption(fe, ed *Element) *EncryptionData {
+	argon := func(k *Element, local string) string {
+		if v, ok := k.Lookup(NSLOExt, local); ok {
+			return v
 		}
-		return v
-	}
-	num := func(e *Element, space, local string) int {
-		v, err := strconv.Atoi(strings.TrimSpace(e.A(space, local)))
-		if err != nil || v < 0 {
-			return 0
-		}
-		return v
+		return k.A(NSManifest, local)
 	}
 	d := &EncryptionData{
 		ChecksumType: ed.A(NSManifest, "checksum-type"),
-		Checksum:     b64(ed.A(NSManifest, "checksum")),
+		Checksum:     ed.A(NSManifest, "checksum"),
+		Size:         fe.A(NSManifest, "size"),
 	}
 	if a := ed.Child(NSManifest, "algorithm"); a != nil {
 		d.AlgorithmName = a.A(NSManifest, "algorithm-name")
-		d.IV = b64(a.A(NSManifest, "initialisation-vector"))
+		d.InitialisationVector = a.A(NSManifest, "initialisation-vector")
 	}
 	if s := ed.Child(NSManifest, "start-key-generation"); s != nil {
-		d.StartKeyName = s.A(NSManifest, "start-key-generation-name")
-		d.StartKeySize = num(s, NSManifest, "key-size")
+		d.StartKeyGenerationName = s.A(NSManifest, "start-key-generation-name")
+		d.StartKeySize = s.A(NSManifest, "key-size")
 	}
 	if k := ed.Child(NSManifest, "key-derivation"); k != nil {
 		d.KeyDerivationName = k.A(NSManifest, "key-derivation-name")
-		d.Salt = b64(k.A(NSManifest, "salt"))
-		d.IterationCount = num(k, NSManifest, "iteration-count")
-		d.KeySize = num(k, NSManifest, "key-size")
-		d.ArgonIterations = num(k, NSLOExt, "argon2-iterations")
-		d.ArgonMemory = num(k, NSLOExt, "argon2-memory")
-		d.ArgonLanes = num(k, NSLOExt, "argon2-lanes")
+		d.KeySize = k.A(NSManifest, "key-size")
+		d.IterationCount = k.A(NSManifest, "iteration-count")
+		d.Salt = k.A(NSManifest, "salt")
+		d.Argon2Iterations = argon(k, "argon2-iterations")
+		d.Argon2Memory = argon(k, "argon2-memory")
+		d.Argon2Lanes = argon(k, "argon2-lanes")
 	}
 	return d
 }
