@@ -13,6 +13,9 @@ import (
 // CSS Values 4, 6.1.1 allows when no font metrics are at hand.
 type length struct {
 	pt, em, ex, ch, rem, vw, vh, vmin, vmax, pct float64
+	// lh and rlh are line heights of the element and of the root (CSS
+	// Values 4, 6.1.1).
+	lh, rlh float64
 	// hasLen and hasPct record the types the value holds, whatever the
 	// coefficients: calc(10px + 0%) is still a mix (CSS Values 4, 10.8).
 	hasLen, hasPct bool
@@ -57,6 +60,8 @@ func (l length) scale(k float64) length {
 	l.vh *= k
 	l.vmin *= k
 	l.vmax *= k
+	l.lh *= k
+	l.rlh *= k
 	l.pct *= k
 	l.cmpK *= k
 	return l
@@ -71,6 +76,7 @@ func (l length) add(o length) length {
 		cmp: cmp, cmpK: k, bad: l.bad || o.bad || l.cmp != nil && o.cmp != nil,
 		pt: l.pt + o.pt, em: l.em + o.em, ex: l.ex + o.ex, ch: l.ch + o.ch, rem: l.rem + o.rem,
 		vw: l.vw + o.vw, vh: l.vh + o.vh, vmin: l.vmin + o.vmin, vmax: l.vmax + o.vmax,
+		lh: l.lh + o.lh, rlh: l.rlh + o.rlh,
 		pct: l.pct + o.pct, hasLen: l.hasLen || o.hasLen, hasPct: l.hasPct || o.hasPct,
 	}
 }
@@ -83,6 +89,10 @@ type lenCtx struct {
 	// its size, 0 for the half-em fallback.
 	ex, ch        float64
 	width, height float64
+	// lineHeight and rootLineHeight are the used line heights the lh and
+	// rlh units resolve against, in points: the element's, its parent's
+	// while line-height itself computes, and the root's.
+	lineHeight, rootLineHeight float64
 }
 
 // points resolves the length part to points, clamped to maxLength.
@@ -96,7 +106,8 @@ func (l length) points(c lenCtx) float64 {
 		ch = 0.5
 	}
 	v := l.pt + (l.em+l.ex*ex+l.ch*ch)*c.fontSize + l.rem*c.rootFontSize +
-		(l.vw*c.width+l.vh*c.height+l.vmin*vmin+l.vmax*vmax)/100
+		(l.vw*c.width+l.vh*c.height+l.vmin*vmin+l.vmax*vmax)/100 +
+		l.lh*c.lineHeight + l.rlh*c.rootLineHeight
 	if l.cmp != nil {
 		v += l.cmpK * l.cmp.eval(c)
 	}
@@ -163,6 +174,10 @@ func unitLength(n float64, unit string) (length, bool) {
 		l.vmin = n
 	case "vmax":
 		l.vmax = n
+	case "lh":
+		l.lh = n
+	case "rlh":
+		l.rlh = n
 	default:
 		return length{}, false
 	}
@@ -249,7 +264,7 @@ func compare(vals []calcValue, isMax bool) (calcValue, bool) {
 	}
 	plain := true
 	for _, x := range vals {
-		if x.l.cmp != nil || x.l.em != 0 || x.l.ex != 0 || x.l.ch != 0 || x.l.rem != 0 || x.l.vw != 0 || x.l.vh != 0 || x.l.vmin != 0 || x.l.vmax != 0 {
+		if x.l.cmp != nil || x.l.lh != 0 || x.l.rlh != 0 || x.l.em != 0 || x.l.ex != 0 || x.l.ch != 0 || x.l.rem != 0 || x.l.vw != 0 || x.l.vh != 0 || x.l.vmin != 0 || x.l.vmax != 0 {
 			plain = false
 		}
 	}

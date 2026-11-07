@@ -12,7 +12,7 @@ func oneValue(src string) []token {
 
 func TestParseLength_Units(t *testing.T) {
 	t.Parallel()
-	lc := lenCtx{fontSize: 10, rootFontSize: 12, width: 600, height: 800}
+	lc := lenCtx{fontSize: 10, rootFontSize: 12, width: 600, height: 800, lineHeight: 15, rootLineHeight: 20}
 	tests := []struct {
 		src  string
 		f    lengthFlags
@@ -53,6 +53,9 @@ func TestParseLength_Units(t *testing.T) {
 		{"calc(1px + 2)", 0, Dimension{}, false},
 		{"-webkit-calc(2px)", 0, pts(1.5), true},
 		{"min(1px, 2px)", 0, pts(0.75), true},
+		{"2lh", 0, pts(30), true},
+		{"1rlh", 0, pts(20), true},
+		{"calc(4lh + 2px)", 0, pts(61.5), true},
 		{"max(1rem, 1px)", 0, pts(12), true},
 		{"max(1px, 1em)", 0, pts(10), true},
 		{"min(2em, 30px)", 0, pts(20), true},

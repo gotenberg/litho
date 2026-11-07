@@ -299,12 +299,29 @@ func (cs *computeState) fontUnits(st *Style) (float64, float64) {
 	return ex, ch
 }
 
+// normalLineHeight is the factor of the font size the lh and rlh units
+// take for line-height: normal, whose used value depends on the face the
+// layout picks: 1.2, the value CSS 2.1, 10.8.2 suggests.
+const normalLineHeight = 1.2
+
+// usedLineHeight returns the line height of st in points, for the lh and
+// rlh units (CSS Values 4, 6.1.1).
+func usedLineHeight(st *Style) float64 {
+	switch st.LineHeight.Kind { //nolint:exhaustive // the other kinds are normal
+	case Points:
+		return st.LineHeight.Value
+	case Number:
+		return st.LineHeight.Value * st.FontSize
+	}
+	return normalLineHeight * st.FontSize
+}
+
 // computeOrder is the order computeStyle computes the longhands in: the
 // font size and colour first, as [propID] says, then the font selection,
 // which the ex and ch units of every other length resolve against, then
 // the rest in propID order.
 var computeOrder = func() []propID {
-	first := []propID{pFontSize, pColor, pFontFamily, pFontWeight, pFontStyle}
+	first := []propID{pFontSize, pColor, pFontFamily, pFontWeight, pFontStyle, pLineHeight}
 	out := slices.Clone(first)
 	for id := propID(0); id < numProps; id++ {
 		if !slices.Contains(first, id) {
@@ -546,6 +563,11 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 	vw, vh := cs.r.media.viewport()
 	s.lc = lenCtx{fontSize: parent.FontSize, rootFontSize: rootFS, width: vw, height: vh}
 	s.lc.ex, s.lc.ch = cs.fontUnits(parent)
+	s.lc.lineHeight = usedLineHeight(parent)
+	s.lc.rootLineHeight = s.lc.lineHeight
+	if cs.root != nil {
+		s.lc.rootLineHeight = usedLineHeight(cs.root)
+	}
 	for _, id := range computeOrder {
 		def := &props[id]
 		v := winners[id]
@@ -589,6 +611,11 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 			}
 		case pFontStyle:
 			s.lc.ex, s.lc.ch = cs.fontUnits(st)
+		case pLineHeight:
+			s.lc.lineHeight = usedLineHeight(st)
+			if isRoot {
+				s.lc.rootLineHeight = s.lc.lineHeight
+			}
 		}
 	}
 	fixupDisplay(st, isRoot)
