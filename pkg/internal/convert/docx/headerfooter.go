@@ -33,7 +33,7 @@ func (d *document) newPages(secs []*section) *pages {
 			p.byName[s.name] = s
 		}
 		for _, kind := range []string{"default", "first", "even"} {
-			probe := &fieldValues{page: 1, pages: 1, sectionPages: 1, format: "decimal"}
+			probe := &fieldValues{page: 1, pages: 1, format: "decimal"}
 			if part := s.headers[kind]; part != "" {
 				s.headerH[kind] = p.measure(s, part, probe)
 			}
@@ -145,12 +145,12 @@ func (p *pages) place(anchors map[string]compose.Dest) {
 	}
 }
 
-// numbering returns the section owning page (1-based), the page's number
-// in it and the section's page count: a section owns the pages from the
+// numbering returns the section owning page (1-based) and the page's
+// number: a section owns the pages from the
 // page it starts on, a continuous section from the next one; a section
 // numbers its pages from its pgNumType start, else on from the previous
 // section (17.6.12).
-func (p *pages) numbering(page, total int) (*section, int, int) {
+func (p *pages) numbering(page, total int) (*section, int) {
 	owner := 0
 	starts := make([]int, len(p.secs))
 	for i, s := range p.secs {
@@ -184,14 +184,7 @@ func (p *pages) numbering(page, total int) (*section, int, int) {
 		}
 		number += page - first + 1
 	}
-	end := total + 1
-	for j := owner + 1; j < len(p.secs); j++ {
-		if starts[j] > starts[owner] {
-			end = starts[j]
-			break
-		}
-	}
-	return p.secs[owner], number, max(1, end-max(starts[owner], 1))
+	return p.secs[owner], number
 }
 
 // margins returns what the margins of a page show (MarginContent): its
@@ -204,7 +197,7 @@ func (p *pages) margins(info layout.PageInfo, total int) []compose.Fragment {
 	if info.Blank {
 		return nil
 	}
-	s, number, secPages := p.numbering(info.Index+1, total)
+	s, number := p.numbering(info.Index+1, total)
 	kind := "default"
 	switch {
 	case s.titlePage && info.Index+1 == max(s.start, 1):
@@ -212,7 +205,7 @@ func (p *pages) margins(info layout.PageInfo, total int) []compose.Fragment {
 	case p.d.settings.evenAndOdd && number%2 == 0:
 		kind = "even"
 	}
-	v := &fieldValues{page: number, pages: total, sectionPages: secPages, format: pageFormat(s.pageFormat)}
+	v := &fieldValues{page: number, pages: total, format: pageFormat(s.pageFormat)}
 	pb := p.box(info)
 	areaW := max(pb.Width-pb.Margin[css.Left]-pb.Margin[css.Right], minPageArea)
 	root := &layout.Node{Kind: layout.Element, Style: p.d.blockStyle()}

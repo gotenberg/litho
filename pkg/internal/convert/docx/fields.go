@@ -127,16 +127,15 @@ func (d *document) computeField(s *story, instr string) (string, bool) {
 		return "", false
 	}
 	v := s.fields
-	var n int
-	format := "decimal"
+	n := v.page
 	switch strings.ToUpper(words[0]) {
 	case "PAGE":
-		n, format = v.page, v.format
 	case "NUMPAGES":
-		n, format = v.pages, v.format
+		n = v.pages
 	default:
 		return "", false
 	}
+	format := v.format
 	for i := 1; i+1 < len(words); i++ {
 		if words[i] != `\*` {
 			continue

@@ -30,12 +30,12 @@ type story struct {
 	note string
 }
 
-// fieldValues are the page fields of one page (17.16.5: PAGE, NUMPAGES,
-// SECTIONPAGES): the page's number in its section's format, the page
-// count and the section's page count.
+// fieldValues are the page fields of one page (17.16.5: PAGE and
+// NUMPAGES): the page's number, the page count, and the section's page
+// number format.
 type fieldValues struct {
-	page, pages, sectionPages int
-	format                    string
+	page, pages int
+	format      string
 }
 
 // cond is what a table style's conditional formatting adds to the
