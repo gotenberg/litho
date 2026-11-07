@@ -130,6 +130,39 @@ install_tar() {
   echo "  fonts: $name installed ($(find "$dir" -name '*.[ot]tf' | wc -l | tr -d ' ') faces)"
 }
 
+# install_deb <name> <url> <sha256> <pin_key> <licence> <member>... fetches
+# a Debian package and unpacks the named members of its data archive and the
+# licence file, flattened, into $OUT/<name>, the licence becoming LICENSE.
+# The data archive is an xz tarball, as Debian's font packages build it.
+install_deb() {
+  local name="$1" url="$2" sha="$3" key="$4" licence="$5" dir="$OUT/$1" stamp tmp m
+  shift 5
+  stamp="$url $sha"
+  if current "$dir" "$stamp"; then
+    echo "  fonts: $name already at the pinned release"
+    return
+  fi
+  tmp="$(mktemp -d)"
+  fetch "$url" "$tmp/archive"
+  verify "$tmp/archive" "$sha" "$key"
+  mkdir -p "$tmp/x"
+  (cd "$tmp" && ar x archive data.tar.xz)
+  local members=("./$licence")
+  for m in "$@"; do
+    members+=("./$m")
+  done
+  tar -xJf "$tmp/data.tar.xz" -C "$tmp/x" "${members[@]}"
+  rm -rf "$dir"
+  mkdir -p "$dir"
+  for m in "$@"; do
+    cp "$tmp/x/$m" "$dir/"
+  done
+  cp "$tmp/x/$licence" "$dir/LICENSE"
+  printf '%s' "$stamp" > "$dir/.pinned"
+  rm -rf "$tmp"
+  echo "  fonts: $name installed ($(find "$dir" -name '*.[ot]tf' | wc -l | tr -d ' ') faces)"
+}
+
 mkdir -p "$OUT"
 
 install_archive "liberation-$(pin LIBERATION_FONTS_VERSION)" \
@@ -207,3 +240,11 @@ CALADEA="$(pin CALADEA_FONTS_VERSION)"
 install_tar "caladea-$CALADEA" "$(pin CALADEA_FONTS_URL)" "$(pin CALADEA_FONTS_SHA256)" CALADEA_FONTS_SHA256 \
   "fonts-crosextra-caladea-$CALADEA" \
   fonts/ttf/Caladea-Regular.ttf fonts/ttf/Caladea-Bold.ttf fonts/ttf/Caladea-Italic.ttf fonts/ttf/Caladea-BoldItalic.ttf
+
+# Noto Sans, the face the Gotenberg image draws a family it lacks with: the
+# four NotoSans faces of Debian's fonts-noto-core, the image's package.
+NOTO_CORE="$(pin NOTO_SANS_CORE_VERSION)"
+install_deb "noto-sans-core-$NOTO_CORE" "$(pin NOTO_SANS_CORE_URL)" "$(pin NOTO_SANS_CORE_SHA256)" NOTO_SANS_CORE_SHA256 \
+  usr/share/doc/fonts-noto-core/copyright \
+  usr/share/fonts/truetype/noto/NotoSans-Regular.ttf usr/share/fonts/truetype/noto/NotoSans-Bold.ttf \
+  usr/share/fonts/truetype/noto/NotoSans-Italic.ttf usr/share/fonts/truetype/noto/NotoSans-BoldItalic.ttf

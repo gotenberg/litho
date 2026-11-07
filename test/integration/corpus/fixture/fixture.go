@@ -367,4 +367,4 @@ func (s *Source) PrintOptions() []pdf.ConvertOption {
 // oracles written for them read.
 //
 //nolint:gochecknoglobals // static list of directory prefixes
-var FontFamilies = []string{"dejavu-", "liberation-", "noto-cjk-sans-", "noto-sans-thai-", "noto-sans-devanagari-", "carlito-", "caladea-"}
+var FontFamilies = []string{"dejavu-", "liberation-", "noto-cjk-sans-", "noto-sans-thai-", "noto-sans-devanagari-", "carlito-", "caladea-", "noto-sans-core-"}
