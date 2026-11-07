@@ -88,4 +88,6 @@ Each reference handed to the cell as litho's conversion, scored against the gold
 
 ## Accepted disagreements
 
-None yet.
+- Content controls (`ooxmlexport/2-id.docx`, `date-control.docx`, `Cool15788_symbolContentControl.docx`, `cell-sdt-redline.docx`, `author-property.docx`, `content-control-shape.docx`): LibreOffice exports a `w:sdt` as a PDF form field, so its text is a widget's value and not page text, and the reference's extracted text is empty where litho prints the control's content in the page. The text F1 of those pages cannot match.
+- `ooxmlexport/del-then-format.docx`: LibreOffice prints the deleted run "BBB" because a formatting change is stacked on the deletion; litho drops deleted text as a printed document does.
+- `layout/fdo48718-1.docx`: the reference draws Noto Sans, which the fixture fonts lack; litho's fallback breaks the lines elsewhere.
