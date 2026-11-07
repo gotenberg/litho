@@ -283,7 +283,7 @@ func (f *Fonts) Shape(ctx context.Context, runs []ParagraphRun, opts ParagraphOp
 	}
 	p.level = resolveLevels(bidiText, at, p.base)
 	p.segment(st, shapeText)
-	if err := p.shape(ctx, st, runs, shapeText); err != nil {
+	if err := p.shape(ctx, st, shapeText); err != nil {
 		return nil, Report{}, err
 	}
 	p.trimAdjacent()
@@ -313,7 +313,7 @@ func (p *Paragraph) segment(st *layoutState, text []rune) {
 }
 
 // shape shapes the text between objects, item by item.
-func (p *Paragraph) shape(ctx context.Context, st *layoutState, runs []ParagraphRun, text []rune) error {
+func (p *Paragraph) shape(ctx context.Context, st *layoutState, text []rune) error {
 	baseDir := di.DirectionLTR
 	if p.base == RightToLeft {
 		baseDir = di.DirectionRTL
@@ -336,7 +336,7 @@ func (p *Paragraph) shape(ctx context.Context, st *layoutState, runs []Paragraph
 		for end < len(text) && p.object[end] == nil {
 			end++
 		}
-		if err := p.shapeSegment(st, runs, text, start, end, baseDir); err != nil {
+		if err := p.shapeSegment(st, text, start, end, baseDir); err != nil {
 			return err
 		}
 		start = end
@@ -345,7 +345,7 @@ func (p *Paragraph) shape(ctx context.Context, st *layoutState, runs []Paragraph
 }
 
 // shapeSegment shapes text[start:end], which holds no object.
-func (p *Paragraph) shapeSegment(st *layoutState, runs []ParagraphRun, text []rune, start, end int, baseDir di.Direction) error {
+func (p *Paragraph) shapeSegment(st *layoutState, text []rune, start, end int, baseDir di.Direction) error {
 	first := st.styles[p.runOf[start]]
 	items := slices.Clone(st.seg.Split(shaping.Input{
 		Text:      text,
