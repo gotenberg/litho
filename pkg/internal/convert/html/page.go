@@ -106,6 +106,14 @@ func pageBox(r *css.Resolver, o Options, sel css.PageSelector) (layout.PageBox, 
 			box.Margin[side] = opt[side]
 		}
 	}
+	// The width and height of the page context size the page area, and
+	// the page box follows with its margins (CSS Page 3, 3.2).
+	if a := ps.AreaWidth; a.Kind == css.Points && a.Value > 0 {
+		box.Width = min(box.Margin[css.Left]+a.Value+box.Margin[css.Right], maxPageSide)
+	}
+	if a := ps.AreaHeight; a.Kind == css.Points && a.Value > 0 {
+		box.Height = min(box.Margin[css.Top]+a.Value+box.Margin[css.Bottom], maxPageSide)
+	}
 	if fits(box) {
 		return box, warns
 	}

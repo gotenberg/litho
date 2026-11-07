@@ -102,3 +102,12 @@ func TestNesting_AmpersandRules(t *testing.T) {
 		}
 	}
 }
+
+func TestPage_AreaWidthAndHeight(t *testing.T) {
+	t.Parallel()
+	r := NewResolver(a4, []Sheet{{Sheet: mustParse(t, `@page { width: 200px; height: auto } @page :first { height: 30pt; width: -1px }`), Origin: Author}})
+	ps := r.Page(PageSelector{First: true, Right: true})
+	if ps.AreaWidth != Pts(150) || ps.AreaHeight != Pts(30) {
+		t.Errorf("area %+v by %+v", ps.AreaWidth, ps.AreaHeight)
+	}
+}

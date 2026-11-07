@@ -1290,4 +1290,9 @@ type PageStyle struct {
 	Bleed Dimension
 	// Marks are the page marks drawn outside the trim (CSS Page 3, 7.1).
 	Marks Marks
+	// AreaWidth and AreaHeight are the width and height of the page
+	// context, Auto or Points: a length sizes the page area, and the page
+	// box grows or shrinks around it with its margins, over the size
+	// descriptor (CSS Page 3, 3.2, the page area).
+	AreaWidth, AreaHeight Dimension
 }

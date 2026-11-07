@@ -82,3 +82,26 @@ func TestFootnotes_CallsAndBodies(t *testing.T) {
 		t.Error("the footnote body stayed in the flow")
 	}
 }
+
+func TestMarginBoxes_MinMaxWidth(t *testing.T) {
+	src := `<style>
+		@page { size: 400pt 300pt; margin: 40pt 50pt; font: 10pt "Test Serif";
+			@top-left { content: "A"; text-align: right; max-width: 40pt }
+			@top-right { content: "B"; text-align: left }
+			@bottom-left { content: "C"; min-width: 250pt; text-align: right }
+			@bottom-right { content: "D" }
+		}
+		body { margin: 0 }
+	</style><p>x</p>`
+	doc := convertDoc(t, src, Options{PreferCSSPageSize: true})
+	pg := doc.Pages[0]
+	if a := find(t, pg, "A"); !approx(a.x, 85, 0.01) {
+		t.Errorf("top-left text at %v, want 85: the box is 40pt wide", a.x)
+	}
+	if b := find(t, pg, "B"); !approx(b.x, 90, 0.01) {
+		t.Errorf("top-right text at %v, want 90: the box takes the rest", b.x)
+	}
+	if c := find(t, pg, "C"); !approx(c.x, 295, 0.01) {
+		t.Errorf("bottom-left text at %v, want 295: the box is 250pt wide", c.x)
+	}
+}

@@ -2,6 +2,9 @@ package html
 
 import (
 	"context"
+	"strings"
+
+	dom "golang.org/x/net/html"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -98,4 +101,42 @@ func (p *prepared) setupPages(ctx context.Context, r *css.Resolver) {
 		}
 		return p.marginContent(ctx, info, pages)
 	}
+}
+
+// startPage returns the start page value of the root element root (CSS
+// Page 3, 4.1): the page property of its first in-flow block-level child,
+// recursively, else its own, "" for auto. It reads the computed styles
+// before any box exists, for the viewport of the first page.
+func startPage(c *css.Computed, root *dom.Node) string {
+	name := ""
+	n := root
+	for depth := 0; n != nil && depth < maxTreeDepth; depth++ {
+		st := c.Style(n)
+		if st == nil {
+			break
+		}
+		if st.Page != "" {
+			name = st.Page
+		}
+		var next *dom.Node
+		for k := n.FirstChild; k != nil; k = k.NextSibling {
+			if k.Type == dom.TextNode && strings.TrimSpace(k.Data) != "" {
+				return name
+			}
+			if k.Type != dom.ElementNode {
+				continue
+			}
+			ks := c.Style(k)
+			if ks == nil || ks.Display == css.DisplayNone || ks.Float != css.FloatNone || ks.Position == css.Absolute || ks.Position == css.Fixed {
+				continue
+			}
+			if ks.Display == css.Inline || ks.Display == css.InlineBlock {
+				return name
+			}
+			next = k
+			break
+		}
+		n = next
+	}
+	return name
 }

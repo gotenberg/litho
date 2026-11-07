@@ -53,6 +53,8 @@ type pageDecl struct {
 	// 7.1 and 7.2).
 	bleed *Dimension
 	marks *Marks
+	// areaW and areaH are the width and height of the page context.
+	areaW, areaH *Dimension
 }
 
 // parsePageSelectors parses a page selector list (CSS Page 3, 4.1); an
@@ -223,6 +225,17 @@ func pageDecls(block []token, c *declCtx) []pageDecl {
 				return true
 			}
 			out = append(out, pageDecl{important: it.important, margins: e})
+		case "width", "height":
+			d, ok := pageAreaSide(significant(it.value))
+			if !ok {
+				c.warn("invalid-css-value", "invalid value for @page %s was ignored", name)
+				return true
+			}
+			pd := pageDecl{important: it.important, areaW: &d}
+			if name == "height" {
+				pd.areaW, pd.areaH = nil, &d
+			}
+			out = append(out, pd)
 		case "bleed", "marks":
 			d, ok := pageMarkDecl(name, significant(it.value))
 			if !ok {
@@ -312,6 +325,12 @@ func (r *Resolver) Page(sel PageSelector) PageStyle {
 			case cssWide:
 				ps.Margin[side] = Dimension{Kind: Auto}
 			}
+		}
+		if c.d.areaW != nil {
+			ps.AreaWidth = *c.d.areaW
+		}
+		if c.d.areaH != nil {
+			ps.AreaHeight = *c.d.areaH
 		}
 		if c.d.bleed != nil {
 			ps.Bleed = *c.d.bleed

@@ -203,7 +203,7 @@ func pageMarkDecl(name string, v []token) (pageDecl, bool) {
 		if !ok {
 			return pageDecl{}, false
 		}
-		l, ok := parseLength(t, 0)
+		l, ok := parseLength(t, nonNeg)
 		if !ok || l.vw != 0 || l.vh != 0 || l.vmin != 0 || l.vmax != 0 {
 			return pageDecl{}, false
 		}
@@ -231,6 +231,23 @@ func pageMarkDecl(name string, v []token) (pageDecl, bool) {
 		m |= bit
 	}
 	return pageDecl{marks: &m}, true
+}
+
+// pageAreaSide parses the width or height of an @page rule: auto or a
+// length, em resolving against medium as for the other page descriptors.
+func pageAreaSide(v []token) (Dimension, bool) {
+	if k, ok := keyword(v); ok && k == "auto" {
+		return Dimension{Kind: Auto}, true
+	}
+	t, ok := single(v)
+	if !ok {
+		return Dimension{}, false
+	}
+	l, ok := parseLength(t, nonNeg)
+	if !ok || l.vw != 0 || l.vh != 0 || l.vmin != 0 || l.vmax != 0 {
+		return Dimension{}, false
+	}
+	return Pts(l.points(lenCtx{fontSize: mediumFontSize, rootFontSize: mediumFontSize})), true
 }
 
 // gcpmProps defines the properties of CSS GCPM 3 and extends position and

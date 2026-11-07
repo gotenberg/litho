@@ -181,7 +181,7 @@ func pageDescriptor(name string) bool {
 	case "size", "margin", "margin-top", "margin-right", "margin-bottom", "margin-left",
 		"background", "background-color", "background-image", "background-repeat",
 		"background-position", "background-size", "background-origin", "background-clip",
-		"background-attachment", "bleed", "marks":
+		"background-attachment", "bleed", "marks", "width", "height":
 		return true
 	}
 	return false

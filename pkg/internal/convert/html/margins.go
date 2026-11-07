@@ -333,26 +333,55 @@ func resolveSides(boxes []*marginBox) {
 		horizontal := side == sideTop || side == sideBottom
 		var s [3]sizing
 		var avail float64
-		for i, mb := range sides[side] {
-			if mb == nil {
-				continue
+		// clamped holds the sizes min- and max-width or -height fixed, by
+		// position (CSS Page 3, 5.3.2.3).
+		var clamped [3]*float64
+		var used [3]float64
+		for pass := 0; pass < 3; pass++ {
+			s = [3]sizing{}
+			for i, mb := range sides[side] {
+				if mb == nil {
+					continue
+				}
+				ax, d, ref := &mb.y, mb.st.Height, mb.cb.Height
+				if horizontal {
+					ax, d, ref = &mb.x, mb.st.Width, mb.cb.Width
+				}
+				avail = ref
+				s[i].gen = true
+				if size, ok := contentSize(mb.st, d, ref, ax.bp); ok || clamped[i] != nil {
+					if clamped[i] != nil {
+						size = *clamped[i]
+					}
+					ax.size = size
+					s[i].used = ax.outer()
+					s[i].minO, s[i].maxO = s[i].used, s[i].used
+					continue
+				}
+				s[i].auto = true
+				s[i].minO, s[i].maxO = mb.minW, mb.maxW
 			}
-			ax, d, ref := &mb.y, mb.st.Height, mb.cb.Height
-			if horizontal {
-				ax, d, ref = &mb.x, mb.st.Width, mb.cb.Width
+			used = variableSizes(avail, s)
+			again := false
+			for i, mb := range sides[side] {
+				if mb == nil || !s[i].auto {
+					continue
+				}
+				ax, lo, hi, ref := &mb.y, mb.st.MinHeight, mb.st.MaxHeight, mb.cb.Height
+				if horizontal {
+					ax, lo, hi, ref = &mb.x, mb.st.MinWidth, mb.st.MaxWidth, mb.cb.Width
+				}
+				size := max(used[i]-ax.m1-ax.m2-ax.bp, 0)
+				if mx, ok := contentSize(mb.st, hi, ref, ax.bp); ok && size > mx {
+					clamped[i], again = &mx, true
+				} else if mn, ok := contentSize(mb.st, lo, ref, ax.bp); ok && size < mn {
+					clamped[i], again = &mn, true
+				}
 			}
-			avail = ref
-			s[i].gen = true
-			if size, ok := contentSize(mb.st, d, ref, ax.bp); ok {
-				ax.size = size
-				s[i].used = ax.outer()
-				s[i].minO, s[i].maxO = s[i].used, s[i].used
-				continue
+			if !again {
+				break
 			}
-			s[i].auto = true
-			s[i].minO, s[i].maxO = mb.minW, mb.maxW
 		}
-		used := variableSizes(avail, s)
 		for i, mb := range sides[side] {
 			if mb == nil {
 				continue
@@ -363,6 +392,8 @@ func resolveSides(boxes []*marginBox) {
 			}
 			if s[i].auto {
 				ax.size = max(used[i]-ax.m1-ax.m2-ax.bp, 0)
+			} else if clamped[i] != nil {
+				ax.size = *clamped[i]
 			}
 			// A is flush with the start, B centred, C flush with the end;
 			// the start margin absorbs the offset.

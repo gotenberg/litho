@@ -262,9 +262,27 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	if fonts != nil {
 		fonts = fonts.WithFaces(faceSet)
 	}
-	computed, err := resolver.Compute(ctx, doc, css.ComputeOptions{Hints: css.HTMLHints, Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts)})
+	computeOpts := css.ComputeOptions{Hints: css.HTMLHints, Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts)}
+	computed, err := resolver.Compute(ctx, doc, computeOpts)
 	if err != nil {
 		return nil, fmt.Errorf("computing the HTML document's styles: %w", err)
+	}
+	if name := startPage(computed, scan.root); name != "" && resolver.HasNamedPages() && !setup.measure {
+		// The first page takes the root's start page value (CSS Page 3,
+		// 4.1), and the viewport units its page area: compute again when
+		// that page's area is not the one assumed.
+		named, _ := pageBox(resolver, o, css.PageSelector{Name: name, First: true, Right: true})
+		vw, vh := media.ViewportWidth, media.ViewportHeight
+		if vw == 0 && vh == 0 {
+			vw, vh = media.Width, media.Height
+		}
+		if nw, nh := areaOf(setup.layoutBox(named)); nw != vw || nh != vh {
+			media.ViewportWidth, media.ViewportHeight = nw, nh
+			resolver = css.NewResolver(media, sheets)
+			if computed, err = resolver.Compute(ctx, doc, computeOpts); err != nil {
+				return nil, fmt.Errorf("computing the HTML document's styles: %w", err)
+			}
+		}
 	}
 	rootStyle := computed.Style(scan.root)
 	rtl := rootStyle != nil && rootStyle.Direction == css.RTL
