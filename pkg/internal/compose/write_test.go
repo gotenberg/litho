@@ -620,3 +620,18 @@ func TestWriteSyntheticBoldAndItalic(t *testing.T) {
 		t.Errorf("upright glyph starts at %d on top, %d at the bottom", top, bottom)
 	}
 }
+
+func TestWritePageBoxes(t *testing.T) {
+	page := &compose.Page{Width: 100, Height: 200, TrimBox: &compose.Rect{X: 10, Y: 20, Width: 80, Height: 160}, BleedBox: &compose.Rect{Width: 100, Height: 200}}
+	r := open(t, write(t, &compose.Document{Pages: []*compose.Page{page}}))
+	p, err := r.Page(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("Page: %v", err)
+	}
+	if want := [4]float64{10, 20, 90, 180}; p.TrimBox != want {
+		t.Errorf("TrimBox = %v, want %v", p.TrimBox, want)
+	}
+	if want := [4]float64{0, 0, 100, 200}; p.BleedBox != want {
+		t.Errorf("BleedBox = %v, want %v", p.BleedBox, want)
+	}
+}

@@ -234,3 +234,24 @@ func shaded(sh *Shading) *Path {
 func twoStops() []ColorStop {
 	return []ColorStop{{Color: Black}, {Offset: 1, Color: Color{R: 1, G: 1, B: 1, A: 1}}}
 }
+
+func TestValidatePageBoxes(t *testing.T) {
+	tests := []struct {
+		name        string
+		trim, bleed *Rect
+		ok          bool
+	}{
+		{"none", nil, nil, true},
+		{"inside", &Rect{X: 1, Y: 1, Width: 8, Height: 8}, &Rect{Width: 10, Height: 10}, true},
+		{"past the page", &Rect{X: 1, Y: 1, Width: 10, Height: 8}, nil, false},
+		{"trim outside bleed", &Rect{Width: 10, Height: 10}, &Rect{X: 1, Y: 1, Width: 8, Height: 8}, false},
+		{"empty", &Rect{X: 1, Y: 1}, nil, false},
+	}
+	for _, tt := range tests {
+		page := &Page{Width: 10, Height: 10, TrimBox: tt.trim, BleedBox: tt.bleed}
+		err := (&Document{Pages: []*Page{page}}).Validate()
+		if (err == nil) != tt.ok {
+			t.Errorf("%s: Validate() = %v", tt.name, err)
+		}
+	}
+}

@@ -188,6 +188,11 @@ func (p *prepared) decorate(ctx context.Context, pg *compose.Page, k, total int)
 		info = p.infos[k]
 	}
 	pb := layout.PageBox{Width: pg.Width, Height: pg.Height, Margin: p.pages.entry(info).box.Margin}
+	if t := pg.TrimBox; t != nil {
+		// A page with a bleed has its header and footer in its page box,
+		// inside the bleed.
+		pb.Width, pb.Height = t.Width, t.Height
+	}
 	frags, err := p.templatePage(ctx, pb, k+1, total)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -195,6 +200,9 @@ func (p *prepared) decorate(ctx context.Context, pg *compose.Page, k, total int)
 		}
 		p.warnOnce(fmt.Sprintf("the header and footer of page %d were left out: %v", k+1, err))
 		return nil
+	}
+	if t := pg.TrimBox; t != nil && len(frags) > 0 {
+		frags = []compose.Fragment{&compose.Group{Transform: compose.Matrix{A: 1, D: 1, E: t.X, F: t.Y}, Opacity: 1, Content: frags}}
 	}
 	pg.Content = append(pg.Content, frags...)
 	return nil

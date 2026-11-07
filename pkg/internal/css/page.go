@@ -49,6 +49,10 @@ type pageDecl struct {
 	margins   []entry
 	// background holds the background longhands the descriptor sets.
 	background []entry
+	// bleed and marks are the bleed and marks descriptors (CSS Page 3,
+	// 7.1 and 7.2).
+	bleed *Dimension
+	marks *Marks
 }
 
 // parsePageSelectors parses a page selector list (CSS Page 3, 4.1); an
@@ -219,8 +223,17 @@ func pageDecls(block []token, c *declCtx) []pageDecl {
 				return true
 			}
 			out = append(out, pageDecl{important: it.important, margins: e})
+		case "bleed", "marks":
+			d, ok := pageMarkDecl(name, significant(it.value))
+			if !ok {
+				c.warn("invalid-css-value", "invalid value for @page %s was ignored", name)
+				return true
+			}
+			d.important = it.important
+			out = append(out, d)
 		case "background", "background-color", "background-image", "background-repeat",
-			"background-position", "background-size", "background-origin", "background-clip":
+			"background-position", "background-size", "background-origin", "background-clip",
+			"background-attachment":
 			// CSS Page 3 gives the page box the background properties.
 			if containsVar(it.value) {
 				c.warn("unsupported-css-value", "@page %s: var() is not supported in page descriptors", name)
@@ -300,6 +313,12 @@ func (r *Resolver) Page(sel PageSelector) PageStyle {
 				ps.Margin[side] = Dimension{Kind: Auto}
 			}
 		}
+		if c.d.bleed != nil {
+			ps.Bleed = *c.d.bleed
+		}
+		if c.d.marks != nil {
+			ps.Marks = *c.d.marks
+		}
 		for _, e := range c.d.background {
 			if ps.Background == nil {
 				bg := *initialStyle
@@ -315,7 +334,7 @@ func (r *Resolver) Page(sel PageSelector) PageStyle {
 // whose other properties keep their initial values: the page box has no
 // parent to inherit from, and currentColor is the initial colour, black.
 func pageBackground(st *Style, e entry, lc lenCtx) {
-	if e.id < pBgColor || e.id > pBgClip {
+	if (e.id < pBgColor || e.id > pBgClip) && e.id != pBgAttachment {
 		return
 	}
 	def := &props[e.id]

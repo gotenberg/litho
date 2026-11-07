@@ -14,6 +14,9 @@ func checkPage(pb PageBox) error {
 	if !finite(pb.Width) || !finite(pb.Height) || pb.Width <= 0 || pb.Height <= 0 || pb.Width > maxPageSide || pb.Height > maxPageSide {
 		return fmt.Errorf("%w: page of %v by %v points", ErrInvalidOptions, pb.Width, pb.Height)
 	}
+	if !finite(pb.Bleed) || pb.Bleed < 0 || pb.Width+2*pb.Bleed > maxPageSide || pb.Height+2*pb.Bleed > maxPageSide {
+		return fmt.Errorf("%w: bleed of %v points on a page of %v by %v", ErrInvalidOptions, pb.Bleed, pb.Width, pb.Height)
+	}
 	for _, m := range pb.Margin {
 		if !finite(m) || m < 0 {
 			return fmt.Errorf("%w: page margin %v", ErrInvalidOptions, m)

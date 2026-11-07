@@ -228,8 +228,10 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 	}
 	for k := range n {
 		pb := e.assembledBox(k, fitH)
-		pg := &compose.Page{Width: pb.Width, Height: pb.Height}
+		pg := &compose.Page{Width: pb.Width + 2*pb.Bleed, Height: pb.Height + 2*pb.Bleed}
 		e.paintPageBackground(pg, pb)
+		e.paintMarks(pg, pb)
+		sheet := len(pg.Content)
 		e.paintCanvas(pg, canvas, pb)
 		if e.opts.MarginContent != nil {
 			pg.Content = append(pg.Content, e.opts.MarginContent(e.infoOf(k), n)...)
@@ -257,6 +259,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 			})
 			i = j
 		}
+		trim(pg, pb, sheet)
 		pages[k] = pg
 	}
 	return pages
@@ -540,7 +543,12 @@ func (e *engine) paintPageBackground(pg *compose.Page, pb PageBox) {
 		pg.Content = append(pg.Content, &compose.Path{Ops: rectOps(whole), Fill: &compose.Fill{Color: c}})
 	}
 	w, h := areaOf(pb)
-	area := compose.Rect{X: pb.Margin[css.Left], Y: pb.Margin[css.Top], Width: w, Height: h}
+	area := compose.Rect{X: pb.Bleed + pb.Margin[css.Left], Y: pb.Bleed + pb.Margin[css.Top], Width: w, Height: h}
+	if st.BackgroundAttachment == css.AttachFixed {
+		// A fixed background is positioned in the viewport, which on
+		// paper is the page box (CSS Backgrounds 3, 3.5; CSS Page 3, 3.3).
+		area = compose.Rect{X: pb.Bleed, Y: pb.Bleed, Width: pb.Width, Height: pb.Height}
+	}
 	e.paintPageLayer(pg, st, area, whole)
 }
 
@@ -548,7 +556,7 @@ func (e *engine) paintPageBackground(pg *compose.Page, pb PageBox) {
 func (e *engine) dest(x, y float64) compose.Dest {
 	p := e.pageOf(y)
 	pb := e.box(p)
-	return compose.Dest{Page: p + 1, X: pb.Margin[css.Left] + x, Y: pb.Margin[css.Top] + y - e.pageTop(p)}
+	return compose.Dest{Page: p + 1, X: pb.Bleed + pb.Margin[css.Left] + x, Y: pb.Bleed + pb.Margin[css.Top] + y - e.pageTop(p)}
 }
 
 // anchors returns where the first box of every node with an ID landed, in
@@ -609,7 +617,7 @@ func (e *engine) links(res *Result, links []pendingLink, used map[*compose.Struc
 				continue
 			}
 			l := compose.Link{
-				Rect: compose.Rect{X: pb.Margin[css.Left] + r.X, Y: pb.Margin[css.Top] + y0 - top, Width: r.Width, Height: y1 - y0},
+				Rect: compose.Rect{X: pb.Bleed + pb.Margin[css.Left] + r.X, Y: pb.Bleed + pb.Margin[css.Top] + y0 - top, Width: r.Width, Height: y1 - y0},
 				URI:  uri, Dest: dest, Parent: pl.lk.elem,
 			}
 			if l.Parent != nil {

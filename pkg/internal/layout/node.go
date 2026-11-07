@@ -193,6 +193,14 @@ type PageBox struct {
 	// under the canvas: a style whose Background fields alone are read
 	// (see css.PageStyle). nil for none.
 	Background *css.Style
+	// Bleed is how far the sheet reaches past the page box on every side,
+	// in points, finite and at least 0 (CSS Page 3, 7.2): the page is
+	// laid out on the page box, the page background paints over the whole
+	// sheet, and the page records its trim and bleed boxes.
+	Bleed float64
+	// Marks are the page marks painted in the bleed area (CSS Page 3,
+	// 7.1).
+	Marks css.Marks
 }
 
 // Result is what [Layout] produced.

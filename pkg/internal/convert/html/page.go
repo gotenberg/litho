@@ -77,7 +77,12 @@ func pageBox(r *css.Resolver, o Options, sel css.PageSelector) (layout.PageBox, 
 	case ps.Orientation == css.Landscape && w < h, ps.Orientation == css.Portrait && w > h:
 		w, h = h, w
 	}
-	box := layout.PageBox{Width: w, Height: h, Background: ps.Background}
+	box := layout.PageBox{Width: w, Height: h, Background: ps.Background, Marks: ps.Marks}
+	// The bleed grows the sheet past the page box (CSS Page 3, 7.2), up
+	// to the PDF page limit.
+	if b := ps.UsedBleed(); b > 0 && !math.IsInf(b, 0) {
+		box.Bleed = min(b, max((maxPageSide-max(w, h))/2, 0))
+	}
 	opt := [4]float64{css.Top: o.MarginTop, css.Right: o.MarginRight, css.Bottom: o.MarginBottom, css.Left: o.MarginLeft}
 	fromRules := false
 	for side := css.Top; side <= css.Left; side++ {

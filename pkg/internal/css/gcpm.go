@@ -191,6 +191,48 @@ type running struct{ name string }
 // footnoteFloat is the specified value float: footnote.
 type footnoteFloat struct{}
 
+// pageMarkDecl parses the bleed or marks descriptor of an @page rule (CSS
+// Page 3, 7.1 and 7.2): bleed takes auto or a length, marks none or crop
+// and cross in any order.
+func pageMarkDecl(name string, v []token) (pageDecl, bool) {
+	if name == "bleed" {
+		if k, ok := keyword(v); ok && k == "auto" {
+			return pageDecl{bleed: &Dimension{Kind: Auto}}, true
+		}
+		t, ok := single(v)
+		if !ok {
+			return pageDecl{}, false
+		}
+		l, ok := parseLength(t, 0)
+		if !ok || l.vw != 0 || l.vh != 0 || l.vmin != 0 || l.vmax != 0 {
+			return pageDecl{}, false
+		}
+		d := Pts(l.points(lenCtx{fontSize: mediumFontSize, rootFontSize: mediumFontSize}))
+		return pageDecl{bleed: &d}, true
+	}
+	var m Marks
+	if k, ok := keyword(v); ok && k == "none" {
+		return pageDecl{marks: &m}, true
+	}
+	if len(v) == 0 || len(v) > 2 {
+		return pageDecl{}, false
+	}
+	for _, t := range v {
+		var bit Marks
+		switch {
+		case t.isIdent("crop"):
+			bit = MarksCrop
+		case t.isIdent("cross"):
+			bit = MarksCross
+		}
+		if bit == 0 || m&bit != 0 {
+			return pageDecl{}, false
+		}
+		m |= bit
+	}
+	return pageDecl{marks: &m}, true
+}
+
 // gcpmProps defines the properties of CSS GCPM 3 and extends position and
 // float with their paged values: running() and footnote. It runs once the
 // other longhands are defined.

@@ -58,3 +58,27 @@ func TestGCPM_UsedBleed(t *testing.T) {
 		}
 	}
 }
+
+func TestGCPM_PageBleedAndMarks(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		css   string
+		bleed Dimension
+		marks Marks
+		fixed bool
+	}{
+		{`@page { bleed: 3pt; marks: crop cross }`, Pts(3), MarksCrop | MarksCross, false},
+		{`@page { marks: cross crop; marks: none }`, Dimension{}, 0, false},
+		{`@page { bleed: auto; marks: crop crop }`, Dimension{Kind: Auto}, 0, false},
+		{`@page { bleed: 1px 2px; background: red fixed }`, Dimension{}, 0, true},
+		{`@page { bleed: 50%; background-attachment: fixed }`, Dimension{}, 0, true},
+	}
+	for _, tt := range tests {
+		r := NewResolver(a4, []Sheet{{Sheet: mustParse(t, tt.css), Origin: Author}})
+		ps := r.Page(PageSelector{First: true, Right: true})
+		fixed := ps.Background != nil && ps.Background.BackgroundAttachment == AttachFixed
+		if ps.Bleed != tt.bleed || ps.Marks != tt.marks || fixed != tt.fixed {
+			t.Errorf("%s: bleed %+v marks %v fixed %v", tt.css, ps.Bleed, ps.Marks, fixed)
+		}
+	}
+}

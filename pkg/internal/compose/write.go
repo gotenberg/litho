@@ -258,6 +258,15 @@ func (w *docWriter) page(ctx context.Context, i int, page *Page) error {
 	binary.BigEndian.PutUint64(size[:8], math.Float64bits(page.Width))
 	binary.BigEndian.PutUint64(size[8:], math.Float64bits(page.Height))
 	w.hashBytes(size[:])
+	for _, b := range []*Rect{page.TrimBox, page.BleedBox} {
+		if b != nil {
+			var box [32]byte
+			for k, v := range []float64{b.X, b.Y, b.Width, b.Height} {
+				binary.BigEndian.PutUint64(box[8*k:], math.Float64bits(v))
+			}
+			w.hashBytes(box[:])
+		}
+	}
 	w.hashBytes(content)
 
 	stream, err := flateStream(ast.PdfDict{}, content)
@@ -270,6 +279,13 @@ func (w *docWriter) page(ctx context.Context, i int, page *Page) error {
 		"MediaBox":  ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), pdfReal(page.Width), pdfReal(page.Height)},
 		"Resources": pw.resources(),
 		"Contents":  w.alloc.Alloc(stream),
+	}
+	for name, b := range map[ast.PdfName]*Rect{"TrimBox": page.TrimBox, "BleedBox": page.BleedBox} {
+		if b != nil {
+			// The page's coordinates run down from its top; PDF's up from
+			// its bottom (ISO 32000-1, 14.11.2: [llx lly urx ury]).
+			dict[name] = ast.PdfArray{pdfReal(b.X), pdfReal(page.Height - b.Y - b.Height), pdfReal(b.X + b.Width), pdfReal(page.Height - b.Y)}
+		}
 	}
 	if w.st != nil {
 		dict["StructParents"] = ast.PdfInt(i)

@@ -65,6 +65,9 @@ func (v *validator) page(p *Page) error {
 			return fmt.Errorf("%w: size %v by %v points, each side in (0, %d]", ErrInvalidPage, p.Width, p.Height, maxPageSize)
 		}
 	}
+	if err := pageBoxes(p); err != nil {
+		return err
+	}
 	v.count = len(p.Links)
 	if err := v.fragments(p.Content, 0); err != nil {
 		return err
@@ -521,4 +524,27 @@ func finite(f float64) bool {
 
 func finiteRect(r Rect) bool {
 	return finite(r.X) && finite(r.Y) && finite(r.Width) && finite(r.Height)
+}
+
+// pageBoxes checks the trim and bleed boxes of p: finite, positive, within
+// the page, the trim box inside the bleed box (ISO 32000-1, 14.11.2).
+func pageBoxes(p *Page) error {
+	inside := func(r, outer Rect) bool {
+		const slack = 1e-6
+		return r.X >= outer.X-slack && r.Y >= outer.Y-slack &&
+			r.X+r.Width <= outer.X+outer.Width+slack && r.Y+r.Height <= outer.Y+outer.Height+slack
+	}
+	whole := Rect{Width: p.Width, Height: p.Height}
+	for _, b := range []*Rect{p.TrimBox, p.BleedBox} {
+		if b == nil {
+			continue
+		}
+		if !finite(b.X) || !finite(b.Y) || !finite(b.Width) || !finite(b.Height) || b.Width <= 0 || b.Height <= 0 || !inside(*b, whole) {
+			return fmt.Errorf("%w: page box %+v outside the page", ErrInvalidPage, *b)
+		}
+	}
+	if p.TrimBox != nil && p.BleedBox != nil && !inside(*p.TrimBox, *p.BleedBox) {
+		return fmt.Errorf("%w: trim box %+v outside the bleed box %+v", ErrInvalidPage, *p.TrimBox, *p.BleedBox)
+	}
+	return nil
 }

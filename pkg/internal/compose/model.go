@@ -59,6 +59,12 @@ type Page struct {
 	Content []Fragment
 	// Links are the clickable regions of the page.
 	Links []Link
+	// TrimBox and BleedBox, when set, are the page's trim and bleed boxes
+	// in page coordinates (ISO 32000-1, 14.11.2): where the printed sheet
+	// is cut, and how far the content painted past the cut reaches. Each
+	// lies within the page, the trim box within the bleed box. nil leaves
+	// the box out, which a reader takes as the media box.
+	TrimBox, BleedBox *Rect
 }
 
 // Fragment is something painted on a page: a [Text] run, an [Image], a

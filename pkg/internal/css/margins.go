@@ -171,7 +171,8 @@ func pageDescriptor(name string) bool {
 	switch name {
 	case "size", "margin", "margin-top", "margin-right", "margin-bottom", "margin-left",
 		"background", "background-color", "background-image", "background-repeat",
-		"background-position", "background-size", "background-origin", "background-clip":
+		"background-position", "background-size", "background-origin", "background-clip",
+		"background-attachment", "bleed", "marks":
 		return true
 	}
 	return false

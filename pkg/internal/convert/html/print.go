@@ -61,6 +61,7 @@ func (s printSetup) layoutBox(b layout.PageBox) layout.PageBox {
 	b = s.source(b)
 	b.Width *= s.factor
 	b.Height *= s.factor
+	b.Bleed *= s.factor
 	for i := range b.Margin {
 		b.Margin[i] *= s.factor
 	}
@@ -159,9 +160,15 @@ func (pl placement) identity() bool {
 // group under the placement's transform, clipped to the source page, its
 // links moved with it.
 func (pl placement) page(lp *compose.Page) *compose.Page {
-	out := &compose.Page{Width: pl.w, Height: pl.h, Content: lp.Content, Links: lp.Links}
+	out := &compose.Page{Width: pl.w, Height: pl.h, Content: lp.Content, Links: lp.Links, TrimBox: lp.TrimBox, BleedBox: lp.BleedBox}
 	if pl.identity() {
 		return out
+	}
+	for _, b := range []**compose.Rect{&out.TrimBox, &out.BleedBox} {
+		if *b != nil {
+			r := pl.rect(**b)
+			*b = &r
+		}
 	}
 	src := compose.Rect{Width: lp.Width, Height: lp.Height}
 	out.Content = []compose.Fragment{&compose.Group{
