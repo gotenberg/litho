@@ -160,9 +160,17 @@ type colCtx struct {
 	// balancing tries heights for; balanceRow is -1 for none.
 	balanceRow int
 	balanceH   float64
+	// free lays the content out in columns nothing limits, to count the
+	// columns its forced breaks make; forced is that count when it
+	// exceeds the column count, 0 otherwise.
+	free   bool
+	forced int
 	frags      []colFrag
 	rows       []colRow
 }
+
+// target returns the columns a row holds before the next row starts.
+func (c *colCtx) target() int { return max(c.n, c.forced) }
 
 // outer runs f in the fragmentation context around c.
 func (c *colCtx) outer(f func()) {
@@ -194,6 +202,8 @@ func (c *colCtx) newRow(top float64) {
 	}
 	next := paged || c.wrap && c.colH > 0 && top+h+c.gap < c.limit
 	switch {
+	case c.free:
+		h, next = unbounded, false
 	case h <= 0:
 		// A container of no height has nowhere to break: its content
 		// stays in its first column and overflows it, as Chromium lays
@@ -226,7 +236,7 @@ func (c *colCtx) grow() bool {
 	}
 	last := c.frags[n-1]
 	row := c.rows[last.row]
-	if last.col+1 < c.n || !row.next {
+	if last.col+1 < c.target() || !row.next {
 		c.frags = append(c.frags, colFrag{vtop: last.vtop + last.h, h: last.h, row: last.row, col: last.col + 1})
 		return true
 	}
@@ -469,9 +479,24 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 	// which it overflows.
 	fits := func() bool {
 		l := ctx.lastFrag(cons)
-		return ctx.frags[l].row == r && l < ctx.rows[r].first+ctx.n && ctx.rowMax(cons, r) <= ctx.rows[r].h+eps
+		return ctx.frags[l].row == r && l < ctx.rows[r].first+ctx.target() && ctx.rowMax(cons, r) <= ctx.rows[r].h+eps
 	}
 	balance := (st.Fill != css.FillAuto || spanned || row.h >= unbounded) && ctx.colH <= 0 && row.top < limit
+	if balance && (r > 0 || !fits()) {
+		// More forced breaks than columns: the content balances over the
+		// columns they make, the ones past the count overflowing the row
+		// (CSS Multicol 1, 6.2).
+		ctx.free = true
+		free := pass(-1, 0)
+		ctx.free = false
+		if n := ctx.lastFrag(free) + 1; n > ctx.n {
+			ctx.forced = n
+		}
+		cons = pass(-1, 0)
+		last = ctx.lastFrag(cons)
+		r = ctx.frags[last].row
+		row = ctx.rows[r]
+	}
 	if balance && fits() {
 		hi := row.h
 		total := 0.0
@@ -502,6 +527,14 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 		}
 		if !bestFits || ctx.rows[r].h != best || !fits() {
 			cons = pass(r, best)
+		}
+		if used := ctx.rowMax(cons, r); bestFits && used < best-eps {
+			// The search stops within balanceSlack above the least height
+			// that fits; the content's own height is that height when it
+			// fits too.
+			if cons = pass(r, used); !fits() {
+				cons = pass(r, best)
+			}
 		}
 	}
 	empty := end <= y+eps && ctx.rowMax(cons, 0) <= eps && len(ctx.rows) == 1
