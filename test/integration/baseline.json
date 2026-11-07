@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-07T10:59:39Z",
+  "captured_at": "2026-11-07T12:49:04Z",
   "corpora": {
     "compose": {
       "features": {
@@ -76,6 +76,2902 @@
             "chars_match": 7,
             "words_match": 7
           }
+        }
+      }
+    },
+    "docx": {
+      "features": {
+        "diff": {
+          "matched": 0,
+          "mismatched": 360,
+          "skipped": 0,
+          "metrics": {
+            "convert_error": 360,
+            "pages_equal": 0
+          },
+          "scores": {
+            "contract": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "i18n": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/CT-formatted-deletion.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/Cool15942_tableSplitRowReformat.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/fdo48718-1.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/fld-in-tbl.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/floattable-center-shift-down.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/hidden-para-separator.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/inline-textbox-position.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/merge_hidden_redline.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf104797.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf106153.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf109077.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf112290.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf116256.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf116486.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf116925.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf117028.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf117188.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf117923.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf117982.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf122878.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf123163-1.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf124261.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf124423.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf124600.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf125300.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf125893.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf127118.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf128198-1.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf128399.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf128959.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf130088.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf134277.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf134463.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf134685.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf135035.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf136588.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf136613.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf137025.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf138782.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf139336_ColumnsWithFootnoteDoNotOccupyEntirePage.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "long-name": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "memo-lo": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/1-table-1-page.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/128197_compat14.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/128197_compat15.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/1_page.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/2-id.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/2120112713.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/2120112713_OpenBrace.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/2_table_doc.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/2col-header.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/99_Fields.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/A019_min.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/CT-with-frame.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/ColorOverwritten.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/CommentDone.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/CommentReply.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/Cool15788_symbolContentControl.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/EquationAsScientificNumbering.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/EquationWithAboveAndBelowCaption.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/FDO73034.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/FDO73546.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/FDO74105.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/FDO74106.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/FDO74215.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/FDO74774.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/FDO74775.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/FDO75133.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/FDO76248.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/FDO76312.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/FDO77715.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/FDO78590.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/FigureAsLabelPicture.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/FileWithInvalidImageLink.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/ImageCrop.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/IndexFieldFlagF.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/LineStyle_DashType.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/LineStyle_DashType_VML.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/LinkedTextBoxes.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/NumberedList.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/PreserveWfieldTOC.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/PreserveXfieldTOC.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/SdtContent.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/Shape.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/ShapeOverlappingWithSdt.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/StyleRef-DE.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/TC-table-DnD-move.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/TC-table-Separate-Move.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/TC-table-rowDND-front.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/TC-table-rowDND.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/TCTagMisMatch.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/TOC_field_b.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/TOC_field_f.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/TableWithAboveCaptions.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/Table_cell_auto_width_fdo69656.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/Tdf147485.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/TestVMLData.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/TextEffects_Glow_Shadow_Reflection.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/TextEffects_Props3d_Ligatures_NumForm_NumSpacing.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/TextEffects_StylisticSets_CntxtAlts.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/TextEffects_TextFill.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/TextEffects_TextOutline.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/TextFrameRotation.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/UnknownStyleInRedline.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/Unsupportedtextfields.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/WPGbodyPr.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/WordOK.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/a4andborders.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/abi11739.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/absolute-link.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/afterlines.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/all_gaps_word.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/alphabeticalIndex_AutoColumn.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/alphabeticalIndex_MultipleColumns.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/anchor-position.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/annotation-formatting.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/author-property.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/autofit.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/behinddoc.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/bnc780044_spacing.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/bnc837302.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/bnc884615.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/bnc891663.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/btlr-textbox.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/calendar1.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/calendar2.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/calendar3.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/calendar4.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/calendar5.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/caption.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/cell-btlr.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/cell-grid-span.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/cell-sdt-redline.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/checkbox-control.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/chtoutline.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/cjklist30.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/cjklist31.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/cjklist34.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/cjklist35.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/cjklist44.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/clearing-break.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/cloud.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/columnbreak.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/combobox-control.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/comment-annotationref.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/conditionalstyles-tbllook.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/content-control-grab-bag.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/content-control-shape.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/crop-pixel.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/crop-roundtrip.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/custom-properties.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/custom-styles-TOC-comma.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/custom-styles-TOC-semicolon.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/customxml-two-data-stores.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/customxml.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dashed_line_custdash_1000th_of_percent.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dashed_line_custdash_percentage.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/date-control.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/date_field_at_end_of_paragraph.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/date_field_in_shape.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/decimal-numbering-no-leveltext.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/default-sect-break-cols.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/defaultStyle.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/del-then-format.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/deleted_pageref.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dkvert.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-charheight-default.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-customgeometry-cubicbezier.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-gradientfill-theme.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-groupshape-capitalization.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-groupshape-childposition.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-groupshape-paraspacing.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-groupshape-relsize.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-groupshape-runfonts.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-groupshape-sdt.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-picture-in-textframe.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-rectangle-relsize.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-shape-fillbitmapcrop.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-shape-fillpattern.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-shape-relsize.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-shape-title.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-solidfill-alpha.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-textframe-vertadjust.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-textshape.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dml-textshapeB.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/docxopenhyperlinkbox.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dont-add-new-styles.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/drawinglayer-pic-pos.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/drawingml-flipv.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/dropdown-in-cell.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/effect-extent-inline.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/effect-extent-line-width.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/effect-extent.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/effectextent-margin.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/em.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/empty-annotation-mark.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/endingSectionProps.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo106029.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo38244.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo38414.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo43093.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo43093b.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo44689_start_page_0.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo44689_start_page_7.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo46361.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo47669.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo52208.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo53985.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo55187.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo55381.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo56679.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo59273.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo59638.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo60922.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo60957-2.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo63053.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo63685.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo64350.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo64826.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo65090.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo65265.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo65295.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo65400.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo65632.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo65718.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo65833.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo66543.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo66688.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo66773.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo66781.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo66929.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo67013.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo67737.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo68418.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo68607.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo68787.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo69548.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo69616.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo69636.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo69644.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo69649.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo70457.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo70812.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo70838.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo70942.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo71302.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo71646.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo71785.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo71834.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo72560.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo72560b.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo72560c.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo72560d.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo72560e.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo73215.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo73247.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo73389.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo73541.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo73550.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo73556.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo73596_AlphaSeparator.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo73596_RunInStyle.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo74110.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo74153.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo74357.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo74401.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo74566.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo74745.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo75431.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo76016.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo76101.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo76163.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo76249.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo76586.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo76587.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo76589.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo76597.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo76741.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo76803.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo76934.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo76979.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo77117.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo77129.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo77716.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo77719.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo77725.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo77727.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo77812.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo77887.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo77890.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo78300.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlexport/fdo78384.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/105975.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/WordArt.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/__RefNumPara__.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/bnc773061.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/bnc779620.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/bnc821804.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/btlr-frame-vml.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/dml-groupshape-paraadjust.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/fdo43641.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/fdo75722-dml.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/fdo75722-vml.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/fdo76583.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/floating-table-section-columns.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/groupshape-child-rotation.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/groupshape-fontname.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/groupshape-line.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/groupshape-relsize.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/groupshape-sdt.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/image-hyperlink.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/image-lazy-read.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/ink.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/line-rotation.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/line-wps-only.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/linked-picture.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/n751017.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/n751077.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/n757890.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/n758883.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/n760764.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/n764745-alignment.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/n766477.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/n773061.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/n775899.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/n778140.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/n779627b.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/n780645.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/n782061.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/n820504.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/n820788.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/numbering-circle.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/strict-lockedcanvas.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/table_width.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf100072.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf100830.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf101626.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf101627.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf103664.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf103931.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf104167.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf105127.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf105143.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf105975.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf106606.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf107784.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf108350.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf108408.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf108714.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf108806.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf108849.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "ooxmlimport/tdf109053.docx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "page_1": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "pages_12": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "pages_3": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "protected_page_1": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "special-chars": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "tracked": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            }
+          },
+          "score_tolerance": 0.02
         }
       }
     },
@@ -852,6 +3748,1254 @@
             "chars_match": 249,
             "words_match": 249
           }
+        }
+      }
+    },
+    "odt": {
+      "features": {
+        "diff": {
+          "matched": 0,
+          "mismatched": 154,
+          "skipped": 0,
+          "metrics": {
+            "convert_error": 154,
+            "pages_equal": 0
+          },
+          "scores": {
+            "form": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "form-flat": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/2024-01-19_merged-cells-on-separate-pages-vertical-alignment.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/Tdf121509.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/TextBoxFrame.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/abi11870-2.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/btlr-cell.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/endOfLineComments.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/fdo56797-2-min.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/i94666.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/image-comment.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/in_056132_mod.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/linked_frames_section_bug.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/many-paragraphs-per-page-in-6-columns.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/redline_footnotes.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/stable-at-page-anchored-fly-position.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tab-over-margin.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tabellen_test_windows_1.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/table-extrusion1.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/table-extrusion2.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf106390.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf116501.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf116830.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf116848.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf117187.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf117245.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf118672.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf119875.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf121658.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf122607.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf122607_leerzeile.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "layout/tdf123898.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "memo": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "memo-flat": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/DUMMY2.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/DUMMY2B.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/MadeByLO7.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/WordTest_edit.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/allow-overlap.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/arabic-zero-numbering.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/arabic-zero3-numbering.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/arabic-zero4-numbering.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/arabic-zero5-numbering.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/border_types.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/btlr-cell.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/btlr-frame.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/chapter-number-new-line.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/charborder.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/embedded-pdf.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/fdo38244.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/fdo43807.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/fdo60769.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/fdo79358.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/fdo86963.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/fillbitmap3.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/framebackgrounds.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/gerrit13858.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/gutter-left.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/image-mimetype.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/listformat.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/nestedTableInFooter.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/ooo321_stylepagenumber.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/page-content-bottom.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/page-content-top.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/pagestyle_background_lo64.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/pagestyle_background_lo70.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/pagestyle_background_ooo33.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/personalmetadata.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/qrcode-properties.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/redlineTextFrame.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/referencelanguage.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/relh-page-tdf80282.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/relh-page.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/relw-page.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/resolved-comment.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/rovas-numbering.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/ruby-position.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/shape-relsize.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/shape-with-hyperlink.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/shapes-hyperlink.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/spellout-numberingtypes.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/sw_hatch.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/table-in-frame-in-table-in-header-base.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/table_styles_1.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/table_styles_2.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/table_styles_3.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/table_styles_4.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf101710.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf101856.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf101856_overlapped.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf103567.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf104254_noHeaderWrapping.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf107292.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf107696.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf111891_frameVertStyle.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf114287.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf115815.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf118502.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf121658.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf124470TableAndEmbeddedUsedFonts.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf131025_noZerosInTable.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf131812.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf132642_keepWithNextTable.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf133507_contextualSpacingSection.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf135338_firstLeftPageFooter.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf136645.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf139126.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf140437.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf142483.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf143605.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf143793_noBodyWrapping.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf145361.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf145871.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfexport/tdf146264.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/BibliographyEntryField.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/PageBackground.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/Word2010AsCharShape.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/annotation-formatting.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/borders_ooo33.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/dateFormFormats.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/empty-svg-family-name.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/fdo37606.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/fdo53210.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/fdo55814.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/fdo56272.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/fdo60842.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/fdo69862.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/fdo69979.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/fdo75872_aoo40.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/fdo75872_ooo33.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/fdo79269.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/fdo79269_header.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/fdo81223.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/fdo82165.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/fdo90130-1.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/fdo90130-2.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/feature_image_jpg.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/feature_table.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/feature_table_merged-cells.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/feature_table_merged-cells_all.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/feature_table_text.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/feature_text.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/feature_text_background-color.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/feature_text_bold.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/feature_text_italic.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/hello.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/incorrectsum.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/ooo32780-1.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/ooo77837-1.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/paste-first-para-direct-format.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/space.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/spellmenu-redline.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/tdf100033_1.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "odfimport/tdf100033_2.odt": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            }
+          },
+          "score_tolerance": 0.02
         }
       }
     },
