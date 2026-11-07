@@ -493,7 +493,9 @@ func readDiffPages(ctx context.Context, data []byte) (diffLithoDoc, error) {
 	pages := make([]diffLithoPage, 0, len(sizes))
 	for i, size := range sizes {
 		p := i + 1
-		text, err := r.ExtractText(ctx, p)
+		// The goldens hold every word of the page, headers and footers
+		// included, which litho writes as pagination artifacts.
+		text, err := r.ExtractText(ctx, p, pdf.WithArtifacts())
 		if err != nil {
 			return diffLithoDoc{}, fmt.Errorf("extract text of page %d: %w", p, err)
 		}
