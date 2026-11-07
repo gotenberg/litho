@@ -95,6 +95,14 @@ var localToolPins = map[string]bool{
 	"NOTO_SANS_DEVANAGARI_URL":     true,
 	"NOTO_SANS_DEVANAGARI_SHA256":  true,
 	"NOTO_SANS_CJK_OTC_SHA256":     true,
+	// The faces the Gotenberg image draws Calibri and Cambria with, which
+	// the docx and odt corpora name.
+	"CARLITO_FONTS_VERSION": true,
+	"CARLITO_FONTS_URL":     true,
+	"CARLITO_FONTS_SHA256":  true,
+	"CALADEA_FONTS_VERSION": true,
+	"CALADEA_FONTS_URL":     true,
+	"CALADEA_FONTS_SHA256":  true,
 
 	// The converter oracles: the web-platform-tests commit `make wpt-fetch`
 	// downloads, the WeasyPrint release `make weasyprint-fixtures` extracts,
@@ -108,6 +116,9 @@ var localToolPins = map[string]bool{
 	"WEASYPRINT_SHA256":      true,
 	"WEASYPRINT_FONT_SHA256": true,
 	"GOTENBERG_IMAGE":        true,
+	// The LibreOffice core commit `make docx-fetch` and `make odt-fetch`
+	// download the docx and odt corpora's documents at.
+	"LIBREOFFICE_CORE_COMMIT": true,
 }
 
 // stagePins maps each directory a provisioning stage fills to the pins its

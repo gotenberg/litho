@@ -99,6 +99,37 @@ install_zip() {
   echo "  fonts: $name installed ($(find "$dir" -name '*.[ot]tf' | wc -l | tr -d ' ') faces)"
 }
 
+# install_tar <name> <url> <sha256> <pin_key> <prefix> <member>... fetches a
+# gzip tarball and unpacks the named members of its <prefix>/ directory,
+# flattened, into $OUT/<name>, OFL.txt becoming LICENSE.
+install_tar() {
+  local name="$1" url="$2" sha="$3" key="$4" prefix="$5" dir="$OUT/$1" stamp tmp m
+  shift 5
+  stamp="$url $sha"
+  if current "$dir" "$stamp"; then
+    echo "  fonts: $name already at the pinned release"
+    return
+  fi
+  tmp="$(mktemp -d)"
+  fetch "$url" "$tmp/archive"
+  verify "$tmp/archive" "$sha" "$key"
+  mkdir -p "$tmp/x"
+  local members=("$prefix/OFL.txt")
+  for m in "$@"; do
+    members+=("$prefix/$m")
+  done
+  tar -xzf "$tmp/archive" -C "$tmp/x" "${members[@]}"
+  rm -rf "$dir"
+  mkdir -p "$dir"
+  for m in "${members[@]}"; do
+    cp "$tmp/x/$m" "$dir/"
+  done
+  mv "$dir/OFL.txt" "$dir/LICENSE"
+  printf '%s' "$stamp" > "$dir/.pinned"
+  rm -rf "$tmp"
+  echo "  fonts: $name installed ($(find "$dir" -name '*.[ot]tf' | wc -l | tr -d ' ') faces)"
+}
+
 mkdir -p "$OUT"
 
 install_archive "liberation-$(pin LIBERATION_FONTS_VERSION)" \
@@ -164,3 +195,15 @@ install_zip "noto-sans-thai-$THAI" "$(pin NOTO_SANS_THAI_URL)" "$(pin NOTO_SANS_
 DEVANAGARI="$(pin NOTO_SANS_DEVANAGARI_VERSION)"
 install_zip "noto-sans-devanagari-$DEVANAGARI" "$(pin NOTO_SANS_DEVANAGARI_URL)" "$(pin NOTO_SANS_DEVANAGARI_SHA256)" NOTO_SANS_DEVANAGARI_SHA256 \
   NotoSansDevanagari/hinted/ttf/NotoSansDevanagari-Regular.ttf NotoSansDevanagari/hinted/ttf/NotoSansDevanagari-Bold.ttf
+
+# Carlito and Caladea, the faces the Gotenberg image draws Calibri and Cambria
+# with: the four TrueType faces of each Debian orig tarball (Caladea's also
+# ships OpenType copies, which would index each face twice).
+CARLITO="$(pin CARLITO_FONTS_VERSION)"
+install_tar "carlito-$CARLITO" "$(pin CARLITO_FONTS_URL)" "$(pin CARLITO_FONTS_SHA256)" CARLITO_FONTS_SHA256 \
+  "fonts-crosextra-carlito-$CARLITO" \
+  fonts/ttf/Carlito-Regular.ttf fonts/ttf/Carlito-Bold.ttf fonts/ttf/Carlito-Italic.ttf fonts/ttf/Carlito-BoldItalic.ttf
+CALADEA="$(pin CALADEA_FONTS_VERSION)"
+install_tar "caladea-$CALADEA" "$(pin CALADEA_FONTS_URL)" "$(pin CALADEA_FONTS_SHA256)" CALADEA_FONTS_SHA256 \
+  "fonts-crosextra-caladea-$CALADEA" \
+  fonts/ttf/Caladea-Regular.ttf fonts/ttf/Caladea-Bold.ttf fonts/ttf/Caladea-Italic.ttf fonts/ttf/Caladea-BoldItalic.ttf
