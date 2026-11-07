@@ -97,7 +97,8 @@ func workbookFiles(sheets []testSheet, styles, before, after string, extra map[s
 	return files
 }
 
-// zipFiles returns a zip archive of files, in name order.
+// zipFiles returns a zip archive of files, in name order, stored without
+// compression so the fuzz targets spend their time in the reader.
 func zipFiles(t testing.TB, files map[string]string) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -108,7 +109,7 @@ func zipFiles(t testing.TB, files map[string]string) []byte {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		w, err := zw.Create(n)
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: n, Method: zip.Store})
 		if err != nil {
 			t.Fatal(err)
 		}
