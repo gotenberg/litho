@@ -316,7 +316,11 @@ func TestRead_Drawings(t *testing.T) {
 		`<draw:object xlink:href="./Object 1"/><draw:image xlink:href="./ObjectReplacements/Object 1"/></draw:frame>` +
 		`<draw:frame svg:x="1in" svg:y="0.25in" svg:width="1in" svg:height="1in"><draw:object xlink:href="./Object 2"/><draw:image xlink:href="Pictures/a.png"/></draw:frame>` +
 		`</table:table-cell></table:table-row></table:table></office:spreadsheet></office:body></office:document-content>`
-	data := zipOf(t, "mimetype", "application/vnd.oasis.opendocument.spreadsheet", "META-INF/manifest.xml", manifest, "content.xml", content, "Pictures/a.png", string(tinyPNG(t)))
+	chartDoc := `<office:document-content ` + nsDecl + ` xmlns:chart="urn:oasis:names:tc:opendocument:xmlns:chart:1.0">` +
+		`<office:body><office:chart><chart:chart chart:class="chart:bar" svg:width="2in" svg:height="1in"><chart:plot-area>` +
+		`<chart:series chart:values-cell-range-address="S.B2:S.B3"/></chart:plot-area></chart:chart></office:chart></office:body></office:document-content>`
+	data := zipOf(t, "mimetype", "application/vnd.oasis.opendocument.spreadsheet", "META-INF/manifest.xml", manifest, "content.xml", content,
+		"Object 1/content.xml", chartDoc, "Pictures/a.png", string(tinyPNG(t)))
 	doc, w := read(t, data)
 	ds := doc.Sheets[0].Drawings
 	if len(ds) != 3 {

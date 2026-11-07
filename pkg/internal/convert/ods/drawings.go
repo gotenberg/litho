@@ -117,7 +117,7 @@ func (r *reader) drawing(ts *tableState, el *odf.Element, at *sheet.Anchor) {
 func (r *reader) object(obj *odf.Element) *chart.Chart {
 	if inline := obj.Child(odf.NSOffice, "document"); inline != nil {
 		if inline.A(odf.NSOffice, "mimetype") == odf.MimeChart {
-			return chartOf("")
+			return r.chartOf("", inline)
 		}
 		return nil
 	}
@@ -126,16 +126,142 @@ func (r *reader) object(obj *odf.Element) *chart.Chart {
 		return nil
 	}
 	if r.pkg.MediaType(dir+"/") == odf.MimeChart || r.pkg.MediaType(dir) == odf.MimeChart {
-		return chartOf(dir)
+		return r.chartOf(dir, nil)
 	}
 	return nil
 }
 
-// chartOf returns the chart of the chart document in the package
-// directory dir, "" for a flat document's inline one: a placeholder the
-// chart reader replaces.
-func chartOf(_ string) *chart.Chart {
-	return &chart.Chart{}
+// chartOf reads the chart document of a draw:object: the package
+// directory dir, or, for a flat document, its inline office:document;
+// nil with a warning when it does not parse. The chart's warnings become
+// the document's, and its series read the sheets' cells through
+// [reader.rangeValues] when the chart holds no data table of its own.
+func (r *reader) chartOf(dir string, inline *odf.Element) *chart.Chart {
+	var (
+		c   *chart.Chart
+		err error
+	)
+	if inline != nil {
+		c, err = odf.ChartFromDocument(inline, inline)
+	} else {
+		c, err = odf.ParseChart(r.ctx, r.pkg, dir)
+	}
+	if err != nil {
+		r.warn("chart-malformed", "a chart does not parse and is left out: "+err.Error())
+		return nil
+	}
+	for _, w := range c.Warnings {
+		r.warn(w.Code, w.Message)
+	}
+	c.Resolver = r.rangeValues
+	return c
+}
+
+// rangeValues returns the values of the cells the cell range address ref
+// names (ODF 1.3, Part 3, 9.2.2 and 19.67: "Sheet1.B2:Sheet1.B5", the
+// second cell taking the first's table when it names none), row by row,
+// at most chart.MaxPoints; nil when the address does not parse or names
+// no sheet of the document. A number is a number, a boolean 0 or 1, a
+// string or an error its text, and an absent cell an empty point.
+func (r *reader) rangeValues(ref string) []chart.Value {
+	a, b, two := strings.Cut(ref, ":")
+	from, ok := cellRef(a)
+	if !ok || from.whole {
+		return nil
+	}
+	to := from
+	if two {
+		if to, ok = cellRef(b); !ok || to.whole {
+			return nil
+		}
+	}
+	name := tableName(a)
+	var sh *sheet.Sheet
+	for _, cand := range r.doc.Sheets {
+		if cand.Name == name {
+			sh = cand
+			break
+		}
+	}
+	if sh == nil {
+		return nil
+	}
+	rg := sheet.Range{FirstRow: min(from.row, to.row), FirstColumn: min(from.col, to.col), LastRow: max(from.row, to.row), LastColumn: max(from.col, to.col)}
+	var out []chart.Value
+	next := 0
+	for ri := rg.FirstRow; ri <= rg.LastRow; ri++ {
+		for next < len(sh.Rows) && sh.Rows[next].Index < ri {
+			next++
+		}
+		var row *sheet.Row
+		if next < len(sh.Rows) && sh.Rows[next].Index == ri {
+			row = &sh.Rows[next]
+		}
+		for col := rg.FirstColumn; col <= rg.LastColumn; col++ {
+			if len(out) >= chart.MaxPoints {
+				return out
+			}
+			out = append(out, chartValue(rowCell(row, col)))
+		}
+	}
+	return out
+}
+
+// rowCell returns the cell of row at column col, nil for none or a nil
+// row.
+func rowCell(row *sheet.Row, col int) *sheet.Cell {
+	if row == nil {
+		return nil
+	}
+	for i := range row.Cells {
+		if row.Cells[i].Column == col {
+			return &row.Cells[i]
+		}
+		if row.Cells[i].Column > col {
+			break
+		}
+	}
+	return nil
+}
+
+// chartValue turns a cell's value into a chart point.
+func chartValue(c *sheet.Cell) chart.Value {
+	if c == nil {
+		return chart.Value{}
+	}
+	switch c.Value.Kind {
+	case sheet.Number, sheet.Bool:
+		return chart.Num(c.Value.Number)
+	case sheet.Text, sheet.Error:
+		return chart.Value{Kind: chart.Text, Text: c.Value.Text}
+	case sheet.Empty:
+	}
+	return chart.Value{}
+}
+
+// tableName returns the table a cell address names, quoted or not,
+// "" for none (".A1").
+func tableName(s string) string {
+	s = strings.TrimPrefix(strings.TrimSpace(s), "$")
+	if strings.HasPrefix(s, "'") {
+		var b strings.Builder
+		for i := 1; i < len(s); i++ {
+			if s[i] == '\'' {
+				if i+1 < len(s) && s[i+1] == '\'' {
+					b.WriteByte('\'')
+					i++
+					continue
+				}
+				return b.String()
+			}
+			b.WriteByte(s[i])
+		}
+		return b.String()
+	}
+	if i := strings.LastIndexByte(s, '.'); i >= 0 {
+		return s[:i]
+	}
+	return ""
 }
 
 // picture decodes the picture of a draw:image, nil with a warning for
