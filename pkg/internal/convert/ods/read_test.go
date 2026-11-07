@@ -124,6 +124,7 @@ func TestRead_Values(t *testing.T) {
 		{`<table:table-cell office:value-type="float" office:value="0" calcext:value-type="error"><text:p>#DIV/0!</text:p></table:table-cell>`, sheet.Value{Kind: sheet.Error, Text: "#DIV/0!"}, ""},
 		{`<table:table-cell office:value-type="string"><text:p><text:a xlink:href="https://example.com/">site</text:a></text:p></table:table-cell>`, sheet.Value{Kind: sheet.Text, Text: "site"}, "https://example.com/"},
 		{`<table:table-cell><text:p>bare</text:p></table:table-cell>`, sheet.Value{Kind: sheet.Text, Text: "bare"}, ""},
+		{`<table:table-cell office:value-type="string"><text:p><text:ruby><text:ruby-base>漢</text:ruby-base><text:ruby-text>かん</text:ruby-text></text:ruby>字</text:p></table:table-cell>`, sheet.Value{Kind: sheet.Text, Text: "漢字"}, ""},
 	}
 	var row strings.Builder
 	for _, c := range cells {

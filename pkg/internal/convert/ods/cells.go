@@ -292,7 +292,9 @@ func (tb *textBuilder) inline(el *odf.Element, f *sheet.Font, depth int) {
 			tb.space = true
 		case c.Is(odf.NSOffice, "annotation"), c.Is(odf.NSOffice, "annotation-end"):
 			tb.r.warn("comments", "cell comments are not printed")
-		case c.Name.Space == odf.NSDraw:
+		case c.Name.Space == odf.NSDraw, c.Is(odf.NSText, "ruby-text"):
+			// A ruby's annotation is drawn above its base, which Calc does
+			// not print in a cell (ODF 1.3, Part 3, 6.4).
 		default:
 			// A field (text:sheet-name, text:date, text:page-number...)
 			// shows the text the file stores.
