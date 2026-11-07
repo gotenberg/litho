@@ -26,6 +26,10 @@ type absCB struct {
 	box *box
 	// page reports the page area of a fixed box.
 	page bool
+	// anchored reports the page box of a page-anchored box, the page
+	// anchorPage.
+	anchored   bool
+	anchorPage int
 }
 
 // setStatic records the static position of the absolutely positioned box
@@ -146,6 +150,9 @@ func (e *engine) layoutPositioned(b *box) {
 // when it has none; for a fixed box the page area, unless a transformed
 // ancestor holds it.
 func (e *engine) containerOf(b *box) absCB {
+	if b.st.PageAnchor && b.st.Position == css.Absolute {
+		return e.pageCB(b)
+	}
 	fixed := b.st.Position == css.Fixed
 	for a := b.parent; a != nil; a = a.parent {
 		if a.tpart.internal() && a.tpart != partCell {
@@ -232,6 +239,13 @@ func (e *engine) layoutAbs(b *box) {
 	cb := e.containerOf(b)
 	b.cbBox = cb.box
 	b.fixed = cb.page
+	if cb.anchored {
+		b.pageAnchored, b.anchorPage = true, cb.anchorPage
+		// The box lies on its page whole, its margins included: no page
+		// cut runs through it.
+		e.noPaginate++
+		defer func() { e.noPaginate-- }()
+	}
 	// The static position is where the box would have been painted: it
 	// moves with the relatively positioned boxes between it and its
 	// containing block, which move none of the containing block itself.
@@ -530,4 +544,18 @@ func absRoom(b *box, cb absCB) (float64, float64) {
 	w := cb.w - l - r - hEdges(b) - nonAuto(b.m[css.Left], st.Margin[css.Left].Kind == css.Auto) - nonAuto(b.m[css.Right], st.Margin[css.Right].Kind == css.Auto)
 	h := cb.h - t - bo - vEdges(b) - nonAuto(b.m[css.Top], st.Margin[css.Top].Kind == css.Auto) - nonAuto(b.m[css.Bottom], st.Margin[css.Bottom].Kind == css.Auto)
 	return max(w, 0), max(h, 0)
+}
+
+// pageCB returns the containing block of the page-anchored box b: the
+// page box, margins included, of the page its static position falls on,
+// in flow coordinates, where the page area's top-left corner is the
+// flow's left edge at the page's top.
+func (e *engine) pageCB(b *box) absCB {
+	p := e.pageOf(b.sy)
+	pb := e.box(p)
+	return absCB{
+		x: -pb.Margin[css.Left], y: e.pageTop(p) - pb.Margin[css.Top],
+		w: pb.Width, h: pb.Height,
+		anchored: true, anchorPage: p,
+	}
 }

@@ -351,6 +351,16 @@ func (p *painter) unit(b *box, own bool) {
 		defer func() { p.mono = savedMono }()
 		push(&ditem{group: true, opacity: 1, fixed: true})
 	}
+	if b.pageAnchored {
+		// A page-anchored box paints on its page alone, unclipped by the
+		// page area: a group of one page with a transform paints up to
+		// the page's edges.
+		savedMono := p.mono
+		p.mono = b.anchorPage
+		defer func() { p.mono = savedMono }()
+		id := compose.Identity
+		push(&ditem{group: true, opacity: 1, transform: &id, page: b.anchorPage})
+	}
 	m, has, visible := transformOf(b, p.borderRect(b))
 	if !visible {
 		return

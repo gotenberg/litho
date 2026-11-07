@@ -1004,6 +1004,13 @@ type Style struct {
 	// boxes and where it puts their baseline: CSS half-leading, or an
 	// Office rule. No CSS property sets it; see [LineRule].
 	LineRule LineRule
+	// PageAnchor makes an absolutely positioned box's containing block the
+	// page box, margins included, of the page its static position falls
+	// on, as Word and Writer anchor a frame to the page (ECMA-376 Part 1,
+	// 20.4.3.4 relativeFrom page; ODF 1.3 Part 3, 20.298 style:vertical-rel
+	// page): it paints on that page alone, over its margins too. No CSS
+	// property sets it; it applies to Position Absolute alone.
+	PageAnchor bool
 	// TextScale scales the glyphs of the text horizontally, 1 for the
 	// natural width, 0 for 1 (WordprocessingML w, ODF style:text-scale). No
 	// CSS property sets it; the engine writes it as compose.Text.HScale.

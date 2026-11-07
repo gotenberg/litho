@@ -94,6 +94,10 @@ type box struct {
 	staticSet bool
 	cbBox     *box
 	fixed     bool
+	// pageAnchored reports an absolutely positioned box whose containing
+	// block is the page box of page anchorPage (css.Style.PageAnchor).
+	pageAnchored bool
+	anchorPage   int
 	// anon reports an anonymous block box (CSS 2.1, 9.2.1.1).
 	anon bool
 	// inlineKids reports a block container whose children are all
