@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-07T17:44:15Z",
+  "captured_at": "2026-11-07T18:37:43Z",
   "corpora": {
     "compose": {
       "features": {
@@ -87,7 +87,7 @@
           "skipped": 0,
           "metrics": {
             "convert_error": 1,
-            "pages_equal": 325
+            "pages_equal": 326
           },
           "scores": {
             "contract": {
@@ -1243,12 +1243,12 @@
               "text_f1": 1
             },
             "ooxmlexport/columnbreak.docx": {
-              "layout": 0.1008,
+              "layout": 0.5758,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.5,
-              "strict": 0.5,
-              "text_f1": 0.2667
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "ooxmlexport/combobox-control.docx": {
               "layout": 0.964,
