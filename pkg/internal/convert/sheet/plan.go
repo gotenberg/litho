@@ -366,6 +366,13 @@ const maxSheetPages = 1 << 15
 
 // singleSize returns the content size of the sheet's first print range at
 // 100%, for a page the size of its content.
+//
+// # Corpus evidence
+//
+//   - xlsx: budget-single, budget.xlsx with singlePage, prints pages of
+//     192.64 by 109.73, 674.14 by 915.02 and 48.19 by 45.04 points, the
+//     sizes of the sheets' cells from A1, the first cell's text a point
+//     from the page's left edge.
 func (sp *sheetPlan) singleSize() (float64, float64) {
 	if len(sp.pages) == 0 {
 		return 0, 0

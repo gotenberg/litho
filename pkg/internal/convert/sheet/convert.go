@@ -123,8 +123,14 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	}
 	var plans []*sheetPlan
 	var pages []*pagePlan
+	anyVisible := false
+	for _, sh := range doc.Sheets {
+		anyVisible = anyVisible || (sh != nil && !sh.Hidden)
+	}
 	for i, sh := range doc.Sheets {
-		if sh == nil || sh.Hidden {
+		// A book whose sheets are all hidden shows its first one, as
+		// Calc does.
+		if sh == nil || (sh.Hidden && (anyVisible || len(plans) > 0)) {
 			continue
 		}
 		if err := ctx.Err(); err != nil {
@@ -263,9 +269,12 @@ func (b *builder) planSheet(i int, sh *Sheet) *sheetPlan {
 		b.warn(CodeTooManyPages, fmt.Sprintf("sheet %s has more than %d pages; the rest are left out", quote(sh.Name), maxSheetPages))
 	}
 	if sp.single && len(sp.pages) > 0 {
+		// LibreOffice's SinglePageSheets export sizes the page to the
+		// printed cells alone: no margins, no header or footer.
 		w, h := sp.singleSize()
-		sp.width = math.Min(w+sp.margin[css.Left]+sp.margin[css.Right], office.MaxPageSide)
-		sp.height = math.Min(h+sp.margin[css.Top]+sp.margin[css.Bottom], office.MaxPageSide)
+		sp.margin = [4]float64{}
+		sp.width = math.Min(w, office.MaxPageSide)
+		sp.height = math.Min(h, office.MaxPageSide)
 		sp.pages = sp.pages[:1]
 	}
 	return sp
@@ -295,7 +304,9 @@ func (b *builder) renderPage(p *pagePlan, first bool, total int) (*compose.Page,
 		oy += (areaH - pb.dataH*z) / 2
 	}
 	pg := &compose.Page{Width: sp.width, Height: sp.height}
-	pg.Content = append(pg.Content, b.margins(p, first, p.number, total, sp.width, sp.height)...)
+	if !sp.single {
+		pg.Content = append(pg.Content, b.margins(p, first, p.number, total, sp.width, sp.height)...)
+	}
 	pg.Content = append(pg.Content, &compose.Group{
 		Transform: compose.Matrix{A: z, D: z, E: ox, F: oy},
 		Clip:      &compose.Path{Ops: rectOps(0, 0, pb.dataW, pb.dataH), Fill: &compose.Fill{}},
