@@ -11,6 +11,7 @@ import (
 	_ "image/jpeg" // registers JPEG with image.Decode
 	_ "image/png"  // registers PNG with image.Decode
 	"math"
+	"strconv"
 	"strings"
 
 	_ "golang.org/x/image/bmp"  // registers BMP with image.Decode
@@ -185,12 +186,19 @@ type frameGeom struct {
 	wrap       string
 	hpos, hrel string
 	vpos, vrel string
-	props      odf.Props
+	// page is the page a page-anchored frame sits on, counted from 1, 0
+	// for the page its anchor falls on (ODF 1.3 Part 3, 19.758
+	// text:anchor-page-number).
+	page  int
+	props odf.Props
 }
 
 // geometry reads a drawing element's geometry and graphic style.
 func (b *builder) geometry(c *odf.Element) frameGeom {
 	g := frameGeom{anchor: c.A(odf.NSText, "anchor-type")}
+	if n, err := strconv.Atoi(c.A(odf.NSText, "anchor-page-number")); err == nil && n > 0 && g.anchor == "page" {
+		g.page = n
+	}
 	g.w, g.hasW = odf.Length(c.A(odf.NSSVG, "width"))
 	g.h, g.hasH = odf.Length(c.A(odf.NSSVG, "height"))
 	if !g.hasW {
@@ -365,6 +373,7 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 			st.Left, st.Top = css.Pts(g.x-b.pageOrigin[0]), css.Pts(g.y-b.pageOrigin[1])
 		case page:
 			st.PageAnchor = true
+			st.AnchorPage = g.page
 			x, y := b.pagePosition(g)
 			st.Left, st.Top = css.Pts(x), css.Pts(y)
 		}
