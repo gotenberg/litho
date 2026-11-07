@@ -159,6 +159,7 @@ func TestVerticalAlign_Kinds(t *testing.T) {
 		{"top", css.VerticalAlign{Kind: css.AlignTop}, 20, 8},
 		{"bottom", css.VerticalAlign{Kind: css.AlignBottom}, 20, 18},
 		{"length raises", css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(px(5))}, 23, 21},
+		{"length lowers", css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(px(-5))}, 20, 11},
 		{"sub", css.VerticalAlign{Kind: css.Sub}, 20, 14},
 		{"super", css.VerticalAlign{Kind: css.Super}, 21 + 1.0/3, 19 + 1.0/3},
 		{"text-top", css.VerticalAlign{Kind: css.TextTop}, 20, 8},
