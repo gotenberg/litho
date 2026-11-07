@@ -4,7 +4,7 @@ HTML and Markdown sources converted twice: by Chromium, through the Chromium rou
 
 | Path            | What it holds                                                                                                                 |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `sources/`      | The 34 sources                                                                                                                |
+| `sources/`      | The 36 sources                                                                                                                |
 | `chromium/`     | Chromium's PDF of each source, the reference (`make html-chromium`, committed)                                                |
 | `pdfs/`         | litho's PDF of each source (`make html-fixtures`, committed once the converter writes them)                                   |
 | `chromium.sh`   | Posts each source to the Gotenberg image and writes `chromium/<name>.pdf`                                                     |
@@ -82,6 +82,8 @@ The 19 sources below mirror the scenarios of Gotenberg's integration tests for t
 | `grid-dashboard`         | 1                | none                                       | Self-authored                                              | A dashboard of `repeat(auto-fill, minmax())` KPI cells and `auto-fit` cards spanning two columns or two rows with auto placement, `grid-auto-rows: minmax()`, a `max-content` footer grid |
 | `bidi-letter`            | 1                | none                                       | Self-authored                                              | An Arabic letter (`dir="rtl"`) with Latin names, numbers, an e-mail address, an rtl table and lists, `bdi`, a Hebrew and an English paragraph                                             |
 | `cjk-article`            | 1                | none                                       | Self-authored                                              | A Japanese article: ideographs mixed with Latin and digits, full-width punctuation, justified paragraphs, `line-break: strict`, `loose`, `anywhere`                                       |
+| `multicol-article`       | 3                | none                                       | Self-authored, generated text                              | A long article in two balanced columns across pages, section headings spanning both (`column-span: all`), pull quotes kept whole (`break-inside: avoid`)   |
+| `multicol-newsletter`    | 2                | none                                       | Self-authored, generated text                              | A newsletter in three columns with rules, a boxed brief kept whole, a notice spanning the columns, `break-after: avoid` headings and a forced column break |
 
 The Gotenberg sources are copied from its repository at commit `77fa381241480e8c2555497d150035418231e72a`, the last to touch `test/corpus/testdata/web`. What changed in the copy:
 
