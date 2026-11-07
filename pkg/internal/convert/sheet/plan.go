@@ -58,8 +58,20 @@ type sheetPlan struct {
 // points: the paper less the margins, divided by the zoom, less the
 // headings (ScPrintFunc::GetDocPageSize).
 func (sp *sheetPlan) docArea(zoom int) (float64, float64) {
-	w := (sp.width - sp.margin[1] - sp.margin[3]) * 100 / float64(zoom)
-	h := (sp.height - sp.margin[0] - sp.margin[2]) * 100 / float64(zoom)
+	z := float64(zoom) / 100
+	w := (sp.width - sp.margin[1] - sp.margin[3]) / z
+	// A header's and a footer's room is unscaled: only the page margins
+	// beyond them are divided by the zoom.
+	top, bottom := sp.margin[0]/z, sp.margin[2]/z
+	ps := &sp.g.sh.Page
+	hf := &sp.g.sh.HeaderFooter
+	if !sp.single && headerShown(hf, false) && ps.HeaderTop >= 0 && ps.HeaderTop < sp.margin[0] {
+		top = ps.HeaderTop/z + sp.margin[0] - ps.HeaderTop
+	}
+	if !sp.single && headerShown(hf, true) && ps.FooterBottom >= 0 && ps.FooterBottom < sp.margin[2] {
+		bottom = ps.FooterBottom/z + sp.margin[2] - ps.FooterBottom
+	}
+	h := sp.height/z - top - bottom
 	if sp.g.sh.Page.Headings {
 		w -= headingWidth
 		h -= headingHeight

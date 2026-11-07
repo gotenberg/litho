@@ -120,7 +120,17 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 	}
 	f := hfFields{page: number, pages: total, sheet: p.sp.g.sh.Name}
 	ps := &p.sp.g.sh.Page
-	left, right := ps.Margin[css.Left], ps.Margin[css.Right]
+	// Calc prints the header and footer at the sheet's print scale
+	// (ScPrintFunc::PrintHF draws in the zoomed twip map mode): they are
+	// laid out on the page divided by the zoom and drawn multiplied by
+	// it, their distances from the edges kept.
+	z := p.sp.zoom
+	if !(z > 0) {
+		z = 1
+	}
+	pageW, pageH := width, height
+	width, height = width/z, height/z
+	left, right := p.sp.margin[css.Left]/z, p.sp.margin[css.Right]/z
 	areaW := width - left - right
 	if areaW <= 1 {
 		return nil
@@ -166,8 +176,8 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 			tree.Children = append(tree.Children, &layout.Node{Kind: layout.Element, Style: box, Children: []*layout.Node{n}})
 		}
 	}
-	place(m.Header, max(ps.HeaderTop, 0), false, max(hf.HeaderMinHeight, 0))
-	place(m.Footer, max(ps.FooterBottom, 0), true, max(hf.FooterMinHeight, 0))
+	place(m.Header, max(ps.HeaderTop, 0)/z, false, max(hf.HeaderMinHeight, 0))
+	place(m.Footer, max(ps.FooterBottom, 0)/z, true, max(hf.FooterMinHeight, 0))
 	if len(tree.Children) == 0 {
 		return nil
 	}
@@ -180,7 +190,33 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 		b.warn(CodeHeader, fmt.Sprintf("a header or footer of sheet %s could not be laid out", quote(p.sp.g.sh.Name)))
 		return nil
 	}
-	return artifacts(res.Pages[0].Content)
+	frags := artifacts(res.Pages[0].Content)
+	if z == 1 {
+		return frags
+	}
+	return []compose.Fragment{&compose.Group{
+		Transform: compose.Matrix{A: z, D: z},
+		Clip:      &compose.Path{Ops: rectOps(0, 0, pageW/z, pageH/z), Fill: &compose.Fill{}},
+		Opacity:   1,
+		Content:   frags,
+	}}
+}
+
+// headerShown reports a sheet whose pages show a header, footer when
+// footer is set.
+func headerShown(hf *HeaderFooter, footer bool) bool {
+	for _, m := range []*Margins{&hf.Odd, &hf.Even, &hf.First} {
+		parts := m.Header
+		if footer {
+			parts = m.Footer
+		}
+		for _, p := range parts {
+			if len(p) > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // measureBlock returns the height of the block n laid out w points wide.

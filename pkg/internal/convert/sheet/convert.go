@@ -305,6 +305,21 @@ func (b *builder) renderPage(p *pagePlan, first bool, total int) (*compose.Page,
 	areaW := sp.width - sp.margin[css.Left] - sp.margin[css.Right]
 	areaH := sp.height - sp.margin[css.Top] - sp.margin[css.Bottom]
 	ox, oy := sp.margin[css.Left], sp.margin[css.Top]
+	// The header's and the footer's room in the margins shrinks with the
+	// print scale, as Calc adds their height in zoomed units to the page
+	// margins (ScPrintFunc::GetDocPageSize): the cells start that much
+	// higher, and the room below them grows as much.
+	hf := &sp.g.sh.HeaderFooter
+	if z != 1 && !sp.single {
+		if headerShown(hf, false) && ps.HeaderTop >= 0 && ps.HeaderTop < sp.margin[css.Top] {
+			shrink := (sp.margin[css.Top] - ps.HeaderTop) * (1 - z)
+			oy -= shrink
+			areaH += shrink
+		}
+		if headerShown(hf, true) && ps.FooterBottom >= 0 && ps.FooterBottom < sp.margin[css.Bottom] {
+			areaH += (sp.margin[css.Bottom] - ps.FooterBottom) * (1 - z)
+		}
+	}
 	if ps.CenterHorizontally {
 		ox += (areaW - pb.dataW*z) / 2
 	}
