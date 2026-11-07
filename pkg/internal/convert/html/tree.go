@@ -96,7 +96,7 @@ func (b *builder) buildRoot(ctx context.Context, root *dom.Node) (*layout.Node, 
 	if b.omitBackgrounds {
 		st = withoutBackground(st)
 	}
-	n := &layout.Node{Kind: layout.Element, Style: st}
+	n := &layout.Node{Kind: layout.Element, Style: st, Lang: rootLanguage(root)}
 	if st.Display == css.DisplayNone {
 		return n, nil
 	}

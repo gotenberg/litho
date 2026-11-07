@@ -463,8 +463,7 @@ func scanDocument(ctx context.Context, doc *dom.Node, docURL string) (*scan, err
 		case atom.Html:
 			if s.root == nil {
 				s.root = n
-				s.lang, _ = attr(n, "lang")
-				s.lang = strings.TrimSpace(s.lang)
+				s.lang = rootLanguage(n)
 			}
 		case atom.A:
 			if name, ok := attr(n, "name"); ok && name != "" {
