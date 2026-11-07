@@ -280,6 +280,10 @@ type gridLayout struct {
 	tracks [2][]*gtrack
 	gap    [2]float64
 	inner  [2]float64
+	// content is the height of the rows and gaps: the content height a
+	// min-height or max-height of max-content takes (CSS Sizing 3, 3.2),
+	// the container's own height applying on top of it.
+	content float64
 	// measured content heights of the items at their used widths, and
 	// their used widths.
 	widths map[*gitem]float64
@@ -366,6 +370,7 @@ func (e *engine) layoutGrid(b *box, cb cblock, top float64) float64 {
 		innerH = max(min(zr.sum(), maxH), minH)
 	}
 	l.inner[rowAxis] = innerH
+	l.content = zr.sum()
 	if st.RowGap.Kind == css.Percent && !pcb.hDefinite {
 		// A percentage gap of an indefinite height counts as 0 for the
 		// sizing, then resolves against the height laid out, as Chromium
@@ -758,7 +763,7 @@ func (l *gridLayout) place(top float64, colPos, rowPos []float64) float64 {
 		ys[0] = rowPos[0]
 	}
 	g.lines[rowAxis] = ys
-	return top + l.inner[rowAxis] + shift
+	return top + l.content + shift
 }
 
 // physLines returns the column lines as offsets from the content box's
