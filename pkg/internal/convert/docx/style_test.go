@@ -214,15 +214,17 @@ func TestParagraphSpacing_AtBreaks(t *testing.T) {
 	for _, n := range ps {
 		got = append(got, textOf(n))
 	}
-	if len(ps) != 4 {
-		t.Fatalf("paragraphs %q: the page break paragraph leaves none", got)
+	// The paragraph that holds a page break alone keeps its empty line
+	// before the break, as LibreOffice prints it.
+	if len(ps) != 5 || got[1] != "" || ps[1].Style.BreakBefore != css.BreakAuto {
+		t.Fatalf("paragraphs %q: the page break paragraph leaves no empty line", got)
 	}
 	// The hard break drops the space before; the section's first page
 	// keeps what the previous paragraph's space after did not give.
-	if ps[1].Style.BreakBefore != css.Page || ps[1].Style.Margin[css.Top] != css.Pts(0) {
-		t.Errorf("after break: break %v margin %v", ps[1].Style.BreakBefore, ps[1].Style.Margin[css.Top])
+	if ps[2].Style.BreakBefore != css.Page || ps[2].Style.Margin[css.Top] != css.Pts(0) {
+		t.Errorf("after break: break %v margin %v", ps[2].Style.BreakBefore, ps[2].Style.Margin[css.Top])
 	}
-	if m := ps[3].Style.Margin[css.Top]; m != css.Pts(14) {
+	if m := ps[4].Style.Margin[css.Top]; m != css.Pts(14) {
 		t.Errorf("new section margin %v, want 14", m)
 	}
 }

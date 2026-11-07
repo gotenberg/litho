@@ -155,3 +155,30 @@ func TestSections_ColumnBreaks(t *testing.T) {
 		}
 	}
 }
+
+func TestSections_StrayBreaksAndEmptyFrames(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:r><w:t>one</w:t></w:r></w:p><w:br w:type="page"/><w:p><w:r><w:t>two</w:t></w:r></w:p>` +
+		`<w:p><w:pPr><w:framePr/></w:pPr><w:r><w:t>three</w:t></w:r></w:p>` +
+		`<w:p><w:r><w:br w:type="page"/></w:r></w:p><w:p><w:r><w:br w:type="page"/></w:r></w:p><w:p><w:r><w:t>four</w:t></w:r></w:p>`
+	b := build(t, body, nil)
+	var got []string
+	var breaks []css.Break
+	for _, p := range role(b.root, "P") {
+		got = append(got, textOf(p))
+		breaks = append(breaks, p.Style.BreakBefore)
+		if textOf(p) == "three" && p.Style.Float != css.FloatNone {
+			t.Error("a frame without properties floats")
+		}
+	}
+	want := []string{"one", "two", "three", "", "", "four"}
+	wantBreaks := []css.Break{css.BreakAuto, css.Page, css.BreakAuto, css.BreakAuto, css.Page, css.Page}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("paragraphs %q, want %q", got, want)
+	}
+	for i := range wantBreaks {
+		if breaks[i] != wantBreaks[i] {
+			t.Errorf("paragraph %d %q breaks %v, want %v", i, got[i], breaks[i], wantBreaks[i])
+		}
+	}
+}

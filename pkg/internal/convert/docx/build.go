@@ -94,6 +94,13 @@ func (d *document) blocksInto(s *story, c *cond, parent *ooxml.Element, depth in
 			d.blocksInto(s, c, e, depth+1, out)
 		case "altChunk":
 			d.warn("unsupported-content", "an imported chunk (altChunk) is left out")
+		case "br":
+			// A break outside a run, which the schema does not allow and
+			// LibreOffice reads: a page or column break moves the next
+			// paragraph.
+			if t := attrOr(e, "type"); t == "page" || t == "column" {
+				s.breakNext, s.breakColumn = true, t == "column"
+			}
 		}
 	}
 }
@@ -260,6 +267,12 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 	d.inlines(s, rp, st, lineMult, p, sink, depth)
 	segs := sink.finish()
 	var out []blockNode
+	breaksOnly := true
+	for _, seg := range segs {
+		if len(seg.nodes) > 0 || seg.id != "" {
+			breaksOnly = false
+		}
+	}
 	for i, seg := range segs {
 		if len(segs) > 1 && len(seg.nodes) == 0 && seg.id == "" {
 			if i == len(segs)-1 {
@@ -267,8 +280,11 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 				s.breakNext, s.breakColumn = true, seg.column
 				break
 			}
-			if i == 0 {
-				// Nor does a page break opening it leave an empty line.
+			if i == 0 && !s.breakNext && !breaksOnly {
+				// Nor does a page break opening it leave an empty line,
+				// unless a break before it already moves it or the
+				// paragraph holds nothing else: then it keeps its empty
+				// line.
 				continue
 			}
 		}

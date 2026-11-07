@@ -374,7 +374,9 @@ func (d *document) group(s *story, g *ooxml.Element, st *css.Style, w, h float64
 // positioned at absolute page coordinates float too, an approximation.
 func (d *document) frame(n *layout.Node, pp paraProps) {
 	f := pp.framePr
-	if f == nil {
+	if f == nil || len(f.Attrs) == 0 {
+		// A frame without properties is a plain paragraph, as LibreOffice
+		// imports it.
 		return
 	}
 	st := n.Style
