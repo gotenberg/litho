@@ -218,8 +218,9 @@ func (p *pages) numbering(page, total int) (*section, int) {
 // section's header and footer for the page's kind (17.10.1: the first
 // page of a section with a title page takes the first header, even pages
 // the even one when the settings ask for them, every other page the
-// default; a first or even one the sections leave undefined takes the
-// default, as LibreOffice shows it), with the page fields of the page.
+// default; a first or even one the sections leave undefined is empty, or
+// the default one as [section.part] says), with the page fields of the
+// page.
 func (p *pages) margins(info layout.PageInfo, total int) []compose.Fragment {
 	if info.Blank {
 		return nil
@@ -250,15 +251,7 @@ func (p *pages) margins(info layout.PageInfo, total int) []compose.Fragment {
 		n.Style.Top = css.Pts(max(0, y))
 		root.Children = append(root.Children, n)
 	}
-	// A first or even header or footer the section chain does not define
-	// takes the default one, as LibreOffice shows it.
-	hk, fk := kind, kind
-	if s.headers[hk] == "" {
-		hk = "default"
-	}
-	if s.footers[fk] == "" {
-		fk = "default"
-	}
+	hk, fk := s.part("header", kind), s.part("footer", kind)
 	place(s.headers[hk], s.header, false, s.headerH[hk])
 	place(s.footers[fk], s.footer, true, s.footerH[fk])
 	if len(root.Children) == 0 {

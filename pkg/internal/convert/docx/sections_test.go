@@ -83,12 +83,15 @@ func TestHeadersFooters_Fields(t *testing.T) {
 	}
 	// PAGE and NUMPAGES take the section's format, SECTIONPAGES keeps
 	// its cached result, the title page of the second section takes its
-	// first header.
+	// first header and no footer: no section defines a first one.
 	want := [][]string{
 		{"Head", "body", "P1of4s99I"},
 		{"Head", "more", "P2of4s99II"},
-		{"First", "body", "Piofivs99I"},
+		{"First", "body"},
 		{"Head", "more", "Piiofivs99II"},
+	}
+	if got := pageText(doc.Pages[2]); strings.Contains(got, "of") {
+		t.Errorf("title page %q shows the default footer", got)
 	}
 	squash := strings.NewReplacer(" ", "", "\n", "")
 	for i, pg := range doc.Pages {
@@ -212,6 +215,49 @@ func TestTextDirections(t *testing.T) {
 	for _, tc := range []struct{ in, want string }{{"", ""}, {"horz", ""}, {"vert270", "btLr"}, {"vert", "tbRl"}, {"eaVert", "tbRl"}} {
 		if got := bodyVert(tc.in); got != tc.want {
 			t.Errorf("bodyVert(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestHeadersFooters_UndefinedFirst checks which header and footer a
+// title page shows when the section defines no first one, as LibreOffice
+// prints it: none, unless the default reference comes before the
+// section's first first-page reference.
+func TestHeadersFooters_UndefinedFirst(t *testing.T) {
+	t.Parallel()
+	part := func(tag, text string) string {
+		return `<w:` + tag + ` ` + nsDecl + `><w:p><w:r><w:t>` + text + `</w:t></w:r></w:p></w:` + tag + `>`
+	}
+	extra := map[string]string{
+		"word/header1.xml": part("hdr", "DefaultHead"),
+		"word/header2.xml": part("hdr", "FirstHead"),
+		"word/footer1.xml": part("ftr", "DefaultFoot"),
+	}
+	const (
+		dh = `<w:headerReference w:type="default" r:id="rIdheader1"/>`
+		fh = `<w:headerReference w:type="first" r:id="rIdheader2"/>`
+		df = `<w:footerReference w:type="default" r:id="rIdfooter1"/>`
+	)
+	for _, tc := range []struct {
+		name, refs string
+		want, not  []string
+	}{
+		{"no first references", dh + df, nil, []string{"DefaultHead", "DefaultFoot"}},
+		{"first header, then the default footer", fh + df, []string{"FirstHead"}, []string{"DefaultFoot"}},
+		{"default footer, then the first header", df + fh, []string{"FirstHead", "DefaultFoot"}, nil},
+	} {
+		body := `<w:p><w:r><w:t>one</w:t></w:r></w:p><w:sectPr>` + tc.refs + `<w:titlePg/></w:sectPr>`
+		doc := convertBytes(t, docx(t, body, extra), office.Options{})
+		got := pageText(doc.Pages[0])
+		for _, w := range tc.want {
+			if !strings.Contains(got, w) {
+				t.Errorf("%s: page %q lacks %q", tc.name, got, w)
+			}
+		}
+		for _, w := range tc.not {
+			if strings.Contains(got, w) {
+				t.Errorf("%s: page %q shows %q", tc.name, got, w)
+			}
 		}
 	}
 }

@@ -50,9 +50,9 @@
 // gutter, columns (unequal widths laid out equal), page borders and break
 // type (a continuous break keeps the page, and its margins, when the page
 // size does not change). Headers and footers of the default, first and
-// even kinds, inherited across sections, draw in the margins, which grow to hold a
-// taller header or footer; a first or even one no section defines takes
-// the default one, as LibreOffice shows it. PAGE and NUMPAGES are computed
+// even kinds, inherited across sections, draw in the margins, which grow
+// to hold a taller header or footer; a first or even one no section
+// defines is empty, as Word and LibreOffice show it. PAGE and NUMPAGES are computed
 // per page in the section's number format; every other field shows the
 // result Word last computed, SECTIONPAGES included, as LibreOffice does.
 // The empty paragraph that only carries a section break is not laid out.
