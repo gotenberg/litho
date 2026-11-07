@@ -160,6 +160,7 @@ const (
 	pFontStretch
 	pFontSynthesisWeight
 	pFontSynthesisStyle
+	pTextSpacingTrim
 	numProps
 )
 

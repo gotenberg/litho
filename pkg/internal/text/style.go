@@ -65,6 +65,11 @@ type Style struct {
 	// and the italic a face lacks, CSS font-synthesis without weight or
 	// without style (CSS Fonts 4, 5.5).
 	NoSyntheticBold, NoSyntheticItalic bool
+	// NoSpacingTrim keeps the full width of adjacent fullwidth
+	// punctuation, CSS text-spacing-trim: space-all; by default it is
+	// trimmed as Chromium's text-spacing-trim: normal does (see
+	// [Fonts.Shape]).
+	NoSpacingTrim bool
 	// Size is the font size in points, greater than 0 and at most 1000.
 	Size float64
 	// Lang is the BCP 47 language tag of the text, "" when unknown. It

@@ -958,6 +958,9 @@ type Style struct {
 	// TextAutospace is the spacing between ideographs and other scripts
 	// (CSS Text 4, 8.2).
 	TextAutospace TextAutospace
+	// NoSpacingTrim is text-spacing-trim: space-all, which keeps adjacent
+	// fullwidth punctuation full width (CSS Text 4, 8.3).
+	NoSpacingTrim bool
 	// TabSize takes Number (a count of spaces) or Points.
 	TabSize       Dimension
 	VerticalAlign VerticalAlign

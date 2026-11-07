@@ -286,6 +286,7 @@ func (f *Fonts) Shape(ctx context.Context, runs []ParagraphRun, opts ParagraphOp
 	if err := p.shape(ctx, st, runs, shapeText); err != nil {
 		return nil, Report{}, err
 	}
+	p.trimAdjacent()
 	return p, st.report(), nil
 }
 

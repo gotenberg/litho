@@ -268,6 +268,7 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 		Stretch:           min(max(st.FontStretch, 0), 1000),
 		NoSyntheticBold:   st.NoSynthesizeWeight,
 		NoSyntheticItalic: st.NoSynthesizeStyle,
+		NoSpacingTrim:     st.NoSpacingTrim,
 		Size:              size,
 		Lang:              lang,
 		Color:             c,

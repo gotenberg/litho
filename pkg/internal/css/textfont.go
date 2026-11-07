@@ -33,8 +33,8 @@ const (
 )
 
 // textFontProps returns the properties of CSS Text 3 and 4 and CSS Fonts
-// 4 this file adds: text-justify, text-autospace, font-stretch and the
-// font-synthesis longhands.
+// 4 this file adds: text-justify, text-autospace, text-spacing-trim,
+// font-stretch and the font-synthesis longhands.
 func textFontProps() map[propID]propDef {
 	return map[propID]propDef{
 		pTextJustify: enumProp("text-justify", true, func(s *Style) *TextJustify { return &s.TextJustify }, map[string]TextJustify{
@@ -66,6 +66,30 @@ func textFontProps() map[propID]propDef {
 				}
 			},
 			copyFrom: field(func(s *Style) *float64 { return &s.FontStretch }),
+		},
+		// CSS Text 4, 8.3: space-all keeps every fullwidth punctuation
+		// full width; the other values trim adjacent ones, as normal does.
+		pTextSpacingTrim: {
+			name: "text-spacing-trim", inherited: true,
+			parse: func(v []token, _ *declCtx) (any, bool) {
+				k, ok := keyword(v)
+				if !ok {
+					return nil, false
+				}
+				switch k {
+				case "space-all":
+					return true, true
+				case "normal", "space-first", "trim-start", "trim-both", "trim-all", "auto":
+					return false, true
+				}
+				return nil, false
+			},
+			compute: func(_ *styler, st *Style, v any) {
+				if b, ok := v.(bool); ok {
+					st.NoSpacingTrim = b
+				}
+			},
+			copyFrom: field(func(s *Style) *bool { return &s.NoSpacingTrim }),
 		},
 		pFontSynthesisWeight: synthesisProp("font-synthesis-weight", func(s *Style) *bool { return &s.NoSynthesizeWeight }),
 		pFontSynthesisStyle:  synthesisProp("font-synthesis-style", func(s *Style) *bool { return &s.NoSynthesizeStyle }),
