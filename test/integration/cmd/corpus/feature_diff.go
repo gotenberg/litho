@@ -203,8 +203,12 @@ func flattenOutline(marks []models.Bookmark) []diffOutlineItem {
 // print media, A4, Gotenberg's default margins) and compared with the PDF
 // Gotenberg's Chromium route wrote from the same source at the same options,
 // read at provisioning by PDF.js (text, links) and poppler (pages at 72 dpi),
-// and at load by litho (page sizes, outline). Six scores, each in [0, 1],
-// land in the baseline per fixture:
+// and at load by litho (page sizes, outline). It scores the Office
+// converters against LibreOffice alike: each docx or odt corpus source is
+// converted at the LibreOffice route's fields its options.json names and
+// compared with the PDF that route wrote, a reference the host builds and
+// [diffFeature.Prepare] checks, both sides drawn without annotations. Six
+// scores, each in [0, 1], land in the baseline per fixture:
 //
 //   - pages: the smaller page count over the larger, times the share of the
 //     pages both have whose width and height lie within diffPageSizeSlack of
