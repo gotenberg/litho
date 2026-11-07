@@ -124,9 +124,10 @@ func (d *document) parseStyles(root *ooxml.Element) *styleSheet {
 		if st.isDefault {
 			switch st.typ {
 			case "paragraph":
-				if s.defaultPara == "" {
-					s.defaultPara = st.id
-				}
+				// The last default paragraph style wins (17.7.4.17: "If
+				// this attribute is specified by multiple styles, then the
+				// last instance shall be used"), as LibreOffice reads it.
+				s.defaultPara = st.id
 			case "character":
 				if s.defaultChar == "" {
 					s.defaultChar = st.id

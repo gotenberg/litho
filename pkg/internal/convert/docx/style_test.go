@@ -289,3 +289,28 @@ func TestJustifyShrink(t *testing.T) {
 		})
 	}
 }
+
+// TestDefaultParagraphStyle takes the last of the paragraph styles marked
+// default (17.7.4.17), as LibreOffice does.
+func TestDefaultParagraphStyle(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		defs string
+		size float64
+	}{
+		{"one", ``, 10},
+		{"last wins", `<w:style w:type="paragraph" w:default="1" w:styleId="Title"><w:rPr><w:sz w:val="56"/></w:rPr></w:style>`, 28},
+		{"not default", `<w:style w:type="paragraph" w:default="0" w:styleId="Title"><w:rPr><w:sz w:val="56"/></w:rPr></w:style>`, 10},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			b := build(t, `<w:p><w:r><w:t>a</w:t></w:r></w:p>`, map[string]string{"word/styles.xml": stylesPart(tt.defs)})
+			r := runWith(t, b.root, "a")
+			if r.Style.FontSize != tt.size {
+				t.Errorf("font size %v, want %v", r.Style.FontSize, tt.size)
+			}
+		})
+	}
+}
