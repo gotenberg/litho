@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -86,7 +87,9 @@ const (
 	scoreStrict = "strict"
 	// scoreOutline is the share of the reference's outline items, by title
 	// and target page, litho's outline holds too; 1 when the reference has
-	// no outline.
+	// no outline. A CSV fixture's items are matched by page alone:
+	// LibreOffice names the sheet, and its outline entry, after the
+	// upload's file name, a UUID of Gotenberg's.
 	scoreOutline = "outline_recall"
 )
 
@@ -469,11 +472,12 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 	fonts, renderDir, reportDir, office := f.fontDirs, f.renderDir, f.reportDir, f.office
 	f.mu.RUnlock()
 	var (
-		data []byte
-		err  error
+		data   []byte
+		format pdf.Format
+		err    error
 	)
 	if office {
-		data, err = f.convertOffice(ctx, srcPath, fonts)
+		data, format, err = f.convertOffice(ctx, srcPath, fonts)
 	} else {
 		data, err = f.convertHTMLSource(ctx, srcPath, fonts)
 	}
@@ -487,7 +491,7 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 		}
 		return json.Marshal(diffOutput{Outcome: outcomeError, Reason: err.Error(), GoldenPages: g.text.NumPages, Scores: zeroDiffScores()})
 	}
-	out := scoreDiff(g, doc, renderDir, func(page int, got, want image.Image, d pixelDiff) {
+	out := scoreDiff(g, doc, renderDir, format == pdf.FormatCSV, func(page int, got, want image.Image, d pixelDiff) {
 		if reportDir == "" {
 			return
 		}
@@ -500,17 +504,19 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 }
 
 // convertOffice converts an Office source, a source directory or a fetched
-// document, at the options its options.json names.
-func (f *diffFeature) convertOffice(ctx context.Context, srcPath string, fonts []string) ([]byte, error) {
+// document, at the options its options.json names, and returns the format
+// it converted from.
+func (f *diffFeature) convertOffice(ctx context.Context, srcPath string, fonts []string) ([]byte, pdf.Format, error) {
 	source, err := fixture.LoadOffice(srcPath)
 	if err != nil {
-		return nil, fmt.Errorf("read: %w", err)
+		return nil, "", fmt.Errorf("read: %w", err)
 	}
 	src, err := os.ReadFile(source.Document)
 	if err != nil {
-		return nil, fmt.Errorf("read: %w", err)
+		return nil, "", fmt.Errorf("read: %w", err)
 	}
-	return f.convert(ctx, src, htmlSettings{FontDirs: fonts, Format: source.Format, Print: source.ConvertOptions()})
+	data, err := f.convert(ctx, src, htmlSettings{FontDirs: fonts, Format: source.Format, Print: source.ConvertOptions()})
+	return data, source.Format, err
 }
 
 // convertHTMLSource converts an html corpus source at the options its
@@ -604,10 +610,11 @@ func readDiffPages(ctx context.Context, data []byte, hideAnnotations bool) (diff
 	return diffLithoDoc{pages: pages, outline: flattenOutline(marks)}, nil
 }
 
-// scoreDiff scores litho's pages against the goldens. report is called for
-// each page the strict rule fails, with litho's drawing, Chromium's and
-// their comparison.
-func scoreDiff(g *diffGolden, doc diffLithoDoc, renderDir string, report func(page int, got, want image.Image, d pixelDiff)) diffOutput {
+// scoreDiff scores litho's pages against the goldens. outlineByPage
+// matches the outline items by page alone, for a reference whose titles
+// no converter can know. report is called for each page the strict rule
+// fails, with litho's drawing, Chromium's and their comparison.
+func scoreDiff(g *diffGolden, doc diffLithoDoc, renderDir string, outlineByPage bool, report func(page int, got, want image.Image, d pixelDiff)) diffOutput {
 	pages := doc.pages
 	out := diffOutput{Pages: len(pages), GoldenPages: g.text.NumPages}
 	n := max(len(pages), g.text.NumPages)
@@ -671,7 +678,7 @@ func scoreDiff(g *diffGolden, doc diffLithoDoc, renderDir string, report func(pa
 		scoreLinks:   linkRecall(g.links.Links, pages),
 		scoreLayout:  meanOver(layoutSum, n),
 		scoreStrict:  meanOver(strictSum, n),
-		scoreOutline: outlineRecall(g.outline, doc.outline),
+		scoreOutline: outlineRecall(g.outline, doc.outline, outlineByPage),
 	}
 	s := out.Scores
 	if s[scorePages] == 1 && s[scoreText] >= diffTextBar && s[scoreLinks] == 1 && s[scoreLayout] >= diffLayoutBar && s[scoreOutline] == 1 {
@@ -685,22 +692,27 @@ func scoreDiff(g *diffGolden, doc diffLithoDoc, renderDir string, report func(pa
 }
 
 // outlineRecall is the share of the reference's outline items, matched by
-// title and page as multisets, that litho's outline holds; 1 when the
-// reference has none. An outline litho writes and Chromium does not is not
-// penalised: the route writes none unless asked (nativeBookmarks), and the
-// fixtures that ask score the items Chromium writes.
-func outlineRecall(golden, got []diffOutlineItem) float64 {
+// title and page as multisets, or by page alone when byPage is set, that
+// litho's outline holds; 1 when the reference has none. An outline litho
+// writes and Chromium does not is not penalised: the route writes none
+// unless asked (nativeBookmarks), and the fixtures that ask score the
+// items Chromium writes.
+func outlineRecall(golden, got []diffOutlineItem, byPage bool) float64 {
 	if len(golden) == 0 {
 		return 1
 	}
+	key := diffOutlineItem.key
+	if byPage {
+		key = func(o diffOutlineItem) string { return strconv.Itoa(o.Page) }
+	}
 	have := make(map[string]int, len(got))
 	for _, o := range got {
-		have[o.key()]++
+		have[key(o)]++
 	}
 	found := 0
 	for _, o := range golden {
-		if have[o.key()] > 0 {
-			have[o.key()]--
+		if have[key(o)] > 0 {
+			have[key(o)]--
 			found++
 		}
 	}

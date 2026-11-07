@@ -353,7 +353,7 @@ func TestScoreDiff_AgainstGoldens(t *testing.T) {
 	}
 	noReport := func(int, image.Image, image.Image, pixelDiff) {}
 
-	same := scoreDiff(g, diffLithoDoc{pages: []diffLithoPage{{text: "hello  world", links: []diffLink{{Page: 1, URI: "https://a.example"}}, img: page}}}, dir, noReport)
+	same := scoreDiff(g, diffLithoDoc{pages: []diffLithoPage{{text: "hello  world", links: []diffLink{{Page: 1, URI: "https://a.example"}}, img: page}}}, dir, false, noReport)
 	if same.Outcome != outcomePass || same.Scores[scoreLayout] != 1 || same.Scores[scoreStrict] != 1 || same.Scores[scoreText] != 1 {
 		t.Errorf("identical conversion: %+v", same)
 	}
@@ -362,7 +362,7 @@ func TestScoreDiff_AgainstGoldens(t *testing.T) {
 	extra := scoreDiff(g, diffLithoDoc{pages: []diffLithoPage{
 		{text: "hello", img: solid(40, 40, color.RGBA{0xff, 0xff, 0xff, 0xff})},
 		{text: "overflow", img: page},
-	}}, dir, func(int, image.Image, image.Image, pixelDiff) { reported++ })
+	}}, dir, false, func(int, image.Image, image.Image, pixelDiff) { reported++ })
 	if extra.Outcome != outcomeFail || extra.Scores[scorePages] != 0.5 || extra.Scores[scoreLinks] != 0 || extra.Scores[scoreLayout] != 0 {
 		t.Errorf("blank page plus an extra one: %+v", extra.Scores)
 	}
@@ -392,7 +392,7 @@ func TestScoreDiff_AgainstGoldens(t *testing.T) {
 	for _, tc := range cases {
 		p := lithoPage
 		p.size = tc.size
-		got := scoreDiff(&shaped, diffLithoDoc{pages: []diffLithoPage{p}, outline: tc.outline}, dir, noReport)
+		got := scoreDiff(&shaped, diffLithoDoc{pages: []diffLithoPage{p}, outline: tc.outline}, dir, false, noReport)
 		if got.Scores[scorePages] != tc.pages || got.Scores[scoreOutline] != tc.recall || got.Outcome != tc.outcome {
 			t.Errorf("%s: pages %v, outline %v, %s (%s); want %v, %v, %s", tc.name, got.Scores[scorePages], got.Scores[scoreOutline], got.Outcome, got.Reason, tc.pages, tc.recall, tc.outcome)
 		}
@@ -406,17 +406,21 @@ func TestOutlineRecall(t *testing.T) {
 	cases := []struct {
 		name         string
 		golden, have []diffOutlineItem
+		byPage       bool
 		want         float64
 	}{
-		{"neither has one", nil, nil, 1},
-		{"only litho has one", nil, golden, 1},
-		{"only Chromium has one", golden, nil, 0},
-		{"the same", golden, golden, 1},
-		{"a duplicate counted once", golden, []diffOutlineItem{{Title: "A", Page: 1}, {Title: "B", Page: 2}}, 2.0 / 3},
-		{"NFKC and white space", []diffOutlineItem{{Title: "ﬁle  one", Page: 1}}, []diffOutlineItem{{Title: "file one", Page: 1}}, 1},
+		{"neither has one", nil, nil, false, 1},
+		{"only litho has one", nil, golden, false, 1},
+		{"only Chromium has one", golden, nil, false, 0},
+		{"the same", golden, golden, false, 1},
+		{"a duplicate counted once", golden, []diffOutlineItem{{Title: "A", Page: 1}, {Title: "B", Page: 2}}, false, 2.0 / 3},
+		{"NFKC and white space", []diffOutlineItem{{Title: "ﬁle  one", Page: 1}}, []diffOutlineItem{{Title: "file one", Page: 1}}, false, 1},
+		{"another title on the page", []diffOutlineItem{{Title: "3f2a-uuid", Page: 1}}, []diffOutlineItem{{Title: "Sheet1", Page: 1}}, false, 0},
+		{"by page, another title on the page", []diffOutlineItem{{Title: "3f2a-uuid", Page: 1}}, []diffOutlineItem{{Title: "Sheet1", Page: 1}}, true, 1},
+		{"by page, the wrong page", []diffOutlineItem{{Title: "3f2a-uuid", Page: 1}}, []diffOutlineItem{{Title: "Sheet1", Page: 2}}, true, 0},
 	}
 	for _, tc := range cases {
-		if got := outlineRecall(tc.golden, tc.have); math.Abs(got-tc.want) > 1e-9 {
+		if got := outlineRecall(tc.golden, tc.have, tc.byPage); math.Abs(got-tc.want) > 1e-9 {
 			t.Errorf("%s: %v, want %v", tc.name, got, tc.want)
 		}
 	}

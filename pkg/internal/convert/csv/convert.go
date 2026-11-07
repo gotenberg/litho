@@ -125,7 +125,10 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, printDate time.Ti
 		Padding: [4]float64{cellPadding, cellPadding, cellPadding, cellPadding},
 		Format:  "General",
 	}
+	// Calc names the sheet after the file, which the converter does not
+	// know: the name of a new sheet stands in, for the outline.
 	sh := &sheet.Sheet{
+		Name:               "Sheet1",
 		DefaultColumnWidth: columnWidth,
 		DefaultRowHeight:   rowHeight,
 		Page:               page(),

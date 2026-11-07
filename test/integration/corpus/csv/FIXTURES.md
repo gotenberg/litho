@@ -41,3 +41,5 @@ Every reference draws Liberation Sans, Calc's default, which the fixture fonts h
 Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on all 11: pages, text, links, outline and the strict rule score 1 on every one, and layout averages 0.970. `TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens` checks the committed sources so on every run with the corpus provisioned.
 
 ## Accepted disagreements
+
+LibreOffice names a CSV's one sheet after the file it loads, which the route stores under a UUID: the reference's outline entry is that UUID, so the cell matches a CSV fixture's outline items by page alone, and litho names the sheet `Sheet1`, as Calc names a new one.
