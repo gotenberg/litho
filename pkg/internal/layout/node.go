@@ -103,7 +103,11 @@ type Node struct {
 	// draws in place of the label. A Marker without children draws the
 	// default marker in its Style; one whose content is empty draws
 	// nothing. Its Alt is what a reader hears for a picture. nil draws
-	// the default marker in the item's Style.
+	// the default marker in the item's Style. An outside marker whose
+	// Style has a Width in Points is an Office list label: a box that
+	// wide outside the item at its start edge, ending on the content
+	// edge, with the label's start, centre or end on the box's start
+	// edge, the number position, as the Style's TextAlign says.
 	Marker *Node
 	// ColSpan and RowSpan are the spans of a table cell, 0 for 1.
 	ColSpan, RowSpan int
