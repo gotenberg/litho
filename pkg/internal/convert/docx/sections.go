@@ -1,0 +1,301 @@
+package docx
+
+import (
+	"fmt"
+
+	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/ooxml"
+)
+
+// The default page of a section without a pgSz or pgMar: US Letter with
+// one-inch margins and half-inch header and footer distances, Word's
+// defaults (ECMA-376 Part 1, 17.6.13 leaves them to the application).
+const (
+	defaultPageWidth  = 612
+	defaultPageHeight = 792
+	defaultMargin     = 72
+	defaultHFDistance = 36
+)
+
+// minPageArea is the least page area side a section keeps, in points, so
+// that margins past the page leave a box the layout accepts.
+const minPageArea = 18
+
+// section is one section of the document (17.6.17 sectPr) with the blocks
+// it holds.
+type section struct {
+	index int
+	// name is the page type name of its pages: shared with the previous
+	// section for a continuous break with the same page setup, which then
+	// shares its pages.
+	name string
+	// id anchors the section's first block, to find its first page.
+	id               string
+	width, height    float64
+	margin           [4]float64
+	header, footer   float64
+	gutter           float64
+	cols             int
+	colSpace         float64
+	colSep           bool
+	breakType        string
+	pageStart        *int
+	pageFormat       string
+	titlePage        bool
+	frame            *layout.PageFrame
+	headers, footers map[string]string
+	blocks           []blockNode
+	headerH, footerH map[string]float64
+	start            int
+}
+
+// parseSection reads a w:sectPr (17.6.17), headers and footers it does not
+// name inherited from prev (17.10.5).
+func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
+	s := &section{
+		width: defaultPageWidth, height: defaultPageHeight,
+		margin: [4]float64{defaultMargin, defaultMargin, defaultMargin, defaultMargin},
+		header: defaultHFDistance, footer: defaultHFDistance,
+		cols: 1, colSpace: 36, breakType: "nextPage",
+		headers: map[string]string{}, footers: map[string]string{},
+		headerH: map[string]float64{}, footerH: map[string]float64{},
+	}
+	if prev != nil {
+		for k, v := range prev.headers {
+			s.headers[k] = v
+		}
+		for k, v := range prev.footers {
+			s.footers[k] = v
+		}
+	}
+	if e == nil {
+		return s
+	}
+	if sz := e.Child(w, "pgSz"); sz != nil {
+		if v, ok := ooxml.Twips(attrOr(sz, "w")); ok && v > 0 {
+			s.width = v
+		}
+		if v, ok := ooxml.Twips(attrOr(sz, "h")); ok && v > 0 {
+			s.height = v
+		}
+		if attrOr(sz, "orient") == "landscape" && s.width < s.height {
+			s.width, s.height = s.height, s.width
+		}
+	}
+	if m := e.Child(w, "pgMar"); m != nil {
+		for side, name := range map[css.Side]string{css.Top: "top", css.Right: "right", css.Bottom: "bottom", css.Left: "left"} {
+			if v, ok := ooxml.Twips(attrOr(m, name)); ok {
+				s.margin[side] = v
+			}
+		}
+		if v, ok := ooxml.Twips(attrOr(m, "header")); ok {
+			s.header = max(0, v)
+		}
+		if v, ok := ooxml.Twips(attrOr(m, "footer")); ok {
+			s.footer = max(0, v)
+		}
+		if v, ok := ooxml.Twips(attrOr(m, "gutter")); ok {
+			s.gutter = max(0, v)
+		}
+	}
+	if c := e.Child(w, "cols"); c != nil {
+		if v, ok := ooxml.Int(attrOr(c, "num")); ok && v > 1 {
+			s.cols = min(v, 45)
+		}
+		if v, ok := ooxml.Twips(attrOr(c, "space")); ok {
+			s.colSpace = max(0, v)
+		}
+		s.colSep = hasAttr(c, "sep") && ooxml.OnOff(attrOr(c, "sep"), true)
+		if hasAttr(c, "equalWidth") && !ooxml.OnOff(attrOr(c, "equalWidth"), true) && s.cols > 1 {
+			d.warn("approximated", "columns of unequal widths are laid out as equal columns")
+		}
+	}
+	if t := e.Child(w, "type"); t != nil {
+		s.breakType = attrOr(t, "val")
+	}
+	if p := e.Child(w, "pgNumType"); p != nil {
+		if v, ok := ooxml.Int(attrOr(p, "start")); ok {
+			s.pageStart = ptr(v)
+		}
+		s.pageFormat = attrOr(p, "fmt")
+	}
+	if t := e.Child(w, "titlePg"); t != nil {
+		s.titlePage = ooxml.Toggle(t)
+	}
+	if v := e.Child(w, "vAlign"); v != nil && attrOr(v, "val") != "top" {
+		d.warn("approximated", "a section's vertical alignment is laid out from the top")
+	}
+	if b := e.Child(w, "pgBorders"); b != nil {
+		s.frame = d.pageFrame(b, s)
+	}
+	for _, c := range e.Kids() {
+		var refs map[string]string
+		switch {
+		case c.Is(w, "headerReference"):
+			refs = s.headers
+		case c.Is(w, "footerReference"):
+			refs = s.footers
+		default:
+			continue
+		}
+		id, _ := c.AttrNS(ooxml.NSR, "id")
+		rel, ok := d.pkg.RelationshipByID(d.main, id)
+		if !ok || rel.External {
+			continue
+		}
+		typ := attrOr(c, "type")
+		if typ == "" {
+			typ = "default"
+		}
+		refs[typ] = rel.Target
+	}
+	return s
+}
+
+// applyOptions lays the conversion options over the section's page: the
+// paper size replaces the page size, landscape turns a portrait page.
+func (s *section) applyOptions(w, h float64, landscape bool) {
+	if w > 0 && h > 0 {
+		portrait := s.width <= s.height
+		s.width, s.height = w, h
+		if !portrait && s.width < s.height {
+			s.width, s.height = s.height, s.width
+		}
+	}
+	if landscape && s.width < s.height {
+		s.width, s.height = s.height, s.width
+	}
+	// Margins never leave less than a minimal page area.
+	if s.margin[css.Left]+s.margin[css.Right]+s.gutter > s.width-minPageArea {
+		s.margin[css.Left], s.margin[css.Right], s.gutter = 0, 0, 0
+	}
+	if abs(s.margin[css.Top])+abs(s.margin[css.Bottom]) > s.height-minPageArea {
+		s.margin[css.Top], s.margin[css.Bottom] = 0, 0
+	}
+}
+
+// samePage reports two sections whose pages share their setup, so that a
+// continuous break between them keeps the page.
+func samePage(a, b *section) bool {
+	return a.width == b.width && a.height == b.height && a.margin == b.margin && a.gutter == b.gutter
+}
+
+// pageFrame reads a w:pgBorders (17.6.10) into a page frame: inset by
+// its space from the page edge (offsetFrom page) or outside the text
+// (offsetFrom text, the default).
+func (d *document) pageFrame(b *ooxml.Element, s *section) *layout.PageFrame {
+	st := css.Initial()
+	drawn := false
+	var space [4]float64
+	for side, name := range map[css.Side]string{css.Top: "top", css.Right: "right", css.Bottom: "bottom", css.Left: "left"} {
+		e := b.Child(w, name)
+		if e == nil {
+			switch name {
+			case "left":
+				e = b.Child(w, "start")
+			case "right":
+				e = b.Child(w, "end")
+			}
+		}
+		if e == nil {
+			continue
+		}
+		bs := d.parseBorder(e)
+		if bs.Style == css.BorderNone {
+			continue
+		}
+		st.Border[side] = bs.Border
+		space[side] = bs.space
+		drawn = true
+	}
+	if !drawn {
+		return nil
+	}
+	f := &layout.PageFrame{Style: st}
+	fromPage := attrOr(b, "offsetFrom") == "page"
+	for i := range f.Inset {
+		if fromPage {
+			f.Inset[i] = space[i]
+		} else {
+			f.Inset[i] = max(0, abs(s.margin[i])-space[i]-st.Border[i].Width)
+		}
+	}
+	if f.Inset[css.Left]+f.Inset[css.Right] >= s.width-1 || f.Inset[css.Top]+f.Inset[css.Bottom] >= s.height-1 {
+		return nil
+	}
+	return f
+}
+
+// body builds the document body (17.2.2) into its sections.
+func (d *document) body(root *ooxml.Element) []*section {
+	body := root.Child(w, "body")
+	st := &story{part: d.main}
+	var secs []*section
+	var cur []blockNode
+	var prev *section
+	closeSection := func(sp *ooxml.Element) {
+		s := d.parseSection(sp, prev)
+		s.applyOptions(d.opts.PageWidth, d.opts.PageHeight, d.opts.Landscape)
+		s.index = len(secs)
+		s.blocks = cur
+		cur = nil
+		secs = append(secs, s)
+		prev = s
+	}
+	if body != nil {
+		for _, e := range body.Kids() {
+			if d.ctx.Err() != nil {
+				break
+			}
+			if e.Is(w, "sectPr") {
+				continue
+			}
+			d.blocksInto(st, nil, &ooxml.Element{Children: []*ooxml.Element{e}}, 0, &cur)
+			if e.Is(w, "p") {
+				if sp := e.Child(w, "pPr").Child(w, "sectPr"); sp != nil {
+					closeSection(sp)
+				}
+			}
+		}
+	}
+	closeSection(body.Child(w, "sectPr"))
+	// Name the pages: a continuous break keeps the page when the setup
+	// does not change; any other break starts a page.
+	for i, s := range secs {
+		s.name = fmt.Sprintf("s%d", i)
+		s.id = d.newID("sec")
+		if i > 0 && s.breakType == "continuous" {
+			if samePage(secs[i-1], s) {
+				s.name = secs[i-1].name
+			} else {
+				d.warn("approximated", "a continuous section break that changes the page setup starts a new page")
+			}
+		}
+	}
+	return secs
+}
+
+// sectionNode returns the block of section s: its page name, its columns,
+// its blocks, its break to an odd or even page.
+func (d *document) sectionNode(s *section, extra []*layout.Node) *layout.Node {
+	st := d.blockStyle()
+	st.Page = s.name
+	if s.cols > 1 {
+		st.Columns.Count = s.cols
+		st.ColumnGap = css.Pts(s.colSpace)
+		if s.colSep {
+			st.Columns.RuleStyle = css.Solid
+			st.Columns.RuleWidth = 0.5
+			st.Columns.RuleColor = css.Color{A: 1}
+		}
+	}
+	switch s.breakType {
+	case "oddPage":
+		st.BreakBefore = css.RightPage
+	case "evenPage":
+		st.BreakBefore = css.LeftPage
+	}
+	kids := append(finish(s.blocks), extra...)
+	return &layout.Node{Kind: layout.Element, Style: st, ID: s.id, Children: kids}
+}

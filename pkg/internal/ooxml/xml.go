@@ -94,6 +94,14 @@ func (e *Element) AttrNS(space, local string) (string, bool) {
 	return "", false
 }
 
+// Kids returns e's children, nil for a nil e.
+func (e *Element) Kids() []*Element {
+	if e == nil {
+		return nil
+	}
+	return e.Children
+}
+
 // Child returns the first child space:local, nil for none.
 func (e *Element) Child(space, local string) *Element {
 	if e == nil {
