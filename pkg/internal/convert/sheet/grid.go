@@ -216,9 +216,9 @@ func visible(st *Style) bool {
 	return (st.DiagonalUp || st.DiagonalDown) && st.Diagonal.Line != LineNone
 }
 
-// usedRange returns the cells a sheet without print areas prints: those
-// with a value or a visible style, the merges, and the cells under its
-// drawings; false when there are none.
+// usedRange returns the cells a sheet without print areas prints: from A1
+// to the last row and column of the cells with a value or a visible style,
+// the merges and the cells under its drawings; false when there are none.
 func (g *grid) usedRange() (Range, bool) {
 	u := Range{FirstRow: math.MaxInt32, FirstColumn: math.MaxInt32, LastRow: -1, LastColumn: -1}
 	add := func(r, c int) {
@@ -251,5 +251,7 @@ func (g *grid) usedRange() (Range, bool) {
 	if u.LastRow < 0 {
 		return Range{}, false
 	}
+	// Calc prints from A1 to the last used cell (ScTable::GetPrintArea).
+	u.FirstRow, u.FirstColumn = 0, 0
 	return u, true
 }

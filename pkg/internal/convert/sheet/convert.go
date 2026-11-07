@@ -177,15 +177,18 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		}
 	}
 	if len(pages) == 0 {
-		// A book that prints no cell prints one blank page, with the
-		// first sheet's header and footer and its outline entry, as
-		// LibreOffice does.
+		// A book that prints no cell prints the first cell of its first
+		// sheet on one page, with the sheet's header and footer and its
+		// outline entry, as LibreOffice does.
 		pg := &compose.Page{Width: letterWidth, Height: letterHeight}
 		if len(plans) > 0 {
 			sp := plans[0]
 			pg.Width, pg.Height = sp.width, sp.height
+			// The first cell prints, with what its styles paint.
 			p := &pagePlan{sp: sp, number: max(sp.g.sh.Page.FirstPageNumber, 1)}
-			pg.Content = b.margins(p, true, p.number, 1, sp.width, sp.height)
+			if r, _, err := b.renderPage(p, true, 1); err == nil {
+				pg = r
+			}
 			if !opts.OmitOutline {
 				out.Outline = []compose.Outline{{Title: sp.g.sh.Name, Dest: compose.Dest{Page: 1}}}
 			}
