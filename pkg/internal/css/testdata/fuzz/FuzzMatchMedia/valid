@@ -1,0 +1,2 @@
+go test fuzz v1
+string("screen and (min-width: 100px), not print and (prefers-color-scheme: dark)")

@@ -119,3 +119,10 @@ func FuzzCompute(f *testing.F) {
 		walk(root)
 	})
 }
+
+func FuzzMatchMedia(f *testing.F) {
+	m := Media{Type: "print", Width: 595, Height: 842}
+	f.Fuzz(func(_ *testing.T, q string) {
+		MatchMedia(q, m)
+	})
+}

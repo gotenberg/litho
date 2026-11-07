@@ -334,7 +334,7 @@ func (b *builder) linkTarget(href string) string {
 // drawn, its alt text with a warning.
 func (b *builder) image(ctx context.Context, n *dom.Node, st, parent *css.Style) []*layout.Node {
 	alt, hasAlt := attr(n, "alt")
-	src, density := b.imageSource(ctx, n)
+	src, density := b.imageSource(n)
 	fallback := func() []*layout.Node {
 		if alt == "" {
 			return nil

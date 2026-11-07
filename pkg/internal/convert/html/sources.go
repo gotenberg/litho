@@ -1,7 +1,6 @@
 package html
 
 import (
-	"context"
 	"mime"
 	"slices"
 	"strconv"
@@ -63,7 +62,7 @@ type srcCandidate struct {
 //   - The candidate is the one of lowest density at least 1, else the one
 //     of highest density: the smallest picture that does not upscale, as
 //     Chromium picks it.
-func (b *builder) imageSource(ctx context.Context, n *dom.Node) (string, float64) {
+func (b *builder) imageSource(n *dom.Node) (string, float64) {
 	if p := n.Parent; p != nil && p.Type == dom.ElementNode && p.DataAtom == atom.Picture && p.Namespace == "" {
 		seen := 0
 		for c := p.FirstChild; c != nil && c != n && seen < maxPictureSources; c = c.NextSibling {
@@ -71,7 +70,7 @@ func (b *builder) imageSource(ctx context.Context, n *dom.Node) (string, float64
 				continue
 			}
 			seen++
-			if u, d, ok := b.sourceElement(ctx, c); ok {
+			if u, d, ok := b.sourceElement(c); ok {
 				return u, d
 			}
 		}
@@ -88,19 +87,19 @@ func (b *builder) imageSource(ctx context.Context, n *dom.Node) (string, float64
 		return src, 1
 	}
 	sizes, _ := attr(n, "sizes")
-	return pickCandidate(cands, b.slotSize(ctx, sizes))
+	return pickCandidate(cands, b.slotSize(sizes))
 }
 
 // sourceElement returns the URL a <source> of a <picture> selects, false
 // when it is skipped: no srcset candidate, a media that does not match or
 // a type litho does not decode.
-func (b *builder) sourceElement(ctx context.Context, s *dom.Node) (string, float64, bool) {
+func (b *builder) sourceElement(s *dom.Node) (string, float64, bool) {
 	srcset, _ := attr(s, "srcset")
 	cands := parseSrcset(srcset)
 	if len(cands) == 0 {
 		return "", 0, false
 	}
-	if m, ok := attr(s, "media"); ok && strings.TrimSpace(m) != "" && !mediaMatches(ctx, m, b.media) {
+	if m, ok := attr(s, "media"); ok && strings.TrimSpace(m) != "" && !css.MatchMedia(m, b.media) {
 		return "", 0, false
 	}
 	if t, ok := attr(s, "type"); ok && strings.TrimSpace(t) != "" {
@@ -110,7 +109,7 @@ func (b *builder) sourceElement(ctx context.Context, s *dom.Node) (string, float
 		}
 	}
 	sizes, _ := attr(s, "sizes")
-	u, d := pickCandidate(cands, b.slotSize(ctx, sizes))
+	u, d := pickCandidate(cands, b.slotSize(sizes))
 	return u, d, true
 }
 
@@ -270,7 +269,7 @@ func srcsetCandidate(u string, descs []string) (srcCandidate, bool) {
 // first entry whose media condition matches the medium, or that has none,
 // 100vw when no entry does. A length in calc() or another function is
 // not read: its entry is skipped.
-func (b *builder) slotSize(ctx context.Context, sizes string) float64 {
+func (b *builder) slotSize(sizes string) float64 {
 	vw := b.media.Width / css.Pt
 	if vw <= 0 {
 		vw = DefaultPageWidth / css.Pt
@@ -288,7 +287,7 @@ func (b *builder) slotSize(ctx context.Context, sizes string) float64 {
 		if !ok || px <= 0 {
 			continue
 		}
-		if cond = strings.Trim(cond, "\t\n\f\r "); cond != "" && (!isMediaCondition(cond) || !mediaMatches(ctx, cond, b.media)) {
+		if cond = strings.Trim(cond, "\t\n\f\r "); cond != "" && (!isMediaCondition(cond) || !css.MatchMedia(cond, b.media)) {
 			continue
 		}
 		return px
@@ -366,23 +365,6 @@ func sizeLength(v string, m css.Media) (float64, bool) {
 		return n * f, true
 	}
 	return 0, false
-}
-
-// mediaMatches evaluates the media query list q against m (Media Queries
-// 4, 3), as the css package evaluates an @media rule: q is the condition
-// of an @media rule holding one @page rule, which applies only when q
-// matches. A list holding a brace, a semicolon or a quote is no valid
-// list and matches nothing (Media Queries 4, 3.2).
-func mediaMatches(ctx context.Context, q string, m css.Media) bool {
-	if strings.ContainsAny(q, "{};\"'\\") {
-		return false
-	}
-	s, err := css.Parse(ctx, []byte("@media "+q+"{@page{margin-top:1pt}}"), css.ParseOptions{})
-	if err != nil || s == nil {
-		return false
-	}
-	ps := css.NewResolver(m, []css.Sheet{{Sheet: s, Origin: css.Author}}).Page(css.PageSelector{})
-	return ps.Margin[css.Top].Kind == css.Points
 }
 
 // htmlInteger parses a valid non-negative integer (HTML Standard,

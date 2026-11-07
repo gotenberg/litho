@@ -1,7 +1,6 @@
 package html
 
 import (
-	"context"
 	"reflect"
 	"testing"
 	"testing/fstest"
@@ -68,7 +67,6 @@ func TestSlotSize(t *testing.T) {
 	// An A4 page area, 793.7 CSS pixels wide.
 	b := &builder{media: css.Media{Type: "print", Width: DefaultPageWidth, Height: DefaultPageHeight}}
 	vw := DefaultPageWidth / css.Pt
-	ctx := context.Background()
 	for _, tc := range []struct {
 		in   string
 		want float64
@@ -87,7 +85,7 @@ func TestSlotSize(t *testing.T) {
 		{"-5px, bogus, 3pt", 4},
 		{"(min-width: 1px) {} 5px, 6px", 6},
 	} {
-		if got := b.slotSize(ctx, tc.in); got < tc.want-1e-9 || got > tc.want+1e-9 {
+		if got := b.slotSize(tc.in); got < tc.want-1e-9 || got > tc.want+1e-9 {
 			t.Errorf("slotSize(%q) = %v, want %v", tc.in, got, tc.want)
 		}
 	}
@@ -160,7 +158,7 @@ func FuzzParseSrcset(f *testing.F) {
 				t.Fatalf("candidate %+v", c)
 			}
 		}
-		slot := b.slotSize(context.Background(), sizes)
+		slot := b.slotSize(sizes)
 		if !(slot > 0) {
 			t.Fatalf("slot %v", slot)
 		}
