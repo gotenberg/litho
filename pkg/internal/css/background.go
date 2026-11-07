@@ -292,6 +292,7 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 		{pBgSize, wideInitial},
 		{pBgOrigin, wideInitial},
 		{pBgClip, wideInitial},
+		{pBgAttachment, wideInitial},
 	}
 	for li, layer := range layers {
 		final := li == len(layers)-1
@@ -330,8 +331,11 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 					continue
 				}
 			}
-			if !attach && (t.isIdent("scroll") || t.isIdent("fixed") || t.isIdent("local")) {
+			if a, ok := attachments[lower(t.value)]; ok && !attach && t.typ == tIdent {
 				attach = true
+				if li == 0 {
+					out[7].v = a
+				}
 				i++
 				continue
 			}

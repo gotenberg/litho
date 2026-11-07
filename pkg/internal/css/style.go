@@ -843,6 +843,9 @@ type Style struct {
 	BackgroundSize     BackgroundSize
 	BackgroundOrigin   BoxEdge
 	BackgroundClip     BoxEdge
+	// BackgroundAttachment fixes the background to the viewport, the
+	// element or its contents (CSS Backgrounds 3, 3.5).
+	BackgroundAttachment Attachment
 
 	// Decoration around the box.
 

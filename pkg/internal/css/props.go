@@ -136,6 +136,7 @@ const (
 	pMaskBorderWidth
 	pMaskBorderOutset
 	pMaskBorderRepeat
+	pBgAttachment
 	numProps
 )
 
@@ -844,6 +845,7 @@ func init() {
 	for id, def := range flexProps() {
 		props[id] = def
 	}
+	props[pBgAttachment] = attachmentProp()
 	for i, def := range borderImageProps("border-image", func(s *Style) *BorderImage { return &s.BorderImage }, false) {
 		props[pBorderImageSource+propID(i)] = def
 	}
