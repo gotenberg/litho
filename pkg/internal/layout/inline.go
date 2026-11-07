@@ -708,6 +708,9 @@ func (s *inlineState) position(top, h float64, forced map[int]bool) float64 {
 	if forced[len(s.lines)] && !e.atPageTop(top) {
 		top = e.nextPage(top)
 	}
+	if s.root.st.BoxDecorationBreak == css.DecorationCloneAll {
+		return s.clonedPosition(top, h)
+	}
 	return e.fit(top, h)
 }
 

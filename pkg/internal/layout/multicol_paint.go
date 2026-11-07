@@ -351,7 +351,7 @@ func moveItem(it *ditem, dy float64, depth int) *ditem {
 // prints it.
 func (p *painter) fragments(b *box) []compose.Rect {
 	r := p.borderRect(b)
-	if b.st.BoxDecorationBreak != css.DecorationClone || b.parent == nil {
+	if !clones(b.st) || b.parent == nil {
 		return []compose.Rect{r}
 	}
 	var top func(i int) (float64, float64)
@@ -367,6 +367,9 @@ func (p *painter) fragments(b *box) []compose.Rect {
 		break
 	}
 	if at == nil {
+		if b.st.BoxDecorationBreak == css.DecorationCloneAll {
+			return p.pageFragments(b, r)
+		}
 		return []compose.Rect{r}
 	}
 	i0, i1 := at(r.Y-p.dy+eps), at(r.Y+r.Height-p.dy-eps)

@@ -108,3 +108,11 @@ const (
 	// shrunk height below the line top.
 	LineRuleMultiple
 )
+
+// DecorationCloneAll gives each fragment of a box its own borders,
+// padding, radii, shadows and background at every break, page breaks
+// included, as Writer draws a bordered paragraph across a page break: the
+// lines leave room for the bottom edges before each cut and start below
+// the top edges after it. [DecorationClone] clones at column breaks alone,
+// as Chromium prints. No CSS value sets it.
+const DecorationCloneAll = DecorationClone + 1
