@@ -56,6 +56,8 @@ type ifcPara struct {
 	// abs lists the absolutely positioned boxes anchored before a
 	// character, for their static position.
 	abs []posBox
+	// leaders lists the leaders of the paragraph at their characters.
+	leaders []posBox
 	// forced reports a paragraph ended by a forced break, which makes a
 	// line even when empty.
 	forced bool
@@ -171,6 +173,9 @@ func (c *collector) walk(k *box) {
 		c.closeBidi(k)
 		c.cur.closes = append(c.cur.closes, posBox{pos: c.cur.n, box: k})
 	default:
+		if isLeader(k) {
+			c.cur.leaders = append(c.cur.leaders, posBox{pos: c.cur.n, box: k})
+		}
 		c.object(runAtomic, k)
 		c.space = false
 		c.prev = 0

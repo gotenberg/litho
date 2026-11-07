@@ -350,6 +350,14 @@ func (b *builder) generate(ctx context.Context, n *dom.Node, ps *css.Style) []*l
 				flush()
 				out = append(out, &layout.Node{Kind: layout.Replaced, Style: anonInline(ps), Picture: pic})
 			}
+		case css.ItemLeader:
+			if n := leaderNode(ps, it.Text); n != nil {
+				flush()
+				out = append(out, n)
+			}
+		case css.ItemNamedString, css.ItemElement, css.ItemContent:
+			// string() and element() generate content in a page-margin
+			// box alone, content() in string-set alone (CSS GCPM 3, 2).
 		}
 	}
 	flush()
@@ -477,4 +485,19 @@ func anonInline(ps *css.Style) *css.Style {
 	st.CounterReset, st.CounterIncrement, st.CounterSet = nil, nil, nil
 	st.Content = css.Content{}
 	return &st
+}
+
+// leaderNode returns the leader of a pseudo-element styled ps whose string
+// is pattern (CSS Generated Content 3, leader()): an inline block holding
+// the string with its spaces preserved, which the layout repeats to fill
+// its line. An empty string draws no leader.
+func leaderNode(ps *css.Style, pattern string) *layout.Node {
+	if pattern == "" {
+		return nil
+	}
+	st := anonInline(ps)
+	st.Display, st.WhiteSpace = css.InlineBlock, css.Pre
+	return &layout.Node{Kind: layout.Element, Style: st, Leader: true, Children: []*layout.Node{
+		{Kind: layout.Text, Style: st, Text: strings.ToValidUTF8(pattern, "\uFFFD")},
+	}}
 }

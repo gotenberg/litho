@@ -36,8 +36,8 @@ var contentKeywords = map[string]ContentItemKind{
 
 // parseContent parses normal, none, or a list of content items with an
 // optional alternative text after a slash (CSS Generated Content 3, 1.1).
-// An item litho does not generate, such as leader() or target-counter(),
-// makes the value invalid with a warning.
+// An item litho does not generate, such as target-counter(), makes the
+// value invalid with a warning.
 func parseContent(v []token, c *declCtx) (any, bool) {
 	if k, ok := keyword(v); ok {
 		switch k {
@@ -133,6 +133,9 @@ func contentItem(t token, c *declCtx) (ContentItem, bool) {
 			}
 		}
 		return it, true
+	}
+	if it, known, valid := gcpmItem(name, args); known {
+		return it, valid
 	}
 	if unsupportedImages[name] {
 		c.warn("unsupported-css-value", "content: %s() is not generated", name)

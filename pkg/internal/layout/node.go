@@ -109,6 +109,12 @@ type Node struct {
 	ColSpan, RowSpan int
 	// Span is the span of a table column or column group, 0 for 1.
 	Span int
+	// Leader marks a leader (CSS Generated Content 3, leader()): an
+	// inline-level Element whose one Text child is the leader string.
+	// The engine gives it no width of its own, keeps the content after
+	// it in its parent on its line, and fills the room the line leaves
+	// with copies of the string aligned on the line's end edge.
+	Leader bool
 }
 
 // Options parametrises one [Layout] call.

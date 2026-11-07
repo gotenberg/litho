@@ -677,6 +677,21 @@ const (
 	ItemNoCloseQuote
 	// ItemImage is the image at the resolved URL Text (url()).
 	ItemImage
+	// ItemLeader is a leader, Text its string repeated to fill the line
+	// (CSS Generated Content 3, leader(); CSS GCPM 3, 5 moved it there).
+	ItemLeader
+	// ItemNamedString is the value of the named string Text on the page,
+	// the assignment Pick selects (CSS GCPM 3, 2.1.2, string()); it
+	// generates text in a page-margin box alone.
+	ItemNamedString
+	// ItemElement is a copy of the running element Text, the one Pick
+	// selects on the page (CSS GCPM 3, 2.2.2, element()); it generates
+	// content in a page-margin box alone.
+	ItemElement
+	// ItemContent is the text of the element a string-set sits on, Text
+	// naming the part: "text", "before", "after" or "first-letter" (CSS
+	// GCPM 3, 2.1.1.1, content()). It appears in Style.StringSet alone.
+	ItemContent
 )
 
 // ContentItem is one item of a content list.
@@ -693,6 +708,9 @@ type ContentItem struct {
 	// decimal by default; ListNone draws nothing and ListString is not
 	// used.
 	Style ListStyleType
+	// Pick selects the assignment of an ItemNamedString or ItemElement
+	// on the page (CSS GCPM 3, 2.1.2), PickFirst by default.
+	Pick PagePick
 }
 
 // Content is the content property of a pseudo-element (CSS Generated
@@ -1086,6 +1104,25 @@ type Style struct {
 	// Box Alignment 3, 6.1 and 6.2); legacy computes to BoxNormal, and
 	// JustifySelf alone takes BoxAuto. Flex layout ignores both.
 	JustifyItems, JustifySelf BoxAlign
+	// Paged media extras (CSS Generated Content for Paged Media 3). None
+	// is inherited.
+
+	// StringSet lists the named strings the element sets, in declaration
+	// order, nil for none (CSS GCPM 3, 2.1.1, string-set).
+	StringSet []NamedString
+	// Running is the name of the running element the element becomes, ""
+	// for none (CSS GCPM 3, 2.2.1, position: running()): it leaves the
+	// flow and element() copies it into the page-margin boxes. Position
+	// computes to static.
+	Running string
+	// Footnote reports float: footnote (CSS GCPM 3, 3.2): the element
+	// becomes a footnote element, its call stays in the flow and its body
+	// moves to the footnote area. Float computes to none.
+	Footnote bool
+	// FootnoteDisplay and FootnotePolicy are footnote-display and
+	// footnote-policy (CSS GCPM 3, 3.3 and 3.8).
+	FootnoteDisplay FootnoteDisplay
+	FootnotePolicy  FootnotePolicy
 
 	// currentColor records the colour longhands whose computed value is
 	// the currentColor keyword (CSS Color 4, 4.4): the exported field
@@ -1243,4 +1280,14 @@ type PageStyle struct {
 	// filled by [Resolver.PageIn] alone: each box's computed style, its
 	// content in Content. A box absent generates nothing.
 	MarginBoxes map[MarginBox]*Style
+	// Footnote is the computed style of the page's footnote area, the
+	// @footnote rule (CSS GCPM 3, 3.4), filled by [Resolver.PageIn]: nil
+	// when no rule styles it, which leaves the area unstyled.
+	Footnote *Style
+	// Bleed is the bleed descriptor, Auto or Points (CSS Page 3, 7.2):
+	// how far the page background paints past the trim, Auto computing
+	// to 6pt with crop marks and 0 otherwise ([PageStyle.UsedBleed]).
+	Bleed Dimension
+	// Marks are the page marks drawn outside the trim (CSS Page 3, 7.1).
+	Marks Marks
 }

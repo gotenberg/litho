@@ -87,7 +87,9 @@ func autoWidth(st *css.Style) *css.Style {
 // containing block: its margin box at its intrinsic widths (CSS Sizing 3,
 // 5.2), auto and percentage margins counting as 0.
 func (e *engine) contribution(b *box) (float64, float64) {
-	if b.kind == kindText || b.kind == kindBreak || b.kind == kindInline || b.abs {
+	if b.kind == kindText || b.kind == kindBreak || b.kind == kindInline || b.abs || isLeader(b) {
+		// A leader takes the room a line leaves: it contributes nothing
+		// of its own (CSS Generated Content 3, leader()).
 		// An absolutely positioned box is out of flow: it contributes
 		// nothing (CSS Sizing 3, 5.2).
 		return 0, 0

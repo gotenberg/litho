@@ -83,6 +83,8 @@ type engine struct {
 	// clamp counts the lines of the line clamp container being laid out,
 	// nil outside one (CSS Overflow 4, 6).
 	clamp *clampState
+	// leaders are the strings of the leaders laid out, by box.
+	leaders map[*box]*leaderInfo
 }
 
 // fail records the first error; the layout unwinds once it is set.

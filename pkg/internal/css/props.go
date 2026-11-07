@@ -163,6 +163,9 @@ const (
 	pTextSpacingTrim
 	pTextAutospaceSize
 	pTextShadow
+	pStringSet
+	pFootnoteDisplay
+	pFootnotePolicy
 	numProps
 )
 
@@ -869,6 +872,7 @@ func init() {
 	for id, def := range textFontProps() {
 		props[id] = def
 	}
+	gcpmProps()
 	longhandByName = map[string]propID{}
 	for i := range props {
 		longhandByName[props[i].name] = propID(i)

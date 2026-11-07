@@ -119,6 +119,11 @@ func (e *engine) prepareInline(d *ifcData, cbw float64) {
 				if e.err != nil {
 					return
 				}
+				if isLeader(info.box) {
+					e.prepareLeader(info.box, cbw)
+					p.p.SetAdvance(i, 0)
+					continue
+				}
 				e.layoutAtomic(info.box, cbw)
 				p.p.SetAdvance(i, max(info.box.marginW(), 0))
 			case runEmpty:
@@ -180,8 +185,11 @@ func (p *ifcPara) allowed(i int) bool {
 		return false
 	}
 	before, after := p.wsAt(i-1), p.wsAt(i)
-	if !wraps(before) && !wraps(after) {
+	if !wraps(before) && !wraps(after) || p.leaderGlue(i) {
 		return false
+	}
+	if p.leaderAt(i) {
+		return true
 	}
 	a, b := p.p.Rune(i-1), p.p.Rune(i)
 	if p.styleAt(i).LineBreak == css.LineBreakAnywhere && wraps(after) && p.p.GraphemeStart(i) {
@@ -477,6 +485,13 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			continue
 		}
 		w := p.paraWidths(nil)
+		for _, lp := range p.leaders {
+			// A leader needs room for one copy of its string to share a
+			// line with what precedes it, as WeasyPrint breaks leaders.
+			if lp.pos < len(w) {
+				w[lp.pos] += e.leaderOf(lp.box).w
+			}
+		}
 		n := p.p.Len()
 		pos := 0
 		paraFirst := true
@@ -1105,6 +1120,7 @@ const metricSlack = 0.01
 // align applies text-align and text-indent to the items of l (CSS Text 3,
 // 6.1 and 8.1), justifying at the word separators unless last.
 func (s *inlineState) align(l *lineBox, indent float64, last bool) {
+	s.fillLeaders(l, indent)
 	st := s.root.st
 	ltr := st.Direction != css.RTL
 	width := 0.0
