@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"math"
 	"slices"
-	"strings"
 
 	gofont "github.com/go-text/typesetting/font"
 
@@ -993,14 +992,14 @@ func (e *engine) placeMarker(b *box) {
 	}
 	if m.runs == nil {
 		style := e.textStyle(mst, b.lang)
-		label := m.text
+		// The marker text runs in the item's direction: a right-to-left
+		// item's suffix and its space come left of the number, between it
+		// and the content, as Chromium draws them.
+		dir := text.LeftToRight
 		if rtl {
-			// A right-to-left item's marker sits right of its content, its
-			// suffix's space between them, as Chromium draws it.
-			trimmed := strings.TrimRight(label, " ")
-			label = strings.Repeat(" ", len(label)-len(trimmed)) + trimmed
+			dir = text.RightToLeft
 		}
-		para, _, err := e.fonts.Shape(e.ctx, []text.ParagraphRun{{Text: label, Style: style}}, text.ParagraphOptions{})
+		para, _, err := e.fonts.Shape(e.ctx, []text.ParagraphRun{{Text: m.text, Style: style}}, text.ParagraphOptions{Direction: dir})
 		if err != nil {
 			return
 		}
