@@ -55,7 +55,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if !textMime(pkg.MimeType) {
 		return nil, fmt.Errorf("%w: the document is %q, not a text document", office.ErrMalformed, pkg.MimeType)
 	}
-	body := odf.Section(pkg.Content, "body").Child(odf.NSOffice, "text")
+	body := textBody(odf.Section(pkg.Content, "body"), pkg.MimeType != "")
 	if body == nil {
 		return nil, fmt.Errorf("%w: the document has no office:text body", office.ErrMalformed)
 	}
@@ -106,6 +106,25 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 		}
 	}
 	return b.assemble(res, ranges, opts, root.Lang)
+}
+
+// textBody returns the office:text of office:body (ODF 1.3, Part 3,
+// 3.3), else, as LibreOffice opens a text document whose body element is
+// misnamed, the body's first element child when the media type, named,
+// says a text document. nil when the body holds no such element.
+func textBody(body *odf.Element, named bool) *odf.Element {
+	if t := body.Child(odf.NSOffice, "text"); t != nil {
+		return t
+	}
+	if body == nil || !named {
+		return nil
+	}
+	for _, c := range body.Children {
+		if !c.IsText() {
+			return c
+		}
+	}
+	return nil
 }
 
 // textMime reports the media types of a text document (ODF 1.3, Part 3,

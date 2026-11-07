@@ -150,3 +150,20 @@ func TestConvert_Outline(t *testing.T) {
 		t.Errorf("structure roles = %s", got)
 	}
 }
+
+func TestConvert_MisnamedTextBody(t *testing.T) {
+	d := doc{body: `<text:p>Body text</text:p>`}
+	content := strings.Replace(d.contentXML(), "<office:text>", "<office:texture-mode>", 1)
+	content = strings.Replace(content, "</office:text>", "</office:texture-mode>", 1)
+	flat := func(mime string) []byte {
+		return []byte(strings.Replace(strings.Replace(content, "office:document-content", "office:document", 2),
+			"<office:document ", `<office:document office:mimetype="`+mime+`" `, 1))
+	}
+	got := convertDoc(t, flat("application/vnd.oasis.opendocument.text"), office.Options{})
+	if txt := docText(got); txt != "Body text" {
+		t.Errorf("text = %q", txt)
+	}
+	if _, err := Convert(context.Background(), bytes.NewReader(flat("")), fixtureFonts(t), office.Options{}); !errors.Is(err, office.ErrMalformed) {
+		t.Errorf("no media type: err = %v, want office.ErrMalformed", err)
+	}
+}
