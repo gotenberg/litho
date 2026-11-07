@@ -355,6 +355,9 @@ type rowProps struct {
 	header     *bool
 	gridBefore int
 	gridAfter  int
+	// jc is the row's alignment (17.4.80), which LibreOffice applies to
+	// the table when its properties set none.
+	jc string
 }
 
 // parseRowProps reads a w:trPr.
@@ -371,6 +374,8 @@ func parseRowProps(e *ooxml.Element) *rowProps {
 				r.height = ptr(v)
 			}
 			r.hRule = attrOr(x, "hRule")
+		case "jc":
+			r.jc = val
 		case "cantSplit":
 			r.cantSplit = ptr(ooxml.Toggle(x))
 		case "tblHeader":
@@ -532,10 +537,11 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	if tp.ind != nil {
 		indent = *tp.ind
 	}
-	if d.settings.compat < 15 {
-		// Before Word 2013 the indent places the first cell's text, so the
+	if d.settings.compat < 15 && tp.ind != nil {
+		// Before Word 2013 an indent places the first cell's text, so the
 		// table's edge sits its left margin further out, as LibreOffice
-		// lays such documents out (MS-DOCX, 2.3.4).
+		// lays such documents out (MS-DOCX, 2.3.4); a table without an
+		// indent keeps its edge at the margin.
 		left := cellMar["left"]
 		if cells := placed[0].cells; len(cells) > 0 {
 			if m, ok := cells[0].props.margins["left"]; ok {
@@ -545,8 +551,16 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 		indent -= left
 	}
 	tableSt.Margin[css.Left] = css.Pts(indent)
-	if tp.jc != nil {
-		switch *tp.jc {
+	jc := tp.jc
+	for _, r := range placed {
+		if jc == nil && r.props.jc != "" {
+			// A row's alignment aligns the table that sets none, as
+			// LibreOffice lays a table out (its rows share one alignment).
+			jc = &r.props.jc
+		}
+	}
+	if jc != nil {
+		switch *jc {
 		case "center":
 			tableSt.Margin[css.Left], tableSt.Margin[css.Right] = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
 		case "right", "end":

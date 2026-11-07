@@ -70,12 +70,26 @@ func TestTables(t *testing.T) {
 
 func TestTables_LegacyIndent(t *testing.T) {
 	t.Parallel()
-	body := `<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>`
-	b := build(t, body, nil)
-	// Before Word 2013 the table's edge sits the cell margin left of the
-	// text.
-	if m := role(b.root, "Table")[0].Style.Margin[css.Left]; m != css.Pts(-defaultCellMargin) {
-		t.Errorf("legacy table margin %v", m)
+	table := func(tblPr, rowPr string) string {
+		return `<w:tbl><w:tblPr>` + tblPr + `</w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:trPr>` + rowPr + `</w:trPr><w:tc><w:p/></w:tc></w:tr></w:tbl>`
+	}
+	// Before Word 2013 an indent places the text, the table's edge the
+	// cell margin left of it; without an indent the edge is at the
+	// margin, as LibreOffice prints both. A row's alignment aligns a
+	// table that sets none.
+	for _, tc := range []struct {
+		name, tblPr, rowPr string
+		want               css.Dimension
+	}{
+		{"indent", `<w:tblInd w:w="0" w:type="dxa"/>`, ``, css.Pts(-defaultCellMargin)},
+		{"no indent", ``, ``, css.Pts(0)},
+		{"row alignment", ``, `<w:jc w:val="center"/>`, css.Dimension{Kind: css.Auto}},
+		{"table alignment first", `<w:jc w:val="left"/>`, `<w:jc w:val="right"/>`, css.Pts(0)},
+	} {
+		b := build(t, table(tc.tblPr, tc.rowPr), nil)
+		if m := role(b.root, "Table")[0].Style.Margin[css.Left]; m != tc.want {
+			t.Errorf("%s: table margin %v, want %v", tc.name, m, tc.want)
+		}
 	}
 }
 
