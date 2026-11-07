@@ -209,3 +209,15 @@ func TestDiffFeature_PrepareRefusesStaleReferences(t *testing.T) {
 		t.Errorf("html corpus: %v", err)
 	}
 }
+
+func TestDiffFeature_GoldenSourceNamesLibreOfficeForAnOfficeCorpus(t *testing.T) {
+	t.Parallel()
+	f := newDiffFeature()
+	if got := f.GoldenSource(); got != "chromium" {
+		t.Fatalf("GoldenSource = %q, want chromium", got)
+	}
+	f.SetManifest(&Manifest{References: &ReferenceSpec{}})
+	if got := f.GoldenSource(); got != "libreoffice" {
+		t.Fatalf("GoldenSource = %q, want libreoffice", got)
+	}
+}

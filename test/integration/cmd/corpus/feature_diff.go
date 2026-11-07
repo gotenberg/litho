@@ -254,8 +254,19 @@ func newDiffFeature() *diffFeature {
 	return &diffFeature{convert: convertHTML, goldens: make(map[string]*diffGolden)}
 }
 
-func (f *diffFeature) Name() string         { return "diff" }
-func (f *diffFeature) GoldenSource() string { return "chromium" }
+func (f *diffFeature) Name() string { return "diff" }
+
+// GoldenSource names the engine the references come from: Chromium for the
+// html corpus, LibreOffice for an Office corpus, whose manifest names its
+// references (see [diffFeature.SetManifest]).
+func (f *diffFeature) GoldenSource() string {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if f.office {
+		return "libreoffice"
+	}
+	return "chromium"
+}
 
 // SetManifest records where an Office corpus's references live.
 func (f *diffFeature) SetManifest(m *Manifest) {
