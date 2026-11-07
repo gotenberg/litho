@@ -150,8 +150,24 @@
 // Appendix E: z-index, opacity and 2D transforms (CSS Transforms 1) create
 // them; a transform paints its box through a group transform.
 //
+// # Office documents
+//
+// The Office converters set the fields of css.Style no CSS property sets,
+// which LibreOffice's layout of WordprocessingML and ODF is the reference
+// for: TabStops lays tabs out on Office stops (alignment, leaders, bar
+// stops and the line breaks around them), LineRule and MinLineHeight
+// space lines as Writer does, TextScale scales glyphs horizontally,
+// PageAnchor anchors a frame to the page box, and DecorationCloneAll
+// draws a bordered paragraph whole on every page. [PageBox.Frame] draws
+// page borders, and a [Node.Marker] whose Style has a width lays a list
+// label out on the number position.
+//
 // # Not supported
 //
+// The vertical alignment of a section's content on its pages (Word's
+// vAlign, Writer's page text alignment) has no equivalent: the
+// converters lay it out at the top and warn. A float cannot be anchored
+// to the page; text does not wrap around a page-anchored box.
 // Vertical writing modes, 3D transforms and hyphenation are out of scope;
 // a footnote call inside an inline block, a table cell or a flex item is
 // laid out off the page cuts, and its body goes to a page after the flow;
