@@ -165,3 +165,27 @@ func TestDrawings_PageAnchoredGroup(t *testing.T) {
 		}
 	}
 }
+
+func TestDrawings_StackOrderAndFloatOffset(t *testing.T) {
+	t.Parallel()
+	anchor := func(attrs, wrap string, posV int) string {
+		return `<w:r><w:drawing><wp:anchor ` + attrs + `><wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH>` +
+			`<wp:positionV relativeFrom="paragraph"><wp:posOffset>` + strconv.Itoa(posV*12700) + `</wp:posOffset></wp:positionV>` +
+			`<wp:extent cx="1270000" cy="635000"/>` + wrap + `<wp:docPr id="2" name="q"/>` + graphic("") + `</wp:anchor></w:drawing></w:r>`
+	}
+	body := `<w:p>` + anchor(`behindDoc="0" relativeHeight="200"`, `<wp:wrapNone/>`, 0) +
+		anchor(`behindDoc="0" relativeHeight="300"`, `<wp:wrapSquare wrapText="bothSides"/>`, 20) +
+		anchor(`behindDoc="1" relativeHeight="400"`, `<wp:wrapNone/>`, 0) + `<w:r><w:t>text</w:t></w:r></w:p>`
+	b := build(t, body, map[string]string{"word/media/a.png": pngData(t, 4, 2)})
+	pics := find(b.root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+	if len(pics) != 3 {
+		t.Fatalf("%d pictures", len(pics))
+	}
+	front, float, behind := pics[0].Style, pics[1].Style, pics[2].Style
+	if front.ZIndex != (css.ZIndex{Level: 200}) || float.ZIndex != (css.ZIndex{Level: 300}) || behind.ZIndex.Level >= 0 {
+		t.Errorf("stack levels %v %v %v", front.ZIndex, float.ZIndex, behind.ZIndex)
+	}
+	if float.Position != css.Relative || float.Float != css.FloatLeft || !near(float.Margin[css.Top], 20) {
+		t.Errorf("float position %v float %v top margin %v", float.Position, float.Float, float.Margin[css.Top])
+	}
+}

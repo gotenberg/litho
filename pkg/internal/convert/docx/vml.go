@@ -135,6 +135,9 @@ func vmlPlacement(k *ooxml.Element, vs ooxml.VMLStyle, w, h float64) placement {
 		p.alignV = a
 	}
 	p.behind = strings.HasPrefix(vs["z-index"], "-")
+	if v, ok := ooxml.Int(vs["z-index"]); ok {
+		p.z = max(0, min(v, maxZ))
+	}
 	for i, name := range []string{"mso-wrap-distance-top", "mso-wrap-distance-right", "mso-wrap-distance-bottom", "mso-wrap-distance-left"} {
 		if v, ok := vs.Length(name, pxPt); ok {
 			p.dist[i] = max(0, v)

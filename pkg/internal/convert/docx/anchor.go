@@ -24,7 +24,15 @@ type placement struct {
 	dist [4]float64
 	// w and h are the drawing's size in points.
 	w, h float64
+	// z orders the drawings in front of the text (20.4.2.3
+	// relativeHeight), 0 for none.
+	z int
 }
+
+// maxZ bounds the stack level read from a drawing. Anti-DoS guard, not
+// spec-mandated: relativeHeight is an unsigned int, Word writes values
+// near 2^28.
+const maxZ = 1 << 30
 
 // pendingAnchor is a drawing whose position needs its section's page,
 // which the section's properties, at its end, give.
@@ -53,6 +61,9 @@ func (d *document) anchor(k *ooxml.Element, n *layout.Node, w, h float64, sink *
 	p.posH, p.alignH, p.relH = position(k.Child(ooxml.NSWP, "positionH"))
 	p.posV, p.alignV, p.relV = position(k.Child(ooxml.NSWP, "positionV"))
 	p.behind = hasAttr(k, "behindDoc") && ooxml.OnOff(attrOr(k, "behindDoc"), true)
+	if v, ok := ooxml.Int(attrOr(k, "relativeHeight")); ok {
+		p.z = max(0, min(v, maxZ))
+	}
 	p.dist = [4]float64{dist("distT"), dist("distR"), dist("distB"), dist("distL")}
 	p.wrap = "wrapNone"
 	for _, c := range k.Kids() {
@@ -96,6 +107,15 @@ func fromPageV(rel string) bool {
 func (d *document) place(p placement, n *layout.Node, sink *inlineSink) {
 	st := n.Style
 	pageH := fromPageH(p.relH) && d.pageAnchors()
+	if !p.behind && p.z > 0 {
+		// The drawings in front of the text stack in the order of their
+		// relative heights, floats among them, as Word and Writer layer
+		// them.
+		st.ZIndex = css.ZIndex{Level: p.z}
+		if st.Position == css.Static {
+			st.Position = css.Relative
+		}
+	}
 	switch p.wrap {
 	case "wrapSquare", "wrapTight", "wrapThrough":
 		st.Float = css.FloatLeft
@@ -103,6 +123,11 @@ func (d *document) place(p placement, n *layout.Node, sink *inlineSink) {
 			st.Float = css.FloatRight
 		}
 		st.Margin = [4]css.Dimension{css.Pts(p.dist[0]), css.Pts(p.dist[1]), css.Pts(p.dist[2]), css.Pts(p.dist[3])}
+		if !fromPageV(p.relV) && p.alignV == "" && p.posV > 0 {
+			// A float lower than its paragraph's top starts that much
+			// lower, an approximation of its vertical offset.
+			st.Margin[css.Top] = css.Pts(p.posV)
+		}
 		if st.Float == css.FloatLeft && p.alignH == "" {
 			switch {
 			case pageH:
