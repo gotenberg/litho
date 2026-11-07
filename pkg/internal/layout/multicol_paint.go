@@ -368,7 +368,7 @@ func (p *painter) fragments(b *box) []compose.Rect {
 	}
 	if at == nil {
 		if b.st.BoxDecorationBreak == css.DecorationCloneAll {
-			return p.pageFragments(b, r)
+			return p.pageFragments(r)
 		}
 		return []compose.Rect{r}
 	}

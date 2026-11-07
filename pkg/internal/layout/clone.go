@@ -28,10 +28,10 @@ func (s *inlineState) clonedPosition(top, h float64) float64 {
 	return y
 }
 
-// pageFragments returns the border boxes of the block b, its border box r
+// pageFragments returns the border boxes of a block whose border box is r,
 // in flow coordinates offset by the painter's, one per page it crosses,
 // each with all its edges ([css.DecorationCloneAll]).
-func (p *painter) pageFragments(b *box, r compose.Rect) []compose.Rect {
+func (p *painter) pageFragments(r compose.Rect) []compose.Rect {
 	e := p.e
 	y0, y1 := r.Y-p.dy, r.Y+r.Height-p.dy
 	first, last := e.pageOf(y0+eps), e.pageOf(y1-eps)
