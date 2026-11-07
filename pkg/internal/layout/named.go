@@ -95,7 +95,7 @@ func namesDiffer(a, b *box) bool {
 // mark past p, which the layout sets again as it reaches them, and
 // resolves again the page boxes the change affects.
 func (e *engine) mark(p int, name string, blank bool, owner *box) {
-	if p < 0 || p > e.maxPages {
+	if p < 0 || p > e.maxPages || e.cols != nil {
 		return
 	}
 	for i := range e.marks {

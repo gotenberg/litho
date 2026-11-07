@@ -48,7 +48,7 @@ func (e *engine) pastMargin(cursor float64, s strut, kept bool) float64 {
 	if !e.paginating() || s.sum() <= 0 {
 		return y
 	}
-	if !kept && cursor > eps && e.atPageTop(cursor) {
+	if !kept && cursor > e.flowStart()+eps && e.atPageTop(cursor) {
 		return cursor
 	}
 	if e.pageOf(y) > e.pageOf(cursor) {
@@ -241,6 +241,9 @@ func formatterFor(b *box) formatter {
 	}
 	if b.grid != nil {
 		return gridFormatter{}
+	}
+	if isMulticol(b) {
+		return multicolFormatter{}
 	}
 	return flowFormatter{}
 }
@@ -484,7 +487,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 			y = e.nextPage(y)
 		}
 		blank := false
-		if right := e.isRight(e.pageOf(y)); mode == breakLeft && right || mode == breakRight && !right {
+		if right := e.isRight(e.pageOf(y)); e.cols == nil && (mode == breakLeft && right || mode == breakRight && !right) {
 			y = e.nextPage(y)
 			blank = true
 		}
@@ -727,7 +730,7 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 	// starts on (CSS Page 3, 4.1: content resumes on a page box of the
 	// named type): cb, which is as wide as the page b starts on, grown by
 	// how much wider the child's page is.
-	adapt := e.paginating() && e.geom.varies() && followsPages(b)
+	adapt := e.paginating() && e.cols == nil && e.geom.varies() && followsPages(b)
 	base := 0.0
 	if adapt {
 		base = e.widthDelta(e.pageOf(b.y))
@@ -767,12 +770,12 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		}
 		snap := take(cursor)
 		mode := breakNone
-		if prev != nil && (isForced(prev.st.BreakAfter) || isForced(k.st.BreakBefore)) {
+		if prev != nil && (e.forces(prev.st.BreakAfter) || e.forces(k.st.BreakBefore)) {
 			mode = forcedMode(prev.st.BreakAfter, k.st.BreakBefore)
-		} else if prev == nil && isForced(k.st.BreakBefore) && cursor+mc.strut.sum() > eps {
+		} else if prev == nil && e.forces(k.st.BreakBefore) && cursor+mc.strut.sum() > e.flowStart()+eps {
 			mode = forcedMode(css.BreakAuto, k.st.BreakBefore)
 		}
-		if mode == breakNone && prev != nil && namesDiffer(prev, k) {
+		if mode == breakNone && prev != nil && e.cols == nil && namesDiffer(prev, k) {
 			// Siblings whose page values differ meet at a forced break
 			// (CSS Page 3, 4.1).
 			mode = breakForced
@@ -803,7 +806,7 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 					cursor = e.layoutBlock(k, cbFor(e.pageOf(k.y)+1), bc, restore(snap), mc, breakPush)
 				}
 			case prev != nil && avoidsBetween(prev, k) && e.pageOf(prev.y+prev.borderH()-1e-3) < e.pageOf(firstContent(k)) &&
-				!e.atPageTop(prev.y) && prev.borderH()+k.borderH() <= e.pageH:
+				!e.atPageTop(prev.y) && prev.borderH()+k.borderH() <= e.areaH(e.pageOf(prev.y)):
 				if e.relayout(k.y) {
 					cursor = e.layoutBlock(prev, cbFor(e.pageOf(prev.y)+1), bc, restore(prevSnap), mc, breakPush)
 					cursor = e.layoutBlock(k, cbFor(e.pageOf(cursor)), bc, cursor, mc, breakNone)
@@ -849,15 +852,16 @@ func forcedMode(after, before css.Break) breakMode {
 	return breakForced
 }
 
-// avoidsInside reports a box that avoids page breaks inside it.
+// avoidsInside reports a box that avoids page or column breaks inside it.
 func avoidsInside(b *box) bool {
-	return b.st.BreakInside == css.InsideAvoid || b.st.BreakInside == css.InsideAvoidPage
+	v := b.st.BreakInside
+	return v == css.InsideAvoid || v == css.InsideAvoidPage || v == css.InsideAvoidColumn
 }
 
 // avoidsBetween reports siblings a and b between which a page break is to
 // be avoided.
 func avoidsBetween(a, b *box) bool {
-	av := func(v css.Break) bool { return v == css.BreakAvoid || v == css.BreakAvoidPage }
+	av := func(v css.Break) bool { return v == css.BreakAvoid || v == css.BreakAvoidPage || v == css.BreakAvoidColumn }
 	return av(a.st.BreakAfter) || av(b.st.BreakBefore)
 }
 

@@ -134,6 +134,9 @@ func (e *engine) areaW(p int) float64 {
 
 // areaH returns the page area height of page p.
 func (e *engine) areaH(p int) float64 {
+	if e.cols != nil {
+		return e.cols.height(p)
+	}
 	if !e.geom.varies() {
 		return e.pageH
 	}
@@ -214,8 +217,9 @@ func (e *engine) fittedHeight(rb *box, d *ditem) float64 {
 			bottom = max(bottom, y)
 			continue
 		}
-		if !continues(b, end) {
-			// The box itself reaches past the cut: it fills the page.
+		if b.mc != nil || !continues(b, end) {
+			// The box itself reaches past the cut, or its columns do: it
+			// fills the page.
 			bottom = areaH
 			continue
 		}

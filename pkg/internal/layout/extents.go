@@ -15,7 +15,8 @@ func (e *engine) extents(rb *box, n int) map[string]compose.Rect {
 	walk = func(b *box) {
 		if b.id != "" && b.laidOut && b.kind != kindInline && b.kind != kindText && b.kind != kindBreak {
 			if _, ok := out[b.id]; !ok {
-				d := e.dest(clamp(b.x), max(clamp(b.y), 0))
+				x, y := toFlow(b, b.x, b.y)
+				d := e.dest(clamp(x), max(clamp(y), 0))
 				if d.Page <= n {
 					out[b.id] = compose.Rect{
 						X: d.X + b.pd[css.Left], Y: d.Y + b.pd[css.Top],

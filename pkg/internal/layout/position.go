@@ -132,6 +132,10 @@ func (e *engine) layoutPositioned(b *box) {
 			}
 			e.layoutAbs(k)
 		}
+		if k.mc != nil {
+			e.layoutPositionedInColumns(k)
+			continue
+		}
 		e.layoutPositioned(k)
 	}
 }

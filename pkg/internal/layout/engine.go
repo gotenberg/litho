@@ -87,6 +87,9 @@ type engine struct {
 	leaders map[*box]*leaderInfo
 	// foot is the footnotes' state, nil for a document without any.
 	foot *footState
+	// cols is the fragmentation context of the column set being laid out,
+	// nil outside columns: the page queries answer for its columns.
+	cols *colCtx
 }
 
 // fail records the first error; the layout unwinds once it is set.
@@ -127,6 +130,9 @@ func (e *engine) paginating() bool { return e.noPaginate == 0 }
 
 // pageOf returns the 0-based page index of flow position y.
 func (e *engine) pageOf(y float64) int {
+	if e.cols != nil {
+		return e.cols.of(y)
+	}
 	if y <= 0 {
 		return 0
 	}
@@ -148,6 +154,9 @@ func (e *engine) pageOf(y float64) int {
 
 // pageTop returns the flow position of the top of page p.
 func (e *engine) pageTop(p int) float64 {
+	if e.cols != nil {
+		return e.cols.top(p)
+	}
 	if g := &e.geom; g.varies() {
 		for p >= len(g.tops) && g.grow() {
 		}
@@ -172,6 +181,10 @@ func (e *engine) nextPage(y float64) float64 { return e.pageTop(e.pageOf(y) + 1)
 // page cap and checking the context once per new page.
 func (e *engine) reach(y float64) {
 	if e.err != nil {
+		return
+	}
+	if e.cols != nil {
+		e.cols.reach(y)
 		return
 	}
 	p := e.pageOf(y)

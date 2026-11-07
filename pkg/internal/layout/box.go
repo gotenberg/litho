@@ -176,6 +176,9 @@ type box struct {
 	// fnBody is the footnote body of a footnote call, laid out in the
 	// footnote area of a page rather than in the flow (CSS GCPM 3, 3.2).
 	fnBody *box
+	// mc is the multi-column layout of a multi-column container (CSS
+	// Multicol 1), nil for any other box.
+	mc *mcolData
 }
 
 // markerBox is the outside marker of a list item (CSS 2.1, 12.5).
@@ -227,7 +230,7 @@ func (b *box) establishesBFC() bool {
 	return b.parent == nil || b.float != css.FloatNone || b.abs || (b.inline && b.kind == kindBlock) ||
 		b.st.Overflow != css.OverflowVisible || b.kind == kindReplaced || b.st.Display == css.FlowRoot ||
 		b.tpart == partWrapper || b.tpart == partCaption || b.tpart == partCell ||
-		b.flex != nil || b.flexItem || b.grid != nil || b.gridItem || b.st.Clamps()
+		b.flex != nil || b.flexItem || b.grid != nil || b.gridItem || b.st.Clamps() || isMulticol(b)
 
 }
 

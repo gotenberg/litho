@@ -46,6 +46,9 @@ type frame struct {
 	container *ditem
 	open      []openClip
 	root      *box
+	// columns reports the frame of a column set of root, a multi-column
+	// container: root's own clip applies outside, to the columns.
+	columns bool
 }
 
 // pendingLink is a link region in flow coordinates.
@@ -181,7 +184,7 @@ func (p *painter) chain(b *box, content bool) []*box {
 		}
 	}
 	for a := start; a != nil; {
-		if p.clips(a) {
+		if p.clips(a) && !(a == root && p.cur().columns) {
 			out = append(out, a)
 		}
 		if a == root {
@@ -363,6 +366,10 @@ func (p *painter) unit(b *box, own bool) {
 		// frame of its own keeps the chains short.
 		push(&ditem{group: true, opacity: 1})
 	}
+	if b.mc != nil {
+		p.multicol(b)
+		return
+	}
 	var blocks, floats, layers []*box
 	p.collect(b, &blocks, &floats, &layers)
 	var neg, zero, pos []*box
@@ -425,7 +432,7 @@ func (p *painter) stack(layers []*box) (neg, zero, pos []*box) {
 			default:
 				zero = append(zero, c)
 			}
-			if c.isStackingContext() || depth >= maxTreeDepth {
+			if c.isStackingContext() || c.mc != nil || depth >= maxTreeDepth {
 				continue
 			}
 			var blocks, floats, sub []*box
@@ -465,7 +472,8 @@ func (p *painter) collect(b *box, blocks, floats, layers *[]*box) {
 			// 6.3).
 		case k.layered():
 			*layers = append(*layers, k)
-		case k.float != css.FloatNone:
+		case k.float != css.FloatNone || k.mc != nil:
+			// A multi-column container paints its columns as a unit.
 			*floats = append(*floats, k)
 		case k.tpart == partTable:
 			// A table paints its rows and cells itself (CSS 2.1, 17.5.1).

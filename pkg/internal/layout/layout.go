@@ -192,7 +192,9 @@ func (e *engine) positionedPages(rb *box, clipped bool) int {
 				}
 				n = max(n, e.pageOf(max(end, k.y, 0))+1)
 			}
-			if k.kind == kindBlock && k.st.Overflow != css.OverflowVisible {
+			if k.kind == kindBlock && k.st.Overflow != css.OverflowVisible || k.mc != nil {
+				// The display list knows where a multi-column container's
+				// positioned boxes paint, moved to their columns.
 				continue
 			}
 			walk(k)
@@ -583,6 +585,7 @@ func (e *engine) anchors(rb *box, n int) map[string]compose.Dest {
 					x, y, ok = b.x, b.y, true
 				}
 				if ok {
+					x, y = toFlow(b, x, y)
 					d := e.dest(clamp(x), max(clamp(y), 0))
 					if d.Page <= n {
 						out[b.id] = d
