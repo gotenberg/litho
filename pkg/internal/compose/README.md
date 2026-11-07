@@ -11,10 +11,12 @@ the plan the work follows.
 ```
 pkg/internal/compose/            The model (model.go) and the PDF backend (write.go).
 pkg/internal/typography/embed/   Embeds a font program by glyph IDs: subset, Type0 objects, ToUnicode.
+pkg/internal/typography/woff/    Decodes WOFF and WOFF2 files into sfnt programs, for @font-face (wave 2).
 pkg/internal/text/               Font matching, shaping, line breaking: text in, positioned glyph runs out.
 pkg/internal/convert/plaintext/  Plain text converter, the smallest complete consumer.
 pkg/internal/css/                CSS parser, selectors, cascade: a DOM in, a computed Style per element out (style.go is the contract).
 pkg/internal/layout/             Box layout and pagination: a styled Node tree in, pages out (node.go is the contract).
+pkg/internal/svg/                SVG renderer: an SVG document in, vector fragments out, for images, backgrounds and inline <svg> (wave 2).
 pkg/internal/convert/html/       HTML converter: parses with x/net/html, styles with css, builds the layout tree (wave 1 onward).
 pkg/internal/convert/markdown/   Markdown converter: renders with gomarkdown at Gotenberg's defaults, lays out through html (wave 2).
 pkg/internal/convert/ooxml/      DOCX, XLSX and PPTX converters (waves 4 to 6).
@@ -141,12 +143,25 @@ Each wave ships behind oracles wired into the corpus matrix
 Wave 4 depends on wave 0 alone, so the Office converters run beside waves
 1 to 3 once the model is frozen.
 
-Status: waves 0 and 1 are done. `test/integration/baseline.json` records
-the oracle scores per fixture; the wpt, weasyprint and html cells score the
-converter in seconds (`go run ./test/integration/cmd/corpus run
---corpus=wpt,weasyprint,html --feature=reftest,draw,diff`). Wave 1 also
-took positioning, transforms, gradients, box-shadow, outlines and generated
-content from wave 3, because the reftests and real pages lean on them.
+Status: waves 0 to 2 are done. `test/integration/baseline.json` records
+the oracle scores per fixture; the wpt, weasyprint, html and svg cells
+score the converter in seconds (`go run ./test/integration/cmd/corpus run
+--corpus=wpt,weasyprint,html,svg --feature=reftest,draw,diff,svgdraw`).
+Wave 1 also took positioning, transforms, gradients, box-shadow, outlines
+and generated content from wave 3, and wave 2 took flexbox, because the
+reftests, the real pages and Chromium's header template lean on them. Wave
+2 mirrors Chromium's route as Gotenberg drives it: landscape, the paper
+against the @page size (preferCssPageSize), the print scale and the
+shrink-to-fit of wide content, the single page measured on a screen, page
+ranges, printBackground, the outline, headers and footers laid out on
+Chromium's template page, media features, and font metrics rounded to
+whole pixels as Blink rounds them; and beyond the route, CSS Page 3 named
+pages and page-margin boxes, @font-face in TrueType, OpenType, WOFF and
+WOFF2, SVG, Markdown through gomarkdown, and http(s) resources with srcset
+and <picture>. The html corpus carries the route's parity fixtures, built
+from Gotenberg's test data with per-fixture options. The oracle
+disagreements that are accepted rather than chased are listed in each
+corpus's FIXTURES.md.
 
 The differential oracle compares page count, PDF.js text with reading
 order, link sets, outline, tag tree and a layout-tolerant score over
