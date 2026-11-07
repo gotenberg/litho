@@ -1,0 +1,12 @@
+go test fuzz v1
+[]byte("\xfd\xdc\xda\x18KY\xbd\xa8\xe44F\xfby\xe6\xb8fJ6Z\xb2w2\x1bH\xe2\xe35# \x92\r\x0f\x9a\t\x0f\xea\n\xcc\x1cPί\x92p\xa0\x97\xc53\xf5\xb0\x9f\xb6\x86\x9d\xeb\xd3\x1c\xd9")
+string("Blowfish CFB")
+string("mPaUwgOpYrs=")
+string("SHA1")
+string("PBKDF2")
+string("10")
+string("fUcSi64R1IEsYlyS4uMeBA==")
+string("16")
+string("SHA1/1K")
+string("aWoxMdlqOsQVnsa6pOwEzvd/M74=")
+string("313")

@@ -1,0 +1,12 @@
+go test fuzz v1
+[]byte("\xec\xef\x9cYb\x8c\x8a\xfc9\xf6첥L\t}\xba\xf2g\x00k\xaa\x95\xa4y\xc0\b(\xa7\x1a\xbbπ\xf3\xb0C~3V`\xce\xd0\n\x00\xb0+J\x00\xd9)l\f\x82F\x820\xa8\xa9wj\xcb{\x1e\x92\u0383\x1f\xd5|>\xb2\xf7h\xcb\xd7Fd\xfe\xb4\x98@\x14\xda\xc6\xc1\xce\xe5\xc2\xc3x\x85ǵ \xe6>+\xac=ޟO\x02\xbf\xa3\xe5\x93q\xfb\x8c\xb4\xf3\x9d\xd1\xe1d\xd1V\x1a^\xb81Y\xf8\xcf,\x1d\xcc")
+string("http://www.w3.org/2001/04/xmlenc#aes256-cbc")
+string("2cf0Xbi8/oYRyQZYvSq2hQ==")
+string("http://www.w3.org/2000/09/xmldsig#sha256")
+string("PBKDF2")
+string("10")
+string("ZiXmx9SLgCush2MmPHIDZQ==")
+string("32")
+string("urn:oasis:names:tc:opendocument:xmlns:manifest:1.0#sha256-1k")
+string("NORbjmhd8Kr82La6v8BV6ZobVdgmeIjfdTzkaxbGhTM=")
+string("313")

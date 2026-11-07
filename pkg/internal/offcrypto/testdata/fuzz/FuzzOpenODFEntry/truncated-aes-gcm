@@ -1,0 +1,12 @@
+go test fuzz v1
+[]byte("G\x82*\xe6Ѵ\x14K\x94wR\xecr\xe1$\x8b\x02\xaeM\xfdݢ\xb3\xf2\"o_D{~W\x01<;\x99\a8\xb8\x01\xcd\x174\x88&\xaf\x8d\xdcM(\xcfh\x15\xab\xea\x12\xa88h\t\x92\tr\xfc\xc6)(:\x05\x03\xf3Q\x04")
+string("http://www.w3.org/2009/xmlenc11#aes256-gcm")
+string("R4Iq5tG0FEuUd1Ls")
+string("http://www.w3.org/2000/09/xmldsig#sha256")
+string("urn:org:documentfoundation:names:experimental:office:manifest:argon2id")
+string("")
+string("+NrkLflH2PcCEjl6iaN4/Q==")
+string("32")
+string("")
+string("")
+string("313")

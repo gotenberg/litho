@@ -1,0 +1,3 @@
+go test fuzz v1
+[]byte("\x04\x00\x04\x00@\x00\x00\x00<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<encryption xmlns=\"http://schemas.microsoft.com/office/2006/encryption\" xmlns:p=\"http://schemas.microsoft.com/office/2006/keyEncryptor/password\"><keyData saltSize=\"16\" blockSize=\"16\" keyBits=\"128\" hashSize=\"32\" cipherAlgorithm=\"AES\" cipherChaining=\"ChainingModeCBC\" hashAlgorithm=\"SHA256\" saltValue=\"wxu4st/1ERtKDQzk5VILdw==\"/><dataIntegrity encryptedHmacKey=\"cCQnRSWDNw2X2aFtfJT/MIgWBNcUnf7jgz3dmpiQLW8=\" encryptedHmacValue=\"dvKd0kK78FP+SwTDGwxhJvh08MTp/yYORigz/r")
+[]byte("`\x01\x00\x00\x00\x00\x00\x00\x1fD")
