@@ -919,12 +919,17 @@ func (l *gridLayout) put(it *gitem, colPos []float64, rowTop, shift float64) flo
 	case hSet || stretch && dependsOnHeight(k):
 		pl.put(k, x, y, w, h, true)
 		k.h = h
-	case stretch:
-		got := pl.put(k, x, y, w, 0, false)
-		k.h = h + max(got-l.ms[it].h, 0)
 	default:
-		got := pl.put(k, x, y, w, 0, false)
-		k.h = constrainHeight(k, got, acb)
+		// Laid out at its content height in the containing block it was
+		// measured in, a layout off the page cuts moves into place; the
+		// struts its content takes at page cuts make it taller.
+		mp := placement{e: e, fd: l.b.grid.fd, pcb: cblock{x: l.cb.x, w: aw}}
+		got := mp.put(k, x, y, w, 0, false)
+		if stretch {
+			k.h = h + max(got-l.ms[it].h, 0)
+		} else {
+			k.h = constrainHeight(k, got, acb)
+		}
 	}
 	return k.y + k.borderH() + k.m[css.Bottom]
 }
