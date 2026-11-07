@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
@@ -37,16 +38,40 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err != nil {
 		return nil, fmt.Errorf("reading ODS: %w", err)
 	}
-	pkg, err := odf.Open(ctx, data, odf.Options{Password: opts.Password})
+	doc, warnings, err := Read(ctx, data, fonts, opts.Password)
 	if err != nil {
-		return nil, fmt.Errorf("reading ODS: %w", err)
+		return nil, err
+	}
+	out, err := sheet.Convert(ctx, doc, fonts, opts)
+	if err != nil {
+		return nil, err
+	}
+	out.Warnings = append(warnings, out.Warnings...)
+	return out, nil
+}
+
+// Read reads the ODS package, or the flat FODS document, data into the
+// spreadsheet model, with the warnings for the constructs it does not
+// read. fonts, which may be nil, parses the text of SVG pictures; password
+// opens an encrypted package. It fails as [Convert] does.
+func Read(ctx context.Context, data []byte, fonts *text.Fonts, password string) (*sheet.Document, []compose.Warning, error) {
+	pkg, err := odf.Open(ctx, data, odf.Options{Password: password})
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading ODS: %w", err)
 	}
 	switch pkg.MimeType {
 	case "", odf.MimeSpreadsheet, odf.MimeSpreadsheetTemplate:
 	default:
-		return nil, fmt.Errorf("reading ODS: %w: the document is %q, not a spreadsheet", office.ErrMalformed, pkg.MimeType)
+		return nil, nil, fmt.Errorf("reading ODS: %w: the document is %q, not a spreadsheet", office.ErrMalformed, pkg.MimeType)
 	}
-	// The reader that fills a sheet.Document for sheet.Convert lands with
-	// the wave 5 cells.
-	return nil, fmt.Errorf("reading ODS: %w", office.ErrNotImplemented)
+	body := odf.Section(pkg.Content, "body").Child(odf.NSOffice, "spreadsheet")
+	if body == nil {
+		return nil, nil, fmt.Errorf("reading ODS: %w: the document has no office:spreadsheet body", office.ErrMalformed)
+	}
+	r := newReader(ctx, pkg, fonts)
+	doc := r.document(body)
+	if r.err != nil {
+		return nil, nil, r.err
+	}
+	return doc, r.warnings, nil
 }
