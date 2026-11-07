@@ -9,7 +9,7 @@ HTML and Markdown sources converted twice: by Chromium, through the Chromium rou
 | `pdfs/`         | litho's PDF of each source (`make html-fixtures`, committed once the converter writes them)                                   |
 | `chromium.sh`   | Posts each source to the Gotenberg image and writes `chromium/<name>.pdf`                                                     |
 | `build/main.go` | Converts each source with `pdf.Convert` twice and writes `pdfs/<name>.pdf`, failing on a difference and printing the warnings |
-| `fixture/`      | Reads a source directory and its `options.json` for `build/main.go` and the `diff` feature                                    |
+| `../fixture/`   | Reads a source directory and its `options.json` for `build/main.go` and the `diff` feature (shared with `docx` and `odt`)     |
 | `download.sh`   | Installs `chromium/*.pdf` as the corpus PDFs the provisioning image derives the diff goldens from                             |
 
 ## Per-fixture options

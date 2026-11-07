@@ -7,7 +7,7 @@
 # goes to /forms/chromium/convert/html with every sibling file; one holding
 # index.md and no index.html goes to /forms/chromium/convert/markdown with an
 # index.html that wraps it as litho's Markdown converter does (MarkdownWrapper
-# in fixture/fixture.go).
+# in ../fixture/fixture.go).
 #
 # The form fields come from the directory's options.json (FIXTURES.md, "Per
 # fixture options"), each key the route's field of the same name; a key left
@@ -64,7 +64,7 @@ done
 curl -fsS "$URL/health" > /dev/null
 
 # The keys of options.json, the route's form fields (Options in
-# fixture/fixture.go). A key outside the list fails the build: a misspelt one
+# ../fixture/fixture.go). A key outside the list fails the build: a misspelt one
 # would leave the fixture on the defaults.
 KEYS='["paperWidth","paperHeight","marginTop","marginRight","marginBottom","marginLeft","landscape","scale","singlePage","nativePages","preferCssPageSize","printBackground","nativeBookmarks","emulatedMediaType","emulatedMediaFeatures","header","footer"]'
 

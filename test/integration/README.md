@@ -1,6 +1,6 @@
 # Integration Tests
 
-Matrix runner that scores litho across (corpus, feature) cells. Every corpus supplies PDF fixtures, or, for the four converter corpora, the HTML and SVG sources litho converts; every feature either loads a captured golden or runs live against an external tool.
+Matrix runner that scores litho across (corpus, feature) cells. Every corpus supplies PDF fixtures, or, for the six converter corpora, the HTML, SVG, DOCX and ODT sources litho converts; every feature either loads a captured golden or runs live against an external tool.
 
 ## Layout
 
@@ -22,7 +22,11 @@ test/integration/
 │   │   ├── gen-merge-empty.sh  pdfcpu merge-with-empty oracle (shared)
 │   │   ├── run-verapdf.sh      veraPDF per-profile runner (shared)
 │   │   ├── run-mustang.sh      Mustang Factur-X validity runner (shared)
-│   │   └── run-kosit.sh        KoSIT Schematron runner (shared)
+│   │   ├── run-kosit.sh        KoSIT Schematron runner (shared)
+│   │   ├── list-office-candidates.py  Selects the docx and odt corpora's LibreOffice test documents
+│   │   ├── fetch-office.sh     Downloads and hash-checks them (make docx-fetch, make odt-fetch)
+│   │   ├── libreoffice.sh      Builds their LibreOffice references on the host (make docx-libreoffice)
+│   │   └── install-references.sh  Installs those references as the corpus PDFs (docx, odt download.sh)
 │   ├── pdfjs/
 │   │   ├── download.sh
 │   │   ├── flatten-scope.json  Widens the flatten cell to the whole corpus
@@ -81,19 +85,29 @@ test/integration/
 │   │   ├── extract.py          Extracts the fixtures (make weasyprint-fixtures)
 │   │   ├── LICENSE             WeasyPrint's licence
 │   │   └── FIXTURES.md         What was extracted and skipped
-│   └── html/                   HTML sources litho and Chromium convert
-│       ├── download.sh         Copies chromium/ into the output dir
-│       ├── manifest.json
-│       ├── sources/<name>/     index.html or index.md, assets, options.json
-│       ├── chromium/*.pdf      Chromium references (make html-chromium)
-│       ├── chromium.sh         Converts the sources with the pinned Gotenberg image
-│       ├── fixture/            Reads a source and its options.json (Go side)
-│       ├── build/main.go       pdf.Convert builder (make html-fixtures)
-│       ├── pdfs/*.pdf          litho's PDFs, once the converter writes them
-│       └── FIXTURES.md         Per-source origin and focus
+│   ├── html/                   HTML sources litho and Chromium convert
+│   │   ├── download.sh         Copies chromium/ into the output dir
+│   │   ├── manifest.json
+│   │   ├── sources/<name>/     index.html or index.md, assets, options.json
+│   │   ├── chromium/*.pdf      Chromium references (make html-chromium)
+│   │   ├── chromium.sh         Converts the sources with the pinned Gotenberg image
+│   │   ├── build/main.go       pdf.Convert builder (make html-fixtures)
+│   │   ├── pdfs/*.pdf          litho's PDFs, once the converter writes them
+│   │   └── FIXTURES.md         Per-source origin and focus
+│   ├── docx/, odt/             DOCX and ODT sources litho and LibreOffice convert
+│   │   ├── download.sh         Installs the host-built references from the testdata volume
+│   │   ├── manifest.json
+│   │   ├── sources/<name>/     Gotenberg's documents, one each, with options.json
+│   │   ├── documents.json      The LibreOffice test documents fetched, by ID
+│   │   ├── files.sha256        Every fetched file, by LibreOffice core path and SHA-256
+│   │   ├── pdfs/*.pdf          litho's PDFs of the committed sources, once the converters write them
+│   │   └── FIXTURES.md         How the documents were chosen, the options, the fonts
+│   └── fixture/                Reads an html, docx or odt source and its options.json (Go side)
+│       └── build/main.go       pdf.Convert builder of the Office sources (make docx-fixtures, make odt-fixtures)
 ├── testdata/fonts/             Fixture fonts, Ahem and the WeasyPrint test font (gitignored)
 ├── testdata/wpt/               The fetched WPT files, with versions.json (gitignored)
 ├── testdata/svg/               The fetched resvg tests, with versions.json (gitignored)
+├── testdata/<docx|odt>/        sources/ fetched, libreoffice/ references and manifest.json, then pdfs/ and goldens/ (gitignored)
 ├── testdata/reports/           Failure images of the converter cells (gitignored)
 ├── testdata/<corpus>/          Provisioned output (gitignored)
 │   ├── pdfs/*.pdf
@@ -128,11 +142,15 @@ make corpus-init CORPUS_NAME=verapdf
 make corpus-tools
 
 # Provision the converter corpora the host provisions (corpus-init skips them).
-make wpt-fetch           # WPT files and Ahem, hash-checked
-make svg-fetch           # resvg tests and their Noto fonts, hash-checked
-make weasyprint-fixtures # re-extract the committed WeasyPrint fixtures, fetch the test font
-make html-fixtures       # fixture fonts, then litho's html corpus PDFs
-make html-chromium       # rebuild the committed Chromium references (Docker; HTML_NAMES="a b" for some)
+make wpt-fetch                                              # WPT files and Ahem, hash-checked
+make svg-fetch                                              # resvg tests and their Noto fonts, hash-checked
+make weasyprint-fixtures                                    # re-extract the committed WeasyPrint fixtures, fetch the test font
+make html-fixtures                                          # fixture fonts, then litho's html corpus PDFs
+make html-chromium                                          # rebuild the committed Chromium references (Docker; HTML_NAMES="a b" for some)
+make docx-fetch                                             # the LibreOffice test documents of the docx corpus, hash-checked (odt-fetch alike)
+make docx-libreoffice                                       # their and the committed sources' LibreOffice references, into the testdata (Docker; NAMES="a b")
+make docx-fixtures                                          # litho's PDFs of the committed docx sources (odt-fixtures alike)
+go run ./test/integration/cmd/corpus init --corpus=docx,odt # the diff goldens of the references
 
 # Wipe provisioned data to force re-init on the next run.
 make clean-corpus
@@ -158,7 +176,7 @@ make corpus-check
 
 ## Tool versions
 
-`corpus/versions.env` pins every tool and corpus source provisioning uses, one commented `KEY=VALUE` per line: veraPDF (the `verapdf/cli` image tag and the digest of the one build the goldens came from), Node (the `node` base image, by digest), the Temurin JRE veraPDF, Mustang and KoSIT run on, the PDF.js commit the image builds, pdfcpu (with the SHA-256 of its Linux archive for each architecture the image builds for, amd64 and arm64), Mustang, KoSIT with its XRechnung bundle and EN 16931 XSLT, poppler (the release, the SHA-256 of its tarball, and the Debian base image it builds on, by digest), and the revision of each downloaded corpus (a commit SHA or a tag, never a branch; govdocs by its fixed thread list). A last group pins the tools the host runs for live checks, fixture builds, the outline goldens and the ICC transform goldens (qpdf, pikepdf, fontTools, Pillow), which the image does not install, and the Liberation and DejaVu font archives the compose fixtures are converted with, each by URL and SHA-256; the host's poppler `pdfsig` is checked against the poppler pin the image builds. The converter corpora add five host pins: the web-platform-tests commit (`WPT_COMMIT`), the resvg commit (`RESVG_COMMIT`), the WeasyPrint release with the SHA-256 of its source tarball and of its test font (`WEASYPRINT_VERSION`, `WEASYPRINT_SHA256`, `WEASYPRINT_FONT_SHA256`), and the Gotenberg image the Chromium references come from (`GOTENBERG_IMAGE`). `wpt/fetch.sh` records `WPT_COMMIT` in `testdata/wpt/versions.json`, so the wpt cell refuses files fetched at another commit as the image-provisioned cells do; `svg/fetch.sh` records `RESVG_COMMIT` in `testdata/svg/versions.json` likewise.
+`corpus/versions.env` pins every tool and corpus source provisioning uses, one commented `KEY=VALUE` per line: veraPDF (the `verapdf/cli` image tag and the digest of the one build the goldens came from), Node (the `node` base image, by digest), the Temurin JRE veraPDF, Mustang and KoSIT run on, the PDF.js commit the image builds, pdfcpu (with the SHA-256 of its Linux archive for each architecture the image builds for, amd64 and arm64), Mustang, KoSIT with its XRechnung bundle and EN 16931 XSLT, poppler (the release, the SHA-256 of its tarball, and the Debian base image it builds on, by digest), and the revision of each downloaded corpus (a commit SHA or a tag, never a branch; govdocs by its fixed thread list). A last group pins the tools the host runs for live checks, fixture builds, the outline goldens and the ICC transform goldens (qpdf, pikepdf, fontTools, Pillow), which the image does not install, and the Liberation and DejaVu font archives the compose fixtures are converted with, each by URL and SHA-256; the host's poppler `pdfsig` is checked against the poppler pin the image builds. The converter corpora add five host pins: the web-platform-tests commit (`WPT_COMMIT`), the resvg commit (`RESVG_COMMIT`), the WeasyPrint release with the SHA-256 of its source tarball and of its test font (`WEASYPRINT_VERSION`, `WEASYPRINT_SHA256`, `WEASYPRINT_FONT_SHA256`), the Gotenberg image the Chromium and LibreOffice references come from (`GOTENBERG_IMAGE`), and the LibreOffice core commit the docx and odt corpora's test documents come from (`LIBREOFFICE_CORE_COMMIT`), the commit of the release the image runs; the fixture fonts gain Carlito and Caladea (`CARLITO_FONTS_*`, `CALADEA_FONTS_*`), the faces the image draws Calibri and Cambria with. A docx or odt reference's own `manifest.json` records the image, the commit and the SHA-256 of its source and options, and the `diff` cell refuses a reference that disagrees with the pins or the sources. `wpt/fetch.sh` records `WPT_COMMIT` in `testdata/wpt/versions.json`, so the wpt cell refuses files fetched at another commit as the image-provisioned cells do; `svg/fetch.sh` records `RESVG_COMMIT` in `testdata/svg/versions.json` likewise.
 
 `corpus init` passes every entry to `docker build` as a `--build-arg`. The Dockerfile carries no default of its own, so a bare `docker build` fails rather than drifting; build by hand with the arguments `corpus versions` prints:
 
@@ -227,6 +245,8 @@ Each feature, its oracle and its comparison rules are in [FEATURES.md](FEATURES.
 | `weasyprint` | 315 HTML draw tests                  | WeasyPrint's `tests/draw` (BSD-3), extracted and committed; see `corpus/weasyprint/FIXTURES.md`                                                                         |
 | `svg`        | 246 SVG tests                        | resvg's `crates/resvg/tests` (MIT) at a pinned commit, fetched by `make svg-fetch`; see `corpus/svg/FIXTURES.md`                                                        |
 | `html`       | 29 HTML and Markdown sources         | Gotenberg's web test corpus and self-authored pages, with Chromium's PDFs; see `corpus/html/FIXTURES.md`                                                                |
+| `docx`       | 360 DOCX documents                   | 10 of Gotenberg's (committed) and 350 of LibreOffice's Writer tests (MPL-2.0, fetched by `make docx-fetch`), against LibreOffice's PDFs; see `corpus/docx/FIXTURES.md`  |
+| `odt`        | 154 ODT and flat ODT documents       | 4 of Gotenberg's (committed) and 150 of LibreOffice's Writer tests (MPL-2.0, fetched by `make odt-fetch`), against LibreOffice's PDFs; see `corpus/odt/FIXTURES.md`     |
 
 Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
 
@@ -234,7 +254,7 @@ Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
 - `none` (pdfjs): one fixture per PDF, ID = `<basename>`.
 - `auto` (govdocs, pdf20, facturx): one fixture per PDF, profile read from the document's XMP claim. Files claiming `PDF_A-Nx` or `PDF_UA-N` get ID = `<profile>/<basename>` and run compliance/remediation. Files with no claim get ID = `<basename>` and run only the profile-agnostic features (text, metadata).
 
-A converter corpus (`wpt`, `svg`, `weasyprint`, `html`) lists source documents instead of PDFs, through its manifest's `inputs`. Its fixture IDs are the WPT paths of the tests (`css/CSS2/floats/float-001.html`), the resvg paths of the SVG tests (`shapes/rect/simple-case.svg`), the fixture file names (`test_float__test_float`), and the source directory names (`invoice`).
+A converter corpus (`wpt`, `svg`, `weasyprint`, `html`, `docx`, `odt`) lists source documents instead of PDFs, through its manifest's `inputs`. Its fixture IDs are the WPT paths of the tests (`css/CSS2/floats/float-001.html`), the resvg paths of the SVG tests (`shapes/rect/simple-case.svg`), the fixture file names (`test_float__test_float`), the source directory names (`invoice`), and, for a fetched LibreOffice test document, its directory and file name (`ooxmlexport/tdf123.docx`).
 
 Auto-mode provisioning runs the in-tree `corpus scan-claims` helper after download, writing `<testdata_root>/claims.csv` keyed `<basename>,<profile>`. `run-verapdf.sh` consumes that file and validates each PDF only against the profile it claims (one veraPDF invocation per profile, hard-linked staging buckets), so cost scales with corpus size, not corpus size × profile count. The runner picks up the same CSV on `corpus run` to skip the live XMP scan. Delete the CSV (or `make clean-corpus`) to force a re-scan.
 
@@ -288,7 +308,8 @@ Fields:
 - `goldens`: maps feature name to the directory (relative to the corpus testdata root) that holds the reference files. `remediation` points at the compliance directory because that is where the feature reads `verapdf_pre` counts from. The provisioning Docker image only generates goldens for features listed here, so dropping `text` + `metadata` from the veraPDF corpus skips the (slow) PDF.js generator entirely.
 - `golden_overrides`: maps feature name to a committed file, relative to the corpus source directory, that corrects goldens the oracle reads wrong. `text` and `flatten` take one. A `text` override file (litho and govdocs carry one) corrects the PDF.js goldens: each entry records the oracle's reading it replaces, so it fails its fixture when the oracle changes, and gives the right reading or marks the page unscored, with the clause behind it; the goldens stay the oracle's raw output. A `flatten` scope file (pdfjs and govdocs carry one) widens the `flatten` cell from the render sample to the whole corpus (see [Transparency flattening](FEATURES.md#transparency-flattening)).
 - `skips`: maps fixture ID to a reason; the runner omits skipped fixtures from every feature.
-- `inputs`: makes the corpus a converter corpus, whose fixtures are source documents. `{"list": "reftests.json"}` reads a committed JSON array of objects with an `id`, each the path of its source under the testdata root (`wpt`, `svg`); `{"glob": "fixtures/*.json"}` matches sources under the corpus source directory, each keyed by what its one `*` matched (`weasyprint`; `html` globs `sources/*`, a directory per source, which the `diff` feature reads through `corpus/html/fixture`). `pdf_root`, `profile_mode` and `profiles` do not apply.
+- `inputs`: makes the corpus a converter corpus, whose fixtures are source documents. `{"list": "reftests.json"}` reads a committed JSON array of objects with an `id`, each the path of its source under the testdata root (`wpt`, `svg`); `{"glob": "fixtures/*.json"}` matches sources under the corpus source directory, each keyed by what its one `*` matched (`weasyprint`; `html` globs `sources/*`, a directory per source, which the `diff` feature reads through `corpus/fixture`). `pdf_root`, `profile_mode` and `profiles` do not apply. Both may be set, as the `docx` and `odt` corpora set them: the committed sources are globbed and the fetched ones listed, with `list_root` the subdirectory of the testdata root the list's IDs resolve under (`sources`) and `fetched_by` the make target a missing one names.
+- `references`: `{"dir": "libreoffice", "built_by": "make docx-libreoffice"}` names the reference PDFs the host builds into the testdata, one `<id with / written __>.pdf` each with a `manifest.json`, which `download.sh` installs as the corpus PDFs and the `diff` feature checks against the pins and the sources before it scores.
 - `goldens_in_source`: resolves `goldens` against the corpus source directory instead of the testdata root, for references committed beside the manifest (`wpt`, `svg`, `weasyprint`).
 - `provisioned_by`: names the make target that provisions the corpus on the host; `corpus init` skips the corpus and says so.
 
