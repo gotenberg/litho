@@ -161,17 +161,9 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, printDate time.Ti
 				continue
 			}
 			d := detect(f, year)
-			c := sheet.Cell{Column: ci, Style: styleOf(d.kind)}
-			switch d.kind {
-			case kText:
-				c.Value = sheet.Value{Kind: sheet.Text, Text: f}
-			case kBool:
-				c.Value = sheet.Value{Kind: sheet.Bool, Number: d.value}
-			default:
-				c.Value = sheet.Value{Kind: sheet.Number, Number: d.value}
-				if d.kind == kDateUS && printDate.IsZero() && !hasYear(f) {
-					undated = true
-				}
+			c := sheet.Cell{Column: ci, Style: styleOf(d.kind), Value: cellValue(d, f)}
+			if d.kind == kDateUS && printDate.IsZero() && !hasYear(f) {
+				undated = true
 			}
 			cols.add(ci, ri, f, d)
 			row.Cells = append(row.Cells, c)
@@ -185,6 +177,19 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, printDate time.Ti
 	}
 	sh.Columns = cols.widths(ctx, fonts)
 	return &sheet.Document{Default: def, Sheets: []*sheet.Sheet{sh}}, warnings, nil
+}
+
+// cellValue returns the value of the field f detected as d.
+func cellValue(d detected, f string) sheet.Value {
+	switch d.kind {
+	case kText:
+		return sheet.Value{Kind: sheet.Text, Text: f}
+	case kBool:
+		return sheet.Value{Kind: sheet.Bool, Number: d.value}
+	case kGeneral, kPercent, kCurrency, kScientific, kDateUS, kDateISO, kDateTimeISO, kDateTimeISOT,
+		kDateTimeUS, kTime, kElapsed, kTimeFraction:
+	}
+	return sheet.Value{Kind: sheet.Number, Number: d.value}
 }
 
 // page returns the page setup of a CSV import: Letter, 2 cm margins, the

@@ -329,8 +329,7 @@ func usDate(s string, year int, day *float64) bool {
 // 2026", "10-Jan-2026", "10 Jan 2026", "Jan 2026".
 func namedDate(s string, day *float64) bool {
 	f := strings.FieldsFunc(s, func(r rune) bool { return r == ' ' || r == ',' || r == '-' })
-	var m, d, y int
-	yDigits := 0
+	var m, d, y, yDigits int
 	switch {
 	case len(f) == 3 && monthNames[f[0]] > 0:
 		m = monthNames[f[0]]
@@ -447,6 +446,7 @@ func display(k kind, v float64) string {
 		return strings.ToUpper(strconv.FormatFloat(v, 'E', 2, 64))
 	case kDateUS, kDateISO, kDateTimeISO, kDateTimeISOT, kDateTimeUS, kTime, kElapsed, kTimeFraction:
 		return dateText(k, v)
+	case kText, kGeneral:
 	}
 	return general(v)
 }
@@ -529,6 +529,7 @@ func dateText(k kind, v float64) string {
 		return ampm()
 	case kElapsed:
 		return fmt.Sprintf("%02d:%02d:%02d", int(day)*24+h, m, s)
+	case kTimeFraction, kText, kGeneral, kBool, kPercent, kCurrency, kScientific:
 	}
 	return fmt.Sprintf("%02d:%02d:%02d.%02d", h, m, s, c)
 }
