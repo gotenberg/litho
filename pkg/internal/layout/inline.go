@@ -983,20 +983,24 @@ func (s *inlineState) vertical(l *lineBox) {
 			v = parent
 		}
 		it.baseline = v.shift
-		lh := v.lh
+		// An empty inline box kept for its edges has no glyphs to lay out:
+		// its own box, included below, is all it adds (CSS 2.1, 10.8.1).
+		empty := it.text == nil && it.ascent == 0 && it.descent == 0
 		if v.b.st.LineHeight.Kind == css.Normal && it.text != nil {
 			// line-height: normal lays a glyph run out at the normal line
 			// height of the face that draws it, a fallback face included,
 			// as CSS Inline 3, 5.1 lets the user agent do and browsers do:
 			// text a fallback face draws taller grows the line.
-			lh = it.ascent + it.descent + max(it.gap, 0)
-		}
-		half := (lh - (it.ascent + it.descent)) / 2
-		// An empty inline box kept for its edges has no glyphs to lay out:
-		// its own box, included below, is all it adds (CSS 2.1, 10.8.1).
-		empty := it.text == nil && it.ascent == 0 && it.descent == 0
-		if it.text != nil || it.box.kind == kindInline && !empty {
+			lh := it.ascent + it.descent + max(it.gap, 0)
+			half := (lh - (it.ascent + it.descent)) / 2
 			include(v, v.shift-wider(it.ascent+half, v.above), v.shift+wider(it.descent+half, v.below))
+		} else if it.text != nil || it.box.kind == kindInline && !empty {
+			// Any other line-height lays the box out on its first
+			// available font's metrics alone, whichever face draws its
+			// glyphs (CSS 2.1, 10.8.1), as Chromium's ComputedLineHeight
+			// and the inline box's text metrics do: a fallback face of
+			// other proportions does not grow the line.
+			include(v, v.shift-v.above, v.shift+v.below)
 		}
 	}
 	for _, v := range s.vboxes {
