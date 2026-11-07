@@ -127,7 +127,7 @@ func ring(outer compose.Rect, oradii [4][2]float64, inner compose.Rect, iradii [
 func (p *painter) background(b *box, st *css.Style, r compose.Rect, radii [4][2]float64, bd, pd [4]float64) {
 	clipR, clipRadii := r, radii
 	switch st.BackgroundClip {
-	case css.BorderEdge:
+	case css.BorderEdge, css.TextEdge:
 	case css.PaddingEdge:
 		clipR, clipRadii = insetRect(r, radii, bd)
 	case css.ContentEdge:
@@ -136,15 +136,44 @@ func (p *painter) background(b *box, st *css.Style, r compose.Rect, radii [4][2]
 	if clipR.Width <= 0 || clipR.Height <= 0 {
 		return
 	}
+	if clipToText(st) {
+		// CSS Backgrounds 4, 2.4: the background paints under the glyphs
+		// alone, within the border box.
+		tc := p.textClip(b)
+		if tc == nil || !hasBackground(st) {
+			return
+		}
+		g := &ditem{group: true, opacity: 1, clip: tc}
+		c := p.sync(p.chain(b, false))
+		c.kids = append(c.kids, g)
+		p.backgroundInto(g, b, st, r, radii, bd, pd, clipR, clipRadii)
+		return
+	}
+	p.backgroundInto(nil, b, st, r, radii, bd, pd, clipR, clipRadii)
+}
+
+// backgroundInto paints the colour and the image of the background of b
+// clipped to clipR with clipRadii, into the group into, or into the
+// display list when into is nil.
+func (p *painter) backgroundInto(into *ditem, b *box, st *css.Style, r compose.Rect, radii [4][2]float64, bd, pd [4]float64, clipR compose.Rect, clipRadii [4][2]float64) {
 	if c, ok := colorOf(st.BackgroundColor); ok {
-		p.emit(b, false, &compose.Path{Ops: roundedRect(clipR, clipRadii), Fill: &compose.Fill{Color: c}}, clipR.Y, clipR.Y+clipR.Height, -1)
+		path := &compose.Path{Ops: roundedRect(clipR, clipRadii), Fill: &compose.Fill{Color: c}}
+		if into == nil {
+			p.emit(b, false, path, clipR.Y, clipR.Y+clipR.Height, -1)
+		} else {
+			page := -1
+			if p.mono >= 0 {
+				page = p.mono
+			}
+			into.kids = append(into.kids, &ditem{frag: path, y0: clipR.Y, y1: clipR.Y + clipR.Height, page: page})
+		}
 	}
 	if st.BackgroundImage == "" && st.BackgroundGradient == nil {
 		return
 	}
 	area := r
 	switch st.BackgroundOrigin {
-	case css.BorderEdge:
+	case css.BorderEdge, css.TextEdge:
 	case css.PaddingEdge:
 		area, _ = insetRect(r, radii, bd)
 	case css.ContentEdge:
@@ -180,12 +209,16 @@ func (p *painter) background(b *box, st *css.Style, r compose.Rect, radii [4][2]
 	if len(g.kids) == 0 {
 		return
 	}
-	c := p.sync(p.chain(b, false))
 	if p.mono >= 0 {
 		for _, k := range g.kids {
 			k.page = p.mono
 		}
 	}
+	if into != nil {
+		into.kids = append(into.kids, g)
+		return
+	}
+	c := p.sync(p.chain(b, false))
 	c.kids = append(c.kids, g)
 }
 

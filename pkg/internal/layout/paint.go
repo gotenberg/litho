@@ -5,6 +5,8 @@ import (
 	"math"
 	"slices"
 
+	gofont "github.com/go-text/typesetting/font"
+
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -79,6 +81,9 @@ type painter struct {
 	// shadowPixels counts the raster pixels of the blurred shadows drawn,
 	// against maxShadowBudget.
 	shadowPixels int
+	// outlines caches the parsed faces whose glyph outlines a
+	// background-clip: text clip draws.
+	outlines map[*compose.Face]*gofont.Face
 }
 
 // paint returns the display list of the box tree rooted at root.
