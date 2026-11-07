@@ -191,6 +191,9 @@ type markerBox struct {
 	elem    *compose.StructElem
 	// st is the marker's style: the ::marker's, else the item's.
 	st *css.Style
+	// boxW, when positive, is the width of the marker box an Office list
+	// marker takes outside the item, its label aligned in it.
+	boxW float64
 	// Layout results: the marker's left edge and baseline, flow
 	// coordinates.
 	x, baseline float64

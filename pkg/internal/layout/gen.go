@@ -461,7 +461,7 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 		ctx.structDepth++
 	}
 	if b.st.ListStylePosition == css.Outside && !inside {
-		b.outside = &markerBox{text: label, picture: pic, elem: markerElem, st: st}
+		b.outside = &markerBox{text: label, picture: pic, elem: markerElem, st: st, boxW: markerBoxWidth(n.Marker)}
 		return ctx
 	}
 	mctx := ctx

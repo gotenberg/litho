@@ -262,3 +262,51 @@ func alphabetic(n int, symbol func(int) string, k int) string {
 	}
 	return b.String()
 }
+
+// markerBoxWidth returns the width of the marker box the converter's
+// marker node m asks for: its style's Width when a length, as an Office
+// converter sets it to the distance from the number position to the text
+// indent (ECMA-376 Part 1, 17.9.6 lvlText and 17.9.24 ind; ODF 1.3 Part
+// 3, 19.880 text:list-level-position-and-space-mode label-alignment). 0
+// lays the marker out as CSS does, its end edge on the item's content
+// edge.
+func markerBoxWidth(m *Node) float64 {
+	if m == nil || m.Style == nil || m.Style.Width.Kind != css.Points {
+		return 0
+	}
+	if w := clamp(m.Style.Width.Value); w > 0 {
+		return w
+	}
+	return 0
+}
+
+// markerX returns the left edge of the label w wide of the Office marker m
+// of list item b. Its box is m.boxW wide outside the item at its start
+// edge, ending on the content edge, and the label aligns on the box's
+// start edge, the number position, by the marker's text-align, as
+// LibreOffice aligns a list label on it (and Word a lvlJc): start puts
+// the label's start there, end its end, centre its centre. A label wider
+// than its room overlaps the content.
+func markerX(b *box, m *markerBox, w float64) float64 {
+	rtl := b.st.Direction == css.RTL
+	anchor := b.contentX() - m.boxW
+	if rtl {
+		anchor = b.contentX() + b.w + m.boxW
+	}
+	end := false
+	switch m.st.TextAlign {
+	case css.AlignCenter:
+		return anchor - w/2
+	case css.AlignEnd:
+		end = true
+	case css.AlignLeft:
+		end = rtl
+	case css.AlignRight:
+		end = !rtl
+	case css.AlignStart, css.AlignAuto, css.AlignJustify, css.AlignJustifyAll:
+	}
+	if end != rtl {
+		return anchor - w
+	}
+	return anchor
+}

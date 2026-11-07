@@ -1009,6 +1009,9 @@ func (e *engine) placeMarker(b *box) {
 		if rtl {
 			m.x = b.contentX() + b.w + gap
 		}
+		if m.boxW > 0 {
+			m.x = markerX(b, m, m.picture.Width)
+		}
 		m.baseline, m.placed = baseline, true
 		return
 	}
@@ -1045,6 +1048,9 @@ func (e *engine) placeMarker(b *box) {
 	m.x = b.contentX() - m.width
 	if rtl {
 		m.x = b.contentX() + b.w
+	}
+	if m.boxW > 0 {
+		m.x = markerX(b, m, m.width)
 	}
 	m.baseline, m.placed = baseline, true
 }
