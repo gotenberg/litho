@@ -66,9 +66,21 @@ func (tableFormatter) intrinsic(e *engine, w *box) (float64, float64) {
 			lo, hi = max(lo, mn+edges), max(hi, mn+edges)
 		}
 	}
+	if td.fixedLayout() && t.st.Width.Kind == css.Percent {
+		// A fixed layout table of a percentage width asks for as much
+		// room as there is: its max-content width is Chromium's largest
+		// table width (TableLayoutAlgorithmFixed, kTableMaxWidth), so a
+		// shrink-to-fit or flexed box around it fills what it is given.
+		hi = max(hi, min(fixedPercentMaxWidth, maxLength))
+	}
 	capMin := e.captionMin(w)
 	return max(lo, capMin), max(hi, lo, capMin)
 }
+
+// fixedPercentMaxWidth is the max-content width of a fixed layout table
+// whose width is a percentage: Chromium's 1,000,000 CSS pixels, in
+// points.
+const fixedPercentMaxWidth = 1_000_000 * 0.75
 
 // captionMin returns the widest min-content contribution of the captions
 // of the wrapper w, which the table is at least as wide as (CSS 2.1,
@@ -694,9 +706,9 @@ func (e *engine) layoutTable(t *box, cb cblock, y float64) {
 		}
 	}
 	h := end - top
-	if sh, ok := specHeight(t, t.st.Height, cb); ok && len(td.groups) > 0 {
-		// A table without a row group, empty or not, takes no height
-		// from its height property, as in Chromium.
+	if sh, ok := specHeight(t, t.st.Height, cb); ok {
+		// The height is a minimum (CSS 2.1, 17.5.3), a table without a
+		// row group's too, as Chromium sizes an empty table.
 		h = max(h, sh)
 	}
 	t.h = max(h, 0)

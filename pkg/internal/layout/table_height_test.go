@@ -105,15 +105,33 @@ func TestTable_ColumnMinWidth(t *testing.T) {
 }
 
 func TestTable_HeightWithoutRowGroups(t *testing.T) {
-	// A table with no row group ignores its height; an empty row group is
-	// enough to honour it.
+	// A table honours its height with or without a row group, as
+	// Chromium sizes an empty table.
 	for _, tc := range []struct {
 		kids []*Node
 		want float64
-	}{{nil, 0}, {[]*Node{col(nil)}, 0}, {[]*Node{tbody(nil)}, 50}} {
+	}{{nil, 50}, {[]*Node{col(nil)}, 50}, {[]*Node{tbody(nil)}, 50}} {
 		tm := tableOf(t, doc(table(mods(height(50), width(40)), tc.kids...)), page(400, 1000))
 		if got := pxOf(tm.table.h); got != tc.want {
 			t.Errorf("%d children: table %v tall, want %v", len(tc.kids), got, tc.want)
 		}
+	}
+}
+
+func TestTable_FlexItems(t *testing.T) {
+	full := func(s *css.Style) { s.Width = pct(100) }
+	// Fixed layout tables of 100% width share a row container equally:
+	// their max-content width is as wide as a table gets, so the items
+	// shrink alike from it.
+	tbl := func() *Node { return el(sty(), table(mods(fixedLayout, full, height(10)))) }
+	got := flexRects(t, doc(el(flexBox(width(90)), tbl(), tbl(), tbl())), 0, 0)
+	want := [][4]float64{{0, 0, 30, 10}, {30, 0, 30, 10}, {60, 0, 30, 10}}
+	if !eqRects(got, want) {
+		t.Errorf("row items %v, want %v", got, want)
+	}
+	// A column item takes its flex basis, its table's height aside.
+	col := el(flexBox(width(50), dir(css.FlexColumn)), table(mods(width(50), height(80), flexF(0, 0, 20))))
+	if got := flexRects(t, doc(col), 0, 0); len(got) != 1 || got[0][3] != 20 {
+		t.Errorf("column item %v, want 20 tall", got)
 	}
 }

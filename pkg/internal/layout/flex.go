@@ -573,6 +573,22 @@ func (e *engine) baseSize(fd *flexData, it *fitem, ax flexAxes, cb, pcb cblock, 
 		}
 		return content
 	}
+	if sized != k && !ax.row {
+		// A table's content height is its rows', its height property
+		// aside, which is a specified size (CSS Flexbox 1, 4.5), as
+		// Chromium measures a table flex item of a column.
+		contentSize = func() float64 {
+			if content < 0 {
+				saved := sized.st
+				st := *saved
+				st.Height, st.MinHeight = css.Dimension{Kind: css.Auto}, css.Pts(0)
+				sized.st = &st
+				content = e.contentMain(fd, it, ax, cb, pcb, top)
+				sized.st = saved
+			}
+			return content
+		}
+	}
 	base, ok := 0.0, false
 	switch st.FlexBasis.Kind {
 	case css.Points, css.Percent:
@@ -712,7 +728,7 @@ func (e *engine) contentWidths(k *box) (float64, float64) {
 func (e *engine) minContentMain(fd *flexData, it *fitem, ax flexAxes, cb, pcb cblock, top float64, content func() float64) float64 {
 	k := it.b
 	if !ax.row || k.kind == kindReplaced {
-		if !ax.row && k.kind != kindReplaced {
+		if !ax.row && k.kind != kindReplaced && (k.tpart != partWrapper || k.tdata == nil) {
 			return e.measureItem(fd, it, it.cross, 0, false, pcb, cb.x, top).h
 		}
 		return content()
