@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-06T22:21:53Z",
+  "captured_at": "2026-11-07T07:03:05Z",
   "corpora": {
     "compose": {
       "features": {
@@ -278,12 +278,12 @@
     "html": {
       "features": {
         "diff": {
-          "matched": 22,
-          "mismatched": 7,
+          "matched": 23,
+          "mismatched": 6,
           "skipped": 0,
           "metrics": {
             "convert_error": 1,
-            "pages_equal": 27
+            "pages_equal": 28
           },
           "scores": {
             "article": {
@@ -335,7 +335,7 @@
               "text_f1": 1
             },
             "header-default-classes": {
-              "layout": 0.4705,
+              "layout": 0.8889,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -343,7 +343,7 @@
               "text_f1": 0.3333
             },
             "header-footer": {
-              "layout": 0.7592,
+              "layout": 0.906,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -399,7 +399,7 @@
               "text_f1": 0.97
             },
             "margin-boxes": {
-              "layout": 0.7488,
+              "layout": 0.9347,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -431,12 +431,12 @@
               "text_f1": 1
             },
             "named-pages": {
-              "layout": 0.0411,
+              "layout": 0.1996,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.3333,
-              "strict": 0,
-              "text_f1": 0.2381
+              "pages": 1,
+              "strict": 0.3333,
+              "text_f1": 1
             },
             "no-background": {
               "layout": 0.9431,
@@ -1344,8 +1344,8 @@
     "weasyprint": {
       "features": {
         "draw": {
-          "matched": 203,
-          "mismatched": 112,
+          "matched": 205,
+          "mismatched": 110,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -1423,7 +1423,7 @@
             "test_box__test_draw_border_radius": "fail",
             "test_box__test_draw_split_border_radius": "pass",
             "test_box__test_infinite_border_radius": "pass",
-            "test_box__test_margin_boxes": "fail",
+            "test_box__test_margin_boxes": "pass",
             "test_box__test_mask_border": "fail",
             "test_box__test_mask_border_fill": "fail",
             "test_box__test_outline_and_border": "pass",
@@ -1584,7 +1584,7 @@
             "test_overflow__test_overflow_1": "pass",
             "test_overflow__test_overflow_2": "pass",
             "test_overflow__test_overflow_3": "pass",
-            "test_overflow__test_overflow_4": "fail",
+            "test_overflow__test_overflow_4": "pass",
             "test_overflow__test_overflow_5": "pass",
             "test_table__test_tables_10": "pass",
             "test_table__test_tables_11": "pass",
@@ -1673,8 +1673,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 696,
-          "mismatched": 78,
+          "matched": 704,
+          "mismatched": 70,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -2297,10 +2297,10 @@
             "css/css-page/basic-pagination-004-print.html": "pass",
             "css/css-page/fixedpos-003-print.html": "pass",
             "css/css-page/fixedpos-004-print.html": "pass",
-            "css/css-page/layers-004-print.html": "fail",
+            "css/css-page/layers-004-print.html": "pass",
             "css/css-page/margin-boxes/alignment-001-print.html": "pass",
             "css/css-page/margin-boxes/content-005-print.html": "fail",
-            "css/css-page/margin-boxes/dimensions-001-print.html": "fail",
+            "css/css-page/margin-boxes/dimensions-001-print.html": "pass",
             "css/css-page/margin-boxes/dimensions-003-print.html": "fail",
             "css/css-page/margin-boxes/dimensions-005-print.html": "fail",
             "css/css-page/margin-boxes/dimensions-010-print.html": "fail",
@@ -2321,12 +2321,12 @@
             "css/css-page/page-name-flex-002-print.html": "pass",
             "css/css-page/page-name-flex-004-print.html": "pass",
             "css/css-page/page-name-inline-block-003-print.html": "pass",
-            "css/css-page/page-name-propagated-004-print.html": "fail",
-            "css/css-page/page-name-propagated-006-print.html": "fail",
-            "css/css-page/page-name-propagated-007-print.html": "fail",
-            "css/css-page/page-name-siblings-004-print.html": "fail",
-            "css/css-page/page-name-table-001-print.html": "fail",
-            "css/css-page/page-name-zero-height-001-print.html": "fail",
+            "css/css-page/page-name-propagated-004-print.html": "pass",
+            "css/css-page/page-name-propagated-006-print.html": "pass",
+            "css/css-page/page-name-propagated-007-print.html": "pass",
+            "css/css-page/page-name-siblings-004-print.html": "pass",
+            "css/css-page/page-name-table-001-print.html": "pass",
+            "css/css-page/page-name-zero-height-001-print.html": "pass",
             "css/css-page/page-size-007-print.html": "fail",
             "css/css-page/page-size-008-print.html": "fail",
             "css/css-page/page-size-009-print.html": "fail",
