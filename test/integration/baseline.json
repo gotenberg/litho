@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-07T18:44:05Z",
+  "captured_at": "2026-11-07T18:57:32Z",
   "corpora": {
     "compose": {
       "features": {
@@ -82,24 +82,24 @@
     "docx": {
       "features": {
         "diff": {
-          "matched": 138,
-          "mismatched": 222,
+          "matched": 173,
+          "mismatched": 187,
           "skipped": 0,
           "metrics": {
-            "convert_error": 1,
-            "pages_equal": 326
+            "convert_error": 0,
+            "pages_equal": 341
           },
           "scores": {
             "contract": {
-              "layout": 0.7337,
+              "layout": 0.7641,
               "link_recall": 1,
               "outline_recall": 0.96,
               "pages": 1,
               "strict": 0.1,
-              "text_f1": 0.9787
+              "text_f1": 0.9713
             },
             "i18n": {
-              "layout": 0.8619,
+              "layout": 0.8718,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -107,7 +107,7 @@
               "text_f1": 0.6182
             },
             "layout/CT-formatted-deletion.docx": {
-              "layout": 0.3556,
+              "layout": 0.7075,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -115,7 +115,7 @@
               "text_f1": 1
             },
             "layout/Cool15942_tableSplitRowReformat.docx": {
-              "layout": 0.721,
+              "layout": 0.7209,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -123,7 +123,7 @@
               "text_f1": 0.6492
             },
             "layout/fdo48718-1.docx": {
-              "layout": 0.0461,
+              "layout": 0.0176,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.6667,
@@ -131,7 +131,7 @@
               "text_f1": 0.298
             },
             "layout/fld-in-tbl.docx": {
-              "layout": 0.9289,
+              "layout": 0.9501,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -139,7 +139,7 @@
               "text_f1": 1
             },
             "layout/floattable-center-shift-down.docx": {
-              "layout": 0.6441,
+              "layout": 0.6466,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -147,12 +147,12 @@
               "text_f1": 0.9572
             },
             "layout/hidden-para-separator.docx": {
-              "layout": 0.0615,
+              "layout": 0.4294,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.4
+              "text_f1": 1
             },
             "layout/inline-textbox-position.docx": {
               "layout": 0.3759,
@@ -163,15 +163,15 @@
               "text_f1": 1
             },
             "layout/merge_hidden_redline.docx": {
-              "layout": 0,
+              "layout": 0.7587,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.5,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0.4368
+              "text_f1": 0.9756
             },
             "layout/tdf104797.docx": {
-              "layout": 0.1473,
+              "layout": 0.1803,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -179,15 +179,15 @@
               "text_f1": 1
             },
             "layout/tdf106153.docx": {
-              "layout": 0,
+              "layout": 0.3197,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.2034
+              "pages": 0.5,
+              "strict": 0.5,
+              "text_f1": 0.2782
             },
             "layout/tdf109077.docx": {
-              "layout": 0.9304,
+              "layout": 0.9303,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -203,7 +203,7 @@
               "text_f1": 1
             },
             "layout/tdf116256.docx": {
-              "layout": 0,
+              "layout": 0.9348,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -211,28 +211,28 @@
               "text_f1": 1
             },
             "layout/tdf116486.docx": {
-              "layout": 0,
+              "layout": 0.1206,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.75
+              "text_f1": 1
             },
             "layout/tdf116925.docx": {
-              "layout": 0.9291,
+              "layout": 0.9468,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "layout/tdf117028.docx": {
-              "layout": 0.9851,
+              "layout": 0.9853,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0
+              "text_f1": 1
             },
             "layout/tdf117188.docx": {
               "layout": 0.7575,
@@ -251,7 +251,7 @@
               "text_f1": 1
             },
             "layout/tdf117982.docx": {
-              "layout": 0.1381,
+              "layout": 0.1408,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -259,7 +259,7 @@
               "text_f1": 0.9394
             },
             "layout/tdf122878.docx": {
-              "layout": 0.3755,
+              "layout": 0.3758,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -267,20 +267,20 @@
               "text_f1": 0.9368
             },
             "layout/tdf123163-1.docx": {
-              "layout": 0.0106,
-              "link_recall": 0,
+              "layout": 0.0694,
+              "link_recall": 0.25,
               "outline_recall": 1,
-              "pages": 0.05,
-              "strict": 0.025,
-              "text_f1": 0.0767
+              "pages": 0.3,
+              "strict": 0,
+              "text_f1": 0.3279
             },
             "layout/tdf124261.docx": {
-              "layout": 0.9219,
+              "layout": 0.9728,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0
+              "text_f1": 1
             },
             "layout/tdf124423.docx": {
               "layout": 0,
@@ -291,15 +291,15 @@
               "text_f1": 1
             },
             "layout/tdf124600.docx": {
-              "layout": 0,
+              "layout": 0.1196,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8718
+              "text_f1": 0.7805
             },
             "layout/tdf125300.docx": {
-              "layout": 0.809,
+              "layout": 0.9859,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -318,9 +318,9 @@
               "layout": 0,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.6667,
-              "strict": 0.6667,
-              "text_f1": 0
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.2778
             },
             "layout/tdf128198-1.docx": {
               "layout": 0,
@@ -331,12 +331,12 @@
               "text_f1": 1
             },
             "layout/tdf128399.docx": {
-              "layout": 0.6049,
+              "layout": 0.8501,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0
+              "text_f1": 1
             },
             "layout/tdf128959.docx": {
               "layout": 0.1733,
@@ -355,7 +355,7 @@
               "text_f1": 0.4912
             },
             "layout/tdf134277.docx": {
-              "layout": 0.8548,
+              "layout": 0.8593,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -363,7 +363,7 @@
               "text_f1": 1
             },
             "layout/tdf134463.docx": {
-              "layout": 0.9414,
+              "layout": 0.9549,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -371,7 +371,7 @@
               "text_f1": 1
             },
             "layout/tdf134685.docx": {
-              "layout": 0.4282,
+              "layout": 0.4365,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -387,7 +387,7 @@
               "text_f1": 0
             },
             "layout/tdf136588.docx": {
-              "layout": 0.5988,
+              "layout": 0.5949,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -395,7 +395,7 @@
               "text_f1": 1
             },
             "layout/tdf136613.docx": {
-              "layout": 0.9479,
+              "layout": 0.9483,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -403,7 +403,7 @@
               "text_f1": 1
             },
             "layout/tdf137025.docx": {
-              "layout": 0.7184,
+              "layout": 0.9433,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -411,7 +411,7 @@
               "text_f1": 1
             },
             "layout/tdf138782.docx": {
-              "layout": 0.2153,
+              "layout": 0.2675,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -419,7 +419,7 @@
               "text_f1": 1
             },
             "layout/tdf139336_ColumnsWithFootnoteDoNotOccupyEntirePage.docx": {
-              "layout": 0.2124,
+              "layout": 0.1895,
               "link_recall": 0,
               "outline_recall": 1,
               "pages": 0.6667,
@@ -427,7 +427,7 @@
               "text_f1": 0.4615
             },
             "long-name": {
-              "layout": 0.9327,
+              "layout": 0.9748,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -435,7 +435,7 @@
               "text_f1": 1
             },
             "memo-lo": {
-              "layout": 0.9691,
+              "layout": 0.9826,
               "link_recall": 0,
               "outline_recall": 1,
               "pages": 1,
@@ -451,7 +451,7 @@
               "text_f1": 1
             },
             "ooxmlexport/128197_compat14.docx": {
-              "layout": 0.3455,
+              "layout": 0.3801,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -459,11 +459,11 @@
               "text_f1": 1
             },
             "ooxmlexport/128197_compat15.docx": {
-              "layout": 0.7393,
+              "layout": 0.7362,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "ooxmlexport/1_page.docx": {
@@ -483,7 +483,7 @@
               "text_f1": 0
             },
             "ooxmlexport/2120112713.docx": {
-              "layout": 0.0296,
+              "layout": 0.0313,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -491,7 +491,7 @@
               "text_f1": 0.3846
             },
             "ooxmlexport/2120112713_OpenBrace.docx": {
-              "layout": 0.8661,
+              "layout": 0.8933,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -499,7 +499,7 @@
               "text_f1": 0.8
             },
             "ooxmlexport/2_table_doc.docx": {
-              "layout": 0.9262,
+              "layout": 0.9261,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -507,7 +507,7 @@
               "text_f1": 1
             },
             "ooxmlexport/2col-header.docx": {
-              "layout": 0.9656,
+              "layout": 0.9679,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -515,7 +515,7 @@
               "text_f1": 1
             },
             "ooxmlexport/99_Fields.docx": {
-              "layout": 0.6711,
+              "layout": 0.6739,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -531,7 +531,7 @@
               "text_f1": 1
             },
             "ooxmlexport/CT-with-frame.docx": {
-              "layout": 0.8145,
+              "layout": 0.8043,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -539,15 +539,15 @@
               "text_f1": 1
             },
             "ooxmlexport/ColorOverwritten.docx": {
-              "layout": 0,
+              "layout": 0.5558,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.88
+              "text_f1": 1
             },
             "ooxmlexport/CommentDone.docx": {
-              "layout": 0.9477,
+              "layout": 0.9771,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -555,7 +555,7 @@
               "text_f1": 1
             },
             "ooxmlexport/CommentReply.docx": {
-              "layout": 0.9365,
+              "layout": 0.957,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -587,7 +587,7 @@
               "text_f1": 0.16
             },
             "ooxmlexport/FDO73034.docx": {
-              "layout": 0.975,
+              "layout": 0.9627,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -595,7 +595,7 @@
               "text_f1": 1
             },
             "ooxmlexport/FDO73546.docx": {
-              "layout": 0.7487,
+              "layout": 0.7584,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -603,7 +603,7 @@
               "text_f1": 0.9897
             },
             "ooxmlexport/FDO74105.docx": {
-              "layout": 0.947,
+              "layout": 0.9407,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -611,7 +611,7 @@
               "text_f1": 0.9167
             },
             "ooxmlexport/FDO74106.docx": {
-              "layout": 0.9508,
+              "layout": 0.952,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -619,23 +619,23 @@
               "text_f1": 0.7692
             },
             "ooxmlexport/FDO74215.docx": {
-              "layout": 0.9367,
+              "layout": 0.9697,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 0.996
             },
             "ooxmlexport/FDO74774.docx": {
-              "layout": 0,
+              "layout": 0.4318,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.3733
+              "text_f1": 0.7626
             },
             "ooxmlexport/FDO74775.docx": {
-              "layout": 0.2712,
+              "layout": 0.2912,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -643,7 +643,7 @@
               "text_f1": 0.4878
             },
             "ooxmlexport/FDO75133.docx": {
-              "layout": 0.2712,
+              "layout": 0.2912,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -651,28 +651,28 @@
               "text_f1": 0.4878
             },
             "ooxmlexport/FDO76248.docx": {
-              "layout": 0.8353,
+              "layout": 0.8375,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9981
+              "text_f1": 1
             },
             "ooxmlexport/FDO76312.docx": {
-              "layout": 0.4489,
+              "layout": 0.4491,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 0.5,
               "text_f1": 0.5
             },
             "ooxmlexport/FDO77715.docx": {
-              "layout": 0.1058,
-              "link_recall": 0,
-              "outline_recall": 0.113,
-              "pages": 0.5957,
-              "strict": 0,
-              "text_f1": 0.1615
+              "layout": 0.8625,
+              "link_recall": 0.4103,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.4255,
+              "text_f1": 0.9758
             },
             "ooxmlexport/FDO78590.docx": {
               "layout": 0,
@@ -683,7 +683,7 @@
               "text_f1": 1
             },
             "ooxmlexport/FigureAsLabelPicture.docx": {
-              "layout": 0.9853,
+              "layout": 0.9852,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -699,15 +699,15 @@
               "text_f1": 1
             },
             "ooxmlexport/ImageCrop.docx": {
-              "layout": 0.9838,
+              "layout": 0.9899,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0
+              "text_f1": 1
             },
             "ooxmlexport/IndexFieldFlagF.docx": {
-              "layout": 0.4988,
+              "layout": 0.5051,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -715,31 +715,31 @@
               "text_f1": 0.9107
             },
             "ooxmlexport/LineStyle_DashType.docx": {
-              "layout": 0.1693,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 0.5,
-              "strict": 0,
-              "text_f1": 0.4167
-            },
-            "ooxmlexport/LineStyle_DashType_VML.docx": {
-              "layout": 0,
+              "layout": 0.9571,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
               "text_f1": 1
             },
+            "ooxmlexport/LineStyle_DashType_VML.docx": {
+              "layout": 0.9715,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "ooxmlexport/LinkedTextBoxes.docx": {
-              "layout": 0,
-              "link_recall": 0.6667,
+              "layout": 0.1208,
+              "link_recall": 0.3333,
               "outline_recall": 1,
               "pages": 0.5,
               "strict": 0,
-              "text_f1": 0.438
+              "text_f1": 0.435
             },
             "ooxmlexport/NumberedList.docx": {
-              "layout": 0.9337,
+              "layout": 0.9408,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -747,7 +747,7 @@
               "text_f1": 1
             },
             "ooxmlexport/PreserveWfieldTOC.docx": {
-              "layout": 0.6587,
+              "layout": 0.6494,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -755,7 +755,7 @@
               "text_f1": 0.7857
             },
             "ooxmlexport/PreserveXfieldTOC.docx": {
-              "layout": 0.6587,
+              "layout": 0.6494,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -771,15 +771,15 @@
               "text_f1": 1
             },
             "ooxmlexport/Shape.docx": {
-              "layout": 0.0491,
+              "layout": 0.9871,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "ooxmlexport/ShapeOverlappingWithSdt.docx": {
-              "layout": 0.2176,
+              "layout": 0.2172,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -787,7 +787,7 @@
               "text_f1": 0
             },
             "ooxmlexport/StyleRef-DE.docx": {
-              "layout": 0.9577,
+              "layout": 0.9715,
               "link_recall": 0,
               "outline_recall": 1,
               "pages": 1,
@@ -795,7 +795,7 @@
               "text_f1": 0.9953
             },
             "ooxmlexport/TC-table-DnD-move.docx": {
-              "layout": 0.4786,
+              "layout": 0.4785,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -835,7 +835,7 @@
               "text_f1": 0.5
             },
             "ooxmlexport/TOC_field_b.docx": {
-              "layout": 0.9549,
+              "layout": 0.9474,
               "link_recall": 0,
               "outline_recall": 1,
               "pages": 1,
@@ -843,7 +843,7 @@
               "text_f1": 0.8235
             },
             "ooxmlexport/TOC_field_f.docx": {
-              "layout": 0.6305,
+              "layout": 0.6198,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -851,7 +851,7 @@
               "text_f1": 0.625
             },
             "ooxmlexport/TableWithAboveCaptions.docx": {
-              "layout": 0.9956,
+              "layout": 0.9959,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -867,7 +867,7 @@
               "text_f1": 1
             },
             "ooxmlexport/Tdf147485.docx": {
-              "layout": 0.4116,
+              "layout": 0.3866,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -883,7 +883,7 @@
               "text_f1": 1
             },
             "ooxmlexport/TextEffects_Glow_Shadow_Reflection.docx": {
-              "layout": 0.9458,
+              "layout": 0.9684,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -891,7 +891,7 @@
               "text_f1": 1
             },
             "ooxmlexport/TextEffects_Props3d_Ligatures_NumForm_NumSpacing.docx": {
-              "layout": 0.9741,
+              "layout": 0.9464,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -899,7 +899,7 @@
               "text_f1": 1
             },
             "ooxmlexport/TextEffects_StylisticSets_CntxtAlts.docx": {
-              "layout": 0.7233,
+              "layout": 0.7224,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -907,7 +907,7 @@
               "text_f1": 1
             },
             "ooxmlexport/TextEffects_TextFill.docx": {
-              "layout": 0.9624,
+              "layout": 0.9265,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -915,7 +915,7 @@
               "text_f1": 0.8571
             },
             "ooxmlexport/TextEffects_TextOutline.docx": {
-              "layout": 0.9608,
+              "layout": 0.9514,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -923,15 +923,15 @@
               "text_f1": 1
             },
             "ooxmlexport/TextFrameRotation.docx": {
-              "layout": 0,
+              "layout": 1,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0
+              "text_f1": 1
             },
             "ooxmlexport/UnknownStyleInRedline.docx": {
-              "layout": 0.6927,
+              "layout": 0.7054,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -939,7 +939,7 @@
               "text_f1": 1
             },
             "ooxmlexport/Unsupportedtextfields.docx": {
-              "layout": 0.926,
+              "layout": 0.9389,
               "link_recall": 0,
               "outline_recall": 1,
               "pages": 1,
@@ -955,7 +955,7 @@
               "text_f1": 1
             },
             "ooxmlexport/WordOK.docx": {
-              "layout": 0.9429,
+              "layout": 0.9437,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -971,7 +971,7 @@
               "text_f1": 1
             },
             "ooxmlexport/abi11739.docx": {
-              "layout": 0.9348,
+              "layout": 0.9721,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -979,7 +979,7 @@
               "text_f1": 1
             },
             "ooxmlexport/absolute-link.docx": {
-              "layout": 0.6865,
+              "layout": 0.6925,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -987,7 +987,7 @@
               "text_f1": 1
             },
             "ooxmlexport/afterlines.docx": {
-              "layout": 0.9276,
+              "layout": 0.9708,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1011,7 +1011,7 @@
               "text_f1": 0.6263
             },
             "ooxmlexport/alphabeticalIndex_MultipleColumns.docx": {
-              "layout": 0.633,
+              "layout": 0.6324,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.6667,
@@ -1019,7 +1019,7 @@
               "text_f1": 0.6618
             },
             "ooxmlexport/anchor-position.docx": {
-              "layout": 0.8902,
+              "layout": 0.8868,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1027,7 +1027,7 @@
               "text_f1": 1
             },
             "ooxmlexport/annotation-formatting.docx": {
-              "layout": 0.9635,
+              "layout": 0.9545,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1043,7 +1043,7 @@
               "text_f1": 0
             },
             "ooxmlexport/autofit.docx": {
-              "layout": 0,
+              "layout": 0.4709,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1051,7 +1051,7 @@
               "text_f1": 1
             },
             "ooxmlexport/behinddoc.docx": {
-              "layout": 0.2103,
+              "layout": 0,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1067,7 +1067,7 @@
               "text_f1": 1
             },
             "ooxmlexport/bnc837302.docx": {
-              "layout": 0.9288,
+              "layout": 0.9733,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1107,7 +1107,7 @@
               "text_f1": 1
             },
             "ooxmlexport/calendar2.docx": {
-              "layout": 0.8974,
+              "layout": 0.8986,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1115,7 +1115,7 @@
               "text_f1": 1
             },
             "ooxmlexport/calendar3.docx": {
-              "layout": 0.4061,
+              "layout": 0.4075,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.5,
@@ -1123,7 +1123,7 @@
               "text_f1": 0.5
             },
             "ooxmlexport/calendar4.docx": {
-              "layout": 0.8973,
+              "layout": 0.8989,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1131,7 +1131,7 @@
               "text_f1": 1
             },
             "ooxmlexport/calendar5.docx": {
-              "layout": 0.2707,
+              "layout": 0.2685,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.5,
@@ -1139,7 +1139,7 @@
               "text_f1": 0.475
             },
             "ooxmlexport/caption.docx": {
-              "layout": 0.9677,
+              "layout": 0.9675,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1147,7 +1147,7 @@
               "text_f1": 1
             },
             "ooxmlexport/cell-btlr.docx": {
-              "layout": 0.6059,
+              "layout": 0.8871,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1155,7 +1155,7 @@
               "text_f1": 1
             },
             "ooxmlexport/cell-grid-span.docx": {
-              "layout": 0.4409,
+              "layout": 0.4418,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1171,7 +1171,7 @@
               "text_f1": 0
             },
             "ooxmlexport/checkbox-control.docx": {
-              "layout": 0.3032,
+              "layout": 0.2735,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1179,7 +1179,7 @@
               "text_f1": 1
             },
             "ooxmlexport/chtoutline.docx": {
-              "layout": 0.3561,
+              "layout": 0.3365,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1243,7 +1243,7 @@
               "text_f1": 1
             },
             "ooxmlexport/columnbreak.docx": {
-              "layout": 0.5758,
+              "layout": 0.9575,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1251,7 +1251,7 @@
               "text_f1": 1
             },
             "ooxmlexport/combobox-control.docx": {
-              "layout": 0.964,
+              "layout": 0.9551,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1286,20 +1286,20 @@
               "layout": 0,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.5,
-              "strict": 0.5,
+              "pages": 1,
+              "strict": 1,
               "text_f1": 0
             },
             "ooxmlexport/crop-pixel.docx": {
-              "layout": 0,
+              "layout": 0.9844,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "ooxmlexport/crop-roundtrip.docx": {
-              "layout": 0,
+              "layout": 0.8963,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1307,7 +1307,7 @@
               "text_f1": 1
             },
             "ooxmlexport/custom-properties.docx": {
-              "layout": 0.9208,
+              "layout": 0.9721,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1315,7 +1315,7 @@
               "text_f1": 1
             },
             "ooxmlexport/custom-styles-TOC-comma.docx": {
-              "layout": 0.7655,
+              "layout": 0.7736,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1323,12 +1323,12 @@
               "text_f1": 0.9688
             },
             "ooxmlexport/custom-styles-TOC-semicolon.docx": {
-              "layout": 0.763,
+              "layout": 0.7742,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9672
+              "text_f1": 0.9712
             },
             "ooxmlexport/customxml-two-data-stores.docx": {
               "layout": 0.0669,
@@ -1371,7 +1371,7 @@
               "text_f1": 0
             },
             "ooxmlexport/date_field_at_end_of_paragraph.docx": {
-              "layout": 0.9393,
+              "layout": 0.9801,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1379,7 +1379,7 @@
               "text_f1": 1
             },
             "ooxmlexport/date_field_in_shape.docx": {
-              "layout": 0.86,
+              "layout": 0.8863,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1387,7 +1387,7 @@
               "text_f1": 1
             },
             "ooxmlexport/decimal-numbering-no-leveltext.docx": {
-              "layout": 0.9251,
+              "layout": 0.9644,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1395,7 +1395,7 @@
               "text_f1": 1
             },
             "ooxmlexport/default-sect-break-cols.docx": {
-              "layout": 0.9696,
+              "layout": 0.9359,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1419,7 +1419,7 @@
               "text_f1": 0
             },
             "ooxmlexport/deleted_pageref.docx": {
-              "layout": 0.9239,
+              "layout": 0.9441,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1430,12 +1430,12 @@
               "layout": 0,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.3333,
-              "strict": 0.3333,
+              "pages": 0.5,
+              "strict": 0.5,
               "text_f1": 0
             },
             "ooxmlexport/dml-charheight-default.docx": {
-              "layout": 0.7187,
+              "layout": 0.6931,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1451,7 +1451,7 @@
               "text_f1": 1
             },
             "ooxmlexport/dml-gradientfill-theme.docx": {
-              "layout": 0.059,
+              "layout": 0.0619,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1459,7 +1459,7 @@
               "text_f1": 1
             },
             "ooxmlexport/dml-groupshape-capitalization.docx": {
-              "layout": 0.7377,
+              "layout": 0.9506,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1475,7 +1475,7 @@
               "text_f1": 0.5
             },
             "ooxmlexport/dml-groupshape-paraspacing.docx": {
-              "layout": 0.8052,
+              "layout": 0.9381,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1483,19 +1483,19 @@
               "text_f1": 1
             },
             "ooxmlexport/dml-groupshape-relsize.docx": {
-              "layout": 0.0841,
+              "layout": 0.9584,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "ooxmlexport/dml-groupshape-runfonts.docx": {
-              "layout": 0.9113,
+              "layout": 0.9781,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "ooxmlexport/dml-groupshape-sdt.docx": {
@@ -1503,7 +1503,7 @@
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 0
             },
             "ooxmlexport/dml-picture-in-textframe.docx": {
@@ -1515,15 +1515,15 @@
               "text_f1": 1
             },
             "ooxmlexport/dml-rectangle-relsize.docx": {
-              "layout": 0,
+              "layout": 0.2224,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "ooxmlexport/dml-shape-fillbitmapcrop.docx": {
-              "layout": 0.9087,
+              "layout": 0.9095,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1531,7 +1531,7 @@
               "text_f1": 1
             },
             "ooxmlexport/dml-shape-fillpattern.docx": {
-              "layout": 0.188,
+              "layout": 0.1783,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1555,7 +1555,7 @@
               "text_f1": 1
             },
             "ooxmlexport/dml-solidfill-alpha.docx": {
-              "layout": 0.9618,
+              "layout": 0.9678,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1563,28 +1563,28 @@
               "text_f1": 1
             },
             "ooxmlexport/dml-textframe-vertadjust.docx": {
-              "layout": 0.2223,
+              "layout": 0.9564,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "ooxmlexport/dml-textshape.docx": {
+              "layout": 0.7186,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
               "text_f1": 1
             },
-            "ooxmlexport/dml-textshape.docx": {
-              "layout": 0,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0
-            },
             "ooxmlexport/dml-textshapeB.docx": {
-              "layout": 0,
+              "layout": 0.7402,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "ooxmlexport/docxopenhyperlinkbox.docx": {
               "layout": 0,
@@ -1595,7 +1595,7 @@
               "text_f1": 1
             },
             "ooxmlexport/dont-add-new-styles.docx": {
-              "layout": 0.9516,
+              "layout": 0.9759,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1603,7 +1603,7 @@
               "text_f1": 1
             },
             "ooxmlexport/drawinglayer-pic-pos.docx": {
-              "layout": 0,
+              "layout": 0.9874,
               "link_recall": 1,
               "outline_recall": 0,
               "pages": 1,
@@ -1619,7 +1619,7 @@
               "text_f1": 1
             },
             "ooxmlexport/dropdown-in-cell.docx": {
-              "layout": 0.9115,
+              "layout": 0.9232,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1635,7 +1635,7 @@
               "text_f1": 1
             },
             "ooxmlexport/effect-extent-line-width.docx": {
-              "layout": 0.4103,
+              "layout": 0.0793,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1643,7 +1643,7 @@
               "text_f1": 0.9826
             },
             "ooxmlexport/effect-extent.docx": {
-              "layout": 0,
+              "layout": 0.8954,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1651,7 +1651,7 @@
               "text_f1": 1
             },
             "ooxmlexport/effectextent-margin.docx": {
-              "layout": 0.4101,
+              "layout": 0.4185,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1659,7 +1659,7 @@
               "text_f1": 1
             },
             "ooxmlexport/em.docx": {
-              "layout": 0.8473,
+              "layout": 0.8458,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1667,7 +1667,7 @@
               "text_f1": 1
             },
             "ooxmlexport/empty-annotation-mark.docx": {
-              "layout": 0.9498,
+              "layout": 0.9565,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1675,15 +1675,15 @@
               "text_f1": 1
             },
             "ooxmlexport/endingSectionProps.docx": {
-              "layout": 0.3989,
+              "layout": 0.7088,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.5,
-              "strict": 0.5,
-              "text_f1": 0.3043
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "ooxmlexport/fdo106029.docx": {
-              "layout": 0.9502,
+              "layout": 0.949,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1691,7 +1691,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo38244.docx": {
-              "layout": 0.9695,
+              "layout": 0.9484,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1707,7 +1707,7 @@
               "text_f1": 0.86
             },
             "ooxmlexport/fdo43093.docx": {
-              "layout": 0.9227,
+              "layout": 0.9632,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1715,7 +1715,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo43093b.docx": {
-              "layout": 0.9328,
+              "layout": 0.9294,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1723,7 +1723,7 @@
               "text_f1": 0.8
             },
             "ooxmlexport/fdo44689_start_page_0.docx": {
-              "layout": 0.9255,
+              "layout": 0.9444,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1731,7 +1731,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo44689_start_page_7.docx": {
-              "layout": 0.9186,
+              "layout": 0.9388,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1742,12 +1742,12 @@
               "layout": 0,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.0588,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "ooxmlexport/fdo47669.docx": {
-              "layout": 0.8317,
+              "layout": 0.8266,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1755,7 +1755,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo52208.docx": {
-              "layout": 0.911,
+              "layout": 0.9136,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1779,15 +1779,15 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo55381.docx": {
-              "layout": 0,
+              "layout": 0.9761,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.25,
-              "strict": 0.25,
-              "text_f1": 0.1667
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "ooxmlexport/fdo56679.docx": {
-              "layout": 0.7592,
+              "layout": 0.8175,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1811,7 +1811,7 @@
               "text_f1": 0.5
             },
             "ooxmlexport/fdo60922.docx": {
-              "layout": 0.9461,
+              "layout": 0.9145,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1835,7 +1835,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo63685.docx": {
-              "layout": 0.9752,
+              "layout": 0.9754,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1851,7 +1851,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo64826.docx": {
-              "layout": 0.9425,
+              "layout": 0.9671,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1867,7 +1867,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo65265.docx": {
-              "layout": 0.9772,
+              "layout": 0.961,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1875,7 +1875,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo65295.docx": {
-              "layout": 0.2933,
+              "layout": 0.5141,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1883,15 +1883,15 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo65400.docx": {
-              "layout": 0.9454,
+              "layout": 0.9676,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "ooxmlexport/fdo65632.docx": {
-              "layout": 0.9215,
+              "layout": 0.9685,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1899,15 +1899,15 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo65718.docx": {
-              "layout": 0.7971,
+              "layout": 0.8308,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "ooxmlexport/fdo65833.docx": {
-              "layout": 0,
+              "layout": 0.9449,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1915,7 +1915,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo66543.docx": {
-              "layout": 0.9454,
+              "layout": 0.946,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1923,7 +1923,7 @@
               "text_f1": 0.9639
             },
             "ooxmlexport/fdo66688.docx": {
-              "layout": 0.8609,
+              "layout": 0.8854,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1931,7 +1931,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo66773.docx": {
-              "layout": 0.942,
+              "layout": 0.9662,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1947,7 +1947,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo66929.docx": {
-              "layout": 0,
+              "layout": 0.132,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1963,7 +1963,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo67737.docx": {
-              "layout": 0,
+              "layout": 0.0819,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -1971,23 +1971,23 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo68418.docx": {
-              "layout": 0,
+              "layout": 0.9903,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.5,
-              "strict": 0.5,
-              "text_f1": 0
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "ooxmlexport/fdo68607.docx": {
-              "layout": 0.5459,
+              "layout": 0.5556,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.8889,
               "strict": 0,
-              "text_f1": 0.7341
+              "text_f1": 0.7367
             },
             "ooxmlexport/fdo68787.docx": {
-              "layout": 0.7002,
+              "layout": 0.7802,
               "link_recall": 0,
               "outline_recall": 1,
               "pages": 1,
@@ -2003,20 +2003,20 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo69616.docx": {
-              "layout": 0,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.6957
-            },
-            "ooxmlexport/fdo69636.docx": {
-              "layout": 0.0373,
+              "layout": 0.3414,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.4
+              "text_f1": 0.8
+            },
+            "ooxmlexport/fdo69636.docx": {
+              "layout": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "ooxmlexport/fdo69644.docx": {
               "layout": 0.9569,
@@ -2051,15 +2051,15 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo70838.docx": {
-              "layout": 0,
+              "layout": 0.9971,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "ooxmlexport/fdo70942.docx": {
-              "layout": 0,
+              "layout": 0.798,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2067,15 +2067,15 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo71302.docx": {
-              "layout": 0.8985,
+              "layout": 0.9066,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "ooxmlexport/fdo71646.docx": {
-              "layout": 0.961,
+              "layout": 0.984,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2091,7 +2091,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo71834.docx": {
-              "layout": 0.5489,
+              "layout": 0.551,
               "link_recall": 1,
               "outline_recall": 0.6667,
               "pages": 1,
@@ -2099,7 +2099,7 @@
               "text_f1": 0.9636
             },
             "ooxmlexport/fdo72560.docx": {
-              "layout": 0.9462,
+              "layout": 0.9259,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2139,15 +2139,15 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo73215.docx": {
-              "layout": 0,
+              "layout": 0.7343,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "ooxmlexport/fdo73247.docx": {
-              "layout": 0.3844,
+              "layout": 0.3864,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2163,15 +2163,15 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo73541.docx": {
-              "layout": 0.4805,
+              "layout": 0.6359,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9577
+              "strict": 0.6,
+              "text_f1": 1
             },
             "ooxmlexport/fdo73550.docx": {
-              "layout": 0.7228,
+              "layout": 0.7249,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2179,7 +2179,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo73556.docx": {
-              "layout": 0.934,
+              "layout": 0.9339,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2187,7 +2187,7 @@
               "text_f1": 0.9362
             },
             "ooxmlexport/fdo73596_AlphaSeparator.docx": {
-              "layout": 0.6087,
+              "layout": 0.6073,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2195,7 +2195,7 @@
               "text_f1": 0.9305
             },
             "ooxmlexport/fdo73596_RunInStyle.docx": {
-              "layout": 0.6275,
+              "layout": 0.6201,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2211,12 +2211,12 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo74153.docx": {
-              "layout": 0.1993,
+              "layout": 0.964,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.5,
-              "strict": 0.5,
-              "text_f1": 0.3125
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "ooxmlexport/fdo74357.docx": {
               "layout": 0.3081,
@@ -2227,15 +2227,15 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo74401.docx": {
-              "layout": 0,
+              "layout": 0.513,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0
+              "text_f1": 1
             },
             "ooxmlexport/fdo74566.docx": {
-              "layout": 0.9603,
+              "layout": 0.9584,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2259,7 +2259,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo76016.docx": {
-              "layout": 0.5602,
+              "layout": 0.5607,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2299,7 +2299,7 @@
               "text_f1": 0.6667
             },
             "ooxmlexport/fdo76587.docx": {
-              "layout": 0.9683,
+              "layout": 0.9677,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2307,7 +2307,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo76589.docx": {
-              "layout": 0.9609,
+              "layout": 0.9599,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2315,7 +2315,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo76597.docx": {
-              "layout": 0.9692,
+              "layout": 0.956,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2331,7 +2331,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo76803.docx": {
-              "layout": 0.9557,
+              "layout": 0.9475,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2339,12 +2339,12 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo76934.docx": {
-              "layout": 0.4245,
+              "layout": 0.849,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.5,
-              "strict": 0.5,
-              "text_f1": 0.5
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "ooxmlexport/fdo76979.docx": {
               "layout": 0,
@@ -2355,7 +2355,7 @@
               "text_f1": 0.9143
             },
             "ooxmlexport/fdo77117.docx": {
-              "layout": 0,
+              "layout": 0.6445,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2363,7 +2363,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo77129.docx": {
-              "layout": 0.7243,
+              "layout": 0.7298,
               "link_recall": 0,
               "outline_recall": 1,
               "pages": 1,
@@ -2371,7 +2371,7 @@
               "text_f1": 0.8571
             },
             "ooxmlexport/fdo77716.docx": {
-              "layout": 0.9731,
+              "layout": 0.9318,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2379,7 +2379,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo77719.docx": {
-              "layout": 0,
+              "layout": 0.3537,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2387,7 +2387,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo77725.docx": {
-              "layout": 0.4463,
+              "layout": 0.4508,
               "link_recall": 0,
               "outline_recall": 1,
               "pages": 1,
@@ -2403,15 +2403,15 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo77812.docx": {
-              "layout": 0.4906,
+              "layout": 0.8714,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.997
+              "text_f1": 1
             },
             "ooxmlexport/fdo77887.docx": {
-              "layout": 0.0461,
+              "layout": 0.0176,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.6667,
@@ -2419,12 +2419,12 @@
               "text_f1": 0.298
             },
             "ooxmlexport/fdo77890.docx": {
-              "layout": 0.5118,
+              "layout": 0.7249,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.625
+              "text_f1": 1
             },
             "ooxmlexport/fdo78300.docx": {
               "layout": 0,
@@ -2459,7 +2459,7 @@
               "text_f1": 1
             },
             "ooxmlimport/__RefNumPara__.docx": {
-              "layout": 0.9616,
+              "layout": 0.9759,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2467,7 +2467,7 @@
               "text_f1": 1
             },
             "ooxmlimport/bnc773061.docx": {
-              "layout": 0.9146,
+              "layout": 0.9159,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2475,7 +2475,7 @@
               "text_f1": 1
             },
             "ooxmlimport/bnc779620.docx": {
-              "layout": 0.7658,
+              "layout": 0.7844,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2483,7 +2483,7 @@
               "text_f1": 1
             },
             "ooxmlimport/bnc821804.docx": {
-              "layout": 0.9165,
+              "layout": 0.9332,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2491,15 +2491,15 @@
               "text_f1": 1
             },
             "ooxmlimport/btlr-frame-vml.docx": {
-              "layout": 0.1043,
+              "layout": 0.8006,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.4
+              "text_f1": 1
             },
             "ooxmlimport/dml-groupshape-paraadjust.docx": {
-              "layout": 0.8117,
+              "layout": 0.9578,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2523,7 +2523,7 @@
               "text_f1": 1
             },
             "ooxmlimport/fdo75722-vml.docx": {
-              "layout": 0,
+              "layout": 0.8622,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2531,7 +2531,7 @@
               "text_f1": 1
             },
             "ooxmlimport/fdo76583.docx": {
-              "layout": 0.9119,
+              "layout": 0.9088,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2539,31 +2539,31 @@
               "text_f1": 1
             },
             "ooxmlimport/floating-table-section-columns.docx": {
-              "layout": 0.439,
+              "layout": 0.878,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.5,
-              "strict": 0.5,
-              "text_f1": 0.5
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "ooxmlimport/groupshape-child-rotation.docx": {
-              "layout": 0,
+              "layout": 0.7091,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "ooxmlimport/groupshape-fontname.docx": {
-              "layout": 0,
+              "layout": 0.6532,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0
+              "strict": 1,
+              "text_f1": 0.8571
             },
             "ooxmlimport/groupshape-line.docx": {
-              "layout": 0.4845,
+              "layout": 0.2311,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2571,20 +2571,20 @@
               "text_f1": 1
             },
             "ooxmlimport/groupshape-relsize.docx": {
-              "layout": 0.3333,
+              "layout": 0.9643,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.6667,
-              "strict": 0.3333,
-              "text_f1": 0.3939
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 0.5909
             },
             "ooxmlimport/groupshape-sdt.docx": {
               "layout": 0,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.0526,
-              "strict": 0.0526,
-              "text_f1": 0.0526
+              "pages": 0.5,
+              "strict": 0.5,
+              "text_f1": 0.5
             },
             "ooxmlimport/image-hyperlink.docx": {
               "layout": 0.9928,
@@ -2595,12 +2595,12 @@
               "text_f1": 1
             },
             "ooxmlimport/image-lazy-read.docx": {
-              "layout": 0,
+              "layout": 0.9512,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.3333,
-              "strict": 0.3333,
-              "text_f1": 0.3333
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "ooxmlimport/ink.docx": {
               "layout": 0,
@@ -2635,7 +2635,7 @@
               "text_f1": 1
             },
             "ooxmlimport/n751017.docx": {
-              "layout": 0.627,
+              "layout": 0.6364,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2643,12 +2643,12 @@
               "text_f1": 0
             },
             "ooxmlimport/n751077.docx": {
-              "layout": 0.3333,
+              "layout": 0.5,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.6667,
-              "strict": 0.3333,
-              "text_f1": 0.4286
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 1
             },
             "ooxmlimport/n757890.docx": {
               "layout": 0,
@@ -2659,15 +2659,15 @@
               "text_f1": 1
             },
             "ooxmlimport/n758883.docx": {
-              "layout": 0,
+              "layout": 0.1551,
               "link_recall": 1,
               "outline_recall": 0,
               "pages": 1,
               "strict": 0,
-              "text_f1": 1
+              "text_f1": 0.8571
             },
             "ooxmlimport/n760764.docx": {
-              "layout": 0.9374,
+              "layout": 0.962,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2699,7 +2699,7 @@
               "text_f1": 1
             },
             "ooxmlimport/n775899.docx": {
-              "layout": 0.8326,
+              "layout": 0.8473,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2707,7 +2707,7 @@
               "text_f1": 1
             },
             "ooxmlimport/n778140.docx": {
-              "layout": 0.9637,
+              "layout": 0.945,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2731,7 +2731,7 @@
               "text_f1": 0.9231
             },
             "ooxmlimport/n782061.docx": {
-              "layout": 0.9147,
+              "layout": 0.9795,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2742,12 +2742,12 @@
               "layout": 0,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 1,
+              "pages": 0.5,
               "strict": 0,
-              "text_f1": 0.4
+              "text_f1": 0.2
             },
             "ooxmlimport/n820788.docx": {
-              "layout": 0,
+              "layout": 0.9773,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2779,7 +2779,7 @@
               "text_f1": 1
             },
             "ooxmlimport/tdf100072.docx": {
-              "layout": 0.5659,
+              "layout": 1,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2795,7 +2795,7 @@
               "text_f1": 1
             },
             "ooxmlimport/tdf101626.docx": {
-              "layout": 0.8872,
+              "layout": 0.9069,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2803,7 +2803,7 @@
               "text_f1": 0.6667
             },
             "ooxmlimport/tdf101627.docx": {
-              "layout": 0.7945,
+              "layout": 0.7952,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2811,7 +2811,7 @@
               "text_f1": 0.8571
             },
             "ooxmlimport/tdf103664.docx": {
-              "layout": 0.6119,
+              "layout": 0.6043,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2819,7 +2819,7 @@
               "text_f1": 0
             },
             "ooxmlimport/tdf103931.docx": {
-              "layout": 0.8596,
+              "layout": 0.8557,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2851,7 +2851,7 @@
               "text_f1": 1
             },
             "ooxmlimport/tdf105975.docx": {
-              "layout": 0.9249,
+              "layout": 0.9794,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2859,7 +2859,7 @@
               "text_f1": 1
             },
             "ooxmlimport/tdf106606.docx": {
-              "layout": 0.7736,
+              "layout": 0.7818,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2867,7 +2867,7 @@
               "text_f1": 0.6875
             },
             "ooxmlimport/tdf107784.docx": {
-              "layout": 0.961,
+              "layout": 0.9522,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2891,12 +2891,12 @@
               "text_f1": 1
             },
             "ooxmlimport/tdf108714.docx": {
-              "layout": 0,
+              "layout": 0.5725,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.25,
-              "strict": 0.25,
-              "text_f1": 0.0667
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9423
             },
             "ooxmlimport/tdf108806.docx": {
               "layout": 0.1929,
@@ -2923,7 +2923,7 @@
               "text_f1": 0.9565
             },
             "page_1": {
-              "layout": 0.9327,
+              "layout": 0.9748,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2931,7 +2931,7 @@
               "text_f1": 1
             },
             "pages_12": {
-              "layout": 0.931,
+              "layout": 0.9749,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2939,7 +2939,7 @@
               "text_f1": 1
             },
             "pages_3": {
-              "layout": 0.9314,
+              "layout": 0.9756,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2947,15 +2947,15 @@
               "text_f1": 1
             },
             "protected_page_1": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9748,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "special-chars": {
-              "layout": 0.9327,
+              "layout": 0.9748,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -2963,7 +2963,7 @@
               "text_f1": 1
             },
             "tracked": {
-              "layout": 0.9606,
+              "layout": 0.9383,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
