@@ -3,6 +3,7 @@ package sheet
 import (
 	"context"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -238,4 +239,32 @@ func (m *measurer) lineHeight(f font) float64 {
 // formatSize writes a font size for a cache key.
 func formatSize(v float64) string {
 	return strconvFloat(v)
+}
+
+// visible returns the characters of s, set in f from x, whose advance
+// reaches into [x0, x1], and the x of the first kept: LibreOffice leaves
+// the glyphs a cell's clip hides wholly out of the PDF it writes.
+func (m *measurer) visible(f font, s string, x, x0, x1 float64) (string, float64) {
+	p, _, err := m.fonts.Shape(m.ctx, []text.ParagraphRun{{Text: s, Style: f.textStyle(m.lang)}}, text.ParagraphOptions{Direction: text.LeftToRight})
+	if err != nil || p.Len() != utf8.RuneCountInString(s) {
+		return s, x
+	}
+	rs := []rune(s)
+	first, last := -1, -1
+	firstX := x
+	pos := x
+	for i := range rs {
+		a := p.Advance(i)
+		if pos+a > x0+epsilon && pos < x1-epsilon {
+			if first < 0 {
+				first, firstX = i, pos
+			}
+			last = i
+		}
+		pos += a
+	}
+	if first < 0 {
+		return "", x
+	}
+	return string(rs[first : last+1]), firstX
 }

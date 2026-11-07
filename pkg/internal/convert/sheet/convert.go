@@ -176,12 +176,21 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 			out.Structure.Kids = append(out.Structure.Kids, st.Kids...)
 		}
 	}
-	if len(out.Pages) == 0 {
-		w, h := float64(letterWidth), float64(letterHeight)
+	if len(pages) == 0 {
+		// A book that prints no cell prints one blank page, with the
+		// first sheet's header and footer and its outline entry, as
+		// LibreOffice does.
+		pg := &compose.Page{Width: letterWidth, Height: letterHeight}
 		if len(plans) > 0 {
-			w, h = b.paper(plans[0].g.sh)
+			sp := plans[0]
+			pg.Width, pg.Height = sp.width, sp.height
+			p := &pagePlan{sp: sp, number: max(sp.g.sh.Page.FirstPageNumber, 1)}
+			pg.Content = b.margins(p, true, p.number, 1, sp.width, sp.height)
+			if !opts.OmitOutline {
+				out.Outline = []compose.Outline{{Title: sp.g.sh.Name, Dest: compose.Dest{Page: 1}}}
+			}
 		}
-		out.Pages = []*compose.Page{{Width: w, Height: h}}
+		out.Pages = []*compose.Page{pg}
 	}
 	if !opts.OmitOutline {
 		for _, sp := range plans {

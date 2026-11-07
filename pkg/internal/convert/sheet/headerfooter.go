@@ -10,8 +10,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 )
 
-// The header and footer text of a span naming no font: the default of
-// Calc's header and footer edit engine, Liberation Sans 10 points.
+// The header and footer text of a span naming no font in a book naming no
+// default font: Calc's default cell font, Liberation Sans 10 points, which
+// its header and footer edit engine takes.
 //
 // # Corpus evidence
 //
@@ -66,7 +67,7 @@ func (b *builder) partNode(spans []Span, f hfFields, align css.TextAlign) *layou
 	if len(spans) == 0 {
 		return nil
 	}
-	base := font{families: []string{headerFamily}, size: headerSize, color: css.Color{A: 1}}
+	base := resolveFont(b.doc.Default.Font, Font{Families: []string{headerFamily}, Size: headerSize})
 	st := b.style()
 	base.apply(st)
 	st.TextAlign = align
@@ -84,7 +85,10 @@ func (b *builder) partNode(spans []Span, f hfFields, align css.TextAlign) *layou
 		rs := b.style()
 		fnt := base
 		if s.Font != nil {
-			fnt = resolveFont(*s.Font, Font{Families: []string{headerFamily}, Size: headerSize})
+			fnt = resolveFont(*s.Font, b.doc.Default.Font)
+			if len(s.Font.Families) == 0 && len(b.doc.Default.Font.Families) == 0 {
+				fnt.families = []string{headerFamily}
+			}
 		}
 		fnt.apply(rs)
 		rs.Display = css.Inline

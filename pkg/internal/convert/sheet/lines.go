@@ -22,7 +22,7 @@ const hairline = 0.05
 // whose top they are and a column, vertical ones by the column whose left
 // they are and a row.
 type edgeKey struct {
-	vertical bool
+	vertical  bool
 	at, along int
 }
 

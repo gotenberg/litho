@@ -338,6 +338,25 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 	if d.wrap {
 		boxX = u.x + left
 	}
+	if !d.wrap && len(d.runs) == 0 && !strings.Contains(d.text, "\n") && (boxX < cx0-epsilon || boxX+d.textW > cx1+epsilon) {
+		// Leave out the characters the clip hides wholly, as LibreOffice
+		// does.
+		start := boxX
+		switch align {
+		case css.AlignRight:
+			start = boxX + boxW - d.textW
+		case css.AlignCenter:
+			start = boxX + (boxW-d.textW)/2
+		}
+		vis, at := b.m.visible(f, d.text, start, cx0, cx1)
+		if vis != d.text {
+			d.text = vis
+			d.textW = b.m.width(f, vis)
+			boxW = d.textW + slack
+			boxX = at
+			align = css.AlignLeft
+		}
+	}
 	para := b.paragraph(&d, f, lineH, align)
 	inner := b.style()
 	inner.Position = css.Absolute
