@@ -4,7 +4,7 @@ HTML and Markdown sources converted twice: by Chromium, through the Chromium rou
 
 | Path            | What it holds                                                                                                                 |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `sources/`      | The 32 sources                                                                                                                |
+| `sources/`      | The 34 sources                                                                                                                |
 | `chromium/`     | Chromium's PDF of each source, the reference (`make html-chromium`, committed)                                                |
 | `pdfs/`         | litho's PDF of each source (`make html-fixtures`, committed once the converter writes them)                                   |
 | `chromium.sh`   | Posts each source to the Gotenberg image and writes `chromium/<name>.pdf`                                                     |
@@ -57,7 +57,7 @@ A symbolic link in a source directory is followed by both sides (`curl -F` and `
 | `images`        | 1                | Self-authored                                  | A JPEG and a PNG at their own size, scaled by attributes, an inline image on the middle of a line, a full-width image                                                                                    |
 | `borders-cards` | 1                | Self-authored                                  | Border images from a gradient and a sliced PNG frame (stretch, round, space, fill, outset), hard and blurred inset shadows, inset and outset shadows on a rounded card, `background-clip: text` headings |
 
-The 17 sources below mirror the scenarios of Gotenberg's integration tests for the Chromium route (`test/integration/features/chromium_convert_html.feature` and `chromium_convert_markdown.feature`) and the route's options; each sets the options in the third column.
+The 19 sources below mirror the scenarios of Gotenberg's integration tests for the Chromium route (`test/integration/features/chromium_convert_html.feature` and `chromium_convert_markdown.feature`) and the route's options; each sets the options in the third column.
 
 | Source                   | Pages (Chromium) | Options                                    | Origin                                                     | Exercises                                                                                                                                                                                 |
 | ------------------------ | ---------------- | ------------------------------------------ | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -80,6 +80,8 @@ The 17 sources below mirror the scenarios of Gotenberg's integration tests for t
 | `markdown-plain`         | 1                | none (Markdown route)                      | Self-authored                                              | `index.md` alone: headings, emphasis, a link, nested lists, a quote, a fenced code block, a table, a rule                                                                                 |
 | `grid-invoice`           | 1                | none                                       | Self-authored                                              | An invoice laid out with `grid-template-areas`, `fr` and fixed columns, a `1fr` row filling a `min-height`, `justify-self`, `align-self`, `place-items` and a nested grid of line items   |
 | `grid-dashboard`         | 1                | none                                       | Self-authored                                              | A dashboard of `repeat(auto-fill, minmax())` KPI cells and `auto-fit` cards spanning two columns or two rows with auto placement, `grid-auto-rows: minmax()`, a `max-content` footer grid |
+| `bidi-letter`            | 1                | none                                       | Self-authored                                              | An Arabic letter (`dir="rtl"`) with Latin names, numbers, an e-mail address, an rtl table and lists, `bdi`, a Hebrew and an English paragraph        |
+| `cjk-article`            | 1                | none                                       | Self-authored                                              | A Japanese article: ideographs mixed with Latin and digits, full-width punctuation, justified paragraphs, `line-break: strict`, `loose`, `anywhere`  |
 
 The Gotenberg sources are copied from its repository at commit `77fa381241480e8c2555497d150035418231e72a`, the last to touch `test/corpus/testdata/web`. What changed in the copy:
 
@@ -90,6 +92,8 @@ The Gotenberg sources are copied from its repository at commit `77fa381241480e8c
 The scenario sources (`pages-12-html`, `wide-table-html`, `page-1-html`, `page-outline-html`, `header-footer-html`) are copied from Gotenberg's `test/integration/testdata` (MIT License, Copyright Julien Neuhart), unchanged but for `header-footer`'s header, which drops the `date` element: Chromium prints the date of the conversion there, which no committed reference can hold.
 
 `markdown-plain` has no `index.html`: `chromium.sh` posts `index.md` to `/forms/chromium/convert/markdown` with an `index.html` it writes, `<!doctype html><html><head><meta charset="utf-8"><title></title></head><body>{{ toHTML "index.md" }}</body></html>`, the document litho's Markdown converter writes around the rendered Markdown, and litho converts `index.md` as `pdf.Format("markdown")`.
+
+`bidi-letter` draws its Arabic and Hebrew with DejaVu Sans and `cjk-article` its Japanese with Noto Sans CJK JP (its Chinese and Korean paragraphs with Noto Sans CJK SC and KR), named in their stylesheets: the faces Chromium picks in the Gotenberg image, which the fixture fonts carry.
 
 No other source holds a script. The six self-authored sources use the Liberation families by name, which both the Gotenberg image and the fixture fonts carry; their images (`tile.png`, `photo.jpg`, `chart.png`, `dot.png`) were drawn by a small Go program for this corpus.
 
