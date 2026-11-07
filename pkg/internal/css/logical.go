@@ -21,19 +21,20 @@ func isInlineLogical(name string) bool {
 // inline axis: left for right and right for left, id itself for any
 // other.
 func mirrorInline(id propID) propID {
-	pairs := [][2]propID{
-		{pMarginLeft, pMarginRight}, {pPaddingLeft, pPaddingRight}, {pLeft, pRight},
-		{pBorderLeftWidth, pBorderRightWidth}, {pBorderLeftStyle, pBorderRightStyle}, {pBorderLeftColor, pBorderRightColor},
-	}
-	for _, p := range pairs {
-		switch id {
-		case p[0]:
-			return p[1]
-		case p[1]:
-			return p[0]
-		}
+	if m, ok := inlineMirrors[id]; ok {
+		return m
 	}
 	return id
+}
+
+// inlineMirrors maps each left or right longhand to the other side's.
+var inlineMirrors = map[propID]propID{
+	pMarginLeft: pMarginRight, pMarginRight: pMarginLeft,
+	pPaddingLeft: pPaddingRight, pPaddingRight: pPaddingLeft,
+	pLeft: pRight, pRight: pLeft,
+	pBorderLeftWidth: pBorderRightWidth, pBorderRightWidth: pBorderLeftWidth,
+	pBorderLeftStyle: pBorderRightStyle, pBorderRightStyle: pBorderLeftStyle,
+	pBorderLeftColor: pBorderRightColor, pBorderRightColor: pBorderLeftColor,
 }
 
 // logicalAliases are the flow-relative border longhands, mapped onto
@@ -65,8 +66,12 @@ func logicalShorthands() map[string]shorthandDef {
 					return nil, false
 				}
 				return []entry{
-					{pBorderTopWidth + ia, w}, {pBorderTopStyle + ia, s}, {pBorderTopColor + ia, col},
-					{pBorderTopWidth + ib, w}, {pBorderTopStyle + ib, s}, {pBorderTopColor + ib, col},
+					{pBorderTopWidth + ia, w},
+					{pBorderTopStyle + ia, s},
+					{pBorderTopColor + ia, col},
+					{pBorderTopWidth + ib, w},
+					{pBorderTopStyle + ib, s},
+					{pBorderTopColor + ib, col},
 				}, true
 			},
 		}

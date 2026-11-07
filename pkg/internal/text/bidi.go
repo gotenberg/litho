@@ -8,15 +8,15 @@ import (
 
 // The explicit directional formatting characters of UAX #9, 2.
 const (
-	LRE = '‪'
-	RLE = '‫'
-	PDF = '‬'
-	LRO = '‭'
-	RLO = '‮'
-	LRI = '⁦'
-	RLI = '⁧'
-	FSI = '⁨'
-	PDI = '⁩'
+	LRE = '\u202a'
+	RLE = '\u202b'
+	PDF = '\u202c'
+	LRO = '\u202d'
+	RLO = '\u202e'
+	LRI = '\u2066'
+	RLI = '\u2067'
+	FSI = '\u2068'
+	PDI = '\u2069'
 )
 
 // maxBidiControls caps the explicit formatting characters one run opens
