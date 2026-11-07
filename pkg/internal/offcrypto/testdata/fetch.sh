@@ -20,7 +20,10 @@ repo() {
   case "$1" in
     msoffcrypto) echo nolze/msoffcrypto-tool ;;
     gotenberg) echo gotenberg/gotenberg ;;
-    *) echo "ERROR: unknown source $1" >&2; return 1 ;;
+    *)
+      echo "ERROR: unknown source $1" >&2
+      return 1
+      ;;
   esac
 }
 
