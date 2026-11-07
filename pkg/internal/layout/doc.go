@@ -158,7 +158,9 @@
 // which LibreOffice's layout of WordprocessingML and ODF is the reference
 // for: TabStops lays tabs out on Office stops (alignment, leaders, bar
 // stops and the line breaks around them), LineRule and MinLineHeight
-// space lines as Writer does, TextScale scales glyphs horizontally,
+// space lines as Writer does, the room a proportional spacing adds below
+// a page's last line hanging past the page cut, JustifyShrink lets
+// justified lines shrink their spaces, TextScale scales glyphs horizontally,
 // PageAnchor anchors a frame to the page box, of the page AnchorPage names
 // or of its anchor's, PageClamp keeps a frame or a float positioned from
 // its paragraph inside its page box, and DecorationCloneAll

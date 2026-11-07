@@ -42,6 +42,7 @@ func (s *inlineState) officeLine(l *lineBox) {
 		// the whole line shrinks.
 		h = above + below + (f-1)*text
 		base = above
+		l.slack = max((f-1)*text, 0)
 		if f < 1 {
 			h = f * (above + below)
 			base = exactAscent * h
@@ -49,6 +50,7 @@ func (s *inlineState) officeLine(l *lineBox) {
 	case css.LineRuleCSS:
 	}
 	if h < least {
+		l.slack = 0
 		// An at least line height adds its room above the glyphs: the
 		// baseline keeps its distance from the line's bottom, as Writer
 		// spaces "at least" lines.

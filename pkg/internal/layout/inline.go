@@ -26,6 +26,10 @@ type lineBox struct {
 	// that monolithic content (CSS Fragmentation 3, 4.1). A line taller
 	// than the area for its text alone takes one page and is cut there.
 	overflows bool
+	// slack is the room an Office proportional line spacing adds below
+	// the line's glyphs, which may hang past a page cut: the line fits a
+	// page when the rest of it does, and then ends at the cut.
+	slack float64
 	// hangW is the advance of the spaces that hang at the line's logical
 	// end, drawn on its left when hangLeft (a right-to-left paragraph),
 	// else on its right.
@@ -529,7 +533,8 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				}
 				l := &lineBox{x: cb.x, w: cb.w, h: strutH, baseline: s.rootV.above}
 				s.officeLine(l)
-				top = s.position(top, strutH, forced)
+				top = s.position(top, l.h-l.slack, forced)
+				s.cutSlack(l, top)
 				l.y = top
 				if first {
 					mc.commit(top)
@@ -592,18 +597,19 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			top, end, left, right, l := s.fitLine(p, w, pos, lineIndent, top, strutH)
 			floatsBefore := len(bc.floats)
 			s.placeFloatsBeside(p, pos, end, l, top)
-			if newTop := s.position(top, l.h, forced); newTop != top {
+			if newTop := s.position(top, l.h-l.slack, forced); newTop != top {
 				top = newTop
 				nl, nw := bandOf(bc, top, l.h, cb)
 				if len(bc.floats) == floatsBefore && (math.Abs(nl-left) > eps || math.Abs(nl+nw-right) > eps) {
 					// The page cut moved the line to where the floats
 					// leave another width: break it again there.
 					top, end, _, _, l = s.fitLine(p, w, pos, lineIndent, top, strutH)
-					top = s.position(top, l.h, forced)
+					top = s.position(top, l.h-l.slack, forced)
 					nl, nw = bandOf(bc, top, l.h, cb)
 				}
 				l.x, l.w = nl, nw
 			}
+			s.cutSlack(l, top)
 			if e.clampOverflows(top, l.h) {
 				return s.discard(d, p, y)
 			}
@@ -745,6 +751,20 @@ func (s *inlineState) position(top, h float64, forced map[int]bool) float64 {
 		return s.clonedPosition(top, h)
 	}
 	return e.fit(top, h)
+}
+
+// cutSlack ends the line l, placed at top, at the page cut its slack
+// hangs past, as Writer lets the room a proportional line spacing adds
+// below the last line of a page fall into the page's margin.
+func (s *inlineState) cutSlack(l *lineBox, top float64) {
+	e := s.e
+	if l.slack <= 0 || !e.paginating() || s.root.st.BoxDecorationBreak == css.DecorationCloneAll {
+		return
+	}
+	cut := e.nextPage(top)
+	if top+l.h > cut+eps && top+l.h-l.slack <= cut+eps && cut > top+eps {
+		l.h = cut - top
+	}
 }
 
 // placeFloats lays out the floats of p anchored at a character position in
