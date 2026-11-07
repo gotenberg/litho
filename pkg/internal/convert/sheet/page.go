@@ -144,7 +144,7 @@ func (b *pageBuilder) region(rg *region) *layout.Node {
 	spans := map[int][][2]float64{}
 	add := func(u *unit) {
 		n, cx0, cx1 := b.textNode(rg, u)
-		if n == nil {
+		if n == nil || cx1 <= rg.x0+epsilon || cx0 >= rg.x0+rg.w-epsilon {
 			return
 		}
 		if cx1-cx0 > u.w+epsilon {

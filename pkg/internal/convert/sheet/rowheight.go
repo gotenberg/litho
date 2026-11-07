@@ -7,22 +7,26 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 )
 
-// pixel is the length of a screen pixel at 96 per inch, in points: Calc
-// computes a row's optimal height in such pixels (sc/source/core/data/
-// column2.cxx, ScColumn::GetNeededSize with the document's nPPTY), each
-// cell padding truncated to whole pixels.
+// screenPixel is the length of a pixel of the screen Calc computes a
+// row's optimal height on, in points (sc/source/core/data/column2.cxx,
+// ScColumn::GetNeededSize with the document's nPPTY): the text's height
+// and each cell padding are truncated to whole pixels, and their sum
+// converted back.
 //
 // # Corpus evidence
 //
 //   - litho: a flat ODS of Liberation Sans 10 point text with 1 point of
-//     padding, converted by Gotenberg 9.0.0: a row of one line is 12.78
-//     points tall and a row of three wrapped lines 35.04, three lines of
-//     11.2 points and 1.5 points of padding.
-const pixel = 0.75
+//     padding, converted by Gotenberg 9.0.0: a row of three wrapped lines
+//     of 11.2 points is 35.04 points tall, 47 pixels of 0.7455 points: 45
+//     for the text and one a padding.
+//   - xlsx: scrolled-pages, rows of Calibri 12 point text (Carlito, 14.65
+//     points a line) without a height of their own print 15.65 points
+//     apart, 21 such pixels.
+const screenPixel = 0.7455
 
-// pixels returns v truncated to whole screen pixels.
+// pixels returns v truncated to whole screen pixels, as a count.
 func pixels(v float64) float64 {
-	return math.Floor(v/pixel+1e-9) * pixel
+	return math.Floor(v/screenPixel + 1e-9)
 }
 
 // maxMeasuredCells caps the cells whose text is measured for the optimal
@@ -89,7 +93,7 @@ func (b *builder) optimalHeights(g *grid) {
 				a := math.Abs(rot) * math.Pi / 180
 				h = d.textW*math.Sin(a) + h*math.Cos(a)
 			}
-			need = max(need, h+pixels(d.padding[css.Top])+pixels(d.padding[css.Bottom]))
+			need = max(need, (pixels(h)+pixels(d.padding[css.Top])+pixels(d.padding[css.Bottom]))*screenPixel)
 		}
 		if need > base+epsilon {
 			g.heights[ri] = min(need, maxSide)
