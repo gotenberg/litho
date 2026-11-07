@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-07T08:49:06Z",
+  "captured_at": "2026-11-07T09:07:31Z",
   "corpora": {
     "compose": {
       "features": {
@@ -278,12 +278,12 @@
     "html": {
       "features": {
         "diff": {
-          "matched": 31,
-          "mismatched": 1,
+          "matched": 32,
+          "mismatched": 2,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 32
+            "pages_equal": 34
           },
           "scores": {
             "article": {
@@ -302,6 +302,14 @@
               "strict": 0,
               "text_f1": 1
             },
+            "bidi-letter": {
+              "layout": 0.9426,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.3177
+            },
             "borders": {
               "layout": 0.9302,
               "link_recall": 1,
@@ -317,6 +325,14 @@
               "pages": 1,
               "strict": 1,
               "text_f1": 0.9674
+            },
+            "cjk-article": {
+              "layout": 0.8822,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9829
             },
             "flex": {
               "layout": 0.9879,
@@ -1368,8 +1384,8 @@
     "weasyprint": {
       "features": {
         "draw": {
-          "matched": 215,
-          "mismatched": 100,
+          "matched": 223,
+          "mismatched": 92,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -1627,15 +1643,15 @@
             "test_table__test_tables_border_tfoot": "pass",
             "test_table__test_tables_column_background": "pass",
             "test_table__test_tables_split_row": "pass",
-            "test_text__test_ellipsis_nested": "fail",
+            "test_text__test_ellipsis_nested": "pass",
             "test_text__test_font_size_very_small": "pass",
             "test_text__test_huge_justification": "pass",
-            "test_text__test_line_clamp": "fail",
-            "test_text__test_line_clamp_nested": "fail",
-            "test_text__test_line_clamp_nested_after": "fail",
+            "test_text__test_line_clamp": "pass",
+            "test_text__test_line_clamp_nested": "pass",
+            "test_text__test_line_clamp_nested_after": "pass",
             "test_text__test_line_clamp_none": "pass",
-            "test_text__test_line_clamp_number": "fail",
-            "test_text__test_max_lines_ellipsis": "fail",
+            "test_text__test_line_clamp_number": "pass",
+            "test_text__test_max_lines_ellipsis": "pass",
             "test_text__test_max_lines_nested": "fail",
             "test_text__test_otb_font": "fail",
             "test_text__test_rtl_default_direction": "pass",
@@ -1655,7 +1671,7 @@
             "test_text__test_text_nested_text_decoration": "pass",
             "test_text__test_text_nested_text_decoration_color": "fail",
             "test_text__test_text_overflow_clip": "pass",
-            "test_text__test_text_overflow_ellipsis": "fail",
+            "test_text__test_text_overflow_ellipsis": "pass",
             "test_text__test_text_overline": "pass",
             "test_text__test_text_underline": "pass",
             "test_text__test_text_underline_offset": "pass",
@@ -1663,7 +1679,7 @@
             "test_text__test_text_underline_offset_percentage": "pass",
             "test_text__test_text_underline_thickness": "pass",
             "test_text__test_text_underline_thickness_calc": "pass",
-            "test_text__test_text_underline_thickness_calc_inherit": "fail",
+            "test_text__test_text_underline_thickness_calc_inherit": "pass",
             "test_text__test_text_underline_thickness_percentage": "pass",
             "test_text__test_text_word_spacing": "pass",
             "test_text__test_zero_width_character": "pass",
@@ -1697,8 +1713,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 1052,
-          "mismatched": 125,
+          "matched": 1072,
+          "mismatched": 105,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -2513,7 +2529,7 @@
             "css/css-lists/list-style-position-001.html": "fail",
             "css/css-lists/list-style-type-decimal-line-height.html": "pass",
             "css/css-lists/list-style-type-string-002.html": "pass",
-            "css/css-lists/list-style-type-string-007.html": "fail",
+            "css/css-lists/list-style-type-string-007.html": "pass",
             "css/css-lists/marker-direction-does-not-move-box.html": "pass",
             "css/css-lists/outside-marker-in-multicol-relpos-content.html": "pass",
             "css/css-lists/outside-marker-rtl.html": "pass",
@@ -2599,31 +2615,31 @@
             "css/css-multicol/relative-child-overflowing-column-gap.html": "fail",
             "css/css-multicol/zero-column-width-layout.html": "fail",
             "css/css-overflow/flex-nested-container-with-scrollable-descendant.html": "pass",
-            "css/css-overflow/line-clamp/block-ellipsis-013.html": "fail",
+            "css/css-overflow/line-clamp/block-ellipsis-013.html": "pass",
             "css/css-overflow/line-clamp/block-ellipsis-028.html": "pass",
             "css/css-overflow/line-clamp/block-ellipsis-bidi-002.html": "pass",
-            "css/css-overflow/line-clamp/line-clamp-009.html": "fail",
+            "css/css-overflow/line-clamp/line-clamp-009.html": "pass",
             "css/css-overflow/line-clamp/line-clamp-038.html": "pass",
-            "css/css-overflow/line-clamp/line-clamp-auto-004.html": "fail",
-            "css/css-overflow/line-clamp/line-clamp-auto-017.html": "fail",
-            "css/css-overflow/line-clamp/line-clamp-auto-019.html": "fail",
+            "css/css-overflow/line-clamp/line-clamp-auto-004.html": "pass",
+            "css/css-overflow/line-clamp/line-clamp-auto-017.html": "pass",
+            "css/css-overflow/line-clamp/line-clamp-auto-019.html": "pass",
             "css/css-overflow/line-clamp/line-clamp-auto-031.html": "fail",
-            "css/css-overflow/line-clamp/line-clamp-auto-033.html": "fail",
-            "css/css-overflow/line-clamp/line-clamp-auto-037.html": "fail",
-            "css/css-overflow/line-clamp/line-clamp-auto-058.html": "fail",
-            "css/css-overflow/line-clamp/line-clamp-auto-060.html": "fail",
-            "css/css-overflow/line-clamp/line-clamp-auto-with-ruby-004.html": "fail",
+            "css/css-overflow/line-clamp/line-clamp-auto-033.html": "pass",
+            "css/css-overflow/line-clamp/line-clamp-auto-037.html": "pass",
+            "css/css-overflow/line-clamp/line-clamp-auto-058.html": "pass",
+            "css/css-overflow/line-clamp/line-clamp-auto-060.html": "pass",
+            "css/css-overflow/line-clamp/line-clamp-auto-with-ruby-004.html": "pass",
             "css/css-overflow/line-clamp/line-clamp-balance-011.html": "pass",
-            "css/css-overflow/line-clamp/line-clamp-with-abspos-001.html": "fail",
-            "css/css-overflow/line-clamp/line-clamp-with-abspos-003.html": "fail",
-            "css/css-overflow/line-clamp/line-clamp-with-abspos-009.html": "fail",
-            "css/css-overflow/line-clamp/line-clamp-with-abspos-026.html": "fail",
+            "css/css-overflow/line-clamp/line-clamp-with-abspos-001.html": "pass",
+            "css/css-overflow/line-clamp/line-clamp-with-abspos-003.html": "pass",
+            "css/css-overflow/line-clamp/line-clamp-with-abspos-009.html": "pass",
+            "css/css-overflow/line-clamp/line-clamp-with-abspos-026.html": "pass",
             "css/css-overflow/line-clamp/webkit-line-clamp-002.html": "pass",
-            "css/css-overflow/line-clamp/webkit-line-clamp-010.html": "fail",
-            "css/css-overflow/line-clamp/webkit-line-clamp-016.html": "fail",
+            "css/css-overflow/line-clamp/webkit-line-clamp-010.html": "pass",
+            "css/css-overflow/line-clamp/webkit-line-clamp-016.html": "pass",
             "css/css-overflow/line-clamp/webkit-line-clamp-039.html": "pass",
-            "css/css-overflow/line-clamp/webkit-line-clamp-045.html": "fail",
-            "css/css-overflow/line-clamp/webkit-line-clamp-049.html": "fail",
+            "css/css-overflow/line-clamp/webkit-line-clamp-045.html": "pass",
+            "css/css-overflow/line-clamp/webkit-line-clamp-049.html": "pass",
             "css/css-overflow/line-clamp/webkit-line-clamp-051.html": "pass",
             "css/css-overflow/line-clamp/webkit-line-clamp-abspos-001.html": "pass",
             "css/css-overflow/overflow-body-propagation-008.html": "pass",
@@ -2807,7 +2823,7 @@
             "css/css-text/text-align/text-align-start-002.html": "pass",
             "css/css-text/text-align/text-align-start-009.html": "pass",
             "css/css-text/text-align/text-align-start-016.html": "pass",
-            "css/css-text/text-autospace/text-autospace-size-001.html": "fail",
+            "css/css-text/text-autospace/text-autospace-size-001.html": "pass",
             "css/css-text/text-autospace/text-autospace-vs-001.html": "pass",
             "css/css-text/text-fit/grow-per-line.html": "pass",
             "css/css-text/text-indent/text-indent-abspos-hanging-001.html": "pass",
