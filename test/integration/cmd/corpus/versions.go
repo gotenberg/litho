@@ -103,6 +103,11 @@ var localToolPins = map[string]bool{
 	"CALADEA_FONTS_VERSION": true,
 	"CALADEA_FONTS_URL":     true,
 	"CALADEA_FONTS_SHA256":  true,
+	// The face the Gotenberg image draws a family it lacks with, which the
+	// xlsx and ods corpora's references name.
+	"NOTO_SANS_CORE_VERSION": true,
+	"NOTO_SANS_CORE_URL":     true,
+	"NOTO_SANS_CORE_SHA256":  true,
 
 	// The converter oracles: the web-platform-tests commit `make wpt-fetch`
 	// downloads, the WeasyPrint release `make weasyprint-fixtures` extracts,
@@ -116,8 +121,9 @@ var localToolPins = map[string]bool{
 	"WEASYPRINT_SHA256":      true,
 	"WEASYPRINT_FONT_SHA256": true,
 	"GOTENBERG_IMAGE":        true,
-	// The LibreOffice core commit `make docx-fetch` and `make odt-fetch`
-	// download the docx and odt corpora's documents at.
+	// The LibreOffice core commit `make docx-fetch`, `make odt-fetch`,
+	// `make xlsx-fetch`, `make ods-fetch` and `make csv-fetch` download the
+	// Office corpora's documents at.
 	"LIBREOFFICE_CORE_COMMIT": true,
 }
 
@@ -179,11 +185,14 @@ var sourcePins = map[string][]string{
 	"svg":        {"RESVG_COMMIT"},
 	"weasyprint": nil,
 	"html":       nil,
-	// The docx and odt corpora's PDFs are LibreOffice references the host
-	// builds: their own manifest records the image and the sources, which
-	// the diff feature checks (see [diffFeature.Prepare]).
+	// The Office corpora's PDFs are LibreOffice references the host builds:
+	// their own manifest records the image and the sources, which the diff
+	// feature checks (see [diffFeature.Prepare]).
 	"docx": nil,
 	"odt":  nil,
+	"xlsx": nil,
+	"ods":  nil,
+	"csv":  nil,
 }
 
 // pinEntry is one KEY=VALUE line of versions.env.

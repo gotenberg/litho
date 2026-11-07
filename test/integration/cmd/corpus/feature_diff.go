@@ -204,11 +204,12 @@ func flattenOutline(marks []models.Bookmark) []diffOutlineItem {
 // Gotenberg's Chromium route wrote from the same source at the same options,
 // read at provisioning by PDF.js (text, links) and poppler (pages at 72 dpi),
 // and at load by litho (page sizes, outline). It scores the Office
-// converters against LibreOffice alike: each docx or odt corpus source is
-// converted at the LibreOffice route's fields its options.json names and
-// compared with the PDF that route wrote, a reference the host builds and
-// [diffFeature.Prepare] checks, both sides drawn without annotations. Six
-// scores, each in [0, 1], land in the baseline per fixture:
+// converters against LibreOffice alike: each docx, odt, xlsx, ods or csv
+// corpus source is converted at the LibreOffice route's fields its
+// options.json names and compared with the PDF that route wrote, a
+// reference the host builds and [diffFeature.Prepare] checks, both sides
+// drawn without annotations. Six scores, each in [0, 1], land in the
+// baseline per fixture:
 //
 //   - pages: the smaller page count over the larger, times the share of the
 //     pages both have whose width and height lie within diffPageSizeSlack of
@@ -365,13 +366,21 @@ func readReferenceShape(ctx context.Context, path string) ([]diffPageSize, []dif
 	return sizes, flattenOutline(marks), nil
 }
 
-// pageSizes lists the size of each page of r, up to maxConvertedPages.
+// maxDiffPages bounds the pages the diff feature reads and scores of one
+// conversion. Anti-DoS guard, not spec-mandated: a layout bug that loops
+// pages would otherwise draw thousands. It is above maxConvertedPages
+// because a spreadsheet's print ranges run longer than any web page: the
+// longest reference, ods's sc/tdf134332.ods, prints 208 pages, and a
+// reference over the cap could never score its page count.
+const maxDiffPages = 256
+
+// pageSizes lists the size of each page of r, up to maxDiffPages.
 func pageSizes(ctx context.Context, r *pdf.Reader) ([]diffPageSize, error) {
 	n, err := r.PageCount(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("count pages: %w", err)
 	}
-	n = min(n, maxConvertedPages)
+	n = min(n, maxDiffPages)
 	sizes := make([]diffPageSize, 0, n)
 	for p := 1; p <= n; p++ {
 		pg, err := r.Page(ctx, p)
@@ -613,7 +622,7 @@ func scoreDiff(g *diffGolden, doc diffLithoDoc, renderDir string, report func(pa
 	var textSum, layoutSum, strictSum float64
 	sizesCompared, sizesMatched := 0, 0
 	var sizeDetail string
-	for p := 1; p <= min(n, maxConvertedPages); p++ {
+	for p := 1; p <= min(n, maxDiffPages); p++ {
 		res := diffPageResult{Page: p}
 		if p <= len(pages) && p <= len(g.sizes) {
 			sizesCompared++

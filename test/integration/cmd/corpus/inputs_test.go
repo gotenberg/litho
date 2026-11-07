@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -244,17 +245,35 @@ func TestLoadInputFixtures_GlobsAndListsTogether(t *testing.T) {
 	}
 }
 
-// TestOfficeListsAndHashesAgree pins that every document the docx and odt
+// TestOfficeListsAndHashesAgree pins that every document the Office
 // corpora's documents.json lists is in their files.sha256, which is what
 // lib/fetch-office.sh downloads, with the licence, that the IDs name the
-// directories and caps list-office-candidates.py takes, and that the lists
-// hold the documents the caps allow.
+// directories, extensions and caps list-office-candidates.py takes, and
+// that the lists hold the documents the caps allow.
 func TestOfficeListsAndHashesAgree(t *testing.T) {
 	t.Parallel()
 
+	// The caps of list-office-candidates.py, by LibreOffice core directory.
 	caps := map[string]map[string]int{
-		"docx": {"ooxmlexport": 250, "ooxmlimport": 60, "layout": 40},
-		"odt":  {"odfexport": 80, "odfimport": 40, "layout": 30},
+		"docx": {"sw/qa/extras/ooxmlexport/data": 250, "sw/qa/extras/ooxmlimport/data": 60, "sw/qa/extras/layout/data": 40},
+		"odt":  {"sw/qa/extras/odfexport/data": 80, "sw/qa/extras/odfimport/data": 40, "sw/qa/extras/layout/data": 30},
+		"xlsx": {"sc/qa/unit/data/xlsx": 220, "chart2/qa/extras/data/xlsx": 60},
+		"ods":  {"sc/qa/unit/data/ods": 200, "sc/qa/unit/data/fods": 16, "chart2/qa/extras/data/ods": 40},
+		"csv":  {"sc/qa/unit/data/csv": 9},
+	}
+	exts := map[string][]string{"docx": {"docx"}, "odt": {"odt"}, "xlsx": {"xlsx"}, "ods": {"ods", "fods"}, "csv": {"csv"}}
+	// corePath is the LibreOffice core path of a fixture ID: a Writer test
+	// directory's name, or the module of a Calc or chart test directory
+	// named by the extension.
+	corePath := func(sub, name string) string {
+		ext := name[strings.LastIndexByte(name, '.')+1:]
+		switch sub {
+		case "sc":
+			return "sc/qa/unit/data/" + ext + "/" + name
+		case "chart2":
+			return "chart2/qa/extras/data/" + ext + "/" + name
+		}
+		return "sw/qa/extras/" + sub + "/data/" + name
 	}
 	for corpus, dirs := range caps {
 		dir := filepath.Join(corpusSourceDir, corpus)
@@ -287,12 +306,14 @@ func TestOfficeListsAndHashesAgree(t *testing.T) {
 		per := make(map[string]int)
 		for _, d := range docs {
 			sub, name, ok := strings.Cut(d.ID, "/")
-			if !ok || !validInputID(d.ID) || !strings.HasSuffix(name, "."+corpus) {
-				t.Errorf("%s: id %q is not <dir>/<file>.%s", corpus, d.ID, corpus)
+			ext := name[strings.LastIndexByte(name, '.')+1:]
+			if !ok || !validInputID(d.ID) || !strings.Contains(name, ".") || !slices.Contains(exts[corpus], ext) {
+				t.Errorf("%s: id %q is not <dir>/<file>.%v", corpus, d.ID, exts[corpus])
 				continue
 			}
-			per[sub]++
-			if p := "sw/qa/extras/" + sub + "/data/" + name; !listed[p] {
+			p := corePath(sub, name)
+			per[p[:strings.LastIndexByte(p, '/')]]++
+			if !listed[p] {
 				t.Errorf("%s: %s is listed but not in files.sha256", corpus, p)
 			}
 		}
@@ -307,13 +328,13 @@ func TestOfficeListsAndHashesAgree(t *testing.T) {
 	}
 }
 
-// TestCommittedOfficeSourcesLoad loads every committed docx and odt source
-// as the diff feature does: one document of its corpus's format and valid
-// options.
+// TestCommittedOfficeSourcesLoad loads every committed Office source as the
+// diff feature does: one document of its corpus's format and valid options.
 func TestCommittedOfficeSourcesLoad(t *testing.T) {
 	t.Parallel()
 
-	for corpus, want := range map[string]pdf.Format{"docx": pdf.FormatDOCX, "odt": pdf.FormatODT} {
+	formats := map[string]pdf.Format{"docx": pdf.FormatDOCX, "odt": pdf.FormatODT, "xlsx": pdf.FormatXLSX, "ods": pdf.FormatODS, "csv": pdf.FormatCSV}
+	for corpus, want := range formats {
 		sources, err := globInputFixtures(filepath.Join(corpusSourceDir, corpus), "sources/*")
 		if err != nil {
 			t.Fatal(err)

@@ -61,7 +61,7 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 }
 
 // TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens proves
-// the docx and odt rig on its own references: each committed source's
+// the Office rig on its own references: each committed source's
 // LibreOffice PDF, handed to the diff feature as litho's conversion, passes
 // Prepare's checks and scores 1 on pages, text, links, strict and outline
 // against the goldens made from it, and clears the layout bar, where the
@@ -78,44 +78,60 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 //     strict fails on 6 whose hairlines and hatches litho draws lighter than
 //     poppler (odfexport/sw_hatch.odt layout 0.037); layout averages 0.966,
 //     below 0.75 on 5 (ooxmlexport/fdo67737.docx 0.32).
+//   - xlsx, ods, csv: of the 554 references (285, 258 and 11), 516 pass
+//     (258, 247 and 11). Pages, links, outline and strict score 1 on all;
+//     text F1 is below 1 on 118 and under the bar on 37, where text crosses
+//     a page edge or a clipping path, which PDF.js reads and litho's
+//     extraction does not (a chart cut across two pages, a cell overflowing
+//     the page: chart2/column-style.xlsx at 0.236, sc/lookup_target.fods at
+//     0.438), or is rotated (sc/tdf119292.xlsx at 0.571); layout averages
+//     0.969, below 0.9 on 5 (chart2/chart-hatch-fill.xlsx 0.584).
 func TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
 	t.Parallel()
 
-	for _, corpus := range []string{"docx", "odt"} {
-		f, fixtures := officeCorpusFeature(t, corpus)
-		if err := f.Prepare(t.Context(), fixtures); err != nil {
-			t.Fatal(err)
-		}
-		checked := 0
-		for _, fx := range fixtures {
-			if strings.Contains(fx.ID, "/") {
-				continue
-			}
-			checked++
-			ref, err := os.ReadFile(filepath.Join(f.testdataRoot, "libreoffice", reportName(fx.ID)+".pdf"))
-			if err != nil {
+	for _, corpus := range []string{"docx", "odt", "xlsx", "ods", "csv"} {
+		t.Run(corpus, func(t *testing.T) {
+			t.Parallel()
+			f, fixtures := officeCorpusFeature(t, corpus)
+			if err := f.Prepare(t.Context(), fixtures); err != nil {
 				t.Fatal(err)
 			}
-			f.convert = func(context.Context, []byte, htmlSettings) ([]byte, error) { return ref, nil }
-			out, err := f.Run(t.Context(), fx.PDFPath, fx.ID)
-			if err != nil {
-				t.Fatal(err)
+			checked := 0
+			for _, fx := range fixtures {
+				if strings.Contains(fx.ID, "/") {
+					continue
+				}
+				checked++
+				ref, err := os.ReadFile(filepath.Join(f.testdataRoot, "libreoffice", reportName(fx.ID)+".pdf"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				f.convert = func(context.Context, []byte, htmlSettings) ([]byte, error) { return ref, nil }
+				out, err := f.Run(t.Context(), fx.PDFPath, fx.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				v := f.Compare(fx.ID, out)
+				s := v.Scores
+				// i18n's Thai and Devanagari: litho's text extraction and
+				// PDF.js put the spaces of a cluster apart. budget-single's
+				// notes sheet: the clipping path hides the last letter of
+				// a cell that overflows its page, which PDF.js reads.
+				wantText := 1.0
+				switch fx.ID {
+				case "i18n":
+					wantText = 0.78
+				case "budget-single":
+					wantText = 0.93
+				}
+				if s[scorePages] != 1 || s[scoreText] < wantText || s[scoreLinks] != 1 || s[scoreStrict] != 1 || s[scoreOutline] != 1 || s[scoreLayout] < diffLayoutBar {
+					t.Errorf("%s %s: %v %s", corpus, fx.ID, s, v.Reason)
+				}
 			}
-			v := f.Compare(fx.ID, out)
-			s := v.Scores
-			// i18n's Thai and Devanagari: litho's text extraction and
-			// PDF.js put the spaces of a cluster apart.
-			wantText := 1.0
-			if fx.ID == "i18n" {
-				wantText = 0.78
+			if checked == 0 {
+				t.Errorf("%s: no committed source", corpus)
 			}
-			if s[scorePages] != 1 || s[scoreText] < wantText || s[scoreLinks] != 1 || s[scoreStrict] != 1 || s[scoreOutline] != 1 || s[scoreLayout] < diffLayoutBar {
-				t.Errorf("%s %s: %s", corpus, fx.ID, v.Reason)
-			}
-		}
-		if checked == 0 {
-			t.Errorf("%s: no committed source", corpus)
-		}
+		})
 	}
 }
 

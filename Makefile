@@ -162,6 +162,48 @@ odt-fixtures: ## Rebuild the odt corpus's litho PDFs from its committed sources,
 	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
 	go run ./test/integration/corpus/fixture/build -corpus test/integration/corpus/odt -fonts $(COMPOSE_FONTS)
 
+.PHONY: xlsx-fetch
+xlsx-fetch: ## Download the LibreOffice test spreadsheets of the xlsx corpus at the commit test/integration/corpus/versions.env pins (hash-checked), with the fixture fonts
+	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
+	test/integration/corpus/lib/fetch-office.sh test/integration/corpus/xlsx $(OFFICE_TESTDATA)/xlsx/sources
+
+.PHONY: xlsx-libreoffice
+xlsx-libreoffice: ## Build the xlsx corpus's LibreOffice reference PDFs into the testdata with the Gotenberg image test/integration/corpus/versions.env pins (needs Docker and make xlsx-fetch). Vars: NAMES (space-separated references, default all)
+	test/integration/corpus/lib/libreoffice.sh test/integration/corpus/xlsx $(OFFICE_TESTDATA)/xlsx/sources $(OFFICE_TESTDATA)/xlsx/libreoffice $(NAMES)
+
+.PHONY: xlsx-fixtures
+xlsx-fixtures: ## Rebuild the xlsx corpus's litho PDFs from its committed sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first)
+	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
+	go run ./test/integration/corpus/fixture/build -corpus test/integration/corpus/xlsx -fonts $(COMPOSE_FONTS)
+
+.PHONY: ods-fetch
+ods-fetch: ## Download the LibreOffice test spreadsheets of the ods corpus at the commit test/integration/corpus/versions.env pins (hash-checked), with the fixture fonts
+	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
+	test/integration/corpus/lib/fetch-office.sh test/integration/corpus/ods $(OFFICE_TESTDATA)/ods/sources
+
+.PHONY: ods-libreoffice
+ods-libreoffice: ## Build the ods corpus's LibreOffice reference PDFs into the testdata with the Gotenberg image test/integration/corpus/versions.env pins (needs Docker and make ods-fetch). Vars: NAMES (space-separated references, default all)
+	test/integration/corpus/lib/libreoffice.sh test/integration/corpus/ods $(OFFICE_TESTDATA)/ods/sources $(OFFICE_TESTDATA)/ods/libreoffice $(NAMES)
+
+.PHONY: ods-fixtures
+ods-fixtures: ## Rebuild the ods corpus's litho PDFs from its committed sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first)
+	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
+	go run ./test/integration/corpus/fixture/build -corpus test/integration/corpus/ods -fonts $(COMPOSE_FONTS)
+
+.PHONY: csv-fetch
+csv-fetch: ## Download the LibreOffice test spreadsheets of the csv corpus at the commit test/integration/corpus/versions.env pins (hash-checked), with the fixture fonts
+	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
+	test/integration/corpus/lib/fetch-office.sh test/integration/corpus/csv $(OFFICE_TESTDATA)/csv/sources
+
+.PHONY: csv-libreoffice
+csv-libreoffice: ## Build the csv corpus's LibreOffice reference PDFs into the testdata with the Gotenberg image test/integration/corpus/versions.env pins (needs Docker and make csv-fetch). Vars: NAMES (space-separated references, default all)
+	test/integration/corpus/lib/libreoffice.sh test/integration/corpus/csv $(OFFICE_TESTDATA)/csv/sources $(OFFICE_TESTDATA)/csv/libreoffice $(NAMES)
+
+.PHONY: csv-fixtures
+csv-fixtures: ## Rebuild the csv corpus's litho PDFs from its committed sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first)
+	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
+	go run ./test/integration/corpus/fixture/build -corpus test/integration/corpus/csv -fonts $(COMPOSE_FONTS)
+
 CORPUS_RUN_FLAGS :=
 ifdef CORPUS_JSON_OUTPUT
 CORPUS_RUN_FLAGS += --format=json

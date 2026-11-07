@@ -215,7 +215,7 @@ else
   echo "==> skipping render goldens (not requested by ${CORPUS})."
 fi
 
-# The diff goldens of the html, docx and odt corpora: what the Chromium or
+# The diff goldens of the html and Office corpora: what the Chromium or
 # LibreOffice reference PDFs hold, read the ways the diff feature reads
 # litho's conversion of the same source. PDF.js extracts each page's text (the text goldens' tooling), poppler draws
 # every page at 72 dpi (gen-render.sh, every PDF, every page), and PDF.js lists
@@ -238,7 +238,7 @@ if wants diff; then
     # viewer's, and the form fields' appearances use fonts it does not embed.
     HIDE=0
     case "$CORPUS" in
-      docx | odt) HIDE=1 ;;
+      docx | odt | xlsx | ods | csv) HIDE=1 ;;
     esac
     RENDER_HIDE_ANNOTATIONS="$HIDE" SHELL=/bin/bash /work/lib/gen-render.sh "$PDFS" "$DIFF/render" 256 0
     node /work/lib/gen-links.mjs \
