@@ -581,6 +581,7 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 			if s.style.Lang != "" {
 				piece.Language = s.lang
 			}
+			piece.FontFeatures = s.style.features()
 			for _, in := range shaping.SplitByFace(piece, styleFontmap{st: st, style: idx, script: piece.Script}) {
 				out := st.shaper.Shape(in)
 				rescale(&out, in.Size)

@@ -34,9 +34,14 @@ const (
 
 // textFontProps returns the properties of CSS Text 3 and 4 and CSS Fonts
 // 4 this file adds: text-justify, text-autospace, text-spacing-trim,
-// font-stretch and the font-synthesis longhands.
+// font-stretch, font-kerning and the font-synthesis longhands.
 func textFontProps() map[propID]propDef {
 	return map[propID]propDef{
+		// font-kerning (CSS Fonts 4, 6.3) is inherited; auto, its initial
+		// value, kerns as normal does.
+		pFontKerning: enumProp("font-kerning", true, func(s *Style) *FontKerning { return &s.FontKerning }, map[string]FontKerning{
+			"auto": KerningAuto, "normal": KerningNormal, "none": KerningNone,
+		}),
 		pTextJustify: enumProp("text-justify", true, func(s *Style) *TextJustify { return &s.TextJustify }, map[string]TextJustify{
 			"auto": JustifyAuto, "none": JustifyNone, "inter-word": JustifyInterWord,
 			"inter-character": JustifyInterCharacter, "distribute": JustifyInterCharacter,

@@ -380,6 +380,7 @@ func anonStyle(parent *css.Style) *css.Style {
 	st.FontWeight = parent.FontWeight
 	st.FontStyle = parent.FontStyle
 	st.FontVariant = parent.FontVariant
+	st.FontKerning = parent.FontKerning
 	st.LineHeight = parent.LineHeight
 	st.TextAlign = parent.TextAlign
 	st.TextIndent = parent.TextIndent

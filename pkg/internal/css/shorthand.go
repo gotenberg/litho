@@ -297,6 +297,9 @@ func expandFont(v []token, c *declCtx) ([]entry, bool) {
 		{pLineHeight, wideInitial},
 		{pFontFamily, wideInitial},
 		{pFontStretch, wideInitial},
+		// The shorthand resets font-kerning, which it cannot set (CSS
+		// Fonts 4, 2.8).
+		{pFontKerning, wideInitial},
 	}
 	if k, ok := keyword(v); ok && systemFonts[k] {
 		c.warn("unsupported-css-value", "font: the system font %s is not supported and computes to the initial font", k)

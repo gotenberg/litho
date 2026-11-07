@@ -301,6 +301,7 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 		LetterSpacing:     spacing(st.LetterSpacing),
 		WordSpacing:       spacing(st.WordSpacing),
 		Scale:             textScale(st.TextScale),
+		NoKerning:         st.FontKerning == css.KerningNone,
 	}
 }
 

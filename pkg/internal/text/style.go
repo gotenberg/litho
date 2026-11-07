@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/go-text/typesetting/font/opentype"
+	"github.com/go-text/typesetting/shaping"
+
 	"github.com/gotenberg/litho/pkg/internal/compose"
 )
 
@@ -100,6 +103,24 @@ type Style struct {
 	// natural width; otherwise it lies in [compose.MinHScale,
 	// compose.MaxHScale]. [Fonts.Layout] ignores it.
 	Scale float64
+	// NoKerning shapes the run without the font's kerning, CSS
+	// font-kerning: none (CSS Fonts 4, 6.3): the shaper is handed the kern
+	// feature at 0, which turns off the GPOS kern feature and the kern
+	// table alike. The default kerns.
+	NoKerning bool
+}
+
+// kernOff is the feature list that shapes without kerning (OpenType
+// feature registry, kern).
+var kernOff = []shaping.FontFeature{{Tag: opentype.MustNewTag("kern"), Value: 0}}
+
+// features returns the font features the shaper is handed for s, nil for
+// the font's defaults.
+func (s Style) features() []shaping.FontFeature {
+	if s.NoKerning {
+		return kernOff
+	}
+	return nil
 }
 
 // scale returns the horizontal scale of s, 1 for none.

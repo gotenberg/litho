@@ -176,6 +176,7 @@ const (
 	pColumnHeight
 	pColumnWrap
 	pBoxDecorationBreak
+	pFontKerning
 	numProps
 )
 
