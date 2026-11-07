@@ -8,9 +8,9 @@ div, p { margin-inline-start: 5px; padding-inline: 1px 2px; border-inline-start:
 #late { direction: rtl }
 #phys { margin-left: 9px }`)
 	tests := []struct {
-		id                   string
+		id                     string
 		ml, mr, pl, pr, bl, br float64
-		left, right          bool
+		left, right            bool
 	}{
 		{"ltr", 5, 0, 1, 2, 3, 0, false, true},
 		{"rtl", 0, 5, 2, 1, 0, 3, true, false},
