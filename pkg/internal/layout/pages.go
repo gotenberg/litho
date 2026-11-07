@@ -25,7 +25,7 @@ func checkPage(pb PageBox) error {
 	if w, h := areaOf(pb); w <= 0 || h <= 0 {
 		return fmt.Errorf("%w: margins leave a page area of %v by %v points", ErrInvalidOptions, w, h)
 	}
-	return nil
+	return checkFrame(pb)
 }
 
 // areaOf returns the size of the page area of pb.

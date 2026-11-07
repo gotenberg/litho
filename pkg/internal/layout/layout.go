@@ -245,6 +245,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 		e.paintMarks(pg, pb)
 		sheet := len(pg.Content)
 		e.paintCanvas(pg, canvas, pb)
+		e.paintFrame(pg, pb)
 		if e.opts.MarginContent != nil {
 			pg.Content = append(pg.Content, e.opts.MarginContent(e.infoOf(k), n)...)
 		}
