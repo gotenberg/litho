@@ -355,3 +355,54 @@ func TestApplyWritingMode_TurnsTheBox(t *testing.T) {
 		}
 	}
 }
+
+// TestConvert_FrameAnchorPage puts a frame anchored to the page its
+// text:anchor-page-number names, a page the text does not reach included
+// (LibreOffice prints anchor-page-number 3 of a one-line document on a
+// third page), and clips a text box of a fixed height while one that
+// grows does not.
+func TestConvert_FrameAnchorPage(t *testing.T) {
+	auto := `<style:style style:name="fr" style:family="graphic"><style:graphic-properties style:wrap="run-through" style:vertical-pos="from-top" style:vertical-rel="page" style:horizontal-pos="from-left" style:horizontal-rel="page"/></style:style>`
+	frame := func(page, box string) string {
+		return `<draw:frame draw:style-name="fr" text:anchor-type="page" text:anchor-page-number="` + page + `" svg:x="2cm" svg:y="2cm" svg:width="4cm" svg:height="1cm">` + box + `<text:p>P` + page + `</text:p></draw:text-box></draw:frame>`
+	}
+	tests := []struct {
+		name  string
+		page  string
+		box   string
+		pages int
+		clip  bool
+	}{
+		{"third page, fixed", "3", `<draw:text-box>`, 3, true},
+		{"first page, grows", "1", `<draw:text-box fo:min-height="1cm">`, 1, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := doc{contentAuto: auto, body: frame(tt.page, tt.box) + `<text:p>Xg</text:p>`}
+			res := convertDoc(t, d.pack(t), office.Options{})
+			if len(res.Pages) != tt.pages || !strings.Contains(pageText(res.Pages[tt.pages-1]), "P"+tt.page) {
+				t.Fatalf("%d pages, last %q", len(res.Pages), pageText(res.Pages[len(res.Pages)-1]))
+			}
+			b := newTestBuilder(t, d)
+			root, _ := b.document(odfBody(b))
+			clipped := false
+			walkNodes(root, func(n *layout.Node) {
+				if n.Role == "Div" && n.Style.Overflow == css.OverflowHidden {
+					clipped = true
+				}
+			})
+			if clipped != tt.clip {
+				t.Errorf("text box clipped %v, want %v", clipped, tt.clip)
+			}
+		})
+	}
+}
+
+// TestConvert_LongWordBreaks breaks a word wider than its line where the
+// line ends, as Writer does, rather than let it overflow the page.
+func TestConvert_LongWordBreaks(t *testing.T) {
+	res := convertDoc(t, doc{body: `<text:p>` + strings.Repeat("x", 300) + `</text:p>`}.pack(t), office.Options{})
+	if n := len(lines(res.Pages[0])); n < 2 {
+		t.Errorf("%d lines, want the word broken", n)
+	}
+}

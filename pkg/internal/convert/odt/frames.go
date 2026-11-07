@@ -785,6 +785,11 @@ func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 		st.MinHeight = st.Height
 		st.Height = css.Dimension{Kind: css.Auto}
 	}
+	if st.Height.Kind == css.Points {
+		// A text box of a fixed height clips the text it cannot hold, as
+		// Writer draws it.
+		st.Overflow = css.OverflowHidden
+	}
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "Div"})
 	n.Children = b.blocks(k, blockCtx{depth: depth + 1})
 	return n

@@ -13,11 +13,13 @@ import (
 // baseStyle returns the style every node starts from: CSS's initial
 // values with the white space the converter already processed kept as it
 // is (pre-wrap: ODF 1.3, Part 3, 6.1.2 collapses white space at import,
-// and the converter does it), and orphans and widows off, LibreOffice's
-// default when a style sets neither.
+// and the converter does it), orphans and widows off, LibreOffice's
+// default when a style sets neither, and a word wider than its line
+// broken where the line ends, as Writer breaks it.
 func baseStyle() *css.Style {
 	st := css.Initial()
 	st.WhiteSpace = css.PreWrap
+	st.OverflowWrap = css.BreakWord
 	st.Orphans, st.Widows = 1, 1
 	st.FontSize = defaultFontSize
 	st.TabSize = css.Pts(defaultTabDistance)
