@@ -770,7 +770,9 @@ func (d *document) cellStyle(cp cellProps, tableMar map[string]float64, tb map[s
 
 // floatTable floats a table with a w:tblpPr (17.4.58) on the side its
 // horizontal alignment says, a position at page coordinates approximated
-// by the float.
+// by the float; a centred one is centred in its own line, as far below
+// the text as its vertical offset says (a float keeps its place: its
+// margin would push the text beside it down too).
 func (d *document) floatTable(st *css.Style, f *ooxml.Element) {
 	st.Float = css.FloatLeft
 	switch attrOr(f, "tblpXSpec") {
@@ -778,11 +780,25 @@ func (d *document) floatTable(st *css.Style, f *ooxml.Element) {
 		st.Float = css.FloatRight
 	case "center":
 		st.Float = css.FloatNone
+		st.Margin[css.Left], st.Margin[css.Right] = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
+		tableOffset(st, f)
 		return
 	}
 	for side, name := range map[css.Side]string{css.Left: "leftFromText", css.Right: "rightFromText", css.Top: "topFromText", css.Bottom: "bottomFromText"} {
 		if v, ok := ooxml.Twips(attrOr(f, name)); ok {
 			st.Margin[side] = css.Pts(max(0, v))
 		}
+	}
+}
+
+// tableOffset moves a floating table anchored to the text (17.4.58
+// vertAnchor text, the default) down by its tblpY, when positive and not
+// an alignment.
+func tableOffset(st *css.Style, f *ooxml.Element) {
+	if a := attrOr(f, "vertAnchor"); a != "" && a != "text" || hasAttr(f, "tblpYSpec") {
+		return
+	}
+	if v, ok := ooxml.Twips(attrOr(f, "tblpY")); ok && v > 0 {
+		st.Margin[css.Top] = css.Pts(v)
 	}
 }

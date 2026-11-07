@@ -88,3 +88,28 @@ func TestTables_Nested(t *testing.T) {
 		t.Errorf("%d tables, want 2", n)
 	}
 }
+
+func TestTables_Floating(t *testing.T) {
+	t.Parallel()
+	table := func(tblpPr string) string {
+		return `<w:tbl><w:tblPr>` + tblpPr + `<w:tblW w:w="2000" w:type="dxa"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid>` +
+			`<w:tr><w:tc><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`
+	}
+	for _, tc := range []struct {
+		name, tblpPr string
+		float        css.Float
+		auto         bool
+		top          float64
+	}{
+		{"left", `<w:tblpPr w:leftFromText="180" w:tblpY="400"/>`, css.FloatLeft, false, 0},
+		{"right", `<w:tblpPr w:tblpXSpec="right"/>`, css.FloatRight, false, 0},
+		{"centred below the text", `<w:tblpPr w:tblpXSpec="center" w:tblpY="400"/>`, css.FloatNone, true, 20},
+		{"centred on the page", `<w:tblpPr w:tblpXSpec="center" w:vertAnchor="page" w:tblpY="400"/>`, css.FloatNone, true, 0},
+	} {
+		b := build(t, table(tc.tblpPr), nil)
+		tbl := role(b.root, "Table")[0].Style
+		if tbl.Float != tc.float || (tbl.Margin[css.Left].Kind == css.Auto) != tc.auto || tbl.Margin[css.Top].Value != tc.top {
+			t.Errorf("%s: float %v margins %v", tc.name, tbl.Float, tbl.Margin)
+		}
+	}
+}
