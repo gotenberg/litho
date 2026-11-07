@@ -201,23 +201,6 @@ func (d *document) proportionalLine(st *css.Style, mult float64) float64 {
 	return math.Max(1, math.Floor(twips*mult)/20)
 }
 
-// lineHeight returns the height of a line of text in st alone: its
-// exact or proportional line height, else the face's normal one, at least
-// its minimum line height.
-func (d *document) lineHeight(st *css.Style) float64 {
-	var h float64
-	switch st.LineHeight.Kind { //nolint:exhaustive // every other kind is the face's normal height
-	case css.Points:
-		h = st.LineHeight.Value
-	case css.Number:
-		h = st.LineHeight.Value * st.FontSize
-	default:
-		a, de, g := d.lineMetrics(st)
-		h = (a + de + g) * st.FontSize
-	}
-	return max(h, st.MinLineHeight)
-}
-
 // lineMetrics returns the ascent, descent and line gap of st's first
 // available face as factors of the font size.
 func (d *document) lineMetrics(st *css.Style) (float64, float64, float64) {

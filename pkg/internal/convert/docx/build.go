@@ -315,10 +315,12 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 		kids := seg.nodes
 		if !hasContent(kids) {
 			// An empty paragraph keeps one line, as tall as its mark's text
-			// would be, and draws nothing a reader would extract.
+			// would be, spaced as its lines are, and draws nothing a
+			// reader would extract: a line break in the mark's font.
 			ms := inlineStyle(pst)
 			d.applyRun(ms, rp.mark, lineMult)
-			pst.MinHeight = css.Pts(d.lineHeight(ms))
+			pst.FontFamilies, pst.FontSize, pst.FontWeight, pst.FontStyle = ms.FontFamilies, ms.FontSize, ms.FontWeight, ms.FontStyle
+			kids = append(kids, &layout.Node{Kind: layout.LineBreak, Style: ms})
 		}
 		n.Children = kids
 		if sink.positioned {

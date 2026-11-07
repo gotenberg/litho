@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 )
 
 func TestRunProperties(t *testing.T) {
@@ -191,11 +192,20 @@ func TestEmptyParagraphKeepsALine(t *testing.T) {
 	if len(ps) != 2 {
 		t.Fatalf("%d paragraphs", len(ps))
 	}
-	if h := ps[1].Style.MinHeight; h.Kind != css.Points || h.Value < 20 || h.Value > 40 || len(ps[1].Children) != 0 {
-		t.Errorf("empty 24-point paragraph min height %v, %d children", h, len(ps[1].Children))
+	tests := []struct {
+		name string
+		size float64
+	}{
+		{"default mark", defaultFontSize},
+		{"24-point mark", 24},
 	}
-	if h0, h1 := ps[0].Style.MinHeight.Value, ps[1].Style.MinHeight.Value; h0 <= 0 || h0 >= h1 {
-		t.Errorf("empty 10-point paragraph min height %v", h0)
+	for i, tt := range tests {
+		p := ps[i]
+		// The paragraph holds one line break in its mark's font, the
+		// line its strut sizes.
+		if len(p.Children) != 1 || p.Children[0].Kind != layout.LineBreak || p.Style.FontSize != tt.size || p.Children[0].Style.FontSize != tt.size {
+			t.Errorf("%s: %d children, font size %v", tt.name, len(p.Children), p.Style.FontSize)
+		}
 	}
 }
 
