@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("@page n:blank { font: 10px serif; color: red; @top-center { content: \"a\" counter(page) counter(pages, lower-roman); width: 30%; margin: auto } @bogus { x: y } } p { page: n } div { display: flex } div > p { page: x }")

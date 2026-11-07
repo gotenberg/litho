@@ -125,6 +125,7 @@ const (
 	pAlignSelf
 	pRowGap
 	pColumnGap
+	pPage
 	numProps
 )
 
@@ -365,6 +366,9 @@ func parseDisplay(v []token, c *declCtx) (any, bool) {
 		}
 		if d, ok := displays3[k]; ok {
 			c.warn("unsupported-css-value", "display: %s is laid out as %s", k, displayName(d))
+			if flexOrGrid[k] {
+				return laidAs{d}, true
+			}
 			return d, true
 		}
 		return nil, false
@@ -426,7 +430,7 @@ func parseDisplay(v []token, c *declCtx) (any, bool) {
 			d = InlineBlock
 		}
 		c.warn("unsupported-css-value", "a two-keyword display is laid out as %s", displayName(d))
-		return d, true
+		return laidAs{d}, true
 	}
 	return nil, false
 }
@@ -600,10 +604,13 @@ func init() {
 			copyFrom: field(func(s *Style) *Color { return &s.Color }),
 		}},
 		{pDisplay, propDef{name: "display", parse: parseDisplay, compute: func(_ *styler, st *Style, v any) {
-			if d, ok := v.(Display); ok {
-				st.Display = d
+			switch d := v.(type) {
+			case Display:
+				st.Display, st.flexOrGrid = d, false
+			case laidAs:
+				st.Display, st.flexOrGrid = d.d, true
 			}
-		}, copyFrom: field(func(s *Style) *Display { return &s.Display })}},
+		}, copyFrom: func(dst, src *Style) { dst.Display, dst.flexOrGrid = src.Display, src.flexOrGrid }}},
 		{pPosition, enumProp("position", false, func(s *Style) *Position { return &s.Position }, map[string]Position{
 			"static": Static, "relative": Relative, "absolute": Absolute, "fixed": Fixed, "sticky": Relative, "-webkit-sticky": Relative,
 		})},
@@ -815,6 +822,7 @@ func init() {
 		}
 	}, copyFrom: field(func(s *Style) *Containment { return &s.Contain })}
 	props[pContent] = contentProp()
+	props[pPage] = pageProp()
 	props[pCounterReset] = counterProp("counter-reset", 0, func(s *Style) *[]CounterOp { return &s.CounterReset })
 	props[pCounterIncrement] = counterProp("counter-increment", 1, func(s *Style) *[]CounterOp { return &s.CounterIncrement })
 	props[pCounterSet] = counterProp("counter-set", 0, func(s *Style) *[]CounterOp { return &s.CounterSet })

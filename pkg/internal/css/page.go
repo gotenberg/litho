@@ -13,6 +13,9 @@ type PageSelector struct {
 	// First is set for the first page of the document; Left and Right for
 	// a left or right page of a spread.
 	First, Left, Right bool
+	// Blank is set for a page a forced break to a left or a right page
+	// left empty (CSS Page 3, 4.2.3).
+	Blank bool
 }
 
 // pageSel is a parsed page selector.
@@ -27,6 +30,10 @@ type pageRule struct {
 	sels  []pageSel
 	decls []pageDecl
 	cond  *mediaCond
+	// context holds the declarations that style the page context and
+	// margins its margin at-rules (CSS Page 3, 4.4 and 5.1).
+	context []Declaration
+	margins []marginRule
 }
 
 // pageSize is a specified size descriptor (CSS Page 3, 5.1).
@@ -106,12 +113,11 @@ func parsePageSelectors(prelude []token) ([]pageSel, bool) {
 }
 
 // matches reports whether the selector applies to the page sel names.
-// litho knows no blank pages, so :blank never matches.
 func (s *pageSel) matches(sel PageSelector) bool {
 	if s.name != "" && s.name != sel.Name {
 		return false
 	}
-	return (!s.first || sel.First) && (!s.left || sel.Left) && (!s.right || sel.Right) && !s.blank
+	return (!s.first || sel.First) && (!s.left || sel.Left) && (!s.right || sel.Right) && (!s.blank || sel.Blank)
 }
 
 // pageSizes are the <page-size> keywords in points (CSS Page 3, 5.1,
@@ -186,8 +192,7 @@ func parsePageSize(v []token) (pageSize, bool) {
 }
 
 // pageDecls parses the descriptors of an @page block: size, the margin
-// properties and the background properties. Margin at-rules and other
-// descriptors are ignored.
+// properties and the background properties. [pageCtxDecls] reads the rest.
 func pageDecls(block []token, c *declCtx) []pageDecl {
 	var out []pageDecl
 	newListParser(block).declarations(func(it item) bool {

@@ -31,6 +31,7 @@ func FuzzParse(f *testing.F) {
 		}
 		r := NewResolver(a4, []Sheet{{Sheet: s, Origin: Author}})
 		r.Page(PageSelector{First: true, Left: true})
+		r.PageIn(PageSelector{Name: "n", Right: true, Blank: true}, nil)
 		r.FontFaces()
 	})
 }

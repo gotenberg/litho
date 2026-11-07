@@ -967,6 +967,10 @@ type Style struct {
 	// Orphans and Widows are the minimum line counts, at least 1.
 	Orphans int
 	Widows  int
+	// Page is the page type name a box asks to be laid out on, "" for
+	// auto (CSS Page 3, 4.1, the page property). It is not inherited: the
+	// layout resolves auto against the nearest ancestor with a name.
+	Page string
 
 	// Flexible box layout (CSS Flexbox 1) and the box alignment of flex
 	// containers and items (CSS Box Alignment 3). None is inherited.
@@ -1009,6 +1013,12 @@ type Style struct {
 	// holds it resolved, and an element that inherits it explicitly
 	// resolves it again against its own color.
 	currentColor colorSlots
+	// flexOrGrid records a flex or grid container laid out as a block in
+	// this version, a grid container or a prefixed flex one the layout
+	// does not know: the page property does not apply to its children,
+	// which are flex or grid items (CSS Page 3, 4.1), any more than to
+	// those of a flex container it lays out.
+	flexOrGrid bool
 }
 
 // colorSlots is a bit set of the colour longhands other than color.
@@ -1149,4 +1159,8 @@ type PageStyle struct {
 	// hold what the @page rules set, every other field initial. nil when
 	// no rule sets a background property.
 	Background *Style
+	// MarginBoxes holds the generated page-margin boxes (CSS Page 3, 5),
+	// filled by [Resolver.PageIn] alone: each box's computed style, its
+	// content in Content. A box absent generates nothing.
+	MarginBoxes map[MarginBox]*Style
 }

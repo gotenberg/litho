@@ -178,7 +178,8 @@ func (sp *sheetParser) rule(it item, base string, cond *mediaCond, depth int, im
 			if !ok || !it.hasBlock || !sp.count() {
 				return
 			}
-			sp.sheet.pages = append(sp.sheet.pages, pageRule{sels: sels, decls: pageDecls(it.block, c), cond: cond})
+			ctx, boxes := pageCtxDecls(it.block, c)
+			sp.sheet.pages = append(sp.sheet.pages, pageRule{sels: sels, decls: pageDecls(it.block, c), cond: cond, context: ctx, margins: boxes})
 		case "font-face":
 			if !it.hasBlock {
 				return
