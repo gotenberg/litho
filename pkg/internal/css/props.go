@@ -868,7 +868,8 @@ func init() {
 		"inline-size": pWidth, "block-size": pHeight,
 		"min-inline-size": pMinWidth, "min-block-size": pMinHeight,
 		"max-inline-size": pMaxWidth, "max-block-size": pMaxHeight,
-		"page-break-inside": pBreakInside,
+		"page-break-inside":       pBreakInside,
+		"-webkit-background-clip": pBgClip,
 	} {
 		longhandByName[alias] = id
 	}
@@ -914,8 +915,7 @@ func parseBgClip(v []token, c *declCtx) (any, bool) {
 		return nil, false
 	}
 	if k == "text" || k == "-webkit-text" {
-		c.warn("unsupported-css-value", "background-clip: text is not supported and computes to border-box")
-		return BorderEdge, true
+		return TextEdge, true
 	}
 	e, ok := boxEdges[k]
 	return e, ok
