@@ -818,6 +818,11 @@ type Style struct {
 	Border [4]Border
 	// BorderRadius is indexed by [Corner].
 	BorderRadius [4]Radius
+	// BorderImage is the border-image drawn in place of the border styles
+	// when it names an image (CSS Backgrounds 3, 6).
+	BorderImage BorderImage
+	// MaskBorder is the mask-border (CSS Masking 1, 7).
+	MaskBorder BorderImage
 
 	// Background (CSS Backgrounds 3). A single layer.
 

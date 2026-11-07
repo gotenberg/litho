@@ -140,15 +140,20 @@ func initShorthands() {
 		"border-bottom": borderSideShorthand(Bottom),
 		"border-left":   borderSideShorthand(Left),
 		"border": {
-			longhands: append(append(ids(pBorderTopStyle, 4), ids(pBorderTopWidth, 4)...), ids(pBorderTopColor, 4)...),
+			longhands: append(append(append(ids(pBorderTopStyle, 4), ids(pBorderTopWidth, 4)...), ids(pBorderTopColor, 4)...), ids(pBorderImageSource, 5)...),
 			expand: func(v []token, c *declCtx) ([]entry, bool) {
 				w, s, col, ok := borderSide(v, c)
 				if !ok {
 					return nil, false
 				}
-				out := make([]entry, 0, 12)
+				out := make([]entry, 0, 17)
 				for i := propID(0); i < 4; i++ {
 					out = append(out, entry{pBorderTopStyle + i, s}, entry{pBorderTopWidth + i, w}, entry{pBorderTopColor + i, col})
+				}
+				// CSS Backgrounds 3, 4.4: border also resets border-image
+				// to its initial value.
+				for i := propID(0); i < 5; i++ {
+					out = append(out, entry{pBorderImageSource + i, wideInitial})
 				}
 				return out, true
 			},
@@ -180,6 +185,8 @@ func initShorthands() {
 				return []entry{{pWordBreak, pv}}, true
 			},
 		},
+		"border-image":      {longhands: ids(pBorderImageSource, 5), expand: expandBorderImage(pBorderImageSource)},
+		"mask-border":       {longhands: ids(pMaskBorderSource, 5), expand: expandBorderImage(pMaskBorderSource)},
 		"page-break-before": legacyBreak(pBreakBefore),
 		"page-break-after":  legacyBreak(pBreakAfter),
 	}

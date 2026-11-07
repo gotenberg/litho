@@ -126,6 +126,16 @@ const (
 	pRowGap
 	pColumnGap
 	pPage
+	pBorderImageSource
+	pBorderImageSlice
+	pBorderImageWidth
+	pBorderImageOutset
+	pBorderImageRepeat
+	pMaskBorderSource
+	pMaskBorderSlice
+	pMaskBorderWidth
+	pMaskBorderOutset
+	pMaskBorderRepeat
 	numProps
 )
 
@@ -833,6 +843,12 @@ func init() {
 	}
 	for id, def := range flexProps() {
 		props[id] = def
+	}
+	for i, def := range borderImageProps("border-image", func(s *Style) *BorderImage { return &s.BorderImage }, false) {
+		props[pBorderImageSource+propID(i)] = def
+	}
+	for i, def := range borderImageProps("mask-border", func(s *Style) *BorderImage { return &s.MaskBorder }, true) {
+		props[pMaskBorderSource+propID(i)] = def
 	}
 	longhandByName = map[string]propID{}
 	for i := range props {
