@@ -29,7 +29,9 @@ func TestVML_Shapes(t *testing.T) {
 	floating := `<v:oval style="position:absolute;margin-left:10pt;margin-top:20pt;width:30pt;height:40pt;z-index:-1"/>`
 	square := `<v:roundrect style="position:absolute;margin-left:0;margin-top:0;width:30pt;height:40pt;mso-position-horizontal:right"><w10:wrap type="square"/></v:roundrect>`
 	hidden := `<v:rect style="width:30pt;height:40pt;visibility:hidden"><v:textbox><w:txbxContent><w:p><w:r><w:t>HIDDEN</w:t></w:r></w:p></w:txbxContent></v:textbox></v:rect>`
-	b := build(t, pict(shapetype+group)+pict(floating)+pict(square)+pict(hidden), nil)
+	custom := `<v:shape style="position:absolute;margin-left:0;margin-top:300pt;width:30pt;height:40pt" path="m,l,21600r21600,l21600,xe"/>` +
+		`<v:shape style="width:30pt;height:40pt" path="m,l,21600r21600,l21600,xe"/>`
+	b := build(t, pict(shapetype+group)+pict(floating)+pict(square)+pict(hidden)+pict(custom), nil)
 	paras := b.root.Children[0].Children
 	g := paras[0].Children[0]
 	if !near(g.Style.Width, 200) || !near(g.Style.Height, 100) || len(g.Children) != 2 {
@@ -51,6 +53,9 @@ func TestVML_Shapes(t *testing.T) {
 	}
 	if rr := paras[2].Children[0]; rr.Style.Float != css.FloatRight {
 		t.Errorf("square-wrapped shape floats %v", rr.Style.Float)
+	}
+	if kids := paras[4].Children; len(kids) != 2 || kids[0].Style.Position != css.Static || !near(kids[0].Style.Height, 40) {
+		t.Errorf("custom shapes: %d boxes, want the room of the one in the line", len(kids)-1)
 	}
 	if contains(textOf(b.root), "HIDDEN") {
 		t.Error("a hidden shape is drawn")

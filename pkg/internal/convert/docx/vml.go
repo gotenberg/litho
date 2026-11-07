@@ -29,7 +29,7 @@ func (d *document) vml(s *story, c *ooxml.Element, st *css.Style, sink *inlineSi
 			continue
 		}
 		w, h := vmlSize(k, vs, pxPt)
-		n := d.vmlShape(s, k, vs, st, w, h, depth)
+		n := d.vmlShape(s, k, vs, st, w, h, vs["position"] != "absolute", depth)
 		if n == nil {
 			continue
 		}
@@ -157,8 +157,9 @@ func vmlPlacement(k *ooxml.Element, vs ooxml.VMLStyle, w, h float64) placement {
 
 // vmlShape builds the VML shape k of w by h points: a group, a text box,
 // a picture, or a preset geometry drawn with the shape's fill and stroke;
-// a shape of another geometry keeps its room, undrawn.
-func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *css.Style, w, h float64, depth int) *layout.Node {
+// a shape of another geometry is left out, with a warning, and keeps its
+// room in the line when inLine.
+func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *css.Style, w, h float64, inLine bool, depth int) *layout.Node {
 	if depth > maxNesting {
 		return nil
 	}
@@ -184,10 +185,10 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 	}
 	geom := d.vmlGeometry(k)
 	if geom == "" {
-		if w <= 0 && h <= 0 {
+		d.warn("approximated", "a VML shape of a custom geometry is left out")
+		if !inLine || w <= 0 && h <= 0 {
 			return nil
 		}
-		d.warn("approximated", "a VML shape of a custom geometry keeps its room undrawn")
 		return box(st, w, h)
 	}
 	n := vectorShape(st, geom, ss, w, h)
@@ -362,7 +363,7 @@ func (d *document) vmlGroup(s *story, g *ooxml.Element, st *css.Style, w, h floa
 			x, y = min(x0, x1)/pxPt, min(y0, y1)/pxPt
 			kw, kh = kw/pxPt, kh/pxPt
 		}
-		kid := d.vmlShape(s, k, vs, st, kw*sx, kh*sy, depth+1)
+		kid := d.vmlShape(s, k, vs, st, kw*sx, kh*sy, false, depth+1)
 		if kid == nil {
 			continue
 		}
