@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# lib/libreoffice.sh: build the LibreOffice reference PDFs of the docx or odt
-# corpus.
+# lib/libreoffice.sh: build the LibreOffice reference PDFs of an Office corpus
+# (docx, odt, xlsx, ods, csv).
 #
 # Starts the Gotenberg image versions.env pins (GOTENBERG_IMAGE) on a free
 # loopback port and posts each source to its LibreOffice route,
 # /forms/libreoffice/convert, writing the PDF to <out_dir>/<name>.pdf. The
 # sources are the committed <corpus_dir>/sources/<name>/ directories, each
-# one document (.docx, .odt or .fodt) and an optional options.json, and the
+# one document (an extension of EXTENSIONS) and an optional options.json, and the
 # LibreOffice test documents <corpus_dir>/documents.json lists, fetched into
 # <fetched_dir> by lib/fetch-office.sh, each named by its ID with "/" written
 # "__" (ooxmlexport/tdf123.docx becomes ooxmlexport__tdf123.docx).
@@ -14,7 +14,7 @@
 # The form fields come from the directory's options.json (FIXTURES.md, "Per
 # fixture options"), each key the route's field of the same name; a key left
 # out keeps the route's default: the document's own page setup, every page,
-# the outline written. The Go side reads the same file through
+# the outline written, each sheet cut into pages. The Go side reads the same file through
 # fixture.LoadOffice (fixture/build and the diff feature of
 # test/integration/cmd/corpus); keep the two in step.
 #
@@ -61,7 +61,19 @@ done
 # The keys of options.json, the route's form fields (OfficeOptions in
 # fixture/office.go). A key outside the list fails the build: a misspelt one
 # would leave the fixture on the defaults.
-KEYS='["password","landscape","nativePages","nativeBookmarks","paperWidth","paperHeight"]'
+KEYS='["password","landscape","nativePages","nativeBookmarks","paperWidth","paperHeight","singlePage"]'
+
+# The extensions of a committed source's document (officeFormats in
+# fixture/office.go).
+EXTENSIONS='docx odt fodt xlsx xlsm xltx xltm ods fods ots csv'
+
+# is_document <file> reports whether the file's extension, in any case, is
+# one of EXTENSIONS.
+is_document() {
+  local ext
+  ext="$(printf '%s' "${1##*.}" | tr '[:upper:]' '[:lower:]')"
+  [ "$ext" != "$1" ] && printf '%s\n' $EXTENSIONS | grep -qxF "$ext"
+}
 
 # selected <name> reports whether the run builds the reference name.
 selected() {
@@ -85,23 +97,21 @@ for dir in "$CORPUS"/sources/*/; do
   selected "$name" || continue
   doc=""
   for f in "$dir"/*; do
-    case "$(basename "$f")" in
-      options.json) ;;
-      *.docx | *.odt | *.fodt)
-        if [ -n "$doc" ]; then
-          echo "ERROR: $dir holds more than one document" >&2
-          exit 1
-        fi
-        doc="$f"
-        ;;
-      *)
-        echo "ERROR: $f is neither a document nor options.json" >&2
-        exit 1
-        ;;
-    esac
+    if [ "$(basename "$f")" = options.json ]; then
+      continue
+    fi
+    if ! is_document "$(basename "$f")"; then
+      echo "ERROR: $f is neither a document ($EXTENSIONS) nor options.json" >&2
+      exit 1
+    fi
+    if [ -n "$doc" ]; then
+      echo "ERROR: $dir holds more than one document" >&2
+      exit 1
+    fi
+    doc="$f"
   done
   if [ -z "$doc" ]; then
-    echo "ERROR: $dir holds no .docx, .odt or .fodt document" >&2
+    echo "ERROR: $dir holds no document ($EXTENSIONS)" >&2
     exit 1
   fi
   options=-
@@ -157,7 +167,7 @@ build_one() {
   local name="$1" doc="$2" options="$3" source="$4" key value status opts_sha=""
   local fields=()
   [ "$options" != - ] || options=""
-  for key in password landscape nativePages nativeBookmarks paperWidth paperHeight; do
+  for key in password landscape nativePages nativeBookmarks paperWidth paperHeight singlePage; do
     value="$(opt "$options" "$key")"
     [ -z "$value" ] || fields+=(--form-string "$key=$value")
   done

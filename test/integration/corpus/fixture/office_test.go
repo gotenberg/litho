@@ -20,7 +20,8 @@ func TestParseOfficeOptions_RefusesWhatTheRouteRefuses(t *testing.T) {
 		name, json, want string
 	}{
 		{"empty object", `{}`, ""},
-		{"every field", `{"password": "foo", "landscape": true, "nativePages": "2-3", "nativeBookmarks": false, "paperWidth": 4, "paperHeight": 6}`, ""},
+		{"every field", `{"password": "foo", "landscape": true, "nativePages": "2-3", "nativeBookmarks": false, "paperWidth": 4, "paperHeight": 6, "singlePage": true}`, ""},
+		{"former single page name", `{"singlePageSheets": true}`, "unknown field"},
 		{"unknown field", `{"paperSize": "A4"}`, "unknown field"},
 		{"another case", `{"Landscape": true}`, "unknown field"},
 		{"trailing data", `{} {}`, "data after"},
@@ -77,6 +78,7 @@ func TestLoadOffice_ReadsADirectoryOrADocument(t *testing.T) {
 		"two documents":   {"a.docx": "", "b.odt": ""},
 		"another file":    {"a.docx": "", "notes.txt": ""},
 		"another format":  {"a.doc": ""},
+		"binary workbook": {"a.xls": ""},
 		"invalid options": {"a.docx": "", OptionsFile: `{"paperHeight": 6}`},
 	} {
 		d := t.TempDir()
@@ -89,6 +91,56 @@ func TestLoadOffice_ReadsADirectoryOrADocument(t *testing.T) {
 	}
 	if _, err := LoadOffice(filepath.Join(dir, OptionsFile)); !errors.Is(err, ErrNoOfficeDocument) {
 		t.Errorf("options file as a document: %v", err)
+	}
+}
+
+func TestLoadOffice_MapsEveryExtension(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]pdf.Format{
+		"a.docx": pdf.FormatDOCX, "a.odt": pdf.FormatODT, "a.fodt": pdf.FormatODT,
+		"a.xlsx": pdf.FormatXLSX, "a.XLSM": pdf.FormatXLSX, "a.xltx": pdf.FormatXLSX, "a.xltm": pdf.FormatXLSX,
+		"a.ods": pdf.FormatODS, "a.fods": pdf.FormatODS, "a.ots": pdf.FormatODS, "a.csv": pdf.FormatCSV,
+	}
+	for name, want := range cases {
+		dir := t.TempDir()
+		write(t, dir, name, "")
+		write(t, dir, OptionsFile, `{"singlePage": true}`)
+		o, err := LoadOffice(dir)
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if o.Format != want || !o.Options.SinglePage || len(o.ConvertOptions()) != 3 {
+			t.Errorf("%s: format %s, options %+v, %d convert options, want %s with single page", name, o.Format, o.Options, len(o.ConvertOptions()), want)
+		}
+	}
+}
+
+// TestLibreOfficeScript_ReadsTheSameExtensions checks that lib/libreoffice.sh
+// accepts a committed source of every extension this package maps, and no
+// other.
+func TestLibreOfficeScript_ReadsTheSameExtensions(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile(filepath.Join("..", "lib", "libreoffice.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, rest, ok := strings.Cut(string(data), "\nEXTENSIONS='")
+	list, _, ok2 := strings.Cut(rest, "'")
+	if !ok || !ok2 {
+		t.Fatal("libreoffice.sh declares no EXTENSIONS")
+	}
+	got := strings.Fields(list)
+	var want []string
+	for ext := range officeFormats {
+		want = append(want, strings.TrimPrefix(ext, "."))
+	}
+	slices.Sort(got)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("libreoffice.sh extensions %v, officeFormats %v", got, want)
 	}
 }
 

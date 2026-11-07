@@ -31,22 +31,37 @@ type OfficeOptions struct {
 	// own page size.
 	PaperWidth  *float64 `json:"paperWidth,omitempty"`
 	PaperHeight *float64 `json:"paperHeight,omitempty"`
+	// SinglePage prints each sheet of a spreadsheet on one page the size
+	// of its content. Default false: each sheet is cut into pages of its
+	// paper. The route's former name, singlePageSheets, is refused.
+	SinglePage bool `json:"singlePage,omitempty"`
 }
 
 // officeOptionNames are the keys of an Office options file, the JSON names
 // of [OfficeOptions].
 //
 //nolint:gochecknoglobals // static list of the schema's keys
-var officeOptionNames = []string{"password", "landscape", "nativePages", "nativeBookmarks", "paperWidth", "paperHeight"}
+var officeOptionNames = []string{"password", "landscape", "nativePages", "nativeBookmarks", "paperWidth", "paperHeight", "singlePage"}
 
 // officeFormats maps the extension of an Office document to the format it
-// converts from: a flat ODT is an OpenDocument text document too.
+// converts from, as the converter's extensions do: a flat ODT is an
+// OpenDocument text document too, a macro-enabled workbook or a template a
+// SpreadsheetML workbook, and a flat ODS or a template an OpenDocument
+// spreadsheet. A lib/libreoffice.sh EXTENSIONS entry each.
 //
 //nolint:gochecknoglobals // static extension table
 var officeFormats = map[string]pdf.Format{
 	".docx": pdf.FormatDOCX,
 	".odt":  pdf.FormatODT,
 	".fodt": pdf.FormatODT,
+	".xlsx": pdf.FormatXLSX,
+	".xlsm": pdf.FormatXLSX,
+	".xltx": pdf.FormatXLSX,
+	".xltm": pdf.FormatXLSX,
+	".ods":  pdf.FormatODS,
+	".fods": pdf.FormatODS,
+	".ots":  pdf.FormatODS,
+	".csv":  pdf.FormatCSV,
 }
 
 // Office is one Office source, read.
@@ -62,8 +77,9 @@ type Office struct {
 }
 
 // ErrNoOfficeDocument reports a source directory that does not hold exactly
-// one DOCX, ODT or flat ODT document, or a source file of another type.
-var ErrNoOfficeDocument = errors.New("not one .docx, .odt or .fodt document")
+// one Office document of an extension officeFormats lists, or a source file
+// of another type.
+var ErrNoOfficeDocument = errors.New("not one Office document (.docx, .odt, .fodt, .xlsx, .xlsm, .xltx, .xltm, .ods, .fods, .ots, .csv)")
 
 // LoadOffice reads an Office source: path is a source directory, holding
 // one document and an optional options file and nothing else, or a document
@@ -141,8 +157,9 @@ func (o OfficeOptions) validate() error {
 }
 
 // ConvertOptions returns the litho options of the source's fields: the
-// landscape and outline switches always, and the page ranges, the password
-// and the paper size, in points, when the options name them.
+// landscape and outline switches always, and the page ranges, the password,
+// the paper size, in points, and the single page sheets when the options
+// name them.
 func (o *Office) ConvertOptions() []pdf.ConvertOption {
 	opts := []pdf.ConvertOption{
 		pdf.WithLandscape(o.Options.Landscape),
@@ -156,6 +173,9 @@ func (o *Office) ConvertOptions() []pdf.ConvertOption {
 	}
 	if o.Options.PaperWidth != nil && o.Options.PaperHeight != nil {
 		opts = append(opts, pdf.WithPaperSize(*o.Options.PaperWidth*72, *o.Options.PaperHeight*72))
+	}
+	if o.Options.SinglePage {
+		opts = append(opts, pdf.WithSinglePage(true))
 	}
 	return opts
 }

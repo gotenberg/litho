@@ -31,15 +31,15 @@ type htmlSettings struct {
 	FontDirs []string
 	// PreferCSSPageSize lets an @page size descriptor set the page.
 	PreferCSSPageSize bool
-	// Format is the source's format; empty converts HTML. A DOCX or ODT
-	// source reads FontDirs and Print alone.
+	// Format is the source's format; empty converts HTML. An Office source
+	// (see [isOfficeFormat]) reads FontDirs and Print alone.
 	Format pdf.Format
 	// Print are the remaining print options of the source, after the
 	// ones above: landscape, scale, page ranges, single page, backgrounds,
 	// outline, header and footer templates and media features (see
-	// fixture.Source.PrintOptions in corpus/fixture); for a DOCX or ODT
-	// source, its landscape, outline, page ranges, password and paper
-	// (fixture.Office.ConvertOptions).
+	// fixture.Source.PrintOptions in corpus/fixture); for an Office
+	// source, its landscape, outline, page ranges, password, paper and
+	// single page sheets (fixture.Office.ConvertOptions).
 	Print []pdf.ConvertOption
 }
 
@@ -49,13 +49,12 @@ type htmlSettings struct {
 type htmlConverter func(ctx context.Context, src []byte, s htmlSettings) ([]byte, error)
 
 // convertHTML converts src with litho's HTML converter at the given
-// settings and returns the PDF bytes, or, for a [pdf.FormatDOCX] or
-// [pdf.FormatODT] source, with the Office converter at the font directories
-// and the print options alone: an Office document carries its own page
-// setup and styles. The report's warnings are not an error: the oracles
-// score what was drawn.
+// settings and returns the PDF bytes, or, for an Office source, with the
+// Office converter at the font directories and the print options alone: an
+// Office document carries its own page setup and styles. The report's
+// warnings are not an error: the oracles score what was drawn.
 func convertHTML(ctx context.Context, src []byte, s htmlSettings) ([]byte, error) {
-	if s.Format == pdf.FormatDOCX || s.Format == pdf.FormatODT {
+	if isOfficeFormat(s.Format) {
 		opts := make([]pdf.ConvertOption, 0, 1+len(s.Print))
 		if len(s.FontDirs) > 0 {
 			opts = append(opts, pdf.WithConvertFontDirs(s.FontDirs...))
@@ -91,6 +90,19 @@ func convertHTML(ctx context.Context, src []byte, s htmlSettings) ([]byte, error
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// isOfficeFormat reports whether a format is one of the Office documents
+// the docx, odt, xlsx, ods and csv corpora convert, which carry their own
+// page setup.
+func isOfficeFormat(f pdf.Format) bool {
+	switch f {
+	case pdf.FormatDOCX, pdf.FormatODT, pdf.FormatXLSX, pdf.FormatODS, pdf.FormatCSV:
+		return true
+	case pdf.FormatText, pdf.FormatHTML, pdf.FormatMarkdown:
+		return false
+	}
+	return false
 }
 
 // fixtureFontsRoot returns the directory the fixture fonts are fetched into:
