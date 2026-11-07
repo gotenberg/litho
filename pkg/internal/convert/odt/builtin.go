@@ -23,9 +23,9 @@ var builtins = map[string]builtinStyle{
 		para: [][2]string{{"fo:margin-top", "0.423cm"}, {"fo:margin-bottom", "0.212cm"}, {"fo:keep-with-next", "always"}},
 		text: [][2]string{{"style:font-name", "Liberation Sans"}, {"fo:font-family", "'Liberation Sans'"}, {"fo:font-size", "14pt"}},
 	},
-	"Heading_20_1": {parent: "Heading", text: [][2]string{{"fo:font-size", "18pt"}, {"fo:font-weight", "bold"}}},
-	"Heading_20_2": {parent: "Heading", text: [][2]string{{"fo:font-size", "16pt"}, {"fo:font-weight", "bold"}}},
-	"Heading_20_3": {parent: "Heading", text: [][2]string{{"fo:font-size", "14pt"}, {"fo:font-weight", "bold"}}},
+	"Heading_20_1":        {parent: "Heading", text: [][2]string{{"fo:font-size", "18pt"}, {"fo:font-weight", "bold"}}},
+	"Heading_20_2":        {parent: "Heading", text: [][2]string{{"fo:font-size", "16pt"}, {"fo:font-weight", "bold"}}},
+	"Heading_20_3":        {parent: "Heading", text: [][2]string{{"fo:font-size", "14pt"}, {"fo:font-weight", "bold"}}},
 	"Contents_20_Heading": {parent: "Heading", text: [][2]string{{"fo:font-size", "16pt"}, {"fo:font-weight", "bold"}}},
 	"Footnote": {
 		para: [][2]string{{"fo:margin-left", "0.5985cm"}, {"fo:text-indent", "-0.5985cm"}},
