@@ -48,6 +48,23 @@
 // for [Options.Media] on the page area of the first page, which the
 // viewport units measure too.
 //
+// # Fonts
+//
+// Each @font-face rule whose media conditions match loads one face (CSS
+// Fonts 4, 4): its src entries are tried in order, a local() entry naming
+// an installed face by its full or PostScript name, a url() entry reading
+// a file or a data: URL as above. TrueType, OpenType with glyf or CFF
+// outlines, collections (their first face), WOFF and WOFF2 are read; an
+// entry whose format() or tech() names something else is skipped. A rule
+// none of whose entries loads is reported with a warning. The faces join
+// the family lookup ahead of the installed fonts for this conversion only:
+// a declared family shadows the installed family of the same name, faces
+// are chosen by their width, style and weight descriptors, unicode-range
+// sends a character outside a face's ranges to the next family, and bold
+// and italic are synthesised where the rules lack them, as Chromium does.
+// font-feature-settings, font-variation-settings, the metric overrides and
+// size-adjust are ignored with a warning; font-display has no effect.
+//
 // # Page
 //
 // The paper and margins of [Options] apply unless an @page rule sets a

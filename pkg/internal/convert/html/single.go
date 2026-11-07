@@ -41,7 +41,7 @@ func measureSinglePage(ctx context.Context, doc *dom.Node, o Options, fonts *tex
 		return 0, 0, err
 	}
 	continuous(p.root)
-	res, err := layOut(ctx, lay, p, fonts)
+	res, err := layOut(ctx, lay, p)
 	if err != nil {
 		return 0, 0, err
 	}

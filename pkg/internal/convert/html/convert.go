@@ -86,7 +86,7 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 	if err != nil {
 		return nil, err
 	}
-	res, err := layOut(ctx, lay, p, fonts)
+	res, err := layOut(ctx, lay, p)
 	if err != nil {
 		return nil, err
 	}
@@ -98,16 +98,16 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 		if p, err = prepareDoc(ctx, doc, o, fonts, s); err != nil {
 			return nil, err
 		}
-		if res, err = layOut(ctx, lay, p, fonts); err != nil {
+		if res, err = layOut(ctx, lay, p); err != nil {
 			return nil, err
 		}
 	}
 	return p.assemble(ctx, res, ranges)
 }
 
-// layOut lays the prepared document p out with lay.
-func layOut(ctx context.Context, lay layoutFunc, p *prepared, fonts *text.Fonts) (*layout.Result, error) {
-	res, err := lay(ctx, p.root, fonts, p.layout)
+// layOut lays the prepared document p out with lay, with its fonts.
+func layOut(ctx context.Context, lay layoutFunc, p *prepared) (*layout.Result, error) {
+	res, err := lay(ctx, p.root, p.fonts, p.layout)
 	if err != nil {
 		if errors.Is(err, layout.ErrTooManyPages) {
 			return nil, fmt.Errorf("%w: %w", ErrTooManyPages, err)
@@ -186,6 +186,8 @@ type prepared struct {
 	// infos are the pages the layout laid out, in order, once it called
 	// layout.Options.MarginContent for them.
 	infos []layout.PageInfo
+	// fonts is the conversion's font index: the one Convert received with
+	// the document's @font-face faces ahead of it.
 	fonts *text.Fonts
 	b     *builder
 }
@@ -256,6 +258,10 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 		resolver = css.NewResolver(media, sheets)
 	}
 
+	faceSet, fontWarns := loadFontFaces(ctx, resolver.FontFaces(), res, fonts, o.Logger)
+	if fonts != nil {
+		fonts = fonts.WithFaces(faceSet)
+	}
 	computed, err := resolver.Compute(ctx, doc, css.ComputeOptions{Hints: css.HTMLHints, Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts)})
 	if err != nil {
 		return nil, fmt.Errorf("computing the HTML document's styles: %w", err)
@@ -311,6 +317,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 		p.warnings = append(p.warnings, compose.Warning{Code: w.Code, Message: displayURL(w.Message)})
 	}
 	p.warnings = append(p.warnings, c.warnings...)
+	p.warnings = append(p.warnings, fontWarns...)
 	p.warnings = append(p.warnings, pageWarns...)
 	p.warnings = append(p.warnings, b.warnings...)
 	return p, nil
