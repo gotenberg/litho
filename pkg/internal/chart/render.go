@@ -1,0 +1,197 @@
+package chart
+
+import (
+	"context"
+	"math"
+
+	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/text"
+)
+
+// The distances of LibreOffice's automatic chart layout, in points
+// (chart2's ChartView and VLegend, which count in hundredths of a
+// millimetre).
+const (
+	// mm100 is a hundredth of a millimetre.
+	mm100 = 72.0 / 2540
+	// layoutDistance is the fraction of the chart's width and height kept
+	// clear around the plot area and above a title.
+	layoutDistance = 0.02
+	// mainTitleExtra is added above the main title: 135.
+	mainTitleExtra = 135 * mm100
+	// pieDistance replaces layoutDistance around a pie: 350.
+	pieDistance = 350 * mm100
+	// legendSideMargin and legendTopMargin keep the legend from the
+	// chart's edge: 210 and 185.
+	legendSideMargin = 210 * mm100
+	legendTopMargin  = 185 * mm100
+	// minLegendSpacing is the least padding in a legend: 100.
+	minLegendSpacing = 100 * mm100
+	// tickLength is the length of a tick mark outside the axis: 150.
+	tickLength = 150 * mm100
+	// labelSpacing is the gap between an axis and its labels: 100.
+	labelSpacing = 100 * mm100
+	// axisTitleDistance is the gap between the axes and an axis title: 420
+	// below the x axis, 450 left of the y axis.
+	xTitleDistance = 420 * mm100
+	yTitleDistance = 450 * mm100
+	// titleHPad and titleVPad pad a title's text: 0.18 and 0.30 of its font
+	// size on each side.
+	titleHPad = 0.18
+	titleVPad = 0.30
+	// lineKeyWidth is the width of a line series' legend key: 800.
+	lineKeyWidth = 800 * mm100
+)
+
+// Render draws c into r, as LibreOffice draws a chart: the chart area,
+// the title and subtitle at the top, the legend at its side, and the plot
+// area in the space left, with its axes, gridlines, series and data labels.
+// Every fragment lies inside r: the content is clipped to it. Text is shaped
+// with fonts and emitted as [compose.Text] runs, so extraction reads it.
+//
+// It returns nil for a nil chart, a nil font index, or a rectangle without
+// area, and ctx's error stops it early with what it drew so far. The group
+// nesting of the result is at most 3. The output depends on c, fonts and r
+// alone.
+//
+// Three-dimensional charts are drawn as their two-dimensional kind;
+// trendlines, error bars and data tables are not drawn.
+func Render(ctx context.Context, fonts *text.Fonts, c *Chart, r compose.Rect) []compose.Fragment {
+	if c == nil || fonts == nil || !(r.Width > 0) || !(r.Height > 0) || math.IsInf(r.Width, 0) || math.IsInf(r.Height, 0) {
+		return nil
+	}
+	rd := &renderer{ctx: ctx, fonts: fonts, c: c, page: r}
+	rd.render(r)
+	if len(rd.out) == 0 {
+		return nil
+	}
+	return []compose.Fragment{&compose.Group{Clip: rectPath(r), Content: rd.out}}
+}
+
+// render lays the chart out into r and paints it.
+func (rd *renderer) render(r compose.Rect) {
+	c := rd.c
+	rd.frame(r, c.Area)
+	if rd.ctx.Err() != nil {
+		return
+	}
+	rem := r
+	pie := len(c.Groups) > 0 && (c.Groups[0].Kind == Pie || c.Groups[0].Kind == Doughnut)
+	if c.Title != nil {
+		rd.title(c.Title, r, &rem, layoutDistance*r.Height+mainTitleExtra)
+	}
+	if c.Subtitle != nil {
+		rd.title(c.Subtitle, r, &rem, layoutDistance*r.Height)
+	}
+	if c.Legend != nil {
+		rd.legend(r, &rem)
+	}
+	if rd.ctx.Err() != nil {
+		return
+	}
+	dx, dy := layoutDistance*r.Width, layoutDistance*r.Height
+	if pie {
+		dx, dy = pieDistance, pieDistance
+	}
+	plot := compose.Rect{X: rem.X + dx, Y: rem.Y + dy, Width: rem.Width - 2*dx, Height: rem.Height - 2*dy}
+	if !(plot.Width > 1) || !(plot.Height > 1) {
+		return
+	}
+	if pie {
+		rd.pies(plot)
+		return
+	}
+	rd.cartesian(plot)
+}
+
+// title places t centred at the top of rem, top distance below rem's top,
+// and takes its height from rem unless it overlays.
+func (rd *renderer) title(t *Title, page compose.Rect, rem *compose.Rect, distance float64) {
+	b := rd.measure(t.Text, t.Style, page.Width*0.8-2*titleHPad*t.Style.Size)
+	if b == nil {
+		return
+	}
+	w, h := b.rotated()
+	w += 2 * titleHPad * b.style.Size
+	h += 2 * titleVPad * b.style.Size
+	cx := rem.X + rem.Width/2
+	top := rem.Y + distance
+	rd.frame(compose.Rect{X: cx - w/2, Y: top, Width: w, Height: h}, t.Frame)
+	rd.out = append(rd.out, b.draw(cx, top+h/2, alignCenter)...)
+	if t.Overlay {
+		return
+	}
+	rem.Y += h + distance
+	rem.Height -= h + distance
+}
+
+// frame paints the fill and border of rect.
+func (rd *renderer) frame(rect compose.Rect, f Frame) {
+	if p := paintRect(rect, f.Fill, f.Border); p != nil {
+		rd.out = append(rd.out, p)
+	}
+}
+
+// paintRect returns the path that fills and strokes rect, nil when it
+// paints nothing.
+func paintRect(rect compose.Rect, fill *Paint, border *Stroke) *compose.Path {
+	return paintPath(rectPath(rect).Ops, fill, border)
+}
+
+// paintPath returns a path of ops filled and stroked, nil when it paints
+// nothing.
+func paintPath(ops []compose.PathOp, fill *Paint, border *Stroke) *compose.Path {
+	p := &compose.Path{Ops: ops}
+	if fill != nil && !fill.None && fill.Color.A > 0 {
+		p.Fill = &compose.Fill{Color: fill.Color}
+	}
+	p.Stroke = border.compose()
+	if p.Fill == nil && p.Stroke == nil {
+		return nil
+	}
+	return p
+}
+
+// compose returns the stroke s draws, nil for none.
+func (s *Stroke) compose() *compose.Stroke {
+	if s == nil || s.None || s.Color.A <= 0 || s.Width < 0 || math.IsNaN(s.Width) {
+		return nil
+	}
+	return &compose.Stroke{Color: s.Color, Width: min(s.Width, maxStrokeWidth), Dash: s.Dash, Join: compose.RoundJoin}
+}
+
+// maxStrokeWidth caps a line's width, in points: Office allows 1584.
+const maxStrokeWidth = 1584
+
+// rectPath returns the outline of r.
+func rectPath(r compose.Rect) *compose.Path {
+	x0, y0, x1, y1 := r.X, r.Y, r.X+r.Width, r.Y+r.Height
+	return &compose.Path{Ops: []compose.PathOp{
+		{Kind: compose.MoveTo, P: [3]compose.Point{{X: x0, Y: y0}}},
+		{Kind: compose.LineTo, P: [3]compose.Point{{X: x1, Y: y0}}},
+		{Kind: compose.LineTo, P: [3]compose.Point{{X: x1, Y: y1}}},
+		{Kind: compose.LineTo, P: [3]compose.Point{{X: x0, Y: y1}}},
+		{Kind: compose.ClosePath},
+	}}
+}
+
+// line returns a straight segment stroked with s, nil for no stroke.
+func line(x0, y0, x1, y1 float64, s *Stroke) *compose.Path {
+	st := s.compose()
+	if st == nil {
+		return nil
+	}
+	return &compose.Path{Ops: []compose.PathOp{
+		{Kind: compose.MoveTo, P: [3]compose.Point{{X: x0, Y: y0}}},
+		{Kind: compose.LineTo, P: [3]compose.Point{{X: x1, Y: y1}}},
+	}, Stroke: st}
+}
+
+// add appends the fragments that are not nil paths.
+func (rd *renderer) add(ps ...*compose.Path) {
+	for _, p := range ps {
+		if p != nil {
+			rd.out = append(rd.out, p)
+		}
+	}
+}
