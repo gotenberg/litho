@@ -108,7 +108,8 @@ func TestPrepare_RefusesStylesheetsOutsideTheResources(t *testing.T) {
 		fsys fstest.MapFS
 		code string
 	}{
-		{"https://example.com/a.css", fsys, CodeResourceRefused},
+		{"https://example.com/a.css", fsys, CodeResourceNoNetwork},
+		{"file:///a.css", fsys, CodeResourceRefused},
 		{"../a.css", fsys, CodeResourceRefused},
 		{"a.css", nil, CodeResourceRefused},
 		{"missing.css", fsys, CodeResourceFailed},

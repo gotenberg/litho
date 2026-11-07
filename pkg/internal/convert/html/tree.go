@@ -68,6 +68,9 @@ type builder struct {
 	computed *css.Computed
 	res      *resources
 	scan     *scan
+	// media is the medium a <source media> and a sizes attribute are
+	// evaluated against.
+	media css.Media
 
 	elements  int
 	synthetic int
@@ -305,12 +308,12 @@ func (b *builder) linkTarget(href string) string {
 	return u
 }
 
-// image builds the nodes of an <img> styled st: a replaced node with its
-// picture, or, when the picture cannot be drawn, its alt text with a
-// warning.
+// image builds the nodes of an <img> styled st: a replaced node with the
+// picture [builder.imageSource] selects, or, when the picture cannot be
+// drawn, its alt text with a warning.
 func (b *builder) image(ctx context.Context, n *dom.Node, st, parent *css.Style) []*layout.Node {
 	alt, hasAlt := attr(n, "alt")
-	src, _ := attr(n, "src")
+	src, density := b.imageSource(ctx, n)
 	fallback := func() []*layout.Node {
 		if alt == "" {
 			return nil
@@ -328,6 +331,13 @@ func (b *builder) image(ctx context.Context, n *dom.Node, st, parent *css.Style)
 		b.warnings = append(b.warnings, compose.Warning{Code: warningCode(err), Message: fmt.Sprintf(
 			"the image %s was left out: %v", displayURL(strings.TrimSpace(src)), err)})
 		return fallback()
+	}
+	if density > 0 && density != 1 {
+		// The density-corrected natural size; the decoded picture is
+		// shared by every element naming it.
+		scaled := *pic
+		scaled.Width, scaled.Height = pic.Width/density, pic.Height/density
+		pic = &scaled
 	}
 	node := &layout.Node{Kind: layout.Replaced, Style: st, Picture: pic}
 	node.ID, _ = attr(n, "id")

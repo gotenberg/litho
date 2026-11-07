@@ -189,20 +189,23 @@ func TestPrepare_RefusesURLsOutsideTheResources(t *testing.T) {
 		src  string
 		fsys fstest.MapFS
 		want string
+		code string
 	}{
-		{"https://example.com/a.png", fsys, "absolute URLs"},
-		{"//example.com/a.png", fsys, "absolute URLs"},
-		{"../a.png", fsys, "leaves the resources root"},
-		{"sub/../../a.png", fsys, "leaves the resources root"},
-		{"/a.png", fsys, "leaves the resources root"},
-		{"a.png", nil, "no resources"},
+		{"https://example.com/a.png", fsys, "no HTTP client", CodeResourceNoNetwork},
+		{"file:///etc/a.png", fsys, "file: URLs are never fetched", CodeResourceRefused},
+		{"ftp://example.com/a.png", fsys, "absolute URLs", CodeResourceRefused},
+		{"//example.com/a.png", fsys, "absolute URLs", CodeResourceRefused},
+		{"../a.png", fsys, "leaves the resources root", CodeResourceRefused},
+		{"sub/../../a.png", fsys, "leaves the resources root", CodeResourceRefused},
+		{"/a.png", fsys, "leaves the resources root", CodeResourceRefused},
+		{"a.png", nil, "no resources", CodeResourceRefused},
 	} {
 		o := Options{}
 		if tc.fsys != nil {
 			o.Resources = tc.fsys
 		}
 		p := prep(t, `<p id=x><img src="`+tc.src+`" alt="alt">`, o)
-		if !hasWarning(p.warnings, CodeResourceRefused, tc.want) {
+		if !hasWarning(p.warnings, tc.code, tc.want) {
 			t.Errorf("%s: warnings %+v, want %s", tc.src, p.warnings, tc.want)
 		}
 		if got := treeText(byID(t, p.root, "x")); got != "alt" {
@@ -257,9 +260,16 @@ func TestPrepare_HonoursBaseForResources(t *testing.T) {
 	if byID(t, p.root, "i").Picture == nil {
 		t.Errorf("relative base not applied: %+v", p.warnings)
 	}
-	abs := prep(t, `<base href="https://cdn.example.com/assets/"><p><img id=i src="assets/a.png">`, Options{Resources: fsys})
-	if byID(t, abs.root, "i").Picture == nil {
-		t.Errorf("absolute base applied to a resource: %+v", abs.warnings)
+	// An http(s) base moves the resources to the network (HTML Standard,
+	// 4.2.3), which needs a client.
+	abs := prep(t, `<base href="https://cdn.example.com/assets/"><p id=x><img src="a.png" alt=alt>`, Options{Resources: fsys})
+	if !hasWarning(abs.warnings, CodeResourceNoNetwork, "") || treeText(byID(t, abs.root, "x")) != "alt" {
+		t.Errorf("absolute base not applied to a resource: %+v", abs.warnings)
+	}
+	// Any other absolute base resolves links alone.
+	other := prep(t, `<base href="ftp://example.com/assets/"><p><img id=i src="assets/a.png">`, Options{Resources: fsys})
+	if byID(t, other.root, "i").Picture == nil {
+		t.Errorf("ftp base applied to a resource: %+v", other.warnings)
 	}
 }
 

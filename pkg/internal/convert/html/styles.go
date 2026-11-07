@@ -88,8 +88,13 @@ func (c *collector) linkElement(ctx context.Context, n *dom.Node) *css.Styleshee
 			return nil
 		}
 	}
-	u := resolveRef(c.base, href)
-	body, err := c.res.fetch(ctx, u)
+	f, err := c.res.fetchTyped(ctx, resolveRef(c.base, href))
+	if err == nil && f.mediaType != "" && f.mediaType != "text/css" {
+		// A stylesheet served under another type is not applied (HTML
+		// Standard, 4.6.7.18, the fetch and process steps for a
+		// standards-mode document; Chromium refuses it cross-origin).
+		err = fmt.Errorf("%w: it is served as %s", errStylesheetMIMEType, f.mediaType)
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil
@@ -98,7 +103,9 @@ func (c *collector) linkElement(ctx context.Context, n *dom.Node) *css.Styleshee
 		return nil
 	}
 	media, _ := attr(n, "media")
-	return c.parse(ctx, body, u, media)
+	// Its url() values and imports resolve against its own URL, the
+	// response's after redirects (CSS Values 4, 4.5.1).
+	return c.parse(ctx, f.data, f.url, media)
 }
 
 // parse parses body, the stylesheet at u, under the media query list

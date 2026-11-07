@@ -335,7 +335,8 @@ type ConvertWarning struct {
 	// conversion adds, among others, "unsupported-css-property" and the
 	// other codes of a construct the cascade dropped, "resource-refused",
 	// "resource-failed" and "resource-limit" for a stylesheet or image left
-	// out, "unsupported-image", "unsupported-element" and "form-control".
+	// out, "image-format-unsupported", "unsupported-element" and
+	// "form-control".
 	Code string
 	// Message explains the construct and what was done instead.
 	Message string

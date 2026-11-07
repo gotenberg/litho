@@ -15,11 +15,29 @@
 // The document sits at the root of [Options.Resources]. A relative URL,
 // in an attribute or a stylesheet, resolves against the document, or
 // against its first <base href> when that is relative, and reads the file
-// at that path. A data: URL (RFC 2397) reads its own payload. An absolute
-// URL with a scheme or a host, a root-relative path, and a path that
-// leaves the root through ".." are refused with a warning; so is every
-// URL when no resources are given. An absolute <base href> resolves links
-// alone.
+// at that path. A data: URL (RFC 2397) reads its own payload. A
+// root-relative path and a path that leaves the root through ".." are
+// refused with a warning; so is every such URL when no resources are
+// given.
+//
+// # Network
+//
+// When [Options.BaseURL] is an http or https URL the document is on the
+// network: its relative URLs resolve against it (RFC 3986, 5.2), or
+// against its first <base href> resolved against it (HTML Standard,
+// 4.2.3). An http or https <base href> moves a local document's resources
+// to the network too; any other absolute one resolves links alone. An
+// http or https URL is fetched with a GET through [Options.HTTPClient]
+// under the conversion's context, once per conversion, its body read up
+// to the resource caps, at most 512 requests a conversion; a status
+// outside 2xx is a warning naming it, and so is a stylesheet whose
+// Content-Type is not text/css (HTML Standard, 4.6.7.18). A stylesheet
+// resolves its own url() values and @import rules against the URL it was
+// served from after redirects. Without a client such a URL is left out
+// with a warning; a file: URL is never fetched, and any other scheme is
+// refused. Redirects, cookies, headers, timeouts and which hosts may be
+// reached are the client's business: a service passes a client whose
+// transport enforces its own policy.
 //
 // # Styles
 //
@@ -84,8 +102,12 @@
 //   - Text, <br> as a forced break, <wbr> as a break opportunity.
 //   - <img> in PNG, JPEG, GIF (its first frame), WebP, BMP and TIFF, at its
 //     pixel size at 96 dpi unless styled otherwise. A JPEG is embedded as
-//     it is. An image that cannot be read is replaced by its alt text, with
-//     a warning.
+//     it is, unless its EXIF orientation turns it, which applies as
+//     Chromium's default image-orientation: from-image does (CSS Images
+//     3, 5.3); image-orientation: none is not read. An image that cannot
+//     be read is replaced by its alt text, with a warning. AVIF, JPEG XL
+//     and ICO, which Chromium draws, have no decoder and are reported as
+//     such.
 //   - SVG, as an <img>, a background or list-style image, or an inline
 //     <svg> element, drawn as vector graphics by the svg package at the
 //     size its width, height and viewBox give it (CSS Images 3, 4.3), with
@@ -96,6 +118,13 @@
 //     package's warnings (codes unsupported-svg-element,
 //     unsupported-svg-property, unsupported-svg-paint, svg-image, svg-text
 //     and svg-limit) join the document's.
+//   - srcset, sizes and <picture> with its <source media type srcset sizes>
+//     choose the picture as the HTML Standard's source selection does
+//     (4.8.4.3), at a device pixel ratio of 1: the first <source> whose
+//     media matches and whose type is decoded, else the <img>, and among
+//     its candidates the one of lowest density at least 1x, else the
+//     densest, a w descriptor's density measured against the sizes slot
+//     (100vw without one, calc() not read).
 //   - <input>, <button>, <select> and <textarea> draw as inline blocks
 //     holding the text they show, without their widgets, with a warning.
 //   - <iframe>, <embed>, <video> and <audio> are left out with a warning;

@@ -13,6 +13,7 @@ import (
 	_ "image/png"  // registers PNG with image.Decode
 	"io"
 	"io/fs"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -48,20 +49,20 @@ var (
 	errTooManyImgs  = fmt.Errorf("the document holds more than %d distinct images", maxImages)
 	errTooManyPx    = fmt.Errorf("the image holds more than %d pixels", maxImagePixels)
 	errPixelBudget  = fmt.Errorf("the conversion already decoded %d pixels", maxTotalImagePixels)
-	errSVG          = errors.New("SVG images are not drawn yet")
 	errEmptyPicture = errors.New("the image has no pixels")
 )
 
 // warningCode returns the warning code a resource error stands for.
 func warningCode(err error) string {
+	if code := networkCode(err); code != "" {
+		return code
+	}
 	switch {
 	case errors.Is(err, errNoResources), errors.Is(err, errAbsoluteURL), errors.Is(err, errOutsideRoot):
 		return CodeResourceRefused
 	case errors.Is(err, errTooLarge), errors.Is(err, errBudget), errors.Is(err, errTooManyImgs),
 		errors.Is(err, errTooManyPx), errors.Is(err, errPixelBudget):
 		return CodeResourceLimit
-	case errors.Is(err, errSVG):
-		return CodeUnsupportedImage
 	default:
 		return CodeResourceFailed
 	}
@@ -94,7 +95,8 @@ func resolveRef(base, ref string) string {
 // [Convert] call; the mutex makes it safe for the layout engine to call
 // from any goroutine.
 type resources struct {
-	fsys fs.FS
+	fsys   fs.FS
+	client *http.Client
 
 	mu       sync.Mutex
 	read     int64
@@ -102,6 +104,10 @@ type resources struct {
 	pictures map[string]pictureResult
 	// svg is what the SVG pictures share.
 	svg svgState
+	// requests counts the HTTP requests sent; network caches their
+	// results by URL.
+	requests int
+	network  map[string]networkResult
 }
 
 // pictureResult is a decoded picture or why it failed.
@@ -111,11 +117,12 @@ type pictureResult struct {
 }
 
 func newResources(fsys fs.FS) *resources {
-	return &resources{fsys: fsys, pictures: map[string]pictureResult{}}
+	return &resources{fsys: fsys, pictures: map[string]pictureResult{}, network: map[string]networkResult{}}
 }
 
-// fetch returns the bytes u names: a data: URL's payload (RFC 2397), or a
-// file of the resources below [rootPrefix].
+// fetch returns the bytes u names: a data: URL's payload (RFC 2397), an
+// http or https resource fetched through the client, or a file of the
+// resources below [rootPrefix].
 func (r *resources) fetch(ctx context.Context, u string) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -128,7 +135,7 @@ func (r *resources) fetch(ctx context.Context, u string) ([]byte, error) {
 		return nil, fmt.Errorf("parsing %s: %w", displayURL(u), err)
 	}
 	if p.Scheme != "" || p.Host != "" {
-		return nil, errAbsoluteURL
+		return r.fetchAbsolute(ctx, p)
 	}
 	if r.fsys == nil {
 		return nil, errNoResources
@@ -226,12 +233,16 @@ func (r *resources) picture(ctx context.Context, u string) (*layout.Picture, err
 // model the backend writes as DCTDecode is kept as its bytes; every other
 // picture is decoded to pixels.
 func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Picture, error) {
-	data, err := r.fetch(ctx, u)
+	f, err := r.fetchTyped(ctx, u)
 	if err != nil {
 		return nil, err
 	}
-	if isSVG(u, data) {
+	data := f.data
+	if isSVG(u, data) || f.mediaType == "image/svg+xml" {
 		return r.decodeSVG(ctx, u, data)
+	}
+	if name := unsupportedFormat(data, f.mediaType); name != "" {
+		return nil, fmt.Errorf("%w: %s", errFormatUnsupported, name)
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
@@ -254,7 +265,15 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 		return nil, errPixelBudget
 	}
 	pic := &layout.Picture{Width: float64(cfg.Width) * css.Pt, Height: float64(cfg.Height) * css.Pt}
-	if format == "jpeg" && dctModel(cfg.ColorModel) {
+	orient := 1
+	if format == "jpeg" {
+		orient = jpegOrientation(data)
+	}
+	if orient >= 5 {
+		// Orientations 5 to 8 turn the picture a quarter.
+		pic.Width, pic.Height = pic.Height, pic.Width
+	}
+	if format == "jpeg" && orient == 1 && dctModel(cfg.ColorModel) {
 		pic.Source = &compose.ImageSource{JPEG: data}
 		return pic, nil
 	}
@@ -262,7 +281,7 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 	if err != nil {
 		return nil, fmt.Errorf("decoding the %s image: %w", format, err)
 	}
-	pic.Source = &compose.ImageSource{Image: img}
+	pic.Source = &compose.ImageSource{Image: orientImage(img, orient)}
 	return pic, nil
 }
 

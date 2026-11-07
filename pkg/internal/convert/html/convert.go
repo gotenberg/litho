@@ -219,12 +219,13 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 // on top of their id attributes, for the header and footer templates,
 // which measure where their elements land.
 func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts, setup printSetup, ids map[*dom.Node]string) (*prepared, error) {
-	scan, err := scanDocument(ctx, doc)
+	scan, err := scanDocument(ctx, doc, documentBase(o.BaseURL))
 	if err != nil {
 		return nil, err
 	}
 	res := newResources(o.Resources)
 	res.svg.fonts = fonts
+	res.client = o.HTTPClient
 	c := &collector{res: res, base: scan.resourceBase, logger: o.Logger}
 	sheets := c.stylesheets(ctx, scan.sheets)
 
@@ -275,7 +276,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	}
 
 	b := &builder{
-		computed: computed, res: res, scan: scan,
+		computed: computed, res: res, scan: scan, media: media,
 		warned: map[string]bool{}, omitBackgrounds: o.OmitBackgrounds, ids: ids,
 	}
 	root, err := b.buildRoot(ctx, scan.root)
@@ -408,16 +409,25 @@ type scan struct {
 	// ids holds every id attribute and a[name] of the document.
 	ids map[string]bool
 	// resourceBase resolves resource references: the document's URL, or
-	// the relative <base href> resolved against it. linkBase resolves
-	// links, "" without a <base>.
+	// the <base href> resolved against it when that is relative or an http
+	// or https URL. linkBase resolves links, "" without a <base> in a
+	// document that is not on the network.
 	resourceBase, linkBase string
+	// docURL is the document's own URL: [Options.BaseURL] when it is an
+	// http or https URL, else [documentURL].
+	docURL string
 }
 
 // scanDocument walks doc once, counting its elements against
 // [MaxElements] and collecting the root, the metadata, the stylesheet
-// elements, the ids and the base URL.
-func scanDocument(ctx context.Context, doc *dom.Node) (*scan, error) {
-	s := &scan{ids: map[string]bool{}, resourceBase: documentURL}
+// elements, the ids and the base URL. docURL is the document's URL, see
+// [documentBase].
+func scanDocument(ctx context.Context, doc *dom.Node, docURL string) (*scan, error) {
+	s := &scan{ids: map[string]bool{}, resourceBase: docURL, docURL: docURL}
+	if docURL != documentURL {
+		// A document on the network resolves its links against its URL.
+		s.linkBase = docURL
+	}
 	seenBase := false
 	elements := 0
 	var walkErr error
@@ -511,16 +521,18 @@ func (s *scan) metaElement(n *dom.Node) {
 	}
 }
 
-// setBase records the document's base URL (HTML Standard, 4.2.3). A
-// relative one moves the resources' base inside the resources root; an
-// absolute one resolves links alone, since no absolute URL is fetched.
+// setBase records the document's base URL (HTML Standard, 4.2.3),
+// resolved against the document's URL. A relative one moves the
+// resources' base inside the resources root, and an http or https one
+// moves it to the network; any other absolute one resolves links alone,
+// since no other scheme is fetched.
 func (s *scan) setBase(href string) {
-	u := resolveRef(documentURL, href)
+	u := resolveRef(s.docURL, href)
 	if u == "" {
 		return
 	}
 	s.linkBase = u
-	if !isAbsolute(u) {
+	if !isAbsolute(u) || isNetworkURL(u) {
 		s.resourceBase = u
 	}
 }

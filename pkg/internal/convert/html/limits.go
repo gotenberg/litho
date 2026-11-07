@@ -66,8 +66,6 @@ const (
 	// CodeResourceLimit flags a resource left out by a cap on bytes, images
 	// or pixels.
 	CodeResourceLimit = "resource-limit"
-	// CodeUnsupportedImage flags an image format not drawn.
-	CodeUnsupportedImage = "unsupported-image"
 	// CodeUnsupportedElement flags an element whose content is not drawn:
 	// embedded documents and media.
 	CodeUnsupportedElement = "unsupported-element"
