@@ -2,6 +2,8 @@ package layout
 
 import (
 	"fmt"
+	"image"
+	"image/draw"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -63,6 +65,7 @@ func (p *painter) borderImage(b *box, st *css.Style, r compose.Rect, bd [4]float
 	g := &ditem{group: true, opacity: 1}
 	tiles := 0
 	for _, pc := range pieces {
+		pc.crop = p.cropSource(src.pic, pc.src)
 		for _, t := range pc.tiles() {
 			if tiles == maxBackgroundTiles {
 				p.e.warn(codeBackgroundTiles, fmt.Sprintf("a border image repeated more than %d times was cut short", maxBackgroundTiles), r.Y)
@@ -180,6 +183,9 @@ type ninePiece struct {
 	src, dst compose.Rect
 	rep      [2]css.ImageRepeat
 	sx, sy   float64
+	// crop is the part src of a raster image cut out as an image of its
+	// own, nil for a vector image, a gradient or a JPEG kept as it is.
+	crop *compose.ImageSource
 }
 
 // scaleOf returns w over s, 0 when either is zero.
@@ -331,8 +337,20 @@ func (p *painter) nineTile(src nineSource, pc ninePiece, t compose.Rect) *ditem 
 	// scaled: the image is cut after it is sized (CSS Backgrounds 3,
 	// 6.2), so a vector one keeps its own aspect ratio inside it.
 	natural := compose.Rect{Width: src.w, Height: src.h}
+	page := -1
+	if p.mono >= 0 {
+		page = p.mono
+	}
 	var inner compose.Fragment
 	switch {
+	case pc.crop != nil:
+		// The cut-out part fills the tile: no neighbouring pixel bleeds
+		// into it, as Blink draws each piece from its own sub-image.
+		f := &compose.Image{Rect: t, Source: pc.crop}
+		if clip == t {
+			return &ditem{frag: f, y0: t.Y, y1: t.Y + t.Height, page: page}
+		}
+		inner = f
 	case src.pic != nil && src.pic.Vector == nil:
 		inner = &compose.Image{Rect: img, Source: src.pic.Source}
 	case src.pic != nil:
@@ -347,15 +365,52 @@ func (p *painter) nineTile(src nineSource, pc ninePiece, t compose.Rect) *ditem 
 	if _, raster := inner.(*compose.Image); !raster {
 		f = &compose.Group{Opacity: 1, Transform: compose.Matrix{A: kx, D: ky, E: img.X, F: img.Y}, Content: []compose.Fragment{inner}}
 	}
-	page := -1
-	if p.mono >= 0 {
-		page = p.mono
-	}
 	return &ditem{
 		group: true, opacity: 1,
 		clip: &compose.Path{Ops: rectOps(clip), Fill: &compose.Fill{}},
 		kids: []*ditem{{frag: f, y0: clip.Y, y1: clip.Y + clip.Height, page: page}},
 	}
+}
+
+// cropKey identifies a part of a raster image cut out by [cropSource].
+type cropKey struct {
+	src  *compose.ImageSource
+	rect image.Rectangle
+}
+
+// cropSource returns the part r, in points, of the raster picture pic as
+// an image of its own, its edges rounded to whole image pixels; nil for a
+// vector picture, a JPEG kept as it is, or an empty part. The parts are
+// cut once per paint.
+func (p *painter) cropSource(pic *Picture, r compose.Rect) *compose.ImageSource {
+	if pic == nil || pic.Source == nil || pic.Source.Image == nil || !(pic.Width > 0) || !(pic.Height > 0) {
+		return nil
+	}
+	img := pic.Source.Image
+	bounds := img.Bounds()
+	kx, ky := float64(bounds.Dx())/pic.Width, float64(bounds.Dy())/pic.Height
+	rect := image.Rect(
+		bounds.Min.X+int(math.Round(r.X*kx)), bounds.Min.Y+int(math.Round(r.Y*ky)),
+		bounds.Min.X+int(math.Round((r.X+r.Width)*kx)), bounds.Min.Y+int(math.Round((r.Y+r.Height)*ky)),
+	).Intersect(bounds)
+	if rect.Empty() {
+		return nil
+	}
+	if rect == bounds {
+		return pic.Source
+	}
+	key := cropKey{pic.Source, rect}
+	if c, ok := p.crops[key]; ok {
+		return c
+	}
+	out := image.NewNRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))
+	draw.Draw(out, out.Bounds(), img, rect.Min, draw.Src)
+	c := &compose.ImageSource{Image: out}
+	if p.crops == nil {
+		p.crops = map[cropKey]*compose.ImageSource{}
+	}
+	p.crops[key] = c
+	return c
 }
 
 // intersect returns the overlap of a and b, false when they do not

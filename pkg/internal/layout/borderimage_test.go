@@ -168,3 +168,32 @@ func TestBorderImage_Gradient(t *testing.T) {
 		_BBBBBB_
 		________`)
 }
+
+func TestBorderImage_CropSource(t *testing.T) {
+	pic, _ := nineLoader()(context.Background(), "i.png")
+	p := &painter{}
+	tests := []struct {
+		name string
+		r    compose.Rect
+		want image.Rectangle
+		same bool
+	}{
+		{"corner", compose.Rect{Width: px(1), Height: px(1)}, image.Rect(0, 0, 1, 1), false},
+		{"middle rounded", compose.Rect{X: px(0.9), Y: px(1.1), Width: px(1.2), Height: px(0.8)}, image.Rect(0, 0, 1, 1), false},
+		{"whole", compose.Rect{Width: px(3), Height: px(3)}, image.Rect(0, 0, 3, 3), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := p.cropSource(pic, tt.r)
+			if c == nil || c.Image.Bounds() != tt.want || (c == pic.Source) != tt.same {
+				t.Fatalf("got %+v", c)
+			}
+		})
+	}
+	if c := p.cropSource(pic, compose.Rect{Width: px(1), Height: px(1)}); c != p.cropSource(pic, compose.Rect{Width: px(1), Height: px(1)}) {
+		t.Error("a part is cut once")
+	}
+	if got := p.cropSource(pic, compose.Rect{X: px(1), Width: px(1), Height: px(1)}).Image.At(0, 0); got != (color.NRGBA{R: 255, A: 255}) {
+		t.Errorf("top edge pixel = %v, want red", got)
+	}
+}

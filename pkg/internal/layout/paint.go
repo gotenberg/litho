@@ -84,6 +84,8 @@ type painter struct {
 	// outlines caches the parsed faces whose glyph outlines a
 	// background-clip: text clip draws.
 	outlines map[*compose.Face]*gofont.Face
+	// crops caches the parts of raster images border images cut out.
+	crops map[cropKey]*compose.ImageSource
 }
 
 // paint returns the display list of the box tree rooted at root.
