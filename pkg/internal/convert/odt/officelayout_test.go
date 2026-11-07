@@ -2,6 +2,8 @@ package odt
 
 import (
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -226,5 +228,62 @@ func TestConvert_FormControls(t *testing.T) {
 	})
 	if len(widths) != 2 || widths[0] != 0.5 || widths[1] != 1 {
 		t.Errorf("control border widths = %v, want [0.5 1]", widths)
+	}
+}
+
+// TestConvert_ShapeText draws the text a shape holds over its fill, in
+// the text area as draw:textarea-vertical-align places it: LibreOffice
+// prints "Mid" of a 3 cm high rectangle 1 cm below its paragraph with
+// its baseline 131.5 pt down the page, its fill from 85 pt.
+func TestConvert_ShapeText(t *testing.T) {
+	auto := `<style:style style:name="gm" style:family="graphic"><style:graphic-properties draw:fill="solid" draw:fill-color="#dddddd" draw:stroke="none" draw:textarea-vertical-align="middle" fo:padding="0.2cm" style:wrap="run-through" style:vertical-pos="from-top" style:vertical-rel="paragraph" style:horizontal-pos="from-left" style:horizontal-rel="paragraph"/></style:style>`
+	body := `<text:p>Xg<draw:rect draw:style-name="gm" text:anchor-type="paragraph" svg:x="1cm" svg:y="1cm" svg:width="4cm" svg:height="3cm"><text:p>Mid</text:p></draw:rect></text:p>`
+	res := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{})
+	var order []string
+	fillTop := -1.0
+	var walk func(fs []compose.Fragment, dy float64)
+	walk = func(fs []compose.Fragment, dy float64) {
+		for _, f := range fs {
+			switch v := f.(type) {
+			case *compose.Path:
+				if v.Fill != nil {
+					order = append(order, "fill")
+					fillTop = dy
+				}
+			case *compose.Text:
+				var sb strings.Builder
+				for _, g := range v.Glyphs {
+					sb.WriteString(g.Text)
+				}
+				order = append(order, sb.String())
+				if sb.String() == "Mid" && !near(v.Origin.Y+dy, 131.5, 1.5) {
+					t.Errorf("Mid's baseline at %.1f, want 131.5", v.Origin.Y+dy)
+				}
+			case *compose.Group:
+				walk(v.Content, dy+v.Transform.F)
+			}
+		}
+	}
+	walk(res.Pages[0].Content, 0)
+	if strings.Join(order, ",") != "Xg,fill,Mid" {
+		t.Errorf("paint order %v, want the fill under the shape's text", order)
+	}
+	if !near(fillTop, 85, 1) {
+		t.Errorf("fill from %.1f, want 85", fillTop)
+	}
+}
+
+// TestConvert_ContextualSpacingAutomatic checks that contextual spacing
+// compares the common styles of paragraphs whose automatic styles
+// differ, and reads LibreOffice's loext:contextual-spacing: the two
+// paragraphs sit a line apart, no margin between them.
+func TestConvert_ContextualSpacingAutomatic(t *testing.T) {
+	styles := `<style:style style:name="Data" style:family="paragraph"><style:paragraph-properties fo:margin-bottom="1cm" loext:contextual-spacing="true"/></style:style>`
+	auto := `<style:style style:name="P1" style:family="paragraph" style:parent-style-name="Data"><style:paragraph-properties fo:margin-left="1cm"/></style:style>` +
+		`<style:style style:name="P2" style:family="paragraph" style:parent-style-name="Data"/>`
+	res := convertDoc(t, doc{styles: styles, contentAuto: auto, body: `<text:p text:style-name="P1">a</text:p><text:p text:style-name="P2">b</text:p>`}.pack(t), office.Options{})
+	ls := lines(res.Pages[0])
+	if len(ls) != 2 || !near(ls[1].y-ls[0].y, 13.8, 0.3) {
+		t.Errorf("lines = %+v, want them 13.8 pt apart", ls)
 	}
 }

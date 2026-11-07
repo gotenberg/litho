@@ -150,6 +150,18 @@ type paraMeta struct {
 	join       bool
 }
 
+// commonStyle returns the common paragraph style of the style name: the
+// parent of an automatic style, which carries a paragraph's direct
+// formatting, else name. Writer's contextual spacing compares these
+// (ODF 1.3, Part 3, 16.2: an automatic style is the formatting of the
+// paragraph, not a style of its own).
+func (b *builder) commonStyle(name string) string {
+	if st := b.styles.Style(b.scope, odf.FamilyParagraph, name); st != nil && st.Auto && st.Parent != "" {
+		return st.Parent
+	}
+	return name
+}
+
 // spacing applies Writer's vertical spacing to the sibling blocks kids:
 // the space between two paragraphs is the bottom margin of the first plus
 // the top margin of the second, not the larger of them as CSS collapses
@@ -325,7 +337,7 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 	}
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "P", Lang: t.langTag()})
 	n.ID = b.paragraphID(el)
-	b.meta[n] = paraMeta{style: name, contextual: p.contextual, join: p.joinBorder}
+	b.meta[n] = paraMeta{style: b.commonStyle(name), contextual: p.contextual, join: p.joinBorder}
 	ws := &wsState{space: true}
 	var kids []*layout.Node
 	b.inline(el, t, &kids, ws, ctx.depth)

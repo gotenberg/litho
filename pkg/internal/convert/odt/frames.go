@@ -337,9 +337,9 @@ func (b *builder) blockFrame(c *odf.Element, ctx blockCtx) []*layout.Node {
 	}
 	g := b.geometry(c)
 	b.place(n, g, g.pageRelative() || g.hrel == "page")
-	if n.Style.Float == css.FloatNone && n.Style.Display != css.Block && n.Kind != layout.Replaced {
+	if n.Style.Float == css.FloatNone && n.Style.Display != css.Block && (n.Kind != layout.Replaced || n.Style.Position == css.Absolute) {
 		st := *n.Style
-		st.Display = css.Block
+		st.Display = blockified(st.Display)
 		n.Style = &st
 	}
 	return []*layout.Node{n}
@@ -353,11 +353,9 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 	n.Style = &st
 	if page || g.wrap == "run-through" {
 		st.Position = css.Absolute
-		if n.Kind != layout.Replaced {
-			// An absolutely positioned box is block-level (CSS 2.1, 9.7):
-			// the engine lays an inline-block one out in the line.
-			st.Display = css.Block
-		}
+		// An absolutely positioned box is block-level (CSS 2.1, 9.7): the
+		// engine lays an inline-level one out in the line.
+		st.Display = blockified(st.Display)
 		st.Left, st.Top = css.Pts(g.x), css.Pts(g.y)
 		switch {
 		case page && b.hf != nil:
@@ -402,7 +400,7 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 		b.floats[n] = g
 	}
 	if g.wrap == "none" {
-		st.Display = css.Block
+		st.Display = blockified(st.Display)
 		st.Float = css.FloatNone
 		st.Clear = css.ClearBoth
 		switch g.hpos {
@@ -493,6 +491,15 @@ func (b *builder) currentGeom() *pageGeom {
 	return b.pages.geom(mp, false, false)
 }
 
+// blockified returns the block-level display of a box (CSS Display 3,
+// 2.7): a flex container stays one.
+func blockified(d css.Display) css.Display {
+	if d == css.InlineFlex || d == css.Flex {
+		return css.Flex
+	}
+	return css.Block
+}
+
 // hasText reports inline content that draws a character other than white
 // space, frames left out.
 func hasText(kids []*layout.Node) bool {
@@ -564,9 +571,7 @@ func (b *builder) pinFloats(kids []*layout.Node, p paraState) {
 		k.Style = &st
 		st.Float = css.FloatNone
 		st.Position = css.Absolute
-		if k.Kind != layout.Replaced {
-			st.Display = css.Block
-		}
+		st.Display = blockified(st.Display)
 		for i := range st.Margin {
 			st.Margin[i] = css.Pts(0)
 		}
@@ -651,7 +656,7 @@ func (b *builder) drawing(c *odf.Element, depth int) *layout.Node {
 		b.warn("draw-group", "the shapes of a group are laid out side by side")
 		return n
 	case c.Name.Space == odf.NSDraw:
-		return b.shape(c, g)
+		return b.shape(c, g, depth)
 	}
 	return nil
 }
@@ -869,11 +874,76 @@ func xmlEscape(s string) string {
 // shape builds a drawing shape through [shapeSVG], or its bounding box
 // with a warning for one it does not draw; its text, when it has
 // paragraphs, is left out with a warning.
-func (b *builder) shape(c *odf.Element, g frameGeom) *layout.Node {
-	src := shapeSVG(c, g)
-	if c.Child(odf.NSText, "p") != nil {
-		b.warn("shape-text", "the text of a drawing shape is left out")
+func (b *builder) shape(c *odf.Element, g frameGeom, depth int) *layout.Node {
+	n := b.shapeBody(c, g)
+	if text := b.shapeText(c, g, depth); text != nil && n != nil {
+		return b.withText(n, text, g)
 	}
+	return n
+}
+
+// shapeText returns the text a drawing shape holds (ODF 1.3, Part 3,
+// 10.3: its paragraphs, headings and lists), nil when it holds none
+// that draws.
+func (b *builder) shapeText(c *odf.Element, g frameGeom, depth int) *layout.Node {
+	var kids []*layout.Node
+	ctx := blockCtx{depth: depth + 1}
+	for _, k := range c.Children {
+		if k.Name.Space == odf.NSText && (k.Name.Local == "p" || k.Name.Local == "h" || k.Name.Local == "list") {
+			kids = append(kids, b.block(k, &ctx)...)
+		}
+	}
+	if !hasText(kids) {
+		return nil
+	}
+	b.spacing(kids)
+	st := baseStyle()
+	st.Display = css.Block
+	return b.node(&layout.Node{Kind: layout.Element, Style: st, Children: kids})
+}
+
+// withText lays a shape's text over its drawing n: a box of the shape's
+// size, its padding the text area's insets (fo:padding), the drawing
+// behind at its corner and the text placed in the text area as
+// draw:textarea-vertical-align says (20.137), at the top when absent.
+func (b *builder) withText(n, text *layout.Node, g frameGeom) *layout.Node {
+	st := baseStyle()
+	st.Display = css.InlineBlock
+	st.Position = css.Relative
+	st.BoxSizing = css.BorderBox
+	st.Width, st.Height = css.Pts(math.Max(g.w, 1)), css.Pts(math.Max(g.h, 1))
+	var pad [4]float64
+	_, pad = foldBox(st.Border, pad, g.props)
+	for i := range pad {
+		st.Padding[i] = css.Pts(max(pad[i], 0))
+	}
+	area := baseStyle()
+	area.Display = css.Flex
+	area.FlexDirection = css.FlexColumn
+	area.Height = css.Dimension{Kind: css.Percent, Value: 1}
+	// Positioned, the text paints over the drawing before it (CSS 2.1,
+	// Appendix E).
+	area.Position = css.Relative
+	area.JustifyContent = css.BoxFlexStart
+	switch g.props.Get("draw:textarea-vertical-align") {
+	case "middle":
+		area.JustifyContent = css.BoxCenter
+	case "bottom":
+		area.JustifyContent = css.BoxFlexEnd
+	}
+	pic := *n.Style
+	pic.Position = css.Absolute
+	pic.Display = blockified(pic.Display)
+	pic.Left, pic.Top = css.Pts(0), css.Pts(0)
+	pic.Right, pic.Bottom = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
+	n.Style = &pic
+	inner := b.node(&layout.Node{Kind: layout.Element, Style: area, Children: []*layout.Node{text}})
+	return b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "Figure", Children: []*layout.Node{n, inner}})
+}
+
+// shapeBody builds the drawing of a shape without its text.
+func (b *builder) shapeBody(c *odf.Element, g frameGeom) *layout.Node {
+	src := shapeSVG(c, g)
 	if src == "" {
 		b.warn("shape-"+c.Name.Local, fmt.Sprintf("the shape %s is drawn as its empty box", c.Name.Local))
 		st := b.frameBox(g)

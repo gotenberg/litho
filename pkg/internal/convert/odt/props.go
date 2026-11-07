@@ -473,6 +473,10 @@ func foldPara(p paraState, layer odf.Props) paraState {
 	}
 	if v, ok := layer.Lookup("style:contextual-spacing"); ok {
 		p.contextual = v == "true"
+	} else if v, ok := layer.Lookup("loext:contextual-spacing"); ok {
+		// LibreOffice wrote the attribute in its extension namespace
+		// before ODF 1.3 named it.
+		p.contextual = v == "true"
 	}
 	return p
 }

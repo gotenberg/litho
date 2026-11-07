@@ -37,7 +37,7 @@
 //     floating beside the text or standing above it, cropped and mirrored;
 //     text boxes; the replacement pictures of objects; rectangles,
 //     ellipses, lines, polygons and paths, and the rectangle and ellipse
-//     custom shapes.
+//     custom shapes, with the text they hold.
 //   - Notes: footnotes at the bottom of their page under the page
 //     layout's separator, endnotes on a page after the text.
 //   - Fields show the text the document saved, page numbers and counts
@@ -53,9 +53,8 @@
 //
 // # What is not
 //
-// WMF, EMF and SVM pictures, form
-// controls' content, the text of drawing shapes, other custom shape
-// geometries, ruby annotations, line numbering, drop caps, tracked
-// change marks and comments are not drawn, each with a warning where the
-// document holds one.
+// WMF, EMF and SVM pictures, form controls' content, the tables of
+// drawing shapes, other custom shape geometries, ruby annotations, line
+// numbering, drop caps, tracked change marks and comments are not drawn,
+// each with a warning where the document holds one.
 package odt
