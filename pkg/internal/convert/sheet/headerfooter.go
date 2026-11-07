@@ -3,7 +3,6 @@ package sheet
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -94,8 +93,10 @@ func (b *builder) partNode(spans []Span, f hfFields, align css.TextAlign) *layou
 		rs.Display = css.Inline
 		rs.WhiteSpace = css.PreWrap
 		rs.LineHeight = st.LineHeight
-		n.Children = append(n.Children, &layout.Node{Kind: layout.Element, Style: rs,
-			Children: []*layout.Node{{Kind: layout.Text, Style: rs, Text: t}}})
+		n.Children = append(n.Children, &layout.Node{
+			Kind: layout.Element, Style: rs,
+			Children: []*layout.Node{{Kind: layout.Text, Style: rs, Text: t}},
+		})
 	}
 	if empty {
 		return nil
@@ -220,6 +221,3 @@ func artifacts(frags []compose.Fragment) []compose.Fragment {
 	}
 	return frags
 }
-
-// trimSpace is strings.TrimSpace, for the outline titles.
-var trimSpace = strings.TrimSpace

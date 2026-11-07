@@ -24,8 +24,6 @@ type pageBuilder struct {
 	// fills, borderPaths and gridPaths are the page's vector content in
 	// the coordinates of its cells, under and over the text.
 	fills, borderPaths, gridPaths []compose.Fragment
-	// regions are the page's region nodes.
-	regions []*layout.Node
 	// dataW and dataH are the size of the page's cells, headings
 	// included, in sheet points.
 	dataW, dataH float64
@@ -106,9 +104,7 @@ func (b *pageBuilder) build() ([]compose.Fragment, []compose.Link, *compose.Stru
 		}
 		return nil, nil, nil, fmt.Errorf("laying out a page of sheet %s: %w", quote(b.g.sh.Name), err)
 	}
-	for _, w := range res.Warnings {
-		b.warnings = append(b.warnings, w)
-	}
+	b.warnings = append(b.warnings, res.Warnings...)
 	var frags []compose.Fragment
 	frags = append(frags, b.fills...)
 	frags = append(frags, b.borderPaths...)
@@ -206,8 +202,10 @@ func (b *pageBuilder) region(rg *region) *layout.Node {
 	b.borderPaths = append(b.borderPaths, bs.paths()...)
 	// Fills and borders of a region stay in it.
 	if len(b.fills) > clipFills {
-		grp := &compose.Group{Clip: &compose.Path{Ops: rectOps(rg.x0, rg.y0, rg.w, rg.h), Fill: &compose.Fill{}},
-			Opacity: 1, Transform: compose.Identity, Content: append([]compose.Fragment(nil), b.fills[clipFills:]...)}
+		grp := &compose.Group{
+			Clip:    &compose.Path{Ops: rectOps(rg.x0, rg.y0, rg.w, rg.h), Fill: &compose.Fill{}},
+			Opacity: 1, Transform: compose.Identity, Content: append([]compose.Fragment(nil), b.fills[clipFills:]...),
+		}
 		b.fills = append(b.fills[:clipFills], grp)
 	}
 	if g.sh.Page.GridLines {

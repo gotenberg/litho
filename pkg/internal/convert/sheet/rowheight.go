@@ -85,7 +85,7 @@ func (b *builder) optimalHeights(g *grid) {
 				if w > 0 {
 					p := pb.paragraph(&d, d.font, lineH, css.AlignLeft)
 					if mh := b.measureBlock(p, w); mh > 0 {
-						h = mh
+						h = math.Round(mh/editLine(lineH)) * editLine(lineH)
 					}
 				}
 			}
@@ -101,4 +101,16 @@ func (b *builder) optimalHeights(g *grid) {
 			g.heights[ri] = min(need, maxSide)
 		}
 	}
+}
+
+// editLine returns the height of a wrapped line of text whose natural
+// line is h points: Calc's edit engine rounds it up to whole twips.
+//
+// # Corpus evidence
+//
+//   - litho: a flat ODS of wrapped Liberation Sans 10 point text (11.17
+//     points a line), converted by Gotenberg 9.0.0, sets its lines 11.2
+//     points apart.
+func editLine(h float64) float64 {
+	return math.Ceil(h*20-1e-6) / 20
 }

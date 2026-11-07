@@ -35,6 +35,16 @@ type builder struct {
 	warned   map[string]bool
 }
 
+// newBuilder returns the builder of one conversion.
+func newBuilder(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.Options) *builder {
+	b := &builder{
+		ctx: ctx, doc: doc, fonts: fonts, opts: opts, lang: doc.Meta.Lang,
+		formats: map[string]*numfmt.Format{}, warned: map[string]bool{},
+	}
+	b.m = newMeasurer(ctx, fonts, b.lang)
+	return b
+}
+
 // warn records a warning.
 func (b *builder) warn(code, msg string) {
 	if b.warned[code+"\x00"+msg] {
@@ -114,9 +124,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", office.ErrInvalidOptions, err)
 	}
-	b := &builder{ctx: ctx, doc: doc, fonts: fonts, opts: opts, lang: doc.Meta.Lang,
-		formats: map[string]*numfmt.Format{}, warned: map[string]bool{}}
-	b.m = newMeasurer(ctx, fonts, b.lang)
+	b := newBuilder(ctx, doc, fonts, opts)
 	limit := opts.MaxPages
 	if limit <= 0 {
 		limit = layout.DefaultMaxPages

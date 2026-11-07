@@ -97,14 +97,14 @@ func (g *grid) drawingCells(d *Drawing) (Range, bool) {
 	if rc.Width <= 0 && rc.Height <= 0 {
 		return Range{}, false
 	}
-	limit := maxRows - 1
-	if !d.Absolute {
-		limit = min(max(d.From.Row, 0)+maxDrawingRows, maxRows-1)
-		if d.To != nil {
-			limit = min(max(d.To.Row, 0)+1, maxRows-1)
-		}
-	} else {
+	var limit int
+	switch {
+	case d.Absolute:
 		limit = min(int(rc.Y+rc.Height)+1, maxRows-1)
+	case d.To != nil:
+		limit = min(max(d.To.Row, 0)+1, maxRows-1)
+	default:
+		limit = min(max(d.From.Row, 0)+maxDrawingRows, maxRows-1)
 	}
 	r := Range{FirstRow: g.rowAt(rc.Y, limit), FirstColumn: g.colAt(rc.X)}
 	r.LastRow = g.rowAt(rc.Y+rc.Height-1e-6, limit)

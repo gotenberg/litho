@@ -45,8 +45,10 @@ func resolveFont(f, def Font) font {
 	if zeroFont(f) {
 		f = def
 	}
-	out := font{families: f.Families, size: f.Size, bold: f.Bold, italic: f.Italic, under: f.Underline,
-		strike: f.Strike, color: f.Color, script: f.Script}
+	out := font{
+		families: f.Families, size: f.Size, bold: f.Bold, italic: f.Italic, under: f.Underline,
+		strike: f.Strike, color: f.Color, script: f.Script,
+	}
 	if len(out.families) == 0 {
 		out.families = def.Families
 	}

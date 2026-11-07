@@ -124,7 +124,7 @@ func (b *pageBuilder) display(u *unit) (display, bool) {
 			d.font.color = d.res.Color
 		}
 	}
-	d.wrap = (st.Align.Wrap || st.Align.Horizontal == HJustify || st.Align.Horizontal == HDistributed) && !(d.value && c.Value.Kind == Number)
+	d.wrap = (st.Align.Wrap || st.Align.Horizontal == HJustify || st.Align.Horizontal == HDistributed) && (!d.value || c.Value.Kind != Number)
 	d.shrink = st.Align.Shrink && !d.wrap && st.Align.Horizontal != HFill
 	if st.Align.Stacked {
 		// Stacked text sets one character a line, centred (ODF
@@ -299,12 +299,11 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		avail = u.w - left - right
 	}
 	f := d.font
-	scale := 1.0
 	if d.shrink && d.textW > avail && d.textW > 0 && avail > 0 {
 		// Shrink to fit: the size times the available width over the
 		// text's, then 10% less at a time while it overflows, at most
 		// seven times (ScOutputData, SC_SHRINKAGAIN_MAX).
-		scale = avail / d.textW
+		scale := avail / d.textW
 		for i := 0; i < 7 && d.textW*scale > avail; i++ {
 			scale *= 0.9
 		}
@@ -342,10 +341,10 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		// Leave out the characters the clip hides wholly, as LibreOffice
 		// does.
 		start := boxX
-		switch align {
-		case css.AlignRight:
+		if align == css.AlignRight {
 			start = boxX + boxW - d.textW
-		case css.AlignCenter:
+		}
+		if align == css.AlignCenter {
 			start = boxX + (boxW-d.textW)/2
 		}
 		vis, at := b.m.visible(f, d.text, start, cx0, cx1)
@@ -418,6 +417,7 @@ func (b *pageBuilder) paragraph(d *display, f font, lineH float64, align css.Tex
 	if d.wrap {
 		st.WhiteSpace = css.PreWrap
 		st.OverflowWrap = css.BreakWord
+		st.LineHeight.Value = editLine(lineH) / math.Max(f.size, 0.01)
 	}
 	n := &layout.Node{Kind: layout.Element, Style: st}
 	if len(d.runs) == 0 {
@@ -430,8 +430,10 @@ func (b *pageBuilder) paragraph(d *display, f font, lineH float64, align css.Tex
 		rs.Display = css.Inline
 		rs.WhiteSpace = st.WhiteSpace
 		rs.LineHeight = st.LineHeight
-		n.Children = append(n.Children, &layout.Node{Kind: layout.Element, Style: rs,
-			Children: []*layout.Node{{Kind: layout.Text, Style: rs, Text: r.Text}}})
+		n.Children = append(n.Children, &layout.Node{
+			Kind: layout.Element, Style: rs,
+			Children: []*layout.Node{{Kind: layout.Text, Style: rs, Text: r.Text}},
+		})
 	}
 	return n
 }

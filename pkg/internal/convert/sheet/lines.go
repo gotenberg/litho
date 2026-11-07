@@ -139,7 +139,7 @@ func (b *pageBuilder) nextCol(c int) int {
 
 // paths returns the border lines, in edge order.
 func (bs *borders) paths() []compose.Fragment {
-	var out []compose.Fragment
+	out := make([]compose.Fragment, 0, len(bs.order))
 	for _, k := range bs.order {
 		e := bs.edges[k]
 		out = append(out, linePaths(e.b, e.x1, e.y1, e.x2, e.y2, true)...)

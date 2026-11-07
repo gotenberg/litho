@@ -52,8 +52,10 @@ type grid struct {
 
 // newGrid indexes the sheet sh of doc.
 func newGrid(doc *Document, sh *Sheet) *grid {
-	g := &grid{sh: sh, doc: doc, defW: sh.DefaultColumnWidth, defH: sh.DefaultRowHeight,
-		rows: map[int]*Row{}, heights: map[int]float64{}, merges: map[[2]int]Range{}, covered: map[[2]int][2]int{}}
+	g := &grid{
+		sh: sh, doc: doc, defW: sh.DefaultColumnWidth, defH: sh.DefaultRowHeight,
+		rows: map[int]*Row{}, heights: map[int]float64{}, merges: map[[2]int]Range{}, covered: map[[2]int][2]int{},
+	}
 	if !(g.defW > 0 && g.defW <= maxSide) {
 		g.defW = defaultColumnWidth
 	}
