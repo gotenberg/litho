@@ -207,7 +207,7 @@ func TestFontFace_Collected(t *testing.T) {
 	if f.Family != "Open Sans" || f.WeightMin != 300 || f.WeightMax != 700 || f.Style != FontItalic {
 		t.Errorf("face = %+v", f)
 	}
-	want := []FontSource{{Local: "Open Sans Regular"}, {URL: "https://e.com/css/fonts/os.woff2", Format: "woff2"}, {URL: "https://e.com/css/fonts/os.ttf", Format: "truetype"}}
+	want := []FontSource{{Local: "Open Sans Regular"}, {URL: "https://e.com/css/fonts/os.woff2", Format: "woff2", Formats: []string{"woff2"}}, {URL: "https://e.com/css/fonts/os.ttf", Format: "truetype", Formats: []string{"truetype"}}}
 	if fmt.Sprint(f.Sources) != fmt.Sprint(want) {
 		t.Errorf("sources = %+v", f.Sources)
 	}
