@@ -756,6 +756,36 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 	}
 	var prev *box
 	var prevSnap snapshot
+	// placed are the in-flow children laid out so far that a break between
+	// boxes looks at, prev last.
+	var placed []*box
+	// chainFromTop reports that the run of siblings ending at prev, each
+	// avoiding a break after the one before, starts prev's page: its first
+	// box follows a sibling ending on an earlier page, or nothing but its
+	// own margin lies above it on the page. Moving prev
+	// to the next page would only break the run higher, so the break stays
+	// where it falls, as Writer ignores a keep-with-next chain that fills
+	// its page.
+	chainFromTop := func() bool {
+		i := len(placed) - 1
+		p := e.pageOf(prev.y)
+		for i > 0 && avoidsBetween(placed[i-1], placed[i]) && e.pageOf(placed[i-1].y) == p {
+			i--
+		}
+		if i == len(placed)-1 {
+			return false
+		}
+		if e.atPageTop(placed[i].y) {
+			return true
+		}
+		if i == 0 {
+			// Only the first box's own margin lies above it on the page.
+			first := placed[0]
+			return first.y-e.pageTop(p) <= max(first.m[css.Top], 0)+eps
+		}
+		last := placed[i-1]
+		return e.pageOf(last.y+last.borderH()-1e-3) < p
+	}
 	// filled reports an in-flow child with a border box before the one
 	// being laid out.
 	filled := false
@@ -813,7 +843,7 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		if e.paginating() && mode == breakNone {
 			switch {
 			case prev != nil && avoidsBetween(prev, k) && avoidsInside(k) && e.straddles(k) && !e.atPageTop(prev.y) &&
-				prev.borderH()+k.borderH() <= e.areaH(e.pageOf(prev.y)):
+				prev.borderH()+k.borderH() <= e.areaH(e.pageOf(prev.y)) && !chainFromTop():
 				// k may break neither inside nor before: the break moves
 				// before prev, which goes to the next page with it (CSS
 				// Fragmentation 3, 4.4, rule 1 before rule 2).
@@ -831,7 +861,7 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 					cursor = e.layoutBlock(k, cbFor(e.pageOf(k.y)+1), bc, restore(snap), mc, breakPush)
 				}
 			case prev != nil && avoidsBetween(prev, k) && e.pageOf(prev.y+prev.borderH()-1e-3) < e.pageOf(firstContent(k)) &&
-				!e.atPageTop(prev.y) && prev.borderH()+k.borderH() <= e.areaH(e.pageOf(prev.y)):
+				!e.atPageTop(prev.y) && prev.borderH()+k.borderH() <= e.areaH(e.pageOf(prev.y)) && !chainFromTop():
 				if e.relayout(k.y) {
 					cursor = e.layoutBlock(prev, cbFor(e.pageOf(prev.y)+1), bc, restore(prevSnap), mc, breakPush)
 					cursor = e.layoutBlock(k, cbFor(e.pageOf(cursor)), bc, cursor, mc, breakNone)
@@ -852,6 +882,7 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 			// An anonymous block of collapsed white space alone is no
 			// sibling a break between boxes looks at.
 			prev, prevSnap = k, snap
+			placed = append(placed, k)
 		}
 		filled = filled || k.borderH() > 0
 	}
