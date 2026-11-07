@@ -506,19 +506,28 @@ func synthesis(req request, fc *Face, size float64) (stroke, skew float64) {
 	if fc == nil {
 		return 0, 0
 	}
+	if fc.doc != nil {
+		return fc.doc.synthesis(req, size)
+	}
 	if req.weight > fc.weight+syntheticBoldDelta {
-		ratio := fakeBoldSmallRatio
-		switch {
-		case size >= fakeBoldLargeSize:
-			ratio = fakeBoldLargeRatio
-		case size > fakeBoldSmallSize:
-			t := (size - fakeBoldSmallSize) / (fakeBoldLargeSize - fakeBoldSmallSize)
-			ratio = fakeBoldSmallRatio + t*(fakeBoldLargeRatio-fakeBoldSmallRatio)
-		}
-		stroke = size * ratio
+		stroke = fakeBoldStroke(size)
 	}
 	if req.slant != slantNormal && fc.slant == slantNormal {
 		skew = syntheticItalicSkew
 	}
 	return stroke, skew
+}
+
+// fakeBoldStroke returns the width of the line Skia strokes a synthetic
+// bold outline with at size points.
+func fakeBoldStroke(size float64) float64 {
+	ratio := fakeBoldSmallRatio
+	switch {
+	case size >= fakeBoldLargeSize:
+		ratio = fakeBoldLargeRatio
+	case size > fakeBoldSmallSize:
+		t := (size - fakeBoldSmallSize) / (fakeBoldLargeSize - fakeBoldSmallSize)
+		ratio = fakeBoldSmallRatio + t*(fakeBoldLargeRatio-fakeBoldSmallRatio)
+	}
+	return size * ratio
 }

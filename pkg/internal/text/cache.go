@@ -12,6 +12,12 @@ import (
 // file. A face that failed to load fails again without reading its file, so
 // every call agrees. The file is read without holding f.mu.
 func (f *Fonts) loadFont(fc *Face) (*font.Font, error) {
+	if fc.pinned != nil {
+		return fc.pinned, nil
+	}
+	if f.base != nil {
+		return f.base.loadFont(fc)
+	}
 	f.mu.Lock()
 	if fc.loadErr != nil {
 		err := fc.loadErr

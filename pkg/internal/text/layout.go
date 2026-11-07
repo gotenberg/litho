@@ -267,11 +267,14 @@ type styleState struct {
 	families []string
 	generic  generic
 	region   string
-	primary  *Face
-	size     fixed.Int26_6
-	letter   fixed.Int26_6
-	word     fixed.Int26_6
-	lang     language.Language
+	// refs is the family list with the document faces of [Fonts.WithFaces]
+	// in place, nil when the style names no document family.
+	refs    []familyRef
+	primary *Face
+	size    fixed.Int26_6
+	letter  fixed.Int26_6
+	word    fixed.Int26_6
+	lang    language.Language
 }
 
 // resolveKey identifies one per-character face resolution.
@@ -324,9 +327,13 @@ func newLayoutState(f *Fonts, runs []Run) (*layoutState, error) {
 		}
 		key := matchKey{families: strings.Join(r.Style.Families, "\x00"), req: s.req, lang: r.Style.Lang}
 		if prev, ok := matched[key]; ok {
-			s.families, s.generic, s.region, s.primary = prev.families, prev.generic, prev.region, prev.primary
+			s.families, s.generic, s.region, s.primary, s.refs = prev.families, prev.generic, prev.region, prev.primary, prev.refs
 		} else {
 			s.families = requestedFamilies(r.Style)
+			if s.refs = f.familyRefs(r.Style); s.refs != nil {
+				s.families = indexKeys(s.refs)
+				selectRefs(s.refs, s.req)
+			}
 			s.generic = firstGeneric(r.Style)
 			s.region = cjkRegion(r.Style.Lang)
 			primary, err := st.usablePrimary(&s, f.Match(r.Style))
@@ -407,6 +414,12 @@ func (st *layoutState) resolve(style int, script language.Script, r rune) *Face 
 		return fc
 	}
 	s := &st.styles[style]
+	if s.refs != nil {
+		if fc := st.resolveRefs(s, r); fc != nil {
+			st.cache[key] = fc
+			return fc
+		}
+	}
 	fc := s.primary
 	if !st.covers(fc, r) {
 		if sc := language.LookupScript(r); sc != language.Common && sc != language.Inherited && sc != language.Unknown {

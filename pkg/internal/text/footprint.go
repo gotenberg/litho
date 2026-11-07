@@ -371,6 +371,7 @@ func readFootprint(ld *ot.Loader, records []truetype.TableRecord) (*Face, error)
 const (
 	nameFamily            tables.NameID = 1
 	nameSubfamily         tables.NameID = 2
+	nameFull              tables.NameID = 4
 	namePostScript        tables.NameID = 6
 	nameTypographicFamily tables.NameID = 16
 )
@@ -390,6 +391,7 @@ func (fc *Face) setNames(names tables.Name) {
 		}
 	}
 	fc.postScript = names.Name(namePostScript)
+	fc.fullName = names.Name(nameFull)
 }
 
 // OS/2 fsSelection bits (ISO/IEC 14496-22, OS/2 table, fsSelection).

@@ -97,6 +97,13 @@ type Fonts struct {
 	faces    []*Face
 	byFamily map[string][]*Face
 
+	// base is the index an overlay [Fonts.WithFaces] returned shares, nil
+	// for an index of its own; set holds the overlay's document faces.
+	// The cache fields below are unused on an overlay: its faces load
+	// through base.
+	base *Fonts
+	set  *FaceSet
+
 	// maxLoaded and maxLoadedBytes are [maxLoadedFaces] and
 	// [maxLoadedFaceBytes]; tests lower them.
 	maxLoaded      int
@@ -126,6 +133,9 @@ type Face struct {
 
 	family     string
 	postScript string
+	// fullName is the full font name (name ID 4), which a CSS local()
+	// source names.
+	fullName string
 	// keys are the [familyKey] forms of the typographic family and the
 	// family the name table records.
 	keys   []string
@@ -151,6 +161,12 @@ type Face struct {
 	once     sync.Once
 	composed *compose.Face
 	err      error
+
+	// pinned is the parsed font of a document face, loaded once by
+	// [LoadFace] or [Fonts.LocalFace] and never evicted; doc holds its
+	// @font-face descriptors. Both are nil for an indexed face.
+	pinned *font.Font
+	doc    *FaceDescriptor
 }
 
 // Metrics are the vertical metrics of a face at a size, in points.
@@ -341,6 +357,9 @@ func (f *Fonts) Len() int {
 func (f *Fonts) Match(style Style) *Face {
 	if len(f.faces) == 0 {
 		return nil
+	}
+	if refs := f.familyRefs(style); refs != nil {
+		return f.matchRefs(style, refs)
 	}
 	req := requestOf(style)
 	for _, key := range matchFamilies(style) {
