@@ -119,7 +119,7 @@ func TestTable_HeightWithoutRowGroups(t *testing.T) {
 }
 
 func TestTable_FlexItems(t *testing.T) {
-	full := func(s *css.Style) { s.Width = pct(100) }
+	full := func(s *css.Style) { s.Width = pct(1) }
 	// Fixed layout tables of 100% width share a row container equally:
 	// their max-content width is as wide as a table gets, so the items
 	// shrink alike from it.
