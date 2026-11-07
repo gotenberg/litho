@@ -179,11 +179,8 @@ func TestChartFromDocument_NumberFormats(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &chartReader{numbers: map[string]*Element{}}
-	for _, el := range kids(Section(root, "automatic-styles")) {
-		r.numbers[el.A(NSStyle, "name")] = el
-	}
-	tests := map[string]string{"M": `"$"0;"-""$"0`, "E": "0.00E+000", "D": `yyyy"-"mm"-"d`, "G": "", "missing": ""}
+	r := &chartReader{formats: DataStylesOf(root, nil)}
+	tests := map[string]string{"M": `[$$]0;\-[$$]0`, "E": "0.00E+000", "D": `yyyy\-mm\-d`, "G": "", "missing": ""}
 	for name, want := range tests {
 		if got := r.numberFormat(name); got != want {
 			t.Errorf("numberFormat(%s) = %q, want %q", name, got, want)

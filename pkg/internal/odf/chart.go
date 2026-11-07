@@ -81,17 +81,12 @@ func ChartFromDocument(content, styles *Element) (*chart.Chart, error) {
 	if ch == nil {
 		return nil, fmt.Errorf("%w: the object holds no chart:chart", office.ErrMalformed)
 	}
-	r := &chartReader{styles: map[string]*Element{}, numbers: map[string]*Element{}, c: &chart.Chart{}}
+	r := &chartReader{styles: map[string]*Element{}, formats: DataStylesOf(content, styles), c: &chart.Chart{}}
 	for _, doc := range []*Element{styles, content} {
 		for _, sec := range []string{"styles", "automatic-styles"} {
 			for _, el := range kids(Section(doc, sec)) {
-				switch {
-				case el.Is(NSStyle, "style"):
-					if el.A(NSStyle, "family") == "chart" {
-						r.styles[el.A(NSStyle, "name")] = el
-					}
-				case el.Name.Space == NSNumber && strings.HasSuffix(el.Name.Local, "-style"):
-					r.numbers[el.A(NSStyle, "name")] = el
+				if el.Is(NSStyle, "style") && el.A(NSStyle, "family") == "chart" {
+					r.styles[el.A(NSStyle, "name")] = el
 				}
 			}
 		}
@@ -102,9 +97,11 @@ func ChartFromDocument(content, styles *Element) (*chart.Chart, error) {
 
 // chartReader holds the state of one chart's reading.
 type chartReader struct {
-	c       *chart.Chart
-	styles  map[string]*Element
-	numbers map[string]*Element
+	c      *chart.Chart
+	styles map[string]*Element
+	// formats indexes the chart document's data styles, which name the
+	// formats of its axes and labels.
+	formats *DataStyles
 	table   *localTable
 	warned  map[string]bool
 	// textDefault is the chart's own text format, which every text

@@ -37,6 +37,19 @@ type DataStyles struct {
 
 // NewDataStyles indexes the data styles of p.
 func NewDataStyles(p *Package) *DataStyles {
+	if p.Flat {
+		d := DataStylesOf(nil, p.Styles)
+		d.auto[ScopeContent] = d.auto[ScopeStyles]
+		return d
+	}
+	return DataStylesOf(p.Content, p.Styles)
+}
+
+// DataStylesOf indexes the data styles of a document given as its parsed
+// content and styles documents, either nil for none: the chart document
+// a spreadsheet embeds, whose data styles name the formats of its axes
+// and labels, or a flat document's one tree passed as styles.
+func DataStylesOf(content, styles *Element) *DataStyles {
 	d := &DataStyles{common: map[string]*Element{}}
 	for i := range d.auto {
 		d.auto[i] = map[string]*Element{}
@@ -44,19 +57,13 @@ func NewDataStyles(p *Package) *DataStyles {
 	parts := []struct {
 		el    *Element
 		scope Scope
-	}{{p.Styles, ScopeStyles}, {p.Content, ScopeContent}}
-	if p.Flat {
-		parts = parts[:1]
-	}
+	}{{styles, ScopeStyles}, {content, ScopeContent}}
 	for _, part := range parts {
 		if part.el == nil {
 			continue
 		}
 		d.add(Section(part.el, "styles"), d.common)
 		d.add(Section(part.el, "automatic-styles"), d.auto[part.scope])
-	}
-	if p.Flat {
-		d.auto[ScopeContent] = d.auto[ScopeStyles]
 	}
 	return d
 }

@@ -248,161 +248,16 @@ func (t *localTable) categories() chart.Data {
 	return d
 }
 
-// maxStyleParts caps the parts of a number style translated. Anti-DoS
-// guard, not spec-mandated: a date style has a dozen parts.
-const maxStyleParts = 64
-
-// numberFormat translates the data style name (ODF 1.3 Part 3, 16.29) into
-// the SpreadsheetML number format code the chart model carries: digits
-// with decimals and grouping, scientific, percentage, currency, literal
-// text, dates and times, and a negative section from a style:map. ""
-// stands for General.
+// numberFormat translates the data style name (ODF 1.3 Part 3, 16.29)
+// into the SpreadsheetML number format code the chart model carries,
+// through the document's data styles; "" stands for General, as the
+// chart model reads it, and for a name that resolves to no style.
 func (r *chartReader) numberFormat(name string) string {
-	return r.formatCode(name, 0)
-}
-
-// formatCode translates one data style, following its maps depth deep.
-func (r *chartReader) formatCode(name string, depth int) string {
-	st := r.numbers[name]
-	if st == nil || depth > 2 {
+	code := r.formats.Code(ScopeContent, name)
+	if code == "General" {
 		return ""
 	}
-	if parts := elementKids(st); len(parts) == 1 && parts[0].Is(NSNumber, "number") && st.Name.Local == "number-style" {
-		if _, ok := parts[0].Lookup(NSNumber, "decimal-places"); !ok {
-			// A lone number without decimal places is LibreOffice's
-			// standard format, General.
-			return ""
-		}
-	}
-	var b strings.Builder
-	for i, part := range st.Children {
-		if i >= maxStyleParts {
-			break
-		}
-		if part.IsText() {
-			continue
-		}
-		switch part.Name.Local {
-		case "number":
-			b.WriteString(digits(part))
-		case "scientific-number":
-			b.WriteString(digits(part))
-			exp := 2
-			if v, err := strconv.Atoi(part.A(NSNumber, "min-exponent-digits")); err == nil && v > 0 && v < 10 {
-				exp = v
-			}
-			b.WriteString("E+" + strings.Repeat("0", exp))
-		case "fraction":
-			b.WriteString("# ?/?")
-		case "text":
-			if t := part.TextContent(); t == "%" && st.Name.Local == "percentage-style" {
-				b.WriteString("%")
-			} else if t != "" {
-				b.WriteString(`"` + strings.ReplaceAll(t, `"`, ``) + `"`)
-			}
-		case "currency-symbol":
-			if t := part.TextContent(); t != "" {
-				b.WriteString(`"` + strings.ReplaceAll(t, `"`, ``) + `"`)
-			}
-		case "year":
-			b.WriteString(pick(part, "yyyy", "yy"))
-		case "month":
-			switch {
-			case part.A(NSNumber, "textual") == "true":
-				b.WriteString(pick(part, "mmmm", "mmm"))
-			default:
-				b.WriteString(pick(part, "mm", "m"))
-			}
-		case "day":
-			b.WriteString(pick(part, "dd", "d"))
-		case "day-of-week":
-			b.WriteString(pick(part, "dddd", "ddd"))
-		case "hours":
-			b.WriteString(pick(part, "hh", "h"))
-		case "minutes":
-			b.WriteString(pick(part, "mm", "m"))
-		case "seconds":
-			b.WriteString(pick(part, "ss", "s"))
-		case "am-pm":
-			b.WriteString("AM/PM")
-		}
-	}
-	code := b.String()
-	if st.Name.Local == "percentage-style" && !strings.Contains(code, "%") {
-		code += "%"
-	}
-	for _, m := range st.All(NSStyle, "map") {
-		cond := strings.ReplaceAll(m.A(NSStyle, "condition"), " ", "")
-		other := r.formatCode(m.A(NSStyle, "apply-style-name"), depth+1)
-		if other == "" {
-			continue
-		}
-		if strings.HasPrefix(cond, "value()>=0") || strings.HasPrefix(cond, "value()>0") {
-			return other + ";" + code
-		}
-	}
 	return code
-}
-
-// pick returns long for number:style="long", else short.
-func pick(e *Element, long, short string) string {
-	if e.A(NSNumber, "style") == "long" {
-		return long
-	}
-	return short
-}
-
-// digits translates a number:number element's digit pattern.
-func digits(e *Element) string {
-	minInt := 1
-	if v, err := strconv.Atoi(e.A(NSNumber, "min-integer-digits")); err == nil && v >= 0 && v < 20 {
-		minInt = v
-	}
-	dec := 0
-	if v, err := strconv.Atoi(e.A(NSNumber, "decimal-places")); err == nil && v >= 0 && v < 20 {
-		dec = v
-	}
-	if _, ok := e.Lookup(NSNumber, "decimal-places"); !ok {
-		// No decimal places given: as many as the value needs.
-		return intPartOf(e, minInt) + ".##########"
-	}
-	minDec := dec
-	for _, ns := range []string{NSNumber, NSLOExt} {
-		if v, err := strconv.Atoi(e.A(ns, "min-decimal-places")); err == nil && v >= 0 && v <= dec {
-			minDec = v
-		}
-	}
-	intPart := intPartOf(e, minInt)
-	if dec == 0 {
-		return intPart
-	}
-	return intPart + "." + strings.Repeat("0", minDec) + strings.Repeat("#", dec-minDec)
-}
-
-// intPartOf returns the integer digit pattern of a number:number element.
-func intPartOf(e *Element, minInt int) string {
-	intPart := strings.Repeat("0", minInt)
-	if intPart == "" {
-		intPart = "#"
-	}
-	if e.A(NSNumber, "grouping") == "true" {
-		intPart = "#,##" + intPart
-		if minInt == 0 {
-			intPart = "#,###"
-		}
-	}
-	return intPart
-}
-
-// elementKids returns e's child elements, its text nodes left out.
-func elementKids(e *Element) []*Element {
-	var out []*Element
-	for _, c := range kids(e) {
-		if !c.IsText() {
-			out = append(out, c)
-		}
-	}
-	return out
 }
 
 // rangeName returns the name LibreOffice gives a series of the values
