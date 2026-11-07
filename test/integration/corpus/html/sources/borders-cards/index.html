@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cards</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; color: #1d3557; margin: 0; }
+h1 { font-size: 40px; margin: 0 0 16px; background: linear-gradient(90deg, #e63946, #457b9d); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.grid::after { content: ""; display: block; clear: both; }
+.card { float: left; width: 280px; height: 150px; margin: 0 18px 18px 0; padding: 14px; box-sizing: border-box; }
+.card h2 { font-size: 22px; margin: 0 0 8px; }
+.gradient { border: 12px solid; border-image: linear-gradient(135deg, #e63946, #f4a261 50%, #2a9d8f) 1; }
+.frame { border: 20px solid #ccc; border-image: url(frame.png) 10 round; background: #f1faee; background-clip: padding-box; }
+.frame-stretch { border: 16px solid #ccc; border-image: url(frame.png) 10 fill / 16px stretch; }
+.frame-space { border: 20px solid #ccc; border-image: url(frame.png) 10 / 20px / 6px space; margin-left: 6px; }
+.inset { background: #a8dadc; box-shadow: inset 6px 6px 0 #457b9d, inset -6px -6px 0 #f1faee; }
+.inset-blur { background: #fff; border: 2px solid #1d3557; box-shadow: inset 0 0 12px 2px #e63946; }
+.mixed { background: #264653; color: #fff; border-radius: 12px; box-shadow: 0 6px 0 #e9c46a, inset 0 -10px 0 #2a9d8f; }
+.clip h2 { background: repeating-linear-gradient(45deg, #e63946 0 6px, #1d3557 6px 12px); -webkit-background-clip: text; background-clip: text; color: transparent; font-size: 30px; }
+.outset { border: 10px solid transparent; border-image: linear-gradient(#2a9d8f, #264653) 30% / 10px / 4px; }
+</style>
+</head>
+<body>
+<h1>Border images and shadows</h1>
+<div class="grid">
+  <div class="card gradient"><h2>Gradient border</h2>A linear gradient sliced at one pixel draws the border.</div>
+  <div class="card frame"><h2>Sliced frame</h2>A PNG frame cut in nine, its edges rounded to whole tiles.</div>
+  <div class="card frame-stretch"><h2>Stretched, filled</h2>The frame stretched, its middle kept.</div>
+  <div class="card frame-space"><h2>Spaced</h2>Edge tiles spaced evenly, the image reaching past the box.</div>
+  <div class="card inset"><h2>Inset shadows</h2>Two hard inset shadows, light and dark.</div>
+  <div class="card inset-blur"><h2>Blurred inset</h2>A spread and blurred inset shadow.</div>
+  <div class="card mixed"><h2>Inset and outset</h2>A rounded card with both kinds.</div>
+  <div class="card clip"><h2>Clipped text</h2>A striped background clipped to the heading's glyphs.</div>
+  <div class="card outset"><h2>Outset</h2>A gradient border image pushed out by an outset.</div>
+</div>
+</body>
+</html>
