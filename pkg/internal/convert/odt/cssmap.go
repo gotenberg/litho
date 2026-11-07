@@ -193,6 +193,38 @@ func (b *builder) lineRatio(t textState) float64 {
 	return fallback
 }
 
+// lineRule sets the line spacing of a paragraph block st from the
+// paragraph's line spacing p, its text properties being t (ODF 1.3, Part
+// 3, 20.315 fo:line-height, 20.317 style:line-height-at-least and 20.318
+// style:line-spacing), with Writer's rules (see [css.LineRule]): a
+// percentage multiplies the line's natural height, the room added below
+// the glyphs; a length makes every line that tall, the baseline at four
+// fifths; at least is a minimum over single spacing, the room above the
+// glyphs; a leading adds its room below each line and above the first.
+func (b *builder) lineRule(st *css.Style, p paraState, t textState) {
+	switch p.line { //nolint:exhaustive // lineNormal keeps the initial line-height
+	case lineProportional:
+		st.LineRule = css.LineRuleMultiple
+		st.LineHeight = css.Dimension{Kind: css.Number, Value: p.lineVal}
+	case lineFixed:
+		st.LineRule = css.LineRuleExact
+		st.LineHeight = css.Pts(p.lineVal)
+	case lineAtLeast:
+		st.LineRule = css.LineRuleMultiple
+		st.LineHeight = css.Dimension{Kind: css.Number, Value: 1}
+		st.MinLineHeight = p.lineVal
+	case lineSpacing:
+		// Writer adds the leading below the glyphs of each line, and once
+		// more above the paragraph's first line (measured: two lines of
+		// 12pt Liberation Serif with a 0.5 cm leading take 2 x 28 pt plus
+		// 14.2 pt).
+		lead := max(p.lineVal, 0)
+		st.LineRule = css.LineRuleMultiple
+		st.LineHeight = css.Dimension{Kind: css.Number, Value: 1 + lead/math.Max(b.lineRatio(t)*t.size, 1)}
+		st.Padding[css.Top] = css.Pts(p.padding[css.Top] + lead)
+	}
+}
+
 // textAligns maps fo:text-align (ODF 1.3, Part 3, 20.216; XSL 1.0, 7.16.9)
 // to css.
 var textAligns = map[string]css.TextAlign{
@@ -244,7 +276,9 @@ func (b *builder) applyPara(st *css.Style, p paraState, t textState) {
 	}
 	st.BoxShadow = p.shadow
 	if hasBorder(st.Border) {
-		cloneDecorations(st)
+		// Writer draws a bordered paragraph whole on each page it spans:
+		// the bottom border before the cut, the top one after it.
+		st.BoxDecorationBreak = css.DecorationCloneAll
 	}
 	st.TabStops = b.tabStops(p.tabs, p.margin[css.Left])
 	if p.tabDist > 0 {

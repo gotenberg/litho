@@ -43,8 +43,9 @@ type builder struct {
 	pics  map[string]picResult
 	// pixels counts the decoded pictures' pixels against maxTotalPixels.
 	pixels int64
-	// pageOrigin is the first page area's top-left corner on its page,
-	// which page-anchored frames' offsets are moved by.
+	// pageOrigin is the first page body's top-left corner on its page,
+	// which the offsets of a header's or footer's page-relative frames
+	// are moved by.
 	pageOrigin [2]float64
 	pages      *pageFlow
 	// hf is the header or footer being built, nil in the body: its page

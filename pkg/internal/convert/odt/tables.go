@@ -210,7 +210,9 @@ func (b *builder) cell(c *odf.Element, tb *tableBuild, header bool) *layout.Node
 		}
 	}
 	if hasBorder(st.Border) {
-		cloneDecorations(st)
+		// Writer closes a cell's border at a page cut and opens it again
+		// on the next page.
+		st.BoxDecorationBreak = css.DecorationCloneAll
 	}
 	st.VerticalAlign = css.VerticalAlign{Kind: css.AlignTop}
 	if k, ok := cellAligns[props.Get("style:vertical-align")]; ok {

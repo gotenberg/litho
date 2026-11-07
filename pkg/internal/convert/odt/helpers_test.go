@@ -4,8 +4,10 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"hash/crc32"
 	"image"
 	"image/png"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -16,6 +18,8 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -77,11 +81,16 @@ func (d doc) pack(t testing.TB) []byte {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	add := func(name, body string, store bool) {
-		method := zip.Deflate
+		var w io.Writer
+		var err error
 		if store {
-			method = zip.Store
+			// A STORED entry carries its sizes and CRC up front, no data
+			// descriptor, as LibreOffice requires of the mimetype.
+			w, err = zw.CreateRaw(&zip.FileHeader{Name: name, Method: zip.Store, CRC32: crc32.ChecksumIEEE([]byte(body)),
+				CompressedSize64: uint64(len(body)), UncompressedSize64: uint64(len(body))})
+		} else {
+			w, err = zw.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Deflate})
 		}
-		w, err := zw.CreateHeader(&zip.FileHeader{Name: name, Method: method})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -89,20 +98,26 @@ func (d doc) pack(t testing.TB) []byte {
 			t.Fatal(err)
 		}
 	}
-	add("mimetype", "application/vnd.oasis.opendocument.text", true)
-	add("META-INF/manifest.xml", `<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3">`+
-		`<manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/>`+
-		`<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>`+
-		`<manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/></manifest:manifest>`, false)
-	add("content.xml", d.contentXML(), false)
-	add("styles.xml", d.stylesXML(), false)
-	meta := d.meta
-	add("meta.xml", `<?xml version="1.0" encoding="UTF-8"?><office:document-meta `+nsDecl+`><office:meta>`+meta+`</office:meta></office:document-meta>`, false)
 	names := make([]string, 0, len(d.pictures))
 	for n := range d.pictures {
 		names = append(names, n)
 	}
 	sort.Strings(names)
+	// LibreOffice refuses a package whose manifest leaves an entry out.
+	manifest := `<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3">` +
+		`<manifest:file-entry manifest:full-path="/" manifest:version="1.3" manifest:media-type="application/vnd.oasis.opendocument.text"/>` +
+		`<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>` +
+		`<manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>` +
+		`<manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>`
+	for _, n := range names {
+		manifest += `<manifest:file-entry manifest:full-path="` + n + `" manifest:media-type=""/>`
+	}
+	add("mimetype", "application/vnd.oasis.opendocument.text", true)
+	add("META-INF/manifest.xml", manifest+`</manifest:manifest>`, false)
+	add("content.xml", d.contentXML(), false)
+	add("styles.xml", d.stylesXML(), false)
+	meta := d.meta
+	add("meta.xml", `<?xml version="1.0" encoding="UTF-8"?><office:document-meta `+nsDecl+`><office:meta>`+meta+`</office:meta></office:document-meta>`, false)
 	for _, n := range names {
 		add(n, string(d.pictures[n]), false)
 	}
@@ -244,4 +259,37 @@ func tinyPNG(t testing.TB) []byte {
 		t.Fatal(err)
 	}
 	return buf.Bytes()
+}
+
+// newTestBuilder opens d and returns a builder of its layout tree, with
+// the fixture fonts.
+func newTestBuilder(t testing.TB, d doc) *builder {
+	t.Helper()
+	pkg, err := odf.Open(context.Background(), d.pack(t), odf.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := &builder{
+		ctx: context.Background(), pkg: pkg, styles: odf.NewStyles(pkg), fonts: fixtureFonts(t),
+		metricsCache: map[string][2]float64{}, warned: map[string]bool{}, pics: map[string]picResult{},
+		meta: map[*layout.Node]paraMeta{}, tabsRelative: true,
+	}
+	b.pages = newPageFlow(b, office.Options{})
+	return b
+}
+
+// odfBody returns the office:text of the builder's document.
+func odfBody(b *builder) *odf.Element {
+	return odf.Section(b.pkg.Content, "body").Child(odf.NSOffice, "text")
+}
+
+// walkNodes calls f on n and its descendants in document order.
+func walkNodes(n *layout.Node, f func(*layout.Node)) {
+	if n == nil {
+		return
+	}
+	f(n)
+	for _, c := range n.Children {
+		walkNodes(c, f)
+	}
 }

@@ -184,7 +184,7 @@ type frameGeom struct {
 	anchor     string
 	wrap       string
 	hpos, hrel string
-	vpos       string
+	vpos, vrel string
 	props      odf.Props
 }
 
@@ -204,8 +204,52 @@ func (b *builder) geometry(c *odf.Element) frameGeom {
 	g.props = b.styles.Resolve(b.scope, odf.FamilyGraphic, c.A(odf.NSDraw, "style-name"), odf.GraphicProps)
 	g.wrap = g.props.Get("style:wrap")
 	g.hpos, g.hrel = g.props.Get("style:horizontal-pos"), g.props.Get("style:horizontal-rel")
-	g.vpos = g.props.Get("style:vertical-pos")
+	g.vpos, g.vrel = g.props.Get("style:vertical-pos"), g.props.Get("style:vertical-rel")
+	b.relativeSize(c, &g)
 	return g
+}
+
+// relativeSize applies a frame's style:rel-width and style:rel-height
+// (ODF 1.3, Part 3, 19.737 and 19.736): a percentage of the page when
+// LibreOffice's rel-width-rel or rel-height-rel says page, else of the
+// page's content area, which Writer resolves for a frame in the body
+// (svg:width and svg:height hold the size it last computed, stale when
+// the page changed). "scale" and "scale-min" keep the stored size.
+func (b *builder) relativeSize(c *odf.Element, g *frameGeom) {
+	rw, okW := odf.Percent(c.A(odf.NSStyle, "rel-width"))
+	rh, okH := odf.Percent(c.A(odf.NSStyle, "rel-height"))
+	if !okW && !okH || b.hf != nil {
+		return
+	}
+	pg := b.currentGeom()
+	rel := func(local string) string {
+		if v, ok := g.props.Lookup("loext:" + local); ok {
+			return v
+		}
+		return g.props.Get("style:" + local)
+	}
+	if okW && rw > 0 && rw <= 1 {
+		w := pg.box.Width - pg.box.Margin[css.Left] - pg.box.Margin[css.Right]
+		if rel("rel-width-rel") == "page" {
+			w = pg.box.Width
+		}
+		g.w, g.hasW = rw*w, true
+	}
+	if okH && rh > 0 && rh <= 1 {
+		h := pg.bottom - pg.top
+		if rel("rel-height-rel") == "page" {
+			h = pg.box.Height
+		}
+		g.h, g.hasH = rh*h, true
+	}
+}
+
+// pageRelative reports a frame whose position Writer measures from the
+// page: anchored to the page (ODF 1.3, Part 3, 19.756), or placed
+// against the page or its content area vertically (20.387,
+// style:vertical-rel page and page-content).
+func (g frameGeom) pageRelative() bool {
+	return g.anchor == "page" || g.vrel == "page" || g.vrel == "page-content"
 }
 
 // frameBox returns the style of a frame's box: its size, border,
@@ -269,18 +313,17 @@ func (b *builder) inlineFrame(c *odf.Element, out *[]*layout.Node, ws *wsState, 
 		case "middle", "center":
 			n.Style.VerticalAlign = css.VerticalAlign{Kind: css.Middle}
 		case "top":
-			if g.props.Get("style:vertical-rel") == "line" || g.props.Get("style:vertical-rel") == "text" {
+			if g.vrel == "line" || g.vrel == "text" {
 				n.Style.VerticalAlign = css.VerticalAlign{Kind: css.TextTop}
 			}
 		}
 		*out = append(*out, n)
 	case "page":
 		b.place(n, g, true)
-	case "frame":
-		b.place(n, g, false)
-		*out = append(*out, n)
 	default:
-		b.place(n, g, false)
+		// A header's or footer's paragraph-anchored frame stays where
+		// its paragraph puts it: Writer keeps it off the body.
+		b.place(n, g, g.pageRelative() && b.hf == nil)
 		*out = append(*out, n)
 	}
 }
@@ -293,8 +336,8 @@ func (b *builder) blockFrame(c *odf.Element, ctx blockCtx) []*layout.Node {
 		return nil
 	}
 	g := b.geometry(c)
-	b.place(n, g, g.anchor == "page" || g.hrel == "page" || g.props.Get("style:vertical-rel") == "page")
-	if n.Style.Position == css.Static && n.Style.Float == css.FloatNone && n.Style.Display != css.Block {
+	b.place(n, g, g.pageRelative() || g.hrel == "page")
+	if n.Style.Float == css.FloatNone && n.Style.Display != css.Block && n.Kind != layout.Replaced {
 		st := *n.Style
 		st.Display = css.Block
 		n.Style = &st
@@ -310,9 +353,22 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 	n.Style = &st
 	if page || g.wrap == "run-through" {
 		st.Position = css.Absolute
+		if n.Kind != layout.Replaced {
+			// An absolutely positioned box is block-level (CSS 2.1, 9.7):
+			// the engine lays an inline-block one out in the line.
+			st.Display = css.Block
+		}
 		st.Left, st.Top = css.Pts(g.x), css.Pts(g.y)
-		if page {
-			b.pageAnchor(&st, g.x, g.y)
+		switch {
+		case page && b.hf != nil:
+			// A header's or footer's frame stays in its margin box: Writer
+			// keeps it off the body, which its offsets less the body's
+			// origin match on the documents measured.
+			st.Left, st.Top = css.Pts(g.x-b.pageOrigin[0]), css.Pts(g.y-b.pageOrigin[1])
+		case page:
+			st.PageAnchor = true
+			x, y := b.pagePosition(g)
+			st.Left, st.Top = css.Pts(x), css.Pts(y)
 		}
 		st.Right, st.Bottom = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
 		st.ZIndex = css.ZIndex{Level: 0}
@@ -352,6 +408,83 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 		return
 	}
 	st.Float = side
+}
+
+// pagePosition returns the top-left corner of a page-relative frame in
+// the page box of the master page the body is on (ODF 1.3, Part 3,
+// 20.290 style:horizontal-pos, 20.291 style:horizontal-rel, 20.386
+// style:vertical-pos and 20.387 style:vertical-rel): from-left and
+// from-top offset svg:x and svg:y from the edge of the area the relation
+// names, left, center, right, top, middle and bottom align the frame in
+// it. The page relations are the page box (page, and the margins of
+// page-start-margin and page-end-margin) and its content area
+// (page-content, margins, border and padding inside, the header and
+// footer included); a relation to the paragraph Writer measures from the
+// page's content area too when the frame is placed against the page
+// vertically.
+func (b *builder) pagePosition(g frameGeom) (float64, float64) {
+	pg := b.currentGeom()
+	pw, ph := pg.box.Width, pg.box.Height
+	left, right := pg.box.Margin[css.Left], pw-pg.box.Margin[css.Right]
+	w, h := 0.0, 0.0
+	if g.hasW {
+		w = g.w
+	}
+	if g.hasH {
+		h = g.h
+	}
+	var x0, x1 float64
+	switch g.hrel {
+	case "page", "page-start-margin", "page-end-margin":
+		x0, x1 = 0, pw
+		switch g.hrel {
+		case "page-start-margin":
+			x1 = left
+		case "page-end-margin":
+			x0 = right
+		}
+	default:
+		if g.hrel == "" && g.anchor == "page" {
+			x0, x1 = 0, pw
+		} else {
+			x0, x1 = left, right
+		}
+	}
+	x := x0 + g.x
+	switch g.hpos {
+	case "left", "inside":
+		x = x0
+	case "center":
+		x = x0 + (x1-x0-w)/2
+	case "right", "outside":
+		x = x1 - w
+	}
+	y0, y1 := 0.0, ph
+	if g.vrel == "page-content" || g.vrel != "page" && !(g.vrel == "" && g.anchor == "page") {
+		y0, y1 = pg.top, pg.bottom
+	}
+	y := y0 + g.y
+	switch g.vpos {
+	case "top":
+		y = y0
+	case "middle", "center":
+		y = y0 + (y1-y0-h)/2
+	case "bottom":
+		y = y1 - h
+	}
+	return x, y
+}
+
+// currentGeom returns the geometry of the master page the body being
+// built is on: the right, non-first variant of the last master page use.
+func (b *builder) currentGeom() *pageGeom {
+	var mp *odf.MasterPage
+	if n := len(b.pages.instances); n > 0 {
+		mp = b.pages.instances[n-1].master
+	} else {
+		mp = b.pages.defaultMaster()
+	}
+	return b.pages.geom(mp, false, false)
 }
 
 // frameMargins returns the fo:margin of a graphic style, the room the

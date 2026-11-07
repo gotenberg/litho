@@ -53,6 +53,10 @@ type pageFlow struct {
 	geoms     map[string]*pageGeom
 	// blanks marks the pages before which Writer inserts a blank page.
 	blanks map[int]bool
+	// building counts the geometries being built: a frame of a header
+	// that asks for its page's geometry gets one without the header and
+	// footer, which are what is being measured.
+	building int
 }
 
 // hfGeom is a header's or footer's placement on its page.
@@ -191,7 +195,12 @@ func (f *pageFlow) geom(mp *odf.MasterPage, left, first bool) *pageGeom {
 	if g, ok := f.geoms[key]; ok {
 		return g
 	}
-	g := f.buildGeom(mp, left, first)
+	if f.building > 0 {
+		return f.buildGeom(mp, left, first, false)
+	}
+	f.building++
+	g := f.buildGeom(mp, left, first, true)
+	f.building--
 	f.geoms[key] = g
 	return g
 }
@@ -223,8 +232,8 @@ const minPageArea = 1
 // and 17.5): the size, the margins, the border and padding drawn as the
 // page frame inside them, then the header and the footer with their
 // spacing, the body below; the left page of a mirrored layout swaps its
-// side margins.
-func (f *pageFlow) buildGeom(mp *odf.MasterPage, left, first bool) *pageGeom {
+// side margins. hf false leaves the header and the footer out.
+func (f *pageFlow) buildGeom(mp *odf.MasterPage, left, first, hf bool) *pageGeom {
 	var pl *odf.PageLayout
 	if mp != nil {
 		pl = f.b.styles.PageLayouts[mp.PageLayout]
@@ -270,7 +279,7 @@ func (f *pageFlow) buildGeom(mp *odf.MasterPage, left, first bool) *pageGeom {
 	}
 	areaW := w - inner[css.Left] - inner[css.Right]
 	g.top, g.bottom = inner[css.Top], h-inner[css.Bottom]
-	if mp != nil {
+	if mp != nil && hf {
 		g.header = f.hf(hfElement(mp.Header, mp.HeaderLeft, mp.HeaderFirst, left, first), pl.Header, inner[css.Left], areaW, true)
 		g.footer = f.hf(hfElement(mp.Footer, mp.FooterLeft, mp.FooterFirst, left, first), pl.Footer, inner[css.Left], areaW, false)
 	}
