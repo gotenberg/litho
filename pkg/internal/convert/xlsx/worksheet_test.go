@@ -138,7 +138,8 @@ func TestRead_CellValues(t *testing.T) {
 // on the cells of their range, and the internal ones left out.
 func TestRead_Hyperlinks(t *testing.T) {
 	t.Parallel()
-	files := workbookFiles([]testSheet{{name: "S",
+	files := workbookFiles([]testSheet{{
+		name: "S",
 		xml: `<sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c><c r="C1"><v>3</v></c></row></sheetData>` +
 			`<hyperlinks><hyperlink ref="A1:B1" r:id="rIdL" location="top"/><hyperlink ref="C1" location="'S'!A1"/></hyperlinks>`,
 		rels: `<Relationship Id="rIdL" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com/a" TargetMode="External"/>`,

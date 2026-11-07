@@ -21,7 +21,7 @@ type definedName struct {
 // defined names and its sheets in book order (ECMA-376 Part 1, 18.2.27).
 func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document) error {
 	if pr := root.Child(nsMain, "workbookPr"); pr != nil {
-		r.date1904 = boolAttr(pr, "date1904", false)
+		r.date1904 = boolAttr(pr, "date1904")
 	}
 	var names []definedName
 	for _, d := range root.Child(nsMain, "definedNames").Kids() {

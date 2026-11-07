@@ -115,10 +115,10 @@ const (
 func (w *sheetReader) pageSetup(root *ooxml.Element) {
 	p := &w.sh.Page
 	if po := root.Child(nsMain, "printOptions"); po != nil {
-		p.GridLines = boolAttr(po, "gridLines", false)
-		p.Headings = boolAttr(po, "headings", false)
-		p.CenterHorizontally = boolAttr(po, "horizontalCentered", false)
-		p.CenterVertically = boolAttr(po, "verticalCentered", false)
+		p.GridLines = boolAttr(po, "gridLines")
+		p.Headings = boolAttr(po, "headings")
+		p.CenterHorizontally = boolAttr(po, "horizontalCentered")
+		p.CenterVertically = boolAttr(po, "verticalCentered")
 	}
 	if pm := root.Child(nsMain, "pageMargins"); pm != nil {
 		for _, m := range []struct {
@@ -126,9 +126,12 @@ func (w *sheetReader) pageSetup(root *ooxml.Element) {
 			def  float64
 			to   *float64
 		}{
-			{"left", defaultMarginLR, &p.Margin[css.Left]}, {"right", defaultMarginLR, &p.Margin[css.Right]},
-			{"top", defaultMarginTB, &p.Margin[css.Top]}, {"bottom", defaultMarginTB, &p.Margin[css.Bottom]},
-			{"header", defaultMarginHF, &p.HeaderTop}, {"footer", defaultMarginHF, &p.FooterBottom},
+			{"left", defaultMarginLR, &p.Margin[css.Left]},
+			{"right", defaultMarginLR, &p.Margin[css.Right]},
+			{"top", defaultMarginTB, &p.Margin[css.Top]},
+			{"bottom", defaultMarginTB, &p.Margin[css.Bottom]},
+			{"header", defaultMarginHF, &p.HeaderTop},
+			{"footer", defaultMarginHF, &p.FooterBottom},
 		} {
 			v := m.def
 			if f, err := strconv.ParseFloat(attr(pm, m.name), 64); err == nil {
@@ -149,7 +152,7 @@ func (w *sheetReader) pageSetup(root *ooxml.Element) {
 		return
 	}
 	landscape := attr(ps, "orientation") == "landscape"
-	if !boolAttr(ps, "usePrinterDefaults", false) {
+	if !boolAttr(ps, "usePrinterDefaults") {
 		size, ok := paperSizes[intAttr(ps, "paperSize", 1)]
 		if !ok {
 			size = paperSizes[1]
@@ -168,7 +171,7 @@ func (w *sheetReader) pageSetup(root *ooxml.Element) {
 	if attr(ps, "pageOrder") == "overThenDown" {
 		p.Order = sheet.OverThenDown
 	}
-	if boolAttr(ps, "useFirstPageNumber", false) {
+	if boolAttr(ps, "useFirstPageNumber") {
 		p.FirstPageNumber = max(0, min(intAttr(ps, "firstPageNumber", 1), maxFirstPg))
 	}
 }

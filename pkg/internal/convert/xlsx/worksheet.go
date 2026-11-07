@@ -77,10 +77,10 @@ func (w *sheetReader) read(root *ooxml.Element) error {
 	r.defaultSetup(sh)
 	w.rowAt = map[int]int{}
 	if pr := root.Child(nsMain, "sheetPr"); pr != nil {
-		w.fitToPage = boolAttr(pr.Child(nsMain, "pageSetUpPr"), "fitToPage", false)
+		w.fitToPage = boolAttr(pr.Child(nsMain, "pageSetUpPr"), "fitToPage")
 	}
 	if v := root.Child(nsMain, "sheetViews").Child(nsMain, "sheetView"); v != nil {
-		sh.RightToLeft = boolAttr(v, "rightToLeft", false)
+		sh.RightToLeft = boolAttr(v, "rightToLeft")
 	}
 	if f := root.Child(nsMain, "sheetFormatPr"); f != nil {
 		w.formatPr(f)
@@ -187,7 +187,7 @@ func (w *sheetReader) columns(cols *ooxml.Element) {
 		if lo < 1 || hi < lo || lo > maxColumns {
 			continue
 		}
-		col := sheet.Column{First: lo - 1, Last: min(hi, maxColumns) - 1, Hidden: boolAttr(c, "hidden", false)}
+		col := sheet.Column{First: lo - 1, Last: min(hi, maxColumns) - 1, Hidden: boolAttr(c, "hidden")}
 		if v, err := strconv.ParseFloat(attr(c, "width"), 64); err == nil {
 			col.Width = r.columnWidth(v)
 		}
@@ -247,11 +247,11 @@ func (w *sheetReader) sheetData(data *ooxml.Element) error {
 			continue
 		}
 		next = idx + 1
-		row := sheet.Row{Index: idx, CustomHeight: boolAttr(re, "customHeight", false), Hidden: boolAttr(re, "hidden", false)}
+		row := sheet.Row{Index: idx, CustomHeight: boolAttr(re, "customHeight"), Hidden: boolAttr(re, "hidden")}
 		if v, err := strconv.ParseFloat(attr(re, "ht"), 64); err == nil && v > 0 && !math.IsInf(v, 0) && row.CustomHeight {
 			row.Height = r.rowHeight(v)
 		}
-		if boolAttr(re, "customFormat", false) {
+		if boolAttr(re, "customFormat") {
 			row.Style = r.style(intAttr(re, "s", 0))
 		}
 		col := 0
@@ -508,7 +508,7 @@ func breaks(e *ooxml.Element, limit int) []int {
 			continue
 		}
 		id := intAttr(b, "id", 0)
-		if id <= 0 || id >= limit || !boolAttr(b, "man", false) || seen[id] {
+		if id <= 0 || id >= limit || !boolAttr(b, "man") || seen[id] {
 			continue
 		}
 		seen[id] = true

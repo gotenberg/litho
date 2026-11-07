@@ -36,13 +36,16 @@ func TestParseHeaderFooter(t *testing.T) {
 		want [3][]span
 	}{
 		{"centre by default", "Hello", [3][]span{1: {with(b, func(s *span) { s.text = "Hello" })}}},
-		{"parts and fields", "&LPage &P of &N&C&A&R&D &T&F&Z&F",
+		{
+			"parts and fields", "&LPage &P of &N&C&A&R&D &T&F&Z&F",
 			[3][]span{
 				{with(b, func(s *span) { s.text = "Page " }), with(b, func(s *span) { s.field = sheet.FieldPage }), with(b, func(s *span) { s.text = " of " }), with(b, func(s *span) { s.field = sheet.FieldPages })},
 				{with(b, func(s *span) { s.field = sheet.FieldSheet })},
 				{with(b, func(s *span) { s.field = sheet.FieldDate }), with(b, func(s *span) { s.text = " " }), with(b, func(s *span) { s.field = sheet.FieldTime }), with(b, func(s *span) { s.field = sheet.FieldFile }), with(b, func(s *span) { s.field = sheet.FieldPath })},
-			}},
-		{"font codes", `&"Arial,Bold Italic"&14A&"-,Regular"&BB&I&U&SC&E&XD&KFF0000E&K04-050F&&`,
+			},
+		},
+		{
+			"font codes", `&"Arial,Bold Italic"&14A&"-,Regular"&BB&I&U&SC&E&XD&KFF0000E&K04-050F&&`,
 			[3][]span{1: {
 				with(b, func(s *span) { s.text, s.family, s.size, s.bold, s.italic = "A", "Arial", 14, true, true }),
 				with(b, func(s *span) { s.text, s.size, s.bold = "B", 14, true }),
@@ -58,7 +61,8 @@ func TestParseHeaderFooter(t *testing.T) {
 				with(b, func(s *span) {
 					s.text, s.size, s.bold, s.italic, s.under, s.strike, s.script, s.color = "F&", 14, true, true, sheet.Double, true, sheet.Superscript, tint(rgb(0x4472C4), -0.5)
 				}),
-			}}},
+			}},
+		},
 		{"a part resets the font", "&B&LA&RB", [3][]span{{with(b, func(s *span) { s.text = "A" })}, nil, {with(b, func(s *span) { s.text = "B" })}}},
 		{"a line break stays", "a\nb&12345c&", [3][]span{1: {with(b, func(s *span) { s.text = "a\nbc" })}}},
 		{"dropped codes", "&Gx&O&Hy&\"Ar", [3][]span{1: {with(b, func(s *span) { s.text = "xy" })}}},

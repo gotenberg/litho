@@ -209,11 +209,11 @@ func textOf(e *ooxml.Element) string {
 	return e.Text
 }
 
-// boolAttr returns e's ST_Boolean attribute local, def when absent.
-func boolAttr(e *ooxml.Element, local string, def bool) bool {
+// boolAttr returns e's ST_Boolean attribute local, false when absent.
+func boolAttr(e *ooxml.Element, local string) bool {
 	v, ok := e.Attr(local)
 	if !ok {
-		return def
+		return false
 	}
 	return ooxml.OnOff(v, true)
 }

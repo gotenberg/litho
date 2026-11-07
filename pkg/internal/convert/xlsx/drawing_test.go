@@ -51,8 +51,10 @@ func TestRead_Drawings(t *testing.T) {
 		`<xdr:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="254000" cy="127000"/><a:chOff x="0" y="0"/><a:chExt cx="25400" cy="12700"/></a:xfrm></xdr:grpSpPr>` +
 		shape("In", "star5", "") + `</xdr:grpSp><xdr:clientData/></xdr:absoluteAnchor>` +
 		`</xdr:wsDr>`
-	files := workbookFiles([]testSheet{{name: "S", xml: `<sheetData/><drawing r:id="rIdD"/>`,
-		rels: `<Relationship Id="rIdD" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>`}},
+	files := workbookFiles([]testSheet{{
+		name: "S", xml: `<sheetData/><drawing r:id="rIdD"/>`,
+		rels: `<Relationship Id="rIdD" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>`,
+	}},
 		minimalStyles, "", "", map[string]string{
 			"xl/drawings/drawing1.xml": drawing,
 			"xl/drawings/_rels/drawing1.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +

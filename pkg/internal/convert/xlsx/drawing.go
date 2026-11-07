@@ -184,7 +184,7 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 func hidden(obj *ooxml.Element) bool {
 	for _, nv := range obj.Kids() {
 		if pr := nv.Child(nsXDR, "cNvPr"); pr != nil {
-			return boolAttr(pr, "hidden", false)
+			return boolAttr(pr, "hidden")
 		}
 	}
 	return false

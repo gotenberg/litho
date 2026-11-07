@@ -33,11 +33,11 @@ func (r *reader) headerFooter(e *ooxml.Element) sheet.HeaderFooter {
 		}
 	}
 	hf := sheet.HeaderFooter{Odd: margins("oddHeader", "oddFooter")}
-	if boolAttr(e, "differentOddEven", false) {
+	if boolAttr(e, "differentOddEven") {
 		hf.DifferentOddEven = true
 		hf.Even = margins("evenHeader", "evenFooter")
 	}
-	if boolAttr(e, "differentFirst", false) {
+	if boolAttr(e, "differentFirst") {
 		hf.DifferentFirst = true
 		hf.First = margins("firstHeader", "firstFooter")
 	}
