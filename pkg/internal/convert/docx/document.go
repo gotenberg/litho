@@ -82,7 +82,7 @@ type document struct {
 	// that a column break starts.
 	columnBreaks []*css.Style
 	inBody       bool
-	nested  int
+	nested       int
 	// vmlTypes maps a VML shape type's id to its shape type number
 	// (o:spt, Part 4, 14.1.2.20), for the shapes that name it.
 	vmlTypes map[string]int
