@@ -48,7 +48,7 @@ func (d *document) drawing(s *story, c *ooxml.Element, st *css.Style, sink *inli
 			continue
 		}
 		if !inline {
-			d.anchor(k, n, sink)
+			d.anchor(k, n, wpt, hpt, sink)
 		}
 		sink.add(n)
 	}
@@ -201,18 +201,25 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 		return d.picture(s, ref, st, w, h, "")
 	}
 	if tb := sp.Child(ooxml.NSWPS, "txbx"); tb != nil {
-		return d.textBox(s, tb.Child(ooxml.NSW, "txbxContent"), w, h, ss, sp.Child(ooxml.NSWPS, "bodyPr"), depth)
+		return d.textBox(s, tb.Child(ooxml.NSW, "txbxContent"), w, h, ss, bodyInsets(sp.Child(ooxml.NSWPS, "bodyPr")), depth)
 	}
 	if _, ok := ooxml.PresetPath(geom, compose.Rect{Width: 1, Height: 1}); !ok {
 		d.warn("approximated", fmt.Sprintf("a %s shape is drawn as its bounding box", geom))
 	}
+	n := vectorShape(st, geom, ss, w, h)
+	if xfrm := spPr.Child(ooxml.NSA, "xfrm"); xfrm != nil {
+		rot, fh, fv := ooxml.Transform2D(xfrm)
+		setTransform(n.Style, rot, fh, fv)
+	}
+	return n
+}
+
+// vectorShape returns the replaced box of w by h points drawing the
+// preset geometry geom with the fill and outline ss.
+func vectorShape(st *css.Style, geom string, ss ooxml.ShapeStyle, w, h float64) *layout.Node {
 	ps := inlineStyle(st)
 	ps.Width, ps.Height = css.Pts(max(w, 0.1)), css.Pts(max(h, 0.1))
 	ps.LineHeight = css.Dimension{Kind: css.Normal}
-	if xfrm := spPr.Child(ooxml.NSA, "xfrm"); xfrm != nil {
-		rot, fh, fv := ooxml.Transform2D(xfrm)
-		setTransform(ps, rot, fh, fv)
-	}
 	pic := &layout.Picture{Width: max(w, 0.1), Height: max(h, 0.1)}
 	pic.Vector = func(_ context.Context, r compose.Rect) []compose.Fragment {
 		ops, _ := ooxml.PresetPath(geom, r)
@@ -221,11 +228,23 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 	return &layout.Node{Kind: layout.Replaced, Style: ps, Picture: pic}
 }
 
-// textBox builds a text box of w by h points: an inline block holding the
-// content's blocks, with the shape's fill and outline and the insets of
-// its body properties (20.1.2.1.1 bodyPr: 0.1 inch left and right, 0.05
+// bodyInsets returns the insets of a text box's body properties, top,
+// right, bottom, left (20.1.2.1.1 bodyPr: 0.1 inch left and right, 0.05
 // inch top and bottom by default).
-func (d *document) textBox(s *story, content *ooxml.Element, w, h float64, ss ooxml.ShapeStyle, bodyPr *ooxml.Element, depth int) *layout.Node {
+func bodyInsets(bodyPr *ooxml.Element) [4]float64 {
+	insets := [4]float64{3.6, 7.2, 3.6, 7.2}
+	for side, name := range map[css.Side]string{css.Top: "tIns", css.Right: "rIns", css.Bottom: "bIns", css.Left: "lIns"} {
+		if v, ok := ooxml.EMU(attrOr(bodyPr, name)); ok {
+			insets[side] = max(0, v)
+		}
+	}
+	return insets
+}
+
+// textBox builds a text box of w by h points: an inline block holding the
+// content's blocks, with the shape's fill and outline and the insets,
+// top, right, bottom and left.
+func (d *document) textBox(s *story, content *ooxml.Element, w, h float64, ss ooxml.ShapeStyle, insets [4]float64, depth int) *layout.Node {
 	bs := d.blockStyle()
 	bs.Display = css.InlineBlock
 	bs.Width = css.Pts(max(w, 1))
@@ -233,12 +252,6 @@ func (d *document) textBox(s *story, content *ooxml.Element, w, h float64, ss oo
 	bs.BoxSizing = css.BorderBox
 	bs.LineHeight = css.Dimension{Kind: css.Normal}
 	bs.VerticalAlign = css.VerticalAlign{Kind: css.AlignTop}
-	insets := [4]float64{3.6, 7.2, 3.6, 7.2}
-	for side, name := range map[css.Side]string{css.Top: "tIns", css.Right: "rIns", css.Bottom: "bIns", css.Left: "lIns"} {
-		if v, ok := ooxml.EMU(attrOr(bodyPr, name)); ok {
-			insets[side] = max(0, v)
-		}
-	}
 	for i := range insets {
 		bs.Padding[i] = css.Pts(insets[i])
 	}
@@ -253,7 +266,9 @@ func (d *document) textBox(s *story, content *ooxml.Element, w, h float64, ss oo
 	var kids []*layout.Node
 	if content != nil {
 		ts := &story{part: s.part, fields: s.fields, note: s.note}
+		d.nested++
 		kids = finish(d.blocks(ts, nil, content, depth+1))
+		d.nested--
 	}
 	return &layout.Node{Kind: layout.Element, Style: bs, Children: kids}
 }

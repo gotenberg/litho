@@ -72,6 +72,16 @@ type document struct {
 	endnoteBodies                 []*layout.Node
 	// elements counts the layout nodes built, against [maxNodes].
 	nodes int
+	// pending collects the drawings of the section being read whose
+	// position needs its page; inBody is set while the body is read and
+	// nested counts the table cells, text boxes and notes being built,
+	// whose drawings are not anchored to the page.
+	pending []pendingAnchor
+	inBody  bool
+	nested  int
+	// vmlTypes maps a VML shape type's id to its shape type number
+	// (o:spt, Part 4, 14.1.2.20), for the shapes that name it.
+	vmlTypes map[string]int
 }
 
 // heading is a paragraph with an outline level, for the outline.
@@ -100,7 +110,7 @@ func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	}
 	d := &document{
 		ctx: ctx, pkg: pkg, main: main, fonts: fonts, opts: opts,
-		warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, lineFactors: map[string][3]float64{},
+		warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, lineFactors: map[string][3]float64{}, vmlTypes: map[string]int{},
 		settings: settings{defaultTab: 36},
 	}
 	d.theme = &ooxml.Theme{}

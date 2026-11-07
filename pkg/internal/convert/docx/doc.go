@@ -47,9 +47,9 @@
 //
 // Each section is a named page with its size, orientation, margins,
 // gutter, columns (unequal widths laid out equal), page borders and break
-// type (a continuous break keeps the page only when the page setup does
-// not change). Headers and footers of the default, first and even kinds,
-// inherited across sections, draw in the margins, which grow to hold a
+// type (a continuous break keeps the page, and its margins, when the page
+// size does not change). Headers and footers of the default, first and
+// even kinds, inherited across sections, draw in the margins, which grow to hold a
 // taller header or footer; a first or even one no section defines takes
 // the default one, as LibreOffice shows it. PAGE and NUMPAGES are computed
 // per page in the section's number format; every other field shows the
@@ -71,9 +71,12 @@
 //
 // Inline pictures are replaced boxes at their extent, cropped and
 // transformed; anchored ones float, stand on their own line or are
-// positioned from their paragraph by their wrapping. Text boxes, preset
-// rectangles, rounded rectangles, ellipses and lines, groups, and the VML
-// fallbacks of text boxes and pictures are drawn. PNG, JPEG, GIF, BMP,
+// positioned by their wrapping, from their page when their vertical
+// position is relative to the page or its margins, else from their
+// paragraph. Text boxes, preset rectangles, rounded rectangles, ellipses
+// and lines, and groups are drawn, in DrawingML and in VML: VML groups
+// with their coordinate spaces, text boxes, pictures, and shapes with
+// their fill, opacity and stroke. PNG, JPEG, GIF, BMP,
 // TIFF and SVG pictures decode; EMF, WMF, charts, SmartArt and embedded
 // objects without a fallback picture are left out with a warning.
 //
@@ -100,7 +103,7 @@
 //
 // # Not supported
 //
-// Vertical text, columns of unequal widths,
-// section vertical alignment, drawings positioned from the page, charts
-// and SmartArt, form fields beyond their text, and the binary .doc format.
+// Vertical text, columns of unequal widths, section vertical alignment,
+// charts and SmartArt, VML shapes of custom geometry, form fields beyond
+// their text, and the binary .doc format.
 package docx

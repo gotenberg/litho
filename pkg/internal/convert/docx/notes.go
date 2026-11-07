@@ -34,7 +34,9 @@ func (d *document) noteCall(s *story, c *ooxml.Element, st *css.Style, sink *inl
 		}
 	}
 	ns := &story{part: part, note: mark}
+	d.nested++
 	content := finish(d.blocks(ns, nil, body, 1))
+	d.nested--
 	noteBody := &layout.Node{Kind: layout.Element, Style: d.blockStyle(), Role: "Note", Children: content}
 	call := &layout.Node{Kind: layout.Element, Style: st}
 	if mark != "" {

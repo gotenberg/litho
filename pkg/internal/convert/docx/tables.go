@@ -671,7 +671,9 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 				cst.Border[css.Left] = css.Border{}
 			}
 			ts := s
+			d.nested++
 			kids := finish(d.blocks(ts, cc, c.xml, depth+1))
+			d.nested--
 			role := "TD"
 			if isHeader {
 				role = "TH"

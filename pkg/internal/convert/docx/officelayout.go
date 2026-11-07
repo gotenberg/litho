@@ -26,12 +26,6 @@ const (
 // a line). Until then the converter places the lines with half-leading.
 func setLineRule(_ *css.Style, _ lineRule) {}
 
-// anchorToPage positions an absolutely positioned box against the page box
-// of the page its anchor lands on, round 2: css.Style.PageAnchor, for
-// drawings and frames positioned from the page. Until then they are
-// positioned from their paragraph.
-func anchorToPage(_ *css.Style) bool { return false }
-
 // cloneDecorations draws a bordered paragraph's or cell's border and
 // padding whole on every page it spans, as Writer does, round 2:
 // css.DecorationCloneAll in BoxDecorationBreak. Until then they are

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"image"
 	"image/png"
+	"strconv"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -89,5 +90,78 @@ func TestDrawings_UnsupportedPicture(t *testing.T) {
 	}
 	if len(b.d.warnings) == 0 || b.d.warnings[0].Code != "unsupported-picture" {
 		t.Errorf("warnings %+v", b.d.warnings)
+	}
+}
+
+func TestDrawings_FromThePage(t *testing.T) {
+	t.Parallel()
+	const sect = `<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="2880" w:left="1440" w:header="720" w:footer="720"/></w:sectPr>`
+	anchor := func(wrap, h, v string) string {
+		return `<w:r><w:drawing><wp:anchor behindDoc="0">` + h + v +
+			`<wp:extent cx="1270000" cy="635000"/>` + wrap + `<wp:docPr id="2" name="q"/>` + graphic("") + `</wp:anchor></w:drawing></w:r>`
+	}
+	pos := func(axis, rel, inner string) string {
+		return `<wp:position` + axis + ` relativeFrom="` + rel + `">` + inner + `</wp:position` + axis + `>`
+	}
+	off := func(pt int) string { return `<wp:posOffset>` + strconv.Itoa(pt*12700) + `</wp:posOffset>` }
+	align := func(a string) string { return `<wp:align>` + a + `</wp:align>` }
+	for _, tc := range []struct {
+		name       string
+		run        string
+		cell       bool
+		page       bool
+		left, top  float64
+		marginLeft float64
+		float      css.Float
+	}{
+		{"page offsets", anchor(`<wp:wrapNone/>`, pos("H", "page", off(30)), pos("V", "page", off(40))), false, true, 30, 40, 0, css.FloatNone},
+		{"margin alignments", anchor(`<wp:wrapNone/>`, pos("H", "margin", align("center")), pos("V", "margin", align("bottom"))), false, true, 72 + (468-100)/2.0, 792 - 144 - 50, 0, css.FloatNone},
+		{"bottom margin", anchor(`<wp:wrapNone/>`, pos("H", "column", off(10)), pos("V", "bottomMargin", off(5))), false, true, 82, 792 - 144 + 5, 0, css.FloatNone},
+		{"page right from a paragraph", anchor(`<wp:wrapNone/>`, pos("H", "page", align("right")), pos("V", "paragraph", off(0))), false, false, 612 - 100 - 72, 0, 0, css.FloatNone},
+		{"square from the page", anchor(`<wp:wrapSquare wrapText="bothSides"/>`, pos("H", "page", off(200)), pos("V", "paragraph", off(0))), false, false, 0, 0, 128, css.FloatLeft},
+		{"in a table cell", anchor(`<wp:wrapNone/>`, pos("H", "column", off(10)), pos("V", "page", off(40))), true, false, 10, 0, 0, css.FloatNone},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			body := `<w:p>` + tc.run + `<w:r><w:t>text</w:t></w:r></w:p>`
+			if tc.cell {
+				body = `<w:tbl><w:tr><w:tc>` + body + `</w:tc></w:tr></w:tbl>`
+			}
+			b := build(t, body+sect, map[string]string{"word/media/a.png": pngData(t, 4, 2)})
+			pics := find(b.root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+			if len(pics) != 1 {
+				t.Fatalf("%d pictures", len(pics))
+			}
+			st := pics[0].Style
+			if st.PageAnchor != tc.page || st.Float != tc.float {
+				t.Fatalf("page anchor %v float %v, want %v %v", st.PageAnchor, st.Float, tc.page, tc.float)
+			}
+			if tc.float != css.FloatNone {
+				if !near(st.Margin[css.Left], tc.marginLeft) {
+					t.Errorf("left margin %v, want %v", st.Margin[css.Left], tc.marginLeft)
+				}
+				return
+			}
+			if !near(st.Left, tc.left) || !near(st.Top, tc.top) {
+				t.Errorf("at %v, %v; want %v, %v", st.Left, st.Top, tc.left, tc.top)
+			}
+		})
+	}
+}
+
+func TestDrawings_PageAnchoredGroup(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:r><w:pict><v:group style="position:absolute;margin-left:100pt;margin-top:50pt;width:200pt;height:100pt;mso-position-horizontal-relative:page;mso-position-vertical-relative:page" coordsize="200,100">` +
+		`<v:rect style="position:absolute;left:20;top:10;width:50;height:50"/><v:oval style="position:absolute;left:100;top:0;width:50;height:50"/></v:group></w:pict></w:r></w:p>`
+	b := build(t, body, nil)
+	shapes := find(b.root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+	if len(shapes) != 2 {
+		t.Fatalf("%d shapes", len(shapes))
+	}
+	for i, want := range [][2]float64{{120, 60}, {200, 50}} {
+		st := shapes[i].Style
+		if !st.PageAnchor || !near(st.Left, want[0]) || !near(st.Top, want[1]) {
+			t.Errorf("shape %d anchored %v at %v, %v; want %v", i, st.PageAnchor, st.Left, st.Top, want)
+		}
 	}
 }

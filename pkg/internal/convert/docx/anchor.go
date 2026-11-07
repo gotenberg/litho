@@ -8,77 +8,279 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
-// anchor places the anchored drawing n by its wrapping (ECMA-376 Part 1,
-// 20.4.2.3 anchor, 20.4.2.10 to 20.4.2.17 wrap*): square, tight and
-// through wrapping float it on the side its horizontal position says;
-// top-and-bottom makes it a block of its own line; none and behindDoc
-// position it absolutely from its paragraph, in front of or behind the
-// text. Vertical offsets from the page or the margin are taken from the
-// paragraph, an approximation the warnings name.
-func (d *document) anchor(k *ooxml.Element, n *layout.Node, sink *inlineSink) {
-	st := n.Style
+// placement is where an anchored drawing goes (ECMA-376 Part 1, 20.4.2.3
+// anchor; for VML, Part 4, 14.1.2.19 style and 14.3.4 w10:wrap): its
+// wrapping, its offsets or alignments and what they are relative to, in
+// DrawingML's names (20.4.3.4 ST_RelFromH, 20.4.3.5 ST_RelFromV).
+type placement struct {
+	// wrap is wrapSquare, wrapTight, wrapThrough, wrapTopAndBottom or
+	// wrapNone.
+	wrap           string
+	behind         bool
+	alignH, alignV string
+	posH, posV     float64
+	relH, relV     string
+	// dist is the distance kept from the text, top, right, bottom, left.
+	dist [4]float64
+	// w and h are the drawing's size in points.
+	w, h float64
+}
+
+// pendingAnchor is a drawing whose position needs its section's page,
+// which the section's properties, at its end, give.
+type pendingAnchor struct {
+	n  *layout.Node
+	st *css.Style
+	p  placement
+	// page anchors the box to the page box; else only its horizontal
+	// offset is measured from the page, the box positioned from its
+	// paragraph or floated.
+	page bool
+	// float sets the offset as the box's left margin.
+	float bool
+	// kids are the shapes of a group anchored to the page, laid out
+	// beside it at their offsets from it.
+	kids []*layout.Node
+}
+
+// anchor places the anchored drawing n by its wp:anchor k (20.4.2.3).
+func (d *document) anchor(k *ooxml.Element, n *layout.Node, w, h float64, sink *inlineSink) {
 	dist := func(name string) float64 {
 		v, _ := ooxml.EMU(attrOr(k, name))
 		return max(0, v)
 	}
-	posH, alignH, relH := position(k.Child(ooxml.NSWP, "positionH"))
-	posV, _, relV := position(k.Child(ooxml.NSWP, "positionV"))
-	behind := hasAttr(k, "behindDoc") && ooxml.OnOff(attrOr(k, "behindDoc"), true)
-	wrap := ""
+	p := placement{w: w, h: h}
+	p.posH, p.alignH, p.relH = position(k.Child(ooxml.NSWP, "positionH"))
+	p.posV, p.alignV, p.relV = position(k.Child(ooxml.NSWP, "positionV"))
+	p.behind = hasAttr(k, "behindDoc") && ooxml.OnOff(attrOr(k, "behindDoc"), true)
+	p.dist = [4]float64{dist("distT"), dist("distR"), dist("distB"), dist("distL")}
+	p.wrap = "wrapNone"
 	for _, c := range k.Kids() {
 		if c.Space == ooxml.NSWP && strings.HasPrefix(c.Local, "wrap") {
-			wrap = c.Local
+			p.wrap = c.Local
 			break
 		}
 	}
-	switch wrap {
+	d.place(p, n, sink)
+}
+
+// fromPageH reports a horizontal position relative to the page or one of
+// its margins (20.4.3.4).
+func fromPageH(rel string) bool {
+	switch rel {
+	case "page", "margin", "leftMargin", "rightMargin", "insideMargin", "outsideMargin":
+		return true
+	}
+	return false
+}
+
+// fromPageV reports a vertical position relative to the page or one of
+// its margins (20.4.3.5).
+func fromPageV(rel string) bool {
+	switch rel {
+	case "page", "margin", "topMargin", "bottomMargin", "insideMargin", "outsideMargin":
+		return true
+	}
+	return false
+}
+
+// place lays the anchored drawing n out by its placement p: square, tight
+// and through wrapping float it on the side its horizontal position says;
+// top-and-bottom makes it a block of its own line; no wrapping positions
+// it absolutely, in front of or behind the text. A drawing positioned
+// vertically from the page or its margins in the body is anchored to the
+// page box of its anchor's page (css.Style.PageAnchor), its offsets
+// measured from its section's page; any other is positioned from its
+// paragraph, a horizontal offset from the page measured from the
+// paragraph's start at the margin.
+func (d *document) place(p placement, n *layout.Node, sink *inlineSink) {
+	st := n.Style
+	pageH := fromPageH(p.relH) && d.pageAnchors()
+	switch p.wrap {
 	case "wrapSquare", "wrapTight", "wrapThrough":
 		st.Float = css.FloatLeft
-		if alignH == "right" || alignH == "outside" {
+		if p.alignH == "right" || p.alignH == "outside" {
 			st.Float = css.FloatRight
 		}
-		st.Margin = [4]css.Dimension{css.Pts(dist("distT")), css.Pts(dist("distR")), css.Pts(dist("distB")), css.Pts(dist("distL"))}
-		if st.Float == css.FloatLeft && alignH == "" && posH > 0 && relH != "page" {
-			st.Margin[css.Left] = css.Pts(posH)
+		st.Margin = [4]css.Dimension{css.Pts(p.dist[0]), css.Pts(p.dist[1]), css.Pts(p.dist[2]), css.Pts(p.dist[3])}
+		if st.Float == css.FloatLeft && p.alignH == "" {
+			switch {
+			case pageH:
+				d.pending = append(d.pending, pendingAnchor{n: n, st: st, p: p, float: true})
+			case p.posH > 0 && !fromPageH(p.relH):
+				st.Margin[css.Left] = css.Pts(p.posH)
+			}
 		}
 		if st.Display == css.Inline || st.Display == css.InlineBlock {
 			st.Display = css.Block
 		}
 	case "wrapTopAndBottom":
 		st.Display = css.Block
-		st.Margin = [4]css.Dimension{css.Pts(dist("distT")), css.Pts(0), css.Pts(dist("distB")), css.Pts(0)}
-		switch alignH {
+		st.Margin = [4]css.Dimension{css.Pts(p.dist[0]), css.Pts(0), css.Pts(p.dist[2]), css.Pts(0)}
+		switch p.alignH {
 		case "center":
 			st.Margin[css.Left], st.Margin[css.Right] = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
 		case "right", "outside":
 			st.Margin[css.Left] = css.Dimension{Kind: css.Auto}
 		default:
-			if posH > 0 {
-				st.Margin[css.Left] = css.Pts(posH)
+			switch {
+			case pageH:
+				d.pending = append(d.pending, pendingAnchor{n: n, st: st, p: p, float: true})
+			case p.posH > 0:
+				st.Margin[css.Left] = css.Pts(p.posH)
 			}
 		}
 	default:
+		// An absolutely positioned box is blockified (CSS 2.1, 9.7).
 		st.Position = css.Absolute
-		if st.Display == css.Inline {
+		if st.Display == css.Inline || st.Display == css.InlineBlock {
 			st.Display = css.Block
 		}
-		st.Left, st.Top = css.Pts(posH), css.Pts(posV)
-		fromPage := relV == "page" || relV == "margin" || relV == "topMargin" || relV == "bottomMargin"
-		if fromPage && !anchorToPage(st) {
-			d.warn("approximated", "a drawing positioned from the page is positioned from its paragraph")
+		if p.behind {
+			st.ZIndex = css.ZIndex{Level: -1}
+		}
+		if fromPageV(p.relV) && d.pageAnchors() {
+			st.PageAnchor = true
+			kids := detachKids(n, 0, 0, 0)
+			for _, k := range kids {
+				k.Style.PageAnchor = true
+				sink.add(k)
+			}
+			d.pending = append(d.pending, pendingAnchor{n: n, st: st, p: p, page: true, kids: kids})
+			return
+		}
+		st.Left, st.Top = css.Pts(p.posH), css.Pts(p.posV)
+		if fromPageV(p.relV) {
+			d.warn("approximated", "a drawing positioned from the page in a header, footer, note, text box or table is positioned from its paragraph")
 			st.Top = css.Pts(0)
 		}
-		switch alignH {
-		case "center":
+		switch {
+		case pageH:
+			d.pending = append(d.pending, pendingAnchor{n: n, st: st, p: p})
+		case p.alignH == "center":
 			st.Left = css.Dimension{Kind: css.Percent, Value: 0.5}
-		case "right", "outside":
+		case p.alignH == "right" || p.alignH == "outside":
 			st.Left, st.Right = css.Dimension{Kind: css.Auto}, css.Pts(0)
-		}
-		if behind {
-			st.ZIndex = css.ZIndex{Level: -1}
 		}
 		sink.positioned = true
 	}
+}
+
+// pageAnchors reports whether a drawing being built can be positioned
+// from its page: in the body, outside tables and text boxes, whose
+// drawings Word lays out in their cell or box.
+func (d *document) pageAnchors() bool { return d.inBody && d.nested == 0 }
+
+// resolve sets the offsets of the pending drawings of section s from its
+// page: the page box's left and top for a page-anchored box, the offset
+// from the margin for one positioned from its paragraph.
+func (a pendingAnchor) resolve(s *section) {
+	p, st := a.p, a.st
+	left := s.margin[css.Left] + s.gutter
+	x0, aw := hArea(s, p.relH)
+	x := x0 + p.posH
+	switch p.alignH {
+	case "left", "inside":
+		x = x0
+	case "center":
+		x = x0 + (aw-p.w)/2
+	case "right", "outside":
+		x = x0 + aw - p.w
+	}
+	switch {
+	case a.float:
+		st.Margin[css.Left] = css.Pts(max(0, x-left))
+		return
+	case !a.page:
+		st.Left = css.Pts(x - left)
+		return
+	}
+	if !fromPageH(p.relH) {
+		x = left + p.posH
+		switch p.alignH {
+		case "left", "inside":
+			x = left
+		case "center":
+			x = left + (s.contentWidth()-p.w)/2
+		case "right", "outside":
+			x = left + s.contentWidth() - p.w
+		}
+	}
+	y0, ah := vArea(s, p.relV)
+	y := y0 + p.posV
+	switch p.alignV {
+	case "top", "inside":
+		y = y0
+	case "center":
+		y = y0 + (ah-p.h)/2
+	case "bottom", "outside":
+		y = y0 + ah - p.h
+	}
+	st.Left, st.Top = css.Pts(x), css.Pts(y)
+	st.Right, st.Bottom = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
+	for _, k := range a.kids {
+		k.Style.Left, k.Style.Top = css.Pts(x+k.Style.Left.Value), css.Pts(y+k.Style.Top.Value)
+	}
+}
+
+// detachKids takes the shapes of the group n, and of the groups in it,
+// out of it and returns them in paint order, their offsets made relative
+// to n. A group anchored to the page lays its shapes out as boxes anchored
+// to the page beside it, each on the group's page whole.
+func detachKids(n *layout.Node, dx, dy float64, depth int) []*layout.Node {
+	if depth > maxNesting {
+		return nil
+	}
+	var out []*layout.Node
+	kept := n.Children[:0]
+	for _, k := range n.Children {
+		st := k.Style
+		if st == nil || st.Position != css.Absolute || st.Left.Kind != css.Points || st.Top.Kind != css.Points {
+			kept = append(kept, k)
+			continue
+		}
+		st.Left, st.Top = css.Pts(dx+st.Left.Value), css.Pts(dy+st.Top.Value)
+		out = append(out, k)
+		out = append(out, detachKids(k, st.Left.Value, st.Top.Value, depth+1)...)
+	}
+	n.Children = kept
+	return out
+}
+
+// contentWidth returns the width of the section's text area.
+func (s *section) contentWidth() float64 {
+	return max(minPageArea, s.width-s.margin[css.Left]-s.margin[css.Right]-s.gutter)
+}
+
+// hArea returns the left edge and the width of the area a horizontal
+// position is relative to (20.4.3.4) on a page of section s: the page,
+// a margin, else the text area.
+func hArea(s *section, rel string) (float64, float64) {
+	left := s.margin[css.Left] + s.gutter
+	switch rel {
+	case "page":
+		return 0, s.width
+	case "leftMargin", "insideMargin":
+		return 0, left
+	case "rightMargin", "outsideMargin":
+		return s.width - s.margin[css.Right], s.margin[css.Right]
+	}
+	return left, s.contentWidth()
+}
+
+// vArea returns the top edge and the height of the area a vertical
+// position is relative to (20.4.3.5) on a page of section s.
+func vArea(s *section, rel string) (float64, float64) {
+	top, bottom := abs(s.margin[css.Top]), abs(s.margin[css.Bottom])
+	switch rel {
+	case "page":
+		return 0, s.height
+	case "topMargin", "insideMargin":
+		return 0, top
+	case "bottomMargin", "outsideMargin":
+		return s.height - bottom, bottom
+	}
+	return top, max(minPageArea, s.height-top-bottom)
 }
 
 // position reads a wp:positionH or wp:positionV (20.4.2.10, 20.4.2.11):
@@ -158,68 +360,12 @@ func (d *document) group(s *story, g *ooxml.Element, st *css.Style, w, h float64
 		}
 		kid.Style.Position = css.Absolute
 		kid.Style.Left, kid.Style.Top = css.Pts((x-offX)*sx), css.Pts((y-offY)*sy)
-		if kid.Style.Display == css.Inline {
+		if kid.Style.Display == css.Inline || kid.Style.Display == css.InlineBlock {
 			kid.Style.Display = css.Block
 		}
 		n.Children = append(n.Children, kid)
 	}
 	return n
-}
-
-// vml builds the VML fallback of a w:pict or w:object (ECMA-376 Part 4,
-// 14.1): a text box's content, else the picture of its v:imagedata, sized
-// by the shape's style.
-func (d *document) vml(s *story, c *ooxml.Element, st *css.Style, sink *inlineSink, depth int) {
-	shape := c.Find(ooxml.NSV, "shape")
-	if shape == nil {
-		shape = c.Find(ooxml.NSV, "rect")
-	}
-	if shape == nil {
-		if c.Local == "object" {
-			d.warn("unsupported-content", "an embedded object is left out")
-		}
-		return
-	}
-	w, h := vmlSize(attrOr(shape, "style"))
-	if tb := shape.Child(ooxml.NSV, "textbox"); tb != nil {
-		if content := tb.Child(ooxml.NSW, "txbxContent"); content != nil {
-			sink.add(d.textBox(s, content, w, h, ooxml.ShapeStyle{}, nil, depth))
-			return
-		}
-	}
-	if img := shape.Child(ooxml.NSV, "imagedata"); img != nil {
-		id, _ := img.AttrNS(ooxml.NSR, "id")
-		if n := d.picture(s, ooxml.PictureRef{Embed: id}, st, w, h, attrOr(img, "title")); n != nil {
-			sink.add(n)
-		}
-		return
-	}
-	if c.Local == "object" {
-		d.warn("unsupported-content", "an embedded object without a picture is left out")
-	}
-}
-
-// vmlSize reads the width and height of a VML shape's CSS-like style
-// (ECMA-376 Part 4, 14.1.2.19), 0 when absent.
-func vmlSize(style string) (float64, float64) {
-	var w, h float64
-	for _, decl := range strings.Split(style, ";") {
-		name, val, ok := strings.Cut(decl, ":")
-		if !ok {
-			continue
-		}
-		v, ok := ooxml.Measure(strings.TrimSpace(val), 0.75)
-		if !ok {
-			continue
-		}
-		switch strings.TrimSpace(name) {
-		case "width":
-			w = max(0, v)
-		case "height":
-			h = max(0, v)
-		}
-	}
-	return w, h
 }
 
 // frame lays a paragraph with a w:framePr (17.3.1.11) out as a float: a
