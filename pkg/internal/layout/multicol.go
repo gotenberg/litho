@@ -107,12 +107,14 @@ type colFrag struct {
 
 // colRow is a row of columns: its top, its columns' height, the height
 // it takes in the container, how many columns hold content, and whether a
-// row may follow it.
+// row may follow it. stop, when not 0, is the column count a forced page
+// break cut the row at.
 type colRow struct {
 	top, h, used float64
 	cols         int
 	next         bool
 	first        int
+	stop         int
 }
 
 // isMulticol reports a multi-column container: a block container, not a
@@ -250,7 +252,7 @@ func (c *colCtx) grow() bool {
 	}
 	last := c.frags[n-1]
 	row := c.rows[last.row]
-	if last.col+1 < c.target() || !row.next {
+	if (last.col+1 < c.target() && (row.stop == 0 || last.col+1 < row.stop)) || !row.next {
 		c.frags = append(c.frags, colFrag{vtop: last.vtop + last.h, h: last.h, row: last.row, col: last.col + 1})
 		return true
 	}
@@ -260,6 +262,34 @@ func (c *colCtx) grow() bool {
 	}
 	c.newRow(top)
 	return true
+}
+
+// breakRow ends the row of columns that the column flow position y lies
+// in, for a forced page break there, and returns the top of the first
+// column of the row that starts on the next page: a page break inside
+// columns ends the multicol fragment on its page, the columns resuming on
+// the next one (CSS Fragmentation 3, 3.1, as Writer breaks a page inside a
+// section of columns). y at the top of a row's first column breaks
+// nothing. A row no row may follow, in a container the pages do not cut,
+// breaks at the next column instead.
+func (c *colCtx) breakRow(y float64) float64 {
+	i := c.of(y)
+	if i >= len(c.frags) {
+		return c.top(i + 1)
+	}
+	if math.Abs(y-c.frags[i].vtop) < 1e-4 {
+		if c.frags[i].col == 0 {
+			return y
+		}
+		i--
+	}
+	f := c.frags[i]
+	if !c.rows[f.row].next {
+		return c.top(i + 1)
+	}
+	c.frags, c.rows = c.frags[:i+1], c.rows[:f.row+1]
+	c.rows[f.row].stop = f.col + 1
+	return c.top(i + 1)
 }
 
 // bottom returns the column flow position the last column ends at.
@@ -849,8 +879,9 @@ func toFlow(d *box, x, y float64) (float64, float64) {
 }
 
 // forces reports a break value that forces a break at the fragmentainer
-// being laid out: a page break, and in columns a column break too, a page
-// break inside columns breaking the column (CSS Fragmentation 3, 3.1).
+// being laid out: a page break, and in columns a column break too; a page
+// break inside columns ends their row on its page (CSS Fragmentation 3,
+// 3.1, see [colCtx.breakRow]).
 func (e *engine) forces(v css.Break) bool {
 	return isForced(v) || e.cols != nil && v == css.Column
 }

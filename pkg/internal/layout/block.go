@@ -213,6 +213,9 @@ const (
 	// side (CSS Fragmentation 3, 3.1; CSS Page 3, 4.3).
 	breakLeft
 	breakRight
+	// breakColumnsPage is a forced page break inside columns: the box
+	// starts the first column of a row on the next page.
+	breakColumnsPage
 )
 
 // formatter lays out the content of a block container. Block flow and
@@ -483,7 +486,10 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		// top margin stays, after an unforced one it is truncated too (CSS
 		// Fragmentation 3, 5.2).
 		y := cursor
-		if !e.atPageTop(y) {
+		switch {
+		case mode == breakColumnsPage && e.cols != nil:
+			y = e.cols.breakRow(y)
+		case !e.atPageTop(y):
 			y = e.nextPage(y)
 		}
 		blank := false
@@ -776,6 +782,11 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 			mode = forcedMode(prev.st.BreakAfter, k.st.BreakBefore)
 		} else if prev == nil && e.forces(k.st.BreakBefore) && cursor+mc.strut.sum() > e.flowStart()+eps {
 			mode = forcedMode(css.BreakAuto, k.st.BreakBefore)
+		}
+		if mode != breakNone && e.cols != nil && (prev != nil && isForced(prev.st.BreakAfter) || isForced(k.st.BreakBefore)) {
+			// A page break wins over a column break at the same place, and
+			// ends the columns on their page (CSS Fragmentation 3, 3.1).
+			mode = breakColumnsPage
 		}
 		if mode == breakNone && prev != nil && e.cols == nil && namesDiffer(prev, k) {
 			// Siblings whose page values differ meet at a forced break
