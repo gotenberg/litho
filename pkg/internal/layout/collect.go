@@ -106,6 +106,9 @@ type collector struct {
 	space bool
 	// prev is the last character kept, for capitalize.
 	prev rune
+	// bidi lists the inline boxes open whose unicode-bidi opens explicit
+	// formatting characters, outermost first.
+	bidi []*bidiScope
 }
 
 // ifcOf returns the inline content of b, collected and shaped on first
@@ -156,6 +159,7 @@ func (c *collector) walk(k *box) {
 		start := c.cur.n
 		startPara := c.cur
 		c.cur.opens = append(c.cur.opens, posBox{pos: c.cur.n, box: k})
+		c.openBidi(k)
 		for _, kid := range k.kids {
 			c.walk(kid)
 		}
@@ -164,6 +168,7 @@ func (c *collector) walk(k *box) {
 			// no line (CSS 2.1, 9.4.2).
 			c.object(runEmpty, k)
 		}
+		c.closeBidi(k)
 		c.cur.closes = append(c.cur.closes, posBox{pos: c.cur.n, box: k})
 	default:
 		c.object(runAtomic, k)
@@ -199,8 +204,7 @@ func hasInlineEdges(b *box) bool {
 
 // object adds an object run for box b.
 func (c *collector) object(kind runKind, b *box) {
-	c.cur.runs = append(c.cur.runs, text.ParagraphRun{Object: &text.Object{}})
-	c.cur.infos = append(c.cur.infos, runInfo{kind: kind, box: b, ws: b.st.WhiteSpace})
+	c.addRun(text.ParagraphRun{Object: &text.Object{}}, runInfo{kind: kind, box: b, ws: b.st.WhiteSpace})
 	c.cur.n++
 }
 
@@ -209,6 +213,7 @@ func (c *collector) breakPara() {
 	c.cur.forced = true
 	c.d.paras = append(c.d.paras, c.cur)
 	c.cur = &ifcPara{}
+	c.reopenBidi()
 	c.space = true
 }
 
@@ -241,13 +246,6 @@ func (c *collector) text(k *box) {
 	}
 	s := transform(k.text, k.st.TextTransform, k.lang, &c.prev)
 	style := c.e.textStyle(k.st, k.lang)
-	override := text.DirectionAuto
-	if k.parent != nil && k.parent != c.root && (k.parent.st.UnicodeBidi == css.BidiOverride || k.parent.st.UnicodeBidi == css.IsolateOverride) {
-		override = text.LeftToRight
-		if k.parent.st.Direction == css.RTL {
-			override = text.RightToLeft
-		}
-	}
 	var buf strings.Builder
 	flush := func() {
 		if buf.Len() == 0 {
@@ -258,8 +256,7 @@ func (c *collector) text(k *box) {
 			if pc.small {
 				st.Size *= smallCapsScale
 			}
-			c.cur.runs = append(c.cur.runs, text.ParagraphRun{Text: pc.text, Style: st, Override: override})
-			c.cur.infos = append(c.cur.infos, runInfo{kind: runText, box: k, ws: ws})
+			c.addRun(text.ParagraphRun{Text: pc.text, Style: st}, runInfo{kind: runText, box: k, ws: ws})
 			c.cur.n += utf8.RuneCountInString(pc.text)
 		}
 		buf.Reset()

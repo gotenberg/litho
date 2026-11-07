@@ -79,6 +79,14 @@ type ParagraphRun struct {
 	// unicode-bidi: bidi-override does (UAX #9, explicit overrides); the
 	// zero value overrides nothing.
 	Override Direction
+	// Open lists the explicit directional formatting characters of UAX
+	// #9 that open before the run (LRE, RLE, LRO, RLO, LRI, RLI or FSI),
+	// outermost first, and Close the ones that close after it (PDF or
+	// PDI), innermost first: the controls CSS Writing Modes 4, 2.4.2 maps
+	// unicode-bidi onto. They take part in resolving the embedding levels
+	// alone: they are not characters of the paragraph's text. Other
+	// characters are ignored.
+	Open, Close []rune
 }
 
 // ParagraphOptions tunes a [Fonts.Shape] call.
@@ -143,6 +151,9 @@ type Paragraph struct {
 	object []*Object
 	base   Direction
 	items  []shapedItem
+	// level is each character's resolved embedding level (UAX #9, X1 to
+	// I2).
+	level []int8
 }
 
 // shapedItem is one shaped piece of a paragraph, in logical order: a run of
@@ -259,16 +270,18 @@ func (f *Fonts) Shape(ctx context.Context, runs []ParagraphRun, opts ParagraphOp
 	p.adv = make([]float64, n)
 	p.brk = make([]Break, n)
 	p.graph = make([]bool, n)
+	bidiText, at := bidiInput(runs, shapeText, p.runOf)
 	p.base = opts.Direction
 	if p.base != LeftToRight && p.base != RightToLeft {
 		p.base = LeftToRight
-		if paragraphDirection(shapeText) == di.DirectionRTL {
+		if paragraphDirection(bidiText) == di.DirectionRTL {
 			p.base = RightToLeft
 		}
 	}
 	if n == 0 {
 		return p, st.report(), nil
 	}
+	p.level = resolveLevels(bidiText, at, p.base)
 	p.segment(st, shapeText)
 	if err := p.shape(ctx, st, runs, shapeText); err != nil {
 		return nil, Report{}, err
@@ -300,18 +313,17 @@ func (p *Paragraph) segment(st *layoutState, text []rune) {
 // shape shapes the text between objects, item by item.
 func (p *Paragraph) shape(ctx context.Context, st *layoutState, runs []ParagraphRun, text []rune) error {
 	baseDir := di.DirectionLTR
-	baseLevel := 0
 	if p.base == RightToLeft {
 		baseDir = di.DirectionRTL
-		baseLevel = 1
 	}
 	for start := 0; start < len(text); {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("shaping text: %w", err)
 		}
 		if o := p.object[start]; o != nil {
+			lv := int(p.level[start])
 			p.items = append(p.items, shapedItem{
-				start: start, end: start + 1, run: p.runOf[start], level: baseLevel, rtl: baseLevel == 1,
+				start: start, end: start + 1, run: p.runOf[start], level: lv, rtl: lv%2 == 1,
 				ascent: o.Ascent, descent: o.Descent, object: true,
 			})
 			p.adv[start] = o.Width
@@ -345,7 +357,7 @@ func (p *Paragraph) shapeSegment(st *layoutState, runs []ParagraphRun, text []ru
 	for _, item := range items {
 		for s := item.RunStart; s < item.RunEnd; {
 			e := s + 1
-			for e < item.RunEnd && p.runOf[e] == p.runOf[s] {
+			for e < item.RunEnd && p.runOf[e] == p.runOf[s] && p.level[e] == p.level[s] {
 				e++
 			}
 			idx := p.runOf[s]
@@ -356,12 +368,11 @@ func (p *Paragraph) shapeSegment(st *layoutState, runs []ParagraphRun, text []ru
 			if ss.style.Lang != "" {
 				piece.Language = ss.lang
 			}
-			switch runs[idx].Override {
-			case LeftToRight:
-				piece.Direction = di.DirectionLTR
-			case RightToLeft:
+			// The resolved level, explicit embeddings and overrides
+			// included, decides the direction (UAX #9, L2).
+			piece.Direction = di.DirectionLTR
+			if p.level[s]%2 == 1 {
 				piece.Direction = di.DirectionRTL
-			case DirectionAuto:
 			}
 			for _, in := range shaping.SplitByFace(piece, styleFontmap{st: st, style: idx, script: piece.Script}) {
 				out := st.shaper.Shape(in)
@@ -370,7 +381,7 @@ func (p *Paragraph) shapeSegment(st *layoutState, runs []ParagraphRun, text []ru
 				if ss.word != 0 {
 					out.AddWordSpacing(text, ss.word)
 				}
-				it, err := p.convert(st, &out, idx, ss.style, baseDir)
+				it, err := p.convert(st, &out, idx, ss.style)
 				if err != nil {
 					return err
 				}
@@ -385,7 +396,7 @@ func (p *Paragraph) shapeSegment(st *layoutState, runs []ParagraphRun, text []ru
 // convert turns one shaped output into a [shapedItem] in points, adding the
 // letter spacing after each cluster and recording every cluster's advance
 // on its first character.
-func (p *Paragraph) convert(st *layoutState, out *shaping.Output, run int, style Style, baseDir di.Direction) (shapedItem, error) {
+func (p *Paragraph) convert(st *layoutState, out *shaping.Output, run int, style Style) (shapedItem, error) {
 	it := shapedItem{
 		start: out.Runes.Offset, end: out.Runes.Offset + out.Runes.Count, run: run, style: style,
 		rtl:     out.Direction.Progression() == di.TowardTopLeft,
@@ -393,13 +404,8 @@ func (p *Paragraph) convert(st *layoutState, out *shaping.Output, run int, style
 		descent: -st.toPoints(out.LineBounds.Descent),
 		gap:     st.toPoints(out.LineBounds.Gap),
 	}
-	switch {
-	case baseDir == di.DirectionLTR && it.rtl:
-		it.level = 1
-	case baseDir == di.DirectionRTL && !it.rtl:
-		it.level = 2
-	case baseDir == di.DirectionRTL:
-		it.level = 1
+	if it.start >= 0 && it.start < len(p.level) {
+		it.level = int(p.level[it.start])
 	}
 	if fc := st.byFont[out.Face.Font]; fc != nil {
 		cf, err := fc.Compose()
