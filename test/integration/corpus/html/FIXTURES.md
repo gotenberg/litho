@@ -4,7 +4,7 @@ HTML and Markdown sources converted twice: by Chromium, through the Chromium rou
 
 | Path            | What it holds                                                                                                                 |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `sources/`      | The 36 sources                                                                                                                |
+| `sources/`      | The 37 sources                                                                                                                |
 | `chromium/`     | Chromium's PDF of each source, the reference (`make html-chromium`, committed)                                                |
 | `pdfs/`         | litho's PDF of each source (`make html-fixtures`, committed once the converter writes them)                                   |
 | `chromium.sh`   | Posts each source to the Gotenberg image and writes `chromium/<name>.pdf`                                                     |
