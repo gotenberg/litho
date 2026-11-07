@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-07T12:49:04Z",
+  "captured_at": "2026-11-07T13:16:17Z",
   "corpora": {
     "compose": {
       "features": {
@@ -3754,613 +3754,613 @@
     "odt": {
       "features": {
         "diff": {
-          "matched": 0,
-          "mismatched": 154,
+          "matched": 66,
+          "mismatched": 88,
           "skipped": 0,
           "metrics": {
-            "convert_error": 154,
-            "pages_equal": 0
+            "convert_error": 1,
+            "pages_equal": 140
           },
           "scores": {
             "form": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.5148,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "form-flat": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.5148,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "layout/2024-01-19_merged-cells-on-separate-pages-vertical-alignment.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
+              "layout": 0.1376,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0.6667,
+              "strict": 0.6667,
               "text_f1": 0
             },
             "layout/Tdf121509.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "layout/TextBoxFrame.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "layout/abi11870-2.odt": {
-              "layout": 0,
+              "layout": 0.4156,
               "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "outline_recall": 0.5405,
+              "pages": 0.9459,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 0.5518
             },
             "layout/btlr-cell.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.7753,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "layout/endOfLineComments.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9778,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "layout/fdo56797-2-min.odt": {
-              "layout": 0,
+              "layout": 0.5287,
               "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "outline_recall": 1,
+              "pages": 0.6667,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 0.6135
             },
             "layout/i94666.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.8988,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "layout/image-comment.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.8899,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "layout/in_056132_mod.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9123,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "layout/linked_frames_section_bug.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.4842
             },
             "layout/many-paragraphs-per-page-in-6-columns.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.7427,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "layout/redline_footnotes.odt": {
-              "layout": 0,
+              "layout": 0.9606,
               "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "layout/stable-at-page-anchored-fly-position.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.3333
             },
             "layout/tab-over-margin.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.5006,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "layout/tabellen_test_windows_1.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9778,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 1
             },
             "layout/table-extrusion1.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9998,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "layout/table-extrusion2.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.683,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "layout/tdf106390.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.8756,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.6667,
+              "text_f1": 1
             },
             "layout/tdf116501.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.0862,
+              "link_recall": 1,
+              "outline_recall": 0.75,
+              "pages": 0.6667,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 0.6135
             },
             "layout/tdf116830.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.156,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "layout/tdf116848.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.7513,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 0.9791
             },
             "layout/tdf117187.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.1053
             },
             "layout/tdf117245.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.0339,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "layout/tdf118672.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.4689,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9362
             },
             "layout/tdf119875.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9929,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "layout/tdf121658.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.965,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9897
             },
             "layout/tdf122607.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.0239,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0.75,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 0.3229
             },
             "layout/tdf122607_leerzeile.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0.5,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 0.4104
             },
             "layout/tdf123898.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
               "text_f1": 0
             },
             "memo": {
-              "layout": 0,
+              "layout": 0.9679,
               "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "memo-flat": {
-              "layout": 0,
+              "layout": 0.8756,
               "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/DUMMY2.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.2144,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0.6,
+              "strict": 0.2,
+              "text_f1": 0.2163
             },
             "odfexport/DUMMY2B.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.2262,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0.6,
+              "strict": 0.2,
+              "text_f1": 0.2324
             },
             "odfexport/MadeByLO7.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfexport/WordTest_edit.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.8843,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/allow-overlap.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.8099,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfexport/arabic-zero-numbering.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.5602,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.5
             },
             "odfexport/arabic-zero3-numbering.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.1407,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.5
             },
             "odfexport/arabic-zero4-numbering.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.2993,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.5
             },
             "odfexport/arabic-zero5-numbering.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.2831,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.5
             },
             "odfexport/border_types.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.8739,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/btlr-cell.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.8728,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/btlr-frame.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/chapter-number-new-line.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.2136,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfexport/charborder.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfexport/embedded-pdf.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
               "text_f1": 0
             },
             "odfexport/fdo38244.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9703,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/fdo43807.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.956,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/fdo60769.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.915,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/fdo79358.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9616,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/fdo86963.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.7496,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/fillbitmap3.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfexport/framebackgrounds.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0.2,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 0.2
             },
             "odfexport/gerrit13858.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
               "text_f1": 0
             },
             "odfexport/gutter-left.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9694,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/image-mimetype.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.8223,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfexport/listformat.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.2886,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/nestedTableInFooter.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.6969,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/ooo321_stylepagenumber.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9999,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/page-content-bottom.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfexport/page-content-top.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.6819,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfexport/pagestyle_background_lo64.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.3544,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 1
             },
             "odfexport/pagestyle_background_lo70.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.3544,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 1
             },
             "odfexport/pagestyle_background_ooo33.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.2271,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfexport/personalmetadata.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.8717,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/qrcode-properties.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9798,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/redlineTextFrame.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9842,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/referencelanguage.odt": {
-              "layout": 0,
+              "layout": 0.9257,
               "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9849
             },
             "odfexport/relh-page-tdf80282.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0.3333,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 0.3333
             },
             "odfexport/relh-page.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/relw-page.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/resolved-comment.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9514,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/rovas-numbering.odt": {
               "layout": 0,
@@ -4371,628 +4371,628 @@
               "text_f1": 0
             },
             "odfexport/ruby-position.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.7083,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.4
             },
             "odfexport/shape-relsize.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.5677,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfexport/shape-with-hyperlink.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/shapes-hyperlink.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.277,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfexport/spellout-numberingtypes.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9661,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/sw_hatch.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfexport/table-in-frame-in-table-in-header-base.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.7217,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/table_styles_1.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 1,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/table_styles_2.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9518,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.3333
             },
             "odfexport/table_styles_3.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.998,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/table_styles_4.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 1,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/tdf101710.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9998,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/tdf101856.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.8539,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.8657
             },
             "odfexport/tdf101856_overlapped.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.6615,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.7333
             },
             "odfexport/tdf103567.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfexport/tdf104254_noHeaderWrapping.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.6274,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfexport/tdf107292.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9463,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/tdf107696.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9148,
+              "link_recall": 1,
+              "outline_recall": 0.5714,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9897
             },
             "odfexport/tdf111891_frameVertStyle.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/tdf114287.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.7225,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfexport/tdf115815.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.876,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/tdf118502.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
               "text_f1": 0
             },
             "odfexport/tdf121658.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.9103,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 0.9781
             },
             "odfexport/tdf124470TableAndEmbeddedUsedFonts.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9651,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/tdf131025_noZerosInTable.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9792,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9697
             },
             "odfexport/tdf131812.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/tdf132642_keepWithNextTable.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9448,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 1
             },
             "odfexport/tdf133507_contextualSpacingSection.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.0473,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 0.7753
             },
             "odfexport/tdf135338_firstLeftPageFooter.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.696,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.6578
             },
             "odfexport/tdf136645.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.4899,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 0.9941
             },
             "odfexport/tdf139126.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.8807,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.8
             },
             "odfexport/tdf140437.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9995,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/tdf142483.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.995,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/tdf143605.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9395,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/tdf143793_noBodyWrapping.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.7953,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfexport/tdf145361.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.956,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/tdf145871.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.7844,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfexport/tdf146264.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.4391,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 0.5
             },
             "odfimport/BibliographyEntryField.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9732,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/PageBackground.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0.5,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 0.1752
             },
             "odfimport/Word2010AsCharShape.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9336,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/annotation-formatting.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9393,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/borders_ooo33.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.8523,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/dateFormFormats.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.2157,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 1
             },
             "odfimport/empty-svg-family-name.odt": {
-              "layout": 0,
-              "link_recall": 0,
+              "layout": 0.9533,
+              "link_recall": 1,
               "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/fdo37606.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9323,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/fdo53210.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.4269,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/fdo55814.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9851,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/fdo56272.odt": {
-              "layout": 0,
-              "link_recall": 0,
+              "layout": 0.0824,
+              "link_recall": 1,
               "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.8889
             },
             "odfimport/fdo60842.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
               "text_f1": 0
             },
             "odfimport/fdo69862.odt": {
-              "layout": 0,
+              "layout": 0.9221,
               "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/fdo69979.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9966,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/fdo75872_aoo40.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/fdo75872_ooo33.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfimport/fdo79269.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.754,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.5
             },
             "odfimport/fdo79269_header.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.7276,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.5
             },
             "odfimport/fdo81223.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfimport/fdo82165.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.8274,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/fdo90130-1.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfimport/fdo90130-2.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "odfimport/feature_image_jpg.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.8812,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/feature_table.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 1,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/feature_table_merged-cells.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 1,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/feature_table_merged-cells_all.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 1,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/feature_table_text.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9852,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/feature_text.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9845,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/feature_text_background-color.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.996,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/feature_text_bold.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9874,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/feature_text_italic.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9857,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/hello.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9456,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/incorrectsum.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9182,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.8939
             },
             "odfimport/ooo32780-1.odt": {
-              "layout": 0,
+              "layout": 0.4447,
               "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "outline_recall": 1,
+              "pages": 0.5,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 0.4926
             },
             "odfimport/ooo77837-1.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
+              "layout": 0.4261,
+              "link_recall": 0.5,
+              "outline_recall": 1,
+              "pages": 0.6667,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 0.6192
             },
             "odfimport/paste-first-para-direct-format.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.956,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/space.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9469,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/spellmenu-redline.odt": {
-              "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "layout": 0.9622,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "odfimport/tdf100033_1.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.5
             },
             "odfimport/tdf100033_2.odt": {
               "layout": 0,
-              "link_recall": 0,
-              "outline_recall": 0,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             }
           },
           "score_tolerance": 0.02
