@@ -1,6 +1,7 @@
 package odt
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -256,11 +257,14 @@ func TestConvert_TableOfContentsRegenerated(t *testing.T) {
 	auto := `<style:style style:name="PB" style:family="paragraph"><style:paragraph-properties fo:break-before="page"/></style:style>`
 	res := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{})
 	ls := lines(res.Pages[0])
+	// The engine fills the right-aligned tab with its dot leader, as
+	// LibreOffice draws it, so a run of dots stands for the leader.
+	leader := regexp.MustCompile(`\.{2,}`)
 	var got []string
 	for _, l := range ls[:3] {
-		got = append(got, strings.Join(strings.Fields(l.text), ""))
+		got = append(got, leader.ReplaceAllString(strings.Join(strings.Fields(l.text), ""), "."))
 	}
-	if strings.Join(got, "|") != "Contents|One1|Two2" {
+	if strings.Join(got, "|") != "Contents|One.1|Two.2" {
 		t.Errorf("table = %q", got)
 	}
 }
