@@ -57,17 +57,20 @@ func newTestServer(t *testing.T, routes map[string]route) *testServer {
 func TestPrepare_FetchesResourcesOverHTTP(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t, map[string]route{
-		"/css/site.css":  {ctype: "text/css", body: []byte(`@import "more.css"; #x { background-image: url(../img/bg.png) }`)},
-		"/css/more.css":  {ctype: "text/css; charset=utf-8", body: []byte(`#x { color: rgb(255, 0, 0) }`)},
-		"/img/bg.png":    {ctype: "image/png", body: pngBytes(t, 2, 2)},
-		"/docs/a.png":    {ctype: "image/png", body: pngBytes(t, 3, 3)},
-		"/assets/b.png":  {ctype: "image/png", body: pngBytes(t, 5, 5)},
-		"/old/moved.css": {redirect: "/new/real.css"},
-		"/new/real.css":  {ctype: "text/css", body: []byte(`#y { background-image: url(pic.png) }`)},
-		"/new/pic.png":   {ctype: "application/octet-stream", body: pngBytes(t, 7, 7)},
+		"/css/site.css":     {ctype: "text/css", body: []byte(`@import "more.css"; @import "../old/imported.css"; #x { background-image: url(../img/bg.png) }`)},
+		"/css/more.css":     {ctype: "text/css; charset=utf-8", body: []byte(`#x { color: rgb(255, 0, 0) }`)},
+		"/img/bg.png":       {ctype: "image/png", body: pngBytes(t, 2, 2)},
+		"/docs/a.png":       {ctype: "image/png", body: pngBytes(t, 3, 3)},
+		"/assets/b.png":     {ctype: "image/png", body: pngBytes(t, 5, 5)},
+		"/old/moved.css":    {redirect: "/new/real.css"},
+		"/new/real.css":     {ctype: "text/css", body: []byte(`#y { background-image: url(pic.png) }`)},
+		"/new/pic.png":      {ctype: "application/octet-stream", body: pngBytes(t, 7, 7)},
+		"/old/imported.css": {redirect: "/new/imported.css"},
+		"/new/imported.css": {ctype: "text/css", body: []byte(`#z { background-image: url(z.png) }`)},
+		"/new/z.png":        {ctype: "image/png", body: pngBytes(t, 9, 9)},
 	})
 	src := `<link rel=stylesheet href="/css/site.css"><link rel=stylesheet href="../old/moved.css">` +
-		`<p id=x>x<img id=i src="a.png"><img id=again src="a.png"></p><p id=y>y</p><a id=l href="other.html">l</a>`
+		`<p id=x>x<img id=i src="a.png"><img id=again src="a.png"></p><p id=y>y</p><p id=z>z</p><a id=l href="other.html">l</a>`
 	p := prep(t, src, Options{BaseURL: ts.URL + "/docs/index.html#frag", HTTPClient: ts.Client()})
 	if len(p.warnings) != 0 {
 		t.Fatalf("warnings: %+v", p.warnings)
@@ -84,8 +87,9 @@ func TestPrepare_FetchesResourcesOverHTTP(t *testing.T) {
 	}
 	ctx := context.Background()
 	// The sheet's url() resolves against the sheet's URL, and after a
-	// redirect against the URL it was served from.
-	for id, want := range map[string]float64{"x": 2, "y": 7} {
+	// redirect against the URL it was served from, an imported sheet's
+	// too.
+	for id, want := range map[string]float64{"x": 2, "y": 7, "z": 9} {
 		u := byID(t, p.root, id).Style.BackgroundImage
 		pic, err := p.layout.Image(ctx, u)
 		if err != nil || pic.Width != want*css.Pt {

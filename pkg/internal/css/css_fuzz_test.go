@@ -24,7 +24,7 @@ func FuzzParse(f *testing.F) {
 	f.Add([]byte("p{a:(((((((((("))
 	f.Add([]byte("@page { background: linear-gradient(45deg, red 10%, 40%, blue) 0 0 / 50% auto } p { background: radial-gradient(circle 4px at left, red, blue 2px 3px) }"))
 	f.Fuzz(func(t *testing.T, data []byte) {
-		fetch := func(context.Context, string) ([]byte, error) { return data, nil }
+		fetch := func(context.Context, string) ([]byte, string, error) { return data, "", nil }
 		s, err := Parse(context.Background(), data, ParseOptions{BaseURL: "https://e.com/s.css", Fetch: fetch})
 		if s == nil {
 			t.Fatalf("nil stylesheet (err %v)", err)

@@ -232,12 +232,12 @@ func TestImport_FetchesAndGuards(t *testing.T) {
 		"https://e.com/self.css":   `@import url(self.css); p { margin-bottom: 2px }`,
 	}
 	var fetched []string
-	fetch := func(_ context.Context, u string) ([]byte, error) {
+	fetch := func(_ context.Context, u string) ([]byte, string, error) {
 		fetched = append(fetched, u)
 		if b, ok := files[u]; ok {
-			return []byte(b), nil
+			return []byte(b), "", nil
 		}
-		return nil, errors.New("not found")
+		return nil, "", errors.New("not found")
 	}
 	s, err := Parse(context.Background(), []byte(files["https://e.com/main.css"]), ParseOptions{BaseURL: "https://e.com/main.css", Fetch: fetch})
 	if err != nil {
@@ -260,8 +260,8 @@ func TestImport_FetchesAndGuards(t *testing.T) {
 	}
 
 	// A chain past maxImportDepth stops with a warning.
-	chain := func(_ context.Context, u string) ([]byte, error) {
-		return []byte(fmt.Sprintf(`@import url(%s-x.css);`, strings.TrimSuffix(u, ".css"))), nil
+	chain := func(_ context.Context, u string) ([]byte, string, error) {
+		return []byte(fmt.Sprintf(`@import url(%s-x.css);`, strings.TrimSuffix(u, ".css"))), "", nil
 	}
 	s, err = Parse(context.Background(), []byte(`@import url(c.css);`), ParseOptions{BaseURL: "https://e.com/", Fetch: chain})
 	if err != nil || !hasWarning(s.Warnings(), "css-limit", "@import") {
@@ -270,6 +270,43 @@ func TestImport_FetchesAndGuards(t *testing.T) {
 	// Without Fetch, imports are skipped.
 	if _, err := Parse(context.Background(), []byte(`@import url(c.css); p{}`), ParseOptions{}); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestImport_ResolvesAgainstTheFinalURL(t *testing.T) {
+	t.Parallel()
+	// moved.css redirects to new/sheet.css: its url() values and its own
+	// imports resolve against the URL it came from (CSS Values 4, 4.5.1).
+	files := map[string]string{
+		"https://e.com/moved.css":      `@import "inner.css"; p { background: url(bg.png) }`,
+		"https://e.com/new/inner.css":  `p { margin-top: 1px }`,
+		"https://e.com/inner.css":      `p { margin-top: 99px }`,
+	}
+	fetch := func(_ context.Context, u string) ([]byte, string, error) {
+		final := ""
+		if u == "https://e.com/moved.css" {
+			final = "https://e.com/new/sheet.css"
+		}
+		if b, ok := files[u]; ok {
+			return []byte(b), final, nil
+		}
+		return nil, "", errors.New("not found")
+	}
+	s, err := Parse(context.Background(), []byte(`@import url(moved.css);`), ParseOptions{BaseURL: "https://e.com/main.css", Fetch: fetch})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := parseHTML(t, `<p id=p>`)
+	c, err := NewResolver(a4, []Sheet{{Sheet: s, Origin: Author}}).Compute(context.Background(), doc, ComputeOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := c.Style(byID(doc, "p"))
+	if p.BackgroundImage != "https://e.com/new/bg.png" {
+		t.Errorf("url() resolved to %q", p.BackgroundImage)
+	}
+	if !dimEq(p.Margin[Top], pts(0.75)) {
+		t.Errorf("margin-top %+v, want the import next to the final URL", p.Margin[Top])
 	}
 }
 

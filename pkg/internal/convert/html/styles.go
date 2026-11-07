@@ -113,11 +113,12 @@ func (c *collector) linkElement(ctx context.Context, n *dom.Node) *css.Styleshee
 // it, so its rules carry the condition as @import gives it (CSS Cascade 4,
 // 2) and its own imports stay valid.
 func (c *collector) parse(ctx context.Context, body []byte, u, media string) *css.Stylesheet {
-	fetch := func(ctx context.Context, target string) ([]byte, error) {
+	fetch := func(ctx context.Context, target string) ([]byte, string, error) {
 		if target == u {
-			return body, nil
+			return body, u, nil
 		}
-		return c.res.fetch(ctx, target)
+		f, err := c.res.fetchTyped(ctx, target)
+		return f.data, f.url, err
 	}
 	src, base := body, u
 	if m := strings.TrimSpace(media); m != "" && !strings.EqualFold(m, "all") {

@@ -12,10 +12,13 @@ type ParseOptions struct {
 	// BaseURL is the stylesheet's URL: url() values and @import resolve
 	// against it. Empty keeps relative URLs as written.
 	BaseURL string
-	// Fetch returns the bytes of an imported stylesheet. nil disables
-	// @import. It is called sequentially, in source order, at most
-	// maxImports times per Parse call.
-	Fetch func(ctx context.Context, url string) ([]byte, error)
+	// Fetch returns the bytes of an imported stylesheet and the URL they
+	// came from, the response's after redirects, "" when it is url itself:
+	// the imported sheet's url() values and imports resolve against that
+	// URL (CSS Values 4, 4.5.1, the stylesheet's location being its
+	// response's URL). nil disables @import. It is called sequentially, in
+	// source order, at most maxImports times per Parse call.
+	Fetch func(ctx context.Context, url string) (body []byte, final string, err error)
 	// Logger receives debug records of dropped imports; nil discards them.
 	Logger *slog.Logger
 }
@@ -313,7 +316,7 @@ func (sp *sheetParser) importRule(it item, base string, cond *mediaCond, depth i
 		return
 	}
 	sp.imports++
-	body, err := sp.opts.Fetch(sp.ctx, target)
+	body, final, err := sp.opts.Fetch(sp.ctx, target)
 	if err != nil {
 		if ctxErr := sp.ctx.Err(); ctxErr != nil {
 			sp.err = ctxErr
@@ -331,9 +334,12 @@ func (sp *sheetParser) importRule(it item, base string, cond *mediaCond, depth i
 	if len(rest) > 0 {
 		inner = &mediaCond{list: rest, parent: cond}
 	}
+	if final == "" {
+		final = target
+	}
 	sp.chain = append(sp.chain, target)
 	sp.flush(c)
-	sp.parseSheet(body, target, inner, depth+1)
+	sp.parseSheet(body, final, inner, depth+1)
 	sp.chain = sp.chain[:len(sp.chain)-1]
 }
 
