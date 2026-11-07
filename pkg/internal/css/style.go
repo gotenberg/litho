@@ -437,6 +437,23 @@ const (
 	SmallCaps
 )
 
+// FontKerning is the font-kerning property (CSS Fonts 4, 6.3): whether
+// the shaper applies the font's kerning (the OpenType kern feature, and
+// the kern table it stands for). It is inherited.
+type FontKerning uint8
+
+// The font-kerning values.
+const (
+	// KerningAuto lets the shaper decide, which litho reads as normal.
+	KerningAuto FontKerning = iota
+	// KerningNormal applies the font's kerning.
+	KerningNormal
+	// KerningNone shapes without kerning: Writer's rendering of a
+	// WordprocessingML run without w:kern (ECMA-376 Part 1, 17.3.2.19) and
+	// of ODF text without style:letter-kerning (ODF 1.3 Part 3, 20.316).
+	KerningNone
+)
+
 // TextAlign is the text-align property (CSS Text 3, 6.1). Start is the
 // initial value: left in a left-to-right block, right in a right-to-left
 // one.
@@ -926,6 +943,7 @@ type Style struct {
 	FontWeight  int
 	FontStyle   FontStyle
 	FontVariant FontVariant
+	FontKerning FontKerning
 	// FontObliqueAngle is the angle of font-style: oblique in degrees,
 	// 14 for a bare oblique, 0 for normal and italic (CSS Fonts 4, 2.4).
 	FontObliqueAngle float64

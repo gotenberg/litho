@@ -224,6 +224,10 @@ type PageBox struct {
 	// pgBorders, ODF page-layout borders), over the page background and
 	// under the margin content and the page area's content.
 	Frame *PageFrame
+	// FootnoteRule, when not nil, is the separator drawn above the page's
+	// footnote area when the area holds a note, as Word and Writer draw
+	// one. nil draws none; the area's borders come from Footnote.
+	FootnoteRule *FootnoteRule
 }
 
 // PageFrame is a border box drawn on every page it applies to.
