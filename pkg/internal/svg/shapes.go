@@ -172,6 +172,8 @@ func roundRect(x, y, w, h, rx, ry float64) []compose.PathOp {
 // shape draws a basic shape or a path, styled st: its fill, then its
 // stroke (SVG 1.1, 11.1). Opacity on a shape that paints only one of the
 // two folds into its colour, which is exact; with both it opens a group.
+// A gradient stroke fills the stroke's outline with the gradient, as the
+// composition model strokes in one colour.
 func (r *renderer) shape(n *html.Node, st *style, s sink) {
 	if !st.visible {
 		return
@@ -185,7 +187,7 @@ func (r *renderer) shape(n *html.Node, st *style, s sink) {
 	if n.Data != "line" {
 		fill = r.fillOf(st, box)
 	}
-	stroke := r.strokeOf(st, box)
+	stroke, strokeSh := r.strokeOf(st, box)
 	if fill == nil && stroke == nil {
 		return
 	}
@@ -200,7 +202,12 @@ func (r *renderer) shape(n *html.Node, st *style, s sink) {
 		return
 	}
 	fill = withAlpha(fill, s.alpha)
-	stroke = strokeAlpha(stroke, s.alpha)
+	var outline *compose.Fill
+	if strokeSh != nil {
+		outline = withAlpha(&compose.Fill{Shading: strokeSh}, s.alpha)
+	} else {
+		stroke = strokeAlpha(stroke, s.alpha)
+	}
 	if fill == nil && stroke == nil {
 		return
 	}
@@ -208,11 +215,24 @@ func (r *renderer) shape(n *html.Node, st *style, s sink) {
 	if stroke != nil && stroke.Cap != compose.ButtCap {
 		ops, caps = zeroLengthCaps(ops, stroke)
 	}
-	if len(ops) > 0 {
+	capFill := func() *compose.Fill {
+		if outline != nil {
+			return outline
+		}
+		return &compose.Fill{Color: stroke.Color}
+	}
+	if strokeSh != nil {
+		if fill != nil && len(ops) > 0 {
+			r.emit(s, &compose.Path{Ops: ops, Fill: fill})
+		}
+		if o := strokeOutline(ops, stroke); outline != nil && len(o) > 0 {
+			r.emit(s, &compose.Path{Ops: o, Fill: outline})
+		}
+	} else if len(ops) > 0 {
 		r.emit(s, &compose.Path{Ops: ops, Fill: fill, Stroke: stroke})
 	}
-	if len(caps) > 0 {
-		r.emit(s, &compose.Path{Ops: caps, Fill: &compose.Fill{Color: stroke.Color}})
+	if len(caps) > 0 && (strokeSh == nil || outline != nil) {
+		r.emit(s, &compose.Path{Ops: caps, Fill: capFill()})
 	}
 }
 
@@ -290,22 +310,47 @@ func strokeAlpha(s *compose.Stroke, a float64) *compose.Stroke {
 }
 
 // strokeOf returns the stroke of a shape styled st (SVG 1.1, 11.4), nil
-// when it has none: no stroke paint, or a zero width.
-func (r *renderer) strokeOf(st *style, box bbox) *compose.Stroke {
+// when it has none: no stroke paint, or a zero width. A gradient stroke
+// also returns the gradient's shading, its stops' alpha multiplied by
+// stroke-opacity, and the stroke's colour is then meaningless.
+func (r *renderer) strokeOf(st *style, box bbox) (*compose.Stroke, *compose.Shading) {
 	if st.stroke.kind == paintNone || st.strokeOpacity <= 0 {
-		return nil
+		return nil, nil
 	}
 	w := st.strokeWidth.resolve(r.lc(st), axisDiag)
 	if !(w > 0) {
-		return nil
+		return nil, nil
 	}
-	c, ok := r.flatPaint(st.stroke, st, box, "stroke")
-	if !ok {
-		return nil
+	var sh *compose.Shading
+	c := compose.Black
+	p := st.stroke
+	if p.kind == paintURL {
+		g, fb, ok := r.shading(p, st, box)
+		switch {
+		case ok && g == nil:
+			return nil, nil
+		case ok:
+			f := withAlpha(&compose.Fill{Shading: g}, st.strokeOpacity)
+			if f == nil {
+				return nil, nil
+			}
+			sh = f.Shading
+		case fb == nil:
+			return nil, nil
+		default:
+			p = *fb
+		}
 	}
-	c.A *= st.strokeOpacity
-	if c.A <= 0 {
-		return nil
+	if sh == nil {
+		var ok bool
+		c, ok = r.colorOf(p, st)
+		if !ok {
+			return nil, nil
+		}
+		c.A *= st.strokeOpacity
+		if c.A <= 0 {
+			return nil, nil
+		}
 	}
 	s := &compose.Stroke{Color: c, Width: w, Cap: st.lineCap, Join: st.lineJoin, Miter: st.miterLimit}
 	if len(st.dashArray) > 0 {
@@ -337,5 +382,5 @@ func (r *renderer) strokeOf(st *style, box bbox) *compose.Stroke {
 			s.DashPhase = off
 		}
 	}
-	return s
+	return s, sh
 }

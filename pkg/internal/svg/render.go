@@ -59,6 +59,11 @@ type renderer struct {
 	// text characters collected.
 	bboxSteps int
 	runes     int
+	// outlines holds the glyph outlines of each face by key, nil for a
+	// face whose outlines cannot be read; glyphsOutlined counts the glyphs
+	// converted to paths.
+	outlines       map[string]*outlineFont
+	glyphsOutlined int
 }
 
 func newRenderer(ctx context.Context, d *Document, vw, vh float64) *renderer {
@@ -240,10 +245,10 @@ func passes(n *html.Node) bool {
 // when given, else from the element's geometry.
 func (r *renderer) open(s sink, n *html.Node, st *style, box *bbox) (sink, func()) {
 	op := st.opacity
-	var clips []*compose.Path
+	var regions []clipRegion
 	if st.clipPath != "" {
 		var empty bool
-		clips, empty = r.clipPath(n, st.clipPath, box, nil)
+		regions, empty = r.clipPath(n, st.clipPath, box, nil)
 		if empty {
 			// An empty clip path clips everything away (SVG 1.1, 14.3.5).
 			op = 0
@@ -253,12 +258,19 @@ func (r *renderer) open(s sink, n *html.Node, st *style, box *bbox) (sink, func(
 		s.alpha = 0
 		return s, func() {}
 	}
-	if op >= 1 && len(clips) == 0 {
+	if len(regions) > 1 {
+		if inner, done, ok := r.openUnion(s, op, regions); ok {
+			return inner, done
+		}
+		regions = regions[:1]
+	}
+	if op >= 1 && len(regions) == 0 {
 		return s, func() {}
 	}
 	var first *compose.Path
-	if len(clips) > 0 {
-		first, clips = clips[0], clips[1:]
+	var clips []*compose.Path
+	if len(regions) > 0 {
+		first, clips = regions[0][0], regions[0][1:]
 	}
 	inner, done := r.openGroup(s, op, first)
 	// Clips that intersect, a clip path's own or its child's, nest.
@@ -269,6 +281,49 @@ func (r *renderer) open(s sink, n *html.Node, st *style, box *bbox) (sink, func(
 		done = func() { d2(); outer() }
 	}
 	return inner, done
+}
+
+// openUnion opens the groups of content of opacity op clipped to the
+// union of regions: the content is painted once in each region, which a
+// single clipping path cannot unite. Where regions overlap, translucent
+// content is painted twice. It reports false, opening nothing, with a
+// warning, when the groups would nest past the cap.
+func (r *renderer) openUnion(s sink, op float64, regions []clipRegion) (sink, func(), bool) {
+	depth := 0
+	for _, reg := range regions {
+		depth = max(depth, len(reg))
+	}
+	if op < 1 {
+		depth++
+	}
+	if s.nest+depth > maxGroupNesting {
+		r.d.warn("svg-limit", fmt.Sprintf("opacity and clipping nested deeper than %d levels are approximated", maxGroupNesting))
+		return s, nil, false
+	}
+	c := &container{}
+	inner := sink{c: c, pending: identity, nest: s.nest + depth, alpha: s.alpha}
+	return inner, func() {
+		if len(c.out) == 0 {
+			return
+		}
+		var out []compose.Fragment
+		for _, reg := range regions {
+			content := c.out
+			for i := len(reg) - 1; i >= 0; i-- {
+				m := identity
+				if i == 0 && op >= 1 {
+					m = s.pending
+				}
+				content = []compose.Fragment{&compose.Group{Transform: m, Clip: reg[i], Opacity: 1, Content: content}}
+			}
+			out = append(out, content...)
+		}
+		if op < 1 {
+			out = []compose.Fragment{&compose.Group{Transform: s.pending, Opacity: op, Content: out}}
+		}
+		s.c.out = append(s.c.out, out...)
+		s.c.last = nil
+	}, true
 }
 
 // openGroup opens a composition group of opacity op clipped to clip, in

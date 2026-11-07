@@ -71,6 +71,14 @@ func TestDraw_Painting(t *testing.T) {
 		src    string
 		probes []probe
 	}{
+		{"gradient-stroke", `<svg width="100" height="100"><linearGradient id="g"><stop stop-color="red"/><stop offset="1" stop-color="blue"/></linearGradient><rect x="10" y="10" width="80" height="80" fill="none" stroke="url(#g)" stroke-width="10"/></svg>`,
+			[]probe{{10, 50, red}, {90, 50, blue}, {50, 50, white}, {50, 30, white}}},
+		{"gradient-stroke-dashed", `<svg width="100" height="100"><linearGradient id="g" gradientUnits="userSpaceOnUse" x2="100"><stop stop-color="red"/><stop offset="1" stop-color="red"/></linearGradient><line x1="0" y1="10" x2="100" y2="10" stroke="url(#g)" stroke-width="10" stroke-dasharray="20"/></svg>`,
+			[]probe{{10, 10, red}, {30, 10, white}, {50, 10, red}}},
+		{"clip-path-union", `<svg width="100" height="100"><clipPath id="half"><rect width="50" height="100"/></clipPath><clipPath id="c"><rect width="100" height="40" clip-path="url(#half)"/><rect y="60" width="100" height="40" clip-rule="evenodd"/></clipPath><rect width="100" height="100" fill="lime" clip-path="url(#c)"/></svg>`,
+			[]probe{{25, 20, lime}, {75, 20, white}, {75, 80, lime}, {25, 80, lime}, {50, 50, white}}},
+		{"clip-path-union-opacity", `<svg width="100" height="100"><clipPath id="c"><rect width="50" height="100" clip-rule="evenodd"/><rect x="50" width="50" height="100" clip-rule="evenodd"/></clipPath><rect width="100" height="100" fill="blue" opacity="0.5" clip-path="url(#c)"/></svg>`,
+			[]probe{{25, 50, [3]uint8{128, 128, 255}}, {75, 50, [3]uint8{128, 128, 255}}}},
 		{"dash", `<svg width="100" height="100"><line x1="0" y1="10" x2="100" y2="10" stroke="black" stroke-width="10" stroke-dasharray="20"/></svg>`,
 			[]probe{{10, 10, black}, {30, 10, white}, {50, 10, black}}},
 		{"dash-offset", `<svg width="100" height="100"><line x1="0" y1="10" x2="100" y2="10" stroke="black" stroke-width="10" stroke-dasharray="20" stroke-dashoffset="20"/></svg>`,

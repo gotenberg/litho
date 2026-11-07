@@ -188,6 +188,19 @@ func TestParse_Errors(t *testing.T) {
 	}
 }
 
+func TestParse_PrefixedNamespace(t *testing.T) {
+	// Elements written with a prefix bound to the SVG namespace are SVG
+	// elements (Namespaces in XML 1.0, 4).
+	img := draw(t, `<svg:svg xmlns:svg="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 10 10"><svg:rect width="5" height="5" fill="red"/></svg:svg>`, 100, 100)
+	checkProbes(t, img, 40, []probe{{25, 25, red}, {75, 75, white}})
+	if got := string(unprefixSVG([]byte(`<a:svg xmlns:a="http://www.w3.org/2000/svg"><a:g/></a:svg>`))); got != `<svg xmlns:a="http://www.w3.org/2000/svg"><g/></svg>` {
+		t.Errorf("unprefixSVG = %q", got)
+	}
+	if got := string(unprefixSVG([]byte(`<svg><a:g/></svg>`))); got != `<svg><a:g/></svg>` {
+		t.Errorf("undeclared prefix rewritten: %q", got)
+	}
+}
+
 func TestParse_ForeignContentNames(t *testing.T) {
 	// The HTML parser keeps SVG's camel-case names in foreign content,
 	// which the renderer relies on.

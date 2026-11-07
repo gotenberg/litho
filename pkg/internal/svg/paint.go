@@ -327,18 +327,44 @@ func anyOpaque(stops []compose.ColorStop) bool {
 // also stops, and real drawings chain one or two.
 const maxClipChain = 8
 
-// clipPath returns the clips the clip path id names for the element n
-// (SVG 1.1, 14.3.5), in n's user space, which intersect: the union of the
-// outlines of the clip path's shapes, each under its transform and the
-// clip path's, in bounding box units when clipPathUnits asks; then the
-// clip path a lone child names, and the one the clip path itself names. It
-// reports empty for a clip path that has nothing to clip with, which hides
-// n; a reference that does not name a clipPath, or that leads back into
-// the chain, clips nothing. Text in a clip path does not clip, with a
-// warning; a clipPath of several shapes combines them with the nonzero
-// rule and ignores their own clip paths, with a warning. seen holds the
-// clip paths of the chain so far.
-func (r *renderer) clipPath(n *html.Node, id string, box *bbox, seen []*html.Node) ([]*compose.Path, bool) {
+// maxClipRegions caps the regions one clip-path reference unites, each
+// painting the clipped content once. Anti-DoS guard, not spec-mandated:
+// a clip path of shapes that each clip themselves, or that mix clip
+// rules, holds a handful.
+const maxClipRegions = 8
+
+// clipRegion is one region of a clip path: the intersection of its paths,
+// which nest as clipping groups.
+type clipRegion []*compose.Path
+
+// clipMember is one child of a clip path: its outline in the clip path's
+// coordinates, its clip rule, and the clip path it names itself, with the
+// element, the transform and the bounding box that clip path resolves in.
+type clipMember struct {
+	ops  []compose.PathOp
+	rule compose.FillRule
+	clip string
+	el   *html.Node
+	m    compose.Matrix
+	box  bbox
+}
+
+// clipPath returns the clip path id names for the element n (SVG 1.1,
+// 14.3.5), in n's user space, as regions whose union it is: each child
+// shape's or text's outline under its transform and the clip path's, in
+// bounding box units when clipPathUnits asks, intersected with the clip
+// path that child names; the regions then intersect the clip path the
+// clip path itself names. Children without a clip path of their own and
+// with the nonzero rule merge into one region, the nonzero union of
+// their outlines; a child with the evenodd rule or its own clip path
+// stands alone, since a single path cannot unite them. Glyphs clip with
+// the nonzero rule, as they fill.
+//
+// It reports empty for a clip path that has nothing to clip with, which
+// hides n; a reference that does not name a clipPath, or that leads back
+// into the chain, returns no region and clips nothing. seen holds the clip
+// paths of the chain so far.
+func (r *renderer) clipPath(n *html.Node, id string, box *bbox, seen []*html.Node) ([]clipRegion, bool) {
 	cp := r.d.ids[id]
 	if cp == nil || cp.Data != "clipPath" {
 		return nil, false
@@ -369,91 +395,127 @@ func (r *renderer) clipPath(n *html.Node, id string, box *bbox, seen []*html.Nod
 		}
 		m = mul(compose.Matrix{A: b.x1 - b.x0, D: b.y1 - b.y0, E: b.x0, F: b.y0}, m)
 	}
-	var ops []compose.PathOp
-	rule := compose.NonZero
-	shapesN := 0
-	var childClip string
-	var childEl *html.Node
-	var childM compose.Matrix
+	var members []clipMember
 	for c := cp.FirstChild; c != nil; c = c.NextSibling {
 		if c.Type != html.ElementNode || c.Namespace != "svg" {
 			continue
 		}
-		el := c
-		local := identity
-		if el.Data == "use" {
-			// A use in a clip path references a shape directly (SVG 1.1,
-			// 14.3.5).
-			ref, ok := strings.CutPrefix(strings.TrimSpace(href(el)), "#")
-			t := r.d.ids[ref]
-			if !ok || t == nil || !shapes[t.Data] {
-				continue
-			}
-			ux := r.length(el, "x", cs, axisX, 0)
-			uy := r.length(el, "y", cs, axisY, 0)
-			if tr, ok := attrOK(el, "transform"); ok {
-				if tm, good := parseTransform(tr); good {
-					local = tm
-				}
-			}
-			local = mul(local, translate(ux, uy))
-			el = t
+		if mb, ok := r.clipChild(c, m); ok {
+			members = append(members, mb)
 		}
-		if el.Data == "text" {
-			r.d.warn("unsupported-svg-property", "text in a clip path does not clip")
-			continue
-		}
-		if !shapes[el.Data] {
-			continue
-		}
-		es := r.d.styleOf(el, 0)
-		if !es.displayed || !es.visible {
-			continue
-		}
-		if tr, ok := attrOK(el, "transform"); ok {
-			if tm, good := parseTransform(tr); good {
-				local = mul(local, tm)
-			}
-		}
-		g := r.geometry(el, es)
-		if len(g) == 0 {
-			continue
-		}
-		shapesN++
-		rule = es.clipRule
-		childClip, childEl, childM = es.clipPath, el, mul(m, local)
-		ops = append(ops, transformOps(g, childM)...)
 	}
-	if shapesN == 0 || len(ops) == 0 {
-		return nil, true
-	}
-	chain := []*compose.Path{{Ops: ops, Fill: &compose.Fill{Rule: rule}}}
-	if shapesN > 1 {
-		chain[0].Fill.Rule = compose.NonZero
-		if childClip != "" {
-			r.d.warn("unsupported-svg-property", "the clip paths of the children of a clip path of several shapes are not applied")
+	var regions []clipRegion
+	var merged []compose.PathOp
+	plain := 0
+	for _, mb := range members {
+		if mb.clip == "" && mb.rule == compose.NonZero {
+			merged = append(merged, mb.ops...)
+			plain++
 		}
-		childClip = ""
 	}
-	if childClip != "" {
+	if plain > 0 {
+		regions = append(regions, clipRegion{{Ops: merged, Fill: &compose.Fill{Rule: compose.NonZero}}})
+	}
+	for _, mb := range members {
+		if mb.clip == "" && mb.rule == compose.NonZero {
+			continue
+		}
+		own := &compose.Path{Ops: mb.ops, Fill: &compose.Fill{Rule: mb.rule}}
+		if mb.clip == "" {
+			regions = append(regions, clipRegion{own})
+			continue
+		}
 		// The child's clip path is in the child's user space.
-		g := opsBBox(r.geometry(childEl, r.d.styleOf(childEl, 0)))
-		sub, empty := r.clipPath(childEl, childClip, &g, seen)
+		sub, empty := r.clipPath(mb.el, mb.clip, &mb.box, seen)
 		if empty {
-			return nil, true
+			continue
 		}
-		for _, p := range sub {
-			chain = append(chain, &compose.Path{Ops: transformOps(p.Ops, childM), Fill: p.Fill})
+		if len(sub) == 0 {
+			regions = append(regions, clipRegion{own})
+			continue
 		}
+		for _, sr := range sub {
+			reg := clipRegion{own}
+			for _, p := range sr {
+				reg = append(reg, &compose.Path{Ops: transformOps(p.Ops, mb.m), Fill: p.Fill})
+			}
+			regions = append(regions, reg)
+		}
+	}
+	if len(regions) == 0 {
+		return nil, true
 	}
 	if cs.clipPath != "" {
 		sub, empty := r.clipPath(n, cs.clipPath, box, seen)
 		if empty {
 			return nil, true
 		}
-		chain = append(chain, sub...)
+		if len(sub) > 0 {
+			var both []clipRegion
+			for _, a := range regions {
+				for _, b := range sub {
+					both = append(both, append(slices.Clone(a), b...))
+				}
+			}
+			regions = both
+		}
 	}
-	return chain, false
+	if len(regions) > maxClipRegions {
+		r.d.warn("svg-limit", fmt.Sprintf("a clip path uniting more than %d regions clips to the first %d", maxClipRegions, maxClipRegions))
+		regions = regions[:maxClipRegions]
+	}
+	return regions, false
+}
+
+// clipChild returns the child c of a clip path whose transform is m as a
+// member of its union: a shape, a use referencing a shape directly (SVG
+// 1.1, 14.3.5) or a text element. It reports false for anything else, or
+// for a child that is not displayed, not visible or empty.
+func (r *renderer) clipChild(c *html.Node, m compose.Matrix) (clipMember, bool) {
+	el := c
+	local := identity
+	if el.Data == "use" {
+		ref, ok := strings.CutPrefix(strings.TrimSpace(href(el)), "#")
+		t := r.d.ids[ref]
+		if !ok || t == nil || !shapes[t.Data] && t.Data != "text" {
+			return clipMember{}, false
+		}
+		us := r.d.styleOf(el, 0)
+		ux := r.length(el, "x", us, axisX, 0)
+		uy := r.length(el, "y", us, axisY, 0)
+		if tr, ok := attrOK(el, "transform"); ok {
+			if tm, good := parseTransform(tr); good {
+				local = tm
+			}
+		}
+		local = mul(local, translate(ux, uy))
+		el = t
+	}
+	if !shapes[el.Data] && el.Data != "text" {
+		return clipMember{}, false
+	}
+	es := r.d.styleOf(el, 0)
+	if !es.displayed {
+		return clipMember{}, false
+	}
+	if tr, ok := attrOK(el, "transform"); ok {
+		if tm, good := parseTransform(tr); good {
+			local = mul(local, tm)
+		}
+	}
+	var g []compose.PathOp
+	rule := es.clipRule
+	if el.Data == "text" {
+		g = r.textOutline(el, es)
+		rule = compose.NonZero
+	} else if es.visible {
+		g = r.geometry(el, es)
+	}
+	if len(g) == 0 {
+		return clipMember{}, false
+	}
+	cm := mul(m, local)
+	return clipMember{ops: transformOps(g, cm), rule: rule, clip: es.clipPath, el: el, m: cm, box: opsBBox(g)}, true
 }
 
 // bboxOf returns the bounding box of the element n styled st, in the

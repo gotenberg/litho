@@ -20,13 +20,18 @@
 //     rules, stroke width, caps, joins, miter limit and dashes (11.4),
 //     opacity on groups, visibility and display.
 //   - Gradients: linearGradient and radialGradient with gradientUnits,
-//     gradientTransform, fx and fy, the href chain and stops (13.2).
-//   - Clipping: clip-path naming a clipPath of shapes, with clipPathUnits,
-//     clip-rule, and the clip-path of the clipPath or of its lone child
-//     intersecting it (14.3).
+//     gradientTransform, fx and fy, the href chain and stops (13.2), on
+//     fills and strokes; a gradient stroke fills the stroke's outline.
+//   - Clipping: clip-path naming a clipPath of shapes and text, with
+//     clipPathUnits, clip-rule, the clip-path of each child intersecting
+//     it and the clip-path of the clipPath intersecting the union (14.3).
+//     Children of mixed clip rules or with clip paths of their own paint
+//     the clipped content once each, so translucent content is painted
+//     twice where they overlap.
 //   - Transforms: the transform attribute grammar (7.6).
 //   - Text: text and tspan with x, y, dx, dy lists, text-anchor and the
-//     font properties, shaped with the text package (10).
+//     font properties, shaped with the text package (10); a stroke unlike
+//     the fill strokes the glyphs' outlines.
 //   - Styling: presentation attributes (6.4), the style attribute and
 //     style elements, matched by the css package's selector engine, with
 //     specificity, !important and inheritance (6); units px, pt, pc, mm,
@@ -36,12 +41,12 @@
 //
 // Patterns, masks, filters and markers are not drawn, with a warning: a
 // pattern paints its fallback, masked and filtered content is drawn as it
-// is. A gradient spreadMethod of reflect or repeat is drawn as pad, a
-// gradient stroke or text fill in the gradient's middle colour, and a text
-// stroke unlike its fill not at all, each with a warning. textPath,
-// textLength, rotate, foreignObject, animation, scripting and external
-// style sheets are not supported. A clipPath of several shapes combines
-// them with the nonzero rule.
+// is. A gradient spreadMethod of reflect or repeat is drawn as pad, and a
+// gradient text fill in the gradient's middle colour, each with a
+// warning. textPath, textLength, rotate, foreignObject, animation,
+// scripting and external style sheets are not supported. Elements
+// written with a namespace prefix are SVG elements only when the prefix
+// is bound to the SVG namespace.
 //
 // # Limits
 //

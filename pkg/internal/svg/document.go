@@ -128,7 +128,7 @@ func Parse(ctx context.Context, data []byte, opts Options) (*Document, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	doc, err := html.Parse(bytes.NewReader(decodeXML(data)))
+	doc, err := html.Parse(bytes.NewReader(unprefixSVG(decodeXML(data))))
 	if err != nil {
 		return nil, fmt.Errorf("parsing the SVG: %w", err)
 	}
@@ -168,6 +168,27 @@ func decodeXML(data []byte) []byte {
 
 // xmlEncoding matches the encoding declaration of an XML declaration.
 var xmlEncoding = regexp.MustCompile(`encoding\s*=\s*["']([A-Za-z0-9._:-]+)["']`)
+
+// svgPrefixDecl matches a namespace declaration binding a prefix to the
+// SVG namespace (Namespaces in XML 1.0, 3).
+var svgPrefixDecl = regexp.MustCompile(`xmlns:([A-Za-z_][A-Za-z0-9._-]*)\s*=\s*["']http://www\.w3\.org/2000/svg["']`)
+
+// unprefixSVG returns data with the tags of the SVG elements written with
+// a namespace prefix, such as svg:rect under xmlns:svg, written without
+// it: the HTML parser reads a prefixed name as an unknown HTML element,
+// where an XML parser reads the SVG element the prefix names (Namespaces
+// in XML 1.0, 4). A document that declares no such prefix is returned as
+// it is. Only the first declared prefix is honoured, as real documents
+// declare one.
+func unprefixSVG(data []byte) []byte {
+	m := svgPrefixDecl.FindSubmatch(data)
+	if m == nil {
+		return data
+	}
+	p := m[1]
+	out := bytes.ReplaceAll(data, append([]byte("</"), append(p, ':')...), []byte("</"))
+	return bytes.ReplaceAll(out, append([]byte("<"), append(p, ':')...), []byte("<"))
+}
 
 // FromNode builds a drawing from an svg element of an already parsed
 // HTML document: inline SVG (HTML Standard, 4.8.16). The tree is read,

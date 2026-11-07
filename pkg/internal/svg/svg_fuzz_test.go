@@ -11,6 +11,7 @@ func FuzzParse(f *testing.F) {
 	f.Add([]byte(`<svg width="100" height="100" viewBox="0 0 10 10"><style>.a{fill:red}</style><defs><linearGradient id="g"><stop offset="0" stop-color="red"/><stop offset="1"/></linearGradient><clipPath id="c"><circle r="5"/></clipPath></defs><g opacity=".5" transform="rotate(10)"><rect class="a" width="5" height="5" rx="1" clip-path="url(#c)"/><use href="#g"/><path d="M0 0A5 5 0 1 1 9 9z" fill="url(#g)" stroke="blue" stroke-dasharray="1 2"/><text x="1 2" y="3">Hi<tspan dx="1">there</tspan></text></g></svg>`))
 	f.Add([]byte(`<svg width="10" height="1`))
 	f.Add([]byte(`<svg><use id="a" href="#b"/><use id="b" href="#a"/><symbol id="s" viewBox="0 0 0 0"/><use href="#s"/></svg>`))
+	f.Add([]byte(`<s:svg xmlns:s="http://www.w3.org/2000/svg"><s:linearGradient id="g"><s:stop/><s:stop offset="1" stop-color="red"/></s:linearGradient><s:clipPath id="h"><s:rect width="5" height="9"/></s:clipPath><s:clipPath id="c"><s:text x="1" y="8" font-family="Ahem" font-size="8">X</s:text><s:rect width="9" height="3" clip-rule="evenodd" clip-path="url(#h)"/></s:clipPath><s:rect width="9" height="9" opacity=".5" stroke="url(#g)" clip-path="url(#c)"/><s:text y="9" stroke="blue">Y</s:text></s:svg>`))
 	fonts := ahem(f)
 	f.Fuzz(func(t *testing.T, data []byte) {
 		d, err := Parse(context.Background(), data, Options{Fonts: fonts})

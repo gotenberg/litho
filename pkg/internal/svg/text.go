@@ -64,13 +64,44 @@ func (r *renderer) text(n *html.Node, st *style, s sink) {
 	if s.alpha <= 0 {
 		return
 	}
+	for _, p := range r.textPieces(n, st) {
+		r.drawPiece(p, s)
+	}
+}
+
+// textPieces collects, positions and shapes the characters of the text
+// element n styled st, and returns its pieces anchored.
+func (r *renderer) textPieces(n *html.Node, st *style) []*piece {
 	tc := &textCtx{}
 	r.collectText(n, st, nil, tc, attrNS(n, "xml", "space") == "preserve", 0)
 	if tc.over {
 		r.d.warn("svg-limit", fmt.Sprintf("text past %d characters was left out", maxTextRunes))
 	}
 	collapseSpaces(tc.chars)
-	r.layoutText(tc.chars, s)
+	return r.layoutText(tc.chars)
+}
+
+// textOutline returns the outlines of the glyphs of the text element n
+// styled st, in its user space, to be filled with the nonzero rule: the
+// shape text gives a clip path (SVG 1.1, 14.3.5). Characters that are not
+// visible add nothing.
+func (r *renderer) textOutline(n *html.Node, st *style) []compose.PathOp {
+	if r.d.opts.Fonts == nil {
+		r.d.warn("svg-text", "text is not drawn: no fonts are available")
+		return nil
+	}
+	var out []compose.PathOp
+	for _, p := range r.textPieces(n, st) {
+		if !p.st.visible {
+			continue
+		}
+		for _, t := range p.runs {
+			c := *t
+			c.Origin = compose.Point{X: p.x + t.Origin.X, Y: p.y + t.Origin.Y}
+			out = append(out, r.runOutline(&c)...)
+		}
+	}
+	return out
 }
 
 // attrNS returns the value of n's attribute key in namespace ns.
@@ -172,8 +203,9 @@ type piece struct {
 	anchor anchor
 }
 
-// layoutText positions and shapes the kept characters and draws them.
-func (r *renderer) layoutText(chars []textChar, s sink) {
+// layoutText positions and shapes the kept characters and returns their
+// pieces anchored.
+func (r *renderer) layoutText(chars []textChar) []*piece {
 	var pieces []*piece
 	var cur *piece
 	x, y := 0.0, 0.0
@@ -232,9 +264,7 @@ func (r *renderer) layoutText(chars []textChar, s sink) {
 	}
 	flush()
 	r.anchor(pieces)
-	for _, p := range pieces {
-		r.drawPiece(p, s)
-	}
+	return pieces
 }
 
 // sameText reports whether two styles draw text alike, so that their
@@ -318,10 +348,10 @@ func (r *renderer) shapePiece(p *piece) {
 	p.width = line.Width
 }
 
-// drawPiece draws the glyph runs of p with its fill (SVG 1.1, 10.10). A
-// stroke the same colour as the fill strokes the glyphs; any other stroke
-// is left out with a warning, since a glyph run strokes in its fill
-// colour.
+// drawPiece draws the glyph runs of p with its fill, then its stroke (SVG
+// 1.1, 10.10). A stroke of the fill's colour and opacity, solid, strokes
+// the glyph runs themselves, which keeps the text one object; any other
+// stroke, a gradient's included, strokes the glyphs' outlines as paths.
 func (r *renderer) drawPiece(p *piece, s sink) {
 	st := p.st
 	if !st.visible || len(p.runs) == 0 {
@@ -335,19 +365,22 @@ func (r *renderer) drawPiece(p *piece, s sink) {
 		ok = false
 	}
 	fill.A *= st.fillOpacity * s.alpha
-	strokeW := 0.0
-	if st.stroke.kind != paintNone && st.strokeOpacity > 0 {
-		w := st.strokeWidth.resolve(r.lc(st), axisDiag)
-		sc, sok := r.flatPaint(st.stroke, st, box, "text stroke")
-		switch {
-		case !(w > 0) || !sok:
-		case ok && sc.R == fill.R && sc.G == fill.G && sc.B == fill.B:
-			strokeW = w
-		default:
-			r.d.warn("unsupported-svg-paint", "a text stroke unlike its fill is not drawn")
+	ok = ok && fill.A > 0
+	stroke, strokeSh := r.strokeOf(st, box)
+	var outline *compose.Fill
+	if strokeSh != nil {
+		outline = withAlpha(&compose.Fill{Shading: strokeSh}, s.alpha)
+		if outline == nil {
+			stroke = nil
 		}
+	} else {
+		stroke = strokeAlpha(stroke, s.alpha)
 	}
-	if !ok || fill.A <= 0 {
+	strokeW := 0.0
+	if ok && stroke != nil && strokeSh == nil && len(stroke.Dash) == 0 && stroke.Color == fill {
+		strokeW, stroke = stroke.Width, nil
+	}
+	if !ok && stroke == nil {
 		return
 	}
 	for _, t := range p.runs {
@@ -357,6 +390,22 @@ func (r *renderer) drawPiece(p *piece, s sink) {
 		if strokeW > 0 {
 			c.Stroke = min(max(c.Stroke, strokeW), c.Size)
 		}
-		r.emit(s, &c)
+		if ok {
+			r.emit(s, &c)
+		}
+		if stroke == nil {
+			continue
+		}
+		ops := r.runOutline(&c)
+		if len(ops) == 0 {
+			continue
+		}
+		if outline != nil {
+			if o := strokeOutline(ops, stroke); len(o) > 0 {
+				r.emit(s, &compose.Path{Ops: o, Fill: outline})
+			}
+			continue
+		}
+		r.emit(s, &compose.Path{Ops: ops, Stroke: stroke})
 	}
 }
