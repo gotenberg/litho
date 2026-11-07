@@ -130,6 +130,7 @@ func (r *reader) tick() bool {
 // document reads the office:spreadsheet body (ODF 1.3, Part 3, 9.1).
 func (r *reader) document(body *odf.Element) *sheet.Document {
 	r.doc = &sheet.Document{Meta: r.metadata(), Default: r.defaultStyle()}
+	var noPrint []bool
 	for _, c := range body.Children {
 		switch {
 		case c.Is(odf.NSTable, "table"):
@@ -139,6 +140,7 @@ func (r *reader) document(body *odf.Element) *sheet.Document {
 			}
 			if sh := r.table(c); sh != nil {
 				r.doc.Sheets = append(r.doc.Sheets, sh)
+				noPrint = append(noPrint, c.A(odf.NSTable, "print") == "false" && len(sh.Page.PrintAreas) == 0)
 			}
 		case c.Is(odf.NSTable, "named-expressions"):
 			if len(c.Children) > 0 {
@@ -154,7 +156,36 @@ func (r *reader) document(body *odf.Element) *sheet.Document {
 			return nil
 		}
 	}
+	hidePrintless(r.doc.Sheets, noPrint)
 	return r.doc
+}
+
+// hidePrintless hides the sheets that print nothing: table:print false
+// without print ranges (ODF 1.3, Part 3, 19.689), as Calc reads a sheet
+// that neither prints entirely nor has ranges, when another shown sheet
+// prints; a document where no shown sheet prints prints every sheet
+// whole, as Calc does when no sheet has a print range.
+//
+// # Corpus evidence
+//
+//   - ods: sc/bug-fixes.ods prints Sheet2 to Sheet4 and not Sheet1, whose
+//     table:print is false; sc/tdf132105.ods prints its one shown sheet,
+//     whose table:print is false.
+func hidePrintless(sheets []*sheet.Sheet, noPrint []bool) {
+	prints := false
+	for i, sh := range sheets {
+		if !sh.Hidden && !noPrint[i] {
+			prints = true
+		}
+	}
+	if !prints {
+		return
+	}
+	for i, sh := range sheets {
+		if noPrint[i] {
+			sh.Hidden = true
+		}
+	}
 }
 
 // metadata reads meta.xml's office:meta (ODF 1.3, Part 3, 4): the title,
@@ -224,11 +255,7 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 	st := r.styles.Style(odf.ScopeContent, odf.FamilyTable, el.A(odf.NSTable, "style-name"))
 	tp := r.styles.Resolve(odf.ScopeContent, odf.FamilyTable, el.A(odf.NSTable, "style-name"), odf.TableProps)
 	sh := &sheet.Sheet{
-		Name: name,
-		// table:print false is what Calc writes for a sheet without print
-		// ranges that does not print entirely; Calc still prints its used
-		// range, so only table:display hides a sheet (ODF 1.3, Part 3,
-		// 19.689 and 20.389).
+		Name:   name,
 		Hidden: tp.Get("table:display") == "false",
 		// Writing mode rl-tb on the table property mirrors the sheet
 		// (ODF 1.3, Part 3, 20.404).

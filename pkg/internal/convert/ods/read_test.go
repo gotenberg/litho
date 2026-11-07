@@ -26,7 +26,7 @@ func TestRead_Tables(t *testing.T) {
 	tests := []struct {
 		name        string
 		hidden, rtl bool
-	}{{"One", false, false}, {"Two", true, false}, {"Three", false, true}, {"Four", false, false}}
+	}{{"One", false, false}, {"Two", true, false}, {"Three", false, true}, {"Four", true, false}}
 	if len(doc.Sheets) != len(tests) {
 		t.Fatalf("sheets = %d", len(doc.Sheets))
 	}
@@ -38,6 +38,13 @@ func TestRead_Tables(t *testing.T) {
 	}
 	if d := doc.Default; d.Font.Size != 10 || len(d.Font.Families) == 0 || d.Font.Families[0] != "Liberation Sans" || d.Format != "General" || d.Padding[0] != 1 {
 		t.Errorf("default = %+v", d)
+	}
+}
+
+func TestRead_PrintFalseAlone(t *testing.T) {
+	doc, _ := read(t, flat{body: `<table:table table:name="A" table:print="false"/><table:table table:name="B" table:print="false"/>`}.bytes())
+	if doc.Sheets[0].Hidden || doc.Sheets[1].Hidden {
+		t.Errorf("sheets = %+v %+v", doc.Sheets[0], doc.Sheets[1])
 	}
 }
 
