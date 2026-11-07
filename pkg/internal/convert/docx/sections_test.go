@@ -147,7 +147,7 @@ func TestSections_ColumnBreaks(t *testing.T) {
 		want css.Break
 	}{
 		{"one column", ``, css.Page},
-		{"two columns", `<w:cols w:num="2"/>`, css.BreakAuto},
+		{"two columns", `<w:cols w:num="2"/>`, css.Column},
 	} {
 		b := build(t, body(tc.cols), nil)
 		for _, text := range []string{"two", "four"} {
@@ -202,6 +202,13 @@ func TestSections_UnequalColumns(t *testing.T) {
 		if s.colTracks[i] != want[i] {
 			t.Errorf("track %d = %v, want %v", i, s.colTracks[i], want[i])
 		}
+	}
+	cols := find(b.root, func(n *layout.Node) bool { return n.Style != nil && len(n.Style.Columns.Tracks) > 0 })
+	if len(cols) != 1 {
+		t.Fatalf("%d blocks carry column tracks, want the section's", len(cols))
+	}
+	if got := cols[0].Style.Columns.Tracks; len(got) != 3 || got[0] != (css.ColumnTrack{Width: 144, Gap: 36}) || got[1] != (css.ColumnTrack{Width: 288}) || got[2] != (css.ColumnTrack{Width: 72}) {
+		t.Errorf("engine tracks %+v, want the section's widths and spaces", got)
 	}
 }
 

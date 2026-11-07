@@ -173,7 +173,7 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 	if tb := k.Child(ooxml.NSV, "textbox"); tb != nil {
 		if content := tb.Child(ooxml.NSW, "txbxContent"); content != nil {
 			n := d.textBox(s, content, w, h, ss, vmlInsets(attrOr(tb, "inset")), depth)
-			d.turn(n, vmlFlow(ooxml.ParseVMLStyle(attrOr(tb, "style"))))
+			turn(n, vmlFlow(ooxml.ParseVMLStyle(attrOr(tb, "style"))))
 			return n
 		}
 	}

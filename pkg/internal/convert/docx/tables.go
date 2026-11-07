@@ -776,8 +776,8 @@ func (d *document) cellStyle(cp cellProps, tableMar map[string]float64, tb map[s
 		// spans.
 		st.BoxDecorationBreak = css.DecorationCloneAll
 	}
-	if cp.textDir != "" && cp.textDir != "lrTb" && cp.textDir != "tb" && !setWritingMode(st, textDirection(cp.textDir)) {
-		d.warn("approximated", "vertical text in a table cell is laid out horizontally")
+	if cp.textDir != "" && cp.textDir != "lrTb" && cp.textDir != "tb" {
+		setWritingMode(st, textDirection(cp.textDir))
 	}
 	return st
 }

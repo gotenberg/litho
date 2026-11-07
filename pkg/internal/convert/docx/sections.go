@@ -305,13 +305,14 @@ func (d *document) body(root *ooxml.Element) []*section {
 		// A column break starts a page in a section of one column. In
 		// columns it starts the next line, an approximation: the model has
 		// no column break.
+		// A column break is a page break in a section of one column
+		// (17.18.3 ST_BrType column) and a break to the next column in
+		// one of several.
 		for _, st := range d.columnBreaks {
-			if s.cols <= 1 {
-				st.BreakBefore = css.Page
+			st.BreakBefore = css.Page
+			if s.cols > 1 {
+				st.BreakBefore = css.Column
 			}
-		}
-		if s.cols > 1 && len(d.columnBreaks) > 0 {
-			d.warn("approximated", "a column break in columns is laid out as a line break")
 		}
 		d.columnBreaks = nil
 		secs = append(secs, s)
@@ -393,8 +394,8 @@ func (d *document) sectionNode(s *section, extra []*layout.Node) *layout.Node {
 	if s.cols > 1 {
 		st.Columns.Count = s.cols
 		st.ColumnGap = css.Pts(s.colSpace)
-		if len(s.colTracks) > 0 && !setColumnTracks(st, s.colTracks) {
-			d.warn("approximated", "columns of unequal widths are laid out as equal columns")
+		if len(s.colTracks) > 0 {
+			setColumnTracks(st, s.colTracks)
 		}
 		if s.colSep {
 			st.Columns.RuleStyle = css.Solid

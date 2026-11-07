@@ -203,7 +203,7 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 	if tb := sp.Child(ooxml.NSWPS, "txbx"); tb != nil {
 		bodyPr := sp.Child(ooxml.NSWPS, "bodyPr")
 		n := d.textBox(s, tb.Child(ooxml.NSW, "txbxContent"), w, h, ss, bodyInsets(bodyPr), depth)
-		d.turn(n, bodyVert(attrOr(bodyPr, "vert")))
+		turn(n, bodyVert(attrOr(bodyPr, "vert")))
 		return n
 	}
 	if _, ok := ooxml.PresetPath(geom, compose.Rect{Width: 1, Height: 1}); !ok {
@@ -256,12 +256,12 @@ func textDirection(v string) string {
 }
 
 // turn sets the writing mode of a text box's block n for the text
-// direction dir, "" for horizontal text, with a warning when it cannot.
-func (d *document) turn(n *layout.Node, dir string) {
-	if dir == "" || n == nil || setWritingMode(n.Style, dir) {
+// direction dir, "" for horizontal text.
+func turn(n *layout.Node, dir string) {
+	if dir == "" || n == nil {
 		return
 	}
-	d.warn("approximated", "vertical text in a text box is laid out horizontally")
+	setWritingMode(n.Style, dir)
 }
 
 // bodyInsets returns the insets of a text box's body properties, top,
