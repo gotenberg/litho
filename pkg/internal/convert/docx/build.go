@@ -111,8 +111,20 @@ const maxNesting = 64
 // it).
 func finish(bs []blockNode) []*layout.Node {
 	out := make([]*layout.Node, 0, len(bs))
+	var list *layout.Node
 	for i, b := range bs {
-		out = append(out, b.node)
+		// Consecutive list items share an L structure element (ISO
+		// 32000-1, 14.8.4.3.3), a block with no box of its own.
+		switch {
+		case b.node.Role != "LI":
+			list = nil
+			out = append(out, b.node)
+		case list == nil:
+			list = &layout.Node{Kind: layout.Element, Style: listStyle(b.node.Style), Role: "L", Children: []*layout.Node{b.node}}
+			out = append(out, list)
+		default:
+			list.Children = append(list.Children, b.node)
+		}
 		info := b.info
 		if info == nil {
 			continue
@@ -148,6 +160,15 @@ func finish(bs []blockNode) []*layout.Node {
 		}
 	}
 	return out
+}
+
+// listStyle returns the style of the block grouping list items styled
+// like item: their inherited text properties and no box of its own.
+func listStyle(item *css.Style) *css.Style {
+	st := *inlineStyle(item)
+	st.Display = css.Block
+	st.TabStops = nil
+	return &st
 }
 
 // sameBorders reports two paragraphs that share their border group: the

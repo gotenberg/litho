@@ -97,4 +97,7 @@ func TestNumbering_Labels(t *testing.T) {
 	if len(role(b.root, "LI")) != len(want) {
 		t.Errorf("numId 0 still numbers")
 	}
+	if lists := role(b.root, "L"); len(lists) != 1 || len(lists[0].Children) != len(want) {
+		t.Errorf("list items not grouped in one L: %d groups", len(lists))
+	}
 }
