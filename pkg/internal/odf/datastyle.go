@@ -163,10 +163,10 @@ func condition(c string) (string, bool) {
 
 // excelColors names the colours a format code's colour section names
 // (ECMA-376 Part 1, 18.8.31): the eight of the legacy palette's first
-// entries, by their sRGB value.
+// entries, by their sRGB value, upper-case as LibreOffice writes them.
 var excelColors = map[Color]string{
-	{0, 0, 0}: "Black", {0, 0, 255}: "Blue", {0, 255, 255}: "Cyan", {0, 255, 0}: "Green",
-	{255, 0, 255}: "Magenta", {255, 0, 0}: "Red", {255, 255, 255}: "White", {255, 255, 0}: "Yellow",
+	{0, 0, 0}: "BLACK", {0, 0, 255}: "BLUE", {0, 255, 255}: "CYAN", {0, 255, 0}: "GREEN",
+	{255, 0, 255}: "MAGENTA", {255, 0, 0}: "RED", {255, 255, 255}: "WHITE", {255, 255, 0}: "YELLOW",
 }
 
 // sectionCode translates one data style element, without its maps, to a
@@ -199,7 +199,14 @@ func sectionCode(el *Element) string {
 		case "fraction":
 			b.WriteString(fractionCode(c))
 		case "text":
-			b.WriteString(literal(c.TextContent(), kind == "percentage-style"))
+			t := c.TextContent()
+			if (kind == "date-style" || kind == "time-style") && (t == ":" || t == "/") {
+				// The date and time separators, which LibreOffice
+				// writes bare.
+				b.WriteString(t)
+				continue
+			}
+			b.WriteString(literal(t, kind == "percentage-style"))
 		case "text-content":
 			b.WriteString("@")
 		case "currency-symbol":
@@ -435,37 +442,30 @@ func currencyCode(el *Element) string {
 	return "[$" + sym + "]"
 }
 
-// plainChars are the characters a format code shows without quotes
-// (ECMA-376 Part 1, 18.8.31): the sign, parentheses, the colon, the
-// slash and the others Excel lists, and the space.
-const plainChars = "$-+/():!^&'~{}<>= "
-
-// literal writes text as format code literal characters: the plain ones
-// as they are, the rest in quotes. In a percentage style a "%" stays a
-// percent sign, which scales the value.
+// literal writes text as format code literal characters as LibreOffice's
+// XLSX export writes them: one character escaped with a backslash, more
+// in quotes. In a percentage style a "%" stays a percent sign, which
+// scales the value.
 func literal(text string, percent bool) string {
 	var b strings.Builder
-	var quoted strings.Builder
+	var run []rune
 	flush := func() {
-		if quoted.Len() > 0 {
-			b.WriteString(`"` + quoted.String() + `"`)
-			quoted.Reset()
+		switch len(run) {
+		case 0:
+		case 1:
+			b.WriteString(`\` + string(run))
+		default:
+			b.WriteString(`"` + strings.ReplaceAll(string(run), `"`, `\"`) + `"`)
 		}
+		run = run[:0]
 	}
 	for _, r := range text {
-		switch {
-		case r == '%' && percent:
+		if r == '%' && percent {
 			flush()
 			b.WriteRune(r)
-		case r == '"':
-			flush()
-			b.WriteString(`\"`)
-		case strings.ContainsRune(plainChars, r):
-			flush()
-			b.WriteRune(r)
-		default:
-			quoted.WriteRune(r)
+			continue
 		}
+		run = append(run, r)
 	}
 	flush()
 	return b.String()
