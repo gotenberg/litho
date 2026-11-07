@@ -78,6 +78,12 @@ func applyText(st *css.Style, t textState, inline bool) {
 	if t.letterSet {
 		st.LetterSpacing = css.Pts(t.letter)
 	}
+	// Writer kerns text whose style:letter-kerning is true alone (ODF 1.3,
+	// Part 3, 20.316): absent, as false, its glyphs keep their advances.
+	st.FontKerning = css.KerningNone
+	if t.kern {
+		st.FontKerning = css.KerningNormal
+	}
 	st.TextScale = 0
 	if t.scale > 0 && t.scale != 1 {
 		st.TextScale = t.scale

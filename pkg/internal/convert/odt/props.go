@@ -48,13 +48,15 @@ type textState struct {
 	smallCaps bool
 	letter    float64
 	letterSet bool
-	scale     float64
-	shadow    *css.Shadow
-	relief    string
-	outline   bool
-	hidden    bool
-	lang      string
-	country   string
+	// kern is style:letter-kerning, false when no style sets it.
+	kern    bool
+	scale   float64
+	shadow  *css.Shadow
+	relief  string
+	outline bool
+	hidden  bool
+	lang    string
+	country string
 }
 
 // defaultFontSize is the font size when no style sets one: LibreOffice's
@@ -133,6 +135,9 @@ func (b *builder) foldText(t textState, layer odf.Props) textState {
 	}
 	if v, ok := layer.Lookup("fo:letter-spacing"); ok {
 		t.letter, t.letterSet = odf.Length(v)
+	}
+	if v, ok := layer.Lookup("style:letter-kerning"); ok {
+		t.kern = v == "true"
 	}
 	if v, ok := layer.Lookup("style:text-scale"); ok {
 		if pc, ok := odf.Percent(v); ok && pc > 0 {

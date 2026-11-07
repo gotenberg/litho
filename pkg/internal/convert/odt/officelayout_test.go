@@ -117,3 +117,29 @@ func TestConvert_BordersCloned(t *testing.T) {
 		t.Errorf("cloned decorations on %q, want the paragraph and the cell", found)
 	}
 }
+
+// TestConvert_Kerning checks the kerning of text per style:letter-kerning:
+// LibreOffice kerns "AV" pairs of Liberation Serif when the property is
+// true alone, absent and false print the glyphs at their advances (the
+// pinned image: 14 such letters at 24pt span 241 pt unkerned, 201 pt
+// kerned).
+func TestConvert_Kerning(t *testing.T) {
+	auto := `<style:style style:name="K" style:family="text"><style:text-properties style:letter-kerning="true"/></style:style>` +
+		`<style:style style:name="N" style:family="text"><style:text-properties style:letter-kerning="false"/></style:style>` +
+		`<style:style style:name="PK" style:family="paragraph"><style:text-properties style:letter-kerning="true"/></style:style>`
+	b := newTestBuilder(t, doc{contentAuto: auto, body: `<text:p>absent<text:span text:style-name="K">true</text:span><text:span text:style-name="N">false</text:span></text:p>` +
+		`<text:p text:style-name="PK">inherited<text:span text:style-name="N">off</text:span></text:p>`})
+	root, _ := b.document(odfBody(b))
+	want := map[string]css.FontKerning{"absent": css.KerningNone, "true": css.KerningNormal, "false": css.KerningNone, "inherited": css.KerningNormal, "off": css.KerningNone}
+	got := map[string]css.FontKerning{}
+	walkNodes(root, func(n *layout.Node) {
+		if n.Kind == layout.Text && n.Style != nil {
+			got[n.Text] = n.Style.FontKerning
+		}
+	})
+	for text, k := range want {
+		if g, ok := got[text]; !ok || g != k {
+			t.Errorf("%s: kerning %v (found %v), want %v", text, g, ok, k)
+		}
+	}
+}
