@@ -249,3 +249,33 @@ func TestRunKerning(t *testing.T) {
 		}
 	}
 }
+
+// TestJustifyShrink shrinks the spaces of justified lines in Word 2013's
+// compatibility mode and later, as LibreOffice lays them out, and not
+// before.
+func TestJustifyShrink(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		compat string
+		want   float64
+	}{
+		{"word 2013", "15", 0.25},
+		{"word 2010", "14", 0},
+		{"none", "", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			extra := map[string]string{}
+			if tt.compat != "" {
+				extra["word/settings.xml"] = `<w:settings ` + nsDecl + `><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="` + tt.compat + `"/></w:compat></w:settings>`
+			}
+			b := build(t, `<w:p><w:pPr><w:jc w:val="both"/></w:pPr><w:r><w:t>a b</w:t></w:r></w:p>`, extra)
+			ps := role(b.root, "P")
+			if len(ps) != 1 || ps[0].Style.JustifyShrink != tt.want {
+				t.Fatalf("paragraphs %d, shrink %v, want %v", len(ps), ps[0].Style.JustifyShrink, tt.want)
+			}
+		})
+	}
+}

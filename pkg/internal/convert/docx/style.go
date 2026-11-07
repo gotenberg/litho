@@ -29,8 +29,18 @@ func (d *document) blockStyle() *css.Style {
 	st.FontSize = defaultFontSize
 	st.TabSize = css.Pts(d.settings.defaultTab)
 	st.OverflowWrap = css.BreakWord
+	if d.settings.compat >= 15 {
+		// LibreOffice shrinks the spaces of justified lines in Word
+		// 2013's compatibility mode and later.
+		st.JustifyShrink = justifyShrink
+	}
 	return st
 }
+
+// justifyShrink is the share of a space LibreOffice lets a justified line
+// of a Word 2013 document shrink: its minimum word spacing of 75%
+// (sw/source/core/text/portxt.cxx, JustifyLinesWithShrinking).
+const justifyShrink = 0.25
 
 // families returns the font family list of run properties: the ASCII,
 // high ANSI, East Asian and complex script typefaces in that order, so
