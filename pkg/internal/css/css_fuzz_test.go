@@ -45,6 +45,7 @@ func FuzzParseDeclarations(f *testing.F) {
 	f.Add("border-image: url(a.png) 10% fill 2 / 1 auto 3px / 0 2px round space; mask-border: linear-gradient(red, blue) 1 / / 1; border-image-slice: calc(1 + 2) fill")
 	f.Add("line-clamp: 3 \"(…)\"; text-overflow: clip ellipsis; width: clamp(1px, max(2lh, 1rem), calc(3rlh - min(1em, 2px))); border-inline-start: 1px solid red; margin-inline: 1px 2px")
 	f.Add("font: oblique condensed 12px serif; font-style: oblique -30deg; font-synthesis: weight small-caps; text-autospace: ideograph-alpha insert; text-shadow: 1px 2px 3px red, 0 0 blue; text-justify: distribute")
+	f.Add("columns: 12em 3; column-rule: thin dotted red; column-span: all; column-fill: balance-all; column-height: 2em; column-wrap: wrap; break-before: column; break-inside: avoid-column; overflow: auto")
 	f.Add("display: inline flex; flex: 2 1 10%; flex-flow: column wrap-reverse; place-content: safe center space-evenly; align-self: last baseline; gap: 1px 2%; order: -2; min-width: auto")
 	f.Fuzz(func(t *testing.T, src string) {
 		ParseDeclarations(src, ParseOptions{BaseURL: "https://e.com/"})

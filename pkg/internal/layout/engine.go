@@ -87,6 +87,9 @@ type engine struct {
 	leaders map[*box]*leaderInfo
 	// foot is the footnotes' state, nil for a document without any.
 	foot *footState
+	// balancePasses counts the layouts balancing columns took, against
+	// [maxBalanceLayouts].
+	balancePasses int
 	// cols is the fragmentation context of the column set being laid out,
 	// nil outside columns: the page queries answer for its columns.
 	cols *colCtx

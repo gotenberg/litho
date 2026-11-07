@@ -182,8 +182,19 @@ func (g *treeGen) style() *css.Style {
 		}
 	}
 	if flags&128 != 0 {
-		st.BreakBefore, st.BreakAfter = css.Break(g.next()%6), css.Break(g.next()%6)
-		st.BreakInside = css.BreakInside(g.next() % 3)
+		st.BreakBefore, st.BreakAfter = css.Break(g.next()%8), css.Break(g.next()%8)
+		st.BreakInside = css.BreakInside(g.next() % 4)
+		if mc := g.next(); mc%4 == 0 {
+			// A multi-column container, its spanners and rules.
+			st.Columns.Count = int(mc>>2) % 4
+			st.Columns.Width = []css.Dimension{{Kind: css.Auto}, g.length(false)}[mc>>4&1]
+			st.Columns.SpanAll = mc&0x20 != 0
+			st.Columns.Fill = css.ColumnFill(mc >> 6 % 3)
+			st.Columns.RuleStyle, st.Columns.RuleWidth = css.BorderStyle(g.next()%10), px(float64(g.next()%3))
+			if g.next()%3 == 0 {
+				st.Columns.Height = g.length(false)
+			}
+		}
 		st.Orphans, st.Widows = int(g.next()%4), int(g.next()%4)
 		st.ListStyleType = css.ListStyleType(g.next() % 13)
 		st.ListStylePosition = css.ListStylePosition(g.next() % 2)

@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"fmt"
 	"math"
 	"slices"
 	"sort"
@@ -54,6 +55,13 @@ const maxBalancePasses = 30
 // balanceSlack is the precision of a balanced column height: a 64th of a
 // CSS pixel, the layout unit of Chromium, which balances to it.
 const balanceSlack = css.Pt / 64
+
+// maxBalanceLayouts bounds the layouts of column content that balancing
+// takes in one [Layout] call, nested containers included: past it the
+// columns keep the heights found so far, with a warning. Anti-DoS guard,
+// not spec-mandated: a container nested in another is balanced again in
+// each of the outer one's passes, and a page of columns takes a few dozen.
+const maxBalanceLayouts = 4000
 
 // unbounded is the height of a column nothing limits: the content of an
 // unfragmented container that balances is first laid out in one column
@@ -165,8 +173,8 @@ type colCtx struct {
 	// exceeds the column count, 0 otherwise.
 	free   bool
 	forced int
-	frags      []colFrag
-	rows       []colRow
+	frags  []colFrag
+	rows   []colRow
 }
 
 // target returns the columns a row holds before the next row starts.
@@ -338,9 +346,10 @@ func (multicolFormatter) intrinsic(e *engine, b *box) (float64, float64) {
 		n = min(c.Count, maxColumns)
 	}
 	g := 0.0
-	if b.st.ColumnGap.Kind == css.Normal {
+	switch b.st.ColumnGap.Kind { //nolint:exhaustive // a percentage of an unknown width is 0
+	case css.Normal:
 		g = e.fontSize(b.st)
-	} else if b.st.ColumnGap.Kind == css.Points {
+	case css.Points:
 		g = max(clamp(b.st.ColumnGap.Value), 0)
 	}
 	k := float64(n)
@@ -464,7 +473,12 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 	}
 	warnings := len(e.warnings)
 	var end float64
+	first := true
 	pass := func(row int, h float64) []float64 {
+		if !first {
+			e.balancePasses++
+		}
+		first = false
 		e.warnings = e.warnings[:warnings]
 		ctx.balanceRow, ctx.balanceH = row, h
 		ctx.frags, ctx.rows = nil, nil
@@ -481,7 +495,7 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 		l := ctx.lastFrag(cons)
 		return ctx.frags[l].row == r && l < ctx.rows[r].first+ctx.target() && ctx.rowMax(cons, r) <= ctx.rows[r].h+eps
 	}
-	balance := (st.Fill != css.FillAuto || spanned || row.h >= unbounded) && ctx.colH <= 0 && row.top < limit
+	balance := (st.Fill != css.FillAuto || spanned || row.h >= unbounded) && ctx.colH <= 0 && row.top < limit && e.balanceBudget(y)
 	if balance && (r > 0 || !fits()) {
 		// More forced breaks than columns: the content balances over the
 		// columns they make, the ones past the count overflowing the row
@@ -510,7 +524,7 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 		best := hi
 		bestFits := row.h == hi
 		for range maxBalancePasses {
-			if hi-lo < balanceSlack || !e.relayout(y) {
+			if hi-lo < balanceSlack || !e.relayout(y) || !e.balanceBudget(y) {
 				break
 			}
 			mid := (lo + hi) / 2
@@ -759,17 +773,6 @@ func toFlow(d *box, x, y float64) (float64, float64) {
 	return x, y
 }
 
-// inColumns reports whether the box b sits in the columns of a
-// multi-column container.
-func inColumns(b *box) bool {
-	for a := b.parent; a != nil; a = a.parent {
-		if a.mc != nil {
-			return true
-		}
-	}
-	return false
-}
-
 // forces reports a break value that forces a break at the fragmentainer
 // being laid out: a page break, and in columns a column break too, a page
 // break inside columns breaking the column (CSS Fragmentation 3, 3.1).
@@ -986,4 +989,14 @@ func sizePieces(kids []*box, pieces map[*box]*spanPiece, cb cblock) {
 		k.st.Height = css.Dimension{Kind: css.Auto}
 		k.st.MaxHeight = css.Pts(h)
 	}
+}
+
+// balanceBudget reports whether balancing may lay out column content once
+// more, warning the first time it may not.
+func (e *engine) balanceBudget(y float64) bool {
+	if e.balancePasses < maxBalanceLayouts {
+		return true
+	}
+	e.warnOnce(codeRelayoutBudget, fmt.Sprintf("more than %d layouts to balance columns: later columns keep their unbalanced heights", maxBalanceLayouts), y)
+	return false
 }

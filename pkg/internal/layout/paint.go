@@ -184,7 +184,7 @@ func (p *painter) chain(b *box, content bool) []*box {
 		}
 	}
 	for a := start; a != nil; {
-		if p.clips(a) && !(a == root && p.cur().columns) {
+		if p.clips(a) && (a != root || !p.cur().columns) {
 			out = append(out, a)
 		}
 		if a == root {
