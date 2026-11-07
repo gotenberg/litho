@@ -202,7 +202,28 @@ func (g *treeGen) style() *css.Style {
 			st.ListStyleImage = "img"
 		}
 	}
+	if b&0x20 != 0 && flags&16 != 0 {
+		g.office(st)
+	}
 	return st
+}
+
+// office sets the Office fields of st from the bytes: tab stops, line
+// rules, a minimum line height, a text scale, page anchoring and cloned
+// decorations.
+func (g *treeGen) office(st *css.Style) {
+	st.TabStops = []css.TabStop{}
+	for range g.next() % 4 {
+		st.TabStops = append(st.TabStops, css.TabStop{Pos: px(float64(g.next())), Align: css.TabAlign(g.next() % 5), Leader: css.TabLeader(g.next() % 5)})
+	}
+	st.TabSize = g.length(false)
+	st.LineRule = css.LineRule(g.next() % 3)
+	st.MinLineHeight = px(float64(g.next() % 40))
+	st.TextScale = float64(g.next()%8) / 2
+	st.PageAnchor = g.next()%2 == 0
+	if g.next()%2 == 0 {
+		st.BoxDecorationBreak = css.DecorationCloneAll
+	}
 }
 
 // node returns a node drawn from the bytes, at most maxDepth deep.
@@ -268,6 +289,13 @@ func FuzzLayout(f *testing.F) {
 		if g.next()%4 == 0 {
 			pb.Background = css.Initial()
 			pb.Background.BackgroundGradient = g.gradient()
+		}
+		if fr := g.next(); fr%3 == 0 {
+			in := px(float64(fr % 7))
+			st := css.Initial()
+			st.Border[0] = css.Border{Width: px(float64(fr % 4)), Style: css.BorderStyle(fr % 10), Color: g.colour()}
+			st.Border[2] = st.Border[0]
+			pb.Frame = &PageFrame{Inset: [4]float64{in, in, in, in}, Style: st}
 		}
 		opts := Options{Page: pb, Image: loader, MaxPages: 40}
 		if alt := g.next(); alt&1 != 0 {
