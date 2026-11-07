@@ -264,6 +264,9 @@ func runCorpus(ctx context.Context, name string, opts runOptions) (*CorpusReport
 			}
 			rw.SetReportDir(dir)
 		}
+		if mr, ok := feat.(ManifestReader); ok {
+			mr.SetManifest(manifest)
+		}
 		goldenDir := manifest.GoldenDir(feat.Name())
 		if goldenDir == "" {
 			fr.NoGolden = true

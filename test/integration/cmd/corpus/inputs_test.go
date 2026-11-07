@@ -10,7 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/test/integration/corpus/html/fixture"
+	"github.com/gotenberg/litho/pkg/pdf"
+	"github.com/gotenberg/litho/test/integration/corpus/fixture"
 )
 
 func TestGlobInputFixtures_KeysOnTheWildcard(t *testing.T) {
@@ -210,5 +211,125 @@ func TestHostProvisionedCorporaReadTheirPin(t *testing.T) {
 	}
 	if checked != 3 {
 		t.Errorf("checked %d host-provisioned corpora, want wpt, weasyprint and svg", checked)
+	}
+}
+
+func TestLoadInputFixtures_GlobsAndListsTogether(t *testing.T) {
+	t.Parallel()
+
+	src, root := t.TempDir(), t.TempDir()
+	writeFiles(t, src, map[string]string{
+		"sources/memo/memo.docx": "",
+		"documents.json":         `[{"id": "export/a.docx"}]`,
+	})
+	writeFiles(t, root, map[string]string{"sources/export/a.docx": ""})
+	m := &Manifest{Name: "office", Inputs: &InputSpec{Glob: "sources/*", List: "documents.json", ListRoot: "sources", FetchedBy: "make office-fetch"}}
+	globbed, err := globInputFixtures(src, m.Inputs.Glob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err := listInputFixtures(filepath.Join(src, m.Inputs.List), filepath.Join(root, m.Inputs.ListRoot), m.Inputs.FetchedBy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ids := compareIDs(append(globbed, listed...), []string{"memo", "export/a.docx"}); ids != "" {
+		t.Error(ids)
+	}
+	if err := os.Remove(filepath.Join(root, "sources", "export", "a.docx")); err != nil {
+		t.Fatal(err)
+	}
+	_, err = listInputFixtures(filepath.Join(src, m.Inputs.List), filepath.Join(root, m.Inputs.ListRoot), m.Inputs.FetchedBy)
+	if !errors.Is(err, errInputsUnfetched) || !strings.Contains(err.Error(), "make office-fetch") {
+		t.Errorf("missing fetched source: %v", err)
+	}
+}
+
+// TestOfficeListsAndHashesAgree pins that every document the docx and odt
+// corpora's documents.json lists is in their files.sha256, which is what
+// lib/fetch-office.sh downloads, with the licence, that the IDs name the
+// directories and caps list-office-candidates.py takes, and that the lists
+// hold the documents the caps allow.
+func TestOfficeListsAndHashesAgree(t *testing.T) {
+	t.Parallel()
+
+	caps := map[string]map[string]int{
+		"docx": {"ooxmlexport": 250, "ooxmlimport": 60, "layout": 40},
+		"odt":  {"odfexport": 80, "odfimport": 40, "layout": 30},
+	}
+	for corpus, dirs := range caps {
+		dir := filepath.Join(corpusSourceDir, corpus)
+		data, err := os.ReadFile(filepath.Join(dir, "documents.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var docs []struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(data, &docs); err != nil {
+			t.Fatal(err)
+		}
+		hashes, err := os.ReadFile(filepath.Join(dir, "files.sha256"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		listed := make(map[string]bool)
+		sc := bufio.NewScanner(bytes.NewReader(hashes))
+		for sc.Scan() {
+			fields := strings.Fields(sc.Text())
+			if len(fields) != 2 || len(fields[0]) != 64 {
+				t.Fatalf("%s files.sha256: malformed line %q", corpus, sc.Text())
+			}
+			listed[fields[1]] = true
+		}
+		if !listed["COPYING.MPL"] {
+			t.Errorf("%s files.sha256 lacks the licence", corpus)
+		}
+		per := make(map[string]int)
+		for _, d := range docs {
+			sub, name, ok := strings.Cut(d.ID, "/")
+			if !ok || !validInputID(d.ID) || !strings.HasSuffix(name, "."+corpus) {
+				t.Errorf("%s: id %q is not <dir>/<file>.%s", corpus, d.ID, corpus)
+				continue
+			}
+			per[sub]++
+			if p := "sw/qa/extras/" + sub + "/data/" + name; !listed[p] {
+				t.Errorf("%s: %s is listed but not in files.sha256", corpus, p)
+			}
+		}
+		if len(listed) != len(docs)+1 {
+			t.Errorf("%s: files.sha256 holds %d files, documents.json %d documents and the licence", corpus, len(listed), len(docs))
+		}
+		for sub, n := range per {
+			if limit, ok := dirs[sub]; !ok || n > limit {
+				t.Errorf("%s: %d documents from %s, cap %d", corpus, n, sub, limit)
+			}
+		}
+	}
+}
+
+// TestCommittedOfficeSourcesLoad loads every committed docx and odt source
+// as the diff feature does: one document of its corpus's format and valid
+// options.
+func TestCommittedOfficeSourcesLoad(t *testing.T) {
+	t.Parallel()
+
+	for corpus, want := range map[string]pdf.Format{"docx": pdf.FormatDOCX, "odt": pdf.FormatODT} {
+		sources, err := globInputFixtures(filepath.Join(corpusSourceDir, corpus), "sources/*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range sources {
+			o, err := fixture.LoadOffice(s.PDFPath)
+			if err != nil {
+				t.Errorf("%s %s: %v", corpus, s.ID, err)
+				continue
+			}
+			if o.Format != want {
+				t.Errorf("%s %s: format %s", corpus, s.ID, o.Format)
+			}
+			if info, err := os.Stat(o.Document); err != nil || info.Size() > 200<<10 {
+				t.Errorf("%s %s: %v, over 200 KiB or unreadable", corpus, s.ID, err)
+			}
+		}
 	}
 }

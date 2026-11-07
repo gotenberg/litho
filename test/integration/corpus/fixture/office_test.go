@@ -1,0 +1,135 @@
+package fixture
+
+import (
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/pdf"
+)
+
+func TestParseOfficeOptions_RefusesWhatTheRouteRefuses(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name, json, want string
+	}{
+		{"empty object", `{}`, ""},
+		{"every field", `{"password": "foo", "landscape": true, "nativePages": "2-3", "nativeBookmarks": false, "paperWidth": 4, "paperHeight": 6}`, ""},
+		{"unknown field", `{"paperSize": "A4"}`, "unknown field"},
+		{"another case", `{"Landscape": true}`, "unknown field"},
+		{"trailing data", `{} {}`, "data after"},
+		{"not an object", `[]`, "decoding"},
+		{"width alone", `{"paperWidth": 4}`, "both or neither"},
+		{"zero paper", `{"paperWidth": 0, "paperHeight": 6}`, "paperWidth"},
+		{"negative paper", `{"paperWidth": 4, "paperHeight": -6}`, "paperHeight"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := ParseOfficeOptions([]byte(tc.json))
+			switch {
+			case tc.want == "" && err != nil:
+				t.Errorf("ParseOfficeOptions: %v", err)
+			case tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)):
+				t.Errorf("ParseOfficeOptions error %v, want one naming %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoadOffice_ReadsADirectoryOrADocument(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	write(t, dir, "memo.fodt", "<office:document/>")
+	write(t, dir, OptionsFile, `{"landscape": true, "paperWidth": 4, "paperHeight": 6, "password": "foo", "nativePages": "1"}`)
+	o, err := LoadOffice(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Format != pdf.FormatODT || o.Document != filepath.Join(dir, "memo.fodt") || !o.Options.Landscape {
+		t.Errorf("source %+v", o)
+	}
+	if n := len(o.ConvertOptions()); n != 5 {
+		t.Errorf("%d convert options, want landscape, outline, pages, password and paper", n)
+	}
+
+	doc := filepath.Join(t.TempDir(), "fetched.DOCX")
+	if err := os.WriteFile(doc, []byte("PK"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	o, err = LoadOffice(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Format != pdf.FormatDOCX || o.Options != (OfficeOptions{}) || len(o.ConvertOptions()) != 2 {
+		t.Errorf("fetched document %+v", o)
+	}
+
+	for name, files := range map[string]map[string]string{
+		"no document":     {OptionsFile: `{}`},
+		"two documents":   {"a.docx": "", "b.odt": ""},
+		"another file":    {"a.docx": "", "notes.txt": ""},
+		"another format":  {"a.doc": ""},
+		"invalid options": {"a.docx": "", OptionsFile: `{"paperHeight": 6}`},
+	} {
+		d := t.TempDir()
+		for f, content := range files {
+			write(t, d, f, content)
+		}
+		if _, err := LoadOffice(d); err == nil {
+			t.Errorf("%s: loaded", name)
+		}
+	}
+	if _, err := LoadOffice(filepath.Join(dir, OptionsFile)); !errors.Is(err, ErrNoOfficeDocument) {
+		t.Errorf("options file as a document: %v", err)
+	}
+}
+
+func TestOfficeOptionNames_MatchTheJSONNames(t *testing.T) {
+	t.Parallel()
+
+	var tags []string
+	ty := reflect.TypeFor[OfficeOptions]()
+	for i := range ty.NumField() {
+		name, _, _ := strings.Cut(ty.Field(i).Tag.Get("json"), ",")
+		tags = append(tags, name)
+	}
+	if !slices.Equal(tags, officeOptionNames) {
+		t.Errorf("json names %v, officeOptionNames %v", tags, officeOptionNames)
+	}
+}
+
+// TestLibreOfficeScript_ReadsTheSameSchema checks that lib/libreoffice.sh,
+// which reads options.json with jq, accepts the keys this package accepts
+// and posts each of them.
+func TestLibreOfficeScript_ReadsTheSameSchema(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile(filepath.Join("..", "lib", "libreoffice.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(data)
+	_, rest, ok := strings.Cut(script, "\nKEYS='")
+	keys, _, ok2 := strings.Cut(rest, "'")
+	if !ok || !ok2 {
+		t.Fatal("libreoffice.sh declares no KEYS")
+	}
+	var got []string
+	if err := json.Unmarshal([]byte(keys), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, officeOptionNames) {
+		t.Errorf("libreoffice.sh keys %v, officeOptionNames %v", got, officeOptionNames)
+	}
+	if !strings.Contains(script, "for key in "+strings.Join(officeOptionNames, " ")+"; do") {
+		t.Error("libreoffice.sh does not post every key")
+	}
+}

@@ -80,17 +80,44 @@ type Manifest struct {
 	// host, for a corpus the Docker image has no part in. corpus init skips
 	// such a corpus and says which target to run instead.
 	ProvisionedBy string `json:"provisioned_by,omitempty"`
+
+	// References, when set, names the reference PDFs a converter corpus's
+	// diff goldens come from, which the host builds into the testdata rather
+	// than git versioning them. See [ReferenceSpec].
+	References *ReferenceSpec `json:"references,omitempty"`
 }
 
-// InputSpec lists the source documents of a converter corpus. Exactly one of
-// List and Glob is set.
+// ReferenceSpec names the reference PDFs of a converter corpus that the host
+// builds into the testdata: Dir, under the testdata root, holds one
+// <name>.pdf per fixture, the fixture ID with "/" written "__", and a
+// manifest.json recording what each was built from (lib/libreoffice.sh), so a
+// reference built from another pin or from a source that changed since is
+// refused.
+type ReferenceSpec struct {
+	// Dir is the reference directory, relative to the testdata root.
+	Dir string `json:"dir"`
+	// BuiltBy is the make target that builds the references.
+	BuiltBy string `json:"built_by"`
+}
+
+// InputSpec lists the source documents of a converter corpus: List, Glob or
+// both, whose fixture IDs must then differ.
 type InputSpec struct {
 	// List names a committed JSON file, relative to the corpus source
 	// directory, holding an array of objects with an "id" field: each is one
 	// fixture, whose source is the file at that ID's path under the corpus
-	// testdata root. The wpt corpus lists its reftests this way, the files
-	// themselves fetched into testdata.
+	// testdata root, or under its ListRoot subdirectory. The wpt corpus lists
+	// its reftests this way, the files themselves fetched into testdata.
 	List string `json:"list,omitempty"`
+
+	// ListRoot is the subdirectory of the testdata root the List IDs
+	// resolve under; empty is the testdata root itself.
+	ListRoot string `json:"list_root,omitempty"`
+
+	// FetchedBy names the make target that fetches the List sources, which
+	// a load missing one names; empty falls back to the manifest's
+	// ProvisionedBy.
+	FetchedBy string `json:"fetched_by,omitempty"`
 
 	// Glob matches the sources, relative to the corpus source directory,
 	// with exactly one "*": each match is one fixture, whose ID is the text

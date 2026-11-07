@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"password\": \"foo\", \"paperWidth\": 4, \"paperHeight\": 6}")

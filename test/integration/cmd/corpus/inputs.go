@@ -18,23 +18,36 @@ var errInputsUnfetched = errors.New("sources not provisioned")
 // [InputSpec], in ID order, with the manifest's skips applied.
 func loadInputFixtures(m *Manifest) ([]Fixture, error) {
 	in := m.Inputs
-	var (
-		fixtures []Fixture
-		err      error
-	)
-	switch {
-	case in.List != "" && in.Glob == "":
-		fixtures, err = listInputFixtures(filepath.Join(m.SourceDir(), in.List), m.TestdataRoot(), m.ProvisionedBy)
-	case in.Glob != "" && in.List == "":
-		fixtures, err = globInputFixtures(m.SourceDir(), in.Glob)
-	default:
-		return nil, errors.New("manifest inputs must set exactly one of list and glob")
+	if in.List == "" && in.Glob == "" {
+		return nil, errors.New("manifest inputs must set list, glob or both")
 	}
-	if err != nil {
-		return nil, err
+	var fixtures []Fixture
+	if in.Glob != "" {
+		globbed, err := globInputFixtures(m.SourceDir(), in.Glob)
+		if err != nil {
+			return nil, err
+		}
+		fixtures = append(fixtures, globbed...)
 	}
+	if in.List != "" {
+		fetchedBy := in.FetchedBy
+		if fetchedBy == "" {
+			fetchedBy = m.ProvisionedBy
+		}
+		listed, err := listInputFixtures(filepath.Join(m.SourceDir(), in.List), filepath.Join(m.TestdataRoot(), filepath.FromSlash(in.ListRoot)), fetchedBy)
+		if err != nil {
+			return nil, err
+		}
+		fixtures = append(fixtures, listed...)
+	}
+	seen := make(map[string]bool, len(fixtures))
 	for i := range fixtures {
-		fixtures[i].SkipReason = m.Skips[fixtures[i].ID]
+		id := fixtures[i].ID
+		if seen[id] {
+			return nil, fmt.Errorf("fixture %q is both globbed and listed", id)
+		}
+		seen[id] = true
+		fixtures[i].SkipReason = m.Skips[id]
 	}
 	sort.Slice(fixtures, func(i, j int) bool { return fixtures[i].ID < fixtures[j].ID })
 	return fixtures, nil

@@ -28,13 +28,8 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/test/integration/corpus/html/fixture"
+	"github.com/gotenberg/litho/test/integration/corpus/fixture"
 )
-
-// fixtureFamilies are the prefixes of the font directories
-// corpus/compose/fetch-fonts.sh installs, the only ones the conversion reads:
-// the fonts directory also holds test fonts other corpora draw with.
-var fixtureFamilies = []string{"dejavu-", "liberation-", "noto-cjk-sans-", "noto-sans-thai-", "noto-sans-devanagari-"}
 
 func main() {
 	sources := flag.String("sources", "test/integration/corpus/html/sources", "Directory of the <name>/ source directories")
@@ -91,7 +86,7 @@ func familyDirs(dir string) ([]string, error) {
 		return nil, fmt.Errorf("reading %s: %w (run make html-fixtures, which downloads the pinned fonts first)", dir, err)
 	}
 	var dirs []string
-	for _, prefix := range fixtureFamilies {
+	for _, prefix := range fixture.FontFamilies {
 		found := false
 		for _, e := range entries {
 			if e.IsDir() && strings.HasPrefix(e.Name(), prefix) {

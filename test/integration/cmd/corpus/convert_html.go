@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/pdf"
+	"github.com/gotenberg/litho/test/integration/corpus/fixture"
 )
 
 // htmlSettings are the options one converter feature converts its sources
@@ -30,12 +31,15 @@ type htmlSettings struct {
 	FontDirs []string
 	// PreferCSSPageSize lets an @page size descriptor set the page.
 	PreferCSSPageSize bool
-	// Format is the source's format; empty converts HTML.
+	// Format is the source's format; empty converts HTML. A DOCX or ODT
+	// source reads FontDirs and Print alone.
 	Format pdf.Format
 	// Print are the remaining print options of the source, after the
 	// ones above: landscape, scale, page ranges, single page, backgrounds,
 	// outline, header and footer templates and media features (see
-	// fixture.Source.PrintOptions in corpus/html/fixture).
+	// fixture.Source.PrintOptions in corpus/fixture); for a DOCX or ODT
+	// source, its landscape, outline, page ranges, password and paper
+	// (fixture.Office.ConvertOptions).
 	Print []pdf.ConvertOption
 }
 
@@ -45,9 +49,24 @@ type htmlSettings struct {
 type htmlConverter func(ctx context.Context, src []byte, s htmlSettings) ([]byte, error)
 
 // convertHTML converts src with litho's HTML converter at the given
-// settings and returns the PDF bytes. The report's warnings are not an
-// error: the oracles score what was drawn.
+// settings and returns the PDF bytes, or, for a [pdf.FormatDOCX] or
+// [pdf.FormatODT] source, with the Office converter at the font directories
+// and the print options alone: an Office document carries its own page
+// setup and styles. The report's warnings are not an error: the oracles
+// score what was drawn.
 func convertHTML(ctx context.Context, src []byte, s htmlSettings) ([]byte, error) {
+	if s.Format == pdf.FormatDOCX || s.Format == pdf.FormatODT {
+		opts := make([]pdf.ConvertOption, 0, 1+len(s.Print))
+		if len(s.FontDirs) > 0 {
+			opts = append(opts, pdf.WithConvertFontDirs(s.FontDirs...))
+		}
+		opts = append(opts, s.Print...)
+		var buf bytes.Buffer
+		if _, err := pdf.Convert(ctx, bytes.NewReader(src), s.Format, &buf, opts...); err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
+	}
 	opts := []pdf.ConvertOption{
 		pdf.WithMediaType(s.Media),
 		pdf.WithMargins(s.Top, s.Right, s.Bottom, s.Left),
@@ -90,12 +109,12 @@ func fixtureFontsRoot() string {
 }
 
 // fixtureFamilyPrefixes are the font directories corpus/compose/fetch-fonts.sh
-// installs, the faces every converter oracle draws text with. The fonts root
-// also holds the test fonts (Ahem, the WeasyPrint test font), which only the
-// oracles written for them read.
+// installs, the faces every converter oracle draws text with
+// (fixture.FontFamilies). The fonts root also holds the test fonts (Ahem, the
+// WeasyPrint test font), which only the oracles written for them read.
 //
 //nolint:gochecknoglobals // static list of directory prefixes
-var fixtureFamilyPrefixes = []string{"dejavu-", "liberation-", "noto-cjk-sans-", "noto-sans-thai-", "noto-sans-devanagari-"}
+var fixtureFamilyPrefixes = fixture.FontFamilies
 
 // errFontsMissing reports a font directory a converter feature needs and
 // the testdata lacks.

@@ -179,6 +179,11 @@ var sourcePins = map[string][]string{
 	"svg":        {"RESVG_COMMIT"},
 	"weasyprint": nil,
 	"html":       nil,
+	// The docx and odt corpora's PDFs are LibreOffice references the host
+	// builds: their own manifest records the image and the sources, which
+	// the diff feature checks (see [diffFeature.Prepare]).
+	"docx": nil,
+	"odt":  nil,
 }
 
 // pinEntry is one KEY=VALUE line of versions.env.

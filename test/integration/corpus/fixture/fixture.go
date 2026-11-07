@@ -172,26 +172,35 @@ func Load(dir string) (*Source, error) {
 // data or a value the route refuses is an error, so a misspelt key cannot
 // leave a fixture on the defaults unnoticed.
 func ParseOptions(data []byte) (Options, error) {
+	var o Options
+	if err := decodeStrict(data, optionNames, &o); err != nil {
+		return Options{}, err
+	}
+	return o, o.validate()
+}
+
+// decodeStrict decodes the JSON object data into v, refusing trailing data
+// and any key outside names.
+func decodeStrict(data []byte, names []string, v any) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	var fields map[string]json.RawMessage
 	if err := dec.Decode(&fields); err != nil {
-		return Options{}, fmt.Errorf("decoding: %w", err)
+		return fmt.Errorf("decoding: %w", err)
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return Options{}, errors.New("decoding: data after the object")
+		return errors.New("decoding: data after the object")
 	}
 	// encoding/json matches field names regardless of case, jq does not:
 	// a key must be spelt as the route spells it for both readers to see it.
 	for name := range fields {
-		if !slices.Contains(optionNames, name) {
-			return Options{}, fmt.Errorf("decoding: unknown field %q", name)
+		if !slices.Contains(names, name) {
+			return fmt.Errorf("decoding: unknown field %q", name)
 		}
 	}
-	var o Options
-	if err := json.Unmarshal(data, &o); err != nil {
-		return Options{}, fmt.Errorf("decoding: %w", err)
+	if err := json.Unmarshal(data, v); err != nil {
+		return fmt.Errorf("decoding: %w", err)
 	}
-	return o, o.validate()
+	return nil
 }
 
 // optionNames are the keys of an options file, the JSON names of [Options].
@@ -350,3 +359,12 @@ func (s *Source) PrintOptions() []pdf.ConvertOption {
 	}
 	return opts
 }
+
+// FontFamilies are the prefixes of the font directories
+// corpus/compose/fetch-fonts.sh installs, the faces every converter oracle
+// and fixture builder draws text with. The fonts directory also holds test
+// fonts (Ahem, the WeasyPrint test font, resvg's Noto faces), which only the
+// oracles written for them read.
+//
+//nolint:gochecknoglobals // static list of directory prefixes
+var FontFamilies = []string{"dejavu-", "liberation-", "noto-cjk-sans-", "noto-sans-thai-", "noto-sans-devanagari-", "carlito-", "caladea-"}

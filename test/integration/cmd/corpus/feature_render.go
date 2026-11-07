@@ -276,6 +276,9 @@ type renderIndex struct {
 	PageCount int               `json:"page_count"`
 	Pages     []renderIndexPage `json:"pages"`
 	Error     string            `json:"error,omitempty"`
+	// HideAnnotations reports pages drawn without their annotations
+	// (RENDER_HIDE_ANNOTATIONS in gen-render.sh).
+	HideAnnotations bool `json:"hide_annotations,omitempty"`
 }
 
 // renderIndexPage names one page's golden PNG, or why poppler rendered none.

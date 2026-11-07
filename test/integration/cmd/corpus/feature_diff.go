@@ -18,7 +18,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/test/integration/corpus/html/fixture"
+	"github.com/gotenberg/litho/test/integration/corpus/fixture"
 )
 
 // diffDPI is the resolution the diff goldens are drawn at, mirroring
@@ -199,7 +199,7 @@ func flattenOutline(marks []models.Bookmark) []diffOutlineItem {
 
 // diffFeature scores litho's HTML converter against Chromium, the engine it
 // replaces in Gotenberg. Each source of the html corpus is converted by
-// litho at the options of its options.json (corpus/html/fixture: by default
+// litho at the options of its options.json (corpus/fixture: by default
 // print media, A4, Gotenberg's default margins) and compared with the PDF
 // Gotenberg's Chromium route wrote from the same source at the same options,
 // read at provisioning by PDF.js (text, links) and poppler (pages at 72 dpi),
@@ -233,6 +233,17 @@ type diffFeature struct {
 	renderDir string
 	fontDirs  []string
 	reportDir string
+
+	// refs and testdataRoot locate the reference PDFs the host builds for
+	// an Office corpus (see [Manifest.References]); refs is nil for a
+	// corpus whose references git versions. office reads every source as
+	// an Office document.
+	refs         *ReferenceSpec
+	testdataRoot string
+	office       bool
+	// pins are the resolved pins the references are checked against; nil
+	// reads versions.env.
+	pins map[string]string
 }
 
 func newDiffFeature() *diffFeature {
@@ -241,6 +252,13 @@ func newDiffFeature() *diffFeature {
 
 func (f *diffFeature) Name() string         { return "diff" }
 func (f *diffFeature) GoldenSource() string { return "chromium" }
+
+// SetManifest records where an Office corpus's references live.
+func (f *diffFeature) SetManifest(m *Manifest) {
+	f.mu.Lock()
+	f.refs, f.testdataRoot, f.office = m.References, m.TestdataRoot(), m.References != nil
+	f.mu.Unlock()
+}
 
 // ScoreTolerance is the drop each recorded score may take.
 func (f *diffFeature) ScoreTolerance() float64 { return diffScoreTolerance }
@@ -253,8 +271,12 @@ func (f *diffFeature) SetReportDir(dir string) {
 }
 
 // LoadGoldens reads the text, render and link goldens under dir, keyed by
-// source name; a source needs all three.
+// reference name, the fixture ID with "/" written "__" ([reportName]); a
+// source needs all three.
 func (f *diffFeature) LoadGoldens(dir string) error {
+	f.mu.RLock()
+	office := f.office
+	f.mu.RUnlock()
 	texts := make(map[string]*pdfjsReference)
 	var textMu sync.RWMutex
 	if err := loadPDFJSReferences(filepath.Join(dir, "text"), texts, &textMu); err != nil {
@@ -279,6 +301,9 @@ func (f *diffFeature) LoadGoldens(dir string) error {
 		}
 		if r.DPI != diffDPI {
 			return fmt.Errorf("diff render golden %s was drawn at %g dpi, the feature compares at %d: re-provision goldens/diff", id, r.DPI, diffDPI)
+		}
+		if r.HideAnnotations != office {
+			return fmt.Errorf("diff render golden %s was drawn with hide_annotations %v, the corpus compares with %v: re-provision goldens/diff", id, r.HideAnnotations, office)
 		}
 		sizes, outline, err := readReferenceShape(context.Background(), filepath.Join(pdfsDir, id+".pdf"))
 		if err != nil {
@@ -373,7 +398,7 @@ func (f *diffFeature) HasGolden(fixtureID string) bool { return f.golden(fixture
 func (f *diffFeature) golden(id string) *diffGolden {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return f.goldens[id]
+	return f.goldens[reportName(id)]
 }
 
 // diffOutput is Run's output.
@@ -417,39 +442,20 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 		return json.Marshal(diffOutput{Outcome: outcomeError, Reason: "no golden", Scores: zeroDiffScores()})
 	}
 	f.mu.RLock()
-	fonts, renderDir, reportDir := f.fontDirs, f.renderDir, f.reportDir
+	fonts, renderDir, reportDir, office := f.fontDirs, f.renderDir, f.reportDir, f.office
 	f.mu.RUnlock()
-	dir := srcPath
-	if info, err := os.Stat(srcPath); err == nil && !info.IsDir() {
-		dir = filepath.Dir(srcPath)
+	var (
+		data []byte
+		err  error
+	)
+	if office {
+		data, err = f.convertOffice(ctx, srcPath, fonts)
+	} else {
+		data, err = f.convertHTMLSource(ctx, srcPath, fonts)
 	}
-	source, err := fixture.Load(dir)
-	if err != nil {
-		return json.Marshal(diffOutput{Outcome: outcomeError, Reason: "read: " + err.Error(), Scores: zeroDiffScores()})
-	}
-	src, err := os.ReadFile(source.Document)
-	if err != nil {
-		return json.Marshal(diffOutput{Outcome: outcomeError, Reason: "read: " + err.Error(), Scores: zeroDiffScores()})
-	}
-	width, height := source.Paper()
-	top, right, bottom, left := source.Margins()
-	data, err := f.convert(ctx, src, htmlSettings{
-		Media:             source.MediaType(),
-		Width:             width,
-		Height:            height,
-		Top:               top,
-		Right:             right,
-		Bottom:            bottom,
-		Left:              left,
-		Resources:         os.DirFS(dir),
-		FontDirs:          fonts,
-		PreferCSSPageSize: source.PreferCSSPageSize(),
-		Format:            source.Format,
-		Print:             source.PrintOptions(),
-	})
 	var doc diffLithoDoc
 	if err == nil {
-		doc, err = readDiffPages(ctx, data)
+		doc, err = readDiffPages(ctx, data, office)
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -469,14 +475,63 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 	return json.Marshal(out)
 }
 
+// convertOffice converts an Office source, a source directory or a fetched
+// document, at the options its options.json names.
+func (f *diffFeature) convertOffice(ctx context.Context, srcPath string, fonts []string) ([]byte, error) {
+	source, err := fixture.LoadOffice(srcPath)
+	if err != nil {
+		return nil, fmt.Errorf("read: %w", err)
+	}
+	src, err := os.ReadFile(source.Document)
+	if err != nil {
+		return nil, fmt.Errorf("read: %w", err)
+	}
+	return f.convert(ctx, src, htmlSettings{FontDirs: fonts, Format: source.Format, Print: source.ConvertOptions()})
+}
+
+// convertHTMLSource converts an html corpus source at the options its
+// options.json names.
+func (f *diffFeature) convertHTMLSource(ctx context.Context, srcPath string, fonts []string) ([]byte, error) {
+	dir := srcPath
+	if info, err := os.Stat(srcPath); err == nil && !info.IsDir() {
+		dir = filepath.Dir(srcPath)
+	}
+	source, err := fixture.Load(dir)
+	if err != nil {
+		return nil, fmt.Errorf("read: %w", err)
+	}
+	src, err := os.ReadFile(source.Document)
+	if err != nil {
+		return nil, fmt.Errorf("read: %w", err)
+	}
+	width, height := source.Paper()
+	top, right, bottom, left := source.Margins()
+	return f.convert(ctx, src, htmlSettings{
+		Media:             source.MediaType(),
+		Width:             width,
+		Height:            height,
+		Top:               top,
+		Right:             right,
+		Bottom:            bottom,
+		Left:              left,
+		Resources:         os.DirFS(dir),
+		FontDirs:          fonts,
+		PreferCSSPageSize: source.PreferCSSPageSize(),
+		Format:            source.Format,
+		Print:             source.PrintOptions(),
+	})
+}
+
 // zeroDiffScores is the score set of a fixture litho could not convert.
 func zeroDiffScores() map[string]float64 {
 	return map[string]float64{scorePages: 0, scoreText: 0, scoreLinks: 0, scoreLayout: 0, scoreStrict: 0, scoreOutline: 0}
 }
 
 // readDiffPages reads litho's PDF: each page's text, links, size and
-// drawing at 72 dpi, and the outline.
-func readDiffPages(ctx context.Context, data []byte) (diffLithoDoc, error) {
+// drawing at 72 dpi, without its annotations when hideAnnotations is set as
+// the Office corpora's goldens are drawn, and the outline. A page with no
+// text at all reads as empty, as PDF.js reads it.
+func readDiffPages(ctx context.Context, data []byte, hideAnnotations bool) (diffLithoDoc, error) {
 	r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return diffLithoDoc{}, fmt.Errorf("open the conversion: %w", err)
@@ -496,6 +551,9 @@ func readDiffPages(ctx context.Context, data []byte) (diffLithoDoc, error) {
 		// The goldens hold every word of the page, headers and footers
 		// included, which litho writes as pagination artifacts.
 		text, err := r.ExtractText(ctx, p, pdf.WithArtifacts())
+		if errors.Is(err, pdf.ErrRequiresOCR) {
+			text, err = "", nil
+		}
 		if err != nil {
 			return diffLithoDoc{}, fmt.Errorf("extract text of page %d: %w", p, err)
 		}
@@ -509,7 +567,11 @@ func readDiffPages(ctx context.Context, data []byte) (diffLithoDoc, error) {
 				links = append(links, diffLink{Page: p, Rect: a.Rect[:], URI: a.URI, DestPage: a.DestPage})
 			}
 		}
-		img, err := r.RenderPage(ctx, p, pdf.WithRenderDPI(diffDPI))
+		renderOpts := []pdf.RenderOption{pdf.WithRenderDPI(diffDPI)}
+		if hideAnnotations {
+			renderOpts = append(renderOpts, pdf.WithRenderContent(pdf.RenderAllContent&^pdf.RenderAnnotations))
+		}
+		img, err := r.RenderPage(ctx, p, renderOpts...)
 		if err != nil {
 			return diffLithoDoc{}, fmt.Errorf("render page %d: %w", p, err)
 		}

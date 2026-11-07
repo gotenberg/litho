@@ -127,3 +127,10 @@ type GoldenOverrider interface {
 type BatchPreparer interface {
 	Prepare(ctx context.Context, fixtures []Fixture) error
 }
+
+// ManifestReader is an optional interface a [Feature] implements when it
+// reads more of its corpus than the golden directory: the runner calls
+// SetManifest with the corpus's manifest before [Feature.LoadGoldens].
+type ManifestReader interface {
+	SetManifest(m *Manifest)
+}
