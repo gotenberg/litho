@@ -799,13 +799,15 @@ var (
 	ErrConvertTooManyPages = plaintext.ErrTooManyPages
 
 	// ErrConvertMalformed is returned, wrapped, by [Convert] for a
-	// [FormatDOCX] or [FormatODT] source that is not a package of its
-	// format, or whose required parts are missing or unreadable.
+	// [FormatDOCX], [FormatODT], [FormatXLSX], [FormatODS] or [FormatCSV]
+	// source that is not a document of its format, or whose required parts
+	// are missing or unreadable.
 	ErrConvertMalformed = office.ErrMalformed
 
 	// ErrConvertEncrypted is returned, wrapped, by [Convert] for an encrypted
-	// [FormatDOCX] or [FormatODT] source that [WithConvertPassword] does not open:
-	// no password, a wrong one, or a scheme litho does not read.
+	// [FormatDOCX], [FormatODT], [FormatXLSX] or [FormatODS] source that
+	// [WithConvertPassword] does not open: no password, a wrong one, or a
+	// scheme litho does not read.
 	ErrConvertEncrypted = office.ErrEncrypted
 
 	// ErrConvertNoFonts is returned, wrapped, by [Convert] when the font

@@ -26,6 +26,11 @@ pkg/internal/offcrypto/          Office document encryption: MS-OFFCRYPTO contai
 pkg/internal/convert/office/     What the Office converters share: options, errors, the source read.
 pkg/internal/convert/docx/       DOCX converter: WordprocessingML to the layout tree (wave 4).
 pkg/internal/convert/odt/        ODT converter: OpenDocument text to the layout tree (wave 4).
+pkg/internal/chart/              Chart model and renderer: DrawingML and OpenDocument charts drawn as LibreOffice draws them (wave 5 onward).
+pkg/internal/convert/sheet/      What the spreadsheet converters share: the sheet model, its pagination and layout as Calc prints a sheet (wave 5).
+pkg/internal/convert/xlsx/       XLSX converter: SpreadsheetML to the sheet model (wave 5).
+pkg/internal/convert/ods/        ODS converter: OpenDocument spreadsheets to the sheet model (wave 5).
+pkg/internal/convert/csv/        CSV converter: a CSV file to the sheet model, as Calc imports one (wave 5).
 pkg/pdf/convert.go               Public entry point: pdf.Convert.
 cmd/litho/convert.go             CLI: litho convert.
 ```

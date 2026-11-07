@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"time"
 )
 
 // MaxPageSide is the longest page side in points (ISO 32000-1, Annex
@@ -11,8 +12,9 @@ import (
 const MaxPageSide = 14400
 
 // Options parametrises an Office conversion. The document's own page
-// setup, sections, margins, headers and footers apply; the options
-// override or select among them as Gotenberg's LibreOffice route does.
+// setup, sections or sheets, margins, headers and footers apply; the
+// options override or select among them as Gotenberg's LibreOffice route
+// does.
 type Options struct {
 	// PageWidth and PageHeight, both positive, replace the page size of
 	// every section with this one, in points, the way the route's paperSize
@@ -33,8 +35,20 @@ type Options struct {
 	// fields count the whole document.
 	PageRanges string
 	// OmitOutline leaves the document outline out; otherwise the headings
-	// (the outline levels of the paragraph styles) become it.
+	// (the outline levels of the paragraph styles) become it, or the sheets
+	// of a spreadsheet.
 	OmitOutline bool
+	// SinglePageSheets lays each sheet of a spreadsheet out on one page the
+	// size of its content, as LibreOffice's SinglePageSheets export does;
+	// the sheet's paper, scale and page breaks are then ignored, and the
+	// page size options above too. A text document ignores it.
+	SinglePageSheets bool
+	// PrintDate is what the date and time fields of a spreadsheet's headers
+	// and footers show; the zero time shows nothing. It is the only date
+	// of a conversion: the output never depends on the clock. A text
+	// document ignores it: its date fields show the results its file
+	// stores.
+	PrintDate time.Time
 	// MaxInputBytes caps the source read, 0 for the converter's default.
 	MaxInputBytes int64
 	// MaxPages caps the pages laid out, 0 for the layout engine's default.

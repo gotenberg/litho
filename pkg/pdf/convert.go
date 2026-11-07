@@ -15,12 +15,15 @@ import (
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/convert/csv"
 	"github.com/gotenberg/litho/pkg/internal/convert/docx"
 	htmlconv "github.com/gotenberg/litho/pkg/internal/convert/html"
 	"github.com/gotenberg/litho/pkg/internal/convert/markdown"
+	"github.com/gotenberg/litho/pkg/internal/convert/ods"
 	"github.com/gotenberg/litho/pkg/internal/convert/odt"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/plaintext"
+	"github.com/gotenberg/litho/pkg/internal/convert/xlsx"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -43,6 +46,16 @@ const (
 	// FormatDOCX is a WordprocessingML document, a DOCX file (ECMA-376).
 	// See [Convert] for what is drawn.
 	FormatDOCX Format = "docx"
+	// FormatXLSX is a SpreadsheetML workbook, an XLSX file (ECMA-376), a
+	// macro-enabled XLSM or a template XLTX alike; macros never run. See
+	// [Convert].
+	FormatXLSX Format = "xlsx"
+	// FormatODS is an OpenDocument spreadsheet, an ODS file, or a flat FODS
+	// document (ODF 1.3). See [Convert].
+	FormatODS Format = "ods"
+	// FormatCSV is a comma-separated values file (RFC 4180), laid out as a
+	// spreadsheet of one sheet. See [Convert].
+	FormatCSV Format = "csv"
 	// FormatODT is an OpenDocument text document, an ODT file (ODF 1.3).
 	// See [Convert] for what is drawn.
 	FormatODT Format = "odt"
@@ -116,9 +129,9 @@ func WithConvertFontDirs(dirs ...string) ConvertOption {
 // is A4, 595.276 by 841.890 points. Each side must be finite, positive and at
 // most 14,400 points (ISO 32000-1, Annex C.2), or [Convert] fails with
 // [ErrInvalidConvertOptions]. Both zero keep the default. A [FormatDOCX] or
-// [FormatODT] source has a page size of its own, per section, which
-// applies unless this option names another: then every section is laid
-// out on this paper.
+// [FormatODT] source has a page size of its own, per section, and a
+// spreadsheet source one per sheet, which applies unless this option
+// names another: then every section or sheet is laid out on this paper.
 func WithPaperSize(width, height float64) ConvertOption {
 	return func(o *convertOptions) {
 		o.width, o.height = width, height
@@ -187,8 +200,9 @@ func WithResources(fsys fs.FS) ConvertOption {
 // WithLandscape swaps the paper's width and height of a [FormatHTML]
 // source, so the page is as wide as the paper is tall: [WithPaperSize]
 // names the portrait sheet. It lays every section of a [FormatDOCX] or
-// [FormatODT] source out in landscape: a portrait section's width and
-// height are swapped, a landscape one is kept.
+// [FormatODT] source, and every sheet of a spreadsheet source, out in
+// landscape: a portrait section's width and height are swapped, a
+// landscape one is kept.
 func WithLandscape(landscape bool) ConvertOption {
 	return func(o *convertOptions) { o.landscape = landscape }
 }
@@ -219,13 +233,18 @@ func WithPrintScale(scale float64) ConvertOption {
 // 437.12 CSS pixels tall and 800 wide: the paper becomes that tall plus the
 // top and bottom margins, and with [WithLandscape] that wide plus the left
 // and right margins. The document is printed on it as usual and only the
-// first page is written, whatever [WithPageRanges] says.
+// first page is written, whatever [WithPageRanges] says. For a
+// [FormatXLSX], [FormatODS] or [FormatCSV] source it lays each sheet out
+// on one page the size of its content, as LibreOffice's SinglePageSheets
+// export does: the sheet's paper, scale and page breaks are ignored, and
+// [WithPaperSize] and [WithLandscape] too.
 func WithSinglePage(single bool) ConvertOption {
 	return func(o *convertOptions) { o.singlePage = single }
 }
 
-// WithPageRanges selects the pages of a [FormatHTML], [FormatDOCX] or
-// [FormatODT] source written, one-based, in document order, as "1-5, 8,
+// WithPageRanges selects the pages of a [FormatHTML], [FormatDOCX],
+// [FormatODT], [FormatXLSX], [FormatODS] or [FormatCSV] source written,
+// one-based, in document order, as "1-5, 8,
 // 11-13"; empty, the default, writes every page. A range past the last page is ignored. A selection
 // that keeps no page, a range whose start exceeds its end and a malformed
 // specification are refused with [ErrInvalidConvertOptions]. Page
@@ -263,16 +282,18 @@ func WithFractionalFontMetrics(fractional bool) ConvertOption {
 	return func(o *convertOptions) { o.fractionalFontMetrics = fractional }
 }
 
-// WithOutline sets whether the headings of a [FormatHTML] source, or the
+// WithOutline sets whether the headings of a [FormatHTML] source, the
 // paragraphs of a [FormatDOCX] or [FormatODT] source whose style has an
-// outline level, become the document outline. true is the default.
+// outline level, or the sheets of a spreadsheet source, become the
+// document outline. true is the default.
 func WithOutline(outline bool) ConvertOption {
 	return func(o *convertOptions) { o.omitOutline = !outline }
 }
 
-// WithConvertPassword opens an encrypted [FormatDOCX] or [FormatODT] source with
-// password. Without it, or with a wrong one, an encrypted source fails
-// with [ErrConvertEncrypted]. Other formats ignore it.
+// WithConvertPassword opens an encrypted [FormatDOCX], [FormatODT],
+// [FormatXLSX] or [FormatODS] source with password. Without it, or with a
+// wrong one, an encrypted source fails with [ErrConvertEncrypted]. Other
+// formats ignore it.
 func WithConvertPassword(password string) ConvertOption {
 	return func(o *convertOptions) { o.password = password }
 }
@@ -299,9 +320,12 @@ func WithFooterTemplate(html string) ConvertOption {
 }
 
 // WithPrintDate sets what the date class of the header and footer
-// templates shows, formatted as Chromium formats it for the en-US locale,
-// "11/6/26, 10:30 AM". The zero time, the default, shows nothing. It is
-// the only date of a conversion: the output never depends on the clock.
+// templates of a [FormatHTML] source shows, formatted as Chromium formats
+// it for the en-US locale, "11/6/26, 10:30 AM", and what the date and
+// time fields of a spreadsheet source's headers and footers show, as Calc
+// formats them for that locale. The zero time, the default, shows
+// nothing. It is the only date of a conversion: the output never depends
+// on the clock.
 func WithPrintDate(t time.Time) ConvertOption {
 	return func(o *convertOptions) { o.date = t }
 }
@@ -461,6 +485,27 @@ type ConvertWarning struct {
 // warning. Macros never run; embedded objects draw as their preview
 // picture when the package holds one.
 //
+// # XLSX, ODS and CSV
+//
+// [FormatXLSX] reads a SpreadsheetML workbook, [FormatODS] an OpenDocument
+// spreadsheet and [FormatCSV] a comma-separated values file as LibreOffice
+// Calc opens one through Gotenberg's LibreOffice route (fields separated
+// by commas, semicolons or tabs, quoted with double quotes, in UTF-8, with
+// numbers, dates and times detected), and lays them out as LibreOffice
+// prints a spreadsheet: every sheet that is not hidden, in book order, its
+// print ranges cut into pages by the sheet's page setup (paper,
+// orientation, margins, scale or fit-to-pages, page order, repeated rows
+// and columns, manual breaks), with its headers and footers, the cell
+// values formatted by their number formats and drawn with their fonts,
+// fills, borders, alignment, wrapping and rotation, merged cells, pictures,
+// charts and hyperlinks. Formulas are never evaluated: a cell shows the
+// value its file stores. A CSV file prints without a header, as the route
+// prints one. [WithPaperSize] and [WithLandscape] override every sheet's
+// page setup; [WithSinglePage] lays each sheet out on one page the size of
+// its content; [WithPageRanges], [WithOutline], [WithConvertPassword] and
+// [WithPrintDate] apply; the other options are ignored as for a DOCX
+// source. A construct that is not drawn is reported as a warning.
+//
 // # All formats
 //
 // The fonts are embedded, each subset to the glyphs drawn. Nothing is
@@ -474,8 +519,8 @@ type ConvertWarning struct {
 // [Limits.MaxConvertInputBytes] or for an HTML document past the
 // converter's element, cascade or box caps, [ErrConvertTooManyPages] past
 // [Limits.MaxConvertPages], [ErrConvertNoFonts] when the font directories
-// hold no usable font, [ErrConvertMalformed] for a DOCX or ODT source that
-// is not a package of its format, [ErrConvertEncrypted] for one
+// hold no usable font, [ErrConvertMalformed] for an Office source that
+// is not a document of its format, [ErrConvertEncrypted] for one
 // [WithConvertPassword] does not open, [ErrInternalPanic] for a recovered panic,
 // and ctx's error when ctx ends first. On an error other than a write error on dst,
 // nothing reaches dst: the whole file is built before it is written.
@@ -493,7 +538,9 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	}
 	defer recoverToError(o.logger, "Convert", &err)
 
-	if format != FormatText && format != FormatHTML && format != FormatMarkdown && format != FormatDOCX && format != FormatODT {
+	switch format {
+	case FormatText, FormatHTML, FormatMarkdown, FormatDOCX, FormatODT, FormatXLSX, FormatODS, FormatCSV:
+	default:
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
 	}
 	if src == nil {
@@ -523,7 +570,7 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	switch format {
 	case FormatHTML, FormatMarkdown:
 		doc, err = convertHTML(ctx, src, format, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages)
-	case FormatDOCX, FormatODT:
+	case FormatDOCX, FormatODT, FormatXLSX, FormatODS, FormatCSV:
 		doc, err = convertOffice(ctx, src, format, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages)
 	case FormatText:
 		doc, err = plaintext.Convert(ctx, src, fonts, plaintext.Options{
@@ -610,25 +657,36 @@ func convertHTML(ctx context.Context, src io.Reader, format Format, fonts *text.
 	}
 }
 
-// convertOffice lays a DOCX or ODT source out, mapping the Office
-// converters' errors onto the public sentinels: their option errors to
+// convertOffice lays an Office source out, mapping the Office converters'
+// errors onto the public sentinels: their option errors to
 // [ErrInvalidConvertOptions], their size caps to [ErrConvertInputTooLarge],
 // their page cap to [ErrConvertTooManyPages], a package that is not one
 // to [ErrConvertMalformed], an encrypted one to [ErrConvertEncrypted], and
 // a converter not written yet to [ErrUnsupportedFormat].
 func convertOffice(ctx context.Context, src io.Reader, format Format, fonts *text.Fonts, o *convertOptions, maxBytes int64, maxPages int) (*compose.Document, error) {
 	conv, name := docx.Convert, "DOCX"
-	if format == FormatODT {
+	switch format {
+	case FormatODT:
 		conv, name = odt.Convert, "ODT"
+	case FormatXLSX:
+		conv, name = xlsx.Convert, "XLSX"
+	case FormatODS:
+		conv, name = ods.Convert, "ODS"
+	case FormatCSV:
+		conv, name = csv.Convert, "CSV"
+	case FormatDOCX, FormatText, FormatHTML, FormatMarkdown:
+		// DOCX is the default; the others never reach here.
 	}
 	opts := office.Options{
-		Landscape:     o.landscape,
-		Password:      o.password,
-		PageRanges:    o.pageRanges,
-		OmitOutline:   o.omitOutline,
-		MaxInputBytes: maxBytes,
-		MaxPages:      maxPages,
-		Logger:        o.logger,
+		Landscape:        o.landscape,
+		Password:         o.password,
+		PageRanges:       o.pageRanges,
+		OmitOutline:      o.omitOutline,
+		SinglePageSheets: o.singlePage,
+		PrintDate:        o.date,
+		MaxInputBytes:    maxBytes,
+		MaxPages:         maxPages,
+		Logger:           o.logger,
 	}
 	if o.paperSet {
 		opts.PageWidth, opts.PageHeight = o.width, o.height

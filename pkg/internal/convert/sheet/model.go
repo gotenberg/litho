@@ -1,0 +1,530 @@
+package sheet
+
+import (
+	"github.com/gotenberg/litho/pkg/internal/chart"
+	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
+)
+
+// Document is a spreadsheet as its reader found it: the sheets in book
+// order and what the book carries as a whole. A reader fills every field
+// a file gives a value for and leaves the rest zero; the builder reads the
+// model and never changes it.
+type Document struct {
+	// Meta is the document information written to the PDF.
+	Meta compose.Metadata
+	// Default is the style a cell, row or column without one draws with:
+	// the book's default font and the General format (ECMA-376 Part 1,
+	// 18.8.11, the Normal cell style; ODF 1.3 Part 3, 16.5, the Default
+	// cell style).
+	Default Style
+	// Sheets lists the sheets in book order. A hidden sheet is listed and
+	// not printed.
+	Sheets []*Sheet
+}
+
+// Sheet is one worksheet (ECMA-376 Part 1, 18.3; ODF 1.3 Part 3, 9.1.2,
+// table:table).
+type Sheet struct {
+	// Name is the sheet's name, what the sheet-name field of a header
+	// shows.
+	Name string
+	// Hidden marks a sheet that is not printed (ECMA-376 Part 1, 18.2.19
+	// state hidden or veryHidden; ODF table:display false).
+	Hidden bool
+	// RightToLeft lays the columns out from the right edge (ECMA-376 Part
+	// 1, 18.3.1.87 rightToLeft; ODF style:writing-mode rl-tb on the table).
+	RightToLeft bool
+	// HideZeros leaves a cell whose value is the number zero blank when
+	// the sheet is printed, as the reader finds the file asks for (ODF
+	// style:print on the page layout without zero-values; a workbook's
+	// showZeros view setting when LibreOffice honours it in print).
+	HideZeros bool
+	// DefaultColumnWidth is the width of a column no Column covers, and
+	// DefaultRowHeight the height of a row no Row lists or whose Height is
+	// 0; both positive.
+	DefaultColumnWidth, DefaultRowHeight float64
+	// Columns are the column ranges with a width, a style or a hidden flag
+	// of their own, by rising First, without overlap.
+	Columns []Column
+	// Rows are the rows holding cells or a height, a style or a hidden
+	// flag of their own, by rising Index.
+	Rows []Row
+	// Merges are the merged ranges (ECMA-376 Part 1, 18.3.1.55; ODF
+	// table:number-columns-spanned and number-rows-spanned): the top-left
+	// cell of each holds the content and the style of the whole.
+	Merges []Range
+	// Page is the sheet's page setup, every field resolved by the reader
+	// to what the file or the application's default gives.
+	Page PageSetup
+	// HeaderFooter is what the page margins show.
+	HeaderFooter HeaderFooter
+	// Drawings are the pictures and charts anchored on the sheet, in
+	// drawing order.
+	Drawings []Drawing
+}
+
+// Column is a range of columns sharing a width, a style or a hidden flag
+// (ECMA-376 Part 1, 18.3.1.13 col; ODF 1.3 Part 3, 9.1.6 table:table-column
+// with number-columns-repeated).
+type Column struct {
+	// First and Last are the 0-based indexes of the range, inclusive.
+	First, Last int
+	// Width is the column width in points, 0 for the sheet's default.
+	Width float64
+	// Hidden marks columns that are not printed.
+	Hidden bool
+	// Style, when not nil, is the style the range's cells without one
+	// take.
+	Style *Style
+}
+
+// Row is one row (ECMA-376 Part 1, 18.3.1.73; ODF 1.3 Part 3, 9.1.3
+// table:table-row).
+type Row struct {
+	// Index is the 0-based row index.
+	Index int
+	// Height is the row height in points, 0 for the sheet's default.
+	Height float64
+	// CustomHeight marks a height the user set (ECMA-376 Part 1, 18.3.1.73
+	// customHeight; ODF style:use-optimal-row-height false): the row keeps
+	// it. Otherwise the builder may grow the row to fit wrapped text, as
+	// Calc computes an optimal height.
+	CustomHeight bool
+	// Hidden marks a row that is not printed.
+	Hidden bool
+	// Style, when not nil, is the style the row's cells without one take,
+	// before a column's.
+	Style *Style
+	// Cells are the row's cells with a value or a style, by rising Column.
+	Cells []Cell
+}
+
+// Cell is one cell (ECMA-376 Part 1, 18.3.1.4 c; ODF 1.3 Part 3, 9.1.4
+// table:table-cell).
+type Cell struct {
+	// Column is the 0-based column index.
+	Column int
+	// Value is the cell's value, the one its file stores: a formula's
+	// cached result, never a computation.
+	Value Value
+	// Runs, when not empty, is the cell's rich text, whose concatenation
+	// is Value.Text: each run draws with its own font over the cell's.
+	Runs []Run
+	// Style, when not nil, is the cell's own style; nil takes the row's,
+	// then the column's, then the document's default.
+	Style *Style
+	// Href is the hyperlink the cell carries, "" for none (ECMA-376 Part
+	// 1, 18.3.1.47; ODF text:a in the cell).
+	Href string
+}
+
+// Run is a span of rich text in a cell (ECMA-376 Part 1, 18.4.4 r; ODF
+// text:span).
+type Run struct {
+	// Text is the span's text.
+	Text string
+	// Font, when not nil, overrides the cell font for the span.
+	Font *Font
+}
+
+// Value is a cell value.
+type Value struct {
+	// Kind says which field holds the value.
+	Kind Kind
+	// Number holds a Number value, a date or time as its serial number
+	// (days since the document's null date, Calc's 1899-12-30 unless the
+	// reader converts; ECMA-376 Part 1, 18.17.4.1), a Bool as 0 or 1.
+	Number float64
+	// Text holds a Text value, an Error value's code ("#DIV/0!"), and the
+	// text a cell shows for a Number or Bool when the file stores it.
+	Text string
+}
+
+// Kind is the kind of a cell value.
+type Kind uint8
+
+// The kinds of cell values (ECMA-376 Part 1, 18.18.11 ST_CellType; ODF 1.3
+// Part 3, 19.385 office:value-type).
+const (
+	// Empty is a cell without a value: it may still carry a style.
+	Empty Kind = iota
+	// Number is a numeric value, including dates, times, percentages and
+	// currencies, which their format distinguishes.
+	Number
+	// Text is a string value.
+	Text
+	// Bool is a boolean value.
+	Bool
+	// Error is an error value.
+	Error
+)
+
+// Range is a rectangle of cells, every index 0-based and inclusive.
+type Range struct {
+	FirstRow, FirstColumn, LastRow, LastColumn int
+}
+
+// Style is a cell style: what a cell draws with, resolved by the reader
+// from the file's style tables (ECMA-376 Part 1, 18.8.45 xf; ODF 1.3 Part
+// 3, 16.5 table-cell style). A zero field means the document default's.
+type Style struct {
+	// Font draws the cell's text.
+	Font Font
+	// Fill paints the cell's background.
+	Fill Fill
+	// Border is the cell's border on each side, indexed by [css.Side].
+	Border [4]Border
+	// Diagonal is the border drawn across the cell when DiagonalUp or
+	// DiagonalDown is set, or both (ECMA-376 Part 1, 18.8.4; ODF
+	// style:diagonal-bl-tr and diagonal-tl-br).
+	Diagonal Border
+	// DiagonalUp draws Diagonal from the bottom-left to the top-right
+	// corner; DiagonalDown from the top-left to the bottom-right.
+	DiagonalUp, DiagonalDown bool
+	// Align places the text in the cell.
+	Align Alignment
+	// Padding is the inset between the border and the text on each side,
+	// indexed by [css.Side] (ODF fo:padding; for a workbook, the inset Calc
+	// gives every imported cell, which the reader sets).
+	Padding [4]float64
+	// Format is the cell's number format, as a format code in the
+	// SpreadsheetML syntax (ECMA-376 Part 1, 18.8.31 numFmt), which Calc
+	// reads and writes for its own number formats too; "" and "General"
+	// are the General format. An ODF data style is written as the code it
+	// means.
+	Format string
+}
+
+// Font is a cell or run font (ECMA-376 Part 1, 18.8.22; ODF 1.3 Part 3,
+// 16.29.x text properties).
+type Font struct {
+	// Families lists the typefaces in order of preference: the Western,
+	// then the Asian and complex script faces an ODF style names, or the
+	// one face a workbook font names; empty takes the document default's.
+	Families []string
+	// Size is the font size in points, 0 for the document default's.
+	Size float64
+	// Bold and Italic select the face.
+	Bold, Italic bool
+	// Underline is the underline kind.
+	Underline Underline
+	// Strike strikes the text through.
+	Strike bool
+	// Color is the text colour; the zero Color, transparent, draws the
+	// document default's, black when none.
+	Color css.Color
+	// Script raises or lowers the text as a superscript or subscript.
+	Script Script
+}
+
+// Underline is an underline kind (ECMA-376 Part 1, 18.18.86 ST_UnderlineValues).
+type Underline uint8
+
+// The underline kinds. The accounting kinds span the cell width and skip
+// descenders as Calc draws them.
+const (
+	NoUnderline Underline = iota
+	Single
+	Double
+	SingleAccounting
+	DoubleAccounting
+)
+
+// Script is a vertical text position (ECMA-376 Part 1, 18.18.33
+// ST_VerticalAlignRun).
+type Script uint8
+
+// The vertical text positions.
+const (
+	Baseline Script = iota
+	Superscript
+	Subscript
+)
+
+// Fill is a cell background (ECMA-376 Part 1, 18.8.20 fill; ODF
+// fo:background-color).
+type Fill struct {
+	// Color is the colour painted over the whole cell; the zero Color,
+	// transparent, paints nothing. A pattern fill is read as the colour
+	// its pattern shows most, as Calc imports one.
+	Color css.Color
+}
+
+// Border is one border line (ECMA-376 Part 1, 18.8.4 border; ODF 1.3 Part
+// 3, 20.176 fo:border).
+type Border struct {
+	// Line is the line style; LineNone draws nothing.
+	Line Line
+	// Width is the line's total thickness in points, positive when Line is
+	// not LineNone: the reader resolves a workbook's named widths (thin,
+	// medium, thick, hair) to the points Calc draws them at.
+	Width float64
+	// Gap is the space between the two lines of a LineDouble border, in
+	// points, 0 for a third of Width; the lines share the rest equally
+	// (ODF style:border-line-width inner, distance, outer).
+	Gap float64
+	// Color is the line colour.
+	Color css.Color
+}
+
+// Line is a border line style (ECMA-376 Part 1, 18.18.3 ST_BorderStyle;
+// ODF 1.3 Part 3, 20.176, the CSS border styles with Calc's dash patterns).
+type Line uint8
+
+// The border line styles.
+const (
+	LineNone Line = iota
+	LineSolid
+	LineDashed
+	LineDotted
+	LineDashDot
+	LineDashDotDot
+	LineDouble
+)
+
+// Alignment places a cell's text (ECMA-376 Part 1, 18.8.1 alignment; ODF
+// 1.3 Part 3, 20.216 fo:text-align, 20.386 style:vertical-align, 20.351
+// style:rotation-angle and the related properties).
+type Alignment struct {
+	// Horizontal is the horizontal alignment.
+	Horizontal HAlign
+	// Vertical is the vertical alignment.
+	Vertical VAlign
+	// Wrap wraps the text in the cell's width.
+	Wrap bool
+	// Shrink shrinks the text to the cell's width instead of overflowing
+	// or clipping.
+	Shrink bool
+	// Indent is the indent from the aligned edge in points, the reader
+	// having resolved a workbook's indent levels.
+	Indent float64
+	// Rotation turns the text counter-clockwise by this many degrees, in
+	// [-90, 90]; 0 is horizontal. A workbook's 91 to 180 rotates
+	// clockwise and reads as negative.
+	Rotation float64
+	// Stacked writes the characters one under the other, upright
+	// (ECMA-376 Part 1, 18.8.1 textRotation 255; ODF style:direction ttb).
+	Stacked bool
+	// RightToLeft lays the text out right to left; false lets the text's
+	// first strong character decide (ECMA-376 Part 1, 18.8.1 readingOrder
+	// 2; ODF style:writing-mode rl-tb on the cell).
+	RightToLeft bool
+}
+
+// HAlign is a horizontal alignment (ECMA-376 Part 1, 18.18.40
+// ST_HorizontalAlignment).
+type HAlign uint8
+
+// The horizontal alignments. HGeneral aligns text left, numbers right and
+// booleans and errors centred, as Calc does.
+const (
+	HGeneral HAlign = iota
+	HLeft
+	HCenter
+	HRight
+	// HFill repeats the text to fill the cell.
+	HFill
+	HJustify
+	// HCenterContinuous centres the text across this cell and the empty
+	// cells to its right that share the alignment.
+	HCenterContinuous
+	// HDistributed justifies every line, the last one too.
+	HDistributed
+)
+
+// VAlign is a vertical alignment (ECMA-376 Part 1, 18.18.88
+// ST_VerticalAlignment).
+type VAlign uint8
+
+// The vertical alignments. Calc aligns to the bottom by default.
+const (
+	VBottom VAlign = iota
+	VTop
+	VMiddle
+	VJustify
+	VDistributed
+)
+
+// PageSetup is a sheet's print setup (ECMA-376 Part 1, 18.3.1.63
+// pageSetup, 18.3.1.62 pageMargins, 18.3.1.70 printOptions, 18.3.1.74
+// rowBreaks and 18.3.1.14 colBreaks, the defined names _xlnm.Print_Area
+// and _xlnm.Print_Titles; ODF 1.3 Part 3, 16.9 page layout, 9.1.2
+// table:print-ranges, 9.1.6 table:table-header-columns and 9.1.3
+// table:table-header-rows, and fo:break-before on rows and columns). The
+// reader fills every field: what the file does not say takes the
+// application's default, since the builder knows no format's defaults.
+type PageSetup struct {
+	// Width and Height are the printed page's size in points, after
+	// orientation; both positive.
+	Width, Height float64
+	// Margin is the distance from each page edge to the cells, indexed by
+	// [css.Side]: a workbook's margins; an OpenDocument page's margin,
+	// plus its header or footer with the spacing to the body on the sides
+	// that have one.
+	Margin [4]float64
+	// HeaderTop is the distance from the top edge to the header's top, and
+	// FooterBottom from the bottom edge to the footer's bottom (ECMA-376
+	// Part 1, 18.3.1.62 header and footer; ODF fo:margin-top of the page
+	// and fo:margin-bottom). The header grows down from HeaderTop and the
+	// footer up from FooterBottom, within Margin.
+	HeaderTop, FooterBottom float64
+	// Scale is the print scale in percent, 100 the natural size, and 0
+	// when FitWidth and FitHeight size the sheet instead (ECMA-376 Part 1,
+	// 18.3.1.63 scale and fitToPage; ODF style:scale-to,
+	// style:scale-to-pages, style:scale-to-X and style:scale-to-Y).
+	Scale int
+	// FitWidth and FitHeight, read when Scale is 0, are how many pages
+	// across and down the sheet is shrunk to fit, 0 for as many as it
+	// takes on that axis.
+	FitWidth, FitHeight int
+	// Order is the order the pages of a sheet wider and taller than one
+	// page are numbered in.
+	Order PageOrder
+	// FirstPageNumber is the number of the sheet's first page, 0 to
+	// continue from the previous sheet, or 1 for the first (ECMA-376 Part
+	// 1, 18.3.1.63 firstPageNumber with useFirstPageNumber; ODF
+	// style:first-page-number).
+	FirstPageNumber int
+	// GridLines prints the grid between the cells; Headings the row
+	// numbers and column letters (ECMA-376 Part 1, 18.3.1.70 gridLines
+	// and headings; ODF style:print "grid" and "headers").
+	GridLines, Headings bool
+	// CenterHorizontally and CenterVertically centre the cells of a page in
+	// its area (ECMA-376 Part 1, 18.3.1.70 horizontalCentered and
+	// verticalCentered; ODF style:table-centering).
+	CenterHorizontally, CenterVertically bool
+	// PrintAreas are the ranges printed, in order, each starting on a new
+	// page; empty prints the used range: the cells with a value, a fill
+	// or a border, and the drawings.
+	PrintAreas []Range
+	// RepeatRows and RepeatColumns, when not nil, are the rows repeated at
+	// the top and the columns repeated at the left of every page of the
+	// sheet (print titles); their row or column indexes alone are read.
+	RepeatRows, RepeatColumns *Range
+	// RowBreaks and ColumnBreaks are the 0-based indexes of the rows and
+	// columns a manual page break starts, rising.
+	RowBreaks, ColumnBreaks []int
+}
+
+// PageOrder is the order the pages of one sheet are numbered in
+// (ECMA-376 Part 1, 18.18.51 ST_PageOrder; ODF style:print-page-order).
+type PageOrder uint8
+
+// The page orders.
+const (
+	// DownThenOver numbers the pages down the first band of columns,
+	// then the next band: Calc's default.
+	DownThenOver PageOrder = iota
+	// OverThenDown numbers the pages across the first band of rows, then
+	// the next band.
+	OverThenDown
+)
+
+// HeaderFooter is what a sheet's pages show in their top and bottom
+// margins (ECMA-376 Part 1, 18.3.1.46 headerFooter; ODF 1.3 Part 3, 16.11
+// style:header and style:footer with their regions). A zero value shows
+// nothing.
+type HeaderFooter struct {
+	// Odd is the header and footer of every page, unless Even or First
+	// applies.
+	Odd Margins
+	// Even applies to even pages when DifferentOddEven is set.
+	Even Margins
+	// First applies to the first page when DifferentFirst is set.
+	First Margins
+	// DifferentOddEven and DifferentFirst enable Even and First.
+	DifferentOddEven, DifferentFirst bool
+	// HeaderMinHeight and FooterMinHeight are the least height of the
+	// header and the footer in points, 0 for the content's own (ODF
+	// fo:min-height); the margins the reader set already make room.
+	HeaderMinHeight, FooterMinHeight float64
+	// ScaleWithDoc scales the header and footer text with the sheet's
+	// print scale (ECMA-376 Part 1, 18.3.1.46 scaleWithDoc); Calc does not,
+	// and the reader leaves it false.
+	ScaleWithDoc bool
+}
+
+// Margins is one header and one footer, each three parts.
+type Margins struct {
+	// Header and Footer are the left, centre and right parts, in that
+	// order.
+	Header, Footer [3][]Span
+}
+
+// Span is a piece of a header or footer part: text, or a field resolved
+// when the page is drawn (ECMA-376 Part 1, 18.3.1.46, the & codes; ODF
+// 1.3 Part 3, 7.3 and 7.5, the text fields).
+type Span struct {
+	// Text is the span's text when Field is FieldNone.
+	Text string
+	// Field, when not FieldNone, is what the span shows.
+	Field Field
+	// Font, when not nil, overrides the header font (Calc's default header
+	// style) for the span.
+	Font *Font
+}
+
+// Field is a header or footer field.
+type Field uint8
+
+// The header and footer fields. FieldDate and FieldTime show
+// office.Options.PrintDate, nothing when it is the zero time.
+const (
+	FieldNone Field = iota
+	// FieldPage is the page number.
+	FieldPage
+	// FieldPages is the document's page count.
+	FieldPages
+	// FieldSheet is the sheet name.
+	FieldSheet
+	// FieldFile is the file name, which a converter does not know: it
+	// shows nothing.
+	FieldFile
+	// FieldPath is the file path, shown as FieldFile.
+	FieldPath
+	// FieldTitle is the document title.
+	FieldTitle
+	// FieldDate is the print date.
+	FieldDate
+	// FieldTime is the print time.
+	FieldTime
+)
+
+// Drawing is a picture or a chart placed on a sheet (ECMA-376 Part 1,
+// 20.5.2 the spreadsheet drawing anchors; ODF 1.3 Part 3, 10.4 draw:frame
+// in a table:shapes element or a cell). Exactly one of Picture and Chart
+// is set.
+type Drawing struct {
+	// From is the cell the drawing's top-left corner sits in, with the
+	// offset from that cell's corner. When To is set it places the
+	// bottom-right corner alike (twoCellAnchor); else Width and Height
+	// size the drawing (oneCellAnchor); with Absolute set, From is ignored
+	// and X and Y place the corner from the sheet's origin
+	// (absoluteAnchor, and ODF shapes outside a cell).
+	From Anchor
+	// To, when not nil, is the bottom-right corner's anchor.
+	To *Anchor
+	// Width and Height size the drawing in points when To is nil.
+	Width, Height float64
+	// Absolute places the drawing by X and Y.
+	Absolute bool
+	// X and Y are the top-left corner from the sheet's origin, in points,
+	// when Absolute is set.
+	X, Y float64
+	// Picture is a raster or vector picture.
+	Picture *layout.Picture
+	// Chart is a chart the chart package draws.
+	Chart *chart.Chart
+	// Name is the drawing's name, for warnings.
+	Name string
+}
+
+// Anchor is a cell with an offset from its top-left corner.
+type Anchor struct {
+	// Row and Column are the cell's 0-based indexes.
+	Row, Column int
+	// DX and DY are the offset into the cell in points, at least 0.
+	DX, DY float64
+}
