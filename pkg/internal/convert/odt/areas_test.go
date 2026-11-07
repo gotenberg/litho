@@ -175,7 +175,8 @@ func TestConvert_Notes(t *testing.T) {
 func TestConvert_Spacing(t *testing.T) {
 	auto := `<style:style style:name="M" style:family="paragraph"><style:paragraph-properties fo:margin-top="0.5cm" fo:margin-bottom="0.25cm"/></style:style>` +
 		`<style:style style:name="K" style:family="paragraph"><style:paragraph-properties fo:margin-top="0.5cm" fo:margin-bottom="0.25cm" style:contextual-spacing="true"/></style:style>` +
-		`<style:style style:name="B" style:family="paragraph"><style:paragraph-properties fo:border="1pt solid #ff0000" fo:padding="0.2cm"/></style:style>`
+		`<style:style style:name="B" style:family="paragraph"><style:paragraph-properties fo:border="1pt solid #ff0000" fo:padding="0.2cm"/></style:style>` +
+		`<style:style style:name="F" style:family="paragraph"><style:paragraph-properties fo:margin-top="0.5cm" fo:break-before="page"/></style:style>`
 	cm := 72 / 2.54
 	cases := []struct {
 		name, body string
@@ -185,10 +186,22 @@ func TestConvert_Spacing(t *testing.T) {
 		{"margins add up", `<text:p text:style-name="M">a</text:p><text:p text:style-name="M">b</text:p>`, 13.8 + 0.75*cm},
 		{"contextual spacing", `<text:p text:style-name="K">a</text:p><text:p text:style-name="K">b</text:p>`, 13.8},
 		{"joined borders", `<text:p text:style-name="B">a</text:p><text:p text:style-name="B">b</text:p>`, 13.8},
+		// After a forced break the new page starts with the next
+		// paragraph's top margin alone, as the first page starts with the
+		// first's (LibreOffice: 1 cm, not 2).
+		{"forced break", `<text:p text:style-name="M">a</text:p><text:p text:style-name="F">b</text:p>`, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			ls := lines(convertDoc(t, doc{contentAuto: auto, body: tc.body}.pack(t), office.Options{}).Pages[0])
+			res := convertDoc(t, doc{contentAuto: auto, body: tc.body}.pack(t), office.Options{})
+			if tc.gap == 0 {
+				first, second := lines(res.Pages[0]), lines(res.Pages[len(res.Pages)-1])
+				if len(res.Pages) != 2 || !near(second[0].y, first[0].y, 0.3) {
+					t.Errorf("pages %d, first lines %+v and %+v", len(res.Pages), first, second)
+				}
+				return
+			}
+			ls := lines(res.Pages[0])
 			if len(ls) != 2 || !near(ls[1].y-ls[0].y, tc.gap, 0.3) {
 				t.Errorf("lines = %+v, want a gap of %.2f", ls, tc.gap)
 			}

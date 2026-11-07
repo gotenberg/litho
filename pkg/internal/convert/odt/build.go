@@ -173,6 +173,12 @@ func (b *builder) spacing(kids []*layout.Node) {
 		if same && cm.contextual {
 			top = 0
 		}
+		if forced(cur.Style.BreakBefore) || forced(prev.Style.BreakAfter) {
+			// The bottom margin ends the page before a forced break;
+			// Writer keeps the top margin of the paragraph that starts the
+			// next.
+			bottom = 0
+		}
 		ps, cs := *prev.Style, *cur.Style
 		if pok && cok && pm.join && cm.join && joinable(&ps, &cs) {
 			ps.Border[css.Bottom], cs.Border[css.Top] = css.Border{}, css.Border{}
@@ -182,6 +188,11 @@ func (b *builder) spacing(kids []*layout.Node) {
 		cs.Margin[css.Top] = css.Pts(top + bottom)
 		prev.Style, cur.Style = &ps, &cs
 	}
+}
+
+// forced reports a forced page or column break.
+func forced(br css.Break) bool {
+	return br == css.Page || br == css.LeftPage || br == css.RightPage || br == css.Column
 }
 
 // inFlowBlock reports a block box in the normal flow.

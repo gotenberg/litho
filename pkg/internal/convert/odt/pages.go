@@ -398,6 +398,9 @@ func (f *pageFlow) hfNodes(g *hfGeom, number, pages int, format string) []*layou
 
 // measure returns the height the header or footer g's content takes.
 func (f *pageFlow) measure(g *hfGeom, pages int) float64 {
+	if f.b.fonts == nil {
+		return 0
+	}
 	nodes := f.hfNodes(g, 1, max(pages, 1), "1")
 	st := baseStyle()
 	st.Display = css.Block
