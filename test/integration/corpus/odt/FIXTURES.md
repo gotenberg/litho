@@ -51,4 +51,6 @@ Each reference handed to the cell as litho's conversion, scored against the gold
 
 ## Accepted disagreements
 
-None yet.
+- `layout/tdf117187.odt`: LibreOffice resolves the `text:date` field when it converts and prints the day's date (7 November 2026 in the references); litho prints the value the document saved, 10 September 2018. A reference that changes with the day cannot be matched, and the text bar misses on that one field.
+- `odfexport/tdf118502.odt`: the picture is an EPS whose text LibreOffice renders, so the reference carries it as extractable text; litho draws the EPS through its replacement picture, with no text to extract. The page agrees; text F1 is 0.
+- `odfexport/embedded-pdf.odt`: the embedded PDF's text is extractable from LibreOffice's reference, which renders the PDF's content as text; litho draws the embedded object as its replacement picture.
