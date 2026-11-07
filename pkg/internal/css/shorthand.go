@@ -199,6 +199,9 @@ func initShorthands() {
 	for name, def := range textOverflowShorthands() {
 		shorthands[name] = def
 	}
+	for name, def := range logicalShorthands() {
+		shorthands[name] = def
+	}
 	delete(longhandByName, "word-break")
 }
 

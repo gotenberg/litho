@@ -884,6 +884,9 @@ func init() {
 	for alias, id := range flexAliases {
 		longhandByName[alias] = id
 	}
+	for alias, id := range logicalAliases() {
+		longhandByName[alias] = id
+	}
 	initShorthands()
 }
 

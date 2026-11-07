@@ -459,6 +459,15 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 	var winners [numProps]any
 	var customNames []string
 	custom := map[string][]token{}
+	// The flow-relative properties take their sides from the direction
+	// (CSS Logical Properties 1, 4).
+	rtl := cascadedRTL(cands, parentStyle)
+	side := func(d *Declaration, id propID) propID {
+		if rtl && isInlineLogical(d.Property) {
+			return mirrorInline(id)
+		}
+		return id
+	}
 	for _, c := range cands {
 		for _, w := range c.d.warns {
 			cs.warns.add(w)
@@ -471,11 +480,11 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 			custom[c.d.Property] = c.d.custom
 		case len(c.d.pending) > 0:
 			for _, id := range longhandsOf(c.d.Property) {
-				winners[id] = pendingRef{c.d}
+				winners[side(c.d, id)] = pendingRef{c.d}
 			}
 		default:
 			for _, e := range c.d.entries {
-				winners[e.id] = e.v
+				winners[side(c.d, e.id)] = e.v
 			}
 		}
 	}
@@ -496,7 +505,7 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		}
 		winners[id] = wideUnset
 		for _, e := range es {
-			if int(e.id) == id {
+			if int(side(p.d, e.id)) == id {
 				winners[id] = e.v
 			}
 		}
