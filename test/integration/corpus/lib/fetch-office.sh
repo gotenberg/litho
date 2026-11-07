@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# lib/fetch-office.sh: download the LibreOffice test documents of the docx or
-# odt corpus.
+# lib/fetch-office.sh: download the LibreOffice test documents of an Office
+# corpus (docx, odt, xlsx, ods, csv).
 #
 # <corpus_dir>/files.sha256 lists every document the corpus's documents.json
 # names, one "<sha256>  <core path>" line each, paths relative to the root of
-# LibreOffice core (sw/qa/extras/<dir>/data/<file>), and the licence,
-# COPYING.MPL. This script downloads each from raw.githubusercontent.com at
-# the commit LIBREOFFICE_CORE_COMMIT pins, checks its SHA-256, and writes a
-# document to <out_dir>/<dir>/<file>, the path documents.json keys it by, and
-# the licence to <out_dir>/COPYING.MPL. A file already on disk with the listed
+# LibreOffice core (sw/qa/extras/<dir>/data/<file>, sc/qa/unit/data/<ext>/<file>,
+# chart2/qa/extras/data/<ext>/<file>), and the licence, COPYING.MPL. This
+# script downloads each from raw.githubusercontent.com at the commit
+# LIBREOFFICE_CORE_COMMIT pins, checks its SHA-256, and writes a document to
+# <out_dir>/<dir>/<file>, the path documents.json keys it by (<dir> the
+# Writer test directory, or sc or chart2), and the licence to
+# <out_dir>/COPYING.MPL. A file already on disk with the listed
 # hash is kept. A download that fails or hashes otherwise fails the run, so
 # the tree on disk is always the pinned one.
 #
@@ -37,6 +39,9 @@ dest() {
     sw/qa/extras/*/data/*)
       local rest="${1#sw/qa/extras/}"
       printf '%s/%s/%s' "$OUT" "${rest%%/*}" "${rest#*/data/}"
+      ;;
+    sc/qa/unit/data/*/* | chart2/qa/extras/data/*/*)
+      printf '%s/%s/%s' "$OUT" "${1%%/*}" "$(basename "$1")"
       ;;
     *) printf '%s/%s' "$OUT" "$(basename "$1")" ;;
   esac

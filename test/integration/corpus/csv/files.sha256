@@ -1,0 +1,10 @@
+b550db4d1032fcd91055075a8140a960783546a5c7f73255eff6eceee8c01c24  sc/qa/unit/data/csv/fdo48621_broken_quotes.csv
+9b43dbe010a7c45bd27b7001cb85218118d674e0d374aa7b4d568d85be282cfa  sc/qa/unit/data/csv/numberformat.csv
+6b9fa8c5de02e6d0363646dafd0b65f17a3d5b8ebab9f68d7da7ec65017ab38c  sc/qa/unit/data/csv/tdf148423.csv
+d7fc38d7262ef3590c09affc380351310de11f71f02c1deed2142bd23827c47c  sc/qa/unit/data/csv/tdf150452.csv
+9d242951a27956ebc3b75652a38ec0004392d387cdd730adc76b577c2fbb829c  sc/qa/unit/data/csv/tdf152053.csv
+e9955252c02232c7054ec47e662fa6de74d7cece7dd6f1f65cf749210e077e26  sc/qa/unit/data/csv/tdf152980.csv
+648476a09dbb00a7acb7320a03f2d163b9f2a6b1afc3009cfb0f467e77574764  sc/qa/unit/data/csv/tdf48731.csv
+c432fcc78cfe584208c1fa4bbfe471271300c9e13e041ca05372ee74707983db  sc/qa/unit/data/csv/tdf80149.csv
+682ff31181b42fd6316789d8fd381065fbe482c33b027e5d56a31b3f5ae36719  sc/qa/unit/data/csv/testTdf82254-csv-bom.csv
+1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5  COPYING.MPL
