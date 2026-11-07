@@ -222,7 +222,7 @@ func (p *chartReader) read(root *Element) {
 	ch := root.Child(NSChart, "chart")
 	c.Area = p.frame(root.Child(NSChart, "spPr"), p.autoFrame(true))
 	accents := []string{"accent1", "accent2", "accent3", "accent4", "accent5", "accent6"}
-	c.Palette, c.PaletteCycleTint = p.palette(accents)
+	c.Palette, c.PaletteCycleTint = p.palette(accents), true
 	pa := ch.Child(NSChart, "plotArea")
 	c.PlotArea = p.frame(pa.Child(NSChart, "spPr"), p.autoFrame(false))
 	p.readAxes(pa)
@@ -268,7 +268,7 @@ func (p *chartReader) read(root *Element) {
 // (2, 10, 18, 26, 34, 42), shades of the dark colour for the grey ones (1,
 // 9, 17, 25, 33, 41), and for the others one accent each series faded from
 // dark to light.
-func (p *chartReader) palette(accents []string) ([]compose.Color, bool) {
+func (p *chartReader) palette(accents []string) []compose.Color {
 	col := func(name string) compose.Color {
 		c, _ := p.theme.Color(name)
 		return toCompose(c)
@@ -279,16 +279,16 @@ func (p *chartReader) palette(accents []string) ([]compose.Color, bool) {
 		for i, a := range accents {
 			out[i] = col(a)
 		}
-		return out, true
+		return out
 	case m == 0:
 		dk, _ := p.theme.Color("dk1")
 		var out []compose.Color
 		for _, t := range []float64{0.885, 0.55, 0.78, 0.925, 0.70, 0.30} {
 			out = append(out, toCompose(linearTint(dk, t)))
 		}
-		return out, true
+		return out
 	default:
-		return []compose.Color{col(accents[(m-2)%6])}, true
+		return []compose.Color{col(accents[(m-2)%6])}
 	}
 }
 

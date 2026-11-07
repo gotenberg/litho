@@ -91,7 +91,7 @@ func (p *chartReader) group(e *Element) *chart.Group {
 			a[g.XAxis].Position = chart.AxisLeft
 		}
 	}
-	g.Labels = p.labels(e.Child(NSChart, "dLbls"), chart.Labels{}, g.Kind)
+	g.Labels = p.labels(e.Child(NSChart, "dLbls"), chart.Labels{})
 	if ln := e.Child(NSChart, "hiLowLines"); ln != nil {
 		p.warn(CodeChartUnsupported, "a chart's high-low lines are not drawn")
 	}
@@ -184,7 +184,7 @@ func (p *chartReader) series(e *Element, g *chart.Group, scatterLines, lineMarke
 	if v := floatVal(e, "explosion"); v > 0 {
 		s.Explosion = v
 	}
-	s.Labels = p.labels(e.Child(NSChart, "dLbls"), g.Labels, g.Kind)
+	s.Labels = p.labels(e.Child(NSChart, "dLbls"), g.Labels)
 	for _, dp := range e.Kids() {
 		if dp.Is(NSChart, "dPt") && len(s.Points) < chart.MaxPoints {
 			s.Points = append(s.Points, p.dataPoint(dp, g))
@@ -287,7 +287,7 @@ func (p *chartReader) dataPoint(e *Element, g *chart.Group) chart.Point {
 
 // labels reads a c:dLbls over the inherited labels (ECMA-376 Part 1,
 // 21.2.2.49): a flag the element leaves out keeps the inherited value.
-func (p *chartReader) labels(e *Element, inherit chart.Labels, kind chart.Kind) chart.Labels {
+func (p *chartReader) labels(e *Element, inherit chart.Labels) chart.Labels {
 	l := inherit
 	if e == nil {
 		return l
