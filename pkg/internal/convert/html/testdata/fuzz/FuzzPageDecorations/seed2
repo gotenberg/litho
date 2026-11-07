@@ -1,0 +1,4 @@
+go test fuzz v1
+string("<html><body><div class=\"text\">x")
+string("</div></body></html>")
+string("@page :blank{@left-middle{content:\"B\"}}h2{break-before:left}")

@@ -1,0 +1,4 @@
+go test fuzz v1
+string("<span class=\"date\"></span> <span class=\"title text\"></span>")
+string("<p><span class=\"pageNumber\"></span> of <span class=\"totalPages\"></span></p>")
+string("@page{margin:2cm;@top-center{content:\"T \" counter(page) \"/\" counter(pages)}}@page wide{size:landscape}.w{page:wide}")

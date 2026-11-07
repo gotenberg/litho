@@ -22,6 +22,8 @@ func FuzzConvert(f *testing.F) {
 	f.Add([]byte("\xff\xfe<\x00p\x00>\x00"))
 	f.Add([]byte(`<html dir=rtl><style>@page{margin:1cm}@page :first{size:200pt 100pt}@page :left{margin-left:3cm}` +
 		`@page :right{size:landscape}h1{break-before:right}p{break-after:left}</style><h1>a</h1><p>b<p>c<h1>d</h1>`))
+	f.Add([]byte(`<style>@page a{size:100pt 50pt;@top-left{content:counter(page)}}@page :blank{margin:1pt}.a{page:a}` +
+		`p{break-before:right}</style><div class=a><p>x</div><p>y<div style="page:b"><p>z</div>`))
 	fsys := fstest.MapFS{
 		"s.css": {Data: []byte(`@import "s.css"; body { background: url(i.png) }`)},
 		"i.png": {Data: pngBytes(f, 3, 2)},

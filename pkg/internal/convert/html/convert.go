@@ -102,7 +102,7 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 			return nil, err
 		}
 	}
-	return p.assemble(res, ranges)
+	return p.assemble(ctx, res, ranges)
 }
 
 // layOut lays the prepared document p out with lay.
@@ -179,6 +179,15 @@ type prepared struct {
 	// svg collects the warnings of the SVG pictures, which the layout
 	// decodes too.
 	svg *svgState
+	// pages resolves the page boxes and styles the layout asks for, fonts
+	// and b lay out and fill the page-margin boxes, the headers and the
+	// footers.
+	pages *pageSetup
+	// infos are the pages the layout laid out, in order, once it called
+	// layout.Options.MarginContent for them.
+	infos []layout.PageInfo
+	fonts *text.Fonts
+	b     *builder
 }
 
 // heading is an h1 to h6 of the content tree, for the outline.
@@ -203,6 +212,13 @@ func parse(data []byte) (*dom.Node, error) {
 // resolves the ex and ch units; nil takes their half-em fallback. It
 // leaves doc as it is, so a second layout prepares it again.
 func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts, setup printSetup) (*prepared, error) {
+	return prepareTagged(ctx, doc, o, fonts, setup, nil)
+}
+
+// prepareTagged is [prepareDoc] with the anchors ids gives elements of doc
+// on top of their id attributes, for the header and footer templates,
+// which measure where their elements land.
+func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts, setup printSetup, ids map[*dom.Node]string) (*prepared, error) {
 	scan, err := scanDocument(ctx, doc)
 	if err != nil {
 		return nil, err
@@ -244,7 +260,8 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 		return nil, fmt.Errorf("computing the HTML document's styles: %w", err)
 	}
 	rootStyle := computed.Style(scan.root)
-	page, pageAt, pageWarns := pageBoxes(resolver, o, rootStyle != nil && rootStyle.Direction == css.RTL)
+	rtl := rootStyle != nil && rootStyle.Direction == css.RTL
+	page, pageAt, pageWarns := pageBoxes(resolver, o, rtl)
 	boxes := []layout.PageBox{page}
 	if pageAt != nil {
 		boxes = append(boxes, pageAt(1), pageAt(2))
@@ -259,7 +276,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 
 	b := &builder{
 		computed: computed, res: res, scan: scan,
-		warned: map[string]bool{}, omitBackgrounds: o.OmitBackgrounds,
+		warned: map[string]bool{}, omitBackgrounds: o.OmitBackgrounds, ids: ids,
 	}
 	root, err := b.buildRoot(ctx, scan.root)
 	if err != nil {
@@ -284,7 +301,11 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 		setup:    setup,
 		first:    sourceFirst,
 		svg:      &res.svg,
+		pages:    newPageSetup(resolver, o, rtl, rootStyle),
+		fonts:    fonts,
+		b:        b,
 	}
+	p.setupPages(ctx, resolver)
 	for _, w := range computed.Warnings() {
 		p.warnings = append(p.warnings, compose.Warning{Code: w.Code, Message: displayURL(w.Message)})
 	}
@@ -296,11 +317,12 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 
 // assemble returns the document of the layout res: the pages ranges
 // selects, or the first alone for a single page, each placed on its sheet
-// (see [prepared.placement]), the links, the outline and the structure
-// tree kept for them. Page numbers count the whole layout before the
+// (see [prepared.placement]) with its header and footer drawn on it (see
+// [prepared.decorate]), the links, the outline and the structure tree
+// kept for them. Page numbers count the whole layout before the
 // selection: a page keeps the number it was laid out with in what it
 // shows, and the selection only drops pages.
-func (p *prepared) assemble(res *layout.Result, ranges []pageRange) (*compose.Document, error) {
+func (p *prepared) assemble(ctx context.Context, res *layout.Result, ranges []pageRange) (*compose.Document, error) {
 	keep := []int{0}
 	if !p.o.SinglePage {
 		var err error
@@ -344,6 +366,9 @@ func (p *prepared) assemble(res *layout.Result, ranges []pageRange) (*compose.Do
 			links = append(links, l)
 		}
 		pg.Links = links
+		if err := p.decorate(ctx, pg, k, len(res.Pages)); err != nil {
+			return nil, err
+		}
 		doc.Pages = append(doc.Pages, pg)
 	}
 	if !p.o.OmitOutline {
@@ -361,6 +386,7 @@ func (p *prepared) assemble(res *layout.Result, ranges []pageRange) (*compose.Do
 	if p.svg != nil {
 		doc.Warnings = append(doc.Warnings, p.svg.warnings()...)
 	}
+	doc.Warnings = append(doc.Warnings, p.pages.warnings...)
 	for _, w := range res.Warnings {
 		w.Message = displayURL(w.Message)
 		if w.Page > 0 && w.Page <= len(at) {

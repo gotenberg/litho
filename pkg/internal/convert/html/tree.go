@@ -79,6 +79,9 @@ type builder struct {
 	// omitBackgrounds clears the backgrounds of the html and body
 	// elements ([Options.OmitBackgrounds]).
 	omitBackgrounds bool
+	// ids are anchors set on elements over their id attributes, nil for
+	// none.
+	ids map[*dom.Node]string
 }
 
 // buildRoot builds the content tree of the root element.
@@ -228,6 +231,9 @@ func (b *builder) semantics(node *layout.Node, n *dom.Node) {
 		node.Lang = strings.TrimSpace(lang)
 	}
 	node.ID, _ = attr(n, "id")
+	if id, ok := b.ids[n]; ok {
+		node.ID = id
+	}
 	switch n.DataAtom { //nolint:exhaustive // every other element takes the default path
 	case atom.A:
 		if node.ID == "" {

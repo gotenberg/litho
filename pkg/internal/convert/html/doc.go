@@ -32,11 +32,31 @@
 //
 // # Page
 //
-// The paper and margins of [Options] apply unless an @page rule for an
-// unnamed page sets a size, an orientation or a margin (CSS Page 3).
-// :first, :left and :right rules apply to the first page and to the right
-// and left pages, the first page being a right page unless the root's
-// direction is right to left. Named pages are not supported.
+// The paper and margins of [Options] apply unless an @page rule sets a
+// size, an orientation or a margin (CSS Page 3). :first, :left and :right
+// rules apply to the first page and to the right and left pages, the first
+// page being a right page unless the root's direction is right to left;
+// :blank rules to the pages a break to a left or a right page leaves
+// empty. An element's page property puts it on pages of that name, with a
+// forced break where the name changes (CSS Page 3, 4.1); each page takes
+// the size and margins of its named rules, and the content after such a
+// break is laid out at that page's width.
+//
+// The sixteen page-margin boxes of the @page rules (@top-left-corner to
+// @left-top) draw their content in the page margins, sized and aligned as
+// CSS Page 3, 5 asks: strings, images, the page and pages counters, other
+// counters at zero, attr() at its fallback. min-width and max-width do not
+// constrain them, and string() and running elements are not supported.
+//
+// [Options.HeaderTemplate] and [Options.FooterTemplate] draw as Chromium
+// draws them: on Chromium's template page, a page-sized document whose
+// header and footer boxes hold the templates, laid out by this package,
+// with the classes date, title, url, pageNumber and totalPages filled and
+// the elements of class text that reach into the page area hidden. The
+// template page's stylesheet is Chromium's, flexbox included; until the
+// engine lays flex containers out, a block layout fallback places the
+// header's items at its top and the footer's at the page's bottom, side by
+// side.
 //
 // # Printing
 //

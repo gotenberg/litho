@@ -1,0 +1,4 @@
+go test fuzz v1
+string("<div class=\"text left\">L</div><div class=\"text center\">C</div>")
+string("")
+string("@page{@top-left{content:\"a\";margin:auto}@top-center{content:\"\";width:50%}}")
