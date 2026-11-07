@@ -46,6 +46,9 @@ type runProps struct {
 	highlight, shading                             *css.Color
 	noHighlight, noShading                         bool
 	spacing, scale, position                       *float64
+	// kern is the least font size in points that kerns (17.3.2.19), 0
+	// for none.
+	kern *float64
 	vertAlign, lang, langEastAsia, langBidi        *string
 	specVanish                                     *bool
 }
@@ -87,7 +90,7 @@ func (r runProps) merge(o *runProps) runProps {
 		}
 	}
 	for _, p := range []struct{ dst, src **float64 }{
-		{&r.size, &o.size}, {&r.spacing, &o.spacing}, {&r.scale, &o.scale}, {&r.position, &o.position},
+		{&r.size, &o.size}, {&r.spacing, &o.spacing}, {&r.scale, &o.scale}, {&r.position, &o.position}, {&r.kern, &o.kern},
 	} {
 		if *p.src != nil {
 			*p.dst = *p.src
@@ -199,6 +202,11 @@ func (d *document) parseRunProps(e *ooxml.Element) *runProps {
 			// ST_TextScale, a percentage, 1 to 600 (17.3.2.43).
 			if v, ok := ooxml.Int(strings.TrimSuffix(val, "%")); ok && v > 0 {
 				r.scale = ptr(float64(min(v, 600)) / 100)
+			}
+		case "kern":
+			// ST_HpsMeasure, half-points (17.3.2.19).
+			if v, ok := ooxml.Measure(val, 0.5); ok {
+				r.kern = ptr(max(0, min(maxFontSize, v)))
 			}
 		case "position":
 			if v, ok := ooxml.Measure(val, 0.5); ok {

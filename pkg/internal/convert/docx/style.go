@@ -130,6 +130,13 @@ func (d *document) applyRun(st *css.Style, r runProps, lineMult float64) {
 	if r.spacing != nil && *r.spacing != 0 {
 		st.LetterSpacing = css.Pts(*r.spacing)
 	}
+	// LibreOffice kerns a run only when its kern property is set and its
+	// size reaches it (17.3.2.19), the document default included: every
+	// other run is set without the font's kerning.
+	st.FontKerning = css.KerningNone
+	if r.kern != nil && *r.kern > 0 && st.FontSize >= *r.kern {
+		st.FontKerning = css.KerningNormal
+	}
 	st.TextScale = 0
 	if r.scale != nil && *r.scale != 1 {
 		st.TextScale = *r.scale

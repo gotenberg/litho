@@ -228,3 +228,24 @@ func TestParagraphSpacing_AtBreaks(t *testing.T) {
 		t.Errorf("new section margin %v, want 14", m)
 	}
 }
+
+func TestRunKerning(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, defaults, rpr string
+		want                css.FontKerning
+	}{
+		{"no kern", ``, `<w:sz w:val="24"/>`, css.KerningNone},
+		{"below the threshold", ``, `<w:kern w:val="28"/><w:sz w:val="24"/>`, css.KerningNone},
+		{"at the threshold", ``, `<w:kern w:val="28"/><w:sz w:val="28"/>`, css.KerningNormal},
+		{"kern zero", ``, `<w:kern w:val="0"/><w:sz w:val="48"/>`, css.KerningNone},
+		{"document default", `<w:kern w:val="2"/>`, `<w:sz w:val="22"/>`, css.KerningNormal},
+		{"turned off", `<w:kern w:val="2"/>`, `<w:kern w:val="0"/>`, css.KerningNone},
+	} {
+		styles := `<w:styles ` + nsDecl + `><w:docDefaults><w:rPrDefault><w:rPr>` + tc.defaults + `</w:rPr></w:rPrDefault></w:docDefaults></w:styles>`
+		b := build(t, `<w:p><w:r><w:rPr>`+tc.rpr+`</w:rPr><w:t>kerned</w:t></w:r></w:p>`, map[string]string{"word/styles.xml": styles})
+		if got := runWith(t, b.root, "kerned").Style.FontKerning; got != tc.want {
+			t.Errorf("%s: kerning %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
