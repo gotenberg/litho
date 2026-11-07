@@ -1,0 +1,7 @@
+Ahem.woff, Ahem.woff2 and Ahem-hmtx.woff2 hold the Ahem font of
+pkg/internal/layout/testdata/Ahem.ttf, re-wrapped as WOFF 1.0 and WOFF 2.0
+(glyf and loca transformed; Ahem-hmtx.woff2 also transforms hmtx) by
+fontTools 4.60.2 with Brotli 1.1.0. The glyphs, metrics and names are Ahem's.
+
+Ahem was created by Todd Fahrner for the W3C CSS test suites and is in the
+public domain.
