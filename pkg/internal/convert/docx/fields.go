@@ -79,6 +79,10 @@ func (d *document) fieldChar(s *story, c *ooxml.Element, st *css.Style, sink *in
 func (d *document) startResult(s *story, f *field, st *css.Style, sink *inlineSink) {
 	f.result = true
 	instr := f.instr.String()
+	if hiddenField(instr) {
+		f.computed = true
+		return
+	}
 	if v, ok := d.computeField(s, instr); ok {
 		f.computed = true
 		sink.add(&layout.Node{Kind: layout.Element, Style: st, Children: []*layout.Node{{Kind: layout.Text, Style: st, Text: v}}})
@@ -94,6 +98,9 @@ func (d *document) startResult(s *story, f *field, st *css.Style, sink *inlineSi
 // its cached result, a link for a HYPERLINK.
 func (d *document) simpleField(s *story, rp resolvedPara, ps *css.Style, lineMult float64, e *ooxml.Element, sink *inlineSink, depth int) {
 	instr := attrOr(e, "instr")
+	if hiddenField(instr) {
+		return
+	}
 	if v, ok := d.computeField(s, instr); ok {
 		st := inlineStyle(ps)
 		props := rp.run
@@ -161,6 +168,14 @@ func (d *document) computeField(s *story, instr string) (string, bool) {
 		format = "decimal"
 	}
 	return formatNumber(n, format), true
+}
+
+// hiddenField reports a field whose result prints nothing: SET, which
+// assigns a bookmark (17.16.5, SET) and which LibreOffice imports as a
+// hidden variable setter, whatever result Word cached.
+func hiddenField(instr string) bool {
+	args := fieldArgs(instr)
+	return len(args) > 0 && strings.EqualFold(args[0], "SET")
 }
 
 // hyperlinkTarget returns the target of a HYPERLINK field instruction

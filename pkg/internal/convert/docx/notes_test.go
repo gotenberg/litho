@@ -88,3 +88,26 @@ func TestSymbolsAndBreaks(t *testing.T) {
 		t.Error("no warning for the equation")
 	}
 }
+
+// TestFields_Set hides the result of a SET field, complex or simple, as
+// LibreOffice imports it, and keeps the results of the fields around it.
+func TestFields_Set(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, body, want string
+	}{
+		{"complex", `<w:r><w:t>a</w:t></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> SET TEST_VAR 99 </w:instrText></w:r>` +
+			`<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>99</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r><w:r><w:t>b</w:t></w:r>`, "ab"},
+		{"simple", `<w:r><w:t>a</w:t></w:r><w:fldSimple w:instr=" set X 1 "><w:r><w:t>1</w:t></w:r></w:fldSimple><w:r><w:t>b</w:t></w:r>`, "ab"},
+		{"other", `<w:r><w:t>a</w:t></w:r><w:fldSimple w:instr=" SEQ X "><w:r><w:t>1</w:t></w:r></w:fldSimple><w:r><w:t>b</w:t></w:r>`, "a1b"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			b := build(t, `<w:p>`+tt.body+`</w:p>`, nil)
+			if got := textOf(role(b.root, "P")[0]); got != tt.want {
+				t.Errorf("text %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
