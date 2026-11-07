@@ -41,6 +41,7 @@ var (
 		".markdown": pdf.FormatMarkdown,
 		".docx":     pdf.FormatDOCX,
 		".odt":      pdf.FormatODT,
+		".fodt":     pdf.FormatODT,
 	}
 )
 
@@ -121,7 +122,7 @@ func (f *marginFlag) Set(value string) error {
 func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("convert", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	from := fs.String("from", "", "Input format: text, html, markdown, docx or odt. Without it, the file extension decides: .txt and .text are text, .html and .htm are html, .md and .markdown are markdown, .docx is docx, .odt is odt; "+
+	from := fs.String("from", "", "Input format: text, html, markdown, docx or odt. Without it, the file extension decides: .txt and .text are text, .html and .htm are html, .md and .markdown are markdown, .docx is docx, .odt and .fodt are odt; "+
 		"for an http(s) URL, the Content-Type, then the URL's extension, then html")
 	output := fs.String("o", "", "Output file (required), - for stdout")
 	format := fs.String("f", "text", "Report format: text (warnings on stderr) or json (the report on stdout)")
@@ -381,7 +382,7 @@ func convertFormat(from, path string) (pdf.Format, error) {
 	ext := strings.ToLower(filepath.Ext(path))
 	f, ok := convertExtensions[ext]
 	if !ok {
-		return "", fmt.Errorf("cannot tell the format of %s from its extension %q: pass --from text, html or markdown", path, ext)
+		return "", fmt.Errorf("cannot tell the format of %s from its extension %q: pass --from text, html, markdown, docx or odt", path, ext)
 	}
 	return f, nil
 }
