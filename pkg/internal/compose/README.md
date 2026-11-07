@@ -135,7 +135,7 @@ Each wave ships behind oracles wired into the corpus matrix
 | 0    | Model, backend, text stack, plain text converter, `pdf.Convert`, `litho convert`                                                              | Round trip: extracted text equals the source. PDF/A-2b and PDF/UA-1 clean after remediation. Deterministic bytes. litho and poppler rasters agree. Fuzz. |
 | 1    | HTML and CSS 2.1 visual formatting, css-text, css-page, lists, backgrounds, borders, images, auto tables                                      | WPT reftests through the engine with the render cell's pixel rule. WeasyPrint draw tests. Differential against Chromium on Gotenberg's fixtures.         |
 | 2    | Route parity: headers and footers, page ranges, scale, paper, media type, outline, tags, links, Markdown, URL, @font-face, image formats, SVG | Gotenberg integration features on both routes.                                                                                                           |
-| 3    | Flexbox, grid, positioning, transforms, multicol, generated content, BiDi, CJK                                                                | WPT flexbox and grid pass rates.                                                                                                                         |
+| 3    | Flexbox, grid, positioning, transforms, multicol, generated content, BiDi, CJK                                                                | WPT grid, multicol, writing modes and text pass rates. WeasyPrint's GCPM tests.                                                                          |
 | 4    | DOCX and ODT                                                                                                                                  | Differential against LibreOffice on the DOCX corpora.                                                                                                    |
 | 5    | XLSX, ODS, CSV                                                                                                                                | Differential against LibreOffice.                                                                                                                        |
 | 6    | PPTX and ODP                                                                                                                                  | Differential against LibreOffice.                                                                                                                        |
@@ -143,7 +143,7 @@ Each wave ships behind oracles wired into the corpus matrix
 Wave 4 depends on wave 0 alone, so the Office converters run beside waves
 1 to 3 once the model is frozen.
 
-Status: waves 0 to 2 are done. `test/integration/baseline.json` records
+Status: waves 0 to 3 are done. `test/integration/baseline.json` records
 the oracle scores per fixture; the wpt, weasyprint, html and svg cells
 score the converter in seconds (`go run ./test/integration/cmd/corpus run
 --corpus=wpt,weasyprint,html,svg --feature=reftest,draw,diff,svgdraw`).
@@ -161,7 +161,14 @@ WOFF2, SVG, Markdown through gomarkdown, and http(s) resources with srcset
 and <picture>. The html corpus carries the route's parity fixtures, built
 from Gotenberg's test data with per-fixture options. The oracle
 disagreements that are accepted rather than chased are listed in each
-corpus's FIXTURES.md.
+corpus's FIXTURES.md. Wave 3 added grid (CSS Grid 1 without subgrid and
+masonry), multi-column layout with spanners and fragmentation, the sizing
+keywords, the inline logical properties, BiDi and CJK line breaking and
+justification, text decoration and text-overflow, border-image, and the
+paged media of CSS GCPM: footnotes, leaders, running elements, string
+sets, bleed and crop marks, which Chromium does not print and the spec
+and WeasyPrint judge. The wpt corpus grew to 1177 reftests over the grid,
+multicol, writing modes, overflow, text decoration and sizing areas.
 
 The differential oracle compares page count, PDF.js text with reading
 order, link sets, outline, tag tree and a layout-tolerant score over
