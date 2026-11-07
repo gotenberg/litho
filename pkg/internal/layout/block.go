@@ -796,6 +796,15 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		}
 		if e.paginating() && mode == breakNone {
 			switch {
+			case prev != nil && avoidsBetween(prev, k) && avoidsInside(k) && e.straddles(k) && !e.atPageTop(prev.y) &&
+				prev.borderH()+k.borderH() <= e.areaH(e.pageOf(prev.y)):
+				// k may break neither inside nor before: the break moves
+				// before prev, which goes to the next page with it (CSS
+				// Fragmentation 3, 4.4, rule 1 before rule 2).
+				if e.relayout(k.y) {
+					cursor = e.layoutBlock(prev, cbFor(e.pageOf(prev.y)+1), bc, restore(prevSnap), mc, breakPush)
+					cursor = e.layoutBlock(k, cbFor(e.pageOf(cursor)), bc, cursor, mc, breakNone)
+				}
 			case avoidsInside(k) && e.straddles(k) && !e.atPageTop(k.y) && (k.borderH() <= e.areaH(e.pageOf(k.y)+1) || filled):
 				// The break before k violates no rule, the one inside it
 				// does: k moves to the next page. One taller than a page
@@ -823,7 +832,11 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 				}
 			}
 		}
-		prev, prevSnap = k, snap
+		if !k.anon || k.borderH() > 0 || len(k.lines) > 0 {
+			// An anonymous block of collapsed white space alone is no
+			// sibling a break between boxes looks at.
+			prev, prevSnap = k, snap
+		}
 		filled = filled || k.borderH() > 0
 	}
 	return cursor
