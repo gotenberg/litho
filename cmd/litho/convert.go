@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,23 +17,26 @@ import (
 )
 
 // convertUsage is the synopsis litho convert prints on a missing argument.
-const convertUsage = "Usage: litho convert [--from text|html] [--paper A4|Letter|WxH] [--landscape] [--margin PT | --margin T,R,B,L] " +
+const convertUsage = "Usage: litho convert [--from text|html|markdown] [--paper A4|Letter|WxH] [--landscape] [--margin PT | --margin T,R,B,L] " +
 	"[--font FAMILY] [--font-size PT] [--media print|screen] [--media-feature NAME=VALUE]... [--resources DIR] [--base-url URL] " +
 	"[--prefer-css-page-size] [--scale N] [--single-page] [--pages RANGES] [--background=false] [--outline=false] " +
-	"[--header FILE] [--footer FILE] [--date RFC3339|now] [--font-dir DIR]... [-f json] -o out.pdf <file>"
+	"[--header FILE] [--footer FILE] [--date RFC3339|now] [--font-dir DIR]... [-f json] -o out.pdf <file|http(s) URL>"
 
 // convertFormats maps the --from values, and the file extensions that imply
 // them, to the formats [pdf.Convert] reads. Immutable lookup tables.
 var (
 	convertFormats = map[string]pdf.Format{
-		"text": pdf.FormatText,
-		"html": pdf.FormatHTML,
+		"text":     pdf.FormatText,
+		"html":     pdf.FormatHTML,
+		"markdown": pdf.FormatMarkdown,
 	}
 	convertExtensions = map[string]pdf.Format{
-		".txt":  pdf.FormatText,
-		".text": pdf.FormatText,
-		".html": pdf.FormatHTML,
-		".htm":  pdf.FormatHTML,
+		".txt":      pdf.FormatText,
+		".text":     pdf.FormatText,
+		".html":     pdf.FormatHTML,
+		".htm":      pdf.FormatHTML,
+		".md":       pdf.FormatMarkdown,
+		".markdown": pdf.FormatMarkdown,
 	}
 )
 
@@ -113,7 +117,8 @@ func (f *marginFlag) Set(value string) error {
 func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("convert", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	from := fs.String("from", "", "Input format: text or html. Without it, the file extension decides: .txt and .text are text, .html and .htm are html")
+	from := fs.String("from", "", "Input format: text, html or markdown. Without it, the file extension decides: .txt and .text are text, .html and .htm are html, .md and .markdown are markdown; "+
+		"for an http(s) URL, the Content-Type, then the URL's extension, then html")
 	output := fs.String("o", "", "Output file (required), - for stdout")
 	format := fs.String("f", "text", "Report format: text (warnings on stderr) or json (the report on stdout)")
 	var paper pageSizeFlag
@@ -137,7 +142,8 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	header := fs.String("header", "", "File of the HTML fragment drawn in the top margin of every page of an HTML file (classes date, title, url, pageNumber, totalPages)")
 	footer := fs.String("footer", "", "File of the HTML fragment drawn in the bottom margin of every page of an HTML file")
 	date := fs.String("date", "", "Date the header and footer show, RFC 3339 or now (default none)")
-	baseURL := fs.String("base-url", "", "URL of the HTML file: shown by the url class of the header and footer; relative references of an http(s) URL are not fetched by the CLI")
+	baseURL := fs.String("base-url", "", "URL of the HTML file: shown by the url class of the header and footer; for an http(s) URL, relative references resolve against it "+
+		"and the CLI fetches every http(s) resource the document names (30 s timeout a request); a service embedding litho brings its own HTTP client")
 	var mediaFeatures stringsFlag
 	fs.Var(&mediaFeatures, "media-feature", "Media feature an HTML file's @media rules see, as NAME=VALUE such as prefers-color-scheme=dark; repeatable")
 
@@ -157,10 +163,14 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		return exitError
 	}
 	input := fs.Arg(0)
-	inFormat, err := convertFormat(*from, input)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return exitError
+	remote := isRemoteInput(input)
+	var inFormat pdf.Format
+	var err error
+	if !remote || *from != "" {
+		if inFormat, err = convertFormat(*from, input); err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitError
+		}
 	}
 	for _, dir := range fontDirs {
 		if info, err := os.Stat(dir); err != nil {
@@ -181,11 +191,31 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		fmt.Fprintln(stderr, err)
 		return exitError
 	}
+	// A remote document is fetched first: its Content-Type may decide its
+	// format.
+	var src io.Reader = os.Stdin
+	var client *http.Client
+	if remote || isRemoteInput(*baseURL) {
+		client = cliHTTPClient()
+	}
+	if remote {
+		body, format, final, err := fetchInput(ctx, client, input, inFormat)
+		if err != nil {
+			fmt.Fprintf(stderr, "%s: %v\n", input, err)
+			return exitError
+		}
+		defer body.Close() //nolint:errcheck // read-only response body
+		src, inFormat = body, format
+		if *baseURL == "" {
+			printOpts = append(printOpts, pdf.WithBaseURL(final))
+		}
+	}
+	htmlLike := inFormat == pdf.FormatHTML || inFormat == pdf.FormatMarkdown
 	resDir := *resources
-	if resDir == "" && input != "-" {
+	if resDir == "" && input != "-" && !remote {
 		resDir = filepath.Dir(input)
 	}
-	if inFormat != pdf.FormatHTML {
+	if !htmlLike {
 		resDir = ""
 	}
 	if resDir != "" {
@@ -199,9 +229,12 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	}
 
 	opts := []pdf.ConvertOption{pdf.WithConvertFontDirs(fontDirs...), pdf.WithFontFamilies(fonts...), pdf.WithFontSize(*fontSize)}
-	if inFormat == pdf.FormatHTML {
+	if htmlLike {
 		opts = append(opts, pdf.WithMediaType(*media))
 		opts = append(opts, printOpts...)
+		if client != nil {
+			opts = append(opts, pdf.WithHTTPClient(client))
+		}
 		if resDir != "" {
 			// An os.Root refuses a path or a symbolic link that leaves
 			// resDir, so the document reads nothing outside it.
@@ -227,8 +260,7 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		opts = append(opts, pdf.WithConvertLimits(limits))
 	}
 
-	var src io.Reader = os.Stdin
-	if input != "-" {
+	if input != "-" && !remote {
 		f, err := os.Open(input) //nolint:gosec // The input path is the command's own argument.
 		if err != nil {
 			fmt.Fprintf(stderr, "%v\n", err)
@@ -330,17 +362,17 @@ func convertFormat(from, path string) (pdf.Format, error) {
 	if from != "" {
 		f, ok := convertFormats[strings.ToLower(from)]
 		if !ok {
-			return "", fmt.Errorf("unsupported --from %q: litho convert reads text and html", from)
+			return "", fmt.Errorf("unsupported --from %q: litho convert reads text, html and markdown", from)
 		}
 		return f, nil
 	}
 	if path == "-" {
-		return "", errors.New("standard input has no extension to tell its format: pass --from text or --from html")
+		return "", errors.New("standard input has no extension to tell its format: pass --from text, html or markdown")
 	}
 	ext := strings.ToLower(filepath.Ext(path))
 	f, ok := convertExtensions[ext]
 	if !ok {
-		return "", fmt.Errorf("cannot tell the format of %s from its extension %q: pass --from text or --from html", path, ext)
+		return "", fmt.Errorf("cannot tell the format of %s from its extension %q: pass --from text, html or markdown", path, ext)
 	}
 	return f, nil
 }

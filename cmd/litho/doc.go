@@ -12,10 +12,11 @@
 //     redaction, encryption, metadata, form fields, bookmarks, stamps,
 //     attachments, auto-tagging, and PDF/A, PDF/UA, WTPDF or Factur-X
 //     remediation.
-//   - convert lays a plain text or HTML file out as a new, tagged PDF in
-//     the fonts of the --font-dir directories, or of the system without
-//     one. An HTML file reads its stylesheets and images from --resources,
-//     its own directory by default.
+//   - convert lays a plain text, HTML or Markdown file, or an http(s) URL,
+//     out as a new, tagged PDF in the fonts of the --font-dir directories,
+//     or of the system without one. An HTML or Markdown file reads its
+//     stylesheets and images from --resources, its own directory by
+//     default; a URL, or a file with an http(s) --base-url, fetches them.
 //   - pipe chains several operations on one document. A remediate stage runs
 //     at most once, as the last stage, since a remediation's report
 //     describes the output only when nothing edits it afterwards; pipe

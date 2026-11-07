@@ -393,7 +393,7 @@ func printUsage(w io.Writer) {
 			{"remediate", "Fix PDF/A, PDF/UA, WTPDF or Factur-X compliance issues"},
 		}},
 		{"Conversion:", [][2]string{
-			{"convert", "Lay a plain text or HTML file out as a tagged PDF"},
+			{"convert", "Lay a plain text, HTML or Markdown file or URL out as a tagged PDF"},
 		}},
 		{"Pipeline:", [][2]string{
 			{"pipe", "Chain multiple operations on a PDF"},

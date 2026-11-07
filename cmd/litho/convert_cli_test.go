@@ -142,11 +142,11 @@ func TestConvert_ReportsJSON(t *testing.T) {
 
 func TestConvert_RefusesAnUnknownExtension(t *testing.T) {
 	t.Parallel()
-	src := writeTempText(t, "notes.md", "AB")
+	src := writeTempText(t, "notes.rst", "AB")
 	out := filepath.Join(t.TempDir(), "out.pdf")
 	for _, args := range [][]string{
 		{"convert", "--font-dir", convertFontDir(t), "-o", out, src},
-		{"convert", "--from", "markdown", "--font-dir", convertFontDir(t), "-o", out, src},
+		{"convert", "--from", "rst", "--font-dir", convertFontDir(t), "-o", out, src},
 	} {
 		var stdout, stderr bytes.Buffer
 		if rc := run(context.Background(), args, &stdout, &stderr); rc != exitError || !strings.Contains(stderr.String(), "--from") {
