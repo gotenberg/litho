@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/convert/pagerange"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -36,6 +37,10 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if fonts.Len() == 0 {
 		return nil, fmt.Errorf("converting DOCX: %w", text.ErrNoFonts)
 	}
+	ranges, err := pagerange.Parse(opts.PageRanges)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", office.ErrInvalidOptions, err)
+	}
 	data, err := office.ReadAll(ctx, src, opts.MaxInputBytes)
 	if err != nil {
 		return nil, fmt.Errorf("reading DOCX: %w", err)
@@ -51,6 +56,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err != nil {
 		return nil, fmt.Errorf("reading DOCX: %w", err)
 	}
+	d.ranges = ranges
 	return d.convert()
 }
 
@@ -120,9 +126,9 @@ func (d *document) lang() string {
 // ranges select, their links and the outline kept for them, the
 // metadata and the warnings.
 func (d *document) assemble(res *layout.Result) (*compose.Document, error) {
-	keep, err := selectPages(d.opts.PageRanges, len(res.Pages))
+	keep, err := pagerange.Select(d.ranges, len(res.Pages))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", office.ErrInvalidOptions, err)
 	}
 	at := make([]int, len(res.Pages))
 	for i, k := range keep {
@@ -175,7 +181,7 @@ func (d *document) assemble(res *layout.Result) (*compose.Document, error) {
 		doc.Outline = outline(d.headings, anchors)
 	}
 	if len(keep) < len(res.Pages) {
-		pruneStructure(doc)
+		compose.PruneStructure(doc)
 	}
 	for _, wn := range res.Warnings {
 		if wn.Page > 0 && wn.Page <= len(at) {

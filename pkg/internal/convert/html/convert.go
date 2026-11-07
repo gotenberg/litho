@@ -15,6 +15,7 @@ import (
 	"golang.org/x/text/encoding"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/convert/pagerange"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -58,9 +59,9 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 	if fonts.Len() == 0 {
 		return nil, fmt.Errorf("converting HTML: %w", text.ErrNoFonts)
 	}
-	ranges, err := parsePageRanges(o.PageRanges)
+	ranges, err := pagerange.Parse(o.PageRanges)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrInvalidOptions, err)
 	}
 	data, err := readCapped(src, o.MaxInputBytes)
 	if err != nil {
@@ -348,12 +349,12 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 // kept for them. Page numbers count the whole layout before the
 // selection: a page keeps the number it was laid out with in what it
 // shows, and the selection only drops pages.
-func (p *prepared) assemble(ctx context.Context, res *layout.Result, ranges []pageRange) (*compose.Document, error) {
+func (p *prepared) assemble(ctx context.Context, res *layout.Result, ranges []pagerange.Range) (*compose.Document, error) {
 	keep := []int{0}
 	if !p.o.SinglePage {
 		var err error
-		if keep, err = selectPages(ranges, len(res.Pages)); err != nil {
-			return nil, err
+		if keep, err = pagerange.Select(ranges, len(res.Pages)); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrInvalidOptions, err)
 		}
 	}
 	// at maps a page of the layout to its 1-based number in the output,
@@ -409,7 +410,7 @@ func (p *prepared) assemble(ctx context.Context, res *layout.Result, ranges []pa
 		doc.Outline = outline(p.headings, anchors)
 	}
 	if len(keep) < len(res.Pages) || culled {
-		pruneStructure(doc)
+		compose.PruneStructure(doc)
 	}
 	if p.svg != nil {
 		doc.Warnings = append(doc.Warnings, p.svg.warnings()...)

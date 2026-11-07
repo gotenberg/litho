@@ -134,39 +134,3 @@ func TestConvert_Outline(t *testing.T) {
 		t.Error("heading roles not set from the outline levels")
 	}
 }
-
-func TestSelectPages(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		spec string
-		n    int
-		want string
-		err  bool
-	}{
-		{"", 3, "0,1,2", false},
-		{"1-2, 3", 5, "0,1,2", false},
-		{"4-", 6, "3,4,5", false},
-		{"2, 2, 9", 3, "1", false},
-		{"1-99", 2, "0,1", false},
-		{"0", 3, "", true},
-		{"3-2", 3, "", true},
-		{"x", 3, "", true},
-		{"7", 3, "", true},
-	} {
-		got, err := selectPages(tc.spec, tc.n)
-		if (err != nil) != tc.err {
-			t.Errorf("selectPages(%q) error %v", tc.spec, err)
-			continue
-		}
-		var parts []string
-		for _, g := range got {
-			parts = append(parts, itoaTest(g))
-		}
-		if s := strings.Join(parts, ","); !tc.err && s != tc.want {
-			t.Errorf("selectPages(%q, %d) = %s, want %s", tc.spec, tc.n, s, tc.want)
-		}
-	}
-}
-
-// itoaTest formats a small int.
-func itoaTest(n int) string { return string(rune('0' + n)) }

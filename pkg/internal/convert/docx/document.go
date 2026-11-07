@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/convert/pagerange"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -35,11 +36,13 @@ type settings struct {
 // document is one conversion's state: the package, its resolved parts
 // and what the build collects.
 type document struct {
-	ctx       context.Context
-	pkg       *ooxml.Package
-	main      string
-	fonts     *text.Fonts
-	opts      office.Options
+	ctx   context.Context
+	pkg   *ooxml.Package
+	main  string
+	fonts *text.Fonts
+	opts  office.Options
+	// ranges is the page selection opts.PageRanges parsed.
+	ranges    []pagerange.Range
 	theme     *ooxml.Theme
 	styles    *styleSheet
 	numbering *numbering

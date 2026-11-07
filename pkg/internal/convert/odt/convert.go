@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/convert/pagerange"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
@@ -38,9 +39,9 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if fonts.Len() == 0 {
 		return nil, fmt.Errorf("converting ODT: %w", text.ErrNoFonts)
 	}
-	ranges, err := parsePageRanges(opts.PageRanges)
+	ranges, err := pagerange.Parse(opts.PageRanges)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", office.ErrInvalidOptions, err)
 	}
 	data, err := office.ReadAll(ctx, src, opts.MaxInputBytes)
 	if err != nil {
@@ -270,10 +271,10 @@ func (b *builder) masterOf(c *odf.Element) (string, int, bool) {
 // assemble returns the document of the layout res: the pages ranges keep,
 // the links among them, the outline of the headings, the metadata and the
 // warnings.
-func (b *builder) assemble(res *layout.Result, ranges []pageRange, opts office.Options, lang string) (*compose.Document, error) {
-	keep, err := selectPages(ranges, len(res.Pages))
+func (b *builder) assemble(res *layout.Result, ranges []pagerange.Range, opts office.Options, lang string) (*compose.Document, error) {
+	keep, err := pagerange.Select(ranges, len(res.Pages))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", office.ErrInvalidOptions, err)
 	}
 	at := make([]int, len(res.Pages))
 	for i, k := range keep {
@@ -305,6 +306,9 @@ func (b *builder) assemble(res *layout.Result, ranges []pageRange, opts office.O
 	}
 	if !opts.OmitOutline {
 		doc.Outline = outline(b.headings, res.Anchors, dest)
+	}
+	if len(keep) < len(res.Pages) {
+		compose.PruneStructure(doc)
 	}
 	doc.Warnings = append(doc.Warnings, b.warnings...)
 	for _, w := range res.Warnings {
