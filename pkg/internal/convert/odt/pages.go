@@ -80,6 +80,16 @@ func newPageFlow(b *builder, opts office.Options) *pageFlow {
 	return &pageFlow{b: b, opts: opts, byName: map[string]*instance{}, geoms: map[string]*pageGeom{}, blanks: map[int]bool{}}
 }
 
+// reset forgets the pages a layout laid out, for another layout of the
+// same document.
+func (f *pageFlow) reset() {
+	f.entries = nil
+	f.blanks = map[int]bool{}
+	for _, inst := range f.instances {
+		inst.first, inst.seen = 0, false
+	}
+}
+
 // defaultMaster returns the master page the document starts on when its
 // first paragraph names none: Writer's "Standard", else the first.
 func (f *pageFlow) defaultMaster() *odf.MasterPage {

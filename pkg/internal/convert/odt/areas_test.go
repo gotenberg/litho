@@ -231,3 +231,23 @@ func TestConvert_Frames(t *testing.T) {
 		t.Errorf("wrapped line = %+v", ls[1])
 	}
 }
+
+func TestConvert_TableOfContentsRegenerated(t *testing.T) {
+	// LibreOffice, through Gotenberg's updateIndexes, rebuilds the table
+	// from the headings: the stale saved entry goes, each heading's page
+	// comes from the layout.
+	tmpl := `<text:table-of-content-entry-template text:outline-level="1" text:style-name="C1"><text:index-entry-chapter/><text:index-entry-text/><text:index-entry-tab-stop style:type="right" style:leader-char="."/><text:index-entry-page-number/></text:table-of-content-entry-template>`
+	body := `<text:table-of-content text:name="T"><text:table-of-content-source text:outline-level="1"><text:index-title-template>Contents</text:index-title-template>` + tmpl + `</text:table-of-content-source>` +
+		`<text:index-body><text:p>stale<text:tab/>9</text:p></text:index-body></text:table-of-content>` +
+		`<text:h text:outline-level="1">One</text:h><text:h text:outline-level="2">Deep</text:h><text:p text:style-name="PB">x</text:p><text:h text:outline-level="1">Two</text:h>`
+	auto := `<style:style style:name="PB" style:family="paragraph"><style:paragraph-properties fo:break-before="page"/></style:style>`
+	res := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{})
+	ls := lines(res.Pages[0])
+	var got []string
+	for _, l := range ls[:3] {
+		got = append(got, strings.Join(strings.Fields(l.text), ""))
+	}
+	if strings.Join(got, "|") != "Contents|One1|Two2" {
+		t.Errorf("table = %q", got)
+	}
+}

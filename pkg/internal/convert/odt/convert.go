@@ -67,20 +67,38 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if b.err != nil {
 		return nil, b.err
 	}
-	res, err := layout.Layout(ctx, root, fonts, layout.Options{
-		Page:          first,
-		PageFor:       b.pages.pageFor,
-		MarginContent: b.pages.marginContent,
-		Lang:          root.Lang,
-		Image:         b.loadPicture,
-		MaxPages:      opts.MaxPages,
-		Logger:        opts.Logger,
-	})
-	if err != nil {
-		if errors.Is(err, layout.ErrTooManyPages) {
-			return nil, fmt.Errorf("%w: %w", office.ErrTooManyPages, err)
+	lay := func() (*layout.Result, error) {
+		b.pages.reset()
+		res, err := layout.Layout(ctx, root, fonts, layout.Options{
+			Page:          first,
+			PageFor:       b.pages.pageFor,
+			MarginContent: b.pages.marginContent,
+			Lang:          root.Lang,
+			Image:         b.loadPicture,
+			MaxPages:      opts.MaxPages,
+			Logger:        opts.Logger,
+		})
+		if err != nil {
+			if errors.Is(err, layout.ErrTooManyPages) {
+				return nil, fmt.Errorf("%w: %w", office.ErrTooManyPages, err)
+			}
+			return nil, fmt.Errorf("laying out the ODT document: %w", err)
 		}
-		return nil, fmt.Errorf("laying out the ODT document: %w", err)
+		return res, nil
+	}
+	res, err := lay()
+	if err != nil {
+		return nil, err
+	}
+	// A table of contents is numbered from where the headings landed,
+	// then laid out again until the numbers settle.
+	for pass := 1; pass < maxIndexPasses && len(b.tocs) > 0 && b.updateTOCs(res); pass++ {
+		if b.err != nil {
+			return nil, b.err
+		}
+		if res, err = lay(); err != nil {
+			return nil, err
+		}
 	}
 	return b.assemble(res, ranges, opts, root.Lang)
 }

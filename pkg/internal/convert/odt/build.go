@@ -53,6 +53,9 @@ type builder struct {
 	// tabsRelative is settings.xml's TabsRelativeToIndent: tab positions
 	// count from the paragraph's indent, Writer's default.
 	tabsRelative bool
+	// tocs are the tables of contents, regenerated once the layout
+	// placed the headings.
+	tocs []*toc
 	// meta records the paragraph blocks' spacing properties.
 	meta map[*layout.Node]paraMeta
 }
@@ -67,6 +70,9 @@ type hfFields struct {
 type heading struct {
 	node  *layout.Node
 	level int
+	// label is the outline number the heading draws first, text its
+	// text: what a table of contents entry shows.
+	label, text string
 }
 
 // warn records a warning once per code.
@@ -209,7 +215,9 @@ func (b *builder) block(c *odf.Element, ctx *blockCtx) []*layout.Node {
 			return b.numberedParagraph(c, ctx)
 		case "section":
 			return b.section(c, *ctx)
-		case "table-of-content", "alphabetical-index", "illustration-index",
+		case "table-of-content":
+			return b.tableOfContent(c, *ctx)
+		case "alphabetical-index", "illustration-index",
 			"table-index", "object-index", "user-index", "bibliography":
 			return b.blocks(c.Child(odf.NSText, "index-body"), *ctx)
 		case "index-title":
@@ -328,10 +336,12 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 			if n.ID == "" {
 				n.ID = b.newID("h")
 			}
-			b.headings = append(b.headings, heading{node: n, level: level})
+			h := heading{node: n, level: level, text: headingTitle(n)}
 			if lbl := b.outlineLabel(level); lbl != "" {
 				n.Children = append([]*layout.Node{b.run(lbl, t, false)}, n.Children...)
+				h.label = lbl
 			}
+			b.headings = append(b.headings, h)
 		}
 	}
 	if ctx.item != nil {
