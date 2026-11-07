@@ -12,6 +12,8 @@ import (
 //     60 characters wide), converted by Gotenberg 9.0.0's LibreOffice
 //     route (LibreOffice 26.8.2.2) and read with litho text; the strings
 //     below are the PDF's, U+2007 where Calc draws a figure space.
+//   - ods: sc/tdf102370_ExponentWithoutSign.ods, 42 in a scientific
+//     format without a forced exponent sign, prints "4.20E1".
 func TestApply_Calc(t *testing.T) {
 	num := func(v float64) Value { return Value{Kind: Number, Number: v} }
 	txt := func(s string) Value { return Value{Kind: Text, Text: s} }
@@ -48,6 +50,8 @@ func TestApply_Calc(t *testing.T) {
 		{"0.00E+00", num(12345.678), "1.23E+04"},
 		{"##0.0E+0", num(12345.678), "12.3E+3"},
 		{"0.00E-00", num(0.00012), "1.20E-04"},
+		{"0.00E0", num(42), "4.20E1"},
+		{"0.00E0", num(0.042), "4.20E-2"},
 		{"# ?/?", num(3.25), "3 1/4"},
 		{"# ??/??", num(1.3333), "1  1/3 "},
 		{"0/8", num(0.4), "3/8"},

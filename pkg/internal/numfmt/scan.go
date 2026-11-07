@@ -280,6 +280,12 @@ func scanSection(src string) (*section, error) {
 		case (c == 'E' || c == 'e') && i+1 < len(src) && (src[i+1] == '+' || src[i+1] == '-'):
 			s.toks = append(s.toks, token{kind: tExp, text: src[i+1 : i+2]})
 			i += 2
+		case (c == 'E' || c == 'e') && i+1 < len(src) && (src[i+1] == '0' || src[i+1] == '#') && hasDigitBefore(s.toks):
+			// LibreOffice's exponent without a forced sign (ODF 1.3 Part
+			// 3, 16.29.3 number:forced-exponent-sign false): a sign only
+			// when negative.
+			s.toks = append(s.toks, token{kind: tExp, text: ""})
+			i++
 		case strings.ContainsRune("YyMmDdHhSs", rune(c)):
 			n := 1
 			for i+n < len(src) && upper[i+n] == upper[i] {
@@ -522,4 +528,14 @@ func (s *section) resolveDate() {
 		out = append(out, t)
 	}
 	s.toks = out
+}
+
+// hasDigitBefore reports a digit placeholder among toks.
+func hasDigitBefore(toks []token) bool {
+	for _, t := range toks {
+		if t.kind == tDigit {
+			return true
+		}
+	}
+	return false
 }
