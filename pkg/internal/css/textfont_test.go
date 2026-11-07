@@ -71,3 +71,19 @@ func TestTextJustifyAndAutospace(t *testing.T) {
 		}
 	}
 }
+
+func TestTextShadow_Parse(t *testing.T) {
+	s := styleOf(t, "color: red; text-shadow: 1px 2px blue, 3px 4px 5px")
+	if len(s.TextShadow) != 2 || s.TextShadow[0].X != 0.75 || s.TextShadow[1].Blur != 3.75 || !colorEq(s.TextShadow[1].Color, rgb(255, 0, 0)) {
+		t.Errorf("text-shadow = %+v", s.TextShadow)
+	}
+	for _, bad := range []string{"text-shadow: 1px 2px 3px 4px", "text-shadow: inset 1px 2px", "text-shadow: 1px"} {
+		if s := styleOf(t, bad); s.TextShadow != nil {
+			t.Errorf("%s = %+v, want none", bad, s.TextShadow)
+		}
+	}
+	c := compute(t, `<div id=a><p id=b>x</p></div>`, `#a { text-shadow: 1px 1px currentColor } #b { color: lime }`)
+	if sh := c.of("b").TextShadow; len(sh) != 1 || !colorEq(sh[0].Color, c.of("b").Color) {
+		t.Errorf("inherited shadow = %+v", sh)
+	}
+}

@@ -162,6 +162,7 @@ const (
 	pFontSynthesisStyle
 	pTextSpacingTrim
 	pTextAutospaceSize
+	pTextShadow
 	numProps
 )
 

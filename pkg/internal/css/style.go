@@ -961,6 +961,9 @@ type Style struct {
 	// TextAutospaceSize is the space text-autospace adds, in ems, 0
 	// standing for the default 1/8 (Chromium's text-autospace-size).
 	TextAutospaceSize float64
+	// TextShadow lists the shadows of the text in the order written, the
+	// first painted on top; nil for none (CSS Text Decoration 3, 4).
+	TextShadow []Shadow
 	// NoSpacingTrim is text-spacing-trim: space-all, which keeps adjacent
 	// fullwidth punctuation full width (CSS Text 4, 8.3).
 	NoSpacingTrim bool

@@ -829,6 +829,7 @@ func (p *painter) text(it *lineItem, l *lineBox, page int) {
 	if t.Face == nil {
 		return
 	}
+	p.textShadows(it, l, page, alpha)
 	p.textDecorations(it, l, page, alpha, css.Underline|css.Overline)
 	c := *t
 	c.Origin = compose.Point{X: l.x + t.Origin.X + p.dx, Y: l.y + t.Origin.Y + p.dy}

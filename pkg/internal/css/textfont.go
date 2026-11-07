@@ -111,9 +111,44 @@ func textFontProps() map[propID]propDef {
 			},
 			copyFrom: field(func(s *Style) *float64 { return &s.TextAutospaceSize }),
 		},
+		pTextShadow:          {name: "text-shadow", inherited: true, parse: parseTextShadow, compute: computeTextShadows, copyFrom: copyTextShadows},
 		pFontSynthesisWeight: synthesisProp("font-synthesis-weight", func(s *Style) *bool { return &s.NoSynthesizeWeight }),
 		pFontSynthesisStyle:  synthesisProp("font-synthesis-style", func(s *Style) *bool { return &s.NoSynthesizeStyle }),
 	}
+}
+
+// parseTextShadow parses text-shadow (CSS Text Decoration 3, 4): none, or
+// a comma-separated list of shadows of two or three lengths and a colour,
+// with no spread and no inset.
+func parseTextShadow(v []token, c *declCtx) (any, bool) {
+	pv, ok := parseBoxShadow(v, c)
+	if !ok {
+		return nil, false
+	}
+	specs, _ := pv.([]shadowSpec)
+	for _, sp := range specs {
+		if sp.inset || sp.n > 3 {
+			return nil, false
+		}
+	}
+	return specs, true
+}
+
+// computeTextShadows computes text-shadow as box-shadow is computed.
+func computeTextShadows(s *styler, st *Style, v any) {
+	saved := st.BoxShadow
+	computeShadows(s, st, v)
+	st.TextShadow, st.BoxShadow = st.BoxShadow, saved
+}
+
+// copyTextShadows inherits text-shadow, resolving a currentColor shadow
+// against dst's color.
+func copyTextShadows(dst, src *Style) {
+	saved := dst.BoxShadow
+	tmp := *src
+	tmp.BoxShadow = src.TextShadow
+	copyShadows(dst, &tmp)
+	dst.TextShadow, dst.BoxShadow = dst.BoxShadow, saved
 }
 
 // parseStretch parses a font-stretch value (CSS Fonts 4, 2.3): a keyword
