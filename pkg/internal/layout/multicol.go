@@ -408,7 +408,7 @@ func (multicolFormatter) layout(e *engine, b *box, cb cblock, bc *bfc, cursor fl
 	g := e.columnGap(b, cb.w)
 	cols := b.st.Columns
 	if len(cols.Tracks) > 0 {
-		// Tracks that do not resolve lay out as as many equal columns.
+		// Tracks that do not resolve lay out that many equal columns.
 		cols.Count, cols.Width = min(len(cols.Tracks), maxColumns), css.Dimension{Kind: css.Auto}
 	}
 	n, w := columnLayout(&cols, cb.w, g)

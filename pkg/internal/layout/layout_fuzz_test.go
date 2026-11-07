@@ -112,7 +112,11 @@ func (g *treeGen) style() *css.Style {
 		st.TextTransform = css.TextTransform(g.next() % 4)
 		st.WordBreak = css.WordBreak(g.next() % 3)
 		st.OverflowWrap = css.OverflowWrap(g.next() % 3)
-		st.Direction = css.Direction(g.next() % 2)
+		d := g.next()
+		st.Direction = css.Direction(d % 2)
+		if m := d >> 4 % 8; m < 5 {
+			st.WritingMode = css.WritingMode(m)
+		}
 		st.UnicodeBidi = css.UnicodeBidi(g.next() % 6)
 		st.TextDecoration = css.TextDecoration(g.next() % 8)
 		st.TextIndent = g.length(false)
@@ -191,8 +195,13 @@ func (g *treeGen) style() *css.Style {
 			st.Columns.SpanAll = mc&0x20 != 0
 			st.Columns.Fill = css.ColumnFill(mc >> 6 % 3)
 			st.Columns.RuleStyle, st.Columns.RuleWidth = css.BorderStyle(g.next()%10), px(float64(g.next()%3))
-			if g.next()%3 == 0 {
+			hb := g.next()
+			if hb%3 == 0 {
 				st.Columns.Height = g.length(false)
+			}
+			if hb%5 == 1 {
+				// Columns of different widths.
+				st.Columns.Tracks = []css.ColumnTrack{{Width: float64(hb%4) + 1, Gap: px(float64(hb % 3))}, {Width: 1}}
 			}
 		}
 		st.Orphans, st.Widows = int(g.next()%4), int(g.next()%4)
@@ -296,6 +305,8 @@ func FuzzLayout(f *testing.F) {
 			st.Border[0] = css.Border{Width: px(float64(fr % 4)), Style: css.BorderStyle(fr % 10), Color: g.colour()}
 			st.Border[2] = st.Border[0]
 			pb.Frame = &PageFrame{Inset: [4]float64{in, in, in, in}, Style: st}
+		} else if fr%3 == 1 {
+			pb.FootnoteRule = &FootnoteRule{Width: float64(fr%5) / 4, Thickness: px(float64(fr % 3)), Color: g.colour(), Align: css.TextAlign(fr % 7), Line: css.BorderStyle(fr % 10), SpaceAbove: px(1), SpaceBelow: px(float64(fr % 2))}
 		}
 		opts := Options{Page: pb, Image: loader, MaxPages: 40}
 		if alt := g.next(); alt&1 != 0 {
