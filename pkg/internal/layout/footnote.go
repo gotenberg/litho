@@ -177,7 +177,7 @@ func (e *engine) placeNote(p int, call *box, bottom float64, later bool) (ok, ro
 	if mh, ok := specMax(st.MaxHeight, ah); ok && a.h > mh+eps && !first {
 		return false, false
 	}
-	h := areaHeight(e.layoutArea(p, calls, st))
+	h := areaHeight(e.layoutArea(p, calls, st)) + e.ruleRoom(p)
 	used := max(bottom-e.pageTop(p), 0)
 	if used+h > ah+eps && !(first && used <= eps) {
 		return false, true
@@ -220,7 +220,7 @@ func (e *engine) unplace(call *box) {
 	}
 	fp.h = 0
 	if len(fp.calls) > 0 {
-		fp.h = areaHeight(e.layoutArea(p, fp.calls, e.areaStyle(p)))
+		fp.h = areaHeight(e.layoutArea(p, fp.calls, e.areaStyle(p))) + e.ruleRoom(p)
 	}
 	e.geom.recut(p)
 }
@@ -333,7 +333,8 @@ func (e *engine) paintNotes() {
 }
 
 // assembleNotes adds the footnote area of page k to pg, whose page box is
-// pb, at the bottom of the page area (CSS GCPM 3, 3.4.1), over the flow.
+// pb, at the bottom of the page area (CSS GCPM 3, 3.4.1), over the flow,
+// under the footnote separator of pb and its spaces.
 func (e *engine) assembleNotes(pg *compose.Page, k int, pb PageBox, used map[*compose.StructElem]bool) {
 	f := e.foot
 	if f == nil || k >= len(f.pages) {
@@ -348,8 +349,13 @@ func (e *engine) assembleNotes(pg *compose.Page, k int, pb PageBox, used map[*co
 		markTree(fr, used)
 	}
 	_, ah := areaOf(pb)
+	top := pb.Margin[css.Top] + ah - f.pages[k].h
+	e.paintFootnoteRule(pg, pb, top)
+	if r := pb.FootnoteRule; r != nil {
+		top += r.SpaceAbove + r.Thickness + r.SpaceBelow
+	}
 	pg.Content = append(pg.Content, &compose.Group{
-		Transform: compose.Matrix{A: 1, D: 1, E: pb.Margin[css.Left], F: pb.Margin[css.Top] + ah - f.pages[k].h},
+		Transform: compose.Matrix{A: 1, D: 1, E: pb.Margin[css.Left], F: top},
 		Opacity:   1,
 		Content:   frags,
 	})

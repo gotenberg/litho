@@ -158,9 +158,11 @@
 // stops and the line breaks around them), LineRule and MinLineHeight
 // space lines as Writer does, TextScale scales glyphs horizontally,
 // PageAnchor anchors a frame to the page box, and DecorationCloneAll
-// draws a bordered paragraph whole on every page. [PageBox.Frame] draws
-// page borders, and a [Node.Marker] whose Style has a width lays a list
-// label out on the number position.
+// draws a bordered paragraph whole on every page, and FontKerning none
+// shapes without the font's kerning. [PageBox.Frame] draws page borders,
+// [PageBox.FootnoteRule] the separator above a page's footnotes, and a
+// [Node.Marker] whose Style has a width lays a list label out on the
+// number position.
 //
 // # Not supported
 //
