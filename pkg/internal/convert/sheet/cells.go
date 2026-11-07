@@ -487,16 +487,26 @@ func stack(s string) string {
 	return b.String()
 }
 
-// normalizeBreaks returns s with its CR LF and CR line breaks written LF.
+// normalizeBreaks returns s with its CR LF and CR line breaks written LF
+// and its other control characters but the tab left out, as Calc draws
+// them.
 //
 // # Corpus evidence
 //
 //   - xlsx: sc/escape-unicode.xlsx, a cell that does not wrap holding
 //     "Line 1\r\nLine 2\r\nLine 3\r\nLine 4", prints four lines in a
 //     row grown to them.
+//   - csv: sc/tdf80149.csv, a field holding U+0016, prints nothing for
+//     it.
 func normalizeBreaks(s string) string {
-	if !strings.ContainsRune(s, '\r') {
-		return s
+	if strings.ContainsRune(s, '\r') {
+		s = strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(s)
 	}
-	return strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(s)
+	// The other control characters draw nothing.
+	return strings.Map(func(r rune) rune {
+		if r != '\n' && r != '\t' && (r < 0x20 || r == 0x7f) {
+			return -1
+		}
+		return r
+	}, s)
 }
