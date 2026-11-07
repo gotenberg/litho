@@ -2,6 +2,7 @@ package layout
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -147,5 +148,29 @@ func TestNamedPages_OverflowCountsAgainstEachPage(t *testing.T) {
 				t.Errorf("content width %v, want %v", res.ContentWidth, tt.want)
 			}
 		})
+	}
+}
+
+func TestNamedPages_WidthFollowsTheNamedPage(t *testing.T) {
+	// The box whose name starts the wide page is laid out at that page's
+	// width, its child too, once: the first page's width stays the flow's
+	// and nothing overflows it.
+	w0, _ := areaOf(page(20, 30))
+	w1, _ := areaOf(page(40, 30))
+	kid := el(sty(height(5)))
+	kid.ID = "kid"
+	wide := el(sty(named("wide")), kid)
+	wide.ID = "wide"
+	res, _ := namedRun(t, doc(el(sty(height(5))), wide))
+	if len(res.Pages) != 2 {
+		t.Fatalf("%d pages, want 2", len(res.Pages))
+	}
+	for _, id := range []string{"wide", "kid"} {
+		if r, ok := res.Extents[id]; !ok || math.Abs(r.Width-w1) > 1e-6 {
+			t.Errorf("%s: extent %+v, want %v wide", id, r, w1)
+		}
+	}
+	if math.Abs(res.ContentWidth-w0) > 1e-6 {
+		t.Errorf("content width %v, want %v", res.ContentWidth, w0)
 	}
 }

@@ -714,14 +714,19 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 	// On pages whose areas differ in width, a box whose width follows the
 	// page area's lays each child out at the width of the page the child
 	// starts on (CSS Page 3, 4.1: content resumes on a page box of the
-	// named type).
+	// named type): cb, which is as wide as the page b starts on, grown by
+	// how much wider the child's page is.
 	adapt := e.paginating() && e.geom.varies() && followsPages(b)
+	base := 0.0
+	if adapt {
+		base = e.widthDelta(e.pageOf(b.y))
+	}
 	cbFor := func(p int) cblock {
 		if !adapt {
 			return cb
 		}
 		c := cb
-		c.w = max(cb.w+e.widthDelta(p), 0)
+		c.w = max(cb.w+e.widthDelta(p)-base, 0)
 		return c
 	}
 	var prev *box
@@ -755,10 +760,12 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 			mode = breakForced
 		}
 		start := e.startPage(cursor+mc.strut.sum(), mode)
-		cursor = e.layoutBlock(k, cbFor(start), bc, cursor, mc, mode)
-		if adapt && e.widthDelta(e.pageOf(k.y)) != e.widthDelta(start) && e.relayout(k.y) {
+		kcb := cbFor(start)
+		cursor = e.layoutBlock(k, kcb, bc, cursor, mc, mode)
+		if adapt && cbFor(e.pageOf(k.y)).w != kcb.w && e.relayout(k.y) {
 			// k landed on a page of another width than the one it was laid
-			// out for: lay it out again at that page's.
+			// out for, or the page it starts took its own page name and
+			// another box with it: lay it out again at that page's.
 			cursor = e.layoutBlock(k, cbFor(e.pageOf(k.y)), bc, restore(snap), mc, mode)
 		}
 		if e.paginating() && mode == breakNone {
