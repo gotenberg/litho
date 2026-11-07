@@ -225,7 +225,11 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 	tp := r.styles.Resolve(odf.ScopeContent, odf.FamilyTable, el.A(odf.NSTable, "style-name"), odf.TableProps)
 	sh := &sheet.Sheet{
 		Name:   name,
-		Hidden: tp.Get("table:display") == "false" || el.A(odf.NSTable, "print") == "false",
+		// table:print false is what Calc writes for a sheet without print
+		// ranges that does not print entirely; Calc still prints its used
+		// range, so only table:display hides a sheet (ODF 1.3, Part 3,
+		// 19.689 and 20.389).
+		Hidden: tp.Get("table:display") == "false",
 		// Writing mode rl-tb on the table property mirrors the sheet
 		// (ODF 1.3, Part 3, 20.404).
 		RightToLeft:        strings.HasPrefix(tp.Get("style:writing-mode"), "rl"),

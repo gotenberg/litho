@@ -26,7 +26,7 @@ func TestRead_Tables(t *testing.T) {
 	tests := []struct {
 		name        string
 		hidden, rtl bool
-	}{{"One", false, false}, {"Two", true, false}, {"Three", false, true}, {"Four", true, false}}
+	}{{"One", false, false}, {"Two", true, false}, {"Three", false, true}, {"Four", false, false}}
 	if len(doc.Sheets) != len(tests) {
 		t.Fatalf("sheets = %d", len(doc.Sheets))
 	}
