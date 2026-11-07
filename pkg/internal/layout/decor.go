@@ -150,6 +150,9 @@ func (p *painter) background(b *box, st *css.Style, r compose.Rect, radii [4][2]
 	case css.ContentEdge:
 		area, _ = insetRect(r, radii, addSides(bd, pd))
 	}
+	if st.BackgroundAttachment == css.AttachLocal {
+		area = p.localArea(b, area, r, pd)
+	}
 	g := &ditem{group: true, opacity: 1, clip: &compose.Path{Ops: roundedRect(clipR, clipRadii), Fill: &compose.Fill{}}}
 	if st.BackgroundGradient != nil {
 		for _, pa := range p.e.gradientTiles(st, area, clipR, r.Y) {
@@ -198,6 +201,16 @@ func addSides(a, b [4]float64) [4]float64 {
 // positioning area, within the painting area clip: its size (CSS
 // Backgrounds 3, 3.9), position (3.6) and repetition (3.4).
 func (e *engine) tiles(st *css.Style, pic *Picture, area, clip compose.Rect, y float64) []compose.Rect {
+	out, over := tileRects(st, pic, area, clip)
+	if over {
+		e.warn(codeBackgroundTiles, fmt.Sprintf("a background repeated more than %d times was drawn once", maxBackgroundTiles), y)
+	}
+	return out
+}
+
+// tileRects returns what [engine.tiles] does, and true with the first
+// tile alone when more than maxBackgroundTiles would cover the clip.
+func tileRects(st *css.Style, pic *Picture, area, clip compose.Rect) ([]compose.Rect, bool) {
 	iw, ih := pic.Width, pic.Height
 	w, h := iw, ih
 	bs := st.BackgroundSize
@@ -239,15 +252,14 @@ func (e *engine) tiles(st *css.Style, pic *Picture, area, clip compose.Rect, y f
 		w = w0 * h / h0
 	}
 	if !(w > 0) || !(h > 0) || math.IsInf(w, 0) || math.IsInf(h, 0) {
-		return nil
+		return nil, false
 	}
 	x0 := area.X + resolve(st.BackgroundPosition[0], area.Width-w)
 	y0 := area.Y + resolve(st.BackgroundPosition[1], area.Height-h)
 	xs := positions(rep[0], x0, w, area.X, area.Width, clip.X, clip.Width)
 	ys := positions(rep[1], y0, h, area.Y, area.Height, clip.Y, clip.Height)
 	if len(xs)*len(ys) > maxBackgroundTiles || len(xs) > maxBackgroundTiles || len(ys) > maxBackgroundTiles {
-		e.warn(codeBackgroundTiles, fmt.Sprintf("a background repeated more than %d times was drawn once", maxBackgroundTiles), y)
-		return []compose.Rect{{X: x0, Y: y0, Width: w, Height: h}}
+		return []compose.Rect{{X: x0, Y: y0, Width: w, Height: h}}, true
 	}
 	var out []compose.Rect
 	for _, ty := range ys {
@@ -255,7 +267,7 @@ func (e *engine) tiles(st *css.Style, pic *Picture, area, clip compose.Rect, y f
 			out = append(out, compose.Rect{X: tx, Y: ty, Width: w, Height: h})
 		}
 	}
-	return out
+	return out, false
 }
 
 // sizeOf resolves one background-size dimension against ref, false for

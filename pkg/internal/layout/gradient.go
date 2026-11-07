@@ -467,9 +467,19 @@ func (e *engine) gradientTiles(st *css.Style, area, clip compose.Rect, y float64
 			bs.Height = css.Dimension{Kind: css.Percent, Value: 1}
 		}
 	}
-	tiles := e.tiles(&sized, &Picture{Width: area.Width, Height: area.Height}, area, clip, y)
+	tiles, over := tileRects(&sized, &Picture{Width: area.Width, Height: area.Height}, area, clip)
 	if len(tiles) == 0 {
 		return nil
+	}
+	if over {
+		// Tiles too small to count, a fraction of a pixel, blend into the
+		// gradient's average colour, which fills the painting area: a
+		// gradient of one colour stays that colour, as browsers draw it.
+		c := gradientAverage(st.BackgroundGradient, tiles[0].Width, tiles[0].Height)
+		if c.A <= 0 {
+			return nil
+		}
+		return []*compose.Path{{Ops: rectOps(clip), Fill: &compose.Fill{Color: c}}}
 	}
 	fill, ok := e.gradientFill(st.BackgroundGradient, tiles[0].Width, tiles[0].Height, y)
 	if !ok {
@@ -494,4 +504,21 @@ func (e *engine) gradientTiles(st *css.Style, area, clip compose.Rect, y float64
 		out = append(out, &compose.Path{Ops: rectOps(t), Fill: f})
 	}
 	return out
+}
+
+// gradientAverage returns the average colour of the gradient g over a w by
+// h box, its stops placed on a line as long as the box's larger side.
+func gradientAverage(g *css.Gradient, w, h float64) compose.Color {
+	if len(g.Stops) == 0 {
+		return compose.Color{}
+	}
+	gs := fixStops(g, max(w, h))
+	if len(gs) == 0 {
+		return compose.Color{}
+	}
+	ps := pieces(gs)
+	if len(ps) == 0 {
+		return gs[0].c
+	}
+	return average(ps)
 }
