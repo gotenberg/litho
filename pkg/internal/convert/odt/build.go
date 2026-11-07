@@ -694,7 +694,7 @@ func (b *builder) columns(st *css.Style, cols *odf.Element, width float64) {
 			gap = end + start
 		}
 		if tracks, first, last, ok := b.columnTracks(kids, width); ok {
-			b.applyColumnTracks(st, tracks, first, last)
+			applyColumnTracks(st, tracks, first, last)
 		}
 	}
 	st.ColumnGap = css.Pts(max(gap, 0))

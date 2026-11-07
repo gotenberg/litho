@@ -214,7 +214,7 @@ func (b *builder) cell(c *odf.Element, tb *tableBuild, header bool) *layout.Node
 		// on the next page.
 		st.BoxDecorationBreak = css.DecorationCloneAll
 	}
-	b.applyWritingMode(props.Get("style:writing-mode"))
+	applyWritingMode(st, props.Get("style:writing-mode"))
 	st.VerticalAlign = css.VerticalAlign{Kind: css.AlignTop}
 	if k, ok := cellAligns[props.Get("style:vertical-align")]; ok {
 		st.VerticalAlign = css.VerticalAlign{Kind: k}

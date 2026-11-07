@@ -330,3 +330,28 @@ func TestColumnTracks(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyColumnTracks_FillsTheEngineTracks(t *testing.T) {
+	t.Parallel()
+	st := css.Initial()
+	st.Padding[css.Left], st.Padding[css.Right] = css.Pts(2), css.Pts(3)
+	applyColumnTracks(st, []columnTrack{{Width: 100, Gap: 10}, {Width: 200}}, 5, 7)
+	want := []css.ColumnTrack{{Width: 100, Gap: 10}, {Width: 200}}
+	if len(st.Columns.Tracks) != 2 || st.Columns.Tracks[0] != want[0] || st.Columns.Tracks[1] != want[1] {
+		t.Errorf("tracks %+v, want %+v", st.Columns.Tracks, want)
+	}
+	if st.Padding[css.Left] != css.Pts(7) || st.Padding[css.Right] != css.Pts(10) {
+		t.Errorf("padding %v %v, want the outer indents added, 7 and 10", st.Padding[css.Left], st.Padding[css.Right])
+	}
+}
+
+func TestApplyWritingMode_TurnsTheBox(t *testing.T) {
+	t.Parallel()
+	for mode, want := range map[string]css.WritingMode{"bt-lr": css.SidewaysLR, "tb-rl": css.VerticalRL, "lr-tb": css.HorizontalTB, "": css.HorizontalTB} {
+		st := css.Initial()
+		applyWritingMode(st, mode)
+		if st.WritingMode != want {
+			t.Errorf("%q: writing mode %v, want %v", mode, st.WritingMode, want)
+		}
+	}
+}
