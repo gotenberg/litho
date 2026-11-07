@@ -262,6 +262,12 @@ COPY litho/ ./litho/
 COPY compose/ ./compose/
 # And the html corpus: the Chromium reference PDFs of its committed sources.
 COPY html/ ./html/
+# The docx and odt corpora's references are not in git: the host builds them
+# into the testdata (make docx-libreoffice, make odt-libreoffice), and the
+# download scripts read them from the /output volume. Only the scripts enter
+# the image.
+COPY docx/download.sh ./docx/
+COPY odt/download.sh ./odt/
 RUN chmod +x entrypoint.sh \
   lib/run-verapdf.sh \
   lib/run-mustang.sh \
@@ -270,6 +276,7 @@ RUN chmod +x entrypoint.sh \
   lib/gen-merges.sh \
   lib/gen-merge-empty.sh \
   lib/gen-render.sh \
+  lib/install-references.sh \
   pdfjs/download.sh \
   verapdf/download.sh \
   govdocs/download.sh \
@@ -278,7 +285,9 @@ RUN chmod +x entrypoint.sh \
   facturx/download.sh \
   litho/download.sh \
   compose/download.sh \
-  html/download.sh
+  html/download.sh \
+  docx/download.sh \
+  odt/download.sh
 
 # Record the versions this image was built with, overrides included, so
 # the entrypoint can hand the corpus revisions to the download scripts and

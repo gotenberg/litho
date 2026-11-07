@@ -132,6 +132,36 @@ html-fixtures: ## Rebuild the html corpus's litho PDFs from its sources, with th
 	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
 	go run ./test/integration/corpus/html/build -fonts $(COMPOSE_FONTS)
 
+OFFICE_TESTDATA := test/integration/testdata
+
+.PHONY: docx-fetch
+docx-fetch: ## Download the LibreOffice test documents of the docx corpus at the commit test/integration/corpus/versions.env pins (hash-checked), with the fixture fonts
+	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
+	test/integration/corpus/lib/fetch-office.sh test/integration/corpus/docx $(OFFICE_TESTDATA)/docx/sources
+
+.PHONY: odt-fetch
+odt-fetch: ## Download the LibreOffice test documents of the odt corpus at the commit test/integration/corpus/versions.env pins (hash-checked), with the fixture fonts
+	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
+	test/integration/corpus/lib/fetch-office.sh test/integration/corpus/odt $(OFFICE_TESTDATA)/odt/sources
+
+.PHONY: docx-libreoffice
+docx-libreoffice: ## Build the docx corpus's LibreOffice reference PDFs into the testdata with the Gotenberg image test/integration/corpus/versions.env pins (needs Docker and make docx-fetch). Vars: NAMES (space-separated references, default all)
+	test/integration/corpus/lib/libreoffice.sh test/integration/corpus/docx $(OFFICE_TESTDATA)/docx/sources $(OFFICE_TESTDATA)/docx/libreoffice $(NAMES)
+
+.PHONY: odt-libreoffice
+odt-libreoffice: ## Build the odt corpus's LibreOffice reference PDFs into the testdata with the Gotenberg image test/integration/corpus/versions.env pins (needs Docker and make odt-fetch). Vars: NAMES (space-separated references, default all)
+	test/integration/corpus/lib/libreoffice.sh test/integration/corpus/odt $(OFFICE_TESTDATA)/odt/sources $(OFFICE_TESTDATA)/odt/libreoffice $(NAMES)
+
+.PHONY: docx-fixtures
+docx-fixtures: ## Rebuild the docx corpus's litho PDFs from its committed sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first)
+	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
+	go run ./test/integration/corpus/fixture/build -corpus test/integration/corpus/docx -fonts $(COMPOSE_FONTS)
+
+.PHONY: odt-fixtures
+odt-fixtures: ## Rebuild the odt corpus's litho PDFs from its committed sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first)
+	test/integration/corpus/compose/fetch-fonts.sh $(COMPOSE_FONTS)
+	go run ./test/integration/corpus/fixture/build -corpus test/integration/corpus/odt -fonts $(COMPOSE_FONTS)
+
 CORPUS_RUN_FLAGS :=
 ifdef CORPUS_JSON_OUTPUT
 CORPUS_RUN_FLAGS += --format=json

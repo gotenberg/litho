@@ -1,0 +1,15 @@
+{
+  "name": "odt",
+  "source": "odt",
+  "pdf_root": "pdfs",
+  "inputs": {
+    "glob": "sources/*",
+    "list": "documents.json",
+    "list_root": "sources",
+    "fetched_by": "make odt-fetch"
+  },
+  "references": { "dir": "libreoffice", "built_by": "make odt-libreoffice" },
+  "goldens": {
+    "diff": "goldens/diff"
+  }
+}

@@ -20,7 +20,11 @@
 #     media box pdftoppm renders by default.
 #   - -aa yes -aaVector yes: anti-aliased text and vector graphics, as viewers
 #     draw them.
-#   - Annotations are drawn, as viewers draw them.
+#   - Annotations are drawn, as viewers draw them, unless
+#     RENDER_HIDE_ANNOTATIONS=1: the docx and odt corpora's diff goldens draw
+#     the page content alone (-hide-annotations), and the index records it
+#     (hide_annotations), since the comment icons a viewer draws for a note
+#     without an appearance are the viewer's own.
 #
 # A PDF is rendered when the first two hex digits of the SHA-256 of its file
 # name, read as a number, are below <sample_per_256>: 256 renders every PDF,
@@ -49,6 +53,8 @@ MAX_PAGES="${4:-$RENDER_MAX_PAGES}"
 # PDF can keep poppler busy indefinitely; at 72 dpi a page takes well under a
 # second.
 RENDER_TIMEOUT=120
+# HIDE is 1 when the annotations are left out of the pages drawn.
+HIDE="${RENDER_HIDE_ANNOTATIONS:-0}"
 
 for tool in pdftoppm pdfinfo jq sha256sum timeout; do
   if ! command -v "$tool" > /dev/null; then
@@ -60,7 +66,10 @@ done
 # render_one renders one PDF and writes its index. Every failure is recorded
 # in the index rather than ending the run.
 render_one() {
-  local pdf="$1" id hash pages err pages_json='[]' page last out
+  local pdf="$1" id hash pages err pages_json='[]' page last out annots=()
+  if [ "$HIDE" = 1 ]; then
+    annots=(-hide-annotations)
+  fi
   id=$(basename "$pdf" .pdf)
   hash=$(printf '%s' "$id.pdf" | sha256sum | cut -c1-2)
   if [ $((16#$hash)) -ge "$SAMPLE" ]; then
@@ -81,7 +90,7 @@ render_one() {
   fi
   for ((page = 1; page <= last; page++)); do
     out="$OUT_DIR/$id.$page"
-    if err=$(timeout "$RENDER_TIMEOUT" pdftoppm -r "$RENDER_DPI" -cropbox -aa yes -aaVector yes \
+    if err=$(timeout "$RENDER_TIMEOUT" pdftoppm -r "$RENDER_DPI" -cropbox -aa yes -aaVector yes ${annots[@]+"${annots[@]}"} \
       -f "$page" -l "$page" -singlefile -png "$pdf" "$out" 2>&1) && [ -s "$out.png" ]; then
       pages_json=$(jq -c --argjson page "$page" --arg file "$id.$page.png" \
         '. + [{page: $page, file: $file}]' <<< "$pages_json")
@@ -91,11 +100,11 @@ render_one() {
         '. + [{page: $page, error: $error}]' <<< "$pages_json")
     fi
   done
-  jq -n --arg id "$id" --argjson dpi "$RENDER_DPI" --argjson count "$pages" --argjson pages "$pages_json" \
-    '{id: $id, dpi: $dpi, page_count: $count, pages: $pages}' > "$OUT_DIR/$id.json"
+  jq -n --arg id "$id" --argjson dpi "$RENDER_DPI" --argjson count "$pages" --argjson pages "$pages_json" --arg hide "$HIDE" \
+    '{id: $id, dpi: $dpi, page_count: $count, pages: $pages} + (if $hide == "1" then {hide_annotations: true} else {} end)' > "$OUT_DIR/$id.json"
 }
 export -f render_one
-export OUT_DIR SAMPLE RENDER_DPI MAX_PAGES RENDER_TIMEOUT
+export OUT_DIR SAMPLE RENDER_DPI MAX_PAGES RENDER_TIMEOUT HIDE
 
 find "$PDFS_DIR" -maxdepth 1 -type f -name '*.pdf' -print0 \
   | sort -z \
