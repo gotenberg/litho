@@ -205,6 +205,9 @@ func initShorthands() {
 	for name, def := range textFontShorthands() {
 		shorthands[name] = def
 	}
+	for name, def := range multicolShorthands() {
+		shorthands[name] = def
+	}
 	delete(longhandByName, "word-break")
 }
 

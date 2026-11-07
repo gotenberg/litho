@@ -166,6 +166,15 @@ const (
 	pStringSet
 	pFootnoteDisplay
 	pFootnotePolicy
+	pColumnCount
+	pColumnWidth
+	pColumnRuleStyle
+	pColumnRuleWidth
+	pColumnRuleColor
+	pColumnSpan
+	pColumnFill
+	pColumnHeight
+	pColumnWrap
 	numProps
 )
 
@@ -811,7 +820,7 @@ func init() {
 		{pBreakBefore, enumProp("break-before", false, func(s *Style) *Break { return &s.BreakBefore }, breakValues)},
 		{pBreakAfter, enumProp("break-after", false, func(s *Style) *Break { return &s.BreakAfter }, breakValues)},
 		{pBreakInside, enumProp("break-inside", false, func(s *Style) *BreakInside { return &s.BreakInside }, map[string]BreakInside{
-			"auto": InsideAuto, "avoid": InsideAvoid, "avoid-page": InsideAvoidPage, "avoid-column": InsideAuto, "avoid-region": InsideAuto,
+			"auto": InsideAuto, "avoid": InsideAvoid, "avoid-page": InsideAvoidPage, "avoid-column": InsideAvoidColumn, "avoid-region": InsideAuto,
 		})},
 		{pOrphans, countProp("orphans", func(s *Style) *int { return &s.Orphans })},
 		{pWidows, countProp("widows", func(s *Style) *int { return &s.Widows })},
@@ -873,6 +882,9 @@ func init() {
 		props[id] = def
 	}
 	gcpmProps()
+	for id, def := range multicolProps() {
+		props[id] = def
+	}
 	longhandByName = map[string]propID{}
 	for i := range props {
 		longhandByName[props[i].name] = propID(i)
@@ -928,7 +940,7 @@ func countProp(name string, f func(*Style) *int) propDef {
 var breakValues = map[string]Break{
 	"auto": BreakAuto, "avoid": BreakAvoid, "avoid-page": BreakAvoidPage, "page": Page,
 	"left": LeftPage, "right": RightPage, "recto": RightPage, "verso": LeftPage, "all": Page,
-	"column": BreakAuto, "avoid-column": BreakAuto, "region": BreakAuto, "avoid-region": BreakAuto,
+	"column": Column, "avoid-column": BreakAvoidColumn, "region": BreakAuto, "avoid-region": BreakAuto,
 }
 
 var boxEdges = map[string]BoxEdge{"border-box": BorderEdge, "padding-box": PaddingEdge, "content-box": ContentEdge}

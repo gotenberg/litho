@@ -177,7 +177,7 @@ func TestProperties_Longhands(t *testing.T) {
 			return s.CaptionSide == CaptionBottom && s.EmptyCells == Hide && s.TableLayout == TableFixed
 		}},
 		{"break-before: recto; break-after: column; break-inside: avoid-page", func(s *Style) bool {
-			return s.BreakBefore == RightPage && s.BreakAfter == BreakAuto && s.BreakInside == InsideAvoidPage
+			return s.BreakBefore == RightPage && s.BreakAfter == Column && s.BreakInside == InsideAvoidPage
 		}},
 		{"orphans: 3; widows: 0", func(s *Style) bool { return s.Orphans == 3 && s.Widows == 2 }},
 		{"color: currentColor", func(s *Style) bool { return colorEq(s.Color, rgb(0, 0, 255)) }},

@@ -1074,6 +1074,8 @@ type Style struct {
 	// lines and items: Normal, Points, or Percent of the container's
 	// content box in the gap's axis (CSS Box Alignment 3, 8).
 	RowGap, ColumnGap Dimension
+	// Columns is the multi-column style (CSS Multicol 1, multicol.go).
+	Columns Columns
 	// MinWidthAuto and MinHeightAuto report a min-width or min-height of
 	// auto, the initial value (CSS Sizing 3, 4.4): MinWidth or MinHeight
 	// then holds Pts(0), its used value on a box that is not a flex item,
