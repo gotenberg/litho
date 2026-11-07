@@ -201,7 +201,10 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 		return d.picture(s, ref, st, w, h, "")
 	}
 	if tb := sp.Child(ooxml.NSWPS, "txbx"); tb != nil {
-		return d.textBox(s, tb.Child(ooxml.NSW, "txbxContent"), w, h, ss, bodyInsets(sp.Child(ooxml.NSWPS, "bodyPr")), depth)
+		bodyPr := sp.Child(ooxml.NSWPS, "bodyPr")
+		n := d.textBox(s, tb.Child(ooxml.NSW, "txbxContent"), w, h, ss, bodyInsets(bodyPr), depth)
+		d.turn(n, bodyVert(attrOr(bodyPr, "vert")))
+		return n
 	}
 	if _, ok := ooxml.PresetPath(geom, compose.Rect{Width: 1, Height: 1}); !ok {
 		d.warn("approximated", fmt.Sprintf("a %s shape is drawn as its bounding box", geom))
@@ -226,6 +229,39 @@ func vectorShape(st *css.Style, geom string, ss ooxml.ShapeStyle, w, h float64) 
 		return ss.Paint(ops)
 	}
 	return &layout.Node{Kind: layout.Replaced, Style: ps, Picture: pic}
+}
+
+// bodyVert maps a text box's bodyPr vert (20.1.10.83 ST_TextVerticalType)
+// onto a text direction: vert270 reads bottom to top, the vertical types
+// top to bottom, horz none.
+func bodyVert(v string) string {
+	switch v {
+	case "", "horz":
+		return ""
+	case "vert270":
+		return "btLr"
+	}
+	return "tbRl"
+}
+
+// textDirection maps a w:textDirection value (17.18.93) onto the two
+// directions [setWritingMode] reads: the transitional names btLr and
+// tbRl, and the strict ones, tbV and lrV among them, as Word writes them.
+func textDirection(v string) string {
+	switch v {
+	case "btLr", "lr", "lrV":
+		return "btLr"
+	}
+	return "tbRl"
+}
+
+// turn sets the writing mode of a text box's block n for the text
+// direction dir, "" for horizontal text, with a warning when it cannot.
+func (d *document) turn(n *layout.Node, dir string) {
+	if dir == "" || n == nil || setWritingMode(n.Style, dir) {
+		return
+	}
+	d.warn("approximated", "vertical text in a text box is laid out horizontally")
 }
 
 // bodyInsets returns the insets of a text box's body properties, top,

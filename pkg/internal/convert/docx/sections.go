@@ -18,6 +18,10 @@ const (
 	defaultHFDistance = 36
 )
 
+// maxColumns caps the columns of a section: Word's own limit (17.6.4
+// cols allows any number; Word lays out at most 45).
+const maxColumns = 45
+
 // minPageArea is the least page area side a section keeps, in points, so
 // that margins past the page leave a box the layout accepts.
 const minPageArea = 18
@@ -39,6 +43,7 @@ type section struct {
 	cols             int
 	colSpace         float64
 	colSep           bool
+	colTracks        []columnTrack
 	breakType        string
 	pageStart        *int
 	pageFormat       string
@@ -102,14 +107,27 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 	}
 	if c := e.Child(w, "cols"); c != nil {
 		if v, ok := ooxml.Int(attrOr(c, "num")); ok && v > 1 {
-			s.cols = min(v, 45)
+			s.cols = min(v, maxColumns)
 		}
 		if v, ok := ooxml.Twips(attrOr(c, "space")); ok {
 			s.colSpace = max(0, v)
 		}
 		s.colSep = hasAttr(c, "sep") && ooxml.OnOff(attrOr(c, "sep"), true)
-		if hasAttr(c, "equalWidth") && !ooxml.OnOff(attrOr(c, "equalWidth"), true) && s.cols > 1 {
-			d.warn("approximated", "columns of unequal widths are laid out as equal columns")
+		if hasAttr(c, "equalWidth") && !ooxml.OnOff(attrOr(c, "equalWidth"), true) {
+			// Columns of different widths list each column (17.6.3 col).
+			for _, col := range c.Kids() {
+				if !col.Is(w, "col") || len(s.colTracks) >= maxColumns {
+					continue
+				}
+				cw, _ := ooxml.Twips(attrOr(col, "w"))
+				sp, _ := ooxml.Twips(attrOr(col, "space"))
+				s.colTracks = append(s.colTracks, columnTrack{w: max(0, cw), space: max(0, sp)})
+			}
+			if len(s.colTracks) > 1 {
+				s.cols = len(s.colTracks)
+			} else {
+				s.colTracks = nil
+			}
 		}
 	}
 	if t := e.Child(w, "type"); t != nil {
@@ -337,6 +355,9 @@ func (d *document) sectionNode(s *section, extra []*layout.Node) *layout.Node {
 	if s.cols > 1 {
 		st.Columns.Count = s.cols
 		st.ColumnGap = css.Pts(s.colSpace)
+		if len(s.colTracks) > 0 && !setColumnTracks(st, s.colTracks) {
+			d.warn("approximated", "columns of unequal widths are laid out as equal columns")
+		}
 		if s.colSep {
 			st.Columns.RuleStyle = css.Solid
 			st.Columns.RuleWidth = 0.5

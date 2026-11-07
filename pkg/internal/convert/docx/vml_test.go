@@ -85,3 +85,17 @@ func TestVMLShapeStyle(t *testing.T) {
 		}
 	}
 }
+
+func TestVMLFlow(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ style, want string }{
+		{"", ""},
+		{"layout-flow:vertical", "tbRl"},
+		{"layout-flow:vertical;mso-layout-flow-alt:bottom-to-top", "btLr"},
+		{"layout-flow:vertical-ideographic", "tbRl"},
+	} {
+		if got := vmlFlow(ooxml.ParseVMLStyle(tc.style)); got != tc.want {
+			t.Errorf("vmlFlow(%q) = %q, want %q", tc.style, got, tc.want)
+		}
+	}
+}

@@ -172,7 +172,9 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 	ss := vmlShapeStyle(k)
 	if tb := k.Child(ooxml.NSV, "textbox"); tb != nil {
 		if content := tb.Child(ooxml.NSW, "txbxContent"); content != nil {
-			return d.textBox(s, content, w, h, ss, vmlInsets(attrOr(tb, "inset")), depth)
+			n := d.textBox(s, content, w, h, ss, vmlInsets(attrOr(tb, "inset")), depth)
+			d.turn(n, vmlFlow(ooxml.ParseVMLStyle(attrOr(tb, "style"))))
+			return n
 		}
 	}
 	if img := k.Child(ooxml.NSV, "imagedata"); img != nil {
@@ -197,6 +199,19 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 	n := vectorShape(st, geom, ss, w, h)
 	setTransform(n.Style, vmlRotation(vs), strings.Contains(vs["flip"], "x"), strings.Contains(vs["flip"], "y"))
 	return n
+}
+
+// vmlFlow maps a v:textbox's layout-flow (MS-OI29500, 2.1.1394) onto a
+// text direction: vertical reads top to bottom, or bottom to top with
+// mso-layout-flow-alt bottom-to-top.
+func vmlFlow(vs ooxml.VMLStyle) string {
+	if !strings.HasPrefix(vs["layout-flow"], "vertical") {
+		return ""
+	}
+	if vs["mso-layout-flow-alt"] == "bottom-to-top" {
+		return "btLr"
+	}
+	return "tbRl"
 }
 
 // vmlRotation returns the rotation of a VML shape's style in degrees.

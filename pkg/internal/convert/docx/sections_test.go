@@ -186,3 +186,32 @@ func TestSections_StrayBreaksAndEmptyFrames(t *testing.T) {
 		}
 	}
 }
+
+func TestSections_UnequalColumns(t *testing.T) {
+	t.Parallel()
+	b := build(t, `<w:p><w:r><w:t>x</w:t></w:r></w:p><w:sectPr><w:cols w:num="2" w:equalWidth="0"><w:col w:w="2880" w:space="720"/><w:col w:w="5760"/><w:col w:w="1440"/></w:cols></w:sectPr>`, nil)
+	s := b.secs[0]
+	want := []columnTrack{{144, 36}, {288, 0}, {72, 0}}
+	if s.cols != 3 || len(s.colTracks) != len(want) {
+		t.Fatalf("%d columns, tracks %v", s.cols, s.colTracks)
+	}
+	for i := range want {
+		if s.colTracks[i] != want[i] {
+			t.Errorf("track %d = %v, want %v", i, s.colTracks[i], want[i])
+		}
+	}
+}
+
+func TestTextDirections(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ in, want string }{{"btLr", "btLr"}, {"lrV", "btLr"}, {"tbRl", "tbRl"}, {"tbV", "tbRl"}} {
+		if got := textDirection(tc.in); got != tc.want {
+			t.Errorf("textDirection(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+	for _, tc := range []struct{ in, want string }{{"", ""}, {"horz", ""}, {"vert270", "btLr"}, {"vert", "tbRl"}, {"eaVert", "tbRl"}} {
+		if got := bodyVert(tc.in); got != tc.want {
+			t.Errorf("bodyVert(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
