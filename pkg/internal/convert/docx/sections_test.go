@@ -16,7 +16,7 @@ func TestSections_PageBoxes(t *testing.T) {
 		return `<w:p><w:pPr><w:sectPr>` + extra + `</w:sectPr></w:pPr><w:r><w:t>s</w:t></w:r></w:p>`
 	}
 	body := sect(`<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="720" w:bottom="1440" w:left="720" w:header="360" w:footer="360" w:gutter="360"/>`) +
-		sect(`<w:type w:val="continuous"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="720" w:bottom="1440" w:left="720" w:header="360" w:footer="360" w:gutter="360"/><w:cols w:num="2" w:space="360" w:sep="1"/>`) +
+		sect(`<w:type w:val="continuous"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="2880" w:right="1440" w:bottom="1440" w:left="1440" w:header="360" w:footer="360"/><w:cols w:num="2" w:space="360" w:sep="1"/>`) +
 		sect(`<w:type w:val="continuous"/><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/>`) +
 		sect(`<w:type w:val="oddPage"/><w:pgBorders w:offsetFrom="page"><w:top w:val="single" w:sz="8" w:space="24"/><w:left w:val="single" w:sz="8" w:space="24"/><w:bottom w:val="single" w:sz="8" w:space="24"/><w:right w:val="single" w:sz="8" w:space="24"/></w:pgBorders>`) +
 		`<w:sectPr/>`
@@ -25,7 +25,7 @@ func TestSections_PageBoxes(t *testing.T) {
 		t.Fatalf("%d sections", len(b.secs))
 	}
 	if b.secs[1].name != b.secs[0].name || b.secs[2].name == b.secs[1].name {
-		t.Errorf("page names %q %q %q: a continuous break keeps the page only with the same setup", b.secs[0].name, b.secs[1].name, b.secs[2].name)
+		t.Errorf("page names %q %q %q: a continuous break keeps the page only with the same size", b.secs[0].name, b.secs[1].name, b.secs[2].name)
 	}
 	pg := b.d.newPages(b.secs)
 	box := pg.box(layout.PageInfo{Name: b.secs[0].name})

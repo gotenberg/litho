@@ -46,6 +46,7 @@ type section struct {
 	frame            *layout.PageFrame
 	headers, footers map[string]string
 	blocks           []blockNode
+	pending          []pendingAnchor
 	headerH, footerH map[string]float64
 	start            int
 }
@@ -175,10 +176,14 @@ func (s *section) applyOptions(w, h float64, landscape bool) {
 	}
 }
 
-// samePage reports two sections whose pages share their setup, so that a
-// continuous break between them keeps the page.
+// samePage reports two sections whose pages have the same size and
+// orientation, so that a continuous break between them keeps the page
+// (17.18.77 ST_SectionMark continuous). The later section's margins,
+// gutter, headers and footers are not applied: the page and the pages
+// that follow keep the earlier section's setup, as LibreOffice lays a
+// DOCX document out.
 func samePage(a, b *section) bool {
-	return a.width == b.width && a.height == b.height && a.margin == b.margin && a.gutter == b.gutter
+	return a.width == b.width && a.height == b.height
 }
 
 // pageFrame reads a w:pgBorders (17.6.10) into a page frame: inset by
@@ -239,10 +244,12 @@ func (d *document) body(root *ooxml.Element) []*section {
 		s.applyOptions(d.opts.PageWidth, d.opts.PageHeight, d.opts.Landscape)
 		s.index = len(secs)
 		s.blocks = cur
-		cur = nil
+		s.pending = d.pending
+		cur, d.pending = nil, nil
 		secs = append(secs, s)
 		prev = s
 	}
+	d.inBody = true
 	if body != nil {
 		for _, e := range body.Kids() {
 			if d.ctx.Err() != nil {
@@ -266,7 +273,8 @@ func (d *document) body(root *ooxml.Element) []*section {
 		}
 	}
 	closeSection(body.Child(w, "sectPr"))
-	// Name the pages: a continuous break keeps the page when the setup
+	d.inBody = false
+	// Name the pages: a continuous break keeps the page when its size
 	// does not change; any other break starts a page, where the first
 	// paragraph keeps only the part of its space before that the last
 	// paragraph's space after did not already give, as LibreOffice lays
@@ -277,9 +285,17 @@ func (d *document) body(root *ooxml.Element) []*section {
 		if i > 0 && s.breakType == "continuous" {
 			if samePage(secs[i-1], s) {
 				s.name = secs[i-1].name
-			} else {
-				d.warn("approximated", "a continuous section break that changes the page setup starts a new page")
 			}
+		}
+		owner := s
+		for _, o := range secs[:i] {
+			if o.name == s.name {
+				owner = o
+				break
+			}
+		}
+		for _, a := range s.pending {
+			a.resolve(owner)
 		}
 		if i > 0 && s.name != secs[i-1].name && len(s.blocks) > 0 && len(secs[i-1].blocks) > 0 {
 			first, last := s.blocks[0].info, secs[i-1].blocks[len(secs[i-1].blocks)-1].info
