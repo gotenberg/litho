@@ -250,7 +250,6 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 	}
 	r.columns(ts, el, false, false, 0)
 	r.rowsOf(ts, el, false, false, 0)
-	r.flushPending(ts, ts.row)
 	if ts.lastColumnWidth > 0 {
 		sh.DefaultColumnWidth = ts.lastColumnWidth
 	}
@@ -440,6 +439,11 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 	}
 	start := ts.row
 	cells, merges, frames := r.rowCells(ts, el)
+	if n >= visAttrStop && !hasValue(cells) {
+		// A long run of rows whose cells only carry a style: Calc leaves
+		// it out of the used range (SC_VISATTR_STOP).
+		cells, merges = nil, nil
+	}
 	height := tmpl.Height
 	if height == 0 {
 		height = defaultRowHeight
@@ -493,6 +497,22 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 	}
 	ts.row = start + n
 	ts.rowY += float64(n) * height
+}
+
+// visAttrStop is the run of rows with equal attributes and no content
+// below which Calc stops looking for visible attributes when it finds a
+// sheet's used range: 84 rows (SC_VISATTR_STOP, sc/source/core/data
+// attarray.cxx, "more than a default page size").
+const visAttrStop = 84
+
+// hasValue reports a cell with a value among cells.
+func hasValue(cells []sheet.Cell) bool {
+	for _, c := range cells {
+		if c.Value.Kind != sheet.Empty {
+			return true
+		}
+	}
+	return false
 }
 
 // rowHeightSlack is the difference under which a row's height is the
