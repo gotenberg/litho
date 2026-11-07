@@ -68,7 +68,9 @@ const corpusImage = "litho-corpus-builder"
 // command that re-provisions, and run, baseline and check refuse to score it.
 //
 // A corpus the host provisions (see [Manifest.ProvisionedBy]) is skipped with
-// the make target that provisions it: the image has no part in it.
+// the make target that provisions it: the image has no part in it. So is a
+// corpus whose references the host has not built yet (see
+// [Manifest.References]), with the make target that builds them.
 func provisionCorpus(m *Manifest, pins *resolvedPins) error {
 	if m.ProvisionedBy != "" {
 		fmt.Printf("%s: provisioned on the host by %s, not by Docker: skipping\n", m.Name, m.ProvisionedBy)
@@ -82,8 +84,19 @@ func provisionCorpus(m *Manifest, pins *resolvedPins) error {
 		return fmt.Errorf("mkdir testdata: %w", err)
 	}
 
+	if m.References != nil && !hasReferences(testdataRoot, m.References) {
+		fmt.Printf("%s: no references under %s (run %s first): skipping\n", m.Name, filepath.Join(testdataRoot, m.References.Dir), m.References.BuiltBy)
+		return nil
+	}
+
 	if provisioned(testdataRoot, m) {
-		fmt.Printf("%s: already provisioned (delete %s to force regeneration)\n", m.Name, testdataRoot)
+		forced := testdataRoot
+		if m.References != nil {
+			// The testdata root also holds the fetched sources and the
+			// references the goldens come from: only what init made goes.
+			forced = filepath.Join(testdataRoot, "pdfs") + " and " + filepath.Join(testdataRoot, "goldens")
+		}
+		fmt.Printf("%s: already provisioned (delete %s to force regeneration)\n", m.Name, forced)
 		check := checkCorpusVersions(m, m.TestdataRoot(), featuresFromGoldens(m), pins)
 		for _, line := range check.Warnings {
 			fmt.Printf("warning: %s\n", line)
@@ -272,6 +285,14 @@ func provisioned(testdataRoot string, m *Manifest) bool {
 		}
 	}
 	return true
+}
+
+// hasReferences reports whether the host built the corpus's references:
+// their manifest is in place. Without it the image has nothing to derive
+// goldens from, so the corpus is skipped rather than failing the whole init.
+func hasReferences(testdataRoot string, refs *ReferenceSpec) bool {
+	info, err := os.Stat(filepath.Join(testdataRoot, filepath.FromSlash(refs.Dir), referenceManifestName))
+	return err == nil && info.Mode().IsRegular() && info.Size() > 0
 }
 
 // veraPDFGolden reports whether a feature's golden comes from the
