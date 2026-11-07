@@ -263,7 +263,7 @@ func (d *document) body(root *ooxml.Element) []*section {
 	}
 	d.inBody = true
 	if body != nil {
-		for _, e := range body.Kids() {
+		for _, e := range mergeDeleted(body.Kids()) {
 			if d.ctx.Err() != nil {
 				break
 			}

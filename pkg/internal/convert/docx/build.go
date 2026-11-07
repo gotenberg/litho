@@ -77,7 +77,7 @@ func (d *document) blocksInto(s *story, c *cond, parent *ooxml.Element, depth in
 		d.warn("too-deep", "content nested too deep is left out")
 		return
 	}
-	for _, e := range parent.Kids() {
+	for _, e := range mergeDeleted(parent.Kids()) {
 		if e.Space != w || d.ctx.Err() != nil {
 			continue
 		}
