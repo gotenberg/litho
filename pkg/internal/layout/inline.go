@@ -463,6 +463,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			return s.discard(d, p, y)
 		}
 		if p.p == nil || p.p.Len() == 0 {
+			s.recordEmptyAnchors(p, 0, 0, &lineBox{x: cb.x, y: pendingTop(y, mc, first)})
 			s.placeFloats(p, 0, math.MaxInt, pendingTop(y, mc, first), mc, first)
 			s.staticRest(p, y, mc, first)
 			if p.forced {
@@ -559,6 +560,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			s.settle(l)
 			s.lines = append(s.lines, l)
 			s.recordAnchors(l)
+			s.recordEmptyAnchors(p, pos, end, l)
 			s.staticLine(p, pos, end, l)
 			y = top + e.advance(l)
 			s.placeFloats(p, pos+1, end, y, mc, false)
@@ -1237,6 +1239,29 @@ func (s *inlineState) recordAnchors(l *lineBox) {
 		if b := it.box; b != nil && !b.anchorSet {
 			b.anchorX, b.anchorY, b.anchorSet = l.x+it.x, l.y+it.baseline-it.ascent, true
 		}
+	}
+}
+
+// recordEmptyAnchors records where the empty inline boxes with an ID that
+// open in the characters [start, end) of p land on the line l: at the
+// item that follows them, on the line's top. Such a box makes no fragment
+// of its own (CSS 2.1, 9.4.2), yet the converter anchors running elements
+// and named strings to it.
+func (s *inlineState) recordEmptyAnchors(p *ifcPara, start, end int, l *lineBox) {
+	for _, o := range p.opens {
+		b := o.box
+		if b.id == "" || b.anchorSet || o.pos < start || o.pos > end || o.pos == end && end < p.n {
+			continue
+		}
+		x := 0.0
+		for _, it := range l.items {
+			if it.start >= o.pos {
+				x = it.x
+				break
+			}
+			x = it.x + it.w
+		}
+		b.anchorX, b.anchorY, b.anchorSet = l.x+x, l.y, true
 	}
 }
 

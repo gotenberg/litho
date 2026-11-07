@@ -70,6 +70,9 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	if e.err != nil {
 		return nil, e.err
 	}
+	if opts.Placed != nil {
+		opts.Placed(e.anchors(rb, e.pageCount(rb, disp)))
+	}
 	res := &Result{Structure: e.root, ContentWidth: e.overflowRight(rb)}
 	used := map[*compose.StructElem]bool{}
 	res.Pages = e.assemble(disp, canvas, rb, used)

@@ -262,7 +262,7 @@ func (p *prepared) marginContent(ctx context.Context, info layout.PageInfo, page
 			continue
 		}
 		mb := &marginBox{which: which, st: st, cb: containingBlock(which, pb)}
-		mb.kids = p.marginNodes(ctx, st, info.Index+1, pages)
+		mb.kids = p.marginNodes(ctx, st, info.Index+1, pages, pb)
 		p.fixedAxes(mb)
 		boxes = append(boxes, mb)
 	}
@@ -573,11 +573,12 @@ func blockStyle(st *css.Style) *css.Style {
 }
 
 // marginNodes returns the content of a page-margin box of style st on
-// page number page of pages (CSS Page 3, 5.2; CSS Generated Content 3,
-// 1.1): its strings, its page and pages counters, every other counter at
-// zero, attr() at its fallback since a page-margin box has no element, and
-// its images.
-func (p *prepared) marginNodes(ctx context.Context, st *css.Style, page, pages int) []*layout.Node {
+// page number page of pages, whose page box is pb (CSS Page 3, 5.2; CSS
+// Generated Content 3, 1.1): its strings, its page and pages counters,
+// every other counter at zero, attr() at its fallback since a page-margin
+// box has no element, its images, its leaders, and the named strings and
+// running elements the page shows (CSS GCPM 3, 2).
+func (p *prepared) marginNodes(ctx context.Context, st *css.Style, page, pages int, pb layout.PageBox) []*layout.Node {
 	ts := anonInline(st)
 	var out []*layout.Node
 	var sb strings.Builder
@@ -614,7 +615,28 @@ func (p *prepared) marginNodes(ctx context.Context, st *css.Style, page, pages i
 					out = append(out, &layout.Node{Kind: layout.Replaced, Style: anonInline(ts), Picture: pic})
 				}
 			}
-		case css.ItemOpenQuote, css.ItemCloseQuote, css.ItemNoOpenQuote, css.ItemNoCloseQuote:
+		case css.ItemLeader:
+			if n := leaderNode(ts, it.Text); n != nil {
+				flush()
+				out = append(out, n)
+			}
+		case css.ItemNamedString, css.ItemElement:
+			if p.b == nil {
+				continue
+			}
+			g := &p.b.gcpm
+			top := pb.Bleed + pb.Margin[css.Top]
+			if it.Kind == css.ItemNamedString {
+				if a, ok := g.pick(g.strings, it.Text, it.Pick, page-1, top); ok {
+					sb.WriteString(a.value)
+				}
+				continue
+			}
+			if a, ok := g.pick(g.running, it.Text, it.Pick, page-1, top); ok && a.node != nil {
+				flush()
+				out = append(out, a.node)
+			}
+		case css.ItemOpenQuote, css.ItemCloseQuote, css.ItemNoOpenQuote, css.ItemNoCloseQuote, css.ItemContent:
 		}
 	}
 	flush()

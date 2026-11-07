@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -59,4 +60,21 @@ func TestLeader_NoIntrinsicWidth(t *testing.T) {
 	assertPixels(t, run(t, root, page(6, 2)), 1, `
 		RR____
 		RR____`)
+}
+
+func TestAnchors_EmptyInlineBoxes(t *testing.T) {
+	t.Parallel()
+	red2 := sty(font(2), fg(red))
+	mark := func(id string) *Node { n := el(inlineSty(font(2)), nil...); n.ID = id; return n }
+	root := doc(el(red2, txt(red2, "XX XX X"), mark("mid"), txt(red2, "X")), el(red2, mark("alone")), el(red2, txt(red2, "X")))
+	res, err := Layout(context.Background(), root, ahem(t), Options{Page: page(10, 2)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d, ok := res.Anchors["mid"]; !ok || d.Page != 2 || d.X != px(2) {
+		t.Errorf("mid: %+v %v, want page 2", d, ok)
+	}
+	if d, ok := res.Anchors["alone"]; !ok || d.Page != 3 {
+		t.Errorf("alone: %+v %v, want page 3", d, ok)
+	}
 }

@@ -81,6 +81,11 @@ func (p *prepared) setupPages(ctx context.Context, r *css.Resolver) {
 		p.layout.PageFor = func(info layout.PageInfo) layout.PageBox { return p.setup.layoutBox(p.pages.box(info)) }
 	}
 	boxes := r.HasMarginBoxes()
+	if boxes && p.b != nil && p.b.gcpm.active() {
+		// The named strings and running elements a page shows follow
+		// where their elements landed (CSS GCPM 3, 2).
+		p.layout.Placed = func(a map[string]compose.Dest) { p.b.gcpm.placed = a }
+	}
 	if !boxes && p.o.HeaderTemplate == "" && p.o.FooterTemplate == "" {
 		return
 	}

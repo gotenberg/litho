@@ -158,6 +158,12 @@ type Options struct {
 	// it once per page, in page order, from its own goroutine; it may call
 	// Layout itself.
 	MarginContent func(page PageInfo, pages int) []compose.Fragment
+	// Placed, when not nil, receives what [Result.Anchors] will hold,
+	// once the flow is laid out and before the first MarginContent call,
+	// so that page-margin content can follow where anchored nodes landed:
+	// the named strings and running elements of a page (CSS GCPM 3, 2).
+	// Layout calls it once, from its own goroutine.
+	Placed func(anchors map[string]compose.Dest)
 	// Lang is the document language as a BCP 47 tag, used for a node
 	// without one in its ancestry, "" for unknown.
 	Lang string

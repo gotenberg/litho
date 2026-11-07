@@ -85,6 +85,8 @@ type builder struct {
 	// ids are anchors set on elements over their id attributes, nil for
 	// none.
 	ids map[*dom.Node]string
+	// gcpm holds the named strings and running elements (CSS GCPM 3, 2).
+	gcpm gcpmState
 }
 
 // buildRoot builds the content tree of the root element.
@@ -116,16 +118,21 @@ func (b *builder) content(ctx context.Context, node *layout.Node, n *dom.Node, s
 	}
 	b.counters.open()
 	defer b.counters.close()
-	if g := b.pseudo(ctx, n, css.PseudoBefore); g != nil {
-		node.Children = append(node.Children, g)
+	before := b.pseudo(ctx, n, css.PseudoBefore)
+	if before != nil {
+		node.Children = append(node.Children, before)
 	}
 	kids, err := b.children(ctx, n, st, depth)
 	if err != nil {
 		return err
 	}
 	node.Children = append(node.Children, kids...)
-	if g := b.pseudo(ctx, n, css.PseudoAfter); g != nil {
-		node.Children = append(node.Children, g)
+	after := b.pseudo(ctx, n, css.PseudoAfter)
+	if after != nil {
+		node.Children = append(node.Children, after)
+	}
+	if len(st.StringSet) > 0 {
+		b.setStrings(n, node, st, before, after)
 	}
 	return nil
 }
@@ -219,6 +226,12 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 	b.semantics(node, n)
 	if err := b.content(ctx, node, n, st, v, depth+1); err != nil {
 		return nil, err
+	}
+	if st.Running != "" {
+		if keep := b.runAway(node, st); keep != nil {
+			return []*layout.Node{keep}, nil
+		}
+		return nil, nil
 	}
 	return []*layout.Node{node}, nil
 }
