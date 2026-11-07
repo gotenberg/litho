@@ -20,7 +20,7 @@ func TestHTMLUserAgent_ParsesClean(t *testing.T) {
 
 func TestHTMLUserAgent_Rendering(t *testing.T) {
 	t.Parallel()
-	c := compute(t, `<body id=body><h2 id=h2>x</h2><pre id=pre>x</pre><blockquote id=bq>q</blockquote>
+	c := compute(t, `<body id=body><h2 id=h2>x</h2><section><h1 id=h1>x</h1></section><pre id=pre>x</pre><blockquote id=bq>q</blockquote>
 <hr id=hr><code id=code>c</code><b id=b>b</b><sub id=sub>s</sub><p id=hid hidden>h</p><center id=center>c</center>
 <marquee id=mq>m</marquee><table><caption id=cap>c</caption><tr id=tr><th id=th>h</th></tr></table>
 <p id=rtl dir=RTL>r</p><input id=hiddenin type=hidden><s id=s>s</s><dd id=dd>d</dd></body>`, ``)
@@ -32,6 +32,9 @@ func TestHTMLUserAgent_Rendering(t *testing.T) {
 		{"h2", func(s *Style) bool {
 			return s.FontSize == 18 && s.FontWeight == 700 && dimEq(s.Margin[Top], pts(18*0.83))
 		}},
+		// An h1 inside sectioning content keeps its size: the HTML Standard
+		// dropped the smaller nested sizes in 2025, and Chromium with it.
+		{"h1", func(s *Style) bool { return s.FontSize == 24 && dimEq(s.Margin[Top], pts(24*0.67)) }},
 		{"pre", func(s *Style) bool { return s.WhiteSpace == Pre && s.FontFamilies[0] == "monospace" }},
 		{"bq", func(s *Style) bool { return s.Margin[Left] == pts(30) && s.Margin[Top] == pts(12) }},
 		{"hr", func(s *Style) bool {
