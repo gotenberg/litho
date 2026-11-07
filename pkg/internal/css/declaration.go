@@ -235,7 +235,7 @@ func mixedCalc(l []token) bool {
 	for i := range l {
 		t := &l[i]
 		if isCalc(t) {
-			if v, ok := parseCalc(t.children, 0); ok && !v.isNum && v.l.mixed() {
+			if v, ok := calcOf(t, 0); ok && !v.isNum && v.l.mixed() {
 				return true
 			}
 		}

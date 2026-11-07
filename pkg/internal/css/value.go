@@ -16,6 +16,33 @@ type length struct {
 	// hasLen and hasPct record the types the value holds, whatever the
 	// coefficients: calc(10px + 0%) is still a mix (CSS Values 4, 10.8).
 	hasLen, hasPct bool
+	// cmp, when set, is a comparison function the value adds cmpK times:
+	// a min(), max() or clamp() whose arguments only resolve at computed
+	// value time (CSS Values 4, 10.2). It is shared and never mutated.
+	cmp  *calcCmp
+	cmpK float64
+	// bad marks a sum of two comparison functions, which a length cannot
+	// hold: the value is invalid.
+	bad bool
+}
+
+// calcCmp is a min() or max() of lengths (CSS Values 4, 10.2); clamp(a, b,
+// c) is max(a, min(b, c)).
+type calcCmp struct {
+	max  bool
+	args []length
+}
+
+// eval resolves the comparison against c.
+func (m *calcCmp) eval(c lenCtx) float64 {
+	v := 0.0
+	for i, a := range m.args {
+		x := a.points(c)
+		if i == 0 || m.max && x > v || !m.max && x < v {
+			v = x
+		}
+	}
+	return v
 }
 
 func (l length) mixed() bool { return l.hasLen && l.hasPct }
@@ -31,11 +58,17 @@ func (l length) scale(k float64) length {
 	l.vmin *= k
 	l.vmax *= k
 	l.pct *= k
+	l.cmpK *= k
 	return l
 }
 
 func (l length) add(o length) length {
+	cmp, k := l.cmp, l.cmpK
+	if o.cmp != nil {
+		cmp, k = o.cmp, o.cmpK
+	}
 	return length{
+		cmp: cmp, cmpK: k, bad: l.bad || o.bad || l.cmp != nil && o.cmp != nil,
 		pt: l.pt + o.pt, em: l.em + o.em, ex: l.ex + o.ex, ch: l.ch + o.ch, rem: l.rem + o.rem,
 		vw: l.vw + o.vw, vh: l.vh + o.vh, vmin: l.vmin + o.vmin, vmax: l.vmax + o.vmax,
 		pct: l.pct + o.pct, hasLen: l.hasLen || o.hasLen, hasPct: l.hasPct || o.hasPct,
@@ -64,6 +97,9 @@ func (l length) points(c lenCtx) float64 {
 	}
 	v := l.pt + (l.em+l.ex*ex+l.ch*ch)*c.fontSize + l.rem*c.rootFontSize +
 		(l.vw*c.width+l.vh*c.height+l.vmin*vmin+l.vmax*vmax)/100
+	if l.cmp != nil {
+		v += l.cmpK * l.cmp.eval(c)
+	}
 	return clampLen(v)
 }
 
@@ -148,13 +184,89 @@ const (
 	allowMixed
 )
 
-// isCalc reports whether t is a calc() function, prefixed or not.
+// isCalc reports whether t is a math function: calc(), prefixed or not,
+// or one of the comparison functions min(), max() and clamp() (CSS Values
+// 4, 10.1 and 10.2).
 func isCalc(t *token) bool {
 	if t.typ != tFunction {
 		return false
 	}
-	n := lower(t.value)
-	return n == "calc" || n == "-webkit-calc" || n == "-moz-calc"
+	switch lower(t.value) {
+	case "calc", "-webkit-calc", "-moz-calc", "min", "max", "clamp":
+		return true
+	}
+	return false
+}
+
+// maxCmpArgs caps the arguments of one min() or max(): 32. Real styles
+// compare two or three values. Anti-DoS guard, not spec-mandated.
+const maxCmpArgs = 32
+
+// calcOf evaluates the math function t, which [isCalc] accepts.
+func calcOf(t *token, depth int) (calcValue, bool) {
+	name := lower(t.value)
+	if name != "min" && name != "max" && name != "clamp" {
+		return parseCalc(t.children, depth)
+	}
+	if depth > maxCalcDepth {
+		return calcValue{}, false
+	}
+	parts := splitCommas(t.children)
+	if len(parts) == 0 || len(parts) > maxCmpArgs || name == "clamp" && len(parts) != 3 {
+		return calcValue{}, false
+	}
+	vals := make([]calcValue, len(parts))
+	for i, p := range parts {
+		v, ok := parseCalc(p, depth+1)
+		if !ok || v.isNum != vals[0].isNum && i > 0 || v.l.hasPct || v.l.bad {
+			// A percentage inside a comparison resolves only at used
+			// value time, which a computed length cannot defer.
+			return calcValue{}, false
+		}
+		vals[i] = v
+	}
+	if name == "clamp" {
+		inner, ok := compare(vals[1:], false)
+		if !ok {
+			return calcValue{}, false
+		}
+		return compare([]calcValue{vals[0], inner}, true)
+	}
+	return compare(vals, name == "max")
+}
+
+// compare returns the minimum of vals, or their maximum when isMax: a
+// number or a plain length at once, a deferred [calcCmp] otherwise.
+func compare(vals []calcValue, isMax bool) (calcValue, bool) {
+	if vals[0].isNum {
+		v := vals[0].num
+		for _, x := range vals[1:] {
+			if isMax && x.num > v || !isMax && x.num < v {
+				v = x.num
+			}
+		}
+		return calcValue{isNum: true, num: v}, finite(v)
+	}
+	plain := true
+	for _, x := range vals {
+		if x.l.cmp != nil || x.l.em != 0 || x.l.ex != 0 || x.l.ch != 0 || x.l.rem != 0 || x.l.vw != 0 || x.l.vh != 0 || x.l.vmin != 0 || x.l.vmax != 0 {
+			plain = false
+		}
+	}
+	if plain {
+		v := vals[0].l.pt
+		for _, x := range vals[1:] {
+			if isMax && x.l.pt > v || !isMax && x.l.pt < v {
+				v = x.l.pt
+			}
+		}
+		return calcValue{l: length{pt: v, hasLen: true}}, true
+	}
+	m := &calcCmp{max: isMax, args: make([]length, len(vals))}
+	for i, x := range vals {
+		m.args[i] = x.l
+	}
+	return calcValue{l: length{hasLen: true, cmp: m, cmpK: 1}}, true
 }
 
 // parseLength parses a <length> or <length-percentage> component value
@@ -180,8 +292,8 @@ func parseLength(t token, f lengthFlags) (length, bool) {
 		if !isCalc(&t) {
 			return length{}, false
 		}
-		v, ok := parseCalc(t.children, 0)
-		if !ok || v.isNum {
+		v, ok := calcOf(&t, 0)
+		if !ok || v.isNum || v.l.bad {
 			return length{}, false
 		}
 		if v.l.hasPct && f&allowPct == 0 {
@@ -332,7 +444,7 @@ func calcLeaf(c *calcCursor, depth int) (calcValue, bool) {
 		return parseCalc(t.children, depth+1)
 	case tFunction:
 		if isCalc(t) {
-			return parseCalc(t.children, depth+1)
+			return calcOf(t, depth+1)
 		}
 	case tIdent:
 		// CSS Values 4, 10.7.1: the numeric constants. An infinite value
@@ -364,7 +476,7 @@ func parseNumber(t token) (float64, bool) {
 		return t.num, finite(t.num)
 	case tFunction:
 		if isCalc(&t) {
-			v, ok := parseCalc(t.children, 0)
+			v, ok := calcOf(&t, 0)
 			if ok && v.isNum {
 				return v.num, true
 			}
@@ -568,7 +680,7 @@ func numberOrPct(t token, allowNone bool) (v float64, pct bool, ok bool) {
 		}
 	case tFunction:
 		if isCalc(&t) {
-			c, ok := parseCalc(t.children, 0)
+			c, ok := calcOf(&t, 0)
 			if !ok {
 				return 0, false, false
 			}

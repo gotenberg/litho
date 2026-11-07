@@ -52,7 +52,17 @@ func TestParseLength_Units(t *testing.T) {
 		{"calc(3)", 0, Dimension{}, false},
 		{"calc(1px + 2)", 0, Dimension{}, false},
 		{"-webkit-calc(2px)", 0, pts(1.5), true},
-		{"min(1px, 2px)", 0, Dimension{}, false},
+		{"min(1px, 2px)", 0, pts(0.75), true},
+		{"max(1rem, 1px)", 0, pts(12), true},
+		{"max(1px, 1em)", 0, pts(10), true},
+		{"min(2em, 30px)", 0, pts(20), true},
+		{"clamp(1px, 1em, 4px)", 0, pts(3), true},
+		{"calc(2 * max(1px, 1em) + 1px)", 0, pts(20.75), true},
+		{"calc(max(1em, 1px) - min(1em, 1px))", 0, Dimension{}, false},
+		{"max(1px, 50%)", allowPct, Dimension{}, false},
+		{"min(1px)", 0, pts(0.75), true},
+		{"clamp(1px, 2px)", 0, Dimension{}, false},
+		{"max(1px, 2)", 0, Dimension{}, false},
 		{"1e999px", 0, Dimension{}, false},
 	}
 	for _, tt := range tests {
