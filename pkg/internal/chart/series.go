@@ -119,6 +119,7 @@ func (rd *renderer) series(g *Group, x, y *dim) []func() {
 		return rd.bars(g, x, y)
 	case Area:
 		return rd.areas(g, x, y)
+	case Line, Pie, Doughnut, Radar:
 	}
 	return rd.lines(g, x, y)
 }
@@ -196,7 +197,7 @@ func (rd *renderer) bars(g *Group, x, y *dim) []func() {
 			rd.add(paintRect(r, rd.fillOf(g, s, j), rd.borderOf(g, s, j)))
 			lb := mergeLabels(g.Labels, s.labelsOf(j))
 			if lb.Any() {
-				s, j, r, raw, neg := s, j, r, sv.raw[i][j], v < b
+				raw, neg := sv.raw[i][j], v < b
 				stacked := g.Grouping != Clustered
 				labels = append(labels, func() { rd.barLabel(g, s, j, raw, lb, r, x.vertical, neg, stacked) })
 			}
@@ -273,6 +274,7 @@ func (rd *renderer) barLabel(g *Group, s *Series, j int, v float64, lb Labels, r
 		} else {
 			cy = r.Y + r.Height - labelSpacing - h/2
 		}
+	case LabelAuto, LabelCenter, LabelAbove, LabelBelow, LabelLeft, LabelRight, LabelBestFit:
 	}
 	rd.labelFrame(b, lb, cx, cy)
 }
@@ -429,7 +431,7 @@ func (rd *renderer) lines(g *Group, x, y *dim) []func() {
 			if !lb.Any() {
 				continue
 			}
-			s, p, raw := s, p, sv.raw[i][j]
+			raw := sv.raw[i][j]
 			m := rd.markerOf(g, s, j)
 			labels = append(labels, func() { rd.pointLabel(g, s, j, raw, lb, p, m.Size) })
 		}
@@ -455,7 +457,7 @@ func (rd *renderer) pointLabel(g *Group, s *Series, j int, v float64, lb Labels,
 		cx -= d + w/2
 	case LabelRight:
 		cx += d + w/2
-	default:
+	case LabelAuto, LabelInsideEnd, LabelInsideBase, LabelOutsideEnd, LabelAbove, LabelBestFit:
 		cy -= d + h/2
 	}
 	rd.labelFrame(b, lb, cx, cy)
@@ -505,7 +507,7 @@ func (rd *renderer) areas(g *Group, x, y *dim) []func() {
 			if !lb.Any() || math.IsNaN(sv.raw[i][j]) {
 				continue
 			}
-			s, j, raw := s, j, sv.raw[i][j]
+			raw := sv.raw[i][j]
 			p := compose.Point{X: (top[j].X + bottom[j].X) / 2, Y: (top[j].Y + bottom[j].Y) / 2}
 			labels = append(labels, func() {
 				lb2 := lb
@@ -581,7 +583,6 @@ func (rd *renderer) scatter(g *Group, x, y *dim) []func() {
 				continue
 			}
 			v, _ := vals.number(j)
-			s, p := s, p
 			labels = append(labels, func() { rd.pointLabel(g, s, j, v, lb, p, rd.markerOf(g, s, j).Size) })
 		}
 	}

@@ -97,11 +97,13 @@ func (rd *renderer) render(r compose.Rect) {
 	if !(plot.Width > 1) || !(plot.Height > 1) {
 		return
 	}
-	if pie {
+	switch {
+	case len(c.Groups) == 0:
+	case pie:
 		rd.pies(plot)
-		return
+	default:
+		rd.cartesian(plot)
 	}
-	rd.cartesian(plot)
 }
 
 // title places t centred at the top of rem, top distance below rem's top,

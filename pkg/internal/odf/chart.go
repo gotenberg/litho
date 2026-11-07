@@ -296,8 +296,9 @@ func (r *chartReader) textStyle(name string, inherit chart.TextStyle) chart.Text
 // paraText returns the text of an element's text:p children, a line
 // each.
 func paraText(e *Element) string {
-	var lines []string
-	for _, p := range e.All(NSText, "p") {
+	paras := e.All(NSText, "p")
+	lines := make([]string, 0, len(paras))
+	for _, p := range paras {
 		lines = append(lines, p.TextContent())
 	}
 	return strings.Join(lines, "\n")
@@ -687,7 +688,7 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 		if v, ok := r.prop(name, "chart-properties", NSChart, "interpolation"); ok && v != "none" {
 			s.Smooth = true
 		}
-	default:
+	case chart.Bar, chart.Area, chart.Pie, chart.Doughnut, chart.Bubble:
 		s.Fill = r.fill(name, nil)
 		s.Border = r.lineOf(name, nil)
 	}

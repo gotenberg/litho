@@ -94,15 +94,16 @@ func autoScale(ax *Axis, lo, hi float64, opt scaleOptions) scale {
 		}
 	}
 	if tMin == tMax {
-		if autoMax || !autoMin {
+		switch {
+		case autoMax || !autoMin:
 			if tMax == 0 {
 				tMax = 1
 			} else {
 				tMax *= 2
 			}
-		} else if tMin == 0 {
+		case tMin == 0:
 			tMin = -1
-		} else {
+		default:
 			tMin /= 2
 		}
 	}

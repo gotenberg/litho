@@ -42,12 +42,11 @@ func sector(cx, cy, r0, r1, a0, a1 float64) []compose.PathOp {
 
 // pieLabel is a data label of a sector, laid out before the pie is sized.
 type pieLabel struct {
-	b       *block
-	lb      Labels
-	mid     float64
-	r0, r1  float64
-	cx, cy  float64
-	outside bool
+	b      *block
+	lb     Labels
+	mid    float64
+	r0, r1 float64
+	cx, cy float64
 }
 
 // pies draws a pie or doughnut group into plot: the sectors of the first

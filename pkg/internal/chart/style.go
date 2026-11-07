@@ -83,7 +83,7 @@ func (rd *renderer) borderOf(g *Group, s *Series, j int) *Stroke {
 	if s.Border != nil {
 		return s.Border
 	}
-	if lined(g.Kind) && !(g.Kind == Radar && g.Filled) {
+	if lined(g.Kind) && (g.Kind != Radar || !g.Filled) {
 		return &Stroke{Color: rd.c.AutoColor(s.Index, rd.c.seriesCount()), Width: 1}
 	}
 	return nil
@@ -109,7 +109,7 @@ func (rd *renderer) markerOf(g *Group, s *Series, j int) Marker {
 		m = p.Marker
 	}
 	if m.Symbol == MarkerAuto {
-		m.Symbol = MarkerSquare + MarkerSymbol(s.Index%int(MarkerVerticalBar-MarkerSquare+1))
+		m.Symbol = MarkerSquare + MarkerSymbol(max(s.Index, 0)%int(MarkerVerticalBar-MarkerSquare+1)) //nolint:gosec // under 15 by the modulo
 	}
 	if !(m.Size > 0) {
 		m.Size = 5

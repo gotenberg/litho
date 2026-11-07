@@ -116,6 +116,7 @@ func (d *dim) crossValue() float64 {
 			return float64(o.n) - 0.5
 		case CrossValue:
 			return at - 1
+		case CrossAuto, CrossMin:
 		}
 		if o.between {
 			return -0.5
@@ -129,6 +130,7 @@ func (d *dim) crossValue() float64 {
 		return o.sc.max
 	case CrossValue:
 		return o.sc.clamp(at)
+	case CrossAuto:
 	}
 	if o.sc.log > 0 {
 		return o.sc.min
@@ -162,6 +164,7 @@ func (d *dim) atHighEnd() bool {
 			return true
 		case LabelLow:
 			return false
+		case LabelNextTo, LabelNone:
 		}
 		if d.ax.Crosses == CrossMax {
 			return d.other.ax == nil || !d.other.ax.Reverse
@@ -625,6 +628,7 @@ func (rd *renderer) axisLine(d *dim) {
 			in = length
 		case TickCross:
 			out, in = length, length
+		case TickNone:
 		}
 		for _, f := range fs {
 			p := d.pixel(f)

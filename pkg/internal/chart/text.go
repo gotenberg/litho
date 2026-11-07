@@ -124,6 +124,7 @@ func (b *block) draw(cx, cy float64, al align) []compose.Fragment {
 			dx = (b.w - l.Width) / 2
 		case alignRight:
 			dx = b.w - l.Width
+		case alignLeft:
 		}
 		base := y + (b.lineH[i]-l.Ascent-l.Descent)/2 + l.Ascent
 		for _, run := range l.Runs {

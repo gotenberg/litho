@@ -743,7 +743,7 @@ func (p *chartReader) axis(e *Element, kind chart.AxisKind) *chart.Axis {
 		a.Crosses, a.CrossAt = chart.CrossValue, v
 	}
 	if nf := e.Child(NSChart, "numFmt"); nf != nil {
-		if code := attrOr(nf, "formatCode"); code != "" && !(attrOr(nf, "sourceLinked") == "1" && strings.EqualFold(code, "General")) {
+		if code := attrOr(nf, "formatCode"); code != "" && (attrOr(nf, "sourceLinked") != "1" || !strings.EqualFold(code, "General")) {
 			a.Format = code
 		}
 	}

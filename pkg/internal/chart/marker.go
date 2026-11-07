@@ -89,6 +89,7 @@ func markerPath(sym MarkerSymbol, x, y, s float64) []compose.PathOp {
 		return polygon(pt(-1, -0.3), pt(1, -0.3), pt(1, 0.3), pt(-1, 0.3))
 	case MarkerVerticalBar:
 		return polygon(pt(-0.3, -1), pt(0.3, -1), pt(0.3, 1), pt(-0.3, 1))
+	case MarkerAuto, MarkerNone, MarkerSquare:
 	}
 	return polygon(pt(-1, -1), pt(1, -1), pt(1, 1), pt(-1, 1))
 }

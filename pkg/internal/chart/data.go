@@ -85,6 +85,7 @@ func (d Data) number(i int) (float64, bool) {
 			return 0, false
 		}
 		return f, true
+	case Empty:
 	}
 	return 0, false
 }
@@ -101,6 +102,7 @@ func (d Data) label(i int) string {
 		return v.Text
 	case Number:
 		return formatLabel(d.Format, v.Number)
+	case Empty:
 	}
 	return ""
 }
@@ -114,6 +116,7 @@ func (d Data) numeric() bool {
 			return false
 		case Number:
 			n++
+		case Empty:
 		}
 	}
 	return n > 0

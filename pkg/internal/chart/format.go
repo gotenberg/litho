@@ -129,6 +129,16 @@ func tokenize(sec string) []token {
 	}
 	for i := 0; i < len(sec); i++ {
 		c := sec[i]
+		if up := strings.ToUpper(sec[i:min(i+5, len(sec))]); strings.HasPrefix(up, "AM/PM") || strings.HasPrefix(up, "A/P") {
+			n := 5
+			if !strings.HasPrefix(up, "AM/PM") {
+				n = 3
+			}
+			flush()
+			toks = append(toks, token{code: up[:n]})
+			i += n - 1
+			continue
+		}
 		switch c {
 		case '"':
 			j := strings.IndexByte(sec[i+1:], '"')

@@ -66,7 +66,7 @@ func (rd *renderer) legendEntries(st TextStyle, maxW float64) []legendEntry {
 // entry builds the legend entry of series s, or of its point j.
 func (rd *renderer) entry(g *Group, s *Series, j int, name string, st TextStyle, maxW float64) legendEntry {
 	e := legendEntry{label: rd.measure(name, st, maxW), fill: rd.fillOf(g, s, j), border: rd.borderOf(g, s, j)}
-	if lined(g.Kind) && !(g.Kind == Radar && g.Filled) {
+	if lined(g.Kind) && (g.Kind != Radar || !g.Filled) {
 		e.marker = rd.markerOf(g, s, j)
 		if e.border != nil && !e.border.None {
 			e.lineKey = true
@@ -162,7 +162,7 @@ func (rd *renderer) legend(page compose.Rect, rem *compose.Rect) {
 		x, y = page.X+page.Width/2-w/2, rem.Y+rem.Height-legendTopMargin-h
 	case LegendTopRight:
 		x, y = page.X+page.Width-legendSideMargin-w, rem.Y+legendTopMargin
-	default:
+	case LegendRight:
 		x, y = page.X+page.Width-legendSideMargin-w, page.Y+page.Height/2-h/2
 	}
 	x = max(page.X, min(x, page.X+page.Width-w))
@@ -199,7 +199,7 @@ func (rd *renderer) legend(page compose.Rect, rem *compose.Rect) {
 		rem.Height -= d
 	case LegendBottom:
 		rem.Height -= h + legendTopMargin
-	default:
+	case LegendRight:
 		rem.Width -= w + legendSideMargin
 	}
 }
