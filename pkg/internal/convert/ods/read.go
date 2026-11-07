@@ -224,7 +224,7 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 	st := r.styles.Style(odf.ScopeContent, odf.FamilyTable, el.A(odf.NSTable, "style-name"))
 	tp := r.styles.Resolve(odf.ScopeContent, odf.FamilyTable, el.A(odf.NSTable, "style-name"), odf.TableProps)
 	sh := &sheet.Sheet{
-		Name:   name,
+		Name: name,
 		// table:print false is what Calc writes for a sheet without print
 		// ranges that does not print entirely; Calc still prints its used
 		// range, so only table:display hides a sheet (ODF 1.3, Part 3,
