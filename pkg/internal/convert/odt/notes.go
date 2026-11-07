@@ -59,7 +59,7 @@ func (b *builder) note(c *odf.Element, t textState, out *[]*layout.Node, ws *wsS
 	} else {
 		at.pos, at.rel, at.auto = noteAnchorRaise, noteAnchorScale, 1
 	}
-	call := b.run(label, at, false)
+	call := b.run(label, at)
 	ws.space = false
 
 	// The number in the note area takes the text properties of the
@@ -83,7 +83,7 @@ func (b *builder) note(c *odf.Element, t textState, out *[]*layout.Node, ws *wsS
 	b.hf = nil
 	body := b.blocks(bodyEl, blockCtx{depth: depth, defStyle: b.notePara(cfg, class)})
 	b.hf = saved
-	prefix := b.run(label, bt, false)
+	prefix := b.run(label, bt)
 	if len(body) > 0 && body[0].Style.Display != css.Table && body[0].Style.TextIndent.Value < 0 {
 		// Writer sets the number in a hanging first-line indent and
 		// starts the text at the paragraph's indent, as a list label.

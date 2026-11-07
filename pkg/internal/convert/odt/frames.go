@@ -242,11 +242,11 @@ func (b *builder) frameBox(g frameGeom) *css.Style {
 // box on the line; one anchored to the paragraph or a character floats
 // beside the text as style:wrap says, or sits in the flow above the
 // paragraph when nothing wraps around it; draw:a makes its frame a link.
-func (b *builder) inlineFrame(c *odf.Element, t textState, out *[]*layout.Node, ws *wsState, depth int) {
+func (b *builder) inlineFrame(c *odf.Element, out *[]*layout.Node, ws *wsState, depth int) {
 	if c.Is(odf.NSDraw, "a") {
 		var kids []*layout.Node
 		for _, k := range c.Children {
-			b.inlineFrame(k, t, &kids, ws, depth+1)
+			b.inlineFrame(k, &kids, ws, depth+1)
 		}
 		*out = append(*out, b.node(&layout.Node{Kind: layout.Element, Style: baseStyle(), Href: c.A(odf.NSXLink, "href"), Role: "Link", Children: kids}))
 		return

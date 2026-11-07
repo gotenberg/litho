@@ -349,7 +349,7 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 			}
 			h := heading{node: n, level: level, text: headingTitle(n)}
 			if lbl := b.outlineLabel(level); lbl != "" {
-				n.Children = append([]*layout.Node{b.run(lbl, t, false)}, n.Children...)
+				n.Children = append([]*layout.Node{b.run(lbl, t)}, n.Children...)
 				h.label = lbl
 			}
 			b.headings = append(b.headings, h)
@@ -437,7 +437,7 @@ func (b *builder) spanText(t textState, name string) textState {
 }
 
 // run returns the inline node of the text s in the text properties t.
-func (b *builder) run(s string, t textState, preserve bool) *layout.Node {
+func (b *builder) run(s string, t textState) *layout.Node {
 	if t.outline {
 		b.warn("text-outline", "outlined text is drawn filled")
 	}
@@ -452,9 +452,6 @@ func (b *builder) run(s string, t textState, preserve bool) *layout.Node {
 		// Writer's line does not grow for it, so its inline box takes no
 		// height.
 		st.LineHeight = css.Pts(0)
-	}
-	if preserve {
-		st.WhiteSpace = css.Pre
 	}
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Lang: t.langTag()})
 	n.Children = []*layout.Node{b.node(&layout.Node{Kind: layout.Text, Style: st, Text: s})}
@@ -474,7 +471,7 @@ func (b *builder) inline(el *odf.Element, t textState, out *[]*layout.Node, ws *
 				continue
 			}
 			if s := ws.collapse(c.Text); s != "" {
-				*out = append(*out, b.run(s, t, false))
+				*out = append(*out, b.run(s, t))
 			}
 			continue
 		}
@@ -495,12 +492,12 @@ func (b *builder) inlineElement(c *odf.Element, t textState, out *[]*layout.Node
 				count = min(v, maxSpaces)
 			}
 			if !t.hidden {
-				*out = append(*out, b.run(strings.Repeat(" ", count), t, false))
+				*out = append(*out, b.run(strings.Repeat(" ", count), t))
 			}
 			ws.space = false
 		case "tab":
 			if !t.hidden {
-				*out = append(*out, b.run("\t", t, false))
+				*out = append(*out, b.run("\t", t))
 			}
 			ws.space = false
 		case "line-break":
@@ -542,7 +539,7 @@ func (b *builder) inlineElement(c *odf.Element, t textState, out *[]*layout.Node
 			b.inline(c, t, out, ws, depth)
 		}
 	case odf.NSDraw:
-		b.inlineFrame(c, t, out, ws, depth)
+		b.inlineFrame(c, out, ws, depth)
 	case odf.NSOffice:
 		// office:annotation and office:annotation-end are not printed.
 	case odf.NSTable, odf.NSForm:
@@ -613,7 +610,7 @@ func (b *builder) pageField(c *odf.Element, t textState, out *[]*layout.Node, ws
 	if c.Name.Local == "page-count" && c.A(odf.NSStyle, "num-format") == "" {
 		format = "1"
 	}
-	*out = append(*out, b.run(formatNumber(n, format), t, false))
+	*out = append(*out, b.run(formatNumber(n, format), t))
 	ws.space = false
 }
 
