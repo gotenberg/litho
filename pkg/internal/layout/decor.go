@@ -327,8 +327,12 @@ func shades(c compose.Color) (compose.Color, compose.Color) {
 
 // border paints the borders of box b of style st on the border box r with
 // outer corner radii and used widths bd, the sides in draw (CSS 2.1, 8.5;
-// CSS Backgrounds 3, 4).
+// CSS Backgrounds 3, 4), or its border image in their place (CSS
+// Backgrounds 3, 6).
 func (p *painter) border(b *box, st *css.Style, r compose.Rect, radii [4][2]float64, bd [4]float64, draw [4]bool) {
+	if p.borderImage(b, st, r, bd, draw) {
+		return
+	}
 	var visible [4]bool
 	shown := false
 	for s := range 4 {

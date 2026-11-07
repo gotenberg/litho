@@ -1,0 +1,170 @@
+package layout
+
+import (
+	"context"
+	"image"
+	"image/color"
+	"reflect"
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/css"
+)
+
+func TestBorderImage_TileSpans(t *testing.T) {
+	tests := []struct {
+		name              string
+		rep               css.ImageRepeat
+		start, size, n, k float64
+		want              []span
+	}{
+		{"stretch", css.ImageStretch, 1, 7, 2, 1, []span{{1, 7}}},
+		{"round half up", css.ImageRound, 0, 7, 2, 1, []span{{0, 1.75}, {1.75, 1.75}, {3.5, 1.75}, {5.25, 1.75}}},
+		{"round at least one", css.ImageRound, 0, 1, 4, 1, []span{{0, 1}}},
+		{"space", css.ImageSpace, 0, 7, 2, 1, []span{{0.25, 2}, {2.5, 2}, {4.75, 2}}},
+		{"space none fits", css.ImageSpace, 0, 3, 2, 2, nil},
+		{"repeat centred", css.ImageRepeatTile, 0, 4, 2, 1, []span{{-1, 2}, {1, 2}, {3, 2}}},
+		{"repeat odd", css.ImageRepeatTile, 0, 3, 2, 1, []span{{-1.5, 2}, {0.5, 2}, {2.5, 2}}},
+		{"zero scale stretches", css.ImageRepeatTile, 0, 3, 2, 0, []span{{0, 3}}},
+		{"empty region", css.ImageRound, 0, 0, 2, 1, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tileSpans(tt.rep, tt.start, tt.size, tt.n, tt.k)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if !near(got[i].at, tt.want[i].at) || !near(got[i].size, tt.want[i].size) {
+					t.Fatalf("got %v, want %v", got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+func TestBorderImage_Widths(t *testing.T) {
+	area := compose.Rect{Width: 10, Height: 6}
+	bd := [4]float64{1, 2, 1, 2}
+	all := [4]bool{true, true, true, true}
+	src := nineSource{w: 4, h: 4, natural: true}
+	slices := [4]float64{1, 1, 1, 1}
+	tests := []struct {
+		name  string
+		width [4]css.Dimension
+		draw  [4]bool
+		want  [4]float64
+	}{
+		{"numbers", [4]css.Dimension{{Kind: css.Number, Value: 1}, {Kind: css.Number, Value: 2}, {Kind: css.Number, Value: 1}, {Kind: css.Number, Value: 0}}, all, [4]float64{1, 4, 1, 0}},
+		{"percent and auto", [4]css.Dimension{{Kind: css.Percent, Value: 0.5}, {Kind: css.Auto}, css.Pts(1), {Kind: css.Percent, Value: 0.1}}, all, [4]float64{3, 1, 1, 1}},
+		{"overlap scales down", [4]css.Dimension{css.Pts(6), css.Pts(1), css.Pts(6), css.Pts(1)}, all, [4]float64{3, 0.5, 3, 0.5}},
+		{"cut side", [4]css.Dimension{css.Pts(1), css.Pts(1), css.Pts(1), css.Pts(1)}, [4]bool{true, false, true, true}, [4]float64{1, 0, 1, 1}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bi := &css.BorderImage{Width: tt.width}
+			if got := imageWidths(bi, src, slices, bd, tt.draw, area); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// nineLoader serves a 3 by 3 px image: a red ring around a blue centre,
+// its top-left pixel lime.
+func nineLoader() func(context.Context, string) (*Picture, error) {
+	img := image.NewNRGBA(image.Rect(0, 0, 3, 3))
+	for y := range 3 {
+		for x := range 3 {
+			img.Set(x, y, color.NRGBA{R: 255, A: 255})
+		}
+	}
+	img.Set(1, 1, color.NRGBA{B: 255, A: 255})
+	img.Set(0, 0, color.NRGBA{G: 255, A: 255})
+	p := &Picture{Source: &compose.ImageSource{Image: img}, Width: px(3), Height: px(3)}
+	return func(context.Context, string) (*Picture, error) { return p, nil }
+}
+
+func TestBorderImage_Draw(t *testing.T) {
+	slice1 := [4]css.Dimension{{Kind: css.Number, Value: 1}, {Kind: css.Number, Value: 1}, {Kind: css.Number, Value: 1}, {Kind: css.Number, Value: 1}}
+	ones := [4]css.Dimension{{Kind: css.Number, Value: 1}, {Kind: css.Number, Value: 1}, {Kind: css.Number, Value: 1}, {Kind: css.Number, Value: 1}}
+	tests := []struct {
+		name string
+		mods func(*css.Style)
+		want string
+	}{
+		{"stretch replaces the border", func(s *css.Style) {
+			s.BorderImage = css.BorderImage{Source: "i.png", Slice: slice1, Width: ones}
+		}, `
+			______
+			_GRRR_
+			_R__R_
+			_RRRR_
+			______`},
+		{"fill", func(s *css.Style) {
+			s.BorderImage = css.BorderImage{Source: "i.png", Slice: slice1, Width: ones, Fill: true}
+		}, `
+			______
+			_GRRR_
+			_RBBR_
+			_RRRR_
+			______`},
+		{"outset", func(s *css.Style) {
+			s.BorderImage = css.BorderImage{Source: "i.png", Slice: slice1, Width: ones,
+				Outset: [4]css.Dimension{css.Pts(px(1)), {Kind: css.Number}, {Kind: css.Number}, {Kind: css.Number}}}
+		}, `
+			_GRRR_
+			_R__R_
+			_R__R_
+			_RRRR_
+			______`},
+		{"missing image draws the border", func(s *css.Style) {
+			s.BorderImage = css.BorderImage{Source: "missing.png", Slice: slice1, Width: ones}
+		}, `
+			______
+			_KKKK_
+			_K__K_
+			_KKKK_
+			______`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := doc(el(sty(width(2), height(1), margin(1), border(1, css.Solid, css.Color{A: 1}), tt.mods)))
+			pics := nineLoader()
+			loader := func(ctx context.Context, u string) (*Picture, error) {
+				if u == "missing.png" {
+					return nil, nil
+				}
+				return pics(ctx, u)
+			}
+			res, err := Layout(context.Background(), root, ahem(t), Options{Page: page(6, 5), Image: loader})
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertPixels(t, res, 1, tt.want)
+		})
+	}
+}
+
+func TestBorderImage_Gradient(t *testing.T) {
+	// A gradient has no natural size: it takes the border image area's,
+	// 6 by 4 px here, its top half red, and a 25% slice cuts it.
+	g := &css.Gradient{Angle: 180, Stops: []css.GradientStop{
+		{Color: red, Position: css.Dimension{Kind: css.Percent}},
+		{Color: red, Position: css.Dimension{Kind: css.Percent, Value: 0.5}},
+		{Color: blue, Position: css.Dimension{Kind: css.Percent, Value: 0.5}},
+		{Color: blue, Position: css.Dimension{Kind: css.Percent, Value: 1}},
+	}}
+	q := css.Dimension{Kind: css.Percent, Value: 0.25}
+	two := css.Dimension{Kind: css.Number, Value: 1}
+	root := doc(el(sty(width(4), height(2), margin(1), border(1, css.Solid, css.Color{A: 1}), func(s *css.Style) {
+		s.BorderImage = css.BorderImage{Gradient: g, Slice: [4]css.Dimension{q, q, q, q}, Width: [4]css.Dimension{two, two, two, two}}
+	})))
+	assertPixels(t, run(t, root, page(8, 6)), 1, `
+		________
+		_RRRRRR_
+		_R____R_
+		_B____B_
+		_BBBBBB_
+		________`)
+}
