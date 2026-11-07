@@ -507,6 +507,35 @@ func hasText(kids []*layout.Node) bool {
 	return false
 }
 
+// controlKind returns the local name of the form control a draw:control
+// draws (ODF 1.3, Part 3, 10.3.13 draw:control and 13.5): the
+// office:forms element whose form:id or xml:id is its draw:control; ""
+// when none is.
+func (b *builder) controlKind(c *odf.Element) string {
+	id := c.A(odf.NSDraw, "control")
+	if id == "" {
+		return ""
+	}
+	forms := odf.Section(b.pkg.Content, "body").Child(odf.NSOffice, "text").Child(odf.NSOffice, "forms")
+	stack := []*odf.Element{forms}
+	for steps := 0; len(stack) > 0 && steps < odf.MaxElements; steps++ {
+		cur := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if cur == nil {
+			continue
+		}
+		if cur.Name.Space == odf.NSForm && (cur.A(odf.NSForm, "id") == id || cur.A(odf.NSXML, "id") == id) {
+			return cur.Name.Local
+		}
+		for _, k := range cur.Children {
+			if !k.IsText() {
+				stack = append(stack, k)
+			}
+		}
+	}
+	return ""
+}
+
 // floatCount returns the floating frames among kids.
 func (b *builder) floatCount(kids []*layout.Node) int {
 	n := 0
@@ -594,11 +623,17 @@ func (b *builder) drawing(c *odf.Element, depth int) *layout.Node {
 	case c.Is(odf.NSDraw, "control"):
 		st := b.frameBox(g)
 		st.Display = css.InlineBlock
-		if st.Border[css.Top].Style == css.BorderNone && g.props.Get("fo:border") == "" {
-			// A control draws its own frame, which Writer prints as a thin
-			// sunken border.
-			bd := css.Border{Width: 0.75, Style: css.Solid, Color: css.Color{R: 0.5, G: 0.5, B: 0.5, A: 1}}
-			st.Border = [4]css.Border{bd, bd, bd, bd}
+		// A control draws its own frame whatever fo:border says: Writer
+		// prints a text field, a list box or a text area with a thin
+		// black border and a check box as a square of a point's border
+		// (measured on the pinned image: 0.5 pt and 1 pt).
+		bd := css.Border{Width: 0.5, Style: css.Solid, Color: css.Color{A: 1}}
+		if b.controlKind(c) == "checkbox" {
+			bd.Width = 1
+		}
+		st.Border = [4]css.Border{bd, bd, bd, bd}
+		for i := range st.Padding {
+			st.Padding[i] = css.Pts(0)
 		}
 		b.warn("form-control", "form controls are drawn as their empty boxes")
 		return b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "Form"})

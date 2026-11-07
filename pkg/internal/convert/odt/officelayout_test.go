@@ -202,3 +202,29 @@ func TestConvert_PinnedFrames(t *testing.T) {
 		}
 	}
 }
+
+// TestConvert_FormControls checks the frames Writer draws around form
+// controls whatever their fo:border: a thin black line around a text
+// field, a point-wide one around a check box (the pinned image prints
+// form.odt so).
+func TestConvert_FormControls(t *testing.T) {
+	auto := `<style:style style:name="gr1" style:family="graphic"><style:graphic-properties fo:border="solid"/></style:style>` +
+		`<style:style style:name="gr2" style:family="graphic"><style:graphic-properties fo:border="groove"/></style:style>`
+	body := `<office:forms xmlns:form="urn:oasis:names:tc:opendocument:xmlns:form:1.0"><form:form form:name="F"><form:text form:id="c1"/><form:checkbox form:id="c2"/></form:form></office:forms>` +
+		`<text:p>Name <draw:control text:anchor-type="as-char" draw:style-name="gr1" svg:width="1in" svg:height="0.25in" draw:control="c1"/></text:p>` +
+		`<text:p>Agree <draw:control text:anchor-type="as-char" draw:style-name="gr2" svg:width="0.13in" svg:height="0.13in" draw:control="c2"/></text:p>`
+	b := newTestBuilder(t, doc{contentAuto: auto, body: body})
+	root, _ := b.document(odfBody(b))
+	var widths []float64
+	walkNodes(root, func(n *layout.Node) {
+		if n.Role == "Form" {
+			widths = append(widths, n.Style.Border[css.Top].Width)
+			if n.Style.Border[css.Top].Color != (css.Color{A: 1}) || n.Style.Border[css.Top].Style != css.Solid {
+				t.Errorf("border = %+v", n.Style.Border[css.Top])
+			}
+		}
+	})
+	if len(widths) != 2 || widths[0] != 0.5 || widths[1] != 1 {
+		t.Errorf("control border widths = %v, want [0.5 1]", widths)
+	}
+}
