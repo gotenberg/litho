@@ -46,7 +46,9 @@ func TestParseHeaderFooter(t *testing.T) {
 			[3][]span{1: {
 				with(b, func(s *span) { s.text, s.family, s.size, s.bold, s.italic = "A", "Arial", 14, true, true }),
 				with(b, func(s *span) { s.text, s.size, s.bold = "B", 14, true }),
-				with(b, func(s *span) { s.text, s.size, s.bold, s.italic, s.under, s.strike = "C", 14, true, true, sheet.Single, true }),
+				with(b, func(s *span) {
+					s.text, s.size, s.bold, s.italic, s.under, s.strike = "C", 14, true, true, sheet.Single, true
+				}),
 				with(b, func(s *span) {
 					s.text, s.size, s.bold, s.italic, s.under, s.strike, s.script = "D", 14, true, true, sheet.Double, true, sheet.Superscript
 				}),

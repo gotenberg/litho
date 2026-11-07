@@ -216,7 +216,18 @@ func (w *sheetReader) columns(cols *ooxml.Element) {
 }
 
 // sheetData reads the rows and cells (ECMA-376 Part 1, 18.3.1.80): a row
-// or cell without its index follows the previous one.
+// or cell without its index follows the previous one. A row's height is
+// read when it is custom alone: LibreOffice gives every other row its
+// optimal height, the sheet's default height grown to the row's text,
+// whatever height the file stores.
+//
+// # Corpus evidence
+//
+//   - LibreOffice 26.8.2.2: rows of 30 and 8 points without customHeight
+//     print 15 points high on a sheet of default height 15, and 13.77 (the
+//     height of Calibri 11 text) on one of default height 10; a custom row
+//     of 30 points prints 30. singlepagesheets-scrolled.xlsx prints its
+//     rows of 16.2 points 15.65 apart.
 func (w *sheetReader) sheetData(data *ooxml.Element) error {
 	r, sh := w.r, w.sh
 	next := 0
@@ -237,7 +248,7 @@ func (w *sheetReader) sheetData(data *ooxml.Element) error {
 		}
 		next = idx + 1
 		row := sheet.Row{Index: idx, CustomHeight: boolAttr(re, "customHeight", false), Hidden: boolAttr(re, "hidden", false)}
-		if v, err := strconv.ParseFloat(attr(re, "ht"), 64); err == nil && v > 0 && !math.IsInf(v, 0) {
+		if v, err := strconv.ParseFloat(attr(re, "ht"), 64); err == nil && v > 0 && !math.IsInf(v, 0) && row.CustomHeight {
 			row.Height = r.rowHeight(v)
 		}
 		if boolAttr(re, "customFormat", false) {

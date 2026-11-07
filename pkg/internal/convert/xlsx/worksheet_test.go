@@ -37,7 +37,7 @@ func TestRead_ColumnsAndRows(t *testing.T) {
 	}
 	doc, _ := readBytes(t, oneSheet(t, `<cols><col min="3" max="4" width="10" customWidth="1"/><col min="1" max="1" width="2"/>`+
 		`<col min="4" max="6" hidden="1"/><col min="8" max="8" style="0"/><col min="9" max="9"/></cols>`+
-		`<sheetData><row r="2" ht="30" customHeight="1"><c r="A2"><v>1</v></c></row><row r="5" hidden="1" s="0" customFormat="1"/>`+
+		`<sheetData><row r="2" ht="30" customHeight="1"><c r="A2"><v>1</v></c></row><row r="3" ht="40"><c r="A3"><v>1</v></c></row><row r="5" hidden="1" s="0" customFormat="1"/>`+
 		`<row r="7" s="0"/><row><c><v>1</v></c><c><v>2</v></c><c r="E8"/><c r="E8" t="b"><v>1</v></c></row></sheetData>`))
 	sh := doc.Sheets[0]
 	want := []sheet.Column{{First: 0, Last: 0, Width: 11}, {First: 2, Last: 3, Width: 55}, {First: 4, Last: 5, Hidden: true}, {First: 7, Last: 7}}
@@ -56,16 +56,19 @@ func TestRead_ColumnsAndRows(t *testing.T) {
 	for _, r := range sh.Rows {
 		idx = append(idx, r.Index)
 	}
-	if !slices.Equal(idx, []int{1, 4, 7}) {
-		t.Fatalf("rows %v, want 1, 4 and 7", idx)
+	if !slices.Equal(idx, []int{1, 2, 4, 7}) {
+		t.Fatalf("rows %v, want 1, 2, 4 and 7", idx)
 	}
 	if r := sh.Rows[0]; r.Height != 30 || !r.CustomHeight {
 		t.Errorf("row 2 = %+v", r)
 	}
-	if r := sh.Rows[1]; !r.Hidden || r.Style == nil {
+	if r := sh.Rows[1]; r.Height != 0 {
+		t.Errorf("row 3 = %+v, want the optimal height of a row without a custom one", r)
+	}
+	if r := sh.Rows[2]; !r.Hidden || r.Style == nil {
 		t.Errorf("row 5 = %+v", r)
 	}
-	if r := sh.Rows[2]; len(r.Cells) != 3 || r.Cells[0].Column != 0 || r.Cells[1].Column != 1 || r.Cells[2].Value.Kind != sheet.Bool {
+	if r := sh.Rows[3]; len(r.Cells) != 3 || r.Cells[0].Column != 0 || r.Cells[1].Column != 1 || r.Cells[2].Value.Kind != sheet.Bool {
 		t.Errorf("row 8 cells %+v, want A8, B8 and the boolean E8", r.Cells)
 	}
 }
@@ -75,7 +78,7 @@ func TestRead_ColumnsAndRows(t *testing.T) {
 // LibreOffice reads them.
 func TestRead_RowHeightsOfOffice(t *testing.T) {
 	t.Parallel()
-	files := workbookFiles([]testSheet{{name: "S", xml: `<sheetFormatPr defaultRowHeight="14.4"/><sheetData><row r="1" ht="20.1"><c r="A1"><v>1</v></c></row></sheetData>`}}, minimalStyles, "", "",
+	files := workbookFiles([]testSheet{{name: "S", xml: `<sheetFormatPr defaultRowHeight="14.4"/><sheetData><row r="1" ht="20.1" customHeight="1"><c r="A1"><v>1</v></c></row></sheetData>`}}, minimalStyles, "", "",
 		map[string]string{"docProps/app.xml": `<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Microsoft Excel</Application></Properties>`})
 	doc, _ := readBytes(t, zipFiles(t, files))
 	sh := doc.Sheets[0]
