@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-07T07:21:14Z",
+  "captured_at": "2026-11-07T07:24:50Z",
   "corpora": {
     "compose": {
       "features": {
@@ -278,8 +278,8 @@
     "html": {
       "features": {
         "diff": {
-          "matched": 27,
-          "mismatched": 2,
+          "matched": 28,
+          "mismatched": 1,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -327,11 +327,11 @@
               "text_f1": 1
             },
             "font-face": {
-              "layout": 0.4918,
+              "layout": 0.9552,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "header-default-classes": {
