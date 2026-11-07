@@ -299,6 +299,39 @@ func (e *engine) tabWidth(b *box, x float64) float64 {
 // its content box, where the tab stops of an Office container are
 // measured from.
 func (e *engine) breakLine(p *ifcPara, w []float64, start int, x0, avail float64, root *box, org float64) (int, bool) {
+	end, fits := e.breakLineIn(p, w, start, x0, avail, root, org)
+	if !fits || end >= p.p.Len() || root == nil || root.st.JustifyShrink <= 0 || lineAlign(root.st, false) != css.AlignJustify {
+		return end, fits
+	}
+	// A justified line whose word separators may shrink takes the text
+	// that fits once they, and the one before the next word, are that
+	// much narrower (css.Style.JustifyShrink).
+	spaces, space := 0, 0.0
+	for i := start; i < end; i++ {
+		if p.infos[p.p.RunOf(i)].kind == runTab {
+			return end, fits
+		}
+		if p.p.Rune(i) == ' ' {
+			spaces++
+			space = w[i]
+		}
+	}
+	for i := end - 1; i >= start && p.p.Rune(i) == ' '; i-- {
+		spaces--
+	}
+	if spaces <= 0 || space <= 0 {
+		return end, fits
+	}
+	more := root.st.JustifyShrink * space * float64(spaces+1)
+	if end2, fits2 := e.breakLineIn(p, w, start, x0, avail+more, root, org); fits2 && end2 > end {
+		return end2, true
+	}
+	return end, fits
+}
+
+// breakLineIn returns where the line from start breaks in avail, as
+// breakLine does without shrinking the word separators.
+func (e *engine) breakLineIn(p *ifcPara, w []float64, start int, x0, avail float64, root *box, org float64) (int, bool) {
 	n := p.p.Len()
 	x := x0
 	last := -1
@@ -1219,6 +1252,14 @@ func (s *inlineState) align(l *lineBox, indent float64, last bool) {
 					off = 0
 				}
 			}
+		}
+	}
+	if free < -eps && st.JustifyShrink > 0 && s.justify(l, free) {
+		// A line that took more text by shrinking its word separators
+		// shrinks them to fit (css.Style.JustifyShrink).
+		off = indent
+		if !ltr {
+			off = 0
 		}
 	}
 	if l.hangLeft {

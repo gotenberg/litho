@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"math"
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -28,7 +29,7 @@ type jcluster struct {
 // and nothing is added after the line's last unit.
 func (s *inlineState) justify(l *lineBox, free float64) bool {
 	mode := s.root.st.TextJustify
-	if free <= eps || mode == css.JustifyNone {
+	if math.Abs(free) <= eps || mode == css.JustifyNone {
 		return false
 	}
 	cls := lineClusters(l)
