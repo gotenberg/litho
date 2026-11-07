@@ -278,9 +278,9 @@ func TestImport_ResolvesAgainstTheFinalURL(t *testing.T) {
 	// moved.css redirects to new/sheet.css: its url() values and its own
 	// imports resolve against the URL it came from (CSS Values 4, 4.5.1).
 	files := map[string]string{
-		"https://e.com/moved.css":      `@import "inner.css"; p { background: url(bg.png) }`,
-		"https://e.com/new/inner.css":  `p { margin-top: 1px }`,
-		"https://e.com/inner.css":      `p { margin-top: 99px }`,
+		"https://e.com/moved.css":     `@import "inner.css"; p { background: url(bg.png) }`,
+		"https://e.com/new/inner.css": `p { margin-top: 1px }`,
+		"https://e.com/inner.css":     `p { margin-top: 99px }`,
 	}
 	fetch := func(_ context.Context, u string) ([]byte, string, error) {
 		final := ""
