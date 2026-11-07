@@ -22,10 +22,16 @@
 // for its text alone takes one page. Margins adjoining an unforced break
 // truncate (CSS Fragmentation 3, 5.2), and a container whose content
 // starts on a later page than its top moves to that page. Forced breaks
-// to a left or a right page leave a blank page when needed. Painting then
-// slices the column into pages, so a box that spans a cut paints its
-// background and borders on every page it crosses, sliced at the cut
-// (box-decoration-break: slice).
+// to a left or a right page leave a blank page when needed. Siblings whose
+// page values differ meet at a forced break, and the page after it takes
+// the name of the box that starts it (CSS Page 3, 4.1), which
+// [Options.PageFor] turns into a page box; the children a box of auto
+// width lays out on a page wider or narrower than the first are laid out
+// at that page's width. Painting then slices the column into pages, so a
+// box that spans a cut paints its background and borders on every page it
+// crosses, sliced at the cut (box-decoration-break: slice).
+// [Options.MarginContent] paints each page's margins, the page-margin
+// boxes, under the page area's content.
 //
 // # Formatting contexts
 //

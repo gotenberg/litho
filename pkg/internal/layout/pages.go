@@ -41,17 +41,21 @@ type geometry struct {
 	// len(boxes)+1. Both stay empty without PageAt.
 	boxes []PageBox
 	tops  []float64
+	// infos are the pages the boxes were resolved for, by
+	// [Options.PageFor].
+	infos []PageInfo
 }
 
 // init sets up the geometry of e, whose first page box is first.
 func (g *geometry) init(e *engine, first PageBox) {
 	g.e = e
-	if e.opts.PageAt == nil {
+	if e.opts.PageAt == nil && e.opts.PageFor == nil {
 		return
 	}
 	_, h := areaOf(first)
 	g.boxes = []PageBox{first}
 	g.tops = []float64{0, h}
+	g.infos = []PageInfo{e.infoOf(0)}
 }
 
 // varies reports pages that differ from one another.
@@ -65,7 +69,13 @@ func (g *geometry) grow() bool {
 	if n > e.maxPages || e.err != nil {
 		return false
 	}
-	pb := e.opts.PageAt(n)
+	info := e.infoOf(n)
+	var pb PageBox
+	if e.opts.PageFor != nil {
+		pb = e.opts.PageFor(info)
+	} else {
+		pb = e.opts.PageAt(n)
+	}
 	if err := checkPage(pb); err != nil {
 		e.fail(fmt.Errorf("page %d: %w", n+1, err))
 		return false
@@ -73,7 +83,24 @@ func (g *geometry) grow() bool {
 	_, h := areaOf(pb)
 	g.boxes = append(g.boxes, pb)
 	g.tops = append(g.tops, g.tops[n]+h)
+	g.infos = append(g.infos, info)
 	return true
+}
+
+// resync drops the page boxes from the first one resolved for a page
+// whose name or blankness has changed since: they resolve again as the
+// layout reaches them. The pages before keep their boxes, so every flow
+// position above the first dropped page's top keeps its page.
+func (g *geometry) resync() {
+	if g.e == nil || g.e.opts.PageFor == nil {
+		return
+	}
+	for i := 1; i < len(g.infos); i++ {
+		if g.e.infoOf(i) != g.infos[i] {
+			g.boxes, g.infos, g.tops = g.boxes[:i], g.infos[:i], g.tops[:i+1]
+			return
+		}
+	}
 }
 
 // isRight reports whether page p is a right page: the first page is a

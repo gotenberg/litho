@@ -26,11 +26,14 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 		return nil, err
 	}
 	first := opts.Page
-	if opts.PageAt != nil {
+	switch {
+	case opts.PageFor != nil:
+		first = opts.PageFor(PageInfo{})
+	case opts.PageAt != nil:
 		first = opts.PageAt(0)
-		if err := checkPage(first); err != nil {
-			return nil, err
-		}
+	}
+	if err := checkPage(first); err != nil {
+		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("laying out: %w", err)
@@ -42,6 +45,20 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	rb := e.generate(root)
 	if e.err != nil {
 		return nil, e.err
+	}
+	if name := pageStart(rb); name != "" {
+		// The first page's type is the root's start page value (CSS Page
+		// 3, 4.1): its box, and the flow's width, follow it.
+		e.mark(0, name, false, nil)
+		if opts.PageFor != nil {
+			first = opts.PageFor(e.infoOf(0))
+			if err := checkPage(first); err != nil {
+				return nil, err
+			}
+			e.pageW, e.pageH = areaOf(first)
+			e.geom = geometry{}
+			e.geom.init(e, first)
+		}
 	}
 	e.rootBox = rb
 	e.layoutRoot(rb)
@@ -60,6 +77,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 		return nil, fmt.Errorf("%w: %d pages, at most %d", ErrTooManyPages, len(res.Pages), e.maxPages)
 	}
 	res.Anchors = e.anchors(rb, len(res.Pages))
+	res.Extents = e.extents(rb, len(res.Pages))
 	e.links(res, links, used)
 	prune(e.root, used)
 	for _, w := range e.warnings {
@@ -213,6 +231,9 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 		pg := &compose.Page{Width: pb.Width, Height: pb.Height}
 		e.paintPageBackground(pg, pb)
 		e.paintCanvas(pg, canvas, pb)
+		if e.opts.MarginContent != nil {
+			pg.Content = append(pg.Content, e.opts.MarginContent(e.infoOf(k), n)...)
+		}
 		top := e.pageTop(k)
 		frags := perPage[k]
 		for i := 0; i < len(frags); {

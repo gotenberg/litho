@@ -479,8 +479,18 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		if !e.atPageTop(y) {
 			y = e.nextPage(y)
 		}
+		blank := false
 		if right := e.isRight(e.pageOf(y)); mode == breakLeft && right || mode == breakRight && !right {
 			y = e.nextPage(y)
+			blank = true
+		}
+		if mode != breakPush {
+			// The page a forced break starts takes the start page value of
+			// the box after it, and the page it skips is blank (CSS Page 3,
+			// 4.1 and 4.2.3); the page boxes from there on may change.
+			p := e.pageOf(y)
+			e.mark(p, pageStart(b), blank, b)
+			y = e.pageTop(p)
 		}
 		mc.commit(y)
 		mc.kept = mode != breakPush
@@ -701,6 +711,19 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		e.warnings = e.warnings[:s.warnings]
 		return s.cursor
 	}
+	// On pages whose areas differ in width, a box whose width follows the
+	// page area's lays each child out at the width of the page the child
+	// starts on (CSS Page 3, 4.1: content resumes on a page box of the
+	// named type).
+	adapt := e.paginating() && e.geom.varies() && followsPages(b)
+	cbFor := func(p int) cblock {
+		if !adapt {
+			return cb
+		}
+		c := cb
+		c.w = max(cb.w+e.widthDelta(p), 0)
+		return c
+	}
 	var prev *box
 	var prevSnap snapshot
 	// filled reports an in-flow child with a border box before the one
@@ -726,7 +749,18 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		} else if prev == nil && isForced(k.st.BreakBefore) && cursor+mc.strut.sum() > eps {
 			mode = forcedMode(css.BreakAuto, k.st.BreakBefore)
 		}
-		cursor = e.layoutBlock(k, cb, bc, cursor, mc, mode)
+		if mode == breakNone && prev != nil && namesDiffer(prev, k) {
+			// Siblings whose page values differ meet at a forced break
+			// (CSS Page 3, 4.1).
+			mode = breakForced
+		}
+		start := e.startPage(cursor+mc.strut.sum(), mode)
+		cursor = e.layoutBlock(k, cbFor(start), bc, cursor, mc, mode)
+		if adapt && e.widthDelta(e.pageOf(k.y)) != e.widthDelta(start) && e.relayout(k.y) {
+			// k landed on a page of another width than the one it was laid
+			// out for: lay it out again at that page's.
+			cursor = e.layoutBlock(k, cbFor(e.pageOf(k.y)), bc, restore(snap), mc, mode)
+		}
 		if e.paginating() && mode == breakNone {
 			switch {
 			case avoidsInside(k) && e.straddles(k) && !e.atPageTop(k.y) && (k.borderH() <= e.areaH(e.pageOf(k.y)+1) || filled):
@@ -736,13 +770,13 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 				// sibling with content, a class A break point, rather than
 				// leave its page empty (CSS Fragmentation 3, 4.3 and 4.4).
 				if e.relayout(k.y) {
-					cursor = e.layoutBlock(k, cb, bc, restore(snap), mc, breakPush)
+					cursor = e.layoutBlock(k, cbFor(e.pageOf(k.y)+1), bc, restore(snap), mc, breakPush)
 				}
 			case prev != nil && avoidsBetween(prev, k) && e.pageOf(prev.y+prev.borderH()-1e-3) < e.pageOf(firstContent(k)) &&
 				!e.atPageTop(prev.y) && prev.borderH()+k.borderH() <= e.pageH:
 				if e.relayout(k.y) {
-					cursor = e.layoutBlock(prev, cb, bc, restore(prevSnap), mc, breakPush)
-					cursor = e.layoutBlock(k, cb, bc, cursor, mc, breakNone)
+					cursor = e.layoutBlock(prev, cbFor(e.pageOf(prev.y)+1), bc, restore(prevSnap), mc, breakPush)
+					cursor = e.layoutBlock(k, cbFor(e.pageOf(cursor)), bc, cursor, mc, breakNone)
 				}
 			case !e.atPageTop(k.y) && e.pageOf(firstContent(k)) > e.pageOf(k.y) && hasContent(k):
 				// k's content starts on a later page than its top: only its
@@ -752,7 +786,7 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 				// breaks before a container rather than after its top edge
 				// (CSS Fragmentation 3, 4.1, class C, and 4.4).
 				if e.relayout(k.y) {
-					cursor = e.layoutBlock(k, cb, bc, restore(snap), mc, breakPush)
+					cursor = e.layoutBlock(k, cbFor(e.pageOf(k.y)+1), bc, restore(snap), mc, breakPush)
 				}
 			}
 		}

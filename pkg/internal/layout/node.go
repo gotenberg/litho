@@ -137,6 +137,21 @@ type Options struct {
 	// does for document text (see pixelMetrics); off, the faces' fractional
 	// metrics apply, as WeasyPrint uses them.
 	PixelFontMetrics bool
+	// PageFor, when not nil, returns the page box of a page from its index,
+	// its page type name and whether it is blank (CSS Page 3, 4.1 and
+	// 4.2.3): the name is the start page value of the box a forced break
+	// starts the page with, or the previous page's for a page an unforced
+	// break starts, the first page taking the root's. It overrides PageAt
+	// and Page under PageAt's rules, except that Layout may call it again
+	// for an index whose name or blankness a later break decided.
+	PageFor func(PageInfo) PageBox
+	// MarginContent, when not nil, returns what is painted in the margins
+	// of a page, in page coordinates, over the page box's background and
+	// the canvas and under the page area's content (CSS Page 3, 5: the
+	// page-margin boxes). pages is the document's page count. Layout calls
+	// it once per page, in page order, from its own goroutine; it may call
+	// Layout itself.
+	MarginContent func(page PageInfo, pages int) []compose.Fragment
 	// Lang is the document language as a BCP 47 tag, used for a node
 	// without one in its ancestry, "" for unknown.
 	Lang string
@@ -149,6 +164,18 @@ type Options struct {
 	MaxPages int
 	// Logger receives diagnostics, nil for none.
 	Logger *slog.Logger
+}
+
+// PageInfo names a page for [Options.PageFor] and [Options.MarginContent].
+type PageInfo struct {
+	// Index is the page's 0-based index.
+	Index int
+	// Name is the page type name, "" for an unnamed page (CSS Page 3,
+	// 4.1).
+	Name string
+	// Blank reports a page that a forced break to a left or a right page
+	// left empty (CSS Page 3, 4.2.3; CSS Fragmentation 3, 3.1).
+	Blank bool
 }
 
 // PageBox is a page's size and margins in points.
@@ -182,6 +209,12 @@ type Result struct {
 	// and exceeds the area's width when content overflows it, which a
 	// converter shrinks to fit as browsers print.
 	ContentWidth float64
+	// Extents maps every non-empty Node.ID of a block-level, inline-block
+	// or replaced box that landed on a page to its border box less its
+	// padding, the box that holds its content and borders, on the page
+	// its first box landed on, in that page's coordinates. Inline boxes
+	// are not listed.
+	Extents map[string]compose.Rect
 }
 
 // DefaultMaxPages is the page cap when Options.MaxPages is zero.

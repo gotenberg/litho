@@ -77,6 +77,9 @@ type engine struct {
 	// flexPasses counts the layouts made to measure flex items, against
 	// [maxFlexPasses].
 	flexPasses int
+	// marks are the page names and blank pages the forced breaks decided,
+	// by page index (CSS Page 3, 4.1 and 4.2.3).
+	marks []pageMark
 }
 
 // fail records the first error; the layout unwinds once it is set.
