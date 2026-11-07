@@ -332,8 +332,9 @@ func (d *document) body(root *ooxml.Element) []*section {
 				sp = nil
 			}
 			// An empty paragraph that only carries a section break is not
-			// laid out, as LibreOffice imports it.
-			if sp == nil || !emptyParagraph(e) {
+			// laid out, as LibreOffice imports it, unless it starts the
+			// document: its section then takes a page of its own.
+			if sp == nil || !emptyParagraph(e) || len(secs) == 0 && len(cur) == 0 {
 				d.blocksInto(st, nil, &ooxml.Element{Children: []*ooxml.Element{e}}, 0, &cur)
 			}
 			if sp != nil {

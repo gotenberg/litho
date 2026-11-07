@@ -53,9 +53,26 @@ func TestSections_PageBoxes(t *testing.T) {
 
 func TestSections_EmptySectionParagraphDropped(t *testing.T) {
 	t.Parallel()
-	b := build(t, `<w:p><w:r><w:t>a</w:t></w:r></w:p><w:p><w:pPr><w:sectPr/></w:pPr></w:p><w:p><w:r><w:t>b</w:t></w:r></w:p><w:sectPr/>`, nil)
-	if n := len(role(b.root, "P")); n != 2 {
-		t.Errorf("%d paragraphs, want 2", n)
+	const brk = `<w:p><w:pPr><w:sectPr/></w:pPr></w:p>`
+	const a, b = `<w:p><w:r><w:t>a</w:t></w:r></w:p>`, `<w:p><w:r><w:t>b</w:t></w:r></w:p>`
+	tests := []struct {
+		name  string
+		body  string
+		paras int
+	}{
+		{"after text", a + brk + b, 2},
+		// LibreOffice gives the section that starts the document a page
+		// of its own, empty.
+		{"first", brk + a + b, 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			bt := build(t, tt.body+`<w:sectPr/>`, nil)
+			if n := len(role(bt.root, "P")); n != tt.paras {
+				t.Errorf("%d paragraphs, want %d", n, tt.paras)
+			}
+		})
 	}
 }
 
