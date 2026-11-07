@@ -86,6 +86,12 @@ func shown(el *odf.Element) bool {
 }
 
 // readPage reads one master page.
+//
+// # Corpus evidence
+//
+//   - ods: sc/tdf129940.ods, whose page layout says landscape and names no
+//     size, prints on 612 by 792 point pages; chart2/chartWithDotInSheetName
+//     .ods, landscape with an 841.89 by 595.3 point size, on that size.
 func (r *reader) readPage(mp *odf.MasterPage) pageResult {
 	var pl odf.PageLayout
 	if p := r.styles.PageLayouts[mp.PageLayout]; p != nil {
