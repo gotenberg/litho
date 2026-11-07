@@ -287,11 +287,11 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 		}
 		kids := seg.nodes
 		if !hasContent(kids) {
-			// An empty paragraph keeps one line, as tall as its mark's text.
+			// An empty paragraph keeps one line, as tall as its mark's text
+			// would be, and draws nothing a reader would extract.
 			ms := inlineStyle(pst)
 			d.applyRun(ms, rp.mark, lineMult)
-			ms.BackgroundColor = css.Transparent
-			kids = append(kids, &layout.Node{Kind: layout.Element, Style: ms, Children: []*layout.Node{{Kind: layout.Text, Style: ms, Text: "\u200b"}}})
+			pst.MinHeight = css.Pts(d.lineHeight(ms))
 		}
 		n.Children = kids
 		if sink.positioned {

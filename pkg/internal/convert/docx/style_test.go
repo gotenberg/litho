@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
-	"github.com/gotenberg/litho/pkg/internal/layout"
 )
 
 func TestRunProperties(t *testing.T) {
@@ -184,9 +183,11 @@ func TestEmptyParagraphKeepsALine(t *testing.T) {
 	if len(ps) != 2 {
 		t.Fatalf("%d paragraphs", len(ps))
 	}
-	strut := find(ps[1], func(n *layout.Node) bool { return n.Kind == layout.Text })
-	if len(strut) != 1 || strut[0].Style.FontSize != 24 {
-		t.Errorf("empty paragraph strut %+v", strut)
+	if h := ps[1].Style.MinHeight; h.Kind != css.Points || h.Value < 20 || h.Value > 40 || len(ps[1].Children) != 0 {
+		t.Errorf("empty 24-point paragraph min height %v, %d children", h, len(ps[1].Children))
+	}
+	if h0, h1 := ps[0].Style.MinHeight.Value, ps[1].Style.MinHeight.Value; h0 <= 0 || h0 >= h1 {
+		t.Errorf("empty 10-point paragraph min height %v", h0)
 	}
 }
 
