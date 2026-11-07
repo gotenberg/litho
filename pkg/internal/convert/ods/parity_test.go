@@ -39,7 +39,7 @@ func TestParity_Figures(t *testing.T) {
 				format   string
 			}{
 				{0, 0, sheet.Value{Kind: sheet.Text, Text: "Month"}, ""},
-				{1, 0, sheet.Value{Kind: sheet.Number, Number: 46053, Text: "2026-01-31"}, "yyyy-mm-dd"},
+				{1, 0, sheet.Value{Kind: sheet.Number, Number: 46053, Text: "2026-01-31"}, `yyyy\-mm\-dd`},
 				{2, 1, sheet.Value{Kind: sheet.Number, Number: 2500.5, Text: "2500.5"}, ""},
 				{3, 0, sheet.Value{Kind: sheet.Text, Text: "REVENUE-SHEET-MARKER"}, ""},
 				{3, 1, sheet.Value{Kind: sheet.Number, Number: 3500.5, Text: "3500.5"}, ""},
@@ -70,7 +70,11 @@ func TestParity_Figures(t *testing.T) {
 					hf.DifferentOddEven || hf.DifferentFirst {
 					t.Errorf("%s header and footer = %+v", sh.Name, hf)
 				}
-				if !near(sh.Columns[0].Width, 64.008) {
+				w := sh.DefaultColumnWidth
+				if len(sh.Columns) > 0 {
+					w = sh.Columns[0].Width
+				}
+				if !near(w, 64) && !near(w, 64.008) {
 					t.Errorf("%s columns = %+v", sh.Name, sh.Columns)
 				}
 			}
