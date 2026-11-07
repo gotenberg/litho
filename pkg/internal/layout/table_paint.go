@@ -56,11 +56,22 @@ func (p *painter) eachRow(td *tableData, content bool, fn func(pr placedRow, cel
 			}
 			dy, mono, art := p.dy, p.mono, p.artifact
 			p.dy += pr.dy
+			cells := td.cells[starts[pr.r]:starts[pr.r+1]]
 			if p.mono < 0 && (!content || !pr.piece) {
-				p.mono = p.e.spanPage(td.top(pr), td.bottom(pr))
+				// A row paints across the pages its row-spanning cells
+				// reach too, when the rows they span break between pages.
+				bottom := td.bottom(pr)
+				if !pr.piece && pr.dy == 0 {
+					for _, c := range cells {
+						if c.cell.rowSpan > 1 {
+							bottom = max(bottom, c.y+c.borderH())
+						}
+					}
+				}
+				p.mono = p.e.spanPage(td.top(pr), bottom)
 			}
 			p.artifact = art || pr.dy != 0
-			fn(pr, td.cells[starts[pr.r]:starts[pr.r+1]])
+			fn(pr, cells)
 			p.dy, p.mono, p.artifact = dy, mono, art
 		}
 	}

@@ -1257,10 +1257,11 @@ func (td *tableData) edgeHalf(above int) float64 {
 }
 
 // rowUnits groups the body rows of td into the units placement keeps
-// whole: rows joined by a row-spanning cell, by break-before or
-// break-after avoid between them, or by break-inside avoid on their row
-// group, as long as the unit stays within room (CSS Fragmentation 3, 3.1
-// and 3.2).
+// whole: rows joined by break-before or break-after avoid between them, or
+// by break-inside avoid on their row group, as long as the unit stays
+// within room (CSS Fragmentation 3, 3.1 and 3.2). Rows a row-spanning cell
+// joins break between them when paginating, the spanning cell sliced at
+// the cut, as Writer breaks them; off the page cuts they stay one unit.
 func (e *engine) rowUnits(td *tableData, rowH []float64, gap, room float64) []rowUnit {
 	lo, hi := td.headN, len(td.rows)-td.footN
 	reach := make([]int, len(td.rows))
@@ -1285,6 +1286,9 @@ func (e *engine) rowUnits(td *tableData, rowH []float64, gap, room float64) []ro
 			end = max(end, reach[x])
 		}
 		end = min(end, hi-1)
+		if e.paginating() {
+			end = r
+		}
 		forced, _ := td.breakBefore(r)
 		units = append(units, rowUnit{lo: r, hi: end + 1, h: height(r, end+1), forced: forced})
 		r = end + 1

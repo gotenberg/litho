@@ -74,7 +74,9 @@
 // table rows: each cell's content continues at the top of the row's piece
 // on the next page, under a copy of the header group, and the page it
 // leaves ends with a copy of the footer group, the copies painted as
-// artifacts; the cells' borders and backgrounds are sliced at the cut. A
+// artifacts; the cells' borders and backgrounds are sliced at the cut.
+// Rows a row-spanning cell joins break between them as other rows do, the
+// spanning cell sliced at the cut, as Writer breaks them. A
 // row that avoids breaks inside it, or none of whose lines fits, moves to
 // the next page whole; one with nothing to break at, taller than a page
 // area, overflows onto the pages below.
