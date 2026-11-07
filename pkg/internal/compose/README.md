@@ -142,17 +142,19 @@ Each wave ships behind oracles wired into the corpus matrix
 | 1    | HTML and CSS 2.1 visual formatting, css-text, css-page, lists, backgrounds, borders, images, auto tables                                      | WPT reftests through the engine with the render cell's pixel rule. WeasyPrint draw tests. Differential against Chromium on Gotenberg's fixtures.         |
 | 2    | Route parity: headers and footers, page ranges, scale, paper, media type, outline, tags, links, Markdown, URL, @font-face, image formats, SVG | Gotenberg integration features on both routes.                                                                                                           |
 | 3    | Flexbox, grid, positioning, transforms, multicol, generated content, BiDi, CJK                                                                | WPT grid, multicol, writing modes and text pass rates. WeasyPrint's GCPM tests.                                                                          |
-| 4    | DOCX and ODT                                                                                                                                  | Differential against LibreOffice on the DOCX corpora.                                                                                                    |
+| 4    | DOCX and ODT                                                                                                                                  | Differential against LibreOffice on the docx and odt corpora.                                                                                            |
 | 5    | XLSX, ODS, CSV                                                                                                                                | Differential against LibreOffice.                                                                                                                        |
 | 6    | PPTX and ODP                                                                                                                                  | Differential against LibreOffice.                                                                                                                        |
 
 Wave 4 depends on wave 0 alone, so the Office converters run beside waves
 1 to 3 once the model is frozen.
 
-Status: waves 0 to 3 are done. `test/integration/baseline.json` records
-the oracle scores per fixture; the wpt, weasyprint, html and svg cells
-score the converter in seconds (`go run ./test/integration/cmd/corpus run
---corpus=wpt,weasyprint,html,svg --feature=reftest,draw,diff,svgdraw`).
+Status: waves 0 to 4 are done. `test/integration/baseline.json` records
+the oracle scores per fixture; the wpt, weasyprint, html, svg, docx and
+odt cells score the converters in a few minutes (`go run
+./test/integration/cmd/corpus run
+--corpus=wpt,weasyprint,html,svg,docx,odt
+--feature=reftest,draw,diff,svgdraw`).
 Wave 1 also took positioning, transforms, gradients, box-shadow, outlines
 and generated content from wave 3, and wave 2 took flexbox, because the
 reftests, the real pages and Chromium's header template lean on them. Wave
@@ -175,6 +177,24 @@ paged media of CSS GCPM: footnotes, leaders, running elements, string
 sets, bleed and crop marks, which Chromium does not print and the spec
 and WeasyPrint judge. The wpt corpus grew to 1177 reftests over the grid,
 multicol, writing modes, overflow, text decoration and sizing areas.
+
+Wave 4 added the DOCX and ODT converters, judged against LibreOffice as
+Gotenberg's LibreOffice route prints a document (the pinned image, with
+Carlito and Caladea standing in for Calibri and Cambria): `ooxml` and
+`odf` read the packages with the caps and the markup compatibility the
+later XLSX, PPTX, ODS and ODP converters share, `offcrypto` opens the
+password-protected ones (MS-OFFCRYPTO Agile and Standard, ODF AES, Blowfish
+and Argon2id), and `convert/docx` and `convert/odt` build the layout tree
+from styles, numbering, sections and master pages, headers and footers,
+tables, frames and drawings, footnotes, fields and tracked changes as
+LibreOffice prints them. The engine gained what Office documents need and
+CSS has no syntax for, declared in `css/office.go`: tab stops with
+alignment and leaders, the Office line spacing rules, text scale, page
+frames, fixed-width list markers, page-anchored boxes, borders cloned at
+a page cut, columns of different widths, the footnote separator, kerning
+off, and vertical text in cells and frames. Where LibreOffice and the
+specification disagree, LibreOffice is the reference, and the docx and
+odt corpora hold its own test documents, fetched at the pinned release.
 
 The differential oracle compares page count, PDF.js text with reading
 order, link sets, outline, tag tree and a layout-tolerant score over
