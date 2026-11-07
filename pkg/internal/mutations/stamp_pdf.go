@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -103,11 +102,15 @@ func StampPDF(
 }
 
 // pageToFormXObject converts a PDF page into a Form XObject stream in the
-// allocator's namespace. The form's /BBox is the media box a viewer draws the
-// source page on, /Resources is a deep copy of the source page's resources,
-// and the stream content is the concatenated raw bytes of the source page's
-// content stream(s). This is the standard PDF §8.10 transformation used
-// for n-up, stamping, and watermarking.
+// allocator's namespace, drawn as a viewer shows the page. The form's /BBox is
+// the region a viewer shows of the source page, its /Matrix moves that
+// region's lower-left corner to the origin and turns it by the page's
+// /Rotate, /Resources is a deep copy of the source page's resources, and the
+// stream content is the concatenated raw bytes of the source page's content
+// stream(s). This is the standard PDF §8.10 transformation used for n-up,
+// stamping, and watermarking. Drawn under the identity, the form fills [0 0 W
+// H], W and H the page's width and height as a viewer shows it. /UserUnit is
+// not applied.
 //
 // # Corpus evidence
 //
@@ -125,13 +128,18 @@ func pageToFormXObject(
 	copier *writer.Copier,
 	alloc *writer.ObjAllocator,
 ) (ast.PdfIndirectRef, error) {
-	// The /BBox clips the form (ISO 32000-1, 8.10.2, Table 95), and the stamp
-	// clips where a viewer draws the source page: on its /MediaBox when a
-	// viewer uses it, four numbers enclosing an area, and on US Letter when it
-	// does not (see [document.Page.ViewedMediaBox]). Either is four numbers,
-	// never a reference to an object of srcDoc, which would name another
-	// object in the target.
-	bbox := slices.Clone(srcPage.ViewedMediaBox())
+	// The /BBox clips the form (ISO 32000-1, 8.10.2, Table 95), and the form
+	// clips where a viewer shows the source page: its crop box, reduced to the
+	// media box, the media box where the crop box is none a viewer uses, and
+	// US Letter where the media box is none either (see
+	// [document.Page.ViewedBox]). Showing the whole media box drew what a
+	// viewer crops away. Either is four numbers, never a reference to an
+	// object of srcDoc, which would name another object in the target.
+	box := normalizedBox(srcPage.ViewedBox())
+	bbox := ast.PdfArray{
+		ast.PdfReal(box[0]), ast.PdfReal(box[1]),
+		ast.PdfReal(box[2]), ast.PdfReal(box[3]),
+	}
 
 	// Copy resources into the destination allocator. Use the ones the source
 	// page reaches, which it inherits from an ancestor /Pages node when it
@@ -163,9 +171,64 @@ func pageToFormXObject(
 		"Subtype":   ast.PdfName("Form"),
 		"FormType":  ast.PdfInt(1),
 		"BBox":      bbox,
+		"Matrix":    viewedPageMatrix(box, srcPage.Rotate),
 		"Resources": resources,
 	}
 	return alloc.Alloc(ast.NewStream(formDict, contents)), nil
+}
+
+// normalizedBox returns box, four numbers, as [llx lly urx ury]: a rectangle
+// may name either pair of opposite corners (ISO 32000-1, 7.9.5).
+func normalizedBox(box ast.PdfArray) [4]float64 {
+	x0, y0 := document.Float(box[0]), document.Float(box[1])
+	x1, y1 := document.Float(box[2]), document.Float(box[3])
+	return [4]float64{min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)}
+}
+
+// viewedPageMatrix returns the form matrix (ISO 32000-1, 8.10.1: form space to
+// user space) that draws box as a viewer shows a page with that box and
+// /Rotate: its lower-left corner at the origin, turned clockwise by rotate
+// (ISO 32000-1, 7.7.3.3, Table 30), so that the form spans [0 0 W H], W and H
+// the width and height pdf.Reader.Page reports. A /Rotate that is not a multiple
+// of 90 is read as 0, as the reader reads it.
+func viewedPageMatrix(box [4]float64, rotate int) ast.PdfArray {
+	llx, lly, urx, ury := box[0], box[1], box[2], box[3]
+	var m [6]float64
+	switch normalizedRotate(rotate) {
+	case 90:
+		// (x, y) maps to (y - lly, urx - x): H wide, W tall.
+		m = [6]float64{0, -1, 1, 0, -lly, urx}
+	case 180:
+		m = [6]float64{-1, 0, 0, -1, urx, ury}
+	case 270:
+		m = [6]float64{0, 1, -1, 0, ury, -llx}
+	default:
+		m = [6]float64{1, 0, 0, 1, -llx, -lly}
+	}
+	arr := make(ast.PdfArray, len(m))
+	for i, v := range m {
+		if v == 0 {
+			// An entry that came out as -0 writes as 0.
+			v = 0
+		}
+		arr[i] = ast.PdfReal(v)
+	}
+	return arr
+}
+
+// normalizedRotate returns rotate as 0, 90, 180 or 270, the clockwise
+// rotations ISO 32000-1, Table 30 allows. A value that is not a multiple of
+// 90 is read as 0.
+func normalizedRotate(rotate int) int {
+	r := rotate % 360
+	if r < 0 {
+		r += 360
+	}
+	switch r {
+	case 90, 180, 270:
+		return r
+	}
+	return 0
 }
 
 // collectPageContents returns the decoded bytes of a page's content stream,

@@ -851,7 +851,8 @@ type PDFStamp struct {
 	Source *Reader
 	// Page is the 1-based source page number. Zero is treated as 1.
 	Page int
-	// X and Y position the bottom-left of the stamp in points.
+	// X and Y position, in points, the bottom-left corner of the source page
+	// as a viewer shows it: its crop box, turned by its /Rotate.
 	X, Y float64
 	// Scale is the uniform scale factor. Zero is treated as 1.0.
 	Scale float64
@@ -2248,6 +2249,15 @@ func (w *Writer) StampImage(stamp ImageStamp, pages ...int) error {
 // queued and applied when [Writer.WriteTo] is called, which refuses a page out
 // of range as [Writer.StampText] does, and a [PDFStamp.Page] outside the
 // source's pages the same way.
+//
+// The stamp draws the source page as a viewer shows it: clipped to its crop
+// box (ISO 32000-1, 14.11.2), the media box when it has none, and turned by its
+// /Rotate (ISO 32000-1, 7.7.3.3, Table 30). Before [PDFStamp.Scale] and
+// [PDFStamp.Rotation] apply, it spans the Width and Height [Reader.Page]
+// reports for that page, and its bottom-left corner sits at [PDFStamp.X],
+// [PDFStamp.Y], whichever point the source's box starts at. The source page's
+// /UserUnit is not applied: the stamp is drawn at one point per unit, where
+// [Reader.Page] multiplies the size by it.
 //
 // The stamp is marked as an /Artifact, so it does not cost a tagged document
 // its ISO 14289-1, 7.1 conformance, and any text it carries is omitted from
