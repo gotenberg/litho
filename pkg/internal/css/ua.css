@@ -487,3 +487,14 @@ legend {
 iframe {
   border: 2px inset;
 }
+
+/* CSS GCPM 3, Appendix B: the footnote call is a superscript number, the
+ * marker the number and a full stop. */
+::footnote-call {
+  content: counter(footnote);
+  vertical-align: super;
+  font-size: 65%;
+}
+::footnote-marker {
+  content: counter(footnote) ". ";
+}

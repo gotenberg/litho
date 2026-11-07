@@ -55,6 +55,8 @@ type sheetParser struct {
 	warns   warnings
 	rules   int
 	imports int
+	// nesting is the depth of the nested style rules being parsed.
+	nesting int
 	chain   []string
 	err     error
 }
@@ -147,6 +149,7 @@ func (sp *sheetParser) rule(it item, base string, cond *mediaCond, depth int, im
 			return
 		}
 		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: parseDeclList(it.block, c), cond: cond})
+		sp.nestedRules(it, base, cond, depth)
 	case itemAtRule:
 		name := lower(it.name)
 		if name != "import" && name != "charset" && (name != "layer" || it.hasBlock) {
@@ -194,6 +197,51 @@ func (sp *sheetParser) rule(it item, base string, cond *mediaCond, depth int, im
 		}
 	}
 }
+
+// nestedRules parses the style rules nested in the style rule it (CSS
+// Nesting 1, 2 and 3): each starts with the nesting selector &, which
+// stands for each selector of the parent rule in turn, and follows the
+// parent's declarations in the cascade order.
+func (sp *sheetParser) nestedRules(it item, base string, cond *mediaCond, depth int) {
+	if sp.nesting >= maxNestingDepth {
+		return
+	}
+	sp.nesting++
+	defer func() { sp.nesting-- }()
+	parents := splitCommas(trimWS(it.prelude))
+	allowed := false
+	newListParser(it.block).declarations(func(n item) bool {
+		if n.kind != itemQualified {
+			return true
+		}
+		var prelude []token
+		for _, sel := range splitCommas(trimWS(n.prelude)) {
+			for _, par := range parents {
+				if len(prelude) > 0 {
+					prelude = append(prelude, token{typ: tComma})
+				}
+				for _, t := range trimWS(sel) {
+					if t.isDelim('&') {
+						prelude = append(prelude, trimWS(par)...)
+						continue
+					}
+					prelude = append(prelude, t)
+				}
+			}
+			if len(prelude) > maxNestedPrelude {
+				return true
+			}
+		}
+		sp.rule(item{kind: itemQualified, prelude: prelude, block: n.block}, base, cond, depth, &allowed)
+		return sp.err == nil
+	})
+}
+
+// maxNestedPrelude caps the tokens of the selector list a nested rule
+// expands to: 4096. Anti-DoS guard, not spec-mandated: each level
+// multiplies the parent's selectors by its own, and real nesting expands
+// to a few selectors.
+const maxNestedPrelude = 4096
 
 // nested parses the rule list inside a conditional group rule (CSS
 // Conditional 3, 2).

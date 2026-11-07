@@ -82,3 +82,23 @@ func TestGCPM_PageBleedAndMarks(t *testing.T) {
 		}
 	}
 }
+
+func TestNesting_AmpersandRules(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		sheet string
+		want  Color
+	}{
+		{`div.f { color: blue; &.f { color: lime } }`, Color{G: 1, A: 1}},
+		{`div, p { color: blue; & + p { color: lime } }`, Color{B: 1, A: 1}},
+		{`.f { color: blue; &.g { color: red } }`, Color{B: 1, A: 1}},
+		{`.f { & { &.f { color: lime } } }`, Color{G: 1, A: 1}},
+		{`.f { color: blue; &:bogus { color: lime } color: red }`, Color{R: 1, A: 1}},
+	}
+	for _, tt := range tests {
+		c := compute(t, `<div class=f id=t>x</div>`, tt.sheet)
+		if got := c.of("t").Color; got != tt.want {
+			t.Errorf("%s: color %+v, want %+v", tt.sheet, got, tt.want)
+		}
+	}
+}

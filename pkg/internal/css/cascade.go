@@ -95,12 +95,20 @@ const (
 	PseudoAfter
 	// PseudoMarker is ::marker, a list item's marker (CSS Lists 3, 3.1).
 	PseudoMarker
+	// PseudoFootnoteCall is ::footnote-call, the call a footnote element
+	// leaves in the flow, and PseudoFootnoteMarker ::footnote-marker, the
+	// marker its body starts with (CSS GCPM 3, 3.6 and 3.7).
+	PseudoFootnoteCall
+	PseudoFootnoteMarker
 	numPseudos
 )
 
 // pseudoNames maps the selector name of each generated pseudo-element to
 // it.
-var pseudoNames = map[string]PseudoElement{"before": PseudoBefore, "after": PseudoAfter, "marker": PseudoMarker}
+var pseudoNames = map[string]PseudoElement{
+	"before": PseudoBefore, "after": PseudoAfter, "marker": PseudoMarker,
+	"footnote-call": PseudoFootnoteCall, "footnote-marker": PseudoFootnoteMarker,
+}
 
 // NewResolver indexes the rules of sheets, in order, whose media
 // conditions match media. A nil Sheet is skipped.

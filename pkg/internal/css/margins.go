@@ -104,7 +104,11 @@ var flexOrGrid = map[string]bool{
 	"-ms-inline-flexbox": true,
 }
 
-// marginRule is a margin at-rule of an @page rule (CSS Page 3, 5.1).
+// footnoteArea is the [marginRule] box of an @footnote rule.
+const footnoteArea = NumMarginBoxes
+
+// marginRule is a margin at-rule of an @page rule (CSS Page 3, 5.1), or
+// an @footnote rule (CSS GCPM 3, 3.4).
 type marginRule struct {
 	box   MarginBox
 	decls []Declaration
@@ -153,6 +157,11 @@ func pageCtxDecls(block []token, c *declCtx) ([]Declaration, []marginRule) {
 			}
 		case itemAtRule:
 			b, ok := marginBoxByName[lower(it.name)]
+			if lower(it.name) == "footnote" {
+				// The footnote area (CSS GCPM 3, 3.4) cascades as a
+				// page-margin box does.
+				b, ok = footnoteArea, true
+			}
 			if !ok || !it.hasBlock {
 				c.warn("unsupported-css-at-rule", "the @%s rule inside @page is not supported and was ignored", lower(it.name))
 				return true
@@ -194,6 +203,32 @@ func (r *Resolver) HasNamedPages() bool {
 // HasMarginBoxes reports whether an @page rule holds a margin at-rule.
 func (r *Resolver) HasMarginBoxes() bool {
 	for i := range r.pages {
+		for _, m := range r.pages[i].rule.margins {
+			if m.box != footnoteArea {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// HasFootnoteArea reports whether an @page rule holds an @footnote rule
+// (CSS GCPM 3, 3.4).
+func (r *Resolver) HasFootnoteArea() bool {
+	for i := range r.pages {
+		for _, m := range r.pages[i].rule.margins {
+			if m.box == footnoteArea {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasPageAreas reports whether an @page rule holds a margin at-rule or an
+// @footnote rule.
+func (r *Resolver) hasPageAreas() bool {
+	for i := range r.pages {
 		if len(r.pages[i].rule.margins) > 0 {
 			return true
 		}
@@ -209,7 +244,7 @@ func (r *Resolver) HasMarginBoxes() bool {
 // and generates nothing (CSS Page 3, 5.2).
 func (r *Resolver) PageIn(sel PageSelector, root *Style) PageStyle {
 	ps := r.Page(sel)
-	if !r.HasMarginBoxes() {
+	if !r.hasPageAreas() {
 		return ps
 	}
 	type src struct {
@@ -236,7 +271,7 @@ func (r *Resolver) PageIn(sel PageSelector, root *Style) PageStyle {
 	}
 	cs := &computeState{r: r, root: root}
 	var ctxCands []cand
-	var boxCands [NumMarginBoxes][]cand
+	var boxCands [NumMarginBoxes + 1][]cand
 	for _, s := range srcs {
 		for i := range s.rule.rule.context {
 			d := &s.rule.rule.context[i]
@@ -251,6 +286,11 @@ func (r *Resolver) PageIn(sel PageSelector, root *Style) PageStyle {
 		}
 	}
 	pageCtx, vars := cs.cascade(ctxCands, root, nil, false)
+	if fc := boxCands[footnoteArea]; len(fc) > 0 {
+		st, _ := cs.cascade(slices.Clone(fc), pageCtx, vars, false)
+		st.Display, st.Float, st.Position = Block, FloatNone, Static
+		ps.Footnote = st
+	}
 	for b := range NumMarginBoxes {
 		if len(boxCands[b]) == 0 {
 			continue

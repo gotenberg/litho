@@ -262,19 +262,39 @@ func (p *parser) declarations(yield func(item) bool) {
 			if !yield(it) {
 				return
 			}
-		default:
-			p.reconsume()
-			for {
-				n := p.next()
-				if n.typ == tSemicolon || n.typ == tEOF {
-					break
+		case tDelim:
+			if t.delim != '&' {
+				p.skipDeclaration()
+				if !yield(item{kind: itemError, name: "invalid"}) {
+					return
 				}
-				p.componentValue(n)
+				continue
 			}
+			// A nested style rule starting with the nesting selector
+			// (CSS Nesting 1, 2; CSS Syntax 3, 5.4.4, consume a block's
+			// contents).
+			p.reconsume()
+			if !yield(p.qualifiedRule()) {
+				return
+			}
+		default:
+			p.skipDeclaration()
 			if !yield(item{kind: itemError, name: "invalid"}) {
 				return
 			}
 		}
+	}
+}
+
+// skipDeclaration consumes a malformed declaration up to its semicolon.
+func (p *parser) skipDeclaration() {
+	p.reconsume()
+	for {
+		n := p.next()
+		if n.typ == tSemicolon || n.typ == tEOF {
+			break
+		}
+		p.componentValue(n)
 	}
 }
 
