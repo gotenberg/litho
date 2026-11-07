@@ -415,7 +415,21 @@ func (rd *renderer) fitScale(d *dim) {
 		return
 	}
 	need := 0.0
-	for _, v := range d.sc.ticks() {
+	ticks := d.sc.ticks()
+	// Ticks whose labels format alike are fewer intervals than they look:
+	// LibreOffice caps the count so no label repeats (tdf#48041).
+	same, run, prev := 0, 0, ""
+	for i, v := range ticks {
+		t := d.tickText(v)
+		if i > 0 && t == prev {
+			run++
+			same = max(same, run)
+		} else {
+			run = 0
+		}
+		prev = t
+	}
+	for _, v := range ticks {
 		b := rd.measure(d.tickText(v), d.style(), 0)
 		if b == nil {
 			continue
@@ -427,8 +441,13 @@ func (rd *renderer) fitScale(d *dim) {
 			need = math.Max(need, w)
 		}
 	}
-	if need > 0 {
-		opt.maxCount = int(d.length() / need)
+	if need > 0 || same > 0 {
+		if need > 0 {
+			opt.maxCount = int(d.length() / need)
+		}
+		if same > 0 {
+			opt.maxCount = min(opt.maxCount, len(ticks)/(same+1))
+		}
 		d.sc = autoScale(d.ax, d.lo, d.hi, opt)
 	}
 }

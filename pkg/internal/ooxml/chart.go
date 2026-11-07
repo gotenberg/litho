@@ -80,7 +80,7 @@ func ParseChart(ctx context.Context, pkg *Package, part string) (*chart.Chart, e
 			}
 		}
 	}
-	c, err := ChartFromElement(root, theme)
+	c, err := ChartFromElement(root, theme, isMSO2007(ctx, pkg))
 	if err != nil {
 		return nil, fmt.Errorf("reading the chart %s: %w", part, err)
 	}
@@ -97,16 +97,47 @@ func ParseChart(ctx context.Context, pkg *Package, part string) (*chart.Chart, e
 // errNotChart reports a part whose root is not a chart space.
 var errNotChart = fmt.Errorf("not a c:chartSpace")
 
+// relExtendedProperties is the relationship type of the extended
+// properties part (ECMA-376 Part 1, 15.2.12.3).
+const relExtendedProperties = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties"
+
+// isMSO2007 reports a package Office 2007 saved, as its extended
+// properties tell (Application "Microsoft ...", AppVersion 12.x): Office
+// 2007 wrote the defaults of several chart booleans opposite to the
+// specification, and LibreOffice reads such files with Office 2007's
+// defaults (oox's XmlFilterBase::isMSO2007Document).
+func isMSO2007(ctx context.Context, pkg *Package) bool {
+	name := pkg.RelatedPart("", relExtendedProperties)
+	if name == "" {
+		return false
+	}
+	root, err := pkg.ParseXML(ctx, name, nil)
+	if err != nil {
+		return false
+	}
+	app, ver := "", ""
+	for _, c := range root.Kids() {
+		switch c.Local {
+		case "Application":
+			app = c.Text
+		case "AppVersion":
+			ver = c.Text
+		}
+	}
+	return strings.HasPrefix(app, "Microsoft") && strings.HasPrefix(ver, "12.")
+}
+
 // ChartFromElement reads a parsed c:chartSpace element as [ParseChart]
-// does, with theme for the scheme colours, nil for Office's default.
-func ChartFromElement(root *Element, theme *Theme) (*chart.Chart, error) {
+// does, with theme for the scheme colours (nil for Office's default) and
+// mso2007 for a file Office 2007 saved.
+func ChartFromElement(root *Element, theme *Theme, mso2007 bool) (*chart.Chart, error) {
 	if !root.Is(NSChart, "chartSpace") {
 		return nil, errNotChart
 	}
 	if theme == nil || len(theme.Colors) == 0 {
 		theme = officeTheme
 	}
-	p := &chartReader{theme: theme, style: defaultChartStyle, c: &chart.Chart{}}
+	p := &chartReader{theme: theme, style: defaultChartStyle, c: &chart.Chart{}, mso2007: mso2007}
 	if v, ok := Int(childVal(root, "style")); ok && v >= 1 && v <= 48 {
 		p.style = v
 	}
@@ -120,6 +151,9 @@ type chartReader struct {
 	theme *Theme
 	style int
 	c     *chart.Chart
+	// mso2007 reads absent booleans with Office 2007's defaults: no
+	// varied colours, no smoothing, an automatic title.
+	mso2007 bool
 	// global is the chart space's text properties, which every text
 	// inherits.
 	global textProps
@@ -242,7 +276,7 @@ func (p *chartReader) palette(accents []string) ([]compose.Color, bool) {
 		dk, _ := p.theme.Color("dk1")
 		var out []compose.Color
 		for _, t := range []float64{0.885, 0.55, 0.78, 0.925, 0.70, 0.30} {
-			out = append(out, toCompose(Tint(dk, t)))
+			out = append(out, toCompose(linearTint(dk, t)))
 		}
 		return out, true
 	default:
@@ -269,7 +303,7 @@ func (p *chartReader) autoFrame(area bool) chart.Frame {
 		f.Border = &chart.Stroke{Color: toCompose(hexColor(0xd9d9d9)), Width: 0.75}
 	} else if p.style > 32 {
 		dk, _ := p.theme.Color("dk1")
-		f.Fill = &chart.Paint{Color: toCompose(Tint(dk, 0.2))}
+		f.Fill = &chart.Paint{Color: toCompose(linearTint(dk, 0.2))}
 	}
 	return f
 }
@@ -286,7 +320,34 @@ func (p *chartReader) autoLine() *chart.Stroke {
 		name = "dk1"
 	}
 	c, _ := p.theme.Color(name)
-	return &chart.Stroke{Color: toCompose(Tint(c, 0.75)), Width: themeLineWidth}
+	return &chart.Stroke{Color: toCompose(linearTint(c, 0.75)), Width: themeLineWidth}
+}
+
+// linearTint lightens c as oox's colour tint does for the automatic chart
+// formats: towards white in linear RGB, keeping the fraction t of the
+// colour.
+func linearTint(c css.Color, t float64) css.Color {
+	f := func(v float64) float64 {
+		l := toLinear(v)
+		return fromLinear(1 - (1-l)*t)
+	}
+	return css.Color{R: f(c.R), G: f(c.G), B: f(c.B), A: c.A}
+}
+
+// toLinear and fromLinear convert an sRGB channel to and from linear
+// light (IEC 61966-2-1).
+func toLinear(v float64) float64 {
+	if v <= 0.04045 {
+		return v / 12.92
+	}
+	return math.Pow((v+0.055)/1.055, 2.4)
+}
+
+func fromLinear(v float64) float64 {
+	if v <= 0.0031308 {
+		return v * 12.92
+	}
+	return 1.055*math.Pow(v, 1/2.4) - 0.055
 }
 
 // frame reads a shape properties element over the automatic frame def.
@@ -343,6 +404,12 @@ func (p *chartReader) stroke(ln *Element, def *chart.Stroke) *chart.Stroke {
 	s := chart.Stroke{Width: themeLineWidth, Color: compose.Black}
 	if def != nil {
 		s = *def
+	}
+	if ln == nil {
+		if def == nil {
+			return nil
+		}
+		return &s
 	}
 	if w, ok := EMU(attrOr(ln, "w")); ok && w >= 0 {
 		s.Width = w
@@ -564,7 +631,7 @@ func richText(tx *Element) string {
 // element without text (oox's ChartSpaceConverter).
 func (p *chartReader) readTitle(ch *Element) {
 	t := ch.Child(NSChart, "title")
-	deleted := boolVal(ch, "autoTitleDeleted", true)
+	deleted := boolVal(ch, "autoTitleDeleted", !p.mso2007)
 	if t == nil && deleted {
 		return
 	}
@@ -696,7 +763,7 @@ func (p *chartReader) axis(e *Element, kind chart.AxisKind) *chart.Axis {
 	if g := e.Child(NSChart, "minorGridlines"); g != nil {
 		minor := p.autoLine()
 		tx, _ := p.theme.Color("tx1")
-		minor.Color = toCompose(Tint(tx, 0.5))
+		minor.Color = toCompose(linearTint(tx, 0.5))
 		a.MinorGrid = p.lineOf(g.Child(NSChart, "spPr"), minor)
 	}
 	a.Line = p.lineOf(e.Child(NSChart, "spPr"), p.autoLine())

@@ -315,34 +315,73 @@ func (rd *renderer) labelText(g *Group, s *Series, j int, v float64, lb Labels, 
 	}
 	sep := lb.Separator
 	if sep == "" {
+		// A percentage without the value goes on a line of its own, as
+		// Office and LibreOffice write it; other parts take a semicolon.
 		sep = "; "
-		if g.Kind == Pie || g.Kind == Doughnut {
+		if lb.ShowPercent && !lb.ShowValue {
 			sep = "\n"
 		}
 	}
 	return strings.Join(parts, sep)
 }
 
-// polyline returns the open path through pts, smoothed as a Catmull-Rom
-// spline through them when smooth is set.
+// polyline returns the open path through pts, smoothed as a natural
+// cubic spline through them when smooth is set, each coordinate a spline of
+// the point's index, as LibreOffice smooths lines.
 func polyline(pts []compose.Point, smooth bool) []compose.PathOp {
 	if len(pts) == 0 {
 		return nil
 	}
 	ops := []compose.PathOp{{Kind: compose.MoveTo, P: [3]compose.Point{pts[0]}}}
-	for i := 1; i < len(pts); i++ {
-		if !smooth || len(pts) < 3 {
-			ops = append(ops, compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{pts[i]}})
-			continue
+	if !smooth || len(pts) < 3 {
+		for _, p := range pts[1:] {
+			ops = append(ops, compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{p}})
 		}
-		p0 := pts[max(i-2, 0)]
-		p1, p2 := pts[i-1], pts[i]
-		p3 := pts[min(i+1, len(pts)-1)]
-		c1 := compose.Point{X: p1.X + (p2.X-p0.X)/6, Y: p1.Y + (p2.Y-p0.Y)/6}
-		c2 := compose.Point{X: p2.X - (p3.X-p1.X)/6, Y: p2.Y - (p3.Y-p1.Y)/6}
-		ops = append(ops, compose.PathOp{Kind: compose.CurveTo, P: [3]compose.Point{c1, c2, p2}})
+		return ops
+	}
+	xs, ys := make([]float64, len(pts)), make([]float64, len(pts))
+	for i, p := range pts {
+		xs[i], ys[i] = p.X, p.Y
+	}
+	dx, dy := splineSlopes(xs), splineSlopes(ys)
+	for i := 1; i < len(pts); i++ {
+		p0, p1 := pts[i-1], pts[i]
+		c1 := compose.Point{X: p0.X + dx[i-1]/3, Y: p0.Y + dy[i-1]/3}
+		c2 := compose.Point{X: p1.X - dx[i]/3, Y: p1.Y - dy[i]/3}
+		ops = append(ops, compose.PathOp{Kind: compose.CurveTo, P: [3]compose.Point{c1, c2, p1}})
 	}
 	return ops
+}
+
+// splineSlopes returns the first derivatives, per unit step, of the
+// natural cubic spline through v at the knots 0, 1, ... (second
+// derivatives zero at both ends), by the tridiagonal algorithm.
+func splineSlopes(v []float64) []float64 {
+	n := len(v)
+	// Solve for the second derivatives m of the natural spline:
+	// m[i-1] + 4 m[i] + m[i+1] = 6 (v[i+1] - 2 v[i] + v[i-1]).
+	m := make([]float64, n)
+	c := make([]float64, n)
+	d := make([]float64, n)
+	for i := 1; i < n-1; i++ {
+		r := 6 * (v[i+1] - 2*v[i] + v[i-1])
+		den := 4.0
+		if i > 1 {
+			den -= c[i-1]
+			r -= d[i-1]
+		}
+		c[i] = 1 / den
+		d[i] = r / den
+	}
+	for i := n - 2; i >= 1; i-- {
+		m[i] = d[i] - c[i]*m[i+1]
+	}
+	out := make([]float64, n)
+	for i := 0; i < n-1; i++ {
+		out[i] = v[i+1] - v[i] - (2*m[i]+m[i+1])/6
+	}
+	out[n-1] = v[n-1] - v[n-2] + (m[n-2]+2*m[n-1])/6
+	return out
 }
 
 // lines draws a line group: each series a line through its points, split
@@ -497,7 +536,9 @@ func (rd *renderer) scatter(g *Group, x, y *dim) []func() {
 	if !(scaleB > 0) {
 		scaleB = 100
 	}
-	rmax := math.Min(x.inner.Width, y.inner.Height) / 8 * math.Min(scaleB, 300) / 100
+	// The largest bubble's radius is a quarter of the plot area's smaller
+	// side (LibreOffice's BubbleChart).
+	rmax := math.Min(x.inner.Width, y.inner.Height) / 4 * math.Min(scaleB, 300) / 100
 	for _, s := range g.Series {
 		cats, vals, sizes := rd.data(s.Categories), rd.data(s.Values), rd.data(s.Sizes)
 		var pts []compose.Point

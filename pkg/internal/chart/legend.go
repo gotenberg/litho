@@ -15,9 +15,11 @@ type legendEntry struct {
 	label  *block
 	fill   *Paint
 	border *Stroke
-	// lineKey draws the key as a line with the marker, as line series do.
-	lineKey bool
-	marker  Marker
+	// lineKey draws the key as a line with the marker, as line series do;
+	// markerKey draws the marker alone, as a scatter series without a line
+	// does.
+	lineKey, markerKey bool
+	marker             Marker
 }
 
 // legendEntries returns the legend's entries in order: a series each, or
@@ -30,7 +32,9 @@ func (rd *renderer) legendEntries(st TextStyle, maxW float64) []legendEntry {
 	}
 	n := 0
 	for _, g := range rd.c.Groups {
-		vary := g.VaryColors && (len(g.Series) == 1 || g.Kind == Pie || g.Kind == Doughnut) && len(g.Series) > 0
+		// A pie lists its categories; another group whose points vary in
+		// colour does too.
+		vary := (g.Kind == Pie || g.Kind == Doughnut || g.VaryColors && len(g.Series) == 1) && len(g.Series) > 0
 		if vary {
 			s := g.Series[0]
 			cnt := max(s.Values.Len(), s.Categories.Len())
@@ -63,8 +67,12 @@ func (rd *renderer) legendEntries(st TextStyle, maxW float64) []legendEntry {
 func (rd *renderer) entry(g *Group, s *Series, j int, name string, st TextStyle, maxW float64) legendEntry {
 	e := legendEntry{label: rd.measure(name, st, maxW), fill: rd.fillOf(g, s, j), border: rd.borderOf(g, s, j)}
 	if lined(g.Kind) && !(g.Kind == Radar && g.Filled) {
-		e.lineKey = true
 		e.marker = rd.markerOf(g, s, j)
+		if e.border != nil && !e.border.None {
+			e.lineKey = true
+		} else {
+			e.markerKey = true
+		}
 	}
 	return e
 }
@@ -198,6 +206,12 @@ func (rd *renderer) legend(page compose.Rect, rem *compose.Rect) {
 
 // key draws an entry's legend key into r.
 func (rd *renderer) key(e legendEntry, r compose.Rect) {
+	if e.markerKey {
+		m := e.marker
+		m.Size = math.Min(m.Size, r.Height)
+		rd.marker(m, r.X+r.Width/2, r.Y+r.Height/2)
+		return
+	}
 	if !e.lineKey {
 		rd.add(paintRect(r, e.fill, keyBorder(e.border)))
 		return

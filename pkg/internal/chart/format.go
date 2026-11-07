@@ -248,7 +248,7 @@ func formatNumber(code string, v float64) string {
 	grouping := strings.Contains(intPart, ",")
 	decimals := strings.Count(frac, "0") + strings.Count(frac, "#") + strings.Count(frac, "?")
 	minDecimals := strings.Count(frac, "0")
-	s := strconv.FormatFloat(v, 'f', decimals, 64)
+	s := strconv.FormatFloat(roundHalfUp(v, decimals), 'f', decimals, 64)
 	ip, fp, _ := strings.Cut(s, ".")
 	for len(fp) > minDecimals && strings.HasSuffix(fp, "0") {
 		fp = fp[:len(fp)-1]
@@ -449,4 +449,18 @@ func pad2(n int) string {
 		return "0" + strconv.Itoa(n)
 	}
 	return strconv.Itoa(n)
+}
+
+// roundHalfUp rounds the non-negative v to decimals places, halves away
+// from zero as spreadsheets round, not to even.
+func roundHalfUp(v float64, decimals int) float64 {
+	if decimals > 15 {
+		return v
+	}
+	p := math.Pow(10, float64(decimals))
+	r := math.Floor(v*p+0.5+1e-9) / p
+	if math.IsInf(r, 0) || math.IsNaN(r) {
+		return v
+	}
+	return r
 }

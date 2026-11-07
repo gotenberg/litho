@@ -55,7 +55,7 @@ func (p *chartReader) group(e *Element) *chart.Group {
 	case "percentStacked":
 		g.Grouping = chart.PercentStacked
 	}
-	g.VaryColors = boolVal(e, "varyColors", g.VaryColors)
+	g.VaryColors = boolVal(e, "varyColors", g.VaryColors && !p.mso2007)
 	if v := floatVal(e, "gapWidth"); !math.IsNaN(v) {
 		g.GapWidth = v
 	}
@@ -159,6 +159,9 @@ func (p *chartReader) series(e *Element, g *chart.Group, scatterLines, lineMarke
 	if filled(g) {
 		f := p.frame(spPr, chart.Frame{})
 		s.Fill, s.Border = f.Fill, f.Border
+		if s.Border == nil {
+			s.Border = p.autoSeriesBorder()
+		}
 		if s.Border != nil && s.Border.None {
 			s.Border = nil
 		}
@@ -180,7 +183,7 @@ func (p *chartReader) series(e *Element, g *chart.Group, scatterLines, lineMarke
 	if g.Kind == chart.Line || g.Kind == chart.Scatter || g.Kind == chart.Radar {
 		s.Marker = p.marker(e.Child(NSChart, "marker"), lineMarkers)
 	}
-	s.Smooth = boolVal(e, "smooth", false)
+	s.Smooth = boolVal(e, "smooth", g.Kind == chart.Line && !p.mso2007)
 	if v := floatVal(e, "explosion"); v > 0 {
 		s.Explosion = v
 	}
@@ -472,4 +475,19 @@ func readCache(cache *Element) ([]chart.Value, string) {
 		vals[i] = chart.Str(text)
 	}
 	return vals, format
+}
+
+// autoSeriesBorder returns the automatic outline of a filled series for
+// the chart's style (oox's spFilledSeriesLines): the light colour for
+// styles 9 to 16, the dark colour shaded to half for 33, none otherwise.
+func (p *chartReader) autoSeriesBorder() *chart.Stroke {
+	switch {
+	case p.style >= 9 && p.style <= 16:
+		c, _ := p.theme.Color("lt1")
+		return &chart.Stroke{Color: toCompose(c), Width: themeLineWidth}
+	case p.style == 33:
+		c, _ := p.theme.Color("dk1")
+		return &chart.Stroke{Color: toCompose(Shade(c, 0.5)), Width: themeLineWidth}
+	}
+	return nil
 }
