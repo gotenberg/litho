@@ -143,3 +143,41 @@ func TestConvert_Kerning(t *testing.T) {
 		}
 	}
 }
+
+// TestFootnoteRule maps style:footnote-sep onto the page box's footnote
+// rule, Writer's defaults where it is absent (LibreOffice draws a 0.5 pt
+// rule a quarter of the area wide on the left, 0.1 cm from the notes; a
+// 0.1 cm rule half as wide, centred, as the second case says).
+func TestFootnoteRule(t *testing.T) {
+	cm := 72 / 2.54
+	layoutOf := func(sep string) string {
+		return `<style:page-layout style:name="pmf"><style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" fo:margin-top="2cm" fo:margin-bottom="2cm" fo:margin-left="2cm" fo:margin-right="2cm">` +
+			sep + `</style:page-layout-properties></style:page-layout>`
+	}
+	cases := []struct {
+		name, sep string
+		want      layout.FootnoteRule
+	}{
+		{"absent", ``, layout.FootnoteRule{Width: 0.25, Thickness: 0.5, Color: css.Color{A: 1}, Align: css.AlignLeft, Line: css.Solid, SpaceAbove: 0.1 * cm, SpaceBelow: 0.1 * cm}},
+		{"centred", `<style:footnote-sep style:width="0.1cm" style:distance-before-sep="0.5cm" style:distance-after-sep="0.3cm" style:line-style="solid" style:adjustment="center" style:rel-width="50%" style:color="#ff0000"/>`,
+			layout.FootnoteRule{Width: 0.5, Thickness: 0.1 * cm, Color: css.Color{R: 1, A: 1}, Align: css.AlignCenter, Line: css.Solid, SpaceAbove: 0.5 * cm, SpaceBelow: 0.3 * cm}},
+		{"dashed right", `<style:footnote-sep style:width="1pt" style:line-style="dash" style:adjustment="right"/>`,
+			layout.FootnoteRule{Width: 0.25, Thickness: 1, Color: css.Color{A: 1}, Align: css.AlignRight, Line: css.Dashed, SpaceAbove: 0.1 * cm, SpaceBelow: 0.1 * cm}},
+		{"no thickness", `<style:footnote-sep style:width="0cm" style:distance-before-sep="0.2cm"/>`,
+			layout.FootnoteRule{Width: 0.25, Color: css.Color{A: 1}, Align: css.AlignLeft, Line: css.BorderNone, SpaceAbove: 0.2 * cm, SpaceBelow: 0.1 * cm}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			b := newTestBuilder(t, doc{autoStyles: layoutOf(tc.sep), masters: `<style:master-page style:name="Standard" style:page-layout-name="pmf"/>`, body: `<text:p>a</text:p>`})
+			r := b.pages.geom(b.styles.Master("Standard"), false, false).box.FootnoteRule
+			if r == nil {
+				t.Fatal("no footnote rule")
+			}
+			got, want := *r, tc.want
+			if !near(got.Thickness, want.Thickness, 0.01) || !near(got.SpaceAbove, want.SpaceAbove, 0.01) || !near(got.SpaceBelow, want.SpaceBelow, 0.01) ||
+				!near(got.Width, want.Width, 1e-9) || got.Align != want.Align || got.Line != want.Line || !near(got.Color.R, want.Color.R, 0.01) || got.Color.A != want.Color.A {
+				t.Errorf("rule = %+v, want %+v", got, want)
+			}
+		})
+	}
+}

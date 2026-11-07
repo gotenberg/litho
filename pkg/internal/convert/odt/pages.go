@@ -298,6 +298,7 @@ func (f *pageFlow) buildGeom(mp *odf.MasterPage, left, first, hf bool) *pageGeom
 	}
 	box.Margin = inner
 	box.Footnote = f.b.footnoteArea(pp)
+	box.FootnoteRule = footnoteRule(pp)
 	g.box = box
 	return g
 }
@@ -493,47 +494,74 @@ func artifacts(frags []compose.Fragment) []compose.Fragment {
 }
 
 // footnoteArea returns the style of the footnote area of a page layout
-// (ODF 1.3, Part 3, 17.2 and 19.354, style:footnote-sep): the separator
-// line drawn at its top, as wide as style:rel-width of the area and
-// placed as style:adjustment says, the distances before and after it,
-// and style:footnote-max-height.
+// (ODF 1.3, Part 3, 17.2): style:footnote-max-height. The separator above
+// it is [footnoteRule]'s.
 func (b *builder) footnoteArea(pp odf.Props) *css.Style {
 	st := baseStyle()
 	st.Display = css.Block
 	if mh, ok := odf.Length(pp.Get("style:footnote-max-height")); ok && mh > 0 {
 		st.MaxHeight = css.Pts(mh)
 	}
+	return st
+}
+
+// The separator Writer draws when a page layout names none
+// (SwPageFootnoteInfo's defaults; measured on the pinned image: a 0.5 pt
+// black rule a quarter of the area wide on the left, 0.1 cm of room on
+// each side).
+const (
+	defaultSepWidth     = 0.25
+	defaultSepThickness = 0.5
+	defaultSepSpace     = 72 * 0.1 / 2.54
+)
+
+// sepLines maps style:line-style of style:footnote-sep (ODF 1.3, Part 3,
+// 19.491) to the rule's line style: the dashed styles draw dashed, any
+// other solid.
+var sepLines = map[string]css.BorderStyle{
+	"none": css.BorderNone, "dotted": css.Dotted, "dash": css.Dashed, "long-dash": css.Dashed,
+	"dot-dash": css.Dashed, "dot-dot-dash": css.Dashed,
+}
+
+// footnoteRule returns the separator between a page's body and its
+// footnotes (ODF 1.3, Part 3, 17.19, style:footnote-sep): style:width the
+// rule's thickness, style:rel-width its length in the area's width,
+// style:adjustment its side, style:color, style:line-style, and
+// style:distance-before-sep and style:distance-after-sep the room above
+// and below it; Writer's defaults where the element or an attribute is
+// absent. A rule of no thickness is not drawn: its room stays.
+func footnoteRule(pp odf.Props) *layout.FootnoteRule {
+	r := &layout.FootnoteRule{Width: defaultSepWidth, Thickness: defaultSepThickness, Color: css.Color{A: 1},
+		Align: css.AlignLeft, Line: css.Solid, SpaceAbove: defaultSepSpace, SpaceBelow: defaultSepSpace}
 	sep := pp.Child("style:footnote-sep")
 	if sep == nil {
-		return st
+		return r
 	}
-	w, _ := odf.Length(sep.A(odf.NSStyle, "width"))
-	before, _ := odf.Length(sep.A(odf.NSStyle, "distance-before-sep"))
-	after, _ := odf.Length(sep.A(odf.NSStyle, "distance-after-sep"))
-	rel, ok := odf.Percent(sep.A(odf.NSStyle, "rel-width"))
-	if !ok {
-		rel = 0.25
-	}
-	st.Padding[css.Top] = css.Pts(max(before, 0) + max(w, 0) + max(after, 0))
-	if w > 0 && rel > 0 && sep.A(odf.NSStyle, "line-style") != "none" {
-		c := css.Color{A: 1}
-		if col, ok := odf.ParseColor(sep.A(odf.NSStyle, "color")); ok {
-			c = cssColor(col)
+	length := func(local string, dst *float64) {
+		if v, ok := odf.Length(sep.A(odf.NSStyle, local)); ok && v >= 0 && v < office.MaxPageSide {
+			*dst = v
 		}
-		st.BackgroundGradient = &css.Gradient{Kind: css.LinearGradient, Angle: 90, Stops: []css.GradientStop{
-			{Color: c, Position: css.Dimension{Kind: css.Percent}},
-			{Color: c, Position: css.Dimension{Kind: css.Percent, Value: 1}},
-		}}
-		st.BackgroundRepeat = [2]css.Repeat{css.RepeatNoRepeat, css.RepeatNoRepeat}
-		st.BackgroundSize = css.BackgroundSize{Kind: css.SizeExplicit, Width: css.Dimension{Kind: css.Percent, Value: rel}, Height: css.Pts(w)}
-		x := 0.0
-		switch sep.A(odf.NSStyle, "adjustment") {
-		case "center":
-			x = 0.5
-		case "right":
-			x = 1
-		}
-		st.BackgroundPosition = [2]css.Dimension{{Kind: css.Percent, Value: x}, css.Pts(max(before, 0))}
 	}
-	return st
+	length("width", &r.Thickness)
+	length("distance-before-sep", &r.SpaceAbove)
+	length("distance-after-sep", &r.SpaceBelow)
+	if v, ok := odf.Percent(sep.A(odf.NSStyle, "rel-width")); ok && v >= 0 {
+		r.Width = min(v, 1)
+	}
+	if col, ok := odf.ParseColor(sep.A(odf.NSStyle, "color")); ok {
+		r.Color = cssColor(col)
+	}
+	switch sep.A(odf.NSStyle, "adjustment") {
+	case "center":
+		r.Align = css.AlignCenter
+	case "right":
+		r.Align = css.AlignRight
+	}
+	if l, ok := sepLines[sep.A(odf.NSStyle, "line-style")]; ok {
+		r.Line = l
+	}
+	if r.Thickness == 0 {
+		r.Line = css.BorderNone
+	}
+	return r
 }
