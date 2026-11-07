@@ -159,7 +159,7 @@ func (c *collector) walk(k *box) {
 		for _, kid := range k.kids {
 			c.walk(kid)
 		}
-		if c.cur == startPara && c.cur.n == start && hasInlineEdges(k.st) {
+		if c.cur == startPara && c.cur.n == start && hasInlineEdges(k) {
 			// An empty inline box with no margin, border or padding makes
 			// no line (CSS 2.1, 9.4.2).
 			c.object(runEmpty, k)
@@ -172,10 +172,21 @@ func (c *collector) walk(k *box) {
 	}
 }
 
-// hasInlineEdges reports whether an inline box of style st takes room at
-// its start or end: a margin, border or padding on the left or right.
-func hasInlineEdges(st *css.Style) bool {
-	for _, s := range []css.Side{css.Left, css.Right} {
+// hasInlineEdges reports whether the inline box b takes room at its
+// start or end: a margin, border or padding on an edge it draws. A piece
+// of an inline box split around a block draws its start edge only when
+// it starts the box and its end edge only when it ends it (CSS 2.1,
+// 9.2.1.1).
+func hasInlineEdges(b *box) bool {
+	st := b.st
+	start, end := css.Left, css.Right
+	if st.Direction == css.RTL {
+		start, end = end, start
+	}
+	for _, s := range []css.Side{start, end} {
+		if s == start && !b.first || s == end && !b.last {
+			continue
+		}
 		if st.Margin[s].Kind != css.Auto && st.Margin[s].Value != 0 || st.Padding[s].Value != 0 {
 			return true
 		}

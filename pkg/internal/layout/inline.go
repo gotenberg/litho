@@ -966,7 +966,10 @@ func (s *inlineState) vertical(l *lineBox) {
 			lh = it.ascent + it.descent + max(it.gap, 0)
 		}
 		half := (lh - (it.ascent + it.descent)) / 2
-		if it.text != nil || it.box.kind == kindInline {
+		// An empty inline box kept for its edges has no glyphs to lay out:
+		// its own box, included below, is all it adds (CSS 2.1, 10.8.1).
+		empty := it.text == nil && it.ascent == 0 && it.descent == 0
+		if it.text != nil || it.box.kind == kindInline && !empty {
 			include(v, v.shift-wider(it.ascent+half, v.above), v.shift+wider(it.descent+half, v.below))
 		}
 	}
