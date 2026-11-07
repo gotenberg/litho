@@ -131,8 +131,35 @@ func (p *pages) box(info layout.PageInfo) layout.PageBox {
 	bottom = min(bottom, s.height/2-minPageArea/2)
 	return layout.PageBox{
 		Width: s.width, Height: s.height,
-		Margin: [4]float64{top, m[css.Right], bottom, m[css.Left] + s.gutter},
-		Frame:  s.frame,
+		Margin:       [4]float64{top, m[css.Right], bottom, m[css.Left] + s.gutter},
+		Frame:        s.frame,
+		FootnoteRule: footnoteRule(s.contentWidth()),
+	}
+}
+
+// The footnote separator LibreOffice prints for a DOCX document, whatever
+// its separator footnote (ECMA-376 Part 1, 17.11.23 separator) holds: a
+// black rule 144 points (two inches) long and 0.75 point thick at the
+// start of the text area, 8.1 points below the body text and 4.95 points
+// above the first note.
+const (
+	footnoteRuleLength     = 144
+	footnoteRuleThickness  = 0.75
+	footnoteRuleSpaceAbove = 8.1
+	footnoteRuleSpaceBelow = 4.95
+)
+
+// footnoteRule returns the footnote separator of a page whose text area
+// is width points wide.
+func footnoteRule(width float64) *layout.FootnoteRule {
+	return &layout.FootnoteRule{
+		Width:      min(1, footnoteRuleLength/max(width, minPageArea)),
+		Thickness:  footnoteRuleThickness,
+		Color:      css.Color{A: 1},
+		Align:      css.AlignLeft,
+		Line:       css.Solid,
+		SpaceAbove: footnoteRuleSpaceAbove,
+		SpaceBelow: footnoteRuleSpaceBelow,
 	}
 }
 
