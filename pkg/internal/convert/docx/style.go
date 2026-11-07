@@ -188,7 +188,7 @@ func (d *document) proportionalLine(st *css.Style, mult float64) float64 {
 // exact or proportional line height, else the face's normal one, at least
 // its minimum line height.
 func (d *document) lineHeight(st *css.Style) float64 {
-	h := 0.0
+	var h float64
 	switch st.LineHeight.Kind { //nolint:exhaustive // every other kind is the face's normal height
 	case css.Points:
 		h = st.LineHeight.Value
