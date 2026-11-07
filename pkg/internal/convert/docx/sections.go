@@ -267,7 +267,10 @@ func (d *document) body(root *ooxml.Element) []*section {
 	}
 	closeSection(body.Child(w, "sectPr"))
 	// Name the pages: a continuous break keeps the page when the setup
-	// does not change; any other break starts a page.
+	// does not change; any other break starts a page, where the first
+	// paragraph keeps only the part of its space before that the last
+	// paragraph's space after did not already give, as LibreOffice lays
+	// a section's first page out.
 	for i, s := range secs {
 		s.name = fmt.Sprintf("s%d", i)
 		s.id = d.newID("sec")
@@ -276,6 +279,12 @@ func (d *document) body(root *ooxml.Element) []*section {
 				s.name = secs[i-1].name
 			} else {
 				d.warn("approximated", "a continuous section break that changes the page setup starts a new page")
+			}
+		}
+		if i > 0 && s.name != secs[i-1].name && len(s.blocks) > 0 && len(secs[i-1].blocks) > 0 {
+			first, last := s.blocks[0].info, secs[i-1].blocks[len(secs[i-1].blocks)-1].info
+			if first != nil && last != nil {
+				first.before = max(0, first.before-last.after)
 			}
 		}
 	}

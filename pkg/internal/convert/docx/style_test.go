@@ -189,3 +189,31 @@ func TestEmptyParagraphKeepsALine(t *testing.T) {
 		t.Errorf("empty paragraph strut %+v", strut)
 	}
 }
+
+func TestParagraphSpacing_AtBreaks(t *testing.T) {
+	t.Parallel()
+	styles := stylesPart(`<w:style w:type="paragraph" w:styleId="Head"><w:pPr><w:spacing w:before="480" w:after="0"/></w:pPr></w:style>` +
+		`<w:style w:type="paragraph" w:styleId="Body"><w:pPr><w:spacing w:after="200"/></w:pPr></w:style>`)
+	p := func(style, text string) string {
+		return `<w:p><w:pPr><w:pStyle w:val="` + style + `"/></w:pPr><w:r><w:t>` + text + `</w:t></w:r></w:p>`
+	}
+	body := p("Body", "a") + `<w:p><w:r><w:br w:type="page"/></w:r></w:p>` + p("Head", "after break") +
+		p("Body", "b") + `<w:p><w:pPr><w:sectPr/></w:pPr></w:p>` + p("Head", "new section") + `<w:sectPr/>`
+	b := build(t, body, map[string]string{"word/styles.xml": styles})
+	ps := role(b.root, "P")
+	var got []string
+	for _, n := range ps {
+		got = append(got, textOf(n))
+	}
+	if len(ps) != 4 {
+		t.Fatalf("paragraphs %q: the page break paragraph leaves none", got)
+	}
+	// The hard break drops the space before; the section's first page
+	// keeps what the previous paragraph's space after did not give.
+	if ps[1].Style.BreakBefore != css.Page || ps[1].Style.Margin[css.Top] != css.Pts(0) {
+		t.Errorf("after break: break %v margin %v", ps[1].Style.BreakBefore, ps[1].Style.Margin[css.Top])
+	}
+	if m := ps[3].Style.Margin[css.Top]; m != css.Pts(14) {
+		t.Errorf("new section margin %v, want 14", m)
+	}
+}

@@ -260,16 +260,25 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 	segs := sink.finish()
 	var out []blockNode
 	for i, seg := range segs {
-		if i > 0 && len(seg.nodes) == 0 && i == len(segs)-1 {
-			// A page break ending the paragraph moves the next one.
-			s.breakNext = true
-			break
+		if len(segs) > 1 && len(seg.nodes) == 0 && seg.id == "" {
+			if i == len(segs)-1 {
+				// A page break ending the paragraph moves the next one.
+				s.breakNext = true
+				break
+			}
+			if i == 0 {
+				// Nor does a page break opening it leave an empty line.
+				continue
+			}
 		}
 		bst := *st
 		pst := &bst
 		pst.Margin = st.Margin
 		n := &layout.Node{Kind: layout.Element, Style: pst, Role: "P", ID: seg.id}
-		if i > 0 || s.breakNext || boolOf(pp.pageBreakBefore) {
+		// A hard page break drops the space before the text it moves, as
+		// LibreOffice lays DOCX documents out.
+		hardBreak := i > 0 || s.breakNext
+		if hardBreak || boolOf(pp.pageBreakBefore) {
 			pst.BreakBefore = css.Page
 			s.breakNext = false
 		}
@@ -301,6 +310,9 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 		d.frame(n, pp)
 		info := &paraInfo{style: rp.styleID, contextual: boolOf(pp.contextual), borders: pp.borders}
 		info.before, info.after = spacingOf(pp)
+		if hardBreak {
+			info.before = 0
+		}
 		if pp.indLeft != nil {
 			info.indLeft = *pp.indLeft
 		}
