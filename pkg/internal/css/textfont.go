@@ -91,6 +91,26 @@ func textFontProps() map[propID]propDef {
 			},
 			copyFrom: field(func(s *Style) *bool { return &s.NoSpacingTrim }),
 		},
+		// text-autospace-size is Chromium's experimental amount of
+		// text-autospace, a number of ems, 1/8 by default; litho lays it
+		// out as the web-platform-tests check it.
+		pTextAutospaceSize: {
+			name: "text-autospace-size", inherited: true,
+			parse: func(v []token, _ *declCtx) (any, bool) {
+				t, ok := single(v)
+				if !ok {
+					return nil, false
+				}
+				n, ok := parseNumber(t)
+				return n, ok && n >= -1 && n <= 1
+			},
+			compute: func(_ *styler, st *Style, v any) {
+				if n, ok := v.(float64); ok {
+					st.TextAutospaceSize = n
+				}
+			},
+			copyFrom: field(func(s *Style) *float64 { return &s.TextAutospaceSize }),
+		},
 		pFontSynthesisWeight: synthesisProp("font-synthesis-weight", func(s *Style) *bool { return &s.NoSynthesizeWeight }),
 		pFontSynthesisStyle:  synthesisProp("font-synthesis-style", func(s *Style) *bool { return &s.NoSynthesizeStyle }),
 	}

@@ -1,6 +1,9 @@
 package text
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 // The fullwidth punctuation classes of CSS Text 4, 8.3 (text-spacing-trim).
 const (
@@ -69,4 +72,68 @@ func trimsBefore(r rune) bool {
 // its blank half for.
 func trimsAfter(r rune) bool {
 	return strings.ContainsRune(fullwidthClosing, r) || strings.ContainsRune(fullwidthMiddle, r)
+}
+
+// autospace adds the text-autospace space between an ideograph and a
+// letter or digit of another script, after the first of the two in
+// logical order (CSS Text 4, 8.2): ideographs are the Han, Hiragana,
+// Katakana and Bopomofo characters, letters those of the other scripts
+// and digits the decimal digits. Punctuation takes none. The run of the
+// first character decides whether and how much.
+func (p *Paragraph) autospace() {
+	n := len(p.text)
+	if n < 2 {
+		return
+	}
+	// last[i] is the last glyph of the cluster that starts at i.
+	last := make([]*shapedGlyph, n)
+	lastItem := make([]*shapedItem, n)
+	for k := range p.items {
+		it := &p.items[k]
+		for gi := range it.glyphs {
+			g := &it.glyphs[gi]
+			if c := g.cluster; c >= 0 && c < n {
+				last[c], lastItem[c] = g, it
+			}
+		}
+	}
+	prev := -1
+	for i := range n {
+		if last[i] == nil {
+			continue
+		}
+		if prev >= 0 {
+			st := lastItem[prev].style
+			if st.Autospace != 0 && autospaced(p.text[prev], p.text[i], st) {
+				last[prev].advance += st.Autospace
+				p.adv[prev] += st.Autospace
+			}
+		}
+		prev = i
+	}
+}
+
+// autospaced reports whether st puts the autospace between a and b.
+func autospaced(a, b rune, st Style) bool {
+	ia, ib := isIdeograph(a), isIdeograph(b)
+	if ia == ib {
+		return false
+	}
+	other := b
+	if ib {
+		other = a
+	}
+	switch {
+	case unicode.IsDigit(other):
+		return st.AutospaceNumeric
+	case unicode.IsLetter(other):
+		return st.AutospaceAlpha
+	}
+	return false
+}
+
+// isIdeograph reports a character of the scripts text-autospace spaces
+// from the others.
+func isIdeograph(r rune) bool {
+	return unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Bopomofo)
 }

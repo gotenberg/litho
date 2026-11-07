@@ -51,3 +51,21 @@ func TestShape_TrimsAdjacentPunctuation(t *testing.T) {
 		}
 	}
 }
+
+func TestShape_Autospace(t *testing.T) {
+	f := newTestFonts(t, append(sansFamily(), fontFile{name: "cjk.ttf", data: testCJK()})...)
+	s := Style{Families: []string{"Test Sans", "Test CJK"}, Size: 10, Autospace: 1.25, AutospaceAlpha: true}
+	p := shape(t, f, []ParagraphRun{{Text: "漢A、A漢", Style: s}}, ParagraphOptions{})
+	// The ideograph before A and the A before it take the space; the
+	// fullwidth comma, punctuation, takes none.
+	want := []float64{11.25, 5, 10, 6.25, 10}
+	for i, w := range want {
+		if math.Abs(p.Advance(i)-w) > 1e-6 {
+			t.Errorf("advance %d = %v, want %v", i, p.Advance(i), w)
+		}
+	}
+	s.AutospaceAlpha = false
+	if p = shape(t, f, []ParagraphRun{{Text: "漢A", Style: s}}, ParagraphOptions{}); p.Advance(0) != 10 {
+		t.Errorf("advance without ideograph-alpha %v, want 10", p.Advance(0))
+	}
+}

@@ -269,12 +269,25 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 		NoSyntheticBold:   st.NoSynthesizeWeight,
 		NoSyntheticItalic: st.NoSynthesizeStyle,
 		NoSpacingTrim:     st.NoSpacingTrim,
+		Autospace:         autospace(st, size),
+		AutospaceAlpha:    st.TextAutospace&css.AutospaceIdeographAlpha != 0,
+		AutospaceNumeric:  st.TextAutospace&css.AutospaceIdeographNumeric != 0,
 		Size:              size,
 		Lang:              lang,
 		Color:             c,
 		LetterSpacing:     spacing(st.LetterSpacing),
 		WordSpacing:       spacing(st.WordSpacing),
 	}
+}
+
+// autospace returns the space text-autospace adds in st at size points:
+// an eighth of an em, or Chromium's text-autospace-size (CSS Text 4, 8.2).
+func autospace(st *css.Style, size float64) float64 {
+	k := 0.125
+	if st.TextAutospaceSize != 0 {
+		k = min(max(st.TextAutospaceSize, -1), 1)
+	}
+	return k * size
 }
 
 // faceMetrics returns the vertical metrics of the first available font of

@@ -161,6 +161,7 @@ const (
 	pFontSynthesisWeight
 	pFontSynthesisStyle
 	pTextSpacingTrim
+	pTextAutospaceSize
 	numProps
 )
 

@@ -65,6 +65,12 @@ type Style struct {
 	// and the italic a face lacks, CSS font-synthesis without weight or
 	// without style (CSS Fonts 4, 5.5).
 	NoSyntheticBold, NoSyntheticItalic bool
+	// Autospace is the space, in points, added between an ideograph and
+	// a letter of another script when AutospaceAlpha is set, or a digit
+	// when AutospaceNumeric is, CSS text-autospace (CSS Text 4, 8.2). Its
+	// magnitude is at most 1000.
+	Autospace                        float64
+	AutospaceAlpha, AutospaceNumeric bool
 	// NoSpacingTrim keeps the full width of adjacent fullwidth
 	// punctuation, CSS text-spacing-trim: space-all; by default it is
 	// trimmed as Chromium's text-spacing-trim: normal does (see
@@ -98,6 +104,9 @@ func (s Style) validate() error {
 	}
 	if !finiteWithin(s.Oblique, 90) || !finiteWithin(s.Stretch, 1000) || s.Stretch < 0 {
 		return fmt.Errorf("%w: oblique angle %v or stretch %v out of range", ErrInvalidStyle, s.Oblique, s.Stretch)
+	}
+	if !finiteWithin(s.Autospace, maxFontSize) {
+		return fmt.Errorf("%w: autospace %v outside [-%d, %d]", ErrInvalidStyle, s.Autospace, maxFontSize, maxFontSize)
 	}
 	if !finiteWithin(s.WordSpacing, maxFontSize) {
 		return fmt.Errorf("%w: word spacing %v outside [-%d, %d]", ErrInvalidStyle, s.WordSpacing, maxFontSize, maxFontSize)

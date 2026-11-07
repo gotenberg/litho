@@ -958,6 +958,9 @@ type Style struct {
 	// TextAutospace is the spacing between ideographs and other scripts
 	// (CSS Text 4, 8.2).
 	TextAutospace TextAutospace
+	// TextAutospaceSize is the space text-autospace adds, in ems, 0
+	// standing for the default 1/8 (Chromium's text-autospace-size).
+	TextAutospaceSize float64
 	// NoSpacingTrim is text-spacing-trim: space-all, which keeps adjacent
 	// fullwidth punctuation full width (CSS Text 4, 8.3).
 	NoSpacingTrim bool

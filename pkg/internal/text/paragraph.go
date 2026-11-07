@@ -287,6 +287,7 @@ func (f *Fonts) Shape(ctx context.Context, runs []ParagraphRun, opts ParagraphOp
 		return nil, Report{}, err
 	}
 	p.trimAdjacent()
+	p.autospace()
 	return p, st.report(), nil
 }
 
