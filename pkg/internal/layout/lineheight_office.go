@@ -35,10 +35,15 @@ func (s *inlineState) officeLine(l *lineBox) {
 		if st.LineHeight.Kind == css.Number && st.LineHeight.Value > 0 {
 			f = clamp(st.LineHeight.Value)
 		}
-		above, below := s.naturalExtent(l)
-		h = f * (above + below)
+		above, below, text := s.naturalExtent(l)
+		// Writer adds the room of a proportional spacing above 100% for
+		// the text of the line alone: an as-character picture taller than
+		// the text keeps its height, the room going below it; below 100%
+		// the whole line shrinks.
+		h = above + below + (f-1)*text
 		base = above
 		if f < 1 {
+			h = f * (above + below)
 			base = exactAscent * h
 		}
 	case css.LineRuleCSS:
@@ -65,20 +70,25 @@ func (s *inlineState) officeLine(l *lineBox) {
 // Writer measures a line's natural height: the face ascent plus its line
 // gap of each glyph run and of the container's strut above, the descents
 // below, each run where its baseline shift puts it, and the margin boxes
-// of the atomic inlines.
-func (s *inlineState) naturalExtent(l *lineBox) (float64, float64) {
+// of the atomic inlines. text is the height the glyph runs and the strut
+// alone take, the atomic inlines left out.
+func (s *inlineState) naturalExtent(l *lineBox) (above, below, text float64) {
 	m := s.e.faceMetrics(s.root.st)
-	above, below := m.Ascent+max(m.LineGap, 0), m.Descent
+	above, below = m.Ascent+max(m.LineGap, 0), m.Descent
+	textAbove, textBelow := above, below
 	for _, it := range l.items {
 		shift := it.baseline - l.baseline
 		up := it.ascent
-		if it.text != nil && it.atomic == nil {
+		switch {
+		case it.text != nil && it.atomic == nil:
 			up += max(it.gap, 0)
-		} else if it.atomic == nil {
+			textAbove = max(textAbove, up-shift)
+			textBelow = max(textBelow, it.descent+shift)
+		case it.atomic == nil:
 			continue
 		}
 		above = max(above, up-shift)
 		below = max(below, it.descent+shift)
 	}
-	return above, below
+	return above, below, textAbove + textBelow
 }

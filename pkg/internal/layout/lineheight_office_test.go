@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"image/color"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -83,5 +84,48 @@ func TestLineRule_EmptyLine(t *testing.T) {
 	_, pos := lineTexts(res, 1)
 	if len(pos) != 1 || !near(pos[0][1], 54) {
 		t.Errorf("baselines %v, want the second line's at 54", pos)
+	}
+}
+
+// TestLineRule_InlinePicture sizes a line holding a picture taller than
+// its text as Writer does: the picture's height and the text's descent at
+// 100%, the room of a proportional spacing above 100% added for the text
+// alone, below it, and the whole line shrunk below 100%.
+//
+// # Corpus evidence
+//
+//   - LibreOffice 9.0.0 image: a .fodt in Liberation Serif 12pt, whose
+//     line is 13.8pt, holding an as-char picture 1cm tall: at 100% the
+//     line is the picture plus the 2.6pt descent, at 115% and 200% 2.07pt
+//     and 13.8pt more, the picture's top at the line's top; at 80% four
+//     fifths of the natural line, the baseline at four fifths of it.
+func TestLineRule_InlinePicture(t *testing.T) {
+	multiple := func(f float64) func(*css.Style) {
+		return func(s *css.Style) {
+			s.LineRule = css.LineRuleMultiple
+			s.LineHeight = css.Dimension{Kind: css.Number, Value: f}
+		}
+	}
+	tests := []struct {
+		name string
+		f    float64
+		// baselines are those of the lines before and after the picture's.
+		baselines [2]float64
+	}{
+		{"100%", 1, [2]float64{8, 50}},
+		{"150%", 1.5, [2]float64{8, 60}},
+		{"60%", 0.6, [2]float64{4.8, 30}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := sty(multiple(tt.f))
+			img := &Node{Kind: Replaced, Style: inlineSty(), Picture: pic(color.NRGBA{R: 255, A: 255}, 10, 30)}
+			root := doc(el(st, txt(st, "a"), br(st), img, br(st), txt(st, "b")))
+			res := run(t, root, page(100, 200))
+			_, pos := lineTexts(res, 1)
+			if len(pos) != 2 || !near(pos[0][1], tt.baselines[0]) || !near(pos[1][1], tt.baselines[1]) {
+				t.Errorf("baselines %v, want %v", pos, tt.baselines)
+			}
+		})
 	}
 }
