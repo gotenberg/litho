@@ -77,11 +77,32 @@
 // the size and margins of its named rules, and the content after such a
 // break is laid out at that page's width.
 //
+// An @page width or height sizes the page area, the page box following
+// with its margins, and the viewport units resolve against the page area
+// of the first page, named after the root's start page value. A bleed
+// grows the sheet past the page box, the page background paints over it,
+// crop and cross marks draw in it where WeasyPrint draws them, and the
+// page records its trim and bleed boxes (CSS Page 3, 7); Chromium ignores
+// bleed and marks.
+//
 // The sixteen page-margin boxes of the @page rules (@top-left-corner to
 // @left-top) draw their content in the page margins, sized and aligned as
-// CSS Page 3, 5 asks: strings, images, the page and pages counters, other
-// counters at zero, attr() at its fallback. min-width and max-width do not
-// constrain them, and string() and running elements are not supported.
+// CSS Page 3, 5 asks, min-width and max-width included: strings, images,
+// leaders, the page and pages counters, other counters at zero, attr() at
+// its fallback, and the paged media extras of CSS GCPM 3, 2: string()
+// shows the named strings string-set assigns, element() a copy of the
+// running elements position: running() takes out of the flow, each with
+// the first, start, last or first-except assignment of the page.
+//
+// float: footnote turns an element into a footnote (CSS GCPM 3, 3): its
+// ::footnote-call stays in the flow, numbered by the footnote counter,
+// and the element, with its ::footnote-marker first, moves to the
+// footnote area at the bottom of the page the call lands on, styled by
+// the @footnote rule; a body that the area's max-height or the page's
+// room refuses moves to the next page, the room closing the call's page.
+// footnote-display: block and inline apply, compact lays out as block,
+// and footnote-policy line and block act as auto. leader() fills the rest
+// of its line with copies of its string (CSS Generated Content 3).
 //
 // [Options.HeaderTemplate] and [Options.FooterTemplate] draw as Chromium
 // draws them: on Chromium's template page, a page-sized document whose

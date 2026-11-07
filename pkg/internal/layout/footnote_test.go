@@ -82,3 +82,15 @@ func normalize(want string) string {
 	}
 	return strings.Join(rows, "\n")
 }
+
+func TestFootnote_OffTheCutsFollowsTheFlow(t *testing.T) {
+	t.Parallel()
+	red2 := sty(font(2), fg(red))
+	ib := sty(font(2), fg(red), display(css.InlineBlock))
+	root := doc(el(red2, txt(red2, "X"), el(ib, call("X", "XX"))))
+	assertPixels(t, run(t, root, PageBox{Width: px(6), Height: px(4)}), 2, `
+		______
+		______
+		BBBB__
+		BBBB__`)
+}

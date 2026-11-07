@@ -40,6 +40,8 @@ type footState struct {
 	where map[*box]int
 	// disp is the painted footnote area of each page, by index.
 	disp map[int]*ditem
+	// calls are every footnote call, in tree order.
+	calls []*box
 }
 
 // genFootnote generates the body of the footnote call b, whose node n
@@ -67,6 +69,7 @@ func (e *engine) genFootnote(n *Node, b *box, ctx genCtx) {
 	if e.foot == nil {
 		e.foot = &footState{where: map[*box]int{}}
 	}
+	e.foot.calls = append(e.foot.calls, b)
 }
 
 // footAt returns the footnote area of page p.
@@ -250,7 +253,7 @@ func (e *engine) noteLine(p *ifcPara, start, end int, l *lineBox) {
 	}
 	for _, o := range p.opens {
 		call := o.box
-		if call.fnBody == nil || o.pos < start || o.pos >= end && !(o.pos == end && end == p.n) {
+		if call.fnBody == nil || o.pos < start || o.pos >= end && (o.pos != end || end != p.n) {
 			continue
 		}
 		e.unplace(call)
@@ -280,7 +283,17 @@ func (e *engine) finishNotes(flowEnd float64) {
 	if f == nil {
 		return
 	}
-	for p := e.pageOf(max(flowEnd-eps, 0)); len(f.pending) > 0 && p <= e.maxPages && e.err == nil; p++ {
+	last := e.pageOf(max(flowEnd-eps, 0))
+	for _, c := range f.calls {
+		if _, ok := f.where[c]; !ok {
+			// A call laid out off the page cuts, inside an inline block or
+			// another footnote, has no page of its own: its body follows
+			// the flow.
+			f.where[c] = -1
+			f.pending = append(f.pending, pendingNote{call: c, from: last})
+		}
+	}
+	for p := last; len(f.pending) > 0 && p <= e.maxPages && e.err == nil; p++ {
 		e.flushNotes(p, e.pageTop(p))
 	}
 }

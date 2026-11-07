@@ -34,6 +34,24 @@
 // [Options.MarginContent] paints each page's margins, the page-margin
 // boxes, under the page area's content.
 //
+// A node with a [Node.Footnote] is a footnote call (CSS GCPM 3, 3): when
+// its line lands on a page, the body goes to that page's footnote area at
+// the bottom of its page area if the area's max-height allows it and the
+// page has room for it, and the page's slice of the flow ends that much
+// higher; otherwise the body waits for the next page, which takes the
+// first body waiting whatever its height, and a body refused for room
+// ends its call's page after the call's line. The pages then cut the flow
+// where each one's slice ends, as named pages do.
+//
+// # Leaders and page marks
+//
+// A leader ([Node.Leader]) takes no width until its line is aligned, then
+// fills the room the line leaves with the copies of its string that fit
+// whole on a grid anchored at the line's end edge (CSS Generated Content
+// 3, leader()). A page box with a bleed lays out on a sheet as much larger
+// on every side, its background and marks painted over the sheet, its
+// trim and bleed boxes recorded (CSS Page 3, 7).
+//
 // # Formatting contexts
 //
 // A block container's content is laid out by a formatter chosen per
@@ -116,7 +134,9 @@
 // # Not supported
 //
 // Vertical writing modes, 3D transforms, generated content,
-// hyphenation and multi-column layout are out of scope; visibility:
+// hyphenation and multi-column layout are out of scope; a footnote call
+// inside an inline block, a table cell or a flex item is laid out off the
+// page cuts, and its body goes to a page after the flow; visibility:
 // collapse on a flex item hides it as visibility: hidden does.
 //
 // # Concurrency

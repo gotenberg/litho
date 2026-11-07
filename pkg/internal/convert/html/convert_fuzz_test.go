@@ -24,6 +24,11 @@ func FuzzConvert(f *testing.F) {
 		`@page :right{size:landscape}h1{break-before:right}p{break-after:left}</style><h1>a</h1><p>b<p>c<h1>d</h1>`))
 	f.Add([]byte(`<style>@page a{size:100pt 50pt;@top-left{content:counter(page)}}@page :blank{margin:1pt}.a{page:a}` +
 		`p{break-before:right}</style><div class=a><p>x</div><p>y<div style="page:b"><p>z</div>`))
+	f.Add([]byte(`<style>@page{size:100pt 60pt;bleed:2pt;marks:crop cross;width:80pt;background:red fixed;` +
+		`@footnote{max-height:20pt;border-top:1pt solid}@top-left{content:string(t,start) element(h,last) leader(dotted)}}` +
+		`h1{string-set:t content() counter(c) content(first-letter)}.n{float:footnote;footnote-display:inline}` +
+		`header{position:running(h)}p::after{content:leader('. ') counter(c)}a{&:hover{color:red}& b{x:y}}</style>` +
+		`<header>H</header><h1>T</h1><p>a<span class=n>note</span> b<span class=n>two</span></p>`))
 	fsys := fstest.MapFS{
 		"s.css": {Data: []byte(`@import "s.css"; body { background: url(i.png) }`)},
 		"i.png": {Data: pngBytes(f, 3, 2)},

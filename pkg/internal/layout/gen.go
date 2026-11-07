@@ -270,7 +270,7 @@ func (e *engine) genInline(n *Node, st *css.Style, ctx genCtx, ordinal *int) []*
 		*piece = *ib
 		piece.kids = nil
 		piece.first, piece.last = false, true
-		piece.id = ""
+		piece.id, piece.fnBody = "", nil
 		out = append(out, piece)
 		cur = piece
 	}

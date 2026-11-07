@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("@page { bleed: 1px; marks: crop cross; width: 10em; height: auto; background-attachment: fixed; @footnote { max-height: 3px } } p { string-set: a content(before) \"x\" counter(c), b attr(t); float: footnote; position: running(r); content: leader(\" . \") string(a, first-except) element(r) } .x { color: red; &::footnote-call { color: blue } & + & { & p { x: y } } }")
