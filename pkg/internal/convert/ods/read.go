@@ -163,7 +163,7 @@ func (r *reader) document(body *odf.Element) *sheet.Document {
 // hidePrintless hides the sheets that print nothing: table:print false
 // without print ranges (ODF 1.3, Part 3, 19.689), as Calc reads a sheet
 // that neither prints entirely nor has ranges, when another shown sheet
-// prints; a document where no shown sheet prints prints every sheet
+// prints; in a document where no shown sheet prints, every sheet prints
 // whole, as Calc does when no sheet has a print range.
 //
 // # Corpus evidence
