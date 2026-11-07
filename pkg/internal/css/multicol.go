@@ -35,7 +35,20 @@ type Columns struct {
 	// wrap is the column-wrap (CSS Multicol 2, 3.4), read through
 	// [Columns.Wrap].
 	wrap columnWrap
+	// scroller records an overflow of scroll or auto, read through
+	// [Style.ScrollContainer].
+	scroller bool
 }
+
+// scrollOverflow is a specified overflow of scroll or auto, which
+// computes to visible on paged media.
+type scrollOverflow struct{}
+
+// ScrollContainer reports an overflow of scroll or auto. Paged media shows
+// such a box as overflow: visible (CSS Overflow 3, 3), but it stays a
+// scroll container, which is monolithic in a fragmentation context (CSS
+// Fragmentation 3, 4.1), as Chromium lays it out in columns.
+func (s *Style) ScrollContainer() bool { return s.Columns.scroller }
 
 // Wrap reports column-wrap: wrap, which starts a new row of columns below
 // a full one instead of an overflow column; auto behaves as wrap when the
@@ -319,3 +332,8 @@ func multicolShorthands() map[string]shorthandDef {
 		"column-rule": {longhands: []propID{pColumnRuleWidth, pColumnRuleStyle, pColumnRuleColor}, expand: expandColumnRule},
 	}
 }
+
+// FlexOrGrid reports a flex or grid container, one laid out as a block
+// included: it establishes an independent formatting context, so a
+// column-span: all box inside it spans no columns (CSS Multicol 1, 5.1).
+func (s *Style) FlexOrGrid() bool { return s.flexOrGridContainer() }

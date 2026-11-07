@@ -337,6 +337,10 @@ func (p *painter) unit(b *box, own bool) {
 		pushed++
 	}
 	defer func() { p.frames = p.frames[:len(p.frames)-pushed] }()
+	if b.monoCol {
+		// A monolithic box in columns moves to its column whole.
+		push(&ditem{group: true, opacity: 1, page: pageMono, y0: b.y + p.dy})
+	}
 	if b.fixed {
 		savedMono := p.mono
 		p.mono = -1
@@ -472,8 +476,9 @@ func (p *painter) collect(b *box, blocks, floats, layers *[]*box) {
 			// 6.3).
 		case k.layered():
 			*layers = append(*layers, k)
-		case k.float != css.FloatNone || k.mc != nil:
-			// A multi-column container paints its columns as a unit.
+		case k.float != css.FloatNone || k.mc != nil || k.monoCol:
+			// A multi-column container paints its columns as a unit, and
+			// a monolithic box in columns paints in its column.
 			*floats = append(*floats, k)
 		case k.tpart == partTable:
 			// A table paints its rows and cells itself (CSS 2.1, 17.5.1).

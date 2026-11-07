@@ -200,6 +200,14 @@ func (e *engine) cutItem(it *ditem, b *box, s *colSet, oy float64, depth int) (m
 			pass = append(pass, k)
 			continue
 		}
+		if k.group && k.page == pageMono {
+			// A monolithic box's group moves whole to the column its top
+			// is in.
+			i := s.fragOf(b, k.y0-oy+eps)
+			_, dy := b.mc.shiftOf(b, s, i)
+			out[i] = append(out[i], piece{it: moveItem(k, dy, 0)})
+			continue
+		}
 		if k.group {
 			if depth >= maxGroupDepth {
 				continue
@@ -208,7 +216,7 @@ func (e *engine) cutItem(it *ditem, b *box, s *colSet, oy float64, depth int) (m
 			pass = append(pass, sp...)
 			for _, i := range slices.Sorted(pieceKeys(sub)) {
 				cp := *k
-				cp.kids = nil
+				cp.kids, cp.page = nil, 0
 				clip := false
 				for _, pc := range sub[i] {
 					cp.kids = append(cp.kids, pc.it)
@@ -310,4 +318,26 @@ func (p *painter) columnRules(b *box) {
 			}
 		}
 	}
+}
+
+// moveItem returns a copy of the display item it with its extents, and
+// those of the items it holds, moved down by dy.
+func moveItem(it *ditem, dy float64, depth int) *ditem {
+	cp := *it
+	cp.y0, cp.y1 = it.y0+dy, it.y1+dy
+	if !it.group {
+		if cp.page >= 0 {
+			cp.page = pageMono
+		}
+		return &cp
+	}
+	if depth >= maxGroupDepth {
+		cp.kids = nil
+		return &cp
+	}
+	cp.kids = make([]*ditem, len(it.kids))
+	for i, k := range it.kids {
+		cp.kids[i] = moveItem(k, dy, depth+1)
+	}
+	return &cp
 }

@@ -649,7 +649,7 @@ func (e *engine) layoutBFCRoot(b *box, cb cblock, bc *bfc, top float64) {
 			blockWidths(b, r-l, rtl, w, wSet)
 			b.x = l + b.m[css.Left]
 			b.y = top
-			e.layoutOwnContext(b, cb)
+			top = e.layoutContextIn(b, cb, top)
 		}
 		h := b.borderH()
 		if !bc.narrowed(top, h, left, right) {
@@ -861,7 +861,9 @@ func avoidsInside(b *box) bool {
 // avoidsBetween reports siblings a and b between which a page break is to
 // be avoided.
 func avoidsBetween(a, b *box) bool {
-	av := func(v css.Break) bool { return v == css.BreakAvoid || v == css.BreakAvoidPage || v == css.BreakAvoidColumn }
+	av := func(v css.Break) bool {
+		return v == css.BreakAvoid || v == css.BreakAvoidPage || v == css.BreakAvoidColumn
+	}
 	return av(a.st.BreakAfter) || av(b.st.BreakBefore)
 }
 

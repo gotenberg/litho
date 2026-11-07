@@ -179,6 +179,9 @@ type box struct {
 	// mc is the multi-column layout of a multi-column container (CSS
 	// Multicol 1), nil for any other box.
 	mc *mcolData
+	// monoCol reports a box laid out whole in one column, a scroll
+	// container (CSS Fragmentation 3, 4.1): it paints in that column.
+	monoCol bool
 }
 
 // markerBox is the outside marker of a list item (CSS 2.1, 12.5).
@@ -228,7 +231,7 @@ func (b *box) marginH() float64 { return b.borderH() + b.m[css.Top] + b.m[css.Bo
 // 17.4).
 func (b *box) establishesBFC() bool {
 	return b.parent == nil || b.float != css.FloatNone || b.abs || (b.inline && b.kind == kindBlock) ||
-		b.st.Overflow != css.OverflowVisible || b.kind == kindReplaced || b.st.Display == css.FlowRoot ||
+		b.st.Overflow != css.OverflowVisible || b.st.ScrollContainer() || b.kind == kindReplaced || b.st.Display == css.FlowRoot ||
 		b.tpart == partWrapper || b.tpart == partCaption || b.tpart == partCell ||
 		b.flex != nil || b.flexItem || b.grid != nil || b.gridItem || b.st.Clamps() || isMulticol(b)
 

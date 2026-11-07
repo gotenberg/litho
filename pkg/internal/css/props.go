@@ -484,17 +484,23 @@ func parseOverflow(v []token, _ *declCtx) (any, bool) {
 		return nil, false
 	}
 	out := OverflowVisible
+	scroll := false
 	for _, t := range v {
 		if t.typ != tIdent {
 			return nil, false
 		}
 		switch lower(t.value) {
-		case "visible", "scroll", "auto", "overlay":
+		case "visible":
+		case "scroll", "auto", "overlay":
+			scroll = true
 		case "hidden", "clip":
 			out = OverflowHidden
 		default:
 			return nil, false
 		}
+	}
+	if scroll && out == OverflowVisible {
+		return scrollOverflow{}, true
 	}
 	return out, true
 }
@@ -657,10 +663,15 @@ func init() {
 			"visible": Visible, "hidden": Hidden, "collapse": VisibilityCollapse,
 		})},
 		{pOverflow, propDef{name: "overflow", parse: parseOverflow, compute: func(_ *styler, st *Style, v any) {
-			if o, ok := v.(Overflow); ok {
-				st.Overflow = o
+			switch o := v.(type) {
+			case Overflow:
+				st.Overflow, st.Columns.scroller = o, false
+			case scrollOverflow:
+				st.Overflow, st.Columns.scroller = OverflowVisible, true
 			}
-		}, copyFrom: field(func(s *Style) *Overflow { return &s.Overflow })}},
+		}, copyFrom: func(dst, src *Style) {
+			dst.Overflow, dst.Columns.scroller = src.Overflow, src.Columns.scroller
+		}}},
 		{pBoxSizing, enumProp("box-sizing", false, func(s *Style) *BoxSizing { return &s.BoxSizing }, map[string]BoxSizing{
 			"content-box": ContentBox, "border-box": BorderBox,
 		})},

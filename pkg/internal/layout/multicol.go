@@ -2,6 +2,7 @@ package layout
 
 import (
 	"math"
+	"slices"
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -343,12 +344,13 @@ func (multicolFormatter) layout(e *engine, b *box, cb cblock, bc *bfc, cursor fl
 	}
 	kcb := cblock{x: cb.x, w: w, h: cb.h, hDefinite: cb.hDefinite}
 	var sets []*colSet
+	pieces := map[*box]*spanPiece{}
 	if b.inlineKids {
 		sets = []*colSet{{kids: b.kids}}
 	} else {
 		cur := &colSet{}
-		for _, k := range b.kids {
-			if k.st.Columns.SpanAll && !k.inline && !k.abs && k.float == css.FloatNone {
+		for _, k := range spanFlow(b.kids, 0, pieces) {
+			if isSpanner(k) {
 				sets = append(sets, cur, &colSet{kids: []*box{k}, spanner: k})
 				cur = &colSet{}
 				continue
@@ -371,17 +373,27 @@ func (multicolFormatter) layout(e *engine, b *box, cb cblock, bc *bfc, cursor fl
 			d.sets = append(d.sets, s)
 			continue
 		}
-		if smc != nil {
-			y = e.pastMargin(y, smc.strut, false)
-			smc.commit(y)
-			smc = nil
-		}
 		if !hasFlow(s.kids, b.inlineKids) {
 			e.placeOutOfFlow(b, s.kids, kcb, y)
 			continue
 		}
+		top := y
+		if smc != nil {
+			top = e.pastMargin(y, smc.strut, false)
+		}
+		sizePieces(s.kids, pieces, kcb)
 		spanned := i+1 < len(sets)
-		y = e.layoutColumnSet(b, s, kcb, y, limit, spanned)
+		end, empty := e.layoutColumnSet(b, s, kcb, top, limit, spanned)
+		if empty && spanned {
+			// Nothing between two spanners, white space alone: their
+			// margins adjoin and collapse.
+			continue
+		}
+		if smc != nil {
+			smc.commit(top)
+			smc = nil
+		}
+		y = end
 		d.sets = append(d.sets, s)
 	}
 	if smc != nil {
@@ -416,10 +428,11 @@ func (e *engine) placeOutOfFlow(b *box, kids []*box, cb cblock, y float64) {
 
 // layoutColumnSet lays out the column set s of the container b, its
 // columns cb wide, from y in the outer flow, the container's height
-// ending at limit, and returns where the set ends. spanned reports a set
+// ending at limit, and returns where the set ends and whether it holds no
+// content taking room. spanned reports a set
 // a spanner follows, whose content balances whatever column-fill says
 // (CSS Multicol 1, 6.1).
-func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64, spanned bool) float64 {
+func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64, spanned bool) (float64, bool) {
 	st := &b.st.Columns
 	ctx := &colCtx{e: e, parent: e.cols, noPag: e.noPaginate, n: b.mc.n, limit: limit, start: y, balanceRow: -1}
 	if st.Height.Kind == css.Points {
@@ -468,8 +481,11 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 			mid := (lo + hi) / 2
 			cons = pass(r, mid)
 			if fits() {
-				used := ctx.rowMax(cons, r)
-				hi, best, bestFits = min(mid, used), min(mid, used), true
+				// The content may take less than mid in every column: the
+				// height a piece needs to stay in a column is what moves
+				// the cut, so the least height that fits is searched, not
+				// read off.
+				hi, best, bestFits = mid, mid, true
 				continue
 			}
 			lo = mid
@@ -478,7 +494,8 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 			cons = pass(r, best)
 		}
 	}
-	return ctx.finish(b, s, cons, end, balance)
+	empty := end <= y+eps && ctx.rowMax(cons, 0) <= eps && len(ctx.rows) == 1
+	return ctx.finish(b, s, cons, end, balance), empty
 }
 
 // layoutColumns lays the content of the column set s of b out in the
@@ -592,7 +609,9 @@ func (c *colCtx) finish(b *box, s *colSet, cons []float64, end float64, balanced
 		if r == lr && !balanced && math.IsInf(c.limit, 1) && c.colH <= 0 {
 			row.used = min(c.rowMax(cons, r), row.h)
 		}
-		if r == lr && row.h >= unbounded {
+		if r == lr && (row.h >= unbounded || c.rowMax(cons, r) <= eps && math.IsInf(c.limit, 1) && c.colH <= 0) {
+			// A row of no content takes no room, whatever the least
+			// height of its columns.
 			row.used = c.rowMax(cons, r)
 		}
 		lastCol := row.first
@@ -763,5 +782,154 @@ func (e *engine) layoutPositionedInColumns(b *box) {
 			e.layoutPositioned(k)
 		}
 		e.cols, e.noPaginate = saved, savedN
+	}
+}
+
+// layoutContextIn lays out the content of the block b, which establishes
+// a formatting context, its border box top at top, and returns that top.
+// In columns a scroll container is monolithic (CSS Fragmentation 3, 4.1,
+// as Chromium fragments it): its content is laid out without breaks, and
+// it moves to the next column when it straddles a cut, overflowing one it
+// is taller than.
+func (e *engine) layoutContextIn(b *box, cb cblock, top float64) float64 {
+	b.monoCol = e.cols != nil && b.parent != nil && (b.st.Overflow != css.OverflowVisible || b.st.ScrollContainer()) && !isMulticol(b)
+	if !b.monoCol {
+		e.layoutOwnContext(b, cb)
+		return top
+	}
+	e.noPaginate++
+	e.layoutOwnContext(b, cb)
+	e.noPaginate--
+	if y := e.fit(top, b.borderH()); y != top {
+		b.shift(0, y-top)
+		return y
+	}
+	return top
+}
+
+// isSpanner reports an in-flow block-level box with column-span: all (CSS
+// Multicol 1, 5.1).
+func isSpanner(k *box) bool {
+	return k.st.Columns.SpanAll && !k.inline && !k.abs && k.float == css.FloatNone && k.kind != kindText && k.kind != kindBreak && k.kind != kindInline
+}
+
+// holdsSpanner reports a block in the column flow with a spanner among its
+// in-flow descendants of the same block formatting context.
+func holdsSpanner(k *box, depth int) bool {
+	if k.kind != kindBlock || k.inline || k.abs || k.float != css.FloatNone || k.inlineKids || k.establishesBFC() || k.st.FlexOrGrid() || depth > maxTreeDepth {
+		return false
+	}
+	for _, kk := range k.kids {
+		if isSpanner(kk) || holdsSpanner(kk, depth+1) {
+			return true
+		}
+	}
+	return false
+}
+
+// spanPiece is a piece of a block a spanner splits: the block it is cut
+// from, the pieces before it, and whether it is the last.
+type spanPiece struct {
+	orig *box
+	prev []*box
+	last bool
+}
+
+// spanFlow returns kids with every block that holds a spanner replaced by
+// its pieces and the spanners between them (CSS Multicol 1, 5.1: a
+// spanner splits the boxes around it, as Chromium lays them out). pieces
+// records each piece.
+func spanFlow(kids []*box, depth int, pieces map[*box]*spanPiece) []*box {
+	var out []*box
+	for _, k := range kids {
+		if !isSpanner(k) && holdsSpanner(k, depth) {
+			out = append(out, splitBlock(k, depth, pieces)...)
+			continue
+		}
+		out = append(out, k)
+	}
+	return out
+}
+
+// splitBlock returns the pieces of the block w, which holds a spanner, and
+// the spanners between them. Each piece is a copy of w holding the boxes
+// between two spanners: the first keeps w's top edges, the last its bottom
+// ones (box-decoration-break: slice), and the pieces share w's specified
+// height in order, the last taking what the others leave.
+func splitBlock(w *box, depth int, pieces map[*box]*spanPiece) []*box {
+	items := spanFlow(w.kids, depth+1, pieces)
+	var groups [][]*box
+	var out []*box
+	cur := []*box{}
+	var seq []*box
+	for _, k := range items {
+		if isSpanner(k) {
+			groups = append(groups, cur)
+			seq = append(seq, nil, k)
+			cur = []*box{}
+			continue
+		}
+		cur = append(cur, k)
+	}
+	groups = append(groups, cur)
+	seq = append(seq, nil)
+	var made []*box
+	g := 0
+	for _, k := range seq {
+		if k != nil {
+			out = append(out, k)
+			continue
+		}
+		c := *w
+		st := *w.st
+		c.st = &st
+		c.kids = groups[g]
+		c.mc = nil
+		if g > 0 {
+			st.Margin[css.Top], st.Padding[css.Top] = css.Pts(0), css.Pts(0)
+			st.Border[css.Top].Width = 0
+			c.id, c.outside = "", nil
+			st.BreakBefore = css.BreakAuto
+		}
+		if g < len(groups)-1 {
+			st.Margin[css.Bottom], st.Padding[css.Bottom] = css.Pts(0), css.Pts(0)
+			st.Border[css.Bottom].Width = 0
+			st.BreakAfter = css.BreakAuto
+		}
+		pieces[&c] = &spanPiece{orig: w, prev: slices.Clone(made), last: g == len(groups)-1}
+		made = append(made, &c)
+		out = append(out, &c)
+		g++
+	}
+	return out
+}
+
+// sizePieces sets the heights of the pieces among kids, about to be laid
+// out: a piece of a block of specified height takes what the pieces
+// before it left of it, at most when another follows, exactly when it is
+// the last.
+func sizePieces(kids []*box, pieces map[*box]*spanPiece, cb cblock) {
+	for _, k := range kids {
+		pc := pieces[k]
+		if pc == nil {
+			continue
+		}
+		h, ok := specHeight(pc.orig, pc.orig.st.Height, cb)
+		if !ok {
+			continue
+		}
+		for _, p := range pc.prev {
+			h -= p.borderH()
+		}
+		h = max(h, 0)
+		if pc.last {
+			k.st.Height = css.Pts(h)
+			if k.st.BoxSizing == css.BorderBox {
+				k.st.Height = css.Pts(h + vEdges(k))
+			}
+			continue
+		}
+		k.st.Height = css.Dimension{Kind: css.Auto}
+		k.st.MaxHeight = css.Pts(h)
 	}
 }
