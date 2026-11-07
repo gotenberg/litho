@@ -969,17 +969,19 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 	return len(bc.floats) - 1
 }
 
-// layoutAtomic lays the inline block or inline replaced box a out in a
-// containing block of width cbw, its margin box at the origin, as one
-// monolithic piece (CSS Fragmentation 3, 4.1); the line box moves it into
-// place.
-func (e *engine) layoutAtomic(a *box, cbw float64) {
+// layoutAtomic lays the inline block or inline replaced box a out in the
+// containing block lcb, its margin box at the origin, as one monolithic
+// piece (CSS Fragmentation 3, 4.1); the line box moves it into place. A
+// replaced box resolves a percentage height against lcb's height when it
+// is definite (CSS 2.1, 10.5).
+func (e *engine) layoutAtomic(a *box, lcb cblock) {
 	a.laidOut = true
+	cbw := lcb.w
 	resolveEdges(a, cbw)
 	e.resolveSizing(a, cblock{w: cbw}, -1, -1)
 	cb := cblock{w: cbw}
 	if a.kind == kindReplaced {
-		a.w, a.h = e.replacedSize(a, cb)
+		a.w, a.h = e.replacedSize(a, cblock{w: cbw, h: lcb.h, hDefinite: lcb.hDefinite})
 		a.x, a.y = a.m[css.Left], a.m[css.Top]
 		return
 	}

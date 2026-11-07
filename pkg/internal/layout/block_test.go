@@ -281,3 +281,34 @@ func TestReplaced_ConstraintTable(t *testing.T) {
 		}
 	}
 }
+
+func TestReplaced_InlinePercentageHeight(t *testing.T) {
+	// An inline replaced box resolves a percentage height against a
+	// definite containing block height, and as auto against an indefinite
+	// one (CSS 2.1, 10.5).
+	half := func(s *css.Style) { s.Height = pct(0.5) }
+	for _, tc := range []struct {
+		parent []func(*css.Style)
+		want   [2]float64
+	}{{[]func(*css.Style){height(50)}, [2]float64{50, 25}}, {nil, [2]float64{40, 20}}} {
+		img := &Node{Kind: Replaced, Style: inlineSty(half), Picture: pic(color.NRGBA{R: 255, A: 255}, 40, 20)}
+		rb := boxes(t, doc(el(sty(tc.parent...), img)), page(100, 100))
+		var found *box
+		var walk func(b *box)
+		walk = func(b *box) {
+			if b.kind == kindReplaced {
+				found = b
+			}
+			for _, k := range b.kids {
+				walk(k)
+			}
+		}
+		walk(rb)
+		if found == nil {
+			t.Fatal("no replaced box")
+		}
+		if got := [2]float64{found.w / css.Pt, found.h / css.Pt}; !near(got[0], tc.want[0]) || !near(got[1], tc.want[1]) {
+			t.Errorf("parent %d mods: size %v, want %v", len(tc.parent), got, tc.want)
+		}
+	}
+}

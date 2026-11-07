@@ -99,9 +99,10 @@ func edgeSides(b *box, start, end bool) (left, right bool) {
 }
 
 // prepareInline resolves the edges of the inline boxes of d and lays its
-// atomic inlines out against the containing block width cbw, setting the
-// advance of their object characters.
-func (e *engine) prepareInline(d *ifcData, cbw float64) {
+// atomic inlines out against the containing block cb, setting the advance
+// of their object characters.
+func (e *engine) prepareInline(d *ifcData, cb cblock) {
+	cbw := cb.w
 	for _, k := range d.boxes {
 		if k.kind == kindInline {
 			resolveEdges(k, cbw)
@@ -124,7 +125,7 @@ func (e *engine) prepareInline(d *ifcData, cbw float64) {
 					p.p.SetAdvance(i, 0)
 					continue
 				}
-				e.layoutAtomic(info.box, cbw)
+				e.layoutAtomic(info.box, cb)
 				p.p.SetAdvance(i, max(info.box.marginW(), 0))
 			case runEmpty:
 				p.p.SetAdvance(i, 0)
@@ -379,7 +380,7 @@ func (e *engine) layoutInline(b *box, cb cblock, bc *bfc, cursor float64, mc *ma
 	if e.err != nil {
 		return cursor
 	}
-	e.prepareInline(d, cb.w)
+	e.prepareInline(d, cb)
 	forced := map[int]bool{}
 	floats, warnings := len(bc.floats), len(e.warnings)
 	saved := mc.clone()

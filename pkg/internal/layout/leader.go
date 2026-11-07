@@ -67,7 +67,7 @@ func (e *engine) layoutLeader(b *box, k int, cbw float64) {
 		tb.text = strings.Repeat(li.pattern, min(max(k, 0), maxLeaderCopies))
 	}
 	b.ifc, b.measured = nil, false
-	e.layoutAtomic(b, cbw)
+	e.layoutAtomic(b, cblock{w: cbw})
 }
 
 // prepareLeader lays the leader b out with one copy of its string, which
