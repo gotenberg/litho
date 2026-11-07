@@ -347,23 +347,30 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 	if d.wrap {
 		boxX = u.x + left
 	}
-	if !d.wrap && len(d.runs) == 0 && !strings.Contains(d.text, "\n") && (boxX < cx0-epsilon || boxX+d.textW > cx1+epsilon) {
-		// Leave out the characters the clip hides wholly, as LibreOffice
-		// does.
-		start := boxX
-		if align == css.AlignRight {
-			start = boxX + boxW - d.textW
-		}
-		if align == css.AlignCenter {
-			start = boxX + (boxW-d.textW)/2
-		}
-		vis, at := b.m.visible(f, d.text, start, cx0, cx1)
-		if vis != d.text {
-			d.text = vis
-			d.textW = b.m.width(f, vis)
-			boxW = d.textW + slack
-			boxX = at
-			align = css.AlignLeft
+	if !d.wrap && !d.value && len(d.runs) == 0 && !strings.Contains(d.text, "\n") && d.textW > 0 {
+		// A clipped text is shortened as LibreOffice shortens it
+		// (ScOutputData::LayoutStringsImpl, aShort): a left-aligned one
+		// to its characters in the proportion its visible width bears to
+		// its width, plus one, a right-aligned one from its end; a
+		// centred one is kept whole.
+		rs := []rune(d.text)
+		switch {
+		case align == css.AlignLeft && boxX+d.textW > cx1+epsilon:
+			ratio := (cx1 - right - boxX) / d.textW
+			if n := int(ratio*float64(len(rs))) + 1; ratio > 0 && n < len(rs) {
+				d.text = string(rs[:n])
+				d.textW = b.m.width(f, d.text)
+				boxW = d.textW + slack
+			}
+		case align == css.AlignRight && boxX+boxW-d.textW < cx0-epsilon:
+			end := boxX + boxW
+			ratio := (end - cx0 - left) / d.textW
+			if n := int(ratio*float64(len(rs))) + 1; ratio > 0 && n < len(rs) {
+				d.text = string(rs[len(rs)-n:])
+				d.textW = b.m.width(f, d.text)
+				boxW = d.textW + slack
+				boxX = end - boxW
+			}
 		}
 	}
 	para := b.paragraph(&d, f, lineH, align)
