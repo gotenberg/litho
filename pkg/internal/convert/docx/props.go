@@ -48,9 +48,9 @@ type runProps struct {
 	spacing, scale, position                       *float64
 	// kern is the least font size in points that kerns (17.3.2.19), 0
 	// for none.
-	kern *float64
-	vertAlign, lang, langEastAsia, langBidi        *string
-	specVanish                                     *bool
+	kern                                    *float64
+	vertAlign, lang, langEastAsia, langBidi *string
+	specVanish                              *bool
 }
 
 // merge returns r with the properties o sets laid over it.
