@@ -44,6 +44,57 @@ type limits struct {
 	rows, columns, bytes, cells bool
 }
 
+// skipBlanks returns the index of the first non-blank byte of text at or
+// after i.
+func skipBlanks(text string, i int) int {
+	for i < len(text) && text[i] == ' ' {
+		i++
+	}
+	return i
+}
+
+// fieldEndQuote reports a quote at text[i] that closes a quoted field: a
+// separator, a line end or the end of the data follows it, after blanks
+// (lcl_isFieldEndQuote, for the generators that do not double embedded
+// quotes).
+func fieldEndQuote(text string, i int) bool {
+	j := skipBlanks(text, i+1)
+	return j >= len(text) || strings.IndexByte(separators, text[j]) >= 0 || text[j] == '\n' || text[j] == '\r'
+}
+
+// scanQuoted reads the quoted field whose opening quote is text[q],
+// passing its characters to add: doubled quotes are one, a quote that
+// does not end the field is a character, a line end inside is a line feed
+// (CRLF or CR alike), and the blanks between the closing quote and the
+// separator belong to the field. It returns the index after the field and
+// false when no quote closes it.
+func scanQuoted(text string, q int, add func(rune)) (int, bool) {
+	i, n := q+1, len(text)
+	for i < n {
+		switch c := text[i]; {
+		case c == quote && i+1 < n && text[i+1] == quote:
+			add(quote)
+			i += 2
+		case c == quote && fieldEndQuote(text, i):
+			for i++; i < n && text[i] == ' '; i++ {
+				add(' ')
+			}
+			return i, true
+		case c == '\r':
+			add('\n')
+			i++
+			if i < n && text[i] == '\n' {
+				i++
+			}
+		default:
+			r, size := utf8.DecodeRuneInString(text[i:])
+			add(r)
+			i += size
+		}
+	}
+	return q, false
+}
+
 // decode returns data as UTF-8 text: a UTF-8 byte order mark skipped,
 // invalid bytes replaced by U+FFFD (the token's character set 76 is
 // UTF-8).
@@ -67,6 +118,10 @@ func parse(ctx context.Context, text string) ([]record, limits, error) {
 		cells int
 	)
 	addRune := func(r rune) {
+		if r < 0x20 && r != '\t' && r != '\n' {
+			// A control character draws nothing in Calc's cell.
+			return
+		}
 		if field.Len()+utf8.RuneLen(r) > maxFieldBytes {
 			lim.bytes = true
 			return
@@ -102,47 +157,26 @@ func parse(ctx context.Context, text string) ([]record, limits, error) {
 		return true
 	}
 	i, n := 0, len(text)
-	start := true
+	start, unclosed := true, false
 	for i < n {
 		if len(out)%4096 == 0 && start {
 			if err := ctx.Err(); err != nil {
 				return nil, lim, err
 			}
 		}
-		if start && text[i] == quote {
-			// A quoted field.
-			i++
-			for i < n {
-				if text[i] == quote {
-					if i+1 < n && text[i+1] == quote {
-						addRune(quote)
-						i += 2
-						continue
-					}
-					if i+1 >= n || strings.IndexByte(separators, text[i+1]) >= 0 || text[i+1] == '\n' || text[i+1] == '\r' {
-						i++
-						break
-					}
-					addRune(quote)
-					i++
-					continue
-				}
-				if text[i] == '\r' {
-					// A line end inside quotes is a line feed of the field,
-					// CRLF or CR alike.
-					addRune('\n')
-					i++
-					if i < n && text[i] == '\n' {
-						i++
-					}
-					continue
-				}
-				r, size := utf8.DecodeRuneInString(text[i:])
-				addRune(r)
-				i += size
+		if j := skipBlanks(text, i); start && !unclosed && j < n && text[j] == quote {
+			// A quoted field, the blanks before its quote skipped
+			// (ScImportExport::ScanNextFieldFromString, for the broken
+			// generators that write "a", "b").
+			if end, ok := scanQuoted(text, j, addRune); ok {
+				i, start = end, false
+				continue
 			}
-			start = false
-			continue
+			// No closing quote before the end of the data: the quote is a
+			// character, and the field runs to its separator. No later
+			// quote closes either, which keeps the scan linear.
+			field.Reset()
+			unclosed = true
 		}
 		c := text[i]
 		switch {
