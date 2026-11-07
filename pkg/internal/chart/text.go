@@ -89,14 +89,15 @@ func (rd *renderer) measure(s string, st TextStyle, maxW float64) *block {
 	return b
 }
 
-// lineHeight returns the height a chart text line takes: the font's
-// ascent and descent.
-func lineHeight(l text.Line, size float64) float64 {
-	h := l.Ascent + l.Descent
-	if !(h > 0) {
-		h = size * 1.2
-	}
-	return h
+// chartLineHeight is the height of a line of chart text, in ems.
+// LibreOffice's chart text shapes take 1.12 to 1.125 times the font size a
+// line, whether the face is Carlito or Liberation Sans, though their
+// ascent and descent sum to 1.22 and 1.117 ems.
+const chartLineHeight = 1.12
+
+// lineHeight returns the height a chart text line of size points takes.
+func lineHeight(_ text.Line, size float64) float64 {
+	return size * chartLineHeight
 }
 
 // align is a horizontal alignment of a block's lines.
