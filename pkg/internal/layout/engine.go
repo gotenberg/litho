@@ -85,6 +85,9 @@ type engine struct {
 	clamp *clampState
 	// leaders are the strings of the leaders laid out, by box.
 	leaders map[*box]*leaderInfo
+	// decimals caches the decimal separator of each language, for decimal
+	// tab stops.
+	decimals map[string]rune
 	// foot is the footnotes' state, nil for a document without any.
 	foot *footState
 	// balancePasses counts the layouts balancing columns took, against

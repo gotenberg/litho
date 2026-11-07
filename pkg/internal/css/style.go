@@ -992,12 +992,18 @@ type Style struct {
 	// which a tab character in its lines advances to before the TabSize
 	// multiples (WordprocessingML tabs, ODF style:tab-stops). No CSS
 	// property sets them: an Office converter fills them; see [TabStop].
+	// Non-nil, even empty, it also lays the container's tabs out as the
+	// Office formats do rather than as CSS Text 3, 4.2 does: see [TabStop].
 	TabStops []TabStop
 	// MinLineHeight is the least height of a line box, in points, 0 for
 	// none: the line is at least this tall and grows with its content
 	// (WordprocessingML spacing lineRule atLeast, ODF
 	// fo:line-height-at-least). No CSS property sets it.
 	MinLineHeight float64
+	// LineRule says how a block container's LineHeight sizes its line
+	// boxes and where it puts their baseline: CSS half-leading, or an
+	// Office rule. No CSS property sets it; see [LineRule].
+	LineRule LineRule
 	// TextScale scales the glyphs of the text horizontally, 1 for the
 	// natural width, 0 for 1 (WordprocessingML w, ODF style:text-scale). No
 	// CSS property sets it; the engine writes it as compose.Text.HScale.

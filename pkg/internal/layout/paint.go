@@ -709,6 +709,7 @@ func (p *painter) line(l *lineBox) {
 	}
 	var linkOrder []*link
 	linkRects := map[*link]*span{}
+	p.barRules(l, page)
 	paintFrags(before[0])
 	for i, it := range l.items {
 		if i > 0 {

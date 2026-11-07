@@ -31,6 +31,11 @@ type lineBox struct {
 	// else on its right.
 	hangW    float64
 	hangLeft bool
+	// bars are the line-relative positions of the bar tab stops of an
+	// Office container, drawn across the line in barColor.
+	bars     []float64
+	barColor compose.Color
+	barOwner *box
 }
 
 // lineItem is one piece of a line: a glyph run of a text box, or an
@@ -53,6 +58,8 @@ type lineItem struct {
 	// right to left.
 	start, end, hang int
 	rtl              bool
+	// tab reports a tab, whose glyph run, when any, is its leader.
+	tab bool
 }
 
 // inlineFrag is the part of an inline box on one line, painted with its
@@ -287,20 +294,34 @@ func (e *engine) tabWidth(b *box, x float64) float64 {
 // p, in a width of avail with the first offset x0, following the rules of
 // CSS Text 3, 5: break at the last opportunity that fits, else at a
 // grapheme boundary when overflow-wrap allows, else overflow to the next
-// opportunity. fits reports whether anything fits.
-func (e *engine) breakLine(p *ifcPara, w []float64, start int, x0, avail float64) (int, bool) {
+// opportunity. fits reports whether anything fits. root is the block
+// container and org the offset of the line's start from the start edge of
+// its content box, where the tab stops of an Office container are
+// measured from.
+func (e *engine) breakLine(p *ifcPara, w []float64, start int, x0, avail float64, root *box, org float64) (int, bool) {
 	n := p.p.Len()
 	x := x0
 	last := -1
+	office := root != nil && officeTabs(root.st)
 	for i := start; i < n; i++ {
 		if i > start && p.allowed(i) {
 			last = i
 		}
 		wi := w[i]
 		if info := p.infos[p.p.RunOf(i)]; info.kind == runTab {
-			wi = e.tabWidth(info.box, x)
+			brk := false
+			if office {
+				wi, brk = e.officeTab(root, p, w, i, org+x, org+avail)
+			} else {
+				wi = e.tabWidth(info.box, x)
+			}
 			p.p.SetAdvance(i, wi)
 			w[i] = wi
+			if brk && i > start {
+				// The tab and the word after it move to the next line
+				// together, as Writer moves a tab portion.
+				return i, true
+			}
 		}
 		if x+wi > avail+eps && !p.hangs(i) {
 			if last > start {
@@ -605,8 +626,12 @@ func (s *inlineState) fitLine(p *ifcPara, w []float64, pos int, indent, top, h f
 	for range maxFitPasses {
 		for range len(bc.floats) + 1 {
 			left, right = bc.band(top, h, cb.x, cb.x+cb.w)
+			org := left - cb.x
+			if s.root.st.Direction == css.RTL {
+				org = cb.x + cb.w - right
+			}
 			var fits bool
-			end, fits = e.breakLine(p, w, pos, indent, right-left)
+			end, fits = e.breakLine(p, w, pos, indent, right-left, s.root, org)
 			if fits || !bc.narrowed(top, h, cb.x, cb.x+cb.w) {
 				break
 			}
@@ -858,7 +883,12 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 			} else if sp.Text != nil {
 				e.warnOnce(codeTooManyGlyphs, fmt.Sprintf("a line of more than %d glyphs was cut short", maxGlyphsPerLine), -1)
 			}
-		case runTab, runEmpty:
+		case runTab:
+			it.tab = true
+			if officeTabs(s.root.st) {
+				it.text = e.tabLeader(p, it)
+			}
+		case runEmpty:
 		}
 		x += sp.Width
 		l.items = append(l.items, it)
@@ -870,6 +900,11 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 		}
 		s.openEdges(p, sp.Start, false, opened, &x, widen)
 		s.closeEdges(p, sp.End, false, closed, &x, widen)
+	}
+	if officeTabs(s.root.st) {
+		l.bars = barRules(s.root, s.cb, left)
+		l.barColor, _ = colorOf(s.root.st.Color)
+		l.barOwner = s.root
 	}
 	l.frags = nil
 	present := make([]*box, 0, len(ext))
@@ -1315,7 +1350,11 @@ func (e *engine) inlineIntrinsic(b *box) (float64, float64) {
 		for i := range n {
 			wi := maxW[i]
 			if info := p.infos[p.p.RunOf(i)]; info.kind == runTab {
-				wi = e.tabWidth(info.box, x)
+				if officeTabs(b.st) {
+					wi, _ = e.officeTab(b, p, maxW, i, x, math.Inf(1))
+				} else {
+					wi = e.tabWidth(info.box, x)
+				}
 			}
 			x += wi
 			if p.hangs(i) {
@@ -1336,7 +1375,11 @@ func (e *engine) inlineIntrinsic(b *box) (float64, float64) {
 			anywhere = (st.OverflowWrap == css.Anywhere || st.LineBreak == css.LineBreakAnywhere) && wraps(st.WhiteSpace)
 			wi := minW[i]
 			if info := p.infos[p.p.RunOf(i)]; info.kind == runTab {
-				wi = e.tabWidth(info.box, seg)
+				if officeTabs(b.st) {
+					wi, _ = e.officeTab(b, p, minW, i, seg, math.Inf(1))
+				} else {
+					wi = e.tabWidth(info.box, seg)
+				}
 			}
 			seg += wi
 			if p.hangs(i) {

@@ -32,6 +32,9 @@ func (s *inlineState) justify(l *lineBox, free float64) bool {
 		return false
 	}
 	cls := lineClusters(l)
+	if officeTabs(s.root.st) {
+		cls = afterLastTab(l, cls, s.root.st.Direction == css.RTL)
+	}
 	n := len(cls)
 	// opp[k] reports an opportunity between clusters k and k+1.
 	opp := make([]bool, n)
@@ -120,6 +123,9 @@ func (s *inlineState) justify(l *lineBox, free float64) bool {
 func lineClusters(l *lineBox) []jcluster {
 	var out []jcluster
 	for _, it := range l.items {
+		if it.tab {
+			continue
+		}
 		if it.text == nil {
 			if it.atomic != nil {
 				out = append(out, jcluster{it: it, r: utf8.RuneError})

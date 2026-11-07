@@ -60,6 +60,9 @@ func bidiInput(runs []ParagraphRun, text []rune, runOf []int) ([]rune, []int) {
 			}
 		}
 		at[i] = len(out)
+		if r >= 0 && r < len(runs) && runs[r].Object != nil && runs[r].Object.Tab {
+			c = '\t'
+		}
 		out = append(out, c)
 		if last && r >= 0 && r < len(runs) {
 			if runs[r].Override != DirectionAuto {

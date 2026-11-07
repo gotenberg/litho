@@ -49,6 +49,10 @@ type Object struct {
 	// Ascent and Descent are the extent above and below the baseline, in
 	// points.
 	Ascent, Descent float64
+	// Tab makes the object a tab for the embedding levels: a segment
+	// separator, which takes the paragraph's level (UAX #9, L1), so that
+	// the text on either side of it orders as separate segments.
+	Tab bool
 }
 
 // Break is the kind of line break opportunity before a character.

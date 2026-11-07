@@ -58,6 +58,9 @@ type ifcPara struct {
 	abs []posBox
 	// leaders lists the leaders of the paragraph at their characters.
 	leaders []posBox
+	// tabs records the stop each tab of an Office paragraph went to, by
+	// character, for its leader.
+	tabs map[int]tabChoice
 	// forced reports a paragraph ended by a forced break, which makes a
 	// line even when empty.
 	forced bool
@@ -209,7 +212,7 @@ func hasInlineEdges(b *box) bool {
 
 // object adds an object run for box b.
 func (c *collector) object(kind runKind, b *box) {
-	c.addRun(text.ParagraphRun{Object: &text.Object{}}, runInfo{kind: kind, box: b, ws: b.st.WhiteSpace})
+	c.addRun(text.ParagraphRun{Object: &text.Object{Tab: kind == runTab}}, runInfo{kind: kind, box: b, ws: b.st.WhiteSpace})
 	c.cur.n++
 }
 
