@@ -368,15 +368,15 @@ func (p *trackListParser) addNames(n []string) bool {
 	return true
 }
 
-// addTrack records a track after the pending names.
-func (p *trackListParser) addTrack(s trackSpec) bool {
+// addTrack records a track after the pending names, and drops it past
+// [MaxGridTracks].
+func (p *trackListParser) addTrack(s trackSpec) {
 	if len(p.out.sizes)+repeatLen(p.out.auto) >= MaxGridTracks {
-		return true
+		return
 	}
 	p.out.names = append(p.out.names, p.pending)
 	p.out.sizes = append(p.out.sizes, s)
 	p.pending, p.names = nil, false
-	return true
 }
 
 func repeatLen(r *repeatSpec) int {
@@ -411,9 +411,10 @@ func parseTrackList(v []token, explicit bool) (trackListSpec, bool) {
 			}
 		default:
 			s, ok := parseTrackSize(t)
-			if !ok || !p.addTrack(s) {
+			if !ok {
 				return trackListSpec{}, false
 			}
+			p.addTrack(s)
 		}
 	}
 	if len(p.out.sizes) == 0 && p.out.auto == nil {

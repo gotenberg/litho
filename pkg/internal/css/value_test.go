@@ -6,7 +6,7 @@ import (
 
 // oneValue tokenizes src into its significant component values.
 func oneValue(src string) []token {
-	l, _ := parseComponentValues(src, maxTokens)
+	l, _ := parseComponentValues(src)
 	return significant(l)
 }
 

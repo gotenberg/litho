@@ -148,7 +148,7 @@ func FuzzTrackList(f *testing.F) {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
-		v, _ := parseComponentValues(s, 1<<12)
+		v, _ := parseComponentValues(s)
 		v = significant(v)
 		if l, ok := parseTrackList(v, false); ok && len(l.sizes)+repeatLen(l.auto) > MaxGridTracks {
 			t.Fatalf("%q: %d tracks", s, len(l.sizes))

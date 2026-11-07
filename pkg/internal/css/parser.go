@@ -334,9 +334,9 @@ func declaration(list []token) (item, bool) {
 }
 
 // parseComponentValues parses a list of component values (CSS Syntax 3,
-// 5.3.10).
-func parseComponentValues(src string, maxTok int) ([]token, *parser) {
-	p := &parser{tz: newTokenizer(src, maxTok)}
+// 5.3.10), at most [maxTokens] of them.
+func parseComponentValues(src string) ([]token, *parser) {
+	p := &parser{tz: newTokenizer(src, maxTokens)}
 	var out []token
 	for {
 		t := p.next()

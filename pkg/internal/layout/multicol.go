@@ -409,7 +409,7 @@ func (multicolFormatter) layout(e *engine, b *box, cb cblock, bc *bfc, cursor fl
 			continue
 		}
 		if !hasFlow(s.kids, b.inlineKids) {
-			e.placeOutOfFlow(b, s.kids, kcb, y)
+			e.placeOutOfFlow(s.kids, kcb, y)
 			continue
 		}
 		top := y
@@ -453,7 +453,7 @@ func hasFlow(kids []*box, inline bool) bool {
 
 // placeOutOfFlow records the static position of the absolutely positioned
 // boxes of a column set with nothing else, at y.
-func (e *engine) placeOutOfFlow(b *box, kids []*box, cb cblock, y float64) {
+func (e *engine) placeOutOfFlow(kids []*box, cb cblock, y float64) {
 	for _, k := range kids {
 		if k.abs {
 			staticBlock(k, cb, y)
@@ -583,7 +583,7 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 		}
 	}
 	empty := end <= y+eps && ctx.rowMax(cons, 0) <= eps && len(ctx.rows) == 1
-	return ctx.finish(b, s, cons, end, balance), empty
+	return ctx.finish(b, s, cons, balance), empty
 }
 
 // layoutColumns lays the content of the column set s of b out in the
@@ -734,11 +734,11 @@ func (c *colCtx) rowMax(cons []float64, r int) float64 {
 }
 
 // finish records the columns and rows of the column set s of b, laid out
-// in ctx with cons taken of each column and the content ending at end, and
-// returns where the set ends in the outer flow: the bottom of its last
-// row, which takes the height of its columns when they are balanced or
-// their height is fixed, the height of its tallest content otherwise.
-func (c *colCtx) finish(b *box, s *colSet, cons []float64, end float64, balanced bool) float64 {
+// in ctx with cons taken of each column, and returns where the set ends
+// in the outer flow: the bottom of its last row, which takes the height
+// of its columns when they are balanced or their height is fixed, the
+// height of its tallest content otherwise.
+func (c *colCtx) finish(b *box, s *colSet, cons []float64, balanced bool) float64 {
 	last := c.lastFrag(cons)
 	lr := c.frags[last].row
 	s.rows = s.rows[:0]

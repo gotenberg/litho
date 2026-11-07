@@ -728,7 +728,7 @@ func (l *gridLayout) place(top float64, colPos, rowPos []float64) float64 {
 		}
 		starts[r] = rowTop - top
 		for _, it := range byRow[r] {
-			bottoms[it] = l.put(it, colPos, rowTop, shift)
+			bottoms[it] = l.put(it, rowTop)
 		}
 		if e.paginating() && !e.atPageTop(rowTop) && l.pushRow(byRow[r], rowTop) && e.relayout(rowTop) {
 			y := e.nextPage(rowTop)
@@ -736,7 +736,7 @@ func (l *gridLayout) place(top float64, colPos, rowPos []float64) float64 {
 			rowTop = y
 			starts[r] = rowTop - top
 			for _, it := range byRow[r] {
-				bottoms[it] = l.put(it, colPos, rowTop, shift)
+				bottoms[it] = l.put(it, rowTop)
 			}
 		}
 		// The row grows to hold the items ending in it as laid out.
@@ -816,9 +816,9 @@ func (l *gridLayout) pushRow(items []*gitem, rowTop float64) bool {
 	return false
 }
 
-// put lays the item it out in its area, the area's top at rowTop and the
-// rows below shifted by shift, and returns the bottom of its margin box.
-func (l *gridLayout) put(it *gitem, colPos []float64, rowTop, shift float64) float64 {
+// put lays the item it out in its area, the area's top at rowTop, and
+// returns the bottom of its margin box.
+func (l *gridLayout) put(it *gitem, rowTop float64) float64 {
 	e := l.e
 	k := it.b
 	rows := l.tracks[rowAxis]

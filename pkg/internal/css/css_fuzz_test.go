@@ -63,7 +63,7 @@ func FuzzSelector(f *testing.F) {
 		f.Fatal(err)
 	}
 	f.Fuzz(func(t *testing.T, sel string) {
-		l, _ := parseComponentValues(sel, maxTokens)
+		l, _ := parseComponentValues(sel)
 		list, serr := parseSelectorList(trimWS(l), 0, false)
 		if serr != nil {
 			return

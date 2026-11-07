@@ -384,7 +384,7 @@ func ParseDeclarations(src string, opts ParseOptions) []Declaration {
 // property: value, as an HTML attribute maps it. An invalid value yields a
 // Declaration that declares nothing.
 func Hint(property, value string) Declaration {
-	toks, _ := parseComponentValues(value, maxTokens)
+	toks, _ := parseComponentValues(value)
 	c := &declCtx{}
 	d := c.declare(property, toks, false)
 	d.warns = c.warns

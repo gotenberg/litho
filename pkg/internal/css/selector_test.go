@@ -24,7 +24,7 @@ const selectorDoc = `<!doctype html><html lang="en"><body>
 // matching returns the ids of the elements sel matches, in document order.
 func matching(t *testing.T, doc *html.Node, sel string) []string {
 	t.Helper()
-	l, _ := parseComponentValues(sel, maxTokens)
+	l, _ := parseComponentValues(sel)
 	list, err := parseSelectorList(trimWS(l), 0, false)
 	if err != nil {
 		t.Fatalf("%s: does not parse (%q)", sel, err.unsupported)
@@ -117,7 +117,7 @@ func TestSelector_Matches(t *testing.T) {
 
 func mustSelectors(t *testing.T, sel string) []*complexSel {
 	t.Helper()
-	l, _ := parseComponentValues(sel, maxTokens)
+	l, _ := parseComponentValues(sel)
 	list, err := parseSelectorList(trimWS(l), 0, false)
 	if err != nil {
 		t.Fatalf("%s: does not parse", sel)
@@ -134,12 +134,12 @@ func TestSelector_Invalid(t *testing.T) {
 		strings.Repeat(":not(", 10) + "p" + strings.Repeat(")", 10),
 		strings.Repeat("a ", 40) + "b",
 	} {
-		l, _ := parseComponentValues(sel, maxTokens)
+		l, _ := parseComponentValues(sel)
 		if _, err := parseSelectorList(trimWS(l), 0, false); err == nil {
 			t.Errorf("%q parses", sel)
 		}
 	}
-	l, _ := parseComponentValues("a:has(b)", maxTokens)
+	l, _ := parseComponentValues("a:has(b)")
 	if _, err := parseSelectorList(l, 0, false); err == nil || err.unsupported != ":has()" {
 		t.Errorf("a:has(b) error = %+v, want unsupported :has()", err)
 	}

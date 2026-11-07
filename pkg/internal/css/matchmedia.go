@@ -7,6 +7,6 @@ package css
 // how a document evaluates the media attribute of an element or the media
 // condition of a sizes attribute (HTML Standard, 2.3.10 and 4.8.4.2.2).
 func MatchMedia(q string, m Media) bool {
-	l, _ := parseComponentValues(q, maxTokens)
+	l, _ := parseComponentValues(q)
 	return evalMediaList(l, m)
 }

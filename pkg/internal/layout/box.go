@@ -234,7 +234,6 @@ func (b *box) establishesBFC() bool {
 		b.st.Overflow != css.OverflowVisible || b.st.ScrollContainer() || b.kind == kindReplaced || b.st.Display == css.FlowRoot ||
 		b.tpart == partWrapper || b.tpart == partCaption || b.tpart == partCell ||
 		b.flex != nil || b.flexItem || b.grid != nil || b.gridItem || b.st.Clamps() || isMulticol(b)
-
 }
 
 // layered reports whether the box paints in the positioned layers of its

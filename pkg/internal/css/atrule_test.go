@@ -50,12 +50,12 @@ func TestMedia_Queries(t *testing.T) {
 		{"garbage(, print", false},
 	}
 	for _, tt := range tests {
-		l, _ := parseComponentValues(tt.q, maxTokens)
+		l, _ := parseComponentValues(tt.q)
 		if got := evalMediaList(l, a4); got != tt.want {
 			t.Errorf("@media %s = %v, want %v", tt.q, got, tt.want)
 		}
 	}
-	l, _ := parseComponentValues("screen", maxTokens)
+	l, _ := parseComponentValues("screen")
 	if !evalMediaList(l, Media{Type: "screen"}) {
 		t.Errorf("screen does not match a screen medium")
 	}
@@ -85,7 +85,7 @@ func TestSupports_Conditions(t *testing.T) {
 		{"font-tech(color-COLRv1)", false},
 	}
 	for _, tt := range tests {
-		l, _ := parseComponentValues(tt.c, maxTokens)
+		l, _ := parseComponentValues(tt.c)
 		if got := evalSupports(l); got != tt.want {
 			t.Errorf("@supports %s = %v, want %v", tt.c, got, tt.want)
 		}
@@ -215,7 +215,7 @@ func TestFontFace_Collected(t *testing.T) {
 		t.Errorf("unicode-range = %v", f.UnicodeRange)
 	}
 	for _, bad := range []string{"U+110000", "U+20-10", "U+1-2-3", "U+???????", "V+20"} {
-		l, _ := parseComponentValues(bad, maxTokens)
+		l, _ := parseComponentValues(bad)
 		if r := parseUnicodeRanges(l); r != nil {
 			t.Errorf("unicode-range %s = %v", bad, r)
 		}

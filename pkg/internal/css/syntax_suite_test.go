@@ -234,7 +234,7 @@ func colorsMatch(got, want string) bool {
 }
 
 func parseColorInput(src string) any {
-	l, _ := parseComponentValues(src, maxTokens)
+	l, _ := parseComponentValues(src)
 	l = trimWS(l)
 	if len(l) != 1 {
 		return nil
@@ -247,7 +247,7 @@ func parseColorInput(src string) any {
 }
 
 func anbInput(src string) any {
-	l, _ := parseComponentValues(src, maxTokens)
+	l, _ := parseComponentValues(src)
 	a, b, ok := parseAnB(l)
 	if !ok {
 		return nil
@@ -262,7 +262,7 @@ func TestCSSParsingTests_Suite(t *testing.T) {
 		t.Skipf("%s is absent: run testdata/fetch-css-parsing-tests.sh", suiteDir)
 	}
 	runners := map[string]func(string) any{
-		"component_value_list.json": func(s string) any { l, _ := parseComponentValues(s, maxTokens); return serializeList(l) },
+		"component_value_list.json": func(s string) any { l, _ := parseComponentValues(s); return serializeList(l) },
 		"one_component_value.json":  oneComponentValue,
 		"declaration_list.json": func(s string) any {
 			return collect((&parser{tz: newTokenizer(s, maxTokens)}).declarations)

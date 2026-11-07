@@ -13,7 +13,7 @@ import (
 // reports current for currentColor, whose colour the caller resolves, and
 // ok false for anything else, surrounding white space allowed.
 func ParseColor(s string) (c Color, current, ok bool) {
-	toks, _ := parseComponentValues(s, maxTokens)
+	toks, _ := parseComponentValues(s)
 	toks = significant(toks)
 	if len(toks) != 1 {
 		return Color{}, false, false
@@ -39,7 +39,7 @@ func ParseSelector(src string) (*Selector, bool) {
 	if len(src) > maxStylesheetBytes {
 		return nil, false
 	}
-	toks, p := parseComponentValues(src, maxTokens)
+	toks, p := parseComponentValues(src)
 	if p.tz.over || p.deep {
 		return nil, false
 	}
