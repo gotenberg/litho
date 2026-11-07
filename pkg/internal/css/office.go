@@ -98,14 +98,17 @@ const (
 	// length): the baseline sits four fifths of the height below the line
 	// top, whatever the glyphs, which overflow a line too short for them.
 	LineRuleExact
-	// LineRuleMultiple makes every line box LineHeight, a number, times
-	// its natural height (WordprocessingML lineRule auto, ODF
+	// LineRuleMultiple spaces the line boxes by LineHeight, a number, a
+	// multiple of their natural height (WordprocessingML lineRule auto, ODF
 	// fo:line-height as a percentage). The natural height is the tallest
 	// ascent plus line gap over the line's glyph runs and atomic inlines
 	// above the shared baseline, plus the deepest descent below it. At 1
 	// and above the baseline keeps its natural place and the room added
-	// goes below the glyphs; below 1 the baseline sits four fifths of the
-	// shrunk height below the line top.
+	// goes below the glyphs, LineHeight less 1 times the natural height of
+	// the glyph runs alone: an atomic inline taller than the text, an
+	// as-character picture, adds its own height unscaled, as Writer sizes
+	// such a line. Below 1 the whole natural height shrinks and the
+	// baseline sits four fifths of it below the line top.
 	LineRuleMultiple
 )
 
