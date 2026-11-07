@@ -9,9 +9,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 )
 
-// The header and footer text of a span naming no font in a book naming no
-// default font: Calc's default cell font, Liberation Sans 10 points, which
-// its header and footer edit engine takes.
+// The header and footer text of a span naming no font: Calc's header and
+// footer edit engine default, Liberation Sans 10 points, whatever the
+// book's default cell font.
 //
 // # Corpus evidence
 //
@@ -20,6 +20,8 @@ import (
 //     part is centred in the header's height, the date shows as
 //     11/07/2026 and the time as 21:39:35, the file name as the
 //     document's URL and the title as the document's title.
+//   - ods: sc/tdf138507.ods, a book whose default cell font is "Sans",
+//     prints its default header and footer in Liberation Sans.
 const (
 	headerFamily = "Liberation Sans"
 	headerSize   = 10
@@ -66,7 +68,7 @@ func (b *builder) partNode(spans []Span, f hfFields, align css.TextAlign) *layou
 	if len(spans) == 0 {
 		return nil
 	}
-	base := resolveFont(b.doc.Default.Font, Font{Families: []string{headerFamily}, Size: headerSize})
+	base := font{families: []string{headerFamily}, size: headerSize, color: css.Color{A: 1}}
 	st := b.style()
 	base.apply(st)
 	st.TextAlign = align
@@ -84,10 +86,7 @@ func (b *builder) partNode(spans []Span, f hfFields, align css.TextAlign) *layou
 		rs := b.style()
 		fnt := base
 		if s.Font != nil {
-			fnt = resolveFont(*s.Font, b.doc.Default.Font)
-			if len(s.Font.Families) == 0 && len(b.doc.Default.Font.Families) == 0 {
-				fnt.families = []string{headerFamily}
-			}
+			fnt = resolveFont(*s.Font, Font{Families: []string{headerFamily}, Size: headerSize})
 		}
 		fnt.apply(rs)
 		rs.Display = css.Inline

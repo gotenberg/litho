@@ -95,9 +95,31 @@ func overlay(base font, r *Font) font {
 // position of SvxEscapementItem, DFLT_ESC_PROP and DFLT_ESC_AUTO).
 const scriptScale = 0.58
 
+// fontconfigAliases are the family names fontconfig reads as its generic
+// families (fontconfig's 45-latin.conf and 49-sansserif.conf), which a
+// book may name and LibreOffice resolves through fontconfig.
+var fontconfigAliases = map[string]string{
+	"sans":      "sans-serif",
+	"serif":     "serif",
+	"mono":      "monospace",
+	"monospace": "monospace",
+}
+
+// cssFamilies returns f's family list with fontconfig's aliases resolved.
+func (f font) cssFamilies() []string {
+	out := make([]string, len(f.families))
+	for i, fam := range f.families {
+		if g, ok := fontconfigAliases[strings.ToLower(strings.TrimSpace(fam))]; ok {
+			fam = g
+		}
+		out[i] = fam
+	}
+	return out
+}
+
 // apply sets the font of st.
 func (f font) apply(st *css.Style) {
-	st.FontFamilies = append([]string(nil), f.families...)
+	st.FontFamilies = f.cssFamilies()
 	st.FontSize = f.size
 	st.FontWeight = 400
 	if f.bold {
@@ -144,7 +166,7 @@ func (f font) textStyle(lang string) text.Style {
 		size *= scriptScale
 	}
 	return text.Style{
-		Families: text.BrowserFamilies(f.families),
+		Families: text.BrowserFamilies(f.cssFamilies()),
 		Weight:   w,
 		Italic:   f.italic,
 		Size:     size,
