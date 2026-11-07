@@ -26,7 +26,10 @@ func TestLineRule_Office(t *testing.T) {
 		return func(s *css.Style) { s.LineRule = css.LineRuleExact; s.LineHeight = css.Pts(px(v)) }
 	}
 	multiple := func(f float64) func(*css.Style) {
-		return func(s *css.Style) { s.LineRule = css.LineRuleMultiple; s.LineHeight = css.Dimension{Kind: css.Number, Value: f} }
+		return func(s *css.Style) {
+			s.LineRule = css.LineRuleMultiple
+			s.LineHeight = css.Dimension{Kind: css.Number, Value: f}
+		}
 	}
 	least := func(v float64) func(*css.Style) { return func(s *css.Style) { s.MinLineHeight = px(v) } }
 	tests := []struct {
