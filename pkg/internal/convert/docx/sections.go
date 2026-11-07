@@ -161,7 +161,7 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 	seenKind := map[string]bool{}
 	for _, c := range e.Kids() {
 		var refs map[string]string
-		which := ""
+		var which string
 		switch {
 		case c.Is(w, "headerReference"):
 			refs, which = s.headers, "header"
