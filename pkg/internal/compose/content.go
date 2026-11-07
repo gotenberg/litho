@@ -202,7 +202,8 @@ func (p *pageWriter) color(c Color, op string) {
 // selected at size 1 and the text matrix carries the size, with d negated
 // so the glyphs stand upright under the page's flip, and the skew as c:
 // [size 0 size*skew -size x y]. A run with a stroke is drawn in text
-// rendering mode 2 (9.3.6) with that line width.
+// rendering mode 2 (9.3.6) with that line width, a run with a horizontal
+// scale under Tz (9.3.4).
 // Glyphs on one baseline share TJ arrays, a glyph away from where the
 // previous one's advance leaves the pen taking a TJ adjustment in
 // thousandths of text space (9.4.3); a change of baseline sets a new text
@@ -234,6 +235,14 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 	if t.Stroke > 0 {
 		p.buf.WriteString("2 Tr\n")
 	}
+	hs := 1.0
+	if t.HScale > 0 && t.HScale != 1 {
+		// Horizontal scaling (9.3.4) scales the glyphs and every advance
+		// and adjustment along the baseline, so the pen moves by hs times
+		// the unscaled positions the run records.
+		hs = t.HScale
+		fmt.Fprintf(&p.buf, "%s Tz\n", num(hs*100))
+	}
 
 	size := t.Size
 	tj := tjWriter{buf: &p.buf}
@@ -256,20 +265,21 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 		if !ok {
 			return fmt.Errorf("%w: glyph %d not in face %q", ErrInvalidFont, g.GID, t.Face.Key)
 		}
-		x, y := t.Origin.X+g.X, t.Origin.Y+g.Y
+		x, y := t.Origin.X+g.X*hs, t.Origin.Y+g.Y
 		if !started || round(y) != round(baseline) {
 			tj.end()
 			fmt.Fprintf(&p.buf, "%s 0 %s %s %s %s Tm\n", num(size), num(size*t.Skew), num(-size), num(x), num(y))
 			started, penX, baseline = true, x, y
-		} else if adj := round((penX - x) / size * 1000); adj != 0 {
+		} else if adj := round((penX - x) / (size * hs) * 1000); adj != 0 {
 			// A positive adjustment moves the next glyph left (9.4.3, the
 			// TJ operator), by adj/1000 of the text space unit, which the
-			// text matrix scales to size points.
+			// text matrix scales to size points and the horizontal
+			// scaling by hs.
 			tj.number(adj)
-			penX -= adj / 1000 * size
+			penX -= adj / 1000 * size * hs
 		}
 		tj.code(fe.subset.Code(g.GID, gt.texts[i]))
-		penX += advance * size
+		penX += advance * size * hs
 		if len(spans) > 0 && spans[0].end == i+1 {
 			tj.end()
 			p.buf.WriteString("EMC\n")
@@ -281,6 +291,10 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 		// The rendering mode is graphics state that outlives the text
 		// object (9.3.1): later runs fill only.
 		p.buf.WriteString("0 Tr\n")
+	}
+	if hs != 1 {
+		// So is the horizontal scaling: later runs draw at their width.
+		p.buf.WriteString("100 Tz\n")
 	}
 	p.buf.WriteString("ET\n")
 	return nil

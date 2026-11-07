@@ -92,6 +92,22 @@ type Style struct {
 	// NO-BREAK SPACE and a few script-specific separators), in points. It
 	// may be negative; its magnitude is at most 1000.
 	WordSpacing float64
+	// Scale scales the glyphs horizontally, the Office formats' text
+	// scale: [Fonts.Shape] shapes at the natural advances, lays the
+	// paragraph out at the scaled ones and writes each run's glyph
+	// positions unscaled with the scale as its [compose.Text.HScale]. Letter
+	// spacing is added after scaling, unscaled. 0 and 1 draw at the
+	// natural width; otherwise it lies in [compose.MinHScale,
+	// compose.MaxHScale]. [Fonts.Layout] ignores it.
+	Scale float64
+}
+
+// scale returns the horizontal scale of s, 1 for none.
+func (s Style) scale() float64 {
+	if s.Scale == 0 {
+		return 1
+	}
+	return s.Scale
 }
 
 // validate reports whether s can be laid out.
@@ -110,6 +126,9 @@ func (s Style) validate() error {
 	}
 	if !finiteWithin(s.WordSpacing, maxFontSize) {
 		return fmt.Errorf("%w: word spacing %v outside [-%d, %d]", ErrInvalidStyle, s.WordSpacing, maxFontSize, maxFontSize)
+	}
+	if s.Scale != 0 && !(s.Scale >= compose.MinHScale && s.Scale <= compose.MaxHScale) {
+		return fmt.Errorf("%w: scale %v outside [%v, %v]", ErrInvalidStyle, s.Scale, compose.MinHScale, compose.MaxHScale)
 	}
 	return nil
 }

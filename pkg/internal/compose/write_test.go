@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -633,5 +634,58 @@ func TestWritePageBoxes(t *testing.T) {
 	}
 	if want := [4]float64{0, 0, 100, 200}; p.BleedBox != want {
 		t.Errorf("BleedBox = %v, want %v", p.BleedBox, want)
+	}
+}
+
+// TestWriteHorizontalScaling writes a run with a horizontal scale under
+// Tz (ISO 32000-1, 9.3.4): its unscaled positions land scaled, extraction
+// reads the scaled advances, and the glyphs draw narrower or wider.
+func TestWriteHorizontalScaling(t *testing.T) {
+	t.Parallel()
+	f, err := embed.Load(sans.Program)
+	if err != nil {
+		t.Fatalf("embed.Load: %v", err)
+	}
+	for _, hs := range []float64{0.5, 2} {
+		t.Run(fmt.Sprint(hs), func(t *testing.T) {
+			txt := run(t, sans, 20, compose.Point{X: 40, Y: 100}, "HHAB")
+			txt.Glyphs[2].X += 3
+			txt.HScale = hs
+			page := &compose.Page{Width: 400, Height: 200, Content: []compose.Fragment{txt, run(t, sans, 20, compose.Point{X: 40, Y: 150}, "H")}}
+			out := write(t, &compose.Document{Pages: []*compose.Page{page}})
+			content := inflated(t, out)
+			if !bytes.Contains(content, []byte(fmt.Sprintf("BT\n/F1 1 Tf\n%g Tz\n", hs*100))) || !bytes.Contains(content, []byte("100 Tz\nET")) {
+				t.Errorf("content lacks the scaling or its reset:\n%s", content)
+			}
+			r := open(t, out)
+			elems, err := r.ExtractTextElements(context.Background(), 1)
+			if err != nil {
+				t.Fatalf("ExtractTextElements: %v", err)
+			}
+			next := 0
+			for _, e := range elems {
+				if e.Y < page.Height-110 {
+					break
+				}
+				g := txt.Glyphs[next]
+				if wantX := txt.Origin.X + g.X*hs; math.Abs(e.X-wantX) > 0.5 {
+					t.Errorf("element %q at x %.3f, want %.3f", e.Text, e.X, wantX)
+				}
+				next += len([]rune(e.Text))
+			}
+			if next != len(txt.Glyphs) {
+				t.Errorf("%d glyphs extracted, want %d", next, len(txt.Glyphs))
+			}
+			img := render(t, r, 1)
+			w, _ := f.Width(txt.Glyphs[0].GID)
+			natural := float64(w) * 20 / 1000
+			// The second H starts where the first, scaled, ends.
+			if n := inkIn(img, int(40+natural*hs)+1, 91, int(40+natural*hs)+2, 99); n == 0 && hs < 1 {
+				t.Errorf("no ink where the scaled second H starts")
+			}
+			if n := inkIn(img, int(40+natural)+1, 141, int(40+natural)+3, 149); n != 0 {
+				t.Errorf("the unscaled run after the scaled one is not at its width: ink past its H")
+			}
+		})
 	}
 }

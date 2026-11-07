@@ -48,8 +48,9 @@ func (p *painter) textClip(b *box) *compose.Path {
 				return
 			}
 			glyphs++
-			ox, oy := x+g.X, y+g.Y
-			ops = appendGlyph(ops, f, g.GID, ox, oy, k, t.Skew)
+			hs := hscale(t)
+			ox, oy := x+g.X*hs, y+g.Y
+			ops = appendGlyph(ops, f, g.GID, ox, oy, k, hs, t.Skew)
 		}
 	}
 	var walk func(c *box, dx, dy float64, depth int)
@@ -129,14 +130,14 @@ func (p *painter) outlineFace(cf *compose.Face) *gofont.Face {
 // appendGlyph appends the outline of glyph gid of f, drawn at size k
 // points per font unit with its origin at x, y and slanted by skew, to
 // ops. Quadratic segments become the cubic Béziers they equal.
-func appendGlyph(ops []compose.PathOp, f *gofont.Face, gid uint16, x, y, k, skew float64) []compose.PathOp {
+func appendGlyph(ops []compose.PathOp, f *gofont.Face, gid uint16, x, y, k, hs, skew float64) []compose.PathOp {
 	data, ok := f.GlyphData(gofont.GID(gid)).(gofont.GlyphOutline)
 	if !ok {
 		return ops
 	}
 	pt := func(s opentype.SegmentPoint) compose.Point {
 		up := float64(s.Y) * k
-		return compose.Point{X: x + float64(s.X)*k + skew*up, Y: y - up}
+		return compose.Point{X: x + hs*float64(s.X)*k + skew*up, Y: y - up}
 	}
 	var last compose.Point
 	open := false

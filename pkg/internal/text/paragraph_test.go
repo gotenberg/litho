@@ -194,3 +194,31 @@ func TestVisualOrder_L2(t *testing.T) {
 		}
 	}
 }
+
+func TestShape_Scale(t *testing.T) {
+	f := newTestFonts(t, sansFamily()...)
+	st := style()
+	st.Scale = 0.5
+	st.LetterSpacing = 1
+	p := shape(t, f, []ParagraphRun{{Text: "AB", Style: st}}, ParagraphOptions{})
+	// A and B are 5 and 6 points wide: halved, then spaced by a point.
+	for i, w := range []float64{3.5, 4} {
+		if math.Abs(p.Advance(i)-w) > 1e-6 {
+			t.Errorf("advance %d = %v, want %v", i, p.Advance(i), w)
+		}
+	}
+	l := p.Line(0, 2, false)
+	if len(l.Spans) != 1 || l.Spans[0].Text == nil || math.Abs(l.Width-7.5) > 1e-6 {
+		t.Fatalf("line %+v, want one run 7.5 wide", l)
+	}
+	run := l.Spans[0].Text
+	if run.HScale != 0.5 || math.Abs(run.Glyphs[1].X-7) > 1e-6 {
+		t.Errorf("HScale %v, B at %v: want 0.5 and 7, its 3.5 unscaled", run.HScale, run.Glyphs[1].X)
+	}
+	for _, bad := range []float64{math.NaN(), 0.001, 7, -1} {
+		st.Scale = bad
+		if _, _, err := f.Shape(context.Background(), []ParagraphRun{{Text: "A", Style: st}}, ParagraphOptions{}); !errors.Is(err, ErrInvalidStyle) {
+			t.Errorf("scale %v: %v", bad, err)
+		}
+	}
+}

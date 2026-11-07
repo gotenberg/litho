@@ -300,7 +300,18 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 		Color:             c,
 		LetterSpacing:     spacing(st.LetterSpacing),
 		WordSpacing:       spacing(st.WordSpacing),
+		Scale:             textScale(st.TextScale),
 	}
+}
+
+// textScale returns the horizontal scale of the text stack for an Office
+// text scale v: 0 for the natural width, else v within the bounds of
+// compose.Text.HScale.
+func textScale(v float64) float64 {
+	if v == 0 || v == 1 || math.IsNaN(v) {
+		return 0
+	}
+	return min(max(v, compose.MinHScale), compose.MaxHScale)
 }
 
 // autospace returns the space text-autospace adds in st at size points:

@@ -443,9 +443,9 @@ func (p *Paragraph) convert(st *layoutState, out *shaping.Output, run int, style
 		}
 		it.glyphs[k] = shapedGlyph{
 			gid:     gid,
-			xoff:    st.toPoints(g.XOffset),
+			xoff:    st.toPoints(g.XOffset) * style.scale(),
 			yoff:    st.toPoints(-g.YOffset),
-			advance: st.toPoints(g.Advance),
+			advance: st.toPoints(g.Advance) * style.scale(),
 			cluster: start,
 			len:     end - start,
 		}
@@ -631,6 +631,10 @@ func (p *Paragraph) LineTrimmed(start, end, trim int) ParagraphLine {
 // their advance.
 func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int) float64 {
 	t := &compose.Text{Face: it.face, Size: it.style.Size, Color: it.style.Color, Origin: compose.Point{X: sp.X}, Stroke: it.stroke, Skew: it.skew}
+	hs := it.style.scale()
+	if hs != 1 {
+		t.HScale = hs
+	}
 	pen := 0.0
 	cluster := -1
 	for _, g := range it.glyphs {
@@ -645,7 +649,9 @@ func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int)
 			pen += adv
 			continue
 		}
-		cg := compose.Glyph{GID: g.gid, X: pen + g.xoff, Y: g.yoff}
+		// The positions are written unscaled: the run's HScale scales
+		// them back (ISO 32000-1, 9.3.4).
+		cg := compose.Glyph{GID: g.gid, X: (pen + g.xoff) / hs, Y: g.yoff}
 		if g.cluster != cluster {
 			cluster = g.cluster
 			e := min(g.cluster+max(g.len, 1), len(p.text))

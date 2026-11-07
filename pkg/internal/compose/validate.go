@@ -136,6 +136,9 @@ func (v *validator) text(t *Text) error {
 	if !finite(t.Skew) || math.Abs(t.Skew) > 1 {
 		return fmt.Errorf("%w: skew %v", ErrInvalidText, t.Skew)
 	}
+	if t.HScale != 0 && !(t.HScale >= MinHScale && t.HScale <= MaxHScale) {
+		return fmt.Errorf("%w: horizontal scale %v outside [%v, %v]", ErrInvalidText, t.HScale, MinHScale, MaxHScale)
+	}
 	if len(t.Glyphs) > maxGlyphsPerRun {
 		return fmt.Errorf("%w: %d glyphs in a run, at most %d", ErrLimitExceeded, len(t.Glyphs), maxGlyphsPerRun)
 	}

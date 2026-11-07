@@ -69,7 +69,7 @@ func (s *inlineState) justify(l *lineBox, free float64) bool {
 			c := cls[k]
 			x := c.it.x + c.it.w
 			if c.it.text != nil && c.g1+1 < len(c.it.text.Glyphs) {
-				x = c.it.x + c.it.text.Glyphs[c.g1+1].X
+				x = c.it.x + c.it.text.Glyphs[c.g1+1].X*hscale(c.it.text)
 			}
 			at = append(at, x)
 		}
@@ -102,8 +102,10 @@ func (s *inlineState) justify(l *lineBox, free float64) bool {
 		it.x += acc
 		local := 0.0
 		if it.text != nil {
+			// A scaled run keeps its positions unscaled.
+			hs := hscale(it.text)
 			for gi := range it.text.Glyphs {
-				it.text.Glyphs[gi].X += local
+				it.text.Glyphs[gi].X += local / hs
 				if after[it][gi] {
 					local += extra
 				}
