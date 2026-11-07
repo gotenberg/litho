@@ -1,18 +1,24 @@
 package sheet
 
 import (
-	"fmt"
+	"context"
 
+	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 )
 
-// chartPicture returns the picture that draws the chart of d, nil when
-// charts are not drawn: the drawing's box is kept empty and a warning
-// names it.
-func (b *builder) chartPicture(d *Drawing) *layout.Picture {
-	b.warn(CodeChart, fmt.Sprintf("chart %s not drawn", quote(d.Name)))
-	return nil
+// chartPicture returns the picture that draws the chart of d into its
+// box rc: chart.Render paints it with the builder's fonts.
+func (b *builder) chartPicture(d *Drawing, rc compose.Rect) *layout.Picture {
+	c, fonts := d.Chart, b.fonts
+	return &layout.Picture{
+		Width:  rc.Width,
+		Height: rc.Height,
+		Vector: func(ctx context.Context, r compose.Rect) []compose.Fragment {
+			return chart.Render(ctx, fonts, c, r)
+		},
+	}
 }
 
 // drawings returns the fragments of the drawings of the page's regions:
@@ -29,7 +35,7 @@ func (b *pageBuilder) drawings(regs []*region) []compose.Fragment {
 		}
 		pic := d.Picture
 		if pic == nil && d.Chart != nil {
-			pic = b.chartPicture(d)
+			pic = b.chartPicture(d, rc)
 		}
 		if pic == nil || (pic.Source == nil && pic.Vector == nil) {
 			continue
