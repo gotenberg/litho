@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<a xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\"><mc:AlternateContent><mc:Choice Requires=\"mc\"><b/></mc:Choice></mc:AlternateContent></a>")
