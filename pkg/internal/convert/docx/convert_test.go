@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -27,7 +28,7 @@ func TestConvert_Errors(t *testing.T) {
 	}{
 		{"nil fonts", good, nil, office.Options{}, office.ErrInvalidOptions},
 		{"half a page size", good, testFonts(t), office.Options{PageWidth: 100}, office.ErrInvalidOptions},
-		{"compound file", append([]byte{0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1}, make([]byte, 600)...), testFonts(t), office.Options{}, office.ErrEncrypted},
+		{"malformed compound file", append([]byte{0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1}, make([]byte, 600)...), testFonts(t), office.Options{}, office.ErrMalformed},
 		{"not a zip", []byte("plain text"), testFonts(t), office.Options{}, office.ErrMalformed},
 		{"no main part", zipFiles(t, noMain), testFonts(t), office.Options{}, office.ErrMalformed},
 		{"not a document", zipFiles(t, notWord), testFonts(t), office.Options{}, office.ErrMalformed},
@@ -40,6 +41,40 @@ func TestConvert_Errors(t *testing.T) {
 			_, err := Convert(context.Background(), bytes.NewReader(tc.data), tc.fonts, tc.opts)
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("Convert = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestConvert_Password opens Gotenberg's password-protected document, a
+// Standard-encrypted package (MS-OFFCRYPTO, 2.3.4.5) whose password is
+// foo, and refuses it without the password or with another one.
+func TestConvert_Password(t *testing.T) {
+	t.Parallel()
+	path := findSource(paritySources(), "protected_page_1.docx")
+	if path == "" {
+		t.Skip("protected_page_1.docx not in the docx corpus sources")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, password string
+		want           error
+	}{
+		{"right password", "foo", nil},
+		{"wrong password", "bar", office.ErrEncrypted},
+		{"no password", "", office.ErrEncrypted},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, err := Convert(context.Background(), bytes.NewReader(data), testFonts(t), office.Options{Password: tc.password})
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("Convert = %v, want %v", err, tc.want)
+			}
+			if tc.want == nil && (len(doc.Pages) != 1 || pageText(doc.Pages[0]) != "Page 1") {
+				t.Errorf("%d pages: %q, want one page with Page 1", len(doc.Pages), docText(doc))
 			}
 		})
 	}

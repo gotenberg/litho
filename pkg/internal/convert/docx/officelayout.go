@@ -1,10 +1,6 @@
 package docx
 
-import (
-	"context"
-
-	"github.com/gotenberg/litho/pkg/internal/css"
-)
+import "github.com/gotenberg/litho/pkg/internal/css"
 
 // This file holds the hooks that fill the layout contract fields this
 // branch does not have yet: the layout cell's css.Style.LineRule,
@@ -41,9 +37,3 @@ func anchorToPage(_ *css.Style) bool { return false }
 // css.DecorationCloneAll in BoxDecorationBreak. Until then they are
 // sliced at the page cut.
 func cloneDecorations(_ *css.Style) {}
-
-// decrypt opens an encrypted package with the conversion's password, round
-// 2: offcrypto.OpenOOXML(ctx, data, password), which returns a zip package
-// unchanged. Until then a compound file fails in ooxml.Open with
-// office.ErrEncrypted.
-func decrypt(_ context.Context, data []byte, _ string) ([]byte, error) { return data, nil }

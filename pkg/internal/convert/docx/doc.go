@@ -92,9 +92,15 @@
 // notes; the core properties give the title, author, subject, keywords
 // and language.
 //
+// # Encryption
+//
+// A password-protected document, a compound file holding the encrypted
+// package (MS-OFFCRYPTO, 2.3.4.4), opens with the options' Password, with
+// the Agile and Standard schemes offcrypto reads.
+//
 // # Not supported
 //
-// Encrypted packages (round 2), vertical text, columns of unequal widths,
+// Vertical text, columns of unequal widths,
 // section vertical alignment, drawings positioned from the page, charts
 // and SmartArt, form fields beyond their text, and the binary .doc format.
 package docx

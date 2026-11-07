@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/pagerange"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/offcrypto"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
@@ -20,8 +21,9 @@ import (
 // ctx ends first, and the errors office.Options documents:
 // office.ErrInvalidOptions for options out of range or a nil fonts,
 // text.ErrNoFonts for an index without faces, office.ErrEncrypted for an
-// encrypted package, office.ErrMalformed for a package that is not a
-// WordprocessingML document, office.ErrInputTooLarge past a size cap and
+// encrypted package opts.Password does not open (missing, wrong, or a
+// scheme offcrypto does not read), office.ErrMalformed for a package that
+// is not a WordprocessingML document or a compound file that cannot be read, office.ErrInputTooLarge past a size cap and
 // office.ErrTooManyPages past the page cap. The output depends on src,
 // fonts' index and opts alone.
 func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*compose.Document, error) {
@@ -45,8 +47,10 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err != nil {
 		return nil, fmt.Errorf("reading DOCX: %w", err)
 	}
-	if data, err = decrypt(ctx, data, opts.Password); err != nil {
-		return nil, fmt.Errorf("decrypting DOCX: %w", err)
+	// A zip package comes back unchanged; a compound file is an encrypted
+	// package (MS-OFFCRYPTO, 2.3.4.4) opened with the password.
+	if data, err = offcrypto.OpenOOXML(ctx, data, opts.Password); err != nil {
+		return nil, fmt.Errorf("opening DOCX: %w", err)
 	}
 	pkg, err := ooxml.Open(data)
 	if err != nil {
