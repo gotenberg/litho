@@ -228,3 +228,45 @@ func TestConvert_Drawings(t *testing.T) {
 		t.Errorf("image at %+v, want %+v", r, want)
 	}
 }
+
+// TestConvert_Rotation locks a quarter turn: the text reads up from the
+// cell's bottom-left corner, its baseline a padding and an ascent right of
+// the cell's left edge.
+//
+// # Corpus evidence
+//
+//   - litho: a flat ODS cell 80 points wide and tall rotated 90 degrees,
+//     Liberation Sans 10, converted by Gotenberg 9.0.0, sets "Rotated90"
+//     up from y 726.89 (a point above the row's bottom at 725.89) with its
+//     baseline at x 46.09 (the column starts at 36).
+func TestConvert_Rotation(t *testing.T) {
+	sh := &Sheet{Name: "S", DefaultColumnWidth: 80, Rows: []Row{{Index: 0, Height: 80, CustomHeight: true,
+		Cells: []Cell{textCell(0, "Rotated90", &Style{Align: Alignment{Rotation: 90}})}}}}
+	out := convert(t, newDoc(sh), office.Options{})
+	var txt *compose.Text
+	var m compose.Matrix
+	var walk func([]compose.Fragment, compose.Matrix)
+	walk = func(fs []compose.Fragment, cur compose.Matrix) {
+		for _, f := range fs {
+			switch v := f.(type) {
+			case *compose.Text:
+				txt, m = v, cur
+			case *compose.Group:
+				tr := v.Transform
+				if tr == (compose.Matrix{}) {
+					tr = compose.Identity
+				}
+				walk(v.Content, mul(tr, cur))
+			}
+		}
+	}
+	walk(out.Pages[0].Content, compose.Identity)
+	if txt == nil {
+		t.Fatal("no text")
+	}
+	x := m.A*txt.Origin.X + m.C*txt.Origin.Y + m.E
+	y := m.B*txt.Origin.X + m.D*txt.Origin.Y + m.F
+	if !near(x, 46.09, 0.6) || !near(841.89-y, 726.89, 0.6) || !near(m.B, -1, 1e-6) {
+		t.Errorf("text origin %.2f, %.2f under %+v, want 46.09, 726.89 turned up", x, 841.89-y, m)
+	}
+}

@@ -394,10 +394,29 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		inner.JustifyContent = css.BoxFlexEnd
 	}
 	if rot := st.Align.Rotation; rot != 0 && !st.Align.Stacked {
+		// Rotated text starts in the cell's bottom-left corner when it
+		// turns counter-clockwise, its top-left when clockwise, the line
+		// turned about its own corner and moved right by its height's
+		// share so that it stays in the cell, as Calc sets a quarter
+		// turn; other angles keep that anchor, an approximation.
 		rot = min(max(rot, -90), 90)
-		inner.Transform = []css.TransformFunc{{Kind: css.TransformRotate, V: [6]float64{-rot * math.Pi / 180}}}
-		inner.TransformOrigin = [2]css.Dimension{{Kind: css.Percent, Value: 0.5}, {Kind: css.Percent, Value: 0.5}}
-		b.warnOnce(CodeRotation, "rotated cell text is turned about the cell's centre, an approximation of Calc's placement")
+		a := rot * math.Pi / 180
+		w := d.textW + slack
+		inner.Display = css.Block
+		inner.Width = css.Pts(w)
+		inner.Height = css.Pts(lineH)
+		inner.Padding[css.Top], inner.Padding[css.Bottom] = css.Pts(0), css.Pts(0)
+		inner.Left = css.Pts(u.x + pad[css.Left] + lineH*math.Abs(math.Sin(a)) - cx0)
+		if rot > 0 {
+			inner.Top = css.Pts(u.h - pad[css.Bottom] - lineH)
+			inner.TransformOrigin = [2]css.Dimension{{Kind: css.Percent}, {Kind: css.Percent, Value: 1}}
+		} else {
+			inner.Top = css.Pts(pad[css.Top])
+			inner.TransformOrigin = [2]css.Dimension{{Kind: css.Percent}, {Kind: css.Percent}}
+		}
+		inner.Transform = []css.TransformFunc{{Kind: css.TransformRotate, V: [6]float64{-a}}}
+		para.Style.TextAlign = css.AlignLeft
+		b.warnOnce(CodeRotation, "text rotated by other than a quarter turn starts in the cell's corner, an approximation of Calc's placement")
 	}
 	clip := b.style()
 	clip.Position = css.Absolute
