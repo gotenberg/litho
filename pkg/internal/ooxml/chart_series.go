@@ -3,6 +3,7 @@ package ooxml
 import (
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 )
@@ -42,7 +43,7 @@ func (p *chartReader) group(e *Element) *chart.Group {
 	default:
 		return nil
 	}
-	if len(e.Local) > 9 && e.Local[len(e.Local)-9:] == "3DChart" || e.Local == "pie3DChart" {
+	if strings.HasSuffix(e.Local, "3DChart") {
 		g.ThreeD = true
 		p.warn(CodeChartUnsupported, "a 3D "+g.Kind.String()+" chart is drawn flat")
 	}
