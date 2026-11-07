@@ -210,10 +210,18 @@ var (
 	ErrWriterConsumed = errors.New("writer already consumed; create a new Writer")
 
 	// ErrInvalidPageSize is returned by [Writer.WriteTo], [Split], [Merge],
-	// [Pipeline.WriteTo] and the remediation methods when
+	// [Compose], [Pipeline.WriteTo] and the remediation methods when
 	// [WithDefaultPageSize] names a width or a height outside the page sizes
-	// ISO 32000-1, Annex C.2, Table C.1 allows, 3 to 14,400 units.
-	ErrInvalidPageSize = errors.New("invalid default page size")
+	// ISO 32000-1, Annex C.2, Table C.1 allows, 3 to 14,400 units, and by
+	// [Compose] when the page size it is given lies outside them.
+	ErrInvalidPageSize = errors.New("invalid page size")
+
+	// ErrInvalidPlacement is returned by [Compose] and [Pipeline.WriteTo]
+	// when a [Placement] cannot be drawn: no placements, a nil Source, a Page
+	// outside its source, a negative TargetPage or Scale, a TargetPage past
+	// the pages a composition may hold, or a number that is not finite. The
+	// message names the placement by its index and the problem.
+	ErrInvalidPlacement = errors.New("invalid placement")
 
 	// ErrWriterClosed is returned by [Writer.WriteTo], [Writer.Redact] and
 	// the remediation methods after [Writer.Close]. Close releases the
@@ -813,7 +821,8 @@ var (
 	ErrPipelineEmpty = errors.New("pipeline has no source")
 
 	// ErrPipelineNoSource indicates a stage was declared before
-	// [Pipeline.Open].
+	// [Pipeline.Open] or [Pipeline.Compose], or one of those two after
+	// another stage.
 	ErrPipelineNoSource = errors.New("pipeline stage requires a loaded source")
 
 	// ErrPipelineNothingToMerge indicates [Pipeline.Merge] was called
@@ -943,6 +952,7 @@ var invalidInputErrors = []error{
 	ErrNoPageLeft,
 	ErrSourceIndexOutOfRange,
 	ErrInvalidPageSize,
+	ErrInvalidPlacement,
 	ErrSignFullRewriteIncompatible,
 	ErrSignatureFieldUnavailable,
 	ErrSignatureFieldLocked,

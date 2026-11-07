@@ -146,8 +146,9 @@
 //     [WithOverprintSimulation], [WithRenderRedactionReading].
 //   - [Reader.CheckTextContrast] takes [ContrastOption]:
 //     [WithEnhancedContrast].
-//   - [Writer.WriteTo], [Split], [Merge], [Pipeline.WriteTo],
-//     [Pipeline.Split] and [Pipeline.Merge] take [WriteOption]:
+//   - [Writer.WriteTo], [Split], [Merge], [Compose], [Pipeline.WriteTo],
+//     [Pipeline.Compose], [Pipeline.Split] and [Pipeline.Merge] take
+//     [WriteOption]:
 //     [WithFullRewrite], [WithVersion], [WithXRefStream], [WithWriteLogger],
 //     [WithBookmarks], [WithPipelineTempDir], [WithTempDir],
 //     [WithEncryption], [WithObjectStreams], [WithDedup],
@@ -156,9 +157,10 @@
 //     too, as defaults for the Writer's WriteTo, which overrides them with
 //     its own, and a [WithDefaultPageSize] given to it also reaches its
 //     remediation. [WithTempDir] places the temp files of [NewWriter],
-//     [Writer.WriteTo] and [Pipeline.WriteTo], and [Split] and [Merge]
-//     ignore it. [Pipeline.Split] and [Pipeline.Merge] honour
-//     [WithBookmarks] on their stage.
+//     [Writer.WriteTo] and [Pipeline.WriteTo], and [Split], [Merge] and
+//     [Compose] ignore it. [Pipeline.Split] and [Pipeline.Merge] honour
+//     [WithBookmarks] on their stage. [Compose] ignores [WithFullRewrite],
+//     [WithBookmarks] and [WithDefaultPageSize] (see its documentation).
 //   - [Writer.RemediatePDFA], [Writer.RemediatePDFUA],
 //     [Writer.RemediateWTPDF], [Writer.RemediateFacturX] and
 //     [Writer.RepairFacturX] take [RemediateOption]: [WithLanguage],

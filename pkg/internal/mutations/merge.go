@@ -132,26 +132,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		}
 	}
 
-	// Build new Pages dict.
-	pagesDict := ast.PdfDict{
-		"Type":  ast.PdfName("Pages"),
-		"Kids":  ast.PdfArray(allPageRefs),
-		"Count": ast.PdfInt(len(allPageRefs)),
-	}
-	pagesRef := alloc.Alloc(pagesDict)
-
-	// Update each page's /Parent.
-	for _, ref := range allPageRefs {
-		pageRef, ok := ref.(ast.PdfIndirectRef)
-		if !ok {
-			continue
-		}
-		if obj, ok := alloc.Pending()[pageRef.ObjectNum]; ok {
-			if pageDict, ok := obj.(ast.PdfDict); ok {
-				pageDict["Parent"] = pagesRef
-			}
-		}
-	}
+	pagesRef := allocPageTree(alloc, allPageRefs)
 
 	// Build catalog.
 	catalogDict := ast.PdfDict{
@@ -254,6 +235,27 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	}
 
 	return finishRewrite(ctx, dst, sources[0].Doc, alloc, trailer, version, xrefStream, compact, encryptCfg, "merge output")
+}
+
+// allocPageTree allocates the root /Pages node of a rewrite over pageRefs, the
+// output's pages in order, and points each page alloc holds at it as its
+// /Parent (ISO 32000-1, 7.7.3.3). It returns the node's reference.
+func allocPageTree(alloc *writer.ObjAllocator, pageRefs []ast.PdfObject) ast.PdfIndirectRef {
+	pagesRef := alloc.Alloc(ast.PdfDict{
+		"Type":  ast.PdfName("Pages"),
+		"Kids":  ast.PdfArray(pageRefs),
+		"Count": ast.PdfInt(len(pageRefs)),
+	})
+	for _, ref := range pageRefs {
+		pageRef, ok := ref.(ast.PdfIndirectRef)
+		if !ok {
+			continue
+		}
+		if pageDict, ok := alloc.Pending()[pageRef.ObjectNum].(ast.PdfDict); ok {
+			pageDict["Parent"] = pagesRef
+		}
+	}
+	return pagesRef
 }
 
 // mergedLang returns the /Lang string the output's catalog holds and the

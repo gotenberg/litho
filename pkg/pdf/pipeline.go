@@ -13,8 +13,8 @@ import (
 )
 
 // Pipeline chains write operations against a single PDF state that
-// evolves from stage to stage. [Pipeline.Open] seeds the state,
-// [Pipeline.Apply] queues mutations through a [Writer] closure,
+// evolves from stage to stage. [Pipeline.Open] seeds the state, or
+// [Pipeline.Compose] in its place, [Pipeline.Apply] queues mutations through a [Writer] closure,
 // [Pipeline.Split] and [Pipeline.Merge] restructure the document, and
 // [Pipeline.WriteTo] executes the pipeline.
 //
@@ -79,8 +79,8 @@ type PipelineResult struct {
 type StageReport struct {
 	// Index is the 0-based position of the stage in declaration order.
 	Index int
-	// Name is the short stage identifier: "open", "split", "merge",
-	// "apply", or "write".
+	// Name is the short stage identifier: "open", "compose", "split",
+	// "merge", "apply", or "write".
 	Name string
 	// Materialized is true if the stage flushed the pipeline state to
 	// an intermediate temp file or to the final destination.
@@ -160,7 +160,8 @@ func WithEditLabel(label string) ApplyOption {
 
 // Validate runs build-time structural checks without executing the
 // pipeline. It catches empty pipelines, missing [Pipeline.Open], empty
-// page lists, and empty merge sources. Cross-stage compatibility (Sign
+// page lists, empty merge sources, and a [Pipeline.Compose] with no
+// placements or after another stage. Cross-stage compatibility (Sign
 // combined with encryption, a stage after a remediation)
 // depends on what the Apply closures call, and is enforced at execution time:
 // it does not appear here.
@@ -180,8 +181,12 @@ func (p *Pipeline) buildValidationErrors() []error {
 	for i, s := range p.stages {
 		if s.kind() == kindOpen {
 			if i != 0 {
+				err := ErrPipelineNoSource
+				if _, ok := s.(*composeStage); ok {
+					err = fmt.Errorf("%w: compose opens the pipeline, so it must be the first stage, in place of open", ErrPipelineNoSource)
+				}
 				errs = append(errs, &PipelineStageError{
-					Index: i, Name: s.name(), Err: ErrPipelineNoSource,
+					Index: i, Name: s.name(), Err: err,
 				})
 			}
 			hasSource = true
@@ -202,6 +207,12 @@ func (p *Pipeline) buildValidationErrors() []error {
 			if len(st.others) == 0 {
 				errs = append(errs, &PipelineStageError{
 					Index: i, Name: s.name(), Err: ErrPipelineNothingToMerge,
+				})
+			}
+		case *composeStage:
+			if len(st.placements) == 0 {
+				errs = append(errs, &PipelineStageError{
+					Index: i, Name: s.name(), Err: fmt.Errorf("%w: no placements", ErrInvalidPlacement),
 				})
 			}
 		}
@@ -301,6 +312,7 @@ const (
 	stageNamePipeline = "pipeline"
 	stageNameWrite    = "write"
 	stageNameOpen     = "open"
+	stageNameCompose  = "compose"
 	stageNameSplit    = "split"
 	stageNameMerge    = "merge"
 	stageNameApply    = "apply"

@@ -28,8 +28,8 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// WriteOption configures the behavior of [Writer.WriteTo], [Split], [Merge]
-// and [Pipeline.WriteTo]. Given to [NewWriter], an option is a default for the
+// WriteOption configures the behavior of [Writer.WriteTo], [Split], [Merge],
+// [Compose] and [Pipeline.WriteTo]. Given to [NewWriter], an option is a default for the
 // Writer's WriteTo, which the same option given to WriteTo overrides.
 // WriteOption closures must be safe to call from any goroutine.
 type WriteOption func(*writeOpts)

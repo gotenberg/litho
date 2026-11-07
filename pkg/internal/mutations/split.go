@@ -123,30 +123,7 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 		}
 	}
 
-	// Build new Pages dict.
-	pagesDict := ast.PdfDict{
-		"Type":  ast.PdfName("Pages"),
-		"Kids":  ast.PdfArray(pageRefs),
-		"Count": ast.PdfInt(len(pageRefs)),
-	}
-	pagesRef := alloc.Alloc(pagesDict)
-
-	// Update each page's /Parent to point to the new Pages dict.
-	for _, ref := range pageRefs {
-		pageRef, ok := ref.(ast.PdfIndirectRef)
-		if !ok {
-			continue
-		}
-		obj, ok := alloc.Pending()[pageRef.ObjectNum]
-		if !ok {
-			continue
-		}
-		pageDict, ok := obj.(ast.PdfDict)
-		if !ok {
-			continue
-		}
-		pageDict["Parent"] = pagesRef
-	}
+	pagesRef := allocPageTree(alloc, pageRefs)
 
 	// Build new catalog.
 	catalogDict := ast.PdfDict{

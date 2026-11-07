@@ -20,6 +20,8 @@ var nonStageOutputCmds = map[string]string{
 	"redact": "redact's value is its report, and pipe prints nothing but the document",
 	"pipe":   "pipe is the pipeline itself, so it cannot be one of its own stages",
 	"render": "render writes PNG images, not a document a later stage could read",
+	"compose": "compose builds a new document from its -place sources, where every pipe opens " +
+		"its input file first, and pdf.Pipeline.Compose must be the first stage, in place of Open",
 }
 
 // TestEveryOutputProducingCommandIsAStageOrDeliberatelyExcluded closes the last

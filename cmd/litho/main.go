@@ -280,6 +280,8 @@ func runCommand(ctx context.Context, cmd string, globalArgs []string, stdout, st
 		return runSplit(ctx, globalArgs, stdout, stderr)
 	case "merge":
 		return runMerge(ctx, globalArgs, stdout, stderr)
+	case "compose":
+		return runCompose(ctx, globalArgs, stdout, stderr)
 	case "insert":
 		return runInsert(ctx, globalArgs, stdout, stderr)
 	case "redact":
@@ -369,6 +371,7 @@ func printUsage(w io.Writer) {
 			{"delete", "Delete pages"},
 			{"split", "Extract pages into a new PDF"},
 			{"merge", "Merge multiple PDFs into one"},
+			{"compose", "Place pages of PDFs on new pages of a chosen size"},
 			{"insert", "Insert pages from another PDF"},
 			{"redact", "Remove content under page regions"},
 			{"convert-colors", "Convert every colour to one colour space"},

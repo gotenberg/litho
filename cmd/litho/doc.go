@@ -8,10 +8,10 @@
 //   - Extraction pulls tables, geospatial data, measurement scales, 3D
 //     models, MathML formulas, pronunciation lexicons, and the text under
 //     redaction marks.
-//   - Mutation writes a new document: page edits, merge and split,
-//     redaction, encryption, metadata, form fields, bookmarks, stamps,
-//     attachments, auto-tagging, and PDF/A, PDF/UA, WTPDF or Factur-X
-//     remediation.
+//   - Mutation writes a new document: page edits, merge and split, page
+//     composition onto new pages of a chosen size, redaction, encryption,
+//     metadata, form fields, bookmarks, stamps, attachments, auto-tagging,
+//     and PDF/A, PDF/UA, WTPDF or Factur-X remediation.
 //   - pipe chains several operations on one document. A remediate stage runs
 //     at most once, as the last stage, since a remediation's report
 //     describes the output only when nothing edits it afterwards; pipe
