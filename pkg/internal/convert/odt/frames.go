@@ -764,6 +764,7 @@ func rectOps(r compose.Rect) []compose.PathOp {
 // the frame's box, at least its minimum height.
 func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 	st := b.frameBox(g)
+	b.applyWritingMode(g.props.Get("style:writing-mode"))
 	st.Display = css.InlineBlock
 	if h, ok := odf.Length(k.A(odf.NSFO, "min-height")); ok && h > 0 {
 		st.MinHeight = css.Pts(h)

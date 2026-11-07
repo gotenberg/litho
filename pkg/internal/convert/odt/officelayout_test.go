@@ -1,6 +1,7 @@
 package odt
 
 import (
+	"context"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -9,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/odf"
 )
 
 // TestConvert_LineSpacing lays two lines of 12pt Liberation Serif out in
@@ -148,7 +150,7 @@ func TestConvert_Kerning(t *testing.T) {
 
 // TestFootnoteRule maps style:footnote-sep onto the page box's footnote
 // rule, Writer's defaults where it is absent (LibreOffice draws a 0.5 pt
-// rule a quarter of the area wide on the left, 0.1 cm from the notes; a
+// rule a quarter of the area wide on the left, 2.85 pt from the notes; a
 // 0.1 cm rule half as wide, centred, as the second case says).
 func TestFootnoteRule(t *testing.T) {
 	cm := 72 / 2.54
@@ -160,13 +162,13 @@ func TestFootnoteRule(t *testing.T) {
 		name, sep string
 		want      layout.FootnoteRule
 	}{
-		{"absent", ``, layout.FootnoteRule{Width: 0.25, Thickness: 0.5, Color: css.Color{A: 1}, Align: css.AlignLeft, Line: css.Solid, SpaceAbove: 0.1 * cm, SpaceBelow: 0.1 * cm}},
+		{"absent", ``, layout.FootnoteRule{Width: 0.25, Thickness: 0.5, Color: css.Color{A: 1}, Align: css.AlignLeft, Line: css.Solid, SpaceAbove: 2.85, SpaceBelow: 2.85}},
 		{"centred", `<style:footnote-sep style:width="0.1cm" style:distance-before-sep="0.5cm" style:distance-after-sep="0.3cm" style:line-style="solid" style:adjustment="center" style:rel-width="50%" style:color="#ff0000"/>`,
 			layout.FootnoteRule{Width: 0.5, Thickness: 0.1 * cm, Color: css.Color{R: 1, A: 1}, Align: css.AlignCenter, Line: css.Solid, SpaceAbove: 0.5 * cm, SpaceBelow: 0.3 * cm}},
 		{"dashed right", `<style:footnote-sep style:width="1pt" style:line-style="dash" style:adjustment="right"/>`,
-			layout.FootnoteRule{Width: 0.25, Thickness: 1, Color: css.Color{A: 1}, Align: css.AlignRight, Line: css.Dashed, SpaceAbove: 0.1 * cm, SpaceBelow: 0.1 * cm}},
+			layout.FootnoteRule{Width: 0.25, Thickness: 1, Color: css.Color{A: 1}, Align: css.AlignRight, Line: css.Dashed, SpaceAbove: 2.85, SpaceBelow: 2.85}},
 		{"no thickness", `<style:footnote-sep style:width="0cm" style:distance-before-sep="0.2cm"/>`,
-			layout.FootnoteRule{Width: 0.25, Color: css.Color{A: 1}, Align: css.AlignLeft, Line: css.BorderNone, SpaceAbove: 0.2 * cm, SpaceBelow: 0.1 * cm}},
+			layout.FootnoteRule{Width: 0.25, Color: css.Color{A: 1}, Align: css.AlignLeft, Line: css.BorderNone, SpaceAbove: 0.2 * cm, SpaceBelow: 2.85}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -285,5 +287,46 @@ func TestConvert_ContextualSpacingAutomatic(t *testing.T) {
 	ls := lines(res.Pages[0])
 	if len(ls) != 2 || !near(ls[1].y-ls[0].y, 13.8, 0.3) {
 		t.Errorf("lines = %+v, want them 13.8 pt apart", ls)
+	}
+}
+
+// TestColumnTracks computes the tracks of columns of relative widths
+// with their indents: each a share of the width less its indents, the
+// gap between two the end indent of one and the start indent of the
+// next, the outer indents the container's padding.
+func TestColumnTracks(t *testing.T) {
+	cm := 72 / 2.54
+	b := &builder{}
+	col := func(rel, start, end string) string {
+		return `<style:column style:rel-width="` + rel + `" fo:start-indent="` + start + `" fo:end-indent="` + end + `"/>`
+	}
+	cases := []struct {
+		name, cols  string
+		tracks      []columnTrack
+		first, last float64
+		ok          bool
+	}{
+		{"equal", col("32767*", "0cm", "0.25cm") + col("32768*", "0.25cm", "0cm"),
+			[]columnTrack{{Width: 32767.0/65535*400 - 0.25*cm, Gap: 0.5 * cm}, {Width: 32768.0/65535*400 - 0.25*cm}}, 0, 0, true},
+		{"unequal with outer indents", col("1*", "1cm", "0.5cm") + col("3*", "0.5cm", "0cm"),
+			[]columnTrack{{Width: 100 - 1.5*cm, Gap: 1 * cm}, {Width: 300 - 0.5*cm}}, 1 * cm, 0, true},
+		{"unreadable share", col("x", "0cm", "0cm") + col("1*", "0cm", "0cm"), nil, 0, 0, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			el, err := odf.ParseXML(context.Background(), []byte(`<style:columns `+nsDecl+`>`+tc.cols+`</style:columns>`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			tracks, first, last, ok := b.columnTracks(el.All(odf.NSStyle, "column"), 400)
+			if ok != tc.ok || len(tracks) != len(tc.tracks) || !near(first, tc.first, 1e-6) || !near(last, tc.last, 1e-6) {
+				t.Fatalf("tracks %+v, %v, %v, %v", tracks, first, last, ok)
+			}
+			for i := range tracks {
+				if !near(tracks[i].Width, tc.tracks[i].Width, 1e-6) || !near(tracks[i].Gap, tc.tracks[i].Gap, 1e-6) {
+					t.Errorf("track %d = %+v, want %+v", i, tracks[i], tc.tracks[i])
+				}
+			}
+		})
 	}
 }

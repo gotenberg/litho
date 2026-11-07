@@ -507,12 +507,12 @@ func (b *builder) footnoteArea(pp odf.Props) *css.Style {
 
 // The separator Writer draws when a page layout names none
 // (SwPageFootnoteInfo's defaults; measured on the pinned image: a 0.5 pt
-// black rule a quarter of the area wide on the left, 0.1 cm of room on
+// black rule a quarter of the area wide on the left, 57 twips of room on
 // each side).
 const (
 	defaultSepWidth     = 0.25
 	defaultSepThickness = 0.5
-	defaultSepSpace     = 72 * 0.1 / 2.54
+	defaultSepSpace     = 57.0 / 20
 )
 
 // sepLines maps style:line-style of style:footnote-sep (ODF 1.3, Part 3,

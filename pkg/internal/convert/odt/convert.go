@@ -188,7 +188,7 @@ func (b *builder) document(body *odf.Element) (*layout.Node, layout.PageBox) {
 		}
 		if mp := inst.master; mp != nil {
 			if pl := b.styles.PageLayouts[mp.PageLayout]; pl != nil {
-				b.columns(st, pl.Page.Child("style:columns"))
+				b.columns(st, pl.Page.Child("style:columns"), b.currentAreaWidth())
 			}
 		}
 		group = &layout.Node{Kind: layout.Element, Style: st}

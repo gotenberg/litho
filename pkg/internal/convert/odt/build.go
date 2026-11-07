@@ -3,6 +3,7 @@ package odt
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -660,7 +661,7 @@ func (b *builder) section(c *odf.Element, ctx blockCtx) []*layout.Node {
 			st.Margin[i] = css.Pts(pt)
 		}
 	}
-	b.columns(st, props.Child("style:columns"))
+	b.columns(st, props.Child("style:columns"), b.currentAreaWidth()-st.Margin[css.Left].Value-st.Margin[css.Right].Value)
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "Sect", ID: c.A(odf.NSText, "name")})
 	n.Children = b.blocks(c, ctx)
 	return []*layout.Node{n}
@@ -669,7 +670,7 @@ func (b *builder) section(c *odf.Element, ctx blockCtx) []*layout.Node {
 // columns sets the style:columns of a section or page (ODF 1.3, Part 3,
 // 17.12): the count, the gap and the separator; columns of relative
 // widths are laid out equal.
-func (b *builder) columns(st *css.Style, cols *odf.Element) {
+func (b *builder) columns(st *css.Style, cols *odf.Element, width float64) {
 	if cols == nil {
 		return
 	}
@@ -692,12 +693,8 @@ func (b *builder) columns(st *css.Style, cols *odf.Element) {
 		if end+start > 0 {
 			gap = end + start
 		}
-		w0 := kids[0].A(odf.NSStyle, "rel-width")
-		for _, k := range kids[1:] {
-			if k.A(odf.NSStyle, "rel-width") != w0 {
-				b.warn("column-widths", "columns of different widths are laid out equal")
-				break
-			}
+		if tracks, first, last, ok := b.columnTracks(kids, width); ok {
+			b.applyColumnTracks(st, tracks, first, last)
 		}
 	}
 	st.ColumnGap = css.Pts(max(gap, 0))
@@ -719,6 +716,52 @@ func (b *builder) columns(st *css.Style, cols *odf.Element) {
 			st.Columns.RuleColor = cssColor(c)
 		}
 	}
+}
+
+// currentAreaWidth returns the width of the page area of the master page
+// the body being built is on: the content width of what fills it. A
+// section in a frame or a table cell is narrower; the column tracks are
+// shares of the width, which the engine lays out on the container it
+// finds.
+func (b *builder) currentAreaWidth() float64 {
+	pg := b.currentGeom()
+	return pg.box.Width - pg.box.Margin[css.Left] - pg.box.Margin[css.Right]
+}
+
+// columnTracks returns the columns kids, the style:column elements of a
+// style:columns (ODF 1.3, Part 3, 17.13), in a container whose content is
+// width wide: each column takes its style:rel-width share of the width
+// less its fo:start-indent and fo:end-indent, the gap after it being its
+// end indent and the next one's start indent; first and last are the
+// first column's start indent and the last one's end indent. ok is false
+// when a column's share does not read.
+func (b *builder) columnTracks(kids []*odf.Element, width float64) (tracks []columnTrack, first, last float64, ok bool) {
+	rel := make([]float64, len(kids))
+	sum := 0.0
+	for i, k := range kids {
+		v, err := strconv.ParseFloat(strings.TrimSuffix(k.A(odf.NSStyle, "rel-width"), "*"), 64)
+		if err != nil || v < 0 || math.IsInf(v, 0) {
+			return nil, 0, 0, false
+		}
+		rel[i] = v
+		sum += v
+	}
+	if sum <= 0 {
+		return nil, 0, 0, false
+	}
+	starts, ends := make([]float64, len(kids)), make([]float64, len(kids))
+	for i, k := range kids {
+		starts[i], _ = odf.Length(k.A(odf.NSFO, "start-indent"))
+		ends[i], _ = odf.Length(k.A(odf.NSFO, "end-indent"))
+	}
+	for i := range kids {
+		t := columnTrack{Width: max(rel[i]/sum*width-starts[i]-ends[i], 0)}
+		if i+1 < len(kids) {
+			t.Gap = ends[i] + starts[i+1]
+		}
+		tracks = append(tracks, t)
+	}
+	return tracks, starts[0], ends[len(ends)-1], true
 }
 
 // maxColumns bounds the columns of a section or page: 99, Writer's own
