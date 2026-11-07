@@ -1036,6 +1036,9 @@ type Style struct {
 	VerticalAlign VerticalAlign
 	Direction     Direction
 	UnicodeBidi   UnicodeBidi
+	// WritingMode is the writing-mode property (CSS Writing Modes 4, 3.1,
+	// writing.go).
+	WritingMode WritingMode
 	// TextOverflow is the mark a line of a block container whose overflow
 	// is not visible shows where its content overflows the end edge (CSS
 	// Overflow 4, 5.1).

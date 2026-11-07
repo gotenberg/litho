@@ -248,6 +248,9 @@ func formatterFor(b *box) formatter {
 	if isMulticol(b) {
 		return multicolFormatter{}
 	}
+	if b.ortho {
+		return orthoFormatter{}
+	}
 	return flowFormatter{}
 }
 

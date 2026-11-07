@@ -76,6 +76,10 @@ type box struct {
 	node *Node
 	st   *css.Style
 	kind boxKind
+	// ortho reports the root of an orthogonal flow, a box of a vertical
+	// writing mode whose one child, an anonymous block, holds its
+	// content turned (writing.go).
+	ortho bool
 	// inline reports an inline-level box: an inline box, a text run, a
 	// break, an inline block or an inline replaced box.
 	inline bool
@@ -240,7 +244,7 @@ func (b *box) establishesBFC() bool {
 	return b.parent == nil || b.float != css.FloatNone || b.abs || (b.inline && b.kind == kindBlock) ||
 		b.st.Overflow != css.OverflowVisible || b.st.ScrollContainer() || b.kind == kindReplaced || b.st.Display == css.FlowRoot ||
 		b.tpart == partWrapper || b.tpart == partCaption || b.tpart == partCell ||
-		b.flex != nil || b.flexItem || b.grid != nil || b.gridItem || b.st.Clamps() || isMulticol(b)
+		b.flex != nil || b.flexItem || b.grid != nil || b.gridItem || b.st.Clamps() || isMulticol(b) || b.ortho
 }
 
 // layered reports whether the box paints in the positioned layers of its

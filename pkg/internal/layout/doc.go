@@ -170,7 +170,11 @@
 // vAlign, Writer's page text alignment) has no equivalent: the
 // converters lay it out at the top and warn. A float cannot be anchored
 // to the page; text does not wrap around a page-anchored box.
-// Vertical writing modes, 3D transforms and hyphenation are out of scope;
+// A box of a vertical writing mode in a horizontal flow is the root of an
+// orthogonal flow whose text is set sideways, a horizontal layout turned
+// a quarter turn into the box (writing.go); upright glyphs, vertical-lr's
+// line order and vertical flows nested in vertical ones are not laid out.
+// 3D transforms and hyphenation are out of scope;
 // a footnote call inside an inline block, a table cell or a flex item is
 // laid out off the page cuts, and its body goes to a page after the flow;
 // visibility:

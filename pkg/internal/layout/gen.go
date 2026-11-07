@@ -19,6 +19,9 @@ type genCtx struct {
 	lang        string
 	decos       []deco
 	depth       int
+	// vertical reports content inside an orthogonal flow, which keeps
+	// the writing mode of its root.
+	vertical bool
 }
 
 // generate builds the box tree of root (CSS 2.1, 9.2). The root box is a
@@ -119,7 +122,14 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 // wraps its runs of table boxes in anonymous tables and its inline runs in
 // anonymous blocks.
 func (e *engine) genChildren(b *box, children []*Node, ctx genCtx) {
+	ortho := !ctx.vertical && b.st.WritingMode.Vertical() && orthoEligible(b)
+	if ortho {
+		ctx.vertical = true
+	}
 	e.adopt(b, e.genRaw(b, children, ctx))
+	if ortho {
+		e.wrapOrtho(b)
+	}
 }
 
 // genNode generates the boxes of n, a child of parent: none, one, or for
