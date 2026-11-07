@@ -96,8 +96,12 @@ func TestProperties_Shorthands(t *testing.T) {
 	if s = styleOf(t, "overflow: scroll hidden"); s.Overflow != OverflowHidden {
 		t.Errorf("overflow = %v", s.Overflow)
 	}
-	if s = styleOf(t, "overflow: auto"); s.Overflow != OverflowVisible {
+	// A scroll container prints clipped, as Chromium prints it.
+	if s = styleOf(t, "overflow: auto"); s.Overflow != OverflowHidden {
 		t.Errorf("overflow auto = %v", s.Overflow)
+	}
+	if s = styleOf(t, "overflow: visible"); s.Overflow != OverflowVisible {
+		t.Errorf("overflow visible = %v", s.Overflow)
 	}
 	if s = styleOf(t, "margin-inline: 1px 2px; padding-block-start: 3px"); !dimEq(s.Margin[Left], pts(0.75)) || !dimEq(s.Margin[Right], pts(1.5)) || !dimEq(s.Padding[Top], pts(2.25)) {
 		t.Errorf("logical = %+v %+v", s.Margin, s.Padding)

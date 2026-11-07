@@ -478,8 +478,10 @@ func displayName(d Display) string {
 }
 
 // parseOverflow parses overflow, overflow-x and overflow-y (CSS Overflow
-// 3, 3): scroll and auto compute to visible on paged media, clip to
-// hidden. Two values compute to hidden when either clips.
+// 3, 3): scroll, auto and clip compute to hidden, the scroll containers
+// printed at their initial scroll position and clipped to their padding
+// box, as Chromium prints them, and a scroll container is marked as one
+// (see [scrollOverflow]). Two values compute to hidden when either clips.
 func parseOverflow(v []token, _ *declCtx) (any, bool) {
 	if len(v) < 1 || len(v) > 2 {
 		return nil, false
@@ -493,14 +495,14 @@ func parseOverflow(v []token, _ *declCtx) (any, bool) {
 		switch lower(t.value) {
 		case "visible":
 		case "scroll", "auto", "overlay":
-			scroll = true
+			scroll, out = true, OverflowHidden
 		case "hidden", "clip":
 			out = OverflowHidden
 		default:
 			return nil, false
 		}
 	}
-	if scroll && out == OverflowVisible {
+	if scroll {
 		return scrollOverflow{}, true
 	}
 	return out, true
@@ -668,7 +670,7 @@ func init() {
 			case Overflow:
 				st.Overflow, st.Columns.scroller = o, false
 			case scrollOverflow:
-				st.Overflow, st.Columns.scroller = OverflowVisible, true
+				st.Overflow, st.Columns.scroller = OverflowHidden, true
 			}
 		}, copyFrom: func(dst, src *Style) {
 			dst.Overflow, dst.Columns.scroller = src.Overflow, src.Columns.scroller

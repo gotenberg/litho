@@ -191,8 +191,9 @@ const (
 	VisibilityCollapse
 )
 
-// Overflow is the overflow property (CSS 2.1, 11.1.1). On paged output
-// scroll and auto behave as visible, so they compute to OverflowVisible.
+// Overflow is the overflow property (CSS 2.1, 11.1.1). On paged output a
+// scroll container prints at its initial scroll position, clipped, so
+// scroll and auto compute to OverflowHidden.
 type Overflow uint8
 
 // The overflow values.

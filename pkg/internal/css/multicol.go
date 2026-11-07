@@ -41,12 +41,13 @@ type Columns struct {
 }
 
 // scrollOverflow is a specified overflow of scroll or auto, which
-// computes to visible on paged media.
+// computes to hidden on paged media, the box printed at its initial
+// scroll position, and marks the box a scroll container.
 type scrollOverflow struct{}
 
-// ScrollContainer reports an overflow of scroll or auto. Paged media shows
-// such a box as overflow: visible (CSS Overflow 3, 3), but it stays a
-// scroll container, which is monolithic in a fragmentation context (CSS
+// ScrollContainer reports an overflow of scroll or auto. Paged media
+// prints such a box clipped, as Chromium does, and it stays a scroll
+// container, which is monolithic in a fragmentation context (CSS
 // Fragmentation 3, 4.1), as Chromium lays it out in columns.
 func (s *Style) ScrollContainer() bool { return s.Columns.scroller }
 
