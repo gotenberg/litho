@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Grid dashboard</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 10pt; margin: 0; color: #1b1b1b; }
+h1 { font-size: 18pt; margin: 0 0 10px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.kpi { border: 1px solid #6a994e; background: #f2f8ee; padding: 8px; }
+.kpi b { display: block; font-size: 16pt; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); grid-auto-rows: minmax(90px, auto); gap: 12px; }
+.card { border: 1px solid #386641; padding: 10px; break-inside: avoid; }
+.card.wide { grid-column: span 2; background: #fefae0; }
+.card.tall { grid-row: span 2; background: #e9edc9; }
+.card h2 { font-size: 12pt; margin: 0 0 6px; }
+.footer { display: grid; grid-template-columns: max-content 1fr max-content; gap: 8px; margin-top: 14px; border-top: 1px solid #999999; padding-top: 6px; }
+.footer .mid { text-align: center; }
+</style>
+</head>
+<body>
+<h1>Operations dashboard</h1>
+<div class="kpis">
+  <div class="kpi">Orders<b>1,284</b></div>
+  <div class="kpi">Revenue<b>96,410</b></div>
+  <div class="kpi">Returns<b>2.1%</b></div>
+  <div class="kpi">Tickets<b>57</b></div>
+  <div class="kpi">Uptime<b>99.98%</b></div>
+</div>
+<div class="cards">
+  <div class="card wide"><h2>Weekly summary</h2>Orders grew eight percent week over week, driven by the autumn catalogue. Fulfilment kept its two-day target in every region but one.</div>
+  <div class="card tall"><h2>Regions</h2>North 412<br>South 298<br>East 331<br>West 243<br>Overseas 61</div>
+  <div class="card"><h2>Warehouse</h2>Stock coverage stands at 41 days.</div>
+  <div class="card"><h2>Carriers</h2>On-time delivery 97.2 percent.</div>
+  <div class="card"><h2>Support</h2>Median first response in 38 minutes.</div>
+  <div class="card wide"><h2>Incidents</h2>One partial outage of the payment gateway, eleven minutes on Tuesday night; no orders lost.</div>
+  <div class="card"><h2>Marketing</h2>Newsletter open rate 31 percent.</div>
+  <div class="card"><h2>Finance</h2>Receivables over sixty days down to 4 percent.</div>
+  <div class="card tall"><h2>Team</h2>Two hires in logistics, one in support. Training on the new returns process completes next week.</div>
+  <div class="card"><h2>Returns</h2>Top reason: wrong size.</div>
+  <div class="card"><h2>Suppliers</h2>Three contracts renewed.</div>
+  <div class="card wide"><h2>Outlook</h2>The holiday season starts in three weeks. Capacity planning assumes a forty percent rise in daily orders over the last two weeks of December, with temporary staff joining the evening shifts.</div>
+  <div class="card"><h2>Quality</h2>Defect rate 0.3 percent.</div>
+  <div class="card"><h2>Energy</h2>Solar covered 22 percent of use.</div>
+  <div class="card"><h2>Audit</h2>Next internal audit on 2 December.</div>
+  <div class="card"><h2>Security</h2>All laptops patched.</div>
+  <div class="card wide"><h2>Notes</h2>Figures are provisional until the month-end close. Contact the operations desk for the detailed export.</div>
+</div>
+<div class="footer"><span>Generated 7 November 2026</span><span class="mid">Operations</span><span>Confidential</span></div>
+</body>
+</html>

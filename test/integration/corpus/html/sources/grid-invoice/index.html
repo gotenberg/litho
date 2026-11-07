@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Grid invoice</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; margin: 0; color: #222222; }
+.invoice {
+  display: grid;
+  grid-template-columns: 160px 1fr 1fr;
+  grid-template-rows: auto auto 1fr auto;
+  grid-template-areas:
+    "logo   head   head"
+    "from   to     meta"
+    "lines  lines  lines"
+    "notes  notes  totals";
+  gap: 12px 16px;
+  min-height: 900px;
+}
+.logo { grid-area: logo; background: #264653; color: #ffffff; font-size: 22pt; font-weight: bold; display: grid; place-items: center; min-height: 80px; }
+.head { grid-area: head; border-bottom: 3px solid #264653; align-self: end; padding-bottom: 6px; }
+.head h1 { margin: 0; font-size: 24pt; }
+.from { grid-area: from; }
+.to { grid-area: to; }
+.meta { grid-area: meta; justify-self: end; text-align: right; }
+.from, .to, .meta { border: 1px solid #aaaaaa; padding: 8px; }
+.lines { grid-area: lines; display: grid; grid-template-columns: 3fr 1fr 1fr 1fr; align-content: start; }
+.lines > div { padding: 5px 6px; border-bottom: 1px solid #dddddd; }
+.lines > .h { font-weight: bold; background: #e9f5f2; }
+.lines > .n { text-align: right; }
+.notes { grid-area: notes; font-size: 9pt; color: #555555; align-self: end; }
+.totals { grid-area: totals; display: grid; grid-template-columns: auto auto; column-gap: 12px; justify-content: end; align-self: end; }
+.totals .n { text-align: right; }
+.totals .grand { font-weight: bold; border-top: 2px solid #264653; padding-top: 4px; }
+</style>
+</head>
+<body>
+<div class="invoice">
+  <div class="logo">ACME</div>
+  <div class="head"><h1>Invoice INV-2026-0107</h1></div>
+  <div class="from"><strong>From</strong><br>ACME Corporation<br>1 Main Street<br>Springfield</div>
+  <div class="to"><strong>Bill to</strong><br>Example Customer<br>42 Side Road<br>Shelbyville</div>
+  <div class="meta">Issued 7 November 2026<br>Due 7 December 2026<br>Order PO-5531</div>
+  <div class="lines">
+    <div class="h">Description</div><div class="h n">Qty</div><div class="h n">Price</div><div class="h n">Total</div>
+    <div>Grid layout consulting, track sizing review</div><div class="n">12</div><div class="n">95.00</div><div class="n">1,140.00</div>
+    <div>Template areas workshop</div><div class="n">1</div><div class="n">600.00</div><div class="n">600.00</div>
+    <div>Fragmentation audit of printed reports with long descriptions that wrap over two lines</div><div class="n">3</div><div class="n">180.00</div><div class="n">540.00</div>
+    <div>Support hours</div><div class="n">8</div><div class="n">60.00</div><div class="n">480.00</div>
+    <div>Travel expenses</div><div class="n">1</div><div class="n">215.50</div><div class="n">215.50</div>
+  </div>
+  <div class="notes">Payment by bank transfer within thirty days. Late payments carry a fee of 1.5% per month. Thank you for your business.</div>
+  <div class="totals">
+    <div>Subtotal</div><div class="n">2,975.50</div>
+    <div>VAT 20%</div><div class="n">595.10</div>
+    <div class="grand">Total due</div><div class="grand n">3,570.60</div>
+  </div>
+</div>
+</body>
+</html>
