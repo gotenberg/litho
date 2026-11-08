@@ -89,3 +89,5 @@ Each reference handed to the cell as litho's conversion, scored against the gold
 - `sc/tdf161301.xlsx`: LibreOffice prints 2024-05-28 with the `[$]ggge` era code as "CE784年2月20日", a misread era, and its page count differs; litho prints the date the code asks for.
 - `sc/cell-value.xlsx`: a 10,987 pt text overflows over 8 pages in both, but LibreOffice caches the text width in whole pixels at a resolution the page count only hints at, so its last page cuts the text one column earlier than litho's.
 - `sc/orderOfCNumFmtElements.xlsx`: its pie charts are 3D, which LibreOffice draws in perspective with their walls and depth; litho draws every chart flat, so the slices sit elsewhere while the labels and legend agree.
+- `sc/hyperlinks.xlsx`: an empty sheet holds a hidden VML comment shape 750 pt tall, which LibreOffice counts in the print range and prints as four blank pages after the two of content; litho prints the two pages the cells fill.
+- `sc/XlStartupExternal.xlsx`: LibreOffice recalculates a formula over an external `[1]!` defined name on load and prints `Err:509` where Excel cached a value; litho prints the cached value.
