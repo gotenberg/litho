@@ -284,3 +284,29 @@ func TestInsetRect(t *testing.T) {
 		}
 	}
 }
+
+// TestText_OverflowAnchor checks that overflowing OpenDocument text
+// anchored at the bottom starts at its rectangle's top, and PresentationML
+// text overflows upwards.
+func TestText_OverflowAnchor(t *testing.T) {
+	a20 := arial(20)
+	for _, tc := range []struct {
+		name   string
+		odf    bool
+		lo, hi float64
+	}{
+		// Two lines of about 23 points: the first baseline in the first
+		// line below the top, or above the box when they end at its bottom.
+		{"odf", true, 100, 125},
+		{"ooxml", false, 60, 100},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sh := box(100, 100, 300, 10, para("One", a20), para("Two", a20))
+			sh.Text.Anchor, sh.Text.FontLineSpacing = AnchorBottom, tc.odf
+			pg := convert(t, deck(&Slide{Shapes: []*Shape{sh}}), office.Options{}).Pages[0]
+			if y := find(t, pg, "One").y; y < tc.lo || y > tc.hi {
+				t.Errorf("first baseline at %v, want between %v and %v", y, tc.lo, tc.hi)
+			}
+		})
+	}
+}

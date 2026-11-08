@@ -203,6 +203,15 @@ func insetRect(r compose.Rect, in [4]float64) compose.Rect {
 
 // shapeText lays the text of body out in the text rectangle of the
 // geometry g fitted to box.
+//
+// # Corpus evidence
+//
+//   - odp: sd/tdf99729-new.odp's bottom-anchored frame of 1 centimetre,
+//     sd/tdf150966_hugeInset.odp's bottom-anchored shape whose insets meet
+//     in the middle print their overflowing text from the rectangle's top;
+//     sd/invalidAudio.odp's middle-anchored title overflows both ways;
+//     pptx: sd-data/TextFittingComparisonWithMSO_TopBottomMiddleAlignment.pptx
+//     overflows a bottom-anchored body upwards.
 func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect) *textResult {
 	res := &textResult{box: box}
 	inner := insetRect(shape.TextRect(g, box), body.Insets)
@@ -277,6 +286,11 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 		case AnchorBottom:
 			dy = lh - h
 		case AnchorTop:
+		}
+		if body.Anchor == AnchorBottom && body.FontLineSpacing && !vertical {
+			// OpenDocument text anchored at the bottom of a rectangle it
+			// overflows starts at the rectangle's top instead.
+			dy = max(dy, 0)
 		}
 	}
 	var m compose.Matrix
