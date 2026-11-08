@@ -284,8 +284,8 @@ func (r *reader) lineOf(srcs []lineSource) slides.Line {
 	}
 	if l.Width == 0 {
 		// A zero width is a hairline, which LibreOffice draws one device
-		// pixel wide.
-		l.Width = defaultLineWidth / 3
+		// pixel wide; the width left is the dashes' unit.
+		l.Width, l.Hairline = defaultLineWidth/3, true
 	}
 	unit := max(l.Width, 0.25)
 	for _, s := range srcs {

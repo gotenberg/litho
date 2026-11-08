@@ -45,6 +45,11 @@ func TestShapes_FillsAndLines(t *testing.T) {
 		name, spPr, style string
 		check             func(t *testing.T, s *slides.Shape)
 	}{
+		{"a line of zero width is a hairline", `<a:ln w="0"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln>`, "", func(t *testing.T, s *slides.Shape) {
+			if !s.Line.Hairline || s.Line.Width <= 0 {
+				t.Errorf("line %+v", s.Line)
+			}
+		}},
 		{"solid fill and dashed line with arrows", `<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 25000"/></a:avLst></a:prstGeom><a:solidFill><a:srgbClr val="00FF00"/></a:solidFill>` +
 			`<a:ln w="25400" cap="rnd"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill><a:prstDash val="dash"/><a:bevel/><a:headEnd type="triangle" w="lg" len="sm"/><a:tailEnd type="oval"/></a:ln>`, "", func(t *testing.T, s *slides.Shape) {
 			if s.Geometry == nil || s.Geometry.Preset != "roundRect" || len(s.Geometry.Adjust) != 1 || s.Geometry.Adjust[0].Value != 25000 {
