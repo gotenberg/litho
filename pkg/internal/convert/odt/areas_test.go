@@ -63,6 +63,30 @@ func TestConvert_ListLabelPlacement(t *testing.T) {
 	}
 }
 
+func TestConvert_ListLabelWiderThanItsGap(t *testing.T) {
+	// A label wider than the room before the list tab stop starts at the
+	// first line's start, margin-left plus text-indent, and the text at
+	// the next default tab stop counted from the indent (LibreOffice
+	// measured, odfexport/listformat.odt: label 18pt and text 71.5pt past
+	// the margin).
+	style := `<text:list-style style:name="LW"><text:list-level-style-number text:level="1" style:num-prefix="&gt;&gt;" style:num-suffix="&lt;&lt;" style:num-format="1"><style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="0.5in" fo:text-indent="-0.25in" fo:margin-left="0.5in"/></style:list-level-properties></text:list-level-style-number></text:list-style>`
+	d := doc{styles: style, body: `<text:list text:style-name="LW"><text:list-item><text:p>Item</text:p></text:list-item></text:list>`}
+	rs := runs(convertDoc(t, d.pack(t), office.Options{}).Pages[0])
+	margin := 2 * 72 / 2.54
+	var label, item float64 = -1, -1
+	for _, r := range rs {
+		switch {
+		case strings.Contains(r.text, "1"):
+			label = r.x
+		case strings.Contains(r.text, "Item"):
+			item = r.x
+		}
+	}
+	if !near(label, margin+18, 0.3) || !near(item, margin+36+defaultTabDistance, 0.3) {
+		t.Errorf("label at %.2f, text at %.2f; want %.2f and %.2f", label, item, margin+18, margin+36+defaultTabDistance)
+	}
+}
+
 func TestConvert_Tables(t *testing.T) {
 	auto := `<style:style style:name="Tb" style:family="table"><style:table-properties style:width="12cm" table:align="left"/></style:style>` +
 		`<style:style style:name="A" style:family="table-column"><style:table-column-properties style:column-width="3cm"/></style:style>` +

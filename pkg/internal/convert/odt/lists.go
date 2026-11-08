@@ -375,6 +375,13 @@ func (item *itemCtx) attach(b *builder, n *layout.Node, t textState) {
 			}
 			st.ListStylePosition = css.Outside
 			mst.Width = css.Pts(max(stop-start, 0))
+			if stop > ml && align == css.AlignStart {
+				// The label box ends on the content edge: a label that
+				// starts before it begins at the first line's start, and
+				// one at or past it begins on it, the text indent moving
+				// the text on, as Writer sets a label wider than the gap.
+				mst.Width = css.Pts(max(ml-start, 0))
+			}
 		}
 	} else {
 		// label-width-and-position: the label box is min-label-width wide
