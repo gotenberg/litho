@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 )
 
 // listStyles are a numbered list in label-alignment mode with a second
@@ -405,5 +406,24 @@ func TestConvert_FrameBeforeTheFirstMaster(t *testing.T) {
 	}
 	if got := pageText(res.Pages[0]); !strings.Contains(got, "Frame") || !strings.Contains(got, "Body") {
 		t.Errorf("page text %q", got)
+	}
+}
+
+func TestAnchorPage_LeftFirstPage(t *testing.T) {
+	for usage, want := range map[string]int{"left": 2, "all": 3} {
+		pl := `<style:page-layout style:name="pm1" style:page-usage="` + usage + `"><style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" fo:margin-top="2cm" fo:margin-bottom="2cm" fo:margin-left="2cm" fo:margin-right="2cm"/></style:page-layout>`
+		masters := `<style:master-page style:name="Standard" style:page-layout-name="pm1"/>`
+		body := `<text:p>a</text:p><draw:frame text:anchor-type="page" text:anchor-page-number="3" svg:x="2cm" svg:y="2cm" svg:width="5cm" svg:height="2cm"><draw:text-box><text:p>Frame</text:p></draw:text-box></draw:frame>`
+		b := newTestBuilder(t, doc{autoStyles: pl, masters: masters, body: body})
+		root, _ := b.document(odfBody(b))
+		got := 0
+		walkNodes(root, func(n *layout.Node) {
+			if n.Style.PageAnchor {
+				got = n.Style.AnchorPage
+			}
+		})
+		if got != want {
+			t.Errorf("%s: anchor page %d, want %d", usage, got, want)
+		}
 	}
 }

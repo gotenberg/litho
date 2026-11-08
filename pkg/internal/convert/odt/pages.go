@@ -568,3 +568,13 @@ func footnoteRule(pp odf.Props) *layout.FootnoteRule {
 	}
 	return r
 }
+
+// firstPageLeft reports a document whose first page's master page lays
+// out left pages only (ODF 1.3 Part 3, 19.505 style:page-usage).
+func (b *builder) firstPageLeft() bool {
+	if b.pages == nil || len(b.pages.instances) == 0 || b.pages.instances[0].master == nil {
+		return false
+	}
+	pl := b.styles.PageLayouts[b.pages.instances[0].master.PageLayout]
+	return pl != nil && pl.PageUsage == "left"
+}

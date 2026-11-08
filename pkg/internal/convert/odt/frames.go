@@ -376,6 +376,12 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 		case page:
 			st.PageAnchor = true
 			st.AnchorPage = g.page
+			if g.page > 1 && b.firstPageLeft() {
+				// Writer numbers a first page of left usage 2, a left
+				// page being even: page n is the n-1th printed
+				// (stable-at-page-anchored-fly-position).
+				st.AnchorPage = g.page - 1
+			}
 			applyFrameWrap(&st, g.wrap, frameMargins(g.props))
 			x, y := b.pagePosition(g)
 			st.Left, st.Top = css.Pts(x), css.Pts(y)
