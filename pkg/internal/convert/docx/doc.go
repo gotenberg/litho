@@ -38,13 +38,20 @@
 //
 // Numbering reads abstract numberings, instances with level overrides
 // and start overrides, numbering style links, the common number formats,
-// level text placeholders, legal numbering and level restarts; the
-// counters of an abstract numbering continue across its instances. A
-// label followed by a tab over a hanging indent is a marker box as wide
-// as the indent, aligned by the level's justification; any other label
-// opens its paragraph. Symbol and Wingdings bullets map to Unicode.
+// level text placeholders, legal numbering and level restarts, the
+// Chinese, Japanese and Korean counting, legal, digital and cyclic
+// formats as LibreOffice writes them; the counters of an abstract
+// numbering continue across its instances. A label followed by a tab
+// over a hanging indent is a marker box as wide as the indent, aligned by
+// the level's justification, a wider label pushing the text to the next
+// tab stop; any other label opens its paragraph. Symbol and Wingdings
+// bullets map to Unicode.
 //
 // # Sections and pages
+//
+// A document without a styles part prints in Calibri 11, as LibreOffice
+// imports it. The lines of a section with a document grid of lines take
+// whole pitches of the grid.
 //
 // Each section is a named page with its size, orientation, margins,
 // gutter, columns (unequal widths laid out equal), page borders and break
@@ -86,8 +93,9 @@
 // # Notes, links and revisions
 //
 // Footnotes go to the footnote area of their page, under the separator
-// LibreOffice draws, endnotes after the text. Hyperlinks to a URI or a bookmark, HYPERLINK fields and bookmarks
-// become links and anchors. Insertions print as text and deletions do not,
+// LibreOffice draws, endnotes after the text; a note's call and its
+// number link to each other. Hyperlinks to a URI or a bookmark,
+// HYPERLINK fields and bookmarks become links and anchors. Insertions print as text and deletions do not,
 // as LibreOffice prints a document with tracked changes; a paragraph whose
 // mark is deleted or hidden joins the next one; comments are
 // left out; equations draw as their text with a warning.

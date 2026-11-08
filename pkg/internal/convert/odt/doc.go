@@ -39,7 +39,8 @@
 //     ellipses, lines, polygons and paths, and the rectangle and ellipse
 //     custom shapes, with the text they hold.
 //   - Notes: footnotes at the bottom of their page under the page
-//     layout's separator, endnotes on a page after the text.
+//     layout's separator, endnotes on a page after the text, each
+//     citation and its note's number linked both ways.
 //   - Fields show the text the document saved, page numbers and counts
 //     in headers and footers excepted; tables of contents are rebuilt
 //     from the headings and the pages they land on, as Writer updates
