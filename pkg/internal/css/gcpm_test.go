@@ -14,6 +14,9 @@ func TestGCPM_Properties(t *testing.T) {
 		{`position: running(header)`, func(s *Style) bool { return s.Running == "header" && s.Position == Static }},
 		{`position: running(header); position: absolute`, func(s *Style) bool { return s.Running == "" && s.Position == Absolute }},
 		{`position: running()`, func(s *Style) bool { return s.Running == "" && s.Position == Static }},
+		{`position: note(side)`, func(s *Style) bool { return s.Note == "side" && s.Running == "" && s.Position == Static }},
+		{`position: note(side); position: relative`, func(s *Style) bool { return s.Note == "" && s.Position == Relative }},
+		{`position: note(a b)`, func(s *Style) bool { return s.Note == "" && s.Position == Static }},
 		{`float: footnote`, func(s *Style) bool { return s.Footnote && s.Float == FloatNone }},
 		{`float: footnote; float: left`, func(s *Style) bool { return !s.Footnote && s.Float == FloatLeft }},
 		{`footnote-display: inline; footnote-policy: line`, func(s *Style) bool {

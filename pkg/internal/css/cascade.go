@@ -100,6 +100,13 @@ const (
 	// marker its body starts with (CSS GCPM 3, 3.6 and 3.7).
 	PseudoFootnoteCall
 	PseudoFootnoteMarker
+	// PseudoNoteCall is ::note-call, the call a note element leaves in the
+	// flow, PseudoNoteMarker ::note-marker, the marker its body starts
+	// with, and PseudoNoteCallback ::note-callback, what its body ends
+	// with: the pseudo-elements of position: note() (see [Style.Note]).
+	PseudoNoteCall
+	PseudoNoteMarker
+	PseudoNoteCallback
 	numPseudos
 )
 
@@ -108,6 +115,7 @@ const (
 var pseudoNames = map[string]PseudoElement{
 	"before": PseudoBefore, "after": PseudoAfter, "marker": PseudoMarker,
 	"footnote-call": PseudoFootnoteCall, "footnote-marker": PseudoFootnoteMarker,
+	"note-call": PseudoNoteCall, "note-marker": PseudoNoteMarker, "note-callback": PseudoNoteCallback,
 }
 
 // NewResolver indexes the rules of sheets, in order, whose media

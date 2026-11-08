@@ -18,10 +18,13 @@ const (
 	// PickFirstExcept is PickFirst, empty on a page that assigns the
 	// value.
 	PickFirstExcept
+	// PickAllOnce shows every element of the name the page assigns, each
+	// on that page alone: the notes of a note area.
+	PickAllOnce
 )
 
 // pagePicks maps the keywords of string() and element() to their pick.
-var pagePicks = map[string]PagePick{"first": PickFirst, "start": PickStart, "last": PickLast, "first-except": PickFirstExcept}
+var pagePicks = map[string]PagePick{"first": PickFirst, "start": PickStart, "last": PickLast, "first-except": PickFirstExcept, "all-once": PickAllOnce}
 
 // NamedString is one assignment of string-set: the string's name and the
 // content list its value is built from (CSS GCPM 3, 2.1.1).
@@ -188,6 +191,9 @@ func parseStringSet(v []token, c *declCtx) (any, bool) {
 // running is the specified value position: running(name).
 type running struct{ name string }
 
+// note is the specified value position: note(name).
+type note struct{ name string }
+
 // footnoteFloat is the specified value float: footnote.
 type footnoteFloat struct{}
 
@@ -273,24 +279,31 @@ func gcpmProps() {
 	props[pPosition] = propDef{
 		name: pos.name, inherited: pos.inherited, initial: pos.initial,
 		parse: func(v []token, c *declCtx) (any, bool) {
-			if t, ok := single(v); ok && t.typ == tFunction && eqFold(t.value, "running") {
+			if t, ok := single(v); ok && t.typ == tFunction && (eqFold(t.value, "running") || eqFold(t.value, "note")) {
 				a := significant(t.children)
 				if len(a) != 1 || a[0].typ != tIdent {
 					return nil, false
+				}
+				if eqFold(t.value, "note") {
+					return note{name: a[0].value}, true
 				}
 				return running{name: a[0].value}, true
 			}
 			return pos.parse(v, c)
 		},
 		compute: func(s *styler, st *Style, v any) {
-			if r, ok := v.(running); ok {
+			st.Running, st.Note = "", ""
+			switch r := v.(type) {
+			case running:
 				st.Position, st.Running = Static, r.name
 				return
+			case note:
+				st.Position, st.Note = Static, r.name
+				return
 			}
-			st.Running = ""
 			pos.compute(s, st, v)
 		},
-		copyFrom: func(dst, src *Style) { pos.copyFrom(dst, src); dst.Running = src.Running },
+		copyFrom: func(dst, src *Style) { pos.copyFrom(dst, src); dst.Running, dst.Note = src.Running, src.Note },
 	}
 	fl := props[pFloat]
 	props[pFloat] = propDef{

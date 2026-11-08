@@ -1195,6 +1195,13 @@ type Style struct {
 	// flow and element() copies it into the page-margin boxes. Position
 	// computes to static.
 	Running string
+	// Note is the name of the note the element becomes, "" for none
+	// (position: note(), the notes WeasyPrint draws): it leaves the flow,
+	// its ::note-call stays in it, and the element, between its
+	// ::note-marker and its ::note-callback, moves to the note area of
+	// the page the call lands on ([PageStyle.NoteArea]). Position
+	// computes to static.
+	Note string
 	// Footnote reports float: footnote (CSS GCPM 3, 3.2): the element
 	// becomes a footnote element, its call stays in the flow and its body
 	// moves to the footnote area. Float computes to none.
@@ -1364,6 +1371,11 @@ type PageStyle struct {
 	// @footnote rule (CSS GCPM 3, 3.4), filled by [Resolver.PageIn]: nil
 	// when no rule styles it, which leaves the area unstyled.
 	Footnote *Style
+	// NoteArea is the computed style of the page's note area, the
+	// @note-area rule, filled by [Resolver.PageIn]: nil when no rule
+	// styles it. Its content names the notes it shows with element(), its
+	// display, float and position place it on the page.
+	NoteArea *Style
 	// Bleed is the bleed descriptor, Auto or Points (CSS Page 3, 7.2):
 	// how far the page background paints past the trim, Auto computing
 	// to 6pt with crop marks and 0 otherwise ([PageStyle.UsedBleed]).

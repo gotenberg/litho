@@ -132,7 +132,8 @@ var knownPseudoElements = map[string]bool{
 	"before": true, "after": true, "first-line": true, "first-letter": true, "marker": true,
 	"placeholder": true, "selection": true, "backdrop": true, "file-selector-button": true,
 	"target-text": true, "spelling-error": true, "grammar-error": true, "cue": true,
-	"footnote-call": true, "footnote-marker": true,
+	"footnote-call": true, "footnote-marker": true, "note-call": true, "note-marker": true,
+	"note-callback": true,
 }
 
 // simplePseudos maps the argument-less pseudo-classes to their kind.

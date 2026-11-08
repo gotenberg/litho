@@ -1,6 +1,9 @@
 package css
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 // resolverOf returns the resolver of the author sheet src.
 func resolverOf(t *testing.T, src string) *Resolver {
@@ -116,5 +119,23 @@ func TestPage_BlankSelector(t *testing.T) {
 func TestMarginBox_String(t *testing.T) {
 	if MarginBottomRightCorner.String() != "bottom-right-corner" || NumMarginBoxes.String() != "margin-box" {
 		t.Error("margin box names")
+	}
+}
+
+func TestPageIn_NoteArea(t *testing.T) {
+	t.Parallel()
+	r := resolverOf(t, `@page { @note-area { content: element(side, all-once); position: absolute; right: 0; display: flex } }`)
+	if !r.HasNoteArea() || r.HasMarginBoxes() || r.HasFootnoteArea() {
+		t.Fatalf("HasNoteArea %v, HasMarginBoxes %v, HasFootnoteArea %v", r.HasNoteArea(), r.HasMarginBoxes(), r.HasFootnoteArea())
+	}
+	st := r.PageIn(PageSelector{}, nil).NoteArea
+	if st == nil {
+		t.Fatal("no note area style")
+	}
+	if st.Position != Absolute || st.Display != Flex || st.Right != Pts(0) {
+		t.Errorf("Position %v, Display %v, Right %+v", st.Position, st.Display, st.Right)
+	}
+	if want := []ContentItem{{Kind: ItemElement, Text: "side", Pick: PickAllOnce}}; !reflect.DeepEqual(st.Content.Items, want) {
+		t.Errorf("content %+v, want %+v", st.Content.Items, want)
 	}
 }

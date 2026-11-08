@@ -498,3 +498,15 @@ iframe {
 ::footnote-marker {
   content: counter(footnote) ". ";
 }
+
+/* The notes of position: note(), as WeasyPrint draws them: the call is a
+ * superscript number, the marker the number and a full stop; a note has
+ * no callback unless a rule gives it one. */
+::note-call {
+  content: counter(note);
+  vertical-align: super;
+  font-size: 65%;
+}
+::note-marker {
+  content: counter(note) ". ";
+}

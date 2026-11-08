@@ -104,8 +104,12 @@ var flexOrGrid = map[string]bool{
 	"-ms-inline-flexbox": true,
 }
 
-// footnoteArea is the [marginRule] box of an @footnote rule.
-const footnoteArea = NumMarginBoxes
+// footnoteArea is the [marginRule] box of an @footnote rule, and
+// noteArea that of an @note-area rule.
+const (
+	footnoteArea = NumMarginBoxes
+	noteArea     = NumMarginBoxes + 1
+)
 
 // marginRule is a margin at-rule of an @page rule (CSS Page 3, 5.1), or
 // an @footnote rule (CSS GCPM 3, 3.4).
@@ -162,6 +166,10 @@ func pageCtxDecls(block []token, c *declCtx) ([]Declaration, []marginRule) {
 				// page-margin box does.
 				b, ok = footnoteArea, true
 			}
+			if lower(it.name) == "note-area" {
+				// The note area cascades as a page-margin box does.
+				b, ok = noteArea, true
+			}
 			if !ok || !it.hasBlock {
 				c.warn("unsupported-css-at-rule", "the @%s rule inside @page is not supported and was ignored", lower(it.name))
 				return true
@@ -204,7 +212,7 @@ func (r *Resolver) HasNamedPages() bool {
 func (r *Resolver) HasMarginBoxes() bool {
 	for i := range r.pages {
 		for _, m := range r.pages[i].rule.margins {
-			if m.box != footnoteArea {
+			if m.box != footnoteArea && m.box != noteArea {
 				return true
 			}
 		}
@@ -225,8 +233,20 @@ func (r *Resolver) HasFootnoteArea() bool {
 	return false
 }
 
-// hasPageAreas reports whether an @page rule holds a margin at-rule or an
-// @footnote rule.
+// HasNoteArea reports whether an @page rule holds an @note-area rule.
+func (r *Resolver) HasNoteArea() bool {
+	for i := range r.pages {
+		for _, m := range r.pages[i].rule.margins {
+			if m.box == noteArea {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasPageAreas reports whether an @page rule holds a margin at-rule, an
+// @footnote rule or an @note-area rule.
 func (r *Resolver) hasPageAreas() bool {
 	for i := range r.pages {
 		if len(r.pages[i].rule.margins) > 0 {
@@ -271,7 +291,7 @@ func (r *Resolver) PageIn(sel PageSelector, root *Style) PageStyle {
 	}
 	cs := &computeState{r: r, root: root}
 	var ctxCands []cand
-	var boxCands [NumMarginBoxes + 1][]cand
+	var boxCands [NumMarginBoxes + 2][]cand
 	for _, s := range srcs {
 		for i := range s.rule.rule.context {
 			d := &s.rule.rule.context[i]
@@ -290,6 +310,11 @@ func (r *Resolver) PageIn(sel PageSelector, root *Style) PageStyle {
 		st, _ := cs.cascade(slices.Clone(fc), pageCtx, vars, false)
 		st.Display, st.Float, st.Position = Block, FloatNone, Static
 		ps.Footnote = st
+	}
+	if nc := boxCands[noteArea]; len(nc) > 0 {
+		// The note area keeps its display, float and position: they
+		// place it on the page.
+		ps.NoteArea, _ = cs.cascade(slices.Clone(nc), pageCtx, vars, false)
 	}
 	for b := range NumMarginBoxes {
 		if len(boxCands[b]) == 0 {
