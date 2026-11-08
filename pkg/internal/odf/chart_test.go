@@ -232,3 +232,12 @@ func TestChartFromDocument_Warnings(t *testing.T) {
 		t.Errorf("uncached series = %+v", s.Values)
 	}
 }
+
+func TestChartFromDocument_LinkedAxisFormat(t *testing.T) {
+	st := chartStyles + `<number:percentage-style style:name="P"><number:number number:decimal-places="0" number:min-integer-digits="1"/><number:text>%</number:text></number:percentage-style>` +
+		`<style:style style:name="lx" style:family="chart" style:data-style-name="P"><style:chart-properties chart:link-data-style-to-source="true"/></style:style>`
+	c := readODFChart(t, chartContent(st, "bar", "", `<chart:axis chart:dimension="y" chart:name="primary-y" chart:style-name="lx"/>`+series))
+	if len(c.Axes) == 0 || c.Axes[0].Format != "0%" {
+		t.Errorf("linked axis format = %+v", c.Axes)
+	}
+}
