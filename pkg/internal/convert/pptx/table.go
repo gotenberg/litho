@@ -412,7 +412,9 @@ func (r *reader) cell(c *shapeCtx, tc *ooxml.Element, ts *tableStyle, i, j int) 
 			body.Vertical = css.SidewaysRL
 		case "vert270":
 			body.Vertical = css.SidewaysLR
-		case "eaVert", "wordArtVert", "wordArtVertRtl":
+		case "eaVert":
+			// A cell's wordArtVert and wordArtVertRtl print horizontally
+			// in Impress, which has no stacked text in tables.
 			body.Vertical = css.VerticalRL
 		}
 		body.Paragraphs = r.paragraphs(tb, tstyles)
