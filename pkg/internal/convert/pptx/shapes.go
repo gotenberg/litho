@@ -15,8 +15,8 @@ import (
 // The graphic data URIs of a graphic frame (ECMA-376 Part 1, 20.1.2.2.17
 // graphicData; 19.3.2.4 for the OLE object).
 const (
-	uriTable   = "http://schemas.openxmlformats.org/drawingml/2006/table"
-	uriChart   = "http://schemas.openxmlformats.org/drawingml/2006/chart"
+	uriTable = "http://schemas.openxmlformats.org/drawingml/2006/table"
+	uriChart = "http://schemas.openxmlformats.org/drawingml/2006/chart"
 	// uriChartEx is an Office 2016 chart (MS-ODRAWXML, 2.24 cx:chart:
 	// funnel, waterfall, sunburst, treemap, histogram, box and whisker),
 	// which PowerPoint wraps in an mc:AlternateContent requiring the cx1
