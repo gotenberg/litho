@@ -312,12 +312,15 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 		s.Geometry = &shape.Geometry{Preset: "line"}
 		if el.Name.Local == "connector" {
 			s.Geometry = &shape.Geometry{Preset: connectorPreset(el.A(odf.NSDraw, "type"))}
+			if box, g := connectorRoute(el); g != nil {
+				s.Box, s.FlipH, s.FlipV, s.Geometry = box, false, false, g
+			}
 		}
 	case "polyline":
 		s.Fill = slides.Fill{}
-		r.polygonGeometry(el)
+		s.Geometry = r.outline(el)
 	case "polygon", "path", "regular-polygon":
-		r.polygonGeometry(el)
+		s.Geometry = r.outline(el)
 	case "caption":
 		r.warn("caption", "the callout line of a caption shape is not drawn")
 	}
@@ -359,12 +362,80 @@ func (r *reader) enhancedGeometry(eg *odf.Element) *shape.Geometry {
 	return g
 }
 
-// polygonGeometry reports a draw:path, draw:polygon, draw:polyline or
-// draw:regular-polygon (ODF 1.3, Part 3, 10.3.7, 10.3.5, 10.3.4, 10.3.6),
-// whose outlines are not read yet: the shape is drawn as its bounding
-// box, with a warning.
-func (r *reader) polygonGeometry(el *odf.Element) {
-	r.warn("custom-geometry", fmt.Sprintf("the outline of draw:%s is drawn as its bounding box", el.Name.Local))
+// outline reads the outline of a draw:path, draw:polygon, draw:polyline
+// or draw:regular-polygon (ODF 1.3, Part 3, 10.3.7, 10.3.5, 10.3.4,
+// 10.3.6) as a custom geometry: svg:d or draw:points in the coordinate
+// space svg:viewBox fitted to the shape's box, or the regular polygon
+// draw:corners, draw:concave and draw:sharpness describe. An outline
+// that does not parse is drawn as the bounding box, with a warning.
+func (r *reader) outline(el *odf.Element) *shape.Geometry {
+	var c *shape.Custom
+	view := viewBoxOf(el)
+	switch el.Name.Local {
+	case "path":
+		c = odf.PathData(el.A(odf.NSSVG, "d"), view)
+	case "polygon", "polyline":
+		c = odf.Points(el.A(odf.NSDraw, "points"), view, el.Name.Local == "polygon")
+	case "regular-polygon":
+		n, _ := strconv.Atoi(el.A(odf.NSDraw, "corners"))
+		sharp, _ := strconv.ParseFloat(strings.TrimSuffix(el.A(odf.NSDraw, "sharpness"), "%"), 64)
+		c = odf.RegularPolygon(n, el.A(odf.NSDraw, "concave") == "true", sharp)
+	}
+	if c == nil {
+		r.warn("custom-geometry", fmt.Sprintf("the outline of draw:%s is drawn as its bounding box", el.Name.Local))
+		return nil
+	}
+	return &shape.Geometry{Custom: c}
+}
+
+// viewBoxOf returns a shape's svg:viewBox (ODF 1.3, Part 3, 19.574), the
+// coordinate space of its svg:d or draw:points. A missing one, or one of
+// zero width or height, is the empty rectangle, which the geometry engine
+// reads as the shape's size in 1/100 mm, LibreOffice's unit.
+func viewBoxOf(el *odf.Element) compose.Rect {
+	f := strings.FieldsFunc(el.A(odf.NSSVG, "viewBox"), func(r rune) bool { return r == ' ' || r == ',' || r == '\t' || r == '\n' || r == '\r' })
+	if len(f) != 4 {
+		return compose.Rect{}
+	}
+	var v [4]float64
+	for i, x := range f {
+		n, err := strconv.ParseFloat(x, 64)
+		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) || math.Abs(n) > 1e12 {
+			return compose.Rect{}
+		}
+		v[i] = n
+	}
+	if v[2] <= 0 || v[3] <= 0 {
+		return compose.Rect{X: v[0], Y: v[1]}
+	}
+	return compose.Rect{X: v[0], Y: v[1], Width: v[2], Height: v[3]}
+}
+
+// hundredthMM is a point in 1/100 mm, the unit of a connector's route.
+const hundredthMM = 2540.0 / 72
+
+// connectorRoute reads the route LibreOffice writes on a connector as
+// svg:d (ODF 1.3, Part 3, 19.530 on draw:connector): the path of the
+// drawn connector in page coordinates in 1/100 mm, svg:viewBox giving
+// only its size. It returns the route's bounding box in points and the
+// geometry that draws it there; a zero box and nil without a route.
+func connectorRoute(el *odf.Element) (compose.Rect, *shape.Geometry) {
+	d := el.A(odf.NSSVG, "d")
+	if strings.TrimSpace(d) == "" {
+		return compose.Rect{}, nil
+	}
+	c := odf.PathData(d, compose.Rect{})
+	if c == nil {
+		return compose.Rect{}, nil
+	}
+	b, ok := odf.Bounds(c.Paths[0].Cmds)
+	if !ok {
+		return compose.Rect{}, nil
+	}
+	*c.View = b
+	c.Paths[0].Fill = shape.FillNone
+	box := compose.Rect{X: b.X / hundredthMM, Y: b.Y / hundredthMM, Width: b.Width / hundredthMM, Height: b.Height / hundredthMM}
+	return box, &shape.Geometry{Custom: c}
 }
 
 // ellipseGeometry maps a draw:ellipse or draw:circle (ODF 1.3, Part 3,

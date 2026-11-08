@@ -1,6 +1,7 @@
 package odp
 
 import (
+	"math"
 	"slices"
 	"testing"
 
@@ -89,8 +90,6 @@ func TestRead_Geometry(t *testing.T) {
 			&shape.Geometry{Preset: "pie", Adjust: []shape.Adjust{{Name: "adj1", Value: 270 * 60000}, {Name: "adj2", Value: 0}}}},
 		{"connector", `<draw:connector svg:x1="0cm" svg:y1="0cm" svg:x2="1cm" svg:y2="1cm"/>`, &shape.Geometry{Preset: "bentConnector3"}},
 		{"curved connector", `<draw:connector draw:type="curve" svg:x1="0cm" svg:y1="0cm" svg:x2="1cm" svg:y2="1cm"/>`, &shape.Geometry{Preset: "curvedConnector3"}},
-		// A draw:path's outline is not read yet: the shape is its box.
-		{"custom path", `<draw:path svg:width="1cm" svg:height="1cm" svg:viewBox="0 0 10 10" svg:d="M0 0L10 10"/>`, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -100,6 +99,57 @@ func TestRead_Geometry(t *testing.T) {
 				t.Errorf("geometry = %+v, want a rectangle", s.Geometry)
 			case tt.want != nil && (s.Geometry == nil || s.Geometry.Preset != tt.want.Preset || !slices.Equal(s.Geometry.Adjust, tt.want.Adjust)):
 				t.Errorf("geometry = %+v, want %+v", s.Geometry, tt.want)
+			}
+		})
+	}
+}
+
+func TestRead_Outlines(t *testing.T) {
+	// The outline of each shape in a 1 cm square, at the box's corner.
+	tests := []struct {
+		name, shape string
+		box         compose.Rect
+		want        [][2]float64
+		fill        bool
+	}{
+		{"path", `<draw:path svg:x="1cm" svg:y="1cm" svg:width="1cm" svg:height="1cm" svg:viewBox="0 0 10 10" svg:d="M0 0h10v10z"/>`,
+			compose.Rect{X: cm(1), Y: cm(1), Width: cm(1), Height: cm(1)}, [][2]float64{{0, 0}, {1, 0}, {1, 1}}, true},
+		{"polygon", `<draw:polygon svg:width="1cm" svg:height="1cm" svg:viewBox="0 0 100 100" draw:points="0,100 100,100 50,0"/>`,
+			compose.Rect{Width: cm(1), Height: cm(1)}, [][2]float64{{0, 1}, {1, 1}, {0.5, 0}}, true},
+		{"polyline", `<draw:polyline svg:width="1cm" svg:height="1cm" svg:viewBox="0 0 100 100" draw:points="0,0 100,100"/>`,
+			compose.Rect{Width: cm(1), Height: cm(1)}, [][2]float64{{0, 0}, {1, 1}}, false},
+		{"triangle", `<draw:regular-polygon svg:width="1cm" svg:height="1cm" draw:corners="3"/>`,
+			compose.Rect{Width: cm(1), Height: cm(1)}, [][2]float64{{0.5, 0}, {1, 1}, {0, 1}}, true},
+		// The route of a connector is in page coordinates in 1/100 mm.
+		{"connector route", `<draw:connector svg:x1="1cm" svg:y1="1cm" svg:x2="2cm" svg:y2="2cm" svg:viewBox="0 0 1000 1500" svg:d="M1000 1000v-500h1000v1000"/>`,
+			compose.Rect{X: cm(1), Y: cm(0.5), Width: cm(1), Height: cm(1)}, [][2]float64{{0, 0.5}, {0, 0}, {1, 0}, {1, 1}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := firstShape(t, flat{body: page(tt.shape)})
+			if s.Geometry == nil || s.Geometry.Custom == nil {
+				t.Fatalf("geometry = %+v, want a custom one", s.Geometry)
+			}
+			if !nearRect(s.Box, tt.box) {
+				t.Errorf("box = %+v, want %+v", s.Box, tt.box)
+			}
+			paths := shape.Paths(s.Geometry, compose.Rect{Width: 1, Height: 1})
+			if len(paths) != 1 || paths[0].Fill != tt.fill || !paths[0].Stroke {
+				t.Fatalf("paths = %+v", paths)
+			}
+			var got [][2]float64
+			for _, op := range paths[0].Ops {
+				if op.Kind == compose.MoveTo || op.Kind == compose.LineTo {
+					got = append(got, [2]float64{op.P[0].X, op.P[0].Y})
+				}
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("points = %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if math.Abs(got[i][0]-tt.want[i][0]) > 1e-6 || math.Abs(got[i][1]-tt.want[i][1]) > 1e-6 {
+					t.Errorf("point %d = %v, want %v", i, got[i], tt.want[i])
+				}
 			}
 		})
 	}
