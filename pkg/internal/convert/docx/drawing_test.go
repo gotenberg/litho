@@ -189,3 +189,18 @@ func TestDrawings_StackOrderAndFloatOffset(t *testing.T) {
 		t.Errorf("float position %v float %v top margin %v", float.Position, float.Float, float.Margin[css.Top])
 	}
 }
+
+func TestDrawings_AloneKeepALine(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:r><w:drawing><wp:anchor behindDoc="0"><wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH>` +
+		`<wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:extent cx="1270000" cy="635000"/><wp:wrapNone/>` +
+		`<wp:docPr id="2" name="q"/>` + graphic("") + `</wp:anchor></w:drawing></w:r></w:p>`
+	b := build(t, body, map[string]string{"word/media/a.png": pngData(t, 4, 2)})
+	p := role(b.root, "P")[0]
+	if len(find(p, func(n *layout.Node) bool { return n.Kind == layout.LineBreak })) != 1 {
+		t.Error("a paragraph holding a positioned drawing alone has no line")
+	}
+	if len(find(p, func(n *layout.Node) bool { return n.Kind == layout.Replaced })) != 1 {
+		t.Error("the drawing is lost")
+	}
+}

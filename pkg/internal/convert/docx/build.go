@@ -320,10 +320,13 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 			d.number(n, rp, st)
 		}
 		kids := seg.nodes
-		if !hasContent(kids) {
+		if !hasLine(kids) {
 			// An empty paragraph keeps one line, as tall as its mark's text
 			// would be, spaced as its lines are, and draws nothing a
-			// reader would extract: a line break in the mark's font.
+			// reader would extract: a line break in the mark's font. One
+			// holding only floating or positioned drawings keeps its line
+			// too, as Writer gives every paragraph one (fdo48718-1: the
+			// paragraph of a logo positioned in front of the text).
 			ms := inlineStyle(pst)
 			d.applyRun(ms, rp.mark, lineMult)
 			pst.FontFamilies, pst.FontSize, pst.FontWeight, pst.FontStyle = ms.FontFamilies, ms.FontSize, ms.FontWeight, ms.FontStyle
@@ -397,6 +400,21 @@ func hasContent(nodes []*layout.Node) bool {
 			if hasContent(n.Children) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// hasLine reports nodes that make a line box of their own: content
+// ([hasContent]) other than floats and absolutely positioned boxes,
+// which take no room in the line.
+func hasLine(nodes []*layout.Node) bool {
+	for _, n := range nodes {
+		if n.Style != nil && (n.Style.Float != css.FloatNone || n.Style.Position == css.Absolute) {
+			continue
+		}
+		if hasContent([]*layout.Node{n}) {
+			return true
 		}
 	}
 	return false
