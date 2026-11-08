@@ -68,6 +68,9 @@ func (r *reader) picture(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 		s.Fill = slides.Fill{Kind: slides.FillPicture, Picture: pic}
 		return s
 	}
+	// The picture's own fill paints under it (20.1.2.2.35 spPr): the
+	// builder draws it beneath the picture and the line above.
+	s.Fill = r.shapeFill(fc, chain, nil)
 	s.Picture = pic
 	return s
 }
