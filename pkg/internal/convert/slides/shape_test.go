@@ -131,6 +131,14 @@ func TestShape_Fills(t *testing.T) {
 		!near(sh.Transform.A, 200/math.Sqrt2, 1e-9) || !near(sh.Transform.D, 100/math.Sqrt2, 1e-9) {
 		t.Errorf("radial shading %+v", sh)
 	}
+	off := b.fill(&Fill{Kind: FillGradient, Gradient: &Gradient{Radial: true, CenterX: 0.25, CenterY: 1, Stops: []Stop{{0, red}, {1, red}}}}, box, ops, shape.FillNorm)
+	if sh := off[0].(*compose.Path).Fill.Shading; !near(sh.Transform.E, 50, 1e-9) || !near(sh.Transform.F, 100, 1e-9) || !near(sh.Transform.A, 200/math.Sqrt2, 1e-9) {
+		t.Errorf("off-centre radial shading %+v", sh)
+	}
+	bordered := b.fill(&Fill{Kind: FillGradient, Gradient: &Gradient{Border: 0.5, Stops: []Stop{{0, red}, {1, css.Color{B: 1, A: 1}}}}}, box, ops, shape.FillNorm)
+	if st := bordered[0].(*compose.Path).Fill.Shading.Stops; len(st) != 3 || st[1].Offset != 0.5 || st[1].Color != st[0].Color || st[2].Offset != 1 {
+		t.Errorf("bordered stops %+v", st)
+	}
 	pat := b.fill(&Fill{Kind: FillPattern, Pattern: "pct50", Color: red, Background: css.Color{A: 1}}, box, ops, shape.FillNorm)
 	if g, ok := pat[0].(*compose.Group); !ok || g.Clip == nil {
 		t.Errorf("pattern %+v", pat)
@@ -204,5 +212,30 @@ func TestShape_TableGrows(t *testing.T) {
 	// "one two three four" wraps to two 24-point lines.
 	if !near(z.y, 48+20, 0.3) || !near(z.x, 100, 0.3) {
 		t.Errorf("z at %.2f, %.2f", z.x, z.y)
+	}
+}
+
+// TestShape_Hairline checks that a hairline strokes a zero-width PDF line
+// whatever its width, and that a zero width without it strokes nothing.
+func TestShape_Hairline(t *testing.T) {
+	b := &builder{warned: map[string]bool{}}
+	for _, tc := range []struct {
+		line Line
+		n    int
+	}{
+		{Line{Hairline: true, Color: red}, 1},
+		{Line{Hairline: true, Width: 3, Color: red}, 1},
+		{Line{Color: red}, 0},
+	} {
+		out := b.stroke(&tc.line, lineOps(0, 0, 100, 0))
+		if len(out) != tc.n {
+			t.Errorf("%+v: %d fragments", tc.line, len(out))
+			continue
+		}
+		if tc.n > 0 {
+			if p := out[0].(*compose.Path); p.Stroke == nil || p.Stroke.Width != 0 {
+				t.Errorf("%+v: stroke %+v", tc.line, p.Stroke)
+			}
+		}
 	}
 }

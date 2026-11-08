@@ -51,11 +51,23 @@ func (b *builder) fill(f *Fill, box compose.Rect, ops []compose.PathOp, mode sha
 		if f.Gradient == nil || len(f.Gradient.Stops) < 2 {
 			return nil
 		}
-		p := shape.Paint{Kind: shape.PaintGradient, Angle: f.Gradient.Angle, Radial: f.Gradient.Radial}
-		for _, st := range f.Gradient.Stops {
-			p.Stops = append(p.Stops, compose.ColorStop{Offset: st.Position, Color: colorOf(st.Color)})
+		g := f.Gradient
+		p := shape.Paint{Kind: shape.PaintGradient, Angle: g.Angle, Radial: g.Radial}
+		// The border is a band of the first stop's colour the stops start
+		// after (ODF 1.3 Part 3, 20.150 draw:border).
+		border := 0.0
+		if g.Border > 0 && g.Border < 1 {
+			border = g.Border
+			p.Stops = append(p.Stops, compose.ColorStop{Offset: 0, Color: colorOf(g.Stops[0].Color)})
 		}
-		return shape.Fill(ops, box, p)
+		for _, st := range g.Stops {
+			p.Stops = append(p.Stops, compose.ColorStop{Offset: border + st.Position*(1-border), Color: colorOf(st.Color)})
+		}
+		out := shape.Fill(ops, box, p)
+		if g.Radial {
+			centreRadial(out, box, g.CenterX, g.CenterY)
+		}
+		return out
 	case FillPicture:
 		content := b.pictureFill(f.Picture, f.Tile, box)
 		if len(content) == 0 {
@@ -67,6 +79,24 @@ func (b *builder) fill(f *Fill, box compose.Rect, ops []compose.PathOp, mode sha
 	case FillNone:
 	}
 	return nil
+}
+
+// centreRadial moves the radial shadings of frags, which the engine
+// centres on box, to the centre (cx, cy), fractions of the box, keeping
+// their size, as Impress draws a radial gradient whose centre is off the
+// middle (ODF 1.3 Part 3, 20.150 draw:cx and draw:cy; ECMA-376 Part 1,
+// 20.1.8.31 fillToRect). A zero centre is the middle.
+func centreRadial(frags []compose.Fragment, box compose.Rect, cx, cy float64) {
+	if cx == 0 && cy == 0 || math.IsNaN(cx) || math.IsNaN(cy) {
+		return
+	}
+	cx, cy = min(max(cx, -1), 2), min(max(cy, -1), 2)
+	for _, f := range frags {
+		if p, ok := f.(*compose.Path); ok && p.Fill != nil && p.Fill.Shading != nil && p.Fill.Shading.Kind == compose.Radial {
+			p.Fill.Shading.Transform.E = box.X + cx*box.Width
+			p.Fill.Shading.Transform.F = box.Y + cy*box.Height
+		}
+	}
 }
 
 // pictureFill returns the fragments of the picture pic over box: stretched
