@@ -155,6 +155,7 @@ func (r *reader) document(body *odf.Element) *slides.Document {
 	}
 	doc.Width, doc.Height = r.pageSize(first)
 	doc.NotesWidth, doc.NotesHeight = r.notesSize(first)
+	r.notesMaster(doc, first)
 	r.pageCount = min(len(pages), maxSlides)
 	r.pageNames = map[string]int{}
 	for i, pg := range pages[:r.pageCount] {
@@ -230,6 +231,46 @@ func (r *reader) notesSize(mp *odf.MasterPage) (float64, float64) {
 		return 0, 0
 	}
 	return w, h
+}
+
+// notesMaster reads the notes page of the master page mp (ODF 1.3, Part
+// 3, 16.19 presentation:notes) into the notes layout of doc: its
+// draw:page-thumbnail as the slide's box, its frame of
+// presentation:class notes as the notes text's, and its shapes of no
+// class as the shapes every notes page draws. Its header, footer,
+// date-time and page-number placeholders are left out: Impress prints
+// none of them on a notes page whose settings it was not given, the
+// date of the notes master of sd/tdf112557.odp among them (measured on
+// the pinned LibreOffice).
+func (r *reader) notesMaster(doc *slides.Document, mp *odf.MasterPage) {
+	if mp == nil {
+		return
+	}
+	notes := mp.El.Child(odf.NSPresentation, "notes")
+	if notes == nil {
+		return
+	}
+	box := func(el *odf.Element) compose.Rect {
+		x, _ := odf.Length(el.A(odf.NSSVG, "x"))
+		y, _ := odf.Length(el.A(odf.NSSVG, "y"))
+		w, _ := odf.Length(el.A(odf.NSSVG, "width"))
+		h, _ := odf.Length(el.A(odf.NSSVG, "height"))
+		return compose.Rect{X: x, Y: y, Width: max(w, 0), Height: max(h, 0)}
+	}
+	var decorations []*odf.Element
+	for _, el := range notes.Children {
+		class := el.A(odf.NSPresentation, "class")
+		switch {
+		case el.Is(odf.NSDraw, "page-thumbnail"):
+			doc.NotesSlideBox = box(el)
+		case el.Is(odf.NSDraw, "frame") && class == "notes":
+			doc.NotesTextBox = box(el)
+		case class == "" && !el.IsText():
+			decorations = append(decorations, el)
+		}
+	}
+	pc := &pageCtx{scope: odf.ScopeStyles, mp: mp, master: true}
+	doc.NotesShapes = r.shapeList(decorations, pc, 0)
 }
 
 // defaultPageName matches the names Impress writes for a page the user

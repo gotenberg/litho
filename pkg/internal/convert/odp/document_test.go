@@ -192,3 +192,20 @@ func TestRead_Warnings(t *testing.T) {
 		}
 	}
 }
+
+func TestRead_NotesMaster(t *testing.T) {
+	master := `<style:master-page style:name="Default" style:page-layout-name="pm1"><presentation:notes>` +
+		`<draw:page-thumbnail presentation:class="page" svg:x="2cm" svg:y="3cm" svg:width="15cm" svg:height="8cm"/>` +
+		`<draw:frame presentation:class="notes" svg:x="2cm" svg:y="12cm" svg:width="15cm" svg:height="10cm"><draw:text-box/></draw:frame>` +
+		`<draw:frame presentation:class="date-time" svg:x="10cm" svg:y="0cm" svg:width="8cm" svg:height="1cm"><draw:text-box><text:p>DATE</text:p></draw:text-box></draw:frame>` +
+		`<draw:rect svg:x="1cm" svg:y="1cm" svg:width="1cm" svg:height="1cm"/>` +
+		`</presentation:notes></style:master-page>`
+	f := flat{master: master, body: page(""), auto: `<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="28cm" fo:page-height="15.75cm"/></style:page-layout>`}
+	doc, _ := read(t, f.bytes())
+	if !nearRect(doc.NotesSlideBox, rect(2, 3, 15, 8)) || !nearRect(doc.NotesTextBox, rect(2, 12, 15, 10)) {
+		t.Errorf("notes boxes = %+v %+v", doc.NotesSlideBox, doc.NotesTextBox)
+	}
+	if len(doc.NotesShapes) != 1 || !nearRect(doc.NotesShapes[0].Box, rect(1, 1, 1, 1)) {
+		t.Errorf("notes shapes = %+v, want the rectangle alone", doc.NotesShapes)
+	}
+}
