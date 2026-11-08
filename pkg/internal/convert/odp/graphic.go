@@ -349,20 +349,6 @@ func markerKind(name string) slides.ArrowKind {
 	return slides.ArrowTriangle
 }
 
-// effects warns for the graphic effects the model does not carry: a
-// shadow (ODF 1.3, Part 3, 20.158 draw:shadow), a glow and a soft edge.
-func (r *reader) effects(p odf.Props) {
-	if p.Get("draw:shadow") == "visible" {
-		r.warn("shadow", "shape shadows are not drawn")
-	}
-	if v, ok := odf.Length(p.Get("loext:glow-radius")); ok && v > 0 {
-		r.warn("glow", "glow effects are not drawn")
-	}
-	if v, ok := odf.Length(p.Get("loext:softedge-radius")); ok && v > 0 {
-		r.warn("soft-edge", "soft edges are not drawn")
-	}
-}
-
 // textBodyProps reads how a shape's text sits in it from its graphic
 // properties p (ODF 1.3, Part 3, 20.217 fo:padding, 20.174
 // draw:textarea-vertical-align, 20.230 fo:wrap-option, 20.98

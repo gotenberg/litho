@@ -110,8 +110,9 @@ func (b *builder) geometry(s *Shape, m compose.Matrix, parent *compose.StructEle
 		b.warn(CodeGeometry, "the geometry "+quote(s.Geometry.Preset)+" is drawn as its bounding rectangle")
 	}
 	sm := aboutCentre(box, s.Rotation, s.FlipH, s.FlipV)
-	var frags []compose.Fragment
-	for _, p := range shape.Paths(s.Geometry, box) {
+	paths := shape.Paths(s.Geometry, box)
+	frags := b.effects(s, paths, box)
+	for _, p := range paths {
 		if p.Fill {
 			frags = append(frags, b.fill(&s.Fill, box, p.Ops, p.Mode)...)
 		}

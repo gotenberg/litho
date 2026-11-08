@@ -431,9 +431,7 @@ func splitText(s *slides.Shape, tx *ooxml.Element) *slides.Shape {
 func (r *reader) effects(chain []*ooxml.Element, s *slides.Shape) {
 	for _, el := range chain {
 		pr := spPr(el)
-		if e := pr.Child(ooxml.NSA, "effectLst"); e != nil && len(e.Children) > 0 {
-			r.warn("unsupported-content", "shape effects (shadows, glows, reflections, soft edges) are not drawn")
-		}
+		r.effectList(pr)
 		scene := pr.Child(ooxml.NSA, "scene3d")
 		if scene == nil && pr.Child(ooxml.NSA, "sp3d") == nil {
 			continue

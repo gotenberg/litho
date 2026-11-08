@@ -62,6 +62,11 @@ type Slide struct {
 	// Notes is the text of the slide's notes, by paragraph, for a notes
 	// page; nil for none.
 	Notes []Paragraph
+	// HasNotes says the file holds a notes page for the slide, even one
+	// whose text is empty (19.3.1.26 notes; ODF presentation:notes): a
+	// notes-pages printout prints that page with its boxes where a slide
+	// without one prints the slide alone.
+	HasNotes bool
 }
 
 // Shape is one shape of a slide. Kind says which fields apply; Box,
@@ -77,6 +82,19 @@ type Shape struct {
 	// box's centre; FlipH and FlipV mirror it about the centre first.
 	Rotation     float64
 	FlipH, FlipV bool
+	// SkewX shears the shape about the box's centre by this many degrees,
+	// the top edge moving right for a positive angle, before Rotation
+	// (ODF 1.3 Part 3, 19.228 draw:transform skewX); 0 for none.
+	SkewX float64
+	// Shadow is the shape's shadow, nil for none; Glow its glow, nil for
+	// none; SoftEdge the radius in points over which its edge fades to
+	// transparent, 0 for a hard edge (ECMA-376 Part 1, 20.1.8.49 outerShdw,
+	// 20.1.8.32 glow, 20.1.8.53 softEdge; ODF 1.3 Part 3, 20.158
+	// draw:shadow and LibreOffice's loext:shadow-blur, loext:glow-radius,
+	// loext:softedge-radius).
+	Shadow   *Shadow
+	Glow     *Glow
+	SoftEdge float64
 	// Geometry is the outline of a KindGeometry shape, nil for a
 	// rectangle.
 	Geometry *shape.Geometry
@@ -107,6 +125,38 @@ type Shape struct {
 	Jump int
 	// Name is the shape's name, for warnings.
 	Name string
+}
+
+// Shadow is a shape's drop shadow: a copy of the shape's silhouette,
+// pictures and text included, painted under it in Color at Opacity,
+// moved by OffsetX and OffsetY, scaled about the shape's centre by ScaleX
+// and ScaleY, and blurred over Blur (ECMA-376 Part 1, 20.1.8.49 outerShdw;
+// ODF 1.3 Part 3, 20.158 to 20.161 draw:shadow, draw:shadow-offset-x,
+// draw:shadow-offset-y, draw:shadow-color, draw:shadow-opacity and
+// LibreOffice's loext:shadow-blur). The reader resolves dist and dir
+// into the offsets, in slide points.
+type Shadow struct {
+	// Color is the shadow's colour; Opacity its opacity as a fraction of
+	// 1, 1 for opaque.
+	Color   css.Color
+	Opacity float64
+	// OffsetX and OffsetY move the shadow in slide points, positive to
+	// the right and down.
+	OffsetX, OffsetY float64
+	// ScaleX and ScaleY scale the silhouette, 1 or 0 for none.
+	ScaleX, ScaleY float64
+	// Blur is the blur radius in points, 0 for a hard shadow.
+	Blur float64
+}
+
+// Glow is a shape's glow: a blurred halo of Radius points around the
+// shape's silhouette in Color at Opacity (ECMA-376 Part 1, 20.1.8.32 glow;
+// LibreOffice's loext:glow-radius, loext:glow-color and
+// loext:glow-transparency).
+type Glow struct {
+	Color   css.Color
+	Opacity float64
+	Radius  float64
 }
 
 // Kind is the kind of a shape.
@@ -269,11 +319,21 @@ type TextBody struct {
 	// Insets are the distances from the text rectangle to the text,
 	// indexed by [css.Side].
 	Insets [4]float64
-	// Anchor places the text vertically in the text rectangle.
-	Anchor Anchor
+	// Anchor places the text vertically in the text rectangle;
+	// HorizontalAnchor places the block of lines horizontally in it, each
+	// line keeping its own alignment (21.1.2.1.1 bodyPr anchorCtr; ODF
+	// 1.3 Part 3, 20.385 draw:textarea-horizontal-align).
+	Anchor           Anchor
+	HorizontalAnchor HorizontalAnchor
 	// Wrap wraps the lines at the text rectangle's width; false lets them
 	// run on, the box growing as Autofit says.
 	Wrap bool
+	// ShrinkGroup, when not 0, ties the body to every other body of the
+	// slide with the same value: an AutofitShrink body of the group takes
+	// the smallest scale any of them needs, as Impress fits the text of a
+	// SmartArt diagram with one scale (ECMA-376 Part 1, 21.4.2.14 lnSpcPct
+	// and the diagram's shared autofit); 0 fits the body alone.
+	ShrinkGroup int
 	// Autofit says what happens when the text does not fit the box.
 	Autofit Autofit
 	// Clip cuts the text at the text rectangle instead of letting it
@@ -319,6 +379,24 @@ const (
 	AnchorBottom
 )
 
+// HorizontalAnchor is the horizontal placement of the block of lines of a
+// text body in its text rectangle (ODF 1.3 Part 3, 20.385
+// draw:textarea-horizontal-align; ECMA-376 Part 1, 21.1.2.1.1 anchorCtr,
+// which is HorizontalCenter).
+type HorizontalAnchor uint8
+
+// The horizontal anchors.
+const (
+	// HorizontalStart puts the block at the start edge: the block is as
+	// wide as the text rectangle, and each line's Align places it.
+	HorizontalStart HorizontalAnchor = iota
+	// HorizontalCenter centres a block as wide as its widest line.
+	HorizontalCenter
+	// HorizontalEnd puts a block as wide as its widest line at the end
+	// edge.
+	HorizontalEnd
+)
+
 // Autofit is what a text body does with text that does not fit (ECMA-376
 // Part 1, 21.1.2.1.2 normAutofit, 21.1.2.1.3 noAutofit, 21.1.2.1.4
 // spAutoFit; ODF draw:fit-to-size and draw:auto-grow-height).
@@ -333,6 +411,11 @@ const (
 	AutofitShrink
 	// AutofitGrow grows the box's height to the text.
 	AutofitGrow
+	// AutofitStretch scales the text to fill the box in both directions,
+	// the font size to the height and the glyphs' width to the width, as
+	// Impress draws an OpenDocument frame with draw:fit-to-size true
+	// (ODF 1.3 Part 3, 20.130).
+	AutofitStretch
 )
 
 // Paragraph is one paragraph of a text body (ECMA-376 Part 1, 21.1.2.2.6 p
@@ -363,6 +446,10 @@ type Paragraph struct {
 	// spcPts).
 	LineSpacing       float64
 	LineSpacingPoints float64
+	// LineSpacingAtLeast is a floor in points under every line's height,
+	// 0 for none (ODF 1.3 Part 3, 20.327 style:line-height-at-least): a
+	// line shorter than it grows to it, a taller one keeps its height.
+	LineSpacingAtLeast float64
 	// SpaceBefore and SpaceAfter are the spacing around the paragraph in
 	// points; SpaceBeforePct and SpaceAfterPct their percentage-of-size
 	// forms when a file gives those instead, as fractions of 1.
@@ -371,8 +458,11 @@ type Paragraph struct {
 	// RightToLeft is the paragraph's base direction.
 	RightToLeft bool
 	// TabStops are the paragraph's tab stop positions in points from the
-	// text rectangle's left edge.
-	TabStops []float64
+	// text rectangle's left edge; DefaultTab is the interval of the tab
+	// stops past the last of them, in points (21.1.2.2.7 defTabSz; ODF
+	// style:tab-stop-distance), 0 for the builder's default.
+	TabStops   []float64
+	DefaultTab float64
 }
 
 // Bullet is a paragraph's bullet or number (ECMA-376 Part 1, 21.1.2.4 the
@@ -431,8 +521,11 @@ type Run struct {
 	// reads it) a FieldDate or FieldTime run shows the print date in, ""
 	// for the format Impress gives a field of that kind by default.
 	Format string
-	// Href is the run's hyperlink, "" for none.
+	// Href is the run's hyperlink, "" for none; Jump the 1-based show
+	// position of the slide the run links to, 0 for none, as [Shape.Jump]
+	// reads for a shape.
 	Href string
+	Jump int
 }
 
 // RunStyle is the style of a run (ECMA-376 Part 1, 21.1.2.3.9 rPr; ODF
@@ -453,8 +546,12 @@ type RunStyle struct {
 	Color css.Color
 	// Spacing is the extra space between characters in points.
 	Spacing float64
-	// Script raises or lowers the text, Baseline for neither.
+	// Script raises or lowers the text, Baseline for neither; Rise is the
+	// shift as a fraction of the size, positive up, when the file gives
+	// one (21.1.2.3.9 baseline; ODF style:text-position), 0 for the
+	// builder's shift for Script.
 	Script Script
+	Rise   float64
 	// Caps draws the text in capitals: CapsAll or CapsSmall.
 	Caps Caps
 	// Lang is the run's language as a BCP 47 tag, "" for the document's.

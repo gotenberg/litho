@@ -23,4 +23,7 @@ const (
 	CodeVertical = "slides-vertical"
 	// CodeTable is a table cell or row the builder leaves out.
 	CodeTable = "slides-table"
+	// CodeEffect is a shadow, glow or soft edge drawn approximately or
+	// not at all.
+	CodeEffect = "slides-effect"
 )
