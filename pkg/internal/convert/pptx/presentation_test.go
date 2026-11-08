@@ -60,7 +60,7 @@ func TestPresentation_Slides(t *testing.T) {
 	if want := []string{"Second", "First", ""}; !slices.Equal(titles, want) {
 		t.Errorf("titles %q, want %q", titles, want)
 	}
-	if want := []string{"Named", "Slide 2", "Slide 3"}; !slices.Equal(names, want) {
+	if want := []string{"Named", "First", "Slide 3"}; !slices.Equal(names, want) {
 		t.Errorf("names %q, want %q", names, want)
 	}
 	if want := []bool{true, false, false}; !slices.Equal(hidden, want) {

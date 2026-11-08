@@ -27,12 +27,11 @@ func (r *reader) slide(n int, part string) (*slides.Slide, error) {
 		return nil, err
 	}
 	sl := newLayer(part, root, lay)
-	sl.sc = scope{theme: lay.sc.theme, cmap: overrideColorMap(root, lay.masterOf().sc.cmap)}
+	// A slide with masterClrMapping takes its layout's mapping, the
+	// layout's override when it has one, as Impress applies it.
+	sl.sc = scope{theme: lay.sc.theme, cmap: overrideColorMap(root, lay.sc.cmap)}
 	s := &slides.Slide{Hidden: !boolAttr(root, "show", true)}
 	s.Name = attr(root.Child(nsP, "cSld"), "name")
-	if s.Name == "" {
-		s.Name = fmt.Sprintf("Slide %d", n)
-	}
 	s.Background = r.background(sl)
 	m := lay.masterOf()
 	if sl.showMasterSp {
@@ -50,6 +49,12 @@ func (r *reader) slide(n int, part string) (*slides.Slide, error) {
 		return nil, err
 	}
 	s.Title = sc.title
+	if s.Name == "" {
+		s.Name = s.Title
+	}
+	if s.Name == "" {
+		s.Name = fmt.Sprintf("Slide %d", n)
+	}
 	r.slideWarnings(part, root)
 	notes, err := r.notes(part)
 	if err != nil {

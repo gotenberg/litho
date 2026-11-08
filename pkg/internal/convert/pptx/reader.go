@@ -194,7 +194,43 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*slides.D
 		}
 		doc.Slides = append(doc.Slides, s)
 	}
+	uniqueNames(doc.Slides)
 	return doc, r.warnings, nil
+}
+
+// uniqueNames makes the slides' names unique as Impress names the pages of
+// an imported presentation: a slide takes its p:cSld name, else its
+// title, else "Slide n", and a name an earlier slide holds gets " (2)",
+// " (3)"... appended.
+//
+// # Corpus evidence
+//
+//   - pptx: sd/tdf103347 prints the outline "Hello", "Hello (2)", "Hello
+//     (3)" for three slides titled "Hello"; sd/slide-sections names its
+//     untitled seventh slide "Slide 7".
+func uniqueNames(list []*slides.Slide) {
+	seen := map[string]int{}
+	taken := map[string]bool{}
+	for _, s := range list {
+		taken[s.Name] = false
+	}
+	for _, s := range list {
+		base := s.Name
+		if !taken[base] {
+			taken[base] = true
+			seen[base] = 1
+			continue
+		}
+		n := seen[base]
+		for {
+			n++
+			name := fmt.Sprintf("%s (%d)", base, n)
+			if !taken[name] {
+				taken[name], seen[base], s.Name = true, n, name
+				break
+			}
+		}
+	}
 }
 
 // size reads the cx and cy of an sldSz or notesSz in points, false when

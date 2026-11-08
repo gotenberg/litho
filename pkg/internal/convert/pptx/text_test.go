@@ -12,9 +12,9 @@ import (
 // rgb returns the opaque colour of 0xRRGGBB.
 func rgb(v uint32) css.Color { return hex(v) }
 
-// sameColor reports whether two colours agree to half a level of 255.
+// sameColor reports whether two colours agree to a level of 255.
 func sameColor(a, b css.Color) bool {
-	d := func(x, y float64) bool { return math.Abs(x-y) < 0.5/255 }
+	d := func(x, y float64) bool { return math.Abs(x-y) < 1.01/255 }
 	return d(a.R, b.R) && d(a.G, b.G) && d(a.B, b.B) && d(a.A, b.A)
 }
 

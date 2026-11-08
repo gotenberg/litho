@@ -298,6 +298,16 @@ func readDeck(t testing.TB, d testDeck) (*slides.Document, []compose.Warning) {
 	return doc, warnings
 }
 
+// loadFiles reads the parts files into the model with the test fonts.
+func loadFiles(t testing.TB, files map[string]string) *slides.Document {
+	t.Helper()
+	doc, _, err := load(context.Background(), bytes.NewReader(zipFiles(t, files)), testFonts(t), office.Options{})
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	return doc
+}
+
 // oneSlide reads a deck of one slide of shape tree content tree.
 func oneSlide(t testing.TB, tree string) *slides.Slide {
 	t.Helper()
