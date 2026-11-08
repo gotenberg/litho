@@ -152,6 +152,9 @@ func TestRead_TextBodyProps(t *testing.T) {
 		{"shape no wrap", `fo:wrap-option="no-wrap" draw:textarea-vertical-align="middle"`, "shape", slides.TextBody{Anchor: slides.AnchorMiddle}},
 		{"shape grows", `draw:auto-grow-height="true" fo:wrap-option="wrap"`, "shape", slides.TextBody{Wrap: true, Autofit: slides.AutofitGrow}},
 		{"clip", `loext:overflow-behavior="clip"`, "frame", slides.TextBody{Wrap: true, Autofit: slides.AutofitGrow, Clip: true}},
+		{"stretched", `draw:fit-to-size="true" draw:textarea-horizontal-align="center"`, "frame", slides.TextBody{Wrap: true, Autofit: slides.AutofitStretch, HorizontalAnchor: slides.HorizontalCenter}},
+		{"stretched in both directions", `draw:fit-to-size="all" draw:textarea-horizontal-align="right"`, "shape", slides.TextBody{Autofit: slides.AutofitStretch, HorizontalAnchor: slides.HorizontalEnd}},
+		{"shrinking wins", `draw:fit-to-size="true" style:shrink-to-fit="true" draw:textarea-horizontal-align="justify"`, "frame", slides.TextBody{Wrap: true, Autofit: slides.AutofitShrink}},
 		{"clip in the style namespace", `style:overflow-behavior="clip"`, "frame", slides.TextBody{Wrap: true, Autofit: slides.AutofitGrow, Clip: true}},
 	}
 	for _, tt := range tests {
@@ -170,7 +173,7 @@ func TestRead_TextBodyProps(t *testing.T) {
 			tb := firstShape(t, f).Text
 			w := tt.want
 			if tb == nil || !nearAll(tb.Insets[:], w.Insets[:]) || tb.Anchor != w.Anchor || tb.Wrap != w.Wrap || tb.Autofit != w.Autofit ||
-				tb.Columns != w.Columns || !near(tb.ColumnGap, w.ColumnGap) || tb.Vertical != w.Vertical || tb.Clip != w.Clip {
+				tb.Columns != w.Columns || !near(tb.ColumnGap, w.ColumnGap) || tb.Vertical != w.Vertical || tb.Clip != w.Clip || tb.HorizontalAnchor != w.HorizontalAnchor {
 				t.Errorf("text body = %+v, want %+v", tb, w)
 			}
 		})

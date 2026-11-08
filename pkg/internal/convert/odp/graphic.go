@@ -377,6 +377,15 @@ func (r *reader) textBodyProps(tb *slides.TextBody, p odf.Props, frame bool) {
 	case "bottom":
 		tb.Anchor = slides.AnchorBottom
 	}
+	// The block of lines across the text area (20.385
+	// draw:textarea-horizontal-align): justify, Impress's block, and left
+	// span the area.
+	switch p.Get("draw:textarea-horizontal-align") {
+	case "center":
+		tb.HorizontalAnchor = slides.HorizontalCenter
+	case "right":
+		tb.HorizontalAnchor = slides.HorizontalEnd
+	}
 	if frame {
 		tb.Wrap = p.Get("draw:auto-grow-width") != "true"
 	} else {
@@ -390,7 +399,7 @@ func (r *reader) textBodyProps(tb *slides.TextBody, p odf.Props, frame bool) {
 	case p.Get("style:shrink-to-fit") == "true", fit == "shrink-to-fit":
 		tb.Autofit = slides.AutofitShrink
 	case fit == "true", fit == "all":
-		r.warn("fit-to-size", "text stretched to its shape's size is drawn at its own size")
+		tb.Autofit = slides.AutofitStretch
 	}
 	// LibreOffice's extension overflow-behavior clip, which it writes in
 	// the loext namespace and reads in the style one too, cuts the text
