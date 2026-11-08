@@ -371,3 +371,24 @@ func TestRender_AreaSeriesBackToFront(t *testing.T) {
 		t.Errorf("first series drawn at %d, second at %d: want the first in front", first, second)
 	}
 }
+
+func TestRender_ManualLayouts(t *testing.T) {
+	c := barChart(1, 2)
+	c.PlotArea = Frame{Fill: &Paint{Color: blue}}
+	c.PlotLayout = &ManualLayout{X: 0.25, Y: 0.25, Width: 0.5, Height: 0.5, Inner: true}
+	frags := Render(context.Background(), ahem(t), c, chartRect)
+	ps := paths(frags, blue)
+	if len(ps) != 1 {
+		t.Fatalf("%d plot area paths", len(ps))
+	}
+	want := compose.Rect{X: 110, Y: 70, Width: 200, Height: 100}
+	if b := bounds(ps[0]); math.Abs(b.X-want.X)+math.Abs(b.Y-want.Y)+math.Abs(b.Width-want.Width)+math.Abs(b.Height-want.Height) > 1e-6 {
+		t.Errorf("plot area = %+v, want %+v", b, want)
+	}
+	c.Legend = &Legend{Position: LegendRight, Style: TextStyle{Size: 10, Color: compose.Black}, Frame: Frame{Fill: &Paint{Color: compose.Color{G: 1, A: 1}}}, Layout: &ManualLayout{X: 0.1, Y: 0.1}}
+	frags = Render(context.Background(), ahem(t), c, chartRect)
+	lg := paths(frags, compose.Color{G: 1, A: 1})
+	if len(lg) != 1 || math.Abs(bounds(lg[0]).X-50) > 1e-6 || math.Abs(bounds(lg[0]).Y-40) > 1e-6 {
+		t.Errorf("legend frames = %d, want one at (50, 40)", len(lg))
+	}
+}

@@ -27,6 +27,9 @@ type Chart struct {
 	Groups []*Group
 	// Axes are the axes of the plot area. A group names its axes by index.
 	Axes []*Axis
+	// PlotLayout, when set, places the plot area where the file says
+	// instead of in the space the title and legend leave.
+	PlotLayout *ManualLayout
 	// Area is the chart area's fill and border, PlotArea the plot area's
 	// (the wall of a two-dimensional chart).
 	Area, PlotArea Frame
@@ -271,6 +274,30 @@ type Title struct {
 	// Overlay lets the title sit over the plot area instead of taking
 	// space from it (ECMA-376 Part 1, 21.2.2.132 overlay).
 	Overlay bool
+	// Layout, when set, puts the title's top-left corner where the file
+	// says; its size stays automatic, and it still takes its space from
+	// the plot area.
+	Layout *ManualLayout
+}
+
+// ManualLayout is where a file places a part of the chart, as fractions of
+// the chart's rectangle from its top-left corner (ECMA-376 Part 1,
+// 21.2.2.95 manualLayout in its edge mode; ODF 1.3 Part 3, 19.237 svg:x
+// and 19.539 svg:width on a chart element).
+type ManualLayout struct {
+	// X and Y place the part's top-left corner.
+	X, Y float64
+	// Width and Height size it, 0 for its automatic size.
+	Width, Height float64
+	// Inner places a plot area's rectangle without its axis labels and
+	// titles, which lie outside it (21.2.2.96 layoutTarget inner); else
+	// the rectangle holds them.
+	Inner bool
+}
+
+// rect returns the layout's rectangle in r, its size 0 when automatic.
+func (l *ManualLayout) rect(r compose.Rect) compose.Rect {
+	return compose.Rect{X: r.X + l.X*r.Width, Y: r.Y + l.Y*r.Height, Width: l.Width * r.Width, Height: l.Height * r.Height}
 }
 
 // LegendPosition is where the legend sits.
@@ -294,6 +321,10 @@ type Legend struct {
 	Overlay bool
 	Style   TextStyle
 	Frame   Frame
+	// Layout, when set, puts the legend's top-left corner where the file
+	// says, and its size when not 0; the plot area still leaves the room
+	// the legend takes at its position.
+	Layout *ManualLayout
 	// Hidden lists legend entries, by index in the legend's order, that the
 	// file deletes (ECMA-376 Part 1, 21.2.2.94 legendEntry delete).
 	Hidden []int

@@ -227,7 +227,11 @@ func (rd *renderer) cartesian(avail compose.Rect) {
 			rd.placeLabels(d)
 		}
 	}
-	for pass := 0; pass < layoutPasses; pass++ {
+	passes := layoutPasses
+	if rd.fixed != nil {
+		inner, passes = *rd.fixed, 0
+	}
+	for pass := 0; pass < passes; pass++ {
 		fit()
 		bb := labelBounds(inner, all)
 		next := compose.Rect{X: avail.X + (inner.X - bb.X), Y: avail.Y + (inner.Y - bb.Y)}
@@ -565,6 +569,12 @@ func (rd *renderer) placeLabels(d *dim) {
 			}
 		} else {
 			maxW = d.inner.Width * 0.3
+			if rd.fixed != nil {
+				// Beside a placed plot area the labels take the room
+				// left of the axis (chart2's VCartesianAxis for a
+				// vertical category axis).
+				maxW = math.Max(d.inner.X-rd.page.X-labelSpacing, maxW)
+			}
 		}
 	} else {
 		for _, v := range d.sc.ticks() {

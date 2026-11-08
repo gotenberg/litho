@@ -88,7 +88,7 @@ func (rd *renderer) pies(plot compose.Rect) {
 			}
 		}
 	}
-	if outside {
+	if outside && rd.fixed == nil {
 		r = math.Min((plot.Width-2*maxW)/2, (plot.Height-2*maxH)/2) - labelSpacing
 	}
 	r /= 1 + maxExpl
@@ -97,18 +97,22 @@ func (rd *renderer) pies(plot compose.Rect) {
 	}
 	hole := 0.0
 	if g.Kind == Doughnut {
-		h := g.HoleSize
-		if !(h > 0) {
-			h = 50
-		}
-		hole = r * math.Max(10, math.Min(h, 90)) / 100
+		hole = r * math.Max(10, math.Min(holeSize(g), 90)) / 100
 	}
-	ringW := (r - hole) / float64(len(series))
 	start := (90 - g.FirstSliceAngle) * math.Pi / 180
 	dir := -1.0
 	if g.CounterClockwise {
 		dir = 1
 	}
+	if rd.fixed != nil {
+		// A placed pie fills its rectangle, less the room its most
+		// exploded sector takes (chart2's PieChart::getMaxOffset).
+		r = math.Min(plot.Width, plot.Height) / 2 / (1 + maxExpl)
+		if g.Kind == Doughnut {
+			hole = r * math.Max(10, math.Min(holeSize(g), 90)) / 100
+		}
+	}
+	ringW := (r - hole) / float64(len(series))
 	var labels []pieLabel
 	for si, s := range series {
 		vals := rd.data(s.Values)
@@ -329,4 +333,13 @@ func (rd *renderer) radar(avail compose.Rect) {
 			rd.out = append(rd.out, b.draw(p.X-labelSpacing-w/2, p.Y, alignRight)...)
 		}
 	}
+}
+
+// holeSize returns a doughnut's hole as a percentage of its diameter, 50
+// by default.
+func holeSize(g *Group) float64 {
+	if g.HoleSize > 0 {
+		return g.HoleSize
+	}
+	return 50
 }

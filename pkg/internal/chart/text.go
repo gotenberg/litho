@@ -157,4 +157,7 @@ type renderer struct {
 	// page is the chart's rectangle.
 	page compose.Rect
 	out  []compose.Fragment
+	// fixed is the plot area's rectangle without its axis labels when the
+	// file fixes it, nil when the layout finds it.
+	fixed *compose.Rect
 }

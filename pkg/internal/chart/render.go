@@ -95,6 +95,15 @@ func (rd *renderer) render(r compose.Rect) {
 		dx, dy = pieDistance, pieDistance
 	}
 	plot := compose.Rect{X: rem.X + dx, Y: rem.Y + dy, Width: rem.Width - 2*dx, Height: rem.Height - 2*dy}
+	if l := c.PlotLayout; l != nil && l.Width > 0 && l.Height > 0 {
+		// A plot area the file places: its rectangle with the axis labels,
+		// or without them, as a pie's always is (oox's PlotAreaConverter,
+		// chart2's DiagramPositioning).
+		plot = l.rect(r)
+		if l.Inner || pie {
+			rd.fixed = &plot
+		}
+	}
 	if !(plot.Width > 1) || !(plot.Height > 1) {
 		return
 	}
@@ -119,6 +128,12 @@ func (rd *renderer) title(t *Title, page compose.Rect, rem *compose.Rect, distan
 	h += 2 * titleVPad * b.style.Size
 	cx := rem.X + rem.Width/2
 	top := rem.Y + distance
+	if t.Layout != nil {
+		// A placed title keeps its top-left corner where the file says
+		// (oox's LayoutConverter positions the title shape).
+		lr := t.Layout.rect(page)
+		cx, top = lr.X+w/2, lr.Y
+	}
 	rd.frame(compose.Rect{X: cx - w/2, Y: top, Width: w, Height: h}, t.Frame)
 	rd.out = append(rd.out, b.draw(cx, top+h/2, alignCenter)...)
 	if t.Overlay {
