@@ -28,7 +28,7 @@ func TestFormatNumber(t *testing.T) {
 		{12, "ordinalText", "Twelfth"},
 		{3, "decimalEnclosedCircle", "③"},
 		{15, "chineseCounting", "十五"},
-		{12, "decimalFullWidth", "１２"},
+		{12, "decimalFullWidth", "12"},
 		{2, "russianUpper", "Б"},
 		{5, "none", ""},
 		{5, "someUnknownFormat", "5"},

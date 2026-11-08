@@ -254,6 +254,12 @@ var romanNumerals = []struct {
 // formatNumber writes n in an ST_NumberFormat (ECMA-376 Part 1,
 // 17.18.59); a format the converter does not write falls back to decimal.
 func formatNumber(n int, format string) string {
+	if s, ok := cjkFormat(n, format); ok {
+		if s == "" {
+			return strconv.Itoa(n)
+		}
+		return s
+	}
 	switch format {
 	case "none":
 		return ""
@@ -307,19 +313,6 @@ func formatNumber(n int, format string) string {
 	case "decimalEnclosedParen":
 		if n >= 1 && n <= 20 {
 			return string(rune(0x2474 + n - 1))
-		}
-	case "decimalFullWidth", "decimalFullWidth2":
-		var b strings.Builder
-		for _, r := range strconv.Itoa(n) {
-			if r >= '0' && r <= '9' {
-				r += 0xFF10 - '0'
-			}
-			b.WriteRune(r)
-		}
-		return b.String()
-	case "chineseCounting", "chineseCountingThousand", "japaneseCounting", "ideographTraditional", "taiwaneseCounting", "koreanCounting":
-		if s := ideographic(n); s != "" {
-			return s
 		}
 	case "russianLower", "russianUpper":
 		if n > 0 && n <= 29*28 {
@@ -396,25 +389,6 @@ func ordinalWords(n int) string {
 		last += "th"
 	}
 	return s[:i+1] + last
-}
-
-// ideographic writes 1 to 99 with the Chinese numerals Word's counting
-// formats use.
-func ideographic(n int) string {
-	digits := []rune("〇一二三四五六七八九")
-	switch {
-	case n <= 0 || n > 99:
-		return ""
-	case n < 10:
-		return string(digits[n])
-	case n == 10:
-		return "十"
-	case n < 20:
-		return "十" + string(digits[n-10])
-	case n%10 == 0:
-		return string(digits[n/10]) + "十"
-	}
-	return string(digits[n/10]) + "十" + string(digits[n%10])
 }
 
 // symbolChars maps the code points of the Symbol font Word lists name in
