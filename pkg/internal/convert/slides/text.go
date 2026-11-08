@@ -28,8 +28,14 @@ const defaultFontSize = 18
 const maxFontSize = 1000
 
 // fallbackFamily is the face a run falls back to when none of its
-// families is installed, fontconfig's first sans-serif face.
-const fallbackFamily = "DejaVu Sans"
+// families is installed and no metric alias serves them, the face Impress
+// draws such a family with in the pinned image.
+//
+// # Corpus evidence
+//
+//   - pptx: sd/bnc862510_7.pptx (Segoe UI) prints in Noto Sans; odp: frames
+//     in NoSuchFont, Segoe UI and Tahoma print in Noto Sans.
+const fallbackFamily = "Noto Sans"
 
 // defaultTab is the distance between the default tab stops of a
 // PresentationML text, in points: one inch, what PowerPoint's masters state
