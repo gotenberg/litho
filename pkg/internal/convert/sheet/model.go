@@ -662,6 +662,12 @@ type Drawing struct {
 	Chart *chart.Chart
 	// Name is the drawing's name, for warnings.
 	Name string
+	// Unbounded lets the offsets of From and To run past their cells, as
+	// Calc reads the anchors of an OpenDocument spreadsheet (ODF 1.3 Part
+	// 3, 19.663 table:end-x and table:end-y); otherwise an offset stops at
+	// its cell's edge, as Calc reads a workbook's anchors (ECMA-376 Part 1,
+	// 20.5.2.19 colOff and rowOff).
+	Unbounded bool
 }
 
 // Anchor is a cell with an offset from its top-left corner.

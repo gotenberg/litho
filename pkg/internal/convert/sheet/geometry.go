@@ -57,13 +57,15 @@ func (g *grid) rowAt(y float64, limit int) int {
 }
 
 // anchorPoint returns the sheet position of an anchor: its cell's corner
-// plus the offset, the offset bounded by the cell, as Calc places a
-// drawing anchored in a cell.
-func (g *grid) anchorPoint(a Anchor) (float64, float64) {
+// plus the offset, the offset bounded by the cell unless unbounded, as
+// Calc places a drawing anchored in a cell.
+func (g *grid) anchorPoint(a Anchor, unbounded bool) (float64, float64) {
 	r := min(max(a.Row, 0), maxRows-1)
 	c := min(max(a.Column, 0), maxColumns-1)
-	dx := min(max(a.DX, 0), g.colWidth(c))
-	dy := min(max(a.DY, 0), g.rowHeight(r))
+	dx, dy := min(max(a.DX, 0), maxSide), min(max(a.DY, 0), maxSide)
+	if !unbounded {
+		dx, dy = min(dx, g.colWidth(c)), min(dy, g.rowHeight(r))
+	}
 	return g.colX(c) + dx, g.rowY(r) + dy
 }
 
@@ -73,9 +75,9 @@ func (g *grid) drawingRect(d *Drawing) compose.Rect {
 	if d.Absolute {
 		return compose.Rect{X: max(d.X, 0), Y: max(d.Y, 0), Width: clampSide(d.Width), Height: clampSide(d.Height)}
 	}
-	x, y := g.anchorPoint(d.From)
+	x, y := g.anchorPoint(d.From, d.Unbounded)
 	if d.To != nil {
-		x2, y2 := g.anchorPoint(*d.To)
+		x2, y2 := g.anchorPoint(*d.To, d.Unbounded)
 		return compose.Rect{X: x, Y: y, Width: max(x2-x, 0), Height: max(y2-y, 0)}
 	}
 	return compose.Rect{X: x, Y: y, Width: clampSide(d.Width), Height: clampSide(d.Height)}
