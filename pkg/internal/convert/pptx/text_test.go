@@ -200,8 +200,8 @@ func TestText_BodyProperties(t *testing.T) {
 				t.Errorf("autofit %+v", b)
 			}
 		}},
-		{"grow", `<a:bodyPr anchor="ctr"><a:spAutoFit/></a:bodyPr>`, func(t *testing.T, b *slides.TextBody) {
-			if b.Autofit != slides.AutofitGrow || b.Anchor != slides.AnchorMiddle {
+		{"a shape fit to its text keeps its box", `<a:bodyPr anchor="ctr"><a:spAutoFit/></a:bodyPr>`, func(t *testing.T, b *slides.TextBody) {
+			if b.Autofit != slides.AutofitNone || b.Anchor != slides.AnchorMiddle {
 				t.Errorf("body %+v", b)
 			}
 		}},

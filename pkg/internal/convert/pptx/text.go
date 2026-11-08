@@ -264,7 +264,10 @@ func bodyProps(bc chain) *slides.TextBody {
 		b.FontScale = percent(attr(fit, "fontScale"))
 		b.SpacingReduction = percent(attr(fit, "lnSpcReduction"))
 	case fit.Local == "spAutoFit":
-		b.Autofit = slides.AutofitGrow
+		// Impress keeps the box the file saved for a shape that fits its
+		// text (pptx: sd/n862510_4 prints its spAutoFit boxes at their
+		// saved height): the text runs past the box as it would without.
+		b.Autofit = slides.AutofitNone
 	}
 	return b
 }
