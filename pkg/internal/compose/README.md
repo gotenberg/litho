@@ -157,11 +157,11 @@ Each wave ships behind oracles wired into the corpus matrix
 Wave 4 depends on wave 0 alone, so the Office converters run beside waves
 1 to 3 once the model is frozen.
 
-Status: waves 0 to 5 are done. `test/integration/baseline.json` records
+Status: waves 0 to 6 are done. `test/integration/baseline.json` records
 the oracle scores per fixture; the wpt, weasyprint, html, svg, docx, odt,
-xlsx, ods and csv cells score the converters in a quarter of an hour (`go
-run ./test/integration/cmd/corpus run
---corpus=wpt,weasyprint,html,svg,docx,odt,xlsx,ods,csv
+xlsx, ods, csv, pptx and odp cells score the converters in about twenty
+minutes (`go run ./test/integration/cmd/corpus run
+--corpus=wpt,weasyprint,html,svg,docx,odt,xlsx,ods,csv,pptx,odp
 --feature=reftest,draw,diff,svgdraw`).
 Wave 1 also took positioning, transforms, gradients, box-shadow, outlines
 and generated content from wave 3, and wave 2 took flexbox, because the
@@ -226,6 +226,24 @@ wave also closed wave 4's open engine items: page-anchored boxes count
 their anchor page alone, row spans split across pages, justified Office
 lines shrink their spaces as Word 2013 does, keep-with-next chains and
 proportional spacing at a page cut follow Writer.
+
+Wave 6 added the presentation converters, judged against LibreOffice
+Impress: `convert/pptx` and `convert/odp` read their files into one model,
+`convert/slides`', resolving masters, layouts, placeholders and themes so
+that every shape says everything about itself, and `convert/slides` lays
+a slide out as Impress prints it: the background and the shapes in
+stacking order, each a geometry with its fill and line, a picture, a chart,
+a table or a group, the text of a shape in its text rectangle with the
+insets, anchor, wrapping, columns, autofit, bullets, numbering and fields
+the file asks for, the line and paragraph spacing rules of each format,
+hidden slides left out unless asked for, a notes page per slide when asked
+for, and the slide names as the outline. `shape` is the geometry engine
+every Office converter now draws through: the 187 DrawingML presets from
+the specification's own definitions, custom geometries, OpenDocument's
+enhanced geometry with LibreOffice's type mapping, and the fills, dashes
+and arrowheads, each measured against LibreOffice. The wave also gave the
+spreadsheets their conditional formatting, the print range Calc extends
+over overflowing text, and the row heights of East Asian text.
 
 The differential oracle compares page count, PDF.js text with reading
 order, link sets, outline, tag tree and a layout-tolerant score over
