@@ -77,7 +77,8 @@ func (b *builder) warn(code, msg string) {
 // Each slide prints its background, then its shapes in stacking order. A
 // page of another size than the slide shows the slide scaled down to fit,
 // never up, centred. The outline holds an entry per slide written, titled
-// with the slide's name. The structure tree holds a Sect
+// with the slide's name, and the same entries again after them when notes
+// pages print, as Impress writes them. The structure tree holds a Sect
 // per slide: the paragraphs of its text as P, its tables as Table, its
 // pictures as Figure.
 //
@@ -199,6 +200,11 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		titles := outlineTitles(doc.Slides)
 		for i, s := range shown {
 			out.Outline = append(out.Outline, compose.Outline{Title: titles[s], Dest: compose.Dest{Page: i + 1}})
+		}
+		if opts.NotesPages {
+			// Impress writes the bookmarks again for the notes pages, each
+			// leading to its slide's page.
+			out.Outline = append(out.Outline, out.Outline...)
 		}
 	}
 	out.Warnings = b.warnings

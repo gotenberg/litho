@@ -25,7 +25,7 @@ func TestConvert_Pages(t *testing.T) {
 	}{
 		{"shown", office.Options{}, 2, [][2]float64{{960, 540}, {960, 540}}, []string{"A", "A (2)"}},
 		{"hidden", office.Options{HiddenSlides: true}, 3, nil, []string{"A", "B", "A (2)"}},
-		{"notes", office.Options{NotesPages: true}, 4, [][2]float64{{960, 540}, {960, 540}, {612, 792}, {612, 792}}, []string{"A", "A (2)"}},
+		{"notes", office.Options{NotesPages: true}, 4, [][2]float64{{960, 540}, {960, 540}, {612, 792}, {612, 792}}, []string{"A", "A (2)", "A", "A (2)"}},
 		{"paper", office.Options{PageWidth: 595, PageHeight: 842, Landscape: true}, 2, [][2]float64{{842, 595}, {842, 595}}, nil},
 		{"no outline", office.Options{OmitOutline: true}, 2, nil, []string{}},
 	} {
@@ -47,8 +47,12 @@ func TestConvert_Pages(t *testing.T) {
 				if len(got) != len(tc.outline) {
 					t.Fatalf("outline %q, want %q", got, tc.outline)
 				}
+				per := len(got)
+				if tc.opts.NotesPages {
+					per /= 2
+				}
 				for i := range got {
-					if got[i] != tc.outline[i] || out.Outline[i].Dest.Page != i+1 {
+					if got[i] != tc.outline[i] || out.Outline[i].Dest.Page != i%per+1 {
 						t.Errorf("outline %d: %q to %d, want %q", i, got[i], out.Outline[i].Dest.Page, tc.outline[i])
 					}
 				}
