@@ -2,6 +2,7 @@ package pptx
 
 import (
 	"bytes"
+	"context"
 	"image"
 	"image/color"
 	"image/png"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
+	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
 // pngBytes returns a 4 by 2 red PNG.
@@ -246,5 +249,35 @@ func TestShapes_LayoutColorMapOverride(t *testing.T) {
 	d := loadFiles(t, files)
 	if c := d.Slides[0].Shapes[0].Text.Paragraphs[0].Runs[0].Style.Color; !sameColor(c, rgb(0xFFFFFF)) {
 		t.Errorf("a slide takes its layout's colour map: %+v", c)
+	}
+}
+
+func TestFillRectCrop(t *testing.T) {
+	cases := []struct {
+		name, fillRect string
+		want           [4]float64
+	}{
+		{"no fill rectangle", ``, [4]float64{}},
+		{"a picture wider than the box is cut", `<a:fillRect l="-25000" r="-25000"/>`, [4]float64{css.Left: 0.25 / 1.5, css.Right: 0.25 / 1.5}},
+		{"an inset leaves blank room", `<a:fillRect t="10000" b="10000"/>`, [4]float64{css.Top: -0.1 / 0.8, css.Bottom: -0.1 / 0.8}},
+		{"an empty rectangle draws the picture whole", `<a:fillRect l="60000" r="60000"/>`, [4]float64{}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var fr *ooxml.Element
+			if c.fillRect != "" {
+				root, err := ooxml.Parse(context.Background(), []byte(`<a:stretch xmlns:a="`+ooxml.NSA+`">`+c.fillRect+`</a:stretch>`), nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				fr = root.Child(ooxml.NSA, "fillRect")
+			}
+			got := fillRectCrop(fr)
+			for i := range got {
+				if d := got[i] - c.want[i]; d > 1e-9 || d < -1e-9 {
+					t.Fatalf("crop %v, want %v", got, c.want)
+				}
+			}
+		})
 	}
 }

@@ -64,7 +64,12 @@ func (r *reader) fillChoice(fc *fillCtx, k *ooxml.Element) (slides.Fill, bool) {
 		if pic == nil {
 			return slides.Fill{}, true
 		}
-		return slides.Fill{Kind: slides.FillPicture, Picture: ooxml.Cropped(pic, ref.Crop), Tile: k.Child(ooxml.NSA, "tile") != nil}, true
+		tile := k.Child(ooxml.NSA, "tile") != nil
+		pic = ooxml.Cropped(pic, ref.Crop)
+		if !tile {
+			pic = ooxml.Cropped(pic, fillRectCrop(k.Child(ooxml.NSA, "stretch").Child(ooxml.NSA, "fillRect")))
+		}
+		return slides.Fill{Kind: slides.FillPicture, Picture: pic, Tile: tile}, true
 	case "pattFill":
 		f := slides.Fill{Kind: slides.FillPattern, Pattern: attr(k, "prst"), Color: css.Color{A: 1}, Background: css.Color{R: 1, G: 1, B: 1, A: 1}}
 		if f.Pattern == "" {
@@ -84,6 +89,25 @@ func (r *reader) fillChoice(fc *fillCtx, k *ooxml.Element) (slides.Fill, bool) {
 		return slides.Fill{}, true
 	}
 	return slides.Fill{}, false
+}
+
+// fillRectCrop returns the crop that draws a stretched picture into the
+// fill rectangle of a blip fill (ECMA-376 Part 1, 20.1.8.30 fillRect: the
+// insets of the rectangle from the shape's box, in thousandths of a
+// percent): a negative inset puts part of the picture past the box, cut
+// off; a positive one leaves blank room.
+func fillRectCrop(fr *ooxml.Element) [4]float64 {
+	var in [4]float64
+	for side, name := range map[css.Side]string{css.Top: "t", css.Right: "r", css.Bottom: "b", css.Left: "l"} {
+		if v, ok := intAttr(fr, name); ok {
+			in[side] = max(-10, min(0.99, float64(v)/100000))
+		}
+	}
+	fw, fh := 1-in[css.Left]-in[css.Right], 1-in[css.Top]-in[css.Bottom]
+	if fw <= 0.001 || fh <= 0.001 {
+		return [4]float64{}
+	}
+	return [4]float64{css.Top: -in[css.Top] / fh, css.Right: -in[css.Right] / fw, css.Bottom: -in[css.Bottom] / fh, css.Left: -in[css.Left] / fw}
 }
 
 // gradient reads a gradFill (20.1.8.33): its stops by position, its
