@@ -2,15 +2,19 @@
 """List the LibreOffice test documents an Office corpus scores.
 
 Walks the test data directories of a LibreOffice core checkout at
-LIBREOFFICE_CORE_COMMIT and writes, for one corpus (docx, odt, xlsx, ods or
-csv), the documents the diff feature of test/integration/cmd/corpus
+LIBREOFFICE_CORE_COMMIT and writes, for one corpus (docx, odt, xlsx, ods,
+csv, pptx or odp), the documents the diff feature of test/integration/cmd/corpus
 converts: documents.json, the fixture list ({"id": "<dir>/<file>"} each,
 the path under the corpus testdata's sources/), and files.sha256, one
 "<sha256>  <core path>" line per document plus the licence, which
 fetch-office.sh downloads. <dir> is the Writer test directory
-(sw/qa/extras/<dir>/data), or the module of a Calc or chart test directory
-(sc for sc/qa/unit/data/<ext>, chart2 for chart2/qa/extras/data/<ext>,
-each read for files of its <ext> alone).
+(sw/qa/extras/<dir>/data), or the module of a Calc, Impress, DrawingML or
+chart test directory (sc for sc/qa/unit/data/<ext>, sd for
+sd/qa/unit/data/<ext>, chart2 for chart2/qa/extras/data/<ext>, oox for
+oox/qa/unit/data), or sd-data for the mixed sd/qa/unit/data itself. A
+directory named for a format is read for files of that format alone (the
+OpenDocument presentation directory for its flat files too); any other for
+the extensions the corpus reads.
 
 A .docx qualifies when it is a zip package holding word/document.xml and no
 part under word/embeddings/, word/charts/, word/diagrams/ or word/activeX/,
@@ -24,10 +28,18 @@ whose content.xml holds an office:spreadsheet body, with no entry under
 Basic/, no WMF, EMF or SVM picture, and every Object*/ directory a chart by
 its manifest media type; a .fods when the flat file holds an
 office:spreadsheet body and every document it embeds is a chart. A .csv
-always qualifies. Every kind is at most MAX_BYTES, its name is plain ASCII
+always qualifies. A .pptx qualifies when it is a zip package holding
+ppt/presentation.xml and no part under ppt/activeX/, no ppt/vbaProject.bin,
+no EMF, WMF, SVM or TIFF picture and no audio or video media, and whose
+ppt/embeddings/ parts, if any, are the data workbooks of its charts alone
+(no relationship but a chart's targets them): charts are kept, embedded
+objects are not. A .odp qualifies as a .ods does with an
+office:presentation body, and without audio or video media; a .fodp as a
+.fods does. Every kind is at most MAX_BYTES, its name is plain ASCII
 (letters, digits, dot, underscore, hyphen), so every shell and form field
-carries it intact, and Gotenberg's LibreOffice route converts it (REFUSED
-lists the ones it does not).
+carries it intact, Gotenberg's LibreOffice route converts it (REFUSED lists
+the ones it does not), and the diff feature can score its reference
+(UNSCORABLE lists the ones it cannot).
 
 The selection is deterministic: the qualifying files of each directory are
 sorted by name and the first CAPS[corpus][dir] kept.
@@ -73,7 +85,29 @@ CAPS = {
     "csv": {
         "sc/qa/unit/data/csv": 9,
     },
+    "pptx": {
+        "sd/qa/unit/data/pptx": 200,
+        "oox/qa/unit/data": 61,
+        "chart2/qa/extras/data/pptx": 38,
+        "sd/qa/unit/data": 20,
+    },
+    "odp": {
+        "sd/qa/unit/data/odp": 150,
+        "sd/qa/unit/data": 20,
+    },
 }
+
+# DIR_EXTENSIONS lists the directories named for a format that hold another
+# extension of the corpus's too: Impress keeps its flat presentations beside
+# the packaged ones, where Calc gives them a directory of their own.
+DIR_EXTENSIONS = {
+    "sd/qa/unit/data/odp": (".odp", ".fodp"),
+}
+
+# MIXED_DIRS are the module test data directories that hold documents of
+# several formats beside the format directories under them; their fixture
+# IDs take "<module>-data", so an ID never names two files.
+MIXED_DIRS = ("sd/qa/unit/data",)
 
 # REFUSED are the documents Gotenberg's LibreOffice route refuses, which have
 # no reference to score litho against.
@@ -81,6 +115,15 @@ REFUSED = {
     # Malformed on purpose: the route answers 400, "LibreOffice could not
     # read the document".
     "sw/qa/extras/ooxmlimport/data/math-malformed_xml.docx",
+}
+
+# UNSCORABLE are documents the route converts whose reference the diff
+# feature cannot score, left out with the reason.
+UNSCORABLE = {
+    # A slide of 500 by 500 cm, Impress's largest: drawn at 72 dpi it is
+    # 14174 pixels square, four times the render budget (pdf.Limits'
+    # MaxRenderPixels, 50 million) the cell draws a page within.
+    "sd/qa/unit/data/odp/canvas-slide.odp",
 }
 
 # LICENSE is the licence fetched beside the documents.
@@ -93,6 +136,17 @@ DOCX_DENIED_PICTURES = (".emf", ".wmf", ".svm", ".tif", ".tiff")
 ODT_DENIED_PICTURES = (".wmf", ".emf", ".svm")
 XLSX_DENIED_DIRS = ("xl/embeddings/", "xl/activex/")
 XLSX_DENIED_PICTURES = DOCX_DENIED_PICTURES
+PPTX_DENIED_DIRS = ("ppt/activex/",)
+PPTX_EMBEDDINGS = "ppt/embeddings/"
+# CHART_RELS holds the relationships of the chart parts, whose embedded
+# workbook is the chart's data (ECMA-376 Part 1, 21.2.2.63 externalData),
+# which no viewer draws.
+CHART_RELS = "ppt/charts/_rels/"
+# EMBEDDING_TARGET finds a relationship that targets an embedded part.
+EMBEDDING_TARGET = re.compile(rb'Target="[^"]*embeddings/', re.IGNORECASE)
+# MEDIA_EXTENSIONS are the audio and video files a presentation plays, which
+# a PDF of its slides cannot hold.
+MEDIA_EXTENSIONS = (".mp4", ".mov", ".avi", ".wmv", ".mp3", ".wav", ".m4a")
 CHART_MEDIA_TYPE = "application/vnd.oasis.opendocument.chart"
 
 # FILE_ENTRY and ATTR read the manifest's file entries, whose attributes come
@@ -104,6 +158,15 @@ ATTR = re.compile(rb'manifest:(full-path|media-type)="([^"]*)"')
 # embeds, an office:document inside a draw:object; the root element carries
 # the spreadsheet's own type and is skipped.
 EMBEDDED_TYPE = re.compile(rb'<office:document\b[^>]*office:mimetype="([^"]*)"')
+
+# FLAT_MEDIA finds a picture of a denied format or a played medium a flat
+# presentation links or embeds: a draw:plugin, or an xlink:href or
+# draw:mime-type naming one.
+FLAT_MEDIA = re.compile(
+    rb'<draw:plugin\b|xlink:href="[^"]*\.(?:wmf|emf|svm|mp4|mov|avi|wmv|mp3|wav|m4a)"'
+    rb'|draw:mime-type="(?:audio|video)/',
+    re.IGNORECASE,
+)
 
 # MAX_CONTENT_BYTES bounds the content.xml read to look for the text body. A
 # document of at most MAX_BYTES compressed rarely inflates past it; one that
@@ -167,13 +230,26 @@ def xlsx_qualifies(path):
 
 def ods_qualifies(path):
     if path.endswith(".fods"):
-        return fods_qualifies(path)
+        return flat_qualifies(path, b"<office:spreadsheet")
+    return package_qualifies(path, b"<office:spreadsheet", ODT_DENIED_PICTURES)
+
+
+def odp_qualifies(path):
+    if path.endswith(".fodp"):
+        return flat_qualifies(path, b"<office:presentation") and not FLAT_MEDIA.search(flat_content(path))
+    return package_qualifies(path, b"<office:presentation", ODT_DENIED_PICTURES + MEDIA_EXTENSIONS)
+
+
+def package_qualifies(path, body, denied):
+    """Report whether the OpenDocument package at path holds body in its
+    content.xml, no macros, no file of a denied extension, and only charts
+    as embedded objects."""
     try:
         with zipfile.ZipFile(path) as z:
             names = z.namelist()
             objects = set()
             for n in names:
-                if n.startswith("Basic/") or n.lower().endswith(ODT_DENIED_PICTURES):
+                if n.startswith("Basic/") or n.lower().endswith(denied):
                     return False
                 top, sep, _ = n.partition("/")
                 # ObjectReplacements/ holds the pictures LibreOffice shows
@@ -196,20 +272,54 @@ def ods_qualifies(path):
         return False
     if any(types.get(o) != CHART_MEDIA_TYPE.encode() for o in objects):
         return False
-    return b"<office:spreadsheet" in content
+    return body in content
 
 
-def fods_qualifies(path):
+def flat_content(path):
     # The size cap holds a flat file to MAX_BYTES, read whole.
     with open(path, "rb") as f:
-        content = f.read()
-    if b"<office:spreadsheet" not in content:
+        return f.read()
+
+
+def flat_qualifies(path, body):
+    """Report whether the flat OpenDocument file at path holds body and
+    embeds charts alone."""
+    content = flat_content(path)
+    if body not in content:
         return False
     embedded = EMBEDDED_TYPE.findall(content)[1:]
     return all(t == CHART_MEDIA_TYPE.encode() for t in embedded)
 
 
 def csv_qualifies(_path):
+    return True
+
+
+def pptx_qualifies(path):
+    try:
+        with zipfile.ZipFile(path) as z:
+            names = z.namelist()
+            if "ppt/presentation.xml" not in names:
+                return False
+            embedded = False
+            for n in names:
+                low = n.lower()
+                if low.startswith(PPTX_DENIED_DIRS) or low == "ppt/vbaproject.bin":
+                    return False
+                if low.endswith(XLSX_DENIED_PICTURES) or low.endswith(MEDIA_EXTENSIONS):
+                    return False
+                embedded = embedded or low.startswith(PPTX_EMBEDDINGS)
+            if not embedded:
+                return True
+            for n in names:
+                if not n.endswith(".rels") or n.startswith(CHART_RELS):
+                    continue
+                if z.getinfo(n).file_size > MAX_CONTENT_BYTES:
+                    return False
+                if EMBEDDING_TARGET.search(z.read(n)):
+                    return False
+    except (zipfile.BadZipFile, OSError, RuntimeError, NotImplementedError):
+        return False
     return True
 
 
@@ -221,17 +331,24 @@ QUALIFIES = {
     "xlsx": (xlsx_qualifies, (".xlsx",)),
     "ods": (ods_qualifies, (".ods", ".fods")),
     "csv": (csv_qualifies, (".csv",)),
+    "pptx": (pptx_qualifies, (".pptx",)),
+    "odp": (odp_qualifies, (".odp", ".fodp")),
 }
 
 
 def dir_extensions(d, exts):
-    """Return the extensions read in the core directory d: a Calc or chart
-    test directory, named for its format, gives its own extension alone, so
-    a fixture ID's extension names the directory (the flat file
-    sc/qa/unit/data/ods holds is left to sc/qa/unit/data/fods)."""
-    if d.split("/")[0] == "sw":
-        return exts
-    return ("." + d.rsplit("/", 1)[1],)
+    """Return the extensions read in the core directory d: a test directory
+    named for a format gives that extension alone, so a fixture ID's
+    extension names the directory (the flat file sc/qa/unit/data/ods holds
+    is left to sc/qa/unit/data/fods, the .odp files of sd/qa/unit/data/pptx
+    to the odp corpus), unless DIR_EXTENSIONS lists it; any other directory,
+    a Writer test's or a mixed one, gives the corpus's extensions."""
+    if d in DIR_EXTENSIONS:
+        return DIR_EXTENSIONS[d]
+    own = "." + d.rsplit("/", 1)[1]
+    if own in exts:
+        return (own,)
+    return exts
 
 
 def short_dir(d):
@@ -239,6 +356,8 @@ def short_dir(d):
     parts = d.split("/")
     if parts[0] == "sw":
         return parts[3]
+    if d in MIXED_DIRS:
+        return parts[0] + "-data"
     return parts[0]
 
 
@@ -256,6 +375,7 @@ def candidate(full, name, exts, d):
         name.endswith(exts)
         and PLAIN_NAME.match(name)
         and d + "/" + name not in REFUSED
+        and d + "/" + name not in UNSCORABLE
         and os.path.isfile(p)
         and os.path.getsize(p) <= MAX_BYTES
     )

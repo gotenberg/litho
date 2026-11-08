@@ -1,0 +1,512 @@
+[
+  {
+    "id": "sd/16-9.odp"
+  },
+  {
+    "id": "sd/4-3.odp"
+  },
+  {
+    "id": "sd/BulletsAsImage.odp"
+  },
+  {
+    "id": "sd/LineStylesOwn.odp"
+  },
+  {
+    "id": "sd/Math.fodp"
+  },
+  {
+    "id": "sd/SvgImageTest.odp"
+  },
+  {
+    "id": "sd/Tdf112594.fodp"
+  },
+  {
+    "id": "sd/Tdf62176.odp"
+  },
+  {
+    "id": "sd/author_field.odp"
+  },
+  {
+    "id": "sd/author_fixed.odp"
+  },
+  {
+    "id": "sd/autofitted-textbox-indent.odp"
+  },
+  {
+    "id": "sd/background.odp"
+  },
+  {
+    "id": "sd/bullet-off-on.odp"
+  },
+  {
+    "id": "sd/bulletCharAndFont.odp"
+  },
+  {
+    "id": "sd/closed-shapes.odp"
+  },
+  {
+    "id": "sd/document_with_linked_graphic.odp"
+  },
+  {
+    "id": "sd/dupmastermultlayouts.odp"
+  },
+  {
+    "id": "sd/embedded-pdf.odp"
+  },
+  {
+    "id": "sd/emptyChildTnLstElement.odp"
+  },
+  {
+    "id": "sd/extfile_field.odp"
+  },
+  {
+    "id": "sd/fillbitmap2.odp"
+  },
+  {
+    "id": "sd/formula.fodp"
+  },
+  {
+    "id": "sd/group_rotation.odp"
+  },
+  {
+    "id": "sd/image_transparency.odp"
+  },
+  {
+    "id": "sd/invalidAttributeValuesInSrcRect.odp"
+  },
+  {
+    "id": "sd/invalidAudio.odp"
+  },
+  {
+    "id": "sd/invalidBuAutoNumEnumValue.odp"
+  },
+  {
+    "id": "sd/invalidCxAndCyAttribute.odp"
+  },
+  {
+    "id": "sd/invalidXmlBy.odp"
+  },
+  {
+    "id": "sd/linked_ole.odp"
+  },
+  {
+    "id": "sd/loopNoPause.odp"
+  },
+  {
+    "id": "sd/loopPause10.odp"
+  },
+  {
+    "id": "sd/masterpage_style_parent.odp"
+  },
+  {
+    "id": "sd/none-to-bullet.odp"
+  },
+  {
+    "id": "sd/num-to-bullet.odp"
+  },
+  {
+    "id": "sd/numfmt.odp"
+  },
+  {
+    "id": "sd/page_transparent_background.odp"
+  },
+  {
+    "id": "sd/para-align-start-end.fodp"
+  },
+  {
+    "id": "sd/placeholder-box-textalignment.odp"
+  },
+  {
+    "id": "sd/preset-shapes-export.odp"
+  },
+  {
+    "id": "sd/repeatBitmapMode.odp"
+  },
+  {
+    "id": "sd/rotate_flip.odp"
+  },
+  {
+    "id": "sd/search-all-notes.odp"
+  },
+  {
+    "id": "sd/shadow-blur.odp"
+  },
+  {
+    "id": "sd/shape-text-glow-effect.odp"
+  },
+  {
+    "id": "sd/slide-bitmap-background.odp"
+  },
+  {
+    "id": "sd/slide-custom-background.odp"
+  },
+  {
+    "id": "sd/slide-tile-background.odp"
+  },
+  {
+    "id": "sd/slidecount_field.odp"
+  },
+  {
+    "id": "sd/slidename_field.odp"
+  },
+  {
+    "id": "sd/slidenum_field.odp"
+  },
+  {
+    "id": "sd/style-overflow-behavior-clip.fodp"
+  },
+  {
+    "id": "sd/svg-export-text-decorations.odp"
+  },
+  {
+    "id": "sd/tdf100348_Fontwork2TextWarp.odp"
+  },
+  {
+    "id": "sd/tdf100348_FontworkBitmapFill.odp"
+  },
+  {
+    "id": "sd/tdf100348_FontworkGradientGlow.odp"
+  },
+  {
+    "id": "sd/tdf100387.odp"
+  },
+  {
+    "id": "sd/tdf103567.odp"
+  },
+  {
+    "id": "sd/tdf105362.odp"
+  },
+  {
+    "id": "sd/tdf105998.odp"
+  },
+  {
+    "id": "sd/tdf106026.odp"
+  },
+  {
+    "id": "sd/tdf108925.odp"
+  },
+  {
+    "id": "sd/tdf109169_Diamond.odp"
+  },
+  {
+    "id": "sd/tdf109169_Octagon.odp"
+  },
+  {
+    "id": "sd/tdf111785.odp"
+  },
+  {
+    "id": "sd/tdf111798.odp"
+  },
+  {
+    "id": "sd/tdf112552.odp"
+  },
+  {
+    "id": "sd/tdf112557.odp"
+  },
+  {
+    "id": "sd/tdf112647.odp"
+  },
+  {
+    "id": "sd/tdf116266.odp"
+  },
+  {
+    "id": "sd/tdf118045.odp"
+  },
+  {
+    "id": "sd/tdf118768-brake.odp"
+  },
+  {
+    "id": "sd/tdf118783.odp"
+  },
+  {
+    "id": "sd/tdf118806.odp"
+  },
+  {
+    "id": "sd/tdf118825-motionpath.odp"
+  },
+  {
+    "id": "sd/tdf118835.odp"
+  },
+  {
+    "id": "sd/tdf118836.odp"
+  },
+  {
+    "id": "sd/tdf123658_SearchAfterSlideChange.odp"
+  },
+  {
+    "id": "sd/tdf124781.odp"
+  },
+  {
+    "id": "sd/tdf127267DashOnHairline.odp"
+  },
+  {
+    "id": "sd/tdf127372.odp"
+  },
+  {
+    "id": "sd/tdf127379.odp"
+  },
+  {
+    "id": "sd/tdf127901.odp"
+  },
+  {
+    "id": "sd/tdf128049.odp"
+  },
+  {
+    "id": "sd/tdf128096.odp"
+  },
+  {
+    "id": "sd/tdf128345_FullTransparentGradient.odp"
+  },
+  {
+    "id": "sd/tdf128345_GradientAxial.odp"
+  },
+  {
+    "id": "sd/tdf128345_GradientLinear.odp"
+  },
+  {
+    "id": "sd/tdf128345_GradientRadial.odp"
+  },
+  {
+    "id": "sd/tdf128985.odp"
+  },
+  {
+    "id": "sd/tdf129430.odp"
+  },
+  {
+    "id": "sd/tdf133502.odp"
+  },
+  {
+    "id": "sd/tdf134969_TransparencyOnColorGradient.odp"
+  },
+  {
+    "id": "sd/tdf143603.fodp"
+  },
+  {
+    "id": "sd/tdf146876.odp"
+  },
+  {
+    "id": "sd/tdf147919.odp"
+  },
+  {
+    "id": "sd/tdf147978_enhancedPath_viewBox.odp"
+  },
+  {
+    "id": "sd/tdf148966-withflag.odp"
+  },
+  {
+    "id": "sd/tdf148966-withoutflag.odp"
+  },
+  {
+    "id": "sd/tdf149126.odp"
+  },
+  {
+    "id": "sd/tdf149128.odp"
+  },
+  {
+    "id": "sd/tdf149311.odp"
+  },
+  {
+    "id": "sd/tdf149551_btlr.odp"
+  },
+  {
+    "id": "sd/tdf149551_tbrl90.odp"
+  },
+  {
+    "id": "sd/tdf150316.odp"
+  },
+  {
+    "id": "sd/tdf150966_hugeInset.odp"
+  },
+  {
+    "id": "sd/tdf151492.odp"
+  },
+  {
+    "id": "sd/tdf153105.odp"
+  },
+  {
+    "id": "sd/tdf153107.odp"
+  },
+  {
+    "id": "sd/tdf153161_FlushToSave.odp"
+  },
+  {
+    "id": "sd/tdf156955.odp"
+  },
+  {
+    "id": "sd/tdf157652.odp"
+  },
+  {
+    "id": "sd/tdf157795.odp"
+  },
+  {
+    "id": "sd/tdf158743.odp"
+  },
+  {
+    "id": "sd/tdf161023.fodp"
+  },
+  {
+    "id": "sd/tdf161430.odp"
+  },
+  {
+    "id": "sd/tdf163343.odp"
+  },
+  {
+    "id": "sd/tdf164775.odp"
+  },
+  {
+    "id": "sd/tdf166647_userpaint.odp"
+  },
+  {
+    "id": "sd/tdf168109.fodp"
+  },
+  {
+    "id": "sd/tdf169524.odp"
+  },
+  {
+    "id": "sd/tdf169675_3d_object_anim.odp"
+  },
+  {
+    "id": "sd/tdf169706_invalid_audio_link.odp"
+  },
+  {
+    "id": "sd/tdf169825_layout_type.odp"
+  },
+  {
+    "id": "sd/tdf169911.odp"
+  },
+  {
+    "id": "sd/tdf169941.odp"
+  },
+  {
+    "id": "sd/tdf169952_multiple_OLEs.odp"
+  },
+  {
+    "id": "sd/tdf169979.odp"
+  },
+  {
+    "id": "sd/tdf170102_layout_type.odp"
+  },
+  {
+    "id": "sd/tdf170166.odp"
+  },
+  {
+    "id": "sd/tdf48735.odp"
+  },
+  {
+    "id": "sd/tdf53970_linked.odp"
+  },
+  {
+    "id": "sd/tdf59046.odp"
+  },
+  {
+    "id": "sd/tdf66228.odp"
+  },
+  {
+    "id": "sd/tdf68759.odp"
+  },
+  {
+    "id": "sd/tdf74670.odp"
+  },
+  {
+    "id": "sd/tdf80020.odp"
+  },
+  {
+    "id": "sd/tdf80224.odp"
+  },
+  {
+    "id": "sd/tdf90626.odp"
+  },
+  {
+    "id": "sd/tdf90627.odp"
+  },
+  {
+    "id": "sd/tdf92076.odp"
+  },
+  {
+    "id": "sd/tdf93883.odp"
+  },
+  {
+    "id": "sd/tdf94122_autocolor.odp"
+  },
+  {
+    "id": "sd/tdf96206.odp"
+  },
+  {
+    "id": "sd/tdf96708.odp"
+  },
+  {
+    "id": "sd/tdf99213-target-missing.odp"
+  },
+  {
+    "id": "sd/tdf99224.odp"
+  },
+  {
+    "id": "sd/tdf99497_CircleKind.odp"
+  },
+  {
+    "id": "sd/tdf99729-legacy.odp"
+  },
+  {
+    "id": "sd/tdf99729-new.odp"
+  },
+  {
+    "id": "sd-data/AllTransitions.odp"
+  },
+  {
+    "id": "sd-data/TestEmbeddedFonts_DejaVu.odp"
+  },
+  {
+    "id": "sd-data/TextFitting.odp"
+  },
+  {
+    "id": "sd-data/TextFittingBulletEditVsView.odp"
+  },
+  {
+    "id": "sd-data/bnc822347_EmptyBullet.odp"
+  },
+  {
+    "id": "sd-data/draw-image-link.fodp"
+  },
+  {
+    "id": "sd-data/draw-object-link.fodp"
+  },
+  {
+    "id": "sd-data/empty.fodp"
+  },
+  {
+    "id": "sd-data/fdo64512.odp"
+  },
+  {
+    "id": "sd-data/fdo71075.odp"
+  },
+  {
+    "id": "sd-data/fdo71961.odp"
+  },
+  {
+    "id": "sd-data/fdo84043.odp"
+  },
+  {
+    "id": "sd-data/fit-to-size.fodp"
+  },
+  {
+    "id": "sd-data/linked_ole.fodp"
+  },
+  {
+    "id": "sd-data/n828390_4.odp"
+  },
+  {
+    "id": "sd-data/n828390_5.odp"
+  },
+  {
+    "id": "sd-data/slide_with_text.odp"
+  },
+  {
+    "id": "sd-data/tdf111522.odp"
+  },
+  {
+    "id": "sd-data/tdf126197.odp"
+  },
+  {
+    "id": "sd-data/tdf128651_CustomShapeUndo.odp"
+  }
+]
