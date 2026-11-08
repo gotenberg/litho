@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"maps"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -590,4 +591,50 @@ func (e *engine) noteSignature() float64 {
 		sig += float64(p+1) * (fp.h + 2*fp.nh)
 	}
 	return sig
+}
+
+// footSnapshot is the footnote state of the bodies placed so far, which a
+// column set's balancing passes restore before each trial: a trial's
+// column height places and defers bodies the height finally chosen does
+// not.
+type footSnapshot struct {
+	pages    []footPage
+	pending  []pendingNote
+	where    map[*box]int
+	deferred map[*box]int
+	tried    map[*box]int
+}
+
+// snapshotNotes returns the footnote state, nil without footnotes.
+func (e *engine) snapshotNotes() *footSnapshot {
+	f := e.foot
+	if f == nil {
+		return nil
+	}
+	s := &footSnapshot{
+		pages: slices.Clone(f.pages), pending: slices.Clone(f.pending),
+		where: maps.Clone(f.where), deferred: maps.Clone(f.deferred), tried: maps.Clone(f.tried),
+	}
+	for i := range s.pages {
+		s.pages[i].calls = slices.Clone(s.pages[i].calls)
+		s.pages[i].notes = slices.Clone(s.pages[i].notes)
+	}
+	return s
+}
+
+// restoreNotes puts the footnote state of s back, s taken while the layout
+// was at the flow position y, and cuts the pages again from y's.
+func (e *engine) restoreNotes(s *footSnapshot, y float64) {
+	f := e.foot
+	if s == nil || f == nil {
+		return
+	}
+	f.pages = slices.Clone(s.pages)
+	for i := range f.pages {
+		f.pages[i].calls = slices.Clone(f.pages[i].calls)
+		f.pages[i].notes = slices.Clone(f.pages[i].notes)
+	}
+	f.pending = slices.Clone(s.pending)
+	f.where, f.deferred, f.tried = maps.Clone(s.where), maps.Clone(s.deferred), maps.Clone(s.tried)
+	e.geom.recut(e.pageOf(y))
 }

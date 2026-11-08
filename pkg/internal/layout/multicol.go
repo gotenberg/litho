@@ -540,11 +540,16 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 	warnings := len(e.warnings)
 	var end float64
 	first := true
+	var notes *footSnapshot
 	pass := func(row int, h float64) []float64 {
 		if !first {
 			e.balancePasses++
 		}
 		first = false
+		if row >= 0 {
+			// A trial height leaves no body placed or waiting.
+			e.restoreNotes(notes, y)
+		}
 		e.warnings = e.warnings[:warnings]
 		ctx.balanceRow, ctx.balanceH = row, h
 		ctx.frags, ctx.rows = nil, nil
@@ -563,6 +568,7 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 		sig = now
 		cons = pass(-1, 0)
 	}
+	notes = e.snapshotNotes()
 	last := ctx.lastFrag(cons)
 	r := ctx.frags[last].row
 	row := ctx.rows[r]
