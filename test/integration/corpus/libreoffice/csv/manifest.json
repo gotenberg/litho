@@ -5,11 +5,12 @@
   "inputs": {
     "list": "documents.json",
     "list_root": "sources",
-    "fetched_by": "make libreoffice-fetch FORMATS=csv"
+    "fetched_by": "make office-fetch SOURCES=libreoffice FORMATS=csv"
   },
   "references": {
     "dir": "references",
-    "built_by": "make office-references FORMATS=csv"
+    "built_by": "make office-references SOURCES=libreoffice FORMATS=csv",
+    "source_pin": "LIBREOFFICE_CORE_COMMIT"
   },
   "goldens": {
     "diff": "goldens/diff"

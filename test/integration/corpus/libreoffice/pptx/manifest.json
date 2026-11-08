@@ -5,11 +5,12 @@
   "inputs": {
     "list": "documents.json",
     "list_root": "sources",
-    "fetched_by": "make libreoffice-fetch FORMATS=pptx"
+    "fetched_by": "make office-fetch SOURCES=libreoffice FORMATS=pptx"
   },
   "references": {
     "dir": "references",
-    "built_by": "make office-references FORMATS=pptx"
+    "built_by": "make office-references SOURCES=libreoffice FORMATS=pptx",
+    "source_pin": "LIBREOFFICE_CORE_COMMIT"
   },
   "goldens": {
     "diff": "goldens/diff"

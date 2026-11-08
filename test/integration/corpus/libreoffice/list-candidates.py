@@ -48,12 +48,12 @@ Usage: libreoffice/list-candidates.py <core_checkout> <format> <corpus_dir>
 Run with python3 -I. Standard library only.
 """
 
-import hashlib
 import json
 import os
-import re
 import sys
-import zipfile
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib"))
+import office_qualify as oq  # noqa: E402
 
 # MAX_BYTES bounds a candidate document: 150 KiB keeps the corpus a few tens
 # of megabytes and a run within minutes, and leaves out the large documents
@@ -129,210 +129,16 @@ UNSCORABLE = {
 # LICENSE is the licence fetched beside the documents.
 LICENSE = "COPYING.MPL"
 
-PLAIN_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
-
-DOCX_DENIED_DIRS = ("word/embeddings/", "word/charts/", "word/diagrams/", "word/activeX/")
-DOCX_DENIED_PICTURES = (".emf", ".wmf", ".svm", ".tif", ".tiff")
-ODT_DENIED_PICTURES = (".wmf", ".emf", ".svm")
-XLSX_DENIED_DIRS = ("xl/embeddings/", "xl/activex/")
-XLSX_DENIED_PICTURES = DOCX_DENIED_PICTURES
-PPTX_DENIED_DIRS = ("ppt/activex/",)
-PPTX_EMBEDDINGS = "ppt/embeddings/"
-# CHART_RELS holds the relationships of the chart parts, whose embedded
-# workbook is the chart's data (ECMA-376 Part 1, 21.2.2.63 externalData),
-# which no viewer draws.
-CHART_RELS = "ppt/charts/_rels/"
-# EMBEDDING_TARGET finds a relationship that targets an embedded part.
-EMBEDDING_TARGET = re.compile(rb'Target="[^"]*embeddings/', re.IGNORECASE)
-# MEDIA_EXTENSIONS are the audio and video files a presentation plays, which
-# a PDF of its slides cannot hold.
-MEDIA_EXTENSIONS = (".mp4", ".mov", ".avi", ".wmv", ".mp3", ".wav", ".m4a")
-CHART_MEDIA_TYPE = "application/vnd.oasis.opendocument.chart"
-
-# FILE_ENTRY and ATTR read the manifest's file entries, whose attributes come
-# in any order.
-FILE_ENTRY = re.compile(rb"<manifest:file-entry\b[^>]*>")
-ATTR = re.compile(rb'manifest:(full-path|media-type)="([^"]*)"')
-
-# EMBEDDED_TYPE finds the media type of each document a flat ODF file
-# embeds, an office:document inside a draw:object; the root element carries
-# the spreadsheet's own type and is skipped.
-EMBEDDED_TYPE = re.compile(rb'<office:document\b[^>]*office:mimetype="([^"]*)"')
-
-# FLAT_MEDIA finds a picture of a denied format or a played medium a flat
-# presentation links or embeds: a draw:plugin, or an xlink:href or
-# draw:mime-type naming one.
-FLAT_MEDIA = re.compile(
-    rb'<draw:plugin\b|xlink:href="[^"]*\.(?:wmf|emf|svm|mp4|mov|avi|wmv|mp3|wav|m4a)"'
-    rb'|draw:mime-type="(?:audio|video)/',
-    re.IGNORECASE,
-)
-
-# MAX_CONTENT_BYTES bounds the content.xml read to look for the text body. A
-# document of at most MAX_BYTES compressed rarely inflates past it; one that
-# does is left out rather than read whole.
-MAX_CONTENT_BYTES = 64 << 20
-
-
-def docx_qualifies(path):
-    try:
-        with zipfile.ZipFile(path) as z:
-            names = z.namelist()
-    except (zipfile.BadZipFile, OSError):
-        return False
-    if "word/document.xml" not in names:
-        return False
-    for n in names:
-        low = n.lower()
-        if low.startswith(tuple(d.lower() for d in DOCX_DENIED_DIRS)):
-            return False
-        if low.endswith("vbaproject.bin") or low.endswith(DOCX_DENIED_PICTURES):
-            return False
-    return True
-
-
-def odt_qualifies(path):
-    try:
-        with zipfile.ZipFile(path) as z:
-            names = z.namelist()
-            for n in names:
-                if n.startswith("Object") or n.startswith("Basic/"):
-                    return False
-                if n.lower().endswith(ODT_DENIED_PICTURES):
-                    return False
-            if "content.xml" not in names:
-                return False
-            info = z.getinfo("content.xml")
-            if info.file_size > MAX_CONTENT_BYTES:
-                return False
-            content = z.read("content.xml")
-    except (zipfile.BadZipFile, OSError, RuntimeError, NotImplementedError):
-        return False
-    return b"<office:text" in content
-
-
-def xlsx_qualifies(path):
-    try:
-        with zipfile.ZipFile(path) as z:
-            names = z.namelist()
-    except (zipfile.BadZipFile, OSError):
-        return False
-    if "xl/workbook.xml" not in names:
-        return False
-    for n in names:
-        low = n.lower()
-        if low.startswith(XLSX_DENIED_DIRS) or low == "xl/vbaproject.bin":
-            return False
-        if low.endswith(XLSX_DENIED_PICTURES):
-            return False
-    return True
-
-
-def ods_qualifies(path):
-    if path.endswith(".fods"):
-        return flat_qualifies(path, b"<office:spreadsheet")
-    return package_qualifies(path, b"<office:spreadsheet", ODT_DENIED_PICTURES)
-
-
-def odp_qualifies(path):
-    if path.endswith(".fodp"):
-        return flat_qualifies(path, b"<office:presentation") and not FLAT_MEDIA.search(flat_content(path))
-    return package_qualifies(path, b"<office:presentation", ODT_DENIED_PICTURES + MEDIA_EXTENSIONS)
-
-
-def package_qualifies(path, body, denied):
-    """Report whether the OpenDocument package at path holds body in its
-    content.xml, no macros, no file of a denied extension, and only charts
-    as embedded objects."""
-    try:
-        with zipfile.ZipFile(path) as z:
-            names = z.namelist()
-            objects = set()
-            for n in names:
-                if n.startswith("Basic/") or n.lower().endswith(denied):
-                    return False
-                top, sep, _ = n.partition("/")
-                # ObjectReplacements/ holds the pictures LibreOffice shows
-                # in place of the objects, not objects of its own.
-                if sep and top.startswith("Object") and top != "ObjectReplacements":
-                    objects.add(top + "/")
-            if "content.xml" not in names:
-                return False
-            if z.getinfo("content.xml").file_size > MAX_CONTENT_BYTES:
-                return False
-            content = z.read("content.xml")
-            types = {}
-            if objects:
-                if "META-INF/manifest.xml" not in names:
-                    return False
-                for entry in FILE_ENTRY.findall(z.read("META-INF/manifest.xml")):
-                    attrs = dict(ATTR.findall(entry))
-                    types[attrs.get(b"full-path", b"").decode("utf-8", "replace")] = attrs.get(b"media-type", b"")
-    except (zipfile.BadZipFile, OSError, RuntimeError, NotImplementedError):
-        return False
-    if any(types.get(o) != CHART_MEDIA_TYPE.encode() for o in objects):
-        return False
-    return body in content
-
-
-def flat_content(path):
-    # The size cap holds a flat file to MAX_BYTES, read whole.
-    with open(path, "rb") as f:
-        return f.read()
-
-
-def flat_qualifies(path, body):
-    """Report whether the flat OpenDocument file at path holds body and
-    embeds charts alone."""
-    content = flat_content(path)
-    if body not in content:
-        return False
-    embedded = EMBEDDED_TYPE.findall(content)[1:]
-    return all(t == CHART_MEDIA_TYPE.encode() for t in embedded)
-
-
-def csv_qualifies(_path):
-    return True
-
-
-def pptx_qualifies(path):
-    try:
-        with zipfile.ZipFile(path) as z:
-            names = z.namelist()
-            if "ppt/presentation.xml" not in names:
-                return False
-            embedded = False
-            for n in names:
-                low = n.lower()
-                if low.startswith(PPTX_DENIED_DIRS) or low == "ppt/vbaproject.bin":
-                    return False
-                if low.endswith(XLSX_DENIED_PICTURES) or low.endswith(MEDIA_EXTENSIONS):
-                    return False
-                embedded = embedded or low.startswith(PPTX_EMBEDDINGS)
-            if not embedded:
-                return True
-            for n in names:
-                if not n.endswith(".rels") or n.startswith(CHART_RELS):
-                    continue
-                if z.getinfo(n).file_size > MAX_CONTENT_BYTES:
-                    return False
-                if EMBEDDING_TARGET.search(z.read(n)):
-                    return False
-    except (zipfile.BadZipFile, OSError, RuntimeError, NotImplementedError):
-        return False
-    return True
-
-
 # QUALIFIES maps a corpus to its qualifying test and the extensions it
 # reads.
 QUALIFIES = {
-    "docx": (docx_qualifies, (".docx",)),
-    "odt": (odt_qualifies, (".odt",)),
-    "xlsx": (xlsx_qualifies, (".xlsx",)),
-    "ods": (ods_qualifies, (".ods", ".fods")),
-    "csv": (csv_qualifies, (".csv",)),
-    "pptx": (pptx_qualifies, (".pptx",)),
-    "odp": (odp_qualifies, (".odp", ".fodp")),
+    "docx": (oq.docx_qualifies, (".docx",)),
+    "odt": (oq.odt_qualifies, (".odt",)),
+    "xlsx": (oq.xlsx_qualifies, (".xlsx",)),
+    "ods": (oq.ods_qualifies, (".ods", ".fods")),
+    "csv": (oq.csv_qualifies, (".csv",)),
+    "pptx": (oq.pptx_qualifies, (".pptx",)),
+    "odp": (oq.odp_qualifies, (".odp", ".fodp")),
 }
 
 
@@ -361,19 +167,11 @@ def short_dir(d):
     return parts[0]
 
 
-def sha256(path):
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 16), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
 def candidate(full, name, exts, d):
     p = os.path.join(full, name)
     return (
         name.endswith(exts)
-        and PLAIN_NAME.match(name)
+        and oq.PLAIN_NAME.match(name)
         and d + "/" + name not in REFUSED
         and d + "/" + name not in UNSCORABLE
         and os.path.isfile(p)
@@ -408,9 +206,9 @@ def main():
         short = short_dir(d)
         for name in kept:
             documents.append({"id": short + "/" + name})
-            hashes.append((d + "/" + name, sha256(os.path.join(full, name))))
+            hashes.append((d + "/" + name, oq.sha256(os.path.join(full, name))))
         counts.append((d, len(kept), cap, qualifying(full, names, exts, qualifies, d)))
-    hashes.append((LICENSE, sha256(os.path.join(core, LICENSE))))
+    hashes.append((LICENSE, oq.sha256(os.path.join(core, LICENSE))))
     with open(os.path.join(out, "documents.json"), "w", encoding="utf-8") as f:
         json.dump(documents, f, indent=2)
         f.write("\n")

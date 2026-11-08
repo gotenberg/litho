@@ -1,0 +1,230 @@
+[
+  {
+    "id": "slideshow/49386-null_dates.pptx",
+    "path": "test-data/slideshow/49386-null_dates.pptx"
+  },
+  {
+    "id": "slideshow/51187.pptx",
+    "path": "test-data/slideshow/51187.pptx"
+  },
+  {
+    "id": "slideshow/54542_cropped_bitmap.pptx",
+    "path": "test-data/slideshow/54542_cropped_bitmap.pptx"
+  },
+  {
+    "id": "slideshow/56812.pptx",
+    "path": "test-data/slideshow/56812.pptx"
+  },
+  {
+    "id": "slideshow/60042.pptx",
+    "path": "test-data/slideshow/60042.pptx"
+  },
+  {
+    "id": "slideshow/61515.pptx",
+    "path": "test-data/slideshow/61515.pptx"
+  },
+  {
+    "id": "slideshow/63200.pptx",
+    "path": "test-data/slideshow/63200.pptx"
+  },
+  {
+    "id": "slideshow/OverlappingRelations.pptx",
+    "path": "test-data/slideshow/OverlappingRelations.pptx"
+  },
+  {
+    "id": "slideshow/SampleShow.pptx",
+    "path": "test-data/slideshow/SampleShow.pptx"
+  },
+  {
+    "id": "slideshow/SmartArt.pptx",
+    "path": "test-data/slideshow/SmartArt.pptx"
+  },
+  {
+    "id": "slideshow/WithMaster.pptx",
+    "path": "test-data/slideshow/WithMaster.pptx"
+  },
+  {
+    "id": "slideshow/backgrounds.pptx",
+    "path": "test-data/slideshow/backgrounds.pptx"
+  },
+  {
+    "id": "slideshow/bar-chart.pptx",
+    "path": "test-data/slideshow/bar-chart.pptx"
+  },
+  {
+    "id": "slideshow/bug58144-headers-footers-2007.pptx",
+    "path": "test-data/slideshow/bug58144-headers-footers-2007.pptx"
+  },
+  {
+    "id": "slideshow/bug60499.pptx",
+    "path": "test-data/slideshow/bug60499.pptx"
+  },
+  {
+    "id": "slideshow/bug60715.pptx",
+    "path": "test-data/slideshow/bug60715.pptx"
+  },
+  {
+    "id": "slideshow/bug60993.pptx",
+    "path": "test-data/slideshow/bug60993.pptx"
+  },
+  {
+    "id": "slideshow/bug62736.pptx",
+    "path": "test-data/slideshow/bug62736.pptx"
+  },
+  {
+    "id": "slideshow/bug63290.pptx",
+    "path": "test-data/slideshow/bug63290.pptx"
+  },
+  {
+    "id": "slideshow/bug65523.pptx",
+    "path": "test-data/slideshow/bug65523.pptx"
+  },
+  {
+    "id": "slideshow/bug65673.pptx",
+    "path": "test-data/slideshow/bug65673.pptx"
+  },
+  {
+    "id": "slideshow/bug68703.pptx",
+    "path": "test-data/slideshow/bug68703.pptx"
+  },
+  {
+    "id": "slideshow/chart-slide-bg.pptx",
+    "path": "test-data/slideshow/chart-slide-bg.pptx"
+  },
+  {
+    "id": "slideshow/chart-texture-bg.pptx",
+    "path": "test-data/slideshow/chart-texture-bg.pptx"
+  },
+  {
+    "id": "slideshow/copy-slide-demo.pptx",
+    "path": "test-data/slideshow/copy-slide-demo.pptx"
+  },
+  {
+    "id": "slideshow/crash-57308ca363f5b71763c489d1b432aff009d4bc4f.pptx",
+    "path": "test-data/slideshow/crash-57308ca363f5b71763c489d1b432aff009d4bc4f.pptx"
+  },
+  {
+    "id": "slideshow/crop-to-0.pptx",
+    "path": "test-data/slideshow/crop-to-0.pptx"
+  },
+  {
+    "id": "slideshow/highlight-test-case.pptx",
+    "path": "test-data/slideshow/highlight-test-case.pptx"
+  },
+  {
+    "id": "slideshow/layouts.pptx",
+    "path": "test-data/slideshow/layouts.pptx"
+  },
+  {
+    "id": "slideshow/line-chart.pptx",
+    "path": "test-data/slideshow/line-chart.pptx"
+  },
+  {
+    "id": "slideshow/minimal-gradient-fill-issue.pptx",
+    "path": "test-data/slideshow/minimal-gradient-fill-issue.pptx"
+  },
+  {
+    "id": "slideshow/missing-blip-fill.pptx",
+    "path": "test-data/slideshow/missing-blip-fill.pptx"
+  },
+  {
+    "id": "slideshow/picture-transparency.pptx",
+    "path": "test-data/slideshow/picture-transparency.pptx"
+  },
+  {
+    "id": "slideshow/pie-chart.pptx",
+    "path": "test-data/slideshow/pie-chart.pptx"
+  },
+  {
+    "id": "slideshow/pptx2svg.pptx",
+    "path": "test-data/slideshow/pptx2svg.pptx"
+  },
+  {
+    "id": "slideshow/prProps.pptx",
+    "path": "test-data/slideshow/prProps.pptx"
+  },
+  {
+    "id": "slideshow/present1.pptx",
+    "path": "test-data/slideshow/present1.pptx"
+  },
+  {
+    "id": "slideshow/radar-chart.pptx",
+    "path": "test-data/slideshow/radar-chart.pptx"
+  },
+  {
+    "id": "slideshow/rain.pptx",
+    "path": "test-data/slideshow/rain.pptx"
+  },
+  {
+    "id": "slideshow/sample.pptx",
+    "path": "test-data/slideshow/sample.pptx"
+  },
+  {
+    "id": "slideshow/scatter-chart.pptx",
+    "path": "test-data/slideshow/scatter-chart.pptx"
+  },
+  {
+    "id": "slideshow/shapes.pptx",
+    "path": "test-data/slideshow/shapes.pptx"
+  },
+  {
+    "id": "slideshow/smartart-rotated-text.pptx",
+    "path": "test-data/slideshow/smartart-rotated-text.pptx"
+  },
+  {
+    "id": "slideshow/smartart-simple.pptx",
+    "path": "test-data/slideshow/smartart-simple.pptx"
+  },
+  {
+    "id": "slideshow/table-with-different-font-colors.pptx",
+    "path": "test-data/slideshow/table-with-different-font-colors.pptx"
+  },
+  {
+    "id": "slideshow/table-with-no-theme.pptx",
+    "path": "test-data/slideshow/table-with-no-theme.pptx"
+  },
+  {
+    "id": "slideshow/table-with-theme.pptx",
+    "path": "test-data/slideshow/table-with-theme.pptx"
+  },
+  {
+    "id": "slideshow/table_test.pptx",
+    "path": "test-data/slideshow/table_test.pptx"
+  },
+  {
+    "id": "slideshow/table_test2.pptx",
+    "path": "test-data/slideshow/table_test2.pptx"
+  },
+  {
+    "id": "slideshow/templatePPTWithOnlyOneText.pptx",
+    "path": "test-data/slideshow/templatePPTWithOnlyOneText.pptx"
+  },
+  {
+    "id": "slideshow/testPPT.pptx",
+    "path": "test-data/slideshow/testPPT.pptx"
+  },
+  {
+    "id": "slideshow/text-highlight.pptx",
+    "path": "test-data/slideshow/text-highlight.pptx"
+  },
+  {
+    "id": "slideshow/with_japanese.pptx",
+    "path": "test-data/slideshow/with_japanese.pptx"
+  },
+  {
+    "id": "xmldsign/PPT2016withComment.pptx",
+    "path": "test-data/xmldsign/PPT2016withComment.pptx"
+  },
+  {
+    "id": "xmldsign/hello-world-signed.pptx",
+    "path": "test-data/xmldsign/hello-world-signed.pptx"
+  },
+  {
+    "id": "xmldsign/hello-world-unsigned.pptx",
+    "path": "test-data/xmldsign/hello-world-unsigned.pptx"
+  },
+  {
+    "id": "xmldsign/ms-office-2010-signed.pptx",
+    "path": "test-data/xmldsign/ms-office-2010-signed.pptx"
+  }
+]

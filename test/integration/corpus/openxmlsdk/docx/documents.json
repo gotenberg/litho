@@ -1,0 +1,1002 @@
+[
+  {
+    "id": "O14ISOStrict/Graphics/AllShadows-O12-Word-OartTextEffects.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/AllShadows-O12-Word-OartTextEffects.docx"
+  },
+  {
+    "id": "O14ISOStrict/Graphics/AlphaMod_-_Parent_Cont_-_Enum_tree.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/AlphaMod - Parent Cont - Enum tree.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/AbbreviatedCaseNumber-Abbreviated_Case_Number.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/AbbreviatedCaseNumber-Abbreviated Case Number.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/BookAuthor-Book_Author.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/BookAuthor-Book Author.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/City-City.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/City-City.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/CommentRangeStart.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/CommentRangeStart.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/argSz-Argument_Size_Sub-Superscript_Function_Superscript_-val--2.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/argSz-Argument Size (Sub-Superscript Function Superscript)-val--2.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/bdr-Text_Border-themeColor-text1.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/bdr-Text Border-themeColor-text1.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/bottom-Bottom_Border-themeColor-dark1.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/bottom-Bottom Border-themeColor-dark1.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/bottom-Bottom_Border-val-holly.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/bottom-Bottom Border-val-holly.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/bottom-Bottom_Border-val-zigZagStitch.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/bottom-Bottom Border-val-zigZagStitch.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/bottom-Table_Cell_Bottom_Border-val-double.docx.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/bottom-Table Cell Bottom Border-val-double.docx.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/clrSchemeMapping-theme_color-w-bg2-background2-light1.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/clrSchemeMapping-theme color-w-bg2-background2-light1.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/customXmlDelRangeStart-Custom_XML_Markup_Deletion_Start-val-author-special-chars.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/customXmlDelRangeStart-Custom XML Markup Deletion Start-val-author-special-chars.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/document_-_HexColor_-_RGB_-_Document_Background.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/document - HexColor - RGB - Document Background.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/eastAsianLayout-East_Asian_Typography_Settings-vert-1.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/eastAsianLayout-East Asian Typography Settings-vert-1.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/fldSimple-Field_Definitions-GreetingLine.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/fldSimple-Field Definitions-GreetingLine.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/fldSimple-FormulasAndExpressions-Bookmark-GeneralFormat.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/fldSimple-FormulasAndExpressions-Bookmark-GeneralFormat.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/ftr_-_Footer_-_bookmarkStart_-_Bookmark_Start.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/ftr - Footer - bookmarkStart - Bookmark Start.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/highlight-Text_Highlighting-val-blue.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/highlight-Text Highlighting-val-blue.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/insideH-Table_Inside_Horizontal_Edges_Border-val-thinThickThinSmallGap.docx.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/insideH-Table Inside Horizontal Edges Border-val-thinThickThinSmallGap.docx.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/instrText-Field_Definitions-EQ-Array-AlignLeft.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/instrText-Field Definitions-EQ-Array-AlignLeft.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/instrText-Field_Definitions-NextIf.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/instrText-Field Definitions-NextIf.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/isLgl-Display_All_Levels_Using_Arabic_Numerals.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/isLgl-Display All Levels Using Arabic Numerals.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/lang-Languages_for_Run_Content-val-moh-CA.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/lang-Languages for Run Content-val-moh-CA.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/left-Left_Border-sz-24.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/left-Left Border-sz-24.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/left-Left_Border-val-gems.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/left-Left Border-val-gems.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/left-Left_Border-val-weavingAngles.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/left-Left Border-val-weavingAngles.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/left-Table_Left_Border-themeColor-background1.docx.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/left-Table Left Border-themeColor-background1.docx.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/lid-Merge_Field_Name_Language_ID-val-es-CR.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/lid-Merge Field Name Language ID-val-es-CR.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/lid-Merge_Field_Name_Language_ID-val-th-TH.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/lid-Merge Field Name Language ID-val-th-TH.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/mailSubject-Merged_E-mail_or_Fax_Subject_Line-val-test.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/mailSubject-Merged E-mail or Fax Subject Line-val-test.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/name-Data_Source_Name_for_Column.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/name-Data Source Name for Column.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/numFmt-Endnote_Numbering_Format-val-40-none.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/numFmt-Endnote Numbering Format-val-40-none.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/numFmt-Numbering_Format-val-decimalEnclosedFullstop.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/numFmt-Numbering Format-val-decimalEnclosedFullstop.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/paperSrc-Paper_Source_Information.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/paperSrc-Paper Source Information.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/pgNumType-Page_Numbering_Settings-fmt-thaiNumbers.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/pgNumType-Page Numbering Settings-fmt-thaiNumbers.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/proofErr-Proofing_Error_Anchor_-_gramStart_and_gramEnd.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/proofErr-Proofing Error Anchor - gramStart and gramEnd.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/rFonts-Run_Fonts-hAnsiTheme-majorHAnsi.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/rFonts-Run Fonts-hAnsiTheme-majorHAnsi.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/rPr-bdr-Text_Border-val_dotDash_color_auto.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/rPr-bdr-Text Border-val=dotDash color=auto.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/rSp-Row_Spacing_Equation-Array_Function_-val-1080.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/rSp-Row Spacing (Equation-Array Function)-val-1080.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/right-Right_Border-val-cakeSlice.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/right-Right Border-val-cakeSlice.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/right-Right_Border-val-peopleHats.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/right-Right Border-val-peopleHats.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/right-Right_Paragraph_Border-val-threeDEmboss.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/right-Right Paragraph Border-val-threeDEmboss.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/sectPr-Previous_Section_Properties-rsidSelect-004B4C75.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/sectPr-Previous Section Properties-rsidSelect-004B4C75.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/shd-Run_Shading-val-pct15.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/shd-Run Shading-val-pct15.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/shd-Table_Shading-val-pct5.docx.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/shd-Table Shading-val-pct5.docx.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/spacing-Spacing_Between_Lines_and_AboveBelow_Paragraph-line-1.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/spacing-Spacing Between Lines and AboveBelow Paragraph-line-1.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/summaryLength-Percentage_of_Document_to_Use_When_Generating_Summary-val-100.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/summaryLength-Percentage of Document to Use When Generating Summary-val-100.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/tblLayout-Table_Layout.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/tblLayout-Table Layout.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/textDirection-Paragraph_Text_Flow_Direction-val-tbRl.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/textDirection-Paragraph Text Flow Direction-val-tbRl.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/top-Table_Top_Border-sz-255.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/top-Table Top Border-sz-255.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/top-Top_Border-themeColor-accent4.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/top-Top Border-themeColor-accent4.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/top-Top_Border-val-handmade2.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/top-Top Border-val-handmade2.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/top-Top_Border-val-whiteFlowers.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/top-Top Border-val-whiteFlowers.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/truncatefontheightslikewp6-Truncate_Font_Height-val.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/truncatefontheightslikewp6-Truncate Font Height-val.docx"
+  },
+  {
+    "id": "O14ISOStrict/Word/w-Expanded_Compressed_Text-val-33.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Word/w-Expanded&Compressed Text-val-33.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment001.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment001.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment002.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment002.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment003.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment003.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment004.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment004.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment005.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment005.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment006.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment006.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment007.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment007.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment008.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment008.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment009.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment009.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment010.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment010.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment011.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment011.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment012.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment012.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment013.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment013.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment014.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment014.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment015.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment015.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment016.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment016.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment017.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment017.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment018.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment018.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment019.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment019.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment020.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment020.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment021.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment021.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment023.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment023.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment024.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment024.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment025.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment025.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment026.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment026.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment028.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment028.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment029.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment029.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment030.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment030.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment031.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment031.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment033.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment033.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment034.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment034.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment035.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment035.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment036.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment036.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment037.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment037.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment038.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment038.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment039.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment039.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment040.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment040.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment041.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment041.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment042.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment042.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment043.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment043.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment044.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment044.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment045.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment045.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment046.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment046.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment047.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment047.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment048.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment048.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment051.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment051.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment052.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment052.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment053.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment053.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment054.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment054.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment055.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment055.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment056.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment056.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment057.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment057.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment058.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment058.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment059.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment059.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment060.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment060.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment062.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment062.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment064.dotx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment064.dotx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment066.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment066.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment067.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment067.docx"
+  },
+  {
+    "id": "O15Conformance/WD/CommentExTest/Invalid_Word15Comments.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O15Conformance/WD/CommentExTest/Invalid_Word15Comments.docx"
+  },
+  {
+    "id": "v2FxTestFiles/ForTestCase/Bug201775_testfile.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/ForTestCase/Bug201775_testfile.docx"
+  },
+  {
+    "id": "v2FxTestFiles/ForTestCase/Bug242602_SDT_-_unknown.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/ForTestCase/Bug242602_SDT - unknown.docx"
+  },
+  {
+    "id": "v2FxTestFiles/ForTestCase/header.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/ForTestCase/header.docx"
+  },
+  {
+    "id": "v2FxTestFiles/bugregression/680607.HelloO14.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/bugregression/680607.HelloO14.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/Empty/empty.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Empty/empty.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/MiscNode/WithMiscNodes.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/MiscNode/WithMiscNodes.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/Normalize/bookmark_between_two_paragraphs.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Normalize/bookmark between two paragraphs.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/Normalize/comment.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Normalize/comment.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/Normalize/conflicting_IDs.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Normalize/conflicting IDs.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/Normalize/header_footer.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Normalize/header&footer.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/Normalize/lastRenderedPageBreak_run.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Normalize/lastRenderedPageBreak+run.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/Normalize/miss_table-row_id.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Normalize/miss table-row_id.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/Normalize/normalized.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Normalize/normalized.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/Normalize/p_in_sdt.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Normalize/p in sdt.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/Normalize/partially_miss_table_row_ID.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Normalize/partially miss table row ID.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/Normalize/pict_pict.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Normalize/pict+pict.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/Normalize/sdsd.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Normalize/sdsd.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/Normalize/sym_sym.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Normalize/sym+sym.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/Normalize/t_t.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Normalize/t+t.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/Normalize/text_sym.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Normalize/text+sym.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/O12_templates/BingoSheet_TP10220238.dotx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/O12 templates/BingoSheet_TP10220238.dotx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/O12_templates/EquityFax_TP10192740.dotx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/O12 templates/EquityFax_TP10192740.dotx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/O12_templates/EquityLetter_TP10199651.dotx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/O12 templates/EquityLetter_TP10199651.dotx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/O12_templates/Framework_for_KPIs_TP10203699.dotx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/O12 templates/Framework_for_KPIs_TP10203699.dotx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/O12_templates/MedianFax_TP10192743.dotx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/O12 templates/MedianFax_TP10192743.dotx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/O12_templates/MedianLetter_TP10192744.dotx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/O12 templates/MedianLetter_TP10192744.dotx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/O12_templates/OrielFax_TP10192747.dotx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/O12 templates/OrielFax_TP10192747.dotx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/O12_templates/OrielLetter_TP10192748.dotx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/O12 templates/OrielLetter_TP10192748.dotx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/O12_templates/OriginFax_TP10192751.dotx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/O12 templates/OriginFax_TP10192751.dotx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/O12_templates/OriginLetter_TP10192752.dotx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/O12 templates/OriginLetter_TP10192752.dotx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/O12_templates/RoomForRentFlyer_TP10220233.dotx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/O12 templates/RoomForRentFlyer_TP10220233.dotx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/O12_templates/UrbanFax_TP10192755.dotx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/O12 templates/UrbanFax_TP10192755.dotx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/O12_templates/UrbanLetter_TP10192756.dotx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/O12 templates/UrbanLetter_TP10192756.dotx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/ParaPr/outlineLvl.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/ParaPr/outlineLvl.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/ParaPr/parabidi.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/ParaPr/parabidi.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/ParaPr/paraind.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/ParaPr/paraind.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/ParaPr/parashading.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/ParaPr/parashading.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/ParaPr/paraspace.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/ParaPr/paraspace.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/SDT/SDT.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/SDT/SDT.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/SDT/Sdt/sdtBlock.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/SDT/Sdt/sdtBlock.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/SDT/Sdt/sdtCell.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/SDT/Sdt/sdtCell.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/SDT/Sdt/sdtContent.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/SDT/Sdt/sdtContent.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/SDT/Sdt/sdtDataBinding.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/SDT/Sdt/sdtDataBinding.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/SDT/Sdt/sdtRow.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/SDT/Sdt/sdtRow.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/SDT/Sdt/sdtRun.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/SDT/Sdt/sdtRun.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/SDT/sdtContent.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/SDT/sdtContent.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/TextRun/test.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/TextRun/test.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/Toc/TOC2.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/Toc/TOC2.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/bookmark/bookmark-p12.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/bookmark/bookmark-p12.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/bookmark/bookmark-pic.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/bookmark/bookmark-pic.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/bookmark/bookmark-whole_text.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/bookmark/bookmark-whole text.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/bookmark/bookmark.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/bookmark/bookmark.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/bullet/bullet-complex.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/bullet/bullet-complex.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/bullet/bullet-picture.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/bullet/bullet-picture.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/bullet/bullet-simple.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/bullet/bullet-simple.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/bullet/bullet-simple1.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/bullet/bullet-simple1.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/bullet/bullet-symbol.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/bullet/bullet-symbol.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/columns/columns1.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/columns/columns1.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/columns/columns2.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/columns/columns2.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/comment/1_Comment.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/comment/1 Comment.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/comment/2_Comments.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/comment/2 Comments.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/comment/Comment_for_comment.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/comment/Comment for comment.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/comment/Comments_with_paragraph.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/comment/Comments with paragraph.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/comment/Comments_with_table.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/comment/Comments with table.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/comment/comments_by_another_person.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/comment/comments by another person.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/complexDocx/complex_table3.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/complexDocx/complex table3.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/complexDocx/complex_tables.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/complexDocx/complex tables.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/complexDocx/complexity_-_part_2.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/complexDocx/complexity - part 2.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/content_control/SDT.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/content control/SDT.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/content_control/SDT_-_Copy.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/content control/SDT - Copy.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/content_control/sdtcontents.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/content control/sdtcontents.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/cover_page/coverpage1.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/cover page/coverpage1.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/cover_page/coverpage2.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/cover page/coverpage2.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/cover_page/coverpage3.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/cover page/coverpage3.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/cover_page/covwepage4.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/cover page/covwepage4.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/equation/equation.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/equation/equation.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/field/Field-Create_date.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/field/Field-Create date.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/field/Field-more_field.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/field/Field-more field.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/field/field.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/field/field.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/field/simple-field.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/field/simple-field.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/footer_header/40101_2004.Rules_and_Regulations_of_the_Board_of_Regents.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footer & header/40101 2004.Rules and Regulations of the Board of Regents.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/footer_header/Business_Plan_for_a_Startup_Business_July.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footer & header/Business Plan for a Startup Business_July.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/footer_header/Outreach_Toolkit_2007_After_the_Flood_Fact_Sheet_1_.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footer & header/Outreach_Toolkit_2007_After_the_Flood_Fact_Sheet[1].docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/footer_header/footer_header-fisrt.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footer & header/footer header-fisrt.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/footer_header/footer_header-odd.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footer & header/footer header-odd.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/footer_header/footer_header.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footer & header/footer header.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/footer_header/footer_header_-_plaintext.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footer & header/footer header - plaintext.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/footer_header/footer_header_empty.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footer & header/footer header empty.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/footer_header/footer_header_even.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footer & header/footer header even.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/footer_header/no_footer_header.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footer & header/no footer header.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/footnote_endnote/endnote.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footnote & endnote/endnote.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/footnote_endnote/endnote_at_end_of_section_and_restart_for_each_section.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footnote & endnote/endnote at end of section and restart for each section.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/footnote_endnote/footnote.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footnote & endnote/footnote.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/footnote_endnote/footnote_at_bottom_of_paget_and_resart_for_each_page.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footnote & endnote/footnote at bottom of paget and resart for each page.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/footnote_endnote/footnote_below_text_and_resart_for_each_section.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footnote & endnote/footnote below text and resart for each section.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/footnote_endnote/ftEdNote.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/footnote & endnote/ftEdNote.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/format/format-font2.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/format/format-font2.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/format/format-paragrapsimple.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/format/format-paragrapsimple.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/hyperlink/632399205748969391_Moon_Tregillus.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/hyperlink/632399205748969391 Moon Tregillus.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/hyperlink/Hyperlink_-_external.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/hyperlink/Hyperlink - external.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/hyperlink/Hyperlink_-_internal.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/hyperlink/Hyperlink - internal.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/hyperlink/Hyperlink_-_relative.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/hyperlink/Hyperlink - relative.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/hyperlink/doclocation.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/hyperlink/doclocation.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/hyperlink/hyperlink-complex.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/hyperlink/hyperlink-complex.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/hyperlink/hyperlink-in_shapes.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/hyperlink/hyperlink-in shapes.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/hyperlink/hyperlink-in_table.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/hyperlink/hyperlink-in table.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/hyperlink/hyperlink.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/hyperlink/hyperlink.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/hyperlink/simple-hyper.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/hyperlink/simple-hyper.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/hyperlink/test10.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/hyperlink/test10.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/mixed_features/MSDN_-_EULA.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/mixed features/MSDN - EULA.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/mixed_features/webappdis.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/mixed features/webappdis.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/mixed_languages/Unit1Translation.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/mixed languages/Unit1Translation.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/numbering/numbering-list.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/numbering/numbering-list.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/numbering/numbering-newformat.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/numbering/numbering-newformat.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/numbering/numbering-simple.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/numbering/numbering-simple.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/numbering/numbering-startValue.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/numbering/numbering-startValue.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/page_layout_big_file/A4.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/page layout(big file)/A4.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/page_layout_big_file/A5.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/page layout(big file)/A5.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/page_layout_big_file/Indent_Spacing.Template.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/page layout(big file)/Indent_Spacing.Template.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/page_layout_big_file/Indent_Spacing.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/page layout(big file)/Indent_Spacing.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/page_layout_big_file/column2.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/page layout(big file)/column2.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/page_layout_big_file/landScape.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/page layout(big file)/landScape.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/page_layout_big_file/margin.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/page layout(big file)/margin.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/page_layout_big_file/pageBorders.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/page layout(big file)/pageBorders.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/pagelayout_simple/Columns-Right.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/pagelayout simple/Columns-Right.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/pagelayout_simple/Line_numbers-Continuous.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/pagelayout simple/Line numbers-Continuous.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/pagelayout_simple/Orientation-landscape.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/pagelayout simple/Orientation-landscape.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/pagelayout_simple/PageBorder-3D.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/pagelayout simple/PageBorder-3D.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/pagelayout_simple/PageColor-lightgreen.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/pagelayout simple/PageColor-lightgreen.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/pagelayout_simple/Size-Tabloid.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/pagelayout simple/Size-Tabloid.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/pagelayout_simple/Themes-verve.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/pagelayout simple/Themes-verve.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/pagelayout_simple/margin-narrow.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/pagelayout simple/margin-narrow.docx"
+  },
+  {
+    "id": "v2FxTestFiles/wordprocessing/page_layout/pagelayout_with_break_in_the_end/Columns-Right.docx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/page layout/pagelayout with break in the end/Columns-Right.docx"
+  }
+]

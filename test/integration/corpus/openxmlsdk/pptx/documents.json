@@ -1,0 +1,730 @@
+[
+  {
+    "id": "O14ISOStrict/Graphics/2D_Area-O12-PPT-Charts.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/2D Area-O12-PPT-Charts.pptx"
+  },
+  {
+    "id": "O14ISOStrict/Graphics/3D_Pie-O12-PPT-Charts.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/3D Pie-O12-PPT-Charts.pptx"
+  },
+  {
+    "id": "O14ISOStrict/Graphics/5.9.3.7_unfinished_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/5.9.3.7(unfinished).pptx"
+  },
+  {
+    "id": "O14ISOStrict/Graphics/Accent1sysClr.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/Accent1sysClr.pptx"
+  },
+  {
+    "id": "O14ISOStrict/Graphics/algnDist_mainLvl5ppr_AlignmentLevel5Distributed.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/algnDist_mainLvl5ppr_AlignmentLevel5Distributed.pptx"
+  },
+  {
+    "id": "O14ISOStrict/Graphics/algnJustLow_mainLvl4ppr_AlignmentLevel4JustifiedLow.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/algnJustLow_mainLvl4ppr_AlignmentLevel4JustifiedLow.pptx"
+  },
+  {
+    "id": "O14ISOStrict/Graphics/algnJust_mainLvl4ppr_AlignmentLevel4Justified.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/algnJust_mainLvl4ppr_AlignmentLevel4Justified.pptx"
+  },
+  {
+    "id": "O14ISOStrict/Graphics/algnR_mainLvl5ppr_AlignmentLevel5Right.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/algnR_mainLvl5ppr_AlignmentLevel5Right.pptx"
+  },
+  {
+    "id": "O14ISOStrict/Graphics/algnThaiDist_mainLvl5ppr_AlignmentLevel5ThaiDistributed.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/algnThaiDist_mainLvl5ppr_AlignmentLevel5ThaiDistributed.pptx"
+  },
+  {
+    "id": "O14ISOStrict/Graphics/anchorModified.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/anchorModified.pptx"
+  },
+  {
+    "id": "O14ISOStrict/Graphics/audioCdModifiedAndReSaved.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/audioCdModifiedAndReSaved.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/4.6.10_bg.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/4.6.10 bg.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/HC_animclr-Direction-cw.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/[HC]animclr-Direction-cw.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/HC_bg-Background-bwmode-white.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/[HC]bg-Background-bwmode-white.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/HC_clrMap-ColorMap-accent1-accent3.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/[HC]clrMap-ColorMap-accent1-accent3.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/HC_gridSpacing-GidSpacing-cy-0.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/[HC]gridSpacing-GidSpacing-cy-0.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/HC_grpsppr-GroupShapeProperties-bwmode-ltgray.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/[HC]grpsppr-GroupShapeProperties-bwmode-ltgray.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/HC_notes-Notes-showMasterPhAnim.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/[HC]notes-Notes-showMasterPhAnim.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/HC_restoredLeft-NormalViewRestoredTop-sz-100000.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/[HC]restoredLeft-NormalViewRestoredTop-sz-100000.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/HC_sndtgt-SoundTarget-builtIn.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/[HC]sndtgt-SoundTarget-builtIn.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/HC_tavlst-Time-tav-tm.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/[HC]tavlst-Time-tav-tm.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/HC_val-Boolean_Varient-boolVal.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/[HC]val-Boolean Varient-boolVal.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/HC_viewPr-PresentationViewProperties-showComments-1.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/[HC]viewPr-PresentationViewProperties-showComments-1.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/Photo_Album3.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/Photo Album3.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/algnDist_mainLvl2ppr_AlignmentLevel2Distributed.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/algnDist_mainLvl2ppr_AlignmentLevel2Distributed.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/algnJustLow_mainLvl1ppr_AlignmentLevel1JustifiedLow.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/algnJustLow_mainLvl1ppr_AlignmentLevel1JustifiedLow.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/algnJust_mainLvl1ppr_AlignmentLevel1Justified.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/algnJust_mainLvl1ppr_AlignmentLevel1Justified.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/algnR_mainLvl2ppr_AlignmentLevel2Right.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/algnR_mainLvl2ppr_AlignmentLevel2Right.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/algnThaiDist_mainLvl2ppr_AlignmentLevel2ThaiDistributed.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/algnThaiDist_mainLvl2ppr_AlignmentLevel2ThaiDistributed.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/altLang_mainEndParaRpr_AlternateLanguage.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/altLang_mainEndParaRpr_AlternateLanguage.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/bg-Background-bwmode-invgray.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/bg-Background-bwmode-invgray.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/bldlst-Build_Graphics-bldgraphic-uiexpand.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/bldlst-Build Graphics-bldgraphic-uiexpand.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/browse-BrowseSlideShowMode-showScrollBar-0.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/browse-BrowseSlideShowMode-showScrollBar-0.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/cmpdThickThin_mainUln_UnderlineStrokeCompoundLineTypeThickThin.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/cmpdThickThin_mainUln_UnderlineStrokeCompoundLineTypeThickThin.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/dbl_endParaRprU_EndofParagraphUnderlineDouble.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/dbl_endParaRprU_EndofParagraphUnderlineDouble.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/err_mainEndParaRpr_SpellingError.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/err_mainEndParaRpr_SpellingError.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/fontAlgnB_mainLvl1ppr_FontAlignmentLevel1Bottom.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/fontAlgnB_mainLvl1ppr_FontAlignmentLevel1Bottom.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/fontAlgnCtr_mainLvl1ppr_FontAlignmentLevel1Center.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/fontAlgnCtr_mainLvl1ppr_FontAlignmentLevel1Center.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/fontAlgnT_mainLvl1ppr_FontAlignementLevel1Top.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/fontAlgnT_mainLvl1ppr_FontAlignementLevel1Top.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/fontScale100000_mainNormAutofit_FontScaleMaximum.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/fontScale100000_mainNormAutofit_FontScaleMaximum.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/indent-51206400_mainLvl2ppr_IndentLevel2Minimum.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/indent-51206400_mainLvl2ppr_IndentLevel2Minimum.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/indent51206400_mainLvl1ppr_IndentLevel1Maximum.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/indent51206400_mainLvl1ppr_IndentLevel1Maximum.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/kern0_mainEndParaRpr_KerningMinimum.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/kern0_mainEndParaRpr_KerningMinimum.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/lvl0_mainLvl3prr_Level0.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/lvl0_mainLvl3prr_Level0.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/lvl8_mainLvl4prr_Level8.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/lvl8_mainLvl4prr_Level8.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/main_bodyPr_anchor_dist.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_bodyPr_anchor_dist.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/main_bodyPr_rtlCol.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_bodyPr_rtlCol.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/main_buautonum_type_alphaLcPeriod.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_buautonum_type_alphaLcPeriod.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/main_buautonum_type_arabicPeriod.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_buautonum_type_arabicPeriod.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/main_buautonum_type_ea1jpnkorperiod.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_buautonum_type_ea1jpnkorperiod.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/main_buautonum_type_romanUCParenBoth.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_buautonum_type_romanUCParenBoth.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/main_bufont_panose_10.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_bufont_panose_10.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/main_cs_panose.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_cs_panose.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/main_defppr_ealnbrk.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_defppr_ealnbrk.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/main_defppr_indent_51206400.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_defppr_indent_51206400.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/main_defppr_marR.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_defppr_marR.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/main_ppr_algn_dist.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_ppr_algn_dist.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/main_ppr_fontalgn_t.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_ppr_fontalgn_t.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/main_rpr_strike_dblstrike.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_rpr_strike_dblstrike.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/main_rpr_u_dotdash.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_rpr_u_dotdash.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/main_rpr_u_wavydbl.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/main_rpr_u_wavydbl.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/marL0_mainLvl8ppr_MarginLeftMinimum.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/marL0_mainLvl8ppr_MarginLeftMinimum.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/marL51206400_mainPpr_LeftMarginMaximum.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/marL51206400_mainPpr_LeftMarginMaximum.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/marR51206400_mainLvl2ppr_MarginRightLevel2Maximum.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/marR51206400_mainLvl2ppr_MarginRightLevel2Maximum.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/none_endParaRprU_EndOfParagraphUnderlineNone.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/none_endParaRprU_EndOfParagraphUnderlineNone.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/normAutoFit_mainbodyPr_NoAutoFit.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/normAutoFit_mainbodyPr_NoAutoFit.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/presentation-Zoom_of_the_embedded_OLE_Object-Server_Zoom.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/presentation-Zoom of the embedded OLE Object-Server Zoom.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/rIns_bodyPr_RightMargin.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/rIns_bodyPr_RightMargin.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/sldsz-Slide_Size-type-b4iso.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/sldsz-Slide Size-type-b4iso.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/sldsz-Slide_Size-type-screen16x9.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/sldsz-Slide Size-type-screen16x9.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/spc-400000_rPr_CharacterSpacingMinimum.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/spc-400000_rPr_CharacterSpacingMinimum.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/strikeNoStrike_mainDefRPr_StrikethroughDefaultNoStrike.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/strikeNoStrike_mainDefRPr_StrikethroughDefaultNoStrike.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/typeface_mainSym_TypeFaceOfFont.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/typeface_mainSym_TypeFaceOfFont.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/uDbl_rprU_UnderlineDouble.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/uDbl_rprU_UnderlineDouble.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/uDottedHeavy_rprU_UnderlineDottedHeavy.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/uDottedHeavy_rprU_UnderlineDottedHeavy.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/uWavy_rprU_UnderlineWavy.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/uWavy_rprU_UnderlineWavy.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/ulnW20116800_main_UnderlineStrokeLineWidthMaximum.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/ulnW20116800_main_UnderlineStrokeLineWidthMaximum.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/vertOverflowEllipsis_bodyPrVertOverflow_VertOverflowEllipsis.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/vertOverflowEllipsis_bodyPrVertOverflow_VertOverflowEllipsis.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/webPr-WebProperties-NavigationControl-clr-blackTextOnWhite.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/webPr-WebProperties-NavigationControl-clr-blackTextOnWhite.pptx"
+  },
+  {
+    "id": "O14ISOStrict/PowerPoint/wrapEAvert_bodyPrVert_VerticalTextEAvert.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/PowerPoint/wrapEAvert_bodyPrVert_VerticalTextEAvert.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/asSources/presentation/Text_withExtrusion_200chars.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/asSources/presentation/Text_withExtrusion_200chars.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/asSources/presentation/Text_withExtrusion_200chars_Animation_Fly_In_all_at_once_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/asSources/presentation/Text_withExtrusion_200chars+Animation (Fly In, all at once).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/asSources/presentation/Text_withExtrusion_200chars_Animation_Fly_In_by_letter_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/asSources/presentation/Text_withExtrusion_200chars+Animation (Fly In, by letter).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/asSources/presentation/Text_withShadow_100chars.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/asSources/presentation/Text_withShadow_100chars.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/asSources/presentation/Text_withShadow_100chars_Animation_Fly_In_all_at_once_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/asSources/presentation/Text_withShadow_100chars+Animation (Fly In, all at once).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/asSources/presentation/Text_withShadow_100chars_Animation_Fly_In_by_letter_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/asSources/presentation/Text_withShadow_100chars+Animation (Fly In, by letter).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/asSources/presentation/Text_withShadow_200chars.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/asSources/presentation/Text_withShadow_200chars.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/asSources/presentation/Text_withShadow_200chars_Animation_Fly_In_all_at_once_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/asSources/presentation/Text_withShadow_200chars+Animation (Fly In, all at once).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/AllSlidesConverterSC.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AllSlidesConverterSC.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/AllSlidesConverterTC.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AllSlidesConverterTC.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/AutoShapes_2D_Default_Styles_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AutoShapes_2D (Default Styles).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/AutoShapes_2D_Reflection_full_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AutoShapes_2D_Reflection (full).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/AutoShapes_2D_Shadow_Offset_Diagonal_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AutoShapes_2D_Shadow (Offset, Diagonal).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/AutoShapes_2D_Soft_Edges_5_Point_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AutoShapes_2D_Soft Edges (5 Point).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/AutoShapes_3D_Bevel_Circle_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AutoShapes_3D_Bevel (Circle).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/AutoShapes_3D_Bevel_Circle_Shadow_Offset_Diagonal_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AutoShapes_3D_Bevel (Circle)+Shadow (Offset, Diagonal).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/AutoShapes_3D_Bevel_Circle_Soft_Edges_5_Point_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AutoShapes_3D_Bevel (Circle)+Soft Edges (5 Point).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/AutoShapes_3D_Bevel_Riblet_Reflection_full_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AutoShapes_3D_Bevel (Riblet)+Reflection (full).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/AutoShapes_3D_Rotation_Parallel_Isometric_Right_Up_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/AutoShapes_3D_Rotation_Parallel (Isometric Right Up).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Chart_2D.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_2D.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Chart_2D_Animation_Box_In_as_one_object_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_2D+Animation (Box In, as one object).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Chart_2D_Animation_Box_In_by_element_in_category_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_2D+Animation (Box In, by element in category).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Chart_2D_Animation_Fly_In_as_one_object_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_2D+Animation (Fly In, as one object).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Chart_2D_Animation_Fly_In_by_element_in_category_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_2D+Animation (Fly In, by element in category).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Chart_3D_Column_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_3D (Column).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Box_In_as_one_object_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_3D (Column)+Animation (Box In, as one object).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Box_In_by_element_in_category_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_3D(Column)+Animation (Box In, by element in category).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Box_Out_as_one_object_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_3D (Column)+Animation (Box Out, as one object).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Box_Out_by_element_in_category_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_3D(Column)+Animation (Box Out, by element in category).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Fly_In_as_one_object_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_3D (Column)+Animation (Fly In, as one object).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Fly_In_by_element_in_category_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_3D(Column)+Animation (Fly In, by element in category).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Fly_Out_as_one_object_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_3D (Column)+Animation (Fly Out, as one object).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Fly_Out_by_element_in_category_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Chart_3D(Column)+Animation (Fly Out, by element in category).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Image_AnimatedGIF.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Image_AnimatedGIF.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Image_Small.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Image_Small.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Image_Small_3D_Rotation.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Image_Small+3D Rotation.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Image_Small_3D_Rotation_Animatioin_Fly_In_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Image_Small+3D Rotation+Animatioin (Fly In).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Ink2.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Ink2.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/LinkedToAPresentation.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/LinkedToAPresentation.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/MetroCodeFree.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/MetroCodeFree.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/2006-2007MoCalEd_TP10164564.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/2006-2007MoCalEd_TP10164564.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/2006Calendar_TP10081921.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/2006Calendar_TP10081921.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/2006MoCalTechnic_TP10164181.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/2006MoCalTechnic_TP10164181.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/2007MoCalFlow_TP10164187.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/2007MoCalFlow_TP10164187.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/2007MoCalHuman_TP10220215.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/2007MoCalHuman_TP10220215.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/2007MoCal_MonSun_TP10164185.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/2007MoCal_MonSun_TP10164185.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/2007calendar_TP10220214.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/2007calendar_TP10220214.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/2008calendar_TP10220216.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/2008calendar_TP10220216.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/BasicOrgChart_TP10085481.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/BasicOrgChart_TP10085481.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/BrainstrmSess_TP10167123.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/BrainstrmSess_TP10167123.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/CertAppr_TP10164188.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/CertAppr_TP10164188.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/CertExcEmp_TP10164190.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/CertExcEmp_TP10164190.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/CertExcStud_TP10164194.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/CertExcStud_TP10164194.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/CompBckgrndPres_TP10220211.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/CompBckgrndPres_TP10220211.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/CompanyBackgroundPresentation_TP10219425.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/CompanyBackgroundPresentation_TP10219425.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/CompanyHndbk_TP10167124.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/CompanyHndbk_TP10167124.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/CompanyMtg_TP10167121.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/CompanyMtg_TP10167121.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/CycleDiagram_TP10174326.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/CycleDiagram_TP10174326.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/EdStudPres_TP10167125.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/EdStudPres_TP10167125.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/EmpOrienPres_TP10220212.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/EmpOrienPres_TP10220212.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/FamilyTree_TP10107970.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/FamilyTree_TP10107970.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/HierarchyDiagram_TP10174325.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/HierarchyDiagram_TP10174325.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/HorizHierChart_TP10220217.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/HorizHierChart_TP10220217.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/HorizLabHierChart_TP10220218.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/HorizLabHierChart_TP10220218.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/ListDiagram_TP10174331.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/ListDiagram_TP10174331.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/MarketingPlan_TP10107969.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/MarketingPlan_TP10107969.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/MatrixDiagram_TP10174328.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/MatrixDiagram_TP10174328.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/MultiChoiceTest_TP10165953.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/MultiChoiceTest_TP10165953.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/ProcessDiagram_TP10174324.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/ProcessDiagram_TP10174324.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/ProductOverviewPresentation_TP10090249.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/ProductOverviewPresentation_TP10090249.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/PyramidDiagram_TP10174330.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/PyramidDiagram_TP10174330.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/QuizShow_TP10176929.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/QuizShow_TP10176929.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/RecommStrat_TP10167129.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/RecommStrat_TP10167129.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/RelationshipDiagram_TP10174327.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/RelationshipDiagram_TP10174327.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/ReportProg_TP10167107.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/ReportProg_TP10167107.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/SalesPropPres_TP10220213.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/SalesPropPres_TP10220213.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/O12_templates/Stafftrain_TP10167128.potx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/O12 templates/Stafftrain_TP10167128.potx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/SmartArt_OrgChart1.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/SmartArt_OrgChart1.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/SmartArt_OrgChart1_3D.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/SmartArt_OrgChart1_3D.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/SmartArt_OrgChart1_3D_Animation_Fly_In_as_one_object_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/SmartArt_OrgChart1_3D+Animation (Fly In, as one object).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/SmartArt_OrgChart1_3D_Animation_Fly_In_by_level_one_by_one_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/SmartArt_OrgChart1_3D+Animation (Fly In, by level one by one).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/SmartArt_OrgChart1_Animation_Fly_In_as_one_object_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/SmartArt_OrgChart1+Animation (Fly In, as one object).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/SmartArt_OrgChart1_Animation_Fly_In_by_level_one_by_one_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/SmartArt_OrgChart1+Animation (Fly In, by level one by one).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Table_Large.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Table_Large.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Table_Small.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Table_Small.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Table_Small_Animation_Fly_In_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Table_Small+Animation (Fly In).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Text_100chars.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Text_100chars.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Text_100chars_Animation_Fly_In_all_at_once_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Text_100chars+Animation (Fly In, all at once).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Text_100chars_Animation_Fly_In_by_letter_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Text_100chars+Animation (Fly In, by letter).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Text_200chars.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Text_200chars.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Text_withEffects_100chars.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Text_withEffects_100chars.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Text_withEffects_100chars_Animation_Fly_In_all_at_once_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Text_withEffects_100chars+Animation (Fly In, all at once).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Text_withEffects_100chars_Animation_Fly_In_by_letter_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Text_withEffects_100chars+Animation (Fly In, by letter).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Text_withEffects_200chars.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Text_withEffects_200chars.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Text_withExtrusion_100chars.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Text_withExtrusion_100chars.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Text_withExtrusion_100chars_Animation_Fly_In_all_at_once_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Text_withExtrusion_100chars+Animation (Fly In, all at once).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Text_withExtrusion_100chars_Animation_Fly_In_by_letter_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Text_withExtrusion_100chars+Animation (Fly In, by letter).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/Text_withShadow_200chars_Animation_Fly_In_by_letter_.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/Text_withShadow_200chars+Animation (Fly In, by letter).pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/block_hyperlink_crash.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/block_hyperlink_crash.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/linkedpicture.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/linkedpicture.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/pptxtestfile.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/pptxtestfile.pptx"
+  },
+  {
+    "id": "v2FxTestFiles/presentation/test.pptx",
+    "path": "test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/presentation/test.pptx"
+  }
+]

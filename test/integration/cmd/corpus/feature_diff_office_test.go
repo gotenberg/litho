@@ -155,7 +155,7 @@ func TestDiffFeature_PrepareRefusesStaleReferences(t *testing.T) {
 	pins := map[string]string{"GOTENBERG_IMAGE": "img:1", "LIBREOFFICE_CORE_COMMIT": "c1"}
 	good := func() referenceManifest {
 		return referenceManifest{References: map[string]referenceRecord{
-			"memo":           {SourceSHA256: sha("docx"), OptionsSHA256: sha(`{"landscape": true}`), PDFSHA256: sha("pdf memo"), Image: "img:1"},
+			"memo":           {SourceSHA256: sha("docx"), OptionsSHA256: sha(`{"landscape": true}`), PDFSHA256: sha("pdf memo"), Image: "img:1", SourcePin: "LIBREOFFICE_CORE_COMMIT", SourcePinValue: "c1"},
 			"export__a.docx": {SourceSHA256: sha("fetched"), PDFSHA256: sha("pdf a"), Image: "img:1", CoreCommit: "c1"},
 		}}
 	}
@@ -174,7 +174,17 @@ func TestDiffFeature_PrepareRefusesStaleReferences(t *testing.T) {
 			r := m.References["export__a.docx"]
 			r.CoreCommit = "c0"
 			m.References["export__a.docx"] = r
-		}, "LibreOffice core c0"},
+		}, `LIBREOFFICE_CORE_COMMIT "c0"`},
+		{"another pin value", func(m *referenceManifest, _ string) {
+			r := m.References["memo"]
+			r.SourcePinValue = "c0"
+			m.References["memo"] = r
+		}, `LIBREOFFICE_CORE_COMMIT "c0"`},
+		{"another pin", func(m *referenceManifest, _ string) {
+			r := m.References["memo"]
+			r.SourcePin = "POI_COMMIT"
+			m.References["memo"] = r
+		}, `LIBREOFFICE_CORE_COMMIT ""`},
 		{"source changed", func(m *referenceManifest, _ string) {
 			r := m.References["memo"]
 			r.SourceSHA256 = sha("older")
@@ -214,7 +224,7 @@ func TestDiffFeature_PrepareRefusesStaleReferences(t *testing.T) {
 			}
 			writeFiles(t, root, map[string]string{"references/manifest.json": string(data)})
 			f := newDiffFeature()
-			f.refs = &ReferenceSpec{Dir: "references", BuiltBy: "make office-references"}
+			f.refs = &ReferenceSpec{Dir: "references", BuiltBy: "make office-references", SourcePin: "LIBREOFFICE_CORE_COMMIT"}
 			f.testdataRoot, f.office, f.pins = root, true, pins
 			fixtures := []Fixture{
 				{ID: "memo", PDFPath: filepath.Join(src, "sources", "memo")},

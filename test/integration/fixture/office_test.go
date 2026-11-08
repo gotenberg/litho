@@ -74,13 +74,21 @@ func TestLoadOffice_ReadsADirectoryOrADocument(t *testing.T) {
 		t.Errorf("fetched document %+v", o)
 	}
 
+	for ext, want := range map[string]pdf.Format{".doc": "doc", ".xls": "xls", ".ppt": "ppt", ".dotx": pdf.FormatDOCX} {
+		bin := filepath.Join(t.TempDir(), "fetched"+ext)
+		if err := os.WriteFile(bin, []byte{0xd0, 0xcf}, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if o, err := LoadOffice(bin); err != nil || o.Format != want {
+			t.Errorf("%s document: %+v, %v", ext, o, err)
+		}
+	}
+
 	for name, files := range map[string]map[string]string{
 		"no document":     {OptionsFile: `{}`},
 		"two documents":   {"a.docx": "", "b.odt": ""},
 		"another file":    {"a.docx": "", "notes.txt": ""},
-		"another format":  {"a.doc": ""},
-		"binary workbook": {"a.xls": ""},
-		"binary deck":     {"a.ppt": ""},
+		"another format":  {"a.rtf": ""},
 		"invalid options": {"a.docx": "", OptionsFile: `{"paperHeight": 6}`},
 	} {
 		d := t.TempDir()

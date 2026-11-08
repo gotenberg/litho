@@ -127,9 +127,13 @@ var localToolPins = map[string]bool{
 	"WEASYPRINT_SHA256":      true,
 	"WEASYPRINT_FONT_SHA256": true,
 	"GOTENBERG_IMAGE":        true,
-	// The LibreOffice core commit `make libreoffice-fetch` downloads the
-	// libreoffice corpora's documents at.
+	// The commits `make office-fetch` downloads the Office corpora's
+	// documents at: LibreOffice core's, Apache POI's and the Open XML
+	// SDK's. The govdocs Office corpora share GOVDOCS_THREADS with
+	// govdocs/pdf.
 	"LIBREOFFICE_CORE_COMMIT": true,
+	"POI_COMMIT":              true,
+	"OPENXMLSDK_COMMIT":       true,
 }
 
 // stagePins maps each directory a provisioning stage fills to the pins its
@@ -193,8 +197,9 @@ var sourcePins = map[string][]string{
 	"weasyprint":     nil,
 	"gotenberg/html": nil,
 	// The Office corpora's PDFs are LibreOffice references the host builds:
-	// their own manifest records the image and the sources, which the diff
-	// feature checks (see [diffFeature.Prepare]).
+	// their own manifest records the image, the sources and the pin the
+	// fetched documents come from, which the diff feature checks (see
+	// [diffFeature.Prepare]).
 	"libreoffice/docx": nil,
 	"libreoffice/odt":  nil,
 	"libreoffice/xlsx": nil,
@@ -209,6 +214,18 @@ var sourcePins = map[string][]string{
 	"gotenberg/csv":    nil,
 	"gotenberg/pptx":   nil,
 	"gotenberg/odp":    nil,
+	"poi/docx":         nil,
+	"poi/xlsx":         nil,
+	"poi/pptx":         nil,
+	"poi/doc":          nil,
+	"poi/xls":          nil,
+	"poi/ppt":          nil,
+	"openxmlsdk/docx":  nil,
+	"openxmlsdk/xlsx":  nil,
+	"openxmlsdk/pptx":  nil,
+	"govdocs/doc":      nil,
+	"govdocs/xls":      nil,
+	"govdocs/ppt":      nil,
 }
 
 // pinEntry is one KEY=VALUE line of versions.env.

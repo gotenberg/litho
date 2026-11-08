@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -373,6 +374,93 @@ func TestCommittedOfficeSourcesLoad(t *testing.T) {
 			}
 			if info, err := os.Stat(o.Document); err != nil || info.Size() > 200<<10 {
 				t.Errorf("%s %s: %v, over 200 KiB or unreadable", corpus, s.ID, err)
+			}
+		}
+	}
+}
+
+// TestFetchedOfficeListsAgree pins that the poi, openxmlsdk and govdocs
+// Office corpora list each document once, by a plain ASCII ID of the
+// corpus's format and the path its source's fetch script downloads, that
+// files.sha256 holds exactly those paths and the source's licence files, and
+// that the manifest names the pin the documents come from.
+func TestFetchedOfficeListsAgree(t *testing.T) {
+	t.Parallel()
+
+	plain := regexp.MustCompile(`^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$`)
+	sources := map[string]struct {
+		pin     string
+		formats map[string][]string
+		licence []string
+	}{
+		"poi": {"POI_COMMIT", map[string][]string{
+			"docx": {".docx", ".dotx"}, "xlsx": {".xlsx", ".xltx"}, "pptx": {".pptx", ".potx"},
+			"doc": {".doc"}, "xls": {".xls"}, "ppt": {".ppt"},
+		}, []string{"legal/LICENSE", "legal/NOTICE"}},
+		"openxmlsdk": {"OPENXMLSDK_COMMIT", map[string][]string{
+			"docx": {".docx", ".dotx"}, "xlsx": {".xlsx", ".xltx"}, "pptx": {".pptx", ".potx"},
+		}, []string{"LICENSE"}},
+		"govdocs": {"GOVDOCS_THREADS", map[string][]string{"doc": {".doc"}, "xls": {".xls"}, "ppt": {".ppt"}}, nil},
+	}
+	for source, s := range sources {
+		for format, exts := range s.formats {
+			dir := filepath.Join(corpusSourceDir, source, format)
+			data, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var m Manifest
+			if err := json.Unmarshal(data, &m); err != nil {
+				t.Fatal(err)
+			}
+			if m.References == nil || m.References.SourcePin != s.pin {
+				t.Errorf("%s/%s: references %+v, want source_pin %s", source, format, m.References, s.pin)
+			}
+			if data, err = os.ReadFile(filepath.Join(dir, "documents.json")); err != nil {
+				t.Fatal(err)
+			}
+			var docs []struct {
+				ID   string `json:"id"`
+				Path string `json:"path"`
+			}
+			if err := json.Unmarshal(data, &docs); err != nil {
+				t.Fatal(err)
+			}
+			if len(docs) == 0 {
+				t.Errorf("%s/%s lists no document", source, format)
+			}
+			hashes, err := os.ReadFile(filepath.Join(dir, "files.sha256"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			listed := make(map[string]bool)
+			for line := range strings.SplitSeq(strings.TrimSpace(string(hashes)), "\n") {
+				digest, path, ok := strings.Cut(line, "  ")
+				if !ok || len(digest) != 64 || listed[path] {
+					t.Fatalf("%s/%s files.sha256: malformed or repeated line %q", source, format, line)
+				}
+				listed[path] = true
+			}
+			ids := make(map[string]bool)
+			for _, d := range docs {
+				ext := strings.ToLower(filepath.Ext(d.ID))
+				if !plain.MatchString(d.ID) || !validInputID(d.ID) || !slices.Contains(exts, ext) || ids[d.ID] {
+					t.Errorf("%s/%s: id %q is not a plain, unique ID of %v", source, format, d.ID, exts)
+				}
+				ids[d.ID] = true
+				if !listed[d.Path] {
+					t.Errorf("%s/%s: %s is listed but not in files.sha256", source, format, d.Path)
+				}
+				delete(listed, d.Path)
+			}
+			for _, l := range s.licence {
+				if !listed[l] {
+					t.Errorf("%s/%s files.sha256 lacks %s", source, format, l)
+				}
+				delete(listed, l)
+			}
+			if len(listed) != 0 {
+				t.Errorf("%s/%s files.sha256 holds %d files no document names", source, format, len(listed))
 			}
 		}
 	}

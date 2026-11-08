@@ -1,0 +1,18 @@
+{
+  "name": "poi/doc",
+  "source": "poi/doc",
+  "pdf_root": "pdfs",
+  "inputs": {
+    "list": "documents.json",
+    "list_root": "sources",
+    "fetched_by": "make office-fetch SOURCES=poi FORMATS=doc"
+  },
+  "references": {
+    "dir": "references",
+    "built_by": "make office-references SOURCES=poi FORMATS=doc",
+    "source_pin": "POI_COMMIT"
+  },
+  "goldens": {
+    "diff": "goldens/diff"
+  }
+}

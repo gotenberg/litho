@@ -16,7 +16,7 @@ set -euo pipefail
 
 OUT="$1"
 CORPUS="$2"
-BUILD="make office-references FORMATS=$(basename "$CORPUS")"
+BUILD="make office-references SOURCES=$(dirname "$CORPUS") FORMATS=$(basename "$CORPUS")"
 mkdir -p "$OUT"
 SRC="$(cd "$OUT/.." && pwd)/references"
 MANIFEST="$SRC/manifest.json"

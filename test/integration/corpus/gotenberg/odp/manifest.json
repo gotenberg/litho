@@ -7,7 +7,7 @@
   },
   "references": {
     "dir": "references",
-    "built_by": "make office-references FORMATS=odp"
+    "built_by": "make office-references SOURCES=gotenberg FORMATS=odp"
   },
   "goldens": {
     "diff": "goldens/diff"

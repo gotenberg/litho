@@ -2,22 +2,22 @@
 
 SpreadsheetML workbooks scored by the `diff` feature (see `FEATURES.md`) against LibreOffice Calc as Gotenberg's LibreOffice route prints them: the image `GOTENBERG_IMAGE` in `corpus/versions.env` pins (`gotenberg/gotenberg:9.0.0`, LibreOffice 26.8.2.2), route `/forms/libreoffice/convert`. A selection of LibreOffice's Calc and chart test workbooks at the commit `LIBREOFFICE_CORE_COMMIT` pins, of which only the list and the hashes are committed; Gotenberg's own test workbooks are the `gotenberg/xlsx` corpus. The references are built on the host and never committed. The corpus works as the libreoffice/docx corpus does, and its `FIXTURES.md` documents the reference checks and the drawing without annotations, which apply here with `xlsx` for `docx`; this file documents the spreadsheet options the ods and csv corpora share.
 
-| Path                       | What it holds                                                                                                                                                     |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `documents.json`           | The 280 LibreOffice test workbooks, each by its ID, `<module>/<file>.xlsx` (`sc/tdf123.xlsx`, `chart2/tdf456.xlsx`)                                               |
-| `files.sha256`             | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 280 workbooks and `COPYING.MPL`                                                                   |
-| `../list-candidates.py`    | Selects the workbooks from a LibreOffice core checkout and writes the two files above (standard library only)                                                     |
-| `../fetch.sh`              | `make libreoffice-fetch FORMATS=xlsx`: downloads each listed file at the pinned commit into `testdata/libreoffice/xlsx/sources/`, refusing one whose hash differs |
-| `../../lib/libreoffice.sh` | `make office-references FORMATS=xlsx`: converts every source with the pinned image into `testdata/libreoffice/xlsx/references/<name>.pdf` and `manifest.json`     |
-| `download.sh`              | Installs the references from the testdata volume as the corpus PDFs the provisioning image derives the diff goldens from                                          |
+| Path                       | What it holds                                                                                                                                                                     |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `documents.json`           | The 280 LibreOffice test workbooks, each by its ID, `<module>/<file>.xlsx` (`sc/tdf123.xlsx`, `chart2/tdf456.xlsx`)                                                               |
+| `files.sha256`             | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 280 workbooks and `COPYING.MPL`                                                                                   |
+| `../list-candidates.py`    | Selects the workbooks from a LibreOffice core checkout and writes the two files above (standard library only)                                                                     |
+| `../fetch.sh`              | `make office-fetch SOURCES=libreoffice FORMATS=xlsx`: downloads each listed file at the pinned commit into `testdata/libreoffice/xlsx/sources/`, refusing one whose hash differs  |
+| `../../lib/libreoffice.sh` | `make office-references SOURCES=libreoffice FORMATS=xlsx`: converts every source with the pinned image into `testdata/libreoffice/xlsx/references/<name>.pdf` and `manifest.json` |
+| `download.sh`              | Installs the references from the testdata volume as the corpus PDFs the provisioning image derives the diff goldens from                                                          |
 
 A fetched workbook's ID names the module whose tests it comes from: `sc/<file>` is `sc/qa/unit/data/xlsx/<file>`, `chart2/<file>` is `chart2/qa/extras/data/xlsx/<file>`. Its reference is named by its ID with `/` written `__`: `sc__tdf123.xlsx.pdf`.
 
 ## Provisioning
 
 ```bash
-make libreoffice-fetch FORMATS=xlsx                                 # the LibreOffice test documents and the fixture fonts, hash-checked
-make office-references FORMATS=xlsx                                 # the references (Docker); NAMES="a__b.xlsx" for some
+make office-fetch SOURCES=libreoffice FORMATS=xlsx                  # the LibreOffice test documents and the fixture fonts, hash-checked
+make office-references SOURCES=libreoffice FORMATS=xlsx             # the references (Docker); NAMES="a__b.xlsx" for some
 go run ./test/integration/cmd/corpus init --corpus=libreoffice/xlsx # the diff goldens, in the corpus image
 go run ./test/integration/cmd/corpus run --corpus=libreoffice/xlsx --feature=diff
 ```

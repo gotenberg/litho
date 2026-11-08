@@ -3,9 +3,9 @@
 # libreoffice/csv corpus.
 #
 # The corpus downloads nothing here. Its fixtures are the LibreOffice test
-# documents `make libreoffice-fetch FORMATS=csv` puts in the testdata, and the
+# documents `make office-fetch SOURCES=libreoffice FORMATS=csv` puts in the testdata, and the
 # PDFs it provisions are their LibreOffice references, which `make
-# office-references FORMATS=csv` builds into the testdata's references/
+# office-references SOURCES=libreoffice FORMATS=csv` builds into the testdata's references/
 # directory with the Gotenberg image versions.env pins. They are read from the
 # testdata volume the image mounts at /output, not baked into the image, and
 # the provisioning image derives the diff goldens from them (see

@@ -134,23 +134,28 @@ html-fixtures: ## Rebuild the litho PDFs of the litho/html and gotenberg/html co
 	@set -e; for c in $(HTML_CORPORA); do go run ./test/integration/fixture/htmlbuild -corpus $(CORPUS)/$$c -fonts $(FIXTURE_FONTS); done
 
 OFFICE_TESTDATA := test/integration/testdata
-FORMATS ?= docx odt xlsx ods csv pptx odp
+SOURCES ?= libreoffice gotenberg poi openxmlsdk govdocs
+FORMATS ?= docx odt xlsx ods csv pptx odp doc xls ppt
 
-.PHONY: libreoffice-fetch
-libreoffice-fetch: ## Download the LibreOffice test documents of the libreoffice corpora at the commit test/integration/corpus/versions.env pins (hash-checked), with the fixture fonts. Vars: FORMATS (space-separated, default all)
+.PHONY: office-fetch
+office-fetch: ## Download the documents of the fetched Office corpora (libreoffice, poi, openxmlsdk, govdocs) at the commits and threads test/integration/corpus/versions.env pins (hash-checked), with the fixture fonts. Vars: SOURCES, FORMATS (space-separated, default all)
 	$(CORPUS)/lib/fetch-fonts.sh $(FIXTURE_FONTS)
-	@set -e; for f in $(FORMATS); do $(CORPUS)/libreoffice/fetch.sh $(CORPUS)/libreoffice/$$f $(OFFICE_TESTDATA)/libreoffice/$$f/sources; done
+	@set -e; for s in $(SOURCES); do for f in $(FORMATS); do \
+		[ -x $(CORPUS)/$$s/fetch.sh ] && [ -f $(CORPUS)/$$s/$$f/manifest.json ] || continue; \
+		$(CORPUS)/$$s/fetch.sh $(CORPUS)/$$s/$$f $(OFFICE_TESTDATA)/$$s/$$f/sources; \
+	done; done
 
 .PHONY: office-references
-office-references: ## Build the LibreOffice reference PDFs of the libreoffice and gotenberg Office corpora into the testdata with the Gotenberg image test/integration/corpus/versions.env pins (needs Docker and make libreoffice-fetch). Vars: FORMATS (space-separated, default all), NAMES (space-separated references, default all)
-	@set -e; for f in $(FORMATS); do for c in libreoffice gotenberg; do \
-		$(CORPUS)/lib/libreoffice.sh $(CORPUS)/$$c/$$f $(OFFICE_TESTDATA)/$$c/$$f/sources $(OFFICE_TESTDATA)/$$c/$$f/references $(NAMES); \
+office-references: ## Build the LibreOffice reference PDFs of the Office corpora into the testdata with the Gotenberg image test/integration/corpus/versions.env pins (needs Docker and make office-fetch). Vars: SOURCES, FORMATS (space-separated, default all), NAMES (space-separated references, default all)
+	@set -e; for s in $(SOURCES); do for f in $(FORMATS); do \
+		[ -f $(CORPUS)/$$s/$$f/manifest.json ] && jq -e .references $(CORPUS)/$$s/$$f/manifest.json > /dev/null || continue; \
+		$(CORPUS)/lib/libreoffice.sh $(CORPUS)/$$s/$$f $(OFFICE_TESTDATA)/$$s/$$f/sources $(OFFICE_TESTDATA)/$$s/$$f/references $(NAMES); \
 	done; done
 
 .PHONY: office-fixtures
 office-fixtures: ## Rebuild the litho PDFs of the gotenberg Office corpora from their sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first). Vars: FORMATS (space-separated, default all)
 	$(CORPUS)/lib/fetch-fonts.sh $(FIXTURE_FONTS)
-	@set -e; for f in $(FORMATS); do go run ./test/integration/fixture/build -corpus $(CORPUS)/gotenberg/$$f -fonts $(FIXTURE_FONTS); done
+	@set -e; for f in $(FORMATS); do [ -d $(CORPUS)/gotenberg/$$f ] || continue; go run ./test/integration/fixture/build -corpus $(CORPUS)/gotenberg/$$f -fonts $(FIXTURE_FONTS); done
 
 CORPUS_RUN_FLAGS :=
 ifdef CORPUS_JSON_OUTPUT

@@ -5,11 +5,12 @@
   "inputs": {
     "list": "documents.json",
     "list_root": "sources",
-    "fetched_by": "make libreoffice-fetch FORMATS=odp"
+    "fetched_by": "make office-fetch SOURCES=libreoffice FORMATS=odp"
   },
   "references": {
     "dir": "references",
-    "built_by": "make office-references FORMATS=odp"
+    "built_by": "make office-references SOURCES=libreoffice FORMATS=odp",
+    "source_pin": "LIBREOFFICE_CORE_COMMIT"
   },
   "goldens": {
     "diff": "goldens/diff"

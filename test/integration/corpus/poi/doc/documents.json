@@ -1,0 +1,342 @@
+[
+  {
+    "id": "document/47950_normal.doc",
+    "path": "test-data/document/47950_normal.doc"
+  },
+  {
+    "id": "document/51921-Word-Crash067.doc",
+    "path": "test-data/document/51921-Word-Crash067.doc"
+  },
+  {
+    "id": "document/52420.doc",
+    "path": "test-data/document/52420.doc"
+  },
+  {
+    "id": "document/56880.doc",
+    "path": "test-data/document/56880.doc"
+  },
+  {
+    "id": "document/57603-seven_columns.doc",
+    "path": "test-data/document/57603-seven_columns.doc"
+  },
+  {
+    "id": "document/58804_1.doc",
+    "path": "test-data/document/58804_1.doc"
+  },
+  {
+    "id": "document/59322.doc",
+    "path": "test-data/document/59322.doc"
+  },
+  {
+    "id": "document/61490.doc",
+    "path": "test-data/document/61490.doc"
+  },
+  {
+    "id": "document/61586.doc",
+    "path": "test-data/document/61586.doc"
+  },
+  {
+    "id": "document/61911.doc",
+    "path": "test-data/document/61911.doc"
+  },
+  {
+    "id": "document/Bug28627.doc",
+    "path": "test-data/document/Bug28627.doc"
+  },
+  {
+    "id": "document/Bug33519.doc",
+    "path": "test-data/document/Bug33519.doc"
+  },
+  {
+    "id": "document/Bug34898.doc",
+    "path": "test-data/document/Bug34898.doc"
+  },
+  {
+    "id": "document/Bug41898.doc",
+    "path": "test-data/document/Bug41898.doc"
+  },
+  {
+    "id": "document/Bug44292.doc",
+    "path": "test-data/document/Bug44292.doc"
+  },
+  {
+    "id": "document/Bug44431.doc",
+    "path": "test-data/document/Bug44431.doc"
+  },
+  {
+    "id": "document/Bug44603.doc",
+    "path": "test-data/document/Bug44603.doc"
+  },
+  {
+    "id": "document/Bug45269.doc",
+    "path": "test-data/document/Bug45269.doc"
+  },
+  {
+    "id": "document/Bug45473.doc",
+    "path": "test-data/document/Bug45473.doc"
+  },
+  {
+    "id": "document/Bug46610_1.doc",
+    "path": "test-data/document/Bug46610_1.doc"
+  },
+  {
+    "id": "document/Bug46610_2.doc",
+    "path": "test-data/document/Bug46610_2.doc"
+  },
+  {
+    "id": "document/Bug46610_3.doc",
+    "path": "test-data/document/Bug46610_3.doc"
+  },
+  {
+    "id": "document/Bug47286.doc",
+    "path": "test-data/document/Bug47286.doc"
+  },
+  {
+    "id": "document/Bug47742.doc",
+    "path": "test-data/document/Bug47742.doc"
+  },
+  {
+    "id": "document/Bug48065.doc",
+    "path": "test-data/document/Bug48065.doc"
+  },
+  {
+    "id": "document/Bug48075.doc",
+    "path": "test-data/document/Bug48075.doc"
+  },
+  {
+    "id": "document/Bug49820.doc",
+    "path": "test-data/document/Bug49820.doc"
+  },
+  {
+    "id": "document/Bug49908.doc",
+    "path": "test-data/document/Bug49908.doc"
+  },
+  {
+    "id": "document/Bug49919.doc",
+    "path": "test-data/document/Bug49919.doc"
+  },
+  {
+    "id": "document/Bug50075.doc",
+    "path": "test-data/document/Bug50075.doc"
+  },
+  {
+    "id": "document/Bug51604.doc",
+    "path": "test-data/document/Bug51604.doc"
+  },
+  {
+    "id": "document/Bug51686.doc",
+    "path": "test-data/document/Bug51686.doc"
+  },
+  {
+    "id": "document/Bug51834.doc",
+    "path": "test-data/document/Bug51834.doc"
+  },
+  {
+    "id": "document/Bug51890.doc",
+    "path": "test-data/document/Bug51890.doc"
+  },
+  {
+    "id": "document/Bug52032_1.doc",
+    "path": "test-data/document/Bug52032_1.doc"
+  },
+  {
+    "id": "document/Bug52311.doc",
+    "path": "test-data/document/Bug52311.doc"
+  },
+  {
+    "id": "document/Bug52583.doc",
+    "path": "test-data/document/Bug52583.doc"
+  },
+  {
+    "id": "document/Bug53182.doc",
+    "path": "test-data/document/Bug53182.doc"
+  },
+  {
+    "id": "document/Bug53380_2.doc",
+    "path": "test-data/document/Bug53380_2.doc"
+  },
+  {
+    "id": "document/Bug53380_4.doc",
+    "path": "test-data/document/Bug53380_4.doc"
+  },
+  {
+    "id": "document/Bug53453Section.doc",
+    "path": "test-data/document/Bug53453Section.doc"
+  },
+  {
+    "id": "document/DiffFirstPageHeadFoot.doc",
+    "path": "test-data/document/DiffFirstPageHeadFoot.doc"
+  },
+  {
+    "id": "document/FancyFoot.doc",
+    "path": "test-data/document/FancyFoot.doc"
+  },
+  {
+    "id": "document/HeaderFooterUnicode.doc",
+    "path": "test-data/document/HeaderFooterUnicode.doc"
+  },
+  {
+    "id": "document/HeaderWithMacros.doc",
+    "path": "test-data/document/HeaderWithMacros.doc"
+  },
+  {
+    "id": "document/Lists.doc",
+    "path": "test-data/document/Lists.doc"
+  },
+  {
+    "id": "document/MarkAuthorsTable.doc",
+    "path": "test-data/document/MarkAuthorsTable.doc"
+  },
+  {
+    "id": "document/NoHeadFoot.doc",
+    "path": "test-data/document/NoHeadFoot.doc"
+  },
+  {
+    "id": "document/PageSpecificHeadFoot.doc",
+    "path": "test-data/document/PageSpecificHeadFoot.doc"
+  },
+  {
+    "id": "document/Picture_Alternative_Text.doc",
+    "path": "test-data/document/Picture_Alternative_Text.doc"
+  },
+  {
+    "id": "document/SampleDoc.doc",
+    "path": "test-data/document/SampleDoc.doc"
+  },
+  {
+    "id": "document/SimpleHeadThreeColFoot.doc",
+    "path": "test-data/document/SimpleHeadThreeColFoot.doc"
+  },
+  {
+    "id": "document/ThreeColFoot.doc",
+    "path": "test-data/document/ThreeColFoot.doc"
+  },
+  {
+    "id": "document/ThreeColHead.doc",
+    "path": "test-data/document/ThreeColHead.doc"
+  },
+  {
+    "id": "document/ThreeColHeadFoot.doc",
+    "path": "test-data/document/ThreeColHeadFoot.doc"
+  },
+  {
+    "id": "document/bug65255.doc",
+    "path": "test-data/document/bug65255.doc"
+  },
+  {
+    "id": "document/cap.stanford.edu_profiles_viewbiosketch_facultyid_4009_name_m_maciver.doc",
+    "path": "test-data/document/cap.stanford.edu_profiles_viewbiosketch_facultyid=4009&name=m_maciver.doc"
+  },
+  {
+    "id": "document/capitalized.doc",
+    "path": "test-data/document/capitalized.doc"
+  },
+  {
+    "id": "document/documentProperties.doc",
+    "path": "test-data/document/documentProperties.doc"
+  },
+  {
+    "id": "document/endingnote.doc",
+    "path": "test-data/document/endingnote.doc"
+  },
+  {
+    "id": "document/footnote.doc",
+    "path": "test-data/document/footnote.doc"
+  },
+  {
+    "id": "document/gh-issue-1126.doc",
+    "path": "test-data/document/gh-issue-1126.doc"
+  },
+  {
+    "id": "document/header_footer_replace.doc",
+    "path": "test-data/document/header_footer_replace.doc"
+  },
+  {
+    "id": "document/header_image.doc",
+    "path": "test-data/document/header_image.doc"
+  },
+  {
+    "id": "document/hyperlink.doc",
+    "path": "test-data/document/hyperlink.doc"
+  },
+  {
+    "id": "document/innertable.doc",
+    "path": "test-data/document/innertable.doc"
+  },
+  {
+    "id": "document/lists-margins.doc",
+    "path": "test-data/document/lists-margins.doc"
+  },
+  {
+    "id": "document/page-break-before.doc",
+    "path": "test-data/document/page-break-before.doc"
+  },
+  {
+    "id": "document/page-break.doc",
+    "path": "test-data/document/page-break.doc"
+  },
+  {
+    "id": "document/pageref.doc",
+    "path": "test-data/document/pageref.doc"
+  },
+  {
+    "id": "document/rasp.doc",
+    "path": "test-data/document/rasp.doc"
+  },
+  {
+    "id": "document/simple-table2.doc",
+    "path": "test-data/document/simple-table2.doc"
+  },
+  {
+    "id": "document/table-merges.doc",
+    "path": "test-data/document/table-merges.doc"
+  },
+  {
+    "id": "document/test-fields.doc",
+    "path": "test-data/document/test-fields.doc"
+  },
+  {
+    "id": "document/test2.doc",
+    "path": "test-data/document/test2.doc"
+  },
+  {
+    "id": "document/testRangeDelete.doc",
+    "path": "test-data/document/testRangeDelete.doc"
+  },
+  {
+    "id": "document/testRangeInsertion.doc",
+    "path": "test-data/document/testRangeInsertion.doc"
+  },
+  {
+    "id": "document/testRangeReplacement.doc",
+    "path": "test-data/document/testRangeReplacement.doc"
+  },
+  {
+    "id": "document/two_images.doc",
+    "path": "test-data/document/two_images.doc"
+  },
+  {
+    "id": "document/vector_image.doc",
+    "path": "test-data/document/vector_image.doc"
+  },
+  {
+    "id": "hmef/quick-contents/quick.doc",
+    "path": "test-data/hmef/quick-contents/quick.doc"
+  },
+  {
+    "id": "hpsf/TestBug52372.doc",
+    "path": "test-data/hpsf/TestBug52372.doc"
+  },
+  {
+    "id": "hpsf/TestChineseProperties.doc",
+    "path": "test-data/hpsf/TestChineseProperties.doc"
+  },
+  {
+    "id": "hpsf/TestNon4ByteBoundary.doc",
+    "path": "test-data/hpsf/TestNon4ByteBoundary.doc"
+  },
+  {
+    "id": "hpsf/TestWriteWellKnown.doc",
+    "path": "test-data/hpsf/TestWriteWellKnown.doc"
+  }
+]

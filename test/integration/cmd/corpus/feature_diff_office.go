@@ -31,15 +31,31 @@ type referenceManifest struct {
 
 // referenceRecord is one reference: its source, as the corpus directory or
 // the fetched directory names it, the SHA-256 of the source, of its
-// options.json ("" without one) and of the PDF, the image that converted it
-// and the LibreOffice core commit the fetched documents come from.
+// options.json ("" without one) and of the PDF, the image that converted it,
+// and the pin the fetched documents come from with its value. CoreCommit is
+// the LibreOffice core commit of a record lib/libreoffice.sh wrote before it
+// recorded the pin, read as the value of LIBREOFFICE_CORE_COMMIT.
 type referenceRecord struct {
-	Source        string `json:"source"`
-	SourceSHA256  string `json:"source_sha256"`
-	OptionsSHA256 string `json:"options_sha256"`
-	PDFSHA256     string `json:"pdf_sha256"`
-	Image         string `json:"image"`
-	CoreCommit    string `json:"libreoffice_core_commit"`
+	Source         string `json:"source"`
+	SourceSHA256   string `json:"source_sha256"`
+	OptionsSHA256  string `json:"options_sha256"`
+	PDFSHA256      string `json:"pdf_sha256"`
+	Image          string `json:"image"`
+	SourcePin      string `json:"source_pin"`
+	SourcePinValue string `json:"source_pin_value"`
+	CoreCommit     string `json:"libreoffice_core_commit"`
+}
+
+// pinValue returns the value of the pin name the record was built at, ""
+// when it records another pin or none.
+func (r referenceRecord) pinValue(name string) string {
+	switch {
+	case r.SourcePin == name:
+		return r.SourcePinValue
+	case r.SourcePin == "" && name == "LIBREOFFICE_CORE_COMMIT":
+		return r.CoreCommit
+	}
+	return ""
 }
 
 // referenceFailure is a source the route refused, with its answer.
@@ -60,7 +76,8 @@ var errStaleReferences = errors.New("stale references")
 
 // Prepare checks, for a corpus whose references the host builds, that every
 // fixture has a reference built at the pinned GOTENBERG_IMAGE (and, for a
-// fetched document, LIBREOFFICE_CORE_COMMIT) from its current source and
+// fetched corpus, at the pin its manifest's references.source_pin names)
+// from its current source and
 // options, and that the provisioned PDFs the goldens were made from are
 // those references. Any disagreement fails the cell with the command that
 // rebuilds what is stale, so no fixture is scored against a reference of
@@ -91,7 +108,7 @@ func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 	var stale, regolden []string
 	for _, fx := range fixtures {
 		name := reportName(fx.ID)
-		if problem := checkReference(man, name, fx, pins); problem != "" {
+		if problem := checkReference(man, refs.SourcePin, name, fx, pins); problem != "" {
 			stale = append(stale, problem)
 			continue
 		}
@@ -113,8 +130,10 @@ func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 }
 
 // checkReference returns what is wrong with the reference of one fixture,
-// or "" when it was built from the fixture's current source at the pins.
-func checkReference(man referenceManifest, name string, fx Fixture, pins map[string]string) string {
+// or "" when it was built from the fixture's current source at the pins:
+// the image's and, when sourcePin is not "", the pin the fetched documents
+// come from.
+func checkReference(man referenceManifest, sourcePin, name string, fx Fixture, pins map[string]string) string {
 	rec, ok := man.References[name]
 	if !ok {
 		if fail, refused := man.Failed[name]; refused {
@@ -129,9 +148,9 @@ func checkReference(man referenceManifest, name string, fx Fixture, pins map[str
 	if err != nil {
 		return fmt.Sprintf("%s: %v", name, err)
 	}
-	if strings.Contains(fx.ID, "/") {
-		if want := pins["LIBREOFFICE_CORE_COMMIT"]; rec.CoreCommit != want {
-			return fmt.Sprintf("%s was built from LibreOffice core %s, the pin is %s", name, rec.CoreCommit, want)
+	if sourcePin != "" {
+		if got, want := rec.pinValue(sourcePin), pins[sourcePin]; got != want {
+			return fmt.Sprintf("%s was built from the documents of %s %q, the pin is %q", name, sourcePin, got, want)
 		}
 	}
 	if got, err := fileSHA256(source.Document); err != nil || got != rec.SourceSHA256 {

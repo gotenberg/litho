@@ -1,0 +1,18 @@
+{
+  "name": "poi/pptx",
+  "source": "poi/pptx",
+  "pdf_root": "pdfs",
+  "inputs": {
+    "list": "documents.json",
+    "list_root": "sources",
+    "fetched_by": "make office-fetch SOURCES=poi FORMATS=pptx"
+  },
+  "references": {
+    "dir": "references",
+    "built_by": "make office-references SOURCES=poi FORMATS=pptx",
+    "source_pin": "POI_COMMIT"
+  },
+  "goldens": {
+    "diff": "goldens/diff"
+  }
+}

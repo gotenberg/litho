@@ -1,0 +1,518 @@
+[
+  {
+    "id": "document/51921-Word-Crash067.docx",
+    "path": "test-data/document/51921-Word-Crash067.docx"
+  },
+  {
+    "id": "document/52288.docx",
+    "path": "test-data/document/52288.docx"
+  },
+  {
+    "id": "document/52449.docx",
+    "path": "test-data/document/52449.docx"
+  },
+  {
+    "id": "document/55733.docx",
+    "path": "test-data/document/55733.docx"
+  },
+  {
+    "id": "document/55966.docx",
+    "path": "test-data/document/55966.docx"
+  },
+  {
+    "id": "document/56392.docx",
+    "path": "test-data/document/56392.docx"
+  },
+  {
+    "id": "document/57312.docx",
+    "path": "test-data/document/57312.docx"
+  },
+  {
+    "id": "document/58067.docx",
+    "path": "test-data/document/58067.docx"
+  },
+  {
+    "id": "document/58618.docx",
+    "path": "test-data/document/58618.docx"
+  },
+  {
+    "id": "document/59030.docx",
+    "path": "test-data/document/59030.docx"
+  },
+  {
+    "id": "document/59378.docx",
+    "path": "test-data/document/59378.docx"
+  },
+  {
+    "id": "document/60293.docx",
+    "path": "test-data/document/60293.docx"
+  },
+  {
+    "id": "document/60316.docx",
+    "path": "test-data/document/60316.docx"
+  },
+  {
+    "id": "document/60316.dotx",
+    "path": "test-data/document/60316.dotx"
+  },
+  {
+    "id": "document/60316b.dotx",
+    "path": "test-data/document/60316b.dotx"
+  },
+  {
+    "id": "document/60329.docx",
+    "path": "test-data/document/60329.docx"
+  },
+  {
+    "id": "document/61470.docx",
+    "path": "test-data/document/61470.docx"
+  },
+  {
+    "id": "document/61787.docx",
+    "path": "test-data/document/61787.docx"
+  },
+  {
+    "id": "document/65099.docx",
+    "path": "test-data/document/65099.docx"
+  },
+  {
+    "id": "document/Bug54771a.docx",
+    "path": "test-data/document/Bug54771a.docx"
+  },
+  {
+    "id": "document/Bug54771b.docx",
+    "path": "test-data/document/Bug54771b.docx"
+  },
+  {
+    "id": "document/Bug54849.docx",
+    "path": "test-data/document/Bug54849.docx"
+  },
+  {
+    "id": "document/Bug55142.docx",
+    "path": "test-data/document/Bug55142.docx"
+  },
+  {
+    "id": "document/Bug60337.docx",
+    "path": "test-data/document/Bug60337.docx"
+  },
+  {
+    "id": "document/Bug60341.docx",
+    "path": "test-data/document/Bug60341.docx"
+  },
+  {
+    "id": "document/Bug62859.docx",
+    "path": "test-data/document/Bug62859.docx"
+  },
+  {
+    "id": "document/Bug64561.docx",
+    "path": "test-data/document/Bug64561.docx"
+  },
+  {
+    "id": "document/Bug66263-paragraph.docx",
+    "path": "test-data/document/Bug66263-paragraph.docx"
+  },
+  {
+    "id": "document/Bug66263-table.docx",
+    "path": "test-data/document/Bug66263-table.docx"
+  },
+  {
+    "id": "document/Bug66988.docx",
+    "path": "test-data/document/Bug66988.docx"
+  },
+  {
+    "id": "document/ComplexNumberedLists.docx",
+    "path": "test-data/document/ComplexNumberedLists.docx"
+  },
+  {
+    "id": "document/DiffFirstPageHeadFoot.docx",
+    "path": "test-data/document/DiffFirstPageHeadFoot.docx"
+  },
+  {
+    "id": "document/EmptyDocumentWithHeaderFooter.docx",
+    "path": "test-data/document/EmptyDocumentWithHeaderFooter.docx"
+  },
+  {
+    "id": "document/EnforcedWith.docx",
+    "path": "test-data/document/EnforcedWith.docx"
+  },
+  {
+    "id": "document/FancyFoot.docx",
+    "path": "test-data/document/FancyFoot.docx"
+  },
+  {
+    "id": "document/FieldCodes.docx",
+    "path": "test-data/document/FieldCodes.docx"
+  },
+  {
+    "id": "document/FldSimple.docx",
+    "path": "test-data/document/FldSimple.docx"
+  },
+  {
+    "id": "document/HeaderFooterUnicode.docx",
+    "path": "test-data/document/HeaderFooterUnicode.docx"
+  },
+  {
+    "id": "document/Headers.docx",
+    "path": "test-data/document/Headers.docx"
+  },
+  {
+    "id": "document/IllustrativeCases.docx",
+    "path": "test-data/document/IllustrativeCases.docx"
+  },
+  {
+    "id": "document/MultipleBodyBug.docx",
+    "path": "test-data/document/MultipleBodyBug.docx"
+  },
+  {
+    "id": "document/NoHeadFoot.docx",
+    "path": "test-data/document/NoHeadFoot.docx"
+  },
+  {
+    "id": "document/Numbering.docx",
+    "path": "test-data/document/Numbering.docx"
+  },
+  {
+    "id": "document/NumberingWOverrides.docx",
+    "path": "test-data/document/NumberingWOverrides.docx"
+  },
+  {
+    "id": "document/NumberingWithOutOfOrderId.docx",
+    "path": "test-data/document/NumberingWithOutOfOrderId.docx"
+  },
+  {
+    "id": "document/PageSpecificHeadFoot.docx",
+    "path": "test-data/document/PageSpecificHeadFoot.docx"
+  },
+  {
+    "id": "document/SampleDoc.docx",
+    "path": "test-data/document/SampleDoc.docx"
+  },
+  {
+    "id": "document/SimpleHeadThreeColFoot.docx",
+    "path": "test-data/document/SimpleHeadThreeColFoot.docx"
+  },
+  {
+    "id": "document/Styles.docx",
+    "path": "test-data/document/Styles.docx"
+  },
+  {
+    "id": "document/TestDocument.docx",
+    "path": "test-data/document/TestDocument.docx"
+  },
+  {
+    "id": "document/TestPoiXMLDocumentCorePropertiesGetKeywords.docx",
+    "path": "test-data/document/TestPoiXMLDocumentCorePropertiesGetKeywords.docx"
+  },
+  {
+    "id": "document/TestTableColumns.docx",
+    "path": "test-data/document/TestTableColumns.docx"
+  },
+  {
+    "id": "document/ThreeColFoot.docx",
+    "path": "test-data/document/ThreeColFoot.docx"
+  },
+  {
+    "id": "document/ThreeColHead.docx",
+    "path": "test-data/document/ThreeColHead.docx"
+  },
+  {
+    "id": "document/ThreeColHeadFoot.docx",
+    "path": "test-data/document/ThreeColHeadFoot.docx"
+  },
+  {
+    "id": "document/Tika-792.docx",
+    "path": "test-data/document/Tika-792.docx"
+  },
+  {
+    "id": "document/WithGIF.docx",
+    "path": "test-data/document/WithGIF.docx"
+  },
+  {
+    "id": "document/WithTabs.docx",
+    "path": "test-data/document/WithTabs.docx"
+  },
+  {
+    "id": "document/bib-chernigovka.netdo.ru_download_docs_17459.docx",
+    "path": "test-data/document/bib-chernigovka.netdo.ru_download_docs_17459.docx"
+  },
+  {
+    "id": "document/bookmarks.docx",
+    "path": "test-data/document/bookmarks.docx"
+  },
+  {
+    "id": "document/bug-paragraph-alignment.docx",
+    "path": "test-data/document/bug-paragraph-alignment.docx"
+  },
+  {
+    "id": "document/bug56075-changeTracking_off.docx",
+    "path": "test-data/document/bug56075-changeTracking_off.docx"
+  },
+  {
+    "id": "document/bug56075-changeTracking_on.docx",
+    "path": "test-data/document/bug56075-changeTracking_on.docx"
+  },
+  {
+    "id": "document/bug56076.docx",
+    "path": "test-data/document/bug56076.docx"
+  },
+  {
+    "id": "document/bug57031.docx",
+    "path": "test-data/document/bug57031.docx"
+  },
+  {
+    "id": "document/bug65738.docx",
+    "path": "test-data/document/bug65738.docx"
+  },
+  {
+    "id": "document/bug66312.docx",
+    "path": "test-data/document/bug66312.docx"
+  },
+  {
+    "id": "document/bug69628.docx",
+    "path": "test-data/document/bug69628.docx"
+  },
+  {
+    "id": "document/capitalized.docx",
+    "path": "test-data/document/capitalized.docx"
+  },
+  {
+    "id": "document/checkboxes.docx",
+    "path": "test-data/document/checkboxes.docx"
+  },
+  {
+    "id": "document/comment.docx",
+    "path": "test-data/document/comment.docx"
+  },
+  {
+    "id": "document/deep-table-cell.docx",
+    "path": "test-data/document/deep-table-cell.docx"
+  },
+  {
+    "id": "document/delins.docx",
+    "path": "test-data/document/delins.docx"
+  },
+  {
+    "id": "document/documentProperties.docx",
+    "path": "test-data/document/documentProperties.docx"
+  },
+  {
+    "id": "document/documentProtection_comments_no_password.docx",
+    "path": "test-data/document/documentProtection_comments_no_password.docx"
+  },
+  {
+    "id": "document/documentProtection_forms_no_password.docx",
+    "path": "test-data/document/documentProtection_forms_no_password.docx"
+  },
+  {
+    "id": "document/documentProtection_no_protection.docx",
+    "path": "test-data/document/documentProtection_no_protection.docx"
+  },
+  {
+    "id": "document/documentProtection_no_protection_tag_existing.docx",
+    "path": "test-data/document/documentProtection_no_protection_tag_existing.docx"
+  },
+  {
+    "id": "document/documentProtection_readonly_no_password.docx",
+    "path": "test-data/document/documentProtection_readonly_no_password.docx"
+  },
+  {
+    "id": "document/documentProtection_trackedChanges_no_password.docx",
+    "path": "test-data/document/documentProtection_trackedChanges_no_password.docx"
+  },
+  {
+    "id": "document/emptyPPr.docx",
+    "path": "test-data/document/emptyPPr.docx"
+  },
+  {
+    "id": "document/endnotes.docx",
+    "path": "test-data/document/endnotes.docx"
+  },
+  {
+    "id": "document/footnotes.docx",
+    "path": "test-data/document/footnotes.docx"
+  },
+  {
+    "id": "document/form_footnotes.docx",
+    "path": "test-data/document/form_footnotes.docx"
+  },
+  {
+    "id": "document/headerFooter.docx",
+    "path": "test-data/document/headerFooter.docx"
+  },
+  {
+    "id": "document/headerPic.docx",
+    "path": "test-data/document/headerPic.docx"
+  },
+  {
+    "id": "document/heading123.docx",
+    "path": "test-data/document/heading123.docx"
+  },
+  {
+    "id": "document/protected_sample.docx",
+    "path": "test-data/document/protected_sample.docx"
+  },
+  {
+    "id": "document/rtl.docx",
+    "path": "test-data/document/rtl.docx"
+  },
+  {
+    "id": "document/sample.docx",
+    "path": "test-data/document/sample.docx"
+  },
+  {
+    "id": "document/shapes-with-text.docx",
+    "path": "test-data/document/shapes-with-text.docx"
+  },
+  {
+    "id": "document/smarttag-snippet.docx",
+    "path": "test-data/document/smarttag-snippet.docx"
+  },
+  {
+    "id": "document/table-alignment.docx",
+    "path": "test-data/document/table-alignment.docx"
+  },
+  {
+    "id": "document/table-indent.docx",
+    "path": "test-data/document/table-indent.docx"
+  },
+  {
+    "id": "document/table_footnotes.docx",
+    "path": "test-data/document/table_footnotes.docx"
+  },
+  {
+    "id": "document/test.dotx",
+    "path": "test-data/document/test.dotx"
+  },
+  {
+    "id": "document/testComment.docx",
+    "path": "test-data/document/testComment.docx"
+  },
+  {
+    "id": "document/tika-3816.docx",
+    "path": "test-data/document/tika-3816.docx"
+  },
+  {
+    "id": "document/zero-length.docx",
+    "path": "test-data/document/zero-length.docx"
+  },
+  {
+    "id": "integration/stress001.docx",
+    "path": "test-data/integration/stress001.docx"
+  },
+  {
+    "id": "integration/stress003.docx",
+    "path": "test-data/integration/stress003.docx"
+  },
+  {
+    "id": "integration/stress005.docx",
+    "path": "test-data/integration/stress005.docx"
+  },
+  {
+    "id": "integration/stress006.docx",
+    "path": "test-data/integration/stress006.docx"
+  },
+  {
+    "id": "integration/stress007.docx",
+    "path": "test-data/integration/stress007.docx"
+  },
+  {
+    "id": "integration/stress009.docx",
+    "path": "test-data/integration/stress009.docx"
+  },
+  {
+    "id": "integration/stress011.docx",
+    "path": "test-data/integration/stress011.docx"
+  },
+  {
+    "id": "integration/stress012.docx",
+    "path": "test-data/integration/stress012.docx"
+  },
+  {
+    "id": "integration/stress016.docx",
+    "path": "test-data/integration/stress016.docx"
+  },
+  {
+    "id": "integration/stress017.docx",
+    "path": "test-data/integration/stress017.docx"
+  },
+  {
+    "id": "integration/stress019.docx",
+    "path": "test-data/integration/stress019.docx"
+  },
+  {
+    "id": "openxml4j/MultipleCoreProperties.docx",
+    "path": "test-data/openxml4j/MultipleCoreProperties.docx"
+  },
+  {
+    "id": "openxml4j/OPCCompliance_CoreProperties_AlternateTimezones.docx",
+    "path": "test-data/openxml4j/OPCCompliance_CoreProperties_AlternateTimezones.docx"
+  },
+  {
+    "id": "openxml4j/OPCCompliance_CoreProperties_OnlyOneCorePropertiesPart.docx",
+    "path": "test-data/openxml4j/OPCCompliance_CoreProperties_OnlyOneCorePropertiesPart.docx"
+  },
+  {
+    "id": "openxml4j/TestCreatePackageOUTPUT.docx",
+    "path": "test-data/openxml4j/TestCreatePackageOUTPUT.docx"
+  },
+  {
+    "id": "openxml4j/TestOpenPackageINPUT.docx",
+    "path": "test-data/openxml4j/TestOpenPackageINPUT.docx"
+  },
+  {
+    "id": "openxml4j/TestOpenPackageOUTPUT.docx",
+    "path": "test-data/openxml4j/TestOpenPackageOUTPUT.docx"
+  },
+  {
+    "id": "openxml4j/TestPackageCoreProperiesGetters.docx",
+    "path": "test-data/openxml4j/TestPackageCoreProperiesGetters.docx"
+  },
+  {
+    "id": "openxml4j/TestPackageThumbnail.docx",
+    "path": "test-data/openxml4j/TestPackageThumbnail.docx"
+  },
+  {
+    "id": "openxml4j/sample.docx",
+    "path": "test-data/openxml4j/sample.docx"
+  },
+  {
+    "id": "xmldsign/Office2010-SP1-XAdES-X-L.docx",
+    "path": "test-data/xmldsign/Office2010-SP1-XAdES-X-L.docx"
+  },
+  {
+    "id": "xmldsign/hello-world-office-2010-technical-preview-unsigned.docx",
+    "path": "test-data/xmldsign/hello-world-office-2010-technical-preview-unsigned.docx"
+  },
+  {
+    "id": "xmldsign/hello-world-office-2010-technical-preview.docx",
+    "path": "test-data/xmldsign/hello-world-office-2010-technical-preview.docx"
+  },
+  {
+    "id": "xmldsign/hello-world-signed-twice.docx",
+    "path": "test-data/xmldsign/hello-world-signed-twice.docx"
+  },
+  {
+    "id": "xmldsign/hello-world-signed.docx",
+    "path": "test-data/xmldsign/hello-world-signed.docx"
+  },
+  {
+    "id": "xmldsign/hello-world-unsigned.docx",
+    "path": "test-data/xmldsign/hello-world-unsigned.docx"
+  },
+  {
+    "id": "xmldsign/hyperlink-example-signed.docx",
+    "path": "test-data/xmldsign/hyperlink-example-signed.docx"
+  },
+  {
+    "id": "xmldsign/ms-office-2010-signed.docx",
+    "path": "test-data/xmldsign/ms-office-2010-signed.docx"
+  },
+  {
+    "id": "xmldsign/office2007prettyPrintedRels.docx",
+    "path": "test-data/xmldsign/office2007prettyPrintedRels.docx"
+  },
+  {
+    "id": "xmldsign/signed.docx",
+    "path": "test-data/xmldsign/signed.docx"
+  }
+]

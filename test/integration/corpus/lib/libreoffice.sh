@@ -21,9 +21,11 @@
 # test/integration/cmd/corpus); keep the two in step.
 #
 # The references are not committed: they live in the gitignored testdata,
-# with <out_dir>/manifest.json recording, per reference, the image, the
-# LibreOffice core commit the fetched documents come from, and the SHA-256
-# of the source and of its options.json, so `corpus run` refuses a reference
+# with <out_dir>/manifest.json recording, per reference, the image, the pin
+# the fetched documents come from (the corpus manifest's
+# references.source_pin, LIBREOFFICE_CORE_COMMIT or POI_COMMIT for
+# instance) and its value, and the SHA-256 of the source and of its
+# options.json, so `corpus run` refuses a reference
 # built from another pin or from a source that changed since. A source the
 # route refuses is recorded under "failed" with the route's answer, and gets
 # no reference. The optional names restrict the run to those references,
@@ -53,7 +55,9 @@ pin() {
   printf '%s' "$v"
 }
 IMAGE="$(pin GOTENBERG_IMAGE)"
-COMMIT="$(pin LIBREOFFICE_CORE_COMMIT)"
+SOURCE_PIN="$(jq -r '.references.source_pin // empty' "$CORPUS/manifest.json")"
+SOURCE_VALUE=""
+[ -z "$SOURCE_PIN" ] || SOURCE_VALUE="$(pin "$SOURCE_PIN")"
 
 for tool in docker curl jq shasum; do
   if ! command -v "$tool" > /dev/null; then
@@ -69,7 +73,7 @@ KEYS='["password","landscape","nativePages","nativeBookmarks","paperWidth","pape
 
 # The extensions of a committed source's document (officeFormats in
 # fixture/office.go).
-EXTENSIONS='docx odt fodt xlsx xlsm xltx xltm ods fods ots csv pptx pptm potx ppsx odp fodp otp'
+EXTENSIONS='docx dotx odt fodt xlsx xlsm xltx xltm ods fods ots csv pptx pptm potx ppsx odp fodp otp doc xls ppt'
 
 # is_document <file> reports whether the file's extension, in any case, is
 # one of EXTENSIONS.
@@ -134,7 +138,7 @@ if [ -f "$CORPUS/documents.json" ]; then
     name="${id//\//__}"
     selected "$name" || continue
     if [ ! -f "$FETCHED/$id" ]; then
-      echo "ERROR: $FETCHED/$id is missing: run make libreoffice-fetch FORMATS=$(basename "$CORPUS")" >&2
+      echo "ERROR: $FETCHED/$id is missing: run make office-fetch SOURCES=$(basename "$(dirname "$CORPUS")") FORMATS=$(basename "$CORPUS")" >&2
       exit 1
     fi
     printf '%s\t%s\t-\t%s\n' "$name" "$FETCHED/$id" "$id" >> "$JOBS"
@@ -187,8 +191,8 @@ build_one() {
   if [ "$status" = 200 ] && [ "$(head -c 5 "$WORK/$name.out")" = "%PDF-" ]; then
     cat "$WORK/$name.out" > "$OUT/$name.pdf"
     jq -n --arg n "$name" --arg s "$source" --arg sh "$(sha "$doc")" --arg o "$opts_sha" \
-      --arg p "$(sha "$OUT/$name.pdf")" --arg i "$IMAGE" --arg c "$COMMIT" \
-      '{($n): {source: $s, source_sha256: $sh, options_sha256: $o, pdf_sha256: $p, image: $i, libreoffice_core_commit: $c}}' \
+      --arg p "$(sha "$OUT/$name.pdf")" --arg i "$IMAGE" --arg sp "$SOURCE_PIN" --arg sv "$SOURCE_VALUE" \
+      '{($n): ({source: $s, source_sha256: $sh, options_sha256: $o, pdf_sha256: $p, image: $i} + (if $sp == "" then {} else {source_pin: $sp, source_pin_value: $sv} end))}' \
       > "$WORK/$name.ok"
     echo "  $NAME: references/$name.pdf ($(wc -c < "$OUT/$name.pdf" | tr -d ' ') bytes)"
   else
@@ -202,7 +206,7 @@ build_one() {
   rm -f "$WORK/$name.out"
 }
 export -f build_one opt sha
-export OUT WORK URL IMAGE COMMIT CORPUS NAME KEYS
+export OUT WORK URL IMAGE SOURCE_PIN SOURCE_VALUE CORPUS NAME KEYS
 
 mkdir -p "$OUT"
 # Four requests at a time: the route converts one document per LibreOffice

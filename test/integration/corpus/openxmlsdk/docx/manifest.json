@@ -1,0 +1,18 @@
+{
+  "name": "openxmlsdk/docx",
+  "source": "openxmlsdk/docx",
+  "pdf_root": "pdfs",
+  "inputs": {
+    "list": "documents.json",
+    "list_root": "sources",
+    "fetched_by": "make office-fetch SOURCES=openxmlsdk FORMATS=docx"
+  },
+  "references": {
+    "dir": "references",
+    "built_by": "make office-references SOURCES=openxmlsdk FORMATS=docx",
+    "source_pin": "OPENXMLSDK_COMMIT"
+  },
+  "goldens": {
+    "diff": "goldens/diff"
+  }
+}

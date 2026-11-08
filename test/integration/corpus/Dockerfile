@@ -261,10 +261,13 @@ COPY facturx/ ./facturx/
 # Chromium references. The Office corpora's references are not in git: the
 # host builds them into the testdata (make office-references), and their
 # download scripts read them from the /output volume, so only the scripts of
-# the libreoffice and gotenberg Office corpora matter in the image.
+# the Office corpora (libreoffice, gotenberg, poi, openxmlsdk and the govdocs
+# Office ones) matter in the image.
 COPY litho/ ./litho/
 COPY gotenberg/ ./gotenberg/
 COPY libreoffice/ ./libreoffice/
+COPY poi/ ./poi/
+COPY openxmlsdk/ ./openxmlsdk/
 RUN chmod +x entrypoint.sh \
   lib/run-verapdf.sh \
   lib/run-mustang.sh \
@@ -276,13 +279,15 @@ RUN chmod +x entrypoint.sh \
   lib/install-references.sh \
   pdfjs/download.sh \
   verapdf/download.sh \
-  govdocs/pdf/download.sh \
+  govdocs/*/download.sh \
   pdf20/download.sh \
   pdfcpu/download.sh \
   facturx/download.sh \
   litho/*/download.sh \
   gotenberg/*/download.sh \
-  libreoffice/*/download.sh
+  libreoffice/*/download.sh \
+  poi/*/download.sh \
+  openxmlsdk/*/download.sh
 
 # Record the versions this image was built with, overrides included, so
 # the entrypoint can hand the corpus revisions to the download scripts and

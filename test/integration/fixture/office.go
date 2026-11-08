@@ -56,11 +56,15 @@ var officeOptionNames = []string{"password", "landscape", "nativePages", "native
 // SpreadsheetML workbook, a flat ODS or a template an OpenDocument
 // spreadsheet, a macro-enabled presentation, a template or a slide show a
 // PresentationML presentation, and a flat ODP or a template an
-// OpenDocument presentation. A lib/libreoffice.sh EXTENSIONS entry each.
+// OpenDocument presentation. A Word, Excel or PowerPoint 97 to 2003 file
+// converts from a format litho does not read yet, named by its extension,
+// which pdf.Convert refuses: its cell scores a convert error until it
+// does. A lib/libreoffice.sh EXTENSIONS entry each.
 //
 //nolint:gochecknoglobals // static extension table
 var officeFormats = map[string]pdf.Format{
 	".docx": pdf.FormatDOCX,
+	".dotx": pdf.FormatDOCX,
 	".odt":  pdf.FormatODT,
 	".fodt": pdf.FormatODT,
 	".xlsx": pdf.FormatXLSX,
@@ -78,6 +82,9 @@ var officeFormats = map[string]pdf.Format{
 	".odp":  pdf.FormatODP,
 	".fodp": pdf.FormatODP,
 	".otp":  pdf.FormatODP,
+	".doc":  pdf.Format("doc"),
+	".xls":  pdf.Format("xls"),
+	".ppt":  pdf.Format("ppt"),
 }
 
 // Office is one Office source, read.
@@ -95,7 +102,7 @@ type Office struct {
 // ErrNoOfficeDocument reports a source directory that does not hold exactly
 // one Office document of an extension officeFormats lists, or a source file
 // of another type.
-var ErrNoOfficeDocument = errors.New("not one Office document (.docx, .odt, .fodt, .xlsx, .xlsm, .xltx, .xltm, .ods, .fods, .ots, .csv, .pptx, .pptm, .potx, .ppsx, .odp, .fodp, .otp)")
+var ErrNoOfficeDocument = errors.New("not one Office document (.docx, .dotx, .odt, .fodt, .xlsx, .xlsm, .xltx, .xltm, .ods, .fods, .ots, .csv, .pptx, .pptm, .potx, .ppsx, .odp, .fodp, .otp, .doc, .xls, .ppt)")
 
 // LoadOffice reads an Office source: path is a source directory, holding
 // one document and an optional options file and nothing else, or a document

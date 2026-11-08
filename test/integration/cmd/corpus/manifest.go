@@ -100,6 +100,11 @@ type ReferenceSpec struct {
 	Dir string `json:"dir"`
 	// BuiltBy is the make target that builds the references.
 	BuiltBy string `json:"built_by"`
+	// SourcePin names the versions.env pin the fetched documents come
+	// from (LIBREOFFICE_CORE_COMMIT, POI_COMMIT): a reference built from
+	// the documents of another value is stale. Empty for a corpus whose
+	// sources are committed.
+	SourcePin string `json:"source_pin,omitempty"`
 }
 
 // InputSpec lists the source documents of a converter corpus: List, Glob or
