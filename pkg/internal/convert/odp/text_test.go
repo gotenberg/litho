@@ -226,3 +226,18 @@ func TestRead_FieldFormat(t *testing.T) {
 		})
 	}
 }
+
+func TestRead_PlaceholderBaseStyle(t *testing.T) {
+	f := flat{
+		styles: `<style:style style:name="M-title" style:family="presentation"><style:paragraph-properties fo:text-align="center"/><style:text-properties fo:font-size="40pt"/></style:style>`,
+		auto: `<style:style style:name="pr1" style:family="presentation"><style:graphic-properties draw:fill="none"/></style:style>` +
+			`<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="28cm" fo:page-height="15.75cm"/></style:page-layout>`,
+		master: `<style:master-page style:name="M" style:page-layout-name="pm1"/>`,
+		body:   `<draw:page draw:master-page-name="M"><draw:frame presentation:class="title" presentation:style-name="pr1" svg:width="20cm" svg:height="3cm"><draw:text-box><text:p>T</text:p></draw:text-box></draw:frame></draw:page>`,
+	}
+	doc, _ := read(t, f.bytes())
+	p := doc.Slides[0].Shapes[0].Text.Paragraphs[0]
+	if p.Align != css.AlignCenter || !near(p.Runs[0].Style.Size, 40) {
+		t.Errorf("paragraph = align %v size %v, want the master title's", p.Align, p.Runs[0].Style.Size)
+	}
+}

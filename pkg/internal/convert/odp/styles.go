@@ -130,6 +130,18 @@ func (r *reader) shapeStyle(el *odf.Element, pc *pageCtx) *shapeStyle {
 		family, name = odf.FamilyPresentation, pn
 	}
 	ls := r.styleLayers(pc.scope, family, name)
+	chain := r.styles.Chain(pc.scope, family, name)
+	if family == odf.FamilyPresentation {
+		if base := r.placeholderBase(chain, ss.class, pc); len(base) > 0 {
+			// The master's style of the class goes under the shape's own.
+			lead := []layer{ls[0]}
+			for _, st := range base {
+				lead = append(lead, layerOf(st))
+			}
+			ls = append(lead, ls[1:]...)
+			chain = append(base, chain...)
+		}
+	}
 	for _, l := range ls {
 		ss.graphic = ss.graphic.Over(l.graphic)
 	}
@@ -138,7 +150,6 @@ func (r *reader) shapeStyle(el *odf.Element, pc *pageCtx) *shapeStyle {
 	if family != odf.FamilyPresentation {
 		return ss
 	}
-	chain := r.styles.Chain(pc.scope, family, name)
 	for i, st := range chain {
 		prefix, ok := strings.CutSuffix(st.Name, "outline1")
 		if !ok || st.Auto {
@@ -163,6 +174,27 @@ func (r *reader) shapeStyle(el *odf.Element, pc *pageCtx) *shapeStyle {
 		break
 	}
 	return ss
+}
+
+// placeholderBase returns the style chain of the master page's
+// presentation style for a placeholder of class (title, subtitle,
+// outline, notes) whose own presentation style chain holds no common
+// style: Impress bases every presentation object on its master's style
+// of its class, "<master>-title", "-subtitle", "-outline1" or "-notes"
+// (measured on the pinned LibreOffice: sd/tdf169979.odp's title, whose
+// automatic style names no parent, prints in its master's title font,
+// centred). nil when the chain reaches a common style already.
+func (r *reader) placeholderBase(chain []*odf.Style, class string, pc *pageCtx) []*odf.Style {
+	suffix := map[string]string{"title": "title", "subtitle": "subtitle", "outline": "outline1", "notes": "notes"}[class]
+	if suffix == "" || pc.mp == nil {
+		return nil
+	}
+	for _, st := range chain {
+		if !st.Auto {
+			return nil
+		}
+	}
+	return r.styles.Chain(odf.ScopeStyles, odf.FamilyPresentation, pc.mp.Name+"-"+suffix)
 }
 
 // levelLayers returns the layers a paragraph of list level lv, 0 for the
