@@ -234,9 +234,17 @@ func (b *builder) lineRule(st *css.Style, p paraState, t textState) {
 }
 
 // textAligns maps fo:text-align (ODF 1.3, Part 3, 20.216; XSL 1.0, 7.16.9)
-// to css.
+// to css. Writer reads start as left and end as right whatever the
+// paragraph's writing mode, where XSL makes them relative to it: a
+// right-to-left paragraph aligned end prints on the right.
+//
+// # Corpus evidence
+//
+//   - odt: odfexport/tdf131812.odt, and a probe of every value in lr-tb
+//     and rl-tb paragraphs: start and left print at the left margin, end
+//     and right at the right one, in both writing modes.
 var textAligns = map[string]css.TextAlign{
-	"start": css.AlignStart, "end": css.AlignEnd, "left": css.AlignLeft,
+	"start": css.AlignLeft, "end": css.AlignRight, "left": css.AlignLeft,
 	"right": css.AlignRight, "center": css.AlignCenter, "justify": css.AlignJustify,
 }
 

@@ -301,3 +301,27 @@ func TestConvert_TableOfContentsRegenerated(t *testing.T) {
 		t.Errorf("table = %q", got)
 	}
 }
+
+func TestConvert_TextAlignStartEndAreAbsolute(t *testing.T) {
+	// Writer prints start at the left and end at the right in either
+	// writing mode (LibreOffice measured: 56.7pt and the right margin).
+	margin := 2 * 72 / 2.54
+	for _, tc := range []struct {
+		align, mode string
+		left        bool
+	}{
+		{"start", "lr-tb", true}, {"end", "lr-tb", false},
+		{"start", "rl-tb", true}, {"end", "rl-tb", false},
+	} {
+		t.Run(tc.align+" "+tc.mode, func(t *testing.T) {
+			auto := `<style:style style:name="A" style:family="paragraph"><style:paragraph-properties fo:text-align="` + tc.align + `" style:writing-mode="` + tc.mode + `"/></style:style>`
+			rs := runs(convertDoc(t, doc{contentAuto: auto, body: `<text:p text:style-name="A">xx</text:p>`}.pack(t), office.Options{}).Pages[0])
+			if len(rs) == 0 {
+				t.Fatal("no text")
+			}
+			if got := near(rs[0].x, margin, 0.5); got != tc.left {
+				t.Errorf("text at x %.2f, at the left margin %v, want %v", rs[0].x, got, tc.left)
+			}
+		})
+	}
+}
