@@ -480,3 +480,13 @@ func TestDims_CategoryAxisCrossesPrimary(t *testing.T) {
 		t.Errorf("the category axis crosses %+v, want the primary value axis", x.other.ax)
 	}
 }
+
+func TestRender_DeletedPointLabelHidesGroupLabel(t *testing.T) {
+	c := barChart(1, 2)
+	c.Groups[0].Labels = Labels{ShowValue: true, Style: TextStyle{Size: 10}}
+	c.Groups[0].Series[0].Points = []Point{{Index: 0, HasLabels: true}}
+	got := texts(Render(context.Background(), ahem(t), c, chartRect))
+	if slices.Contains(got, "1") || !slices.Contains(got, "2") {
+		t.Errorf("texts %q, want the second point's label alone", got)
+	}
+}

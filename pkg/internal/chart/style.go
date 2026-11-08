@@ -126,11 +126,3 @@ func (rd *renderer) markerOf(g *Group, s *Series, j int) Marker {
 	}
 	return m
 }
-
-// labelsOf returns the data labels of point j of series s.
-func (s *Series) labelsOf(j int) Labels {
-	if p := s.point(j); p != nil && p.HasLabels {
-		return p.Labels
-	}
-	return s.Labels
-}

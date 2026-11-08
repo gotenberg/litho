@@ -212,7 +212,7 @@ func (rd *renderer) bars(g *Group, x, y *dim) []func() {
 				r = compose.Rect{X: math.Min(p0, p1), Y: math.Min(v0, v1), Width: math.Abs(p1 - p0), Height: math.Abs(v1 - v0)}
 			}
 			rd.paint(rectPath(r).Ops, rd.fillOf(g, s, j), rd.borderOf(g, s, j))
-			lb := mergeLabels(g.Labels, s.labelsOf(j))
+			lb := labelsAt(g, s, j)
 			if lb.Any() {
 				raw, neg := sv.raw[i][j], v < b
 				stacked := g.Grouping != Clustered
@@ -221,6 +221,16 @@ func (rd *renderer) bars(g *Group, x, y *dim) []func() {
 		}
 	}
 	return labels
+}
+
+// labelsAt returns the data labels of point j of series s in group g: the
+// point's own when it has any, a deleted label included, else the
+// series' merged with the group's.
+func labelsAt(g *Group, s *Series, j int) Labels {
+	if p := s.point(j); p != nil && p.HasLabels {
+		return p.Labels
+	}
+	return mergeLabels(g.Labels, s.Labels)
 }
 
 // mergeLabels returns s, or the group's labels when the series sets none.
@@ -498,7 +508,7 @@ func (rd *renderer) lines(g *Group, x, y *dim) []func() {
 		}
 		for k, p := range pts {
 			j := idx[k]
-			lb := mergeLabels(g.Labels, s.labelsOf(j))
+			lb := labelsAt(g, s, j)
 			if !lb.Any() {
 				continue
 			}
@@ -578,7 +588,7 @@ func (rd *renderer) areas(g *Group, x, y *dim) []func() {
 		}
 		rd.paint(polygon(pts...), rd.fillOf(g, s, -1), rd.borderOf(g, s, -1))
 		for j := 0; j < len(top); j++ {
-			lb := mergeLabels(g.Labels, s.labelsOf(j))
+			lb := labelsAt(g, s, j)
 			if !lb.Any() || math.IsNaN(sv.raw[i][j]) {
 				continue
 			}
@@ -653,7 +663,7 @@ func (rd *renderer) scatter(g *Group, x, y *dim) []func() {
 		}
 		for k, p := range pts {
 			j := idx[k]
-			lb := mergeLabels(g.Labels, s.labelsOf(j))
+			lb := labelsAt(g, s, j)
 			if !lb.Any() {
 				continue
 			}

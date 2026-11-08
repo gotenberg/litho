@@ -78,7 +78,7 @@ func (rd *renderer) pies(plot compose.Rect) {
 	maxW, maxH := 0.0, 0.0
 	for _, s := range series {
 		for j := range rd.data(s.Values).Len() {
-			lb := mergeLabels(g.Labels, s.labelsOf(j))
+			lb := labelsAt(g, s, j)
 			if lb.Any() && lb.Placement == LabelOutsideEnd {
 				outside = true
 				if b := rd.measure(rd.labelText(g, s, j, 0, lb, 0), lb.Style, 0); b != nil {
@@ -166,7 +166,7 @@ func (rd *renderer) pies(plot compose.Rect) {
 				}
 				rd.out = append(rd.out, p)
 			}
-			lb := mergeLabels(g.Labels, s.labelsOf(j))
+			lb := labelsAt(g, s, j)
 			if !lb.Any() {
 				continue
 			}
