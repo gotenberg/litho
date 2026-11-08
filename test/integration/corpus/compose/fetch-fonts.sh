@@ -241,13 +241,19 @@ install_tar "caladea-$CALADEA" "$(pin CALADEA_FONTS_URL)" "$(pin CALADEA_FONTS_S
   "fonts-crosextra-caladea-$CALADEA" \
   fonts/ttf/Caladea-Regular.ttf fonts/ttf/Caladea-Bold.ttf fonts/ttf/Caladea-Italic.ttf fonts/ttf/Caladea-BoldItalic.ttf
 
-# Noto Sans, the face the Gotenberg image draws a family it lacks with: the
-# four NotoSans faces of Debian's fonts-noto-core, the image's package.
+# Noto Sans and Noto Serif, the faces the Gotenberg image draws a family it
+# lacks with, a sans with the first and a serif with the second: the four
+# faces of each from Debian's fonts-noto-core, the image's package. The
+# directory held the Sans faces alone under its old name, which is removed
+# so a tree fetched before the Serif faces joined does not index two copies.
 NOTO_CORE="$(pin NOTO_SANS_CORE_VERSION)"
-install_deb "noto-sans-core-$NOTO_CORE" "$(pin NOTO_SANS_CORE_URL)" "$(pin NOTO_SANS_CORE_SHA256)" NOTO_SANS_CORE_SHA256 \
+rm -rf "$OUT/noto-sans-core-$NOTO_CORE"
+install_deb "noto-core-$NOTO_CORE" "$(pin NOTO_SANS_CORE_URL)" "$(pin NOTO_SANS_CORE_SHA256)" NOTO_SANS_CORE_SHA256 \
   usr/share/doc/fonts-noto-core/copyright \
   usr/share/fonts/truetype/noto/NotoSans-Regular.ttf usr/share/fonts/truetype/noto/NotoSans-Bold.ttf \
-  usr/share/fonts/truetype/noto/NotoSans-Italic.ttf usr/share/fonts/truetype/noto/NotoSans-BoldItalic.ttf
+  usr/share/fonts/truetype/noto/NotoSans-Italic.ttf usr/share/fonts/truetype/noto/NotoSans-BoldItalic.ttf \
+  usr/share/fonts/truetype/noto/NotoSerif-Regular.ttf usr/share/fonts/truetype/noto/NotoSerif-Bold.ttf \
+  usr/share/fonts/truetype/noto/NotoSerif-Italic.ttf usr/share/fonts/truetype/noto/NotoSerif-BoldItalic.ttf
 
 # OpenSymbol, LibreOffice's symbol font, which the image draws most of a
 # presentation's bullets with: Debian's fonts-opensymbol, the image's

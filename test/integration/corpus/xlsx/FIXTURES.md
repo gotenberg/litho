@@ -75,7 +75,7 @@ LibreOffice's test documents are under the Mozilla Public License 2.0 (some also
 
 ## Fonts
 
-The cell converts with the fixture fonts `compose/fetch-fonts.sh` installs (see the docx corpus's `FIXTURES.md`), which hold what the image draws most workbooks with: Carlito for Calibri, Excel's default (180 of the 285 references draw it), Liberation Sans for Arial and Calc's default (59), Liberation Serif (38), Caladea for Cambria (4), DejaVu and Noto Sans CJK, and Noto Sans (`NOTO_SANS_CORE_*`, Debian's `fonts-noto-core`, the image's package): the face the image's fontconfig gives a family it does not install, Tahoma, Century Gothic, Comic Sans MS, Segoe UI and the like, which 27 references draw. The image also has OpenSymbol (4 references, check boxes and bullets), Noto Sans Symbols 2 (1) and URW base 35 (P052, 1), which the fixture fonts lack.
+The cell converts with the fixture fonts `compose/fetch-fonts.sh` installs (see the docx corpus's `FIXTURES.md`), which hold what the image draws most workbooks with: Carlito for Calibri, Excel's default (180 of the 285 references draw it), Liberation Sans for Arial and Calc's default (59), Liberation Serif (38), Caladea for Cambria (4), DejaVu and Noto Sans CJK, and Noto Sans (`NOTO_SANS_CORE_*`, Debian's `fonts-noto-core`, the image's package): the face the image's fontconfig gives a family it does not install, Tahoma, Century Gothic, Comic Sans MS, Segoe UI and the like, which 27 references draw. Noto Serif and OpenSymbol (4 references, check boxes and bullets) are pinned too; the image also has Noto Sans Symbols 2 (1) and URW base 35 (P052, 1), which the fixture fonts lack.
 
 ## How the rig was proven
 

@@ -44,7 +44,7 @@ LibreOffice's test documents are under the Mozilla Public License 2.0 (some also
 
 ## Fonts
 
-Of the 258 references, 240 draw Liberation Sans, Calc's default, 22 Carlito, 17 Liberation Serif and 7 Noto Sans, the image's face for a family it does not install; the fixture fonts hold all four. The image also has OpenSymbol (1 reference) and URW base 35 (Z003, 1), which the fixture fonts lack. Two references name an unembedded Helvetica in their form controls' appearances, which are annotations the cell leaves out.
+Of the 258 references, 240 draw Liberation Sans, Calc's default, 22 Carlito, 17 Liberation Serif and 7 Noto Sans, the image's face for a family it does not install; the fixture fonts hold all four. OpenSymbol (1 reference) and Noto Serif are pinned too; the image also has URW base 35 (Z003, 1), which the fixture fonts lack. Two references name an unembedded Helvetica in their form controls' appearances, which are annotations the cell leaves out.
 
 ## How the rig was proven
 
