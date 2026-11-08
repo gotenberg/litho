@@ -158,7 +158,7 @@ Each wave ships behind oracles wired into the corpus matrix
 Wave 4 depends on wave 0 alone, so the Office converters run beside waves
 1 to 3 once the model is frozen.
 
-Status: waves 0 to 6 are done, and wave 7, a fidelity round over every corpus. `test/integration/baseline.json` records
+Status: waves 0 to 6 are done, and waves 7 and 8, two fidelity rounds over every corpus. `test/integration/baseline.json` records
 the oracle scores per fixture; the wpt, weasyprint, html, svg, docx, odt,
 xlsx, ods, csv, pptx and odp cells score the converters in about twenty
 minutes (`go run ./test/integration/cmd/corpus run
@@ -258,6 +258,30 @@ for the totals real workbooks leave uncached, locale separators; footnotes
 in table cells, note links, tab leaders, East Asian list formats and the
 document grid in text documents; and in the HTML route the CSS GCPM notes,
 footnotes in columns and overflow-clip-margin.
+
+Wave 8 was the second fidelity round, with one capability the first could
+not do without: `pkg/internal/raster` draws coverage masks, blurs them and
+tints them, so a presentation's blurred shadows, glows and soft edges print
+as the masked bitmaps Impress prints, at Impress's resolution and pixel
+budget. Around it: the presentation builder's horizontal anchors, default
+tabs, line-height floors, explicit baseline shifts, text links to slides,
+fit-to-size text, shared SmartArt scales, skews, notes pages for every
+slide, and symbol-font bullets recoded through LibreOffice's tables
+(`pkg/internal/symbolfont`, shared by every converter); the deck readers'
+table styles, theme link colours, picture effects and media frames; Office
+2016 charts (histograms as bars, the other kinds with LibreOffice's
+notice), trendlines, error bars, theme overrides and locale separators;
+in spreadsheets the drawing shapes and turned pictures placed from their
+anchor cells, icon sets as Calc places them, the used range stopped
+before a run of columns formatted alike, cell links to their pages, the
+detective's circles, dimension lines, and the broken CSV quoting Calc
+reads; in text documents the frames the flow wraps around, chains of linked boxes,
+borders stroked as Writer strokes them, exact row heights, nested rows
+split at a page cut, the fonts LibreOffice falls back to, cell values
+through their data styles; and in the HTML route `calc()` mixing lengths
+and percentages, the browser rendering rules of two-tone borders, list
+markers and underlines behind an option of their own, and the
+fragmentation rule of absolutely positioned boxes.
 
 The differential oracle compares page count, PDF.js text with reading
 order, link sets, outline, tag tree and a layout-tolerant score over
