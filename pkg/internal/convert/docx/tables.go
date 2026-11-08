@@ -755,6 +755,7 @@ func (d *document) cellStyle(cp cellProps, tableMar map[string]float64, tb map[s
 	st.Border[css.Bottom] = pick("bottom", "bottom", "insideH", last)
 	st.Border[css.Left] = pick("left", "left", "insideV", firstCol)
 	st.Border[css.Right] = pick("right", "right", "insideV", lastCol)
+	strokeBorders(st)
 	if shading != nil {
 		st.BackgroundColor = *shading
 	}

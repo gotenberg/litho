@@ -201,6 +201,7 @@ func (b *builder) cell(c *odf.Element, tb *tableBuild, header bool) *layout.Node
 	props := b.styles.Resolve(b.scope, odf.FamilyCell, c.A(odf.NSTable, "style-name"), odf.CellProps)
 	var pad [4]float64
 	st.Border, pad = foldBox(st.Border, pad, props)
+	strokeBorders(st)
 	for i := range pad {
 		st.Padding[i] = css.Pts(pad[i])
 	}

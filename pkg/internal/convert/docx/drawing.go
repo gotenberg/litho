@@ -198,6 +198,19 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 	if tb := sp.Child(ooxml.NSWPS, "txbx"); tb != nil {
 		bodyPr := sp.Child(ooxml.NSWPS, "bodyPr")
 		n := d.textBox(s, tb.Child(ooxml.NSW, "txbxContent"), w, h, ss, bodyInsets(bodyPr), depth)
+		if id := attrOr(tb, "id"); id != "" {
+			setChain(n.Style, id, 0, h)
+		}
+		turn(n, bodyVert(attrOr(bodyPr, "vert")))
+		return n
+	}
+	if l := sp.Child(ooxml.NSWPS, "linkedTxbx"); l != nil && attrOr(l, "id") != "" {
+		// A later link of a chain of text boxes holds none of the
+		// chain's content, which flows into it from the link before.
+		bodyPr := sp.Child(ooxml.NSWPS, "bodyPr")
+		n := d.textBox(s, nil, w, h, ss, bodyInsets(bodyPr), depth)
+		seq, _ := ooxml.Int(attrOr(l, "seq"))
+		setChain(n.Style, attrOr(l, "id"), seq, h)
 		turn(n, bodyVert(attrOr(bodyPr, "vert")))
 		return n
 	}
@@ -301,6 +314,7 @@ func (d *document) textBox(s *story, content *ooxml.Element, w, h float64, ss oo
 		for i := range bs.Border {
 			bs.Border[i] = css.Border{Width: ss.LineWidth, Style: css.Solid, Color: *ss.Line}
 		}
+		strokeBorders(bs)
 	}
 	var kids []*layout.Node
 	if content != nil {

@@ -269,6 +269,7 @@ func (f *pageFlow) buildGeom(mp *odf.MasterPage, left, first, hf bool) *pageGeom
 	if hasBorder(ps.border) {
 		fs := baseStyle()
 		fs.Border = ps.border
+		strokeBorders(fs)
 		box.Frame = &layout.PageFrame{Inset: margin, Style: fs}
 	}
 	for i := range inner {

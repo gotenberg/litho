@@ -2,6 +2,7 @@ package odt
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -405,5 +406,72 @@ func TestConvert_LongWordBreaks(t *testing.T) {
 	res := convertDoc(t, doc{body: `<text:p>` + strings.Repeat("x", 300) + `</text:p>`}.pack(t), office.Options{})
 	if n := len(lines(res.Pages[0])); n < 2 {
 		t.Errorf("%d lines, want the word broken", n)
+	}
+}
+
+func TestApplyFrameWrap_PageAnchoredFrames(t *testing.T) {
+	t.Parallel()
+	for wrap, want := range map[string]css.FrameWrap{"none": css.FrameWrapNone, "left": css.FrameWrapLeft, "right": css.FrameWrapRight, "parallel": css.FrameWrapParallel,
+		"dynamic": css.FrameWrapDynamic, "biggest": css.FrameWrapLargest, "run-through": css.FrameWrapThrough, "": css.FrameWrapThrough, "contour": css.FrameWrapThrough} {
+		st := css.Initial()
+		applyFrameWrap(st, wrap, [4]float64{1, 2, 3, 4})
+		if st.FrameWrap != want || st.WrapGap != [4]float64{1, 2, 3, 4} {
+			t.Errorf("%q: wrap %v gap %v, want %v", wrap, st.FrameWrap, st.WrapGap, want)
+		}
+	}
+	auto := `<style:style style:name="fr1" style:family="graphic"><style:graphic-properties style:wrap="dynamic" fo:margin="0.1in"/></style:style>`
+	b := newTestBuilder(t, doc{contentAuto: auto, body: `<draw:frame draw:style-name="fr1" text:anchor-type="page" text:anchor-page-number="2" svg:x="1in" svg:y="1in" svg:width="2in" svg:height="1in"><draw:text-box><text:p>framed</text:p></draw:text-box></draw:frame><text:p>body</text:p>`})
+	root, _ := b.document(odfBody(b))
+	found := false
+	walkNodes(root, func(n *layout.Node) {
+		if n.Style.PageAnchor {
+			found = true
+			if n.Style.FrameWrap != css.FrameWrapDynamic || n.Style.WrapGap != [4]float64{7.2, 7.2, 7.2, 7.2} {
+				t.Errorf("wrap %v gap %v, want dynamic, 7.2pt", n.Style.FrameWrap, n.Style.WrapGap)
+			}
+		}
+	})
+	if !found {
+		t.Fatal("no page-anchored frame")
+	}
+}
+
+func TestScanChains_LinkedTextBoxes(t *testing.T) {
+	t.Parallel()
+	frame := func(name, next, text string) string {
+		attr := ""
+		if next != "" {
+			attr = ` draw:chain-next-name="` + next + `"`
+		}
+		return `<draw:frame draw:name="` + name + `" text:anchor-type="paragraph" svg:width="2in" svg:height="1in"><draw:text-box` + attr + `>` + text + `</draw:text-box></draw:frame>`
+	}
+	body := `<text:p>` + frame("Frame3", "", "") + frame("Frame1", "Frame2", "<text:p>chained</text:p>") + frame("Frame2", "Frame3", "") +
+		frame("Loop1", "Loop2", "") + frame("Loop2", "Loop1", "") + frame("Alone", "", "<text:p>alone</text:p>") + `</text:p>`
+	b := newTestBuilder(t, doc{body: body})
+	got := scanChains(odfBody(b))
+	want := map[string]chainLink{"Frame1": {"Frame1", 0}, "Frame2": {"Frame1", 1}, "Frame3": {"Frame1", 2}}
+	if len(got) != len(want) {
+		t.Fatalf("chains %v, want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s: %v, want %v", k, got[k], v)
+		}
+	}
+	if scanChains(nil) != nil {
+		t.Error("a missing body has chains")
+	}
+	root, _ := b.document(odfBody(b))
+	var chained []string
+	walkNodes(root, func(n *layout.Node) {
+		if n.Style.Chain != "" {
+			chained = append(chained, n.Style.Chain+":"+strconv.Itoa(n.Style.ChainIndex))
+		}
+		if n.Role == "Div" && !n.Style.StrokeBorders {
+			t.Error("a frame's borders are not stroked")
+		}
+	})
+	if strings.Join(chained, " ") != "Frame1:2 Frame1:0 Frame1:1" {
+		t.Errorf("links %q, want Frame1:2 Frame1:0 Frame1:1", chained)
 	}
 }

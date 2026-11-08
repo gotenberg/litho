@@ -36,6 +36,9 @@ type builder struct {
 	// beside their paragraph's text, which a paragraph without text
 	// places at their offsets instead.
 	floats map[*layout.Node]frameGeom
+	// chains maps the frames of chains of linked text boxes onto their
+	// place in their chain, by frame name ([scanChains]).
+	chains map[string]chainLink
 
 	warnings []compose.Warning
 	warned   map[string]bool

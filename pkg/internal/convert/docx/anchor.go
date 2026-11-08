@@ -15,7 +15,10 @@ import (
 type placement struct {
 	// wrap is wrapSquare, wrapTight, wrapThrough, wrapTopAndBottom or
 	// wrapNone.
-	wrap           string
+	wrap string
+	// wrapText is the sides of a square, tight or through wrapping the
+	// text takes (20.4.3.7 ST_WrapText), "" for both.
+	wrapText       string
 	behind         bool
 	alignH, alignV string
 	posH, posV     float64
@@ -69,6 +72,7 @@ func (d *document) anchor(k *ooxml.Element, n *layout.Node, w, h float64, sink *
 	for _, c := range k.Kids() {
 		if c.Space == ooxml.NSWP && strings.HasPrefix(c.Local, "wrap") {
 			p.wrap = c.Local
+			p.wrapText = attrOr(c, "wrapText")
 			break
 		}
 	}
@@ -162,6 +166,8 @@ func (d *document) place(p placement, n *layout.Node, sink *inlineSink) {
 	default:
 		// An absolutely positioned box is blockified (CSS 2.1, 9.7).
 		st.Position = css.Absolute
+		setFrameWrap(st, p.wrap, p.wrapText)
+		setWrapGap(st, p.dist)
 		if st.Display == css.Inline || st.Display == css.InlineBlock {
 			st.Display = css.Block
 		}

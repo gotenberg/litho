@@ -274,6 +274,7 @@ func (b *builder) frameBox(g frameGeom) *css.Style {
 	st.BoxSizing = css.BorderBox
 	var pad [4]float64
 	st.Border, pad = foldBox(st.Border, pad, g.props)
+	strokeBorders(st)
 	for i := range pad {
 		st.Padding[i] = css.Pts(pad[i])
 	}
@@ -375,6 +376,7 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 		case page:
 			st.PageAnchor = true
 			st.AnchorPage = g.page
+			applyFrameWrap(&st, g.wrap, frameMargins(g.props))
 			x, y := b.pagePosition(g)
 			st.Left, st.Top = css.Pts(x), css.Pts(y)
 		case paraRel(g.hrel):
@@ -719,7 +721,11 @@ func (b *builder) frame(c *odf.Element, g frameGeom, depth int) *layout.Node {
 			}
 			return b.imageNode(pic, g, alt)
 		case k.Is(odf.NSDraw, "text-box"):
-			return b.textBox(k, g, depth)
+			n := b.textBox(k, g, depth)
+			if l, ok := b.chains[c.A(odf.NSDraw, "name")]; ok {
+				applyChain(n.Style, l)
+			}
+			return n
 		case k.Is(odf.NSDraw, "object"), k.Is(odf.NSDraw, "object-ole"):
 			// The replacement picture, a draw:image after the object, is
 			// tried next.

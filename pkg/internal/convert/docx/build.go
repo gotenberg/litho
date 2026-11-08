@@ -513,6 +513,7 @@ func (d *document) paraStyle(pp paraProps, mark runProps) (*css.Style, float64) 
 			continue
 		}
 		st.Border[side] = b.Border
+		strokeBorders(st)
 		st.Padding[side] = css.Pts(b.space)
 		if side == css.Left || side == css.Right {
 			// Side borders sit outside the indents, their space and width

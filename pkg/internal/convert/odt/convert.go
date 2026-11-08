@@ -171,6 +171,7 @@ func (b *builder) document(body *odf.Element) (*layout.Node, layout.PageBox) {
 	rootStyle.Display = css.Block
 	root := &layout.Node{Kind: layout.Element, Style: rootStyle, Role: "Document"}
 	root.Lang = b.paraText("Standard").langTag()
+	b.chains = scanChains(body)
 	var group *layout.Node
 	ctx := blockCtx{}
 	open := func(master string, restart int) {

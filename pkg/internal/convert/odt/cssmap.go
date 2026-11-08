@@ -257,6 +257,7 @@ func (b *builder) applyPara(st *css.Style, p paraState, t textState) {
 		st.Padding[i] = css.Pts(p.padding[i])
 	}
 	st.Border = p.border
+	strokeBorders(st)
 	st.TextIndent = css.Pts(p.indent)
 	if a, ok := textAligns[p.align]; ok {
 		st.TextAlign = a

@@ -267,6 +267,7 @@ func (d *document) pageFrame(b *ooxml.Element, s *section) *layout.PageFrame {
 			continue
 		}
 		st.Border[side] = bs.Border
+		strokeBorders(st)
 		space[side] = bs.space
 		drawn = true
 	}
