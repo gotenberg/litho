@@ -76,7 +76,16 @@ func (e *engine) seedWraps(seeds []wrapSeed) []floatRect {
 
 // wrapBand narrows the band [l, r) of a line beside the exclusion f as its
 // wrap mode says: the text keeps to one side of it, the side the mode
-// names or the one with more room, or leaves the band.
+// names or the one with more room, the right one on a tie, or leaves the
+// band. A line takes one side alone: the text of a parallel wrap, which
+// Writer sets on both sides, keeps to the side with more room.
+//
+// # Corpus evidence
+//
+//   - litho: a flat ODT with 5 cm wide page-anchored frames of dynamic wrap
+//     leaving 1.5, 2.5 and 6 cm on their left and 10.5, 9.5 and 6 cm on
+//     their right prints, through the pinned LibreOffice, every line
+//     beside them on their right alone.
 func (f floatRect) wrapBand(l, r float64) (float64, float64) {
 	if f.x1 <= l || f.x0 >= r {
 		return l, r
@@ -94,7 +103,7 @@ func (f floatRect) wrapBand(l, r float64) (float64, float64) {
 	case css.FrameWrapNone:
 		return l, l
 	}
-	if left >= right {
+	if left > right {
 		return l, f.x0
 	}
 	return f.x1, r
