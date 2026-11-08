@@ -34,6 +34,8 @@ func TestParse_Records(t *testing.T) {
 		{"blanks before quote", `a, "b, c" ,d`, []record{{"a", "b, c ", "d"}}},
 		{"control", "a\x16b\n", []record{{"ab"}}},
 		{"broken quotes", `"abc" d "ef",x`, []record{{`abc" d "ef`, "x"}}},
+		{"a stray quote ends the line", "a,\"de\"b,c\n\"x\",y", []record{{"a", `"de"b`, "c"}, {"x", "y"}}},
+		{"a doubled quote keeps the line", "\"a\"\"b\nc\",d", []record{{"a\"b\nc", "d"}}},
 		{"empty quoted", "\"\",x", []record{{"", "x"}}},
 	}
 	for _, tt := range tests {

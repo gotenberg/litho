@@ -66,20 +66,31 @@ func fieldEndQuote(text string, i int) bool {
 // passing its characters to add: doubled quotes are one, a quote that
 // does not end the field is a character, a line end inside is a line feed
 // (CRLF or CR alike), and the blanks between the closing quote and the
-// separator belong to the field. It returns the index after the field and
-// false when no quote closes it.
-func scanQuoted(text string, q int, add func(rune)) (int, bool) {
+// separator belong to the field. A line end the field reaches after a
+// quote that is a character ends the line, as LibreOffice's ReadCsvLine
+// stops at a DONTKNOW_QUOTE: the field then has no closing quote. It
+// returns the index after the field, false when no quote closes it, and
+// whether the scan then reached the end of the data.
+func scanQuoted(text string, q int, add func(rune)) (int, bool, bool) {
 	i, n := q+1, len(text)
+	stray := false
 	for i < n {
 		switch c := text[i]; {
 		case c == quote && i+1 < n && text[i+1] == quote:
 			add(quote)
 			i += 2
+			stray = false
 		case c == quote && fieldEndQuote(text, i):
 			for i++; i < n && text[i] == ' '; i++ {
 				add(' ')
 			}
-			return i, true
+			return i, true, false
+		case c == quote:
+			add(quote)
+			i++
+			stray = true
+		case (c == '\r' || c == '\n') && stray:
+			return q, false, false
 		case c == '\r':
 			add('\n')
 			i++
@@ -92,7 +103,7 @@ func scanQuoted(text string, q int, add func(rune)) (int, bool) {
 			i += size
 		}
 	}
-	return q, false
+	return q, false, true
 }
 
 // decode returns data as UTF-8 text: a UTF-8 byte order mark skipped,
@@ -168,15 +179,17 @@ func parse(ctx context.Context, text string) ([]record, limits, error) {
 			// A quoted field, the blanks before its quote skipped
 			// (ScImportExport::ScanNextFieldFromString, for the broken
 			// generators that write "a", "b").
-			if end, ok := scanQuoted(text, j, addRune); ok {
+			end, ok, eof := scanQuoted(text, j, addRune)
+			if ok {
 				i, start = end, false
 				continue
 			}
-			// No closing quote before the end of the data: the quote is a
-			// character, and the field runs to its separator. No later
-			// quote closes either, which keeps the scan linear.
+			// No closing quote: the quote is a character, and the field
+			// runs to its separator. When the scan reached the end of the
+			// data, no later quote closes either, which keeps the scan
+			// linear.
 			field.Reset()
-			unclosed = true
+			unclosed = eof
 		}
 		c := text[i]
 		switch {
