@@ -39,16 +39,10 @@ func translate(x, y float64) compose.Matrix {
 	return compose.Matrix{A: 1, D: 1, E: x, F: y}
 }
 
-// aboutCentre returns the transform that mirrors, then turns clockwise by
-// deg degrees, about the centre of r (ECMA-376 Part 1, 20.1.7.6 xfrm: the
-// flips apply before the rotation).
-func aboutCentre(r compose.Rect, deg float64, flipH, flipV bool) compose.Matrix {
-	return skewedAboutCentre(r, deg, 0, flipH, flipV)
-}
-
 // skewedAboutCentre returns the transform that mirrors, then shears by
 // skew degrees, the top edge moving right for a positive angle, then
-// turns clockwise by deg degrees, about the centre of r (ODF 1.3 Part 3,
+// turns clockwise by deg degrees, about the centre of r (ECMA-376 Part 1,
+// 20.1.7.6 xfrm: the flips apply before the rotation; ODF 1.3 Part 3,
 // 19.228 draw:transform, whose skewX applies before its rotate).
 func skewedAboutCentre(r compose.Rect, deg, skew float64, flipH, flipV bool) compose.Matrix {
 	deg = math.Mod(deg, 360)
