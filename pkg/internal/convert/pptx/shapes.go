@@ -35,6 +35,9 @@ type shapeCtx struct {
 	group *slides.Fill
 	// title collects the text of the slide's title placeholder.
 	title string
+	// fontColor, when not nil, is the colour every font reference of the
+	// tree takes: a diagram drawing's, from its colour definition.
+	fontColor *ooxml.Element
 }
 
 // kid returns el's child local in el's own namespace.
@@ -272,7 +275,11 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	s.Line = r.shapeLine(fc, chain, style)
 	r.effects(chain)
 	if el.Local == "sp" {
-		s.Text = r.textBody(c, chain, p, style.Child(ooxml.NSA, "fontRef"))
+		ref := style.Child(ooxml.NSA, "fontRef")
+		if ref != nil && c.fontColor != nil {
+			ref = &ooxml.Element{Space: ref.Space, Local: ref.Local, Attrs: ref.Attrs, Children: []*ooxml.Element{c.fontColor}}
+		}
+		s.Text = r.textBody(c, chain, p, ref)
 	}
 	if isPh {
 		if s.Text == nil || empty(s.Text) {

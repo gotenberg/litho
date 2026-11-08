@@ -26,10 +26,14 @@ type diagramParts struct {
 // PowerPoint saved one with shapes (MS-ODRAWXML, 2.4: the dsp:drawing the
 // data part's dsp:dataModelExt names), else the shapes the layout engine
 // lays out from the data model, layout definition, quick style and
-// colours; the data model's background first.
+// colours; the data model's background first. A saved drawing's font
+// references take the last text colour of the colour definition's node0
+// label, as Impress gives them.
 //
 // # Corpus evidence
 //
+//   - pptx: sd/bnc862510_6's drawing, whose font reference names lt1 on
+//     a white box, prints its text in node0's dk1.
 //   - pptx: sd/smartart-cycle's five ellipses on a circle with an arrow
 //     between each two, laid out from the layout definition, its drawing
 //     part empty.
@@ -63,6 +67,10 @@ func (r *reader) diagram(c *shapeCtx, data *ooxml.Element, s *slides.Shape, dept
 		s.Kids = append(s.Kids, bg)
 	}
 	if part := r.diagramDrawing(c, d); part != "" {
+		colors, err := r.diagramPart(parts.colors)
+		if err != nil {
+			return nil, err
+		}
 		root, err := r.pkg.ParseXML(r.ctx, part, understood)
 		if err != nil {
 			if isMalformed(err) {
@@ -72,6 +80,11 @@ func (r *reader) diagram(c *shapeCtx, data *ooxml.Element, s *slides.Shape, dept
 			return nil, err
 		}
 		drawn := &shapeCtx{layer: c.layer, sc: c.sc, ns: nsDSP, part: part}
+		// Impress gives the drawing's font references the last text colour
+		// of the colour definition's node0 label.
+		if cd := ooxml.ParseDiagram(nil, nil, nil, colors).Colors["node0"]; cd != nil && len(cd.TextFill) > 0 {
+			drawn.fontColor = cd.TextFill[len(cd.TextFill)-1]
+		}
 		if err := r.shapeList(&s.Kids, drawn, root.Child(nsDSP, "spTree"), depth+1); err != nil {
 			return nil, err
 		}

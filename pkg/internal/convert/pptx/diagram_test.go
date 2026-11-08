@@ -51,7 +51,7 @@ func diagramDeck(drawing string) testDeck {
 			`<dgm:forEach axis="ch" ptType="node"><dgm:layoutNode name="node"><dgm:alg type="tx"/><dgm:shape type="ellipse"/></dgm:layoutNode></dgm:forEach></dgm:layoutNode></dgm:layoutDef>`,
 		"ppt/diagrams/quickStyle1.xml": `<dgm:styleDef ` + dgmDecl + `><dgm:styleLbl name="node1"><dgm:style><a:lnRef idx="2"><a:scrgbClr r="0" g="0" b="0"/></a:lnRef>` +
 			`<a:fillRef idx="1"><a:scrgbClr r="0" g="0" b="0"/></a:fillRef><a:effectRef idx="0"/><a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef></dgm:style></dgm:styleLbl></dgm:styleDef>`,
-		"ppt/diagrams/colors1.xml": `<dgm:colorsDef ` + dgmDecl + `><dgm:styleLbl name="node1"><dgm:fillClrLst meth="repeat"><a:schemeClr val="accent1"/><a:schemeClr val="accent2"/></dgm:fillClrLst>` +
+		"ppt/diagrams/colors1.xml": `<dgm:colorsDef ` + dgmDecl + `><dgm:styleLbl name="node0"><dgm:txFillClrLst><a:schemeClr val="lt1"/><a:schemeClr val="dk1"/></dgm:txFillClrLst></dgm:styleLbl><dgm:styleLbl name="node1"><dgm:fillClrLst meth="repeat"><a:schemeClr val="accent1"/><a:schemeClr val="accent2"/></dgm:fillClrLst>` +
 			`<dgm:linClrLst><a:schemeClr val="lt1"/></dgm:linClrLst><dgm:txFillClrLst><a:schemeClr val="lt1"/></dgm:txFillClrLst></dgm:styleLbl></dgm:colorsDef>`,
 	}
 	if drawing != "" {
@@ -113,6 +113,14 @@ func TestDiagram(t *testing.T) {
 				}
 				if shape, text := g.Kids[1].Kids[0], g.Kids[1].Kids[1]; shape.Rotation != 180 || text.Rotation != 0 || plain(text.Text) != "up" {
 					t.Errorf("shape turned %v, text turned %v", shape.Rotation, text.Rotation)
+				}
+			}},
+		{"a saved drawing's font references take node0's last text colour", `<dsp:sp modelId="{1}"><dsp:nvSpPr><dsp:cNvPr id="0" name="font"/><dsp:cNvSpPr/></dsp:nvSpPr>` +
+			`<dsp:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="254000" cy="127000"/></a:xfrm></dsp:spPr><dsp:style><a:lnRef idx="0"/><a:fillRef idx="0"/><a:effectRef idx="0"/><a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef></dsp:style>` +
+			`<dsp:txBody><a:bodyPr/><a:p><a:r><a:t>dark</a:t></a:r></a:p></dsp:txBody></dsp:sp>`,
+			func(t *testing.T, g *slides.Shape) {
+				if len(g.Kids) != 2 || g.Kids[1].Text == nil || g.Kids[1].Text.Paragraphs[0].Runs[0].Style.Color != (css.Color{A: 1}) {
+					t.Fatalf("kids %+v", g.Kids)
 				}
 			}},
 		{"an empty saved drawing is laid out", `<dsp:cxnSp/>`, func(t *testing.T, g *slides.Shape) {
