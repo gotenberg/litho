@@ -374,6 +374,10 @@ func (p *chartReader) pointLabels(e *Element, s *chart.Series) {
 			if tp := d.Child(NSChart, "txPr"); tp != nil {
 				l.Style = p.textStyle(p.textProps(tp), 10, false, 1)
 			}
+			if rich := d.Child(NSChart, "tx").Child(NSChart, "rich"); rich != nil {
+				l.Custom = labelFields(rich, d)
+				l.Style = p.textStyle(p.textProps(rich), l.Style.Size, l.Style.Bold, 1)
+			}
 		}
 		pt := s.Points
 		found := false
@@ -493,4 +497,82 @@ func (p *chartReader) autoSeriesBorder() *chart.Stroke {
 		return &chart.Stroke{Color: toCompose(Shade(c, 0.5)), Width: themeLineWidth}
 	}
 	return nil
+}
+
+// maxLabelFields caps the pieces of one data label's own text. Anti-DoS
+// guard, not spec-mandated: a label is a few runs and fields.
+const maxLabelFields = 256
+
+// labelFields reads a data label's own text, a c:rich (ECMA-376 Part 1,
+// 21.2.2.156): its runs as text, its fields (a:fld, 21.1.2.2.4) by type,
+// a line break between paragraphs and at a:br. A CELLREF or CELLRANGE
+// field shows its cell's cached text from the label's c15:dlblFieldTable,
+// else the field's own text.
+func labelFields(rich, dLbl *Element) []chart.LabelField {
+	cells := map[string]string{}
+	for _, ext := range dLbl.Child(NSChart, "extLst").Kids() {
+		for _, tbl := range ext.Kids() {
+			if tbl.Local != "dlblFieldTable" {
+				continue
+			}
+			for _, ent := range tbl.Kids() {
+				id, val := "", ""
+				for _, k := range ent.Kids() {
+					switch k.Local {
+					case "txfldGUID":
+						id = strings.TrimSpace(k.Text)
+					case "dlblFieldTableCache":
+						if d, _ := readCache(k); len(d) > 0 {
+							val = d[0].Text
+						}
+					}
+				}
+				if id != "" {
+					cells[id] = val
+				}
+			}
+		}
+	}
+	var out []chart.LabelField
+	add := func(f chart.LabelField) {
+		if len(out) < maxLabelFields {
+			out = append(out, f)
+		}
+	}
+	first := true
+	for _, para := range rich.Kids() {
+		if !para.Is(NSA, "p") {
+			continue
+		}
+		if !first {
+			add(chart.LabelField{Kind: chart.FieldBreak})
+		}
+		first = false
+		for _, r := range para.Kids() {
+			switch {
+			case r.Is(NSA, "r"):
+				add(chart.LabelField{Text: textOf(r.Child(NSA, "t"))})
+			case r.Is(NSA, "br"):
+				add(chart.LabelField{Kind: chart.FieldBreak})
+			case r.Is(NSA, "fld"):
+				f := chart.LabelField{Text: textOf(r.Child(NSA, "t"))}
+				switch attrOr(r, "type") {
+				case "VALUE", "Y_VALUE":
+					f.Kind = chart.FieldValue
+				case "CATEGORYNAME", "X_VALUE":
+					f.Kind = chart.FieldCategory
+				case "SERIESNAME":
+					f.Kind = chart.FieldSeries
+				case "PERCENTAGE":
+					f.Kind = chart.FieldPercent
+				case "CELLREF", "CELLRANGE":
+					if v, ok := cells[attrOr(r, "id")]; ok {
+						f.Text = v
+					}
+				}
+				add(f)
+			}
+		}
+	}
+	return out
 }

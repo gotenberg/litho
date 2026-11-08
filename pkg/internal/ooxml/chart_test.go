@@ -430,3 +430,22 @@ func TestChartFromElement_DataTable(t *testing.T) {
 		t.Errorf("data table = %+v", dt)
 	}
 }
+
+func TestChartFromElement_CustomLabels(t *testing.T) {
+	dl := `<c:dLbls><c:dLbl><c:idx val="0"/><c:tx><c:rich><a:p><a:r><a:t>Share </a:t></a:r><a:fld id="{1}" type="PERCENTAGE"><a:t>[PERCENTAGE]</a:t></a:fld></a:p><a:p><a:fld id="{2}" type="CELLREF"><a:t>[CELL]</a:t></a:fld></a:p></c:rich></c:tx><c:showVal val="1"/>` +
+		`<c:extLst><c:ext uri="{CE6537A1-D6FC-4f65-9D91-7224C49458BB}" xmlns:c15="http://schemas.microsoft.com/office/drawing/2012/chart"><c15:dlblFieldTable><c15:dlblFTEntry><c15:txfldGUID>{2}</c15:txfldGUID><c15:f>S!$B$3</c15:f><c15:dlblFieldTableCache><c:ptCount val="1"/><c:pt idx="0"><c:v>cell text</c:v></c:pt></c15:dlblFieldTableCache></c15:dlblFTEntry></c15:dlblFieldTable></c:ext></c:extLst></c:dLbl><c:showVal val="1"/></c:dLbls>`
+	s := readChart(t, chartXML("", "", `<c:pieChart>`+ser(0, "A", dl, "1", "3")+`</c:pieChart>`), false).Groups[0].Series[0]
+	if len(s.Points) != 1 {
+		t.Fatalf("points = %+v", s.Points)
+	}
+	want := []chart.LabelField{{Text: "Share "}, {Kind: chart.FieldPercent, Text: "[PERCENTAGE]"}, {Kind: chart.FieldBreak}, {Text: "cell text"}}
+	got := s.Points[0].Labels.Custom
+	if len(got) != len(want) {
+		t.Fatalf("custom = %+v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("custom[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
