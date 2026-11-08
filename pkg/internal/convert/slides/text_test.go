@@ -2,6 +2,7 @@ package slides
 
 import (
 	"context"
+	"github.com/gotenberg/litho/pkg/internal/compose"
 
 	"testing"
 
@@ -116,6 +117,31 @@ func TestText_UnwrappedOverflow(t *testing.T) {
 		w := b.width(s, b.textStyle(&RunStyle{Families: []string{"Arial"}, Size: 20}, 1))
 		if !tc.want(rs[0].x, w) {
 			t.Errorf("align %d: line at %.2f, %.2f wide", tc.align, rs[0].x, w)
+		}
+	}
+}
+
+// TestText_Clip checks that a clipped body leaves out the lines whose
+// baseline falls outside its rectangle, as Impress prints
+// sd/style-overflow-behavior-clip.fodp, and cuts the rest at it.
+func TestText_Clip(t *testing.T) {
+	for _, clip := range []bool{false, true} {
+		sh := box(100, 100, 300, 30, para("Kept", arial(20)), para("Gone", arial(20)))
+		sh.Text.Clip = clip
+		pg := convert(t, deck(&Slide{Shapes: []*Shape{sh}}), office.Options{}).Pages[0]
+		var got []string
+		for _, r := range runs(pg) {
+			got = append(got, r.text)
+		}
+		want := 2
+		if clip {
+			want = 1
+		}
+		if len(got) != want || got[0] != "Kept" {
+			t.Errorf("clip %v: runs %q", clip, got)
+		}
+		if g, ok := pg.Content[0].(*compose.Group); clip && (!ok || g.Clip == nil) {
+			t.Errorf("clip %v: no clipping group", clip)
 		}
 	}
 }

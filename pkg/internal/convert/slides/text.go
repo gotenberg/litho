@@ -207,13 +207,54 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 	default:
 		m = translate(inner.X+dx, inner.Y+dy)
 	}
-	res.frags = group(m, lay.frags)
+	frags := lay.frags
+	if body.Clip && !vertical {
+		// A clipped body draws no line whose baseline falls outside its
+		// rectangle and cuts the others at it, as Impress prints a text
+		// whose overflow behaviour is clip (sd/style-overflow-behavior-clip.fodp
+		// leaves its second line out).
+		frags = keepLines(frags, compose.Identity, -dy, lh-dy)
+		r := shape.TextRect(g, box)
+		res.frags = []compose.Fragment{&compose.Group{
+			Transform: compose.Identity, Opacity: 1,
+			Clip:    &compose.Path{Ops: rectOps(r), Fill: &compose.Fill{}},
+			Content: group(m, frags),
+		}}
+	} else {
+		res.frags = group(m, frags)
+	}
 	for _, l := range lay.links {
 		l.Rect = transformRect(m, l.Rect)
 		res.links = append(res.links, l)
 	}
 	res.structure = lay.structure
 	return res
+}
+
+// keepLines returns the fragments of frags, mapped by m, less the text
+// runs whose baseline lies above top or below bottom.
+func keepLines(frags []compose.Fragment, m compose.Matrix, top, bottom float64) []compose.Fragment {
+	out := make([]compose.Fragment, 0, len(frags))
+	for _, f := range frags {
+		switch v := f.(type) {
+		case *compose.Text:
+			_, y := apply(m, v.Origin.X, v.Origin.Y)
+			if y < top-0.01 || y > bottom+0.01 {
+				continue
+			}
+		case *compose.Group:
+			t := v.Transform
+			if t == (compose.Matrix{}) {
+				t = compose.Identity
+			}
+			g := *v
+			g.Content = keepLines(v.Content, then(t, m), top, bottom)
+			out = append(out, &g)
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
 }
 
 // naturalWidth returns the width of the body's longest line laid out
