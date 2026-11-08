@@ -143,9 +143,11 @@ type paraState struct {
 	align                    css.TextAlign
 	marginL, marginR, indent float64
 	spacing, spacingPts      float64
+	atLeast                  float64
 	before, after            float64
 	rtl                      bool
 	tabs                     []float64
+	defaultTab               float64
 }
 
 // apply lays the paragraph properties p over ps.
@@ -174,18 +176,23 @@ func (r *reader) applyPara(ps *paraState, p odf.Props) {
 	length("fo:text-indent", &ps.indent)
 	length("fo:margin-top", &ps.before)
 	length("fo:margin-bottom", &ps.after)
+	// fo:line-height and style:line-height-at-least replace each other
+	// (ODF 1.3, Part 3, 20.204 and 20.327): the last layer that sets
+	// either decides.
 	if v := p.Get("fo:line-height"); v != "" {
 		if f, ok := odf.Percent(v); ok && f > 0 {
-			ps.spacing, ps.spacingPts = f, 0
+			ps.spacing, ps.spacingPts, ps.atLeast = f, 0, 0
 		} else if l, ok := odf.Length(v); ok && l > 0 {
-			ps.spacing, ps.spacingPts = 0, l
+			ps.spacing, ps.spacingPts, ps.atLeast = 0, l, 0
 		} else if v == "normal" {
-			ps.spacing, ps.spacingPts = 1, 0
+			ps.spacing, ps.spacingPts, ps.atLeast = 1, 0, 0
 		}
 	}
 	if l, ok := odf.Length(p.Get("style:line-height-at-least")); ok && l > 0 {
-		r.warn("line-height-at-least", "a minimum line height is drawn as an exact one")
-		ps.spacing, ps.spacingPts = 0, l
+		ps.spacing, ps.spacingPts, ps.atLeast = 1, 0, l
+	}
+	if l, ok := odf.Length(p.Get("style:tab-stop-distance")); ok && l > 0 {
+		ps.defaultTab = l
 	}
 	if l, ok := odf.Length(p.Get("style:line-spacing")); ok && l != 0 {
 		r.warn("line-spacing", "a paragraph's leading is not applied")
@@ -216,6 +223,9 @@ const maxTabStops = 64
 type runState struct {
 	style                 slides.RunStyle
 	auto                  bool
+	// scale is the size the text position gives the text, a fraction of
+	// its font size, 0 for none.
+	scale                 float64
 	latin, asian, complex string
 	lang, country         string
 }
@@ -296,7 +306,7 @@ func (r *reader) applyText(rs *runState, p odf.Props) {
 		rs.style.Spacing = l
 	}
 	if v := p.Get("style:text-position"); v != "" {
-		rs.style.Script = scriptOf(v)
+		rs.style.Script, rs.style.Rise, rs.scale = textPosition(v)
 	}
 	switch p.Get("fo:text-transform") {
 	case "uppercase":
@@ -330,28 +340,40 @@ func (r *reader) applyText(rs *runState, p odf.Props) {
 	}
 }
 
-// scriptOf reads style:text-position (ODF 1.3, Part 3, 20.384): super,
-// sub, or a percentage raising (positive) or lowering the text.
-func scriptOf(v string) slides.Script {
+// textPosition reads style:text-position (ODF 1.3, Part 3, 20.374): the
+// keywords super and sub, the automatic shifts the builder places, or a
+// percentage of the size raising (positive) or lowering the text, which
+// gives the rise and leaves the script at the baseline; the optional
+// second percentage is the text's size as a fraction of the font size,
+// 58% when absent but for a shift of 0%, as LibreOffice reads it
+// (xmloff's XMLEscapementHeightPropHdl, DFLT_ESC_PROP). A keyword
+// leaves the size to the builder's script rule.
+func textPosition(v string) (slides.Script, float64, float64) {
 	f := strings.Fields(v)
 	if len(f) == 0 {
-		return slides.Baseline
+		return slides.Baseline, 0, 0
 	}
 	switch f[0] {
 	case "super":
-		return slides.Superscript
+		return slides.Superscript, 0, 0
 	case "sub":
-		return slides.Subscript
+		return slides.Subscript, 0, 0
 	}
-	if p, ok := odf.Percent(f[0]); ok {
-		switch {
-		case p > 0:
-			return slides.Superscript
-		case p < 0:
-			return slides.Subscript
+	rise, ok := odf.Percent(f[0])
+	if !ok || math.IsNaN(rise) {
+		return slides.Baseline, 0, 0
+	}
+	rise = max(-1, min(rise, 1))
+	scale := 0.58
+	if rise == 0 {
+		scale = 1
+	}
+	if len(f) > 1 {
+		if p, ok := odf.Percent(f[1]); ok && p > 0 {
+			scale = min(p, 1)
 		}
 	}
-	return slides.Baseline
+	return slides.Baseline, rise, scale
 }
 
 // final returns the run style rs resolves to against the backdrop bg: the
@@ -369,6 +391,9 @@ func (rs runState) final(bg css.Color) slides.RunStyle {
 	}
 	if st.Size <= 0 {
 		st.Size = defaultFontSize
+	}
+	if rs.scale > 0 {
+		st.Size *= rs.scale
 	}
 	if rs.auto {
 		st.Color = css.Color{A: 1}
@@ -426,7 +451,8 @@ func (r *reader) paragraph(p *odf.Element, tc *textCtx, lc listCtx) slides.Parag
 	out := slides.Paragraph{
 		Align: ps.align, Level: lv,
 		MarginLeft: ps.marginL, Indent: ps.indent, MarginRight: ps.marginR,
-		LineSpacing: ps.spacing, LineSpacingPoints: ps.spacingPts,
+		LineSpacing: ps.spacing, LineSpacingPoints: ps.spacingPts, LineSpacingAtLeast: ps.atLeast,
+		DefaultTab: ps.defaultTab,
 		SpaceBefore: ps.before, SpaceAfter: ps.after, RightToLeft: ps.rtl,
 	}
 	if lc.inList && !lc.header {
@@ -442,8 +468,24 @@ func (r *reader) paragraph(p *odf.Element, tc *textCtx, lc listCtx) slides.Parag
 	r.inline(p, tc, rs, "", w, 0)
 	w.trim()
 	out.Runs = w.runs
+	for i := range out.Runs {
+		out.Runs[i].Href, out.Runs[i].Jump = r.linkTarget(out.Runs[i].Href)
+	}
 	out.Style = rs.final(tc.bg)
 	return out
+}
+
+// linkTarget returns a text link's target (ODF 1.3, Part 3, 6.1.8 text:a
+// xlink:href) as an external href or, for "#name" naming a slide by its
+// draw:name or the name Impress shows ("Slide 2"), the slide's 1-based
+// position in the document; an anchor naming no slide stays an href.
+func (r *reader) linkTarget(href string) (string, int) {
+	if name, ok := strings.CutPrefix(href, "#"); ok {
+		if n := r.pageNames[name]; n >= 1 && n <= r.pageCount {
+			return "", n
+		}
+	}
+	return href, 0
 }
 
 // runWriter collects the runs of one paragraph, collapsing white space
@@ -545,7 +587,7 @@ func (w *runWriter) trim() {
 func sameStyle(a, b slides.RunStyle) bool {
 	return slices.Equal(a.Families, b.Families) && a.Size == b.Size && a.Bold == b.Bold && a.Italic == b.Italic &&
 		a.Underline == b.Underline && a.Strike == b.Strike && a.Color == b.Color && a.Spacing == b.Spacing &&
-		a.Script == b.Script && a.Caps == b.Caps && a.Lang == b.Lang
+		a.Script == b.Script && a.Rise == b.Rise && a.Caps == b.Caps && a.Lang == b.Lang
 }
 
 // maxInlineDepth bounds the nesting of spans and links read in one

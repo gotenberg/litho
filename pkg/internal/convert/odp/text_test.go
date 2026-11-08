@@ -241,3 +241,53 @@ func TestRead_PlaceholderBaseStyle(t *testing.T) {
 		t.Errorf("paragraph = align %v size %v, want the master title's", p.Align, p.Runs[0].Style.Size)
 	}
 }
+
+func TestRead_ParagraphSpacingTabsAndRise(t *testing.T) {
+	t.Parallel()
+	f := flat{
+		styles: `<style:default-style style:family="graphic"><style:paragraph-properties style:tab-stop-distance="1.25cm"/></style:default-style>`,
+		auto: `<style:style style:name="P1" style:family="paragraph"><style:paragraph-properties fo:line-height="150%" style:line-height-at-least="0.5cm"/></style:style>` +
+			`<style:style style:name="P2" style:family="paragraph"><style:paragraph-properties style:tab-stop-distance="2cm"/></style:style>` +
+			`<style:style style:name="T1" style:family="text"><style:text-properties fo:font-size="20pt" style:text-position="-33% 50%"/></style:style>` +
+			`<style:style style:name="T2" style:family="text"><style:text-properties fo:font-size="20pt" style:text-position="10%"/></style:style>`,
+		body: page(`<draw:frame svg:width="10cm" svg:height="8cm"><draw:text-box>` +
+			`<text:p text:style-name="P1">a<text:span text:style-name="T1">b</text:span><text:span text:style-name="T2">c</text:span></text:p>` +
+			`<text:p text:style-name="P2">d</text:p></draw:text-box></draw:frame>`),
+	}
+	doc, _ := read(t, f.bytes())
+	ps := doc.Slides[0].Shapes[0].Text.Paragraphs
+	if p := ps[0]; !near(p.LineSpacingAtLeast, cm(0.5)) || p.LineSpacing != 1 || p.LineSpacingPoints != 0 || !near(p.DefaultTab, cm(1.25)) {
+		t.Errorf("first paragraph %+v", p)
+	}
+	if !near(ps[1].DefaultTab, cm(2)) || ps[1].LineSpacingAtLeast != 0 {
+		t.Errorf("second paragraph %+v", ps[1])
+	}
+	runs := ps[0].Runs
+	for i, want := range []struct{ rise, size float64 }{{0, 18}, {-0.33, 10}, {0.1, 11.6}} {
+		if s := runs[i].Style; !near(s.Rise, want.rise) || !near(s.Size, want.size) || s.Script != slides.Baseline {
+			t.Errorf("run %d style %+v, want rise %v size %v", i, s, want.rise, want.size)
+		}
+	}
+}
+
+func TestRead_TextLinkJumps(t *testing.T) {
+	t.Parallel()
+	f := flat{body: page(`<draw:frame svg:width="10cm" svg:height="8cm"><draw:text-box><text:p>` +
+		`<text:a xlink:href="#Slide 2">a</text:a><text:a xlink:href="#shape">b</text:a><text:a xlink:href="#nowhere">c</text:a><text:a xlink:href="https://example.com">d</text:a>` +
+		`</text:p></draw:text-box></draw:frame>`) +
+		`<draw:page draw:name="page2" draw:master-page-name="Default"><draw:g><draw:rect draw:name="shape" svg:width="1cm" svg:height="1cm"/></draw:g></draw:page>`}
+	doc, _ := read(t, f.bytes())
+	runs := doc.Slides[0].Shapes[0].Text.Paragraphs[0].Runs
+	want := []struct {
+		href string
+		jump int
+	}{{"", 2}, {"", 2}, {"#nowhere", 0}, {"https://example.com", 0}}
+	if len(runs) != len(want) {
+		t.Fatalf("runs %+v", runs)
+	}
+	for i, w := range want {
+		if runs[i].Href != w.href || runs[i].Jump != w.jump {
+			t.Errorf("run %d %q href %q jump %d, want %+v", i, runs[i].Text, runs[i].Href, runs[i].Jump, w)
+		}
+	}
+}

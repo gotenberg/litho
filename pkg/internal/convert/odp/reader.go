@@ -82,6 +82,28 @@ type reader struct {
 	pageCount int
 }
 
+// nameShapes maps the draw:name of every drawing shape el holds, groups
+// and links walked, but not its notes, to the page n, a name already
+// taken keeping its first page.
+func (r *reader) nameShapes(el *odf.Element, n, depth int) {
+	if depth > maxGroupDepth {
+		return
+	}
+	for _, k := range el.Children {
+		if k.IsText() || k.Is(odf.NSPresentation, "notes") || k.Name.Space != odf.NSDraw {
+			continue
+		}
+		if name := k.A(odf.NSDraw, "name"); name != "" {
+			if _, dup := r.pageNames[name]; !dup {
+				r.pageNames[name] = n
+			}
+		}
+		if k.Is(odf.NSDraw, "g") || k.Is(odf.NSDraw, "a") {
+			r.nameShapes(k, n, depth+1)
+		}
+	}
+}
+
 // newReader returns a reader of pkg.
 func newReader(ctx context.Context, pkg *odf.Package, fonts *text.Fonts) *reader {
 	r := &reader{
@@ -164,6 +186,12 @@ func (r *reader) document(body *odf.Element) *slides.Document {
 				r.pageNames[name] = i + 1
 			}
 		}
+	}
+	// A link may name a shape: it goes to the page that holds it, as
+	// Impress's "Go to page or object" action does (ODF 1.3, Part 3,
+	// 19.414 presentation:action show); a page's own name comes first.
+	for i, pg := range pages[:r.pageCount] {
+		r.nameShapes(pg, i+1, 0)
 	}
 	for i, pg := range pages {
 		if i >= maxSlides {
