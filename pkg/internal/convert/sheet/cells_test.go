@@ -276,12 +276,10 @@ func TestConvert_Rotation(t *testing.T) {
 // cells; a fixed height does not.
 func TestConvert_GrowHeader(t *testing.T) {
 	tests := []struct {
-		name           string
-		grow           bool
-		spacing        float64
-		wantDown       float64
-		footerSpacing  float64
-		wantFooterRoom bool
+		name     string
+		grow     bool
+		spacing  float64
+		wantDown float64
 	}{
 		{name: "fixed height", grow: false, wantDown: 0},
 		// "H" in Liberation Sans 10 takes 11.17 points, with 7.09 of
