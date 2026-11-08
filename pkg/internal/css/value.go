@@ -248,9 +248,7 @@ func calcOf(t *token, depth int) (calcValue, bool) {
 	vals := make([]calcValue, len(parts))
 	for i, p := range parts {
 		v, ok := parseCalc(p, depth+1)
-		if !ok || v.isNum != vals[0].isNum && i > 0 || v.l.hasPct || v.l.bad {
-			// A percentage inside a comparison resolves only at used
-			// value time, which a computed length cannot defer.
+		if !ok || v.isNum != vals[0].isNum && i > 0 || v.l.bad {
 			return calcValue{}, false
 		}
 		vals[i] = v
@@ -276,6 +274,33 @@ func compare(vals []calcValue, isMax bool) (calcValue, bool) {
 			}
 		}
 		return calcValue{isNum: true, num: v}, finite(v)
+	}
+	pcts, pure := 0, true
+	for _, x := range vals {
+		if x.l.hasPct {
+			pcts++
+		}
+		if !x.l.hasPct || x.l.hasLen && !x.l.zeroLen() {
+			pure = false
+		}
+	}
+	if pure {
+		// Percentages of one reference compare as they are (CSS Values
+		// 4, 10.2).
+		v := vals[0].l.pct
+		for _, x := range vals[1:] {
+			if isMax && x.l.pct > v || !isMax && x.l.pct < v {
+				v = x.l.pct
+			}
+		}
+		return calcValue{l: length{pct: v, hasPct: true}}, true
+	}
+	if pcts > 0 {
+		// A comparison of a length and a percentage resolves only once
+		// the reference is known, which a [Dimension] cannot defer: the
+		// value is invalid rather than compared with the percentage
+		// taken as zero.
+		return calcValue{l: length{hasLen: true, bad: true}}, true
 	}
 	plain := true
 	for _, x := range vals {

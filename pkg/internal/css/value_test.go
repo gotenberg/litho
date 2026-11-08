@@ -176,3 +176,20 @@ func TestResolveURL_AgainstBase(t *testing.T) {
 		t.Errorf("background-image = %q", u)
 	}
 }
+
+func TestParseCalc_CompareLengthWithPercentIsInvalid(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<div id=d></div><p id=p></p>`, `div { width: 80%; width: min(100%, 600px) } p { width: max(10%, 20%) }`)
+	if got := c.of("d").Width; !dimEq(got, pct(0.8)) {
+		t.Errorf("min(100%%, 600px) = %+v, want the earlier 80%%, not 0", got)
+	}
+	if got := c.of("p").Width; !dimEq(got, pct(0.2)) {
+		t.Errorf("max(10%%, 20%%) = %+v, want 20%%", got)
+	}
+	if got := styleOf(t, `margin-top: calc(max(10%, 20%) + 2px)`).Margin[Top]; got != (Dimension{Kind: Calc, Value: 1.5, Fraction: 0.2}) {
+		t.Errorf("calc(max(10%%, 20%%) + 2px) = %+v, want calc(20%% + 1.5pt)", got)
+	}
+	if got := styleOf(t, `margin-top: calc(min(10%, 5px) + 2px)`).Margin[Top]; got != Pts(0) {
+		t.Errorf("calc(min(10%%, 5px) + 2px) = %+v, want the value dropped", got)
+	}
+}
