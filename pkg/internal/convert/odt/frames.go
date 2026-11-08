@@ -21,6 +21,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/svg"
 )
 
@@ -798,8 +799,8 @@ func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 
 // shapeSVG returns an SVG drawing of a shape (ODF 1.3, Part 3, 10.3) in
 // its own box: rectangles, ellipses, circles, lines, polylines, polygons
-// and paths with their viewBox, and the custom shapes whose preset
-// geometry is a rectangle or an ellipse; "" for a shape it does not draw.
+// and paths with their viewBox; "" for a shape it does not draw (a custom
+// shape draws through [customShape]).
 func shapeSVG(c *odf.Element, g frameGeom) string {
 	fill := "#729fcf"
 	if g.props.Get("draw:fill") == "none" {
@@ -849,18 +850,6 @@ func shapeSVG(c *odf.Element, g frameGeom) string {
 			attr = fmt.Sprintf(`<polygon points="%s" %s/>`, xmlEscape(c.A(odf.NSDraw, "points")), paint)
 		}
 		return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%gpt" height="%gpt" viewBox="%s" preserveAspectRatio="none">%s</svg>`, w, h, xmlEscape(vb), attr)
-	case "custom-shape":
-		geo := c.Child(odf.NSDraw, "enhanced-geometry")
-		switch geo.A(odf.NSDraw, "type") {
-		case "rectangle", "flowchart-process":
-			body = fmt.Sprintf(`<rect x="0" y="0" width="%g" height="%g" %s/>`, w, h, paint)
-		case "round-rectangle", "flowchart-alternate-process":
-			body = fmt.Sprintf(`<rect x="0" y="0" width="%g" height="%g" rx="%g" %s/>`, w, h, math.Min(w, h)/6, paint)
-		case "ellipse", "circle", "flowchart-connector":
-			body = fmt.Sprintf(`<ellipse cx="%g" cy="%g" rx="%g" ry="%g" %s/>`, w/2, h/2, w/2, h/2, paint)
-		default:
-			return ""
-		}
 	default:
 		return ""
 	}
@@ -957,8 +946,61 @@ func (b *builder) withText(n, text *layout.Node, g frameGeom) *layout.Node {
 	return b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "Figure", Children: []*layout.Node{n, inner}})
 }
 
+// customShape returns the picture of a draw:custom-shape (ODF 1.3, Part
+// 3, 10.6.1): its enhanced geometry drawn by the shape engine with the
+// shape's fill (draw:fill, draw:fill-color) and stroke (draw:stroke,
+// svg:stroke-color, svg:stroke-width), Impress's default blue fill and
+// darker blue line where the style says none; nil for a geometry the
+// engine draws as its box.
+func (b *builder) customShape(c *odf.Element, g frameGeom) *layout.Picture {
+	geom := odf.ParseGeometry(c)
+	if geom == nil || !shape.Known(geom) {
+		return nil
+	}
+	if err := shape.Check(geom); err != nil {
+		b.warn("shape-custom-shape", fmt.Sprintf("a custom shape's geometry is drawn in part: %v", err))
+	}
+	fill := &compose.Color{R: 0x72 / 255.0, G: 0x9f / 255.0, B: 0xcf / 255.0, A: 1}
+	if g.props.Get("draw:fill") == "none" {
+		fill = nil
+	} else if col, ok := odf.ParseColor(g.props.Get("draw:fill-color")); ok {
+		fill = &compose.Color{R: float64(col.R) / 255, G: float64(col.G) / 255, B: float64(col.B) / 255, A: 1}
+	}
+	line := shape.Line{Width: 0.75, Color: compose.Color{R: 0x34 / 255.0, G: 0x65 / 255.0, B: 0xa4 / 255.0, A: 1}, Join: compose.RoundJoin}
+	if g.props.Get("draw:stroke") == "none" {
+		line.Width = 0
+	} else {
+		if col, ok := odf.ParseColor(g.props.Get("svg:stroke-color")); ok {
+			line.Color = compose.Color{R: float64(col.R) / 255, G: float64(col.G) / 255, B: float64(col.B) / 255, A: 1}
+		}
+		if sw, ok := odf.Length(g.props.Get("svg:stroke-width")); ok && sw > 0 {
+			line.Width = sw
+		}
+	}
+	w, h := math.Max(g.w, 1), math.Max(g.h, 1)
+	pic := &layout.Picture{Width: w, Height: h}
+	pic.Vector = func(_ context.Context, r compose.Rect) []compose.Fragment {
+		var out, strokes []compose.Fragment
+		for _, p := range shape.Paths(geom, r) {
+			if p.Fill && fill != nil {
+				out = append(out, shape.Fill(p.Ops, r, shape.Paint{Kind: shape.PaintSolid, Color: shape.Shade(*fill, p.Mode)})...)
+			}
+			if p.Stroke {
+				strokes = append(strokes, shape.Stroke(p.Ops, line)...)
+			}
+		}
+		return append(out, strokes...)
+	}
+	return pic
+}
+
 // shapeBody builds the drawing of a shape without its text.
 func (b *builder) shapeBody(c *odf.Element, g frameGeom) *layout.Node {
+	if c.Is(odf.NSDraw, "custom-shape") {
+		if pic := b.customShape(c, g); pic != nil {
+			return b.shapeNode(c, pic)
+		}
+	}
 	src := shapeSVG(c, g)
 	if src == "" {
 		b.warn("shape-"+c.Name.Local, fmt.Sprintf("the shape %s is drawn as its empty box", c.Name.Local))
@@ -975,6 +1017,11 @@ func (b *builder) shapeBody(c *odf.Element, g frameGeom) *layout.Node {
 		s := doc.Size()
 		pic.Width, pic.Height = s.Width, s.Height
 	}
+	return b.shapeNode(c, pic)
+}
+
+// shapeNode returns the replaced node drawing a shape's picture.
+func (b *builder) shapeNode(c *odf.Element, pic *layout.Picture) *layout.Node {
 	st := baseStyle()
 	st.Display = css.Inline
 	st.Width, st.Height = css.Pts(pic.Width), css.Pts(pic.Height)

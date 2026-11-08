@@ -82,7 +82,7 @@ func TestRead_Drawings(t *testing.T) {
 	if d := ds[3]; d.Name != "Group" || d.Picture == nil {
 		t.Errorf("group %+v", d)
 	}
-	if !hasWarning(warnings, "star5 shape is drawn as its bounding box") || !hasWarning(warnings, "the chart has no chart type the reader draws") {
+	if hasWarning(warnings, "star5 shape is drawn as its bounding box") || !hasWarning(warnings, "the chart has no chart type the reader draws") {
 		t.Errorf("warnings %v", warnings)
 	}
 }

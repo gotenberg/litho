@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
 // nsXDR is the spreadsheet drawing namespace (ECMA-376 Part 1, 20.5).
@@ -160,7 +161,7 @@ type leaf struct {
 	flipH, flipV bool
 	pic          *layout.Picture
 	crop         [4]float64
-	geom         string
+	geom         *shape.Geometry
 	style        ooxml.ShapeStyle
 	text         *shapeText
 	// anchored marks a leaf that fills its anchor: its anchor holds the
@@ -251,21 +252,19 @@ func (w *sheetReader) leaves(part string, obj *ooxml.Element, x, y, bw, bh float
 		}
 	case "sp", "cxnSp":
 		spPr := obj.Child(nsXDR, "spPr")
-		geom := "rect"
-		if g := spPr.Child(ooxml.NSA, "prstGeom"); g != nil {
-			geom = attr(g, "prst")
-		} else if spPr.Child(ooxml.NSA, "custGeom") != nil {
-			geom = "custom"
-		}
-		if obj.Local == "cxnSp" && geom != "line" {
-			if _, ok := ooxml.PresetPath(geom, compose.Rect{Width: 1, Height: 1}); !ok {
-				geom = "line"
+		g := ooxml.ParseGeometry(spPr)
+		switch {
+		case obj.Local == "cxnSp" && !shape.Known(g):
+			// A connector the engine does not know joins its ends.
+			g = &shape.Geometry{Preset: "line"}
+		case !shape.Known(g):
+			r.warn("approximated", fmt.Sprintf("a %s shape is drawn as its bounding box", g.Preset))
+		default:
+			if err := shape.Check(g); err != nil {
+				r.warn("approximated", fmt.Sprintf("a shape's geometry is drawn in part: %v", err))
 			}
 		}
-		if _, ok := ooxml.PresetPath(geom, compose.Rect{Width: 1, Height: 1}); !ok {
-			r.warn("approximated", fmt.Sprintf("a %s shape is drawn as its bounding box", geom))
-		}
-		l := leaf{x: x, y: y, w: bw, h: bh, geom: geom, style: ooxml.ParseShapeStyle(spPr, obj.Child(nsXDR, "style"), r.theme)}
+		l := leaf{x: x, y: y, w: bw, h: bh, geom: g, style: ooxml.ParseShapeStyle(spPr, obj.Child(nsXDR, "style"), r.theme)}
 		l.text = r.shapeTextOf(obj.Child(nsXDR, "txBody"), obj.Child(nsXDR, "style"))
 		if xfrm := spPr.Child(ooxml.NSA, "xfrm"); xfrm != nil {
 			l.rot, l.flipH, l.flipV = ooxml.Transform2D(xfrm)
@@ -375,13 +374,15 @@ func (r *reader) composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
 					content = []compose.Fragment{&compose.Image{Rect: box, Source: pic.Source}}
 				}
 			} else {
-				ops, _ := ooxml.PresetPath(l.geom, box)
-				content = opaque(l.style.Paint(ops))
+				content = opaque(l.style.Paint(l.geom, box))
+				// The text sits in the geometry's text rectangle (ECMA-376
+				// Part 1, 20.1.9.22 rect), as LibreOffice lays it out; text
+				// kept upright in a turned shape keeps the outer box.
 				switch {
 				case l.text != nil && l.text.upright:
 					upright = l.text.draw(ctx, fonts, outer)
 				case l.text != nil:
-					content = append(content, l.text.draw(ctx, fonts, box)...)
+					content = append(content, l.text.draw(ctx, fonts, shape.TextRect(l.geom, box))...)
 				}
 			}
 			if m, ok := transform(box, l.rot, l.flipH, l.flipV); ok && len(content) > 0 {

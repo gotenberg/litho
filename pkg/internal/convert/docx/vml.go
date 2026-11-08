@@ -6,6 +6,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
 // pxPt is the size of a VML pixel, the unit of a top-level shape's
@@ -196,7 +197,9 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 		}
 		return box(st, w, h)
 	}
-	n := vectorShape(st, geom, ss, w, h)
+	g := &shape.Geometry{Preset: geom}
+	d.checkGeometry(g)
+	n := vectorShape(st, g, ss, w, h)
 	setTransform(n.Style, vmlRotation(vs), strings.Contains(vs["flip"], "x"), strings.Contains(vs["flip"], "y"))
 	return n
 }
@@ -227,9 +230,9 @@ func vmlRotation(vs ooxml.VMLStyle) float64 {
 }
 
 // vmlGeometry returns the preset geometry a VML shape draws (Part 4,
-// 14.1.2): its element's, else its shape type's (o:spt 1 a rectangle,
-// 2 a rounded rectangle, 3 an oval, 20 and 32 a line, 202 a text box's
-// rectangle), "" for any other.
+// 14.1.2): its element's, else its shape type's o:spt mapped onto the
+// DrawingML preset of the same shape ([ooxml.VMLPreset]), "" for a shape
+// of its own v:path or a type without a preset.
 func (d *document) vmlGeometry(k *ooxml.Element) string {
 	switch k.Local {
 	case "rect":
@@ -254,17 +257,8 @@ func (d *document) vmlGeometry(k *ooxml.Element) string {
 	if !ok {
 		return ""
 	}
-	switch spt {
-	case 1, 202:
-		return "rect"
-	case 2:
-		return "roundRect"
-	case 3:
-		return "ellipse"
-	case 20, 32:
-		return "line"
-	}
-	return ""
+	p, _ := ooxml.VMLPreset(spt)
+	return p
 }
 
 // vmlShapeStyle returns the fill and stroke of a VML shape (Part 4,

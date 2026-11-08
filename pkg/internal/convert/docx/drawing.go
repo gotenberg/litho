@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
 // The graphic data URIs (ECMA-376 Part 1, 20.1.2.2.17) the converter
@@ -187,16 +188,10 @@ func (d *document) loadPicture(part, id string) *layout.Picture {
 
 // shape builds a wps:wsp (MS-ODRAWXML, 2.3.4): a text box as a block of
 // its content over the shape's fill, any other shape as a vector picture
-// of its preset geometry.
+// of its preset or custom geometry.
 func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float64, depth int) *layout.Node {
 	spPr := sp.Child(ooxml.NSWPS, "spPr")
 	ss := ooxml.ParseShapeStyle(spPr, sp.Child(ooxml.NSWPS, "style"), d.theme)
-	geom := "rect"
-	if g := spPr.Child(ooxml.NSA, "prstGeom"); g != nil {
-		geom = attrOr(g, "prst")
-	} else if spPr.Child(ooxml.NSA, "custGeom") != nil {
-		geom = "custom"
-	}
 	if ref := ooxml.ParsePicture(sp); ref.Embed != "" && spPr.Child(ooxml.NSA, "blipFill") != nil {
 		return d.picture(s, ref, st, w, h, "")
 	}
@@ -206,10 +201,9 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 		turn(n, bodyVert(attrOr(bodyPr, "vert")))
 		return n
 	}
-	if _, ok := ooxml.PresetPath(geom, compose.Rect{Width: 1, Height: 1}); !ok {
-		d.warn("approximated", fmt.Sprintf("a %s shape is drawn as its bounding box", geom))
-	}
-	n := vectorShape(st, geom, ss, w, h)
+	g := ooxml.ParseGeometry(spPr)
+	d.checkGeometry(g)
+	n := vectorShape(st, g, ss, w, h)
 	if xfrm := spPr.Child(ooxml.NSA, "xfrm"); xfrm != nil {
 		rot, fh, fv := ooxml.Transform2D(xfrm)
 		setTransform(n.Style, rot, fh, fv)
@@ -217,16 +211,25 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 	return n
 }
 
+// checkGeometry warns of a geometry the engine draws as its bounding box
+// or whose guides do not all resolve.
+func (d *document) checkGeometry(g *shape.Geometry) {
+	if !shape.Known(g) {
+		d.warn("approximated", fmt.Sprintf("a %s shape is drawn as its bounding box", g.Preset))
+	} else if err := shape.Check(g); err != nil {
+		d.warn("approximated", fmt.Sprintf("a shape's geometry is drawn in part: %v", err))
+	}
+}
+
 // vectorShape returns the replaced box of w by h points drawing the
-// preset geometry geom with the fill and outline ss.
-func vectorShape(st *css.Style, geom string, ss ooxml.ShapeStyle, w, h float64) *layout.Node {
+// geometry g, nil for a rectangle, with the fill and outline ss.
+func vectorShape(st *css.Style, g *shape.Geometry, ss ooxml.ShapeStyle, w, h float64) *layout.Node {
 	ps := inlineStyle(st)
 	ps.Width, ps.Height = css.Pts(max(w, 0.1)), css.Pts(max(h, 0.1))
 	ps.LineHeight = css.Dimension{Kind: css.Normal}
 	pic := &layout.Picture{Width: max(w, 0.1), Height: max(h, 0.1)}
 	pic.Vector = func(_ context.Context, r compose.Rect) []compose.Fragment {
-		ops, _ := ooxml.PresetPath(geom, r)
-		return ss.Paint(ops)
+		return ss.Paint(g, r)
 	}
 	return &layout.Node{Kind: layout.Replaced, Style: ps, Picture: pic}
 }
