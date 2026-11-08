@@ -165,7 +165,8 @@ func TestTabs_CSSUnchanged(t *testing.T) {
 }
 
 // TestTabs_Leaders fills the room a tab leaves with its leader's character
-// in the paragraph's font, the last copy ending at the stop.
+// in the paragraph's font, as many copies as whole advances fit spread
+// over the tab, the first at its start and the last ending at its end.
 func TestTabs_Leaders(t *testing.T) {
 	tests := []struct {
 		leader css.TabLeader
@@ -186,9 +187,10 @@ func TestTabs_Leaders(t *testing.T) {
 					fill = append(fill, g.x)
 				}
 			}
-			// The tab runs from 10 to 135: twelve whole copies end there.
-			if len(fill) != 12 || !near(fill[0], 15) || !near(fill[11], 125) {
-				t.Errorf("leader copies at %v, want 12 from 15 to 125", fill)
+			// The tab runs from 10 to 135: twelve whole copies, 125/12
+			// apart.
+			if len(fill) != 12 || !near(fill[0], 10) || !near(fill[11], 10+11*125.0/12) {
+				t.Errorf("leader copies at %v, want 12 from 10 to %.2f", fill, 10+11*125.0/12)
 			}
 			if got := glyphLayout(res, 1); !strings.HasSuffix(got, "9@135,8") {
 				t.Errorf("glyphs %s, want 9 ending on the stop at 145", got)

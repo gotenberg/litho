@@ -165,9 +165,17 @@ func leaderRune(l css.TabLeader) rune {
 
 // tabLeader returns the glyph run that fills the tab item it of a line of
 // paragraph p with its stop's leader: the leader's character repeated in
-// the tab's font, as many whole copies as fit in the tab's width, the last
-// one ending at the tab's end (on the stop for a left stop), as Writer
-// fills a tab portion. nil when the tab has no leader or no room.
+// the tab's font, as Writer fills a tab portion. Writer counts the copies
+// in whole twips, the tab's width over the character's advance truncated to
+// a twip, and spreads them evenly over the tab, the first at its start
+// and the last ending at its end. nil when the tab has no leader or no
+// room.
+//
+// # Corpus evidence
+//
+//   - docx: ooxmlexport/TOC_field_f.docx draws 145 dots of 2.772 points
+//     in a tab of 400.9 points, 2.765 points apart, where whole advances
+//     fit 144.
 func (e *engine) tabLeader(p *ifcPara, it *lineItem) *compose.Text {
 	tc, ok := p.tabs[it.start]
 	if !ok {
@@ -186,18 +194,22 @@ func (e *engine) tabLeader(p *ifcPara, it *lineItem) *compose.Text {
 		return nil
 	}
 	cw := pl.Width
-	k := min(math.Floor(it.w/cw+1e-6), maxLeaderCopies)
+	twip := math.Floor(cw*20 + 1e-6)
+	if twip < 1 {
+		twip = 1
+	}
+	k := min(math.Floor(it.w*20/twip+1e-6), maxLeaderCopies)
 	if k < 1 {
 		return nil
 	}
+	step := it.w / k
 	src := pl.Spans[0].Text
 	t := *src
 	t.Glyphs = make([]compose.Glyph, 0, int(k)) // fits int: at most maxLeaderCopies
 	hs := hscale(src)
-	start := it.w - k*cw
 	for c := range int(k) { // fits int: at most maxLeaderCopies
 		g := src.Glyphs[0]
-		g.X = (start + float64(c)*cw) / hs
+		g.X = float64(c) * step / hs
 		t.Glyphs = append(t.Glyphs, g)
 	}
 	return &t
