@@ -6,7 +6,6 @@ import (
 	"image"
 	"image/color"
 	"image/png"
-	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -134,19 +133,25 @@ func TestDrawing_ChartEx(t *testing.T) {
 		`<a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/drawing/2014/chartex"><cx:chart xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" r:id="rIdX"/></a:graphicData></a:graphic></xdr:graphicFrame>` +
 		`</mc:Choice><mc:Fallback><xdr:sp macro=""><xdr:nvSpPr><xdr:cNvPr id="0" name=""/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:prstGeom prst="rect"/></xdr:spPr></xdr:sp></mc:Fallback></mc:AlternateContent>` +
 		`<xdr:clientData/></xdr:absoluteAnchor></xdr:wsDr>`
-	files := workbookFiles([]testSheet{{
+	chartEx := `<cx:chartSpace xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex"><cx:chart><cx:plotArea><cx:plotAreaRegion>` +
+		`<cx:series layoutId="funnel"><cx:dataId val="0"/></cx:series></cx:plotAreaRegion></cx:plotArea></cx:chart></cx:chartSpace>`
+	parts := map[string]string{
+		"xl/drawings/drawing1.xml": drawing,
+		"xl/drawings/_rels/drawing1.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+			`<Relationship Id="rIdX" Type="http://schemas.microsoft.com/office/2014/relationships/chartEx" Target="../charts/chartEx1.xml"/></Relationships>`,
+		"xl/charts/chartEx1.xml": chartEx,
+	}
+	sheets := []testSheet{{
 		name: "S", xml: `<sheetData/><drawing r:id="rIdD"/>`,
 		rels: `<Relationship Id="rIdD" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>`,
-	}}, minimalStyles, "", "", map[string]string{"xl/drawings/drawing1.xml": drawing})
-	doc, warnings := readBytes(t, zipFiles(t, files))
-	if ds := doc.Sheets[0].Drawings; len(ds) != 1 || ds[0].Picture == nil || ds[0].Chart != nil {
-		t.Errorf("drawings %+v, want the chart's box kept empty", ds)
+	}}
+	doc, warnings := readBytes(t, zipFiles(t, workbookFiles(sheets, minimalStyles, "", "", parts)))
+	if ds := doc.Sheets[0].Drawings; len(ds) != 1 || ds[0].Chart == nil || ds[0].Picture != nil {
+		t.Errorf("drawings %+v, warnings %+v: want the Office 2016 chart read, as Calc draws it over the fallback shape", ds, warnings)
 	}
-	named := false
-	for _, w := range warnings {
-		named = named || strings.Contains(w.Message, `"Funnel"`)
-	}
-	if !named {
-		t.Errorf("warnings %+v", warnings)
+	delete(parts, "xl/drawings/_rels/drawing1.xml.rels")
+	doc, _ = readBytes(t, zipFiles(t, workbookFiles(sheets, minimalStyles, "", "", parts)))
+	if n := len(doc.Sheets[0].Drawings); n != 0 {
+		t.Errorf("%d drawings for a chart whose part is missing, want none", n)
 	}
 }

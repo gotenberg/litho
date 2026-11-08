@@ -197,11 +197,24 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 				d.Chart = w.r.chartOf(rel.Target)
 				return true
 			case uriChartEx:
-				// The chart keeps its box, which the printed range
-				// spans, as LibreOffice prints an empty chart object
-				// there.
-				w.r.warn("unsupported-content", fmt.Sprintf("the Office 2016 chart %q (a histogram, funnel, box and whisker or similar chart) is not drawn", d.Name))
-				d.Picture = &layout.Picture{Width: 1, Height: 1, Vector: func(context.Context, compose.Rect) []compose.Fragment { return nil }}
+				// An Office 2016 chart (MS-ODRAWXML, 2.24.3 cx:chart):
+				// Excel caches no data for it, so the chart reads its
+				// ranges through the workbook.
+				id, _ := data.Child(ooxml.NSChartEx, "chart").AttrNS(ooxml.NSR, "id")
+				rel, ok := w.r.pkg.RelationshipByID(part, id)
+				if !ok || rel.External || !w.r.pkg.Has(rel.Target) {
+					return false
+				}
+				c, err := ooxml.ParseChartEx(w.r.ctx, w.r.pkg, rel.Target)
+				if err != nil {
+					w.r.warn("unsupported-content", fmt.Sprintf("the Office 2016 chart %q is left out: %v", d.Name, err))
+					return false
+				}
+				for _, x := range c.Warnings {
+					w.r.warn(x.Code, x.Message)
+				}
+				c.Resolver = w.r.rangeValues
+				d.Chart = c
 				return true
 			case uriDiagram:
 				w.r.warn("unsupported-content", "a SmartArt diagram is left out: the workbook holds no picture of it")
