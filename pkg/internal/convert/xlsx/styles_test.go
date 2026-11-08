@@ -198,3 +198,21 @@ func TestRead_StyleRecords(t *testing.T) {
 		t.Errorf("own font %+v format %q, want the cell format's font", b.Font, b.Format)
 	}
 }
+
+// TestRead_SystemThemeColors checks that a theme colour naming a system
+// colour reads as the system's, black window text and white window,
+// whatever its lastClr, with its tint.
+func TestRead_SystemThemeColors(t *testing.T) {
+	t.Parallel()
+	theme := strings.NewReplacer(`lastClr="000000"`, `lastClr="00FF00"`, `lastClr="FFFFFF"`, `lastClr="FF0000"`).Replace(testTheme)
+	styles := `<fonts><font><sz val="11"/><name val="Test Sans"/></font><font><color theme="1"/></font><font><color theme="0" tint="-0.5"/></font><font><color theme="4"/></font></fonts>` +
+		`<cellStyleXfs><xf numFmtId="0" fontId="0"/></cellStyleXfs><cellXfs><xf fontId="0"/><xf fontId="1"/><xf fontId="2"/><xf fontId="3"/></cellXfs>`
+	files := workbookFiles([]testSheet{{name: "S", xml: `<sheetData><row r="1"><c r="A1" s="1"><v>1</v></c><c r="B1" s="2"><v>1</v></c><c r="C1" s="3"><v>1</v></c></row></sheetData>`}},
+		styles, "", "", map[string]string{"xl/theme/theme1.xml": theme})
+	doc, _ := readBytes(t, zipFiles(t, files))
+	for i, want := range []css.Color{{A: 1}, tint(css.Color{R: 1, G: 1, B: 1, A: 1}, -0.5), rgb(0x4472C4)} {
+		if got := styleOf(t, doc, i).Font.Color; !near(got, want) {
+			t.Errorf("column %d colour %v, want %v", i, got, want)
+		}
+	}
+}

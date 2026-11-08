@@ -57,7 +57,10 @@ func (r *reader) color(e *ooxml.Element) (css.Color, bool) {
 	ok := false
 	if v, has := e.Attr("theme"); has {
 		if i, iok := ooxml.Int(v); iok && i >= 0 && i < len(themeColorNames) {
-			c, ok = r.theme.Color(themeColorNames[i])
+			c, ok = r.systemColors[themeColorNames[i]]
+			if !ok {
+				c, ok = r.theme.Color(themeColorNames[i])
+			}
 		}
 	} else if v, has := e.Attr("rgb"); has {
 		c, ok = argb(v)
@@ -158,4 +161,33 @@ func fromHSL(h, s, l, a float64) css.Color {
 		return p
 	}
 	return css.Color{R: hue(h + 1.0/3), G: hue(h), B: hue(h - 1.0/3), A: a}
+}
+
+// systemColors returns the scheme colours of the theme root that name a
+// system colour (ECMA-376 Part 1, 20.1.2.3.33 sysClr): the window text
+// black and the window white, as LibreOffice reads them from the system
+// rather than from their lastClr, which records what the writer's screen
+// showed.
+//
+// # Corpus evidence
+//
+//   - xlsx: sc/cond_format_theme_color2.xlsx, whose theme's dk1 is the
+//     window text with lastClr 00FF00, prints its text in theme colour 1
+//     black.
+func systemColors(root *ooxml.Element) map[string]css.Color {
+	scheme := root.Find(ooxml.NSA, "clrScheme")
+	out := map[string]css.Color{}
+	for _, entry := range scheme.Kids() {
+		sys := entry.Child(ooxml.NSA, "sysClr")
+		if sys == nil {
+			continue
+		}
+		switch attr(sys, "val") {
+		case "windowText":
+			out[entry.Local] = css.Color{A: 1}
+		case "window":
+			out[entry.Local] = css.Color{R: 1, G: 1, B: 1, A: 1}
+		}
+	}
+	return out
 }

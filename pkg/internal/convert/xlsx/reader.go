@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -72,6 +73,9 @@ type reader struct {
 	// pixels decoded against [maxTotalPixels].
 	pictures map[string]*layout.Picture
 	pixels   int64
+	// systemColors are the theme's scheme colours that name a system
+	// colour, by scheme name.
+	systemColors map[string]css.Color
 	// pending are the operands of conditional formats that refer to a
 	// cell, read once every sheet is.
 	pending []pendingOperand
@@ -95,6 +99,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*sheet.Do
 	if name := pkg.RelatedPart(main, ooxml.RelTheme); name != "" {
 		if t, err := pkg.ParseXML(ctx, name, understood); err == nil {
 			r.theme = ooxml.ParseTheme(t)
+			r.systemColors = systemColors(t)
 		} else if !isMalformed(err) {
 			return nil, nil, err
 		}
