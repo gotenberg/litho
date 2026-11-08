@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
 // chartRect is the rectangle the draw tests render into.
@@ -326,5 +327,25 @@ func TestRender_CategoryLabelsTurnOrBreak(t *testing.T) {
 				t.Errorf("turned = %v, want %v", got, tt.turned)
 			}
 		})
+	}
+}
+
+func TestRender_GradientAndPatternFills(t *testing.T) {
+	grad := &shape.Paint{Kind: shape.PaintGradient, Stops: []compose.ColorStop{{Offset: 0, Color: red}, {Offset: 1, Color: blue}}}
+	c := barChart(1, 2)
+	c.Groups[0].Series[0].Fill = &Paint{Color: red, Shape: grad}
+	c.Area = Frame{Fill: &Paint{Color: blue, Shape: &shape.Paint{Kind: shape.PaintPattern, Pattern: "pct50", Color: blue, Background: red}}}
+	frags := Render(context.Background(), ahem(t), c, chartRect)
+	shaded := 0
+	walk(frags, 0, func(fr compose.Fragment, _ int) {
+		if p, ok := fr.(*compose.Path); ok && p.Fill != nil && p.Fill.Shading != nil {
+			shaded++
+		}
+	})
+	if shaded != 2 {
+		t.Errorf("%d shaded bars, want 2", shaded)
+	}
+	if n := len(paths(frags, red)); n == 0 {
+		t.Errorf("the pattern's background is not painted")
 	}
 }

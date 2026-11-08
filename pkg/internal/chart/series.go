@@ -194,7 +194,7 @@ func (rd *renderer) bars(g *Group, x, y *dim) []func() {
 			} else {
 				r = compose.Rect{X: math.Min(p0, p1), Y: math.Min(v0, v1), Width: math.Abs(p1 - p0), Height: math.Abs(v1 - v0)}
 			}
-			rd.add(paintRect(r, rd.fillOf(g, s, j), rd.borderOf(g, s, j)))
+			rd.paint(rectPath(r).Ops, rd.fillOf(g, s, j), rd.borderOf(g, s, j))
 			lb := mergeLabels(g.Labels, s.labelsOf(j))
 			if lb.Any() {
 				raw, neg := sv.raw[i][j], v < b
@@ -516,7 +516,7 @@ func (rd *renderer) areas(g *Group, x, y *dim) []func() {
 		for k := len(bottom) - 1; k >= 0; k-- {
 			pts = append(pts, bottom[k])
 		}
-		rd.add(paintPath(polygon(pts...), rd.fillOf(g, s, -1), rd.borderOf(g, s, -1)))
+		rd.paint(polygon(pts...), rd.fillOf(g, s, -1), rd.borderOf(g, s, -1))
 		for j := 0; j < len(top); j++ {
 			lb := mergeLabels(g.Labels, s.labelsOf(j))
 			if !lb.Any() || math.IsNaN(sv.raw[i][j]) {
@@ -579,7 +579,7 @@ func (rd *renderer) scatter(g *Group, x, y *dim) []func() {
 					continue
 				}
 				r := rmax * math.Sqrt(v/maxSize)
-				rd.add(paintPath(ellipse(p.X, p.Y, r, r), rd.fillOf(g, s, idx[k]), rd.borderOf(g, s, idx[k])))
+				rd.paint(ellipse(p.X, p.Y, r, r), rd.fillOf(g, s, idx[k]), rd.borderOf(g, s, idx[k]))
 			}
 		} else {
 			if st := rd.borderOf(g, s, -1).compose(); st != nil && len(pts) > 1 {

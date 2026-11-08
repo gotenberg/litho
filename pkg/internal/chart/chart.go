@@ -2,6 +2,7 @@ package chart
 
 import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
 // Chart is one chart as a reader found it: its title, its legend, its plot
@@ -211,13 +212,18 @@ type Point struct {
 	HasLabels bool
 }
 
-// Paint is a fill: a flat colour, or none.
+// Paint is a fill: a flat colour, a gradient or a pattern, or none.
 type Paint struct {
 	// None paints nothing.
 	None bool
-	// Color is the fill colour; a gradient fills with an approximation of
-	// its colours.
+	// Color is the fill colour, and a gradient's or a pattern's
+	// approximation where one colour is drawn (a line, a legend key's
+	// border).
 	Color compose.Color
+	// Shape, when set, paints a gradient or a pattern instead of Color,
+	// fitted to the bounding box of each area it fills (a bar, a sector,
+	// the chart area), through [shape.Fill].
+	Shape *shape.Paint
 }
 
 // Stroke is a line: its colour, width and dashes, or none.

@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -129,22 +130,45 @@ func (rd *renderer) title(t *Title, page compose.Rect, rem *compose.Rect, distan
 
 // frame paints the fill and border of rect.
 func (rd *renderer) frame(rect compose.Rect, f Frame) {
-	if p := paintRect(rect, f.Fill, f.Border); p != nil {
-		rd.out = append(rd.out, p)
-	}
+	rd.paint(rectPath(rect).Ops, f.Fill, f.Border)
 }
 
-// paintRect returns the path that fills and strokes rect, nil when it
-// paints nothing.
-func paintRect(rect compose.Rect, fill *Paint, border *Stroke) *compose.Path {
-	return paintPath(rectPath(rect).Ops, fill, border)
+// paint fills the outline ops with fill, a gradient or pattern through
+// the shape package, and strokes it with border.
+func (rd *renderer) paint(ops []compose.PathOp, fill *Paint, border *Stroke) {
+	if fill != nil && !fill.None && fill.Shape != nil {
+		rd.out = append(rd.out, shape.Fill(ops, opsBounds(ops), *fill.Shape)...)
+	}
+	rd.add(paintPath(ops, fill, border))
+}
+
+// opsBounds returns the bounding box of the points of ops.
+func opsBounds(ops []compose.PathOp) compose.Rect {
+	x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
+	for _, op := range ops {
+		n := 1
+		switch op.Kind {
+		case compose.CurveTo:
+			n = 3
+		case compose.ClosePath:
+			n = 0
+		case compose.MoveTo, compose.LineTo:
+		}
+		for _, pt := range op.P[:n] {
+			x0, y0, x1, y1 = math.Min(x0, pt.X), math.Min(y0, pt.Y), math.Max(x1, pt.X), math.Max(y1, pt.Y)
+		}
+	}
+	if x0 > x1 || y0 > y1 {
+		return compose.Rect{}
+	}
+	return compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
 }
 
 // paintPath returns a path of ops filled and stroked, nil when it paints
 // nothing.
 func paintPath(ops []compose.PathOp, fill *Paint, border *Stroke) *compose.Path {
 	p := &compose.Path{Ops: ops}
-	if fill != nil && !fill.None && fill.Color.A > 0 {
+	if fill != nil && !fill.None && fill.Shape == nil && fill.Color.A > 0 {
 		p.Fill = &compose.Fill{Color: fill.Color}
 	}
 	p.Stroke = border.compose()

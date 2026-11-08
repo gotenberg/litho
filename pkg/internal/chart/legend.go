@@ -213,7 +213,7 @@ func (rd *renderer) key(e legendEntry, r compose.Rect) {
 		return
 	}
 	if !e.lineKey {
-		rd.add(paintRect(r, e.fill, keyBorder(e.border)))
+		rd.paint(rectPath(r).Ops, e.fill, keyBorder(e.border))
 		return
 	}
 	cy := r.Y + r.Height/2

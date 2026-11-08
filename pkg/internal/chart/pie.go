@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
 // arc appends to ops the circular arc of centre (cx, cy) and radius r from
@@ -150,7 +151,11 @@ func (rd *renderer) pies(plot compose.Rect) {
 					ops = append(ops, ellipse(pcx, pcy, r0, r0)...)
 				}
 			}
-			p := paintPath(ops, rd.fillOf(g, s, j), rd.borderOf(g, s, j))
+			fill := rd.fillOf(g, s, j)
+			if fill != nil && !fill.None && fill.Shape != nil {
+				rd.out = append(rd.out, shape.Fill(ops, opsBounds(ops), *fill.Shape)...)
+			}
+			p := paintPath(ops, fill, rd.borderOf(g, s, j))
 			if p != nil {
 				if p.Fill != nil {
 					p.Fill.Rule = compose.EvenOdd
@@ -291,7 +296,7 @@ func (rd *renderer) radar(avail compose.Rect) {
 			continue
 		}
 		if g.Filled {
-			rd.add(paintPath(polygon(pts...), rd.fillOf(g, s, -1), rd.borderOf(g, s, -1)))
+			rd.paint(polygon(pts...), rd.fillOf(g, s, -1), rd.borderOf(g, s, -1))
 		} else if st := rd.borderOf(g, s, -1).compose(); st != nil {
 			ops := polygon(pts...)
 			rd.out = append(rd.out, &compose.Path{Ops: ops, Stroke: st})
