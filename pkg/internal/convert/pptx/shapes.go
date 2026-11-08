@@ -307,7 +307,9 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	fc := &fillCtx{sc: c.sc, part: c.part, group: c.group}
 	s.Fill = r.shapeFill(fc, chain, style)
 	s.Line = r.shapeLine(fc, chain, style)
+	turn := s.Rotation
 	r.effects(chain, s)
+	fixGradient(s, chain, turn)
 	if el.Local == "sp" {
 		ref := style.Child(ooxml.NSA, "fontRef")
 		if ref != nil && c.fontColor != nil {
@@ -428,6 +430,36 @@ func (r *reader) effects(chain []*ooxml.Element, s *slides.Shape) {
 		}
 		r.warn("unsupported-content", "3D shape properties are not drawn: shapes print flat")
 		return
+	}
+}
+
+// fixGradient turns a shape's linear gradient so it keeps the direction
+// Impress gives it on the page: the gradient's angle turned by the
+// shape's own rotation turn (20.1.7.6 xfrm rot), or not at all when the
+// gradient does not rotate with the shape (20.1.8.33 gradFill
+// rotWithShape false); a camera's turn never turns it.
+//
+// # Corpus evidence
+//
+//   - pptx: oox/Scene3d_orthographicFront's wave, turned a quarter by its
+//     camera, prints its left-to-right gradient left to right.
+func fixGradient(s *slides.Shape, chain []*ooxml.Element, turn float64) {
+	if s.Fill.Kind != slides.FillGradient || s.Fill.Gradient.Radial {
+		return
+	}
+	page := turn
+	for _, el := range chain {
+		if g := spPr(el).Child(ooxml.NSA, "gradFill"); g != nil {
+			if v, ok := g.Attr("rotWithShape"); ok && !ooxml.OnOff(v, true) {
+				page = 0
+			}
+			break
+		}
+	}
+	if d := page - s.Rotation; d != 0 {
+		g := *s.Fill.Gradient
+		g.Angle = math.Mod(g.Angle+d+720, 360)
+		s.Fill.Gradient = &g
 	}
 }
 

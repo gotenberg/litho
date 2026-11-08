@@ -338,3 +338,27 @@ func TestShapes_CameraTurn(t *testing.T) {
 		})
 	}
 }
+
+func TestShapes_GradientTurn(t *testing.T) {
+	t.Parallel()
+	grad := func(attrs string) string {
+		return `<a:gradFill ` + attrs + `><a:gsLst><a:gs pos="0"><a:srgbClr val="FFFF00"/></a:gs><a:gs pos="100000"><a:srgbClr val="00B0F0"/></a:gs></a:gsLst><a:lin ang="0"/></a:gradFill>`
+	}
+	camera := `<a:scene3d><a:camera prst="orthographicFront"><a:rot lat="0" lon="0" rev="5400000"/></a:camera><a:lightRig rig="threePt" dir="t"/></a:scene3d>`
+	for _, tc := range []struct {
+		name, spPr string
+		want       float64
+	}{
+		{"a gradient turns with its shape", grad(""), 0},
+		{"a gradient that does not rotate with the shape keeps the page's direction", grad(`rotWithShape="0"`), 270},
+		{"a camera's turn does not turn the gradient", grad("") + camera, 90},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := oneSlide(t, sp("S", tc.spPr, "")).Shapes[0]
+			if s.Fill.Gradient == nil || s.Fill.Gradient.Angle != tc.want {
+				t.Errorf("gradient %+v, want an angle of %v", s.Fill.Gradient, tc.want)
+			}
+		})
+	}
+}
