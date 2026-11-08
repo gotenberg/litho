@@ -21,10 +21,19 @@ const maxLineWidth = 1584
 // ln, 20.1.8.37 headEnd, 20.1.8.57 tailEnd), through the shape engine's
 // stroke, which sizes and docks the arrowheads as Impress draws them.
 func (b *builder) stroke(l *Line, ops []compose.PathOp) []compose.Fragment {
-	if l == nil || !(l.Width > 0) || l.Color.A <= 0 || len(ops) < 2 || math.IsInf(l.Width, 0) {
+	if l == nil || l.Color.A <= 0 || len(ops) < 2 {
 		return nil
 	}
-	sl := shape.Line{Width: min(l.Width, maxLineWidth), Color: colorOf(l.Color), Head: arrowheadOf(l.Head), Tail: arrowheadOf(l.Tail)}
+	width := l.Width
+	if l.Hairline {
+		// A hairline's arrowheads take the smallest size the engine draws;
+		// the line itself is a PDF zero-width line, the thinnest the
+		// device draws.
+		width = hairlineArrowWidth
+	} else if !(width > 0) || math.IsInf(width, 0) {
+		return nil
+	}
+	sl := shape.Line{Width: min(width, maxLineWidth), Color: colorOf(l.Color), Head: arrowheadOf(l.Head), Tail: arrowheadOf(l.Tail)}
 	switch l.Cap {
 	case CapRound:
 		sl.Cap = compose.RoundCap
@@ -53,8 +62,21 @@ func (b *builder) stroke(l *Line, ops []compose.PathOp) []compose.Fragment {
 			sl.Dash = append([]float64(nil), l.Dash...)
 		}
 	}
-	return shape.Stroke(ops, sl)
+	out := shape.Stroke(ops, sl)
+	if l.Hairline {
+		for _, f := range out {
+			if p, ok := f.(*compose.Path); ok && p.Stroke != nil {
+				p.Stroke.Width = 0
+			}
+		}
+	}
+	return out
 }
+
+// hairlineArrowWidth is the line width a hairline's arrowheads are sized
+// for, in points: any width up to it gives the engine's smallest
+// arrowhead, 0.7 millimetre.
+const hairlineArrowWidth = 0.1
 
 // arrowheadOf returns the engine's arrowhead for a: its kind, and its
 // width and length as the small, medium or large size the model's
