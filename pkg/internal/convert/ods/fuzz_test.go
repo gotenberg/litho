@@ -14,6 +14,15 @@ func FuzzRead(f *testing.F) {
 	}.bytes()
 	f.Add(doc)
 	f.Add(doc[:len(doc)/2])
+	f.Add(flat{
+		auto: `<style:style style:name="ce2" style:family="table-cell"><style:map style:condition="cell-content()&lt;=2" style:apply-style-name="Good" style:base-cell-address="S.A1"/></style:style>`,
+		body: table("S", `<table:table-column table:default-cell-style-name="ce2"/><table:table-row><table:table-cell office:value-type="float" office:value="1"/></table:table-row>`) +
+			`<table:table table:name="T"><table:table-row><table:table-cell office:value-type="float" office:value="1"/></table:table-row><calcext:conditional-formats><calcext:conditional-format calcext:target-range-address="T.A1:T.B4">` +
+			`<calcext:condition calcext:apply-style-name="Bad" calcext:value="between([.$A$1],&quot;x&quot;)" calcext:base-cell-address="T.A1"/>` +
+			`<calcext:color-scale><calcext:color-scale-entry calcext:value="50" calcext:type="percentile" calcext:color="#ff0000"/><calcext:color-scale-entry calcext:value="0" calcext:type="maximum" calcext:color="#0000ff"/></calcext:color-scale>` +
+			`<calcext:data-bar calcext:axis-position="middle"><calcext:formatting-entry calcext:value="0" calcext:type="auto-minimum"/><calcext:formatting-entry calcext:value="[.A1]" calcext:type="number"/></calcext:data-bar>` +
+			`</calcext:conditional-format></calcext:conditional-formats></table:table>`,
+	}.bytes())
 	f.Fuzz(func(t *testing.T, data []byte) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()

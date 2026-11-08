@@ -43,6 +43,13 @@ const fuzzStyles = `<numFmts><numFmt numFmtId="164" formatCode="0.0"/></numFmts>
 func FuzzConvert(f *testing.F) {
 	f.Add([]byte(fuzzSheet))
 	f.Add([]byte(fuzzSheet[:len(fuzzSheet)/2]))
+	f.Add([]byte(`<sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c></row></sheetData>` +
+		`<conditionalFormatting sqref="A1:B9 C1"><cfRule type="cellIs" priority="1" operator="between"><formula>1</formula><formula>$B$1</formula></cfRule>` +
+		`<cfRule type="colorScale" priority="2"><colorScale><cfvo type="percentile" val="50"/><cfvo type="num" val="$A$1"/><color rgb="FFFF0000"/><color theme="4"/></colorScale></cfRule>` +
+		`<cfRule type="dataBar"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF638EC6"/></dataBar><extLst><ext><x14:id xmlns:x14="` + nsX14 + `">{1}</x14:id></ext></extLst></cfRule>` +
+		`<cfRule type="top10" percent="1" rank="50"/></conditionalFormatting><extLst><ext><x14:conditionalFormattings xmlns:x14="` + nsX14 + `"><x14:conditionalFormatting xmlns:xm="` + nsXM + `">` +
+		`<x14:cfRule type="dataBar" id="{1}"><x14:dataBar axisPosition="middle"><x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/></x14:dataBar></x14:cfRule>` +
+		`<x14:cfRule type="containsText" priority="3" operator="containsText"><xm:f>x</xm:f><xm:f>'T'!$A$1</xm:f><x14:dxf><font><b/></font></x14:dxf></x14:cfRule><xm:sqref>A1</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings></ext></extLst>`))
 	fonts := testFonts(f)
 	f.Fuzz(func(t *testing.T, ws []byte) {
 		files := workbookFiles([]testSheet{{name: "S", xml: string(ws), rels: fuzzRels}, {name: "T", state: "hidden", xml: string(ws)}}, fuzzStyles, `<workbookPr date1904="1"/>`,
