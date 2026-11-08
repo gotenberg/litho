@@ -326,3 +326,35 @@ func TestConvert_FormatFill(t *testing.T) {
 		})
 	}
 }
+
+// TestConvert_InvalidCircle locks the red ellipse around a cell marked
+// invalid: the cell grown 0.25 cm left and right and 0.07 cm up and down,
+// stroked 0.55 mm wide.
+func TestConvert_InvalidCircle(t *testing.T) {
+	c := numCell(1, 5, nil)
+	c.MarkedInvalid = true
+	sh := &Sheet{Name: "S", Rows: []Row{{Index: 1, Cells: []Cell{c}}}}
+	out := convert(t, newDoc(sh), office.Options{})
+	var found *compose.Path
+	var walk func([]compose.Fragment)
+	walk = func(fs []compose.Fragment) {
+		for _, f := range fs {
+			switch f := f.(type) {
+			case *compose.Group:
+				walk(f.Content)
+			case *compose.Path:
+				if f.Stroke != nil && f.Stroke.Color.R == 1 && f.Stroke.Color.G == 0 {
+					found = f
+				}
+			}
+		}
+	}
+	walk(out.Pages[0].Content)
+	if found == nil {
+		t.Fatal("no circle drawn")
+	}
+	// The ellipse's rightmost point is the cell's right edge grown.
+	if p := found.Ops[0].P[0]; !near(p.X, 128+circleGrowX, 1e-6) || !near(found.Stroke.Width, 1.559, 0.001) {
+		t.Errorf("circle starts at %+v, width %v", p, found.Stroke.Width)
+	}
+}

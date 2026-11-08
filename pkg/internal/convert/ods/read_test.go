@@ -352,14 +352,14 @@ func TestRead_Drawings(t *testing.T) {
 func TestRead_MetaAndWarnings(t *testing.T) {
 	f := flat{
 		meta: `<dc:title>Budget</dc:title><dc:creator>Ann</dc:creator><meta:keyword>a</meta:keyword><meta:keyword>b</meta:keyword><dc:language>fr-FR</dc:language>`,
-		body: `<table:table table:name="S"><calcext:conditional-formats/><table:table-row><table:table-cell office:value-type="string"><office:annotation><text:p>note</text:p></office:annotation><text:p>v</text:p></table:table-cell></table:table-row></table:table>` +
+		body: `<table:table table:name="S"><calcext:conditional-formats/><table:table-row><table:table-cell office:value-type="string"><office:annotation><text:p>note</text:p></office:annotation><table:detective><table:highlighted-range table:marked-invalid="true"/></table:detective><text:p>v</text:p></table:table-cell></table:table-row></table:table>` +
 			`<table:content-validations/><table:named-expressions><table:named-range table:name="x"/></table:named-expressions>`,
 	}
 	doc, w := read(t, f.bytes())
 	if m := doc.Meta; m.Title != "Budget" || m.Author != "Ann" || m.Keywords != "a, b" || m.Lang != "fr-FR" {
 		t.Errorf("meta = %+v", m)
 	}
-	if c := cellAt(doc.Sheets[0], 0, 0); c == nil || c.Value.Text != "v" {
+	if c := cellAt(doc.Sheets[0], 0, 0); c == nil || c.Value.Text != "v" || !c.MarkedInvalid {
 		t.Errorf("annotated cell = %+v", c)
 	}
 	for _, code := range []string{"comments", "validations", "named-expressions"} {

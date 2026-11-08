@@ -617,6 +617,12 @@ func (r *reader) rowCells(ts *tableState, el *odf.Element) ([]sheet.Cell, []shee
 				frames = append(frames, frameAt{el: k, at: sheet.Anchor{Row: ts.row, Column: col}})
 			case k.Is(odf.NSOffice, "annotation"):
 				r.warn("comments", "cell comments are not printed")
+			case k.Is(odf.NSTable, "detective"):
+				for _, h := range k.Children {
+					if h.Is(odf.NSTable, "highlighted-range") && h.A(odf.NSTable, "marked-invalid") == "true" {
+						cell.MarkedInvalid = true
+					}
+				}
 			}
 		}
 		for i := 0; i < n; i++ {

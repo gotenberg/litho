@@ -24,6 +24,8 @@ type pageBuilder struct {
 	// fills, borderPaths and gridPaths are the page's vector content in
 	// the coordinates of its cells, under and over the text.
 	fills, borderPaths, gridPaths []compose.Fragment
+	// circles are the red ellipses around the cells marked invalid.
+	circles []compose.Fragment
 	// dataW and dataH are the size of the page's cells, headings
 	// included, in sheet points.
 	dataW, dataH float64
@@ -114,6 +116,7 @@ func (b *pageBuilder) build() ([]compose.Fragment, []compose.Link, *compose.Stru
 		links = res.Pages[0].Links
 	}
 	frags = append(frags, b.gridPaths...)
+	frags = append(frags, b.circles...)
 	frags = append(frags, b.drawings(regs)...)
 	return frags, links, res.Structure, nil
 }
@@ -166,6 +169,9 @@ func (b *pageBuilder) region(rg *region) *layout.Node {
 		}
 		b.drawDataBar(u)
 		b.drawIcon(u)
+		if u.cell != nil && u.cell.MarkedInvalid {
+			b.circles = append(b.circles, invalidCircle(u))
+		}
 		b.unitBorders(bs, rg, u)
 		if _, only := b.g.iconAt(u.r, u.c, u.cell); !only {
 			add(u)
@@ -336,4 +342,38 @@ func columnName(c int) string {
 		c /= 26
 	}
 	return string(b)
+}
+
+// The detective's circle around a cell marked invalid, in points: grown
+// 0.25 cm left and right and 0.07 cm up and down from the cell, stroked
+// red 0.55 mm wide (ScDetectiveFunc::DrawCircle).
+const (
+	circleGrowX = 0.25 / 2.54 * 72
+	circleGrowY = 0.07 / 2.54 * 72
+	circleWidth = 0.055 / 2.54 * 72
+)
+
+// invalidCircle returns the red ellipse Calc's detective draws around the
+// cell or merge of u, its value refused by its validity rule.
+//
+// # Corpus evidence
+//
+//   - ods: sc/deleteCirclesInRowAndCol.ods prints a 1.559-point red
+//     ellipse 78.18 by 16.78 points around each 64 by 12.78 point cell
+//     marked invalid.
+func invalidCircle(u *unit) compose.Fragment {
+	x0, y0 := u.x-circleGrowX, u.y-circleGrowY
+	rx, ry := u.w/2+circleGrowX, u.h/2+circleGrowY
+	cx, cy := x0+rx, y0+ry
+	const k = 0.5522847498
+	pt := func(x, y float64) compose.Point { return compose.Point{X: x, Y: y} }
+	ops := []compose.PathOp{
+		{Kind: compose.MoveTo, P: [3]compose.Point{pt(cx+rx, cy)}},
+		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx+rx, cy+k*ry), pt(cx+k*rx, cy+ry), pt(cx, cy+ry)}},
+		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx-k*rx, cy+ry), pt(cx-rx, cy+k*ry), pt(cx-rx, cy)}},
+		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx-rx, cy-k*ry), pt(cx-k*rx, cy-ry), pt(cx, cy-ry)}},
+		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx+k*rx, cy-ry), pt(cx+rx, cy-k*ry), pt(cx+rx, cy)}},
+		{Kind: compose.ClosePath},
+	}
+	return &compose.Path{Ops: ops, Stroke: &compose.Stroke{Color: compose.Color{R: 1, A: 1}, Width: circleWidth, Join: compose.RoundJoin}}
 }

@@ -260,6 +260,10 @@ type Cell struct {
 	// Href is the hyperlink the cell carries, "" for none (ECMA-376 Part
 	// 1, 18.3.1.47; ODF text:a in the cell).
 	Href string
+	// MarkedInvalid circles the cell in red, as Calc's detective marks a
+	// value its validity rule refuses (ODF 1.3 Part 3, 9.2.13
+	// table:highlighted-range with table:marked-invalid true).
+	MarkedInvalid bool
 	// Formula is the cell's formula when Calc computes it as it loads the
 	// file, as the file writes it (ECMA-376 Part 1, 18.3.1.40 f, of a cell
 	// saved without its result, or of every cell of a workbook Calc
