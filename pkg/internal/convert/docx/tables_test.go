@@ -143,3 +143,23 @@ func TestTables_FramesInCells(t *testing.T) {
 		}
 	}
 }
+
+func TestFrames_WithoutWidthBreakAnywhere(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:pPr><w:framePr w:hSpace="142" w:wrap="around" w:vAnchor="text" w:hAnchor="page" w:x="4569" w:y="340"/></w:pPr><w:r><w:t>narrow</w:t></w:r></w:p>` +
+		`<w:p><w:pPr><w:framePr w:w="2000" w:wrap="around" w:hAnchor="page" w:x="4569"/></w:pPr><w:r><w:t>sized</w:t></w:r></w:p>` +
+		`<w:p><w:r><w:t>plain</w:t></w:r></w:p>`
+	b := build(t, body, nil)
+	for _, p := range role(b.root, "P") {
+		want := textOf(p) == "narrow"
+		texts := find(p, func(n *layout.Node) bool { return n.Kind == layout.Text })
+		if len(texts) == 0 {
+			t.Fatalf("%q: no text", textOf(p))
+		}
+		for _, n := range append(texts, p) {
+			if got := n.Style.OverflowWrap == css.Anywhere; got != want {
+				t.Errorf("%q: anywhere %v, want %v", textOf(p), got, want)
+			}
+		}
+	}
+}

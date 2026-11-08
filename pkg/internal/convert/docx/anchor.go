@@ -406,6 +406,26 @@ func (d *document) group(s *story, g *ooxml.Element, st *css.Style, w, h float64
 	return n
 }
 
+// breakAnywhere lets the text of n break between any two letters
+// (css.Anywhere), n's descendants included: a run's style holds its own
+// overflow-wrap. n's style is set in place, its descendants' are copied,
+// a run's style being shareable.
+func breakAnywhere(n *layout.Node, depth int) {
+	if n == nil || depth > maxNesting {
+		return
+	}
+	if n.Style != nil {
+		if depth > 0 {
+			st := *n.Style
+			n.Style = &st
+		}
+		n.Style.OverflowWrap = css.Anywhere
+	}
+	for _, k := range n.Children {
+		breakAnywhere(k, depth+1)
+	}
+}
+
 // frame lays a paragraph with a w:framePr (17.3.1.11) out as a float: a
 // drop cap's letter floats at the start of the next paragraph's lines, a
 // text frame floats on the side its xAlign says, as wide as its w. Frames
@@ -442,6 +462,12 @@ func (d *document) frame(n *layout.Node, pp paraProps) {
 	}
 	if v, ok := ooxml.Twips(attrOr(f, "w")); ok && v > 0 {
 		st.Width = css.Pts(v)
+	} else {
+		// A frame without a width is as wide as its text, at most its
+		// column: Writer breaks a word longer than the column inside it
+		// (tdf135035), which a float's shrink-to-fit width allows only
+		// when the word's letters are break opportunities.
+		breakAnywhere(n, 0)
 	}
 	if v, ok := ooxml.Twips(attrOr(f, "hSpace")); ok && v > 0 {
 		st.Margin[css.Right] = css.Pts(v)
