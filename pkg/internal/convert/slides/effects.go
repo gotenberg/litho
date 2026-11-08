@@ -103,7 +103,8 @@ type silhouette struct {
 
 // silhouetteOf returns the silhouette of frags drawn under m (their
 // coordinates to the slide's): each path filled or stroked, each picture
-// its rectangle. Text is left out: its glyphs have no outline here.
+// its rectangle, each clipped group its clip. Text is left out: its
+// glyphs have no outline here.
 func silhouetteOf(frags []compose.Fragment, m compose.Matrix) *silhouette {
 	s := &silhouette{flat: true}
 	x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
@@ -148,6 +149,13 @@ func silhouetteOf(frags []compose.Fragment, m compose.Matrix) *silhouette {
 					t := f.Transform
 					if t == (compose.Matrix{}) {
 						t = compose.Identity
+					}
+					if f.Clip != nil {
+						// A clipped fill, a picture or a gradient in its
+						// shape, covers its clip.
+						s.flat = false
+						add(f.Clip.Ops, 0, compose.Color{A: 1}, then(t, tr))
+						continue
 					}
 					walk(f.Content, then(t, tr), depth+1)
 				}
