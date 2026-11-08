@@ -249,12 +249,10 @@ RUN found="$(pdftoppm -v 2>&1 | head -n 1)" \
 WORKDIR /work
 COPY entrypoint.sh ./
 COPY lib/ ./lib/
-COPY pdfjs/ ./pdfjs/
-COPY verapdf/ ./verapdf/
+# The PDF corpora (pdfjs, verapdf, govdocs/pdf, pdf20, pdfcpu, facturx) come
+# fetched by `corpus fetch` on the host, in the mounted testdata: the image
+# only derives their goldens.
 COPY govdocs/ ./govdocs/
-COPY pdf20/ ./pdf20/
-COPY pdfcpu/ ./pdfcpu/
-COPY facturx/ ./facturx/
 # The litho corpora ship their fixtures in git rather than downloading them:
 # the litho/pdf and litho/text PDFs, and the Chromium references of the
 # litho/html sources. The gotenberg corpora likewise ship gotenberg/html's
@@ -277,12 +275,7 @@ RUN chmod +x entrypoint.sh \
   lib/gen-merge-empty.sh \
   lib/gen-render.sh \
   lib/install-references.sh \
-  pdfjs/download.sh \
-  verapdf/download.sh \
   govdocs/*/download.sh \
-  pdf20/download.sh \
-  pdfcpu/download.sh \
-  facturx/download.sh \
   litho/*/download.sh \
   gotenberg/*/download.sh \
   libreoffice/*/download.sh \

@@ -51,7 +51,7 @@ func subcommandFromArgv0() string {
 func dispatch(ctx context.Context, cmd string, args []string) int {
 	switch cmd {
 	case "init":
-		return runInit(args)
+		return runInit(ctx, args)
 	case "fetch":
 		return runFetch(ctx, args)
 	case "select":

@@ -123,6 +123,7 @@ func newRangeReaderAt(ctx context.Context, client *http.Client, u string) (*rang
 	if err != nil {
 		return nil, 0, fmt.Errorf("%w: %w", errPermanent, err)
 	}
+	req.Header.Set("User-Agent", fetchUserAgent)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, 0, fmt.Errorf("HEAD %s: %w", u, err)

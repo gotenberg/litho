@@ -25,11 +25,9 @@ if [ -z "$CORPUS" ]; then
   exit 1
 fi
 
+# A corpus `corpus fetch` downloads on the host arrives with its PDFs in the
+# mounted testdata; the others install theirs through their download.sh.
 DOWNLOAD="/work/${CORPUS}/download.sh"
-if [ ! -x "$DOWNLOAD" ]; then
-  echo "no download.sh for corpus ${CORPUS} at ${DOWNLOAD}" >&2
-  exit 1
-fi
 
 # wants <feature> tests whether a feature appears in the comma-separated
 # FEATURES list. Returns 0 (true) when present.
@@ -112,6 +110,10 @@ PDF_COUNT=$(find "$PDFS" -maxdepth 1 -name '*.pdf' | wc -l)
 if [ "$PDF_COUNT" -gt 0 ]; then
   echo "==> ${CORPUS}: ${PDF_COUNT} PDFs already on disk, skipping download."
 else
+  if [ ! -x "$DOWNLOAD" ]; then
+    echo "ERROR: ${CORPUS} has no PDFs and no download.sh: run corpus fetch --corpus=${CORPUS} on the host" >&2
+    exit 1
+  fi
   echo "==> ${CORPUS}: download..."
   "$DOWNLOAD" "$PDFS"
   PDF_COUNT=$(find "$PDFS" -maxdepth 1 -name '*.pdf' | wc -l)

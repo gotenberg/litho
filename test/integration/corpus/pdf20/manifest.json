@@ -10,5 +10,11 @@
     "compliance": "goldens/compliance",
     "remediation": "goldens/compliance",
     "remediation-aggressive": "goldens/compliance"
+  },
+  "fetch": {
+    "github": "pdf-association/pdf20examples",
+    "pin": "PDF20_REVISION",
+    "list": "documents.json",
+    "root": "pdfs"
   }
 }

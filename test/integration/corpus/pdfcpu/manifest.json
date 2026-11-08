@@ -11,5 +11,11 @@
     "merge": "goldens/merges",
     "merge-empty": "goldens/merge-empty",
     "redact-render": "goldens/text"
+  },
+  "fetch": {
+    "github": "pdfcpu/pdfcpu",
+    "pin": "PDFCPU_CORPUS_REVISION",
+    "list": "documents.json",
+    "root": "pdfs"
   }
 }

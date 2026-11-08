@@ -468,3 +468,50 @@ func TestFetchedOfficeListsAgree(t *testing.T) {
 		}
 	}
 }
+
+// TestFetchListsAgree pins that every corpus that declares a fetch and a
+// documents list lists each document once, by a valid ID, at a path its
+// files.sha256 hashes, and that a PDF corpus's fixtures are PDFs.
+func TestFetchListsAgree(t *testing.T) {
+	t.Parallel()
+
+	checked := 0
+	for _, m := range readManifests(t) {
+		list, _ := m.listAndRoot()
+		// A corpus whose paths a map rewrites (wpt, resvg) lists tests, not
+		// fetched documents.
+		if m.Fetch == nil || list == "" || len(m.Fetch.Map) > 0 {
+			continue
+		}
+		checked++
+		dir := filepath.Join(corpusSourceDir, filepath.FromSlash(m.Source))
+		docs, err := readDocumentList(filepath.Join(dir, list))
+		if err != nil {
+			t.Fatal(err)
+		}
+		hashes, err := readHashList(filepath.Join(dir, "files.sha256"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		listed := map[string]bool{}
+		for _, h := range hashes {
+			listed[h.path] = true
+		}
+		ids := map[string]bool{}
+		for _, d := range docs {
+			if !validInputID(d.ID) || ids[d.ID] || !listed[d.Path] {
+				t.Errorf("%s: %q (%s) is not a unique, valid ID of a hashed path", m.Name, d.ID, d.Path)
+			}
+			if m.Inputs == nil && !strings.HasSuffix(strings.ToLower(d.ID), ".pdf") {
+				t.Errorf("%s: %q is not a PDF", m.Name, d.ID)
+			}
+			if d.Optional && d.URL == "" {
+				t.Errorf("%s: %q is optional without a URL", m.Name, d.ID)
+			}
+			ids[d.ID] = true
+		}
+	}
+	if checked < 20 {
+		t.Errorf("checked %d fetched lists, want the Office and PDF corpora", checked)
+	}
+}

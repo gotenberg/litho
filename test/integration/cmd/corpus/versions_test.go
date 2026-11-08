@@ -455,8 +455,15 @@ func TestEverySourceReadsItsPin(t *testing.T) {
 			continue
 		}
 		// A corpus the host provisions has no download.sh: its make target
-		// reads the pin (TestHostProvisionedCorporaReadTheirPin).
+		// reads the pin (TestHostProvisionedCorporaReadTheirPin). A corpus
+		// `corpus fetch` downloads reads it through its fetch.
 		if m.ProvisionedBy != "" {
+			continue
+		}
+		if m.Fetch != nil {
+			if len(keys) > 0 && !slices.Equal(keys, []string{m.Fetch.Pin}) {
+				t.Errorf("%s: its sources come from %v, its fetch reads %s", m.Name, keys, m.Fetch.Pin)
+			}
 			continue
 		}
 		script, err := os.ReadFile(filepath.Join(corpusSourceDir, m.Source, "download.sh"))

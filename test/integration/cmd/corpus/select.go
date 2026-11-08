@@ -36,6 +36,11 @@ var selectors = map[string]selector{
 	"govdocs":     selectGovdocs,
 	"wpt":         selectWPT,
 	"resvg":       selectResvg,
+	"verapdf":     selectVeraPDF,
+	"pdf20":       selectPDF20,
+	"pdfcpu":      selectPDFCPU,
+	"facturx":     selectFacturX,
+	"pdfjs":       selectPDFJS,
 }
 
 // plainName is a file name every shell and form field carries intact.
@@ -381,6 +386,9 @@ const govdocsArchives = "https://digitalcorpora.s3.amazonaws.com/corpora/files/g
 // SHA-256 of their path, each downloaded and kept when it qualifies, until
 // govdocsCap are kept.
 func selectGovdocs(ctx context.Context, _, format, dir string, pins map[string]string) error {
+	if format == "pdf" {
+		return selectGovdocsPDF(ctx, pins, dir)
+	}
 	if format != "doc" && format != "xls" && format != "ppt" {
 		return fmt.Errorf("no govdocs Office corpus of format %q", format)
 	}

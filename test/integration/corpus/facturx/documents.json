@@ -1,0 +1,602 @@
+[
+  {
+    "id": "v1__correct_4s4u_additional-data-sample-1.pdf",
+    "path": "ZUGFeRDv1/correct/4s4u/additional-data-sample-1.pdf"
+  },
+  {
+    "id": "v1__correct_Intarsys_ZUGFeRD_1p0_BASIC_Einfach.pdf",
+    "path": "ZUGFeRDv1/correct/Intarsys/ZUGFeRD_1p0_BASIC_Einfach.pdf"
+  },
+  {
+    "id": "v1__correct_Intarsys_ZUGFeRD_1p0_BASIC_Rechnungskorrektur.pdf",
+    "path": "ZUGFeRDv1/correct/Intarsys/ZUGFeRD_1p0_BASIC_Rechnungskorrektur.pdf"
+  },
+  {
+    "id": "v1__correct_Intarsys_ZUGFeRD_1p0_COMFORT_Einfach.pdf",
+    "path": "ZUGFeRDv1/correct/Intarsys/ZUGFeRD_1p0_COMFORT_Einfach.pdf"
+  },
+  {
+    "id": "v1__correct_Intarsys_ZUGFeRD_1p0_COMFORT_Haftpflichtversicherung_Versicherungssteuer.pdf",
+    "path": "ZUGFeRDv1/correct/Intarsys/ZUGFeRD_1p0_COMFORT_Haftpflichtversicherung_Versicherungssteuer.pdf"
+  },
+  {
+    "id": "v1__correct_Intarsys_ZUGFeRD_1p0_COMFORT_Kraftfahrversicherung_Bruttopreise.pdf",
+    "path": "ZUGFeRDv1/correct/Intarsys/ZUGFeRD_1p0_COMFORT_Kraftfahrversicherung_Bruttopreise.pdf"
+  },
+  {
+    "id": "v1__correct_Intarsys_ZUGFeRD_1p0_COMFORT_Rabatte.pdf",
+    "path": "ZUGFeRDv1/correct/Intarsys/ZUGFeRD_1p0_COMFORT_Rabatte.pdf"
+  },
+  {
+    "id": "v1__correct_Intarsys_ZUGFeRD_1p0_COMFORT_Rechnungskorrektur.pdf",
+    "path": "ZUGFeRDv1/correct/Intarsys/ZUGFeRD_1p0_COMFORT_Rechnungskorrektur.pdf"
+  },
+  {
+    "id": "v1__correct_Intarsys_ZUGFeRD_1p0_COMFORT_SEPA_Prenotification.pdf",
+    "path": "ZUGFeRDv1/correct/Intarsys/ZUGFeRD_1p0_COMFORT_SEPA_Prenotification.pdf"
+  },
+  {
+    "id": "v1__correct_Intarsys_ZUGFeRD_1p0_COMFORT_Sachversicherung_berechneter_Steuersatz.pdf",
+    "path": "ZUGFeRDv1/correct/Intarsys/ZUGFeRD_1p0_COMFORT_Sachversicherung_berechneter_Steuersatz.pdf"
+  },
+  {
+    "id": "v1__correct_Intarsys_ZUGFeRD_1p0_EXTENDED_Kostenrechnung.pdf",
+    "path": "ZUGFeRDv1/correct/Intarsys/ZUGFeRD_1p0_EXTENDED_Kostenrechnung.pdf"
+  },
+  {
+    "id": "v1__correct_Intarsys_ZUGFeRD_1p0_EXTENDED_Rechnungskorrektur.pdf",
+    "path": "ZUGFeRDv1/correct/Intarsys/ZUGFeRD_1p0_EXTENDED_Rechnungskorrektur.pdf"
+  },
+  {
+    "id": "v1__correct_Intarsys_ZUGFeRD_1p0_EXTENDED_Warenrechnung.pdf",
+    "path": "ZUGFeRDv1/correct/Intarsys/ZUGFeRD_1p0_EXTENDED_Warenrechnung.pdf"
+  },
+  {
+    "id": "v1__correct_Konik_acme_invoice-42_ZUGFeRD.pdf",
+    "path": "ZUGFeRDv1/correct/Konik/acme_invoice-42_ZUGFeRD.pdf"
+  },
+  {
+    "id": "v1__correct_Mustangproject_MustangGnuaccountingBeispielRE-20140519_499.pdf",
+    "path": "ZUGFeRDv1/correct/Mustangproject/MustangGnuaccountingBeispielRE-20140519_499.pdf"
+  },
+  {
+    "id": "v1__correct_Mustangproject_MustangGnuaccountingBeispielRE-20140522_501.pdf",
+    "path": "ZUGFeRDv1/correct/Mustangproject/MustangGnuaccountingBeispielRE-20140522_501.pdf"
+  },
+  {
+    "id": "v1__correct_Mustangproject_MustangGnuaccountingBeispielRE-20140703_502.pdf",
+    "path": "ZUGFeRDv1/correct/Mustangproject/MustangGnuaccountingBeispielRE-20140703_502.pdf"
+  },
+  {
+    "id": "v1__correct_Mustangproject_MustangGnuaccountingBeispielRE-20150613_503.pdf",
+    "path": "ZUGFeRDv1/correct/Mustangproject/MustangGnuaccountingBeispielRE-20150613_503.pdf"
+  },
+  {
+    "id": "v1__correct_Mustangproject_MustangGnuaccountingBeispielRE-20151008_504.pdf",
+    "path": "ZUGFeRDv1/correct/Mustangproject/MustangGnuaccountingBeispielRE-20151008_504.pdf"
+  },
+  {
+    "id": "v1__correct_Mustangproject_MustangGnuaccountingBeispielRE-20151008_504new.pdf",
+    "path": "ZUGFeRDv1/correct/Mustangproject/MustangGnuaccountingBeispielRE-20151008_504new.pdf"
+  },
+  {
+    "id": "v1__correct_Mustangproject_MustangGnuaccountingBeispielRE-20170509_505.pdf",
+    "path": "ZUGFeRDv1/correct/Mustangproject/MustangGnuaccountingBeispielRE-20170509_505.pdf"
+  },
+  {
+    "id": "v1__fail_Mustangproject_fail1.pdf",
+    "path": "ZUGFeRDv1/fail/Mustangproject/fail1.pdf"
+  },
+  {
+    "id": "v1__fail_Mustangproject_fail2.pdf",
+    "path": "ZUGFeRDv1/fail/Mustangproject/fail2.pdf"
+  },
+  {
+    "id": "v1__fail_Mustangproject_fail3.pdf",
+    "path": "ZUGFeRDv1/fail/Mustangproject/fail3.pdf"
+  },
+  {
+    "id": "v2__correct_FNFE-factur-x-examples_Avoir_FR_type381_BASIC.pdf",
+    "path": "ZUGFeRDv2/correct/FNFE-factur-x-examples/Avoir_FR_type381_BASIC.pdf"
+  },
+  {
+    "id": "v2__correct_FNFE-factur-x-examples_Facture_DOM_BASICWL.pdf",
+    "path": "ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_DOM_BASICWL.pdf"
+  },
+  {
+    "id": "v2__correct_FNFE-factur-x-examples_Facture_DOM_MINIMUM.pdf",
+    "path": "ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_DOM_MINIMUM.pdf"
+  },
+  {
+    "id": "v2__correct_FNFE-factur-x-examples_Facture_FR_BASICWL.pdf",
+    "path": "ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_FR_BASICWL.pdf"
+  },
+  {
+    "id": "v2__correct_FNFE-factur-x-examples_Facture_FR_MINIMUM.pdf",
+    "path": "ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_FR_MINIMUM.pdf"
+  },
+  {
+    "id": "v2__correct_FNFE-factur-x-examples_Facture_UE_BASICWL.pdf",
+    "path": "ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_UE_BASICWL.pdf"
+  },
+  {
+    "id": "v2__correct_FNFE-factur-x-examples_Facture_UE_MINIMUM.pdf",
+    "path": "ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_UE_MINIMUM.pdf"
+  },
+  {
+    "id": "v2__correct_Mustangproject_MustangGnuaccountingBeispielRE-20190610_507.pdf",
+    "path": "ZUGFeRDv2/correct/Mustangproject/MustangGnuaccountingBeispielRE-20190610_507.pdf"
+  },
+  {
+    "id": "v2__correct_Mustangproject_MustangGnuaccountingBeispielRE-20201121_508.pdf",
+    "path": "ZUGFeRDv2/correct/Mustangproject/MustangGnuaccountingBeispielRE-20201121_508.pdf"
+  },
+  {
+    "id": "v2__correct_Mustangproject_MustangGnuaccountingBeispielRE-20201121_508_withBOM.pdf",
+    "path": "ZUGFeRDv2/correct/Mustangproject/MustangGnuaccountingBeispielRE-20201121_508_withBOM.pdf"
+  },
+  {
+    "id": "v2__correct_PHP_@gpFacturX_sample_inofficial_20190125_atgp_factur-x_v_1_0.pdf",
+    "path": "ZUGFeRDv2/correct/PHP_@gpFacturX/sample_inofficial_20190125_atgp_factur-x_v_1_0.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_BASIC_zugferd_2p0_BASIC_Einfach.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/BASIC/zugferd_2p0_BASIC_Einfach.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_BASIC_zugferd_2p0_BASIC_Rechnungskorrektur.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/BASIC/zugferd_2p0_BASIC_Rechnungskorrektur.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_BASIC_zugferd_2p0_BASIC_Taxifahrt.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/BASIC/zugferd_2p0_BASIC_Taxifahrt.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_1_Teilrechnung.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_1_Teilrechnung.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_2_Teilrechnung.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_2_Teilrechnung.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_AbweichenderZahlungsempf.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_AbweichenderZahlungsempf.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_Betriebskostenabrechnung.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_Betriebskostenabrechnung.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_Einfach.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_Einfach.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_Elektron.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_Elektron.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_ElektronischeAdresse.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_ElektronischeAdresse.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_Gutschrift.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_Gutschrift.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_Haftpflichtversicherung_Versicherungssteuer.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_Haftpflichtversicherung_Versicherungssteuer.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_Innergemeinschaftliche_Lieferungen.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_Innergemeinschaftliche_Lieferungen.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_Kraftfahrversicherung_Bruttopreise.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_Kraftfahrversicherung_Bruttopreise.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_Miete.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_Miete.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_OEPNV.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_OEPNV.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_Physiotherapeut.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_Physiotherapeut.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_Rabatte.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_Rabatte.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_RechnungsUebertragung.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_RechnungsUebertragung.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_Rechnungskorrektur.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_Rechnungskorrektur.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_Reisekostenabrechnung.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_Reisekostenabrechnung.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_SEPA_Prenotification.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_SEPA_Prenotification.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_Sachversicherung_berechneter_Steuersatz.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EN16931/zugferd_2p0_EN16931_Sachversicherung_berechneter_Steuersatz.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EXTENDED_zugferd_2p0_EXTENDED_Fremdwaehrung.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EXTENDED/zugferd_2p0_EXTENDED_Fremdwaehrung.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EXTENDED_zugferd_2p0_EXTENDED_InnergemeinschLieferungMehrereBestellungen.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EXTENDED/zugferd_2p0_EXTENDED_InnergemeinschLieferungMehrereBestellungen.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EXTENDED_zugferd_2p0_EXTENDED_Kostenrechnung.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EXTENDED/zugferd_2p0_EXTENDED_Kostenrechnung.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EXTENDED_zugferd_2p0_EXTENDED_Rechnungskorrektur.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EXTENDED/zugferd_2p0_EXTENDED_Rechnungskorrektur.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_EXTENDED_zugferd_2p0_EXTENDED_Warenrechnung.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/EXTENDED/zugferd_2p0_EXTENDED_Warenrechnung.pdf"
+  },
+  {
+    "id": "v2__correct_intarsys_MINIMUM_zugferd_2p0_MINIMUM.pdf",
+    "path": "ZUGFeRDv2/correct/intarsys/MINIMUM/zugferd_2p0_MINIMUM.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_BASIC_WL_zugferd_2p1_BASIC-WL_Buchungshilfe.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/BASIC WL/zugferd_2p1_BASIC-WL_Buchungshilfe.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_BASIC_WL_zugferd_2p1_BASIC-WL_Einfach.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/BASIC WL/zugferd_2p1_BASIC-WL_Einfach.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_BASIC_zugferd_2p1_BASIC_Einfach.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/BASIC/zugferd_2p1_BASIC_Einfach.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_BASIC_zugferd_2p1_BASIC_Rechnungskorrektur.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/BASIC/zugferd_2p1_BASIC_Rechnungskorrektur.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_BASIC_zugferd_2p1_BASIC_Taxifahrt.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/BASIC/zugferd_2p1_BASIC_Taxifahrt.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_1_Teilrechnung.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_1_Teilrechnung.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_2_Teilrechnung.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_2_Teilrechnung.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_AbweichenderZahlungsempf.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_AbweichenderZahlungsempf.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Betriebskostenabrechnung.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Betriebskostenabrechnung.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Betriebskostenabrechnung_XRechnung_embedded.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Betriebskostenabrechnung_XRechnung_embedded.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Einfach.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Einfach.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Einfach_DueDate.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Einfach_DueDate.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Einfach_negativePaymentDue.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Einfach_negativePaymentDue.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Elektron.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Elektron.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Elektron_XRechnung.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Elektron_XRechnung.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Elektron_embedded.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Elektron_embedded.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_ElektronischeAdresse.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_ElektronischeAdresse.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Gutschrift.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Gutschrift.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Haftpflichtversicherung_Versicherungssteuer.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Haftpflichtversicherung_Versicherungssteuer.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Innergemeinschaftliche_Lieferungen.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Innergemeinschaftliche_Lieferungen.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Kraftfahrversicherung_Bruttopreise.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Kraftfahrversicherung_Bruttopreise.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Miete.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Miete.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_OEPNV.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_OEPNV.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Physiotherapeut.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Physiotherapeut.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Rabatte.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Rabatte.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_RechnungsUebertragung.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_RechnungsUebertragung.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Rechnungskorrektur.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Rechnungskorrektur.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Reisekostenabrechnung.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Reisekostenabrechnung.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Reisekostenabrechnung_XRechnung_embedded.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Reisekostenabrechnung_XRechnung_embedded.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_SEPA_Prenotification.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_SEPA_Prenotification.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EN16931_zugferd_2p1_EN16931_Sachversicherung_berechneter_Steuersatz.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_Sachversicherung_berechneter_Steuersatz.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EXTENDED_zugferd_2p1_EXTENDED_Fremdwaehrung.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EXTENDED/zugferd_2p1_EXTENDED_Fremdwaehrung.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EXTENDED_zugferd_2p1_EXTENDED_InnergemeinschLieferungMehrereBestellungen.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EXTENDED/zugferd_2p1_EXTENDED_InnergemeinschLieferungMehrereBestellungen.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EXTENDED_zugferd_2p1_EXTENDED_Kostenrechnung.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EXTENDED/zugferd_2p1_EXTENDED_Kostenrechnung.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EXTENDED_zugferd_2p1_EXTENDED_Rechnungskorrektur.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EXTENDED/zugferd_2p1_EXTENDED_Rechnungskorrektur.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_EXTENDED_zugferd_2p1_EXTENDED_Warenrechnung.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/EXTENDED/zugferd_2p1_EXTENDED_Warenrechnung.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_MINIMUM_zugferd_2p1_MINIMUM_Buchungshilfe.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/MINIMUM/zugferd_2p1_MINIMUM_Buchungshilfe.pdf"
+  },
+  {
+    "id": "v2__correct_symtrax_Beispiele_MINIMUM_zugferd_2p1_MINIMUM_Rechnung.pdf",
+    "path": "ZUGFeRDv2/correct/symtrax/Beispiele/MINIMUM/zugferd_2p1_MINIMUM_Rechnung.pdf"
+  },
+  {
+    "id": "v2__fail_FNFE-factur-x-examples_Avoir_FR_type380_BASIC.pdf",
+    "path": "ZUGFeRDv2/fail/FNFE-factur-x-examples/Avoir_FR_type380_BASIC.pdf"
+  },
+  {
+    "id": "v2__fail_FNFE-factur-x-examples_Avoir_FR_type380_EN16931.pdf",
+    "path": "ZUGFeRDv2/fail/FNFE-factur-x-examples/Avoir_FR_type380_EN16931.pdf"
+  },
+  {
+    "id": "v2__fail_FNFE-factur-x-examples_Avoir_FR_type380_MINIMUM.pdf",
+    "path": "ZUGFeRDv2/fail/FNFE-factur-x-examples/Avoir_FR_type380_MINIMUM.pdf"
+  },
+  {
+    "id": "v2__fail_FNFE-factur-x-examples_Avoir_FR_type381_BASICWL.pdf",
+    "path": "ZUGFeRDv2/fail/FNFE-factur-x-examples/Avoir_FR_type381_BASICWL.pdf"
+  },
+  {
+    "id": "v2__fail_FNFE-factur-x-examples_Avoir_FR_type381_EN16931.pdf",
+    "path": "ZUGFeRDv2/fail/FNFE-factur-x-examples/Avoir_FR_type381_EN16931.pdf"
+  },
+  {
+    "id": "v2__fail_FNFE-factur-x-examples_Avoir_FR_type381_MINIMUM.pdf",
+    "path": "ZUGFeRDv2/fail/FNFE-factur-x-examples/Avoir_FR_type381_MINIMUM.pdf"
+  },
+  {
+    "id": "v2__fail_FNFE-factur-x-examples_Facture_DOM_BASIC.pdf",
+    "path": "ZUGFeRDv2/fail/FNFE-factur-x-examples/Facture_DOM_BASIC.pdf"
+  },
+  {
+    "id": "v2__fail_FNFE-factur-x-examples_Facture_DOM_EN16931.pdf",
+    "path": "ZUGFeRDv2/fail/FNFE-factur-x-examples/Facture_DOM_EN16931.pdf"
+  },
+  {
+    "id": "v2__fail_FNFE-factur-x-examples_Facture_FR_BASIC.pdf",
+    "path": "ZUGFeRDv2/fail/FNFE-factur-x-examples/Facture_FR_BASIC.pdf"
+  },
+  {
+    "id": "v2__fail_FNFE-factur-x-examples_Facture_FR_EN16931.pdf",
+    "path": "ZUGFeRDv2/fail/FNFE-factur-x-examples/Facture_FR_EN16931.pdf"
+  },
+  {
+    "id": "v2__fail_FNFE-factur-x-examples_Facture_UE_BASIC.pdf",
+    "path": "ZUGFeRDv2/fail/FNFE-factur-x-examples/Facture_UE_BASIC.pdf"
+  },
+  {
+    "id": "v2__fail_FNFE-factur-x-examples_Facture_UE_EN16931.pdf",
+    "path": "ZUGFeRDv2/fail/FNFE-factur-x-examples/Facture_UE_EN16931.pdf"
+  },
+  {
+    "id": "v2__fail_FX-With-UBL-REC50304330.pdf",
+    "path": "ZUGFeRDv2/fail/FX-With-UBL-REC50304330.pdf"
+  },
+  {
+    "id": "v2__fail_MustangRE-20171118_506_ZUGFeRD1and2.pdf",
+    "path": "ZUGFeRDv2/fail/MustangRE-20171118_506_ZUGFeRD1and2.pdf"
+  },
+  {
+    "id": "v2__fail_Mustangproject_MustangGnuaccountingBeispielRE-20171118_506.pdf",
+    "path": "ZUGFeRDv2/fail/Mustangproject/MustangGnuaccountingBeispielRE-20171118_506.pdf"
+  },
+  {
+    "id": "v2__fail_Mustangproject_MustangGnuaccountingBeispielRE-20190610_507a.pdf",
+    "path": "ZUGFeRDv2/fail/Mustangproject/MustangGnuaccountingBeispielRE-20190610_507a.pdf"
+  },
+  {
+    "id": "v2__fail_Mustangproject_MustangGnuaccountingBeispielRE-20190610_507b.pdf",
+    "path": "ZUGFeRDv2/fail/Mustangproject/MustangGnuaccountingBeispielRE-20190610_507b.pdf"
+  },
+  {
+    "id": "v2__fail_Mustangproject_factur-x-invalid-xml-encoding-attribute.pdf",
+    "path": "ZUGFeRDv2/fail/Mustangproject/factur-x-invalid-xml-encoding-attribute.pdf"
+  },
+  {
+    "id": "v2__fail_Mustangproject_wrongFilename.pdf",
+    "path": "ZUGFeRDv2/fail/Mustangproject/wrongFilename.pdf"
+  },
+  {
+    "id": "v2__fail_ZUGFeRD_2.0_fully_compliant_complete.pdf",
+    "path": "ZUGFeRDv2/fail/ZUGFeRD_2.0_fully_compliant_complete.pdf"
+  },
+  {
+    "id": "v2__fail_ZUGFeRD_2_fully_compliant_complete.pdf",
+    "path": "ZUGFeRDv2/fail/ZUGFeRD_2_fully_compliant_complete.pdf"
+  },
+  {
+    "id": "v2__fail_python-factur-x_python-factur-x.pdf",
+    "path": "ZUGFeRDv2/fail/python-factur-x/python-factur-x.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_1_Teilrechnung.pdf",
+    "path": "XML-Rechnung/FX/EN16931_1_Teilrechnung.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_2_Teilrechnung.pdf",
+    "path": "XML-Rechnung/FX/EN16931_2_Teilrechnung.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_AbweichenderZahlungsempf.pdf",
+    "path": "XML-Rechnung/FX/EN16931_AbweichenderZahlungsempf.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_Betriebskostenabrechnung.pdf",
+    "path": "XML-Rechnung/FX/EN16931_Betriebskostenabrechnung.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_Einfach.pdf",
+    "path": "XML-Rechnung/FX/EN16931_Einfach.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_Einfach_DueDate.pdf",
+    "path": "XML-Rechnung/FX/EN16931_Einfach_DueDate.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_Einfach_negativePaymentDue.pdf",
+    "path": "XML-Rechnung/FX/EN16931_Einfach_negativePaymentDue.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_Elektron.pdf",
+    "path": "XML-Rechnung/FX/EN16931_Elektron.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_ElektronischeAdresse.pdf",
+    "path": "XML-Rechnung/FX/EN16931_ElektronischeAdresse.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_Gutschrift.pdf",
+    "path": "XML-Rechnung/FX/EN16931_Gutschrift.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_Haftpflichtversicherung_Versicherungssteuer.pdf",
+    "path": "XML-Rechnung/FX/EN16931_Haftpflichtversicherung_Versicherungssteuer.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_Innergemeinschaftliche_Lieferungen.pdf",
+    "path": "XML-Rechnung/FX/EN16931_Innergemeinschaftliche_Lieferungen.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_Kraftfahrversicherung_Bruttopreise.pdf",
+    "path": "XML-Rechnung/FX/EN16931_Kraftfahrversicherung_Bruttopreise.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_Miete.pdf",
+    "path": "XML-Rechnung/FX/EN16931_Miete.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_OEPNV.pdf",
+    "path": "XML-Rechnung/FX/EN16931_OEPNV.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_Physiotherapeut.pdf",
+    "path": "XML-Rechnung/FX/EN16931_Physiotherapeut.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_Rabatte.pdf",
+    "path": "XML-Rechnung/FX/EN16931_Rabatte.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_RechnungsUebertragung.pdf",
+    "path": "XML-Rechnung/FX/EN16931_RechnungsUebertragung.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_Rechnungskorrektur.pdf",
+    "path": "XML-Rechnung/FX/EN16931_Rechnungskorrektur.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_Reisekostenabrechnung.pdf",
+    "path": "XML-Rechnung/FX/EN16931_Reisekostenabrechnung.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_SEPA_Prenotification.pdf",
+    "path": "XML-Rechnung/FX/EN16931_SEPA_Prenotification.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_EN16931_Sachversicherung_berechneter_Steuersatz.pdf",
+    "path": "XML-Rechnung/FX/EN16931_Sachversicherung_berechneter_Steuersatz.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_XRECHNUNG_Betriebskostenabrechnung.pdf",
+    "path": "XML-Rechnung/FX/XRECHNUNG_Betriebskostenabrechnung.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_XRECHNUNG_Einfach.pdf",
+    "path": "XML-Rechnung/FX/XRECHNUNG_Einfach.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_XRECHNUNG_Elektron.pdf",
+    "path": "XML-Rechnung/FX/XRECHNUNG_Elektron.pdf"
+  },
+  {
+    "id": "xmlrechnung__FX_XRECHNUNG_Reisekostenabrechnung.pdf",
+    "path": "XML-Rechnung/FX/XRECHNUNG_Reisekostenabrechnung.pdf"
+  }
+]

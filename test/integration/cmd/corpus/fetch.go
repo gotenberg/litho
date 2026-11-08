@@ -44,6 +44,24 @@ type FetchSpec struct {
 	Pin string `json:"pin"`
 	// Map rewrites the paths of a corpus without a documents list.
 	Map []FetchMap `json:"map,omitempty"`
+	// List and Root name the documents list of a corpus without inputs (a
+	// PDF corpus) and the directory, under the testdata root, its documents
+	// are installed in; a converter corpus takes its inputs' list and list
+	// root.
+	List string `json:"list,omitempty"`
+	Root string `json:"root,omitempty"`
+}
+
+// listAndRoot returns the documents list and the install directory of m, ""
+// when it has no documents list.
+func (m *Manifest) listAndRoot() (string, string) {
+	if m.Fetch != nil && m.Fetch.List != "" {
+		return m.Fetch.List, m.Fetch.Root
+	}
+	if m.Inputs != nil && m.Inputs.List != "" {
+		return m.Inputs.List, m.Inputs.ListRoot
+	}
+	return "", ""
 }
 
 // FetchMap rewrites the files whose path starts with Prefix: the rest of the
@@ -71,6 +89,17 @@ const fetchJobs = 8
 // hash mismatch or a 4xx answer is not.
 const fetchRetries = 4
 
+// fetchUserAgent names the fetches to the servers they read: some (the
+// Internet Archive) refuse the Go client's default name.
+const fetchUserAgent = "litho-corpus"
+
+// retryableStatus reports the 4xx answers a later attempt may not get: too
+// many requests, and the Internet Archive's 498, which it answers a burst
+// of requests with.
+func retryableStatus(code int) bool {
+	return code == http.StatusTooManyRequests || code == 498
+}
+
 // fetchTimeout bounds one HTTP request.
 const fetchTimeout = 5 * time.Minute
 
@@ -97,6 +126,9 @@ type fetchFile struct {
 	sha256 string
 	dest   string
 	read   func(ctx context.Context) ([]byte, error)
+	// optional marks a file a third party serves, which may be gone: its
+	// failure is reported and skipped rather than failing the fetch.
+	optional bool
 }
 
 func runFetch(ctx context.Context, args []string) int {
@@ -162,13 +194,17 @@ func fetch(ctx context.Context, selected []string, jobs int, client *http.Client
 		return err
 	}
 	for _, m := range chosen {
-		if m.ProvisionedBy != "" {
+		if len(sourcePins[m.Source]) > 0 {
 			if err := writeFetchRecord(m, pins.Values[m.Fetch.Pin]); err != nil {
 				return err
 			}
 		}
 		c := counts[m.Name]
-		fmt.Printf("  %s: %d files at %s=%s, %d downloaded, all hash-checked\n", m.Name, c.total, m.Fetch.Pin, pins.Values[m.Fetch.Pin], c.downloaded)
+		missing := ""
+		if c.missing > 0 {
+			missing = fmt.Sprintf(", %d links gone", c.missing)
+		}
+		fmt.Printf("  %s: %d files at %s=%s, %d downloaded%s, all hash-checked\n", m.Name, c.total, m.Fetch.Pin, pins.Values[m.Fetch.Pin], c.downloaded, missing)
 	}
 	return nil
 }
@@ -217,14 +253,19 @@ func corpusFetchFiles(m *Manifest, pins map[string]string, testdata string, clie
 	if err != nil {
 		return nil, err
 	}
-	dest, err := fetchDestinations(m, listed, testdata)
+	dest, docs, err := fetchDestinations(m, listed, testdata)
 	if err != nil {
 		return nil, err
 	}
 	files := make([]fetchFile, 0, len(listed))
 	for _, l := range listed {
 		f := fetchFile{corpus: m.Name, path: l.path, sha256: l.sha256, dest: dest[l.path]}
+		doc := docs[l.path]
 		switch {
+		case doc.URL != "":
+			u := doc.URL
+			f.read = func(ctx context.Context) ([]byte, error) { return httpGet(ctx, client, u) }
+			f.optional = doc.Optional
 		case spec.GitHub != "":
 			u := githubRaw + spec.GitHub + "/" + value + "/" + escapePath(l.path)
 			f.read = func(ctx context.Context) ([]byte, error) { return httpGet(ctx, client, u) }
@@ -241,40 +282,42 @@ func corpusFetchFiles(m *Manifest, pins map[string]string, testdata string, clie
 	return files, nil
 }
 
-// fetchDestinations maps each listed path to the file it is installed at.
-func fetchDestinations(m *Manifest, listed []hashEntry, testdata string) (map[string]string, error) {
+// fetchDestinations maps each listed path to the file it is installed at,
+// and returns the documents list's entries by path.
+func fetchDestinations(m *Manifest, listed []hashEntry, testdata string) (map[string]string, map[string]documentEntry, error) {
 	root := m.TestdataRoot()
 	out := make(map[string]string, len(listed))
-	byPath := make(map[string]string)
-	if m.Inputs != nil && m.Inputs.List != "" {
-		docs, err := readDocumentList(filepath.Join(m.SourceDir(), m.Inputs.List))
+	byPath := make(map[string]documentEntry)
+	list, listRoot := m.listAndRoot()
+	if list != "" {
+		docs, err := readDocumentList(filepath.Join(m.SourceDir(), list))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for _, d := range docs {
 			if d.Path == "" {
 				continue
 			}
 			if !validInputID(d.ID) {
-				return nil, fmt.Errorf("%s: invalid id %q", m.Inputs.List, d.ID)
+				return nil, nil, fmt.Errorf("%s: invalid id %q", list, d.ID)
 			}
-			byPath[d.Path] = d.ID
+			byPath[d.Path] = d
 		}
 	}
 	for _, l := range listed {
 		switch {
 		case len(byPath) > 0:
-			listRoot := filepath.Join(root, filepath.FromSlash(m.Inputs.ListRoot))
-			if id, ok := byPath[l.path]; ok {
-				out[l.path] = filepath.Join(listRoot, filepath.FromSlash(id))
+			base := filepath.Join(root, filepath.FromSlash(listRoot))
+			if d, ok := byPath[l.path]; ok {
+				out[l.path] = filepath.Join(base, filepath.FromSlash(d.ID))
 			} else {
-				out[l.path] = filepath.Join(listRoot, path.Base(l.path))
+				out[l.path] = filepath.Join(base, path.Base(l.path))
 			}
 		default:
 			out[l.path] = mapFetchPath(m.Fetch.Map, l.path, root, filepath.Join(testdata, fixtureFontsDir))
 		}
 	}
-	return out, nil
+	return out, byPath, nil
 }
 
 // mapFetchPath rewrites p by the first rule whose prefix it starts with,
@@ -331,6 +374,12 @@ func readHashList(p string) ([]hashEntry, error) {
 type documentEntry struct {
 	ID   string `json:"id"`
 	Path string `json:"path,omitempty"`
+	// URL, when set, is where the document is read from instead of the
+	// corpus's source: a file the source only links to.
+	URL string `json:"url,omitempty"`
+	// Optional marks a document whose URL may be gone, as a third party's
+	// link can be: a fetch reports and skips it.
+	Optional bool `json:"optional,omitempty"`
 }
 
 func readDocumentList(p string) ([]documentEntry, error) {
@@ -355,9 +404,10 @@ func escapePath(p string) string {
 	return strings.Join(segs, "/")
 }
 
-// fetchCount counts one corpus's files and those a fetch downloaded.
+// fetchCount counts one corpus's files, those a fetch downloaded, and the
+// optional ones it could not.
 type fetchCount struct {
-	total, downloaded int
+	total, downloaded, missing int
 }
 
 // downloadAll downloads every file not already on disk with its hash, jobs
@@ -374,15 +424,22 @@ func downloadAll(ctx context.Context, files []fetchFile, jobs int) (map[string]f
 		wg.Go(func() {
 			for f := range work {
 				got, err := installFile(ctx, f)
+				skipped := err != nil && f.optional && ctx.Err() == nil
 				mu.Lock()
 				c := counts[f.corpus]
 				c.total++
 				if got {
 					c.downloaded++
 				}
+				if skipped {
+					c.missing++
+				}
 				counts[f.corpus] = c
 				mu.Unlock()
-				if err != nil {
+				switch {
+				case skipped:
+					fmt.Fprintf(os.Stderr, "  %s: %s skipped, its link is gone: %v\n", f.corpus, f.path, err)
+				case err != nil:
 					cancel(fmt.Errorf("%s: %s: %w", f.corpus, f.path, err))
 				}
 			}
@@ -465,6 +522,10 @@ func httpRange(ctx context.Context, client *http.Client, u string, off, n int64)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errPermanent, err)
 	}
+	req.Header.Set("User-Agent", fetchUserAgent)
+	// Without an Accept header the Internet Archive answers a page of its
+	// own instead of the archived file.
+	req.Header.Set("Accept", "*/*")
 	want := http.StatusOK
 	if off >= 0 {
 		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", off, off+n-1))
@@ -477,7 +538,7 @@ func httpRange(ctx context.Context, client *http.Client, u string, off, n int64)
 	defer resp.Body.Close()
 	if resp.StatusCode != want {
 		err := fmt.Errorf("GET %s: %s", u, resp.Status)
-		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 && !retryableStatus(resp.StatusCode) {
 			err = fmt.Errorf("%w: %w", errPermanent, err)
 		}
 		return nil, err
@@ -492,19 +553,29 @@ func httpRange(ctx context.Context, client *http.Client, u string, off, n int64)
 	return data, nil
 }
 
-// writeFetchRecord writes the versions.json a host-provisioned corpus's
-// runs check: the pin its files were fetched at.
+// writeFetchRecord records, in the versions.json of a corpus whose files come
+// from a pin, the pin its files were fetched at, as the stage "pdfs" the runs
+// check; the record's other stages, the goldens', are kept.
 func writeFetchRecord(m *Manifest, value string) error {
-	rec := map[string]any{
-		"format": 1,
-		"stages": map[string]any{"pdfs": map[string]any{
-			"recorded_at": time.Now().UTC().Format(time.RFC3339),
-			"pins":        map[string]string{m.Fetch.Pin: value},
-		}},
+	p := filepath.Join(m.TestdataRoot(), versionRecordName)
+	rec := map[string]any{}
+	if data, err := os.ReadFile(p); err == nil { //nolint:gosec // the corpus testdata's own record
+		if err := json.Unmarshal(data, &rec); err != nil {
+			return fmt.Errorf("decode %s: %w", p, err)
+		}
 	}
+	stages, _ := rec["stages"].(map[string]any)
+	if stages == nil {
+		stages = map[string]any{}
+	}
+	stages["pdfs"] = map[string]any{
+		"recorded_at": time.Now().UTC().Format(time.RFC3339),
+		"pins":        map[string]string{m.Fetch.Pin: value},
+	}
+	rec["format"], rec["stages"] = 1, stages
 	data, err := json.Marshal(rec)
 	if err != nil {
 		return fmt.Errorf("encode versions record: %w", err)
 	}
-	return writeFileAtomic(filepath.Join(m.TestdataRoot(), versionRecordName), append(data, '\n'))
+	return writeFileAtomic(p, append(data, '\n'))
 }

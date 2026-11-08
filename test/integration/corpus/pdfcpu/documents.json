@@ -1,0 +1,206 @@
+[
+  {
+    "id": "pkg_samples_bookmarks__bookmarkDuplicates.pdf",
+    "path": "pkg/samples/bookmarks/bookmarkDuplicates.pdf"
+  },
+  {
+    "id": "pkg_samples_bookmarks__bookmarkSimple.pdf",
+    "path": "pkg/samples/bookmarks/bookmarkSimple.pdf"
+  },
+  {
+    "id": "pkg_samples_bookmarks__bookmarkTree.pdf",
+    "path": "pkg/samples/bookmarks/bookmarkTree.pdf"
+  },
+  {
+    "id": "pkg_testdata__5116.DCT_Filter.pdf",
+    "path": "pkg/testdata/5116.DCT_Filter.pdf"
+  },
+  {
+    "id": "pkg_testdata__Acroforms2.pdf",
+    "path": "pkg/testdata/Acroforms2.pdf"
+  },
+  {
+    "id": "pkg_testdata__BuildingWebappsWithGo.pdf",
+    "path": "pkg/testdata/BuildingWebappsWithGo.pdf"
+  },
+  {
+    "id": "pkg_testdata__CenterOfWhy.pdf",
+    "path": "pkg/testdata/CenterOfWhy.pdf"
+  },
+  {
+    "id": "pkg_testdata__ECSTR11-01.pdf",
+    "path": "pkg/testdata/ECSTR11-01.pdf"
+  },
+  {
+    "id": "pkg_testdata__FOSDEM14_HPC_devroom_14_GoCUDA.pdf",
+    "path": "pkg/testdata/FOSDEM14_HPC_devroom_14_GoCUDA.pdf"
+  },
+  {
+    "id": "pkg_testdata__GoForOptimization.pdf",
+    "path": "pkg/testdata/GoForOptimization.pdf"
+  },
+  {
+    "id": "pkg_testdata__HL1396.pdf",
+    "path": "pkg/testdata/HL1396.pdf"
+  },
+  {
+    "id": "pkg_testdata__Hybrid-PDF.pdf",
+    "path": "pkg/testdata/Hybrid-PDF.pdf"
+  },
+  {
+    "id": "pkg_testdata__OptimizeTest.pdf",
+    "path": "pkg/testdata/OptimizeTest.pdf"
+  },
+  {
+    "id": "pkg_testdata__Paclitaxel.pdf",
+    "path": "pkg/testdata/Paclitaxel.PDF"
+  },
+  {
+    "id": "pkg_testdata__RA_CI.pdf",
+    "path": "pkg/testdata/RA_CI.pdf"
+  },
+  {
+    "id": "pkg_testdata__T4.pdf",
+    "path": "pkg/testdata/T4.pdf"
+  },
+  {
+    "id": "pkg_testdata__T6.pdf",
+    "path": "pkg/testdata/T6.pdf"
+  },
+  {
+    "id": "pkg_testdata__TheGoProgrammingLanguageCh1.pdf",
+    "path": "pkg/testdata/TheGoProgrammingLanguageCh1.pdf"
+  },
+  {
+    "id": "pkg_testdata__The_Go_Language_Gigon-Odienne-Wartel.pdf",
+    "path": "pkg/testdata/The_Go_Language_Gigon-Odienne-Wartel.pdf"
+  },
+  {
+    "id": "pkg_testdata__VectorApple.pdf",
+    "path": "pkg/testdata/VectorApple.pdf"
+  },
+  {
+    "id": "pkg_testdata__Walden.pdf",
+    "path": "pkg/testdata/Walden.pdf"
+  },
+  {
+    "id": "pkg_testdata__WaldenFull.pdf",
+    "path": "pkg/testdata/WaldenFull.pdf"
+  },
+  {
+    "id": "pkg_testdata__Wonderwall.pdf",
+    "path": "pkg/testdata/Wonderwall.pdf"
+  },
+  {
+    "id": "pkg_testdata__adobeImplOfPDFSpec.pdf",
+    "path": "pkg/testdata/adobeImplOfPDFSpec.pdf"
+  },
+  {
+    "id": "pkg_testdata__adobe_errata.pdf",
+    "path": "pkg/testdata/adobe_errata.pdf"
+  },
+  {
+    "id": "pkg_testdata__adobe_supplement_iso32000_1.pdf",
+    "path": "pkg/testdata/adobe_supplement_iso32000_1.pdf"
+  },
+  {
+    "id": "pkg_testdata__annotTest.pdf",
+    "path": "pkg/testdata/annotTest.pdf"
+  },
+  {
+    "id": "pkg_testdata__blank-scan.pdf",
+    "path": "pkg/testdata/blank-scan.pdf"
+  },
+  {
+    "id": "pkg_testdata__bookletTest.pdf",
+    "path": "pkg/testdata/bookletTest.pdf"
+  },
+  {
+    "id": "pkg_testdata__bookletTestA6.pdf",
+    "path": "pkg/testdata/bookletTestA6.pdf"
+  },
+  {
+    "id": "pkg_testdata__bookletTestA6L.pdf",
+    "path": "pkg/testdata/bookletTestA6L.pdf"
+  },
+  {
+    "id": "pkg_testdata__bookletTestLandscape.pdf",
+    "path": "pkg/testdata/bookletTestLandscape.pdf"
+  },
+  {
+    "id": "pkg_testdata__empty.pdf",
+    "path": "pkg/testdata/empty.pdf"
+  },
+  {
+    "id": "pkg_testdata__go-lecture.pdf",
+    "path": "pkg/testdata/go-lecture.pdf"
+  },
+  {
+    "id": "pkg_testdata__go.pdf",
+    "path": "pkg/testdata/go.pdf"
+  },
+  {
+    "id": "pkg_testdata__gobook.0.pdf",
+    "path": "pkg/testdata/gobook.0.pdf"
+  },
+  {
+    "id": "pkg_testdata__golang.pdf",
+    "path": "pkg/testdata/golang.pdf"
+  },
+  {
+    "id": "pkg_testdata__grid_example.pdf",
+    "path": "pkg/testdata/grid_example.pdf"
+  },
+  {
+    "id": "pkg_testdata__itu-t81.pdf",
+    "path": "pkg/testdata/itu-t81.pdf"
+  },
+  {
+    "id": "pkg_testdata__jphysiol01396-0132.pdf",
+    "path": "pkg/testdata/jphysiol01396-0132.pdf"
+  },
+  {
+    "id": "pkg_testdata__mountain.pdf",
+    "path": "pkg/testdata/mountain.pdf"
+  },
+  {
+    "id": "pkg_testdata__pike-stanford.pdf",
+    "path": "pkg/testdata/pike-stanford.pdf"
+  },
+  {
+    "id": "pkg_testdata__read.go.pdf",
+    "path": "pkg/testdata/read.go.pdf"
+  },
+  {
+    "id": "pkg_testdata__schmager_plateau10.pdf",
+    "path": "pkg/testdata/schmager_plateau10.pdf"
+  },
+  {
+    "id": "pkg_testdata__test.pdf",
+    "path": "pkg/testdata/test.pdf"
+  },
+  {
+    "id": "pkg_testdata__testImage.pdf",
+    "path": "pkg/testdata/testImage.pdf"
+  },
+  {
+    "id": "pkg_testdata__testRot.pdf",
+    "path": "pkg/testdata/testRot.pdf"
+  },
+  {
+    "id": "pkg_testdata__testWithText.pdf",
+    "path": "pkg/testdata/testWithText.pdf"
+  },
+  {
+    "id": "pkg_testdata__text_annotations.pdf",
+    "path": "pkg/testdata/text_annotations.pdf"
+  },
+  {
+    "id": "pkg_testdata__xdp_2.0.pdf",
+    "path": "pkg/testdata/xdp_2.0.pdf"
+  },
+  {
+    "id": "pkg_testdata__zineTest.pdf",
+    "path": "pkg/testdata/zineTest.pdf"
+  }
+]

@@ -12,5 +12,11 @@
     "remediation-aggressive": "goldens/compliance",
     "facturx-validity": "goldens/facturx-validity",
     "facturx-schematron": "goldens/facturx-schematron"
+  },
+  "fetch": {
+    "github": "ZUGFeRD/corpus",
+    "pin": "FACTURX_CORPUS_REVISION",
+    "list": "documents.json",
+    "root": "pdfs"
   }
 }

@@ -33,5 +33,11 @@
   "golden_overrides": {
     "text": "text-overrides.json",
     "flatten": "flatten-scope.json"
+  },
+  "fetch": {
+    "zip": "https://digitalcorpora.s3.amazonaws.com/corpora/files/govdocs1/zipfiles",
+    "pin": "GOVDOCS_THREADS",
+    "list": "documents.json",
+    "root": "pdfs"
   }
 }

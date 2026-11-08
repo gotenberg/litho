@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,7 +20,7 @@ import (
 // testdata directory. Every tool and source comes at the version
 // test/integration/corpus/versions.env pins, or its environment
 // override.
-func runInit(args []string) int {
+func runInit(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
 	corpus := fs.String("corpus", "", "Comma-separated corpus names (empty = all)")
 	if err := fs.Parse(args); err != nil {
@@ -47,7 +48,7 @@ func runInit(args []string) int {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", name, err)
 			return 1
 		}
-		if err := provisionCorpus(manifest, pins); err != nil {
+		if err := provisionCorpus(ctx, manifest, pins); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", name, err)
 			return 1
 		}
@@ -67,11 +68,15 @@ const corpusImage = "litho-corpus-builder"
 // re-provision can take an hour. The disagreement is reported with the
 // command that re-provisions, and run, baseline and check refuse to score it.
 //
+// A corpus that declares a fetch and builds no references (a PDF corpus) is
+// fetched on the host first, so the image derives its goldens from the PDFs
+// `corpus fetch` checked.
+//
 // A corpus the host provisions (see [Manifest.ProvisionedBy]) is skipped with
 // the make target that provisions it: the image has no part in it. So is a
 // corpus whose references the host has not built yet (see
 // [Manifest.References]), with the make target that builds them.
-func provisionCorpus(m *Manifest, pins *resolvedPins) error {
+func provisionCorpus(ctx context.Context, m *Manifest, pins *resolvedPins) error {
 	if m.ProvisionedBy != "" {
 		fmt.Printf("%s: provisioned on the host by %s, not by Docker: skipping\n", m.Name, m.ProvisionedBy)
 		return nil
@@ -108,6 +113,12 @@ func provisionCorpus(m *Manifest, pins *resolvedPins) error {
 			fmt.Printf("  re-provision: %s\n", check.Remedy)
 		}
 		return nil
+	}
+
+	if m.Fetch != nil && m.References == nil {
+		if err := fetch(ctx, []string{m.Name}, fetchJobs, http.DefaultClient); err != nil {
+			return err
+		}
 	}
 
 	dockerCtx := corpusRoot()

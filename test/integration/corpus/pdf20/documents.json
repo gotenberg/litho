@@ -1,0 +1,30 @@
+[
+  {
+    "id": "PDF_2.0_UTF-8_string_and_annotation.pdf",
+    "path": "PDF 2.0 UTF-8 string and annotation.pdf"
+  },
+  {
+    "id": "PDF_2.0_image_with_BPC.pdf",
+    "path": "PDF 2.0 image with BPC.pdf"
+  },
+  {
+    "id": "PDF_2.0_via_incremental_save.pdf",
+    "path": "PDF 2.0 via incremental save.pdf"
+  },
+  {
+    "id": "PDF_2.0_with_offset_start.pdf",
+    "path": "PDF 2.0 with offset start.pdf"
+  },
+  {
+    "id": "PDF_2.0_with_page_level_output_intent.pdf",
+    "path": "PDF 2.0 with page level output intent.pdf"
+  },
+  {
+    "id": "Simple_PDF_2.0_file.pdf",
+    "path": "Simple PDF 2.0 file.pdf"
+  },
+  {
+    "id": "pdf20-utf8-test.pdf",
+    "path": "pdf20-utf8-test.pdf"
+  }
+]

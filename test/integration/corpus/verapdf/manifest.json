@@ -24,5 +24,11 @@
     "compliance": "goldens/compliance",
     "remediation": "goldens/compliance",
     "remediation-aggressive": "goldens/compliance"
+  },
+  "fetch": {
+    "github": "veraPDF/veraPDF-corpus",
+    "pin": "VERAPDF_CORPUS_REVISION",
+    "list": "documents.json",
+    "root": "pdfs"
   }
 }

@@ -7,3 +7,4 @@
 /graphify-out/
 /dist/
 /pkg/internal/css/testdata/css-parsing-tests/
+/test/integration/cmd/corpus/corpus

@@ -19,5 +19,11 @@
   },
   "skips": {
     "bug1393476": "infinite loop in xref parsing"
+  },
+  "fetch": {
+    "github": "mozilla/pdf.js",
+    "pin": "PDFJS_REVISION",
+    "list": "documents.json",
+    "root": "pdfs"
   }
 }

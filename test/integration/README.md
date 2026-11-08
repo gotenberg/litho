@@ -9,7 +9,7 @@ test/integration/
 ├── corpus/                     Shared provisioning image + per-corpus scripts
 │   ├── versions.env            Pinned version of every tool and corpus source
 │   ├── Dockerfile              One image: Node + PDF.js + JRE + veraPDF + pdfcpu + Mustang + KoSIT
-│   ├── entrypoint.sh           Dispatches to <corpus>/download.sh then shared goldens
+│   ├── entrypoint.sh           Installs a corpus's PDFs (fetched on the host, or by <corpus>/download.sh) then makes the goldens
 │   │                           A corpus is named by its source: a directory with a manifest.json, or, for a source
 │   │                           that feeds several corpora, one per format inside it (libreoffice/docx, litho/html)
 │   ├── lib/
@@ -29,28 +29,34 @@ test/integration/
 │   │   ├── libreoffice.sh      Builds an Office corpus's LibreOffice references on the host (make office-references)
 │   │   └── install-references.sh  Installs those references as the corpus PDFs (each Office download.sh)
 │   ├── pdfjs/
-│   │   ├── download.sh
+│   │   ├── documents.json  Every PDF at the pin, by fixture ID and path (corpus select)
+│   │   ├── files.sha256    Their SHA-256 (corpus fetch checks each download)
 │   │   ├── flatten-scope.json  Widens the flatten cell to the whole corpus
 │   │   └── manifest.json
 │   ├── verapdf/
-│   │   ├── download.sh
+│   │   ├── documents.json  Every PDF at the pin, by fixture ID and path (corpus select)
+│   │   ├── files.sha256    Their SHA-256 (corpus fetch checks each download)
 │   │   └── manifest.json
 │   ├── govdocs/                Govdocs1 (US government documents), fetched from five pinned threads
 │   │   ├── FIXTURES.md         The four corpora and how the Office documents were chosen
 │   │   ├── doc/, xls/, ppt/    As libreoffice/docx: manifest.json, documents.json, files.sha256, download.sh
 │   │   └── pdf/
-│   │       ├── download.sh
+│   │       ├── documents.json  Every PDF of the threads, by fixture ID and archive entry (corpus select)
+│   │       ├── files.sha256    Their SHA-256 (corpus fetch checks each download)
 │   │       ├── flatten-scope.json  Widens the flatten cell to the whole corpus
 │   │       ├── manifest.json
 │   │       └── text-overrides.json Corrections to the PDF.js text goldens, with reasons
 │   ├── pdf20/
-│   │   ├── download.sh
+│   │   ├── documents.json  Every PDF at the pin, by fixture ID and path (corpus select)
+│   │   ├── files.sha256    Their SHA-256 (corpus fetch checks each download)
 │   │   └── manifest.json
 │   ├── pdfcpu/
-│   │   ├── download.sh
+│   │   ├── documents.json  Every PDF at the pin, by fixture ID and path (corpus select)
+│   │   ├── files.sha256    Their SHA-256 (corpus fetch checks each download)
 │   │   └── manifest.json
 │   ├── facturx/
-│   │   ├── download.sh
+│   │   ├── documents.json  Every PDF at the pin, by fixture ID and path (corpus select)
+│   │   ├── files.sha256    Their SHA-256 (corpus fetch checks each download)
 │   │   └── manifest.json
 │   ├── litho/                  Self-authored by litho, committed (not downloaded)
 │   │   ├── pdf/                PDF fixtures
@@ -245,7 +251,7 @@ Each feature, its oracle and its comparison rules are in [FEATURES.md](FEATURES.
 
 | Corpus             | Fixtures                                | Source                                                                                                                                                                                      |
 | ------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pdfjs`            | ~1,200 PDFs (1 fixture each)            | Mozilla's PDF.js test suite                                                                                                                                                                 |
+| `pdfjs`            | 1,371 PDFs (1 fixture each)             | Mozilla's PDF.js test suite, its linked files included                                                                                                                                      |
 | `verapdf`          | ~2,600 PDFs × 15 profiles               | veraPDF corpus, flattened from the per-profile directories                                                                                                                                  |
 | `govdocs/pdf`      | ~1,100 PDFs (1 fixture per claim)       | Govdocs1 random-sample of five fixed thread archives (real-world PDFs)                                                                                                                      |
 | `pdf20`            | 7 PDFs (1 fixture per claim)            | PDF Association's `pdf20examples` (CC-BY-SA-4.0 PDF 2.0 samples)                                                                                                                            |
@@ -297,7 +303,7 @@ Auto-mode provisioning runs the in-tree `corpus scan-claims` helper after downlo
 
 Known limitation: the current govdocs sample (1,091 files) and the pdf20 examples contain zero PDF/A or PDF/UA claims (verified by byte-scanning for `pdfaid`), so their `claims.csv` files are legitimately empty and the compliance/remediation features run no fixtures there. Compliance is scored on three corpora instead: `verapdf` and `litho/pdf`, whose fixtures are built to exercise specific rules, and `facturx`, whose invoices claim PDF/A-3. `litho/text` scores it too, on what litho's converter writes, which claims nothing. veraPDF is the ground truth for all three. A general real-world sample of documents that claim PDF/A or PDF/UA is still missing.
 
-Adding a new corpus means dropping `corpus/<name>/download.sh` + `manifest.json`, then adding the matching `COPY <name>/ ./<name>/` and `chmod +x <name>/download.sh` lines to `corpus/Dockerfile` so the provisioning image can reach the script. A corpus is named by its source, the project its documents come from. A source that feeds several corpora holds one directory per format, with no manifest of its own: `corpus/<source>/<format>/`, named `<source>/<format>` (`libreoffice/docx`). Nothing else changes: the CLI discovers corpora by scanning for `manifest.json`, one level deep or two. A corpus the host provisions, as `wpt`, `resvg` and `weasyprint` are, names its make target in `provisioned_by` instead and ships no `download.sh`; `corpus init` skips it.
+Adding a new corpus means dropping `corpus/<name>/manifest.json` with a `fetch` block naming where its files come from, then writing its lists with `corpus select` (a selector in `cmd/corpus`) and fetching them with `corpus fetch`; `corpus init` fetches a PDF corpus on the host before the image derives its goldens. A corpus whose PDFs are committed instead ships a `download.sh` that copies them, with the matching `COPY <name>/ ./<name>/` and `chmod +x <name>/download.sh` lines in `corpus/Dockerfile`. A corpus is named by its source, the project its documents come from. A source that feeds several corpora holds one directory per format, with no manifest of its own: `corpus/<source>/<format>/`, named `<source>/<format>` (`libreoffice/docx`). Nothing else changes: the CLI discovers corpora by scanning for `manifest.json`, one level deep or two. A corpus the host provisions, as `wpt`, `resvg` and `weasyprint` are, names its make target in `provisioned_by` instead and ships no `download.sh`; `corpus init` skips it.
 
 A new corpus becomes regression-gated only after the next `make corpus-baseline` commit; until then it runs and scores but cannot fail `make corpus-check`.
 
@@ -338,7 +344,7 @@ When a change touches a construct no corpus file reaches, add a fixture to the l
 Fields:
 
 - `name`: identifier used in `CORPUS_NAME`. Need not match the source directory.
-- `source`: directory under `corpus/` holding the `download.sh`. Defaults to `name`.
+- `source`: directory under `corpus/` holding the manifest. Defaults to `name`.
 - `pdf_root`: subdirectory of the corpus testdata root that holds the flat `pdfs/` tree.
 - `profile_mode`: how PDFs become fixtures. `expand` (default) cartesian-products every PDF over `profiles`; `none` drops the cartesian and emits one fixture per PDF; `auto` reads each PDF's XMP claim and emits one fixture per PDF, keyed by the claimed profile when present.
 - `profiles`: veraPDF profile directory names. Drives the cartesian under `expand`, acts as the allow-set for accepted XMP claims under `auto`, and is ignored under `none`.
@@ -348,6 +354,7 @@ Fields:
 - `inputs`: makes the corpus a converter corpus, whose fixtures are source documents. `{"list": "reftests.json"}` reads a committed JSON array of objects with an `id`, each the path of its source under the testdata root (`wpt`, `resvg`, and the fetched Office corpora, with `list_root` the subdirectory of the testdata root the list's IDs resolve under, `sources`, and `fetched_by` the make target a missing one names); `{"glob": "fixtures/*.json"}` matches sources under the corpus source directory, each keyed by what its one `*` matched (`weasyprint`; the html and `gotenberg` Office corpora glob `sources/*`, a directory per source, which the `diff` feature reads through `fixture`). `pdf_root`, `profile_mode` and `profiles` do not apply. Both may be set; their fixture IDs must then differ.
 - `references`: `{"dir": "references", "built_by": "make office-references SOURCES=libreoffice FORMATS=docx", "source_pin": "LIBREOFFICE_CORE_COMMIT"}` names the reference PDFs the host builds into the testdata, one `<id with / written __>.pdf` each with a `manifest.json`, which `download.sh` installs as the corpus PDFs and the `diff` feature checks against the pins and the sources before it scores. `source_pin` names the pin the fetched documents come from, empty for committed sources.
 - `goldens_in_source`: resolves `goldens` against the corpus source directory instead of the testdata root, for references committed beside the manifest (`wpt`, `resvg`, `weasyprint`).
+- `fetch`: where `corpus fetch` downloads the corpus's files from: `{"github": "<owner>/<repo>", "pin": "<versions.env key>"}` or `{"zip": "<archives URL>", "pin": ...}`, with `list` and `root` naming the documents list and the install directory of a corpus without `inputs` (`documents.json`, `pdfs`), and `map` rewriting the paths of one without a list (wpt, resvg). Every file `files.sha256` lists is downloaded at the pin and checked against its hash; a document whose `url` names a third party is read from there, and skipped with a warning when `optional` and gone.
 - `provisioned_by`: names the make target that provisions the corpus on the host; `corpus init` skips the corpus and says so.
 
 ## See also
