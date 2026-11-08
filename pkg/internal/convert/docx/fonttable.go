@@ -9,13 +9,23 @@ import (
 
 // The fallback faces of each class of typeface: what fontconfig
 // substitutes for a family it does not have, where LibreOffice runs
-// Gotenberg, by the class 60-latin.conf gives it (the first face of its
-// serif, sans-serif and monospace preference lists).
+// Gotenberg, by the class the font table gives it.
+//
+// # Corpus evidence
+//
+//   - docx: ooxmlexport/fdo73550.docx (Segoe UI, roman in the font
+//     table) and ooxmlexport/FDO77715.docx (Georgia) print in Noto Serif;
+//     ooxmlexport/LinkedTextBoxes.docx (Candara, swiss) in Noto Sans, as
+//     the slides reader's fallbackFamily.
 const (
-	fallbackSerif = "DejaVu Serif"
-	fallbackSans  = "DejaVu Sans"
+	fallbackSerif = "Noto Serif"
+	fallbackSans  = "Noto Sans"
 	fallbackMono  = "DejaVu Sans Mono"
 )
+
+// secondFallback is the face after a fallback face, for a font set
+// without it: the DejaVu face of its class.
+var secondFallback = map[string]string{fallbackSerif: "DejaVu Serif", fallbackSans: "DejaVu Sans"}
 
 // knownClasses classes the common Office families a font table may not
 // describe.
@@ -71,10 +81,15 @@ func (d *document) readFontTable(root *ooxml.Element) {
 	}
 }
 
-// fallbackFor returns the fallback face of a family.
-func (d *document) fallbackFor(family string) string {
-	if c, ok := d.fontClass[strings.ToLower(family)]; ok {
-		return c
+// fallbackFor returns the fallback faces of a family, in the order they
+// are tried.
+func (d *document) fallbackFor(family string) []string {
+	c, ok := d.fontClass[strings.ToLower(family)]
+	if !ok {
+		c = fallbackSans
 	}
-	return fallbackSans
+	if s := secondFallback[c]; s != "" {
+		return []string{c, s}
+	}
+	return []string{c}
 }

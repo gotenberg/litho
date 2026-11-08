@@ -25,7 +25,7 @@ func (d *document) blockStyle() *css.Style {
 	st := css.Initial()
 	st.Display = css.Block
 	st.WhiteSpace = css.PreWrap
-	st.FontFamilies = []string{defaultFamily, fallbackSerif}
+	st.FontFamilies = []string{defaultFamily, fallbackSerif, secondFallback[fallbackSerif]}
 	st.FontSize = defaultFontSize
 	st.TabSize = css.Pts(d.settings.defaultTab)
 	st.OverflowWrap = css.BreakWord
@@ -67,14 +67,18 @@ func (d *document) families(r runProps) []string {
 	add(r.fonts.ascii)
 	add(r.fonts.hAnsi)
 	if len(out) > 0 {
-		add(d.fallbackFor(out[0]))
+		for _, f := range d.fallbackFor(out[0]) {
+			add(f)
+		}
 	}
 	add(r.fonts.eastAsia)
 	add(r.fonts.cs)
 	if len(out) == 0 {
 		add(defaultFamily)
 	}
-	add(d.fallbackFor(out[0]))
+	for _, f := range d.fallbackFor(out[0]) {
+		add(f)
+	}
 	return out
 }
 

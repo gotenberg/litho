@@ -1,6 +1,7 @@
 package docx
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -51,7 +52,7 @@ func TestRunProperties(t *testing.T) {
 		{"theme", func(s *css.Style) bool {
 			// The high ANSI face the defaults set stays; the theme sets the
 			// ASCII and East Asian ones.
-			return len(s.FontFamilies) == 4 && s.FontFamilies[0] == "Minor Face" && s.FontFamilies[1] == "Test Sans" && s.FontFamilies[2] == "DejaVu Sans" && s.FontFamilies[3] == "EA Face"
+			return strings.Join(s.FontFamilies, "|") == "Minor Face|Test Sans|Noto Sans|DejaVu Sans|EA Face"
 		}},
 		{"themecolor", func(s *css.Style) bool { return s.Color.B > 0.7 && s.Color.R < 0.4 }},
 		{"lines", func(s *css.Style) bool {
