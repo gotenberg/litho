@@ -162,22 +162,41 @@ type laidBody struct {
 	height    float64
 }
 
-// insetRect returns r less the insets, indexed by css.Side, at least a
-// point wide and tall.
+// insetRect returns r less the insets, indexed by css.Side, as Impress
+// places a text frame's text rectangle (SdrTextObj::AdjustRectToTextDistance):
+// a negative inset widens the rectangle; an inset larger than the box
+// stops at the box's opposite edge; when the two insets of an axis
+// overlap, the rectangle shrinks to nothing at the middle of its two
+// edges.
+//
+// # Corpus evidence
+//
+//   - pptx: sd-data/TextDistancesInsets3.pptx's 56.7-point boxes with top
+//     and bottom insets of 0 and 4, 4 and 0, 1 and 2, 2 and 1, 2 and 2
+//     centimetres print their top-anchored text at 28.35 points above the
+//     box, at its bottom edge, and 14.17 points below, 42.52 below and
+//     28.35 below its top.
 func insetRect(r compose.Rect, in [4]float64) compose.Rect {
 	side := func(v float64) float64 {
-		if !(v > 0) || math.IsInf(v, 0) {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
 			return 0
 		}
-		return min(v, maxCoordinate)
+		return min(max(v, -maxCoordinate), maxCoordinate)
 	}
-	l, t, rr, bb := side(in[css.Left]), side(in[css.Top]), side(in[css.Right]), side(in[css.Bottom])
-	out := compose.Rect{X: r.X + l, Y: r.Y + t, Width: r.Width - l - rr, Height: r.Height - t - bb}
+	axis := func(start, size, a, b float64) (float64, float64) {
+		lo := start + min(a, size)
+		hi := start + size - b
+		if hi < lo {
+			mid := (lo + hi) / 2
+			return mid, 0
+		}
+		return lo, hi - lo
+	}
+	x, w := axis(r.X, r.Width, side(in[css.Left]), side(in[css.Right]))
+	y, h := axis(r.Y, r.Height, side(in[css.Top]), side(in[css.Bottom]))
+	out := compose.Rect{X: x, Y: y, Width: w, Height: h}
 	if out.Width < 1 {
-		out.X, out.Width = r.X+r.Width/2-0.5, 1
-	}
-	if out.Height < 1 {
-		out.Y, out.Height = r.Y+r.Height/2-0.5, 1
+		out.X, out.Width = out.X+out.Width/2-0.5, 1
 	}
 	return out
 }

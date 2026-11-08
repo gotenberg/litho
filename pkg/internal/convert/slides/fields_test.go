@@ -257,3 +257,30 @@ func TestTable_VerticalCells(t *testing.T) {
 		t.Errorf("clockwise text's first line at %v, want between 148 and 172", r.x)
 	}
 }
+
+// TestInsetRect checks the text rectangle of insets that overlap, exceed
+// the box or are negative (sd-data/TextDistancesInsets3.pptx).
+func TestInsetRect(t *testing.T) {
+	box := compose.Rect{X: 0, Y: 100, Width: 200, Height: 56.69}
+	ins := func(top, bottom float64) [4]float64 {
+		var in [4]float64
+		in[css.Top], in[css.Bottom] = top, bottom
+		return in
+	}
+	for _, tc := range []struct {
+		name         string
+		in           [4]float64
+		wantY, wantH float64
+	}{
+		{"fits", ins(10, 10), 110, 36.69},
+		{"bottom past the top", ins(0, 113.39), 71.65, 0},
+		{"top past the bottom", ins(113.39, 0), 156.69, 0},
+		{"overlap", ins(28.35, 56.69), 114.17, 0},
+		{"negative", ins(-10, -10), 90, 76.69},
+	} {
+		got := insetRect(box, tc.in)
+		if !near(got.Y, tc.wantY, 0.01) || !near(got.Height, tc.wantH, 0.01) || got.Width != 200 {
+			t.Errorf("%s: %+v, want y %v height %v", tc.name, got, tc.wantY, tc.wantH)
+		}
+	}
+}
