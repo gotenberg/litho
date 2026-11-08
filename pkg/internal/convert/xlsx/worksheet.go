@@ -378,6 +378,9 @@ func (w *sheetReader) cell(c *ooxml.Element, col int, row *sheet.Row) (sheet.Cel
 			}
 		}
 	}
+	if cell.Value.Kind == sheet.Text && (cell.Style == nil || !cell.Style.Align.Wrap) {
+		joinLines(&cell)
+	}
 	if cell.Value.Kind == sheet.Text && cell.Value.Text == "" && len(cell.Runs) == 0 {
 		cell.Value = sheet.Value{}
 	}
@@ -602,4 +605,31 @@ func uncURL(target string) string {
 		return target
 	}
 	return "file://" + strings.ReplaceAll(rest, `\`, "/")
+}
+
+// lineBreaks drops the line breaks of a text.
+var lineBreaks = strings.NewReplacer("\r\n", "", "\n", "", "\r", "")
+
+// joinLines drops the line breaks of the text of a cell that does not
+// wrap, as LibreOffice shows such a cell of a workbook on one line.
+//
+// # Corpus evidence
+//
+//   - xlsx: sc/cell-multi-line.xlsx prints "Line1\r\nLine2\r\nLine3" as
+//     Line1Line2Line3 in its cell without wrapText, on three lines in the
+//     one with it; sc/preserve_space.xlsx prints "123\n" and "456" as
+//     123456.
+func joinLines(cell *sheet.Cell) {
+	if !strings.ContainsAny(cell.Value.Text, "\r\n") {
+		return
+	}
+	cell.Value.Text = lineBreaks.Replace(cell.Value.Text)
+	runs := cell.Runs[:0]
+	for _, r := range cell.Runs {
+		r.Text = lineBreaks.Replace(r.Text)
+		if r.Text != "" {
+			runs = append(runs, r)
+		}
+	}
+	cell.Runs = runs
 }

@@ -63,7 +63,8 @@ func TestRead_Workbook(t *testing.T) {
 }
 
 // TestRead_SharedStrings checks plain and rich shared strings, the
-// phonetic runs dropped and the ST_Xstring escapes decoded.
+// phonetic runs dropped, the ST_Xstring escapes decoded and the line
+// breaks of a cell that does not wrap dropped.
 func TestRead_SharedStrings(t *testing.T) {
 	t.Parallel()
 	sst := `<sst ` + nsDecl + `><si><t>plain</t></si>` +
@@ -77,7 +78,7 @@ func TestRead_SharedStrings(t *testing.T) {
 		col  int
 		text string
 		runs int
-	}{{0, "plain", 0}, {1, "bold ", 2}, {2, "a\r\nb_x0041_", 0}} {
+	}{{0, "plain", 0}, {1, "bold ", 2}, {2, "ab_x0041_", 0}} {
 		c, ok := cellAt(sh, 0, tc.col)
 		if !ok || c.Value.Kind != sheet.Text || c.Value.Text != tc.text || len(c.Runs) != tc.runs {
 			t.Errorf("column %d: %+v, want text %q with %d runs", tc.col, c, tc.text, tc.runs)
@@ -133,5 +134,13 @@ func TestRead_NoFonts(t *testing.T) {
 	doc, _ := readBytes(t, zipFiles(t, files))
 	if w := doc.Sheets[0].Columns[0].Width; w != 170.1 {
 		t.Errorf("width %v, want 30 digits of 2 mm, 170.1 points", w)
+	}
+}
+
+func TestJoinLines(t *testing.T) {
+	cell := sheet.Cell{Value: sheet.Value{Kind: sheet.Text, Text: "123\n456"}, Runs: []sheet.Run{{Text: "123\n"}, {Text: "\r\n"}, {Text: "456"}}}
+	joinLines(&cell)
+	if cell.Value.Text != "123456" || len(cell.Runs) != 2 || cell.Runs[0].Text != "123" || cell.Runs[1].Text != "456" {
+		t.Errorf("joined cell %+v", cell)
 	}
 }
