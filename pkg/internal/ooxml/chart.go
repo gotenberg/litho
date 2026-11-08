@@ -266,6 +266,9 @@ func (p *chartReader) read(root *Element) {
 	p.readTitle(ch)
 	for _, g := range c.Groups {
 		for _, s := range g.Series {
+			if s.Name == "" && !p.impress {
+				s.Name = rangeName(s.Values.Ref)
+			}
 			if s.Name == "" {
 				// The name LibreOffice gives a series without one.
 				s.Name = "Series" + strconv.Itoa(s.Index+1)
@@ -861,4 +864,47 @@ func textOf(e *Element) string {
 		return ""
 	}
 	return e.Text
+}
+
+// rangeName returns the name a spreadsheet gives a series without one,
+// after its values' range: "Column B" for a range down one column, "Row 3"
+// for a range across one row, "" for another reference (LibreOffice
+// Calc's ScChart2DataSequence::generateLabel).
+func rangeName(ref string) string {
+	ref = strings.ReplaceAll(ref, "$", "")
+	from, to, isRange := strings.Cut(ref, ":")
+	if i := strings.LastIndexByte(from, '!'); i >= 0 {
+		from = from[i+1:]
+	}
+	c1, r1, ok := splitCell(from)
+	if !ok {
+		return ""
+	}
+	c2, r2 := c1, r1
+	if isRange {
+		if c2, r2, ok = splitCell(to); !ok {
+			return ""
+		}
+	}
+	if r1 == r2 && c1 != c2 {
+		return "Row " + strconv.Itoa(r1)
+	}
+	return "Column " + c1
+}
+
+// splitCell splits an A1 cell reference into its column letters and its
+// row number.
+func splitCell(s string) (string, int, bool) {
+	i := 0
+	for i < len(s) && s[i] >= 'A' && s[i] <= 'Z' {
+		i++
+	}
+	if i == 0 || i > 3 {
+		return "", 0, false
+	}
+	row, err := strconv.Atoi(s[i:])
+	if err != nil || row < 1 {
+		return "", 0, false
+	}
+	return s[:i], row, true
 }
