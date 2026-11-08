@@ -31,9 +31,19 @@ const maxFontSize = 1000
 // families is installed, fontconfig's first sans-serif face.
 const fallbackFamily = "DejaVu Sans"
 
-// defaultTab is the distance between the default tab stops, in points:
-// DrawingML's default, one inch (ECMA-376 Part 1, 21.1.2.2.7 defTabSz).
-const defaultTab = 72
+// defaultTab is the distance between the default tab stops of a
+// PresentationML text, in points: one inch, what PowerPoint's masters state
+// (ECMA-376 Part 1, 21.1.2.2.7 defTabSz). odfDefaultTab is an OpenDocument
+// text's, half an inch, Impress's default.
+//
+// # Corpus evidence
+//
+//   - odp: a frame of Liberation Sans 20 with three tabs and no tab stop
+//     distance prints its digits 36 points apart.
+const (
+	defaultTab    = 72
+	odfDefaultTab = 36
+)
 
 // maxParagraphs caps the paragraphs of a text body laid out. Anti-DoS
 // guard, not spec-mandated: a slide's text box shows a few dozen.
@@ -782,6 +792,9 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 	st.Position = css.Relative
 	st.Top = css.Pts(lb.ascent - 0.8*lb.height)
 	st.TabSize = css.Pts(defaultTab)
+	if body.FontLineSpacing {
+		st.TabSize = css.Pts(odfDefaultTab)
+	}
 	st.Orphans, st.Widows = 1, 1
 	st.TextAlign = p.Align
 	if p.Align == css.AlignAuto {

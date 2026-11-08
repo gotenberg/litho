@@ -3,6 +3,7 @@ package slides
 import (
 	"context"
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"strings"
 
 	"testing"
 
@@ -168,6 +169,29 @@ func TestText_Scripts(t *testing.T) {
 		b1, u, b2, d := find(t, pg, "Base"), find(t, pg, "Up"), find(t, pg, "Base2"), find(t, pg, "Down")
 		if !near(b1.y-u.y, tc.up, 0.05) || !near(d.y-b2.y, tc.down, 0.05) || !near(u.size, 11.6, 0.01) {
 			t.Errorf("font lines %v: up %.2f, down %.2f, size %.2f", tc.fontLines, b1.y-u.y, d.y-b2.y, u.size)
+		}
+	}
+}
+
+// TestText_DefaultTab checks the default tab stops: an inch apart in
+// PresentationML text, half an inch in OpenDocument text, as Impress
+// prints a frame without tab stops.
+func TestText_DefaultTab(t *testing.T) {
+	for _, tc := range []struct {
+		fontLines bool
+		want      float64
+	}{{false, 72}, {true, 36}} {
+		sh := box(100, 100, 400, 100, para("0\t1", arial(20)))
+		sh.Text.FontLineSpacing = tc.fontLines
+		pg := convert(t, deck(&Slide{Shapes: []*Shape{sh}}), office.Options{}).Pages[0]
+		var x1 float64
+		for _, r := range runs(pg) {
+			if i := strings.Index(r.text, "1"); i >= 0 {
+				x1 = r.x
+			}
+		}
+		if !near(x1, 100+tc.want, 0.2) {
+			t.Errorf("font lines %v: second digit at %.2f, want %.2f; runs %v", tc.fontLines, x1, 100+tc.want, runs(pg))
 		}
 	}
 }
