@@ -157,7 +157,7 @@ func TestOptionNames_AreTheJSONNamesOfOptions(t *testing.T) {
 func TestChromiumScript_ReadsTheSameSchema(t *testing.T) {
 	t.Parallel()
 
-	data, err := os.ReadFile(filepath.Join("..", "lib", "chromium.sh"))
+	data, err := os.ReadFile(filepath.Join("..", "corpus", "lib", "chromium.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func TestSources_LoadAndReadThroughDirFS(t *testing.T) {
 
 	var dirs []string
 	for _, corpus := range []string{"litho", "gotenberg"} {
-		root := filepath.Join("..", corpus, "html", "sources")
+		root := filepath.Join("..", "corpus", corpus, "html", "sources")
 		entries, err := os.ReadDir(root)
 		if err != nil {
 			t.Fatal(err)

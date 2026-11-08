@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gotenberg/litho/test/integration/corpus/fixture"
+	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
 // referenceManifestName is the record lib/libreoffice.sh writes beside the

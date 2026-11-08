@@ -10,7 +10,7 @@
 // downloads the fonts versions.env pins and builds litho/html and
 // gotenberg/html:
 //
-//	go run ./test/integration/corpus/fixture/htmlbuild -corpus test/integration/corpus/litho/html
+//	go run ./test/integration/fixture/htmlbuild -corpus test/integration/corpus/litho/html
 //
 // Each source is converted twice and the build fails when the two runs write
 // different bytes. The warnings of a conversion are printed: they name what
@@ -29,7 +29,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/test/integration/corpus/fixture"
+	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
 func main() {

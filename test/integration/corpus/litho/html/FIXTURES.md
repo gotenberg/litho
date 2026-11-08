@@ -2,15 +2,15 @@
 
 HTML and Markdown sources litho authored, converted twice: by Chromium, through the Chromium route of the Gotenberg image `GOTENBERG_IMAGE` in `corpus/versions.env` pins, and by litho. The `diff` feature scores litho's conversion against Chromium's (see `FEATURES.md`). Each source is a self-contained directory, `sources/<name>/`, holding `index.html` (or, for a Markdown source, `index.md` and no `index.html`), the files it names, and optionally `options.json`, the route options it is converted with. The sources built from Gotenberg's own test documents are the `gotenberg/html` corpus, scored by the same cell; this file documents the options, the references and litho's PDFs of both.
 
-| Path                       | What it holds                                                                                                                 |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `sources/`                 | The 22 sources                                                                                                                |
-| `references/`              | Chromium's PDF of each source, the reference (`make html-references`, committed)                                              |
-| `pdfs/`                    | litho's PDF of each source (`make html-fixtures`, committed once the converter writes them)                                   |
-| `../../lib/chromium.sh`    | Posts each source to the Gotenberg image and writes `references/<name>.pdf`                                                   |
-| `../../fixture/htmlbuild/` | Converts each source with `pdf.Convert` twice and writes `pdfs/<name>.pdf`, failing on a difference and printing the warnings |
-| `../../fixture/`           | Reads a source directory and its `options.json` for `htmlbuild` and the `diff` feature (shared with the Office corpora)       |
-| `download.sh`              | Installs `references/*.pdf` as the corpus PDFs the provisioning image derives the diff goldens from                           |
+| Path                          | What it holds                                                                                                                 |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `sources/`                    | The 22 sources                                                                                                                |
+| `references/`                 | Chromium's PDF of each source, the reference (`make html-references`, committed)                                              |
+| `pdfs/`                       | litho's PDF of each source (`make html-fixtures`, committed once the converter writes them)                                   |
+| `../../lib/chromium.sh`       | Posts each source to the Gotenberg image and writes `references/<name>.pdf`                                                   |
+| `../../../fixture/htmlbuild/` | Converts each source with `pdf.Convert` twice and writes `pdfs/<name>.pdf`, failing on a difference and printing the warnings |
+| `../../../fixture/`           | Reads a source directory and its `options.json` for `htmlbuild` and the `diff` feature (shared with the Office corpora)       |
+| `download.sh`                 | Installs `references/*.pdf` as the corpus PDFs the provisioning image derives the diff goldens from                           |
 
 ## Per-fixture options
 

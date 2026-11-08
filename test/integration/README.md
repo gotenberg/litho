@@ -102,18 +102,18 @@ test/integration/
 │   │       ├── sources/<name>/ One document each, with options.json
 │   │       ├── pdfs/*.pdf      litho's PDFs (make office-fixtures)
 │   │       └── FIXTURES.md     Per-source origin and options
-│   ├── libreoffice/            LibreOffice core's test documents, fetched (never committed)
-│   │   ├── list-candidates.py  Selects them from a LibreOffice core checkout
-│   │   ├── fetch.sh            Downloads and hash-checks them (make libreoffice-fetch)
-│   │   └── docx/, odt/, xlsx/, ods/, csv/, pptx/, odp/
-│   │       ├── download.sh     Installs the host-built references from the testdata volume
-│   │       ├── manifest.json
-│   │       ├── documents.json  The documents fetched, by ID
-│   │       ├── files.sha256    Every fetched file, by LibreOffice core path and SHA-256
-│   │       └── FIXTURES.md     How the documents were chosen, the fonts
-│   └── fixture/                Reads an html or Office source and its options.json (Go side)
-│       ├── build/main.go       pdf.Convert builder of the gotenberg Office sources (make office-fixtures)
-│       └── htmlbuild/main.go   pdf.Convert builder of the html sources (make html-fixtures)
+│   └── libreoffice/            LibreOffice core's test documents, fetched (never committed)
+│       ├── list-candidates.py  Selects them from a LibreOffice core checkout
+│       ├── fetch.sh            Downloads and hash-checks them (make libreoffice-fetch)
+│       └── docx/, odt/, xlsx/, ods/, csv/, pptx/, odp/
+│           ├── download.sh     Installs the host-built references from the testdata volume
+│           ├── manifest.json
+│           ├── documents.json  The documents fetched, by ID
+│           ├── files.sha256    Every fetched file, by LibreOffice core path and SHA-256
+│           └── FIXTURES.md     How the documents were chosen, the fonts
+├── fixture/                    Reads an html or Office source and its options.json (Go side)
+│   ├── build/main.go           pdf.Convert builder of the gotenberg Office sources (make office-fixtures)
+│   └── htmlbuild/main.go       pdf.Convert builder of the html sources (make html-fixtures)
 ├── testdata/fonts/             Fixture fonts, Ahem and the WeasyPrint test font (gitignored)
 ├── testdata/wpt/               The fetched WPT files, with versions.json (gitignored)
 ├── testdata/resvg/             The fetched resvg tests, with versions.json (gitignored)
@@ -332,7 +332,7 @@ Fields:
 - `goldens`: maps feature name to the directory (relative to the corpus testdata root) that holds the reference files. `remediation` points at the compliance directory because that is where the feature reads `verapdf_pre` counts from. The provisioning Docker image only generates goldens for features listed here, so dropping `text` + `metadata` from the veraPDF corpus skips the (slow) PDF.js generator entirely.
 - `golden_overrides`: maps feature name to a committed file, relative to the corpus source directory, that corrects goldens the oracle reads wrong. `text` and `flatten` take one. A `text` override file (litho and govdocs carry one) corrects the PDF.js goldens: each entry records the oracle's reading it replaces, so it fails its fixture when the oracle changes, and gives the right reading or marks the page unscored, with the clause behind it; the goldens stay the oracle's raw output. A `flatten` scope file (pdfjs and govdocs carry one) widens the `flatten` cell from the render sample to the whole corpus (see [Transparency flattening](FEATURES.md#transparency-flattening)).
 - `skips`: maps fixture ID to a reason; the runner omits skipped fixtures from every feature.
-- `inputs`: makes the corpus a converter corpus, whose fixtures are source documents. `{"list": "reftests.json"}` reads a committed JSON array of objects with an `id`, each the path of its source under the testdata root (`wpt`, `resvg`, and the `libreoffice` corpora, with `list_root` the subdirectory of the testdata root the list's IDs resolve under, `sources`, and `fetched_by` the make target a missing one names); `{"glob": "fixtures/*.json"}` matches sources under the corpus source directory, each keyed by what its one `*` matched (`weasyprint`; the html and `gotenberg` Office corpora glob `sources/*`, a directory per source, which the `diff` feature reads through `corpus/fixture`). `pdf_root`, `profile_mode` and `profiles` do not apply. Both may be set; their fixture IDs must then differ.
+- `inputs`: makes the corpus a converter corpus, whose fixtures are source documents. `{"list": "reftests.json"}` reads a committed JSON array of objects with an `id`, each the path of its source under the testdata root (`wpt`, `resvg`, and the `libreoffice` corpora, with `list_root` the subdirectory of the testdata root the list's IDs resolve under, `sources`, and `fetched_by` the make target a missing one names); `{"glob": "fixtures/*.json"}` matches sources under the corpus source directory, each keyed by what its one `*` matched (`weasyprint`; the html and `gotenberg` Office corpora glob `sources/*`, a directory per source, which the `diff` feature reads through `fixture`). `pdf_root`, `profile_mode` and `profiles` do not apply. Both may be set; their fixture IDs must then differ.
 - `references`: `{"dir": "references", "built_by": "make office-references FORMATS=docx"}` names the reference PDFs the host builds into the testdata, one `<id with / written __>.pdf` each with a `manifest.json`, which `download.sh` installs as the corpus PDFs and the `diff` feature checks against the pins and the sources before it scores.
 - `goldens_in_source`: resolves `goldens` against the corpus source directory instead of the testdata root, for references committed beside the manifest (`wpt`, `resvg`, `weasyprint`).
 - `provisioned_by`: names the make target that provisions the corpus on the host; `corpus init` skips the corpus and says so.

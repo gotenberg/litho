@@ -10,7 +10,7 @@
 // Run it from the repository root through `make office-fixtures`, which
 // first downloads the fonts versions.env pins:
 //
-//	go run ./test/integration/corpus/fixture/build -corpus test/integration/corpus/gotenberg/docx
+//	go run ./test/integration/fixture/build -corpus test/integration/corpus/gotenberg/docx
 //
 // Each source is converted twice and the build fails when the two runs write
 // different bytes. The warnings of a conversion are printed: they name what
@@ -29,7 +29,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/test/integration/corpus/fixture"
+	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
 func main() {

@@ -19,7 +19,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/test/integration/corpus/fixture"
+	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
 // diffDPI is the resolution the diff goldens are drawn at, mirroring
@@ -202,7 +202,7 @@ func flattenOutline(marks []models.Bookmark) []diffOutlineItem {
 
 // diffFeature scores litho's HTML converter against Chromium, the engine it
 // replaces in Gotenberg. Each source of an html corpus is converted by
-// litho at the options of its options.json (corpus/fixture: by default
+// litho at the options of its options.json (test/integration/fixture: by default
 // print media, A4, Gotenberg's default margins) and compared with the PDF
 // Gotenberg's Chromium route wrote from the same source at the same options,
 // read at provisioning by PDF.js (text, links) and poppler (pages at 72 dpi),

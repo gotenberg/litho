@@ -2,12 +2,12 @@
 
 OpenDocument presentations scored by the `diff` feature (see `FEATURES.md`) against LibreOffice Impress as Gotenberg's LibreOffice route prints them: the image `GOTENBERG_IMAGE` in `corpus/versions.env` pins (`gotenberg/gotenberg:9.0.0`, LibreOffice 26.8.2.2), route `/forms/libreoffice/convert`. The sources are Gotenberg's own test presentations, committed under `sources/`. The references are built on the host and never committed. LibreOffice core's own Impress test presentations are the `libreoffice/odp` corpus, scored by the same cell: its `FIXTURES.md` documents the reference checks and the fonts, which apply here.
 
-| Path                                     | What it holds                                                                                                                                             |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sources/<name>/`                        | One document each and an optional `options.json`                                                                                                          |
-| `download.sh`                            | Installs the references from the testdata volume as the corpus PDFs the provisioning image derives the diff goldens from                                  |
-| `../../lib/libreoffice.sh`               | `make office-references FORMATS=odp`: converts every source with the pinned image into `testdata/gotenberg/odp/references/<name>.pdf` and `manifest.json` |
-| `../../fixture/`, `../../fixture/build/` | Read a source and its `options.json` (the `diff` feature, the builder); `make office-fixtures FORMATS=odp` writes `pdfs/<name>.pdf`                       |
+| Path                                           | What it holds                                                                                                                                             |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sources/<name>/`                              | One document each and an optional `options.json`                                                                                                          |
+| `download.sh`                                  | Installs the references from the testdata volume as the corpus PDFs the provisioning image derives the diff goldens from                                  |
+| `../../lib/libreoffice.sh`                     | `make office-references FORMATS=odp`: converts every source with the pinned image into `testdata/gotenberg/odp/references/<name>.pdf` and `manifest.json` |
+| `../../../fixture/`, `../../../fixture/build/` | Read a source and its `options.json` (the `diff` feature, the builder); `make office-fixtures FORMATS=odp` writes `pdfs/<name>.pdf`                       |
 
 A source's reference is named by its fixture ID: `<name>.pdf`.
 

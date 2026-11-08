@@ -127,7 +127,7 @@ func TestLoadOffice_MapsEveryExtension(t *testing.T) {
 func TestLibreOfficeScript_ReadsTheSameExtensions(t *testing.T) {
 	t.Parallel()
 
-	data, err := os.ReadFile(filepath.Join("..", "lib", "libreoffice.sh"))
+	data, err := os.ReadFile(filepath.Join("..", "corpus", "lib", "libreoffice.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestOfficeOptionNames_MatchTheJSONNames(t *testing.T) {
 func TestLibreOfficeScript_ReadsTheSameSchema(t *testing.T) {
 	t.Parallel()
 
-	data, err := os.ReadFile(filepath.Join("..", "lib", "libreoffice.sh"))
+	data, err := os.ReadFile(filepath.Join("..", "corpus", "lib", "libreoffice.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}

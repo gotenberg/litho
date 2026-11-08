@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/test/integration/corpus/fixture"
+	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
 // htmlSettings are the options one converter feature converts its sources
@@ -37,7 +37,7 @@ type htmlSettings struct {
 	// Print are the remaining print options of the source, after the
 	// ones above: landscape, scale, page ranges, single page, backgrounds,
 	// outline, header and footer templates and media features (see
-	// fixture.Source.PrintOptions in corpus/fixture); for an Office
+	// fixture.Source.PrintOptions in test/integration/fixture); for an Office
 	// source, its landscape, outline, page ranges, password, paper,
 	// single page sheets, hidden slides and notes pages
 	// (fixture.Office.ConvertOptions).

@@ -131,7 +131,7 @@ html-references: ## Rebuild the Chromium reference PDFs of the litho/html and go
 .PHONY: html-fixtures
 html-fixtures: ## Rebuild the litho PDFs of the litho/html and gotenberg/html corpora from their sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first)
 	$(CORPUS)/lib/fetch-fonts.sh $(FIXTURE_FONTS)
-	@set -e; for c in $(HTML_CORPORA); do go run ./$(CORPUS)/fixture/htmlbuild -corpus $(CORPUS)/$$c -fonts $(FIXTURE_FONTS); done
+	@set -e; for c in $(HTML_CORPORA); do go run ./test/integration/fixture/htmlbuild -corpus $(CORPUS)/$$c -fonts $(FIXTURE_FONTS); done
 
 OFFICE_TESTDATA := test/integration/testdata
 FORMATS ?= docx odt xlsx ods csv pptx odp
@@ -150,7 +150,7 @@ office-references: ## Build the LibreOffice reference PDFs of the libreoffice an
 .PHONY: office-fixtures
 office-fixtures: ## Rebuild the litho PDFs of the gotenberg Office corpora from their sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first). Vars: FORMATS (space-separated, default all)
 	$(CORPUS)/lib/fetch-fonts.sh $(FIXTURE_FONTS)
-	@set -e; for f in $(FORMATS); do go run ./$(CORPUS)/fixture/build -corpus $(CORPUS)/gotenberg/$$f -fonts $(FIXTURE_FONTS); done
+	@set -e; for f in $(FORMATS); do go run ./test/integration/fixture/build -corpus $(CORPUS)/gotenberg/$$f -fonts $(FIXTURE_FONTS); done
 
 CORPUS_RUN_FLAGS :=
 ifdef CORPUS_JSON_OUTPUT

@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/test/integration/corpus/fixture"
+	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
 func TestGlobInputFixtures_KeysOnTheWildcard(t *testing.T) {
