@@ -81,7 +81,7 @@ func ParseChartEx(ctx context.Context, pkg *Package, part string) (*chart.Chart,
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	c, err := ChartExFromElement(root, theme, opts, names)
+	c, err := ChartExFromElement(root, chartTheme(ctx, pkg, part, theme), opts, names)
 	if err != nil {
 		return nil, fmt.Errorf("reading the chart %s: %w", part, err)
 	}

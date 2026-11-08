@@ -84,6 +84,7 @@ func ParseChart(ctx context.Context, pkg *Package, part string) (*chart.Chart, e
 			}
 		}
 	}
+	theme = chartTheme(ctx, pkg, part, theme)
 	c, err := ChartFromElement(root, theme, opts)
 	if err != nil {
 		return nil, fmt.Errorf("reading the chart %s: %w", part, err)
@@ -96,6 +97,37 @@ func ParseChart(ctx context.Context, pkg *Package, part string) (*chart.Chart, e
 		}
 	}
 	return c, nil
+}
+
+// relThemeOverride is the relationship type of a chart's theme override
+// part (ECMA-376 Part 1, 14.2.9).
+const relThemeOverride = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/themeOverride"
+
+// chartTheme returns theme with the colours and fonts the chart part's
+// theme override replaces (ECMA-376 Part 1, 20.1.6.12 themeOverride: a
+// colour, font or format scheme the chart takes instead of the
+// document's), theme itself without one.
+func chartTheme(ctx context.Context, pkg *Package, part string, theme *Theme) *Theme {
+	name := pkg.RelatedPart(part, relThemeOverride)
+	if name == "" {
+		return theme
+	}
+	root, err := pkg.ParseXML(ctx, name, nil)
+	if err != nil || !root.Is(NSA, "themeOverride") {
+		return theme
+	}
+	o := ParseTheme(&Element{Space: NSA, Local: "theme", Children: []*Element{{Space: NSA, Local: "themeElements", Children: root.Children}}})
+	out := &Theme{Colors: map[string]css.Color{}, Major: theme.Major, Minor: theme.Minor}
+	for k, v := range theme.Colors {
+		out.Colors[k] = v
+	}
+	for k, v := range o.Colors {
+		out.Colors[k] = v
+	}
+	if root.Child(NSA, "fontScheme") != nil {
+		out.Major, out.Minor = o.Major, o.Minor
+	}
+	return out
 }
 
 // errNotChart reports a part whose root is not a chart space.
