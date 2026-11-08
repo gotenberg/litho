@@ -73,6 +73,8 @@ type condStats struct {
 	nums  []float64
 	mean  float64
 	count map[string]int
+	// formula computes a threshold given as a formula, nil for none.
+	formula func(string) (float64, bool)
 }
 
 // condResult is what the rules give a cell: a differential style, a
@@ -298,6 +300,14 @@ func (f *condFormat) statistics(g *grid) *condStats {
 	}
 	if len(st.nums) > 0 {
 		st.mean = sum / float64(len(st.nums))
+	}
+	if g.cond != nil && len(f.ranges) > 0 {
+		cs, index, first := g.cond, f.index, f.ranges[0]
+		st.formula = func(src string) (float64, bool) {
+			v, ok := cs.formula(src, index, first.FirstRow, first.FirstColumn)
+			x := scalar(v)
+			return x.Number, ok && (x.Kind == Number || x.Kind == Bool)
+		}
 	}
 	f.stats = st
 	return st
@@ -568,8 +578,9 @@ func ranked(nums []float64, v, n float64, top bool) bool {
 }
 
 // thresholds returns the numbers of a scale's thresholds: each value's
-// number, the range's minimum for "min" and maximum for "max"; with no
-// values, the minimum, the median when three, and the maximum.
+// number, the range's minimum for "min" and maximum for "max", a formula's
+// result for a text starting with "="; with no values, the minimum, the
+// median when three, and the maximum.
 func thresholds(vals []Value, n int, st *condStats) ([]float64, bool) {
 	if len(st.nums) == 0 {
 		return nil, false
@@ -592,6 +603,12 @@ func thresholds(vals []Value, n int, st *condStats) ([]float64, bool) {
 			out[i] = lo
 		case v.Kind == Text && v.Text == "max":
 			out[i] = hi
+		case v.Kind == Text && strings.HasPrefix(v.Text, "=") && st.formula != nil:
+			x, ok := st.formula(v.Text[1:])
+			if !ok {
+				return nil, false
+			}
+			out[i] = x
 		default:
 			return nil, false
 		}

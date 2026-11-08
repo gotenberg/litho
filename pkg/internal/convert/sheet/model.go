@@ -102,7 +102,9 @@ type Rule struct {
 	// "notContains").
 	Operator string
 	// Values are the constant operands: one or two numbers or strings for
-	// a RuleCellIs, the text of a RuleText, the thresholds of a scale.
+	// a RuleCellIs, the text of a RuleText, the thresholds of a scale, a
+	// threshold's text "=" and a formula for one the builder computes,
+	// relative to the format's first cell.
 	Values []Value
 	// Formula is the formula of a RuleExpression, or a non-constant
 	// operand, as the file writes it; the builder does not evaluate it.

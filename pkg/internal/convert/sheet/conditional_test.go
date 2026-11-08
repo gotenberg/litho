@@ -304,3 +304,16 @@ func TestThreshold(t *testing.T) {
 		t.Errorf("RangeNumbers %v", got)
 	}
 }
+
+// TestConditional_FormulaThreshold locks a threshold given as a formula,
+// computed over the sheet: sc/databar.xlsx's upper threshold 3*A1+2.
+func TestConditional_FormulaThreshold(t *testing.T) {
+	sh := column(numCell(0, 1, nil), numCell(0, 3, nil), numCell(0, 5, nil))
+	sh.Conditional = []Conditional{{Ranges: []Range{{FirstRow: 1, LastRow: 2}}, Rules: []Rule{{
+		Kind: RuleDataBar, Values: []Value{num(0), str("=3*$A$1+2")}, Bar: blue, BarAxis: BarAxisAuto, BarMaxLength: 1,
+	}}}}
+	g := newGrid(newDoc(sh), sh)
+	if _, length, _, _, ok := g.dataBar(1, 0, g.cell(1, 0)); !ok || !near(length, 0.6, 1e-9) {
+		t.Errorf("length %v (%v), want 3 of 5", length, ok)
+	}
+}
