@@ -205,8 +205,12 @@ func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 			case m == "vertical":
 				s.FlipV = !s.FlipV
 			}
-			if strings.TrimSpace(k.TextContent()) != "" {
-				r.warn("picture-text", "the text of a picture is not drawn")
+			if hasParagraphs(k) && strings.TrimSpace(k.TextContent()) != "" {
+				// A picture's text is drawn over it, in the frame's box,
+				// as Impress draws it.
+				t := &slides.Shape{Kind: slides.KindGeometry, Box: s.Box, Rotation: s.Rotation, Text: r.textBody(k, ss, pc)}
+				r.textBodyProps(t.Text, ss.graphic, false)
+				return &slides.Shape{Kind: slides.KindGroup, Box: s.Box, Child: s.Box, Kids: []*slides.Shape{s, t}}
 			}
 			return s
 		case k.Is(odf.NSDraw, "object"):

@@ -94,9 +94,13 @@ func TestRead_Runs(t *testing.T) {
 			[]slides.Run{{Text: "a   b\tc"}, {Break: true}, {Text: "d   e"}}},
 		{"link", `<text:p>go <text:a xlink:href="https://x.test/">here</text:a></text:p>`,
 			[]slides.Run{{Text: "go "}, {Text: "here", Href: "https://x.test/"}}},
-		{"fields", `<text:p><text:page-number>3</text:page-number>/<text:page-count>9</text:page-count> <text:date>1/1/26</text:date> <text:time text:fixed="true">10:00</text:time> <text:author-name>Ann</text:author-name></text:p>`,
+		{"fields", `<text:p><text:page-number>3</text:page-number>/<text:page-count>9</text:page-count> <text:date>1/1/26</text:date> <text:time text:fixed="true">10:00</text:time> <loext:page-name>&lt;slide-name&gt;</loext:page-name></text:p>`,
 			[]slides.Run{{Text: "3", Field: slides.FieldSlideNumber}, {Text: "/"}, {Text: "9", Field: slides.FieldSlideCount}, {Text: " "},
-				{Text: "1/1/26", Field: slides.FieldDate}, {Text: " 10:00 "}, {Text: "Ann", Field: slides.FieldAuthor}}},
+				{Text: "1/1/26", Field: slides.FieldDate}, {Text: " 10:00 "}, {Text: "<slide-name>", Field: slides.FieldSlideName}}},
+		// Measured on the pinned LibreOffice: an author field that is not
+		// fixed prints nothing.
+		{"author", `<text:p>by <text:author-name text:fixed="false">Ann</text:author-name><text:author-name text:fixed="true">Bob</text:author-name></text:p>`,
+			[]slides.Run{{Text: "by Bob"}}},
 		{"break trims", "<text:p>a <text:line-break/> b </text:p>", []slides.Run{{Text: "a"}, {Break: true}, {Text: "b"}}},
 	}
 	for _, tt := range tests {

@@ -539,7 +539,8 @@ const maxInlineDepth = 64
 
 // inline reads the content of a paragraph or a span (ODF 1.3, Part 3,
 // 6.1 and 7): character data, text:span with its text style, text:a,
-// text:s, text:tab, text:line-break and the fields.
+// text:s, text:tab, text:line-break and the fields, LibreOffice's
+// loext:page-name, the slide's name, among them.
 func (r *reader) inline(el *odf.Element, tc *textCtx, rs runState, href string, w *runWriter, depth int) {
 	if depth > maxInlineDepth {
 		return
@@ -552,6 +553,10 @@ func (r *reader) inline(el *odf.Element, tc *textCtx, rs runState, href string, 
 		}
 		if k.Name.Space == odf.NSPresentation {
 			r.presentationField(k, tc, st, href, w)
+			continue
+		}
+		if k.Is(odf.NSLOExt, "page-name") || k.Is(odf.NSText, "page-name") {
+			w.raw(slides.Run{Text: k.TextContent(), Style: st, Href: href, Field: slides.FieldSlideName})
 			continue
 		}
 		if k.Name.Space != odf.NSText {
@@ -596,7 +601,14 @@ func (r *reader) inline(el *odf.Element, tc *textCtx, rs runState, href string, 
 			w.raw(slides.Run{Text: k.TextContent(), Style: st, Href: href, Field: slides.FieldFile})
 		case "title":
 			w.raw(slides.Run{Text: k.TextContent(), Style: st, Href: href, Field: slides.FieldTitle})
-		case "author-name", "initial-creator", "creator":
+		case "author-name", "author-initials":
+			// A field that is not fixed shows the name of whoever opens the
+			// document, which a conversion has none of: Impress prints
+			// nothing (measured on the pinned LibreOffice).
+			if k.A(odf.NSText, "fixed") == "true" {
+				w.text(k.TextContent(), st, href)
+			}
+		case "initial-creator", "creator":
 			w.raw(slides.Run{Text: k.TextContent(), Style: st, Href: href, Field: slides.FieldAuthor})
 		case "ruby":
 			r.inline(k.Child(odf.NSText, "ruby-base"), tc, rs, href, w, depth+1)

@@ -107,6 +107,12 @@ func TestRead_Frames(t *testing.T) {
 			t.Errorf("shape = %+v", s)
 		}
 	})
+	t.Run("picture text", func(t *testing.T) {
+		s := firstShape(t, flat{body: page(`<draw:frame svg:width="2cm" svg:height="1cm"><draw:image><office:binary-data>` + png + `</office:binary-data><text:p>x</text:p></draw:image></draw:frame>`)})
+		if s.Kind != slides.KindGroup || len(s.Kids) != 2 || s.Kids[0].Kind != slides.KindPicture || !slices.Equal(texts(s.Kids[1].Text.Paragraphs), []string{"x"}) {
+			t.Errorf("shape = %+v", s)
+		}
+	})
 	t.Run("placeholder size from the master", func(t *testing.T) {
 		f := flat{
 			master: `<style:master-page style:name="Default"><draw:frame presentation:class="title" presentation:placeholder="true" svg:x="1cm" svg:y="2cm" svg:width="20cm" svg:height="3cm"><draw:text-box/></draw:frame></style:master-page>`,
