@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/offcrypto"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -34,23 +35,36 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if fonts.Len() == 0 {
 		return nil, fmt.Errorf("converting PPTX: %w", text.ErrNoFonts)
 	}
+	doc, warnings, err := load(ctx, src, fonts, opts)
+	if err != nil {
+		return nil, err
+	}
+	out, err := slides.Convert(ctx, doc, fonts, opts)
+	if err != nil {
+		return nil, err
+	}
+	out.Warnings = append(warnings, out.Warnings...)
+	return out, nil
+}
+
+// load reads src into the slide model with the reader's warnings.
+func load(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*slides.Document, []compose.Warning, error) {
 	data, err := office.ReadAll(ctx, src, opts.MaxInputBytes)
 	if err != nil {
-		return nil, fmt.Errorf("reading PPTX: %w", err)
+		return nil, nil, fmt.Errorf("reading PPTX: %w", err)
 	}
 	// A zip package comes back unchanged; a compound file is an encrypted
 	// package (MS-OFFCRYPTO, 2.3.4.4) opened with the password.
 	if data, err = offcrypto.OpenOOXML(ctx, data, opts.Password); err != nil {
-		return nil, fmt.Errorf("opening PPTX: %w", err)
+		return nil, nil, fmt.Errorf("opening PPTX: %w", err)
 	}
 	pkg, err := ooxml.Open(data)
 	if err != nil {
-		return nil, fmt.Errorf("opening PPTX: %w", err)
+		return nil, nil, fmt.Errorf("opening PPTX: %w", err)
 	}
-	if _, err := pkg.MainPart(); err != nil {
-		return nil, fmt.Errorf("reading PPTX: %w: %w", office.ErrMalformed, err)
+	doc, warnings, err := read(ctx, pkg, fonts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading PPTX: %w", err)
 	}
-	// The reader that fills a slides.Document for slides.Convert lands
-	// with the wave 6 cells.
-	return nil, fmt.Errorf("reading PPTX: %w", office.ErrNotImplemented)
+	return doc, warnings, nil
 }
