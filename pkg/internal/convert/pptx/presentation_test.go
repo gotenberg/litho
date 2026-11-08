@@ -159,3 +159,33 @@ func shapeNames(shapes []*slides.Shape) []string {
 	}
 	return out
 }
+
+func TestPresentation_NotesLayout(t *testing.T) {
+	files := deckFiles(testDeck{slides: []testSlide{
+		{},
+		{notes: phShape("Notes", "body", 3, 0, 0, 0, 0, para("N")) + `<p:sp><p:nvSpPr><p:cNvPr id="9" name="Num"/><p:cNvSpPr/><p:nvPr><p:ph type="sldNum" idx="5"/></p:nvPr></p:nvSpPr><p:spPr/>` +
+			`<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:fld id="{2}" type="slidenum"><a:t>2</a:t></a:fld></a:p></p:txBody></p:sp>`},
+	}})
+	files["ppt/notesMasters/notesMaster1.xml"] = `<p:notesMaster ` + nsDecl + `><p:cSld><p:spTree>` + spGroup +
+		phShape("Image", "sldImg", 2, 1143000, 685800, 4572000, 3429000, ``) +
+		phShape("Body", "body", 3, 685800, 4343400, 5486400, 4114800, `<a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr/></a:p>`) +
+		phShape("Footer", "ftr", 4, 0, 8685213, 2971800, 457200, `<a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>FOOT</a:t></a:r></a:p>`) +
+		phShape("Number", "sldNum", 5, 3884613, 8685213, 2971800, 457200, `<a:bodyPr/><a:lstStyle/><a:p><a:fld id="{1}" type="slidenum"><a:t>‹#›</a:t></a:fld></a:p>`) +
+		sp("Rule", `<a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>`, "") +
+		`</p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:notesMaster>`
+	doc := loadFiles(t, files)
+	if doc.NotesSlideBox != (compose.Rect{X: 90, Y: 54, Width: 360, Height: 270}) || doc.NotesTextBox != (compose.Rect{X: 54, Y: 342, Width: 432, Height: 324}) {
+		t.Errorf("slide box %+v, text box %+v", doc.NotesSlideBox, doc.NotesTextBox)
+	}
+	var names []string
+	for _, s := range doc.NotesShapes {
+		names = append(names, s.Name)
+	}
+	if !slices.Equal(names, []string{"Rule", "Num"}) {
+		t.Fatalf("notes shapes %q, want the master's decoration and the slide number the notes slide holds", names)
+	}
+	num := doc.NotesShapes[1]
+	if num.Box.Y < 683 || num.Box.Y > 684 || num.Text == nil || num.Text.Paragraphs[0].Runs[0].Field != slides.FieldSlideNumber {
+		t.Errorf("slide number %+v %+v", num.Box, num.Text)
+	}
+}

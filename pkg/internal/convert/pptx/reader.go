@@ -116,8 +116,13 @@ type reader struct {
 	// the jumps of hyperlinks.
 	slideAt         map[string]int
 	slideCount, cur int
-	warnings        []compose.Warning
-	warned          map[string]bool
+	// notesRead marks the notes page layout read from the first notes
+	// slide: notesSlideBox, notesTextBox and notesShapes.
+	notesRead                   bool
+	notesSlideBox, notesTextBox compose.Rect
+	notesShapes                 []*slides.Shape
+	warnings                    []compose.Warning
+	warned                      map[string]bool
 }
 
 // warn records a warning, once per message.
@@ -210,6 +215,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*slides.D
 		doc.Slides = append(doc.Slides, s)
 	}
 	uniqueNames(doc.Slides)
+	doc.NotesSlideBox, doc.NotesTextBox, doc.NotesShapes = r.notesSlideBox, r.notesTextBox, r.notesShapes
 	return doc, r.warnings, nil
 }
 

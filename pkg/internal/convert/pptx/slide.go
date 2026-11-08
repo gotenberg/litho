@@ -139,6 +139,12 @@ func (r *reader) notes(slidePart string) ([]slides.Paragraph, error) {
 		sc.theme = r.themeOf("")
 	}
 	nl.sc = sc
+	if nm != nil && !r.notesRead {
+		r.notesRead = true
+		if err := r.notesLayout(nl, nm, part); err != nil {
+			return nil, err
+		}
+	}
 	for _, k := range nl.phs {
 		if p, _ := phOf(k); p.typ != "body" {
 			continue
@@ -151,6 +157,49 @@ func (r *reader) notes(slidePart string) ([]slides.Paragraph, error) {
 		return body.Paragraphs, nil
 	}
 	return nil, nil
+}
+
+// notesLayout reads the notes page layout from the first notes slide nl
+// of part and its notes master nm (19.3.1.27 notesMaster): the boxes of
+// the master's slide image and body placeholders, its shapes that are no
+// placeholder, and the date, footer, header and slide number
+// placeholders the notes slide holds, at the master's places with the
+// master's text; Impress draws them so on the notes pages of the slides
+// that have notes, unscaled on the page it prints them on.
+//
+// # Measured
+//
+//   - pptx: deck.pptx's notes master places the slide image at 90, 54 by
+//     360, 270 points and the slide number at 305.9, 683.9 on a 540 by 720
+//     notes size; Impress's notes pages print both there on Letter, and
+//     move the slide image when the master moves it. A slide without
+//     notes prints its page in Impress's default layout.
+func (r *reader) notesLayout(nl, nm *layer, part string) error {
+	for _, k := range nm.phs {
+		p, _ := phOf(k)
+		pl, ok := placeOf([]*ooxml.Element{k})
+		if !ok {
+			continue
+		}
+		switch p.typ {
+		case "sldImg":
+			r.notesSlideBox = pl.box
+		case "body":
+			r.notesTextBox = pl.box
+		}
+	}
+	if err := r.shapeList(&r.notesShapes, &shapeCtx{layer: nm, sc: nl.sc, ns: nsP, part: nm.part}, nm.tree, 0); err != nil {
+		return err
+	}
+	c := &shapeCtx{layer: nl, sc: nl.sc, ns: nsP, part: part, slide: true}
+	for _, k := range nl.phs {
+		if p, _ := phOf(k); footerKind(p) {
+			if s := r.autoShape(c, k); s != nil {
+				r.notesShapes = append(r.notesShapes, s)
+			}
+		}
+	}
+	return nil
 }
 
 // p0 returns the placeholder of el, the zero placeholder for none.
