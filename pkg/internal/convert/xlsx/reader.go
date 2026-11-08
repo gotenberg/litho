@@ -138,8 +138,10 @@ func (r *reader) officeWritten() bool {
 // style's font, which the column widths and the indents count in
 // (ECMA-376 Part 1, 18.3.1.13 width), as LibreOffice measures them on its
 // reference device: the font size rounded to a hundredth of a
-// millimetre, the advance to a twip. Without a face they take the widths
-// of Calibri at 11 points.
+// millimetre, the advance to a twip. A stylesheet without fonts gives
+// LibreOffice no font to measure: a digit is then 2 millimetres and a
+// space 1, its defaults. Without a face they take the widths of Calibri
+// at 11 points.
 //
 // # Corpus evidence
 //
@@ -153,6 +155,10 @@ func (r *reader) officeWritten() bool {
 func (r *reader) measureNormalFont() {
 	r.digitWidth, r.spaceWidth = 111.0/20, 50.0/20
 	s := r.styles
+	if len(s.fonts) == 0 {
+		r.digitWidth, r.spaceWidth = 2*72/25.4, 72/25.4
+		return
+	}
 	x := xf{font: 0}
 	if s.normalXf < len(s.styleXfs) {
 		x = s.styleXfs[s.normalXf]
