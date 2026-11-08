@@ -274,7 +274,13 @@ func (r *reader) resolve(x xf) *sheet.Style {
 }
 
 // fontAt returns font record i, the first record for an index past the
-// table, LibreOffice's default font when there is none.
+// table, and Calc's Default cell style font, Liberation Sans 10, when the
+// workbook has none.
+//
+// # Corpus evidence
+//
+//   - LibreOffice 26.8.2.2: a workbook without a styles part prints its
+//     cells in Liberation Sans 10 points.
 func (r *reader) fontAt(i int) sheet.Font {
 	fonts := r.styles.fonts
 	switch {
@@ -283,7 +289,7 @@ func (r *reader) fontAt(i int) sheet.Font {
 	case len(fonts) > 0:
 		return fonts[0]
 	}
-	return sheet.Font{Families: []string{defaultFontName}, Size: defaultFontSize}
+	return sheet.Font{Families: []string{"Liberation Sans"}, Size: 10}
 }
 
 // format returns the code of number format id: the workbook's own, else

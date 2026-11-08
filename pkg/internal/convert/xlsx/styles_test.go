@@ -238,3 +238,13 @@ func TestRead_SubstituteFamily(t *testing.T) {
 		t.Errorf("an unknown family's columns are %v points, Noto Sans's %v", unknown, noto)
 	}
 }
+
+// TestRead_NoStyles checks that a workbook without a styles part draws
+// with Calc's Default cell style font, Liberation Sans 10.
+func TestRead_NoStyles(t *testing.T) {
+	t.Parallel()
+	doc, _ := readBytes(t, zipFiles(t, workbookFiles([]testSheet{{name: "S", xml: `<sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>`}}, "", "", "", nil)))
+	if f := doc.Default.Font; len(f.Families) != 1 || f.Families[0] != "Liberation Sans" || f.Size != 10 {
+		t.Errorf("default font %+v", f)
+	}
+}
