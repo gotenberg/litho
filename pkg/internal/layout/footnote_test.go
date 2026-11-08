@@ -94,3 +94,34 @@ func TestFootnote_OffTheCutsFollowsTheFlow(t *testing.T) {
 		BBBB__
 		BBBB__`)
 }
+
+func TestFootnote_InColumns(t *testing.T) {
+	t.Parallel()
+	// Three columns of one line each, the call in the third: its body
+	// takes the bottom of the call's page, which leaves the columns one
+	// line, and the rest balances on the next page.
+	red2 := sty(font(2), fg(red))
+	mc := sty(font(2), fg(red), func(s *css.Style) {
+		s.Columns.Count, s.ColumnGap = 3, css.Pts(px(1))
+	})
+	root := doc(el(mc, txt(red2, "XX XX X"), call("X", "XXXX"), txt(red2, " XX XX")))
+	res := run(t, root, PageBox{Width: px(14), Height: px(5)})
+	var rows string
+	for i := range res.Pages {
+		rows += "\n" + strings.Join(grid(render(t, res, i+1)), "\n")
+	}
+	want := normalize(`
+		RRRR_RRRR_RRRR
+		RRRR_RRRR_RRRR
+		______________
+		BBBBBBBB______
+		BBBBBBBB______
+		RRRR_RRRR_____
+		RRRR_RRRR_____
+		______________
+		______________
+		______________`)
+	if rows[1:] != want {
+		t.Errorf("pixels:\n%s\nwant:\n%s", rows[1:], want)
+	}
+}

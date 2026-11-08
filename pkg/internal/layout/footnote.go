@@ -49,6 +49,15 @@ type footState struct {
 	ndisp map[int]placedArea
 	// calls are every footnote call, in tree order.
 	calls []*box
+	// deferred maps a call in columns to the page that refused its body:
+	// the column set laid out again does not offer it that page again.
+	deferred map[*box]int
+	// tried maps a call in columns to the page its body was placed on
+	// though the page lacked the room, for the columns laid out again
+	// around it to show whether the call stays on that page; forcing
+	// places a body so.
+	tried   map[*box]int
+	forcing bool
 }
 
 // genFootnote generates the body of the footnote call b, whose node n
@@ -174,6 +183,7 @@ func (e *engine) placeNote(p int, call *box, bottom float64, later bool) (ok, ro
 	if call.note {
 		return e.placeAreaNote(p, call, bottom, later)
 	}
+	f := e.foot
 	fp := e.footAt(p)
 	if len(fp.calls) >= maxFootnotesPerPage {
 		return false, false
@@ -190,7 +200,7 @@ func (e *engine) placeNote(p int, call *box, bottom float64, later bool) (ok, ro
 	}
 	h := areaHeight(e.layoutArea(p, calls, st)) + e.ruleRoom(p)
 	used := max(bottom-e.pageTop(p), 0)
-	if used+h+fp.nh > ah+eps && !(first && used <= eps) {
+	if used+h+fp.nh > ah+eps && !(first && used <= eps) && !f.forcing {
 		return false, true
 	}
 	fp.calls, fp.h = calls, h
@@ -279,24 +289,92 @@ func (e *engine) noteLine(p *ifcPara, start, end int, l *lineBox) {
 		if call.fnBody == nil || o.pos < start || o.pos >= end && (o.pos != end || end != p.n) {
 			continue
 		}
-		e.unplace(call)
-		page := e.pageOf(l.y + eps)
-		if len(f.pending) == 0 {
-			ok, room := e.placeNote(page, call, l.y+l.h, false)
-			if ok {
-				continue
+		if e.cols != nil {
+			// A call in columns places its body on the page its column
+			// lies on, as the line's bottom in the page flow.
+			e.inPages(l.y, l.y+l.h, func(top, bottom float64) { e.noteColumnCall(call, top, bottom) })
+			continue
+		}
+		e.noteCall(call, l.y, l.y+l.h)
+	}
+}
+
+// noteCall places the body of the footnote call call, whose line spans
+// the flow positions top to bottom (CSS GCPM 3, 3.8, footnote-policy:
+// auto), as [engine.noteLine] does.
+func (e *engine) noteCall(call *box, top, bottom float64) {
+	f := e.foot
+	e.unplace(call)
+	page := e.pageOf(top + eps)
+	if len(f.pending) == 0 {
+		ok, room := e.placeNote(page, call, bottom, false)
+		if ok {
+			return
+		}
+		if room {
+			fp := e.footAt(page)
+			if fp.endBy == nil {
+				fp.end, fp.endBy = bottom, call
+				e.geom.recut(page)
 			}
-			if room {
-				fp := e.footAt(page)
-				if fp.endBy == nil {
-					fp.end, fp.endBy = l.y+l.h, call
-					e.geom.recut(page)
+		}
+	}
+	f.where[call] = -1
+	f.pending = append(f.pending, pendingNote{call: call, from: page})
+}
+
+// noteColumnCall is [engine.noteCall] for a call in columns, its line
+// spanning top to bottom in the page flow: a body the call's page refused
+// waits for the next page whatever the columns laid out again leave, and
+// the page goes on past the call's line, its columns filling the room the
+// footnote area leaves.
+func (e *engine) noteColumnCall(call *box, top, bottom float64) {
+	f := e.foot
+	e.unplace(call)
+	page := e.pageOf(top + eps)
+	if p, ok := f.tried[call]; ok && p != page {
+		// The room the body took moved its call off its page: the body
+		// waits for a later page, the call staying where the body left
+		// it room.
+		delete(f.tried, call)
+		if f.deferred == nil {
+			f.deferred = map[*box]int{}
+		}
+		f.deferred[call] = p
+	}
+	if p, ok := f.deferred[call]; !ok || p != page {
+		// Bodies waiting from an earlier page go first; those a call
+		// later in the columns left waiting on this page do not, since
+		// laying the columns out again reaches this call before them.
+		waiting := slices.ContainsFunc(f.pending, func(n pendingNote) bool { return n.from < page })
+		if !waiting {
+			ok, room := e.placeNote(page, call, bottom, false)
+			if ok {
+				delete(f.tried, call)
+				return
+			}
+			if _, done := f.tried[call]; room && !done {
+				// The columns laid out again in the room the area leaves
+				// may move the call's line to a column where it fits.
+				f.forcing = true
+				ok, _ = e.placeNote(page, call, bottom, false)
+				f.forcing = false
+				if ok {
+					if f.tried == nil {
+						f.tried = map[*box]int{}
+					}
+					f.tried[call] = page
+					return
 				}
 			}
 		}
-		f.where[call] = -1
-		f.pending = append(f.pending, pendingNote{call: call, from: page})
+		if f.deferred == nil {
+			f.deferred = map[*box]int{}
+		}
+		f.deferred[call] = page
 	}
+	f.where[call] = -1
+	f.pending = append(f.pending, pendingNote{call: call, from: page})
 }
 
 // finishNotes places the bodies still waiting once the flow is laid out,
@@ -384,4 +462,50 @@ func (e *engine) assembleNotes(pg *compose.Page, k int, pb PageBox, used map[*co
 		Opacity:   1,
 		Content:   frags,
 	})
+}
+
+// inPages runs f with the flow positions top and bottom of the column
+// flow, which lie in one column, mapped to the page flow around the
+// column set, in that fragmentation context. Columns nested in columns
+// are left alone.
+func (e *engine) inPages(top, bottom float64, f func(top, bottom float64)) {
+	c := e.cols
+	if c == nil {
+		f(top, bottom)
+		return
+	}
+	if c.parent != nil || c.free {
+		// The pass that counts the columns forced breaks make lays the
+		// content out in columns no page limits: it places no body.
+		return
+	}
+	i := c.of(top + eps)
+	if i >= len(c.frags) {
+		return
+	}
+	fr := c.frags[i]
+	if fr.row >= len(c.rows) {
+		return
+	}
+	r := c.rows[fr.row]
+	ot := r.top + min(max(top-fr.vtop, 0), fr.h)
+	ob := r.top + min(max(bottom-fr.vtop, 0), fr.h)
+	c.outer(func() {
+		if e.paginating() {
+			f(ot, ob)
+		}
+	})
+}
+
+// noteSignature returns a value that changes when a footnote area changes
+// height, for a column set to lay its content out again around it.
+func (e *engine) noteSignature() float64 {
+	if e.foot == nil {
+		return 0
+	}
+	sig := 0.0
+	for p, fp := range e.foot.pages {
+		sig += float64(p+1) * (fp.h + 2*fp.nh)
+	}
+	return sig
 }

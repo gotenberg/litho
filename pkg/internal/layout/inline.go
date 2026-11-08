@@ -581,7 +581,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			if e.foot != nil && e.paginating() {
 				// The bodies waiting for a page take their place on this
 				// line's page before it is laid out.
-				e.flushNotes(e.pageOf(top+eps), top)
+				e.inPages(top, top, func(t, _ float64) { e.flushNotes(e.pageOf(t+eps), t) })
 			}
 			if first {
 				// The margins resolve here: the floats placed under them

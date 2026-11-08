@@ -41,7 +41,11 @@
 // page has room for it, and the page's slice of the flow ends that much
 // higher; otherwise the body waits for the next page, which takes the
 // first body waiting whatever its height, and a body refused for room
-// ends its call's page after the call's line. The pages then cut the flow
+// ends its call's page after the call's line. A call in columns places its
+// body on the page its column lies on, by its line's bottom there, and the
+// columns are laid out again in the room the footnote area leaves; a body
+// that lacks the room is given it once, and waits for the next page when
+// the columns laid out again in it move its call off its page. The pages then cut the flow
 // where each one's slice ends, as named pages do.
 //
 // A call whose body's style has a Note goes to the page's note area

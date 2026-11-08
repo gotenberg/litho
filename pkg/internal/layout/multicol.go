@@ -140,6 +140,11 @@ func (e *engine) columnGap(b *box, w float64) float64 {
 	return max(resolve(g, w), 0)
 }
 
+// maxNotePasses bounds the layouts of a column set again for the footnote
+// areas its calls change: 4. Anti-DoS guard, not spec-mandated: a page's
+// footnotes settle in one or two passes.
+const maxNotePasses = 4
+
 // minColumnWidth is the used column-width of a column-width of 0: a CSS
 // pixel.
 const minColumnWidth = 0.75
@@ -546,7 +551,18 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 		end = e.layoutColumns(b, s, cb, ctx)
 		return ctx.consumed(b, s.kids, end, true)
 	}
+	sig := e.noteSignature()
 	cons := pass(-1, 0)
+	for range maxNotePasses {
+		// A footnote a call in the columns placed or moved changes the
+		// room the page leaves the columns: lay them out again.
+		now := e.noteSignature()
+		if now == sig || !e.relayout(y) {
+			break
+		}
+		sig = now
+		cons = pass(-1, 0)
+	}
 	last := ctx.lastFrag(cons)
 	r := ctx.frags[last].row
 	row := ctx.rows[r]
