@@ -67,7 +67,7 @@ func parseFontScheme(e *Element) FontScheme {
 
 // SchemeColor returns the colour a colour container element holds (a
 // scheme entry such as a:dk1, or a fill's colour choice): its a:srgbClr,
-// a:sysClr lastClr, or a:schemeClr resolved in theme, with lumMod and
+// a:sysClr's system colour, or a:schemeClr resolved in theme, with lumMod and
 // lumOff applied (ECMA-376 Part 1, 20.1.2.3).
 func SchemeColor(e *Element, theme *Theme) (css.Color, bool) {
 	if e == nil {
@@ -80,7 +80,7 @@ func SchemeColor(e *Element, theme *Theme) (css.Color, bool) {
 		case c.Is(NSA, "srgbClr"):
 			col, ok = HexColor(attrOr(c, "val"))
 		case c.Is(NSA, "sysClr"):
-			col, ok = HexColor(attrOr(c, "lastClr"))
+			col, ok = sysColor(c)
 		case c.Is(NSA, "schemeClr"):
 			if theme != nil {
 				col, ok = theme.Color(attrOr(c, "val"))

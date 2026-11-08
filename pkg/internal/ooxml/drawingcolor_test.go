@@ -31,6 +31,9 @@ func TestDrawingColor_Transforms(t *testing.T) {
 		{"lumMod lumOff", `<a:srgbClr val="FF0000"><a:lumMod val="50000"/><a:lumOff val="0"/></a:srgbClr>`, [4]int{128, 0, 0, 255}, true},
 		{"alpha", `<a:srgbClr val="000000"><a:alpha val="50000"/></a:srgbClr>`, [4]int{0, 0, 0, 128}, true},
 		{"sys default", `<a:sysClr val="window"/>`, [4]int{255, 255, 255, 255}, true},
+		// LibreOffice measured: a windowText line saved red prints black.
+		{"sys over lastClr", `<a:sysClr val="windowText" lastClr="FF0000"/>`, [4]int{0, 0, 0, 255}, true},
+		{"unknown sys keeps lastClr", `<a:sysClr val="hotLight" lastClr="FF0000"/>`, [4]int{255, 0, 0, 255}, true},
 		{"preset dk", `<a:prstClr val="dkBlue"/>`, [4]int{0, 0, 139, 255}, true},
 		{"hsl", `<a:hslClr hue="0" sat="100000" lum="50000"/>`, [4]int{255, 0, 0, 255}, true},
 		{"comp", `<a:srgbClr val="FF0000"><a:comp/></a:srgbClr>`, [4]int{0, 255, 255, 255}, true},

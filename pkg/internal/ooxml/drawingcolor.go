@@ -59,9 +59,7 @@ func DrawingColorChoice(c *Element, scheme SchemeResolver) (css.Color, bool) {
 		col = fromHSL(math.Mod(float64(h)/60000/360, 1), clamp01(pct(c, "sat")), clamp01(pct(c, "lum")), 1)
 		ok = true
 	case "sysClr":
-		if col, ok = HexColor(attrOr(c, "lastClr")); !ok {
-			col, ok = systemColor(attrOr(c, "val"))
-		}
+		col, ok = sysColor(c)
 	case "schemeClr":
 		if scheme != nil {
 			col, ok = scheme(attrOr(c, "val"))
@@ -90,9 +88,21 @@ func gammaIn(v float64) float64 { return math.Pow(clamp01(v), decGamma) }
 // gammaOut converts a linear RGB component back to sRGB.
 func gammaOut(v float64) float64 { return math.Pow(clamp01(v), incGamma) }
 
+// sysColor returns the colour of a sysClr (ECMA-376 Part 1, 20.1.2.3.33):
+// the system colour its val names, as LibreOffice resolves it on a system
+// of default colours, and its lastClr, the colour the system had when the
+// file was saved, only for a name it does not know. LibreOffice prints a
+// windowText sysClr black whatever lastClr says.
+func sysColor(c *Element) (css.Color, bool) {
+	if col, ok := systemColor(attrOr(c, "val")); ok {
+		return col, true
+	}
+	return HexColor(attrOr(c, "lastClr"))
+}
+
 // systemColor returns the colour of a system colour name (ECMA-376 Part
-// 1, 20.1.10.58 ST_SystemColorVal) without a lastClr: the window text
-// black, the window white, as LibreOffice's defaults.
+// 1, 20.1.10.58 ST_SystemColorVal): the window text black, the window
+// white, as LibreOffice's defaults.
 func systemColor(name string) (css.Color, bool) {
 	switch name {
 	case "windowText", "menuText", "captionText", "btnText", "infoText", "3dDkShadow", "highlightText":
