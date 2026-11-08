@@ -171,8 +171,8 @@ func TestRead_TitleAndNotes(t *testing.T) {
 	if got := doc.Slides[0].Title; got != "Q4 Review 2026" {
 		t.Errorf("title = %q", got)
 	}
-	if n := len(doc.Slides[0].Shapes); n != 1 {
-		t.Errorf("shapes = %d, want the title alone: the empty placeholder prints nothing", n)
+	if sh := doc.Slides[0].Shapes; len(sh) != 2 || len(sh[1].Text.Paragraphs) != 0 {
+		t.Errorf("shapes = %+v, want the title and the empty placeholder without text", sh)
 	}
 	if got := texts(doc.Slides[0].Notes); !slices.Equal(got, []string{"NOTE-1", "NOTE-2"}) {
 		t.Errorf("notes = %q", got)

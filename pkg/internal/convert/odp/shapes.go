@@ -48,7 +48,10 @@ func (r *reader) shapeList(els []*odf.Element, pc *pageCtx, depth int) []*slides
 
 // shape reads one element of a page, a master page or a group: a shape,
 // a group, or a draw:a hyperlink around shapes (10.4.12), whose href the
-// shapes carry; nil for an element that draws nothing printed.
+// shapes carry; nil for an element that draws nothing printed. An empty
+// placeholder (19.411 presentation:placeholder) prints its fill and its
+// line, its prompt text being the screen's alone (measured on the pinned
+// LibreOffice).
 func (r *reader) shape(el *odf.Element, pc *pageCtx, depth int, href string) []*slides.Shape {
 	if depth > maxGroupDepth {
 		r.warn("group-depth", fmt.Sprintf("groups nested past %d levels are not drawn", maxGroupDepth))
@@ -82,11 +85,6 @@ func (r *reader) shape(el *odf.Element, pc *pageCtx, depth int, href string) []*
 		return nil
 	}
 	if d := r.layers[el.A(odf.NSDraw, "layer")]; d == "none" || d == "screen" {
-		return nil
-	}
-	if !pc.master && el.A(odf.NSPresentation, "placeholder") == "true" {
-		// An empty placeholder shows its prompt on screen and prints
-		// nothing (19.411).
 		return nil
 	}
 	if r.shapes >= maxShapes {
