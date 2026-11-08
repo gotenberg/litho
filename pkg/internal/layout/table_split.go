@@ -17,8 +17,10 @@ type breakCand struct {
 }
 
 // cellBreaks returns the break points inside the cell c, in flow order,
-// at its tentative layout. A nested table, a float, an inline block or a
-// replaced box is monolithic here: nothing breaks inside it.
+// at its tentative layout. A nested table breaks between its rows, as
+// Writer splits a row whose cell holds a table taller than the page; a
+// float, an inline block or a replaced box is monolithic here: nothing
+// breaks inside it.
 func cellBreaks(c *box) []breakCand {
 	var out []breakCand
 	collectBreaks(c, &out, 0)
@@ -46,6 +48,9 @@ func collectBreaks(b *box, out *[]breakCand, depth int) {
 		*out = append(*out, breakCand{y: k.y, soft: soft})
 		if k.kind == kindBlock && k.tpart == partNone && !avoidsInside(k) {
 			collectBreaks(k, out, depth+1)
+		}
+		if k.kind == kindBlock && k.tpart == partWrapper && !avoidsInside(k) {
+			nestedRowBreaks(k, out)
 		}
 		prev = k
 	}
@@ -90,7 +95,7 @@ func (b *box) insertStrut(cut, d float64, depth int) {
 			switch {
 			case k.y >= cut-eps:
 				k.shift(0, d)
-			case k.y+k.borderH() > cut+eps && k.float == css.FloatNone && k.kind == kindBlock && k.tpart == partNone:
+			case k.y+k.borderH() > cut+eps && k.float == css.FloatNone && k.kind == kindBlock && (k.tpart == partNone || nestedGrid(k)):
 				k.insertStrut(cut, d, depth+1)
 			}
 		case k.kind == kindText || k.kind == kindBreak:
@@ -236,4 +241,30 @@ func (sc *splitCell) open(at float64) {
 	}
 	sc.end += d
 	sc.bottom += d
+}
+
+// nestedRowBreaks adds the tops of the rows of the table whose wrapper is
+// w, but its first, to out: a nested table breaks between its rows. A row
+// that avoids a break before it argues against the break.
+func nestedRowBreaks(w *box, out *[]breakCand) {
+	for _, t := range w.kids {
+		if t.tpart != partTable || t.tdata == nil {
+			continue
+		}
+		for i, r := range t.tdata.rows {
+			if i == 0 || r.box == nil || !r.box.laidOut {
+				continue
+			}
+			prev := t.tdata.rows[i-1].box
+			soft := prev != nil && avoidsBetween(prev, r.box) || avoidsInside(t)
+			*out = append(*out, breakCand{y: r.box.y, soft: soft})
+		}
+	}
+}
+
+// nestedGrid reports a box of a nested table that a strut opened between
+// two of its rows grows: its wrapper, its table box, a row group. Its rows
+// below the strut move down whole.
+func nestedGrid(b *box) bool {
+	return b.tpart == partWrapper || b.tpart == partTable || b.tpart == partRowGroup
 }

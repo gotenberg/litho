@@ -225,3 +225,26 @@ func TestTable_CaptionStaysWhenTableMoves(t *testing.T) {
 		t.Errorf("caption at %v and table at %v, want 35 and 50", c, tt)
 	}
 }
+
+// TestTableSplit_NestedTableRows splits a row whose cell holds a table
+// taller than the page between the nested table's rows, as Writer splits
+// it, rather than moving the outer table to the next page whole.
+func TestTableSplit_NestedTableRows(t *testing.T) {
+	cell := mods(fg(red), valign(css.AlignTop))
+	var rows []*Node
+	for range 3 {
+		rows = append(rows, tr(nil, td(cell, "a")))
+	}
+	inner := td(nil, "")
+	inner.Children = []*Node{table(nil, rows...)}
+	root := doc(deep(el(sty(), txt(sty(fg(blue)), "b")), font(2)), deep(table(nil, tr(nil, inner)), font(2)))
+	assertPages(t, run(t, root, page(4, 4)), 4, `
+		BB__
+		BB__
+		RR__
+		RR__
+		RR__
+		RR__
+		RR__
+		RR__`, wpLetters)
+}
