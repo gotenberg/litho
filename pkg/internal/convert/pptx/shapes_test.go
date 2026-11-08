@@ -90,7 +90,12 @@ func TestShapes_FillsAndLines(t *testing.T) {
 			}
 		}},
 		{"radial gradient", `<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs></a:gsLst><a:path path="circle"/></a:gradFill>`, "", func(t *testing.T, s *slides.Shape) {
-			if g := s.Fill.Gradient; !g.Radial || len(g.Stops) != 2 {
+			if g := s.Fill.Gradient; !g.Radial || len(g.Stops) != 2 || g.CenterX != 0.5 || g.CenterY != 0.5 {
+				t.Errorf("gradient %+v", g)
+			}
+		}},
+		{"radial gradient from a corner", `<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs></a:gsLst><a:path path="circle"><a:fillToRect l="100000" t="100000"/></a:path></a:gradFill>`, "", func(t *testing.T, s *slides.Shape) {
+			if g := s.Fill.Gradient; !g.Radial || g.CenterX != 1 || g.CenterY != 1 {
 				t.Errorf("gradient %+v", g)
 			}
 		}},

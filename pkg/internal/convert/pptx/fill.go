@@ -140,8 +140,19 @@ func (r *reader) gradient(fc *fillCtx, k *ooxml.Element) *slides.Gradient {
 	if lin := k.Child(ooxml.NSA, "lin"); lin != nil {
 		a, _ := intAttr(lin, "ang")
 		g.Angle = float64(a) / 60000
-	} else if k.Child(ooxml.NSA, "path") != nil {
-		g.Radial = true
+	} else if path := k.Child(ooxml.NSA, "path"); path != nil {
+		// The centre is the middle of the focus rectangle (20.1.8.31
+		// fillToRect: its insets from the box, in thousandths of a
+		// percent); none centres the gradient.
+		g.Radial, g.CenterX, g.CenterY = true, 0.5, 0.5
+		if fr := path.Child(ooxml.NSA, "fillToRect"); fr != nil {
+			in := func(name string) float64 {
+				v, _ := intAttr(fr, name)
+				return float64(v) / 100000
+			}
+			g.CenterX = max(0, min(1, (1+in("l")-in("r"))/2))
+			g.CenterY = max(0, min(1, (1+in("t")-in("b"))/2))
+		}
 	}
 	return g
 }
