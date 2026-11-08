@@ -44,6 +44,11 @@
 // ends its call's page after the call's line. The pages then cut the flow
 // where each one's slice ends, as named pages do.
 //
+// A call whose body's style has a Note goes to the page's note area
+// ([PageBox.NoteArea]) by the same rules: at the top of the page area,
+// pushing the page's slice of the flow down, or, absolutely positioned,
+// placed by its insets against the page area and taking no room.
+//
 // # Leaders and page marks
 //
 // A leader ([Node.Leader]) takes no width until its line is aligned, then

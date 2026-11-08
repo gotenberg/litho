@@ -21,6 +21,11 @@ const maxFootnotesPerPage = 256
 type footPage struct {
 	calls []*box
 	h     float64
+	// notes are the note calls whose bodies the page's note area holds,
+	// in call order, and nh the height the area takes from the top of
+	// the page area, 0 when it is empty or out of the flow.
+	notes []*box
+	nh    float64
 	end   float64
 	endBy *box
 }
@@ -38,8 +43,10 @@ type footState struct {
 	pending []pendingNote
 	// where maps a call to its body's page, -1 while it waits.
 	where map[*box]int
-	// disp is the painted footnote area of each page, by index.
-	disp map[int]*ditem
+	// disp is the painted footnote area of each page, by index, and
+	// ndisp the painted note area with its offset in the page area.
+	disp  map[int]*ditem
+	ndisp map[int]placedArea
 	// calls are every footnote call, in tree order.
 	calls []*box
 }
@@ -56,6 +63,7 @@ func (e *engine) genFootnote(n *Node, b *box, ctx genCtx) {
 		return
 	}
 	b.fnBody = body[0]
+	b.note = n.Footnote.Style != nil && n.Footnote.Style.Note != ""
 	if len(body) > 1 {
 		// An inline body split around a block: an anonymous block holds
 		// its pieces.
@@ -94,7 +102,7 @@ func (e *engine) usableH(p int, pb PageBox, top float64) float64 {
 		return h
 	}
 	fp := &e.foot.pages[p]
-	h = max(h-fp.h, 0)
+	h = max(h-fp.h-fp.nh, 0)
 	if fp.endBy != nil && fp.end > top {
 		h = min(h, fp.end-top)
 	}
@@ -163,6 +171,9 @@ func areaHeight(a *box) float64 { return max(a.y+a.borderH()+a.m[css.Bottom], 0)
 // max-height. A later page, one the call is not on, takes a first body
 // whatever its height (CSS GCPM 3, 3.8, footnote-policy: auto).
 func (e *engine) placeNote(p int, call *box, bottom float64, later bool) (ok, room bool) {
+	if call.note {
+		return e.placeAreaNote(p, call, bottom, later)
+	}
 	fp := e.footAt(p)
 	if len(fp.calls) >= maxFootnotesPerPage {
 		return false, false
@@ -179,7 +190,7 @@ func (e *engine) placeNote(p int, call *box, bottom float64, later bool) (ok, ro
 	}
 	h := areaHeight(e.layoutArea(p, calls, st)) + e.ruleRoom(p)
 	used := max(bottom-e.pageTop(p), 0)
-	if used+h > ah+eps && !(first && used <= eps) {
+	if used+h+fp.nh > ah+eps && !(first && used <= eps) {
 		return false, true
 	}
 	fp.calls, fp.h = calls, h
@@ -214,6 +225,18 @@ func (e *engine) unplace(call *box) {
 		return
 	}
 	fp := e.footAt(p)
+	if call.note {
+		fp.notes = slices.DeleteFunc(fp.notes, func(c *box) bool { return c == call })
+		fp.nh = 0
+		if len(fp.notes) > 0 {
+			fp.nh = e.noteRoom(e.layoutNoteArea(p, fp.notes, e.noteStyle(p)))
+		}
+		if fp.endBy == call {
+			fp.endBy, fp.end = nil, 0
+		}
+		e.geom.recut(p)
+		return
+	}
 	fp.calls = slices.DeleteFunc(fp.calls, func(c *box) bool { return c == call })
 	if fp.endBy == call {
 		fp.endBy, fp.end = nil, 0
@@ -305,7 +328,7 @@ func (e *engine) notePages() int {
 	}
 	n := 0
 	for p, fp := range e.foot.pages {
-		if len(fp.calls) > 0 {
+		if len(fp.calls) > 0 || len(fp.notes) > 0 {
 			n = p + 1
 		}
 	}
@@ -320,6 +343,7 @@ func (e *engine) paintNotes() {
 		return
 	}
 	f.disp = map[int]*ditem{}
+	e.paintNoteAreas()
 	for p, fp := range f.pages {
 		if len(fp.calls) == 0 || e.err != nil {
 			continue
@@ -340,6 +364,7 @@ func (e *engine) assembleNotes(pg *compose.Page, k int, pb PageBox, used map[*co
 	if f == nil || k >= len(f.pages) {
 		return
 	}
+	e.assembleNoteArea(pg, k, pb, used)
 	d := f.disp[k]
 	if d == nil {
 		return

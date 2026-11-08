@@ -258,6 +258,9 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 			pg.Content = append(pg.Content, e.opts.MarginContent(e.infoOf(k), n)...)
 		}
 		top := e.pageTop(k)
+		// The note area at the top of the page area pushes its slice of
+		// the flow down.
+		shift := e.noteShift(k)
 		frags := perPage[k]
 		for i := 0; i < len(frags); {
 			// A run of fragments is clipped to the page area, the slice of
@@ -273,7 +276,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 				clip = compose.Rect{X: -pb.Margin[css.Left], Y: top - pb.Margin[css.Top], Width: pb.Width, Height: pb.Height}
 			}
 			pg.Content = append(pg.Content, &compose.Group{
-				Transform: compose.Matrix{A: 1, D: 1, E: pb.Margin[css.Left], F: pb.Margin[css.Top] - top},
+				Transform: compose.Matrix{A: 1, D: 1, E: pb.Margin[css.Left], F: pb.Margin[css.Top] - top + shift},
 				Clip:      &compose.Path{Ops: rectOps(clip), Fill: &compose.Fill{}},
 				Opacity:   1,
 				Content:   frags[i:j],

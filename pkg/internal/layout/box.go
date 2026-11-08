@@ -184,6 +184,9 @@ type box struct {
 	// fnBody is the footnote body of a footnote call, laid out in the
 	// footnote area of a page rather than in the flow (CSS GCPM 3, 3.2).
 	fnBody *box
+	// note reports a call whose body goes to the note area rather than
+	// the footnote area.
+	note bool
 	// mc is the multi-column layout of a multi-column container (CSS
 	// Multicol 1), nil for any other box.
 	mc *mcolData

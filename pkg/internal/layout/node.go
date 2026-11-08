@@ -122,7 +122,9 @@ type Node struct {
 	// Footnote, set on an inline Element, makes it a footnote call: the
 	// node is laid out in the flow, and the footnote body Footnote holds
 	// is laid out in the footnote area of the page the call lands on, or
-	// of a later page when that one has no room (CSS GCPM 3, 3).
+	// of a later page when that one has no room (CSS GCPM 3, 3). A body
+	// whose Style has a Note is a note: it goes to the page's note area
+	// ([PageBox.NoteArea]) by the same rule.
 	Footnote *Node
 }
 
@@ -220,6 +222,14 @@ type PageBox struct {
 	// rule (CSS GCPM 3, 3.4): its margins, borders, padding, background
 	// and max-height apply. nil lays the area out unstyled.
 	Footnote *css.Style
+	// NoteArea is the style of the page's note area, the @note-area rule:
+	// the bodies of the note calls ([Node.Footnote] whose Style has a
+	// Note) that land on the page lay out in it. In the flow it sits at
+	// the top of the page area and pushes the page's content down; an
+	// absolutely positioned area is placed by its insets against the
+	// page area and takes no room. nil lays the area out unstyled, in the
+	// flow.
+	NoteArea *css.Style
 	// Frame, when not nil, is a border drawn on the page (WordprocessingML
 	// pgBorders, ODF page-layout borders), over the page background and
 	// under the margin content and the page area's content.
