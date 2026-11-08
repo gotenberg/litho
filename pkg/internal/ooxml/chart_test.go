@@ -208,7 +208,7 @@ func TestChartFromElement_Warnings(t *testing.T) {
 		msgs = append(msgs, w.Message)
 	}
 	got := strings.Join(msgs, "|")
-	for _, want := range []string{"3D line", "equation", "error bars", "surface"} {
+	for _, want := range []string{"3D line", "equation", "surface"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("warnings %q lack %q", got, want)
 		}
@@ -517,5 +517,21 @@ func TestChartFromElement_Trendlines(t *testing.T) {
 	}
 	if !hasWarning(c, CodeChartUnsupported) {
 		t.Error("an equation shown is not reported")
+	}
+}
+
+func TestChartFromElement_ErrorBars(t *testing.T) {
+	eb := `<c:errBars><c:errDir val="y"/><c:errBarType val="plus"/><c:errValType val="percentage"/><c:noEndCap val="1"/><c:val val="5"/></c:errBars>` +
+		`<c:errBars><c:errDir val="x"/><c:errBarType val="both"/><c:errValType val="cust"/><c:plus><c:numLit><c:ptCount val="1"/><c:pt idx="0"><c:v>2</c:v></c:pt></c:numLit></c:plus></c:errBars>`
+	c := readChart(t, chartXML("", "", `<c:barChart>`+ser(0, "A", eb, "1")+`</c:barChart>`), false)
+	got := c.Groups[0].Series[0].ErrorBars
+	if len(got) != 2 {
+		t.Fatalf("error bars = %+v, want two", got)
+	}
+	if a := got[0]; a.Kind != chart.ErrorPercent || a.Plus != 5 || !a.Up || a.Down || !a.NoCap || a.X || a.Line == nil {
+		t.Errorf("first = %+v", a)
+	}
+	if b := got[1]; b.Kind != chart.ErrorCustom || b.X || !b.Up || !b.Down || b.PlusData.Len() != 1 {
+		t.Errorf("second = %+v, want a bar chart's custom bars along its values", b)
 	}
 }

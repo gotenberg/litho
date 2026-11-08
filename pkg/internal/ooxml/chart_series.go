@@ -178,6 +178,44 @@ func (p *chartReader) trendline(e *Element) (chart.Trendline, bool) {
 	return t, true
 }
 
+// errorBars reads a c:errBars (ECMA-376 Part 1, 21.2.2.55) of a series of
+// group g, false for an unknown value type: a bar chart's bars run along
+// its values whatever c:errDir says, as oox's ErrorBarConverter reads
+// them.
+func (p *chartReader) errorBars(e *Element, g *chart.Group) (chart.ErrorBars, bool) {
+	b := chart.ErrorBars{X: childVal(e, "errDir") == "x" && (g.Kind == chart.Scatter || g.Kind == chart.Bubble)}
+	val := floatVal(e, "val")
+	if math.IsNaN(val) {
+		val = 0
+	}
+	switch childVal(e, "errValType") {
+	case "fixedVal", "":
+		b.Kind, b.Plus, b.Minus = chart.ErrorFixed, val, val
+	case "percentage":
+		b.Kind, b.Plus = chart.ErrorPercent, val
+	case "stdDev":
+		b.Kind, b.Plus = chart.ErrorStdDev, val
+	case "stdErr":
+		b.Kind, b.Plus = chart.ErrorStdErr, 1
+	case "cust":
+		b.Kind = chart.ErrorCustom
+		b.PlusData, b.MinusData = readData(e.Child(NSChart, "plus")), readData(e.Child(NSChart, "minus"))
+	default:
+		return b, false
+	}
+	switch childVal(e, "errBarType") {
+	case "plus":
+		b.Up = true
+	case "minus":
+		b.Down = true
+	default:
+		b.Up, b.Down = true, true
+	}
+	b.NoCap = boolVal(e, "noEndCap", false)
+	b.Line = p.lineOf(e.Child(NSChart, "spPr"), p.autoLine())
+	return b, true
+}
+
 // sortSeries orders series by their c:order, which their Index holds,
 // stable (ECMA-376 Part 1, 21.2.2.128 order), then gives each its c:idx,
 // idx in the series' file order, as Index (21.2.2.84 idx).
@@ -277,8 +315,12 @@ func (p *chartReader) series(e *Element, g *chart.Group, scatterLines, lineMarke
 			}
 		}
 	}
-	if e.Child(NSChart, "errBars") != nil {
-		p.warn(CodeChartUnsupported, "error bars are not drawn")
+	for _, eb := range e.Kids() {
+		if eb.Is(NSChart, "errBars") && len(s.ErrorBars) < maxTrendlines {
+			if b, ok := p.errorBars(eb, g); ok {
+				s.ErrorBars = append(s.ErrorBars, b)
+			}
+		}
 	}
 	return s
 }

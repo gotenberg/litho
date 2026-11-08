@@ -23,8 +23,8 @@ const RelChart = "http://schemas.openxmlformats.org/officeDocument/2006/relation
 // Warning codes [ParseChart] reports.
 const (
 	// CodeChartUnsupported flags a chart construct drawn approximately or
-	// not at all: a 3D chart drawn flat, a trendline's equation, error
-	// bars, user shapes, an unknown chart type.
+	// not at all: a 3D chart drawn flat, a trendline's equation, user
+	// shapes, an unknown chart type.
 	CodeChartUnsupported = "chart-unsupported"
 	// CodeChartNoCache flags a series whose file holds no cached values,
 	// drawn empty unless the converter resolves its range.
