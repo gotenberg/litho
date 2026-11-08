@@ -272,6 +272,11 @@ func (rd *renderer) cartesian(avail compose.Rect) {
 		}
 		labels = append(labels, rd.series(g, x, y)...)
 	}
+	for _, g := range c.Groups {
+		if y := yOf[g]; y != nil {
+			rd.trendlines(g, x, y)
+		}
+	}
 	for _, f := range labels {
 		f()
 	}

@@ -76,6 +76,14 @@ func (rd *renderer) legendEntries(st TextStyle, maxW float64) []legendEntry {
 				}
 			}
 			n++
+			// A series' trendlines follow it, each a line key (chart2's
+			// VSeriesPlotter::createLegendEntriesForSeries).
+			for _, t := range s.Trendlines {
+				if len(out) >= maxLegendEntries {
+					break
+				}
+				out = append(out, legendEntry{label: rd.measure(trendName(t, s), st, maxW), border: rd.trendStroke(g, s, t), lineKey: true, marker: Marker{Symbol: MarkerNone}})
+			}
 		}
 	}
 	return out

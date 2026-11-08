@@ -30,7 +30,10 @@
 // is shaped through the text package and emitted as [compose.Text], so
 // extraction reads it.
 //
-// Not drawn: 3D perspective (a 3D chart draws flat), trendlines, error
-// bars, high-low lines and up-down bars, leader lines, multi-level
-// categories (their levels join on one label).
+// Trendlines fit their series by least squares, or average them, and
+// enter the legend after their series.
+//
+// Not drawn: 3D perspective (a 3D chart draws flat), the equations of
+// trendlines, error bars, high-low lines and up-down bars, leader lines,
+// multi-level categories (their levels join on one label).
 package chart

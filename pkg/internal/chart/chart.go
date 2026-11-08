@@ -214,10 +214,67 @@ type Series struct {
 	Points []Point
 	// NoLegend leaves the series out of the legend.
 	NoLegend bool
+	// Trendlines are the regression curves drawn over the series.
+	Trendlines []Trendline
 	// Bins, when set, draws the series as a histogram: its values are
 	// counted into bins, which become the series' categories and values
 	// (MS-ODRAWXML, 2.24.3.5 CT_Binning).
 	Bins *Binning
+}
+
+// TrendKind is the regression a [Trendline] fits (ECMA-376 Part 1,
+// 21.2.3.51 ST_TrendlineType; ODF 1.3 Part 3, 20.86 chart:regression-type).
+type TrendKind uint8
+
+// The trendline kinds.
+const (
+	TrendLinear TrendKind = iota
+	TrendExponential
+	TrendLogarithmic
+	TrendPolynomial
+	TrendPower
+	TrendMovingAverage
+)
+
+// MovingType is how a moving average places its points (ODF 1.3 Part 3,
+// 20.86.1 chart:regression-moving-type).
+type MovingType uint8
+
+// The moving average types.
+const (
+	// MovingPrior averages each point with the points before it, at the
+	// point's x.
+	MovingPrior MovingType = iota
+	// MovingCentral averages the same windows, placed at the middle
+	// point's x.
+	MovingCentral
+	// MovingAveragedAbscissa places each average at the average x of its
+	// window.
+	MovingAveragedAbscissa
+)
+
+// Trendline is a regression curve fitted to a series' points: x is a
+// scatter series' x value, or a category's 1-based index (ECMA-376 Part 1,
+// 21.2.2.211 trendline; ODF 1.3 Part 3, 11.15 chart:regression-curve).
+type Trendline struct {
+	Kind TrendKind
+	// Order is a polynomial's degree, 2 to 6.
+	Order int
+	// Period is a moving average's window, at least 2.
+	Period int
+	Moving MovingType
+	// Forward and Backward extend the curve past the greatest and the
+	// least x, in x units.
+	Forward, Backward float64
+	// Intercept, when HasIntercept, forces the curve through (0,
+	// Intercept): a linear, polynomial or exponential fit.
+	Intercept    float64
+	HasIntercept bool
+	// Name is the legend entry's text; "" takes the kind's name and the
+	// series' ("Linear (Sales)").
+	Name string
+	// Line is the curve's line, nil for the series' colour.
+	Line *Stroke
 }
 
 // Binning is how a histogram series counts its values into bins.
