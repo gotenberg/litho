@@ -354,7 +354,7 @@ func TestRead_MetaAndWarnings(t *testing.T) {
 	if c := cellAt(doc.Sheets[0], 0, 0); c == nil || c.Value.Text != "v" {
 		t.Errorf("annotated cell = %+v", c)
 	}
-	for _, code := range []string{"conditional-formats", "comments", "validations", "named-expressions"} {
+	for _, code := range []string{"comments", "validations", "named-expressions"} {
 		if !hasWarning(w, code) {
 			t.Errorf("no %s warning in %+v", code, w)
 		}

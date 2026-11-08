@@ -80,6 +80,7 @@ type reader struct {
 
 	doc      *sheet.Document
 	cellSty  map[string]*sheet.Style
+	condSty  map[string]*sheet.Style
 	pages    map[string]pageResult
 	pics     map[string]*picResult
 	pixels   int64
@@ -98,7 +99,7 @@ type reader struct {
 func newReader(ctx context.Context, pkg *odf.Package, fonts *text.Fonts) *reader {
 	return &reader{
 		ctx: ctx, pkg: pkg, fonts: fonts, styles: odf.NewStyles(pkg), data: odf.NewDataStyles(pkg),
-		cellSty: map[string]*sheet.Style{}, pages: map[string]pageResult{}, pics: map[string]*picResult{},
+		cellSty: map[string]*sheet.Style{}, condSty: map[string]*sheet.Style{}, pages: map[string]pageResult{}, pics: map[string]*picResult{},
 		warned: map[string]bool{},
 	}
 }
@@ -302,8 +303,8 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 			if len(c.Children) > 0 {
 				r.warn("named-expressions", "named ranges and expressions are not read")
 			}
-		case c.Name.Local == "conditional-formats":
-			r.warn("conditional-formats", "conditional formatting is not applied")
+		case c.Is(nsCalcExt, "conditional-formats"):
+			r.conditionalFormats(sh, c)
 		case c.Is(odf.NSOffice, "forms"):
 			if len(c.Children) > 0 {
 				r.warn("form-controls", "form controls are not drawn")
