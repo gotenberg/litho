@@ -8,6 +8,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/odf"
 )
 
 // styledRect returns a document of one rectangle in the automatic
@@ -26,7 +28,7 @@ func TestRead_Fill(t *testing.T) {
 	red, blue := css.Color{R: 1, A: 1}, css.Color{B: 1, A: 1}
 	grads := `<draw:gradient draw:name="lin" draw:style="linear" draw:start-color="#ff0000" draw:end-color="#0000ff" draw:angle="90deg" draw:border="40%"/>` +
 		`<draw:gradient draw:name="ax" draw:style="axial" draw:start-color="#ff0000" draw:end-color="#0000ff" draw:angle="0deg" draw:border="50%"/>` +
-		`<draw:gradient draw:name="rad" draw:style="radial" draw:start-color="#ff0000" draw:end-color="#0000ff" draw:border="50%"/>` +
+		`<draw:gradient draw:name="rad" draw:style="radial" draw:cx="25%" draw:cy="75%" draw:start-color="#ff0000" draw:end-color="#0000ff" draw:border="50%"/>` +
 		`<draw:gradient draw:name="int" draw:style="linear" draw:start-color="#ff0000" draw:end-color="#0000ff" draw:start-intensity="50%"/>` +
 		`<draw:hatch draw:name="h" draw:style="double" draw:color="#000000" draw:distance="0.1cm" draw:rotation="45deg"/>` +
 		`<draw:fill-image draw:name="img"><office:binary-data>iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==</office:binary-data></draw:fill-image>`
@@ -40,16 +42,16 @@ func TestRead_Fill(t *testing.T) {
 		// Measured on the pinned LibreOffice: a linear gradient at 90
 		// degrees runs left to right, its border in the start colour.
 		{"linear", `draw:fill="gradient" draw:fill-gradient-name="lin"`, slides.Fill{Kind: slides.FillGradient, Gradient: &slides.Gradient{
-			Stops: []slides.Stop{{Position: 0, Color: red}, {Position: 0.4, Color: red}, {Position: 1, Color: blue}}}}},
+			CenterX: 0.5, CenterY: 0.5, Border: 0.4, Stops: []slides.Stop{{Position: 0, Color: red}, {Position: 1, Color: blue}}}}},
 		// An axial gradient puts the start colour in the middle and its
 		// border in the end colour at both edges.
-		{"axial", `draw:fill="gradient" draw:fill-gradient-name="ax"`, slides.Fill{Kind: slides.FillGradient, Gradient: &slides.Gradient{Angle: 90,
+		{"axial", `draw:fill="gradient" draw:fill-gradient-name="ax"`, slides.Fill{Kind: slides.FillGradient, Gradient: &slides.Gradient{Angle: 90, CenterX: 0.5, CenterY: 0.5,
 			Stops: []slides.Stop{{Position: 0, Color: blue}, {Position: 0.25, Color: blue}, {Position: 0.5, Color: red}, {Position: 0.75, Color: blue}, {Position: 1, Color: blue}}}}},
 		// A radial gradient has the end colour at the centre, its border
 		// in the start colour outside.
-		{"radial", `draw:fill="gradient" draw:fill-gradient-name="rad"`, slides.Fill{Kind: slides.FillGradient, Gradient: &slides.Gradient{Radial: true,
+		{"radial", `draw:fill="gradient" draw:fill-gradient-name="rad"`, slides.Fill{Kind: slides.FillGradient, Gradient: &slides.Gradient{Radial: true, CenterX: 0.25, CenterY: 0.75,
 			Stops: []slides.Stop{{Position: 0, Color: blue}, {Position: 0.5, Color: red}, {Position: 1, Color: red}}}}},
-		{"intensity", `draw:fill="gradient" draw:fill-gradient-name="int"`, slides.Fill{Kind: slides.FillGradient, Gradient: &slides.Gradient{Angle: 90,
+		{"intensity", `draw:fill="gradient" draw:fill-gradient-name="int"`, slides.Fill{Kind: slides.FillGradient, Gradient: &slides.Gradient{Angle: 90, CenterX: 0.5, CenterY: 0.5,
 			Stops: []slides.Stop{{Position: 0, Color: css.Color{R: 128.0 / 255, A: 1}}, {Position: 1, Color: blue}}}}},
 		{"hatch", `draw:fill="hatch" draw:fill-hatch-name="h" draw:fill-hatch-solid="true" draw:fill-color="#ffffff"`,
 			slides.Fill{Kind: slides.FillPattern, Pattern: "diagCross", Color: css.Color{A: 1}, Background: css.Color{R: 1, G: 1, B: 1, A: 1}}},
@@ -69,7 +71,7 @@ func TestRead_Fill(t *testing.T) {
 			}
 			if tt.want.Gradient != nil {
 				g, w := got.Gradient, tt.want.Gradient
-				if g.Angle != w.Angle || g.Radial != w.Radial || !slices.EqualFunc(g.Stops, w.Stops, func(a, b slides.Stop) bool {
+				if g.Angle != w.Angle || g.Radial != w.Radial || !near(g.CenterX, w.CenterX) || !near(g.CenterY, w.CenterY) || !near(g.Border, w.Border) || !slices.EqualFunc(g.Stops, w.Stops, func(a, b slides.Stop) bool {
 					return near(a.Position, b.Position) && a.Color == b.Color
 				}) {
 					t.Errorf("gradient = %+v, want %+v", *g, *w)
@@ -168,6 +170,66 @@ func TestRead_TextBodyProps(t *testing.T) {
 			if tb == nil || !nearAll(tb.Insets[:], w.Insets[:]) || tb.Anchor != w.Anchor || tb.Wrap != w.Wrap || tb.Autofit != w.Autofit ||
 				tb.Columns != w.Columns || !near(tb.ColumnGap, w.ColumnGap) || tb.Vertical != w.Vertical {
 				t.Errorf("text body = %+v, want %+v", tb, w)
+			}
+		})
+	}
+}
+
+func TestHatchPattern_AngleAndSpacing(t *testing.T) {
+	tests := []struct {
+		style    string
+		rotation float64
+		distance float64
+		want     string
+	}{
+		{"single", 0, 3, "horz"},
+		{"single", 0, 1, "narHorz"},
+		{"single", 90, 5, "vert"},
+		{"single", 92, 1, "narVert"},
+		{"single", 45, 3, "upDiag"},
+		{"single", 135, 3, "dnDiag"},
+		{"double", 0, 3, "cross"},
+		{"double", 0, 6, "lgGrid"},
+		{"triple", 45, 3, "diagCross"},
+	}
+	for _, tt := range tests {
+		if got := hatchPattern(&odf.Hatch{Style: tt.style, Rotation: tt.rotation, Distance: tt.distance}); got != tt.want {
+			t.Errorf("%s at %g deg, %g pt = %q, want %q", tt.style, tt.rotation, tt.distance, got, tt.want)
+		}
+	}
+}
+
+func TestTiling_Placement(t *testing.T) {
+	area := compose.Rect{X: 0, Y: 0, Width: 10, Height: 10}
+	tests := []struct {
+		name   string
+		tiling tiling
+		want   []compose.Rect
+	}{
+		// A tile half the area wide, centred: the tiles straddle the
+		// centre lines.
+		{"centred", tiling{ref: "center", size: fillImageSize{relW: 0.5, relH: 1}}, []compose.Rect{
+			{X: -2.5, Y: 0, Width: 5, Height: 10}, {X: 2.5, Y: 0, Width: 5, Height: 10}, {X: 7.5, Y: 0, Width: 5, Height: 10}}},
+		// Moved by a fifth of a tile, from the corner.
+		{"moved", tiling{refX: 0.2, size: fillImageSize{w: 10, h: 10}}, []compose.Rect{
+			{X: -8, Y: 0, Width: 10, Height: 10}, {X: 2, Y: 0, Width: 10, Height: 10}}},
+		// Every other row shifted by half a tile.
+		{"brick", tiling{offset: 0.5, size: fillImageSize{w: 10, h: 5}}, []compose.Rect{
+			{X: 0, Y: 0, Width: 10, Height: 5}, {X: -5, Y: 5, Width: 10, Height: 5}, {X: 5, Y: 5, Width: 10, Height: 5}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pic := tt.tiling.picture(&layout.Picture{Width: 1, Height: 1, Source: &compose.ImageSource{}})
+			frags := pic.Vector(context.Background(), area)
+			if len(frags) != 1 {
+				t.Fatalf("fragments = %d, want a clipped group", len(frags))
+			}
+			var got []compose.Rect
+			for _, f := range frags[0].(*compose.Group).Content {
+				got = append(got, f.(*compose.Image).Rect)
+			}
+			if !slices.EqualFunc(got, tt.want, nearRect) {
+				t.Errorf("tiles = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -45,7 +45,9 @@ func (r *reader) opacity(p odf.Props) float64 {
 		return math.Max(0, math.Min(1, 1-v))
 	}
 	if g := r.draw.Opacities[p.Get("draw:opacity-name")]; g != nil {
-		r.warn("opacity-gradient", "a transparency gradient is drawn as its mean opacity")
+		if g.StartValue != g.EndValue {
+			r.warn("opacity-gradient", "a transparency gradient is drawn as its mean opacity")
+		}
 		return (g.StartValue + g.EndValue) / 2
 	}
 	return 1
@@ -101,15 +103,26 @@ func (r *reader) fill(p odf.Props, def string) slides.Fill {
 		if rep == "no-repeat" {
 			return slides.Fill{Kind: slides.FillPicture, Picture: placedOnce(pic, p.Get("draw:fill-image-ref-point"), size)}
 		}
-		if rep == "repeat" && size.relW == 0 && size.relH == 0 && (size.w != pic.Width || size.h != pic.Height) {
-			sized := *pic
-			sized.Width, sized.Height = size.w, size.h
-			pic = &sized
+		if rep != "repeat" {
+			return slides.Fill{Kind: slides.FillPicture, Picture: pic}
 		}
-		if p.Get("draw:fill-image-ref-point") != "" && rep == "repeat" {
-			r.warn("bitmap-tile-origin", "a tiled picture fill's reference point and offsets are not applied: the tiles start at the corner")
+		t := tiling{ref: p.Get("draw:fill-image-ref-point"), size: size}
+		t.refX, _ = odf.Percent(p.Get("draw:fill-image-ref-point-x"))
+		t.refY, _ = odf.Percent(p.Get("draw:fill-image-ref-point-y"))
+		if f := strings.Fields(p.Get("draw:tile-repeat-offset")); len(f) == 2 {
+			if v, ok := odf.Percent(f[0]); ok {
+				t.offset, t.vertical = clamp(v, 0, 1), f[1] == "vertical"
+			}
 		}
-		return slides.Fill{Kind: slides.FillPicture, Picture: pic, Tile: rep == "repeat"}
+		if t.plain() {
+			if size.w != pic.Width || size.h != pic.Height {
+				sized := *pic
+				sized.Width, sized.Height = size.w, size.h
+				pic = &sized
+			}
+			return slides.Fill{Kind: slides.FillPicture, Picture: pic, Tile: true}
+		}
+		return slides.Fill{Kind: slides.FillPicture, Picture: t.picture(pic)}
 	case "hatch":
 		h := r.draw.Hatches[p.Get("draw:fill-hatch-name")]
 		if h == nil {
@@ -129,12 +142,15 @@ func (r *reader) fill(p odf.Props, def string) slides.Fill {
 // gradient maps a draw:gradient onto the model's stops as Impress draws
 // it, measured on the pinned LibreOffice: a linear gradient runs from
 // the start colour to the end colour along draw:angle, its draw:border
-// fraction painted in the start colour first; an axial one has the start
-// colour in the middle and the end colour at both edges, the border in
-// the end colour at the edges; a radial one has the end colour at the
-// centre and the start colour at half the box's diagonal, the border in
-// the start colour outside. Ellipsoid, square and rectangular gradients
-// are drawn radial, and every centre is the box's, with a warning.
+// fraction painted in the start colour first, which Border carries; an
+// axial one has the start colour in the middle and the end colour at
+// both edges, the border in the end colour at the edges; a radial one
+// has the end colour at its centre, draw:cx and draw:cy as CenterX and
+// CenterY, and the start colour at half the box's diagonal, the border
+// in the start colour outside. The border of an axial or radial
+// gradient lies at both edges or outside, where Border, a band before
+// the first stop, cannot say it: the stops carry it. Ellipsoid, square
+// and rectangular gradients are drawn radial, with a warning.
 func (r *reader) gradient(g *odf.Gradient, alpha float64) *slides.Gradient {
 	col := func(c odf.Color) css.Color {
 		cc := cssColor(c)
@@ -146,7 +162,7 @@ func (r *reader) gradient(g *odf.Gradient, alpha float64) *slides.Gradient {
 		stops = []odf.GradientStop{{Offset: 0, Color: g.Start}, {Offset: 1, Color: g.End}}
 	}
 	b := g.Border
-	out := &slides.Gradient{}
+	out := &slides.Gradient{CenterX: 0.5, CenterY: 0.5}
 	switch g.Style {
 	case "axial":
 		// Half the axis from an edge (the end) to the middle (the start).
@@ -169,10 +185,8 @@ func (r *reader) gradient(g *odf.Gradient, alpha float64) *slides.Gradient {
 		if g.Style != "radial" {
 			r.warn("gradient-"+g.Style, g.Style+" gradients are drawn radial")
 		}
-		if g.CX != 0.5 || g.CY != 0.5 {
-			r.warn("gradient-centre", "a radial gradient's centre is drawn at the shape's centre")
-		}
 		out.Radial = true
+		out.CenterX, out.CenterY = g.CX, g.CY
 		for i := len(stops) - 1; i >= 0; i-- {
 			out.Stops = append(out.Stops, slides.Stop{Position: (1 - b) * (1 - stops[i].Offset), Color: col(stops[i].Color)})
 		}
@@ -180,12 +194,10 @@ func (r *reader) gradient(g *odf.Gradient, alpha float64) *slides.Gradient {
 			out.Stops = append(out.Stops, slides.Stop{Position: 1, Color: col(stops[0].Color)})
 		}
 	default:
-		if b > 0 {
-			out.Stops = append(out.Stops, slides.Stop{Position: 0, Color: col(stops[0].Color)})
-		}
 		for _, s := range stops {
-			out.Stops = append(out.Stops, slides.Stop{Position: b + (1-b)*s.Offset, Color: col(s.Color)})
+			out.Stops = append(out.Stops, slides.Stop{Position: s.Offset, Color: col(s.Color)})
 		}
+		out.Border = min(b, 0.999)
 		out.Angle = axisAngle(g.Angle)
 	}
 	return out
@@ -203,23 +215,35 @@ func axisAngle(a float64) float64 {
 }
 
 // hatchPattern maps a draw:hatch (ODF 1.3, Part 3, 16.42.5) onto the
-// DrawingML pattern preset of the same lines (ECMA-376 Part 1, 20.1.10.51):
-// horizontal, vertical or diagonal lines, crossed for a double or a
-// triple hatch, at the angle nearest its draw:rotation. The spacing is
-// the preset's.
+// DrawingML pattern preset of the same lines (ECMA-376 Part 1, 20.1.10.51)
+// by angle and spacing: horizontal, vertical or diagonal lines, crossed
+// for a double or a triple hatch, at the angle nearest its draw:rotation,
+// and the preset whose line spacing is nearest draw:distance. The presets'
+// 8 by 8 cells, a pixel being 0.75 pt, space their lines 4 pixels apart
+// (3 pt), the narrow ones 2 (1.5 pt), the large grid 8 (6 pt); a
+// diagonal preset's lines lie 4 pixels apart along the axes, 2.1 pt
+// apart across.
 func hatchPattern(h *odf.Hatch) string {
 	a := math.Mod(math.Round(h.Rotation/45)*45, 180)
 	if a < 0 {
 		a += 180
 	}
+	d := h.Distance
+	narrow := d > 0 && d < (1.5+3)/2
 	cross := h.Style == "double" || h.Style == "triple"
 	switch {
 	case cross && (a == 45 || a == 135):
 		return "diagCross"
+	case cross && d >= (3+6)/2:
+		return "lgGrid"
 	case cross:
 		return "cross"
+	case a == 0 && narrow:
+		return "narHorz"
 	case a == 0:
 		return "horz"
+	case a == 90 && narrow:
+		return "narVert"
 	case a == 90:
 		return "vert"
 	case a == 45:
@@ -458,6 +482,96 @@ func placedOnce(pic *layout.Picture, ref string, size fillImageSize) *layout.Pic
 			content = src.Vector(ctx, at)
 		} else {
 			content = []compose.Fragment{&compose.Image{Rect: at, Source: src.Source}}
+		}
+		return []compose.Fragment{&compose.Group{Clip: &compose.Path{Ops: shape.RectOps(area)}, Content: content}}
+	}}
+}
+
+// clamp returns v within [lo, hi].
+func clamp(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
+
+// maxTiles caps the tiles one tiled picture fill draws itself: 10,000.
+// Anti-DoS guard, not spec-mandated: a slide tiled with a 1 cm picture
+// holds a few hundred; past the cap the fill tiles from its corner.
+const maxTiles = 10_000
+
+// tiling is how a picture fill of style:repeat repeat (ODF 1.3, Part 3,
+// 20.341) lays its tiles: their size, the reference point of the area a
+// tile is aligned with (20.125 draw:fill-image-ref-point), the movement
+// after it as fractions of a tile (20.126 and 20.127
+// draw:fill-image-ref-point-x and -y), and the shift of every other row,
+// or column when vertical, as a fraction of a tile (20.133
+// draw:tile-repeat-offset), as Impress draws them.
+type tiling struct {
+	ref        string
+	refX, refY float64
+	offset     float64
+	vertical   bool
+	size       fillImageSize
+}
+
+// plain reports a tiling the model's corner-anchored Tile draws: tiles of
+// a fixed size from the top-left corner, unshifted.
+func (t tiling) plain() bool {
+	return (t.ref == "" || t.ref == "top-left") && t.refX == 0 && t.refY == 0 && t.offset == 0 && t.size.relW == 0 && t.size.relH == 0
+}
+
+// picture returns a picture that, stretched over an area as the model
+// draws a fill picture, paints pic tiled over it as t says, clipped to
+// the area.
+func (t tiling) picture(pic *layout.Picture) *layout.Picture {
+	src := pic
+	return &layout.Picture{Width: pic.Width, Height: pic.Height, NoRatio: true, Vector: func(ctx context.Context, area compose.Rect) []compose.Fragment {
+		w, h := t.size.w, t.size.h
+		if t.size.relW > 0 {
+			w = area.Width * t.size.relW
+		}
+		if t.size.relH > 0 {
+			h = area.Height * t.size.relH
+		}
+		if w <= 0 || h <= 0 || (area.Width/w+2)*(area.Height/h+2) > maxTiles {
+			return nil
+		}
+		// The tile aligned with the reference point, then moved.
+		x0, y0 := area.X+(area.Width-w)/2, area.Y+(area.Height-h)/2
+		if strings.Contains(t.ref, "left") || t.ref == "" {
+			x0 = area.X
+		} else if strings.Contains(t.ref, "right") {
+			x0 = area.X + area.Width - w
+		}
+		if strings.HasPrefix(t.ref, "top") || t.ref == "" {
+			y0 = area.Y
+		} else if strings.HasPrefix(t.ref, "bottom") {
+			y0 = area.Y + area.Height - h
+		}
+		x0 += t.refX * w
+		y0 += t.refY * h
+		// The first row and column at or before the area's corner, of the
+		// same parity as the aligned tile's.
+		col0 := 2*math.Floor((area.X-x0)/w/2) - 2
+		row0 := 2*math.Floor((area.Y-y0)/h/2) - 2
+		var content []compose.Fragment
+		for row := row0; y0+row*h < area.Y+area.Height+h; row++ {
+			for col := col0; x0+col*w < area.X+area.Width+w; col++ {
+				x, y := x0+col*w, y0+row*h
+				if t.offset > 0 && t.vertical && int(col)%2 != 0 {
+					y += t.offset * h
+				} else if t.offset > 0 && !t.vertical && int(row)%2 != 0 {
+					x += t.offset * w
+				}
+				if x+w <= area.X || y+h <= area.Y || x >= area.X+area.Width || y >= area.Y+area.Height {
+					continue
+				}
+				if ctx.Err() != nil {
+					return nil
+				}
+				at := compose.Rect{X: x, Y: y, Width: w, Height: h}
+				if src.Vector != nil {
+					content = append(content, src.Vector(ctx, at)...)
+				} else {
+					content = append(content, &compose.Image{Rect: at, Source: src.Source})
+				}
+			}
 		}
 		return []compose.Fragment{&compose.Group{Clip: &compose.Path{Ops: shape.RectOps(area)}, Content: content}}
 	}}
