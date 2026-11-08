@@ -231,7 +231,11 @@ func (p *painter) sync(chain []*box) *ditem {
 // clipPath returns the padding box of b, its inner radii rounding it, the
 // clip overflow: hidden applies (CSS 2.1, 11.1.1; CSS Backgrounds 3, 5.3).
 func (p *painter) clipPath(b *box) *compose.Path {
-	r := p.borderRect(b)
+	// The clip stays where b's own relative offsets put it, whichever
+	// relatively positioned descendant asks for it.
+	ax, ay := ancestorOffset(b)
+	ox, oy := offset(b)
+	r := compose.Rect{X: b.x + ax + ox, Y: b.y + ay + oy, Width: b.borderW(), Height: b.borderH()}
 	radii := radiiOf(b, r.Width, r.Height)
 	pr, pradii := insetRect(r, radii, b.bd)
 	return &compose.Path{Ops: roundedRect(pr, pradii), Fill: &compose.Fill{Rule: compose.NonZero}}
