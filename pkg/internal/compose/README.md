@@ -154,11 +154,11 @@ Each wave ships behind oracles wired into the corpus matrix
 Wave 4 depends on wave 0 alone, so the Office converters run beside waves
 1 to 3 once the model is frozen.
 
-Status: waves 0 to 4 are done. `test/integration/baseline.json` records
-the oracle scores per fixture; the wpt, weasyprint, html, svg, docx and
-odt cells score the converters in a few minutes (`go run
-./test/integration/cmd/corpus run
---corpus=wpt,weasyprint,html,svg,docx,odt
+Status: waves 0 to 5 are done. `test/integration/baseline.json` records
+the oracle scores per fixture; the wpt, weasyprint, html, svg, docx, odt,
+xlsx, ods and csv cells score the converters in a quarter of an hour (`go
+run ./test/integration/cmd/corpus run
+--corpus=wpt,weasyprint,html,svg,docx,odt,xlsx,ods,csv
 --feature=reftest,draw,diff,svgdraw`).
 Wave 1 also took positioning, transforms, gradients, box-shadow, outlines
 and generated content from wave 3, and wave 2 took flexbox, because the
@@ -200,6 +200,29 @@ a page cut, columns of different widths, the footnote separator, kerning
 off, and vertical text in cells and frames. Where LibreOffice and the
 specification disagree, LibreOffice is the reference, and the docx and
 odt corpora hold its own test documents, fetched at the pinned release.
+
+Wave 5 added the spreadsheet converters, judged against LibreOffice Calc
+the same way: `convert/xlsx`, `convert/ods` and `convert/csv` read their
+files into one model, `convert/sheet`'s, which knows cells, styles,
+number format codes, page setups, headers, footers and anchored drawings
+and nothing of any file format, and `convert/sheet` paginates it as Calc
+prints a sheet: the print ranges cut into pages by paper, margins, scale
+or fit-to-pages, page order, repeated rows and columns and manual breaks,
+the cells as absolutely positioned boxes with their own fills, borders
+and grid, text overflowing into empty neighbours and numbers narrowed or
+replaced by "###" to fit, the headers and footers with their fields, and
+each sheet on one page of its content's size for the single-page export.
+`numfmt` formats a value by a SpreadsheetML format code as Calc shows it
+(an ODF data style is translated to the code it means), for cells and
+chart labels alike. `chart` reads DrawingML and OpenDocument charts into
+one model and draws them with LibreOffice's own automatic layout, scaling
+and default colours: bars, lines, areas, pies, scatter, bubbles and
+radars. A CSV file loads as the LibreOffice route loads one: fields split
+at commas, semicolons and tabs, types detected, the page header off. The
+wave also closed wave 4's open engine items: page-anchored boxes count
+their anchor page alone, row spans split across pages, justified Office
+lines shrink their spaces as Word 2013 does, keep-with-next chains and
+proportional spacing at a page cut follow Writer.
 
 The differential oracle compares page count, PDF.js text with reading
 order, link sets, outline, tag tree and a layout-tolerant score over
