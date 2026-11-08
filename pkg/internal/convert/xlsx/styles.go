@@ -92,6 +92,9 @@ type styleSheet struct {
 	normalXf int
 	// resolved caches the style of each cell format.
 	resolved map[int]*sheet.Style
+	// tables holds the table styles read: the workbook's own, then the
+	// presets as tables name them, nil for an unknown name.
+	tables map[string]*tableStyle
 }
 
 // indexed returns the palette colour of index i (ECMA-376 Part 1,
@@ -114,7 +117,7 @@ func (s *styleSheet) indexed(i int) (css.Color, bool) {
 // part yields the defaults: the General format and LibreOffice's default
 // font.
 func (r *reader) readStyles(main string) error {
-	s := &styleSheet{numFmts: map[int]string{}, resolved: map[int]*sheet.Style{}}
+	s := &styleSheet{numFmts: map[int]string{}, resolved: map[int]*sheet.Style{}, tables: map[string]*tableStyle{}}
 	for i, v := range defaultPalette {
 		s.palette[i] = rgb(v)
 	}
@@ -172,6 +175,12 @@ func (r *reader) readStyles(main string) error {
 	}
 	s.styleXfs = r.xfs(root.Child(nsMain, "cellStyleXfs"), false)
 	s.cellXfs = r.xfs(root.Child(nsMain, "cellXfs"), true)
+	dxfs := root.Child(nsMain, "dxfs").Kids()
+	for _, ts := range root.Child(nsMain, "tableStyles").Kids() {
+		if ts.Is(nsMain, "tableStyle") && len(s.tables) < maxStyleRecords && attr(ts, "pivot") != "1" {
+			s.tables[attr(ts, "name")] = r.parseTableStyle(ts, dxfs, 0)
+		}
+	}
 	for _, c := range root.Child(nsMain, "cellStyles").Kids() {
 		if c.Is(nsMain, "cellStyle") && attr(c, "builtinId") == "0" {
 			if id, ok := ooxml.Int(attr(c, "xfId")); ok && id >= 0 {

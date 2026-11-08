@@ -19,12 +19,15 @@ const maxTables = 256
 // tables reads the sheet's table parts (ECMA-376 Part 1, 18.5.1.2 table):
 // a header cell the sheet leaves empty shows its column's name, as
 // LibreOffice writes the names of a database range's columns into its
-// header row. The table's style is not applied.
+// header row, and the table's style (18.5.1.5 tableStyleInfo) formats its
+// cells, as LibreOffice draws a database range's table style.
 //
 // # Corpus evidence
 //
 //   - xlsx: sc/TableEmptyHeaders.xlsx prints Column1 and Column2 over
-//     header cells its sheet data leaves empty.
+//     header cells its sheet data leaves empty; sc/TableStyleTest.xlsx
+//     prints TableStyleMedium2's dark blue header row of white bold text
+//     and its light blue banded rows.
 func (w *sheetReader) tables(parts *ooxml.Element) error {
 	r := w.r
 	n := 0
@@ -47,7 +50,18 @@ func (w *sheetReader) tables(parts *ooxml.Element) error {
 			return err
 		}
 		rg, ok := rangeRef(attr(root, "ref"))
-		if !ok || intAttr(root, "headerRowCount", 1) == 0 {
+		if !ok {
+			continue
+		}
+		info := tableInfo{area: rg, header: intAttr(root, "headerRowCount", 1) != 0, total: intAttr(root, "totalsRowCount", 0) > 0}
+		if si := root.Child(nsMain, "tableStyleInfo"); si != nil {
+			info.firstCol, info.lastCol = boolAttr(si, "showFirstColumn"), boolAttr(si, "showLastColumn")
+			info.rowStripes, info.colStripes = boolAttr(si, "showRowStripes"), boolAttr(si, "showColumnStripes")
+			if ts := r.tableStyleNamed(attr(si, "name")); ts != nil {
+				w.styleTable(ts, info)
+			}
+		}
+		if !info.header {
 			continue
 		}
 		col := rg.FirstColumn
@@ -67,20 +81,24 @@ func (w *sheetReader) tables(parts *ooxml.Element) error {
 	return nil
 }
 
+// row returns the row at index row, added when the sheet lacks it.
+func (w *sheetReader) row(row int) *sheet.Row {
+	sh := w.sh
+	if at, ok := w.rowAt[row]; ok {
+		return &sh.Rows[at]
+	}
+	sh.Rows = append(sh.Rows, sheet.Row{Index: row})
+	sort.SliceStable(sh.Rows, func(i, j int) bool { return sh.Rows[i].Index < sh.Rows[j].Index })
+	for i, rw := range sh.Rows {
+		w.rowAt[rw.Index] = i
+	}
+	return &sh.Rows[w.rowAt[row]]
+}
+
 // setEmptyText gives the cell at row and col the text s when it holds no
 // value, adding the cell and the row when the sheet lacks them.
 func (w *sheetReader) setEmptyText(row, col int, s string) {
-	sh := w.sh
-	at, ok := w.rowAt[row]
-	if !ok {
-		sh.Rows = append(sh.Rows, sheet.Row{Index: row})
-		sort.SliceStable(sh.Rows, func(i, j int) bool { return sh.Rows[i].Index < sh.Rows[j].Index })
-		for i, rw := range sh.Rows {
-			w.rowAt[rw.Index] = i
-		}
-		at = w.rowAt[row]
-	}
-	rw := &sh.Rows[at]
+	rw := w.row(row)
 	for i := range rw.Cells {
 		if rw.Cells[i].Column == col {
 			if rw.Cells[i].Value.Kind == sheet.Empty {
