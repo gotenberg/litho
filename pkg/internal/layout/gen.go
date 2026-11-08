@@ -191,6 +191,25 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		return []*box{e.genColumn(n, st, ctx)}
 	}
 	float := st.Float
+	if cl := e.chains[n]; cl != nil && (st.Display == css.Block || st.Display == css.InlineBlock || st.Display == css.ListItem) {
+		// A link of a chain paints its share of the chain's content and
+		// lays none of its children out (chain.go).
+		if cl.auto {
+			own := *st
+			own.Height = css.Pts(cl.h)
+			if own.BoxSizing == css.BorderBox {
+				own.Height = css.Pts(cl.h + own.Border[css.Top].Width + own.Border[css.Bottom].Width + pts(own.Padding[css.Top]) + pts(own.Padding[css.Bottom]))
+			}
+			st = &own
+		}
+		b := e.newBox(n, st, kindBlock, ctx)
+		b.float = float
+		b.abs = isAbs(st)
+		b.inline = float == css.FloatNone && !b.abs && st.Display == css.InlineBlock
+		b.chain = cl
+		e.enter(n, b, ctx)
+		return []*box{b}
+	}
 	switch {
 	case float == css.FloatNone && (st.Display == css.Inline || st.Display == css.InlineListItem):
 		return e.genInline(n, st, ctx, ordinal)
@@ -221,24 +240,6 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		cctx := e.enter(n, b, ctx)
 		cctx.decos = ownDecos(b.st)
 		e.genChildren(b, n.Children, cctx)
-		return []*box{b}
-	}
-	if cl := e.chains[n]; cl != nil {
-		// A link of a chain paints its share of the chain's content and
-		// lays none of its children out (chain.go).
-		if cl.auto {
-			own := *st
-			own.Height = css.Pts(cl.h)
-			if own.BoxSizing == css.BorderBox {
-				own.Height = css.Pts(cl.h + own.Border[css.Top].Width + own.Border[css.Bottom].Width + pts(own.Padding[css.Top]) + pts(own.Padding[css.Bottom]))
-			}
-			st = &own
-		}
-		b := e.newBox(n, st, kindBlock, ctx)
-		b.float = float
-		b.abs = isAbs(st)
-		b.chain = cl
-		e.enter(n, b, ctx)
 		return []*box{b}
 	}
 	b := e.newBox(n, st, kindBlock, ctx)

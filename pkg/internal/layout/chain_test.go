@@ -48,6 +48,9 @@ func TestChain(t *testing.T) {
 			chained(0, 0, 0, 50, 10, p("a"), p("b"), p("c")),
 			chained(1, 0, 50, 50, 0),
 		}, "a@0,8 b@0,58 c@0,68 "},
+		{"inline-block links in flow", []*Node{
+			el(sty(), flowLink(0, display(css.InlineBlock), p("a"), p("b")), flowLink(1, display(css.InlineBlock))),
+		}, "a@0,8 b@50,8 "},
 		{"content past the last link", []*Node{
 			chained(0, 0, 0, 50, 10, p("a"), p("b")),
 			chained(1, 0, 50, 50, 10),
@@ -63,3 +66,8 @@ func TestChain(t *testing.T) {
 	}
 }
 
+// flowLink returns an in-flow link of the chain "c" at index i, 50 px wide
+// and 10 px tall, changed by mod, holding kids.
+func flowLink(i int, mod func(*css.Style), kids ...*Node) *Node {
+	return el(sty(width(50), height(10), mod, func(s *css.Style) { s.Chain, s.ChainIndex = "c", i }), kids...)
+}
