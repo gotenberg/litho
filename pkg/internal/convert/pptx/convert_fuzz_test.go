@@ -26,16 +26,23 @@ const fuzzTree = `<p:sp><p:nvSpPr><p:cNvPr id="2" name="T"/><p:cNvSpPr/><p:nvPr>
 func FuzzConvert(f *testing.F) {
 	f.Add([]byte(fuzzTree))
 	f.Add([]byte(fuzzTree[:len(fuzzTree)/2]))
+	// A SmartArt frame, its parts in every deck the target reads.
+	dgm := diagramDeck("")
+	f.Add([]byte(dgm.slides[0].tree))
 	fonts := testFonts(f)
 	png := pngBytes(f)
 	f.Fuzz(func(t *testing.T, tree []byte) {
+		parts := map[string]string{"ppt/media/image1.png": png}
+		for name, part := range dgm.parts {
+			parts[name] = part
+		}
 		files := deckFiles(testDeck{
 			slides: []testSlide{{
 				tree: string(tree), notes: string(tree),
-				rels: `<Relationship Id="rIdP" Type="` + tRelImage + `" Target="../media/image1.png"/><Relationship Id="rIdH" Type="` + tRelLink + `" Target="x" TargetMode="External"/>`,
+				rels: `<Relationship Id="rIdP" Type="` + tRelImage + `" Target="../media/image1.png"/><Relationship Id="rIdH" Type="` + tRelLink + `" Target="x" TargetMode="External"/>` + dgm.slides[0].rels,
 			}},
 			layoutTree: string(tree),
-			parts:      map[string]string{"ppt/media/image1.png": png},
+			parts:      parts,
 		})
 		doc, _, err := load(context.Background(), bytes.NewReader(zipFiles(t, files)), fonts, office.Options{})
 		if err != nil {
