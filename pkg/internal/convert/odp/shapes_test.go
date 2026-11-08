@@ -1,6 +1,7 @@
 package odp
 
 import (
+	"context"
 	"math"
 	"slices"
 	"testing"
@@ -352,5 +353,20 @@ func TestRead_MediaWithoutPicture(t *testing.T) {
 	s := firstShape(t, flat{body: page(`<draw:frame svg:width="2cm" svg:height="1cm"><draw:plugin xlink:href="../a.avi" draw:mime-type="application/vnd.sun.star.media"/></draw:frame>`)})
 	if s.Kind != slides.KindGeometry || s.Fill.Kind != slides.FillSolid || math.Abs(s.Fill.Color.R-0x43/255.0) > 1e-9 || s.Line.Width != 0 {
 		t.Errorf("shape = %+v, want a dark grey box", s)
+	}
+}
+
+func TestRead_ImageOpacity(t *testing.T) {
+	png := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+	s := firstShape(t, flat{
+		auto: `<style:style style:name="o" style:family="graphic"><style:graphic-properties draw:image-opacity="49%"/></style:style>`,
+		body: page(`<draw:frame draw:style-name="o" svg:width="2cm" svg:height="1cm"><draw:image><office:binary-data>` + png + `</office:binary-data></draw:image></draw:frame>`),
+	})
+	if s.Kind != slides.KindPicture || s.Picture == nil || s.Picture.Vector == nil {
+		t.Fatalf("shape = %+v", s)
+	}
+	frags := s.Picture.Vector(context.Background(), compose.Rect{Width: 10, Height: 5})
+	if g, ok := frags[0].(*compose.Group); len(frags) != 1 || !ok || !near(g.Opacity, 0.49) {
+		t.Errorf("fragments = %+v, want a group at 49%% opacity", frags)
 	}
 }

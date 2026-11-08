@@ -230,6 +230,9 @@ func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 			}
 			s.Kind = slides.KindPicture
 			s.Picture = r.cropped(pic, ss.graphic.Get("fo:clip"))
+			if v, ok := odf.Percent(ss.graphic.Get("draw:image-opacity")); ok && v < 1 {
+				s.Picture = translucent(s.Picture, max(v, 0))
+			}
 			switch m := ss.graphic.Get("style:mirror"); {
 			case strings.Contains(m, "horizontal"):
 				s.FlipH = !s.FlipH

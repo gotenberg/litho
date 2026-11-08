@@ -211,3 +211,22 @@ func (r *reader) object(obj *odf.Element) *chart.Chart {
 	}
 	return c
 }
+
+// translucent returns pic painted at opacity op, in [0, 1) (ODF 1.3, Part
+// 3, 20.140 draw:image-opacity), as a picture that draws pic in a group
+// of that opacity.
+func translucent(pic *layout.Picture, op float64) *layout.Picture {
+	if op <= 0 {
+		return &layout.Picture{Width: pic.Width, Height: pic.Height, Vector: func(context.Context, compose.Rect) []compose.Fragment { return nil }}
+	}
+	src := pic
+	return &layout.Picture{Width: pic.Width, Height: pic.Height, Vector: func(ctx context.Context, rect compose.Rect) []compose.Fragment {
+		var content []compose.Fragment
+		if src.Vector != nil {
+			content = src.Vector(ctx, rect)
+		} else {
+			content = []compose.Fragment{&compose.Image{Rect: rect, Source: src.Source}}
+		}
+		return []compose.Fragment{&compose.Group{Opacity: op, Content: content}}
+	}}
+}
