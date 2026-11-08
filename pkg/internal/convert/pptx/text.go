@@ -558,7 +558,9 @@ func (r *reader) bullet(pc chain, ts *textStyles) *slides.Bullet {
 	b := &slides.Bullet{}
 	switch kind.Local {
 	case "buChar":
-		b.Kind, b.Char = slides.BulletChar, attr(kind, "char")
+		// Impress draws a bullet of one character: the first of a longer
+		// buChar char (pptx: sd/bnc862510_5's "••" prints one bullet).
+		b.Kind, b.Char = slides.BulletChar, firstRune(attr(kind, "char"))
 		if b.Char == "" {
 			return nil
 		}
@@ -605,6 +607,14 @@ func (r *reader) bullet(pc chain, ts *textStyles) *slides.Bullet {
 		}
 	}
 	return b
+}
+
+// firstRune returns the first character of s, "" for none.
+func firstRune(s string) string {
+	for _, r := range s {
+		return string(r)
+	}
+	return ""
 }
 
 // empty reports whether a text body holds no text.

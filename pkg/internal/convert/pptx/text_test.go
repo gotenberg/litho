@@ -140,6 +140,11 @@ func TestText_ParagraphsAndBullets(t *testing.T) {
 				t.Errorf("runs %+v", p.Runs)
 			}
 		}},
+		{"a bullet of several characters draws the first", `<a:p><a:pPr><a:buChar char="••"/></a:pPr><a:r><a:t>x</a:t></a:r></a:p>`, func(t *testing.T, p slides.Paragraph) {
+			if p.Bullet == nil || p.Bullet.Char != "•" {
+				t.Errorf("bullet %+v", p.Bullet)
+			}
+		}},
 		{"exact line spacing", `<a:p><a:pPr><a:lnSpc><a:spcPts val="2400"/></a:lnSpc></a:pPr><a:r><a:t>x</a:t></a:r></a:p>`, func(t *testing.T, p slides.Paragraph) {
 			if p.LineSpacingPoints != 24 {
 				t.Errorf("paragraph %+v", p)
