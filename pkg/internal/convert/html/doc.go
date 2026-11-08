@@ -92,7 +92,9 @@
 // its fallback, and the paged media extras of CSS GCPM 3, 2: string()
 // shows the named strings string-set assigns, element() a copy of the
 // running elements position: running() takes out of the flow, each with
-// the first, start, last or first-except assignment of the page.
+// the first, start, last or first-except assignment of the page. A block
+// running element of auto width fits its content and sits where the box's
+// text-align puts a line, as WeasyPrint lays it out.
 //
 // float: footnote turns an element into a footnote (CSS GCPM 3, 3): its
 // ::footnote-call stays in the flow, numbered by the footnote counter,

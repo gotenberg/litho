@@ -128,3 +128,25 @@ func TestNotes_CallsAndBodies(t *testing.T) {
 		t.Error("the note body stayed in the flow")
 	}
 }
+
+func TestRunning_ShrinksToFitItsBox(t *testing.T) {
+	src := `<style>
+		@page { size: 400pt 300pt; margin: 40pt 50pt; font: 10pt "Test Serif";
+			@top-center { content: element(head) }
+			@bottom-right { content: element(foot); text-align: right }
+		}
+		body { margin: 0; font: 10pt "Test Serif" }
+		header { position: running(head); background: green }
+		footer { position: running(foot) }
+	</style>
+	<header>Head</header><footer>Foot</footer><p>x</p>`
+	doc := convertDoc(t, src, Options{PreferCSSPageSize: true})
+	pg := doc.Pages[0]
+	head, foot := find(t, pg, "Head"), find(t, pg, "Foot")
+	if !(head.x > 150 && head.x < 200) {
+		t.Errorf("running header at %v, want centred on the page", head.x)
+	}
+	if !(foot.x > 300) {
+		t.Errorf("running footer at %v, want at the right edge", foot.x)
+	}
+}

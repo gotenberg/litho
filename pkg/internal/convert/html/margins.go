@@ -665,11 +665,45 @@ func (p *prepared) marginNodes(ctx context.Context, st *css.Style, page, pages i
 			}
 			if a, ok := g.pick(g.running, it.Text, it.Pick, page-1, top); ok && a.node != nil {
 				flush()
-				out = append(out, a.node)
+				out = append(out, runningBox(a.node, st))
 			}
 		case css.ItemOpenQuote, css.ItemCloseQuote, css.ItemNoOpenQuote, css.ItemNoCloseQuote, css.ItemContent:
 		}
 	}
 	flush()
 	return out
+}
+
+// runningBox returns the running element n as the page-margin box styled
+// box shows it: a block sized to fit its content and placed as the box's
+// text-align places a line, as WeasyPrint lays running elements out (CSS
+// GCPM 3, 2.2.1 leaves their layout in the box open).
+func runningBox(n *layout.Node, box *css.Style) *layout.Node {
+	if n.Style == nil || n.Style.Display != css.Block || n.Style.Width.Kind != css.Auto {
+		return n
+	}
+	c := *n
+	st := *n.Style
+	st.Width = css.Dimension{Kind: css.FitContent}
+	auto := css.Dimension{Kind: css.Auto}
+	rtl := box.Direction == css.RTL
+	switch box.TextAlign {
+	case css.AlignCenter:
+		st.Margin[css.Left], st.Margin[css.Right] = auto, auto
+	case css.AlignRight:
+		st.Margin[css.Left] = auto
+	case css.AlignEnd:
+		if rtl {
+			st.Margin[css.Right] = auto
+		} else {
+			st.Margin[css.Left] = auto
+		}
+	case css.AlignStart, css.AlignJustify, css.AlignJustifyAll, css.AlignAuto:
+		if rtl {
+			st.Margin[css.Left] = auto
+		}
+	case css.AlignLeft:
+	}
+	c.Style = &st
+	return &c
 }
