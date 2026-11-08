@@ -360,7 +360,7 @@ func TestApplyWritingMode_TurnsTheBox(t *testing.T) {
 // text:anchor-page-number names, a page the text does not reach included
 // (LibreOffice prints anchor-page-number 3 of a one-line document on a
 // third page), and clips a text box of a fixed height while one that
-// grows does not.
+// grows, or one whose text continues in a linked box, does not.
 func TestConvert_FrameAnchorPage(t *testing.T) {
 	auto := `<style:style style:name="fr" style:family="graphic"><style:graphic-properties style:wrap="run-through" style:vertical-pos="from-top" style:vertical-rel="page" style:horizontal-pos="from-left" style:horizontal-rel="page"/></style:style>`
 	frame := func(page, box string) string {
@@ -375,6 +375,7 @@ func TestConvert_FrameAnchorPage(t *testing.T) {
 	}{
 		{"third page, fixed", "3", `<draw:text-box>`, 3, true},
 		{"first page, grows", "1", `<draw:text-box fo:min-height="1cm">`, 1, false},
+		{"first page, linked", "1", `<draw:text-box draw:chain-next-name="F2">`, 1, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

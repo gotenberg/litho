@@ -785,9 +785,10 @@ func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 		st.MinHeight = st.Height
 		st.Height = css.Dimension{Kind: css.Auto}
 	}
-	if st.Height.Kind == css.Points {
+	if st.Height.Kind == css.Points && k.A(odf.NSDraw, "chain-next-name") == "" {
 		// A text box of a fixed height clips the text it cannot hold, as
-		// Writer draws it.
+		// Writer draws it; one linked to a next box, whose text Writer
+		// continues there, shows it all, the chain not being laid out.
 		st.Overflow = css.OverflowHidden
 	}
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "Div"})
