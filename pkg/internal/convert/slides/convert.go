@@ -53,6 +53,9 @@ type builder struct {
 	// autoScript moves the scripts of the body being laid out
 	// automatically, as an OpenDocument text's.
 	autoScript bool
+	// recode maps the characters the bullets of the body being laid out
+	// draw to the text they stand for, when the two differ.
+	recode map[string]string
 }
 
 // warn records a warning once per code and message.

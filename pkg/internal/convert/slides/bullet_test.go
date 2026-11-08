@@ -78,23 +78,39 @@ func TestFormatNumber(t *testing.T) {
 
 func TestSymbolBullet(t *testing.T) {
 	for _, tc := range []struct {
-		char string
-		fams []string
-		want string
-		face string
+		char       string
+		fams       []string
+		draw, text string
+		face       string
 	}{
-		{"•", []string{"Arial"}, "•", "Arial"},
-		{"q", []string{"Wingdings"}, "", "OpenSymbol"},
-		{"", []string{"Symbol"}, "", "OpenSymbol"},
-		{"", []string{"StarSymbol"}, "", "OpenSymbol"},
-		{"➢", []string{"Wingdings"}, "➢", "OpenSymbol"},
-		{"\x01", []string{"Symbol"}, "•", "OpenSymbol"},
+		{"•", []string{"Arial"}, "•", "•", "Arial"},
+		{"q", []string{"Wingdings"}, "\ue43c", "\uf071", "OpenSymbol"},
+		{"\uf06e", []string{"Wingdings"}, "\ue439", "\uf06e", "OpenSymbol"},
+		{"\u00a7", []string{"Wingdings"}, "\ue46f", "\uf0a7", "OpenSymbol"},
+		{"\uf0b7", []string{"Symbol"}, "\ue12c", "\uf0b7", "OpenSymbol"},
+		{"\uf095", []string{"StarBats"}, "\u2022", "\uf095", "OpenSymbol"},
+		{"n", []string{"Wingdings 2"}, string(wingDings2Tab['n'-0x20]), "\uf06e", "OpenSymbol"},
+		{"\uf0b7", []string{"StarSymbol"}, "\uf0b7", "\uf0b7", "OpenSymbol"},
+		{"➢", []string{"Wingdings"}, "➢", "➢", "OpenSymbol"},
+		{"\x01", []string{"Symbol"}, "•", "•", "OpenSymbol"},
 	} {
-		got, fams := symbolBullet(tc.char, tc.fams)
-		if got != tc.want || len(fams) == 0 || fams[0] != tc.face {
-			t.Errorf("symbolBullet(%q, %q) = %q, %q", tc.char, tc.fams, got, fams)
+		draw, txt, fams := symbolBullet(tc.char, tc.fams)
+		if draw != tc.draw || txt != tc.text || len(fams) == 0 || fams[0] != tc.face {
+			t.Errorf("symbolBullet(%q, %q) = %q, %q, %q", tc.char, tc.fams, draw, txt, fams)
 		}
 	}
+}
+
+// TestText_SymbolBulletText checks that a recoded bullet draws OpenSymbol's
+// glyph and reads as its symbol font's private-use code
+// (sd/tdf123090.pptx: a Wingdings "n").
+func TestText_SymbolBulletText(t *testing.T) {
+	p := para("aaa", arial(18))
+	p.MarginLeft, p.Indent = 18, -18
+	p.Bullet = &Bullet{Kind: BulletChar, Char: "n", Families: []string{"Wingdings"}}
+	pg := convert(t, deck(&Slide{Shapes: []*Shape{box(10, 10, 300, 100, p)}}), office.Options{}).Pages[0]
+	find(t, pg, "\uf06e")
+	find(t, pg, "aaa")
 }
 
 // TestText_Autofit checks the scale levels a shrinking body takes and the
