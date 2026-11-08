@@ -209,7 +209,10 @@ func (b *builder) fitBody(body *TextBody, w, h float64) fit {
 	}
 	room := h * float64(cols)
 	fits := func(f fit) bool {
-		lay := b.layoutBody(&TextBody{Paragraphs: body.Paragraphs, Wrap: body.Wrap, RightToLeft: body.RightToLeft}, colW, h, f)
+		lay := b.layoutBody(&TextBody{
+			Paragraphs: body.Paragraphs, Wrap: body.Wrap, RightToLeft: body.RightToLeft,
+			FontLineSpacing: body.FontLineSpacing, MaxParagraphSpacing: body.MaxParagraphSpacing,
+		}, colW, h, f)
 		return lay == nil || lay.height <= room+1e-6
 	}
 	if fits(noFit) {
@@ -358,17 +361,17 @@ type lineBox struct {
 }
 
 // lines returns the line box of a paragraph whose largest run is set in
-// the style ts at the scaling f (ImpEditEngine::CreateLines, the line
+// the style ts at the scaling f, with the faces' metrics when fontLines (ImpEditEngine::CreateLines, the line
 // spacing rules): a natural line is the face's ascent plus descent, or
 // 1.2 times the size with the size as ascent when the body spaces lines
 // independently of the faces; a proportional spacing above 1 adds its
 // room above the glyphs, below 1 it shrinks the line and caps the ascent
 // at four fifths of it; an exact spacing changes the ascent by the
 // difference.
-func (b *builder) lines(p *Paragraph, ts text.Style, f fit) lineBox {
+func (b *builder) lines(p *Paragraph, ts text.Style, f fit, fontLines bool) lineBox {
 	s := ts.Size
 	a, n := s, s*fixedLineFactor
-	if b.fontLines {
+	if fontLines {
 		m := b.faceMetrics(ts)
 		a, n = m.Ascent, m.Ascent+m.Descent
 	}
@@ -547,7 +550,7 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 		}
 	}
 	bigTS := b.textStyle(big, f.font)
-	lb := b.lines(p, bigTS, f)
+	lb := b.lines(p, bigTS, f, body.FontLineSpacing)
 	size := bigTS.Size
 
 	st := css.Initial()
@@ -616,10 +619,28 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 		}
 		return min(v, maxCoordinate) * f.spacing
 	}
+	// The spacing between two paragraphs is the first's after plus the
+	// second's before, or the larger of the two (IsSummationOfParagraphs),
+	// the first paragraph's before and the last one's after dropped.
 	if i > 0 {
-		st.Padding[css.Top] = css.Pts(space(p.SpaceBefore, p.SpaceBeforePct))
+		before := space(p.SpaceBefore, p.SpaceBeforePct)
+		if body.MaxParagraphSpacing {
+			prev := &body.Paragraphs[i-1]
+			psize := size
+			if len(prev.Runs) > 0 {
+				psize = scaledSize(prev.Runs[0].Style.Size, f.font)
+			}
+			after := prev.SpaceAfter
+			if prev.SpaceAfterPct > 0 && !(after > 0) {
+				after = prev.SpaceAfterPct * psize
+			}
+			if after > 0 && !math.IsInf(after, 0) {
+				before = max(before, min(after, maxCoordinate)*f.spacing)
+			}
+		}
+		st.Padding[css.Top] = css.Pts(before)
 	}
-	if i < n-1 {
+	if i < n-1 && !body.MaxParagraphSpacing {
 		st.Padding[css.Bottom] = css.Pts(space(p.SpaceAfter, p.SpaceAfterPct))
 	}
 	node := &layout.Node{Kind: layout.Element, Style: st, Role: "P"}

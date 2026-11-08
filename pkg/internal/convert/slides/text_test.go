@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/css"
 )
 
 // TestText_LinePlacement checks the baselines of PPTX text against the
@@ -39,6 +40,44 @@ func TestText_LinePlacement(t *testing.T) {
 				r := find(t, pg, s)
 				if !near(r.y, y, 0.2) || !near(r.x, 28.35, 0.2) {
 					t.Errorf("%s at %.2f, %.2f, want 28.35, %.2f", s, r.x, r.y, y)
+				}
+			}
+		})
+	}
+}
+
+// TestText_FontLinePlacement checks the baselines of OpenDocument text,
+// lines following the faces' metrics and paragraphs spaced by the larger
+// of the two spacings, against the numbers Impress prints (m1.fodp and
+// m2.fodp of the measurement decks: Liberation Sans 20 in a frame without
+// padding at 28.35, 28.35).
+func TestText_FontLinePlacement(t *testing.T) {
+	ls := RunStyle{Families: []string{"Liberation Sans"}, Size: 20, Color: css.Color{A: 1}}
+	spaced := func(p Paragraph, before, after float64) Paragraph {
+		p.SpaceBefore, p.SpaceAfter = before, after
+		return p
+	}
+	lined := func(p Paragraph, prop, pts float64) Paragraph {
+		p.LineSpacing, p.LineSpacingPoints = prop, pts
+		return p
+	}
+	for _, tc := range []struct {
+		name  string
+		paras []Paragraph
+		want  map[string]float64
+	}{
+		{"single", []Paragraph{para("P0", ls), para("P1", ls)}, map[string]float64{"P0": 46.46, "P1": 68.77}},
+		{"prop150", []Paragraph{lined(para("P0", ls), 1.5, 0), lined(para("P1", ls), 1.5, 0)}, map[string]float64{"P0": 57.6, "P1": 91.05}},
+		{"exact30", []Paragraph{lined(para("P0", ls), 0, 30), lined(para("P1", ls), 0, 30)}, map[string]float64{"P0": 54.15, "P1": 84.14}},
+		{"max", []Paragraph{spaced(para("P0", ls), 5, 10), spaced(para("P1", ls), 5, 10), spaced(para("P2", ls), 5, 10)}, map[string]float64{"P0": 46.46, "P1": 78.78, "P2": 111.09}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sh := box(28.35, 28.35, 340, 340, tc.paras...)
+			sh.Text.FontLineSpacing, sh.Text.MaxParagraphSpacing = true, true
+			pg := convert(t, deck(&Slide{Shapes: []*Shape{sh}}), office.Options{}).Pages[0]
+			for s, y := range tc.want {
+				if r := find(t, pg, s); !near(r.y, y, 0.2) {
+					t.Errorf("%s at %.2f, want %.2f", s, r.y, y)
 				}
 			}
 		})

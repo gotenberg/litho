@@ -47,11 +47,6 @@ type builder struct {
 	shapes int
 	// links collects the slide's links in slide coordinates.
 	links []compose.Link
-	// fontLines lays text out with the faces' ascent and descent, as
-	// Impress does for an OpenDocument text body, instead of the
-	// font-independent 1.2 times the size it uses for a PPTX one. The
-	// model has no field for it yet: it stays off.
-	fontLines bool
 }
 
 // warn records a warning once per code and message.
@@ -104,8 +99,11 @@ func (b *builder) warn(code, msg string) {
 // a PPTX text body; proportional spacing above 100% adds its room above
 // the glyphs, below 100% shrinks the line and puts the baseline at four
 // fifths of it; exact spacing keeps the descent and moves the baseline.
-// The spacing before the first paragraph and after the last is dropped,
-// the spacing between two paragraphs is the sum of the two. A bullet sits
+// A body with FontLineSpacing takes its faces' ascent and descent
+// instead, as Impress spaces an OpenDocument text body. The spacing
+// before the first paragraph and after the last is dropped; the spacing
+// between two paragraphs is the sum of the two, or the larger with
+// MaxParagraphSpacing. A bullet sits
 // at the first line's indent, the text at the left margin, or after the
 // bullet when the indent leaves it no room; a symbol bullet is centred on
 // the line's text height. Numbers count per level across the body. A
