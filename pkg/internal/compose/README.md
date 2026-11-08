@@ -157,7 +157,7 @@ Each wave ships behind oracles wired into the corpus matrix
 Wave 4 depends on wave 0 alone, so the Office converters run beside waves
 1 to 3 once the model is frozen.
 
-Status: waves 0 to 6 are done. `test/integration/baseline.json` records
+Status: waves 0 to 6 are done, and wave 7, a fidelity round over every corpus. `test/integration/baseline.json` records
 the oracle scores per fixture; the wpt, weasyprint, html, svg, docx, odt,
 xlsx, ods, csv, pptx and odp cells score the converters in about twenty
 minutes (`go run ./test/integration/cmd/corpus run
@@ -244,6 +244,19 @@ enhanced geometry with LibreOffice's type mapping, and the fills, dashes
 and arrowheads, each measured against LibreOffice. The wave also gave the
 spreadsheets their conditional formatting, the print range Calc extends
 over overflowing text, and the row heights of East Asian text.
+
+Wave 7 was a fidelity round over the eleven corpora, one cell per area:
+SmartArt laid out from its data, layout, style and colour definitions as
+Impress lays it out; the presentation builder's text rules (shrink-to-fit
+recomputed as Impress does, unwrapped text widening its box, bullets and
+numbering, notes pages from the notes master), the OpenDocument shape
+outlines of paths and polygons, charts with manual layouts, gradient and
+pattern fills, data tables and the axis label rules; pivot tables rebuilt
+from their caches as Calc rebuilds them, data bars, a formula evaluator
+for the totals real workbooks leave uncached, locale separators; footnotes
+in table cells, note links, tab leaders, East Asian list formats and the
+document grid in text documents; and in the HTML route the CSS GCPM notes,
+footnotes in columns and overflow-clip-margin.
 
 The differential oracle compares page count, PDF.js text with reading
 order, link sets, outline, tag tree and a layout-tolerant score over
