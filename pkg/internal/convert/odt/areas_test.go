@@ -362,3 +362,15 @@ func TestConvert_FirstPageFooterInLibreOfficeNamespace(t *testing.T) {
 		}
 	}
 }
+
+func TestConvert_ListHeaderHeadingTakesNoNumber(t *testing.T) {
+	// LibreOffice measured (odfexport/tdf107696.odt): the list header
+	// heading prints without a number and the next heading of its level
+	// takes 1.1.
+	outline := `<text:outline-style style:name="Outline"><text:outline-level-style text:level="1" style:num-format="1"/><text:outline-level-style text:level="2" style:num-format="1" text:display-levels="2"/></text:outline-style>`
+	body := `<text:h text:outline-level="1">One</text:h><text:h text:outline-level="2" text:is-list-header="true">Header</text:h><text:h text:outline-level="2">Two</text:h>`
+	got := pageText(convertDoc(t, doc{styles: outline, body: body}.pack(t), office.Options{}).Pages[0])
+	if got != "1One\nHeader\n1.1Two" {
+		t.Errorf("headings = %q", got)
+	}
+}

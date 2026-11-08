@@ -370,9 +370,14 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 				n.ID = b.newID("h")
 			}
 			h := heading{node: n, level: level, text: headingTitle(n)}
-			if lbl := b.outlineLabel(level); lbl != "" {
-				n.Children = append([]*layout.Node{b.run(lbl, t)}, n.Children...)
-				h.label = lbl
+			// A heading that is a list header takes no number and leaves
+			// the outline counters as they are (ODF 1.3, Part 3, 5.1.2
+			// text:is-list-header).
+			if el.A(odf.NSText, "is-list-header") != "true" {
+				if lbl := b.outlineLabel(level); lbl != "" {
+					n.Children = append([]*layout.Node{b.run(lbl, t)}, n.Children...)
+					h.label = lbl
+				}
 			}
 			b.headings = append(b.headings, h)
 		}
