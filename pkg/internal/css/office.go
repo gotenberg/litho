@@ -2,8 +2,8 @@ package css
 
 // The fields of [Style] that no CSS property sets, which the Office
 // converters fill from their document models and the layout engine
-// honours: [Style.TabStops], [Style.MinLineHeight], [Style.TextScale] and
-// [Columns.Tracks].
+// honours: [Style.TabStops], [Style.MinLineHeight], [Style.TextScale],
+// [Columns.Tracks] and the fields of [Office].
 
 // TabStop is one tab stop of a block container (ECMA-376 Part 1,
 // 17.3.1.37; ODF 1.3 Part 3, 17.8): a tab character in a line of the
@@ -148,3 +148,109 @@ type ColumnTrack struct {
 	// the last column's is ignored.
 	Gap float64
 }
+
+// Office holds the fields of [Style] no CSS property sets that the Office
+// converters fill for the frames, chains and borders of their documents,
+// as LibreOffice's Writer lays WordprocessingML and ODF out. [Style]
+// embeds it: the zero value changes nothing, and none is inherited.
+type Office struct {
+	// FrameWrap is how the flow wraps around an absolutely positioned box
+	// that is page-anchored ([Style.PageAnchor]) or page-clamped
+	// ([Style.PageClamp]), Writer's wrap of a frame or a drawing
+	// (ODF 1.3 Part 3, 20.393 style:wrap; ECMA-376 Part 1, 20.4.2.15 to
+	// 20.4.2.19, the wrap elements of an anchor): the lines of every
+	// block formatting context the box's border box, grown by
+	// [Office.WrapGap], overlaps on its page leave its band as a float
+	// would, before and after the box's anchor alike. The zero value,
+	// [FrameWrapThrough], lets the text run under or over the box, the
+	// box taking no room. See [FrameWrap] for the modes.
+	FrameWrap FrameWrap
+	// WrapGap is the room the text keeps from the border box of a
+	// wrapped box ([Office.FrameWrap]), in points, indexed by [Side],
+	// each finite and at least 0: the frame's fo:margin (ODF 1.3 Part 3,
+	// 20.199 to 20.204, the spacing to the text), the anchor's distT,
+	// distR, distB and distL (ECMA-376 Part 1, 20.4.2.3). It moves the box
+	// none: the insets place the border box.
+	WrapGap [4]float64
+	// Chain names the chain of linked boxes the box is a link of, "" for
+	// none (ODF 1.3 Part 3, 19.112 draw:chain-next-name; ECMA-376 Part 1,
+	// 20.4.2.18 wps:linkedTxbx id): the chain's content flows from one
+	// link into the next as the pages' content flows from page to page.
+	// The first link, [Office.ChainIndex] 0, holds the content of the
+	// whole chain as its children; the converter leaves the other links
+	// without children, and the engine ignores any they have. The content
+	// is laid out at the content width of the first link and cut at its
+	// content height; what does not fit continues at the top of the next
+	// link in ChainIndex order, laid out at that link's width, wherever
+	// the link sits, on another page included, and so on; what the last
+	// link has no room for is not painted. A link's height is its own,
+	// definite from its style, its content never growing it (Writer
+	// disables the automatic height of a linked frame); a link without a
+	// definite height grows to hold all the content left, and the links
+	// after it stay empty. Links of one chain
+	// share a name; two links with the same name and index keep the
+	// first in tree order, the later one empty.
+	Chain string
+	// ChainIndex is the box's place in its chain ([Office.Chain]), from 0
+	// for the first link: the ODF reader counts the draw:chain-next-name
+	// links from the frame no other names, the WordprocessingML one takes
+	// wps:linkedTxbx seq. Indexes need not be consecutive: the links
+	// follow in increasing index.
+	ChainIndex int
+	// StrokeBorders paints the box's solid borders as Writer prints them:
+	// each side a line stroked along the middle of the side at the side's
+	// width, its ends meeting the adjacent sides', and at least
+	// [MinBorderStroke] wide, where a CSS border is a filled band. The
+	// band of a border thinner than a device pixel averages to grey on a
+	// raster; a stroked line is drawn at least a pixel wide. A width of 0
+	// draws no border. The other border styles and the radii paint as CSS
+	// paints them.
+	StrokeBorders bool
+}
+
+// MinBorderStroke is the least width, in points, at which a border of
+// [Office.StrokeBorders] is stroked: LibreOffice strokes a border of one
+// twip (0.05 pt), Writer's hairline, two twips wide.
+//
+// # Corpus evidence
+//
+//   - litho: a flat ODT whose paragraphs have solid borders of 0.02 pt to
+//     1 pt prints, through the pinned LibreOffice, strokes of 0.1 pt for
+//     every border of one or two twips, 0.15, 0.2, 0.25, 0.3, 0.5, 0.75
+//     and 1 pt at the widths above, and no border for 0.01 pt.
+const MinBorderStroke = 0.1
+
+// FrameWrap is how the flow wraps around a page-anchored or page-clamped
+// box ([Office.FrameWrap]), Writer's wrap modes (ODF 1.3 Part 3, 20.393
+// style:wrap). WordprocessingML's wrapSquare, wrapTight and wrapThrough
+// with wrapText bothSides map to [FrameWrapParallel], left and right to
+// [FrameWrapLeft] and [FrameWrapRight], largest to [FrameWrapLargest];
+// wrapTopAndBottom to [FrameWrapNone]; wrapNone to [FrameWrapThrough]
+// (ECMA-376 Part 1, 20.4.2.15 to 20.4.2.19, 20.4.3.7 ST_WrapText).
+type FrameWrap uint8
+
+// The frame wrap modes.
+const (
+	// FrameWrapThrough lets the text run through the box, which paints
+	// in front of it or behind it by its z-index (style:wrap run-through).
+	FrameWrapThrough FrameWrap = iota
+	// FrameWrapNone keeps the text above and below the box, none beside
+	// it (style:wrap none): a line overlapping its band moves below it.
+	FrameWrapNone
+	// FrameWrapParallel lets the text beside the box on both sides
+	// (style:wrap parallel).
+	FrameWrapParallel
+	// FrameWrapLeft lets the text on the box's left alone (style:wrap
+	// left).
+	FrameWrapLeft
+	// FrameWrapRight lets the text on the box's right alone (style:wrap
+	// right).
+	FrameWrapRight
+	// FrameWrapDynamic lets the text on each side wide enough for it, as
+	// Writer's optimal wrap decides per line (style:wrap dynamic): a side
+	// narrower than Writer's least text width takes no text.
+	FrameWrapDynamic
+	// FrameWrapLargest lets the text on the side with more room alone
+	// (style:wrap biggest, wrapText largest).
+	FrameWrapLargest
+)

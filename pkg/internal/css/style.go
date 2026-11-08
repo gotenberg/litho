@@ -1215,6 +1215,10 @@ type Style struct {
 	FootnoteDisplay FootnoteDisplay
 	FootnotePolicy  FootnotePolicy
 
+	// Office holds the fields the Office converters fill for frames,
+	// chains of linked boxes and borders (office.go). None is inherited.
+	Office
+
 	// currentColor records the colour longhands whose computed value is
 	// the currentColor keyword (CSS Color 4, 4.4): the exported field
 	// holds it resolved, and an element that inherits it explicitly
