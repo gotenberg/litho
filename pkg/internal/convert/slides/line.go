@@ -64,14 +64,38 @@ func (b *builder) stroke(l *Line, ops []compose.PathOp) []compose.Fragment {
 	}
 	out := shape.Stroke(ops, sl)
 	if l.Hairline {
+		w := hairlineWidth(l)
 		for _, f := range out {
 			if p, ok := f.(*compose.Path); ok && p.Stroke != nil {
-				p.Stroke.Width = 0
+				p.Stroke.Width = w
 			}
 		}
 	}
 	return out
 }
+
+// hairlineWidth returns the width a hairline strokes at: a PDF zero-width
+// line, the thinnest the device draws, as Impress strokes a hairline
+// without arrowheads; 0.1 point, the line width Impress sets at the top of
+// every page and leaves in place, for one with an arrowhead at either
+// end.
+//
+// # Corpus evidence
+//
+//   - odp: sd/tdf66228.odp's outlines and connector and
+//     sd/tdf127267DashOnHairline.odp's dashed line, hairlines without
+//     arrowheads, stroke at "0 w"; sd/tdf99213-target-missing.odp's three
+//     hairlines with arrowheads stroke at the page's "0.1 w".
+func hairlineWidth(l *Line) float64 {
+	if l.Head.Kind != ArrowNone || l.Tail.Kind != ArrowNone {
+		return hairlineArrowedWidth
+	}
+	return 0
+}
+
+// hairlineArrowedWidth is the width of a hairline with an arrowhead, in
+// points.
+const hairlineArrowedWidth = 0.1
 
 // hairlineArrowWidth is the line width a hairline's arrowheads are sized
 // for, in points: any width up to it gives the engine's smallest

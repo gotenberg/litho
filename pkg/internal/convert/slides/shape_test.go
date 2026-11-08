@@ -216,25 +216,32 @@ func TestShape_TableGrows(t *testing.T) {
 }
 
 // TestShape_Hairline checks that a hairline strokes a zero-width PDF line
-// whatever its width, and that a zero width without it strokes nothing.
+// whatever its width, a 0.1-point one with an arrowhead, and that a zero
+// width without it strokes nothing.
 func TestShape_Hairline(t *testing.T) {
 	b := &builder{warned: map[string]bool{}}
+	arrow := Arrow{Kind: ArrowTriangle, Width: 1, Length: 1}
 	for _, tc := range []struct {
-		line Line
-		n    int
+		line  Line
+		n     int
+		width float64
 	}{
-		{Line{Hairline: true, Color: red}, 1},
-		{Line{Hairline: true, Width: 3, Color: red}, 1},
-		{Line{Color: red}, 0},
+		{Line{Hairline: true, Color: red}, 1, 0},
+		{Line{Hairline: true, Width: 3, Color: red}, 1, 0},
+		{Line{Hairline: true, Color: red, Tail: arrow}, 2, 0.1},
+		{Line{Color: red}, 0, 0},
 	} {
 		out := b.stroke(&tc.line, lineOps(0, 0, 100, 0))
-		if len(out) != tc.n {
+		if len(out) < tc.n {
 			t.Errorf("%+v: %d fragments", tc.line, len(out))
 			continue
 		}
-		if tc.n > 0 {
-			if p := out[0].(*compose.Path); p.Stroke == nil || p.Stroke.Width != 0 {
-				t.Errorf("%+v: stroke %+v", tc.line, p.Stroke)
+		if tc.n == 0 && len(out) != 0 {
+			t.Errorf("%+v: %d fragments, want none", tc.line, len(out))
+		}
+		for _, f := range out {
+			if p, ok := f.(*compose.Path); ok && p.Stroke != nil && p.Stroke.Width != tc.width {
+				t.Errorf("%+v: stroke %+v, want width %v", tc.line, p.Stroke, tc.width)
 			}
 		}
 	}
