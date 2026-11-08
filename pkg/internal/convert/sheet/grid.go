@@ -48,6 +48,8 @@ type grid struct {
 	// colPrefix and rowPrefix are the running sums of the column widths
 	// and row heights, filled on first use.
 	colPrefix, rowPrefix []float64
+	// cond is the sheet's conditional formatting, nil for none.
+	cond *conditions
 }
 
 // newGrid indexes the sheet sh of doc.
@@ -76,6 +78,7 @@ func newGrid(doc *Document, sh *Sheet) *grid {
 		}
 	}
 	sort.Ints(g.rowOrder)
+	g.cond = newConditions(sh)
 	for _, m := range sh.Merges {
 		m = clampRange(m)
 		if m.LastRow < m.FirstRow || m.LastColumn < m.FirstColumn || (m.LastRow == m.FirstRow && m.LastColumn == m.FirstColumn) {
@@ -186,8 +189,14 @@ func hasContent(c *Cell) bool {
 
 // style returns the style of the cell at (r, c), cell being it or nil: the
 // cell's own, else its row's, else its column's, else the document
-// default.
+// default, with the sheet's conditional formats applied over it.
 func (g *grid) style(r, c int, cell *Cell) *Style {
+	return g.condStyle(r, c, cell, g.baseStyle(r, c, cell))
+}
+
+// baseStyle returns the style of the cell at (r, c) before conditional
+// formatting.
+func (g *grid) baseStyle(r, c int, cell *Cell) *Style {
 	if cell != nil && cell.Style != nil {
 		return cell.Style
 	}

@@ -97,13 +97,15 @@ func (b *builder) warnOnce(code, msg string) {
 // side its alignment leaves free and is clipped at the first cell with
 // content; a number that does not fit its column shows "###", a General
 // one first losing decimals. Rows without a custom height grow to their
-// wrapped text. The grid and the row and column headings print when the
+// wrapped text. The sheet's conditional formats restyle the cells their
+// rules hold for, paint colour scales and draw data bars, as Calc does. The grid and the row and column headings print when the
 // sheet asks for them, and pictures over the cells their anchors name.
 //
 // # Not supported
 //
-// Charts are reserved as empty boxes with a warning; conditional
-// formatting has no model; right-to-left sheets are laid out left to
+// Charts are reserved as empty boxes with a warning; the conditional
+// formatting rules that hold a formula and the icon sets are left out
+// with a warning; right-to-left sheets are laid out left to
 // right with a warning; rotated text turns about the cell's centre; the
 // accounting underlines draw as plain ones.
 func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.Options) (*compose.Document, error) {
@@ -252,6 +254,9 @@ func (b *builder) planSheet(i int, sh *Sheet) *sheetPlan {
 	}
 	if sp.margin[css.Top]+sp.margin[css.Bottom] >= sp.height-1 {
 		sp.margin[css.Top], sp.margin[css.Bottom] = 0, 0
+	}
+	if n := unevaluated(sh); n > 0 {
+		b.warn(CodeConditional, fmt.Sprintf("sheet %s: %d conditional formatting rules (formulas, icon sets) are not applied", quote(sh.Name), n))
 	}
 	if sh.RightToLeft {
 		b.warnOnce(CodeRightToLeft, "a right-to-left sheet is laid out left to right")

@@ -20,4 +20,6 @@ const (
 	// CodeTooManyPages is a sheet with more pages than the builder lays
 	// out.
 	CodeTooManyPages = "sheet-too-many-pages"
+	// CodeConditional is a conditional formatting rule not applied.
+	CodeConditional = "sheet-conditional"
 )

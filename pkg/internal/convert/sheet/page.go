@@ -164,6 +164,7 @@ func (b *pageBuilder) region(rg *region) *layout.Node {
 		if c := u.st.Fill.Color; c.A > 0 {
 			b.fills = append(b.fills, &compose.Path{Ops: rectOps(u.x, u.y, u.w, u.h), Fill: &compose.Fill{Color: colorOf(c)}})
 		}
+		b.drawDataBar(u)
 		b.unitBorders(bs, rg, u)
 		add(u)
 	})
