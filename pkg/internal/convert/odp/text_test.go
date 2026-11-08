@@ -138,15 +138,16 @@ func TestRead_Lists(t *testing.T) {
 	}
 	wants := []want{
 		// Measured on the pinned LibreOffice: a list of no style indents
-		// each level 0.6 cm, its bullet 45% of the text in OpenSymbol.
-		{cm(0.6), -cm(0.6), &slides.Bullet{Kind: slides.BulletChar, Char: "•", Families: []string{"OpenSymbol"}, Scale: 0.45}},
-		{cm(1.2), -cm(0.6), &slides.Bullet{Kind: slides.BulletChar, Char: "•", Families: []string{"OpenSymbol"}, Scale: 0.45}},
+		// each level 0.6 cm, its bullet 45% of the text, StarBats'
+		// U+F095, which the builder draws as OpenSymbol's bullet.
+		{cm(0.6), -cm(0.6), &slides.Bullet{Kind: slides.BulletChar, Char: "\uf095", Families: []string{"StarBats"}, Scale: 0.45}},
+		{cm(1.2), -cm(0.6), &slides.Bullet{Kind: slides.BulletChar, Char: "\uf095", Families: []string{"StarBats"}, Scale: 0.45}},
 		{cm(3), -cm(2), &slides.Bullet{Kind: slides.BulletChar, Char: "▪", Families: []string{"DejaVu Sans"}, Scale: 1, Color: css.Color{R: 1, A: 1}}},
 		{cm(3), -cm(1), &slides.Bullet{Kind: slides.BulletNumber, Format: "alphaLcParenR", StartAt: 3, Scale: 0.45}},
 		// Impress lays a label-alignment level out with no indent; a level
 		// starting at 1 continues the count (StartAt 0).
 		{0, 0, &slides.Bullet{Kind: slides.BulletNumber, Format: "arabicPeriod", Scale: 0.45}},
-		{0, 0, &slides.Bullet{Kind: slides.BulletChar, Char: "•", Families: []string{"OpenSymbol"}, Scale: 0.45}},
+		{0, 0, &slides.Bullet{Kind: slides.BulletChar, Char: "\uf095", Families: []string{"StarBats"}, Scale: 0.45}},
 		{0, 0, nil},
 	}
 	if len(ps) != len(wants) {
