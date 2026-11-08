@@ -193,13 +193,17 @@ func TestShades_Blink(t *testing.T) {
 		{compose.Color{B: 1, A: 1}, compose.Color{B: 171 / 255.0, A: 1}, compose.Color{B: 1, A: 1}},
 	}
 	for _, tt := range tests {
-		d, l := shades(tt.in)
+		d, l := shades(tt.in, true)
 		if !colorNear(d, tt.dark) || !colorNear(l, tt.light) {
 			t.Errorf("shades(%v) = %v, %v; want %v, %v", tt.in, d, l, tt.dark, tt.light)
 		}
 	}
+	// Off the Blink rendering, black darkens to black.
+	if d, l := shades(compose.Color{A: 1}, false); d != (compose.Color{A: 1}) || !colorNear(l, compose.Color{R: 0x54 / 255.0, G: 0x54 / 255.0, B: 0x54 / 255.0, A: 1}) {
+		t.Errorf("shades(black, false) = %v, %v; want black and #545454", d, l)
+	}
 	// #8d99ae, measured on Chromium's groove: (73, 79, 90) and (207, 225, 255).
-	d, l := shades(compose.Color{R: 141 / 255.0, G: 153 / 255.0, B: 174 / 255.0, A: 1})
+	d, l := shades(compose.Color{R: 141 / 255.0, G: 153 / 255.0, B: 174 / 255.0, A: 1}, true)
 	if math.Abs(d.R*255-73) > 1 || math.Abs(l.G*255-225) > 1 || math.Abs(l.B*255-255) > 1 {
 		t.Errorf("shades of #8d99ae = %v, %v", d, l)
 	}

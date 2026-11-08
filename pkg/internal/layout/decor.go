@@ -358,9 +358,11 @@ func positions(rep css.Repeat, start, size, areaStart, areaSize, clipStart, clip
 // colour of a relative luminance at most #202020's is too dark to darken:
 // its shades are its lighter one and that one's lighter, as Chromium
 // 9.0.0's print measures (#000 draws #545454 and #a8a8a8, #210000 (117, 0,
-// 0) and (201, 0, 0), #003000 black and (0, 132, 0)).
-func shades(c compose.Color) (compose.Color, compose.Color) {
-	if veryDark(c) {
+// 0) and (201, 0, 0), #003000 black and (0, 132, 0)). blink selects that
+// rule; off, as the Office formats draw them, a dark colour darkens to
+// black like any other.
+func shades(c compose.Color, blink bool) (compose.Color, compose.Color) {
+	if blink && veryDark(c) {
 		l := lighter(c)
 		return l, lighter(l)
 	}
@@ -407,6 +409,11 @@ func veryDark(c compose.Color) bool {
 	l := 0.2126*lin(c.R) + 0.7152*lin(c.G) + 0.0722*lin(c.B)
 	return l <= lin(0x20/255.0)+1e-9
 }
+
+// blink reports the Blink rendering of the HTML converter, which selects
+// [Options.PixelFontMetrics]: the two-tone border shades of [shades] and
+// [currentShades] are Blink's, which the Office formats do not draw.
+func (p *painter) blink() bool { return p.e.opts.PixelFontMetrics }
 
 // currentShades are the dark and light shades of a two-tone border whose
 // colour is currentColor: Blink paints #eeeeee and its darker #9a9a9a
@@ -635,8 +642,8 @@ func (p *painter) side(g *ditem, s css.Side, bdr css.Border, current bool, r com
 		}
 		return insetRect(r, radii, d)
 	}
-	dark, light := shades(c)
-	if current {
+	dark, light := shades(c, p.blink())
+	if current && p.blink() {
 		dark, light = currentShades(c.A)
 	}
 	topLeft := s == css.Top || s == css.Left

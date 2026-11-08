@@ -465,7 +465,7 @@ func (p *painter) segment(t *box, b cborder, r compose.Rect, horizontal bool) {
 		fill(a, col)
 		fill(z, col)
 	case css.Groove, css.Ridge, css.Inset, css.Outset:
-		dark, light := shades(col)
+		dark, light := shades(col, p.blink())
 		if b.style == css.Ridge || b.style == css.Inset {
 			dark, light = light, dark
 		}
