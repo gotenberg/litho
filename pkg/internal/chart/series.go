@@ -301,6 +301,9 @@ func (rd *renderer) labelFrame(b *block, lb Labels, cx, cy float64) {
 // name, the category, the value and the percentage, joined by the
 // separator.
 func (rd *renderer) labelText(g *Group, s *Series, j int, v float64, lb Labels, pct float64) string {
+	if len(lb.Custom) > 0 {
+		return rd.customLabel(g, s, j, v, lb, pct)
+	}
 	var parts []string
 	if lb.ShowSeries && s.Name != "" {
 		parts = append(parts, s.Name)
@@ -340,6 +343,42 @@ func (rd *renderer) labelText(g *Group, s *Series, j int, v float64, lb Labels, 
 		}
 	}
 	return strings.Join(parts, sep)
+}
+
+// customLabel returns a data label's own text, its fields filled: the
+// value in the label's or the data's format, the percentage in 0%, the
+// category and the series name.
+func (rd *renderer) customLabel(g *Group, s *Series, j int, v float64, lb Labels, pct float64) string {
+	var b strings.Builder
+	for _, f := range lb.Custom {
+		switch f.Kind {
+		case FieldText:
+			b.WriteString(f.Text)
+		case FieldBreak:
+			b.WriteString("\n")
+		case FieldValue:
+			if !math.IsNaN(v) {
+				code := lb.Format
+				if code == "" {
+					code = rd.data(s.Values).Format
+				}
+				b.WriteString(formatLabel(code, v))
+			}
+		case FieldPercent:
+			if !math.IsNaN(pct) && (g.Kind == Pie || g.Kind == Doughnut || g.Grouping == PercentStacked) {
+				code := lb.PercentFormat
+				if code == "" {
+					code = "0%"
+				}
+				b.WriteString(formatLabel(code, pct))
+			}
+		case FieldCategory:
+			b.WriteString(rd.data(s.Categories).label(j))
+		case FieldSeries:
+			b.WriteString(s.Name)
+		}
+	}
+	return b.String()
 }
 
 // polyline returns the open path through pts, smoothed as a natural

@@ -504,11 +504,39 @@ type Labels struct {
 	PercentFormat string
 	Style         TextStyle
 	Frame         Frame
+	// Custom, when not empty, is the label's own text, which replaces the
+	// parts the flags choose (ECMA-376 Part 1, 21.2.2.47 dLbl's tx; ODF
+	// 1.3 Part 3, loext:data-label's text:p).
+	Custom []LabelField
 }
+
+// LabelField is one piece of a data label's own text: text as written,
+// or a field the renderer fills.
+type LabelField struct {
+	Kind LabelFieldKind
+	// Text is a FieldText's text, and what a field the renderer cannot
+	// fill shows.
+	Text string
+}
+
+// LabelFieldKind is what a [LabelField] holds (the field types of
+// ECMA-376 Part 1, 21.1.2.2.4 fld as Office writes them in charts).
+type LabelFieldKind uint8
+
+// The label field kinds.
+const (
+	FieldText LabelFieldKind = iota
+	FieldValue
+	FieldCategory
+	FieldSeries
+	FieldPercent
+	// FieldBreak breaks the line.
+	FieldBreak
+)
 
 // Any reports labels that show something.
 func (l Labels) Any() bool {
-	return l.ShowValue || l.ShowCategory || l.ShowSeries || l.ShowPercent
+	return l.ShowValue || l.ShowCategory || l.ShowSeries || l.ShowPercent || len(l.Custom) > 0
 }
 
 // MarkerSymbol is the shape of a data point's marker. The standard shapes

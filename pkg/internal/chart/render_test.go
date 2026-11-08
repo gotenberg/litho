@@ -453,3 +453,17 @@ func TestRender_DataTable(t *testing.T) {
 		t.Errorf("the table draws no border")
 	}
 }
+
+func TestRender_CustomLabelFields(t *testing.T) {
+	c := barChart(1.5, 2)
+	c.Groups[0].Series[0].Categories = Data{Values: strs("Q1", "Q2"), Cached: true}
+	c.Groups[0].Series[0].Points = []Point{{Index: 0, HasLabels: true, Labels: Labels{Style: TextStyle{Size: 8, Color: compose.Black}, Custom: []LabelField{
+		{Text: "v="}, {Kind: FieldValue}, {Kind: FieldBreak}, {Kind: FieldCategory}, {Text: "/"}, {Kind: FieldSeries},
+	}}}}
+	got := strings.Join(texts(Render(context.Background(), ahem(t), c, chartRect)), " ")
+	for _, want := range []string{"v=1.5", "Q1/S"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("texts %q lack %q", got, want)
+		}
+	}
+}
