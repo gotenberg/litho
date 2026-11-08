@@ -519,6 +519,9 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	tableSt := d.blockStyle()
 	tableSt.Display = css.Table
 	tableSt.BorderCollapse = css.CollapseBorders
+	// In the collapsing border model the table's decoration break
+	// decides for every cell's: Writer closes a split row's borders.
+	tableSt.BoxDecorationBreak = css.DecorationCloneAll
 	tableSt.TableLayout = css.TableFixed
 	tableSt.LineHeight = css.Dimension{Kind: css.Normal}
 	width := 0.0
@@ -774,11 +777,10 @@ func (d *document) cellStyle(cp cellProps, tableMar map[string]float64, tb map[s
 	if boolOf(cp.noWrap) {
 		st.WhiteSpace = css.Pre
 	}
-	if st.Border != ([4]css.Border{}) {
-		// Writer draws a cell's borders whole on every page its row
-		// spans.
-		st.BoxDecorationBreak = css.DecorationCloneAll
-	}
+	// Writer draws a cell's borders whole on every page its row spans:
+	// the bottom border at the cut, the top border again on the next
+	// page.
+	st.BoxDecorationBreak = css.DecorationCloneAll
 	if cp.textDir != "" && cp.textDir != "lrTb" && cp.textDir != "tb" {
 		setWritingMode(st, textDirection(cp.textDir))
 	}

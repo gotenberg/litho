@@ -44,6 +44,9 @@ func (b *builder) table(c *odf.Element, ctx blockCtx) []*layout.Node {
 	st.Display = css.Table
 	st.TableLayout = css.TableFixed
 	st.BorderCollapse = css.CollapseBorders
+	// In the collapsing border model the table's decoration break
+	// decides for every cell's: Writer closes a split row's borders.
+	st.BoxDecorationBreak = css.DecorationCloneAll
 	if props.Get("table:border-model") == "separating" {
 		st.BorderCollapse = css.SeparateBorders
 	}
@@ -210,11 +213,9 @@ func (b *builder) cell(c *odf.Element, tb *tableBuild, header bool) *layout.Node
 			st.BackgroundColor = cssColor(col)
 		}
 	}
-	if hasBorder(st.Border) {
-		// Writer closes a cell's border at a page cut and opens it again
-		// on the next page.
-		st.BoxDecorationBreak = css.DecorationCloneAll
-	}
+	// Writer closes a cell's border at a page cut and opens it again on
+	// the next page.
+	st.BoxDecorationBreak = css.DecorationCloneAll
 	applyWritingMode(st, props.Get("style:writing-mode"))
 	st.VerticalAlign = css.VerticalAlign{Kind: css.AlignTop}
 	if k, ok := cellAligns[props.Get("style:vertical-align")]; ok {

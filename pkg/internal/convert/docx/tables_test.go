@@ -163,3 +163,15 @@ func TestFrames_WithoutWidthBreakAnywhere(t *testing.T) {
 		}
 	}
 }
+
+func TestTables_DecorationsCloned(t *testing.T) {
+	t.Parallel()
+	b := build(t, `<w:tbl><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`, nil)
+	for _, r := range []string{"Table", "TD"} {
+		for _, n := range role(b.root, r) {
+			if n.Style.BoxDecorationBreak != css.DecorationCloneAll {
+				t.Errorf("%s: decoration break %v, want clone", r, n.Style.BoxDecorationBreak)
+			}
+		}
+	}
+}

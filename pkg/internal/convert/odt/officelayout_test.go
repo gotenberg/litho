@@ -104,8 +104,8 @@ func TestConvert_PageAnchoredFrames(t *testing.T) {
 	}
 }
 
-// TestConvert_BordersCloned checks that a bordered paragraph and a
-// bordered cell draw their whole border on each page they span, as
+// TestConvert_BordersCloned checks that a bordered paragraph, a table
+// and its cells draw their whole border on each page they span, as
 // Writer closes and reopens them at a page cut.
 func TestConvert_BordersCloned(t *testing.T) {
 	auto := `<style:style style:name="B" style:family="paragraph"><style:paragraph-properties fo:border="2pt solid #000000" fo:padding="0.2cm"/></style:style>` +
@@ -118,8 +118,8 @@ func TestConvert_BordersCloned(t *testing.T) {
 			found = append(found, n.Role)
 		}
 	})
-	if strings.Join(found, ",") != "P,TD" {
-		t.Errorf("cloned decorations on %q, want the paragraph and the cell", found)
+	if strings.Join(found, ",") != "P,Table,TD" {
+		t.Errorf("cloned decorations on %q, want the paragraph, the table and the cell", found)
 	}
 }
 
