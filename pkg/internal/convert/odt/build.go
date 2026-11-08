@@ -39,6 +39,9 @@ type builder struct {
 	// chains maps the frames of chains of linked text boxes onto their
 	// place in their chain, by frame name ([scanChains]).
 	chains map[string]chainLink
+	// data reads the data styles of table cells' values, built on first
+	// use ([builder.cellValueText]).
+	data *odf.DataStyles
 
 	warnings []compose.Warning
 	warned   map[string]bool

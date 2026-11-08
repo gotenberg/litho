@@ -234,6 +234,10 @@ func (b *builder) cell(c *odf.Element, tb *tableBuild, header bool) *layout.Node
 	if v, err := strconv.Atoi(c.A(odf.NSTable, "number-rows-spanned")); err == nil && v > 1 {
 		n.RowSpan = min(v, maxRepeat)
 	}
-	n.Children = b.blocks(c, tb.ctx)
+	content := c
+	if text, ok := b.cellValueText(c); ok {
+		content = valueParagraph(c, text)
+	}
+	n.Children = b.blocks(content, tb.ctx)
 	return n
 }
