@@ -128,6 +128,11 @@ func TestText_ParagraphsAndBullets(t *testing.T) {
 				t.Errorf("bullet %+v", b)
 			}
 		}},
+		{"numbering without a start continues the count", `<a:p><a:pPr><a:buAutoNum type="arabicPeriod"/></a:pPr><a:r><a:t>x</a:t></a:r></a:p>`, func(t *testing.T, p slides.Paragraph) {
+			if b := p.Bullet; b == nil || b.Kind != slides.BulletNumber || b.StartAt != 0 {
+				t.Errorf("bullet %+v", b)
+			}
+		}},
 		{"empty paragraph has no bullet", `<a:p><a:endParaRPr sz="1200"/></a:p>`, func(t *testing.T, p slides.Paragraph) {
 			if p.Bullet != nil || p.Style.Size != 12 || len(p.Runs) != 0 {
 				t.Errorf("paragraph %+v", p)

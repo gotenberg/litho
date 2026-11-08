@@ -565,7 +565,9 @@ func (r *reader) bullet(pc chain, ts *textStyles) *slides.Bullet {
 			return nil
 		}
 	case "buAutoNum":
-		b.Kind, b.Format, b.StartAt = slides.BulletNumber, attr(kind, "type"), 1
+		// A stated start restarts the count; none continues it
+		// (slides.Bullet.StartAt 0).
+		b.Kind, b.Format = slides.BulletNumber, attr(kind, "type")
 		if n, ok := intAttr(kind, "startAt"); ok && n >= 1 {
 			b.StartAt = min(n, 32767)
 		}
