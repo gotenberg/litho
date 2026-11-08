@@ -203,15 +203,33 @@ func (r *reader) pageSize(mp *odf.MasterPage) (float64, float64) {
 		return w, h
 	}
 	if pl := r.styles.PageLayouts[mp.PageLayout]; pl != nil {
-		if v, ok := odf.Length(pl.Page.Get("fo:page-width")); ok && v > 0 {
-			w = v
+		pw, okW := odf.Length(pl.Page.Get("fo:page-width"))
+		ph, okH := odf.Length(pl.Page.Get("fo:page-height"))
+		if okW && okH && (pw <= 0 || ph <= 0) {
+			// A layout of no size takes the printer's paper, A4 in the
+			// layout's orientation (measured on the pinned LibreOffice:
+			// sd/invalidCxAndCyAttribute.odp, 0 cm by 0 cm portrait,
+			// prints 595.28 by 841.89 points).
+			if pl.Page.Get("style:print-orientation") == "landscape" {
+				return a4Height, a4Width
+			}
+			return a4Width, a4Height
 		}
-		if v, ok := odf.Length(pl.Page.Get("fo:page-height")); ok && v > 0 {
-			h = v
+		if okW && pw > 0 {
+			w = pw
+		}
+		if okH && ph > 0 {
+			h = ph
 		}
 	}
 	return w, h
 }
+
+// The A4 paper, 21 cm by 29.7 cm.
+const (
+	a4Width  = 21 * 72 / 2.54
+	a4Height = 29.7 * 72 / 2.54
+)
 
 // notesSize returns the notes page size of a master page: the page
 // layout its presentation:notes names (ODF 1.3, Part 3, 16.19), 0 by 0

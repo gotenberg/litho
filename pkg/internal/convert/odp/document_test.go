@@ -53,6 +53,16 @@ func TestRead_Document(t *testing.T) {
 			t.Errorf("size = %v x %v, notes %v", doc.Width, doc.Height, doc.NotesWidth)
 		}
 	})
+	t.Run("zero size", func(t *testing.T) {
+		f := flat{
+			auto:   `<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="0cm" fo:page-height="0cm" style:print-orientation="portrait"/></style:page-layout>`,
+			master: `<style:master-page style:name="M" style:page-layout-name="pm1"/>`, body: `<draw:page/>`,
+		}
+		doc, _ := read(t, f.bytes())
+		if !near(doc.Width, cm(21)) || !near(doc.Height, cm(29.7)) {
+			t.Errorf("size = %v x %v, want A4", doc.Width, doc.Height)
+		}
+	})
 }
 
 func TestRead_Errors(t *testing.T) {
