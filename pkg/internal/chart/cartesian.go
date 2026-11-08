@@ -43,6 +43,8 @@ type dim struct {
 	// outside is where the labels go: -1 to the left or below, +1 to the
 	// right or above.
 	outside float64
+	// table is the data table drawn in place of the labels, nil for none.
+	table *dataTable
 }
 
 // item is one axis label's text at its fraction of the axis.
@@ -273,6 +275,9 @@ func (rd *renderer) cartesian(avail compose.Rect) {
 	for _, d := range all {
 		for _, l := range d.labels {
 			rd.out = append(rd.out, l.b.draw(l.cx, l.cy, alignCenter)...)
+		}
+		if d.table != nil {
+			rd.drawDataTable(d, d.table)
 		}
 	}
 	ext := labelBounds(inner, all)
@@ -543,6 +548,15 @@ func (rd *renderer) placeLabels(d *dim) {
 		} else {
 			d.lineAt = o.pixel(1)
 		}
+	}
+	d.table = nil
+	if t := rd.layoutDataTable(d); t != nil {
+		// The data table takes the labels' place under the axis.
+		d.table = t
+		right := d.inner.X + d.inner.Width
+		h := t.height()
+		d.labels = append(d.labels, tickLabel{b: &block{w: right - t.x, h: h}, cx: (t.x + right) / 2, cy: t.top + h/2})
+		return
 	}
 	if !d.labelled() {
 		return

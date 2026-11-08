@@ -426,3 +426,30 @@ func TestRender_LegendOrder(t *testing.T) {
 		})
 	}
 }
+
+func TestRender_DataTable(t *testing.T) {
+	c := barChart(1.5, 2)
+	c.Groups[0].Series[0].Categories = Data{Values: strs("Q1", "Q2"), Cached: true}
+	c.Axes[0].Labels = LabelNextTo
+	c.DataTable = &DataTable{HBorder: true, VBorder: true, Outline: true, Keys: true, Style: TextStyle{Size: 8, Color: compose.Black}, Line: &Stroke{Color: blue, Width: 1}}
+	frags := Render(context.Background(), ahem(t), c, chartRect)
+	got := texts(frags)
+	count := map[string]int{}
+	for _, s := range got {
+		count[s]++
+	}
+	for _, want := range []string{"Q1", "Q2", "S", "1.5", "2"} {
+		if count[want] != 1 {
+			t.Errorf("text %q drawn %d times in %q, want once", want, count[want], got)
+		}
+	}
+	lines := 0
+	walk(frags, 0, func(fr compose.Fragment, _ int) {
+		if p, ok := fr.(*compose.Path); ok && p.Stroke != nil && near(p.Stroke.Color, blue) {
+			lines++
+		}
+	})
+	if lines == 0 {
+		t.Errorf("the table draws no border")
+	}
+}

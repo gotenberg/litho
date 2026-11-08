@@ -30,6 +30,9 @@ type Chart struct {
 	// PlotLayout, when set, places the plot area where the file says
 	// instead of in the space the title and legend leave.
 	PlotLayout *ManualLayout
+	// DataTable, when set, draws the series' values in a table under the
+	// plot area, in place of the category axis's labels.
+	DataTable *DataTable
 	// Area is the chart area's fill and border, PlotArea the plot area's
 	// (the wall of a two-dimensional chart).
 	Area, PlotArea Frame
@@ -278,6 +281,22 @@ type Title struct {
 	// says; its size stays automatic, and it still takes its space from
 	// the plot area.
 	Layout *ManualLayout
+}
+
+// DataTable is the table of the series' values a chart draws under its
+// plot area: a header row of the categories, aligned with them, then a row
+// a series, its name in a first column left of the plot area (ECMA-376
+// Part 1, 21.2.2.54 dTable; ODF 1.3 Part 3, loext:data-table).
+type DataTable struct {
+	// HBorder, VBorder and Outline draw the lines between the rows, the
+	// lines between the columns and the table's outline; Keys draws each
+	// series' legend key before its name.
+	HBorder, VBorder, Outline, Keys bool
+	Style                           TextStyle
+	// Fill is the background of each cell's text, nil for none.
+	Fill *Paint
+	// Line is the border lines' stroke, nil for none.
+	Line *Stroke
 }
 
 // ManualLayout is where a file places a part of the chart, as fractions of
