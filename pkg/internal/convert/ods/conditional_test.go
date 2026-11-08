@@ -100,7 +100,8 @@ func TestRead_ConditionalFormats(t *testing.T) {
 	if s := scales[0]; s.Kind != sheet.RuleColorScale || len(s.Values) != 2 || s.Values[0] != num(2.5) || s.Values[1] != num(2) || len(s.Scale) != 2 {
 		t.Errorf("colour scale %+v", s)
 	}
-	if b := scales[1]; b.Kind != sheet.RuleDataBar || len(b.Values) != 2 || b.Values[0] != num(-4) || b.Values[1] != num(4) || b.Bar != (css.Color{G: 1, A: 1}) {
+	if b := scales[1]; b.Kind != sheet.RuleDataBar || len(b.Values) != 2 || b.Values[0] != num(0) || b.Values[1] != num(4) || b.Bar != (css.Color{G: 1, A: 1}) ||
+		b.BarAxis != sheet.BarAxisMiddle || b.BarMinLength != 0 || b.BarMaxLength != 1 || b.BarSolid {
 		t.Errorf("data bar %+v", b)
 	}
 	if s := scales[2]; s.Kind != sheet.RuleExpression {

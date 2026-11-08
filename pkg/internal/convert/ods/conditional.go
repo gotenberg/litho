@@ -100,10 +100,29 @@ func (r *reader) condRule(sh *sheet.Sheet, e *odf.Element, ranges []sheet.Range)
 		if !ok || len(vals) != 2 {
 			return sheet.Rule{Kind: sheet.RuleExpression, Formula: "data-bar"}, true
 		}
-		if e.A(nsCalcExt, "axis-position") == "middle" {
-			vals[0].Number, vals[1].Number = sheet.MiddleAxis(vals[0].Number, vals[1].Number)
-		}
 		rule.Values = vals
+		// The axis, the lengths in percent, the gradient and the
+		// negative colour (ODF 1.3 extended by LibreOffice,
+		// calcext:data-bar; ScXMLDataBarFormatContext), with
+		// ScDataBarFormatData's defaults: automatic, 0 to 100, a
+		// gradient, red.
+		switch e.A(nsCalcExt, "axis-position") {
+		case "middle":
+			rule.BarAxis = sheet.BarAxisMiddle
+		case "none":
+			rule.BarAxis = sheet.BarAxisNone
+		}
+		rule.BarMinLength, rule.BarMaxLength = 0, 1
+		if v, err := strconv.ParseFloat(e.A(nsCalcExt, "min-length"), 64); err == nil {
+			rule.BarMinLength = min(max(v, 0), 100) / 100
+		}
+		if v, err := strconv.ParseFloat(e.A(nsCalcExt, "max-length"), 64); err == nil {
+			rule.BarMaxLength = max(min(max(v, 0), 100)/100, 0.001)
+		}
+		rule.BarSolid = e.A(nsCalcExt, "gradient") == "false"
+		if c, ok := color(e.A(nsCalcExt, "negative-color")); ok {
+			rule.BarNegative = c
+		}
 		return rule, true
 	case e.Is(nsCalcExt, "icon-set"):
 		return sheet.Rule{Kind: sheet.RuleIconSet}, true
