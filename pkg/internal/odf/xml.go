@@ -171,6 +171,7 @@ var errTooDeep = errors.New("odf: XML nested too deep")
 func ParseXML(ctx context.Context, data []byte) (*Element, error) {
 	d := xml.NewDecoder(bytes.NewReader(data))
 	d.Strict = true
+	d.CharsetReader = charsetReader
 	var (
 		stack []*Element
 		root  *Element
