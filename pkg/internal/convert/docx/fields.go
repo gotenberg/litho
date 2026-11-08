@@ -25,6 +25,24 @@ type field struct {
 	link bool
 }
 
+// inTOC reports a run inside the result of an open TOC field (17.16.5.68).
+func (s *story) inTOC() bool {
+	for _, f := range s.open {
+		if f.result && strings.EqualFold(firstWord(f.instr.String()), "TOC") {
+			return true
+		}
+	}
+	return false
+}
+
+// firstWord returns the first space-separated word of s.
+func firstWord(s string) string {
+	if f := strings.Fields(s); len(f) > 0 {
+		return f[0]
+	}
+	return ""
+}
+
 // top returns the innermost open field, nil for none.
 func (s *story) top() *field {
 	if len(s.open) == 0 {

@@ -1,6 +1,8 @@
 package docx
 
 import (
+	"strings"
+
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
@@ -182,6 +184,13 @@ func (s *styleSheet) paraStyle(id string) (paraProps, runProps) {
 		r = r.merge(st.rpr)
 	}
 	return p, r
+}
+
+// isHyperlink reports the character style Word links take, the one
+// whose ID or name is Hyperlink.
+func (s *styleSheet) isHyperlink(id string) bool {
+	st, ok := s.byID[id]
+	return ok && st.typ == "character" && (strings.EqualFold(st.id, "Hyperlink") || strings.EqualFold(st.name, "Hyperlink"))
 }
 
 // charStyle returns the run properties of character style id merged along

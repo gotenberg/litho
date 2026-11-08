@@ -799,6 +799,12 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 	}
 	direct := d.parseRunProps(r.Child(w, "rPr"))
 	props := rp.run
+	if direct.style != "" && s.inTOC() && d.styles.isHyperlink(direct.style) {
+		// LibreOffice imports a table of contents as an index whose
+		// entries link without the Hyperlink character style: they print
+		// in the entry's paragraph style.
+		direct.style = ""
+	}
 	if direct.style != "" {
 		props = props.merge(ptr(d.styles.charStyle(direct.style)))
 	}

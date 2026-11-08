@@ -124,3 +124,27 @@ func TestFields_Set(t *testing.T) {
 		})
 	}
 }
+
+func TestTOCEntriesDropTheHyperlinkStyle(t *testing.T) {
+	t.Parallel()
+	styles := stylesPart(`<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="0000FF"/><w:u w:val="single"/></w:rPr></w:style>`)
+	link := `<w:hyperlink w:anchor="h"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>Entry</w:t></w:r></w:hyperlink>`
+	for _, tc := range []struct {
+		name, body string
+		blue       bool
+	}{
+		{"in a TOC", `<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText> TOC \o "1-3" \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>` + link + `<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`, false},
+		{"outside", `<w:p>` + link + `</w:p>`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b := build(t, tc.body, map[string]string{"word/styles.xml": styles})
+			texts := find(b.root, func(n *layout.Node) bool { return n.Kind == layout.Text && n.Text == "Entry" })
+			if len(texts) != 1 {
+				t.Fatalf("%d entries", len(texts))
+			}
+			if blue := texts[0].Style.Color.B == 1 && texts[0].Style.Color.R == 0; blue != tc.blue {
+				t.Errorf("entry colour %+v, blue %v want %v", texts[0].Style.Color, blue, tc.blue)
+			}
+		})
+	}
+}
