@@ -364,16 +364,6 @@ const (
 func invalidCircle(u *unit) compose.Fragment {
 	x0, y0 := u.x-circleGrowX, u.y-circleGrowY
 	rx, ry := u.w/2+circleGrowX, u.h/2+circleGrowY
-	cx, cy := x0+rx, y0+ry
-	const k = 0.5522847498
-	pt := func(x, y float64) compose.Point { return compose.Point{X: x, Y: y} }
-	ops := []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{pt(cx+rx, cy)}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx+rx, cy+k*ry), pt(cx+k*rx, cy+ry), pt(cx, cy+ry)}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx-k*rx, cy+ry), pt(cx-rx, cy+k*ry), pt(cx-rx, cy)}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx-rx, cy-k*ry), pt(cx-k*rx, cy-ry), pt(cx, cy-ry)}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx+k*rx, cy-ry), pt(cx+rx, cy-k*ry), pt(cx+rx, cy)}},
-		{Kind: compose.ClosePath},
-	}
+	ops := ellipse(x0+rx, y0+ry, rx, ry)
 	return &compose.Path{Ops: ops, Stroke: &compose.Stroke{Color: compose.Color{R: 1, A: 1}, Width: circleWidth, Join: compose.RoundJoin}}
 }
