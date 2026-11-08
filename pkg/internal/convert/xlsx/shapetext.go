@@ -211,6 +211,11 @@ func (st *shapeText) draw(ctx context.Context, fonts *text.Fonts, box compose.Re
 			x += avail - l.Width
 		}
 		for _, run := range l.Runs {
+			if run.Color.A <= 0 {
+				// A fully transparent run paints nothing, and compose
+				// refuses one.
+				continue
+			}
 			t := *run
 			t.Origin = compose.Point{X: x + run.Origin.X, Y: y}
 			out = append(out, &t)
