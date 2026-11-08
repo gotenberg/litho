@@ -20,7 +20,8 @@ func TestParseOfficeOptions_RefusesWhatTheRouteRefuses(t *testing.T) {
 		name, json, want string
 	}{
 		{"empty object", `{}`, ""},
-		{"every field", `{"password": "foo", "landscape": true, "nativePages": "2-3", "nativeBookmarks": false, "paperWidth": 4, "paperHeight": 6, "singlePage": true}`, ""},
+		{"every field", `{"password": "foo", "landscape": true, "nativePages": "2-3", "nativeBookmarks": false, "paperWidth": 4, "paperHeight": 6, "singlePage": true, "exportHiddenSlides": true, "exportNotesPages": true}`, ""},
+		{"former hidden slides name", `{"hiddenSlides": true}`, "unknown field"},
 		{"former single page name", `{"singlePageSheets": true}`, "unknown field"},
 		{"unknown field", `{"paperSize": "A4"}`, "unknown field"},
 		{"another case", `{"Landscape": true}`, "unknown field"},
@@ -79,6 +80,7 @@ func TestLoadOffice_ReadsADirectoryOrADocument(t *testing.T) {
 		"another file":    {"a.docx": "", "notes.txt": ""},
 		"another format":  {"a.doc": ""},
 		"binary workbook": {"a.xls": ""},
+		"binary deck":     {"a.ppt": ""},
 		"invalid options": {"a.docx": "", OptionsFile: `{"paperHeight": 6}`},
 	} {
 		d := t.TempDir()
@@ -101,6 +103,8 @@ func TestLoadOffice_MapsEveryExtension(t *testing.T) {
 		"a.docx": pdf.FormatDOCX, "a.odt": pdf.FormatODT, "a.fodt": pdf.FormatODT,
 		"a.xlsx": pdf.FormatXLSX, "a.XLSM": pdf.FormatXLSX, "a.xltx": pdf.FormatXLSX, "a.xltm": pdf.FormatXLSX,
 		"a.ods": pdf.FormatODS, "a.fods": pdf.FormatODS, "a.ots": pdf.FormatODS, "a.csv": pdf.FormatCSV,
+		"a.pptx": pdf.FormatPPTX, "a.PPTM": pdf.FormatPPTX, "a.potx": pdf.FormatPPTX, "a.ppsx": pdf.FormatPPTX,
+		"a.odp": pdf.FormatODP, "a.fodp": pdf.FormatODP, "a.otp": pdf.FormatODP,
 	}
 	for name, want := range cases {
 		dir := t.TempDir()
@@ -181,7 +185,37 @@ func TestLibreOfficeScript_ReadsTheSameSchema(t *testing.T) {
 	if !slices.Equal(got, officeOptionNames) {
 		t.Errorf("libreoffice.sh keys %v, officeOptionNames %v", got, officeOptionNames)
 	}
-	if !strings.Contains(script, "for key in "+strings.Join(officeOptionNames, " ")+"; do") {
-		t.Error("libreoffice.sh does not post every key")
+	if !strings.Contains(script, `for key in $(jq -r '.[]' <<< "$KEYS"); do`) {
+		t.Error("libreoffice.sh does not post every key of KEYS")
+	}
+}
+
+func TestOfficeConvertOptions_MapsThePresentationFields(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name, json string
+		want       int
+	}{
+		{"defaults", `{}`, 2},
+		{"hidden slides", `{"exportHiddenSlides": true}`, 3},
+		{"notes pages", `{"exportNotesPages": true}`, 3},
+		{"both", `{"exportHiddenSlides": true, "exportNotesPages": true}`, 4},
+		{"both off", `{"exportHiddenSlides": false, "exportNotesPages": false}`, 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			write(t, dir, "deck.pptx", "")
+			write(t, dir, OptionsFile, tc.json)
+			o, err := LoadOffice(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n := len(o.ConvertOptions()); n != tc.want {
+				t.Errorf("%d convert options, want %d", n, tc.want)
+			}
+		})
 	}
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # lib/libreoffice.sh: build the LibreOffice reference PDFs of an Office corpus
-# (docx, odt, xlsx, ods, csv).
+# (docx, odt, xlsx, ods, csv, pptx, odp).
 #
 # Starts the Gotenberg image versions.env pins (GOTENBERG_IMAGE) on a free
 # loopback port and posts each source to its LibreOffice route,
@@ -14,7 +14,8 @@
 # The form fields come from the directory's options.json (FIXTURES.md, "Per
 # fixture options"), each key the route's field of the same name; a key left
 # out keeps the route's default: the document's own page setup, every page,
-# the outline written, each sheet cut into pages. The Go side reads the same file through
+# the outline written, each sheet cut into pages, the hidden slides left out,
+# no notes pages. The Go side reads the same file through
 # fixture.LoadOffice (fixture/build and the diff feature of
 # test/integration/cmd/corpus); keep the two in step.
 #
@@ -61,11 +62,11 @@ done
 # The keys of options.json, the route's form fields (OfficeOptions in
 # fixture/office.go). A key outside the list fails the build: a misspelt one
 # would leave the fixture on the defaults.
-KEYS='["password","landscape","nativePages","nativeBookmarks","paperWidth","paperHeight","singlePage"]'
+KEYS='["password","landscape","nativePages","nativeBookmarks","paperWidth","paperHeight","singlePage","exportHiddenSlides","exportNotesPages"]'
 
 # The extensions of a committed source's document (officeFormats in
 # fixture/office.go).
-EXTENSIONS='docx odt fodt xlsx xlsm xltx xltm ods fods ots csv'
+EXTENSIONS='docx odt fodt xlsx xlsm xltx xltm ods fods ots csv pptx pptm potx ppsx odp fodp otp'
 
 # is_document <file> reports whether the file's extension, in any case, is
 # one of EXTENSIONS.
@@ -167,7 +168,7 @@ build_one() {
   local name="$1" doc="$2" options="$3" source="$4" key value status opts_sha=""
   local fields=()
   [ "$options" != - ] || options=""
-  for key in password landscape nativePages nativeBookmarks paperWidth paperHeight singlePage; do
+  for key in $(jq -r '.[]' <<< "$KEYS"); do
     value="$(opt "$options" "$key")"
     [ -z "$value" ] || fields+=(--form-string "$key=$value")
   done
@@ -193,7 +194,7 @@ build_one() {
   rm -f "$WORK/$name.out"
 }
 export -f build_one opt sha
-export OUT WORK URL IMAGE COMMIT CORPUS
+export OUT WORK URL IMAGE COMMIT CORPUS KEYS
 
 mkdir -p "$OUT"
 # Four requests at a time: the route converts one document per LibreOffice

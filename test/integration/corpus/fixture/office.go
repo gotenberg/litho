@@ -14,7 +14,8 @@ import (
 // OfficeOptions are the LibreOffice route's form fields an Office source is
 // converted with, as options.json spells them. A field left out keeps the
 // route's default, which every source without the file is converted with:
-// the document's own page setup, every page, and the outline written.
+// the document's own page setup, every page, the outline written, the
+// hidden slides of a presentation left out and no notes pages.
 type OfficeOptions struct {
 	// Password opens an encrypted document. Default none.
 	Password string `json:"password,omitempty"`
@@ -35,19 +36,27 @@ type OfficeOptions struct {
 	// of its content. Default false: each sheet is cut into pages of its
 	// paper. The route's former name, singlePageSheets, is refused.
 	SinglePage bool `json:"singlePage,omitempty"`
+	// ExportHiddenSlides prints the slides a presentation hides too.
+	// Default false: a hidden slide is left out.
+	ExportHiddenSlides bool `json:"exportHiddenSlides,omitempty"`
+	// ExportNotesPages prints, after the slides, one notes page per slide
+	// printed. Default false.
+	ExportNotesPages bool `json:"exportNotesPages,omitempty"`
 }
 
 // officeOptionNames are the keys of an Office options file, the JSON names
 // of [OfficeOptions].
 //
 //nolint:gochecknoglobals // static list of the schema's keys
-var officeOptionNames = []string{"password", "landscape", "nativePages", "nativeBookmarks", "paperWidth", "paperHeight", "singlePage"}
+var officeOptionNames = []string{"password", "landscape", "nativePages", "nativeBookmarks", "paperWidth", "paperHeight", "singlePage", "exportHiddenSlides", "exportNotesPages"}
 
 // officeFormats maps the extension of an Office document to the format it
 // converts from, as the converter's extensions do: a flat ODT is an
 // OpenDocument text document too, a macro-enabled workbook or a template a
-// SpreadsheetML workbook, and a flat ODS or a template an OpenDocument
-// spreadsheet. A lib/libreoffice.sh EXTENSIONS entry each.
+// SpreadsheetML workbook, a flat ODS or a template an OpenDocument
+// spreadsheet, a macro-enabled presentation, a template or a slide show a
+// PresentationML presentation, and a flat ODP or a template an
+// OpenDocument presentation. A lib/libreoffice.sh EXTENSIONS entry each.
 //
 //nolint:gochecknoglobals // static extension table
 var officeFormats = map[string]pdf.Format{
@@ -62,6 +71,13 @@ var officeFormats = map[string]pdf.Format{
 	".fods": pdf.FormatODS,
 	".ots":  pdf.FormatODS,
 	".csv":  pdf.FormatCSV,
+	".pptx": pdf.FormatPPTX,
+	".pptm": pdf.FormatPPTX,
+	".potx": pdf.FormatPPTX,
+	".ppsx": pdf.FormatPPTX,
+	".odp":  pdf.FormatODP,
+	".fodp": pdf.FormatODP,
+	".otp":  pdf.FormatODP,
 }
 
 // Office is one Office source, read.
@@ -79,7 +95,7 @@ type Office struct {
 // ErrNoOfficeDocument reports a source directory that does not hold exactly
 // one Office document of an extension officeFormats lists, or a source file
 // of another type.
-var ErrNoOfficeDocument = errors.New("not one Office document (.docx, .odt, .fodt, .xlsx, .xlsm, .xltx, .xltm, .ods, .fods, .ots, .csv)")
+var ErrNoOfficeDocument = errors.New("not one Office document (.docx, .odt, .fodt, .xlsx, .xlsm, .xltx, .xltm, .ods, .fods, .ots, .csv, .pptx, .pptm, .potx, .ppsx, .odp, .fodp, .otp)")
 
 // LoadOffice reads an Office source: path is a source directory, holding
 // one document and an optional options file and nothing else, or a document
@@ -158,8 +174,8 @@ func (o OfficeOptions) validate() error {
 
 // ConvertOptions returns the litho options of the source's fields: the
 // landscape and outline switches always, and the page ranges, the password,
-// the paper size, in points, and the single page sheets when the options
-// name them.
+// the paper size, in points, the single page sheets, the hidden slides and
+// the notes pages when the options name them.
 func (o *Office) ConvertOptions() []pdf.ConvertOption {
 	opts := []pdf.ConvertOption{
 		pdf.WithLandscape(o.Options.Landscape),
@@ -176,6 +192,12 @@ func (o *Office) ConvertOptions() []pdf.ConvertOption {
 	}
 	if o.Options.SinglePage {
 		opts = append(opts, pdf.WithSinglePage(true))
+	}
+	if o.Options.ExportHiddenSlides {
+		opts = append(opts, pdf.WithHiddenSlides(true))
+	}
+	if o.Options.ExportNotesPages {
+		opts = append(opts, pdf.WithNotesPages(true))
 	}
 	return opts
 }

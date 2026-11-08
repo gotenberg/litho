@@ -38,8 +38,9 @@ type htmlSettings struct {
 	// ones above: landscape, scale, page ranges, single page, backgrounds,
 	// outline, header and footer templates and media features (see
 	// fixture.Source.PrintOptions in corpus/fixture); for an Office
-	// source, its landscape, outline, page ranges, password, paper and
-	// single page sheets (fixture.Office.ConvertOptions).
+	// source, its landscape, outline, page ranges, password, paper,
+	// single page sheets, hidden slides and notes pages
+	// (fixture.Office.ConvertOptions).
 	Print []pdf.ConvertOption
 }
 
@@ -93,11 +94,11 @@ func convertHTML(ctx context.Context, src []byte, s htmlSettings) ([]byte, error
 }
 
 // isOfficeFormat reports whether a format is one of the Office documents
-// the docx, odt, xlsx, ods and csv corpora convert, which carry their own
-// page setup.
+// the docx, odt, xlsx, ods, csv, pptx and odp corpora convert, which carry
+// their own page setup.
 func isOfficeFormat(f pdf.Format) bool {
 	switch f {
-	case pdf.FormatDOCX, pdf.FormatODT, pdf.FormatXLSX, pdf.FormatODS, pdf.FormatCSV:
+	case pdf.FormatDOCX, pdf.FormatODT, pdf.FormatXLSX, pdf.FormatODS, pdf.FormatCSV, pdf.FormatPPTX, pdf.FormatODP:
 		return true
 	case pdf.FormatText, pdf.FormatHTML, pdf.FormatMarkdown:
 		return false

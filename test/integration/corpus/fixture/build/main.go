@@ -9,8 +9,9 @@
 // committed.
 //
 // Run it from the repository root through `make docx-fixtures`, `make
-// odt-fixtures`, `make xlsx-fixtures`, `make ods-fixtures` or `make
-// csv-fixtures`, which first download the fonts versions.env pins:
+// odt-fixtures`, `make xlsx-fixtures`, `make ods-fixtures`, `make
+// csv-fixtures`, `make pptx-fixtures` or `make odp-fixtures`, which first
+// download the fonts versions.env pins:
 //
 //	go run ./test/integration/corpus/fixture/build -corpus test/integration/corpus/docx
 //
@@ -35,7 +36,7 @@ import (
 )
 
 func main() {
-	corpus := flag.String("corpus", "", "Corpus directory holding sources/<name>/ (test/integration/corpus/docx, odt, xlsx, ods or csv)")
+	corpus := flag.String("corpus", "", "Corpus directory holding sources/<name>/ (test/integration/corpus/docx, odt, xlsx, ods, csv, pptx or odp)")
 	fonts := flag.String("fonts", "test/integration/testdata/fonts", "Directory of the pinned fixture fonts (make docx-fixtures fills it)")
 	flag.Parse()
 	if *corpus == "" {
