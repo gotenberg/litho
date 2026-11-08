@@ -311,6 +311,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 			PageAt:           pageAt,
 			FitFirstPage:     setup.measure,
 			PixelFontMetrics: !o.FractionalFontMetrics,
+			BrowserRules:     true,
 			Lang:             scan.lang,
 			Image:            res.picture,
 			MaxPages:         o.MaxPages,

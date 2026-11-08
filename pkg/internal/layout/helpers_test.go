@@ -89,7 +89,13 @@ func page(w, h float64) PageBox {
 // run lays root out on page pb and checks the document is valid.
 func run(t testing.TB, root *Node, pb PageBox) *Result {
 	t.Helper()
-	res, err := Layout(context.Background(), root, ahem(t), Options{Page: pb})
+	return runWith(t, root, Options{Page: pb})
+}
+
+// runWith lays root out with o and checks the document is valid.
+func runWith(t testing.TB, root *Node, o Options) *Result {
+	t.Helper()
+	res, err := Layout(context.Background(), root, ahem(t), o)
 	if err != nil {
 		t.Fatalf("Layout: %v", err)
 	}
@@ -230,7 +236,14 @@ func near(a, b float64) bool {
 // boxes generates and lays out root on page pb and returns its root box.
 func boxes(t testing.TB, root *Node, pb PageBox) *box {
 	t.Helper()
-	e := newEngine(context.Background(), ahem(t), Options{Page: pb}, pb.Width-pb.Margin[css.Left]-pb.Margin[css.Right], pb.Height-pb.Margin[css.Top]-pb.Margin[css.Bottom])
+	return boxesWith(t, root, Options{Page: pb})
+}
+
+// boxesWith generates and lays out root with o and returns its root box.
+func boxesWith(t testing.TB, root *Node, o Options) *box {
+	t.Helper()
+	pb := o.Page
+	e := newEngine(context.Background(), ahem(t), o, pb.Width-pb.Margin[css.Left]-pb.Margin[css.Right], pb.Height-pb.Margin[css.Top]-pb.Margin[css.Bottom])
 	rb := e.generate(root)
 	e.layoutRoot(rb)
 	e.layoutPositioned(rb)

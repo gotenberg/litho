@@ -479,10 +479,10 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 		return ctx
 	}
 	outside := b.st.ListStylePosition == css.Outside && !inside
-	// An outside bullet of disc, circle or square paints as a shape
-	// ([symbolRect]); a ::marker's content or an Office marker's box
-	// draws as text.
-	symbol := outside && pic == nil && markerBoxWidth(n.Marker) == 0 && (n.Marker == nil || len(n.Marker.Children) == 0) &&
+	// Under [Options.BrowserRules], an outside bullet of disc, circle or
+	// square paints as a shape ([symbolRect]); a ::marker's content, an
+	// Office marker's box or the engine's own rules draw it as text.
+	symbol := e.opts.BrowserRules && outside && pic == nil && markerBoxWidth(n.Marker) == 0 && (n.Marker == nil || len(n.Marker.Children) == 0) &&
 		(st.ListStyleType == css.Disc || st.ListStyleType == css.Circle || st.ListStyleType == css.Square)
 	markerElem := ctx.elem
 	if n.Role == "LI" && ctx.elem != nil && ctx.elem.Role == "LI" && ctx.structDepth < maxStructDepth {

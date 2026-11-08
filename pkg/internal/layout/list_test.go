@@ -162,12 +162,12 @@ func TestListMarkers_ImageFailureWarns(t *testing.T) {
 	if !found {
 		t.Errorf("warnings %+v, want an image failure", res.Warnings)
 	}
-	if got, _ := lineTexts(res, 1); len(got) != 1 || got[0] != "x" {
-		t.Errorf("lines %q, want the disc shape as fallback, no text", got)
+	if got, _ := lineTexts(res, 1); len(got) != 1 || got[0] != "• x" {
+		t.Errorf("lines %q, want the disc marker as fallback", got)
 	}
-	rb := boxes(t, doc(el(st, txt(st, "x"))), page(100, 20))
+	rb := boxesWith(t, doc(el(st, txt(st, "x"))), Options{Page: page(100, 20), BrowserRules: true})
 	if m := kid(t, rb, 0, 0).outside; m == nil || !m.symbol {
-		t.Errorf("marker %+v, want the disc shape as fallback", m)
+		t.Errorf("marker %+v, want the disc shape as fallback under BrowserRules", m)
 	}
 }
 
@@ -179,7 +179,7 @@ func TestListMarkers_SymbolGeometry(t *testing.T) {
 	for _, lt := range []css.ListStyleType{css.Disc, css.Circle, css.Square} {
 		ul := list(lt, css.Outside, 0)
 		ul.Children[0].Style.FontSize = px(30)
-		rb := boxes(t, doc(ul), page(200, 100))
+		rb := boxesWith(t, doc(ul), Options{Page: page(200, 100), BrowserRules: true})
 		m := kid(t, rb, 0, 0, 0).outside
 		if m == nil || !m.symbol {
 			t.Fatalf("type %v: marker %+v, want a symbol", lt, m)
@@ -194,7 +194,10 @@ func TestListMarkers_SymbolGeometry(t *testing.T) {
 func TestListMarkersDraw_Square(t *testing.T) {
 	// At 10px: ascent 8px, a 3px square 12px left of the content edge at
 	// 40px, its top 4px below the line's.
-	assertPixels(t, run(t, doc(list(css.Square, css.Outside, 0)), page(40, 8)), 1, `
+	if m := kid(t, boxes(t, doc(list(css.Square, css.Outside, 0)), page(40, 8)), 0, 0, 0).outside; m == nil || m.symbol {
+		t.Errorf("marker %+v, want text without BrowserRules", m)
+	}
+	assertPixels(t, runWith(t, doc(list(css.Square, css.Outside, 0)), Options{Page: page(40, 8), BrowserRules: true}), 1, `
 		________________________________________
 		________________________________________
 		________________________________________

@@ -410,10 +410,10 @@ func veryDark(c compose.Color) bool {
 	return l <= lin(0x20/255.0)+1e-9
 }
 
-// blink reports the Blink rendering of the HTML converter, which selects
-// [Options.PixelFontMetrics]: the two-tone border shades of [shades] and
-// [currentShades] are Blink's, which the Office formats do not draw.
-func (p *painter) blink() bool { return p.e.opts.PixelFontMetrics }
+// blink reports [Options.BrowserRules]: the two-tone border shades of
+// [shades] and [currentShades] and the auto underline are Blink's, which
+// the Office formats do not draw.
+func (p *painter) blink() bool { return p.e.opts.BrowserRules }
 
 // currentShades are the dark and light shades of a two-tone border whose
 // colour is currentColor: Blink paints #eeeeee and its darker #9a9a9a
