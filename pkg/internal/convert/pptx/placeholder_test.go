@@ -133,3 +133,28 @@ func TestPlaceholders_MasterShapesShowThrough(t *testing.T) {
 		})
 	}
 }
+
+func TestPlaceholders_ObjectWithoutIndexTakesNoBodyStyle(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, ph string
+		bullet   bool
+	}{
+		{"no type, no index", `<p:ph/>`, false},
+		{"an object with an index takes the body style", `<p:ph idx="1"/>`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := oneSlide(t, title("T")+`<p:sp><p:nvSpPr><p:cNvPr id="7" name="Obj"/><p:cNvSpPr/><p:nvPr>`+tc.ph+`</p:nvPr></p:nvSpPr>`+
+				`<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/></a:xfrm></p:spPr><p:txBody>`+para("x")+`</p:txBody></p:sp>`)
+			sh := shapeNamed(s.Shapes, "Obj")
+			if sh == nil || sh.Text == nil {
+				t.Fatalf("shape %+v", sh)
+			}
+			p := sh.Text.Paragraphs[0]
+			if (p.Bullet != nil) != tc.bullet || (p.MarginLeft != 0) != tc.bullet {
+				t.Errorf("bullet %+v, margin %v", p.Bullet, p.MarginLeft)
+			}
+		})
+	}
+}

@@ -178,9 +178,17 @@ func (r *reader) textBody(c *shapeCtx, sc []*ooxml.Element, p placeholder, ref *
 	if tb == nil {
 		return nil
 	}
-	_, isPh := phOf(sc[0])
+	own, isPh := phOf(sc[0])
 	isPh = isPh && len(sc) > 1
-	ts := &textStyles{extra: fontRefLevel(ref), master: c.layer.styleFor(p, isPh), def: r.defaultText, sc: c.sc, part: c.part, owners: map[*ooxml.Element]string{}}
+	master := c.layer.styleFor(p, isPh)
+	if isPh && own.typ == "obj" && !own.hasIdx {
+		// An object placeholder without an index takes no list style of
+		// its layout's or master's placeholder and no master body style:
+		// the presentation's default text style (pptx: sd/bullet-indent's
+		// <p:ph/> prints its bullets at margin 0).
+		sc, master = sc[:1], nil
+	}
+	ts := &textStyles{extra: fontRefLevel(ref), master: master, def: r.defaultText, sc: c.sc, part: c.part, owners: map[*ooxml.Element]string{}}
 	if ts.master != nil {
 		ts.owners[ts.master] = r.partOf(ts.master, c.part)
 	}
