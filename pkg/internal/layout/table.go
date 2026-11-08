@@ -694,6 +694,7 @@ func (e *engine) layoutTableOnce(t *box, cb cblock, y float64) {
 		}
 		c.y = top.y
 		c.h = max(h-vEdges(c), 0)
+		c.clipExact = td.exactCell(c)
 	}
 	e.placeGroups(td)
 	top := t.contentY()
@@ -776,12 +777,16 @@ func (e *engine) rowHeights(td *tableData, cb cblock) ([]float64, []float64, []b
 	hasBase := make([]bool, nr)
 	pct := make([]float64, nr)
 	fixed := make([]bool, nr)
+	exact := make([]bool, nr)
 	tableH, tableSet := specHeight(td.table, td.table.st.Height, cb)
 	for r, row := range td.rows {
 		st := row.box.st
 		if h, ok := specHeight(row.box, st.Height, cblock{}); ok {
 			rowH[r] = h
 			fixed[r] = true
+		}
+		if td.exactRow(r) {
+			exact[r] = true
 		}
 		if st.Height.Kind == css.Percent {
 			pct[r] = max(clamp(st.Height.Value), 0)
@@ -800,6 +805,10 @@ func (e *engine) rowHeights(td *tableData, cb cblock) ([]float64, []float64, []b
 		case css.Percent:
 			pct[cd.row] = max(pct[cd.row], clamp(c.st.Height.Value))
 		case css.Auto, css.None, css.Normal, css.Number, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch:
+		}
+		if exact[cd.row] {
+			// An exact row clips its cells' content (css.Office.ExactHeight).
+			continue
 		}
 		rowH[cd.row] = max(rowH[cd.row], cd.natH)
 		if vaKind(c.st) == css.Baseline && cd.hasBase {
@@ -839,12 +848,15 @@ func (e *engine) rowHeights(td *tableData, cb cblock) ([]float64, []float64, []b
 			have += h
 		}
 		if extra := cd.natH - have; extra > eps {
-			spread(hs, extra)
+			spreadFree(hs, exact[cd.row:cd.row+cd.rowSpan], extra)
 		}
 	}
 	for r := range td.rows {
 		if td.rowCollapsed(r) {
 			rowH[r] = 0
+		}
+		if exact[r] {
+			rowH[r], _ = specHeight(td.rows[r].box, td.rows[r].box.st.Height, cblock{})
 		}
 	}
 	if tableSet && nr > 0 {
@@ -1377,5 +1389,53 @@ func (e *engine) placeGroups(td *tableData) {
 				}
 			}
 		}
+	}
+}
+
+// exactRow reports a row of td exactly as tall as its height, its cells'
+// content clipped (css.Office.ExactHeight).
+func (td *tableData) exactRow(r int) bool {
+	if r < 0 || r >= len(td.rows) {
+		return false
+	}
+	st := td.rows[r].box.st
+	return st.ExactHeight && st.Height.Kind == css.Points
+}
+
+// exactCell reports a cell of td whose rows are all exact
+// (css.Office.ExactHeight): it clips its content at its bottom.
+func (td *tableData) exactCell(c *box) bool {
+	cd := c.cell
+	for r := cd.row; r < cd.row+cd.rowSpan; r++ {
+		if !td.exactRow(r) {
+			return false
+		}
+	}
+	return cd.rowSpan > 0
+}
+
+// spreadFree spreads extra over the heights hs whose exact flag is false,
+// in proportion to them, and over all of them when none is free.
+func spreadFree(hs []float64, exact []bool, extra float64) {
+	var idx []int
+	for i := range hs {
+		if i < len(exact) && !exact[i] {
+			idx = append(idx, i)
+		}
+	}
+	if len(idx) == len(hs) {
+		spread(hs, extra)
+		return
+	}
+	if len(idx) == 0 {
+		return
+	}
+	sub := make([]float64, len(idx))
+	for k, i := range idx {
+		sub[k] = hs[i]
+	}
+	spread(sub, extra)
+	for k, i := range idx {
+		hs[i] = sub[k]
 	}
 }

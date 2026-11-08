@@ -221,6 +221,15 @@ type Office struct {
 	// the flow before it collapse as usual; the box's own top margin
 	// adds to PageTop none.
 	PageTop float64
+	// ExactHeight makes a table row exactly as tall as its Height, a
+	// length, whatever its cells hold: the cells' content past the row
+	// is clipped, as Writer prints a row of an exact height
+	// (ECMA-376 Part 1, 17.4.81 trHeight with hRule exact; ODF 1.3 Part
+	// 3, 17.17 style:row-height without style:use-optimal-row-height
+	// true). A row-spanning cell grows none of the exact rows it spans
+	// and is clipped at their bottom when they all are exact. It applies
+	// to a table row whose Height is in points alone.
+	ExactHeight bool
 }
 
 // MinBorderStroke is the least width, in points, at which a border of

@@ -316,3 +316,23 @@ func TestTableSplit_SpanningCellLines(t *testing.T) {
 		____
 		____`, wpLetters)
 }
+
+// TestTable_ExactHeightRow keeps a row of an exact height at its height,
+// its cell's content past it clipped, and adds no page for that content.
+func TestTable_ExactHeightRow(t *testing.T) {
+	cell := td(mods(fg(red), valign(css.AlignTop)), "a")
+	cell.Children = append(cell.Children, br(sty()), txt(sty(fg(red)), "a"), br(sty()), txt(sty(fg(red)), "a"))
+	exact := func(s *css.Style) { s.Height, s.ExactHeight = css.Pts(px(3)), true }
+	root := doc(deep(table(mods(collapse), tr(mods(exact), cell), tr(nil, td(mods(fg(blue)), "b"))), font(2)))
+	res := run(t, root, page(4, 6))
+	if len(res.Pages) != 1 {
+		t.Fatalf("%d pages, want 1", len(res.Pages))
+	}
+	assertPages(t, res, 6, `
+		RR__
+		RR__
+		RR__
+		BB__
+		BB__
+		____`, wpLetters)
+}

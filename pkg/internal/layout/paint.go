@@ -156,7 +156,7 @@ func viewportBox(root *box) *box {
 // box: overflow hidden, unless its overflow went to the viewport (CSS
 // 2.1, 11.1.1).
 func (p *painter) clips(a *box) bool {
-	return a.kind == kindBlock && a.parent != nil && a.st.Overflow == css.OverflowHidden && a != p.viewport
+	return a.kind == kindBlock && a.parent != nil && (a.st.Overflow == css.OverflowHidden || a.clipExact) && a != p.viewport
 }
 
 // hasBackground reports a style that paints a background.

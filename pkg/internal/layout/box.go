@@ -77,8 +77,12 @@ type box struct {
 	// chain is what the box paints as a link of a chain of linked boxes,
 	// nil for none (chain.go).
 	chain *chainLink
-	st    *css.Style
-	kind  boxKind
+	// clipExact reports a table cell whose rows are all of an exact
+	// height: it clips its content to its padding box
+	// (css.Office.ExactHeight).
+	clipExact bool
+	st        *css.Style
+	kind      boxKind
 	// ortho reports the root of an orthogonal flow, a box of a vertical
 	// writing mode whose one child, an anonymous block, holds its
 	// content turned (writing.go).

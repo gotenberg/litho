@@ -153,7 +153,8 @@ func (td *tableData) splitCells(r int) []*splitCell {
 	var out []*splitCell
 	for _, c := range td.cells {
 		cd := c.cell
-		if cd.row != r {
+		if cd.row != r || td.exactCell(c) {
+			// An exact row clips what it cannot hold: nothing breaks.
 			continue
 		}
 		off := 0.0
@@ -348,7 +349,7 @@ func (td *tableData) breakSpans(r int, cut, at float64, rowH []float64, gap floa
 				bottom += gap
 			}
 		}
-		if need := top + end + d - bottom; need > eps && last < len(rowH) {
+		if need := top + end + d - bottom; need > eps && last < len(rowH) && !td.exactRow(last) {
 			rowH[last] += need
 		}
 	}
