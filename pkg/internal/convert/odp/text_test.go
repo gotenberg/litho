@@ -143,8 +143,9 @@ func TestRead_Lists(t *testing.T) {
 		{cm(1.2), -cm(0.6), &slides.Bullet{Kind: slides.BulletChar, Char: "•", Families: []string{"OpenSymbol"}, Scale: 0.45}},
 		{cm(3), -cm(2), &slides.Bullet{Kind: slides.BulletChar, Char: "▪", Families: []string{"DejaVu Sans"}, Scale: 1, Color: css.Color{R: 1, A: 1}}},
 		{cm(3), -cm(1), &slides.Bullet{Kind: slides.BulletNumber, Format: "alphaLcParenR", StartAt: 3, Scale: 0.45}},
-		// Impress lays a label-alignment level out with no indent.
-		{0, 0, &slides.Bullet{Kind: slides.BulletNumber, Format: "arabicPeriod", StartAt: 1, Scale: 0.45}},
+		// Impress lays a label-alignment level out with no indent; a level
+		// starting at 1 continues the count (StartAt 0).
+		{0, 0, &slides.Bullet{Kind: slides.BulletNumber, Format: "arabicPeriod", Scale: 0.45}},
 		{0, 0, &slides.Bullet{Kind: slides.BulletChar, Char: "•", Families: []string{"OpenSymbol"}, Scale: 0.45}},
 		{0, 0, nil},
 	}
@@ -180,5 +181,30 @@ func TestNumberScheme(t *testing.T) {
 		if got := numberScheme(tt.format, tt.prefix, tt.suffix); got != tt.want {
 			t.Errorf("numberScheme(%q, %q, %q) = %q, want %q", tt.format, tt.prefix, tt.suffix, got, tt.want)
 		}
+	}
+}
+
+func TestRead_ListStart(t *testing.T) {
+	style := `<text:list-style style:name="N"><text:list-level-style-number text:level="1" style:num-format="1" text:start-value="4"/></text:list-style>`
+	item := func(attr string) string { return `<text:list-item` + attr + `><text:p>x</text:p></text:list-item>` }
+	tests := []struct {
+		name, lists string
+		want        []int
+	}{
+		{"level start at a list's first item", `<text:list text:style-name="N">` + item("") + item("") + `</text:list>`, []int{4, 0}},
+		{"continued list", `<text:list text:style-name="N">` + item("") + `</text:list><text:list text:style-name="N" text:continue-numbering="true">` + item("") + `</text:list>`, []int{4, 0}},
+		{"item restart", `<text:list text:style-name="N">` + item("") + item(` text:start-value="9"`) + `</text:list>`, []int{4, 9}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ps := firstShape(t, flat{auto: style, body: page(`<draw:frame svg:width="10cm" svg:height="8cm"><draw:text-box>` + tt.lists + `</draw:text-box></draw:frame>`)}).Text.Paragraphs
+			var got []int
+			for _, p := range ps {
+				got = append(got, p.Bullet.StartAt)
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("starts = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

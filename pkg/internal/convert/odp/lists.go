@@ -54,8 +54,11 @@ func (r *reader) listIndents(ls *odf.ListStyle, lv int) (float64, float64) {
 // bullet returns the label of a paragraph opening a list item at level
 // lv of ls (ODF 1.3, Part 3, 16.33 text:list-level-style-bullet, 16.32
 // text:list-level-style-number, 16.34 text:list-level-style-image): nil
-// for a level that shows none.
-func (r *reader) bullet(ls *odf.ListStyle, lv int, item *odf.Element) *slides.Bullet {
+// for a level that shows none. A number's StartAt restarts the count
+// where the file states a start (the contract's 0 continues it);
+// listStart marks the first item of a list that does not continue
+// another.
+func (r *reader) bullet(ls *odf.ListStyle, lv int, item *odf.Element, listStart bool) *slides.Bullet {
 	l := listLevel(ls, lv)
 	if l == nil {
 		return &slides.Bullet{Kind: slides.BulletChar, Char: "•", Families: []string{"OpenSymbol"}, Scale: defaultBulletScale}
@@ -92,11 +95,13 @@ func (r *reader) bullet(ls *odf.ListStyle, lv int, item *odf.Element) *slides.Bu
 		}
 		b.Kind = slides.BulletNumber
 		b.Format = numberScheme(f, l.El.A(odf.NSStyle, "num-prefix"), l.El.A(odf.NSStyle, "num-suffix"))
-		b.StartAt = 1
-		if n, err := strconv.Atoi(l.El.A(odf.NSText, "start-value")); err == nil && n >= 0 {
+		// An item's text:start-value restarts the count (19.868); the
+		// level's restarts it where a list starts, when it is not 1, the
+		// count every run of numbered paragraphs starts at.
+		if n, err := strconv.Atoi(l.El.A(odf.NSText, "start-value")); err == nil && n > 1 && listStart {
 			b.StartAt = n
 		}
-		if n, err := strconv.Atoi(item.A(odf.NSText, "start-value")); err == nil && n >= 0 {
+		if n, err := strconv.Atoi(item.A(odf.NSText, "start-value")); err == nil && n >= 1 {
 			b.StartAt = n
 		}
 	case "image":

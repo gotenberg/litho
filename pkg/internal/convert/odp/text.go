@@ -88,6 +88,10 @@ type listCtx struct {
 	header bool
 	first  bool
 	item   *odf.Element
+	// listStart marks the first item of a list that does not continue
+	// another's numbering (19.791 text:continue-numbering, 19.790
+	// text:continue-list).
+	listStart bool
 }
 
 // blocks reads the paragraphs, headings and lists of el into out.
@@ -118,10 +122,12 @@ func (r *reader) blocks(el *odf.Element, tc *textCtx, lc listCtx, out *[]slides.
 					nl.style = ls
 				}
 			}
+			fresh := k.A(odf.NSText, "continue-numbering") != "true" && k.A(odf.NSText, "continue-list") == ""
 			for _, item := range k.Children {
 				if item.Is(odf.NSText, "list-item") || item.Is(odf.NSText, "list-header") {
 					ic := nl
 					ic.header, ic.first, ic.item = item.Is(odf.NSText, "list-header"), true, item
+					ic.listStart, fresh = fresh, false
 					r.blocks(item, tc, ic, out, depth+1)
 				}
 			}
@@ -426,7 +432,7 @@ func (r *reader) paragraph(p *odf.Element, tc *textCtx, lc listCtx) slides.Parag
 	if lc.inList && !lc.header {
 		out.MarginLeft, out.Indent = r.listIndents(lc.style, lv)
 		if lc.first {
-			out.Bullet = r.bullet(lc.style, lv, lc.item)
+			out.Bullet = r.bullet(lc.style, lv, lc.item, lc.listStart)
 		}
 	}
 	for _, t := range ps.tabs {
