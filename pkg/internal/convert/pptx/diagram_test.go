@@ -104,6 +104,17 @@ func TestDiagram(t *testing.T) {
 					t.Fatalf("kids %+v", g.Kids)
 				}
 			}},
+		{"a saved text box turns with its shape", `<dsp:sp modelId="{1}"><dsp:nvSpPr><dsp:cNvPr id="0" name="turned"/><dsp:cNvSpPr/></dsp:nvSpPr>` +
+			`<dsp:spPr><a:xfrm rot="10800000"><a:off x="0" y="0"/><a:ext cx="254000" cy="127000"/></a:xfrm></dsp:spPr>` +
+			`<dsp:txBody><a:bodyPr/><a:p><a:r><a:t>up</a:t></a:r></a:p></dsp:txBody><dsp:txXfrm rot="10800000"><a:off x="0" y="0"/><a:ext cx="254000" cy="127000"/></dsp:txXfrm></dsp:sp>`,
+			func(t *testing.T, g *slides.Shape) {
+				if len(g.Kids) != 2 || g.Kids[1].Kind != slides.KindGroup || len(g.Kids[1].Kids) != 2 {
+					t.Fatalf("kids %+v", g.Kids)
+				}
+				if shape, text := g.Kids[1].Kids[0], g.Kids[1].Kids[1]; shape.Rotation != 180 || text.Rotation != 0 || plain(text.Text) != "up" {
+					t.Errorf("shape turned %v, text turned %v", shape.Rotation, text.Rotation)
+				}
+			}},
 		{"an empty saved drawing is laid out", `<dsp:cxnSp/>`, func(t *testing.T, g *slides.Shape) {
 			if len(g.Kids) != 3 {
 				t.Fatalf("%d kids, want the background and two ellipses", len(g.Kids))
