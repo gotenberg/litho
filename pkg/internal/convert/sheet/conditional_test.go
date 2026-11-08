@@ -141,6 +141,7 @@ func TestConditional_ColorScale(t *testing.T) {
 		{"min to max", Rule{Kind: RuleColorScale, Scale: []css.Color{red, blue}}, []float64{1, 2, 3, 4}, []css.Color{red, c8(170, 0, 85), c8(85, 0, 170), blue}},
 		{"numbers, truncated steps", Rule{Kind: RuleColorScale, Scale: []css.Color{yellow, cyan}, Values: []Value{num(1.3), num(3.7)}}, []float64{1, 2, 3, 4}, []css.Color{yellow, c8(181, 255, 74), c8(75, 255, 180), cyan}},
 		{"three colours, median", Rule{Kind: RuleColorScale, Scale: []css.Color{red, green, blue}}, []float64{0, 5, 10}, []css.Color{red, green, blue}},
+		{"one value takes the top colour", Rule{Kind: RuleColorScale, Scale: []css.Color{red, green, blue}}, []float64{1}, []css.Color{blue}},
 		{"min and max names", Rule{Kind: RuleColorScale, Scale: []css.Color{red, blue}, Values: []Value{str("min"), num(2)}}, []float64{0, 1, 2, 4}, []css.Color{red, c8(128, 0, 127), blue, blue}},
 	}
 	for _, tc := range tests {

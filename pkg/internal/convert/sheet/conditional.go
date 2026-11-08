@@ -538,9 +538,10 @@ func thresholds(vals []Value, n int, st *condStats) ([]float64, bool) {
 // colorScale returns the colour a colour scale paints the cell with: the
 // colours of the thresholds on either side of its number mixed in
 // proportion, each channel moved from the lower colour by the truncated
-// share of the difference; below the first threshold the first colour,
-// past the last the last (ScColorScaleFormat::GetColor, CalcColor). A
-// cell without a number is not painted.
+// share of the difference: the band is the first whose top the value
+// does not reach, or the last; at or past its top the top colour, at or
+// below its bottom the bottom colour (ScColorScaleFormat::GetColor, CalcColor). A cell without
+// a number is not painted.
 //
 // # Corpus evidence
 //
@@ -548,6 +549,8 @@ func thresholds(vals []Value, n int, st *condStats) ([]float64, bool) {
 //     (170, 0, 85); yellow to cyan between the 10th percentile and 90% of
 //     1 to 4 (1.3 and 3.7) prints 2 as (181, 255, 74) and 3 as (75, 255,
 //     180).
+//   - xlsx: sc/tdf156028.xlsx, a three-colour scale over the one value 1,
+//     paints it the maximum's green.
 func colorScale(rule *Rule, st *condStats, cell *Cell) (css.Color, bool) {
 	if cell == nil || (cell.Value.Kind != Number && cell.Value.Kind != Bool) {
 		return css.Color{}, false
@@ -557,24 +560,21 @@ func colorScale(rule *Rule, st *condStats, cell *Cell) (css.Color, bool) {
 		return css.Color{}, false
 	}
 	v := cell.Value.Number
-	if v <= th[0] {
-		return rule.Scale[0], true
+	// The band moves on while the value reaches its top; at or past the
+	// top, the top colour wins, then at or below the bottom, the bottom
+	// colour.
+	i := 1
+	for i < len(th)-1 && v >= th[i] {
+		i++
 	}
-	last := len(th) - 1
-	if v >= th[last] {
-		return rule.Scale[last], true
+	lo, hi := th[i-1], th[i]
+	switch {
+	case v >= hi:
+		return rule.Scale[i], true
+	case v <= lo:
+		return rule.Scale[i-1], true
 	}
-	for i := 1; i <= last; i++ {
-		if v > th[i] {
-			continue
-		}
-		f := 0.0
-		if d := th[i] - th[i-1]; d > 0 {
-			f = (v - th[i-1]) / d
-		}
-		return mixColor(rule.Scale[i-1], rule.Scale[i], f), true
-	}
-	return rule.Scale[last], true
+	return mixColor(rule.Scale[i-1], rule.Scale[i], (v-lo)/(hi-lo)), true
 }
 
 // mixColor moves each channel of a towards b by the share f, truncated to
