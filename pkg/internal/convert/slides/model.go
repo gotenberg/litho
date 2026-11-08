@@ -31,10 +31,13 @@ type Document struct {
 // Slide is one slide (ECMA-376 Part 1, 19.3.1.38 sld; ODF 1.3 Part 3, 10.2.4
 // draw:page).
 type Slide struct {
-	// Name is the slide's name, what the outline shows when the reader
-	// finds no title: "Slide 3" when the file names none.
+	// Name is what the slide's outline entry shows, as Impress writes the
+	// bookmarks of the format: the title placeholder's text of a
+	// PresentationML slide, the draw:name of an OpenDocument page; "Slide
+	// 3" when the file gives none.
 	Name string
-	// Title is the text of the slide's title placeholder, "" for none.
+	// Title is the text of the slide's title placeholder, "" for none: the
+	// slide's heading for the structure tree and the fields.
 	Title string
 	// Hidden marks a slide the show skips (19.3.1.38 show false; ODF
 	// presentation:visibility hidden).

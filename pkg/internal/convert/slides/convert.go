@@ -13,7 +13,7 @@ import (
 // the index fonts, and returns the paged document: one page per slide at
 // the slide size, hidden slides left out unless office.Options.HiddenSlides
 // asks for them, a notes page per slide after the slides when
-// office.Options.NotesPages asks, the slide titles as the outline unless
+// office.Options.NotesPages asks, the slides' names as the outline unless
 // OmitOutline, the date and time fields showing PrintDate. PageWidth and
 // PageHeight, when set, are the page size, the slide scaled to fit it and
 // centred; Landscape turns a portrait page. It returns ctx's error when
