@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
 // The colours of LibreOffice's drawing item pool, which a shape takes when
@@ -51,6 +52,8 @@ func shapeElement(el *odf.Element) bool {
 type shapeArt struct {
 	draw   func(ctx context.Context) []compose.Fragment
 	bounds compose.Rect
+	// line is a dimension line's ends, which its text follows.
+	line [4]float64
 	// logic, when set, is the shape's unturned box, which the anchors of
 	// a shape resized with its cells place (ODF 1.3, Part 3, 19.661
 	// table:end-cell-address); nil for a line or a dimension line, whose
@@ -96,6 +99,9 @@ func (r *reader) shape(ts *tableState, el *odf.Element, at *sheet.Anchor) {
 		art, ok = lineArt(el, line, dx, dy)
 	case "measure":
 		art, ok = measureArt(el, line, p, dx, dy)
+		if ok {
+			r.measureText(el, &art)
+		}
 	default:
 		art, ok = r.geometryArt(el, paint, line, dx, dy)
 	}
@@ -397,7 +403,8 @@ func appendFrag(out []compose.Fragment, f compose.Fragment) []compose.Fragment {
 // dimension line draw:line-distance to the left of the way from its
 // first point to its second, with its arrowheads, and a guide from each
 // point, starting draw:guide-distance from it and passing the dimension
-// line by draw:guide-overhang. The measured value is not drawn.
+// line by draw:guide-overhang; [reader.measureText] adds the measured
+// value.
 func measureArt(el *odf.Element, s *shapeStroke, p odf.Props, dx, dy float64) (shapeArt, bool) {
 	x1, y1, x2, y2, ok := lineEnds(el, dx, dy)
 	n := math.Hypot(x2-x1, y2-y1)
@@ -430,6 +437,7 @@ func measureArt(el *odf.Element, s *shapeStroke, p odf.Props, dx, dy float64) (s
 	pts := [][2]float64{{x1, y1}, {x2, y2}, {x1 + nx*(dist+over), y1 + ny*(dist+over)}, {x2 + nx*(dist+over), y2 + ny*(dist+over)}}
 	return shapeArt{
 		bounds: bounds(pts, math.Max(arrow, s.line.Width)),
+		line:   [4]float64{ax, ay, bx, by},
 		draw: func(context.Context) []compose.Fragment {
 			out := s.stroke(segment(ax, ay, bx, by))
 			out = append(out, s.stroke(guide(x1, y1))...)
@@ -630,3 +638,112 @@ func (r *reader) transformedPicture(ts *tableState, el *odf.Element, at *sheet.A
 		logic: &logicBox{x: m.E, y: m.F, w: w, h: h, lin: lin, local: local},
 	})
 }
+
+// The measured value's font when no style sets one: Liberation Serif at 12
+// points (measured on the pinned LibreOffice, sc/tdf137576_Measureline.ods
+// prints "37 mm" in it at 11.991 points), and the gap between the
+// dimension line and the text's baseline, 0.935 points.
+const (
+	measureFontSize = 11.991
+	measureTextGap  = 0.935
+)
+
+// measureText adds to art, a dimension line's drawing, its measured value
+// as the file writes it in the shape's paragraph (ODF 1.3, Part 3, 7.6.5
+// text:measure, with the text:s spaces): centred along the dimension
+// line, turned with the line and never upside down, its baseline 0.935
+// points off the line, as Calc lays it out.
+func (r *reader) measureText(el *odf.Element, art *shapeArt) {
+	var sb strings.Builder
+	x1, y1, x2, y2, _ := lineEnds(el, 0, 0)
+	value := measureValue(math.Hypot(x2-x1, y2-y1))
+	for _, c := range el.Children {
+		if c.Is(odf.NSText, "p") {
+			spacedText(c, &sb, value, 0)
+		}
+	}
+	txt := sb.String()
+	if strings.TrimSpace(txt) == "" || r.fonts == nil {
+		return
+	}
+	tp := r.styles.Resolve(odf.ScopeContent, odf.FamilyGraphic, el.A(odf.NSDraw, "style-name"), odf.TextProps)
+	size := measureFontSize
+	if v, ok := odf.Length(tp.Get("fo:font-size")); ok && v > 0 {
+		size = min(v, maxMeasureFont)
+	}
+	families := []string{"Liberation Serif"}
+	if f := strings.Trim(tp.Get("fo:font-family"), "'\""); f != "" {
+		families = []string{f, "Liberation Serif"}
+	}
+	fonts, prev := r.fonts, art.draw
+	ax, ay, bx, by := art.line[0], art.line[1], art.line[2], art.line[3]
+	angle := math.Atan2(by-ay, bx-ax)
+	if angle >= math.Pi/2-1e-9 || angle < -math.Pi/2-1e-9 {
+		// Text reads left to right or upwards, never upside down.
+		angle -= math.Pi
+	}
+	sin, cos := math.Sincos(angle)
+	mx, my := (ax+bx)/2, (ay+by)/2
+	art.draw = func(ctx context.Context) []compose.Fragment {
+		out := prev(ctx)
+		lines, _, err := fonts.Layout(ctx, []text.Run{{Text: txt, Style: text.Style{Families: families, Size: size, Color: compose.Color{A: 1}}}}, 1<<16, text.Options{Whitespace: text.Preserve})
+		if err != nil || len(lines) == 0 {
+			return out
+		}
+		l := lines[0]
+		var runs []compose.Fragment
+		for _, run := range l.Runs {
+			t := *run
+			t.Origin = compose.Point{X: run.Origin.X - l.Width/2, Y: -measureTextGap}
+			runs = append(runs, &t)
+		}
+		return append(out, &compose.Group{Transform: compose.Matrix{A: cos, B: sin, C: -sin, D: cos, E: mx, F: my}, Opacity: 1, Content: runs})
+	}
+}
+
+// maxMeasureFont caps a dimension line's font size, in points. Anti-DoS
+// guard, not spec-mandated: Calc stops at 999.9 points.
+const maxMeasureFont = 1000
+
+// measureValue returns a length in points as Calc writes a dimension
+// line's value: in millimetres, at most two decimals, the trailing zeros
+// dropped, a full stop for the decimal separator whatever the file's
+// locale wrote (measured on the pinned LibreOffice: sc/LargeAnchorOffset.ods
+// prints its "79,99" as 79.99, sc/tdf137576_Measureline.ods 37 mm as 37).
+func measureValue(pt float64) string {
+	s := strconv.FormatFloat(math.Round(pt*2540/72)/100, 'f', 2, 64)
+	s = strings.TrimRight(strings.TrimRight(s, "0"), ".")
+	return s
+}
+
+// spacedText writes the text of el to sb, a text:s as its text:c spaces
+// (ODF 1.3, Part 3, 6.1.3), a tab or line break as a space, and a
+// dimension line's value field (7.6.5 text:measure kind value) as value.
+func spacedText(el *odf.Element, sb *strings.Builder, value string, depth int) {
+	if depth > maxTextDepth || sb.Len() > maxFieldText {
+		return
+	}
+	for _, c := range el.Children {
+		switch {
+		case c.IsText():
+			sb.WriteString(c.Text)
+		case c.Is(odf.NSText, "s"):
+			n, err := strconv.Atoi(c.A(odf.NSText, "c"))
+			if err != nil || n < 1 {
+				n = 1
+			}
+			sb.WriteString(strings.Repeat(" ", min(n, maxFieldText)))
+		case c.Is(odf.NSText, "tab"), c.Is(odf.NSText, "line-break"):
+			sb.WriteByte(' ')
+		case c.Is(odf.NSText, "measure") && c.A(odf.NSText, "kind") == "value":
+			sb.WriteString(value)
+		default:
+			spacedText(c, sb, value, depth+1)
+		}
+	}
+}
+
+// maxFieldText caps the characters of a shape's text read. Anti-DoS
+// guard, not spec-mandated: a dimension line's text is a number and a
+// unit.
+const maxFieldText = 1024

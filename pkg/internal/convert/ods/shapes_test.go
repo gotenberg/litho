@@ -3,7 +3,10 @@ package ods
 import (
 	"context"
 	"math"
+	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/odf"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 )
@@ -127,4 +130,39 @@ func firstFill(frags []compose.Fragment) *compose.Fill {
 		}
 	}
 	return nil
+}
+
+func TestMeasureValue(t *testing.T) {
+	for pt, want := range map[float64]string{37 * 72 / 25.4: "37", 79.99 * 72 / 25.4: "79.99", 12.5 * 72 / 25.4: "12.5", 0: "0"} {
+		if got := measureValue(pt); got != want {
+			t.Errorf("measureValue(%v) = %q, want %q", pt, got, want)
+		}
+	}
+}
+
+func TestSpacedText(t *testing.T) {
+	f := flat{body: `<table:table table:name="S"><table:table-row><table:table-cell><draw:measure svg:x1="0in" svg:y1="0in" svg:x2="1in" svg:y2="0in">` +
+		`<text:p><text:measure text:kind="gap"/><text:s/><text:measure text:kind="value">25,4</text:measure><text:s text:c="3"/><text:measure text:kind="unit">mm</text:measure></text:p>` +
+		`</draw:measure></table:table-cell></table:table-row></table:table>`}
+	root, err := odf.ParseXML(context.Background(), f.bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var find func(e *odf.Element) *odf.Element
+	find = func(e *odf.Element) *odf.Element {
+		if e.Is(odf.NSText, "p") {
+			return e
+		}
+		for _, c := range e.Children {
+			if p := find(c); p != nil {
+				return p
+			}
+		}
+		return nil
+	}
+	var sb strings.Builder
+	spacedText(find(root), &sb, "25.4", 0)
+	if sb.String() != " 25.4   mm" {
+		t.Errorf("text %q", sb.String())
+	}
 }
