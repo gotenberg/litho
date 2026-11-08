@@ -51,6 +51,20 @@ func shapeElement(el *odf.Element) bool {
 type shapeArt struct {
 	draw   func(ctx context.Context) []compose.Fragment
 	bounds compose.Rect
+	// logic, when set, is the shape's unturned box, which the anchors of
+	// a shape resized with its cells place (ODF 1.3, Part 3, 19.661
+	// table:end-cell-address); nil for a line or a dimension line, whose
+	// ends place it.
+	logic *logicBox
+}
+
+// logicBox is a shape's unturned box: its corner (x, y) on the sheet, its
+// size w by h, the linear part lin of its transform about that corner,
+// and what local draws in the box (0, 0, w, h).
+type logicBox struct {
+	x, y, w, h float64
+	lin        compose.Matrix
+	local      func(ctx context.Context, box compose.Rect) []compose.Fragment
 }
 
 // shape reads a drawing shape (ODF 1.3, Part 3, 10.3 and 10.6) into a
@@ -133,22 +147,27 @@ func (r *reader) place(ts *tableState, el *odf.Element, at *sheet.Anchor, art sh
 		return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: draw(ctx)}}
 	}
 	d := sheet.Drawing{Name: el.A(odf.NSDraw, "name"), Picture: pic, Width: b.Width, Height: b.Height, Unbounded: true}
-	dx, dy := 0.0, 0.0
-	if at != nil {
-		dx, dy = b.X-ts.colLeft(at.Column), b.Y-ts.rowY
-	}
-	if at == nil {
+	end, resize := cellRef(el.A(odf.NSTable, "end-cell-address"))
+	switch {
+	case at == nil:
 		d.Absolute, d.X, d.Y = true, max(b.X, 0), max(b.Y, 0)
-	} else {
-		// A shape whose box starts above or left of its anchor cell starts
-		// at the cell's corner, as Calc snaps a turned legacy shape to it
-		// (sc/legacycellanchoredrotatedshape.ods).
-		d.From = sheet.Anchor{Row: at.Row, Column: at.Column, DX: max(dx, 0), DY: max(dy, 0)}
-		if end, ok := cellRef(el.A(odf.NSTable, "end-cell-address")); ok {
-			ex, _ := odf.Length(el.A(odf.NSTable, "end-x"))
-			ey, _ := odf.Length(el.A(odf.NSTable, "end-y"))
-			d.To = &sheet.Anchor{Row: end.row, Column: end.col, DX: max(ex, 0), DY: max(ey, 0)}
+	case resize && art.logic != nil && art.logic.w > 0 && art.logic.h > 0:
+		// Calc sets the unturned box of a shape resized with its cells
+		// from its anchors, then turns it about its corner
+		// (ScDrawLayer::InitializeCellAnchoredObj, lcl_SetLogicRectFromAnchor).
+		lb := art.logic
+		ex, _ := odf.Length(el.A(odf.NSTable, "end-x"))
+		ey, _ := odf.Length(el.A(odf.NSTable, "end-y"))
+		d.From = sheet.Anchor{Row: at.Row, Column: at.Column, DX: lb.x - ts.colLeft(at.Column), DY: lb.y - ts.rowY}
+		d.To = &sheet.Anchor{Row: end.row, Column: end.col, DX: max(ex, 0), DY: max(ey, 0)}
+		d.Width, d.Height = lb.w, lb.h
+		pic.Width, pic.Height = lb.w, lb.h
+		pic.Vector = func(ctx context.Context, rect compose.Rect) []compose.Fragment {
+			m := mul(translation(rect.X, rect.Y), mul(lb.lin, compose.Matrix{A: rect.Width / lb.w, D: rect.Height / lb.h}))
+			return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: lb.local(ctx, compose.Rect{Width: lb.w, Height: lb.h})}}
 		}
+	default:
+		d.From = sheet.Anchor{Row: at.Row, Column: at.Column, DX: b.X - ts.colLeft(at.Column), DY: b.Y - ts.rowY}
 	}
 	r.drawings++
 	ts.sh.Drawings = append(ts.sh.Drawings, d)
@@ -498,25 +517,30 @@ func (r *reader) geometryArt(el *odf.Element, paint *shape.Paint, s *shapeStroke
 	if s != nil {
 		pad = s.line.Width / 2
 	}
-	box := compose.Rect{Width: w, Height: h}
+	local := func(_ context.Context, box compose.Rect) []compose.Fragment {
+		var out []compose.Fragment
+		for _, path := range shape.Paths(g, box) {
+			if path.Fill && paint != nil {
+				pt := *paint
+				if path.Mode != shape.FillNorm && pt.Kind == shape.PaintSolid {
+					pt.Color = shape.Shade(pt.Color, path.Mode)
+				}
+				out = append(out, shape.Fill(path.Ops, box, pt)...)
+			}
+			if path.Stroke {
+				out = append(out, s.stroke(path.Ops)...)
+			}
+		}
+		return out
+	}
+	lin := m
+	lin.E, lin.F = 0, 0
 	return shapeArt{
 		bounds: bounds(pts, pad),
-		draw: func(context.Context) []compose.Fragment {
-			var out []compose.Fragment
-			for _, path := range shape.Paths(g, box) {
-				if path.Fill && paint != nil {
-					pt := *paint
-					if path.Mode != shape.FillNorm && pt.Kind == shape.PaintSolid {
-						pt.Color = shape.Shade(pt.Color, path.Mode)
-					}
-					out = append(out, shape.Fill(path.Ops, box, pt)...)
-				}
-				if path.Stroke {
-					out = append(out, s.stroke(path.Ops)...)
-				}
-			}
-			return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: out}}
+		draw: func(ctx context.Context) []compose.Fragment {
+			return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: local(ctx, compose.Rect{Width: w, Height: h})}}
 		},
+		logic: &logicBox{x: m.E, y: m.F, w: w, h: h, lin: lin, local: local},
 	}, true
 }
 
@@ -587,18 +611,22 @@ func (r *reader) transformedPicture(ts *tableState, el *odf.Element, at *sheet.A
 		px, py := apply(m, c[0], c[1])
 		pts = append(pts, [2]float64{px, py})
 	}
-	box := compose.Rect{Width: w, Height: h}
+	local := func(ctx context.Context, box compose.Rect) []compose.Fragment {
+		switch {
+		case pic.Vector != nil:
+			return pic.Vector(ctx, box)
+		case pic.Source != nil:
+			return []compose.Fragment{&compose.Image{Rect: box, Source: pic.Source}}
+		}
+		return nil
+	}
+	lin := m
+	lin.E, lin.F = 0, 0
 	r.place(ts, el, at, shapeArt{
 		bounds: bounds(pts, 0),
 		draw: func(ctx context.Context) []compose.Fragment {
-			var content []compose.Fragment
-			switch {
-			case pic.Vector != nil:
-				content = pic.Vector(ctx, box)
-			case pic.Source != nil:
-				content = []compose.Fragment{&compose.Image{Rect: box, Source: pic.Source}}
-			}
-			return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: content}}
+			return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: local(ctx, compose.Rect{Width: w, Height: h})}}
 		},
+		logic: &logicBox{x: m.E, y: m.F, w: w, h: h, lin: lin, local: local},
 	})
 }

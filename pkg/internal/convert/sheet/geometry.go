@@ -62,11 +62,11 @@ func (g *grid) rowAt(y float64, limit int) int {
 func (g *grid) anchorPoint(a Anchor, unbounded bool) (float64, float64) {
 	r := min(max(a.Row, 0), maxRows-1)
 	c := min(max(a.Column, 0), maxColumns-1)
-	dx, dy := min(max(a.DX, 0), maxSide), min(max(a.DY, 0), maxSide)
+	dx, dy := min(max(a.DX, -maxSide), maxSide), min(max(a.DY, -maxSide), maxSide)
 	if !unbounded {
-		dx, dy = min(dx, g.colWidth(c)), min(dy, g.rowHeight(r))
+		dx, dy = min(max(dx, 0), g.colWidth(c)), min(max(dy, 0), g.rowHeight(r))
 	}
-	return g.colX(c) + dx, g.rowY(r) + dy
+	return max(g.colX(c)+dx, 0), max(g.rowY(r)+dy, 0)
 }
 
 // drawingRect returns a drawing's box on the sheet, in points from the

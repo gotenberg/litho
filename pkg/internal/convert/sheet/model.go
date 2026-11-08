@@ -662,11 +662,12 @@ type Drawing struct {
 	Chart *chart.Chart
 	// Name is the drawing's name, for warnings.
 	Name string
-	// Unbounded lets the offsets of From and To run past their cells, as
-	// Calc reads the anchors of an OpenDocument spreadsheet (ODF 1.3 Part
-	// 3, 19.663 table:end-x and table:end-y); otherwise an offset stops at
-	// its cell's edge, as Calc reads a workbook's anchors (ECMA-376 Part 1,
-	// 20.5.2.19 colOff and rowOff).
+	// Unbounded lets the offsets of From and To run past their cells, and
+	// below 0 to the cells above and left, as Calc reads the anchors of an
+	// OpenDocument spreadsheet (ODF 1.3 Part 3, 19.663 table:end-x and
+	// table:end-y); otherwise an offset stops at its cell's edges, as Calc
+	// reads a workbook's anchors (ECMA-376 Part 1, 20.5.2.19 colOff and
+	// rowOff).
 	Unbounded bool
 }
 
@@ -674,7 +675,8 @@ type Drawing struct {
 type Anchor struct {
 	// Row and Column are the cell's 0-based indexes.
 	Row, Column int
-	// DX and DY are the offset into the cell in points, at least 0.
+	// DX and DY are the offset into the cell in points, at least 0 unless
+	// the drawing is Unbounded.
 	DX, DY float64
 }
 
