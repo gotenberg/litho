@@ -58,8 +58,16 @@ type grid struct {
 	overflows map[[2]int]int
 }
 
-// newGrid indexes the sheet sh of doc.
+// newGrid indexes the sheet sh of doc, with its conditional formats.
 func newGrid(doc *Document, sh *Sheet) *grid {
+	g := newPlainGrid(doc, sh)
+	g.cond = newConditions(doc, sh)
+	return g
+}
+
+// newPlainGrid indexes the sheet sh of doc without its conditional
+// formats, as the formula evaluator reads it.
+func newPlainGrid(doc *Document, sh *Sheet) *grid {
 	g := &grid{
 		sh: sh, doc: doc, defW: sh.DefaultColumnWidth, defH: sh.DefaultRowHeight,
 		rows: map[int]*Row{}, heights: map[int]float64{}, overflows: map[[2]int]int{}, merges: map[[2]int]Range{}, covered: map[[2]int][2]int{},
@@ -84,7 +92,6 @@ func newGrid(doc *Document, sh *Sheet) *grid {
 		}
 	}
 	sort.Ints(g.rowOrder)
-	g.cond = newConditions(sh)
 	for _, m := range sh.Merges {
 		m = clampRange(m)
 		if m.LastRow < m.FirstRow || m.LastColumn < m.FirstColumn || (m.LastRow == m.FirstRow && m.LastColumn == m.FirstColumn) {

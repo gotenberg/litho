@@ -271,7 +271,7 @@ func (b *builder) planSheet(i int, sh *Sheet) *sheetPlan {
 	if !sp.single {
 		b.growMargins(sp)
 	}
-	if n := unevaluated(sh); n > 0 {
+	if n := unevaluated(g); n > 0 {
 		b.warn(CodeConditional, fmt.Sprintf("sheet %s: %d conditional formatting rules (formulas, icon sets) are not applied", quote(sh.Name), n))
 	}
 	if sh.RightToLeft {

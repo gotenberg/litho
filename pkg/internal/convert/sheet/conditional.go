@@ -60,6 +60,8 @@ type condRule struct {
 // the sheet, their bounding box, and the statistics of its values, read on
 // first use.
 type condFormat struct {
+	// index is the format's index in the sheet's Conditional.
+	index  int
 	ranges []Range
 	box    Range
 	stats  *condStats
@@ -94,23 +96,33 @@ type condStyleKey struct {
 type conditions struct {
 	rules  []condRule
 	styles map[condStyleKey]*Style
+	// doc and sheet place the sheet in its book, eval computes the
+	// rules' formulas, made on first use.
+	doc   *Document
+	sheet int
+	eval  *formulaEval
 }
 
 // newConditions indexes the conditional formats of sh, the rules sorted
 // in the order Calc evaluates them: by priority where the file gives one,
 // else in file order.
-func newConditions(sh *Sheet) *conditions {
+func newConditions(doc *Document, sh *Sheet) *conditions {
 	if len(sh.Conditional) == 0 {
 		return nil
 	}
-	cs := &conditions{styles: map[condStyleKey]*Style{}}
+	cs := &conditions{styles: map[condStyleKey]*Style{}, doc: doc, sheet: -1}
+	for i, s := range doc.Sheets {
+		if s == sh {
+			cs.sheet = i
+		}
+	}
 	nRanges := 0
 	for i := range sh.Conditional {
 		if i >= maxConditionals {
 			break
 		}
 		c := &sh.Conditional[i]
-		f := &condFormat{box: Range{FirstRow: maxRows, FirstColumn: maxColumns, LastRow: -1, LastColumn: -1}}
+		f := &condFormat{index: i, box: Range{FirstRow: maxRows, FirstColumn: maxColumns, LastRow: -1, LastColumn: -1}}
 		for _, rg := range c.Ranges {
 			if nRanges >= maxCondRanges {
 				break
@@ -150,7 +162,9 @@ func newConditions(sh *Sheet) *conditions {
 // its kind one of those whose operands are the cell's value.
 func evaluable(r *Rule) bool {
 	switch r.Kind {
-	case RuleExpression, RuleIconSet:
+	case RuleExpression:
+		return r.Formula != ""
+	case RuleIconSet:
 		return false
 	case RuleCellIs:
 		return r.Formula == "" && len(r.Values) > 0
@@ -168,18 +182,63 @@ func evaluable(r *Rule) bool {
 	return false
 }
 
-// unevaluated returns how many rules of sh the builder does not evaluate:
-// expressions, icon sets and rules with a formula operand.
-func unevaluated(sh *Sheet) int {
+// unevaluated returns how many rules of the sheet of g the builder does
+// not evaluate: icon sets, rules with a formula operand, and expressions
+// whose formula the evaluator does not compute at the format's first
+// cell.
+func unevaluated(g *grid) int {
 	n := 0
-	for _, c := range sh.Conditional {
+	for ci, c := range g.sh.Conditional {
 		for i := range c.Rules {
-			if !evaluable(&c.Rules[i]) {
+			r := &c.Rules[i]
+			if !evaluable(r) {
 				n++
+				continue
+			}
+			if r.Kind == RuleExpression && g.cond != nil && len(c.Ranges) > 0 {
+				a := c.Ranges[0]
+				if _, ok := g.cond.formula(r.Formula, ci, a.FirstRow, a.FirstColumn); !ok {
+					n++
+				}
 			}
 		}
 	}
 	return n
+}
+
+// formula evaluates the formula of a rule of the conditional format ci at
+// the cell (r, c): its relative references move from the format's first
+// cell to the cell (ECMA-376 Part 1, 18.3.1.10: a formula is relative to
+// the top-left cell of the first range).
+func (cs *conditions) formula(f string, ci, r, c int) (fval, bool) {
+	if cs.sheet < 0 || ci < 0 || ci >= len(cs.doc.Sheets[cs.sheet].Conditional) {
+		return fval{}, false
+	}
+	rgs := cs.doc.Sheets[cs.sheet].Conditional[ci].Ranges
+	if len(rgs) == 0 {
+		return fval{}, false
+	}
+	if cs.eval == nil {
+		cs.eval = newFormulaEval(cs.doc)
+	}
+	return cs.eval.evalAt(f, cs.sheet, r, c, r-rgs[0].FirstRow, c-rgs[0].FirstColumn)
+}
+
+// expressionHolds evaluates an expression rule at the cell (r, c): it
+// holds for TRUE or a number other than 0 (ScConditionEntry::IsValid,
+// ScConditionMode::Direct).
+func (cs *conditions) expressionHolds(cr *condRule, r, c int) bool {
+	v, ok := cs.formula(cr.rule.Formula, cr.f.index, r, c)
+	if !ok {
+		return false
+	}
+	x := scalar(v)
+	switch x.Kind {
+	case Number, Bool:
+		return x.Number != 0
+	case Text, Error, Empty:
+	}
+	return false
 }
 
 // contains reports a cell of the format's ranges.
@@ -291,7 +350,14 @@ func (cs *conditions) evaluate(g *grid, r, c int, cell *Cell) *condResult {
 			if cell != nil && (cell.Value.Kind == Number || cell.Value.Kind == Bool) {
 				res.bar, res.barF, holds = rule, cr.f, true
 			}
-		case RuleExpression, RuleIconSet:
+		case RuleExpression:
+			if res.style != nil {
+				continue
+			}
+			if holds = cs.expressionHolds(cr, r, c); holds && rule.Style != nil {
+				res.style = rule.Style
+			}
+		case RuleIconSet:
 		case RuleCellIs, RuleText, RuleBlanks, RuleNoBlanks, RuleDuplicates, RuleUniques,
 			RuleTop, RuleBottom, RuleAboveAverage, RuleBelowAverage:
 			if res.style != nil {

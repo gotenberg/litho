@@ -66,12 +66,13 @@ type formulaEval struct {
 	unsupported map[string]bool
 }
 
-// newFormulaEval returns an evaluator over doc.
+// newFormulaEval returns an evaluator over doc, which the formulas of its
+// cells and of its conditional formats read.
 func newFormulaEval(doc *Document) *formulaEval {
 	e := &formulaEval{doc: doc, grids: make([]*grid, len(doc.Sheets)), state: map[[3]int]uint8{}, done: map[[3]int]fval{}, ok: map[[3]int]bool{}, unsupported: map[string]bool{}}
 	for i, sh := range doc.Sheets {
 		if sh != nil {
-			e.grids[i] = newGrid(doc, sh)
+			e.grids[i] = newPlainGrid(doc, sh)
 		}
 	}
 	return e
@@ -96,7 +97,7 @@ func (e *formulaEval) cellValue(s, r, c, depth int) fval {
 			return e.done[k]
 		case 0:
 			e.state[k] = 1
-			res, ok := e.eval(cell.Formula, s, 0, 0, depth+1)
+			res, ok := e.eval(cell.Formula, s, r, c, 0, 0, depth+1)
 			e.state[k] = 2
 			if ok && res.rng == nil {
 				e.done[k] = res
@@ -123,11 +124,17 @@ func (e *formulaEval) stored(g *grid, r, c int, cell *Cell) fval {
 	return fval{v: v, format: g.baseStyle(r, c, cell).Format}
 }
 
-// eval evaluates the formula f on sheet s, its relative references moved
-// dr rows and dc columns, false when it holds what the evaluator does not
-// compute: a function other than SUM, AVERAGE, MIN, MAX and COUNT, a
+// evalAt evaluates the formula f as the cell (r, c) of sheet s reads it,
+// its relative references moved dr rows and dc columns.
+func (e *formulaEval) evalAt(f string, s, r, c, dr, dc int) (fval, bool) {
+	return e.eval(f, s, r, c, dr, dc, 0)
+}
+
+// eval evaluates the formula f of the cell (r, c) of sheet s, its
+// relative references moved dr rows and dc columns, false when it holds
+// what the evaluator does not compute: a function it does not know, a
 // reference it cannot resolve, a syntax it does not read.
-func (e *formulaEval) eval(f string, s, dr, dc, depth int) (fval, bool) {
+func (e *formulaEval) eval(f string, s, r, c, dr, dc, depth int) (fval, bool) {
 	if len(f) > maxFormulaLen {
 		return fval{}, false
 	}
@@ -136,7 +143,7 @@ func (e *formulaEval) eval(f string, s, dr, dc, depth int) (fval, bool) {
 		f = strings.TrimPrefix(f, p)
 	}
 	f = strings.TrimPrefix(f, "=")
-	p := &fparser{e: e, src: f, sheet: s, dr: dr, dc: dc, depth: depth}
+	p := &fparser{e: e, src: f, sheet: s, row: r, col: c, dr: dr, dc: dc, depth: depth}
 	v, ok := p.comparison()
 	p.space()
 	if !ok || p.pos != len(p.src) {
@@ -147,12 +154,13 @@ func (e *formulaEval) eval(f string, s, dr, dc, depth int) (fval, bool) {
 
 // fparser reads and evaluates one formula as it goes.
 type fparser struct {
-	e      *formulaEval
-	src    string
-	pos    int
-	sheet  int
-	dr, dc int
-	depth  int
+	e        *formulaEval
+	src      string
+	pos      int
+	sheet    int
+	row, col int
+	dr, dc   int
+	depth    int
 }
 
 // space skips white space.
@@ -182,7 +190,9 @@ func (p *fparser) comparison() (fval, bool) {
 	for _, op := range []string{"<>", "<=", ">=", "=", "<", ">"} {
 		if p.eat(op) {
 			b, ok := p.concat()
-			if !ok {
+			if !ok || a.rng != nil || b.rng != nil {
+				// A range compared reads as an array, which the
+				// evaluator does not compute.
 				return b, false
 			}
 			return compareValues(op, scalar(a), scalar(b)), true
@@ -199,7 +209,7 @@ func (p *fparser) concat() (fval, bool) {
 	}
 	for p.eat("&") {
 		b, ok := p.additive()
-		if !ok {
+		if !ok || a.rng != nil || b.rng != nil {
 			return b, false
 		}
 		x, y := scalar(a), scalar(b)
@@ -233,7 +243,7 @@ func (p *fparser) additive() (fval, bool) {
 			return a, true
 		}
 		b, ok := p.multiplicative()
-		if !ok {
+		if !ok || a.rng != nil || b.rng != nil {
 			return b, false
 		}
 		a = arith(op, a, b)
@@ -257,7 +267,7 @@ func (p *fparser) multiplicative() (fval, bool) {
 			return a, true
 		}
 		b, ok := p.power()
-		if !ok {
+		if !ok || a.rng != nil || b.rng != nil {
 			return b, false
 		}
 		a = arith(op, a, b)
@@ -272,7 +282,7 @@ func (p *fparser) power() (fval, bool) {
 	}
 	for p.eat("^") {
 		b, ok := p.unary()
-		if !ok {
+		if !ok || a.rng != nil || b.rng != nil {
 			return b, false
 		}
 		a = arith('^', a, b)
@@ -285,7 +295,7 @@ func (p *fparser) unary() (fval, bool) {
 	switch {
 	case p.eat("-"):
 		v, ok := p.unary()
-		if !ok {
+		if !ok || v.rng != nil {
 			return v, false
 		}
 		return arith('-', fval{v: Value{Kind: Number}}, v), true
@@ -297,6 +307,9 @@ func (p *fparser) unary() (fval, bool) {
 		return v, false
 	}
 	for p.eat("%") {
+		if v.rng != nil {
+			return v, false
+		}
 		v = arith('/', v, fval{v: Value{Kind: Number, Number: 100}})
 		v.percent = true
 	}
@@ -593,6 +606,9 @@ func (p *fparser) call(fn string) (fval, bool) {
 	switch fn {
 	case "SUM", "AVERAGE", "MIN", "MAX", "COUNT":
 	default:
+		if v, ok := p.scalarFunction(fn, args); ok {
+			return v, true
+		}
 		p.e.unsupported[fn] = true
 		return fval{}, false
 	}
@@ -946,4 +962,139 @@ func (b *builder) applyFormulas(doc *Document) *Document {
 		b.warn(CodeFormula, msg)
 	}
 	return &out
+}
+
+// scalarFunction computes the functions of scalar arguments the
+// evaluator knows besides the aggregates: ROW and COLUMN of the cell or of
+// a reference, ABS, INT, MOD, ROUND, ISEVEN, ISODD, IF, AND, OR and NOT,
+// as Calc defines them; false for another function or a wrong count of
+// arguments.
+func (p *fparser) scalarFunction(fn string, args []fval) (fval, bool) {
+	for _, a := range args {
+		if a.rng != nil && fn != "ROW" && fn != "COLUMN" {
+			// A range as a scalar argument reads as an array.
+			return fval{}, false
+		}
+	}
+	num := func(i int) (float64, *Value) {
+		if i >= len(args) {
+			return 0, nil
+		}
+		return number(scalar(args[i]))
+	}
+	val := func(x float64) (fval, bool) {
+		if !finite(x) {
+			return fval{v: Value{Kind: Error, Text: "#NUM!"}}, true
+		}
+		return fval{v: Value{Kind: Number, Number: x}}, true
+	}
+	boolean := func(b bool) (fval, bool) {
+		if b {
+			return fval{v: Value{Kind: Bool, Number: 1}}, true
+		}
+		return fval{v: Value{Kind: Bool}}, true
+	}
+	switch fn {
+	case "ROW", "COLUMN":
+		if len(args) > 1 {
+			return fval{}, false
+		}
+		r, c := p.row, p.col
+		if len(args) == 1 {
+			if args[0].rng == nil {
+				// A one-cell reference reads as its value: the
+				// position is not known.
+				return fval{}, false
+			}
+			r, c = args[0].rng.rg.FirstRow, args[0].rng.rg.FirstColumn
+		}
+		if r < 0 || c < 0 {
+			return fval{}, false
+		}
+		if fn == "ROW" {
+			return val(float64(r + 1))
+		}
+		return val(float64(c + 1))
+	case "ABS", "INT", "ISEVEN", "ISODD":
+		if len(args) != 1 {
+			return fval{}, false
+		}
+		x, err := num(0)
+		if err != nil {
+			return fval{v: *err}, true
+		}
+		switch fn {
+		case "ABS":
+			return val(math.Abs(x))
+		case "INT":
+			return val(math.Floor(x))
+		case "ISEVEN":
+			return boolean(math.Mod(math.Trunc(x), 2) == 0)
+		}
+		return boolean(math.Mod(math.Trunc(x), 2) != 0)
+	case "MOD", "ROUND":
+		if len(args) != 2 {
+			return fval{}, false
+		}
+		x, err := num(0)
+		if err != nil {
+			return fval{v: *err}, true
+		}
+		y, err := num(1)
+		if err != nil {
+			return fval{v: *err}, true
+		}
+		if fn == "MOD" {
+			if y == 0 {
+				return fval{v: Value{Kind: Error, Text: errDiv0}}, true
+			}
+			return val(x - y*math.Floor(x/y))
+		}
+		f := math.Pow(10, math.Trunc(y))
+		return val(math.Round(x*f) / f)
+	case "NOT":
+		if len(args) != 1 {
+			return fval{}, false
+		}
+		x, err := num(0)
+		if err != nil {
+			return fval{v: *err}, true
+		}
+		return boolean(x == 0)
+	case "AND", "OR":
+		if len(args) == 0 {
+			return fval{}, false
+		}
+		out := fn == "AND"
+		for i := range args {
+			x, err := num(i)
+			if err != nil {
+				return fval{v: *err}, true
+			}
+			if fn == "AND" {
+				out = out && x != 0
+			} else {
+				out = out || x != 0
+			}
+		}
+		return boolean(out)
+	case "IF":
+		if len(args) < 1 || len(args) > 3 {
+			return fval{}, false
+		}
+		x, err := num(0)
+		if err != nil {
+			return fval{v: *err}, true
+		}
+		switch {
+		case x != 0 && len(args) >= 2:
+			return args[1], true
+		case x != 0:
+			return boolean(true)
+		case len(args) == 3:
+			return args[2], true
+		}
+		return boolean(false)
+	}
+	return fval{}, false
 }

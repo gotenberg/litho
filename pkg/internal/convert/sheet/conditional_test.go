@@ -54,7 +54,11 @@ func TestConditional_Rules(t *testing.T) {
 		{"bottom 2, ties hold", Rule{Kind: RuleBottom, Values: []Value{num(2)}}, []bool{true, true, false, true, true, false, false}},
 		{"above average", Rule{Kind: RuleAboveAverage}, []bool{false, false, true, false, false, false, false}},
 		{"below average, an empty cell is 0", Rule{Kind: RuleBelowAverage}, []bool{true, false, false, false, true, false, false}},
-		{"an expression is not applied", Rule{Kind: RuleExpression, Formula: "A1>1"}, []bool{false, false, false, false, false, false, false}},
+		// A formula is relative to the format's first cell; a text
+		// compares above every number.
+		{"an expression, relative", Rule{Kind: RuleExpression, Formula: "A1>1"}, []bool{false, true, true, true, false, true, true}},
+		{"an expression on the row", Rule{Kind: RuleExpression, Formula: "ISEVEN(ROW())"}, []bool{false, true, false, true, false, true, false}},
+		{"an expression the evaluator does not compute", Rule{Kind: RuleExpression, Formula: "VLOOKUP(A1,B1:B2,1)"}, []bool{false, false, false, false, false, false, false}},
 		{"a formula operand is not applied", Rule{Kind: RuleCellIs, Operator: "equal", Values: []Value{num(1)}, Formula: "B1"}, []bool{false, false, false, false, false, false, false}},
 	}
 	for _, tc := range tests {

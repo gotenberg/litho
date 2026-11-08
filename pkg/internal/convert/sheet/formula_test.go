@@ -102,6 +102,6 @@ func FuzzFormula(f *testing.F) {
 	doc := formulaDoc()
 	f.Fuzz(func(t *testing.T, s string) {
 		e := newFormulaEval(doc)
-		e.eval(s, 0, 0, 0, 0)
+		e.evalAt(s, 0, 5, 1, 0, 0)
 	})
 }
