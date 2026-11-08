@@ -175,6 +175,9 @@ type placement struct {
 	box          compose.Rect
 	rotation     float64
 	flipH, flipV bool
+	// skew shears the box about its centre before the rotation, in
+	// degrees, the top moving right for a positive angle.
+	skew float64
 }
 
 // placementOf returns the placement of el, the box of def standing in for
@@ -192,13 +195,10 @@ func (r *reader) placementOf(el *odf.Element, def *compose.Rect) placement {
 	if tr == "" {
 		return placement{box: compose.Rect{X: x, Y: y, Width: w, Height: h}}
 	}
-	m, skew, ok := parseTransform(tr)
+	m, _, ok := parseTransform(tr)
 	if !ok {
 		r.warn("transform", "a draw:transform that does not parse is not applied")
 		return placement{box: compose.Rect{X: x, Y: y, Width: w, Height: h}}
-	}
-	if skew {
-		r.warn("skew", "skewed shapes are drawn unskewed")
 	}
 	m = m.mul(translation(x, y))
 	return m.place(w, h)
@@ -211,7 +211,7 @@ func (r *reader) placementOf(el *odf.Element, def *compose.Rect) placement {
 func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 	pl := r.placementOf(el, r.placeholderBox(el, pc))
 	ss := r.shapeStyle(el, pc)
-	s := &slides.Shape{Box: pl.box, Rotation: pl.rotation, FlipH: pl.flipH, FlipV: pl.flipV}
+	s := &slides.Shape{Box: pl.box, Rotation: pl.rotation, FlipH: pl.flipH, FlipV: pl.flipV, SkewX: pl.skew}
 	media := false
 	for _, k := range el.Children {
 		switch {
@@ -335,7 +335,7 @@ func (r *reader) group(el *odf.Element, pc *pageCtx, depth int) *slides.Shape {
 func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 	ss := r.shapeStyle(el, pc)
 	pl := r.placementOf(el, nil)
-	s := &slides.Shape{Kind: slides.KindGeometry, Box: pl.box, Rotation: pl.rotation, FlipH: pl.flipH, FlipV: pl.flipV}
+	s := &slides.Shape{Kind: slides.KindGeometry, Box: pl.box, Rotation: pl.rotation, FlipH: pl.flipH, FlipV: pl.flipV, SkewX: pl.skew}
 	s.Fill = r.fill(ss.graphic, "solid")
 	s.Line = r.line(ss.graphic)
 	switch el.Name.Local {

@@ -35,7 +35,10 @@ func (m matrix) apply(x, y float64) (float64, float64) {
 
 // place returns the placement of a w by h box at the origin mapped by m:
 // the box scaled by m's axis lengths about the mapped centre, the angle
-// m turns the x axis clockwise, and a vertical flip where m mirrors.
+// m turns the x axis clockwise, a vertical flip where m mirrors, and the
+// shear left over once the rotation and the scale are taken out (m's
+// linear part as a rotation after an upper triangular matrix), as a
+// skew whose positive angle moves the box's top right of its bottom.
 func (m matrix) place(w, h float64) placement {
 	cx, cy := m.apply(w/2, h/2)
 	sx := math.Hypot(m.a, m.b)
@@ -52,7 +55,18 @@ func (m matrix) place(w, h float64) placement {
 		rot = 0
 	}
 	bw, bh := w*sx, h*math.Abs(sy)
-	return placement{box: compose.Rect{X: cx - bw/2, Y: cy - bh/2, Width: bw, Height: bh}, rotation: rot, flipV: sy < 0}
+	skew := 0.0
+	if sx > 0 && sy != 0 {
+		// The second column turned back by the rotation: its x is the
+		// shear times sy; x' = x + k y moves the top, y up, left.
+		sin, cos := m.b/sx, m.a/sx
+		k := (m.c*cos + m.d*sin) / sy
+		skew = math.Atan(-k) * 180 / math.Pi
+		if math.Abs(skew) < 1e-9 {
+			skew = 0
+		}
+	}
+	return placement{box: compose.Rect{X: cx - bw/2, Y: cy - bh/2, Width: bw, Height: bh}, rotation: rot, flipV: sy < 0, skew: skew}
 }
 
 // maxTransformOps bounds the operations of one draw:transform read: 16.
