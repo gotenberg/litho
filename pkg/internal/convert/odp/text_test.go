@@ -147,7 +147,8 @@ func TestRead_Lists(t *testing.T) {
 		// Impress lays a label-alignment level out with no indent; a level
 		// starting at 1 continues the count (StartAt 0).
 		{0, 0, &slides.Bullet{Kind: slides.BulletNumber, Format: "arabicPeriod", Scale: 0.45}},
-		{0, 0, &slides.Bullet{Kind: slides.BulletChar, Char: "\uf095", Families: []string{"StarBats"}, Scale: 0.45}},
+		// A list style's StarBats bullet is recoded on reading.
+		{0, 0, &slides.Bullet{Kind: slides.BulletChar, Char: "•", Families: []string{"OpenSymbol"}, Scale: 0.45}},
 		{0, 0, nil},
 	}
 	if len(ps) != len(wants) {
