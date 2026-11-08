@@ -30,11 +30,12 @@ func baseStyle() *css.Style {
 // one, 1.25 cm, LibreOffice's default.
 const defaultTabDistance = 1.25 * 72 / 2.54
 
-// families returns the font family list of t: the western family, its
-// generic family, then the asian and complex families, so Latin text in
-// a missing western face takes the generic family as LibreOffice
-// substitutes it, never the asian face, while the text stack's
-// per-character fallback still finds the asian face for CJK text.
+// families returns the font family list of t: the western family, the
+// Noto face of its generic family and the generic family, then the
+// asian and complex families, so Latin text in a missing western face
+// takes the face LibreOffice substitutes for it, never the asian face,
+// while the text stack's per-character fallback still finds the asian
+// face for CJK text.
 func (t textState) families() []string {
 	var out []string
 	seen := map[string]bool{}
@@ -47,6 +48,7 @@ func (t textState) families() []string {
 	for i, f := range t.family {
 		add(f)
 		if i == 0 && f != "" {
+			add(notoFallback(t.generic))
 			add(genericFamilies[t.generic])
 		}
 	}
@@ -55,6 +57,26 @@ func (t textState) families() []string {
 		out = []string{"serif"}
 	}
 	return out
+}
+
+// notoFallback returns the face the pinned LibreOffice draws a missing
+// family of the style:font-family-generic generic with: Noto Serif for a
+// roman one, none for a monospace one, Noto Sans for any other, a
+// family without a generic included.
+//
+// # Corpus evidence
+//
+//   - odt: layout/abi11870-2.odt (Linux Libertine G, no generic) prints
+//     in Noto Sans; the docx reader's fallbacks (fdo73550, Segoe UI
+//     roman, in Noto Serif).
+func notoFallback(generic string) string {
+	switch generic {
+	case "roman":
+		return "Noto Serif"
+	case "modern":
+		return ""
+	}
+	return "Noto Sans"
 }
 
 // applyText sets the text properties t gives on st. inline adds what a

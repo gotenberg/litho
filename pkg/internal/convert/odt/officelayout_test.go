@@ -482,9 +482,11 @@ func TestFamilies_GenericBeforeAsian(t *testing.T) {
 		t    textState
 		want string
 	}{
-		{textState{family: [3]string{"Missing", "EA Face", "CTL Face"}, generic: "roman"}, "Missing serif EA Face CTL Face"},
+		{textState{family: [3]string{"Missing", "EA Face", "CTL Face"}, generic: "roman"}, "Missing Noto Serif serif EA Face CTL Face"},
+		{textState{family: [3]string{"Missing", "", ""}}, "Missing Noto Sans"},
+		{textState{family: [3]string{"Mono", "", ""}, generic: "modern"}, "Mono monospace"},
 		{textState{family: [3]string{"", "EA Face", ""}, generic: "roman"}, "EA Face serif"},
-		{textState{family: [3]string{"Face", "Face", ""}}, "Face"},
+		{textState{family: [3]string{"Face", "Face", ""}}, "Face Noto Sans"},
 		{textState{}, "serif"},
 	} {
 		if got := strings.Join(tc.t.families(), " "); got != tc.want {
