@@ -79,7 +79,9 @@ func Parse(code string) (*Format, error) {
 		return nil, err
 	}
 	f := &Format{}
-	for _, p := range parts {
+	for i, p := range parts {
+		p = systemFormat(p)
+		parts[i] = p
 		s, err := scanSection(p)
 		if err != nil {
 			return nil, err
@@ -169,6 +171,37 @@ func (f *Format) pick(v float64) int {
 		return 1
 	}
 	return 2
+}
+
+// The en-US system date and time formats a section tagged [$-F800] or
+// [$-F400] stands for, whatever else it says (ECMA-376 Part 1, 18.8.31;
+// LibreOffice's SvNumberFormatter maps the tags to NF_DATE_SYSTEM_LONG,
+// "NNNNMMMM D, YYYY", and NF_TIME_HHMMSSAMPM).
+const (
+	systemLongDate = "dddd, mmmm d, yyyy"
+	systemLongTime = "h:mm:ss AM/PM"
+)
+
+// systemFormat returns the section p, or the system format its tag names
+// when it holds more than the tag; a tag alone formats as General.
+//
+// # Corpus evidence
+//
+//   - xlsx: sc/tdf165180_date1904.xlsx, "[$-F800]dddd\,\ mmmm\ dd\,\
+//     yyyy", prints "Tuesday, March 1, 1904", the day unpadded; the
+//     tag alone prints 45000 as 45000 (TestApply_Calc).
+func systemFormat(p string) string {
+	u := strings.ToUpper(p)
+	if strings.HasPrefix(u, "[") && strings.Index(u, "]") == len(u)-1 {
+		return p
+	}
+	switch {
+	case strings.Contains(u, "[$-F800]"), strings.Contains(u, "X-SYSDATE]"):
+		return systemLongDate
+	case strings.Contains(u, "[$-F400]"), strings.Contains(u, "X-SYSTIME]"):
+		return systemLongTime
+	}
+	return p
 }
 
 // realNegative reports whether the section i formats negative numbers

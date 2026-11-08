@@ -23,6 +23,9 @@ func TestApply_Calc(t *testing.T) {
 		want string
 	}{
 		{"General", num(1234.5678), "1234.5678"},
+		{`[$-F800]dddd\,\ mmmm\ dd\,\ yyyy`, num(1522), "Tuesday, March 1, 1904"},
+		{"[$-F400]h:mm:ss\\ AM/PM", num(0.5625), "1:30:00 PM"},
+		{"[$-en-US-x-sysdate]dddd", num(1522), "Tuesday, March 1, 1904"},
 		{"General", num(0.1), "0.1"},
 		{"General", num(1e20), "1E+020"},
 		{"General", num(123456789012), "123456789012"},
