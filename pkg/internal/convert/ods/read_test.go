@@ -382,3 +382,19 @@ func TestRead_Caps(t *testing.T) {
 		t.Errorf("cells = %d, warnings %+v", n, w)
 	}
 }
+
+func TestRead_Formulas(t *testing.T) {
+	row := `<table:table-row><table:table-cell table:formula="of:=[.B1]+2" office:value-type="float" office:value="5"><text:p>5</text:p></table:table-cell>` +
+		`<table:table-cell table:formula="of:=1"/><table:table-cell office:value-type="float" office:value="3"/></table:table-row>`
+	doc, _ := read(t, flat{body: table("S", row)}.bytes())
+	sh := doc.Sheets[0]
+	for i, want := range []string{"of:=[.B1]+2", "of:=1", ""} {
+		c := cellAt(sh, 0, i)
+		if c == nil || c.Formula != want {
+			t.Errorf("cell %d: %+v, want the formula %q", i, c, want)
+		}
+	}
+	if c := cellAt(sh, 0, 0); c.Value.Number != 5 {
+		t.Errorf("the stored value %+v", c.Value)
+	}
+}
