@@ -272,3 +272,18 @@ func TestAutoColor_CyclesTinted(t *testing.T) {
 		t.Errorf("default palette colour 13 = %v", got)
 	}
 }
+
+func TestRender_VaryColorsKeepsSeriesFill(t *testing.T) {
+	c := barChart(1, 2)
+	c.Palette = []compose.Color{blue}
+	c.Groups[0].VaryColors = true
+	frags := Render(context.Background(), ahem(t), c, chartRect)
+	if n := len(paths(frags, red)); n != 2 {
+		t.Errorf("a varied bar series with a fill of its own: %d red bars, want 2", n)
+	}
+	c.Groups[0].Series[0].Fill = nil
+	frags = Render(context.Background(), ahem(t), c, chartRect)
+	if n := len(paths(frags, red)); n != 0 {
+		t.Errorf("a varied bar series without a fill: %d red bars, want 0", n)
+	}
+}

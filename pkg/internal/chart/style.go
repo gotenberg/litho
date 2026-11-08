@@ -65,7 +65,9 @@ func (rd *renderer) fillOf(g *Group, s *Series, j int) *Paint {
 	if p := s.point(j); p != nil && p.Fill != nil {
 		return p.Fill
 	}
-	if g.VaryColors && j >= 0 && (len(g.Series) == 1 || g.Kind == Pie || g.Kind == Doughnut) {
+	// A pie varies its colours over the series' fill; another kind only
+	// when the series has none (oox's SeriesConverter::createDataSeries).
+	if g.VaryColors && j >= 0 && (g.Kind == Pie || g.Kind == Doughnut || len(g.Series) == 1 && s.Fill == nil) {
 		return &Paint{Color: rd.c.AutoColor(j, s.Values.Len())}
 	}
 	if s.Fill != nil {

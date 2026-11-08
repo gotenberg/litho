@@ -187,7 +187,13 @@ func (p *chartReader) series(e *Element, g *chart.Group, scatterLines, lineMarke
 	s.Labels = p.labels(e.Child(NSChart, "dLbls"), g.Labels)
 	for _, dp := range e.Kids() {
 		if dp.Is(NSChart, "dPt") && len(s.Points) < chart.MaxPoints {
-			s.Points = append(s.Points, p.dataPoint(dp, g))
+			pt := p.dataPoint(dp, g)
+			if filled(g) && spPr != nil && dp.Child(NSChart, "spPr") == nil {
+				// A point without its own shape properties takes the
+				// series' over the varied colour (oox's DataPointConverter).
+				pt.Fill, pt.Border = s.Fill, s.Border
+			}
+			s.Points = append(s.Points, pt)
 		}
 	}
 	p.pointLabels(e.Child(NSChart, "dLbls"), s)
