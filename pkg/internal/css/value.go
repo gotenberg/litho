@@ -178,6 +178,11 @@ func unitLength(n float64, unit string) (length, bool) {
 		l.ch = n
 	case "rem":
 		l.rem = n
+	case "ic":
+		// The ideographic advance: the fallback of CSS Values 4, 6.1.1,
+		// 1em, which a full-width ideograph's advance is in the CJK
+		// faces.
+		l.em = n
 	case "vw":
 		l.vw = n
 	case "vh":
