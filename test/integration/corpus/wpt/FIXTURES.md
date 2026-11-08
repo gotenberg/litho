@@ -80,6 +80,7 @@ The script prints the candidate count and the commonest rejection reasons on std
 Chromium is the reference where a test and Chromium draw differently, so these fixtures stay failing on purpose, recorded in `baseline.json`:
 
 - `css/css-text/white-space/control-chars-00E`, `-00F`, `-080`, `-083`, `-089`, `-090`, `-095`, `-099`: the tests expect a control character to draw a visible glyph; Chromium's PDF draws nothing for one, and so does litho.
+- Mismatch-reference tests whose own Chromium drawing differs from their `!=` reference by fewer pixels than the cell's 1% tolerance, so that no correct drawing can pass them (Chromium 9.0.0's test against its notref, in pixels): `css/CSS2/borders/ridge-default` (4400, the whole border), `css/CSS2/floats/float-in-nested-multicol-001` (140), `css/css-backgrounds/border-width-small-values-001-b` and `-e` (1604 each), `css/css-lists/list-style-position-001` (2209), `css/css-text-decor/text-decoration-inset-auto` and `-negative` (0: the pinned Chromium does not support the property), `css/css-text-decor/overline-wavy-covers-whole-line-length-001` (1164), `css/css-text-decor/text-decoration-skip-ink-004` (124), `css/css-text-decor/text-underline-offset-001` (320), `css/css-content/object-replacement-2` (3227). Where litho's drawing was wrong as well, it was fixed; the cell counts them as matching the mismatch reference.
 
 ## Licence
 

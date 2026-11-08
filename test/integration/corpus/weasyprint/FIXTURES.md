@@ -65,6 +65,8 @@ Chromium is the reference where WeasyPrint and Chromium draw a test differently,
 - `test_background_repeat_round_2` and `_4`: Chromium positions the rounded tiles where litho does.
 - `test_absolute_rtl_2`: an absolutely positioned box whose border box reaches past the first page takes a second page in Chromium (it prints two pages); WeasyPrint expects one.
 - `test_text_float_text_decoration`, `test_text_nested_block_text_decoration`, `test_text_nested_text_decoration_color`: WeasyPrint marks these expected grids as failing in its own suite, and they contradict `test_text_nested_text_decoration`, which passes; litho follows the passing one.
+- `test_text_underline`, `test_text_multiple_text_decoration`, `test_text_nested_text_decoration`: litho's HTML output draws an automatic underline as Chromium does, floor(size / 10) px thick with its top ceil(size / 20) px below the baseline (measured over 23 rows of 4 fonts at 13 to 64 px), whatever the font's own underline metrics say; WeasyPrint draws the font's metrics.
+- `test_absolute_split_8`, `test_absolute_split_9`, `test_absolute_pages_counter`, `test_absolute_pages_counter_orphans`: an absolutely positioned box fragments where it lands, like in-flow content, as Chromium paginates (3, 2 and 3 pages measured for the first three); WeasyPrint moves the box whole (1, 1 and 2 pages).
 
 ## Licence
 
