@@ -71,7 +71,7 @@ func (s *section) date(x float64, first bool) Result {
 	if neg && total == 0 && sub == 0 {
 		neg = false
 	}
-	day := nullDate.AddDate(0, 0, int(days))
+	day := nullDate.AddDate(0, 0, int(days)) // fits int: |x| is at most maxSerialDays, checked above
 	hour, minute, sec := total/3600, total%3600/60, total%60
 	if !elapsed {
 		hour %= 24

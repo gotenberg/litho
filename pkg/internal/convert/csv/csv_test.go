@@ -217,7 +217,7 @@ func TestRead_Model(t *testing.T) {
 		t.Fatal(err)
 	}
 	sh := doc.Sheets[0]
-	if sh.Name != "" || len(sh.Rows) != 3 || sh.Page.Width != 612 || sh.Page.Height != 792 || math.Abs(sh.Page.Margin[css.Top]-margin) > 1e-9 ||
+	if sh.Name != "Sheet1" || len(sh.Rows) != 3 || sh.Page.Width != 612 || sh.Page.Height != 792 || math.Abs(sh.Page.Margin[css.Top]-margin) > 1e-9 ||
 		math.Abs(sh.Page.Margin[css.Bottom]-margin-footerHeight) > 1e-9 || sh.Page.Scale != 100 || sh.DefaultRowHeight != 12.8 || sh.DefaultColumnWidth != 64 {
 		t.Errorf("sheet = %+v", sh)
 	}
