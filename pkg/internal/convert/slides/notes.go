@@ -20,7 +20,7 @@ const (
 // (sd/xml/objectlist.xml, PageKind::Notes): the slide drawn in the upper
 // box, fitted and centred, the notes text in the lower one.
 const (
-	notesSlideY, notesSlideH                        = 0.076, 0.375
+	notesSlideY, notesSlideH                       = 0.076, 0.375
 	notesTextX, notesTextY, notesTextW, notesTextH = 0.1, 0.475, 0.8, 0.45
 )
 

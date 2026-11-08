@@ -12,8 +12,14 @@ import (
 func TestText_LinePlacement(t *testing.T) {
 	a20 := arial(20)
 	two := Paragraph{Runs: []Run{{Text: "Hxg two", Style: a20}, {Break: true, Style: a20}, {Text: "Hxg three", Style: a20}}, Style: a20}
-	spaced := func(p Paragraph, before, after float64) Paragraph { p.SpaceBefore, p.SpaceAfter = before, after; return p }
-	lined := func(p Paragraph, prop, pts float64) Paragraph { p.LineSpacing, p.LineSpacingPoints = prop, pts; return p }
+	spaced := func(p Paragraph, before, after float64) Paragraph {
+		p.SpaceBefore, p.SpaceAfter = before, after
+		return p
+	}
+	lined := func(p Paragraph, prop, pts float64) Paragraph {
+		p.LineSpacing, p.LineSpacingPoints = prop, pts
+		return p
+	}
 	for _, tc := range []struct {
 		name  string
 		paras []Paragraph

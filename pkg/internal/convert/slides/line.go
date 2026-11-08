@@ -167,8 +167,12 @@ func arrowhead(a Arrow, p, d compose.Point, w float64, c compose.Color) []compos
 	at := func(u, v float64) compose.Point {
 		return compose.Point{X: p.X - d.X*u - d.Y*v, Y: p.Y - d.Y*u + d.X*v}
 	}
-	mv := func(q compose.Point) compose.PathOp { return compose.PathOp{Kind: compose.MoveTo, P: [3]compose.Point{q}} }
-	ln := func(q compose.Point) compose.PathOp { return compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{q}} }
+	mv := func(q compose.Point) compose.PathOp {
+		return compose.PathOp{Kind: compose.MoveTo, P: [3]compose.Point{q}}
+	}
+	ln := func(q compose.Point) compose.PathOp {
+		return compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{q}}
+	}
 	fill := &compose.Fill{Color: c}
 	switch a.Kind {
 	case ArrowTriangle:
@@ -180,7 +184,9 @@ func arrowhead(a Arrow, p, d compose.Point, w float64, c compose.Color) []compos
 	case ArrowOval:
 		rx, ry := al/2, aw/2
 		const k = 0.5522847498
-		pt3 := func(a1, b1, a2, b2, a3, b3 float64) [3]compose.Point { return [3]compose.Point{at(a1, b1), at(a2, b2), at(a3, b3)} }
+		pt3 := func(a1, b1, a2, b2, a3, b3 float64) [3]compose.Point {
+			return [3]compose.Point{at(a1, b1), at(a2, b2), at(a3, b3)}
+		}
 		return []compose.Fragment{&compose.Path{Fill: fill, Ops: []compose.PathOp{
 			mv(at(rx, 0)),
 			{Kind: compose.CurveTo, P: pt3(rx, ry*k, rx*k, ry, 0, ry)},

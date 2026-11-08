@@ -111,9 +111,9 @@ func gradientShading(g *Gradient, box compose.Rect) *compose.Shading {
 		half = 0.5
 	}
 	return &compose.Shading{
-		Kind: compose.Axial,
-		From: compose.Point{X: cx - c*half, Y: cy - s*half},
-		To:   compose.Point{X: cx + c*half, Y: cy + s*half},
+		Kind:  compose.Axial,
+		From:  compose.Point{X: cx - c*half, Y: cy - s*half},
+		To:    compose.Point{X: cx + c*half, Y: cy + s*half},
 		Stops: stops, Transform: compose.Identity,
 	}
 }
