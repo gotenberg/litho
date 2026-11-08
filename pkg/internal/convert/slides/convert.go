@@ -101,38 +101,45 @@ func (b *builder) warn(code, msg string) {
 // # Shapes
 //
 // A geometry shape is filled and stroked along the paths of its geometry,
-// turned and mirrored about its box's centre; its text turns with it but
-// is not mirrored, a vertical flip turning it half a turn, as Impress
-// draws it. Fills are solid, gradients, pictures stretched or tiled,
-// clipped to the shape, and patterns; lines carry their dash, cap, join
-// and arrowheads. A group maps its kids from its child space onto its
-// box. A table's rows grow to the text of their cells.
+// turned, sheared and mirrored about its box's centre; its text turns and
+// shears with it but is not mirrored, a vertical flip turning it half a
+// turn, as Impress draws it. Fills are solid, gradients, pictures
+// stretched or tiled, clipped to the shape, and patterns; lines carry
+// their dash, cap, join and arrowheads. A group maps its kids from its
+// child space onto its box. A table's rows grow to the text of their
+// cells.
 //
 // # Text
 //
 // Paragraphs are laid out in the shape's text rectangle less its insets,
-// at the top, middle or bottom of it. A line is 1.2 times the largest
-// font size tall, the baseline the size below its top, as Impress spaces
-// a PPTX text body; proportional spacing above 100% adds its room above
-// the glyphs, below 100% shrinks the line and puts the baseline at four
-// fifths of it; exact spacing keeps the descent and moves the baseline.
-// A body with FontLineSpacing takes its faces' ascent and descent
-// instead, as Impress spaces an OpenDocument text body. The spacing
-// before the first paragraph and after the last is dropped; the spacing
-// between two paragraphs is the sum of the two, or the larger with
-// MaxParagraphSpacing. A bullet sits
-// at the first line's indent, the text at the left margin, or after the
-// bullet when the indent leaves it no room; a symbol bullet is centred on
-// the line's text height. Numbers count per level across the body. A
-// text body that shrinks to fit tries Impress's scale levels in turn,
-// font sizes rounded to whole points, until the text fits; a growing one
-// stretches its box from its anchor. Unwrapped lines wider than the text
-// rectangle widen it, overflowing on the side the first paragraph's
-// alignment leaves free; a clipped body leaves out the lines past its
-// rectangle. Superscripts and subscripts are 58% of the size, moved by
-// their face's share of the size they give up in OpenDocument text, by 30%
-// up and 25% down in PresentationML text. Date and time fields show the
-// print date through their number format.
+// at the top, middle or bottom of it; a block anchored at the centre or
+// the end is as wide as its widest line and sits there. A line is 1.2
+// times the largest font size tall, the baseline the size below its top,
+// as Impress spaces a PPTX text body; proportional spacing above 100% adds
+// its room above the glyphs, below 100% shrinks the line and puts the
+// baseline at four fifths of it; exact spacing keeps the descent and moves
+// the baseline; a floor grows a shorter line to it. A body with
+// FontLineSpacing takes its faces' ascent and descent instead, as Impress
+// spaces an OpenDocument text body. The spacing before the first
+// paragraph and after the last is dropped; the spacing between two
+// paragraphs is the sum of the two, or the larger with
+// MaxParagraphSpacing. A bullet sits at the first line's indent, the text
+// at the left margin, or after the bullet when the indent leaves it no
+// room; a symbol bullet is centred on the line's text height, and a symbol
+// font's bullet draws in OpenSymbol as LibreOffice recodes it. Numbers
+// count per level across the body. A text body that shrinks to fit tries
+// Impress's scale levels in turn, font sizes rounded to whole points,
+// until the text fits, the bodies of a shrink group taking the smallest
+// scale any needs; a growing one stretches its box from its anchor; a
+// stretched one scales its unwrapped text to fill its rectangle.
+// Unwrapped lines wider than the text rectangle widen it, overflowing on
+// the side the first paragraph's alignment leaves free; a clipped body
+// leaves out the lines past its rectangle. Superscripts and subscripts are
+// 58% of the size, moved by their face's share of the size they give up
+// in OpenDocument text, by 30% up and 25% down in PresentationML text, or
+// by the run's explicit rise. Date and time fields show the print date
+// through their number format. A run that jumps to a slide links to that
+// slide's page.
 //
 // # Not supported
 //
