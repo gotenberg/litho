@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/css"
 )
 
 // TestRead_ColumnsAndRows checks the column widths in digits of the
@@ -224,5 +225,59 @@ func TestRead_TableHeaders(t *testing.T) {
 		if c, _ := cellAt(sh, 1, col); c.Value.Text != want {
 			t.Errorf("column %d = %q, want %q", col, c.Value.Text, want)
 		}
+	}
+}
+
+// TestRead_TableStyles checks a preset table style laid over a table's
+// cells, the header row, the banded rows, the total row and the outer and
+// inner borders, and a workbook's own table style.
+func TestRead_TableStyles(t *testing.T) {
+	t.Parallel()
+	table := func(style string) string {
+		return `<table ` + nsDecl + ` id="1" name="T" displayName="T" ref="A1:B4" totalsRowCount="1"><tableColumns count="2"><tableColumn id="1" name="A"/><tableColumn id="2" name="B"/></tableColumns>` +
+			`<tableStyleInfo name="` + style + `" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>`
+	}
+	sheetXML := `<sheetData><row r="2"><c r="A2"><v>1</v></c></row></sheetData><tableParts count="1"><tablePart r:id="rIdT"/></tableParts>`
+	rels := `<Relationship Id="rIdT" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/>`
+	styles := minimalStyles + `<dxfs><dxf><fill><patternFill patternType="solid"><bgColor rgb="FF00FF00"/></patternFill></fill></dxf></dxfs>` +
+		`<tableStyles count="1"><tableStyle name="Mine" pivot="0" count="1"><tableStyleElement type="headerRow" dxfId="0"/></tableStyle></tableStyles>`
+	read := func(style string) *sheet.Sheet {
+		files := workbookFiles([]testSheet{{name: "S", xml: sheetXML, rels: rels}}, styles, "", "",
+			map[string]string{"xl/tables/table1.xml": table(style), "xl/theme/theme1.xml": testTheme})
+		doc, _ := readBytes(t, zipFiles(t, files))
+		return doc.Sheets[0]
+	}
+	sh := read("TableStyleMedium2")
+	style := func(row, col int) *sheet.Style {
+		c, ok := cellAt(sh, row, col)
+		if !ok || c.Style == nil {
+			t.Fatalf("no styled cell at row %d, column %d", row, col)
+		}
+		return c.Style
+	}
+	accent := rgb(0x4472C4)
+	band := tint(accent, 0.79998168889431442)
+	line := tint(accent, 0.39997558519241921)
+	if h := style(0, 1); !near(h.Fill.Color, accent) || !h.Font.Bold || !near(h.Font.Color, rgb(0xFFFFFF)) {
+		t.Errorf("header %+v", h)
+	}
+	if b := style(1, 0); !near(b.Fill.Color, band) || b.Border[css.Left].Line != sheet.LineSolid || !near(b.Border[css.Left].Color, line) || b.Border[css.Right].Line != sheet.LineNone {
+		t.Errorf("first band %+v", b)
+	}
+	if b := style(2, 1); b.Fill.Color.A != 0 || b.Border[css.Top].Line != sheet.LineSolid || b.Border[css.Right].Line != sheet.LineSolid {
+		t.Errorf("second band %+v", b)
+	}
+	if tot := style(3, 0); !tot.Font.Bold || tot.Border[css.Top].Line != sheet.LineDouble || tot.Fill.Color.A != 0 {
+		t.Errorf("total row %+v", tot)
+	}
+	if c, _ := cellAt(sh, 1, 0); c.Value.Number != 1 {
+		t.Errorf("A2 value %+v lost", c.Value)
+	}
+	mine := read("Mine")
+	if c, _ := cellAt(mine, 0, 0); c.Style == nil || !near(c.Style.Fill.Color, rgb(0x00FF00)) {
+		t.Errorf("workbook style header %+v", c.Style)
+	}
+	if c, ok := cellAt(mine, 1, 1); ok && c.Style != nil && c.Style.Fill.Color.A != 0 {
+		t.Errorf("workbook style body %+v", c.Style)
 	}
 }
