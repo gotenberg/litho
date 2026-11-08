@@ -3,6 +3,7 @@ package slides
 import (
 	"context"
 	"errors"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"testing"
 	"time"
 
@@ -180,5 +181,60 @@ func TestConvert_Structure(t *testing.T) {
 		if roles[i] != want[i] {
 			t.Errorf("role %d %q, want %q", i, roles[i], want[i])
 		}
+	}
+}
+
+// TestConvert_NotesMaster checks notes pages laid out by a notes master,
+// against deck-notes as Impress prints it: a slide with notes in the
+// master's slide box, its notes in the master's text box, its number in
+// the master's number shape; a later slide without notes in the default
+// layout over the notes size at the top of the Letter page.
+func TestConvert_NotesMaster(t *testing.T) {
+	num := box(305.88, 683.88, 234, 36, Paragraph{Runs: []Run{{Field: FieldSlideNumber, Text: "‹#›", Style: arial(12)}}, Style: arial(12), Align: css.AlignRight})
+	num.Text.Insets = [4]float64{3.6, 7.2, 3.6, 7.2}
+	title := func(s string) *Slide {
+		return &Slide{Name: s, Shapes: []*Shape{box(0, 0, 960, 100, para(s, arial(40)))}}
+	}
+	withNotes := title("Second")
+	withNotes.Notes = []Paragraph{para("NOTE", arial(20))}
+	doc := &Document{
+		Width: 960, Height: 540, NotesWidth: 540, NotesHeight: 720,
+		NotesSlideBox: compose.Rect{X: 90, Y: 54, Width: 360, Height: 270},
+		NotesTextBox:  compose.Rect{X: 54, Y: 342, Width: 432, Height: 324},
+		NotesShapes:   []*Shape{num},
+		Slides:        []*Slide{title("First"), withNotes, title("Third")},
+	}
+	pages := convert(t, doc, office.Options{NotesPages: true}).Pages
+	for i, tc := range []struct {
+		page   int
+		text   string
+		x, y   float64
+		scale  float64
+		number bool
+	}{
+		{3, "First", 42.01, 60.19, 527.98 / 960, false},
+		{4, "Second", 90, 54 + (270-202.5)/2, 0.375, true},
+		{5, "Third", 30, 720 * 0.076, 0.5, false},
+	} {
+		pg := pages[tc.page]
+		if pg.Width != 612 || pg.Height != 792 {
+			t.Errorf("notes page %d is %v by %v", i+1, pg.Width, pg.Height)
+		}
+		r := find(t, pg, tc.text)
+		if !near(r.x, tc.x, 0.1) || !near(r.y, tc.y+40*tc.scale, 0.2) || !near(r.size, 40*tc.scale, 0.05) {
+			t.Errorf("notes page %d: %s at %.2f, %.2f size %.2f", i+1, tc.text, r.x, r.y, r.size)
+		}
+		var hasNumber bool
+		for _, rr := range runs(pg) {
+			if rr.text == "2" && near(rr.x, 526.68, 1) {
+				hasNumber = true
+			}
+		}
+		if hasNumber != tc.number {
+			t.Errorf("notes page %d: slide number drawn %v, runs %v", i+1, hasNumber, runs(pg))
+		}
+	}
+	if n := find(t, pages[4], "NOTE"); !near(n.x, 61.2, 0.1) || !near(n.y, 365.6, 0.2) {
+		t.Errorf("note at %.2f, want 61.2", n.x)
 	}
 }
