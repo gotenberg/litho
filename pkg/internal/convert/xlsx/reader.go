@@ -33,8 +33,17 @@ const (
 
 // understood lists the namespaces whose mc:Choice the reader takes
 // (ECMA-376 Part 3, 10.2): SpreadsheetML, DrawingML and its spreadsheet
-// drawing and picture vocabularies; any other Choice takes its Fallback.
-var understood = []string{nsMain, ooxml.NSA, ooxml.NSR, nsXDR, ooxml.NSPic}
+// drawing and picture vocabularies, the Office 2016 charts; any other
+// Choice takes its Fallback.
+var understood = []string{nsMain, ooxml.NSA, ooxml.NSR, nsXDR, ooxml.NSPic, nsChartEx1, nsChartEx2}
+
+// The namespaces an Office 2016 chart's mc:Choice requires (MS-ODRAWXML,
+// 2.24.3): the reader takes the Choice, to name the chart it leaves out,
+// rather than the Fallback's message shape.
+const (
+	nsChartEx1 = "http://schemas.microsoft.com/office/drawing/2015/9/8/chartex"
+	nsChartEx2 = "http://schemas.microsoft.com/office/drawing/2015/10/21/chartex"
+)
 
 // maxSheets caps the sheets of a workbook. Anti-DoS guard, not
 // spec-mandated: LibreOffice Calc holds at most 10,000 sheets.

@@ -21,6 +21,11 @@ const nsXDR = "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawi
 const (
 	uriChart   = "http://schemas.openxmlformats.org/drawingml/2006/chart"
 	uriDiagram = "http://schemas.openxmlformats.org/drawingml/2006/diagram"
+	// uriChartEx is the graphic data of an Office 2016 chart (MS-ODRAWXML,
+	// 2.24.3 chartex: histograms, box and whisker, funnel, waterfall,
+	// sunburst, treemap and region map charts), which a workbook places in
+	// an mc:Choice of the cx1 or cx2 namespaces.
+	uriChartEx = "http://schemas.microsoft.com/office/drawing/2014/chartex"
 )
 
 // nsC is the DrawingML chart namespace (ECMA-376 Part 1, 21.2).
@@ -191,6 +196,8 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 				}
 				d.Chart = w.r.chartOf(rel.Target)
 				return true
+			case uriChartEx:
+				w.r.warn("unsupported-content", fmt.Sprintf("the Office 2016 chart %q (a histogram, funnel, box and whisker or similar chart) is not drawn", d.Name))
 			case uriDiagram:
 				w.r.warn("unsupported-content", "a SmartArt diagram is left out: the workbook holds no picture of it")
 			default:
