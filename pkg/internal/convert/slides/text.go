@@ -143,6 +143,23 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 		lw, lh = lh, lw
 	}
 	f := b.fitBody(body, lw, lh)
+	dx := 0.0
+	if !body.Wrap && !vertical {
+		// Unwrapped lines wider than the rectangle widen the text block to
+		// the longest, which overflows the rectangle on the side its first
+		// paragraph's alignment leaves free: right of a start-aligned text,
+		// both sides of a centred one, left of an end-aligned one
+		// (SdrObjCustomShape::TakeTextRect).
+		if nat := b.naturalWidth(body, f); nat > lw {
+			switch overflowSide(body) {
+			case css.AlignCenter:
+				dx = (lw - nat) / 2
+			case css.AlignRight:
+				dx = lw - nat
+			}
+			lw = nat
+		}
+	}
 	lay := b.layoutBody(body, lw, lh, f)
 	if lay == nil {
 		return res
@@ -178,7 +195,7 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 	var m compose.Matrix
 	switch body.Vertical {
 	case css.HorizontalTB:
-		m = translate(inner.X, inner.Y+dy)
+		m = translate(inner.X+dx, inner.Y+dy)
 	case css.SidewaysLR:
 		// Turned a quarter turn counter-clockwise: the lines read bottom
 		// to top and stack left to right (21.1.10.83 vert270).
@@ -188,7 +205,7 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 		// and stack right to left (vert, eaVert).
 		m = compose.Matrix{A: 0, B: 1, C: -1, D: 0, E: inner.X + inner.Width - dy, F: inner.Y}
 	default:
-		m = translate(inner.X, inner.Y+dy)
+		m = translate(inner.X+dx, inner.Y+dy)
 	}
 	res.frags = group(m, lay.frags)
 	for _, l := range lay.links {
@@ -197,6 +214,71 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 	}
 	res.structure = lay.structure
 	return res
+}
+
+// naturalWidth returns the width of the body's longest line laid out
+// without wrapping at the scaling f, its paragraph's margins included.
+func (b *builder) naturalWidth(body *TextBody, f fit) float64 {
+	best := 0.0
+	for i := range body.Paragraphs {
+		if i >= maxParagraphs {
+			break
+		}
+		p := &body.Paragraphs[i]
+		var runs []text.ParagraphRun
+		for k := range p.Runs {
+			if k >= maxRuns {
+				break
+			}
+			r := &p.Runs[k]
+			ts := b.textStyle(&r.Style, f.font)
+			if r.Break {
+				runs = append(runs, text.ParagraphRun{Text: "\n", Style: ts})
+				continue
+			}
+			if s := b.fieldText(r); s != "" {
+				runs = append(runs, text.ParagraphRun{Text: s, Style: ts})
+			}
+		}
+		if len(runs) == 0 {
+			continue
+		}
+		sp, _, err := b.fonts.Shape(b.ctx, runs, text.ParagraphOptions{})
+		if err != nil {
+			continue
+		}
+		ml := max(p.MarginLeft, 0) + max(p.Indent, 0) + max(p.MarginRight, 0)
+		if w := sp.MaxContent() + ml; w > best && !math.IsInf(w, 0) {
+			best = w
+		}
+	}
+	return min(best, office.MaxPageSide)
+}
+
+// overflowSide returns how a body's unwrapped text wider than its
+// rectangle sits on it: by its first paragraph's alignment, left,
+// centred or right.
+func overflowSide(body *TextBody) css.TextAlign {
+	if len(body.Paragraphs) == 0 {
+		return css.AlignLeft
+	}
+	p := &body.Paragraphs[0]
+	rtl := p.RightToLeft || body.RightToLeft
+	switch p.Align {
+	case css.AlignCenter:
+		return css.AlignCenter
+	case css.AlignRight:
+		return css.AlignRight
+	case css.AlignEnd:
+		if !rtl {
+			return css.AlignRight
+		}
+	case css.AlignStart, css.AlignAuto, css.AlignJustify:
+		if rtl {
+			return css.AlignRight
+		}
+	}
+	return css.AlignLeft
 }
 
 // fitBody returns the scaling the body is laid out at in a box w by h: a

@@ -1,6 +1,8 @@
 package slides
 
 import (
+	"context"
+
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -81,5 +83,36 @@ func TestText_FontLinePlacement(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestText_UnwrappedOverflow checks where unwrapped text wider than its
+// box sits, as Impress prints sd/tdf113198.pptx (centred, overflowing both
+// sides) and sd/tdf104722.pptx (start-aligned, overflowing right): every
+// character drawn, the block aligned on the box by its first paragraph.
+func TestText_UnwrappedOverflow(t *testing.T) {
+	const s = "A line far wider than its box"
+	for _, tc := range []struct {
+		align css.TextAlign
+		want  func(x, w float64) bool
+	}{
+		{css.AlignLeft, func(x, _ float64) bool { return near(x, 100, 0.2) }},
+		{css.AlignCenter, func(x, w float64) bool { return near(x+w/2, 125, 0.5) }},
+		{css.AlignRight, func(x, w float64) bool { return near(x+w, 150, 0.5) }},
+	} {
+		p := para(s, arial(20))
+		p.Align = tc.align
+		sh := box(100, 100, 50, 30, p)
+		sh.Text.Wrap = false
+		pg := convert(t, deck(&Slide{Shapes: []*Shape{sh}}), office.Options{}).Pages[0]
+		rs := runs(pg)
+		if len(rs) != 1 || rs[0].text != s {
+			t.Fatalf("align %d: runs %v, want one line", tc.align, rs)
+		}
+		b := &builder{ctx: context.Background(), fonts: pinnedFonts(t)}
+		w := b.width(s, b.textStyle(&RunStyle{Families: []string{"Arial"}, Size: 20}, 1))
+		if !tc.want(rs[0].x, w) {
+			t.Errorf("align %d: line at %.2f, %.2f wide", tc.align, rs[0].x, w)
+		}
 	}
 }
