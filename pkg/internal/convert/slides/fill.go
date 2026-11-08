@@ -1,8 +1,6 @@
 package slides
 
 import (
-	"image"
-	"image/color"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -15,16 +13,6 @@ import (
 // Anti-DoS guard, not spec-mandated: a slide tiled with a 16-point texture
 // takes about 2,000 copies.
 const maxTiles = 4096
-
-// maxPatternPixels caps the pixels of the picture a pattern fill is drawn
-// as. Anti-DoS guard, not spec-mandated: a full slide at a pattern pixel
-// of 0.75 point is about a million pixels.
-const maxPatternPixels = 1 << 22
-
-// patternPixel is the side of one pixel of a pattern fill's 8 by 8 cell,
-// in points: a pixel at 96 dots per inch, the screen resolution the
-// DrawingML presets are drawn at.
-const patternPixel = 0.75
 
 // colorOf returns c as a composition colour.
 func colorOf(c css.Color) compose.Color {
@@ -141,121 +129,172 @@ func (b *builder) picture(pic *layout.Picture, r compose.Rect) []compose.Fragmen
 }
 
 // patternFill returns the pattern fill f of the area ops encloses within
-// box: the preset's 8 by 8 cell repeated over the box in the foreground
-// and background colours, clipped to the area (ECMA-376 Part 1, 20.1.8.47
-// pattFill, 20.1.10.51 ST_PresetPatternVal). A preset the builder does not
-// know paints the foreground at half opacity over the background.
+// box as Impress draws a DrawingML preset pattern: the hatch its import
+// maps the preset to, sets of parallel lines 0.1 point wide in the
+// foreground colour, over the background colour (ECMA-376 Part 1,
+// 20.1.8.47 pattFill, 20.1.10.51 ST_PresetPatternVal; LibreOffice's
+// oox/inc/drawingml/hatchmap.hxx). A preset the map lacks paints the
+// foreground at half opacity over the background.
+//
+// # Corpus evidence
+//
+//   - pptx: sd-data/n820786.pptx's narVert rectangle prints vertical lines
+//     1.39 points apart at the page's 0.1-point width over its background,
+//     and none of its 48 pattern swatches prints a picture.
 func (b *builder) patternFill(f *Fill, box compose.Rect, ops []compose.PathOp) []compose.Fragment {
-	cell, ok := patternCell(f.Pattern)
-	w := int(math.Ceil(box.Width / patternPixel))
-	h := int(math.Ceil(box.Height / patternPixel))
-	if !ok || w <= 0 || h <= 0 || w*h > maxPatternPixels {
-		b.warn(CodePattern, "the pattern "+quote(f.Pattern)+" is drawn as its foreground at half opacity")
-		var out []compose.Fragment
-		if f.Background.A > 0 {
-			out = append(out, &compose.Path{Ops: ops, Fill: &compose.Fill{Color: colorOf(f.Background)}})
-		}
-		if f.Color.A > 0 {
-			c := colorOf(f.Color)
-			c.A /= 2
-			out = append(out, &compose.Path{Ops: ops, Fill: &compose.Fill{Color: c}})
-		}
+	var out []compose.Fragment
+	if f.Background.A > 0 {
+		out = append(out, &compose.Path{Ops: ops, Fill: &compose.Fill{Color: colorOf(f.Background)}})
+	}
+	if f.Color.A <= 0 {
 		return out
 	}
-	img := image.NewNRGBA(image.Rect(0, 0, w, h))
-	fg, bg := nrgba(f.Color), nrgba(f.Background)
-	for y := range h {
-		row := cell[y%8]
-		for x := range w {
-			if row&(0x80>>(x%8)) != 0 {
-				img.SetNRGBA(x, y, fg)
-			} else {
-				img.SetNRGBA(x, y, bg)
-			}
-		}
+	h, ok := presetHatches[f.Pattern]
+	// The hatch keeps its angle on the page: the shape's clockwise turn
+	// turns it back (sd/tdf107608.pptx, a shape turned 270 degrees, prints
+	// its ltDnDiag lines falling to the right).
+	h.angle += 10 * b.hatchTurn
+	lines := hatchOps(h, box)
+	if !ok || lines == nil {
+		b.warn(CodePattern, "the pattern "+quote(f.Pattern)+" is drawn as its foreground at half opacity")
+		c := colorOf(f.Color)
+		c.A /= 2
+		return append(out, &compose.Path{Ops: ops, Fill: &compose.Fill{Color: c}})
 	}
-	r := compose.Rect{X: box.X, Y: box.Y, Width: float64(w) * patternPixel, Height: float64(h) * patternPixel}
-	return []compose.Fragment{&compose.Group{
+	return append(out, &compose.Group{
 		Transform: compose.Identity, Opacity: 1,
 		Clip:    &compose.Path{Ops: ops, Fill: &compose.Fill{}},
-		Content: []compose.Fragment{&compose.Image{Rect: r, Source: &compose.ImageSource{Image: img}}},
-	}}
+		Content: []compose.Fragment{&compose.Path{Ops: lines, Stroke: &compose.Stroke{Color: colorOf(f.Color), Width: hatchLineWidth}}},
+	})
 }
 
-// nrgba returns c as an 8-bit colour.
-func nrgba(c css.Color) color.NRGBA {
-	q := func(v float64) uint8 { return uint8(math.Round(min(max(v, 0), 1) * 255)) }
-	return color.NRGBA{R: q(c.R), G: q(c.G), B: q(c.B), A: q(c.A)}
+// hatchLineWidth is the width of a hatch's lines, in points: the line
+// width Impress sets at the top of every page and leaves in place.
+const hatchLineWidth = 0.1
+
+// maxHatchLines caps the lines of one hatch drawn. Anti-DoS guard, not
+// spec-mandated: the densest preset over a full slide takes about 3,000.
+const maxHatchLines = 1 << 14
+
+// hatchStyle is how many sets of lines a hatch draws: one; two crossing at
+// a right angle; three, the third at 45 degrees to the first
+// (drawing::HatchStyle).
+type hatchStyle uint8
+
+// The hatch styles.
+const (
+	hatchSingle hatchStyle = iota
+	hatchDouble
+	hatchTriple
+)
+
+// hatch is a hatch fill: its style, the distance between its lines in
+// hundredths of a millimetre, and the angle of its first set of lines in
+// tenths of a degree, counter-clockwise from the horizontal
+// (drawing::Hatch).
+type hatch struct {
+	style    hatchStyle
+	distance float64
+	angle    float64
 }
 
-// patternCell returns the 8 by 8 cell of a DrawingML preset pattern, a
-// row per byte, the most significant bit leftmost, a set bit in the
-// foreground colour (ECMA-376 Part 1, 20.1.10.51 ST_PresetPatternVal, as
-// PowerPoint and Impress draw the presets).
-func patternCell(name string) ([8]byte, bool) {
-	switch name {
-	case "pct5":
-		return [8]byte{0x80, 0, 0, 0, 0x08, 0, 0, 0}, true
-	case "pct10":
-		return [8]byte{0x80, 0, 0x08, 0, 0x80, 0, 0x08, 0}, true
-	case "pct20":
-		return [8]byte{0x88, 0, 0x22, 0, 0x88, 0, 0x22, 0}, true
-	case "pct25":
-		return [8]byte{0x88, 0x22, 0x88, 0x22, 0x88, 0x22, 0x88, 0x22}, true
-	case "pct30":
-		return [8]byte{0xaa, 0x44, 0xaa, 0x11, 0xaa, 0x44, 0xaa, 0x11}, true
-	case "pct40":
-		return [8]byte{0xaa, 0x55, 0xaa, 0x55, 0xaa, 0x55, 0xaa, 0x51}, true
-	case "pct50":
-		return [8]byte{0xaa, 0x55, 0xaa, 0x55, 0xaa, 0x55, 0xaa, 0x55}, true
-	case "pct60":
-		return [8]byte{0xee, 0x55, 0xbb, 0x55, 0xee, 0x55, 0xbb, 0x55}, true
-	case "pct70":
-		return [8]byte{0xee, 0xbb, 0xee, 0xbb, 0xee, 0xbb, 0xee, 0xbb}, true
-	case "pct75":
-		return [8]byte{0xee, 0xff, 0xbb, 0xff, 0xee, 0xff, 0xbb, 0xff}, true
-	case "pct80":
-		return [8]byte{0xf7, 0xff, 0x7f, 0xff, 0xf7, 0xff, 0x7f, 0xff}, true
-	case "pct90":
-		return [8]byte{0xff, 0xff, 0xf7, 0xff, 0xff, 0xff, 0x7f, 0xff}, true
-	case "horz", "ltHorz":
-		return [8]byte{0xff, 0, 0, 0, 0xff, 0, 0, 0}, true
-	case "dkHorz":
-		return [8]byte{0xff, 0xff, 0, 0, 0xff, 0xff, 0, 0}, true
-	case "narHorz":
-		return [8]byte{0xff, 0, 0xff, 0, 0xff, 0, 0xff, 0}, true
-	case "vert", "ltVert":
-		return [8]byte{0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88}, true
-	case "dkVert":
-		return [8]byte{0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc}, true
-	case "narVert":
-		return [8]byte{0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa}, true
-	case "dnDiag", "ltDnDiag":
-		return [8]byte{0x88, 0x44, 0x22, 0x11, 0x88, 0x44, 0x22, 0x11}, true
-	case "dkDnDiag", "wdDnDiag":
-		return [8]byte{0xcc, 0x66, 0x33, 0x99, 0xcc, 0x66, 0x33, 0x99}, true
-	case "upDiag", "ltUpDiag":
-		return [8]byte{0x11, 0x22, 0x44, 0x88, 0x11, 0x22, 0x44, 0x88}, true
-	case "dkUpDiag", "wdUpDiag":
-		return [8]byte{0x33, 0x66, 0xcc, 0x99, 0x33, 0x66, 0xcc, 0x99}, true
-	case "cross", "smGrid":
-		return [8]byte{0xff, 0x88, 0x88, 0x88, 0xff, 0x88, 0x88, 0x88}, true
-	case "lgGrid":
-		return [8]byte{0xff, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80}, true
-	case "diagCross", "smCheck":
-		return [8]byte{0x99, 0x66, 0x66, 0x99, 0x99, 0x66, 0x66, 0x99}, true
-	case "lgCheck":
-		return [8]byte{0xf0, 0xf0, 0xf0, 0xf0, 0x0f, 0x0f, 0x0f, 0x0f}, true
-	case "openDmnd":
-		return [8]byte{0x80, 0x41, 0x22, 0x14, 0x08, 0x14, 0x22, 0x41}, true
-	case "dotGrid":
-		return [8]byte{0xaa, 0, 0x80, 0, 0x80, 0, 0x80, 0}, true
-	case "dashHorz":
-		return [8]byte{0xf0, 0, 0, 0, 0x0f, 0, 0, 0}, true
-	case "dashVert":
-		return [8]byte{0x80, 0x80, 0x80, 0x80, 0x08, 0x08, 0x08, 0x08}, true
-	case "horzBrick":
-		return [8]byte{0xff, 0x80, 0x80, 0x80, 0xff, 0x08, 0x08, 0x08}, true
+// hatchOps returns the lines of the hatch h over box, through its top-left
+// corner, nil for a hatch without spacing or with too many lines.
+func hatchOps(h hatch, box compose.Rect) []compose.PathOp {
+	d := h.distance * 72 / 2540
+	if !(d > 0) || !finite(box) {
+		return nil
 	}
-	return [8]byte{}, false
+	angles := []float64{h.angle / 10}
+	switch h.style {
+	case hatchDouble:
+		angles = append(angles, h.angle/10+90)
+	case hatchTriple:
+		angles = append(angles, h.angle/10+90, h.angle/10+45)
+	case hatchSingle:
+	}
+	cx, cy := box.X+box.Width/2, box.Y+box.Height/2
+	r := math.Hypot(box.Width, box.Height) / 2
+	var ops []compose.PathOp
+	for _, a := range angles {
+		// With y down, a counter-clockwise angle runs up the page.
+		s, c := math.Sincos(a * math.Pi / 180)
+		dx, dy := c, -s
+		nx, ny := s, c
+		// The lines pass through the top-left corner: the offsets along
+		// the normal of the lines that cross the box.
+		o := (box.X-cx)*nx + (box.Y-cy)*ny
+		lo := math.Ceil((-r - o) / d)
+		hi := math.Floor((r - o) / d)
+		if hi-lo+1 > maxHatchLines || len(ops)/2+int(hi-lo+1) > maxHatchLines {
+			return nil
+		}
+		for k := lo; k <= hi; k++ {
+			px, py := cx+(o+k*d)*nx, cy+(o+k*d)*ny
+			ops = append(ops,
+				compose.PathOp{Kind: compose.MoveTo, P: [3]compose.Point{{X: px - r*dx, Y: py - r*dy}}},
+				compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{{X: px + r*dx, Y: py + r*dy}}})
+		}
+	}
+	return ops
+}
+
+// presetHatches maps the DrawingML preset patterns to the hatches
+// Impress draws them as (LibreOffice's oox/inc/drawingml/hatchmap.hxx,
+// createHatch, at the commit the corpora pin).
+var presetHatches = map[string]hatch{
+	"pct5":       {hatchSingle, 250, 450},
+	"pct10":      {hatchSingle, 200, 450},
+	"pct20":      {hatchSingle, 150, 450},
+	"dashUpDiag": {hatchSingle, 150, 450},
+	"pct25":      {hatchDouble, 200, 450},
+	"pct30":      {hatchDouble, 175, 450},
+	"pct40":      {hatchDouble, 150, 450},
+	"weave":      {hatchDouble, 150, 450},
+	"pct50":      {hatchDouble, 125, 450},
+	"pct60":      {hatchTriple, 150, 450},
+	"pct70":      {hatchTriple, 125, 450},
+	"pct75":      {hatchTriple, 100, 450},
+	"pct80":      {hatchTriple, 75, 450},
+	"pct90":      {hatchTriple, 50, 450},
+	"horz":       {hatchSingle, 100, 0},
+	"wave":       {hatchSingle, 100, 0},
+	"vert":       {hatchSingle, 100, 900},
+	"ltHorz":     {hatchSingle, 50, 0},
+	"narHorz":    {hatchSingle, 50, 0},
+	"ltVert":     {hatchSingle, 50, 900},
+	"narVert":    {hatchSingle, 50, 900},
+	"dkHorz":     {hatchSingle, 25, 0},
+	"dkVert":     {hatchSingle, 25, 900},
+	"dashHorz":   {hatchSingle, 150, 0},
+	"dashVert":   {hatchSingle, 150, 900},
+	"cross":      {hatchDouble, 100, 0},
+	"lgGrid":     {hatchDouble, 100, 0},
+	"dnDiag":     {hatchSingle, 100, 1350},
+	"wdDnDiag":   {hatchSingle, 100, 1350},
+	"upDiag":     {hatchSingle, 100, 450},
+	"wdUpDiag":   {hatchSingle, 100, 450},
+	"ltDnDiag":   {hatchSingle, 50, 1350},
+	"dkDnDiag":   {hatchSingle, 50, 1350},
+	"ltUpDiag":   {hatchSingle, 50, 450},
+	"dkUpDiag":   {hatchSingle, 50, 450},
+	"dashDnDiag": {hatchSingle, 150, 1350},
+	"diagCross":  {hatchDouble, 100, 450},
+	"smCheck":    {hatchDouble, 50, 450},
+	"lgCheck":    {hatchDouble, 100, 450},
+	"smGrid":     {hatchDouble, 50, 0},
+	"dotGrid":    {hatchDouble, 400, 0},
+	"smConfetti": {hatchSingle, 200, 600},
+	"lgConfetti": {hatchSingle, 100, 600},
+	"horzBrick":  {hatchDouble, 300, 0},
+	"diagBrick":  {hatchDouble, 300, 450},
+	"dotDmnd":    {hatchDouble, 300, 450},
+	"solidDmnd":  {hatchDouble, 100, 450},
+	"openDmnd":   {hatchDouble, 100, 450},
+	"plaid":      {hatchTriple, 200, 900},
+	"sphere":     {hatchTriple, 100, 0},
+	"divot":      {hatchTriple, 400, 450},
+	"shingle":    {hatchSingle, 200, 1350},
+	"trellis":    {hatchDouble, 75, 450},
+	"zigZag":     {hatchSingle, 75, 0},
 }

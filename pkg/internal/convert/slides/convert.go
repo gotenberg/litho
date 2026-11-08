@@ -59,6 +59,10 @@ type builder struct {
 	// groupFit is the scaling of each ShrinkGroup of the slide being
 	// drawn.
 	groupFit map[int]fit
+	// hatchTurn is the clockwise turn, in degrees, of the shape whose fill
+	// is being drawn: a hatch keeps its angle on the page whatever the
+	// shape's turn.
+	hatchTurn float64
 }
 
 // warn records a warning once per code and message.

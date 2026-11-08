@@ -112,6 +112,7 @@ func (b *builder) geometry(s *Shape, m compose.Matrix, parent *compose.StructEle
 	sm := skewedAboutCentre(box, s.Rotation, s.SkewX, s.FlipH, s.FlipV)
 	paths := shape.Paths(s.Geometry, box)
 	frags, paths := b.effects(s, paths, box, m, txt)
+	b.hatchTurn = s.Rotation
 	for _, p := range paths {
 		if p.Fill {
 			frags = append(frags, b.fill(&s.Fill, box, p.Ops, p.Mode)...)
@@ -120,6 +121,7 @@ func (b *builder) geometry(s *Shape, m compose.Matrix, parent *compose.StructEle
 			frags = append(frags, b.stroke(&s.Line, p.Ops)...)
 		}
 	}
+	b.hatchTurn = 0
 	out := group(sm, frags)
 	if txt != nil {
 		// Impress turns a shape's text with the shape but never mirrors

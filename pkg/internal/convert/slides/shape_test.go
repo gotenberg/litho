@@ -139,9 +139,19 @@ func TestShape_Fills(t *testing.T) {
 	if st := bordered[0].(*compose.Path).Fill.Shading.Stops; len(st) != 3 || st[1].Offset != 0.5 || st[1].Color != st[0].Color || st[2].Offset != 1 {
 		t.Errorf("bordered stops %+v", st)
 	}
-	pat := b.fill(&Fill{Kind: FillPattern, Pattern: "pct50", Color: red, Background: css.Color{A: 1}}, box, ops, shape.FillNorm)
-	if g, ok := pat[0].(*compose.Group); !ok || g.Clip == nil {
+	// narVert is Impress's hatch of vertical lines 0.5 millimetre apart:
+	// 141 or 142 lines across the 200-point box, over the background.
+	pat := b.fill(&Fill{Kind: FillPattern, Pattern: "narVert", Color: red, Background: css.Color{A: 1}}, box, ops, shape.FillNorm)
+	if len(pat) != 2 {
+		t.Fatalf("pattern %+v", pat)
+	}
+	if bg, ok := pat[0].(*compose.Path); !ok || bg.Fill == nil || bg.Fill.Color.A != 1 {
+		t.Errorf("pattern background %+v", pat[0])
+	}
+	if g, ok := pat[1].(*compose.Group); !ok || g.Clip == nil || len(g.Content) != 1 {
 		t.Errorf("pattern %+v", pat)
+	} else if l := g.Content[0].(*compose.Path); l.Stroke == nil || l.Stroke.Width != 0.1 || inside(l.Ops, -0.01, 200) < 141 || !near(l.Ops[0].P[0].X, l.Ops[1].P[0].X, 1e-9) {
+		t.Errorf("hatch lines %d, stroke %+v", len(l.Ops), l.Stroke)
 	}
 	unknown := b.fill(&Fill{Kind: FillPattern, Pattern: "nope", Color: red}, box, ops, shape.FillNorm)
 	if p, ok := unknown[0].(*compose.Path); !ok || p.Fill.Color.A != 0.5 || len(b.warnings) != 1 {
@@ -259,4 +269,15 @@ func TestShape_Jump(t *testing.T) {
 	if len(pg.Links) != 1 || pg.Links[0].Dest == nil || pg.Links[0].Dest.Page != 2 || pg.Links[0].Rect.Width != 50 {
 		t.Errorf("links %+v", pg.Links)
 	}
+}
+
+// inside counts the vertical lines of ops between x0 and x1.
+func inside(ops []compose.PathOp, x0, x1 float64) int {
+	n := 0
+	for i := 0; i+1 < len(ops); i += 2 {
+		if x := ops[i].P[0].X; x >= x0 && x <= x1 && near(x, ops[i+1].P[0].X, 1e-9) {
+			n++
+		}
+	}
+	return n
 }
