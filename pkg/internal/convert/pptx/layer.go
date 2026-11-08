@@ -255,12 +255,20 @@ func inherited(l *layer, el *ooxml.Element) []*ooxml.Element {
 // styleFor returns the master text style a text body of placeholder p
 // takes (19.3.1.51 txStyles): the title style for the titles, the body
 // style for the bodies and content placeholders, the other style for the
-// rest and for shapes that are no placeholder.
+// other placeholders; none for a shape that is no placeholder, whose text
+// takes the presentation's default text style alone, as Impress prints
+// it.
+//
+// # Corpus evidence
+//
+//   - pptx: oox/tdf151008_eaVertAnchor's text boxes, of no size of their
+//     own on a master whose other style sets 15.12 points, print at the
+//     default text style's 18 points, upright or vertical.
 func (l *layer) styleFor(p placeholder, isPh bool) *ooxml.Element {
 	m := l.masterOf()
 	switch {
 	case !isPh:
-		return m.other
+		return nil
 	case p.class() == "title":
 		return m.title
 	case p.class() == "body":

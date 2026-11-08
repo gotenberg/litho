@@ -348,3 +348,14 @@ func TestText_DefaultTab(t *testing.T) {
 		})
 	}
 }
+
+func TestText_ShapeTakesNoOtherStyle(t *testing.T) {
+	t.Parallel()
+	doc, _ := readDeck(t, testDeck{
+		masterExtra: strings.Replace(defaultTxStyles, `<p:otherStyle><a:lvl1pPr><a:defRPr sz="1800">`, `<p:otherStyle><a:lvl1pPr><a:defRPr sz="1500">`, 1),
+		slides:      []testSlide{{tree: textBox("TB", 0, 0, 914400, 914400, `<a:bodyPr/><a:p><a:r><a:t>x</a:t></a:r></a:p>`)}},
+	})
+	if s := doc.Slides[0].Shapes[0].Text.Paragraphs[0].Runs[0].Style; s.Size != 18 {
+		t.Errorf("text box size %v, want the default text style's 18", s.Size)
+	}
+}
