@@ -12,13 +12,19 @@ import (
 // The relationship types of the pivot table parts (ECMA-376 Part 1,
 // 12.3.13 and 12.3.12).
 const (
-	relPivotTable = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable"
-	relPivotCache = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition"
+	relPivotTable   = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable"
+	relPivotCache   = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition"
+	relPivotRecords = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords"
 )
 
 // maxPivotTables caps the pivot tables of a workbook. Anti-DoS guard, not
 // spec-mandated: a workbook holds a handful.
 const maxPivotTables = 256
+
+// maxPivotRecords caps the records restored from a pivot cache.
+// Anti-DoS guard, not spec-mandated: the sheet builder summarises at most
+// as many.
+const maxPivotRecords = 1 << 18
 
 // maxPivotItems caps the items read for one pivot or cache field.
 // Anti-DoS guard, not spec-mandated: Excel shows at most 1,048,576 items
@@ -29,6 +35,7 @@ const maxPivotItems = 1 << 16
 // defined name or a table that is resolved once every sheet is read.
 type pendingPivot struct {
 	sh    *sheet.Sheet
+	cache *pivotCache
 	pivot sheet.Pivot
 	// srcSheet, srcName and srcRange are the cache's worksheet source
 	// (18.10.1.98 worksheetSource).
@@ -53,6 +60,11 @@ type pivotCache struct {
 	worksheet         bool
 	external          bool
 	fields            []cacheField
+	// records is the cache's records part, dummy the index of the hidden
+	// sheet its records were written to, -1 before.
+	records string
+	dummy   int
+	rows    int
 }
 
 // pivotCacheParts reads the workbook's pivotCaches (18.2.22): the part of
@@ -133,7 +145,7 @@ func (r *reader) pivotCache(name string) (*pivotCache, error) {
 		}
 		return nil, err
 	}
-	c := &pivotCache{}
+	c := &pivotCache{records: r.pkg.RelatedPart(name, relPivotRecords), dummy: -1}
 	if src := root.Child(nsMain, "cacheSource"); src != nil {
 		c.worksheet = attr(src, "type") == "worksheet"
 		if ws := src.Child(nsMain, "worksheetSource"); ws != nil {
@@ -233,10 +245,10 @@ func (w *sheetReader) pivotTable(root *ooxml.Element, cache *pivotCache) (pendin
 	name := decodeXString(attr(root, "name"))
 	loc := root.Child(nsMain, "location")
 	area, ok := rangeRef(attr(loc, "ref"))
-	if cache == nil || !cache.worksheet || cache.external || name == "" || !ok {
+	if cache == nil || !cache.worksheet || name == "" || !ok {
 		return pendingPivot{}, false
 	}
-	pp := pendingPivot{sh: w.sh, srcSheet: cache.srcSheet, srcName: cache.srcName, srcRange: cache.srcRange, hasRange: cache.hasRange}
+	pp := pendingPivot{sh: w.sh, cache: cache, srcSheet: cache.srcSheet, srcName: cache.srcName, srcRange: cache.srcRange, hasRange: cache.hasRange}
 	clear := area
 	p := sheet.Pivot{
 		Name: name, Clear: &clear,
@@ -498,8 +510,90 @@ func (r *reader) pivotSource(doc *sheet.Document, pp *pendingPivot) (int, sheet.
 		return 0, sheet.Range{}, false
 	}
 	i := sheetIndex(pp.srcSheet)
+	if pp.cache.external || (i < 0 && pp.srcSheet != "") {
+		// A source in another workbook, or on a sheet deleted since, is
+		// restored from the cache's records on a sheet of its own, which
+		// does not print (PivotCache::prepareSourceDataSheet).
+		return r.cacheSheet(doc, pp)
+	}
 	if i < 0 || !pp.hasRange || pp.srcRange.LastRow <= pp.srcRange.FirstRow {
 		return 0, sheet.Range{}, false
 	}
 	return i, pp.srcRange, true
+}
+
+// cacheDateFormat is the number format of the dates a cache restores:
+// Calc's en-US default date format.
+const cacheDateFormat = "MM/DD/YY"
+
+// cacheSheet writes the records of pp's cache to a hidden sheet,
+// "DPCache_" and the source sheet's name, its first row the cache fields'
+// names (18.10.1.68 pivotCacheRecords: each r a record, an x an index
+// into the field's shared items), and returns its index and range.
+func (r *reader) cacheSheet(doc *sheet.Document, pp *pendingPivot) (int, sheet.Range, bool) {
+	c := pp.cache
+	if c.dummy >= 0 {
+		return c.dummy, c.dummyRange(), true
+	}
+	if c.records == "" || pp.srcName != "" || pp.srcSheet == "" || len(c.fields) == 0 || len(doc.Sheets) >= maxSheets {
+		return 0, sheet.Range{}, false
+	}
+	root, err := r.pkg.ParseXML(r.ctx, c.records, understood)
+	if err != nil {
+		return 0, sheet.Range{}, false
+	}
+	sh := &sheet.Sheet{Name: "DPCache_" + pp.srcSheet, Hidden: true}
+	r.defaultSetup(sh)
+	date := &sheet.Style{Format: cacheDateFormat}
+	head := sheet.Row{Index: 0}
+	for i, f := range c.fields {
+		head.Cells = append(head.Cells, sheet.Cell{Column: i, Value: sheet.Value{Kind: sheet.Text, Text: f.name}})
+	}
+	sh.Rows = append(sh.Rows, head)
+	for _, rec := range root.Kids() {
+		if !rec.Is(nsMain, "r") || len(sh.Rows) > maxPivotRecords || r.cells > maxCells {
+			continue
+		}
+		row := sheet.Row{Index: len(sh.Rows)}
+		for i, it := range rec.Kids() {
+			if i >= len(c.fields) {
+				break
+			}
+			var v sheet.Value
+			if it.Local == "x" {
+				x := intAttr(it, "v", -1)
+				if x < 0 || x >= len(c.fields[i].items) {
+					continue
+				}
+				v = c.fields[i].items[x]
+			} else {
+				v = r.cacheItem(it)
+			}
+			if v.Kind == sheet.Empty || v.Kind == sheet.Error {
+				// An error item restores as an empty cell.
+				//
+				// # Corpus evidence
+				//
+				//   - xlsx: sc/tdf122471.xlsx, whose cache restores an
+				//     external source, prints its #N/A item as a column
+				//     "(empty)".
+				continue
+			}
+			cell := sheet.Cell{Column: i, Value: v}
+			if it.Local == "d" {
+				cell.Style = date
+			}
+			row.Cells = append(row.Cells, cell)
+			r.cells++
+		}
+		sh.Rows = append(sh.Rows, row)
+	}
+	c.dummy, c.rows = len(doc.Sheets), len(sh.Rows)
+	doc.Sheets = append(doc.Sheets, sh)
+	return c.dummy, c.dummyRange(), c.rows > 1
+}
+
+// dummyRange returns the range of the cache's records sheet.
+func (c *pivotCache) dummyRange() sheet.Range {
+	return sheet.Range{LastRow: max(c.rows-1, 1), LastColumn: len(c.fields) - 1}
 }

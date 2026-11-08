@@ -1,9 +1,11 @@
 package xlsx
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -144,4 +146,58 @@ func FuzzPivotTable(f *testing.F) {
 			t.Fatalf("convert: %v", err)
 		}
 	})
+}
+
+func TestPivotTables_ExternalSourceFromRecords(t *testing.T) {
+	def := `<pivotTableDefinition ` + nsDecl + ` name="P1" cacheId="7"><location ref="E3:F6" firstHeaderRow="1"/>` +
+		`<pivotFields count="2"><pivotField axis="axisRow"/><pivotField dataField="1"/></pivotFields>` +
+		`<rowFields count="1"><field x="0"/></rowFields><dataFields count="1"><dataField fld="1"/></dataFields></pivotTableDefinition>`
+	data := pivotPackage(t, def)
+	files := map[string]string{}
+	zr := mustUnzip(t, data)
+	for k, v := range zr {
+		files[k] = v
+	}
+	files["xl/pivotCache/pivotCacheDefinition1.xml"] = `<pivotCacheDefinition ` + nsDecl + `><cacheSource type="worksheet"><worksheetSource ref="A1:B4" sheet="Gone" r:id="rIdX"/></cacheSource>` +
+		`<cacheFields count="2"><cacheField name="name"><sharedItems count="2"><s v="x"/><e v="#N/A"/></sharedItems></cacheField><cacheField name="v"><sharedItems/></cacheField></cacheFields></pivotCacheDefinition>`
+	files["xl/pivotCache/_rels/pivotCacheDefinition1.xml.rels"] = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+		`<Relationship Id="rIdR" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords" Target="pivotCacheRecords1.xml"/></Relationships>`
+	files["xl/pivotCache/pivotCacheRecords1.xml"] = `<pivotCacheRecords ` + nsDecl + `><r><x v="0"/><n v="2"/></r><r><x v="1"/><n v="3"/></r></pivotCacheRecords>`
+	doc, _ := readBytes(t, zipFiles(t, files))
+	if len(doc.Sheets) != 2 || !doc.Sheets[1].Hidden || doc.Sheets[1].Name != "DPCache_Gone" {
+		t.Fatalf("sheets = %d", len(doc.Sheets))
+	}
+	p := doc.Sheets[0].Pivots
+	if len(p) != 1 || p[0].SourceSheet != 1 || p[0].Source != (sheet.Range{LastRow: 2, LastColumn: 1}) {
+		t.Fatalf("pivots = %+v", p)
+	}
+	if c, ok := cellAt(doc.Sheets[1], 1, 0); !ok || c.Value.Text != "x" {
+		t.Errorf("A2 = %+v", c)
+	}
+	if c, ok := cellAt(doc.Sheets[1], 2, 0); ok && c.Value.Kind != sheet.Empty {
+		t.Errorf("A3 = %+v, want the error item empty", c)
+	}
+}
+
+// mustUnzip returns the parts of the zip archive data.
+func mustUnzip(t *testing.T, data []byte) map[string]string {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]string{}
+	for _, f := range zr.File {
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[f.Name] = string(b)
+	}
+	return out
 }
