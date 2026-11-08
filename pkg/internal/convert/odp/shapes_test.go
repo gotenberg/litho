@@ -211,3 +211,40 @@ func TestRead_Frames(t *testing.T) {
 		}
 	})
 }
+
+func TestRead_Jump(t *testing.T) {
+	listener := func(action, href string) string {
+		h := ""
+		if href != "" {
+			h = ` xlink:href="` + href + `"`
+		}
+		return `<draw:rect svg:width="1cm" svg:height="1cm"><office:event-listeners><presentation:event-listener presentation:action="` + action + `"` + h + `/></office:event-listeners></draw:rect>`
+	}
+	tests := []struct {
+		name, action, href string
+		jump               int
+		wantHref           string
+	}{
+		{"next", "next-page", "", 3, ""},
+		{"previous", "previous-page", "", 1, ""},
+		{"first", "first-page", "", 1, ""},
+		{"last", "last-page", "", 4, ""},
+		{"by name", "show", "#end", 4, ""},
+		{"by shown name", "show", "#Slide 1", 1, ""},
+		{"unknown page", "show", "#nowhere", 0, "#nowhere"},
+		{"url", "show", "https://example.com/", 0, "https://example.com/"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := `<draw:page draw:name="page1" draw:master-page-name="Default"/>` +
+				`<draw:page draw:name="page2" draw:master-page-name="Default">` + listener(tt.action, tt.href) + `</draw:page>` +
+				`<draw:page draw:name="page3" draw:master-page-name="Default"/>` +
+				`<draw:page draw:name="end" draw:master-page-name="Default"/>`
+			doc, _ := read(t, flat{body: body}.bytes())
+			s := doc.Slides[1].Shapes[0]
+			if s.Jump != tt.jump || s.Href != tt.wantHref {
+				t.Errorf("jump = %d href %q, want %d %q", s.Jump, s.Href, tt.jump, tt.wantHref)
+			}
+		})
+	}
+}

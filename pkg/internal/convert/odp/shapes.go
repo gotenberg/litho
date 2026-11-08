@@ -92,7 +92,8 @@ func (r *reader) shape(el *odf.Element, pc *pageCtx, depth int, href string) []*
 		return nil
 	}
 	r.shapes++
-	if h := eventHref(el); h != "" {
+	jump := r.eventJump(el, pc)
+	if h := eventHref(el); h != "" && jump == 0 {
 		href = h
 	}
 	var s *slides.Shape
@@ -113,7 +114,8 @@ func (r *reader) shape(el *odf.Element, pc *pageCtx, depth int, href string) []*
 		return nil
 	}
 	s.Name = el.A(odf.NSDraw, "name")
-	if s.Href == "" {
+	s.Jump = jump
+	if s.Href == "" && jump == 0 {
 		s.Href = href
 	}
 	return []*slides.Shape{s}
@@ -131,6 +133,40 @@ func eventHref(el *odf.Element) string {
 		}
 	}
 	return ""
+}
+
+// eventJump returns the 1-based position in the document of the slide a
+// shape's click action goes to (ODF 1.3, Part 3, 19.414
+// presentation:action): next-page and previous-page from the slide pc
+// reads, first-page, last-page, and show with an xlink:href "#name"
+// naming a page by its draw:name or the name Impress shows ("Slide 2");
+// 0 for none, for a master page's shape, or for a target out of the
+// document.
+func (r *reader) eventJump(el *odf.Element, pc *pageCtx) int {
+	if pc.master || pc.number <= 0 {
+		return 0
+	}
+	for _, l := range el.Child(odf.NSOffice, "event-listeners").All(odf.NSPresentation, "event-listener") {
+		n := 0
+		switch l.A(odf.NSPresentation, "action") {
+		case "next-page":
+			n = pc.number + 1
+		case "previous-page":
+			n = pc.number - 1
+		case "first-page":
+			n = 1
+		case "last-page":
+			n = r.pageCount
+		case "show":
+			if name, ok := strings.CutPrefix(l.A(odf.NSXLink, "href"), "#"); ok {
+				n = r.pageNames[name]
+			}
+		}
+		if n >= 1 && n <= r.pageCount {
+			return n
+		}
+	}
+	return 0
 }
 
 // placement reads a shape's svg:x, svg:y, svg:width, svg:height and

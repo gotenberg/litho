@@ -76,6 +76,10 @@ type reader struct {
 	// (10.9.3.2 to 10.9.3.6) by presentation:name.
 	footers, headers map[string]string
 	dates            map[string]*odf.Element
+	// pageNames maps a page's draw:name, and the name Impress shows for
+	// it, to its 1-based position; pageCount is the number of pages read.
+	pageNames map[string]int
+	pageCount int
 }
 
 // newReader returns a reader of pkg.
@@ -151,6 +155,15 @@ func (r *reader) document(body *odf.Element) *slides.Document {
 	}
 	doc.Width, doc.Height = r.pageSize(first)
 	doc.NotesWidth, doc.NotesHeight = r.notesSize(first)
+	r.pageCount = min(len(pages), maxSlides)
+	r.pageNames = map[string]int{}
+	for i, pg := range pages[:r.pageCount] {
+		for _, name := range []string{pg.A(odf.NSDraw, "name"), slideName(pg.A(odf.NSDraw, "name"), i+1)} {
+			if _, dup := r.pageNames[name]; !dup && name != "" {
+				r.pageNames[name] = i + 1
+			}
+		}
+	}
 	for i, pg := range pages {
 		if i >= maxSlides {
 			r.warn("too-many-slides", fmt.Sprintf("slides past %d are not read", maxSlides))
