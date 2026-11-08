@@ -110,3 +110,12 @@ func TestRead_ConditionalFormats(t *testing.T) {
 		t.Errorf("icon set %+v", s)
 	}
 }
+
+// TestEncodeStyleName locks LibreOffice's encoding of a display name.
+func TestEncodeStyleName(t *testing.T) {
+	for in, want := range map[string]string{"ConditionalStyle_1": "ConditionalStyle_5f_1", "Good": "Good", "My style": "My_20_style", "1st": "_31_st", "a-b.c": "a-b.c"} {
+		if got := encodeStyleName(in); got != want {
+			t.Errorf("%q: %q, want %q", in, got, want)
+		}
+	}
+}

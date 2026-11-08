@@ -356,6 +356,10 @@ func (r *reader) condStyle(name string) *sheet.Style {
 	if st, ok := r.condSty[name]; ok {
 		return st
 	}
+	key := name
+	if r.styles.Style(odf.ScopeContent, odf.FamilyCell, name) == nil {
+		name = encodeStyleName(name)
+	}
 	var chain []*odf.Style
 	for _, s := range r.styles.Chain(odf.ScopeContent, odf.FamilyCell, name) {
 		if s.Name != defaultStyleName || s.Auto {
@@ -363,7 +367,7 @@ func (r *reader) condStyle(name string) *sheet.Style {
 		}
 	}
 	if len(chain) == 0 {
-		r.condSty[name] = nil
+		r.condSty[key] = nil
 		return nil
 	}
 	var cp odf.Props
@@ -384,6 +388,24 @@ func (r *reader) condStyle(name string) *sheet.Style {
 		st.Fill.Color = c
 	}
 	st.Border, _ = borders(cp)
-	r.condSty[name] = st
+	r.condSty[key] = st
 	return st
+}
+
+// encodeStyleName returns a style's display name as its style:name: every
+// character an XML name may not hold, and the underscore, written as an
+// underscore, its hexadecimal code and an underscore, as LibreOffice
+// encodes it (calcext:apply-style-name names the display name; ODF 1.3,
+// Part 3, 19.493 style:display-name).
+func encodeStyleName(s string) string {
+	var b strings.Builder
+	for i, c := range s {
+		ok := c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c > 0x7f || i > 0 && (c >= '0' && c <= '9' || c == '-' || c == '.')
+		if ok {
+			b.WriteRune(c)
+			continue
+		}
+		b.WriteString("_" + strconv.FormatInt(int64(c), 16) + "_")
+	}
+	return b.String()
 }
