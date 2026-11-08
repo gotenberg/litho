@@ -30,6 +30,10 @@ pkg/internal/convert/sheet/      What the spreadsheet converters share: the shee
 pkg/internal/convert/xlsx/       XLSX converter: SpreadsheetML to the sheet model (wave 5).
 pkg/internal/convert/ods/        ODS converter: OpenDocument spreadsheets to the sheet model (wave 5).
 pkg/internal/convert/csv/        CSV converter: a CSV file to the sheet model, as Calc imports one (wave 5).
+pkg/internal/shape/              Shape geometry: DrawingML presets and custom geometries, OpenDocument enhanced geometry, fitted to a box (wave 6 onward).
+pkg/internal/convert/slides/     What the presentation converters share: the slide model and its layout as Impress prints a show (wave 6).
+pkg/internal/convert/pptx/       PPTX converter: PresentationML to the slide model (wave 6).
+pkg/internal/convert/odp/        ODP converter: OpenDocument presentations to the slide model (wave 6).
 pkg/pdf/convert.go               Public entry point: pdf.Convert.
 cmd/litho/convert.go             CLI: litho convert.
 ```

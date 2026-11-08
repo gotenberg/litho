@@ -17,10 +17,10 @@ import (
 )
 
 // convertUsage is the synopsis litho convert prints on a missing argument.
-const convertUsage = "Usage: litho convert [--from text|html|markdown|docx|odt|xlsx|ods|csv] [--paper A4|Letter|WxH] [--landscape] [--margin PT | --margin T,R,B,L] " +
+const convertUsage = "Usage: litho convert [--from text|html|markdown|docx|odt|xlsx|ods|csv|pptx|odp] [--paper A4|Letter|WxH] [--landscape] [--margin PT | --margin T,R,B,L] " +
 	"[--font FAMILY] [--font-size PT] [--media print|screen] [--media-feature NAME=VALUE]... [--resources DIR] [--base-url URL] " +
 	"[--prefer-css-page-size] [--scale N] [--single-page] [--pages RANGES] [--background=false] [--outline=false] " +
-	"[--header FILE] [--footer FILE] [--date RFC3339|now] [--password PASSWORD] [--font-dir DIR]... [-f json] -o out.pdf <file|http(s) URL>"
+	"[--header FILE] [--footer FILE] [--date RFC3339|now] [--password PASSWORD] [--hidden-slides] [--notes-pages] [--font-dir DIR]... [-f json] -o out.pdf <file|http(s) URL>"
 
 // convertFormats maps the --from values, and the file extensions that imply
 // them, to the formats [pdf.Convert] reads. Immutable lookup tables.
@@ -34,6 +34,8 @@ var (
 		"xlsx":     pdf.FormatXLSX,
 		"ods":      pdf.FormatODS,
 		"csv":      pdf.FormatCSV,
+		"pptx":     pdf.FormatPPTX,
+		"odp":      pdf.FormatODP,
 	}
 	convertExtensions = map[string]pdf.Format{
 		".txt":      pdf.FormatText,
@@ -53,6 +55,13 @@ var (
 		".fods":     pdf.FormatODS,
 		".ots":      pdf.FormatODS,
 		".csv":      pdf.FormatCSV,
+		".pptx":     pdf.FormatPPTX,
+		".pptm":     pdf.FormatPPTX,
+		".potx":     pdf.FormatPPTX,
+		".ppsx":     pdf.FormatPPTX,
+		".odp":      pdf.FormatODP,
+		".fodp":     pdf.FormatODP,
+		".otp":      pdf.FormatODP,
 	}
 )
 
@@ -133,8 +142,8 @@ func (f *marginFlag) Set(value string) error {
 func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("convert", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	from := fs.String("from", "", "Input format: text, html, markdown, docx, odt, xlsx, ods or csv. Without it, the file extension decides: .txt and .text are text, .html and .htm are html, .md and .markdown are markdown, .docx is docx, .odt and .fodt are odt, "+
-		".xlsx, .xlsm, .xltx and .xltm are xlsx, .ods, .fods and .ots are ods, .csv is csv; "+
+	from := fs.String("from", "", "Input format: text, html, markdown, docx, odt, xlsx, ods, csv, pptx or odp. Without it, the file extension decides: .txt and .text are text, .html and .htm are html, .md and .markdown are markdown, .docx is docx, .odt and .fodt are odt, "+
+		".xlsx, .xlsm, .xltx and .xltm are xlsx, .ods, .fods and .ots are ods, .csv is csv, .pptx, .pptm, .potx and .ppsx are pptx, .odp, .fodp and .otp are odp; "+
 		"for an http(s) URL, the Content-Type, then the URL's extension, then html")
 	output := fs.String("o", "", "Output file (required), - for stdout")
 	format := fs.String("f", "text", "Report format: text (warnings on stderr) or json (the report on stdout)")
@@ -152,6 +161,8 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	landscape := fs.Bool("landscape", false, "Swap the paper's width and height of an HTML file")
 	preferCSS := fs.Bool("prefer-css-page-size", false, "Let an @page size of an HTML file set the page size; without it the paper is the page and such a document is scaled to fit it")
 	scale := fs.Float64("scale", 1, "Scale of the content of an HTML file, from 0.1 to 2; the page keeps its size")
+	hiddenSlides := fs.Bool("hidden-slides", false, "Write the slides a presentation hides from its show too")
+	notesPages := fs.Bool("notes-pages", false, "Write a notes page after the slides of a presentation, one per slide")
 	singlePage := fs.Bool("single-page", false, "Lay an HTML file out on one page as tall as its content, or each sheet of a spreadsheet on one page the size of its content")
 	pages := fs.String("pages", "", "Pages to write, as 1-3,7, even, odd or last (default all)")
 	background := fs.Bool("background", true, "Print the backgrounds of an HTML file; --background=false drops the html and body backgrounds, the canvas")
@@ -267,7 +278,7 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		}
 	}
 	if officeLike {
-		opts = append(opts, pdf.WithLandscape(*landscape), pdf.WithPageRanges(*pages), pdf.WithOutline(*outlineFlag), pdf.WithConvertPassword(*password))
+		opts = append(opts, pdf.WithLandscape(*landscape), pdf.WithPageRanges(*pages), pdf.WithOutline(*outlineFlag), pdf.WithConvertPassword(*password), pdf.WithHiddenSlides(*hiddenSlides), pdf.WithNotesPages(*notesPages))
 	}
 	if paper.set {
 		opts = append(opts, pdf.WithPaperSize(paper.width, paper.height))
@@ -384,12 +395,12 @@ func convertFormat(from, path string) (pdf.Format, error) {
 	if from != "" {
 		f, ok := convertFormats[strings.ToLower(from)]
 		if !ok {
-			return "", fmt.Errorf("unsupported --from %q: litho convert reads text, html, markdown, docx, odt, xlsx, ods and csv", from)
+			return "", fmt.Errorf("unsupported --from %q: litho convert reads text, html, markdown, docx, odt, xlsx, ods, csv, pptx and odp", from)
 		}
 		return f, nil
 	}
 	if path == "-" {
-		return "", errors.New("standard input has no extension to tell its format: pass --from text, html, markdown, docx, odt, xlsx, ods or csv")
+		return "", errors.New("standard input has no extension to tell its format: pass --from text, html, markdown, docx, odt, xlsx, ods, csv, pptx or odp")
 	}
 	ext := strings.ToLower(filepath.Ext(path))
 	f, ok := convertExtensions[ext]

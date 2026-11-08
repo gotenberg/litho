@@ -60,13 +60,14 @@ type Options struct {
 // The media types of the ODF documents (ODF 1.3, Part 2, 3.3 and Part 3,
 // Appendix C).
 const (
-	MimeText                = "application/vnd.oasis.opendocument.text"
-	MimeTextTemplate        = "application/vnd.oasis.opendocument.text-template"
-	MimeSpreadsheet         = "application/vnd.oasis.opendocument.spreadsheet"
-	MimePresentation        = "application/vnd.oasis.opendocument.presentation"
-	MimeTextMaster          = "application/vnd.oasis.opendocument.text-master"
-	MimeTextWeb             = "application/vnd.oasis.opendocument.text-web"
-	MimeSpreadsheetTemplate = "application/vnd.oasis.opendocument.spreadsheet-template"
+	MimeText                 = "application/vnd.oasis.opendocument.text"
+	MimeTextTemplate         = "application/vnd.oasis.opendocument.text-template"
+	MimeSpreadsheet          = "application/vnd.oasis.opendocument.spreadsheet"
+	MimePresentation         = "application/vnd.oasis.opendocument.presentation"
+	MimeTextMaster           = "application/vnd.oasis.opendocument.text-master"
+	MimeTextWeb              = "application/vnd.oasis.opendocument.text-web"
+	MimeSpreadsheetTemplate  = "application/vnd.oasis.opendocument.spreadsheet-template"
+	MimePresentationTemplate = "application/vnd.oasis.opendocument.presentation-template"
 )
 
 // ManifestEntry is one manifest:file-entry of META-INF/manifest.xml (ODF

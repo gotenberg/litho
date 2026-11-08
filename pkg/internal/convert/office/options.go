@@ -36,11 +36,20 @@ type Options struct {
 	// page size options above too. A text document ignores it.
 	SinglePageSheets bool
 	// PrintDate is what the date and time fields of a spreadsheet's headers
-	// and footers show; the zero time shows nothing. It is the only date
-	// of a conversion: the output never depends on the clock. A text
-	// document ignores it: its date fields show the results its file
-	// stores.
+	// and footers, and of a presentation's slides, show; the zero time
+	// shows nothing for a spreadsheet and the text the file saved for a
+	// presentation. It is the only date of a conversion: the output never
+	// depends on the clock. A text document ignores it: its date fields
+	// show the results its file stores.
 	PrintDate time.Time
+	// HiddenSlides prints the slides a presentation hides from its show
+	// too; off, the default, they are left out, as Impress prints a show.
+	// Other documents ignore it.
+	HiddenSlides bool
+	// NotesPages prints, after the slides of a presentation, one notes
+	// page per printed slide: the slide at the top and its notes below, on
+	// the notes page size. Other documents ignore it.
+	NotesPages bool
 	// MaxInputBytes caps the source read, 0 for the converter's default.
 	MaxInputBytes int64
 	// MaxPages caps the pages laid out, 0 for the layout engine's default.

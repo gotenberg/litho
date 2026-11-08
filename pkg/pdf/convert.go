@@ -19,10 +19,12 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/docx"
 	htmlconv "github.com/gotenberg/litho/pkg/internal/convert/html"
 	"github.com/gotenberg/litho/pkg/internal/convert/markdown"
+	"github.com/gotenberg/litho/pkg/internal/convert/odp"
 	"github.com/gotenberg/litho/pkg/internal/convert/ods"
 	"github.com/gotenberg/litho/pkg/internal/convert/odt"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/plaintext"
+	"github.com/gotenberg/litho/pkg/internal/convert/pptx"
 	"github.com/gotenberg/litho/pkg/internal/convert/xlsx"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -56,6 +58,13 @@ const (
 	// FormatCSV is a comma-separated values file (RFC 4180), laid out as a
 	// spreadsheet of one sheet. See [Convert].
 	FormatCSV Format = "csv"
+	// FormatPPTX is a PresentationML presentation, a PPTX file (ECMA-376),
+	// a macro-enabled PPTM, a template POTX or a slide show PPSX alike;
+	// macros never run. See [Convert].
+	FormatPPTX Format = "pptx"
+	// FormatODP is an OpenDocument presentation, an ODP file, a template
+	// OTP, or a flat FODP document (ODF 1.3). See [Convert].
+	FormatODP Format = "odp"
 	// FormatODT is an OpenDocument text document, an ODT file (ODF 1.3).
 	// See [Convert] for what is drawn.
 	FormatODT Format = "odt"
@@ -82,6 +91,8 @@ type convertOptions struct {
 	preferCSSPageSize                    bool
 	scale                                float64
 	singlePage                           bool
+	hiddenSlides                         bool
+	notesPages                           bool
 	pageRanges                           string
 	omitBackgrounds                      bool
 	omitOutline                          bool
@@ -131,7 +142,10 @@ func WithConvertFontDirs(dirs ...string) ConvertOption {
 // [ErrInvalidConvertOptions]. Both zero keep the default. A [FormatDOCX] or
 // [FormatODT] source has a page size of its own, per section, and a
 // spreadsheet source one per sheet, which applies unless this option
-// names another: then every section or sheet is laid out on this paper.
+// names another: then every section or sheet is laid out on this paper. A
+// presentation's pages are its slide size unless this option names
+// another: then each slide is scaled down to fit the paper, never up, and
+// centred on it.
 func WithPaperSize(width, height float64) ConvertOption {
 	return func(o *convertOptions) {
 		o.width, o.height = width, height
@@ -202,7 +216,8 @@ func WithResources(fsys fs.FS) ConvertOption {
 // names the portrait sheet. It lays every section of a [FormatDOCX] or
 // [FormatODT] source, and every sheet of a spreadsheet source, out in
 // landscape: a portrait section's width and height are swapped, a
-// landscape one is kept.
+// landscape one is kept. It turns a portrait page of a presentation
+// source alike.
 func WithLandscape(landscape bool) ConvertOption {
 	return func(o *convertOptions) { o.landscape = landscape }
 }
@@ -283,18 +298,34 @@ func WithFractionalFontMetrics(fractional bool) ConvertOption {
 
 // WithOutline sets whether the headings of a [FormatHTML] source, the
 // paragraphs of a [FormatDOCX] or [FormatODT] source whose style has an
-// outline level, or the sheets of a spreadsheet source, become the
-// document outline. true is the default.
+// outline level, the sheets of a spreadsheet source, or the slides of a
+// presentation source, become the document outline. true is the default.
 func WithOutline(outline bool) ConvertOption {
 	return func(o *convertOptions) { o.omitOutline = !outline }
 }
 
 // WithConvertPassword opens an encrypted [FormatDOCX], [FormatODT],
-// [FormatXLSX] or [FormatODS] source with password. Without it, or with a
-// wrong one, an encrypted source fails with [ErrConvertEncrypted]. Other
-// formats ignore it.
+// [FormatXLSX], [FormatODS], [FormatPPTX] or [FormatODP] source with
+// password. Without it, or with a wrong one, an encrypted source fails
+// with [ErrConvertEncrypted]. Other formats ignore it.
 func WithConvertPassword(password string) ConvertOption {
 	return func(o *convertOptions) { o.password = password }
+}
+
+// WithHiddenSlides sets whether the slides a [FormatPPTX] or [FormatODP]
+// source hides from its show are written. false, the default, leaves
+// them out, as a show is printed; true writes every slide. Slide numbers
+// count the slides written. Other formats ignore it.
+func WithHiddenSlides(include bool) ConvertOption {
+	return func(o *convertOptions) { o.hiddenSlides = include }
+}
+
+// WithNotesPages writes, after the slides of a [FormatPPTX] or
+// [FormatODP] source, one notes page per slide written: the slide drawn
+// at the top of the notes page size and the slide's notes below it.
+// false, the default, writes the slides alone. Other formats ignore it.
+func WithNotesPages(notes bool) ConvertOption {
+	return func(o *convertOptions) { o.notesPages = notes }
 }
 
 // WithHeaderTemplate draws the HTML fragment html in the top margin of
@@ -321,8 +352,11 @@ func WithFooterTemplate(html string) ConvertOption {
 // templates of a [FormatHTML] source shows, formatted for the en-US
 // locale as "11/6/26, 10:30 AM", and what the date and time fields of a
 // spreadsheet source's headers and footers show, as "11/06/2026" and
-// "10:30:00". The zero time, the default, shows nothing. It is the only
-// date of a conversion: the output never depends on the clock.
+// "10:30:00", and what the date and time fields of a presentation's
+// slides show in place of the text their file saved. The zero time, the
+// default, shows nothing in a spreadsheet and the saved text in a
+// presentation. It is the only date of a conversion: the output never
+// depends on the clock.
 func WithPrintDate(t time.Time) ConvertOption {
 	return func(o *convertOptions) { o.date = t }
 }
@@ -502,6 +536,24 @@ type ConvertWarning struct {
 // [WithPrintDate] apply; the other options are ignored as for a DOCX
 // source. A construct that is not drawn is reported as a warning.
 //
+// # PPTX and ODP
+//
+// [FormatPPTX] reads a PresentationML presentation and [FormatODP] an
+// OpenDocument presentation, and lays them out as a presentation prints:
+// one page per slide at the slide size, the slide's background and its
+// shapes in stacking order, the masters' and layouts' shapes that show
+// through included, each shape its geometry with its fill and line, its
+// picture, chart or table, its text laid out in its box with the insets,
+// anchor, wrapping, columns and autofit the file asks for, bullets and
+// numbering, and the slide number, date and footer fields. Hidden slides
+// are left out unless [WithHiddenSlides] asks for them; [WithNotesPages]
+// adds a notes page per slide. [WithPaperSize] and [WithLandscape] set the
+// page size, the slide scaled to fit it; [WithPageRanges], [WithOutline]
+// (the slide titles), [WithConvertPassword] and [WithPrintDate] apply;
+// the other options are ignored as for a DOCX source. Transitions,
+// animations, narration and comments are not printed. A construct that
+// is not drawn is reported as a warning.
+//
 // # All formats
 //
 // The fonts are embedded, each subset to the glyphs drawn. Nothing is
@@ -536,7 +588,7 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	defer recoverToError(o.logger, "Convert", &err)
 
 	switch format {
-	case FormatText, FormatHTML, FormatMarkdown, FormatDOCX, FormatODT, FormatXLSX, FormatODS, FormatCSV:
+	case FormatText, FormatHTML, FormatMarkdown, FormatDOCX, FormatODT, FormatXLSX, FormatODS, FormatCSV, FormatPPTX, FormatODP:
 	default:
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
 	}
@@ -567,7 +619,7 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	switch format {
 	case FormatHTML, FormatMarkdown:
 		doc, err = convertHTML(ctx, src, format, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages)
-	case FormatDOCX, FormatODT, FormatXLSX, FormatODS, FormatCSV:
+	case FormatDOCX, FormatODT, FormatXLSX, FormatODS, FormatCSV, FormatPPTX, FormatODP:
 		doc, err = convertOffice(ctx, src, format, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages)
 	case FormatText:
 		doc, err = plaintext.Convert(ctx, src, fonts, plaintext.Options{
@@ -673,6 +725,10 @@ func convertOffice(ctx context.Context, src io.Reader, format Format, fonts *tex
 		conv, name = ods.Convert, "ODS"
 	case FormatCSV:
 		conv, name = csv.Convert, "CSV"
+	case FormatPPTX:
+		conv, name = pptx.Convert, "PPTX"
+	case FormatODP:
+		conv, name = odp.Convert, "ODP"
 	case FormatDOCX, FormatText, FormatHTML, FormatMarkdown:
 		// DOCX is the default; the others never reach here.
 	}
@@ -682,6 +738,8 @@ func convertOffice(ctx context.Context, src io.Reader, format Format, fonts *tex
 		OmitOutline:      o.omitOutline,
 		SinglePageSheets: o.singlePage,
 		PrintDate:        o.date,
+		HiddenSlides:     o.hiddenSlides,
+		NotesPages:       o.notesPages,
 		MaxInputBytes:    maxBytes,
 		MaxPages:         maxPages,
 		Logger:           o.logger,

@@ -3,52 +3,17 @@ package ooxml
 import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
-// kappa places the control points of a cubic Bézier quarter circle.
-const kappa = 0.5522847498
-
 // PresetPath returns the outline of the preset geometry name (ECMA-376
-// Part 1, 20.1.10.56 ST_ShapeType) fitted to r: rect, roundRect (with the
-// default adjustment, a sixth of the shorter side), ellipse, line and the
-// connectors drawn as lines. It reports false for any other geometry,
-// which a converter draws as its bounding box.
+// Part 1, 20.1.10.56 ST_ShapeType) fitted to r, through the shape
+// package's engine, and whether the engine draws that preset rather than
+// its bounding box.
 func PresetPath(name string, r compose.Rect) ([]compose.PathOp, bool) {
-	x0, y0, x1, y1 := r.X, r.Y, r.X+r.Width, r.Y+r.Height
-	pt := func(x, y float64) [3]compose.Point { return [3]compose.Point{{X: x, Y: y}} }
-	switch name {
-	case "rect", "flowChartProcess", "frame":
-		return RectPath(r).Ops, true
-	case "line", "straightConnector1", "bentConnector2", "bentConnector3", "curvedConnector3":
-		return []compose.PathOp{{Kind: compose.MoveTo, P: pt(x0, y0)}, {Kind: compose.LineTo, P: pt(x1, y1)}}, true
-	case "ellipse", "flowChartConnector":
-		cx, cy, rx, ry := (x0+x1)/2, (y0+y1)/2, r.Width/2, r.Height/2
-		kx, ky := rx*kappa, ry*kappa
-		return []compose.PathOp{
-			{Kind: compose.MoveTo, P: pt(cx+rx, cy)},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: cx + rx, Y: cy + ky}, {X: cx + kx, Y: cy + ry}, {X: cx, Y: cy + ry}}},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: cx - kx, Y: cy + ry}, {X: cx - rx, Y: cy + ky}, {X: cx - rx, Y: cy}}},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: cx - rx, Y: cy - ky}, {X: cx - kx, Y: cy - ry}, {X: cx, Y: cy - ry}}},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: cx + kx, Y: cy - ry}, {X: cx + rx, Y: cy - ky}, {X: cx + rx, Y: cy}}},
-			{Kind: compose.ClosePath},
-		}, true
-	case "roundRect", "flowChartAlternateProcess":
-		rad := min(r.Width, r.Height) / 6
-		k := rad * (1 - kappa)
-		return []compose.PathOp{
-			{Kind: compose.MoveTo, P: pt(x0+rad, y0)},
-			{Kind: compose.LineTo, P: pt(x1-rad, y0)},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: x1 - k, Y: y0}, {X: x1, Y: y0 + k}, {X: x1, Y: y0 + rad}}},
-			{Kind: compose.LineTo, P: pt(x1, y1-rad)},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: x1, Y: y1 - k}, {X: x1 - k, Y: y1}, {X: x1 - rad, Y: y1}}},
-			{Kind: compose.LineTo, P: pt(x0+rad, y1)},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: x0 + k, Y: y1}, {X: x0, Y: y1 - k}, {X: x0, Y: y1 - rad}}},
-			{Kind: compose.LineTo, P: pt(x0, y0+rad)},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: x0, Y: y0 + k}, {X: x0 + k, Y: y0}, {X: x0 + rad, Y: y0}}},
-			{Kind: compose.ClosePath},
-		}, true
-	}
-	return RectPath(r).Ops, false
+	g := &shape.Geometry{Preset: name}
+	paths := shape.Paths(g, r)
+	return paths[0].Ops, shape.Known(g)
 }
 
 // ShapeStyle is the fill and outline of a DrawingML shape (ECMA-376 Part

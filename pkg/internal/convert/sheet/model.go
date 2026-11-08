@@ -63,7 +63,94 @@ type Sheet struct {
 	// Drawings are the pictures and charts anchored on the sheet, in
 	// drawing order.
 	Drawings []Drawing
+	// Conditional are the sheet's conditional formats, in the order the
+	// file lists them; a rule earlier in the list, or of a lower Priority
+	// when both set one, wins over a later one for a cell both match.
+	Conditional []Conditional
 }
+
+// Conditional is one conditional format: the ranges it applies to and
+// its rules (ECMA-376 Part 1, 18.3.1.18 conditionalFormatting and 18.3.1.10
+// cfRule; ODF 1.3 Part 3, 9.4.6 calcext:conditional-format and the
+// style:map of a cell style).
+type Conditional struct {
+	// Ranges are the cells the rules apply to.
+	Ranges []Range
+	// Rules are the rules, each with the style it applies when it holds.
+	Rules []Rule
+}
+
+// Rule is one rule of a conditional format. The builder evaluates the
+// kinds whose operands are the cell's own value and constants, and
+// reports the rest.
+type Rule struct {
+	// Kind says how the rule is evaluated.
+	Kind RuleKind
+	// Priority orders the rules of a sheet, the lowest winning (18.3.1.10
+	// priority); 0 for a file that gives none, when list order decides.
+	Priority int
+	// StopIfTrue ends the evaluation of lower-priority rules for a cell
+	// the rule holds for.
+	StopIfTrue bool
+	// Operator is the comparison of a RuleCellIs ("lessThan", "between",
+	// "equal", ... as 18.18.15 ST_ConditionalFormattingOperator spells
+	// them) and of a RuleText ("containsText", "beginsWith", "endsWith",
+	// "notContains").
+	Operator string
+	// Values are the constant operands: one or two numbers or strings for
+	// a RuleCellIs, the text of a RuleText, the thresholds of a scale.
+	Values []Value
+	// Formula is the formula of a RuleExpression, or a non-constant
+	// operand, as the file writes it; the builder does not evaluate it.
+	Formula string
+	// Style is the differential style the rule applies: the fields set
+	// (a non-zero Font.Color, Font.Bold, a Fill.Color, a Border side, a
+	// Format) override the cell's; nil for a rule without one.
+	Style *Style
+	// Scale is the colour scale of a RuleColorScale, by rising position:
+	// the colours of the minimum, the midpoint when three, and the
+	// maximum, whose thresholds Values hold as numbers, "min" and "max"
+	// standing for the range's extremes when Values is empty.
+	Scale []css.Color
+	// Bar is the colour of a RuleDataBar.
+	Bar css.Color
+}
+
+// RuleKind is the kind of a conditional formatting rule (ECMA-376 Part 1,
+// 18.18.12 ST_CfType).
+type RuleKind uint8
+
+// The rule kinds.
+const (
+	// RuleCellIs compares the cell's value to Values with Operator.
+	RuleCellIs RuleKind = iota
+	// RuleText tests the cell's text with Operator against Values[0].
+	RuleText
+	// RuleExpression holds when Formula is true: not evaluated, reported.
+	RuleExpression
+	// RuleColorScale paints the cell's fill from Scale by where its value
+	// sits between the thresholds.
+	RuleColorScale
+	// RuleDataBar paints a bar of Bar's colour across the cell, as long
+	// as the value's share of the range's maximum.
+	RuleDataBar
+	// RuleIconSet shows an icon: not drawn, reported.
+	RuleIconSet
+	// RuleDuplicates and RuleUniques hold for a value seen elsewhere in
+	// the range, or nowhere else.
+	RuleDuplicates
+	RuleUniques
+	// RuleBlanks and RuleNoBlanks hold for an empty cell, or a filled one.
+	RuleBlanks
+	RuleNoBlanks
+	// RuleTop holds for the Values[0] largest values of the range,
+	// RuleBottom the smallest; a percent variant is reported.
+	RuleTop
+	RuleBottom
+	// RuleAboveAverage and RuleBelowAverage compare to the range's mean.
+	RuleAboveAverage
+	RuleBelowAverage
+)
 
 // Column is a range of columns sharing a width, a style or a hidden flag
 // (ECMA-376 Part 1, 18.3.1.13 col; ODF 1.3 Part 3, 9.1.6 table:table-column

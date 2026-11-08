@@ -208,8 +208,9 @@
 //     [WithSinglePage], [WithPrintBackground], [WithOutline],
 //     [WithShrinkToFit], [WithFractionalFontMetrics],
 //     [WithHeaderTemplate], [WithFooterTemplate], [WithPrintDate],
-//     [WithBaseURL], [WithHTTPClient], [WithMediaFeatures], and for the
-//     Office formats [WithConvertPassword].
+//     [WithBaseURL], [WithHTTPClient], [WithMediaFeatures], for the
+//     Office formats [WithConvertPassword], and for presentations
+//     [WithHiddenSlides] and [WithNotesPages].
 //
 // [WithFullRewrite], [WithVersion], and [WithXRefStream] are advanced
 // serialization controls. The defaults suit most callers:
