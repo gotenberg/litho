@@ -56,6 +56,9 @@ type builder struct {
 	// recode maps the characters the bullets of the body being laid out
 	// draw to the text they stand for, when the two differ.
 	recode map[string]string
+	// groupFit is the scaling of each ShrinkGroup of the slide being
+	// drawn.
+	groupFit map[int]fit
 }
 
 // warn records a warning once per code and message.
@@ -318,6 +321,7 @@ func (b *builder) slidePage(s *Slide, n int) (*compose.Page, *compose.StructElem
 // element.
 func (b *builder) slideContent(s *Slide, n int, w, h float64) ([]compose.Fragment, []compose.Link, *compose.StructElem) {
 	b.slide, b.number, b.shapes, b.links = s, n, 0, nil
+	b.groupFit = b.groupFits(s.Shapes)
 	sect := &compose.StructElem{Role: "Sect"}
 	var out []compose.Fragment
 	area := compose.Rect{Width: w, Height: h}

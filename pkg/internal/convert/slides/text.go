@@ -51,6 +51,11 @@ const (
 	odfDefaultTab = 36
 )
 
+// minDefaultTab is the smallest interval of default tab stops laid out,
+// in points. Anti-DoS guard, not spec-mandated: a line of tabs at a
+// smaller interval takes thousands of stops.
+const minDefaultTab = 1
+
 // maxParagraphs caps the paragraphs of a text body laid out. Anti-DoS
 // guard, not spec-mandated: a slide's text box shows a few dozen.
 const maxParagraphs = 4096
@@ -81,6 +86,11 @@ const (
 	superRise   = 0.30
 	subDrop     = 0.25
 )
+
+// maxRise caps a run's shift as a fraction of its size. Anti-DoS guard,
+// not spec-mandated: PowerPoint and Impress offer shifts of up to 100% of
+// the size, a run so shifted standing a line above or below its own.
+const maxRise = 1
 
 // scriptShift returns how far a superscript or a subscript of a text of
 // size moves in faces of metrics m, as Impress moves an automatic one
@@ -185,8 +195,27 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 	if vertical {
 		lw, lh = lh, lw
 	}
+	if body.Autofit == AutofitStretch && !vertical {
+		return b.stretchText(body, inner, res)
+	}
 	f := b.fitBody(body, lw, lh)
+	if g, ok := b.groupFit[body.ShrinkGroup]; ok && body.ShrinkGroup != 0 && body.Autofit == AutofitShrink {
+		f = g
+	}
 	dx := 0.0
+	if body.HorizontalAnchor != HorizontalStart && !vertical {
+		// A block of lines anchored at the centre or the end is as wide as
+		// its widest line, each line aligned in it, and sits at the
+		// rectangle's centre or end (SdrTextObj::TakeTextRect,
+		// SDRTEXTHORZADJUST_CENTER and _RIGHT).
+		if nat := b.naturalWidth(body, f) + blockSlack; nat < lw {
+			dx = lw - nat
+			if body.HorizontalAnchor == HorizontalCenter {
+				dx /= 2
+			}
+			lw = nat
+		}
+	}
 	if !body.Wrap && !vertical {
 		// Unwrapped lines wider than the rectangle widen the text block to
 		// the longest, which overflows the rectangle on the side its first
@@ -262,6 +291,71 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 		res.frags = group(m, frags)
 	}
 	for _, l := range lay.links {
+		if !b.resolveJump(&l) {
+			continue
+		}
+		l.Rect = transformRect(m, l.Rect)
+		res.links = append(res.links, l)
+	}
+	res.structure = lay.structure
+	return res
+}
+
+// jumpPrefix starts the target a run's jump to a slide carries through
+// the layout, the slide's show position after it; the NUL keeps it apart
+// from any hyperlink a file gives.
+const jumpPrefix = "\x00slide:"
+
+// resolveJump turns the link l of a run's jump into a link to the page of
+// the slide it names, and reports whether l is still a link: false for a
+// jump to a slide that does not print.
+func (b *builder) resolveJump(l *compose.Link) bool {
+	n, ok := strings.CutPrefix(l.URI, jumpPrefix)
+	if !ok {
+		return true
+	}
+	i, err := strconv.Atoi(n)
+	if err != nil || i < 1 || i > len(b.doc.Slides) {
+		return false
+	}
+	pg, ok := b.pages[b.doc.Slides[i-1]]
+	if !ok {
+		return false
+	}
+	l.URI, l.Dest = "", &compose.Dest{Page: pg}
+	return true
+}
+
+// blockSlack widens a block of lines as wide as its widest line, in
+// points, so that rounding never wraps that line.
+const blockSlack = 0.01
+
+// stretchText lays the body out unwrapped and scales it to fill the
+// rectangle inner, its font size to the height and its glyphs' width to
+// the width, as Impress draws a frame whose text fits its size
+// (SdrTextObj::impDecomposeStretchTextPrimitive; ODF 1.3 Part 3, 20.130
+// draw:fit-to-size true or all).
+//
+// # Corpus evidence
+//
+//   - odp: sd-data/fit-to-size.fodp's frames 2 (true) and 3 (all), 357 by
+//     144 and 357 by 127 points, print "foo" 8 times its width and 2 and
+//     1.78 times its height, the two lines filling the frame.
+func (b *builder) stretchText(body *TextBody, inner compose.Rect, res *textResult) *textResult {
+	nb := *body
+	nb.Wrap, nb.Autofit = false, AutofitNone
+	w := b.naturalWidth(&nb, noFit) + blockSlack
+	lay := b.layoutBody(&nb, w, inner.Height, noFit)
+	if lay == nil || !(w > blockSlack) || !(lay.height > 0) {
+		return res
+	}
+	sx, sy := inner.Width/w, inner.Height/lay.height
+	m := compose.Matrix{A: sx, D: sy, E: inner.X, F: inner.Y}
+	res.frags = group(m, lay.frags)
+	for _, l := range lay.links {
+		if !b.resolveJump(&l) {
+			continue
+		}
 		l.Rect = transformRect(m, l.Rect)
 		res.links = append(res.links, l)
 	}
@@ -602,6 +696,13 @@ func (b *builder) lines(p *Paragraph, ts text.Style, f fit, fontLines bool) line
 		lb.height = n * min(prop, maxLineSpacing) * sf
 		lb.ascent = a - (n - lb.height)
 	}
+	if least := p.LineSpacingAtLeast; least > lb.height && !math.IsInf(least, 0) {
+		// A line shorter than the floor grows to it, the room going above
+		// its glyphs (SvxLineSpaceRule::Min).
+		least = min(least, maxCoordinate)
+		lb.ascent += least - lb.height
+		lb.height = least
+	}
 	lb.height = max(lb.height, 0.01)
 	return lb
 }
@@ -742,6 +843,12 @@ func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 		st.VerticalAlign = css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(-down)}
 	case Baseline:
 	}
+	if r := rs.Rise; r != 0 && !math.IsNaN(r) && math.Abs(r) <= maxRise {
+		// An explicit shift replaces the script's own, as a fraction of
+		// the text's size (ECMA-376 Part 1, 21.1.2.3.9 baseline; ODF 1.3
+		// Part 3, 20.374 style:text-position).
+		st.VerticalAlign = css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(r * size)}
+	}
 	return st
 }
 
@@ -801,6 +908,9 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 	st.TabSize = css.Pts(defaultTab)
 	if body.FontLineSpacing {
 		st.TabSize = css.Pts(odfDefaultTab)
+	}
+	if t := p.DefaultTab; t > 0 && !math.IsInf(t, 0) {
+		st.TabSize = css.Pts(max(min(t, maxCoordinate), minDefaultTab))
 	}
 	st.Orphans, st.Widows = 1, 1
 	st.TextAlign = p.Align
@@ -890,8 +1000,12 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 		}
 		*budget -= utf8.RuneCountInString(s)
 		is := b.inline(st, &r.Style, f.font)
-		run := &layout.Node{Kind: layout.Element, Style: is, Lang: r.Style.Lang, Href: r.Href, Children: []*layout.Node{{Kind: layout.Text, Style: is, Text: s}}}
-		if r.Href != "" {
+		href := r.Href
+		if href == "" && r.Jump > 0 {
+			href = jumpPrefix + strconv.Itoa(r.Jump)
+		}
+		run := &layout.Node{Kind: layout.Element, Style: is, Lang: r.Style.Lang, Href: href, Children: []*layout.Node{{Kind: layout.Text, Style: is, Text: s}}}
+		if href != "" {
 			run.Role = "Link"
 		}
 		node.Children = append(node.Children, run)
@@ -1018,4 +1132,59 @@ func quote(s string) string {
 		s = string([]rune(s)[:64]) + "…"
 	}
 	return strconv.Quote(s)
+}
+
+// groupFits returns the scaling of each shrink group of the shapes, the
+// smallest any AutofitShrink body of the group needs in its own text
+// rectangle, as Impress fits the text of a SmartArt diagram with one
+// scale (TextBody.ShrinkGroup).
+func (b *builder) groupFits(shapes []*Shape) map[int]fit {
+	var out map[int]fit
+	var walk func(shapes []*Shape, depth int)
+	walk = func(shapes []*Shape, depth int) {
+		for _, s := range shapes {
+			if s == nil || !finite(s.Box) || depth > maxGroupDepth || b.ctx.Err() != nil {
+				continue
+			}
+			if s.Kind == KindGroup {
+				child := s.Child
+				if !(child.Width > 0) || !(child.Height > 0) || !finite(child) {
+					child = s.Box
+				}
+				sx, sy := s.Box.Width/child.Width, s.Box.Height/child.Height
+				kids := make([]*Shape, 0, len(s.Kids))
+				for _, k := range s.Kids {
+					if k == nil {
+						continue
+					}
+					kk := *k
+					kk.Box = compose.Rect{
+						X: s.Box.X + (k.Box.X-child.X)*sx, Y: s.Box.Y + (k.Box.Y-child.Y)*sy,
+						Width: k.Box.Width * sx, Height: k.Box.Height * sy,
+					}
+					kids = append(kids, &kk)
+				}
+				walk(kids, depth+1)
+				continue
+			}
+			t := s.Text
+			if s.Kind != KindGeometry || t == nil || t.ShrinkGroup == 0 || t.Autofit != AutofitShrink || len(t.Paragraphs) == 0 {
+				continue
+			}
+			inner := insetRect(shape.TextRect(s.Geometry, s.Box), t.Insets)
+			w, h := inner.Width, inner.Height
+			if t.Vertical.Vertical() {
+				w, h = h, w
+			}
+			f := b.fitBody(t, w, h)
+			if out == nil {
+				out = map[int]fit{}
+			}
+			if g, ok := out[t.ShrinkGroup]; !ok || f.font < g.font || (f.font == g.font && f.spacing < g.spacing) {
+				out[t.ShrinkGroup] = f
+			}
+		}
+	}
+	walk(shapes, 0)
+	return out
 }
