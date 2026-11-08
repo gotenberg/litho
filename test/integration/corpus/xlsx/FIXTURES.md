@@ -84,4 +84,6 @@ Each reference handed to the cell as litho's conversion, scored against the gold
 ## Accepted disagreements
 
 - `sc/129969-min.xlsx`, `sc/tdf111876.xlsx`, `sc/hyperlink_export.xlsx`: LibreOffice resolves relative hyperlinks against the route's upload directory, so the reference's link targets are `file:///tmp/<uuid>/...` URIs no converter can know; litho keeps the targets the workbook names. Link recall is 0 on each; `hyperlink_export` also prints the resolved paths as cell text.
+- `sc/tdf161301.xlsx`: LibreOffice prints 2024-05-28 with the `[$]ggge` era code as "CE784年2月20日", a misread era, and its page count differs; litho prints the date the code asks for.
+- `sc/cell-value.xlsx`: a 10,987 pt text overflows over 8 pages in both, but LibreOffice caches the text width in whole pixels at a resolution the page count only hints at, so its last page cuts the text one column earlier than litho's.
 - `budget`: the totals are formulas saved without a result (`fullCalcOnLoad`), which LibreOffice computes when it loads the workbook; litho prints the empty results the file holds, and never evaluates a formula.

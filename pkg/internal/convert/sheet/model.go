@@ -144,7 +144,8 @@ const (
 	RuleBlanks
 	RuleNoBlanks
 	// RuleTop holds for the Values[0] largest values of the range,
-	// RuleBottom the smallest; a percent variant is reported.
+	// RuleBottom the smallest; the reader resolves a percent variant to a
+	// count.
 	RuleTop
 	RuleBottom
 	// RuleAboveAverage and RuleBelowAverage compare to the range's mean.
@@ -404,8 +405,8 @@ type Alignment struct {
 // ST_HorizontalAlignment).
 type HAlign uint8
 
-// The horizontal alignments. HGeneral aligns text left, numbers right and
-// booleans and errors centred, as Calc does.
+// The horizontal alignments. HGeneral aligns text left and numbers,
+// booleans and errors right, as Calc does.
 const (
 	HGeneral HAlign = iota
 	HLeft
@@ -527,9 +528,10 @@ type HeaderFooter struct {
 	// header and the footer in points, 0 for the content's own (ODF
 	// fo:min-height); the margins the reader set already make room.
 	HeaderMinHeight, FooterMinHeight float64
-	// ScaleWithDoc scales the header and footer text with the sheet's
-	// print scale (ECMA-376 Part 1, 18.3.1.46 scaleWithDoc); Calc does not,
-	// and the reader leaves it false.
+	// ScaleWithDoc is a workbook's scaleWithDoc flag (ECMA-376 Part 1,
+	// 18.3.1.46), kept for the record: Calc scales the header and footer
+	// text with the sheet's print scale whatever it says, and so does the
+	// builder.
 	ScaleWithDoc bool
 }
 
