@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
@@ -211,6 +212,7 @@ func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 	pl := r.placementOf(el, r.placeholderBox(el, pc))
 	ss := r.shapeStyle(el, pc)
 	s := &slides.Shape{Box: pl.box, Rotation: pl.rotation, FlipH: pl.flipH, FlipV: pl.flipV}
+	media := false
 	for _, k := range el.Children {
 		switch {
 		case k.Is(odf.NSDraw, "text-box"):
@@ -261,9 +263,18 @@ func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 			}
 		case k.Is(odf.NSDraw, "plugin"):
 			r.warn("media", "audio and video are drawn as their replacement picture")
+			media = true
 		case k.Is(odf.NSDraw, "applet"), k.Is(odf.NSDraw, "floating-frame"):
 			r.warn("frame-"+k.Name.Local, fmt.Sprintf("draw:%s is not drawn", k.Name.Local))
 		}
+	}
+	if media {
+		// A media object without a replacement picture prints as a dark
+		// grey box, #434343 (measured on the pinned LibreOffice:
+		// sd/tdf53970_linked.odp's linked video).
+		s.Kind = slides.KindGeometry
+		s.Fill = slides.Fill{Kind: slides.FillSolid, Color: css.Color{R: 0x43 / 255.0, G: 0x43 / 255.0, B: 0x43 / 255.0, A: 1}}
+		return s
 	}
 	return nil
 }

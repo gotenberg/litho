@@ -347,3 +347,10 @@ func TestRead_EllipseKinds(t *testing.T) {
 		})
 	}
 }
+
+func TestRead_MediaWithoutPicture(t *testing.T) {
+	s := firstShape(t, flat{body: page(`<draw:frame svg:width="2cm" svg:height="1cm"><draw:plugin xlink:href="../a.avi" draw:mime-type="application/vnd.sun.star.media"/></draw:frame>`)})
+	if s.Kind != slides.KindGeometry || s.Fill.Kind != slides.FillSolid || math.Abs(s.Fill.Color.R-0x43/255.0) > 1e-9 || s.Line.Width != 0 {
+		t.Errorf("shape = %+v, want a dark grey box", s)
+	}
+}
