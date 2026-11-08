@@ -418,6 +418,16 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 	if y := yOf[xGroup]; y != nil {
 		x.other = y
 	}
+	if a := x.other.ax; a != nil && (a.Position == AxisRight || a.Position == AxisTop) {
+		// The category axis crosses the primary value axis, not a
+		// secondary one on the far side.
+		for _, y := range ys {
+			if y.ax != nil && (y.ax.Position == AxisLeft || y.ax.Position == AxisBottom) {
+				x.other = y
+				break
+			}
+		}
+	}
 	for _, y := range ys {
 		if math.IsInf(y.lo, 0) || math.IsInf(y.hi, 0) {
 			y.lo, y.hi = 0, 0

@@ -467,3 +467,16 @@ func TestRender_CustomLabelFields(t *testing.T) {
 		}
 	}
 }
+
+func TestDims_CategoryAxisCrossesPrimary(t *testing.T) {
+	c := barChart(1, 2)
+	c.Groups[0].Kind = Line
+	sec := &Axis{Kind: ValueAxis, Position: AxisRight, Min: math.NaN(), Max: math.NaN(), MajorUnit: math.NaN(), MinorUnit: math.NaN()}
+	c.Axes = append(c.Axes, sec)
+	c.Groups = append([]*Group{{Kind: Line, XAxis: 0, YAxis: 2, Series: []*Series{{Values: Data{Values: nums(-5, 5), Cached: true}}}}}, c.Groups...)
+	rd := &renderer{ctx: context.Background(), fonts: ahem(t), c: c, page: chartRect}
+	x, ys, _ := rd.dims(c.Groups[0])
+	if x == nil || len(ys) != 2 || x.other.ax != c.Axes[1] {
+		t.Errorf("the category axis crosses %+v, want the primary value axis", x.other.ax)
+	}
+}
