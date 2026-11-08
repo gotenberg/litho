@@ -317,8 +317,12 @@ func dedupCells(cells []sheet.Cell) []sheet.Cell {
 
 // cell reads a c element at column col of row (ECMA-376 Part 1,
 // 18.3.1.4), its value of type t (18.18.11 ST_CellType) the one the file
-// stores: a formula is not computed, its cached value shown. It reports
-// false for a cell without a value or a style.
+// stores: a formula with a cached value shows it, as LibreOffice does not
+// recalculate a workbook it loads; one without (18.3.1.40 f, no v) keeps
+// its text for the builder to compute (an empty v is none, as budget.xlsx
+// saves its totals), a shared formula's other cells
+// excepted. It reports false for a cell without a value, a formula or a
+// style.
 func (w *sheetReader) cell(c *ooxml.Element, col int, row *sheet.Row) (sheet.Cell, bool) {
 	r := w.r
 	cell := sheet.Cell{Column: col}
@@ -376,7 +380,10 @@ func (w *sheetReader) cell(c *ooxml.Element, col int, row *sheet.Row) (sheet.Cel
 	if cell.Value.Kind == sheet.Text && cell.Value.Text == "" && len(cell.Runs) == 0 {
 		cell.Value = sheet.Value{}
 	}
-	if cell.Value.Kind == sheet.Empty && cell.Style == nil {
+	if f := c.Child(nsMain, "f"); f != nil && (v == nil || strings.TrimSpace(v.Text) == "") && len(f.Text) <= maxFormulaRunes {
+		cell.Formula = strings.TrimSpace(f.Text)
+	}
+	if cell.Value.Kind == sheet.Empty && cell.Style == nil && cell.Formula == "" {
 		return cell, false
 	}
 	return cell, true
@@ -390,6 +397,10 @@ func (r *reader) richTextOf(s string) string {
 	}
 	return s
 }
+
+// maxFormulaRunes caps the formula text kept for a cell. Anti-DoS guard,
+// not spec-mandated: Excel stops at 8,192 characters.
+const maxFormulaRunes = 8192
 
 // date1904Shift is the days from Calc's null date, 1899-12-30, to the
 // 1904 date system's, 1904-01-01 (ECMA-376 Part 1, 18.17.4.1).

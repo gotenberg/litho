@@ -119,10 +119,14 @@ func TestRead_CellValues(t *testing.T) {
 			t.Errorf("column %d = %+v (%v), want %+v", tc.col, c.Value, ok, tc.want)
 		}
 	}
-	for _, col := range []int{2, 10, 11} {
+	for _, col := range []int{10, 11} {
 		if c, ok := cellAt(sh, 0, col); ok {
 			t.Errorf("column %d kept: %+v", col, c)
 		}
+	}
+	// A formula saved with an empty result is kept for the builder.
+	if c, ok := cellAt(sh, 0, 2); !ok || c.Formula != "SUM(A1)" {
+		t.Errorf("column 2 = %+v (%v), want the formula", c, ok)
 	}
 	if !sh.RightToLeft || sh.HideZeros {
 		t.Errorf("right to left %v, hide zeros %v: want right to left, zeros printed", sh.RightToLeft, sh.HideZeros)
@@ -279,5 +283,20 @@ func TestRead_TableStyles(t *testing.T) {
 	}
 	if c, ok := cellAt(mine, 1, 1); ok && c.Style != nil && c.Style.Fill.Color.A != 0 {
 		t.Errorf("workbook style body %+v", c.Style)
+	}
+}
+
+func TestCell_Formulas(t *testing.T) {
+	doc, _ := readBytes(t, oneSheet(t, `<sheetData><row r="1"><c r="A1"><f>B1+2</f><v>5</v></c><c r="B1"><f>SUM(C1:C2)</f></c>`+
+		`<c r="C1"><f>1</f><v></v></c><c r="D1"><f t="shared" si="0"/></c></row></sheetData>`))
+	sh := doc.Sheets[0]
+	for i, want := range []string{"", "SUM(C1:C2)", "1"} {
+		c, ok := cellAt(sh, 0, i)
+		if !ok || c.Formula != want {
+			t.Errorf("cell %d: %+v, want the formula %q", i, c, want)
+		}
+	}
+	if _, ok := cellAt(sh, 0, 3); ok {
+		t.Errorf("a shared formula's cell without text is kept")
 	}
 }
