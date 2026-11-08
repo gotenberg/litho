@@ -176,8 +176,14 @@ func TestRead_TitleAndNotes(t *testing.T) {
 		`<presentation:notes><draw:page-thumbnail presentation:class="page"/>` +
 		`<draw:frame presentation:class="notes" svg:width="5cm" svg:height="1cm"><draw:text-box><text:p>NOTE-1</text:p><text:p>NOTE-2</text:p></draw:text-box></draw:frame>` +
 		`</presentation:notes></draw:page>` +
-		`<draw:page draw:master-page-name="Default"><presentation:notes><draw:frame svg:width="5cm" svg:height="1cm"><draw:text-box><text:p>LOOSE</text:p></draw:text-box></draw:frame></presentation:notes></draw:page>`
+		`<draw:page draw:master-page-name="Default"><presentation:notes><draw:frame svg:width="5cm" svg:height="1cm"><draw:text-box><text:p>LOOSE</text:p></draw:text-box></draw:frame></presentation:notes></draw:page>` +
+		`<draw:page draw:master-page-name="Default"><presentation:notes/></draw:page><draw:page draw:master-page-name="Default"/>`
 	doc, _ := read(t, flat{body: body}.bytes())
+	for i, want := range []bool{true, true, false, false} {
+		if doc.Slides[i].HasNotes != want {
+			t.Errorf("slide %d has notes %v, want %v", i+1, doc.Slides[i].HasNotes, want)
+		}
+	}
 	if got := doc.Slides[0].Title; got != "Q4 Review 2026" {
 		t.Errorf("title = %q", got)
 	}

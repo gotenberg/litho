@@ -365,8 +365,30 @@ func (r *reader) slide(pg *odf.Element, n int) *slides.Slide {
 	s.Title = r.title(pg, pc)
 	if notes := pg.Child(odf.NSPresentation, "notes"); notes != nil {
 		s.Notes = r.notes(notes, pc)
+		s.HasNotes = hasElements(notes)
 	}
 	return s
+}
+
+// hasElements reports an element holding an element: a page's notes
+// with a thumbnail or a frame, which Impress prints as a notes page with
+// its boxes, where a page without notes prints its slide alone in the
+// default layout.
+//
+// # Measured
+//
+//   - litho: a flat presentation of three pages, the first without
+//     presentation:notes, the second with a thumbnail and an empty notes
+//     placeholder, the third with a notes frame alone, prints with notes
+//     pages the first slide large at the page's top, the second at its
+//     thumbnail's box, the third's notes frame without the slide.
+func hasElements(el *odf.Element) bool {
+	for _, k := range el.Children {
+		if !k.IsText() {
+			return true
+		}
+	}
+	return false
 }
 
 // title returns the text of the page's title placeholder (ODF 1.3, Part
