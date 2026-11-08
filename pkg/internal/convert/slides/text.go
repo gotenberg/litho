@@ -216,12 +216,13 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 			lw = nat
 		}
 	}
-	if !body.Wrap && !vertical {
+	if !body.Wrap {
 		// Unwrapped lines wider than the rectangle widen the text block to
 		// the longest, which overflows the rectangle on the side its first
 		// paragraph's alignment leaves free: right of a start-aligned text,
 		// both sides of a centred one, left of an end-aligned one
-		// (SdrObjCustomShape::TakeTextRect).
+		// (SdrObjCustomShape::TakeTextRect), and past the end of a vertical
+		// text's lines alike (oox/tdf151008_eaVertAnchor.pptx).
 		if nat := b.naturalWidth(body, f); nat > lw {
 			dx = (lw - nat) * overflowShare(body)
 			lw = nat
@@ -266,11 +267,11 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 	case css.SidewaysLR:
 		// Turned a quarter turn counter-clockwise: the lines read bottom
 		// to top and stack left to right (21.1.10.83 vert270).
-		m = compose.Matrix{A: 0, B: -1, C: 1, D: 0, E: inner.X + dy, F: inner.Y + inner.Height}
+		m = compose.Matrix{A: 0, B: -1, C: 1, D: 0, E: inner.X + dy, F: inner.Y + inner.Height - dx}
 	case css.VerticalRL, css.VerticalLR, css.SidewaysRL:
 		// Turned a quarter turn clockwise: the lines read top to bottom
 		// and stack right to left (vert, eaVert).
-		m = compose.Matrix{A: 0, B: 1, C: -1, D: 0, E: inner.X + inner.Width - dy, F: inner.Y}
+		m = compose.Matrix{A: 0, B: 1, C: -1, D: 0, E: inner.X + inner.Width - dy, F: inner.Y + dx}
 	default:
 		m = translate(inner.X+dx, inner.Y+dy)
 	}

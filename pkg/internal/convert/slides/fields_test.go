@@ -225,3 +225,35 @@ func TestNotes_HasNotes(t *testing.T) {
 		t.Errorf("slide without notes framed at the master's box")
 	}
 }
+
+// TestTable_VerticalCells checks that a row grows to the length of its
+// vertical cells' lines, at most the cell's width, and that a cell's text
+// turned clockwise sits at its left edge.
+func TestTable_VerticalCells(t *testing.T) {
+	a20 := arial(20)
+	long := para("A rather long line of vertical text", a20)
+	cell := func(p Paragraph, v css.WritingMode) TableCell {
+		return TableCell{Text: &TextBody{Paragraphs: []Paragraph{p}, Wrap: true, Vertical: v}, Fill: Fill{Kind: FillSolid, Color: css.Color{B: 1, A: 1}}}
+	}
+	tbl := &Shape{Kind: KindTable, Box: compose.Rect{X: 100, Y: 100, Width: 300, Height: 50}, Table: &Table{
+		ColumnWidths: []float64{150, 150},
+		Rows:         []TableRow{{Height: 50, Cells: []TableCell{cell(long, css.SidewaysRL), cell(para("Short", a20), css.SidewaysLR)}}},
+	}}
+	pg := convert(t, deck(&Slide{Shapes: []*Shape{tbl}}), office.Options{}).Pages[0]
+	// The long line wraps at the cell's width: the row is 150 tall.
+	var bottom float64
+	for _, f := range pg.Content {
+		if p, ok := f.(*compose.Path); ok && p.Fill != nil {
+			for _, op := range p.Ops {
+				bottom = max(bottom, op.P[0].Y)
+			}
+		}
+	}
+	if !near(bottom, 250, 0.5) {
+		t.Errorf("row ends at %v, want 250", bottom)
+	}
+	// Three 24-point lines from the cell's left edge, the first rightmost.
+	if r := find(t, pg, "A"); r.x > 100+72 || r.x < 100+48 {
+		t.Errorf("clockwise text's first line at %v, want between 148 and 172", r.x)
+	}
+}
