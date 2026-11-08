@@ -1,6 +1,7 @@
 package xlsx
 
 import (
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
@@ -109,5 +110,36 @@ func TestRead_HeaderFooter(t *testing.T) {
 	}
 	if f := hf.Odd.Header[1][0].Font; f == nil || f.Families[0] != "Test Sans" {
 		t.Errorf("header font %+v, want the Normal font", f)
+	}
+}
+
+func TestDynamicHeights(t *testing.T) {
+	tests := []struct {
+		name    string
+		header  [3][]sheet.Span
+		top     float64
+		grow    bool
+		spacing float64
+	}{
+		// sc/databar.xlsx: 17.1 points of room (603 hundredths of a
+		// millimetre) less a 10-point line (353) leave 2.5 millimetres.
+		{"one line", [3][]sheet.Span{1: {{Text: "x"}}}, 17.1, true, 250 * 72 / 2540.0},
+		{"a larger font", [3][]sheet.Span{0: {{Text: "x", Font: &sheet.Font{Size: 14}}}}, 17.1, true, (603 - 494) * 72 / 2540.0},
+		{"two lines", [3][]sheet.Span{1: {{Text: "a\nb"}}}, 17.1, false, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sh := &sheet.Sheet{}
+			sh.Page.HeaderTop = 56.7
+			sh.Page.Margin[css.Top] = 56.7 + tt.top
+			sh.HeaderFooter.Odd.Header = tt.header
+			dynamicHeights(sh, 10)
+			if sh.HeaderFooter.GrowHeader != tt.grow || math.Abs(sh.HeaderFooter.HeaderSpacing-tt.spacing) > 0.01 {
+				t.Errorf("grow %v spacing %.3f, want %v %.3f", sh.HeaderFooter.GrowHeader, sh.HeaderFooter.HeaderSpacing, tt.grow, tt.spacing)
+			}
+			if sh.HeaderFooter.GrowFooter {
+				t.Errorf("a footer without content grows")
+			}
+		})
 	}
 }

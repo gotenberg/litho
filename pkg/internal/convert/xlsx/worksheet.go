@@ -103,6 +103,7 @@ func (w *sheetReader) read(root *ooxml.Element) error {
 	w.pageSetup(root)
 	if hf := root.Child(nsMain, "headerFooter"); hf != nil {
 		sh.HeaderFooter = r.headerFooter(hf)
+		dynamicHeights(sh, r.normal().Font.Size)
 	}
 	sh.Page.RowBreaks = breaks(root.Child(nsMain, "rowBreaks"), maxRows)
 	sh.Page.ColumnBreaks = breaks(root.Child(nsMain, "colBreaks"), maxColumns)
