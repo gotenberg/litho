@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<cx:chartSpace xmlns:cx=\"http://schemas.microsoft.com/office/drawing/2014/chartex\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><cx:chartData><cx:data id=\"0\"><cx:numDim type=\"val\"><cx:f>_xlchart.v1.0</cx:f><cx:lvl ptCount=\"3\"><cx:pt idx=\"0\">1</cx:pt><cx:pt idx=\"1\">4</cx:pt><cx:pt idx=\"2\">9</cx:pt></cx:lvl></cx:numDim></cx:data></cx:chartData><cx:chart")

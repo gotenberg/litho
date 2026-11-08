@@ -148,7 +148,7 @@ func (p *chartReader) series(e *Element, g *chart.Group, scatterLines, lineMarke
 		s.Categories = p.data(e.Child(NSChart, "xVal"), "x values")
 		s.Values = p.data(e.Child(NSChart, "yVal"), "y values")
 		s.Sizes = p.data(e.Child(NSChart, "bubbleSize"), "bubble sizes")
-	case chart.Bar, chart.Line, chart.Area, chart.Pie, chart.Doughnut, chart.Radar:
+	case chart.Bar, chart.Line, chart.Area, chart.Pie, chart.Doughnut, chart.Radar, chart.Unsupported:
 		s.Categories = p.data(e.Child(NSChart, "cat"), "categories")
 		s.Values = p.data(e.Child(NSChart, "val"), "values")
 	}

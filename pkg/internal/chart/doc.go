@@ -23,6 +23,9 @@
 // angle; lines may be smoothed as natural cubic splines. Category labels
 // break at spaces, or stay whole and turn by 45 degrees when they would
 // overlap. A data table replaces the category labels under the plot area.
+// A histogram series counts its values into bins first. A kind the
+// renderer does not draw ([Unsupported]) keeps its axes and legend, and
+// the reader's [Chart.Notice] says so over the chart's middle.
 // Gradient and pattern fills paint through the shape package. Every text
 // is shaped through the text package and emitted as [compose.Text], so
 // extraction reads it.

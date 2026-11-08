@@ -83,6 +83,21 @@ func (rd *renderer) stack(g *Group) stackedValues {
 // percent-stacked.
 func (rd *renderer) valueRange(g *Group) (float64, float64, bool) {
 	lo, hi := math.Inf(1), math.Inf(-1)
+	if g.Kind == Unsupported {
+		// The file's axes belong to the last series alone (oox's
+		// PlotAreaConverter gives each Office 2016 series its own type
+		// group, and the axes to the last).
+		if len(g.Series) == 0 {
+			return lo, hi, false
+		}
+		vals := rd.data(g.Series[len(g.Series)-1].Values)
+		for j := range min(vals.Len(), MaxPoints) {
+			if v, ok := vals.number(j); ok {
+				lo, hi = math.Min(lo, v), math.Max(hi, v)
+			}
+		}
+		return lo, hi, false
+	}
 	if g.Kind == Scatter || g.Kind == Bubble {
 		for _, s := range g.Series {
 			vals := rd.data(s.Values)
@@ -119,6 +134,8 @@ func (rd *renderer) series(g *Group, x, y *dim) []func() {
 		return rd.bars(g, x, y)
 	case Area:
 		return rd.areas(g, x, y)
+	case Unsupported:
+		return nil
 	case Line, Pie, Doughnut, Radar:
 	}
 	return rd.lines(g, x, y)

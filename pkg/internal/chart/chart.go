@@ -48,6 +48,11 @@ type Chart struct {
 	// Resolver, when set, supplies the values of a series whose file holds
 	// no cache, from its range reference.
 	Resolver Resolver
+	// Notice, when set, is a text drawn over the middle of the chart in
+	// its frame, at most two thirds of the chart's width, over the plot
+	// area and its axes: the reader's note that it does not draw the
+	// chart's kind.
+	Notice *Title
 	// Warnings lists what the reader did not carry into the model.
 	Warnings []compose.Warning
 }
@@ -79,6 +84,12 @@ const (
 	// Radar draws each series as a polygon around the centre (21.2.2.153
 	// radarChart).
 	Radar
+	// Unsupported is a chart kind the renderer does not draw, as a
+	// funnel or a box and whisker chart of Office 2016 (MS-ODRAWXML,
+	// 2.24.3.53 ST_SeriesLayout): its axes are drawn, scaled to its last
+	// series alone, its categories on the ticks, and no series; its
+	// legend keys are circles.
+	Unsupported
 )
 
 // String returns the kind's name, as warnings spell it.
@@ -100,6 +111,8 @@ func (k Kind) String() string {
 		return "bubble"
 	case Radar:
 		return "radar"
+	case Unsupported:
+		return "unsupported"
 	}
 	return "unknown"
 }
@@ -196,6 +209,19 @@ type Series struct {
 	Points []Point
 	// NoLegend leaves the series out of the legend.
 	NoLegend bool
+	// Bins, when set, draws the series as a histogram: its values are
+	// counted into bins, which become the series' categories and values
+	// (MS-ODRAWXML, 2.24.3.5 CT_Binning).
+	Bins *Binning
+}
+
+// Binning is how a histogram series counts its values into bins.
+type Binning struct {
+	// Width is the width of a bin, Count the number of bins; when both
+	// are 0, the width follows Scott's rule: 3.5 standard deviations
+	// over the cube root of the count of values.
+	Width float64
+	Count int
 }
 
 // Point is the format of one data point that differs from its series

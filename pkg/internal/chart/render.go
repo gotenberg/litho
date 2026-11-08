@@ -30,6 +30,9 @@ const (
 	minLegendSpacing = 100 * mm100
 	// tickLength is the length of a tick mark outside the axis: 150.
 	tickLength = 150 * mm100
+	// minorTickLength is the length of a minor tick mark outside the
+	// axis, three quarters of a major one's: 112.5.
+	minorTickLength = tickLength * 3 / 4
 	// labelSpacing is the gap between an axis and its labels: 100.
 	labelSpacing = 100 * mm100
 	// axisTitleDistance is the gap between the axes and an axis title: 420
@@ -61,7 +64,7 @@ func Render(ctx context.Context, fonts *text.Fonts, c *Chart, r compose.Rect) []
 	if c == nil || fonts == nil || !(r.Width > 0) || !(r.Height > 0) || math.IsInf(r.Width, 0) || math.IsInf(r.Height, 0) {
 		return nil
 	}
-	rd := &renderer{ctx: ctx, fonts: fonts, c: c, page: r}
+	rd := &renderer{ctx: ctx, fonts: fonts, c: binned(c), page: r}
 	rd.render(r)
 	if len(rd.out) == 0 {
 		return nil
@@ -114,6 +117,26 @@ func (rd *renderer) render(r compose.Rect) {
 	default:
 		rd.cartesian(plot)
 	}
+	if c.Notice != nil {
+		rd.notice(c.Notice, r)
+	}
+}
+
+// notice draws t centred on the chart's rectangle r, its lines at most two
+// thirds of r's width, in a frame that fits them (chart2's
+// UnsupportedChart: a text shape growing from the page's centre, its
+// width capped at two thirds of the page's). LibreOffice sets the text
+// narrower than the face's advances, by noticeNarrowing, so the lines
+// break where they would at that width.
+func (rd *renderer) notice(t *Title, r compose.Rect) {
+	b := rd.measure(t.Text, t.Style, r.Width*2/3/noticeNarrowing)
+	if b == nil {
+		return
+	}
+	w, h := b.rotated()
+	cx, cy := r.X+r.Width/2, r.Y+r.Height/2
+	rd.frame(compose.Rect{X: cx - w/2, Y: cy - h/2, Width: w, Height: h}, t.Frame)
+	rd.out = append(rd.out, b.draw(cx, cy, alignCenter)...)
 }
 
 // title places t centred at the top of rem, top distance below rem's top,
@@ -200,6 +223,16 @@ func (s *Stroke) compose() *compose.Stroke {
 	}
 	return &compose.Stroke{Color: s.Color, Width: min(s.Width, maxStrokeWidth), Dash: s.Dash, Join: compose.RoundJoin}
 }
+
+// noticeNarrowing is the width LibreOffice gives a chart's notice text,
+// as a fraction of the width of the face's advances.
+//
+// # Corpus evidence
+//
+//   - pptx: chart2/funnel-pp1.pptx prints the 10-point Liberation Serif
+//     notice 275.93 points wide, where its advances sum to 282.78;
+//     xlsx: chart2/funnel1.xlsx its first line 185.51 for 190.50.
+const noticeNarrowing = 0.9757
 
 // maxStrokeWidth caps a line's width, in points: Office allows 1584.
 const maxStrokeWidth = 1584

@@ -716,7 +716,7 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 		if v, ok := r.prop(name, "chart-properties", NSChart, "interpolation"); ok && v != "none" {
 			s.Smooth = true
 		}
-	case chart.Bar, chart.Area, chart.Pie, chart.Doughnut, chart.Bubble:
+	case chart.Bar, chart.Area, chart.Pie, chart.Doughnut, chart.Bubble, chart.Unsupported:
 		s.Fill = r.fill(name, nil)
 		s.Border = r.lineOf(name, nil)
 	}

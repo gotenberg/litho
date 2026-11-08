@@ -845,13 +845,19 @@ func (rd *renderer) axisLine(d *dim) {
 		}
 	}
 	tick(d.ticks, d.ax.MajorTicks, tickLength)
-	if !d.category {
-		var fs []float64
+	var fs []float64
+	if d.category {
+		// A category axis's minor ticks halve its major intervals
+		// (chart2's category axis subdivides each interval once).
+		for i := 1; i < len(d.ticks); i++ {
+			fs = append(fs, (d.ticks[i-1]+d.ticks[i])/2)
+		}
+	} else {
 		for _, v := range d.sc.minorTicks() {
 			fs = append(fs, d.sc.frac(v))
 		}
-		tick(fs, d.ax.MinorTicks, tickLength/2)
 	}
+	tick(fs, d.ax.MinorTicks, minorTickLength)
 }
 
 // titleBlock lays out d's axis title, nil for none.

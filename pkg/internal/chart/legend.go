@@ -19,7 +19,10 @@ type legendEntry struct {
 	// markerKey draws the marker alone, as a scatter series without a line
 	// does.
 	lineKey, markerKey bool
-	marker             Marker
+	// circleKey draws the key as a filled circle, as the legend of a kind
+	// the renderer does not draw has (chart2's UnsupportedChart).
+	circleKey bool
+	marker    Marker
 }
 
 // legendEntries returns the legend's entries in order: a series each, or
@@ -81,6 +84,10 @@ func (rd *renderer) legendEntries(st TextStyle, maxW float64) []legendEntry {
 // entry builds the legend entry of series s, or of its point j.
 func (rd *renderer) entry(g *Group, s *Series, j int, name string, st TextStyle, maxW float64) legendEntry {
 	e := legendEntry{label: rd.measure(name, st, maxW), fill: rd.fillOf(g, s, j), border: rd.borderOf(g, s, j)}
+	if g.Kind == Unsupported {
+		e.circleKey, e.border = true, nil
+		return e
+	}
 	if lined(g.Kind) && (g.Kind != Radar || !g.Filled) {
 		e.marker = rd.markerOf(g, s, j)
 		if e.border != nil && !e.border.None {
@@ -243,6 +250,11 @@ func (rd *renderer) legend(page compose.Rect, rem *compose.Rect) {
 
 // key draws an entry's legend key into r.
 func (rd *renderer) key(e legendEntry, r compose.Rect) {
+	if e.circleKey {
+		d := math.Min(r.Width, r.Height) / 2
+		rd.paint(ellipse(r.X+r.Width/2, r.Y+r.Height/2, d, d), e.fill, nil)
+		return
+	}
 	if e.markerKey {
 		m := e.marker
 		m.Size = math.Min(m.Size, r.Height)
