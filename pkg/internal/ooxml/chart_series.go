@@ -127,6 +127,57 @@ func (p *chartReader) group(e *Element) *chart.Group {
 	return g
 }
 
+// maxTrendlines caps the trendlines of one series. Anti-DoS guard, not
+// spec-mandated: Office offers a few a series.
+const maxTrendlines = 16
+
+// trendline reads a c:trendline (ECMA-376 Part 1, 21.2.2.211), false for
+// an unknown type. Its equation and R² label are not drawn.
+func (p *chartReader) trendline(e *Element) (chart.Trendline, bool) {
+	var t chart.Trendline
+	switch childVal(e, "trendlineType") {
+	case "linear", "":
+		t.Kind = chart.TrendLinear
+	case "exp":
+		t.Kind = chart.TrendExponential
+	case "log":
+		t.Kind = chart.TrendLogarithmic
+	case "poly":
+		t.Kind = chart.TrendPolynomial
+	case "power":
+		t.Kind = chart.TrendPower
+	case "movingAvg":
+		t.Kind = chart.TrendMovingAverage
+	default:
+		return t, false
+	}
+	// 21.2.2.130 order defaults to 2, 21.2.2.136 period to 2.
+	t.Order, t.Period = 2, 2
+	if v, ok := Int(childVal(e, "order")); ok && v >= 2 && v <= 6 {
+		t.Order = v
+	}
+	if v, ok := Int(childVal(e, "period")); ok && v >= 2 && v <= chart.MaxPoints {
+		t.Period = v
+	}
+	if v := floatVal(e, "forward"); v > 0 {
+		t.Forward = v
+	}
+	if v := floatVal(e, "backward"); v > 0 {
+		t.Backward = v
+	}
+	if v := floatVal(e, "intercept"); !math.IsNaN(v) {
+		t.Intercept, t.HasIntercept = v, true
+	}
+	t.Name = textOf(e.Child(NSChart, "name"))
+	if ln := e.Child(NSChart, "spPr").Child(NSA, "ln"); ln != nil {
+		t.Line = p.stroke(ln, nil)
+	}
+	if boolVal(e, "dispEq", false) || boolVal(e, "dispRSqr", false) {
+		p.warn(CodeChartUnsupported, "a trendline's equation is not drawn")
+	}
+	return t, true
+}
+
 // sortSeries orders series by their c:order, which their Index holds,
 // stable (ECMA-376 Part 1, 21.2.2.128 order), then gives each its c:idx,
 // idx in the series' file order, as Index (21.2.2.84 idx).
@@ -219,8 +270,12 @@ func (p *chartReader) series(e *Element, g *chart.Group, scatterLines, lineMarke
 		}
 	}
 	p.pointLabels(e.Child(NSChart, "dLbls"), s)
-	if e.Child(NSChart, "trendline") != nil {
-		p.warn(CodeChartUnsupported, "trendlines are not drawn")
+	for _, tl := range e.Kids() {
+		if tl.Is(NSChart, "trendline") && len(s.Trendlines) < maxTrendlines {
+			if t, ok := p.trendline(tl); ok {
+				s.Trendlines = append(s.Trendlines, t)
+			}
+		}
 	}
 	if e.Child(NSChart, "errBars") != nil {
 		p.warn(CodeChartUnsupported, "error bars are not drawn")

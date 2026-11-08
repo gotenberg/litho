@@ -201,14 +201,14 @@ func TestChartFromElement_DataLabelsInherit(t *testing.T) {
 }
 
 func TestChartFromElement_Warnings(t *testing.T) {
-	plot := `<c:line3DChart>` + ser(0, "A", `<c:trendline/><c:errBars/>`, "1") + `</c:line3DChart><c:surfaceChart/>`
+	plot := `<c:line3DChart>` + ser(0, "A", `<c:trendline><c:dispRSqr val="1"/></c:trendline><c:errBars/>`, "1") + `</c:line3DChart><c:surfaceChart/>`
 	c := readChart(t, chartXML("", "", plot), false)
 	var msgs []string
 	for _, w := range c.Warnings {
 		msgs = append(msgs, w.Message)
 	}
 	got := strings.Join(msgs, "|")
-	for _, want := range []string{"3D line", "trendlines", "error bars", "surface"} {
+	for _, want := range []string{"3D line", "equation", "error bars", "surface"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("warnings %q lack %q", got, want)
 		}
@@ -498,5 +498,24 @@ func TestChartFromElement_SeriesColourByIdx(t *testing.T) {
 	ss := c.Groups[0].Series
 	if ss[0].Name != "A" || ss[0].Index != 2 || ss[1].Name != "B" || ss[1].Index != 0 {
 		t.Errorf("series %q index %d, %q index %d: want A (idx 2) drawn before B (idx 0)", ss[0].Name, ss[0].Index, ss[1].Name, ss[1].Index)
+	}
+}
+
+func TestChartFromElement_Trendlines(t *testing.T) {
+	tl := `<c:trendline><c:name>Fit</c:name><c:spPr><a:ln w="19050"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:ln></c:spPr><c:trendlineType val="poly"/><c:order val="3"/><c:forward val="1.5"/><c:intercept val="2"/><c:dispEq val="1"/></c:trendline>` +
+		`<c:trendline><c:trendlineType val="movingAvg"/><c:period val="4"/></c:trendline><c:trendline><c:trendlineType val="bogus"/></c:trendline>`
+	c := readChart(t, chartXML("", "", `<c:lineChart>`+ser(0, "A", tl, "1", "2")+`</c:lineChart>`), false)
+	got := c.Groups[0].Series[0].Trendlines
+	if len(got) != 2 {
+		t.Fatalf("trendlines = %+v, want two", got)
+	}
+	if a := got[0]; a.Kind != chart.TrendPolynomial || a.Order != 3 || a.Forward != 1.5 || !a.HasIntercept || a.Intercept != 2 || a.Name != "Fit" || a.Line == nil || a.Line.Width != 1.5 {
+		t.Errorf("first trendline = %+v", a)
+	}
+	if b := got[1]; b.Kind != chart.TrendMovingAverage || b.Period != 4 || b.Order != 2 || b.Line != nil {
+		t.Errorf("second trendline = %+v", b)
+	}
+	if !hasWarning(c, CodeChartUnsupported) {
+		t.Error("an equation shown is not reported")
 	}
 }
