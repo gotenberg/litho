@@ -76,16 +76,25 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 		}
 		out = group(sm, frags)
 	}
-	b.link(s.Href, then(sm, m), box)
+	b.link(s, then(sm, m), box)
 	return out
 }
 
-// link records a link to href over box, mapped by m to the slide.
-func (b *builder) link(href string, m compose.Matrix, box compose.Rect) {
-	if href == "" || box.Width <= 0 || box.Height <= 0 {
+// link records the link of s over box, mapped by m to the slide: its
+// hyperlink, else its jump to the page of the slide it names when that
+// slide prints.
+func (b *builder) link(s *Shape, m compose.Matrix, box compose.Rect) {
+	if box.Width <= 0 || box.Height <= 0 {
 		return
 	}
-	b.links = append(b.links, compose.Link{Rect: transformRect(m, box), URI: href})
+	switch {
+	case s.Href != "":
+		b.links = append(b.links, compose.Link{Rect: transformRect(m, box), URI: s.Href})
+	case s.Jump > 0 && s.Jump <= len(b.doc.Slides):
+		if pg, ok := b.pages[b.doc.Slides[s.Jump-1]]; ok {
+			b.links = append(b.links, compose.Link{Rect: transformRect(m, box), Dest: &compose.Dest{Page: pg}})
+		}
+	}
 }
 
 // geometry returns the fragments of the geometry shape s: its paths
@@ -126,6 +135,6 @@ func (b *builder) geometry(s *Shape, m compose.Matrix, parent *compose.StructEle
 		}
 		parent.Kids = append(parent.Kids, txt.structure...)
 	}
-	b.link(s.Href, then(sm, m), box)
+	b.link(s, then(sm, m), box)
 	return out
 }

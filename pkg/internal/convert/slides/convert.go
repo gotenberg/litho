@@ -48,6 +48,8 @@ type builder struct {
 	shapes int
 	// links collects the slide's links in slide coordinates.
 	links []compose.Link
+	// pages maps each slide printed to its 1-based page number.
+	pages map[*Slide]int
 	// autoScript moves the scripts of the body being laid out
 	// automatically, as an OpenDocument text's.
 	autoScript bool
@@ -140,6 +142,12 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	for _, s := range doc.Slides {
 		if s != nil && (!s.Hidden || opts.HiddenSlides) {
 			shown = append(shown, s)
+		}
+	}
+	b.pages = make(map[*Slide]int, len(shown))
+	for i, s := range shown {
+		if _, ok := b.pages[s]; !ok {
+			b.pages[s] = i + 1
 		}
 	}
 	limit := opts.MaxPages

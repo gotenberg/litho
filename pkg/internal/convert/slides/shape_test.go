@@ -239,3 +239,17 @@ func TestShape_Hairline(t *testing.T) {
 		}
 	}
 }
+
+// TestShape_Jump checks that a shape's jump links to the page of the
+// slide it names, hidden slides counted in the show and left without a
+// page, and that a jump to an unprinted slide links nowhere.
+func TestShape_Jump(t *testing.T) {
+	jump := func(n int) *Shape {
+		return &Shape{Box: compose.Rect{X: 10, Y: 10, Width: 50, Height: 20}, Jump: n}
+	}
+	doc := deck(&Slide{Shapes: []*Shape{jump(3), jump(2), jump(9)}}, &Slide{Hidden: true}, &Slide{})
+	pg := convert(t, doc, office.Options{}).Pages[0]
+	if len(pg.Links) != 1 || pg.Links[0].Dest == nil || pg.Links[0].Dest.Page != 2 || pg.Links[0].Rect.Width != 50 {
+		t.Errorf("links %+v", pg.Links)
+	}
+}
