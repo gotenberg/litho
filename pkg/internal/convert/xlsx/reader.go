@@ -81,6 +81,16 @@ type reader struct {
 	pending []pendingOperand
 }
 
+// substituteFamily is the face LibreOffice measures and draws a family
+// with that no installed font and no metric alias serves, in the pinned
+// image (the sheet builder draws with it too).
+//
+// # Corpus evidence
+//
+//   - xlsx: sc/tdf165180_date1904.xlsx, whose Normal font is Aptos
+//     Narrow, prints in Noto Sans with columns of its digits.
+const substituteFamily = "Noto Sans"
+
 // read reads the workbook pkg holds into the sheet model, with the
 // warnings of what it left out or approximated.
 func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*sheet.Document, []compose.Warning, error) {
@@ -180,7 +190,9 @@ func (r *reader) measureNormalFont() {
 	if size <= 0 {
 		return
 	}
-	style := text.Style{Families: f.Families, Size: size, Italic: f.Italic, NoKerning: true}
+	// A family no font serves is drawn, and measured, in LibreOffice's
+	// substitute, Noto Sans in the pinned image.
+	style := text.Style{Families: append(append([]string(nil), f.Families...), substituteFamily), Size: size, Italic: f.Italic, NoKerning: true}
 	if f.Bold {
 		style.Weight = 700
 	}

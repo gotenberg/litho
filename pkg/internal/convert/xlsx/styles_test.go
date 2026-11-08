@@ -1,11 +1,14 @@
 package xlsx
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"strings"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
 )
@@ -214,5 +217,24 @@ func TestRead_SystemThemeColors(t *testing.T) {
 		if got := styleOf(t, doc, i).Font.Color; !near(got, want) {
 			t.Errorf("column %d colour %v, want %v", i, got, want)
 		}
+	}
+}
+
+// TestRead_SubstituteFamily checks that a Normal font no installed face
+// serves measures its columns in Noto Sans, LibreOffice's substitute.
+func TestRead_SubstituteFamily(t *testing.T) {
+	t.Parallel()
+	fonts := pinnedFonts(t)
+	width := func(name string) float64 {
+		styles := strings.Replace(minimalStyles, "Test Sans", name, 1)
+		data := zipFiles(t, workbookFiles([]testSheet{{name: "S", xml: `<sheetData/>`}}, styles, "", "", nil))
+		doc, _, err := load(context.Background(), bytes.NewReader(data), fonts, office.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return doc.Sheets[0].DefaultColumnWidth
+	}
+	if unknown, noto := width("Aptos Narrow"), width("Noto Sans"); unknown != noto {
+		t.Errorf("an unknown family's columns are %v points, Noto Sans's %v", unknown, noto)
 	}
 }

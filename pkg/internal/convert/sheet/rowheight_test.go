@@ -2,6 +2,7 @@ package sheet
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -25,5 +26,30 @@ func TestOptimalHeights_FallbackFaces(t *testing.T) {
 	}
 	if h := g.rowHeight(1); !near(h, 15.65, 0.01) {
 		t.Errorf("Chinese row %v, want 15.65", h)
+	}
+}
+
+// TestFont_Substitute locks the family list a cell font draws with: its
+// families, fontconfig's generic aliases resolved, then Noto Sans, the
+// face LibreOffice substitutes for a family nothing serves.
+func TestFont_Substitute(t *testing.T) {
+	tests := []struct {
+		families []string
+		want     []string
+	}{
+		{[]string{"Aptos Narrow"}, []string{"Aptos Narrow", "Noto Sans"}},
+		{[]string{"Calibri", "sans"}, []string{"Calibri", "sans-serif", "Noto Sans"}},
+	}
+	for _, tc := range tests {
+		got := font{families: tc.families}.cssFamilies()
+		if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+			t.Errorf("%v: %v, want %v", tc.families, got, tc.want)
+		}
+	}
+	m := newMeasurer(context.Background(), pinnedFonts(t), "")
+	unknown := m.width(font{families: []string{"Aptos Narrow"}, size: 11}, "Monday")
+	noto := m.width(font{families: []string{"Noto Sans"}, size: 11}, "Monday")
+	if !near(unknown, noto, 1e-9) {
+		t.Errorf("an unknown family measures %v, Noto Sans %v", unknown, noto)
 	}
 }

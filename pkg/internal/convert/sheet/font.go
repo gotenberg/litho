@@ -105,16 +105,26 @@ var fontconfigAliases = map[string]string{
 	"monospace": "monospace",
 }
 
-// cssFamilies returns f's family list with fontconfig's aliases resolved.
+// substituteFamily is the face LibreOffice draws a family with that no
+// installed font and no metric alias serves, in the pinned image.
+//
+// # Corpus evidence
+//
+//   - xlsx: sc/tdf165180_date1904.xlsx (Aptos Narrow) and
+//     sc/tdf134392.xlsx (FreeSans) print in Noto Sans.
+const substituteFamily = "Noto Sans"
+
+// cssFamilies returns f's family list with fontconfig's aliases resolved,
+// then the substitute of an unknown family.
 func (f font) cssFamilies() []string {
-	out := make([]string, len(f.families))
-	for i, fam := range f.families {
+	out := make([]string, 0, len(f.families)+1)
+	for _, fam := range f.families {
 		if g, ok := fontconfigAliases[strings.ToLower(strings.TrimSpace(fam))]; ok {
 			fam = g
 		}
-		out[i] = fam
+		out = append(out, fam)
 	}
-	return out
+	return append(out, substituteFamily)
 }
 
 // apply sets the font of st.
