@@ -290,3 +290,19 @@ func TestFormatSections(t *testing.T) {
 		}
 	}
 }
+
+func TestChartFromDocument_LabelFrameAndAxisGap(t *testing.T) {
+	st := chartStyles + `<style:style style:name="dl" style:family="chart"><style:graphic-properties draw:fill="solid" draw:fill-color="#00ff00" draw:stroke="solid" svg:stroke-color="#0000ff" svg:stroke-width="0.03in"/></style:style>` +
+		`<style:style style:name="ay" style:family="chart"><style:chart-properties chart:gap-width="219" chart:overlap="-27"/></style:style>`
+	sers := `<chart:series chart:style-name="s1" chart:values-cell-range-address="Sheet1.B2:Sheet1.B3"><chart:data-label chart:style-name="dl"/></chart:series>`
+	plot := `<chart:axis chart:dimension="x" chart:name="primary-x"/><chart:axis chart:dimension="y" chart:name="primary-y" chart:style-name="ay"/>` + sers
+	c := readODFChart(t, chartContent(strings.Replace(st, `chart:gap-width="80" chart:overlap="20" `, "", 1), "bar", "", plot))
+	g := c.Groups[0]
+	if g.GapWidth != 219 || g.Overlap != -27 {
+		t.Errorf("gap %v overlap %v, want the value axis style's 219 and -27", g.GapWidth, g.Overlap)
+	}
+	f := g.Series[0].Labels.Frame
+	if f.Fill == nil || f.Fill.Color.G != 1 || f.Border == nil || f.Border.Color.B != 1 {
+		t.Errorf("label frame = %+v, want the data label style's green fill and blue border", f)
+	}
+}

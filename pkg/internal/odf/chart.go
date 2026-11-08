@@ -442,9 +442,27 @@ func (r *chartReader) plotArea(ch, pa *Element) {
 				r.warn(CodeChartUnsupported, "a chart of class "+sClass+" is not drawn")
 				continue
 			}
-			if ax := se.A(NSChart, "attached-axis"); ax != "" {
+			ax := se.A(NSChart, "attached-axis")
+			if ax != "" {
 				if i, ok := axisIndex[ax]; ok && strings.HasSuffix(ax, "-y") {
 					g.YAxis = i
+				}
+			} else {
+				ax = "primary-y"
+			}
+			// LibreOffice writes a bar group's gap and overlap on the
+			// style of the value axis it is drawn against (its
+			// GapwidthSequence and OverlapSequence are per axis).
+			for _, a := range pa.All(NSChart, "axis") {
+				if a.A(NSChart, "name") != ax {
+					continue
+				}
+				aName := a.A(NSChart, "style-name")
+				if v := r.numProp(aName, "gap-width"); !math.IsNaN(v) {
+					g.GapWidth = v
+				}
+				if v := r.numProp(aName, "overlap"); !math.IsNaN(v) {
+					g.Overlap = v
 				}
 			}
 			groups[key] = g
@@ -725,6 +743,7 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 	}
 	s.Labels = r.labels(name, g.Labels, g)
 	s.Labels.Format = labelFormat
+	r.labelFrame(se, &s.Labels)
 	if st := r.styles[name]; st != nil {
 		if pf := st.A(NSStyle, "percentage-data-style-name"); pf != "" {
 			s.Labels.PercentFormat = r.numberFormat(pf)
@@ -739,7 +758,11 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 		dName := dp.A(NSChart, "style-name")
 		if dName != "" && r.styles[dName] != nil {
 			for k := 0; k < rep && idx+k < chart.MaxPoints; k++ {
-				s.Points = append(s.Points, r.point(dName, idx+k, s, g))
+				pt := r.point(dName, idx+k, s, g)
+				if pt.HasLabels {
+					r.labelFrame(dp, &pt.Labels)
+				}
+				s.Points = append(s.Points, pt)
 			}
 		}
 		idx += rep
@@ -832,6 +855,22 @@ func (r *chartReader) marker(name string, kind chart.Kind) chart.Marker {
 		}
 	}
 	return m
+}
+
+// labelFrame reads the fill and border of the data labels of a
+// chart:series or chart:data-point el from the style of its
+// chart:data-label child (ODF 1.3 Part 3, 11.13), into l.
+func (r *chartReader) labelFrame(el *Element, l *chart.Labels) {
+	name := el.Child(NSChart, "data-label").A(NSChart, "style-name")
+	if name == "" || r.styles[name] == nil {
+		return
+	}
+	if f := r.fill(name, nil); f != nil {
+		l.Frame.Fill = f
+	}
+	if b := r.stroke(name, nil); b != nil {
+		l.Frame.Border = b
+	}
 }
 
 // labels reads a style's data labels over the inherited ones (ODF 1.3
