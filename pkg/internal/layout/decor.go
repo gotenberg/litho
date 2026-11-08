@@ -661,7 +661,7 @@ func strokedSide(s css.Side, r compose.Rect, w float64, c compose.Color) *compos
 		a, z = compose.Point{X: r.X, Y: r.Y + r.Height - w/2}, compose.Point{X: r.X + r.Width, Y: r.Y + r.Height - w/2}
 	case css.Left:
 		a, z = compose.Point{X: r.X + w/2, Y: r.Y}, compose.Point{X: r.X + w/2, Y: r.Y + r.Height}
-	default:
+	case css.Right:
 		a, z = compose.Point{X: r.X + r.Width - w/2, Y: r.Y}, compose.Point{X: r.X + r.Width - w/2, Y: r.Y + r.Height}
 	}
 	return strokedLine(a, z, w, c)
@@ -669,6 +669,13 @@ func strokedSide(s css.Side, r compose.Rect, w float64, c compose.Color) *compos
 
 // strokedLine returns the line from a to z stroked in c, w points wide and
 // at least css.MinBorderStroke, with butt caps.
+//
+// # Corpus evidence
+//
+//   - litho: a flat ODT whose paragraphs have solid borders of 0.02 pt to
+//     1 pt prints, through the pinned LibreOffice, strokes of 0.1 pt for
+//     every border of one or two twips, 0.15, 0.2, 0.25, 0.3, 0.5, 0.75
+//     and 1 pt at the widths above, and no border for 0.01 pt.
 func strokedLine(a, z compose.Point, w float64, c compose.Color) *compose.Path {
 	return &compose.Path{Ops: []compose.PathOp{
 		{Kind: compose.MoveTo, P: [3]compose.Point{a}},

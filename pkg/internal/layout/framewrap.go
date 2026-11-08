@@ -102,6 +102,7 @@ func (f floatRect) wrapBand(l, r float64) (float64, float64) {
 		}
 	case css.FrameWrapNone:
 		return l, l
+	case css.FrameWrapThrough, css.FrameWrapParallel, css.FrameWrapLargest:
 	}
 	if left > right {
 		return l, f.x0
