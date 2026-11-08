@@ -201,3 +201,15 @@ func TestText_BodyProperties(t *testing.T) {
 		t.Errorf("title body %+v", b)
 	}
 }
+
+func TestText_OrphanPlaceholder(t *testing.T) {
+	t.Parallel()
+	doc, _ := readDeck(t, testDeck{
+		layoutTree: phShape("Title 1", "title", -1, 0, 0, 0, 0, para("x")),
+		slides:     []testSlide{{tree: phShape("Orphan", "body", 99, 0, 0, 12700, 12700, para("x"))}},
+	})
+	p := doc.Slides[0].Shapes[0].Text.Paragraphs[0]
+	if p.Bullet != nil || p.MarginLeft != 0 || p.Runs[0].Style.Size != 18 {
+		t.Errorf("a placeholder its layout lacks inherits nothing: %+v", p)
+	}
+}

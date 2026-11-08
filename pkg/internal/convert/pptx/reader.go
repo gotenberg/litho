@@ -199,8 +199,8 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*slides.D
 }
 
 // uniqueNames makes the slides' names unique as Impress names the pages of
-// an imported presentation: a slide takes its p:cSld name, else its
-// title, else "Slide n", and a name an earlier slide holds gets " (2)",
+// an imported presentation, which its bookmarks show: a slide takes its
+// title, else "Slide n" by its place in the show, and a name an earlier slide holds gets " (2)",
 // " (3)"... appended.
 //
 // # Corpus evidence

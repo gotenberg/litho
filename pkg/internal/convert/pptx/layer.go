@@ -184,8 +184,16 @@ func (l *layer) find(p placeholder, byIdx bool) *ooxml.Element {
 }
 
 // inherited returns the chain of shapes el inherits from in layer l: el,
-// then its layout's placeholder, then that one's master placeholder, as
-// far as each exists.
+// then its layout's placeholder, then that one's master placeholder. A
+// placeholder its layout has no placeholder for inherits nothing, not even
+// from the master, and its text takes the master's other style, as Impress
+// imports it.
+//
+// # Corpus evidence
+//
+//   - pptx: sd-data/n759180's body placeholder of idx 4294967295, on a
+//     layout of a title, a footer and a slide number, prints at its box's
+//     inset without the master body style's bullet and indent.
 func inherited(l *layer, el *ooxml.Element) []*ooxml.Element {
 	chain := []*ooxml.Element{el}
 	p, ok := phOf(el)
@@ -196,7 +204,7 @@ func inherited(l *layer, el *ooxml.Element) []*ooxml.Element {
 	for up := l.parent; up != nil; up = up.parent {
 		k := up.find(p, byIdx)
 		if k == nil {
-			continue
+			break
 		}
 		chain = append(chain, k)
 		if q, ok := phOf(k); ok {

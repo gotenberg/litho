@@ -179,6 +179,7 @@ func (r *reader) textBody(c *shapeCtx, sc []*ooxml.Element, p placeholder, ref *
 		return nil
 	}
 	_, isPh := phOf(sc[0])
+	isPh = isPh && len(sc) > 1
 	ts := &textStyles{extra: fontRefLevel(ref), master: c.layer.styleFor(p, isPh), def: r.defaultText, sc: c.sc, part: c.part, owners: map[*ooxml.Element]string{}}
 	if ts.master != nil {
 		ts.owners[ts.master] = r.partOf(ts.master, c.part)
@@ -198,6 +199,9 @@ func (r *reader) textBody(c *shapeCtx, sc []*ooxml.Element, p placeholder, ref *
 		}
 	}
 	body := bodyProps(bodies)
+	if w := bodies.child("prstTxWarp"); w != nil && attr(w, "prst") != "textNoShape" {
+		r.warn("approximated", "warped text (WordArt) is drawn unwarped")
+	}
 	body.Paragraphs = r.paragraphs(tb, ts)
 	return body
 }
