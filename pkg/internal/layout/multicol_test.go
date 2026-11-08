@@ -37,7 +37,7 @@ func TestMulticol_ColumnLayout(t *testing.T) {
 		{count: 0, width: 100, u: 350, g: 0, n: 3, w: 350.0 / 3},
 		{count: 2, width: 100, u: 350, g: 0, n: 2, w: 175},
 		{count: 5, width: 200, u: 100, g: 10, n: 1, w: 100},
-		{count: 0, width: 0, u: 100, g: 0, n: 1, w: 100},
+		{count: 0, width: 0, u: 75, g: 0, n: 100, w: 0.75},
 		{count: 4, u: 10, g: 20, n: 4, w: 0, widthAuto: true},
 	}
 	for _, tt := range tests {

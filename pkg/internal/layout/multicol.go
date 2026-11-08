@@ -140,6 +140,10 @@ func (e *engine) columnGap(b *box, w float64) float64 {
 	return max(resolve(g, w), 0)
 }
 
+// minColumnWidth is the used column-width of a column-width of 0: a CSS
+// pixel.
+const minColumnWidth = 0.75
+
 // columnLayout returns the used column count and width of a container
 // whose content box is u wide, with a gap of g (CSS Multicol 1, 3.4).
 func columnLayout(c *css.Columns, u, g float64) (int, float64) {
@@ -148,7 +152,10 @@ func columnLayout(c *css.Columns, u, g float64) (int, float64) {
 		n := max(c.Count, 1)
 		return n, max((u-float64(n-1)*g)/float64(n), 0)
 	}
-	w := max(clamp(c.Width.Value), 0)
+	// A column-width of 0 sizes as one pixel, the narrowest column
+	// Chromium lays out: the pseudo-algorithm of CSS Multicol 1, 3.4
+	// divides by it.
+	w := max(clamp(c.Width.Value), minColumnWidth)
 	fit := 1
 	if w+g > 0 {
 		fit = int(min(max(math.Floor((u+g)/(w+g)), 1), maxColumns)) // fits int: capped
