@@ -2,7 +2,7 @@
 // unotools/source/misc/fontcvt.cxx (MPL 2.0) at commit
 // 9dea406ab7695df6325b11b0e19fdca8db4b7276. DO NOT EDIT.
 
-package slides
+package symbolfont
 
 // symbolFonts maps a symbol font's normalized name (lower case, without
 // spaces) to the OpenSymbol code point of each of its codes from 0x20 to

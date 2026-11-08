@@ -1,5 +1,6 @@
-// Command gen-symbol-fonts generates the symbol font recoding tables the
-// slides package of pkg/internal/convert/slides draws bullets with.
+// Command gen-symbol-fonts generates the symbol font recoding tables of
+// pkg/internal/symbolfont, which the converters draw symbol-font bullets
+// with.
 //
 // A presentation names a bullet's character by its code in a symbol font
 // (Wingdings, Webdings, Symbol and their kin) that the printing system
@@ -17,5 +18,5 @@
 //
 //	go run ./cmd/gen-symbol-fonts                   # download the source
 //	go run ./cmd/gen-symbol-fonts --src fontcvt.cxx # read a local copy
-//	go generate ./pkg/internal/convert/slides/...
+//	go generate ./pkg/internal/symbolfont/...
 package main
