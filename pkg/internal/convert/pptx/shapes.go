@@ -39,6 +39,9 @@ type shapeCtx struct {
 	// fontColor, when not nil, is the colour every font reference of the
 	// tree takes: a diagram drawing's, from its colour definition.
 	fontColor *ooxml.Element
+	// bg is the slide's background, which a shape filled with it takes
+	// (19.3.1.43 sp useBgFill); nil off a slide.
+	bg *slides.Fill
 }
 
 // kid returns el's child local in el's own namespace.
@@ -306,6 +309,11 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	style := styleRefs(chain)
 	fc := &fillCtx{sc: c.sc, part: c.part, group: c.group}
 	s.Fill = r.shapeFill(fc, chain, style)
+	if boolAttr(el, "useBgFill", false) && c.bg != nil {
+		// pptx: sd/tdf127964's rectangle filled with the background
+		// prints white over the white slide, not its style's accent1.
+		s.Fill = *c.bg
+	}
 	s.Line = r.shapeLine(fc, chain, style)
 	turn := s.Rotation
 	r.effects(chain, s)

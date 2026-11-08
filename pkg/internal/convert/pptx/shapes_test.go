@@ -367,3 +367,13 @@ func TestShapes_GradientTurn(t *testing.T) {
 		})
 	}
 }
+
+func TestShapes_BackgroundFill(t *testing.T) {
+	t.Parallel()
+	shape := `<p:sp useBgFill="1"><p:nvSpPr><p:cNvPr id="3" name="Bg"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="12700" cy="12700"/></a:xfrm></p:spPr>` +
+		`<p:style><a:lnRef idx="0"/><a:fillRef idx="1"><a:schemeClr val="accent1"/></a:fillRef><a:effectRef idx="0"/><a:fontRef idx="minor"/></p:style></p:sp>`
+	doc, _ := readDeck(t, testDeck{slides: []testSlide{{tree: shape, bg: `<p:bg><p:bgPr><a:solidFill><a:srgbClr val="00FF00"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>`}}})
+	if f := doc.Slides[0].Shapes[0].Fill; f.Kind != slides.FillSolid || f.Color != (css.Color{G: 1, A: 1}) {
+		t.Errorf("fill %+v, want the slide's green background", f)
+	}
+}
