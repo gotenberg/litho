@@ -193,8 +193,15 @@ func (sp *sheetPlan) layoutPages(a Range, zoom int) ([]band, []band, [][]bool) {
 		b := band{from, last}
 		if !sp.g.empty(Range{FirstRow: b.first, LastRow: b.last, FirstColumn: a.FirstColumn, LastColumn: a.LastColumn}) {
 			h := make([]bool, len(cols))
+			leftEmpty := false
 			for i, cb := range cols {
 				h[i] = sp.g.empty(Range{FirstRow: b.first, LastRow: b.last, FirstColumn: cb.first, LastColumn: cb.last})
+				// A page that text overflows into from the left prints,
+				// unless the page left of it does not (ScDocument::IsPrintEmpty).
+				if h[i] && !leftEmpty && cb.first > 0 && sp.g.extendPrint(cb.first-1, b.first, b.last) >= cb.first {
+					h[i] = false
+				}
+				leftEmpty = h[i]
 			}
 			rows = append(rows, b)
 			hidden = append(hidden, h)
@@ -326,7 +333,7 @@ func (sp *sheetPlan) plan() {
 				areas = append(areas, a)
 			}
 		}
-	} else if u, ok := g.usedRange(); ok {
+	} else if u, ok := g.usedRange(sp.single); ok {
 		areas = []Range{u}
 	}
 	for _, a := range areas {

@@ -50,13 +50,19 @@ type grid struct {
 	colPrefix, rowPrefix []float64
 	// cond is the sheet's conditional formatting, nil for none.
 	cond *conditions
+	// need measures the room a text cell needs on one line, nil for no
+	// measuring; overflowBudget counts down the cells it may measure.
+	need           func(r, c int, cell *Cell) float64
+	overflowBudget int
+	// overflows caches the last column each text cell reaches.
+	overflows map[[2]int]int
 }
 
 // newGrid indexes the sheet sh of doc.
 func newGrid(doc *Document, sh *Sheet) *grid {
 	g := &grid{
 		sh: sh, doc: doc, defW: sh.DefaultColumnWidth, defH: sh.DefaultRowHeight,
-		rows: map[int]*Row{}, heights: map[int]float64{}, merges: map[[2]int]Range{}, covered: map[[2]int][2]int{},
+		rows: map[int]*Row{}, heights: map[int]float64{}, overflows: map[[2]int]int{}, merges: map[[2]int]Range{}, covered: map[[2]int][2]int{},
 	}
 	if !(g.defW > 0 && g.defW <= maxSide) {
 		g.defW = defaultColumnWidth
@@ -229,8 +235,16 @@ func visible(st *Style) bool {
 
 // usedRange returns the cells a sheet without print areas prints: from A1
 // to the last row and column of the cells with a value or a visible style,
-// the merges and the cells under its drawings; false when there are none.
-func (g *grid) usedRange() (Range, bool) {
+// the merges and the cells under its drawings, and on to the last column
+// a text overflows into unless the sheet prints on one page of its
+// content; false when there are none.
+//
+// # Corpus evidence
+//
+//   - xlsx: sc/cell-value.xlsx, whose D3 text overflows far past its last
+//     column, prints 8 pages; budget-single, whose Notes sheet's A2 text
+//     overflows, prints a page of column A alone as one page of content.
+func (g *grid) usedRange(single bool) (Range, bool) {
 	u := Range{FirstRow: math.MaxInt32, FirstColumn: math.MaxInt32, LastRow: -1, LastColumn: -1}
 	add := func(r, c int) {
 		u.FirstRow, u.LastRow = min(u.FirstRow, r), max(u.LastRow, r)
@@ -262,7 +276,13 @@ func (g *grid) usedRange() (Range, bool) {
 	if u.LastRow < 0 {
 		return Range{}, false
 	}
-	// Calc prints from A1 to the last used cell (ScTable::GetPrintArea).
+	// Calc prints from A1 to the last used cell (ScTable::GetPrintArea,
+	// ScPrintFunc::AdjustPrintArea), then on to the last column the text
+	// of a cell reaches into the empty cells right of it
+	// (ScDocument::ExtendPrintArea).
 	u.FirstRow, u.FirstColumn = 0, 0
+	if !single {
+		u.LastColumn = g.extendPrint(u.LastColumn, 0, u.LastRow)
+	}
 	return u, true
 }

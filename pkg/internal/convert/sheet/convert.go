@@ -242,6 +242,7 @@ func (b *builder) paper(sh *Sheet) (float64, float64) {
 // planSheet returns how the sheet sh prints.
 func (b *builder) planSheet(i int, sh *Sheet) *sheetPlan {
 	g := newGrid(b.doc, sh)
+	g.need, g.overflowBudget = b.textNeed(g), maxOverflowCells
 	b.optimalHeights(g)
 	sp := &sheetPlan{g: g, idx: i, zoom: 1, single: b.opts.SinglePageSheets}
 	sp.width, sp.height = b.paper(sh)
