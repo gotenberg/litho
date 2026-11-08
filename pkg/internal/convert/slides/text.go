@@ -785,8 +785,14 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 	}
 	if last := runs[len(runs)-1]; last.Break {
 		// A line break that ends the paragraph keeps the empty line after
-		// it.
-		node.Children = append(node.Children, &layout.Node{Kind: layout.Text, Style: st, Text: "\u200b"})
+		// it, as tall as the paragraph's end mark makes it.
+		if k := len(node.Children) - 1; k > 0 && hasText(runs) {
+			node.Children = node.Children[:k]
+			empty := b.lines(p, b.textStyle(&p.Style, f.font), f, body.FontLineSpacing)
+			st.Padding[css.Bottom] = css.Pts(st.Padding[css.Bottom].Value + empty.height)
+		} else {
+			node.Children = append(node.Children, &layout.Node{Kind: layout.Text, Style: st, Text: "\u200b"})
+		}
 	}
 	if p.Bullet != nil && hasText(runs) {
 		b.bullet(node, p, first, lb, f, number, indent)

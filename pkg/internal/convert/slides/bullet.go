@@ -17,6 +17,18 @@ import (
 // any other indent, or a centred or end-aligned paragraph, the bullet
 // opens the first line. A number stands on the text's baseline; a
 // character or a picture is centred on the first line's text height.
+//
+// The bullet so sits at the larger of 0 and the smaller of the margin and
+// the margin plus the indent, and the text the indent's magnitude past the
+// bullet whatever its sign, as Impress maps a DrawingML margin and indent
+// onto its numbering (TextParagraphProperties::pushToPropSet).
+//
+// # Corpus evidence
+//
+//   - pptx: sd/bullet-indent.pptx with its first paragraph's margin and
+//     positive indent set to 0 and 25.5, 36 and 25.5, 36 and 54, 18 and 10,
+//     54 and 18 points prints the bullet at the margin and the text at the
+//     margin plus the indent, to 0.01 point, in each.
 func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb lineBox, f fit, number int, indent float64) {
 	bu := p.Bullet
 	rel := bu.Scale

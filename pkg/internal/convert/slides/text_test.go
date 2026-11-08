@@ -33,6 +33,9 @@ func TestText_LinePlacement(t *testing.T) {
 		{"prop150", []Paragraph{lined(para("A1", a20), 1.5, 0), lined(para("A2", a20), 1.5, 0)}, map[string]float64{"A1": 60.32, "A2": 96.32}},
 		{"prop80", []Paragraph{lined(para("A1", a20), 0.8, 0), lined(para("A2", a20), 0.8, 0)}, map[string]float64{"A1": 43.68, "A2": 62.9}},
 		{"exact30", []Paragraph{lined(para("A1", a20), 0, 30), lined(para("A2", a20), 0, 30)}, map[string]float64{"A1": 54.31, "A2": 84.30}},
+		// A closing line break leaves a line as tall as the end mark's
+		// size (sd-data/n759180.pptx: 13 points, end mark 5).
+		{"closing-break", []Paragraph{{Runs: []Run{{Text: "B0", Style: a20}, {Break: true, Style: a20}}, Style: arial(5)}, para("B1", a20)}, map[string]float64{"B0": 48.33, "B1": 78.33}},
 		{"spacing", []Paragraph{spaced(para("P0", a20), 10, 5), spaced(para("P1", a20), 10, 5), spaced(para("P2", a20), 10, 5)}, map[string]float64{"P0": 48.33, "P1": 87.33, "P2": 126.34}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
