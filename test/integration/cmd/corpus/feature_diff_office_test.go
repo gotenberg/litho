@@ -86,10 +86,18 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 //     the page: chart2/column-style.xlsx at 0.236, sc/lookup_target.fods at
 //     0.438), or is rotated (sc/tdf119292.xlsx at 0.571); layout averages
 //     0.969, below 0.9 on 5 (chart2/chart-hatch-fill.xlsx 0.584).
+//   - pptx, odp: of the 491 references (319 and 172), 484 pass (314 and
+//     170). Pages, links and outline score 1 on all, strict on all but 4
+//     hairlines and a bitmap fill; text F1 is under the bar on 3 whose
+//     text is drawn invisible, white on a white slide or at 2% opacity,
+//     which PDF.js reads and litho's extraction leaves out
+//     (sd/tdf118776.pptx at 0, sd/tdf96708.odp at 0.725); rotated text and
+//     text past the slide edge score 1; layout averages 0.976, below 0.75
+//     on 4 nearly empty slides (sd/tdf112633.pptx 0.290).
 func TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
 	t.Parallel()
 
-	for _, corpus := range []string{"docx", "odt", "xlsx", "ods", "csv"} {
+	for _, corpus := range []string{"docx", "odt", "xlsx", "ods", "csv", "pptx", "odp"} {
 		t.Run(corpus, func(t *testing.T) {
 			t.Parallel()
 			f, fixtures := officeCorpusFeature(t, corpus)

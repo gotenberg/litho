@@ -238,7 +238,7 @@ if wants diff; then
     # viewer's, and the form fields' appearances use fonts it does not embed.
     HIDE=0
     case "$CORPUS" in
-      docx | odt | xlsx | ods | csv) HIDE=1 ;;
+      docx | odt | xlsx | ods | csv | pptx | odp) HIDE=1 ;;
     esac
     RENDER_HIDE_ANNOTATIONS="$HIDE" SHELL=/bin/bash /work/lib/gen-render.sh "$PDFS" "$DIFF/render" 256 0
     node /work/lib/gen-links.mjs \

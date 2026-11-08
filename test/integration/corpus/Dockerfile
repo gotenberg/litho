@@ -263,14 +263,17 @@ COPY compose/ ./compose/
 # And the html corpus: the Chromium reference PDFs of its committed sources.
 COPY html/ ./html/
 # The Office corpora's references are not in git: the host builds them into
-# the testdata (make docx-libreoffice, make odt-libreoffice, and xlsx, ods and
-# csv alike), and the download scripts read them from the /output volume.
+# the testdata (make docx-libreoffice, make odt-libreoffice, and xlsx, ods,
+# csv, pptx and odp alike), and the download scripts read them from the
+# /output volume.
 # Only the scripts enter the image.
 COPY docx/download.sh ./docx/
 COPY odt/download.sh ./odt/
 COPY xlsx/download.sh ./xlsx/
 COPY ods/download.sh ./ods/
 COPY csv/download.sh ./csv/
+COPY pptx/download.sh ./pptx/
+COPY odp/download.sh ./odp/
 RUN chmod +x entrypoint.sh \
   lib/run-verapdf.sh \
   lib/run-mustang.sh \
@@ -293,7 +296,9 @@ RUN chmod +x entrypoint.sh \
   odt/download.sh \
   xlsx/download.sh \
   ods/download.sh \
-  csv/download.sh
+  csv/download.sh \
+  pptx/download.sh \
+  odp/download.sh
 
 # Record the versions this image was built with, overrides included, so
 # the entrypoint can hand the corpus revisions to the download scripts and

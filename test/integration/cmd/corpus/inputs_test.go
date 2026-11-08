@@ -260,16 +260,29 @@ func TestOfficeListsAndHashesAgree(t *testing.T) {
 		"xlsx": {"sc/qa/unit/data/xlsx": 220, "chart2/qa/extras/data/xlsx": 60},
 		"ods":  {"sc/qa/unit/data/ods": 200, "sc/qa/unit/data/fods": 16, "chart2/qa/extras/data/ods": 40},
 		"csv":  {"sc/qa/unit/data/csv": 9},
+		"pptx": {"sd/qa/unit/data/pptx": 200, "oox/qa/unit/data": 61, "chart2/qa/extras/data/pptx": 38, "sd/qa/unit/data": 20},
+		"odp":  {"sd/qa/unit/data/odp": 150, "sd/qa/unit/data": 20},
 	}
-	exts := map[string][]string{"docx": {"docx"}, "odt": {"odt"}, "xlsx": {"xlsx"}, "ods": {"ods", "fods"}, "csv": {"csv"}}
+	exts := map[string][]string{
+		"docx": {"docx"}, "odt": {"odt"}, "xlsx": {"xlsx"}, "ods": {"ods", "fods"}, "csv": {"csv"},
+		"pptx": {"pptx"}, "odp": {"odp", "fodp"},
+	}
 	// corePath is the LibreOffice core path of a fixture ID: a Writer test
-	// directory's name, or the module of a Calc or chart test directory
-	// named by the extension.
+	// directory's name, the module of a Calc, Impress or chart test
+	// directory named by the extension (Impress keeps its flat
+	// presentations beside the packaged ones), the DrawingML tests' module,
+	// or sd-data for the mixed Impress test directory itself.
 	corePath := func(sub, name string) string {
 		ext := name[strings.LastIndexByte(name, '.')+1:]
 		switch sub {
 		case "sc":
 			return "sc/qa/unit/data/" + ext + "/" + name
+		case "sd":
+			return "sd/qa/unit/data/" + strings.TrimPrefix(ext, "f") + "/" + name
+		case "sd-data":
+			return "sd/qa/unit/data/" + name
+		case "oox":
+			return "oox/qa/unit/data/" + name
 		case "chart2":
 			return "chart2/qa/extras/data/" + ext + "/" + name
 		}
@@ -333,7 +346,10 @@ func TestOfficeListsAndHashesAgree(t *testing.T) {
 func TestCommittedOfficeSourcesLoad(t *testing.T) {
 	t.Parallel()
 
-	formats := map[string]pdf.Format{"docx": pdf.FormatDOCX, "odt": pdf.FormatODT, "xlsx": pdf.FormatXLSX, "ods": pdf.FormatODS, "csv": pdf.FormatCSV}
+	formats := map[string]pdf.Format{
+		"docx": pdf.FormatDOCX, "odt": pdf.FormatODT, "xlsx": pdf.FormatXLSX, "ods": pdf.FormatODS, "csv": pdf.FormatCSV,
+		"pptx": pdf.FormatPPTX, "odp": pdf.FormatODP,
+	}
 	for corpus, want := range formats {
 		sources, err := globInputFixtures(filepath.Join(corpusSourceDir, corpus), "sources/*")
 		if err != nil {
