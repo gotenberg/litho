@@ -1,16 +1,18 @@
 package slides
 
 import (
-	"math"
-
 	"github.com/gotenberg/litho/pkg/internal/compose"
-	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 )
 
-// The notes page of a document that gives no size: US Letter portrait,
-// the paper Impress prints notes pages on with the en-US defaults, whatever
-// a PPTX file's notes size says.
+// The notes page size: US Letter portrait, the paper Impress prints notes
+// pages on with the en-US defaults, whatever notes size the file gives.
+//
+// # Corpus evidence
+//
+//   - pptx: deck.pptx (notes size 540 by 720) and pitch-lo.pptx (A4) print
+//     their notes pages on Letter; odp: pitch.odp, whose notes master is
+//     A4, too.
 const (
 	notesWidth  = 612
 	notesHeight = 792
@@ -37,8 +39,11 @@ const (
 // notes below, as Impress's default notes master places them.
 func (b *builder) notesPage(s *Slide, n int) (*compose.Page, *compose.StructElem) {
 	pw, ph := float64(notesWidth), float64(notesHeight)
-	if w, h := b.doc.NotesWidth, b.doc.NotesHeight; w > 0 && h > 0 && !math.IsInf(w, 0) && !math.IsInf(h, 0) {
-		pw, ph = min(w, office.MaxPageSide), min(h, office.MaxPageSide)
+	if b.opts.PageWidth > 0 && b.opts.PageHeight > 0 {
+		pw, ph = b.opts.PageWidth, b.opts.PageHeight
+	}
+	if b.opts.Landscape && pw < ph {
+		pw, ph = ph, pw
 	}
 	sw, sh := b.slideSize()
 	area := compose.Rect{Y: ph * notesSlideY, Width: pw, Height: ph * notesSlideH}

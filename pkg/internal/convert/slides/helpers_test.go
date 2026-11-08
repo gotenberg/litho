@@ -2,6 +2,7 @@ package slides
 
 import (
 	"context"
+	"image"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -127,4 +129,10 @@ func find(t *testing.T, pg *compose.Page, s string) run {
 func near(a, b, tol float64) bool {
 	d := a - b
 	return d <= tol && d >= -tol
+}
+
+// tinyPicture returns a 2 by 2 raster picture.
+func tinyPicture() *layout.Picture {
+	img := image.NewNRGBA(image.Rect(0, 0, 2, 2))
+	return &layout.Picture{Source: &compose.ImageSource{Image: img}, Width: 2, Height: 2}
 }
