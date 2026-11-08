@@ -939,6 +939,35 @@ func avoidsBetween(a, b *box) bool {
 	return av(a.st.BreakAfter) || av(b.st.BreakBefore)
 }
 
+// avoidedBefore reports whether a break before b would be one that
+// break-before or break-after avoids: between b and its previous in-flow
+// sibling, or, b being its parent's first, before the parent (CSS
+// Fragmentation 3, 4.1: a break between a box and its first child is the
+// break before the parent too).
+func avoidedBefore(b *box) bool {
+	for depth := 0; b != nil && b.parent != nil && depth < maxAvoidDepth; depth++ {
+		var prev *box
+		for _, k := range b.parent.kids {
+			if k == b {
+				break
+			}
+			if !k.inline && k.float == css.FloatNone && !k.abs {
+				prev = k
+			}
+		}
+		if prev != nil {
+			return avoidsBetween(prev, b)
+		}
+		b = b.parent
+	}
+	return false
+}
+
+// maxAvoidDepth bounds the ancestors [avoidedBefore] climbs. Anti-DoS
+// guard, not spec-mandated: a break before a box that deep is decided
+// by its nearer ancestors already.
+const maxAvoidDepth = 64
+
 // straddles reports whether b's border box crosses a page cut.
 func (e *engine) straddles(b *box) bool {
 	return e.pageOf(b.y) != e.pageOf(b.y+b.borderH()-1e-3)

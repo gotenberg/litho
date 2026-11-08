@@ -338,3 +338,30 @@ func TestMarginCollapse_BodyOverflowGoesToViewport(t *testing.T) {
 		})
 	}
 }
+
+func TestOrphans_GiveWayToBreakAvoid(t *testing.T) {
+	// The second block's first line would be an orphan on the first page;
+	// moving it to the second would break where break-before avoids it,
+	// so orphans give way (CSS Fragmentation 3, 4.4).
+	block := func(mods ...func(*css.Style)) *Node {
+		st := sty(append([]func(*css.Style){width(10)}, mods...)...)
+		return el(st, txt(st, "a a"))
+	}
+	avoid := func(s *css.Style) { s.BreakBefore = css.BreakAvoid }
+	tests := []struct {
+		name string
+		mods []func(*css.Style)
+		want float64
+	}{
+		{"orphans move the block", nil, 30},
+		{"break-before avoid keeps it", []func(*css.Style){avoid}, 20},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rb := boxes(t, doc(block(), block(tt.mods...)), page(10, 30))
+			if got := kid(t, rb, 0, 1).lines[0].y / css.Pt; !near(got, tt.want) {
+				t.Errorf("second block's first line at %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
