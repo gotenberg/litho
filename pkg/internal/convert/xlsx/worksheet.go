@@ -439,10 +439,12 @@ func isoSerial(s string) (float64, bool) {
 // guard, not spec-mandated: a link covers a cell or a merged range.
 const maxHyperlinkCells = 4096
 
-// hyperlinks reads the sheet's hyperlinks (ECMA-376 Part 1, 18.3.1.47):
-// an external target through its relationship becomes the link of the
-// cells of its range that hold a value; a location inside the workbook
-// is not followed.
+// hyperlinks reads the sheet's hyperlinks (ECMA-376 Part 1, 18.3.1.47)
+// onto the cells of their range that hold a value: an external target
+// through its relationship, its location appended after a #; a location
+// alone, a place in the workbook ("Sheet2!A1"), as # and the location,
+// which the builder resolves to the page that cell prints on, as
+// LibreOffice links it.
 func (w *sheetReader) hyperlinks(e *ooxml.Element) {
 	r, sh := w.r, w.sh
 	for _, h := range e.Kids() {
@@ -457,15 +459,12 @@ func (w *sheetReader) hyperlinks(e *ooxml.Element) {
 		if id, ok := h.AttrNS(ooxml.NSR, "id"); ok {
 			if rel, ok := r.pkg.RelationshipByID(w.part, id); ok && rel.External {
 				target = rel.Target
-				if loc := attr(h, "location"); loc != "" {
-					target += "#" + loc
-				}
 			}
 		}
+		if loc := decodeXString(attr(h, "location")); loc != "" {
+			target += "#" + loc
+		}
 		if target == "" {
-			if attr(h, "location") != "" {
-				r.warn("unsupported-content", "a link to a place in the workbook is left out")
-			}
 			continue
 		}
 		n := 0

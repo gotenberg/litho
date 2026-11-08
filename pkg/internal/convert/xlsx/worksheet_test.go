@@ -135,7 +135,8 @@ func TestRead_CellValues(t *testing.T) {
 }
 
 // TestRead_Hyperlinks checks external links through their relationships
-// on the cells of their range, and the internal ones left out.
+// on the cells of their range, and the places in the workbook as # and
+// the location.
 func TestRead_Hyperlinks(t *testing.T) {
 	t.Parallel()
 	files := workbookFiles([]testSheet{{
@@ -144,15 +145,12 @@ func TestRead_Hyperlinks(t *testing.T) {
 			`<hyperlinks><hyperlink ref="A1:B1" r:id="rIdL" location="top"/><hyperlink ref="C1" location="'S'!A1"/></hyperlinks>`,
 		rels: `<Relationship Id="rIdL" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com/a" TargetMode="External"/>`,
 	}}, minimalStyles, "", "", nil)
-	doc, warnings := readBytes(t, zipFiles(t, files))
+	doc, _ := readBytes(t, zipFiles(t, files))
 	sh := doc.Sheets[0]
-	for col, want := range []string{"https://example.com/a#top", "https://example.com/a#top", ""} {
+	for col, want := range []string{"https://example.com/a#top", "https://example.com/a#top", "#'S'!A1"} {
 		if c, _ := cellAt(sh, 0, col); c.Href != want {
 			t.Errorf("column %d links %q, want %q", col, c.Href, want)
 		}
-	}
-	if !hasWarning(warnings, "place in the workbook") {
-		t.Errorf("warnings %v lack the internal link", warnings)
 	}
 }
 
