@@ -3,6 +3,8 @@ package sheet
 import (
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 )
 
@@ -57,5 +59,35 @@ func TestUsedRange_FormattedColumns(t *testing.T) {
 				t.Errorf("used range %+v, want last column %d", u, tc.want)
 			}
 		})
+	}
+}
+
+// TestConvert_NoValues locks the page of a book whose cells hold no
+// value: its first sheet's first page prints with the borders and fills
+// its cells paint, as LibreOffice prints it.
+func TestConvert_NoValues(t *testing.T) {
+	border := &Style{Border: [4]Border{{Line: LineSolid, Width: 1}, {Line: LineSolid, Width: 1}, {Line: LineSolid, Width: 1}, {Line: LineSolid, Width: 1}}}
+	sh := &Sheet{Name: "S", Rows: []Row{{Index: 3, Cells: []Cell{{Column: 2, Style: border}}}}}
+	out := convert(t, newDoc(sh), office.Options{})
+	if len(out.Pages) != 1 {
+		t.Fatalf("%d pages, want 1", len(out.Pages))
+	}
+	strokes := 0
+	var walk func([]compose.Fragment)
+	walk = func(fs []compose.Fragment) {
+		for _, f := range fs {
+			switch f := f.(type) {
+			case *compose.Group:
+				walk(f.Content)
+			case *compose.Path:
+				if f.Stroke != nil || f.Fill != nil {
+					strokes++
+				}
+			}
+		}
+	}
+	walk(out.Pages[0].Content)
+	if strokes == 0 {
+		t.Error("the borders of the cell are not drawn")
 	}
 }

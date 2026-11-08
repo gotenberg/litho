@@ -52,6 +52,11 @@ type sheetPlan struct {
 	pages         []*pagePlan
 	// single reports a page sized to the sheet's content.
 	single bool
+	// first is the first page of the first print range, printed or not:
+	// what a book without a printed page shows; firstRows the first row
+	// band layoutPages cut, kept or not.
+	first     *pagePlan
+	firstRows *band
 }
 
 // docArea returns the room for cells on a page at zoom percent, in sheet
@@ -191,6 +196,9 @@ func (sp *sheetPlan) layoutPages(a Range, zoom int) ([]band, []band, [][]bool) {
 	from = a.FirstRow
 	flush := func(last int) {
 		b := band{from, last}
+		if sp.firstRows == nil {
+			sp.firstRows = &b
+		}
 		if !sp.g.empty(Range{FirstRow: b.first, LastRow: b.last, FirstColumn: a.FirstColumn, LastColumn: a.LastColumn}) {
 			h := make([]bool, len(cols))
 			leftEmpty := false
@@ -339,7 +347,11 @@ func (sp *sheetPlan) plan() {
 	for _, a := range areas {
 		zoom := sp.zoomFor(a)
 		sp.zoom = float64(zoom) / 100
+		sp.firstRows = nil
 		cols, rows, hidden := sp.layoutPages(a, zoom)
+		if sp.first == nil && sp.firstRows != nil && len(cols) > 0 {
+			sp.first = &pagePlan{sp: sp, area: a, rows: *sp.firstRows, cols: cols[0]}
+		}
 		add := func(ri, ci int) {
 			if hidden[ri][ci] || len(sp.pages) >= maxSheetPages {
 				return
