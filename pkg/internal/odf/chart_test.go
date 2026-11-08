@@ -241,3 +241,12 @@ func TestChartFromDocument_LinkedAxisFormat(t *testing.T) {
 		t.Errorf("linked axis format = %+v", c.Axes)
 	}
 }
+
+func TestChartFromDocument_AxisLabelBreaks(t *testing.T) {
+	st := chartStyles + `<style:style style:name="b1" style:family="chart"><style:chart-properties text:line-break="true"/></style:style>` +
+		`<style:style style:name="b2" style:family="chart"><style:chart-properties text:line-break="false" chart:text-overlap="true"/></style:style>`
+	c := readODFChart(t, chartContent(st, "bar", "", `<chart:axis chart:dimension="x" chart:style-name="b1"/><chart:axis chart:dimension="y" chart:style-name="b2"/>`+series))
+	if len(c.Axes) != 2 || c.Axes[0].NoBreak || c.Axes[0].Overlap || !c.Axes[1].NoBreak || !c.Axes[1].Overlap {
+		t.Errorf("axes = %+v %+v", c.Axes[0], c.Axes[1])
+	}
+}

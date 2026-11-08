@@ -585,6 +585,12 @@ func (r *chartReader) axis(ax *Element) *chart.Axis {
 	a.MinorTicks = ticks(r.boolProp(name, "tick-marks-minor-inner", false), r.boolProp(name, "tick-marks-minor-outer", false))
 	a.Line = r.lineOf(name, &chart.Stroke{Color: compose.Color{R: 0xb3 / 255.0, G: 0xb3 / 255.0, B: 0xb3 / 255.0, A: 1}})
 	a.Style = r.textStyle(name, r.textDefault)
+	// Labels break only when the style asks (ODF 1.3 Part 3, 20.25
+	// text:line-break; chart2's axis default is off) and overlap only when
+	// it allows it (20.21 chart:text-overlap).
+	lb, _ := r.prop(name, "chart-properties", NSText, "line-break")
+	a.NoBreak = lb != "true"
+	a.Overlap = r.boolProp(name, "text-overlap", false)
 	// An axis linked to its source's format carries the format the
 	// application saved for it, which a chart's own table, holding bare
 	// numbers, cannot override (ODF 1.3 Part 3, 20.20
