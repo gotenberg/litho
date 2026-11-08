@@ -230,12 +230,11 @@ func (r *reader) graphicFrame(c *shapeCtx, el *ooxml.Element, depth int) (*slide
 	case uriDiagram:
 		return r.diagram(c, data, s, depth)
 	case uriChartEx:
-		// The reader takes the picture PowerPoint saves in the Fallback
-		// of the cx1 and cx2 Choice it does not understand; a chart of
-		// this kind outside one is left out until a reader of its part
-		// exists.
-		r.warn("unsupported-content", "an Office 2016 chart (funnel, waterfall, sunburst, treemap, histogram, box and whisker) without a fallback picture is left out")
-		return nil, nil
+		ch := r.chartExOf(c.part, data)
+		if ch == nil {
+			return nil, nil
+		}
+		s.Kind, s.Chart = slides.KindChart, ch
 	case uriOLE:
 		ole := data.Child(nsP, "oleObj")
 		pic := ole.Child(nsP, "pic")

@@ -38,7 +38,7 @@ const (
 // (ECMA-376 Part 3, 10.2): PresentationML, DrawingML and its picture and
 // chart vocabularies; any other Choice, an OLE object's VML one or a
 // PowerPoint 2010 extension, takes its Fallback.
-var understood = []string{nsP, ooxml.NSA, ooxml.NSR, ooxml.NSPic, ooxml.NSChart}
+var understood = append([]string{nsP, ooxml.NSA, ooxml.NSR, ooxml.NSPic, ooxml.NSChart}, chartExChoices...)
 
 // maxSlides caps the slides of a presentation. Anti-DoS guard, not
 // spec-mandated: every slide is a page, and real decks hold a few hundred
