@@ -392,3 +392,37 @@ func TestRender_ManualLayouts(t *testing.T) {
 		t.Errorf("legend frames = %d, want one at (50, 40)", len(lg))
 	}
 }
+
+func TestRender_LegendOrder(t *testing.T) {
+	tests := []struct {
+		name       string
+		horizontal bool
+		grouping   Grouping
+		pos        LegendPosition
+		want       string
+	}{
+		{"columns", false, Clustered, LegendRight, "AB"},
+		{"stacked columns beside", false, Stacked, LegendRight, "BA"},
+		{"stacked columns below", false, Stacked, LegendBottom, "AB"},
+		{"bars", true, Clustered, LegendBottom, "BA"},
+		{"stacked bars", true, Stacked, LegendRight, "AB"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := barChart(1, 2)
+			c.Groups[0].Series[0].Name = "A"
+			c.Groups[0].Series = append(c.Groups[0].Series, &Series{Index: 1, Name: "B", Values: Data{Values: nums(1, 1), Cached: true}})
+			c.Groups[0].Horizontal, c.Groups[0].Grouping = tt.horizontal, tt.grouping
+			c.Legend = &Legend{Position: tt.pos, Style: TextStyle{Size: 10, Color: compose.Black}}
+			got := ""
+			for _, s := range texts(Render(context.Background(), ahem(t), c, chartRect)) {
+				if s == "A" || s == "B" {
+					got += s
+				}
+			}
+			if got != tt.want {
+				t.Errorf("legend order %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
