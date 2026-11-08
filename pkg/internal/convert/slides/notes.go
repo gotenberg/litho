@@ -77,7 +77,7 @@ func (b *builder) notesPage(s *Slide, n int) (*compose.Page, *compose.StructElem
 	}
 	// The notes page's own size, at the paper's top-left corner.
 	nw, nh := pw, ph
-	if w, h := b.doc.NotesWidth, b.doc.NotesHeight; w > 0 && h > 0 && w <= office.MaxPageSide && h <= office.MaxPageSide && !(s.Notes == nil && b.firstSlide(s)) {
+	if w, h := b.doc.NotesWidth, b.doc.NotesHeight; w > 0 && h > 0 && w <= office.MaxPageSide && h <= office.MaxPageSide && (s.Notes != nil || !b.firstSlide(s)) {
 		nw, nh = w, h
 	}
 	master := s.Notes != nil && usable(b.doc.NotesSlideBox)

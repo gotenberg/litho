@@ -194,12 +194,7 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 		// both sides of a centred one, left of an end-aligned one
 		// (SdrObjCustomShape::TakeTextRect).
 		if nat := b.naturalWidth(body, f); nat > lw {
-			switch overflowSide(body) {
-			case css.AlignCenter:
-				dx = (lw - nat) / 2
-			case css.AlignRight:
-				dx = lw - nat
-			}
+			dx = (lw - nat) * overflowShare(body)
 			lw = nat
 		}
 	}
@@ -339,30 +334,32 @@ func (b *builder) naturalWidth(body *TextBody, f fit) float64 {
 	return min(best, office.MaxPageSide)
 }
 
-// overflowSide returns how a body's unwrapped text wider than its
-// rectangle sits on it: by its first paragraph's alignment, left,
-// centred or right.
-func overflowSide(body *TextBody) css.TextAlign {
+// overflowShare returns the share of the overflow of a body's unwrapped
+// text wider than its rectangle that falls left of it: by its first
+// paragraph's alignment, none when it starts at the left, half when it is
+// centred, all when it ends at the right.
+func overflowShare(body *TextBody) float64 {
 	if len(body.Paragraphs) == 0 {
-		return css.AlignLeft
+		return 0
 	}
 	p := &body.Paragraphs[0]
 	rtl := p.RightToLeft || body.RightToLeft
 	switch p.Align {
 	case css.AlignCenter:
-		return css.AlignCenter
+		return 0.5
 	case css.AlignRight:
-		return css.AlignRight
+		return 1
 	case css.AlignEnd:
 		if !rtl {
-			return css.AlignRight
+			return 1
 		}
-	case css.AlignStart, css.AlignAuto, css.AlignJustify:
+	case css.AlignStart, css.AlignAuto, css.AlignJustify, css.AlignJustifyAll:
 		if rtl {
-			return css.AlignRight
+			return 1
 		}
+	case css.AlignLeft:
 	}
-	return css.AlignLeft
+	return 0
 }
 
 // fitBody returns the scaling the body is laid out at in a box w by h: a
