@@ -125,3 +125,48 @@ func TestFootnote_InColumns(t *testing.T) {
 		t.Errorf("pixels:\n%s\nwant:\n%s", rows[1:], want)
 	}
 }
+
+func TestFootnote_TableCellCallGoesToItsPage(t *testing.T) {
+	t.Parallel()
+	red2 := sty(font(2), fg(red))
+	cell := part(css.TableCell, mods(font(2), fg(red)), txt(red2, "X"), call("X", "XX"))
+	tests := []struct {
+		name string
+		root *Node
+		want string
+	}{
+		{"the body joins the call's page", doc(table(nil, tr(nil, cell))), `
+			RRRR__
+			RRRR__
+			______
+			______
+			BBBB__
+			BBBB__`},
+		{"the row breaks above the area", doc(el(red2, txt(red2, "X")), table(nil, tr(nil, part(css.TableCell, mods(font(2), fg(red)), txt(red2, "X"), call("X", "XX"), el(red2, txt(red2, "X")))))), `
+			RR____
+			RR____
+			RRRR__
+			RRRR__
+			BBBB__
+			BBBB__
+			RR____
+			RR____
+			______
+			______
+			______
+			______`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			res := run(t, tt.root, PageBox{Width: px(6), Height: px(6)})
+			var rows string
+			for i := range res.Pages {
+				rows += "\n" + strings.Join(grid(render(t, res, i+1)), "\n")
+			}
+			if want := normalize(tt.want); rows[1:] != want {
+				t.Errorf("pixels:\n%s\nwant:\n%s", rows[1:], want)
+			}
+		})
+	}
+}

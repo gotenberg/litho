@@ -611,11 +611,11 @@ func vaKind(st *css.Style) css.AlignKind {
 	return css.Baseline
 }
 
-// layoutTable lays out the table box t in the containing block cb, the
+// layoutTableOnce lays out the table box t in the containing block cb, the
 // wrapper's content box, its border top at y: column widths (CSS 2.1,
 // 17.5.2), row heights and cell alignment (17.5.3), then the rows down the
 // pages, header and footer repeated where the table breaks.
-func (e *engine) layoutTable(t *box, cb cblock, y float64) {
+func (e *engine) layoutTableOnce(t *box, cb cblock, y float64) {
 	td := t.tdata
 	t.laidOut = true
 	e.tableEdges(td, cb.w)

@@ -190,8 +190,10 @@
 // a quarter turn into the box (writing.go); upright glyphs, vertical-lr's
 // line order and vertical flows nested in vertical ones are not laid out.
 // 3D transforms and hyphenation are out of scope;
-// a footnote call inside an inline block, a table cell or a flex item is
-// laid out off the page cuts, and its body goes to a page after the flow;
+// a footnote call inside an inline block or a flex item is laid out off
+// the page cuts, and its body goes to a page after the flow (a table
+// cell's calls go to the pages their lines land on, the table laid out
+// again against the footnote areas);
 // visibility:
 // collapse on a flex item hides it as visibility: hidden does.
 //
