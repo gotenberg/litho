@@ -59,9 +59,17 @@ type Custom struct {
 	Paths []PathDef
 	// View, when not nil, is an OpenDocument svg:viewBox: the guide and
 	// path coordinate space, fitted to the box, and the left, top, right,
-	// bottom, width and height of the formulas. Nil is DrawingML's guide
-	// space: the shape's size in EMUs, with the origin at its corner.
+	// bottom, width and height of the formulas; an empty View (zero width
+	// or height) is the shape's size in 1/100 mm, as LibreOffice writes
+	// the geometry of a shape it read from DrawingML ("0 0 0 0"). Nil is
+	// DrawingML's guide space: the shape's size in EMUs, with the origin
+	// at its corner.
 	View *compose.Rect
+	// OpenUnfilled leaves the open subpaths of a filled path unfilled,
+	// stroked only, as LibreOffice draws its own OpenDocument shapes (a
+	// bracket pair, a brace); DrawingML fills an open subpath as if
+	// closed, and so does the zero value.
+	OpenUnfilled bool
 	// Unresolved lists the names the reader could not resolve, which it
 	// replaced with 0 (20.1.9.11: a guide names an earlier guide, an
 	// adjustment or a built-in).
@@ -97,7 +105,7 @@ const (
 // space (ECMA-376 Part 1, 20.1.9.15 path).
 type PathDef struct {
 	// W and H are the path's coordinate space, fitted to the box; 0 is
-	// the guide space. An OpenDocument path ignores them for the View.
+	// the guide space (or the View).
 	W, H float64
 	// Fill is how the path fills; Stroke whether it is stroked.
 	Fill   FillMode
@@ -192,6 +200,11 @@ type Path struct {
 	Mode FillMode
 }
 
+// FillRule is the rule a geometry's paths fill by: even-odd, as
+// LibreOffice fills a custom shape's polygons, so a ring's inner
+// contour is a hole whichever way it turns.
+const FillRule = compose.EvenOdd
+
 // definition returns the custom geometry g draws, nil for a rectangle.
 func definition(g *Geometry) *Custom {
 	if g == nil {
@@ -227,7 +240,44 @@ func Paths(g *Geometry, r compose.Rect) []Path {
 		if len(ops) == 0 {
 			continue
 		}
-		out = append(out, Path{Ops: ops, Fill: pd.Fill != FillNone, Stroke: pd.Stroke, Mode: pd.Fill})
+		p := Path{Ops: ops, Fill: pd.Fill != FillNone, Stroke: pd.Stroke, Mode: pd.Fill}
+		if def.OpenUnfilled && p.Fill {
+			out = append(out, splitOpen(p)...)
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// splitOpen returns p as a fill of its closed subpaths and a stroke of
+// all of them, when some subpath is open; p itself otherwise.
+func splitOpen(p Path) []Path {
+	var closed []compose.PathOp
+	open := false
+	start := 0
+	for i := 0; i <= len(p.Ops); i++ {
+		if i < len(p.Ops) && (i == start || p.Ops[i].Kind != compose.MoveTo) {
+			if p.Ops[i].Kind == compose.ClosePath {
+				closed = append(closed, p.Ops[start:i+1]...)
+				start = i + 1
+			}
+			continue
+		}
+		if start < i {
+			open = true
+		}
+		start = i
+	}
+	if !open {
+		return []Path{p}
+	}
+	var out []Path
+	if len(closed) > 0 {
+		out = append(out, Path{Ops: closed, Fill: true, Mode: p.Mode})
+	}
+	if p.Stroke {
+		out = append(out, Path{Ops: p.Ops, Stroke: true})
 	}
 	return out
 }

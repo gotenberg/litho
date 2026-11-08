@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<a:prstGeom prst=\"rightArrow\"><a:avLst><a:gd name=\"adj1\" fmla=\"val 30000\"/></a:avLst></a:prstGeom><a:custGeom><a:gdLst><a:gd name=\"g\" fmla=\"pin 0 w 10\"/></a:gdLst><a:pathLst><a:path w=\"21600\" h=\"21600\" fill=\"lighten\"><a:moveTo><a:pt x=\"g\" y=\"0\"/></a:moveTo><a:quadBezTo><a:pt x=\"0\" y=\"0\"/><a:pt x=\"h\" y=\"w\"/></a:quadBezTo><a:close/></a:path></a:pathLst></a:custGeom>")

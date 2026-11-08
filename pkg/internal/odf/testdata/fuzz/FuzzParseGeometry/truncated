@@ -1,0 +1,4 @@
+go test fuzz v1
+string("M 0 ?f8 L ?f5")
+string("min(logwidth,")
+string("5000")

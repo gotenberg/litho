@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("<a:custGeom><a:gdLst><a:gd name=\"g\" fmla=\"pin 0")

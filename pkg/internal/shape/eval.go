@@ -58,6 +58,11 @@ func newEvaluator(def *Custom, g *Geometry, r compose.Rect) *evaluator {
 	var l, t, w, h float64
 	if v := def.View; v != nil {
 		l, t, w, h = v.X, v.Y, v.Width, v.Height
+		if w <= 0 || h <= 0 {
+			// An empty view is the shape's own size in 1/100 mm, the
+			// space LibreOffice writes a DrawingML shape's geometry in.
+			w, h = r.Width*hundredthMMPerPoint, r.Height*hundredthMMPerPoint
+		}
 		ev.gx, ev.gy = r.X-l*ratio(r.Width, w), r.Y-t*ratio(r.Height, h)
 		ev.gsx, ev.gsy = ratio(r.Width, w), ratio(r.Height, h)
 	} else {
@@ -192,19 +197,14 @@ type pathBuilder struct {
 // path evaluates the commands cmds of pd into box operations.
 func (ev *evaluator) path(pd *PathDef, cmds []Cmd) []compose.PathOp {
 	pb := &pathBuilder{ev: ev, ox: ev.gx, oy: ev.gy, sx: ev.gsx, sy: ev.gsy}
-	if ev.def.View == nil && pd.W > 0 && pd.H > 0 {
-		pb.ox, pb.oy = ev.box.X, ev.box.Y
-		pb.sx, pb.sy = ev.box.Width/pd.W, ev.box.Height/pd.H
-	} else if ev.def.View == nil && (pd.W > 0 || pd.H > 0) {
-		// One of w and h alone: the other is the guide space's
-		// (20.1.9.15 path: w and h default to 0, the shape's own).
-		pb.ox, pb.oy = ev.box.X, ev.box.Y
-		if pd.W > 0 {
-			pb.sx = ev.box.Width / pd.W
-		}
-		if pd.H > 0 {
-			pb.sy = ev.box.Height / pd.H
-		}
+	// A path of its own size w by h maps 0..w onto the box; one of w and
+	// h alone leaves the other axis in guide space (20.1.9.15 path: w and
+	// h default to 0, the shape's own).
+	if pd.W > 0 {
+		pb.ox, pb.sx = ev.box.X, ev.box.Width/pd.W
+	}
+	if pd.H > 0 {
+		pb.oy, pb.sy = ev.box.Y, ev.box.Height/pd.H
 	}
 	for i := range cmds {
 		pb.cmd(&cmds[i])
@@ -350,7 +350,9 @@ func (pb *pathBuilder) ellipse(cx, cy, rx, ry, t0, dt float64) {
 
 // angleEllipse draws the ODF angle-ellipse of centre (x, y) and radii (w,
 // h) from t0 to t1 degrees, counter-clockwise on the page (ODF 1.3 Part 3,
-// 19.145, T and U), from a line to its start or a new subpath.
+// 19.145, T and U), from a line to its start or a new subpath; with no
+// subpath open a T starts one, as LibreOffice draws it, rather than a
+// line from the origin.
 func (pb *pathBuilder) angleEllipse(x, y, w, h, t0, t1 float64, move bool) {
 	sweep := math.Mod(t1-t0, 360)
 	if sweep <= 0 && t1 != t0 {
@@ -362,7 +364,7 @@ func (pb *pathBuilder) angleEllipse(x, y, w, h, t0, t1 float64, move bool) {
 	// Counter-clockwise on the y-down page is a falling parametric angle.
 	a0 := -t0 * math.Pi / 180
 	sx, sy := x+w*math.Cos(a0), y+h*math.Sin(a0)
-	if move {
+	if move || !pb.open {
 		pb.moveTo(sx, sy)
 	} else {
 		pb.lineTo(sx, sy)
@@ -371,14 +373,15 @@ func (pb *pathBuilder) angleEllipse(x, y, w, h, t0, t1 float64, move bool) {
 }
 
 // arcRect draws the ODF arc of the ellipse inscribed in a box, between
-// the rays through two points (ODF 1.3 Part 3, 19.145, A, B, W and V).
+// the rays through two points (ODF 1.3 Part 3, 19.145, A, B, W and V); an
+// A or a W with no subpath open starts one.
 func (pb *pathBuilder) arcRect(a func(int) float64, move, clockwise bool) {
 	x1, y1, x2, y2 := a(0), a(1), a(2), a(3)
 	cx, cy, rx, ry := (x1+x2)/2, (y1+y2)/2, math.Abs(x2-x1)/2, math.Abs(y2-y1)/2
 	t0 := math.Atan2((a(5)-cy)*rx, (a(4)-cx)*ry)
 	t1 := math.Atan2((a(7)-cy)*rx, (a(6)-cx)*ry)
 	sx, sy := cx+rx*math.Cos(t0), cy+ry*math.Sin(t0)
-	if move {
+	if move || !pb.open {
 		pb.moveTo(sx, sy)
 	} else {
 		pb.lineTo(sx, sy)
