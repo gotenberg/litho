@@ -72,6 +72,9 @@ type reader struct {
 	// pixels decoded against [maxTotalPixels].
 	pictures map[string]*layout.Picture
 	pixels   int64
+	// pending are the operands of conditional formats that refer to a
+	// cell, read once every sheet is.
+	pending []pendingOperand
 }
 
 // read reads the workbook pkg holds into the sheet model, with the
@@ -114,6 +117,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*sheet.Do
 	if err := r.workbook(main, root, doc); err != nil {
 		return nil, nil, err
 	}
+	r.resolveOperands(doc)
 	return doc, r.warnings, nil
 }
 

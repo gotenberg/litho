@@ -26,71 +26,137 @@ const (
 )
 
 // conditionalFormats reads the sheet's conditional formats (ECMA-376
-// Part 1, 18.3.1.18 conditionalFormatting, 18.3.1.10 cfRule) into
+// Part 1, 18.3.1.18 conditionalFormatting, 18.3.1.10 cfRule), then those
+// of its Excel 2010 extension (MS-XLSX, 2.6.30 CT_ConditionalFormattings,
+// which holds the rules whose operands refer to cells), into
 // sh.Conditional: each rule with its kind, priority, operator, constant
 // operands and differential style (18.8.14 dxf), its colour scale or data
 // bar with the thresholds resolved against the range's numbers. A data
 // bar's thresholds come from its Excel 2010 extension when it has one, as
 // LibreOffice reads them: "autoMin" and "autoMax" keep zero in the range.
-// An operand that is not a constant is kept as the rule's formula, which
-// the builder does not evaluate; a threshold given by a formula drops its
-// rule with a warning.
+// An operand that refers to one cell, absolutely or from a format of one
+// cell, takes that cell's value once the workbook is read
+// ([reader.resolveOperands]); any other operand that is not a constant is
+// kept as the rule's formula, which the builder does not evaluate, and so
+// is a threshold given by a formula.
 func (w *sheetReader) conditionalFormats(root *ooxml.Element) {
 	ext := w.dataBarExtensions(root)
 	n := 0
-	for _, cf := range root.Kids() {
-		if !cf.Is(nsMain, "conditionalFormatting") {
-			continue
-		}
-		if n >= maxCondFormats {
-			break
+	add := func(cf *ooxml.Element, ranges []sheet.Range, ns cfNames) {
+		if n >= maxCondFormats || len(ranges) == 0 {
+			return
 		}
 		n++
-		var c sheet.Conditional
-		for _, ref := range strings.Fields(attr(cf, "sqref")) {
-			if rg, ok := rangeRef(ref); ok {
-				c.Ranges = append(c.Ranges, rg)
-			}
-		}
-		if len(c.Ranges) == 0 {
-			continue
-		}
+		c := sheet.Conditional{Ranges: ranges}
+		var refs []pendingOperand
 		for _, e := range cf.Kids() {
-			if !e.Is(nsMain, "cfRule") || len(c.Rules) >= maxCondRules {
+			if !e.Is(ns.rule, "cfRule") || len(c.Rules) >= maxCondRules {
 				continue
 			}
-			c.Rules = append(c.Rules, w.cfRule(e, c.Ranges, ext))
+			if ns.rule == nsX14 && attr(e, "type") == "dataBar" && ext.used[attr(e, "id")] {
+				continue
+			}
+			rule, ops := w.cfRule(e, ranges, ext, ns)
+			for _, op := range ops {
+				op.rule = len(c.Rules)
+				refs = append(refs, op)
+			}
+			c.Rules = append(c.Rules, rule)
 		}
-		if len(c.Rules) > 0 {
-			w.sh.Conditional = append(w.sh.Conditional, c)
+		if len(c.Rules) == 0 {
+			return
 		}
+		for _, op := range refs {
+			op.sh, op.cond = w.sh, len(w.sh.Conditional)
+			if len(w.r.pending) < maxCondFormats*maxCondRules {
+				w.r.pending = append(w.r.pending, op)
+			}
+		}
+		w.sh.Conditional = append(w.sh.Conditional, c)
+	}
+	for _, cf := range root.Kids() {
+		if cf.Is(nsMain, "conditionalFormatting") {
+			add(cf, sqref(attr(cf, "sqref")), mainNames)
+		}
+	}
+	for _, cf := range ext.formats {
+		add(cf, sqref(textOf(cf.Child(nsXM, "sqref"))), x14Names)
 	}
 }
 
-// cfRule reads one rule against the ranges it applies to.
-func (w *sheetReader) cfRule(e *ooxml.Element, ranges []sheet.Range, ext map[string]*ooxml.Element) sheet.Rule {
+// sqref parses a list of ranges (ECMA-376 Part 1, 18.18.76 ST_Sqref).
+func sqref(s string) []sheet.Range {
+	var out []sheet.Range
+	for _, ref := range strings.Fields(s) {
+		if rg, ok := rangeRef(ref); ok {
+			out = append(out, rg)
+		}
+	}
+	return out
+}
+
+// cfNames are the names of a rule's parts: the namespace of the rule and
+// its children, and the formula element.
+type cfNames struct {
+	rule, formulaNS, formula string
+}
+
+var (
+	mainNames = cfNames{rule: nsMain, formulaNS: nsMain, formula: "formula"}
+	x14Names  = cfNames{rule: nsX14, formulaNS: nsXM, formula: "f"}
+)
+
+// pendingOperand is an operand of a rule that refers to a cell, read once
+// the workbook is: the rule (its sheet, format and index), the operand's
+// index among its values, the sheet the reference names ("" for the
+// rule's own) and the cell.
+type pendingOperand struct {
+	sh            *sheet.Sheet
+	cond, rule    int
+	value         int
+	sheetName     string
+	row, col      int
+	formula       string
+	otherFormulas bool
+}
+
+// cfRule reads one rule against the ranges it applies to, with the
+// operands that refer to a cell.
+func (w *sheetReader) cfRule(e *ooxml.Element, ranges []sheet.Range, ext *dataBarExt, ns cfNames) (sheet.Rule, []pendingOperand) {
 	r := w.r
 	rule := sheet.Rule{Priority: max(intAttr(e, "priority", 0), 0), StopIfTrue: boolAttr(e, "stopIfTrue")}
 	if id, ok := ooxml.Int(attr(e, "dxfId")); ok {
 		rule.Style = r.dxfStyle(id)
+	} else if d := e.Child(nsX14, "dxf"); d != nil {
+		rule.Style = r.dxfElementStyle(d)
 	}
 	var formulas []string
 	for _, f := range e.Kids() {
-		if f.Is(nsMain, "formula") && len(formulas) < 3 {
+		if f.Is(ns.formulaNS, ns.formula) && len(formulas) < 3 {
 			formulas = append(formulas, textOf(f))
 		}
+	}
+	var refs []pendingOperand
+	hard := false
+	operand := func(f string) {
+		if v, ok := constant(f); ok {
+			rule.Values = append(rule.Values, v)
+			return
+		}
+		rule.Formula = f
+		if name, row, col, ok := cellOperand(f, ranges); ok {
+			refs = append(refs, pendingOperand{value: len(rule.Values), sheetName: name, row: row, col: col, formula: f})
+		} else {
+			hard = true
+		}
+		rule.Values = append(rule.Values, sheet.Value{})
 	}
 	switch typ := attr(e, "type"); typ {
 	case "cellIs":
 		rule.Kind = sheet.RuleCellIs
 		rule.Operator = attr(e, "operator")
 		for _, f := range formulas {
-			v, ok := constant(f)
-			if !ok {
-				rule.Formula = f
-				break
-			}
-			rule.Values = append(rule.Values, v)
+			operand(f)
 		}
 	case "containsText", "notContainsText", "beginsWith", "endsWith":
 		rule.Kind = sheet.RuleText
@@ -98,7 +164,12 @@ func (w *sheetReader) cfRule(e *ooxml.Element, ranges []sheet.Range, ext map[str
 		if typ == "notContainsText" {
 			rule.Operator = "notContains"
 		}
-		rule.Values = []sheet.Value{{Kind: sheet.Text, Text: attr(e, "text")}}
+		if t, ok := e.Attr("text"); ok || len(formulas) < 2 {
+			rule.Values = []sheet.Value{{Kind: sheet.Text, Text: t}}
+		} else {
+			// The extension's rule names its text by its second formula.
+			operand(formulas[1])
+		}
 	case "containsBlanks":
 		rule.Kind = sheet.RuleBlanks
 	case "notContainsBlanks":
@@ -129,10 +200,10 @@ func (w *sheetReader) cfRule(e *ooxml.Element, ranges []sheet.Range, ext map[str
 			rule.Kind, rule.Formula = sheet.RuleExpression, "stdDev"
 		}
 	case "colorScale":
-		cs := e.Child(nsMain, "colorScale")
+		cs := e.Child(ns.rule, "colorScale")
 		rule.Kind = sheet.RuleColorScale
 		for _, k := range cs.Kids() {
-			if k.Is(nsMain, "color") {
+			if k.Is(ns.rule, "color") {
 				c, ok := r.color(k)
 				if !ok {
 					c = css.Color{A: 1}
@@ -140,23 +211,27 @@ func (w *sheetReader) cfRule(e *ooxml.Element, ranges []sheet.Range, ext map[str
 				rule.Scale = append(rule.Scale, c)
 			}
 		}
-		vals, ok := w.cfvos(cs, nsMain, "val", ranges)
+		vals, ok := w.cfvos(cs, ns.rule, "val", ranges)
 		if !ok || len(vals) != len(rule.Scale) {
 			rule.Kind, rule.Formula = sheet.RuleExpression, "colorScale"
 			break
 		}
 		rule.Values = vals
 	case "dataBar":
-		db := e.Child(nsMain, "dataBar")
+		db := e.Child(ns.rule, "dataBar")
 		rule.Kind = sheet.RuleDataBar
-		if c, ok := r.color(db.Child(nsMain, "color")); ok {
+		if c, ok := r.color(db.Child(ns.rule, "color")); ok {
+			rule.Bar = c
+		} else if c, ok := r.color(db.Child(nsX14, "fillColor")); ok {
 			rule.Bar = c
 		}
-		src, ns, valAttr := db, nsMain, "val"
-		if x := ext[extID(e)]; x != nil {
-			src, ns, valAttr = x, nsX14, "value"
+		src, cfvoNS, valAttr := db, ns.rule, "val"
+		if x := ext.bars[extID(e)]; x != nil {
+			src, cfvoNS, valAttr = x, nsX14, "value"
+		} else if ns.rule == nsX14 {
+			valAttr = "value"
 		}
-		vals, ok := w.cfvos(src, ns, valAttr, ranges)
+		vals, ok := w.cfvos(src, cfvoNS, valAttr, ranges)
 		if !ok || len(vals) != 2 {
 			rule.Kind, rule.Formula = sheet.RuleExpression, "dataBar"
 			break
@@ -170,8 +245,105 @@ func (w *sheetReader) cfRule(e *ooxml.Element, ranges []sheet.Range, ext map[str
 		if len(formulas) > 0 {
 			rule.Formula = formulas[0]
 		}
+		return rule, nil
 	}
-	return rule
+	for i := range refs {
+		refs[i].otherFormulas = hard
+	}
+	return rule, refs
+}
+
+// cellOperand reads an operand that refers to one cell: an absolute
+// reference ("$B$1", "Sheet2!$A$1"), or a relative one when the format
+// covers one cell, which it then names as written (ECMA-376 Part 1,
+// 18.17.2.3: a relative reference is relative to the first cell of the
+// range).
+func cellOperand(f string, ranges []sheet.Range) (name string, row, col int, ok bool) {
+	f = strings.TrimSpace(f)
+	if i := strings.LastIndexByte(f, '!'); i >= 0 {
+		name, f = unquoteSheet(f[:i]), f[i+1:]
+	}
+	row, col, ok = cellRef(f)
+	if !ok {
+		return "", 0, 0, false
+	}
+	absolute := strings.HasPrefix(f, "$") && strings.Contains(f[1:], "$")
+	single := len(ranges) == 1 && ranges[0].FirstRow == ranges[0].LastRow && ranges[0].FirstColumn == ranges[0].LastColumn
+	return name, row, col, absolute || single
+}
+
+// resolveOperands gives the rules' operands that refer to a cell that
+// cell's value, once every sheet is read: its number, its text, the empty
+// text for an empty cell a text rule names and 0 for one a comparison
+// names. A rule whose operands all resolve loses its formula; one whose
+// reference names no sheet of the book or an error keeps it.
+func (r *reader) resolveOperands(doc *sheet.Document) {
+	type ruleKey struct {
+		sh         *sheet.Sheet
+		cond, rule int
+	}
+	failed := map[ruleKey]bool{}
+	for _, op := range r.pending {
+		if op.cond >= len(op.sh.Conditional) || op.rule >= len(op.sh.Conditional[op.cond].Rules) {
+			continue
+		}
+		rule := &op.sh.Conditional[op.cond].Rules[op.rule]
+		key := ruleKey{op.sh, op.cond, op.rule}
+		v, ok := r.cellValue(doc, op.sh, op.sheetName, op.row, op.col, rule.Kind == sheet.RuleText)
+		if !ok || op.value >= len(rule.Values) || op.otherFormulas {
+			failed[key] = true
+			continue
+		}
+		rule.Values[op.value] = v
+	}
+	for _, op := range r.pending {
+		key := ruleKey{op.sh, op.cond, op.rule}
+		if op.cond < len(op.sh.Conditional) && op.rule < len(op.sh.Conditional[op.cond].Rules) && !failed[key] {
+			op.sh.Conditional[op.cond].Rules[op.rule].Formula = ""
+		}
+	}
+	r.pending = nil
+}
+
+// cellValue returns the value of the cell at row and col of the sheet
+// named name, own when the name is empty.
+func (r *reader) cellValue(doc *sheet.Document, own *sheet.Sheet, name string, row, col int, text bool) (sheet.Value, bool) {
+	sh := own
+	if name != "" {
+		sh = nil
+		for _, s := range doc.Sheets {
+			if strings.EqualFold(s.Name, name) {
+				sh = s
+				break
+			}
+		}
+		if sh == nil {
+			return sheet.Value{}, false
+		}
+	}
+	for _, rw := range sh.Rows {
+		if rw.Index != row {
+			continue
+		}
+		for _, c := range rw.Cells {
+			if c.Column != col {
+				continue
+			}
+			switch c.Value.Kind {
+			case sheet.Number, sheet.Bool:
+				return sheet.Value{Kind: sheet.Number, Number: c.Value.Number}, true
+			case sheet.Text:
+				return sheet.Value{Kind: sheet.Text, Text: c.Value.Text}, true
+			case sheet.Error:
+				return sheet.Value{}, false
+			case sheet.Empty:
+			}
+		}
+	}
+	if text {
+		return sheet.Value{Kind: sheet.Text}, true
+	}
+	return sheet.Value{Kind: sheet.Number}, true
 }
 
 // cfvos resolves the thresholds of a colour scale or a data bar (18.3.1.11
@@ -216,21 +388,45 @@ func (w *sheetReader) cfvos(e *ooxml.Element, ns, valAttr string, ranges []sheet
 	return out, true
 }
 
-// dataBarExtensions returns the Excel 2010 data bars of the worksheet's
-// extLst by the id their cfRule's extension names (MS-XLSX, 2.6.30).
-func (w *sheetReader) dataBarExtensions(root *ooxml.Element) map[string]*ooxml.Element {
-	out := map[string]*ooxml.Element{}
+// dataBarExt is the Excel 2010 extension of a worksheet's conditional
+// formats: its formats, and the data bars a cfRule names by id, which
+// extend that rule rather than stand alone.
+type dataBarExt struct {
+	formats []*ooxml.Element
+	bars    map[string]*ooxml.Element
+	used    map[string]bool
+}
+
+// dataBarExtensions returns the Excel 2010 conditional formats of the
+// worksheet's extLst (MS-XLSX, 2.6.30), with the data bars the
+// worksheet's own rules name.
+func (w *sheetReader) dataBarExtensions(root *ooxml.Element) *dataBarExt {
+	out := &dataBarExt{bars: map[string]*ooxml.Element{}, used: map[string]bool{}}
 	for _, x := range root.Child(nsMain, "extLst").Kids() {
 		for _, cfs := range x.Kids() {
 			if !cfs.Is(nsX14, "conditionalFormattings") {
 				continue
 			}
 			for _, cf := range cfs.Kids() {
+				if !cf.Is(nsX14, "conditionalFormatting") || len(out.formats) >= maxCondFormats {
+					continue
+				}
+				out.formats = append(out.formats, cf)
 				for _, rule := range cf.Kids() {
-					if db := rule.Child(nsX14, "dataBar"); rule.Is(nsX14, "cfRule") && db != nil && len(out) < maxCondFormats {
-						out[attr(rule, "id")] = db
+					if db := rule.Child(nsX14, "dataBar"); rule.Is(nsX14, "cfRule") && db != nil && len(out.bars) < maxCondFormats {
+						out.bars[attr(rule, "id")] = db
 					}
 				}
+			}
+		}
+	}
+	for _, cf := range root.Kids() {
+		if !cf.Is(nsMain, "conditionalFormatting") {
+			continue
+		}
+		for _, e := range cf.Kids() {
+			if id := extID(e); id != "" && out.bars[id] != nil {
+				out.used[id] = true
 			}
 		}
 	}
@@ -279,7 +475,14 @@ func (r *reader) dxfStyle(id int) *sheet.Style {
 	if id < 0 || id >= len(s.dxfs) {
 		return nil
 	}
-	e := s.dxfs[id]
+	st := r.dxfElementStyle(s.dxfs[id])
+	s.dxfStyles[id] = st
+	return st
+}
+
+// dxfElementStyle returns the differential format e as the fields of a
+// style it sets, as dxfStyle says.
+func (r *reader) dxfElementStyle(e *ooxml.Element) *sheet.Style {
 	d := r.readDxf(e)
 	st := &sheet.Style{}
 	if d.bold != nil {
@@ -320,6 +523,5 @@ func (r *reader) dxfStyle(id int) *sheet.Style {
 		}
 		st.Format = code
 	}
-	s.dxfStyles[id] = st
 	return st
 }

@@ -19,10 +19,11 @@ func TestRead_ConditionalFormats(t *testing.T) {
 		`<dxf><numFmt numFmtId="200" formatCode="0.000"/><border><bottom style="thin"><color rgb="FF0000FF"/></bottom></border></dxf>` +
 		`</dxfs>`
 	ws := `<sheetData>` +
-		`<row r="1"><c r="A1"><v>1</v></c></row><row r="2"><c r="A2"><v>2</v></c></row>` +
+		`<row r="1"><c r="A1"><v>1</v></c><c r="B1" t="inlineStr"><is><t>ab</t></is></c></row><row r="2"><c r="A2"><v>2</v></c></row>` +
 		`<row r="3"><c r="A3"><v>3</v></c></row><row r="4"><c r="A4"><v>-1</v></c></row></sheetData>` +
 		`<conditionalFormatting sqref="A1:A4 C1"><cfRule type="cellIs" dxfId="0" priority="2" operator="between" stopIfTrue="1"><formula>1</formula><formula>"x""y"</formula></cfRule>` +
-		`<cfRule type="cellIs" dxfId="1" priority="1" operator="equal"><formula>$B$1</formula></cfRule></conditionalFormatting>` +
+		`<cfRule type="cellIs" dxfId="1" priority="1" operator="equal"><formula>$B$1</formula></cfRule>` +
+		`<cfRule type="cellIs" priority="15" operator="equal"><formula>A2</formula></cfRule></conditionalFormatting>` +
 		`<conditionalFormatting sqref="A1:A4"><cfRule type="containsText" priority="3" operator="containsText" text="ab"><formula>NOT(ISERROR(SEARCH("ab",A1)))</formula></cfRule>` +
 		`<cfRule type="top10" priority="4" percent="1" rank="50"/><cfRule type="top10" priority="5" bottom="1" rank="2"/>` +
 		`<cfRule type="aboveAverage" priority="6" aboveAverage="0"/><cfRule type="duplicateValues" priority="7"/><cfRule type="containsBlanks" priority="8"/>` +
@@ -35,7 +36,9 @@ func TestRead_ConditionalFormats(t *testing.T) {
 		`</conditionalFormatting>` +
 		`<extLst><ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}" xmlns:x14="` + nsX14 + `"><x14:conditionalFormattings><x14:conditionalFormatting xmlns:xm="` + nsXM + `">` +
 		`<x14:cfRule type="dataBar" id="{1}"><x14:dataBar><x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/></x14:dataBar></x14:cfRule><xm:sqref>A1:A4</xm:sqref>` +
-		`</x14:conditionalFormatting></x14:conditionalFormattings></ext></extLst>`
+		`</x14:conditionalFormatting><x14:conditionalFormatting xmlns:xm="` + nsXM + `"><x14:cfRule type="beginsWith" priority="16" operator="beginsWith" id="{2}">` +
+		`<xm:f>LEFT(A1,LEN('S'!$B$1))='S'!$B$1</xm:f><xm:f>'S'!$B$1</xm:f><x14:dxf><fill><patternFill><bgColor rgb="FFFFFF00"/></patternFill></fill></x14:dxf></x14:cfRule>` +
+		`<x14:cfRule type="endsWith" priority="17" operator="endsWith" id="{3}"><xm:f>x</xm:f><xm:f>Nowhere!$B$1</xm:f></x14:cfRule><xm:sqref>A1:A2</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings></ext></extLst>`
 	doc, warnings := readBytes(t, zipFiles(t, workbookFiles([]testSheet{{name: "S", xml: ws}}, styles, "", "", nil)))
 	for _, w := range warnings {
 		if w.Code == "unsupported-content" {
@@ -43,8 +46,8 @@ func TestRead_ConditionalFormats(t *testing.T) {
 		}
 	}
 	cf := doc.Sheets[0].Conditional
-	if len(cf) != 2 {
-		t.Fatalf("%d conditional formats, want 2", len(cf))
+	if len(cf) != 3 {
+		t.Fatalf("%d conditional formats, want 3", len(cf))
 	}
 	if r := cf[0].Ranges; len(r) != 2 || r[0] != (sheet.Range{LastRow: 3}) || r[1] != (sheet.Range{FirstColumn: 2, LastColumn: 2}) {
 		t.Errorf("ranges %+v", r)
@@ -57,7 +60,23 @@ func TestRead_ConditionalFormats(t *testing.T) {
 	if s := between.Style; s == nil || !s.Font.Bold || s.Font.Color != rgb(0xFF0000) || s.Fill.Color != rgb(0x92D050) || s.Format != "" {
 		t.Errorf("first differential style %+v", between.Style)
 	}
-	if equal.Formula != "$B$1" || equal.Style == nil || equal.Style.Format != "0.000" || equal.Style.Border[css.Bottom].Color != rgb(0x0000FF) || equal.Style.Font.Bold {
+	if equal.Formula != "" || len(equal.Values) != 1 || equal.Values[0] != (sheet.Value{Kind: sheet.Text, Text: "ab"}) {
+		t.Errorf("a reference to B1 reads %+v", equal)
+	}
+	if rel := cf[0].Rules[2]; rel.Formula != "A2" {
+		t.Errorf("a relative reference over a range %+v", rel)
+	}
+	ext := cf[2].Rules
+	if len(ext) != 2 || cf[2].Ranges[0] != (sheet.Range{LastRow: 1}) {
+		t.Fatalf("extension rules %+v", cf[2])
+	}
+	if b := ext[0]; b.Kind != sheet.RuleText || b.Operator != "beginsWith" || b.Formula != "" || b.Values[0].Text != "ab" || b.Style == nil || b.Style.Fill.Color != rgb(0xFFFF00) {
+		t.Errorf("extension rule %+v", b)
+	}
+	if e := ext[1]; e.Formula != "Nowhere!$B$1" {
+		t.Errorf("a reference to no sheet %+v", e)
+	}
+	if equal.Style == nil || equal.Style.Format != "0.000" || equal.Style.Border[css.Bottom].Color != rgb(0x0000FF) || equal.Style.Font.Bold {
 		t.Errorf("equal %+v %+v", equal, equal.Style)
 	}
 	rules := cf[1].Rules
