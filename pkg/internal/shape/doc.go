@@ -7,6 +7,16 @@
 // draw:equation and draw:enhanced-path), fitted to a shape's box. A
 // [Geometry] is what a reader hands over; [Paths] returns the outlines to
 // fill and stroke and [TextRect] the box the shape's text is laid out in.
+//
+// The 187 presets are generated from LibreOffice's copy of Annex D
+// (cmd/gen-shape-presets) and evaluated as LibreOffice's custom shape
+// engine evaluates them: guides in order, arcs by their visible angles,
+// polygons filled even-odd. [Fill] and [Stroke] paint an outline with
+// plain fill and line values: solid, gradient, picture and pattern fills,
+// dashes in line widths ([PresetDash]) and arrowheads at a line's ends.
 // The presentation, text and spreadsheet converters share it for every
 // shape they draw.
+//
+// Everything in the package is a pure function of its arguments and safe
+// for concurrent use.
 package shape
