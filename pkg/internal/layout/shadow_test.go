@@ -219,6 +219,15 @@ func TestDashStroke_FitsTheSide(t *testing.T) {
 	}
 }
 
+func TestDashStroke_ThinDotsAreSquare(t *testing.T) {
+	// Under 3px the dots are squares a width long, butt-capped.
+	w := px(1)
+	st := dashStroke(css.Dotted, compose.Color{A: 1}, w, px(9), false)
+	if st.Cap == compose.RoundCap || st.Dash[0] != w || math.Abs(5*w+4*st.Dash[1]-px(9)) > 1e-9 {
+		t.Errorf("thin dotted pattern %v, cap %v", st.Dash, st.Cap)
+	}
+}
+
 func TestBackgroundRound_KeepsRatio(t *testing.T) {
 	// CSS Backgrounds 3, 3.4: round on x only with an auto height scales
 	// the height with the width.

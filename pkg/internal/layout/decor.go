@@ -461,9 +461,12 @@ func dashStroke(bs css.BorderStyle, c compose.Color, w, l float64, closed bool) 
 	if w < 3*css.Pt {
 		dash = 3 * w
 	}
+	round := bs == css.Dotted && !squareDots(w)
 	if bs == css.Dotted {
 		dash = w
-		st.Cap = compose.RoundCap
+		if round {
+			st.Cap = compose.RoundCap
+		}
 	}
 	gap := w
 	if closed {
@@ -471,19 +474,23 @@ func dashStroke(bs css.BorderStyle, c compose.Color, w, l float64, closed bool) 
 		gap = max(l/n-dash, 0)
 	} else {
 		span := l
-		if bs == css.Dotted {
+		if round {
 			// Round caps reach half a width past each end.
 			span = l + w
 		}
 		gap = bestGap(span, dash, gap)
 	}
-	if bs == css.Dotted {
+	if round {
 		st.Dash = []float64{0, dash + gap}
 		return st
 	}
 	st.Dash = []float64{dash, gap}
 	return st
 }
+
+// squareDots reports a dotted line too thin for round dots, w points
+// wide: under 3 pixels Blink draws its dots as squares, as WeasyPrint does.
+func squareDots(w float64) bool { return w < 3*css.Pt }
 
 // bestGap returns the gap closest to gap that fits a whole number of dashes
 // of length dash, gaps between them, in length l, dashes on both ends
@@ -605,7 +612,7 @@ func (p *painter) side(g *ditem, s css.Side, bdr css.Border, r compose.Rect, rad
 			a, z = compose.Point{X: r.X + w/2, Y: r.Y + r.Height}, compose.Point{X: r.X + w/2, Y: r.Y}
 		}
 		l := math.Hypot(z.X-a.X, z.Y-a.Y)
-		if bdr.Style == css.Dotted {
+		if bdr.Style == css.Dotted && !squareDots(w) {
 			// The dots sit on the line, the first and the last centred
 			// half a width in from the corners.
 			if l <= w {
