@@ -477,25 +477,22 @@ func TestEverySourceReadsItsPin(t *testing.T) {
 
 func readManifests(t *testing.T) []*Manifest {
 	t.Helper()
-	entries, err := os.ReadDir(corpusSourceDir)
+	dirs, err := corpusDirs(corpusSourceDir)
 	if err != nil {
 		t.Fatalf("read corpus dir: %v", err)
 	}
 	var out []*Manifest
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(corpusSourceDir, e.Name(), "manifest.json"))
+	for _, dir := range dirs {
+		data, err := os.ReadFile(filepath.Join(corpusSourceDir, filepath.FromSlash(dir), "manifest.json"))
 		if err != nil {
-			continue
+			t.Fatalf("read %s manifest: %v", dir, err)
 		}
 		var m Manifest
 		if err := json.Unmarshal(data, &m); err != nil {
-			t.Fatalf("parse %s manifest: %v", e.Name(), err)
+			t.Fatalf("parse %s manifest: %v", dir, err)
 		}
 		if m.Source == "" {
-			m.Source = e.Name()
+			m.Source = dir
 		}
 		out = append(out, &m)
 	}
