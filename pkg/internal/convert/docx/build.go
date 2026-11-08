@@ -2,6 +2,7 @@ package docx
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -9,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
 // story is one flow of text being built: the body, a header or footer, a
@@ -601,6 +603,15 @@ func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
 		n.Style.TextIndent = css.Pts(0)
 		ms.Width = css.Pts(hang)
 		ms.Display = css.Inline
+		if ms.TextAlign == css.AlignStart && st.Margin[css.Left].Kind == css.Points {
+			// A label wider than the hanging indent pushes the text to the
+			// next tab stop past its end, the paragraph's own or a default
+			// one counted from the margin, as LibreOffice sets it.
+			ml := st.Margin[css.Left].Value
+			if end := ml - hang + d.textWidth(label, ms); end > ml+0.01 {
+				n.Style.TextIndent = css.Pts(nextTabStop(st, end) - ml)
+			}
+		}
 		n.Marker = &layout.Node{Kind: layout.Element, Style: ms, Children: []*layout.Node{{Kind: layout.Text, Style: ms, Text: label}}}
 		return
 	}
@@ -613,6 +624,37 @@ func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
 	}
 	n.Style.ListStylePosition = css.Inside
 	n.Marker = &layout.Node{Kind: layout.Element, Style: ms, Children: []*layout.Node{{Kind: layout.Text, Style: ms, Text: label + suffix}}}
+}
+
+// nextTabStop returns the first tab stop of the paragraph style st past x,
+// a position from the start of its containing block: a left, centre,
+// right or decimal stop of its own, else the next multiple of its default
+// interval.
+func nextTabStop(st *css.Style, x float64) float64 {
+	for _, ts := range st.TabStops {
+		if ts.Align != css.TabBar && ts.Pos > x+0.01 {
+			return ts.Pos
+		}
+	}
+	dist := 36.0
+	if st.TabSize.Kind == css.Points && st.TabSize.Value > 0 {
+		dist = st.TabSize.Value
+	}
+	return dist * (math.Floor(x/dist+1e-9) + 1)
+}
+
+// textWidth returns the advance of s set in the style st, 0 when it
+// cannot be shaped.
+func (d *document) textWidth(s string, st *css.Style) float64 {
+	if d.fonts == nil || s == "" {
+		return 0
+	}
+	ts := text.Style{Families: text.BrowserFamilies(st.FontFamilies), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: st.FontSize}
+	p, _, err := d.fonts.Shape(d.ctx, []text.ParagraphRun{{Text: s, Style: ts}}, text.ParagraphOptions{})
+	if err != nil || p.Len() == 0 {
+		return 0
+	}
+	return p.Line(0, p.Len(), false).Width
 }
 
 // inlineSink collects a paragraph's inline nodes, cut into segments at its

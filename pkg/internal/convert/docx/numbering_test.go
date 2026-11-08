@@ -1,10 +1,13 @@
 package docx
 
 import (
+	"math"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 )
 
 func TestFormatNumber(t *testing.T) {
@@ -99,5 +102,35 @@ func TestNumbering_Labels(t *testing.T) {
 	}
 	if lists := role(b.root, "L"); len(lists) != 1 || len(lists[0].Children) != len(want) {
 		t.Errorf("list items not grouped in one L: %d groups", len(lists))
+	}
+}
+
+func TestNumbering_LabelWiderThanHangPushesTheText(t *testing.T) {
+	t.Parallel()
+	numbering := `<w:numbering ` + nsDecl + `><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:pPr><w:ind w:left="480" w:hanging="480"/></w:pPr></w:lvl></w:abstractNum>` +
+		`<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>` +
+		`<w:num w:numId="2"><w:abstractNumId w:val="0"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="1000000"/></w:lvlOverride></w:num></w:numbering>`
+	settings := `<w:settings ` + nsDecl + `><w:defaultTabStop w:val="480"/></w:settings>`
+	for _, tc := range []struct {
+		name   string
+		num    int
+		indent float64
+	}{
+		{"label fits", 1, 0},
+		// LibreOffice measured (cjklist34.docx): the text goes to the
+		// next default stop, 48 points from the margin.
+		{"label too wide", 2, 24},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="` + strconv.Itoa(tc.num) + `"/></w:numPr></w:pPr><w:r><w:t>Item</w:t></w:r></w:p>`
+			b := build(t, body, map[string]string{"word/numbering.xml": numbering, "word/settings.xml": settings})
+			items := find(b.root, func(n *layout.Node) bool { return n.Marker != nil })
+			if len(items) != 1 {
+				t.Fatalf("%d items", len(items))
+			}
+			if got := items[0].Style.TextIndent.Value; math.Abs(got-tc.indent) > 0.01 {
+				t.Errorf("text indent %.2f, want %.2f", got, tc.indent)
+			}
+		})
 	}
 }
