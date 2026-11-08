@@ -264,6 +264,18 @@ type TextBody struct {
 	Vertical css.WritingMode
 	// RightToLeft is the body's base direction.
 	RightToLeft bool
+	// FontLineSpacing makes a line as tall as its faces' ascent plus
+	// descent, as Impress lays an OpenDocument text out unless the
+	// paragraph's style:font-independent-line-spacing is true (ODF 1.3
+	// Part 3, 20.330); false, the default, makes every line 1.2 times its
+	// largest size tall with the baseline the size below the line's top,
+	// whatever the face, as Impress lays a PresentationML text out.
+	FontLineSpacing bool
+	// MaxParagraphSpacing makes the space between two paragraphs the
+	// larger of the first's SpaceAfter and the second's SpaceBefore, as
+	// Impress stacks OpenDocument paragraphs; false, the default, adds the
+	// two, as it stacks PresentationML paragraphs.
+	MaxParagraphSpacing bool
 }
 
 // Anchor is the vertical placement of a text body (ECMA-376 Part 1,
