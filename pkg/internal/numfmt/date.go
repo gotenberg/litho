@@ -20,10 +20,20 @@ var monthNames = [12]string{"January", "February", "March", "April", "May", "Jun
 
 var dayNames = [7]string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
 
+// approxFloor returns the floor of v rounded to 15 significant digits,
+// which absorbs the binary error of a decimal value (rtl::math::approxFloor).
+func approxFloor(v float64) float64 {
+	r, err := strconv.ParseFloat(strconv.FormatFloat(v, 'g', 15, 64), 64)
+	if err != nil {
+		return math.Floor(v)
+	}
+	return math.Floor(r)
+}
+
 // date formats the serial number x by a date or time section.
 func (s *section) date(x float64, first bool) Result {
 	r := Result{Numeric: true}
-	hasDate, elapsed, ampm := false, false, false
+	hasDate, elapsed, ampm, seconds := false, false, false, false
 	frac := 0
 	for _, t := range s.toks {
 		switch t.kind {
@@ -31,9 +41,13 @@ func (s *section) date(x float64, first bool) Result {
 			switch t.key {
 			case kYear, kMonth, kDay:
 				hasDate = true
-			case kElapsedHour, kElapsedMinute, kElapsedSecond:
+			case kElapsedHour, kElapsedMinute:
 				elapsed = true
-			case kHour, kMinute, kSecond:
+			case kElapsedSecond:
+				elapsed, seconds = true, true
+			case kSecond:
+				seconds = true
+			case kHour, kMinute:
 			}
 		case tAMPM, tAP:
 			ampm = true
@@ -52,15 +66,30 @@ func (s *section) date(x float64, first bool) Result {
 		return r
 	}
 	scale := math.Pow(10, float64(frac))
+	// A time that shows whole seconds is cut to the second, as a clock
+	// reads, the value first rounded to 15 significant digits; one that
+	// shows fractions of a second, or no seconds, is rounded to the
+	// precision it keeps (SvNumberformat::ImpGetTimeOutput).
+	//
+	// # Corpus evidence
+	//
+	//   - ods: sc/tdf125099.ods, 03:23:59.999999665 in [HH]:MM:SS prints
+	//     03:23:59, and 11:23:59.999999665 in HH:MM prints 11:24.
+	whole := func(v float64) float64 {
+		if seconds && frac == 0 {
+			return approxFloor(v)
+		}
+		return math.Floor(v + 0.5)
+	}
 	var days, total int64
 	var sub float64
 	if elapsed {
-		t := math.Floor(x*86400*scale+0.5) / scale
+		t := whole(x*86400*scale) / scale
 		total = int64(t)
 		sub = t - float64(total)
 	} else {
 		d := math.Floor(x)
-		t := math.Floor((x-d)*86400*scale+0.5) / scale
+		t := whole((x-d)*86400*scale) / scale
 		if t >= 86400 {
 			d++
 			t -= 86400

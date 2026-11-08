@@ -19,8 +19,9 @@
 //   - Colours [Black] [Blue] [Cyan] [Green] [Magenta] [Red] [White]
 //     [Yellow], LibreOffice's [Brown] and [Grey], and [Color n] from the
 //     56-colour workbook palette.
-//   - Locale tags [$-409], which are ignored, and currency tags [$€-407],
-//     which show their symbol.
+//   - Locale tags [$-409], which are ignored, the system tags [$-F800]
+//     and [$-F400], which stand for the en-US long date and time, and
+//     currency tags [$€-407], which show their symbol.
 //   - Literal text in quotes, backslash escapes, and the characters that
 //     stand for themselves ($ - + / ( ) : ! ^ & ' ~ { } < > = and space).
 //   - "_x", replaced by the spaces LibreOffice inserts for the width of
