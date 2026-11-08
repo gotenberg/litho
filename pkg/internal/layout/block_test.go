@@ -312,3 +312,29 @@ func TestReplaced_InlinePercentageHeight(t *testing.T) {
 		}
 	}
 }
+
+func TestMarginCollapse_BodyOverflowGoesToViewport(t *testing.T) {
+	// The body's overflow goes to the viewport, its used value is visible
+	// (CSS Overflow 3, 3.3): it does not establish a formatting context,
+	// so its margin and its first child's collapse. A later box keeps
+	// its own.
+	hidden := func(s *css.Style) { s.Overflow = css.OverflowHidden }
+	tests := []struct {
+		name string
+		root *Node
+		want float64
+	}{
+		{"body", el(sty(), el(sty(hidden, margin(8)), el(sty(height(5), margin(16, 0))))), 16},
+		{"root keeps it", el(sty(hidden), el(sty(margin(8)), el(sty(height(5), margin(16, 0))))), 16},
+		{"second block", el(sty(), el(sty(height(1))), el(sty(hidden, margin(8)), el(sty(height(5), margin(16, 0))))), 1 + 8 + 16},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rb := boxes(t, tt.root, page(100, 100))
+			last := len(rb.kids) - 1
+			if got := rect(kid(t, rb, last, 0)); got[1] != tt.want {
+				t.Errorf("first child at y %v, want %v", got[1], tt.want)
+			}
+		})
+	}
+}
