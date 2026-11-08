@@ -18,6 +18,8 @@ type theme struct {
 	fills, lines, bgFills []*ooxml.Element
 	// effects are the children of effectStyleLst, in order.
 	effects []*ooxml.Element
+	// part is the theme part, whose relationships its picture fills name.
+	part string
 }
 
 // officeColors is the colour scheme of the Office theme, which a master
@@ -58,6 +60,7 @@ func (r *reader) themeOf(master string) *theme {
 			r.warn("malformed-part", fmt.Sprintf("theme %s does not parse: the Office theme stands in: %v", name, err))
 		}
 	}
+	t.part = name
 	r.themes[name] = t
 	return t
 }

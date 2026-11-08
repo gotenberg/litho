@@ -419,3 +419,21 @@ func TestShapes_ChartEx(t *testing.T) {
 		t.Errorf("a wrapped chartex frame prints %q, want its fallback picture", names)
 	}
 }
+
+func TestShapes_ThemePictureFill(t *testing.T) {
+	t.Parallel()
+	theme := strings.Replace(testTheme, `<a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill>`,
+		`<a:bgFillStyleLst><a:blipFill><a:blip r:embed="rIdT"/><a:stretch/></a:blipFill>`, 1)
+	doc, warnings := readDeck(t, testDeck{
+		masterBg: `<p:bg><p:bgRef idx="1001"><a:schemeClr val="bg2"/></p:bgRef></p:bg>`,
+		slides:   []testSlide{{}},
+		parts: map[string]string{
+			"ppt/theme/theme1.xml":            theme,
+			"ppt/theme/_rels/theme1.xml.rels": `<Relationships ` + relsNS + `><Relationship Id="rIdT" Type="` + tRelImage + `" Target="../media/image1.png"/></Relationships>`,
+			"ppt/media/image1.png":            pngBytes(t),
+		},
+	})
+	if f := doc.Slides[0].Background; f.Kind != slides.FillPicture || f.Picture == nil {
+		t.Errorf("background %+v, warnings %+v: want the theme's picture", f, warnings)
+	}
+}

@@ -201,7 +201,14 @@ func (r *reader) styleFill(fc *fillCtx, ref *ooxml.Element) slides.Fill {
 		}
 		return slides.Fill{}
 	}
-	f, _ := r.fillChoice(fc.withPh(ph), list[idx-1])
+	// A picture of the theme's styles is the theme part's (pptx:
+	// sd/tdf123684's master background, the theme's third background
+	// style, a blipFill of the theme's own image).
+	tfc := fc.withPh(ph)
+	if fc.sc.theme.part != "" {
+		tfc.part = fc.sc.theme.part
+	}
+	f, _ := r.fillChoice(tfc, list[idx-1])
 	return f
 }
 
