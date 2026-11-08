@@ -87,6 +87,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 		return nil, fmt.Errorf("%w: %d pages, at most %d", ErrTooManyPages, len(res.Pages), e.maxPages)
 	}
 	res.Anchors = e.anchors(rb, len(res.Pages))
+	e.anchorsFound = res.Anchors
 	res.Extents = e.extents(rb, len(res.Pages))
 	e.links(res, links, used)
 	prune(e.root, used)
@@ -610,6 +611,7 @@ func (e *engine) anchors(rb *box, n int) map[string]compose.Dest {
 		}
 	}
 	walk(rb)
+	e.noteAnchors(out, n)
 	return out
 }
 
@@ -617,23 +619,11 @@ func (e *engine) anchors(rb *box, n int) map[string]compose.Dest {
 // internal targets resolved against res.Anchors.
 func (e *engine) links(res *Result, links []pendingLink, used map[*compose.StructElem]bool) {
 	for _, pl := range links {
-		href := pl.lk.href
-		var dest *compose.Dest
-		uri := ""
-		if id, ok := strings.CutPrefix(href, "#"); ok {
-			d, found := res.Anchors[id]
-			if !found || id == "" {
-				e.warnOnce(codeLink, fmt.Sprintf("link to %q left out: no element has that ID", href), pl.rect.Y)
-				continue
-			}
-			dest = &d
-		} else {
-			uri = href
-		}
-		r := pl.rect
-		if !(r.Width > 0) || !(r.Height > 0) {
+		l, ok := e.resolveLink(pl)
+		if !ok {
 			continue
 		}
+		r := pl.rect
 		p0, p1 := e.pageOf(max(r.Y, 0)), e.pageOf(max(r.Y+r.Height-1e-3, 0))
 		for p := p0; p <= p1 && p < len(res.Pages); p++ {
 			top := e.pageTop(p)
@@ -642,16 +632,34 @@ func (e *engine) links(res *Result, links []pendingLink, used map[*compose.Struc
 			if y1 <= y0 {
 				continue
 			}
-			l := compose.Link{
-				Rect: compose.Rect{X: pb.Bleed + pb.Margin[css.Left] + r.X, Y: pb.Bleed + pb.Margin[css.Top] + y0 - top, Width: r.Width, Height: y1 - y0},
-				URI:  uri, Dest: dest, Parent: pl.lk.elem,
-			}
+			l.Rect = compose.Rect{X: pb.Bleed + pb.Margin[css.Left] + r.X, Y: pb.Bleed + pb.Margin[css.Top] + y0 - top, Width: r.Width, Height: y1 - y0}
 			if l.Parent != nil {
 				used[l.Parent] = true
 			}
 			res.Pages[p].Links = append(res.Pages[p].Links, l)
 		}
 	}
+	e.noteLinks(res, used)
+}
+
+// resolveLink returns the link of the region pl, its rectangle unset, its
+// internal target resolved against the anchors e.anchors found; false for
+// an empty region or a target no element names, which it warns about.
+func (e *engine) resolveLink(pl pendingLink) (compose.Link, bool) {
+	r := pl.rect
+	if !(r.Width > 0) || !(r.Height > 0) {
+		return compose.Link{}, false
+	}
+	href := pl.lk.href
+	if id, ok := strings.CutPrefix(href, "#"); ok {
+		d, found := e.anchorsFound[id]
+		if !found || id == "" {
+			e.warnOnce(codeLink, fmt.Sprintf("link to %q left out: no element has that ID", href), r.Y)
+			return compose.Link{}, false
+		}
+		return compose.Link{Dest: &d, Parent: pl.lk.elem}, true
+	}
+	return compose.Link{URI: href, Parent: pl.lk.elem}, true
 }
 
 // prune drops the structure elements no fragment hangs from, directly or

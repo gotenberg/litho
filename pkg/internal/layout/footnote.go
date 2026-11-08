@@ -43,9 +43,12 @@ type footState struct {
 	pending []pendingNote
 	// where maps a call to its body's page, -1 while it waits.
 	where map[*box]int
-	// disp is the painted footnote area of each page, by index, and
-	// ndisp the painted note area with its offset in the page area.
+	// disp is the painted footnote area of each page, by index, areas
+	// the area's boxes and links its link regions, relative to the area,
+	// and ndisp the painted note area with its offset in the page area.
 	disp  map[int]*ditem
+	areas map[int]*box
+	links map[int][]pendingLink
 	ndisp map[int]placedArea
 	// calls are every footnote call, in tree order.
 	calls []*box
@@ -420,7 +423,7 @@ func (e *engine) paintNotes() {
 	if f == nil {
 		return
 	}
-	f.disp = map[int]*ditem{}
+	f.disp, f.areas, f.links = map[int]*ditem{}, map[int]*box{}, map[int][]pendingLink{}
 	e.paintNoteAreas()
 	for p, fp := range f.pages {
 		if len(fp.calls) == 0 || e.err != nil {
@@ -430,7 +433,86 @@ func (e *engine) paintNotes() {
 		pt := &painter{e: e, top: &ditem{group: true, opacity: 1}, mono: -1, alpha: 1}
 		pt.frames = []*frame{{container: pt.top, root: area}}
 		pt.context(area)
-		f.disp[p] = pt.top
+		f.disp[p], f.areas[p], f.links[p] = pt.top, area, pt.links
+	}
+}
+
+// areaOrigin returns where the footnote area of page k, whose page box is
+// pb, starts on its page, in the page area's coordinates: under the
+// footnote separator and its spaces, as [engine.assembleNotes] places it.
+func (e *engine) areaOrigin(k int, pb PageBox) float64 {
+	_, ah := areaOf(pb)
+	top := ah - e.foot.pages[k].h
+	if r := pb.FootnoteRule; r != nil {
+		top += r.SpaceAbove + r.Thickness + r.SpaceBelow
+	}
+	return top
+}
+
+// noteAnchors adds to out where the boxes with an ID inside the footnote
+// areas landed, page by page, for a document of n pages, unless an
+// earlier box took the ID.
+func (e *engine) noteAnchors(out map[string]compose.Dest, n int) {
+	f := e.foot
+	if f == nil {
+		return
+	}
+	for k := range f.pages {
+		area := f.areas[k]
+		if area == nil || k >= n {
+			continue
+		}
+		pb := e.box(k)
+		top := e.areaOrigin(k, pb)
+		var walk func(b *box, depth int)
+		walk = func(b *box, depth int) {
+			if depth > maxTreeDepth {
+				return
+			}
+			if b.id != "" {
+				if _, ok := out[b.id]; !ok {
+					x, y, ok := b.anchorX, b.anchorY, b.anchorSet
+					if !ok && b.laidOut && b.kind != kindInline && b.kind != kindText && b.kind != kindBreak {
+						x, y, ok = b.x, b.y, true
+					}
+					if ok {
+						out[b.id] = compose.Dest{Page: k + 1, X: pb.Bleed + pb.Margin[css.Left] + clamp(x), Y: pb.Bleed + pb.Margin[css.Top] + top + max(clamp(y), 0)}
+					}
+				}
+			}
+			for _, c := range b.kids {
+				walk(c, depth+1)
+			}
+		}
+		walk(area, 0)
+	}
+}
+
+// noteLinks adds the link regions of the footnote areas to the pages of
+// res, internal targets resolved against res.Anchors.
+func (e *engine) noteLinks(res *Result, used map[*compose.StructElem]bool) {
+	f := e.foot
+	if f == nil {
+		return
+	}
+	for k := range f.pages {
+		if k >= len(res.Pages) {
+			break
+		}
+		pb := e.box(k)
+		top := e.areaOrigin(k, pb)
+		for _, pl := range f.links[k] {
+			l, ok := e.resolveLink(pl)
+			if !ok {
+				continue
+			}
+			r := pl.rect
+			l.Rect = compose.Rect{X: pb.Bleed + pb.Margin[css.Left] + r.X, Y: pb.Bleed + pb.Margin[css.Top] + top + r.Y, Width: r.Width, Height: r.Height}
+			if l.Parent != nil {
+				used[l.Parent] = true
+			}
+			res.Pages[k].Links = append(res.Pages[k].Links, l)
+		}
 	}
 }
 

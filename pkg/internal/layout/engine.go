@@ -93,6 +93,9 @@ type engine struct {
 	// balancePasses counts the layouts balancing columns took, against
 	// [maxBalanceLayouts].
 	balancePasses int
+	// anchorsFound are the anchors of the finished layout, which the
+	// links resolve against.
+	anchorsFound map[string]compose.Dest
 	// cols is the fragmentation context of the column set being laid out,
 	// nil outside columns: the page queries answer for its columns.
 	cols *colCtx

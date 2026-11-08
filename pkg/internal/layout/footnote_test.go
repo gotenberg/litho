@@ -170,3 +170,33 @@ func TestFootnote_TableCellCallGoesToItsPage(t *testing.T) {
 		})
 	}
 }
+
+func TestFootnote_LinksBetweenCallAndBody(t *testing.T) {
+	t.Parallel()
+	red2 := sty(font(2), fg(red))
+	c := call("X", "")
+	c.ID, c.Href = "call", "#note"
+	num := el(inlineSty(font(2), fg(blue)), txt(sty(font(2), fg(blue)), "X"))
+	num.ID, num.Href = "note", "#call"
+	c.Footnote.Children = []*Node{num}
+	res := run(t, doc(el(red2, txt(red2, "XX"), c)), PageBox{Width: px(6), Height: px(6)})
+	if len(res.Pages) != 1 {
+		t.Fatalf("got %d pages, want 1", len(res.Pages))
+	}
+	d, ok := res.Anchors["note"]
+	if !ok || d.Page != 1 || d.Y < px(4)-1e-6 {
+		t.Errorf("note anchor = %+v, %v; want page 1 at the area, y >= %v", d, ok, px(4))
+	}
+	links := res.Pages[0].Links
+	if len(links) != 2 {
+		t.Fatalf("got %d links, want 2: %+v", len(links), links)
+	}
+	for _, l := range links {
+		if l.Dest == nil || l.Dest.Page != 1 {
+			t.Errorf("link %+v: want a destination on page 1", l)
+		}
+	}
+	if y := links[1].Rect.Y; y < px(4)-1e-6 {
+		t.Errorf("the body's link sits at y %v, want the footnote area, at %v or below", y, px(4))
+	}
+}
