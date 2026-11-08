@@ -29,6 +29,11 @@ type story struct {
 	// note is the note a footnoteRef or endnoteRef run inside a note body
 	// numbers, "" outside one.
 	note string
+	// noteID is the anchor ID the note's footnoteRef or endnoteRef run
+	// takes, noteBack the link back to its call; noteRef records that the
+	// run was met.
+	noteID, noteBack string
+	noteRef          bool
 }
 
 // fieldValues are the page fields of one page (17.16.5: PAGE and
@@ -876,7 +881,13 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 				ns = inlineStyle(st)
 				d.applyRun(ns, props.merge(&runProps{vertAlign: ptr("superscript")}), lineMult)
 			}
-			sink.add(&layout.Node{Kind: layout.Element, Style: ns, Children: []*layout.Node{{Kind: layout.Text, Style: ns, Text: s.note}}})
+			ref := &layout.Node{Kind: layout.Element, Style: ns, Children: []*layout.Node{{Kind: layout.Text, Style: ns, Text: s.note}}}
+			if s.noteID != "" && !s.noteRef {
+				// The note's number links back to its call, as LibreOffice
+				// exports a note.
+				ref.ID, ref.Href, s.noteRef = s.noteID, s.noteBack, true
+			}
+			sink.add(ref)
 		case c.Is(w, "drawing"):
 			emit()
 			d.drawing(s, c, st, sink, depth)

@@ -33,21 +33,24 @@ func (d *document) noteCall(s *story, c *ooxml.Element, st *css.Style, sink *inl
 			mark = formatNumber(d.endnoteNumber, "lowerRoman")
 		}
 	}
-	ns := &story{part: part, note: mark}
+	callID, bodyID := d.newID("nc"), d.newID("n")
+	ns := &story{part: part, note: mark, noteID: bodyID, noteBack: "#" + callID}
 	d.nested++
 	content := finish(d.blocks(ns, nil, body, 1))
 	d.nested--
 	noteBody := &layout.Node{Kind: layout.Element, Style: d.blockStyle(), Role: "Note", Children: content}
-	call := &layout.Node{Kind: layout.Element, Style: st}
+	if !ns.noteRef {
+		noteBody.ID = bodyID
+	}
+	// The call links to its note, and the note's number back to the call,
+	// as LibreOffice exports a note.
+	call := &layout.Node{Kind: layout.Element, Style: st, ID: callID, Href: "#" + bodyID}
 	if mark != "" {
 		call.Children = []*layout.Node{{Kind: layout.Text, Style: st, Text: mark}}
 	}
 	if foot {
 		call.Footnote = noteBody
 	} else {
-		id := d.newID("en")
-		noteBody.ID = id
-		call.Href = "#" + id
 		d.endnoteBodies = append(d.endnoteBodies, noteBody)
 	}
 	if len(call.Children) == 0 && !foot {
