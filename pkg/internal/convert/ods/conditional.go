@@ -100,6 +100,9 @@ func (r *reader) condRule(sh *sheet.Sheet, e *odf.Element, ranges []sheet.Range)
 		if !ok || len(vals) != 2 {
 			return sheet.Rule{Kind: sheet.RuleExpression, Formula: "data-bar"}, true
 		}
+		if e.A(nsCalcExt, "axis-position") == "middle" {
+			vals[0].Number, vals[1].Number = sheet.MiddleAxis(vals[0].Number, vals[1].Number)
+		}
 		rule.Values = vals
 		return rule, true
 	case e.Is(nsCalcExt, "icon-set"):

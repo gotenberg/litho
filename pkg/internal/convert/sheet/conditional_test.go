@@ -279,6 +279,9 @@ func TestThreshold(t *testing.T) {
 			t.Errorf("%s %v: %v %v, want %v %v", tc.kind, tc.v, got, ok, tc.want, tc.ok)
 		}
 	}
+	if lo, hi := MiddleAxis(-1, 4); lo != -4 || hi != 4 {
+		t.Errorf("MiddleAxis %v %v", lo, hi)
+	}
 	if _, ok := Threshold("min", 0, nil); ok {
 		t.Error("min of no number")
 	}

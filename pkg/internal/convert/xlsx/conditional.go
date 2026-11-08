@@ -236,6 +236,9 @@ func (w *sheetReader) cfRule(e *ooxml.Element, ranges []sheet.Range, ext *dataBa
 			rule.Kind, rule.Formula = sheet.RuleExpression, "dataBar"
 			break
 		}
+		if attr(src, "axisPosition") == "middle" {
+			vals[0].Number, vals[1].Number = sheet.MiddleAxis(vals[0].Number, vals[1].Number)
+		}
 		rule.Values = vals
 	case "iconSet":
 		rule.Kind = sheet.RuleIconSet

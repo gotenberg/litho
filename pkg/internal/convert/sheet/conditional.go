@@ -798,6 +798,17 @@ func Threshold(kind string, v float64, nums []float64) (float64, bool) {
 	return 0, false
 }
 
+// MiddleAxis returns the thresholds of a data bar whose axis sits in the
+// middle of its cells (ECMA-376 Part 1 as MS-XLSX, 2.6.29 axisPosition
+// middle extends it; ODF calcext:axis-position middle): the lower and
+// upper thresholds made symmetric about zero, so that zero falls halfway
+// and a value's bar runs its share of the larger magnitude across half
+// the cell (ScDataBarFormat::GetDataBarInfo, databar::MIDDLE).
+func MiddleAxis(lo, hi float64) (float64, float64) {
+	m := max(math.Abs(lo), math.Abs(hi))
+	return -m, m
+}
+
 // Percentile returns the p-th percentile of the sorted nums, interpolated
 // between the two closest ranks as Calc's PERCENTILE computes it.
 func Percentile(nums []float64, p float64) float64 {

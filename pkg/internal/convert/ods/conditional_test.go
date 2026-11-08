@@ -37,7 +37,7 @@ func TestRead_ConditionalFormats(t *testing.T) {
 			`</calcext:conditional-format>` +
 			`<calcext:conditional-format calcext:target-range-address="S.A1:S.A4">` +
 			`<calcext:color-scale><calcext:color-scale-entry calcext:value="50" calcext:type="percentile" calcext:color="#ff0000"/><calcext:color-scale-entry calcext:value="[.A2]" calcext:type="number" calcext:color="#0000ff"/></calcext:color-scale>` +
-			`<calcext:data-bar calcext:positive-color="#00ff00"><calcext:formatting-entry calcext:value="0" calcext:type="auto-minimum"/><calcext:formatting-entry calcext:value="0" calcext:type="maximum"/></calcext:data-bar>` +
+			`<calcext:data-bar calcext:positive-color="#00ff00" calcext:axis-position="middle"><calcext:formatting-entry calcext:value="0" calcext:type="auto-minimum"/><calcext:formatting-entry calcext:value="0" calcext:type="maximum"/></calcext:data-bar>` +
 			`<calcext:color-scale><calcext:color-scale-entry calcext:value="0" calcext:type="minimum" calcext:color="#ff0000"/><calcext:color-scale-entry calcext:value="=2*[.A1]" calcext:type="formula" calcext:color="#0000ff"/></calcext:color-scale>` +
 			`<calcext:icon-set calcext:icon-set-type="3Arrows"/>` +
 			`</calcext:conditional-format>` +
@@ -100,7 +100,7 @@ func TestRead_ConditionalFormats(t *testing.T) {
 	if s := scales[0]; s.Kind != sheet.RuleColorScale || len(s.Values) != 2 || s.Values[0] != num(2.5) || s.Values[1] != num(2) || len(s.Scale) != 2 {
 		t.Errorf("colour scale %+v", s)
 	}
-	if b := scales[1]; b.Kind != sheet.RuleDataBar || len(b.Values) != 2 || b.Values[0] != num(0) || b.Values[1] != num(4) || b.Bar != (css.Color{G: 1, A: 1}) {
+	if b := scales[1]; b.Kind != sheet.RuleDataBar || len(b.Values) != 2 || b.Values[0] != num(-4) || b.Values[1] != num(4) || b.Bar != (css.Color{G: 1, A: 1}) {
 		t.Errorf("data bar %+v", b)
 	}
 	if s := scales[2]; s.Kind != sheet.RuleExpression {
