@@ -25,11 +25,15 @@ func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document)
 		r.date1904 = boolAttr(pr, "date1904")
 	}
 	var names []definedName
+	r.pivotCaches = r.pivotCacheParts(main, root)
 	for _, d := range root.Child(nsMain, "definedNames").Kids() {
 		if !d.Is(nsMain, "definedName") {
 			continue
 		}
 		n := attr(d, "name")
+		if len(r.allNames) < maxAreas {
+			r.allNames = append(r.allNames, definedName{name: n, local: intAttr(d, "localSheetId", -1), formula: d.Text})
+		}
 		if !strings.EqualFold(n, "_xlnm.Print_Area") && !strings.EqualFold(n, "_xlnm.Print_Titles") {
 			continue
 		}

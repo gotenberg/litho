@@ -79,6 +79,25 @@ type reader struct {
 	// pending are the operands of conditional formats that refer to a
 	// cell, read once every sheet is.
 	pending []pendingOperand
+	// pivots are the pivot tables read, placed once every sheet is;
+	// pivotCaches names the cache part of each cache id, caches holds
+	// the caches read by part.
+	pivots      []pendingPivot
+	pivotCaches map[int]string
+	caches      map[string]*pivotCache
+	// tableAreas are the tables of every sheet, allNames the workbook's
+	// defined names, which a pivot cache's source may name.
+	tableAreas []tableArea
+	allNames   []definedName
+}
+
+// tableArea is a table of a sheet (ECMA-376 Part 1, 18.5.1.2): its name,
+// its range and its totals rows.
+type tableArea struct {
+	name   string
+	sh     *sheet.Sheet
+	area   sheet.Range
+	totals int
 }
 
 // substituteFamily is the face LibreOffice measures and draws a family
@@ -98,7 +117,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*sheet.Do
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", office.ErrMalformed, err)
 	}
-	r := &reader{ctx: ctx, pkg: pkg, fonts: fonts, warned: map[string]bool{}, pictures: map[string]*layout.Picture{}}
+	r := &reader{ctx: ctx, pkg: pkg, fonts: fonts, warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, caches: map[string]*pivotCache{}}
 	root, err := pkg.ParseXML(ctx, main, understood)
 	if err != nil {
 		return nil, nil, err
@@ -133,6 +152,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*sheet.Do
 		return nil, nil, err
 	}
 	r.resolveOperands(doc)
+	r.resolvePivots(doc)
 	return doc, r.warnings, nil
 }
 

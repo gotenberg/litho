@@ -113,6 +113,9 @@ func (w *sheetReader) read(root *ooxml.Element) error {
 		}
 	}
 	w.conditionalFormats(root)
+	if err := w.pivotTables(); err != nil {
+		return err
+	}
 	if root.Child(nsMain, "picture") != nil {
 		r.warn("unsupported-content", "a sheet background picture is left out")
 	}

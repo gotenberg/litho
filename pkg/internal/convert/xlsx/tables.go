@@ -53,6 +53,13 @@ func (w *sheetReader) tables(parts *ooxml.Element) error {
 		if !ok {
 			continue
 		}
+		if len(r.tableAreas) < maxTables {
+			name := decodeXString(attr(root, "displayName"))
+			if name == "" {
+				name = decodeXString(attr(root, "name"))
+			}
+			r.tableAreas = append(r.tableAreas, tableArea{name: name, sh: w.sh, area: rg, totals: max(intAttr(root, "totalsRowCount", 0), 0)})
+		}
 		info := tableInfo{area: rg, header: intAttr(root, "headerRowCount", 1) != 0, total: intAttr(root, "totalsRowCount", 0) > 0}
 		if si := root.Child(nsMain, "tableStyleInfo"); si != nil {
 			info.firstCol, info.lastCol = boolAttr(si, "showFirstColumn"), boolAttr(si, "showLastColumn")
