@@ -336,7 +336,7 @@ func (r *reader) composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
 				}
 			} else {
 				ops, _ := ooxml.PresetPath(l.geom, box)
-				content = l.style.Paint(ops)
+				content = opaque(l.style.Paint(ops))
 				if l.text != nil {
 					content = append(content, l.text.draw(ctx, fonts, box)...)
 				}
@@ -351,6 +351,28 @@ func (r *reader) composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
 			}
 		}
 		return []compose.Fragment{&compose.Group{Clip: ooxml.RectPath(rect), Content: frags}}
+	}
+	return out
+}
+
+// opaque returns the paths of frags without their fully transparent fill
+// or outline, which compose refuses, and without the paths left painting
+// nothing.
+func opaque(frags []compose.Fragment) []compose.Fragment {
+	out := frags[:0]
+	for _, f := range frags {
+		if p, ok := f.(*compose.Path); ok {
+			if p.Fill != nil && p.Fill.Color.A <= 0 {
+				p.Fill = nil
+			}
+			if p.Stroke != nil && p.Stroke.Color.A <= 0 {
+				p.Stroke = nil
+			}
+			if p.Fill == nil && p.Stroke == nil {
+				continue
+			}
+		}
+		out = append(out, f)
 	}
 	return out
 }
