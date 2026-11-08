@@ -98,7 +98,7 @@ func TestChartFromElement_Kinds(t *testing.T) {
 		}},
 		{"scatter", `<c:scatterChart><c:scatterStyle val="marker"/><c:ser><c:idx val="0"/><c:order val="0"/><c:xVal><c:numLit><c:ptCount val="2"/><c:pt idx="0"><c:v>1.5</c:v></c:pt><c:pt idx="1"><c:v>2.5</c:v></c:pt></c:numLit></c:xVal><c:yVal><c:numRef><c:f>Sheet1!$B$2:$B$3</c:f></c:numRef></c:yVal></c:ser>` + ids + `</c:scatterChart>` + axes, func(t *testing.T, g *chart.Group) {
 			s := g.Series[0]
-			if g.Kind != chart.Scatter || s.Categories.Len() != 2 || s.Categories.Values[1].Number != 2.5 || s.Values.Cached || s.Values.Ref != "Sheet1!$B$2:$B$3" || s.Border == nil || !s.Border.None || s.Name != "Series1" {
+			if g.Kind != chart.Scatter || s.Categories.Len() != 2 || s.Categories.Values[1].Number != 2.5 || s.Values.Cached || s.Values.Ref != "Sheet1!$B$2:$B$3" || s.Border == nil || !s.Border.None || s.Name != "Column B" {
 				t.Errorf("series = %+v", s)
 			}
 		}},
@@ -309,5 +309,27 @@ func TestRangeName(t *testing.T) {
 		if got := rangeName(ref); got != want {
 			t.Errorf("rangeName(%q) = %q, want %q", ref, got, want)
 		}
+	}
+}
+
+func TestChartFromElement_AxisLabelBreaks(t *testing.T) {
+	tests := []struct {
+		name             string
+		axis             string
+		noBreak, overlap bool
+	}{
+		{name: "automatic", axis: `<c:catAx><c:axId val="1"/><c:txPr><a:bodyPr rot="-60000000"/></c:txPr></c:catAx>`},
+		{name: "upright", axis: `<c:catAx><c:axId val="1"/><c:txPr><a:bodyPr rot="0"/></c:txPr></c:catAx>`, overlap: true},
+		{name: "turned", axis: `<c:catAx><c:axId val="1"/><c:txPr><a:bodyPr rot="-2700000"/></c:txPr></c:catAx>`, noBreak: true},
+		{name: "quarter turn", axis: `<c:catAx><c:axId val="1"/><c:txPr><a:bodyPr rot="-5400000"/></c:txPr></c:catAx>`},
+		{name: "date", axis: `<c:dateAx><c:axId val="1"/></c:dateAx>`, noBreak: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := readChart(t, chartXML("", "", tt.axis), false)
+			if len(c.Axes) != 1 || c.Axes[0].NoBreak != tt.noBreak || c.Axes[0].Overlap != tt.overlap {
+				t.Errorf("axes = %+v", c.Axes)
+			}
+		})
 	}
 }

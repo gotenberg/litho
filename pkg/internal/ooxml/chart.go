@@ -813,7 +813,21 @@ func (p *chartReader) axis(e *Element, kind chart.AxisKind) *chart.Axis {
 		a.MinorGrid = p.lineOf(g.Child(NSChart, "spPr"), minor)
 	}
 	a.Line = p.lineOf(e.Child(NSChart, "spPr"), p.autoLine())
-	a.Style = p.textStyle(p.textProps(e.Child(NSChart, "txPr")), 10, false, 1)
+	tp := p.textProps(e.Child(NSChart, "txPr"))
+	a.Style = p.textStyle(tp, 10, false, 1)
+	switch kind {
+	case chart.DateAxis:
+		// A date axis keeps chart2's defaults: no line breaks.
+		a.NoBreak = true
+	case chart.CategoryAxis:
+		// oox's AxisConverter: labels turned by the file never overlap and
+		// break only when upright or turned a quarter; an explicit zero
+		// turn lets them overlap.
+		r := math.Mod(tp.rotation+360, 360)
+		a.Overlap = tp.hasRotation && r == 0
+		a.NoBreak = tp.hasRotation && r != 0 && r != 90 && r != 270
+	case chart.ValueAxis, chart.SeriesAxis:
+	}
 	if t := e.Child(NSChart, "title"); t != nil {
 		own := p.textProps(t.Child(NSChart, "txPr"))
 		if rich := t.Child(NSChart, "tx").Child(NSChart, "rich"); rich != nil {
