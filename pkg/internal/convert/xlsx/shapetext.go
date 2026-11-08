@@ -89,7 +89,7 @@ paras:
 		para.size = endStyle.Size
 		for _, k := range p.Kids() {
 			var s string
-			rs := base
+			var rs text.Style
 			switch {
 			case k.Is(ooxml.NSA, "r"), k.Is(ooxml.NSA, "fld"):
 				s = textOf(k.Child(ooxml.NSA, "t"))
