@@ -386,7 +386,7 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 				x.n = min(max(x.n, vals.Len(), cats.Len()), MaxPoints)
 				if x.names == nil && cats.Len() > 0 {
 					for i := range min(cats.Len(), MaxPoints) {
-						x.names = append(x.names, cats.label(i))
+						x.names = append(x.names, cats.labelAs(i, x.format))
 					}
 				}
 			}

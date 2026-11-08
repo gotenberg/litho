@@ -37,3 +37,20 @@ func TestFormatLabel_Codes(t *testing.T) {
 		}
 	}
 }
+
+func TestData_LabelAsAxisFormat(t *testing.T) {
+	d := Data{Values: []Value{Num(43831), Str("x")}, Format: "0.0"}
+	tests := []struct {
+		i          int
+		code, want string
+	}{
+		{0, "", "43831.0"},
+		{0, "yyyy-mm-dd", "2020-01-01"},
+		{1, "yyyy-mm-dd", "x"},
+	}
+	for _, tt := range tests {
+		if got := d.labelAs(tt.i, tt.code); got != tt.want {
+			t.Errorf("labelAs(%d, %q) = %q, want %q", tt.i, tt.code, got, tt.want)
+		}
+	}
+}

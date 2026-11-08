@@ -107,6 +107,16 @@ func (d Data) label(i int) string {
 	return ""
 }
 
+// labelAs returns point i as a category label, a number formatted with
+// code when not empty, as an axis with its own number format shows its
+// numeric categories, else with the data's format.
+func (d Data) labelAs(i int, code string) string {
+	if code != "" && i >= 0 && i < len(d.Values) && d.Values[i].Kind == Number {
+		return formatLabel(code, d.Values[i].Number)
+	}
+	return d.label(i)
+}
+
 // numeric reports whether every non-empty point is a number.
 func (d Data) numeric() bool {
 	n := 0
