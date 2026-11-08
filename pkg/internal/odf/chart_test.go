@@ -227,7 +227,7 @@ func TestChartFromDocument_Warnings(t *testing.T) {
 		msgs = append(msgs, w.Message)
 	}
 	got := strings.Join(msgs, "|")
-	for _, want := range []string{"equation", "error indicators", "no values"} {
+	for _, want := range []string{"equation", "no values"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("warnings %q lack %q", got, want)
 		}
@@ -322,5 +322,23 @@ func TestChartFromDocument_RegressionCurves(t *testing.T) {
 	}
 	if b := got[1]; b.Kind != chart.TrendLinear || !b.HasIntercept || b.Intercept != 3 || b.Line != nil {
 		t.Errorf("second curve = %+v", b)
+	}
+}
+
+func TestChartFromDocument_ErrorIndicators(t *testing.T) {
+	st := chartStyles + `<style:style style:name="ep" style:family="chart"><style:chart-properties chart:error-upper-indicator="true" chart:error-lower-indicator="true" chart:error-category="percentage" chart:error-percentage="10"/><style:graphic-properties svg:stroke-width="0cm" svg:stroke-color="#000000"/></style:style>` +
+		`<style:style style:name="ec" style:family="chart"><style:chart-properties chart:error-upper-indicator="true" chart:error-category="cell-range" chart:error-upper-range="Sheet1.B2:Sheet1.B3"/></style:style>` +
+		`<style:style style:name="en" style:family="chart"><style:chart-properties chart:error-category="none"/></style:style>`
+	sers := `<chart:series chart:style-name="s1" chart:values-cell-range-address="Sheet1.B2:Sheet1.B3"><chart:error-indicator chart:style-name="ep" chart:dimension="y"/><chart:error-indicator chart:style-name="ec" chart:dimension="x"/><chart:error-indicator chart:style-name="en"/></chart:series>`
+	c := readODFChart(t, chartContent(st, "scatter", "", sers))
+	got := c.Groups[0].Series[0].ErrorBars
+	if len(got) != 2 {
+		t.Fatalf("error bars = %+v, want two", got)
+	}
+	if a := got[0]; a.Kind != chart.ErrorPercent || a.Plus != 10 || !a.Up || !a.Down || a.X || a.Line == nil {
+		t.Errorf("first = %+v", a)
+	}
+	if b := got[1]; b.Kind != chart.ErrorCustom || !b.X || !b.Up || b.Down || b.PlusData.Len() != 2 {
+		t.Errorf("second = %+v", b)
 	}
 }

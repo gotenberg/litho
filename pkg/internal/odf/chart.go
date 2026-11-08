@@ -778,8 +778,10 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 			r.warn(CodeChartUnsupported, "a regression curve's equation is not drawn")
 		}
 	}
-	if se.Child(NSChart, "error-indicator") != nil {
-		r.warn(CodeChartUnsupported, "error indicators are not drawn")
+	for _, ei := range se.All(NSChart, "error-indicator") {
+		if e, ok := r.errorBars(ei); ok && len(s.ErrorBars) < maxTrendlines {
+			s.ErrorBars = append(s.ErrorBars, e)
+		}
 	}
 	return s
 }
@@ -921,6 +923,52 @@ func (r *chartReader) trendline(name string) (chart.Trendline, bool) {
 		t.Line = s
 	}
 	return t, true
+}
+
+// errorBars reads a chart:error-indicator (ODF 1.3 Part 3, 11.16; its
+// style's 20.32 chart:error-category and the chart:error-* properties),
+// false for none.
+func (r *chartReader) errorBars(el *Element) (chart.ErrorBars, bool) {
+	name := el.A(NSChart, "style-name")
+	e := chart.ErrorBars{X: el.A(NSChart, "dimension") == "x"}
+	num := func(local string) float64 {
+		v := r.numProp(name, local)
+		if math.IsNaN(v) {
+			return 0
+		}
+		return v
+	}
+	weight := r.numProp(name, "std-weight")
+	if math.IsNaN(weight) {
+		weight = 1
+	}
+	switch v, _ := r.prop(name, "chart-properties", NSChart, "error-category"); v {
+	case "constant":
+		e.Kind, e.Plus, e.Minus = chart.ErrorFixed, num("error-upper-limit"), num("error-lower-limit")
+	case "percentage":
+		e.Kind, e.Plus = chart.ErrorPercent, num("error-percentage")
+	case "error-margin":
+		e.Kind, e.Plus = chart.ErrorMargin, num("error-margin")
+	case "standard-deviation":
+		e.Kind, e.Plus = chart.ErrorStdDev, weight
+	case "standard-error":
+		e.Kind, e.Plus = chart.ErrorStdErr, weight
+	case "variance":
+		e.Kind, e.Plus = chart.ErrorVariance, weight
+	case "cell-range":
+		e.Kind = chart.ErrorCustom
+		up, _ := r.prop(name, "chart-properties", NSChart, "error-upper-range")
+		down, _ := r.prop(name, "chart-properties", NSChart, "error-lower-range")
+		e.PlusData, e.MinusData = r.data(up, false), r.data(down, false)
+	default:
+		return e, false
+	}
+	e.Up = r.boolProp(name, "error-upper-indicator", false)
+	e.Down = r.boolProp(name, "error-lower-indicator", false)
+	if s := r.stroke(name, nil); s != nil {
+		e.Line = s
+	}
+	return e, e.Up || e.Down
 }
 
 // labelFrame reads the fill and border of the data labels of a
