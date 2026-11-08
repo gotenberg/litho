@@ -599,9 +599,10 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 		rst := d.blockStyle()
 		rst.Display = css.TableRow
 		// A height without a rule is a minimum, as Word and LibreOffice
-		// read it; an exact one is laid out as a minimum too.
+		// read it; an exact one fixes the row's height.
 		if row.props.height != nil && row.props.hRule != "auto" {
 			rst.Height = css.Pts(*row.props.height)
+			setExactHeight(rst, row.props.hRule == "exact")
 		}
 		if boolOf(row.props.cantSplit) {
 			rst.BreakInside = css.InsideAvoid

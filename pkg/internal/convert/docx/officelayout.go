@@ -103,3 +103,11 @@ func setPageTop(st *css.Style, y float64) {
 		st.PageTop = y
 	}
 }
+
+// setExactHeight makes the table row st exactly as tall as its Height
+// when exact, a trHeight of hRule exact (ECMA-376 Part 1, 17.4.81), its
+// cells' content past it clipped as Writer prints it
+// ([css.Office.ExactHeight]).
+func setExactHeight(st *css.Style, exact bool) {
+	st.ExactHeight = exact && st.Height.Kind == css.Points
+}

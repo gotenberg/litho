@@ -494,3 +494,27 @@ func TestFamilies_GenericBeforeAsian(t *testing.T) {
 		}
 	}
 }
+
+func TestApplyExactHeight_Rows(t *testing.T) {
+	t.Parallel()
+	auto := `<style:style style:name="R1" style:family="table-row"><style:table-row-properties style:row-height="1cm"/></style:style>` +
+		`<style:style style:name="R2" style:family="table-row"><style:table-row-properties style:row-height="1cm" style:use-optimal-row-height="true"/></style:style>` +
+		`<style:style style:name="R3" style:family="table-row"><style:table-row-properties style:min-row-height="1cm"/></style:style>`
+	var body strings.Builder
+	body.WriteString(`<table:table><table:table-column/>`)
+	for _, r := range []string{"R1", "R2", "R3"} {
+		body.WriteString(`<table:table-row table:style-name="` + r + `"><table:table-cell><text:p>x</text:p></table:table-cell></table:table-row>`)
+	}
+	body.WriteString(`</table:table>`)
+	b := newTestBuilder(t, doc{contentAuto: auto, body: body.String()})
+	root, _ := b.document(odfBody(b))
+	var got []bool
+	walkNodes(root, func(n *layout.Node) {
+		if n.Style.Display == css.TableRow {
+			got = append(got, n.Style.ExactHeight)
+		}
+	})
+	if len(got) != 3 || !got[0] || got[1] || got[2] {
+		t.Errorf("exact rows %v, want [true false false]", got)
+	}
+}

@@ -116,3 +116,20 @@ func TestStrokeBorders_ParagraphsAndCells(t *testing.T) {
 		}
 	}
 }
+
+func TestSetExactHeight_Rows(t *testing.T) {
+	t.Parallel()
+	row := func(rule string) string {
+		return `<w:tr><w:trPr><w:trHeight w:val="340"` + rule + `/></w:trPr><w:tc><w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc></w:tr>`
+	}
+	b := build(t, `<w:tbl><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid>`+row(` w:hRule="exact"`)+row(` w:hRule="atLeast"`)+row(``)+`</w:tbl>`, nil)
+	rows := find(b.root, func(n *layout.Node) bool { return n.Style.Display == css.TableRow })
+	if len(rows) != 3 {
+		t.Fatalf("%d rows", len(rows))
+	}
+	for i, want := range []bool{true, false, false} {
+		if st := rows[i].Style; st.ExactHeight != want || st.Height.Value != 17 {
+			t.Errorf("row %d: exact %v height %v, want %v 17pt", i, st.ExactHeight, st.Height, want)
+		}
+	}
+}

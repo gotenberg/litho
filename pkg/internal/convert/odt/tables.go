@@ -163,9 +163,11 @@ func (b *builder) row(c *odf.Element, tb *tableBuild, header bool) *layout.Node 
 	props := b.styles.Resolve(b.scope, odf.FamilyRow, c.A(odf.NSTable, "style-name"), odf.RowProps)
 	if h, ok := odf.Length(props.Get("style:row-height")); ok && h > 0 {
 		st.Height = css.Pts(h)
+		applyExactHeight(st, props.Get("style:use-optimal-row-height") != "true")
 	}
 	if h, ok := odf.Length(props.Get("style:min-row-height")); ok && h > 0 {
 		st.Height = css.Pts(h)
+		applyExactHeight(st, false)
 	}
 	if props.Get("fo:keep-together") == "always" {
 		st.BreakInside = css.InsideAvoid

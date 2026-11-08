@@ -133,3 +133,12 @@ func applyChain(st *css.Style, l chainLink) {
 func strokeBorders(st *css.Style) {
 	st.StrokeBorders = true
 }
+
+// applyExactHeight makes the table row st exactly as tall as its Height
+// when exact: a style:row-height without style:use-optimal-row-height
+// true (ODF 1.3 Part 3, 20.383 and 20.384), which Writer takes as fixed,
+// its cells' content past it clipped ([css.Office.ExactHeight]). A
+// style:min-row-height is a minimum.
+func applyExactHeight(st *css.Style, exact bool) {
+	st.ExactHeight = exact && st.Height.Kind == css.Points
+}
