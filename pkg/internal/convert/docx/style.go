@@ -42,10 +42,14 @@ func (d *document) blockStyle() *css.Style {
 // (sw/source/core/text/portxt.cxx, JustifyLinesWithShrinking).
 const justifyShrink = 0.25
 
-// families returns the font family list of run properties: the ASCII,
-// high ANSI, East Asian and complex script typefaces in that order, so
-// the text stack's per-character fallback picks the East Asian face for
-// CJK text, then the fallback face of the first family's class.
+// families returns the font family list of run properties: the ASCII
+// and high ANSI typefaces, the fallback face of the first one's class,
+// then the East Asian and complex script typefaces, so the text stack's
+// per-character fallback picks the East Asian face for CJK text. Latin
+// text in a missing face takes its class's fallback, as LibreOffice
+// substitutes it, never the East Asian face (fdo73550: Segoe UI, a
+// roman face in the font table, prints in a serif where its East Asian
+// Calibri is installed).
 func (d *document) families(r runProps) []string {
 	var out []string
 	add := func(f string) {
@@ -62,6 +66,9 @@ func (d *document) families(r runProps) []string {
 	}
 	add(r.fonts.ascii)
 	add(r.fonts.hAnsi)
+	if len(out) > 0 {
+		add(d.fallbackFor(out[0]))
+	}
 	add(r.fonts.eastAsia)
 	add(r.fonts.cs)
 	if len(out) == 0 {
