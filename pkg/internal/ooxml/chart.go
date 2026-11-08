@@ -172,6 +172,9 @@ type chartReader struct {
 	mso2007 bool
 	// impress reads a presentation's chart (ChartOptions.Presentation).
 	impress bool
+	// fixedInner marks a plot area the file places without its axis
+	// labels.
+	fixedInner bool
 	// global is the chart space's text properties, which every text
 	// inherits.
 	global textProps
@@ -247,6 +250,7 @@ func (p *chartReader) read(root *Element) {
 	c.PlotArea = p.frame(pa.Child(NSChart, "spPr"), p.autoFrame(false))
 	if l := manualLayout(pa); l != nil && l.Width > 0 && l.Height > 0 {
 		c.PlotLayout = l
+		p.fixedInner = l.Inner
 	}
 	p.readAxes(pa)
 	for _, g := range pa.Kids() {
@@ -908,11 +912,12 @@ func (p *chartReader) axis(e *Element, kind chart.AxisKind) *chart.Axis {
 		a.NoBreak = true
 	case chart.CategoryAxis:
 		// oox's AxisConverter: labels turned by the file never overlap and
-		// break only when upright or turned a quarter; an explicit zero
-		// turn lets them overlap.
+		// break only when upright or turned a quarter beside a plot area
+		// the file does not place; an explicit zero turn lets them
+		// overlap.
 		r := math.Mod(tp.rotation+360, 360)
 		a.Overlap = tp.hasRotation && r == 0
-		a.NoBreak = tp.hasRotation && r != 0 && r != 90 && r != 270
+		a.NoBreak = tp.hasRotation && r != 0 && (p.fixedInner || r != 90 && r != 270)
 	case chart.ValueAxis, chart.SeriesAxis:
 	}
 	if t := e.Child(NSChart, "title"); t != nil {

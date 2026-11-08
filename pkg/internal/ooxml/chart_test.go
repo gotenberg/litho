@@ -324,6 +324,7 @@ func TestChartFromElement_AxisLabelBreaks(t *testing.T) {
 		{name: "turned", axis: `<c:catAx><c:axId val="1"/><c:txPr><a:bodyPr rot="-2700000"/></c:txPr></c:catAx>`, noBreak: true},
 		{name: "quarter turn", axis: `<c:catAx><c:axId val="1"/><c:txPr><a:bodyPr rot="-5400000"/></c:txPr></c:catAx>`},
 		{name: "date", axis: `<c:dateAx><c:axId val="1"/></c:dateAx>`, noBreak: true},
+		{name: "quarter turn beside a placed plot area", axis: `<c:layout><c:manualLayout><c:layoutTarget val="inner"/><c:xMode val="edge"/><c:yMode val="edge"/><c:x val="0.1"/><c:y val="0.1"/><c:w val="0.5"/><c:h val="0.5"/></c:manualLayout></c:layout><c:catAx><c:axId val="1"/><c:txPr><a:bodyPr rot="-5400000"/></c:txPr></c:catAx>`, noBreak: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
