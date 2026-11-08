@@ -67,3 +67,12 @@ Of the 172 references, 134 draw Liberation Serif and 83 Liberation Sans, Impress
 Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on 170 of 172 presentations. Pages, links and outline score 1 on all, strict on all but 3, hairlines and a bitmap fill litho draws otherwise than poppler (`sd/LineStylesOwn.odp`, `sd/fillbitmap2.odp`, `sd/tdf153161_FlushToSave.odp`). Text F1 is below 1 on 2 and under the bar on 1, `sd/tdf96708.odp` at 0.725, whose slide numbers are white on a white slide, which PDF.js reads and litho's text extraction leaves out. Rotated text (4 references) scores 1. Layout averages 0.977 and falls below 0.75 on 1 (`sd/tdf127267DashOnHairline.odp` at 0.736, dashed hairlines). 78 references hold no text PDF.js reads; 3 of them draw the Fontwork text their slides hold as outlines (`sd/tdf100348_Fontwork2TextWarp.odp`): a conversion that writes that text as text scores text F1 0 there. `TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens` checks the committed sources so on every run with the corpus provisioned.
 
 ## Accepted disagreements
+
+- `sd/Math.fodp`, `sd/formula.fodp`: formula objects LibreOffice renders through its own formula editor; litho has no formula renderer and draws the object's replacement picture when the file holds one.
+- `sd/tdf169952_multiple_OLEs.odp`, `sd/linked_ole.odp`: embedded and linked OLE objects LibreOffice draws itself; their replacement pictures are StarView metafiles, which litho does not draw.
+- `sd/embedded-pdf.odp`: a PDF used as a picture, whose text LibreOffice renders; litho draws the replacement picture.
+- `sd/tdf100348_Fontwork2TextWarp.odp`, `sd/tdf100348_FontworkBitmapFill.odp`, `sd/tdf100348_FontworkGradientGlow.odp`: Fontwork is drawn as outlines by LibreOffice, so the reference holds no text; litho writes the text unwarped.
+- `sd/extfile_field.odp`: the file name field prints the route's temporary upload path in the reference, which changes on every conversion; litho prints nothing for it.
+- `sd/numfmt.odp`: the date and time fields print the moment of the conversion in the reference.
+- `sd/slide-tile-background.odp`: LibreOffice prints none of the slide's tiled background bitmap, with or without its zero size; litho tiles it.
+- `sd/tdf96708.odp`: white text on a white slide is read by PDF.js and left out by litho's text extraction.
