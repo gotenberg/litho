@@ -255,8 +255,8 @@ func footerKind(p placeholder) bool {
 // autoShape reads a p:sp or p:cxnSp (19.3.1.43 sp, 19.3.1.19 cxnSp): its
 // placement, geometry, fill, line and text, each inherited from its
 // placeholders as far as the slide leaves them unset. A placeholder
-// without text is an empty prompt and prints nothing, as Impress leaves
-// empty presentation objects out; a date, footer or slide number
+// without text is an empty prompt whose text never prints, its fill and
+// outline only; a date, footer or slide number
 // placeholder prints only when the slide's layout has one of its type,
 // as Impress turns them into its master page's header and footer fields.
 //
@@ -266,6 +266,8 @@ func footerKind(p placeholder) bool {
 //     at the slide's own place when its layout holds one, and nothing when
 //     only the master does, whatever the master's p:hf says; a placeholder
 //     no layer places prints nothing.
+//   - pptx: sd/tdf104015's empty title placeholder prints its red fill and
+//     blue outline.
 func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	chain := inherited(c.layer, el)
 	p, isPh := phOf(el)
@@ -293,9 +295,13 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	}
 	if isPh {
 		if s.Text == nil || empty(s.Text) {
-			return nil
+			// The prompt text never prints; the outline and fill do.
+			if s.Fill.Kind == slides.FillNone && s.Line.Width == 0 {
+				return nil
+			}
+			s.Text = nil
 		}
-		if p.class() == "title" && c.title == "" {
+		if p.class() == "title" && c.title == "" && s.Text != nil {
 			c.title = plain(s.Text)
 		}
 	}

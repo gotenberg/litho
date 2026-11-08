@@ -57,6 +57,11 @@ func TestPlaceholders_Inheritance(t *testing.T) {
 			shape: "Empty", absent: true,
 		},
 		{
+			name:  "an empty placeholder with a fill prints its shape",
+			deck:  testDeck{slides: []testSlide{{tree: `<p:sp><p:nvSpPr><p:cNvPr id="9" name="Filled"/><p:cNvSpPr/><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></p:spPr><p:txBody><a:bodyPr/><a:p><a:endParaRPr/></a:p></p:txBody></p:sp>`}}},
+			shape: "Filled", want: masterBox,
+		},
+		{
 			name: "a placeholder no layer places prints nothing",
 			deck: testDeck{
 				masterTree: phShape("Title Placeholder 1", "title", -1, 0, 0, 0, 0, para("x")),
