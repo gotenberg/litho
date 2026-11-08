@@ -364,6 +364,7 @@ func (r *reader) paragraph(p *ooxml.Element, ts *textStyles) slides.Paragraph {
 			run.Style = r.runStyle(runChain(pr, pc), ts.sc)
 			if k.Local == "fld" {
 				run.Field = fieldOf(attr(k, "type"))
+				run.Format = dateFormat(attr(k, "type"), run.Style.Lang)
 			}
 			if h := pr.Child(ooxml.NSA, "hlinkClick"); h != nil {
 				if run.Href = r.href(ts.part, h); run.Href != "" {
@@ -442,6 +443,60 @@ func fieldOf(typ string) slides.Field {
 		return slides.FieldDate
 	}
 	return slides.FieldNone
+}
+
+// The number format codes the date and time fields print in (21.1.2.3.6
+// fld type datetime and datetime1 to datetime13), as Impress maps them
+// to its date and time formats and prints them in the en-US locale.
+//
+// # Measured
+//
+//   - litho: a deck of the fourteen fields, en-US, converted by the
+//     pinned image on 2026-11-08 at 11:25:38 prints "11/8/26",
+//     "11/08/2026", "Sunday, November 8, 2026", "November 8, 2026" (3, 4
+//     and 6), "Nov 8, 2026" (5 and 7), "11/08/2026 11:25 AM", "11/08/2026
+//     11:25:38 AM", "11:25", "11:25:38 AM", "11:25 AM" and "11:25:38 AM".
+var usDateFormats = map[string]string{
+	"datetime": "M/D/YY", "datetime1": "MM/DD/YYYY", "datetime2": "DDDD, MMMM D, YYYY",
+	"datetime3": "MMMM D, YYYY", "datetime4": "MMMM D, YYYY", "datetime5": "MMM D, YYYY",
+	"datetime6": "MMMM D, YYYY", "datetime7": "MMM D, YYYY", "datetime8": "MM/DD/YYYY HH:MM AM/PM",
+	"datetime9": "MM/DD/YYYY HH:MM:SS AM/PM", "datetime10": "HH:MM", "datetime11": "HH:MM:SS AM/PM",
+	"datetime12": "HH:MM AM/PM", "datetime13": "HH:MM:SS AM/PM",
+}
+
+// dayFirstFormats are the codes of a field in a language that writes the
+// day first, as en-GB, de-DE and fr-FR print them; the names stay
+// English, the language's own the format codes cannot say.
+//
+// # Measured
+//
+//   - litho: the same deck in en-GB prints "08/11/26", "08/11/2026",
+//     "Sunday 8 November 2026", "8 November 2026", "8 Nov 2026" and
+//     "11:25:53"; in de-DE the dates with full stops ("08.11.2026").
+var dayFirstFormats = map[string]string{
+	"datetime": "DD/MM/YY", "datetime1": "DD/MM/YYYY", "datetime2": "DDDD D MMMM YYYY",
+	"datetime3": "D MMMM YYYY", "datetime4": "D MMMM YYYY", "datetime5": "D MMM YYYY",
+	"datetime6": "D MMMM YYYY", "datetime7": "D MMM YYYY", "datetime8": "DD/MM/YYYY HH:MM AM/PM",
+	"datetime9": "DD/MM/YYYY HH:MM:SS AM/PM", "datetime10": "HH:MM", "datetime11": "HH:MM:SS",
+	"datetime12": "HH:MM AM/PM", "datetime13": "HH:MM:SS AM/PM",
+}
+
+// dateFormat returns the format code a date or time field of type typ
+// prints in for the run's language lang, "" for another field.
+func dateFormat(typ, lang string) string {
+	code, ok := usDateFormats[typ]
+	if !ok {
+		return ""
+	}
+	l := strings.ToLower(lang)
+	if l == "" || l == "en" || strings.HasPrefix(l, "en-us") {
+		return code
+	}
+	code = dayFirstFormats[typ]
+	if strings.HasPrefix(l, "de") {
+		code = strings.ReplaceAll(code, "/", ".")
+	}
+	return code
 }
 
 // hasText reports whether a run holds text.

@@ -5,9 +5,11 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numfmt"
 )
 
 // rgb returns the opaque colour of 0xRRGGBB.
@@ -227,5 +229,43 @@ func TestText_OrphanPlaceholder(t *testing.T) {
 	p := doc.Slides[0].Shapes[0].Text.Paragraphs[0]
 	if p.Bullet != nil || p.MarginLeft != 0 || p.Runs[0].Style.Size != 18 {
 		t.Errorf("a placeholder its layout lacks inherits nothing: %+v", p)
+	}
+}
+
+func TestText_DateFieldFormats(t *testing.T) {
+	// 2026-11-08 11:25:38, the moment the measurements were printed.
+	serial := float64(time.Date(2026, 11, 8, 11, 25, 38, 0, time.UTC).Sub(time.Date(1899, 12, 30, 0, 0, 0, 0, time.UTC))) / float64(24*time.Hour)
+	cases := []struct{ typ, lang, want string }{
+		{"datetime", "en-US", "11/8/26"},
+		{"datetime1", "en-US", "11/08/2026"},
+		{"datetime2", "", "Sunday, November 8, 2026"},
+		{"datetime3", "en-US", "November 8, 2026"},
+		{"datetime5", "en-US", "Nov 8, 2026"},
+		{"datetime8", "en-US", "11/08/2026 11:25 AM"},
+		{"datetime9", "en-US", "11/08/2026 11:25:38 AM"},
+		{"datetime10", "en-US", "11:25"},
+		{"datetime11", "en-US", "11:25:38 AM"},
+		{"datetime12", "en-US", "11:25 AM"},
+		{"datetime1", "en-GB", "08/11/2026"},
+		{"datetime2", "en-GB", "Sunday 8 November 2026"},
+		{"datetime11", "en-GB", "11:25:38"},
+		{"datetime1", "de-DE", "08.11.2026"},
+		{"slidenum", "en-US", ""},
+	}
+	for _, c := range cases {
+		code := dateFormat(c.typ, c.lang)
+		if c.want == "" {
+			if code != "" {
+				t.Errorf("%s: code %q", c.typ, code)
+			}
+			continue
+		}
+		f, err := numfmt.Parse(code)
+		if err != nil {
+			t.Fatalf("%s %s: %v", c.typ, c.lang, err)
+		}
+		if got := f.Apply(numfmt.Value{Kind: numfmt.Number, Number: serial}).Text; got != c.want {
+			t.Errorf("%s %s: %q prints %q, want %q", c.typ, c.lang, code, got, c.want)
+		}
 	}
 }
