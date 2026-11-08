@@ -215,6 +215,11 @@ func TestText_BodyProperties(t *testing.T) {
 				t.Errorf("body %+v", b)
 			}
 		}},
+		{"a block not centred", `<a:bodyPr anchorCtr="0"/>`, func(t *testing.T, b *slides.TextBody) {
+			if b.HorizontalAnchor != slides.HorizontalStart {
+				t.Errorf("body %+v", b)
+			}
+		}},
 		{"a shape fit to its text keeps its box", `<a:bodyPr anchor="ctr"><a:spAutoFit/></a:bodyPr>`, func(t *testing.T, b *slides.TextBody) {
 			if b.Autofit != slides.AutofitNone || b.Anchor != slides.AnchorMiddle {
 				t.Errorf("body %+v", b)

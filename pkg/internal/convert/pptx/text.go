@@ -226,7 +226,7 @@ func bodyProps(bc chain) *slides.TextBody {
 			}
 		}
 	}
-	if v, ok := bc.attr("anchorCtr"); ok && ooxml.OnOff(v, false) {
+	if v, ok := bc.attr("anchorCtr"); ok && ooxml.OnOff(v, true) {
 		b.HorizontalAnchor = slides.HorizontalCenter
 	}
 	switch v, _ := bc.attr("anchor"); v {
