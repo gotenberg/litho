@@ -95,6 +95,8 @@ func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment
 			}
 		}
 	}
-	out := append(fills, texts...)
+	out := make([]compose.Fragment, 0, len(fills)+len(texts)+len(borders))
+	out = append(out, fills...)
+	out = append(out, texts...)
 	return append(out, borders...)
 }

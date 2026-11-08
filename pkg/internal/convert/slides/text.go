@@ -75,8 +75,18 @@ var noFit = fit{1, 1}
 // to fit, until the text fits (ImpEditEngine::ScaleContentToFitWindow,
 // constScaleLevels).
 var scaleLevels = [...]fit{
-	{1, 0.9}, {0.925, 0.9}, {0.85, 0.9}, {0.85, 0.8}, {0.775, 0.8}, {0.7, 0.8},
-	{0.625, 0.8}, {0.55, 0.8}, {0.475, 0.8}, {0.4, 0.8}, {0.325, 0.8}, {0.25, 0.8},
+	{1, 0.9},
+	{0.925, 0.9},
+	{0.85, 0.9},
+	{0.85, 0.8},
+	{0.775, 0.8},
+	{0.7, 0.8},
+	{0.625, 0.8},
+	{0.55, 0.8},
+	{0.475, 0.8},
+	{0.4, 0.8},
+	{0.325, 0.8},
+	{0.25, 0.8},
 }
 
 // textResult is a text body laid out in its shape.
@@ -119,7 +129,7 @@ func insetRect(r compose.Rect, in [4]float64) compose.Rect {
 	return out
 }
 
-// shapeText lays the text body body out in the text rectangle of the
+// shapeText lays the text of body out in the text rectangle of the
 // geometry g fitted to box.
 func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect) *textResult {
 	res := &textResult{box: box}
@@ -167,6 +177,8 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 	}
 	var m compose.Matrix
 	switch body.Vertical {
+	case css.HorizontalTB:
+		m = translate(inner.X, inner.Y+dy)
 	case css.SidewaysLR:
 		// Turned a quarter turn counter-clockwise: the lines read bottom
 		// to top and stack left to right (21.1.10.83 vert270).
@@ -576,11 +588,9 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 	st.Top = css.Pts(lb.ascent - 0.8*lb.height)
 	st.TabSize = css.Pts(defaultTab)
 	st.Orphans, st.Widows = 1, 1
-	switch p.Align {
-	case css.AlignStart, css.AlignAuto:
+	st.TextAlign = p.Align
+	if p.Align == css.AlignAuto {
 		st.TextAlign = css.AlignStart
-	default:
-		st.TextAlign = p.Align
 	}
 	sideLen := func(v float64) float64 {
 		if math.IsNaN(v) || math.IsInf(v, 0) {
@@ -674,7 +684,7 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 	if last := runs[len(runs)-1]; last.Break {
 		// A line break that ends the paragraph keeps the empty line after
 		// it.
-		node.Children = append(node.Children, &layout.Node{Kind: layout.Text, Style: st, Text: "​"})
+		node.Children = append(node.Children, &layout.Node{Kind: layout.Text, Style: st, Text: "\u200b"})
 	}
 	if p.Bullet != nil && hasText(runs) {
 		b.bullet(node, p, first, lb, f, number, indent)

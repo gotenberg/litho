@@ -108,8 +108,8 @@ func (b *builder) warn(code, msg string) {
 // bullet when the indent leaves it no room; a symbol bullet is centred on
 // the line's text height. Numbers count per level across the body. A
 // text body that shrinks to fit tries Impress's scale levels in turn,
-// font sizes rounded to whole points, until the text fits; one that grows
-// grows the box from its anchor.
+// font sizes rounded to whole points, until the text fits; a growing one
+// stretches its box from its anchor.
 //
 // # Not supported
 //
