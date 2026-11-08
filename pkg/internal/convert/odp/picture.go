@@ -101,6 +101,9 @@ func (r *reader) decodePicture(el *odf.Element) *layout.Picture {
 	}
 	r.pixels += px
 	pic := &layout.Picture{Width: float64(cfg.Width) * css.Pt, Height: float64(cfg.Height) * css.Pt}
+	if dx, dy, ok := density(data); ok {
+		pic.Width, pic.Height = float64(cfg.Width)*72/dx, float64(cfg.Height)*72/dy
+	}
 	if format == "jpeg" && (cfg.ColorModel == imgcolor.GrayModel || cfg.ColorModel == imgcolor.YCbCrModel || cfg.ColorModel == imgcolor.CMYKModel) {
 		pic.Source = &compose.ImageSource{JPEG: data}
 		return pic
