@@ -86,8 +86,6 @@ func TestRead_Geometry(t *testing.T) {
 		{"rounded rectangle", `<draw:rect draw:corner-radius="0.25cm" svg:width="2cm" svg:height="1cm"/>`,
 			&shape.Geometry{Preset: "roundRect", Adjust: []shape.Adjust{{Name: "adj", Value: 25000}}}},
 		{"circle", `<draw:circle svg:width="1cm" svg:height="1cm"/>`, &shape.Geometry{Preset: "ellipse"}},
-		{"section", `<draw:ellipse draw:kind="section" draw:start-angle="0" draw:end-angle="90" svg:width="1cm" svg:height="1cm"/>`,
-			&shape.Geometry{Preset: "pie", Adjust: []shape.Adjust{{Name: "adj1", Value: 270 * 60000}, {Name: "adj2", Value: 0}}}},
 		{"connector", `<draw:connector svg:x1="0cm" svg:y1="0cm" svg:x2="1cm" svg:y2="1cm"/>`, &shape.Geometry{Preset: "bentConnector3"}},
 		{"curved connector", `<draw:connector draw:type="curve" svg:x1="0cm" svg:y1="0cm" svg:x2="1cm" svg:y2="1cm"/>`, &shape.Geometry{Preset: "curvedConnector3"}},
 	}
@@ -310,5 +308,42 @@ func TestRead_OpenFreeformFilled(t *testing.T) {
 		if s.Geometry == nil || s.Geometry.Custom == nil || s.Geometry.Custom.OpenUnfilled != tt.unfilled {
 			t.Errorf("%s: geometry = %+v, want open subpaths unfilled %v", tt.typ, s.Geometry, tt.unfilled)
 		}
+	}
+}
+
+func TestRead_EllipseKinds(t *testing.T) {
+	// A quarter from three o'clock to twelve, in a 2 cm square.
+	tests := []struct {
+		kind  string
+		fill  bool
+		first [2]float64
+		last  [2]float64
+	}{
+		{"section", true, [2]float64{1, 1}, [2]float64{1, 0}},
+		{"cut", true, [2]float64{2, 1}, [2]float64{1, 0}},
+		{"arc", false, [2]float64{2, 1}, [2]float64{1, 0}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.kind, func(t *testing.T) {
+			s := firstShape(t, flat{body: page(`<draw:ellipse draw:kind="` + tt.kind + `" draw:start-angle="0" draw:end-angle="90" svg:width="2cm" svg:height="2cm"/>`)})
+			paths := shape.Paths(s.Geometry, compose.Rect{Width: 2, Height: 2})
+			if len(paths) != 1 || paths[0].Fill != tt.fill {
+				t.Fatalf("paths = %+v", paths)
+			}
+			ops := paths[0].Ops
+			first := ops[0].P[0]
+			var last compose.Point
+			for _, op := range ops {
+				switch op.Kind {
+				case compose.MoveTo, compose.LineTo:
+					last = op.P[0]
+				case compose.CurveTo:
+					last = op.P[2]
+				}
+			}
+			if math.Abs(first.X-tt.first[0]) > 1e-6 || math.Abs(first.Y-tt.first[1]) > 1e-6 || math.Abs(last.X-tt.last[0]) > 1e-6 || math.Abs(last.Y-tt.last[1]) > 1e-6 {
+				t.Errorf("from %+v to %+v, want %v to %v", first, last, tt.first, tt.last)
+			}
+		})
 	}
 }

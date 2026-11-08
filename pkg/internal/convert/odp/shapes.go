@@ -524,15 +524,17 @@ func connectorRoute(el *odf.Element) (compose.Rect, *shape.Geometry) {
 	return box, &shape.Geometry{Custom: c}
 }
 
-// ellipseGeometry maps a draw:ellipse or draw:circle (ODF 1.3, Part 3,
-// 10.3.8 and 10.3.9) onto a DrawingML preset: the whole ellipse, or for a
-// draw:kind (19.188) of section, cut or arc the pie, chord or arc preset
-// (ECMA-376 Part 1, 20.1.10.56) between draw:start-angle and
-// draw:end-angle, which run counterclockwise from three o'clock where
-// the presets' adj1 and adj2 run clockwise, in 60,000ths of a degree.
+// ellipseGeometry returns the outline of a draw:ellipse or draw:circle
+// (ODF 1.3, Part 3, 10.3.8 and 10.3.9): the whole ellipse, or for a
+// draw:kind (19.188) of section, cut or arc the part between
+// draw:start-angle and draw:end-angle, counterclockwise from three
+// o'clock: a section closed through the centre, a cut closed by its
+// chord, an arc open and unfilled, as Impress draws them (measured on the
+// pinned LibreOffice: sd/tdf99497_CircleKind.odp's arc prints its curve
+// alone). The ellipse is drawn in a 2 by 2 space fitted to the box.
 func ellipseGeometry(el *odf.Element) *shape.Geometry {
-	preset := map[string]string{"section": "pie", "cut": "chord", "arc": "arc"}[el.A(odf.NSDraw, "kind")]
-	if preset == "" {
+	kind := el.A(odf.NSDraw, "kind")
+	if kind != "section" && kind != "cut" && kind != "arc" {
 		return &shape.Geometry{Preset: "ellipse"}
 	}
 	start, _ := odf.ParseAngle(el.A(odf.NSDraw, "start-angle"), false)
@@ -540,6 +542,25 @@ func ellipseGeometry(el *odf.Element) *shape.Geometry {
 	if !ok {
 		end = 360
 	}
-	cw := func(a float64) float64 { return math.Mod(360-a, 360) * 60000 }
-	return &shape.Geometry{Preset: preset, Adjust: []shape.Adjust{{Name: "adj1", Value: cw(end)}, {Name: "adj2", Value: cw(start)}}}
+	lit := func(v ...float64) []shape.Arg {
+		out := make([]shape.Arg, len(v))
+		for i, x := range v {
+			out[i] = shape.Arg{Value: x}
+		}
+		return out
+	}
+	var cmds []shape.Cmd
+	switch kind {
+	case "section":
+		cmds = []shape.Cmd{{Kind: shape.CmdMove, Args: lit(1, 1)}, {Kind: shape.CmdAngleEllipseTo, Args: lit(1, 1, 1, 1, start, end)}, {Kind: shape.CmdClose}}
+	case "cut":
+		cmds = []shape.Cmd{{Kind: shape.CmdAngleEllipse, Args: lit(1, 1, 1, 1, start, end)}, {Kind: shape.CmdClose}}
+	default:
+		cmds = []shape.Cmd{{Kind: shape.CmdAngleEllipse, Args: lit(1, 1, 1, 1, start, end)}}
+	}
+	pd := shape.PathDef{Stroke: true, Cmds: cmds}
+	if kind == "arc" {
+		pd.Fill = shape.FillNone
+	}
+	return &shape.Geometry{Custom: &shape.Custom{View: &compose.Rect{Width: 2, Height: 2}, Paths: []shape.PathDef{pd}}}
 }
