@@ -139,8 +139,9 @@ var thresholdKinds = map[string]string{
 }
 
 // thresholds resolves the entries of a colour scale or a data bar to
-// numbers over the range's numbers; false when one is a formula other
-// than a number or a cell of this table.
+// numbers over the range's numbers, a formula other than a number or a
+// cell of this table to "=" and its text for the builder; false for an
+// entry it cannot read.
 func thresholds(sh *sheet.Sheet, entries []*odf.Element, ranges []sheet.Range) ([]sheet.Value, bool) {
 	var nums []float64
 	read := false
@@ -156,6 +157,11 @@ func thresholds(sh *sheet.Sheet, entries []*odf.Element, ranges []sheet.Range) (
 			if c, ok := operand(sh, raw, nil); ok && c.Kind == sheet.Number {
 				v, err = c.Number, nil
 			}
+		}
+		if err != nil && k.A(nsCalcExt, "type") == "formula" && raw != "" {
+			// A formula is left for the builder to compute.
+			out = append(out, sheet.Value{Kind: sheet.Text, Text: "=" + raw})
+			continue
 		}
 		if err != nil && (kind == "num" || kind == "percent" || kind == "percentile") {
 			return nil, false

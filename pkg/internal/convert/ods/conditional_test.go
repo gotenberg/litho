@@ -104,7 +104,7 @@ func TestRead_ConditionalFormats(t *testing.T) {
 		b.BarAxis != sheet.BarAxisMiddle || b.BarMinLength != 0 || b.BarMaxLength != 1 || b.BarSolid {
 		t.Errorf("data bar %+v", b)
 	}
-	if s := scales[2]; s.Kind != sheet.RuleExpression {
+	if s := scales[2]; s.Kind != sheet.RuleColorScale || len(s.Values) != 2 || s.Values[1] != (sheet.Value{Kind: sheet.Text, Text: "=2*[.A1]"}) {
 		t.Errorf("a formula threshold %+v", s)
 	}
 	if s := scales[3]; s.Kind != sheet.RuleIconSet {
