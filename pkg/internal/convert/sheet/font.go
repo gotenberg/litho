@@ -238,6 +238,45 @@ func (m *measurer) runsWidth(runs []text.ParagraphRun) float64 {
 	return p.MaxContent()
 }
 
+// textLineHeight returns the height of a line of the text s in the font
+// f: the font's own, or the tallest of the faces the text falls back to
+// for the characters the font lacks, as Calc's edit engine sets a line to
+// its tallest portion.
+//
+// # Corpus evidence
+//
+//   - xlsx: sc/tdf130104_indent.xlsx, rows of Calibri 10 point text and
+//     Chinese text without a height of their own, prints them 15.65
+//     points apart, the line of Noto Sans CJK's 14.5 points and the
+//     padding, where its Latin rows are 12.75.
+func (m *measurer) textLineHeight(f font, s string) float64 {
+	h := m.lineHeight(f)
+	ascii := true
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			ascii = false
+			break
+		}
+	}
+	if ascii {
+		return h
+	}
+	k := f.key() + "\x00h\x00" + s
+	if v, ok := m.cache[k]; ok {
+		return v
+	}
+	p, _, err := m.fonts.Shape(m.ctx, []text.ParagraphRun{{Text: s, Style: f.textStyle(m.lang)}}, text.ParagraphOptions{})
+	if err == nil {
+		for _, sp := range p.Line(0, p.Len(), false).Spans {
+			h = max(h, sp.Ascent+sp.Descent)
+		}
+	}
+	if len(m.cache) < maxMeasureCache {
+		m.cache[k] = h
+	}
+	return h
+}
+
 // lineHeight returns the height of a line of f: its face's ascent plus
 // descent, as Calc sizes a cell's text line.
 func (m *measurer) lineHeight(f font) float64 {

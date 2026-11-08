@@ -73,7 +73,10 @@ func (b *builder) optimalHeights(g *grid) {
 			if !ok {
 				continue
 			}
-			lineH := b.m.lineHeight(d.font)
+			lineH := 0.0
+			for _, line := range strings.Split(d.text, "\n") {
+				lineH = max(lineH, b.m.textLineHeight(d.font, line))
+			}
 			for _, r := range d.runs {
 				if r.Font != nil {
 					lineH = max(lineH, b.m.lineHeight(overlay(d.font, r.Font)))
