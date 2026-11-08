@@ -59,10 +59,12 @@ type Paint struct {
 //     at the preset's pitch and weight, the others as the foreground at
 //     the preset's ink coverage.
 //
-// The gradient's scaled and rotWithShape flags (20.1.8.33 gradFill) and a
+// An outline that encloses no area, a line, paints nothing: a renderer
+// would draw its zero-width fill as a hairline. The gradient's scaled and
+// rotWithShape flags (20.1.8.33 gradFill) and a
 // picture's source rectangle and tile alignment are not modelled.
 func Fill(ops []compose.PathOp, box compose.Rect, p Paint) []compose.Fragment {
-	if len(ops) == 0 {
+	if !hasArea(ops) {
 		return nil
 	}
 	flat := func(c compose.Color) *compose.Path {
@@ -94,6 +96,43 @@ func Fill(ops []compose.PathOp, box compose.Rect, p Paint) []compose.Fragment {
 	case PaintNone:
 	}
 	return nil
+}
+
+// hasArea reports whether the outline ops encloses any area: the
+// shoelace sum of each subpath over its points, Bézier control points
+// included, is not zero.
+func hasArea(ops []compose.PathOp) bool {
+	var area, sub float64
+	var first, last compose.Point
+	open := false
+	add := func(p compose.Point) {
+		sub += last.X*p.Y - p.X*last.Y
+		last = p
+	}
+	closeSub := func() {
+		if open {
+			add(first)
+			area += math.Abs(sub)
+		}
+		sub, open = 0, false
+	}
+	for _, op := range ops {
+		switch op.Kind {
+		case compose.MoveTo:
+			closeSub()
+			first, last, open = op.P[0], op.P[0], true
+		case compose.LineTo:
+			add(op.P[0])
+		case compose.CurveTo:
+			add(op.P[0])
+			add(op.P[1])
+			add(op.P[2])
+		case compose.ClosePath:
+			closeSub()
+		}
+	}
+	closeSub()
+	return area > 1e-9
 }
 
 // normalStops returns the stops sorted by position, clamped to [0, 1],

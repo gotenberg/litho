@@ -45,8 +45,9 @@ func line() []compose.PathOp {
 
 // TestStroke_Arrowheads checks a triangle at the end of a 2 pt line: the
 // tip at the end, the base 6 pt back and 6 pt wide (medium: 3 line
-// widths), the line stopping halfway in; and a diamond centred on the
-// start with the line untouched.
+// widths), the line stopping a fifteenth of the width short of the base;
+// and a diamond centred on the start, the line stopping short of its
+// centre.
 func TestStroke_Arrowheads(t *testing.T) {
 	frags := Stroke(line(), Line{Width: 2, Color: compose.Color{A: 1},
 		Head: Arrowhead{Kind: ArrowDiamond}, Tail: Arrowhead{Kind: ArrowTriangle}})
@@ -54,11 +55,11 @@ func TestStroke_Arrowheads(t *testing.T) {
 		t.Fatalf("%d fragments", len(frags))
 	}
 	body := frags[0].(*compose.Path)
-	if got := body.Ops[1].P[0].X; math.Abs(got-97) > 1e-9 {
-		t.Errorf("the line ends at %g, want 97", got)
+	if got := body.Ops[1].P[0].X; math.Abs(got-(94+0.4)) > 1e-9 {
+		t.Errorf("the line ends at %g, want 94.4", got)
 	}
-	if got := body.Ops[0].P[0].X; got != 0 {
-		t.Errorf("the line starts at %g, want 0", got)
+	if got := body.Ops[0].P[0].X; math.Abs(got-(3-0.4)) > 1e-9 {
+		t.Errorf("the line starts at %g, want 2.6", got)
 	}
 	tri := frags[2].(*compose.Path)
 	want := []compose.Point{{X: 100, Y: 0}, {X: 94, Y: 3}, {X: 94, Y: -3}}
@@ -108,8 +109,8 @@ func TestFill_Gradient(t *testing.T) {
 	if sh.Kind != compose.Radial || sh.Transform.E != 100 || sh.Transform.F != 50 {
 		t.Errorf("radial %+v", sh)
 	}
-	// No area: the first stop, flat.
-	flat := Fill(RectOps(compose.Rect{Width: 10}), compose.Rect{Width: 10}, Paint{Kind: PaintGradient, Stops: stops})
+	// A box without area: the first stop, flat.
+	flat := Fill(RectOps(box), compose.Rect{Width: 10}, Paint{Kind: PaintGradient, Stops: stops})
 	if p := flat[0].(*compose.Path); p.Fill.Shading != nil || p.Fill.Color.R != 1 {
 		t.Errorf("flat %+v", p.Fill)
 	}
@@ -120,6 +121,9 @@ func TestFill_Kinds(t *testing.T) {
 	ops := RectOps(box)
 	if f := Fill(ops, box, Paint{Kind: PaintSolid, Color: compose.Color{G: 1, A: 1}}); len(f) != 1 || f[0].(*compose.Path).Fill.Rule != FillRule {
 		t.Errorf("solid %v", f)
+	}
+	if f := Fill(line(), box, Paint{Kind: PaintSolid}); f != nil {
+		t.Errorf("a line filled: %v", f)
 	}
 	if f := Fill(ops, box, Paint{Kind: PaintNone}); f != nil {
 		t.Errorf("none %v", f)

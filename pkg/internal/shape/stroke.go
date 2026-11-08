@@ -124,8 +124,8 @@ func arrowFactor(s ArrowSize, open bool) float64 {
 // lineproperties.cxx): an arrowhead is as wide as 2, 3 or 5 times the
 // line width (2.5, 3.5, 5.5 for the open arrow), at least 0.7 mm, and as
 // long by the same factors; the triangle, stealth and open arrow have
-// their tip at the line's end and the line stops halfway into them; the
-// diamond and the oval are centred on the end. A closed subpath has no
+// their tip at the line's end, the diamond and the oval their centre, and
+// the line stops just short of the arrowhead's base, notch or centre. A closed subpath has no
 // arrowheads. A zero width strokes nothing.
 func Stroke(ops []compose.PathOp, l Line) []compose.Fragment {
 	if len(ops) == 0 || l.Width <= 0 || !finite(l.Width) {
@@ -337,9 +337,18 @@ func arrowhead(a Arrowhead, w, base float64, tip, dir compose.Point, c compose.C
 		ops = append(ops, compose.PathOp{Kind: k, P: [3]compose.Point{pt}})
 	}
 	ops = append(ops, compose.PathOp{Kind: compose.ClosePath})
-	back := al / 2
-	if centred {
-		back = 0
-	}
-	return &compose.Path{Ops: ops, Fill: &compose.Fill{Color: c}}, back
+	return &compose.Path{Ops: ops, Fill: &compose.Fill{Color: c}}, max(0, arrowDock[a.Kind]*al-aw/15)
+}
+
+// arrowDock is where the line meets an arrowhead, as a share of its
+// length from the line's end: the base of a triangle or an open arrow,
+// the notch of a stealth arrow, the centre of a diamond or an oval, which
+// sit centred on the end. LibreOffice stops the line a fifteenth of the
+// arrowhead's width short of it, measured on the pinned image: a 2.01 pt
+// line under triangles 6.04 and 4.03 pt long and 6.04 and 10.06 pt wide
+// stops 5.64 and 3.35 pt from their tips, under stealth arrows 3.23 and
+// 1.76 pt, and 2.61 and 1.33 pt short of the centres of diamonds and
+// ovals of the same sizes.
+var arrowDock = map[ArrowKind]float64{ //nolint:gochecknoglobals // a read-only table of LibreOffice's marker docking.
+	ArrowTriangle: 1, ArrowOpen: 1, ArrowStealth: 0.6, ArrowDiamond: 0.5, ArrowOval: 0.5,
 }
