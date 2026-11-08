@@ -230,6 +230,9 @@ func (p *painter) sync(chain []*box) *ditem {
 
 // clipPath returns the padding box of b, its inner radii rounding it, the
 // clip overflow: hidden applies (CSS 2.1, 11.1.1; CSS Backgrounds 3, 5.3).
+// A box that is not a scroll container clips at the edge and past it by
+// the margin its overflow-clip-margin names, the corners rounded by the
+// edge's radii grown by that margin (CSS Overflow 4, 3.2).
 func (p *painter) clipPath(b *box) *compose.Path {
 	// The clip stays where b's own relative offsets put it, whichever
 	// relatively positioned descendant asks for it.
@@ -237,7 +240,30 @@ func (p *painter) clipPath(b *box) *compose.Path {
 	ox, oy := offset(b)
 	r := compose.Rect{X: b.x + ax + ox, Y: b.y + ay + oy, Width: b.borderW(), Height: b.borderH()}
 	radii := radiiOf(b, r.Width, r.Height)
-	pr, pradii := insetRect(r, radii, b.bd)
+	cm := b.st.OverflowClipMargin
+	if b.st.ScrollContainer() {
+		cm = css.ClipMargin{}
+	}
+	pr, pradii := r, radii
+	switch cm.Box {
+	case css.ClipPaddingBox:
+		pr, pradii = insetRect(r, radii, b.bd)
+	case css.ClipContentBox:
+		var d [4]float64
+		for i := range d {
+			d[i] = b.bd[i] + b.pd[i]
+		}
+		pr, pradii = insetRect(r, radii, d)
+	case css.ClipBorderBox:
+	}
+	if m := cm.Margin; m > 0 {
+		pr = compose.Rect{X: pr.X - m, Y: pr.Y - m, Width: pr.Width + 2*m, Height: pr.Height + 2*m}
+		for c := range pradii {
+			if pradii[c] != [2]float64{} {
+				pradii[c] = [2]float64{pradii[c][0] + m, pradii[c][1] + m}
+			}
+		}
+	}
 	return &compose.Path{Ops: roundedRect(pr, pradii), Fill: &compose.Fill{Rule: compose.NonZero}}
 }
 

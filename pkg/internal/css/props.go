@@ -178,6 +178,7 @@ const (
 	pBoxDecorationBreak
 	pFontKerning
 	pWritingMode
+	pOverflowClipMargin
 	numProps
 )
 
@@ -898,6 +899,9 @@ func init() {
 		props[id] = def
 	}
 	gcpmProps()
+	for id, def := range overflowClipProps() {
+		props[id] = def
+	}
 	for id, def := range multicolProps() {
 		props[id] = def
 	}

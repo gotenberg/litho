@@ -837,6 +837,10 @@ type Style struct {
 	Visibility Visibility
 	Overflow   Overflow
 	BoxSizing  BoxSizing
+	// OverflowClipMargin is how far past which edge a box that clips its
+	// overflow, and is not a scroll container, clips it (CSS Overflow 4,
+	// 3.2); the zero value clips at the padding box.
+	OverflowClipMargin ClipMargin
 	// Opacity runs from 0 to 1 (CSS Color 3, 3.2).
 	Opacity float64
 	// ZIndex is the stack level of a positioned box (CSS 2.1, 9.9.1).
