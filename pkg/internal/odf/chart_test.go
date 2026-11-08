@@ -261,3 +261,12 @@ func TestChartFromDocument_PointNumberFormat(t *testing.T) {
 		t.Errorf("points = %+v", pts)
 	}
 }
+
+func TestChartFromDocument_MultiLevelCategoriesBreak(t *testing.T) {
+	st := chartStyles + `<style:style style:name="nb" style:family="chart"><style:chart-properties text:line-break="false"/></style:style>`
+	axes := `<chart:axis chart:dimension="x" chart:name="primary-x" chart:style-name="nb"><chart:categories table:cell-range-address="Sheet1.A2:Sheet1.B3"/></chart:axis><chart:axis chart:dimension="y" chart:name="primary-y" chart:style-name="nb"/>`
+	c := readODFChart(t, chartContent(st, "bar", "", axes+series))
+	if len(c.Axes) != 2 || c.Axes[0].NoBreak || !c.Axes[1].NoBreak {
+		t.Errorf("axes = %+v %+v", c.Axes[0], c.Axes[1])
+	}
+}

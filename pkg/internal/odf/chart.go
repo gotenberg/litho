@@ -407,7 +407,13 @@ func (r *chartReader) plotArea(ch, pa *Element) {
 	var cats chart.Data
 	for _, ax := range pa.All(NSChart, "axis") {
 		if cat := ax.Child(NSChart, "categories"); cat != nil && ax.A(NSChart, "dimension") == "x" {
-			cats = r.data(cat.A(NSTable, "cell-range-address"), true)
+			addr := cat.A(NSTable, "cell-range-address")
+			cats = r.data(addr, true)
+			if cols, rows, ok := rangeShape(addr); ok && cols > 1 && rows > 1 && xAxis >= 0 && xAxis < len(c.Axes) {
+				// Categories of several levels join on one label, which
+				// breaks between them as LibreOffice stacks the levels.
+				c.Axes[xAxis].NoBreak = false
+			}
 		}
 	}
 	if cats.Values == nil && r.table != nil {
