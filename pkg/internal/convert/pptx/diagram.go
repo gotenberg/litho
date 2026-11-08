@@ -189,7 +189,7 @@ func (r *reader) diagramShape(c *shapeCtx, ds *ooxml.DiagramShape, preset string
 	sp := &ooxml.Element{Space: nsDSP, Local: "sp"}
 	pr := &ooxml.Element{Space: nsDSP, Local: "spPr"}
 	if draws && preset != "rect" {
-		pr.Children = append(pr.Children, el(ooxml.NSA, "prstGeom", []string{"prst", preset}, el(ooxml.NSA, "avLst", nil)))
+		pr.Children = append(pr.Children, el("prstGeom", []string{"prst", preset}, el("avLst", nil)))
 	}
 	if draws {
 		if f := fillChild(ds.FillSpPr); f != nil {
@@ -279,10 +279,10 @@ func fillChild(e *ooxml.Element) *ooxml.Element {
 	return nil
 }
 
-// el returns a new element with the attributes of the name and value
-// pairs kv and the children kids.
-func el(space, local string, kv []string, kids ...*ooxml.Element) *ooxml.Element {
-	return &ooxml.Element{Space: space, Local: local, Attrs: attrs(kv...), Children: kids}
+// el returns a new DrawingML element with the attributes of the name and
+// value pairs kv and the children kids.
+func el(local string, kv []string, kids ...*ooxml.Element) *ooxml.Element {
+	return &ooxml.Element{Space: ooxml.NSA, Local: local, Attrs: attrs(kv...), Children: kids}
 }
 
 // withAttr returns a copy of e with the attribute name set to v.
@@ -323,7 +323,7 @@ func diagramText(ds *ooxml.DiagramShape) *ooxml.Element {
 		}
 	}
 	if ds.Autofit {
-		body.Children = append(body.Children, el(ooxml.NSA, "normAutofit", nil))
+		body.Children = append(body.Children, el("normAutofit", nil))
 	}
 	tb := &ooxml.Element{Space: nsDSP, Local: "txBody", Children: []*ooxml.Element{body}}
 	if ds.ListStyle != nil {
@@ -349,10 +349,10 @@ func diagramText(ds *ooxml.DiagramShape) *ooxml.Element {
 				}
 				kids = append(kids, k)
 			}
-			kids = append(kids, el(ooxml.NSA, "buChar", []string{"char", "•"}))
+			kids = append(kids, el("buChar", []string{"char", "•"}))
 			ppr.Children = kids
 		} else if ppr.Child(ooxml.NSA, "buChar") == nil && ppr.Child(ooxml.NSA, "buAutoNum") == nil && ppr.Child(ooxml.NSA, "buBlip") == nil {
-			ppr.Children = append(append([]*ooxml.Element(nil), ppr.Children...), el(ooxml.NSA, "buNone", nil))
+			ppr.Children = append(append([]*ooxml.Element(nil), ppr.Children...), el("buNone", nil))
 		}
 		out := &ooxml.Element{Space: ooxml.NSA, Local: "p", Children: []*ooxml.Element{ppr}}
 		for _, k := range p.Source.Kids() {
