@@ -307,3 +307,22 @@ func TestConvert_GrowHeader(t *testing.T) {
 		})
 	}
 }
+
+// TestConvert_FormatFill locks the "*x" fill of a number format: the
+// character repeated where the code puts it until the cell is full, a
+// fill of spaces too.
+func TestConvert_FormatFill(t *testing.T) {
+	for _, tc := range []struct{ code, head, tail string }{
+		{`"£"* #,##0.00`, "£", "892.75"},
+		{`"£"*-#,##0.00`, "£", "892.75"},
+	} {
+		t.Run(tc.code, func(t *testing.T) {
+			st := &Style{Format: tc.code}
+			sh := &Sheet{Name: "S", Columns: []Column{{First: 0, Last: 0, Width: 150}}, Rows: []Row{{Index: 0, Cells: []Cell{numCell(0, 892.75, st)}}}}
+			rs := runs(convert(t, newDoc(sh), office.Options{}).Pages[0])
+			if len(rs) != 1 || !strings.HasPrefix(rs[0].text, tc.head) || !strings.HasSuffix(rs[0].text, tc.tail) || len(rs[0].text) < 30 || rs[0].x > 40 {
+				t.Errorf("runs %+v", rs)
+			}
+		})
+	}
+}

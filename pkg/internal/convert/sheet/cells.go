@@ -167,7 +167,9 @@ func (b *pageBuilder) display(u *unit) (display, bool) {
 		// Repeat the "*x" character to fill the cell, as Calc does
 		// (ScDrawStringsVars::RepeatToFill).
 		tw := b.m.width(d.font, d.text)
-		fw := b.m.width(d.font, strings.Repeat(string(d.res.Fill), 20)) / 20
+		// The fill is measured between two bars, so that a fill of
+		// spaces, which the measure leaves out at a line's end, counts.
+		fw := (b.m.width(d.font, "|"+strings.Repeat(string(d.res.Fill), 20)+"|") - b.m.width(d.font, "||")) / 20
 		if fw > 0 && avail-tw > fw {
 			n := min(int((avail-tw)/fw), maxCellText)
 			at := min(max(d.res.FillAt, 0), len(d.text))
