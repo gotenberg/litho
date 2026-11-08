@@ -21,8 +21,8 @@ const maxShapeRunes = 8192
 // 21.1.2.3.9 rPr: a size of 18 points the spreadsheet application
 // replaces by 11, Excel's and LibreOffice's text box default).
 const (
-	shapeInsetLR    = 7.2
-	shapeInsetTB    = 3.6
+	shapeInsetLR   = 7.2
+	shapeInsetTB   = 3.6
 	shapeTextSize  = 11.0
 	maxShapeTextPt = 400.0
 )
