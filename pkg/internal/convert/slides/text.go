@@ -207,8 +207,10 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 //
 // # Corpus evidence
 //
-//   - pptx: sd/font-scale.pptx saves a font scale of 62.5% and prints at
-//     85% with 80% spacing, the fourth level.
+//   - pptx: sd/font-scale.pptx saves a font scale of 85% with 20% less
+//     spacing and prints at the fourth level whatever it saves (100%, 50% or
+//     none measured): its three empty closing paragraphs would push the
+//     fit to 70%.
 func (b *builder) fitBody(body *TextBody, w, h float64) fit {
 	if body.Autofit != AutofitShrink {
 		return noFit
@@ -220,9 +222,16 @@ func (b *builder) fitBody(body *TextBody, w, h float64) fit {
 		colW = max(colW, 1)
 	}
 	room := h * float64(cols)
+	// The empty paragraphs that end the body take no room in the fit, the
+	// first paragraph excepted (ImpEditEngine::FormatParagraphs and
+	// isInEmptyClusterAtTheEnd).
+	paras := body.Paragraphs
+	for len(paras) > 1 && emptyParagraph(&paras[len(paras)-1]) {
+		paras = paras[:len(paras)-1]
+	}
 	fits := func(f fit) bool {
 		lay := b.layoutBody(&TextBody{
-			Paragraphs: body.Paragraphs, Wrap: body.Wrap, RightToLeft: body.RightToLeft,
+			Paragraphs: paras, Wrap: body.Wrap, RightToLeft: body.RightToLeft,
 			FontLineSpacing: body.FontLineSpacing, MaxParagraphSpacing: body.MaxParagraphSpacing,
 		}, colW, h, f)
 		return lay == nil || lay.height <= room+1e-6
@@ -236,6 +245,17 @@ func (b *builder) fitBody(body *TextBody, w, h float64) fit {
 		}
 	}
 	return scaleLevels[len(scaleLevels)-1]
+}
+
+// emptyParagraph reports whether p holds no character at all, a line
+// break being one.
+func emptyParagraph(p *Paragraph) bool {
+	for i := range p.Runs {
+		if r := &p.Runs[i]; r.Break || r.Text != "" || r.Field != FieldNone {
+			return false
+		}
+	}
+	return true
 }
 
 // roundPt rounds a font size to a whole point, as Impress rounds the

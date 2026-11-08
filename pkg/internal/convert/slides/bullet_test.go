@@ -109,6 +109,15 @@ func TestText_Autofit(t *testing.T) {
 	if !near(l0.size, 13, 0.01) || !near(l1.y-l0.y, 12.48, 0.05) || !near(l0.y, 28.35+12.48, 0.1) {
 		t.Errorf("shrunk to %.2f at %.2f, pitch %.2f", l0.size, l0.y, l1.y-l0.y)
 	}
+	// Empty paragraphs closing the body take no room in the fit, as
+	// sd/font-scale.pptx prints.
+	trailing := append(append([]Paragraph(nil), four...), Paragraph{Style: arial(20)}, Paragraph{Style: arial(20)})
+	tail := box(28.35, 28.35, 150, 50, trailing...)
+	tail.Text.Autofit = AutofitShrink
+	pg = convert(t, deck(&Slide{Shapes: []*Shape{tail}}), office.Options{}).Pages[0]
+	if r := find(t, pg, "L0"); !near(r.size, 13, 0.01) {
+		t.Errorf("with empty closing paragraphs shrunk to %.2f, want 13", r.size)
+	}
 	for _, tc := range []struct {
 		anchor Anchor
 		box    compose.Rect
