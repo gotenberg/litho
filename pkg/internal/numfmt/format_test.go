@@ -213,3 +213,64 @@ func TestFit_General(t *testing.T) {
 		}
 	}
 }
+
+func TestFormat_WithLocale(t *testing.T) {
+	tests := []struct {
+		lang, code string
+		v          float64
+		want       string
+	}{
+		{"de-DE", "#,##0.00", 1234567.5, "1.234.567,50"},
+		{"fr-FR", "#,##0.00", 1234567.5, "1 234 567,50"},
+		{"pt-PT", "#,##0.00", 1234.5, "1 234,50"},
+		{"pt-BR", "#,##0.00", 1234.5, "1.234,50"},
+		{"de-CH", "#,##0.00", 1234.5, "1'234.50"},
+		{"en-US", "#,##0.00", 1234.5, "1,234.50"},
+		{"es_ES", "0.00%", 0.2143, "21,43%"},
+		{"hu", "General", 2.5, "2,5"},
+		{"", "0.0", 2.5, "2.5"},
+	}
+	for _, tt := range tests {
+		f, err := Parse(tt.code)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := f.WithLocale(LocaleOf(tt.lang)).Apply(Value{Kind: Number, Number: tt.v}).Text; got != tt.want {
+			t.Errorf("%s %s: %q, want %q", tt.lang, tt.code, got, tt.want)
+		}
+	}
+	if General.WithLocale(Locale{}) != General {
+		t.Error("the en-US locale copies the format")
+	}
+}
+
+func TestParse_LocaleTag(t *testing.T) {
+	tests := []struct {
+		code string
+		want string
+	}{
+		{"[$-407]#,##0.00", "1.234,50"},
+		{"[$-40C]#,##0.00", "1 234,50"},
+		{"[$€-407]#,##0.00", "€1,234.50"},
+		{"[$-409]#,##0.00", "1,234.50"},
+		{"[$-x]0.0", "1234.5"},
+	}
+	for _, tt := range tests {
+		f, err := Parse(tt.code)
+		if err != nil {
+			t.Fatalf("%s: %v", tt.code, err)
+		}
+		if got := f.Apply(Value{Kind: Number, Number: 1234.5}).Text; got != tt.want {
+			t.Errorf("%s: %q, want %q", tt.code, got, tt.want)
+		}
+	}
+	if id, ok := LCIDOf("hu-HU"); !ok || id != 0x40E {
+		t.Errorf("LCIDOf(hu-HU) = %x %v", id, ok)
+	}
+	if id, ok := LCIDOf("de"); !ok || LocaleOf(lcidTags[id]) != LocaleOf("de") {
+		t.Errorf("LCIDOf(de) = %x %v", id, ok)
+	}
+	if _, ok := LCIDOf("en-US"); ok {
+		t.Error("an en-US tag")
+	}
+}

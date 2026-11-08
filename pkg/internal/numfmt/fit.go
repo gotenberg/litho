@@ -49,6 +49,9 @@ func (f *Format) Fit(v Value, width float64, measure func(string) float64) Resul
 	if signs+dots+exps > 0 {
 		s = narrowGeneral(x, digitCount(w, maxDigit))
 	}
+	if loc := f.sections[0].loc; loc != nil && loc.Decimal != "" {
+		s = strings.Replace(s, ".", loc.Decimal, 1)
+	}
 	if measure(s) > w {
 		return hash(r)
 	}

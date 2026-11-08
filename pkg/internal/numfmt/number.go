@@ -197,20 +197,20 @@ func (s *section) writeInt(b *strings.Builder, r *Result, ip string, from, to in
 		case t.kind == tComma && role != nil && role[i] != 0:
 		default:
 			if out.Len() > 0 {
-				writeGrouped(b, out.String(), group)
+				writeGrouped(b, out.String(), group, s.group())
 				out.Reset()
 			}
 			s.writeOther(b, r, t)
 		}
 	}
 	if out.Len() > 0 {
-		writeGrouped(b, out.String(), group)
+		writeGrouped(b, out.String(), group, s.group())
 	}
 }
 
-// writeGrouped writes the digits run d, with a thousands separator
+// writeGrouped writes the digits run d, with the thousands separator sep
 // between each group of three digits from the right when group is set.
-func writeGrouped(b *strings.Builder, d string, group bool) {
+func writeGrouped(b *strings.Builder, d string, group bool, sep string) {
 	if !group {
 		b.WriteString(d)
 		return
@@ -225,7 +225,7 @@ func writeGrouped(b *strings.Builder, d string, group bool) {
 	for _, c := range d {
 		if c >= '0' && c <= '9' {
 			if seen > 0 && (digits-seen)%3 == 0 {
-				b.WriteByte(',')
+				b.WriteString(sep)
 			}
 			seen++
 		}
@@ -274,7 +274,7 @@ func (s *section) writeDecimals(b *strings.Builder, r *Result, dp string, m mant
 		shown = true
 	}
 	if shown || m.decDigits == 0 {
-		b.WriteByte('.')
+		b.WriteString(s.decimal())
 	}
 	pi := 0
 	for i := m.dot + 1; i < m.exp; i++ {
@@ -299,13 +299,13 @@ func (s *section) writeOther(b *strings.Builder, r *Result, t token) {
 	case tPercent:
 		b.WriteByte('%')
 	case tComma:
-		b.WriteByte(',')
+		b.WriteString(s.group())
 	case tFill:
 		r.setFill(t, b.Len())
 	case tSlash:
 		b.WriteByte('/')
 	case tDot:
-		b.WriteByte('.')
+		b.WriteString(s.decimal())
 	case tAt:
 	case tGeneral:
 		b.WriteString("General")

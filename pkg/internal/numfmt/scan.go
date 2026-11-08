@@ -96,6 +96,25 @@ type section struct {
 	kind         sectionKind
 	// empty reports a section the code left blank, which shows nothing.
 	empty bool
+	// loc is the locale the section writes its separators in, nil for
+	// en-US.
+	loc *Locale
+}
+
+// decimal returns the decimal separator the section writes.
+func (s *section) decimal() string {
+	if s.loc != nil && s.loc.Decimal != "" {
+		return s.loc.Decimal
+	}
+	return "."
+}
+
+// group returns the thousands separator the section writes.
+func (s *section) group() string {
+	if s.loc != nil && s.loc.Group != "" {
+		return s.loc.Group
+	}
+	return ","
 }
 
 // sectionKind says how a section formats a number.
@@ -325,10 +344,19 @@ func (s *section) bracket(b string, lit func(string)) error {
 		return fmt.Errorf("%w: empty bracket", ErrSyntax)
 	case strings.HasPrefix(u, "$"):
 		// A currency or locale tag: [$symbol-locale] shows the symbol
-		// (ECMA-376 Part 1, 18.8.31); the locale is not used.
-		sym, _, _ := strings.Cut(b[strings.IndexByte(b, '$')+1:], "-")
+		// (ECMA-376 Part 1, 18.8.31); a locale tag without a symbol
+		// writes the section's separators in that locale, as LibreOffice
+		// does ([$-407]#,##0.00 prints 1.234,50, [$€-407]#,##0.00
+		// €1,234.50).
+		sym, id, _ := strings.Cut(b[strings.IndexByte(b, '$')+1:], "-")
 		if sym != "" {
 			lit(sym)
+		} else if n, err := strconv.ParseUint(strings.TrimSpace(id), 16, 32); err == nil {
+			if tag, ok := lcidTags[n&0xFFFF]; ok {
+				if loc := LocaleOf(tag); loc != (Locale{}) {
+					s.loc = &loc
+				}
+			}
 		}
 		return nil
 	case u[0] == '<' || u[0] == '>' || u[0] == '=':

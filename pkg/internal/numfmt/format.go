@@ -349,6 +349,9 @@ func (s *section) general(x float64, first bool) Result {
 		x = -x
 	}
 	g := generalString(x)
+	if s.loc != nil && s.loc.Decimal != "" {
+		g = strings.Replace(g, ".", s.loc.Decimal, 1)
+	}
 	if neg && first {
 		g = "-" + g
 	}
@@ -414,4 +417,104 @@ func approxEqual(a, b float64) bool {
 	}
 	d := math.Abs(a - b)
 	return d < math.Abs(a)*(1.0/(1<<48)) && d < math.Abs(b)*(1.0/(1<<48))
+}
+
+// Locale is the separators a format writes numbers with, those of the
+// locale a document or a format names. The zero Locale is en-US's: "."
+// and ",".
+type Locale struct {
+	// Decimal is the decimal separator, Group the thousands separator.
+	Decimal, Group string
+}
+
+// localeSeparators are the decimal and thousands separators LibreOffice
+// writes numbers with, by language, or by language and country where the
+// country changes them (i18npool's locale data); a language not listed
+// writes en-US's.
+//
+// # Corpus evidence
+//
+//   - LibreOffice 26.8.2.2: 1234567.5 in #,##0.00 of each locale prints
+//     1.234.567,50 in de-DE, es-ES, it-IT, nl-NL, pt-BR, da-DK, tr-TR,
+//     el-GR, ro-RO, id-ID, vi-VN, ca-ES, hr-HR, sl-SI and lt-LT;
+//     1 234 567,50 with a no-break space in fr-FR, fr-CA, hu-HU, ru-RU,
+//     pl-PL, sv-SE, cs-CZ, fi-FI, nb-NO, uk-UA, sk-SK, bg-BG, lv-LV,
+//     et-EE and pt-PT; 1'234'567.50 in de-CH; 1,234,567.50 in en-US,
+//     en-GB, ja-JP, zh-CN, ko-KR, he-IL, th-TH and es-MX.
+var localeSeparators = map[string]Locale{
+	"de": {",", "."}, "es": {",", "."}, "it": {",", "."}, "nl": {",", "."}, "pt": {",", "."},
+	"da": {",", "."}, "tr": {",", "."}, "el": {",", "."}, "ro": {",", "."}, "id": {",", "."},
+	"vi": {",", "."}, "ca": {",", "."}, "hr": {",", "."}, "sl": {",", "."}, "lt": {",", "."},
+	"fr": {",", "\u00a0"}, "hu": {",", "\u00a0"}, "ru": {",", "\u00a0"}, "pl": {",", "\u00a0"},
+	"sv": {",", "\u00a0"}, "cs": {",", "\u00a0"}, "fi": {",", "\u00a0"}, "nb": {",", "\u00a0"},
+	"uk": {",", "\u00a0"}, "sk": {",", "\u00a0"}, "bg": {",", "\u00a0"}, "lv": {",", "\u00a0"},
+	"et": {",", "\u00a0"}, "pt-pt": {",", "\u00a0"}, "de-ch": {".", "'"}, "es-mx": {}, "en": {},
+}
+
+// LocaleOf returns the separators of the language tag lang ("de-DE",
+// "es_ES", "hu"), en-US's for a language LibreOffice writes so or does
+// not list, and for an empty tag.
+func LocaleOf(lang string) Locale {
+	l := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(lang)), "_", "-")
+	if loc, ok := localeSeparators[l]; ok {
+		return loc
+	}
+	if i := strings.IndexByte(l, '-'); i >= 0 {
+		if loc, ok := localeSeparators[l[:i]]; ok {
+			return loc
+		}
+	}
+	return Locale{}
+}
+
+// WithLocale returns f writing its separators in loc: a copy, f itself
+// for the en-US separators.
+func (f *Format) WithLocale(loc Locale) *Format {
+	if loc == (Locale{}) || loc == (Locale{Decimal: ".", Group: ","}) {
+		return f
+	}
+	out := *f
+	out.sections = make([]*section, len(f.sections))
+	for i, s := range f.sections {
+		c := *s
+		c.loc = &loc
+		out.sections[i] = &c
+	}
+	return &out
+}
+
+// lcidTags names the Windows locale identifiers (MS-LCID) of the locales
+// whose separators [localeSeparators] lists.
+var lcidTags = map[uint64]string{
+	0x407: "de-DE", 0x807: "de-CH", 0xC07: "de-AT", 0x40A: "es-ES", 0xC0A: "es-ES", 0x80A: "es-MX",
+	0x410: "it-IT", 0x413: "nl-NL", 0x813: "nl-BE", 0x416: "pt-BR", 0x816: "pt-PT", 0x406: "da-DK",
+	0x41F: "tr-TR", 0x408: "el-GR", 0x418: "ro-RO", 0x421: "id-ID", 0x42A: "vi-VN", 0x403: "ca-ES",
+	0x41A: "hr-HR", 0x424: "sl-SI", 0x427: "lt-LT", 0x40C: "fr-FR", 0xC0C: "fr-CA", 0x80C: "fr-BE",
+	0x40E: "hu-HU", 0x419: "ru-RU", 0x415: "pl-PL", 0x41D: "sv-SE", 0x405: "cs-CZ", 0x40B: "fi-FI",
+	0x414: "nb-NO", 0x422: "uk-UA", 0x41B: "sk-SK", 0x402: "bg-BG", 0x426: "lv-LV", 0x425: "et-EE",
+	0x409: "en-US", 0x809: "en-GB",
+}
+
+// LCIDOf returns the Windows locale identifier of the language tag lang
+// ("hu-HU"), for a reader that writes a locale into a format code as a
+// [$-LCID] tag; false for a locale whose separators are en-US's or that
+// [lcidTags] lacks.
+func LCIDOf(lang string) (uint64, bool) {
+	l := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(lang)), "_", "-")
+	loc := LocaleOf(l)
+	if loc == (Locale{}) {
+		return 0, false
+	}
+	prefix, _, _ := strings.Cut(l, "-")
+	best, found := uint64(0), false
+	for id, tag := range lcidTags {
+		t := strings.ToLower(tag)
+		if t == l {
+			return id, true
+		}
+		if strings.HasPrefix(t, prefix+"-") && LocaleOf(t) == loc && (!found || id < best) {
+			best, found = id, true
+		}
+	}
+	return best, found
 }
