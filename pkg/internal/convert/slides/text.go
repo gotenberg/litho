@@ -6,12 +6,14 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
@@ -882,13 +884,9 @@ func (b *builder) fieldText(r *Run) string {
 		return strconv.Itoa(b.number)
 	case FieldSlideCount:
 		return strconv.Itoa(b.count)
-	case FieldDate:
+	case FieldDate, FieldTime:
 		if !b.opts.PrintDate.IsZero() {
-			return b.opts.PrintDate.Format("01/02/06")
-		}
-	case FieldTime:
-		if !b.opts.PrintDate.IsZero() {
-			return b.opts.PrintDate.Format("15:04")
+			return b.dateText(r)
 		}
 	case FieldSlideName:
 		if b.slide != nil {
@@ -904,6 +902,51 @@ func (b *builder) fieldText(r *Run) string {
 	case FieldNone:
 	}
 	return r.Text
+}
+
+// The number formats a date and a time field show without one of their
+// own, as Impress prints them: the month, day and year of the date, the
+// hours, minutes and seconds of the time on a 12-hour clock.
+//
+// # Corpus evidence
+//
+//   - pptx: sd/numfmt.pptx's plain datetime field prints 11/8/26 on 8
+//     November 2026; odp: a text:date and a text:time without a data
+//     style print 11/8/26 and 11:05:48 AM.
+const (
+	defaultDateFormat = "M/D/YY"
+	defaultTimeFormat = "HH:MM:SS AM/PM"
+)
+
+// dateText returns the print date as the date or time field r shows it,
+// through its number format, else the kind's default.
+func (b *builder) dateText(r *Run) string {
+	code := r.Format
+	if code == "" {
+		code = defaultDateFormat
+		if r.Field == FieldTime {
+			code = defaultTimeFormat
+		}
+	}
+	f, err := numfmt.Parse(code)
+	if err != nil {
+		b.warn(CodeText, "the field format "+quote(code)+" is not understood; the default one shows")
+		if r.Field == FieldTime {
+			f, err = numfmt.Parse(defaultTimeFormat)
+		} else {
+			f, err = numfmt.Parse(defaultDateFormat)
+		}
+		if err != nil {
+			return r.Text
+		}
+	}
+	// The serial number of the print date's wall clock, days since the
+	// spreadsheet epoch, 30 December 1899.
+	d := b.opts.PrintDate
+	day := time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
+	serial := math.Floor(day.Sub(time.Date(1899, 12, 30, 0, 0, 0, 0, time.UTC)).Hours()/24+0.5) +
+		float64(d.Hour()*3600+d.Minute()*60+d.Second())/86400
+	return f.Apply(numfmt.Value{Kind: numfmt.Number, Number: serial}).Text
 }
 
 // quote returns s quoted for a warning, shortened.

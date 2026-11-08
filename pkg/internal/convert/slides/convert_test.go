@@ -135,14 +135,16 @@ func TestConvert_Fields(t *testing.T) {
 	field := func(f Field, saved string) Paragraph {
 		return Paragraph{Runs: []Run{{Text: saved, Field: f, Style: arial(20)}}, Style: arial(20)}
 	}
-	body := []Paragraph{field(FieldSlideNumber, "9"), field(FieldSlideCount, "9"), field(FieldDate, "saved"), field(FieldSlideName, ""), field(FieldAuthor, "")}
-	doc := &Document{Width: 720, Height: 540, Meta: compose.Metadata{Author: "Ada"}, Slides: []*Slide{{Hidden: true}, {Name: "Second", Shapes: []*Shape{box(0, 0, 400, 400, body...)}}}}
+	formatted := field(FieldDate, "saved")
+	formatted.Runs[0].Format = "MMMM D, YYYY"
+	body := []Paragraph{field(FieldSlideNumber, "9"), field(FieldSlideCount, "9"), field(FieldDate, "saved"), field(FieldTime, "saved"), formatted, field(FieldSlideName, ""), field(FieldAuthor, "")}
+	doc := &Document{Width: 720, Height: 540, Meta: compose.Metadata{Author: "Ada"}, Slides: []*Slide{{Hidden: true}, {Name: "Second", Shapes: []*Shape{box(0, 0, 400, 500, body...)}}}}
 	pg := convert(t, doc, office.Options{PrintDate: time.Date(2026, 11, 8, 9, 30, 0, 0, time.UTC)}).Pages[0]
 	var got []string
 	for _, r := range runs(pg) {
 		got = append(got, r.text)
 	}
-	want := []string{"2", "2", "11/08/26", "Second", "Ada"}
+	want := []string{"2", "2", "11/8/26", "09:30:00 AM", "November 8, 2026", "Second", "Ada"}
 	if len(got) != len(want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
