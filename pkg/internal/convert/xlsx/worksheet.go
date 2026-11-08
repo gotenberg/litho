@@ -96,6 +96,9 @@ func (w *sheetReader) read(root *ooxml.Element) error {
 			}
 		}
 	}
+	if err := w.tables(root.Child(nsMain, "tableParts")); err != nil {
+		return err
+	}
 	w.hyperlinks(root.Child(nsMain, "hyperlinks"))
 	w.pageSetup(root)
 	if hf := root.Child(nsMain, "headerFooter"); hf != nil {

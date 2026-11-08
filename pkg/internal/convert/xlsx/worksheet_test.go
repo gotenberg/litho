@@ -208,3 +208,21 @@ func hasWarning(warnings []compose.Warning, s string) bool {
 	}
 	return false
 }
+
+// TestRead_TableHeaders checks a table's column names written into the
+// header cells its sheet leaves empty.
+func TestRead_TableHeaders(t *testing.T) {
+	t.Parallel()
+	files := workbookFiles([]testSheet{{name: "S",
+		xml:  `<sheetData><row r="2"><c r="B2" t="inlineStr"><is><t>Kept</t></is></c></row></sheetData><tableParts count="1"><tablePart r:id="rIdT"/></tableParts>`,
+		rels: `<Relationship Id="rIdT" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/>`,
+	}}, minimalStyles, "", "", map[string]string{"xl/tables/table1.xml": `<table ` + nsDecl + ` id="1" name="T" displayName="T" ref="A2:C5">` +
+		`<tableColumns count="3"><tableColumn id="1" name="First"/><tableColumn id="2" name="Second"/><tableColumn id="3" name="Third_x0021_"/></tableColumns></table>`})
+	doc, _ := readBytes(t, zipFiles(t, files))
+	sh := doc.Sheets[0]
+	for col, want := range []string{"First", "Kept", "Third!"} {
+		if c, _ := cellAt(sh, 1, col); c.Value.Text != want {
+			t.Errorf("column %d = %q, want %q", col, c.Value.Text, want)
+		}
+	}
+}
