@@ -188,10 +188,15 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 }
 
 // fitBody returns the scaling the body is laid out at in a box w by h: a
-// body that shrinks to fit takes the scaling the file saved when the text
-// fits at it, else the first of Impress's scale levels at which it fits,
-// else the last one (ImpEditEngine::ScaleContentToFitWindow). Every other
-// body takes none.
+// body that shrinks to fit takes the first of Impress's scale levels at
+// which its text fits, else the last one, and none when it fits as it is
+// (ImpEditEngine::ScaleContentToFitWindow). The scale a file saved is not
+// read: Impress computes the fit again whatever the file says.
+//
+// # Corpus evidence
+//
+//   - pptx: sd/font-scale.pptx saves a font scale of 62.5% and prints at
+//     85% with 80% spacing, the fourth level.
 func (b *builder) fitBody(body *TextBody, w, h float64) fit {
 	if body.Autofit != AutofitShrink {
 		return noFit
@@ -207,12 +212,8 @@ func (b *builder) fitBody(body *TextBody, w, h float64) fit {
 		lay := b.layoutBody(&TextBody{Paragraphs: body.Paragraphs, Wrap: body.Wrap, RightToLeft: body.RightToLeft}, colW, h, f)
 		return lay == nil || lay.height <= room+1e-6
 	}
-	start := noFit
-	if s := body.FontScale; s > 0 && s <= 1 {
-		start = fit{s, 1 - min(max(body.SpacingReduction, 0), 1)}
-	}
-	if fits(start) {
-		return start
+	if fits(noFit) {
+		return noFit
 	}
 	for _, f := range scaleLevels {
 		if fits(f) {
@@ -479,6 +480,7 @@ func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 	st := css.Initial()
 	st.Display = css.Inline
 	st.WhiteSpace = ps.WhiteSpace
+	st.OverflowWrap = ps.OverflowWrap
 	st.Direction = ps.Direction
 	st.LineRule = ps.LineRule
 	st.LineHeight = ps.LineHeight
@@ -554,6 +556,9 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 	st.FontSize = size
 	st.Color = textColor(first.Color)
 	st.WhiteSpace = css.PreWrap
+	// A word wider than the line breaks at the line's end, as Impress
+	// breaks it.
+	st.OverflowWrap = css.BreakWord
 	if !body.Wrap {
 		st.WhiteSpace = css.Pre
 	}

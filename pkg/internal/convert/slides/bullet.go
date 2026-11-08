@@ -98,24 +98,37 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 			raise = r
 		}
 	}
-	// The bullet is an inline block opening the first line, moved up by
-	// its raise; with a hanging indent it takes no width and moves back to
-	// the indent, the text starting at the margin or past the bullet.
+	// In a start-aligned paragraph the bullet is a box of its own at the
+	// first line's indent when it hangs, else at the margin, its baseline
+	// on the line's less its raise; the first line's text starts at the
+	// indent, or past the bullet when the bullet reaches further.
+	// Otherwise the bullet opens the first line, as wide as the hanging
+	// indent when it is wider.
 	st := node.Style
-	ms.Display = css.InlineBlock
-	ms.Position = css.Relative
-	ms.Top = css.Pts(-raise)
 	startAligned := st.TextAlign == css.AlignStart || st.TextAlign == css.AlignJustify ||
 		(st.TextAlign == css.AlignLeft && st.Direction != css.RTL) || (st.TextAlign == css.AlignRight && st.Direction == css.RTL)
-	if indent < 0 && startAligned {
-		ms.Width = css.Pts(0)
+	if startAligned {
+		bx := min(indent, 0)
+		ms.Display = css.Block
+		ms.Position = css.Absolute
+		ms.LineRule = css.LineRuleExact
+		ms.LineHeight = css.Pts(lb.height)
+		ms.Top = css.Pts(st.Padding[css.Top].Value - raise)
 		if st.Direction == css.RTL {
-			ms.Left = css.Pts(-indent)
+			ms.Right = css.Pts(bx)
+			ms.TextAlign = css.AlignRight
 		} else {
-			ms.Left = css.Pts(indent)
+			ms.Left = css.Pts(bx)
 		}
-		st.TextIndent = css.Pts(max(bw+indent, 0))
+		ms.Width = css.Pts(bw + 1)
+		st.TextIndent = css.Pts(max(max(indent, 0), bx+bw))
+		node.Children = append(node.Children, marker)
+		return
 	}
+	ms.Display = css.InlineBlock
+	ms.Width = css.Pts(max(bw, -indent))
+	ms.Position = css.Relative
+	ms.Top = css.Pts(-raise)
 	node.Children = append([]*layout.Node{marker}, node.Children...)
 }
 
@@ -149,13 +162,16 @@ func symbolBullet(c string, fams []string) (string, []string) {
 		return c, []string{"OpenSymbol"}
 	case !sym:
 		return c, fams
+	case r[0] >= 0xf000 && r[0] <= 0xf0ff:
+		// Impress keeps the character and draws it in OpenSymbol, which
+		// holds the symbol fonts' private-use characters.
+		return c, append([]string{"OpenSymbol"}, fams...)
+	case r[0] >= 0x20 && r[0] <= 0xff:
+		// A symbol font's character is its private-use character.
+		return string(0xf000 + r[0]), append([]string{"OpenSymbol"}, fams...)
 	}
 	opensym := []string{"OpenSymbol"}
-	v := r[0]
-	if v >= 0xf000 && v <= 0xf0ff {
-		v -= 0xf000
-	}
-	switch v {
+	switch r[0] {
 	case 0xb7, 0x95, 0x9f, 0x6c:
 		return "•", opensym
 	case 0xa7, 0x6e:

@@ -198,19 +198,43 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		out.Pages = []*compose.Page{{Width: w, Height: h}}
 	}
 	if !opts.OmitOutline {
+		titles := outlineTitles(doc.Slides)
 		for i, s := range shown {
-			title := s.Title
-			if title == "" {
-				title = s.Name
-			}
-			if title == "" {
-				title = fmt.Sprintf("Slide %d", i+1)
-			}
-			out.Outline = append(out.Outline, compose.Outline{Title: title, Dest: compose.Dest{Page: i + 1}})
+			out.Outline = append(out.Outline, compose.Outline{Title: titles[s], Dest: compose.Dest{Page: i + 1}})
 		}
 	}
 	out.Warnings = b.warnings
 	return out, nil
+}
+
+// outlineTitles returns the outline title of every slide: its title,
+// else its name, else "Slide n" for the n-th slide; a title an earlier
+// slide already took gets " (2)", " (3)" and so on, as Impress names the
+// pages of a presentation it imports after their titles, each page name
+// unique, hidden slides counted.
+func outlineTitles(slides []*Slide) map[*Slide]string {
+	out := make(map[*Slide]string, len(slides))
+	seen := map[string]int{}
+	n := 0
+	for _, s := range slides {
+		if s == nil {
+			continue
+		}
+		n++
+		t := s.Title
+		if t == "" {
+			t = s.Name
+		}
+		if t == "" {
+			t = fmt.Sprintf("Slide %d", n)
+		}
+		seen[t]++
+		if k := seen[t]; k > 1 {
+			t = fmt.Sprintf("%s (%d)", t, k)
+		}
+		out[s] = t
+	}
+	return out
 }
 
 // slideSize returns the slide size, Impress's default for a document that
