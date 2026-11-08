@@ -21,6 +21,9 @@ type ShapeStyle struct {
 	// Dash is the preset dash (20.1.10.48 ST_PresetLineDashVal), "" for a
 	// solid line.
 	Dash string
+	// CustDash is a custom dash (20.1.8.21 custDash), its dash and space
+	// lengths in line widths, nil for none; it takes over Dash.
+	CustDash []float64
 	// Cap and Join are the line's cap and join (20.1.10.31 ST_LineCap,
 	// 20.1.8.52 to 20.1.8.54): flat and round unless the file says.
 	Cap  compose.LineCap
@@ -96,6 +99,17 @@ func parseLineStyle(s *ShapeStyle, ln *Element) {
 	if d := ln.Child(NSA, "prstDash"); d != nil {
 		if v := attrOr(d, "val"); v != "solid" {
 			s.Dash = v
+		}
+	} else if d := ln.Child(NSA, "custDash"); d != nil {
+		for _, ds := range d.Children {
+			if !ds.Is(NSA, "ds") || len(s.CustDash) >= maxCustDashes {
+				continue
+			}
+			// 20.1.10.44 ST_PositivePercentage: thousandths of a percent
+			// of the line width.
+			dv, _ := strconv.Atoi(attrOr(ds, "d"))
+			sv, _ := strconv.Atoi(attrOr(ds, "sp"))
+			s.CustDash = append(s.CustDash, max(float64(dv), 0)/100000, max(float64(sv), 0)/100000)
 		}
 	}
 	switch attrOr(ln, "cap") {
@@ -201,11 +215,40 @@ func (s ShapeStyle) Paint(g *shape.Geometry, r compose.Rect) []compose.Fragment 
 			c := compose.Color{R: s.Line.R, G: s.Line.G, B: s.Line.B, A: s.Line.A}
 			strokes = append(strokes, shape.Stroke(p.Ops, shape.Line{
 				Width: s.LineWidth, Color: c, Cap: s.Cap, Join: s.Join,
-				Dash: shape.PresetDash(s.Dash, s.LineWidth, s.Cap), Head: s.Head, Tail: s.Tail,
+				Dash: s.dash(), Head: s.Head, Tail: s.Tail,
 			})...)
 		}
 	}
 	return append(out, strokes...)
+}
+
+// maxCustDashes bounds the dash and space lengths of a custom dash read:
+// 64, 32 pairs.
+// Anti-DoS guard, not spec-mandated: Office's dialogs make at most a few,
+// and each pair adds to every stroke's dash array.
+const maxCustDashes = 64
+
+// dash returns the dash array in points of the line: the custom dash in
+// line widths when there is one, else the preset's. A dash array whose
+// lengths are all zero draws solid.
+func (s ShapeStyle) dash() []float64 {
+	if len(s.CustDash) == 0 {
+		return shape.PresetDash(s.Dash, s.LineWidth, s.Cap)
+	}
+	w := s.LineWidth
+	if w <= 0 {
+		w = 1
+	}
+	out := make([]float64, len(s.CustDash))
+	sum := 0.0
+	for i, v := range s.CustDash {
+		out[i] = v * w
+		sum += out[i]
+	}
+	if !(sum > 0) {
+		return nil
+	}
+	return out
 }
 
 // paint returns the fill of a path of fill mode m.

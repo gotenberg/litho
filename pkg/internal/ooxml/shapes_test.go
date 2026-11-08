@@ -24,6 +24,31 @@ func TestParseShapeStyle_Line(t *testing.T) {
 	}
 }
 
+func TestParseShapeStyle_CustomDash(t *testing.T) {
+	tests := []struct {
+		name, ds string
+		want     []float64
+	}{
+		{"pairs in line widths", `<a:ds d="800000" sp="300000"/><a:ds d="100000" sp="300000"/>`, []float64{16, 6, 2, 6}},
+		{"all zero is solid", `<a:ds d="0" sp="0"/>`, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sp := spPrOf(t, `<a:ln w="25400"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill><a:custDash>`+tt.ds+`</a:custDash></a:ln>`)
+			s := ParseShapeStyle(sp, nil, nil)
+			got := s.dash()
+			if len(got) != len(tt.want) {
+				t.Fatalf("dash %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if math.Abs(got[i]-tt.want[i]) > 1e-9 {
+					t.Errorf("dash %v, want %v", got, tt.want)
+				}
+			}
+		})
+	}
+}
+
 func TestParseShapeStyle_Gradient(t *testing.T) {
 	sp := spPrOf(t, `<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill>`)
 	s := ParseShapeStyle(sp, nil, nil)
