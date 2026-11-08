@@ -222,7 +222,7 @@ func composite(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 		vmax = max(vmax, y+h)
 	}
 	ph, _ := props.get("", "h")
-	if !(vmin >= 0 && vmin <= vmax && vmax <= ph) {
+	if vmin < 0 || vmin > vmax || vmax > ph {
 		return
 	}
 	if diff := ph - (vmax - vmin); diff > 0 {
@@ -294,7 +294,7 @@ func connAlg(a *DiagramAtom, s *DiagramShape) {
 			continue
 		}
 		c := ca.Constraint
-		if !((c.Op == "none" || c.Op == "equ") && c.Type != "none") {
+		if (c.Op != "none" && c.Op != "equ") || c.Type == "none" {
 			continue
 		}
 		if ref, ok := props[c.RefForName]; ok {

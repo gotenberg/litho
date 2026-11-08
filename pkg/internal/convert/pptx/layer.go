@@ -183,24 +183,25 @@ func (l *layer) find(p placeholder) *ooxml.Element {
 		second = "body"
 	}
 	var choice [5]*ooxml.Element
+	take := func(slot **ooxml.Element, k *ooxml.Element) {
+		if *slot == nil {
+			*slot = k
+		}
+	}
 	for _, k := range l.phs {
 		q, _ := phOf(k)
 		sameIdx := p.hasIdx == q.hasIdx && (!p.hasIdx || p.idx == q.idx)
-		prio := -1
 		switch {
 		case q.typ == p.typ && sameIdx:
-			prio = 0
+			take(&choice[0], k)
 		case q.typ == p.typ:
-			prio = 1
+			take(&choice[1], k)
 		case second != "" && q.typ == second && sameIdx:
-			prio = 2
+			take(&choice[2], k)
 		case second != "" && q.typ == second:
-			prio = 3
+			take(&choice[3], k)
 		case sameIdx:
-			prio = 4
-		}
-		if prio >= 0 && choice[prio] == nil {
-			choice[prio] = k
+			take(&choice[4], k)
 		}
 	}
 	for _, k := range choice {

@@ -349,7 +349,8 @@ func diagramText(ds *ooxml.DiagramShape) *ooxml.Element {
 				}
 				kids = append(kids, k)
 			}
-			ppr.Children = append(kids, el(ooxml.NSA, "buChar", []string{"char", "•"}))
+			kids = append(kids, el(ooxml.NSA, "buChar", []string{"char", "•"}))
+			ppr.Children = kids
 		} else if ppr.Child(ooxml.NSA, "buChar") == nil && ppr.Child(ooxml.NSA, "buAutoNum") == nil && ppr.Child(ooxml.NSA, "buBlip") == nil {
 			ppr.Children = append(append([]*ooxml.Element(nil), ppr.Children...), el(ooxml.NSA, "buNone", nil))
 		}

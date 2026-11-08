@@ -263,6 +263,7 @@ func (w *walker) forEach(a *DiagramAtom) {
 	case modeShallow:
 		w.kids(a)
 		return
+	case modeCreate, modeLayout:
 	}
 	if a.Ref != "" {
 		if r, ok := w.e.d.forEach[a.Ref]; ok {
@@ -315,6 +316,7 @@ func (w *walker) layoutNode(a *DiagramAtom) {
 	case modeShallow:
 		w.count = max(w.count, len(w.e.d.presNames[a.Name]))
 		return
+	case modeCreate, modeLayout:
 	}
 	if w.look != lookNode {
 		return
