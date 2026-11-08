@@ -612,7 +612,13 @@ func (r *reader) inline(el *odf.Element, tc *textCtx, rs runState, href string, 
 			if k.A(odf.NSText, "fixed") == "true" {
 				f = slides.FieldNone
 			}
-			w.raw(slides.Run{Text: k.TextContent(), Style: st, Href: href, Field: f})
+			run := slides.Run{Text: k.TextContent(), Style: st, Href: href, Field: f}
+			if f != slides.FieldNone {
+				// The field's data style (19.500 style:data-style-name)
+				// as a format code; none takes the kind's default.
+				run.Format = r.data.Code(tc.ss.scope, k.A(odf.NSStyle, "data-style-name"))
+			}
+			w.raw(run)
 		case "file-name":
 			w.raw(slides.Run{Text: k.TextContent(), Style: st, Href: href, Field: slides.FieldFile})
 		case "title":
@@ -643,9 +649,8 @@ const maxSpaces = 1024
 // presentationField writes a presentation field (ODF 1.3, Part 3,
 // 10.9.3): presentation:footer and presentation:header show the slide's
 // declarations, presentation:date-time the slide's date-time
-// declaration, its saved text when fixed, the date when current (its
-// data style is not applied; LibreOffice writes current as
-// "current-date").
+// declaration, its saved text when fixed, the date when current in its
+// data style's format (LibreOffice writes current as "current-date").
 func (r *reader) presentationField(k *odf.Element, tc *textCtx, st slides.RunStyle, href string, w *runWriter) {
 	switch k.Name.Local {
 	case "footer":
@@ -658,10 +663,9 @@ func (r *reader) presentationField(k *odf.Element, tc *textCtx, st slides.RunSty
 			return
 		}
 		if src := d.A(odf.NSPresentation, "source"); src == "current" || src == "current-date" {
-			if d.A(odf.NSStyle, "data-style-name") != "" {
-				r.warn("date-format", "the date format of a slide's date field is not applied")
-			}
-			w.raw(slides.Run{Text: d.TextContent(), Style: st, Href: href, Field: slides.FieldDate})
+			// The declaration's data style, of content.xml's styles.
+			code := r.data.Code(odf.ScopeContent, d.A(odf.NSStyle, "data-style-name"))
+			w.raw(slides.Run{Text: d.TextContent(), Style: st, Href: href, Field: slides.FieldDate, Format: code})
 			return
 		}
 		w.text(d.TextContent(), st, href)

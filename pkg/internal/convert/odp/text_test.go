@@ -208,3 +208,21 @@ func TestRead_ListStart(t *testing.T) {
 		})
 	}
 }
+
+func TestRead_FieldFormat(t *testing.T) {
+	ds := `<number:date-style style:name="D1"><number:day number:style="long"/><number:text>.</number:text><number:month number:style="long"/><number:text>.</number:text><number:year number:style="long"/></number:date-style>` +
+		`<number:time-style style:name="T1"><number:hours number:style="long"/><number:text>:</number:text><number:minutes number:style="long"/></number:time-style>`
+	tests := []struct{ name, p, want string }{
+		{"date", `<text:date style:data-style-name="D1">1.1.2026</text:date>`, `dd\.mm\.yyyy`},
+		{"time", `<text:time style:data-style-name="T1">10:00</text:time>`, "hh:mm"},
+		{"default", `<text:date>1/1/26</text:date>`, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := firstShape(t, flat{auto: ds, body: page(`<draw:frame svg:width="5cm" svg:height="2cm"><draw:text-box><text:p>` + tt.p + `</text:p></draw:text-box></draw:frame>`)})
+			if r := s.Text.Paragraphs[0].Runs[0]; r.Format != tt.want {
+				t.Errorf("format = %q, want %q", r.Format, tt.want)
+			}
+		})
+	}
+}
