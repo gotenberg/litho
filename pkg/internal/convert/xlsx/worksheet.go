@@ -525,3 +525,39 @@ func breaks(e *ooxml.Element, limit int) []int {
 	sort.Ints(out)
 	return out
 }
+
+// chartsheet reads the chartsheet part name into sh (ECMA-376 Part 1,
+// 18.3.1.12 chartsheet): a sheet without cells whose drawing holds its
+// chart, its page setup, header and footer as a worksheet's, fitted to one
+// page as LibreOffice prints the chart object it imports a chartsheet as.
+//
+// # Corpus evidence
+//
+//   - LibreOffice 26.8.2.2: sc/tdf107586.xlsx's chartsheet, a 731.7 by
+//     477.9 point chart given a series, prints on one Letter page at 69%,
+//     505.99 points wide from the 0.7-inch margin; without a series, as
+//     the file holds it, the page is blank.
+func (r *reader) chartsheet(name string, sh *sheet.Sheet) error {
+	root, err := r.pkg.ParseXML(r.ctx, name, understood)
+	if err != nil {
+		if isMalformed(err) {
+			r.warn("malformed-part", fmt.Sprintf("sheet %q does not parse: it prints empty: %v", sh.Name, err))
+			r.defaultSetup(sh)
+			return nil
+		}
+		return err
+	}
+	w := &sheetReader{r: r, part: name, sh: sh, rowAt: map[int]int{}}
+	r.defaultSetup(sh)
+	w.pageSetup(root)
+	sh.Page.Scale, sh.Page.FitWidth, sh.Page.FitHeight = 0, 1, 1
+	if hf := root.Child(nsMain, "headerFooter"); hf != nil {
+		sh.HeaderFooter = r.headerFooter(hf)
+		dynamicHeights(sh, r.normal().Font.Size)
+	}
+	if d := root.Child(nsMain, "drawing"); d != nil {
+		id, _ := d.AttrNS(ooxml.NSR, "id")
+		return w.drawing(id)
+	}
+	return nil
+}

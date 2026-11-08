@@ -62,6 +62,10 @@ func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document)
 			if err := r.worksheet(rel.Target, sh); err != nil {
 				return err
 			}
+		case rel.Type == relChartsheet:
+			if err := r.chartsheet(rel.Target, sh); err != nil {
+				return err
+			}
 		default:
 			r.warn("unsupported-content", fmt.Sprintf("sheet %q is not a worksheet: it prints empty", sh.Name))
 			r.defaultSetup(sh)
