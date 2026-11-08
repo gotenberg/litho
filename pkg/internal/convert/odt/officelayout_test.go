@@ -475,3 +475,20 @@ func TestScanChains_LinkedTextBoxes(t *testing.T) {
 		t.Errorf("links %q, want Frame1:2 Frame1:0 Frame1:1", chained)
 	}
 }
+
+func TestFamilies_GenericBeforeAsian(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		t    textState
+		want string
+	}{
+		{textState{family: [3]string{"Missing", "EA Face", "CTL Face"}, generic: "roman"}, "Missing serif EA Face CTL Face"},
+		{textState{family: [3]string{"", "EA Face", ""}, generic: "roman"}, "EA Face serif"},
+		{textState{family: [3]string{"Face", "Face", ""}}, "Face"},
+		{textState{}, "serif"},
+	} {
+		if got := strings.Join(tc.t.families(), " "); got != tc.want {
+			t.Errorf("%v: %q, want %q", tc.t.family, got, tc.want)
+		}
+	}
+}

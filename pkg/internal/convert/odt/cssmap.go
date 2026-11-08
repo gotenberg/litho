@@ -30,20 +30,27 @@ func baseStyle() *css.Style {
 // one, 1.25 cm, LibreOffice's default.
 const defaultTabDistance = 1.25 * 72 / 2.54
 
-// families returns the font family list of t: the western, asian and
-// complex families in that order, then the western one's generic family.
+// families returns the font family list of t: the western family, its
+// generic family, then the asian and complex families, so Latin text in
+// a missing western face takes the generic family as LibreOffice
+// substitutes it, never the asian face, while the text stack's
+// per-character fallback still finds the asian face for CJK text.
 func (t textState) families() []string {
 	var out []string
 	seen := map[string]bool{}
-	for _, f := range t.family {
+	add := func(f string) {
 		if f != "" && !seen[strings.ToLower(f)] {
 			seen[strings.ToLower(f)] = true
 			out = append(out, f)
 		}
 	}
-	if g := genericFamilies[t.generic]; g != "" {
-		out = append(out, g)
+	for i, f := range t.family {
+		add(f)
+		if i == 0 && f != "" {
+			add(genericFamilies[t.generic])
+		}
 	}
+	add(genericFamilies[t.generic])
 	if len(out) == 0 {
 		out = []string{"serif"}
 	}
