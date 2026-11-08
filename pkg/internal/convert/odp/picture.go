@@ -86,9 +86,13 @@ func (r *reader) decodePicture(el *odf.Element) *layout.Picture {
 		w, h := s.Width, s.Height
 		if !s.HasWidth || !s.HasHeight || w <= 0 || h <= 0 {
 			w, h = 300*css.Pt, 150*css.Pt
-			if s.Ratio > 0 {
-				h = w / s.Ratio
+			if !(s.Ratio > 0) {
+				// A drawing of neither size nor viewBox Impress fits by
+				// its content's bounds, which the drawing does not give:
+				// it fills the frame as the SVG viewport rules place it.
+				return &layout.Picture{Width: w, Height: h, Vector: doc.Draw}
 			}
+			h = w / s.Ratio
 		}
 		return stretchedSVG(doc, w, h)
 	}
