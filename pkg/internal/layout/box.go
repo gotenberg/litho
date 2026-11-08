@@ -212,6 +212,11 @@ type markerBox struct {
 	// boxW, when positive, is the width of the marker box an Office list
 	// marker takes outside the item, its label aligned in it.
 	boxW float64
+	// symbol marks the bullet of disc, circle or square a list item draws
+	// for content: normal, which paints as a shape in sym rather than as
+	// text ([placeSymbol]).
+	symbol bool
+	sym    compose.Rect
 	// Layout results: the marker's left edge and baseline, flow
 	// coordinates.
 	x, baseline float64

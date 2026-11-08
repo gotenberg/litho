@@ -478,11 +478,17 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 	if pic == nil && label == "" {
 		return ctx
 	}
+	outside := b.st.ListStylePosition == css.Outside && !inside
+	// An outside bullet of disc, circle or square paints as a shape
+	// ([symbolRect]); a ::marker's content or an Office marker's box
+	// draws as text.
+	symbol := outside && pic == nil && markerBoxWidth(n.Marker) == 0 && (n.Marker == nil || len(n.Marker.Children) == 0) &&
+		(st.ListStyleType == css.Disc || st.ListStyleType == css.Circle || st.ListStyleType == css.Square)
 	markerElem := ctx.elem
 	if n.Role == "LI" && ctx.elem != nil && ctx.elem.Role == "LI" && ctx.structDepth < maxStructDepth {
 		lbl := &compose.StructElem{Role: "Lbl"}
 		body := &compose.StructElem{Role: "LBody"}
-		if pic != nil {
+		if pic != nil || symbol {
 			lbl.ActualText = alt
 		}
 		ctx.elem.Kids = append(ctx.elem.Kids, lbl, body)
@@ -490,8 +496,8 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 		ctx.elem = body
 		ctx.structDepth++
 	}
-	if b.st.ListStylePosition == css.Outside && !inside {
-		b.outside = &markerBox{text: label, picture: pic, elem: markerElem, st: st, boxW: markerBoxWidth(n.Marker)}
+	if outside {
+		b.outside = &markerBox{text: label, picture: pic, elem: markerElem, st: st, boxW: markerBoxWidth(n.Marker), symbol: symbol}
 		return ctx
 	}
 	mctx := ctx

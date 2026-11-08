@@ -1,9 +1,11 @@
 package layout
 
 import (
+	"math"
 	"strconv"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 )
 
@@ -310,3 +312,31 @@ func markerX(b *box, m *markerBox, w float64) float64 {
 	}
 	return anchor
 }
+
+// symbolRect returns the rectangle, in flow coordinates, of the bullet an
+// outside disc, circle or square marker of the list item b draws, for a
+// font of the given ascent and a first line at baseline. CSS Lists 3 leaves
+// the marker's look to the user agent; this is Blink's symbol marker,
+// which Chromium 9.0.0's print measures, independent of the font's own
+// bullet: with A the ascent rounded to whole pixels and o = A*2/3, a
+// square of (o+1)/2 pixels, o + 7 pixels of gap and 1 pixel of side
+// bearing from the content edge, 3*(A-o)/2 pixels below the top of the
+// ascent (Liberation Serif at 100px: A 89, a 30 pixel bullet whose ink
+// spans 66 to 37 pixels left of the content edge, its top 45 pixels below
+// the ascent's), in integer arithmetic.
+func symbolRect(b *box, ascent, baseline float64) compose.Rect {
+	a := int(math.Round(min(max(ascent/css.Pt, 0), maxSymbolAscent))) // fits int: bounded
+	o := a * 2 / 3
+	w := float64((o+1)/2) * css.Pt
+	x := b.contentX() - float64(o+7+1-1)*css.Pt
+	if b.st.Direction == css.RTL {
+		x = b.contentX() + b.w + float64(o+7+1-1)*css.Pt - w
+	}
+	y := baseline - float64(a)*css.Pt + float64(3*(a-o)/2)*css.Pt
+	return compose.Rect{X: x, Y: y, Width: w, Height: w}
+}
+
+// maxSymbolAscent bounds the ascent, in pixels, a symbol marker is sized
+// from. Anti-DoS guard, not spec-mandated: it keeps the integer arithmetic
+// of [symbolRect] in range whatever the font size.
+const maxSymbolAscent = 1 << 20

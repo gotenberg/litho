@@ -701,6 +701,10 @@ func (p *painter) marker(b *box) {
 		}
 		return
 	}
+	if m.symbol {
+		p.symbolMarker(b, m)
+		return
+	}
 	for _, t := range m.runs {
 		if t.Color.A <= 0 || t.Face == nil {
 			continue
@@ -710,6 +714,36 @@ func (p *painter) marker(b *box) {
 		c.Parent = m.elem
 		p.emit(b, false, &c, m.baseline-m.ascent, m.baseline, p.e.pageOf(m.baseline-m.ascent+eps))
 	}
+}
+
+// symbolMarker paints the symbol marker m of the list item b in the
+// marker's colour: a disc fills its square's inscribed circle, a circle
+// strokes it one pixel wide inside the square, a square fills the square,
+// as Blink paints them.
+func (p *painter) symbolMarker(b *box, m *markerBox) {
+	mst := m.st
+	if mst == nil {
+		mst = b.st
+	}
+	col, ok := colorOf(mst.Color)
+	if !ok {
+		return
+	}
+	r := m.sym
+	r.X += p.dx
+	r.Y += p.dy
+	var path *compose.Path
+	switch mst.ListStyleType { //nolint:exhaustive // a symbol marker is a disc, a circle or a square
+	case css.Square:
+		path = &compose.Path{Ops: rectOps(r), Fill: &compose.Fill{Color: col}}
+	case css.Circle:
+		sw := min(css.Pt, r.Width/2)
+		path = &compose.Path{Ops: circleOps(r.X+r.Width/2, r.Y+r.Height/2, (r.Width-sw)/2), Stroke: &compose.Stroke{Color: col, Width: sw}}
+	default:
+		path = &compose.Path{Ops: circleOps(r.X+r.Width/2, r.Y+r.Height/2, r.Width/2), Fill: &compose.Fill{Color: col}}
+	}
+	path.Parent = m.elem
+	p.emit(b, false, path, r.Y, r.Y+r.Height, p.e.pageOf(m.sym.Y+eps))
 }
 
 // line paints one line box: the backgrounds and borders of its inline
@@ -1091,6 +1125,11 @@ func (e *engine) placeMarker(b *box) {
 	m.ascent = mt.Ascent
 	if !ok {
 		baseline = b.contentY() + mt.Ascent + (e.lineHeight(mst)-mt.Ascent-mt.Descent)/2
+	}
+	if m.symbol {
+		m.sym = symbolRect(b, mt.Ascent, baseline)
+		m.x, m.baseline, m.placed = m.sym.X, baseline, true
+		return
 	}
 	m.x = b.contentX() - m.width
 	if rtl {

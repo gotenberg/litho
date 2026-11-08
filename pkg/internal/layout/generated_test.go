@@ -46,7 +46,8 @@ func TestListMarkers_MarkerNode(t *testing.T) {
 		want   string
 	}{
 		{"content", el(ms, txt(ms, "1.2"), txt(ms, " ")), "1.2 x"},
-		{"normal", el(ms), "• x"},
+		// content: normal draws the disc as a shape, no text.
+		{"normal", el(ms), "x"},
 		{"none", el(ms, txt(ms, "")), "x"},
 	}
 	for _, tt := range tests {
