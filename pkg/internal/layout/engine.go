@@ -242,14 +242,16 @@ func clamp(v float64) float64 {
 	return min(max(v, -maxLength), maxLength)
 }
 
-// resolve returns the used value of a length or percentage d against ref,
-// 0 for any other kind.
+// resolve returns the used value of a length, a percentage or a calc()
+// sum of both d against ref, 0 for any other kind.
 func resolve(d css.Dimension, ref float64) float64 {
-	if d.Kind == css.Points {
+	switch d.Kind { //nolint:exhaustive // the other kinds have no length
+	case css.Points:
 		return clamp(d.Value)
-	}
-	if d.Kind == css.Percent {
+	case css.Percent:
 		return clamp(d.Value * ref)
+	case css.Calc:
+		return clamp(clamp(d.Value) + clamp(d.Fraction*clamp(ref)))
 	}
 	return 0
 }

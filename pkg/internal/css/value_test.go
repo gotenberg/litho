@@ -85,13 +85,21 @@ func TestParseLength_Units(t *testing.T) {
 
 func TestParseCalc_MixedIsWarned(t *testing.T) {
 	t.Parallel()
-	s := mustParse(t, `div { width: calc(100% - 2em); width: 80% }`)
-	if !hasWarning(s.Warnings(), "invalid-css-value", `"width": a calc() mixing lengths and percentages`) {
+	s := mustParse(t, `div { vertical-align: calc(100% - 2em); vertical-align: 80% }`)
+	if !hasWarning(s.Warnings(), "invalid-css-value", `"vertical-align": a calc() mixing lengths and percentages`) {
 		t.Errorf("warnings = %v", s.Warnings())
 	}
+}
+
+func TestParseCalc_MixedSizeIsCalc(t *testing.T) {
+	t.Parallel()
+	s := mustParse(t, `div { width: calc(100% - 2em) }`)
+	if w := s.Warnings(); len(w) != 0 {
+		t.Errorf("warnings = %v", w)
+	}
 	c := compute(t, `<div id=d></div>`, `div { width: 80%; width: calc(100% - 2em) }`)
-	if got := c.of("d").Width; !dimEq(got, pct(0.8)) {
-		t.Errorf("width = %+v, want the earlier 80%%", got)
+	if got := c.of("d").Width; got != (Dimension{Kind: Calc, Value: -24, Fraction: 1}) {
+		t.Errorf("width = %+v, want calc(100%% - 24pt)", got)
 	}
 }
 

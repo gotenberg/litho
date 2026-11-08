@@ -322,7 +322,7 @@ func vEdges(b *box) float64 {
 // against cbw, honouring box-sizing (CSS UI 3, 4.1), and false for auto or
 // none.
 func specWidth(b *box, d css.Dimension, cbw float64) (float64, bool) {
-	if d.Kind != css.Points && d.Kind != css.Percent {
+	if !d.IsLength() {
 		return 0, false
 	}
 	w := resolve(d, cbw)
@@ -336,7 +336,7 @@ func specWidth(b *box, d css.Dimension, cbw float64) (float64, bool) {
 // false for auto, none, or a percentage of an indefinite height (CSS 2.1,
 // 10.5).
 func specHeight(b *box, d css.Dimension, cb cblock) (float64, bool) {
-	if d.Kind != css.Points && (d.Kind != css.Percent || !cb.hDefinite) {
+	if !d.IsLength() || d.HasPercent() && !cb.hDefinite {
 		return 0, false
 	}
 	h := resolve(d, cb.h)

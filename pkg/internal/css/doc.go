@@ -27,9 +27,10 @@
 //
 // Namespaced selectors match nothing; :has(), :dir() and the form state
 // pseudo-classes other than :checked, :disabled and :enabled make a
-// selector invalid. min(), max() and clamp() make a value invalid, and so
-// does a calc() mixing lengths and percentages where [Style] can hold only
-// one of them. Cascade layers are flattened into source order; @container
+// selector invalid. min(), max() and clamp() of a percentage make a
+// value invalid, and so does a calc() mixing lengths and
+// percentages outside the box sizes, margins, paddings, insets, gaps and
+// flex-basis, which hold it as a [Calc]. Cascade layers are flattened into source order; @container
 // and @scope are ignored with their rules. Logical properties map onto the
 // physical ones of a horizontal left-to-right box. The input is UTF-8.
 // The flexible box layout properties and the box alignment properties that

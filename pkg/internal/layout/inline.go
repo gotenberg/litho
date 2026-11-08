@@ -282,7 +282,7 @@ func (e *engine) tabWidth(b *box, x float64) float64 {
 		step = max(clamp(b.st.TabSize.Value), 0) * space
 	case css.Points:
 		step = max(clamp(b.st.TabSize.Value), 0)
-	case css.Auto, css.Percent, css.None, css.Normal, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch:
+	case css.Auto, css.Percent, css.None, css.Normal, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch, css.Calc:
 	}
 	if step <= eps {
 		return 0

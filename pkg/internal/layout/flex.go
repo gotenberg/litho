@@ -231,8 +231,10 @@ func (flexFormatter) layout(e *engine, b *box, cb cblock, _ *bfc, cursor float64
 func (flexFormatter) intrinsic(e *engine, b *box) (float64, float64) {
 	ax := axesOf(b.st)
 	gap := 0.0
-	if b.st.ColumnGap.Kind == css.Points {
-		gap = max(clamp(b.st.ColumnGap.Value), 0)
+	if g := b.st.ColumnGap; g.Kind == css.Points || g.Kind == css.Calc {
+		// A percentage resolves against zero here (CSS Box Alignment 3,
+		// 8.3), so a calc() contributes its length part.
+		gap = max(clamp(g.Value), 0)
 	}
 	lo, hi := 0.0, 0.0
 	n := 0
@@ -278,11 +280,11 @@ func heightBounds(b *box) (float64, float64) {
 }
 
 // gapOf returns the used value of a row-gap or column-gap d against the
-// content box size ref, 0 for normal or a percentage of an indefinite
-// size (CSS Box Alignment 3, 8.1).
+// content box size ref, 0 for normal; a percentage of an indefinite size
+// resolves against zero (CSS Box Alignment 3, 8.3).
 func gapOf(d css.Dimension, ref float64, definite bool) float64 {
-	if d.Kind == css.Percent && !definite {
-		return 0
+	if !definite {
+		ref = 0
 	}
 	return max(resolve(d, ref), 0)
 }
@@ -591,7 +593,7 @@ func (e *engine) baseSize(fd *flexData, it *fitem, ax flexAxes, cb, pcb cblock, 
 	}
 	base, ok := 0.0, false
 	switch st.FlexBasis.Kind {
-	case css.Points, css.Percent:
+	case css.Points, css.Percent, css.Calc:
 		base, ok = mainSpec(st.FlexBasis, mcb)
 		if !ok {
 			// A percentage of an indefinite main size acts as auto, as
@@ -1127,8 +1129,8 @@ func dependsOnHeight(k *box) bool {
 			}
 			continue
 		}
-		if c.st.Height.Kind == css.Percent || c.st.MinHeight.Kind == css.Percent || c.st.MaxHeight.Kind == css.Percent ||
-			c.abs && (c.st.Top.Kind == css.Percent || c.st.Bottom.Kind == css.Percent || c.st.Height.Kind == css.Percent) {
+		if c.st.Height.HasPercent() || c.st.MinHeight.HasPercent() || c.st.MaxHeight.HasPercent() ||
+			c.abs && (c.st.Top.HasPercent() || c.st.Bottom.HasPercent()) {
 			return true
 		}
 	}

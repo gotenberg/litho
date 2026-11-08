@@ -372,7 +372,7 @@ var (
 // sizeProp defines width, height, max-width or max-height: the keywords
 // kws, or a non-negative length or percentage.
 func sizeProp(name string, f func(*Style) *Dimension, kws map[string]DimKind) propDef {
-	return dimProp(name, false, f, allowPct|nonNeg, kws, false)
+	return dimProp(name, false, f, allowPct|nonNeg|allowMixed, kws, false)
 }
 
 var displays = map[string]Display{
@@ -695,10 +695,10 @@ func init() {
 		{pMinHeight, minSizeProp("min-height", func(s *Style) *Dimension { return &s.MinHeight }, func(s *Style) *bool { return &s.MinHeightAuto })},
 		{pMaxWidth, sizeProp("max-width", func(s *Style) *Dimension { return &s.MaxWidth }, kwMaxSizing)},
 		{pMaxHeight, sizeProp("max-height", func(s *Style) *Dimension { return &s.MaxHeight }, kwMaxSizing)},
-		{pTop, dimProp("top", false, func(s *Style) *Dimension { return &s.Top }, allowPct, kwAuto, false)},
-		{pRight, dimProp("right", false, func(s *Style) *Dimension { return &s.Right }, allowPct, kwAuto, false)},
-		{pBottom, dimProp("bottom", false, func(s *Style) *Dimension { return &s.Bottom }, allowPct, kwAuto, false)},
-		{pLeft, dimProp("left", false, func(s *Style) *Dimension { return &s.Left }, allowPct, kwAuto, false)},
+		{pTop, dimProp("top", false, func(s *Style) *Dimension { return &s.Top }, allowPct|allowMixed, kwAuto, false)},
+		{pRight, dimProp("right", false, func(s *Style) *Dimension { return &s.Right }, allowPct|allowMixed, kwAuto, false)},
+		{pBottom, dimProp("bottom", false, func(s *Style) *Dimension { return &s.Bottom }, allowPct|allowMixed, kwAuto, false)},
+		{pLeft, dimProp("left", false, func(s *Style) *Dimension { return &s.Left }, allowPct|allowMixed, kwAuto, false)},
 		{pBgColor, colorProp("background-color", func(s *Style) *Color { return &s.BackgroundColor }, slotBackground, nil)},
 		{pBgImage, propDef{name: "background-image", parse: parseBgImage, compute: func(s *styler, st *Style, v any) {
 			if im, ok := v.(imageSpec); ok {
@@ -845,8 +845,8 @@ func init() {
 	for _, d := range defs {
 		props[d.id] = d.def
 	}
-	margins := edgeProps("margin-", "", func(s *Style) *[4]Dimension { return &s.Margin }, allowPct, kwAuto)
-	paddings := edgeProps("padding-", "", func(s *Style) *[4]Dimension { return &s.Padding }, allowPct|nonNeg, kwNoKw)
+	margins := edgeProps("margin-", "", func(s *Style) *[4]Dimension { return &s.Margin }, allowPct|allowMixed, kwAuto)
+	paddings := edgeProps("padding-", "", func(s *Style) *[4]Dimension { return &s.Padding }, allowPct|nonNeg|allowMixed, kwNoKw)
 	sides := [4]string{"border-top", "border-right", "border-bottom", "border-left"}
 	for i := 0; i < 4; i++ {
 		props[pMarginTop+propID(i)] = margins[i]

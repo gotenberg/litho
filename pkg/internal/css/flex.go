@@ -180,13 +180,13 @@ var kwFlexBasis = map[string]DimKind{
 // flexBasisProp defines flex-basis: auto, content, or a non-negative
 // length or percentage.
 func flexBasisProp() propDef {
-	return dimProp("flex-basis", false, func(s *Style) *Dimension { return &s.FlexBasis }, allowPct|nonNeg, kwFlexBasis, false)
+	return dimProp("flex-basis", false, func(s *Style) *Dimension { return &s.FlexBasis }, allowPct|nonNeg|allowMixed, kwFlexBasis, false)
 }
 
 // gapProp defines row-gap or column-gap: normal, or a non-negative length
 // or percentage (CSS Box Alignment 3, 8.1).
 func gapProp(name string, f func(*Style) *Dimension) propDef {
-	return dimProp(name, false, f, allowPct|nonNeg, kwNormal, false)
+	return dimProp(name, false, f, allowPct|nonNeg|allowMixed, kwNormal, false)
 }
 
 // orderProp defines order: an integer (CSS Flexbox 1, 5.4).
@@ -218,7 +218,7 @@ type minAuto struct{}
 // (CSS Sizing 3, 4.4; CSS Flexbox 1, 4.5); the intrinsic sizing keywords
 // compute to 0.
 func minSizeProp(name string, f func(*Style) *Dimension, autoF func(*Style) *bool) propDef {
-	def := dimProp(name, false, f, allowPct|nonNeg, kwMinSizing, false)
+	def := dimProp(name, false, f, allowPct|nonNeg|allowMixed, kwMinSizing, false)
 	parse, compute := def.parse, def.compute
 	def.parse = func(v []token, c *declCtx) (any, bool) {
 		if k, ok := keyword(v); ok && k == "auto" {

@@ -105,7 +105,7 @@ func fixStops(g *css.Gradient, length float64) []gstop {
 			c = compose.Color{}
 		}
 		out[i] = gstop{c: c, hint: s.Hint}
-		if s.Position.Kind == css.Points || s.Position.Kind == css.Percent {
+		if s.Position.IsLength() {
 			out[i].pos, set[i] = resolve(s.Position, length), true
 		}
 	}
@@ -460,10 +460,10 @@ func (e *engine) gradientTiles(st *css.Style, area, clip compose.Rect, y float64
 	if bs := &sized.BackgroundSize; bs.Kind == css.SizeExplicit {
 		// CSS Backgrounds 3, 3.9: an auto dimension of an image with
 		// neither intrinsic size nor ratio is 100%.
-		if bs.Width.Kind != css.Points && bs.Width.Kind != css.Percent {
+		if !bs.Width.IsLength() {
 			bs.Width = css.Dimension{Kind: css.Percent, Value: 1}
 		}
-		if bs.Height.Kind != css.Points && bs.Height.Kind != css.Percent {
+		if !bs.Height.IsLength() {
 			bs.Height = css.Dimension{Kind: css.Percent, Value: 1}
 		}
 	}

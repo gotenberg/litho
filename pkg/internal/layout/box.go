@@ -58,13 +58,13 @@ func newDeco(st *css.Style) deco {
 	d := deco{lines: st.TextDecoration, color: st.TextDecorationColor, style: st.TextDecorationStyle, thick: autoThickness}
 	size := max(clamp(st.FontSize), 0)
 	switch t := st.TextDecorationThickness; t.Kind {
-	case css.Points, css.Percent:
+	case css.Points, css.Percent, css.Calc:
 		d.thick = max(resolve(t, size), 0)
 	case css.Normal:
 		d.thick = fromFont
 	case css.Auto, css.None, css.Number, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch:
 	}
-	if o := st.TextUnderlineOffset; o.Kind == css.Points || o.Kind == css.Percent {
+	if o := st.TextUnderlineOffset; o.IsLength() {
 		d.offset, d.hasOffset = resolve(o, size), true
 	}
 	return d

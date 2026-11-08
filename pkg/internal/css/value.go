@@ -133,9 +133,11 @@ func clampLen(v float64) float64 {
 	return v
 }
 
-// dim computes the length: a pure percentage stays Percent, anything
-// else becomes Points. nonNeg clamps a negative calc() result to zero as
-// CSS Values 4, 10.12 asks.
+// dim computes the length: a pure percentage stays Percent, a mix of a
+// length and a percentage becomes Calc, anything else Points. nonNeg
+// clamps a negative calc() result to zero as CSS Values 4, 10.12 asks; a
+// Calc only knows its sign once resolved, so the layout engine clamps it
+// at used-value time.
 func (l length) dim(c lenCtx, nonNeg bool) Dimension {
 	if l.hasPct && !l.hasLen {
 		v := l.pct / 100
@@ -143,6 +145,9 @@ func (l length) dim(c lenCtx, nonNeg bool) Dimension {
 			v = 0
 		}
 		return Dimension{Kind: Percent, Value: clampLen(v)}
+	}
+	if l.mixed() {
+		return Dimension{Kind: Calc, Value: l.points(c), Fraction: clampLen(l.pct / 100)}
 	}
 	v := l.points(c)
 	if nonNeg && v < 0 {
@@ -201,8 +206,11 @@ const (
 	allowPct lengthFlags = 1 << iota
 	// nonNeg rejects negative values (a negative calc() clamps instead).
 	nonNeg
-	// allowMixed accepts a calc() mixing lengths and percentages, for the
-	// properties that resolve percentages at computed-value time.
+	// allowMixed accepts a calc() mixing lengths and percentages: the
+	// properties whose percentages resolve at computed-value time
+	// (font-size, the decoration thickness and offset), and those the
+	// layout engine resolves as a [Calc] (the box sizes, margins,
+	// paddings, insets, gaps and flex-basis).
 	allowMixed
 )
 

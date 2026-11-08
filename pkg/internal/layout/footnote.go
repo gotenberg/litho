@@ -213,14 +213,12 @@ func (e *engine) placeNote(p int, call *box, bottom float64, later bool) (ok, ro
 	return true, false
 }
 
-// specMax returns a max-height of points or a percentage of ref, false
-// for none.
+// specMax returns a max-height of points, a percentage of ref or a calc()
+// sum of both, false for none.
 func specMax(d css.Dimension, ref float64) (float64, bool) {
 	switch d.Kind { //nolint:exhaustive // the other kinds set no maximum
-	case css.Points:
-		return d.Value, true
-	case css.Percent:
-		return d.Value * ref, true
+	case css.Points, css.Percent, css.Calc:
+		return resolve(d, ref), true
 	}
 	return 0, false
 }

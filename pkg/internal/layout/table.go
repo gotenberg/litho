@@ -169,7 +169,7 @@ func (td *tableData) cellEdges(c *box, cbw float64) {
 // (CSS 2.1, 17.5.2.1): table-layout fixed and a width other than auto.
 func (td *tableData) fixedLayout() bool {
 	st := td.table.st
-	return st.TableLayout == css.TableFixed && (st.Width.Kind == css.Points || st.Width.Kind == css.Percent)
+	return st.TableLayout == css.TableFixed && st.Width.IsLength()
 }
 
 // colMeasure is what the automatic layout knows of one column (CSS 2.1,
@@ -195,7 +195,7 @@ func (e *engine) cellMeasure(td *tableData, c *box) (float64, float64) {
 	lo, hi := formatterFor(c).intrinsic(e, c)
 	td.cellEdges(c, 0)
 	edges := hEdges(c)
-	if c.st.MinWidth.Kind == css.Points {
+	if k := c.st.MinWidth.Kind; k == css.Points || k == css.Calc {
 		if mn, ok := specWidth(c, c.st.MinWidth, 0); ok {
 			lo, hi = max(lo, mn), max(hi, mn)
 		}
@@ -232,14 +232,15 @@ func (e *engine) measureColumns(td *tableData) []colMeasure {
 			if b == nil {
 				continue
 			}
+			// A calc() mixing a percentage sizes the column as auto.
 			switch b.st.Width.Kind {
 			case css.Points:
 				cm[i].fixed, cm[i].hasFixed = max(clamp(b.st.Width.Value), 0), true
 			case css.Percent:
 				cm[i].pct = max(clamp(b.st.Width.Value), 0)
-			case css.Auto, css.None, css.Normal, css.Number, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch:
+			case css.Auto, css.None, css.Normal, css.Number, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch, css.Calc:
 			}
-			if b.st.MinWidth.Kind == css.Points {
+			if k := b.st.MinWidth.Kind; k == css.Points || k == css.Calc {
 				// A column's or column group's min-width is a floor on
 				// each column it applies to, as Chromium honours it.
 				mw := max(clamp(b.st.MinWidth.Value), 0)
@@ -518,7 +519,7 @@ func (e *engine) fixedWidths(td *tableData, avail float64) []float64 {
 				w[i], set[i] = max(clamp(b.st.Width.Value), 0), true
 			case css.Percent:
 				w[i], set[i] = max(resolve(b.st.Width, avail), 0), true
-			case css.Auto, css.None, css.Normal, css.Number, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch:
+			case css.Auto, css.None, css.Normal, css.Number, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch, css.Calc:
 			}
 		}
 	}
@@ -804,7 +805,7 @@ func (e *engine) rowHeights(td *tableData, cb cblock) ([]float64, []float64, []b
 			fixed[cd.row] = true
 		case css.Percent:
 			pct[cd.row] = max(pct[cd.row], clamp(c.st.Height.Value))
-		case css.Auto, css.None, css.Normal, css.Number, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch:
+		case css.Auto, css.None, css.Normal, css.Number, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch, css.Calc:
 		}
 		if exact[cd.row] {
 			// An exact row clips its cells' content (css.Office.ExactHeight).

@@ -60,7 +60,9 @@ func (e *engine) intrinsic(b *box) (float64, float64) {
 		}
 		lo, hi = min(lo, max(mx, 0)), min(hi, max(mx, 0))
 	}
-	if src.MinWidth.Kind == css.Points {
+	if k := src.MinWidth.Kind; k == css.Points || k == css.Calc {
+		// A percentage of a min-width resolves against zero here (CSS
+		// Sizing 3, 5.2.1c): a calc() keeps its length part.
 		mn := clamp(src.MinWidth.Value)
 		if src.BoxSizing == css.BorderBox {
 			mn -= edges
@@ -85,7 +87,7 @@ func autoWidth(st *css.Style) *css.Style {
 
 // contribution returns the min- and max-content contributions of b to its
 // containing block: its margin box at its intrinsic widths (CSS Sizing 3,
-// 5.2), auto and percentage margins counting as 0.
+// 5.2), auto margins counting as 0 and percentages resolving against 0.
 func (e *engine) contribution(b *box) (float64, float64) {
 	if b.kind == kindText || b.kind == kindBreak || b.kind == kindInline || b.abs || isLeader(b) {
 		// A leader takes the room a line leaves: it contributes nothing
@@ -98,7 +100,7 @@ func (e *engine) contribution(b *box) (float64, float64) {
 	pd, bd, m := edgesOf(b, 0)
 	out := pd[css.Left] + pd[css.Right] + bd[css.Left] + bd[css.Right]
 	for _, s := range []css.Side{css.Left, css.Right} {
-		if b.st.Margin[s].Kind == css.Points {
+		if b.st.Margin[s].IsLength() {
 			out += m[s]
 		}
 	}

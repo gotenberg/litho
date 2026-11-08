@@ -95,11 +95,9 @@ func pageBox(r *css.Resolver, o Options, sel css.PageSelector) (layout.PageBox, 
 			ref = h
 		}
 		m := ps.Margin[side]
-		switch m.Kind { //nolint:exhaustive // a page margin is Auto, Points or Percent
-		case css.Points:
-			box.Margin[side], fromRules = m.Value, true
-		case css.Percent:
-			box.Margin[side], fromRules = m.Value*ref, true
+		switch m.Kind { //nolint:exhaustive // a page margin is Auto, Points, Percent or Calc
+		case css.Points, css.Percent, css.Calc:
+			box.Margin[side], fromRules = resolveDim(m, ref), true
 		default:
 			box.Margin[side] = opt[side]
 		}

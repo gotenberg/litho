@@ -78,7 +78,7 @@ func (gridFormatter) intrinsic(e *engine, b *box) (float64, float64) {
 	st := b.st
 	gap := gapOf(st.ColumnGap, 0, false)
 	mn, mx := 0.0, inf
-	if st.MinWidth.Kind == css.Points {
+	if k := st.MinWidth.Kind; k == css.Points || k == css.Calc {
 		mn, _ = specWidth(b, st.MinWidth, 0)
 	}
 	if st.MaxWidth.Kind == css.Points {
@@ -263,7 +263,7 @@ func (e *engine) colContrib(it *gitem, k contribKind, tracks []*gtrack) float64 
 		}
 		return m + out
 	}
-	if mn, ok := specWidth(b, b.st.MinWidth, 0); ok && b.st.MinWidth.Kind == css.Points {
+	if mn, ok := specWidth(b, b.st.MinWidth, 0); ok && b.st.MinWidth.Kind != css.Percent {
 		return mn + out
 	}
 	return out
@@ -373,7 +373,7 @@ func (e *engine) layoutGrid(b *box, cb cblock, top float64) float64 {
 	}
 	l.inner[rowAxis] = innerH
 	l.content = zr.sum()
-	if st.RowGap.Kind == css.Percent && !pcb.hDefinite {
+	if st.RowGap.HasPercent() && !pcb.hDefinite {
 		// A percentage gap of an indefinite height counts as 0 for the
 		// sizing, then resolves against the height laid out, as Chromium
 		// resolves it (CSS Box Alignment 3, 8.1).
@@ -521,7 +521,7 @@ func (l *gridLayout) itemWidth(it *gitem, aw float64) float64 {
 	if k.kind != kindReplaced && k.tpart != partWrapper {
 		w = constrainWidth(k, w, aw)
 	}
-	if autoMinApplies(it, colAxis, l.tracks[colAxis], st.MinWidthAuto) && k.st.Width.Kind != css.Points && k.st.Width.Kind != css.Percent {
+	if autoMinApplies(it, colAxis, l.tracks[colAxis], st.MinWidthAuto) && !k.st.Width.IsLength() {
 		mn := e.colAutoMin(k)
 		if _, ok := fixedSpan(l.tracks[colAxis], it.start[colAxis], it.end[colAxis], l.gap[colAxis]); ok {
 			mn = min(mn, room)

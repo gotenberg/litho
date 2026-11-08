@@ -406,7 +406,7 @@ func (multicolFormatter) intrinsic(e *engine, b *box) (float64, float64) {
 	switch b.st.ColumnGap.Kind { //nolint:exhaustive // a percentage of an unknown width is 0
 	case css.Normal:
 		g = e.fontSize(b.st)
-	case css.Points:
+	case css.Points, css.Calc:
 		g = max(clamp(b.st.ColumnGap.Value), 0)
 	}
 	k := float64(n)

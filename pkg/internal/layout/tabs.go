@@ -31,7 +31,7 @@ func (e *engine) officeStep(st *css.Style, lang string) float64 {
 		return max(clamp(st.TabSize.Value), 0)
 	case css.Number:
 		return max(clamp(st.TabSize.Value), 0) * e.spaceWidth(st, lang)
-	case css.Auto, css.Percent, css.None, css.Normal, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch:
+	case css.Auto, css.Percent, css.None, css.Normal, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch, css.Calc:
 	}
 	return 8 * e.spaceWidth(st, lang)
 }

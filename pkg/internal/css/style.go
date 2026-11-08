@@ -41,6 +41,11 @@ const (
 	MaxContent
 	FitContent
 	Stretch
+	// Calc is a calc() sum of a length and a percentage, which only
+	// resolves once the reference is known (CSS Values 4, 10.8): Value
+	// points plus Fraction of the reference. calc(10% + 100px) is
+	// {Calc, 75, 0.1}.
+	Calc
 )
 
 // Dimension is a computed length, percentage, number or keyword.
@@ -48,8 +53,11 @@ type Dimension struct {
 	Kind DimKind
 	// Value is the length in points for Points, the fraction of the
 	// reference for Percent (0.5 for 50%), the number for Number, and 0
-	// otherwise.
+	// otherwise. For Calc it is the length part in points.
 	Value float64
+	// Fraction is the percentage part of a Calc as a fraction of the
+	// reference (0.1 for 10%), 0 for every other kind.
+	Fraction float64
 }
 
 // Pts is the Dimension of an absolute length in points.

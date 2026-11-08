@@ -117,16 +117,19 @@ func usedBorder(b css.Border) float64 {
 // edges returns the border and padding of st along one axis, start then
 // end, percentages of ref.
 func edges(st *css.Style, start, end css.Side, ref float64) float64 {
-	return usedBorder(st.Border[start]) + usedBorder(st.Border[end]) + resolveDim(st.Padding[start], ref) + resolveDim(st.Padding[end], ref)
+	return usedBorder(st.Border[start]) + usedBorder(st.Border[end]) + max(resolveDim(st.Padding[start], ref), 0) + max(resolveDim(st.Padding[end], ref), 0)
 }
 
-// resolveDim returns a length or a percentage of ref, 0 otherwise.
+// resolveDim returns a length, a percentage of ref or a calc() sum of
+// both, 0 otherwise.
 func resolveDim(d css.Dimension, ref float64) float64 {
 	switch d.Kind { //nolint:exhaustive // the other kinds have no length here
 	case css.Points:
 		return d.Value
 	case css.Percent:
 		return d.Value * ref
+	case css.Calc:
+		return d.Value + d.Fraction*ref
 	}
 	return 0
 }
@@ -135,7 +138,7 @@ func resolveDim(d css.Dimension, ref float64) float64 {
 // the border and padding bp taken out under box-sizing: border-box, and
 // false for auto.
 func contentSize(st *css.Style, d css.Dimension, ref, bp float64) (float64, bool) {
-	if d.Kind != css.Points && d.Kind != css.Percent {
+	if !d.IsLength() {
 		return 0, false
 	}
 	v := resolveDim(d, ref)

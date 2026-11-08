@@ -226,7 +226,7 @@ func inlineCB(a *box) absCB {
 // insetOf returns the used value of the offset property d against ref,
 // false for auto.
 func insetOf(d css.Dimension, ref float64) (float64, bool) {
-	if d.Kind != css.Points && d.Kind != css.Percent {
+	if !d.IsLength() {
 		return 0, false
 	}
 	return resolve(d, ref), true

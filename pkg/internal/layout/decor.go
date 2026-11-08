@@ -306,7 +306,7 @@ func tileRects(st *css.Style, pic *Picture, area, clip compose.Rect) ([]compose.
 // sizeOf resolves one background-size dimension against ref, false for
 // auto.
 func sizeOf(d css.Dimension, ref float64) (float64, bool) {
-	if d.Kind != css.Points && d.Kind != css.Percent {
+	if !d.IsLength() {
 		return 0, false
 	}
 	v := resolve(d, ref)
