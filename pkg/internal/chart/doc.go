@@ -17,13 +17,17 @@
 // [Render] follows LibreOffice's automatic chart layout (chart2's
 // ChartView): the title at the top, the legend at its side sized from its
 // entries, and the plot area in the space left, shrunk until its axis
-// labels fit. Value axes scale as LibreOffice's ScaleAutomatism does; bars
+// labels fit, unless a manual layout places the plot area, the title or
+// the legend. Value axes scale as LibreOffice's ScaleAutomatism does; bars
 // take their width from the gap and overlap; pies start at the first slice
-// angle; lines may be smoothed as natural cubic splines. Every text is
-// shaped through the text package and emitted as [compose.Text], so
+// angle; lines may be smoothed as natural cubic splines. Category labels
+// break at spaces, or stay whole and turn by 45 degrees when they would
+// overlap. A data table replaces the category labels under the plot area.
+// Gradient and pattern fills paint through the shape package. Every text
+// is shaped through the text package and emitted as [compose.Text], so
 // extraction reads it.
 //
 // Not drawn: 3D perspective (a 3D chart draws flat), trendlines, error
-// bars, data tables, gradients and patterns (a fill takes one colour),
-// manual layouts, leader lines.
+// bars, high-low lines and up-down bars, leader lines, multi-level
+// categories (their levels join on one label).
 package chart

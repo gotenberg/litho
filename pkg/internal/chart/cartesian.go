@@ -639,7 +639,7 @@ func (rd *renderer) placeLabels(d *dim) {
 	// line instead (chart2's VCartesianAxis::createTextShapes, after
 	// lcl_hasWordBreak).
 	if breakable && !d.vertical && maxW > 0 && !overlap && st.Rotation == 0 && rd.breaksWord(items[min(1, len(items)):], blocks[min(1, len(blocks)):], st, maxW) {
-		breakable, maxW = false, 0
+		breakable = false
 		blocks = measure(st, 0)
 	}
 	place := func(blocks []*block) {

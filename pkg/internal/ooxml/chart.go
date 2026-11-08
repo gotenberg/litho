@@ -54,7 +54,8 @@ func hexColor(v uint32) css.Color {
 // scheme colours and fonts. What the file leaves automatic takes
 // LibreOffice's defaults for the chart's style (c:style, 2 by default):
 // the theme's accent colours for the series, a white chart area with a
-// light grey border, 10-point text in the theme's minor font and an
+// light grey border (in a presentation, no fill and no border for the
+// styles 1 to 32), 10-point text in the theme's minor font and an
 // 18-point bold title, lines three times the theme's thinnest line.
 //
 // The data comes from the series' caches (c:strCache, c:numCache, literal

@@ -56,7 +56,7 @@ const (
 // alone.
 //
 // Three-dimensional charts are drawn as their two-dimensional kind;
-// trendlines, error bars and data tables are not drawn.
+// trendlines and error bars are not drawn.
 func Render(ctx context.Context, fonts *text.Fonts, c *Chart, r compose.Rect) []compose.Fragment {
 	if c == nil || fonts == nil || !(r.Width > 0) || !(r.Height > 0) || math.IsInf(r.Width, 0) || math.IsInf(r.Height, 0) {
 		return nil
