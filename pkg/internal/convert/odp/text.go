@@ -628,7 +628,8 @@ const maxSpaces = 1024
 // 10.9.3): presentation:footer and presentation:header show the slide's
 // declarations, presentation:date-time the slide's date-time
 // declaration, its saved text when fixed, the date when current (its
-// data style is not applied).
+// data style is not applied; LibreOffice writes current as
+// "current-date").
 func (r *reader) presentationField(k *odf.Element, tc *textCtx, st slides.RunStyle, href string, w *runWriter) {
 	switch k.Name.Local {
 	case "footer":
@@ -640,7 +641,7 @@ func (r *reader) presentationField(k *odf.Element, tc *textCtx, st slides.RunSty
 		if d == nil {
 			return
 		}
-		if d.A(odf.NSPresentation, "source") == "current" {
+		if src := d.A(odf.NSPresentation, "source"); src == "current" || src == "current-date" {
 			if d.A(odf.NSStyle, "data-style-name") != "" {
 				r.warn("date-format", "the date format of a slide's date field is not applied")
 			}

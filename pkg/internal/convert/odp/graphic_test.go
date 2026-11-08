@@ -1,9 +1,11 @@
 package odp
 
 import (
+	"context"
 	"slices"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 )
@@ -75,6 +77,20 @@ func TestRead_Fill(t *testing.T) {
 			}
 		})
 	}
+	t.Run("bitmap once", func(t *testing.T) {
+		got := firstShape(t, styledRect(grads, `draw:fill="bitmap" draw:fill-image-name="img" style:repeat="no-repeat" draw:fill-image-width="2cm" draw:fill-image-height="1cm" draw:fill-image-ref-point="top-left"`)).Fill
+		if got.Kind != slides.FillPicture || got.Tile || got.Picture == nil || got.Picture.Vector == nil {
+			t.Fatalf("fill = %+v", got)
+		}
+		frags := got.Picture.Vector(context.Background(), compose.Rect{X: 10, Y: 20, Width: 300, Height: 200})
+		g, ok := frags[0].(*compose.Group)
+		if !ok || len(g.Content) != 1 {
+			t.Fatalf("fragments = %+v", frags)
+		}
+		if img, ok := g.Content[0].(*compose.Image); !ok || !nearRect(img.Rect, compose.Rect{X: 10, Y: 20, Width: cm(2), Height: cm(1)}) {
+			t.Errorf("picture placed at %+v", g.Content[0])
+		}
+	})
 	t.Run("bitmap", func(t *testing.T) {
 		got := firstShape(t, styledRect(grads, `draw:fill="bitmap" draw:fill-image-name="img" style:repeat="stretch"`)).Fill
 		if got.Kind != slides.FillPicture || got.Picture == nil || got.Tile {

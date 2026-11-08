@@ -1,13 +1,17 @@
 package odp
 
 import (
+	"context"
 	"math"
 	"strconv"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
 // The colours Impress's item pool paints with when no style gives one:
@@ -91,11 +95,18 @@ func (r *reader) fill(p odf.Props, def string) slides.Fill {
 		if rep == "" {
 			rep = "repeat"
 		}
-		if rep == "no-repeat" {
-			r.warn("bitmap-no-repeat", "a picture fill placed once at its size is stretched over the shape")
+		if w, ok := odf.Length(p.Get("draw:fill-image-width")); ok && w > 0 && rep != "stretch" {
+			if h, ok := odf.Length(p.Get("draw:fill-image-height")); ok && h > 0 {
+				sized := *pic
+				sized.Width, sized.Height = w, h
+				pic = &sized
+			}
 		}
-		if _, ok := p.Lookup("draw:fill-image-width"); ok && rep == "repeat" {
-			r.warn("bitmap-tile-size", "a tiled picture fill's tile size and reference point are not applied: the tiles take the picture's size")
+		if rep == "no-repeat" {
+			return slides.Fill{Kind: slides.FillPicture, Picture: placedOnce(pic, p.Get("draw:fill-image-ref-point"))}
+		}
+		if p.Get("draw:fill-image-ref-point") != "" && rep == "repeat" {
+			r.warn("bitmap-tile-origin", "a tiled picture fill's reference point and offsets are not applied: the tiles start at the corner")
 		}
 		return slides.Fill{Kind: slides.FillPicture, Picture: pic, Tile: rep == "repeat"}
 	case "hatch":
@@ -386,3 +397,36 @@ func (r *reader) textBodyProps(tb *slides.TextBody, p odf.Props, frame bool) {
 // maxColumns bounds the text columns of a shape: 16, Impress's own limit
 // (the column dialog's maximum).
 const maxColumns = 16
+
+// placedOnce returns a picture that, stretched over an area as the model
+// draws a fill picture, paints pic once at its own size at the reference
+// point ref of the area (ODF 1.3, Part 3, 20.125 draw:fill-image-ref-point:
+// top-left, top, top-right, left, center, right, bottom-left, bottom,
+// bottom-right; center when absent), as Impress draws a fill of
+// style:repeat no-repeat (19.515).
+func placedOnce(pic *layout.Picture, ref string) *layout.Picture {
+	src := pic
+	return &layout.Picture{Width: pic.Width, Height: pic.Height, NoRatio: true, Vector: func(ctx context.Context, area compose.Rect) []compose.Fragment {
+		w, h := src.Width, src.Height
+		x := area.X + (area.Width-w)/2
+		y := area.Y + (area.Height-h)/2
+		if strings.Contains(ref, "left") {
+			x = area.X
+		} else if strings.Contains(ref, "right") {
+			x = area.X + area.Width - w
+		}
+		if strings.HasPrefix(ref, "top") {
+			y = area.Y
+		} else if strings.HasPrefix(ref, "bottom") {
+			y = area.Y + area.Height - h
+		}
+		at := compose.Rect{X: x, Y: y, Width: w, Height: h}
+		var content []compose.Fragment
+		if src.Vector != nil {
+			content = src.Vector(ctx, at)
+		} else {
+			content = []compose.Fragment{&compose.Image{Rect: at, Source: src.Source}}
+		}
+		return []compose.Fragment{&compose.Group{Clip: &compose.Path{Ops: shape.RectOps(area)}, Content: content}}
+	}}
+}
