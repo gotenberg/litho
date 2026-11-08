@@ -292,7 +292,7 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 	s.Line = r.line(ss.graphic)
 	switch el.Name.Local {
 	case "custom-shape":
-		s.Geometry = r.enhancedGeometry(el.Child(odf.NSDraw, "enhanced-geometry"), s)
+		s.Geometry = r.enhancedGeometry(el.Child(odf.NSDraw, "enhanced-geometry"))
 	case "rect":
 		if rad, ok := odf.Length(el.A(odf.NSDraw, "corner-radius")); ok && rad > 0 {
 			if side := min(s.Box.Width, s.Box.Height); side > 0 {
@@ -315,9 +315,9 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 		}
 	case "polyline":
 		s.Fill = slides.Fill{}
-		s.Geometry = &shape.Geometry{Custom: r.customGeometry(el)}
+		r.polygonGeometry(el)
 	case "polygon", "path", "regular-polygon":
-		s.Geometry = &shape.Geometry{Custom: r.customGeometry(el)}
+		r.polygonGeometry(el)
 	case "caption":
 		r.warn("caption", "the callout line of a caption shape is not drawn")
 	}
@@ -344,51 +344,27 @@ func connectorPreset(typ string) string {
 }
 
 // enhancedGeometry reads a custom shape's draw:enhanced-geometry (ODF
-// 1.3, Part 3, 10.6.2): its draw:type as the preset, spelled as the file
-// spells it, which the geometry engine maps onto a DrawingML one, and its
-// draw:modifiers as the adjustments "$0", "$1"... in their order; a shape
-// of no type or "non-primitive" is a custom geometry. draw:mirror-
-// horizontal and -vertical (19.192, 19.193) mirror the shape.
-func (r *reader) enhancedGeometry(eg *odf.Element, s *slides.Shape) *shape.Geometry {
+// 1.3, Part 3, 10.6.2) through the shared OpenDocument geometry reader:
+// its draw:type mapped onto the DrawingML preset of the same shape, or
+// its path, equations and modifiers as a custom geometry, with its
+// mirroring; nil for none.
+func (r *reader) enhancedGeometry(eg *odf.Element) *shape.Geometry {
 	if eg == nil {
 		return nil
 	}
-	if eg.A(odf.NSDraw, "mirror-horizontal") == "true" {
-		s.FlipH = !s.FlipH
-	}
-	if eg.A(odf.NSDraw, "mirror-vertical") == "true" {
-		s.FlipV = !s.FlipV
-	}
-	typ := eg.A(odf.NSDraw, "type")
-	if typ == "" || typ == "non-primitive" {
-		return &shape.Geometry{Custom: r.customGeometry(eg)}
-	}
-	g := &shape.Geometry{Preset: typ}
-	for i, f := range strings.Fields(eg.A(odf.NSDraw, "modifiers")) {
-		if i >= maxModifiers {
-			break
-		}
-		v, err := strconv.ParseFloat(f, 64)
-		if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
-			continue
-		}
-		g.Adjust = append(g.Adjust, shape.Adjust{Name: "$" + strconv.Itoa(i), Value: v})
+	g := odf.ParseGeometry(eg)
+	if g != nil && !shape.Known(g) {
+		r.warn("custom-geometry", "the shape type "+strconv.Quote(g.Preset)+" is drawn as its bounding box")
 	}
 	return g
 }
 
-// maxModifiers bounds the draw:modifiers values read: 32. Anti-DoS
-// guard, not spec-mandated: Impress's shapes take eight at most.
-const maxModifiers = 32
-
-// customGeometry returns the custom geometry of a draw:enhanced-geometry,
-// a draw:path, a draw:polygon, a draw:polyline or a draw:regular-polygon
-// (ODF 1.3, Part 3, 10.6.2, 10.3.7, 10.3.5, 10.3.4, 10.3.6). The geometry
-// engine reads them; until it is wired here, the shape is drawn as its
-// bounding rectangle, with a warning.
-func (r *reader) customGeometry(el *odf.Element) *shape.Custom {
-	r.warn("custom-geometry", fmt.Sprintf("the custom geometry of draw:%s is drawn as its bounding box", el.Name.Local))
-	return nil
+// polygonGeometry reports a draw:path, draw:polygon, draw:polyline or
+// draw:regular-polygon (ODF 1.3, Part 3, 10.3.7, 10.3.5, 10.3.4, 10.3.6),
+// whose outlines are not read yet: the shape is drawn as its bounding
+// box, with a warning.
+func (r *reader) polygonGeometry(el *odf.Element) {
+	r.warn("custom-geometry", fmt.Sprintf("the outline of draw:%s is drawn as its bounding box", el.Name.Local))
 }
 
 // ellipseGeometry maps a draw:ellipse or draw:circle (ODF 1.3, Part 3,

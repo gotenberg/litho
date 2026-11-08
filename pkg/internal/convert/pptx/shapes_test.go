@@ -98,7 +98,8 @@ func TestShapes_FillsAndLines(t *testing.T) {
 			}
 		}},
 		{"custom geometry", `<a:custGeom><a:pathLst/></a:custGeom>`, "", func(t *testing.T, s *slides.Shape) {
-			if s.Geometry == nil || s.Geometry.Preset != "" || s.Geometry.Custom != nil {
+			// The shared geometry reader parses the custom geometry.
+			if s.Geometry == nil || s.Geometry.Preset != "" || s.Geometry.Custom == nil {
 				t.Errorf("geometry %+v", s.Geometry)
 			}
 		}},

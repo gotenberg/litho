@@ -104,7 +104,7 @@ func (b *builder) geometry(s *Shape, m compose.Matrix, parent *compose.StructEle
 	var frags []compose.Fragment
 	for _, p := range shape.Paths(s.Geometry, box) {
 		if p.Fill {
-			frags = append(frags, b.fill(&s.Fill, box, p.Ops)...)
+			frags = append(frags, b.fill(&s.Fill, box, p.Ops, p.Mode)...)
 		}
 		if p.Stroke {
 			frags = append(frags, b.stroke(&s.Line, p.Ops)...)

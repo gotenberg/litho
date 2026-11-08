@@ -426,7 +426,7 @@ func (r *reader) paragraph(p *odf.Element, tc *textCtx, lc listCtx) slides.Parag
 	if lc.inList && !lc.header {
 		out.MarginLeft, out.Indent = r.listIndents(lc.style, lv)
 		if lc.first {
-			out.Bullet = r.bullet(lc.style, lv, lc.item, rs)
+			out.Bullet = r.bullet(lc.style, lv, lc.item)
 		}
 	}
 	for _, t := range ps.tabs {

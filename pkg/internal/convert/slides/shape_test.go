@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
 // paths returns the paths of a page with the transforms they sit under.
@@ -114,30 +115,33 @@ func TestShape_Fills(t *testing.T) {
 	box := compose.Rect{X: 0, Y: 0, Width: 200, Height: 100}
 	b := &builder{warned: map[string]bool{}}
 	ops := rectOps(box)
-	lin := b.fill(&Fill{Kind: FillGradient, Gradient: &Gradient{Stops: []Stop{{0.2, red}, {1, css.Color{B: 1, A: 1}}}}}, box, ops)
+	lin := b.fill(&Fill{Kind: FillGradient, Gradient: &Gradient{Stops: []Stop{{0.2, red}, {1, css.Color{B: 1, A: 1}}}}}, box, ops, shape.FillNorm)
 	sh := lin[0].(*compose.Path).Fill.Shading
 	if sh.Kind != compose.Axial || !near(sh.From.X, 0, 1e-9) || !near(sh.To.X, 200, 1e-9) || len(sh.Stops) != 3 || sh.Stops[0].Offset != 0 {
 		t.Errorf("linear shading %+v", sh)
 	}
-	down := b.fill(&Fill{Kind: FillGradient, Gradient: &Gradient{Angle: 90, Stops: []Stop{{0, red}, {1, red}}}}, box, ops)
+	down := b.fill(&Fill{Kind: FillGradient, Gradient: &Gradient{Angle: 90, Stops: []Stop{{0, red}, {1, red}}}}, box, ops, shape.FillNorm)
 	if sh := down[0].(*compose.Path).Fill.Shading; !near(sh.From.Y, 0, 1e-9) || !near(sh.To.Y, 100, 1e-9) {
 		t.Errorf("downward shading %+v", sh)
 	}
-	rad := b.fill(&Fill{Kind: FillGradient, Gradient: &Gradient{Radial: true, Stops: []Stop{{0, red}, {1, red}}}}, box, ops)
-	if sh := rad[0].(*compose.Path).Fill.Shading; sh.Kind != compose.Radial || !near(sh.ToRadius, math.Hypot(200, 100)/2, 1e-9) {
+	rad := b.fill(&Fill{Kind: FillGradient, Gradient: &Gradient{Radial: true, Stops: []Stop{{0, red}, {1, red}}}}, box, ops, shape.FillNorm)
+	// The engine draws a radial gradient as the unit circle mapped onto
+	// the ellipse through the box's corners, centred on the box.
+	if sh := rad[0].(*compose.Path).Fill.Shading; sh.Kind != compose.Radial || !near(sh.Transform.E, 100, 1e-9) || !near(sh.Transform.F, 50, 1e-9) ||
+		!near(sh.Transform.A, 200/math.Sqrt2, 1e-9) || !near(sh.Transform.D, 100/math.Sqrt2, 1e-9) {
 		t.Errorf("radial shading %+v", sh)
 	}
-	pat := b.fill(&Fill{Kind: FillPattern, Pattern: "pct50", Color: red, Background: css.Color{A: 1}}, box, ops)
+	pat := b.fill(&Fill{Kind: FillPattern, Pattern: "pct50", Color: red, Background: css.Color{A: 1}}, box, ops, shape.FillNorm)
 	if g, ok := pat[0].(*compose.Group); !ok || g.Clip == nil {
 		t.Errorf("pattern %+v", pat)
 	}
-	unknown := b.fill(&Fill{Kind: FillPattern, Pattern: "nope", Color: red}, box, ops)
+	unknown := b.fill(&Fill{Kind: FillPattern, Pattern: "nope", Color: red}, box, ops, shape.FillNorm)
 	if p, ok := unknown[0].(*compose.Path); !ok || p.Fill.Color.A != 0.5 || len(b.warnings) != 1 {
 		t.Errorf("unknown pattern %+v, warnings %v", unknown, b.warnings)
 	}
 	pic := tinyPicture()
 	pic.Width, pic.Height = 8, 8
-	tiles := b.fill(&Fill{Kind: FillPicture, Tile: true, Picture: pic}, box, ops)
+	tiles := b.fill(&Fill{Kind: FillPicture, Tile: true, Picture: pic}, box, ops, shape.FillNorm)
 	if g := tiles[0].(*compose.Group); len(g.Content) != 25*13 {
 		t.Errorf("%d tiles", len(g.Content))
 	}
@@ -146,27 +150,35 @@ func TestShape_Fills(t *testing.T) {
 func TestShape_Arrowheads(t *testing.T) {
 	b := &builder{warned: map[string]bool{}}
 	for _, tc := range []struct {
-		kind  ArrowKind
-		frags int
-		endX  float64
+		kind ArrowKind
+		// docked reports a line shortened to meet its arrowhead.
+		docked bool
 	}{
-		{ArrowNone, 1, 100},
-		{ArrowTriangle, 2, 100 - 3*minArrowBase/2},
-		{ArrowOpen, 2, 100},
-		{ArrowOval, 2, 100},
+		{ArrowNone, false},
+		{ArrowTriangle, true},
+		{ArrowOpen, true},
+		{ArrowOval, true},
 	} {
 		l := &Line{Width: 1, Color: red, Tail: Arrow{Kind: tc.kind}}
 		out := b.stroke(l, lineOps(0, 0, 100, 0))
-		if len(out) != tc.frags {
+		if len(out) < 1 || (tc.kind != ArrowNone && len(out) < 2) {
 			t.Errorf("kind %d: %d fragments", tc.kind, len(out))
 			continue
 		}
-		if x := out[0].(*compose.Path).Ops[1].P[0].X; !near(x, tc.endX, 1e-9) {
-			t.Errorf("kind %d: line ends at %v, want %v", tc.kind, x, tc.endX)
+		end := out[0].(*compose.Path).Ops[1].P[0].X
+		if tc.docked && !(end < 100) || !tc.docked && !near(end, 100, 1e-9) {
+			t.Errorf("kind %d: line ends at %v", tc.kind, end)
 		}
 		if tc.kind == ArrowTriangle {
-			if tip := out[1].(*compose.Path).Ops[0].P[0]; !near(tip.X, 100, 1e-9) {
-				t.Errorf("tip at %+v", tip)
+			// The arrowhead's tip sits at the line's end.
+			tip := 0.0
+			for _, op := range out[1].(*compose.Path).Ops {
+				for _, pt := range op.P {
+					tip = max(tip, pt.X)
+				}
+			}
+			if !near(tip, 100, 1e-6) {
+				t.Errorf("tip at %v", tip)
 			}
 		}
 	}

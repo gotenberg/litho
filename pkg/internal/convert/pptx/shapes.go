@@ -175,43 +175,23 @@ func place(s *slides.Shape, chain []*ooxml.Element) bool {
 }
 
 // geometryOf returns the geometry of the first shape of chain that sets
-// one (20.1.9.18 prstGeom with its 20.1.9.5 avLst, 20.1.9.8 custGeom), nil
-// for a rectangle.
+// one (20.1.9.18 prstGeom with its 20.1.9.5 avLst, 20.1.9.8 custGeom),
+// through the shared DrawingML reader; nil for a plain rectangle.
 func (r *reader) geometryOf(chain []*ooxml.Element) *shape.Geometry {
 	for _, el := range chain {
 		pr := spPr(el)
-		if g := pr.Child(ooxml.NSA, "prstGeom"); g != nil {
-			name := attr(g, "prst")
-			geo := &shape.Geometry{Preset: name}
-			for _, gd := range g.Child(ooxml.NSA, "avLst").Kids() {
-				if !gd.Is(ooxml.NSA, "gd") {
-					continue
-				}
-				if v, ok := strings.CutPrefix(strings.TrimSpace(attr(gd, "fmla")), "val "); ok {
-					if n, ok := ooxml.Int(v); ok {
-						geo.Adjust = append(geo.Adjust, shape.Adjust{Name: attr(gd, "name"), Value: float64(n)})
-					}
-				}
-			}
-			if (name == "rect" || name == "") && len(geo.Adjust) == 0 {
-				return nil
-			}
-			return geo
+		if pr == nil {
+			continue
 		}
-		if g := pr.Child(ooxml.NSA, "custGeom"); g != nil {
-			return &shape.Geometry{Custom: r.customGeometry(g)}
+		g := ooxml.ParseGeometry(pr)
+		if g == nil {
+			continue
 		}
+		if g.Custom == nil && (g.Preset == "rect" || g.Preset == "") && len(g.Adjust) == 0 {
+			return nil
+		}
+		return g
 	}
-	return nil
-}
-
-// customGeometry reads a custom geometry (ECMA-376 Part 1, 20.1.9.8
-// custGeom: guides, adjust handles, connection sites, the text rectangle
-// and the paths) into the geometry engine's form. Until the engine's
-// parser is wired it returns nil, which draws the shape's bounding
-// rectangle, and warns.
-func (r *reader) customGeometry(_ *ooxml.Element) *shape.Custom {
-	r.warn("approximated", "a custom geometry is drawn as its bounding rectangle")
 	return nil
 }
 

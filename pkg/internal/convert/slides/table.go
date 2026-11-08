@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
 // maxTableCells caps the cells of a table drawn. Anti-DoS guard, not
@@ -79,7 +80,7 @@ func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment
 			c1 := min(c+max(cell.ColSpan, 1), len(cols))
 			r1 := min(r+max(cell.RowSpan, 1), len(rows))
 			rc := compose.Rect{X: xs[c], Y: ys[r], Width: xs[c1] - xs[c], Height: ys[r1] - ys[r]}
-			fills = append(fills, b.fill(&cell.Fill, rc, rectOps(rc))...)
+			fills = append(fills, b.fill(&cell.Fill, rc, rectOps(rc), shape.FillNorm)...)
 			if cell.Text != nil && len(cell.Text.Paragraphs) > 0 {
 				txt := b.shapeText(cell.Text, nil, rc)
 				texts = append(texts, txt.frags...)

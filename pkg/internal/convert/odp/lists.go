@@ -55,7 +55,7 @@ func (r *reader) listIndents(ls *odf.ListStyle, lv int) (float64, float64) {
 // lv of ls (ODF 1.3, Part 3, 16.33 text:list-level-style-bullet, 16.32
 // text:list-level-style-number, 16.34 text:list-level-style-image): nil
 // for a level that shows none.
-func (r *reader) bullet(ls *odf.ListStyle, lv int, item *odf.Element, rs runState) *slides.Bullet {
+func (r *reader) bullet(ls *odf.ListStyle, lv int, item *odf.Element) *slides.Bullet {
 	l := listLevel(ls, lv)
 	if l == nil {
 		return &slides.Bullet{Kind: slides.BulletChar, Char: "•", Families: []string{"OpenSymbol"}, Scale: defaultBulletScale}

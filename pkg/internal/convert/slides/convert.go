@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -296,7 +297,7 @@ func (b *builder) slideContent(s *Slide, n int, w, h float64) ([]compose.Fragmen
 	sect := &compose.StructElem{Role: "Sect"}
 	var out []compose.Fragment
 	area := compose.Rect{Width: w, Height: h}
-	out = append(out, b.fill(&s.Background, area, rectOps(area))...)
+	out = append(out, b.fill(&s.Background, area, rectOps(area), shape.FillNorm)...)
 	for _, sp := range s.Shapes {
 		if err := b.ctx.Err(); err != nil {
 			break

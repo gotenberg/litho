@@ -4,11 +4,11 @@ import (
 	"image"
 	"image/color"
 	"math"
-	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
 // maxTiles caps the copies of a tiled picture drawn over one area.
@@ -33,8 +33,11 @@ func colorOf(c css.Color) compose.Color {
 
 // fill returns what paints the area ops encloses, box being the shape's
 // box the fill is fitted to (ECMA-376 Part 1, 20.1.8: solidFill, gradFill,
-// blipFill, pattFill).
-func (b *builder) fill(f *Fill, box compose.Rect, ops []compose.PathOp) []compose.Fragment {
+// blipFill, pattFill): a solid colour, tinted by the path's fill mode
+// (shape.Shade), and a gradient through the shape engine's fill; a
+// picture or a pattern through the builder's own, which draw a vector
+// picture and a pattern's pixel cell the engine does not.
+func (b *builder) fill(f *Fill, box compose.Rect, ops []compose.PathOp, mode shape.FillMode) []compose.Fragment {
 	if f == nil || len(ops) == 0 || !finite(box) {
 		return nil
 	}
@@ -43,13 +46,16 @@ func (b *builder) fill(f *Fill, box compose.Rect, ops []compose.PathOp) []compos
 		if f.Color.A <= 0 {
 			return nil
 		}
-		return []compose.Fragment{&compose.Path{Ops: ops, Fill: &compose.Fill{Color: colorOf(f.Color)}}}
+		return shape.Fill(ops, box, shape.Paint{Kind: shape.PaintSolid, Color: shape.Shade(colorOf(f.Color), mode)})
 	case FillGradient:
-		sh := gradientShading(f.Gradient, box)
-		if sh == nil {
+		if f.Gradient == nil || len(f.Gradient.Stops) < 2 {
 			return nil
 		}
-		return []compose.Fragment{&compose.Path{Ops: ops, Fill: &compose.Fill{Shading: sh}}}
+		p := shape.Paint{Kind: shape.PaintGradient, Angle: f.Gradient.Angle, Radial: f.Gradient.Radial}
+		for _, st := range f.Gradient.Stops {
+			p.Stops = append(p.Stops, compose.ColorStop{Offset: st.Position, Color: colorOf(st.Color)})
+		}
+		return shape.Fill(ops, box, p)
 	case FillPicture:
 		content := b.pictureFill(f.Picture, f.Tile, box)
 		if len(content) == 0 {
@@ -61,61 +67,6 @@ func (b *builder) fill(f *Fill, box compose.Rect, ops []compose.PathOp) []compos
 	case FillNone:
 	}
 	return nil
-}
-
-// gradientShading returns the shading of the gradient g over box, nil for
-// a gradient without two stops (ECMA-376 Part 1, 20.1.8.33 gradFill,
-// 20.1.8.41 lin, 20.1.8.46 path). A linear gradient runs across the whole
-// box along its angle, its first stop on the corner the angle points away
-// from; a radial one runs from the box's centre to its corners.
-func gradientShading(g *Gradient, box compose.Rect) *compose.Shading {
-	if g == nil || len(g.Stops) < 2 {
-		return nil
-	}
-	stops := make([]compose.ColorStop, 0, len(g.Stops)+2)
-	for _, s := range g.Stops {
-		p := s.Position
-		if math.IsNaN(p) {
-			continue
-		}
-		stops = append(stops, compose.ColorStop{Offset: min(max(p, 0), 1), Color: colorOf(s.Color)})
-	}
-	if len(stops) < 2 {
-		return nil
-	}
-	sort.SliceStable(stops, func(i, j int) bool { return stops[i].Offset < stops[j].Offset })
-	if stops[0].Offset > 0 {
-		stops = append([]compose.ColorStop{{Offset: 0, Color: stops[0].Color}}, stops...)
-	}
-	if last := stops[len(stops)-1]; last.Offset < 1 {
-		stops = append(stops, compose.ColorStop{Offset: 1, Color: last.Color})
-	}
-	visible := false
-	for _, s := range stops {
-		visible = visible || s.Color.A > 0
-	}
-	if !visible {
-		return nil
-	}
-	cx, cy := box.X+box.Width/2, box.Y+box.Height/2
-	if g.Radial {
-		r := math.Hypot(box.Width, box.Height) / 2
-		if r <= 0 {
-			return nil
-		}
-		return &compose.Shading{Kind: compose.Radial, From: compose.Point{X: cx, Y: cy}, To: compose.Point{X: cx, Y: cy}, ToRadius: r, Stops: stops, Transform: compose.Identity}
-	}
-	s, c := math.Sincos(g.Angle * math.Pi / 180)
-	half := (math.Abs(box.Width*c) + math.Abs(box.Height*s)) / 2
-	if half <= 0 {
-		half = 0.5
-	}
-	return &compose.Shading{
-		Kind:  compose.Axial,
-		From:  compose.Point{X: cx - c*half, Y: cy - s*half},
-		To:    compose.Point{X: cx + c*half, Y: cy + s*half},
-		Stops: stops, Transform: compose.Identity,
-	}
 }
 
 // pictureFill returns the fragments of the picture pic over box: stretched

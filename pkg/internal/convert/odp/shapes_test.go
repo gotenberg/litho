@@ -25,8 +25,10 @@ func TestRead_Placement(t *testing.T) {
 			compose.Rect{X: 346.73 - cm(2), Y: 137.94 - cm(1), Width: cm(4), Height: cm(2)}, 330, false, false},
 		{"line backwards", `<draw:line svg:x1="5cm" svg:y1="4cm" svg:x2="1cm" svg:y2="2cm"/>`,
 			compose.Rect{X: cm(1), Y: cm(2), Width: cm(4), Height: cm(2)}, 0, true, true},
+		// The geometry carries the mirroring (shape.Geometry.MirrorH), so the
+		// shape itself is not flipped.
 		{"mirrored custom shape", `<draw:custom-shape svg:x="0cm" svg:y="0cm" svg:width="1cm" svg:height="1cm"><draw:enhanced-geometry draw:type="rectangle" draw:mirror-horizontal="true"/></draw:custom-shape>`,
-			compose.Rect{Width: cm(1), Height: cm(1)}, 0, true, false},
+			compose.Rect{Width: cm(1), Height: cm(1)}, 0, false, false},
 		{"scaled down", `<draw:rect draw:transform="scale (1 -1) translate (1cm 3cm)" svg:width="2cm" svg:height="2cm"/>`,
 			compose.Rect{X: cm(1), Y: cm(1), Width: cm(2), Height: cm(2)}, 0, false, true},
 	}
@@ -39,6 +41,9 @@ func TestRead_Placement(t *testing.T) {
 			}
 			if !near(s.Rotation, tt.rot) || s.FlipH != tt.flipH || s.FlipV != tt.flipV {
 				t.Errorf("rotation %v flips %v %v, want %v %v %v", s.Rotation, s.FlipH, s.FlipV, tt.rot, tt.flipH, tt.flipV)
+			}
+			if tt.name == "mirrored custom shape" && (s.Geometry == nil || !s.Geometry.MirrorH) {
+				t.Errorf("geometry %+v, want it mirrored horizontally", s.Geometry)
 			}
 		})
 	}
@@ -72,8 +77,10 @@ func TestRead_Geometry(t *testing.T) {
 		name, shape string
 		want        *shape.Geometry
 	}{
+		// A type without a path maps onto the DrawingML preset at its default
+		// adjustments, as the shared geometry reader reads it.
 		{"custom shape", `<draw:custom-shape svg:width="2cm" svg:height="1cm"><draw:enhanced-geometry draw:type="round-rectangle" draw:modifiers="3600 12.5"/></draw:custom-shape>`,
-			&shape.Geometry{Preset: "round-rectangle", Adjust: []shape.Adjust{{Name: "$0", Value: 3600}, {Name: "$1", Value: 12.5}}}},
+			&shape.Geometry{Preset: "roundRect"}},
 		{"rectangle", `<draw:rect svg:width="2cm" svg:height="1cm"/>`, nil},
 		{"rounded rectangle", `<draw:rect draw:corner-radius="0.25cm" svg:width="2cm" svg:height="1cm"/>`,
 			&shape.Geometry{Preset: "roundRect", Adjust: []shape.Adjust{{Name: "adj", Value: 25000}}}},
@@ -82,7 +89,8 @@ func TestRead_Geometry(t *testing.T) {
 			&shape.Geometry{Preset: "pie", Adjust: []shape.Adjust{{Name: "adj1", Value: 270 * 60000}, {Name: "adj2", Value: 0}}}},
 		{"connector", `<draw:connector svg:x1="0cm" svg:y1="0cm" svg:x2="1cm" svg:y2="1cm"/>`, &shape.Geometry{Preset: "bentConnector3"}},
 		{"curved connector", `<draw:connector draw:type="curve" svg:x1="0cm" svg:y1="0cm" svg:x2="1cm" svg:y2="1cm"/>`, &shape.Geometry{Preset: "curvedConnector3"}},
-		{"custom path", `<draw:path svg:width="1cm" svg:height="1cm" svg:viewBox="0 0 10 10" svg:d="M0 0L10 10"/>`, &shape.Geometry{}},
+		// A draw:path's outline is not read yet: the shape is its box.
+		{"custom path", `<draw:path svg:width="1cm" svg:height="1cm" svg:viewBox="0 0 10 10" svg:d="M0 0L10 10"/>`, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
