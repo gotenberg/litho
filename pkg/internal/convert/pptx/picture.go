@@ -62,6 +62,7 @@ func (r *reader) picture(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	s.Line = r.shapeLine(fc, chain, style)
 	s.Geometry = r.geometryOf(chain)
 	r.effects(chain, s)
+	r.effectList(chain, style, fc, s)
 	if s.Geometry != nil || s.Line.Width > 0 {
 		s.Kind = slides.KindGeometry
 		s.Fill = slides.Fill{Kind: slides.FillPicture, Picture: pic}
@@ -167,6 +168,7 @@ func (r *reader) graphicFrame(c *shapeCtx, el *ooxml.Element, depth int) (*slide
 			return nil, nil
 		}
 		s.Kind, s.Table = slides.KindTable, t
+		r.effectList([]*ooxml.Element{data.Child(ooxml.NSA, "tbl").Child(ooxml.NSA, "tblPr")}, nil, &fillCtx{sc: c.sc, part: c.part, group: c.group}, s)
 	case uriChart:
 		id, _ := data.Child(ooxml.NSChart, "chart").AttrNS(ooxml.NSR, "id")
 		rel, ok := r.pkg.RelationshipByID(c.part, id)

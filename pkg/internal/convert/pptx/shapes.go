@@ -327,6 +327,7 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	s.Line = r.shapeLine(fc, chain, style)
 	turn := s.Rotation
 	r.effects(chain, s)
+	r.effectList(chain, style, fc, s)
 	fixGradient(s, chain, turn)
 	if el.Local == "sp" {
 		ref := style.Child(ooxml.NSA, "fontRef")
@@ -431,7 +432,6 @@ func splitText(s *slides.Shape, tx *ooxml.Element) *slides.Shape {
 func (r *reader) effects(chain []*ooxml.Element, s *slides.Shape) {
 	for _, el := range chain {
 		pr := spPr(el)
-		r.effectList(pr)
 		scene := pr.Child(ooxml.NSA, "scene3d")
 		if scene == nil && pr.Child(ooxml.NSA, "sp3d") == nil {
 			continue

@@ -16,6 +16,8 @@ type theme struct {
 	// fills, lines and bgFills are the children of fillStyleLst,
 	// lnStyleLst and bgFillStyleLst, in order.
 	fills, lines, bgFills []*ooxml.Element
+	// effects are the children of effectStyleLst, in order.
+	effects []*ooxml.Element
 }
 
 // officeColors is the colour scheme of the Office theme, which a master
@@ -51,6 +53,7 @@ func (r *reader) themeOf(master string) *theme {
 			t.fills = fs.Child(ooxml.NSA, "fillStyleLst").Kids()
 			t.lines = fs.Child(ooxml.NSA, "lnStyleLst").Kids()
 			t.bgFills = fs.Child(ooxml.NSA, "bgFillStyleLst").Kids()
+			t.effects = fs.Child(ooxml.NSA, "effectStyleLst").Kids()
 		} else {
 			r.warn("malformed-part", fmt.Sprintf("theme %s does not parse: the Office theme stands in: %v", name, err))
 		}
