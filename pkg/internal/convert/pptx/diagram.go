@@ -107,26 +107,59 @@ func (r *reader) diagram(c *shapeCtx, data *ooxml.Element, s *slides.Shape, dept
 			}
 			r.diagramShapes(&s.Kids, inner, k, 0, 0, 0)
 		}
+		r.shrinkGroups(s.Kids, roots[0])
 	}
 	if len(s.Kids) == 0 {
 		return nil, nil
 	}
-	r.diagrams++
-	shrinkGroup(s.Kids, r.diagrams)
 	return s, nil
 }
 
-// shrinkGroup ties the text bodies of a diagram's shapes to the group id,
-// so the builder shrinks the text of every shape of the diagram that
-// shrinks by one scale, the smallest any needs, as Impress fits a
-// SmartArt diagram's text.
-func shrinkGroup(shapes []*slides.Shape, id int) {
-	for _, k := range shapes {
-		if k.Text != nil {
-			k.Text.ShrinkGroup = id
+// shrinkGroups ties the text bodies of a laid out diagram's shapes into
+// shrink groups, one per layout node name whose primary font size the
+// layout definition makes equal (21.4.2.8 constr type primFontSz, op
+// equ, forName), so the builder shrinks the text of all of them by one
+// scale, the smallest any needs, as Impress syncs a SmartArt diagram's
+// font heights (oox Shape::syncDiagramFontHeights); other shapes fit
+// alone.
+//
+// # Corpus evidence
+//
+//   - pptx: sd/smartart-maxdepth's "parTx" nodes, of a primFontSz
+//     constraint without op equ, print "first" broken as "fi rs t" and
+//     "second" as "se co nd", each at its own size.
+func (r *reader) shrinkGroups(shapes []*slides.Shape, layoutDef *ooxml.Element) {
+	equal := map[string]bool{}
+	var walk func(e *ooxml.Element, depth int)
+	walk = func(e *ooxml.Element, depth int) {
+		if depth > maxGroupDepth*4 {
+			return
 		}
-		shrinkGroup(k.Kids, id)
+		for _, k := range e.Kids() {
+			if k.Local == "constr" && attr(k, "type") == "primFontSz" && attr(k, "op") == "equ" && attr(k, "forName") != "" {
+				equal[attr(k, "forName")] = true
+			}
+			walk(k, depth+1)
+		}
 	}
+	walk(layoutDef, 0)
+	ids := map[string]int{}
+	var tie func(list []*slides.Shape)
+	tie = func(list []*slides.Shape) {
+		for _, k := range list {
+			if k.Text != nil && equal[k.Name] {
+				id, ok := ids[k.Name]
+				if !ok {
+					r.shrinkGroupCount++
+					id = r.shrinkGroupCount
+					ids[k.Name] = id
+				}
+				k.Text.ShrinkGroup = id
+			}
+			tie(k.Kids)
+		}
+	}
+	tie(shapes)
 }
 
 // emu converts points to whole EMUs.
