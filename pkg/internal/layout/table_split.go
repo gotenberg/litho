@@ -140,6 +140,10 @@ type splitCell struct {
 	// cut is where the current break cuts the cell, valid when has.
 	cut float64
 	has bool
+	// tail and head are the room a cell that clones its decorations at a
+	// break keeps for its bottom border and padding before a cut, and for
+	// its top ones after it.
+	tail, head float64
 }
 
 // splitCells returns the cells of row r of td to split, aligned at their
@@ -158,6 +162,18 @@ func (td *tableData) splitCells(r int) []*splitCell {
 		}
 		cd.off = off
 		sc := &splitCell{c: c, end: cd.contentEnd - c.y + off, bottom: cd.natH + off}
+		if c.st.BoxDecorationBreak == css.DecorationCloneAll || td.collapse && td.table.st.BoxDecorationBreak == css.DecorationCloneAll {
+			// Writer draws a split cell's borders whole on every page,
+			// its content clear of them.
+			k := 1.0
+			if td.collapse {
+				// A collapsed border's cell holds half of it; the cloned
+				// line lies whole on the piece's side of the cut.
+				k = 2
+			}
+			sc.tail = k*c.bd[css.Bottom] + c.pd[css.Bottom]
+			sc.head = k*c.bd[css.Top] + c.pd[css.Top]
+		}
 		for _, k := range cellBreaks(c) {
 			sc.cands = append(sc.cands, breakCand{y: k.y - c.y + off, soft: k.soft})
 		}
@@ -181,6 +197,7 @@ func chooseCuts(cells []*splitCell, top, limit float64, moveAll bool) bool {
 		if sc.end <= limit+metricSlack {
 			continue
 		}
+		limit := limit - sc.tail
 		first := -1
 		for i, k := range sc.cands {
 			if k.y >= top-eps {
@@ -228,7 +245,7 @@ func chooseCuts(cells []*splitCell, top, limit float64, moveAll bool) bool {
 // open opens the strut that moves the content of sc from its cut to at,
 // relative to the row top, and records it on the cell.
 func (sc *splitCell) open(at float64) {
-	d := at - sc.cut
+	d := at + sc.head - sc.cut
 	if d <= 0 {
 		return
 	}

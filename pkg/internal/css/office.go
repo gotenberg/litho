@@ -117,8 +117,11 @@ const (
 // padding, radii, shadows and background at every break, page breaks
 // included, as Writer draws a bordered paragraph across a page break: the
 // lines leave room for the bottom edges before each cut and start below
-// the top edges after it. [DecorationClone] clones at column breaks alone,
-// as Chromium prints. No CSS value sets it.
+// the top edges after it. A table cell that clones so draws its borders
+// whole on every page a split row reaches, its content clear of them,
+// as Writer draws a split row; in the collapsing border model the table
+// box's value decides for every cell. [DecorationClone] clones at column
+// breaks alone, as Chromium prints. No CSS value sets it.
 const DecorationCloneAll = DecorationClone + 1
 
 // ColumnTrack is one column of a row of columns of different widths, as

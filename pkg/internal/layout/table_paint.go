@@ -135,6 +135,11 @@ func (p *painter) tableDecorations(t *box) {
 					continue
 				}
 				cr, top, bottom := p.cellRect(c, pr)
+				if c.st.BoxDecorationBreak == css.DecorationCloneAll {
+					// Writer draws a split cell's borders whole on every
+					// page (css.DecorationCloneAll).
+					top, bottom = true, true
+				}
 				bd := c.bd
 				var radii [4][2]float64
 				if top && bottom {
@@ -275,6 +280,10 @@ func (p *painter) collapsedBorders(td *tableData) {
 		return
 	}
 	t := td.table
+	// A table whose borders clone at a page cut draws the grid line a
+	// split row's piece ends or starts with, as Writer draws a split
+	// cell's borders whole on every page (css.DecorationCloneAll).
+	clone := t.st.BoxDecorationBreak == css.DecorationCloneAll || td.wrapper != nil && td.wrapper.st.BoxDecorationBreak == css.DecorationCloneAll
 	x := func(i int) float64 { return t.contentX() + td.colX[i] + p.dx }
 	for _, seq := range td.seqs {
 		n := len(seq)
@@ -302,7 +311,7 @@ func (p *painter) collapsedBorders(td *tableData) {
 			h[k] = make([]cborder, nc)
 			for c := range nc {
 				switch {
-				case cutLine(seq, k):
+				case cutLine(seq, k) && !clone:
 				case k > 0 && k < n && seq[k].cutTop:
 					// A copy of the header over a piece of a split row: the
 					// piece's cut top adds nothing.
@@ -370,6 +379,15 @@ func (p *painter) collapsedBorders(td *tableData) {
 					x1 -= hw
 				}
 				y := lineY(k)
+				if clone && cutLine(seq, k) {
+					// The page cut runs along the line: the cloned border
+					// lies on the piece's side of it.
+					if k == n {
+						y -= b.w / 2
+					} else {
+						y += b.w / 2
+					}
+				}
 				p.segment(t, b, compose.Rect{X: x0, Y: y - b.w/2, Width: x1 - x0, Height: b.w}, true)
 			}
 		}
@@ -401,7 +419,8 @@ func (p *painter) collapsedBorders(td *tableData) {
 // cutLine reports the grid line k of the run of rows seq that a page break
 // cuts: the top of a piece of a split row not under a copy of the header,
 // the bottom of one not over a copy of the footer. It draws no border
-// (box-decoration-break: slice).
+// (box-decoration-break: slice), unless the table clones its decorations
+// (css.DecorationCloneAll).
 func cutLine(seq []placedRow, k int) bool {
 	n := len(seq)
 	if k < n && seq[k].cutTop && (k == 0 || seq[k-1].dy == 0) {

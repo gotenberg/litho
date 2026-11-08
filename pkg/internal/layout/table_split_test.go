@@ -248,3 +248,47 @@ func TestTableSplit_NestedTableRows(t *testing.T) {
 		RR__
 		RR__`, wpLetters)
 }
+
+// TestTableSplit_ClonedCellBorders draws the borders of a split cell whole
+// on each page when the cell, or the table in the collapsing model, clones
+// its decorations at a break, as Writer draws a split row.
+func TestTableSplit_ClonedCellBorders(t *testing.T) {
+	clone := func(s *css.Style) { s.BoxDecorationBreak = css.DecorationCloneAll }
+	two := func(m []func(*css.Style)) *Node {
+		c := td(m, "a")
+		c.Children = append(c.Children, br(sty()), txt(sty(fg(red)), "a"), br(sty()), txt(sty(fg(red)), "a"))
+		return c
+	}
+	cell := mods(border(1, css.Solid, black), fg(red), valign(css.AlignTop), clone)
+	want := `
+		KKKK____
+		KRRK____
+		KRRK____
+		KKKK____
+		KKKK____
+		KRRK____
+		KRRK____
+		KKKK____`
+	tests := []struct {
+		name string
+		root *Node
+	}{
+		{"separated", doc(deep(table(nil, tr(nil, two(cell))), font(2)))},
+		{"collapsed", doc(deep(table(mods(collapse, clone), tr(nil, two(mods(border(1, css.Solid, black), fg(red), valign(css.AlignTop))))), font(2)))},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := run(t, tt.root, page(8, 4))
+			if len(res.Pages) < 2 {
+				t.Fatalf("%d pages, want at least 2", len(res.Pages))
+			}
+			var rows string
+			for i := range 2 {
+				rows += "\n" + strings.Join(grid(render(t, res, i+1)), "\n")
+			}
+			if got := strings.ReplaceAll(rows[1:], "B", "K"); got != normalize(want) {
+				t.Errorf("pixels:\n%s\nwant:\n%s", got, normalize(want))
+			}
+		})
+	}
+}
