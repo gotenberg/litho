@@ -55,7 +55,7 @@ func (r *reader) picture(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 		r.warn("unsupported-content", fmt.Sprintf("%s does not play in a printout: its poster frame stands in", media))
 	}
 	ref := ooxml.ParsePicture(asPicture(el))
-	pic := r.pictureOf(c.part, ref)
+	pic := blipEffects(r.pictureOf(c.part, ref), kid(el, "blipFill").Child(ooxml.NSA, "blip"))
 	if pic == nil {
 		return nil
 	}
