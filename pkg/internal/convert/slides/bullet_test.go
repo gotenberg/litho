@@ -1,0 +1,133 @@
+package slides
+
+import (
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/css"
+)
+
+// TestText_Bullets checks bullets and numbers against the places Impress
+// gives them (p2.pptx and p6.pptx of the measurement decks: Arial 20 in a
+// box at 28.35, 28.35).
+func TestText_Bullets(t *testing.T) {
+	a20 := arial(20)
+	bul := func(s string, ml, ind float64, b *Bullet) Paragraph {
+		p := para(s, a20)
+		p.MarginLeft, p.Indent, p.Bullet = ml, ind, b
+		return p
+	}
+	dot := func() *Bullet { return &Bullet{Kind: BulletChar, Char: "•", Families: []string{"Arial"}} }
+	num := func(f string, start int) *Bullet { return &Bullet{Kind: BulletNumber, Format: f, StartAt: start} }
+	centred := bul("Centred", 36, -36, dot())
+	centred.Align = css.AlignCenter
+	sub := bul("Sub", 72, -36, num("alphaLcParenR", 0))
+	sub.Level = 1
+	for _, tc := range []struct {
+		name  string
+		paras []Paragraph
+		want  [][3]any
+	}{
+		{"hanging", []Paragraph{bul("One", 36, -36, dot()), bul("Two", 72, -18, dot()), bul("Four", 10, -36, dot())},
+			[][3]any{{"•", 28.35, 47.2}, {"One", 64.35, 48.33}, {"•", 82.35, 71.2}, {"Two", 100.35, 72.34}, {"•", 28.35, 95.2}, {"Four", 64.35, 96.35}}},
+		{"indents", []Paragraph{bul("Three", 36, 0, dot()), bul("Four", 36, 10, dot()), centred},
+			[][3]any{{"•", 64.35, 47.2}, {"Three", 71.35, 48.33}, {"Four", 74.35, 72.34}, {"•", 124.7, 95.2}, {"Centred", 160.7, 96.35}}},
+		{"numbers", []Paragraph{bul("N1", 36, -36, num("arabicPeriod", 0)), bul("N2", 36, -36, num("arabicPeriod", 0)), sub, bul("N3", 36, -36, num("arabicPeriod", 0)), bul("R", 36, -36, num("romanUcPeriod", 4))},
+			[][3]any{{"1.", 28.35, 48.33}, {"2.", 28.35, 72.34}, {"a)", 64.35, 96.35}, {"3.", 28.35, 120.36}, {"IV.", 28.35, 144.37}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pg := convert(t, deck(&Slide{Shapes: []*Shape{box(28.35, 28.35, 300, 300, tc.paras...)}}), office.Options{}).Pages[0]
+			rs := runs(pg)
+			for _, w := range tc.want {
+				ok := false
+				for _, r := range rs {
+					if r.text == w[0].(string) && near(r.x, w[1].(float64), 0.3) && near(r.y, w[2].(float64), 0.3) {
+						ok = true
+					}
+				}
+				if !ok {
+					t.Errorf("no %q at %v, %v in %v", w[0], w[1], w[2], rs)
+				}
+			}
+		})
+	}
+}
+
+func TestFormatNumber(t *testing.T) {
+	for _, tc := range []struct {
+		format string
+		n      int
+		want   string
+		ok     bool
+	}{
+		{"arabicPeriod", 3, "3.", true},
+		{"arabicParenR", 12, "12)", true},
+		{"arabicParenBoth", 1, "(1)", true},
+		{"alphaLcPeriod", 28, "bb.", true},
+		{"alphaUcParenR", 1, "A)", true},
+		{"romanLcPeriod", 9, "ix.", true},
+		{"romanUcPlain", 2024, "MMXXIV", true},
+		{"hebrew2Minus", 5, "5.", false},
+	} {
+		if got, ok := formatNumber(tc.format, tc.n); got != tc.want || ok != tc.ok {
+			t.Errorf("formatNumber(%q, %d) = %q, %v; want %q, %v", tc.format, tc.n, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+func TestSymbolBullet(t *testing.T) {
+	for _, tc := range []struct {
+		char string
+		fams []string
+		want string
+		face string
+	}{
+		{"•", []string{"Arial"}, "•", "Arial"},
+		{"q", []string{"Wingdings"}, "", "OpenSymbol"},
+		{"", []string{"Symbol"}, "", "OpenSymbol"},
+		{"", []string{"StarSymbol"}, "", "OpenSymbol"},
+		{"➢", []string{"Wingdings"}, "➢", "OpenSymbol"},
+		{"\x01", []string{"Symbol"}, "•", "OpenSymbol"},
+	} {
+		got, fams := symbolBullet(tc.char, tc.fams)
+		if got != tc.want || len(fams) == 0 || fams[0] != tc.face {
+			t.Errorf("symbolBullet(%q, %q) = %q, %q", tc.char, tc.fams, got, fams)
+		}
+	}
+}
+
+// TestText_Autofit checks the scale levels a shrinking body takes and the
+// growth of a growing one (p3.pptx, m3.fodp).
+func TestText_Autofit(t *testing.T) {
+	four := []Paragraph{para("L0", arial(20)), para("L1", arial(20)), para("L2", arial(20)), para("L3", arial(20))}
+	shrink := box(28.35, 28.35, 150, 50, four...)
+	shrink.Text.Autofit = AutofitShrink
+	pg := convert(t, deck(&Slide{Shapes: []*Shape{shrink}}), office.Options{}).Pages[0]
+	l0, l1 := find(t, pg, "L0"), find(t, pg, "L1")
+	// The level of 62.5% and 80% spacing: 13 points on 12.48-point lines.
+	if !near(l0.size, 13, 0.01) || !near(l1.y-l0.y, 12.48, 0.05) || !near(l0.y, 28.35+12.48, 0.1) {
+		t.Errorf("shrunk to %.2f at %.2f, pitch %.2f", l0.size, l0.y, l1.y-l0.y)
+	}
+	for _, tc := range []struct {
+		anchor Anchor
+		box    compose.Rect
+	}{
+		{AnchorTop, compose.Rect{X: 28.35, Y: 28.35, Width: 150, Height: 96}},
+		{AnchorBottom, compose.Rect{X: 28.35, Y: 28.35 - 46, Width: 150, Height: 96}},
+		{AnchorMiddle, compose.Rect{X: 28.35, Y: 28.35 - 23, Width: 150, Height: 96}},
+	} {
+		grow := box(28.35, 28.35, 150, 50, four...)
+		grow.Text.Autofit, grow.Text.Anchor = AutofitGrow, tc.anchor
+		grow.Line = Line{Width: 1, Color: red}
+		pg := convert(t, deck(&Slide{Shapes: []*Shape{grow}}), office.Options{}).Pages[0]
+		var ps []placedPath
+		paths(pg.Content, compose.Identity, &ps)
+		if len(ps) != 1 || !rectNear(ps[0].bounds(), tc.box, 0.05) {
+			t.Errorf("anchor %d: grown box %+v, want %+v", tc.anchor, ps[0].bounds(), tc.box)
+		}
+		if r := find(t, pg, "L0"); !near(r.y, tc.box.Y+20, 0.1) {
+			t.Errorf("anchor %d: L0 at %.2f", tc.anchor, r.y)
+		}
+	}
+}

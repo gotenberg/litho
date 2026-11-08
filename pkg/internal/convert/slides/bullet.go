@@ -140,11 +140,11 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 const maxBulletScale = 4
 
 // symbolBullet returns the character c of a bullet in the families fams
-// as Impress draws it, with the families to draw it in: a private-use
-// character of StarSymbol's fonts draws in OpenSymbol, which holds it; one
-// of the Symbol and Wingdings fonts is mapped to the Unicode character
-// Impress draws for it in OpenSymbol (unotools' StarSymbol conversion
-// tables), else a bullet.
+// as Impress draws it, with the families to draw it in: a bullet of a
+// StarSymbol font draws in OpenSymbol; a character of the Symbol and
+// Wingdings fonts becomes its private-use character, U+F000 plus its code,
+// which OpenSymbol holds as Impress's symbol font conversion draws it
+// (unotools' StarSymbol tables); any other character keeps its families.
 func symbolBullet(c string, fams []string) (string, []string) {
 	r := []rune(c)
 	if len(r) == 0 {
@@ -164,38 +164,12 @@ func symbolBullet(c string, fams []string) (string, []string) {
 		return c, []string{"OpenSymbol"}
 	case !sym:
 		return c, fams
-	case r[0] >= 0xf000 && r[0] <= 0xf0ff:
-		// Impress keeps the character and draws it in OpenSymbol, which
-		// holds the symbol fonts' private-use characters.
-		return c, append([]string{"OpenSymbol"}, fams...)
 	case r[0] >= 0x20 && r[0] <= 0xff:
-		// A symbol font's character is its private-use character.
 		return string(0xf000 + r[0]), append([]string{"OpenSymbol"}, fams...)
+	case r[0] < 0x20:
+		return "•", []string{"OpenSymbol"}
 	}
-	opensym := []string{"OpenSymbol"}
-	switch r[0] {
-	case 0xb7, 0x95, 0x9f, 0x6c:
-		return "•", opensym
-	case 0xa7, 0x6e:
-		return "▪", opensym
-	case 0xa8:
-		return "◆", opensym
-	case 0xd8:
-		return "➢", opensym
-	case 0xfc:
-		return "✔", opensym
-	case 0x76:
-		return "❖", opensym
-	case 0x71:
-		return "❑", opensym
-	case 0x6f:
-		return "□", opensym
-	case 0x2d:
-		return "–", opensym
-	case 0x3e:
-		return ">", opensym
-	}
-	return "•", opensym
+	return c, append([]string{"OpenSymbol"}, fams...)
 }
 
 // formatNumber returns the label of the number n in the DrawingML
