@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
+	"github.com/gotenberg/litho/pkg/internal/css"
 )
 
 func TestTable_BackgroundUnderTheCells(t *testing.T) {
@@ -50,5 +51,21 @@ func TestTable_BackgroundUnderTheCells(t *testing.T) {
 				t.Errorf("own fill %+v", own.Color)
 			}
 		})
+	}
+}
+
+func TestTable_CellWritingModes(t *testing.T) {
+	t.Parallel()
+	cell := func(vert string) string {
+		return `<a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:t>x</a:t></a:r></a:p></a:txBody><a:tcPr vert="` + vert + `"/></a:tc>`
+	}
+	frame := `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="3" name="T"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="0" y="0"/><a:ext cx="254000" cy="254000"/></p:xfrm>` +
+		`<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr/><a:tblGrid><a:gridCol w="127000"/><a:gridCol w="127000"/><a:gridCol w="127000"/></a:tblGrid>` +
+		`<a:tr h="127000">` + cell("eaVert") + cell("wordArtVert") + cell("vert270") + `</a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame>`
+	cells := oneSlide(t, frame).Shapes[0].Table.Rows[0].Cells
+	for i, want := range []css.WritingMode{css.VerticalRL, css.HorizontalTB, css.SidewaysLR} {
+		if got := cells[i].Text.Vertical; got != want {
+			t.Errorf("cell %d writing mode %v, want %v", i, got, want)
+		}
 	}
 }
