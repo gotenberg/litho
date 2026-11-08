@@ -376,4 +376,8 @@ func TestShapes_BackgroundFill(t *testing.T) {
 	if f := doc.Slides[0].Shapes[0].Fill; f.Kind != slides.FillSolid || f.Color != (css.Color{G: 1, A: 1}) {
 		t.Errorf("fill %+v, want the slide's green background", f)
 	}
+	doc, _ = readDeck(t, testDeck{slides: []testSlide{{tree: shape}}})
+	if f := doc.Slides[0].Shapes[0].Fill; f.Kind != slides.FillSolid || f.Color != (css.Color{R: 1, G: 1, B: 1, A: 1}) {
+		t.Errorf("fill %+v, want white for a slide without a background", f)
+	}
 }

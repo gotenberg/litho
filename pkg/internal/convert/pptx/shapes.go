@@ -311,8 +311,13 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	s.Fill = r.shapeFill(fc, chain, style)
 	if boolAttr(el, "useBgFill", false) && c.bg != nil {
 		// pptx: sd/tdf127964's rectangle filled with the background
-		// prints white over the white slide, not its style's accent1.
+		// prints white over the white slide, not its style's accent1;
+		// sd/tdf105150's hides the red frame under it: a slide without a
+		// background is white.
 		s.Fill = *c.bg
+		if s.Fill.Kind == slides.FillNone {
+			s.Fill = slides.Fill{Kind: slides.FillSolid, Color: css.Color{R: 1, G: 1, B: 1, A: 1}}
+		}
 	}
 	s.Line = r.shapeLine(fc, chain, style)
 	turn := s.Rotation
