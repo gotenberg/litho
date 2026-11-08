@@ -56,6 +56,7 @@ func (r *reader) backdrop(ss *shapeStyle, pc *pageCtx) css.Color {
 			}
 		case slides.FillPattern:
 			return f.Background, f.Background.A > 0
+		case slides.FillNone, slides.FillPicture:
 		}
 		return css.Color{}, false
 	}

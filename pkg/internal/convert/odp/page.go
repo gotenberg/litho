@@ -41,8 +41,8 @@ func (pc *pageCtx) decls(r *reader, pg *odf.Element, dp odf.Props) {
 	pc.showNumber = dp.Get("presentation:display-page-number") == "true"
 }
 
-// masterShows reports whether a master page's shape of presentation
-// class class shows on a slide: the placeholders of the layout (title,
+// masterShows reports whether a master page's shape of the presentation
+// class named class shows on a slide: the placeholders of the layout (title,
 // outline, subtitle, text, graphic, object, chart, table, orgchart,
 // page, notes, handout) are templates the slide's own shapes fill and
 // never print; the header shows on notes and handouts alone; the footer,
