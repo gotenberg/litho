@@ -208,7 +208,7 @@ func TestText_BodyProperties(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s := oneSlide(t, textBox("TB", 0, 0, 1, 1, tc.bodyPr+`<a:p><a:r><a:t>x</a:t></a:r></a:p>`))
+			s := oneSlide(t, textBox("TB", 0, 0, 914400, 914400, tc.bodyPr+`<a:p><a:r><a:t>x</a:t></a:r></a:p>`))
 			tc.check(t, s.Shapes[0].Text)
 		})
 	}
@@ -267,5 +267,29 @@ func TestText_DateFieldFormats(t *testing.T) {
 		if got := f.Apply(numfmt.Value{Kind: numfmt.Number, Number: serial}).Text; got != c.want {
 			t.Errorf("%s %s: %q prints %q, want %q", c.typ, c.lang, code, got, c.want)
 		}
+	}
+}
+
+func TestText_InsetsFitTheBox(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, bodyPr string
+		want         [4]float64
+	}{
+		{"insets within the box stay", `<a:bodyPr lIns="12700" tIns="12700" rIns="12700" bIns="12700"/>`, [4]float64{1, 1, 1, 1}},
+		{"top and bottom past the height lose half the excess each", `<a:bodyPr lIns="0" tIns="1270000" rIns="0" bIns="0"/>`, [4]float64{55, 0, -45, 0}},
+		{"left and right past the width", `<a:bodyPr lIns="762000" tIns="0" rIns="762000" bIns="0"/>`, [4]float64{0, 55, 0, 55}},
+		{"an inset the file leaves out keeps its default", `<a:bodyPr tIns="1270000"/>`, [4]float64{100, 7.2, 3.6, 7.2}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := oneSlide(t, textBox("TB", 0, 0, 1397000, 127000, tc.bodyPr+`<a:p><a:r><a:t>x</a:t></a:r></a:p>`))
+			got := s.Shapes[0].Text.Insets
+			for i := range got {
+				if d := got[i] - tc.want[i]; d > 1e-6 || d < -1e-6 {
+					t.Fatalf("insets %v, want %v", got, tc.want)
+				}
+			}
+		})
 	}
 }

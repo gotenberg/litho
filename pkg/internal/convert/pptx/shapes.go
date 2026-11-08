@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
@@ -313,6 +314,9 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 			ref = &ooxml.Element{Space: ref.Space, Local: ref.Local, Attrs: ref.Attrs, Children: []*ooxml.Element{c.fontColor}}
 		}
 		s.Text = r.textBody(c, chain, p, ref)
+		if s.Text != nil {
+			fitInsets(s.Text, chain, s.Box, s.Geometry)
+		}
 	}
 	if isPh {
 		if s.Text == nil || empty(s.Text) {
@@ -330,6 +334,40 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 		return splitText(s, tx)
 	}
 	return s
+}
+
+// fitInsets shrinks the text insets a shape's body properties state when
+// a side's pair reaches across the room it has, as Impress applies them
+// (oox TextBodyProperties::pushTextDistances): the left and right insets
+// against the shape's width, the top and bottom ones against its
+// geometry's text rectangle, each pair losing half the excess.
+//
+// # Corpus evidence
+//
+//   - pptx: sd-data/TextDistancesInsets3's 2 cm boxes with 0 and 4 cm
+//     top and bottom insets print their text above the box.
+func fitInsets(b *slides.TextBody, chain []*ooxml.Element, box compose.Rect, g *shape.Geometry) {
+	var set [4]bool
+	for _, el := range chain {
+		pr := kid(el, "txBody").Child(ooxml.NSA, "bodyPr")
+		for side, name := range [4]string{"tIns", "rIns", "bIns", "lIns"} {
+			if _, ok := pr.Attr(name); ok {
+				set[side] = true
+			}
+		}
+	}
+	fit := func(a, b *float64, room float64) {
+		if room > 0 && *a+*b >= room {
+			d := (*a + *b - room) / 2
+			*a, *b = *a-d, *b-d
+		}
+	}
+	if set[css.Left] && set[css.Right] {
+		fit(&b.Insets[css.Left], &b.Insets[css.Right], box.Width)
+	}
+	if set[css.Top] && set[css.Bottom] {
+		fit(&b.Insets[css.Top], &b.Insets[css.Bottom], shape.TextRect(g, box).Height)
+	}
 }
 
 // splitText returns a diagram drawing's shape whose text sits in a box of
