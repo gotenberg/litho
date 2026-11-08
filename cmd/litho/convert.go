@@ -215,7 +215,12 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		fmt.Fprintf(stderr, "invalid --media %q: expected print or screen\n", *media)
 		return exitError
 	}
-	printOpts, err := convertPrintOptions(*landscape, *preferCSS, *scale, *singlePage, *pages, *background, *outlineFlag, *header, *footer, *date, *baseURL, mediaFeatures)
+	printAt, err := printDate(*date)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitError
+	}
+	printOpts, err := convertPrintOptions(*landscape, *preferCSS, *scale, *singlePage, *pages, *background, *outlineFlag, *header, *footer, printAt, *baseURL, mediaFeatures)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitError
@@ -240,7 +245,7 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		}
 	}
 	htmlLike := inFormat == pdf.FormatHTML || inFormat == pdf.FormatMarkdown
-	officeLike := inFormat == pdf.FormatDOCX || inFormat == pdf.FormatODT
+	officeLike := isOfficeFormat(inFormat)
 	resDir := *resources
 	if resDir == "" && input != "-" && !remote {
 		resDir = filepath.Dir(input)
@@ -278,7 +283,8 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		}
 	}
 	if officeLike {
-		opts = append(opts, pdf.WithLandscape(*landscape), pdf.WithPageRanges(*pages), pdf.WithOutline(*outlineFlag), pdf.WithConvertPassword(*password), pdf.WithHiddenSlides(*hiddenSlides), pdf.WithNotesPages(*notesPages))
+		opts = append(opts, pdf.WithLandscape(*landscape), pdf.WithPageRanges(*pages), pdf.WithOutline(*outlineFlag), pdf.WithConvertPassword(*password),
+			pdf.WithSinglePage(*singlePage), pdf.WithPrintDate(printAt), pdf.WithHiddenSlides(*hiddenSlides), pdf.WithNotesPages(*notesPages))
 	}
 	if paper.set {
 		opts = append(opts, pdf.WithPaperSize(paper.width, paper.height))
@@ -336,11 +342,40 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	return exitOK
 }
 
+// isOfficeFormat reports whether format is one of the Office formats,
+// whose conversion takes the Office options: the paper, landscape, page
+// ranges, outline, password, single page, print date, hidden slides and
+// notes pages flags.
+func isOfficeFormat(format pdf.Format) bool {
+	switch format {
+	case pdf.FormatDOCX, pdf.FormatODT, pdf.FormatXLSX, pdf.FormatODS, pdf.FormatCSV, pdf.FormatPPTX, pdf.FormatODP:
+		return true
+	case pdf.FormatText, pdf.FormatHTML, pdf.FormatMarkdown:
+	}
+	return false
+}
+
+// printDate parses --date: "" is the zero time, "now" the clock, anything
+// else an RFC 3339 instant.
+func printDate(date string) (time.Time, error) {
+	switch date {
+	case "":
+		return time.Time{}, nil
+	case "now":
+		return time.Now(), nil
+	}
+	t, err := time.Parse(time.RFC3339, date)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("--date: %w: expected RFC 3339, such as 2026-11-06T10:30:00Z, or now", err)
+	}
+	return t, nil
+}
+
 // convertPrintOptions turns the print flags of litho convert into options
-// of [pdf.Convert]: it reads the header and footer files, parses --date and
-// splits every --media-feature at its first "=". The library checks the
+// of [pdf.Convert]: it reads the header and footer files and splits every
+// --media-feature at its first "=". The library checks the
 // ranges.
-func convertPrintOptions(landscape, preferCSS bool, scale float64, singlePage bool, pages string, background, outline bool, header, footer, date, baseURL string, mediaFeatures []string) ([]pdf.ConvertOption, error) {
+func convertPrintOptions(landscape, preferCSS bool, scale float64, singlePage bool, pages string, background, outline bool, header, footer string, date time.Time, baseURL string, mediaFeatures []string) ([]pdf.ConvertOption, error) {
 	opts := []pdf.ConvertOption{
 		pdf.WithLandscape(landscape),
 		pdf.WithPreferCSSPageSize(preferCSS),
@@ -364,16 +399,8 @@ func convertPrintOptions(landscape, preferCSS bool, scale float64, singlePage bo
 		}
 		opts = append(opts, f.with(string(data)))
 	}
-	switch date {
-	case "":
-	case "now":
-		opts = append(opts, pdf.WithPrintDate(time.Now()))
-	default:
-		t, err := time.Parse(time.RFC3339, date)
-		if err != nil {
-			return nil, fmt.Errorf("--date: %w: expected RFC 3339, such as 2026-11-06T10:30:00Z, or now", err)
-		}
-		opts = append(opts, pdf.WithPrintDate(t))
+	if !date.IsZero() {
+		opts = append(opts, pdf.WithPrintDate(date))
 	}
 	if len(mediaFeatures) > 0 {
 		features := make(map[string]string, len(mediaFeatures))
