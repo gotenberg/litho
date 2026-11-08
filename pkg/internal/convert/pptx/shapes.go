@@ -307,7 +307,7 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	fc := &fillCtx{sc: c.sc, part: c.part, group: c.group}
 	s.Fill = r.shapeFill(fc, chain, style)
 	s.Line = r.shapeLine(fc, chain, style)
-	r.effects(chain)
+	r.effects(chain, s)
 	if el.Local == "sp" {
 		ref := style.Child(ooxml.NSA, "fontRef")
 		if ref != nil && c.fontColor != nil {
@@ -396,17 +396,61 @@ func splitText(s *slides.Shape, tx *ooxml.Element) *slides.Shape {
 
 // effects reports the effects a printout leaves out (20.1.8.26 effectLst,
 // 20.1.4.1.26 scene3d, 20.1.5.12 sp3d) of the first shape of chain that
-// sets them.
-func (r *reader) effects(chain []*ooxml.Element) {
+// sets them, and turns s by its scene's camera when Impress draws the
+// scene flat: a front camera (20.1.10.47 ST_PresetCameraType
+// orthographicFront, legacyObliqueFront) not tilted about the x and y
+// axes (20.1.5.11 rot lat and lon 0) turns the shape by its revolution
+// against the shape's own rotation; any other camera Impress extrudes
+// in 3D, which prints flat here.
+//
+// # Corpus evidence
+//
+//   - pptx: oox/camera-rotation-revolution-nonwps's text box of camera
+//     revolution 90 degrees prints turned a quarter anticlockwise, its
+//     rectangle of 305 degrees turned 55 degrees clockwise.
+func (r *reader) effects(chain []*ooxml.Element, s *slides.Shape) {
 	for _, el := range chain {
 		pr := spPr(el)
 		if e := pr.Child(ooxml.NSA, "effectLst"); e != nil && len(e.Children) > 0 {
 			r.warn("unsupported-content", "shape effects (shadows, glows, reflections, soft edges) are not drawn")
 		}
-		if pr.Child(ooxml.NSA, "scene3d") != nil || pr.Child(ooxml.NSA, "sp3d") != nil {
-			r.warn("unsupported-content", "3D shape properties are not drawn: shapes print flat")
+		scene := pr.Child(ooxml.NSA, "scene3d")
+		if scene == nil && pr.Child(ooxml.NSA, "sp3d") == nil {
+			continue
 		}
+		if rev, ok := flatCamera(scene); ok {
+			if rev != 0 {
+				s.Rotation = math.Mod(s.Rotation-rev+720, 360)
+			}
+			if pr.Child(ooxml.NSA, "sp3d") == nil {
+				return
+			}
+		}
+		r.warn("unsupported-content", "3D shape properties are not drawn: shapes print flat")
+		return
 	}
+}
+
+// flatCamera returns the revolution in degrees of a scene's front camera
+// that Impress draws flat, false for a scene it extrudes.
+func flatCamera(scene *ooxml.Element) (float64, bool) {
+	cam := scene.Child(ooxml.NSA, "camera")
+	switch attr(cam, "prst") {
+	case "orthographicFront", "legacyObliqueFront":
+	default:
+		return 0, false
+	}
+	rot := cam.Child(ooxml.NSA, "rot")
+	if rot == nil {
+		return 0, true
+	}
+	lat, _ := intAttr(rot, "lat")
+	lon, _ := intAttr(rot, "lon")
+	if lat%21600000 != 0 || lon%21600000 != 0 {
+		return 0, false
+	}
+	rev, _ := intAttr(rot, "rev")
+	return float64(rev) / 60000, true
 }
 
 // group reads a p:grpSp (19.3.1.22): its box and child space, and its

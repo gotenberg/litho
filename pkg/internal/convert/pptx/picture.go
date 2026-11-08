@@ -61,7 +61,7 @@ func (r *reader) picture(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	fc := &fillCtx{sc: c.sc, part: c.part, group: c.group}
 	s.Line = r.shapeLine(fc, chain, style)
 	s.Geometry = r.geometryOf(chain)
-	r.effects(chain)
+	r.effects(chain, s)
 	if s.Geometry != nil || s.Line.Width > 0 {
 		s.Kind = slides.KindGeometry
 		s.Fill = slides.Fill{Kind: slides.FillPicture, Picture: pic}

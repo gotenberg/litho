@@ -314,3 +314,27 @@ func TestShapes_Jumps(t *testing.T) {
 		t.Errorf("a jump before the first slide: %+v", s)
 	}
 }
+
+func TestShapes_CameraTurn(t *testing.T) {
+	t.Parallel()
+	scene := func(prst, rot string) string {
+		return `<a:scene3d><a:camera prst="` + prst + `">` + rot + `</a:camera><a:lightRig rig="threePt" dir="t"/></a:scene3d>`
+	}
+	for _, tc := range []struct {
+		name, spPr string
+		want       float64
+	}{
+		{"a front camera's revolution turns the shape back", scene("orthographicFront", `<a:rot lat="0" lon="0" rev="5400000"/>`), 0},
+		{"a front camera without a rotation", scene("orthographicFront", ""), 90},
+		{"a tilted camera is drawn flat", scene("orthographicFront", `<a:rot lat="1200000" lon="0" rev="5400000"/>`), 90},
+		{"an isometric camera is drawn flat", scene("isometricRightUp", ""), 90},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := oneSlide(t, sp("S", tc.spPr, ""))
+			if got := s.Shapes[0].Rotation; got != tc.want {
+				t.Errorf("rotation %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
