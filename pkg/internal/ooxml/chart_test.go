@@ -422,3 +422,11 @@ func TestManualLayout(t *testing.T) {
 		})
 	}
 }
+
+func TestChartFromElement_DataTable(t *testing.T) {
+	plot := `<c:barChart><c:barDir val="col"/>` + ser(0, "A", "", "1") + `</c:barChart><c:dTable><c:showHorzBorder val="1"/><c:showKeys val="1"/><c:spPr><a:solidFill><a:srgbClr val="D9D9D9"/></a:solidFill><a:ln w="12700"><a:solidFill><a:srgbClr val="0000FF"/></a:solidFill></a:ln></c:spPr><c:txPr><a:p><a:pPr><a:defRPr sz="900"/></a:pPr></a:p></c:txPr></c:dTable>`
+	dt := readChart(t, chartXML("", "", plot), false).DataTable
+	if dt == nil || !dt.HBorder || dt.VBorder || !dt.Keys || dt.Style.Size != 9 || dt.Fill == nil || dt.Line == nil || dt.Line.Width != 1 {
+		t.Errorf("data table = %+v", dt)
+	}
+}

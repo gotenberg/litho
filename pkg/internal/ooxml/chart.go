@@ -294,9 +294,32 @@ func (p *chartReader) read(root *Element) {
 	if lg := ch.Child(NSChart, "legend"); lg != nil {
 		p.readLegend(lg)
 	}
-	if ch.Child(NSChart, "dTable") != nil {
-		p.warn(CodeChartUnsupported, "a chart's data table is not drawn")
+	if dt := ch.Child(NSChart, "plotArea").Child(NSChart, "dTable"); dt != nil {
+		p.readDataTable(dt)
 	}
+}
+
+// readDataTable reads c:dTable (ECMA-376 Part 1, 21.2.2.54): its borders,
+// keys, text and lines; a fill colours the text's background, as
+// LibreOffice draws it.
+func (p *chartReader) readDataTable(e *Element) {
+	f := p.frame(e.Child(NSChart, "spPr"), chart.Frame{})
+	t := &chart.DataTable{
+		HBorder: boolVal(e, "showHorzBorder", false),
+		VBorder: boolVal(e, "showVertBorder", false),
+		Outline: boolVal(e, "showOutline", false),
+		Keys:    boolVal(e, "showKeys", false),
+		Style:   p.textStyle(p.textProps(e.Child(NSChart, "txPr")), 10, false, 1),
+		Fill:    f.Fill,
+		Line:    f.Border,
+	}
+	if t.Fill != nil && t.Fill.None {
+		t.Fill = nil
+	}
+	if t.Line != nil && t.Line.None {
+		t.Line = nil
+	}
+	p.c.DataTable = t
 }
 
 // categoryPositions decides whether each category axis puts its
