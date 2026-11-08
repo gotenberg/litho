@@ -20,7 +20,7 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 		b.warn(CodeTooManyShapes, fmt.Sprintf("a slide has more than %d shapes; the rest are left out", maxSlideShapes))
 		return nil
 	}
-	sm := aboutCentre(s.Box, s.Rotation, s.FlipH, s.FlipV)
+	sm := skewedAboutCentre(s.Box, s.Rotation, s.SkewX, s.FlipH, s.FlipV)
 	var out []compose.Fragment
 	box := s.Box
 	switch s.Kind {
@@ -109,7 +109,7 @@ func (b *builder) geometry(s *Shape, m compose.Matrix, parent *compose.StructEle
 	if !shape.Known(s.Geometry) {
 		b.warn(CodeGeometry, "the geometry "+quote(s.Geometry.Preset)+" is drawn as its bounding rectangle")
 	}
-	sm := aboutCentre(box, s.Rotation, s.FlipH, s.FlipV)
+	sm := skewedAboutCentre(box, s.Rotation, s.SkewX, s.FlipH, s.FlipV)
 	paths := shape.Paths(s.Geometry, box)
 	frags, paths := b.effects(s, paths, box, m, txt)
 	for _, p := range paths {
@@ -128,7 +128,7 @@ func (b *builder) geometry(s *Shape, m compose.Matrix, parent *compose.StructEle
 		if s.FlipV {
 			rot += 180
 		}
-		tm := aboutCentre(box, rot, false, false)
+		tm := skewedAboutCentre(box, rot, s.SkewX, false, false)
 		out = append(out, group(tm, txt.frags)...)
 		for _, l := range txt.links {
 			l.Rect = transformRect(then(tm, m), l.Rect)

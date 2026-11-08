@@ -43,11 +43,22 @@ func translate(x, y float64) compose.Matrix {
 // deg degrees, about the centre of r (ECMA-376 Part 1, 20.1.7.6 xfrm: the
 // flips apply before the rotation).
 func aboutCentre(r compose.Rect, deg float64, flipH, flipV bool) compose.Matrix {
+	return skewedAboutCentre(r, deg, 0, flipH, flipV)
+}
+
+// skewedAboutCentre returns the transform that mirrors, then shears by
+// skew degrees, the top edge moving right for a positive angle, then
+// turns clockwise by deg degrees, about the centre of r (ODF 1.3 Part 3,
+// 19.228 draw:transform, whose skewX applies before its rotate).
+func skewedAboutCentre(r compose.Rect, deg, skew float64, flipH, flipV bool) compose.Matrix {
 	deg = math.Mod(deg, 360)
 	if math.IsNaN(deg) {
 		deg = 0
 	}
-	if deg == 0 && !flipH && !flipV {
+	if math.IsNaN(skew) || math.Abs(skew) > maxSkew {
+		skew = 0
+	}
+	if deg == 0 && skew == 0 && !flipH && !flipV {
 		return compose.Identity
 	}
 	cx, cy := r.X+r.Width/2, r.Y+r.Height/2
@@ -58,12 +69,19 @@ func aboutCentre(r compose.Rect, deg float64, flipH, flipV bool) compose.Matrix 
 	if flipV {
 		f.D = -1
 	}
+	// With y down, a point above the centre has a negative y: the shear
+	// moves it right for a positive angle.
+	sh := compose.Matrix{A: 1, C: -math.Tan(skew * math.Pi / 180), D: 1}
 	// In page coordinates, y down, a clockwise turn maps the x axis onto
 	// (cos, sin).
 	s, c := math.Sincos(deg * math.Pi / 180)
 	rot := compose.Matrix{A: c, B: s, C: -s, D: c}
-	return then(then(then(translate(-cx, -cy), f), rot), translate(cx, cy))
+	return then(then(then(then(translate(-cx, -cy), f), sh), rot), translate(cx, cy))
 }
+
+// maxSkew bounds a shear's angle, in degrees: a shear of 90 degrees
+// flattens the shape to a line and has no finite matrix.
+const maxSkew = 89
 
 // rectOps returns the path of the rectangle r.
 func rectOps(r compose.Rect) []compose.PathOp {
