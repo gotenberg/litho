@@ -323,7 +323,8 @@ func (r *reader) cell(c *shapeCtx, tc *ooxml.Element, ts *tableStyle, i, j int) 
 		}
 	}
 	if tb := tc.Child(ooxml.NSA, "txBody"); tb != nil {
-		tstyles := &textStyles{extra: cellTextLevel(parts), master: c.layer.masterOf().other, def: r.defaultText, sc: c.sc, part: c.part}
+		m := c.layer.masterOf()
+		tstyles := &textStyles{extra: cellTextLevel(parts), master: m.other, def: r.defaultText, sc: c.sc, part: c.part, owners: map[*ooxml.Element]string{m.other: m.part}}
 		if l := tb.Child(ooxml.NSA, "lstStyle"); l != nil {
 			tstyles.lists = []*ooxml.Element{l}
 		}

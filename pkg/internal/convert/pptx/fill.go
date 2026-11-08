@@ -168,7 +168,9 @@ func (r *reader) styleFill(fc *fillCtx, ref *ooxml.Element) slides.Fill {
 // one, else the fill its style's fillRef names.
 func (r *reader) shapeFill(fc *fillCtx, chain []*ooxml.Element, style *ooxml.Element) slides.Fill {
 	for _, el := range chain {
-		if f, ok := r.fillOf(fc, spPr(el)); ok {
+		efc := *fc
+		efc.part = r.partOf(el, fc.part)
+		if f, ok := r.fillOf(&efc, spPr(el)); ok {
 			return f
 		}
 	}

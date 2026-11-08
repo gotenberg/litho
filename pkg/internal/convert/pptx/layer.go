@@ -60,6 +60,7 @@ func (r *reader) master(part string) (*layer, error) {
 	if ns := root.Child(nsP, "notesStyle"); ns != nil {
 		l.body, l.other = ns, ns
 	}
+	r.own(l)
 	r.layers[part] = l
 	return l, nil
 }
@@ -86,6 +87,7 @@ func (r *reader) layout(part string) (*layer, error) {
 	}
 	l := newLayer(part, root, m)
 	l.sc = scope{theme: m.sc.theme, cmap: overrideColorMap(root, m.sc.cmap)}
+	r.own(l)
 	r.layers[part] = l
 	return l, nil
 }

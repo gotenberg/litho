@@ -96,8 +96,6 @@ type reader struct {
 	// main is the presentation part, defaultText its p:defaultTextStyle.
 	main        string
 	defaultText *ooxml.Element
-	// width and height are the slide size in points.
-	width, height float64
 	// layers caches the masters, layouts and notes masters by part, and
 	// themes the themes.
 	layers map[string]*layer
@@ -110,8 +108,11 @@ type reader struct {
 	shapes, runes int
 	pixels        int64
 	pictures      map[string]*layout.Picture
-	warnings      []compose.Warning
-	warned        map[string]bool
+	// owner maps a placeholder shape or a text style of a layout, master
+	// or notes master to its part, whose relationships its pictures name.
+	owner    map[*ooxml.Element]string
+	warnings []compose.Warning
+	warned   map[string]bool
 }
 
 // warn records a warning, once per message.
@@ -139,7 +140,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*slides.D
 	r := &reader{
 		ctx: ctx, pkg: pkg, fonts: fonts, main: main,
 		layers: map[string]*layer{}, themes: map[string]*theme{},
-		pictures: map[string]*layout.Picture{}, warned: map[string]bool{},
+		pictures: map[string]*layout.Picture{}, warned: map[string]bool{}, owner: map[*ooxml.Element]string{},
 	}
 	root, err := pkg.ParseXML(ctx, main, understood)
 	if err != nil {
@@ -155,7 +156,6 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*slides.D
 	if w, h, ok := size(root.Child(nsP, "notesSz")); ok {
 		doc.NotesWidth, doc.NotesHeight = w, h
 	}
-	r.width, r.height = doc.Width, doc.Height
 	r.defaultText = root.Child(nsP, "defaultTextStyle")
 	r.readTableStyles()
 	cp := pkg.CoreProperties(ctx)
@@ -233,6 +233,27 @@ func intAttr(e *ooxml.Element, local string) (int, bool) {
 		return 0, false
 	}
 	return ooxml.Int(v)
+}
+
+// partOf returns the part el belongs to: its owner when the reader
+// registered one, else def.
+func (r *reader) partOf(el *ooxml.Element, def string) string {
+	if p, ok := r.owner[el]; ok {
+		return p
+	}
+	return def
+}
+
+// own registers the placeholders and text styles of l as l's.
+func (r *reader) own(l *layer) {
+	for _, k := range l.phs {
+		r.owner[k] = l.part
+	}
+	for _, s := range []*ooxml.Element{l.title, l.body, l.other} {
+		if s != nil {
+			r.owner[s] = l.part
+		}
+	}
 }
 
 // related returns the target of part's first internal relationship of

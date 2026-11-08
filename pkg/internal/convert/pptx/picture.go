@@ -251,6 +251,7 @@ func (r *reader) diagram(c *shapeCtx, data *ooxml.Element, s *slides.Shape, dept
 		return nil, err
 	}
 	if len(s.Kids) == 0 {
+		r.warn("unsupported-content", "a SmartArt diagram without a saved drawing is left out")
 		return nil, nil
 	}
 	return s, nil

@@ -243,21 +243,41 @@ func (r *reader) href(part string, h *ooxml.Element) string {
 	return ""
 }
 
+// footerKind reports a date, footer, slide number or header placeholder.
+func footerKind(p placeholder) bool {
+	switch p.typ {
+	case "dt", "ftr", "sldNum", "hdr":
+		return true
+	}
+	return false
+}
+
 // autoShape reads a p:sp or p:cxnSp (19.3.1.43 sp, 19.3.1.19 cxnSp): its
 // placement, geometry, fill, line and text, each inherited from its
 // placeholders as far as the slide leaves them unset. A placeholder
 // without text is an empty prompt and prints nothing, as Impress leaves
-// empty presentation objects out.
+// empty presentation objects out; a date, footer or slide number
+// placeholder prints only when the slide's layout has one of its type,
+// as Impress turns them into its master page's header and footer fields.
+//
+// # Corpus evidence
+//
+//   - litho: a slide's slide number placeholder prints the slide's number
+//     at the slide's own place when its layout holds one, and nothing when
+//     only the master does, whatever the master's p:hf says; a placeholder
+//     no layer places prints nothing.
 func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	chain := inherited(c.layer, el)
 	p, isPh := phOf(el)
 	nv := nvProps(el)
+	if isPh && footerKind(p) && c.layer.parent.find(p, false) == nil {
+		return nil
+	}
 	s := &slides.Shape{Kind: slides.KindGeometry, Name: attr(nv, "name"), Href: r.href(c.part, nv.Child(ooxml.NSA, "hlinkClick"))}
 	if !place(s, chain) {
-		if !isPh {
-			return nil
-		}
-		s.Box = defaultPlaceholderBox(p, r.slideSize(c))
+		// Impress drops a placeholder neither the slide, its layout nor
+		// its master places.
+		return nil
 	}
 	s.Geometry = r.geometryOf(chain)
 	if el.Local == "cxnSp" && s.Geometry == nil {
@@ -279,7 +299,27 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 			c.title = plain(s.Text)
 		}
 	}
+	if tx := kid(el, "txXfrm"); tx != nil && s.Text != nil {
+		return splitText(s, tx)
+	}
 	return s
+}
+
+// splitText returns a diagram drawing's shape whose text sits in a box of
+// its own (MS-ODRAWXML, 2.4.2 txXfrm) as a group of the shape without its
+// text and a shape of the text alone in that box.
+func splitText(s *slides.Shape, tx *ooxml.Element) *slides.Shape {
+	p, ok := readXfrm(tx)
+	if !ok {
+		return s
+	}
+	text := &slides.Shape{Kind: slides.KindGeometry, Name: s.Name, Box: p.box, Rotation: p.rot, FlipH: p.flipH, FlipV: p.flipV, Text: s.Text}
+	shape := *s
+	shape.Text = nil
+	g := &slides.Shape{Kind: slides.KindGroup, Name: s.Name, Kids: []*slides.Shape{&shape, text}}
+	g.Box = union(g.Kids)
+	g.Child = g.Box
+	return g
 }
 
 // effects reports the effects a printout leaves out (20.1.8.26 effectLst,
@@ -348,9 +388,4 @@ func union(kids []*slides.Shape) compose.Rect {
 		u = compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
 	}
 	return u
-}
-
-// slideSize returns the presentation's slide size.
-func (r *reader) slideSize(_ *shapeCtx) compose.Rect {
-	return compose.Rect{Width: r.width, Height: r.height}
 }

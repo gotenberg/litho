@@ -56,6 +56,13 @@ func (c chain) child(local string) *ooxml.Element {
 // the element that sets the property locals name together (a bullet's
 // kind, a fill...).
 func (c chain) first(locals ...string) *ooxml.Element {
+	k, _ := c.firstWith(locals...)
+	return k
+}
+
+// firstWith is [chain.first] that also returns the chain element holding
+// the child.
+func (c chain) firstWith(locals ...string) (child, holder *ooxml.Element) {
 	for _, e := range c {
 		for _, k := range e.Kids() {
 			if k.Space != ooxml.NSA {
@@ -63,12 +70,12 @@ func (c chain) first(locals ...string) *ooxml.Element {
 			}
 			for _, l := range locals {
 				if k.Local == l {
-					return k
+					return k, e
 				}
 			}
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // textStyles are the list styles a text body inherits, in priority order
@@ -84,6 +91,17 @@ type textStyles struct {
 	def    *ooxml.Element
 	sc     scope
 	part   string
+	// owners maps a list style to the part its bullet pictures belong to,
+	// when not part.
+	owners map[*ooxml.Element]string
+}
+
+// partOf returns the part of the list level e of the chain belongs to.
+func (ts *textStyles) partOf(e *ooxml.Element) string {
+	if p, ok := ts.owners[e]; ok {
+		return p
+	}
+	return ts.part
 }
 
 // level returns the paragraph property chain of list level lvl (0-based).
@@ -96,10 +114,19 @@ func (ts *textStyles) level(lvl int) chain {
 		}
 	}
 	for _, l := range ts.lists {
-		add(l.Child(ooxml.NSA, name))
+		lv := l.Child(ooxml.NSA, name)
+		add(lv)
+		if p, ok := ts.owners[l]; ok && lv != nil {
+			ts.owners[lv] = p
+		}
 	}
 	add(ts.extra)
-	add(ts.master.Child(ooxml.NSA, name))
+	if lv := ts.master.Child(ooxml.NSA, name); lv != nil {
+		add(lv)
+		if p, ok := ts.owners[ts.master]; ok {
+			ts.owners[lv] = p
+		}
+	}
 	add(ts.def.Child(ooxml.NSA, name))
 	add(ts.def.Child(ooxml.NSA, "defPPr"))
 	return c
@@ -152,7 +179,10 @@ func (r *reader) textBody(c *shapeCtx, sc []*ooxml.Element, p placeholder, ref *
 		return nil
 	}
 	_, isPh := phOf(sc[0])
-	ts := &textStyles{extra: fontRefLevel(ref), master: c.layer.styleFor(p, isPh), def: r.defaultText, sc: c.sc, part: c.part}
+	ts := &textStyles{extra: fontRefLevel(ref), master: c.layer.styleFor(p, isPh), def: r.defaultText, sc: c.sc, part: c.part, owners: map[*ooxml.Element]string{}}
+	if ts.master != nil {
+		ts.owners[ts.master] = r.partOf(ts.master, c.part)
+	}
 	var bodies chain
 	for _, el := range sc {
 		b := kid(el, "txBody")
@@ -161,6 +191,7 @@ func (r *reader) textBody(c *shapeCtx, sc []*ooxml.Element, p placeholder, ref *
 		}
 		if l := b.Child(ooxml.NSA, "lstStyle"); l != nil {
 			ts.lists = append(ts.lists, l)
+			ts.owners[l] = r.partOf(el, c.part)
 		}
 		if pr := b.Child(ooxml.NSA, "bodyPr"); pr != nil {
 			bodies = append(bodies, pr)
@@ -516,7 +547,7 @@ func (r *reader) linkStyle(s *slides.RunStyle, pr *ooxml.Element, sc scope) {
 // first of buNone, buChar, buAutoNum and buBlip sets the kind; the font,
 // colour and size come each from the first element that sets them.
 func (r *reader) bullet(pc chain, ts *textStyles) *slides.Bullet {
-	kind := pc.first("buNone", "buChar", "buAutoNum", "buBlip")
+	kind, holder := pc.firstWith("buNone", "buChar", "buAutoNum", "buBlip")
 	if kind == nil || kind.Local == "buNone" {
 		return nil
 	}
@@ -539,7 +570,7 @@ func (r *reader) bullet(pc chain, ts *textStyles) *slides.Bullet {
 		ref := ooxml.ParsePicture(&ooxml.Element{Space: ooxml.NSPic, Local: "pic", Children: []*ooxml.Element{
 			{Space: ooxml.NSA, Local: "blipFill", Children: kind.Children},
 		}})
-		b.Kind, b.Picture = slides.BulletPicture, r.pictureOf(ts.part, ref)
+		b.Kind, b.Picture = slides.BulletPicture, r.pictureOf(ts.partOf(holder), ref)
 		if b.Picture == nil {
 			b.Kind, b.Char = slides.BulletChar, "•"
 		}
