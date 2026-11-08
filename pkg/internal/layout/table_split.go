@@ -285,3 +285,56 @@ func nestedRowBreaks(w *box, out *[]breakCand) {
 func nestedGrid(b *box) bool {
 	return b.tpart == partWrapper || b.tpart == partTable || b.tpart == partRowGroup
 }
+
+// breakSpans moves the content of the cells spanning into row r, whose
+// rows break before r at the page cut cut, from the line the cut runs
+// through down to at, where row r starts on the next page: a row-spanning
+// cell's lines continue on the next page as a split row's do, rather
+// than straddling the cut, as Writer breaks them. The cells then sit at
+// the top of their rows.
+func (td *tableData) breakSpans(r int, cut, at float64) {
+	for _, c := range td.cells {
+		cd := c.cell
+		if cd.rowSpan < 2 || cd.row >= r || cd.row+cd.rowSpan <= r {
+			continue
+		}
+		top := td.rows[cd.row].box.y
+		limit := cut - top
+		end := cd.contentEnd - c.y
+		var cands []float64
+		for _, k := range cellBreaks(c) {
+			cands = append(cands, k.y-c.y)
+		}
+		for _, st := range cd.struts {
+			end += st.d
+			for i := range cands {
+				if cands[i] >= st.at-eps {
+					cands[i] += st.d
+				}
+			}
+		}
+		if end <= limit+metricSlack {
+			continue
+		}
+		brk := -1.0
+		for i, y := range cands {
+			// The first line whose bottom, the next one's top, passes
+			// the cut moves.
+			bottom := end
+			if i+1 < len(cands) {
+				bottom = cands[i+1]
+			}
+			if y > eps && bottom > limit+metricSlack {
+				brk = y
+				break
+			}
+		}
+		if brk < 0 {
+			continue
+		}
+		if d := at - top - brk; d > 0 {
+			cd.split, cd.off = true, 0
+			cd.struts = append(cd.struts, cellStrut{at: brk, d: d})
+		}
+	}
+}

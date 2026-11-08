@@ -292,3 +292,27 @@ func TestTableSplit_ClonedCellBorders(t *testing.T) {
 		})
 	}
 }
+
+// TestTableSplit_SpanningCellLines moves the line of a row-spanning cell
+// that a page cut between its rows runs through to the next page, where
+// the next row starts, rather than slicing it.
+func TestTableSplit_SpanningCellLines(t *testing.T) {
+	span := td(mods(fg(red), valign(css.AlignTop)), "a")
+	span.Children = append(span.Children, br(sty()), txt(sty(fg(red)), "a"), br(sty()), txt(sty(fg(red)), "a"))
+	spans(span, 1, 3)
+	row := func(h float64, kids ...*Node) *Node {
+		return tr(mods(func(s *css.Style) { s.Height = css.Pts(px(h)) }), kids...)
+	}
+	root := doc(deep(table(mods(collapse), row(1, span, td(nil, "")), row(2.5, td(nil, "")), row(2.5, td(nil, ""))), font(2)))
+	assertPages(t, run(t, root, page(4, 5)), 5, `
+		RR__
+		RR__
+		RR__
+		RR__
+		____
+		RR__
+		RR__
+		____
+		____
+		____`, wpLetters)
+}
