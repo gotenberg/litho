@@ -5,7 +5,7 @@
   "inputs": {
     "list": "documents.json",
     "list_root": "sources",
-    "fetched_by": "make office-fetch SOURCES=libreoffice FORMATS=pptx"
+    "fetched_by": "make corpus-fetch CORPUS_NAME=libreoffice/pptx"
   },
   "references": {
     "dir": "references",
@@ -14,5 +14,9 @@
   },
   "goldens": {
     "diff": "goldens/diff"
+  },
+  "fetch": {
+    "github": "LibreOffice/core",
+    "pin": "LIBREOFFICE_CORE_COMMIT"
   }
 }

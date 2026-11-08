@@ -88,21 +88,8 @@ FIXTURE_FONTS := test/integration/testdata/fonts
 
 .PHONY: text-fixtures
 text-fixtures: ## Regenerate the litho/text corpus PDFs from their text sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first)
-	$(CORPUS)/lib/fetch-fonts.sh $(FIXTURE_FONTS)
+	go run ./test/integration/cmd/corpus fetch --corpus=fonts
 	go run ./$(CORPUS)/litho/text/build -fonts $(FIXTURE_FONTS)
-
-WPT_DIR := test/integration/testdata/wpt
-
-.PHONY: wpt-fetch
-wpt-fetch: ## Download the web-platform-tests reftests of the wpt corpus at the commit test/integration/corpus/versions.env pins (hash-checked), with Ahem and the fixture fonts
-	$(CORPUS)/lib/fetch-fonts.sh $(FIXTURE_FONTS)
-	$(CORPUS)/wpt/fetch.sh $(WPT_DIR) $(FIXTURE_FONTS)
-
-RESVG_DIR := test/integration/testdata/resvg
-
-.PHONY: resvg-fetch
-resvg-fetch: ## Download the resvg tests of the resvg corpus at the commit test/integration/corpus/versions.env pins (hash-checked), with their Noto fonts
-	$(CORPUS)/resvg/fetch.sh $(RESVG_DIR) $(FIXTURE_FONTS)
 
 WEASYPRINT := test/integration/corpus/weasyprint
 
@@ -120,7 +107,7 @@ weasyprint-fixtures: ## Extract the weasyprint corpus fixtures from the WeasyPri
 	got="$$(shasum -a 256 $(FIXTURE_FONTS)/weasyprint/weasyprint.otf | cut -d ' ' -f 1)"; \
 	if [ "$$got" != "$$font_sha" ]; then echo "ERROR: the WeasyPrint test font hashes to $$got, WEASYPRINT_FONT_SHA256 pins $$font_sha" >&2; exit 1; fi
 	npx prettier --write $(WEASYPRINT)/fixtures
-	$(CORPUS)/lib/fetch-fonts.sh $(FIXTURE_FONTS)
+	go run ./test/integration/cmd/corpus fetch --corpus=fonts
 
 HTML_CORPORA := litho/html gotenberg/html
 
@@ -130,23 +117,15 @@ html-references: ## Rebuild the Chromium reference PDFs of the litho/html and go
 
 .PHONY: html-fixtures
 html-fixtures: ## Rebuild the litho PDFs of the litho/html and gotenberg/html corpora from their sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first)
-	$(CORPUS)/lib/fetch-fonts.sh $(FIXTURE_FONTS)
+	go run ./test/integration/cmd/corpus fetch --corpus=fonts
 	@set -e; for c in $(HTML_CORPORA); do go run ./test/integration/fixture/htmlbuild -corpus $(CORPUS)/$$c -fonts $(FIXTURE_FONTS); done
 
 OFFICE_TESTDATA := test/integration/testdata
 SOURCES ?= libreoffice gotenberg poi openxmlsdk govdocs
 FORMATS ?= docx odt xlsx ods csv pptx odp doc xls ppt
 
-.PHONY: office-fetch
-office-fetch: ## Download the documents of the fetched Office corpora (libreoffice, poi, openxmlsdk, govdocs) at the commits and threads test/integration/corpus/versions.env pins (hash-checked), with the fixture fonts. Vars: SOURCES, FORMATS (space-separated, default all)
-	$(CORPUS)/lib/fetch-fonts.sh $(FIXTURE_FONTS)
-	@set -e; for s in $(SOURCES); do for f in $(FORMATS); do \
-		[ -x $(CORPUS)/$$s/fetch.sh ] && [ -f $(CORPUS)/$$s/$$f/manifest.json ] || continue; \
-		$(CORPUS)/$$s/fetch.sh $(CORPUS)/$$s/$$f $(OFFICE_TESTDATA)/$$s/$$f/sources; \
-	done; done
-
 .PHONY: office-references
-office-references: ## Build the LibreOffice reference PDFs of the Office corpora into the testdata with the Gotenberg image test/integration/corpus/versions.env pins (needs Docker and make office-fetch). Vars: SOURCES, FORMATS (space-separated, default all), NAMES (space-separated references, default all)
+office-references: ## Build the LibreOffice reference PDFs of the Office corpora into the testdata with the Gotenberg image test/integration/corpus/versions.env pins (needs Docker and make corpus-fetch). Vars: SOURCES, FORMATS (space-separated, default all), NAMES (space-separated references, default all)
 	@set -e; for s in $(SOURCES); do for f in $(FORMATS); do \
 		[ -f $(CORPUS)/$$s/$$f/manifest.json ] && jq -e .references $(CORPUS)/$$s/$$f/manifest.json > /dev/null || continue; \
 		$(CORPUS)/lib/libreoffice.sh $(CORPUS)/$$s/$$f $(OFFICE_TESTDATA)/$$s/$$f/sources $(OFFICE_TESTDATA)/$$s/$$f/references $(NAMES); \
@@ -154,7 +133,7 @@ office-references: ## Build the LibreOffice reference PDFs of the Office corpora
 
 .PHONY: office-fixtures
 office-fixtures: ## Rebuild the litho PDFs of the gotenberg Office corpora from their sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first). Vars: FORMATS (space-separated, default all)
-	$(CORPUS)/lib/fetch-fonts.sh $(FIXTURE_FONTS)
+	go run ./test/integration/cmd/corpus fetch --corpus=fonts
 	@set -e; for f in $(FORMATS); do [ -d $(CORPUS)/gotenberg/$$f ] || continue; go run ./test/integration/fixture/build -corpus $(CORPUS)/gotenberg/$$f -fonts $(FIXTURE_FONTS); done
 
 CORPUS_RUN_FLAGS :=
@@ -186,6 +165,23 @@ endif
 corpus: ## Score litho across the (corpus, feature) matrix; auto-provisions. Vars: CORPUS_JSON_OUTPUT, CORPUS_NAME, CORPUS_FEATURE, CORPUS_PROFILE, CORPUS_WORKERS, CORPUS_ALLOW_VERSION_DRIFT
 	go run ./test/integration/cmd/corpus init $(CORPUS_INIT_FLAGS)
 	go run ./test/integration/cmd/corpus run $(CORPUS_RUN_FLAGS)
+
+CORPUS_FETCH_FLAGS :=
+ifdef CORPUS_NAME
+CORPUS_FETCH_FLAGS += --corpus=$(CORPUS_NAME)
+endif
+ifdef CORPUS_JOBS
+CORPUS_FETCH_FLAGS += --jobs=$(CORPUS_JOBS)
+endif
+
+.PHONY: corpus-fetch
+corpus-fetch: ## Download the fixture fonts and the files of the host-fetched corpora at the pins test/integration/corpus/versions.env holds (hash-checked, in parallel). Vars: CORPUS_NAME (corpora, sources or fonts, comma-separated; default all), CORPUS_JOBS
+	go run ./test/integration/cmd/corpus fetch $(CORPUS_FETCH_FLAGS)
+
+.PHONY: corpus-select
+corpus-select: ## Rewrite the lists of one corpus from a checkout of its source at its pin, then format them. Vars: CORPUS_NAME (one corpus), CHECKOUT (none for govdocs)
+	go run ./test/integration/cmd/corpus select --corpus=$(CORPUS_NAME) $(if $(CHECKOUT),--checkout=$(CHECKOUT))
+	npx prettier --write test/integration/corpus/$(CORPUS_NAME)/*.json
 
 .PHONY: corpus-init
 corpus-init: ## Provision missing corpora via Docker at the versions test/integration/corpus/versions.env pins (an env var of the same name overrides one). Vars: CORPUS_NAME

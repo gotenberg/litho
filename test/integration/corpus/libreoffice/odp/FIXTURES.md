@@ -1,6 +1,6 @@
 # libreoffice/odp corpus fixtures
 
-OpenDocument presentations scored by the `diff` feature (see `FEATURES.md`) against LibreOffice Impress as Gotenberg's LibreOffice route prints them: the image `GOTENBERG_IMAGE` in `corpus/versions.env` pins (`gotenberg/gotenberg:9.0.0`, LibreOffice 26.8.2.2), route `/forms/libreoffice/convert`. A selection of LibreOffice's Impress test presentations at the commit `LIBREOFFICE_CORE_COMMIT` pins, of which only the list and the hashes are committed; Gotenberg's own test presentations are the `gotenberg/odp` corpus. The references are built on the host and never committed. The corpus works as the libreoffice/pptx corpus does: its `FIXTURES.md` documents the scripts, the provisioning and the fonts, and the libreoffice/docx corpus's the reference checks, which apply here with `odp` for `pptx` (`make office-fetch SOURCES=libreoffice FORMATS=odp`, `make office-references SOURCES=libreoffice FORMATS=odp`).
+OpenDocument presentations scored by the `diff` feature (see `FEATURES.md`) against LibreOffice Impress as Gotenberg's LibreOffice route prints them: the image `GOTENBERG_IMAGE` in `corpus/versions.env` pins (`gotenberg/gotenberg:9.0.0`, LibreOffice 26.8.2.2), route `/forms/libreoffice/convert`. A selection of LibreOffice's Impress test presentations at the commit `LIBREOFFICE_CORE_COMMIT` pins, of which only the list and the hashes are committed; Gotenberg's own test presentations are the `gotenberg/odp` corpus. The references are built on the host and never committed. The corpus works as the libreoffice/pptx corpus does: its `FIXTURES.md` documents the scripts, the provisioning and the fonts, and the libreoffice/docx corpus's the reference checks, which apply here with `odp` for `pptx` (`make corpus-fetch CORPUS_NAME=libreoffice/odp`, `make office-references SOURCES=libreoffice FORMATS=odp`).
 
 | Path             | What it holds                                                                                                                                 |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -12,7 +12,7 @@ A fetched presentation's ID names the directory whose tests it comes from: `sd/<
 
 ## How the documents were chosen
 
-`list-candidates.py` reads the `.odp` and `.fodp` files at the top of LibreOffice core's `sd/qa/unit/data/odp` and `sd/qa/unit/data` at the pinned commit and keeps a presentation when:
+`corpus select` reads the `.odp` and `.fodp` files at the top of LibreOffice core's `sd/qa/unit/data/odp` and `sd/qa/unit/data` at the pinned commit and keeps a presentation when:
 
 - it is at most 150 KiB;
 - its name is plain ASCII (letters, digits, dot, underscore, hyphen);

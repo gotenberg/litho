@@ -6,8 +6,8 @@ PresentationML presentations scored by the `diff` feature (see `FEATURES.md`) ag
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `documents.json`           | The 315 LibreOffice test presentations, each by its ID, `<module>/<file>.pptx` (`sd/tdf123.pptx`, `oox/tdf456.pptx`, `chart2/a.pptx`, `sd-data/b.pptx`)                           |
 | `files.sha256`             | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 315 presentations and `COPYING.MPL`                                                                               |
-| `../list-candidates.py`    | Selects the presentations from a LibreOffice core checkout and writes the two files above (standard library only)                                                                 |
-| `../fetch.sh`              | `make office-fetch SOURCES=libreoffice FORMATS=pptx`: downloads each listed file at the pinned commit into `testdata/libreoffice/pptx/sources/`, refusing one whose hash differs  |
+| `corpus select`            | Selects the presentations from a LibreOffice core checkout and writes the two files above                                                                                         |
+| `corpus fetch`             | `make corpus-fetch CORPUS_NAME=libreoffice/pptx`: downloads each listed file at the pinned commit into `testdata/libreoffice/pptx/sources/`, refusing one whose hash differs      |
 | `../../lib/libreoffice.sh` | `make office-references SOURCES=libreoffice FORMATS=pptx`: converts every source with the pinned image into `testdata/libreoffice/pptx/references/<name>.pdf` and `manifest.json` |
 | `download.sh`              | Installs the references from the testdata volume as the corpus PDFs the provisioning image derives the diff goldens from                                                          |
 
@@ -16,7 +16,7 @@ A fetched presentation's ID names the directory whose tests it comes from: `sd/<
 ## Provisioning
 
 ```bash
-make office-fetch SOURCES=libreoffice FORMATS=pptx                  # the LibreOffice test documents and the fixture fonts, hash-checked
+make corpus-fetch CORPUS_NAME=libreoffice/pptx                      # the LibreOffice test documents and the fixture fonts, hash-checked
 make office-references SOURCES=libreoffice FORMATS=pptx             # the references (Docker); NAMES="a__b.pptx" for some
 go run ./test/integration/cmd/corpus init --corpus=libreoffice/pptx # the diff goldens, in the corpus image
 go run ./test/integration/cmd/corpus run --corpus=libreoffice/pptx --feature=diff
@@ -24,7 +24,7 @@ go run ./test/integration/cmd/corpus run --corpus=libreoffice/pptx --feature=dif
 
 ## How the documents were chosen
 
-`list-candidates.py` reads the `.pptx` files at the top of LibreOffice core's `sd/qa/unit/data/pptx`, `oox/qa/unit/data`, `chart2/qa/extras/data/pptx` and `sd/qa/unit/data` at the pinned commit (the commit of the `libreoffice-26.8.2.2` tag, the release the image runs) and keeps one when:
+`corpus select` reads the `.pptx` files at the top of LibreOffice core's `sd/qa/unit/data/pptx`, `oox/qa/unit/data`, `chart2/qa/extras/data/pptx` and `sd/qa/unit/data` at the pinned commit (the commit of the `libreoffice-26.8.2.2` tag, the release the image runs) and keeps one when:
 
 - it is at most 150 KiB;
 - its name is plain ASCII (letters, digits, dot, underscore, hyphen), so every shell and form field carries it intact;
@@ -47,7 +47,7 @@ LibreOffice's test documents are under the Mozilla Public License 2.0 (some also
 
 ## Fonts
 
-The cell converts with the fixture fonts `lib/fetch-fonts.sh` installs (see the docx corpus's `FIXTURES.md`). Of the 319 references, 141 draw Carlito (Calibri and Calibri Light, PowerPoint's defaults, and Aptos, which the image lacks), 50 Liberation Sans, 38 Noto Sans (the image's face for a family it does not install: Tahoma, Segoe UI, Trebuchet MS, Century Gothic), 21 OpenSymbol (Impress's bullets: `OPENSYMBOL_*`, Debian's `fonts-opensymbol`, the image's package), 6 Liberation Mono, 2 Liberation Serif, 2 Noto Sans CJK, and DejaVu Serif, DejaVu Sans Mono and Caladea 1 each; the fixture fonts hold all of them. The image also has URW base 35 (Nimbus Sans, 1 reference: `sd/slide-sections.pptx`), which the fixture fonts lack, and one reference draws the font its document embeds (`sd-data/BoldonseFontEmbedded.pptx`, Boldonse).
+The cell converts with the fixture fonts `corpus fetch --corpus=fonts` installs (see the docx corpus's `FIXTURES.md`). Of the 319 references, 141 draw Carlito (Calibri and Calibri Light, PowerPoint's defaults, and Aptos, which the image lacks), 50 Liberation Sans, 38 Noto Sans (the image's face for a family it does not install: Tahoma, Segoe UI, Trebuchet MS, Century Gothic), 21 OpenSymbol (Impress's bullets: `OPENSYMBOL_*`, Debian's `fonts-opensymbol`, the image's package), 6 Liberation Mono, 2 Liberation Serif, 2 Noto Sans CJK, and DejaVu Serif, DejaVu Sans Mono and Caladea 1 each; the fixture fonts hold all of them. The image also has URW base 35 (Nimbus Sans, 1 reference: `sd/slide-sections.pptx`), which the fixture fonts lack, and one reference draws the font its document embeds (`sd-data/BoldonseFontEmbedded.pptx`, Boldonse).
 
 ## How the rig was proven
 

@@ -1,842 +1,1122 @@
 [
   {
-    "id": "sc/129969-min.xlsx"
+    "id": "sc/129969-min.xlsx",
+    "path": "sc/qa/unit/data/xlsx/129969-min.xlsx"
   },
   {
-    "id": "sc/Book1_custom.xlsx"
+    "id": "sc/Book1_custom.xlsx",
+    "path": "sc/qa/unit/data/xlsx/Book1_custom.xlsx"
   },
   {
-    "id": "sc/CalcThemeTest.xlsx"
+    "id": "sc/CalcThemeTest.xlsx",
+    "path": "sc/qa/unit/data/xlsx/CalcThemeTest.xlsx"
   },
   {
-    "id": "sc/MissingPathExternal.xlsx"
+    "id": "sc/MissingPathExternal.xlsx",
+    "path": "sc/qa/unit/data/xlsx/MissingPathExternal.xlsx"
   },
   {
-    "id": "sc/NamedSheetViews.xlsx"
+    "id": "sc/NamedSheetViews.xlsx",
+    "path": "sc/qa/unit/data/xlsx/NamedSheetViews.xlsx"
   },
   {
-    "id": "sc/PivotTable_CachedDefinitionAndDataInSync.xlsx"
+    "id": "sc/PivotTable_CachedDefinitionAndDataInSync.xlsx",
+    "path": "sc/qa/unit/data/xlsx/PivotTable_CachedDefinitionAndDataInSync.xlsx"
   },
   {
-    "id": "sc/PivotTable_CachedDefinitionAndDataNotInSync_SheetColumnsRemoved_WithCacheData.xlsx"
+    "id": "sc/PivotTable_CachedDefinitionAndDataNotInSync_SheetColumnsRemoved_WithCacheData.xlsx",
+    "path": "sc/qa/unit/data/xlsx/PivotTable_CachedDefinitionAndDataNotInSync_SheetColumnsRemoved_WithCacheData.xlsx"
   },
   {
-    "id": "sc/PivotTable_CachedDefinitionAndDataNotInSync_SheetColumnsRemoved_WithoutCacheData.xlsx"
+    "id": "sc/PivotTable_CachedDefinitionAndDataNotInSync_SheetColumnsRemoved_WithoutCacheData.xlsx",
+    "path": "sc/qa/unit/data/xlsx/PivotTable_CachedDefinitionAndDataNotInSync_SheetColumnsRemoved_WithoutCacheData.xlsx"
   },
   {
-    "id": "sc/ProtecteSheet1234Pass.xlsx"
+    "id": "sc/ProtecteSheet1234Pass.xlsx",
+    "path": "sc/qa/unit/data/xlsx/ProtecteSheet1234Pass.xlsx"
   },
   {
-    "id": "sc/RowImportCellStyleIssue.xlsx"
+    "id": "sc/RowImportCellStyleIssue.xlsx",
+    "path": "sc/qa/unit/data/xlsx/RowImportCellStyleIssue.xlsx"
   },
   {
-    "id": "sc/Sparklines.xlsx"
+    "id": "sc/Sparklines.xlsx",
+    "path": "sc/qa/unit/data/xlsx/Sparklines.xlsx"
   },
   {
-    "id": "sc/Spill.xlsx"
+    "id": "sc/Spill.xlsx",
+    "path": "sc/qa/unit/data/xlsx/Spill.xlsx"
   },
   {
-    "id": "sc/TableEmptyHeaders.xlsx"
+    "id": "sc/TableEmptyHeaders.xlsx",
+    "path": "sc/qa/unit/data/xlsx/TableEmptyHeaders.xlsx"
   },
   {
-    "id": "sc/TableStyleTest.xlsx"
+    "id": "sc/TableStyleTest.xlsx",
+    "path": "sc/qa/unit/data/xlsx/TableStyleTest.xlsx"
   },
   {
-    "id": "sc/Test_ThemeColor_Text_Background_Border.xlsx"
+    "id": "sc/Test_ThemeColor_Text_Background_Border.xlsx",
+    "path": "sc/qa/unit/data/xlsx/Test_ThemeColor_Text_Background_Border.xlsx"
   },
   {
-    "id": "sc/TextColor.xlsx"
+    "id": "sc/TextColor.xlsx",
+    "path": "sc/qa/unit/data/xlsx/TextColor.xlsx"
   },
   {
-    "id": "sc/XlStartupExternal.xlsx"
+    "id": "sc/XlStartupExternal.xlsx",
+    "path": "sc/qa/unit/data/xlsx/XlStartupExternal.xlsx"
   },
   {
-    "id": "sc/autofilter-colors-fg.xlsx"
+    "id": "sc/autofilter-colors-fg.xlsx",
+    "path": "sc/qa/unit/data/xlsx/autofilter-colors-fg.xlsx"
   },
   {
-    "id": "sc/autofilter-colors.xlsx"
+    "id": "sc/autofilter-colors.xlsx",
+    "path": "sc/qa/unit/data/xlsx/autofilter-colors.xlsx"
   },
   {
-    "id": "sc/autofilter.xlsx"
+    "id": "sc/autofilter.xlsx",
+    "path": "sc/qa/unit/data/xlsx/autofilter.xlsx"
   },
   {
-    "id": "sc/autofilterShowButton.xlsx"
+    "id": "sc/autofilterShowButton.xlsx",
+    "path": "sc/qa/unit/data/xlsx/autofilterShowButton.xlsx"
   },
   {
-    "id": "sc/autofilternamedrange.xlsx"
+    "id": "sc/autofilternamedrange.xlsx",
+    "path": "sc/qa/unit/data/xlsx/autofilternamedrange.xlsx"
   },
   {
-    "id": "sc/bnc762542.xlsx"
+    "id": "sc/bnc762542.xlsx",
+    "path": "sc/qa/unit/data/xlsx/bnc762542.xlsx"
   },
   {
-    "id": "sc/bug-fixes.xlsx"
+    "id": "sc/bug-fixes.xlsx",
+    "path": "sc/qa/unit/data/xlsx/bug-fixes.xlsx"
   },
   {
-    "id": "sc/built-in_ranges.xlsx"
+    "id": "sc/built-in_ranges.xlsx",
+    "path": "sc/qa/unit/data/xlsx/built-in_ranges.xlsx"
   },
   {
-    "id": "sc/button-form-control.xlsx"
+    "id": "sc/button-form-control.xlsx",
+    "path": "sc/qa/unit/data/xlsx/button-form-control.xlsx"
   },
   {
-    "id": "sc/ceiling-floor.xlsx"
+    "id": "sc/ceiling-floor.xlsx",
+    "path": "sc/qa/unit/data/xlsx/ceiling-floor.xlsx"
   },
   {
-    "id": "sc/cell-anchored-hidden-shapes.xlsx"
+    "id": "sc/cell-anchored-hidden-shapes.xlsx",
+    "path": "sc/qa/unit/data/xlsx/cell-anchored-hidden-shapes.xlsx"
   },
   {
-    "id": "sc/cell-borders.xlsx"
+    "id": "sc/cell-borders.xlsx",
+    "path": "sc/qa/unit/data/xlsx/cell-borders.xlsx"
   },
   {
-    "id": "sc/cell-multi-line.xlsx"
+    "id": "sc/cell-multi-line.xlsx",
+    "path": "sc/qa/unit/data/xlsx/cell-multi-line.xlsx"
   },
   {
-    "id": "sc/cell-note.xlsx"
+    "id": "sc/cell-note.xlsx",
+    "path": "sc/qa/unit/data/xlsx/cell-note.xlsx"
   },
   {
-    "id": "sc/cell-value.xlsx"
+    "id": "sc/cell-value.xlsx",
+    "path": "sc/qa/unit/data/xlsx/cell-value.xlsx"
   },
   {
-    "id": "sc/change-tracking.xlsx"
+    "id": "sc/change-tracking.xlsx",
+    "path": "sc/qa/unit/data/xlsx/change-tracking.xlsx"
   },
   {
-    "id": "sc/chart_hyperlink.xlsx"
+    "id": "sc/chart_hyperlink.xlsx",
+    "path": "sc/qa/unit/data/xlsx/chart_hyperlink.xlsx"
   },
   {
-    "id": "sc/check-boolean.xlsx"
+    "id": "sc/check-boolean.xlsx",
+    "path": "sc/qa/unit/data/xlsx/check-boolean.xlsx"
   },
   {
-    "id": "sc/checkbox-form-control.xlsx"
+    "id": "sc/checkbox-form-control.xlsx",
+    "path": "sc/qa/unit/data/xlsx/checkbox-form-control.xlsx"
   },
   {
-    "id": "sc/colorscale.xlsx"
+    "id": "sc/colorscale.xlsx",
+    "path": "sc/qa/unit/data/xlsx/colorscale.xlsx"
   },
   {
-    "id": "sc/colorscale_num_with_ref.xlsx"
+    "id": "sc/colorscale_num_with_ref.xlsx",
+    "path": "sc/qa/unit/data/xlsx/colorscale_num_with_ref.xlsx"
   },
   {
-    "id": "sc/column-style.xlsx"
+    "id": "sc/column-style.xlsx",
+    "path": "sc/qa/unit/data/xlsx/column-style.xlsx"
   },
   {
-    "id": "sc/column_style.xlsx"
+    "id": "sc/column_style.xlsx",
+    "path": "sc/qa/unit/data/xlsx/column_style.xlsx"
   },
   {
-    "id": "sc/complex_icon_set.xlsx"
+    "id": "sc/complex_icon_set.xlsx",
+    "path": "sc/qa/unit/data/xlsx/complex_icon_set.xlsx"
   },
   {
-    "id": "sc/condFormat_cellis.xlsx"
+    "id": "sc/condFormat_cellis.xlsx",
+    "path": "sc/qa/unit/data/xlsx/condFormat_cellis.xlsx"
   },
   {
-    "id": "sc/cond_format_formula_listener.xlsx"
+    "id": "sc/cond_format_formula_listener.xlsx",
+    "path": "sc/qa/unit/data/xlsx/cond_format_formula_listener.xlsx"
   },
   {
-    "id": "sc/cond_format_theme_color2.xlsx"
+    "id": "sc/cond_format_theme_color2.xlsx",
+    "path": "sc/qa/unit/data/xlsx/cond_format_theme_color2.xlsx"
   },
   {
-    "id": "sc/cond_format_theme_color3.xlsx"
+    "id": "sc/cond_format_theme_color3.xlsx",
+    "path": "sc/qa/unit/data/xlsx/cond_format_theme_color3.xlsx"
   },
   {
-    "id": "sc/cond_parent.xlsx"
+    "id": "sc/cond_parent.xlsx",
+    "path": "sc/qa/unit/data/xlsx/cond_parent.xlsx"
   },
   {
-    "id": "sc/condformat_databar.xlsx"
+    "id": "sc/condformat_databar.xlsx",
+    "path": "sc/qa/unit/data/xlsx/condformat_databar.xlsx"
   },
   {
-    "id": "sc/condformat_theme_color.xlsx"
+    "id": "sc/condformat_theme_color.xlsx",
+    "path": "sc/qa/unit/data/xlsx/condformat_theme_color.xlsx"
   },
   {
-    "id": "sc/conditional_fmt_checkpriority.xlsx"
+    "id": "sc/conditional_fmt_checkpriority.xlsx",
+    "path": "sc/qa/unit/data/xlsx/conditional_fmt_checkpriority.xlsx"
   },
   {
-    "id": "sc/conditional_fmt_origin.xlsx"
+    "id": "sc/conditional_fmt_origin.xlsx",
+    "path": "sc/qa/unit/data/xlsx/conditional_fmt_origin.xlsx"
   },
   {
-    "id": "sc/customxml.xlsx"
+    "id": "sc/customxml.xlsx",
+    "path": "sc/qa/unit/data/xlsx/customxml.xlsx"
   },
   {
-    "id": "sc/dataValidity.xlsx"
+    "id": "sc/dataValidity.xlsx",
+    "path": "sc/qa/unit/data/xlsx/dataValidity.xlsx"
   },
   {
-    "id": "sc/data_validation_test.xlsx"
+    "id": "sc/data_validation_test.xlsx",
+    "path": "sc/qa/unit/data/xlsx/data_validation_test.xlsx"
   },
   {
-    "id": "sc/databar.xlsx"
+    "id": "sc/databar.xlsx",
+    "path": "sc/qa/unit/data/xlsx/databar.xlsx"
   },
   {
-    "id": "sc/database.xlsx"
+    "id": "sc/database.xlsx",
+    "path": "sc/qa/unit/data/xlsx/database.xlsx"
   },
   {
-    "id": "sc/dateAutofilter.xlsx"
+    "id": "sc/dateAutofilter.xlsx",
+    "path": "sc/qa/unit/data/xlsx/dateAutofilter.xlsx"
   },
   {
-    "id": "sc/embedded-text-in-decimal.xlsx"
+    "id": "sc/embedded-text-in-decimal.xlsx",
+    "path": "sc/qa/unit/data/xlsx/embedded-text-in-decimal.xlsx"
   },
   {
-    "id": "sc/empty-noconf.xlsx"
+    "id": "sc/empty-noconf.xlsx",
+    "path": "sc/qa/unit/data/xlsx/empty-noconf.xlsx"
   },
   {
-    "id": "sc/empty.xlsx"
+    "id": "sc/empty.xlsx",
+    "path": "sc/qa/unit/data/xlsx/empty.xlsx"
   },
   {
-    "id": "sc/empty_ext_defined_name.xlsx"
+    "id": "sc/empty_ext_defined_name.xlsx",
+    "path": "sc/qa/unit/data/xlsx/empty_ext_defined_name.xlsx"
   },
   {
-    "id": "sc/enhanced-protection.xlsx"
+    "id": "sc/enhanced-protection.xlsx",
+    "path": "sc/qa/unit/data/xlsx/enhanced-protection.xlsx"
   },
   {
-    "id": "sc/enhancedProtectionRangeShorthand.xlsx"
+    "id": "sc/enhancedProtectionRangeShorthand.xlsx",
+    "path": "sc/qa/unit/data/xlsx/enhancedProtectionRangeShorthand.xlsx"
   },
   {
-    "id": "sc/escape-unicode.xlsx"
+    "id": "sc/escape-unicode.xlsx",
+    "path": "sc/qa/unit/data/xlsx/escape-unicode.xlsx"
   },
   {
-    "id": "sc/external-refs.xlsx"
+    "id": "sc/external-refs.xlsx",
+    "path": "sc/qa/unit/data/xlsx/external-refs.xlsx"
   },
   {
-    "id": "sc/fontSize.xlsx"
+    "id": "sc/fontSize.xlsx",
+    "path": "sc/qa/unit/data/xlsx/fontSize.xlsx"
   },
   {
-    "id": "sc/formats.xlsx"
+    "id": "sc/formats.xlsx",
+    "path": "sc/qa/unit/data/xlsx/formats.xlsx"
   },
   {
-    "id": "sc/forum-mso-en4-134670.xlsx"
+    "id": "sc/forum-mso-en4-134670.xlsx",
+    "path": "sc/qa/unit/data/xlsx/forum-mso-en4-134670.xlsx"
   },
   {
-    "id": "sc/forum-mso-en4-145327.xlsx"
+    "id": "sc/forum-mso-en4-145327.xlsx",
+    "path": "sc/qa/unit/data/xlsx/forum-mso-en4-145327.xlsx"
   },
   {
-    "id": "sc/freezePaneStartCell.xlsx"
+    "id": "sc/freezePaneStartCell.xlsx",
+    "path": "sc/qa/unit/data/xlsx/freezePaneStartCell.xlsx"
   },
   {
-    "id": "sc/functions-excel-2010.xlsx"
+    "id": "sc/functions-excel-2010.xlsx",
+    "path": "sc/qa/unit/data/xlsx/functions-excel-2010.xlsx"
   },
   {
-    "id": "sc/groupShape.xlsx"
+    "id": "sc/groupShape.xlsx",
+    "path": "sc/qa/unit/data/xlsx/groupShape.xlsx"
   },
   {
-    "id": "sc/hiddenButton.xlsx"
+    "id": "sc/hiddenButton.xlsx",
+    "path": "sc/qa/unit/data/xlsx/hiddenButton.xlsx"
   },
   {
-    "id": "sc/hiddenShape.xlsx"
+    "id": "sc/hiddenShape.xlsx",
+    "path": "sc/qa/unit/data/xlsx/hiddenShape.xlsx"
   },
   {
-    "id": "sc/hidden_sheets.xlsx"
+    "id": "sc/hidden_sheets.xlsx",
+    "path": "sc/qa/unit/data/xlsx/hidden_sheets.xlsx"
   },
   {
-    "id": "sc/hyperlink.xlsx"
+    "id": "sc/hyperlink.xlsx",
+    "path": "sc/qa/unit/data/xlsx/hyperlink.xlsx"
   },
   {
-    "id": "sc/hyperlink_export.xlsx"
+    "id": "sc/hyperlink_export.xlsx",
+    "path": "sc/qa/unit/data/xlsx/hyperlink_export.xlsx"
   },
   {
-    "id": "sc/hyperlink_formula.xlsx"
+    "id": "sc/hyperlink_formula.xlsx",
+    "path": "sc/qa/unit/data/xlsx/hyperlink_formula.xlsx"
   },
   {
-    "id": "sc/hyperlinks.xlsx"
+    "id": "sc/hyperlinks.xlsx",
+    "path": "sc/qa/unit/data/xlsx/hyperlinks.xlsx"
   },
   {
-    "id": "sc/image_hyperlink.xlsx"
+    "id": "sc/image_hyperlink.xlsx",
+    "path": "sc/qa/unit/data/xlsx/image_hyperlink.xlsx"
   },
   {
-    "id": "sc/invalid_ext_data_validation.xlsx"
+    "id": "sc/invalid_ext_data_validation.xlsx",
+    "path": "sc/qa/unit/data/xlsx/invalid_ext_data_validation.xlsx"
   },
   {
-    "id": "sc/matrix-multiplication.xlsx"
+    "id": "sc/matrix-multiplication.xlsx",
+    "path": "sc/qa/unit/data/xlsx/matrix-multiplication.xlsx"
   },
   {
-    "id": "sc/miscrowheights.xlsx"
+    "id": "sc/miscrowheights.xlsx",
+    "path": "sc/qa/unit/data/xlsx/miscrowheights.xlsx"
   },
   {
-    "id": "sc/named-ranges-global.xlsx"
+    "id": "sc/named-ranges-global.xlsx",
+    "path": "sc/qa/unit/data/xlsx/named-ranges-global.xlsx"
   },
   {
-    "id": "sc/named-ranges-hidden.xlsx"
+    "id": "sc/named-ranges-hidden.xlsx",
+    "path": "sc/qa/unit/data/xlsx/named-ranges-hidden.xlsx"
   },
   {
-    "id": "sc/new_cond_format_test.xlsx"
+    "id": "sc/new_cond_format_test.xlsx",
+    "path": "sc/qa/unit/data/xlsx/new_cond_format_test.xlsx"
   },
   {
-    "id": "sc/new_cond_format_test_export.xlsx"
+    "id": "sc/new_cond_format_test_export.xlsx",
+    "path": "sc/qa/unit/data/xlsx/new_cond_format_test_export.xlsx"
   },
   {
-    "id": "sc/open-as-read-only.xlsx"
+    "id": "sc/open-as-read-only.xlsx",
+    "path": "sc/qa/unit/data/xlsx/open-as-read-only.xlsx"
   },
   {
-    "id": "sc/orderOfCNumFmtElements.xlsx"
+    "id": "sc/orderOfCNumFmtElements.xlsx",
+    "path": "sc/qa/unit/data/xlsx/orderOfCNumFmtElements.xlsx"
   },
   {
-    "id": "sc/page_scale.xlsx"
+    "id": "sc/page_scale.xlsx",
+    "path": "sc/qa/unit/data/xlsx/page_scale.xlsx"
   },
   {
-    "id": "sc/pivot_dark1.xlsx"
+    "id": "sc/pivot_dark1.xlsx",
+    "path": "sc/qa/unit/data/xlsx/pivot_dark1.xlsx"
   },
   {
-    "id": "sc/pivot_table_first_header_row.xlsx"
+    "id": "sc/pivot_table_first_header_row.xlsx",
+    "path": "sc/qa/unit/data/xlsx/pivot_table_first_header_row.xlsx"
   },
   {
-    "id": "sc/pivottable_1s_difference.xlsx"
+    "id": "sc/pivottable_1s_difference.xlsx",
+    "path": "sc/qa/unit/data/xlsx/pivottable_1s_difference.xlsx"
   },
   {
-    "id": "sc/pivottable_bool_field_filter.xlsx"
+    "id": "sc/pivottable_bool_field_filter.xlsx",
+    "path": "sc/qa/unit/data/xlsx/pivottable_bool_field_filter.xlsx"
   },
   {
-    "id": "sc/pivottable_date_field_filter.xlsx"
+    "id": "sc/pivottable_date_field_filter.xlsx",
+    "path": "sc/qa/unit/data/xlsx/pivottable_date_field_filter.xlsx"
   },
   {
-    "id": "sc/pivottable_double_field_filter.xlsx"
+    "id": "sc/pivottable_double_field_filter.xlsx",
+    "path": "sc/qa/unit/data/xlsx/pivottable_double_field_filter.xlsx"
   },
   {
-    "id": "sc/pivottable_duplicated_member_filter.xlsx"
+    "id": "sc/pivottable_duplicated_member_filter.xlsx",
+    "path": "sc/qa/unit/data/xlsx/pivottable_duplicated_member_filter.xlsx"
   },
   {
-    "id": "sc/pivottable_error_item_filter.xlsx"
+    "id": "sc/pivottable_error_item_filter.xlsx",
+    "path": "sc/qa/unit/data/xlsx/pivottable_error_item_filter.xlsx"
   },
   {
-    "id": "sc/pivottable_invalid_formats.xlsx"
+    "id": "sc/pivottable_invalid_formats.xlsx",
+    "path": "sc/qa/unit/data/xlsx/pivottable_invalid_formats.xlsx"
   },
   {
-    "id": "sc/pivottable_long_text.xlsx"
+    "id": "sc/pivottable_long_text.xlsx",
+    "path": "sc/qa/unit/data/xlsx/pivottable_long_text.xlsx"
   },
   {
-    "id": "sc/pivottable_outline_mode.xlsx"
+    "id": "sc/pivottable_outline_mode.xlsx",
+    "path": "sc/qa/unit/data/xlsx/pivottable_outline_mode.xlsx"
   },
   {
-    "id": "sc/pivottable_rowcolpage_field_filter.xlsx"
+    "id": "sc/pivottable_rowcolpage_field_filter.xlsx",
+    "path": "sc/qa/unit/data/xlsx/pivottable_rowcolpage_field_filter.xlsx"
   },
   {
-    "id": "sc/pivottable_string_field_filter.xlsx"
+    "id": "sc/pivottable_string_field_filter.xlsx",
+    "path": "sc/qa/unit/data/xlsx/pivottable_string_field_filter.xlsx"
   },
   {
-    "id": "sc/pivottable_tabular_mode.xlsx"
+    "id": "sc/pivottable_tabular_mode.xlsx",
+    "path": "sc/qa/unit/data/xlsx/pivottable_tabular_mode.xlsx"
   },
   {
-    "id": "sc/preserve-whitespace.xlsx"
+    "id": "sc/preserve-whitespace.xlsx",
+    "path": "sc/qa/unit/data/xlsx/preserve-whitespace.xlsx"
   },
   {
-    "id": "sc/preserve_space.xlsx"
+    "id": "sc/preserve_space.xlsx",
+    "path": "sc/qa/unit/data/xlsx/preserve_space.xlsx"
   },
   {
-    "id": "sc/queryTableExport.xlsx"
+    "id": "sc/queryTableExport.xlsx",
+    "path": "sc/qa/unit/data/xlsx/queryTableExport.xlsx"
   },
   {
-    "id": "sc/ref_string.xlsx"
+    "id": "sc/ref_string.xlsx",
+    "path": "sc/qa/unit/data/xlsx/ref_string.xlsx"
   },
   {
-    "id": "sc/row-index-1-based.xlsx"
+    "id": "sc/row-index-1-based.xlsx",
+    "path": "sc/qa/unit/data/xlsx/row-index-1-based.xlsx"
   },
   {
-    "id": "sc/seconds-without-truncate-and-decimals.xlsx"
+    "id": "sc/seconds-without-truncate-and-decimals.xlsx",
+    "path": "sc/qa/unit/data/xlsx/seconds-without-truncate-and-decimals.xlsx"
   },
   {
-    "id": "sc/shape-macro-ext-ref.xlsx"
+    "id": "sc/shape-macro-ext-ref.xlsx",
+    "path": "sc/qa/unit/data/xlsx/shape-macro-ext-ref.xlsx"
   },
   {
-    "id": "sc/sheet-names.xlsx"
+    "id": "sc/sheet-names.xlsx",
+    "path": "sc/qa/unit/data/xlsx/sheet-names.xlsx"
   },
   {
-    "id": "sc/sheet-tab-color.xlsx"
+    "id": "sc/sheet-tab-color.xlsx",
+    "path": "sc/qa/unit/data/xlsx/sheet-tab-color.xlsx"
   },
   {
-    "id": "sc/sortconditionref.xlsx"
+    "id": "sc/sortconditionref.xlsx",
+    "path": "sc/qa/unit/data/xlsx/sortconditionref.xlsx"
   },
   {
-    "id": "sc/sortconditionref2.xlsx"
+    "id": "sc/sortconditionref2.xlsx",
+    "path": "sc/qa/unit/data/xlsx/sortconditionref2.xlsx"
   },
   {
-    "id": "sc/strike-through.xlsx"
+    "id": "sc/strike-through.xlsx",
+    "path": "sc/qa/unit/data/xlsx/strike-through.xlsx"
   },
   {
-    "id": "sc/subtotal-above.xlsx"
+    "id": "sc/subtotal-above.xlsx",
+    "path": "sc/qa/unit/data/xlsx/subtotal-above.xlsx"
   },
   {
-    "id": "sc/tablerefsnamed.xlsx"
+    "id": "sc/tablerefsnamed.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tablerefsnamed.xlsx"
   },
   {
-    "id": "sc/tdf100034.xlsx"
+    "id": "sc/tdf100034.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf100034.xlsx"
   },
   {
-    "id": "sc/tdf100154.xlsx"
+    "id": "sc/tdf100154.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf100154.xlsx"
   },
   {
-    "id": "sc/tdf100709.xlsx"
+    "id": "sc/tdf100709.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf100709.xlsx"
   },
   {
-    "id": "sc/tdf104310-2.xlsx"
+    "id": "sc/tdf104310-2.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf104310-2.xlsx"
   },
   {
-    "id": "sc/tdf104310.xlsx"
+    "id": "sc/tdf104310.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf104310.xlsx"
   },
   {
-    "id": "sc/tdf105272.xlsx"
+    "id": "sc/tdf105272.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf105272.xlsx"
   },
   {
-    "id": "sc/tdf105840_allRowsHidden.xlsx"
+    "id": "sc/tdf105840_allRowsHidden.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf105840_allRowsHidden.xlsx"
   },
   {
-    "id": "sc/tdf106197_import_upright.xlsx"
+    "id": "sc/tdf106197_import_upright.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf106197_import_upright.xlsx"
   },
   {
-    "id": "sc/tdf107586.xlsx"
+    "id": "sc/tdf107586.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf107586.xlsx"
   },
   {
-    "id": "sc/tdf109061.xlsx"
+    "id": "sc/tdf109061.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf109061.xlsx"
   },
   {
-    "id": "sc/tdf111876.xlsx"
+    "id": "sc/tdf111876.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf111876.xlsx"
   },
   {
-    "id": "sc/tdf112106.xlsx"
+    "id": "sc/tdf112106.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf112106.xlsx"
   },
   {
-    "id": "sc/tdf112567.xlsx"
+    "id": "sc/tdf112567.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf112567.xlsx"
   },
   {
-    "id": "sc/tdf112936.xlsx"
+    "id": "sc/tdf112936.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf112936.xlsx"
   },
   {
-    "id": "sc/tdf113013.xlsx"
+    "id": "sc/tdf113013.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf113013.xlsx"
   },
   {
-    "id": "sc/tdf113271.xlsx"
+    "id": "sc/tdf113271.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf113271.xlsx"
   },
   {
-    "id": "sc/tdf113621.xlsx"
+    "id": "sc/tdf113621.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf113621.xlsx"
   },
   {
-    "id": "sc/tdf115022.xlsx"
+    "id": "sc/tdf115022.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf115022.xlsx"
   },
   {
-    "id": "sc/tdf115159.xlsx"
+    "id": "sc/tdf115159.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf115159.xlsx"
   },
   {
-    "id": "sc/tdf117287_comment.xlsx"
+    "id": "sc/tdf117287_comment.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf117287_comment.xlsx"
   },
   {
-    "id": "sc/tdf118668.xlsx"
+    "id": "sc/tdf118668.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf118668.xlsx"
   },
   {
-    "id": "sc/tdf118990.xlsx"
+    "id": "sc/tdf118990.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf118990.xlsx"
   },
   {
-    "id": "sc/tdf119190.xlsx"
+    "id": "sc/tdf119190.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf119190.xlsx"
   },
   {
-    "id": "sc/tdf119292.xlsx"
+    "id": "sc/tdf119292.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf119292.xlsx"
   },
   {
-    "id": "sc/tdf119565.xlsx"
+    "id": "sc/tdf119565.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf119565.xlsx"
   },
   {
-    "id": "sc/tdf120168.xlsx"
+    "id": "sc/tdf120168.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf120168.xlsx"
   },
   {
-    "id": "sc/tdf120301_xmlSpaceParsing.xlsx"
+    "id": "sc/tdf120301_xmlSpaceParsing.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf120301_xmlSpaceParsing.xlsx"
   },
   {
-    "id": "sc/tdf120749.xlsx"
+    "id": "sc/tdf120749.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf120749.xlsx"
   },
   {
-    "id": "sc/tdf121715.xlsx"
+    "id": "sc/tdf121715.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf121715.xlsx"
   },
   {
-    "id": "sc/tdf121887.xlsx"
+    "id": "sc/tdf121887.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf121887.xlsx"
   },
   {
-    "id": "sc/tdf122102.xlsx"
+    "id": "sc/tdf122102.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf122102.xlsx"
   },
   {
-    "id": "sc/tdf122191.xlsx"
+    "id": "sc/tdf122191.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf122191.xlsx"
   },
   {
-    "id": "sc/tdf122336.xlsx"
+    "id": "sc/tdf122336.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf122336.xlsx"
   },
   {
-    "id": "sc/tdf122471.xlsx"
+    "id": "sc/tdf122471.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf122471.xlsx"
   },
   {
-    "id": "sc/tdf122716_font_with_charset.xlsx"
+    "id": "sc/tdf122716_font_with_charset.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf122716_font_with_charset.xlsx"
   },
   {
-    "id": "sc/tdf123026_optimalRowHeight.xlsx"
+    "id": "sc/tdf123026_optimalRowHeight.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf123026_optimalRowHeight.xlsx"
   },
   {
-    "id": "sc/tdf123139_applyAlignment.xlsx"
+    "id": "sc/tdf123139_applyAlignment.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf123139_applyAlignment.xlsx"
   },
   {
-    "id": "sc/tdf123353.xlsx"
+    "id": "sc/tdf123353.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf123353.xlsx"
   },
   {
-    "id": "sc/tdf124525.xlsx"
+    "id": "sc/tdf124525.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf124525.xlsx"
   },
   {
-    "id": "sc/tdf129985.xlsx"
+    "id": "sc/tdf129985.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf129985.xlsx"
   },
   {
-    "id": "sc/tdf130104_indent.xlsx"
+    "id": "sc/tdf130104_indent.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf130104_indent.xlsx"
   },
   {
-    "id": "sc/tdf130959.xlsx"
+    "id": "sc/tdf130959.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf130959.xlsx"
   },
   {
-    "id": "sc/tdf131380.xlsx"
+    "id": "sc/tdf131380.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf131380.xlsx"
   },
   {
-    "id": "sc/tdf131424.xlsx"
+    "id": "sc/tdf131424.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf131424.xlsx"
   },
   {
-    "id": "sc/tdf131536.xlsx"
+    "id": "sc/tdf131536.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf131536.xlsx"
   },
   {
-    "id": "sc/tdf133595.xlsx"
+    "id": "sc/tdf133595.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf133595.xlsx"
   },
   {
-    "id": "sc/tdf134392.xlsx"
+    "id": "sc/tdf134392.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf134392.xlsx"
   },
   {
-    "id": "sc/tdf134455.xlsx"
+    "id": "sc/tdf134455.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf134455.xlsx"
   },
   {
-    "id": "sc/tdf134459_HeaderFooterColor.xlsx"
+    "id": "sc/tdf134459_HeaderFooterColor.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf134459_HeaderFooterColor.xlsx"
   },
   {
-    "id": "sc/tdf134553.xlsx"
+    "id": "sc/tdf134553.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf134553.xlsx"
   },
   {
-    "id": "sc/tdf134769.xlsx"
+    "id": "sc/tdf134769.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf134769.xlsx"
   },
   {
-    "id": "sc/tdf134817_HeaderFooterTextWith2Section.xlsx"
+    "id": "sc/tdf134817_HeaderFooterTextWith2Section.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf134817_HeaderFooterTextWith2Section.xlsx"
   },
   {
-    "id": "sc/tdf134826.xlsx"
+    "id": "sc/tdf134826.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf134826.xlsx"
   },
   {
-    "id": "sc/tdf135828_Shape_Rect.xlsx"
+    "id": "sc/tdf135828_Shape_Rect.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf135828_Shape_Rect.xlsx"
   },
   {
-    "id": "sc/tdf136364.xlsx"
+    "id": "sc/tdf136364.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf136364.xlsx"
   },
   {
-    "id": "sc/tdf137000_export_upright.xlsx"
+    "id": "sc/tdf137000_export_upright.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf137000_export_upright.xlsx"
   },
   {
-    "id": "sc/tdf137091.xlsx"
+    "id": "sc/tdf137091.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf137091.xlsx"
   },
   {
-    "id": "sc/tdf137543.xlsx"
+    "id": "sc/tdf137543.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf137543.xlsx"
   },
   {
-    "id": "sc/tdf138601.xlsx"
+    "id": "sc/tdf138601.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf138601.xlsx"
   },
   {
-    "id": "sc/tdf138741_externalLinkSkipUnusedsCrash.xlsx"
+    "id": "sc/tdf138741_externalLinkSkipUnusedsCrash.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf138741_externalLinkSkipUnusedsCrash.xlsx"
   },
   {
-    "id": "sc/tdf139021.xlsx"
+    "id": "sc/tdf139021.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf139021.xlsx"
   },
   {
-    "id": "sc/tdf139167.xlsx"
+    "id": "sc/tdf139167.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf139167.xlsx"
   },
   {
-    "id": "sc/tdf139394.xlsx"
+    "id": "sc/tdf139394.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf139394.xlsx"
   },
   {
-    "id": "sc/tdf139928.xlsx"
+    "id": "sc/tdf139928.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf139928.xlsx"
   },
   {
-    "id": "sc/tdf139934.xlsx"
+    "id": "sc/tdf139934.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf139934.xlsx"
   },
   {
-    "id": "sc/tdf141495.xlsx"
+    "id": "sc/tdf141495.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf141495.xlsx"
   },
   {
-    "id": "sc/tdf141644.xlsx"
+    "id": "sc/tdf141644.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf141644.xlsx"
   },
   {
-    "id": "sc/tdf142881.xlsx"
+    "id": "sc/tdf142881.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf142881.xlsx"
   },
   {
-    "id": "sc/tdf142905.xlsx"
+    "id": "sc/tdf142905.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf142905.xlsx"
   },
   {
-    "id": "sc/tdf142929.xlsx"
+    "id": "sc/tdf142929.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf142929.xlsx"
   },
   {
-    "id": "sc/tdf143068_top10filter.xlsx"
+    "id": "sc/tdf143068_top10filter.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf143068_top10filter.xlsx"
   },
   {
-    "id": "sc/tdf144397.xlsx"
+    "id": "sc/tdf144397.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf144397.xlsx"
   },
   {
-    "id": "sc/tdf144642_RowHeight_10mm_SavedByCalc.xlsx"
+    "id": "sc/tdf144642_RowHeight_10mm_SavedByCalc.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf144642_RowHeight_10mm_SavedByCalc.xlsx"
   },
   {
-    "id": "sc/tdf144642_RowHeight_28.35pt_SavedByExcel.xlsx"
+    "id": "sc/tdf144642_RowHeight_28.35pt_SavedByExcel.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf144642_RowHeight_28.35pt_SavedByExcel.xlsx"
   },
   {
-    "id": "sc/tdf145054.xlsx"
+    "id": "sc/tdf145054.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf145054.xlsx"
   },
   {
-    "id": "sc/tdf145057.xlsx"
+    "id": "sc/tdf145057.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf145057.xlsx"
   },
   {
-    "id": "sc/tdf145129_DefaultRowHeight_28.35pt_SavedByExcel.xlsx"
+    "id": "sc/tdf145129_DefaultRowHeight_28.35pt_SavedByExcel.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf145129_DefaultRowHeight_28.35pt_SavedByExcel.xlsx"
   },
   {
-    "id": "sc/tdf147014.xlsx"
+    "id": "sc/tdf147014.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf147014.xlsx"
   },
   {
-    "id": "sc/tdf147955.xlsx"
+    "id": "sc/tdf147955.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf147955.xlsx"
   },
   {
-    "id": "sc/tdf148820.xlsx"
+    "id": "sc/tdf148820.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf148820.xlsx"
   },
   {
-    "id": "sc/tdf151755_stylesLostOnXLSXExport.xlsx"
+    "id": "sc/tdf151755_stylesLostOnXLSXExport.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf151755_stylesLostOnXLSXExport.xlsx"
   },
   {
-    "id": "sc/tdf152581_bordercolorNotExportedToXLSX.xlsx"
+    "id": "sc/tdf152581_bordercolorNotExportedToXLSX.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf152581_bordercolorNotExportedToXLSX.xlsx"
   },
   {
-    "id": "sc/tdf153767.xlsx"
+    "id": "sc/tdf153767.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf153767.xlsx"
   },
   {
-    "id": "sc/tdf155046.xlsx"
+    "id": "sc/tdf155046.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf155046.xlsx"
   },
   {
-    "id": "sc/tdf155321.xlsx"
+    "id": "sc/tdf155321.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf155321.xlsx"
   },
   {
-    "id": "sc/tdf155402.xlsx"
+    "id": "sc/tdf155402.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf155402.xlsx"
   },
   {
-    "id": "sc/tdf156028.xlsx"
+    "id": "sc/tdf156028.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf156028.xlsx"
   },
   {
-    "id": "sc/tdf156814.xlsx"
+    "id": "sc/tdf156814.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf156814.xlsx"
   },
   {
-    "id": "sc/tdf157689.xlsx"
+    "id": "sc/tdf157689.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf157689.xlsx"
   },
   {
-    "id": "sc/tdf159581_optimalRowHeight.xlsx"
+    "id": "sc/tdf159581_optimalRowHeight.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf159581_optimalRowHeight.xlsx"
   },
   {
-    "id": "sc/tdf160371.xlsx"
+    "id": "sc/tdf160371.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf160371.xlsx"
   },
   {
-    "id": "sc/tdf161301.xlsx"
+    "id": "sc/tdf161301.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf161301.xlsx"
   },
   {
-    "id": "sc/tdf161365.xlsx"
+    "id": "sc/tdf161365.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf161365.xlsx"
   },
   {
-    "id": "sc/tdf162093.xlsx"
+    "id": "sc/tdf162093.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf162093.xlsx"
   },
   {
-    "id": "sc/tdf162948.xlsx"
+    "id": "sc/tdf162948.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf162948.xlsx"
   },
   {
-    "id": "sc/tdf162963_TableWithTotalsEnabled.xlsx"
+    "id": "sc/tdf162963_TableWithTotalsEnabled.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf162963_TableWithTotalsEnabled.xlsx"
   },
   {
-    "id": "sc/tdf163554.xlsx"
+    "id": "sc/tdf163554.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf163554.xlsx"
   },
   {
-    "id": "sc/tdf164417.xlsx"
+    "id": "sc/tdf164417.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf164417.xlsx"
   },
   {
-    "id": "sc/tdf164895.xlsx"
+    "id": "sc/tdf164895.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf164895.xlsx"
   },
   {
-    "id": "sc/tdf165180_date1904.xlsx"
+    "id": "sc/tdf165180_date1904.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf165180_date1904.xlsx"
   },
   {
-    "id": "sc/tdf165503.xlsx"
+    "id": "sc/tdf165503.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf165503.xlsx"
   },
   {
-    "id": "sc/tdf165655.xlsx"
+    "id": "sc/tdf165655.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf165655.xlsx"
   },
   {
-    "id": "sc/tdf165886.xlsx"
+    "id": "sc/tdf165886.xlsx",
+    "path": "sc/qa/unit/data/xlsx/tdf165886.xlsx"
   },
   {
-    "id": "chart2/ChartDataTable.xlsx"
+    "id": "chart2/ChartDataTable.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/ChartDataTable.xlsx"
   },
   {
-    "id": "chart2/DataTable-MultipleLegendEntriesForOneDataSeries.xlsx"
+    "id": "chart2/DataTable-MultipleLegendEntriesForOneDataSeries.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/DataTable-MultipleLegendEntriesForOneDataSeries.xlsx"
   },
   {
-    "id": "chart2/SimpleHistogram.xlsx"
+    "id": "chart2/SimpleHistogram.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/SimpleHistogram.xlsx"
   },
   {
-    "id": "chart2/add_series_secondary_axis.xlsx"
+    "id": "chart2/add_series_secondary_axis.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/add_series_secondary_axis.xlsx"
   },
   {
-    "id": "chart2/auto_marker_excel10.xlsx"
+    "id": "chart2/auto_marker_excel10.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/auto_marker_excel10.xlsx"
   },
   {
-    "id": "chart2/autotitledel_2007.xlsx"
+    "id": "chart2/autotitledel_2007.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/autotitledel_2007.xlsx"
   },
   {
-    "id": "chart2/autotitledel_2013.xlsx"
+    "id": "chart2/autotitledel_2013.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/autotitledel_2013.xlsx"
   },
   {
-    "id": "chart2/axis-label-rotation.xlsx"
+    "id": "chart2/axis-label-rotation.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/axis-label-rotation.xlsx"
   },
   {
-    "id": "chart2/axis_character_properties.xlsx"
+    "id": "chart2/axis_character_properties.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/axis_character_properties.xlsx"
   },
   {
-    "id": "chart2/axis_title_default_rotation.xlsx"
+    "id": "chart2/axis_title_default_rotation.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/axis_title_default_rotation.xlsx"
   },
   {
-    "id": "chart2/axis_title_rotated.xlsx"
+    "id": "chart2/axis_title_rotated.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/axis_title_rotated.xlsx"
   },
   {
-    "id": "chart2/axis_title_rotation.xlsx"
+    "id": "chart2/axis_title_rotation.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/axis_title_rotation.xlsx"
   },
   {
-    "id": "chart2/barOfPieChart.xlsx"
+    "id": "chart2/barOfPieChart.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/barOfPieChart.xlsx"
   },
   {
-    "id": "chart2/barOfPieChart2.xlsx"
+    "id": "chart2/barOfPieChart2.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/barOfPieChart2.xlsx"
   },
   {
-    "id": "chart2/bar_chart_simple.xlsx"
+    "id": "chart2/bar_chart_simple.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/bar_chart_simple.xlsx"
   },
   {
-    "id": "chart2/barchart_outend.xlsx"
+    "id": "chart2/barchart_outend.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/barchart_outend.xlsx"
   },
   {
-    "id": "chart2/barchart_totalsrow.xlsx"
+    "id": "chart2/barchart_totalsrow.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/barchart_totalsrow.xlsx"
   },
   {
-    "id": "chart2/bartest-stroke.xlsx"
+    "id": "chart2/bartest-stroke.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/bartest-stroke.xlsx"
   },
   {
-    "id": "chart2/box-whisker-gapwidth.xlsx"
+    "id": "chart2/box-whisker-gapwidth.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/box-whisker-gapwidth.xlsx"
   },
   {
-    "id": "chart2/boxWhisker.xlsx"
+    "id": "chart2/boxWhisker.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/boxWhisker.xlsx"
   },
   {
-    "id": "chart2/bubble_chart_simple.xlsx"
+    "id": "chart2/bubble_chart_simple.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/bubble_chart_simple.xlsx"
   },
   {
-    "id": "chart2/chart-area-style-background.xlsx"
+    "id": "chart2/chart-area-style-background.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/chart-area-style-background.xlsx"
   },
   {
-    "id": "chart2/chart-area-style-border.xlsx"
+    "id": "chart2/chart-area-style-border.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/chart-area-style-border.xlsx"
   },
   {
-    "id": "chart2/chart-auto-background.xlsx"
+    "id": "chart2/chart-auto-background.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/chart-auto-background.xlsx"
   },
   {
-    "id": "chart2/chart-hatch-fill.xlsx"
+    "id": "chart2/chart-hatch-fill.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/chart-hatch-fill.xlsx"
   },
   {
-    "id": "chart2/chart-text-can-overlap.xlsx"
+    "id": "chart2/chart-text-can-overlap.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/chart-text-can-overlap.xlsx"
   },
   {
-    "id": "chart2/chart.xlsx"
+    "id": "chart2/chart.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/chart.xlsx"
   },
   {
-    "id": "chart2/chart_label_text_break.xlsx"
+    "id": "chart2/chart_label_text_break.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/chart_label_text_break.xlsx"
   },
   {
-    "id": "chart2/chart_pie2007.xlsx"
+    "id": "chart2/chart_pie2007.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/chart_pie2007.xlsx"
   },
   {
-    "id": "chart2/chart_title.xlsx"
+    "id": "chart2/chart_title.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/chart_title.xlsx"
   },
   {
-    "id": "chart2/chart_with_name_range.xlsx"
+    "id": "chart2/chart_with_name_range.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/chart_with_name_range.xlsx"
   },
   {
-    "id": "chart2/clusteredColumn.xlsx"
+    "id": "chart2/clusteredColumn.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/clusteredColumn.xlsx"
   },
   {
-    "id": "chart2/color_funnel.xlsx"
+    "id": "chart2/color_funnel.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/color_funnel.xlsx"
   },
   {
-    "id": "chart2/column-style.xlsx"
+    "id": "chart2/column-style.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/column-style.xlsx"
   },
   {
-    "id": "chart2/combined_chart_secondary_axis.xlsx"
+    "id": "chart2/combined_chart_secondary_axis.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/combined_chart_secondary_axis.xlsx"
   },
   {
-    "id": "chart2/custom_data_label.xlsx"
+    "id": "chart2/custom_data_label.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/custom_data_label.xlsx"
   },
   {
-    "id": "chart2/data_label.xlsx"
+    "id": "chart2/data_label.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/data_label.xlsx"
   },
   {
-    "id": "chart2/data_labels_fill_color.xlsx"
+    "id": "chart2/data_labels_fill_color.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/data_labels_fill_color.xlsx"
   },
   {
-    "id": "chart2/deleted_data_labels.xlsx"
+    "id": "chart2/deleted_data_labels.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/deleted_data_labels.xlsx"
   },
   {
-    "id": "chart2/deleted_legend_entry.xlsx"
+    "id": "chart2/deleted_legend_entry.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/deleted_legend_entry.xlsx"
   },
   {
-    "id": "chart2/deleted_legend_entry2.xlsx"
+    "id": "chart2/deleted_legend_entry2.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/deleted_legend_entry2.xlsx"
   },
   {
-    "id": "chart2/dispBlanksAs_2007.xlsx"
+    "id": "chart2/dispBlanksAs_2007.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/dispBlanksAs_2007.xlsx"
   },
   {
-    "id": "chart2/dispBlanksAs_2013.xlsx"
+    "id": "chart2/dispBlanksAs_2013.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/dispBlanksAs_2013.xlsx"
   },
   {
-    "id": "chart2/empty_chart.xlsx"
+    "id": "chart2/empty_chart.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/empty_chart.xlsx"
   },
   {
-    "id": "chart2/external_str_ref.xlsx"
+    "id": "chart2/external_str_ref.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/external_str_ref.xlsx"
   },
   {
-    "id": "chart2/fdo54361-1.xlsx"
+    "id": "chart2/fdo54361-1.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/fdo54361-1.xlsx"
   },
   {
-    "id": "chart2/fdo54361.xlsx"
+    "id": "chart2/fdo54361.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/fdo54361.xlsx"
   },
   {
-    "id": "chart2/fdo70609.xlsx"
+    "id": "chart2/fdo70609.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/fdo70609.xlsx"
   },
   {
-    "id": "chart2/fdo78080.xlsx"
+    "id": "chart2/fdo78080.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/fdo78080.xlsx"
   },
   {
-    "id": "chart2/funnel1.xlsx"
+    "id": "chart2/funnel1.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/funnel1.xlsx"
   },
   {
-    "id": "chart2/gapWidth.xlsx"
+    "id": "chart2/gapWidth.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/gapWidth.xlsx"
   },
   {
-    "id": "chart2/hidden_cells.xlsx"
+    "id": "chart2/hidden_cells.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/hidden_cells.xlsx"
   },
   {
-    "id": "chart2/incorrect_label_position.xlsx"
+    "id": "chart2/incorrect_label_position.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/incorrect_label_position.xlsx"
   },
   {
-    "id": "chart2/invertIfNeg_bar.xlsx"
+    "id": "chart2/invertIfNeg_bar.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/invertIfNeg_bar.xlsx"
   },
   {
-    "id": "chart2/invertIfNeg_bubble.xlsx"
+    "id": "chart2/invertIfNeg_bubble.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/invertIfNeg_bubble.xlsx"
   },
   {
-    "id": "chart2/legend_manual_layout.xlsx"
+    "id": "chart2/legend_manual_layout.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/legend_manual_layout.xlsx"
   },
   {
-    "id": "chart2/majorTickMark.xlsx"
+    "id": "chart2/majorTickMark.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/majorTickMark.xlsx"
   },
   {
-    "id": "chart2/markerColor.xlsx"
+    "id": "chart2/markerColor.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/markerColor.xlsx"
   },
   {
-    "id": "chart2/minorTickMark.xlsx"
+    "id": "chart2/minorTickMark.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/minorTickMark.xlsx"
   },
   {
-    "id": "chart2/no_marker.xlsx"
+    "id": "chart2/no_marker.xlsx",
+    "path": "chart2/qa/extras/data/xlsx/no_marker.xlsx"
   }
 ]

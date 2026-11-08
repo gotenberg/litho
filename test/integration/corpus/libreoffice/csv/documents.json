@@ -1,29 +1,38 @@
 [
   {
-    "id": "sc/fdo48621_broken_quotes.csv"
+    "id": "sc/fdo48621_broken_quotes.csv",
+    "path": "sc/qa/unit/data/csv/fdo48621_broken_quotes.csv"
   },
   {
-    "id": "sc/numberformat.csv"
+    "id": "sc/numberformat.csv",
+    "path": "sc/qa/unit/data/csv/numberformat.csv"
   },
   {
-    "id": "sc/tdf148423.csv"
+    "id": "sc/tdf148423.csv",
+    "path": "sc/qa/unit/data/csv/tdf148423.csv"
   },
   {
-    "id": "sc/tdf150452.csv"
+    "id": "sc/tdf150452.csv",
+    "path": "sc/qa/unit/data/csv/tdf150452.csv"
   },
   {
-    "id": "sc/tdf152053.csv"
+    "id": "sc/tdf152053.csv",
+    "path": "sc/qa/unit/data/csv/tdf152053.csv"
   },
   {
-    "id": "sc/tdf152980.csv"
+    "id": "sc/tdf152980.csv",
+    "path": "sc/qa/unit/data/csv/tdf152980.csv"
   },
   {
-    "id": "sc/tdf48731.csv"
+    "id": "sc/tdf48731.csv",
+    "path": "sc/qa/unit/data/csv/tdf48731.csv"
   },
   {
-    "id": "sc/tdf80149.csv"
+    "id": "sc/tdf80149.csv",
+    "path": "sc/qa/unit/data/csv/tdf80149.csv"
   },
   {
-    "id": "sc/testTdf82254-csv-bom.csv"
+    "id": "sc/testTdf82254-csv-bom.csv",
+    "path": "sc/qa/unit/data/csv/testTdf82254-csv-bom.csv"
   }
 ]

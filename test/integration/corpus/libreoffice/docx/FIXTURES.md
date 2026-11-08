@@ -6,8 +6,8 @@ DOCX documents scored by the `diff` feature (see `FEATURES.md`) against LibreOff
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `documents.json`           | The 350 LibreOffice test documents, each by its ID, `<dir>/<file>.docx` (`ooxmlexport/tdf123.docx`)                                                                               |
 | `files.sha256`             | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 350 documents and `COPYING.MPL`                                                                                   |
-| `../list-candidates.py`    | Selects the documents from a LibreOffice core checkout and writes the two files above (standard library only)                                                                     |
-| `../fetch.sh`              | `make office-fetch SOURCES=libreoffice FORMATS=docx`: downloads each listed file at the pinned commit into `testdata/libreoffice/docx/sources/`, refusing one whose hash differs  |
+| `corpus select`            | Selects the documents from a LibreOffice core checkout and writes the two files above                                                                                             |
+| `corpus fetch`             | `make corpus-fetch CORPUS_NAME=libreoffice/docx`: downloads each listed file at the pinned commit into `testdata/libreoffice/docx/sources/`, refusing one whose hash differs      |
 | `../../lib/libreoffice.sh` | `make office-references SOURCES=libreoffice FORMATS=docx`: converts every source with the pinned image into `testdata/libreoffice/docx/references/<name>.pdf` and `manifest.json` |
 | `download.sh`              | Installs the references from the testdata volume as the corpus PDFs the provisioning image derives the diff goldens from                                                          |
 
@@ -16,7 +16,7 @@ A source's reference is named by its ID with `/` written `__`: `ooxmlexport__tdf
 ## Provisioning
 
 ```bash
-make office-fetch SOURCES=libreoffice FORMATS=docx                  # the LibreOffice test documents and the fixture fonts, hash-checked
+make corpus-fetch CORPUS_NAME=libreoffice/docx                      # the LibreOffice test documents and the fixture fonts, hash-checked
 make office-references SOURCES=libreoffice FORMATS=docx             # the references (Docker); NAMES="a__b.docx" for some
 go run ./test/integration/cmd/corpus init --corpus=libreoffice/docx # the diff goldens, in the corpus image
 go run ./test/integration/cmd/corpus run --corpus=libreoffice/docx --feature=diff
@@ -26,7 +26,7 @@ go run ./test/integration/cmd/corpus run --corpus=libreoffice/docx --feature=dif
 
 ## How the documents were chosen
 
-`list-candidates.py` reads LibreOffice core's `sw/qa/extras/ooxmlexport/data`, `sw/qa/extras/ooxmlimport/data` and `sw/qa/extras/layout/data` at the pinned commit (the commit of the `libreoffice-26.8.2.2` tag, the release the image runs) and keeps a `.docx` when:
+`corpus select` reads LibreOffice core's `sw/qa/extras/ooxmlexport/data`, `sw/qa/extras/ooxmlimport/data` and `sw/qa/extras/layout/data` at the pinned commit (the commit of the `libreoffice-26.8.2.2` tag, the release the image runs) and keeps a `.docx` when:
 
 - it is at most 150 KiB;
 - its name is plain ASCII (letters, digits, dot, underscore, hyphen), so every shell and form field carries it intact;
@@ -46,7 +46,7 @@ LibreOffice's test documents are under the Mozilla Public License 2.0 (some also
 
 ## Fonts
 
-The cell converts with the fixture fonts `lib/fetch-fonts.sh` installs, which hold what the image draws most documents with: Carlito and Caladea for Calibri and Cambria (the Debian packages' orig tarballs, byte for byte the image's files), Liberation for Arial, Times New Roman and Courier New, DejaVu, Noto Sans CJK, Noto Sans Thai and Devanagari, Noto Sans and Noto Serif (`fonts-noto-core`'s faces, byte for byte the image's, which draw a sans or a serif family the image does not install), and OpenSymbol (LibreOffice's bullet and symbol font). The image also has the rest of Noto Core (the script families), URW base 35 (C059, Nimbus), Noto Color Emoji and Noto Serif CJK, which the fixture fonts lack. Of the committed sources, `contract` draws its list bullets in OpenSymbol, and `i18n` draws some characters in Noto Serif and its emoji in Noto Color Emoji; of the 350 fetched references, 15 draw Noto Sans, 21 Noto Serif, 9 OpenSymbol, 3 a URW face and 1 Noto Serif CJK. The standard 14 fonts the form fields' appearances name (Times-Roman, Helvetica, unembedded) are never drawn: the annotations are left out.
+The cell converts with the fixture fonts `corpus fetch --corpus=fonts` installs, which hold what the image draws most documents with: Carlito and Caladea for Calibri and Cambria (the Debian packages' orig tarballs, byte for byte the image's files), Liberation for Arial, Times New Roman and Courier New, DejaVu, Noto Sans CJK, Noto Sans Thai and Devanagari, Noto Sans and Noto Serif (`fonts-noto-core`'s faces, byte for byte the image's, which draw a sans or a serif family the image does not install), and OpenSymbol (LibreOffice's bullet and symbol font). The image also has the rest of Noto Core (the script families), URW base 35 (C059, Nimbus), Noto Color Emoji and Noto Serif CJK, which the fixture fonts lack. Of the committed sources, `contract` draws its list bullets in OpenSymbol, and `i18n` draws some characters in Noto Serif and its emoji in Noto Color Emoji; of the 350 fetched references, 15 draw Noto Sans, 21 Noto Serif, 9 OpenSymbol, 3 a URW face and 1 Noto Serif CJK. The standard 14 fonts the form fields' appearances name (Times-Roman, Helvetica, unembedded) are never drawn: the annotations are left out.
 
 ## How the rig was proven
 

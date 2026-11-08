@@ -1,10 +1,23 @@
 {
   "name": "wpt",
   "source": "wpt",
-  "provisioned_by": "make wpt-fetch",
-  "inputs": { "list": "reftests.json" },
+  "provisioned_by": "make corpus-fetch CORPUS_NAME=wpt",
+  "inputs": {
+    "list": "reftests.json"
+  },
   "goldens_in_source": true,
   "goldens": {
     "reftest": "."
+  },
+  "fetch": {
+    "github": "web-platform-tests/wpt",
+    "pin": "WPT_COMMIT",
+    "map": [
+      {
+        "prefix": "fonts/Ahem.ttf",
+        "to": "ahem/Ahem.ttf",
+        "fonts": true
+      }
+    ]
   }
 }

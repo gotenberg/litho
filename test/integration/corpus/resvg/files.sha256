@@ -1,3 +1,4 @@
+f5d934dc281b44e0003ee461ac740b18b6629a454decd872c774d34e4ee0b21d  LICENSE-MIT
 1f91c5ef4a18a747526f9c527d8e39337d31d3f37a8472c89fbdfe874c2d0d69  crates/resvg/tests/fonts/Amiri-LICENSE-OFL.txt
 f3615b08cc3d78409474c28ed7c9e0fb5cc42435e12080a385e1a4163ab46708  crates/resvg/tests/fonts/Amiri-Regular.ttf
 6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2  crates/resvg/tests/fonts/Noto-LICENSE-OFL.txt
@@ -246,8 +247,6 @@ f3b07b142c0dee369caa46a54af130b7e10f9c4b5fa5f1d1fa582ccb3232ca27  crates/resvg/t
 97fc2f590f61f6e3f4c71caaef39f6333304675ee57507f2d8036cb557951422  crates/resvg/tests/tests/shapes/line/no-y2-coordinate.svg
 29faa9a274a197cd920c53cf8ab8f8804bce5fd4cd0c68b1dc814ef377d7c65b  crates/resvg/tests/tests/shapes/line/simple-case.png
 4a07586a883ded70e547b1aa508107751db226333f3254439484e5f95700a73c  crates/resvg/tests/tests/shapes/line/simple-case.svg
-996c4cd048c74cb8614b7c72174011a6ad7b715ea410e3d3373c9f53b659adbe  crates/resvg/tests/tests/shapes/path/invalid-data-in-L.png
-eb14ff975fb462200d8a0ccc3b8e76614e3e8e5dc535c2f853d2616c3ddebbc3  crates/resvg/tests/tests/shapes/path/invalid-data-in-L.svg
 a0c6a4f935c143ad5bf7e3eedb5c253e8d04004e692c5c926e6b8a16d0db727b  crates/resvg/tests/tests/shapes/path/M-A-t.png
 8c9f3a72655cb68924b18dff12417af3d2f212aacfc1194174b0fa03987f4666  crates/resvg/tests/tests/shapes/path/M-A-t.svg
 80beef26d65c39180e5ba011cdb80c12df5ab961776fc7017b8c178179d8d4f6  crates/resvg/tests/tests/shapes/path/M-A-trimmed.png
@@ -262,8 +261,6 @@ bd49705aa292095a5f102c929f0d14f371f6f1f70baf03466452ccaba47ccfc5  crates/resvg/t
 4a48d6d9378d648a5d0547fcb724bcd99115a849c85548227a7df33558b0c24f  crates/resvg/tests/tests/shapes/path/M-L-L-implicit.svg
 439246eab420b60d059c3e158a0a544f382e46a3cc2e16ff8ddc02b70b576583  crates/resvg/tests/tests/shapes/path/M-L.png
 e29e21127a0c3f409d9bf8a7e5d11b07c016221c4d05bd952e7cec75f4d011d8  crates/resvg/tests/tests/shapes/path/M-L.svg
-899f432ac0b3417fb9791f44dc4176e46f1939b2ef4ce60219fb230993290db6  crates/resvg/tests/tests/shapes/path/M-rel-M.png
-a860671acdf9bc2fe2e7a494fd4e57631b611b7789dd398b509f56fb61c02a68  crates/resvg/tests/tests/shapes/path/M-rel-M.svg
 bbd8943f2b0e624e64bb1157ea7891b74f32794bb312427279d988db67b83927  crates/resvg/tests/tests/shapes/path/M-S.png
 919f21ac5696af11b288316215b1a08b099bc496a225eebf9408b11c48478724  crates/resvg/tests/tests/shapes/path/M-S.svg
 a2af05aa5f2e0b480dc57ded1f1ed3ceeb0fea1a793284f51737f505349eacd0  crates/resvg/tests/tests/shapes/path/M-T-Q-rel.png
@@ -274,6 +271,10 @@ cb1955b34bbd42d53f9a1d63448b4c96606bd547223194eb67d22b204ec65e9d  crates/resvg/t
 4f7429c44d7addd29f1130242e376baacd9ea6b14525ba69005700ecda75102e  crates/resvg/tests/tests/shapes/path/M-V.svg
 47b705d0ca751f14bc856bf6a29767ddad416a02025c7f192ce949dc756c3fc3  crates/resvg/tests/tests/shapes/path/M-Z.png
 503a87962c067831ee20d8f42ba2b03c4bce1d0dea39ab8e81a592ce87c3a9c5  crates/resvg/tests/tests/shapes/path/M-Z.svg
+899f432ac0b3417fb9791f44dc4176e46f1939b2ef4ce60219fb230993290db6  crates/resvg/tests/tests/shapes/path/M-rel-M.png
+a860671acdf9bc2fe2e7a494fd4e57631b611b7789dd398b509f56fb61c02a68  crates/resvg/tests/tests/shapes/path/M-rel-M.svg
+996c4cd048c74cb8614b7c72174011a6ad7b715ea410e3d3373c9f53b659adbe  crates/resvg/tests/tests/shapes/path/invalid-data-in-L.png
+eb14ff975fb462200d8a0ccc3b8e76614e3e8e5dc535c2f853d2616c3ddebbc3  crates/resvg/tests/tests/shapes/path/invalid-data-in-L.svg
 6a16f79c7ccbb1b8a4f1d4f81d8c075ebc1beae47e65391b97c6404f025c7965  crates/resvg/tests/tests/shapes/path/no-commawsp-between-and-after-arc-flags.png
 55f467c113d7c1a8f6412b0f5b01546e6e803b1466eaa18a0e50e2e825f7adc4  crates/resvg/tests/tests/shapes/path/no-commawsp-between-and-after-arc-flags.svg
 c9557eded438f5ceea277e8629a9d4e6d3d2e23c766603deb6f7e230fa3cb78f  crates/resvg/tests/tests/shapes/path/out-of-range-large-arc-flag-value.png
@@ -446,10 +447,10 @@ eb3a3c4af5a50b86f42efa5da1eac0ecb7272c83abaf7c85a3056890db9688c0  crates/resvg/t
 1177590823719888a2f211038bc3a4d4793ac5fae61d2fe8d008c67f9a9fc213  crates/resvg/tests/tests/structure/transform/translate-without-Y.svg
 079605bd0441e4865c2f566b804b598355fa2eb4ec64d56311c3eab3a304d3d4  crates/resvg/tests/tests/structure/transform/translate.png
 845f60bd2882c9b63d4bb719252bb9c378e82dd2d940f195b6a622429f21a2b0  crates/resvg/tests/tests/structure/transform/translate.svg
-8990e1273aeb2d1a13c85f429a0c92faed8764b631b4bb918d04909848fa3afc  crates/resvg/tests/tests/structure/use/complex-style-resolving-order.png
-d838ededf7aa7c8ec6ec22f3c7f9bea3bce39eb412f404c1c444d2c18d34d819  crates/resvg/tests/tests/structure/use/complex-style-resolving-order.svg
 5137bb82421031c4b1a73ab07cf13598070af22c51474c1711935028a6ce584f  crates/resvg/tests/tests/structure/use/cSS-rules.png
 0db248f013e7bc91f29443cfac52fd5493f77e0830524998629f7f88496d081e  crates/resvg/tests/tests/structure/use/cSS-rules.svg
+8990e1273aeb2d1a13c85f429a0c92faed8764b631b4bb918d04909848fa3afc  crates/resvg/tests/tests/structure/use/complex-style-resolving-order.png
+d838ededf7aa7c8ec6ec22f3c7f9bea3bce39eb412f404c1c444d2c18d34d819  crates/resvg/tests/tests/structure/use/complex-style-resolving-order.svg
 899f432ac0b3417fb9791f44dc4176e46f1939b2ef4ce60219fb230993290db6  crates/resvg/tests/tests/structure/use/display-inheritance.png
 1cce0b7065c1fe85c2c20573bfb2e1b09957da815b4147a75d02f1e97a65b21c  crates/resvg/tests/tests/structure/use/display-inheritance.svg
 8174aabe8157a64a38bb406125ddccb4be695f9c97bcbd6a74f35bb31d105bf6  crates/resvg/tests/tests/structure/use/href-precedence-over-xlink.png
@@ -498,4 +499,3 @@ d0d8dde34752152882c870262b01462cd368f1e6952541f52e230b187af4dcdd  crates/resvg/t
 aa7a74d7326bd793d59c039ae1668bf1594551dc5bc84a56b5055b8569b0e1e6  crates/resvg/tests/tests/text/tspan/sequential.svg
 b4bfd557d5fffea8edf8c68b969862b3774a74e973e54f687e06b4dff1695339  crates/resvg/tests/tests/text/tspan/tspan-bbox-1.png
 e2d5d76a78b35c954e0378404641332d16e25cc439c0af92ea2ce550a5d8c238  crates/resvg/tests/tests/text/tspan/tspan-bbox-1.svg
-f5d934dc281b44e0003ee461ac740b18b6629a454decd872c774d34e4ee0b21d  LICENSE-MIT

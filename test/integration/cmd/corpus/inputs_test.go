@@ -46,7 +46,7 @@ func TestListInputFixtures_NamesTheMakeTargetForMissingFiles(t *testing.T) {
 	src, root := t.TempDir(), t.TempDir()
 	writeFiles(t, src, map[string]string{"list.json": `[{"id": "css/a.html"}, {"id": "css/b.html"}]`})
 	writeFiles(t, root, map[string]string{"css/a.html": "", "css/b.html": ""})
-	got, err := listInputFixtures(filepath.Join(src, "list.json"), root, "make wpt-fetch")
+	got, err := listInputFixtures(filepath.Join(src, "list.json"), root, "make corpus-fetch CORPUS_NAME=wpt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,8 +55,8 @@ func TestListInputFixtures_NamesTheMakeTargetForMissingFiles(t *testing.T) {
 	}
 
 	writeFiles(t, src, map[string]string{"list.json": `[{"id": "css/a.html"}, {"id": "css/c.html"}]`})
-	_, err = listInputFixtures(filepath.Join(src, "list.json"), root, "make wpt-fetch")
-	if !errors.Is(err, errInputsUnfetched) || !strings.Contains(err.Error(), "make wpt-fetch") {
+	_, err = listInputFixtures(filepath.Join(src, "list.json"), root, "make corpus-fetch CORPUS_NAME=wpt")
+	if !errors.Is(err, errInputsUnfetched) || !strings.Contains(err.Error(), "make corpus-fetch CORPUS_NAME=wpt") {
 		t.Errorf("missing source: %v", err)
 	}
 
@@ -70,7 +70,7 @@ func TestListInputFixtures_NamesTheMakeTargetForMissingFiles(t *testing.T) {
 
 // TestWPTListAndHashesAgree pins that every file a reftest of
 // corpus/wpt/reftests.json reads is in corpus/wpt/files.sha256, which is
-// what wpt/fetch.sh downloads, and that the list holds the 300 to 1300 tests
+// what `corpus fetch` downloads, and that the list holds the 300 to 1300 tests
 // the corpus is sized for.
 func TestWPTListAndHashesAgree(t *testing.T) {
 	t.Parallel()
@@ -185,33 +185,36 @@ func TestCommittedConverterCorporaLoad(t *testing.T) {
 }
 
 // TestHostProvisionedCorporaReadTheirPin checks that a corpus the host
-// provisions reads, in one of its scripts, every pin sourcePins says its
-// sources come from, as TestEverySourceReadsItsPin checks of download.sh.
+// provisions fetches its files at the pin sourcePins says they come from, as
+// TestEverySourceReadsItsPin checks of download.sh, and that every fetch names
+// a pin of versions.env.
 func TestHostProvisionedCorporaReadTheirPin(t *testing.T) {
 	t.Parallel()
 
+	f, err := os.Open(filepath.Join(corpusSourceDir, versionsFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	entries, err := parsePins(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinned := map[string]bool{}
+	for _, e := range entries {
+		pinned[e.Key] = true
+	}
 	checked := 0
 	for _, m := range readManifests(t) {
+		if m.Fetch != nil && !pinned[m.Fetch.Pin] {
+			t.Errorf("%s fetches at %s, which versions.env does not pin", m.Name, m.Fetch.Pin)
+		}
 		if m.ProvisionedBy == "" {
 			continue
 		}
 		checked++
-		scripts, err := filepath.Glob(filepath.Join(corpusSourceDir, m.Source, "*.sh"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		var all []byte
-		for _, s := range scripts {
-			data, err := os.ReadFile(s)
-			if err != nil {
-				t.Fatal(err)
-			}
-			all = append(all, data...)
-		}
-		for _, k := range sourcePins[m.Source] {
-			if !bytes.Contains(all, []byte("${"+k)) {
-				t.Errorf("%s: no script expands %s", m.Name, k)
-			}
+		if keys := sourcePins[m.Source]; len(keys) > 0 && (m.Fetch == nil || !slices.Equal(keys, []string{m.Fetch.Pin})) {
+			t.Errorf("%s: its sources come from %v, its fetch reads %+v", m.Name, keys, m.Fetch)
 		}
 		if _, err := os.Stat(filepath.Join(corpusSourceDir, m.Source, "download.sh")); err == nil {
 			t.Errorf("%s is provisioned on the host but ships a download.sh the image would run", m.Name)
@@ -231,7 +234,7 @@ func TestLoadInputFixtures_GlobsAndListsTogether(t *testing.T) {
 		"documents.json":         `[{"id": "export/a.docx"}]`,
 	})
 	writeFiles(t, root, map[string]string{"sources/export/a.docx": ""})
-	m := &Manifest{Name: "office", Inputs: &InputSpec{Glob: "sources/*", List: "documents.json", ListRoot: "sources", FetchedBy: "make office-fetch"}}
+	m := &Manifest{Name: "office", Inputs: &InputSpec{Glob: "sources/*", List: "documents.json", ListRoot: "sources", FetchedBy: "make corpus-fetch"}}
 	globbed, err := globInputFixtures(src, m.Inputs.Glob)
 	if err != nil {
 		t.Fatal(err)
@@ -247,20 +250,20 @@ func TestLoadInputFixtures_GlobsAndListsTogether(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = listInputFixtures(filepath.Join(src, m.Inputs.List), filepath.Join(root, m.Inputs.ListRoot), m.Inputs.FetchedBy)
-	if !errors.Is(err, errInputsUnfetched) || !strings.Contains(err.Error(), "make office-fetch") {
+	if !errors.Is(err, errInputsUnfetched) || !strings.Contains(err.Error(), "make corpus-fetch") {
 		t.Errorf("missing fetched source: %v", err)
 	}
 }
 
 // TestOfficeListsAndHashesAgree pins that every document the Office
 // libreoffice corpora's documents.json lists is in their files.sha256, which
-// is what libreoffice/fetch.sh downloads, with the licence, that the IDs name
-// the directories, extensions and caps libreoffice/list-candidates.py takes,
+// is what `corpus fetch` downloads, with the licence, that the IDs name
+// the directories, extensions and caps the libreoffice selector takes,
 // and that the lists hold the documents the caps allow.
 func TestOfficeListsAndHashesAgree(t *testing.T) {
 	t.Parallel()
 
-	// The caps of libreoffice/list-candidates.py, by LibreOffice core
+	// The caps of the libreoffice selector (libreOfficeDirs), by LibreOffice core
 	// directory.
 	caps := map[string]map[string]int{
 		"docx": {"sw/qa/extras/ooxmlexport/data": 250, "sw/qa/extras/ooxmlimport/data": 60, "sw/qa/extras/layout/data": 40},

@@ -7,7 +7,7 @@ WeasyPrint's draw tests, extracted from the release `WEASYPRINT_VERSION` in `cor
 | `fixtures/`  | 315 JSON fixtures, `<module>__<test>.json`: the test name and source, whether WeasyPrint marks it `xfail`, the HTML, the expected rows, and the colour map        |
 | `resources/` | The files of WeasyPrint's `tests/resources/` the fixtures name (images, SVG, stylesheets), and `tests_ua.css`, the user agent stylesheet the tests are written to |
 | `ua.css`     | Prepended to every test by the feature: takes the margins a browser's user agent stylesheet adds back out (see the file and `FEATURES.md`)                        |
-| `extract.py` | The extraction script (standard library only)                                                                                                                     |
+| `extract.py` | The extraction script                                                                                                                                             |
 | `LICENSE`    | WeasyPrint's licence, copied from the release                                                                                                                     |
 
 The colour map is `PIXELS_BY_CHAR` of `tests/draw/__init__.py`, read from the release rather than restated, copied into each fixture so one file says all a test expects. A character whose colour is `null` (`z`) marks a pixel the test does not check.

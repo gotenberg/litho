@@ -1,17 +1,17 @@
 # resvg corpus fixtures
 
-SVG tests from [resvg](https://github.com/linebender/resvg) at the commit `RESVG_COMMIT` in `corpus/versions.env` pins (the v0.49.0 tag), scored by the `svgdraw` feature (see `FEATURES.md`). Nothing from resvg is committed but the list of tests and the hashes of the files they read; `make resvg-fetch` downloads the files into `test/integration/testdata/resvg/` (gitignored) and the fonts the text tests draw with into `test/integration/testdata/fonts/resvg/`. The downloaded files are data: nothing runs from there.
+SVG tests from [resvg](https://github.com/linebender/resvg) at the commit `RESVG_COMMIT` in `corpus/versions.env` pins (the v0.49.0 tag), scored by the `svgdraw` feature (see `FEATURES.md`). Nothing from resvg is committed but the list of tests and the hashes of the files they read; `make corpus-fetch CORPUS_NAME=resvg` downloads the files into `test/integration/testdata/resvg/` (gitignored) and the fonts the text tests draw with into `test/integration/testdata/fonts/resvg/`. The downloaded files are data: nothing runs from there.
 
-| File                 | What it holds                                                                                                                                                         |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tests.json`         | The 246 tests: each SVG's path under `crates/resvg/tests/tests/`, its reference PNG and the PNG's size                                                                |
-| `files.sha256`       | Every file the tests read (each SVG and PNG, the Noto Sans, Serif and Mono and Amiri fonts with their licences, resvg's MIT licence): 501 lines of `<sha256>  <path>` |
-| `list-candidates.py` | The selection script: reads a resvg checkout and writes `tests.json` (standard library only)                                                                          |
-| `fetch.sh`           | Downloads each listed file from `raw.githubusercontent.com` at the pinned commit, refuses one whose hash differs, and records the commit in `versions.json`           |
+| File            | What it holds                                                                                                                                                         |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tests.json`    | The 246 tests: each SVG's path under `crates/resvg/tests/tests/`, its reference PNG and the PNG's size                                                                |
+| `files.sha256`  | Every file the tests read (each SVG and PNG, the Noto Sans, Serif and Mono and Amiri fonts with their licences, resvg's MIT licence): 501 lines of `<sha256>  <path>` |
+| `corpus select` | The selection script: reads a resvg checkout and writes `tests.json`                                                                                                  |
+| `corpus fetch`  | Downloads each listed file from `raw.githubusercontent.com` at the pinned commit, refuses one whose hash differs, and records the commit in `versions.json`           |
 
 ## How the tests were chosen
 
-resvg's tests are SVG files with a PNG reference beside each, drawn by resvg scaled to 300 pixels wide (a few 500). `list-candidates.py` walks the directories of the features litho's SVG renderer draws: structure (`svg`, `g`, `defs`, `use`, `symbol`, `switch`, `systemLanguage`, `style`, `style-attribute`, `transform`), shapes (all seven), painting (fill and stroke with their properties, `opacity`, `display`, `visibility`, `color`), paint servers (`linearGradient`, `radialGradient`, `stop`, `stop-color`, `stop-opacity`), clipping (`clipPath`, `clip-rule`) and text basics (`text`, `tspan`, `text-anchor`, `font-size`). It leaves out the filters, masks, patterns, markers and the rest of text, which the renderer does not draw.
+resvg's tests are SVG files with a PNG reference beside each, drawn by resvg scaled to 300 pixels wide (a few 500). `corpus select` walks the directories of the features litho's SVG renderer draws: structure (`svg`, `g`, `defs`, `use`, `symbol`, `switch`, `systemLanguage`, `style`, `style-attribute`, `transform`), shapes (all seven), painting (fill and stroke with their properties, `opacity`, `display`, `visibility`, `color`), paint servers (`linearGradient`, `radialGradient`, `stop`, `stop-color`, `stop-opacity`), clipping (`clipPath`, `clip-rule`) and text basics (`text`, `tspan`, `text-anchor`, `font-size`). It leaves out the filters, masks, patterns, markers and the rest of text, which the renderer does not draw.
 
 A test qualifies when it has a reference PNG and uses none of:
 
@@ -79,11 +79,10 @@ git remote add origin https://github.com/linebender/resvg.git
 git config core.sparseCheckout true
 printf '/crates/resvg/tests/tests/\n/crates/resvg/tests/fonts/\n/LICENSE-MIT\n' > .git/info/sparse-checkout
 git fetch -q --depth 1 --filter=blob:none origin "$RESVG_COMMIT" && git checkout -q FETCH_HEAD
-cd .. && python3 -I test/integration/corpus/resvg/list-candidates.py resvg > test/integration/corpus/resvg/tests.json
-npx prettier --write test/integration/corpus/resvg/tests.json
+cd .. && make corpus-select CORPUS_NAME=resvg CHECKOUT=resvg
 ```
 
-The script prints the candidate count and the commonest rejection reasons on stderr. `files.sha256` is the SHA-256 of every SVG and PNG `tests.json` names, plus `LICENSE-MIT` and the fonts `NotoSans-Regular.ttf`, `NotoSans-Bold.ttf`, `NotoSans-Italic.ttf`, `NotoSerif-Regular.ttf`, `NotoMono-Regular.ttf`, `Amiri-Regular.ttf` and their licences from `crates/resvg/tests/fonts/`, computed in the same checkout (`shasum -a 256`), sorted by path; `TestSVGListAndHashesAgree` checks that the two files agree.
+`corpus select` writes `tests.json` and `files.sha256` and prints the candidate count on stderr. `files.sha256` is the SHA-256 of every SVG and PNG `tests.json` names, plus `LICENSE-MIT` and the fonts `NotoSans-Regular.ttf`, `NotoSans-Bold.ttf`, `NotoSans-Italic.ttf`, `NotoSerif-Regular.ttf`, `NotoMono-Regular.ttf`, `Amiri-Regular.ttf` and their licences from `crates/resvg/tests/fonts/`, computed in the same checkout, sorted by path in byte order; `TestSVGListAndHashesAgree` checks that the two files agree.
 
 ## Known disagreements
 

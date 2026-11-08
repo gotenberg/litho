@@ -6,8 +6,8 @@ SpreadsheetML workbooks scored by the `diff` feature (see `FEATURES.md`) against
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `documents.json`           | The 280 LibreOffice test workbooks, each by its ID, `<module>/<file>.xlsx` (`sc/tdf123.xlsx`, `chart2/tdf456.xlsx`)                                                               |
 | `files.sha256`             | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 280 workbooks and `COPYING.MPL`                                                                                   |
-| `../list-candidates.py`    | Selects the workbooks from a LibreOffice core checkout and writes the two files above (standard library only)                                                                     |
-| `../fetch.sh`              | `make office-fetch SOURCES=libreoffice FORMATS=xlsx`: downloads each listed file at the pinned commit into `testdata/libreoffice/xlsx/sources/`, refusing one whose hash differs  |
+| `corpus select`            | Selects the workbooks from a LibreOffice core checkout and writes the two files above                                                                                             |
+| `corpus fetch`             | `make corpus-fetch CORPUS_NAME=libreoffice/xlsx`: downloads each listed file at the pinned commit into `testdata/libreoffice/xlsx/sources/`, refusing one whose hash differs      |
 | `../../lib/libreoffice.sh` | `make office-references SOURCES=libreoffice FORMATS=xlsx`: converts every source with the pinned image into `testdata/libreoffice/xlsx/references/<name>.pdf` and `manifest.json` |
 | `download.sh`              | Installs the references from the testdata volume as the corpus PDFs the provisioning image derives the diff goldens from                                                          |
 
@@ -16,7 +16,7 @@ A fetched workbook's ID names the module whose tests it comes from: `sc/<file>` 
 ## Provisioning
 
 ```bash
-make office-fetch SOURCES=libreoffice FORMATS=xlsx                  # the LibreOffice test documents and the fixture fonts, hash-checked
+make corpus-fetch CORPUS_NAME=libreoffice/xlsx                      # the LibreOffice test documents and the fixture fonts, hash-checked
 make office-references SOURCES=libreoffice FORMATS=xlsx             # the references (Docker); NAMES="a__b.xlsx" for some
 go run ./test/integration/cmd/corpus init --corpus=libreoffice/xlsx # the diff goldens, in the corpus image
 go run ./test/integration/cmd/corpus run --corpus=libreoffice/xlsx --feature=diff
@@ -24,7 +24,7 @@ go run ./test/integration/cmd/corpus run --corpus=libreoffice/xlsx --feature=dif
 
 ## How the documents were chosen
 
-`list-candidates.py` reads the `.xlsx` files at the top of LibreOffice core's `sc/qa/unit/data/xlsx` and `chart2/qa/extras/data/xlsx` at the pinned commit (the commit of the `libreoffice-26.8.2.2` tag, the release the image runs) and keeps one when:
+`corpus select` reads the `.xlsx` files at the top of LibreOffice core's `sc/qa/unit/data/xlsx` and `chart2/qa/extras/data/xlsx` at the pinned commit (the commit of the `libreoffice-26.8.2.2` tag, the release the image runs) and keeps one when:
 
 - it is at most 150 KiB;
 - its name is plain ASCII (letters, digits, dot, underscore, hyphen), so every shell and form field carries it intact;
@@ -45,7 +45,7 @@ LibreOffice's test documents are under the Mozilla Public License 2.0 (some also
 
 ## Fonts
 
-The cell converts with the fixture fonts `lib/fetch-fonts.sh` installs (see the docx corpus's `FIXTURES.md`), which hold what the image draws most workbooks with: Carlito for Calibri, Excel's default (180 of the 285 references draw it), Liberation Sans for Arial and Calc's default (59), Liberation Serif (38), Caladea for Cambria (4), DejaVu and Noto Sans CJK, and Noto Sans (`NOTO_SANS_CORE_*`, Debian's `fonts-noto-core`, the image's package): the face the image's fontconfig gives a family it does not install, Tahoma, Century Gothic, Comic Sans MS, Segoe UI and the like, which 27 references draw. Noto Serif and OpenSymbol (4 references, check boxes and bullets) are pinned too; the image also has Noto Sans Symbols 2 (1) and URW base 35 (P052, 1), which the fixture fonts lack.
+The cell converts with the fixture fonts `corpus fetch --corpus=fonts` installs (see the docx corpus's `FIXTURES.md`), which hold what the image draws most workbooks with: Carlito for Calibri, Excel's default (180 of the 285 references draw it), Liberation Sans for Arial and Calc's default (59), Liberation Serif (38), Caladea for Cambria (4), DejaVu and Noto Sans CJK, and Noto Sans (`NOTO_SANS_CORE_*`, Debian's `fonts-noto-core`, the image's package): the face the image's fontconfig gives a family it does not install, Tahoma, Century Gothic, Comic Sans MS, Segoe UI and the like, which 27 references draw. Noto Serif and OpenSymbol (4 references, check boxes and bullets) are pinned too; the image also has Noto Sans Symbols 2 (1) and URW base 35 (P052, 1), which the fixture fonts lack.
 
 ## How the rig was proven
 

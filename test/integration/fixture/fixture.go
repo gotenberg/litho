@@ -361,7 +361,7 @@ func (s *Source) PrintOptions() []pdf.ConvertOption {
 }
 
 // FontFamilies are the prefixes of the font directories
-// corpus/lib/fetch-fonts.sh installs, the faces every converter oracle
+// `corpus fetch --corpus=fonts` installs, the faces every converter oracle
 // and fixture builder draws text with. The fonts directory also holds test
 // fonts (Ahem, the WeasyPrint test font, resvg's Noto faces), which only the
 // oracles written for them read.

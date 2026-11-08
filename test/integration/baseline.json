@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-08T18:02:36Z",
+  "captured_at": "2026-11-08T18:58:12Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -26946,8 +26946,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 1146,
-          "mismatched": 31,
+          "matched": 1147,
+          "mismatched": 30,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -27975,7 +27975,6 @@
             "css/css-text-decor/text-decoration-inset-015.html": "pass",
             "css/css-text-decor/text-decoration-inset-030.html": "pass",
             "css/css-text-decor/text-decoration-inset-auto.html": "fail",
-            "css/css-text-decor/text-decoration-inset-negative.html": "fail",
             "css/css-text-decor/text-decoration-inset-one-value.html": "pass",
             "css/css-text-decor/text-decoration-inset-percentage-slice.html": "pass",
             "css/css-text-decor/text-decoration-inset-zero.html": "pass",
@@ -27995,6 +27994,7 @@
             "css/css-text-decor/text-decoration-thickness-overline-001.html": "pass",
             "css/css-text-decor/text-decoration-wavy-phase-across-elements-001.html": "pass",
             "css/css-text-decor/text-emphasis-color-property-001.html": "pass",
+            "css/css-text-decor/text-emphasis-line-height-001b.html": "pass",
             "css/css-text-decor/text-emphasis-property-001.html": "pass",
             "css/css-text-decor/text-emphasis-property-004.html": "pass",
             "css/css-text-decor/text-emphasis-property-004a.html": "pass",

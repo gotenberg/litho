@@ -1,512 +1,682 @@
 [
   {
-    "id": "sd/16-9.odp"
+    "id": "sd/16-9.odp",
+    "path": "sd/qa/unit/data/odp/16-9.odp"
   },
   {
-    "id": "sd/4-3.odp"
+    "id": "sd/4-3.odp",
+    "path": "sd/qa/unit/data/odp/4-3.odp"
   },
   {
-    "id": "sd/BulletsAsImage.odp"
+    "id": "sd/BulletsAsImage.odp",
+    "path": "sd/qa/unit/data/odp/BulletsAsImage.odp"
   },
   {
-    "id": "sd/LineStylesOwn.odp"
+    "id": "sd/LineStylesOwn.odp",
+    "path": "sd/qa/unit/data/odp/LineStylesOwn.odp"
   },
   {
-    "id": "sd/Math.fodp"
+    "id": "sd/Math.fodp",
+    "path": "sd/qa/unit/data/odp/Math.fodp"
   },
   {
-    "id": "sd/SvgImageTest.odp"
+    "id": "sd/SvgImageTest.odp",
+    "path": "sd/qa/unit/data/odp/SvgImageTest.odp"
   },
   {
-    "id": "sd/Tdf112594.fodp"
+    "id": "sd/Tdf112594.fodp",
+    "path": "sd/qa/unit/data/odp/Tdf112594.fodp"
   },
   {
-    "id": "sd/Tdf62176.odp"
+    "id": "sd/Tdf62176.odp",
+    "path": "sd/qa/unit/data/odp/Tdf62176.odp"
   },
   {
-    "id": "sd/author_field.odp"
+    "id": "sd/author_field.odp",
+    "path": "sd/qa/unit/data/odp/author_field.odp"
   },
   {
-    "id": "sd/author_fixed.odp"
+    "id": "sd/author_fixed.odp",
+    "path": "sd/qa/unit/data/odp/author_fixed.odp"
   },
   {
-    "id": "sd/autofitted-textbox-indent.odp"
+    "id": "sd/autofitted-textbox-indent.odp",
+    "path": "sd/qa/unit/data/odp/autofitted-textbox-indent.odp"
   },
   {
-    "id": "sd/background.odp"
+    "id": "sd/background.odp",
+    "path": "sd/qa/unit/data/odp/background.odp"
   },
   {
-    "id": "sd/bullet-off-on.odp"
+    "id": "sd/bullet-off-on.odp",
+    "path": "sd/qa/unit/data/odp/bullet-off-on.odp"
   },
   {
-    "id": "sd/bulletCharAndFont.odp"
+    "id": "sd/bulletCharAndFont.odp",
+    "path": "sd/qa/unit/data/odp/bulletCharAndFont.odp"
   },
   {
-    "id": "sd/closed-shapes.odp"
+    "id": "sd/closed-shapes.odp",
+    "path": "sd/qa/unit/data/odp/closed-shapes.odp"
   },
   {
-    "id": "sd/document_with_linked_graphic.odp"
+    "id": "sd/document_with_linked_graphic.odp",
+    "path": "sd/qa/unit/data/odp/document_with_linked_graphic.odp"
   },
   {
-    "id": "sd/dupmastermultlayouts.odp"
+    "id": "sd/dupmastermultlayouts.odp",
+    "path": "sd/qa/unit/data/odp/dupmastermultlayouts.odp"
   },
   {
-    "id": "sd/embedded-pdf.odp"
+    "id": "sd/embedded-pdf.odp",
+    "path": "sd/qa/unit/data/odp/embedded-pdf.odp"
   },
   {
-    "id": "sd/emptyChildTnLstElement.odp"
+    "id": "sd/emptyChildTnLstElement.odp",
+    "path": "sd/qa/unit/data/odp/emptyChildTnLstElement.odp"
   },
   {
-    "id": "sd/extfile_field.odp"
+    "id": "sd/extfile_field.odp",
+    "path": "sd/qa/unit/data/odp/extfile_field.odp"
   },
   {
-    "id": "sd/fillbitmap2.odp"
+    "id": "sd/fillbitmap2.odp",
+    "path": "sd/qa/unit/data/odp/fillbitmap2.odp"
   },
   {
-    "id": "sd/formula.fodp"
+    "id": "sd/formula.fodp",
+    "path": "sd/qa/unit/data/odp/formula.fodp"
   },
   {
-    "id": "sd/group_rotation.odp"
+    "id": "sd/group_rotation.odp",
+    "path": "sd/qa/unit/data/odp/group_rotation.odp"
   },
   {
-    "id": "sd/image_transparency.odp"
+    "id": "sd/image_transparency.odp",
+    "path": "sd/qa/unit/data/odp/image_transparency.odp"
   },
   {
-    "id": "sd/invalidAttributeValuesInSrcRect.odp"
+    "id": "sd/invalidAttributeValuesInSrcRect.odp",
+    "path": "sd/qa/unit/data/odp/invalidAttributeValuesInSrcRect.odp"
   },
   {
-    "id": "sd/invalidAudio.odp"
+    "id": "sd/invalidAudio.odp",
+    "path": "sd/qa/unit/data/odp/invalidAudio.odp"
   },
   {
-    "id": "sd/invalidBuAutoNumEnumValue.odp"
+    "id": "sd/invalidBuAutoNumEnumValue.odp",
+    "path": "sd/qa/unit/data/odp/invalidBuAutoNumEnumValue.odp"
   },
   {
-    "id": "sd/invalidCxAndCyAttribute.odp"
+    "id": "sd/invalidCxAndCyAttribute.odp",
+    "path": "sd/qa/unit/data/odp/invalidCxAndCyAttribute.odp"
   },
   {
-    "id": "sd/invalidXmlBy.odp"
+    "id": "sd/invalidXmlBy.odp",
+    "path": "sd/qa/unit/data/odp/invalidXmlBy.odp"
   },
   {
-    "id": "sd/linked_ole.odp"
+    "id": "sd/linked_ole.odp",
+    "path": "sd/qa/unit/data/odp/linked_ole.odp"
   },
   {
-    "id": "sd/loopNoPause.odp"
+    "id": "sd/loopNoPause.odp",
+    "path": "sd/qa/unit/data/odp/loopNoPause.odp"
   },
   {
-    "id": "sd/loopPause10.odp"
+    "id": "sd/loopPause10.odp",
+    "path": "sd/qa/unit/data/odp/loopPause10.odp"
   },
   {
-    "id": "sd/masterpage_style_parent.odp"
+    "id": "sd/masterpage_style_parent.odp",
+    "path": "sd/qa/unit/data/odp/masterpage_style_parent.odp"
   },
   {
-    "id": "sd/none-to-bullet.odp"
+    "id": "sd/none-to-bullet.odp",
+    "path": "sd/qa/unit/data/odp/none-to-bullet.odp"
   },
   {
-    "id": "sd/num-to-bullet.odp"
+    "id": "sd/num-to-bullet.odp",
+    "path": "sd/qa/unit/data/odp/num-to-bullet.odp"
   },
   {
-    "id": "sd/numfmt.odp"
+    "id": "sd/numfmt.odp",
+    "path": "sd/qa/unit/data/odp/numfmt.odp"
   },
   {
-    "id": "sd/page_transparent_background.odp"
+    "id": "sd/page_transparent_background.odp",
+    "path": "sd/qa/unit/data/odp/page_transparent_background.odp"
   },
   {
-    "id": "sd/para-align-start-end.fodp"
+    "id": "sd/para-align-start-end.fodp",
+    "path": "sd/qa/unit/data/odp/para-align-start-end.fodp"
   },
   {
-    "id": "sd/placeholder-box-textalignment.odp"
+    "id": "sd/placeholder-box-textalignment.odp",
+    "path": "sd/qa/unit/data/odp/placeholder-box-textalignment.odp"
   },
   {
-    "id": "sd/preset-shapes-export.odp"
+    "id": "sd/preset-shapes-export.odp",
+    "path": "sd/qa/unit/data/odp/preset-shapes-export.odp"
   },
   {
-    "id": "sd/repeatBitmapMode.odp"
+    "id": "sd/repeatBitmapMode.odp",
+    "path": "sd/qa/unit/data/odp/repeatBitmapMode.odp"
   },
   {
-    "id": "sd/rotate_flip.odp"
+    "id": "sd/rotate_flip.odp",
+    "path": "sd/qa/unit/data/odp/rotate_flip.odp"
   },
   {
-    "id": "sd/search-all-notes.odp"
+    "id": "sd/search-all-notes.odp",
+    "path": "sd/qa/unit/data/odp/search-all-notes.odp"
   },
   {
-    "id": "sd/shadow-blur.odp"
+    "id": "sd/shadow-blur.odp",
+    "path": "sd/qa/unit/data/odp/shadow-blur.odp"
   },
   {
-    "id": "sd/shape-text-glow-effect.odp"
+    "id": "sd/shape-text-glow-effect.odp",
+    "path": "sd/qa/unit/data/odp/shape-text-glow-effect.odp"
   },
   {
-    "id": "sd/slide-bitmap-background.odp"
+    "id": "sd/slide-bitmap-background.odp",
+    "path": "sd/qa/unit/data/odp/slide-bitmap-background.odp"
   },
   {
-    "id": "sd/slide-custom-background.odp"
+    "id": "sd/slide-custom-background.odp",
+    "path": "sd/qa/unit/data/odp/slide-custom-background.odp"
   },
   {
-    "id": "sd/slide-tile-background.odp"
+    "id": "sd/slide-tile-background.odp",
+    "path": "sd/qa/unit/data/odp/slide-tile-background.odp"
   },
   {
-    "id": "sd/slidecount_field.odp"
+    "id": "sd/slidecount_field.odp",
+    "path": "sd/qa/unit/data/odp/slidecount_field.odp"
   },
   {
-    "id": "sd/slidename_field.odp"
+    "id": "sd/slidename_field.odp",
+    "path": "sd/qa/unit/data/odp/slidename_field.odp"
   },
   {
-    "id": "sd/slidenum_field.odp"
+    "id": "sd/slidenum_field.odp",
+    "path": "sd/qa/unit/data/odp/slidenum_field.odp"
   },
   {
-    "id": "sd/style-overflow-behavior-clip.fodp"
+    "id": "sd/style-overflow-behavior-clip.fodp",
+    "path": "sd/qa/unit/data/odp/style-overflow-behavior-clip.fodp"
   },
   {
-    "id": "sd/svg-export-text-decorations.odp"
+    "id": "sd/svg-export-text-decorations.odp",
+    "path": "sd/qa/unit/data/odp/svg-export-text-decorations.odp"
   },
   {
-    "id": "sd/tdf100348_Fontwork2TextWarp.odp"
+    "id": "sd/tdf100348_Fontwork2TextWarp.odp",
+    "path": "sd/qa/unit/data/odp/tdf100348_Fontwork2TextWarp.odp"
   },
   {
-    "id": "sd/tdf100348_FontworkBitmapFill.odp"
+    "id": "sd/tdf100348_FontworkBitmapFill.odp",
+    "path": "sd/qa/unit/data/odp/tdf100348_FontworkBitmapFill.odp"
   },
   {
-    "id": "sd/tdf100348_FontworkGradientGlow.odp"
+    "id": "sd/tdf100348_FontworkGradientGlow.odp",
+    "path": "sd/qa/unit/data/odp/tdf100348_FontworkGradientGlow.odp"
   },
   {
-    "id": "sd/tdf100387.odp"
+    "id": "sd/tdf100387.odp",
+    "path": "sd/qa/unit/data/odp/tdf100387.odp"
   },
   {
-    "id": "sd/tdf103567.odp"
+    "id": "sd/tdf103567.odp",
+    "path": "sd/qa/unit/data/odp/tdf103567.odp"
   },
   {
-    "id": "sd/tdf105362.odp"
+    "id": "sd/tdf105362.odp",
+    "path": "sd/qa/unit/data/odp/tdf105362.odp"
   },
   {
-    "id": "sd/tdf105998.odp"
+    "id": "sd/tdf105998.odp",
+    "path": "sd/qa/unit/data/odp/tdf105998.odp"
   },
   {
-    "id": "sd/tdf106026.odp"
+    "id": "sd/tdf106026.odp",
+    "path": "sd/qa/unit/data/odp/tdf106026.odp"
   },
   {
-    "id": "sd/tdf108925.odp"
+    "id": "sd/tdf108925.odp",
+    "path": "sd/qa/unit/data/odp/tdf108925.odp"
   },
   {
-    "id": "sd/tdf109169_Diamond.odp"
+    "id": "sd/tdf109169_Diamond.odp",
+    "path": "sd/qa/unit/data/odp/tdf109169_Diamond.odp"
   },
   {
-    "id": "sd/tdf109169_Octagon.odp"
+    "id": "sd/tdf109169_Octagon.odp",
+    "path": "sd/qa/unit/data/odp/tdf109169_Octagon.odp"
   },
   {
-    "id": "sd/tdf111785.odp"
+    "id": "sd/tdf111785.odp",
+    "path": "sd/qa/unit/data/odp/tdf111785.odp"
   },
   {
-    "id": "sd/tdf111798.odp"
+    "id": "sd/tdf111798.odp",
+    "path": "sd/qa/unit/data/odp/tdf111798.odp"
   },
   {
-    "id": "sd/tdf112552.odp"
+    "id": "sd/tdf112552.odp",
+    "path": "sd/qa/unit/data/odp/tdf112552.odp"
   },
   {
-    "id": "sd/tdf112557.odp"
+    "id": "sd/tdf112557.odp",
+    "path": "sd/qa/unit/data/odp/tdf112557.odp"
   },
   {
-    "id": "sd/tdf112647.odp"
+    "id": "sd/tdf112647.odp",
+    "path": "sd/qa/unit/data/odp/tdf112647.odp"
   },
   {
-    "id": "sd/tdf116266.odp"
+    "id": "sd/tdf116266.odp",
+    "path": "sd/qa/unit/data/odp/tdf116266.odp"
   },
   {
-    "id": "sd/tdf118045.odp"
+    "id": "sd/tdf118045.odp",
+    "path": "sd/qa/unit/data/odp/tdf118045.odp"
   },
   {
-    "id": "sd/tdf118768-brake.odp"
+    "id": "sd/tdf118768-brake.odp",
+    "path": "sd/qa/unit/data/odp/tdf118768-brake.odp"
   },
   {
-    "id": "sd/tdf118783.odp"
+    "id": "sd/tdf118783.odp",
+    "path": "sd/qa/unit/data/odp/tdf118783.odp"
   },
   {
-    "id": "sd/tdf118806.odp"
+    "id": "sd/tdf118806.odp",
+    "path": "sd/qa/unit/data/odp/tdf118806.odp"
   },
   {
-    "id": "sd/tdf118825-motionpath.odp"
+    "id": "sd/tdf118825-motionpath.odp",
+    "path": "sd/qa/unit/data/odp/tdf118825-motionpath.odp"
   },
   {
-    "id": "sd/tdf118835.odp"
+    "id": "sd/tdf118835.odp",
+    "path": "sd/qa/unit/data/odp/tdf118835.odp"
   },
   {
-    "id": "sd/tdf118836.odp"
+    "id": "sd/tdf118836.odp",
+    "path": "sd/qa/unit/data/odp/tdf118836.odp"
   },
   {
-    "id": "sd/tdf123658_SearchAfterSlideChange.odp"
+    "id": "sd/tdf123658_SearchAfterSlideChange.odp",
+    "path": "sd/qa/unit/data/odp/tdf123658_SearchAfterSlideChange.odp"
   },
   {
-    "id": "sd/tdf124781.odp"
+    "id": "sd/tdf124781.odp",
+    "path": "sd/qa/unit/data/odp/tdf124781.odp"
   },
   {
-    "id": "sd/tdf127267DashOnHairline.odp"
+    "id": "sd/tdf127267DashOnHairline.odp",
+    "path": "sd/qa/unit/data/odp/tdf127267DashOnHairline.odp"
   },
   {
-    "id": "sd/tdf127372.odp"
+    "id": "sd/tdf127372.odp",
+    "path": "sd/qa/unit/data/odp/tdf127372.odp"
   },
   {
-    "id": "sd/tdf127379.odp"
+    "id": "sd/tdf127379.odp",
+    "path": "sd/qa/unit/data/odp/tdf127379.odp"
   },
   {
-    "id": "sd/tdf127901.odp"
+    "id": "sd/tdf127901.odp",
+    "path": "sd/qa/unit/data/odp/tdf127901.odp"
   },
   {
-    "id": "sd/tdf128049.odp"
+    "id": "sd/tdf128049.odp",
+    "path": "sd/qa/unit/data/odp/tdf128049.odp"
   },
   {
-    "id": "sd/tdf128096.odp"
+    "id": "sd/tdf128096.odp",
+    "path": "sd/qa/unit/data/odp/tdf128096.odp"
   },
   {
-    "id": "sd/tdf128345_FullTransparentGradient.odp"
+    "id": "sd/tdf128345_FullTransparentGradient.odp",
+    "path": "sd/qa/unit/data/odp/tdf128345_FullTransparentGradient.odp"
   },
   {
-    "id": "sd/tdf128345_GradientAxial.odp"
+    "id": "sd/tdf128345_GradientAxial.odp",
+    "path": "sd/qa/unit/data/odp/tdf128345_GradientAxial.odp"
   },
   {
-    "id": "sd/tdf128345_GradientLinear.odp"
+    "id": "sd/tdf128345_GradientLinear.odp",
+    "path": "sd/qa/unit/data/odp/tdf128345_GradientLinear.odp"
   },
   {
-    "id": "sd/tdf128345_GradientRadial.odp"
+    "id": "sd/tdf128345_GradientRadial.odp",
+    "path": "sd/qa/unit/data/odp/tdf128345_GradientRadial.odp"
   },
   {
-    "id": "sd/tdf128985.odp"
+    "id": "sd/tdf128985.odp",
+    "path": "sd/qa/unit/data/odp/tdf128985.odp"
   },
   {
-    "id": "sd/tdf129430.odp"
+    "id": "sd/tdf129430.odp",
+    "path": "sd/qa/unit/data/odp/tdf129430.odp"
   },
   {
-    "id": "sd/tdf133502.odp"
+    "id": "sd/tdf133502.odp",
+    "path": "sd/qa/unit/data/odp/tdf133502.odp"
   },
   {
-    "id": "sd/tdf134969_TransparencyOnColorGradient.odp"
+    "id": "sd/tdf134969_TransparencyOnColorGradient.odp",
+    "path": "sd/qa/unit/data/odp/tdf134969_TransparencyOnColorGradient.odp"
   },
   {
-    "id": "sd/tdf143603.fodp"
+    "id": "sd/tdf143603.fodp",
+    "path": "sd/qa/unit/data/odp/tdf143603.fodp"
   },
   {
-    "id": "sd/tdf146876.odp"
+    "id": "sd/tdf146876.odp",
+    "path": "sd/qa/unit/data/odp/tdf146876.odp"
   },
   {
-    "id": "sd/tdf147919.odp"
+    "id": "sd/tdf147919.odp",
+    "path": "sd/qa/unit/data/odp/tdf147919.odp"
   },
   {
-    "id": "sd/tdf147978_enhancedPath_viewBox.odp"
+    "id": "sd/tdf147978_enhancedPath_viewBox.odp",
+    "path": "sd/qa/unit/data/odp/tdf147978_enhancedPath_viewBox.odp"
   },
   {
-    "id": "sd/tdf148966-withflag.odp"
+    "id": "sd/tdf148966-withflag.odp",
+    "path": "sd/qa/unit/data/odp/tdf148966-withflag.odp"
   },
   {
-    "id": "sd/tdf148966-withoutflag.odp"
+    "id": "sd/tdf148966-withoutflag.odp",
+    "path": "sd/qa/unit/data/odp/tdf148966-withoutflag.odp"
   },
   {
-    "id": "sd/tdf149126.odp"
+    "id": "sd/tdf149126.odp",
+    "path": "sd/qa/unit/data/odp/tdf149126.odp"
   },
   {
-    "id": "sd/tdf149128.odp"
+    "id": "sd/tdf149128.odp",
+    "path": "sd/qa/unit/data/odp/tdf149128.odp"
   },
   {
-    "id": "sd/tdf149311.odp"
+    "id": "sd/tdf149311.odp",
+    "path": "sd/qa/unit/data/odp/tdf149311.odp"
   },
   {
-    "id": "sd/tdf149551_btlr.odp"
+    "id": "sd/tdf149551_btlr.odp",
+    "path": "sd/qa/unit/data/odp/tdf149551_btlr.odp"
   },
   {
-    "id": "sd/tdf149551_tbrl90.odp"
+    "id": "sd/tdf149551_tbrl90.odp",
+    "path": "sd/qa/unit/data/odp/tdf149551_tbrl90.odp"
   },
   {
-    "id": "sd/tdf150316.odp"
+    "id": "sd/tdf150316.odp",
+    "path": "sd/qa/unit/data/odp/tdf150316.odp"
   },
   {
-    "id": "sd/tdf150966_hugeInset.odp"
+    "id": "sd/tdf150966_hugeInset.odp",
+    "path": "sd/qa/unit/data/odp/tdf150966_hugeInset.odp"
   },
   {
-    "id": "sd/tdf151492.odp"
+    "id": "sd/tdf151492.odp",
+    "path": "sd/qa/unit/data/odp/tdf151492.odp"
   },
   {
-    "id": "sd/tdf153105.odp"
+    "id": "sd/tdf153105.odp",
+    "path": "sd/qa/unit/data/odp/tdf153105.odp"
   },
   {
-    "id": "sd/tdf153107.odp"
+    "id": "sd/tdf153107.odp",
+    "path": "sd/qa/unit/data/odp/tdf153107.odp"
   },
   {
-    "id": "sd/tdf153161_FlushToSave.odp"
+    "id": "sd/tdf153161_FlushToSave.odp",
+    "path": "sd/qa/unit/data/odp/tdf153161_FlushToSave.odp"
   },
   {
-    "id": "sd/tdf156955.odp"
+    "id": "sd/tdf156955.odp",
+    "path": "sd/qa/unit/data/odp/tdf156955.odp"
   },
   {
-    "id": "sd/tdf157652.odp"
+    "id": "sd/tdf157652.odp",
+    "path": "sd/qa/unit/data/odp/tdf157652.odp"
   },
   {
-    "id": "sd/tdf157795.odp"
+    "id": "sd/tdf157795.odp",
+    "path": "sd/qa/unit/data/odp/tdf157795.odp"
   },
   {
-    "id": "sd/tdf158743.odp"
+    "id": "sd/tdf158743.odp",
+    "path": "sd/qa/unit/data/odp/tdf158743.odp"
   },
   {
-    "id": "sd/tdf161023.fodp"
+    "id": "sd/tdf161023.fodp",
+    "path": "sd/qa/unit/data/odp/tdf161023.fodp"
   },
   {
-    "id": "sd/tdf161430.odp"
+    "id": "sd/tdf161430.odp",
+    "path": "sd/qa/unit/data/odp/tdf161430.odp"
   },
   {
-    "id": "sd/tdf163343.odp"
+    "id": "sd/tdf163343.odp",
+    "path": "sd/qa/unit/data/odp/tdf163343.odp"
   },
   {
-    "id": "sd/tdf164775.odp"
+    "id": "sd/tdf164775.odp",
+    "path": "sd/qa/unit/data/odp/tdf164775.odp"
   },
   {
-    "id": "sd/tdf166647_userpaint.odp"
+    "id": "sd/tdf166647_userpaint.odp",
+    "path": "sd/qa/unit/data/odp/tdf166647_userpaint.odp"
   },
   {
-    "id": "sd/tdf168109.fodp"
+    "id": "sd/tdf168109.fodp",
+    "path": "sd/qa/unit/data/odp/tdf168109.fodp"
   },
   {
-    "id": "sd/tdf169524.odp"
+    "id": "sd/tdf169524.odp",
+    "path": "sd/qa/unit/data/odp/tdf169524.odp"
   },
   {
-    "id": "sd/tdf169675_3d_object_anim.odp"
+    "id": "sd/tdf169675_3d_object_anim.odp",
+    "path": "sd/qa/unit/data/odp/tdf169675_3d_object_anim.odp"
   },
   {
-    "id": "sd/tdf169706_invalid_audio_link.odp"
+    "id": "sd/tdf169706_invalid_audio_link.odp",
+    "path": "sd/qa/unit/data/odp/tdf169706_invalid_audio_link.odp"
   },
   {
-    "id": "sd/tdf169825_layout_type.odp"
+    "id": "sd/tdf169825_layout_type.odp",
+    "path": "sd/qa/unit/data/odp/tdf169825_layout_type.odp"
   },
   {
-    "id": "sd/tdf169911.odp"
+    "id": "sd/tdf169911.odp",
+    "path": "sd/qa/unit/data/odp/tdf169911.odp"
   },
   {
-    "id": "sd/tdf169941.odp"
+    "id": "sd/tdf169941.odp",
+    "path": "sd/qa/unit/data/odp/tdf169941.odp"
   },
   {
-    "id": "sd/tdf169952_multiple_OLEs.odp"
+    "id": "sd/tdf169952_multiple_OLEs.odp",
+    "path": "sd/qa/unit/data/odp/tdf169952_multiple_OLEs.odp"
   },
   {
-    "id": "sd/tdf169979.odp"
+    "id": "sd/tdf169979.odp",
+    "path": "sd/qa/unit/data/odp/tdf169979.odp"
   },
   {
-    "id": "sd/tdf170102_layout_type.odp"
+    "id": "sd/tdf170102_layout_type.odp",
+    "path": "sd/qa/unit/data/odp/tdf170102_layout_type.odp"
   },
   {
-    "id": "sd/tdf170166.odp"
+    "id": "sd/tdf170166.odp",
+    "path": "sd/qa/unit/data/odp/tdf170166.odp"
   },
   {
-    "id": "sd/tdf48735.odp"
+    "id": "sd/tdf48735.odp",
+    "path": "sd/qa/unit/data/odp/tdf48735.odp"
   },
   {
-    "id": "sd/tdf53970_linked.odp"
+    "id": "sd/tdf53970_linked.odp",
+    "path": "sd/qa/unit/data/odp/tdf53970_linked.odp"
   },
   {
-    "id": "sd/tdf59046.odp"
+    "id": "sd/tdf59046.odp",
+    "path": "sd/qa/unit/data/odp/tdf59046.odp"
   },
   {
-    "id": "sd/tdf66228.odp"
+    "id": "sd/tdf66228.odp",
+    "path": "sd/qa/unit/data/odp/tdf66228.odp"
   },
   {
-    "id": "sd/tdf68759.odp"
+    "id": "sd/tdf68759.odp",
+    "path": "sd/qa/unit/data/odp/tdf68759.odp"
   },
   {
-    "id": "sd/tdf74670.odp"
+    "id": "sd/tdf74670.odp",
+    "path": "sd/qa/unit/data/odp/tdf74670.odp"
   },
   {
-    "id": "sd/tdf80020.odp"
+    "id": "sd/tdf80020.odp",
+    "path": "sd/qa/unit/data/odp/tdf80020.odp"
   },
   {
-    "id": "sd/tdf80224.odp"
+    "id": "sd/tdf80224.odp",
+    "path": "sd/qa/unit/data/odp/tdf80224.odp"
   },
   {
-    "id": "sd/tdf90626.odp"
+    "id": "sd/tdf90626.odp",
+    "path": "sd/qa/unit/data/odp/tdf90626.odp"
   },
   {
-    "id": "sd/tdf90627.odp"
+    "id": "sd/tdf90627.odp",
+    "path": "sd/qa/unit/data/odp/tdf90627.odp"
   },
   {
-    "id": "sd/tdf92076.odp"
+    "id": "sd/tdf92076.odp",
+    "path": "sd/qa/unit/data/odp/tdf92076.odp"
   },
   {
-    "id": "sd/tdf93883.odp"
+    "id": "sd/tdf93883.odp",
+    "path": "sd/qa/unit/data/odp/tdf93883.odp"
   },
   {
-    "id": "sd/tdf94122_autocolor.odp"
+    "id": "sd/tdf94122_autocolor.odp",
+    "path": "sd/qa/unit/data/odp/tdf94122_autocolor.odp"
   },
   {
-    "id": "sd/tdf96206.odp"
+    "id": "sd/tdf96206.odp",
+    "path": "sd/qa/unit/data/odp/tdf96206.odp"
   },
   {
-    "id": "sd/tdf96708.odp"
+    "id": "sd/tdf96708.odp",
+    "path": "sd/qa/unit/data/odp/tdf96708.odp"
   },
   {
-    "id": "sd/tdf99213-target-missing.odp"
+    "id": "sd/tdf99213-target-missing.odp",
+    "path": "sd/qa/unit/data/odp/tdf99213-target-missing.odp"
   },
   {
-    "id": "sd/tdf99224.odp"
+    "id": "sd/tdf99224.odp",
+    "path": "sd/qa/unit/data/odp/tdf99224.odp"
   },
   {
-    "id": "sd/tdf99497_CircleKind.odp"
+    "id": "sd/tdf99497_CircleKind.odp",
+    "path": "sd/qa/unit/data/odp/tdf99497_CircleKind.odp"
   },
   {
-    "id": "sd/tdf99729-legacy.odp"
+    "id": "sd/tdf99729-legacy.odp",
+    "path": "sd/qa/unit/data/odp/tdf99729-legacy.odp"
   },
   {
-    "id": "sd/tdf99729-new.odp"
+    "id": "sd/tdf99729-new.odp",
+    "path": "sd/qa/unit/data/odp/tdf99729-new.odp"
   },
   {
-    "id": "sd-data/AllTransitions.odp"
+    "id": "sd-data/AllTransitions.odp",
+    "path": "sd/qa/unit/data/AllTransitions.odp"
   },
   {
-    "id": "sd-data/TestEmbeddedFonts_DejaVu.odp"
+    "id": "sd-data/TestEmbeddedFonts_DejaVu.odp",
+    "path": "sd/qa/unit/data/TestEmbeddedFonts_DejaVu.odp"
   },
   {
-    "id": "sd-data/TextFitting.odp"
+    "id": "sd-data/TextFitting.odp",
+    "path": "sd/qa/unit/data/TextFitting.odp"
   },
   {
-    "id": "sd-data/TextFittingBulletEditVsView.odp"
+    "id": "sd-data/TextFittingBulletEditVsView.odp",
+    "path": "sd/qa/unit/data/TextFittingBulletEditVsView.odp"
   },
   {
-    "id": "sd-data/bnc822347_EmptyBullet.odp"
+    "id": "sd-data/bnc822347_EmptyBullet.odp",
+    "path": "sd/qa/unit/data/bnc822347_EmptyBullet.odp"
   },
   {
-    "id": "sd-data/draw-image-link.fodp"
+    "id": "sd-data/draw-image-link.fodp",
+    "path": "sd/qa/unit/data/draw-image-link.fodp"
   },
   {
-    "id": "sd-data/draw-object-link.fodp"
+    "id": "sd-data/draw-object-link.fodp",
+    "path": "sd/qa/unit/data/draw-object-link.fodp"
   },
   {
-    "id": "sd-data/empty.fodp"
+    "id": "sd-data/empty.fodp",
+    "path": "sd/qa/unit/data/empty.fodp"
   },
   {
-    "id": "sd-data/fdo64512.odp"
+    "id": "sd-data/fdo64512.odp",
+    "path": "sd/qa/unit/data/fdo64512.odp"
   },
   {
-    "id": "sd-data/fdo71075.odp"
+    "id": "sd-data/fdo71075.odp",
+    "path": "sd/qa/unit/data/fdo71075.odp"
   },
   {
-    "id": "sd-data/fdo71961.odp"
+    "id": "sd-data/fdo71961.odp",
+    "path": "sd/qa/unit/data/fdo71961.odp"
   },
   {
-    "id": "sd-data/fdo84043.odp"
+    "id": "sd-data/fdo84043.odp",
+    "path": "sd/qa/unit/data/fdo84043.odp"
   },
   {
-    "id": "sd-data/fit-to-size.fodp"
+    "id": "sd-data/fit-to-size.fodp",
+    "path": "sd/qa/unit/data/fit-to-size.fodp"
   },
   {
-    "id": "sd-data/linked_ole.fodp"
+    "id": "sd-data/linked_ole.fodp",
+    "path": "sd/qa/unit/data/linked_ole.fodp"
   },
   {
-    "id": "sd-data/n828390_4.odp"
+    "id": "sd-data/n828390_4.odp",
+    "path": "sd/qa/unit/data/n828390_4.odp"
   },
   {
-    "id": "sd-data/n828390_5.odp"
+    "id": "sd-data/n828390_5.odp",
+    "path": "sd/qa/unit/data/n828390_5.odp"
   },
   {
-    "id": "sd-data/slide_with_text.odp"
+    "id": "sd-data/slide_with_text.odp",
+    "path": "sd/qa/unit/data/slide_with_text.odp"
   },
   {
-    "id": "sd-data/tdf111522.odp"
+    "id": "sd-data/tdf111522.odp",
+    "path": "sd/qa/unit/data/tdf111522.odp"
   },
   {
-    "id": "sd-data/tdf126197.odp"
+    "id": "sd-data/tdf126197.odp",
+    "path": "sd/qa/unit/data/tdf126197.odp"
   },
   {
-    "id": "sd-data/tdf128651_CustomShapeUndo.odp"
+    "id": "sd-data/tdf128651_CustomShapeUndo.odp",
+    "path": "sd/qa/unit/data/tdf128651_CustomShapeUndo.odp"
   }
 ]

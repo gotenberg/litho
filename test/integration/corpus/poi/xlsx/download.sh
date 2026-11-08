@@ -3,7 +3,7 @@
 # corpus.
 #
 # The corpus downloads nothing here. Its fixtures are the documents `make
-# office-fetch SOURCES=poi FORMATS=xlsx` puts in the testdata, and the PDFs it
+# corpus-fetch CORPUS_NAME=poi/xlsx` puts in the testdata, and the PDFs it
 # provisions are their LibreOffice references, which `make office-references
 # SOURCES=poi FORMATS=xlsx` builds into the testdata's references/ directory with
 # the Gotenberg image versions.env pins. They are read from the testdata

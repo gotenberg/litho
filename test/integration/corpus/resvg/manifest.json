@@ -1,12 +1,27 @@
 {
   "name": "resvg",
   "source": "resvg",
-  "provisioned_by": "make resvg-fetch",
+  "provisioned_by": "make corpus-fetch CORPUS_NAME=resvg",
   "inputs": {
     "list": "tests.json"
   },
   "goldens_in_source": true,
   "goldens": {
     "svgdraw": "."
+  },
+  "fetch": {
+    "github": "linebender/resvg",
+    "pin": "RESVG_COMMIT",
+    "map": [
+      {
+        "prefix": "crates/resvg/tests/tests/",
+        "to": ""
+      },
+      {
+        "prefix": "crates/resvg/tests/fonts/",
+        "to": "resvg/",
+        "fonts": true
+      }
+    ]
   }
 }

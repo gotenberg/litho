@@ -36,7 +36,7 @@ const reftestDPI = 96
 
 // reftestFontsTarget is the make target that fetches what the reftest
 // feature reads.
-const reftestFontsTarget = "make wpt-fetch"
+const reftestFontsTarget = "make corpus-fetch CORPUS_NAME=wpt"
 
 // metricConvertError counts, in a converter cell, the fixtures litho failed
 // to convert or to read back: an error before there was anything to compare.
@@ -44,7 +44,7 @@ const reftestFontsTarget = "make wpt-fetch"
 const metricConvertError = "convert_error"
 
 // reftestEntry is one test of corpus/wpt/reftests.json, written by
-// corpus/wpt/list-candidates.py.
+// `corpus select --corpus=wpt` (select_tests.go).
 type reftestEntry struct {
 	ID        string       `json:"id"`
 	Print     bool         `json:"print"`
@@ -100,7 +100,7 @@ func (r reftestRef) rule() pixelRule {
 // a regression whatever the cell's count does.
 //
 // Each document is converted with the file system rooted at its own
-// directory, the one its relative URLs resolve in (list-candidates.py keeps
+// directory, the one its relative URLs resolve in (the selector keeps
 // only tests whose resources lie under it), and with the fixture fonts plus
 // Ahem, the font most reftests draw with.
 type reftestFeature struct {

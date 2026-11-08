@@ -52,7 +52,7 @@ func main() {
 	}
 }
 
-// fixtureFamilies are the prefixes of the font directories fetch-fonts.sh
+// fixtureFamilies are the prefixes of the font directories `corpus fetch --corpus=fonts`
 // installs. The fonts directory also holds the test fonts other corpora draw
 // with (Ahem, the WeasyPrint test font), which must not take part in the
 // litho/text fixtures' font matching, so only these subdirectories are read.
@@ -92,7 +92,7 @@ func run(ctx context.Context, sourcesDir, outDir, fontsDir string) error {
 	return nil
 }
 
-// familyDirs returns the subdirectories of dir that fetch-fonts.sh installs,
+// familyDirs returns the subdirectories of dir that `corpus fetch --corpus=fonts` installs,
 // sorted, failing when one family is missing.
 func familyDirs(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)

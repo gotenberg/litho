@@ -52,6 +52,10 @@ func dispatch(ctx context.Context, cmd string, args []string) int {
 	switch cmd {
 	case "init":
 		return runInit(args)
+	case "fetch":
+		return runFetch(ctx, args)
+	case "select":
+		return runSelect(ctx, args)
 	case "run":
 		return runRun(ctx, args)
 	case "baseline":
@@ -80,9 +84,11 @@ func dispatch(ctx context.Context, cmd string, args []string) int {
 // the real text instead of a rebuilt copy of it. See
 // [TestUsageNamesEveryDispatchableSubcommand].
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: corpus <init|run|baseline|check|scan-claims|versions|tools> [flags]")
+	fmt.Fprintln(w, "Usage: corpus <fetch|select|init|run|baseline|check|scan-claims|versions|tools> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
+	fmt.Fprintln(w, "  fetch         Download the fixture fonts and the files of the host-fetched corpora (--corpus=poi,wpt; --jobs=N)")
+	fmt.Fprintln(w, "  select        Write a corpus's lists from a checkout of its source (--corpus=poi/docx --checkout=DIR)")
 	fmt.Fprintln(w, "  init          Provision corpora via Docker (downloads PDFs and goldens)")
 	fmt.Fprintln(w, "  run           Compare litho against golden references across the matrix")
 	fmt.Fprintln(w, "  baseline      Run the matrix and write the per-cell match counts to a baseline file")

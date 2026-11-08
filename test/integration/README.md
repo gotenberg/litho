@@ -25,13 +25,9 @@ test/integration/
 │   │   ├── run-verapdf.sh      veraPDF per-profile runner (shared)
 │   │   ├── run-mustang.sh      Mustang Factur-X validity runner (shared)
 │   │   ├── run-kosit.sh        KoSIT Schematron runner (shared)
-│   │   ├── fetch-fonts.sh      Downloads the pinned fixture fonts, hash-checked
 │   │   ├── chromium.sh         Builds an html corpus's Chromium references (make html-references)
 │   │   ├── libreoffice.sh      Builds an Office corpus's LibreOffice references on the host (make office-references)
-│   │   ├── install-references.sh  Installs those references as the corpus PDFs (each Office download.sh)
-│   │   ├── office_qualify.py   Decides which Office documents a selector keeps (every list-candidates.py)
-│   │   ├── fetch-github.sh     Downloads a corpus's documents from GitHub at a pin (poi, openxmlsdk)
-│   │   └── remote_zip.py       Reads single entries of remote zip archives (govdocs)
+│   │   └── install-references.sh  Installs those references as the corpus PDFs (each Office download.sh)
 │   ├── pdfjs/
 │   │   ├── download.sh
 │   │   ├── flatten-scope.json  Widens the flatten cell to the whole corpus
@@ -40,8 +36,6 @@ test/integration/
 │   │   ├── download.sh
 │   │   └── manifest.json
 │   ├── govdocs/                Govdocs1 (US government documents), fetched from five pinned threads
-│   │   ├── list-candidates.py  Samples the Office documents of the threads
-│   │   ├── fetch.sh            Reads them out of the archives, hash-checked (make office-fetch SOURCES=govdocs)
 │   │   ├── FIXTURES.md         The four corpora and how the Office documents were chosen
 │   │   ├── doc/, xls/, ppt/    As libreoffice/docx: manifest.json, documents.json, files.sha256, download.sh
 │   │   └── pdf/
@@ -84,15 +78,11 @@ test/integration/
 │   │   ├── manifest.json
 │   │   ├── reftests.json       The 569 tests, their references and fuzziness
 │   │   ├── files.sha256        Every file they read, by WPT path and SHA-256
-│   │   ├── list-candidates.py  Selects the tests from a WPT checkout
-│   │   ├── fetch.sh            Downloads and hash-checks the files (make wpt-fetch)
 │   │   └── FIXTURES.md         How the tests were chosen
 │   ├── resvg/                  resvg SVG tests (host-provisioned, no Docker)
 │   │   ├── manifest.json
 │   │   ├── tests.json          The 246 tests, their reference PNGs and sizes
 │   │   ├── files.sha256        Every file they read, by resvg path and SHA-256
-│   │   ├── list-candidates.py  Selects the tests from a resvg checkout
-│   │   ├── fetch.sh            Downloads and hash-checks the files (make resvg-fetch)
 │   │   └── FIXTURES.md         How the tests were chosen
 │   ├── weasyprint/             WeasyPrint draw tests (host-provisioned, no Docker)
 │   │   ├── manifest.json
@@ -111,18 +101,12 @@ test/integration/
 │   │       ├── pdfs/*.pdf      litho's PDFs (make office-fixtures)
 │   │       └── FIXTURES.md     Per-source origin and options
 │   ├── poi/                    Apache POI's test documents, fetched (never committed)
-│   │   ├── list-candidates.py  Selects them from a POI checkout
-│   │   ├── fetch.sh            Downloads and hash-checks them (make office-fetch SOURCES=poi)
 │   │   ├── FIXTURES.md         The corpora and how the documents were chosen
 │   │   └── docx/, xlsx/, pptx/, doc/, xls/, ppt/  As libreoffice/docx
 │   ├── openxmlsdk/             The Open XML SDK's test documents, fetched (never committed)
-│   │   ├── list-candidates.py  Selects them from an SDK checkout
-│   │   ├── fetch.sh            Downloads and hash-checks them (make office-fetch SOURCES=openxmlsdk)
 │   │   ├── FIXTURES.md         The corpora and how the documents were chosen
 │   │   └── docx/, xlsx/, pptx/ As libreoffice/docx
 │   └── libreoffice/            LibreOffice core's test documents, fetched (never committed)
-│       ├── list-candidates.py  Selects them from a LibreOffice core checkout
-│       ├── fetch.sh            Downloads and hash-checks them (make office-fetch SOURCES=libreoffice)
 │       └── docx/, odt/, xlsx/, ods/, csv/, pptx/, odp/
 │           ├── download.sh     Installs the host-built references from the testdata volume
 │           ├── manifest.json
@@ -147,7 +131,7 @@ test/integration/
 │       ├── metadata/<fixture>.json
 │       ├── images/<fixture>.json
 │       └── compliance/<profile>.json
-└── cmd/corpus/                 CLI (init, run, baseline, check, scan-claims, versions, tools)
+└── cmd/corpus/                 CLI (fetch, select, init, run, baseline, check, scan-claims, versions, tools)
 ```
 
 ## Running
@@ -171,13 +155,12 @@ make corpus-init CORPUS_NAME=verapdf
 make corpus-tools
 
 # Provision the converter corpora the host provisions (corpus-init skips them).
-make wpt-fetch                                                                     # WPT files and Ahem, hash-checked
-make resvg-fetch                                                                   # resvg tests and their Noto fonts, hash-checked
+make corpus-fetch                                                                  # the fixture fonts and every host-fetched corpus, hash-checked, in parallel (CORPUS_NAME=wpt,poi or =fonts for some; CORPUS_JOBS)
+make corpus-select CORPUS_NAME=poi/docx CHECKOUT=../poi                            # rewrite one corpus's lists from a checkout of its source at its pin
 make weasyprint-fixtures                                                           # re-extract the committed WeasyPrint fixtures, fetch the test font
 make html-fixtures                                                                 # fixture fonts, then litho's PDFs of litho/html and gotenberg/html
 make html-references                                                               # rebuild their committed Chromium references (Docker; NAMES="a b" for some)
-make office-fetch                                                                  # the documents of the libreoffice, poi, openxmlsdk and govdocs Office corpora, hash-checked (SOURCES, FORMATS for some)
-make office-references                                                             # their LibreOffice references and the gotenberg corpora's, into the testdata (Docker; SOURCES, FORMATS, NAMES)
+make office-references                                                             # the LibreOffice references of the Office corpora, into the testdata (Docker; SOURCES, FORMATS, NAMES)
 make office-fixtures                                                               # litho's PDFs of the gotenberg Office sources (FORMATS)
 go run ./test/integration/cmd/corpus init --corpus=libreoffice/docx,gotenberg/docx # the diff goldens of the references
 
@@ -205,7 +188,7 @@ make corpus-check
 
 ## Tool versions
 
-`corpus/versions.env` pins every tool and corpus source provisioning uses, one commented `KEY=VALUE` per line: veraPDF (the `verapdf/cli` image tag and the digest of the one build the goldens came from), Node (the `node` base image, by digest), the Temurin JRE veraPDF, Mustang and KoSIT run on, the PDF.js commit the image builds, pdfcpu (with the SHA-256 of its Linux archive for each architecture the image builds for, amd64 and arm64), Mustang, KoSIT with its XRechnung bundle and EN 16931 XSLT, poppler (the release, the SHA-256 of its tarball, and the Debian base image it builds on, by digest), and the revision of each downloaded corpus (a commit SHA or a tag, never a branch; govdocs by its fixed thread list). A last group pins the tools the host runs for live checks, fixture builds, the outline goldens and the ICC transform goldens (qpdf, pikepdf, fontTools, Pillow), which the image does not install, and the Liberation and DejaVu font archives the litho/text fixtures are converted with, each by URL and SHA-256; the host's poppler `pdfsig` is checked against the poppler pin the image builds. The converter corpora add five host pins: the web-platform-tests commit (`WPT_COMMIT`), the resvg commit (`RESVG_COMMIT`), the WeasyPrint release with the SHA-256 of its source tarball and of its test font (`WEASYPRINT_VERSION`, `WEASYPRINT_SHA256`, `WEASYPRINT_FONT_SHA256`), the Gotenberg image the Chromium and LibreOffice references come from (`GOTENBERG_IMAGE`), and the LibreOffice core commit the Office corpora's test documents come from (`LIBREOFFICE_CORE_COMMIT`), the commit of the release the image runs; the fixture fonts gain Carlito and Caladea (`CARLITO_FONTS_*`, `CALADEA_FONTS_*`), the faces the image draws Calibri and Cambria with, and Noto Sans (`NOTO_SANS_CORE_*`), the face it draws a family it lacks with. An Office reference's own `manifest.json` records the image, the commit and the SHA-256 of its source and options, and the `diff` cell refuses a reference that disagrees with the pins or the sources. `wpt/fetch.sh` records `WPT_COMMIT` in `testdata/wpt/versions.json`, so the wpt cell refuses files fetched at another commit as the image-provisioned cells do; `svg/fetch.sh` records `RESVG_COMMIT` in `testdata/svg/versions.json` likewise.
+`corpus/versions.env` pins every tool and corpus source provisioning uses, one commented `KEY=VALUE` per line: veraPDF (the `verapdf/cli` image tag and the digest of the one build the goldens came from), Node (the `node` base image, by digest), the Temurin JRE veraPDF, Mustang and KoSIT run on, the PDF.js commit the image builds, pdfcpu (with the SHA-256 of its Linux archive for each architecture the image builds for, amd64 and arm64), Mustang, KoSIT with its XRechnung bundle and EN 16931 XSLT, poppler (the release, the SHA-256 of its tarball, and the Debian base image it builds on, by digest), and the revision of each downloaded corpus (a commit SHA or a tag, never a branch; govdocs by its fixed thread list). A last group pins the tools the host runs for live checks, fixture builds, the outline goldens and the ICC transform goldens (qpdf, pikepdf, fontTools, Pillow), which the image does not install, and the Liberation and DejaVu font archives the litho/text fixtures are converted with, each by URL and SHA-256; the host's poppler `pdfsig` is checked against the poppler pin the image builds. The converter corpora add five host pins: the web-platform-tests commit (`WPT_COMMIT`), the resvg commit (`RESVG_COMMIT`), the WeasyPrint release with the SHA-256 of its source tarball and of its test font (`WEASYPRINT_VERSION`, `WEASYPRINT_SHA256`, `WEASYPRINT_FONT_SHA256`), the Gotenberg image the Chromium and LibreOffice references come from (`GOTENBERG_IMAGE`), and the LibreOffice core commit the Office corpora's test documents come from (`LIBREOFFICE_CORE_COMMIT`), the commit of the release the image runs; the fixture fonts gain Carlito and Caladea (`CARLITO_FONTS_*`, `CALADEA_FONTS_*`), the faces the image draws Calibri and Cambria with, and Noto Sans (`NOTO_SANS_CORE_*`), the face it draws a family it lacks with. An Office reference's own `manifest.json` records the image, the commit and the SHA-256 of its source and options, and the `diff` cell refuses a reference that disagrees with the pins or the sources. `corpus fetch` records `WPT_COMMIT` in `testdata/wpt/versions.json`, so the wpt cell refuses files fetched at another commit as the image-provisioned cells do; `corpus fetch` records `RESVG_COMMIT` in `testdata/resvg/versions.json` likewise.
 
 `corpus init` passes every entry to `docker build` as a `--build-arg`. The Dockerfile carries no default of its own, so a bare `docker build` fails rather than drifting; build by hand with the arguments `corpus versions` prints:
 
@@ -260,47 +243,47 @@ Each feature, its oracle and its comparison rules are in [FEATURES.md](FEATURES.
 
 ## Corpora
 
-| Corpus             | Fixtures                                | Source                                                                                                                                                                                  |
-| ------------------ | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pdfjs`            | ~1,200 PDFs (1 fixture each)            | Mozilla's PDF.js test suite                                                                                                                                                             |
-| `verapdf`          | ~2,600 PDFs × 15 profiles               | veraPDF corpus, flattened from the per-profile directories                                                                                                                              |
-| `govdocs/pdf`      | ~1,100 PDFs (1 fixture per claim)       | Govdocs1 random-sample of five fixed thread archives (real-world PDFs)                                                                                                                  |
-| `pdf20`            | 7 PDFs (1 fixture per claim)            | PDF Association's `pdf20examples` (CC-BY-SA-4.0 PDF 2.0 samples)                                                                                                                        |
-| `pdfcpu`           | ~50 PDFs (1 fixture each)               | pdfcpu's `pkg/samples/bookmarks` + `pkg/testdata` (Apache-2.0)                                                                                                                          |
-| `facturx`          | ~150 PDFs (1 fixture per claim)         | ZUGFeRD/corpus (Apache-2.0): real, sample and intentionally-broken Factur-X / ZUGFeRD invoices, flattened from the `ZUGFeRDv2`, `XML-Rechnung` and `ZUGFeRDv1` subtrees                 |
-| `litho/pdf`        | 215 PDFs × 13 profiles (2,795 cells)    | Self-authored, committed in-tree; see `corpus/litho/pdf/README.md`                                                                                                                      |
-| `litho/text`       | 8 PDFs × 2 profiles (16 cells)          | Converted by litho from committed self-authored text sources; see `corpus/litho/text/FIXTURES.md`                                                                                       |
-| `litho/html`       | 30 HTML and Markdown sources            | Self-authored pages, with Chromium's PDFs; see `corpus/litho/html/FIXTURES.md`                                                                                                          |
-| `wpt`              | 569 HTML reftests                       | web-platform-tests (BSD-3) at a pinned commit, fetched by `make wpt-fetch`; see `corpus/wpt/FIXTURES.md`                                                                                |
-| `weasyprint`       | 315 HTML draw tests                     | WeasyPrint's `tests/draw` (BSD-3), extracted and committed; see `corpus/weasyprint/FIXTURES.md`                                                                                         |
-| `resvg`            | 246 SVG tests                           | resvg's `crates/resvg/tests` (MIT) at a pinned commit, fetched by `make resvg-fetch`; see `corpus/resvg/FIXTURES.md`                                                                    |
-| `gotenberg/html`   | 7 HTML and Markdown sources             | Gotenberg's web test corpus (MIT, committed), with Chromium's PDFs; see `corpus/gotenberg/html/FIXTURES.md`                                                                             |
-| `gotenberg/docx`   | 10 DOCX documents                       | Gotenberg's Office test documents (MIT, committed), against LibreOffice's PDFs; see `corpus/gotenberg/docx/FIXTURES.md`                                                                 |
-| `gotenberg/odt`    | 4 ODT and flat ODT documents            | As `gotenberg/docx`                                                                                                                                                                     |
-| `gotenberg/xlsx`   | 5 XLSX workbooks                        | As `gotenberg/docx`                                                                                                                                                                     |
-| `gotenberg/ods`    | 2 ODS and flat ODS spreadsheets         | As `gotenberg/docx`                                                                                                                                                                     |
-| `gotenberg/csv`    | 2 CSV files                             | As `gotenberg/docx`                                                                                                                                                                     |
-| `gotenberg/pptx`   | 4 PPTX presentations                    | As `gotenberg/docx`                                                                                                                                                                     |
-| `gotenberg/odp`    | 2 ODP and flat ODP presentations        | As `gotenberg/docx`                                                                                                                                                                     |
-| `libreoffice/docx` | 350 DOCX documents                      | LibreOffice core's Writer tests (MPL-2.0) at a pinned commit, fetched by `make office-fetch SOURCES=libreoffice`, against LibreOffice's PDFs; see `corpus/libreoffice/docx/FIXTURES.md` |
-| `libreoffice/odt`  | 150 ODT documents                       | LibreOffice core's Writer tests, as `libreoffice/docx`                                                                                                                                  |
-| `libreoffice/xlsx` | 280 XLSX workbooks                      | LibreOffice core's Calc and chart tests, as `libreoffice/docx`                                                                                                                          |
-| `libreoffice/ods`  | 256 ODS and flat ODS spreadsheets       | LibreOffice core's Calc and chart tests, as `libreoffice/docx`                                                                                                                          |
-| `libreoffice/csv`  | 9 CSV files                             | LibreOffice core's Calc CSV tests, as `libreoffice/docx`                                                                                                                                |
-| `libreoffice/pptx` | 315 PPTX presentations                  | LibreOffice core's Impress, DrawingML and chart tests, as `libreoffice/docx`                                                                                                            |
-| `libreoffice/odp`  | 170 ODP and flat ODP presentations      | LibreOffice core's Impress tests, as `libreoffice/docx`                                                                                                                                 |
-| `poi/docx`         | 129 DOCX and DOTX documents             | Apache POI's test documents (Apache 2.0) at a pinned commit, fetched by `make office-fetch`, against LibreOffice's PDFs; see `corpus/poi/FIXTURES.md`                                   |
-| `poi/xlsx`         | 200 XLSX and XLTX workbooks             | As `poi/docx`                                                                                                                                                                           |
-| `poi/pptx`         | 57 PPTX and POTX presentations          | As `poi/docx`                                                                                                                                                                           |
-| `poi/doc`          | 85 Word 97 to 2003 documents            | As `poi/docx`; litho reads no binary format yet                                                                                                                                         |
-| `poi/xls`          | 200 Excel 97 to 2003 workbooks          | As `poi/doc`                                                                                                                                                                            |
-| `poi/ppt`          | 73 PowerPoint 97 to 2003 presentations  | As `poi/doc`                                                                                                                                                                            |
-| `openxmlsdk/docx`  | 250 DOCX and DOTX documents             | The Open XML SDK's test documents (MIT), most written by Microsoft Office, fetched as `poi/docx`; see `corpus/openxmlsdk/FIXTURES.md`                                                   |
-| `openxmlsdk/xlsx`  | 63 XLSX and XLTX workbooks              | As `openxmlsdk/docx`                                                                                                                                                                    |
-| `openxmlsdk/pptx`  | 182 PPTX and POTX presentations         | As `openxmlsdk/docx`                                                                                                                                                                    |
-| `govdocs/doc`      | 100 Word 97 to 2003 documents           | A sample of the `govdocs/pdf` threads' documents, fetched as `poi/docx`; see `corpus/govdocs/FIXTURES.md`                                                                               |
-| `govdocs/xls`      | 100 Excel 97 to 2003 workbooks          | As `govdocs/doc`                                                                                                                                                                        |
-| `govdocs/ppt`      | 100 PowerPoint 97 to 2003 presentations | As `govdocs/doc`                                                                                                                                                                        |
+| Corpus             | Fixtures                                | Source                                                                                                                                                                                      |
+| ------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pdfjs`            | ~1,200 PDFs (1 fixture each)            | Mozilla's PDF.js test suite                                                                                                                                                                 |
+| `verapdf`          | ~2,600 PDFs × 15 profiles               | veraPDF corpus, flattened from the per-profile directories                                                                                                                                  |
+| `govdocs/pdf`      | ~1,100 PDFs (1 fixture per claim)       | Govdocs1 random-sample of five fixed thread archives (real-world PDFs)                                                                                                                      |
+| `pdf20`            | 7 PDFs (1 fixture per claim)            | PDF Association's `pdf20examples` (CC-BY-SA-4.0 PDF 2.0 samples)                                                                                                                            |
+| `pdfcpu`           | ~50 PDFs (1 fixture each)               | pdfcpu's `pkg/samples/bookmarks` + `pkg/testdata` (Apache-2.0)                                                                                                                              |
+| `facturx`          | ~150 PDFs (1 fixture per claim)         | ZUGFeRD/corpus (Apache-2.0): real, sample and intentionally-broken Factur-X / ZUGFeRD invoices, flattened from the `ZUGFeRDv2`, `XML-Rechnung` and `ZUGFeRDv1` subtrees                     |
+| `litho/pdf`        | 215 PDFs × 13 profiles (2,795 cells)    | Self-authored, committed in-tree; see `corpus/litho/pdf/README.md`                                                                                                                          |
+| `litho/text`       | 8 PDFs × 2 profiles (16 cells)          | Converted by litho from committed self-authored text sources; see `corpus/litho/text/FIXTURES.md`                                                                                           |
+| `litho/html`       | 30 HTML and Markdown sources            | Self-authored pages, with Chromium's PDFs; see `corpus/litho/html/FIXTURES.md`                                                                                                              |
+| `wpt`              | 1,177 HTML reftests                     | web-platform-tests (BSD-3) at a pinned commit, fetched by `make corpus-fetch CORPUS_NAME=wpt`; see `corpus/wpt/FIXTURES.md`                                                                 |
+| `weasyprint`       | 315 HTML draw tests                     | WeasyPrint's `tests/draw` (BSD-3), extracted and committed; see `corpus/weasyprint/FIXTURES.md`                                                                                             |
+| `resvg`            | 246 SVG tests                           | resvg's `crates/resvg/tests` (MIT) at a pinned commit, fetched by `make corpus-fetch CORPUS_NAME=resvg`; see `corpus/resvg/FIXTURES.md`                                                     |
+| `gotenberg/html`   | 7 HTML and Markdown sources             | Gotenberg's web test corpus (MIT, committed), with Chromium's PDFs; see `corpus/gotenberg/html/FIXTURES.md`                                                                                 |
+| `gotenberg/docx`   | 10 DOCX documents                       | Gotenberg's Office test documents (MIT, committed), against LibreOffice's PDFs; see `corpus/gotenberg/docx/FIXTURES.md`                                                                     |
+| `gotenberg/odt`    | 4 ODT and flat ODT documents            | As `gotenberg/docx`                                                                                                                                                                         |
+| `gotenberg/xlsx`   | 5 XLSX workbooks                        | As `gotenberg/docx`                                                                                                                                                                         |
+| `gotenberg/ods`    | 2 ODS and flat ODS spreadsheets         | As `gotenberg/docx`                                                                                                                                                                         |
+| `gotenberg/csv`    | 2 CSV files                             | As `gotenberg/docx`                                                                                                                                                                         |
+| `gotenberg/pptx`   | 4 PPTX presentations                    | As `gotenberg/docx`                                                                                                                                                                         |
+| `gotenberg/odp`    | 2 ODP and flat ODP presentations        | As `gotenberg/docx`                                                                                                                                                                         |
+| `libreoffice/docx` | 350 DOCX documents                      | LibreOffice core's Writer tests (MPL-2.0) at a pinned commit, fetched by `make corpus-fetch CORPUS_NAME=libreoffice`, against LibreOffice's PDFs; see `corpus/libreoffice/docx/FIXTURES.md` |
+| `libreoffice/odt`  | 150 ODT documents                       | LibreOffice core's Writer tests, as `libreoffice/docx`                                                                                                                                      |
+| `libreoffice/xlsx` | 280 XLSX workbooks                      | LibreOffice core's Calc and chart tests, as `libreoffice/docx`                                                                                                                              |
+| `libreoffice/ods`  | 256 ODS and flat ODS spreadsheets       | LibreOffice core's Calc and chart tests, as `libreoffice/docx`                                                                                                                              |
+| `libreoffice/csv`  | 9 CSV files                             | LibreOffice core's Calc CSV tests, as `libreoffice/docx`                                                                                                                                    |
+| `libreoffice/pptx` | 315 PPTX presentations                  | LibreOffice core's Impress, DrawingML and chart tests, as `libreoffice/docx`                                                                                                                |
+| `libreoffice/odp`  | 170 ODP and flat ODP presentations      | LibreOffice core's Impress tests, as `libreoffice/docx`                                                                                                                                     |
+| `poi/docx`         | 129 DOCX and DOTX documents             | Apache POI's test documents (Apache 2.0) at a pinned commit, fetched by `make corpus-fetch`, against LibreOffice's PDFs; see `corpus/poi/FIXTURES.md`                                       |
+| `poi/xlsx`         | 200 XLSX and XLTX workbooks             | As `poi/docx`                                                                                                                                                                               |
+| `poi/pptx`         | 57 PPTX and POTX presentations          | As `poi/docx`                                                                                                                                                                               |
+| `poi/doc`          | 85 Word 97 to 2003 documents            | As `poi/docx`; litho reads no binary format yet                                                                                                                                             |
+| `poi/xls`          | 200 Excel 97 to 2003 workbooks          | As `poi/doc`                                                                                                                                                                                |
+| `poi/ppt`          | 73 PowerPoint 97 to 2003 presentations  | As `poi/doc`                                                                                                                                                                                |
+| `openxmlsdk/docx`  | 250 DOCX and DOTX documents             | The Open XML SDK's test documents (MIT), most written by Microsoft Office, fetched as `poi/docx`; see `corpus/openxmlsdk/FIXTURES.md`                                                       |
+| `openxmlsdk/xlsx`  | 63 XLSX and XLTX workbooks              | As `openxmlsdk/docx`                                                                                                                                                                        |
+| `openxmlsdk/pptx`  | 182 PPTX and POTX presentations         | As `openxmlsdk/docx`                                                                                                                                                                        |
+| `govdocs/doc`      | 100 Word 97 to 2003 documents           | A sample of the `govdocs/pdf` threads' documents, fetched as `poi/docx`; see `corpus/govdocs/FIXTURES.md`                                                                                   |
+| `govdocs/xls`      | 100 Excel 97 to 2003 workbooks          | As `govdocs/doc`                                                                                                                                                                            |
+| `govdocs/ppt`      | 100 PowerPoint 97 to 2003 presentations | As `govdocs/doc`                                                                                                                                                                            |
 
 Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
 

@@ -5,7 +5,7 @@
   "inputs": {
     "list": "documents.json",
     "list_root": "sources",
-    "fetched_by": "make office-fetch SOURCES=govdocs FORMATS=doc"
+    "fetched_by": "make corpus-fetch CORPUS_NAME=govdocs/doc"
   },
   "references": {
     "dir": "references",
@@ -14,5 +14,9 @@
   },
   "goldens": {
     "diff": "goldens/diff"
+  },
+  "fetch": {
+    "zip": "https://digitalcorpora.s3.amazonaws.com/corpora/files/govdocs1/zipfiles",
+    "pin": "GOVDOCS_THREADS"
   }
 }

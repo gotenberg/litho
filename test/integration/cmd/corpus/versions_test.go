@@ -386,7 +386,7 @@ func TestDockerfileFinalStageRecordsEveryStagePin(t *testing.T) {
 		t.Fatalf("collected only %d recorded pins: %v", len(recorded), recorded)
 	}
 	for p := range recorded {
-		// A pin a host-side step records (wpt/fetch.sh writes WPT_COMMIT) is
+		// A pin a host-side step records (`corpus fetch` writes WPT_COMMIT) is
 		// no build argument, so the image has nothing to declare.
 		if !declared[p] && !localToolPins[p] {
 			t.Errorf("a stage records %s, but the Dockerfile's final stage declares no ARG for it", p)

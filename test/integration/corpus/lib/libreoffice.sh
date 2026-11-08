@@ -9,7 +9,7 @@
 # sources are the committed <corpus_dir>/sources/<name>/ directories, each
 # one document (an extension of EXTENSIONS) and an optional options.json, and the
 # LibreOffice test documents <corpus_dir>/documents.json lists, fetched into
-# <fetched_dir> by libreoffice/fetch.sh, each named by its ID with "/" written
+# <fetched_dir> by `corpus fetch`, each named by its ID with "/" written
 # "__" (ooxmlexport/tdf123.docx becomes ooxmlexport__tdf123.docx).
 #
 # The form fields come from the directory's options.json (FIXTURES.md, "Per
@@ -138,7 +138,7 @@ if [ -f "$CORPUS/documents.json" ]; then
     name="${id//\//__}"
     selected "$name" || continue
     if [ ! -f "$FETCHED/$id" ]; then
-      echo "ERROR: $FETCHED/$id is missing: run make office-fetch SOURCES=$(basename "$(dirname "$CORPUS")") FORMATS=$(basename "$CORPUS")" >&2
+      echo "ERROR: $FETCHED/$id is missing: run make corpus-fetch CORPUS_NAME=$(basename "$(dirname "$CORPUS")")/$(basename "$CORPUS")" >&2
       exit 1
     fi
     printf '%s\t%s\t-\t%s\n' "$name" "$FETCHED/$id" "$id" >> "$JOBS"

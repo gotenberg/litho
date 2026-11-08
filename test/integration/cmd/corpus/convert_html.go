@@ -121,7 +121,7 @@ func fixtureFontsRoot() string {
 	return filepath.Join("test", "integration", "testdata", "fonts")
 }
 
-// fixtureFamilyPrefixes are the font directories corpus/lib/fetch-fonts.sh
+// fixtureFamilyPrefixes are the font directories `corpus fetch --corpus=fonts`
 // installs, the faces every converter oracle draws text with
 // (fixture.FontFamilies). The fonts root also holds the test fonts (Ahem, the
 // WeasyPrint test font), which only the oracles written for them read.

@@ -86,7 +86,7 @@ var localToolPins = map[string]bool{
 	"DEJAVU_FONTS_SHA256":      true,
 
 	// The script fonts of the html corpora and the CJK collection the
-	// Gotenberg image draws with, fetched by lib/fetch-fonts.sh on the
+	// Gotenberg image draws with, fetched by `corpus fetch --corpus=fonts` on the
 	// host like the two above.
 	"NOTO_SANS_THAI_VERSION":       true,
 	"NOTO_SANS_THAI_URL":           true,
@@ -114,12 +114,12 @@ var localToolPins = map[string]bool{
 	"OPENSYMBOL_URL":     true,
 	"OPENSYMBOL_SHA256":  true,
 
-	// The converter oracles: the web-platform-tests commit `make wpt-fetch`
+	// The converter oracles: the web-platform-tests commit `make corpus-fetch CORPUS_NAME=wpt`
 	// downloads, the WeasyPrint release `make weasyprint-fixtures` extracts,
 	// and the Gotenberg image `make html-references` and `make
 	// office-references` convert with. The host runs all three;
-	// wpt/fetch.sh records WPT_COMMIT in the wpt testdata. The resvg commit
-	// `make resvg-fetch` downloads at, which resvg/fetch.sh records in the
+	// `corpus fetch` records WPT_COMMIT in the wpt testdata. The resvg commit
+	// `make corpus-fetch CORPUS_NAME=resvg` downloads at, which `corpus fetch` records in the
 	// resvg testdata.
 	"WPT_COMMIT":             true,
 	"RESVG_COMMIT":           true,
@@ -127,7 +127,7 @@ var localToolPins = map[string]bool{
 	"WEASYPRINT_SHA256":      true,
 	"WEASYPRINT_FONT_SHA256": true,
 	"GOTENBERG_IMAGE":        true,
-	// The commits `make office-fetch` downloads the Office corpora's
+	// The commits `make corpus-fetch` downloads the Office corpora's
 	// documents at: LibreOffice core's, Apache POI's and the Open XML
 	// SDK's. The govdocs Office corpora share GOVDOCS_THREADS with
 	// govdocs/pdf.
@@ -176,8 +176,8 @@ var stagePins = map[string][]string{
 // sourcePins maps each corpus source directory to the pins its PDFs come
 // from. The litho corpora are committed in-tree, so git versions them, and so
 // are the weasyprint fixtures and the html corpora's Chromium references. The
-// wpt corpus's files come from the WPT commit wpt/fetch.sh records, and the
-// resvg corpus's from the resvg commit resvg/fetch.sh records.
+// wpt corpus's files come from the WPT commit `corpus fetch` records, and the
+// resvg corpus's from the resvg commit it records.
 //
 //nolint:gochecknoglobals // static dependency table
 var sourcePins = map[string][]string{

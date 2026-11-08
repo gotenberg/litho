@@ -84,7 +84,7 @@ func run(ctx context.Context, corpusDir, fontsDir string) error {
 	return nil
 }
 
-// familyDirs returns the subdirectories of dir that fetch-fonts.sh installs,
+// familyDirs returns the subdirectories of dir that `corpus fetch --corpus=fonts` installs,
 // sorted, failing when one family is missing.
 func familyDirs(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)

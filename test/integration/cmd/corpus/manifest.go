@@ -87,6 +87,10 @@ type Manifest struct {
 	// diff goldens come from, which the host builds into the testdata rather
 	// than git versioning them. See [ReferenceSpec].
 	References *ReferenceSpec `json:"references,omitempty"`
+
+	// Fetch, when set, names where `corpus fetch` downloads the corpus's
+	// files from on the host. See [FetchSpec].
+	Fetch *FetchSpec `json:"fetch,omitempty"`
 }
 
 // ReferenceSpec names the reference PDFs of a converter corpus that the host

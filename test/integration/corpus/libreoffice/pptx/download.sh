@@ -3,7 +3,7 @@
 # libreoffice/pptx corpus.
 #
 # The corpus downloads nothing here. Its fixtures are the LibreOffice test
-# documents `make office-fetch SOURCES=libreoffice FORMATS=pptx` puts in the testdata, and the
+# documents `make corpus-fetch CORPUS_NAME=libreoffice/pptx` puts in the testdata, and the
 # PDFs it provisions are their LibreOffice references, which `make
 # office-references SOURCES=libreoffice FORMATS=pptx` builds into the testdata's references/
 # directory with the Gotenberg image versions.env pins. They are read from the

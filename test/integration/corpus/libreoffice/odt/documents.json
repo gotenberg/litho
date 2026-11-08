@@ -1,452 +1,602 @@
 [
   {
-    "id": "odfexport/DUMMY2.odt"
+    "id": "odfexport/DUMMY2.odt",
+    "path": "sw/qa/extras/odfexport/data/DUMMY2.odt"
   },
   {
-    "id": "odfexport/DUMMY2B.odt"
+    "id": "odfexport/DUMMY2B.odt",
+    "path": "sw/qa/extras/odfexport/data/DUMMY2B.odt"
   },
   {
-    "id": "odfexport/MadeByLO7.odt"
+    "id": "odfexport/MadeByLO7.odt",
+    "path": "sw/qa/extras/odfexport/data/MadeByLO7.odt"
   },
   {
-    "id": "odfexport/WordTest_edit.odt"
+    "id": "odfexport/WordTest_edit.odt",
+    "path": "sw/qa/extras/odfexport/data/WordTest_edit.odt"
   },
   {
-    "id": "odfexport/allow-overlap.odt"
+    "id": "odfexport/allow-overlap.odt",
+    "path": "sw/qa/extras/odfexport/data/allow-overlap.odt"
   },
   {
-    "id": "odfexport/arabic-zero-numbering.odt"
+    "id": "odfexport/arabic-zero-numbering.odt",
+    "path": "sw/qa/extras/odfexport/data/arabic-zero-numbering.odt"
   },
   {
-    "id": "odfexport/arabic-zero3-numbering.odt"
+    "id": "odfexport/arabic-zero3-numbering.odt",
+    "path": "sw/qa/extras/odfexport/data/arabic-zero3-numbering.odt"
   },
   {
-    "id": "odfexport/arabic-zero4-numbering.odt"
+    "id": "odfexport/arabic-zero4-numbering.odt",
+    "path": "sw/qa/extras/odfexport/data/arabic-zero4-numbering.odt"
   },
   {
-    "id": "odfexport/arabic-zero5-numbering.odt"
+    "id": "odfexport/arabic-zero5-numbering.odt",
+    "path": "sw/qa/extras/odfexport/data/arabic-zero5-numbering.odt"
   },
   {
-    "id": "odfexport/border_types.odt"
+    "id": "odfexport/border_types.odt",
+    "path": "sw/qa/extras/odfexport/data/border_types.odt"
   },
   {
-    "id": "odfexport/btlr-cell.odt"
+    "id": "odfexport/btlr-cell.odt",
+    "path": "sw/qa/extras/odfexport/data/btlr-cell.odt"
   },
   {
-    "id": "odfexport/btlr-frame.odt"
+    "id": "odfexport/btlr-frame.odt",
+    "path": "sw/qa/extras/odfexport/data/btlr-frame.odt"
   },
   {
-    "id": "odfexport/chapter-number-new-line.odt"
+    "id": "odfexport/chapter-number-new-line.odt",
+    "path": "sw/qa/extras/odfexport/data/chapter-number-new-line.odt"
   },
   {
-    "id": "odfexport/charborder.odt"
+    "id": "odfexport/charborder.odt",
+    "path": "sw/qa/extras/odfexport/data/charborder.odt"
   },
   {
-    "id": "odfexport/embedded-pdf.odt"
+    "id": "odfexport/embedded-pdf.odt",
+    "path": "sw/qa/extras/odfexport/data/embedded-pdf.odt"
   },
   {
-    "id": "odfexport/fdo38244.odt"
+    "id": "odfexport/fdo38244.odt",
+    "path": "sw/qa/extras/odfexport/data/fdo38244.odt"
   },
   {
-    "id": "odfexport/fdo43807.odt"
+    "id": "odfexport/fdo43807.odt",
+    "path": "sw/qa/extras/odfexport/data/fdo43807.odt"
   },
   {
-    "id": "odfexport/fdo60769.odt"
+    "id": "odfexport/fdo60769.odt",
+    "path": "sw/qa/extras/odfexport/data/fdo60769.odt"
   },
   {
-    "id": "odfexport/fdo79358.odt"
+    "id": "odfexport/fdo79358.odt",
+    "path": "sw/qa/extras/odfexport/data/fdo79358.odt"
   },
   {
-    "id": "odfexport/fdo86963.odt"
+    "id": "odfexport/fdo86963.odt",
+    "path": "sw/qa/extras/odfexport/data/fdo86963.odt"
   },
   {
-    "id": "odfexport/fillbitmap3.odt"
+    "id": "odfexport/fillbitmap3.odt",
+    "path": "sw/qa/extras/odfexport/data/fillbitmap3.odt"
   },
   {
-    "id": "odfexport/framebackgrounds.odt"
+    "id": "odfexport/framebackgrounds.odt",
+    "path": "sw/qa/extras/odfexport/data/framebackgrounds.odt"
   },
   {
-    "id": "odfexport/gerrit13858.odt"
+    "id": "odfexport/gerrit13858.odt",
+    "path": "sw/qa/extras/odfexport/data/gerrit13858.odt"
   },
   {
-    "id": "odfexport/gutter-left.odt"
+    "id": "odfexport/gutter-left.odt",
+    "path": "sw/qa/extras/odfexport/data/gutter-left.odt"
   },
   {
-    "id": "odfexport/image-mimetype.odt"
+    "id": "odfexport/image-mimetype.odt",
+    "path": "sw/qa/extras/odfexport/data/image-mimetype.odt"
   },
   {
-    "id": "odfexport/listformat.odt"
+    "id": "odfexport/listformat.odt",
+    "path": "sw/qa/extras/odfexport/data/listformat.odt"
   },
   {
-    "id": "odfexport/nestedTableInFooter.odt"
+    "id": "odfexport/nestedTableInFooter.odt",
+    "path": "sw/qa/extras/odfexport/data/nestedTableInFooter.odt"
   },
   {
-    "id": "odfexport/ooo321_stylepagenumber.odt"
+    "id": "odfexport/ooo321_stylepagenumber.odt",
+    "path": "sw/qa/extras/odfexport/data/ooo321_stylepagenumber.odt"
   },
   {
-    "id": "odfexport/page-content-bottom.odt"
+    "id": "odfexport/page-content-bottom.odt",
+    "path": "sw/qa/extras/odfexport/data/page-content-bottom.odt"
   },
   {
-    "id": "odfexport/page-content-top.odt"
+    "id": "odfexport/page-content-top.odt",
+    "path": "sw/qa/extras/odfexport/data/page-content-top.odt"
   },
   {
-    "id": "odfexport/pagestyle_background_lo64.odt"
+    "id": "odfexport/pagestyle_background_lo64.odt",
+    "path": "sw/qa/extras/odfexport/data/pagestyle_background_lo64.odt"
   },
   {
-    "id": "odfexport/pagestyle_background_lo70.odt"
+    "id": "odfexport/pagestyle_background_lo70.odt",
+    "path": "sw/qa/extras/odfexport/data/pagestyle_background_lo70.odt"
   },
   {
-    "id": "odfexport/pagestyle_background_ooo33.odt"
+    "id": "odfexport/pagestyle_background_ooo33.odt",
+    "path": "sw/qa/extras/odfexport/data/pagestyle_background_ooo33.odt"
   },
   {
-    "id": "odfexport/personalmetadata.odt"
+    "id": "odfexport/personalmetadata.odt",
+    "path": "sw/qa/extras/odfexport/data/personalmetadata.odt"
   },
   {
-    "id": "odfexport/qrcode-properties.odt"
+    "id": "odfexport/qrcode-properties.odt",
+    "path": "sw/qa/extras/odfexport/data/qrcode-properties.odt"
   },
   {
-    "id": "odfexport/redlineTextFrame.odt"
+    "id": "odfexport/redlineTextFrame.odt",
+    "path": "sw/qa/extras/odfexport/data/redlineTextFrame.odt"
   },
   {
-    "id": "odfexport/referencelanguage.odt"
+    "id": "odfexport/referencelanguage.odt",
+    "path": "sw/qa/extras/odfexport/data/referencelanguage.odt"
   },
   {
-    "id": "odfexport/relh-page-tdf80282.odt"
+    "id": "odfexport/relh-page-tdf80282.odt",
+    "path": "sw/qa/extras/odfexport/data/relh-page-tdf80282.odt"
   },
   {
-    "id": "odfexport/relh-page.odt"
+    "id": "odfexport/relh-page.odt",
+    "path": "sw/qa/extras/odfexport/data/relh-page.odt"
   },
   {
-    "id": "odfexport/relw-page.odt"
+    "id": "odfexport/relw-page.odt",
+    "path": "sw/qa/extras/odfexport/data/relw-page.odt"
   },
   {
-    "id": "odfexport/resolved-comment.odt"
+    "id": "odfexport/resolved-comment.odt",
+    "path": "sw/qa/extras/odfexport/data/resolved-comment.odt"
   },
   {
-    "id": "odfexport/rovas-numbering.odt"
+    "id": "odfexport/rovas-numbering.odt",
+    "path": "sw/qa/extras/odfexport/data/rovas-numbering.odt"
   },
   {
-    "id": "odfexport/ruby-position.odt"
+    "id": "odfexport/ruby-position.odt",
+    "path": "sw/qa/extras/odfexport/data/ruby-position.odt"
   },
   {
-    "id": "odfexport/shape-relsize.odt"
+    "id": "odfexport/shape-relsize.odt",
+    "path": "sw/qa/extras/odfexport/data/shape-relsize.odt"
   },
   {
-    "id": "odfexport/shape-with-hyperlink.odt"
+    "id": "odfexport/shape-with-hyperlink.odt",
+    "path": "sw/qa/extras/odfexport/data/shape-with-hyperlink.odt"
   },
   {
-    "id": "odfexport/shapes-hyperlink.odt"
+    "id": "odfexport/shapes-hyperlink.odt",
+    "path": "sw/qa/extras/odfexport/data/shapes-hyperlink.odt"
   },
   {
-    "id": "odfexport/spellout-numberingtypes.odt"
+    "id": "odfexport/spellout-numberingtypes.odt",
+    "path": "sw/qa/extras/odfexport/data/spellout-numberingtypes.odt"
   },
   {
-    "id": "odfexport/sw_hatch.odt"
+    "id": "odfexport/sw_hatch.odt",
+    "path": "sw/qa/extras/odfexport/data/sw_hatch.odt"
   },
   {
-    "id": "odfexport/table-in-frame-in-table-in-header-base.odt"
+    "id": "odfexport/table-in-frame-in-table-in-header-base.odt",
+    "path": "sw/qa/extras/odfexport/data/table-in-frame-in-table-in-header-base.odt"
   },
   {
-    "id": "odfexport/table_styles_1.odt"
+    "id": "odfexport/table_styles_1.odt",
+    "path": "sw/qa/extras/odfexport/data/table_styles_1.odt"
   },
   {
-    "id": "odfexport/table_styles_2.odt"
+    "id": "odfexport/table_styles_2.odt",
+    "path": "sw/qa/extras/odfexport/data/table_styles_2.odt"
   },
   {
-    "id": "odfexport/table_styles_3.odt"
+    "id": "odfexport/table_styles_3.odt",
+    "path": "sw/qa/extras/odfexport/data/table_styles_3.odt"
   },
   {
-    "id": "odfexport/table_styles_4.odt"
+    "id": "odfexport/table_styles_4.odt",
+    "path": "sw/qa/extras/odfexport/data/table_styles_4.odt"
   },
   {
-    "id": "odfexport/tdf101710.odt"
+    "id": "odfexport/tdf101710.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf101710.odt"
   },
   {
-    "id": "odfexport/tdf101856.odt"
+    "id": "odfexport/tdf101856.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf101856.odt"
   },
   {
-    "id": "odfexport/tdf101856_overlapped.odt"
+    "id": "odfexport/tdf101856_overlapped.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf101856_overlapped.odt"
   },
   {
-    "id": "odfexport/tdf103567.odt"
+    "id": "odfexport/tdf103567.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf103567.odt"
   },
   {
-    "id": "odfexport/tdf104254_noHeaderWrapping.odt"
+    "id": "odfexport/tdf104254_noHeaderWrapping.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf104254_noHeaderWrapping.odt"
   },
   {
-    "id": "odfexport/tdf107292.odt"
+    "id": "odfexport/tdf107292.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf107292.odt"
   },
   {
-    "id": "odfexport/tdf107696.odt"
+    "id": "odfexport/tdf107696.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf107696.odt"
   },
   {
-    "id": "odfexport/tdf111891_frameVertStyle.odt"
+    "id": "odfexport/tdf111891_frameVertStyle.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf111891_frameVertStyle.odt"
   },
   {
-    "id": "odfexport/tdf114287.odt"
+    "id": "odfexport/tdf114287.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf114287.odt"
   },
   {
-    "id": "odfexport/tdf115815.odt"
+    "id": "odfexport/tdf115815.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf115815.odt"
   },
   {
-    "id": "odfexport/tdf118502.odt"
+    "id": "odfexport/tdf118502.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf118502.odt"
   },
   {
-    "id": "odfexport/tdf121658.odt"
+    "id": "odfexport/tdf121658.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf121658.odt"
   },
   {
-    "id": "odfexport/tdf124470TableAndEmbeddedUsedFonts.odt"
+    "id": "odfexport/tdf124470TableAndEmbeddedUsedFonts.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf124470TableAndEmbeddedUsedFonts.odt"
   },
   {
-    "id": "odfexport/tdf131025_noZerosInTable.odt"
+    "id": "odfexport/tdf131025_noZerosInTable.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf131025_noZerosInTable.odt"
   },
   {
-    "id": "odfexport/tdf131812.odt"
+    "id": "odfexport/tdf131812.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf131812.odt"
   },
   {
-    "id": "odfexport/tdf132642_keepWithNextTable.odt"
+    "id": "odfexport/tdf132642_keepWithNextTable.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf132642_keepWithNextTable.odt"
   },
   {
-    "id": "odfexport/tdf133507_contextualSpacingSection.odt"
+    "id": "odfexport/tdf133507_contextualSpacingSection.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf133507_contextualSpacingSection.odt"
   },
   {
-    "id": "odfexport/tdf135338_firstLeftPageFooter.odt"
+    "id": "odfexport/tdf135338_firstLeftPageFooter.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf135338_firstLeftPageFooter.odt"
   },
   {
-    "id": "odfexport/tdf136645.odt"
+    "id": "odfexport/tdf136645.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf136645.odt"
   },
   {
-    "id": "odfexport/tdf139126.odt"
+    "id": "odfexport/tdf139126.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf139126.odt"
   },
   {
-    "id": "odfexport/tdf140437.odt"
+    "id": "odfexport/tdf140437.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf140437.odt"
   },
   {
-    "id": "odfexport/tdf142483.odt"
+    "id": "odfexport/tdf142483.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf142483.odt"
   },
   {
-    "id": "odfexport/tdf143605.odt"
+    "id": "odfexport/tdf143605.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf143605.odt"
   },
   {
-    "id": "odfexport/tdf143793_noBodyWrapping.odt"
+    "id": "odfexport/tdf143793_noBodyWrapping.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf143793_noBodyWrapping.odt"
   },
   {
-    "id": "odfexport/tdf145361.odt"
+    "id": "odfexport/tdf145361.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf145361.odt"
   },
   {
-    "id": "odfexport/tdf145871.odt"
+    "id": "odfexport/tdf145871.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf145871.odt"
   },
   {
-    "id": "odfexport/tdf146264.odt"
+    "id": "odfexport/tdf146264.odt",
+    "path": "sw/qa/extras/odfexport/data/tdf146264.odt"
   },
   {
-    "id": "odfimport/BibliographyEntryField.odt"
+    "id": "odfimport/BibliographyEntryField.odt",
+    "path": "sw/qa/extras/odfimport/data/BibliographyEntryField.odt"
   },
   {
-    "id": "odfimport/PageBackground.odt"
+    "id": "odfimport/PageBackground.odt",
+    "path": "sw/qa/extras/odfimport/data/PageBackground.odt"
   },
   {
-    "id": "odfimport/Word2010AsCharShape.odt"
+    "id": "odfimport/Word2010AsCharShape.odt",
+    "path": "sw/qa/extras/odfimport/data/Word2010AsCharShape.odt"
   },
   {
-    "id": "odfimport/annotation-formatting.odt"
+    "id": "odfimport/annotation-formatting.odt",
+    "path": "sw/qa/extras/odfimport/data/annotation-formatting.odt"
   },
   {
-    "id": "odfimport/borders_ooo33.odt"
+    "id": "odfimport/borders_ooo33.odt",
+    "path": "sw/qa/extras/odfimport/data/borders_ooo33.odt"
   },
   {
-    "id": "odfimport/dateFormFormats.odt"
+    "id": "odfimport/dateFormFormats.odt",
+    "path": "sw/qa/extras/odfimport/data/dateFormFormats.odt"
   },
   {
-    "id": "odfimport/empty-svg-family-name.odt"
+    "id": "odfimport/empty-svg-family-name.odt",
+    "path": "sw/qa/extras/odfimport/data/empty-svg-family-name.odt"
   },
   {
-    "id": "odfimport/fdo37606.odt"
+    "id": "odfimport/fdo37606.odt",
+    "path": "sw/qa/extras/odfimport/data/fdo37606.odt"
   },
   {
-    "id": "odfimport/fdo53210.odt"
+    "id": "odfimport/fdo53210.odt",
+    "path": "sw/qa/extras/odfimport/data/fdo53210.odt"
   },
   {
-    "id": "odfimport/fdo55814.odt"
+    "id": "odfimport/fdo55814.odt",
+    "path": "sw/qa/extras/odfimport/data/fdo55814.odt"
   },
   {
-    "id": "odfimport/fdo56272.odt"
+    "id": "odfimport/fdo56272.odt",
+    "path": "sw/qa/extras/odfimport/data/fdo56272.odt"
   },
   {
-    "id": "odfimport/fdo60842.odt"
+    "id": "odfimport/fdo60842.odt",
+    "path": "sw/qa/extras/odfimport/data/fdo60842.odt"
   },
   {
-    "id": "odfimport/fdo69862.odt"
+    "id": "odfimport/fdo69862.odt",
+    "path": "sw/qa/extras/odfimport/data/fdo69862.odt"
   },
   {
-    "id": "odfimport/fdo69979.odt"
+    "id": "odfimport/fdo69979.odt",
+    "path": "sw/qa/extras/odfimport/data/fdo69979.odt"
   },
   {
-    "id": "odfimport/fdo75872_aoo40.odt"
+    "id": "odfimport/fdo75872_aoo40.odt",
+    "path": "sw/qa/extras/odfimport/data/fdo75872_aoo40.odt"
   },
   {
-    "id": "odfimport/fdo75872_ooo33.odt"
+    "id": "odfimport/fdo75872_ooo33.odt",
+    "path": "sw/qa/extras/odfimport/data/fdo75872_ooo33.odt"
   },
   {
-    "id": "odfimport/fdo79269.odt"
+    "id": "odfimport/fdo79269.odt",
+    "path": "sw/qa/extras/odfimport/data/fdo79269.odt"
   },
   {
-    "id": "odfimport/fdo79269_header.odt"
+    "id": "odfimport/fdo79269_header.odt",
+    "path": "sw/qa/extras/odfimport/data/fdo79269_header.odt"
   },
   {
-    "id": "odfimport/fdo81223.odt"
+    "id": "odfimport/fdo81223.odt",
+    "path": "sw/qa/extras/odfimport/data/fdo81223.odt"
   },
   {
-    "id": "odfimport/fdo82165.odt"
+    "id": "odfimport/fdo82165.odt",
+    "path": "sw/qa/extras/odfimport/data/fdo82165.odt"
   },
   {
-    "id": "odfimport/fdo90130-1.odt"
+    "id": "odfimport/fdo90130-1.odt",
+    "path": "sw/qa/extras/odfimport/data/fdo90130-1.odt"
   },
   {
-    "id": "odfimport/fdo90130-2.odt"
+    "id": "odfimport/fdo90130-2.odt",
+    "path": "sw/qa/extras/odfimport/data/fdo90130-2.odt"
   },
   {
-    "id": "odfimport/feature_image_jpg.odt"
+    "id": "odfimport/feature_image_jpg.odt",
+    "path": "sw/qa/extras/odfimport/data/feature_image_jpg.odt"
   },
   {
-    "id": "odfimport/feature_table.odt"
+    "id": "odfimport/feature_table.odt",
+    "path": "sw/qa/extras/odfimport/data/feature_table.odt"
   },
   {
-    "id": "odfimport/feature_table_merged-cells.odt"
+    "id": "odfimport/feature_table_merged-cells.odt",
+    "path": "sw/qa/extras/odfimport/data/feature_table_merged-cells.odt"
   },
   {
-    "id": "odfimport/feature_table_merged-cells_all.odt"
+    "id": "odfimport/feature_table_merged-cells_all.odt",
+    "path": "sw/qa/extras/odfimport/data/feature_table_merged-cells_all.odt"
   },
   {
-    "id": "odfimport/feature_table_text.odt"
+    "id": "odfimport/feature_table_text.odt",
+    "path": "sw/qa/extras/odfimport/data/feature_table_text.odt"
   },
   {
-    "id": "odfimport/feature_text.odt"
+    "id": "odfimport/feature_text.odt",
+    "path": "sw/qa/extras/odfimport/data/feature_text.odt"
   },
   {
-    "id": "odfimport/feature_text_background-color.odt"
+    "id": "odfimport/feature_text_background-color.odt",
+    "path": "sw/qa/extras/odfimport/data/feature_text_background-color.odt"
   },
   {
-    "id": "odfimport/feature_text_bold.odt"
+    "id": "odfimport/feature_text_bold.odt",
+    "path": "sw/qa/extras/odfimport/data/feature_text_bold.odt"
   },
   {
-    "id": "odfimport/feature_text_italic.odt"
+    "id": "odfimport/feature_text_italic.odt",
+    "path": "sw/qa/extras/odfimport/data/feature_text_italic.odt"
   },
   {
-    "id": "odfimport/hello.odt"
+    "id": "odfimport/hello.odt",
+    "path": "sw/qa/extras/odfimport/data/hello.odt"
   },
   {
-    "id": "odfimport/incorrectsum.odt"
+    "id": "odfimport/incorrectsum.odt",
+    "path": "sw/qa/extras/odfimport/data/incorrectsum.odt"
   },
   {
-    "id": "odfimport/ooo32780-1.odt"
+    "id": "odfimport/ooo32780-1.odt",
+    "path": "sw/qa/extras/odfimport/data/ooo32780-1.odt"
   },
   {
-    "id": "odfimport/ooo77837-1.odt"
+    "id": "odfimport/ooo77837-1.odt",
+    "path": "sw/qa/extras/odfimport/data/ooo77837-1.odt"
   },
   {
-    "id": "odfimport/paste-first-para-direct-format.odt"
+    "id": "odfimport/paste-first-para-direct-format.odt",
+    "path": "sw/qa/extras/odfimport/data/paste-first-para-direct-format.odt"
   },
   {
-    "id": "odfimport/space.odt"
+    "id": "odfimport/space.odt",
+    "path": "sw/qa/extras/odfimport/data/space.odt"
   },
   {
-    "id": "odfimport/spellmenu-redline.odt"
+    "id": "odfimport/spellmenu-redline.odt",
+    "path": "sw/qa/extras/odfimport/data/spellmenu-redline.odt"
   },
   {
-    "id": "odfimport/tdf100033_1.odt"
+    "id": "odfimport/tdf100033_1.odt",
+    "path": "sw/qa/extras/odfimport/data/tdf100033_1.odt"
   },
   {
-    "id": "odfimport/tdf100033_2.odt"
+    "id": "odfimport/tdf100033_2.odt",
+    "path": "sw/qa/extras/odfimport/data/tdf100033_2.odt"
   },
   {
-    "id": "layout/2024-01-19_merged-cells-on-separate-pages-vertical-alignment.odt"
+    "id": "layout/2024-01-19_merged-cells-on-separate-pages-vertical-alignment.odt",
+    "path": "sw/qa/extras/layout/data/2024-01-19_merged-cells-on-separate-pages-vertical-alignment.odt"
   },
   {
-    "id": "layout/Tdf121509.odt"
+    "id": "layout/Tdf121509.odt",
+    "path": "sw/qa/extras/layout/data/Tdf121509.odt"
   },
   {
-    "id": "layout/TextBoxFrame.odt"
+    "id": "layout/TextBoxFrame.odt",
+    "path": "sw/qa/extras/layout/data/TextBoxFrame.odt"
   },
   {
-    "id": "layout/abi11870-2.odt"
+    "id": "layout/abi11870-2.odt",
+    "path": "sw/qa/extras/layout/data/abi11870-2.odt"
   },
   {
-    "id": "layout/btlr-cell.odt"
+    "id": "layout/btlr-cell.odt",
+    "path": "sw/qa/extras/layout/data/btlr-cell.odt"
   },
   {
-    "id": "layout/endOfLineComments.odt"
+    "id": "layout/endOfLineComments.odt",
+    "path": "sw/qa/extras/layout/data/endOfLineComments.odt"
   },
   {
-    "id": "layout/fdo56797-2-min.odt"
+    "id": "layout/fdo56797-2-min.odt",
+    "path": "sw/qa/extras/layout/data/fdo56797-2-min.odt"
   },
   {
-    "id": "layout/i94666.odt"
+    "id": "layout/i94666.odt",
+    "path": "sw/qa/extras/layout/data/i94666.odt"
   },
   {
-    "id": "layout/image-comment.odt"
+    "id": "layout/image-comment.odt",
+    "path": "sw/qa/extras/layout/data/image-comment.odt"
   },
   {
-    "id": "layout/in_056132_mod.odt"
+    "id": "layout/in_056132_mod.odt",
+    "path": "sw/qa/extras/layout/data/in_056132_mod.odt"
   },
   {
-    "id": "layout/linked_frames_section_bug.odt"
+    "id": "layout/linked_frames_section_bug.odt",
+    "path": "sw/qa/extras/layout/data/linked_frames_section_bug.odt"
   },
   {
-    "id": "layout/many-paragraphs-per-page-in-6-columns.odt"
+    "id": "layout/many-paragraphs-per-page-in-6-columns.odt",
+    "path": "sw/qa/extras/layout/data/many-paragraphs-per-page-in-6-columns.odt"
   },
   {
-    "id": "layout/redline_footnotes.odt"
+    "id": "layout/redline_footnotes.odt",
+    "path": "sw/qa/extras/layout/data/redline_footnotes.odt"
   },
   {
-    "id": "layout/stable-at-page-anchored-fly-position.odt"
+    "id": "layout/stable-at-page-anchored-fly-position.odt",
+    "path": "sw/qa/extras/layout/data/stable-at-page-anchored-fly-position.odt"
   },
   {
-    "id": "layout/tab-over-margin.odt"
+    "id": "layout/tab-over-margin.odt",
+    "path": "sw/qa/extras/layout/data/tab-over-margin.odt"
   },
   {
-    "id": "layout/tabellen_test_windows_1.odt"
+    "id": "layout/tabellen_test_windows_1.odt",
+    "path": "sw/qa/extras/layout/data/tabellen_test_windows_1.odt"
   },
   {
-    "id": "layout/table-extrusion1.odt"
+    "id": "layout/table-extrusion1.odt",
+    "path": "sw/qa/extras/layout/data/table-extrusion1.odt"
   },
   {
-    "id": "layout/table-extrusion2.odt"
+    "id": "layout/table-extrusion2.odt",
+    "path": "sw/qa/extras/layout/data/table-extrusion2.odt"
   },
   {
-    "id": "layout/tdf106390.odt"
+    "id": "layout/tdf106390.odt",
+    "path": "sw/qa/extras/layout/data/tdf106390.odt"
   },
   {
-    "id": "layout/tdf116501.odt"
+    "id": "layout/tdf116501.odt",
+    "path": "sw/qa/extras/layout/data/tdf116501.odt"
   },
   {
-    "id": "layout/tdf116830.odt"
+    "id": "layout/tdf116830.odt",
+    "path": "sw/qa/extras/layout/data/tdf116830.odt"
   },
   {
-    "id": "layout/tdf116848.odt"
+    "id": "layout/tdf116848.odt",
+    "path": "sw/qa/extras/layout/data/tdf116848.odt"
   },
   {
-    "id": "layout/tdf117187.odt"
+    "id": "layout/tdf117187.odt",
+    "path": "sw/qa/extras/layout/data/tdf117187.odt"
   },
   {
-    "id": "layout/tdf117245.odt"
+    "id": "layout/tdf117245.odt",
+    "path": "sw/qa/extras/layout/data/tdf117245.odt"
   },
   {
-    "id": "layout/tdf118672.odt"
+    "id": "layout/tdf118672.odt",
+    "path": "sw/qa/extras/layout/data/tdf118672.odt"
   },
   {
-    "id": "layout/tdf119875.odt"
+    "id": "layout/tdf119875.odt",
+    "path": "sw/qa/extras/layout/data/tdf119875.odt"
   },
   {
-    "id": "layout/tdf121658.odt"
+    "id": "layout/tdf121658.odt",
+    "path": "sw/qa/extras/layout/data/tdf121658.odt"
   },
   {
-    "id": "layout/tdf122607.odt"
+    "id": "layout/tdf122607.odt",
+    "path": "sw/qa/extras/layout/data/tdf122607.odt"
   },
   {
-    "id": "layout/tdf122607_leerzeile.odt"
+    "id": "layout/tdf122607_leerzeile.odt",
+    "path": "sw/qa/extras/layout/data/tdf122607_leerzeile.odt"
   },
   {
-    "id": "layout/tdf123898.odt"
+    "id": "layout/tdf123898.odt",
+    "path": "sw/qa/extras/layout/data/tdf123898.odt"
   }
 ]

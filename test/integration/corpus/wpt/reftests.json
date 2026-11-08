@@ -12445,18 +12445,6 @@
     "resources": []
   },
   {
-    "id": "css/css-text-decor/text-decoration-inset-negative.html",
-    "print": false,
-    "refs": [
-      {
-        "path": "css/css-text-decor/text-decoration-inset-negative-notref.html",
-        "rel": "mismatch",
-        "resources": []
-      }
-    ],
-    "resources": []
-  },
-  {
     "id": "css/css-text-decor/text-decoration-inset-one-value.html",
     "print": false,
     "refs": [
@@ -12680,6 +12668,18 @@
     "refs": [
       {
         "path": "css/css-text-decor/text-emphasis-color-property-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-text-decor/text-emphasis-line-height-001b.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-text-decor/text-emphasis-line-height-001-ref.html",
         "rel": "match",
         "resources": []
       }
