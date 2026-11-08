@@ -254,15 +254,21 @@ func (p *chartReader) read(root *Element) {
 		p.fixedInner = l.Inner
 	}
 	p.readAxes(pa)
+	known := false
 	for _, g := range pa.Kids() {
 		if g.Space != NSChart {
 			continue
 		}
+		// A chart type without series draws nothing, not even its axes
+		// (oox's PlotAreaConverter makes no axes set of it).
 		if grp := p.group(g); grp != nil {
-			c.Groups = append(c.Groups, grp)
+			known = true
+			if len(grp.Series) > 0 {
+				c.Groups = append(c.Groups, grp)
+			}
 		}
 	}
-	if len(c.Groups) == 0 {
+	if !known {
 		p.warn(CodeChartUnsupported, "the chart has no chart type the reader draws")
 	}
 	p.categoryPositions()

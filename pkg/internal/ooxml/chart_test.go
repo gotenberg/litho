@@ -450,3 +450,13 @@ func TestChartFromElement_CustomLabels(t *testing.T) {
 		}
 	}
 }
+
+func TestChartFromElement_ChartTypeWithoutSeries(t *testing.T) {
+	c := readChart(t, chartXML("", `<c:title/>`, `<c:barChart><c:barDir val="col"/><c:axId val="1"/><c:axId val="2"/></c:barChart>`+axes), false)
+	if len(c.Groups) != 0 || hasWarning(c, CodeChartUnsupported) {
+		t.Errorf("groups %+v, warnings %+v: want no group and no warning", c.Groups, c.Warnings)
+	}
+	if c.Title == nil || c.Title.Text != "Chart Title" {
+		t.Errorf("title = %+v, want the automatic title", c.Title)
+	}
+}
