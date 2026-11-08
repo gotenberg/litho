@@ -200,6 +200,16 @@ func TestText_BodyProperties(t *testing.T) {
 				t.Errorf("autofit %+v", b)
 			}
 		}},
+		{"a clipped overflow", `<a:bodyPr vertOverflow="clip"/>`, func(t *testing.T, b *slides.TextBody) {
+			if !b.Clip {
+				t.Errorf("body %+v", b)
+			}
+		}},
+		{"an overflow", `<a:bodyPr vertOverflow="overflow"/>`, func(t *testing.T, b *slides.TextBody) {
+			if b.Clip {
+				t.Errorf("body %+v", b)
+			}
+		}},
 		{"a shape fit to its text keeps its box", `<a:bodyPr anchor="ctr"><a:spAutoFit/></a:bodyPr>`, func(t *testing.T, b *slides.TextBody) {
 			if b.Autofit != slides.AutofitNone || b.Anchor != slides.AnchorMiddle {
 				t.Errorf("body %+v", b)

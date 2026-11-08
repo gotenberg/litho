@@ -255,6 +255,11 @@ func bodyProps(bc chain) *slides.TextBody {
 	case "mongolianVert":
 		b.Vertical = css.VerticalLR
 	}
+	// A text cut at the box's bottom, or ellipsised there (21.1.2.1.1
+	// vertOverflow clip and ellipsis), is clipped as Impress clips both.
+	if v, ok := bc.attr("vertOverflow"); ok {
+		b.Clip = v == "clip" || v == "ellipsis"
+	}
 	if v, ok := bc.attr("rtlCol"); ok {
 		b.RightToLeft = ooxml.OnOff(v, true)
 	}
