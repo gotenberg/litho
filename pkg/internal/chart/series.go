@@ -484,7 +484,11 @@ func (rd *renderer) areas(g *Group, x, y *dim) []func() {
 	sv := rd.stack(g)
 	base := y.sc.clamp(x.crossValue())
 	var labels []func()
-	for i, s := range g.Series {
+	// The last series is drawn first, at the back, so the first stays in
+	// front (chart2's AreaChart reverses a two-dimensional area chart's
+	// series, ReverseSeriesOrderAreaAndNetChart).
+	for i := len(g.Series) - 1; i >= 0; i-- {
+		s := g.Series[i]
 		var top, bottom []compose.Point
 		for j := 0; j < sv.n && j < x.n; j++ {
 			v := sv.hi[i][j]

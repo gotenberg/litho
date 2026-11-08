@@ -349,3 +349,25 @@ func TestRender_GradientAndPatternFills(t *testing.T) {
 		t.Errorf("the pattern's background is not painted")
 	}
 }
+
+func TestRender_AreaSeriesBackToFront(t *testing.T) {
+	c := barChart(1, 2)
+	c.Groups[0].Kind = Area
+	c.Groups[0].Series = append(c.Groups[0].Series, &Series{Index: 1, Values: Data{Values: nums(2, 1), Cached: true}, Fill: &Paint{Color: blue}})
+	frags := Render(context.Background(), ahem(t), c, chartRect)
+	first, second, i := -1, -1, 0
+	walk(frags, 0, func(fr compose.Fragment, _ int) {
+		i++
+		if p, ok := fr.(*compose.Path); ok && p.Fill != nil {
+			switch {
+			case near(p.Fill.Color, red):
+				first = i
+			case near(p.Fill.Color, blue):
+				second = i
+			}
+		}
+	})
+	if first < 0 || second < 0 || first < second {
+		t.Errorf("first series drawn at %d, second at %d: want the first in front", first, second)
+	}
+}
