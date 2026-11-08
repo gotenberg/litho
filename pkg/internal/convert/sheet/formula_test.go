@@ -51,13 +51,16 @@ func TestApplyFormulas(t *testing.T) {
 		{"C1+1", num(45001), "YYYY-MM-DD"},
 		{"F6+1", num(3), ""},
 		{"VLOOKUP(1,A1:A3,1)", num(-1), ""},
+		{"HOUR(0.5208333)+MINUTE(0.5208333)/100", num(12.3), ""},
+		{`of:=COM.MICROSOFT.SWITCH([.A1];1;"one";2;"two";"other")`, Value{Kind: Text, Text: "two"}, ""},
+		{`COM.MICROSOFT.SWITCH(A1,"2","text two","other")`, Value{Kind: Text, Text: "text two"}, ""},
 		{"A1+", num(-1), ""},
 	}
 	var formulas []string
 	for _, tt := range tests {
 		formulas = append(formulas, tt.formula)
 	}
-	// F6 refers to the "A1+2" a few cells left: G6 below reads it.
+	// Q6 refers to the "A1+2" of A6.
 	formulas[16] = "A6-1"
 	tests[16].want = num(3)
 	doc := formulaDoc(formulas...)

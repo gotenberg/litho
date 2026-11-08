@@ -444,7 +444,9 @@ func (p *fparser) name() (fval, bool) {
 		return p.a1Ref(sheet)
 	}
 	if p.eat("(") {
-		return p.call(strings.ToUpper(word))
+		// OpenFormula names Excel's later functions in a namespace
+		// (ODF 1.3 Part 4, 4.15: COM.MICROSOFT.SWITCH).
+		return p.call(strings.TrimPrefix(strings.ToUpper(word), "COM.MICROSOFT."))
 	}
 	switch strings.ToUpper(word) {
 	case "TRUE":
@@ -966,9 +968,9 @@ func (b *builder) applyFormulas(doc *Document) *Document {
 
 // scalarFunction computes the functions of scalar arguments the
 // evaluator knows besides the aggregates: ROW and COLUMN of the cell or of
-// a reference, ABS, INT, MOD, ROUND, ISEVEN, ISODD, IF, AND, OR and NOT,
-// as Calc defines them; false for another function or a wrong count of
-// arguments.
+// a reference, ABS, INT, MOD, ROUND, ISEVEN, ISODD, IF, AND, OR, NOT,
+// HOUR, MINUTE, SECOND and SWITCH, as Calc defines them; false for
+// another function or a wrong count of arguments.
 func (p *fparser) scalarFunction(fn string, args []fval) (fval, bool) {
 	for _, a := range args {
 		if a.rng != nil && fn != "ROW" && fn != "COLUMN" {
@@ -1052,6 +1054,50 @@ func (p *fparser) scalarFunction(fn string, args []fval) (fval, bool) {
 		}
 		f := math.Pow(10, math.Trunc(y))
 		return val(math.Round(x*f) / f)
+	case "HOUR", "MINUTE", "SECOND":
+		// The time of day, rounded to the second first, as Calc's
+		// time functions read a serial (ScInterpreter::ScGetHour).
+		if len(args) != 1 {
+			return fval{}, false
+		}
+		x, err := num(0)
+		if err != nil {
+			return fval{v: *err}, true
+		}
+		secs := math.Round((x - math.Floor(x)) * 86400)
+		switch fn {
+		case "HOUR":
+			return val(math.Mod(math.Floor(secs/3600), 24))
+		case "MINUTE":
+			return val(math.Mod(math.Floor(secs/60), 60))
+		}
+		return val(math.Mod(secs, 60))
+	case "SWITCH":
+		// SWITCH(expression; value1; result1; ...; default): the result
+		// of the first value equal to the expression, else the default,
+		// else #N/A.
+		if len(args) < 3 {
+			return fval{}, false
+		}
+		e := scalar(args[0])
+		for i := 1; i+1 < len(args); i += 2 {
+			x := scalar(args[i])
+			// A number and a text compare as texts, as Calc's SWITCH
+			// matches 1 with "1" (sc/tdf130583.ods).
+			if (e.Kind == Text) != (x.Kind == Text) && e.Kind != Error && x.Kind != Error {
+				if strings.EqualFold(textOfValue(e), textOfValue(x)) {
+					return args[i+1], true
+				}
+				continue
+			}
+			if c := compareValues("=", e, x); c.v.Kind == Bool && c.v.Number != 0 {
+				return args[i+1], true
+			}
+		}
+		if len(args)%2 == 0 {
+			return args[len(args)-1], true
+		}
+		return fval{v: Value{Kind: Error, Text: "#N/A"}}, true
 	case "NOT":
 		if len(args) != 1 {
 			return fval{}, false
