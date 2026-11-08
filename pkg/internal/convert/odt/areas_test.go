@@ -1,6 +1,7 @@
 package odt
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -162,6 +163,18 @@ func TestConvert_Notes(t *testing.T) {
 	}
 	if got := pageText(res.Pages[1]); got != "iEnd body" {
 		t.Errorf("page 2 = %q", got)
+	}
+	// Writer links each citation to its note's number and back.
+	var dests []int
+	for _, p := range res.Pages {
+		for _, l := range p.Links {
+			if l.Dest != nil {
+				dests = append(dests, l.Dest.Page)
+			}
+		}
+	}
+	if fmt.Sprint(dests) != "[1 2 1 1]" {
+		t.Errorf("note link destinations = %v, want [1 2 1 1]", dests)
 	}
 	ls := lines(res.Pages[0])
 	if ls[len(ls)-1].size != 10 {

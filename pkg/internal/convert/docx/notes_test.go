@@ -28,6 +28,19 @@ func TestNotes(t *testing.T) {
 	if got := docText(doc); !strings.Contains(got, "footnote body") || !strings.Contains(got, "endnote body") {
 		t.Errorf("notes not drawn: %q", got)
 	}
+	// Each call links to its note's number and the number back, as
+	// LibreOffice exports a note.
+	var dests []int
+	for _, p := range doc.Pages {
+		for _, l := range p.Links {
+			if l.Dest != nil {
+				dests = append(dests, l.Dest.Page)
+			}
+		}
+	}
+	if len(dests) != 4 {
+		t.Errorf("note links %v, want 4", dests)
+	}
 }
 
 func TestFields(t *testing.T) {
