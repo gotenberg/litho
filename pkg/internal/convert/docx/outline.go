@@ -5,6 +5,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 )
 
@@ -80,7 +81,9 @@ func headingTitle(n *layout.Node) string {
 		case layout.Replaced:
 			b.WriteString(cur.Alt)
 		case layout.Element:
-			if cur.Footnote != nil {
+			if cur.Footnote != nil || cur != n && (cur.Style.Float != css.FloatNone || cur.Style.Position == css.Absolute) {
+				// A note's body and an anchored drawing's text are not
+				// the heading's title, as LibreOffice bookmarks it.
 				continue
 			}
 			for i := len(cur.Children) - 1; i >= 0; i-- {

@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -161,5 +163,23 @@ func TestConvert_Outline(t *testing.T) {
 	b := build(t, body, map[string]string{"word/styles.xml": styles})
 	if len(role(b.root, "H1")) != 2 || len(role(b.root, "H2")) != 1 {
 		t.Error("heading roles not set from the outline levels")
+	}
+}
+
+func TestHeadingTitle_LeavesOutAnchoredText(t *testing.T) {
+	t.Parallel()
+	inline := css.Initial()
+	float := css.Initial()
+	float.Float = css.FloatLeft
+	abs := css.Initial()
+	abs.Position = css.Absolute
+	txtNode := func(st *css.Style, s string) *layout.Node {
+		return &layout.Node{Kind: layout.Element, Style: st, Children: []*layout.Node{{Kind: layout.Text, Style: st, Text: s}}}
+	}
+	h := &layout.Node{Kind: layout.Element, Style: inline, Children: []*layout.Node{
+		txtNode(inline, "Contents:"), txtNode(float, "Box"), txtNode(abs, "Frame"),
+	}}
+	if got := headingTitle(h); got != "Contents:" {
+		t.Errorf("title %q, want Contents:", got)
 	}
 }
