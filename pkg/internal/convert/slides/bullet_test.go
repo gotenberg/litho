@@ -149,3 +149,32 @@ func TestText_Autofit(t *testing.T) {
 		}
 	}
 }
+
+// TestNumbers checks how numbered paragraphs count: per level and format,
+// a start of 0 continuing, the same start continuing, another start
+// restarting.
+func TestNumbers(t *testing.T) {
+	p := func(level, start int, format string) Paragraph {
+		return Paragraph{Level: level, Runs: []Run{{Text: "x"}}, Bullet: &Bullet{Kind: BulletNumber, Format: format, StartAt: start}}
+	}
+	for _, tc := range []struct {
+		name  string
+		paras []Paragraph
+		want  []int
+	}{
+		{"continue", []Paragraph{p(0, 0, "arabicPeriod"), p(0, 0, "arabicPeriod"), p(0, 0, "arabicPeriod")}, []int{1, 2, 3}},
+		{"same-start", []Paragraph{p(0, 3, "arabicPeriod"), p(0, 3, "arabicPeriod")}, []int{3, 4}},
+		{"zero-continues", []Paragraph{p(0, 3, "arabicPeriod"), p(0, 0, "arabicPeriod")}, []int{3, 4}},
+		{"restart", []Paragraph{p(0, 1, "arabicPeriod"), p(0, 1, "arabicPeriod"), p(0, 7, "arabicPeriod")}, []int{1, 2, 7}},
+		{"format", []Paragraph{p(0, 0, "arabicPeriod"), p(0, 0, "alphaLcParenR")}, []int{1, 1}},
+		{"levels", []Paragraph{p(0, 0, "arabicPeriod"), p(1, 0, "arabicPeriod"), p(1, 0, "arabicPeriod"), p(0, 0, "arabicPeriod"), p(1, 0, "arabicPeriod")}, []int{1, 1, 2, 2, 1}},
+	} {
+		got := numbers(tc.paras)
+		for i := range tc.want {
+			if got[i] != tc.want[i] {
+				t.Errorf("%s: numbers %v, want %v", tc.name, got, tc.want)
+				break
+			}
+		}
+	}
+}

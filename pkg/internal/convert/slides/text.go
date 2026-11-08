@@ -464,12 +464,18 @@ const maxColumns = 16
 // the others: paragraphs count per level, from the StartAt of the first
 // of a run of paragraphs of one level and format, a paragraph of a
 // shallower level restarting the deeper ones, one of the level without
-// the format restarting its own (Outliner::ImplCalcBulletText).
+// the format restarting its own (Outliner::ImplCalcBulletText). A
+// paragraph whose StartAt is not 0 and differs from the one its level's
+// count began at restarts the count there, as a new start value starts a
+// new numbering; the same start again continues it, as the paragraphs of
+// one list all state it.
 func numbers(paras []Paragraph) []int {
 	out := make([]int, len(paras))
 	type level struct {
 		format string
 		n      int
+		// start is the StartAt the level's count began from.
+		start int
 	}
 	var levels []level
 	for i := range paras {
@@ -487,14 +493,15 @@ func numbers(paras []Paragraph) []int {
 			}
 			continue
 		}
-		if levels[lv].format == p.Bullet.Format && levels[lv].n > 0 {
-			levels[lv].n++
+		at := p.Bullet.StartAt
+		if l := &levels[lv]; l.format == p.Bullet.Format && l.n > 0 && (at <= 0 || at == l.start) {
+			l.n = min(l.n+1, maxNumber)
 		} else {
-			start := p.Bullet.StartAt
+			start := at
 			if start <= 0 {
 				start = 1
 			}
-			levels[lv] = level{format: p.Bullet.Format, n: min(start, maxNumber)}
+			levels[lv] = level{format: p.Bullet.Format, n: min(start, maxNumber), start: at}
 		}
 		out[i] = levels[lv].n
 	}
