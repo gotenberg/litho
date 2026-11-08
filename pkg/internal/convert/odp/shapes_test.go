@@ -370,3 +370,22 @@ func TestRead_ImageOpacity(t *testing.T) {
 		t.Errorf("fragments = %+v, want a group at 49%% opacity", frags)
 	}
 }
+
+func TestRead_LinkedPictureFrame(t *testing.T) {
+	t.Parallel()
+	f := flat{body: page(`<draw:frame svg:width="2cm" svg:height="2cm"><draw:image xlink:href="../chart.svg"/><draw:image xlink:href="Pictures/x.png"/></draw:frame>` +
+		`<draw:rect svg:width="1cm" svg:height="1cm"/>`)}
+	doc, _ := read(t, f.bytes())
+	if n := len(doc.Slides[0].Shapes); n != 1 {
+		t.Errorf("%d shapes, want the rectangle alone: a frame of a picture linked outside prints nothing", n)
+	}
+}
+
+func TestLinkedOutside(t *testing.T) {
+	t.Parallel()
+	for href, want := range map[string]bool{"../a.svg": true, "/tmp/a.png": true, "https://x/a.png": true, "Pictures/a.png": false, "./Pictures/a.png": false} {
+		if got := linkedOutside(href); got != want {
+			t.Errorf("linkedOutside(%q) = %v, want %v", href, got, want)
+		}
+	}
+}

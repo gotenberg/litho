@@ -225,6 +225,14 @@ func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 			return s
 		case k.Is(odf.NSDraw, "image"):
 			pic := r.picture(k)
+			if pic == nil && linkedOutside(k.A(odf.NSXLink, "href")) {
+				// A picture linked outside the package prints nothing, its
+				// replacement picture included, as Impress, which does not
+				// fetch the link on a conversion, prints its frame (odp:
+				// sd/tdf116266's frame of a linked SVG and a PNG prints
+				// nothing).
+				return nil
+			}
 			if pic == nil {
 				continue
 			}
@@ -280,6 +288,13 @@ func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 		return s
 	}
 	return nil
+}
+
+// linkedOutside reports an xlink:href naming a file outside the package:
+// one of a scheme, or a relative path leaving it (ODF 1.3, Part 3,
+// 19.910: a package-relative href never starts with "../" or "/").
+func linkedOutside(href string) bool {
+	return strings.Contains(href, "://") || strings.HasPrefix(href, "../") || strings.HasPrefix(href, "/")
 }
 
 // hasParagraphs reports an element holding text:p or text:list children.
