@@ -41,6 +41,12 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 		if len(frags) > 0 {
 			parent.Kids = append(parent.Kids, fig)
 		}
+		// A picture's own fill paints under it and its line over it, as
+		// Impress draws a picture whose shape properties fill and stroke
+		// it (oox/tdf163803_image_with_fill.pptx).
+		ops := rectOps(box)
+		frags = append(b.fill(&s.Fill, box, ops, shape.FillNorm), frags...)
+		frags = append(frags, b.stroke(&s.Line, ops)...)
 		out = group(sm, b.contentEffects(s, frags, m))
 	case KindChart:
 		if s.Chart == nil {
