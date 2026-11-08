@@ -297,6 +297,7 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 	if pr := el.A(odf.NSTable, "print-ranges"); pr != "" {
 		sh.Page.PrintAreas = parseRanges(pr)
 	}
+	calcext := false
 	for _, c := range el.Children {
 		switch {
 		case c.Is(odf.NSTable, "named-expressions"):
@@ -305,6 +306,7 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 			}
 		case c.Is(nsCalcExt, "conditional-formats"):
 			r.conditionalFormats(sh, c)
+			calcext = true
 		case c.Is(odf.NSOffice, "forms"):
 			if len(c.Children) > 0 {
 				r.warn("form-controls", "form controls are not drawn")
@@ -312,6 +314,9 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 		case c.Is(odf.NSTable, "scenario"):
 			r.warn("scenarios", "scenarios are not read")
 		}
+	}
+	if !calcext {
+		r.styleMaps(sh)
 	}
 	return sh
 }

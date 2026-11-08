@@ -409,3 +409,97 @@ func encodeStyleName(s string) string {
 	}
 	return b.String()
 }
+
+// maxMapRanges caps the ranges the style maps of one table give their
+// conditions. Anti-DoS guard, not spec-mandated: a table holds a few
+// hundred cells of conditional styles.
+const maxMapRanges = 4096
+
+// styleMaps gives the cells of the table sh whose cell style holds
+// style:map conditions (ODF 1.3, Part 3, 16.3 style:map), the columns'
+// default cell styles and the cells' own, those conditions, as Calc reads
+// a document without calcext:conditional-formats: one conditional format
+// per style, over its cells, its conditions in document order.
+func (r *reader) styleMaps(sh *sheet.Sheet) {
+	names := map[*sheet.Style]string{}
+	for name, st := range r.cellSty {
+		if st != nil {
+			names[st] = name
+		}
+	}
+	var order []string
+	ranges := map[string][]sheet.Range{}
+	hasRules := map[string]bool{}
+	n := 0
+	add := func(st *sheet.Style, rg sheet.Range) {
+		name, ok := names[st]
+		if !ok || n >= maxMapRanges {
+			return
+		}
+		has, seen := hasRules[name]
+		if !seen {
+			has = len(r.mapRules(sh, name)) > 0
+			hasRules[name] = has
+			if has {
+				order = append(order, name)
+			}
+		}
+		if has {
+			n++
+			ranges[name] = append(ranges[name], rg)
+		}
+	}
+	for _, c := range sh.Columns {
+		if c.Style != nil {
+			add(c.Style, sheet.Range{FirstColumn: c.First, LastColumn: c.Last, LastRow: maxRows - 1})
+		}
+	}
+	for _, rw := range sh.Rows {
+		for _, c := range rw.Cells {
+			if c.Style != nil {
+				add(c.Style, sheet.Range{FirstRow: rw.Index, LastRow: rw.Index, FirstColumn: c.Column, LastColumn: c.Column})
+			}
+		}
+	}
+	for _, name := range order {
+		if len(sh.Conditional) >= maxCondFormats {
+			break
+		}
+		sh.Conditional = append(sh.Conditional, sheet.Conditional{Ranges: ranges[name], Rules: r.mapRules(sh, name)})
+	}
+}
+
+// mapRules returns the conditions of the style:map elements of the cell
+// style name: "cell-content()" compared with an operand,
+// "cell-content-is-between(a,b)" and its negation; any other condition
+// is kept with its formula.
+func (r *reader) mapRules(sh *sheet.Sheet, name string) []sheet.Rule {
+	st := r.styles.Style(odf.ScopeContent, odf.FamilyCell, name)
+	if st == nil {
+		return nil
+	}
+	var out []sheet.Rule
+	for _, m := range st.El.Children {
+		if !m.Is(odf.NSStyle, "map") || len(out) >= maxCondRules {
+			continue
+		}
+		cond := strings.TrimSpace(m.A(odf.NSStyle, "condition"))
+		var rule sheet.Rule
+		switch {
+		case strings.HasPrefix(cond, "cell-content()"):
+			rule = r.condition(sh, strings.TrimPrefix(cond, "cell-content()"), nil, &relative{})
+		case strings.HasPrefix(cond, "cell-content-is-between("):
+			rule = r.condition(sh, "between("+strings.TrimPrefix(cond, "cell-content-is-between("), nil, &relative{})
+		case strings.HasPrefix(cond, "cell-content-is-not-between("):
+			rule = r.condition(sh, "not-between("+strings.TrimPrefix(cond, "cell-content-is-not-between("), nil, &relative{})
+		default:
+			rule = sheet.Rule{Kind: sheet.RuleExpression, Formula: cond}
+		}
+		if rule.Kind != sheet.RuleCellIs {
+			rule = sheet.Rule{Kind: sheet.RuleExpression, Formula: cond}
+		}
+		rule.Style = r.condStyle(m.A(odf.NSStyle, "apply-style-name"))
+		out = append(out, rule)
+	}
+	return out
+}

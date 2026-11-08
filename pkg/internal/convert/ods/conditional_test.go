@@ -119,3 +119,34 @@ func TestEncodeStyleName(t *testing.T) {
 		}
 	}
 }
+
+// TestRead_StyleMaps locks the style:map conditions of a table without
+// calcext conditional formats: one format per mapped cell style over its
+// column and its cells, the comparisons read, the others kept with their
+// formula; a table with calcext formats ignores the maps.
+func TestRead_StyleMaps(t *testing.T) {
+	styles := `<style:style style:name="grey" style:family="table-cell" style:parent-style-name="Default"><style:table-cell-properties fo:background-color="#999999"/></style:style>`
+	auto := `<style:style style:name="ce1" style:family="table-cell" style:parent-style-name="Default">` +
+		`<style:map style:condition="cell-content()=1" style:apply-style-name="grey" style:base-cell-address="S.A1"/>` +
+		`<style:map style:condition="cell-content-is-between(2,&quot;b&quot;)" style:apply-style-name="grey" style:base-cell-address="S.A1"/>` +
+		`<style:map style:condition="cell-content()!=x" style:apply-style-name="grey" style:base-cell-address="S.A1"/></style:style>`
+	body := func(extra string) string {
+		return `<table:table table:name="S"><table:table-column table:default-cell-style-name="ce1"/><table:table-column/>` +
+			`<table:table-row><table:table-cell office:value-type="float" office:value="1"/><table:table-cell table:style-name="ce1" office:value-type="float" office:value="1"/></table:table-row>` +
+			extra + `</table:table>`
+	}
+	doc, _ := read(t, flat{styles: styles, auto: auto, body: body("")}.bytes())
+	cf := doc.Sheets[0].Conditional
+	if len(cf) != 1 || len(cf[0].Ranges) != 2 || cf[0].Ranges[0] != (sheet.Range{LastRow: 1<<20 - 1}) || cf[0].Ranges[1] != (sheet.Range{FirstColumn: 1, LastColumn: 1}) {
+		t.Fatalf("conditional formats %+v", cf)
+	}
+	rules := cf[0].Rules
+	if len(rules) != 3 || rules[0].Operator != "equal" || rules[0].Values[0].Number != 1 || rules[1].Operator != "between" || rules[1].Values[1].Text != "b" ||
+		rules[2].Formula != "x" || rules[0].Style == nil || rules[0].Style.Fill.Color.A == 0 {
+		t.Errorf("rules %+v", rules)
+	}
+	doc, _ = read(t, flat{styles: styles, auto: auto, body: body(`<calcext:conditional-formats/>`)}.bytes())
+	if cf := doc.Sheets[0].Conditional; len(cf) != 0 {
+		t.Errorf("a calcext table reads its maps: %+v", cf)
+	}
+}
