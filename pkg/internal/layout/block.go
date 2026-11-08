@@ -533,7 +533,8 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	}
 	if b.kind == kindReplaced || b.establishesBFC() {
 		top := e.pastMargin(cursor, mc.strut.add(mt), mc.kept)
-		if want := e.pageTopOf(b, top); want > top+eps {
+		want := e.pageTopOf(b, top)
+		if want > top+eps {
 			// The box starts no higher than its distance from its page's
 			// top edge (css.Office.PageTop).
 			mc.commit(top)
@@ -541,7 +542,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		}
 		switch {
 		case cleared:
-			top = max(clearY, top)
+			top = max(clearY, want)
 		default:
 			if fy, ok := mc.floatTop(); ok && math.Abs(top-fy) > eps && bc.narrowed(fy, 0, cb.x, cb.x+cb.w) {
 				// A float placed under the pending margins sits at fy: a
