@@ -123,7 +123,7 @@ func remediateFixture(ctx context.Context, data []byte, profile string, opts ...
 //   - litho/pdf: every fixture at 15 profiles, both modes, under a delay injected
 //     at random before each compliance check group and a 64-object cache,
 //     wrote the same bytes in all 4080 cells.
-//   - govdocs, verapdf, pdfcpu, pdf20, facturx: the 930 files naming a
+//   - govdocs/pdf, verapdf, pdfcpu, pdf20, facturx: the 930 files naming a
 //     /StructTreeRoot in their bytes, at the same 15 profiles and both modes
 //     under the same injected delay, wrote the same bytes in all 27900 cells.
 //   - pdfjs: the command line wrote different bytes for 7 of 158 tagged

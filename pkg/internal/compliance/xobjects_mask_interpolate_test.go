@@ -16,7 +16,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400019.pdf: carries 72 images with /Interpolate
+//   - govdocs/pdf thread_400_400019.pdf: carries 72 images with /Interpolate
 //     true, of which 15 are reached only as a /SMask. veraPDF reported 72 and
 //     litho 57 before the walk descended into masks.
 func TestMaskImageInterpolateJudged(t *testing.T) {

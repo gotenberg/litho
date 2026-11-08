@@ -23,7 +23,7 @@ import (
 //   - pdfjs issue7835.pdf, issue18466.pdf: each shows an unembedded
 //     CIDFontType2 with no /CIDToGIDMap, and veraPDF reports both at PDF/A-1a
 //     while litho reported neither.
-//   - govdocs thread_400_400765.pdf: shows an unembedded CIDFontType2 with no
+//   - govdocs/pdf thread_400_400765.pdf: shows an unembedded CIDFontType2 with no
 //     /CIDToGIDMap, and veraPDF reports it at PDF/A-1a while litho did not.
 func TestCIDToGIDMapEscapeDiffersByPart(t *testing.T) {
 	t.Parallel()

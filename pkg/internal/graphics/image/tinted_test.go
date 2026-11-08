@@ -172,7 +172,7 @@ func TestDecodeImage_DeviceNRepeatedTuplesUseTheCache(t *testing.T) {
 //
 //   - All corpora: every tint transform measured maps tint 0 to paper white and
 //     full tint to near black.
-//   - govdocs thread_200_200192.pdf: before the fix, three images and 687,592
+//   - govdocs/pdf thread_200_200192.pdf: before the fix, three images and 687,592
 //     pixels came back with not one pixel above luminance 192, against
 //     poppler's MEAN_LUM=221.91 for the same page.
 func TestDecodeImage_SeparationDecodesThroughItsTintTransform(t *testing.T) {
@@ -284,7 +284,7 @@ func TestDecodeImage_SeparationOverCMYKAlternate(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs: 74 of the 112 Separation images use a type 0 tint transform.
+//   - govdocs/pdf: 74 of the 112 Separation images use a type 0 tint transform.
 func TestDecodeImage_SeparationWithSampledTint(t *testing.T) {
 	t.Parallel()
 

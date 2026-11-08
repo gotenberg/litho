@@ -124,7 +124,7 @@ func loadFixturesNone(m *Manifest, pdfs []string) []Fixture {
 //
 // # Corpus evidence
 //
-//   - govdocs: 1091 PDFs, and the live XMP scan adds ~30s to every run,
+//   - govdocs/pdf: 1091 PDFs, and the live XMP scan adds ~30s to every run,
 //     which is why a provisioned claims.csv replaces it.
 func loadFixturesAuto(ctx context.Context, m *Manifest, pdfs []string) ([]Fixture, error) {
 	allow := make(map[string]bool, len(m.Profiles))

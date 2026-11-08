@@ -10,7 +10,7 @@ import "testing"
 //
 // # Corpus evidence
 //
-//   - govdocs: 0x03 (ETX) shows up as a Producer prefix on some fixtures,
+//   - govdocs/pdf: 0x03 (ETX) shows up as a Producer prefix on some fixtures,
 //     which the etx-prefix case reproduces.
 func TestStripUndefinedControls(t *testing.T) {
 	t.Parallel()

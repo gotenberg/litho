@@ -36,7 +36,7 @@ func wellFormed(t *testing.T, patched string) {
 //
 // # Corpus evidence
 //
-//   - govdocs: seven files came out of remediation newly failing 6.6.2.1 tests
+//   - govdocs/pdf: seven files came out of remediation newly failing 6.6.2.1 tests
 //     4 and 5, confirmed against veraPDF on the remediated file.
 func TestPatchExistingXMPKeepsAttributeFormWellFormed(t *testing.T) {
 	t.Parallel()
@@ -67,7 +67,7 @@ func TestPatchExistingXMPKeepsAttributeFormWellFormed(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400038: has /Keywords "victims--general, victims'
+//   - govdocs/pdf thread_400_400038: has /Keywords "victims--general, victims'
 //     rights" and a single-quoted pdf:Keywords attribute, and the unescaped
 //     apostrophe ended the attribute mid-value.
 func TestPatchExistingXMPEscapesAnApostrophe(t *testing.T) {
@@ -132,7 +132,7 @@ func TestPatchExistingXMPLeavesElementFormAlone(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000187.pdf: has a CRLF inside /Keywords, litho
+//   - govdocs/pdf thread_000_000187.pdf: has a CRLF inside /Keywords, litho
 //     reported "synced pdf:Keywords with Info /Keywords", and both litho and
 //     veraPDF still failed test 5 on the output.
 func TestXMLEscapeCarriageReturnRoundTrips(t *testing.T) {

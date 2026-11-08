@@ -40,7 +40,7 @@ type OtherPageCopy struct {
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfcpu, pdfjs, redacting all of page 1: every surviving copy
+//   - govdocs/pdf, pdfcpu, pdfjs, redacting all of page 1: every surviving copy
 //     is one other pages draw in 355 of 459 govdocs refusals with
 //     ErrRedactionIncomplete, 4 of 10 pdfcpu and 19 of 60 pdfjs ones, mostly
 //     running headers and footers (pdfjs issue11532.pdf, "Federal Reserve

@@ -37,12 +37,12 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs: 10 files carry WordPerfect and Symbol subsets of this kind
+//   - govdocs/pdf: 10 files carry WordPerfect and Symbol subsets of this kind
 //     that get a map. On veraPDF 1.30.2 the remediated outputs of 8 lose
 //     6.2.11.7.2 t1 at PDF/A-2u and PDF/A-3u, 7.21.7 t1 at PDF/UA-1 and
 //     8.4.5.8 t1 at PDF/UA-2, the other 2 keep it for other fonts, none gains
 //     a rule, and litho's extracted text is unchanged.
-//   - govdocs thread_200_200393.pdf, thread_300_300082.pdf,
+//   - govdocs/pdf thread_200_200393.pdf, thread_300_300082.pdf,
 //     thread_300_300237.pdf: post names code 0xB7 bullet. PDF.js reads "∑"
 //     from the original, its golden, and "•" from the remediated file.
 //   - All corpora: 41 files show a symbolic Type 1 font that states no
@@ -68,7 +68,7 @@ import (
 //   - All corpora: the fonts left unmapped name a shown code with a name no
 //     glyph list carries (the "H11021" names of the Universal and
 //     MathematicalPi subsets), or a numeric one (AdvOpti's "C42").
-//   - govdocs thread_000_000763.pdf, litho/pdf ttcmap_2b.pdf and
+//   - govdocs/pdf thread_000_000763.pdf, litho/pdf ttcmap_2b.pdf and
 //     ttmaccopy_2b.pdf: symbolic TrueType fonts behind a genuine (1,0)
 //     subtable get a map. On veraPDF 1.30.2 their remediated outputs lose
 //     6.3.8 t1, 6.2.11.7.2 t1, 7.21.7 t1 or 8.4.5.8 t1 at the seven levels

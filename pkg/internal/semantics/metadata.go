@@ -363,7 +363,7 @@ func Metadata(ctx context.Context, doc *document.Document) (map[string]string, e
 //
 // # Corpus evidence
 //
-//   - govdocs: the largest file is ~12 MB.
+//   - govdocs/pdf: the largest file is ~12 MB.
 const maxRawInfoScanBytes = 10 * 1024 * 1024
 
 // scanRawInfoFields scans the raw PDF bytes for Info-dict field

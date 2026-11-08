@@ -70,7 +70,7 @@ const (
 //   - All corpora: 5,713 of the 5,892 images whose only filter is DCTDecode
 //     are re-coded, saving 19.3 MB, and libjpeg-turbo's djpeg and [Decode]
 //     read every one to the samples they read from its source.
-//   - govdocs: the re-coding saves 100.2% of what jpegtran -optimize saves,
+//   - govdocs/pdf: the re-coding saves 100.2% of what jpegtran -optimize saves,
 //     and 95.2% while it kept restart intervals.
 //   - All corpora: 865 of 6,349 DCTDecode images have restart intervals,
 //     56.4 MB. Dropping them saves 0.73 MB more than keeping them, re-codes

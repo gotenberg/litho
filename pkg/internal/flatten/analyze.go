@@ -717,7 +717,7 @@ const maxTakenBoxes = 256
 //     two knockout forms of a glow drawn at constant alphas stayed after
 //     the image that held them, and 5 pixels over flat areas drew 20 to 27
 //     levels lighter by litho's rendering.
-//   - govdocs, pdfjs: flattening writes other content for 8 files where an
+//   - govdocs/pdf, pdfjs: flattening writes other content for 8 files where an
 //     opaque unit overlapped one the image took over. Of the 11 pages, 9
 //     differ less from the source by litho's rendering; the flatten cell
 //     scores as before.

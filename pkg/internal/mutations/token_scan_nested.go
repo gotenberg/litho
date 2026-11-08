@@ -80,7 +80,7 @@ func (w *scanWalk) scanBlob(ctx context.Context, objNum int, dict ast.PdfDict, d
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400240.pdf: page 1 shows "%PDF-1.4" as text, a
+//   - govdocs/pdf thread_400_400240.pdf: page 1 shows "%PDF-1.4" as text, a
 //     page about the file format. Redacting a band of it refused with one
 //     object unread: the content stream the redaction wrote for the page,
 //     opened as an attached PDF because the header sat in its first bytes.

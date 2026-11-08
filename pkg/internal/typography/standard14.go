@@ -13,7 +13,7 @@ import "github.com/gotenberg/litho/pkg/internal/typography/encodings"
 //
 // # Corpus evidence
 //
-//   - govdocs: fonts named Arial, TimesNewRoman or CourierNew, plain or with
+//   - govdocs/pdf: fonts named Arial, TimesNewRoman or CourierNew, plain or with
 //     a comma style, and no /Widths were the only fonts a PDF/A-2b
 //     remediation given Liberation programs refused for declaring no widths.
 //     Read as their standard fonts, they take a program, and the residual of

@@ -596,7 +596,7 @@ func pruneRootFields(
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100196, thread_300_300346, thread_400_400371,
+//   - govdocs/pdf thread_100_100196, thread_300_300346, thread_400_400371,
 //     thread_400_400916, pdfjs annotation-link-text-popup: redacting page 1
 //     was refused over a removed link's URI that an /OBJR still reached, and
 //     now succeeds.

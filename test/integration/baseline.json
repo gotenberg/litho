@@ -563,7 +563,7 @@
         }
       }
     },
-    "govdocs": {
+    "govdocs/pdf": {
       "features": {
         "flatten": {
           "matched": 34,

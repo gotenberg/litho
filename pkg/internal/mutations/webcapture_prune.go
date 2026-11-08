@@ -30,7 +30,7 @@ var webCaptureTrees = []ast.PdfName{"IDS", "URLS"}
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400742.pdf: held 730 bytes of a deleted page through
+//   - govdocs/pdf thread_400_400742.pdf: held 730 bytes of a deleted page through
 //     a content set after the destinations, the structure tree and the article
 //     threads had all let go.
 //   - All corpora: 8 files carry Web Capture trees, 32 content sets between

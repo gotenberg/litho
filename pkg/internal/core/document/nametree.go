@@ -262,7 +262,7 @@ func ResolveDestinationPage(ctx context.Context, doc *Document, dest ast.PdfObje
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300865 and three other govdocs outlines: wrap the
+//   - govdocs/pdf thread_300_300865 and three other govdocs/pdf outlines: wrap the
 //     destination in a GoTo action in /Dest, and every one of their bookmarks
 //     reported no page at all until /D was followed.
 func resolveDestinationPage(ctx context.Context, doc *Document, dest ast.PdfObject, pageMap map[ast.PdfIndirectRef]int, depth int) int {
@@ -330,7 +330,7 @@ func resolveDestinationPage(ctx context.Context, doc *Document, dest ast.PdfObje
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300254.pdf: sends a link on page 20 to
+//   - govdocs/pdf thread_300_300254.pdf: sends a link on page 20 to
 //     /Dest [19 /XYZ 87 243 0].
 func pageFromDestArray(arr ast.PdfArray, pageMap map[ast.PdfIndirectRef]int) int {
 	if len(arr) == 0 {

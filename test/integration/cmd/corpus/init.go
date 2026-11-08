@@ -251,7 +251,7 @@ func buildScanClaimsBinary(goarch string) (string, error) {
 //
 // # Corpus evidence
 //
-//   - govdocs: its scan finds no profile claim, so it has no VeraPDF report
+//   - govdocs/pdf: its scan finds no profile claim, so it has no VeraPDF report
 //     and no compliance cell.
 //   - pdf20: its scan finds no profile claim either, so it is in the same
 //     state.

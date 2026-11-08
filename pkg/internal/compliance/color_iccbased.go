@@ -90,21 +90,21 @@ func iccBasedIdentityRule(part int) Rule {
 //   - pdfjs issue17689.pdf: fails ISO 19005-1, 6.2.3.2 t1 600 times with
 //     veraPDF, once per link, where litho failed it once per page, seven
 //     times.
-//   - govdocs thread_400_400765.pdf: sixteen pages use one direct CMYK space,
+//   - govdocs/pdf thread_400_400765.pdf: sixteen pages use one direct CMYK space,
 //     and veraPDF fails the profile test once.
 //   - All corpora: under PDF/A-1b and PDF/A-2b, and the verapdf files under
 //     their own profile, following the overprint mode moves eight counts on
 //     five files, each to veraPDF's count, and no verdict: three of the
 //     profile tests and five of ISO 19005-2, 6.2.4.2 t2, which litho stated
 //     once per page for fills and once for strokes.
-//   - govdocs thread_200_200973.pdf: paints its direct CMYK space under three
+//   - govdocs/pdf thread_200_200973.pdf: paints its direct CMYK space under three
 //     overprint modes, and veraPDF fails the profile test and ISO 19005-1,
 //     6.2.3.2 t2 three times each, and 6.2.4.2 t2 once, where litho failed
 //     the first two once and t2 four times.
-//   - govdocs thread_000_000372.pdf, thread_000_000314.pdf and
+//   - govdocs/pdf thread_000_000372.pdf, thread_000_000314.pdf and
 //     thread_400_400567.pdf: veraPDF fails 6.2.4.2 t2 once, where litho
 //     failed it 40, 7 and 9 times.
-//   - govdocs thread_200_200087.pdf: veraPDF fails 6.2.4.2 t2 three times,
+//   - govdocs/pdf thread_200_200087.pdf: veraPDF fails 6.2.4.2 t2 three times,
 //     where litho failed it 7 times.
 func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []pageCtx, part int, results *[]Violation) {
 	// Collect the OutputIntent ICC profile info for identity comparison (parts 2+).

@@ -16,7 +16,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400934.pdf: writes /Footnote, mapped to /Note,
+//   - govdocs/pdf thread_400_400934.pdf: writes /Footnote, mapped to /Note,
 //     without /ID, and veraPDF reports 7.9 t1.
 func TestRoleMappedNoteAndFormula(t *testing.T) {
 	t.Parallel()

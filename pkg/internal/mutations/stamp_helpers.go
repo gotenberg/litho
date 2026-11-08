@@ -46,7 +46,7 @@ type stampResource struct {
 // # Corpus evidence
 //
 //   - All corpora: 4% of the files measured carry a non-zero box origin.
-//   - govdocs thread_000_000018.pdf: its box starts at (-306, -396), where an
+//   - govdocs/pdf thread_000_000018.pdf: its box starts at (-306, -396), where an
 //     unshifted stamp landed in the middle of the page and ran off the right
 //     edge, losing its last character to the crop.
 //   - litho/pdf viewerboxes_2b.pdf: page 1 states /MediaBox [10 10 300], which a

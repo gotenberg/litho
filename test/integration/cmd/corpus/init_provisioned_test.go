@@ -64,7 +64,7 @@ func veraEmpty() map[string]bool {
 //
 // # Corpus evidence
 //
-//   - govdocs, 1091 PDFs: none claims a profile, so claims.csv has zero rows.
+//   - govdocs/pdf, 1091 PDFs: none claims a profile, so claims.csv has zero rows.
 //   - pdf20, 7 PDFs: none claims a profile either.
 func TestProvisionedAcceptsClaimlessAutoCorpus(t *testing.T) {
 	t.Parallel()

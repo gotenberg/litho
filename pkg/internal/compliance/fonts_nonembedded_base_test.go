@@ -27,7 +27,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000578.pdf, thread_000_000885.pdf: show Times-Bold
+//   - govdocs/pdf thread_000_000578.pdf, thread_000_000885.pdf: show Times-Bold
 //     and Palatino-Roman respectively, both with a /FontDescriptor, no program
 //     and a /Differences array naming none of the codes they draw. veraPDF
 //     reports ISO 14289-1 §7.21.7 t1 on every glyph.

@@ -92,7 +92,7 @@ func deleteFirstPage(t *testing.T) *writer.ObjAllocator {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100852.pdf: deleting page 1 left the page behind with
+//   - govdocs/pdf thread_100_100852.pdf: deleting page 1 left the page behind with
 //     all 1191 bytes of its content.
 func TestDeletePagesPrunesDestinationsToRemovedPages(t *testing.T) {
 	t.Parallel()
@@ -251,7 +251,7 @@ func TestRemovedPageSetKeepsRepeatedPages(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100852.pdf: deleting page 1 kept the page and all 1191
+//   - govdocs/pdf thread_100_100852.pdf: deleting page 1 kept the page and all 1191
 //     bytes of its content through a widget left behind, reachable as
 //     /Pages/Kids[0]/Annots[0]/Parent/Kids[4]/P.
 func TestDeletePagesDropsWidgetsOfRemovedPages(t *testing.T) {

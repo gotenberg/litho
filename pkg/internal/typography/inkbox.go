@@ -73,13 +73,13 @@ const maxFontBBoxEm = 4.0
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu, verapdf: 113 files stroke text in their first
+//   - govdocs/pdf, pdfjs, pdfcpu, verapdf: 113 files stroke text in their first
 //     30 pages, and their boxes grow. Bounded by the miter limit, govdocs
 //     thread_200_200151.pdf reports its keycaps, black outlines filled white,
 //     as text that paints nothing, and five redaction scenarios remove one
 //     to five glyphs more than by half the width, which moves no redaction
 //     scenario's outcome against the base.
-//   - govdocs thread_300_300508.pdf, thread_100_100870.pdf: map labels set
+//   - govdocs/pdf thread_300_300508.pdf, thread_100_100870.pdf: map labels set
 //     twice, a white halo stroked under the black fill, whose boxes the
 //     fill's no longer hide: ExtractUnseenText reports the halos as text in
 //     white, as it reports any white text.
@@ -246,15 +246,15 @@ func clippedInkBox(state *graphics.State, originX, originY float64) [4]float64 {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200408.pdf: bitmap Type 3 fonts with a /FontMatrix
+//   - govdocs/pdf thread_200_200408.pdf: bitmap Type 3 fonts with a /FontMatrix
 //     of [1 0 0 -1 0 0] shown at Tf 1 ink 14 to 154 times their font size.
-//   - govdocs: 97 of 110 Type 3 fonts ink more than five times their font
+//   - govdocs/pdf: 97 of 110 Type 3 fonts ink more than five times their font
 //     size, and in 19 files their ink reaches over 1 unit past a zone sized
 //     by the font size; pdfjs: 47 of 108 fonts, 19 files; pdfcpu: 4 of 15,
 //     2 files.
-//   - govdocs, pdfjs, pdfcpu, facturx, pdf20: the text of every page the
+//   - govdocs/pdf, pdfjs, pdfcpu, facturx, pdf20: the text of every page the
 //     text goldens hold, 2490 files, does not move.
-//   - govdocs, pdfjs, pdfcpu, facturx: with /FontBBox, a region over the
+//   - govdocs/pdf, pdfjs, pdfcpu, facturx: with /FontBBox, a region over the
 //     middle of one run meets more of the runs around it on 0.8%, 5.1%,
 //     0.4% and 11.2% of runs, the tall boxes of faces such as
 //     [-628 -376 2034 1010] reaching the next line.

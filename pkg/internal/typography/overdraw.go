@@ -53,7 +53,7 @@ const overdrawAngleSlack = 0.01
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400902.pdf: curved labels of a flow chart ("Calcine
+//   - govdocs/pdf thread_400_400902.pdf: curved labels of a flow chart ("Calcine
 //     storage in bin sets", "SBW storage in Tank Farm") drawn twice a third
 //     of a point apart, each glyph turned from its copy by 0.02 to 0.22
 //     radian, read "rage in bin sets" and "a r m" a second time under a bound
@@ -139,28 +139,28 @@ type overdrawCell struct {
 //     and every word read before survives but on 4 pages, labels of a plot
 //     drawn over one another sharing their "Q=" (govdocs
 //     thread_400_400141.pdf) and three words the merge joins otherwise.
-//   - govdocs thread_200_200433.pdf and thread_200_200835.pdf: PowerPoint
+//   - govdocs/pdf thread_200_200433.pdf and thread_200_200835.pdf: PowerPoint
 //     slides draw each line in a dark shadow and again in white a tenth of an
 //     em away, read "OutlineOutline" and "PurposePurpose" once the white copy
 //     is judged visible.
-//   - govdocs thread_400_400574.pdf, thread_200_200044.pdf and
+//   - govdocs/pdf thread_400_400574.pdf, thread_200_200044.pdf and
 //     thread_300_300592.pdf: headings drawn five times a fraction of a point
 //     apart for a fake bold, read "NOTICENOTICENOTICENOTICENOTICE" and
 //     "Eight-Eight-Eight-Eight-Eight-".
 //   - pdfjs issue20513.pdf: an outlined logo drawn four times, its kerning
 //     pairs cut into different show-text chains in each copy.
-//   - govdocs thread_100_100853.pdf and thread_300_300033.pdf: text set over
+//   - govdocs/pdf thread_100_100853.pdf and thread_300_300033.pdf: text set over
 //     other text shares a letter, or two in a row, with it here and there;
 //     matching glyphs alone read "sec ion" for "section" and "Am dment" for
 //     "Amendment", which the neighbours on both sides tell apart.
 //   - pdfjs bug900822.pdf: each glyph drawn four times in a row, read
 //     "TTTTeeeesssstttt".
-//   - govdocs thread_300_300250.pdf: a footer drawn again 0.24 em away with
+//   - govdocs/pdf thread_300_300250.pdf: a footer drawn again 0.24 em away with
 //     its spacing drifting, matched in part, read "This lth rd luation".
-//   - govdocs thread_100_100499.pdf: "Following" set with a space drawn
+//   - govdocs/pdf thread_100_100499.pdf: "Following" set with a space drawn
 //     between its two l, read "Fol owing" when glyphs of one piece were not
 //     held an advance apart.
-//   - govdocs thread_000_000208.pdf: "Modified for the Web" drawn at the top
+//   - govdocs/pdf thread_000_000208.pdf: "Modified for the Web" drawn at the top
 //     of each page and again, at the same place, at the end of its stream;
 //     keeping the last copy read the header at the end of the page.
 func dropOverdrawn(ctx context.Context, elements []models.TextElement) ([]int, error) {

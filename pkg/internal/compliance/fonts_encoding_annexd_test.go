@@ -12,7 +12,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000152.pdf: shows WinAnsi code 173, whose Annex D
+//   - govdocs/pdf thread_000_000152.pdf: shows WinAnsi code 173, whose Annex D
 //     name "hyphen" selects a 800-unit glyph against a declared 650, a
 //     §6.2.11.5 mismatch veraPDF reports and litho read as U+00AD instead.
 func TestPredefinedEncodingNames_AnnexDGlyphNames(t *testing.T) {

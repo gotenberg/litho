@@ -116,7 +116,7 @@ func TestXMPOtherPackets_PropertyAudits(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100847.pdf: writes
+//   - govdocs/pdf thread_100_100847.pdf: writes
 //     <xapMM:DerivedFrom rdf:parseType="Resource"></xapMM:DerivedFrom>, and
 //     veraPDF, whose run on it passes 1.99M checks, reports nothing.
 func TestXMPPropertyTypes_EmptyResourceStruct(t *testing.T) {

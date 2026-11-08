@@ -73,7 +73,7 @@ func subsupExtract(t *testing.T, data []byte) string {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000282.pdf: "NOX" and "SO2" in Touch-Up_Line
+//   - govdocs/pdf thread_000_000282.pdf: "NOX" and "SO2" in Touch-Up_Line
 //     sequences, read "NOX" where PDF.js reads "NO X".
 func TestExtractText_MarkedContentEndsRun(t *testing.T) {
 	t.Parallel()
@@ -123,7 +123,7 @@ func TestReconstructText_RunGapAtItemScale(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300493.pdf pages 6 and 8: "(A)" in rotated figure
+//   - govdocs/pdf thread_300_300493.pdf pages 6 and 8: "(A)" in rotated figure
 //     captions read "( A )".
 func TestReconstructText_RotatedLinePastSpaceGlyph(t *testing.T) {
 	t.Parallel()
@@ -216,7 +216,7 @@ func TestType3PathBounds(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200417.pdf page 1: "Xu 1 ," read "Xu1,".
+//   - govdocs/pdf thread_200_200417.pdf page 1: "Xu 1 ," read "Xu1,".
 func TestReconstructText_BeadReadsContentOrder(t *testing.T) {
 	t.Parallel()
 	in := []models.TextElement{
@@ -247,7 +247,7 @@ func TestReconstructText_BeadReadsContentOrder(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200087.pdf: "Reδ" and "Uδ", each δ an oblique
+//   - govdocs/pdf thread_200_200087.pdf: "Reδ" and "Uδ", each δ an oblique
 //     Symbol subscript, where PDF.js reads "Re δ" and "U δ".
 //   - pdfjs JBIG2Globals.pdf: "tyrannidemdinavit", a margin note set on the
 //     turned baseline of the line before it, as PDF.js reads it.

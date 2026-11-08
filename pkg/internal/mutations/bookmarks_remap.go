@@ -114,7 +114,7 @@ func abs(x int) int {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400931.pdf, thread_400_400934.pdf: merging them sent
+//   - govdocs/pdf thread_400_400931.pdf, thread_400_400934.pdf: merging them sent
 //     the latter's "cr2002073.pdf" bookmark, whose /Dest is [null 0 0 1], to
 //     page 5, the last page of the other document.
 func OffsetPages(bookmarks []OutlineItem, offset int) []OutlineItem {

@@ -58,11 +58,11 @@ import (
 //
 // # Corpus evidence
 //
-//   - pdfcpu (all 51) and govdocs (1 in 8, 137), the whole of page 1: the
+//   - pdfcpu (all 51) and govdocs/pdf (1 in 8, 137), the whole of page 1: the
 //     fallback lifts all 11 form and shading refusals and the 4 of images a
 //     form draws; 11 redactions then succeed and 4 stop at the scan, for
 //     copies the page did not hold (another page's stream, a JPEG's bytes).
-//   - litho/pdf (228), pdfjs (79), pdfcpu, govdocs, the four redact-render
+//   - litho/pdf (228), pdfjs (79), pdfcpu, govdocs/pdf, the four redact-render
 //     scenarios: 117 scenarios refused without the fallback succeed with it,
 //     none leaving ink inside a region by litho's or poppler's rendering.
 //   - pdfjs issue2642, issue12752, issue17289, pdfcpu text_annotations:

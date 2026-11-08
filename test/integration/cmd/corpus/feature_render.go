@@ -180,7 +180,7 @@ var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page
 //   - pdfjs annotation-square-circle-without-appearance, issue13447: Square,
 //     Circle, Line, PolyLine, Ink, Highlight and StrikeOut annotations with
 //     no /AP, which both renderers build from the dictionary and which match.
-//   - govdocs thread_300_300511 page 2: Link annotations with no /AP and no
+//   - govdocs/pdf thread_300_300511 page 2: Link annotations with no /AP and no
 //     /F, boxed from /Border and /C by both, which match.
 //   - pdfjs bug886717: 45 Link annotations whose /AP /N is an empty stream,
 //     boxed by poppler from /Border; poppler's own rendering with
@@ -213,7 +213,7 @@ var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page
 //     and 442 as ÄÖÜäöü through the Calibri glyph order, as PDF.js does;
 //     poppler draws U+0009, P, m, ć, Ƃ and ƺ, and PDFium a third reading
 //     (69% of the ink differs from poppler, 90% from PDFium).
-//   - govdocs thread_100_100161, thread_200_200618 pages 1 to 3: an
+//   - govdocs/pdf thread_100_100161, thread_200_200618 pages 1 to 3: an
 //     unembedded CourierNewPSMT (Serif flag set) poppler draws in DejaVu
 //     Sans Mono, litho in Nimbus Mono PS. PDFium draws a Courier as litho
 //     does: 325 to 477 pixels differ, 1.0% to 2.6% of the ink, against 28%
@@ -244,7 +244,7 @@ var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page
 //     face. cmapcollect_1b, cmappredef_2b, cmapusevert_1b
 //     and cmapverabase_2b: embedded fonts of CJK collections with no
 //     /ToUnicode, whose text poppler drew only with poppler-data.
-//   - pdfjs, govdocs: the 10 pdfjs and 2 govdocs files above are every
+//   - pdfjs, govdocs/pdf: the 10 pdfjs and 2 govdocs files above are every
 //     render mismatch of the two corpora under the ink bar, re-read with
 //     PDFium (pypdfium2 4.30.0) as a third renderer at 72 dpi: none is a
 //     litho defect. MuPDF (PyMuPDF 1.26.4), a fourth, draws

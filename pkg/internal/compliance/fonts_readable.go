@@ -56,7 +56,7 @@ import (
 //     embedded and this rejects is the one veraPDF reports. The other twelve
 //     it rejects already counted as unembedded: PFB containers, TrueType
 //     Collections, and CIDFontType0 programs in /FontFile.
-//   - govdocs thread_300_300851.pdf: embeds CMDCGH+AdvMT_RM, a Type 1 program
+//   - govdocs/pdf thread_300_300851.pdf: embeds CMDCGH+AdvMT_RM, a Type 1 program
 //     whose eexec section follows a form feed, so neither parser finds its
 //     CharStrings. veraPDF reports it under 6.2.11.4.1 t1, which litho did
 //     not.

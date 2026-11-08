@@ -728,7 +728,7 @@ func programFontSubtype(ctx context.Context, doc *document.Document, fontDict as
 //
 // # Corpus evidence
 //
-//   - govdocs: on one 4 MB government document the program decode ran 11248
+//   - govdocs/pdf: on one 4 MB government document the program decode ran 11248
 //     times over 66 distinct streams and accounted for roughly three quarters
 //     of the whole validation.
 //   - pdfjs poppler-395-0-fuzzed.pdf: its /FontFile2 keeps 37 bytes before a

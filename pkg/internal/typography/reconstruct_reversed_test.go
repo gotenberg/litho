@@ -19,7 +19,7 @@ import (
 //
 //   - pdfjs issue14415.pdf: "agreement " at -12 Tf, then "on" set by a Tm
 //     0.02 past the "t", which PDF.js reads "agreementon".
-//   - govdocs thread_000_000150.pdf: words set by a Tm of -10.25 0 0 -10.25,
+//   - govdocs/pdf thread_000_000150.pdf: words set by a Tm of -10.25 0 0 -10.25,
 //     each after a space the next Tm overprints.
 func TestReconstructText_LiteralSpaceOverprintedHalfTurn(t *testing.T) {
 	t.Parallel()

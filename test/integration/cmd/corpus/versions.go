@@ -177,12 +177,12 @@ var stagePins = map[string][]string{
 //
 //nolint:gochecknoglobals // static dependency table
 var sourcePins = map[string][]string{
-	"pdfjs":   {"PDFJS_REVISION"},
-	"verapdf": {"VERAPDF_CORPUS_REVISION"},
-	"govdocs": {"GOVDOCS_THREADS"},
-	"pdf20":   {"PDF20_REVISION"},
-	"pdfcpu":  {"PDFCPU_CORPUS_REVISION"},
-	"facturx": {"FACTURX_CORPUS_REVISION"},
+	"pdfjs":       {"PDFJS_REVISION"},
+	"verapdf":     {"VERAPDF_CORPUS_REVISION"},
+	"govdocs/pdf": {"GOVDOCS_THREADS"},
+	"pdf20":       {"PDF20_REVISION"},
+	"pdfcpu":      {"PDFCPU_CORPUS_REVISION"},
+	"facturx":     {"FACTURX_CORPUS_REVISION"},
 
 	"litho/pdf":  nil,
 	"litho/text": nil,

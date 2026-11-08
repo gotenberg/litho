@@ -18,7 +18,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000632.pdf: carries an /Artifact sequence with an
+//   - govdocs/pdf thread_000_000632.pdf: carries an /Artifact sequence with an
 //     /MCID the ParentTree maps, so its content is both an Artifact inside
 //     tagged content and tagged content inside an Artifact.
 func TestArtifactSequenceWithOwnedMCID(t *testing.T) {

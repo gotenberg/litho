@@ -132,7 +132,7 @@ type determinismOp struct {
 //     pages of 1191 files twice each, every one the same pixels; 10 pdfjs
 //     files draw no page. It takes 5 s and 64 s with 4 workers on a loaded
 //     machine (load 8 to 12), the slowest pdfjs cell issue11518 at 15 s.
-//   - govdocs: the pass draws 2941 pages of 1091 files the same twice, but
+//   - govdocs/pdf: the pass draws 2941 pages of 1091 files the same twice, but
 //     takes 145 s, and thread_400_400730 overruns the per-fixture timeout
 //     on a loaded machine, so the corpus does not run it.
 type determinismFeature struct {

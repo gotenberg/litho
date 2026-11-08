@@ -2096,7 +2096,7 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100870.pdf: selects one Times-Roman Identity-H font on
+//   - govdocs/pdf thread_100_100870.pdf: selects one Times-Roman Identity-H font on
 //     fourteen pages, and page 20 shows CID 0 and a CID its CFF charset does
 //     not hold in rendering mode 1, which no earlier page used. veraPDF
 //     reports both under ISO 19005-2 §6.2.11.8 and the second under
@@ -2175,7 +2175,7 @@ func checkType0UsageRules(ctx context.Context, doc *document.Document, fontDict,
 //   - pdfjs bug1354114.pdf: shows WinAnsi code 10 through a symbolic
 //     NimbusRomNo9L subset and veraPDF reports it; the same code taken from
 //     StandardEncoding it does not.
-//   - govdocs thread_000_000153.pdf: shows code 127 of an unembedded NewYork
+//   - govdocs/pdf thread_000_000153.pdf: shows code 127 of an unembedded NewYork
 //     declared /MacRomanEncoding, which veraPDF reports under ISO 14289-1,
 //     7.21.8 t1, so DEL is not exempt when no program is embedded.
 //   - pdfjs issue13107_reduced.pdf: embeds a DejaVuSans subset with no .notdef
@@ -2564,7 +2564,7 @@ const (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200565.pdf: its 411 show operators are all mode 3,
+//   - govdocs/pdf thread_200_200565.pdf: its 411 show operators are all mode 3,
 //     and veraPDF reports 6.2.11.8 and not 6.2.11.4.1 for a used CID absent
 //     from the CFF charset.
 //   - litho/pdf glyphs_2b.pdf: shows CID 5 past the end of a TrueType program,

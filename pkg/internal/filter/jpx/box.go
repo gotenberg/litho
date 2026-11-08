@@ -296,7 +296,7 @@ func readFile(data []byte) ([]byte, *fileHeader, error) {
 //
 // # Corpus evidence
 //
-//   - govdocs: six streams put the Component Mapping box outside the JP2
+//   - govdocs/pdf: six streams put the Component Mapping box outside the JP2
 //     Header box. Each is an /Indexed image, and pdf.js decodes them.
 func readHeader(body []byte) (*fileHeader, error) {
 	boxes, err := ReadBoxes(body)

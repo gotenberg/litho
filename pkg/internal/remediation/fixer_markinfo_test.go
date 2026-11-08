@@ -41,7 +41,7 @@ func TestFixMarkInfo_AddsMarkedTrue(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100982: the test reproduces this file at PDF/UA-1.
+//   - govdocs/pdf thread_100_100982: the test reproduces this file at PDF/UA-1.
 func TestFixMarkInfo_RecoversRootlessTrailer(t *testing.T) {
 	doc, alloc := newTestDoc(t, rootlessCatalogPDF(""))
 

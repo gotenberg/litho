@@ -138,7 +138,7 @@ func (p *Page) ViewedMediaBox() ast.PdfArray {
 //
 //   - pdfjs boundingBox_invalid.pdf: the first page declares /MediaBox
 //     [0 0 0 0], and poppler reports 612 x 792 for it.
-//   - govdocs thread_400_400739.pdf: has no /MediaBox anywhere, and poppler
+//   - govdocs/pdf thread_400_400739.pdf: has no /MediaBox anywhere, and poppler
 //     reports 612 x 792 for it.
 func (p *Page) ViewedBox() ast.PdfArray {
 	if UsableBox(p.CropBox) {
@@ -164,7 +164,7 @@ func (p *Page) ViewedBox() ast.PdfArray {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400594.pdf: holds page 12 as "40 2 R" and sends eight
+//   - govdocs/pdf thread_400_400594.pdf: holds page 12 as "40 2 R" and sends eight
 //     outline entries to "40 0 R". The reference resolved, the lookup missed,
 //     and every one of those bookmarks reported no page while remediating the
 //     same file produced a working outline.
@@ -526,7 +526,7 @@ const MaxPageTreeDepth = maxPageTreeDepth
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200147.pdf: the page tree root states /XObject
+//   - govdocs/pdf thread_200_200147.pdf: the page tree root states /XObject
 //     <</Im11 ...>> while most pages state a /Resources holding only /Font
 //     and /ColorSpace, so the /Resources merge reports Im11 on every page
 //     and qpdf reports it only on the first.
@@ -766,7 +766,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200062: declares a 612x792 media box and a 614x794 crop
+//   - govdocs/pdf thread_200_200062: declares a 612x792 media box and a 614x794 crop
 //     box. Taken verbatim, litho answered 614x794 where poppler answers 612x792.
 //   - All corpora: 47 pages in 12 files declare 56 bleed, trim or art boxes
 //     that extend beyond the media box. Taken verbatim, all 56 differed from
@@ -775,7 +775,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 //   - All corpora: no declared bleed, trim or art box misses the media box
 //     entirely or has other than four entries, so the fallbacks to the
 //     default change no page.
-//   - govdocs thread_300_300104.pdf: every page declares a 699x879 bleed box
+//   - govdocs/pdf thread_300_300104.pdf: every page declares a 699x879 bleed box
 //     on a 612x792 media box.
 //   - verapdf PDF_A-2b__veraPDF_test_suite_6-1-13-t09-fail-b.pdf: declares
 //     14405-unit bleed, trim and art boxes on a 500-unit media box. The

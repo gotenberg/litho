@@ -92,22 +92,22 @@ type Skip struct {
 //
 // # Corpus evidence
 //
-//   - litho/pdf (214 files), pdfjs (1 in 3), govdocs (1 in 4), pdfcpu (1 in 2),
+//   - litho/pdf (214 files), pdfjs (1 in 3), govdocs/pdf (1 in 4), pdfcpu (1 in 2),
 //     converted to DeviceRGB through each source profile's transform to
 //     sRGB and rendered before and after, pages 1 to 3 at 36 dpi: no failure,
 //     and 0 or 1 level apart on every page but these.
 //   - pdfjs function_based_shading.pdf: a checkerboard function sampled at
 //     256 by 256 blurs its edges over one sample, up to 128 levels on 507
 //     edge pixels.
-//   - pdfjs calrgb.pdf, govdocs thread_300_300924.pdf: CalRGB converted
+//   - pdfjs calrgb.pdf, govdocs/pdf thread_300_300924.pdf: CalRGB converted
 //     exactly, where the renderer reads it through 8-bit tables, up to 4 and
 //     9 levels apart in a near-zero channel of a saturated colour.
-//   - govdocs thread_300_300253.pdf: Separation spaces over a Lab alternate
+//   - govdocs/pdf thread_300_300253.pdf: Separation spaces over a Lab alternate
 //     convert to their colour, which the renderer also paints since it reads
 //     a Lab alternate.
 //   - pdfjs transparency_group.pdf: a group's blending space becomes the
 //     target, which moves a blend by up to 3 levels on 10 pixels.
-//   - litho/pdf (215 files), pdfjs and govdocs (79 files each the render goldens
+//   - litho/pdf (215 files), pdfjs and govdocs/pdf (79 files each the render goldens
 //     sample), images included, converted to the built-in CMYK through the
 //     ICC engine and rendered at 72 dpi: no colour moves past the gamut
 //     mapping of sRGB blue, 71.7 ΔE*ab, on 1% of a page, but where a PDF/X

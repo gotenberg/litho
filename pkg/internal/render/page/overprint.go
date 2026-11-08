@@ -48,7 +48,7 @@ const allProcess = 0x0f
 //     paint Separation and DeviceN spot colours, or change fewer than 0.7%
 //     of their pixels. [renderer.spotPaint]'s evidence measures the spot
 //     planes.
-//   - pdfjs, govdocs: poppler -overprint converts its CMYK planes to RGB
+//   - pdfjs, govdocs/pdf: poppler -overprint converts its CMYK planes to RGB
 //     by its own formula, so a page it draws with -overprint differs from
 //     the page it draws without wherever DeviceCMYK paints; only the change
 //     overprinting makes compares.
@@ -197,7 +197,7 @@ func (r *renderer) spotKeep(on bool) uint8 {
 //     poppler and litho already disagree on the colour drawn without
 //     overprint; pdfjs bug1753075's is a DeviceN shading of process
 //     colorants under overprint, which has no spot colorant.
-//   - govdocs thread_300_300242: planes made only at the first spot colour
+//   - govdocs/pdf thread_300_300242: planes made only at the first spot colour
 //     painted under overprint printed a colorant twice where it first
 //     knocked out through its alternate and then overprinted on its plane,
 //     2315 pixels poppler leaves unchanged; made at the first spot colour,

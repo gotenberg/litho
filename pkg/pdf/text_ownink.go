@@ -135,7 +135,7 @@ func (o originSet) nearest(p geom.Point) (int, bool) {
 //     origin, read white on white; judged on their squares, all 14 pass.
 //   - pdfjs issue9186.pdf: zero-width spaces at the origin of the letters
 //     after them no longer show by the letters' ink.
-//   - govdocs thread_000_000208.pdf: a heading filled and drawn again in mode
+//   - govdocs/pdf thread_000_000208.pdf: a heading filled and drawn again in mode
 //     7 to clip an image; the fill copy, painted over by the image, shows no
 //     ink of its own.
 type glyphPlaces struct {

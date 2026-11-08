@@ -18,7 +18,7 @@ import (
 // # Corpus evidence
 //
 //   - All corpora: 4% of the files measured do not start their box at (0, 0).
-//   - govdocs thread_000_000018.pdf: uses [-306 -396 306 396], where an
+//   - govdocs/pdf thread_000_000018.pdf: uses [-306 -396 306 396], where an
 //     unshifted stamp began at the page's centre and ran off the right edge,
 //     losing its last character to the crop.
 func TestStampOriginShiftUsesCropBox(t *testing.T) {

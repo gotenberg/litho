@@ -51,16 +51,16 @@ const whiteVerdictBytes = 48
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu: the default reading gains 132138 characters on
+//   - govdocs/pdf, pdfjs, pdfcpu: the default reading gains 132138 characters on
 //     773 pages of 134 files, white headings on a coloured bar mostly: govdocs
 //     thread_000_000152.pdf's "TABLE OF CONTENTS" on navy, pdfjs
 //     bug1734802.pdf's "Important Safety Information". 98.9% of the words it
 //     gains are words pdftotext reads on the page; the rest are words the two
 //     segment apart. litho, facturx and pdf20 read as before.
-//   - govdocs thread_000_000325.pdf, thread_300_300113.pdf and three more: nine
+//   - govdocs/pdf thread_000_000325.pdf, thread_300_300113.pdf and three more: nine
 //     pages whose only text is white on a scan no longer report
 //     [ErrRequiresOCR].
-//   - govdocs, pdfjs, pdfcpu: judging a run by its own ink rather than by
+//   - govdocs/pdf, pdfjs, pdfcpu: judging a run by its own ink rather than by
 //     the pixels no other glyph's box holds changes the default reading of
 //     86 pages of 22 files, 7074 characters gained and 614 lost. Most gains
 //     are white text over a dark offset shadow, both now read (govdocs

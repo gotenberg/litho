@@ -16,7 +16,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200213.pdf: Helvetica with /WinAnsiEncoding shows its
+//   - govdocs/pdf thread_200_200213.pdf: Helvetica with /WinAnsiEncoding shows its
 //     list bullets as code 0x7F, which PDF.js reads as "•" and litho dropped.
 func TestResolveFont_WinAnsiUnusedCodesReadAsBullet(t *testing.T) {
 	ctx := context.Background()

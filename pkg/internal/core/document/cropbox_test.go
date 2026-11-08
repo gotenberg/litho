@@ -37,7 +37,7 @@ func sameRect(a, b ast.PdfArray) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200062: declares a 612x792 media box with a 614x794
+//   - govdocs/pdf thread_200_200062: declares a 612x792 media box with a 614x794
 //     crop box. Taken verbatim, litho answered 614x794 where poppler answers
 //     612x792.
 func TestClampToMediaBox(t *testing.T) {

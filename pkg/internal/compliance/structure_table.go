@@ -258,7 +258,7 @@ type tableKid struct {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100945.pdf: holds its rows in TableHead and TableBody
+//   - govdocs/pdf thread_100_100945.pdf: holds its rows in TableHead and TableBody
 //     elements its role map maps to THead and TBody.
 func tableKids(ctx context.Context, state *walkState, elem ast.PdfDict) []tableKid {
 	return tableKidsAt(ctx, state, elem, 0, make(map[int]bool))

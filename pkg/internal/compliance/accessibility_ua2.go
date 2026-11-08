@@ -294,10 +294,10 @@ func isWidgetOBJR(ctx context.Context, doc *document.Document, obj ast.PdfObject
 //
 //   - pdfjs issue16839.pdf: writes /OpenAction 0 0 R, the free-list head, and
 //     veraPDF builds no destination from it.
-//   - govdocs thread_000_000904.pdf, pdfjs issue3214.pdf: each runs a GoTo
+//   - govdocs/pdf thread_000_000904.pdf, pdfjs issue3214.pdf: each runs a GoTo
 //     action through /Next, which litho did not judge. Test 2 fired 26 and 4
 //     times at PDF/UA-2 against veraPDF's 27 and 5, and now agrees.
-//   - govdocs thread_300_300076.pdf, pdfjs issue14847.pdf: links share GoTo
+//   - govdocs/pdf thread_300_300076.pdf, pdfjs issue14847.pdf: links share GoTo
 //     actions, which litho judged once per link. Test 2 fired 29 and 10 times
 //     against veraPDF's 20 and 4, and now agrees. No other file moves.
 func checkStructureDestinations(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {

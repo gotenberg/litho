@@ -13,7 +13,7 @@ import "testing"
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300035.pdf: opens its binary section with 0x32
+//   - govdocs/pdf thread_300_300035.pdf: opens its binary section with 0x32
 //     ('2'), which cost litho every charstring name and width in the font,
 //     and with them the ISO 19005-2 §6.2.11.5 mismatch veraPDF reports on
 //     its code 109.
@@ -87,7 +87,7 @@ func TestIsHexEncoded(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300851.pdf: CMDCGH+AdvMT_RM opens its cipher text
+//   - govdocs/pdf thread_300_300851.pdf: CMDCGH+AdvMT_RM opens its cipher text
 //     with 0x0C, and litho read no glyph name and no width from it.
 func TestDecryptEexec_FormFeedOpensCipherText(t *testing.T) {
 	t.Parallel()

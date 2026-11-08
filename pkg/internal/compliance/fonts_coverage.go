@@ -180,7 +180,7 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300511.pdf: reports glyph "O" of NSNPEK+CMR12 missing
+//   - govdocs/pdf thread_300_300511.pdf: reports glyph "O" of NSNPEK+CMR12 missing
 //     from /CharSet on 31 pages, where veraPDF states it once against the font.
 func checkCharSetDeclaredCoverage(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	if PDFAPart(profile) == 1 {

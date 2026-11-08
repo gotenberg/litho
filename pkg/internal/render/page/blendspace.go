@@ -388,7 +388,7 @@ func (r *renderer) deviceCMYK(profile *icc.Profile) (*blend.Space, error) {
 //     files, every one with a black point above XYZ 0 read K alone through
 //     the device 14 to 118 levels lighter than through the page's DeviceCMYK
 //     reading; compensated, the two agree to the level.
-//   - litho/pdf, govdocs, pdfjs: the render, flatten, recolor and redact-render
+//   - litho/pdf, govdocs/pdf, pdfjs: the render, flatten, recolor and redact-render
 //     cells score as before. DeviceCMYK under litho's built-in profile, whose
 //     black point is XYZ 0, converts as before; only pdfjs issue8019 and
 //     issue19319 flatten to other composites, within the cell's bars.
@@ -615,7 +615,7 @@ func levelsApart(a, b float32) bool {
 //     page's process cyan, drawn back into the page's DeviceCMYK group,
 //     drew 1,755 pixels at 4 167 221 where the cyan fill beside it draws
 //     0 174 239; poppler 26.09.0 and PDFium draw both alike.
-//   - govdocs, pdfjs: flattening writes other composites for 9 files whose
+//   - govdocs/pdf, pdfjs: flattening writes other composites for 9 files whose
 //     CMYK page groups draw images. Of the 16 pages, 11 differ less from the
 //     source by litho's rendering, 5 by at most 800 levels summed over the
 //     page more; the flatten, render and recolor cells score as before.

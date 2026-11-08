@@ -16,7 +16,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100982.pdf, thread_100_100983.pdf: the shape this
+//   - govdocs/pdf thread_100_100982.pdf, thread_100_100983.pdf: the shape this
 //     fixture reproduces. Their first startxref is a malformed 0 and their
 //     second points into the file body rather than at an xref table.
 func stubLastTrailerPDF() []byte {
@@ -57,7 +57,7 @@ func noTrailerPDF() []byte {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100982.pdf: litho reported neither 6.1.3 t4 nor t5
+//   - govdocs/pdf thread_100_100982.pdf: litho reported neither 6.1.3 t4 nor t5
 //     while veraPDF reported both.
 func TestRebuild_RecoversInfoFromEarlierTrailer(t *testing.T) {
 	t.Parallel()

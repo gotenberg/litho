@@ -26,13 +26,13 @@ import (
 //
 // # Corpus evidence
 //
-//   - pdfjs issue10339_reduced, issue2761, govdocs thread_300_300253: their Lab
+//   - pdfjs issue10339_reduced, issue2761, govdocs/pdf thread_300_300253: their Lab
 //     images (two indexed over Lab in each pdfjs file, one direct in govdocs)
 //     mismatch on PDF.js's side. litho converts Lab with Bradford adaptation to
 //     D65 and the sRGB curve (ISO 32000-1, 8.6.5.4) and matches the pinned
 //     poppler within one level; PDF.js skips the adaptation and approximates the
 //     curve with a square root, 7 to 10 levels away.
-//   - pdfjs issue2856 Im5 and Im6, issue11052 (4 of its 6 images), govdocs
+//   - pdfjs issue2856 Im5 and Im6, issue11052 (4 of its 6 images), govdocs/pdf
 //     thread_000_000372 (2 of 22): ICCBased images whose profile's black is
 //     lighter than sRGB's (L* 3.1 to 16.5), which litho converts with black
 //     point compensation (package graphics/icc), as poppler's Little CMS
@@ -435,7 +435,7 @@ func (f *imageDecodeFeature) Compare(fixtureID string, output []byte) Verdict {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200823: pairing each golden image with its nearest
+//   - govdocs/pdf thread_200_200823: pairing each golden image with its nearest
 //     partner in turn left 34 of its tiny strips unmatched against images
 //     litho decodes within tolerance.
 func pairImages(want, got []imageSignature) []int {

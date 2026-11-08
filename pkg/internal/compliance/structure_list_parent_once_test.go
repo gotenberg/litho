@@ -16,7 +16,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400037.pdf: holds 21 LI elements with exactly two
+//   - govdocs/pdf thread_400_400037.pdf: holds 21 LI elements with exactly two
 //     offending children each, where litho reported 42 and veraPDF 21.
 func TestListContainmentStatedOncePerParent(t *testing.T) {
 	t.Parallel()

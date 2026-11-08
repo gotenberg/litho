@@ -17,7 +17,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs: the g5.cff fixture is a real CIDFontType0 subset taken from a
+//   - govdocs/pdf: the g5.cff fixture is a real CIDFontType0 subset taken from a
 //     govdocs file.
 func TestCIDWidths_DuplicateCIDDeterministic(t *testing.T) {
 	t.Parallel()

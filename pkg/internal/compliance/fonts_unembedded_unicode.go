@@ -157,7 +157,7 @@ func unembeddedNameHasUnicode(name string, pdfa1Type1 bool) bool {
 //   - pdfjs issue18208.pdf and poppler-90-0-fuzzed.pdf: show codes an
 //     unembedded font's encoding names .notdef, and veraPDF states t2 466 and
 //     22 times, where litho stated 70 and 0.
-//   - govdocs thread_300_300507.pdf and thread_300_300517.pdf: show codes an
+//   - govdocs/pdf thread_300_300507.pdf and thread_300_300517.pdf: show codes an
 //     unembedded font's encoding leaves unnamed, and veraPDF states t1 6
 //     times each, where litho stated none.
 func unembeddedUnicodeFaults(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, subtype, fontName string, pageNum int, profile string, presence, value Rule, usage *fontUsageInfo, mapped map[int]bool) []Violation {

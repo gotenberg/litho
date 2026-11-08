@@ -948,7 +948,7 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, dep
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100184.pdf: its role map maps Caption to P, so its
+//   - govdocs/pdf thread_100_100184.pdf: its role map maps Caption to P, so its
 //     mid-Sect Caption elements are paragraphs.
 func validateCaptionKidPositions(ctx context.Context, state *walkState, elem ast.PdfDict) {
 	kidKeys, _ := iso32005Kids(ctx, state, elem)
@@ -966,14 +966,14 @@ func validateCaptionKidPositions(ctx context.Context, state *walkState, elem ast
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000150.pdf: maps LI_Label to Lbl and LI_Title to
+//   - govdocs/pdf thread_000_000150.pdf: maps LI_Label to Lbl and LI_Title to
 //     LBody, so comparing the PDF/UA-1 containment names as written reported
 //     its list items' kids as foreign to LI.
 //   - verapdf 8.2.5.29 fixtures: litho's reading of the math-in-Formula test
 //     was measured against veraPDF on them and on crafted variants.
-//   - govdocs thread_000_000838.pdf: its "Heading 2", which its role map maps
+//   - govdocs/pdf thread_000_000838.pdf: its "Heading 2", which its role map maps
 //     to H2, is a level-2 heading for ISO 14289-1 §7.4.2.
-//   - govdocs thread_400_400934.pdf: writes its notes as /Footnote, mapped to
+//   - govdocs/pdf thread_400_400934.pdf: writes its notes as /Footnote, mapped to
 //     /Note, without /ID, and veraPDF reports ISO 14289-1, 7.9 t1 while
 //     litho, reading /S, did not.
 func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, depth int, lastHeadingLevel int) {
@@ -1248,7 +1248,7 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, depth 
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400037.pdf: holds 21 LI elements with exactly two
+//   - govdocs/pdf thread_400_400037.pdf: holds 21 LI elements with exactly two
 //     offending children each, and litho reported 42 findings where veraPDF
 //     reports 21, which is why §7.2 t20 is stated once per LI.
 func validateListContainment(_ context.Context, state *walkState, _ ast.PdfDict, typeName ast.PdfName, parentType ast.PdfName) {
@@ -1759,7 +1759,7 @@ func structClassMap(ctx context.Context, doc *document.Document, structTreeRoot 
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300035.pdf: labels its items with LI_Label, which
+//   - govdocs/pdf thread_300_300035.pdf: labels its items with LI_Label, which
 //     its role map maps to Lbl.
 func listContainsLabels(ctx context.Context, state *walkState, elem ast.PdfDict, depth int) bool {
 	return listContainsLabelsAt(ctx, state, elem, depth, make(map[int]bool))

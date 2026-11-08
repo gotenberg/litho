@@ -96,7 +96,7 @@ func applyPredictor(data []byte, params *predictorParams) ([]byte, error) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200172.pdf: Im1's Flate data holds 2,390 whole rows
+//   - govdocs/pdf thread_200_200172.pdf: Im1's Flate data holds 2,390 whole rows
 //     at the /BitsPerComponent 1 its /DecodeParms state and 45 bytes of the
 //     next, which hold the 44 samples that complete the 8-bit image. Dropped,
 //     they were read as short data, and the redaction that blanked the image

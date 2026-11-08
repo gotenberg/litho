@@ -17,7 +17,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300234.pdf: ships such a packet.
+//   - govdocs/pdf thread_300_300234.pdf: ships such a packet.
 func TestXMPMalformedPacketAnswersForItsSerializationAlone(t *testing.T) {
 	t.Parallel()
 

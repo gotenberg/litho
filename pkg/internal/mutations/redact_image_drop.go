@@ -33,17 +33,17 @@ var stateOnlyOperators = []string{
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100791: Word drew page 1's two logos as 1,566 image
+//   - govdocs/pdf thread_100_100791: Word drew page 1's two logos as 1,566 image
 //     placements one sample high, each under its own q, gs, cm ... Q. A
 //     whole-page redaction blanked every one in place, and the page showed
 //     both logos and the agency's name around them in black.
-//   - govdocs, pdfjs, pdfcpu, litho/pdf: the redact-render scenarios remove
+//   - govdocs/pdf, pdfjs, pdfcpu, litho/pdf: the redact-render scenarios remove
 //     placements in 334, 246, 17 and 182 fixtures, up to 50,385 on one
 //     page (govdocs thread_400_400230). No scenario fails a check it
 //     passed, and poppler's inside check stops failing on four mosaics,
 //     govdocs thread_000_000344, thread_000_000672, thread_100_100791 and
 //     thread_400_400762 (284, 10, 53 and 23 pixels).
-//   - govdocs thread_100_100853, pdfjs issue16454, issue19494: a whole-page
+//   - govdocs/pdf thread_100_100853, pdfjs issue16454, issue19494: a whole-page
 //     redaction was incomplete over removed digits the kept placements
 //     spelled in their operands and names (154.32 0 0 .78 306 123.9 cm
 //     /Im123 Do), and now succeeds.

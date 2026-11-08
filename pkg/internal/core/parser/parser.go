@@ -28,7 +28,7 @@ type DecryptFunc func([]byte) ([]byte, error)
 //
 // # Corpus evidence
 //
-//   - govdocs: parsing one page of 1.5 million operators spent 1.58 GB in
+//   - govdocs/pdf: parsing one page of 1.5 million operators spent 1.58 GB in
 //     the tokens = tokens[1:] reslice that the head index replaced.
 type Parser struct {
 	lex    *lexer.Lexer

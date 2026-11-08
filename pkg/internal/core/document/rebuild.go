@@ -32,7 +32,7 @@ var objHeaderRe = regexp.MustCompile(`(\d+)\s+(\d+)\s+obj\b`)
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100982.pdf, thread_100_100983.pdf: both end with
+//   - govdocs/pdf thread_100_100982.pdf, thread_100_100983.pdf: both end with
 //     `trailer<</Size N/ID[...]>>` and carry `/Info N 0 R /Root N 0 R /Prev N`
 //     in a trailer near the start, whose own startxref offset is a malformed
 //     0. Without the /Info recovery, ISO 19005-4, 6.1.3 t4 and t5 reported
@@ -236,7 +236,7 @@ const maxRecoveredTrailers = 16
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100982.pdf, thread_100_100983.pdf: the stub trailer
+//   - govdocs/pdf thread_100_100982.pdf, thread_100_100983.pdf: the stub trailer
 //     is last while the trailer carrying /Info sits about a kilobyte into a
 //     hundred-kilobyte document.
 func (d *Document) findTrailerInfoRef(ctx context.Context) (ast.PdfObject, bool) {

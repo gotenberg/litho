@@ -18,7 +18,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300084.pdf: shows codes its embedded Type 1 program
+//   - govdocs/pdf thread_300_300084.pdf: shows codes its embedded Type 1 program
 //     names G4F and G56. litho read them as U+004F and U+0056 and excused the
 //     font, while veraPDF reports every such glyph.
 func TestGlyphNameHasUnicode_ListedNamesOnly(t *testing.T) {

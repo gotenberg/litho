@@ -22,12 +22,12 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100172, thread_100_100195, thread_200_200961,
+//   - govdocs/pdf thread_100_100172, thread_100_100195, thread_200_200961,
 //     thread_300_300346: four files whose tag is "EN-US" plus a NUL went
 //     unreported, and veraPDF fails each of them.
 //   - verapdf 6-8-4-t01-pass-f: veraPDF passes the BOM'd "en-GB" of its own
 //     fixture.
-//   - govdocs thread_000_000153, thread_200_200295: a BOM'd value whose
+//   - govdocs/pdf thread_000_000153, thread_200_200295: a BOM'd value whose
 //     payload carries U+0000 already fails the grammar after decoding, which
 //     is what reports them.
 func TestPDFALangTagJudgedOnBytes(t *testing.T) {

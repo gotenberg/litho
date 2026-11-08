@@ -83,7 +83,7 @@ func TestWriterRedactClearsARegionOverAnAlreadyBlankedInlineSample(t *testing.T)
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300873, thread_400_400390: a second redaction after a
+//   - govdocs/pdf thread_300_300873, thread_400_400390: a second redaction after a
 //     p1-quarter refused on a 1 by 9004 background copy, LithoRedacted1, over
 //     samples the first redaction had blanked: 52 of the 120 and 112 cells of
 //     an 8 by 8 grid of page 1.

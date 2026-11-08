@@ -68,13 +68,13 @@ const winAnsiSecondHyphen = 0o255
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200213.pdf, thread_300_300076.pdf: Helvetica with
+//   - govdocs/pdf thread_200_200213.pdf, thread_300_300076.pdf: Helvetica with
 //     /WinAnsiEncoding shows its list bullets as code 0x7F, and extraction
 //     dropped every one of them.
 //   - All corpora: text matches PDF.js word for word on 10 more files
 //     (govdocs 9, pdfcpu 1) and character for character on 19 more, on none
 //     fewer.
-//   - pdfjs issue9650.pdf, govdocs thread_400_400900.pdf: code 0xAD ends a
+//   - pdfjs issue9650.pdf, govdocs/pdf thread_400_400900.pdf: code 0xAD ends a
 //     hyphenated line or opens a list item, and PDF.js reads a hyphen there.
 func WinAnsiDecoding() map[byte]rune {
 	m := make(map[byte]rune, len(WinAnsiEncoding)+6)

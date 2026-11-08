@@ -16,7 +16,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300511.pdf: selects NSNPEK+CMR12 from 31 pages, and
+//   - govdocs/pdf thread_300_300511.pdf: selects NSNPEK+CMR12 from 31 pages, and
 //     litho reported its missing glyph "O" 31 times, where veraPDF states it
 //     once against the font.
 func TestCharSetCompletenessJudgedOncePerFont(t *testing.T) {

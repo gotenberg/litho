@@ -109,7 +109,7 @@ type Stats struct {
 //     MB), 7.3% on pdfjs, 2.7% on pdfcpu and verapdf, 1.8% on litho and 1.4%
 //     on govdocs; pdf20 has nothing to subset. Most programs left whole are
 //     already subsets, whose in-place subset is not smaller.
-//   - 43 plain and subset pairs from facturx, litho/pdf, pdfjs, govdocs and
+//   - 43 plain and subset pairs from facturx, litho/pdf, pdfjs, govdocs/pdf and
 //     verapdf, judged by veraPDF 1.30.2 at their own flavour: the same rules
 //     fail as often.
 //   - pdfjs Brotli-Prototype-FileA.pdf: the one rule that moves. Three
@@ -128,7 +128,7 @@ type Stats struct {
 //     31 files' rewrite), 595 KB on pdfjs (1.9%), 28 KB on verapdf (22.3%),
 //     24 KB on pdfcpu (5.0%) and 2.5 KB on litho (7.3%); facturx and pdf20
 //     embed no Type 1 program.
-//   - govdocs thread_400_400543.pdf and thread_400_400559.pdf: four Type 1
+//   - govdocs/pdf thread_400_400543.pdf and thread_400_400559.pdf: four Type 1
 //     programs stored under LZWDecode come out under FlateDecode, so ISO
 //     19005-1, 6.1.10 and ISO 19005-2, 6.1.7.2 fire four times fewer.
 //   - pdfjs issue3928.pdf: a Type 1 program's /Length2 and /Length3 exceed

@@ -64,7 +64,7 @@ func matchNoteNamespace(v compliance.Violation) bool {
 //     at PDF/UA-2 and both WTPDF levels; every one of the 31 clears on both
 //     tools, default and aggressive, and no other output changes. 25 are
 //     govdocs Word exports mapping /Footnote and /Endnote to /Note.
-//   - govdocs thread_400_400585: its Note holding a heading fails ISO/TS
+//   - govdocs/pdf thread_400_400585: its Note holding a heading fails ISO/TS
 //     32005 Table 5 as FENote-Hn in place of Note-Hn, on both tools: the
 //     same nesting defect, named for the type the Note now stands for.
 func fixNoteNamespace(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {

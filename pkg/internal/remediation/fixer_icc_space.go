@@ -67,7 +67,7 @@ func matchICCSpaceV2(v compliance.Violation) bool {
 //     PDF_UA-1__7.20-t02-pass-a.pdf, and veraPDF agrees on every output.
 //   - pdfjs issue2856.pdf: its two version 4.0 RGB profiles hold an mAB A2B0
 //     table, which ToV2 refuses, and both tools keep the violation.
-//   - govdocs thread_100_100114.pdf, thread_200_200629.pdf,
+//   - govdocs/pdf thread_100_100114.pdf, thread_200_200629.pdf,
 //     thread_400_400765.pdf and thread_200_200973.pdf: their profile streams
 //     hold no ICC profile (version bytes 44 and 88), out of ToV2's reach.
 //   - litho/pdf defaultcs_4.pdf and csnames_2b.pdf: their abstract profiles are

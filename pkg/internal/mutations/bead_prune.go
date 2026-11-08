@@ -39,7 +39,7 @@ const maxBeadsPerThread = 100000
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100184.pdf: a bead left in the ring held on to 3649
+//   - govdocs/pdf thread_100_100184.pdf: a bead left in the ring held on to 3649
 //     bytes of the page the deletion had just removed.
 func pruneArticleBeads(
 	ctx context.Context,

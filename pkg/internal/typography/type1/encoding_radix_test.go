@@ -7,7 +7,7 @@ import "testing"
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100480.pdf: its Universal News with Commercial Pi
+//   - govdocs/pdf thread_100_100480.pdf: its Universal News with Commercial Pi
 //     program writes its vector this way, as in "dup 8#40 /space put".
 var radixVector = []byte("%!PS-AdobeFont-1.0: Test\n/Encoding 256 array\n0 1 255 {1 index exch /.notdef put} for\n" +
 	"dup 8#101 /A put\ndup 16#42 /B put\ndup 67 /C put\ndup 99#1 /bad put\nreadonly def\ncurrentfile eexec\n")

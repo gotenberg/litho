@@ -36,11 +36,12 @@ test/integration/
 │   ├── verapdf/
 │   │   ├── download.sh
 │   │   └── manifest.json
-│   ├── govdocs/
-│   │   ├── download.sh
-│   │   ├── flatten-scope.json  Widens the flatten cell to the whole corpus
-│   │   ├── manifest.json
-│   │   └── text-overrides.json Corrections to the PDF.js text goldens, with reasons
+│   ├── govdocs/                Govdocs1 (US government documents), fetched from five pinned threads
+│   │   └── pdf/
+│   │       ├── download.sh
+│   │       ├── flatten-scope.json  Widens the flatten cell to the whole corpus
+│   │       ├── manifest.json
+│   │       └── text-overrides.json Corrections to the PDF.js text goldens, with reasons
 │   ├── pdf20/
 │   │   ├── download.sh
 │   │   └── manifest.json
@@ -246,7 +247,7 @@ Each feature, its oracle and its comparison rules are in [FEATURES.md](FEATURES.
 | ------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `pdfjs`            | ~1,200 PDFs (1 fixture each)         | Mozilla's PDF.js test suite                                                                                                                                              |
 | `verapdf`          | ~2,600 PDFs × 15 profiles            | veraPDF corpus, flattened from the per-profile directories                                                                                                               |
-| `govdocs`          | ~1,100 PDFs (1 fixture per claim)    | Govdocs1 random-sample of five fixed thread archives (real-world PDFs)                                                                                                   |
+| `govdocs/pdf`      | ~1,100 PDFs (1 fixture per claim)    | Govdocs1 random-sample of five fixed thread archives (real-world PDFs)                                                                                                   |
 | `pdf20`            | 7 PDFs (1 fixture per claim)         | PDF Association's `pdf20examples` (CC-BY-SA-4.0 PDF 2.0 samples)                                                                                                         |
 | `pdfcpu`           | ~50 PDFs (1 fixture each)            | pdfcpu's `pkg/samples/bookmarks` + `pkg/testdata` (Apache-2.0)                                                                                                           |
 | `facturx`          | ~150 PDFs (1 fixture per claim)      | ZUGFeRD/corpus (Apache-2.0): real, sample and intentionally-broken Factur-X / ZUGFeRD invoices, flattened from the `ZUGFeRDv2`, `XML-Rechnung` and `ZUGFeRDv1` subtrees  |
@@ -276,7 +277,7 @@ Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
 
 - `expand` (verapdf, litho/pdf, litho/text): every PDF yields one fixture per declared profile, ID = `<profile>/<basename>`. A profile-agnostic feature (`text`) keeps each PDF's first fixture, under ID = `<basename>`.
 - `none` (pdfjs): one fixture per PDF, ID = `<basename>`.
-- `auto` (govdocs, pdf20, facturx): one fixture per PDF, profile read from the document's XMP claim. Files claiming `PDF_A-Nx` or `PDF_UA-N` get ID = `<profile>/<basename>` and run compliance/remediation. Files with no claim get ID = `<basename>` and run only the profile-agnostic features (text, metadata).
+- `auto` (govdocs/pdf, pdf20, facturx): one fixture per PDF, profile read from the document's XMP claim. Files claiming `PDF_A-Nx` or `PDF_UA-N` get ID = `<profile>/<basename>` and run compliance/remediation. Files with no claim get ID = `<basename>` and run only the profile-agnostic features (text, metadata).
 
 A converter corpus (`wpt`, `resvg`, `weasyprint`, `litho/html`, `gotenberg/*`, `libreoffice/*`) lists source documents instead of PDFs, through its manifest's `inputs`. Its fixture IDs are the WPT paths of the tests (`css/CSS2/floats/float-001.html`), the resvg paths of the SVG tests (`shapes/rect/simple-case.svg`), the fixture file names (`test_float__test_float`), the source directory names (`invoice`), and, for a fetched LibreOffice test document, its directory and file name (`ooxmlexport/tdf123.docx`), or the module of a Calc, Impress, DrawingML or chart test and its file name (`sc/tdf123.xlsx`, `chart2/tdf456.ods`, `sd/tdf789.pptx`, `oox/tdf1.pptx`), `sd-data` for the Impress test directory itself (`sd-data/tdf2.odp`).
 
@@ -304,8 +305,8 @@ When a change touches a construct no corpus file reaches, add a fixture to the l
 
 ```json
 {
-  "name": "govdocs",
-  "source": "govdocs",
+  "name": "govdocs/pdf",
+  "source": "govdocs/pdf",
   "pdf_root": "pdfs",
   "profile_mode": "auto",
   "profiles": ["PDF_A-1a", "PDF_A-1b", "...", "PDF_UA-2"],

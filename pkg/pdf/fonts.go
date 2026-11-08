@@ -257,16 +257,16 @@ func metricFamilies(family string) []string {
 //
 // # Corpus evidence
 //
-//   - govdocs: at PDF/A-2b with the macOS system fonts, 8 files show
+//   - govdocs/pdf: at PDF/A-2b with the macOS system fonts, 8 files show
 //     Helvetica-Narrow, which took Helvetica's Regular face and was refused
 //     for its widths, and now takes Arial Narrow and embeds; pdf.js reads
 //     their text at the same positions, and veraPDF reports one 6.2.11.4.1
 //     failure fewer per file and nothing new.
-//   - govdocs: 16 fonts whose weight word the family has no face of
+//   - govdocs/pdf: 16 fonts whose weight word the family has no face of
 //     (Helvetica-Black, Times-ExtraBold, Futura-Light, Futura-Book,
 //     Arial-BlackItalic) took the Bold or Regular face, every one refused
 //     for its widths, and now match none.
-//   - govdocs: the 294 fonts no program served before those changes name
+//   - govdocs/pdf: the 294 fonts no program served before those changes name
 //     families the system does not ship (Melior, New Century Schoolbook, Century Gothic, WP symbol
 //     fonts) or styles it has no face of (Geneva,Bold, Symbol,Italic); none is
 //     a name the matching misreads.

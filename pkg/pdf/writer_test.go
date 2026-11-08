@@ -508,7 +508,7 @@ func rootlessTrailerPDF() []byte {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100982.pdf, thread_100_100983.pdf: failed the full
+//   - govdocs/pdf thread_100_100982.pdf, thread_100_100983.pdf: failed the full
 //     rewrite with "trailer missing /Root indirect reference" before the
 //     fallback.
 func TestWriter_FullRewrite_RecoversRootlessTrailer(t *testing.T) {

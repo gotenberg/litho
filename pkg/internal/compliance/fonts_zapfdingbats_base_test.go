@@ -21,7 +21,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300031.pdf: its code 110, which its /Differences does
+//   - govdocs/pdf thread_300_300031.pdf: its code 110, which its /Differences does
 //     not name, read as the letter n, and veraPDF reports the glyph.
 func TestToUnicode_ZapfDingbatsImplicitBase(t *testing.T) {
 	t.Parallel()

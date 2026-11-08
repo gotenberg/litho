@@ -229,7 +229,7 @@ func encodingUndefinedCode(table string, code byte) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000885.pdf: shows Palatino-Roman with a
+//   - govdocs/pdf thread_000_000885.pdf: shows Palatino-Roman with a
 //     /FontDescriptor, no program and a /Differences-only /Encoding, and
 //     veraPDF reports ISO 14289-1 §7.21.7 t1 on every glyph it draws.
 func fontNamesUnencodedCodes(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
@@ -249,7 +249,7 @@ func fontNamesUnencodedCodes(ctx context.Context, doc *document.Document, fontDi
 //   - pdfjs js-buttons.pdf: shows code 0x34 through an unembedded ZapfDingbats
 //     with no /ToUnicode inside a widget appearance, which veraPDF reports
 //     under ISO 14289-1 §7.21.7 t1. It backs the ZapfDingbats exclusion.
-//   - govdocs thread_300_300031.pdf: shows ZapfDingbats code 110, which its
+//   - govdocs/pdf thread_300_300031.pdf: shows ZapfDingbats code 110, which its
 //     /Differences does not name, and veraPDF reports it. It backs judging the
 //     shown codes rather than surveying the names the font mentions.
 func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
@@ -475,14 +475,14 @@ func shownType3CodesWithoutUnicode(ctx context.Context, doc *document.Document, 
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300084.pdf: shows codes its embedded Type 1 program
+//   - govdocs/pdf thread_300_300084.pdf: shows codes its embedded Type 1 program
 //     names G4F and G56, which litho read as U+004F and U+0056, and veraPDF
 //     reports those glyphs as having no Unicode value.
 //   - pdfjs issue11016_reduced.pdf: its Calibre-Medium subset binds code 31 to
 //     f_f, and veraPDF reports it as "The glyph can not be mapped to Unicode".
 //   - verapdf 6-2-11-7-2-t01-fail-a.pdf, 6-3-8-t01-fail-a.pdf: embed CMEX10
 //     whose sole glyph is integraldisplay, and veraPDF reports both.
-//   - govdocs thread_000_000859.pdf: binds code 1 to a71 through /Differences
+//   - govdocs/pdf thread_000_000859.pdf: binds code 1 to a71 through /Differences
 //     on an unembedded ZapfDingbats, and veraPDF reports nothing.
 //   - pdfjs issue10640.pdf, issue2176.pdf: show codes their embedded Type 1
 //     subsets name zero.os, one.oldstyle and the like, and veraPDF reports
@@ -867,10 +867,10 @@ func usedGlyphNamesResolvable(ctx context.Context, doc *document.Document, fontD
 //     whose built-in names are all in the Adobe Glyph List, and veraPDF
 //     derives a Unicode value for every one of the eleven codes the page
 //     shows. It backs keeping the built-in encoding under an unknown name.
-//   - govdocs thread_000_000364.pdf: a subset CFF that maps codes 9, 10, 13,
+//   - govdocs/pdf thread_000_000364.pdf: a subset CFF that maps codes 9, 10, 13,
 //     127 and 128 in /Differences and every printing code in the CFF. It
 //     backs the program's built-in encoding as the implicit base.
-//   - govdocs thread_300_300031.pdf: shows ZapfDingbats code 110 that its
+//   - govdocs/pdf thread_300_300031.pdf: shows ZapfDingbats code 110 that its
 //     /Differences leave alone, and veraPDF reports it under ISO 14289-1
 //     §7.21.7 t1.
 //   - pdfjs bug1727053.pdf: shows code 80 through an embedded Arial,Bold whose
@@ -1077,7 +1077,7 @@ func builtinEncodingNames(fontData []byte) map[byte]string {
 //     any code it shows and reports ISO 14289-1, 7.21.7 t1 on each, while
 //     litho read StandardEncoding out of the PFB. It backs reading no
 //     encoding from a /FontFile that holds no Type 1 program.
-//   - govdocs thread_000_000341.pdf: embeds AvantGarde-Book with a program
+//   - govdocs/pdf thread_000_000341.pdf: embeds AvantGarde-Book with a program
 //     that names a predefined encoding and binds 110 codes through
 //     /Differences, leaving the other 146, the space and the digits among
 //     them, to the reference.
@@ -1261,14 +1261,14 @@ func encodingGlyphNames(name string, table map[byte]rune) map[byte]string {
 //   - pdfjs bug1727053.pdf: shows an unembedded Arial,Bold with no /ToUnicode,
 //     and veraPDF reports neither 7.21.7 nor 8.4.5.8. It backs extending the
 //     glyph-name exemption to TrueType.
-//   - govdocs: veraPDF reports 16 files whose TrueType names /WinAnsiEncoding
+//   - govdocs/pdf: veraPDF reports 16 files whose TrueType names /WinAnsiEncoding
 //     or /MacRomanEncoding and shows codes the program leaves unmapped. These
 //     files motivated the /Encoding dictionary restriction. All 16 show codes
 //     /Differences never names, and they take the /BaseEncoding route, so they
 //     never reach the StandardEncoding fallback.
 //   - pdfjs issue8613.pdf: shows two unembedded MSSansSerif fonts whose
 //     /Differences names the whole range, and veraPDF passes them.
-//   - govdocs thread_300_300859.pdf: shows an embedded ZJLCSM+Symbol whose
+//   - govdocs/pdf thread_300_300859.pdf: shows an embedded ZJLCSM+Symbol whose
 //     only code is named /bullet, and veraPDF passes it.
 //   - pdfjs bug1727053.pdf: shows 27 codes of an embedded Arial,Bold, 23 of
 //     them named by the StandardEncoding base rather than by its 88-entry
@@ -1495,16 +1495,16 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100601.pdf: shows code 1 of an embedded
+//   - govdocs/pdf thread_100_100601.pdf: shows code 1 of an embedded
 //     MHHIBN+ZapfDingbats named /a73 with no /ToUnicode, on pages 49 and 50.
 //     veraPDF reports that glyph once at PDF/A-1a and passes it at PDF/A-2u,
 //     where the rule runs and succeeds rather than going unapplied (142
 //     passed rules against 121 at 1a). The check keyed on the font's name
 //     reported the font once per page.
-//   - govdocs thread_100_100852.pdf: shows a73 and a35 through an embedded
+//   - govdocs/pdf thread_100_100852.pdf: shows a73 and a35 through an embedded
 //     AEJJAA+ZapfDingbatsITC, and veraPDF reports both glyphs at PDF/A-1a. A
 //     check keyed on the name ZapfDingbats reported neither.
-//   - govdocs thread_400_400578.pdf: shows code 2 of an embedded
+//   - govdocs/pdf thread_400_400578.pdf: shows code 2 of an embedded
 //     KLAIOM+ZapfDingbats named a73 by /Differences, beside a /ToUnicode
 //     CMap, and veraPDF reports it at PDF/A-1a. The survey of the codes
 //     outside that CMap admitted the name.
@@ -1606,7 +1606,7 @@ type outsideCode struct {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300068.pdf: shows code 2 of an MTSY font whose
+//   - govdocs/pdf thread_300_300068.pdf: shows code 2 of an MTSY font whose
 //     /Differences name it circlecopyrt, a TeX spelling no glyph list carries,
 //     while its /ToUnicode maps codes 1 and 3 only, and veraPDF reports the
 //     glyph.

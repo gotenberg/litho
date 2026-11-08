@@ -95,7 +95,7 @@ func deleteFirstOfTagged(t *testing.T) *writer.ObjAllocator {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400912.pdf: held 17204 bytes of the page it had just
+//   - govdocs/pdf thread_400_400912.pdf: held 17204 bytes of the page it had just
 //     deleted, by the structure tree alone.
 func TestDeletePagesPrunesStructureElements(t *testing.T) {
 	t.Parallel()
@@ -155,7 +155,7 @@ func TestDeletePagesPrunesParentTree(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000761.pdf: kept 2196 bytes of its deleted page
+//   - govdocs/pdf thread_000_000761.pdf: kept 2196 bytes of its deleted page
 //     through an outline destination alone.
 func TestDeletePagesStripsOutlineDestinations(t *testing.T) {
 	t.Parallel()

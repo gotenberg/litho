@@ -551,7 +551,7 @@ func checkLiveVeraPDF(report []byte, want string) error {
 //
 // # Corpus evidence
 //
-//   - govdocs, 25 files: VeraPDF's rule order is stable batch against batch,
+//   - govdocs/pdf, 25 files: VeraPDF's rule order is stable batch against batch,
 //     and batch against single permutes 5 of 6, which is why the ids are
 //     sorted.
 func jobVerdict(vr verapdfValidationResult) veraVerdict {

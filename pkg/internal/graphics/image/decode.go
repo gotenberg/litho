@@ -279,7 +279,7 @@ func tintedGrey(samples []byte, grey [256]byte, conv *converter, width, height i
 //
 // # Corpus evidence
 //
-//   - pdfjs, govdocs: of the images on pages PDF.js paints, only
+//   - pdfjs, govdocs/pdf: of the images on pages PDF.js paints, only
 //     xobject-image.pdf wraps its JPEG this way, and no decoded pixel changes.
 //     Its 1x1 JPEG under a 200x100 dictionary is refused either way; the
 //     refusal now names the JPEG rather than a short sample row.
@@ -506,7 +506,7 @@ func indexedColorSpace(ctx context.Context, doc *document.Document, dict ast.Pdf
 //
 // # Corpus evidence
 //
-//   - govdocs: 135 images in one document were strided across pixel
+//   - govdocs/pdf: 135 images in one document were strided across pixel
 //     boundaries this way, and every one of them decoded without error.
 func tintedColorSpace(ctx context.Context, doc *document.Document, dict ast.PdfDict) (ast.PdfArray, string, int, bool) {
 	csObj, ok := dict["ColorSpace"]
@@ -829,7 +829,7 @@ func decodeDeviceN(
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300659, thread_400_400932: reading the tints as RGB
+//   - govdocs/pdf thread_300_300659, thread_400_400932: reading the tints as RGB
 //     misread every entry of their five-colorant tables.
 func tintTable(ctx context.Context, doc *document.Document, cs ast.PdfArray, colorants int, table []byte, intent icc.Intent, cc colorContext) ([]byte, error) {
 	tc, err := newTintConverter(ctx, doc, cs, colorants, intent, cc)
@@ -905,7 +905,7 @@ func (tc *tintConverter) rgb(tints []byte) (color.RGBA, error) {
 //   - pdfjs issue9940.pdf: two images indexed over a DeviceN space whose
 //     alternate is a CalRGB with XYZ for its primaries came out up to 17
 //     levels off PDF.js read as DeviceRGB, and within 3 read through it.
-//   - govdocs thread_200_200169.pdf: Separation /Black images over an sRGB-like
+//   - govdocs/pdf thread_200_200169.pdf: Separation /Black images over an sRGB-like
 //     CalRGB alternate moved from 3.4 levels off PDF.js to within 3.
 func alternateCal(ctx context.Context, doc *document.Document, obj ast.PdfObject, comps int) *calSpace {
 	cal, ok := resolveCalSpace(ctx, doc, obj)
@@ -940,7 +940,7 @@ type tintAlternate struct {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300253.pdf: four PANTONE Separation spaces over a
+//   - govdocs/pdf thread_300_300253.pdf: four PANTONE Separation spaces over a
 //     D50 Lab alternate, the only tinted spaces over Lab in any corpus, whose
 //     fills litho painted black where poppler 26.09.0 and PDFium paint the
 //     NTP and NIEHS logos blue and teal. Page 1 at 72 dpi went from 10251 to
@@ -1257,7 +1257,7 @@ func resolveLabParams(ctx context.Context, doc *document.Document, obj ast.PdfOb
 //
 // # Corpus evidence
 //
-//   - pdfjs issue10339_reduced.pdf, issue2761.pdf, govdocs
+//   - pdfjs issue10339_reduced.pdf, issue2761.pdf, govdocs/pdf
 //     thread_300_300253.pdf: the 5 Lab images of the corpora, direct or
 //     indexed, now lie 7 to 10 levels from PDF.js's approximation.
 func labEntryToRGB(e [4]byte, p labParams) (uint8, uint8, uint8) {
@@ -1556,12 +1556,12 @@ func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.Pdf
 //     RGB image" when read in the base space.
 //   - All corpora: every tint transform measured maps tint 0 to paper white
 //     and full tint to near black.
-//   - govdocs thread_000_000340: reading its one-colorant /Black JPEGs as
+//   - govdocs/pdf thread_000_000340: reading its one-colorant /Black JPEGs as
 //     DeviceGray inverted both images against PDF.js, which applies the tint
 //     transform.
-//   - govdocs: the one direct Lab image in the corpora is a JPEG, whose white
+//   - govdocs/pdf: the one direct Lab image in the corpora is a JPEG, whose white
 //     came out pink when read as RGB.
-//   - govdocs: painting the rows short data holds, with the filters keeping
+//   - govdocs/pdf: painting the rows short data holds, with the filters keeping
 //     what a truncated stream holds, took the pages PDF.js paints images on
 //     that litho failed to decode from 375 to 3.
 func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream, cc colorContext, native *NativeSamples) (image.Image, error) {

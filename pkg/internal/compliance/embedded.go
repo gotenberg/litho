@@ -290,7 +290,7 @@ func (fs fileSpecEntry) label() string {
 //   - litho/pdf complex_1b.pdf and complex_4.pdf: a reference XObject names its
 //     target file through a /Ref /F written inline, and veraPDF reports it
 //     under ISO 19005-3, 6.8 t3 and t4 where litho did not.
-//   - govdocs thread_400_400002.pdf: 42 /OPI dictionaries name their image
+//   - govdocs/pdf thread_400_400002.pdf: 42 /OPI dictionaries name their image
 //     file through an inline /F, and veraPDF reports each under ISO 19005-3,
 //     6.8 t3 and t4 where litho reported none.
 //   - All corpora, the 298 files that hold a file specification, at PDF/A-1b,

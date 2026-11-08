@@ -173,7 +173,7 @@ const xmpPacketHeaderSize = 200
 //   - pdfjs issue18941.pdf: its packet ends "</x:xmpmeta" with no closing
 //     ">", and veraPDF reports all six of its Info keys as unmatched.
 //     Recovering values from the packet instead passed three of them.
-//   - govdocs thread_300_300234.pdf: ships a packet whose prefixes are
+//   - govdocs/pdf thread_300_300234.pdf: ships a packet whose prefixes are
 //     unbound, and veraPDF reports its serialization alone, not the property
 //     types litho recovered from it.
 func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
@@ -976,7 +976,7 @@ const maxXMPCharRefDigits = 8
 //
 // # Corpus evidence
 //
-//   - govdocs: Adobe Illustrator writes dc:description values holding
+//   - govdocs/pdf: Adobe Illustrator writes dc:description values holding
 //     "&#x5;".
 func xmpFixControlChars(data []byte) []byte {
 	if !bytes.ContainsFunc(data, func(r rune) bool { return xmpIsControlChar(int(r)) }) &&
@@ -1418,7 +1418,7 @@ func xmpNamespaceHoldsMachinery(ns string) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs: six files write rdf:type as a property element, and veraPDF
+//   - govdocs/pdf: six files write rdf:type as a property element, and veraPDF
 //     reports every one.
 //   - All corpora, 3732 packets carrying RDF-namespace names at that
 //     position: nothing else is written as an element.
@@ -1530,7 +1530,7 @@ func xmpExtractTopLevelProperties(data []byte) []xmpTopLevelProperty {
 //     xmpMM:DocumentID, which the XMP Specification predefines. Reporting
 //     those names instead of falling through to the catalog invented 67
 //     violations veraPDF never makes.
-//   - govdocs thread_000_000163.pdf: writes Iptc4xmpCore:CreatorContactInfo,
+//   - govdocs/pdf thread_000_000163.pdf: writes Iptc4xmpCore:CreatorContactInfo,
 //     CountryCode and Location, none of them predefined by the XMP
 //     Specification this part admits, and veraPDF reports all three.
 func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, extraExtensionNS map[string]bool, pooled map[string]map[string]bool, results *[]Violation) {
@@ -2171,7 +2171,7 @@ func dcTitleLangAltMalformed(data []byte) bool {
 //
 //   - pdfjs issue15833.pdf: carries packets rewritten by a library proxy that
 //     bind the rdf prefix to another URI, and veraPDF reports none of them.
-//   - govdocs thread_300_300842.pdf: writes &#x5; inside its x-default item,
+//   - govdocs/pdf thread_300_300842.pdf: writes &#x5; inside its x-default item,
 //     which XMPCore repairs and veraPDF reports, while the raw decoder
 //     stopped there.
 func xmpLangAltOnlyXDefault(data []byte) bool {
@@ -3334,7 +3334,7 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, extraExtensio
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300116: litho reported photoshop:ColorMode,
+//   - govdocs/pdf thread_300_300116: litho reported photoshop:ColorMode,
 //     photoshop:History, photoshop:ICCProfile, exif:NativeDigest,
 //     tiff:NativeDigest and pdf:Trapped under t1 alone while veraPDF reports
 //     every one under both tests.
@@ -3687,10 +3687,10 @@ type xmpPropertyValue struct {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100847.pdf: carries <xapMM:DerivedFrom
+//   - govdocs/pdf thread_100_100847.pdf: carries <xapMM:DerivedFrom
 //     rdf:parseType="Resource"></...>, an empty struct, and litho read its
 //     whitespace as a plain text value.
-//   - govdocs thread_300_300116.pdf: writes <exif:Flash exif:Fired="False"
+//   - govdocs/pdf thread_300_300116.pdf: writes <exif:Flash exif:Fired="False"
 //     .../> in one packet and the same struct with sub-elements in another;
 //     litho read the first as plain text and reported a struct property with
 //     a text value that veraPDF does not report.

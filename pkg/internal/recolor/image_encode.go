@@ -31,7 +31,7 @@ func flateCompress(data []byte, limit int) ([]byte, bool, error) {
 //
 // # Corpus evidence
 //
-//   - litho/pdf, pdfjs, govdocs render samples and every pdfjs, govdocs and
+//   - litho/pdf, pdfjs, govdocs/pdf render samples and every pdfjs, govdocs/pdf and
 //     litho file holding a JPEG 2000 image (417 files): converted to CMYK,
 //     lossless and at quality 85, the outputs are byte for byte those of
 //     encoding in full.
@@ -79,7 +79,7 @@ const subsampleBelowQuality = 90
 //
 // # Corpus evidence
 //
-//   - pdfjs, govdocs, litho/pdf: the 41 files holding JPEG 2000 images that
+//   - pdfjs, govdocs/pdf, litho/pdf: the 41 files holding JPEG 2000 images that
 //     convert to CMYK grow from 58.8 MB to 275.9 MB lossless and 182.5 MB
 //     at quality 85, their JPEG 2000 images alone from 21.1 MB to 211.0 MB
 //     under Flate; pdfjs issue17289.pdf 59768197 -> 29287778 bytes.
@@ -130,11 +130,11 @@ func (im *Images) jpegSource(ctx context.Context, stream ast.PdfStream, filterNa
 //     100.6 / 101.1 / 101.9 MB at quality 85 / 90 / 95, 5 files holding
 //     JPEGs (issue13999 742906 -> 445163 bytes at 85); the recolor cell
 //     matches 78 in every mode, no page with colour drift past 75 ΔE*ab.
-//   - govdocs (79 render-sampled files): 107.4 MB lossless, 84.5 / 87.9 /
+//   - govdocs/pdf (79 render-sampled files): 107.4 MB lossless, 84.5 / 87.9 /
 //     93.8 MB at 85 / 90 / 95, 24 files holding JPEGs (thread_200_200427
 //     4304820 -> 904014 bytes at 85); the recolor cell matches 79 in every
 //     mode, no drift.
-//   - govdocs thread_100_100452, thread_100_100651, thread_300_300034: at
+//   - govdocs/pdf thread_100_100452, thread_100_100651, thread_300_300034: at
 //     95 the lossless encoding is no larger, so the file keeps its size.
 func (im *Images) encodeJPEG(ctx context.Context, samples []byte, width, height, comps int) ([]byte, bool, error) {
 	q := im.cfg.JPEGQuality

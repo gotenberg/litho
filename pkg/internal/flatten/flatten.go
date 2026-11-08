@@ -55,7 +55,7 @@ const pixelEpsilon = 1e-6
 //     the litho corpus, flattened at 72 dpi, 9 composite 12 units painting
 //     under overprint (govdocs 3 files, pdfjs 6). Without Overprint every
 //     output is byte for byte the output before overprint was read.
-//   - govdocs, pdfjs: those 9 flattened with Overprint, drawn at 36 dpi with
+//   - govdocs/pdf, pdfjs: those 9 flattened with Overprint, drawn at 36 dpi with
 //     overprinting simulated, differ from the source drawn so by more than
 //     16 levels on fewer pixels than the outputs flattened without it on 6
 //     of their 16 pages, on as many on 9, and on one pixel more on
@@ -841,7 +841,7 @@ const holeClipMargin = 72.0
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200427 page 1, quarter with the raster fallback: a
+//   - govdocs/pdf thread_200_200427 page 1, quarter with the raster fallback: a
 //     band whose shading was clipped to a rectangle 0.17 pixel into a row
 //     drew that row lighter by 43 levels over 78 pixels in litho, and in
 //     PDFium 4.30.0, once the image stood in for it under one clip holding

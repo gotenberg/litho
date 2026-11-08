@@ -151,7 +151,7 @@ func (r *Reader) ExtractUnseenText(ctx context.Context, pageNum int) (_ []models
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000149.pdf pages 9 and 10: mode 7 copies clip a
+//   - govdocs/pdf thread_000_000149.pdf pages 9 and 10: mode 7 copies clip a
 //     0.37-point sliver, and were judged seen while leaving them out of the
 //     clip let the sliver paint their whole boxes; now judged for their
 //     mode, and left unreported for their filled copies that show
@@ -223,7 +223,7 @@ func (s *textScene) judgeUnseen(ctx context.Context, r *Reader, pg *document.Pag
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000208.pdf: InDesign fills "Modified for the Web",
+//   - govdocs/pdf thread_000_000208.pdf: InDesign fills "Modified for the Web",
 //     paints an image over it, then draws it again in mode 7 to clip a second
 //     image to its letters, on 38 pages.
 func (s *textScene) seenThroughClipCopies(units [][]int, seen []bool, reasons []models.UnseenReason) {
@@ -257,7 +257,7 @@ func (s *textScene) seenThroughClipCopies(units [][]int, seen []bool, reasons []
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000149.pdf pages 9 and 10: the table caption and a
+//   - govdocs/pdf thread_000_000149.pdf pages 9 and 10: the table caption and a
 //     reference are filled, shown, and drawn again in mode 7 to clip a
 //     0.37-point sliver ([textScene.judgeUnseen]); no longer reported.
 func (s *textScene) seenInPaintedCopies(units [][]int, seen []bool, reasons []models.UnseenReason) {

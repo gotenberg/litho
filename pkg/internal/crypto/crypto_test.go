@@ -148,7 +148,7 @@ func TestNewHandler_MissingP_DefaultsToAllPermissions(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs: files commonly declare V=2 R=3.
+//   - govdocs/pdf: files commonly declare V=2 R=3.
 func TestAuthenticate_V2R3_BlankUserPassword(t *testing.T) {
 	cfg := EncryptConfig{
 		UserPassword:  "",

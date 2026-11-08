@@ -188,7 +188,7 @@ Corpus measurements back a decision; they are not the decision. Collect them in 
 //   - All corpora: 5170 of 5171 files parse, and the deepest page tree is 4.
 ```
 
-One bullet per finding, starting with the corpus as the integration matrix names it (`All corpora`, `govdocs`, `pdfjs`, `verapdf`, `pdf20`, `pdfcpu`, `facturx`, `litho/pdf`, `litho/text`, `libreoffice/pptx`, `gotenberg/docx`), then the file names when file-specific, then a colon. A measurement on a document made for it, in no corpus, starts with `probe` and the format (`probe, pptx`). Evidence behind a comment inside a function, a struct field, or a `const` group moves to the enclosing declaration.
+One bullet per finding, starting with the corpus as the integration matrix names it (`All corpora`, `govdocs/pdf`, `pdfjs`, `verapdf`, `pdf20`, `pdfcpu`, `facturx`, `litho/pdf`, `litho/text`, `libreoffice/pptx`, `gotenberg/docx`), then the file names when file-specific, then a colon. A measurement on a document made for it, in no corpus, starts with `probe` and the format (`probe, pptx`). Evidence behind a comment inside a function, a struct field, or a `const` group moves to the enclosing declaration.
 
 ## Testing
 

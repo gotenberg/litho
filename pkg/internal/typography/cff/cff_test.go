@@ -234,7 +234,7 @@ func TestParsePrivateDict_Empty(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200836.pdf: a Computer Modern subset declares
+//   - govdocs/pdf thread_200_200836.pdf: a Computer Modern subset declares
 //     nominalWidthX 384.778.
 func TestParsePrivateDict_RealNumberWidth(t *testing.T) {
 	// nominalWidthX = 392.49 encoded as op 30: nibbles 3 9 2 . 4 9 END.

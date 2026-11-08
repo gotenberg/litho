@@ -18,7 +18,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300068.pdf: shows code 2 of an MTSY font whose
+//   - govdocs/pdf thread_300_300068.pdf: shows code 2 of an MTSY font whose
 //     /Differences name it circlecopyrt, a TeX spelling no glyph list
 //     carries, while its /ToUnicode maps codes 1 and 3 only. veraPDF reports
 //     the glyph and litho accepted the font for having a CMap.

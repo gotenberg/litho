@@ -72,7 +72,7 @@ type splitShow struct {
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfcpu, pdfjs: redacting page 1 of each of 2344 files under a
+//   - govdocs/pdf, pdfcpu, pdfjs: redacting page 1 of each of 2344 files under a
 //     whole-page, a top-third, a left-half and a mid-page band region, 1427
 //     redactions refused for partial coverage before splitting and 27 after.
 //     758 now succeed, and in each the extracted glyphs outside the region
@@ -80,10 +80,10 @@ type splitShow struct {
 //     --check reports no error; the 642 others now meet a later refusal (the
 //     structure tree, the verification scan, a shared image, an annotation
 //     appearance).
-//   - govdocs thread_300_300338.pdf: the one exception, a kept glyph whose
+//   - govdocs/pdf thread_300_300338.pdf: the one exception, a kept glyph whose
 //     box started exactly on the region's edge, at 306.0000000000001 before
 //     and 306 after, which an inclusive overlap test reads as touching.
-//   - pdfjs, pdfcpu, govdocs: of the 27 refusals left, 18 are a TJ number
+//   - pdfjs, pdfcpu, govdocs/pdf: of the 27 refusals left, 18 are a TJ number
 //     under a horizontal scaling other than 100 (issue9650.pdf,
 //     JBIG2Globals.pdf, thread_300_300655.pdf), 5 a code split against the
 //     encoding (issue9915_reduced.pdf, bug898853.pdf) and 4 clipping text

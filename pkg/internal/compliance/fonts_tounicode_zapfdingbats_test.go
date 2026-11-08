@@ -25,7 +25,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100601.pdf: veraPDF reports the /a73 glyph at
+//   - govdocs/pdf thread_100_100601.pdf: veraPDF reports the /a73 glyph at
 //     PDF/A-1a and passes it at PDF/A-2u.
 //   - All corpora: extending the carve-out past part 1 reported four files
 //     veraPDF passes.

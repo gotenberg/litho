@@ -181,7 +181,7 @@ var interpolationKeys = []ast.PdfName{"I", "Interpolate"}
 //     PDF/A-2b and PDF/A-4 remediations, default and aggressive, kept every
 //     one, and now keep none, on litho and veraPDF 1.30.2 alike, and no other
 //     rule moves on either tool.
-//   - govdocs thread_100_100877.pdf: the 97 findings go, 110 residual
+//   - govdocs/pdf thread_100_100877.pdf: the 97 findings go, 110 residual
 //     findings become 13 at each level.
 //   - pdfjs bug1065245.pdf, issue20722.pdf at PDF/A-2b and PDF/A-4, and verapdf
 //     PDF_A-1b__veraPDF_test_suite_6-2-4-t03-fail-a.pdf,

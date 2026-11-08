@@ -153,7 +153,7 @@ func structTreeRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100631.pdf: maps /LI_Title to /LBody, and the list
+//   - govdocs/pdf thread_100_100631.pdf: maps /LI_Title to /LBody, and the list
 //     fixer wrapped that existing list body in a SECOND LBody.
 func resolvedStructType(ctx context.Context, doc *document.Document, elem ast.PdfDict, roleMap map[ast.PdfName]ast.PdfName) ast.PdfName {
 	role := structType(ctx, doc, elem)

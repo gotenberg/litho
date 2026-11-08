@@ -225,7 +225,7 @@ type contentMarkingWalk struct {
 //
 //   - pdfjs bug1019475_1.pdf: wraps its text in /H1 <</MCID 0>> BDC under a
 //     catalog with no StructTreeRoot, and veraPDF reports it as untagged.
-//   - govdocs thread_000_000632.pdf: wraps an image in /Artifact <</MCID 31>>
+//   - govdocs/pdf thread_000_000632.pdf: wraps an image in /Artifact <</MCID 31>>
 //     BDC that its /S /Artifact element owns, and veraPDF reports t1 and t2;
 //     with the MCID left out of the ParentTree it reports neither.
 //   - litho/pdf annothidden_2b.pdf: flattening draws each annotation's empty

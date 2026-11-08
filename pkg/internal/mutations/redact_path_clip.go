@@ -1176,7 +1176,7 @@ func emitBroken(segs []pathSeg, pieces []piece, loop bool) string {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400756.pdf page 2: a table rule 1 unit thick along a
+//   - govdocs/pdf thread_400_400756.pdf page 2: a table rule 1 unit thick along a
 //     region's top edge, split on both axes and painted as one path, lost
 //     its snapping and drew grey across the table outside the region.
 //   - pdfcpu FOSDEM14_HPC_devroom_14_GoCUDA page 1: a pattern fill 137 units

@@ -124,7 +124,7 @@ type ColorOption func(*colorOpts)
 //
 // # Corpus evidence
 //
-//   - All corpora (litho/pdf, pdf20, pdfcpu, pdfjs, govdocs; 2540 converted to
+//   - All corpora (litho/pdf, pdf20, pdfcpu, pdfjs, govdocs/pdf; 2540 converted to
 //     the built-in CMYK): compensating by default changes the bytes of 54
 //     outputs (litho 3, pdfcpu 2, pdfjs 34, govdocs 15), every one
 //     deterministic, and no flattening of an output starts or stops

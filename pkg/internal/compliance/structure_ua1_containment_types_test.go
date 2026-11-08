@@ -16,7 +16,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000150.pdf: maps LI_Label to Lbl and LI_Title to
+//   - govdocs/pdf thread_000_000150.pdf: maps LI_Label to Lbl and LI_Title to
 //     LBody; comparing the names as written reported §7.2 t20 on every list
 //     item.
 func TestUA1Containment_ByStandardType(t *testing.T) {

@@ -111,7 +111,7 @@ func splitFirstTwoPages(t *testing.T, withBeads bool) []byte {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100852.pdf: extracting nine pages wrote all 56 into
+//   - govdocs/pdf thread_100_100852.pdf: extracting nine pages wrote all 56 into
 //     the output: 47 pages the caller never asked for, 510 KB of content that
 //     read back as plain text from a file that was supposed to hold pages 2
 //     to 10.
@@ -207,7 +207,7 @@ func TestSplitKeepsInheritedAttributes(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100184.pdf: leaked 84 pages and 1.2 MB of content
+//   - govdocs/pdf thread_100_100184.pdf: leaked 84 pages and 1.2 MB of content
 //     through its article beads, from a two-page extraction, after the
 //     /Parent path was already closed.
 func TestSplitDoesNotFollowArticleBeads(t *testing.T) {
@@ -275,7 +275,7 @@ func onePagePDF(t *testing.T) []byte {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100852.pdf: inserting one of its pages into a
+//   - govdocs/pdf thread_100_100852.pdf: inserting one of its pages into a
 //     four-page document produced a five-page file carrying all 55 unselected
 //     source pages and 613 KB of their content, so the output was 2 MB where
 //     88 KB was called for.

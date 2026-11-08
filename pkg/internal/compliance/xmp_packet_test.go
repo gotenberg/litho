@@ -41,7 +41,7 @@ func TestXmpWellFormed(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300842.pdf: holds "&#x5;" inside a dc:description,
+//   - govdocs/pdf thread_300_300842.pdf: holds "&#x5;" inside a dc:description,
 //     and veraPDF reports schema violations against that packet's properties,
 //     proving it parsed.
 func TestXmpWellFormed_ControlChars(t *testing.T) {

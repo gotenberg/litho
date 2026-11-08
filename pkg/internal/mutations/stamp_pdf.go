@@ -271,7 +271,7 @@ func collectLatestPageContents(ctx context.Context, alloc *writer.ObjAllocator, 
 //
 // # Corpus evidence
 //
-//   - govdocs: 26 of 1091 documents write /Contents as a reference naming an
+//   - govdocs/pdf: 26 of 1091 documents write /Contents as a reference naming an
 //     array, which redaction, excision and stamping all refused until the
 //     reference was resolved before the switch.
 func collectContents(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageDict ast.PdfDict) ([]byte, error) {

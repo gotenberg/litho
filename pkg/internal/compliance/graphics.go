@@ -294,13 +294,13 @@ func appearanceResources(ctx context.Context, doc *document.Document, streamRes,
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100666.pdf: references ExtGState object 190 from 30
+//   - govdocs/pdf thread_100_100666.pdf: references ExtGState object 190 from 30
 //     pages, and veraPDF reports its /TR once. It backs judging a shared
 //     dictionary once.
 //   - pdfjs issue21089.pdf: six graphics states name one indirect type 5
 //     halftone whose process colorants carry transfer functions, and veraPDF
 //     fails ISO 19005-2, 6.2.5 t6 four times, where litho failed it 24 times.
-//   - govdocs thread_300_300255.pdf: its two pages list /GS13, holding /TR,
+//   - govdocs/pdf thread_300_300255.pdf: its two pages list /GS13, holding /TR,
 //     and never set it, and veraPDF fails 6.2.5 t1 twice, where litho failed
 //     it four times.
 //   - All corpora: judging a state where a gs sets it moved 19 counts at
@@ -513,11 +513,11 @@ var halftoneCMYKColorants = map[ast.PdfName]bool{"Cyan": true, "Magenta": true, 
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100518.pdf: six type 5 halftones in which Red and
+//   - govdocs/pdf thread_100_100518.pdf: six type 5 halftones in which Red and
 //     Cyan, Green and Magenta, Blue and Yellow, and Gray, Black and Default
 //     share a component each, and veraPDF fails t6 12 times, for Green and
 //     Blue, where litho failed it 24 times, once per non-process colorant.
-//   - govdocs thread_400_400570.pdf: the same halftone with Blue written
+//   - govdocs/pdf thread_400_400570.pdf: the same halftone with Blue written
 //     before Yellow, where veraPDF fails t6 for Green alone.
 //   - All corpora: judging halftones as veraPDF does moved 10 counts of t6 at
 //     PDF/A-2b and PDF/A-4, in 5 govdocs files, each onto veraPDF's count,

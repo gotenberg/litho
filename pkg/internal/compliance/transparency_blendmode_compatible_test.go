@@ -22,7 +22,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300345.pdf: the corpus case, a page whose /GS3 names
+//   - govdocs/pdf thread_300_300345.pdf: the corpus case, a page whose /GS3 names
 //     /Compatible.
 func TestBlendModeCompatibleIsTransparency(t *testing.T) {
 	t.Parallel()

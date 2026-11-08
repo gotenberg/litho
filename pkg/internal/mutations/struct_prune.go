@@ -126,10 +126,10 @@ func pageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400912.pdf: deleting page 1 carried the page along
+//   - govdocs/pdf thread_400_400912.pdf: deleting page 1 carried the page along
 //     with 17204 bytes of its content, held there by the structure tree alone
 //     once /OpenAction and the form field tree had let go.
-//   - govdocs thread_000_000761.pdf: storing the returned reference again after
+//   - govdocs/pdf thread_000_000761.pdf: storing the returned reference again after
 //     its /K array was rewritten in place wrote the reference as the array
 //     object, which cost the file its whole structure tree.
 func pruneStructTree(
@@ -261,7 +261,7 @@ func (p *structPrune) pageGone(dict ast.PdfDict) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000761.pdf: kept 2196 bytes of the deleted page
+//   - govdocs/pdf thread_000_000761.pdf: kept 2196 bytes of the deleted page
 //     through a dropped single kid its parent still referenced.
 type structKidsResult struct {
 	Value     ast.PdfObject
@@ -380,7 +380,7 @@ type kidOutcome struct {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100587.pdf: reading only an /OBJR's own /Pg kept one
+//   - govdocs/pdf thread_100_100587.pdf: reading only an /OBJR's own /Pg kept one
 //     naming a link annotation on the deleted page, and through the link's
 //     /GoTo the page itself.
 func (p *structPrune) kid(ctx context.Context, kid ast.PdfObject, ownerGone bool, depth int) kidOutcome {
@@ -457,7 +457,7 @@ func (p *structPrune) objectOnGonePage(ctx context.Context, obj ast.PdfObject) b
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000153.pdf: the empty cells of tables on pages the
+//   - govdocs/pdf thread_000_000153.pdf: the empty cells of tables on pages the
 //     split left out kept their rows, and their tables, as long as a
 //     surviving kid was enough to keep an element: every split of the file
 //     carried skeleton tables that failed ISO 14289-1, 7.2 test 42.

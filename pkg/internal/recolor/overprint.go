@@ -38,7 +38,7 @@ const maxOverprintFormOps = 1 << 22
 //     four-component ICCBased colours whose zero components the conversion
 //     moves; converted to sRGB, 73 report 137223. No conversion flips
 //     between converting and refusing.
-//   - govdocs, verapdf: pages 1 to 3 of the 11 outputs with rewritten
+//   - govdocs/pdf, verapdf: pages 1 to 3 of the 11 outputs with rewritten
 //     states render at 36 dpi identical pixel for pixel to the outputs
 //     without the rewrite.
 type OverprintReport struct {

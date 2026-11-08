@@ -16,7 +16,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400580.pdf: every button carries its field type on
+//   - govdocs/pdf thread_400_400580.pdf: every button carries its field type on
 //     its parent field, the shape this fixture reproduces.
 func buttonWidgetPDF(annotExtra, parentFT string) []byte {
 	appearance := "q 1 0 0 RG 0 0 20 20 re S Q"
@@ -75,7 +75,7 @@ func fixedAnnot(t *testing.T, data []byte) ast.PdfDict {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400580.pdf: came out of remediation newly failing
+//   - govdocs/pdf thread_400_400580.pdf: came out of remediation newly failing
 //     ISO 19005-2, 6.3.3 test 3 while /FT was read off the annotation alone,
 //     which veraPDF confirmed on the output.
 func TestAnnotAppearanceWrapsAButtonWhoseTypeIsInherited(t *testing.T) {

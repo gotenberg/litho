@@ -60,7 +60,7 @@ func (f *Font) programGapWidth(code int) (float64, bool) {
 //     alone sets each glyph by a TD of its own, 10.87 units apart against
 //     the 11.87 the program gives each glyph at 19.79 points. Measured from
 //     a 0 advance, "net:" read "n e t :".
-//   - govdocs thread_300_300705.pdf pages 9, 10, 11, 15 and 16: a figure
+//   - govdocs/pdf thread_300_300705.pdf pages 9, 10, 11, 15 and 16: a figure
 //     label's "ψ←" read "ψ ←".
 //   - All corpora: those two files are the only text that moves; no file's
 //     words or characters match PDF.js moves either way, in govdocs, pdfjs,

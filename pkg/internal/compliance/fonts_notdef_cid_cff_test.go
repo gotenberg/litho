@@ -92,7 +92,7 @@ func cidKeyedCFF(cids []uint16) []byte {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200565.pdf: all 411 show operators are mode 3, and
+//   - govdocs/pdf thread_200_200565.pdf: all 411 show operators are mode 3, and
 //     veraPDF reports 6.2.11.8 and not 6.2.11.4.1.
 func TestCheckType0NotdefGlyph_CIDFontType0RenderModeScope(t *testing.T) {
 	t.Parallel()

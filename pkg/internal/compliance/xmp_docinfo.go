@@ -311,7 +311,7 @@ func xmpInfoEntryValue(ctx context.Context, doc *document.Document, infoDict ast
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400906.pdf: its /Title, /Author and /Creator each end
+//   - govdocs/pdf thread_400_400906.pdf: its /Title, /Author and /Creator each end
 //     in one NUL, and veraPDF passes them against analogues without it.
 func XMPInfoText(s ast.PdfString) (string, bool) {
 	bom := len(s) >= 2 && (s[0] == 0xFE && s[1] == 0xFF || s[0] == 0xFF && s[1] == 0xFE) ||

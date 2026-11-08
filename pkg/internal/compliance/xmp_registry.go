@@ -563,7 +563,7 @@ func isValidXMPGPSCoordinate(s string) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300483.pdf: Acrobat Distiller 6.0.1 emits
+//   - govdocs/pdf thread_300_300483.pdf: Acrobat Distiller 6.0.1 emits
 //     pdf:Keywords=' ', a blank Text value, and veraPDF passes it.
 func validateXMPValue(propType xmpPropType, value string) bool {
 	switch propType {

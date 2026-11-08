@@ -24,7 +24,7 @@ import (
 //     them named by the implicit StandardEncoding base rather than by its
 //     88-entry /Differences. veraPDF passes all 27; litho reported the font at
 //     PDF/A-2u, 2a, 3a and 3u while staying silent at PDF/UA-1 and UA-2.
-//   - govdocs: the unembedded control has the shape of the 16 files the
+//   - govdocs/pdf: the unembedded control has the shape of the 16 files the
 //     /Encoding dictionary restriction protects.
 func TestToUnicodeTrueTypeBaseEncodingNamesTheRest(t *testing.T) {
 	t.Parallel()

@@ -37,7 +37,7 @@ func calArray(family string, white []float64, gamma ast.PdfObject, matrix []floa
 //
 // # Corpus evidence
 //
-//   - govdocs: 17,348 images use this space.
+//   - govdocs/pdf: 17,348 images use this space.
 func srgbD65() ast.PdfArray {
 	g := ast.PdfReal(2.22221)
 	return calArray("CalRGB", []float64{0.9505, 1, 1.089}, ast.PdfArray{g, g, g},

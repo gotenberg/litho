@@ -51,7 +51,7 @@ func matchLangClauses(v compliance.Violation) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100811 and thread_300_300189, pdfcpu
+//   - govdocs/pdf thread_100_100811 and thread_300_300189, pdfcpu
 //     pkg_testdata__empty.pdf, pkg_testdata__blank-scan.pdf and
 //     pkg_testdata__HL1396.pdf, and 19 pdfjs files, among them issue4379.pdf
 //     and issue8823.pdf: their source reports no 7.2 finding, and each

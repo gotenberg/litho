@@ -366,7 +366,7 @@ func newElementPages(resolve func(ast.PdfObject) ast.PdfObject) *elementPages {
 //
 // # Corpus evidence
 //
-//   - govdocs: 5 tagged files name the type of some of their elements through
+//   - govdocs/pdf: 5 tagged files name the type of some of their elements through
 //     an indirect reference to a name object, thread_000_000761.pdf 42 of its
 //     69, which left 2 pages its outline opens with no element beginning on
 //     them.

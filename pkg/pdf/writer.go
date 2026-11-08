@@ -4814,7 +4814,7 @@ func (w *Writer) mediaBoxDefault(cfg writeOpts) *document.MediaBoxDefault {
 //
 // # Corpus evidence
 //
-//   - govdocs: write syscalls were 30% of a remediate run against an
+//   - govdocs/pdf: write syscalls were 30% of a remediate run against an
 //     unbuffered destination, since each round serializes the document to a
 //     temp file to revalidate it.
 func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, step *signingStep, opts ...WriteOption) (err error) {

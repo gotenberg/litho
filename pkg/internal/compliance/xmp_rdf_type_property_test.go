@@ -28,7 +28,7 @@ func checkXMPRDFTypePacket(t *testing.T, data []byte, part int) []Violation {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000009, thread_000_000365, thread_400_400006,
+//   - govdocs/pdf thread_000_000009, thread_000_000365, thread_400_400006,
 //     thread_400_400364, thread_400_400723, thread_400_400724: these six
 //     files write one, and veraPDF reports both tests for every one. The
 //     packet below is the form thread_000_000009.pdf carries.

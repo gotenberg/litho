@@ -27,7 +27,7 @@ import (
 //   - All corpora, 5171 files: the largest id is 12522 and the p99 is 8877,
 //     reading raw and Flate-compressed content streams, so the cap leaves ~84x
 //     headroom.
-//   - govdocs thread_000_000314.pdf: carries that largest id, 12522.
+//   - govdocs/pdf thread_000_000314.pdf: carries that largest id, 12522.
 //   - pdfjs: the largest id is 9757.
 const maxParentTreeMCID = 1 << 20
 

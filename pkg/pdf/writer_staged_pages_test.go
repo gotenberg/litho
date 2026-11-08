@@ -273,7 +273,7 @@ func TestWriterEditsWithNoPageListReachInsertedPages(t *testing.T) {
 //   - pdfjs boundingBox_invalid.pdf: page 3 states /CropBox [600 800 1000 1000]
 //     on /MediaBox [0 0 600 800]. Inserted, then stamped, its stamp was moved
 //     by (600, 800), off the page.
-//   - govdocs thread_300_300123.pdf, pdfjs bug1755507.pdf: state a crop box
+//   - govdocs/pdf thread_300_300123.pdf, pdfjs bug1755507.pdf: state a crop box
 //     reaching past the media box. Inserted, then stamped, their stamps were
 //     not moved to the corner of the page view, (36, 36) and (39, 39).
 //   - litho/pdf viewerboxes_2b.pdf: page 1 states /MediaBox [10 10 300], and a

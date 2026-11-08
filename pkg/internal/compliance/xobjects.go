@@ -103,7 +103,7 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 //
 //   - pdfjs issue14256.pdf: writes both /I and /Interpolate on one inline
 //     image.
-//   - govdocs thread_100_100877.pdf: holds 97 inline images with /I true on 9
+//   - govdocs/pdf thread_100_100877.pdf: holds 97 inline images with /I true on 9
 //     pages, and veraPDF states ISO 19005-1, 6.2.4 t3 and ISO 19005-2, 6.2.8
 //     t3 97 times, where litho stated 9.
 //   - pdfjs TAMReview.pdf, bug1065245.pdf and issue20722.pdf: the same, 2, 3
@@ -174,10 +174,10 @@ func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []V
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400019.pdf: veraPDF reports a soft mask's
+//   - govdocs/pdf thread_400_400019.pdf: veraPDF reports a soft mask's
 //     /Interpolate 15 times against 57 plain XObjects (72 findings from
 //     veraPDF, 57 from litho).
-//   - govdocs thread_100_100173.pdf: draws 41 images whose /Intent is invalid,
+//   - govdocs/pdf thread_100_100173.pdf: draws 41 images whose /Intent is invalid,
 //     one per object, and veraPDF and litho state ISO 19005-1, 6.2.9 t1 and
 //     ISO 19005-2, 6.2.6 t1 41 times each.
 //   - All corpora, at PDF/A-1b, PDF/A-2b and PDF/A-2u, and at their own
@@ -186,7 +186,7 @@ func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []V
 //     count; litho imagereach_2b.pdf plants both. Its second page reads the
 //     shared content under resources of its own, and its image is judged
 //     since (see [markJudgedContents]), where veraPDF judges it not at all.
-//   - govdocs thread_400_400002.pdf and thread_000_000372.pdf: draw forms
+//   - govdocs/pdf thread_400_400002.pdf and thread_000_000372.pdf: draw forms
 //     carrying /OPI more than once, and veraPDF states ISO 19005-1, 6.2.4 t2
 //     and ISO 19005-2, 6.2.9 t1 65 and 44 times, where litho stated 42 and 43.
 //     Judging a form at every Do moved no other count on any corpus.

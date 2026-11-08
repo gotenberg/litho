@@ -292,14 +292,14 @@ const furniturePositionTol = 4.0
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, litho/pdf: of the 1602 files auto-tagging reaches, 138 carry
+//   - govdocs/pdf, pdfjs, litho/pdf: of the 1602 files auto-tagging reaches, 138 carry
 //     furniture, 2853 blocks in all (2150 footers, 703 headers). Before, 2624
 //     were tagged P, 203 H1 to H3, and 26 were folded into a paragraph with
 //     body text. The trees of the other 1464 files are unchanged.
-//   - govdocs, pdfjs, litho/pdf: the PDF/UA-1 and PDF/UA-2 remediations of those
+//   - govdocs/pdf, pdfjs, litho/pdf: the PDF/UA-1 and PDF/UA-2 remediations of those
 //     138 files draw no rule from veraPDF they did not draw before, and the
 //     text they extract with artifacts is the same.
-//   - govdocs, pdfjs, pdfcpu: weighing each hand apart takes 1277 more
+//   - govdocs/pdf, pdfjs, pdfcpu: weighing each hand apart takes 1277 more
 //     blocks and parts for furniture, in 55 files. govdocs
 //     thread_400_400760.pdf: "Soil Survey of" and "Rock County, Minnesota",
 //     194 pages each. govdocs thread_000_000347.pdf: the journal's name and
@@ -476,10 +476,10 @@ type marginPart struct {
 //
 // # Corpus evidence
 //
-//   - govdocs, facturx, pdfjs, pdfcpu: of the 3914 files auto-tagging reaches,
+//   - govdocs/pdf, facturx, pdfjs, pdfcpu: of the 3914 files auto-tagging reaches,
 //     174 set furniture in a text object that sets more, 4077 parts cut off
 //     in all (govdocs 145 files, facturx 26, pdfjs 2, pdfcpu 1).
-//   - govdocs thread_000_000347.pdf: each page sets its running head (the
+//   - govdocs/pdf thread_000_000347.pdf: each page sets its running head (the
 //     page number, the volume and the journal's name) and the body under it in
 //     one text object, so the head was tagged as a paragraph, and on the pages
 //     of tables it was folded with the caption into one paragraph, which the
@@ -605,7 +605,7 @@ type furnitureBlock struct {
 //
 // # Corpus evidence
 //
-//   - pdfjs bug1946953.pdf, govdocs thread_100_100981.pdf: a table's header
+//   - pdfjs bug1946953.pdf, govdocs/pdf thread_100_100981.pdf: a table's header
 //     row repeats atop every page, directly above its rows, and repetition
 //     alone read it as a running head.
 //   - pdfjs bug1354114.pdf: the boxes of a diagram repeat atop every page.
@@ -1537,15 +1537,15 @@ func classifyBlocks(blocks []textBlock, body float64, pageIndex int, data []byte
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, facturx, pdfcpu: of the 3914 files auto-tagging reaches,
+//   - govdocs/pdf, pdfjs, facturx, pdfcpu: of the 3914 files auto-tagging reaches,
 //     172 hold an element of several sequences, 6140 in all, each a run of
 //     one-line elements before.
-//   - govdocs thread_300_300236.pdf: sets every line of its numbered
+//   - govdocs/pdf thread_300_300236.pdf: sets every line of its numbered
 //     submissions as a text object of its own, a cm and an rg between each
 //     two, so each line was a paragraph; each submission is now a list item.
-//   - govdocs thread_100_100169.pdf: the wrapped heads of a table's columns
+//   - govdocs/pdf thread_100_100169.pdf: the wrapped heads of a table's columns
 //     and the wrapped lines of its notes join their first lines.
-//   - govdocs, pdfjs, facturx, pdfcpu: the PDF/UA-1 and PDF/UA-2
+//   - govdocs/pdf, pdfjs, facturx, pdfcpu: the PDF/UA-1 and PDF/UA-2
 //     remediations, default and aggressive, of the 340 files whose trees
 //     these elements and the cut furniture of [marginParts] change write 1360
 //     outputs that differ from before. On none does litho or veraPDF report
@@ -1744,17 +1744,17 @@ const maxTitleLines = 2
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu, pdf20, facturx, litho/pdf: 14 elements on 7 of 2695
+//   - govdocs/pdf, pdfjs, pdfcpu, pdf20, facturx, litho/pdf: 14 elements on 7 of 2695
 //     files turn from P to H1 and no other element changes.
-//   - govdocs thread_300_300242.pdf: "Contents" over a table of contents.
+//   - govdocs/pdf thread_300_300242.pdf: "Contents" over a table of contents.
 //     pdfjs radial_gradients.pdf: the title of four pages over a grid of
 //     labels. pdfcpu pkg_testdata__go-lecture.pdf: slide titles over bullets
 //     carved as a table. litho filledrules_ua1.pdf, prosecolumns_ua1.pdf: the
 //     title over a table.
-//   - govdocs, pdfjs, litho/pdf: the PDF/UA-1 and PDF/UA-2 remediations of the
+//   - govdocs/pdf, pdfjs, litho/pdf: the PDF/UA-1 and PDF/UA-2 remediations of the
 //     changed files, default and aggressive, draw the same rules as before
 //     on litho and on veraPDF.
-//   - govdocs thread_100_100859.pdf, thread_200_200623.pdf: prose over a
+//   - govdocs/pdf thread_100_100859.pdf, thread_200_200623.pdf: prose over a
 //     table set smaller, which the cells as body would turn into headings.
 func headingBody(all, rest []textBlock) float64 {
 	body := bodyFontSize(rest)
@@ -1793,7 +1793,7 @@ func headingBody(all, rest []textBlock) float64 {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000337.pdf: tagged to H6 first and drew 7.4.2 test 1
+//   - govdocs/pdf thread_000_000337.pdf: tagged to H6 first and drew 7.4.2 test 1
 //     from litho's own validator, one of 35 files where remediation
 //     introduced that violation.
 func headingLevels(blocks []textBlock, body float64) []int {

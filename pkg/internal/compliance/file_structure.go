@@ -418,10 +418,10 @@ func checkTrailerID(ctx context.Context, doc *document.Document, profile string)
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200432.pdf: its /L misses its size by the 2 bytes it
+//   - govdocs/pdf thread_200_200432.pdf: its /L misses its size by the 2 bytes it
 //     carries past %%EOF, and trimming those 2 bytes turns veraPDF's t1 from
 //     fail to pass.
-//   - govdocs thread_000_000012.pdf: appending 2 bytes turns veraPDF's t1 from
+//   - govdocs/pdf thread_000_000012.pdf: appending 2 bytes turns veraPDF's t1 from
 //     pass to fail.
 //   - All corpora, 4963 files: 4 files answer differently (govdocs
 //     thread_100_100820, thread_200_200432, thread_200_200932,
@@ -789,7 +789,7 @@ func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400545.pdf: a hybrid-reference file litho passed,
+//   - govdocs/pdf thread_400_400545.pdf: a hybrid-reference file litho passed,
 //     for which veraPDF answers containsXRefStream true.
 func checkXRefFormat(doc *document.Document, profile string) []Violation {
 	if PDFAPart(profile) != 1 {

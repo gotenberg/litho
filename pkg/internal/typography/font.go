@@ -208,7 +208,7 @@ type Font struct {
 //
 //   - pdfjs complex_ttf_font.pdf: combining marks carry /W 0 under /DW 1000;
 //     reading 1000 clipped 85 of 395 characters off the page.
-//   - pdfjs, govdocs, pdfcpu, facturx, pdf20: honouring /W 0 changes three
+//   - pdfjs, govdocs/pdf, pdfcpu, facturx, pdf20: honouring /W 0 changes three
 //     files, all toward PDF.js (complex_ttf_font, bug1046314,
 //     ThuluthFeatures), and no file moves away from it.
 //   - litho/pdf unembednames_2u.pdf: the unembedded Helvetica shows codes 01 and
@@ -218,7 +218,7 @@ type Font struct {
 //   - litho/pdf fontclaims_2b.pdf: its unembedded Helvetica shows code 01,
 //     which StandardEncoding leaves unnamed; the page's differing pixels
 //     fall from 50 to 35, and the rest is poppler's.
-//   - govdocs thread_200_200732.pdf page 31: unnamed codes of an unembedded
+//   - govdocs/pdf thread_200_200732.pdf page 31: unnamed codes of an unembedded
 //     font split "(3rain3)X" one word nearer PDF.js's "( 3rain 3) X".
 //   - All corpora: 19 files show such a code. The text of no other file
 //     changes, and no compliance verdict over them moves.
@@ -228,7 +228,7 @@ type Font struct {
 //   - pdfjs issue18208.pdf: 72 Helvetica-Bold dictionaries state /Widths 0
 //     for 246 of their codes. Read at a fallback width, those glyphs ran the
 //     words together ("TorredeMonsanto") where PDF.js reads the spaces.
-//   - govdocs thread_100_100945.pdf page 2: a Univers subset states /Widths
+//   - govdocs/pdf thread_100_100945.pdf page 2: a Univers subset states /Widths
 //     from code 48 and shows its column spaces as code 32, which its program
 //     does not hold. Read at the 1.16-em bounding box, each space pushed the
 //     digits after it a column right, and "9 8" read "98". Giving the code
@@ -524,7 +524,7 @@ func copyEncoding(src map[byte]rune) map[byte]rune {
 //
 // # Corpus evidence
 //
-//   - govdocs: fonts that ship only a Mac Roman cmap subtable are common in
+//   - govdocs/pdf: fonts that ship only a Mac Roman cmap subtable are common in
 //     its older Mac-authored scanned filings.
 //   - pdfjs noembed-eucjp.pdf, noembed-sjis.pdf, noembed-jis7.pdf,
 //     noembed-identity.pdf, noembed-identity-2.pdf: reference-only Adobe-Japan1
@@ -946,7 +946,7 @@ func parseToUnicode(ctx context.Context, doc *document.Document, tuObj ast.PdfOb
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400235.pdf, thread_300_300511.pdf, pdfjs TAMReview.pdf:
+//   - govdocs/pdf thread_400_400235.pdf, thread_300_300511.pdf, pdfjs TAMReview.pdf:
 //     symbolic Type 1 programs whose built-in encodings leave 0x27 and 0x60
 //     without a usable name. Filled from StandardEncoding they read as curly
 //     quotes, where PDF.js reads straight ones.
@@ -1106,7 +1106,7 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400235.pdf, thread_400_400786.pdf, pdfjs
+//   - govdocs/pdf thread_400_400235.pdf, thread_400_400786.pdf, pdfjs
 //     TAMReview.pdf, bug1151216.pdf: subset fonts name their glyphs by index
 //     ("g88", "G41") at codes counted up from 33, which read as runs like
 //     `!"#$` and `f##2`. They now read as nothing, and in the first three
@@ -1115,7 +1115,7 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 //     "trianglerightsld" at code 73, read as "I" before each item, as PDF.js
 //     reads it; it now reads as nothing. The words differ from PDF.js on 1
 //     more file, by decision: correct words over agreement (2026-10-19).
-//   - govdocs thread_300_300511.pdf: CMMI "lscript" (U+2113) at 0x60, read as
+//   - govdocs/pdf thread_300_300511.pdf: CMMI "lscript" (U+2113) at 0x60, read as
 //     "`" as PDF.js reads it, then as nothing, and as ℓ since TeX's glyph
 //     list is read ([encodings.InTeXGlyphList]).
 //   - pdfjs simpletype3font.pdf, Type3WordSpacing.pdf: a Type 3 font names
@@ -2194,14 +2194,14 @@ func recordProgramGlyphRune(font *Font, code byte, name string, r rune) {
 //     decomposes to it.
 //   - verapdf 6-3-8-t01-fail-a: the CMSY8 subset's "infinity" read as the
 //     default encoding's "1", so "−∞ ∞" came out "−1 1".
-//   - govdocs thread_300_300492.pdf, thread_300_300848.pdf, pdfjs
+//   - govdocs/pdf thread_300_300492.pdf, thread_300_300848.pdf, pdfjs
 //     link-annotation-border.pdf: their TeX and Greek subsets' "pi",
 //     "sigma", "lambda", "element" and "reflexsubset" read as "ð", "ó", "ì",
 //     "2" and nothing. With the glyph lists, thread_300_300492.pdf extracts
 //     the words PDF.js does and link-annotation-border.pdf its characters.
-//   - govdocs thread_300_300228.pdf: a Symbol subset's "Delta" read through the
+//   - govdocs/pdf thread_300_300228.pdf: a Symbol subset's "Delta" read through the
 //     Symbol table first came out U+0394, where PDF.js reads U+2206.
-//   - govdocs, pdfjs, pdfcpu: 27 files hold a Type 1 program whose built-in
+//   - govdocs/pdf, pdfjs, pdfcpu: 27 files hold a Type 1 program whose built-in
 //     encoding the two readings take differently under a stated /Encoding.
 //     Neither the text the five text corpora extract nor the remediated
 //     output of any of the 27 at the 13 levels, in both modes, changes with
@@ -2230,12 +2230,12 @@ func builtinGlyphRune(name string, code int, isDingbats bool) (rune, bool) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300161.pdf, thread_200_200155.pdf, thread_000_000364.pdf,
+//   - govdocs/pdf thread_300_300161.pdf, thread_200_200155.pdf, thread_000_000364.pdf,
 //     thread_400_400786.pdf: Times New Roman programs whose built-in
 //     encodings name code c "G<c in decimal>". Read as hexadecimal, "G97"
 //     became U+0097 and "G32" became "2", so every "a" and every space came
 //     out wrong.
-//   - govdocs thread_300_300606.pdf: a program naming code c "G<c in
+//   - govdocs/pdf thread_300_300606.pdf: a program naming code c "G<c in
 //     hexadecimal>" keeps its reading, which PDF.js shares.
 func builtinNumericNameMisreads(name string, code int) bool {
 	r, ok := encodings.NumericGlyphName(name)
@@ -2835,15 +2835,15 @@ func decodeFontStreamFromDescriptor(ctx context.Context, doc *document.Document,
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300089.pdf: an embedded symbolic WPTypographicSymbols
+//   - govdocs/pdf thread_300_300089.pdf: an embedded symbolic WPTypographicSymbols
 //     subset with no /Encoding and only a (1,0) cmap subtable read code 0x96
 //     through the Symbol encoding, which leaves it empty. Read as Mac OS Roman
 //     through that subtable (9.6.6.4), it is the "ñ" PDF.js reads, and the
 //     file matches PDF.js.
-//   - govdocs thread_200_200611.pdf: unembedded symbolic WPIconicSymbolsA and
+//   - govdocs/pdf thread_200_200611.pdf: unembedded symbolic WPIconicSymbolsA and
 //     WPIconicSymbolsB read as PDF.js reads them only through the Symbol
 //     encoding. Read through WinAnsi, the file no longer matches PDF.js.
-//   - govdocs thread_400_400895.pdf: an embedded WPIconicSymbolsA Type 1
+//   - govdocs/pdf thread_400_400895.pdf: an embedded WPIconicSymbolsA Type 1
 //     program names code 0x8E "c142", which no glyph list resolves. The
 //     Symbol encoding left the code empty; the WinAnsi default of a symbolic
 //     Type 1 font reads "Ž", the /Zcaron its /CharSet lists, where PDF.js
@@ -2886,7 +2886,7 @@ func readsAsStandardSymbol(baseFont string, symbolic, embedded bool) bool {
 //     one govdocs and eight pdfjs. Text changes on one file alone, compliance
 //     verdicts and rule sets on none, and remediated output on none of the
 //     nine at PDF/A-2u and PDF/UA-1 in either mode.
-//   - govdocs thread_100_100852.pdf: an embedded AEJJAA+ZapfDingbatsITC Type 1
+//   - govdocs/pdf thread_100_100852.pdf: an embedded AEJJAA+ZapfDingbatsITC Type 1
 //     subset read an end-of-article mark as "■" through the ZapfDingbats
 //     table. Its own /ToUnicode CMap answers instead, which reads no visible
 //     character there, as PDF.js does. The file now matches PDF.js on the
@@ -3217,7 +3217,7 @@ func trueTypeTakesStandardEncoding(ctx context.Context, doc *document.Document, 
 //
 // # Corpus evidence
 //
-//   - govdocs: its Mac-authored filings surface these bytes as WinAnsi
+//   - govdocs/pdf: its Mac-authored filings surface these bytes as WinAnsi
 //     look-alikes without this override.
 func applyTrueTypeBuiltinEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font, symbolic bool) {
 	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
@@ -3272,7 +3272,7 @@ func applyTrueTypeBuiltinEncoding(ctx context.Context, doc *document.Document, f
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000763.pdf: four TimesNewRoman subsets flagged
+//   - govdocs/pdf thread_000_000763.pdf: four TimesNewRoman subsets flagged
 //     symbolic carry (1,0) and (3,1) subtables. Their glyph at code 0xB9 is
 //     named pi1, U+03D6, where Mac OS Roman reads U+03C0, and no Unicode
 //     subtable maps it; every other named code agrees, Ohm U+2126 under
@@ -3384,10 +3384,10 @@ func canonicallyEqual(a, b rune) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400935.pdf: WPTypographicSymbols names the glyph at
+//   - govdocs/pdf thread_400_400935.pdf: WPTypographicSymbols names the glyph at
 //     code 0x53 "S" in its (1,0) and (3,0) subtables. Read through the Symbol
 //     built-in encoding its "Symbol"-bearing name selected, it came out "Σ".
-//   - govdocs thread_200_200393.pdf, thread_300_300082.pdf,
+//   - govdocs/pdf thread_200_200393.pdf, thread_300_300082.pdf,
 //     thread_300_300237.pdf, thread_200_200149.pdf: Symbol subsets whose post
 //     tables name codes 0xB7, 0x6D and 0xD4 bullet, mu and trademarkserif, the
 //     readings the Symbol encoding gave them. PDF.js reads "∑", "m" and "‘".
@@ -3823,7 +3823,7 @@ func injectStandard14Widths(font *Font, baseFont string, serif bool) {
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu, facturx, pdf20: one font reaches this choice
+//   - govdocs/pdf, pdfjs, pdfcpu, facturx, pdf20: one font reaches this choice
 //     with a name no standard font answers to (pdfjs issue2391-2.pdf,
 //     Monaco, no font descriptor). It is sans under the former substring
 //     list and under PDF.js's rule, so no extracted text changes.
@@ -3861,12 +3861,12 @@ func invertGlyphUnicode(m map[string]rune) map[rune]string {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400739.pdf: Symbol's 0xA2 (minute, 247 units)
+//   - govdocs/pdf thread_400_400739.pdf: Symbol's 0xA2 (minute, 247 units)
 //     read as 1000 units, so the space after the two primes of 35′′ fell
 //     11 points before the next word started.
-//   - govdocs thread_400_400392.pdf: a Symbol font whose /Differences name
+//   - govdocs/pdf thread_400_400392.pdf: a Symbol font whose /Differences name
 //     phi and theta read both as 1000 units wide.
-//   - govdocs: with both lookups, 5 more files extract the words PDF.js
+//   - govdocs/pdf: with both lookups, 5 more files extract the words PDF.js
 //     does, none fewer, and 15 files come closer to it, none further.
 func builtinGlyphNames(name string) (*[256]string, map[string]rune, map[rune]string) {
 	switch name {

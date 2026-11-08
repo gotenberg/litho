@@ -409,11 +409,11 @@ func boxCorners(box ast.PdfArray) (x0, y0, x1, y1 float64) {
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu, facturx, pdf20, litho/pdf: of the 1911 files
+//   - govdocs/pdf, pdfjs, pdfcpu, facturx, pdf20, litho/pdf: of the 1911 files
 //     auto-tagging reaches, 341 have a page whose reading order is not content
 //     order, 2510 pages in all, 533 of them read column by column. The trees
 //     of the other pages are unchanged.
-//   - govdocs thread_300_300082.pdf: every page draws its page number first.
+//   - govdocs/pdf thread_300_300082.pdf: every page draws its page number first.
 //     govdocs thread_200_200182.pdf: a page draws its footnotes before the
 //     counsel list at its head. govdocs thread_200_200412.pdf: two columns of
 //     figures, each drawn apart from its caption.

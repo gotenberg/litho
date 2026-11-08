@@ -291,7 +291,7 @@ func normalizeAP(ctx context.Context, doc *document.Document, annotDict ast.PdfD
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400580: reading /FT off the annotation alone left
+//   - govdocs/pdf thread_400_400580: reading /FT off the annotation alone left
 //     every button with an /AP /N stream where ISO 19005-2, 6.3.3 test 3
 //     requires a subdictionary.
 func inheritedFieldType(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) ast.PdfName {

@@ -88,7 +88,7 @@ func TestReconstructText_RunningHeadResetDropsTrailingSpace(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400907.pdf page 3: "Original Signature on File",
+//   - govdocs/pdf thread_400_400907.pdf page 3: "Original Signature on File",
 //     a space glyph at x 533, then "Date:" at x 408, which PDF.js reads
 //     "File Date:".
 func TestReconstructText_RunningHeadResetFromPaintedGlyph(t *testing.T) {
@@ -112,7 +112,7 @@ func TestReconstructText_RunningHeadResetFromPaintedGlyph(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400936.pdf page 216: "Pressure, psia", space
+//   - govdocs/pdf thread_400_400936.pdf page 216: "Pressure, psia", space
 //     glyphs in two empty cells, then "#" back on the header's baseline,
 //     which PDF.js reads "psia#".
 func TestReconstructText_SpaceGlyphsKeepTheLine(t *testing.T) {
@@ -137,7 +137,7 @@ func TestReconstructText_SpaceGlyphsKeepTheLine(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000338.pdf page 5: "References", two space
+//   - govdocs/pdf thread_000_000338.pdf page 5: "References", two space
 //     glyphs, then leader dots 0.08 em after the "s", which PDF.js reads
 //     "References....".
 func TestReconstructText_RepeatedSpacesWithinTracking(t *testing.T) {

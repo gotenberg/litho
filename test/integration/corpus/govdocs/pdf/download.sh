@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# govdocs/download.sh: fetch a fixed set of Govdocs1 thread archives,
+# govdocs/pdf/download.sh: fetch a fixed set of Govdocs1 thread archives,
 # filter to PDFs, and rename them with a stable thread-qualified ID.
 #
-# Usage: govdocs/download.sh <output_pdfs_dir>
+# Usage: govdocs/pdf/download.sh <output_pdfs_dir>
 #
 # The thread list is pinned (GOVDOCS_THREADS, comma-separated, from
 # versions.env) to keep provisioning reproducible across machines. Bump

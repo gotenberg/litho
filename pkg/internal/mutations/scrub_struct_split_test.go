@@ -134,7 +134,7 @@ func TestScrubStructText_RefusesActualTextSpanningTheCut(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300784.pdf, whole page 1: an /InlineShape with
+//   - govdocs/pdf thread_300_300784.pdf, whole page 1: an /InlineShape with
 //     /Alt () over a glyph MCID and a drawing MCID refused once the drawing
 //     counted as content kept.
 func TestScrubStructText_KeepsAnEmptyAltAcrossTheCut(t *testing.T) {

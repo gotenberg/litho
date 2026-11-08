@@ -110,7 +110,7 @@ func standardMembers(members []ast.PdfName, profile string) []ast.PdfName {
 //     deletion left /MyType -> /Foo -> /Bar dangling.
 //   - verapdf PDF_UA-1__7.1-t07-fail-a.pdf: maps /Document to /Book, a
 //     standard source mapped to a custom name.
-//   - govdocs thread_300_300708.pdf: maps /H4 -> /P. Dropping it alone turned
+//   - govdocs/pdf thread_300_300708.pdf: maps /H4 -> /P. Dropping it alone turned
 //     paragraphs into the document's FIRST heading, an H4, which fails the
 //     heading sequence of ISO 14289-1, 7.4.2 test 1.
 func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {

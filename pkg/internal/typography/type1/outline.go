@@ -107,7 +107,7 @@ const maxGlyphOperations = 1 << 16
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100478.pdf: a program defines /bar twice, a 26-byte
+//   - govdocs/pdf thread_100_100478.pdf: a program defines /bar twice, a 26-byte
 //     and a 45-byte charstring; fontTools draws the later, as ParseFont does.
 func ParseFont(ctx context.Context, data []byte) (*Font, error) {
 	data = joinPFBSegments(data)
@@ -217,9 +217,9 @@ func (f *Font) HasGlyph(name string) bool {
 //     the other 7, 4 are bare CFF or CIDFontType 0 data that ParseFont
 //     rejects too, and pdfjs issue7769.pdf (/lenIV -1) and
 //     issue14462_reduced.pdf hold the 3 fontTools cannot read.
-//   - govdocs thread_100_100478.pdf and five other programs: 6 glyphs named
+//   - govdocs/pdf thread_100_100478.pdf and five other programs: 6 glyphs named
 //     by the empty name "/", which the /CharStrings walk skips.
-//   - govdocs thread_300_300035.pdf, thread_300_300083.pdf,
+//   - govdocs/pdf thread_300_300035.pdf, thread_300_300083.pdf,
 //     thread_300_300084.pdf and thread_400_400574.pdf: 105 glyphs open with
 //     sbw, which fontTools' outline reader leaves unimplemented, so its
 //     outlines lose the side bearing point and its advances read 0.

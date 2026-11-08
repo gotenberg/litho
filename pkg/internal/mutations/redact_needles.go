@@ -24,9 +24,9 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs: a whole-page redaction of page 1 refuses 215,065 surviving
+//   - govdocs/pdf: a whole-page redaction of page 1 refuses 215,065 surviving
 //     copies over 584 documents; 54.8% are one character, " " the commonest.
-//   - govdocs, litho/pdf, pdfcpu: over a whole-page and a top-third redaction of
+//   - govdocs/pdf, litho/pdf, pdfcpu: over a whole-page and a top-third redaction of
 //     page 1 of each file, a threshold of three lets 289 redactions through
 //     that refused before, every one over a survivor of two letters or digits
 //     at most, and refuses none that passed. Two lets 232 through, four 324;

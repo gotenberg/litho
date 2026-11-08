@@ -193,7 +193,7 @@ type showSite struct {
 //     counts of ISO 19005-2, 6.2.11.7.2 t1 toward veraPDF's in 2 files and
 //     those of t2 in 1, and none away; each now equals veraPDF's, a summed
 //     distance of 368 and 298 before.
-//   - govdocs thread_000_000028.pdf: a tagged document showing its glyphs
+//   - govdocs/pdf thread_000_000028.pdf: a tagged document showing its glyphs
 //     without Unicode values on pages with distinct /StructParents; litho
 //     states 5450 of them, as veraPDF does, where it stated 5083.
 //   - pdfcpu pkg_testdata__read.go.pdf: veraPDF states the value rule 324
@@ -407,13 +407,13 @@ var noContext = glyphContext{mode: -1}
 //     t1 and ISO 19005-4, 6.2.10.5 t1 moved toward veraPDF's for 68 pairs of
 //     file and profile and away for 12, six files at each of PDF/A-1b and
 //     PDF/A-2b; their summed distance fell from 3309 to 1090.
-//   - govdocs thread_300_300035.pdf, thread_300_300083.pdf and
+//   - govdocs/pdf thread_300_300035.pdf, thread_300_300083.pdf and
 //     thread_300_300084.pdf: the width counts that moved away. Each embeds
 //     Type 1 programs whose /FontMatrix makes the advances fractional, and
 //     veraPDF truncates them: litho states 24, 30 and 37 glyphs against
 //     veraPDF's 1, 12 and 12, and truncating litho's own program widths
 //     leaves exactly veraPDF's 1, 12 and 12.
-//   - govdocs thread_200_200155.pdf: the same truncation accounts for 148 of
+//   - govdocs/pdf thread_200_200155.pdf: the same truncation accounts for 148 of
 //     the 217 width glyphs litho states, leaving veraPDF's 69. litho keeps
 //     its exact comparison; see [checkType1FontWidths].
 //   - pdfjs issue19835.pdf: litho stated 278 width glyphs against veraPDF's
@@ -437,7 +437,7 @@ var noContext = glyphContext{mode: -1}
 //     see [structureKey].
 //   - verapdf: the ToUnicode presence counts at PDF/A-1a, PDF/A-2u, PDF/UA-1
 //     and PDF/UA-2, a distance of 27 from veraPDF's, now match them.
-//   - govdocs thread_200_200408.pdf: a ToUnicode count that moved away, from
+//   - govdocs/pdf thread_200_200408.pdf: a ToUnicode count that moved away, from
 //     26 to 15 against veraPDF's 181, because litho stated nothing for the
 //     Type 3 fonts whose /ToUnicode leaves shown codes out; see
 //     [checkType3ToUnicode]. For the fonts it did judge the counts moved
@@ -567,7 +567,7 @@ func (j *fontJudgements) glyphs(ctx context.Context, doc *document.Document, fon
 //     to 0.
 //   - pdfjs issue19835.pdf: the width counts moved onto veraPDF's at the
 //     three profiles, from 278 to 204.
-//   - govdocs thread_100_100870.pdf: the width counts that moved away, from 3
+//   - govdocs/pdf thread_100_100870.pdf: the width counts that moved away, from 3
 //     to 0 against veraPDF's 2. litho's 3 glyphs are shown on pages after
 //     the first, which veraPDF does not judge. veraPDF's 2 are a CID the CFF
 //     charset lacks, which litho now weighs too ([checkCFFMissingGlyphWidths]),

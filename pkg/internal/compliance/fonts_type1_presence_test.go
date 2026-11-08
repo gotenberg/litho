@@ -47,7 +47,7 @@ func type1Program(preamble string, glyphs ...string) string {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300516.pdf: shows code 202 named "blank".
+//   - govdocs/pdf thread_300_300516.pdf: shows code 202 named "blank".
 //   - pdfjs issue11477_reduced.pdf: shows a space its 61-charstring subset
 //     omits.
 func TestCheckSimpleGlyphPresence_Type1Program(t *testing.T) {

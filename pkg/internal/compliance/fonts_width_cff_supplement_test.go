@@ -44,7 +44,7 @@ func supplementCFFFont(spaceWidth int) []string {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300228.pdf: QVUSMV+Helvetica-Bold gives space (SID 1)
+//   - govdocs/pdf thread_300_300228.pdf: QVUSMV+Helvetica-Bold gives space (SID 1)
 //     the code 32 through a supplement. fontTools and litho read space, 569
 //     units and /Widths 569; veraPDF reads GID 2, y, 1139 units, and reports
 //     the one 6.2.11.5 finding the file and its remediated output carry.

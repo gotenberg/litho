@@ -597,11 +597,11 @@ const maxHullInks = 3
 //
 //   - All corpora: 73 runs of 2,122,995 judged turn undetermined, in 7
 //     files.
-//   - govdocs thread_400_400902.pdf: 31 runs of curved text set glyph by
+//   - govdocs/pdf thread_400_400902.pdf: 31 runs of curved text set glyph by
 //     glyph over a shadow copy in another colour.
-//   - govdocs thread_000_000152.pdf page 38, thread_400_400625.pdf page 26:
+//   - govdocs/pdf thread_000_000152.pdf page 38, thread_400_400625.pdf page 26:
 //     map symbols built of several glyphs, 32 runs.
-//   - govdocs thread_000_000162.pdf page 1: white text over a CMYK
+//   - govdocs/pdf thread_000_000162.pdf page 1: white text over a CMYK
 //     composite mixes off the straight line, within the luminance test.
 func (c *contrastSamples) offInk(inks [][3]float64) bool {
 	n := len(c.pairs) / 6

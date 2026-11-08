@@ -372,7 +372,7 @@ func liveArray(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Do
 //   - litho/pdf laterreads_2u.pdf: the PDF/A-1b to 3b outputs held a removed
 //     Screen annotation again, which annot-opacity or annot-appearance wrote
 //     back from the array as the file wrote it.
-//   - govdocs thread_400_400575.pdf, pdfcpu
+//   - govdocs/pdf thread_400_400575.pdf, pdfcpu
 //     pkg_testdata__text_annotations.pdf, pdfjs 160F-2019.pdf,
 //     annotation_hidden_noview.pdf and annotation_hidden_print.pdf: their
 //     PDF/A outputs change bytes alone, and no rule moves on litho or

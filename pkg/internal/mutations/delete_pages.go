@@ -144,7 +144,7 @@ func stagedPageKids(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100852.pdf: before destinations naming a dropped page
+//   - govdocs/pdf thread_100_100852.pdf: before destinations naming a dropped page
 //     were pruned, deleting page 1 left the page behind with all 1191 bytes of
 //     it.
 func rebuildPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, allPages []*document.Page, kept []ast.PdfIndirectRef) error {

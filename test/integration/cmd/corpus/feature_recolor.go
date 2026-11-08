@@ -49,7 +49,7 @@ const recolorInkLevel = renderChannelTolerance
 //   - litho/pdf complex_2b.pdf, megafont_2b.pdf, multipage_2b.pdf,
 //     transparency_2b.pdf: saturated sRGB blue covers 1% of a page at 52 to
 //     71.7, which a bar of 50 failed.
-//   - govdocs thread_000_000753.pdf: the same at 53.5.
+//   - govdocs/pdf thread_000_000753.pdf: the same at 53.5.
 const recolorDeltaE = 75
 
 // recolorMaxPerMillion is the largest share of a page's pixels, in parts per
@@ -156,7 +156,7 @@ const recolorJPEGQuality = 85
 //
 // # Corpus evidence
 //
-//   - litho/pdf (215 files), pdfjs and govdocs (79 sampled files each): 199, 78
+//   - litho/pdf (215 files), pdfjs and govdocs/pdf (79 sampled files each): 199, 78
 //     and 79 match; 14 litho files and no other are refused, 10 for a
 //     construct the file holds on purpose (a colour space naming a resource,
 //     33 colorants, a 3-bit or 2-channel JPEG 2000 image, an /Lzw or doubled
@@ -171,7 +171,7 @@ const recolorJPEGQuality = 85
 //     a GTS_PDFX intent over another CMYK profile, through which the renderer
 //     reads the converted DeviceCMYK, 80.6 and 83.5 ΔE*ab from the source on
 //     the last two; with pdf.WithReplacedOutputIntents all four match.
-//   - pdfjs, govdocs: the JPEG run re-encodes 7 and 25 files, every one
+//   - pdfjs, govdocs/pdf: the JPEG run re-encodes 7 and 25 files, every one
 //     passing and none larger, 33884 and 22313 KiB saved; issue12752.pdf,
 //     issue17289.pdf and thread_200_200163.pdf among them for their JPEG
 //     2000 images. 2 and 6 more name a codec filter and write the lossless
@@ -745,7 +745,7 @@ func spaceString(u models.ColorSpaceUse) string {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000859.pdf: page 3's light blue background, 17 ΔE*ab
+//   - govdocs/pdf thread_000_000859.pdf: page 3's light blue background, 17 ΔE*ab
 //     at most from the source, crosses the ink level on 70872 pixels, 18% of
 //     the page.
 func compareRecolored(a, b image.Image) (pixels, moved, drift int, maxDE float64, sizeChanged bool) {

@@ -28,7 +28,7 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000839.pdf, thread_200_200150.pdf and 19 more: a
+//   - govdocs/pdf thread_000_000839.pdf, thread_200_200150.pdf and 19 more: a
 //     math font's parentheses carry glyph names no table maps, so they read
 //     as no character, and the word gaps around them vanished with them,
 //     "time-domainFDTDprogram". PDF.js shows each such glyph as its code
@@ -36,14 +36,14 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 //     gaps leaves those pages differing from PDF.js by the codes alone, and
 //     makes words match on 1 more file (govdocs thread_200_200676.pdf) and
 //     on none fewer.
-//   - govdocs thread_000_000839.pdf, thread_300_300880.pdf and 9 more: a
+//   - govdocs/pdf thread_000_000839.pdf, thread_300_300880.pdf and 9 more: a
 //     word gap between two such glyphs, "(11b)" then "Ex", vanished
 //     ("11bEx") where PDF.js, which shows both codes, reads "11b Ex". Reading
 //     it makes the space disagreements with PDF.js on files whose
 //     characters match fall from 12339 to 7160, on 12 files, with no new
 //     one; no file's words or characters match moves, since PDF.js writes
 //     those codes as raw control characters.
-//   - pdfjs issue13915.pdf, govdocs thread_300_300849.pdf and 4 more: "≠" is
+//   - pdfjs issue13915.pdf, govdocs/pdf thread_300_300849.pdf and 4 more: "≠" is
 //     a zero-width slash, read as "6", set over "=" after a word gap. Read
 //     from the slash, the gap vanished before "=" ("σ1(e) 6= 0"), where
 //     PDF.js, which measures it from the glyph before the slash, reads
@@ -69,7 +69,7 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 //     complex_ttf_font.pdf) and on 2 more pages of files that still differ
 //     (pdfjs issue17689.pdf), and on none fewer; facturx, govdocs, pdf20 and
 //     pdfcpu do not move.
-//   - govdocs thread_300_300224.pdf: every hyphen maps to U+00AD, and the
+//   - govdocs/pdf thread_300_300224.pdf: every hyphen maps to U+00AD, and the
 //     text after it is set by a Td past the hyphen. Measured from the
 //     hyphen, which litho drops, "Cross-reactivity" read "Crossreactivity",
 //     where PDF.js, which measures from the "s", reads "Cross reactivity".
@@ -490,16 +490,16 @@ const (
 //   - All corpora: with the text rise on the glyph origins, words match
 //     PDF.js on 26 more files (govdocs 18, pdfcpu 3, pdfjs 5) and on none
 //     fewer; facturx and pdf20 do not move.
-//   - govdocs thread_000_000270.pdf: a space glyph that opened the next
+//   - govdocs/pdf thread_000_000270.pdf: a space glyph that opened the next
 //     run, held on the superscript's line, raised that line's space
 //     threshold and dropped the space inside "3 )".
-//   - govdocs thread_100_100667.pdf, pdfjs issue20668.pdf: a superscript
+//   - govdocs/pdf thread_100_100667.pdf, pdfjs issue20668.pdf: a superscript
 //     in a font of its own, or a bullet in another font before the line,
 //     breaks the line only when the font change starts the run.
-//   - govdocs thread_000_000266.pdf, thread_100_100174.pdf and 13 more: a
+//   - govdocs/pdf thread_000_000266.pdf, thread_100_100174.pdf and 13 more: a
 //     text matrix that scales a 1-point Tf sets the size on the page, and
 //     comparing that size started runs PDF.js does not start.
-//   - govdocs thread_400_400561.pdf page 18: lines of a 0.2-unit font set
+//   - govdocs/pdf thread_400_400561.pdf page 18: lines of a 0.2-unit font set
 //     0.22 apart read as one line under the fixed tolerance alone.
 //   - pdfjs bug857031.pdf: a horizontally compressed map label moving back
 //     1.75 units across a 4.2-unit font stays on its line in PDF.js, which
@@ -508,18 +508,18 @@ const (
 //     thread_400_400561.pdf) and on none fewer, and on 2 more pages of files
 //     that still differ (govdocs thread_000_000282.pdf page 84, pdfjs
 //     issue19624.pdf page 1); facturx, pdf20 and pdfcpu do not move.
-//   - govdocs thread_200_200088.pdf, thread_200_200404.pdf, thread_400_400385.pdf
+//   - govdocs/pdf thread_200_200088.pdf, thread_200_200404.pdf, thread_400_400385.pdf
 //     and 10 more: slides set a quarter turn round broke the line at every
 //     subscript shifted across it by more than 2 units, "SO 2" and "C L"
 //     where PDF.js reads "SO2" and "CL". Reading those lines by runs makes
 //     words match PDF.js on 13 more files (all govdocs) and on none fewer.
-//   - govdocs thread_000_000547.pdf page 2: a bullet in a smaller size
+//   - govdocs/pdf thread_000_000547.pdf page 2: a bullet in a smaller size
 //     starts the run of "CH4", and PDF.js measures the subscript's shift
 //     against the bullet's size, so it breaks the line there and not on
 //     page 3, where the bullet has the size of the text. Measuring the
 //     shift against the glyph that started the run makes words match PDF.js
 //     on 7 more files (govdocs 6, pdfjs 1) and on none fewer.
-//   - govdocs thread_000_000282.pdf: each subscript of "NOX" and "SO2" sits
+//   - govdocs/pdf thread_000_000282.pdf: each subscript of "NOX" and "SO2" sits
 //     2.4 units below its line in a marked-content sequence of its own, with
 //     no MCID, set by the Tf of the text and a smaller text matrix. PDF.js
 //     ends its text item at the BDC and breaks the line there; litho kept
@@ -529,7 +529,7 @@ const (
 //     that still differ (govdocs thread_000_000282.pdf 23, pdfjs
 //     issue16800.pdf 3), and on none fewer; facturx, pdf20 and pdfcpu do
 //     not move.
-//   - govdocs thread_400_400936.pdf page 216, pdfjs issue8022.pdf, pdfcpu
+//   - govdocs/pdf thread_400_400936.pdf page 216, pdfjs issue8022.pdf, pdfcpu
 //     xdp_2.0.pdf: space glyphs in empty table cells, blank paragraphs or a
 //     page header broke lines of their own, and the glyph after them, back
 //     on the baseline of the text before them, read a space PDF.js does not
@@ -537,7 +537,7 @@ const (
 //   - All corpora: keeping space glyphs on the line makes words match
 //     PDF.js on 11 more files (govdocs 8, pdfcpu 2, pdfjs 1) and on none
 //     fewer; facturx and pdf20 do not move.
-//   - govdocs thread_300_300493.pdf pages 6 and 8: the letters of figure
+//   - govdocs/pdf thread_300_300493.pdf pages 6 and 8: the letters of figure
 //     captions set a quarter turn round, "(A)", each have an upright space
 //     glyph shown at the top of the page between them. Read against that
 //     space, each letter broke its line, "( A )". Reading a rotated line past
@@ -887,7 +887,7 @@ func (r *runTracker) breaksLine(i int, el models.TextElement) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300849.pdf pages 20, 27 and 35: a figure label
+//   - govdocs/pdf thread_300_300849.pdf pages 20, 27 and 35: a figure label
 //     drawn by a form joined the caption line after it, "(b)Jochen", where
 //     PDF.js breaks the line.
 func (r *runTracker) breaksItem(i int, el models.TextElement) bool {
@@ -933,7 +933,7 @@ func (r *runTracker) breaksItem(i int, el models.TextElement) bool {
 //
 // # Corpus evidence
 //
-//   - pdfjs issue14301.pdf, govdocs thread_100_100591.pdf, pdfcpu
+//   - pdfjs issue14301.pdf, govdocs/pdf thread_100_100591.pdf, pdfcpu
 //     CenterOfWhy.pdf: text a form XObject draws beside the page's text
 //     reads "Prénom: 1/20", "Information Reports" and "M-2004-002 1",
 //     where PDF.js glues it, "Prénom:1/20", so the goldens of those files
@@ -1020,13 +1020,13 @@ const sameDirectionTolerance = 1e-3
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000024.pdf: "OCEAN" then "PACIFIC", set 0.004
+//   - govdocs/pdf thread_000_000024.pdf: "OCEAN" then "PACIFIC", set 0.004
 //     radian apart, PACIFIC 150 units back along the line, read
 //     "OCEANPACIFIC".
-//   - govdocs thread_100_100945.pdf page 14: two "River" labels turned
+//   - govdocs/pdf thread_100_100945.pdf page 14: two "River" labels turned
 //     0.6 radian apart read "RiverRiver", and "MONTANA" then "IDAHO", set
 //     upside down, "MONTANAIDAHO".
-//   - govdocs thread_000_000146.pdf: "Big Hog Bayou", one letter per text
+//   - govdocs/pdf thread_000_000146.pdf: "Big Hog Bayou", one letter per text
 //     matrix along a curve, still reads as one line.
 //   - All corpora: words match PDF.js on 3 more files (govdocs
 //     thread_000_000024.pdf, thread_300_300121.pdf, pdfjs bug1753983.pdf)
@@ -1067,7 +1067,7 @@ func turnsAway(prev, el models.TextElement) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200087.pdf, thread_200_200089.pdf: the subscript δ
+//   - govdocs/pdf thread_200_200087.pdf, thread_200_200089.pdf: the subscript δ
 //     of "Reδ" and "Uδ" set by an oblique text matrix 1.56 units below its
 //     line read glued, where PDF.js ends the line at it ("Re δ").
 //   - pdfjs issue20914.pdf: wire labels compressed to 0.18 of their height
@@ -1153,7 +1153,7 @@ func (r *runTracker) height(i int, el models.TextElement) float64 {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400907.pdf page 3: a space glyph at x 533, right of
+//   - govdocs/pdf thread_400_400907.pdf page 3: a space glyph at x 533, right of
 //     "Original Signature on File", read the "Date:" at x 408 after it as a
 //     reset and dropped the word space PDF.js reads ("File Date:"). Reading
 //     the reset from "File" makes words match PDF.js on that file and on
@@ -1220,7 +1220,7 @@ const exactAbutment = 1e-6
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200926.pdf: page numbers "-3-" set as "3", a
+//   - govdocs/pdf thread_200_200926.pdf: page numbers "-3-" set as "3", a
 //     glyph mapped to a line feed, then "-" moved back onto the end of "3"
 //     read "-3 -", where PDF.js reads the line feed as a space glyph the
 //     move cancels.
@@ -1303,7 +1303,7 @@ func isWhitespaceRune(r rune) bool {
 //     overprints, where PDF.js reads "von1" and "05.03.2018Nr.".
 //   - All corpora: words match PDF.js on 83 more files (facturx 26, govdocs
 //     43, pdfcpu 2, pdfjs 12) and on none fewer.
-//   - govdocs thread_100_100451.pdf (drop cap), pdfjs prefilled_f1040.pdf
+//   - govdocs/pdf thread_100_100451.pdf (drop cap), pdfjs prefilled_f1040.pdf
 //     (exact abutment), issue269_2.pdf (180° text, while its gaps were read
 //     rightward), issue9186.pdf (U+200B around each space): each lost spaces
 //     PDF.js keeps until the guard above that names its case.
@@ -1319,19 +1319,19 @@ func isWhitespaceRune(r rune) bool {
 //     with the advance turned by Tfs × Th, makes words match PDF.js on 2 more
 //     files (govdocs thread_000_000150.pdf, pdfjs issue14415.pdf) and on none
 //     fewer; facturx, pdf20 and pdfcpu do not move.
-//   - govdocs thread_000_000012.pdf, thread_000_000750.pdf and 6 more: text
+//   - govdocs/pdf thread_000_000012.pdf, thread_000_000750.pdf and 6 more: text
 //     rotated a quarter turn read a space PDF.js drops ("$500,000y").
-//   - govdocs thread_200_200396.pdf: a tick label "100" and the rotated "y"
+//   - govdocs/pdf thread_200_200396.pdf: a tick label "100" and the rotated "y"
 //     after it read glued until both glyphs had to share a direction.
 //   - pdfjs issue20232.pdf: "и дата", rotated a quarter turn, read "идата"
 //     while the widths of its UTF-8 codes were read at the code, not the CID.
 //   - All corpora: dropping the space in ±90° text makes words match PDF.js
 //     on 8 more files and on none fewer.
-//   - govdocs thread_000_000338.pdf page 5: "References", a space glyph
+//   - govdocs/pdf thread_000_000338.pdf page 5: "References", a space glyph
 //     ending its TJ, another at the next Td, then the leader dots moved back
 //     to 0.08 em after the "s", read "References ...." for PDF.js's
 //     "References....".
-//   - govdocs thread_000_000208.pdf page 69: "effi", two space glyphs, then
+//   - govdocs/pdf thread_000_000208.pdf page 69: "effi", two space glyphs, then
 //     "ciency" at the exact end of the ligature, read "effi ciency".
 //   - All corpora: the tracking bound after two spaces or more makes words
 //     match PDF.js on 5 more files (govdocs 4, pdfjs 1) and on none fewer;
@@ -1371,7 +1371,7 @@ func suppressesLiteralSpace(prev, el models.TextElement, gap, size float64, spac
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200744.pdf page 84: every space of a -1.2-unit Tc
+//   - govdocs/pdf thread_200_200744.pdf page 84: every space of a -1.2-unit Tc
 //     run starts 1.2 units inside the letter before it, and the next word at
 //     that letter's end. Read without the ligature test, "genetically
 //     susceptible" came out "geneticallysusceptible".
@@ -1417,16 +1417,16 @@ func spaceGlyphsBetween(elems []models.TextElement, p, i int) int {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300829.pdf: "c", a space, then "j" set by a Tm
+//   - govdocs/pdf thread_300_300829.pdf: "c", a space, then "j" set by a Tm
 //     at 21.3 points after 11.8: the 0.5-point gap passed 0.03 of the
 //     smaller size and kept a space PDF.js drops ("cj").
-//   - govdocs thread_400_400566.pdf page 4: "5", a space, then a "." set
+//   - govdocs/pdf thread_400_400566.pdf page 4: "5", a space, then a "." set
 //     at 14.4 points after 9.75, read "5 ." for "5.".
 //   - All corpora: words match PDF.js on 2 more files (both govdocs) and
 //     on 2 more pages of files that still differ (govdocs
 //     thread_000_000282.pdf, thread_300_300695.pdf), and on none fewer;
 //     facturx, pdf20, pdfcpu and pdfjs do not move.
-//   - govdocs thread_300_300653.pdf page 31: every letter of
+//   - govdocs/pdf thread_300_300653.pdf page 31: every letter of
 //     "angleOfAttack_d" set by an 8.9-point Tm in one font and every space
 //     glyph between two letters by a 12-point Tm in another, each letter
 //     placed where the space starts. Measured at 8.9 points, the 0.29-unit
@@ -1552,7 +1552,7 @@ func stringHasRTL(s string) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200417.pdf page 1: one bead covers the page.
+//   - govdocs/pdf thread_200_200417.pdf page 1: one bead covers the page.
 //     Sorting its text into rows 5 units tall put each superscript "1" on
 //     the line of the author name before it and glued them, "Xu1,", where
 //     PDF.js, which reads no beads, breaks the line at each. Reading the
@@ -1630,7 +1630,7 @@ func beadContains(bead semantics.Bead, el models.TextElement) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100518.pdf, thread_000_000744.pdf and 7 more: chart
+//   - govdocs/pdf thread_100_100518.pdf, thread_000_000744.pdf and 7 more: chart
 //     labels and table headings set upside down read every gap as negative,
 //     so no word space was ever inserted: "TransferCargo", and "Mid-Atlantic"
 //     for a heading tracked letter by letter that PDF.js reads
@@ -1638,12 +1638,12 @@ func beadContains(bead semantics.Bead, el models.TextElement) bool {
 //     Reading the gap leftward makes words match PDF.js on 6 more files (all
 //     govdocs) and on none fewer; facturx, pdf20, pdfcpu and pdfjs do not
 //     move.
-//   - pdfjs issue5747.pdf, govdocs thread_000_000262.pdf and 9 more: text
+//   - pdfjs issue5747.pdf, govdocs/pdf thread_000_000262.pdf and 9 more: text
 //     rotated by -90° read every gap as negative, so no word space was ever
 //     inserted ("dolorsitamet,").
 //   - pdfjs issue20930.pdf, bug1905623.pdf: vertical writing read "ABCDE"
 //     for glyphs PDF.js reads "A B C D E".
-//   - govdocs thread_300_300516.pdf: a /blank glyph states /Widths 0 and a
+//   - govdocs/pdf thread_300_300516.pdf: a /blank glyph states /Widths 0 and a
 //     TJ gap of 0.287 em follows it. Half an em taken off that gap lost the
 //     space PDF.js reads ("Jeff␣Sherwood").
 //   - pdfjs issue7020.pdf: half an em taken off the gap after a /Widths 0
@@ -1722,12 +1722,12 @@ func curveTurn(prev, curr models.TextElement) (float64, bool) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400902.pdf pages 2, 3 and 6 to 8: chart labels set
+//   - govdocs/pdf thread_400_400902.pdf pages 2, 3 and 6 to 8: chart labels set
 //     along a path about 0.43 em above their baseline read "SB W storage in
 //     Tank Fa r m", "M i xed transuranic w a ste/" and "Vitrificatio n"; the
 //     baseline gaps inside those words reach 2.9 points at 9 points over a
 //     turn of 55°.
-//   - govdocs thread_200_200196.pdf page 6: "Verkin Creek" follows a river
+//   - govdocs/pdf thread_200_200196.pdf page 6: "Verkin Creek" follows a river
 //     along a path on its baseline, its letters 0.1 point apart whatever the
 //     turn, and the 31.8° turn at its word space still reads a space. Read
 //     at a fixed height of half an em, that space vanished.
@@ -1869,12 +1869,12 @@ const trackingSpaceFactor = 0.102
 //   - pdfjs issue17232.pdf: "__/__/____" sets each underscore run and slash
 //     by its own Tm and marked-content sequence, at 25.6 and 8 points; the
 //     slash's size put a space PDF.js does not read after each run.
-//   - govdocs thread_300_300083.pdf: small capitals set by a 9-point Tm read
+//   - govdocs/pdf thread_300_300083.pdf: small capitals set by a 9-point Tm read
 //     "THEM ...." where the leaders' 11-point Tm keeps PDF.js at "THEM....".
 //   - All corpora: words match PDF.js on 33 more files (govdocs 28, pdfjs 5)
 //     and on none fewer, the line average having spaced or joined glyphs set
 //     in a size of their own.
-//   - govdocs thread_000_000152.pdf page 38: a 13-point "^" then "Riverine"
+//   - govdocs/pdf thread_000_000152.pdf page 38: a 13-point "^" then "Riverine"
 //     at 7.4 points, each in a marked-content sequence of its own with no
 //     MCID, read "^ Riverine" against the 7.4-point size, where PDF.js
 //     measures the gap at 13 points and reads "^Riverine". Taking the size
@@ -1910,11 +1910,11 @@ func wordSpaceThreshold(elems []models.TextElement, fonts []runFont, p, i int, l
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300344.pdf page 11: "involve" then "ment" set by a
+//   - govdocs/pdf thread_300_300344.pdf page 11: "involve" then "ment" set by a
 //     Td 0.102 em past the end of the "e" read "involve ment".
-//   - govdocs thread_200_200293.pdf page 13: "Ixtoc /Burmah" read
+//   - govdocs/pdf thread_200_200293.pdf page 13: "Ixtoc /Burmah" read
 //     "Ixtoc / Burmah" across a gap of exactly 0.102 em.
-//   - govdocs thread_400_400745.pdf page 1, pdfjs issue9552.pdf page 5: PDF.js
+//   - govdocs/pdf thread_400_400745.pdf page 1, pdfjs issue9552.pdf page 5: PDF.js
 //     reads a space at an exact 0.102 em tie ("JURISDICTIO N", "ex ami ned")
 //     where litho reads the word the page shows.
 //   - All corpora: words match PDF.js on 2 more files (govdocs
@@ -1922,7 +1922,7 @@ func wordSpaceThreshold(elems []models.TextElement, fonts []runFont, p, i int, l
 //     PDF.js splitting a word at a tie (govdocs thread_400_400745.pdf, pdfjs
 //     issue9552.pdf); pages that differ fall on 3 more files and rise on
 //     none; facturx, litho, pdf20 and pdfcpu do not move.
-//   - govdocs thread_400_400905.pdf pages 11, 13 and 15: leader dots set 0.03
+//   - govdocs/pdf thread_400_400905.pdf pages 11, 13 and 15: leader dots set 0.03
 //     em after a word and its space glyph keep the space in PDF.js; the tie
 //     margin on that bound dropped it on 2 more pages.
 const gapTieTolerance = 1e-9
@@ -2087,7 +2087,7 @@ func hasNonspacingMark(s string) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300224.pdf page 105: a soft hyphen before a Tf
+//   - govdocs/pdf thread_300_300224.pdf page 105: a soft hyphen before a Tf
 //     read "76432 , E." where PDF.js reads "76432, E .".
 //   - All corpora: carrying the shift across a Tf makes words match PDF.js on
 //     1 more file (govdocs thread_300_300224.pdf) and moves 16 more pages of

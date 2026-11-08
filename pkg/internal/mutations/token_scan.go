@@ -38,7 +38,7 @@ const maxScanDepth = 100
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400594.pdf: reported 0 to 44 objects unreadable from
+//   - govdocs/pdf thread_400_400594.pdf: reported 0 to 44 objects unreadable from
 //     run to run, every one past this bound, while each object resolved.
 const maxScanRefDepth = 100
 
@@ -364,7 +364,7 @@ func (w *scanWalk) follow(ctx context.Context, ref ast.PdfIndirectRef) {
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu, redacting all of page 1: font programs or
+//   - govdocs/pdf, pdfjs, pdfcpu, redacting all of page 1: font programs or
 //     profiles hold a surviving copy in 75 of 459 govdocs refusals and 55 of
 //     95 pdfjs refusals, none of 9 pdfcpu ones. Skipping them lets 8 govdocs
 //     and 37 pdfjs redactions through, exactly those whose every copy was in
@@ -397,7 +397,7 @@ var binarySlotKeys = map[ast.PdfName]bool{
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu, facturx, pdf20, litho/pdf, redacting all of page 1:
+//   - govdocs/pdf, pdfjs, pdfcpu, facturx, pdf20, litho/pdf, redacting all of page 1:
 //     every copy a CMap held is a PostScript fragment ("Map", "uppl",
 //     "resource", "der"), a font name ("and" in SandRegular) or a hex
 //     destination ("2013"), 55 distinct tokens over 56 files. Skipping CMaps

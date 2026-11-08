@@ -17,7 +17,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000341.pdf: embeds AvantGarde-Book with a program
+//   - govdocs/pdf thread_000_000341.pdf: embeds AvantGarde-Book with a program
 //     that names StandardEncoding, naming 110 codes in /Differences and leaving
 //     the other 146, the space and the digits among them, to StandardEncoding.
 func TestBuiltinProgramEncoding_PredefinedReference(t *testing.T) {

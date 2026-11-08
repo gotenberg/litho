@@ -51,7 +51,7 @@ func type0TwoPagePDF(t *testing.T, page1, page2 string) []byte {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100870.pdf: selects one Times-Roman Identity-H font
+//   - govdocs/pdf thread_100_100870.pdf: selects one Times-Roman Identity-H font
 //     on fourteen pages, and page 20 shows a CID its CFF charset does not hold
 //     in rendering mode 1, which no earlier page used; veraPDF reports it under
 //     ISO 19005-2, 6.2.11.8 and 6.2.11.4.1 t2, and litho did not.

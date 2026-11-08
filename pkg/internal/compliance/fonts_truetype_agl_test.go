@@ -29,7 +29,7 @@ import (
 //
 //   - pdfjs bug1727053.pdf: shows Arial,Bold with no /ToUnicode, and veraPDF
 //     reports nothing.
-//   - govdocs: widening the exemption to named encodings suppressed the rule
+//   - govdocs/pdf: widening the exemption to named encodings suppressed the rule
 //     on 16 files veraPDF still reports.
 func TestTrueTypeAGLExemption(t *testing.T) {
 	t.Parallel()

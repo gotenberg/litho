@@ -37,7 +37,7 @@ var annotTextKeys = []ast.PdfName{"Contents", "RC", "URI"}
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100166: a link the centred quarter cut to the part
+//   - govdocs/pdf thread_100_100166: a link the centred quarter cut to the part
 //     outside the region named an action object whose /URI is the mailto:
 //     address the region removed, and the redaction was refused over it.
 //

@@ -15,7 +15,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300829.pdf: "c", a space, then "j" set at 21.3
+//   - govdocs/pdf thread_300_300829.pdf: "c", a space, then "j" set at 21.3
 //     points after 11.8, 0.5 apart, which PDF.js reads "cj".
 func TestReconstructText_LiteralSpaceFollowsTheGlyphSize(t *testing.T) {
 	t.Parallel()

@@ -97,7 +97,7 @@ func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violatio
 //     toward veraPDF's and none away, 103 of them onto it, when litho stopped
 //     judging each object once per page, per resource dictionary and per
 //     annotation; their summed distance from veraPDF fell from 18171 to 6.
-//   - govdocs thread_000_000146.pdf: names the same indirect graphics states
+//   - govdocs/pdf thread_000_000146.pdf: names the same indirect graphics states
 //     from the resources of many of its 163 forms, and veraPDF fails 6.4 t4,
 //     t5 and t6 two or three times, where litho failed them 19 or 20 times.
 //   - All corpora: reaching the streams a page draws as [drawnStreamWalk]

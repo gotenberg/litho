@@ -22,7 +22,7 @@ func pdfDescription(body string) []byte {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300483.pdf, thread_400_400924.pdf: Acrobat Distiller
+//   - govdocs/pdf thread_300_300483.pdf, thread_400_400924.pdf: Acrobat Distiller
 //     6.0.1 emits pdf:Keywords=' ', and veraPDF passes it.
 func TestXMPTextType_BlankValueAccepted(t *testing.T) {
 	data := pdfDescription(`pdf:Keywords=" "`)

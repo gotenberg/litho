@@ -394,7 +394,7 @@ func writeInfoDict(alloc *writer.ObjAllocator, doc *document.Document, infoObj a
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100230.pdf: its /Producer is "\003 version 2.51-b".
+//   - govdocs/pdf thread_100_100230.pdf: its /Producer is "\003 version 2.51-b".
 //     Its PDF/A-1b output failed 6.7.3 test 7 in veraPDF 1.30.2, default and
 //     aggressive, with a pdf:Producer of " version 2.51-b", while litho passed
 //     it. Both outputs now fail, on both tools, only the 6.3.7 test 2 its
@@ -495,14 +495,14 @@ func fallbackDocTitle(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 //
 // # Corpus evidence
 //
-//   - govdocs: 7 of 90 sampled files carry an empty /Keywords and no packet,
+//   - govdocs/pdf: 7 of 90 sampled files carry an empty /Keywords and no packet,
 //     and took a second PDF/A-1b round, default and aggressive alike, for the
 //     pdf:Keywords alone. One round now repairs them to the same residual.
 //   - pdfjs issue11004.pdf and issue14203.pdf, pdfcpu
 //     pkg_testdata__ECSTR11-01.pdf: the same at PDF/A-1b.
-//   - govdocs thread_400_400393, pdfjs issue14203.pdf and pdfcpu
+//   - govdocs/pdf thread_400_400393, pdfjs issue14203.pdf and pdfcpu
 //     pkg_testdata__ECSTR11-01.pdf: took the second round at PDF/UA-1 too.
-//   - govdocs: 12 of 131 sampled files, among them thread_100_100582, carry
+//   - govdocs/pdf: 12 of 131 sampled files, among them thread_100_100582, carry
 //     an empty /Title, /Subject, /Author, /Creator or /Producer and no packet,
 //     and their PDF/A-1b remediations, default and aggressive, left 6.7.3
 //     tests 2, 3, 4, 6 or 7 failing against "Untitled", "litho" or no
@@ -1731,7 +1731,7 @@ func stripForbiddenXPacketAttrs(buf []byte) ([]byte, []string) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000187.pdf: has a CRLF inside /Keywords, and before
+//   - govdocs/pdf thread_000_000187.pdf: has a CRLF inside /Keywords, and before
 //     the CR escape litho reported the sync as done while both litho and
 //     veraPDF still failed 6.7.3 test 5 on the output.
 func xmlEscape(s string) string {
@@ -1870,10 +1870,10 @@ func pdfDateToXMP(pdfDate string) string {
 //
 // # Corpus evidence
 //
-//   - govdocs: seven files came out of remediation newly failing ISO 19005-2,
+//   - govdocs/pdf: seven files came out of remediation newly failing ISO 19005-2,
 //     6.6.2.1 tests 4 and 5 when the dc:description rdf:Alt was written into
 //     an attribute-form property.
-//   - govdocs thread_000_000009, thread_000_000354, thread_300_300259 and
+//   - govdocs/pdf thread_000_000009, thread_000_000354, thread_300_300259 and
 //     thread_400_400007, pdfjs issue17856.pdf: carry a packet and an empty
 //     /Author or /Subject, and kept failing 6.7.3 test 3 or 4 after their
 //     PDF/A-1b remediations, default and aggressive, until an empty entry

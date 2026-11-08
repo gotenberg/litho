@@ -52,7 +52,7 @@ func (w *scanWalk) markPageContents(ctx context.Context, dict ast.PdfDict) {
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu, litho/pdf, verapdf: 136 files hold a Type 3 font,
+//   - govdocs/pdf, pdfjs, pdfcpu, litho/pdf, verapdf: 136 files hold a Type 3 font,
 //     and in 35 of them (19, 13, 1, 2, 0) 4,860 glyph descriptions paint an
 //     inline image. Redacting page 1 whole, its centred quarter and a band,
 //     and page 2's centred quarter, default and under the raster fallback
@@ -241,7 +241,7 @@ func (w *scanWalk) scanOperand(objNum int, operand ast.PdfObject, depth int) {
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu, litho/pdf, verapdf: 144 files hold an inline image
+//   - govdocs/pdf, pdfjs, pdfcpu, litho/pdf, verapdf: 144 files hold an inline image
 //     in a stream other than an image XObject (63, 40, 1, 8, 32). Redacting
 //     page 1 whole, its centred quarter and a band, default and under the
 //     raster fallback (864 redactions), moves no outcome and no byte of any

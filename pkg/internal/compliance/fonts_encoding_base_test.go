@@ -23,7 +23,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000364.pdf: lists just codes 9, 10, 13, 127 and 128
+//   - govdocs/pdf thread_000_000364.pdf: lists just codes 9, 10, 13, 127 and 128
 //     in /Differences and leaves every printing code to the CFF, and veraPDF
 //     reports the font litho left unjudged.
 func TestResolveSimpleFontEncoding_ImplicitBaseEncoding(t *testing.T) {

@@ -19,7 +19,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs: testdata/lzw_pdfa_stream.bin is a content stream taken from
+//   - govdocs/pdf: testdata/lzw_pdfa_stream.bin is a content stream taken from
 //     a govdocs1 file.
 func TestDecodeLZW_RealPDFStream(t *testing.T) {
 	t.Parallel()

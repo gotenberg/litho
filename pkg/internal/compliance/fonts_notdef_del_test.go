@@ -24,7 +24,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000153.pdf: page 8 shows code 127 through an
+//   - govdocs/pdf thread_000_000153.pdf: page 8 shows code 127 through an
 //     unembedded NewYork declared /MacRomanEncoding, and veraPDF reports
 //     7.21.8 t1 while litho stayed silent.
 func TestNotdefGlyph_DELIsUndefinedWithoutAProgram(t *testing.T) {

@@ -74,7 +74,7 @@ type RedactOption func(*redactOpts)
 //     and outside checks by litho's and poppler 26.09.0's rendering; 85
 //     with the raster fallback too. 77 reach a later refusal, a structure
 //     element or a copy of the removed text.
-//   - litho/pdf (all), pdfcpu (all), govdocs (1 in 8) and pdfjs (1 in 16, and
+//   - litho/pdf (all), pdfcpu (all), govdocs/pdf (1 in 8) and pdfjs (1 in 16, and
 //     issue17289), the four redact-render scenarios with the fallback: 106
 //     rasterise, 3 of them reach a photographic tile at q 90, and the
 //     outputs weigh 47.7 MB against 55.5 MB lossless (46.2 MB at q 75).
@@ -82,7 +82,7 @@ type RedactOption func(*redactOpts)
 //     photographs were re-encoded: 28.8 MB lossless, 21.0 MB at q 90; most
 //     of the rest was a JPX image the band blanks. Re-encoded too: 27.0 MB
 //     lossless, 11.5 MB at q 90, against a 7.8 MB source.
-//   - litho/pdf (5 PDFs), pdfcpu (21), pdfjs (190) and govdocs (386), every PDF
+//   - litho/pdf (5 PDFs), pdfcpu (21), pdfjs (190) and govdocs/pdf (386), every PDF
 //     holding JPEG or JPEG 2000 data, the four redact-render scenarios
 //     without the fallback, at q 90: 247 redactions blank 565 photographs
 //     that are re-encoded (pdfcpu 8, pdfjs 84, govdocs 155, litho none),
@@ -90,7 +90,7 @@ type RedactOption func(*redactOpts)
 //     404.2 MB of sources (pdfjs 259.2 against 404.1 from 196.6, govdocs
 //     222.6 against 269.4 from 202.4). pdfjs issue17289, the band: 9.0 MB
 //     against 16.7 MB.
-//   - pdfcpu, pdfjs, govdocs, the 148 PDFs those redactions reach, the
+//   - pdfcpu, pdfjs, govdocs/pdf, the 148 PDFs those redactions reach, the
 //     redact-render cell, both halves, with and without the fallback, at
 //     q 90 against lossless: no outcome changes, no inside leak by either
 //     renderer that lossless lacks. Poppler's outside check counts more
@@ -105,7 +105,7 @@ type RedactOption func(*redactOpts)
 //   - pdfjs issue16395 (PDF/A-2b) and issue19494 (PDF/A-3a), the three of
 //     their redactions that re-encode a photograph: veraPDF 1.30.2 reports
 //     the same rules lossy as lossless.
-//   - litho/pdf, pdfcpu, pdfjs, govdocs, redact-render with the fallback, before
+//   - litho/pdf, pdfcpu, pdfjs, govdocs/pdf, redact-render with the fallback, before
 //     blanked photographs were re-encoded, at q 90 against lossless: no
 //     inside leak by either renderer that lossless lacks, and
 //     litho's outside check unchanged. Poppler's outside check fails on 2

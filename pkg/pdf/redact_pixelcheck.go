@@ -179,18 +179,18 @@ type redactedGlyphs struct {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200806: removed glyphs of an unembedded Times-Bold
+//   - govdocs/pdf thread_200_200806: removed glyphs of an unembedded Times-Bold
 //     drew as placeholders reaching a quarter em below their baseline, past
 //     the glyph boxes, and the check refused the quarter and band
 //     redactions until it cleared what the page drew for them.
-//   - govdocs thread_300_300662: a transfer function (/TR) paints a blanked
+//   - govdocs/pdf thread_300_300662: a transfer function (/TR) paints a blanked
 //     image white, and the check refused the whole-page redaction until it
 //     left the transfer out of the rendering over black.
-//   - govdocs: over whole-page redactions of page 1 of all 1091 files, it
+//   - govdocs/pdf: over whole-page redactions of page 1 of all 1091 files, it
 //     refused two real leaks, a photograph a form XObject draws under the
 //     name of a page image (thread_000_000582, thread_400_400358), which
 //     Redact now refuses on its own.
-//   - pdfjs, govdocs, pdfcpu: one worker, a median of 37 ms more per
+//   - pdfjs, govdocs/pdf, pdfcpu: one worker, a median of 37 ms more per
 //     redacted page (11, 106 and 69 ms; 112 ms per million pixels at 72
 //     dpi), 3.7 times the redaction alone, and 8.1 s at most.
 func checkRedactionPixels(

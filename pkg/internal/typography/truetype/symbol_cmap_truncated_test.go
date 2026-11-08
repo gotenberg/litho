@@ -15,7 +15,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400573.pdf: embeds a SymbolMT subset whose (3,0)
+//   - govdocs/pdf thread_400_400573.pdf: embeds a SymbolMT subset whose (3,0)
 //     subtable declares 48 bytes where 42 remain and holds only 0xF021 and
 //     0xF022, and veraPDF reports no glyph-level finding for that font at
 //     all.

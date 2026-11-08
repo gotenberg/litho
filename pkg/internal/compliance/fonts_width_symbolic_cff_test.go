@@ -21,7 +21,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300492.pdf: every TeX Computer Modern subset went
+//   - govdocs/pdf thread_300_300492.pdf: every TeX Computer Modern subset went
 //     unchecked, and litho reported none of the 22 §6.2.11.5 width mismatches
 //     veraPDF and fontTools both compute.
 func TestSimpleFontGlyphMetrics_SymbolicCFFResolvesByName(t *testing.T) {

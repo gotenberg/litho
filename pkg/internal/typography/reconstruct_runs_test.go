@@ -221,7 +221,7 @@ func TestExtractElements_RunFontsCarryRiseAndHeight(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000578.pdf: footnote marks set with 4.9 Ts read
+//   - govdocs/pdf thread_000_000578.pdf: footnote marks set with 4.9 Ts read
 //     glued to the word before them.
 func TestExtractText_TextRiseSuperscript(t *testing.T) {
 	t.Parallel()
@@ -247,7 +247,7 @@ func TestExtractText_TextRiseSuperscript(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400561.pdf page 18: a 0.2-unit font with lines
+//   - govdocs/pdf thread_400_400561.pdf page 18: a 0.2-unit font with lines
 //     0.22 apart read as one line.
 func TestReconstructText_TinyFontLinesBreak(t *testing.T) {
 	t.Parallel()

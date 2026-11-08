@@ -59,7 +59,7 @@ func (c *clip) empty() bool {
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu: rectangles drawn with m and four l, or with
+//   - govdocs/pdf, pdfjs, pdfcpu: rectangles drawn with m and four l, or with
 //     re then h, which litho clipped as paths. Taken for rectangles, with
 //     glyphs tested pixel by pixel ([clip.binaryIn]), 73 of the first three
 //     pages of every PDF of the seven corpora move at 72 dpi: 34 come
@@ -67,11 +67,11 @@ func (c *clip) empty() bool {
 //     and none changes its verdict against poppler. 7 are render-cell
 //     pages and all still match (govdocs thread_300_300499 page 1: 2346 to
 //     1318 differing pixels).
-//   - govdocs thread_000_000149 page 2: moves away from both (2724 to 2946
+//   - govdocs/pdf thread_000_000149 page 2: moves away from both (2724 to 2946
 //     differing pixels from poppler): an image's bottom edge falls inside
 //     the row the clip now keeps whole, a row litho covers by the image's
 //     area and poppler paints lighter.
-//   - litho/pdf, pdfjs, govdocs, pdfcpu: no flatten, redact-render or recolor
+//   - litho/pdf, pdfjs, govdocs/pdf, pdfcpu: no flatten, redact-render or recolor
 //     verdict changes; two flatten page checks count a few more inked
 //     pixels (pdfjs freeculture page 2: 10993 to 11160).
 func axisRect(p geom.Path) (geom.Rect, bool) {
@@ -139,7 +139,7 @@ const rowSnapTolerance = 1e-6
 //     underlines under a clip half a pixel tall, which poppler paints solid
 //     and exact coverage painted at half strength. 6951 pixels differed
 //     from poppler, 0 do.
-//   - govdocs, litho/pdf, pdfjs: 31 of 641 render-cell pages move. 20 come
+//   - govdocs/pdf, litho/pdf, pdfjs: 31 of 641 render-cell pages move. 20 come
 //     closer to poppler (govdocs thread_200_200148 pages 1 and 2: 3951 and
 //     3055 pixels differ, then 2037 and 1331), 7 keep their count, 4 move
 //     away by 1 to 6 pixels; no page, flatten or redact-render verdict
@@ -184,7 +184,7 @@ func pixelRect(r geom.Rect) geom.Rect {
 //
 // # Corpus evidence
 //
-//   - govdocs, litho/pdf, pdfjs, pdfcpu: with glyphs ([clip.binaryIn])
+//   - govdocs/pdf, litho/pdf, pdfjs, pdfcpu: with glyphs ([clip.binaryIn])
 //     and groups cut at whole pixels, no render-cell or redact-render page
 //     moves; 25 flatten-cell page checks over 21 files move by a few
 //     pixels (pdfjs issue14562: 4225 to 4346 differing pixels of 327260
@@ -215,7 +215,7 @@ func (c *clip) wholePixels() *clip {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400358 page 1: glyphs under clipping paths that
+//   - govdocs/pdf thread_400_400358 page 1: glyphs under clipping paths that
 //     are no rectangle. Tested pixel by pixel, the page comes closer to
 //     poppler (904 to 894 differing pixels) and to PDFium (603 to 597);
 //     govdocs thread_000_000583 and pdfjs issue17069 move by 5 and 3

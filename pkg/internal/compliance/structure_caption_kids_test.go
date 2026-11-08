@@ -15,7 +15,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100184.pdf: maps Caption to P and places those
+//   - govdocs/pdf thread_100_100184.pdf: maps Caption to P and places those
 //     elements mid-Sect; litho judged the name as written and reported them,
 //     while veraPDF reports nothing.
 func TestCaptionKidPositions(t *testing.T) {

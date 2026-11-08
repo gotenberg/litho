@@ -243,7 +243,7 @@ func TestResolveFont_NonStandard14NoEncoding(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs: its Mac-authored filings showed the 'Ð' the previous WinAnsi
+//   - govdocs/pdf: its Mac-authored filings showed the 'Ð' the previous WinAnsi
 //     overlay produced for byte 0xD0.
 func TestResolveFont_Standard14DifferencesNoBaseEncoding(t *testing.T) {
 	fontDict := ast.PdfDict{

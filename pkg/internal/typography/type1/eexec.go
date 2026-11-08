@@ -83,7 +83,7 @@ func normaliseEexec(data []byte) []byte {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300035.pdf: starts its binary section with 0x32
+//   - govdocs/pdf thread_300_300035.pdf: starts its binary section with 0x32
 //     ('2'), which made litho hex-decode the cipher text into noise and
 //     read no glyph at all from the program.
 func isHexEncoded(data []byte) bool {
@@ -112,7 +112,7 @@ func isHexEncoded(data []byte) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300851.pdf: CMDCGH+AdvMT_RM opens its binary cipher
+//   - govdocs/pdf thread_300_300851.pdf: CMDCGH+AdvMT_RM opens its binary cipher
 //     text with 0x0C; skipping it as white space decrypted the section into
 //     noise, and the program read no glyph name and no width. Its /Length1 of
 //     523 ends the clear text right before the form feed, and decrypting from

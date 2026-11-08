@@ -304,14 +304,14 @@ func deviceFamily(name string) string {
 //     their own profile, walking every tiling cell a stream paints in the one
 //     state veraPDF gives them moves eight device colour counts on four
 //     files, each to veraPDF's count, and no verdict.
-//   - govdocs thread_200_200567.pdf: draws 71 image masks inside 71 cells of
+//   - govdocs/pdf thread_200_200567.pdf: draws 71 image masks inside 71 cells of
 //     uncoloured tiling patterns SCN selects in [/Pattern /ICCBased], and
 //     veraPDF fails DeviceGray 71 times, the page's initial fill the cells
 //     begin in, where litho failed none.
-//   - govdocs thread_400_400245.pdf: draws twelve image masks inside the cells
+//   - govdocs/pdf thread_400_400245.pdf: draws twelve image masks inside the cells
 //     of uncoloured patterns scn selects in [/Pattern /DeviceRGB], and veraPDF
 //     fails DeviceRGB 733 times, where litho failed it 721 times.
-//   - govdocs thread_000_000336.pdf: draws one image mask in an uncoloured
+//   - govdocs/pdf thread_000_000336.pdf: draws one image mask in an uncoloured
 //     cell, and veraPDF fails DeviceGray once, where litho failed nothing.
 //   - pdfjs tiling_patterns_variations.pdf: paints four coloured patterns
 //     whose cells fill after rg and one uncoloured pattern from one page, and
@@ -952,13 +952,13 @@ func (w *colorLinkWalk) judgeSpaceUnder(ctx context.Context, obj ast.PdfObject, 
 //
 // # Corpus evidence
 //
-//   - pdfcpu pkg_testdata__VectorApple.pdf, and govdocs thread_000_000162.pdf,
+//   - pdfcpu pkg_testdata__VectorApple.pdf, and govdocs/pdf thread_000_000162.pdf,
 //     thread_400_400372.pdf and thread_400_400374.pdf: their shadings share
 //     one indirect object holding /DeviceCMYK as /ColorSpace, and veraPDF
 //     fails ISO 19005-1, 6.2.3.3 t2 and ISO 19005-2, 6.2.4.3 t3 once per
 //     shading, 851 times in pkg_testdata__VectorApple.pdf, which judging the
 //     object once dropped to 843.
-//   - govdocs thread_300_300760.pdf: its pages name /CS0, an indirect object
+//   - govdocs/pdf thread_300_300760.pdf: its pages name /CS0, an indirect object
 //     holding /DeviceGray, and veraPDF fails ISO 19005-1, 6.2.3.3 t3 and ISO
 //     19005-2, 6.2.4.3 t4 8311 times, where litho judged the object once and
 //     failed them 8310 times.

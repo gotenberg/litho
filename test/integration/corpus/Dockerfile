@@ -276,7 +276,7 @@ RUN chmod +x entrypoint.sh \
   lib/install-references.sh \
   pdfjs/download.sh \
   verapdf/download.sh \
-  govdocs/download.sh \
+  govdocs/pdf/download.sh \
   pdf20/download.sh \
   pdfcpu/download.sh \
   facturx/download.sh \

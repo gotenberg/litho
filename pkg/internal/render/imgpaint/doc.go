@@ -79,7 +79,7 @@
 //     Two evenly spaced taps per axis weighed each neighbour as much as the
 //     sample and blurred the text, 7931 pixels off the render golden; area
 //     weights leave 6055, the rest poppler's whole-sample reduction.
-//   - pdfjs, govdocs and litho/pdf: of 634 golden pages none changes verdict
+//   - pdfjs, govdocs/pdf and litho/pdf: of 634 golden pages none changes verdict
 //     with area weights; 51 move closer to the golden and 13 move away, by
 //     at most 0.05% of a page.
 package imgpaint

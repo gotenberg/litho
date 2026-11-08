@@ -74,7 +74,7 @@ func hybridXRefPDF(withXRefStm bool) []byte {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400545.pdf: a hybrid file with
+//   - govdocs/pdf thread_400_400545.pdf: a hybrid file with
 //     `/Prev 219303 /XRefStm 218949` and a `40 0 obj << /Type /XRef ... >>`.
 //     veraPDF answers containsXRefStream true for it while litho passed it.
 func TestXRefFormatHybridReference(t *testing.T) {

@@ -80,7 +80,7 @@ func StagedPages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 //   - pdfjs boundingBox_invalid.pdf: page 3 states /CropBox
 //     [600 800 1000 1000] on /MediaBox [0 0 600 800]. Taken as written, its
 //     crop box moved a stamp on the inserted page by (600, 800), off the page.
-//   - govdocs thread_300_300123.pdf, pdfjs bug1755507.pdf: state a crop box
+//   - govdocs/pdf thread_300_300123.pdf, pdfjs bug1755507.pdf: state a crop box
 //     reaching past the media box, which a viewer reduces to the media box.
 //     Taken as written, a stamp on the inserted page was not moved to the
 //     media box's corner, at (36, 36) and (39, 39).

@@ -69,7 +69,7 @@ func ParseEncoding(data []byte) [256]string {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100480.pdf: writes its whole vector with radix
+//   - govdocs/pdf thread_100_100480.pdf: writes its whole vector with radix
 //     indices.
 func ParseEncodingPS(data []byte) [256]string {
 	return parseEncoding(data, dupPutRadixRe)

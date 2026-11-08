@@ -36,7 +36,7 @@ import (
 //   - All corpora, at PDF/A-2u: the counts of ISO 19005-2, 6.2.11.7.2 t1
 //     moved toward veraPDF's in 5 files and away in none; each now equals
 //     veraPDF's, a summed distance of 254 before.
-//   - govdocs thread_200_200408.pdf: most of its glyphs without a Unicode
+//   - govdocs/pdf thread_200_200408.pdf: most of its glyphs without a Unicode
 //     value are shown through Type 3 fonts whose /ToUnicode leaves their codes
 //     out; litho states 181 of them, as veraPDF does, where it stated 15.
 func checkType3ToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, rule Rule, usage *fontUsageInfo) []Violation {

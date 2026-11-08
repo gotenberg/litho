@@ -246,7 +246,7 @@ func (s inlineFontSite) replace(ctx context.Context, alloc *writer.ObjAllocator,
 //   - All corpora: veraPDF, run on 151 of the changed outputs, reports 35
 //     fewer rule classes and none new, and the outputs litho and veraPDF
 //     disagree on are the ones they disagreed on before.
-//   - pdfjs js-buttons.pdf, resetform.pdf, govdocs thread_200_200931.pdf: the
+//   - pdfjs js-buttons.pdf, resetform.pdf, govdocs/pdf thread_200_200931.pdf: the
 //     fonts only form field appearances show, ZapfDingbats among them, gain a
 //     /ToUnicode, and 6.2.11.7.2 t1 at PDF/A-2u clears on both tools.
 //   - litho/pdf laterreads_2u.pdf: a font named by two pages and shown on the

@@ -46,7 +46,7 @@ func pageCtxsForPages(ctx context.Context, doc *document.Document, pages ...ast.
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100666.pdf: references object 190 from 30 pages, and
+//   - govdocs/pdf thread_100_100666.pdf: references object 190 from 30 pages, and
 //     veraPDF reports its /TR once, where litho reported it 30 times.
 func TestSharedExtGStateJudgedOnce(t *testing.T) {
 	t.Parallel()

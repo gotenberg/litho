@@ -65,7 +65,7 @@ func contentsRefToArrayPDF(t *testing.T) []byte {
 //
 // # Corpus evidence
 //
-//   - govdocs: 26 of 1091 documents carry a /Contents reference naming an
+//   - govdocs/pdf: 26 of 1091 documents carry a /Contents reference naming an
 //     array, every one of them a file litho otherwise reads.
 func TestCollectPageContents_ContentsRefNamingAnArray(t *testing.T) {
 	t.Parallel()

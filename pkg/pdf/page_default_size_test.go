@@ -46,7 +46,7 @@ func pageBoxPDF(pageEntries string) []byte {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400739.pdf: has no /MediaBox anywhere, and poppler
+//   - govdocs/pdf thread_400_400739.pdf: has no /MediaBox anywhere, and poppler
 //     reports 612 x 792 for it.
 func TestPageWithoutMediaBoxReportsLetter(t *testing.T) {
 	data := pageBoxPDF("")

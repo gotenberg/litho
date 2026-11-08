@@ -83,7 +83,7 @@ func matchLZW(v compliance.Violation) bool {
 //     complex_3b.pdf, a4syntax_4.pdf: the /DefaultRGB output-intent adds to
 //     the /Resources of an LZW Form XObject was discarded at PDF/A-1b, 2b
 //     and 4.
-//   - govdocs thread_100_100603.pdf, thread_100_100635.pdf,
+//   - govdocs/pdf thread_100_100603.pdf, thread_100_100635.pdf,
 //     thread_100_100636.pdf: under aggressive remediation, text-control's
 //     rewrite of four LZW content streams per file was reverted.
 func fixLZW(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {

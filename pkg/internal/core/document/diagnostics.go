@@ -124,7 +124,7 @@ func (d *Document) UndecodableStreams(ctx context.Context) ([]StreamDiagnostic, 
 //     PDF_A-2b__veraPDF_test_suite_6-2-3-t01-fail-b.pdf and
 //     PDF_A-4__veraPDF_test_suite_6-2-3-t01-fail-b.pdf hold the two outside
 //     pdfjs.
-//   - govdocs, facturx, litho/pdf, pdf20: no stream is salvaged or damaged.
+//   - govdocs/pdf, facturx, litho/pdf, pdf20: no stream is salvaged or damaged.
 //   - All corpora: the call lists exactly the streams whose decode reports
 //     a damaged or salvaged filter.
 func (d *Document) SalvagedStreams(ctx context.Context) ([]StreamDiagnostic, error) {

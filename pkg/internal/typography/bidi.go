@@ -442,13 +442,13 @@ func reverseInts(s []int) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300867.pdf: a /ToUnicode CMap maps code 0x7F, which
+//   - govdocs/pdf thread_300_300867.pdf: a /ToUnicode CMap maps code 0x7F, which
 //     draws the hyphen ending "treat-", to U+00AD, and PDF.js reads "treat"
 //     and "ment" on two lines where litho rejoined "treatment".
-//   - pdfjs issue9084.pdf, govdocs thread_000_000142.pdf: a mid-line soft
+//   - pdfjs issue9084.pdf, govdocs/pdf thread_000_000142.pdf: a mid-line soft
 //     hyphen read as "-" ("SS-2541-03-M", "long-term") where PDF.js reads
 //     nothing.
-//   - govdocs thread_300_300483.pdf, thread_100_100791.pdf: a WinAnsi
+//   - govdocs/pdf thread_300_300483.pdf, thread_100_100791.pdf: a WinAnsi
 //     octal 255 ending a line read as a soft hyphen and rejoined the word,
 //     where PDF.js reads "commu-" and "non-".
 //   - All corpora, with the WinAnsiEncoding hyphen at octal 255: words match

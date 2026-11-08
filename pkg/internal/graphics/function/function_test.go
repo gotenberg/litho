@@ -137,7 +137,7 @@ func TestSampledFunctionClampsOutsideDomain(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200192.pdf: carries the tint transform whose
+//   - govdocs/pdf thread_200_200192.pdf: carries the tint transform whose
 //     coefficients this test uses.
 func TestExponentialFunction(t *testing.T) {
 	t.Parallel()

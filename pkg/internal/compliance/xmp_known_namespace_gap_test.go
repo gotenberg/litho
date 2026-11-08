@@ -17,7 +17,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000163.pdf: writes Iptc4xmpCore:CreatorContactInfo,
+//   - govdocs/pdf thread_000_000163.pdf: writes Iptc4xmpCore:CreatorContactInfo,
 //     CountryCode and Location. The XMP Specification this part admits
 //     predefines none of them, and veraPDF reports every one.
 //   - pdfjs issue18896.pdf: adds Iptc4xmpExt:RecDevice, which the XMP

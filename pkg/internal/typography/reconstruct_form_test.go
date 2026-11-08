@@ -97,7 +97,7 @@ func TestReconstructText_FormBoundaryLines(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400566.pdf page 58: "G2G3/S2/D", an image Do
+//   - govdocs/pdf thread_400_400566.pdf page 58: "G2G3/S2/D", an image Do
 //     between "3 " and a "/" set back over the space.
 func TestReconstructText_FormBoundarySpaces(t *testing.T) {
 	t.Parallel()
@@ -163,7 +163,7 @@ func TestReconstructText_FormBoundarySpaces(t *testing.T) {
 //
 //   - pdfjs issue14301.pdf page 1: a footer label drawn by a form, then the
 //     page number the page shows, "Prénom: 1/20".
-//   - govdocs thread_100_100591.pdf page 2: a running head drawn by two
+//   - govdocs/pdf thread_100_100591.pdf page 2: a running head drawn by two
 //     forms, "Information Reports".
 //   - pdfcpu CenterOfWhy.pdf page 2: a footer and the page number of
 //     another form, "M-2004-002 1".

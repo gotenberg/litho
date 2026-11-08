@@ -21,10 +21,10 @@ import (
 //   - pdfjs issue8613.pdf: shows two unembedded MSSansSerif fonts whose
 //     /Differences names the whole range. litho reported it, and the same
 //     fonts again under ISO 19005-2 §6.2.11.7.2.
-//   - govdocs thread_300_300859.pdf: shows an embedded ZJLCSM+Symbol whose
+//   - govdocs/pdf thread_300_300859.pdf: shows an embedded ZJLCSM+Symbol whose
 //     only shown code is named /bullet. litho reported it, and the same font
 //     again under ISO 19005-2 §6.2.11.7.2.
-//   - govdocs: veraPDF reports 16 files where a shown code /Differences never
+//   - govdocs/pdf: veraPDF reports 16 files where a shown code /Differences never
 //     names falls to the base encoding, the shape the restriction control
 //     holds.
 func TestToUnicodeTrueTypeDifferencesNamesEveryShownCode(t *testing.T) {

@@ -23,7 +23,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100945.pdf: shows a space at code 32 against a
+//   - govdocs/pdf thread_100_100945.pdf: shows a space at code 32 against a
 //     /FirstChar of 48 and a 222-unit program glyph, which veraPDF reports
 //     under ISO 19005-2 §6.2.11.5.
 func TestCheckGlyphWidths_UncoveredCode(t *testing.T) {

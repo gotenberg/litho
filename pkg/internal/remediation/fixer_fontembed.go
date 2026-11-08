@@ -88,22 +88,22 @@ func matchFontEmbed(v compliance.Violation) bool {
 //   - litho/pdf fontembed_2b.pdf: three fonts written inline, in a page's /Font
 //     dictionary, a form's /Resources and a /Resources two pages share, are
 //     embedded with synthetic programs, on litho and veraPDF alike.
-//   - govdocs and litho/pdf: measured with a provider over the Liberation 2.1.5
+//   - govdocs/pdf and litho/pdf: measured with a provider over the Liberation 2.1.5
 //     and URW base35 families, on the 856 files that hold an unembedded
 //     font, at PDF/A-2b and PDF/UA-1, default and aggressive.
-//   - govdocs: 785 files. The findings of ISO 19005-2, 6.2.11.4.1 t1 fall
+//   - govdocs/pdf: 785 files. The findings of ISO 19005-2, 6.2.11.4.1 t1 fall
 //     from 4559 to 728 at PDF/A-2b default (721 aggressive), those of ISO
 //     14289-1, 7.21.4.1 t1 from 4560 to 728 at PDF/UA-1, and 416 PDF/A-2b
 //     and 287 PDF/UA-1 outputs are left with no finding at all. No rule gains
 //     a finding in any file, and no embedding is rolled back.
 //   - litho/pdf: 71 files. 6.2.11.4.1 t1 falls from 128 to 61 at PDF/A-2b, and
 //     37 more outputs are left with no finding. No rule gains a finding.
-//   - govdocs and litho/pdf: 70 of the files, remediated with and without the
+//   - govdocs/pdf and litho/pdf: 70 of the files, remediated with and without the
 //     provider and judged by veraPDF 1.30.2: the embedding findings fall
 //     from 341 to 53 at PDF/A-2b and at PDF/UA-1, the 53 litho reports, and
 //     no rule gains a finding. pdf.js places each of the 193275 text items
 //     of the 140 outputs where it placed them without the provider.
-//   - govdocs: of the 730 refusals at PDF/A-2b, 452 name a font the
+//   - govdocs/pdf: of the 730 refusals at PDF/A-2b, 452 name a font the
 //     families do not cover, 184 a width the program does not share (a
 //     space the producer declared narrower, a soft hyphen declared 0), 78 a
 //     program the font cannot take (Symbol over a CFF program, Arial Narrow,
@@ -460,7 +460,7 @@ const maxFontCandidates = 8
 //
 // # Corpus evidence
 //
-//   - govdocs: remediated at PDF/A-2b with WithSystemFonts on macOS, 8 fonts
+//   - govdocs/pdf: remediated at PDF/A-2b with WithSystemFonts on macOS, 8 fonts
 //     of 7 files refused over the first program are embedded over a later
 //     one: 4 Courier fonts Apple's Courier drew with a degree sign of 400
 //     where they declare 600, now over Courier New, and 2 Times New Roman and
@@ -470,7 +470,7 @@ const maxFontCandidates = 8
 //     6.2.11.2 t4 to t6) and none more, pdf.js places their 35782 text items
 //     where it placed them before, and the 1084 other outputs are
 //     byte-identical.
-//   - govdocs: the 512 refusals left are 310 fonts no program serves, of
+//   - govdocs/pdf: the 512 refusals left are 310 fonts no program serves, of
 //     families the system does not ship (Century, Melior, Book Antiqua, WP
 //     symbol fonts) or in styles it has no face of (Geneva,Bold,
 //     Symbol,Italic, Futura-Book); 174 whose widths no face shares (a
@@ -737,7 +737,7 @@ func (e *fontEmbedder) buildSimple(ctx context.Context, s *simpleFont, prog *sup
 //
 // # Corpus evidence
 //
-//   - govdocs: remediated at PDF/A-2b with WithSystemFonts on macOS, pdf.js
+//   - govdocs/pdf: remediated at PDF/A-2b with WithSystemFonts on macOS, pdf.js
 //     read Symbol's bullet as the MacRoman summation sign and alpha as "a"
 //     in 11 of 31 outputs sampled, once the Symbol fonts took Apple's
 //     programs without a /ToUnicode CMap. With the CMap, 4 read otherwise
@@ -1277,7 +1277,7 @@ func trueTypeEncoding(ctx context.Context, doc *document.Document, font ast.PdfD
 //     passes the output.
 //   - pdfjs issue6127.pdf: its TimesNewRomanPS-BoldItalicMT gains
 //     /WinAnsiEncoding, which clears 6.2.11.6 t2 under veraPDF 1.30.2.
-//   - govdocs: no file has a non-embedded non-symbolic TrueType font without
+//   - govdocs/pdf: no file has a non-embedded non-symbolic TrueType font without
 //     /Encoding.
 func namesSurviveEmbedding(ctx context.Context, doc *document.Document, font ast.PdfDict) bool {
 	if name := nameOf(ctx, doc, font["Encoding"]); compliance.PredefinedEncodingNames(name) != nil {

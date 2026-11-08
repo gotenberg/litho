@@ -22,7 +22,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300849.pdf: shows code 26 of a TeX-cmex9 font whose
+//   - govdocs/pdf thread_300_300849.pdf: shows code 26 of a TeX-cmex9 font whose
 //     encoding names it dotlessj and which has no /ToUnicode. veraPDF reports
 //     ISO 14289-2, 8.4.3, and litho did not.
 func TestPUAActualText_GlyphNameReachesPUA(t *testing.T) {

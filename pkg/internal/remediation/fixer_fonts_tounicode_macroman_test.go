@@ -140,7 +140,7 @@ func TestFixSimpleFontToUnicode_SymbolicMacRomanLeavesAnUnnamedGlyph(t *testing.
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000763.pdf: its TimesNewRoman subsets name the glyph
+//   - govdocs/pdf thread_000_000763.pdf: its TimesNewRoman subsets name the glyph
 //     at 0xB9 pi1, U+03D6, where Mac OS Roman reads U+03C0, and the one at
 //     0xBD Ohm, U+2126, canonically U+03A9.
 func TestFixSimpleFontToUnicode_SymbolicMacRomanSkipsAnUncorroboratedCode(t *testing.T) {

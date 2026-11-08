@@ -72,7 +72,7 @@ func matchFontFixes(v compliance.Violation) bool {
 //     corpus disagreement metric 14 -> 16.
 //   - pdfjs issue5010.pdf: at PDF/A-2b the /CIDSet regeneration wrote the
 //     document's descriptor back over name-utf8's repair of its /FontName.
-//   - pdfjs issue12963.pdf, govdocs thread_300_300033.pdf: several Type 0
+//   - pdfjs issue12963.pdf, govdocs/pdf thread_300_300033.pdf: several Type 0
 //     fonts share one descriptor, and each wrote its own /CIDSet over the
 //     document's copy of it. Read through the allocator, the descriptor gets
 //     one.

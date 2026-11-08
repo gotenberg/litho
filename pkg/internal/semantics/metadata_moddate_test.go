@@ -68,7 +68,7 @@ func metadataOf(t *testing.T, data []byte) map[string]string {
 //     Acrobat on 9 fixtures.
 //   - facturx: two of them are files whose XMP timestamp is written one second
 //     after the /Info one.
-//   - govdocs: six of them.
+//   - govdocs/pdf: six of them.
 //   - pdfjs bug1064894.pdf: the ninth.
 func TestStatedModDateWinsOverTheRawScan(t *testing.T) {
 	t.Parallel()

@@ -16,7 +16,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300035.pdf: labels its items with LI_Label, which its
+//   - govdocs/pdf thread_300_300035.pdf: labels its items with LI_Label, which its
 //     role map maps to Lbl; litho compared the names as written and missed
 //     four lists veraPDF reports.
 func TestListNumberingByStandardType(t *testing.T) {

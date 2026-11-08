@@ -245,7 +245,7 @@ func droppedPageAnnots(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100852.pdf: extracting nine pages dragged 47
+//   - govdocs/pdf thread_100_100852.pdf: extracting nine pages dragged 47
 //     unextracted pages and 510 KB of their content into the output, reachable
 //     as /Pages/Kids[0]/Annots[0]/Parent/Kids[4]/P.
 func fieldKidOverrides(
@@ -410,7 +410,7 @@ func pruneFieldKidsAt(
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100852.pdf: extracting nine pages carried seventeen
+//   - govdocs/pdf thread_100_100852.pdf: extracting nine pages carried seventeen
 //     unextracted ones along, and the text of page 26 was recoverable from a
 //     file that was supposed to hold pages 2 to 10.
 func pageDestOverrides(ctx context.Context, doc *document.Document, keptPages []*document.Page, removed map[int]bool, overrides map[int]ast.PdfObject) {
@@ -566,7 +566,7 @@ func explicitDest(ctx context.Context, doc *document.Document, dest ast.PdfObjec
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000761.pdf: an outline destination wrote 2196 bytes
+//   - govdocs/pdf thread_000_000761.pdf: an outline destination wrote 2196 bytes
 //     of the deleted page into the output.
 func pruneOutlineDestinations(
 	ctx context.Context,
@@ -799,7 +799,7 @@ func pruneDestNameTreeAt(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400912.pdf: an /OpenAction left pointing at a deleted
+//   - govdocs/pdf thread_400_400912.pdf: an /OpenAction left pointing at a deleted
 //     page held on to 17204 bytes of the page the deletion had just removed.
 func pruneCatalogDestinations(
 	ctx context.Context,

@@ -56,7 +56,7 @@ const pdfjsTokenCacheSize = 128
 //     229,937 inline images in 136 of the files, read the operations, and
 //     the byte ranges, they read when every scan read the stream afresh, as
 //     PDF.js reads them, as a repair does and whole.
-//   - pdfjs, govdocs: the text of the 34,585 pages of the 2282 files with a
+//   - pdfjs, govdocs/pdf: the text of the 34,585 pages of the 2282 files with a
 //     PDF.js golden does not change.
 type pdfjsImages struct {
 	data []byte

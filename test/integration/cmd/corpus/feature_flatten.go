@@ -97,7 +97,7 @@ const (
 //     both, averaged down to 72 dpi, find none; PDFium 4.30.0 finds 154 where
 //     the uniform grid found 257, and MuPDF 246 where it found 248. litho's
 //     half matches.
-//   - govdocs, all 1091 files (scope file): 34 flatten, all match, and
+//   - govdocs/pdf, all 1091 files (scope file): 34 flatten, all match, and
 //     1057 have no transparency.
 //   - pdfjs, all 1202 files but the 1 the manifest skips: 267 of 276
 //     flattened match, 915 have no transparency, 4 are refused
@@ -213,7 +213,7 @@ func (f *flattenFeature) HasGolden(fixtureID string) bool {
 //     at the glyph pixels it reads. issue18765.pdf, issue19281.pdf and
 //     issue19319.pdf were excluded until then, the first and the last
 //     timing out under a load of 50.
-//   - govdocs: the heaviest, thread_200_200744.pdf, takes 16 s.
+//   - govdocs/pdf: the heaviest, thread_200_200744.pdf, takes 16 s.
 type flattenScopeFile struct {
 	// WholeCorpus puts every PDF of the corpus in scope, not only those
 	// the render goldens cover.

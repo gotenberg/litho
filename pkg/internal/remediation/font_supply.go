@@ -330,7 +330,7 @@ const symbolCodeBase = 0xF000
 //
 // # Corpus evidence
 //
-//   - govdocs: remediated at PDF/A-2b with WithSystemFonts on macOS, 95
+//   - govdocs/pdf: remediated at PDF/A-2b with WithSystemFonts on macOS, 95
 //     Symbol and ZapfDingbats fonts over Apple's TrueType Symbol and
 //     ZapfDingbats programs were refused as a symbolic Type 1 font over a
 //     TrueType program. Read through the program's own (1,0) subtable, 44 of
@@ -389,7 +389,7 @@ const cmapUnicodePlatform = 0
 //
 // # Corpus evidence
 //
-//   - govdocs: remediated at PDF/A-2b with WithSystemFonts on macOS, 160
+//   - govdocs/pdf: remediated at PDF/A-2b with WithSystemFonts on macOS, 160
 //     Times, Helvetica and Courier fonts given the Apple programs, which
 //     carry (0,3) and (1,0) subtables alone, were refused under 6.2.11.6 t2
 //     for their /Differences, and 30 symbolic TrueType Symbol fonts under

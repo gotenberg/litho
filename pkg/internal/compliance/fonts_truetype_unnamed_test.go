@@ -73,7 +73,7 @@ func nonSymbolicTTF() string {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300708.pdf: shows code 31 through an embedded
+//   - govdocs/pdf thread_300_300708.pdf: shows code 31 through an embedded
 //     TimesNewRomanPSMT, and veraPDF reports the glyph absent.
 func TestTrueTypeUnnamedCodeGlyphPresence(t *testing.T) {
 	t.Parallel()

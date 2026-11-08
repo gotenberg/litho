@@ -1632,12 +1632,12 @@ func IsValidUALangTag(s ast.PdfString) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100172, thread_100_100195, thread_200_200961,
+//   - govdocs/pdf thread_100_100172, thread_100_100195, thread_200_200961,
 //     thread_300_300346: write "EN-US\x00" exactly, and veraPDF reports every
 //     one.
 //   - verapdf 6-8-4-t01-pass-f: veraPDF passes the BOM'd "en-GB" of its own
 //     fixture.
-//   - govdocs thread_000_000153, thread_200_200295: the grammar after decoding
+//   - govdocs/pdf thread_000_000153, thread_200_200295: the grammar after decoding
 //     already reports their BOM'd "EN-US\x00".
 func pdfaLangTagInvalid(s ast.PdfString, part int) bool {
 	decoded := document.DecodePdfString(s)

@@ -17,7 +17,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300865.pdf: the shape this fixture reproduces.
+//   - govdocs/pdf thread_300_300865.pdf: the shape this fixture reproduces.
 func actionInDestPDF(t *testing.T) []byte {
 	t.Helper()
 
@@ -62,7 +62,7 @@ func actionInDestPDF(t *testing.T) []byte {
 //
 // # Corpus evidence
 //
-//   - govdocs: four outlines reported no page for every bookmark.
+//   - govdocs/pdf: four outlines reported no page for every bookmark.
 func TestOutlineFollowsAnActionInDest(t *testing.T) {
 	t.Parallel()
 

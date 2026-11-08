@@ -46,7 +46,7 @@ const zlibChecksumLen = 4
 //     carry a tail, in 59 files. 1534 of them are one byte, mostly in
 //     encrypted govdocs files whose /Length counts the end-of-line before
 //     endstream, which decrypts to a stray byte.
-//   - govdocs thread_400_400299.pdf: a /Length past endstream makes the tail
+//   - govdocs/pdf thread_400_400299.pdf: a /Length past endstream makes the tail
 //     the text of the next object.
 func StoredTail(ctx context.Context, stream ast.PdfStream, limit int64) ([]byte, error) {
 	filters, err := streamFilterNames(stream.Dict)

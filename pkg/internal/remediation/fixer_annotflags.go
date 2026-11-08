@@ -320,7 +320,7 @@ func readAnnotSheets(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 //     the default PDF/A-2a, 2b and 2u outputs 6.8 t5, on litho and veraPDF,
 //     from the embedded file of a removed FileAttachment in the array object
 //     the file wrote, which veraPDF sweeps as an indirect object.
-//   - litho/pdf annothidden_2b.pdf, govdocs thread_400_400575.pdf and pdfjs
+//   - litho/pdf annothidden_2b.pdf, govdocs/pdf thread_400_400575.pdf and pdfjs
 //     annotation_hidden_noview.pdf: their PDF/A outputs change bytes alone.
 func writeSheetAnnots(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, sh *annotSheet, kept ast.PdfArray) bool {
 	if annotsRef, isRef := sh.annotsObj.(ast.PdfIndirectRef); isRef && annotsRef.ObjectNum > 0 {

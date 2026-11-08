@@ -149,7 +149,7 @@ func enclosingAlt(ctx context.Context, doc *document.Document, parentTree ast.Pd
 //
 //   - All corpora: at PDF/UA-1, 1815 widgets in 151 files lost the
 //     /StructParent annot-nesting had just given them.
-//   - pdfjs bug1669099.pdf, govdocs thread_300_300033.pdf: the next round
+//   - pdfjs bug1669099.pdf, govdocs/pdf thread_300_300033.pdf: the next round
 //     nested every widget again, leaving 30 Form elements for 15 widgets and
 //     316 for 158.
 func walkFormTooltipFields(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, parentTree ast.PdfObject, fields ast.PdfArray, count *int, seen map[int]bool, depth int) {

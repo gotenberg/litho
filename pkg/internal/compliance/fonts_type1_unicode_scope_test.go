@@ -136,7 +136,7 @@ func TestType1Unicode_ScopedToShownCodes(t *testing.T) {
 //     glyph can not be mapped to Unicode".
 //   - pdfjs issue11016_reduced.pdf: its Calibre-Medium subset binds code 31 to
 //     f_f, and veraPDF reports it.
-//   - govdocs thread_000_000859.pdf: binds code 1 to a71 on an unembedded
+//   - govdocs/pdf thread_000_000859.pdf: binds code 1 to a71 on an unembedded
 //     ZapfDingbats, and veraPDF reports nothing.
 func TestType1Unicode_TeXNamesAreNotAGL(t *testing.T) {
 	t.Parallel()

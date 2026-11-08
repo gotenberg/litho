@@ -137,7 +137,7 @@ type inlineImageBytes struct {
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu: 544 pages of 73 files paint an inline image,
+//   - govdocs/pdf, pdfjs, pdfcpu: 544 pages of 73 files paint an inline image,
 //     and every whole-page and centred-quarter redaction of them was refused
 //     over it. Blanked in place, 252 of those 1088 redactions succeed, over
 //     8842 inline images: each output passes qpdf --check, keeps no text in
@@ -146,7 +146,7 @@ type inlineImageBytes struct {
 //   - pdfjs issue14256.pdf writes /W and /Width in one image and
 //     issue10388_reduced.pdf draws its image through a form: the only two
 //     files still refused over an inline image.
-//   - govdocs, pdfjs: 2254 inline images name an indexed space over
+//   - govdocs/pdf, pdfjs: 2254 inline images name an indexed space over
 //     DeviceRGB, 2253 of them through a /ColorSpace resource, and no other
 //     indexed base occurs.
 func blankInlineImage(
@@ -444,7 +444,7 @@ func blankInlineIndexed(
 //
 // # Corpus evidence
 //
-//   - litho/pdf, pdfcpu, pdfjs, govdocs: 10 inline images refused a region
+//   - litho/pdf, pdfcpu, pdfjs, govdocs/pdf: 10 inline images refused a region
 //     between their sample centres in the redact-render scenarios, run on
 //     the source and again on its p1-quarter output. One no longer does:
 //     govdocs thread_200_200184, the p1-band on the p1-quarter output, meets

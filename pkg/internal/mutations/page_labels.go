@@ -79,13 +79,13 @@ func (l pageLabels) at(index int) pageLabel {
 //
 //   - All corpora: 520 files carry /PageLabels, 462 govdocs, 44 pdfjs, 13
 //     pdfcpu and 1 pdf20, and pdf.js reads labels from 518 of them.
-//   - pdfjs issue16114.pdf, a range starting at 0, and govdocs
+//   - pdfjs issue16114.pdf, a range starting at 0, and govdocs/pdf
 //     thread_300_300234.pdf, a range that is no dictionary: pdf.js shows
 //     their page numbers.
-//   - govdocs thread_200_200788.pdf, thread_400_400141.pdf and
+//   - govdocs/pdf thread_200_200788.pdf, thread_400_400141.pdf and
 //     thread_400_400580.pdf: no range at page index 0, and pdf.js shows the
 //     pages before the first one with an empty label, as qpdf does.
-//   - govdocs thread_100_100556.pdf: its one range is keyed -2, and pdf.js
+//   - govdocs/pdf thread_100_100556.pdf: its one range is keyed -2, and pdf.js
 //     shows each of its three pages with an empty label.
 func readPageLabels(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict, count int) pageLabels {
 	treeObj, has := catalog["PageLabels"]

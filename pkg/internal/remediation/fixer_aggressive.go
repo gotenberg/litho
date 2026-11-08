@@ -588,7 +588,7 @@ func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) error {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100877.pdf: page 4's /Contents is a reference to an
+//   - govdocs/pdf thread_100_100877.pdf: page 4's /Contents is a reference to an
 //     array of 8 streams, and the first repair to rewrite that page, the
 //     inline image one, wrote the reference to its new stream as the value of
 //     the array's object. qpdf read the page's content as an integer and

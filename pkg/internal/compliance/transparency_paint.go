@@ -457,7 +457,7 @@ func resolvedNumber(ctx context.Context, doc *document.Document, obj ast.PdfObje
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300345.pdf: an ExtGState naming /Compatible, which
+//   - govdocs/pdf thread_300_300345.pdf: an ExtGState naming /Compatible, which
 //     veraPDF reports under 6.2.10 t2 on a page with no group.
 func blendIsTransparency(ctx context.Context, doc *document.Document, obj ast.PdfObject) bool {
 	if obj == nil {

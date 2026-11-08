@@ -900,16 +900,16 @@ func projectQuad(q [4][2]float64, a [2]float64) (lo, hi float64) {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300873, thread_400_400390: a background 1 sample wide
+//   - govdocs/pdf thread_300_300873, thread_400_400390: a background 1 sample wide
 //     and 9004 high stretched over the page. A first redaction blanks the
 //     samples whose centres it covers, which paint the page's full height, and
 //     a second region on them below or above that centre line refused.
-//   - govdocs thread_300_300227, pdfjs bug857031: the p1-band blanks an image
+//   - govdocs/pdf thread_300_300227, pdfjs bug857031: the p1-band blanks an image
 //     at one placement and meets another between its centres. thread_300_300227
 //     stops at a later refusal (a structure element); bug857031 succeeds
 //     since the write-time check reads its placements by this rule too
 //     ([copiedPlacementLeftAsIs]).
-//   - litho/pdf, pdfcpu, pdfjs, govdocs: of 27 such refusals, 21 in the
+//   - litho/pdf, pdfcpu, pdfjs, govdocs/pdf: of 27 such refusals, 21 in the
 //     redact-render scenarios and 6 in them run again after a lossy
 //     p1-quarter, those 3 pass this check and 24 stand, 10 of them inline
 //     images, which [inlineCoverageError] brings to this check.

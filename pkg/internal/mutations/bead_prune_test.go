@@ -69,7 +69,7 @@ func articleThreadPDF(t *testing.T) []byte {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100184.pdf: held 3649 bytes of its deleted page
+//   - govdocs/pdf thread_100_100184.pdf: held 3649 bytes of its deleted page
 //     through a bead left in the ring.
 func TestDeletePagesSplicesArticleBeads(t *testing.T) {
 	t.Parallel()

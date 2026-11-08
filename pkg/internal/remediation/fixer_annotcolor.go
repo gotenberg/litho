@@ -88,7 +88,7 @@ func matchAnnotColor(v compliance.Violation) bool {
 //     output-intent adds clears it from 22 of them, 19 in aggressive mode, and
 //     the fixer from the other 20, whose content needs a CMYK intent. Neither
 //     moves another rule on either validator.
-//   - govdocs thread_400_400575, pdfjs bug1899804, bug921760, issue13915,
+//   - govdocs/pdf thread_400_400575, pdfjs bug1899804, bug921760, issue13915,
 //     issue14105 and stamps: output-intent installs a CMYK intent in the first
 //     round and an sRGB one in the second, at PDF/A-1a and 1b in both modes.
 //     Acting in the first round dropped their annotation colours and cleared

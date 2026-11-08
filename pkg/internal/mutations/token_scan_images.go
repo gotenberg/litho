@@ -51,7 +51,7 @@ func isImageXObjectDict(dict ast.PdfDict) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu, litho/pdf, redacting page 1 whole, its centred
+//   - govdocs/pdf, pdfjs, pdfcpu, litho/pdf, redacting page 1 whole, its centred
 //     quarter and a band (7,692 redactions): the data of an image held a
 //     surviving copy in 114 refusals with ErrRedactionIncomplete, 89 govdocs,
 //     22 pdfjs, 3 pdfcpu, none litho. Skipping it lets 49 through (32, 16,
@@ -60,13 +60,13 @@ func isImageXObjectDict(dict ast.PdfDict) bool {
 //   - pdfcpu FOSDEM14_HPC_devroom_14_GoCUDA.pdf, the quarter: the one
 //     redaction that moves to another refusal, the pixel check's, over 3
 //     pixels at the region's edge it had not reached before.
-//   - govdocs, pdfjs, pdfcpu: of 1,464 matches in JPEG images, none lay in
+//   - govdocs/pdf, pdfjs, pdfcpu: of 1,464 matches in JPEG images, none lay in
 //     a comment or application segment. 6 lay in entropy-coded bytes, and
 //     the other 1,458 spell nothing in the stored bytes: the scan matched
 //     them in the samples it decoded. Raw-sample (Flate, LZW) and JPX images
 //     held 46 and 49 more.
 //   - pdfjs issue9367.pdf: an attached PDF whose JPEG samples spelled "EUR".
-//   - govdocs, timed back to back at load 10: the scan decoded every image,
+//   - govdocs/pdf, timed back to back at load 10: the scan decoded every image,
 //     so Redact and WriteTo over 3,273 redactions took 510 s instead of
 //     1,024 s, the 95th percentile 504 ms instead of 1,153.
 func (w *scanWalk) imageDataSkipped(objNum int, stream ast.PdfStream) bool {

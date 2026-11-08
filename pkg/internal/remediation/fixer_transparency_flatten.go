@@ -27,7 +27,7 @@ const FlattenFixer = "transparency-flatten"
 //
 // # Corpus evidence
 //
-//   - govdocs (34 files): the PDF/A-1b outputs weigh 177.2 MB with every
+//   - govdocs/pdf (34 files): the PDF/A-1b outputs weigh 177.2 MB with every
 //     composite lossless and 162.9 MB with photographic ones as JPEG, 8 files
 //     holding one (thread_300_300860 17556952 -> 4109245 bytes); the sources
 //     weigh 45.5 MB. Most of the rest was whole pages mixing photographs with
@@ -38,7 +38,7 @@ const FlattenFixer = "transparency-flatten"
 //     or in poppler 26.09.0.
 //   - verapdf: 23 of 522 files hold a JPEG composite, and no output draws
 //     apart from its source that did not before.
-//   - govdocs (34 files): with the JPEG tiles drawn over one lossless
+//   - govdocs/pdf (34 files): with the JPEG tiles drawn over one lossless
 //     underlay rather than beside lossless tiles (imagetiles.Encoder.Tiles),
 //     the outputs weigh 135.5 MB, 6 of them change (thread_000_000737 20.3
 //     -> 21.1 MB), and veraPDF 1.30.2 reports the same rule set on each.
@@ -83,7 +83,7 @@ func flattenedAny(lines []string) bool {
 //
 // # Corpus evidence
 //
-//   - verapdf (522 files), litho (20) and govdocs (34), the files litho finds
+//   - verapdf (522 files), litho (20) and govdocs/pdf (34), the files litho finds
 //     ISO 19005-1, 6.4 transparency in: over their PDF/A-1a and PDF/A-1b
 //     remediations, default and aggressive, veraPDF 1.30.2 and litho report on
 //     each output the rule set the opaque normalization alone left, file by
@@ -97,7 +97,7 @@ func flattenedAny(lines []string) bool {
 //     outputs like the sources; in 6-2-10-t06-fail-c and its copy, a Darken
 //     pattern of overlapping tiles, litho draws the output as the source at
 //     300 dpi, and poppler draws the source apart from litho.
-//   - litho/pdf flattentext_2b and govdocs thread_000_000146, thread_000_000340,
+//   - litho/pdf flattentext_2b and govdocs/pdf thread_000_000146, thread_000_000340,
 //     thread_200_200744 and thread_400_400019: the integrity probe refused
 //     their flattened outputs, text at constant alpha 0 now invisible and up
 //     to 90 images of a page composited, and the writer fell back to the

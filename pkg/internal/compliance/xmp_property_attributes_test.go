@@ -25,7 +25,7 @@ func structComplaint(got []Violation) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300116.pdf: writes <exif:Flash exif:Fired="False"
+//   - govdocs/pdf thread_300_300116.pdf: writes <exif:Flash exif:Fired="False"
 //     .../> in one packet and the same struct with sub-elements in another.
 //     litho read the first as plain text and reported a value-type violation
 //     for it; veraPDF, whose own SchemasDefinition types exif:Flash as

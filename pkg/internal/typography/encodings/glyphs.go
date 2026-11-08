@@ -402,9 +402,9 @@ var texMathGlyphs = map[string]rune{
 //
 // # Corpus evidence
 //
-//   - govdocs thread_300_300511.pdf, pdfjs issue13915.pdf: CMMI "lscript"
+//   - govdocs/pdf thread_300_300511.pdf, pdfjs issue13915.pdf: CMMI "lscript"
 //     read as nothing where the page shows ℓ, and PDF.js reads the code, "`".
-//   - govdocs thread_300_300504.pdf, thread_300_300849.pdf,
+//   - govdocs/pdf thread_300_300504.pdf, thread_300_300849.pdf,
 //     thread_400_400302.pdf, thread_400_400393.pdf, pdfjs issue13915.pdf:
 //     CMMI "epsilon1" read as nothing where the page shows ϵ.
 //   - pdfcpu pkg_testdata__ECSTR11-01.pdf, pkg_testdata__schmager_plateau10.pdf:
@@ -480,13 +480,13 @@ var texGlyphList = map[string]rune{
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200424.pdf: the AccTimesItal program's built-in
+//   - govdocs/pdf thread_200_200424.pdf: the AccTimesItal program's built-in
 //     encoding names code 0xCA "nbspace", which the remediated /ToUnicode
 //     mapped to U+00CA, Ê, before it read the name.
 //   - pdfjs issue11385.pdf: three Helvetica /Differences arrays name code
 //     0xAD "sfthyphen", which the remediated /ToUnicode mapped to the
 //     standard encoding's U+203A, ›, before it read the name.
-//   - govdocs, pdfjs: the nine other files whose uncompressed bytes name one
+//   - govdocs/pdf, pdfjs: the nine other files whose uncompressed bytes name one
 //     of them keep their violations and remediated output at all 13 levels.
 //   - All corpora: the five text corpora extract byte-identical text.
 var aglAliases = map[string]rune{

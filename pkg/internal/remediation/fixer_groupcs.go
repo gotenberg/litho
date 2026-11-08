@@ -124,7 +124,7 @@ func flaggedPages(violations []compliance.Violation, flags func(compliance.Viola
 //     round, default and aggressive alike, and one round now repairs them to
 //     the same residual: 67 verapdf, 45 pdfjs, 9 govdocs and 9 pdfcpu files.
 //     Runs taking more than one round fell from 149 to 19.
-//   - govdocs thread_000_000163: its source fails 6.2.10 t2 on one page, and
+//   - govdocs/pdf thread_000_000163: its source fails 6.2.10 t2 on one page, and
 //     four pages blend in an ICCBased space. Its PDF/A-2b remediation took two
 //     rounds and left seven pages failing 6.2.10 t2; one round now leaves
 //     none, and veraPDF 1.30 passes the output.

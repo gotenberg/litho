@@ -70,7 +70,7 @@ const redactRenderSelfTolerance = 16
 //     removed (the fault b291dd6b fixed): the band and quarter scenarios
 //     fail on litho's half with 3,120 and 528 faded pixels over flat areas,
 //     where the render tolerance read 0.
-//   - pdfjs issue12752, govdocs thread_200_200163, pdfcpu
+//   - pdfjs issue12752, govdocs/pdf thread_200_200163, pdfcpu
 //     FOSDEM14_HPC_devroom_14_GoCUDA page 2: 2 to 1,497 pixels per scenario
 //     move past 16 levels at the edges of hairlines and glyphs the image
 //     samples at a point, none over a flat area.
@@ -101,7 +101,7 @@ const redactRenderFallbackTolerance = redactRenderSelfTolerance
 //     interpolation_spill (480 on the band, 2,300 on each quarter). Under
 //     the redaction reading the blank renders black and every scenario
 //     passes with no interpolation spill.
-//   - litho/pdf, pdfcpu, pdfjs, govdocs: 1,911 scenarios in the cell's sample,
+//   - litho/pdf, pdfcpu, pdfjs, govdocs/pdf: 1,911 scenarios in the cell's sample,
 //     fallback scenarios included; the reading changes litho's half of
 //     cmykintent_2b's three alone.
 //   - litho/pdf, pdfjs: the extra render took litho's half from 84 and 68
@@ -375,7 +375,7 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //
 // # Corpus evidence
 //
-//   - litho/pdf, pdfcpu, pdfjs, govdocs: 600, 101, 178 and 170 scenarios
+//   - litho/pdf, pdfcpu, pdfjs, govdocs/pdf: 600, 101, 178 and 170 scenarios
 //     checked in about 25, 11, 15 and 40 seconds (4 workers).
 //   - litho/pdf directstream_2b: a band over text a content stream written
 //     inline in /Contents draws reported success and removed nothing.
@@ -387,7 +387,7 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //     clip, and the fill it masked painted as a rectangle outside the band.
 //   - pdfcpu WaldenFull: a cover image's soft mask kept its lettering
 //     readable after a whole-page redaction.
-//   - govdocs thread_400_400756 page 2: a table rule along a region's edge
+//   - govdocs/pdf thread_400_400756 page 2: a table rule along a region's edge
 //     drew grey across the table once split into one path.
 //   - litho/pdf iccv4space_1b, megafont_2b, multipage_2b: image_spill, a
 //     2 by 2 image's samples, one of them interpolated, reaching past the
@@ -404,17 +404,17 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //   - pdfjs bitmap-halftone-skip-grid-template2, bitmap-refine-tpgron,
 //     issue17871_top_right: JBIG2 regions poppler garbles, which change in
 //     poppler once redaction re-encodes them from litho's decode.
-//   - govdocs thread_000_000372 p1-quarter: poppler's 1 changed pixel outside
+//   - govdocs/pdf thread_000_000372 p1-quarter: poppler's 1 changed pixel outside
 //     the region is a decoder difference on a CMYK ICCBased JPEG blanked in a
 //     copy, which stores litho's decode while poppler decodes the original.
 //     litho's half sees 0. Accepted as a mismatch. The PDF has no render
 //     golden, so it lies outside the cell's sample and the gate never runs
 //     it: the pixel shows with every govdocs PDF in scope.
-//   - litho/pdf, pdfcpu, pdfjs, govdocs: 70, 20, 20 and 6 fallback scenarios
+//   - litho/pdf, pdfcpu, pdfjs, govdocs/pdf: 70, 20, 20 and 6 fallback scenarios
 //     checked, rasterising 112, 55, 20 and 17 units; the cell's wall time
 //     went from about 51, 20, 46 and 65 seconds to 45, 24, 85 and 121
 //     (4 workers, timed back to back on a machine at load 25 to 60).
-//   - litho/pdf, pdfcpu, pdfjs, govdocs: 114 scenarios the default mode found
+//   - litho/pdf, pdfcpu, pdfjs, govdocs/pdf: 114 scenarios the default mode found
 //     incomplete stayed incomplete with the fallback, every one of them.
 //   - litho/pdf usedcs_2b: a shading painted over the whole page hid the
 //     heading drawn before it, and the fallback drew its image again over
@@ -440,7 +440,7 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //     image holds them. PDFium 4.30.0 draws every one of those pixels the
 //     same before and after, and changes no pixel outside the region of
 //     issue12752: poppler-side, they stay mismatches.
-//   - govdocs thread_200_200427 whole page: 2 pixels inside the region at
+//   - govdocs/pdf thread_200_200427 whole page: 2 pixels inside the region at
 //     the hairline tip of the clip a blanked image is drawn through, which
 //     poppler draws at 46 to 68 where litho draws 148 to 175 and PDFium 153
 //     to 178: poppler-side, a mismatch.

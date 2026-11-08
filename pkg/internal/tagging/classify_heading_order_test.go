@@ -47,7 +47,7 @@ func equal(a, b []int) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000337.pdf: did exactly that.
+//   - govdocs/pdf thread_000_000337.pdf: did exactly that.
 //   - All corpora: auto-tagging introduced 7.4.2 test 1 into 35 files that did
 //     not have it.
 func TestHeadingLevelsFollowReadingOrder(t *testing.T) {

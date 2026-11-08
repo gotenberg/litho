@@ -21,7 +21,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000578.pdf: footnote marks set with 4.9 Ts read
+//   - govdocs/pdf thread_000_000578.pdf: footnote marks set with 4.9 Ts read
 //     glued to the word before them while the rise was ignored.
 //   - All corpora: honouring the rise alone makes words match PDF.js on 7
 //     more files and on none fewer.
@@ -199,7 +199,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 //   - litho/pdf cmaps_2b.pdf, type0nodesc_2b.pdf: a CMap name outside Table 118
 //     and Type 0 fonts with no CIDFont stay unplaced, and redacting their
 //     page still refuses.
-//   - govdocs thread_300_300034.pdf pages 29 and 30: the unmapped <0004>
+//   - govdocs/pdf thread_300_300034.pdf pages 29 and 30: the unmapped <0004>
 //     codes inside "<" and ">" left gaps read as word spaces, "< Population
 //     Viability >". Placed, they cover their width, and the line reads
 //     "<Population Viability>", as PDF.js reads it.
@@ -273,7 +273,7 @@ func type3XSign(font *Font) float64 {
 //
 //   - pdfjs bug1199237.pdf: "Éditorial" is drawn a second time through a Tm
 //     of [1 0 0 -1], a reflection hanging below the word.
-//   - govdocs thread_400_400243.pdf: a Type 3 font with an identity
+//   - govdocs/pdf thread_400_400243.pdf: a Type 3 font with an identity
 //     /FontMatrix shown through a Tm that flips Y inks below the baseline;
 //     rendered with poppler, 635 of the 657 runs whose side the rendering
 //     settles have their ink there.
@@ -366,16 +366,16 @@ const spaceCharCode = 0x20
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200612.pdf, thread_200_200408.pdf: TeX text fonts
+//   - govdocs/pdf thread_200_200612.pdf, thread_200_200408.pdf: TeX text fonts
 //     set "fi" at code 0x0C and "fl" at 0x0D with no glyph name litho or
 //     PDF.js maps. PDF.js reads "brie y" and "Veri cation"; litho keeps the
 //     words whole, "briey" and "Verication", by decision.
-//   - pdfjs bug810214.pdf, TAMReview.pdf, govdocs thread_400_400235.pdf,
+//   - pdfjs bug810214.pdf, TAMReview.pdf, govdocs/pdf thread_400_400235.pdf,
 //     thread_400_400786.pdf and 18 more: fonts that give codes 0x09 to 0x0D
 //     glyph names no table maps, which PDF.js reads as word spaces. Reading them so would cut the space disagreements with
 //     PDF.js on files whose characters match from 7160 to 2915; litho
 //     keeps them as glyphs with no character by decision.
-//   - govdocs thread_400_400235.pdf, thread_400_400786.pdf, pdfjs
+//   - govdocs/pdf thread_400_400235.pdf, thread_400_400786.pdf, pdfjs
 //     TAMReview.pdf: subset fonts whose /Differences arrays name their glyphs
 //     by index ("g55", "G40") give code 32 a name no table maps. The rule
 //     reads those codes as the word spaces they separate; it reaches no
@@ -384,7 +384,7 @@ const spaceCharCode = 0x20
 //     <00> to <FF> one byte long and <0100> to <FFFF> two, then maps <0029>
 //     and the other two-byte codes below <0100>. Split by that codespace,
 //     "Hello" read "⤀䘀䴀䴀P". No other file of the six text corpora moves.
-//   - govdocs thread_300_300034.pdf pages 29 and 30: <0004> codes under a
+//   - govdocs/pdf thread_300_300034.pdf pages 29 and 30: <0004> codes under a
 //     /ToUnicode whose only codespace range is <0006>, read a byte at a
 //     time, put "ЀЀЀ" around "Population Viability".
 //   - pdfjs issue18208.pdf: simple fonts whose /ToUnicode CMaps declare a
@@ -606,7 +606,7 @@ func type0TableRune(font *Font, data []byte) (rune, bool) {
 //
 // # Corpus evidence
 //
-//   - pdfjs text_clip_cff_cid.pdf, bug1749563.pdf, issue3584.pdf, govdocs
+//   - pdfjs text_clip_cff_cid.pdf, bug1749563.pdf, issue3584.pdf, govdocs/pdf
 //     thread_000_000208.pdf, thread_000_000149.pdf: every mode-7 run fills a
 //     colour or an image through its glyphs and shows, as poppler draws it.
 func textIsInvisible(state *graphics.State) bool {
@@ -630,7 +630,7 @@ func textIsInvisible(state *graphics.State) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200152.pdf page 1: keycap frames stroked black in
+//   - govdocs/pdf thread_200_200152.pdf page 1: keycap frames stroked black in
 //     mode 1 with a white fill, judged white by the fill, now read beside
 //     their digits as on the rest of the page ("■2", "■#"), as pdftotext
 //     reads them. No other default reading of the seven corpora changes.

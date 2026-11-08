@@ -132,7 +132,7 @@ func (q *queuedFont) describe() string {
 //
 // # Corpus evidence
 //
-//   - govdocs: the 785 files that show an unembedded font, remediated with
+//   - govdocs/pdf: the 785 files that show an unembedded font, remediated with
 //     the Liberation 2.1.5 and URW base35 families at PDF/A-2b and PDF/A-1b:
 //     4124 of the 4133 programs embedded are subsets, 7 stay whole for a
 //     form's default resources and 2 for a descriptor shared with a font
@@ -143,11 +143,11 @@ func (q *queuedFont) describe() string {
 //     the 68 programs embedded are subsets, 3 stay whole for a form's default
 //     resources, no rule gains a finding, and the 54 outputs that embed a
 //     program fall from 3.4 to 1.2 MB.
-//   - govdocs thread_000_000187.pdf, thread_400_400566.pdf and
+//   - govdocs/pdf thread_000_000187.pdf, thread_400_400566.pdf and
 //     thread_000_000336.pdf: give one program to many fonts, and grew by up
 //     to 718 KB when each font took a subset of its own, which is why the
 //     fonts given one program share one subset.
-//   - govdocs: 40 of those outputs judged by veraPDF 1.30.2 at PDF/A-2b and
+//   - govdocs/pdf: 40 of those outputs judged by veraPDF 1.30.2 at PDF/A-2b and
 //     PDF/A-1b, and 20 remediated at PDF/UA-1, fail every rule as often as
 //     with the whole programs. pdf.js places the 15393 text items of the
 //     first three pages of the 40 PDF/A-2b outputs where it placed them with
@@ -263,7 +263,7 @@ func (e *fontEmbedder) sharingWhole(ctx context.Context, members []*queuedFont, 
 //
 // # Corpus evidence
 //
-//   - govdocs: the 1091 files remediated with the system fonts at PDF/A-2b:
+//   - govdocs/pdf: the 1091 files remediated with the system fonts at PDF/A-2b:
 //     18 outputs change, each giving a TrueType font a subset of its own, and
 //     grow from 24.0 to 24.9 MB, 641 KB of it thread_300_300655.pdf, whose
 //     fonts each carry their own /Differences (11 to 59 program streams). No
@@ -272,7 +272,7 @@ func (e *fontEmbedder) sharingWhole(ctx context.Context, members []*queuedFont, 
 //     now pass, and thread_000_000153.pdf loses the 2 and 2 its Helvetica
 //     over MacRomanEncoding and over WinAnsiEncoding with /Differences
 //     caused.
-//   - govdocs: those 18 files with whole programs grow from 43 to 68 MB
+//   - govdocs/pdf: those 18 files with whole programs grow from 43 to 68 MB
 //     when each mapping takes a copy of the program, 12.3 to 33.0 MB of it
 //     thread_300_300655.pdf, which is why a whole program stays shared.
 //   - litho/pdf: no output of the 139 files changes.
@@ -335,7 +335,7 @@ func (e *fontEmbedder) codeMapping(ctx context.Context, plan *embedPlan) string 
 //
 // # Corpus evidence
 //
-//   - govdocs: the 1091 files remediated with the system fonts at PDF/A-2b:
+//   - govdocs/pdf: the 1091 files remediated with the system fonts at PDF/A-2b:
 //     24 outputs change, 17 of them among the 18 the split by mapping
 //     changed, and grow by 3 KB in all. TrueType program streams that fonts
 //     of different direct encodings share fall from 12 to 0, all of them in
@@ -343,7 +343,7 @@ func (e *fontEmbedder) codeMapping(ctx context.Context, plan *embedPlan) string 
 //     deduplication, which merged one pair of alike subsets in
 //     thread_300_300224.pdf; and from 38 to 0 with whole programs, which stay
 //     one stream each (50.7 MB over the 24 outputs).
-//   - govdocs: veraPDF 1.30.2 over those 24 outputs judges 5 better and none
+//   - govdocs/pdf: veraPDF 1.30.2 over those 24 outputs judges 5 better and none
 //     worse, 6.2.11.4.1 t2 falling from 16 to 7 and 6.2.11.5 from 11 to 2,
 //     and 12 pass instead of 8, alike with stream deduplication; with whole
 //     programs it judges 13 better and none worse, 6.2.11.4.1 t2 falling

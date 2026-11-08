@@ -36,7 +36,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - All corpora but pdf20, verapdf and facturx (govdocs, pdfjs, pdfcpu,
+//   - All corpora but pdf20, verapdf and facturx (govdocs/pdf, pdfjs, pdfcpu,
 //     litho), the redact-render scenarios with and without the raster
 //     fallback: the 2,640 redactions that blank an image write 2,874.2 MB
 //     against 3,059.2 MB plain (govdocs 1,410.5 against 1,464.9, pdfjs
@@ -48,7 +48,7 @@ import (
 //     best compression saves 4 % more at eight times the time; the gap to the
 //     source is the JPEG 2000 coder's loss, which a lossless encoding
 //     cannot take. pdfjs issue12841_reduced, the band: 17.6 MB against 31.4 MB.
-//   - govdocs thread_200_200683, the whole page: each all-black picture's
+//   - govdocs/pdf thread_200_200683, the whole page: each all-black picture's
 //     predicted data was 15 bytes smaller and its /DecodeParms 40 bytes
 //     larger, which grew the file before the entry was counted.
 func encodeBlankedSamples(ctx context.Context, samples []byte, width, comps, bpc int, photo bool) ([]byte, ast.PdfDict, error) {

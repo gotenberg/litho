@@ -13,7 +13,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_000_000838.pdf: maps "Heading 1" to "Heading 5" onto H1
+//   - govdocs/pdf thread_000_000838.pdf: maps "Heading 1" to "Heading 5" onto H1
 //     to H5 through its role map and skips levels; veraPDF reports each skip,
 //     while litho read the names as written and found no heading at all.
 func TestHeadingNesting_ByStandardType(t *testing.T) {

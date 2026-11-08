@@ -109,7 +109,7 @@ type metadataMismatch struct {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100981.pdf: has a 1024-byte all-NUL Title, which
+//   - govdocs/pdf thread_100_100981.pdf: has a 1024-byte all-NUL Title, which
 //     PDF.js surfaces as a NULL-padded field while litho's
 //     scanRawInfoFields fallback recovers a real value, so a golden that is
 //     empty after stripping undefined controls is skipped.

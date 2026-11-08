@@ -26,7 +26,7 @@ import (
 // # Corpus evidence
 //
 //   - All corpora, 5171 files: the largest marked-content id is 12522.
-//   - govdocs thread_000_000314.pdf: carries that largest id.
+//   - govdocs/pdf thread_000_000314.pdf: carries that largest id.
 const corpusMaxMCID = 12522
 
 // parentTreeMCIDPDF builds a structure tree whose single element registers one

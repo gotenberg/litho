@@ -89,7 +89,7 @@ const maxOutlineFixWalk = 10000
 //   - verapdf PDF_UA-1__7.15-t01-fail-a.pdf: its outline opens two page objects
 //     outside the page tree, which it keeps, and fails 8.8 test 2 four times
 //     on both tools.
-//   - govdocs thread_000_000904.pdf, pdfjs issue3214.pdf: the two files that
+//   - govdocs/pdf thread_000_000904.pdf, pdfjs issue3214.pdf: the two files that
 //     run a GoTo action after another action through /Next, a page's /AA /O
 //     Named action and an outline item's GoTo action. Remediated to PDF/UA-2,
 //     default and aggressive, each output kept that GoTo action without /SD,

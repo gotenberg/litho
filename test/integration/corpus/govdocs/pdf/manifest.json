@@ -1,6 +1,6 @@
 {
-  "name": "govdocs",
-  "source": "govdocs",
+  "name": "govdocs/pdf",
+  "source": "govdocs/pdf",
   "pdf_root": "pdfs",
   "profile_mode": "auto",
   "profiles": [

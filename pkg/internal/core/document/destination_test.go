@@ -162,7 +162,7 @@ func buildGenerationPDF(gen int) []byte {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400594.pdf: holds page 12 as "40 2 R" and sends eight
+//   - govdocs/pdf thread_400_400594.pdf: holds page 12 as "40 2 R" and sends eight
 //     outline entries to "40 0 R". Every one of them reported no page, while
 //     remediating the same file emitted a working outline from the same input.
 func TestResolveDestinationPageIgnoresTheGeneration(t *testing.T) {

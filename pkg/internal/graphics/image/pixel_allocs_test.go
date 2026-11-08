@@ -15,7 +15,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_200_200293.pdf: 23 page-sized 1-bit scans took 18
+//   - govdocs/pdf thread_200_200293.pdf: 23 page-sized 1-bit scans took 18
 //     seconds to decode and score, 5 of them in Set and the colour model
 //     behind it, so the gate's 20-second budget ran out and none of its
 //     images was scored.

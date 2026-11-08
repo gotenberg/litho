@@ -57,7 +57,7 @@ func webCapturePDF(t *testing.T) []byte {
 //
 // # Corpus evidence
 //
-//   - govdocs thread_400_400742.pdf: held 730 bytes of a deleted page through
+//   - govdocs/pdf thread_400_400742.pdf: held 730 bytes of a deleted page through
 //     a content set after every other path had been closed.
 func TestDeletePagesPrunesWebCaptureSets(t *testing.T) {
 	t.Parallel()

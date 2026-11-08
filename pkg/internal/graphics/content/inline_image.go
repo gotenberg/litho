@@ -93,7 +93,7 @@ const inlineImageCheckInterval = 64 * 1024
 //   - All corpora: ending the data where veraPDF does changes what compliance
 //     reports on 3 files at PDF/A-1b and PDF/A-2b, veraPDF files at their own
 //     profile, each toward veraPDF's findings.
-//   - govdocs thread_200_200176.pdf: an image on page 16 ends at an EI inside
+//   - govdocs/pdf thread_200_200176.pdf: an image on page 16 ends at an EI inside
 //     its data, and the 10 undefined operators veraPDF reports after it, the
 //     last the EI litho took for its end, were read as data.
 //   - pdfjs bug1077808.pdf: the 2 undefined operators veraPDF reports were

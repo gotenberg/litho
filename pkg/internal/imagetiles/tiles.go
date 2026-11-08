@@ -42,7 +42,7 @@ const MinPhotoColors = 256
 //
 // # Corpus evidence
 //
-//   - govdocs, PDF/A-1b remediation of the 34 files it flattens: the outputs
+//   - govdocs/pdf, PDF/A-1b remediation of the 34 files it flattens: the outputs
 //     weigh 163.4 MB with every mixed composite lossless, and 150.9, 138.5,
 //     134.2 and 133.5 MB with the grid at 512, 256, 128 and 64 pixels, 64
 //     growing 4 files, measured before the units under a region and filled
@@ -266,7 +266,7 @@ func (e Encoder) Tiles(ctx context.Context, samples []byte, px, inner image.Rect
 //   - pdfjs, redact-render with the fallback at q 90: poppler's outside
 //     check counts 158 to 1063 changed pixels on the 8 scenarios that differ
 //     from lossless, against 239 to 1261 as abutting tiles.
-//   - litho/pdf, govdocs and pdfjs flattened at q 90 against lossless, the 69
+//   - litho/pdf, govdocs/pdf and pdfjs flattened at q 90 against lossless, the 69
 //     pages of the first 3 of the 66 files that hold JPEG tiles, by the
 //     render cell's pixel rule: as abutting tiles, PDFium drew 3886 and
 //     22286 pixels changed where no JPEG tile lies on 11 and 8 pages at 72

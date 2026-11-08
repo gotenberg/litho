@@ -34,9 +34,9 @@ var ua1HeaderRe = regexp.MustCompile(`^%PDF-1\.[0-7]$`)
 //   - verapdf PDF_A-2b__veraPDF_test_suite_6-1-2-t01-fail-b: writes the line
 //     "SomeData" before %PDF-1.7, and veraPDF passes 6.1 t1 on it, while
 //     litho, reading byte zero, reported it.
-//   - govdocs thread_200_200436.pdf: a blank line before %PDF-1.1, which
+//   - govdocs/pdf thread_200_200436.pdf: a blank line before %PDF-1.1, which
 //     veraPDF passes too.
-//   - verapdf PDF_A-1b__veraPDF_test_suite_6-1-2-t01-fail-a, govdocs
+//   - verapdf PDF_A-1b__veraPDF_test_suite_6-1-2-t01-fail-a, govdocs/pdf
 //     thread_100_100982.pdf and thread_100_100983.pdf, pdfjs issue11330.pdf:
 //     a space or binary bytes before %PDF- on the same line, which veraPDF
 //     reports.

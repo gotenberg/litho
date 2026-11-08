@@ -22,7 +22,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - govdocs thread_100_100631.pdf: maps /LI_Title to /LBody, and the list
+//   - govdocs/pdf thread_100_100631.pdf: maps /LI_Title to /LBody, and the list
 //     fixer wrapped that existing list body in a second LBody.
 func TestResolvedStructTypeFollowsRoleMap(t *testing.T) {
 	t.Parallel()
