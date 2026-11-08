@@ -470,6 +470,20 @@ func (p *painter) segment(t *box, b cborder, r compose.Rect, horizontal bool) {
 			{Kind: compose.LineTo, P: [3]compose.Point{z}},
 		}, Stroke: stroke}, r.Y, r.Y+r.Height, -1)
 	case css.Solid, css.BorderNone, css.BorderHidden:
+		if t.st.StrokeBorders {
+			// Writer strokes a collapsed cell border along its middle
+			// (css.Office.StrokeBorders).
+			a := compose.Point{X: r.X, Y: r.Y + r.Height/2}
+			z := compose.Point{X: r.X + r.Width, Y: a.Y}
+			w := r.Height
+			if !horizontal {
+				a = compose.Point{X: r.X + r.Width/2, Y: r.Y}
+				z = compose.Point{X: a.X, Y: r.Y + r.Height}
+				w = r.Width
+			}
+			p.emit(t, false, strokedLine(a, z, w, col), r.Y, r.Y+r.Height, -1)
+			return
+		}
 		fill(r, col)
 	}
 }

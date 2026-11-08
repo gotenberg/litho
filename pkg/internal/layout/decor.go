@@ -389,6 +389,20 @@ func (p *painter) border(b *box, st *css.Style, r compose.Rect, radii [4][2]floa
 	if !shown {
 		return
 	}
+	if st.StrokeBorders && radii == ([4][2]float64{}) {
+		shown = false
+		for s := range 4 {
+			if visible[s] && st.Border[s].Style == css.Solid {
+				c, _ := colorOf(st.Border[s].Color)
+				p.emit(b, false, strokedSide(css.Side(s), r, bd[s], c), r.Y, r.Y+r.Height, -1)
+				visible[s] = false
+			}
+			shown = shown || visible[s]
+		}
+		if !shown {
+			return
+		}
+	}
 	inner, iradii := insetRect(r, radii, bd)
 	ref := 0
 	for !visible[ref] {
@@ -630,4 +644,34 @@ func (p *painter) side(g *ditem, s css.Side, bdr css.Border, r compose.Rect, rad
 	case css.Solid, css.BorderNone, css.BorderHidden:
 		fill(ring(r, radii, inner, iradii), c)
 	}
+}
+
+// strokedSide returns the side s of the border box r, w points wide, as
+// Writer prints a solid border (css.Office.StrokeBorders): a line of colour
+// c stroked along the middle of the side, from one outer corner to the
+// other, at least css.MinBorderStroke wide, so that a raster draws a
+// border thinner than a pixel a pixel wide where a filled band would
+// average to grey.
+func strokedSide(s css.Side, r compose.Rect, w float64, c compose.Color) *compose.Path {
+	var a, z compose.Point
+	switch s {
+	case css.Top:
+		a, z = compose.Point{X: r.X, Y: r.Y + w/2}, compose.Point{X: r.X + r.Width, Y: r.Y + w/2}
+	case css.Bottom:
+		a, z = compose.Point{X: r.X, Y: r.Y + r.Height - w/2}, compose.Point{X: r.X + r.Width, Y: r.Y + r.Height - w/2}
+	case css.Left:
+		a, z = compose.Point{X: r.X + w/2, Y: r.Y}, compose.Point{X: r.X + w/2, Y: r.Y + r.Height}
+	default:
+		a, z = compose.Point{X: r.X + r.Width - w/2, Y: r.Y}, compose.Point{X: r.X + r.Width - w/2, Y: r.Y + r.Height}
+	}
+	return strokedLine(a, z, w, c)
+}
+
+// strokedLine returns the line from a to z stroked in c, w points wide and
+// at least css.MinBorderStroke, with butt caps.
+func strokedLine(a, z compose.Point, w float64, c compose.Color) *compose.Path {
+	return &compose.Path{Ops: []compose.PathOp{
+		{Kind: compose.MoveTo, P: [3]compose.Point{a}},
+		{Kind: compose.LineTo, P: [3]compose.Point{z}},
+	}, Stroke: &compose.Stroke{Color: c, Width: max(w, css.MinBorderStroke)}}
 }
