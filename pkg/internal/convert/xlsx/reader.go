@@ -63,8 +63,11 @@ type reader struct {
 	// space, in points, rounded to twips as LibreOffice measures them.
 	digitWidth, spaceWidth float64
 	cells                  int
-	warnings               []compose.Warning
-	warned                 map[string]bool
+	// doc is the document being read, which the charts' series read
+	// their values from when their part holds no cache.
+	doc      *sheet.Document
+	warnings []compose.Warning
+	warned   map[string]bool
 	// pictures caches decoded pictures by part name; pixels counts the
 	// pixels decoded against [maxTotalPixels].
 	pictures map[string]*layout.Picture

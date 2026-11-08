@@ -159,10 +159,9 @@ func (r *reader) chartOf(dir string, inline *odf.Element) *chart.Chart {
 
 // rangeValues returns the values of the cells the cell range address ref
 // names (ODF 1.3, Part 3, 9.2.2 and 19.67: "Sheet1.B2:Sheet1.B5", the
-// second cell taking the first's table when it names none), row by row,
-// at most chart.MaxPoints; nil when the address does not parse or names
-// no sheet of the document. A number is a number, a boolean 0 or 1, a
-// string or an error its text, and an absent cell an empty point.
+// second cell taking the first's table when it names none), as
+// sheet.ChartValues reads them; nil when the address does not parse or
+// names no sheet of the document.
 func (r *reader) rangeValues(ref string) []chart.Value {
 	a, b, two := strings.Cut(ref, ":")
 	from, ok := cellRef(a)
@@ -187,56 +186,7 @@ func (r *reader) rangeValues(ref string) []chart.Value {
 		return nil
 	}
 	rg := sheet.Range{FirstRow: min(from.row, to.row), FirstColumn: min(from.col, to.col), LastRow: max(from.row, to.row), LastColumn: max(from.col, to.col)}
-	var out []chart.Value
-	next := 0
-	for ri := rg.FirstRow; ri <= rg.LastRow; ri++ {
-		for next < len(sh.Rows) && sh.Rows[next].Index < ri {
-			next++
-		}
-		var row *sheet.Row
-		if next < len(sh.Rows) && sh.Rows[next].Index == ri {
-			row = &sh.Rows[next]
-		}
-		for col := rg.FirstColumn; col <= rg.LastColumn; col++ {
-			if len(out) >= chart.MaxPoints {
-				return out
-			}
-			out = append(out, chartValue(rowCell(row, col)))
-		}
-	}
-	return out
-}
-
-// rowCell returns the cell of row at column col, nil for none or a nil
-// row.
-func rowCell(row *sheet.Row, col int) *sheet.Cell {
-	if row == nil {
-		return nil
-	}
-	for i := range row.Cells {
-		if row.Cells[i].Column == col {
-			return &row.Cells[i]
-		}
-		if row.Cells[i].Column > col {
-			break
-		}
-	}
-	return nil
-}
-
-// chartValue turns a cell's value into a chart point.
-func chartValue(c *sheet.Cell) chart.Value {
-	if c == nil {
-		return chart.Value{}
-	}
-	switch c.Value.Kind {
-	case sheet.Number, sheet.Bool:
-		return chart.Num(c.Value.Number)
-	case sheet.Text, sheet.Error:
-		return chart.Value{Kind: chart.Text, Text: c.Value.Text}
-	case sheet.Empty:
-	}
-	return chart.Value{}
+	return sheet.ChartValues(sh, rg)
 }
 
 // tableName returns the table a cell address names, quoted or not,

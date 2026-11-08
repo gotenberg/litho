@@ -37,12 +37,41 @@ const maxDrawings = 4096
 // not spec-mandated: groups in groups rarely pass a few levels.
 const maxGroupDepth = 16
 
-// chartOf returns the chart of the chart part named part, the one place
-// the DrawingML chart reader plugs into. Until it does, the chart is the
-// empty placeholder, reported as not drawn.
+// chartOf reads the chart part named part through the DrawingML chart
+// reader, nil with a warning when it does not parse. The chart's warnings
+// become the document's, and its series read the sheets' cells through
+// [reader.rangeValues] when their part holds no cache.
 func (r *reader) chartOf(part string) *chart.Chart {
-	r.warn("unsupported-content", fmt.Sprintf("chart %s is not drawn", part))
-	return &chart.Chart{}
+	c, err := ooxml.ParseChart(r.ctx, r.pkg, part)
+	if err != nil {
+		r.warn("chart-malformed", fmt.Sprintf("chart %s does not parse and is left out: %v", part, err))
+		return nil
+	}
+	for _, w := range c.Warnings {
+		r.warn(w.Code, w.Message)
+	}
+	c.Resolver = r.rangeValues
+	return c
+}
+
+// rangeValues returns the values of the cells the formula ref names
+// ("Sheet1!$B$2:$B$5", "'My sheet'!$B$2:$B$5", or several areas in
+// parentheses separated by commas; ECMA-376 Part 1, 21.2.2.115 and
+// 18.17.2.3), each area as sheet.ChartValues reads it, in order; nil when
+// no area names a sheet of the workbook.
+func (r *reader) rangeValues(ref string) []chart.Value {
+	names, areas := sheetAreas(ref)
+	var out []chart.Value
+	for i, area := range areas {
+		for _, sh := range r.doc.Sheets {
+			if sh.Name != names[i] || names[i] == "" {
+				continue
+			}
+			out = append(out, sheet.ChartValues(sh, area)...)
+			break
+		}
+	}
+	return out
 }
 
 // drawing reads the drawing part the sheet's relationship id names

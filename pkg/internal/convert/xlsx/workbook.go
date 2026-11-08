@@ -20,6 +20,7 @@ type definedName struct {
 // workbook reads the workbook part root of main: its properties, its
 // defined names and its sheets in book order (ECMA-376 Part 1, 18.2.27).
 func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document) error {
+	r.doc = doc
 	if pr := root.Child(nsMain, "workbookPr"); pr != nil {
 		r.date1904 = boolAttr(pr, "date1904")
 	}
