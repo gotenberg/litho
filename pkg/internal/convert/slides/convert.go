@@ -84,7 +84,11 @@ func (b *builder) warn(code, msg string) {
 // page of another size than the slide shows the slide scaled down to fit,
 // never up, centred. The outline holds an entry per slide written, titled
 // with the slide's name, and the same entries again after them when notes
-// pages print, as Impress writes them. The structure tree holds a Sect
+// pages print, as Impress writes them. A notes page is Letter paper with
+// the notes page drawn at its top-left corner: a slide with notes in the
+// notes master's boxes with its shapes, any other in Impress's default
+// notes layout. A shape that jumps to a slide links to that slide's page.
+// The structure tree holds a Sect
 // per slide: the paragraphs of its text as P, its tables as Table, its
 // pictures as Figure.
 //
@@ -116,7 +120,13 @@ func (b *builder) warn(code, msg string) {
 // the line's text height. Numbers count per level across the body. A
 // text body that shrinks to fit tries Impress's scale levels in turn,
 // font sizes rounded to whole points, until the text fits; a growing one
-// stretches its box from its anchor.
+// stretches its box from its anchor. Unwrapped lines wider than the text
+// rectangle widen it, overflowing on the side the first paragraph's
+// alignment leaves free; a clipped body leaves out the lines past its
+// rectangle. Superscripts and subscripts are 58% of the size, moved by
+// their face's share of the size they give up in OpenDocument text, by 30%
+// up and 25% down in PresentationML text. Date and time fields show the
+// print date through their number format.
 //
 // # Not supported
 //
