@@ -176,7 +176,9 @@ type chartReader struct {
 	// inherits.
 	global textProps
 	// axes maps an axis ID to its index in the chart's axes.
-	axes   map[string]int
+	axes map[string]int
+	// crossBetween is each axis's c:crossBetween, "" when absent.
+	crossBetween []string
 	warned map[string]bool
 	// autoLines are the line series whose line takes the automatic
 	// colour.
@@ -255,6 +257,7 @@ func (p *chartReader) read(root *Element) {
 	if len(c.Groups) == 0 {
 		p.warn(CodeChartUnsupported, "the chart has no chart type the reader draws")
 	}
+	p.categoryPositions()
 	n := 0
 	for _, g := range c.Groups {
 		n += len(g.Series)
@@ -281,6 +284,40 @@ func (p *chartReader) read(root *Element) {
 	}
 	if ch.Child(NSChart, "dTable") != nil {
 		p.warn(CodeChartUnsupported, "a chart's data table is not drawn")
+	}
+}
+
+// categoryPositions decides whether each category axis puts its
+// categories between its ticks, as oox's AxisConverter does: from the
+// c:crossBetween of the value axis crossing it (ECMA-376 Part 1, 21.2.2.32),
+// else between for bar and line groups and on the ticks for the others; a
+// 3D bar group always between, a radar group never.
+func (p *chartReader) categoryPositions() {
+	done := map[int]bool{}
+	for _, g := range p.c.Groups {
+		x, y := g.XAxis, g.YAxis
+		if x < 0 || x >= len(p.c.Axes) || done[x] {
+			continue
+		}
+		a := p.c.Axes[x]
+		if a.Kind != chart.CategoryAxis && a.Kind != chart.DateAxis {
+			continue
+		}
+		done[x] = true
+		cb := ""
+		if y >= 0 && y < len(p.crossBetween) {
+			cb = p.crossBetween[y]
+		}
+		switch {
+		case g.ThreeD && g.Kind == chart.Bar:
+			a.BetweenCategories = true
+		case g.Kind == chart.Radar:
+			a.BetweenCategories = false
+		case cb != "":
+			a.BetweenCategories = cb == "between"
+		default:
+			a.BetweenCategories = g.Kind == chart.Bar || g.Kind == chart.Line
+		}
 	}
 }
 
@@ -768,6 +805,7 @@ func (p *chartReader) readAxes(pa *Element) {
 		}
 		p.axes[id] = len(p.c.Axes)
 		p.c.Axes = append(p.c.Axes, p.axis(e, kind))
+		p.crossBetween = append(p.crossBetween, childVal(e, "crossBetween"))
 	}
 }
 

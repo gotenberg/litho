@@ -143,7 +143,7 @@ func TestChartFromElement_Axes(t *testing.T) {
 		t.Fatalf("got %d axes", len(c.Axes))
 	}
 	cat, val := c.Axes[0], c.Axes[1]
-	if cat.Kind != chart.CategoryAxis || !cat.Reverse || cat.MajorTicks != chart.TickOut || !cat.BetweenCategories || cat.Line == nil {
+	if cat.Kind != chart.CategoryAxis || !cat.Reverse || cat.MajorTicks != chart.TickOut || cat.BetweenCategories || cat.Line == nil {
 		t.Errorf("category axis = %+v", cat)
 	}
 	if val.Kind != chart.ValueAxis || val.Log != 10 || val.Min != 1 || val.Max != 100 || val.MajorUnit != 5 || val.Format != "0%" ||
@@ -346,5 +346,30 @@ func TestChartFromElement_GradientAndPatternFills(t *testing.T) {
 	pf := c.PlotArea.Fill
 	if pf == nil || pf.Shape == nil || pf.Shape.Pattern != "dkDnDiag" || pf.Shape.Color.G != 1 || pf.Shape.Background.R != 1 {
 		t.Errorf("plot area fill = %+v", pf)
+	}
+}
+
+func TestChartFromElement_CategoryPositions(t *testing.T) {
+	cat := `<c:catAx><c:axId val="1"/><c:crossAx val="2"/></c:catAx>`
+	val := func(cb string) string {
+		return `<c:valAx><c:axId val="2"/><c:crossAx val="1"/>` + cb + `</c:valAx>`
+	}
+	ids := `<c:axId val="1"/><c:axId val="2"/>`
+	tests := []struct {
+		name, plot string
+		between    bool
+	}{
+		{"bar by default", `<c:barChart>` + ser(0, "A", "", "1") + ids + `</c:barChart>` + cat + val(""), true},
+		{"area by default", `<c:areaChart>` + ser(0, "A", "", "1") + ids + `</c:areaChart>` + cat + val(""), false},
+		{"value axis says between", `<c:areaChart>` + ser(0, "A", "", "1") + ids + `</c:areaChart>` + cat + val(`<c:crossBetween val="between"/>`), true},
+		{"value axis says on ticks", `<c:barChart>` + ser(0, "A", "", "1") + ids + `</c:barChart>` + cat + val(`<c:crossBetween val="midCat"/>`), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := readChart(t, chartXML("", "", tt.plot), false)
+			if c.Axes[0].BetweenCategories != tt.between {
+				t.Errorf("between = %v, want %v", c.Axes[0].BetweenCategories, tt.between)
+			}
+		})
 	}
 }
