@@ -361,3 +361,34 @@ func TestUNCURL(t *testing.T) {
 		}
 	}
 }
+
+// TestRead_Recalculation locks which cached formula results a workbook
+// shows: all of them when Microsoft's or LibreOffice's application wrote
+// it, or when a formula caches a number other than 0; none, every formula
+// left for the builder to compute, otherwise, as LibreOffice
+// recalculates such a workbook.
+func TestRead_Recalculation(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, app, cached string
+		recalc            bool
+	}{
+		{"another application, results 0", "Apache POI", "0.0", true},
+		{"another application, a result", "Apache POI", "7", false},
+		{"Excel", "Microsoft Excel", "0", false},
+		{"LibreOffice", "LibreOffice/7.6", "0", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ws := `<sheetData><row r="1"><c r="A1"><v>2</v></c><c r="B1"><f>A1*2</f><v>` + tc.cached + `</v></c></row></sheetData>`
+			files := workbookFiles([]testSheet{{name: "S", xml: ws}}, minimalStyles, "", "",
+				map[string]string{"docProps/app.xml": `<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>` + tc.app + `</Application></Properties>`})
+			doc, _ := readBytes(t, zipFiles(t, files))
+			c := doc.Sheets[0].Rows[0].Cells[1]
+			if (c.Formula == "A1*2") != tc.recalc {
+				t.Errorf("formula %q, want recalculated %v", c.Formula, tc.recalc)
+			}
+		})
+	}
+}

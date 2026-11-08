@@ -44,9 +44,9 @@ const (
 //     Calibri 11.
 const paddingPixels = 5 * 0.75
 
-// worksheet reads the worksheet part name into sh (ECMA-376 Part 1,
-// 18.3.1.99 worksheet).
-func (r *reader) worksheet(name string, sh *sheet.Sheet) error {
+// worksheet reads the worksheet part name into sh, the index-th sheet of
+// the book (ECMA-376 Part 1, 18.3.1.99 worksheet).
+func (r *reader) worksheet(name string, sh *sheet.Sheet, index int) error {
 	root, err := r.pkg.ParseXML(r.ctx, name, understood)
 	if err != nil {
 		if isMalformed(err) {
@@ -56,7 +56,7 @@ func (r *reader) worksheet(name string, sh *sheet.Sheet) error {
 		}
 		return err
 	}
-	ws := &sheetReader{r: r, part: name, sh: sh}
+	ws := &sheetReader{r: r, part: name, sh: sh, index: index}
 	return ws.read(root)
 }
 
@@ -70,7 +70,15 @@ type sheetReader struct {
 	fitToPage bool
 	// rowAt indexes sh.Rows by row index.
 	rowAt map[int]int
+	// index is the sheet's index in the book.
+	index int
 }
+
+// maxCachedFormulas caps the formulas with a cached result a workbook
+// recalculates. Anti-DoS guard, not spec-mandated: a million formulas
+// cover the largest workbooks LibreOffice opens in reasonable time; the
+// cells past it show their cached results.
+const maxCachedFormulas = 1_000_000
 
 // read reads the worksheet root.
 func (w *sheetReader) read(root *ooxml.Element) error {
@@ -319,10 +327,10 @@ func dedupCells(cells []sheet.Cell) []sheet.Cell {
 // cell reads a c element at column col of row (ECMA-376 Part 1,
 // 18.3.1.4), its value of type t (18.18.11 ST_CellType) the one the file
 // stores: a formula with a cached value shows it, as LibreOffice does not
-// recalculate a workbook it loads; one without (18.3.1.40 f, no v) keeps
-// its text for the builder to compute (an empty v is none, as budget.xlsx
-// saves its totals), a shared formula's other cells
-// excepted. It reports false for a cell without a value, a formula or a
+// recalculate a workbook it loads unless [reader.recalculates]; one
+// without (18.3.1.40 f, no v) keeps its text for the builder to compute
+// (an empty v is none, as budget.xlsx saves its totals), a shared
+// formula's other cells excepted. It reports false for a cell without a value, a formula or a
 // style.
 func (w *sheetReader) cell(c *ooxml.Element, col int, row *sheet.Row) (sheet.Cell, bool) {
 	r := w.r
@@ -384,8 +392,23 @@ func (w *sheetReader) cell(c *ooxml.Element, col int, row *sheet.Row) (sheet.Cel
 	if cell.Value.Kind == sheet.Text && cell.Value.Text == "" && len(cell.Runs) == 0 {
 		cell.Value = sheet.Value{}
 	}
-	if f := c.Child(nsMain, "f"); f != nil && (v == nil || strings.TrimSpace(v.Text) == "") && len(f.Text) <= maxFormulaRunes {
+	if f := c.Child(nsMain, "f"); f != nil && len(f.Text) <= maxFormulaRunes {
 		cell.Formula = strings.TrimSpace(f.Text)
+		if v != nil && strings.TrimSpace(v.Text) != "" {
+			// A cached result shows unless the workbook is recalculated
+			// ([reader.keepCachedResults]).
+			if t := attr(c, "t"); (t == "" || t == "n") && cell.Value.Kind == sheet.Number && cell.Value.Number != 0 {
+				r.calculated = true
+			}
+			if cell.Formula != "" && len(r.cachedFormulas) < maxCachedFormulas {
+				if r.cachedFormulas == nil {
+					r.cachedFormulas = map[[3]int]bool{}
+				}
+				r.cachedFormulas[[3]int{w.index, row.Index, col}] = true
+			} else {
+				cell.Formula = ""
+			}
+		}
 	}
 	if cell.Value.Kind == sheet.Empty && cell.Style == nil && cell.Formula == "" {
 		return cell, false

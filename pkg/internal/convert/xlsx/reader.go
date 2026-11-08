@@ -69,6 +69,11 @@ type reader struct {
 	// mso marks a workbook an Office application wrote, whose row heights
 	// LibreOffice rounds down to three quarters of a point.
 	mso bool
+	// calculated marks a workbook with a formula caching a number other
+	// than 0; cachedFormulas are the cells, by sheet index, row and
+	// column, whose formula caches a result.
+	calculated     bool
+	cachedFormulas map[[3]int]bool
 	// digitWidth is the widest digit of the Normal font and spaceWidth its
 	// space, in points, rounded to twips as LibreOffice measures them.
 	digitWidth, spaceWidth float64
@@ -160,6 +165,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*sheet.Do
 	if err := r.workbook(main, root, doc); err != nil {
 		return nil, nil, err
 	}
+	r.keepCachedResults(doc)
 	r.resolveOperands(doc)
 	r.resolvePivots(doc)
 	return doc, r.warnings, nil
@@ -169,20 +175,63 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*sheet.Do
 // application, the test LibreOffice's import makes before it rounds row
 // heights down to three quarters of a point.
 func (r *reader) officeWritten() bool {
+	return strings.HasPrefix(strings.ToLower(r.application()), "microsoft")
+}
+
+// application returns the application docProps/app.xml names, "" for
+// none.
+func (r *reader) application() string {
 	name := r.pkg.RelatedPart("", relExtendedProps)
 	if name == "" {
-		return false
+		return ""
 	}
 	root, err := r.pkg.ParseXML(r.ctx, name, nil)
 	if err != nil {
-		return false
+		return ""
 	}
 	for _, c := range root.Kids() {
 		if c.Local == "Application" {
-			return strings.HasPrefix(strings.ToLower(strings.TrimSpace(c.Text)), "microsoft")
+			return strings.TrimSpace(c.Text)
 		}
 	}
-	return false
+	return ""
+}
+
+// recalculates reports whether LibreOffice recalculates the whole
+// workbook as it loads it: one an application other than Microsoft's or
+// LibreOffice wrote, none of whose formulas caches a number other than 0
+// (WorkbookFragment::recalcFormulaCells, isGeneratorKnownGood,
+// hasCalculatedFormulaCells).
+//
+// # Corpus evidence
+//
+//   - xlsx: sc/tdf147955.xlsx, written by Apache POI with every result
+//     cached as 0, prints its totals computed.
+func (r *reader) recalculates() bool {
+	app := strings.ToLower(r.application())
+	return !strings.HasPrefix(app, "microsoft") && !strings.HasPrefix(app, "libreoffice") && !r.calculated
+}
+
+// keepCachedResults clears the formula of every cell of doc whose
+// formula caches a result, unless LibreOffice recalculates the workbook
+// ([reader.recalculates]): such a cell shows its cached result.
+func (r *reader) keepCachedResults(doc *sheet.Document) {
+	if len(r.cachedFormulas) == 0 || r.recalculates() {
+		return
+	}
+	for si, sh := range doc.Sheets {
+		if sh == nil {
+			continue
+		}
+		for ri := range sh.Rows {
+			row := &sh.Rows[ri]
+			for ci := range row.Cells {
+				if r.cachedFormulas[[3]int{si, row.Index, row.Cells[ci].Column}] {
+					row.Cells[ci].Formula = ""
+				}
+			}
+		}
+	}
 }
 
 // measureNormalFont measures the widest digit and the space of the Normal

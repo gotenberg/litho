@@ -59,7 +59,7 @@ func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document)
 			r.warn("malformed-part", fmt.Sprintf("sheet %q has no part: it prints empty", sh.Name))
 			r.defaultSetup(sh)
 		case rel.Type == relWorksheet:
-			if err := r.worksheet(rel.Target, sh); err != nil {
+			if err := r.worksheet(rel.Target, sh, index); err != nil {
 				return err
 			}
 		case rel.Type == relChartsheet:
