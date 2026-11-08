@@ -384,3 +384,26 @@ func TestConvert_ListHeadingOutlineTitle(t *testing.T) {
 		t.Errorf("outline = %+v", res.Outline)
 	}
 }
+
+func TestConvert_FrameBeforeTheFirstMaster(t *testing.T) {
+	pl := `<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" fo:margin-top="2cm" fo:margin-bottom="2cm" fo:margin-left="2cm" fo:margin-right="2cm"/></style:page-layout>` +
+		`<style:page-layout style:name="pm2"><style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" fo:margin-top="10cm" fo:margin-bottom="2cm" fo:margin-left="2cm" fo:margin-right="2cm"/></style:page-layout>`
+	masters := `<style:master-page style:name="Standard" style:page-layout-name="pm1"/><style:master-page style:name="First" style:page-layout-name="pm2" style:next-style-name="Standard"/>`
+	auto := `<style:style style:name="PF" style:family="paragraph" style:master-page-name="First"/>`
+	body := `<draw:frame text:anchor-type="page" text:anchor-page-number="1" svg:x="2cm" svg:y="2cm" svg:width="5cm" svg:height="2cm"><draw:text-box><text:p>Frame</text:p></draw:text-box></draw:frame>` +
+		`<text:p text:style-name="PF">Body</text:p>`
+	res := convertDoc(t, doc{autoStyles: pl, masters: masters, contentAuto: auto, body: body}.pack(t), office.Options{})
+	if len(res.Pages) != 1 {
+		t.Fatalf("pages = %d, want 1", len(res.Pages))
+	}
+	// The body starts under the First master's 10 cm top margin (283.5
+	// pt), the frame at 2 cm.
+	for _, l := range lines(res.Pages[0]) {
+		if strings.Contains(l.text, "Body") && l.y < 283 {
+			t.Errorf("body baseline %.1f above the First master's margin", l.y)
+		}
+	}
+	if got := pageText(res.Pages[0]); !strings.Contains(got, "Frame") || !strings.Contains(got, "Body") {
+		t.Errorf("page text %q", got)
+	}
+}

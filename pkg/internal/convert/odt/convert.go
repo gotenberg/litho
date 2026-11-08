@@ -190,6 +190,18 @@ func (b *builder) document(body *odf.Element) (*layout.Node, layout.PageBox) {
 		group = &layout.Node{Kind: layout.Element, Style: st}
 		root.Children = append(root.Children, group)
 	}
+	// frames holds the drawings before the first block of the flow: a
+	// frame is no flow content, the first paragraph or table names the
+	// first page's master page (tdf122607: a page-anchored frame before
+	// a paragraph of the First Page master), and the frames are placed
+	// on that page.
+	var frames []*odf.Element
+	flush := func() {
+		for _, f := range frames {
+			group.Children = append(group.Children, b.block(f, &ctx)...)
+		}
+		frames = nil
+	}
 	for _, c := range body.Children {
 		if b.err != nil {
 			break
@@ -197,17 +209,23 @@ func (b *builder) document(body *odf.Element) (*layout.Node, layout.PageBox) {
 		if master, restart, ok := b.masterOf(c); ok {
 			open(master, restart)
 		} else if group == nil && !c.IsText() && blockLike(c) {
+			if c.Name.Space == odf.NSDraw {
+				frames = append(frames, c)
+				continue
+			}
 			open("", 0)
 		}
 		if group == nil {
 			// Declarations before the first block.
 			continue
 		}
+		flush()
 		group.Children = append(group.Children, b.block(c, &ctx)...)
 	}
 	if group == nil {
 		open("", 0)
 	}
+	flush()
 	for _, g := range root.Children {
 		b.spacing(g.Children)
 	}
