@@ -460,3 +460,43 @@ func TestChartFromElement_ChartTypeWithoutSeries(t *testing.T) {
 		t.Errorf("title = %+v, want the automatic title", c.Title)
 	}
 }
+
+func TestParseChart_ThemeOverride(t *testing.T) {
+	files := minimalPackage()
+	files["word/_rels/document.xml.rels"] = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+		`<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/></Relationships>`
+	files["word/theme/theme1.xml"] = `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:themeElements><a:clrScheme name="x">` +
+		`<a:dk1><a:srgbClr val="000000"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:accent1><a:srgbClr val="4F81BD"/></a:accent1><a:accent2><a:srgbClr val="C0504D"/></a:accent2></a:clrScheme>` +
+		`<a:fontScheme name="f"><a:majorFont><a:latin typeface="Major"/></a:majorFont><a:minorFont><a:latin typeface="Minor"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>`
+	files["word/charts/chart1.xml"] = chartXML("", "", `<c:barChart>`+ser(0, "A", "", "1")+`</c:barChart>`)
+	files["word/charts/_rels/chart1.xml.rels"] = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+		`<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/themeOverride" Target="../theme/themeOverride1.xml"/></Relationships>`
+	files["word/theme/themeOverride1.xml"] = `<a:themeOverride xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:clrScheme name="o"><a:accent1><a:srgbClr val="5B9BD5"/></a:accent1></a:clrScheme></a:themeOverride>`
+	pkg, err := Open(buildZip(t, files))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := ParseChart(context.Background(), pkg, "word/charts/chart1.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Palette[0]; math.Abs(got.R-0x5b/255.0) > 1e-9 {
+		t.Errorf("first automatic colour = %v, want the override's accent1", got)
+	}
+	if got := c.Palette[1]; math.Abs(got.R-0xc0/255.0) > 1e-9 {
+		t.Errorf("second automatic colour = %v, want the document theme's accent2", got)
+	}
+	if c.Title != nil && c.Title.Style.Families[0] != "Minor" {
+		t.Errorf("title font %v, want the document theme's minor font", c.Title.Style.Families)
+	}
+}
+
+func TestChartFromElement_SeriesColourByIdx(t *testing.T) {
+	a := strings.Replace(ser(0, "A", "", "1"), `<c:idx val="0"/>`, `<c:idx val="2"/>`, 1)
+	b := strings.Replace(strings.Replace(ser(1, "B", "", "2"), `<c:idx val="1"/>`, `<c:idx val="0"/>`, 1), `<c:order val="1"/>`, `<c:order val="5"/>`, 1)
+	c := readChart(t, chartXML("", "", `<c:barChart>`+b+a+`</c:barChart>`), false)
+	ss := c.Groups[0].Series
+	if ss[0].Name != "A" || ss[0].Index != 2 || ss[1].Name != "B" || ss[1].Index != 0 {
+		t.Errorf("series %q index %d, %q index %d: want A (idx 2) drawn before B (idx 0)", ss[0].Name, ss[0].Index, ss[1].Name, ss[1].Index)
+	}
+}

@@ -103,6 +103,7 @@ func (p *chartReader) group(e *Element) *chart.Group {
 		}
 	}
 	lineMarkers := boolVal(e, "marker", true)
+	var idx []int
 	for _, se := range e.Kids() {
 		if !se.Is(NSChart, "ser") {
 			continue
@@ -111,18 +112,39 @@ func (p *chartReader) group(e *Element) *chart.Group {
 			p.warn(CodeChartUnsupported, "series past the chart's limit are not drawn")
 			break
 		}
-		g.Series = append(g.Series, p.series(se, g, scatterLines, lineMarkers))
+		s := p.series(se, g, scatterLines, lineMarkers)
+		g.Series = append(g.Series, s)
+		i, ok := Int(childVal(se, "idx"))
+		if !ok {
+			i = s.Index
+		}
+		idx = append(idx, max(0, min(i, chart.MaxSeries*8)))
 	}
-	sortSeries(g.Series)
+	// The series draw in their c:order, and take their automatic colour
+	// and marker from their c:idx (oox's SeriesConverter formats a series
+	// by its mnIndex, the idx).
+	sortSeries(g.Series, idx)
 	return g
 }
 
-// sortSeries orders series by their c:order, stable (ECMA-376 Part 1,
-// 21.2.2.128 order).
-func sortSeries(ss []*chart.Series) {
+// sortSeries orders series by their c:order, which their Index holds,
+// stable (ECMA-376 Part 1, 21.2.2.128 order), then gives each its c:idx,
+// idx in the series' file order, as Index (21.2.2.84 idx).
+func sortSeries(ss []*chart.Series, idx []int) {
+	of := make(map[*chart.Series]int, len(ss))
+	for i, s := range ss {
+		if i < len(idx) {
+			of[s] = idx[i]
+		}
+	}
 	for i := 1; i < len(ss); i++ {
 		for j := i; j > 0 && ss[j].Index < ss[j-1].Index; j-- {
 			ss[j], ss[j-1] = ss[j-1], ss[j]
+		}
+	}
+	for _, s := range ss {
+		if v, ok := of[s]; ok {
+			s.Index = v
 		}
 	}
 }
