@@ -269,3 +269,30 @@ func TestRead_MirroredRotation(t *testing.T) {
 		})
 	}
 }
+
+func TestRead_CaptionAndMeasure(t *testing.T) {
+	t.Run("caption", func(t *testing.T) {
+		s := firstShape(t, flat{body: page(`<draw:caption svg:x="1cm" svg:y="1cm" svg:width="4cm" svg:height="2cm" draw:caption-point-x="2cm" draw:caption-point-y="5cm"/>`)})
+		if s.Geometry == nil || s.Geometry.Custom == nil {
+			t.Fatalf("geometry = %+v", s.Geometry)
+		}
+		paths := shape.Paths(s.Geometry, s.Box)
+		if len(paths) != 2 || !paths[0].Fill || paths[1].Fill || !paths[1].Stroke {
+			t.Fatalf("paths = %+v", paths)
+		}
+		// The callout runs from the bottom side's middle to the point.
+		ops := paths[1].Ops
+		if p := ops[0].P[0]; !near(p.X, cm(3)) || !near(p.Y, cm(3)) {
+			t.Errorf("callout start = %+v", p)
+		}
+		if p := ops[len(ops)-1].P[0]; !near(p.X, cm(3)) || !near(p.Y, cm(6)) {
+			t.Errorf("callout end = %+v", p)
+		}
+	})
+	t.Run("measure", func(t *testing.T) {
+		s := firstShape(t, flat{body: page(`<draw:measure svg:x1="1cm" svg:y1="2cm" svg:x2="5cm" svg:y2="2cm"/>`)})
+		if s.Geometry == nil || s.Geometry.Preset != "line" || !nearRect(s.Box, rect(1, 2, 4, 0)) {
+			t.Errorf("shape = %+v", s)
+		}
+	})
+}

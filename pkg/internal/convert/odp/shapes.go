@@ -102,10 +102,8 @@ func (r *reader) shape(el *odf.Element, pc *pageCtx, depth int, href string) []*
 		s = r.frame(el, pc)
 	case "g":
 		s = r.group(el, pc, depth)
-	case "custom-shape", "rect", "ellipse", "circle", "line", "connector", "polygon", "polyline", "path", "regular-polygon", "caption":
+	case "custom-shape", "rect", "ellipse", "circle", "line", "connector", "polygon", "polyline", "path", "regular-polygon", "caption", "measure":
 		s = r.drawShape(el, pc)
-	case "measure":
-		r.warn("measure", "dimension lines are not drawn")
 	case "page-thumbnail":
 	default:
 		r.warn("shape-"+el.Name.Local, fmt.Sprintf("draw:%s is not drawn", el.Name.Local))
@@ -347,7 +345,7 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 		}
 	case "ellipse", "circle":
 		s.Geometry = ellipseGeometry(el)
-	case "line", "connector":
+	case "line", "connector", "measure":
 		x1, _ := odf.Length(el.A(odf.NSSVG, "x1"))
 		y1, _ := odf.Length(el.A(odf.NSSVG, "y1"))
 		x2, _ := odf.Length(el.A(odf.NSSVG, "x2"))
@@ -356,6 +354,9 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 		s.FlipH, s.FlipV = x2 < x1, y2 < y1
 		s.Fill = slides.Fill{}
 		s.Geometry = &shape.Geometry{Preset: "line"}
+		if el.Name.Local == "measure" {
+			r.warn("measure", "dimension lines are drawn as their measured line, without their extension lines")
+		}
 		if el.Name.Local == "connector" {
 			s.Geometry = &shape.Geometry{Preset: connectorPreset(el.A(odf.NSDraw, "type"))}
 			if box, g := connectorRoute(el); g != nil {
@@ -368,7 +369,7 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 	case "polygon", "path", "regular-polygon":
 		s.Geometry = r.outline(el)
 	case "caption":
-		r.warn("caption", "the callout line of a caption shape is not drawn")
+		s.Geometry = captionGeometry(el, s.Box)
 	}
 	if hasParagraphs(el) {
 		s.Text = r.textBody(el, ss, pc)
@@ -376,6 +377,39 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 	}
 	r.effects(ss.graphic)
 	return s
+}
+
+// captionGeometry returns the outline of a draw:caption (ODF 1.3, Part 3,
+// 10.3.11): its rectangle, filled and stroked, and its callout line,
+// stroked, from the middle of the rectangle's side nearest the caption
+// point to that point, draw:caption-point-x and -y (19.120, 19.121),
+// which are relative to the shape's corner. The line is straight, a
+// caption's simplest kind; nil without a caption point.
+func captionGeometry(el *odf.Element, box compose.Rect) *shape.Geometry {
+	px, okX := odf.Length(el.A(odf.NSDraw, "caption-point-x"))
+	py, okY := odf.Length(el.A(odf.NSDraw, "caption-point-y"))
+	if !okX || !okY || box.Width <= 0 || box.Height <= 0 {
+		return nil
+	}
+	w, h := box.Width, box.Height
+	// The side whose outward direction points most at the caption point.
+	dx, dy := (px-w/2)/w, (py-h/2)/h
+	sx, sy := w/2, 0.0
+	switch {
+	case math.Abs(dx) >= math.Abs(dy) && dx < 0:
+		sx, sy = 0, h/2
+	case math.Abs(dx) >= math.Abs(dy):
+		sx, sy = w, h/2
+	case dy > 0:
+		sx, sy = w/2, h
+	}
+	rect := odf.Points(fmt.Sprintf("0,0 %g,0 %g,%g 0,%g", w, w, h, h), compose.Rect{Width: w, Height: h}, true)
+	line := odf.Points(fmt.Sprintf("%g,%g %g,%g", sx, sy, px, py), compose.Rect{Width: w, Height: h}, false)
+	if rect == nil || line == nil {
+		return nil
+	}
+	rect.Paths = append(rect.Paths, line.Paths...)
+	return &shape.Geometry{Custom: rect}
 }
 
 // connectorPreset maps a connector's draw:type (ODF 1.3, Part 3, 19.229)
