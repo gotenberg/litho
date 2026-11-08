@@ -1,15 +1,13 @@
 package shape
 
 import (
-	"math"
-
 	"github.com/gotenberg/litho/pkg/internal/compose"
 )
 
 // Geometry is the outline a shape is drawn with: a preset by name with its
 // adjustments, or a custom geometry. A reader fills Preset and Adjust from
-// the file and leaves Custom nil; a custom geometry's parsing lands with
-// the geometry engine, which declares Custom's fields.
+// the file, or Custom for a geometry the file spells out (ECMA-376 Part
+// 1, 20.1.9.8 custGeom; ODF 1.3 Part 3, 19.145 draw:enhanced-path).
 type Geometry struct {
 	// Preset is the DrawingML preset name (ECMA-376 Part 1, 20.1.10.56
 	// ST_ShapeType: "rect", "roundRect", "ellipse", "triangle",
@@ -25,6 +23,11 @@ type Geometry struct {
 	Adjust []Adjust
 	// Custom, when not nil, is a custom geometry, which overrides Preset.
 	Custom *Custom
+	// MirrorH and MirrorV mirror the outline and the text rectangle
+	// about the box's vertical and horizontal centre lines (ODF 1.3 Part
+	// 3, 19.137 draw:mirror-horizontal and 19.138 draw:mirror-vertical).
+	// A DrawingML shape's flips belong to its transform, not here.
+	MirrorH, MirrorV bool
 }
 
 // Adjust is one adjustment value of a preset geometry.
@@ -33,9 +36,150 @@ type Adjust struct {
 	Value float64
 }
 
-// Custom is a custom geometry: guide formulas and paths in the shape's
-// own coordinate space. Its fields are declared with the geometry engine.
-type Custom struct{}
+// Custom is a geometry spelled out as guides and paths: a DrawingML
+// custom geometry, a preset of the generated table, or an OpenDocument
+// enhanced geometry compiled into the same form.
+//
+// Guides are evaluated in order over the adjustments, then the guides: an
+// [ArgGuide] operand's Ref indexes Adjust followed by Guides. A guide may
+// name a later one; a reference cycle, a chain deeper than [MaxGuideDepth]
+// or an index out of range evaluates to 0, and [Check] reports it.
+type Custom struct {
+	// Adjust are the adjustment guides with their defaults (20.1.9.5
+	// avLst; ODF draw:modifiers), which a [Geometry]'s Adjust overrides by
+	// name.
+	Adjust []Guide
+	// Guides are the formulas (20.1.9.12 gdLst; ODF draw:equation).
+	Guides []Guide
+	// Text is the text rectangle (20.1.9.22 rect; the first of ODF's
+	// draw:text-areas), nil for the whole box.
+	Text *TextBox
+	// Paths are the outlines, in paint order (20.1.9.16 pathLst; ODF
+	// draw:enhanced-path, cut at its N commands).
+	Paths []PathDef
+	// View, when not nil, is an OpenDocument svg:viewBox: the guide and
+	// path coordinate space, fitted to the box, and the left, top, right,
+	// bottom, width and height of the formulas. Nil is DrawingML's guide
+	// space: the shape's size in EMUs, with the origin at its corner.
+	View *compose.Rect
+	// Unresolved lists the names the reader could not resolve, which it
+	// replaced with 0 (20.1.9.11: a guide names an earlier guide, an
+	// adjustment or a built-in).
+	Unresolved []string
+}
+
+// TextBox is a text rectangle by its left, top, right and bottom edges in
+// guide space.
+type TextBox struct {
+	L, T, R, B Arg
+}
+
+// FillMode is how a path's interior is painted (ECMA-376 Part 1,
+// 20.1.10.37 ST_PathFillMode).
+type FillMode uint8
+
+// The fill modes.
+const (
+	// FillNorm fills with the shape's fill.
+	FillNorm FillMode = iota
+	// FillNone does not fill.
+	FillNone
+	// FillLighten, FillLightenLess, FillDarken and FillDarkenLess fill
+	// with the shape's fill made lighter or darker, as the outline of a
+	// 3D-looking preset asks.
+	FillLighten
+	FillLightenLess
+	FillDarken
+	FillDarkenLess
+)
+
+// PathDef is one outline of a [Custom] geometry in its own coordinate
+// space (ECMA-376 Part 1, 20.1.9.15 path).
+type PathDef struct {
+	// W and H are the path's coordinate space, fitted to the box; 0 is
+	// the guide space. An OpenDocument path ignores them for the View.
+	W, H float64
+	// Fill is how the path fills; Stroke whether it is stroked.
+	Fill   FillMode
+	Stroke bool
+	// Cmds are the path's commands.
+	Cmds []Cmd
+}
+
+// CmdKind is the kind of a path command.
+type CmdKind uint8
+
+// The path commands, with their operands in Args. Points are (x, y)
+// pairs; DrawingML angles are in 60,000ths of a degree, OpenDocument ones
+// in degrees.
+const (
+	// CmdMove starts a subpath at (x, y) (20.1.9.14 moveTo; ODF M).
+	CmdMove CmdKind = iota
+	// CmdLine draws a line to (x, y) (20.1.9.13 lnTo; ODF L).
+	CmdLine
+	// CmdArc draws the arc of the ellipse of radii wR and hR that starts
+	// at the current point at angle stAng and sweeps swAng (20.1.9.3
+	// arcTo: wR, hR, stAng, swAng).
+	CmdArc
+	// CmdQuad draws a quadratic Bézier through (x1, y1) to (x, y)
+	// (20.1.9.21 quadBezTo; ODF Q).
+	CmdQuad
+	// CmdCubic draws a cubic Bézier through (x1, y1) and (x2, y2) to (x,
+	// y) (20.1.9.7 cubicBezTo; ODF C).
+	CmdCubic
+	// CmdClose closes the subpath (20.1.9.4 close; ODF Z).
+	CmdClose
+	// CmdAngleEllipseTo draws a line to, then the arc of, the ellipse of
+	// centre (x, y) and radii (w, h) from angle t0 to t1 degrees,
+	// counter-clockwise (ODF T: x y w h t0 t1).
+	CmdAngleEllipseTo
+	// CmdAngleEllipse is CmdAngleEllipseTo starting a new subpath (ODF
+	// U).
+	CmdAngleEllipse
+	// CmdArcTo draws a line to, then the arc counter-clockwise of, the
+	// ellipse inscribed in the box (x1, y1)-(x2, y2), from where the ray
+	// from its centre through (x3, y3) meets it to where the ray through
+	// (x4, y4) does (ODF A).
+	CmdArcTo
+	// CmdArcMove is CmdArcTo starting a new subpath (ODF B).
+	CmdArcMove
+	// CmdClockwiseArcTo is CmdArcTo drawn clockwise (ODF W).
+	CmdClockwiseArcTo
+	// CmdClockwiseArcMove is CmdArcMove drawn clockwise (ODF V).
+	CmdClockwiseArcMove
+	// CmdQuadrantX draws a quarter ellipse from the current point to (x,
+	// y) leaving it horizontally (ODF X).
+	CmdQuadrantX
+	// CmdQuadrantY draws a quarter ellipse leaving the current point
+	// vertically (ODF Y).
+	CmdQuadrantY
+)
+
+// Cmd is one path command with its operands.
+type Cmd struct {
+	Kind CmdKind
+	Args []Arg
+}
+
+// The caps of a geometry. A reader stops adding past them, and the
+// engine evaluates no more.
+const (
+	// MaxGuides caps a geometry's adjustments and guides together. Anti-DoS
+	// guard, not spec-mandated: the largest preset of Annex D has 244.
+	MaxGuides = 4096
+	// MaxCommands caps a geometry's path commands, over all its paths.
+	// Anti-DoS guard, not spec-mandated: the largest preset has 70, a
+	// freeform traced from a drawing a few thousand.
+	MaxCommands = 1 << 16
+	// MaxPaths caps a geometry's paths. Anti-DoS guard, not
+	// spec-mandated: the presets have at most 6.
+	MaxPaths = 1024
+	// MaxGuideDepth caps the chain of forward guide references evaluated
+	// recursively, which protects the stack. Anti-DoS guard, not
+	// spec-mandated: DrawingML guides name earlier guides only, so a
+	// preset never recurses.
+	MaxGuideDepth = 64
+)
 
 // Path is one outline of a geometry fitted to a box, with how it is
 // painted: the shape's fill when Fill is set, its line when Stroke is.
@@ -43,92 +187,78 @@ type Path struct {
 	Ops    []compose.PathOp
 	Fill   bool
 	Stroke bool
+	// Mode is the fill mode of a filled path: [FillNorm], or one of the
+	// lighten and darken modes the caller may tint the fill by.
+	Mode FillMode
 }
 
-// kappa places the control points of a cubic Bézier quarter circle.
-const kappa = 0.5522847498
-
-// adjustUnit is the scale of a DrawingML adjustment value: 100,000 is the
-// shorter side (ECMA-376 Part 1, 20.1.9.5 gd, the presets of Annex D).
-const adjustUnit = 100000
-
-// Paths returns the outlines of g fitted to r, in paint order, filled and
-// stroked. The presets drawn so far are rect, roundRect (its adj, a sixth
-// of the shorter side by default), ellipse, line and the connectors drawn
-// as lines; every other geometry is its bounding rectangle until the
-// geometry engine lands. A nil g is a rectangle.
-func Paths(g *Geometry, r compose.Rect) []Path {
-	x0, y0, x1, y1 := r.X, r.Y, r.X+r.Width, r.Y+r.Height
-	pt := func(x, y float64) [3]compose.Point { return [3]compose.Point{{X: x, Y: y}} }
-	name := ""
-	if g != nil {
-		name = g.Preset
-	}
-	switch name {
-	case "line", "straightConnector1", "bentConnector2", "bentConnector3", "curvedConnector3":
-		return []Path{{Ops: []compose.PathOp{{Kind: compose.MoveTo, P: pt(x0, y0)}, {Kind: compose.LineTo, P: pt(x1, y1)}}, Stroke: true}}
-	case "ellipse", "flowChartConnector":
-		cx, cy, rx, ry := (x0+x1)/2, (y0+y1)/2, r.Width/2, r.Height/2
-		kx, ky := rx*kappa, ry*kappa
-		return []Path{{Fill: true, Stroke: true, Ops: []compose.PathOp{
-			{Kind: compose.MoveTo, P: pt(cx+rx, cy)},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: cx + rx, Y: cy + ky}, {X: cx + kx, Y: cy + ry}, {X: cx, Y: cy + ry}}},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: cx - kx, Y: cy + ry}, {X: cx - rx, Y: cy + ky}, {X: cx - rx, Y: cy}}},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: cx - rx, Y: cy - ky}, {X: cx - kx, Y: cy - ry}, {X: cx, Y: cy - ry}}},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: cx + kx, Y: cy - ry}, {X: cx + rx, Y: cy - ky}, {X: cx + rx, Y: cy}}},
-			{Kind: compose.ClosePath},
-		}}}
-	case "roundRect", "flowChartAlternateProcess":
-		adj := adjustUnit / 6.0
-		for _, a := range g.Adjust {
-			if a.Name == "adj" && a.Value >= 0 && a.Value <= adjustUnit/2 {
-				adj = a.Value
-			}
-		}
-		rad := min(r.Width, r.Height) * adj / adjustUnit
-		k := rad * (1 - kappa)
-		return []Path{{Fill: true, Stroke: true, Ops: []compose.PathOp{
-			{Kind: compose.MoveTo, P: pt(x0+rad, y0)},
-			{Kind: compose.LineTo, P: pt(x1-rad, y0)},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: x1 - k, Y: y0}, {X: x1, Y: y0 + k}, {X: x1, Y: y0 + rad}}},
-			{Kind: compose.LineTo, P: pt(x1, y1-rad)},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: x1, Y: y1 - k}, {X: x1 - k, Y: y1}, {X: x1 - rad, Y: y1}}},
-			{Kind: compose.LineTo, P: pt(x0+rad, y1)},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: x0 + k, Y: y1}, {X: x0, Y: y1 - k}, {X: x0, Y: y1 - rad}}},
-			{Kind: compose.LineTo, P: pt(x0, y0+rad)},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: x0, Y: y0 + k}, {X: x0 + k, Y: y0}, {X: x0 + rad, Y: y0}}},
-			{Kind: compose.ClosePath},
-		}}}
-	}
-	return []Path{{Ops: RectOps(r), Fill: true, Stroke: true}}
-}
-
-// Known reports whether Paths draws the geometry g as its preset asks,
-// rather than as its bounding rectangle.
-func Known(g *Geometry) bool {
+// definition returns the custom geometry g draws, nil for a rectangle.
+func definition(g *Geometry) *Custom {
 	if g == nil {
-		return true
+		return nil
 	}
-	switch g.Preset {
-	case "", "rect", "flowChartProcess", "frame", "line", "straightConnector1", "bentConnector2", "bentConnector3", "curvedConnector3",
-		"ellipse", "flowChartConnector", "roundRect", "flowChartAlternateProcess":
-		return true
+	if g.Custom != nil {
+		return g.Custom
 	}
-	return false
+	return presetTable[g.Preset]
+}
+
+// Paths returns the outlines of g fitted to r, in paint order, with each
+// path's fill and stroke as the definition says (ECMA-376 Part 1, 20.1.9.15
+// path fill and stroke). A nil g, an empty Preset and a preset the table
+// lacks are the rectangle r; a custom geometry with no path draws nothing.
+// Arcs are turned into cubic Béziers of at most a quarter turn each.
+func Paths(g *Geometry, r compose.Rect) []Path {
+	def := definition(g)
+	if def == nil {
+		return []Path{{Ops: RectOps(r), Fill: true, Stroke: true}}
+	}
+	ev := newEvaluator(def, g, r)
+	out := make([]Path, 0, len(def.Paths))
+	budget := MaxCommands
+	for i := range def.Paths {
+		if i >= MaxPaths || budget <= 0 {
+			break
+		}
+		pd := &def.Paths[i]
+		n := min(len(pd.Cmds), budget)
+		budget -= n
+		ops := ev.path(pd, pd.Cmds[:n])
+		if len(ops) == 0 {
+			continue
+		}
+		out = append(out, Path{Ops: ops, Fill: pd.Fill != FillNone, Stroke: pd.Stroke, Mode: pd.Fill})
+	}
+	return out
+}
+
+// Known reports whether Paths draws the geometry g as its preset or custom
+// definition asks, rather than as its bounding rectangle: true for a nil
+// g, the rectangle, every preset of ECMA-376 Part 1, Annex D and every
+// custom geometry.
+func Known(g *Geometry) bool {
+	return g == nil || (g.Custom == nil && g.Preset == "") || definition(g) != nil
 }
 
 // TextRect returns the box the text of a shape of geometry g fitted to r
 // is laid out in (ECMA-376 Part 1, 20.1.9.22 rect, the text rectangle of
-// the presets of Annex D; ODF draw:text-areas): the ellipse's inscribed
-// rectangle, r for every other geometry until the engine lands.
+// the presets of Annex D; ODF draw:text-areas), r when the geometry
+// defines none. An inverted rectangle is normalised.
 func TextRect(g *Geometry, r compose.Rect) compose.Rect {
-	if g != nil && (g.Preset == "ellipse" || g.Preset == "flowChartConnector") {
-		// Annex D: il = w * 29289 / 200000, the inset of the inscribed
-		// square's corner, (1 - cos 45°) / 2 of the side.
-		ix, iy := r.Width*(1-math.Sqrt2/2)/2, r.Height*(1-math.Sqrt2/2)/2
-		return compose.Rect{X: r.X + ix, Y: r.Y + iy, Width: r.Width - 2*ix, Height: r.Height - 2*iy}
+	def := definition(g)
+	if def == nil || def.Text == nil {
+		return r
 	}
-	return r
+	ev := newEvaluator(def, g, r)
+	x0, y0 := ev.guidePoint(def.Text.L, def.Text.T)
+	x1, y1 := ev.guidePoint(def.Text.R, def.Text.B)
+	if x1 < x0 {
+		x0, x1 = x1, x0
+	}
+	if y1 < y0 {
+		y0, y1 = y1, y0
+	}
+	return compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
 }
 
 // RectOps returns the path of the rectangle r.
