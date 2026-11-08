@@ -378,3 +378,22 @@ func TestReplaced_BorderBoxMinWidthIntrinsic(t *testing.T) {
 		t.Errorf("float %vpx wide, want 60", got)
 	}
 }
+
+func TestFragmentation_SizeContainedMovesInAbsolute(t *testing.T) {
+	// A box of size containment is monolithic: in an absolutely positioned
+	// box the second one, which would straddle the page cut at 10px, moves
+	// to the next page whole, as Chromium paginates it (wpt
+	// abspos-002-print).
+	sized := func() *Node {
+		return el(sty(height(4), width(4), func(s *css.Style) { s.Contain = css.ContainSize }))
+	}
+	abs := el(sty(func(s *css.Style) {
+		s.Position = css.Absolute
+		s.Top = css.Pts(px(3))
+	}), sized(), sized())
+	rb := boxes(t, doc(el(sty(func(s *css.Style) { s.Position = css.Relative }), abs)), page(10, 10))
+	a := kid(t, rb, 0, 0, 0)
+	if got := rect(a.kids[1])[1]; got != 10 {
+		t.Errorf("second box at y %v, want 10", got)
+	}
+}

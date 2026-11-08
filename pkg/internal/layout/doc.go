@@ -32,6 +32,15 @@
 // at that page's width. Painting then slices the column into pages, so a
 // box that spans a cut paints its background and borders on every page it
 // crosses, sliced at the cut (box-decoration-break: slice).
+//
+// An absolutely positioned box is fragmented where it lands, as the flow
+// is (CSS Positioned Layout 3 fragments one inside a fragmentation
+// context, by the rules of CSS Fragmentation 3): its lines and
+// its monolithic children (replaced boxes, boxes of size containment)
+// move past a page cut as in-flow ones do, and content past the last page
+// of the flow adds pages, as Chromium paginates it. WeasyPrint keeps such
+// a box on the page it starts on and drops what overflows it; its
+// references disagree there.
 // [Options.MarginContent] paints each page's margins, the page-margin
 // boxes, under the page area's content.
 //

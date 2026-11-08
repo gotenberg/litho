@@ -924,10 +924,13 @@ func forcedMode(after, before css.Break) breakMode {
 	return breakForced
 }
 
-// avoidsInside reports a box that avoids page or column breaks inside it.
+// avoidsInside reports a box that avoids page or column breaks inside it,
+// or that cannot break inside: a box of size containment is monolithic
+// (CSS Containment 2, 3.1; CSS Fragmentation 3, 4.1), and moves to the next
+// page whole as Chromium moves it, inside an absolutely positioned box too.
 func avoidsInside(b *box) bool {
 	v := b.st.BreakInside
-	return v == css.InsideAvoid || v == css.InsideAvoidPage || v == css.InsideAvoidColumn
+	return v == css.InsideAvoid || v == css.InsideAvoidPage || v == css.InsideAvoidColumn || b.st.Contain&css.ContainSize != 0
 }
 
 // avoidsBetween reports siblings a and b between which a page break is to
