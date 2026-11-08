@@ -82,7 +82,7 @@ func (e *engine) seedWraps(seeds []wrapSeed) []floatRect {
 //
 // # Corpus evidence
 //
-//   - litho: a flat ODT with 5 cm wide page-anchored frames of dynamic wrap
+//   - litho/pdf: a flat ODT with 5 cm wide page-anchored frames of dynamic wrap
 //     leaving 1.5, 2.5 and 6 cm on their left and 10.5, 9.5 and 6 cm on
 //     their right prints, through the pinned LibreOffice, every line
 //     beside them on their right alone.

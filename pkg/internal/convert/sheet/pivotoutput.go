@@ -13,7 +13,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/pivottable_outline_mode.xlsx strokes its pivot table's
+//   - libreoffice/xlsx: sc/pivottable_outline_mode.xlsx strokes its pivot table's
 //     outer edge at 2.00009 points and the lines inside at 1.00005.
 const (
 	pivotInnerFrame = 1

@@ -288,11 +288,11 @@ func footerKind(p placeholder) bool {
 //
 // # Corpus evidence
 //
-//   - litho: a slide's slide number placeholder prints the slide's number
+//   - litho/pdf: a slide's slide number placeholder prints the slide's number
 //     at the slide's own place when its layout holds one, and nothing when
 //     only the master does, whatever the master's p:hf says; a placeholder
 //     no layer places prints nothing.
-//   - pptx: sd/tdf104015's empty title placeholder prints its red fill and
+//   - libreoffice/pptx: sd/tdf104015's empty title placeholder prints its red fill and
 //     blue outline.
 func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	chain := inherited(c.layer, el)
@@ -368,7 +368,7 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 //
 // # Corpus evidence
 //
-//   - pptx: sd-data/TextDistancesInsets3's 2 cm boxes with 0 and 4 cm
+//   - libreoffice/pptx: sd-data/TextDistancesInsets3's 2 cm boxes with 0 and 4 cm
 //     top and bottom insets print their text above the box.
 func fitInsets(b *slides.TextBody, chain []*ooxml.Element, box compose.Rect, g *shape.Geometry) {
 	var set [4]bool
@@ -402,7 +402,7 @@ func fitInsets(b *slides.TextBody, chain []*ooxml.Element, box compose.Rect, g *
 //
 // # Corpus evidence
 //
-//   - pptx: sd/smartart-rotation2's three shapes turned half a turn with
+//   - libreoffice/pptx: sd/smartart-rotation2's three shapes turned half a turn with
 //     their txXfrm turned half a turn print their text upright.
 func splitText(s *slides.Shape, tx *ooxml.Element) *slides.Shape {
 	p, ok := readXfrm(tx)
@@ -429,7 +429,7 @@ func splitText(s *slides.Shape, tx *ooxml.Element) *slides.Shape {
 //
 // # Corpus evidence
 //
-//   - pptx: oox/camera-rotation-revolution-nonwps's text box of camera
+//   - libreoffice/pptx: oox/camera-rotation-revolution-nonwps's text box of camera
 //     revolution 90 degrees prints turned a quarter anticlockwise, its
 //     rectangle of 305 degrees turned 55 degrees clockwise.
 func (r *reader) effects(chain []*ooxml.Element, s *slides.Shape) {
@@ -460,7 +460,7 @@ func (r *reader) effects(chain []*ooxml.Element, s *slides.Shape) {
 //
 // # Corpus evidence
 //
-//   - pptx: oox/Scene3d_orthographicFront's wave, turned a quarter by its
+//   - libreoffice/pptx: oox/Scene3d_orthographicFront's wave, turned a quarter by its
 //     camera, prints its left-to-right gradient left to right.
 func fixGradient(s *slides.Shape, chain []*ooxml.Element, turn float64) {
 	if s.Fill.Kind != slides.FillGradient || s.Fill.Gradient.Radial {

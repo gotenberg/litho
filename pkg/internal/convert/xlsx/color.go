@@ -171,7 +171,7 @@ func fromHSL(h, s, l, a float64) css.Color {
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/cond_format_theme_color2.xlsx, whose theme's dk1 is the
+//   - libreoffice/xlsx: sc/cond_format_theme_color2.xlsx, whose theme's dk1 is the
 //     window text with lastClr 00FF00, prints its text in theme colour 1
 //     black.
 func systemColors(root *ooxml.Element) map[string]css.Color {

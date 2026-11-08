@@ -64,7 +64,7 @@ func (l signatureLock) covers(name string) bool {
 //
 //   - All corpora: 9 signatures in 5242 files record a FieldMDP lock; one,
 //     pdfjs issue15813.pdf, locks All, so it alone refuses a new signature.
-//   - litho: siglock_2b.pdf, signed in a locked field and timestamped, draws
+//   - litho/pdf: siglock_2b.pdf, signed in a locked field and timestamped, draws
 //     "the form field name is locked" from pyHanko 0.37, which is
 //     pyHanko-side. The update writes only the catalog, the DocTimeStamp
 //     dictionary and its field, and pyHanko's own timestamp of the same

@@ -110,7 +110,7 @@ var fontconfigAliases = map[string]string{
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/tdf165180_date1904.xlsx (Aptos Narrow) and
+//   - libreoffice/xlsx: sc/tdf165180_date1904.xlsx (Aptos Narrow) and
 //     sc/tdf134392.xlsx (FreeSans) print in Noto Sans.
 const substituteFamily = "Noto Sans"
 
@@ -255,7 +255,7 @@ func (m *measurer) runsWidth(runs []text.ParagraphRun) float64 {
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/tdf130104_indent.xlsx, rows of Calibri 10 point text and
+//   - libreoffice/xlsx: sc/tdf130104_indent.xlsx, rows of Calibri 10 point text and
 //     Chinese text without a height of their own, prints them 15.65
 //     points apart, the line of Noto Sans CJK's 14.5 points and the
 //     padding, where its Latin rows are 12.75.

@@ -444,7 +444,7 @@ func blankInlineIndexed(
 //
 // # Corpus evidence
 //
-//   - litho, pdfcpu, pdfjs, govdocs: 10 inline images refused a region
+//   - litho/pdf, pdfcpu, pdfjs, govdocs: 10 inline images refused a region
 //     between their sample centres in the redact-render scenarios, run on
 //     the source and again on its p1-quarter output. One no longer does:
 //     govdocs thread_200_200184, the p1-band on the p1-quarter output, meets

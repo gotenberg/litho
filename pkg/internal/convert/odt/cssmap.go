@@ -66,7 +66,7 @@ func (t textState) families() []string {
 //
 // # Corpus evidence
 //
-//   - odt: layout/abi11870-2.odt (Linux Libertine G, no generic) prints
+//   - libreoffice/odt: layout/abi11870-2.odt (Linux Libertine G, no generic) prints
 //     in Noto Sans; the docx reader's fallbacks (fdo73550, Segoe UI
 //     roman, in Noto Serif).
 func notoFallback(generic string) string {
@@ -269,7 +269,7 @@ func (b *builder) lineRule(st *css.Style, p paraState, t textState) {
 //
 // # Corpus evidence
 //
-//   - odt: odfexport/tdf131812.odt, and a probe of every value in lr-tb
+//   - libreoffice/odt: odfexport/tdf131812.odt, and a probe of every value in lr-tb
 //     and rl-tb paragraphs: start and left print at the left margin, end
 //     and right at the right one, in both writing modes.
 var textAligns = map[string]css.TextAlign{

@@ -71,7 +71,7 @@ type type3ScopeWalk struct {
 //
 // # Corpus evidence
 //
-//   - litho t3scope_2b.pdf: a page and a form name the same resourceless
+//   - litho/pdf t3scope_2b.pdf: a page and a form name the same resourceless
 //     font, binding /Bar apart. The font was given the page's binding, and
 //     the glyphs the form shows drew the page's short bar; each scope now
 //     gets its own copy and the output renders as its source.

@@ -37,7 +37,7 @@ func filteredImagePDF(entries string, data []byte, extra ...string) []string {
 //
 // # Corpus evidence
 //
-//   - litho jpx_2b.pdf: held seven JPXDecode images of exactly this shape
+//   - litho/pdf jpx_2b.pdf: held seven JPXDecode images of exactly this shape
 //     while JPXDecode needed a plugin.
 func TestDecodeImage_UndecodableFilterIsRefusedEvenWhenLongEnough(t *testing.T) {
 	t.Parallel()

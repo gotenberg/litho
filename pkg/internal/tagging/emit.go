@@ -230,7 +230,7 @@ func (e *emitter) build(ctx context.Context, node *Element, parentRef ast.PdfInd
 //
 // # Corpus evidence
 //
-//   - litho sharedtag_ua1.pdf: a marked stream for each page of two sharing one
+//   - litho/pdf sharedtag_ua1.pdf: a marked stream for each page of two sharing one
 //     /Contents stream gave the marked form it draws a second reference, and
 //     remediation at PDF/UA-1 added ISO 14289-1, 7.20 t2 on both litho and
 //     veraPDF.

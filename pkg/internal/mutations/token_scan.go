@@ -397,7 +397,7 @@ var binarySlotKeys = map[ast.PdfName]bool{
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu, facturx, pdf20, litho, redacting all of page 1:
+//   - govdocs, pdfjs, pdfcpu, facturx, pdf20, litho/pdf, redacting all of page 1:
 //     every copy a CMap held is a PostScript fragment ("Map", "uppl",
 //     "resource", "der"), a font name ("and" in SandRegular) or a hex
 //     destination ("2013"), 55 distinct tokens over 56 files. Skipping CMaps

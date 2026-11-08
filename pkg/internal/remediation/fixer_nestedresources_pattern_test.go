@@ -80,7 +80,7 @@ func TestFixNestedResources_GivesATilingPatternItsOwnResources(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho colouroff_2b.pdf: its PUnc cell selects /CS0 only the page
+//   - litho/pdf colouroff_2b.pdf: its PUnc cell selects /CS0 only the page
 //     defines, and veraPDF 1.30.2 fails no 6.2.2 t2 for it.
 func TestFixNestedResources_CopiesNoColourNameIntoAnUncolouredCell(t *testing.T) {
 	t.Parallel()

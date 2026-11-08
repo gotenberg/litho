@@ -3071,7 +3071,7 @@ type integritySnap struct {
 //     the PDF/UA-1 and PDF/UA-2 remediations failed once auto-tagging marked
 //     their page numbers and running heads as pagination artifacts, which took
 //     13% to 100% of the text the default extraction keeps.
-//   - litho cmapverabase_2b.pdf: K7 shows U+FA2E, which PDF.js's
+//   - litho/pdf cmapverabase_2b.pdf: K7 shows U+FA2E, which PDF.js's
 //     UniKS-UTF16-H maps and veraPDF's leaves unmapped. Remediation embeds
 //     veraPDF's copy at PDF/A-1a and 1b, after which the code selects
 //     .notdef. Weighed as lost text in bytes, it rolled back all eight CMap
@@ -3986,7 +3986,7 @@ func countRepairs(fixes []string) int {
 //
 // # Corpus evidence
 //
-//   - litho extguards_2b: at PDF/A-2b with PDF/UA-1, the whole repair of the
+//   - litho/pdf extguards_2b: at PDF/A-2b with PDF/UA-1, the whole repair of the
 //     first PDF/A round was the full rewrite of a stream whose /Length the
 //     source got wrong (ISO 19005-2, 6.1.7.1 t1). The round was dropped as one
 //     that fixed nothing, and the output kept the defect.
@@ -4074,7 +4074,7 @@ type roundResult struct {
 //
 // # Corpus evidence
 //
-//   - litho flattentext_2b: at PDF/A-1a and PDF/A-1b paired with PDF/UA-1, the
+//   - litho/pdf flattentext_2b: at PDF/A-1a and PDF/A-1b paired with PDF/UA-1, the
 //     PDF/A engine flattens in the second round, which hides the text drawn at
 //     alpha 0. Measured against the source's visible text, the round was
 //     refused, and the output kept 62 and 63 PDF/A-1 violations that each
@@ -4745,7 +4745,7 @@ func copySourceCancellable(ctx context.Context, dst io.Writer, src io.ReaderAt, 
 //   - All corpora: four files write a page directly in /Kids, litho
 //     kidsrepair_1b.pdf and kidsarray_2b.pdf and pdfjs issue9105_other.pdf
 //     and issue9540.pdf.
-//   - litho kidsrepair_1b.pdf: mutate-stamp left its two direct pages
+//   - litho/pdf kidsrepair_1b.pdf: mutate-stamp left its two direct pages
 //     unstamped, and mutate-pages wrote a tree listing them as object 0:
 //     litho read one page of four, qpdf warned "Pages tree includes
 //     non-dictionary object", veraPDF could not parse the output, and the
@@ -4758,7 +4758,7 @@ func copySourceCancellable(ctx context.Context, dst io.Writer, src io.ReaderAt, 
 //     page is tagged and both outputs pass both tools. The other 44
 //     remediations of it, kidsrepair_1b.pdf and issue9105_other.pdf come out
 //     as before on both tools.
-//   - litho kidsarray_2b.pdf: mutate-flatten left the widget on a direct page,
+//   - litho/pdf kidsarray_2b.pdf: mutate-flatten left the widget on a direct page,
 //     mutate-autotag tagged its two direct pages with /Pg 0 0 R, and the
 //     remediations left a direct page's /AA and, at PDF/UA-1 and PDF/UA-2,
 //     the two pages untagged and without /Tabs, on both tools. Every

@@ -1548,7 +1548,7 @@ func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.Pdf
 //   - pdfcpu Wonderwall.pdf: a 2312x3307 stencil mask carries 955,723 bytes
 //     and was asked for 2,867,169 while a missing /ColorSpace drove the
 //     unpacking.
-//   - litho jpx_2b.pdf: holds seven 8x8 JPXDecode images of 212 to 235
+//   - litho/pdf jpx_2b.pdf: holds seven 8x8 JPXDecode images of 212 to 235
 //     encoded bytes against the 192 an RGB read wants, and while the filter
 //     pipeline skipped JPXDecode each decoded into a picture made of
 //     codestream bytes.

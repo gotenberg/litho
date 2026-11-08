@@ -249,7 +249,7 @@ func (s inlineFontSite) replace(ctx context.Context, alloc *writer.ObjAllocator,
 //   - pdfjs js-buttons.pdf, resetform.pdf, govdocs thread_200_200931.pdf: the
 //     fonts only form field appearances show, ZapfDingbats among them, gain a
 //     /ToUnicode, and 6.2.11.7.2 t1 at PDF/A-2u clears on both tools.
-//   - litho laterreads_2u.pdf: a font named by two pages and shown on the
+//   - litho/pdf laterreads_2u.pdf: a font named by two pages and shown on the
 //     second, one only a form names and one only an appearance names kept
 //     6.2.11.7.2 t1 at PDF/A-2a and 2u, 7.21.7 t1 at PDF/UA-1 and 8.4.5.8 t1
 //     at PDF/UA-2, six times each, on litho and veraPDF.

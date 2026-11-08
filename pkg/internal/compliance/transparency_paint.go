@@ -88,7 +88,7 @@ import (
 //   - All corpora: reading transparency at the painting operators moves no
 //     count of ISO 19005-2, 6.2.10 t2 at PDF/A-2b or of ISO 19005-4, 6.2.9 t2
 //     at PDF/A-4, and no other count at PDF/A-1b, PDF/A-2b or PDF/A-4.
-//   - litho paintop_2b.pdf: seven pages each set a transparent graphics state
+//   - litho/pdf paintop_2b.pdf: seven pages each set a transparent graphics state
 //     no operator paints under, which litho failed and veraPDF passes.
 type paintTransparency struct {
 	doc *document.Document

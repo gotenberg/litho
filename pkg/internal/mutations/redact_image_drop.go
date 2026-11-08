@@ -37,7 +37,7 @@ var stateOnlyOperators = []string{
 //     placements one sample high, each under its own q, gs, cm ... Q. A
 //     whole-page redaction blanked every one in place, and the page showed
 //     both logos and the agency's name around them in black.
-//   - govdocs, pdfjs, pdfcpu, litho: the redact-render scenarios remove
+//   - govdocs, pdfjs, pdfcpu, litho/pdf: the redact-render scenarios remove
 //     placements in 334, 246, 17 and 182 fixtures, up to 50,385 on one
 //     page (govdocs thread_400_400230). No scenario fails a check it
 //     passed, and poppler's inside check stops failing on four mosaics,

@@ -8,11 +8,11 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho: a workbook of these codes and values (one row each, a column
+//   - litho/pdf: a workbook of these codes and values (one row each, a column
 //     60 characters wide), converted by Gotenberg 9.0.0's LibreOffice
 //     route (LibreOffice 26.8.2.2) and read with litho text; the strings
 //     below are the PDF's, U+2007 where Calc draws a figure space.
-//   - ods: sc/tdf102370_ExponentWithoutSign.ods, 42 in a scientific
+//   - libreoffice/ods: sc/tdf102370_ExponentWithoutSign.ods, 42 in a scientific
 //     format without a forced exponent sign, prints "4.20E1".
 func TestApply_Calc(t *testing.T) {
 	num := func(v float64) Value { return Value{Kind: Number, Number: v} }
@@ -147,10 +147,10 @@ func TestApply_Calc(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho: a flat ODS of these values in columns 20, 30, 40, 50 and 60
+//   - litho/pdf: a flat ODS of these values in columns 20, 30, 40, 50 and 60
 //     points wide, Liberation Sans 10, converted by Gotenberg 9.0.0; a
 //     cell's text is its width less one point of padding a side.
-//   - litho: the same values in columns 36 to 43.5 points wide by half
+//   - litho/pdf: the same values in columns 36 to 43.5 points wide by half
 //     points: 1234.5678 shows 1234.57 from 38.5 points and 1.5e-7 shows
 //     1.5E-07 from 40, as the widths here give; Calc rounds a column to
 //     its device's pixels, so a column within a pixel of a threshold may

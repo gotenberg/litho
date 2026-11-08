@@ -55,7 +55,7 @@ func (d *document) parseStyles(root *ooxml.Element) *styleSheet {
 		//
 		// # Corpus evidence
 		//
-		//   - docx: ooxmlimport/tdf108350.docx, tdf108714.docx,
+		//   - libreoffice/docx: ooxmlimport/tdf108350.docx, tdf108714.docx,
 		//     tdf108806.docx, layout/tdf117188.docx and
 		//     ooxmlimport/linked-picture.docx print in Carlito 11; the
 		//     documents whose styles part lacks docDefaults print in

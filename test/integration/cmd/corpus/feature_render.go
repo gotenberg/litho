@@ -55,7 +55,7 @@ const renderNeighbourhood = 1
 //
 // # Corpus evidence
 //
-//   - litho: poppler's pdftocairo, a second anti-aliasing rasterizer over the
+//   - litho/pdf: poppler's pdftocairo, a second anti-aliasing rasterizer over the
 //     same parser, matches 302 of the 309 golden pages Splash drew under
 //     these tolerances, run on a macOS host with its own fonts. Each of the 7 others
 //     differs at a glance: complex_2b upsamples a small image with another
@@ -88,7 +88,7 @@ const renderMaxDiffPerMillion = 10_000
 //     53% to 40% (litho cmappredef_2b, limits_2b), the widest gap above 31%.
 //   - pdfjs issue11768_reduced: the CJK page the render feature's evidence
 //     adjudicates as matching shares 31% of its ink (71 of 227 pixels).
-//   - litho complex_2a, complex_2u, complex_3b, complex_4, typedreads_1b: an
+//   - litho/pdf complex_2a, complex_2u, complex_3b, complex_4, typedreads_1b: an
 //     image interpolated half a sample apart and a box edge anti-aliased
 //     otherwise share 17% to 28%.
 //   - A planted blank golden fails the bar on every page that draws ink
@@ -111,7 +111,7 @@ const metricRenderFailed = "render_failed"
 //
 // # Corpus evidence
 //
-//   - litho kidsarray_2b pages 2 and 3, kidsrepair_1b page 3: 1 by 1 goldens
+//   - litho/pdf kidsarray_2b pages 2 and 3, kidsrepair_1b page 3: 1 by 1 goldens
 //     poppler wrote for pages it did not render. pageboxes_2b pages 1 to 3:
 //     the page boxes litho reads as viewers do, 612 by 792 against 500 by
 //     700. These 6 were all of litho's render_failed before the split.
@@ -237,7 +237,7 @@ var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page
 //     under a CMap stream that uses UniJIS-UTF8-H. poppler drew nothing
 //     without poppler-data's CMaps; with them both renderers draw it and
 //     match (71 pixels differ).
-//   - litho cmapcidtext_2b, fontembed_2b: unembedded Adobe-Japan1 fonts
+//   - litho/pdf cmapcidtext_2b, fontembed_2b: unembedded Adobe-Japan1 fonts
 //     showing B, A and U+3042, which poppler drew as nothing and litho with
 //     Nimbus Sans, U+3042 as a box; both now draw them with Noto Sans JP,
 //     and 1 and 60 pixels differ, 4 and 130 before litho asked for the CJK

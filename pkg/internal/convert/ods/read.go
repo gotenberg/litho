@@ -170,7 +170,7 @@ func (r *reader) document(body *odf.Element) *sheet.Document {
 //
 // # Corpus evidence
 //
-//   - ods: sc/bug-fixes.ods prints Sheet2 to Sheet4 and not Sheet1, whose
+//   - libreoffice/ods: sc/bug-fixes.ods prints Sheet2 to Sheet4 and not Sheet1, whose
 //     table:print is false; sc/tdf132105.ods prints its one shown sheet,
 //     whose table:print is false.
 func hidePrintless(sheets []*sheet.Sheet, noPrint []bool) {

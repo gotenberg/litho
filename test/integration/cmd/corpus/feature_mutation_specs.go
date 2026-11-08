@@ -303,18 +303,18 @@ const mutationRedactReach = 1e6
 //
 // # Corpus evidence
 //
-//   - litho: 152 of the 216 fixtures have one page, so mutate-pages deletes a
+//   - litho/pdf: 152 of the 216 fixtures have one page, so mutate-pages deletes a
 //     page on 64.
-//   - litho: 50 fixtures refuse the whole-page redaction by design, 49 with
+//   - litho/pdf: 50 fixtures refuse the whole-page redaction by design, 49 with
 //     ErrRedactionRefused (36 content a form XObject draws, 4 image samples
 //     it cannot decode, 3 a shading paint the region reaches, 2 text whose
 //     glyphs cannot be placed, 1 text whose position viewers read two ways,
 //     2 an image carrying /Decode or /Mask entries, recolorimg_2b's colour-key
 //     ImKey among them, 1 an annotation another page still shows) and 1,
 //     redactcopies_2b, with ErrRedactionIncomplete.
-//   - litho encperm_ua1, trailer_2b: the 2 encrypted fixtures refuse the
+//   - litho/pdf encperm_ua1, trailer_2b: the 2 encrypted fixtures refuse the
 //     signature with ErrSignFullRewriteIncompatible.
-//   - litho formshare_ua1, sharedtag_ua1, sharedclose_ua1: no ruleset_changed
+//   - litho/pdf formshare_ua1, sharedtag_ua1, sharedclose_ua1: no ruleset_changed
 //     cell under mutate-stamp. Their pages share one /Contents stream drawing
 //     a marked form, which veraPDF parses once per /Contents object. While
 //     each StampText call of applyStamp gave the page it stamped a /Contents
@@ -322,12 +322,12 @@ const mutationRedactReach = 1e6
 //     and counted the form again, so the stamp added 7.20 test 2 at PDF/UA-1
 //     on both tools. The pages now keep naming one array, which draws each
 //     page's stamps through a form its own resources name.
-//   - litho sharedtag_ua1: 1 ruleset_changed cell under mutate-autotag, 7.1
+//   - litho/pdf sharedtag_ua1: 1 ruleset_changed cell under mutate-autotag, 7.1
 //     test 2 added at PDF/UA-1, and veraPDF 1.30.2 adds it too: the marked
 //     form is drawn inside the artifact the auto-tagger makes of the graphics
 //     around it, as remediation at PDF/UA-1 leaves it (see the fixture's
 //     README section).
-//   - litho imagereach_2b: no ruleset_changed cell. Its two pages share one
+//   - litho/pdf imagereach_2b: no ruleset_changed cell. Its two pages share one
 //     content stream, and litho judges it under each page's resources (ISO
 //     32000-1, 7.8.3), so the stamp's /Contents arrays and the page move no
 //     longer change which page's image is judged. Before that, both features
@@ -338,55 +338,55 @@ const mutationRedactReach = 1e6
 //     adds at PDF/A-2b only the stamp's own 6.2.11.4.1 test 1 and 6.2.4.3
 //     test 2, where a /Contents array for each page added 6.2.6 test 1 and
 //     6.2.8 test 3 as well.
-//   - litho namedmcid_ua1, structcopy_ua2: while the copy of a tagged first
+//   - litho/pdf namedmcid_ua1, structcopy_ua2: while the copy of a tagged first
 //     page carried its content and not its structure, its MCIDs mapped to no
 //     element, and mutate-pages added 7.1 test 3 at PDF/UA-1 and 8.2.2 test 1
 //     at PDF/UA-2 on both tools, and 7.18.5 test 1 at PDF/UA-1 on
 //     structcopy_ua2, whose Link lost its element. The copy carries its
 //     structure elements now, and the cells pass.
-//   - litho: with the deletion no longer allowed to pass any rule at the
+//   - litho/pdf: with the deletion no longer allowed to pass any rule at the
 //     tagged profiles, the 33 fixtures whose first page moves to the end
 //     count no ruleset_changed cell.
-//   - litho: naming page 1 twice moves no mutate-pages cell: the 124 fixtures
+//   - litho/pdf: naming page 1 twice moves no mutate-pages cell: the 124 fixtures
 //     count the 986 matched cells that the single copy counted, measured
 //     before PDF/A-4e, 4f, 1a, 3a and 3u joined the manifest.
-//   - litho structcopy_ua2, pagelabels_2b, annotshare_ua1, sigtagged_ua1,
+//   - litho/pdf structcopy_ua2, pagelabels_2b, annotshare_ua1, sigtagged_ua1,
 //     complex_ua1, formstruct_ua2: veraPDF reports the input's rule set on the
 //     output of the repeat at each home profile, at PDF/UA-1 for the two
 //     PDF/UA-2 fixtures, and in all thirteen flavours for pagelabels_2b.
-//   - litho: planted in InsertPages, a repeat written as its first copy's page
+//   - litho/pdf: planted in InsertPages, a repeat written as its first copy's page
 //     object again counts 124 pages_wrong PDFs, litho reading one page fewer
 //     than the plan promises, and a repeat copied without its structure counts
 //     57 ruleset_changed cells on 30 tagged fixtures: 7.1 test 3, or on 3 an
 //     annotation rule of 7.18, at PDF/UA-1, and 8.2.2 test 1 at PDF/UA-2.
-//   - litho a4syntax_4: 1 ruleset_changed cell (PDF/A-4, 6.1.2 test 1) under
+//   - litho/pdf a4syntax_4: 1 ruleset_changed cell (PDF/A-4, 6.1.2 test 1) under
 //     each of mutate-pages, mutate-flatten and mutate-encrypt: a full rewrite
 //     writes a %PDF-1.7 header over a PDF 2.0 source.
-//   - litho xrefstm_2b: 1 ruleset_changed cell (PDF/A-1b, 6.7.3 tests 2, 4
+//   - litho/pdf xrefstm_2b: 1 ruleset_changed cell (PDF/A-1b, 6.7.3 tests 2, 4
 //     and 7 pass) under mutate-pages and mutate-encrypt: a full rewrite drops
 //     the direct /Info dictionary the source's cross-reference stream holds.
-//   - litho: mutate-autotag tags 59 PDFs and leaves 43 alone, each for the
+//   - litho/pdf: mutate-autotag tags 59 PDFs and leaves 43 alone, each for the
 //     reason [pdf.AutoTagReport] names and [verifyAutoTag] finds on the input:
 //     26 already tagged, 13 with nothing to tag, 3 with marked content and 1
 //     with a page it cannot read.
-//   - litho complex_2u, forbidden_mix, inlineimage_2b: the 3 with marked
+//   - litho/pdf complex_2u, forbidden_mix, inlineimage_2b: the 3 with marked
 //     content counted promise_broken until AutoTag reported its skips.
-//   - litho undecodable_2b: the page it cannot read is page 7, and litho
+//   - litho/pdf undecodable_2b: the page it cannot read is page 7, and litho
 //     reads no text from it either.
-//   - litho patternreach_2b: 1 promise_broken PDF. Its only text is one Type
+//   - litho/pdf patternreach_2b: 1 promise_broken PDF. Its only text is one Type
 //     3 A at (10, 10) on pages 4 and 11, which AutoTag reads as a running
 //     footer, and a document whose text is all furniture has nothing to tag.
 //     AutoTag writes no tree, so nothing is hidden; the check reads the
 //     input's text and cannot tell furniture from content.
-//   - litho refreach_ua1: 1 promise_broken PDF, the same shape: its only
+//   - litho/pdf refreach_ua1: 1 promise_broken PDF, the same shape: its only
 //     text is one Type 3 A at (1, 1), shown on two pages, which AutoTag
 //     reads as a running footer.
-//   - litho formreuse_ua1: 1 promise_broken PDF, the same shape: its only
+//   - litho/pdf formreuse_ua1: 1 promise_broken PDF, the same shape: its only
 //     text is Type 3 A glyphs drawn at one spot on each page.
-//   - litho: [scanMarkedContent] finds marked content in 26 inputs, the 23
+//   - litho/pdf: [scanMarkedContent] finds marked content in 26 inputs, the 23
 //     already tagged that carry it and the 3 above, and in none of the 59
 //     AutoTag tags.
-//   - litho: planted in AutoTag, a defect that reports every untagged page
+//   - litho/pdf: planted in AutoTag, a defect that reports every untagged page
 //     as marked counts 73 promise_broken PDFs, and one that builds the tree
 //     without wiring it into the catalog counts 59.
 //
@@ -530,9 +530,9 @@ var mutationSpecs = []mutationSpec{
 //
 // # Corpus evidence
 //
-//   - litho sigcms_2b: mutate-pages and mutate-encrypt drop its four signed
+//   - litho/pdf sigcms_2b: mutate-pages and mutate-encrypt drop its four signed
 //     fields, and 6.4.3 tests 1 to 3 pass at PDF/A-2a, 2b, 2u and 3b.
-//   - litho docmdp_2b: they drop its certification signature, and at PDF/UA-1
+//   - litho/pdf docmdp_2b: they drop its certification signature, and at PDF/UA-1
 //     7.18.1 test 3, 7.18.3 test 1 and 7.18.4 test 1 pass, at PDF/UA-2 8.9.3.3
 //     test 1, all of which its widget failed.
 func droppedSignaturesRemove(rc ruleContext) bool {
@@ -637,16 +637,16 @@ func verifyStamp(ctx context.Context, _ *mutationFeature, in *mutationInput, out
 //
 // # Corpus evidence
 //
-//   - litho sharedarray_2b: its pages are 100 points wide, so the stamp's
+//   - litho/pdf sharedarray_2b: its pages are 100 points wide, so the stamp's
 //     last letter starts at x = 102 and the visible run reads "LITHO
 //     MUTATION STAM" at (10, 10).
-//   - litho: every stamp on the 310 pages of the other 133 fixtures reads at
+//   - litho/pdf: every stamp on the 310 pages of the other 133 fixtures reads at
 //     exactly (10, 10), since none has a crop box off the origin.
-//   - litho boxorigin_2b: planted in turn, the cell adding the box origin to X
+//   - litho/pdf boxorigin_2b: planted in turn, the cell adding the box origin to X
 //     and Y, stampOriginShift reading the crop box's first two entries, and
 //     no shift at all each count promise_broken. The text check passes all
 //     three.
-//   - litho viewerboxes_2b: stampOriginShift reading the first two entries of
+//   - litho/pdf viewerboxes_2b: stampOriginShift reading the first two entries of
 //     page 1's /MediaBox [10 10 300] counts promise_broken, the stamp reading
 //     at (20, 20).
 func stampPlacement(ctx context.Context, in *mutationInput, out *mutationOutputDoc) []mutationFailure {

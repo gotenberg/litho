@@ -10,7 +10,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho: a flat ODS sheet printed with its grid by Gotenberg 9.0.0
+//   - litho/pdf: a flat ODS sheet printed with its grid by Gotenberg 9.0.0
 //     strokes the grid lines at 0.1 point in black, after the cell text,
 //     and frames the printed cells.
 const gridWidth = 0.1

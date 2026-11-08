@@ -135,7 +135,7 @@ func TestFlattenDrawsAValueTheAppearanceCannotCarry(t *testing.T) {
 	//
 	// # Corpus evidence
 	//
-	//   - litho sigcms_2b.pdf: has a text field carrying "not a signature" and
+	//   - litho/pdf sigcms_2b.pdf: has a text field carrying "not a signature" and
 	//     no /DA of its own, and removing the form alone dropped it from the
 	//     page.
 	if !strings.Contains(drawn[0], " 9 Tf") {

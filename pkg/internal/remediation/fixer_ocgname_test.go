@@ -19,7 +19,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho complex_1b.pdf: remediating it grew it 1125 bytes per pass,
+//   - litho/pdf complex_1b.pdf: remediating it grew it 1125 bytes per pass,
 //     forever, and never added the /Name.
 func TestEnsureOCGConfigNameReturnsDirectReplacement(t *testing.T) {
 	alloc := writer.NewObjAllocator(10)

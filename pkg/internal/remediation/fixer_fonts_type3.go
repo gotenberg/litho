@@ -40,7 +40,7 @@ import (
 //     2u, 3u and UA outputs keep their verdicts, since veraPDF reads those
 //     names there already. Extracted text against the PDF.js golden moves on
 //     none.
-//   - litho type3names_2u.pdf: a font naming a code g12 gets no map, and
+//   - litho/pdf type3names_2u.pdf: a font naming a code g12 gets no map, and
 //     its findings stay on both tools.
 func fixType3FontToUnicode(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, shownCodes map[byte]bool) []string {
 	if _, mapped := fontDict["ToUnicode"]; mapped || fontRef.ObjectNum == 0 || len(shownCodes) == 0 {

@@ -84,7 +84,7 @@ func (g *pageGeometry) paths(ctx context.Context) (stroked, filled []models.Line
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, litho: 653 files fill horizontal bars at most 2 points
+//   - govdocs, pdfjs, litho/pdf: 653 files fill horizontal bars at most 2 points
 //     tall and 36 wide; the commonest heights are 0.48 (14975 bars), 0.72,
 //     0.96, 0.30 and 1.00 points, and 1.50 is the commonest above one point.
 const maxRuleThickness = 2.0
@@ -103,7 +103,7 @@ const ruleJoinGap = 1.0
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, litho: 492 files fill bars at most 2 points tall and
+//   - govdocs, pdfjs, litho/pdf: 492 files fill bars at most 2 points tall and
 //     under 36 wide, the per-cell segments of a border among them.
 func filledRules(boxes [][4]float64) []models.Line {
 	var bars []models.Line
@@ -158,7 +158,7 @@ func filledRules(boxes [][4]float64) []models.Line {
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, litho: of the 1617 files auto-tagging reaches, 115 carry
+//   - govdocs, pdfjs, litho/pdf: of the 1617 files auto-tagging reaches, 115 carry
 //     1402 tables. Five grids in five files now read as columns: two columns
 //     of prose (govdocs thread_300_300104.pdf, pdfjs issue11518.pdf), the
 //     captions under a two-by-two array of gradients (pdfjs

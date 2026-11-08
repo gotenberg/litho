@@ -177,7 +177,7 @@ func TestSplitMerge_KeepAcroForm(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho docmdp_2b.pdf: veraPDF reported ISO 19005-2, 6.4.3 against a
+//   - litho/pdf docmdp_2b.pdf: veraPDF reported ISO 19005-2, 6.4.3 against a
 //     split, a document that then advertised a signature it could not honour.
 func TestCollectRootFields_DropsSignedSignatureFields(t *testing.T) {
 	alloc := writer.NewObjAllocator(1)

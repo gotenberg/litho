@@ -61,16 +61,16 @@ const diffScoreTolerance = 0.02
 //
 // # Corpus evidence
 //
-//   - html: each Chromium reference converted back through the feature (litho
+//   - litho/html, gotenberg/html: each Chromium reference converted back through the feature (litho
 //     reads and draws the PDF the goldens come from) scores text F1 1 on 11
 //     sources and 0.89 on i18n, whose Arabic, Hebrew and Thai litho's text
 //     extraction and PDF.js tokenise apart; layout 0.93 (i18n) to 0.99
 //     (backgrounds, images, floats); strict 1 on every page.
-//   - html: litho's drawing of each reference's first page shifted by 1 or
+//   - probe, html: litho's drawing of each reference's first page shifted by 1 or
 //     2 pixels both ways, or stretched by 1% down the page (a line pitch a
 //     fraction of a pixel apart), scores layout 0.92 to 0.99 against its
 //     golden.
-//   - html: the lists reference scored against the 11 other sources reaches
+//   - litho/html, gotenberg/html: the lists reference scored against the 11 other sources reaches
 //     text F1 0.14 and layout 0.05 at most (markdown), and a blank page
 //     scores 0 on both.
 const (

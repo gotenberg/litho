@@ -427,7 +427,7 @@ func embedNamedUseCMap(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 //     the embedding and CIDSystemInfo rules at PDF/A-2b, PDF/A-4, PDF/UA-1
 //     and PDF/UA-2 on the 32 outputs there, default and aggressive: veraPDF
 //     finds all 48 conforming.
-//   - litho cmaps_2b.pdf: the other 4 name LithoCustomCMap, which no reader
+//   - litho/pdf cmaps_2b.pdf: the other 4 name LithoCustomCMap, which no reader
 //     holds, so nothing faithful can be embedded.
 //   - All corpora: the other 40 files 6.3.3.3 fires on, remediated at
 //     PDF/A-1a, 1b, 2b, 4, PDF/UA-1 and UA-2, default and aggressive, give

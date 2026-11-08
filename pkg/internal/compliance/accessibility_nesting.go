@@ -17,7 +17,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho annotstruct_ua2: its two Popups both carry a /Parent, and veraPDF
+//   - litho/pdf annotstruct_ua2: its two Popups both carry a /Parent, and veraPDF
 //     reports §7.18.1 t1 on the unnested one.
 func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-1" {

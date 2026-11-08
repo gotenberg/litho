@@ -263,7 +263,7 @@ func (s *controlByteStripper) repair(op content.Operation) ([]content.Operation,
 //     PDF/A-2b, PDF/UA-1 or the profile their name states, 18 remove a glyph
 //     that took room with more glyphs after it on its line, in 511 operations
 //     of govdocs thread_400_400240.pdf and one to four in each other file.
-//   - litho repairleft_4.pdf: poppler drew the lines after its emptied " and
+//   - litho/pdf repairleft_4.pdf: poppler drew the lines after its emptied " and
 //     ' at x 72 once the strip removed their code, where the source draws
 //     them at 80.2, and draws them at 80.2 with the room kept.
 func (s *controlByteStripper) keepAdvances(op content.Operation, info textFontInfo) ([]content.Operation, bool) {
@@ -375,7 +375,7 @@ func (s *controlByteStripper) spacedElements(shown ast.PdfArray, info textFontIn
 //     and two files show a ' string the strip empties, govdocs
 //     thread_100_100586.pdf and pdfjs bug854315.pdf, where no .notdef finding
 //     runs the repair.
-//   - litho repairleft_4.pdf: dropping its emptied ' and " lost two line
+//   - litho/pdf repairleft_4.pdf: dropping its emptied ' and " lost two line
 //     breaks from its text, which rolled the whole content tier back and left
 //     its .notdef findings, in the aggressive remediation at PDF/A-2a, 2b,
 //     2u, 3b and 4, PDF/UA-1 and PDF/UA-2.

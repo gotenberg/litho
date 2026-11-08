@@ -377,7 +377,7 @@ func (r *reader) slide(pg *odf.Element, n int) *slides.Slide {
 //
 // # Measured
 //
-//   - litho: a flat presentation of three pages, the first without
+//   - probe, odp: a flat presentation of three pages, the first without
 //     presentation:notes, the second with a thumbnail and an empty notes
 //     placeholder, the third with a notes frame alone, prints with notes
 //     pages the first slide large at the page's top, the second at its

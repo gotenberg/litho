@@ -19,7 +19,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho complex_ua2: carries a /Configs configuration with its own
+//   - litho/pdf complex_ua2: carries a /Configs configuration with its own
 //     incomplete /Order that an earlier detector never looked at. Claiming
 //     test 3 and completing /D alone silenced litho while veraPDF kept
 //     reporting: litho corpus disagreement moved from exactly 0 to 10 across
@@ -519,10 +519,10 @@ func ocgOrderCompleteViolation(r compliance.Rule) bool {
 //
 // # Corpus evidence
 //
-//   - litho complex_ua2.pdf: /Configs [ << /Order [ ] >> ] beside an
+//   - litho/pdf complex_ua2.pdf: /Configs [ << /Order [ ] >> ] beside an
 //     incomplete /D; completing /D alone left veraPDF reporting the /Configs
 //     entry.
-//   - litho complex_2b.pdf: its OCG carries no /Name, and its completed
+//   - litho/pdf complex_2b.pdf: its OCG carries no /Name, and its completed
 //     /Order stayed reported by veraPDF until the OCG was named.
 func completeOCGOrders(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ocp ast.PdfDict) []string {
 	ocgs := compliance.DocumentOCGs(ctx, doc, ocp)
@@ -778,7 +778,7 @@ func ocgConfigName(ctx context.Context, doc *document.Document, d ast.PdfDict) s
 //
 // # Corpus evidence
 //
-//   - litho complex_1b.pdf: remediating it repeatedly grew it by 1125 bytes a
+//   - litho/pdf complex_1b.pdf: remediating it repeatedly grew it by 1125 bytes a
 //     pass, forever, and never added the /Name.
 func ensureOCGConfigName(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, label string) (ast.PdfDict, bool) {
 	ref, isRef := obj.(ast.PdfIndirectRef)

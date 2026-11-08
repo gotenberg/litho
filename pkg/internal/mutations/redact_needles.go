@@ -26,14 +26,14 @@ import (
 //
 //   - govdocs: a whole-page redaction of page 1 refuses 215,065 surviving
 //     copies over 584 documents; 54.8% are one character, " " the commonest.
-//   - govdocs, litho, pdfcpu: over a whole-page and a top-third redaction of
+//   - govdocs, litho/pdf, pdfcpu: over a whole-page and a top-third redaction of
 //     page 1 of each file, a threshold of three lets 289 redactions through
 //     that refused before, every one over a survivor of two letters or digits
 //     at most, and refuses none that passed. Two lets 232 through, four 324;
 //     the 35 four adds over three are refusals over survivors of three
 //     letters or digits, "and" beside "HUD", "512" and "34.1", where a word
 //     cannot be told from an agency or an amount.
-//   - litho cmapnotdef_2b.pdf: page 1 reads "A", and the redaction refused
+//   - litho/pdf cmapnotdef_2b.pdf: page 1 reads "A", and the redaction refused
 //     over an "A" elsewhere in the file.
 const MinNeedleRunes = 3
 

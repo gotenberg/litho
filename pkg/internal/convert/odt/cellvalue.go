@@ -18,7 +18,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - odt: odfimport/fdo60842.odt prints its date, currency and string
+//   - libreoffice/odt: odfimport/fdo60842.odt prints its date, currency and string
 //     cells by their values ("18/02/2012", "500 000,00", "USD") where the
 //     string cell's paragraph says "This text should not appear".
 
@@ -115,7 +115,7 @@ func (b *builder) cellValueText(c *odf.Element) (string, bool) {
 //
 // # Corpus evidence
 //
-//   - odt: odfimport/fdo60842.odt, fr LU: 2012-02-18 prints 18/02/2012.
+//   - libreoffice/odt: odfimport/fdo60842.odt, fr LU: 2012-02-18 prints 18/02/2012.
 var languageDates = map[string]string{"fr": "DD/MM/YYYY"}
 
 // nullDate is day 0 of the serial numbers data styles format dates by,

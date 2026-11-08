@@ -196,7 +196,7 @@ func pageCopyOverrides(pages []*document.Page) map[int]ast.PdfObject {
 //
 // # Corpus evidence
 //
-//   - litho directstream_2b.pdf: its /MediaBox [0 0 612 792 5 0 R] runs on
+//   - litho/pdf directstream_2b.pdf: its /MediaBox [0 0 612 792 5 0 R] runs on
 //     into its content stream, and split, merge and insert wrote it as the
 //     page's /CropBox.
 //   - pdfjs issue13783.pdf, poppler-937-0-fuzzed.pdf: the same, for a
@@ -307,7 +307,7 @@ func pageResourcesEntry(dict ast.PdfDict, page *document.Page) ast.PdfObject {
 //
 // # Corpus evidence
 //
-//   - litho resinherit_2b.pdf: the flat tree gave the page whose /Resources is
+//   - litho/pdf resinherit_2b.pdf: the flat tree gave the page whose /Resources is
 //     null none at all, and the pages inheriting from an intermediate node the
 //     key-by-key merge, which reaches the root's font. qpdf reported "Resources
 //     is missing or invalid" on the null page and on the page whose /Resources

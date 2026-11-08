@@ -11,8 +11,8 @@ import (
 //
 // # Corpus evidence
 //
-//   - pptx: deck.pptx (notes size 540 by 720) and pitch-lo.pptx (A4) print
-//     their notes pages on Letter; odp: pitch.odp, whose notes master is
+//   - gotenberg/pptx: deck.pptx (notes size 540 by 720) and pitch-lo.pptx (A4) print
+//     their notes pages on Letter; gotenberg/odp: pitch.odp, whose notes master is
 //     A4, too.
 const (
 	notesWidth  = 612
@@ -60,7 +60,7 @@ const (
 //
 // # Corpus evidence
 //
-//   - pptx: deck-notes (notes size 540 by 720, a master slide picture box
+//   - gotenberg/pptx: deck-notes (notes size 540 by 720, a master slide picture box
 //     of 360 by 270 at 90, 54): the slides with notes print the slide in
 //     that box framed whole and the slide number placeholder; slides 3 to 6,
 //     without notes, print the default layout over 540 by 720 at the top

@@ -40,7 +40,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho docmdp_2b.pdf, sigcms_2b.pdf: leaving their signed signature
+//   - litho/pdf docmdp_2b.pdf, sigcms_2b.pdf: leaving their signed signature
 //     fields out of the form left 1 and 4 widgets on the moved page, which
 //     qpdf reported. Each is drawn into the page now, and qpdf reports nothing.
 //   - All corpora, 605 files that mention a form: leaving the signed

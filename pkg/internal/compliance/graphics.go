@@ -128,7 +128,7 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 //     selects, which the page tree defines, and veraPDF fails no t2 at
 //     PDF/A-2b, where litho failed it once. It is the only file whose count
 //     moves.
-//   - litho noresources_4.pdf: veraPDF 1.30.2 failed t3 at PDF/A-4, 4e and 4f
+//   - litho/pdf noresources_4.pdf: veraPDF 1.30.2 failed t3 at PDF/A-4, 4e and 4f
 //     for its five content streams on pages with no resource dictionary, and
 //     1.30.3 fails it for none of them, since none names a resource.
 func pageResourceScopes(p *pageCtx) (own, inherited ast.PdfDict) {

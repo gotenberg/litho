@@ -109,7 +109,7 @@ type Stats struct {
 //     MB), 7.3% on pdfjs, 2.7% on pdfcpu and verapdf, 1.8% on litho and 1.4%
 //     on govdocs; pdf20 has nothing to subset. Most programs left whole are
 //     already subsets, whose in-place subset is not smaller.
-//   - 43 plain and subset pairs from facturx, litho, pdfjs, govdocs and
+//   - 43 plain and subset pairs from facturx, litho/pdf, pdfjs, govdocs and
 //     verapdf, judged by veraPDF 1.30.2 at their own flavour: the same rules
 //     fail as often.
 //   - pdfjs Brotli-Prototype-FileA.pdf: the one rule that moves. Three
@@ -211,10 +211,9 @@ func Run(ctx context.Context, alloc *writer.ObjAllocator, trailer ast.PdfDict, c
 //
 // # Corpus evidence
 //
-//   - litho glyphs_2b.pdf: two fonts draw from byte-identical programs. A
-//     subset of its own for each grew the output of a form flattening
-//     written with object streams and dedup from 2,066 to 2,561 bytes, since
-//     dedup no longer merged them.
+//   - litho/pdf glyphs_2b.pdf: two fonts draw from byte-identical programs. A
+//     subset of its own for each grew the output of flatten-form --compact
+//     from 2,066 to 2,561 bytes, since dedup no longer merged them.
 func programGroups(ctx context.Context, g *graph) ([][]int, error) {
 	var nums []int
 	for num, slots := range g.refs {

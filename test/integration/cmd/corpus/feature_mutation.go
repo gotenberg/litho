@@ -93,7 +93,7 @@ type mutationFailure struct {
 //
 // # Corpus evidence
 //
-//   - litho: the seven features take 18 s together with 4 workers on an idle
+//   - litho/pdf: the seven features take 18 s together with 4 workers on an idle
 //     machine.
 type mutationFeature struct {
 	spec   mutationSpec

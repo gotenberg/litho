@@ -90,7 +90,7 @@ var mediaGrey = css.Color{R: 0x43 / 255.0, G: 0x43 / 255.0, B: 0x43 / 255.0, A: 
 //
 // # Corpus evidence
 //
-//   - pptx: sd/narration-non-media-shape's 480 by 360 point video of a
+//   - libreoffice/pptx: sd/narration-non-media-shape's 480 by 360 point video of a
 //     nearly square poster prints the poster 324 points wide in the box's
 //     middle, between two grey bands.
 func mediaFrame(s *slides.Shape) *slides.Shape {

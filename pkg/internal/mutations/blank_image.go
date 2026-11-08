@@ -502,7 +502,7 @@ func blankedMaskStream(ctx context.Context, alloc *writer.ObjAllocator, box grap
 //
 // # Corpus evidence
 //
-//   - litho smaskindata_2b: a whole-page redaction wrote an all-opaque
+//   - litho/pdf smaskindata_2b: a whole-page redaction wrote an all-opaque
 //     /SMask on both images, adding 6.4 test 2 at PDF/A-1a and 1b in the
 //     mutate-redact cell; none is written now.
 func blankDataSoftMask(
@@ -571,7 +571,7 @@ func blankDataSoftMask(
 //
 // # Corpus evidence
 //
-//   - litho imagecolour_2b: redacting page 1 rewrote its four JPX images,
+//   - litho/pdf imagecolour_2b: redacting page 1 rewrote its four JPX images,
 //     which state no /ColorSpace, as DeviceRGB, adding 6.2.3.3 test 1 at
 //     PDF/A-1b and 6.2.4.3 test 2 at PDF/A-2a, 2b, 2u, 3b and 4.
 func srgbColorSpace(alloc *writer.ObjAllocator) (ast.PdfArray, error) {
@@ -732,11 +732,11 @@ func blankCoveredSamples(canvas *image.NRGBA, box graphics.ImageBox, zones []heu
 //
 // # Corpus evidence
 //
-//   - litho cutcell_2b p1-quarter: a 12 by 10 image drawn 30 by 36 points a
+//   - litho/pdf cutcell_2b p1-quarter: a 12 by 10 image drawn 30 by 36 points a
 //     sample kept 6,016 pixels of picture inside the region, 9 to 11 points
 //     deep, and the pixel check refused; clearing the cut samples changes
 //     18,864 pixels outside it, all image blanking.
-//   - litho blankblack_2b, imagecolour_2b and jpx_2b p1-band,
+//   - litho/pdf blankblack_2b, imagecolour_2b and jpx_2b p1-band,
 //     iccalternate_2b p1-quarter, imageintent_2b p2-quarter: the cells the
 //     region's edges cut reach less than two pixels into it at 72 dpi, and
 //     are now cleared, 80 to 15,724 pixels outside the region; no scenario
@@ -909,7 +909,7 @@ func projectQuad(q [4][2]float64, a [2]float64) (lo, hi float64) {
 //     stops at a later refusal (a structure element); bug857031 succeeds
 //     since the write-time check reads its placements by this rule too
 //     ([copiedPlacementLeftAsIs]).
-//   - litho, pdfcpu, pdfjs, govdocs: of 27 such refusals, 21 in the
+//   - litho/pdf, pdfcpu, pdfjs, govdocs: of 27 such refusals, 21 in the
 //     redact-render scenarios and 6 in them run again after a lossy
 //     p1-quarter, those 3 pass this check and 24 stand, 10 of them inline
 //     images, which [inlineCoverageError] brings to this check.

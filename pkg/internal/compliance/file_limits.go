@@ -416,7 +416,7 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 //   - pdfjs issue6151.pdf: selects its font by a name of 139 bytes, written
 //     with #20 escapes, which veraPDF reports as a Tf operand beside the /Font
 //     key the object walk reports.
-//   - litho limits_2b.pdf: gives cs a name of 203 bytes, which veraPDF reports
+//   - litho/pdf limits_2b.pdf: gives cs a name of 203 bytes, which veraPDF reports
 //     beside the /ColorSpace key.
 func checkOperandLimits(ops []content.Operation, overflow map[float64]int, where string, colourOff bool, maxStr int, profile string) []Violation {
 	l := operandLimits{

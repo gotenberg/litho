@@ -63,12 +63,12 @@ func matchEmbeddedSubtype(v compliance.Violation) bool {
 //
 // # Corpus evidence
 //
-//   - pdfjs bug1230933.pdf, litho annotstruct_ua2.pdf: two FileAttachment
+//   - pdfjs bug1230933.pdf, litho/pdf annotstruct_ua2.pdf: two FileAttachment
 //     annotations each name a /Filespec outside the tree whose embedded file
 //     has no /Subtype, or /text#232Fplain, and each kept its ISO 19005-3, 6.8
 //     t1 or ISO 19005-4, 6.9 t1 finding after a PDF/A-3b or PDF/A-4
 //     remediation.
-//   - litho inlinefs_4.pdf: two Links list an embedded file with no valid
+//   - litho/pdf inlinefs_4.pdf: two Links list an embedded file with no valid
 //     media type in an inline /AF entry, one of them a Link written inline in
 //     the page's /Annots, and each kept its ISO 19005-4, 6.9 t1 finding after
 //     a PDF/A-4 remediation.

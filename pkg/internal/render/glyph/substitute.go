@@ -104,7 +104,7 @@ func (f *Font) substitute(ctx context.Context, req Request, opts Options) error 
 //
 // # Corpus evidence
 //
-//   - litho ttencoding_2b: two symbolic TrueType fonts no standard font
+//   - litho/pdf ttencoding_2b: two symbolic TrueType fonts no standard font
 //     answers to, one under WinAnsiEncoding and one with no /Encoding, show
 //     41 42; poppler and PDFium draw A and B with the face they draw the
 //     nonsymbolic ones with.
@@ -250,7 +250,7 @@ func (f *Font) substituteGlyph(ctx context.Context, code Code, g *Glyph) {
 //
 // # Corpus evidence
 //
-//   - litho unembednames_2u: an unembedded Helvetica shows codes 01 and 80,
+//   - litho/pdf unembednames_2u: an unembedded Helvetica shows codes 01 and 80,
 //     which StandardEncoding leaves unnamed, and a symbolic Arial TrueType
 //     codes 00 and 01, which WinAnsiEncoding leaves unnamed; poppler and
 //     PDFium draw none of the four.

@@ -38,7 +38,7 @@ const (
 //
 // # Corpus evidence
 //
-//   - litho: siglock_2b holds the most unsigned signature fields, five;
+//   - litho/pdf: siglock_2b holds the most unsigned signature fields, five;
 //     sigcms_2b and sigtagged_ua1 hold one each, and no other fixture holds
 //     one.
 const maxSignFieldTrials = 8

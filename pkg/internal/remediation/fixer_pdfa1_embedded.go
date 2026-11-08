@@ -160,7 +160,7 @@ func stripEFFromFileSpecs(ctx context.Context, alloc *writer.ObjAllocator, doc *
 //
 // # Corpus evidence
 //
-//   - litho inlinefs_4.pdf: two inline /AF entries embed a file, and both
+//   - litho/pdf inlinefs_4.pdf: two inline /AF entries embed a file, and both
 //     kept ISO 19005-1, 6.1.11 t1 on veraPDF after an aggressive PDF/A-1b
 //     remediation, where litho saw one.
 func stripEFFromInlineFileSpecs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (int, error) {

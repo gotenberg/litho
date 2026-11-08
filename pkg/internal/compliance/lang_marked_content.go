@@ -20,7 +20,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho inlineimage_2b.pdf: has no structure tree and a BDC /Lang of
+//   - litho/pdf inlineimage_2b.pdf: has no structure tree and a BDC /Lang of
 //     "-pt", and veraPDF reports it at PDF/A-1a, 2a and 3a. litho read no
 //     content without a structure tree.
 //   - pdfjs issue11678.pdf: a raw byte search read a "/Lang" out of a damaged

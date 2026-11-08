@@ -730,7 +730,7 @@ func strokedSide(s css.Side, r compose.Rect, w float64, c compose.Color) *compos
 //
 // # Corpus evidence
 //
-//   - litho: a flat ODT whose paragraphs have solid borders of 0.02 pt to
+//   - litho/pdf: a flat ODT whose paragraphs have solid borders of 0.02 pt to
 //     1 pt prints, through the pinned LibreOffice, strokes of 0.1 pt for
 //     every border of one or two twips, 0.15, 0.2, 0.25, 0.3, 0.5, 0.75
 //     and 1 pt at the widths above, and no border for 0.01 pt.

@@ -14,7 +14,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho limits_2b.pdf: lost its catalog, and its /Pages with it, so
+//   - litho/pdf limits_2b.pdf: lost its catalog, and its /Pages with it, so
 //     neither veraPDF nor pikepdf could open the remediated file.
 func TestFormatRealKeepsThePointBeyondInt64(t *testing.T) {
 	t.Parallel()

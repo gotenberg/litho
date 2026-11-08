@@ -68,7 +68,7 @@ import (
 //   - All corpora: the fonts left unmapped name a shown code with a name no
 //     glyph list carries (the "H11021" names of the Universal and
 //     MathematicalPi subsets), or a numeric one (AdvOpti's "C42").
-//   - govdocs thread_000_000763.pdf, litho ttcmap_2b.pdf and
+//   - govdocs thread_000_000763.pdf, litho/pdf ttcmap_2b.pdf and
 //     ttmaccopy_2b.pdf: symbolic TrueType fonts behind a genuine (1,0)
 //     subtable get a map. On veraPDF 1.30.2 their remediated outputs lose
 //     6.3.8 t1, 6.2.11.7.2 t1, 7.21.7 t1 or 8.4.5.8 t1 at the seven levels
@@ -137,7 +137,7 @@ func symbolicProgramToUnicode(ctx context.Context, doc *document.Document, fontD
 //   - pdfjs issue16553.pdf: its Identity-H Helvetica gets the map, and the
 //     remediated output passes veraPDF 1.30.2 at PDF/A-2u, PDF/A-3u and
 //     PDF/UA-2.
-//   - litho cmapusestream_2b.pdf: under an embedded encoding CMap, the
+//   - litho/pdf cmapusestream_2b.pdf: under an embedded encoding CMap, the
 //     remediated output passes veraPDF and litho at the seven levels that
 //     state the rule, in both modes.
 func programType0ToUnicode(ctx context.Context, doc *document.Document, fontDict, cidFont ast.PdfDict, shown []ast.PdfString) []byte {

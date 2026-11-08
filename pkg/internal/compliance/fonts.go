@@ -779,7 +779,7 @@ func resolveFontForm(ctx context.Context, doc *document.Document, xobjDict ast.P
 //   - pdfjs issue15716.pdf: fills a rectangle with a pattern whose cell shows a
 //     glyph from an unembedded ZapfDingbats, which veraPDF reports under
 //     ISO 19005-2, 6.2.11.4.1 and litho never reached.
-//   - litho offlimits_1b.pdf: page 12 shows a Type 3 glyph in an uncoloured
+//   - litho/pdf offlimits_1b.pdf: page 12 shows a Type 3 glyph in an uncoloured
 //     cell, which veraPDF reports under ISO 19005-1, 6.3.8 t1 and litho never
 //     reached.
 func checkPatternFonts(ctx context.Context, doc *document.Document, ops []content.Operation, parent showSite, res, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements, visited map[int]bool, depth int) []Violation {
@@ -1143,7 +1143,7 @@ func checkGlyphUsageRules(ctx context.Context, doc *document.Document, font ast.
 //
 // # Corpus evidence
 //
-//   - litho type0nodesc_2b.pdf: veraPDF reports four glyphs of its four
+//   - litho/pdf type0nodesc_2b.pdf: veraPDF reports four glyphs of its four
 //     descendant-less fonts at PDF/A-2u. The control font's glyph, also
 //     reported, hid the gap until remediation mapped it.
 func type0ToUnicodeWithoutDescendant(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo, malformed judgeMalformedCodes) []Violation {
@@ -1615,7 +1615,7 @@ func checkFormPUA(ctx context.Context, doc *document.Document, res, pageRes ast.
 //
 // # Corpus evidence
 //
-//   - litho usecmap_2u.pdf: C2 shows CID 44DF through /Adobe-CNS1-UCS2
+//   - litho/pdf usecmap_2u.pdf: C2 shows CID 44DF through /Adobe-CNS1-UCS2
 //     usecmap, which maps it to U+F538 through bfchar. veraPDF reports it at
 //     PDF/A-2a, PDF/A-3a and PDF/UA-2, and litho, reading the program alone,
 //     did not.
@@ -2567,7 +2567,7 @@ const (
 //   - govdocs thread_200_200565.pdf: its 411 show operators are all mode 3,
 //     and veraPDF reports 6.2.11.8 and not 6.2.11.4.1 for a used CID absent
 //     from the CFF charset.
-//   - litho glyphs_2b.pdf: shows CID 5 past the end of a TrueType program,
+//   - litho/pdf glyphs_2b.pdf: shows CID 5 past the end of a TrueType program,
 //     once visibly and once in rendering mode 3 through another font, and
 //     veraPDF fails ISO 19005-2, 6.2.11.8 t1 for both, where litho failed it
 //     for neither.

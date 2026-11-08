@@ -26,7 +26,7 @@ import (
 //     its 22 KB stream that nothing closes, and the /Artifact sequence
 //     remediation wrapped the page in stayed open, so veraPDF reported ISO
 //     14289-1, 7.1 t3 and ISO 14289-2, 8.2.2 t1 on the remediated output.
-//   - litho danglingstr_ua1.pdf: the stamp the mutate-stamp cell appends was
+//   - litho/pdf danglingstr_ua1.pdf: the stamp the mutate-stamp cell appends was
 //     read inside the page's unterminated string, so qpdf reported the stamped
 //     page as not carrying it.
 func TerminatedEnd(ctx context.Context, data []byte) int {

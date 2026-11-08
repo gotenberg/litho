@@ -188,7 +188,7 @@ Corpus measurements back a decision; they are not the decision. Collect them in 
 //   - All corpora: 5170 of 5171 files parse, and the deepest page tree is 4.
 ```
 
-One bullet per finding, starting with the corpus (`All corpora`, `govdocs`, `pdfjs`, `verapdf`, `pdf20`, `pdfcpu`, `facturx`, `litho`, `compose`), then the file names when file-specific, then a colon. Evidence behind a comment inside a function, a struct field, or a `const` group moves to the enclosing declaration.
+One bullet per finding, starting with the corpus as the integration matrix names it (`All corpora`, `govdocs`, `pdfjs`, `verapdf`, `pdf20`, `pdfcpu`, `facturx`, `litho/pdf`, `litho/text`, `libreoffice/pptx`, `gotenberg/docx`), then the file names when file-specific, then a colon. A measurement on a document made for it, in no corpus, starts with `probe` and the format (`probe, pptx`). Evidence behind a comment inside a function, a struct field, or a `const` group moves to the enclosing declaration.
 
 ## Testing
 
@@ -196,7 +196,7 @@ Tests live in `_test.go` files beside the code. Assert observable contracts (exp
 
 Any function whose leading argument is attacker-controlled `[]byte` (filter `Decode`, predictors, font and CMap parsers, image decoders) ships a `Fuzz*` target in a `*_fuzz_test.go`, seeded with one valid and one truncated input.
 
-The integration matrix scores litho against oracles over several corpora. When no corpus file reaches a construct, craft a fixture in the litho corpus. See [test/integration/README.md](test/integration/README.md).
+The integration matrix scores litho against oracles over several corpora. When no corpus file reaches a construct, craft a fixture in the litho/pdf corpus. See [test/integration/README.md](test/integration/README.md).
 
 ## Pull requests
 

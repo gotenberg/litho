@@ -49,7 +49,7 @@ type stampResource struct {
 //   - govdocs thread_000_000018.pdf: its box starts at (-306, -396), where an
 //     unshifted stamp landed in the middle of the page and ran off the right
 //     edge, losing its last character to the crop.
-//   - litho viewerboxes_2b.pdf: page 1 states /MediaBox [10 10 300], which a
+//   - litho/pdf viewerboxes_2b.pdf: page 1 states /MediaBox [10 10 300], which a
 //     viewer draws as US Letter from (0, 0). Read from its first two entries,
 //     it moved the stamp by (10, 10), where the pinned pdf.js now finds it at
 //     the X and Y given.
@@ -318,7 +318,7 @@ func appendPageContents(ctx context.Context, doc *document.Document, alloc *writ
 //
 // # Corpus evidence
 //
-//   - litho danglingstr_ua1.pdf: the page ends inside "(dangling ( string",
+//   - litho/pdf danglingstr_ua1.pdf: the page ends inside "(dangling ( string",
 //     and the stamp the mutate-stamp cell appended was read inside it, so qpdf
 //     reported the stamped page as not carrying the stamp.
 func endDanglingContent(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, elems []ast.PdfObject) []ast.PdfObject {
@@ -419,7 +419,7 @@ func latestPage(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 //     PDF/A-2b remediation, its page lost the Default colour space the
 //     remediation had added, and 12 uses of DeviceRGB failed ISO 19005-2,
 //     6.2.4.3 again.
-//   - litho resinherit_2b.pdf: seeded from the Reader's key-by-key merge of
+//   - litho/pdf resinherit_2b.pdf: seeded from the Reader's key-by-key merge of
 //     the page tree, two stamped pages reached the root's font, which the
 //     dictionary they inherit hides, and the page whose /Resources is null
 //     lost the font and colour space it inherits.

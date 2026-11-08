@@ -120,7 +120,7 @@ func remediateFixture(ctx context.Context, data []byte, profile string, opts ...
 //   - pdfjs: remediated three times per file at PDF/UA-1, PDF/UA-2 and
 //     WTPDF-1.0-Accessibility, default and aggressive, with the /ID pinned,
 //     every one of 7212 cells wrote the same bytes and report.
-//   - litho: every fixture at 15 profiles, both modes, under a delay injected
+//   - litho/pdf: every fixture at 15 profiles, both modes, under a delay injected
 //     at random before each compliance check group and a 64-object cache,
 //     wrote the same bytes in all 4080 cells.
 //   - govdocs, verapdf, pdfcpu, pdf20, facturx: the 930 files naming a
@@ -209,7 +209,7 @@ func TestRemediationDerivesAMissingIDFromTheContent(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho, pdfjs: 15 edits, Split and Merge among them, run three times
+//   - litho/pdf, pdfjs: 15 edits, Split and Merge among them, run three times
 //     over every litho fixture and 158 tagged pdfjs files wrote the same
 //     bytes in all 4410 cells.
 func TestWriterEditsWriteTheSameBytesEveryRun(t *testing.T) {

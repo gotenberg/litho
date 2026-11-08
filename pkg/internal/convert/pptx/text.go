@@ -179,7 +179,7 @@ func (r *reader) textBody(c *shapeCtx, sc []*ooxml.Element, p placeholder, ref *
 		return nil
 	}
 	// A placeholder takes its master's text style for its type even when
-	// its layout lacks it (pptx: sd/tdf120028's body placeholder of an
+	// its layout lacks it (libreoffice/pptx: sd/tdf120028's body placeholder of an
 	// index its layout lacks prints in the master body style's Arial);
 	// one of the index 4294967295, which Impress looks up nowhere, takes
 	// the other style (sd-data/n759180).
@@ -189,7 +189,7 @@ func (r *reader) textBody(c *shapeCtx, sc []*ooxml.Element, p placeholder, ref *
 	if isPh && own.typ == "obj" && !own.hasIdx {
 		// An object placeholder without an index takes no list style of
 		// its layout's or master's placeholder and no master body style:
-		// the presentation's default text style (pptx: sd/bullet-indent's
+		// the presentation's default text style (libreoffice/pptx: sd/bullet-indent's
 		// <p:ph/> prints its bullets at margin 0).
 		sc, master = sc[:1], nil
 	}
@@ -278,7 +278,7 @@ func bodyProps(bc chain) *slides.TextBody {
 		b.SpacingReduction = percent(attr(fit, "lnSpcReduction"))
 	case fit.Local == "spAutoFit":
 		// Impress keeps the box the file saved for a shape that fits its
-		// text (pptx: sd/n862510_4 prints its spAutoFit boxes at their
+		// text (libreoffice/pptx: sd/n862510_4 prints its spAutoFit boxes at their
 		// saved height): the text runs past the box as it would without.
 		b.Autofit = slides.AutofitNone
 	}
@@ -493,7 +493,7 @@ func fieldOf(typ string) slides.Field {
 //
 // # Measured
 //
-//   - litho: a deck of the fourteen fields, en-US, converted by the
+//   - probe, pptx: a deck of the fourteen fields, en-US, converted by the
 //     pinned image on 2026-11-08 at 11:25:38 prints "11/8/26",
 //     "11/08/2026", "Sunday, November 8, 2026", "November 8, 2026" (3, 4
 //     and 6), "Nov 8, 2026" (5 and 7), "11/08/2026 11:25 AM", "11/08/2026
@@ -512,7 +512,7 @@ var usDateFormats = map[string]string{
 //
 // # Measured
 //
-//   - litho: the same deck in en-GB prints "08/11/26", "08/11/2026",
+//   - probe, pptx: the same deck in en-GB prints "08/11/26", "08/11/2026",
 //     "Sunday 8 November 2026", "8 November 2026", "8 Nov 2026" and
 //     "11:25:53"; in de-DE the dates with full stops ("08.11.2026").
 var dayFirstFormats = map[string]string{
@@ -626,7 +626,7 @@ func (r *reader) runStyle(c chain, sc scope) slides.RunStyle {
 			}
 		case "noFill":
 			// Text of no fill paints nothing: a transparent colour, which
-			// the zero colour, black, is not (pptx: sd/tdf118776's text
+			// the zero colour, black, is not (libreoffice/pptx: sd/tdf118776's text
 			// of noFill prints nothing).
 			s.Color = css.Color{R: 1, G: 1, B: 1}
 		}
@@ -646,7 +646,7 @@ func (r *reader) runStyle(c chain, sc scope) slides.RunStyle {
 //
 // # Corpus evidence
 //
-//   - pptx: sd/bnc887230's link run of colour CCCCFF prints in the
+//   - libreoffice/pptx: sd/bnc887230's link run of colour CCCCFF prints in the
 //     theme's hlink, 0000FF.
 func (r *reader) linkStyle(s *slides.RunStyle, h *ooxml.Element, sc scope) {
 	s.Underline = true
@@ -674,7 +674,7 @@ func (r *reader) bullet(pc chain, ts *textStyles) *slides.Bullet {
 	switch kind.Local {
 	case "buChar":
 		// Impress draws a bullet of one character: the first of a longer
-		// buChar char (pptx: sd/bnc862510_5's "••" prints one bullet).
+		// buChar char (libreoffice/pptx: sd/bnc862510_5's "••" prints one bullet).
 		b.Kind, b.Char = slides.BulletChar, firstRune(attr(kind, "char"))
 		if b.Char == "" {
 			return nil
@@ -700,7 +700,7 @@ func (r *reader) bullet(pc chain, ts *textStyles) *slides.Bullet {
 	}
 	if f := pc.first("buFont", "buFontTx"); f == nil && b.Kind == slides.BulletChar {
 		// A bullet character no level gives a face draws in Impress's
-		// default bullet face (pptx: sd/n862510_2's diagram bullet prints
+		// default bullet face (libreoffice/pptx: sd/n862510_2's diagram bullet prints
 		// in OpenSymbol).
 		b.Families = []string{symbolFace}
 	} else if f != nil && f.Local == "buFont" {

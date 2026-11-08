@@ -228,7 +228,7 @@ type contentMarkingWalk struct {
 //   - govdocs thread_000_000632.pdf: wraps an image in /Artifact <</MCID 31>>
 //     BDC that its /S /Artifact element owns, and veraPDF reports t1 and t2;
 //     with the MCID left out of the ParentTree it reports neither.
-//   - litho annothidden_2b.pdf: flattening draws each annotation's empty
+//   - litho/pdf annothidden_2b.pdf: flattening draws each annotation's empty
 //     appearance on an untagged page, and veraPDF reports neither t3 nor
 //     8.2.2 t1 on the output, where litho did.
 //   - pdfjs bug1703683_page2_reduced.pdf: draws dozens of empty forms outside
@@ -239,23 +239,23 @@ type contentMarkingWalk struct {
 //     8.2.2 t1, where litho did.
 //   - All corpora: no other file changes its rule set at PDF/UA-1 or
 //     PDF/UA-2.
-//   - litho namedmcid_ua1.pdf: tags text through lists its page and three
+//   - litho/pdf namedmcid_ua1.pdf: tags text through lists its page and three
 //     forms name, and veraPDF reports neither t3 nor 8.2.2 t1, where litho
 //     reported both.
 //   - All corpora: dropping the orphan-MCID check moves no rule set at
 //     PDF/UA-1, PDF/UA-2 or either WTPDF level. It lowers the t3 and 8.2.2 t1
 //     counts, from 2 to 1 on 25 files and from 4 to 1 on govdocs
 //     thread_200_200824.pdf.
-//   - litho and verapdf corpora: counting per content item puts t3 and 8.2.2
+//   - litho/pdf and verapdf corpora: counting per content item puts t3 and 8.2.2
 //     t1 on veraPDF's count in 7500 of the 7502 cells where either fires, up
 //     from 5814, and moves no rule set. The two left are litho
 //     baretree_2b.pdf, whose root /Count lets veraPDF read four of its five
 //     pages.
-//   - litho imagereach_2b.pdf: two pages share one content stream, and
+//   - litho/pdf imagereach_2b.pdf: two pages share one content stream, and
 //     veraPDF reports only the first page's items.
-//   - litho fontcopies_2b.pdf: forms two pages draw, which veraPDF reports
+//   - litho/pdf fontcopies_2b.pdf: forms two pages draw, which veraPDF reports
 //     under the first page only.
-//   - litho multipage_2b.pdf: a PostScript XObject drawn untagged, which
+//   - litho/pdf multipage_2b.pdf: a PostScript XObject drawn untagged, which
 //     veraPDF does not count.
 func checkContentMarking(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !IsPDFUA(profile) {

@@ -168,7 +168,7 @@ func TestFixRoleMap_CycleRemapAvoidsOrphan(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho rolecycle_ua1 and rolecycle_ua2: carry this cycle.
+//   - litho/pdf rolecycle_ua1 and rolecycle_ua2: carry this cycle.
 func TestFixRoleMap_BreaksCycleAtItsStandardType(t *testing.T) {
 	for _, tc := range []struct {
 		profile    string
@@ -210,7 +210,7 @@ func TestFixRoleMap_BreaksCycleAtItsStandardType(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho stdremap_ua2: its PDF 1.7 Sect read as Book until the entry went,
+//   - litho/pdf stdremap_ua2: its PDF 1.7 Sect read as Book until the entry went,
 //     and veraPDF reported 8.2.4 t4 on every PDF/UA-2 and WTPDF output.
 func TestFixRoleMap_DropsDeadEndStandardRemap_Namespaced(t *testing.T) {
 	data := roleMapPDF("<< /Sect /Book /Div /Foo /Foo /Bar /Note /Foo2 /Foo2 /P /Custom /P >>", true)

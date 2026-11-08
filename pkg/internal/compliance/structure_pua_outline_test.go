@@ -44,7 +44,7 @@ func puaOutlineNoStructPDF(title string) []byte {
 //
 // # Corpus evidence
 //
-//   - litho puatext_ua2.pdf: with its /StructTreeRoot entry removed and
+//   - litho/pdf puatext_ua2.pdf: with its /StructTreeRoot entry removed and
 //     nothing else changed, veraPDF 1.30.2 reports §8.6 t1 once, and litho
 //     reported it not at all.
 func TestOutlineTitlePUAWithoutStructureTree(t *testing.T) {

@@ -82,7 +82,7 @@ func (b *builder) stroke(l *Line, ops []compose.PathOp) []compose.Fragment {
 //
 // # Corpus evidence
 //
-//   - odp: sd/tdf66228.odp's outlines and connector and
+//   - libreoffice/odp: sd/tdf66228.odp's outlines and connector and
 //     sd/tdf127267DashOnHairline.odp's dashed line, hairlines without
 //     arrowheads, stroke at "0 w"; sd/tdf99213-target-missing.odp's three
 //     hairlines with arrowheads stroke at the page's "0.1 w".

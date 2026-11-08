@@ -131,10 +131,10 @@ func associatedFileSpecRefs(typed []int, tree map[int]bool, promoted []int) []in
 //
 //   - pdfjs issue14203.pdf: a FileAttachment's inline /FS kept 6.8 t4 after
 //     a PDF/A-3b remediation.
-//   - litho afref_3b.pdf: a FileAttachment's inline /FS and a Link's /GoToR
+//   - litho/pdf afref_3b.pdf: a FileAttachment's inline /FS and a Link's /GoToR
 //     /F kept 6.8 t4 after a PDF/A-3b remediation, on litho and veraPDF
 //     alike.
-//   - litho inlinefs_4.pdf: the inline /AF entries of a Link written inline,
+//   - litho/pdf inlinefs_4.pdf: the inline /AF entries of a Link written inline,
 //     of a form XObject and of the catalog kept 6.8 t4, and the form's 6.8 t3,
 //     on veraPDF after a PDF/A-3b remediation, where litho reported none.
 type inlineFileSpecAF struct {

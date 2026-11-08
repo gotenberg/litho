@@ -139,7 +139,7 @@ func (q *queuedFont) describe() string {
 //     given no subset. No rule gains a finding in any file, and the 680
 //     outputs that embed a program fall from 806 to 432 MB at PDF/A-2b (817
 //     to 444 MB at PDF/A-1b), none of them growing.
-//   - litho: the 72 files that show an unembedded font, at PDF/A-2b: 65 of
+//   - litho/pdf: the 72 files that show an unembedded font, at PDF/A-2b: 65 of
 //     the 68 programs embedded are subsets, 3 stay whole for a form's default
 //     resources, no rule gains a finding, and the 54 outputs that embed a
 //     program fall from 3.4 to 1.2 MB.
@@ -275,7 +275,7 @@ func (e *fontEmbedder) sharingWhole(ctx context.Context, members []*queuedFont, 
 //   - govdocs: those 18 files with whole programs grow from 43 to 68 MB
 //     when each mapping takes a copy of the program, 12.3 to 33.0 MB of it
 //     thread_300_300655.pdf, which is why a whole program stays shared.
-//   - litho: no output of the 139 files changes.
+//   - litho/pdf: no output of the 139 files changes.
 func (e *fontEmbedder) codeMapping(ctx context.Context, plan *embedPlan) string {
 	var sb strings.Builder
 	sb.WriteString(nameOf(ctx, e.doc, plan.font["Subtype"]))
@@ -350,7 +350,7 @@ func (e *fontEmbedder) codeMapping(ctx context.Context, plan *embedPlan) string 
 //     from 27 to 7 and 6.2.11.5 from 46 to 2, and 12 pass instead of 6.
 //     litho's verdicts do not move, and pdf.js places each of the 237418
 //     text items where it placed them before.
-//   - litho: no output of the 140 files changes, subset or whole.
+//   - litho/pdf: no output of the 140 files changes, subset or whole.
 func (e *fontEmbedder) encodingObjects() map[*queuedFont]*ast.PdfIndirectRef {
 	mappings := make(map[programKey]map[string]bool)
 	for _, q := range e.queued {

@@ -54,12 +54,12 @@ var defaultSpaceFamily = map[ast.PdfName]ast.PdfName{
 //
 // # Corpus evidence
 //
-//   - litho patternshade_2b.pdf: remediation replaced its CMYK intent with an
+//   - litho/pdf patternshade_2b.pdf: remediation replaced its CMYK intent with an
 //     sRGB one and kept a DeviceCMYK finding on veraPDF and litho at every
 //     PDF/A level, in both modes, for the Separation of the shading pattern a
 //     tiling cell selects. It is gone at all eleven, and the PDF/A-4 and 4e
 //     outputs are conforming.
-//   - litho shadedefault_2b.pdf: six DeviceCMYK findings, and from part 2 on
+//   - litho/pdf shadedefault_2b.pdf: six DeviceCMYK findings, and from part 2 on
 //     a 6.2.4.4 t2 one, stayed at every PDF/A level in both modes; every
 //     output is now conforming on both tools but PDF/A-4f's, which keeps 6.9
 //     t5.

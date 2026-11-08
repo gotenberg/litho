@@ -549,7 +549,7 @@ func (r *reader) dxfElementStyle(e *ooxml.Element) *sheet.Style {
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/databar.xlsx's middle axis, whose extension says
+//   - libreoffice/xlsx: sc/databar.xlsx's middle axis, whose extension says
 //     maxLength 100, paints its longest bar across 90% of the half cell.
 func dataBarSettings(rule *sheet.Rule, db, ext *ooxml.Element, color func(*ooxml.Element) (css.Color, bool)) {
 	length := func(name string, def int) float64 {

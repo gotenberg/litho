@@ -116,7 +116,7 @@ func assertGStateRepaired(t *testing.T, gs ast.PdfDict) {
 //
 // # Corpus evidence
 //
-//   - litho gstate_2b.pdf: GS7, GS9, H1, H2 and the forms' GSn kept 6.2.5 t1,
+//   - litho/pdf gstate_2b.pdf: GS7, GS9, H1, H2 and the forms' GSn kept 6.2.5 t1,
 //     t3, t4 and 6.2.6 t1 after a PDF/A-2b remediation, and 6.2.8 t1 and 6.2.9
 //     t1 after a PDF/A-1b one, on litho and veraPDF alike.
 func TestFixGraphics_RepairsADirectGraphicsState(t *testing.T) {
@@ -176,7 +176,7 @@ func TestFixGraphics_KeepsTheBodyOfAFormItRepairs(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho gstate_2b.pdf: GS4's type 6 halftone kept 6.2.5 t6 after a
+//   - litho/pdf gstate_2b.pdf: GS4's type 6 halftone kept 6.2.5 t6 after a
 //     PDF/A-2b remediation, on litho and veraPDF alike.
 func TestNormalizeHalftone_DropsTheTransferFunctionOfATopLevelHalftone(t *testing.T) {
 	t.Parallel()

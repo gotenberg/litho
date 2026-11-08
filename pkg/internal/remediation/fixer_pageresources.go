@@ -46,7 +46,7 @@ func matchPageResources(v compliance.Violation) bool {
 //
 // # Corpus evidence
 //
-//   - litho parentreach_2b.pdf: four pages whose /Parent names the root were
+//   - litho/pdf parentreach_2b.pdf: four pages whose /Parent names the root were
 //     given the root's /Resources, so their PDF/A-2b outputs passed litho and
 //     veraPDF with every name the pages draw undefined, and their PDF/A-4
 //     outputs failed 6.2.2 t3 on both. Given the /Resources of the node
@@ -231,7 +231,7 @@ func treeNodeWritable(node annotPageEntry) bool {
 //     listing them. The one in litho resinherit_2b.pdf and the four in litho
 //     parentreach_2b.pdf inherit, and the two in pdfjs filled-background.pdf
 //     state /Resources of their own.
-//   - litho parentreach_2b.pdf: graphics, devicen, aggressive-limits and
+//   - litho/pdf parentreach_2b.pdf: graphics, devicen, aggressive-limits and
 //     marked-content-lang repaired the root's /Resources in place of the
 //     node's, so PDF/A-1b outputs kept 6.2.8 t1 and 6.1.12 t9 in both modes,
 //     and PDF/UA-1 and PDF/UA-2 outputs the /Lang (7.2 t29, 8.4.4 t2), on
@@ -271,7 +271,7 @@ func resourcesHolder(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 //     that resolve, or sit directly in /Kids, only litho resinherit_2b.pdf and
 //     the two files holding a page written directly in /Kids change output,
 //     and no finding moves on litho or veraPDF.
-//   - litho resinherit_2b.pdf: at PDF/UA-1 the fonts repair gave a /ToUnicode
+//   - litho/pdf resinherit_2b.pdf: at PDF/UA-1 the fonts repair gave a /ToUnicode
 //     to the three fonts no page resolves, and now gives none; the findings
 //     of litho and veraPDF on the outputs are the same either way.
 func pageResourceCategory(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, category ast.PdfName) ast.PdfDict {
@@ -305,7 +305,7 @@ func pageResourceCategory(ctx context.Context, alloc *writer.ObjAllocator, doc *
 //   - pdfjs issue18986.pdf, poppler-742-0-fuzzed.pdf and
 //     poppler-937-0-fuzzed.pdf: the page tree walk reaches no page where the
 //     parser reaches one, the only files where the walks part.
-//   - litho kidsrepair_1b.pdf: two sibling pages written directly in one
+//   - litho/pdf kidsrepair_1b.pdf: two sibling pages written directly in one
 //     /Kids, one inheriting its node's /Resources and one stating its own, kept
 //     6.2.2 t2 and 6.2.5 t1 after a PDF/A-2 or PDF/A-4 remediation, and 6.4 and
 //     6.2.8 t1 after a PDF/A-1b one, on litho and veraPDF. Written back into the

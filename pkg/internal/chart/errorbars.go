@@ -11,7 +11,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - ods: chart2/error_bar.ods prints its caps 5.67 points long.
+//   - libreoffice/ods: chart2/error_bar.ods prints its caps 5.67 points long.
 const errorCap = 100 * mm100
 
 // errorAmounts returns the error above and below point j of a series of

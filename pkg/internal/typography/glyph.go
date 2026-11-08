@@ -192,18 +192,18 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 //
 // # Corpus evidence
 //
-//   - litho cmapusecmap_2b.pdf, cmapverabase_2b.pdf, usecmap_2u.pdf: codes
+//   - litho/pdf cmapusecmap_2b.pdf, cmapverabase_2b.pdf, usecmap_2u.pdf: codes
 //     a /ToUnicode CMap maps to nothing, or an empty one leaves unmapped, are
 //     placed, and a region over a quarter of their page, or a band through
 //     it, no longer refuses.
-//   - litho cmaps_2b.pdf, type0nodesc_2b.pdf: a CMap name outside Table 118
+//   - litho/pdf cmaps_2b.pdf, type0nodesc_2b.pdf: a CMap name outside Table 118
 //     and Type 0 fonts with no CIDFont stay unplaced, and redacting their
 //     page still refuses.
 //   - govdocs thread_300_300034.pdf pages 29 and 30: the unmapped <0004>
 //     codes inside "<" and ">" left gaps read as word spaces, "< Population
 //     Viability >". Placed, they cover their width, and the line reads
 //     "<Population Viability>", as PDF.js reads it.
-//   - litho fontcopies_2b.pdf page 16: a line of one unmapped code reads as
+//   - litho/pdf fontcopies_2b.pdf page 16: a line of one unmapped code reads as
 //     an empty line, where PDF.js reads a line too.
 //   - All corpora: placing the codes makes no other file of the six text
 //     corpora read other text, and changes the redaction outcome of no page
@@ -568,7 +568,7 @@ func encodingCIDTableChar(font *Font, code encodingCode) (char string, consumed 
 //
 // # Corpus evidence
 //
-//   - litho cmapnotdef_2b.pdf, cmapverabase_2b.pdf: codes a notdef range or
+//   - litho/pdf cmapnotdef_2b.pdf, cmapverabase_2b.pdf: codes a notdef range or
 //     no mapping covers read "C", "Ő" and "娠", their own values; they now
 //     read as nothing. No file of the five text corpora changes, and both
 //     pages stay unscored.

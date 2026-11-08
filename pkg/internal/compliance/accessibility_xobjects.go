@@ -75,12 +75,12 @@ func checkFormXObjectRestrictions(ctx context.Context, vctx *validationCtx) []Vi
 //
 // # Corpus evidence
 //
-//   - litho refreach_ua1.pdf: plants one reference form per path, and litho
+//   - litho/pdf refreach_ua1.pdf: plants one reference form per path, and litho
 //     stated test 1 2 times, where veraPDF states it 6 times.
 //   - All corpora, at PDF/UA-1: reaching the forms the streams draw, instead
 //     of the forms the resources list, moves no test 1 count on any other
 //     file.
-//   - litho formreuse_ua1.pdf: plants one second reference per path, and
+//   - litho/pdf formreuse_ua1.pdf: plants one second reference per path, and
 //     litho stated test 2 in none of them, where veraPDF states it 6 times.
 //     litho formshare_ua1.pdf: litho stated test 2 twice for the forms the
 //     content two pages share draws, where veraPDF states it nowhere.

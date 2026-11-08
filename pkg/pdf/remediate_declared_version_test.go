@@ -136,7 +136,7 @@ func TestRemediate_IncrementalOutputDeclaresTheRequiredVersion(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho a4syntax_4.pdf: its PDF/A-4 remediation rewrote the file at
+//   - litho/pdf a4syntax_4.pdf: its PDF/A-4 remediation rewrote the file at
 //     %PDF-2.0 under a catalog /Version /1.7.
 //   - pdf20 PDF_2.0_via_incremental_save.pdf: its PDF/A-2b and PDF/UA-1
 //     remediations stayed incremental at %PDF-1.7 under a catalog /Version

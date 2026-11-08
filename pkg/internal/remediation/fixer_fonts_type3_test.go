@@ -120,7 +120,7 @@ func TestFixType3FontToUnicodeLeavesWhatItCannotGround(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho offlimits_1b.pdf: page 12's cell shows a Type 3 glyph named a, and
+//   - litho/pdf offlimits_1b.pdf: page 12's cell shows a Type 3 glyph named a, and
 //     the remediated PDF/A-1a output kept ISO 19005-1, 6.3.8 t1 on veraPDF.
 func TestFixFontIssues_ReachesType3FontInUncolouredCell(t *testing.T) {
 	t.Parallel()

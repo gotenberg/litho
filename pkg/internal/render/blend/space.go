@@ -226,7 +226,7 @@ type ProfiledConverter interface {
 //
 // # Corpus evidence
 //
-//   - litho greygroup_2b.pdf: black through a luminosity mask of sRGB grey
+//   - litho/pdf greygroup_2b.pdf: black through a luminosity mask of sRGB grey
 //     0.5 drawn in a grey group of a linear tone curve draws 126 to 127 on
 //     poppler 26.09.0, PDFium and MuPDF 1.26.10, and 126 here; the component
 //     itself would draw 199.

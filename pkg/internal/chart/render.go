@@ -229,7 +229,7 @@ func (s *Stroke) compose() *compose.Stroke {
 //
 // # Corpus evidence
 //
-//   - pptx: chart2/funnel-pp1.pptx prints the 10-point Liberation Serif
+//   - libreoffice/pptx: chart2/funnel-pp1.pptx prints the 10-point Liberation Serif
 //     notice 275.93 points wide, where its advances sum to 282.78;
 //     xlsx: chart2/funnel1.xlsx its first line 185.51 for 190.50.
 const noticeNarrowing = 0.9757

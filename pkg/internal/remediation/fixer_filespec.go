@@ -35,7 +35,7 @@ func matchFileSpecFUF(v compliance.Violation) bool {
 //
 //   - pdfjs issue14203.pdf: a FileAttachment's inline /FS carries /F and no
 //     /UF.
-//   - litho inlinefs_4.pdf: a Link's inline /AF entry carries /F and no /UF,
+//   - litho/pdf inlinefs_4.pdf: a Link's inline /AF entry carries /F and no /UF,
 //     and kept its ISO 19005-4, 6.9 t2 finding after a PDF/A-4 remediation.
 func fixFileSpecFUF(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	var count int

@@ -76,7 +76,7 @@ func matchFontFixes(v compliance.Violation) bool {
 //     fonts share one descriptor, and each wrote its own /CIDSet over the
 //     document's copy of it. Read through the allocator, the descriptor gets
 //     one.
-//   - litho inlineimage_2b.pdf, repairleft_4.pdf and repairroom_2b.pdf: read
+//   - litho/pdf inlineimage_2b.pdf, repairleft_4.pdf and repairroom_2b.pdf: read
 //     after text-control's strip, the content shows no control code, so their
 //     aggressive PDF/A-2u and PDF/UA-1 outputs gain a /ToUnicode for the font
 //     that showed one. litho and veraPDF report the same findings either way.

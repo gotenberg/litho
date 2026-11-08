@@ -168,7 +168,7 @@ func (p placeholder) class() string {
 //
 // # Corpus evidence
 //
-//   - pptx: sd/tdf120028's body placeholder of an index its layout lacks,
+//   - libreoffice/pptx: sd/tdf120028's body placeholder of an index its layout lacks,
 //     on a layout of a title and a subtitle, inherits nothing: its text
 //     prints left-aligned and black, not as the subtitle's centred grey.
 func (l *layer) find(p placeholder) *ooxml.Element {
@@ -222,7 +222,7 @@ func (l *layer) find(p placeholder) *ooxml.Element {
 //
 // # Corpus evidence
 //
-//   - pptx: sd-data/n759180's body placeholder of idx 4294967295, on a
+//   - libreoffice/pptx: sd-data/n759180's body placeholder of idx 4294967295, on a
 //     layout of a title, a footer and a slide number, prints at its box's
 //     inset without the master body style's bullet and indent.
 func inherited(l *layer, el *ooxml.Element) []*ooxml.Element {
@@ -261,7 +261,7 @@ func inherited(l *layer, el *ooxml.Element) []*ooxml.Element {
 //
 // # Corpus evidence
 //
-//   - pptx: oox/tdf151008_eaVertAnchor's text boxes, of no size of their
+//   - libreoffice/pptx: oox/tdf151008_eaVertAnchor's text boxes, of no size of their
 //     own on a master whose other style sets 15.12 points, print at the
 //     default text style's 18 points, upright or vertical.
 func (l *layer) styleFor(p placeholder, isPh bool) *ooxml.Element {

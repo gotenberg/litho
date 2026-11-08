@@ -617,7 +617,7 @@ func chartSeries(c *chart.Chart) int {
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/129969-min.xlsx links file:///\\ndhlis-cbut018\CBUT018\...,
+//   - libreoffice/xlsx: sc/129969-min.xlsx links file:///\\ndhlis-cbut018\CBUT018\...,
 //     which LibreOffice exports as file://ndhlis-cbut018/CBUT018/....
 func uncURL(target string) string {
 	rest, ok := strings.CutPrefix(target, `file:///\\`)
@@ -637,7 +637,7 @@ func uncURL(target string) string {
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/cell-multi-line.xlsx prints "Line1\nLine2\nLine3" as
+//   - libreoffice/xlsx: sc/cell-multi-line.xlsx prints "Line1\nLine2\nLine3" as
 //     Line1Line2Line3 in its cell without wrapText, on three lines in the
 //     one with it; sc/preserve_space.xlsx prints "123\n" and "456" as
 //     123456; sc/escape-unicode.xlsx prints "Line 1_x000D_\nLine 2" on two

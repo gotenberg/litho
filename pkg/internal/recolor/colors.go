@@ -81,7 +81,7 @@ func (c sessionColors) variantKey() string {
 //     byte for byte as before. Only pdfjs issue15220.pdf paints such an image
 //     under another intent, /Perceptual ri, and its profile is a matrix one
 //     whose intents agree.
-//   - litho jpxintent_2b.pdf: the two images painted under /Perceptual ri
+//   - litho/pdf jpxintent_2b.pdf: the two images painted under /Perceptual ri
 //     and an /RI drew L* 50 converted, where the source draws L* 13, and now
 //     draw L* 13.
 //   - All corpora: of the 65 files naming JPX in their bytes, converted to
@@ -90,7 +90,7 @@ func (c sessionColors) variantKey() string {
 //     than before the option's intent reached the decoder, under
 //     /Perceptual and /Saturation; under relative colorimetric, the default,
 //     every output is byte-identical.
-//   - litho jpxintent_2b.pdf: converted to sRGB under the /Perceptual option,
+//   - litho/pdf jpxintent_2b.pdf: converted to sRGB under the /Perceptual option,
 //     all three images drew grey 119, the two under /Perceptual ri among
 //     them since their state then matched the option's, and now draw 33, the
 //     perceptual reading.

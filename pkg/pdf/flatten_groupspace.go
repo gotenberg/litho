@@ -84,7 +84,7 @@ type groupSpaceOutcome struct {
 //     converts 68 pages of 30 of them, each drawing on litho as before
 //     within the flatten cell's bars, govdocs thread_200_200620.pdf page 3
 //     closer (220 differing pixels at 72 dpi before, none after).
-//   - litho: converted to CMYK and then flattened, the 248 files give the
+//   - litho/pdf: converted to CMYK and then flattened, the 248 files give the
 //     same bytes as before; flattened alone, groupspace_2b.pdf alone
 //     changes, its pages 1 to 3 drawing within 2 levels of their source at
 //     300 dpi where they drew up to 104, 102 and 170 levels apart.
@@ -349,7 +349,7 @@ func groupTarget(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 //
 // # Corpus evidence
 //
-//   - litho greygroup_2b.pdf: converted to CMYK, then flattened, page 3's
+//   - litho/pdf greygroup_2b.pdf: converted to CMYK, then flattened, page 3's
 //     perceptual fill in its L* grey group drew up to 36 levels from its
 //     source over half the page by the luminance, and now draws within 11
 //     levels but on 0.02% of it; flattened alone, its pages draw as before.

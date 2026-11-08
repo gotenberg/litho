@@ -31,7 +31,7 @@ func flateCompress(data []byte, limit int) ([]byte, bool, error) {
 //
 // # Corpus evidence
 //
-//   - litho, pdfjs, govdocs render samples and every pdfjs, govdocs and
+//   - litho/pdf, pdfjs, govdocs render samples and every pdfjs, govdocs and
 //     litho file holding a JPEG 2000 image (417 files): converted to CMYK,
 //     lossless and at quality 85, the outputs are byte for byte those of
 //     encoding in full.
@@ -79,7 +79,7 @@ const subsampleBelowQuality = 90
 //
 // # Corpus evidence
 //
-//   - pdfjs, govdocs, litho: the 41 files holding JPEG 2000 images that
+//   - pdfjs, govdocs, litho/pdf: the 41 files holding JPEG 2000 images that
 //     convert to CMYK grow from 58.8 MB to 275.9 MB lossless and 182.5 MB
 //     at quality 85, their JPEG 2000 images alone from 21.1 MB to 211.0 MB
 //     under Flate; pdfjs issue17289.pdf 59768197 -> 29287778 bytes.

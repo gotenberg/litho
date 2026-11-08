@@ -251,7 +251,7 @@ func visible(st *Style) bool {
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/cell-value.xlsx, whose D3 text overflows far past its last
+//   - libreoffice/xlsx, gotenberg/xlsx: sc/cell-value.xlsx, whose D3 text overflows far past its last
 //     column, prints 8 pages; budget-single, whose Notes sheet's A2 text
 //     overflows, prints a page of column A alone as one page of content.
 func (g *grid) usedRange(single bool) (Range, bool) {
@@ -321,7 +321,7 @@ const columnsStop = 30
 //
 // # Corpus evidence
 //
-//   - ods: sc/tdf133327.ods, rows filled across 261 columns without a
+//   - libreoffice/ods: sc/tdf133327.ods, rows filled across 261 columns without a
 //     value, prints column A alone.
 func (g *grid) attrColumns(dataLast, attrLast int) int {
 	keys := map[*Style]string{}

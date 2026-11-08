@@ -495,10 +495,10 @@ func stack(s string) string {
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/escape-unicode.xlsx, a cell that does not wrap holding
+//   - libreoffice/xlsx: sc/escape-unicode.xlsx, a cell that does not wrap holding
 //     "Line 1\r\nLine 2\r\nLine 3\r\nLine 4", prints four lines in a
 //     row grown to them.
-//   - csv: sc/tdf80149.csv, a field holding U+0016, prints nothing for
+//   - libreoffice/csv: sc/tdf80149.csv, a field holding U+0016, prints nothing for
 //     it.
 func normalizeBreaks(s string) string {
 	if strings.ContainsRune(s, '\r') {

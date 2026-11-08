@@ -39,7 +39,7 @@ const tableStyleNS = `xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/
 //
 // # Corpus evidence
 //
-//   - litho: Gotenberg's deck.pptx, a "Medium Style 2 - Accent 1" table:
+//   - litho/pdf: Gotenberg's deck.pptx, a "Medium Style 2 - Accent 1" table:
 //     Impress fills the header 4F81BD, the first band D0D8E7, the second
 //     E9ECF3, draws 0.84-point white rules between all rows and columns,
 //     and sets the header's "R0C0" in regular Carlito, as wide as the

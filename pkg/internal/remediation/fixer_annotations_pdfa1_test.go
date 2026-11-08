@@ -357,7 +357,7 @@ func TestFixAnnotations_Part4fKeepsFileAttachment(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho: annotkinds_ua2.pdf, remediated as PDF/A-4e, lost its 3D and
+//   - litho/pdf: annotkinds_ua2.pdf, remediated as PDF/A-4e, lost its 3D and
 //     RichMedia annotations along with the Screen and Sound ones its 6.3.1
 //     violation was about. The verapdf PDF/A-4e fixtures carry either subtype
 //     but none raises an annotation violation, so the fixer never runs on them.

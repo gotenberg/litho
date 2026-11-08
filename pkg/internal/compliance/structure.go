@@ -137,7 +137,7 @@ func isStandardStructTypeInNS(name ast.PdfName, nsURI string) bool {
 //
 // # Corpus evidence
 //
-//   - litho structkinds_ua2: veraPDF 1.30.2 reports 6.8.3.4/1 at PDF/A-1a for
+//   - litho/pdf structkinds_ua2: veraPDF 1.30.2 reports 6.8.3.4/1 at PDF/A-1a for
 //     each of the 19 Ruby, RB, RT, RP, Warichu, WT and WP elements beside the
 //     two math ones, and nothing for them from PDF/A-2a.
 //
@@ -377,7 +377,7 @@ func checkStructTreeRoot(ctx context.Context, doc *document.Document, catalog as
 //
 // # Corpus evidence
 //
-//   - litho remapchain_ua2: /Div -> /Section -> /Sect, which veraPDF passes at
+//   - litho/pdf remapchain_ua2: /Div -> /Section -> /Sect, which veraPDF passes at
 //     PDF/A-2a and PDF/A-3a and litho, judging the first hop, reported.
 func legacyChainReachesStandard(mapping map[ast.PdfName]ast.PdfName, src ast.PdfName, profile string) bool {
 	visited := map[ast.PdfName]bool{src: true}
@@ -522,11 +522,11 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 //
 // # Corpus evidence
 //
-//   - litho rolecycle_ua1: veraPDF reports 7.1 t6 on the Sect in a Sect, Book
+//   - litho/pdf rolecycle_ua1: veraPDF reports 7.1 t6 on the Sect in a Sect, Book
 //     cycle and on the Item mapped into it, 8.2.4 t2 on both at PDF/UA-2, and
 //     6.7.3.4 t2 on the Sect alone at PDF/A-2a and PDF/A-3a; litho, judging
 //     only non-standard /RoleMap entries, reported none of them.
-//   - litho rolecycle_ua2: veraPDF reports 8.2.4 t2 on a Callout whose
+//   - litho/pdf rolecycle_ua2: veraPDF reports 8.2.4 t2 on a Callout whose
 //     namespace chain returns to it through a second namespace and 8.2.4 t3 on
 //     a Panel whose chain stays in its own; litho reported t3 on every entry of
 //     both cycles and t2 on a self-mapped /RoleMapNS entry no element uses.

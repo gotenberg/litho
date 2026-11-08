@@ -46,7 +46,7 @@ const recolorInkLevel = renderChannelTolerance
 //
 // # Corpus evidence
 //
-//   - litho complex_2b.pdf, megafont_2b.pdf, multipage_2b.pdf,
+//   - litho/pdf complex_2b.pdf, megafont_2b.pdf, multipage_2b.pdf,
 //     transparency_2b.pdf: saturated sRGB blue covers 1% of a page at 52 to
 //     71.7, which a bar of 50 failed.
 //   - govdocs thread_000_000753.pdf: the same at 53.5.
@@ -156,17 +156,17 @@ const recolorJPEGQuality = 85
 //
 // # Corpus evidence
 //
-//   - litho (215 files), pdfjs and govdocs (79 sampled files each): 199, 78
+//   - litho/pdf (215 files), pdfjs and govdocs (79 sampled files each): 199, 78
 //     and 79 match; 14 litho files and no other are refused, 10 for a
 //     construct the file holds on purpose (a colour space naming a resource,
 //     33 colorants, a 3-bit or 2-channel JPEG 2000 image, an /Lzw or doubled
 //     /Interpolate inline image, a shading function of the wrong output
 //     count, an undecodable content stream) and 4 for a GTS_PDFX intent;
 //     pdfjs print_protection.pdf does not open.
-//   - litho defaultbox_2b.pdf, viewerboxes_2b.pdf: ink_moved on the pages
+//   - litho/pdf defaultbox_2b.pdf, viewerboxes_2b.pdf: ink_moved on the pages
 //     without a usable media box, which every full rewrite gives a size of
 //     its own (see their known divergences), the conversion aside.
-//   - litho iccbadcmyk_2b.pdf, pdfxnoprofile_2b.pdf, pdfxonly_2b.pdf,
+//   - litho/pdf iccbadcmyk_2b.pdf, pdfxnoprofile_2b.pdf, pdfxonly_2b.pdf,
 //     twoprofile_1b.pdf: refused with pdf.ErrOutputIntentConflict. Each keeps
 //     a GTS_PDFX intent over another CMYK profile, through which the renderer
 //     reads the converted DeviceCMYK, 80.6 and 83.5 ΔE*ab from the source on
@@ -177,7 +177,7 @@ const recolorJPEGQuality = 85
 //     2000 images. 2 and 6 more name a codec filter and write the lossless
 //     bytes. Without the byte test the run also converted 15 and 8 files
 //     naming no JPEG filter, and changed none.
-//   - litho imagecolour_2b.pdf, inlinejpx_2b.pdf: the run converts their
+//   - litho/pdf imagecolour_2b.pdf, inlinejpx_2b.pdf: the run converts their
 //     JPEG 2000 images and keeps the lossless bytes, Flate holding images
 //     that small in fewer; no fixture converts a JPEG (undecodable_2b's is
 //     refused).

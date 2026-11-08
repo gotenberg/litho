@@ -56,7 +56,7 @@ import (
 //     names by reference. No file writes an intermediate node, the root or a
 //     lone /Kids dictionary directly: veraPDF 1.30.2 refuses a file holding
 //     an intermediate node written directly in /Kids.
-//   - litho kidsrepair_1b.pdf: a text stamp on every page left its two direct
+//   - litho/pdf kidsrepair_1b.pdf: a text stamp on every page left its two direct
 //     pages unstamped, and moving its first page to the end wrote a tree
 //     listing them as object 0, which litho read as one page of four.
 //   - pdfjs issue9105_other.pdf: is the one file whose trailer writes the

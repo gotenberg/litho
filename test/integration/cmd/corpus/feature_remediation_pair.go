@@ -34,9 +34,9 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho: 106 of the 257 PDFs come out fully fixed, and litho and veraPDF
+//   - litho/pdf: 106 of the 257 PDFs come out fully fixed, and litho and veraPDF
 //     1.30.3 disagree on one, sharedicc_2b. The cell takes 15 to 20 s.
-//   - litho: against the remediation cells at the same profiles, the pair
+//   - litho/pdf: against the remediation cells at the same profiles, the pair
 //     leaves no PDF/A rule RemediatePDFA fixes alone, and one PDF/UA rule
 //     RemediatePDFUA fixes alone: extpredef_2b keeps ISO 14289-1, 7.1 t9. Its
 //     extension schema redeclares dc:title as Text, which its Lang Alt value

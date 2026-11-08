@@ -13,11 +13,11 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho: figures.ods, whose page layout names no size or margin,
+//   - litho/pdf: figures.ods, whose page layout names no size or margin,
 //     prints on 612 by 792 point pages, its cells' text 1 point right of
 //     56.69 points (2 cm) and its first row's top 77.95 points below the
 //     page's top: the 2 cm margin and the 0.75 cm header.
-//   - litho: a sheet with a 1 cm top margin and a header of 2 cm
+//   - litho/pdf: a sheet with a 1 cm top margin and a header of 2 cm
 //     min-height and 0.5 cm spacing starts its cells 85.04 points down:
 //     the min-height includes the spacing; the header's text is centred
 //     in the 1.5 cm left above the spacing, as the footer's alike.
@@ -89,7 +89,7 @@ func shown(el *odf.Element) bool {
 //
 // # Corpus evidence
 //
-//   - ods: sc/tdf129940.ods, whose page layout says landscape and names no
+//   - libreoffice/ods: sc/tdf129940.ods, whose page layout says landscape and names no
 //     size, prints on 612 by 792 point pages; chart2/chartWithDotInSheetName
 //     .ods, landscape with an 841.89 by 595.3 point size, on that size.
 func (r *reader) readPage(mp *odf.MasterPage) pageResult {

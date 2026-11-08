@@ -15,7 +15,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - pptx: a 10 by 10 pt rectangle with a shadow blurred over 2 pt
+//   - probe, pptx: a 10 by 10 pt rectangle with a shadow blurred over 2 pt
 //     prints its shadow as a 141 by 141 pixel bitmap over 14 pt, and
 //     rectangles of 20, 40 and 45 pt blurred over 1 pt as bitmaps of 220,
 //     420 and 470 pixels: the range's side in points times 10, rounded up.
@@ -29,7 +29,7 @@ const effectScale = 10
 //
 // # Corpus evidence
 //
-//   - pptx: sd/shape-blur-effect's oval prints its 171.9 by 169.1 pt
+//   - libreoffice/pptx: sd/shape-blur-effect's oval prints its 171.9 by 169.1 pt
 //     shadow as a bitmap of 504 by 496 pixels, sd/effectOrder's glows as
 //     626 by 399 and 660 by 379, sd-data/n819614's 56 shadows each within
 //     a few hundred pixels of 250,000.
@@ -246,15 +246,15 @@ type effectPlan struct {
 //
 // # Corpus evidence
 //
-//   - pptx: sd/effectOrder's rectangle prints two glow bitmaps, over its
+//   - libreoffice/pptx: sd/effectOrder's rectangle prints two glow bitmaps, over its
 //     box grown by one and by two glow radii, the outer one opaque from
 //     one radius out; a rectangle, a text box and a turned rectangle with
 //     a glow print two, the presets roundRect, flowChartProcess,
 //     snip1Rect, triangle, ellipse, diamond and a custom rectangle one.
-//   - pptx: sd/shape-soft-edges's rectangle fades as the square of a
+//   - libreoffice/pptx: sd/shape-soft-edges's rectangle fades as the square of a
 //     single soft edge: 64 of 255 at the radius, 128 a quarter radius
 //     further in; its diamond fades once.
-//   - odp: a draw:custom-shape of type rectangle with a glow prints two
+//   - probe, odp: a draw:custom-shape of type rectangle with a glow prints two
 //     glow bitmaps, a draw:rect one.
 func effectsTwice(s *Shape) bool {
 	g := s.Geometry
@@ -278,7 +278,7 @@ func effectsTwice(s *Shape) bool {
 //
 // # Corpus evidence
 //
-//   - pptx: sd/effectOrder's rectangle with a glow and a shadow prints the
+//   - libreoffice/pptx: sd/effectOrder's rectangle with a glow and a shadow prints the
 //     shadow (a bitmap of the shape and both glows, at 40% opacity), the
 //     outer glow, the glow, then the rectangle.
 func (b *builder) effects(s *Shape, paths []shape.Path, box compose.Rect, m compose.Matrix, txt *textResult) ([]compose.Fragment, []shape.Path) {
@@ -328,7 +328,7 @@ func invertOr(m compose.Matrix) compose.Matrix {
 //
 // # Corpus evidence
 //
-//   - pptx: a picture with a shadow blurred over 6 pt prints its shadow
+//   - probe, libreoffice/pptx: a picture with a shadow blurred over 6 pt prints its shadow
 //     as a bitmap of its box grown by 6 pt, opaque inside; oox/table-shadow
 //     prints its table's borders again 10 pt down and right in the
 //     shadow's red, its text once.
@@ -440,7 +440,7 @@ func (b *builder) paintEffects(s *Shape, own, text []compose.Fragment, toSlide c
 //
 // # Corpus evidence
 //
-//   - pptx: two rectangles turned 30 degrees with a shadow 20 pt to the
+//   - probe, pptx: two rectangles turned 30 degrees with a shadow 20 pt to the
 //     right print the same shadow bitmap 20 pt to the right of each,
 //     whether rotWithShape is 0 or 1.
 func shadowMatrix(sh *Shadow, bounds compose.Rect) compose.Matrix {
@@ -572,7 +572,7 @@ func (p *effectPlan) glowMask(g effectGrid, tr compose.Matrix, outer bool) *imag
 //
 // # Corpus evidence
 //
-//   - pptx: sd/shape-glow-effect's oval with a glow of 11 pt at 40% prints
+//   - libreoffice/pptx: sd/shape-glow-effect's oval with a glow of 11 pt at 40% prints
 //     a bitmap over its outline grown by 11 pt, at 102 of 255 inside the
 //     outline, fading to 0 at the bitmap's edge over 30 pixels at 2.7
 //     pixels a point.
@@ -622,7 +622,7 @@ func (p *effectPlan) softMask(g effectGrid, tr compose.Matrix) *image.Alpha {
 //
 // # Corpus evidence
 //
-//   - pptx: sd/shape-soft-edges's diamond and rectangle print as bitmaps
+//   - libreoffice/pptx: sd/shape-soft-edges's diamond and rectangle print as bitmaps
 //     of their outlines' bounds, the line inside, the text on top; the
 //     rectangle, 10 pt soft, is transparent 3 pt in and opaque 20 pt in.
 func (p *effectPlan) softEdge() compose.Fragment {
@@ -663,11 +663,11 @@ func (p *effectPlan) softEdge() compose.Fragment {
 //
 // # Corpus evidence
 //
-//   - pptx: sd/shape-blur-effect's oval prints its shadow, blurred 11 pt,
+//   - libreoffice/pptx: sd/shape-blur-effect's oval prints its shadow, blurred 11 pt,
 //     as a bitmap over the oval's outline moved by the shadow's 34 pt and
 //     grown by 11 pt, ramping from 0 to opaque over 22 pt about the
 //     outline, 32 of 255 a quarter of the way.
-//   - pptx: a rectangle reaching past the slide's right edge prints its
+//   - probe, pptx: a rectangle reaching past the slide's right edge prints its
 //     shadow's bitmap cut 6 pt, its blur, past the edge.
 func (p *effectPlan) shadow() compose.Fragment {
 	sh := p.s.Shadow

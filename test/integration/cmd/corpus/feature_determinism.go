@@ -110,17 +110,17 @@ type determinismOp struct {
 //
 // # Corpus evidence
 //
-//   - litho: the 1557 scored cells of the 173 fixtures, at three runs and
+//   - litho/pdf: the 1557 scored cells of the 173 fixtures, at three runs and
 //     eight for a bookmark generation, take 4 s with 4 workers, and every
 //     operation writes the same bytes each time.
-//   - litho sizetie_2b: planted, the tie in the body font size broken in map
+//   - litho/pdf sizetie_2b: planted, the tie in the body font size broken in map
 //     order again, as before 5688d5c6, counts its generate-bookmarks or its
 //     split-reconstruct cell nondeterministic, or both, in 10 of 10 runs.
-//   - litho: planted, a serializer that writes dictionary keys unsorted counts
+//   - litho/pdf: planted, a serializer that writes dictionary keys unsorted counts
 //     787 of the 966 cells nondeterministic.
-//   - litho (217 files): flatten-transparency writes the same bytes three
+//   - litho/pdf (217 files): flatten-transparency writes the same bytes three
 //     times over on every file, the 20 it flattens included.
-//   - litho filestruct_1b: planted, the random trailer /ID remediation drew
+//   - litho/pdf filestruct_1b: planted, the random trailer /ID remediation drew
 //     before it derived one counts its two remediation cells, the only ones
 //     it moves.
 //   - pdfjs issue14256: before 1e31d290 an inline image whose dictionary
@@ -128,7 +128,7 @@ type determinismOp struct {
 //     order. With that fix reverted, the render pass counts the file
 //     nondeterministic in 10 of 10 cells. The file is outside the pdfjs
 //     render sample, so the pass runs over the whole corpus.
-//   - litho, pdfjs: the render pass draws 341 pages of 225 files and 1520
+//   - litho/pdf, pdfjs: the render pass draws 341 pages of 225 files and 1520
 //     pages of 1191 files twice each, every one the same pixels; 10 pdfjs
 //     files draw no page. It takes 5 s and 64 s with 4 workers on a loaded
 //     machine (load 8 to 12), the slowest pdfjs cell issue11518 at 15 s.

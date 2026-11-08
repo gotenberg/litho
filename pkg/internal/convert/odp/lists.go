@@ -163,7 +163,7 @@ func numberScheme(format, prefix, suffix string) string {
 //
 // # Corpus evidence
 //
-//   - odp: pitch.odp's level of StarBats U+F095 prints "•" in its text,
+//   - gotenberg/odp: pitch.odp's level of StarBats U+F095 prints "•" in its text,
 //     where pitch.fodp's default outline bullet, Impress's own StarBats
 //     U+F095, prints U+F095.
 func symbolChar(ch, family string) (string, string) {

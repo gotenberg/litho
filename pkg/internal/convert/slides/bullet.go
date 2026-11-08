@@ -27,7 +27,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - pptx: sd/bullet-indent.pptx with its first paragraph's margin and
+//   - libreoffice/pptx: sd/bullet-indent.pptx with its first paragraph's margin and
 //     positive indent set to 0 and 25.5, 36 and 25.5, 36 and 54, 18 and 10,
 //     54 and 18 points prints the bullet at the margin and the text at the
 //     margin plus the indent, to 0.01 point, in each.

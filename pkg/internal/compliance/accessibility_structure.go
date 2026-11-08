@@ -442,7 +442,7 @@ func typeInLegacyRoleMap(roleMap map[ast.PdfName]ast.PdfName, typeName ast.PdfNa
 //
 //   - All corpora: no tagged file declares, on an element whose type only the
 //     legacy map maps, a namespace that map does not govern.
-//   - litho rolemapscope_ua2: declares the PDF 2.0 namespace on such an
+//   - litho/pdf rolemapscope_ua2: declares the PDF 2.0 namespace on such an
 //     element, beside the two placements the map governs.
 //   - All corpora: PDF/UA-2 remediation of 6 tagged files declared the PDF 2.0
 //     namespace on a root element the map sends to Document, and veraPDF

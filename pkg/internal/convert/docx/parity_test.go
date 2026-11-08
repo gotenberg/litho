@@ -40,7 +40,7 @@ func findSource(dir, name string) string {
 //
 // # Corpus evidence
 //
-//   - docx: page_1, pages_3, pages_12, Special_Chars_ß, i18n, memo-lo and
+//   - gotenberg/docx: page_1, pages_3, pages_12, Special_Chars_ß, i18n, memo-lo and
 //     tracked print on 1, 3, 12, 1, 1, 1 and 1 pages and contract on 10
 //     through Gotenberg 9.0.0's LibreOffice route.
 func TestParity_GotenbergDocuments(t *testing.T) {

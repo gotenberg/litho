@@ -23,7 +23,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho qshyphen_2b.pdf: fully fixed in the remediation-pair cell, and
+//   - litho/pdf qshyphen_2b.pdf: fully fixed in the remediation-pair cell, and
 //     veraPDF 1.30.3 finds no violation of PDF/A-2b or PDF/UA-1 in the output.
 const pairFixture = "../../test/integration/corpus/litho/pdf/pdfs/qshyphen_2b.pdf"
 

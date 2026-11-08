@@ -1061,7 +1061,7 @@ func splitCell(s string) (string, int, bool) {
 //
 // # Corpus evidence
 //
-//   - pptx: chart2/1904NullDate.pptx, serial 37257 under m/d/yyyy prints
+//   - libreoffice/pptx: chart2/1904NullDate.pptx, serial 37257 under m/d/yyyy prints
 //     1/1/2006.
 const date1904Shift = 1461
 

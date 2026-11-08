@@ -43,7 +43,7 @@ func matchContentTag(v compliance.Violation) bool {
 //
 //   - All corpora: attaching the MCR straight to the Document accounted for
 //     158 of the 173 files where PDF/UA-2 remediation introduced a violation.
-//   - litho formshare_ua1.pdf: a wrapped stream for each page of two sharing
+//   - litho/pdf formshare_ua1.pdf: a wrapped stream for each page of two sharing
 //     one /Contents stream gave the marked form it draws a second reference,
 //     and remediation at PDF/UA-1 left ISO 14289-1, 7.20 t2 twice on both
 //     litho and veraPDF; one shared wrapped stream fully fixes it.

@@ -75,7 +75,7 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 //
 // # Corpus evidence
 //
-//   - docx, odt: each of the 514 references (360 and 154) converted back
+//   - libreoffice/docx, gotenberg/docx, libreoffice/odt, gotenberg/odt: each of the 514 references (360 and 154) converted back
 //     through the feature passes on 498. Pages, links and outline score 1 on
 //     all; text F1 is below 1 on 18, where litho's text extraction and
 //     PDF.js's split words apart (i18n's Thai and Devanagari at 0.786,
@@ -83,7 +83,8 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 //     strict fails on 6 whose hairlines and hatches litho draws lighter than
 //     poppler (odfexport/sw_hatch.odt layout 0.037); layout averages 0.966,
 //     below 0.75 on 5 (ooxmlexport/fdo67737.docx 0.32).
-//   - xlsx, ods, csv: of the 554 references (285, 258 and 11), 516 pass
+//   - libreoffice/xlsx, gotenberg/xlsx, libreoffice/ods, gotenberg/ods,
+//     libreoffice/csv, gotenberg/csv: of the 554 references (285, 258 and 11), 516 pass
 //     (258, 247 and 11). Pages, links, outline and strict score 1 on all;
 //     text F1 is below 1 on 118 and under the bar on 37, where text crosses
 //     a page edge or a clipping path, which PDF.js reads and litho's
@@ -91,7 +92,7 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 //     the page: chart2/column-style.xlsx at 0.236, sc/lookup_target.fods at
 //     0.438), or is rotated (sc/tdf119292.xlsx at 0.571); layout averages
 //     0.969, below 0.9 on 5 (chart2/chart-hatch-fill.xlsx 0.584).
-//   - pptx, odp: of the 491 references (319 and 172), 484 pass (314 and
+//   - libreoffice/pptx, gotenberg/pptx, libreoffice/odp, gotenberg/odp: of the 491 references (319 and 172), 484 pass (314 and
 //     170). Pages, links and outline score 1 on all, strict on all but 4
 //     hairlines and a bitmap fill; text F1 is under the bar on 3 whose
 //     text is drawn invisible, white on a white slide or at 2% opacity,

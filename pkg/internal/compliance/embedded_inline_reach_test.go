@@ -19,7 +19,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho complex_1b.pdf and complex_4.pdf: veraPDF reports the /Ref /F of
+//   - litho/pdf complex_1b.pdf and complex_4.pdf: veraPDF reports the /Ref /F of
 //     a reference XObject under ISO 19005-3, 6.8 t3 and t4.
 func TestCollectFileSpecs_InlineInEveryObject(t *testing.T) {
 	t.Parallel()

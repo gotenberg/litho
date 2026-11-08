@@ -53,10 +53,10 @@ func matchNoteNamespace(v compliance.Violation) bool {
 //
 // # Corpus evidence
 //
-//   - litho fenote_ua2: one Note bound to the PDF 1.7 namespace. With the
+//   - litho/pdf fenote_ua2: one Note bound to the PDF 1.7 namespace. With the
 //     entry, veraPDF 1.30.2 drops 8.2.5.14 t1 at PDF/UA-2 and both WTPDF
 //     levels, default and aggressive, and reports no other new rule.
-//   - litho formmedia_ua1: three Notes in no namespace. Mapping the PDF 1.7
+//   - litho/pdf formmedia_ua1: three Notes in no namespace. Mapping the PDF 1.7
 //     namespace alone left all three failing on veraPDF, since an element in
 //     no namespace is not governed by it; bound to it, all three clear.
 //   - All corpora: of the files pikepdf opens, 33 hold a Note or a type the

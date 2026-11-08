@@ -17,7 +17,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho annotshare_ua1.pdf: a widget and a Text annotation listed by
+//   - litho/pdf annotshare_ua1.pdf: a widget and a Text annotation listed by
 //     pages 1 and 2. A whole-page redaction of page 1 dropped the widget's
 //     field, and qpdf --check warned that page 2's widget was not reachable
 //     from /AcroForm.

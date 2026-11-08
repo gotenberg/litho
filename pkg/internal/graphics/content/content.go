@@ -505,7 +505,7 @@ func InlineImageData() Option {
 //
 // # Corpus evidence
 //
-//   - litho undecodable_2b.pdf: poppler 26.09.0 and PDFium (pypdfium2 4.30.0) draw
+//   - litho/pdf undecodable_2b.pdf: poppler 26.09.0 and PDFium (pypdfium2 4.30.0) draw
 //     nothing for page 2, [/Foo /FlateDecode] over Flate data, where litho
 //     drew the probe. On page 3, [/FlateDecode /Foo], PDFium and litho draw
 //     it, and poppler nothing.

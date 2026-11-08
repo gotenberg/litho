@@ -22,7 +22,7 @@ import (
 //     thread_400_400932.pdf).
 //   - pdfjs issue21089.pdf: the widest /Domain outside test fixtures, 8
 //     inputs, the tint transform of an 8-colorant DeviceN space.
-//   - verapdf PDF_A-1b__veraPDF_test_suite_6-1-12-t09-fail-a.pdf, litho
+//   - verapdf PDF_A-1b__veraPDF_test_suite_6-1-12-t09-fail-a.pdf, litho/pdf
 //     limits_2b.pdf: tint transforms of 12 and 33 inputs, built to break the
 //     PDF/A DeviceN limits. The 33-input one is the only function past
 //     maxInputs.

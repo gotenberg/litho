@@ -276,7 +276,7 @@ func TestWriterEditsWithNoPageListReachInsertedPages(t *testing.T) {
 //   - govdocs thread_300_300123.pdf, pdfjs bug1755507.pdf: state a crop box
 //     reaching past the media box. Inserted, then stamped, their stamps were
 //     not moved to the corner of the page view, (36, 36) and (39, 39).
-//   - litho viewerboxes_2b.pdf: page 1 states /MediaBox [10 10 300], and a
+//   - litho/pdf viewerboxes_2b.pdf: page 1 states /MediaBox [10 10 300], and a
 //     stamp on it was moved by (10, 10).
 func TestWriterStampsEachPageWhereAViewerShowsIt(t *testing.T) {
 	t.Parallel()

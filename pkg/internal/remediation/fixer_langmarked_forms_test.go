@@ -107,7 +107,7 @@ func assertMarkedLangsRemoved(t *testing.T, alloc *writer.ObjAllocator, doc *doc
 //
 // # Corpus evidence
 //
-//   - litho mcform_2a.pdf: kept 6.7.4 t1 for the inline BDC of a form the page
+//   - litho/pdf mcform_2a.pdf: kept 6.7.4 t1 for the inline BDC of a form the page
 //     draws and of an annotation appearance after a PDF/A-2a remediation, on
 //     litho and veraPDF alike.
 func TestFixMarkedContentLang_ReachesFormsAndAppearances(t *testing.T) {

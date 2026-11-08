@@ -73,7 +73,7 @@ func (s *section) date(x float64, first bool) Result {
 	//
 	// # Corpus evidence
 	//
-	//   - ods: sc/tdf125099.ods, 03:23:59.999999665 in [HH]:MM:SS prints
+	//   - libreoffice/ods: sc/tdf125099.ods, 03:23:59.999999665 in [HH]:MM:SS prints
 	//     03:23:59, and 11:23:59.999999665 in HH:MM prints 11:24.
 	whole := func(v float64) float64 {
 		if seconds && frac == 0 {

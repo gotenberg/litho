@@ -125,7 +125,7 @@ func runAggressiveLimits(t *testing.T, profile string, rules []compliance.Rule, 
 //
 // # Corpus evidence
 //
-//   - litho: limits_1b.pdf, remediated as PDF/A-2b or PDF/A-3b in aggressive
+//   - litho/pdf: limits_1b.pdf, remediated as PDF/A-2b or PDF/A-3b in aggressive
 //     mode, lost one entry of its 4096-entry dictionary to a 6.1.13 test 10
 //     CID violation, a rule neither part states for dictionaries.
 func TestFixAggressiveLimits_RepairsFollowTheProfileAndTheViolation(t *testing.T) {

@@ -137,7 +137,7 @@ func koreanNative(n int) string {
 //
 // # Corpus evidence
 //
-//   - docx: ooxmlexport/cjklist30.docx to cjklist44.docx, and a probe of
+//   - libreoffice/docx: ooxmlexport/cjklist30.docx to cjklist44.docx, and a probe of
 //     every format at 1, 9 to 12, 20, 21, 99 to 101, 110, 1000 and 10000:
 //     the counting formats print 十, 十一, 一百零一, 一百一十, 一万; the
 //     legal ones 壹拾, 壹佰零壹; koreanDigital2 一零; the stems and

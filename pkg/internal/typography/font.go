@@ -211,11 +211,11 @@ type Font struct {
 //   - pdfjs, govdocs, pdfcpu, facturx, pdf20: honouring /W 0 changes three
 //     files, all toward PDF.js (complex_ttf_font, bug1046314,
 //     ThuluthFeatures), and no file moves away from it.
-//   - litho unembednames_2u.pdf: the unembedded Helvetica shows codes 01 and
+//   - litho/pdf unembednames_2u.pdf: the unembedded Helvetica shows codes 01 and
 //     80, which StandardEncoding leaves unnamed. Advanced by one em each,
 //     they pushed the glyph after them 24 points right of poppler's, and 78
 //     of the page's 219 inked pixels differed; read at 0, 8 of 184 do.
-//   - litho fontclaims_2b.pdf: its unembedded Helvetica shows code 01,
+//   - litho/pdf fontclaims_2b.pdf: its unembedded Helvetica shows code 01,
 //     which StandardEncoding leaves unnamed; the page's differing pixels
 //     fall from 50 to 35, and the rest is poppler's.
 //   - govdocs thread_200_200732.pdf page 31: unnamed codes of an unembedded
@@ -534,13 +534,13 @@ func copyEncoding(src map[byte]rune) map[byte]rune {
 //   - All corpora: 29 files change text once unembedded composite fonts read
 //     through 9.10.2, 22 of them pdfjs files that then match PDF.js, and none
 //     moves away from it.
-//   - litho cmapcollect_1b.pdf, cmapusevert_1b.pdf: Adobe-Korea1 and
+//   - litho/pdf cmapcollect_1b.pdf, cmapusevert_1b.pdf: Adobe-Korea1 and
 //     Adobe-Japan1 fonts whose /CIDToGIDMap stream sends CIDs 1 and 2 to the
 //     program's glyph A. litho read "AA" and "A", the glyphs the program
 //     paints; read through the collection, both match PDF.js. No file of the
 //     five text corpora changes, CJK files included, and no validation or
 //     remediation result moves on the litho corpus.
-//   - litho type0nodesc_2b.pdf: four fonts with no descendant CIDFont read
+//   - litho/pdf type0nodesc_2b.pdf: four fonts with no descendant CIDFont read
 //     U+001E, the code plus the CID offset heuristic; no other file reaches it.
 func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (*Font, error) {
 	subtypeObj, ok := fontDict["Subtype"]
@@ -3645,7 +3645,7 @@ func programNamedCodes(ctx context.Context, doc *document.Document, fontDict ast
 //
 // # Corpus evidence
 //
-//   - litho type1notdef_2u.pdf: N1 and N2 read code 43, which their programs
+//   - litho/pdf type1notdef_2u.pdf: N1 and N2 read code 43, which their programs
 //     name .notdef or nothing, as "C". They now read as nothing, the reading
 //     the fixture's text override gives.
 //   - All corpora: 282 files (189 govdocs, 71 pdfjs, 12 verapdf, 9 pdfcpu, 1
@@ -3986,7 +3986,7 @@ type type3InkBounds struct {
 //     shading, a form or text, which the font's box once stood in for. Over
 //     their first ten pages, 112 of 622,716 text elements change their ink
 //     box, on 10 files; no other moves.
-//   - litho t3extent_2b.pdf: a shading and a form painting past /FontBBox;
+//   - litho/pdf t3extent_2b.pdf: a shading and a form painting past /FontBBox;
 //     the centred quarter over them left 2204 pixels, and now removes both.
 //   - pdfjs pr4922.pdf: d1 glyphs that show text in fonts the page names, the
 //     font stating no /Resources, so each is bounded here by the page, and

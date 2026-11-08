@@ -26,7 +26,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho forbidden_mix.pdf: remediated as PDF/A-4, PDF/A-4e or PDF/A-4f, it
+//   - litho/pdf forbidden_mix.pdf: remediated as PDF/A-4, PDF/A-4e or PDF/A-4f, it
 //     lost the /Names/JavaScript tree those profiles permit, because its other
 //     forbidden actions ran this fixer. The residual rules were the same
 //     either way.
@@ -699,7 +699,7 @@ const maxFieldTreeDepth = 200
 //
 // # Corpus evidence
 //
-//   - litho annots_1b.pdf: the non-terminal field "parent" holds a JavaScript
+//   - litho/pdf annots_1b.pdf: the non-terminal field "parent" holds a JavaScript
 //     action under /AA/K, and at PDF/A-2b the output kept 6.5.1 test 1 and
 //     6.4.1 test 2 for it.
 //   - pdfjs issue15092.pdf, issue16863.pdf, issue19753.pdf: remediated as

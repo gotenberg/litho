@@ -43,7 +43,7 @@ func findSource(dir, name string) string {
 //
 // # Corpus evidence
 //
-//   - pptx: deck prints 7 slides of 959.98 by 540 points without its
+//   - gotenberg/pptx: deck prints 7 slides of 959.98 by 540 points without its
 //     hidden seventh, "Agenda" centred in a 648-point title box at 36,
 //     21.63, its bullets at 43.2 (the body box's 36 plus its 7.2 inset),
 //     the table's first cell text at 79.2 (72 plus 7.2); pitch-lo prints

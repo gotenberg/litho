@@ -66,7 +66,7 @@ func matchFigureAlt(v compliance.Violation) bool {
 //     single-doc-root repair stopped listing its Document as its own /K, which
 //     had left the whole tree unreachable to this fixer and to both
 //     validators.
-//   - litho directfig_ua2.pdf: three Figures that enclose drawings, written
+//   - litho/pdf directfig_ua2.pdf: three Figures that enclose drawings, written
 //     directly in an element's /K array, in an inline Div's and in a /K array
 //     of its own, kept failing 8.2.5.28.2 after aggressive remediation. Now
 //     they take the placeholder and the outputs pass litho and veraPDF 1.30.2.

@@ -320,7 +320,7 @@ func visibleOutsideOps(
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu, litho, redacting page 1 whole, its centred
+//   - govdocs, pdfjs, pdfcpu, litho/pdf, redacting page 1 whole, its centred
 //     quarter and a text band: 108 more redactions succeed once these
 //     operators are set aside too (634 against 526 with visible text alone),
 //     69 of them whole-page, where no text is left outside the region and

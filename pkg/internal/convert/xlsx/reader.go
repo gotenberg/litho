@@ -120,7 +120,7 @@ type tableArea struct {
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/tdf165180_date1904.xlsx, whose Normal font is Aptos
+//   - libreoffice/xlsx: sc/tdf165180_date1904.xlsx, whose Normal font is Aptos
 //     Narrow, prints in Noto Sans with columns of its digits.
 const substituteFamily = "Noto Sans"
 
@@ -205,7 +205,7 @@ func (r *reader) application() string {
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/tdf147955.xlsx, written by Apache POI with every result
+//   - libreoffice/xlsx: sc/tdf147955.xlsx, written by Apache POI with every result
 //     cached as 0, prints its totals computed.
 func (r *reader) recalculates() bool {
 	app := strings.ToLower(r.application())

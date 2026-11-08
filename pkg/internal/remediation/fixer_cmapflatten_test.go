@@ -267,7 +267,7 @@ func TestFixCMapFlatten_DropsOnlyAnUnresolvableUseCMapName(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho cmapverabase_2b.pdf: K1 to K3 run usecmap on Adobe-KR-9 and
+//   - litho/pdf cmapverabase_2b.pdf: K1 to K3 run usecmap on Adobe-KR-9 and
 //     Adobe-Japan1-7. Without the repair litho kept 6.2.11.3.3 t3 after
 //     remediation at eleven levels, where veraPDF, which judges /UseCMap
 //     only, called the base gone.

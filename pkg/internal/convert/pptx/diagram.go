@@ -32,9 +32,9 @@ type diagramParts struct {
 //
 // # Corpus evidence
 //
-//   - pptx: sd/bnc862510_6's drawing, whose font reference names lt1 on
+//   - libreoffice/pptx: sd/bnc862510_6's drawing, whose font reference names lt1 on
 //     a white box, prints its text in node0's dk1.
-//   - pptx: sd/smartart-cycle's five ellipses on a circle with an arrow
+//   - libreoffice/pptx: sd/smartart-cycle's five ellipses on a circle with an arrow
 //     between each two, laid out from the layout definition, its drawing
 //     part empty.
 func (r *reader) diagram(c *shapeCtx, data *ooxml.Element, s *slides.Shape, depth int) (*slides.Shape, error) {
@@ -126,7 +126,7 @@ func (r *reader) diagram(c *shapeCtx, data *ooxml.Element, s *slides.Shape, dept
 //
 // # Corpus evidence
 //
-//   - pptx: sd/smartart-maxdepth's "parTxOnly" nodes, made equal by a
+//   - libreoffice/pptx: sd/smartart-maxdepth's "parTxOnly" nodes, made equal by a
 //     constraint of a dgm:else branch, print "first" broken as "fi rs t"
 //     and "second" as "se co nd", each at its own size;
 //     sd/smartart-background's "node" children, made equal for ch,

@@ -64,7 +64,7 @@ type FieldOptions struct {
 //
 //   - pdfjs issue12963.pdf: has 27 fields reachable only from the page and no
 //     /AcroForm at all.
-//   - pdfjs issue18561.pdf and litho syntax_1b.pdf: a field set after a
+//   - pdfjs issue18561.pdf and litho/pdf syntax_1b.pdf: a field set after a
 //     PDF/A-2b remediation was rewritten from its source copy, and the output
 //     failed ISO 19005-2, 6.4.1 again.
 func SetFormField(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name, value string, opts FieldOptions) error {
@@ -1165,7 +1165,7 @@ const maxFieldAncestorDepth = 32
 //
 // # Corpus evidence
 //
-//   - litho filestruct_1b, sigcms_2b, typedreads_1b: each kept an empty text
+//   - litho/pdf filestruct_1b, sigcms_2b, typedreads_1b: each kept an empty text
 //     field or an unsigned signature field after flattening, and litho still
 //     read it as a form field.
 //   - All corpora, 617 files that mention a form: 32 flattened outputs that

@@ -113,7 +113,7 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 //     keyword EOL.
 //   - pdfjs issue13783.pdf, issue15833.pdf and PDFBOX-3148-2-fuzzed.pdf: the
 //     only other counts that moved, on files veraPDF cannot parse.
-//   - litho filestruct_1b.pdf: holds an odd hex string and a non-hex
+//   - litho/pdf filestruct_1b.pdf: holds an odd hex string and a non-hex
 //     character in its /Info, and veraPDF fails ISO 19005-1 and ISO
 //     19005-2, 6.1.6 t1 and t2 twice each, where litho failed them once.
 func cosReachedTwice(ctx context.Context, doc *document.Document, catalog ast.PdfDict) map[int]bool {
@@ -1341,7 +1341,7 @@ func utf8NameRule(profile string) Rule {
 //     Separation reads again at every cs, scn and f.
 //   - pdfjs bug1734802.pdf: litho stated the rule once and now 5 times, as
 //     veraPDF does.
-//   - litho a4syntax_4.pdf: 2 at PDF/A-2b, PDF/A-2u and PDF/A-4, as veraPDF
+//   - litho/pdf a4syntax_4.pdf: 2 at PDF/A-2b, PDF/A-2u and PDF/A-4, as veraPDF
 //     states it, where litho stated 1.
 //   - pdfjs issue10004.pdf: the one other count that moved, from 3 to 8,
 //     which veraPDF 1.30 cannot check, as it cannot parse the file.

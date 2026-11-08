@@ -577,7 +577,7 @@ func (j *fontJudgements) glyphs(ctx context.Context, doc *document.Document, fon
 //     profile for the verapdf files: claiming in veraPDF's order, forms where
 //     the page draws them and annotations before the page at PDF/A-1b, moves
 //     no count.
-//   - verapdf and litho, at PDF/UA-1, PDF/UA-2 and both WTPDF levels: making
+//   - verapdf and litho/pdf, at PDF/UA-1, PDF/UA-2 and both WTPDF levels: making
 //     a form's claims unread and the annotations' first moves no count.
 func (j *fontJudgements) readsProgram(ctx context.Context, doc *document.Document, fontID string, font ast.PdfDict, usage *fontUsageInfo) bool {
 	if usage == nil || isType3Font(ctx, doc, font) {

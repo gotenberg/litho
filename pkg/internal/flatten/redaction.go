@@ -62,7 +62,7 @@ import (
 //     fallback lifts all 11 form and shading refusals and the 4 of images a
 //     form draws; 11 redactions then succeed and 4 stop at the scan, for
 //     copies the page did not hold (another page's stream, a JPEG's bytes).
-//   - litho (228), pdfjs (79), pdfcpu, govdocs, the four redact-render
+//   - litho/pdf (228), pdfjs (79), pdfcpu, govdocs, the four redact-render
 //     scenarios: 117 scenarios refused without the fallback succeed with it,
 //     none leaving ink inside a region by litho's or poppler's rendering.
 //   - pdfjs issue2642, issue12752, issue17289, pdfcpu text_annotations:
@@ -70,12 +70,12 @@ import (
 //     paint; all but 1 to 7 a scenario show litho's rendering of the
 //     source or a blend of it, and PDFium draws those few unchanged (the
 //     redact-render cell adjudicates them).
-//   - litho usedcs_2b: the image drawn again over a heading a shading hid
+//   - litho/pdf usedcs_2b: the image drawn again over a heading a shading hid
 //     covered only the hollow frames litho draws for its unembedded
 //     Helvetica, and the glyphs showed through for a reader with the font,
 //     146 pixels by litho's rendering with the goldens' fonts, until the
 //     coverage read them whole.
-//   - litho transparency_2b: the images were drawn under the constant
+//   - litho/pdf transparency_2b: the images were drawn under the constant
 //     alpha and Screen blend mode the page had set, which they already
 //     held: PDFium drew 663 pixels faded outside the region, until they
 //     were drawn under an opaque state.

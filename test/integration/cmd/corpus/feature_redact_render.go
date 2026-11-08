@@ -66,7 +66,7 @@ const redactRenderSelfTolerance = 16
 //
 // # Corpus evidence
 //
-//   - litho transparency_2b with the opaque state of the fallback's images
+//   - litho/pdf transparency_2b with the opaque state of the fallback's images
 //     removed (the fault b291dd6b fixed): the band and quarter scenarios
 //     fail on litho's half with 3,120 and 528 faded pixels over flat areas,
 //     where the render tolerance read 0.
@@ -92,7 +92,7 @@ const redactRenderFallbackTolerance = redactRenderSelfTolerance
 //
 // # Corpus evidence
 //
-//   - litho cmykintent_2b: under the viewer's reading the blank of `Im`,
+//   - litho/pdf cmykintent_2b: under the viewer's reading the blank of `Im`,
 //     drawn after /Perceptual ri through the `split` profile's A2B0, renders
 //     at 0x76, so the band and the quarter redacted again over samples a
 //     first quarter redaction had blanked failed the inside check on 360 and
@@ -101,10 +101,10 @@ const redactRenderFallbackTolerance = redactRenderSelfTolerance
 //     interpolation_spill (480 on the band, 2,300 on each quarter). Under
 //     the redaction reading the blank renders black and every scenario
 //     passes with no interpolation spill.
-//   - litho, pdfcpu, pdfjs, govdocs: 1,911 scenarios in the cell's sample,
+//   - litho/pdf, pdfcpu, pdfjs, govdocs: 1,911 scenarios in the cell's sample,
 //     fallback scenarios included; the reading changes litho's half of
 //     cmykintent_2b's three alone.
-//   - litho, pdfjs: the extra render took litho's half from 84 and 68
+//   - litho/pdf, pdfjs: the extra render took litho's half from 84 and 68
 //     seconds to 113 and 95, and left pdfjs's within the noise (117 and 173
 //     seconds before, 212 and 128 after), 4 workers, timed back to back on
 //     a machine at load 65 to 118.
@@ -120,7 +120,7 @@ const redactRenderDarkLevel = 80
 //
 // # Corpus evidence
 //
-//   - litho blankkeys_ua1 p1-quarter and p1-band: poppler's blend of the
+//   - litho/pdf blankkeys_ua1 p1-quarter and p1-band: poppler's blend of the
 //     blank into ImA, a 16 by 16 image drawn 160 points wide, reaches 3 to 4
 //     pixels past litho's (138 and 79 pixels); litho and PDFium 4.30.0
 //     (pdfium 126.0.6462.0) draw the blend alike, to a level.
@@ -375,13 +375,13 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //
 // # Corpus evidence
 //
-//   - litho, pdfcpu, pdfjs, govdocs: 600, 101, 178 and 170 scenarios
+//   - litho/pdf, pdfcpu, pdfjs, govdocs: 600, 101, 178 and 170 scenarios
 //     checked in about 25, 11, 15 and 40 seconds (4 workers).
-//   - litho directstream_2b: a band over text a content stream written
+//   - litho/pdf directstream_2b: a band over text a content stream written
 //     inline in /Contents draws reported success and removed nothing.
-//   - litho cmaps_2b, type0nodesc_2b, usecmap_2u: codes extraction reads no
+//   - litho/pdf cmaps_2b, type0nodesc_2b, usecmap_2u: codes extraction reads no
 //     glyph for stayed, drawn by litho's renderer inside a whole-page region.
-//   - litho qshyphen_2b: a Td inside q...Q in a text object put a word
+//   - litho/pdf qshyphen_2b: a Td inside q...Q in a text object put a word
 //     poppler draws inside a band litho read clear.
 //   - pdfjs text_clip_cff_cid: removing text in rendering mode 7 widened the
 //     clip, and the fill it masked painted as a rectangle outside the band.
@@ -389,16 +389,16 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //     readable after a whole-page redaction.
 //   - govdocs thread_400_400756 page 2: a table rule along a region's edge
 //     drew grey across the table once split into one path.
-//   - litho iccv4space_1b, megafont_2b, multipage_2b: image_spill, a
+//   - litho/pdf iccv4space_1b, megafont_2b, multipage_2b: image_spill, a
 //     2 by 2 image's samples, one of them interpolated, reaching past the
 //     region.
-//   - litho megafont_2b p1-quarter, multipage_2b p2-quarter: once blanking
+//   - litho/pdf megafont_2b p1-quarter, multipage_2b p2-quarter: once blanking
 //     kept /Interpolate, the 2 by 2 image drawn 200 points wide blends its
 //     kept red and blue samples into the blank up to 15 pixels inside the
 //     region by litho's rendering (876 pixels) and 21 by poppler's (1,399):
 //     no green, the channel of the samples blanked, in either, and PDFium
 //     4.30.0 draws litho's blend to a level. interpolation_spill.
-//   - litho blankkeys_ua1 p1-band: poppler draws ImA's blend half a sample
+//   - litho/pdf blankkeys_ua1 p1-band: poppler draws ImA's blend half a sample
 //     lower than litho and PDFium, 88 pixels of a kept row's colour fading
 //     into the blank inside the band: interpolation_spill.
 //   - pdfjs bitmap-halftone-skip-grid-template2, bitmap-refine-tpgron,
@@ -410,19 +410,19 @@ func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 //     litho's half sees 0. Accepted as a mismatch. The PDF has no render
 //     golden, so it lies outside the cell's sample and the gate never runs
 //     it: the pixel shows with every govdocs PDF in scope.
-//   - litho, pdfcpu, pdfjs, govdocs: 70, 20, 20 and 6 fallback scenarios
+//   - litho/pdf, pdfcpu, pdfjs, govdocs: 70, 20, 20 and 6 fallback scenarios
 //     checked, rasterising 112, 55, 20 and 17 units; the cell's wall time
 //     went from about 51, 20, 46 and 65 seconds to 45, 24, 85 and 121
 //     (4 workers, timed back to back on a machine at load 25 to 60).
-//   - litho, pdfcpu, pdfjs, govdocs: 114 scenarios the default mode found
+//   - litho/pdf, pdfcpu, pdfjs, govdocs: 114 scenarios the default mode found
 //     incomplete stayed incomplete with the fallback, every one of them.
-//   - litho usedcs_2b: a shading painted over the whole page hid the
+//   - litho/pdf usedcs_2b: a shading painted over the whole page hid the
 //     heading drawn before it, and the fallback drew its image again over
 //     the hollow frames litho draws for the unembedded Helvetica only: the
 //     glyphs poppler and the goldens' fonts draw showed through, 146
 //     pixels outside the region by litho's rendering. The flattening now
 //     reads such glyphs as their whole boxes.
-//   - litho transparency_2b band: the images stood in for forms drawn at a
+//   - litho/pdf transparency_2b band: the images stood in for forms drawn at a
 //     constant alpha of 0.8 and with the Screen blend mode, and were drawn
 //     under those states, so their colours faded: 17 pixels by poppler,
 //     663 by PDFium, none past the render tolerance by litho. They are now
@@ -1655,7 +1655,7 @@ func (s *redactPixelSets) grown(marked func(i int) bool) []bool {
 //
 // # Corpus evidence
 //
-//   - litho cmapverabase_2b page 1, band: a glyph shown for U+2002 inks 3.8
+//   - litho/pdf cmapverabase_2b page 1, band: a glyph shown for U+2002 inks 3.8
 //     points past the band's top edge. Removed, it changed 12 pixels poppler
 //     draws outside the band, which the text runs did not exclude.
 func newRedactPixelSets(g redactGeometry, rect [4]float64, text []models.TextElement, removed [][4]float64) *redactPixelSets {

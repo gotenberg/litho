@@ -70,7 +70,7 @@ func matchAnnotFlags(v compliance.Violation) bool {
 //     litho and veraPDF alike, veraPDF reports 54 fewer rule classes and none
 //     new, the two agree on every output's rule set, and every page's extracted
 //     text is unchanged. No PDF/UA-1 or PDF/UA-2 output changes.
-//   - litho annothidden_2b.pdf: carries the constructs no other file does. Its
+//   - litho/pdf annothidden_2b.pdf: carries the constructs no other file does. Its
 //     remediations at the six PDF/A manifest profiles, default and aggressive,
 //     now pass on both tools, where each kept the flag finding of its hidden
 //     pop-up.
@@ -316,11 +316,11 @@ func readAnnotSheets(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 //
 // # Corpus evidence
 //
-//   - litho laterreads_2u.pdf: the default PDF/A-1b output kept 6.1.11 t1, and
+//   - litho/pdf laterreads_2u.pdf: the default PDF/A-1b output kept 6.1.11 t1, and
 //     the default PDF/A-2a, 2b and 2u outputs 6.8 t5, on litho and veraPDF,
 //     from the embedded file of a removed FileAttachment in the array object
 //     the file wrote, which veraPDF sweeps as an indirect object.
-//   - litho annothidden_2b.pdf, govdocs thread_400_400575.pdf and pdfjs
+//   - litho/pdf annothidden_2b.pdf, govdocs thread_400_400575.pdf and pdfjs
 //     annotation_hidden_noview.pdf: their PDF/A outputs change bytes alone.
 func writeSheetAnnots(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, sh *annotSheet, kept ast.PdfArray) bool {
 	if annotsRef, isRef := sh.annotsObj.(ast.PdfIndirectRef); isRef && annotsRef.ObjectNum > 0 {

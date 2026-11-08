@@ -177,7 +177,7 @@ func (r *reader) tableBackground(fc *fillCtx, style *ooxml.Element) (slides.Fill
 //
 // # Corpus evidence
 //
-//   - pptx: sd/bnc480256's "Themed Style 1 - Accent 1" table, its tblBg
+//   - libreoffice/pptx: sd/bnc480256's "Themed Style 1 - Accent 1" table, its tblBg
 //     the theme's second fill style, prints its second band C6DDFF, the
 //     gradient's second stop, and its first band 9BC3EE, accent1 5B9BD5
 //     at 40% over it; its "Themed Style 2" table 4697E0 and 6BACE6, white

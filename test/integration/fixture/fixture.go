@@ -293,7 +293,7 @@ func (s *Source) Paper() (width, height float64) {
 //
 // # Corpus evidence
 //
-//   - html: margins of 0.0104, 0.1, 0.2, 0.3, 0.35, 0.37, 0.42917 and 0.6
+//   - probe, html: margins of 0.0104, 0.1, 0.2, 0.3, 0.35, 0.37, 0.42917 and 0.6
 //     inch put the content box of Chromium's page at 0, 6.75, 14.25, 21,
 //     24.75, 26.25, 30 and 42.75 points; rounding the inches to whole
 //     pixels instead gives 0.75, 7.5, 14.25, 21.75, 25.5, 27, 30.75 and 43.5,

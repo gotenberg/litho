@@ -13,7 +13,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - docx: ooxmlexport/fdo73550.docx (Segoe UI, roman in the font
+//   - libreoffice/docx: ooxmlexport/fdo73550.docx (Segoe UI, roman in the font
 //     table) and ooxmlexport/FDO77715.docx (Georgia) print in Noto Serif;
 //     ooxmlexport/LinkedTextBoxes.docx (Candara, swiss) in Noto Sans, as
 //     the slides reader's fallbackFamily.

@@ -15,11 +15,11 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho: a flat ODS of Liberation Sans 10 point text with 1 point of
+//   - litho/pdf: a flat ODS of Liberation Sans 10 point text with 1 point of
 //     padding, converted by Gotenberg 9.0.0: a row of three wrapped lines
 //     of 11.2 points is 35.04 points tall, 47 pixels of 0.7455 points: 45
 //     for the text and one a padding.
-//   - xlsx: scrolled-pages, rows of Calibri 12 point text (Carlito, 14.65
+//   - gotenberg/xlsx: scrolled-pages, rows of Calibri 12 point text (Carlito, 14.65
 //     points a line) without a height of their own print 15.65 points
 //     apart, 21 such pixels.
 const screenPixel = 0.7455
@@ -111,7 +111,7 @@ func (b *builder) optimalHeights(g *grid) {
 //
 // # Corpus evidence
 //
-//   - litho: a flat ODS of wrapped Liberation Sans 10 point text (11.17
+//   - litho/pdf: a flat ODS of wrapped Liberation Sans 10 point text (11.17
 //     points a line), converted by Gotenberg 9.0.0, sets its lines 11.2
 //     points apart.
 func editLine(h float64) float64 {

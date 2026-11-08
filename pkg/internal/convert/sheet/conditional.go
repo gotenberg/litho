@@ -27,7 +27,7 @@ const (
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/databar.xlsx, rows 12.65 points high, prints bars 12.25 to
+//   - libreoffice/xlsx: sc/databar.xlsx, rows 12.65 points high, prints bars 12.25 to
 //     12.5 points high and starts the bar of B6 0.35 points right of the
 //     column's edge (ScOutputData::DrawDataBars, getDataBarRect, 2 pixels
 //     at the print scale).
@@ -38,7 +38,7 @@ const dataBarInset = 0.3
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/databar.xlsx, B3:B6 holding -2 to 3, prints a black line
+//   - libreoffice/xlsx: sc/databar.xlsx, B3:B6 holding -2 to 3, prints a black line
 //     a quarter point wide dotted every quarter point at 2/5 of the cells'
 //     width.
 var dataBarAxis = compose.Stroke{Color: compose.Black, Width: 0.25, Dash: []float64{0.25, 0.25}}
@@ -635,11 +635,11 @@ func thresholds(vals []Value, n int, st *condStats) ([]float64, bool) {
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/colorscale.xlsx, red to blue over 1 to 4, prints 2 as
+//   - libreoffice/xlsx: sc/colorscale.xlsx, red to blue over 1 to 4, prints 2 as
 //     (170, 0, 85); yellow to cyan between the 10th percentile and 90% of
 //     1 to 4 (1.3 and 3.7) prints 2 as (181, 255, 74) and 3 as (75, 255,
 //     180).
-//   - xlsx: sc/tdf156028.xlsx, a three-colour scale over the one value 1,
+//   - libreoffice/xlsx: sc/tdf156028.xlsx, a three-colour scale over the one value 1,
 //     paints it the maximum's green.
 func colorScale(rule *Rule, st *condStats, cell *Cell) (css.Color, bool) {
 	if cell == nil || (cell.Value.Kind != Number && cell.Value.Kind != Bool) {
@@ -747,7 +747,7 @@ func (g *grid) condStyle(r, c int, cell *Cell, base *Style) *Style {
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/databar.xlsx: over -2 to 3 the axis sits at 2/5 of the
+//   - libreoffice/xlsx: sc/databar.xlsx: over -2 to 3 the axis sits at 2/5 of the
 //     cell, 1 paints a third of the positive side and -2 the whole
 //     negative side in red; over 1 to 4 with the minimum as the lower
 //     threshold, 1 paints nothing and 4 the whole width; a middle axis

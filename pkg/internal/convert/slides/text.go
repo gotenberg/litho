@@ -33,7 +33,7 @@ const maxFontSize = 1000
 //
 // # Corpus evidence
 //
-//   - pptx: sd/bnc862510_7.pptx (Segoe UI) prints in Noto Sans; odp: frames
+//   - libreoffice/pptx: sd/bnc862510_7.pptx (Segoe UI) prints in Noto Sans; probe, odp: frames
 //     in NoSuchFont, Segoe UI and Tahoma print in Noto Sans.
 const fallbackFamily = "Noto Sans"
 
@@ -44,7 +44,7 @@ const fallbackFamily = "Noto Sans"
 //
 // # Corpus evidence
 //
-//   - odp: a frame of Liberation Sans 20 with three tabs and no tab stop
+//   - probe, odp: a frame of Liberation Sans 20 with three tabs and no tab stop
 //     distance prints its digits 36 points apart.
 const (
 	defaultTab    = 72
@@ -100,7 +100,7 @@ const maxRise = 1
 //
 // # Corpus evidence
 //
-//   - odp: Liberation Sans 20 with text-position super 58% prints 6.8 points
+//   - probe, odp: Liberation Sans 20 with text-position super 58% prints 6.8 points
 //     up, sub 58% 1.4 points down, 33% 58% 6.6 points up.
 func scriptShift(size float64, m text.Metrics, sub bool) float64 {
 	h := m.Ascent + m.Descent
@@ -171,7 +171,7 @@ type laidBody struct {
 //
 // # Corpus evidence
 //
-//   - pptx: sd-data/TextDistancesInsets3.pptx's 56.7-point boxes with top
+//   - libreoffice/pptx: sd-data/TextDistancesInsets3.pptx's 56.7-point boxes with top
 //     and bottom insets of 0 and 4, 4 and 0, 1 and 2, 2 and 1, 2 and 2
 //     centimetres print their top-anchored text at 28.35 points above the
 //     box, at its bottom edge, and 14.17 points below, 42.52 below and
@@ -206,7 +206,7 @@ func insetRect(r compose.Rect, in [4]float64) compose.Rect {
 //
 // # Corpus evidence
 //
-//   - odp: sd/tdf99729-new.odp's bottom-anchored frame of 1 centimetre,
+//   - libreoffice/odp: sd/tdf99729-new.odp's bottom-anchored frame of 1 centimetre,
 //     sd/tdf150966_hugeInset.odp's bottom-anchored shape whose insets meet
 //     in the middle print their overflowing text from the rectangle's top;
 //     sd/invalidAudio.odp's middle-anchored title overflows both ways;
@@ -372,7 +372,7 @@ const blockSlack = 0.01
 //
 // # Corpus evidence
 //
-//   - odp: sd-data/fit-to-size.fodp's frames 2 (true) and 3 (all), 357 by
+//   - libreoffice/odp: sd-data/fit-to-size.fodp's frames 2 (true) and 3 (all), 357 by
 //     144 and 357 by 127 points, print "foo" 8 times its width and 2 and
 //     1.78 times its height, the two lines filling the frame.
 func (b *builder) stretchText(body *TextBody, inner compose.Rect, res *textResult) *textResult {
@@ -498,7 +498,7 @@ func overflowShare(body *TextBody) float64 {
 //
 // # Corpus evidence
 //
-//   - pptx: sd/font-scale.pptx saves a font scale of 85% with 20% less
+//   - libreoffice/pptx: sd/font-scale.pptx saves a font scale of 85% with 20% less
 //     spacing and prints at the fourth level whatever it saves (100%, 50% or
 //     none measured): its three empty closing paragraphs would push the
 //     fit to 70%.
@@ -1121,8 +1121,8 @@ func (b *builder) fieldText(r *Run) string {
 //
 // # Corpus evidence
 //
-//   - pptx: sd/numfmt.pptx's plain datetime field prints 11/8/26 on 8
-//     November 2026; odp: a text:date and a text:time without a data
+//   - libreoffice/pptx: sd/numfmt.pptx's plain datetime field prints 11/8/26 on 8
+//     November 2026; probe, odp: a text:date and a text:time without a data
 //     style print 11/8/26 and 11:05:48 AM.
 const (
 	defaultDateFormat = "M/D/YY"

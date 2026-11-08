@@ -792,10 +792,10 @@ func (r *runTracker) restart(i int, el models.TextElement) {
 //
 // # Corpus evidence
 //
-//   - litho fontemptycs_2b.pdf, fontkeys_1b.pdf: two glyphs whose /Widths
+//   - litho/pdf fontemptycs_2b.pdf, fontkeys_1b.pdf: two glyphs whose /Widths
 //     entry is 0 or missing, shown at one origin on a line of their own,
 //     read "A" and "B" on two lines where PDF.js reads "AB".
-//   - litho complex_ua1.pdf, complex_ua2.pdf: an unembedded font whose
+//   - litho/pdf complex_ua1.pdf, complex_ua2.pdf: an unembedded font whose
 //     /Widths covers only "A" and "B" gave every other letter no advance, so
 //     each letter read as a line of its own.
 //   - All corpora: words match PDF.js on these 4 more files and on none

@@ -109,7 +109,7 @@ func matchHeadingLevel(v compliance.Violation) bool {
 //     H1 in the same document (verapdf 7.4.4-t02 and t03 fail files, pdfjs
 //     bug1722036 and issue16081), an H in a table header cell (pdfjs
 //     prefilled_f1040).
-//   - verapdf, litho, pdfjs: remediated at PDF/UA-2, default and aggressive,
+//   - verapdf, litho/pdf, pdfjs: remediated at PDF/UA-2, default and aggressive,
 //     the 12 files fully fixed on litho and veraPDF 1.30.2 alike go from 1
 //     to 3, and at each WTPDF level from 0 to 3, since the WTPDF runs did not
 //     reach the repair before. No rule appears on either tool, and litho and
@@ -117,7 +117,7 @@ func matchHeadingLevel(v compliance.Violation) bool {
 //   - All corpora: no H has a standard Art ancestor. pdfjs bug1722036 nests
 //     its H in an Article its /RoleMap maps to Art, and the H1 it also uses
 //     refuses it.
-//   - litho headingart_ua2: the three H of two Art elements of the PDF 1.7
+//   - litho/pdf headingart_ua2: the three H of two Art elements of the PDF 1.7
 //     namespace and a Sect inside one become H1, H2 and H1, and veraPDF
 //     1.30.2 reports nothing on the PDF/UA-2 and WTPDF outputs, default and
 //     aggressive.

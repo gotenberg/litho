@@ -17,9 +17,9 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho stdremap_ua2: the PDF 1.7 Sect the /RoleMap sends to Book, which
+//   - litho/pdf stdremap_ua2: the PDF 1.7 Sect the /RoleMap sends to Book, which
 //     veraPDF 1.30.2 reports once and litho missed.
-//   - litho remapchain_ua2: a legacy chain Div -> Section -> Sect and a
+//   - litho/pdf remapchain_ua2: a legacy chain Div -> Section -> Sect and a
 //     namespace chain Sect -> Section -> Sect, which veraPDF passes and litho
 //     reported twice.
 func TestCheckNamespaceRoleMapping_T04(t *testing.T) {

@@ -82,7 +82,7 @@ func (f *flattener) keptForms(ctx context.Context, ops []content.Operation, edit
 //
 // # Corpus evidence
 //
-//   - litho paintop_2b.pdf: the appearance of its Square names a state at ca
+//   - litho/pdf paintop_2b.pdf: the appearance of its Square names a state at ca
 //     0.5 and paints nothing with it. Drawn into the page by annotation
 //     flattening, the form kept the state, and PDF/A-1b validation still found
 //     ISO 19005-1, 6.4 test 6.

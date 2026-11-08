@@ -59,15 +59,15 @@ type extSchemaEntry struct {
 //
 // # Corpus evidence
 //
-//   - litho xmppage_2b.pdf: the packet of its third page holds its entries in
+//   - litho/pdf xmppage_2b.pdf: the packet of its third page holds its entries in
 //     an rdf:Seq, and the packet of its fourth page an entry with no property
 //     array whose value type has a field of type Dimensions. Both kept their
 //     ISO 19005-2, 6.6.2.3.3 t1 and t17 findings after a PDF/A-2b and a
 //     PDF/A-3b remediation.
-//   - litho exttypes_2b.pdf: an entry with no property array has fields of
+//   - litho/pdf exttypes_2b.pdf: an entry with no property array has fields of
 //     type Dimensions, Locale and Box, which kept three t17 findings, three
 //     6.7.8 t18 at PDF/A-1b.
-//   - litho schemaprefix_1b.pdf: its catalog packet holds its entries in an
+//   - litho/pdf schemaprefix_1b.pdf: its catalog packet holds its entries in an
 //     rdf:Seq, which kept 6.7.8 t2 at PDF/A-1b and t1 at PDF/A-2b and 3b.
 //   - All corpora: 641 files carry an extension schema block, and no other
 //     holds either defect. Over their PDF/A-1b and PDF/A-2b remediations and

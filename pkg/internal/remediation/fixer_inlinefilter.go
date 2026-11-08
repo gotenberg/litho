@@ -152,14 +152,14 @@ func canonicalInlineFilter(name ast.PdfName) (ast.PdfName, bool) {
 //   - pdfjs issue8613.pdf: two 1300-pixel-wide RGB images writing /Filter
 //     [/ASCII85Decode /LZWDecode], 2.4 MB decoded. Their findings go at every
 //     level, and every output draws the samples the source draws.
-//   - litho a4syntax_4.pdf: its LZW image writes no EOD code (see
+//   - litho/pdf a4syntax_4.pdf: its LZW image writes no EOD code (see
 //     [decodeInlineData]); the finding goes at every level.
 //   - All corpora: no govdocs, pdfcpu, pdf20 or facturx file holds an inline
 //     image any part forbids, and no output gains a rule on either tool.
-//   - litho inlinelzw_2b.pdf: holds such images in a form XObject, a Type 3
+//   - litho/pdf inlinelzw_2b.pdf: holds such images in a form XObject, a Type 3
 //     glyph, a tiling pattern cell and an annotation appearance, which no
 //     other file does.
-//   - litho inlinejpx_2b.pdf: the only file whose inline images apply
+//   - litho/pdf inlinejpx_2b.pdf: the only file whose inline images apply
 //     JPXDecode or JBIG2Decode, on its page and in a form XObject. Its five
 //     findings go at every PDF/A level of parts 2 to 4, default and
 //     aggressive, on litho and veraPDF 1.30.2 alike. Decoding the images and
@@ -654,7 +654,7 @@ func inlineDecodeParms(v ast.PdfObject, n int) ([]ast.PdfObject, bool) {
 //
 // # Corpus evidence
 //
-//   - litho a4syntax_4.pdf: its LZW image's data ends with no EOD code, and
+//   - litho/pdf a4syntax_4.pdf: its LZW image's data ends with no EOD code, and
 //     the space before its EI read as data made the decode damaged.
 func decodeInlineData(ctx context.Context, dec *filter.Decoder, raw []byte, names []ast.PdfName, parms []ast.PdfObject) ([]byte, bool) {
 	if decoded, ok := decodeInlineChain(ctx, dec, raw, names, parms); ok {

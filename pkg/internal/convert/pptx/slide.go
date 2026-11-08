@@ -90,7 +90,7 @@ func (r *reader) slideWarnings(part string, root *ooxml.Element) {
 //
 // # Corpus evidence
 //
-//   - pptx: sd/tdf123684's text box filled with the slide's picture
+//   - libreoffice/pptx: sd/tdf123684's text box filled with the slide's picture
 //     background prints invisible over it.
 func (r *reader) slideWindow(bg *layout.Picture, box compose.Rect) *layout.Picture {
 	w, h := r.slideW, r.slideH
@@ -201,7 +201,7 @@ func (r *reader) notes(slidePart string) ([]slides.Paragraph, bool, error) {
 //
 // # Measured
 //
-//   - pptx: deck.pptx's notes master places the slide image at 90, 54 by
+//   - gotenberg/pptx: deck.pptx's notes master places the slide image at 90, 54 by
 //     360, 270 points and the slide number at 305.9, 683.9 on a 540 by 720
 //     notes size; Impress's notes pages print both there on Letter, and
 //     move the slide image when the master moves it. A slide without

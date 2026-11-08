@@ -47,7 +47,7 @@ import (
 //   - All corpora: read whole, as remediation reads them, two pages leave
 //     a sequence open, both one level deep and painting after the opener,
 //     and no form XObject does.
-//   - litho unclosedmc_ua1.pdf: an /Artifact BMC before a stroked rule with
+//   - litho/pdf unclosedmc_ua1.pdf: an /Artifact BMC before a stroked rule with
 //     no EMC kept ISO 14289-1, 7.1 t3 and ISO 14289-2, 8.2.2 t1 after
 //     remediation on both tools, and now fully fixes.
 //   - pdfjs issue11678.pdf: page 2 leaves its sequence open past where the
@@ -57,7 +57,7 @@ import (
 //     10 MB of content inside a /Layer sequence, but every sequence closes
 //     in the whole reading, so the fixer leaves it, and a /Layer sequence
 //     would tag nothing anyway.
-//   - litho sharedclose_ua1.pdf: a closed array for each page of two sharing
+//   - litho/pdf sharedclose_ua1.pdf: a closed array for each page of two sharing
 //     one /Contents stream made veraPDF parse the stream once per array, so
 //     the marked form it draws gained a second reference and remediation at
 //     PDF/UA-1 left ISO 14289-1, 7.20 t2 on both tools; one shared closed

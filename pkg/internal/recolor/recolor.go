@@ -92,7 +92,7 @@ type Skip struct {
 //
 // # Corpus evidence
 //
-//   - litho (214 files), pdfjs (1 in 3), govdocs (1 in 4), pdfcpu (1 in 2),
+//   - litho/pdf (214 files), pdfjs (1 in 3), govdocs (1 in 4), pdfcpu (1 in 2),
 //     converted to DeviceRGB through each source profile's transform to
 //     sRGB and rendered before and after, pages 1 to 3 at 36 dpi: no failure,
 //     and 0 or 1 level apart on every page but these.
@@ -107,12 +107,12 @@ type Skip struct {
 //     a Lab alternate.
 //   - pdfjs transparency_group.pdf: a group's blending space becomes the
 //     target, which moves a blend by up to 3 levels on 10 pixels.
-//   - litho (215 files), pdfjs and govdocs (79 files each the render goldens
+//   - litho/pdf (215 files), pdfjs and govdocs (79 files each the render goldens
 //     sample), images included, converted to the built-in CMYK through the
 //     ICC engine and rendered at 72 dpi: no colour moves past the gamut
 //     mapping of sRGB blue, 71.7 ΔE*ab, on 1% of a page, but where a PDF/X
 //     intent the conversion keeps changes what DeviceCMYK means.
-//   - litho sharedarray_2b.pdf, resinherit_2b.pdf, baretree_2b.pdf, pdfjs
+//   - litho/pdf sharedarray_2b.pdf, resinherit_2b.pdf, baretree_2b.pdf, pdfjs
 //     issue18973.pdf: a stream two pages' /Contents arrays share, /Resources
 //     naming a missing object or no dictionary, and a /Contents element
 //     naming a missing object, which each left a page unconverted.
@@ -570,7 +570,7 @@ func (s *session) rewriteAnnotations(ctx context.Context, obj ast.PdfObject) (as
 //
 // # Corpus evidence
 //
-//   - litho annotsynth_2b.pdf: its Polygon, Underline and Squiggly
+//   - litho/pdf annotsynth_2b.pdf: its Polygon, Underline and Squiggly
 //     annotations have no appearance stream and RGB /C and /IC, which a
 //     flattening after a CMYK conversion drew in DeviceRGB.
 func (s *session) annotationColours(ctx context.Context, annot ast.PdfDict) (ast.PdfDict, bool) {

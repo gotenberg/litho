@@ -27,7 +27,7 @@ import (
 //     12568 to 6202 (pdfjs issue2856 and litho imageintent_2b, 3366 and 3000
 //     to 0). The worst move is govdocs thread_400_400032, 104 pixels of a
 //     saturated blue the perceptual table maps 20 levels from its source.
-//   - litho, pdf20: the 225 other files that convert to the built-in CMYK
+//   - litho/pdf, pdf20: the 225 other files that convert to the built-in CMYK
 //     convert byte for byte as before.
 type IntentReport struct {
 	// Operators counts the colour operators converted under a graphics

@@ -71,7 +71,7 @@ func (c *clip) empty() bool {
 //     differing pixels from poppler): an image's bottom edge falls inside
 //     the row the clip now keeps whole, a row litho covers by the image's
 //     area and poppler paints lighter.
-//   - litho, pdfjs, govdocs, pdfcpu: no flatten, redact-render or recolor
+//   - litho/pdf, pdfjs, govdocs, pdfcpu: no flatten, redact-render or recolor
 //     verdict changes; two flatten page checks count a few more inked
 //     pixels (pdfjs freeculture page 2: 10993 to 11160).
 func axisRect(p geom.Path) (geom.Rect, bool) {
@@ -139,7 +139,7 @@ const rowSnapTolerance = 1e-6
 //     underlines under a clip half a pixel tall, which poppler paints solid
 //     and exact coverage painted at half strength. 6951 pixels differed
 //     from poppler, 0 do.
-//   - govdocs, litho, pdfjs: 31 of 641 render-cell pages move. 20 come
+//   - govdocs, litho/pdf, pdfjs: 31 of 641 render-cell pages move. 20 come
 //     closer to poppler (govdocs thread_200_200148 pages 1 and 2: 3951 and
 //     3055 pixels differ, then 2037 and 1331), 7 keep their count, 4 move
 //     away by 1 to 6 pixels; no page, flatten or redact-render verdict
@@ -184,7 +184,7 @@ func pixelRect(r geom.Rect) geom.Rect {
 //
 // # Corpus evidence
 //
-//   - govdocs, litho, pdfjs, pdfcpu: with glyphs ([clip.binaryIn])
+//   - govdocs, litho/pdf, pdfjs, pdfcpu: with glyphs ([clip.binaryIn])
 //     and groups cut at whole pixels, no render-cell or redact-render page
 //     moves; 25 flatten-cell page checks over 21 files move by a few
 //     pixels (pdfjs issue14562: 4225 to 4346 differing pixels of 327260

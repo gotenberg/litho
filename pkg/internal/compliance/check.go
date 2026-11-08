@@ -269,10 +269,10 @@ const maxSharedContentReadings = 16
 //     and 9 under a scanned DeviceGray image of their own, and the DeviceGray
 //     test fails 13 times, where veraPDF fails it 10 times; the rule sets
 //     agree.
-//   - litho imagereach_2b.pdf: the second page draws its own image through
+//   - litho/pdf imagereach_2b.pdf: the second page draws its own image through
 //     the shared stream, and its /Intent and /Interpolate fail at every PDF/A
 //     level, where veraPDF fails neither.
-//   - litho csnames_2b.pdf: rewritten with duplicate streams merged, five
+//   - litho/pdf csnames_2b.pdf: rewritten with duplicate streams merged, five
 //     pages share one content stream and six another, each under resources of
 //     its own, and veraPDF stops failing the abstract profiles of pages 9, 10,
 //     18 and 19. litho still fails those of pages 9, 18 and 19; page 10 reads

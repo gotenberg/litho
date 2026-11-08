@@ -24,7 +24,7 @@ const maxTables = 256
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/TableEmptyHeaders.xlsx prints Column1 and Column2 over
+//   - libreoffice/xlsx: sc/TableEmptyHeaders.xlsx prints Column1 and Column2 over
 //     header cells its sheet data leaves empty; sc/TableStyleTest.xlsx
 //     prints TableStyleMedium2's dark blue header row of white bold text
 //     and its light blue banded rows.

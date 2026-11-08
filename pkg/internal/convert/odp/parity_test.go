@@ -16,7 +16,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - odp: pitch and pitch-flat print four 28 cm by 15.75 cm pages, the
+//   - gotenberg/odp: pitch and pitch-flat print four 28 cm by 15.75 cm pages, the
 //     slide's text 18 points of Liberation Sans in white on green boxes of
 //     a 0.106 cm darker green border, the title at 2 cm, 1 cm, the bullet
 //     list's text 0.6 cm right of its bullet; the notes of slide 2 hold

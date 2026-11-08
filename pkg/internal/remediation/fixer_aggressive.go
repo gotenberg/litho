@@ -598,14 +598,14 @@ func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) error {
 //     /Contents. None of their PDF/A-1b, PDF/A-2b and PDF/A-4 remediations,
 //     default and aggressive, rolled back before the inline image repair,
 //     and with it and this write only thread_100_100877.pdf changes.
-//   - litho inlineinterp_2b.pdf: its page names such an array, and the inline
+//   - litho/pdf inlineinterp_2b.pdf: its page names such an array, and the inline
 //     image repair of the page rolled back until this write.
-//   - litho sharedarray_2b.pdf: two pairs of pages share a stream of their
+//   - litho/pdf sharedarray_2b.pdf: two pairs of pages share a stream of their
 //     direct arrays, and the aggressive rendering intent repair took the
 //     shared stream off one page and painted the repaired page on another.
 //     No other litho or verapdf corpus output changes, at any of the 13
 //     levels, default or aggressive.
-//   - litho formshare_ua1, imagereach_2b, noresources_4, sharedclose_ua1,
+//   - litho/pdf formshare_ua1, imagereach_2b, noresources_4, sharedclose_ua1,
 //     sharedicc_2b, sharedtag_ua1: a page names through a reference a stream
 //     another page names too, and verapdf has none. No repair rewrites such a
 //     stream, so a stream of its own for the page changes no litho output at

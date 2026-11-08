@@ -41,7 +41,7 @@ var forbiddenInlineImageFilters = map[string]bool{
 //
 // # Corpus evidence
 //
-//   - litho inlinejpx_2b.pdf: its two JPXDecode, two JBIG2Decode and one
+//   - litho/pdf inlinejpx_2b.pdf: its two JPXDecode, two JBIG2Decode and one
 //     form XObject JPXDecode inline images fail ISO 19005-2/3, 6.1.10 t1 and
 //     ISO 19005-4, 6.1.9 t1 five times on veraPDF 1.30.2, at every PDF/A level
 //     of those parts, and ISO 19005-1, 6.1.10 t2 never.
@@ -155,12 +155,12 @@ func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx
 //
 // # Corpus evidence
 //
-//   - litho limits_2b.pdf: nests 30 levels, and veraPDF fails the test twice at
+//   - litho/pdf limits_2b.pdf: nests 30 levels, and veraPDF fails the test twice at
 //     PDF/A-1b and PDF/A-2b, where litho failed it once.
 //   - pdfjs bug1130815.pdf: runs 124 q past the limit on its first page, 145
 //     levels deep at most, which litho stated once. veraPDF cannot parse the
 //     file (it finds no cross-reference table), so it has no count to compare.
-//   - litho qnestreach_2b.pdf: nests past the limit in a form XObject, a tiling
+//   - litho/pdf qnestreach_2b.pdf: nests past the limit in a form XObject, a tiling
 //     pattern cell, a Type 3 glyph and an annotation appearance, which
 //     veraPDF reports and litho did not judge.
 //   - All corpora: no file nests past the limit in a stream its pages draw,

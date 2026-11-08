@@ -273,7 +273,7 @@ func toggleScript(s, kind sheet.Script) sheet.Script {
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/databar.xlsx, a top margin of 1.025 inches and a header
+//   - libreoffice/xlsx: sc/databar.xlsx, a top margin of 1.025 inches and a header
 //     margin of 0.7875 holding "&C&A" in Arial 10, prints its cells 1.14
 //     points lower than the margin: the header's 11.17-point line and its
 //     7.09-point spacing need more than the margin's 17.10 points.

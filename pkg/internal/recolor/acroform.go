@@ -34,10 +34,10 @@ const maxFieldKidsDepth = 100
 //
 // # Corpus evidence
 //
-//   - litho sigcms_2b.pdf: converted to CMYK and then form-flattened, its
+//   - litho/pdf sigcms_2b.pdf: converted to CMYK and then form-flattened, its
 //     text field's appearance, generated from the form's /DA, painted in
 //     DeviceGray.
-//   - litho: 6 files hold a /DA colour (annothidden_2b, annotstruct_ua2,
+//   - litho/pdf: 6 files hold a /DA colour (annothidden_2b, annotstruct_ua2,
 //     flattenannots_2b, flatuntagged_ua1, idfields_ua2, sigcms_2b); each
 //     converts, and no rendering of a converted page moves.
 func (s *session) rewriteAcroForm(ctx context.Context) error {

@@ -588,7 +588,7 @@ func sortStops(s []css.TabStop) {
 //
 // # Corpus evidence
 //
-//   - docx: ooxmlimport/tdf101626.docx, a U+00AD bullet, prints "-".
+//   - libreoffice/docx: ooxmlimport/tdf101626.docx, a U+00AD bullet, prints "-".
 func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
 	label, ordinal := rp.num.next(rp.ilvl)
 	lv := rp.num.levelOf(rp.ilvl)
@@ -665,7 +665,7 @@ func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
 //
 // # Corpus evidence
 //
-//   - docx: ooxmlexport/cjklist34.docx, a grid of 18 points, prints 12
+//   - libreoffice/docx: ooxmlexport/cjklist34.docx, a grid of 18 points, prints 12
 //     point lines 18 points apart, each baseline 14.2 points below its
 //     line's top.
 func (d *document) snapLines(st *css.Style, pitch, mult float64) {

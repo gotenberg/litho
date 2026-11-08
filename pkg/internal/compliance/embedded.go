@@ -287,7 +287,7 @@ func (fs fileSpecEntry) label() string {
 //
 //   - pdfjs issue14203.pdf: attaches example.tex through an annotation's
 //     direct /FS, and every clause 6.8 check skipped it.
-//   - litho complex_1b.pdf and complex_4.pdf: a reference XObject names its
+//   - litho/pdf complex_1b.pdf and complex_4.pdf: a reference XObject names its
 //     target file through a /Ref /F written inline, and veraPDF reports it
 //     under ISO 19005-3, 6.8 t3 and t4 where litho did not.
 //   - govdocs thread_400_400002.pdf: 42 /OPI dictionaries name their image

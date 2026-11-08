@@ -100,7 +100,7 @@ var markupAnnotationSubtypes = map[ast.PdfName]bool{
 //   - verapdf 6-3-2-t01-fail-b: its Link, remediated to PDF/UA-1, carries
 //     neither /Contents nor an enclosing-element /Alt, and veraPDF reports it
 //     live, so a Link is not exempt.
-//   - litho annotstruct_ua2: its two Popups carry a /Parent and no /Contents,
+//   - litho/pdf annotstruct_ua2: its two Popups carry a /Parent and no /Contents,
 //     and veraPDF reports the rule on both.
 func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	// PDF/UA-2 has no generic "markup annotation needs Contents/Alt" rule: it

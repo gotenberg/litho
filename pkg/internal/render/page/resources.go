@@ -39,12 +39,12 @@ var defaultSpaces = []ast.PdfName{"DefaultGray", "DefaultRGB", "DefaultCMYK"}
 //
 // # Corpus evidence
 //
-//   - litho sharednested_2b.pdf: two forms under /Resources << >> set a /GS0
+//   - litho/pdf sharednested_2b.pdf: two forms under /Resources << >> set a /GS0
 //     or /GS1 only the page defines, and poppler 26.09.0 and PDFium (pypdfium2
 //     4.30.0) stroke them at the page's line width, 2 on page 1 and 4 on page
 //     2, where litho stroked them at the default of 1. Its tiling pattern sets
 //     /GS0 alike, and both stroke that cell at the same width on both pages.
-//   - litho colouroff_2b.pdf: a coloured tiling cell selects a /CS0 only the
+//   - litho/pdf colouroff_2b.pdf: a coloured tiling cell selects a /CS0 only the
 //     page defines, and both renderers fill it in black, as with no space.
 func (r *renderer) withPageNames(ref ast.PdfIndirectRef, own ast.PdfDict) ast.PdfDict {
 	page := r.page.Resources

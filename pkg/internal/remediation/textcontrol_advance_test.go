@@ -115,7 +115,7 @@ func glyphPositions(t *testing.T, data []byte, advance map[byte]float64) map[byt
 //
 // # Corpus evidence
 //
-//   - litho repairleft_4.pdf: "2 1 (\x01) \" (AB) Tj" drew AB 8.2 units
+//   - litho/pdf repairleft_4.pdf: "2 1 (\x01) \" (AB) Tj" drew AB 8.2 units
 //     further left once the strip removed the code, the room the .notdef
 //     glyph took with its width of 600 at 12 points and a spacing of 1.
 func TestFixTextControl_KeepsTheRoomOfAStrippedGlyph(t *testing.T) {

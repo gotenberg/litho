@@ -67,7 +67,7 @@ func matchXMPSchema(v compliance.Violation) bool {
 //     default and aggressive alike, and one round now repairs them to the same
 //     residual. thread_300_300116 carries its dc:creator as an rdf:Bag, where
 //     the XMP Specification defines an ordered array.
-//   - pdfcpu pkg_testdata__T4.pdf and litho docsync_1b.pdf: the same at
+//   - pdfcpu pkg_testdata__T4.pdf and litho/pdf docsync_1b.pdf: the same at
 //     PDF/A-1b, with dc:title, dc:creator and dc:description as simple text.
 //   - govdocs thread_000_000365, thread_300_300116 and thread_400_400724: took
 //     the second round at PDF/A-2b too. That part has no 6.7.3 rule, but a
@@ -462,7 +462,7 @@ func parseXMPSchemaTarget(s string) (objNum int, prop xmpSchemaProperty, ok bool
 //
 // # Corpus evidence
 //
-//   - litho imgxmp_4.pdf: at PDF/A-4 the catalog packet needs no patch, so
+//   - litho/pdf imgxmp_4.pdf: at PDF/A-4 the catalog packet needs no patch, so
 //     the bytes and encoding attributes of two page packets stayed, and the
 //     output failed ISO 19005-4, 6.7.2.1 t2 and t3 on litho and veraPDF 1.30.
 //   - govdocs thread_300_300779.pdf, pdfcpu pkg_testdata__VectorApple.pdf,

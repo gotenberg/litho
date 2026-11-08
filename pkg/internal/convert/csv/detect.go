@@ -16,7 +16,7 @@ type kind uint8
 //
 // # Corpus evidence
 //
-//   - litho: a CSV of one value per row, converted by the image, prints
+//   - litho/pdf: a CSV of one value per row, converted by the image, prints
 //     123, -1.5, "+3" as 3, "007" as 7, "1,234.56" as 1234.56, ".5" as
 //     0.5, "(5)" and "5-" as -5, "1.5E+03" and "1e5" as 1.50E+03 and
 //     1.00E+05, "15%" and "5 %" as 15.00% and 5.00%, "$1234.50", "-$5"

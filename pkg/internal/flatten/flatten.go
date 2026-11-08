@@ -704,7 +704,7 @@ func (f *flattener) regionImage(ctx context.Context, res *page.Result, g page.Ge
 //     but that one, whose composite is now DeviceCMYK and still draws as its
 //     source in litho and poppler 26.09.0. PDF/A-1b and 1a remediation of
 //     litho and veraPDF's PDF/A-1 files, which flattens, is unchanged.
-//   - litho: converted to CMYK and then flattened, 16 outputs held sRGB
+//   - litho/pdf: converted to CMYK and then flattened, 16 outputs held sRGB
 //     composites, 58 of them. The conversion now names the target for a
 //     page group whose /CS names a /ColorSpace resource (pagegroup_2b.pdf)
 //     and converts the /C and /IC an appearance is synthesised from

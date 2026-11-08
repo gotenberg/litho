@@ -71,7 +71,7 @@ func sheetIndex(doc *Document, name string) int {
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/hyperlinks.xlsx links "#Offering!$B$2", which LibreOffice
+//   - libreoffice/xlsx: sc/hyperlinks.xlsx links "#Offering!$B$2", which LibreOffice
 //     exports as a link to page 3, the first of sheet Offering.
 func resolveSheetLinks(doc *Document, out *compose.Document, pages []*pagePlan, at []int) {
 	for _, pg := range out.Pages {

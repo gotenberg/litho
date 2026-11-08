@@ -62,7 +62,7 @@ func fixMarkedContentLang(ctx context.Context, alloc *writer.ObjAllocator, doc *
 //
 //   - verapdf PDF_UA-1__7.2-t29-fail-g through -p: came out of remediation
 //     still carrying tags like "-pt" and "1-pt" before this repair.
-//   - litho mcform_2a.pdf: kept 6.7.4 t1 for the inline BDC of a form the
+//   - litho/pdf mcform_2a.pdf: kept 6.7.4 t1 for the inline BDC of a form the
 //     page draws and of an annotation appearance after a PDF/A-2a
 //     remediation, on litho and veraPDF alike, and 7.2 t29 at PDF/UA-1 and
 //     8.4.4 t2 at PDF/UA-2, while the repair read the page's content alone.

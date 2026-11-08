@@ -93,7 +93,7 @@ func (d *DataStyles) add(sec *Element, m map[string]*Element) {
 //
 // # Corpus evidence
 //
-//   - ods: sc/formats.ods's cell style ce28 names N2, which only
+//   - libreoffice/ods: sc/formats.ods's cell style ce28 names N2, which only
 //     styles.xml's automatic styles hold; Calc prints its 2 as 2.00.
 func (d *DataStyles) Element(scope Scope, name string) *Element {
 	if el := d.auto[scope][name]; el != nil {
@@ -283,7 +283,7 @@ func sectionCode(el *Element) string {
 //
 // # Corpus evidence
 //
-//   - ods: sc/tdf162177_Eastersunday.fods's "dd.mm.yy" style of automatic
+//   - libreoffice/ods: sc/tdf162177_Eastersunday.fods's "dd.mm.yy" style of automatic
 //     order prints 03/31/24, and sc/tdf125099.ods's "dd-mm-yyyy" prints
 //     04/17/2019.
 func autoOrderDate(el *Element) (string, bool) {

@@ -13,7 +13,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - odp: a flat presentation without styles whose rectangle sets
+//   - probe, odp: a flat presentation without styles whose rectangle sets
 //     draw:shadow visible alone prints a copy 5.67 pt right and down in
 //     0x808080.
 var (
@@ -37,7 +37,7 @@ const maxEffectRadius = 1000
 //
 // # Corpus evidence
 //
-//   - odp: sd/shadow-blur's oval prints the shadow its 0.67 by 0.994 cm
+//   - libreoffice/odp: sd/shadow-blur's oval prints the shadow its 0.67 by 0.994 cm
 //     offsets and 0.388 cm blur give, as sd/shape-blur-effect.pptx does;
 //     a glow without loext:glow-color glows black.
 func (r *reader) effects(p odf.Props, s *slides.Shape) {

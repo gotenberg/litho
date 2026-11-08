@@ -89,7 +89,7 @@ func standardMembers(members []ast.PdfName, profile string) []ast.PdfName {
 //     maps further; dropping the entry leaves both tools reporting nothing on
 //     the PDF/UA-2 and WTPDF-1.0-Accessibility outputs, default and
 //     aggressive, where both reported 8.2.4 t4 before.
-//   - litho complex_2a: maps /Div to /Custom. With the entry gone its Div,
+//   - litho/pdf complex_2a: maps /Div to /Custom. With the entry gone its Div,
 //     which holds a content item, passes through to the Document for ISO/TS
 //     32005 Table 5, and both tools report Document-content in place of
 //     8.2.4 t4: the private mapping hid the defect, it did not repair it.
@@ -102,11 +102,11 @@ func standardMembers(members []ast.PdfName, profile string) []ast.PdfName {
 //     /LI -> /P, which litho reported as a remapped standard type and which
 //     turned every list item into a paragraph, so <L> then held <P> and <P>
 //     held <LBody>.
-//   - litho rolecycle_ua2: its /Sect -> /Book -> /Sect cycle was broken by
+//   - litho/pdf rolecycle_ua2: its /Sect -> /Book -> /Sect cycle was broken by
 //     sending /Book to /P, so the Sect in no namespace read as a P at
 //     PDF/UA-2; dropping the /Sect entry keeps it a Sect, and both tools
 //     report no circular mapping on it.
-//   - litho complex_ua1: repaired at PDF/UA-2, breaking /Bar -> /Foo by
+//   - litho/pdf complex_ua1: repaired at PDF/UA-2, breaking /Bar -> /Foo by
 //     deletion left /MyType -> /Foo -> /Bar dangling.
 //   - verapdf PDF_UA-1__7.1-t07-fail-a.pdf: maps /Document to /Book, a
 //     standard source mapped to a custom name.
@@ -407,9 +407,9 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 //   - All corpora: no tagged file declares, on an element whose type only the
 //     legacy map maps, a namespace that map does not govern, before or after
 //     PDF/UA-2 remediation.
-//   - litho rolemapscope_ua2: a Para in the PDF 2.0 namespace the map sends to
+//   - litho/pdf rolemapscope_ua2: a Para in the PDF 2.0 namespace the map sends to
 //     P, which veraPDF reported as 8.2.4 t1 after PDF/UA-2 remediation.
-//   - litho rolemapns_ua2: one element per repair, in two custom namespaces,
+//   - litho/pdf rolemapns_ua2: one element per repair, in two custom namespaces,
 //     the PDF 1.7 namespace carrying its own /RoleMapNS and the PDF 2.0
 //     namespace. veraPDF reported 8.2.4 t1 on all five after PDF/UA-2 and
 //     WTPDF remediation, default and aggressive, and passes every output now.

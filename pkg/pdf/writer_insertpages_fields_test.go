@@ -157,7 +157,7 @@ const maxFieldParentDepthForTest = 32
 //
 // # Corpus evidence
 //
-//   - litho: 9 fixtures carried a widget the form did not reach after a page
+//   - litho/pdf: 9 fixtures carried a widget the form did not reach after a page
 //     move, each reported by qpdf.
 func TestWriter_InsertPages_ListsCopiedFields(t *testing.T) {
 	t.Parallel()

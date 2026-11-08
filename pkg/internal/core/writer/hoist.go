@@ -49,7 +49,7 @@ import (
 //   - pdfjs poppler-937-0-fuzzed.pdf, issue13783.pdf: came out of split, merge
 //     and insert holding their content stream inside a copied /CropBox, which
 //     [document.ResolveRectangle] had resolved into the page box.
-//   - litho directstream_2b.pdf: holds four streams inline, two of them in
+//   - litho/pdf directstream_2b.pdf: holds four streams inline, two of them in
 //     inline forms, and came out of every writer path holding them there.
 func HoistDirectStreams(ctx context.Context, alloc *ObjAllocator, trailer ast.PdfDict) (int, error) {
 	h := hoister{alloc: alloc}

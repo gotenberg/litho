@@ -20,7 +20,7 @@ const maxTableCells = 1 << 14
 //
 // # Corpus evidence
 //
-//   - pptx: sd/tdf100926.pptx's 213-point columns of vert and vert270 text
+//   - libreoffice/pptx: sd/tdf100926.pptx's 213-point columns of vert and vert270 text
 //     wrap "Top to Bottom vertical text" before "text" and grow the 119-point
 //     row to 204; sd/tcPr-vert-roundtrip.pptx's 148-point line in a
 //     320-point column leaves its 173-point row as it is.

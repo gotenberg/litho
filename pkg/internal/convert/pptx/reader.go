@@ -232,7 +232,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*slides.D
 //
 // # Corpus evidence
 //
-//   - pptx: sd/tdf103347 prints the outline "Hello", "Hello (2)", "Hello
+//   - libreoffice/pptx: sd/tdf103347 prints the outline "Hello", "Hello (2)", "Hello
 //     (3)" for three slides titled "Hello"; sd/slide-sections names its
 //     untitled seventh slide "Slide 7".
 func uniqueNames(list []*slides.Slide) {

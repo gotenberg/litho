@@ -538,7 +538,7 @@ func checkEmbeddedFileMIME(ctx context.Context, doc *document.Document, catalog 
 //
 // # Corpus evidence
 //
-//   - litho complex_ua2.pdf: /Configs [ << /Order [ ] >> ], an incomplete
+//   - litho/pdf complex_ua2.pdf: /Configs [ << /Order [ ] >> ], an incomplete
 //     /Order a /D-only read never inspected; veraPDF reports it.
 func checkOCGOrderCompleteness(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
 	ocProps, err := document.ResolveDict(ctx, doc, catalog["OCProperties"])

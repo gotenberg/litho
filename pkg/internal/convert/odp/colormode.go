@@ -29,7 +29,7 @@ const (
 //
 // # Corpus evidence
 //
-//   - odp: sd/tdf127901's greyscale, mono and watermark pictures print
+//   - libreoffice/odp: sd/tdf127901's greyscale, mono and watermark pictures print
 //     grey, black and white, and pale.
 func adjusted(pic *layout.Picture, p odf.Props) *layout.Picture {
 	mode := p.Get("draw:color-mode")

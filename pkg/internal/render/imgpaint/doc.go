@@ -63,15 +63,15 @@
 //
 // # Corpus evidence
 //
-//   - litho inlineinterp_2b.pdf: a 4 by 1 interpolated image enlarged to 250
+//   - litho/pdf inlineinterp_2b.pdf: a 4 by 1 interpolated image enlarged to 250
 //     pixels a sample; poppler peaks each sample at the left edge of its cell
 //     (x 100, 350, 600 for samples 0, 1, 2), litho at its centre (225, 475,
 //     725). The page mismatches the render golden on 148309 pixels for it.
-//   - litho complex_2b.pdf, megafont_2b.pdf and multipage_2b.pdf page 2: a 2
+//   - litho/pdf complex_2b.pdf, megafont_2b.pdf and multipage_2b.pdf page 2: a 2
 //     by 2 interpolated image enlarged 100 by 50 pixels a sample; poppler
 //     shifts it the same way, and each page mismatches the render golden on
 //     about 14870 pixels for it.
-//   - litho inlineinterp_2b, complex_2b, megafont_2b, multipage_2b: PDFium
+//   - litho/pdf inlineinterp_2b, complex_2b, megafont_2b, multipage_2b: PDFium
 //     (pypdfium2 4.30.0) and poppler's Cairo backend (pdftocairo 26.09.0)
 //     centre the samples as litho does: 0 pixels differ from litho inside the
 //     image on each page, so the shift is Splash's alone.
@@ -79,7 +79,7 @@
 //     Two evenly spaced taps per axis weighed each neighbour as much as the
 //     sample and blurred the text, 7931 pixels off the render golden; area
 //     weights leave 6055, the rest poppler's whole-sample reduction.
-//   - pdfjs, govdocs and litho: of 634 golden pages none changes verdict
+//   - pdfjs, govdocs and litho/pdf: of 634 golden pages none changes verdict
 //     with area weights; 51 move closer to the golden and 13 move away, by
 //     at most 0.05% of a page.
 package imgpaint

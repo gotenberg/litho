@@ -380,7 +380,7 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 //
 // # Corpus evidence
 //
-//   - litho ttnoenc_2b.pdf: veraPDF reports ISO 19005-2, 6.2.11.4.1 t2 for
+//   - litho/pdf ttnoenc_2b.pdf: veraPDF reports ISO 19005-2, 6.2.11.4.1 t2 for
 //     both codes of a non-symbolic font with no /Encoding and of a symbolic
 //     font, each carrying only a (3,1) subtable, and nothing for the
 //     siblings carrying a (1,0) or a (3,0).

@@ -409,7 +409,7 @@ func boxCorners(box ast.PdfArray) (x0, y0, x1, y1 float64) {
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu, facturx, pdf20, litho: of the 1911 files
+//   - govdocs, pdfjs, pdfcpu, facturx, pdf20, litho/pdf: of the 1911 files
 //     auto-tagging reaches, 341 have a page whose reading order is not content
 //     order, 2510 pages in all, 533 of them read column by column. The trees
 //     of the other pages are unchanged.
@@ -419,7 +419,7 @@ func boxCorners(box ast.PdfArray) (x0, y0, x1, y1 float64) {
 //     figures, each drawn apart from its caption.
 //   - pdfjs bug1905623.pdf: 201 pages of vertical Japanese, whose columns the
 //     segmentation read left to right, keep content order.
-//   - litho, verapdf: the PDF/UA-1 and PDF/UA-2 remediations, default and
+//   - litho/pdf, verapdf: the PDF/UA-1 and PDF/UA-2 remediations, default and
 //     aggressive, of the 173 litho fixtures and the 434 veraPDF PDF/UA files
 //     write the same bytes on a second run, and bytes that differ from
 //     before on 3 litho fixtures only.

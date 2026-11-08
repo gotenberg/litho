@@ -76,11 +76,11 @@ func matchNestedResources(v compliance.Violation) bool {
 //
 //   - All corpora: every fixture carrying this violation is single-page, so the
 //     corpus cannot tell the singly-referenced repair from a per-page deep copy.
-//   - pdfjs issue6541.pdf, litho colouroff_2b.pdf: a tiling pattern cell
+//   - pdfjs issue6541.pdf, litho/pdf colouroff_2b.pdf: a tiling pattern cell
 //     resolves a name through the page, and veraPDF 1.30.2 reported 6.2.2 t2
 //     on each remediated output at PDF/A-2b and PDF/A-4, twice and once, and
 //     reports it on neither now.
-//   - litho nestedpattern_2b.pdf: the only file whose remediation copies the
+//   - litho/pdf nestedpattern_2b.pdf: the only file whose remediation copies the
 //     pattern a form XObject selects.
 func fixNestedResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)

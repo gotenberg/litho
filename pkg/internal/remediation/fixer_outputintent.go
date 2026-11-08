@@ -160,7 +160,7 @@ func matchOutputIntentCleanup(v compliance.Violation) bool {
 //     6-2-3-t02-fail-a and litho outputintent_2b, each with the GTS_PDFA1
 //     intent first. Before the fixer claimed ISO 19005-1, 6.2.2 t2, the three
 //     kept it through a PDF/A-1a and 1b remediation on litho and veraPDF.
-//   - litho twoprofile_1b, a GTS_PDFX CMYK intent before a GTS_PDFA1 RGB one
+//   - litho/pdf twoprofile_1b, a GTS_PDFX CMYK intent before a GTS_PDFA1 RGB one
 //     over DeviceRGB content: unifying on the first entry left the content
 //     uncovered, and the next round replaced the whole array with a stock sRGB
 //     intent, dropping the PDF/X intent and the source's RGB profile.
@@ -679,7 +679,7 @@ func defaultCMYKPages(violations []compliance.Violation) (pages map[int]bool, al
 //     dropped the PDF/X intent from all 264 of their outputs at the eleven
 //     PDF/A levels, default and aggressive; every output now keeps it, and
 //     each reports the rule set it reported before on litho.
-//   - litho pdfxonly_2b and pdfxnoprofile_2b: remediated at the eleven PDF/A
+//   - litho/pdf pdfxonly_2b and pdfxnoprofile_2b: remediated at the eleven PDF/A
 //     levels, every output keeps the PDF/X intent and reports the same rule
 //     set on litho and veraPDF.
 func addOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogRef ast.PdfIndirectRef, catalogDict ast.PdfDict, cmyk bool, part int) (ast.PdfDict, []string) {
@@ -1040,7 +1040,7 @@ func formBlendsIn(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 //
 // # Corpus evidence
 //
-//   - litho resinherit_2b.pdf: the page whose /Parent names the root was given
+//   - litho/pdf resinherit_2b.pdf: the page whose /Parent names the root was given
 //     the root's /Resources with the default space, so its text named /F5,
 //     which nothing defined any more, and the page whose /Resources is null
 //     was given none, so it kept 6.2.2 t2 after a PDF/A-2b remediation, on
@@ -1237,7 +1237,7 @@ func patchType3FontColorSpace(ctx context.Context, alloc *writer.ObjAllocator, d
 //
 // # Corpus evidence
 //
-//   - litho fontcopies_2b.pdf: page 15 draws /X1 and /X2, two identical forms
+//   - litho/pdf fontcopies_2b.pdf: page 15 draws /X1 and /X2, two identical forms
 //     sharing /Resources 67 0 R, and a PDF/A-1b remediation rewrote form 48
 //     instead of form 47 in 7 of 40 runs.
 func recurseColorSpacePatch(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, newRes ast.PdfDict, name ast.PdfName, key ast.PdfName, csArr func() ast.PdfArray, visited map[int]bool) bool {

@@ -260,7 +260,7 @@ var deviceNProcessColorants = map[string]bool{
 //   - verapdf PDF_A-1b__veraPDF_test_suite_6-1-12-t09-fail-a.pdf: a direct
 //     12-colourant DeviceN that CS selects, SCN sets and B strokes fails the
 //     limit three times.
-//   - litho limits_2b.pdf: a direct 33-colourant DeviceN that cs selects and f
+//   - litho/pdf limits_2b.pdf: a direct 33-colourant DeviceN that cs selects and f
 //     fills fails the limit twice under PDF/A-1b and PDF/A-2b.
 //   - All corpora: judging the limit on the links, where a walk of the
 //     resources judged it, moves no count at PDF/A-1b or PDF/A-2b.

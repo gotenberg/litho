@@ -226,10 +226,10 @@ func (s *session) rewriteDefinition(ctx context.Context, def ast.PdfObject) (ast
 //
 // # Corpus evidence
 //
-//   - litho kidsrepair_1b.pdf, pagegroup_2b.pdf: the only files of the recolor
+//   - litho/pdf kidsrepair_1b.pdf, pagegroup_2b.pdf: the only files of the recolor
 //     cell's sample (386) whose page group names no space, so the only
 //     outputs a CMYK conversion changes; both still draw as their sources.
-//   - litho pagegroup_2b.pdf: pages 6 and 7 name /CS0, the ICCBased space of
+//   - litho/pdf pagegroup_2b.pdf: pages 6 and 7 name /CS0, the ICCBased space of
 //     their /ColorSpace resources, which a flattening then composited in sRGB.
 func (s *session) rewriteGroup(ctx context.Context, obj ast.PdfObject, page bool) (ast.PdfObject, bool, error) {
 	if obj == nil {

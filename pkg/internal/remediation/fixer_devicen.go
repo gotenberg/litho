@@ -54,7 +54,7 @@ func matchDeviceNColorants(v compliance.Violation) bool {
 //     an image's DeviceN kept 6.2.4.4 t1 after a PDF/A-2b remediation.
 //   - pdfjs issue9940.pdf: the DeviceN base of an /Indexed space kept 6.2.4.4
 //     t1 after a PDF/A-2b remediation.
-//   - litho offlimits_1b.pdf: the DeviceN of an image an uncoloured tiling
+//   - litho/pdf offlimits_1b.pdf: the DeviceN of an image an uncoloured tiling
 //     pattern's cell paints, directly on page 1 and through a form on page 3,
 //     kept 6.2.4.4 t1 after a PDF/A-2b remediation, on litho and veraPDF
 //     alike.

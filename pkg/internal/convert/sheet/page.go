@@ -358,7 +358,7 @@ const (
 //
 // # Corpus evidence
 //
-//   - ods: sc/deleteCirclesInRowAndCol.ods prints a 1.559-point red
+//   - libreoffice/ods: sc/deleteCirclesInRowAndCol.ods prints a 1.559-point red
 //     ellipse 78.18 by 16.78 points around each 64 by 12.78 point cell
 //     marked invalid.
 func invalidCircle(u *unit) compose.Fragment {

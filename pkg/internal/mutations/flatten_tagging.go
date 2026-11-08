@@ -64,7 +64,7 @@ const (
 //
 // # Corpus evidence
 //
-//   - litho annotstruct_ua2, formstruct_ua2, idfields_ua2: flattening added ISO
+//   - litho/pdf annotstruct_ua2, formstruct_ua2, idfields_ua2: flattening added ISO
 //     14289-1, 7.1 test 3 and ISO 14289-2, 8.2.2 test 1, 6 cells veraPDF
 //     confirmed. With the appearances tagged or marked, veraPDF reports a subset
 //     of the input's rules on each at both profiles.

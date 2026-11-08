@@ -166,7 +166,7 @@ type walkedKid struct {
 //     and PDF/A-1b remediation of those files but litho pageboxes_2b.pdf,
 //     veraPDF fails ISO 19005-2, 6.1.13 t11 on 12 outputs, 0 now, and reports
 //     nothing else new at PDF/A-2b. qpdf reports what it did.
-//   - litho annotshare_ua1.pdf: page 3 lists a Link above a crop box of no
+//   - litho/pdf annotshare_ua1.pdf: page 3 lists a Link above a crop box of no
 //     height, which ISO 14289-1, 7.18 exempts. Its outputs show the whole
 //     page, and litho and veraPDF both count one more check of 7.18.1 t2 and
 //     7.18.5 t1 and t2 for each copy of the page, the rule sets unchanged.
@@ -721,7 +721,7 @@ func (s *pageTreeRepair) repairBoundary(ctx context.Context, key ast.PdfName, bo
 //
 // # Corpus evidence
 //
-//   - litho pageboxes_2b.pdf: a /MediaBox of five entries on a page and on a
+//   - litho/pdf pageboxes_2b.pdf: a /MediaBox of five entries on a page and on a
 //     node, a /BleedBox of five and a /TrimBox holding a name, each of which
 //     a rewrite wrote as the rectangle of its first four entries. The pinned
 //     pdf.js showed pages 1 and 2 of the output at 600 by 800 and 400 by 500,

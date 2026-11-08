@@ -192,7 +192,7 @@ var interpolationKeys = []ast.PdfName{"I", "Interpolate"}
 //     outputs of the 14 files that write /I, /Interpolate or /Intent in an
 //     inline image are unchanged, and the outputs of the 6 with no such
 //     finding are byte for byte the same.
-//   - litho inlineinterp_2b.pdf: holds such an image in a form XObject, a
+//   - litho/pdf inlineinterp_2b.pdf: holds such an image in a form XObject, a
 //     Type 3 glyph and an annotation appearance, which no other file does.
 func fixInlineImageInterpolation(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (string, error) {
 	images := 0

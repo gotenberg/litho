@@ -77,7 +77,7 @@ func colorKey(c compose.Color) string {
 //
 // # Corpus evidence
 //
-//   - litho: a flat ODS of 3Arrows icon sets in 10 and 24 point cells,
+//   - litho/pdf: a flat ODS of 3Arrows icon sets in 10 and 24 point cells,
 //     converted by Gotenberg 9.0.0, prints 2.835 and 6.803 point icons
 //     0.227 points right of and 0.255 points above the cells' bottom-left
 //     corners, whatever their vertical alignment.

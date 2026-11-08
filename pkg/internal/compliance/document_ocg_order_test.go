@@ -199,7 +199,7 @@ func ocPropsViolations(t *testing.T, ctx context.Context, part int, ocProps stri
 //
 // # Corpus evidence
 //
-//   - litho complex_ua2.pdf: /Configs [ << /Order [ ] >> ], an incomplete
+//   - litho/pdf complex_ua2.pdf: /Configs [ << /Order [ ] >> ], an incomplete
 //     /Order litho never inspected while /D also failed.
 func TestCheckOCGOrderCompleteness_EveryConfiguration(t *testing.T) {
 	t.Parallel()

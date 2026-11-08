@@ -304,7 +304,7 @@ func TestRead_Pages(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - ods: sc/tdf125938_anchor_after_copy_paste.ods prints its picture at
+//   - libreoffice/ods: sc/tdf125938_anchor_after_copy_paste.ods prints its picture at
 //     its svg:x and svg:y from its anchor cell's corner.
 func TestRead_Drawings(t *testing.T) {
 	manifest := `<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0">` +

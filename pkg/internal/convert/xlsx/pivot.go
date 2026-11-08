@@ -575,7 +575,7 @@ func (r *reader) cacheSheet(doc *sheet.Document, pp *pendingPivot) (int, sheet.R
 				//
 				// # Corpus evidence
 				//
-				//   - xlsx: sc/tdf122471.xlsx, whose cache restores an
+				//   - libreoffice/xlsx: sc/tdf122471.xlsx, whose cache restores an
 				//     external source, prints its #N/A item as a column
 				//     "(empty)".
 				continue

@@ -15,12 +15,12 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho: a flat ODS with every header field, converted by Gotenberg
+//   - litho/pdf: a flat ODS with every header field, converted by Gotenberg
 //     9.0.0, draws the header and footer in Liberation Sans 10 points; a
 //     part is centred in the header's height, the date shows as
 //     11/07/2026 and the time as 21:39:35, the file name as the
 //     document's URL and the title as the document's title.
-//   - ods: sc/tdf138507.ods, a book whose default cell font is "Sans",
+//   - libreoffice/ods: sc/tdf138507.ods, a book whose default cell font is "Sans",
 //     prints its default header and footer in Liberation Sans.
 const (
 	headerFamily = "Liberation Sans"

@@ -31,7 +31,7 @@ func matchTransparency(v compliance.Violation) bool {
 //
 // # Corpus evidence
 //
-//   - litho kidsrepair_1b.pdf: three graphics states written directly in the
+//   - litho/pdf kidsrepair_1b.pdf: three graphics states written directly in the
 //     /Resources of a page tree node, inherited by a page under the root, one
 //     whose /Parent names the root and one written directly in /Kids, kept
 //     their /CA 0.5 (6.4 t5) after a PDF/A-1b remediation, in both modes, on

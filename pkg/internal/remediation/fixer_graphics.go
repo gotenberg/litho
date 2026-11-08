@@ -66,7 +66,7 @@ var validRenderingIntents = map[ast.PdfName]bool{
 //
 // # Corpus evidence
 //
-//   - litho laterreads_2u.pdf: every PDF/A output kept the /OPI of an
+//   - litho/pdf laterreads_2u.pdf: every PDF/A output kept the /OPI of an
 //     appearance on a page resolving no /Resources and the /Interpolate of the
 //     image it draws (6.2.4 t2 and t3 at part 1, 6.2.9 t1 and 6.2.8 t3 at
 //     parts 2 and 3, 6.2.8.1 t1 and 6.2.7.1 t3 at part 4), on litho and
@@ -209,7 +209,7 @@ func fixResourcesGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *
 //
 // # Corpus evidence
 //
-//   - litho imagedraws_2b.pdf: an image with /Interpolate true drawn by a
+//   - litho/pdf imagedraws_2b.pdf: an image with /Interpolate true drawn by a
 //     Type 3 glyph kept ISO 19005-2, 6.2.8 t3 after a PDF/A-2b remediation,
 //     on litho and veraPDF alike.
 func fixType3FontGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, owner ast.PdfDict, visited map[int]bool, depth int) (landed, pending []string, dirty bool, err error) {
@@ -336,7 +336,7 @@ func fixPatternGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 //   - pdfjs pr12564.pdf and issue11306.pdf: images with /Interpolate true
 //     drawn by annotation appearances kept ISO 19005-2, 6.2.8 t3 after a
 //     PDF/A-2b remediation.
-//   - litho imagedraws_2b.pdf: appearances carrying /OPI and /Ref kept ISO
+//   - litho/pdf imagedraws_2b.pdf: appearances carrying /OPI and /Ref kept ISO
 //     19005-2, 6.2.9 t1 and t2 after a PDF/A-2b remediation, on litho and
 //     veraPDF alike.
 func fixAppearanceGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageDict ast.PdfDict, visited, appearances map[int]bool) ([]string, error) {
@@ -413,11 +413,11 @@ func appearanceStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 //
 // # Corpus evidence
 //
-//   - litho gstate_2b.pdf: the direct states GS7, GS9, H1, H2 and the form's
+//   - litho/pdf gstate_2b.pdf: the direct states GS7, GS9, H1, H2 and the form's
 //     GSn kept 6.2.5 t1, t3, t4 and 6.2.6 t1 after a PDF/A-2b remediation,
 //     and 6.2.8 t1 and 6.2.9 t1 after a PDF/A-1b one, on litho and veraPDF
 //     alike, and took three rounds where one now does.
-//   - litho namereads_1b.pdf and defaultcs_4.pdf: a direct state's /RI, /BM
+//   - litho/pdf namereads_1b.pdf and defaultcs_4.pdf: a direct state's /RI, /BM
 //     and /OPM 1 kept their findings, 6.2.9 t1 at PDF/A-1b and PDF/A-4,
 //     6.2.6 t1 and 6.2.10 t1 at PDF/A-2 and PDF/A-3, and 6.2.4.2 t2 at every
 //     part 2 to 4 profile, on litho and veraPDF alike.
@@ -593,7 +593,7 @@ func writeResourceCategory(alloc *writer.ObjAllocator, owner, resources ast.PdfD
 //
 // # Corpus evidence
 //
-//   - litho gstate_2b.pdf: GS4's type 6 halftone kept 6.2.5 t6 after a
+//   - litho/pdf gstate_2b.pdf: GS4's type 6 halftone kept 6.2.5 t6 after a
 //     PDF/A-2b remediation turned it into a type 1, on litho and veraPDF
 //     alike.
 //   - verapdf PDF_A-4__veraPDF_test_suite_6-2-5-t05-fail-c.pdf: its type 1

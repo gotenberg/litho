@@ -47,7 +47,7 @@ const stampDispatchPrefix = "StampShared"
 //
 // # Corpus evidence
 //
-//   - litho formshare_ua1.pdf, sharedtag_ua1.pdf, sharedclose_ua1.pdf: their
+//   - litho/pdf formshare_ua1.pdf, sharedtag_ua1.pdf, sharedclose_ua1.pdf: their
 //     pages share one /Contents stream drawing a marked form. Stamping each
 //     page by its own call, as the corpus gate's mutate-stamp cell does, gave
 //     each page an array of its own, and veraPDF added 7.20 test 2.

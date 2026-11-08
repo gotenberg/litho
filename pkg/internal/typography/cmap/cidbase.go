@@ -227,7 +227,7 @@ func ConformanceCIDBase(name string) *CIDMap {
 //
 // # Corpus evidence
 //
-//   - litho cmapverabase_2b.pdf: K4's code 0007, which its Adobe-GB1-6 base
+//   - litho/pdf cmapverabase_2b.pdf: K4's code 0007, which its Adobe-GB1-6 base
 //     sends to CID 7, read as nothing and now reads "&" through
 //     Adobe-GB1-UCS2 (ISO 32000-1, 9.10.2). No file of the five text corpora
 //     changes, and no validation or remediation result moves on the litho

@@ -82,13 +82,13 @@ func matchFontEmbed(v compliance.Violation) bool {
 //     issue6069.pdf, issue6106.pdf and issue6108.pdf lose 6.2.11.4.1 t1 on
 //     litho and veraPDF 1.30.2, issue6069.pdf to issue6108.pdf 6.2.11.2 t4 to
 //     t6 besides, and five outputs pass both tools. No rule gains a finding.
-//   - litho fontcopies_2b.pdf and pdfjs issue11555.pdf: the 15 inline copies
+//   - litho/pdf fontcopies_2b.pdf and pdfjs issue11555.pdf: the 15 inline copies
 //     of Helvetica and LithoKorea and the inline KozMinPro6N-Regular the
 //     provider cannot serve are now listed as refused, with object number 0.
-//   - litho fontembed_2b.pdf: three fonts written inline, in a page's /Font
+//   - litho/pdf fontembed_2b.pdf: three fonts written inline, in a page's /Font
 //     dictionary, a form's /Resources and a /Resources two pages share, are
 //     embedded with synthetic programs, on litho and veraPDF alike.
-//   - govdocs and litho: measured with a provider over the Liberation 2.1.5
+//   - govdocs and litho/pdf: measured with a provider over the Liberation 2.1.5
 //     and URW base35 families, on the 856 files that hold an unembedded
 //     font, at PDF/A-2b and PDF/UA-1, default and aggressive.
 //   - govdocs: 785 files. The findings of ISO 19005-2, 6.2.11.4.1 t1 fall
@@ -96,9 +96,9 @@ func matchFontEmbed(v compliance.Violation) bool {
 //     14289-1, 7.21.4.1 t1 from 4560 to 728 at PDF/UA-1, and 416 PDF/A-2b
 //     and 287 PDF/UA-1 outputs are left with no finding at all. No rule gains
 //     a finding in any file, and no embedding is rolled back.
-//   - litho: 71 files. 6.2.11.4.1 t1 falls from 128 to 61 at PDF/A-2b, and
+//   - litho/pdf: 71 files. 6.2.11.4.1 t1 falls from 128 to 61 at PDF/A-2b, and
 //     37 more outputs are left with no finding. No rule gains a finding.
-//   - govdocs and litho: 70 of the files, remediated with and without the
+//   - govdocs and litho/pdf: 70 of the files, remediated with and without the
 //     provider and judged by veraPDF 1.30.2: the embedding findings fall
 //     from 341 to 53 at PDF/A-2b and at PDF/UA-1, the 53 litho reports, and
 //     no rule gains a finding. pdf.js places each of the 193275 text items

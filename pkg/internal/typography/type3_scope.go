@@ -71,7 +71,7 @@ type type3ScopeCache struct {
 //     "Page 12", litho's and poppler's renderings unchanged outside it.
 //   - All corpora: over the first ten pages of the other 132 files, no text
 //     and no ink box moves.
-//   - litho t3scope_2b.pdf: glyphs painting a form and showing text through
+//   - litho/pdf t3scope_2b.pdf: glyphs painting a form and showing text through
 //     the page and through a form binding the names apart. The quarter and
 //     the band refused over the form's glyphs, and now remove the page's
 //     glyphs under them alone.

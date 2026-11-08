@@ -56,9 +56,9 @@ func ocgOrderFindings(t *testing.T, doc *document.Document, profile models.PDFAP
 //
 // # Corpus evidence
 //
-//   - litho complex_ua2.pdf: /Configs [ << /Order [ ] >> ] beside an
+//   - litho/pdf complex_ua2.pdf: /Configs [ << /Order [ ] >> ] beside an
 //     incomplete /D.
-//   - litho complex_2b.pdf: its OCG has no /Name, and veraPDF matches /Order
+//   - litho/pdf complex_2b.pdf: its OCG has no /Name, and veraPDF matches /Order
 //     to the OCGs by /Name, so a completed /Order still failed there.
 func TestRemediatePDFA_CompletesOCGOrderInEveryConfiguration(t *testing.T) {
 	t.Parallel()

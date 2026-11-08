@@ -187,7 +187,7 @@ const (
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/tdf165180_date1904.xlsx, "[$-F800]dddd\,\ mmmm\ dd\,\
+//   - libreoffice/xlsx: sc/tdf165180_date1904.xlsx, "[$-F800]dddd\,\ mmmm\ dd\,\
 //     yyyy", prints "Tuesday, March 1, 1904", the day unpadded; the
 //     tag alone prints 45000 as 45000 (TestApply_Calc).
 func systemFormat(p string) string {

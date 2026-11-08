@@ -62,7 +62,7 @@ const maxFunctionNesting = 16
 //
 // # Corpus evidence
 //
-//   - litho fnlimits_1b.pdf: plants a Separation and a graphics state whose
+//   - litho/pdf fnlimits_1b.pdf: plants a Separation and a graphics state whose
 //     type 4 functions break the integer and the real limit, and a shading
 //     whose type 4 function breaks both, and veraPDF fails 6.1.12 t1 and t2
 //     twice each.

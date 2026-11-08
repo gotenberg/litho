@@ -173,7 +173,7 @@ func leaderRune(l css.TabLeader) rune {
 //
 // # Corpus evidence
 //
-//   - docx: ooxmlexport/TOC_field_f.docx draws 145 dots of 2.772 points
+//   - libreoffice/docx: ooxmlexport/TOC_field_f.docx draws 145 dots of 2.772 points
 //     in a tab of 400.9 points, 2.765 points apart, where whole advances
 //     fit 144.
 func (e *engine) tabLeader(p *ifcPara, it *lineItem) *compose.Text {

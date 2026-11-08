@@ -69,7 +69,7 @@ const maxOutlineFixWalk = 10000
 //     to no destination, and the 114 destinations of 2 files whose tree holds
 //     no element keep theirs too. litho and veraPDF agree on ISO 14289-2, 8.8
 //     on every output.
-//   - litho annotstruct_ua2.pdf, complex_ua2.pdf, linkfont_ua2.pdf: the GoTo
+//   - litho/pdf annotstruct_ua2.pdf, complex_ua2.pdf, linkfont_ua2.pdf: the GoTo
 //     actions of 7 of their links are direct dictionaries, which the fixer
 //     left without /SD, and their outputs now meet ISO 14289-2, 8.8.
 //   - All corpora: of 1127 tagged files remediated to PDF/UA-2, named
@@ -96,7 +96,7 @@ const maxOutlineFixWalk = 10000
 //     and veraPDF reported 8.8 test 2 once. Walked through /Next, neither
 //     tool reports 8.8, and PDF.js opens every outline item of both outputs on
 //     the page it opens in the source.
-//   - litho gotochain_ua2.pdf: of its 7 GoTo actions lacking /SD, the 4 run
+//   - litho/pdf gotochain_ua2.pdf: of its 7 GoTo actions lacking /SD, the 4 run
 //     through /Next, one in an array, one in a loop, one after a Named action
 //     and one two chains share, kept none, and both tools reported 8.8 test 2
 //     four times. Now neither reports anything.

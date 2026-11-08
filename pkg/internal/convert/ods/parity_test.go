@@ -18,7 +18,7 @@ const corpusSources = "../../../../test/integration/corpus/gotenberg/ods/sources
 //
 // # Corpus evidence
 //
-//   - ods: figures and figures-flat print 2 Letter pages, the sheet name in
+//   - gotenberg/ods: figures and figures-flat print 2 Letter pages, the sheet name in
 //     the header, "Page 1" and "Page 2" in the footer, "REVENUE-SH" on
 //     page 1 and "COSTS-SHEE" on page 2, 2026-01-31 in ISO form.
 func TestParity_Figures(t *testing.T) {

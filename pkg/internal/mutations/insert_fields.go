@@ -50,7 +50,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho: 9 fixtures carried a widget qpdf reported as not reachable from
+//   - litho/pdf: 9 fixtures carried a widget qpdf reported as not reachable from
 //     /AcroForm after a page move, and none does now.
 //   - All corpora, 617 files that mention a form: the warning went from the
 //     page-move output of 221 files to 5. Four carry it in their input.

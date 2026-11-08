@@ -240,7 +240,7 @@ const epsilon = 1e-6
 //
 // # Corpus evidence
 //
-//   - ods: sc/tdf104502_hiddenColsCountedInPageCount.ods, values below
+//   - libreoffice/ods: sc/tdf104502_hiddenColsCountedInPageCount.ods, values below
 //     the first page in a hidden column alone, prints one page.
 func (g *grid) empty(a Range) bool {
 	i := sort.SearchInts(g.rowOrder, a.FirstRow)
@@ -406,7 +406,7 @@ const maxSheetPages = 1 << 15
 //
 // # Corpus evidence
 //
-//   - xlsx: budget-single, budget.xlsx with singlePage, prints pages of
+//   - gotenberg/xlsx: budget-single, budget.xlsx with singlePage, prints pages of
 //     192.64 by 109.73, 674.14 by 915.02 and 48.19 by 45.04 points, the
 //     sizes of the sheets' cells from A1, the first cell's text a point
 //     from the page's left edge.

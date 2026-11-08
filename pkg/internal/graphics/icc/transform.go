@@ -365,7 +365,7 @@ const neutralTolerance = 1
 //     draws a sample more than a level off the neutral axis under any
 //     intent, so every grey ICC colour they hold keeps its one-channel
 //     reading.
-//   - litho greytint_2b.pdf: its profile's table tints the middle greys,
+//   - litho/pdf greytint_2b.pdf: its profile's table tints the middle greys,
 //     which poppler 26.09.0, PDFium and MuPDF draw brown and litho drew grey.
 func (t *Transform) Neutral() bool {
 	return t.neutral()

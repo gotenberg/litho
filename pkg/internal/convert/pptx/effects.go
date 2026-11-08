@@ -35,13 +35,13 @@ import (
 //
 // # Corpus evidence
 //
-//   - pptx: a rectangle referencing effect style 3 of its theme, whose
+//   - probe, pptx: a rectangle referencing effect style 3 of its theme, whose
 //     effect list holds a shadow blurred 4.5 pt, 1.5 pt down at 63%,
 //     prints that shadow; one with an inner shadow and one with a
 //     reflection print without them.
-//   - pptx: a rectangle whose outer shadow has no colour prints a white
+//   - probe, pptx: a rectangle whose outer shadow has no colour prints a white
 //     shadow, opaque; an oval whose glow has none prints no glow.
-//   - pptx: sd-data/n819614 and sd/bnc862510_5's diagram shapes print the
+//   - libreoffice/pptx: sd-data/n819614 and sd/bnc862510_5's diagram shapes print the
 //     shadows of their own effect lists.
 func (r *reader) effectList(chain []*ooxml.Element, style *ooxml.Element, fc *fillCtx, s *slides.Shape) {
 	var lst *ooxml.Element

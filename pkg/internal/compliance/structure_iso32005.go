@@ -480,14 +480,14 @@ func validateISO32005(ctx context.Context, state *walkState, elem ast.PdfDict, t
 //
 // # Corpus evidence
 //
-//   - litho complex_2a: remediated at PDF/UA-2, its Div (object 19) holds
+//   - litho/pdf complex_2a: remediated at PDF/UA-2, its Div (object 19) holds
 //     MCID 1 directly, a painted rectangle, once remediation drops the
 //     /Div -> /Custom entry that kept it non-standard. Moving that MCID under
 //     a P inside the Div clears the rule on veraPDF 1.30.2, so the Div is the
 //     one carrier. The element to give it (a P, a Figure needing /Alt, an
 //     artifact) is a reading of the content, so remediation leaves it to this
 //     finding.
-//   - litho typedreads_1b: its Document lists a marked-content reference
+//   - litho/pdf typedreads_1b: its Document lists a marked-content reference
 //     itself.
 func iso32005ContentCarrier(ctx context.Context, state *walkState, elem ast.PdfDict) string {
 	items, err := document.ResolveArray(ctx, state.doc, elem["K"])

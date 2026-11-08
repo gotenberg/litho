@@ -35,7 +35,7 @@ func gotenbergDocument(t *testing.T, name string) []byte {
 //
 // # Corpus evidence
 //
-//   - odt: memo.odt, memo.fodt, form.odt and form.fodt print on one page
+//   - gotenberg/odt: memo.odt, memo.fodt, form.odt and form.fodt print on one page
 //     with these lines (gotenberg/gotenberg:9.0.0, read with litho's text
 //     extraction, the header and footer included).
 func TestParity_GotenbergDocuments(t *testing.T) {

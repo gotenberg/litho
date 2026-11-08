@@ -124,7 +124,7 @@ type ColorOption func(*colorOpts)
 //
 // # Corpus evidence
 //
-//   - All corpora (litho, pdf20, pdfcpu, pdfjs, govdocs; 2540 converted to
+//   - All corpora (litho/pdf, pdf20, pdfcpu, pdfjs, govdocs; 2540 converted to
 //     the built-in CMYK): compensating by default changes the bytes of 54
 //     outputs (litho 3, pdfcpu 2, pdfjs 34, govdocs 15), every one
 //     deterministic, and no flattening of an output starts or stops
@@ -136,7 +136,7 @@ type ColorOption func(*colorOpts)
 //     to 2.5% under poppler, and pdfjs issue2856.pdf page 1, 29.5% to 29.7%,
 //     where two compensated steps, through the CMYK target to the screen,
 //     read the darks otherwise than the one step a viewer takes.
-//   - litho usebpc_4.pdf: its /Default page, 100 levels from its source at
+//   - litho/pdf usebpc_4.pdf: its /Default page, 100 levels from its source at
 //     worst without compensation, draws 46 apart, as its /ON page does;
 //     poppler reads it 94 apart without and 36 with.
 type colorOpts struct {

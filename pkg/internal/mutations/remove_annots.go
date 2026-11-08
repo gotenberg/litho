@@ -62,7 +62,7 @@ type regionAnnotations struct {
 //
 // # Corpus evidence
 //
-//   - litho annotstraddle_2b: the Ink the centred quarter of page 2 removed
+//   - litho/pdf annotstraddle_2b: the Ink the centred quarter of page 2 removed
 //     stayed in the output, its /InkList and appearance stream with it,
 //     written through its pop-up's /Parent and its reply's /IRT.
 //   - pdfjs annotation-highlight, annotation-squiggly, annotation-strikeout,
@@ -600,7 +600,7 @@ func pruneRootFields(
 //     thread_400_400916, pdfjs annotation-link-text-popup: redacting page 1
 //     was refused over a removed link's URI that an /OBJR still reached, and
 //     now succeeds.
-//   - litho: 14 tagged fixtures change output under a page-1 redaction, and
+//   - litho/pdf: 14 tagged fixtures change output under a page-1 redaction, and
 //     veraPDF reports no rule the untouched tree did not.
 func untagRegionAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, annots []RemovedAnnotation) error {
 	if len(annots) == 0 {

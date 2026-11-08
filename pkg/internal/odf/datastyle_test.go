@@ -10,7 +10,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho: a flat document with these data styles, exported to XLSX by
+//   - litho/pdf: a flat document with these data styles, exported to XLSX by
 //     the image's soffice, carries the numFmts #,##0.00; 0.0%;
 //     #,##0.00\ [$€-407];[RED]\-#,##0.00\ [$€-407]; dd\.mm\.yy;
 //     [hh]:mm:ss.00; h:mm\ AM/PM; 0.000E+00; # ??/??; "TRUE";"TRUE";"FALSE";

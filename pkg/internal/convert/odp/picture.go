@@ -131,7 +131,7 @@ func (r *reader) decodePicture(el *odf.Element) *layout.Picture {
 //
 // # Corpus evidence
 //
-//   - odp: sd/tdf105362's master frame of 28.3 by 21.1 cm holding a
+//   - libreoffice/odp: sd/tdf105362's master frame of 28.3 by 21.1 cm holding a
 //     square SVG of a viewBox alone prints black over the whole slide.
 func stretchedSVG(doc *svg.Document, w, h float64) *layout.Picture {
 	return &layout.Picture{Width: w, Height: h, NoRatio: true, Vector: func(ctx context.Context, area compose.Rect) []compose.Fragment {

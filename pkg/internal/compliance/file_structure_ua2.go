@@ -50,7 +50,7 @@ const headerVersionWindow = 8
 //     such rule.
 //   - verapdf: veraPDF 1.30.3 fails it on 1946 of the 2601 files at PDF/UA-2
 //     and at both WTPDF levels, and litho on the same 1946.
-//   - litho: veraPDF 1.30.3 fails it on 214 of the 257 fixtures at PDF/UA-2,
+//   - litho/pdf: veraPDF 1.30.3 fails it on 214 of the 257 fixtures at PDF/UA-2,
 //     and litho on the same 214.
 func checkUA2VersionGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	line, ok := readUAHeaderLine(ctx, vctx.doc)

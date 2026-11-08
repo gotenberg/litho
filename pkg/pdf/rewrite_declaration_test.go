@@ -131,7 +131,7 @@ func openDeclaration(t *testing.T, data []byte, encrypted bool) *Reader {
 //
 // # Corpus evidence
 //
-//   - litho a4syntax_4.pdf: its header is %PDF-2.0 and its catalog /Version
+//   - litho/pdf a4syntax_4.pdf: its header is %PDF-2.0 and its catalog /Version
 //     /1.7, and page insertion and deletion, flattening and encryption each
 //     wrote %PDF-1.7.
 func TestFullRewrite_KeepsTheSourceDeclaration(t *testing.T) {
@@ -203,7 +203,7 @@ var indirectInfo = regexp.MustCompile(`/Info \d+ 0 R`)
 //
 // # Corpus evidence
 //
-//   - litho xrefstm_2b.pdf: its cross-reference stream holds a direct /Info,
+//   - litho/pdf xrefstm_2b.pdf: its cross-reference stream holds a direct /Info,
 //     and page insertion and deletion, flattening and encryption each wrote
 //     the file without one.
 func TestFullRewrite_CarriesADirectInfo(t *testing.T) {

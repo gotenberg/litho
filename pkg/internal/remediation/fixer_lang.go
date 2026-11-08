@@ -236,7 +236,7 @@ func repairStructElemLangs(ctx context.Context, alloc *writer.ObjAllocator, doc 
 //
 // # Corpus evidence
 //
-//   - litho annotlang_ua1.pdf: the elements of two of its annotations sit
+//   - litho/pdf annotlang_ua1.pdf: the elements of two of its annotations sit
 //     outside the structure tree, one tagged en_US and one with an empty
 //     tag. Each kept its finding after a remediation at PDF/UA-1, PDF/UA-2
 //     and WTPDF, and the first after one at PDF/A-1a and PDF/A-2a, default

@@ -43,7 +43,7 @@ func findSource(dir, name string) string {
 //
 // # Corpus evidence
 //
-//   - xlsx: budget prints Summary on a Letter portrait page and Monthly on
+//   - gotenberg/xlsx: budget prints Summary on a Letter portrait page and Monthly on
 //     two landscape pages repeating its first row, column A of both 48.13
 //     points wide; figures-lo prints Revenue and Costs on A4 pages with
 //     0.7875-inch margins, a Times New Roman header with the sheet name

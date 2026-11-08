@@ -28,7 +28,7 @@ func texts(pg *compose.Page) []string {
 //
 // # Corpus evidence
 //
-//   - xlsx: budget, a first column too narrow for "Cloud hosting" before
+//   - gotenberg/xlsx: budget, a first column too narrow for "Cloud hosting" before
 //     a cell with content prints "Cloud host" in the PDF's text: the
 //     characters that start past the column's edge are left out, the one
 //     it cuts kept.
@@ -141,7 +141,7 @@ func TestConvert_Borders(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho: a flat ODS of two sheets, three pages, whose header shows
+//   - litho/pdf: a flat ODS of two sheets, three pages, whose header shows
 //     every field, converted by Gotenberg 9.0.0: "D:11/07/2026
 //     T:21:39:35", "S:Alpha P:1/3" and on the third page "S:Beta P:3/3";
 //     the ODS default header centres "Revenue" at x 306 on Letter, its
@@ -235,7 +235,7 @@ func TestConvert_Drawings(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho: a flat ODS cell 80 points wide and tall rotated 90 degrees,
+//   - litho/pdf: a flat ODS cell 80 points wide and tall rotated 90 degrees,
 //     Liberation Sans 10, converted by Gotenberg 9.0.0, sets "Rotated90"
 //     up from y 726.89 (a point above the row's bottom at 725.89) with its
 //     baseline at x 46.09 (the column starts at 36).

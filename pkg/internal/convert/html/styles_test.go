@@ -244,7 +244,7 @@ func TestPrepare_ViewportIsThePageArea(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - html: Chromium in the pinned Gotenberg image, A4 paper and its default
+//   - probe, html: Chromium in the pinned Gotenberg image, A4 paper and its default
 //     0.39in margins, matches (min-width: 720px) and (min-height: 1048px)
 //     and no wider, under @page { margin: 1in }, @page { size: 400px 300px;
 //     margin: 50px } and @page { size: landscape; margin: 0 } alike, where

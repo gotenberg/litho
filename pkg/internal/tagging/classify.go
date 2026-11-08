@@ -292,11 +292,11 @@ const furniturePositionTol = 4.0
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, litho: of the 1602 files auto-tagging reaches, 138 carry
+//   - govdocs, pdfjs, litho/pdf: of the 1602 files auto-tagging reaches, 138 carry
 //     furniture, 2853 blocks in all (2150 footers, 703 headers). Before, 2624
 //     were tagged P, 203 H1 to H3, and 26 were folded into a paragraph with
 //     body text. The trees of the other 1464 files are unchanged.
-//   - govdocs, pdfjs, litho: the PDF/UA-1 and PDF/UA-2 remediations of those
+//   - govdocs, pdfjs, litho/pdf: the PDF/UA-1 and PDF/UA-2 remediations of those
 //     138 files draw no rule from veraPDF they did not draw before, and the
 //     text they extract with artifacts is the same.
 //   - govdocs, pdfjs, pdfcpu: weighing each hand apart takes 1277 more
@@ -1744,14 +1744,14 @@ const maxTitleLines = 2
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu, pdf20, facturx, litho: 14 elements on 7 of 2695
+//   - govdocs, pdfjs, pdfcpu, pdf20, facturx, litho/pdf: 14 elements on 7 of 2695
 //     files turn from P to H1 and no other element changes.
 //   - govdocs thread_300_300242.pdf: "Contents" over a table of contents.
 //     pdfjs radial_gradients.pdf: the title of four pages over a grid of
 //     labels. pdfcpu pkg_testdata__go-lecture.pdf: slide titles over bullets
 //     carved as a table. litho filledrules_ua1.pdf, prosecolumns_ua1.pdf: the
 //     title over a table.
-//   - govdocs, pdfjs, litho: the PDF/UA-1 and PDF/UA-2 remediations of the
+//   - govdocs, pdfjs, litho/pdf: the PDF/UA-1 and PDF/UA-2 remediations of the
 //     changed files, default and aggressive, draw the same rules as before
 //     on litho and on veraPDF.
 //   - govdocs thread_100_100859.pdf, thread_200_200623.pdf: prose over a

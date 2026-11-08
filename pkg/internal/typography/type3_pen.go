@@ -114,14 +114,14 @@ func newType3PenStroke(box [4]float64, clip *[4]float64, pen type3PenState, m [6
 //     the miter limit alone, 511 glyphs); none is shown under a pen reaching
 //     past the initial one, and over the first ten pages of the 135 files no
 //     text and no ink box moves.
-//   - litho t3pen_2b.pdf: a line stroked under the showing state's 2000 w.
+//   - litho/pdf t3pen_2b.pdf: a line stroked under the showing state's 2000 w.
 //     The centred quarter over its pen left 720 pixels inside the region, and
 //     now removes the glyph.
 //   - All corpora: 8 of the 135 files show text from a Type 3 glyph
 //     description, and no nested Type 3 glyph among them strokes with an
 //     inherited pen (pdfjs ContentStream*Type3insideType3 set 10 w): over
 //     their first ten pages no ink box moves.
-//   - litho t3nestpen_2b.pdf: a nested line stroked under the page's 2000 w.
+//   - litho/pdf t3nestpen_2b.pdf: a nested line stroked under the page's 2000 w.
 //     The centred quarter over its pen left 760 pixels inside the region, and
 //     now removes the outer glyph.
 type type3Pen struct {

@@ -64,7 +64,7 @@ func matchPageBoxes(v compliance.Violation) bool {
 //   - pdfjs issue7872.pdf: writes its /MediaBox as an array of indirect
 //     references, which reads as zero-sized unless the coordinates are
 //     resolved.
-//   - litho pageboxes_2b.pdf: the PDF/A-2b remediation wrote page 1's
+//   - litho/pdf pageboxes_2b.pdf: the PDF/A-2b remediation wrote page 1's
 //     /MediaBox [0 0 600 800 7], /TrimBox [0 /Foo 200 300] and /BleedBox
 //     [0 0 300 400 9] as the rectangles of their first four entries, and the
 //     pinned pdf.js showed the page at 600 by 800, where it shows the source
@@ -82,7 +82,7 @@ func matchPageBoxes(v compliance.Violation) bool {
 //     with no media box a viewer uses, boundingBox_invalid.pdf is the one
 //     output that changes. The others repair no media box, or repair one to
 //     the US Letter most of their pages have.
-//   - litho defaultbox_2b.pdf: the PDF/A-2b remediation gives the pages with
+//   - litho/pdf defaultbox_2b.pdf: the PDF/A-2b remediation gives the pages with
 //     no media box and the one under a node stating [0 0 0 0] A4 each, and
 //     the node US Letter.
 //   - verapdf 6-1-13-t09-fail-c through -f: walking only the leaves left them

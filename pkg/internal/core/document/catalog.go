@@ -80,7 +80,7 @@ type Page struct {
 	//
 	// # Corpus evidence
 	//
-	//   - litho resinherit_2b.pdf: poppler draws nothing for the font F6 and
+	//   - litho/pdf resinherit_2b.pdf: poppler draws nothing for the font F6 and
 	//     the colour space CS4 page 2 names past the /Resources it states,
 	//     reports "Unknown font tag 'F6'", and draws the text of page 4, whose
 	//     /Resources names a missing object, in its ancestor's F4.

@@ -253,7 +253,7 @@ const corpusSources = "../../../../test/integration/corpus/gotenberg/csv/sources
 //
 // # Corpus evidence
 //
-//   - csv: sales prints one Letter page of 26 rows, the dates as ISO
+//   - gotenberg/csv: sales prints one Letter page of 26 rows, the dates as ISO
 //     dates, the quoted comments with their commas, "Page 1" in the
 //     footer; sheet prints Alice and no header.
 func TestParity_Gotenberg(t *testing.T) {

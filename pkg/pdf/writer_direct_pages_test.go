@@ -129,7 +129,7 @@ func assertPageWords(t *testing.T, data []byte, want []string, also string) {
 //
 // # Corpus evidence
 //
-//   - litho kidsrepair_1b.pdf: mutate-stamp left page 3 unstamped, and
+//   - litho/pdf kidsrepair_1b.pdf: mutate-stamp left page 3 unstamped, and
 //     mutate-pages wrote one page of four.
 func TestWriter_EditsPagesWrittenDirectlyInKids(t *testing.T) {
 	t.Parallel()

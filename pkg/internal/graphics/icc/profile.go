@@ -57,7 +57,7 @@ const iccMAXVersion = 5
 //   - All corpora: 5 of the 3,916 ICC profile streams state version 5.0, in
 //     litho iccbadcmyk_1b.pdf, iccbadgray_1b.pdf and iccbased_4.pdf and the
 //     veraPDF 6-2-3-t01-fail-d pair; none is embedded in a JPEG 2000 image.
-//   - litho iccbadcmyk_1b.pdf: DeviceCMYK read through the version 5 output
+//   - litho/pdf iccbadcmyk_1b.pdf: DeviceCMYK read through the version 5 output
 //     intent painted a neutral grey; read through the built-in profile, the
 //     page matches poppler's.
 func Parse(data []byte) (*Profile, error) {

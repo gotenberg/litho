@@ -114,7 +114,7 @@ func flattenBytes(ctx context.Context, t *testing.T, data []byte) []byte {
 //
 // # Corpus evidence
 //
-//   - litho annotstruct_ua2, formstruct_ua2, idfields_ua2: flattening added ISO
+//   - litho/pdf annotstruct_ua2, formstruct_ua2, idfields_ua2: flattening added ISO
 //     14289-1, 7.1 test 3 and ISO 14289-2, 8.2.2 test 1, and veraPDF agreed.
 func TestWriter_FlattenForm_TaggedDocumentStaysTagged(t *testing.T) {
 	t.Parallel()
@@ -162,7 +162,7 @@ func TestWriter_FlattenForm_TaggedDocumentStaysTagged(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho filestruct_1b, sigcms_2b, typedreads_1b: each kept such a widget
+//   - litho/pdf filestruct_1b, sigcms_2b, typedreads_1b: each kept such a widget
 //     after flattening, and litho still read it as a form field.
 func TestWriter_FlattenForm_DropsWidgetsThatDrawNothing(t *testing.T) {
 	t.Parallel()

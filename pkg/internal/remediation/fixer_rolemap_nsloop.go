@@ -76,7 +76,7 @@ type nsLoopRedirect struct {
 //     whose chain comes back to a namespace it left; remediation at PDF/UA-2
 //     and both WTPDF levels, default and aggressive, changes the output of 4
 //     of them alone.
-//   - litho rolecycle_ua2: a Callout whose chain runs through a second
+//   - litho/pdf rolecycle_ua2: a Callout whose chain runs through a second
 //     namespace and back, and a Panel mapped to a Frame of its own namespace
 //     and back. Every output kept 8.2.4 t1, t2 and t3 on both tools, since no
 //     fixer edited a /RoleMapNS; with Box and Panel sent to Div, veraPDF finds
@@ -90,7 +90,7 @@ type nsLoopRedirect struct {
 //   - verapdf PDF_UA-2__8.2.4-t03-fail-a: maps an XHTML /Q to the XHTML /P,
 //     which maps on to the PDF 2.0 /P. /Q now maps to the PDF 2.0 /P straight,
 //     and veraPDF, which reported t3 on every output, finds each clean.
-//   - litho complex_ua2: maps a private /Alpha to a /Beta of its own namespace
+//   - litho/pdf complex_ua2: maps a private /Alpha to a /Beta of its own namespace
 //     that nothing maps further. Both tools keep reporting t3 and t1 there, by
 //     design: sending the entry to Div cleared both, and invented the meaning.
 func repairNamespaceRoleLoops(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, stRef ast.PdfIndirectRef, stDict ast.PdfDict) ([]string, ast.PdfDict) {

@@ -1028,7 +1028,7 @@ func floatEquals1(v float64) bool {
 //     page has no blending colour space.
 //   - All corpora: no file reaches either half, so reading them as veraPDF
 //     does moves no count at PDF/A-2b or PDF/A-4.
-//   - litho pagegroup_2b.pdf: pages 5 to 7 plant both halves.
+//   - litho/pdf pagegroup_2b.pdf: pages 5 to 7 plant both halves.
 func pageHasBlendingCS(ctx context.Context, doc *document.Document, page ast.PdfDict) bool {
 	group, err := document.ResolveDict(ctx, doc, page["Group"])
 	if err != nil || group == nil {

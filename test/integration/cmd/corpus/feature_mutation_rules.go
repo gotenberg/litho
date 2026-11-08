@@ -207,7 +207,7 @@ var explicitResourcesRules = map[string][]ruleMatch{
 //
 // # Corpus evidence
 //
-//   - litho noresources_4: a stamp, a page move and an encryption each write
+//   - litho/pdf noresources_4: a stamp, a page move and an encryption each write
 //     /Resources on every page, and 6.2.2 test 3, which five of its content
 //     streams fail, passes at PDF/A-4.
 //
@@ -222,7 +222,7 @@ var pageResourcesRules = map[string][]ruleMatch{
 //
 // # Corpus evidence
 //
-//   - litho imagereach_2b: veraPDF also fails 7.2 test 34 on the stamped
+//   - litho/pdf imagereach_2b: veraPDF also fails 7.2 test 34 on the stamped
 //     output and not on the input, so the rule reaches the artifact's text.
 //
 //nolint:gochecknoglobals // static rule table

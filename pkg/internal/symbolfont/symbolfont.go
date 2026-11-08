@@ -18,7 +18,7 @@ import "strings"
 //
 // # Corpus evidence
 //
-//   - pptx: sd/tdf123090.pptx, sd/bulletColor.pptx and sd/tdf126234.pptx
+//   - libreoffice/pptx: sd/tdf123090.pptx, sd/bulletColor.pptx and sd/tdf126234.pptx
 //     print Wingdings bullets "n", "q" and "l" in OpenSymbol, as U+F06E,
 //     U+F071 and U+F06C in the text.
 func Recode(c string, fams []string) (draw, txt string, out []string) {

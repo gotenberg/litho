@@ -79,7 +79,7 @@ const (
 //
 // # Corpus evidence
 //
-//   - litho (257 files, flattentext_2b, flattenannots_2b, blendspace_2b,
+//   - litho/pdf (257 files, flattentext_2b, flattenannots_2b, blendspace_2b,
 //     flattentiles_1b, smaskindata_2b, flatuntagged_ua1, iccgroupalt_2b,
 //     greyintent_2b and sharedimage_2b among them): 36 flattened, all but
 //     usebpcgroup_4 match; flattenrefuse_1b and smaskbudget_2b are refused, a group on
@@ -88,7 +88,7 @@ const (
 //     flattened and 5 left annotations painting with transparency; 1 does
 //     now, laterreads_2u.pdf, whose Screen annotation has no appearance
 //     stream.
-//   - litho usebpcgroup_4.pdf: poppler_mismatch, 242 of 20,000 pixels where
+//   - litho/pdf usebpcgroup_4.pdf: poppler_mismatch, 242 of 20,000 pixels where
 //     the bar is 200, all on rows where a fill stops on a whole point: poppler
 //     26.09.0 snaps a downscaled image to whole device pixels, so the 300 dpi
 //     composite's row edges fall on a 72 dpi pixel's middle and take half

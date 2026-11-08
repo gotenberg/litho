@@ -19,7 +19,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho: CSVs of one string per column ("a" to twelve "a", "n" to
+//   - litho/pdf: CSVs of one string per column ("a" to twelve "a", "n" to
 //     thirty "n"), sales.csv's columns and a row of one value of each
 //     detected type print with column widths that this arithmetic gives
 //     to 0.03 points: "a" 14.08, twelve "a" 73.58, "Northwind Traders"

@@ -278,7 +278,7 @@ func (r *renderer) exec(s *scope, op content.Operation) error {
 //
 // # Corpus evidence
 //
-//   - litho resinherit_2b.pdf page 2: /CS4 cs, which the page's own
+//   - litho/pdf resinherit_2b.pdf page 2: /CS4 cs, which the page's own
 //     /Resources do not define (7.7.3.4), then 1 scn. poppler fills it white
 //     in the initial DeviceGray. Read without the resources of an ancestor,
 //     litho filled it black.
@@ -317,7 +317,7 @@ func (r *renderer) selectSpace(op content.Operation) error {
 //
 // # Corpus evidence
 //
-//   - litho csnames_2b.pdf page 3: /CS2 names /CS0, which no reader takes as
+//   - litho/pdf csnames_2b.pdf page 3: /CS2 names /CS0, which no reader takes as
 //     a colour space, so DeviceGray stays in force, and 1 0 0 sc then fills
 //     black in poppler.
 func (r *renderer) fitsSpace(op content.Operation) bool {

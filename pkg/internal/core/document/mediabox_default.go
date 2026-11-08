@@ -52,7 +52,7 @@ type pageSize struct {
 //     in litho baretree_2b.pdf, 600 by 800 in litho viewerboxes_2b.pdf, and
 //     800 by 600 in pdfjs boundingBox_invalid.pdf, a tie with 600 by 800 the
 //     earlier page wins.
-//   - litho defaultbox_2b.pdf: pages missing their media box among A4 ones,
+//   - litho/pdf defaultbox_2b.pdf: pages missing their media box among A4 ones,
 //     the case no other corpus file reaches.
 func MediaBoxCandidates(ctx context.Context, docs []*Document) ([]ast.PdfArray, error) {
 	counts := make(map[pageSize]int)

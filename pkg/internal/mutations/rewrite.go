@@ -345,7 +345,7 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 //
 // # Corpus evidence
 //
-//   - litho a4syntax_4.pdf: its header is %PDF-2.0 and its catalog /Version
+//   - litho/pdf a4syntax_4.pdf: its header is %PDF-2.0 and its catalog /Version
 //     /1.7, and page insertion and deletion, flattening and encryption each
 //     wrote %PDF-1.7.
 //   - All corpora: 27 of the 5196 files litho opens declare a later version in
@@ -373,7 +373,7 @@ func sourceVersion(doc *document.Document) string {
 //
 // # Corpus evidence
 //
-//   - litho xrefstm_2b.pdf: its cross-reference stream holds a direct /Info,
+//   - litho/pdf xrefstm_2b.pdf: its cross-reference stream holds a direct /Info,
 //     and page insertion and deletion, flattening and encryption each wrote
 //     the file without one.
 //   - All corpora: 2 of the 5196 files litho opens hold a direct /Info, litho

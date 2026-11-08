@@ -99,19 +99,19 @@ func matchEmptyFigure(v compliance.Violation) bool {
 //     listing an identifier their page does not mark. No destination, /IDTree
 //     or /Ref names one. Only those outputs change, and litho and veraPDF 1.30.2
 //     report on each the rules and counts they reported with the placeholder.
-//   - litho emptyfig_ua2.pdf: holds the forms and references no other file
+//   - litho/pdf emptyfig_ua2.pdf: holds the forms and references no other file
 //     reaches, and agrees with veraPDF on every output. Its F10 is the only
 //     element on page 2, which an outline item's /SD names: removed, it left
 //     8.8 test 2 once on both tools at PDF/UA-2 and WTPDF-1.0 Accessibility,
 //     and kept, those outputs pass both.
-//   - litho sharedk_ua1.pdf, directfig_ua2.pdf: the only files over the 1132
+//   - litho/pdf sharedk_ua1.pdf, directfig_ua2.pdf: the only files over the 1132
 //     tagged ones that write a Figure directly in a /K. Their empty ones stayed
 //     under the placeholder-less aggressive run and failed 7.3 or 8.2.5.28.2
 //     on both tools; now they go and no other output of the 1132 moves.
 //   - All corpora: no file has an element written inline list an element of
 //     its own, over the 203 files at PDF/UA-1 and 169 at PDF/UA-2 that hold a
 //     Figure lacking alternate text.
-//   - litho inlinekids_ua2.pdf: packs the Figures only inline elements list.
+//   - litho/pdf inlinekids_ua2.pdf: packs the Figures only inline elements list.
 //     Its empty ones took the placeholder under the aggressive run, since the
 //     removal kept every one; now they go, and the outputs pass litho and
 //     veraPDF 1.30.2 at PDF/UA-1 and PDF/UA-2 as before.

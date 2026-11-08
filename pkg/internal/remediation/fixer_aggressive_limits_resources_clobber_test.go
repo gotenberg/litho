@@ -115,7 +115,7 @@ func TestTrimDeviceNColorants_FollowsThePendingResources(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho limits_2b.pdf and verapdf 6-1-12-t09-fail-a.pdf: both have this
+//   - litho/pdf limits_2b.pdf and verapdf 6-1-12-t09-fail-a.pdf: both have this
 //     shape, and both kept their test 9 violation in aggressive mode.
 func TestTrimDeviceNColorants_InlineColourSpaceInInlineResources(t *testing.T) {
 	t.Parallel()

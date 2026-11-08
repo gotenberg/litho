@@ -128,7 +128,7 @@ func textPositions(t *testing.T, data []byte) map[string]models.TextElement {
 //
 // # Corpus evidence
 //
-//   - litho fontembed_2b.pdf: veraPDF 1.30.2 at PDF/A-2b reports 6.2.11.4.1
+//   - litho/pdf fontembed_2b.pdf: veraPDF 1.30.2 at PDF/A-2b reports 6.2.11.4.1
 //     t1 nine times on the source and twice on this output, LithoMissing and
 //     LithoWide, as litho does, and no rule the source did not fail.
 func TestFontEmbedFixture(t *testing.T) {

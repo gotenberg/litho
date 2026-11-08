@@ -79,7 +79,7 @@ func matchLZW(v compliance.Violation) bool {
 //
 // # Corpus evidence
 //
-//   - litho complex_1b.pdf, complex_2a.pdf, complex_2b.pdf, complex_2u.pdf,
+//   - litho/pdf complex_1b.pdf, complex_2a.pdf, complex_2b.pdf, complex_2u.pdf,
 //     complex_3b.pdf, a4syntax_4.pdf: the /DefaultRGB output-intent adds to
 //     the /Resources of an LZW Form XObject was discarded at PDF/A-1b, 2b
 //     and 4.

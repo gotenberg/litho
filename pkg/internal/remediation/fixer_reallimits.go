@@ -101,7 +101,7 @@ func numberRepairsFor(violations []compliance.Violation, part int) numberRepairs
 //     PDF/A-4 remediations of 110 more whose catalog /Version is not 2.n, the
 //     violations litho and veraPDF 1.30 report on the outputs do not change,
 //     and neither does their extracted text.
-//   - litho limits_1b.pdf and limits_2b.pdf: their PDF/A-2b remediations
+//   - litho/pdf limits_1b.pdf and limits_2b.pdf: their PDF/A-2b remediations
 //     clamped 2 and 1 reals past 32767, which ISO 19005-2 admits, to 32767.
 //   - pdfjs issue20872.pdf: its PDF/A-4 remediation clamped the four
 //     309-digit coordinates of an object for its catalog /Version finding.

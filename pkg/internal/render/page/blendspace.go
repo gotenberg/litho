@@ -279,7 +279,7 @@ func (r *renderer) blendKind(cs ast.PdfObject) (blend.Kind, string, bool) {
 //
 // # Corpus evidence
 //
-//   - litho greygroup_2b.pdf: in a page group of a linear tone curve, an RGB
+//   - litho/pdf greygroup_2b.pdf: in a page group of a linear tone curve, an RGB
 //     grey 0.66 drew 213 through the formula and draws 170, as outside the
 //     group and on poppler 26.09.0, PDFium and MuPDF 1.26.10. In a group of
 //     an L* profile whose perceptual table reads lighter, a fill of its own
@@ -388,7 +388,7 @@ func (r *renderer) deviceCMYK(profile *icc.Profile) (*blend.Space, error) {
 //     files, every one with a black point above XYZ 0 read K alone through
 //     the device 14 to 118 levels lighter than through the page's DeviceCMYK
 //     reading; compensated, the two agree to the level.
-//   - litho, govdocs, pdfjs: the render, flatten, recolor and redact-render
+//   - litho/pdf, govdocs, pdfjs: the render, flatten, recolor and redact-render
 //     cells score as before. DeviceCMYK under litho's built-in profile, whose
 //     black point is XYZ 0, converts as before; only pdfjs issue8019 and
 //     issue19319 flatten to other composites, within the cell's bars.
@@ -504,7 +504,7 @@ func (r *renderer) nativeColor(s *scope, c graphics.Color, sp *blend.Space) (ble
 //     as before, their profiles reading alike; without the comparison
 //     issue19319's pages 8, 9 and 19 drew farther from poppler 26.09.0, a
 //     saturated ink taken through sRGB.
-//   - litho cmykintent_2b.pdf: an image and a fill in a CMYK profile whose
+//   - litho/pdf cmykintent_2b.pdf: an image and a fill in a CMYK profile whose
 //     perceptual table reads K 0.5 lighter, after /Perceptual ri, in a page
 //     group of that profile, drew as relative colorimetric reads them (118);
 //     they now draw 184, as outside the group and on poppler. MuPDF 1.26.10
@@ -611,7 +611,7 @@ func levelsApart(a, b float32) bool {
 //
 // # Corpus evidence
 //
-//   - litho blendspace_2b: the raster fallback's DeviceCMYK image of the
+//   - litho/pdf blendspace_2b: the raster fallback's DeviceCMYK image of the
 //     page's process cyan, drawn back into the page's DeviceCMYK group,
 //     drew 1,755 pixels at 4 167 221 where the cyan fill beside it draws
 //     0 174 239; poppler 26.09.0 and PDFium draw both alike.

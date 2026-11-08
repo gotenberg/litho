@@ -296,7 +296,7 @@ var sideNames = [4]string{"top", "right", "bottom", "left"}
 //
 // # Corpus evidence
 //
-//   - litho: figures.ods prints its left-aligned text 1 point right of the
+//   - litho/pdf: figures.ods prints its left-aligned text 1 point right of the
 //     column's edge, its right-aligned numbers 1 point left of the next
 //     column's, and its baselines 1 point above the descent from the
 //     row's bottom.

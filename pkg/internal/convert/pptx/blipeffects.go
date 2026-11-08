@@ -26,7 +26,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - pptx: sd/tdf112209's picture fill of grayscl prints grey;
+//   - libreoffice/pptx: sd/tdf112209's picture fill of grayscl prints grey;
 //     sd/tdf123684's background picture of duotone, phClr shaded to 69%
 //     then tinted, prints dark teal.
 func blipEffects(pic *layout.Picture, blip *ooxml.Element, color func(*ooxml.Element) (css.Color, bool)) *layout.Picture {

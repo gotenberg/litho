@@ -97,7 +97,7 @@ func flattenedAny(lines []string) bool {
 //     outputs like the sources; in 6-2-10-t06-fail-c and its copy, a Darken
 //     pattern of overlapping tiles, litho draws the output as the source at
 //     300 dpi, and poppler draws the source apart from litho.
-//   - litho flattentext_2b and govdocs thread_000_000146, thread_000_000340,
+//   - litho/pdf flattentext_2b and govdocs thread_000_000146, thread_000_000340,
 //     thread_200_200744 and thread_400_400019: the integrity probe refused
 //     their flattened outputs, text at constant alpha 0 now invisible and up
 //     to 90 images of a page composited, and the writer fell back to the

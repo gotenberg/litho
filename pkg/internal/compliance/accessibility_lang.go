@@ -123,7 +123,7 @@ func forEachPageContentOps(ctx context.Context, doc *document.Document, catalog 
 //   - pdfjs issue20722.pdf: the one file whose marked content names a list
 //     carrying an /MCID, from its pages and from its forms' own resources, and
 //     it has no structure tree, so no rule set moves.
-//   - litho mcform_2a.pdf: the one file whose form names a list only the page
+//   - litho/pdf mcform_2a.pdf: the one file whose form names a list only the page
 //     defines, carrying a /Lang.
 type markedContentProps struct {
 	doc  *document.Document
@@ -823,7 +823,7 @@ func checkFieldTULang(ctx context.Context, doc *document.Document, treeRoot ast.
 //     and veraPDF reports it under §7.2 t34.
 //   - pdfjs bug1755507.pdf: shows three Tj inside a /Part with no /MCID, and
 //     veraPDF reports it under §7.2 t34.
-//   - litho and verapdf corpora: counting per text item puts §7.2 t34 on
+//   - litho/pdf and verapdf corpora: counting per text item puts §7.2 t34 on
 //     veraPDF's count in 350 of the 352 cells where either fires, up from
 //     238, and moves no rule set. The two left are litho baretree_2b.pdf,
 //     whose root /Count lets veraPDF read four of its five pages, and litho

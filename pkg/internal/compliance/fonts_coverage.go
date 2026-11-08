@@ -597,7 +597,7 @@ func cidToGIDStreamEntries(ctx context.Context, doc *document.Document, obj ast.
 //     subset renders CID 1, a glyph with no outline, outside its /CIDSet, and
 //     veraPDF reports it at PDF/A-1b. litho exempted empty glyphs and did not.
 //   - pdfjs issue11330.pdf: the same with CID 3 of a Calibri subset.
-//   - litho fontcopies_2b.pdf remediated at PDF/A-1b: the output's /CIDSet names
+//   - litho/pdf fontcopies_2b.pdf remediated at PDF/A-1b: the output's /CIDSet names
 //     the CIDs the three-glyph program holds while C renders CID 5, past it.
 //     veraPDF passes it, and litho reported it.
 //   - All corpora: no other file moves at PDF/A-1b.

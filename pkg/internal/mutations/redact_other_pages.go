@@ -45,7 +45,7 @@ type OtherPageCopy struct {
 //     ErrRedactionIncomplete, 4 of 10 pdfcpu and 19 of 60 pdfjs ones, mostly
 //     running headers and footers (pdfjs issue11532.pdf, "Federal Reserve
 //     Bank of Dallas" on pages 3 and 5).
-//   - litho readcolumns_ua1.pdf: the one fixture that moves, its title drawn
+//   - litho/pdf readcolumns_ua1.pdf: the one fixture that moves, its title drawn
 //     again on page 2.
 func SplitOtherPageCopies(
 	ctx context.Context,

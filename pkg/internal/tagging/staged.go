@@ -109,11 +109,11 @@ func stagedResources(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 //     leaves 385 of the 386 outputs byte for byte the remediation's, and
 //     veraPDF reports 1134 failed checks fewer on those 36 and no new one on
 //     any of the 187.
-//   - litho docmdp_2b.pdf, contentstream_4.pdf, pdfjs bug1354114.pdf and
+//   - litho/pdf docmdp_2b.pdf, contentstream_4.pdf, pdfjs bug1354114.pdf and
 //     poppler-90-0-fuzzed.pdf: AutoTag queued after a PDF/A-2b remediation
 //     brought back a number or an operator the remediation had repaired
 //     (ISO 19005-2, 6.1.13 and 6.2.2).
-//   - litho limits_2b.pdf, pdfjs issue6151.pdf: the name longer than 127 bytes
+//   - litho/pdf limits_2b.pdf, pdfjs issue6151.pdf: the name longer than 127 bytes
 //     it brought back resolved to nothing, hiding the DeviceN colour space and
 //     the unembedded font the remediated output names, which litho and
 //     veraPDF now report as they do on that output.

@@ -138,7 +138,7 @@ func (b *builder) picture(pic *layout.Picture, r compose.Rect) []compose.Fragmen
 //
 // # Corpus evidence
 //
-//   - pptx: sd-data/n820786.pptx's narVert rectangle prints vertical lines
+//   - libreoffice/pptx: sd-data/n820786.pptx's narVert rectangle prints vertical lines
 //     1.39 points apart at the page's 0.1-point width over its background,
 //     and none of its 48 pattern swatches prints a picture.
 func (b *builder) patternFill(f *Fill, box compose.Rect, ops []compose.PathOp) []compose.Fragment {

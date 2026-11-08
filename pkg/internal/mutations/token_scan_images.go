@@ -51,7 +51,7 @@ func isImageXObjectDict(dict ast.PdfDict) bool {
 //
 // # Corpus evidence
 //
-//   - govdocs, pdfjs, pdfcpu, litho, redacting page 1 whole, its centred
+//   - govdocs, pdfjs, pdfcpu, litho/pdf, redacting page 1 whole, its centred
 //     quarter and a band (7,692 redactions): the data of an image held a
 //     surviving copy in 114 refusals with ErrRedactionIncomplete, 89 govdocs,
 //     22 pdfjs, 3 pdfcpu, none litho. Skipping it lets 49 through (32, 16,

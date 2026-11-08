@@ -63,7 +63,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 //
 // # Corpus evidence
 //
-//   - litho: sales.csv and sheet.csv print on one 612 by 792 point page
+//   - litho/pdf: sales.csv and sheet.csv print on one 612 by 792 point page
 //     with "Page 1" centred at 60.35 points from the bottom and no header;
 //     the first row's text sits 1 point right of 56.69 points (2 cm) and
 //     its baseline 9.7 points below 56.69 points from the top; the rows

@@ -70,7 +70,7 @@ func matchICCSpaceV2(v compliance.Violation) bool {
 //   - govdocs thread_100_100114.pdf, thread_200_200629.pdf,
 //     thread_400_400765.pdf and thread_200_200973.pdf: their profile streams
 //     hold no ICC profile (version bytes 44 and 88), out of ToV2's reach.
-//   - litho defaultcs_4.pdf and csnames_2b.pdf: their abstract profiles are
+//   - litho/pdf defaultcs_4.pdf and csnames_2b.pdf: their abstract profiles are
 //     re-encoded and keep the device class violation, and iccbased_4.pdf's
 //     version 5 profile is refused.
 func fixICCSpaceV2(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {

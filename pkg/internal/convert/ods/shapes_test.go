@@ -57,7 +57,7 @@ func FuzzParseTransform(f *testing.F) {
 //
 // # Corpus evidence
 //
-//   - ods: sc/hideColsShow.ods prints its custom shape 15 mm right of its
+//   - libreoffice/ods: sc/hideColsShow.ods prints its custom shape 15 mm right of its
 //     anchor column C, as its svg:x says; sc/LargeAnchorOffset.ods its
 //     dimension line from its anchor column's left edge;
 //     sc/legacycellanchoredrotatedhiddenshape.ods no shape, its anchor row

@@ -459,10 +459,10 @@ func checkFontRequiredKeys(ctx context.Context, doc *document.Document, fontDict
 //
 // # Corpus evidence
 //
-//   - litho fontcff2_2b.pdf and fontotread_2b.pdf: four Type0 fonts each over
+//   - litho/pdf fontcff2_2b.pdf and fontotread_2b.pdf: four Type0 fonts each over
 //     an /OpenType program, and veraPDF 1.30.2 fails ISO 19005-1, 6.3.2 t7 14
 //     and 12 times at PDF/A-1a and 1b, where litho failed it 10 and 8 times.
-//   - litho, verapdf and facturx corpora: no other count of the rule moves
+//   - litho/pdf, verapdf and facturx corpora: no other count of the rule moves
 //     at any level.
 func fontFileSubtypeViolations(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, part int, subject string) []Violation {
 	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)

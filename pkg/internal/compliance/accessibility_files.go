@@ -282,7 +282,7 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 //   - verapdf PDF_UA-2__8.2.5.20-t02-fail-a.pdf, fail-b, pass-a and pass-b:
 //     each carries three Links without /Contents, and veraPDF reports the test
 //     three times at PDF/UA-1, where litho reported it once.
-//   - litho annotstruct_ua2.pdf: carries four Links without /Contents, and
+//   - litho/pdf annotstruct_ua2.pdf: carries four Links without /Contents, and
 //     veraPDF reports the test four times at PDF/UA-1, where litho reported it
 //     once.
 //   - All corpora: the count moves on 201 files at PDF/UA-1 and no rule set

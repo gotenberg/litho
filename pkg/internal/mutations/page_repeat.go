@@ -138,7 +138,7 @@ type shareNode struct {
 //   - pdfjs issue12963.pdf: its widgets name page tree nodes, fonts and images
 //     as /Parent, so the widgets of the added page are not reachable from
 //     /AcroForm, as those of the first copy are not.
-//   - litho: veraPDF fails no rule at a fixture's home profile on the split or
+//   - litho/pdf: veraPDF fails no rule at a fixture's home profile on the split or
 //     the insertion that it does not fail on the fixture, the 17 PDF/UA-1 and
 //     14 PDF/UA-2 fixtures included.
 //   - pdfjs issue19319.pdf: page 1 named 50 times makes a 10.0 MB file, where
