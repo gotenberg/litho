@@ -100,8 +100,11 @@ render_one() {
         '. + [{page: $page, error: $error}]' <<< "$pages_json")
     fi
   done
-  jq -n --arg id "$id" --argjson dpi "$RENDER_DPI" --argjson count "$pages" --argjson pages "$pages_json" --arg hide "$HIDE" \
-    '{id: $id, dpi: $dpi, page_count: $count, pages: $pages} + (if $hide == "1" then {hide_annotations: true} else {} end)' > "$OUT_DIR/$id.json"
+  # The page list goes through stdin: a document of thousands of pages makes
+  # it longer than one argument may be (Linux's MAX_ARG_STRLEN, 128 KiB).
+  jq --arg id "$id" --argjson dpi "$RENDER_DPI" --argjson count "$pages" --arg hide "$HIDE" \
+    '{id: $id, dpi: $dpi, page_count: $count, pages: .} + (if $hide == "1" then {hide_annotations: true} else {} end)' \
+    <<< "$pages_json" > "$OUT_DIR/$id.json"
 }
 export -f render_one
 export OUT_DIR SAMPLE RENDER_DPI MAX_PAGES RENDER_TIMEOUT HIDE
