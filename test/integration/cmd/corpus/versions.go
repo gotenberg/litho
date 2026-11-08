@@ -108,6 +108,11 @@ var localToolPins = map[string]bool{
 	"NOTO_SANS_CORE_VERSION": true,
 	"NOTO_SANS_CORE_URL":     true,
 	"NOTO_SANS_CORE_SHA256":  true,
+	// LibreOffice's symbol font, which the pptx and odp corpora's
+	// references draw bullets with.
+	"OPENSYMBOL_VERSION": true,
+	"OPENSYMBOL_URL":     true,
+	"OPENSYMBOL_SHA256":  true,
 
 	// The converter oracles: the web-platform-tests commit `make wpt-fetch`
 	// downloads, the WeasyPrint release `make weasyprint-fixtures` extracts,
@@ -122,8 +127,9 @@ var localToolPins = map[string]bool{
 	"WEASYPRINT_FONT_SHA256": true,
 	"GOTENBERG_IMAGE":        true,
 	// The LibreOffice core commit `make docx-fetch`, `make odt-fetch`,
-	// `make xlsx-fetch`, `make ods-fetch` and `make csv-fetch` download the
-	// Office corpora's documents at.
+	// `make xlsx-fetch`, `make ods-fetch`, `make csv-fetch`, `make
+	// pptx-fetch` and `make odp-fetch` download the Office corpora's
+	// documents at.
 	"LIBREOFFICE_CORE_COMMIT": true,
 }
 
@@ -193,6 +199,8 @@ var sourcePins = map[string][]string{
 	"xlsx": nil,
 	"ods":  nil,
 	"csv":  nil,
+	"pptx": nil,
+	"odp":  nil,
 }
 
 // pinEntry is one KEY=VALUE line of versions.env.

@@ -248,3 +248,10 @@ install_deb "noto-sans-core-$NOTO_CORE" "$(pin NOTO_SANS_CORE_URL)" "$(pin NOTO_
   usr/share/doc/fonts-noto-core/copyright \
   usr/share/fonts/truetype/noto/NotoSans-Regular.ttf usr/share/fonts/truetype/noto/NotoSans-Bold.ttf \
   usr/share/fonts/truetype/noto/NotoSans-Italic.ttf usr/share/fonts/truetype/noto/NotoSans-BoldItalic.ttf
+
+# OpenSymbol, LibreOffice's symbol font, which the image draws most of a
+# presentation's bullets with: Debian's fonts-opensymbol, the image's
+# package.
+install_deb "opensymbol-$(pin OPENSYMBOL_VERSION)" "$(pin OPENSYMBOL_URL)" "$(pin OPENSYMBOL_SHA256)" OPENSYMBOL_SHA256 \
+  usr/share/doc/fonts-opensymbol/copyright \
+  usr/share/fonts/truetype/libreoffice/opens___.ttf
