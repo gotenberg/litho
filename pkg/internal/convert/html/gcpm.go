@@ -242,7 +242,7 @@ func (g *gcpmState) pick(list []assignment, name string, p css.PagePick, index i
 		if onPage {
 			return assignment{}, false
 		}
-	case css.PickFirst:
+	case css.PickFirst, css.PickAllOnce:
 		if onPage {
 			return first, true
 		}
@@ -287,3 +287,34 @@ func (b *builder) footnote(ctx context.Context, n *dom.Node, node *layout.Node, 
 // pageTopSlack is how far below the page area's top an element still
 // starts the page, for string(name, start): a hundredth of a point.
 const pageTopSlack = 0.01
+
+// noteCounter is the counter that numbers notes.
+const noteCounter = "note"
+
+// note turns the element n, built as node and styled st, into a note
+// (position: note(), the notes WeasyPrint draws): the ::note-call it
+// leaves in the flow carries its body, the element with its ::note-marker
+// first and its ::note-callback last, which the layout moves to the note
+// area of the page the call lands on. A call without content still
+// anchors the body.
+func (b *builder) note(ctx context.Context, n *dom.Node, node *layout.Node, st *css.Style) *layout.Node {
+	if m := b.pseudo(ctx, n, css.PseudoNoteMarker); m != nil {
+		node.Children = append([]*layout.Node{m}, node.Children...)
+	}
+	if cb := b.pseudo(ctx, n, css.PseudoNoteCallback); cb != nil {
+		node.Children = append(node.Children, cb)
+	}
+	if node.Role == "" || node.Role == "Span" || node.Role == "P" {
+		node.Role = "Note"
+	}
+	call := b.pseudo(ctx, n, css.PseudoNoteCall)
+	if call == nil {
+		call = &layout.Node{Kind: layout.Element, Style: anonInline(st)}
+	} else if call.Style.Display != css.Inline {
+		cs := *call.Style
+		cs.Display = css.Inline
+		call.Style = &cs
+	}
+	call.Footnote = node
+	return call
+}

@@ -108,6 +108,10 @@ func (b *builder) buildRoot(ctx context.Context, root *dom.Node) (*layout.Node, 
 		// document unless an element resets it (CSS GCPM 3, 3.5.2).
 		_ = b.counters.instantiate(footnoteCounter, 0, false)
 	}
+	if b.counters.innermost(noteCounter) == nil {
+		// The note counter numbers the notes alike.
+		_ = b.counters.instantiate(noteCounter, 0, false)
+	}
 	err := b.content(ctx, n, root, st, v, 1)
 	return n, err
 }
@@ -234,6 +238,9 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 	}
 	if st.Footnote {
 		return []*layout.Node{b.footnote(ctx, n, node, st)}, nil
+	}
+	if st.Note != "" {
+		return []*layout.Node{b.note(ctx, n, node, st)}, nil
 	}
 	if st.Running != "" {
 		if keep := b.runAway(node, st); keep != nil {

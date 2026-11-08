@@ -142,6 +142,8 @@ func (b *builder) applyCounters(n *dom.Node, st *css.Style) int {
 	// A footnote element increments the footnote counter (CSS GCPM 3,
 	// 3.5.1), unless its counter-increment names it.
 	implicitNote := n != nil && st.Footnote
+	// A note element increments the note counter alike.
+	implicitSide := n != nil && st.Note != ""
 	for _, op := range st.CounterIncrement {
 		if op.Name == listItem {
 			implicit = false
@@ -149,10 +151,16 @@ func (b *builder) applyCounters(n *dom.Node, st *css.Style) int {
 		if op.Name == footnoteCounter {
 			implicitNote = false
 		}
+		if op.Name == noteCounter {
+			implicitSide = false
+		}
 		b.increment(op.Name, op.Value, inst)
 	}
 	if implicitNote {
 		b.increment(footnoteCounter, 1, inst)
+	}
+	if implicitSide {
+		b.increment(noteCounter, 1, inst)
 	}
 	if implicit {
 		step := 1

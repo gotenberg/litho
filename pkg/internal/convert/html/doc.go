@@ -104,6 +104,17 @@
 // and footnote-policy line and block act as auto. leader() fills the rest
 // of its line with copies of its string (CSS Generated Content 3).
 //
+// position: note(name) turns an element into a note, as WeasyPrint draws
+// notes: its ::note-call stays in the flow, numbered by the note counter,
+// and the element, between its ::note-marker and its ::note-callback,
+// moves to the note area of the page the call lands on, styled by the
+// @note-area rule, a body without room moving to the next page as a
+// footnote's does. The area sits at the top of the page area and pushes
+// the page's content down; display: flex and grid lay its notes out as
+// items, and an absolutely positioned area is placed by its insets and
+// takes no room. A floated area does not let the content wrap around it,
+// and every note goes to the area whatever name its element() gives.
+//
 // [Options.HeaderTemplate] and [Options.FooterTemplate] draw as Chromium
 // draws them: on Chromium's template page, a page-sized document whose
 // header and footer boxes hold the templates, laid out by this package,

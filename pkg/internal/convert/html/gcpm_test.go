@@ -105,3 +105,26 @@ func TestMarginBoxes_MinMaxWidth(t *testing.T) {
 		t.Errorf("bottom-left text at %v, want 295: the box is 250pt wide", c.x)
 	}
 }
+
+func TestNotes_CallsAndBodies(t *testing.T) {
+	src := `<style>
+		@page { size: 300pt 200pt; margin: 20pt; @note-area { content: element(note, all-once) } }
+		body { margin: 0; font: 10pt "Test Serif" }
+		p { margin: 0 }
+		.n { position: note(note) }
+		.n::note-callback { content: " back" }
+	</style>
+	<p>One<span class=n>First note</span> two.</p>`
+	doc := convertDoc(t, src, Options{PreferCSSPageSize: true})
+	if len(doc.Pages) != 1 {
+		t.Fatalf("%d pages, want 1", len(doc.Pages))
+	}
+	pg := doc.Pages[0]
+	body, flow := find(t, pg, "1. First note back"), find(t, pg, "One")
+	if !(body.y < flow.y) {
+		t.Errorf("body at %v, flow at %v: want the note area above the flow", body.y, flow.y)
+	}
+	if hasText(pg, "One First") {
+		t.Error("the note body stayed in the flow")
+	}
+}

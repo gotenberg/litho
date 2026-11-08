@@ -78,8 +78,9 @@ func pageBox(r *css.Resolver, o Options, sel css.PageSelector) (layout.PageBox, 
 		w, h = h, w
 	}
 	box := layout.PageBox{Width: w, Height: h, Background: ps.Background, Marks: ps.Marks}
-	if r.HasFootnoteArea() {
-		box.Footnote = r.PageIn(sel, nil).Footnote
+	if r.HasFootnoteArea() || r.HasNoteArea() {
+		in := r.PageIn(sel, nil)
+		box.Footnote, box.NoteArea = in.Footnote, in.NoteArea
 	}
 	// The bleed grows the sheet past the page box (CSS Page 3, 7.2), up
 	// to the PDF page limit.
