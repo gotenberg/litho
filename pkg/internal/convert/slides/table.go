@@ -1,0 +1,100 @@
+package slides
+
+import (
+	"fmt"
+	"math"
+
+	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/css"
+)
+
+// maxTableCells caps the cells of a table drawn. Anti-DoS guard, not
+// spec-mandated: a slide's table shows a few hundred cells.
+const maxTableCells = 1 << 14
+
+// table returns the fragments of the table shape s in its box: the
+// columns from the box's left edge at their widths, the rows from its top
+// at their heights, each row grown to the tallest text of its cells, each
+// cell's fill, text and borders (ECMA-376 Part 1, 21.1.3.13 tbl). It hangs
+// a Table element from parent, with a TR per row and a TD per cell.
+func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment {
+	t := s.Table
+	if t == nil || len(t.ColumnWidths) == 0 || len(t.Rows) == 0 {
+		return nil
+	}
+	cols := t.ColumnWidths
+	rows := t.Rows
+	if len(cols)*len(rows) > maxTableCells {
+		b.warn(CodeTable, fmt.Sprintf("a table has more than %d cells; the rest are left out", maxTableCells))
+		if len(cols) > maxTableCells {
+			cols = cols[:maxTableCells]
+		}
+		rows = rows[:max(maxTableCells/len(cols), 1)]
+	}
+	side := func(v float64) float64 {
+		if !(v > 0) || math.IsInf(v, 0) {
+			return 0
+		}
+		return min(v, maxCoordinate)
+	}
+	xs := make([]float64, len(cols)+1)
+	xs[0] = s.Box.X
+	for i, w := range cols {
+		xs[i+1] = xs[i] + side(w)
+	}
+	hs := make([]float64, len(rows))
+	for r, row := range rows {
+		hs[r] = side(row.Height)
+		// A row grows to the text of its cells that span it alone.
+		for c := range min(len(row.Cells), len(cols)) {
+			cell := &row.Cells[c]
+			if cell.Covered || cell.Text == nil || max(cell.RowSpan, 1) > 1 {
+				continue
+			}
+			w := xs[min(c+max(cell.ColSpan, 1), len(cols))] - xs[c]
+			inner := insetRect(compose.Rect{Width: w, Height: max(hs[r], 1)}, cell.Text.Insets)
+			if lay := b.layoutBody(cell.Text, inner.Width, inner.Height, noFit); lay != nil {
+				hs[r] = max(hs[r], lay.height+side(cell.Text.Insets[css.Top])+side(cell.Text.Insets[css.Bottom]))
+			}
+		}
+	}
+	ys := make([]float64, len(rows)+1)
+	ys[0] = s.Box.Y
+	for r := range rows {
+		ys[r+1] = ys[r] + hs[r]
+	}
+	tbl := &compose.StructElem{Role: "Table"}
+	parent.Kids = append(parent.Kids, tbl)
+	var fills, texts, borders []compose.Fragment
+	for r, row := range rows {
+		tr := &compose.StructElem{Role: "TR"}
+		tbl.Kids = append(tbl.Kids, tr)
+		for c := range min(len(row.Cells), len(cols)) {
+			cell := &row.Cells[c]
+			if cell.Covered {
+				continue
+			}
+			td := &compose.StructElem{Role: "TD"}
+			tr.Kids = append(tr.Kids, td)
+			c1 := min(c+max(cell.ColSpan, 1), len(cols))
+			r1 := min(r+max(cell.RowSpan, 1), len(rows))
+			rc := compose.Rect{X: xs[c], Y: ys[r], Width: xs[c1] - xs[c], Height: ys[r1] - ys[r]}
+			fills = append(fills, b.fill(&cell.Fill, rc, rectOps(rc))...)
+			if cell.Text != nil && len(cell.Text.Paragraphs) > 0 {
+				txt := b.shapeText(cell.Text, nil, rc)
+				texts = append(texts, txt.frags...)
+				b.links = append(b.links, txt.links...)
+				td.Kids = append(td.Kids, txt.structure...)
+			}
+			x0, y0, x1, y1 := rc.X, rc.Y, rc.X+rc.Width, rc.Y+rc.Height
+			for side, ops := range [4][]compose.PathOp{
+				css.Top: lineOps(x0, y0, x1, y0), css.Right: lineOps(x1, y0, x1, y1),
+				css.Bottom: lineOps(x0, y1, x1, y1), css.Left: lineOps(x0, y0, x0, y1),
+			} {
+				borders = append(borders, b.stroke(&cell.Borders[side], ops)...)
+			}
+		}
+	}
+	out := append(fills, texts...)
+	return append(out, borders...)
+}

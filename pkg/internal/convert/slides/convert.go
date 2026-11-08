@@ -3,11 +3,66 @@ package slides
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
+
+// The slide size of a document that gives none, Impress's 4:3 screen
+// show, 28 by 21 centimetres.
+const (
+	defaultSlideWidth  = 793.7
+	defaultSlideHeight = 595.28
+)
+
+// maxSlideShapes caps the shapes drawn on one slide, groups and their
+// kids counted. Anti-DoS guard, not spec-mandated: a dense slide holds a
+// few hundred shapes.
+const maxSlideShapes = 1 << 14
+
+// maxGroupDepth caps the nesting of groups followed. Anti-DoS guard, not
+// spec-mandated: real decks nest groups a few levels deep, and every
+// level costs a stack frame and a transform.
+const maxGroupDepth = 32
+
+// builder holds what one conversion shares.
+type builder struct {
+	ctx      context.Context
+	doc      *Document
+	fonts    *text.Fonts
+	opts     office.Options
+	lang     string
+	warnings []compose.Warning
+	warned   map[string]bool
+	// metrics caches the font metrics of the faces the text matched.
+	metrics map[string]text.Metrics
+	// slide is the slide being drawn, number its number among the slides
+	// written and count their count, for the fields.
+	slide         *Slide
+	number, count int
+	// shapes counts the shapes drawn on the slide.
+	shapes int
+	// links collects the slide's links in slide coordinates.
+	links []compose.Link
+	// fontLines lays text out with the faces' ascent and descent, as
+	// Impress does for an OpenDocument text body, instead of the
+	// font-independent 1.2 times the size it uses for a PPTX one. The
+	// model has no field for it yet: it stays off.
+	fontLines bool
+}
+
+// warn records a warning once per code and message.
+func (b *builder) warn(code, msg string) {
+	k := code + "\x00" + msg
+	if b.warned[k] {
+		return
+	}
+	b.warned[k] = true
+	b.warnings = append(b.warnings, compose.Warning{Code: code, Message: msg})
+}
 
 // Convert lays doc out as Impress prints a presentation, with the fonts of
 // the index fonts, and returns the paged document: one page per slide at
@@ -21,6 +76,49 @@ import (
 // nil fonts or doc, text.ErrNoFonts for an index without faces, and
 // office.ErrTooManyPages past the page cap. The output depends on doc,
 // fonts' index and opts alone.
+//
+// # Pages
+//
+// Each slide prints its background, then its shapes in stacking order. A
+// page of another size than the slide shows the slide scaled down to fit,
+// never up, centred. The outline holds an entry per slide written, titled
+// with the slide's title, else its name. The structure tree holds a Sect
+// per slide: the paragraphs of its text as P, its tables as Table, its
+// pictures as Figure.
+//
+// # Shapes
+//
+// A geometry shape is filled and stroked along the paths of its geometry,
+// turned and mirrored about its box's centre; its text turns with it but
+// is not mirrored, a vertical flip turning it half a turn, as Impress
+// draws it. Fills are solid, gradients, pictures stretched or tiled,
+// clipped to the shape, and patterns; lines carry their dash, cap, join
+// and arrowheads. A group maps its kids from its child space onto its
+// box. A table's rows grow to the text of their cells.
+//
+// # Text
+//
+// Paragraphs are laid out in the shape's text rectangle less its insets,
+// at the top, middle or bottom of it. A line is 1.2 times the largest
+// font size tall, the baseline the size below its top, as Impress spaces
+// a PPTX text body; proportional spacing above 100% adds its room above
+// the glyphs, below 100% shrinks the line and puts the baseline at four
+// fifths of it; exact spacing keeps the descent and moves the baseline.
+// The spacing before the first paragraph and after the last is dropped,
+// the spacing between two paragraphs is the sum of the two. A bullet sits
+// at the first line's indent, the text at the left margin, or after the
+// bullet when the indent leaves it no room; a symbol bullet is centred on
+// the line's text height. Numbers count per level across the body. A
+// text body that shrinks to fit tries Impress's scale levels in turn,
+// font sizes rounded to whole points, until the text fits; one that grows
+// grows the box from its anchor.
+//
+// # Not supported
+//
+// Vertical text is laid out horizontally and turned a quarter turn;
+// upright East Asian text turns with it. A paragraph's lines all take the
+// height of its largest font. Effects (shadows, glows, reflections, 3D)
+// are not drawn.
 func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.Options) (*compose.Document, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
@@ -34,5 +132,134 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	if fonts.Len() == 0 {
 		return nil, fmt.Errorf("laying the presentation out: %w", text.ErrNoFonts)
 	}
-	return nil, fmt.Errorf("laying the presentation out: %w", office.ErrNotImplemented)
+	b := &builder{ctx: ctx, doc: doc, fonts: fonts, opts: opts, lang: doc.Meta.Lang, warned: map[string]bool{}, metrics: map[string]text.Metrics{}}
+	var shown []*Slide
+	for _, s := range doc.Slides {
+		if s != nil && (!s.Hidden || opts.HiddenSlides) {
+			shown = append(shown, s)
+		}
+	}
+	limit := opts.MaxPages
+	if limit <= 0 {
+		limit = layout.DefaultMaxPages
+	}
+	pages := len(shown)
+	if opts.NotesPages {
+		pages *= 2
+	}
+	if pages > limit {
+		return nil, fmt.Errorf("%w: more than %d pages", office.ErrTooManyPages, limit)
+	}
+	out := &compose.Document{
+		Metadata:  doc.Meta,
+		Structure: &compose.StructElem{Role: "Document", Lang: b.lang},
+	}
+	b.count = len(shown)
+	for i, s := range shown {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		pg, sect := b.slidePage(s, i+1)
+		out.Pages = append(out.Pages, pg)
+		out.Structure.Kids = append(out.Structure.Kids, sect)
+	}
+	if opts.NotesPages {
+		for i, s := range shown {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			pg, sect := b.notesPage(s, i+1)
+			out.Pages = append(out.Pages, pg)
+			out.Structure.Kids = append(out.Structure.Kids, sect)
+		}
+	}
+	if len(out.Pages) == 0 {
+		// A deck that prints no slide prints one blank page of the slide
+		// size, as Impress exports an empty show.
+		w, h := b.pageSize(b.slideSize())
+		out.Pages = []*compose.Page{{Width: w, Height: h}}
+	}
+	if !opts.OmitOutline {
+		for i, s := range shown {
+			title := s.Title
+			if title == "" {
+				title = s.Name
+			}
+			if title == "" {
+				title = fmt.Sprintf("Slide %d", i+1)
+			}
+			out.Outline = append(out.Outline, compose.Outline{Title: title, Dest: compose.Dest{Page: i + 1}})
+		}
+	}
+	out.Warnings = b.warnings
+	return out, nil
+}
+
+// slideSize returns the slide size, Impress's default for a document that
+// gives none, each side within the PDF's limits.
+func (b *builder) slideSize() (float64, float64) {
+	w, h := b.doc.Width, b.doc.Height
+	if !(w > 0) || !(h > 0) || math.IsInf(w, 0) || math.IsInf(h, 0) {
+		w, h = defaultSlideWidth, defaultSlideHeight
+	}
+	return min(w, office.MaxPageSide), min(h, office.MaxPageSide)
+}
+
+// pageSize returns the page size a slide of size w by h prints on: the
+// options' paper, else the slide's, turned to landscape when the options
+// ask and it is portrait.
+func (b *builder) pageSize(w, h float64) (float64, float64) {
+	if b.opts.PageWidth > 0 && b.opts.PageHeight > 0 {
+		w, h = b.opts.PageWidth, b.opts.PageHeight
+	}
+	if b.opts.Landscape && w < h {
+		w, h = h, w
+	}
+	return w, h
+}
+
+// fitMatrix returns the transform that places a sheet of size w by h on a
+// page of size pw by ph: scaled down to fit, never up, and centred.
+func fitMatrix(w, h, pw, ph float64) compose.Matrix {
+	s := min(pw/w, ph/h, 1)
+	return compose.Matrix{A: s, D: s, E: (pw - w*s) / 2, F: (ph - h*s) / 2}
+}
+
+// slidePage draws the slide s, the n-th written, on its page, and returns
+// the page with the slide's structure element.
+func (b *builder) slidePage(s *Slide, n int) (*compose.Page, *compose.StructElem) {
+	sw, sh := b.slideSize()
+	pw, ph := b.pageSize(sw, sh)
+	content, links, sect := b.slideContent(s, n, sw, sh)
+	pg := &compose.Page{Width: pw, Height: ph}
+	m := fitMatrix(sw, sh, pw, ph)
+	if m == compose.Identity {
+		pg.Content = content
+		pg.Links = links
+	} else {
+		pg.Content = []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: content}}
+		for _, l := range links {
+			l.Rect = transformRect(m, l.Rect)
+			pg.Links = append(pg.Links, l)
+		}
+	}
+	return pg, sect
+}
+
+// slideContent draws the slide s, the n-th written, w by h, in slide
+// coordinates: its background and shapes, its links and its structure
+// element.
+func (b *builder) slideContent(s *Slide, n int, w, h float64) ([]compose.Fragment, []compose.Link, *compose.StructElem) {
+	b.slide, b.number, b.shapes, b.links = s, n, 0, nil
+	sect := &compose.StructElem{Role: "Sect"}
+	var out []compose.Fragment
+	area := compose.Rect{Width: w, Height: h}
+	out = append(out, b.fill(&s.Background, area, rectOps(area))...)
+	for _, sp := range s.Shapes {
+		if err := b.ctx.Err(); err != nil {
+			break
+		}
+		out = append(out, b.shape(sp, compose.Identity, 0, sect)...)
+	}
+	return out, b.links, sect
 }
