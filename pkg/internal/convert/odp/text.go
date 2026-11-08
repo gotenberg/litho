@@ -156,7 +156,7 @@ type paraState struct {
 // it for the shape's text writing mode, so a paragraph keeps the
 // direction of the default style or a common style.
 //
-// # Measured
+// # Corpus evidence
 //
 //   - probe, odp: frames of a flat presentation whose default graphic style
 //     is rl-tb print right to left with an automatic graphic or

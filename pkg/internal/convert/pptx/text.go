@@ -491,7 +491,7 @@ func fieldOf(typ string) slides.Field {
 // fld type datetime and datetime1 to datetime13), as Impress maps them
 // to its date and time formats and prints them in the en-US locale.
 //
-// # Measured
+// # Corpus evidence
 //
 //   - probe, pptx: a deck of the fourteen fields, en-US, converted by the
 //     pinned image on 2026-11-08 at 11:25:38 prints "11/8/26",
@@ -510,7 +510,7 @@ var usDateFormats = map[string]string{
 // day first, as en-GB, de-DE and fr-FR print them; the names stay
 // English, the language's own the format codes cannot say.
 //
-// # Measured
+// # Corpus evidence
 //
 //   - probe, pptx: the same deck in en-GB prints "08/11/26", "08/11/2026",
 //     "Sunday 8 November 2026", "8 November 2026", "8 Nov 2026" and

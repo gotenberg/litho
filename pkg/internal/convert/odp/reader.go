@@ -375,7 +375,7 @@ func (r *reader) slide(pg *odf.Element, n int) *slides.Slide {
 // its boxes, where a page without notes prints its slide alone in the
 // default layout.
 //
-// # Measured
+// # Corpus evidence
 //
 //   - probe, odp: a flat presentation of three pages, the first without
 //     presentation:notes, the second with a thumbnail and an empty notes

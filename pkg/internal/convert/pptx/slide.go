@@ -199,7 +199,7 @@ func (r *reader) notes(slidePart string) ([]slides.Paragraph, bool, error) {
 // master's text; Impress draws them so on the notes pages of the slides
 // that have notes, unscaled on the page it prints them on.
 //
-// # Measured
+// # Corpus evidence
 //
 //   - gotenberg/pptx: deck.pptx's notes master places the slide image at 90, 54 by
 //     360, 270 points and the slide number at 305.9, 683.9 on a 540 by 720
