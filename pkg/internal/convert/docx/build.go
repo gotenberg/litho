@@ -638,10 +638,10 @@ func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
 }
 
 // snapLines lays the lines of the paragraph style st on a document grid
-// of line pitch pitch (17.6.5 docGrid, type lines): each line takes the
-// whole pitches its natural height, times the proportional spacing mult
-// when not 0, needs, as LibreOffice spaces the lines of a page with a
-// text grid. The line keeps the baseline of an exact line of that
+// whose line pitch is pitch (17.6.5 docGrid, type lines): each line takes
+// the whole pitches its natural height, times the proportional spacing
+// mult when not 0, needs, as LibreOffice spaces the lines of a page with
+// a text grid. The line keeps the baseline of an exact line of that
 // height, an approximation: Writer centres the glyphs in it.
 //
 // # Corpus evidence
