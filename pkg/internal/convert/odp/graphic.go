@@ -390,6 +390,13 @@ func (r *reader) textBodyProps(tb *slides.TextBody, p odf.Props, frame bool) {
 		tb.Vertical = css.VerticalRL
 	case "tb-lr":
 		tb.Vertical = css.VerticalLR
+	case "tb-rl90":
+		// LibreOffice's extension values of style:writing-mode beyond
+		// ODF 1.3's 20.404: the text turned a quarter turn clockwise, or
+		// counterclockwise reading bottom to top.
+		tb.Vertical = css.SidewaysRL
+	case "bt-lr":
+		tb.Vertical = css.SidewaysLR
 	case "rl-tb", "rl":
 		tb.RightToLeft = true
 	}

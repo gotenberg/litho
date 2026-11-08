@@ -146,6 +146,7 @@ func TestRead_TextBodyProps(t *testing.T) {
 		{"frame defaults", ``, "frame", slides.TextBody{Wrap: true, Autofit: slides.AutofitGrow}},
 		{"frame", `fo:padding="0.1cm" fo:padding-left="0.2cm" draw:textarea-vertical-align="bottom" draw:auto-grow-height="false" style:shrink-to-fit="true" fo:column-count="2" fo:column-gap="0.5cm" style:writing-mode="tb-rl"`, "frame",
 			slides.TextBody{Insets: [4]float64{cm(0.1), cm(0.1), cm(0.1), cm(0.2)}, Anchor: slides.AnchorBottom, Wrap: true, Autofit: slides.AutofitShrink, Columns: 2, ColumnGap: cm(0.5), Vertical: css.VerticalRL}},
+		{"bottom to top", `style:writing-mode="bt-lr"`, "frame", slides.TextBody{Wrap: true, Autofit: slides.AutofitGrow, Vertical: css.SidewaysLR}},
 		{"shape no wrap", `fo:wrap-option="no-wrap" draw:textarea-vertical-align="middle"`, "shape", slides.TextBody{Anchor: slides.AnchorMiddle}},
 		{"shape grows", `draw:auto-grow-height="true" fo:wrap-option="wrap"`, "shape", slides.TextBody{Wrap: true, Autofit: slides.AutofitGrow}},
 	}
