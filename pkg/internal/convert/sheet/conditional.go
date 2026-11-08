@@ -494,11 +494,9 @@ func ranked(nums []float64, v, n float64, top bool) bool {
 	if n < 1 {
 		return false
 	}
-	beat := 0
+	beat := sort.SearchFloat64s(nums, v)
 	if top {
 		beat = len(nums) - sort.Search(len(nums), func(i int) bool { return nums[i] > v })
-	} else {
-		beat = sort.SearchFloat64s(nums, v)
 	}
 	return float64(beat) < n
 }

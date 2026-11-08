@@ -156,8 +156,12 @@ func thresholds(sh *sheet.Sheet, entries []*odf.Element, ranges []sheet.Range) (
 // conditionOps are the comparison prefixes of a condition's value, the
 // longer first, with the operators of sheet.Rule they stand for.
 var conditionOps = []struct{ prefix, op string }{
-	{"<=", "lessThanOrEqual"}, {">=", "greaterThanOrEqual"}, {"!=", "notEqual"},
-	{"<", "lessThan"}, {">", "greaterThan"}, {"=", "equal"},
+	{"<=", "lessThanOrEqual"},
+	{">=", "greaterThanOrEqual"},
+	{"!=", "notEqual"},
+	{"<", "lessThan"},
+	{">", "greaterThan"},
+	{"=", "equal"},
 }
 
 // conditionFuncs are the functions of a condition's value without
