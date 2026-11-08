@@ -285,7 +285,7 @@ func (b *builder) effects(s *Shape, paths []shape.Path, box compose.Rect, m comp
 	if s.Shadow == nil && s.Glow == nil && !(s.SoftEdge > 0) {
 		return nil, paths
 	}
-	sm := aboutCentre(box, s.Rotation, s.FlipH, s.FlipV)
+	sm := skewedAboutCentre(box, s.Rotation, s.SkewX, s.FlipH, s.FlipV)
 	toSlide := then(sm, m)
 	var own []compose.Fragment
 	for _, p := range paths {
@@ -302,7 +302,7 @@ func (b *builder) effects(s *Shape, paths []shape.Path, box compose.Rect, m comp
 		if s.FlipV {
 			rot += 180
 		}
-		text = group(then(aboutCentre(box, rot, false, false), invertOr(sm)), txt.frags)
+		text = group(then(skewedAboutCentre(box, rot, s.SkewX, false, false), invertOr(sm)), txt.frags)
 	}
 	under, drawn := b.paintEffects(s, own, text, toSlide, effectsTwice(s))
 	if drawn != nil {
@@ -339,7 +339,7 @@ func (b *builder) contentEffects(s *Shape, frags []compose.Fragment, m compose.M
 	if s.SoftEdge > 0 {
 		b.warn(CodeEffect, "the soft edge of "+quote(s.Name)+" is not drawn")
 	}
-	sm := aboutCentre(s.Box, s.Rotation, s.FlipH, s.FlipV)
+	sm := skewedAboutCentre(s.Box, s.Rotation, s.SkewX, s.FlipH, s.FlipV)
 	t := *s
 	t.SoftEdge = 0
 	under, _ := b.paintEffects(&t, withoutText(frags, 0), nil, then(sm, m), false)
