@@ -1,8 +1,13 @@
 package pptx
 
 import (
+	"context"
 	"fmt"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -77,6 +82,33 @@ func (r *reader) slideWarnings(part string, root *ooxml.Element) {
 			r.warn("unsupported-content", "slide comments do not print")
 		}
 	}
+}
+
+// slideWindow returns the slide's background picture bg, stretched over
+// the slide, as seen through a shape of box: stretched over any area, it
+// paints the part of the background the box covers, as Impress fills a
+// shape with the slide's background (19.3.1.43 sp useBgFill).
+//
+// # Corpus evidence
+//
+//   - pptx: sd/tdf123684's text box filled with the slide's picture
+//     background prints invisible over it.
+func (r *reader) slideWindow(bg *layout.Picture, box compose.Rect) *layout.Picture {
+	w, h := r.slideW, r.slideH
+	if bg == nil || box.Width <= 0 || box.Height <= 0 || w <= 0 || h <= 0 {
+		return bg
+	}
+	return &layout.Picture{Width: box.Width, Height: box.Height, NoRatio: true, Vector: func(ctx context.Context, area compose.Rect) []compose.Fragment {
+		sx, sy := area.Width/box.Width, area.Height/box.Height
+		full := compose.Rect{X: area.X - box.X*sx, Y: area.Y - box.Y*sy, Width: w * sx, Height: h * sy}
+		var content []compose.Fragment
+		if bg.Vector != nil {
+			content = bg.Vector(ctx, full)
+		} else {
+			content = []compose.Fragment{&compose.Image{Rect: full, Source: bg.Source}}
+		}
+		return []compose.Fragment{&compose.Group{Clip: &compose.Path{Ops: shape.RectOps(area)}, Content: content}}
+	}}
 }
 
 // background returns the background of a slide: the first of the slide's,

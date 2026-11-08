@@ -323,6 +323,9 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 		if s.Fill.Kind == slides.FillNone {
 			s.Fill = slides.Fill{Kind: slides.FillSolid, Color: css.Color{R: 1, G: 1, B: 1, A: 1}}
 		}
+		if s.Fill.Kind == slides.FillPicture && !s.Fill.Tile && c.group == nil {
+			s.Fill.Picture = r.slideWindow(s.Fill.Picture, s.Box)
+		}
 	}
 	s.Line = r.shapeLine(fc, chain, style)
 	turn := s.Rotation

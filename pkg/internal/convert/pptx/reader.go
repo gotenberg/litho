@@ -116,6 +116,8 @@ type reader struct {
 	// the jumps of hyperlinks.
 	slideAt         map[string]int
 	slideCount, cur int
+	// slideW and slideH are the slide size in points.
+	slideW, slideH float64
 	// shrinkGroupCount counts the shrink groups of the SmartArt
 	// diagrams read, the last one's id.
 	shrinkGroupCount int
@@ -169,6 +171,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*slides.D
 	if w, h, ok := size(root.Child(nsP, "notesSz")); ok {
 		doc.NotesWidth, doc.NotesHeight = w, h
 	}
+	r.slideW, r.slideH = doc.Width, doc.Height
 	r.defaultText = root.Child(nsP, "defaultTextStyle")
 	r.readTableStyles()
 	cp := pkg.CoreProperties(ctx)
