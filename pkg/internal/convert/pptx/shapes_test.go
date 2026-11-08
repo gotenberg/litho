@@ -138,7 +138,7 @@ func TestShapes_FillsAndLines(t *testing.T) {
 func TestShapes_BackgroundGroupPictureConnector(t *testing.T) {
 	t.Parallel()
 	pic := `<p:pic><p:nvPicPr><p:cNvPr id="4" name="Pic"><a:hlinkClick r:id="rIdH"/></p:cNvPr><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rIdP"/><a:srcRect l="25000"/><a:stretch/></p:blipFill>` +
-		`<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="38100" cy="25400"/></a:xfrm><a:prstGeom prst="rect"/></p:spPr></p:pic>`
+		`<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="38100" cy="25400"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="00FF00"/></a:solidFill></p:spPr></p:pic>`
 	round := `<p:pic><p:nvPicPr><p:cNvPr id="5" name="Round"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rIdP"/></p:blipFill>` +
 		`<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="38100" cy="25400"/></a:xfrm><a:prstGeom prst="ellipse"/></p:spPr></p:pic>`
 	group := `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="6" name="G"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="127000" y="127000"/><a:ext cx="254000" cy="254000"/><a:chOff x="0" y="0"/><a:chExt cx="127000" cy="127000"/></a:xfrm><a:solidFill><a:srgbClr val="FFFF00"/></a:solidFill></p:grpSpPr>` +
@@ -163,6 +163,9 @@ func TestShapes_BackgroundGroupPictureConnector(t *testing.T) {
 	p := shapeNamed(s.Shapes, "Pic")
 	if p == nil || p.Kind != slides.KindPicture || p.Picture == nil || p.Href != "https://example.com/pic" {
 		t.Fatalf("picture %+v", p)
+	}
+	if p.Fill.Kind != slides.FillSolid || !sameColor(p.Fill.Color, rgb(0x00FF00)) {
+		t.Errorf("picture's own fill %+v", p.Fill)
 	}
 	// A quarter cut off the left of a 3-point-wide picture.
 	if w := p.Picture.Width; w < 2.24 || w > 2.26 {
