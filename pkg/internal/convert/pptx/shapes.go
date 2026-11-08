@@ -2,6 +2,7 @@ package pptx
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -293,13 +294,20 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 
 // splitText returns a diagram drawing's shape whose text sits in a box of
 // its own (MS-ODRAWXML, 2.4.2 txXfrm) as a group of the shape without its
-// text and a shape of the text alone in that box.
+// text and a shape of the text alone in that box. The box's rotation
+// turns the text further than the shape, as Impress adds it to the
+// shape's.
+//
+// # Corpus evidence
+//
+//   - pptx: sd/smartart-rotation2's three shapes turned half a turn with
+//     their txXfrm turned half a turn print their text upright.
 func splitText(s *slides.Shape, tx *ooxml.Element) *slides.Shape {
 	p, ok := readXfrm(tx)
 	if !ok {
 		return s
 	}
-	text := &slides.Shape{Kind: slides.KindGeometry, Name: s.Name, Box: p.box, Rotation: p.rot, FlipH: p.flipH, FlipV: p.flipV, Text: s.Text}
+	text := &slides.Shape{Kind: slides.KindGeometry, Name: s.Name, Box: p.box, Rotation: math.Mod(s.Rotation+p.rot, 360), FlipH: p.flipH, FlipV: p.flipV, Text: s.Text}
 	shape := *s
 	shape.Text = nil
 	g := &slides.Shape{Kind: slides.KindGroup, Name: s.Name, Kids: []*slides.Shape{&shape, text}}
