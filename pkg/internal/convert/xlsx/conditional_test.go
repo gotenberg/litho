@@ -28,8 +28,8 @@ func TestRead_ConditionalFormats(t *testing.T) {
 		`<cfRule type="top10" priority="4" percent="1" rank="50"/><cfRule type="top10" priority="5" bottom="1" rank="2"/>` +
 		`<cfRule type="aboveAverage" priority="6" aboveAverage="0"/><cfRule type="duplicateValues" priority="7"/><cfRule type="containsBlanks" priority="8"/>` +
 		`<cfRule type="expression" priority="9"><formula>MOD(ROW(),2)=0</formula></cfRule><cfRule type="iconSet" priority="10"><iconSet><cfvo type="min"/></iconSet></cfRule>` +
-		`<cfRule type="colorScale" priority="11"><colorScale><cfvo type="percentile" val="50"/><cfvo type="max"/><color rgb="FFFF0000"/><color rgb="FF0000FF"/></colorScale></cfRule>` +
-		`<cfRule type="colorScale" priority="12"><colorScale><cfvo type="min"/><cfvo type="formula" val="$A$1*2"/><color rgb="FFFF0000"/><color rgb="FF0000FF"/></colorScale></cfRule>` +
+		`<cfRule type="colorScale" priority="11"><colorScale><cfvo type="percentile" val="50"/><cfvo type="num" val="$A$2"/><color rgb="FFFF0000"/><color rgb="FF0000FF"/></colorScale></cfRule>` +
+		`<cfRule type="colorScale" priority="12"><colorScale><cfvo type="num" val="$A$3"/><cfvo type="formula" val="$A$1*2"/><color rgb="FFFF0000"/><color rgb="FF0000FF"/></colorScale></cfRule>` +
 		`<cfRule type="dataBar" priority="13"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF638EC6"/></dataBar>` +
 		`<extLst><ext uri="{B025F937-C7B1-47D3-B67F-A62EFF666E3E}" xmlns:x14="` + nsX14 + `"><x14:id>{1}</x14:id></ext></extLst></cfRule>` +
 		`<cfRule type="dataBar" priority="14"><dataBar><cfvo type="percent" val="50"/><cfvo type="num" val="10"/><color rgb="FF00FF00"/></dataBar></cfRule>` +
@@ -93,7 +93,7 @@ func TestRead_ConditionalFormats(t *testing.T) {
 		{sheet.RuleBlanks, "", nil},
 		{sheet.RuleExpression, "", nil},
 		{sheet.RuleIconSet, "", nil},
-		{sheet.RuleColorScale, "", []float64{1.5, 3}},
+		{sheet.RuleColorScale, "", []float64{1.5, 2}},
 		{sheet.RuleExpression, "", nil},
 		{sheet.RuleDataBar, "", []float64{-1, 3}},
 		{sheet.RuleDataBar, "", []float64{1, 10}},

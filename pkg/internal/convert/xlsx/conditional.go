@@ -348,8 +348,9 @@ func (r *reader) cellValue(doc *sheet.Document, own *sheet.Sheet, name string, r
 
 // cfvos resolves the thresholds of a colour scale or a data bar (18.3.1.11
 // cfvo; MS-XLSX, 2.6.17 CT_Cfvo): each to a number over the range's
-// numbers; false when one is a formula or the range holds no number for a
-// threshold that needs one.
+// numbers, a value naming an absolute cell of the sheet being that cell's
+// number; false when one is another formula or the range holds no number
+// for a threshold that needs one.
 func (w *sheetReader) cfvos(e *ooxml.Element, ns, valAttr string, ranges []sheet.Range) ([]sheet.Value, bool) {
 	var nums []float64
 	read := false
@@ -364,13 +365,21 @@ func (w *sheetReader) cfvos(e *ooxml.Element, ns, valAttr string, ranges []sheet
 			raw = textOf(k.Child(nsXM, "f"))
 		}
 		v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+		if err != nil && strings.TrimSpace(raw) != "" {
+			// A threshold naming a cell of this sheet takes its number.
+			if name, row, col, ok := cellOperand(raw, nil); ok && (name == "" || strings.EqualFold(name, w.sh.Name)) {
+				if c, ok := w.r.cellValue(nil, w.sh, "", row, col, false); ok && c.Kind == sheet.Number {
+					v, err = c.Number, nil
+				}
+			}
+		}
 		switch typ {
 		case "num", "percent", "percentile":
 			if err != nil {
 				return nil, false
 			}
 		case "formula":
-			// A constant formula is its number.
+			// A constant formula, or one naming a cell, is its number.
 			if err != nil {
 				return nil, false
 			}
