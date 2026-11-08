@@ -27,7 +27,7 @@ func FuzzChartFromElement(f *testing.F) {
 		if err != nil {
 			return
 		}
-		c, err := ChartFromElement(root, nil, len(data)%2 == 0)
+		c, err := ChartFromElement(root, nil, ChartOptions{MSO2007: len(data)%2 == 0, Presentation: len(data)%3 == 0})
 		if err != nil {
 			return
 		}

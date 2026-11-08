@@ -40,7 +40,7 @@ func readChart(t *testing.T, xml string, mso2007 bool) *chart.Chart {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	c, err := ChartFromElement(root, nil, mso2007)
+	c, err := ChartFromElement(root, nil, ChartOptions{MSO2007: mso2007})
 	if err != nil {
 		t.Fatalf("ChartFromElement: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestChartFromElement_Warnings(t *testing.T) {
 			t.Errorf("warnings %q lack %q", got, want)
 		}
 	}
-	if _, err := ChartFromElement(&Element{Space: NSChart, Local: "chart"}, nil, false); err == nil {
+	if _, err := ChartFromElement(&Element{Space: NSChart, Local: "chart"}, nil, ChartOptions{}); err == nil {
 		t.Error("read a part that is not a chart space")
 	}
 }
@@ -246,5 +246,51 @@ func TestParseChart_ThemeAndOffice2007(t *testing.T) {
 	}
 	if _, err := ParseChart(context.Background(), pkg, "word/charts/missing.xml"); !IsMissing(err) {
 		t.Errorf("missing part: err = %v", err)
+	}
+}
+
+func TestChartFromElement_AutomaticFrames(t *testing.T) {
+	plot := `<c:barChart><c:barDir val="col"/>` + ser(0, "A", "", "1") + `</c:barChart>`
+	tests := []struct {
+		name               string
+		style              string
+		presentation       bool
+		areaFill, areaLine bool
+		plotFill           bool
+		plotGrey           float64
+	}{
+		{name: "spreadsheet style 2", style: `<c:style val="2"/>`, areaFill: true, areaLine: true, plotFill: true, plotGrey: 1},
+		{name: "presentation style 2", style: `<c:style val="2"/>`, presentation: true},
+		{name: "presentation style 47", style: `<c:style val="47"/>`, presentation: true, areaFill: true, plotFill: true, plotGrey: 0.25},
+		{name: "spreadsheet style 34", style: `<c:style val="34"/>`, areaFill: true, areaLine: true, plotFill: true, plotGrey: 0.89},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root, err := Parse(context.Background(), []byte(chartXML(tt.style, "", plot)), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			c, err := ChartFromElement(root, nil, ChartOptions{Presentation: tt.presentation})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (c.Area.Fill != nil) != tt.areaFill || (c.Area.Border != nil) != tt.areaLine {
+				t.Errorf("chart area = %+v", c.Area)
+			}
+			if (c.PlotArea.Fill != nil) != tt.plotFill {
+				t.Fatalf("plot area = %+v", c.PlotArea)
+			}
+			if tt.plotFill && math.Abs(c.PlotArea.Fill.Color.R-tt.plotGrey) > 0.02 {
+				t.Errorf("plot area grey = %.3f, want %.3f", c.PlotArea.Fill.Color.R, tt.plotGrey)
+			}
+		})
+	}
+}
+
+func TestChartFromElement_PointTakesSeriesFill(t *testing.T) {
+	plot := `<c:pieChart><c:varyColors val="1"/>` + ser(0, "A", `<c:spPr><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></c:spPr><c:dPt><c:idx val="0"/></c:dPt><c:dPt><c:idx val="1"/><c:spPr><a:solidFill><a:srgbClr val="0000FF"/></a:solidFill></c:spPr></c:dPt>`, "1", "2", "3") + `</c:pieChart>`
+	s := readChart(t, chartXML("", "", plot), false).Groups[0].Series[0]
+	if len(s.Points) != 2 || s.Points[0].Fill == nil || s.Points[0].Fill.Color.R != 1 || s.Points[1].Fill == nil || s.Points[1].Fill.Color.B != 1 {
+		t.Errorf("points = %+v", s.Points)
 	}
 }

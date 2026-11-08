@@ -71,7 +71,9 @@ func ParseChart(ctx context.Context, pkg *Package, part string) (*chart.Chart, e
 		return nil, err
 	}
 	theme := officeTheme
+	opts := ChartOptions{MSO2007: isMSO2007(ctx, pkg)}
 	if main, err := pkg.MainPart(); err == nil {
+		opts.Presentation = strings.HasSuffix(main, "/presentation.xml")
 		if name := pkg.RelatedPart(main, RelTheme); name != "" {
 			if troot, err := pkg.ParseXML(ctx, name, nil); err == nil {
 				if t := ParseTheme(troot); len(t.Colors) > 0 {
@@ -80,7 +82,7 @@ func ParseChart(ctx context.Context, pkg *Package, part string) (*chart.Chart, e
 			}
 		}
 	}
-	c, err := ChartFromElement(root, theme, isMSO2007(ctx, pkg))
+	c, err := ChartFromElement(root, theme, opts)
 	if err != nil {
 		return nil, fmt.Errorf("reading the chart %s: %w", part, err)
 	}
@@ -127,17 +129,30 @@ func isMSO2007(ctx context.Context, pkg *Package) bool {
 	return strings.HasPrefix(app, "Microsoft") && strings.HasPrefix(ver, "12.")
 }
 
+// ChartOptions says what [ChartFromElement] knows of the package a chart
+// comes from.
+type ChartOptions struct {
+	// MSO2007 reads a file Office 2007 saved, with its defaults.
+	MSO2007 bool
+	// Presentation reads a chart of a presentation, whose chart area and
+	// two-dimensional plot area are transparent and unframed by default
+	// for the chart styles 1 to 32 (LibreOffice's Impress import:
+	// PptGraphicHelper's default chart area fill, ObjectFormatter's
+	// chart space line).
+	Presentation bool
+}
+
 // ChartFromElement reads a parsed c:chartSpace element as [ParseChart]
 // does, with theme for the scheme colours (nil for Office's default) and
-// mso2007 for a file Office 2007 saved.
-func ChartFromElement(root *Element, theme *Theme, mso2007 bool) (*chart.Chart, error) {
+// opts for the package's defaults.
+func ChartFromElement(root *Element, theme *Theme, opts ChartOptions) (*chart.Chart, error) {
 	if !root.Is(NSChart, "chartSpace") {
 		return nil, errNotChart
 	}
 	if theme == nil || len(theme.Colors) == 0 {
 		theme = officeTheme
 	}
-	p := &chartReader{theme: theme, style: defaultChartStyle, c: &chart.Chart{}, mso2007: mso2007}
+	p := &chartReader{theme: theme, style: defaultChartStyle, c: &chart.Chart{}, mso2007: opts.MSO2007, impress: opts.Presentation}
 	if v, ok := Int(childVal(root, "style")); ok && v >= 1 && v <= 48 {
 		p.style = v
 	}
@@ -154,6 +169,8 @@ type chartReader struct {
 	// mso2007 reads absent booleans with Office 2007's defaults: no
 	// varied colours, no smoothing, an automatic title.
 	mso2007 bool
+	// impress reads a presentation's chart (ChartOptions.Presentation).
+	impress bool
 	// global is the chart space's text properties, which every text
 	// inherits.
 	global textProps
@@ -292,26 +309,44 @@ func (p *chartReader) palette(accents []string) []compose.Color {
 	}
 }
 
-// autoFrame returns the automatic frame of the chart area (white with a
-// light grey border, oox's default chart area line) or the plot area (the
-// background colour, no border).
+// autoFrame returns the automatic frame of the chart area or the plot
+// area for the chart's style (oox's spChartSpaceFill and
+// spPlotArea2dFills): the chart area takes the background colour (styles
+// 1 to 32), the light colour (33 to 40) or the dark colour (41 to 48) with
+// a light grey border, oox's default chart area line; the plot area the
+// background colour (1 to 32), the dark colour tinted to 20% (33 and 34),
+// the style's accent tinted to 20% (35 to 40) or the dark colour tinted to
+// 95% (41 to 48), with no border. A presentation's chart area has no
+// border, and for styles 1 to 32 neither area has a fill.
 func (p *chartReader) autoFrame(area bool) chart.Frame {
-	fillName := "bg1"
-	switch {
-	case p.style >= 41:
-		fillName = "dk1"
-	case p.style >= 33:
-		fillName = "lt1"
-	}
 	f := chart.Frame{}
-	if c, ok := p.theme.Color(fillName); ok {
-		f.Fill = &chart.Paint{Color: toCompose(c)}
+	col := func(name string, tint float64) *chart.Paint {
+		c, ok := p.theme.Color(name)
+		if !ok {
+			return nil
+		}
+		if tint < 1 {
+			c = linearTint(c, tint)
+		}
+		return &chart.Paint{Color: toCompose(c)}
 	}
-	if area {
+	switch {
+	case p.impress && p.style <= 32:
+	case area && p.style >= 41:
+		f.Fill = col("dk1", 1)
+	case area && p.style >= 33:
+		f.Fill = col("lt1", 1)
+	case p.style <= 32:
+		f.Fill = col("bg1", 1)
+	case p.style <= 34:
+		f.Fill = col("dk1", 0.2)
+	case p.style <= 40:
+		f.Fill = col("accent"+strconv.Itoa(p.style-34), 0.2)
+	default:
+		f.Fill = col("dk1", 0.95)
+	}
+	if area && !p.impress {
 		f.Border = &chart.Stroke{Color: toCompose(hexColor(0xd9d9d9)), Width: 0.75}
-	} else if p.style > 32 {
-		dk, _ := p.theme.Color("dk1")
-		f.Fill = &chart.Paint{Color: toCompose(linearTint(dk, 0.2))}
 	}
 	return f
 }
