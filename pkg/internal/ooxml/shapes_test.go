@@ -61,6 +61,16 @@ func TestVMLPreset(t *testing.T) {
 			t.Errorf("spt %d: %q, want %q", spt, got, want)
 		}
 	}
+	for spt, p := range vmlPresets {
+		if !shape.Known(&shape.Geometry{Preset: p}) || p == "" {
+			t.Errorf("spt %d maps onto %q, which the engine does not draw", spt, p)
+		}
+	}
+	for _, spt := range []int{136, 24} {
+		if _, ok := VMLPreset(spt); ok {
+			t.Errorf("WordArt type %d has a preset", spt)
+		}
+	}
 	if _, ok := VMLPreset(14); ok {
 		t.Error("the thick arrow has a preset")
 	}

@@ -2,11 +2,13 @@ package ooxml
 
 // vmlPresets maps the shape type numbers of VML (ECMA-376 Part 4, the
 // o:spt attribute of v:shape and v:shapetype, the binary format's MSO_SPT
-// values) onto the DrawingML
-// preset of the same shape, as LibreOffice maps them: the type's name in
-// svx's EnhancedCustomShapeTypeNames, then GetOOXMLPresetGeometry of
-// filter/source/msfilter/util.cxx. The thick arrow (14), the balloon
-// (17), the seal (18) and the picture frame (75) have no preset.
+// values) onto the DrawingML preset of the same shape, as LibreOffice
+// maps them: the type's name in svx's EnhancedCustomShapeTypeNames, then
+// GetOOXMLPresetGeometry of filter/source/msfilter/util.cxx. The thick
+// arrow (14), the balloon (17), the seal (18), the picture frame (75) and
+// the host control (201) have no preset, and the WordArt types (24 to 31,
+// 136 to 175), which LibreOffice maps onto the text warps of 20.1.10.76
+// ST_TextShapeType, are not shapes.
 var vmlPresets = map[int]string{ //nolint:gochecknoglobals // a read-only table, LibreOffice's MSO_SPT to OOXML mapping.
 	1:   "rect",                       // rectangle
 	2:   "roundRect",                  // round-rectangle
@@ -28,14 +30,6 @@ var vmlPresets = map[int]string{ //nolint:gochecknoglobals // a read-only table,
 	21:  "plaque",                     // mso-spt21
 	22:  "can",                        // can
 	23:  "donut",                      // ring
-	24:  "textPlain",                  // mso-spt24
-	25:  "textStop",                   // mso-spt25
-	26:  "textTriangle",               // mso-spt26
-	27:  "textCanDown",                // mso-spt27
-	28:  "textWave1",                  // mso-spt28
-	29:  "textArchUpPour",             // mso-spt29
-	30:  "textCanDown",                // mso-spt30
-	31:  "textArchUp",                 // mso-spt31
 	32:  "straightConnector1",         // mso-spt32
 	33:  "bentConnector2",             // mso-spt33
 	34:  "bentConnector3",             // mso-spt34
@@ -139,46 +133,6 @@ var vmlPresets = map[int]string{ //nolint:gochecknoglobals // a read-only table,
 	133: "flowChartMagneticDrum",      // flowchart-direct-access-storage
 	134: "flowChartDisplay",           // flowchart-display
 	135: "flowChartDelay",             // flowchart-delay
-	136: "textPlainText",              // fontwork-plain-text
-	137: "textStop",                   // fontwork-stop
-	138: "textTriangle",               // fontwork-triangle-up
-	139: "textTriangleInverted",       // fontwork-triangle-down
-	140: "textChevron",                // fontwork-chevron-up
-	141: "textChevronInverted",        // fontwork-chevron-down
-	142: "textRingInside",             // mso-spt142
-	143: "textRingOutside",            // mso-spt143
-	144: "textArchUpCurve",            // fontwork-arch-up-curve
-	145: "textArchDownCurve",          // fontwork-arch-down-curve
-	146: "textCircleCurve",            // fontwork-circle-curve
-	147: "textButtonCurve",            // fontwork-open-circle-curve
-	148: "textArchUpPour",             // fontwork-arch-up-pour
-	149: "textArchDownPour",           // fontwork-arch-down-pour
-	150: "textCirclePour",             // fontwork-circle-pour
-	151: "textButtonPour",             // fontwork-open-circle-pour
-	152: "textCurveUp",                // fontwork-curve-up
-	153: "textCurveDown",              // fontwork-curve-down
-	154: "textCascadeUp",              // fontwork-fade-up-and-right
-	155: "textCascadeDown",            // fontwork-fade-up-and-left
-	156: "textWave1",                  // fontwork-wave
-	157: "textWave2",                  // mso-spt157
-	158: "textWave3",                  // mso-spt158
-	159: "textWave4",                  // mso-spt159
-	160: "textInflate",                // fontwork-inflate
-	161: "textDeflate",                // mso-spt161
-	162: "textInflateBottom",          // mso-spt162
-	163: "textDeflateBottom",          // mso-spt163
-	164: "textInflateTop",             // mso-spt164
-	165: "textDeflateTop",             // mso-spt165
-	166: "textDeflateInflate",         // mso-spt166
-	167: "textDeflateInflateDeflate",  // mso-spt167
-	168: "textFadeRight",              // fontwork-fade-right
-	169: "textFadeLeft",               // fontwork-fade-left
-	170: "textFadeUp",                 // fontwork-fade-up
-	171: "textFadeDown",               // fontwork-fade-down
-	172: "textSlantUp",                // fontwork-slant-up
-	173: "textSlantDown",              // fontwork-slant-down
-	174: "textCanUp",                  // mso-spt174
-	175: "textCanDown",                // mso-spt175
 	176: "flowChartAlternateProcess",  // flowchart-alternate-process
 	177: "flowChartOffpageConnector",  // flowchart-off-page-connector
 	178: "callout1",                   // mso-spt178
@@ -204,7 +158,6 @@ var vmlPresets = map[int]string{ //nolint:gochecknoglobals // a read-only table,
 	198: "actionButtonDocument",       // mso-spt198
 	199: "actionButtonSound",          // mso-spt199
 	200: "actionButtonMovie",          // mso-spt200
-	201: "hostControl",                // mso-spt201
 	202: "rect",                       // mso-spt202
 }
 
