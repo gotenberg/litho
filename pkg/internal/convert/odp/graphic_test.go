@@ -112,7 +112,7 @@ func TestRead_Line(t *testing.T) {
 		want        slides.Line
 	}{
 		{"none", `draw:stroke="none"`, slides.Line{}},
-		{"pool default hairline", ``, slides.Line{Width: hairline, Color: cssColor(poolStroke)}},
+		{"pool default hairline", ``, slides.Line{Width: hairline, Hairline: true, Color: cssColor(poolStroke)}},
 		{"solid", `draw:stroke="solid" svg:stroke-width="0.1cm" svg:stroke-color="#ff0000" svg:stroke-linecap="square" draw:stroke-linejoin="miter"`,
 			slides.Line{Width: cm(0.1), Color: css.Color{R: 1, A: 1}, Cap: slides.CapSquare, Join: slides.JoinMiter}},
 		// Measured on the pinned LibreOffice: d1 at 0.1 cm prints the dash
@@ -131,7 +131,7 @@ func TestRead_Line(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := firstShape(t, styledRect(dashes, tt.props)).Line
 			w := tt.want
-			if !near(got.Width, w.Width) || got.Color != w.Color || !nearAll(got.Dash, w.Dash) || got.Cap != w.Cap || got.Join != w.Join ||
+			if !near(got.Width, w.Width) || got.Hairline != w.Hairline || got.Color != w.Color || !nearAll(got.Dash, w.Dash) || got.Cap != w.Cap || got.Join != w.Join ||
 				got.Head.Kind != w.Head.Kind || !near(got.Head.Width, w.Head.Width) || !near(got.Head.Length, w.Head.Length) || got.Tail != w.Tail {
 				t.Errorf("line = %+v, want %+v", got, w)
 			}
@@ -151,6 +151,8 @@ func TestRead_TextBodyProps(t *testing.T) {
 		{"bottom to top", `style:writing-mode="bt-lr"`, "frame", slides.TextBody{Wrap: true, Autofit: slides.AutofitGrow, Vertical: css.SidewaysLR}},
 		{"shape no wrap", `fo:wrap-option="no-wrap" draw:textarea-vertical-align="middle"`, "shape", slides.TextBody{Anchor: slides.AnchorMiddle}},
 		{"shape grows", `draw:auto-grow-height="true" fo:wrap-option="wrap"`, "shape", slides.TextBody{Wrap: true, Autofit: slides.AutofitGrow}},
+		{"clip", `loext:overflow-behavior="clip"`, "frame", slides.TextBody{Wrap: true, Autofit: slides.AutofitGrow, Clip: true}},
+		{"clip in the style namespace", `style:overflow-behavior="clip"`, "frame", slides.TextBody{Wrap: true, Autofit: slides.AutofitGrow, Clip: true}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -168,7 +170,7 @@ func TestRead_TextBodyProps(t *testing.T) {
 			tb := firstShape(t, f).Text
 			w := tt.want
 			if tb == nil || !nearAll(tb.Insets[:], w.Insets[:]) || tb.Anchor != w.Anchor || tb.Wrap != w.Wrap || tb.Autofit != w.Autofit ||
-				tb.Columns != w.Columns || !near(tb.ColumnGap, w.ColumnGap) || tb.Vertical != w.Vertical {
+				tb.Columns != w.Columns || !near(tb.ColumnGap, w.ColumnGap) || tb.Vertical != w.Vertical || tb.Clip != w.Clip {
 				t.Errorf("text body = %+v, want %+v", tb, w)
 			}
 		})

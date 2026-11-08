@@ -22,10 +22,11 @@ var (
 	poolStroke = odf.Color{R: 0x34, G: 0x65, B: 0xa4}
 )
 
-// hairline is the width a stroke of svg:stroke-width 0 is drawn at.
-// Impress writes such a stroke with a PDF line width of 0, the thinnest
-// line the device draws; the model strokes nothing at 0, so the reader
-// gives it half a point, a device pixel at 150 dpi.
+// hairline is the width a stroke of svg:stroke-width 0 carries beside
+// Line.Hairline. Impress writes such a stroke with a PDF line width of 0,
+// the thinnest line the device draws, which Hairline asks for; the width
+// sizes its arrowheads and dashes, and draws the line where a builder
+// does not honour Hairline: half a point, a device pixel at 150 dpi.
 const hairline = 0.5
 
 // cssColor converts an ODF colour to an opaque css.Color.
@@ -285,7 +286,7 @@ func (r *reader) line(p odf.Props) slides.Line {
 		}
 	}
 	if w == 0 {
-		ln.Width = hairline
+		ln.Width, ln.Hairline = hairline, true
 	}
 	switch p.Get("svg:stroke-linecap") {
 	case "round":
@@ -405,6 +406,10 @@ func (r *reader) textBodyProps(tb *slides.TextBody, p odf.Props, frame bool) {
 	case fit == "true", fit == "all":
 		r.warn("fit-to-size", "text stretched to its shape's size is drawn at its own size")
 	}
+	// LibreOffice's extension overflow-behavior clip, which it writes in
+	// the loext namespace and reads in the style one too, cuts the text
+	// at the shape's text area.
+	tb.Clip = p.Get("loext:overflow-behavior") == "clip" || p.Get("style:overflow-behavior") == "clip"
 	if n, err := strconv.Atoi(p.Get("fo:column-count")); err == nil && n > 1 {
 		tb.Columns = min(n, maxColumns)
 		tb.ColumnGap, _ = odf.Length(p.Get("fo:column-gap"))
