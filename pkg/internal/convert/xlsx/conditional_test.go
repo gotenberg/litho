@@ -94,7 +94,7 @@ func TestRead_ConditionalFormats(t *testing.T) {
 		{sheet.RuleExpression, "", nil},
 		{sheet.RuleIconSet, "", nil},
 		{sheet.RuleColorScale, "", []float64{1.5, 2}},
-		{sheet.RuleExpression, "", nil},
+		{sheet.RuleColorScale, "", nil},
 		{sheet.RuleDataBar, "", []float64{-1, 3}},
 		{sheet.RuleDataBar, "", []float64{1, 10}},
 	}
@@ -122,6 +122,10 @@ func TestRead_ConditionalFormats(t *testing.T) {
 	}
 	if rules[0].Values[0].Text != "ab" || rules[6].Formula != "MOD(ROW(),2)=0" {
 		t.Errorf("text %+v, expression %+v", rules[0], rules[6])
+	}
+	// A threshold formula is left for the builder.
+	if v := rules[9].Values; len(v) != 2 || v[1] != (sheet.Value{Kind: sheet.Text, Text: "=$A$1*2"}) {
+		t.Errorf("formula threshold %+v", v)
 	}
 	if s := rules[8].Scale; len(s) != 2 || s[0] != rgb(0xFF0000) || s[1] != rgb(0x0000FF) {
 		t.Errorf("scale %+v", s)

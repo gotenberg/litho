@@ -380,9 +380,11 @@ func (w *sheetReader) cfvos(e *ooxml.Element, ns, valAttr string, ranges []sheet
 				return nil, false
 			}
 		case "formula":
-			// A constant formula, or one naming a cell, is its number.
+			// A constant formula, or one naming a cell, is its number;
+			// another is left for the builder to compute.
 			if err != nil {
-				return nil, false
+				out = append(out, sheet.Value{Kind: sheet.Text, Text: "=" + strings.TrimSpace(raw)})
+				continue
 			}
 			typ = "num"
 		}
