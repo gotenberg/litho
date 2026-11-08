@@ -325,3 +325,23 @@ func TestConvert_TextAlignStartEndAreAbsolute(t *testing.T) {
 		})
 	}
 }
+
+func TestConvert_FrameCentredOnParagraph(t *testing.T) {
+	// A frame anchored to its paragraph and centred on it sits in the
+	// middle of the content area, whether text runs through it or wraps
+	// beside it (LibreOffice measured, odfexport/relh-page.odt and
+	// odfimport/fdo90130-1.odt).
+	margin := 2 * 72 / 2.54
+	width := 21*72/2.54 - 2*margin
+	for _, wrap := range []string{"run-through", "parallel"} {
+		t.Run(wrap, func(t *testing.T) {
+			auto := `<style:style style:name="fr" style:family="graphic"><style:graphic-properties style:wrap="` + wrap + `" style:horizontal-pos="center" style:horizontal-rel="paragraph" style:vertical-pos="top" style:vertical-rel="paragraph" fo:padding="0cm" fo:border="none"/></style:style>`
+			body := `<text:p><draw:frame draw:style-name="fr" text:anchor-type="paragraph" svg:width="4cm" svg:height="2cm"><draw:text-box><text:p>In</text:p></draw:text-box></draw:frame></text:p>`
+			rs := runs(convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{}).Pages[0])
+			want := margin + (width-4*72/2.54)/2
+			if len(rs) == 0 || !near(rs[0].x, want, 0.5) {
+				t.Errorf("frame text at %+v, want x %.2f", rs, want)
+			}
+		})
+	}
+}

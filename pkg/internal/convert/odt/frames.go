@@ -377,6 +377,8 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 			st.AnchorPage = g.page
 			x, y := b.pagePosition(g)
 			st.Left, st.Top = css.Pts(x), css.Pts(y)
+		case paraRel(g.hrel):
+			st.Left = css.Pts(alignX(g, b.contentWidth()))
 		}
 		st.Right, st.Bottom = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
 		st.ZIndex = css.ZIndex{Level: 0}
@@ -399,6 +401,11 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 	}
 	if g.hpos == "from-left" || g.hpos == "" {
 		st.Margin[css.Left] = css.Pts(margins[css.Left] + max(g.x, 0))
+	}
+	if g.hpos == "center" && g.wrap != "none" && g.hasW && paraRel(g.hrel) {
+		// A float cannot be centred: it floats left, as far in as Writer
+		// centres it, the text wrapping on its right.
+		st.Margin[css.Left] = css.Pts(max(alignX(g, b.contentWidth()), 0))
 	}
 	if g.vpos == "from-top" || g.vpos == "" {
 		st.Margin[css.Top] = css.Pts(margins[css.Top] + max(g.y, 0))
@@ -587,19 +594,7 @@ func (b *builder) pinFloats(kids []*layout.Node, p paraState) {
 		}
 		pg := b.currentGeom()
 		area := pg.box.Width - pg.box.Margin[css.Left] - pg.box.Margin[css.Right] - p.margin[css.Left] - p.margin[css.Right]
-		w := 0.0
-		if g.hasW {
-			w = g.w
-		}
-		x := g.x
-		switch g.hpos {
-		case "left", "inside":
-			x = 0
-		case "center":
-			x = (area - w) / 2
-		case "right", "outside":
-			x = area - w
-		}
+		x := alignX(g, area)
 		y := g.y
 		if g.vpos == "top" {
 			y = 0
@@ -607,6 +602,43 @@ func (b *builder) pinFloats(kids []*layout.Node, p paraState) {
 		st.Left, st.Top = css.Pts(x), css.Pts(y)
 		st.Right, st.Bottom = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
 	}
+}
+
+// paraRel reports a style:horizontal-rel that measures from the
+// paragraph (ODF 1.3, Part 3, 20.291), the default for a frame anchored
+// to it.
+func paraRel(rel string) bool {
+	switch rel {
+	case "", "paragraph", "paragraph-content", "char":
+		return true
+	}
+	return false
+}
+
+// alignX returns the left edge of a frame of geometry g in an area of
+// width area that style:horizontal-pos aligns it in (ODF 1.3, Part 3,
+// 20.290): svg:x for from-left.
+func alignX(g frameGeom, area float64) float64 {
+	w := 0.0
+	if g.hasW {
+		w = g.w
+	}
+	switch g.hpos {
+	case "left", "inside":
+		return 0
+	case "center":
+		return (area - w) / 2
+	case "right", "outside":
+		return area - w
+	}
+	return g.x
+}
+
+// contentWidth returns the width of the content area of the master page
+// the body being built is on.
+func (b *builder) contentWidth() float64 {
+	pg := b.currentGeom()
+	return pg.box.Width - pg.box.Margin[css.Left] - pg.box.Margin[css.Right]
 }
 
 // frameMargins returns the fo:margin of a graphic style, the room the
