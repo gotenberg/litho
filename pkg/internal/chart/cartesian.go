@@ -274,6 +274,7 @@ func (rd *renderer) cartesian(avail compose.Rect) {
 	}
 	for _, g := range c.Groups {
 		if y := yOf[g]; y != nil {
+			rd.groupErrorBars(g, x, y)
 			rd.trendlines(g, x, y)
 		}
 	}

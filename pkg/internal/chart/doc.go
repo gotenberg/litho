@@ -31,9 +31,10 @@
 // extraction reads it.
 //
 // Trendlines fit their series by least squares, or average them, and
-// enter the legend after their series.
+// enter the legend after their series. Error bars mark each point's error
+// with a capped line.
 //
 // Not drawn: 3D perspective (a 3D chart draws flat), the equations of
-// trendlines, error bars, high-low lines and up-down bars, leader lines,
+// trendlines, high-low lines and up-down bars, leader lines,
 // multi-level categories (their levels join on one label).
 package chart

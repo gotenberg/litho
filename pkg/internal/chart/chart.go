@@ -216,6 +216,9 @@ type Series struct {
 	NoLegend bool
 	// Trendlines are the regression curves drawn over the series.
 	Trendlines []Trendline
+	// ErrorBars are the series' error bars, of the values and, on a
+	// scatter series, of the x values.
+	ErrorBars []ErrorBars
 	// Bins, when set, draws the series as a histogram: its values are
 	// counted into bins, which become the series' categories and values
 	// (MS-ODRAWXML, 2.24.3.5 CT_Binning).
@@ -274,6 +277,48 @@ type Trendline struct {
 	// series' ("Linear (Sales)").
 	Name string
 	// Line is the curve's line, nil for the series' colour.
+	Line *Stroke
+}
+
+// ErrorKind is how [ErrorBars] size a point's error (ECMA-376 Part 1,
+// 21.2.3.20 ST_ErrValType; ODF 1.3 Part 3, 20.32 chart:error-category).
+type ErrorKind uint8
+
+// The error kinds.
+const (
+	// ErrorFixed is Plus above and Minus below every point.
+	ErrorFixed ErrorKind = iota
+	// ErrorPercent is Plus percent of each point's value.
+	ErrorPercent
+	// ErrorMargin is Plus percent of the series' largest absolute value.
+	ErrorMargin
+	// ErrorCustom takes each point's errors from PlusData and MinusData.
+	ErrorCustom
+	// ErrorStdDev is Plus standard deviations of the series' values,
+	// ErrorStdErr Plus standard errors, ErrorVariance Plus variances.
+	ErrorStdDev
+	ErrorStdErr
+	ErrorVariance
+)
+
+// ErrorBars are the error bars of a series' values, or of its x values
+// (ECMA-376 Part 1, 21.2.2.55 errBars; ODF 1.3 Part 3, 11.16
+// chart:error-indicator).
+type ErrorBars struct {
+	// X bars the x values of a scatter series instead of its values.
+	X    bool
+	Kind ErrorKind
+	// Plus and Minus are the amounts of the fixed kind, or the
+	// percentage, margin or multiple of the others (Plus alone).
+	Plus, Minus float64
+	// PlusData and MinusData are a custom kind's errors, a point each.
+	PlusData, MinusData Data
+	// Up and Down draw the bar above and below the point (right and
+	// left for X).
+	Up, Down bool
+	// NoCap leaves out the short line across each bar's end.
+	NoCap bool
+	// Line is the bars' line, nil for a hairline in black.
 	Line *Stroke
 }
 
