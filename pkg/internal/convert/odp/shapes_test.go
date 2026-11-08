@@ -78,6 +78,8 @@ func TestRead_Geometry(t *testing.T) {
 		{"rounded rectangle", `<draw:rect draw:corner-radius="0.25cm" svg:width="2cm" svg:height="1cm"/>`,
 			&shape.Geometry{Preset: "roundRect", Adjust: []shape.Adjust{{Name: "adj", Value: 25000}}}},
 		{"circle", `<draw:circle svg:width="1cm" svg:height="1cm"/>`, &shape.Geometry{Preset: "ellipse"}},
+		{"section", `<draw:ellipse draw:kind="section" draw:start-angle="0" draw:end-angle="90" svg:width="1cm" svg:height="1cm"/>`,
+			&shape.Geometry{Preset: "pie", Adjust: []shape.Adjust{{Name: "adj1", Value: 270 * 60000}, {Name: "adj2", Value: 0}}}},
 		{"connector", `<draw:connector svg:x1="0cm" svg:y1="0cm" svg:x2="1cm" svg:y2="1cm"/>`, &shape.Geometry{Preset: "bentConnector3"}},
 		{"curved connector", `<draw:connector draw:type="curve" svg:x1="0cm" svg:y1="0cm" svg:x2="1cm" svg:y2="1cm"/>`, &shape.Geometry{Preset: "curvedConnector3"}},
 		{"custom path", `<draw:path svg:width="1cm" svg:height="1cm" svg:viewBox="0 0 10 10" svg:d="M0 0L10 10"/>`, &shape.Geometry{}},

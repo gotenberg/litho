@@ -300,10 +300,7 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 			}
 		}
 	case "ellipse", "circle":
-		s.Geometry = &shape.Geometry{Preset: "ellipse"}
-		if k := el.A(odf.NSDraw, "kind"); k != "" && k != "full" {
-			r.warn("ellipse-kind", "arcs, sections and cuts of an ellipse are drawn as the whole ellipse")
-		}
+		s.Geometry = ellipseGeometry(el)
 	case "line", "connector":
 		x1, _ := odf.Length(el.A(odf.NSSVG, "x1"))
 		y1, _ := odf.Length(el.A(odf.NSSVG, "y1"))
@@ -392,4 +389,24 @@ const maxModifiers = 32
 func (r *reader) customGeometry(el *odf.Element) *shape.Custom {
 	r.warn("custom-geometry", fmt.Sprintf("the custom geometry of draw:%s is drawn as its bounding box", el.Name.Local))
 	return nil
+}
+
+// ellipseGeometry maps a draw:ellipse or draw:circle (ODF 1.3, Part 3,
+// 10.3.8 and 10.3.9) onto a DrawingML preset: the whole ellipse, or for a
+// draw:kind (19.188) of section, cut or arc the pie, chord or arc preset
+// (ECMA-376 Part 1, 20.1.10.56) between draw:start-angle and
+// draw:end-angle, which run counterclockwise from three o'clock where
+// the presets' adj1 and adj2 run clockwise, in 60,000ths of a degree.
+func ellipseGeometry(el *odf.Element) *shape.Geometry {
+	preset := map[string]string{"section": "pie", "cut": "chord", "arc": "arc"}[el.A(odf.NSDraw, "kind")]
+	if preset == "" {
+		return &shape.Geometry{Preset: "ellipse"}
+	}
+	start, _ := odf.ParseAngle(el.A(odf.NSDraw, "start-angle"), false)
+	end, ok := odf.ParseAngle(el.A(odf.NSDraw, "end-angle"), false)
+	if !ok {
+		end = 360
+	}
+	cw := func(a float64) float64 { return math.Mod(360-a, 360) * 60000 }
+	return &shape.Geometry{Preset: preset, Adjust: []shape.Adjust{{Name: "adj1", Value: cw(end)}, {Name: "adj2", Value: cw(start)}}}
 }
