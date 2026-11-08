@@ -116,9 +116,9 @@
 //
 // # Printing
 //
-// The print options mirror Chromium's printToPDF as Gotenberg's Chromium
-// route drives it. [Options.Landscape] turns the paper before the @page
-// rules see it. Without [Options.PreferCSSPageSize] the paper is the
+// The print options are the package's own; where a browser's print
+// dialog has the same control, the option behaves as the browser does.
+// [Options.Landscape] turns the paper before the @page rules see it. Without [Options.PreferCSSPageSize] the paper is the
 // sheet: a page whose @page size or orientation differs is laid out at
 // that size and drawn scaled down to fit the paper, never up, centred on
 // it, the paper turned to the page's orientation; with it, the @page size
@@ -126,14 +126,12 @@
 // and drawn divided by it, the margins kept, and the viewport the media
 // queries and viewport units measure is that enlarged area. A document
 // wider than its page area is laid out again at its content's width, at
-// most 1.5 times the area's, and drawn shrunk to fit, as Chromium prints,
+// most 1.5 times the area's, and drawn shrunk to fit, as browsers print,
 // unless [Options.NoShrinkToFit]. [Options.SinglePage] sizes the paper to the
-// content measured as the route measures it, on an 800 pixel screen, and
-// writes the first page. [Options.PageRanges] takes Chromium's grammar and selects the
-// pages after layout, so page numbers count the whole document; links and
-// outline entries to a page left out are dropped. [Options.OmitBackgrounds]
-// blanks the canvas alone, as the route does, and [Options.OmitOutline]
-// writes no outline.
+// content measured as an 800 pixel screen would show it, and writes the
+// first page. Page selection is the caller's, after layout, so page
+// numbers count the whole document. [Options.OmitBackgrounds] blanks the
+// canvas alone, and [Options.OmitOutline] writes no outline.
 //
 // # Content
 //

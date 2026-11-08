@@ -2,9 +2,8 @@
 // Part 1, 17; Part 2 for the package), to the composition model: it reads
 // the package, resolves the styles, numbering and sections, builds a
 // layout.Node tree in the vocabulary of css.Style, and lays it out with
-// layout.Layout. LibreOffice, as Gotenberg's LibreOffice route prints a
-// document, is the reference wherever the specification leaves room or
-// LibreOffice departs from it; see [Convert].
+// layout.Layout. LibreOffice is the reference wherever the specification
+// leaves room or LibreOffice departs from it; see [Convert].
 //
 // # Text and styles
 //

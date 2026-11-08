@@ -25,9 +25,9 @@ const (
 	maxCells = 1_000_000
 )
 
-// separators are the field separators the route's import token names:
-// 44, 59 and 9, the comma, the semicolon and the tab, each splitting a
-// field alike.
+// separators are the field separators of a Calc import with the comma,
+// the semicolon and the tab enabled together, each splitting a field
+// alike.
 const separators = ",;\t"
 
 // quote is the text delimiter of the token, 34.

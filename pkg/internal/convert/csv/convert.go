@@ -55,9 +55,10 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 }
 
 // The page and cell defaults of a CSV import, Calc's Default page style
-// and Default cell style in the en-US image, with the route's header
-// turned off (lok's LokGeometry.xba sets HeaderIsOn false on every page
-// style of a CSV, since the header shows the sheet name, the upload's
+// and Default cell style in the en-US locale, with the page header turned
+// off: Calc's default header shows the sheet name, which a CSV takes from
+// its file name, a name the converter does not know (lok's LokGeometry.xba
+// turns it off alike, since there the name is the upload's
 // file name).
 //
 // # Corpus evidence
@@ -93,7 +94,7 @@ const (
 const fallbackYear = 2026
 
 // Read reads the CSV data into the spreadsheet model as Calc's import
-// through the route reads it, with the warnings for what it drops. fonts
+// reads it, with the warnings for what it drops. fonts
 // measures the column widths; printDate gives a date without a year its
 // year (the zero time: [fallbackYear]). It returns ctx's error when ctx
 // ends first.

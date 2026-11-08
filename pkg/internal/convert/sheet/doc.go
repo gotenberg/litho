@@ -13,8 +13,8 @@
 //
 // The readers know their file format and nothing of pages; the builder
 // knows pages and nothing of any file format. A length anywhere in the
-// model is in points; a row or column index is 0-based. LibreOffice, as
-// Gotenberg's LibreOffice route prints a spreadsheet, is the reference
-// wherever the specifications (ECMA-376 Part 1, 18; ODF 1.3 Part 3, 9) leave
-// room or LibreOffice departs from them; see [Convert].
+// model is in points; a row or column index is 0-based. LibreOffice Calc
+// is the reference wherever the specifications (ECMA-376 Part 1, 18; ODF
+// 1.3 Part 3, 9) leave room or LibreOffice departs from them; see
+// [Convert].
 package sheet

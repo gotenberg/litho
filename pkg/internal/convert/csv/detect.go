@@ -64,7 +64,7 @@ type detected struct {
 }
 
 // detect reads a field as Calc's Standard column type does with the
-// en-US locale and "detect special numbers" on (the route's token): a
+// en-US locale and "detect special numbers" on: a
 // number, a percentage, a currency amount in dollars, a scientific
 // number, a boolean, a date, a time or both; anything else is text.
 // year is the year a date without one takes: Calc takes the current

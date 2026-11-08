@@ -17,9 +17,9 @@ import (
 // pass drew it.
 const maxIndexPasses = 3
 
-// toc is a table of contents of the body, which Writer regenerates from
-// the document's headings before printing as Gotenberg's LibreOffice
-// route asks (its updateIndexes option, on by default).
+// toc is a table of contents of the body, regenerated from the
+// document's headings before printing, as Writer does when asked to
+// update its indexes.
 type toc struct {
 	node *layout.Node
 	src  *odf.Element

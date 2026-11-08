@@ -203,14 +203,13 @@
 //   - [Convert] takes [ConvertOption]: [WithConvertLogger],
 //     [WithConvertFontDirs], [WithPaperSize], [WithMargins],
 //     [WithFontFamilies], [WithFontSize], [WithMediaType],
-//     [WithResources], [WithConvertLimits], for HTML the print
-//     options of Chromium's printToPDF: [WithLandscape],
-//     [WithPreferCSSPageSize], [WithPrintScale], [WithSinglePage],
-//     [WithPageRanges], [WithPrintBackground], [WithOutline],
+//     [WithResources], [WithConvertLimits], [WithPageRanges], the print
+//     options [WithLandscape], [WithPreferCSSPageSize], [WithPrintScale],
+//     [WithSinglePage], [WithPrintBackground], [WithOutline],
 //     [WithShrinkToFit], [WithFractionalFontMetrics],
 //     [WithHeaderTemplate], [WithFooterTemplate], [WithPrintDate],
-//     [WithBaseURL], [WithHTTPClient], [WithMediaFeatures], and for
-//     DOCX and ODT [WithConvertPassword].
+//     [WithBaseURL], [WithHTTPClient], [WithMediaFeatures], and for the
+//     Office formats [WithConvertPassword].
 //
 // [WithFullRewrite], [WithVersion], and [WithXRefStream] are advanced
 // serialization controls. The defaults suit most callers:
