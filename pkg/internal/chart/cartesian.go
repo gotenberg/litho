@@ -608,6 +608,23 @@ func (rd *renderer) placeLabels(d *dim) {
 		return bs
 	}
 	blocks := measure(st, maxW)
+	if rd.fixed != nil && d.category && !d.vertical && st.Rotation != 0 {
+		// Beside a placed plot area, a turned label longer than the room
+		// under the axis loses its end for an ellipsis (chart2's
+		// lcl_ResizeTextShapeToFitAvailableSpace).
+		room := rd.page.Y + rd.page.Height - d.lineAt
+		for i, b := range blocks {
+			if b == nil {
+				continue
+			}
+			if _, h := b.rotated(); h > room {
+				if t := truncateLabel(items[i].text, b.w, h-room); t != items[i].text {
+					items[i].text = t
+					blocks[i] = rd.measure(t, st, maxW)
+				}
+			}
+		}
+	}
 	// A label whose words break inside a word keeps its words whole on one
 	// line instead (chart2's VCartesianAxis::createTextShapes, after
 	// lcl_hasWordBreak).
@@ -654,6 +671,27 @@ func (rd *renderer) placeLabels(d *dim) {
 		place(measure(st, 0))
 	}
 	d.labels = thin(d.labels, d.vertical)
+}
+
+// truncateLabel shortens s, w points wide, by excess points as chart2
+// does: as many characters of the average width as cover the excess, and
+// one more, then three for an ellipsis, which follows what is left when
+// that is more than three characters.
+func truncateLabel(s string, w, excess float64) string {
+	r := []rune(s)
+	if len(r) == 0 || !(w > 0) {
+		return s
+	}
+	avg := w / float64(len(r))
+	remove := int(excess/avg) + 1
+	n := len(r) - remove - 3
+	if n < 0 {
+		n = min(3, len(r))
+	}
+	if n > 3 {
+		return string(r[:n]) + "..."
+	}
+	return string(r[:n])
 }
 
 // overlapping reports neighbouring labels of a horizontal axis whose boxes

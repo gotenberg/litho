@@ -54,3 +54,21 @@ func TestData_LabelAsAxisFormat(t *testing.T) {
 		}
 	}
 }
+
+func TestTruncateLabel(t *testing.T) {
+	tests := []struct {
+		s         string
+		w, excess float64
+		want      string
+	}{
+		{"Dddddd dddddd", 130, 55, "Dddd..."},
+		{"Bbbbbbb", 70, 5, "Bbb"},
+		{"Ab", 20, 30, "Ab"},
+		{"", 0, 10, ""},
+	}
+	for _, tt := range tests {
+		if got := truncateLabel(tt.s, tt.w, tt.excess); got != tt.want {
+			t.Errorf("truncateLabel(%q, %v, %v) = %q, want %q", tt.s, tt.w, tt.excess, got, tt.want)
+		}
+	}
+}
