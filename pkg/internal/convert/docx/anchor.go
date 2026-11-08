@@ -411,6 +411,14 @@ func (d *document) frame(n *layout.Node, pp paraProps) {
 		// imports it.
 		return
 	}
+	if d.inCell > 0 {
+		// LibreOffice makes no frame of a paragraph inside a table cell:
+		// it stays in the cell's flow. Word writes the floating table's
+		// position on its cells' paragraphs (fdo48718-1), and a table
+		// whose cells repeat the frame properties of the paragraphs
+		// around it is part of their frame (fdo60957-2).
+		return
+	}
 	st := n.Style
 	switch attrOr(f, "wrap") {
 	case "none", "notBeside":

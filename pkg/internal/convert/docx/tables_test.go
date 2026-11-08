@@ -127,3 +127,19 @@ func TestTables_Floating(t *testing.T) {
 		}
 	}
 }
+
+func TestTables_FramesInCells(t *testing.T) {
+	t.Parallel()
+	frame := `<w:framePr w:w="2000" w:hSpace="141" w:wrap="around" w:vAnchor="page" w:hAnchor="margin" w:xAlign="right" w:y="2266"/>`
+	body := `<w:tbl><w:tblPr><w:tblW w:w="2000" w:type="dxa"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid>` +
+		`<w:tr><w:tc><w:p><w:pPr>` + frame + `</w:pPr><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>` +
+		`<w:p><w:pPr>` + frame + `</w:pPr><w:r><w:t>body</w:t></w:r></w:p>`
+	b := build(t, body, nil)
+	for _, p := range role(b.root, "P") {
+		st := p.Style
+		framed := st.Float != css.FloatNone || st.Width.Kind != css.Auto
+		if want := textOf(p) == "body"; framed != want {
+			t.Errorf("%q: float %v width %v, framed %v, want %v", textOf(p), st.Float, st.Width, framed, want)
+		}
+	}
+}

@@ -686,7 +686,9 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 			}
 			ts := s
 			d.nested++
+			d.inCell++
 			kids := finish(d.blocks(ts, cc, c.xml, depth+1))
+			d.inCell--
 			d.nested--
 			role := "TD"
 			if isHeader {

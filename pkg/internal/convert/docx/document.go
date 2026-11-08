@@ -84,6 +84,9 @@ type document struct {
 	columnBreaks []*css.Style
 	inBody       bool
 	nested       int
+	// inCell counts the table cells being built, whose paragraphs'
+	// frame properties are ignored.
+	inCell int
 	// vmlTypes maps a VML shape type's id to its shape type number
 	// (o:spt, Part 4, 14.1.2.20), for the shapes that name it.
 	vmlTypes map[string]int
