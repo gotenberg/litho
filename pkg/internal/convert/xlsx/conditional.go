@@ -570,7 +570,7 @@ func dataBarSettings(rule *sheet.Rule, db, ext *ooxml.Element, color func(*ooxml
 	default:
 		rule.BarAxis = sheet.BarAxisAuto
 	}
-	rule.BarSolid = !boolDefault(ext, "gradient", true)
+	rule.BarSolid = !boolOrTrue(ext, "gradient")
 	if c, ok := color(ext.Child(nsX14, "negativeFillColor")); ok {
 		rule.BarNegative = c
 	}

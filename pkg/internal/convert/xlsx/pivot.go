@@ -252,10 +252,10 @@ func (w *sheetReader) pivotTable(root *ooxml.Element, cache *pivotCache) (pendin
 	clear := area
 	p := sheet.Pivot{
 		Name: name, Clear: &clear,
-		RowGrand:       boolDefault(root, "rowGrandTotals", true),
-		ColumnGrand:    boolDefault(root, "colGrandTotals", true),
+		RowGrand:       boolOrTrue(root, "rowGrandTotals"),
+		ColumnGrand:    boolOrTrue(root, "colGrandTotals"),
 		HideHeader:     intAttr(loc, "firstHeaderRow", 0) == 0,
-		ExpandCollapse: boolDefault(root, "showDrill", true),
+		ExpandCollapse: boolOrTrue(root, "showDrill"),
 	}
 	// The database index of every cache field: its column in the source
 	// (PivotCache::getCacheDatabaseIndex).
@@ -341,13 +341,14 @@ func (w *sheetReader) pivotTable(root *ooxml.Element, cache *pivotCache) (pendin
 	return pp, true
 }
 
-// boolDefault returns e's ST_Boolean attribute local, def when absent.
-func boolDefault(e *ooxml.Element, local string, def bool) bool {
+// boolOrTrue returns e's ST_Boolean attribute local, true when absent:
+// the default of every pivot and data bar flag read here.
+func boolOrTrue(e *ooxml.Element, local string) bool {
 	v, ok := e.Attr(local)
 	if !ok {
-		return def
+		return true
 	}
-	return ooxml.OnOff(v, def)
+	return ooxml.OnOff(v, true)
 }
 
 // pivotField reads a row, column or page field's settings (18.10.1.69
@@ -355,10 +356,10 @@ func boolDefault(e *ooxml.Element, local string, def bool) bool {
 // (PivotTableField::convertRowColPageField).
 func pivotField(e *ooxml.Element, column int, shared []sheet.Value) sheet.PivotField {
 	pf := sheet.PivotField{Field: column}
-	outline := boolDefault(e, "outline", true)
-	top := boolDefault(e, "subtotalTop", true)
+	outline := boolOrTrue(e, "outline")
+	top := boolOrTrue(e, "subtotalTop")
 	switch {
-	case top && outline && boolDefault(e, "compact", true):
+	case top && outline && boolOrTrue(e, "compact"):
 		pf.Layout = sheet.PivotCompact
 	case outline && top:
 		pf.Layout = sheet.PivotOutlineTop
@@ -387,11 +388,11 @@ func pivotField(e *ooxml.Element, column int, shared []sheet.Value) sheet.PivotF
 			pf.Subtotals = append(pf.Subtotals, s.fn)
 		}
 	}
-	if len(pf.Subtotals) == 0 && boolDefault(e, "defaultSubtotal", true) {
+	if len(pf.Subtotals) == 0 && boolOrTrue(e, "defaultSubtotal") {
 		pf.Subtotals = []sheet.PivotFunction{sheet.PivotAuto}
 	}
 	pf.AddEmpty = boolAttr(e, "insertBlankRow")
-	pf.ShowEmpty = boolDefault(e, "showAll", true)
+	pf.ShowEmpty = boolOrTrue(e, "showAll")
 	switch attr(e, "sortType") {
 	case "ascending":
 		pf.Sort = sheet.PivotAscending
