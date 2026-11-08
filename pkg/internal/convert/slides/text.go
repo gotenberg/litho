@@ -55,13 +55,38 @@ const maxBodyText = 1 << 18
 // the line's top.
 const fixedLineFactor = 1.2
 
-// scriptScale and scriptRise are how a superscript or a subscript is
-// drawn: 58% of the size, raised or lowered by a third of it (DFLT_ESC_PROP
-// and DFLT_ESC_AUTO).
+// scriptScale is the size of a superscript or a subscript, 58% of the
+// text's (DFLT_ESC_PROP); superRise and subDrop how far a PresentationML
+// one moves, 30% of the size up or 25% down, the shifts PowerPoint writes
+// (ECMA-376 Part 1, 21.1.2.3.9 baseline) and Impress prints as stated.
+// An OpenDocument one moves automatically instead (scriptShift).
 const (
 	scriptScale = 0.58
-	scriptRise  = 0.33
+	superRise   = 0.30
+	subDrop     = 0.25
 )
+
+// scriptShift returns how far a superscript or a subscript of a text of
+// size moves in faces of metrics m, as Impress moves an automatic one
+// (SvxFont::SetNonAutoEscapement): the share of the face's height above
+// its baseline, or below for a subscript, of the 42% the script's size
+// gives up, in whole percents of the size.
+//
+// # Corpus evidence
+//
+//   - odp: Liberation Sans 20 with text-position super 58% prints 6.8 points
+//     up, sub 58% 1.4 points down, 33% 58% 6.6 points up.
+func scriptShift(size float64, m text.Metrics, sub bool) float64 {
+	h := m.Ascent + m.Descent
+	if !(h > 0) {
+		return 0
+	}
+	share := m.Ascent / h
+	if sub {
+		share = m.Descent / h
+	}
+	return math.Trunc(share*(1-scriptScale)*100) / 100 * size
+}
 
 // fit is the scaling a text body is laid out at to fit its box: the font
 // scale and the spacing scale, 1 for none (ImpEditEngine's
@@ -423,6 +448,9 @@ func (b *builder) layoutBody(body *TextBody, w, h float64, f fit) *laidBody {
 		root.ColumnGap = css.Pts(max(body.ColumnGap, 0))
 		root.Height = css.Pts(h)
 	}
+	// OpenDocument text, spaced by its faces, moves its scripts
+	// automatically.
+	b.autoScript = body.FontLineSpacing
 	tree := &layout.Node{Kind: layout.Element, Style: root, ID: "slides-body"}
 	nums := numbers(paras)
 	budget := maxBodyText
@@ -683,10 +711,18 @@ func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 	switch rs.Script {
 	case Superscript:
 		st.FontSize = size * scriptScale
-		st.VerticalAlign = css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(size * scriptRise)}
+		up := size * superRise
+		if b.autoScript {
+			up = scriptShift(size, b.faceMetrics(b.textStyle(rs, k)), false)
+		}
+		st.VerticalAlign = css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(up)}
 	case Subscript:
 		st.FontSize = size * scriptScale
-		st.VerticalAlign = css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(-size * scriptRise)}
+		down := size * subDrop
+		if b.autoScript {
+			down = scriptShift(size, b.faceMetrics(b.textStyle(rs, k)), true)
+		}
+		st.VerticalAlign = css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(-down)}
 	case Baseline:
 	}
 	return st

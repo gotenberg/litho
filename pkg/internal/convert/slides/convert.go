@@ -48,6 +48,9 @@ type builder struct {
 	shapes int
 	// links collects the slide's links in slide coordinates.
 	links []compose.Link
+	// autoScript moves the scripts of the body being laid out
+	// automatically, as an OpenDocument text's.
+	autoScript bool
 }
 
 // warn records a warning once per code and message.

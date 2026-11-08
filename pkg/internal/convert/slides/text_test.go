@@ -145,3 +145,29 @@ func TestText_Clip(t *testing.T) {
 		}
 	}
 }
+
+// TestText_Scripts checks where superscripts and subscripts sit: an
+// OpenDocument text's moved automatically by its face (Liberation Sans 20
+// up 6.8 and down 1.4, as Impress prints them), a PresentationML text's by
+// PowerPoint's shifts, 30% up and 25% down.
+func TestText_Scripts(t *testing.T) {
+	for _, tc := range []struct {
+		fontLines bool
+		up, down  float64
+	}{
+		{true, 6.8, 1.4},
+		{false, 6, 5},
+	} {
+		ls := RunStyle{Families: []string{"Liberation Sans"}, Size: 20, Color: css.Color{A: 1}}
+		sup, sub := ls, ls
+		sup.Script, sub.Script = Superscript, Subscript
+		sh := box(100, 100, 400, 200, Paragraph{Runs: []Run{{Text: "Base", Style: ls}, {Text: "Up", Style: sup}}, Style: ls},
+			Paragraph{Runs: []Run{{Text: "Base2", Style: ls}, {Text: "Down", Style: sub}}, Style: ls})
+		sh.Text.FontLineSpacing = tc.fontLines
+		pg := convert(t, deck(&Slide{Shapes: []*Shape{sh}}), office.Options{}).Pages[0]
+		b1, u, b2, d := find(t, pg, "Base"), find(t, pg, "Up"), find(t, pg, "Base2"), find(t, pg, "Down")
+		if !near(b1.y-u.y, tc.up, 0.05) || !near(d.y-b2.y, tc.down, 0.05) || !near(u.size, 11.6, 0.01) {
+			t.Errorf("font lines %v: up %.2f, down %.2f, size %.2f", tc.fontLines, b1.y-u.y, d.y-b2.y, u.size)
+		}
+	}
+}
