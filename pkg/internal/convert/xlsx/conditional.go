@@ -236,10 +236,8 @@ func (w *sheetReader) cfRule(e *ooxml.Element, ranges []sheet.Range, ext *dataBa
 			rule.Kind, rule.Formula = sheet.RuleExpression, "dataBar"
 			break
 		}
-		if attr(src, "axisPosition") == "middle" {
-			vals[0].Number, vals[1].Number = sheet.MiddleAxis(vals[0].Number, vals[1].Number)
-		}
 		rule.Values = vals
+		dataBarSettings(&rule, db, ext.bars[extID(e)], func(e *ooxml.Element) (css.Color, bool) { return r.color(e) })
 	case "iconSet":
 		rule.Kind = sheet.RuleIconSet
 	default:
@@ -536,4 +534,42 @@ func (r *reader) dxfElementStyle(e *ooxml.Element) *sheet.Style {
 		st.Format = code
 	}
 	return st
+}
+
+// dataBarSettings reads a data bar's axis, lengths, fill and negative
+// colour as LibreOffice imports them (DataBarRule::importAttribs,
+// ExtCfDataBarRule): a bar without the Excel 2010 extension has no axis,
+// its lengths the dataBar element's minLength and maxLength, 10 and 90
+// percent by default; the extension (MS-XLSX, 2.6.29 x14:dataBar) gives
+// the axis, automatic by default, the gradient and the negative colour,
+// and the lengths stay the dataBar element's.
+//
+// # Corpus evidence
+//
+//   - xlsx: sc/databar.xlsx's middle axis, whose extension says
+//     maxLength 100, paints its longest bar across 90% of the half cell.
+func dataBarSettings(rule *sheet.Rule, db, ext *ooxml.Element, color func(*ooxml.Element) (css.Color, bool)) {
+	length := func(name string, def int) float64 {
+		return float64(max(0, min(intAttr(db, name, def), 100))) / 100
+	}
+	rule.BarMinLength, rule.BarMaxLength = length("minLength", 10), length("maxLength", 90)
+	if rule.BarMinLength == 0 && rule.BarMaxLength == 0 {
+		rule.BarMaxLength = 0.001
+	}
+	if ext == nil {
+		rule.BarAxis = sheet.BarAxisNone
+		return
+	}
+	switch attr(ext, "axisPosition") {
+	case "middle":
+		rule.BarAxis = sheet.BarAxisMiddle
+	case "none":
+		rule.BarAxis = sheet.BarAxisNone
+	default:
+		rule.BarAxis = sheet.BarAxisAuto
+	}
+	rule.BarSolid = !boolDefault(ext, "gradient", true)
+	if c, ok := color(ext.Child(nsX14, "negativeFillColor")); ok {
+		rule.BarNegative = c
+	}
 }

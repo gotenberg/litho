@@ -129,4 +129,12 @@ func TestRead_ConditionalFormats(t *testing.T) {
 	if rules[10].Bar != rgb(0x638EC6) {
 		t.Errorf("bar %+v", rules[10].Bar)
 	}
+	// The extended bar's axis is automatic, the plain one's none; both
+	// keep the dataBar element's 10 and 90 percent lengths.
+	if b := rules[10]; b.BarAxis != sheet.BarAxisAuto || b.BarMinLength != 0.1 || b.BarMaxLength != 0.9 || b.BarSolid {
+		t.Errorf("extended bar %+v", b)
+	}
+	if b := rules[11]; b.BarAxis != sheet.BarAxisNone || b.BarMinLength != 0.1 || b.BarMaxLength != 0.9 {
+		t.Errorf("plain bar %+v", b)
+	}
 }
