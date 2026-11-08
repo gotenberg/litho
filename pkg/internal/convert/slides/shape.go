@@ -41,14 +41,14 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 		if len(frags) > 0 {
 			parent.Kids = append(parent.Kids, fig)
 		}
-		out = group(sm, frags)
+		out = group(sm, b.contentEffects(s, frags, m))
 	case KindChart:
 		if s.Chart == nil {
 			return nil
 		}
 		out = group(sm, chart.Render(b.ctx, b.fonts, s.Chart, box))
 	case KindTable:
-		out = group(sm, b.table(s, parent))
+		out = group(sm, b.contentEffects(s, b.table(s, parent), m))
 	case KindGroup:
 		if depth >= maxGroupDepth {
 			b.warn(CodeGroupDepth, fmt.Sprintf("groups nest deeper than %d levels; the deeper ones are left out", maxGroupDepth))
@@ -111,7 +111,7 @@ func (b *builder) geometry(s *Shape, m compose.Matrix, parent *compose.StructEle
 	}
 	sm := aboutCentre(box, s.Rotation, s.FlipH, s.FlipV)
 	paths := shape.Paths(s.Geometry, box)
-	frags := b.effects(s, paths, box)
+	frags, paths := b.effects(s, paths, box, m, txt)
 	for _, p := range paths {
 		if p.Fill {
 			frags = append(frags, b.fill(&s.Fill, box, p.Ops, p.Mode)...)
