@@ -90,24 +90,24 @@ func TestPaths_HandComputed(t *testing.T) {
 		g    *Geometry
 		want []compose.Point
 	}{
-		{"nil", nil, []compose.Point{{10, 20}, {210, 20}, {210, 120}, {10, 120}}},
-		{"rect", &Geometry{Preset: "rect"}, []compose.Point{{10, 20}, {210, 20}, {210, 120}, {10, 120}}},
+		{"nil", nil, []compose.Point{{X: 10, Y: 20}, {X: 210, Y: 20}, {X: 210, Y: 120}, {X: 10, Y: 120}}},
+		{"rect", &Geometry{Preset: "rect"}, []compose.Point{{X: 10, Y: 20}, {X: 210, Y: 20}, {X: 210, Y: 120}, {X: 10, Y: 120}}},
 		// roundRect at adj 25000: the radius is a quarter of the shorter
 		// side, 25 pt; the path starts at (l, dx1) and runs clockwise.
-		{"roundRect", &Geometry{Preset: "roundRect", Adjust: []Adjust{{"adj", 25000}}}, []compose.Point{
-			{10, 45}, {35, 20}, {185, 20}, {210, 45}, {210, 95}, {185, 120}, {35, 120}, {10, 95},
+		{"roundRect", &Geometry{Preset: "roundRect", Adjust: []Adjust{{Name: "adj", Value: 25000}}}, []compose.Point{
+			{X: 10, Y: 45}, {X: 35, Y: 20}, {X: 185, Y: 20}, {X: 210, Y: 45}, {X: 210, Y: 95}, {X: 185, Y: 120}, {X: 35, Y: 120}, {X: 10, Y: 95},
 		}},
 		// ellipse: from (l, vc), four quarter arcs.
-		{"ellipse", &Geometry{Preset: "ellipse"}, []compose.Point{{10, 70}, {110, 20}, {210, 70}, {110, 120}, {10, 70}}},
+		{"ellipse", &Geometry{Preset: "ellipse"}, []compose.Point{{X: 10, Y: 70}, {X: 110, Y: 20}, {X: 210, Y: 70}, {X: 110, Y: 120}, {X: 10, Y: 70}}},
 		// rightArrow at its defaults: the shaft spans half the height
 		// (y1 = vc - h/4), the head is ss/2 = 50 long.
 		{"rightArrow", &Geometry{Preset: "rightArrow"}, []compose.Point{
-			{10, 45}, {160, 45}, {160, 20}, {210, 70}, {160, 120}, {160, 95}, {10, 95},
+			{X: 10, Y: 45}, {X: 160, Y: 45}, {X: 160, Y: 20}, {X: 210, Y: 70}, {X: 160, Y: 120}, {X: 160, Y: 95}, {X: 10, Y: 95},
 		}},
 		// rightArrow with adj1 100000 and adj2 20000: a full-height shaft,
 		// a head 20 long.
-		{"rightArrow adjusted", &Geometry{Preset: "rightArrow", Adjust: []Adjust{{"adj1", 100000}, {"adj2", 20000}}}, []compose.Point{
-			{10, 20}, {190, 20}, {190, 20}, {210, 70}, {190, 120}, {190, 120}, {10, 120},
+		{"rightArrow adjusted", &Geometry{Preset: "rightArrow", Adjust: []Adjust{{Name: "adj1", Value: 100000}, {Name: "adj2", Value: 20000}}}, []compose.Point{
+			{X: 10, Y: 20}, {X: 190, Y: 20}, {X: 190, Y: 20}, {X: 210, Y: 70}, {X: 190, Y: 120}, {X: 190, Y: 120}, {X: 10, Y: 120},
 		}},
 	}
 	for _, tt := range tests {
@@ -171,7 +171,7 @@ func TestPaths_CustomGuidesAndArc(t *testing.T) {
 	got := pts(ops)
 	// From (0, 50) the arc of radii 50 and 50 starts at 180 degrees and
 	// sweeps 180 clockwise: through (50, 0) to (100, 50).
-	want := []compose.Point{{0, 50}, {50, 0}, {100, 50}}
+	want := []compose.Point{{X: 0, Y: 50}, {X: 50, Y: 0}, {X: 100, Y: 50}}
 	if len(got) != len(want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
