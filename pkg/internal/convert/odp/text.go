@@ -38,6 +38,16 @@ func (r *reader) textBody(container *odf.Element, ss *shapeStyle, pc *pageCtx) *
 	}
 	tc := &textCtx{ss: ss, pc: pc, bg: r.backdrop(ss, pc)}
 	r.blocks(container, tc, listCtx{}, &tb.Paragraphs, 0)
+	// Impress spaces an OpenDocument text by its faces' metrics unless the
+	// style asks for font-independent lines (ODF 1.3, Part 3, 20.330), and
+	// stacks its paragraphs by the larger of their spacings.
+	tb.FontLineSpacing = true
+	for _, l := range ss.text {
+		if v, ok := l.para.Lookup("style:font-independent-line-spacing"); ok {
+			tb.FontLineSpacing = v != "true"
+		}
+	}
+	tb.MaxParagraphSpacing = true
 	return tb
 }
 
