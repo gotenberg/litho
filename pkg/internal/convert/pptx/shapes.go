@@ -17,6 +17,11 @@ import (
 const (
 	uriTable   = "http://schemas.openxmlformats.org/drawingml/2006/table"
 	uriChart   = "http://schemas.openxmlformats.org/drawingml/2006/chart"
+	// uriChartEx is an Office 2016 chart (MS-ODRAWXML, 2.24 cx:chart:
+	// funnel, waterfall, sunburst, treemap, histogram, box and whisker),
+	// which PowerPoint wraps in an mc:AlternateContent requiring the cx1
+	// or cx2 namespace, its Fallback a picture of the chart.
+	uriChartEx = "http://schemas.microsoft.com/office/drawing/2014/chartex"
 	uriDiagram = "http://schemas.openxmlformats.org/drawingml/2006/diagram"
 	uriOLE     = "http://schemas.openxmlformats.org/presentationml/2006/ole"
 )

@@ -3,10 +3,12 @@ package pptx
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -379,5 +381,24 @@ func TestShapes_BackgroundFill(t *testing.T) {
 	doc, _ = readDeck(t, testDeck{slides: []testSlide{{tree: shape}}})
 	if f := doc.Slides[0].Shapes[0].Fill; f.Kind != slides.FillSolid || f.Color != (css.Color{R: 1, G: 1, B: 1, A: 1}) {
 		t.Errorf("fill %+v, want white for a slide without a background", f)
+	}
+}
+
+func TestShapes_ChartEx(t *testing.T) {
+	t.Parallel()
+	frame := `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="6" name="Funnel"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="0" y="0"/><a:ext cx="12700" cy="12700"/></p:xfrm>` +
+		`<a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/drawing/2014/chartex"><cx:chart xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" r:id="rIdX"/></a:graphicData></a:graphic></p:graphicFrame>`
+	fallback := `<p:pic><p:nvPicPr><p:cNvPr id="7" name="Picture of the funnel"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rIdP"/></p:blipFill><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="12700" cy="12700"/></a:xfrm></p:spPr></p:pic>`
+	rels := `<Relationship Id="rIdP" Type="` + tRelImage + `" Target="../media/image1.png"/>`
+	parts := map[string]string{"ppt/media/image1.png": pngBytes(t)}
+	doc, warnings := readDeck(t, testDeck{slides: []testSlide{{tree: frame}}})
+	if len(doc.Slides[0].Shapes) != 0 || !strings.Contains(fmt.Sprint(warnings), "Office 2016 chart") {
+		t.Errorf("a bare chartex frame: shapes %q, warnings %+v", shapeNames(doc.Slides[0].Shapes), warnings)
+	}
+	wrapped := `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:cx2="http://schemas.microsoft.com/office/drawing/2015/10/21/chartex" Requires="cx2">` +
+		frame + `</mc:Choice><mc:Fallback>` + fallback + `</mc:Fallback></mc:AlternateContent>`
+	doc, _ = readDeck(t, testDeck{slides: []testSlide{{tree: wrapped, rels: rels}}, parts: parts})
+	if names := shapeNames(doc.Slides[0].Shapes); len(names) != 1 || names[0] != "Picture of the funnel" {
+		t.Errorf("a wrapped chartex frame prints %q, want its fallback picture", names)
 	}
 }
