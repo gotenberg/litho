@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-08T08:40:54Z",
+  "captured_at": "2026-11-08T09:37:16Z",
   "corpora": {
     "compose": {
       "features": {
@@ -3855,6 +3855,1398 @@
         }
       }
     },
+    "odp": {
+      "features": {
+        "diff": {
+          "matched": 0,
+          "mismatched": 172,
+          "skipped": 0,
+          "metrics": {
+            "convert_error": 172,
+            "pages_equal": 0
+          },
+          "scores": {
+            "pitch": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "pitch-flat": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/AllTransitions.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/TestEmbeddedFonts_DejaVu.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/TextFitting.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/TextFittingBulletEditVsView.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/bnc822347_EmptyBullet.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/draw-image-link.fodp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/draw-object-link.fodp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/empty.fodp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/fdo64512.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/fdo71075.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/fdo71961.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/fdo84043.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/fit-to-size.fodp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/linked_ole.fodp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/n828390_4.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/n828390_5.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/slide_with_text.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/tdf111522.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/tdf126197.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/tdf128651_CustomShapeUndo.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/16-9.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/4-3.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/BulletsAsImage.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/LineStylesOwn.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/Math.fodp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/SvgImageTest.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/Tdf112594.fodp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/Tdf62176.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/author_field.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/author_fixed.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/autofitted-textbox-indent.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/background.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bullet-off-on.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bulletCharAndFont.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/closed-shapes.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/document_with_linked_graphic.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/dupmastermultlayouts.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/embedded-pdf.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/emptyChildTnLstElement.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/extfile_field.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/fillbitmap2.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/formula.fodp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/group_rotation.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/image_transparency.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/invalidAttributeValuesInSrcRect.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/invalidAudio.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/invalidBuAutoNumEnumValue.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/invalidCxAndCyAttribute.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/invalidXmlBy.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/linked_ole.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/loopNoPause.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/loopPause10.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/masterpage_style_parent.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/none-to-bullet.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/num-to-bullet.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/numfmt.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/page_transparent_background.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/para-align-start-end.fodp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/placeholder-box-textalignment.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/preset-shapes-export.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/repeatBitmapMode.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/rotate_flip.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/search-all-notes.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/shadow-blur.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/shape-text-glow-effect.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/slide-bitmap-background.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/slide-custom-background.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/slide-tile-background.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/slidecount_field.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/slidename_field.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/slidenum_field.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/style-overflow-behavior-clip.fodp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/svg-export-text-decorations.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf100348_Fontwork2TextWarp.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf100348_FontworkBitmapFill.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf100348_FontworkGradientGlow.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf100387.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf103567.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf105362.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf105998.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf106026.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf108925.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf109169_Diamond.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf109169_Octagon.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf111785.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf111798.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf112552.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf112557.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf112647.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf116266.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf118045.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf118768-brake.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf118783.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf118806.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf118825-motionpath.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf118835.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf118836.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf123658_SearchAfterSlideChange.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf124781.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf127267DashOnHairline.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf127372.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf127379.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf127901.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf128049.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf128096.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf128345_FullTransparentGradient.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf128345_GradientAxial.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf128345_GradientLinear.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf128345_GradientRadial.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf128985.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf129430.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf133502.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf134969_TransparencyOnColorGradient.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf143603.fodp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf146876.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf147919.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf147978_enhancedPath_viewBox.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf148966-withflag.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf148966-withoutflag.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf149126.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf149128.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf149311.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf149551_btlr.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf149551_tbrl90.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf150316.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf150966_hugeInset.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf151492.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf153105.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf153107.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf153161_FlushToSave.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf156955.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf157652.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf157795.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf158743.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf161023.fodp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf161430.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf163343.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf164775.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf166647_userpaint.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf168109.fodp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf169524.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf169675_3d_object_anim.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf169706_invalid_audio_link.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf169825_layout_type.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf169911.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf169941.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf169952_multiple_OLEs.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf169979.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf170102_layout_type.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf170166.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf48735.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf53970_linked.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf59046.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf66228.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf68759.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf74670.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf80020.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf80224.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf90626.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf90627.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf92076.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf93883.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf94122_autocolor.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf96206.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf96708.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf99213-target-missing.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf99224.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf99497_CircleKind.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf99729-legacy.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf99729-new.odp": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            }
+          },
+          "score_tolerance": 0.02
+        }
+      }
+    },
     "ods": {
       "features": {
         "diff": {
@@ -7422,6 +8814,2574 @@
             "chars_match": 1157,
             "words_match": 1128
           }
+        }
+      }
+    },
+    "pptx": {
+      "features": {
+        "diff": {
+          "matched": 0,
+          "mismatched": 319,
+          "skipped": 0,
+          "metrics": {
+            "convert_error": 319,
+            "pages_equal": 0
+          },
+          "scores": {
+            "chart2/1904NullDate.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/CustomDataLabel_tdf115107.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/bnc864396.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/bnc882383.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/bnc889755.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/chart.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/funnel-pp1.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/percentage-number-formats.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/sparse-chart.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/stacked-bar-chart-hidden-series.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/stacked-non-stacked-mix-y-axis.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf105517.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf106217.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf115107-2.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf115859.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf116163.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf121205.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf122765.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf125444.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf127393.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf127811.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf128345_ChartArea_CG_TS.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf128345_ChartWall_CS_TG.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf128345_Legend_CS_TG_axial.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf135366_CustomLabelText.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf136754.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf137691_dataTable.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf146487.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf146756_bestFit.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf148117.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf150176.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf48041.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/tdf60316.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/testChartTitlePropertiesBitmapFill.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/testChartTitlePropertiesColorFill.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "chart2/testChartTitlePropertiesGradientFill.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "deck": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "deck-hidden": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "deck-notes": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/Scene3d_cropped_image.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/Scene3d_isometricRightUp.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/Scene3d_legacyObliqueBottomRight.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/Scene3d_legacyPerspectiveTopRight.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/Scene3d_lightRig_default.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/Scene3d_lightRig_dir_rotation.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/Scene3d_lightRig_legacyCamera.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/Scene3d_lightRig_modernCamera.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/Scene3d_lightRig_rot_rotation.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/Scene3d_material_highlight.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/Scene3d_material_wireframe.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/Scene3d_obliqueTopRight.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/Scene3d_orthographicFront.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/Scene3d_perspectiveContrastingLeft.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/Scene3d_pureImage.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/Scene3d_shape_rotation.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/ThemeShapesReference.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/camera-rotation-revolution-nonwps.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/chart-theme-override.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/connectorConnection.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/curvedConnectors.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/elbowConnectors.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/endParaRPr-newline-textsize.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/gradient-multistep-transparency.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/import-characters.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/import-mce.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/outliner-list-style.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/preset-adjust-value.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/refer-to-theme.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/shape-text-adjust-left.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/shape-text-alignment.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/smartart-groupshape.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/table-shadow.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf113187_arcTo_withoutReferences.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf125085_WordArtFontText.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf125085_WordArtFontTheme.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf125582_TextOnCircle.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf131082.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf139618_ImportWordArtGradient.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf139618_ThemeColorTransparency.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf139618_WordArtBitmapFill.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf141463_GroupTransform.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf144742_funnel.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf144742_mathEqual_mathNotEqual.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf147978_enhancedPath_subpath.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf149538_upright.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf149551_TextRot.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf149551_vert270AndTextRot.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf149551_vert_and_padding.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf151008_eaVertAnchor.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf155327_WordArtDefaultColor.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf155412_typeface.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf163803_image_with_fill.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf164623.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/tdf170095.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/testTdf132557_footerCustomShapes.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/testTdf157019_objPlaceholderCustomShape.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/theme-tint.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/theme.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "oox/transparent-text.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "pitch-lo": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/BoldonseFontEmbedded.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/TextDistancesInsets1.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/TextDistancesInsets2.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/TextDistancesInsets3.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/TextFittingComparisonWithMSO_TopBottomMiddleAlignment.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/fdo47434.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/fdo90607.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/n593612.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/n759180.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/n762695.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/n819614.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/n820786.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/n902652.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/smoketest.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/strict_ooxml.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/tdf100491.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/tdf109317.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/tdf90403.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd-data/theme.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/3columns.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/NumberedList-12ab-ab-34.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/ShapeLineProperties.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/ShapePlusImage.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/ShapeTextInflateTop.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/animation-sound-external.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/arc-validiert.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bnc480256-2.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bnc480256.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bnc584721_1_2.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bnc584721_4.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bnc862510_5.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bnc862510_6.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bnc862510_7.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bnc870233_1.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bnc870233_2.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bnc870237.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bnc880763.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bnc887225.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bnc887230.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bnc904423.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bnc910045.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bullet-indent.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bulletColor.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/bulletMarginAndIndent.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/chart_pt_color_bg1.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/connector-shape-animations.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/connectors.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/crop-position.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/crop-to-shape.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/croppedTo0.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/customshape-bitmapfill-srcrect.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/customxml.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/effectOrder.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/fdo83751.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/fill-color-list.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/font-scale.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/formatting-bullet-indent.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/glue_point_leaving_directions.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/group-rot.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/group.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/hidden_group_shape.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/hyperlinkOnImage.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/hyperlinktest.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/layout-clrmap-override.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/lineStyle.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/loopNoPause.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/master-bg-color.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/master-slides.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/multicol.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/multiplelayoutfooter.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/n778859.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/n80340.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/n828390.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/n828390_2.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/n828390_3.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/n83889.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/n862510_1.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/n862510_2.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/n862510_4.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/n90190.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/n90223.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/n90223RT.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/n90255.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/narration-non-media-shape.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/numfmt.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/onemaster-twolayouts.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/ooxtheme.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/open-as-read-only.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/page_transparent_bitmap.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/paraMarginAndIndentation.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/predefined-table-style.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/pres-with-notes.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/presLeftAlign.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/presetDashDot.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/rightToLeftParagraph.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/shape-blur-effect.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/shape-glow-effect.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/shape-soft-edges.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/shape-text-glow-effect.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/shape-text-rotate.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/slide-section-test.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/slide-sections.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/slidenum_field.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-accent-process.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-autoTxRot.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-autofit-sync.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-background-drawingml-fallback.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-background.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-bullet-list.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-center-cycle.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-chevron.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-children.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-cnt.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-composite-infer-right.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-continuous-block-process.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-cycle-matrix.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-cycle.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-data-follow.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-dir.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-font-size.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-interopgrabbag.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-linear-rule-vert.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-linear-rule.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-maxdepth.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-missing-bullet.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-multidirectional.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-org-chart.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-org-chart2.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-picture-strip.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-preserve.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-pyramid-1child.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-recursion.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-rightoleftblockdiagram.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-rotation.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-rotation2.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-snake-rows.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-tdf134221.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-text.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-vertical-block-list.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart-vertical-box-list.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/smartart1.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/subtitle-animation-save.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/table-list.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tableBorderLineStyle.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tcPr-vert-roundtrip.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf100065.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf100926.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf100926_ODP.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf102261_testParaTabStopDefaultDistance.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf103347.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf103473.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf103792.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf103800.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf103876.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf104015.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf104201.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf104445.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf104722.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf104786.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf104788.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf104789.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf104792-smart-art-animation.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf105150.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf105739.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf107608.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf109067.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf109187.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf111518.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf111786.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf111789.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf111863.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf111884.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf112086.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf112088.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf112089.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf112209.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf112280.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf112333.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf112334.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf112633.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf113198.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf113818-swivel.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf113822underline.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf114821.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf114845_rotateShape.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf114848.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf114913.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf115394-zero.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf115394.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf116350-texteffects.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf118776.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf119015.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf119087.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf119118.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf119187.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf119649.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf120028.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf123090.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf123684.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf124457.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf125071.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf125346.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf125346_2.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf125360.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf125360_1.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf125360_2.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf125551.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf125554.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf125573_FontWorkScaleX.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf126234.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf126324.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf126741.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf127129.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf127237.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf127964.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf128206.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf128212.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf128213-shaperot.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
+            "sd/tdf128213.pptx": {
+              "layout": 0,
+              "link_recall": 0,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            }
+          },
+          "score_tolerance": 0.02
         }
       }
     },
