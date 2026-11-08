@@ -91,7 +91,7 @@ func TestDiagram(t *testing.T) {
 				if k.Fill.Kind != slides.FillSolid || !nearColor(k.Fill.Color, want.fill) || k.Line.Width != 2 || k.Line.Color != white {
 					t.Errorf("ellipse %d fill %+v line %+v", i, k.Fill, k.Line)
 				}
-				if k.Text == nil || plain(k.Text) != want.text || k.Text.Anchor != slides.AnchorMiddle || k.Text.Autofit != slides.AutofitShrink ||
+				if k.Text == nil || plain(k.Text) != want.text || k.Text.Anchor != slides.AnchorMiddle || k.Text.Autofit != slides.AutofitShrink || k.Text.ShrinkGroup != 1 ||
 					k.Text.Paragraphs[0].Align != css.AlignCenter || k.Text.Paragraphs[0].Runs[0].Style.Color != white {
 					t.Errorf("ellipse %d text %+v", i, k.Text)
 				}

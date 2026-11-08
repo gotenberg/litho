@@ -116,6 +116,9 @@ type reader struct {
 	// the jumps of hyperlinks.
 	slideAt         map[string]int
 	slideCount, cur int
+	// diagrams counts the SmartArt diagrams read, each one's count the
+	// shrink group of its text.
+	diagrams int
 	// notesRead marks the notes page layout read from the first notes
 	// slide: notesSlideBox, notesTextBox and notesShapes.
 	notesRead                   bool

@@ -111,7 +111,22 @@ func (r *reader) diagram(c *shapeCtx, data *ooxml.Element, s *slides.Shape, dept
 	if len(s.Kids) == 0 {
 		return nil, nil
 	}
+	r.diagrams++
+	shrinkGroup(s.Kids, r.diagrams)
 	return s, nil
+}
+
+// shrinkGroup ties the text bodies of a diagram's shapes to the group id,
+// so the builder shrinks the text of every shape of the diagram that
+// shrinks by one scale, the smallest any needs, as Impress fits a
+// SmartArt diagram's text.
+func shrinkGroup(shapes []*slides.Shape, id int) {
+	for _, k := range shapes {
+		if k.Text != nil {
+			k.Text.ShrinkGroup = id
+		}
+		shrinkGroup(k.Kids, id)
+	}
 }
 
 // emu converts points to whole EMUs.
