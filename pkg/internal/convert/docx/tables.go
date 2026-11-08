@@ -814,6 +814,12 @@ func (d *document) floatTable(st *css.Style, f *ooxml.Element) {
 // vertAnchor text, the default) down by its tblpY, when positive and not
 // an alignment.
 func tableOffset(st *css.Style, f *ooxml.Element) {
+	if attrOr(f, "vertAnchor") == "page" && !hasAttr(f, "tblpYSpec") {
+		if v, ok := ooxml.Twips(attrOr(f, "tblpY")); ok {
+			setPageTop(st, v)
+		}
+		return
+	}
 	if a := attrOr(f, "vertAnchor"); a != "" && a != "text" || hasAttr(f, "tblpYSpec") {
 		return
 	}

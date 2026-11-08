@@ -113,17 +113,17 @@ func TestTables_Floating(t *testing.T) {
 		name, tblpPr string
 		float        css.Float
 		auto         bool
-		top          float64
+		top, pageTop float64
 	}{
-		{"left", `<w:tblpPr w:leftFromText="180" w:tblpY="400"/>`, css.FloatLeft, false, 0},
-		{"right", `<w:tblpPr w:tblpXSpec="right"/>`, css.FloatRight, false, 0},
-		{"centred below the text", `<w:tblpPr w:tblpXSpec="center" w:tblpY="400"/>`, css.FloatNone, true, 20},
-		{"centred on the page", `<w:tblpPr w:tblpXSpec="center" w:vertAnchor="page" w:tblpY="400"/>`, css.FloatNone, true, 0},
+		{"left", `<w:tblpPr w:leftFromText="180" w:tblpY="400"/>`, css.FloatLeft, false, 0, 0},
+		{"right", `<w:tblpPr w:tblpXSpec="right"/>`, css.FloatRight, false, 0, 0},
+		{"centred below the text", `<w:tblpPr w:tblpXSpec="center" w:tblpY="400"/>`, css.FloatNone, true, 20, 0},
+		{"centred on the page", `<w:tblpPr w:tblpXSpec="center" w:vertAnchor="page" w:tblpY="400"/>`, css.FloatNone, true, 0, 20},
 	} {
 		b := build(t, table(tc.tblpPr), nil)
 		tbl := role(b.root, "Table")[0].Style
-		if tbl.Float != tc.float || (tbl.Margin[css.Left].Kind == css.Auto) != tc.auto || tbl.Margin[css.Top].Value != tc.top {
-			t.Errorf("%s: float %v margins %v", tc.name, tbl.Float, tbl.Margin)
+		if tbl.Float != tc.float || (tbl.Margin[css.Left].Kind == css.Auto) != tc.auto || tbl.Margin[css.Top].Value != tc.top || tbl.PageTop != tc.pageTop {
+			t.Errorf("%s: float %v margins %v page top %v", tc.name, tbl.Float, tbl.Margin, tbl.PageTop)
 		}
 	}
 }

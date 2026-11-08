@@ -93,3 +93,13 @@ func setChain(st *css.Style, id string, seq int, h float64) {
 func strokeBorders(st *css.Style) {
 	st.StrokeBorders = true
 }
+
+// setPageTop starts the floating table st, positioned y points below its
+// page's top edge (17.4.58 tblpPr vertAnchor page, tblpY), at least that
+// low on its page, as Writer places it, the flow before it ending higher
+// ([css.Office.PageTop]). A y of 0 or less sets none.
+func setPageTop(st *css.Style, y float64) {
+	if y > 0 {
+		st.PageTop = y
+	}
+}
