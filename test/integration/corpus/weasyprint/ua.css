@@ -13,7 +13,8 @@
  * page margin; and it gives the body the orphans and widows of
  * tests_ua.css, and the footnote pseudo-elements the content tests_ua.css
  * gives them: a call at the text's size on its baseline, and a marker
- * without a space. It is an author stylesheet placed before the test's
+ * without a space; the note pseudo-elements alike, with tests_ua.css's
+ * callback. It is an author stylesheet placed before the test's
  * own, and its selectors are type selectors, so a rule of the test wins
  * over it where they meet unless the test's selector is the universal one
  * alone.
@@ -106,4 +107,15 @@ body {
 }
 ::footnote-marker {
   content: counter(footnote) ".";
+}
+::note-call {
+  content: counter(note);
+  vertical-align: baseline;
+  font-size: inherit;
+}
+::note-marker {
+  content: counter(note) ".";
+}
+::note-callback {
+  content: "b";
 }
