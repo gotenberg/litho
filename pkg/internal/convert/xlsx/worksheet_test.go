@@ -93,7 +93,7 @@ func TestRead_RowHeightsOfOffice(t *testing.T) {
 // left view and the warnings of what is not applied.
 func TestRead_CellValues(t *testing.T) {
 	t.Parallel()
-	doc, warnings := readBytes(t, oneSheet(t, `<sheetViews><sheetView rightToLeft="1" showZeros="0" workbookViewId="0"/></sheetViews><sheetData><row r="1">`+
+	doc, _ := readBytes(t, oneSheet(t, `<sheetViews><sheetView rightToLeft="1" showZeros="0" workbookViewId="0"/></sheetViews><sheetData><row r="1">`+
 		`<c r="A1"><v> 12.5 </v></c><c r="B1" t="n"><f>A1*2</f><v>25</v></c><c r="C1"><f>SUM(A1)</f><v></v></c>`+
 		`<c r="D1" t="str"><f>"a"</f><v>text_x0021_</v></c><c r="E1" t="b"><v>1</v></c><c r="F1" t="b"><v>0</v></c>`+
 		`<c r="G1" t="e"><v>#DIV/0!</v></c><c r="H1" t="d"><v>2025-01-21T13:30:00</v></c><c r="I1" t="inlineStr"><is><t>in</t><t>line</t></is></c>`+
@@ -130,8 +130,8 @@ func TestRead_CellValues(t *testing.T) {
 	if len(sh.Merges) != 1 || sh.Merges[0] != (sheet.Range{FirstRow: 2, FirstColumn: 0, LastRow: 3, LastColumn: 2}) {
 		t.Errorf("merges %+v", sh.Merges)
 	}
-	if !hasWarning(warnings, "conditional formatting") {
-		t.Errorf("warnings %v lack the conditional formatting", warnings)
+	if len(sh.Conditional) != 1 || len(sh.Conditional[0].Rules) != 1 {
+		t.Errorf("conditional formats %+v", sh.Conditional)
 	}
 }
 

@@ -112,9 +112,7 @@ func (w *sheetReader) read(root *ooxml.Element) error {
 			return err
 		}
 	}
-	if root.Child(nsMain, "conditionalFormatting") != nil {
-		r.warn("unsupported-content", "conditional formatting is not applied")
-	}
+	w.conditionalFormats(root)
 	if root.Child(nsMain, "picture") != nil {
 		r.warn("unsupported-content", "a sheet background picture is left out")
 	}
