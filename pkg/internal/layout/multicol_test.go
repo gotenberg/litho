@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -168,4 +169,18 @@ func TestMulticol_CloneDecoration(t *testing.T) {
 		BB_BB
 		RR_RR
 		_____`)
+}
+
+func TestMulticol_BalancesOverAbsoluteBoxes(t *testing.T) {
+	t.Parallel()
+	abs := el(sty(width(2), func(s *css.Style) { s.Position = css.Absolute; s.Top = css.Pts(0) }), strip(blue), strip(blue), strip(blue), strip(blue))
+	rel := el(sty(func(s *css.Style) { s.Position = css.Relative }), strip(red), strip(red), abs)
+	// The flow alone balances to one row in each column; the absolutely
+	// positioned box, 4 rows tall, balances the columns to 2 rows, which
+	// the block after the container follows.
+	res := run(t, doc(el(sty(columns(2, 1)), rel), strip(lime)), page(5, 6))
+	rows := grid(render(t, res, 1))
+	if rows[0][3:] != "BB" || rows[2][4] != 'G' || rows[3][4] != '_' {
+		t.Errorf("pixels:\n%s\nwant the second column to start blue and the next block on the third row", strings.Join(rows, "\n"))
+	}
 }

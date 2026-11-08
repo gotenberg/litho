@@ -667,7 +667,7 @@ func (e *engine) layoutColumns(b *box, s *colSet, cb cblock, ctx *colCtx) float6
 	end = max(end, own.bottom())
 	e.reach(end)
 	e.noPaginate++
-	e.layoutMonolithicAbs(s.kids, 0)
+	e.layoutMonolithicAbs(s.kids, 0, false)
 	e.noPaginate--
 	return end
 }
@@ -681,22 +681,31 @@ func monolithicAbs(k *box) bool {
 }
 
 // layoutMonolithicAbs lays out the monolithic absolutely positioned boxes
-// among kids and their descendants, for balancing to measure.
-func (e *engine) layoutMonolithicAbs(kids []*box, depth int) {
+// among kids and their descendants, and the breakable ones whose
+// containing block is among them, for balancing to measure: Chromium
+// balances the columns over what those take too. in reports kids inside
+// such a containing block.
+func (e *engine) layoutMonolithicAbs(kids []*box, depth int, in bool) {
 	for _, k := range kids {
 		if e.err != nil || depth > maxTreeDepth {
 			return
 		}
-		if monolithicAbs(k) {
+		if monolithicAbs(k) || in && k.abs && !k.fixed && k.st.Position == css.Absolute {
 			if k.staticSet {
 				e.layoutAbs(k)
 			}
 			continue
 		}
-		if k.mc == nil {
-			e.layoutMonolithicAbs(k.kids, depth+1)
+		if k.mc == nil && !k.abs {
+			e.layoutMonolithicAbs(k.kids, depth+1, in || holdsAbs(k))
 		}
 	}
+}
+
+// holdsAbs reports a box that is the containing block of its absolutely
+// positioned descendants (CSS 2.1, 10.1; CSS Transforms 1, 2).
+func holdsAbs(k *box) bool {
+	return k.st.Position != css.Static || len(k.st.Transform) > 0 && k.kind == kindBlock
 }
 
 // consumed returns how much of each column the content of the container
@@ -729,10 +738,23 @@ func (c *colCtx) consumed(b *box, kids []*box, end float64, abs bool) []float64 
 		// The container's own lines are its content.
 		lines(b)
 	}
-	var walk func(k *box, depth int)
-	walk = func(k *box, depth int) {
+	var walk func(k *box, depth int, in bool)
+	walk = func(k *box, depth int, in bool) {
 		if abs && monolithicAbs(k) && k.laidOut {
 			add(c.index(k.y+eps), k.y+k.borderH())
+			return
+		}
+		if abs && in && k.abs && !k.fixed && k.st.Position == css.Absolute && k.laidOut {
+			// A breakable box takes the room of each column it runs
+			// through.
+			top, bot := k.y, k.y+k.borderH()
+			for i := c.index(top + eps); i < len(out) && c.frags[i].vtop < bot-eps; i++ {
+				add(i, min(bot, c.frags[i].vtop+c.frags[i].h))
+			}
+			if last := len(c.frags) - 1; last >= 0 && bot > c.frags[last].vtop+c.frags[last].h+eps {
+				// Past the last column the box overflows the row.
+				add(last, bot)
+			}
 			return
 		}
 		if !k.laidOut && k.kind != kindInline || k.abs || k.fixed || depth > maxTreeDepth {
@@ -740,7 +762,7 @@ func (c *colCtx) consumed(b *box, kids []*box, end float64, abs bool) []float64 
 		}
 		if k.kind == kindInline {
 			for _, kk := range k.kids {
-				walk(kk, depth+1)
+				walk(kk, depth+1, in || holdsAbs(k))
 			}
 			return
 		}
@@ -760,11 +782,11 @@ func (c *colCtx) consumed(b *box, kids []*box, end float64, abs bool) []float64 
 		}
 		lines(k)
 		for _, kk := range k.kids {
-			walk(kk, depth+1)
+			walk(kk, depth+1, in || holdsAbs(k))
 		}
 	}
 	for _, k := range kids {
-		walk(k, 0)
+		walk(k, 0, false)
 	}
 	if len(out) > 0 && end > c.start+eps {
 		add(c.index(end-eps), end)
