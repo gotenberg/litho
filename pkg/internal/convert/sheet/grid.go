@@ -1,8 +1,11 @@
 package sheet
 
 import (
+	"fmt"
 	"math"
 	"sort"
+	"strconv"
+	"strings"
 )
 
 // The sheet limits, Excel's and Calc's: 1,048,576 rows by 16,384 columns
@@ -257,6 +260,7 @@ func (g *grid) usedRange(single bool) (Range, bool) {
 		u.FirstRow, u.LastRow = min(u.FirstRow, r), max(u.LastRow, r)
 		u.FirstColumn, u.LastColumn = min(u.FirstColumn, c), max(u.LastColumn, c)
 	}
+	dataLast, attrLast := -1, -1
 	for _, ri := range g.rowOrder {
 		row := g.rows[ri]
 		for i := range row.Cells {
@@ -264,10 +268,17 @@ func (g *grid) usedRange(single bool) (Range, bool) {
 			if c.Column < 0 || c.Column >= maxColumns {
 				continue
 			}
-			if hasContent(c) || visible(c.Style) {
+			if hasContent(c) {
+				dataLast = max(dataLast, c.Column)
 				add(ri, c.Column)
+			} else if visible(c.Style) {
+				attrLast = max(attrLast, c.Column)
+				add(ri, 0)
 			}
 		}
+	}
+	if attrLast > dataLast {
+		u.LastColumn = max(u.LastColumn, g.attrColumns(dataLast, attrLast))
 	}
 	for _, m := range g.merges {
 		if hasContent(g.cell(m.FirstRow, m.FirstColumn)) {
@@ -292,4 +303,65 @@ func (g *grid) usedRange(single bool) (Range, bool) {
 		u.LastColumn = g.extendPrint(u.LastColumn, 0, u.LastRow)
 	}
 	return u, true
+}
+
+// columnsStop is the run of columns formatted alike right of the last
+// column with a value at which Calc stops extending the print range over
+// formatted cells: 30 columns (SC_COLUMNS_STOP, sc/source/core/data
+// table1.cxx).
+const columnsStop = 30
+
+// attrColumns returns the last column a sheet prints for its formatted
+// cells right of dataLast, the last column with a value, attrLast being
+// the last formatted one: attrLast, unless a run of at least columnsStop
+// columns formatted alike starts before it, where the range stops, the
+// unformatted columns before the run left out too, as Calc's
+// ScTable::GetPrintArea compares the columns' visible attributes (fill,
+// borders, diagonals).
+//
+// # Corpus evidence
+//
+//   - ods: sc/tdf133327.ods, rows filled across 261 columns without a
+//     value, prints column A alone.
+func (g *grid) attrColumns(dataLast, attrLast int) int {
+	keys := map[*Style]string{}
+	key := func(st *Style) string {
+		k, ok := keys[st]
+		if !ok {
+			k = fmt.Sprint(st.Fill.Color, st.Border, st.Diagonal, st.DiagonalUp, st.DiagonalDown)
+			keys[st] = k
+		}
+		return k
+	}
+	sig := make([]strings.Builder, attrLast-dataLast)
+	for _, ri := range g.rowOrder {
+		row := g.rows[ri]
+		for i := range row.Cells {
+			c := &row.Cells[i]
+			if c.Column <= dataLast || c.Column > attrLast || hasContent(c) || !visible(c.Style) {
+				continue
+			}
+			b := &sig[c.Column-dataLast-1]
+			b.WriteString(strconv.Itoa(ri))
+			b.WriteByte(':')
+			b.WriteString(key(c.Style))
+			b.WriteByte(';')
+		}
+	}
+	at := func(c int) string { return sig[c-dataLast-1].String() }
+	for start := dataLast + 1; start < attrLast; {
+		end := start
+		for end < attrLast && at(start) == at(end+1) {
+			end++
+		}
+		if end+1-start >= columnsStop {
+			last := start - 1
+			for last > dataLast && at(last) == "" {
+				last--
+			}
+			return max(last, 0)
+		}
+		start = end + 1
+	}
+	return attrLast
 }
