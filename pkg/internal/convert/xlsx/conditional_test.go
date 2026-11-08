@@ -142,3 +142,37 @@ func TestRead_ConditionalFormats(t *testing.T) {
 		t.Errorf("plain bar %+v", b)
 	}
 }
+
+// TestRead_IconSets locks the reading of an icon set rule and of its
+// Excel 2010 extension: the set, the thresholds over the range, the gte
+// flags, reverse, showValue and the custom icons.
+func TestRead_IconSets(t *testing.T) {
+	t.Parallel()
+	ws := `<sheetData><row r="1"><c r="A1"><v>1</v></c></row><row r="2"><c r="A2"><v>5</v></c></row></sheetData>` +
+		`<conditionalFormatting sqref="A1:A2"><cfRule type="iconSet" priority="1"><iconSet iconSet="4Rating" reverse="1" showValue="0">` +
+		`<cfvo type="percent" val="0"/><cfvo type="percent" val="25"/><cfvo type="num" val="3" gte="0"/><cfvo type="max"/></iconSet></cfRule></conditionalFormatting>` +
+		`<extLst><ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}" xmlns:x14="` + nsX14 + `"><x14:conditionalFormattings><x14:conditionalFormatting xmlns:xm="` + nsXM + `">` +
+		`<x14:cfRule type="iconSet" priority="2" id="{9}"><x14:iconSet iconSet="3Stars" custom="1"><x14:cfvo type="percent"><xm:f>0</xm:f></x14:cfvo>` +
+		`<x14:cfvo type="percent"><xm:f>33</xm:f></x14:cfvo><x14:cfvo type="percent"><xm:f>67</xm:f></x14:cfvo>` +
+		`<x14:cfIcon iconSet="3Flags" iconId="2"/><x14:cfIcon iconSet="NoIcons" iconId="0"/><x14:cfIcon iconSet="3Stars" iconId="2"/></x14:iconSet></x14:cfRule>` +
+		`<xm:sqref>A1:A2</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings></ext></extLst>`
+	doc, _ := readBytes(t, zipFiles(t, workbookFiles([]testSheet{{name: "S", xml: ws}}, minimalStyles, "", "", nil)))
+	cf := doc.Sheets[0].Conditional
+	if len(cf) != 2 {
+		t.Fatalf("%d conditional formats, want 2", len(cf))
+	}
+	r := cf[0].Rules[0]
+	want := []float64{1, 2, 3, 5}
+	if r.Kind != sheet.RuleIconSet || r.Icons != "4Rating" || !r.IconsReversed || !r.IconsOnly || len(r.Values) != 4 || len(r.IconsAbove) != 4 || !r.IconsAbove[2] || r.IconsAbove[1] {
+		t.Fatalf("icon set %+v", r)
+	}
+	for i, v := range want {
+		if r.Values[i].Number != v {
+			t.Errorf("threshold %d = %v, want %v", i, r.Values[i], v)
+		}
+	}
+	x := cf[1].Rules[0]
+	if x.Icons != "3Stars" || len(x.Values) != 3 || len(x.IconsCustom) != 3 || x.IconsCustom[0] != "3Flags:2" || x.IconsCustom[1] != "NoIcons:0" {
+		t.Errorf("extended icon set %+v", x)
+	}
+}

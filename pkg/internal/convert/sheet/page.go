@@ -165,8 +165,11 @@ func (b *pageBuilder) region(rg *region) *layout.Node {
 			b.fills = append(b.fills, &compose.Path{Ops: rectOps(u.x, u.y, u.w, u.h), Fill: &compose.Fill{Color: colorOf(c)}})
 		}
 		b.drawDataBar(u)
+		b.drawIcon(u)
 		b.unitBorders(bs, rg, u)
-		add(u)
+		if _, only := b.g.iconAt(u.r, u.c, u.cell); !only {
+			add(u)
+		}
 	})
 	// Text from cells left and right of the region that overflows into
 	// it.

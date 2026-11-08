@@ -125,7 +125,27 @@ func (r *reader) condRule(sh *sheet.Sheet, e *odf.Element, ranges []sheet.Range)
 		}
 		return rule, true
 	case e.Is(nsCalcExt, "icon-set"):
-		return sheet.Rule{Kind: sheet.RuleIconSet}, true
+		// The set, its thresholds and whether each is reached or passed,
+		// and the value shown or not (ODF 1.3 extended by LibreOffice,
+		// calcext:icon-set; ScXMLIconSetFormatContext).
+		rule := sheet.Rule{Kind: sheet.RuleIconSet, Icons: e.A(nsCalcExt, "icon-set-type")}
+		if rule.Icons == "" {
+			rule.Icons = "3TrafficLights1"
+		}
+		var entries []*odf.Element
+		for _, k := range e.Children {
+			if k.Is(nsCalcExt, "formatting-entry") {
+				entries = append(entries, k)
+				rule.IconsAbove = append(rule.IconsAbove, k.A(nsCalcExt, "greater-equal") == "false")
+			}
+		}
+		vals, ok := thresholds(sh, entries, ranges)
+		if !ok {
+			return sheet.Rule{Kind: sheet.RuleIconSet}, true
+		}
+		rule.Values = vals
+		rule.IconsOnly = e.A(nsCalcExt, "show-value") == "false"
+		return rule, true
 	}
 	return sheet.Rule{}, false
 }

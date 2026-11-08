@@ -240,6 +240,7 @@ func (w *sheetReader) cfRule(e *ooxml.Element, ranges []sheet.Range, ext *dataBa
 		dataBarSettings(&rule, db, ext.bars[extID(e)], func(e *ooxml.Element) (css.Color, bool) { return r.color(e) })
 	case "iconSet":
 		rule.Kind = sheet.RuleIconSet
+		iconSet(&rule, w, e.Child(ns.rule, "iconSet"), ns, ranges)
 	default:
 		rule.Kind = sheet.RuleExpression
 		rule.Formula = typ
@@ -573,5 +574,50 @@ func dataBarSettings(rule *sheet.Rule, db, ext *ooxml.Element, color func(*ooxml
 	rule.BarSolid = !boolOrTrue(ext, "gradient")
 	if c, ok := color(ext.Child(nsX14, "negativeFillColor")); ok {
 		rule.BarNegative = c
+	}
+}
+
+// iconSet reads the icon set of a rule (ECMA-376 Part 1, 18.3.1.49
+// iconSet; MS-XLSX, 2.6.32 CT_IconSet): its set, 3TrafficLights1 by
+// default, its thresholds, reverse and showValue, and per threshold the
+// gte flag and the custom icon x14:cfIcon names. A rule whose thresholds
+// do not resolve keeps no set and is reported.
+func iconSet(rule *sheet.Rule, w *sheetReader, is *ooxml.Element, ns cfNames, ranges []sheet.Range) {
+	if is == nil {
+		return
+	}
+	name := attr(is, "iconSet")
+	if name == "" {
+		name = "3TrafficLights1"
+	}
+	valAttr := "val"
+	if ns.rule == nsX14 {
+		valAttr = "value"
+	}
+	vals, ok := w.cfvos(is, ns.rule, valAttr, ranges)
+	if !ok {
+		return
+	}
+	rule.Icons, rule.Values = name, vals
+	rule.IconsReversed = boolAttr(is, "reverse")
+	if v, ok := is.Attr("showValue"); ok {
+		rule.IconsOnly = !ooxml.OnOff(v, true)
+	}
+	for _, k := range is.Kids() {
+		switch {
+		case k.Is(ns.rule, "cfvo"):
+			above := false
+			if v, ok := k.Attr("gte"); ok {
+				above = !ooxml.OnOff(v, true)
+			}
+			rule.IconsAbove = append(rule.IconsAbove, above)
+		case k.Is(nsX14, "cfIcon"):
+			if len(rule.IconsCustom) < len(vals) {
+				rule.IconsCustom = append(rule.IconsCustom, attr(k, "iconSet")+":"+attr(k, "iconId"))
+			}
+		}
+	}
+	if !boolAttr(is, "custom") {
+		rule.IconsCustom = nil
 	}
 }

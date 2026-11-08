@@ -85,6 +85,8 @@ type condResult struct {
 	hasScale bool
 	bar      *Rule
 	barF     *condFormat
+	icon     *Rule
+	iconF    *condFormat
 }
 
 // condStyleKey caches the styles the rules make.
@@ -167,7 +169,8 @@ func evaluable(r *Rule) bool {
 	case RuleExpression:
 		return r.Formula != ""
 	case RuleIconSet:
-		return false
+		set := iconSets[r.Icons]
+		return r.Formula == "" && len(set) > 0 && len(r.Values) == len(set)
 	case RuleCellIs:
 		return r.Formula == "" && len(r.Values) > 0
 	case RuleText:
@@ -185,7 +188,7 @@ func evaluable(r *Rule) bool {
 }
 
 // unevaluated returns how many rules of the sheet of g the builder does
-// not evaluate: icon sets, rules with a formula operand, and expressions
+// not evaluate: icon sets of an unknown set, rules with a formula operand, and expressions
 // whose formula the evaluator does not compute at the format's first
 // cell.
 func unevaluated(g *grid) int {
@@ -368,6 +371,12 @@ func (cs *conditions) evaluate(g *grid, r, c int, cell *Cell) *condResult {
 				res.style = rule.Style
 			}
 		case RuleIconSet:
+			if res.icon != nil {
+				continue
+			}
+			if cell != nil && (cell.Value.Kind == Number || cell.Value.Kind == Bool) {
+				res.icon, res.iconF, holds = rule, cr.f, true
+			}
 		case RuleCellIs, RuleText, RuleBlanks, RuleNoBlanks, RuleDuplicates, RuleUniques,
 			RuleTop, RuleBottom, RuleAboveAverage, RuleBelowAverage:
 			if res.style != nil {
@@ -953,4 +962,49 @@ func Percentile(nums []float64, p float64) float64 {
 		return nums[len(nums)-1]
 	}
 	return nums[i] + (pos-float64(i))*(nums[i+1]-nums[i])
+}
+
+// iconAt returns the icon a cell shows by its icon set rule, and whether
+// the rule hides the cell's value: the icon of the highest threshold the
+// cell's number reaches, or passes for a threshold that asks it to, the
+// first below them all (ScIconSetFormat::GetIconSetData); nil for none.
+func (g *grid) iconAt(r, c int, cell *Cell) (icon, bool) {
+	if g.cond == nil {
+		return nil, false
+	}
+	res := g.cond.evaluate(g, r, c, cell)
+	if res == nil || res.icon == nil {
+		return nil, false
+	}
+	rule := res.icon
+	th, ok := thresholds(rule.Values, len(rule.Values), res.iconF.statistics(g))
+	if !ok {
+		return nil, false
+	}
+	v := cell.Value.Number
+	band := 0
+	for k := 1; k < len(th); k++ {
+		above := k < len(rule.IconsAbove) && rule.IconsAbove[k]
+		if v > th[k] || (!above && v == th[k]) {
+			band = k
+			continue
+		}
+		break
+	}
+	return iconOf(rule, band), rule.IconsOnly
+}
+
+// drawIcon draws the icon of the cell of u at its bottom-left corner, the
+// size of its font's icon, as Calc paints an icon set's icon.
+func (b *pageBuilder) drawIcon(u *unit) {
+	ic, _ := b.g.iconAt(u.r, u.c, u.cell)
+	if ic == nil {
+		return
+	}
+	f := resolveFont(u.st.Font, b.g.doc.Default.Font)
+	s := iconSide(f.size)
+	if s <= 0 || u.w <= 0 || u.h <= 0 {
+		return
+	}
+	b.fills = append(b.fills, placeIcon(ic, u.x+iconInsetX, u.y+u.h-iconInsetY-s, s))
 }

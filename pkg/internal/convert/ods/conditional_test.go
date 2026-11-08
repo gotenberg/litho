@@ -39,7 +39,8 @@ func TestRead_ConditionalFormats(t *testing.T) {
 			`<calcext:color-scale><calcext:color-scale-entry calcext:value="50" calcext:type="percentile" calcext:color="#ff0000"/><calcext:color-scale-entry calcext:value="[.A2]" calcext:type="number" calcext:color="#0000ff"/></calcext:color-scale>` +
 			`<calcext:data-bar calcext:positive-color="#00ff00" calcext:axis-position="middle"><calcext:formatting-entry calcext:value="0" calcext:type="auto-minimum"/><calcext:formatting-entry calcext:value="0" calcext:type="maximum"/></calcext:data-bar>` +
 			`<calcext:color-scale><calcext:color-scale-entry calcext:value="0" calcext:type="minimum" calcext:color="#ff0000"/><calcext:color-scale-entry calcext:value="=2*[.A1]" calcext:type="formula" calcext:color="#0000ff"/></calcext:color-scale>` +
-			`<calcext:icon-set calcext:icon-set-type="3Arrows"/>` +
+			`<calcext:icon-set calcext:icon-set-type="3Flags" calcext:show-value="false"><calcext:formatting-entry calcext:value="0" calcext:type="percent"/>` +
+			`<calcext:formatting-entry calcext:value="50" calcext:type="percent" calcext:greater-equal="false"/><calcext:formatting-entry calcext:value="3" calcext:type="number"/></calcext:icon-set>` +
 			`</calcext:conditional-format>` +
 			`<calcext:conditional-format calcext:target-range-address="S.A3:S.A3"><calcext:condition calcext:value="=[$S.$A5]" calcext:base-cell-address="S.A4"/></calcext:conditional-format>` +
 			`</calcext:conditional-formats></table:table>`,
@@ -107,7 +108,8 @@ func TestRead_ConditionalFormats(t *testing.T) {
 	if s := scales[2]; s.Kind != sheet.RuleColorScale || len(s.Values) != 2 || s.Values[1] != (sheet.Value{Kind: sheet.Text, Text: "=2*[.A1]"}) {
 		t.Errorf("a formula threshold %+v", s)
 	}
-	if s := scales[3]; s.Kind != sheet.RuleIconSet {
+	if s := scales[3]; s.Kind != sheet.RuleIconSet || s.Icons != "3Flags" || !s.IconsOnly || len(s.Values) != 3 ||
+		len(s.IconsAbove) != 3 || s.IconsAbove[0] || !s.IconsAbove[1] || s.Values[2] != num(3) {
 		t.Errorf("icon set %+v", s)
 	}
 }

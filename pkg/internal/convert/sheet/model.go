@@ -131,6 +131,25 @@ type Rule struct {
 	// BarAxis places the zero of a RuleDataBar's bars (MS-XLSX x14:dataBar
 	// axisPosition; ODF calcext:axis-position).
 	BarAxis BarAxis
+	// Icons is the icon set of a RuleIconSet by its SpreadsheetML name
+	// ("3Arrows", "4Rating", "5Quarters", ...; ECMA-376 Part 1, 18.18.42
+	// ST_IconSetType, which ODF's calcext:icon-set-type spells alike), its
+	// thresholds in Values as numbers, the lowest first, one per icon: a
+	// cell shows the icon of the highest threshold its number reaches,
+	// the first icon below them all.
+	Icons string
+	// IconsAbove, when set, lists per threshold whether the number must
+	// pass it rather than reach it (MS-XLSX x14:cfvo gte false; ECMA-376
+	// Part 1, 18.3.1.11 cfvo gte).
+	IconsAbove []bool
+	// IconsReversed shows the icons in the reverse order; IconsOnly hides
+	// the cell's value (18.3.1.49 iconSet reverse and showValue; ODF
+	// calcext:show-value).
+	IconsReversed, IconsOnly bool
+	// IconsCustom, when not empty, names the icon of each threshold as
+	// another set's icon, "3Flags:2", "" keeping the set's own and
+	// "NoIcons:0" showing none (MS-XLSX x14:cfIcon).
+	IconsCustom []string
 }
 
 // BarAxis is where a data bar's zero sits in its cells
@@ -168,7 +187,8 @@ const (
 	// RuleDataBar paints a bar of Bar's colour across the cell, as long
 	// as the value's share of the range's maximum.
 	RuleDataBar
-	// RuleIconSet shows an icon: not drawn, reported.
+	// RuleIconSet shows an icon of the set Icons at the cell's left by
+	// where its number sits among the thresholds.
 	RuleIconSet
 	// RuleDuplicates and RuleUniques hold for a value seen elsewhere in
 	// the range, or nowhere else.
