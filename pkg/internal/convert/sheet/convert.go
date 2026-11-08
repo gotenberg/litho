@@ -191,6 +191,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 			out.Structure.Kids = append(out.Structure.Kids, st.Kids...)
 		}
 	}
+	resolveSheetLinks(doc, out, pages, at)
 	if len(pages) == 0 {
 		// A book that prints no cell prints the first page of its first
 		// sheet, the cells its styles paint, with the sheet's header and

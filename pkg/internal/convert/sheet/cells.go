@@ -432,7 +432,7 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		{Kind: layout.Element, Style: inner, Children: []*layout.Node{para}},
 	}}
 	if u.cell.Href != "" {
-		para.Href = u.cell.Href
+		para.Href = cellHref(u.cell.Href)
 	}
 	return n, cx0, cx1
 }
