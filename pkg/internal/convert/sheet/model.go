@@ -238,6 +238,14 @@ type Cell struct {
 	// Href is the hyperlink the cell carries, "" for none (ECMA-376 Part
 	// 1, 18.3.1.47; ODF text:a in the cell).
 	Href string
+	// Formula is the cell's formula when Calc computes it as it loads the
+	// file, as the file writes it (ECMA-376 Part 1, 18.3.1.40 f, of a cell
+	// saved without its result; ODF 1.3 Part 3, 19.643 table:formula, of
+	// every cell, Calc recalculating an OpenDocument spreadsheet whole):
+	// the builder computes the arithmetic, the comparisons and SUM,
+	// AVERAGE, MIN, MAX and COUNT over the cells and ranges of the book,
+	// and keeps Value for what it does not compute.
+	Formula string
 }
 
 // Run is a span of rich text in a cell (ECMA-376 Part 1, 18.4.4 r; ODF

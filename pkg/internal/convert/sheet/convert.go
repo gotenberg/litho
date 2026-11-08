@@ -130,6 +130,8 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		return nil, fmt.Errorf("laying the spreadsheet out: %w", text.ErrNoFonts)
 	}
 	b := newBuilder(ctx, doc, fonts, opts)
+	doc = b.applyFormulas(doc)
+	b.doc = doc
 	doc = b.applyPivots(doc)
 	b.doc = doc
 	limit := opts.MaxPages

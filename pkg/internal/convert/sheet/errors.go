@@ -25,4 +25,7 @@ const (
 	// CodePivot is a pivot table whose output is left as the file saved
 	// it, or computed in part.
 	CodePivot = "sheet-pivot"
+	// CodeFormula is a formula not computed, which prints its stored
+	// result.
+	CodeFormula = "sheet-formula"
 )
