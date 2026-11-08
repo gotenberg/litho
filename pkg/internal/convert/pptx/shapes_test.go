@@ -414,9 +414,16 @@ func TestShapes_ChartEx(t *testing.T) {
 	}
 	wrapped := `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:cx2="http://schemas.microsoft.com/office/drawing/2015/10/21/chartex" Requires="cx2">` +
 		frame + `</mc:Choice><mc:Fallback>` + fallback + `</mc:Fallback></mc:AlternateContent>`
+	chartRels := rels + `<Relationship Id="rIdX" Type="http://schemas.microsoft.com/office/2014/relationships/chartEx" Target="../charts/chartEx1.xml"/>`
+	parts["ppt/charts/chartEx1.xml"] = `<cx:chartSpace xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex"><cx:chart><cx:plotArea><cx:plotAreaRegion>` +
+		`<cx:series layoutId="funnel"><cx:dataId val="0"/></cx:series></cx:plotAreaRegion></cx:plotArea></cx:chart></cx:chartSpace>`
+	doc, warnings = readDeck(t, testDeck{slides: []testSlide{{tree: wrapped, rels: chartRels}}, parts: parts})
+	if sh := doc.Slides[0].Shapes; len(sh) != 1 || sh[0].Kind != slides.KindChart || sh[0].Chart == nil || sh[0].Name != "Funnel" {
+		t.Errorf("a wrapped chartex frame prints %q, warnings %+v: want the chart, as Impress draws it over the fallback picture", shapeNames(sh), warnings)
+	}
 	doc, _ = readDeck(t, testDeck{slides: []testSlide{{tree: wrapped, rels: rels}}, parts: parts})
-	if names := shapeNames(doc.Slides[0].Shapes); len(names) != 1 || names[0] != "Picture of the funnel" {
-		t.Errorf("a wrapped chartex frame prints %q, want its fallback picture", names)
+	if n := len(doc.Slides[0].Shapes); n != 0 {
+		t.Errorf("a wrapped chartex frame without its part prints %d shapes, want none: the Choice is taken and its chart is missing", n)
 	}
 }
 
