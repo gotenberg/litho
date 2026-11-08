@@ -31,6 +31,13 @@ func (fc *fillCtx) withPh(c css.Color) *fillCtx {
 	return &out
 }
 
+// colorChoice resolves one colour choice element (a srgbClr, a
+// schemeClr...) with its transforms in fc's scope, phClr standing for
+// fc's colour.
+func (fc *fillCtx) colorChoice(e *ooxml.Element) (css.Color, bool) {
+	return ooxml.DrawingColorChoice(e, fc.sc.resolver(fc.ph))
+}
+
 // fillOf returns the fill among e's children (an spPr, a bgPr, a tcPr, a
 // grpSpPr...), false when e holds none.
 func (r *reader) fillOf(fc *fillCtx, e *ooxml.Element) (slides.Fill, bool) {
@@ -66,7 +73,7 @@ func (r *reader) fillChoice(fc *fillCtx, k *ooxml.Element) (slides.Fill, bool) {
 		return slides.Fill{Kind: slides.FillGradient, Gradient: g}, true
 	case "blipFill":
 		ref := ooxml.ParsePicture(&ooxml.Element{Space: ooxml.NSPic, Local: "pic", Children: []*ooxml.Element{k}})
-		pic := blipEffects(r.pictureOf(fc.part, ref), k.Child(ooxml.NSA, "blip"))
+		pic := blipEffects(r.pictureOf(fc.part, ref), k.Child(ooxml.NSA, "blip"), fc.colorChoice)
 		if pic == nil {
 			return slides.Fill{}, true
 		}

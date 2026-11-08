@@ -55,13 +55,13 @@ func (r *reader) picture(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 		r.warn("unsupported-content", fmt.Sprintf("%s does not play in a printout: its poster frame stands in", media))
 	}
 	ref := ooxml.ParsePicture(asPicture(el))
-	pic := blipEffects(r.pictureOf(c.part, ref), kid(el, "blipFill").Child(ooxml.NSA, "blip"))
+	fc := &fillCtx{sc: c.sc, part: c.part, group: c.group}
+	pic := blipEffects(r.pictureOf(c.part, ref), kid(el, "blipFill").Child(ooxml.NSA, "blip"), fc.colorChoice)
 	if pic == nil {
 		return nil
 	}
 	pic = ooxml.Cropped(pic, ref.Crop)
 	style := styleRefs(chain)
-	fc := &fillCtx{sc: c.sc, part: c.part, group: c.group}
 	s.Line = r.shapeLine(fc, chain, style)
 	s.Geometry = r.geometryOf(chain)
 	r.effects(chain, s)
