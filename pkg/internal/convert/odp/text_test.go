@@ -176,6 +176,8 @@ func TestNumberScheme(t *testing.T) {
 		{"i", "", ")", "romanLcParenR"},
 		{"A", "", ".", "alphaUcPeriod"},
 		{"I", "", "-", "romanUcPeriod"},
+		{"I", "", "", "romanUcPlain"},
+		{"a", "", "", "alphaLcPlain"},
 		{"一, 二, 三, ...", "", ".", "arabicPeriod"},
 	}
 	for _, tt := range tests {

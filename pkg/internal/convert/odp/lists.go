@@ -128,7 +128,8 @@ func (r *reader) bullet(ls *odf.ListStyle, lv int, item *odf.Element, listStart 
 // DrawingML autonumber scheme of the same digits and punctuation
 // (ECMA-376 Part 1, 20.1.10.62 ST_TextAutonumberScheme): "1" with "." is
 // arabicPeriod, "a" with ")" alphaLcParenR, "(" and ")" a ParenBoth
-// scheme. A punctuation the schemes lack takes the period; a digit set
+// scheme, none a Plain one (romanUcPlain, which DrawingML lacks for any
+// digits but Arabic, and the builder prints bare). A punctuation the schemes lack takes the period; a digit set
 // they lack, the Arabic digits.
 func numberScheme(format, prefix, suffix string) string {
 	base := "arabic"
@@ -147,8 +148,9 @@ func numberScheme(format, prefix, suffix string) string {
 		return base + "ParenBoth"
 	case strings.HasPrefix(suffix, ")"):
 		return base + "ParenR"
-	case suffix == "" && prefix == "" && base == "arabic":
-		return "arabicPlain"
+	case suffix == "" && prefix == "":
+		// A number of no punctuation prints bare: "I", "a", "1".
+		return base + "Plain"
 	}
 	return base + "Period"
 }
