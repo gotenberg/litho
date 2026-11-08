@@ -67,7 +67,7 @@ var errStaleReferences = errors.New("stale references")
 // something else. A corpus whose references git versions passes.
 func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 	f.mu.RLock()
-	refs, root, pins := f.refs, f.testdataRoot, f.pins
+	refs, root, corpus, pins := f.refs, f.testdataRoot, f.corpus, f.pins
 	f.mu.RUnlock()
 	if refs == nil {
 		return nil
@@ -107,7 +107,7 @@ func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 		return fmt.Errorf("%w: %s (run %s)", errStaleReferences, summarize(stale), refs.BuiltBy)
 	case len(regolden) > 0:
 		return fmt.Errorf("%w: the diff goldens were not made from the references of %s (run rm -rf %s %s, then corpus init --corpus=%s)",
-			errStaleReferences, summarize(regolden), filepath.Join(root, "pdfs"), filepath.Join(root, "goldens", "diff"), filepath.Base(root))
+			errStaleReferences, summarize(regolden), filepath.Join(root, "pdfs"), filepath.Join(root, "goldens", "diff"), corpus)
 	}
 	return nil
 }

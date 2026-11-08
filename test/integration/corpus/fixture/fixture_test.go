@@ -157,7 +157,7 @@ func TestOptionNames_AreTheJSONNamesOfOptions(t *testing.T) {
 func TestChromiumScript_ReadsTheSameSchema(t *testing.T) {
 	t.Parallel()
 
-	data, err := os.ReadFile(filepath.Join("..", "html", "chromium.sh"))
+	data, err := os.ReadFile(filepath.Join("..", "lib", "chromium.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,19 +186,24 @@ func TestChromiumScript_ReadsTheSameSchema(t *testing.T) {
 func TestSources_LoadAndReadThroughDirFS(t *testing.T) {
 	t.Parallel()
 
-	root := filepath.Join("..", "html", "sources")
-	dirs, err := os.ReadDir(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, d := range dirs {
-		if !d.IsDir() {
-			t.Errorf("%s is not a source directory", d.Name())
-			continue
+	var dirs []string
+	for _, corpus := range []string{"litho", "gotenberg"} {
+		root := filepath.Join("..", corpus, "html", "sources")
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			t.Fatal(err)
 		}
-		dir := filepath.Join(root, d.Name())
+		for _, e := range entries {
+			if !e.IsDir() {
+				t.Errorf("%s is not a source directory", filepath.Join(root, e.Name()))
+				continue
+			}
+			dirs = append(dirs, filepath.Join(root, e.Name()))
+		}
+	}
+	for _, dir := range dirs {
 		if _, err := Load(dir); err != nil {
-			t.Errorf("%s: %v", d.Name(), err)
+			t.Errorf("%s: %v", dir, err)
 		}
 		fsys := os.DirFS(dir)
 		entries, err := fs.ReadDir(fsys, ".")
@@ -207,7 +212,7 @@ func TestSources_LoadAndReadThroughDirFS(t *testing.T) {
 		}
 		for _, e := range entries {
 			if data, err := fs.ReadFile(fsys, e.Name()); err != nil || len(data) == 0 {
-				t.Errorf("%s/%s reads %d bytes: %v", d.Name(), e.Name(), len(data), err)
+				t.Errorf("%s/%s reads %d bytes: %v", dir, e.Name(), len(data), err)
 			}
 		}
 	}

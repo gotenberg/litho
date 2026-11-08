@@ -1,0 +1,17 @@
+{
+  "name": "libreoffice/pptx",
+  "source": "libreoffice/pptx",
+  "pdf_root": "pdfs",
+  "inputs": {
+    "list": "documents.json",
+    "list_root": "sources",
+    "fetched_by": "make libreoffice-fetch FORMATS=pptx"
+  },
+  "references": {
+    "dir": "references",
+    "built_by": "make office-references FORMATS=pptx"
+  },
+  "goldens": {
+    "diff": "goldens/diff"
+  }
+}

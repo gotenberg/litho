@@ -24,7 +24,7 @@ const determinismRuns = 3
 
 // litho corpus fixtures the determinism guards read. They are tracked in the
 // repository, unlike the other corpora.
-const lithoFixtureDir = "../../test/integration/corpus/litho/pdfs"
+const lithoFixtureDir = "../../test/integration/corpus/litho/pdf/pdfs"
 
 // pinnedDocumentID is the /ID seed the remediation guard pins, so the one
 // documented nondeterministic input stays out of the comparison.

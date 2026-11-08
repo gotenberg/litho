@@ -28,7 +28,7 @@ import (
 func TestInsertPagesKeepsSeparationsConsistent(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	data, err := os.ReadFile("../../test/integration/corpus/litho/pdfs/fnlimits_1b.pdf")
+	data, err := os.ReadFile("../../test/integration/corpus/litho/pdf/pdfs/fnlimits_1b.pdf")
 	if err != nil {
 		t.Fatalf("reading the fixture: %v", err)
 	}

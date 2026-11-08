@@ -4,7 +4,8 @@
 /dist/
 # Converter corpus inputs: the bytes are the test, and the Chromium references
 # were made from them as they are.
-/test/integration/corpus/html/sources/
+/test/integration/corpus/litho/html/sources/
+/test/integration/corpus/gotenberg/html/sources/
 /test/integration/corpus/weasyprint/resources/
 # A fetched test suite, never formatted.
 /pkg/internal/css/testdata/css-parsing-tests/

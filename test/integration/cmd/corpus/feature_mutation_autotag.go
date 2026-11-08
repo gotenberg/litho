@@ -79,7 +79,7 @@ var markedContentOp = regexp.MustCompile(`(?:^|[\x00\t\n\f\r ()<>\[\]{}/%])B[DM]
 
 // maxScannedStreamBytes caps the bytes [scanMarkedContent] inflates from one
 // stream. Anti-DoS guard for the harness, not spec-mandated: page content in
-// the litho corpus runs to kilobytes, and a stream past the cap is still
+// the litho/pdf corpus runs to kilobytes, and a stream past the cap is still
 // scanned up to it.
 const maxScannedStreamBytes = 64 << 20
 

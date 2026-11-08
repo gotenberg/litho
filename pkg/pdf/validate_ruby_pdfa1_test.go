@@ -19,7 +19,7 @@ import (
 func TestValidatePDFA1aReportsEveryRubyAndWarichuElement(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	data, err := os.ReadFile("../../test/integration/corpus/litho/pdfs/structkinds_ua2.pdf")
+	data, err := os.ReadFile("../../test/integration/corpus/litho/pdf/pdfs/structkinds_ua2.pdf")
 	if err != nil {
 		t.Fatalf("reading the fixture: %v", err)
 	}

@@ -19,7 +19,7 @@ import (
 func fixtureFontsFailing(t *testing.T, name, profile string, rule Rule) []string {
 	t.Helper()
 	ctx := context.Background()
-	data, err := os.ReadFile("../../../test/integration/corpus/litho/pdfs/" + name)
+	data, err := os.ReadFile("../../../test/integration/corpus/litho/pdf/pdfs/" + name)
 	if err != nil {
 		t.Fatalf("reading the fixture: %v", err)
 	}

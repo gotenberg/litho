@@ -16,7 +16,7 @@ import (
 
 // fontEmbedFixture is the litho corpus fixture whose unembedded fonts
 // [fixturePrograms] covers.
-var fontEmbedFixture = filepath.Join("..", "..", "test", "integration", "corpus", "litho", "pdfs", "fontembed_2b.pdf")
+var fontEmbedFixture = filepath.Join("..", "..", "test", "integration", "corpus", "litho", "pdf", "pdfs", "fontembed_2b.pdf")
 
 // fixturePrograms returns the synthetic programs [TestFontEmbedFixture]
 // supplies, by /BaseFont: a glyph for each character the fixture shows with

@@ -13,12 +13,14 @@ import (
 // sit. Every corpus under test/integration/corpus/ ships one
 // manifest.json with this exact shape.
 type Manifest struct {
-	// Name is the corpus identifier used in CLI flags ("pdfjs", "verapdf",
-	// "govdocs", "pdf20").
+	// Name is the corpus identifier used in CLI flags and the baseline: the
+	// corpus directory under test/integration/corpus/ ("pdfjs",
+	// "libreoffice/docx"). Defaults to that directory when empty.
 	Name string `json:"name"`
 
 	// Source is the directory under test/integration/corpus/ that holds
-	// the corpus's download.sh. Defaults to Name when empty.
+	// the corpus's manifest and download.sh, with "/" separators. Defaults
+	// to that directory when empty.
 	Source string `json:"source,omitempty"`
 
 	// PDFRoot is the subdirectory of the corpus testdata root that holds
@@ -143,43 +145,92 @@ func (m *Manifest) EffectiveProfileMode() string {
 	return m.ProfileMode
 }
 
-// LoadManifest reads the manifest whose Name field matches name. It
-// walks every corpus directory under test/integration/corpus/ and
-// returns the first match. The source directory name and the corpus
-// Name need not coincide (e.g. directory "pdf.js" hosts corpus "pdfjs").
+// LoadManifest reads the manifest whose Name field matches name, among the
+// corpora [corpusDirs] finds. The source directory and the corpus Name need
+// not coincide, though every corpus today names itself by its directory.
 func LoadManifest(name string) (*Manifest, error) {
+	ms, err := manifests()
+	if err != nil {
+		return nil, err
+	}
+	for _, m := range ms {
+		if m.Name == name {
+			return m, nil
+		}
+	}
+	return nil, fmt.Errorf("manifest not found for corpus %q", name)
+}
+
+// manifests reads the manifest of every corpus [corpusDirs] finds, in
+// directory order. A Name or Source left empty takes the directory, its
+// path under test/integration/corpus/ with "/" separators.
+func manifests() ([]*Manifest, error) {
 	root := corpusRoot()
 	if root == "" {
 		return nil, errors.New("no corpus directory found")
 	}
-	entries, err := os.ReadDir(root)
+	dirs, err := corpusDirs(root)
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", root, err)
+		return nil, err
 	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		p := filepath.Join(root, e.Name(), "manifest.json")
-		data, err := os.ReadFile(p)
+	out := make([]*Manifest, 0, len(dirs))
+	for _, dir := range dirs {
+		p := filepath.Join(root, filepath.FromSlash(dir), "manifest.json")
+		data, err := os.ReadFile(p) //nolint:gosec // a committed manifest under the corpus root
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("read %s: %w", p, err)
 		}
 		var m Manifest
 		if err := json.Unmarshal(data, &m); err != nil {
 			return nil, fmt.Errorf("parse %s: %w", p, err)
 		}
 		if m.Name == "" {
-			m.Name = e.Name()
+			m.Name = dir
 		}
 		if m.Source == "" {
-			m.Source = e.Name()
+			m.Source = dir
 		}
-		if m.Name == name {
-			return &m, nil
+		out = append(out, &m)
+	}
+	return out, nil
+}
+
+// corpusDirs lists the corpus directories under root, as paths relative to
+// it with "/" separators: every directory holding a manifest.json, and every
+// such directory one level down in a directory holding none. A source that
+// feeds several corpora groups them that way, one per format:
+// libreoffice/docx, litho/html.
+func corpusDirs(root string) ([]string, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", root, err)
+	}
+	var dirs []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if hasManifest(filepath.Join(root, e.Name())) {
+			dirs = append(dirs, e.Name())
+			continue
+		}
+		subs, err := os.ReadDir(filepath.Join(root, e.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", filepath.Join(root, e.Name()), err)
+		}
+		for _, sub := range subs {
+			if sub.IsDir() && hasManifest(filepath.Join(root, e.Name(), sub.Name())) {
+				dirs = append(dirs, e.Name()+"/"+sub.Name())
+			}
 		}
 	}
-	return nil, fmt.Errorf("manifest not found for corpus %q", name)
+	return dirs, nil
+}
+
+// hasManifest reports whether dir holds a manifest.json file.
+func hasManifest(dir string) bool {
+	info, err := os.Stat(filepath.Join(dir, "manifest.json"))
+	return err == nil && info.Mode().IsRegular()
 }
 
 func corpusRoot() string {
@@ -196,13 +247,14 @@ func corpusRoot() string {
 }
 
 // TestdataRoot returns the absolute path to the corpus testdata
-// directory. The directory holds the provisioned PDFs and goldens and
-// sits next to the source directory (same leaf name).
+// directory. The directory holds the provisioned PDFs and goldens, at the
+// source directory's path under test/integration/testdata/.
 func (m *Manifest) TestdataRoot() string {
 	leaf := m.Source
 	if leaf == "" {
 		leaf = m.Name
 	}
+	leaf = filepath.FromSlash(leaf)
 	candidates := []string{
 		filepath.Join("test", "integration", "testdata", leaf),
 		filepath.Join("testdata", leaf),
@@ -233,7 +285,7 @@ func (m *Manifest) GoldenDir(feature string) string {
 // SourceDir returns the corpus source directory under
 // test/integration/corpus/, the one holding its manifest.
 func (m *Manifest) SourceDir() string {
-	return filepath.Join(corpusRoot(), m.Source)
+	return filepath.Join(corpusRoot(), filepath.FromSlash(m.Source))
 }
 
 // GoldenOverridesPath returns the path to the committed golden override
@@ -243,38 +295,18 @@ func (m *Manifest) GoldenOverridesPath(feature string) string {
 	if !ok {
 		return ""
 	}
-	return filepath.Join(corpusRoot(), m.Source, rel)
+	return filepath.Join(corpusRoot(), filepath.FromSlash(m.Source), rel)
 }
 
-// ListCorpora returns the Name of every corpus whose source directory
-// under test/integration/corpus/ ships a manifest.json.
+// ListCorpora returns the Name of every corpus [corpusDirs] finds.
 func ListCorpora() ([]string, error) {
-	root := corpusRoot()
-	if root == "" {
-		return nil, errors.New("no corpus directory found")
-	}
-	entries, err := os.ReadDir(root)
+	ms, err := manifests()
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", root, err)
+		return nil, err
 	}
-	var names []string
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(root, e.Name(), "manifest.json"))
-		if err != nil {
-			continue
-		}
-		var m Manifest
-		if err := json.Unmarshal(data, &m); err != nil {
-			continue
-		}
-		name := m.Name
-		if name == "" {
-			name = e.Name()
-		}
-		names = append(names, name)
+	names := make([]string, 0, len(ms))
+	for _, m := range ms {
+		names = append(names, m.Name)
 	}
 	return names, nil
 }

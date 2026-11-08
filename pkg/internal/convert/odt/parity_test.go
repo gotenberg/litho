@@ -14,7 +14,7 @@ import (
 // LITHO_GOTENBERG_OFFICE names; the test skips without either.
 func gotenbergDocument(t *testing.T, name string) []byte {
 	t.Helper()
-	root := filepath.Join("..", "..", "..", "..", "test", "integration", "corpus", "odt", "sources")
+	root := filepath.Join("..", "..", "..", "..", "test", "integration", "corpus", "gotenberg", "odt", "sources")
 	candidates, _ := filepath.Glob(filepath.Join(root, "*", name))
 	candidates = append(candidates, filepath.Join(root, name))
 	if dir := os.Getenv("LITHO_GOTENBERG_OFFICE"); dir != "" {

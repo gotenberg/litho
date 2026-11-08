@@ -11,11 +11,11 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
-// siglockFixture returns the litho corpus fixture whose unsigned signature
+// siglockFixture returns the litho/pdf corpus fixture whose unsigned signature
 // fields carry a /Lock of each action Table 233 defines.
 func siglockFixture(t *testing.T) []byte {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "..", "corpus", "litho", "pdfs", "siglock_2b.pdf"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "corpus", "litho", "pdf", "pdfs", "siglock_2b.pdf"))
 	if err != nil {
 		t.Fatal(err)
 	}

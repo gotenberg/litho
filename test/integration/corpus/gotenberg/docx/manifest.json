@@ -1,0 +1,15 @@
+{
+  "name": "gotenberg/docx",
+  "source": "gotenberg/docx",
+  "pdf_root": "pdfs",
+  "inputs": {
+    "glob": "sources/*"
+  },
+  "references": {
+    "dir": "references",
+    "built_by": "make office-references FORMATS=docx"
+  },
+  "goldens": {
+    "diff": "goldens/diff"
+  }
+}

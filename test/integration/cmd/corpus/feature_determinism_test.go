@@ -16,9 +16,9 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
-// lithoCorpusPDFs is the tracked litho corpus, which the determinism tests
+// lithoCorpusPDFs is the tracked litho/pdf corpus, which the determinism tests
 // read from the repository.
-const lithoCorpusPDFs = "../../corpus/litho/pdfs"
+const lithoCorpusPDFs = "../../corpus/litho/pdf/pdfs"
 
 // writeDeterminismPDF writes the plain two-page mutation document as a litho
 // fixture named name and returns its path.

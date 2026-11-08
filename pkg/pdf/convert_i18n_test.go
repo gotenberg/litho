@@ -20,7 +20,7 @@ func TestConvert_I18nTextExtractsInSourceOrder(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join("..", "..", "test", "integration")
 	fonts := filepath.Join(root, "testdata", "fonts")
-	src, err := os.ReadFile(filepath.Join(root, "corpus", "html", "sources", "i18n", "index.html"))
+	src, err := os.ReadFile(filepath.Join(root, "corpus", "gotenberg", "html", "sources", "i18n", "index.html"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,17 @@
+{
+  "name": "libreoffice/csv",
+  "source": "libreoffice/csv",
+  "pdf_root": "pdfs",
+  "inputs": {
+    "list": "documents.json",
+    "list_root": "sources",
+    "fetched_by": "make libreoffice-fetch FORMATS=csv"
+  },
+  "references": {
+    "dir": "references",
+    "built_by": "make office-references FORMATS=csv"
+  },
+  "goldens": {
+    "diff": "goldens/diff"
+  }
+}

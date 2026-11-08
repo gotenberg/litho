@@ -1,0 +1,17 @@
+{
+  "name": "libreoffice/docx",
+  "source": "libreoffice/docx",
+  "pdf_root": "pdfs",
+  "inputs": {
+    "list": "documents.json",
+    "list_root": "sources",
+    "fetched_by": "make libreoffice-fetch FORMATS=docx"
+  },
+  "references": {
+    "dir": "references",
+    "built_by": "make office-references FORMATS=docx"
+  },
+  "goldens": {
+    "diff": "goldens/diff"
+  }
+}

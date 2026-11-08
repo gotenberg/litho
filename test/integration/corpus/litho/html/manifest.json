@@ -1,0 +1,11 @@
+{
+  "name": "litho/html",
+  "source": "litho/html",
+  "pdf_root": "pdfs",
+  "inputs": {
+    "glob": "sources/*"
+  },
+  "goldens": {
+    "diff": "goldens/diff"
+  }
+}

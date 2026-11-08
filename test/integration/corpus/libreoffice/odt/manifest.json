@@ -1,0 +1,17 @@
+{
+  "name": "libreoffice/odt",
+  "source": "libreoffice/odt",
+  "pdf_root": "pdfs",
+  "inputs": {
+    "list": "documents.json",
+    "list_root": "sources",
+    "fetched_by": "make libreoffice-fetch FORMATS=odt"
+  },
+  "references": {
+    "dir": "references",
+    "built_by": "make office-references FORMATS=odt"
+  },
+  "goldens": {
+    "diff": "goldens/diff"
+  }
+}

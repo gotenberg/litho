@@ -1,0 +1,17 @@
+{
+  "name": "libreoffice/odp",
+  "source": "libreoffice/odp",
+  "pdf_root": "pdfs",
+  "inputs": {
+    "list": "documents.json",
+    "list_root": "sources",
+    "fetched_by": "make libreoffice-fetch FORMATS=odp"
+  },
+  "references": {
+    "dir": "references",
+    "built_by": "make office-references FORMATS=odp"
+  },
+  "goldens": {
+    "diff": "goldens/diff"
+  }
+}

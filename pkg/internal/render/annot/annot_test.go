@@ -400,7 +400,7 @@ func TestCollectCancelled(t *testing.T) {
 // fixtures, every page, both modes, and checks each appearance lands on its
 // rectangle.
 func TestCollectLithoCorpus(t *testing.T) {
-	dir := filepath.Join("..", "..", "..", "..", "test", "integration", "corpus", "litho", "pdfs")
+	dir := filepath.Join("..", "..", "..", "..", "test", "integration", "corpus", "litho", "pdf", "pdfs")
 	names := []string{
 		"annots_1b.pdf", "annothidden_2b.pdf", "annotkinds_ua2.pdf", "annotshare_ua1.pdf",
 		"formflat_ua1.pdf", "formhidden_ua1.pdf", "formreuse_ua1.pdf", "formshare_ua1.pdf",

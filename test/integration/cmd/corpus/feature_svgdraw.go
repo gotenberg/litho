@@ -19,15 +19,15 @@ const svgDrawDPI = 96
 
 // svgFontsTarget is the make target that fetches what the svgdraw feature
 // reads.
-const svgFontsTarget = "make svg-fetch"
+const svgFontsTarget = "make resvg-fetch"
 
 // maxSVGReference bounds the side of a reference PNG, in pixels. Anti-DoS
 // guard, not spec-mandated: resvg draws its tests 300 pixels wide, and a
 // few 500 pixels.
 const maxSVGReference = 4096
 
-// svgTest is one test of corpus/svg/tests.json, written by
-// corpus/svg/list-candidates.py.
+// svgTest is one test of corpus/resvg/tests.json, written by
+// corpus/resvg/list-candidates.py.
 type svgTest struct {
 	ID     string `json:"id"`
 	PNG    string `json:"png"`
@@ -61,7 +61,7 @@ func newSVGDrawFeature() *svgDrawFeature {
 }
 
 func (f *svgDrawFeature) Name() string         { return "svgdraw" }
-func (f *svgDrawFeature) GoldenSource() string { return "svg" }
+func (f *svgDrawFeature) GoldenSource() string { return "resvg" }
 
 // RecordsOutcomes records each test's outcome in the baseline.
 func (f *svgDrawFeature) RecordsOutcomes() {}

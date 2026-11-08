@@ -201,7 +201,7 @@ func flattenOutline(marks []models.Bookmark) []diffOutlineItem {
 }
 
 // diffFeature scores litho's HTML converter against Chromium, the engine it
-// replaces in Gotenberg. Each source of the html corpus is converted by
+// replaces in Gotenberg. Each source of an html corpus is converted by
 // litho at the options of its options.json (corpus/fixture: by default
 // print media, A4, Gotenberg's default margins) and compared with the PDF
 // Gotenberg's Chromium route wrote from the same source at the same options,
@@ -244,10 +244,12 @@ type diffFeature struct {
 
 	// refs and testdataRoot locate the reference PDFs the host builds for
 	// an Office corpus (see [Manifest.References]); refs is nil for a
-	// corpus whose references git versions. office reads every source as
-	// an Office document.
+	// corpus whose references git versions. corpus names the corpus in the
+	// commands a stale reference asks for. office reads every source as an
+	// Office document.
 	refs         *ReferenceSpec
 	testdataRoot string
+	corpus       string
 	office       bool
 	// pins are the resolved pins the references are checked against; nil
 	// reads versions.env.
@@ -261,7 +263,7 @@ func newDiffFeature() *diffFeature {
 func (f *diffFeature) Name() string { return "diff" }
 
 // GoldenSource names the engine the references come from: Chromium for the
-// html corpus, LibreOffice for an Office corpus, whose manifest names its
+// html corpora, LibreOffice for an Office corpus, whose manifest names its
 // references (see [diffFeature.SetManifest]).
 func (f *diffFeature) GoldenSource() string {
 	f.mu.RLock()
@@ -275,7 +277,7 @@ func (f *diffFeature) GoldenSource() string {
 // SetManifest records where an Office corpus's references live.
 func (f *diffFeature) SetManifest(m *Manifest) {
 	f.mu.Lock()
-	f.refs, f.testdataRoot, f.office = m.References, m.TestdataRoot(), m.References != nil
+	f.refs, f.testdataRoot, f.corpus, f.office = m.References, m.TestdataRoot(), m.Name, m.References != nil
 	f.mu.Unlock()
 }
 
@@ -519,7 +521,7 @@ func (f *diffFeature) convertOffice(ctx context.Context, srcPath string, fonts [
 	return data, source.Format, err
 }
 
-// convertHTMLSource converts an html corpus source at the options its
+// convertHTMLSource converts an html source at the options its
 // options.json names.
 func (f *diffFeature) convertHTMLSource(ctx context.Context, srcPath string, fonts []string) ([]byte, error) {
 	dir := srcPath

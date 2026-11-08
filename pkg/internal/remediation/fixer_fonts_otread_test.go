@@ -19,7 +19,7 @@ import (
 func TestRemediatePDFA_RepairsWidthsAsTheFontReadsItsProgram(t *testing.T) {
 	t.Parallel()
 
-	data, err := os.ReadFile("../../../test/integration/corpus/litho/pdfs/fontotread_2b.pdf")
+	data, err := os.ReadFile("../../../test/integration/corpus/litho/pdf/pdfs/fontotread_2b.pdf")
 	if err != nil {
 		t.Fatalf("reading the fixture: %v", err)
 	}

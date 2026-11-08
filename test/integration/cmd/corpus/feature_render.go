@@ -84,7 +84,7 @@ const renderMaxDiffPerMillion = 10_000
 //   - All corpora: of the 666 golden pages the page bar passes, 15 share more
 //     than 50% of their ink, all of them litho fixtures, and on each one
 //     renderer draws a glyph, a fill or an annotation the other does not (the
-//     litho corpus README lists and adjudicates them). The shares jump from
+//     litho/pdf corpus README lists and adjudicates them). The shares jump from
 //     53% to 40% (litho cmappredef_2b, limits_2b), the widest gap above 31%.
 //   - pdfjs issue11768_reduced: the CJK page the render feature's evidence
 //     adjudicates as matching shares 31% of its ink (71 of 227 pixels).

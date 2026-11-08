@@ -1,0 +1,15 @@
+{
+  "name": "gotenberg/xlsx",
+  "source": "gotenberg/xlsx",
+  "pdf_root": "pdfs",
+  "inputs": {
+    "glob": "sources/*"
+  },
+  "references": {
+    "dir": "references",
+    "built_by": "make office-references FORMATS=xlsx"
+  },
+  "goldens": {
+    "diff": "goldens/diff"
+  }
+}

@@ -21,7 +21,7 @@
 #   - -aa yes -aaVector yes: anti-aliased text and vector graphics, as viewers
 #     draw them.
 #   - Annotations are drawn, as viewers draw them, unless
-#     RENDER_HIDE_ANNOTATIONS=1: the docx and odt corpora's diff goldens draw
+#     RENDER_HIDE_ANNOTATIONS=1: the Office corpora's diff goldens draw
 #     the page content alone (-hide-annotations), and the index records it
 #     (hide_annotations), since the comment icons a viewer draws for a note
 #     without an appearance are the viewer's own.

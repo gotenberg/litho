@@ -1,19 +1,16 @@
-// Command build regenerates the litho PDFs of an Office corpus's committed
-// sources: it converts the document of every <corpus>/sources/<name>/
+// Command build regenerates the litho PDFs of a gotenberg Office corpus: it
+// converts the document of every <corpus>/sources/<name>/
 // directory to <corpus>/pdfs/<name>.pdf with pdf.Convert, at the options the
 // directory's options.json names (read through the fixture package, as the
 // diff feature of test/integration/cmd/corpus reads it and lib/libreoffice.sh
 // posts it to LibreOffice), and with the pinned fixture fonts alone, so two
-// machines write the same bytes. The LibreOffice test documents the corpus
-// fetches are scored by the diff feature but not built here: they are not
-// committed.
+// machines write the same bytes. The libreoffice corpora are scored by the
+// diff feature but not built here: their documents are not committed.
 //
-// Run it from the repository root through `make docx-fixtures`, `make
-// odt-fixtures`, `make xlsx-fixtures`, `make ods-fixtures`, `make
-// csv-fixtures`, `make pptx-fixtures` or `make odp-fixtures`, which first
-// download the fonts versions.env pins:
+// Run it from the repository root through `make office-fixtures`, which
+// first downloads the fonts versions.env pins:
 //
-//	go run ./test/integration/corpus/fixture/build -corpus test/integration/corpus/docx
+//	go run ./test/integration/corpus/fixture/build -corpus test/integration/corpus/gotenberg/docx
 //
 // Each source is converted twice and the build fails when the two runs write
 // different bytes. The warnings of a conversion are printed: they name what
@@ -36,8 +33,8 @@ import (
 )
 
 func main() {
-	corpus := flag.String("corpus", "", "Corpus directory holding sources/<name>/ (test/integration/corpus/docx, odt, xlsx, ods, csv, pptx or odp)")
-	fonts := flag.String("fonts", "test/integration/testdata/fonts", "Directory of the pinned fixture fonts (make docx-fixtures fills it)")
+	corpus := flag.String("corpus", "", "Corpus directory holding sources/<name>/ (test/integration/corpus/gotenberg/docx, odt, xlsx, ods, csv, pptx or odp)")
+	fonts := flag.String("fonts", "test/integration/testdata/fonts", "Directory of the pinned fixture fonts (make office-fixtures fills it)")
 	flag.Parse()
 	if *corpus == "" {
 		fmt.Fprintln(os.Stderr, "office build: -corpus is required")
@@ -92,7 +89,7 @@ func run(ctx context.Context, corpusDir, fontsDir string) error {
 func familyDirs(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w (run make docx-fixtures, which downloads the pinned fonts first)", dir, err)
+		return nil, fmt.Errorf("reading %s: %w (run make office-fixtures, which downloads the pinned fonts first)", dir, err)
 	}
 	var dirs []string
 	for _, prefix := range fixture.FontFamilies {
@@ -104,7 +101,7 @@ func familyDirs(dir string) ([]string, error) {
 			}
 		}
 		if !found {
-			return nil, fmt.Errorf("no %s* font directory under %s: run make docx-fixtures, which downloads the pinned fonts first", prefix, dir)
+			return nil, fmt.Errorf("no %s* font directory under %s: run make office-fixtures, which downloads the pinned fonts first", prefix, dir)
 		}
 	}
 	sort.Strings(dirs)

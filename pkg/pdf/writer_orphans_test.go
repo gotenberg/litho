@@ -95,7 +95,7 @@ func TestRemediatePDFAFreesTheProfileItUnreferences(t *testing.T) {
 		{"threedcs_4", []models.PDFAProfile{models.PDFA1b}},
 	}
 	for _, tc := range cases {
-		data, err := os.ReadFile("../../test/integration/corpus/litho/pdfs/" + tc.fixture + ".pdf")
+		data, err := os.ReadFile("../../test/integration/corpus/litho/pdf/pdfs/" + tc.fixture + ".pdf")
 		if err != nil {
 			t.Fatalf("reading the fixture: %v", err)
 		}
@@ -140,7 +140,7 @@ func TestRemediatePDFAFreesTheProfileItUnreferences(t *testing.T) {
 func TestRemediatePDFUAFreesWhatAPromotedPageDropped(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	data, err := os.ReadFile("../../test/integration/corpus/litho/pdfs/kidsarray_2b.pdf")
+	data, err := os.ReadFile("../../test/integration/corpus/litho/pdf/pdfs/kidsarray_2b.pdf")
 	if err != nil {
 		t.Fatalf("reading the fixture: %v", err)
 	}

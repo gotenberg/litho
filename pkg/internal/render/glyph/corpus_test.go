@@ -15,7 +15,7 @@ import (
 // fixture opens the litho corpus fixture name.
 func fixture(t *testing.T, name string, opts ...document.Option) *document.Document {
 	t.Helper()
-	data, err := os.ReadFile("../../../../test/integration/corpus/litho/pdfs/" + name)
+	data, err := os.ReadFile("../../../../test/integration/corpus/litho/pdf/pdfs/" + name)
 	if err != nil {
 		t.Fatalf("reading the fixture: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestCorpusEmptyCFFDrawsNothing(t *testing.T) {
 }
 
 func BenchmarkGlyph(b *testing.B) {
-	data, err := os.ReadFile("../../../../test/integration/corpus/litho/pdfs/fontleft_2b.pdf")
+	data, err := os.ReadFile("../../../../test/integration/corpus/litho/pdf/pdfs/fontleft_2b.pdf")
 	if err != nil {
 		b.Fatal(err)
 	}

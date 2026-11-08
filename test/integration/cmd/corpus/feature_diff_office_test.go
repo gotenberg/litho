@@ -17,7 +17,7 @@ import (
 // when the corpus is not provisioned.
 func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) {
 	t.Helper()
-	src := filepath.Join(corpusSourceDir, corpus)
+	src := filepath.Join(corpusSourceDir, filepath.FromSlash(corpus))
 	data, err := os.ReadFile(filepath.Join(src, "manifest.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -26,10 +26,10 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 	if err := json.Unmarshal(data, &m); err != nil {
 		t.Fatal(err)
 	}
-	root := filepath.Join("..", "..", "testdata", corpus)
+	root := filepath.Join("..", "..", "testdata", filepath.FromSlash(corpus))
 	goldens := filepath.Join(root, filepath.FromSlash(m.Goldens["diff"]))
 	if _, err := os.Stat(filepath.Join(goldens, "render")); err != nil {
-		t.Skipf("%s is not provisioned (make %s-fetch %s-libreoffice, then corpus init --corpus=%s)", corpus, corpus, corpus, corpus)
+		t.Skipf("%s is not provisioned (%s, then corpus init --corpus=%s)", corpus, m.References.BuiltBy, corpus)
 	}
 	pf, err := os.Open(filepath.Join(corpusSourceDir, versionsFileName))
 	if err != nil {
@@ -45,28 +45,33 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 		t.Fatal(err)
 	}
 	f := newDiffFeature()
-	f.refs, f.testdataRoot, f.office, f.pins = m.References, root, true, pins.Values
+	f.refs, f.testdataRoot, f.corpus, f.office, f.pins = m.References, root, corpus, true, pins.Values
 	if err := f.LoadGoldens(goldens); err != nil {
 		t.Fatal(err)
 	}
-	fixtures, err := globInputFixtures(src, m.Inputs.Glob)
-	if err != nil {
-		t.Fatal(err)
+	var fixtures []Fixture
+	if m.Inputs.Glob != "" {
+		if fixtures, err = globInputFixtures(src, m.Inputs.Glob); err != nil {
+			t.Fatal(err)
+		}
 	}
-	listed, err := listInputFixtures(filepath.Join(src, m.Inputs.List), filepath.Join(root, m.Inputs.ListRoot), m.Inputs.FetchedBy)
-	if err != nil {
-		t.Skip(err)
+	if m.Inputs.List != "" {
+		listed, err := listInputFixtures(filepath.Join(src, m.Inputs.List), filepath.Join(root, m.Inputs.ListRoot), m.Inputs.FetchedBy)
+		if err != nil {
+			t.Skip(err)
+		}
+		fixtures = append(fixtures, listed...)
 	}
-	return f, append(fixtures, listed...)
+	return f, fixtures
 }
 
 // TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens proves
-// the Office rig on its own references: each committed source's
+// the Office rig on its own references: each gotenberg Office source's
 // LibreOffice PDF, handed to the diff feature as litho's conversion, passes
 // Prepare's checks and scores 1 on pages, text, links, strict and outline
 // against the goldens made from it, and clears the layout bar, where the
-// two sides differ only by litho drawing what poppler drew. The fetched
-// documents are left to a corpus run: drawing all of them takes a minute.
+// two sides differ only by litho drawing what poppler drew. The libreoffice
+// corpora are left to a corpus run: drawing all of them takes a minute.
 //
 // # Corpus evidence
 //
@@ -97,20 +102,16 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 func TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
 	t.Parallel()
 
-	for _, corpus := range []string{"docx", "odt", "xlsx", "ods", "csv", "pptx", "odp"} {
-		t.Run(corpus, func(t *testing.T) {
+	for _, format := range []string{"docx", "odt", "xlsx", "ods", "csv", "pptx", "odp"} {
+		corpus := "gotenberg/" + format
+		t.Run(format, func(t *testing.T) {
 			t.Parallel()
 			f, fixtures := officeCorpusFeature(t, corpus)
 			if err := f.Prepare(t.Context(), fixtures); err != nil {
 				t.Fatal(err)
 			}
-			checked := 0
 			for _, fx := range fixtures {
-				if strings.Contains(fx.ID, "/") {
-					continue
-				}
-				checked++
-				ref, err := os.ReadFile(filepath.Join(f.testdataRoot, "libreoffice", reportName(fx.ID)+".pdf"))
+				ref, err := os.ReadFile(filepath.Join(f.testdataRoot, filepath.FromSlash(f.refs.Dir), reportName(fx.ID)+".pdf"))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -136,8 +137,8 @@ func TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens(t *testing
 					t.Errorf("%s %s: %v %s", corpus, fx.ID, s, v.Reason)
 				}
 			}
-			if checked == 0 {
-				t.Errorf("%s: no committed source", corpus)
+			if len(fixtures) == 0 {
+				t.Errorf("%s: no source", corpus)
 			}
 		})
 	}
@@ -210,9 +211,9 @@ func TestDiffFeature_PrepareRefusesStaleReferences(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			writeFiles(t, root, map[string]string{"libreoffice/manifest.json": string(data)})
+			writeFiles(t, root, map[string]string{"references/manifest.json": string(data)})
 			f := newDiffFeature()
-			f.refs = &ReferenceSpec{Dir: "libreoffice", BuiltBy: "make office-libreoffice"}
+			f.refs = &ReferenceSpec{Dir: "references", BuiltBy: "make office-references"}
 			f.testdataRoot, f.office, f.pins = root, true, pins
 			fixtures := []Fixture{
 				{ID: "memo", PDFPath: filepath.Join(src, "sources", "memo")},
@@ -230,7 +231,7 @@ func TestDiffFeature_PrepareRefusesStaleReferences(t *testing.T) {
 
 	// A corpus whose references git versions has nothing to check.
 	if err := newDiffFeature().Prepare(t.Context(), nil); err != nil {
-		t.Errorf("html corpus: %v", err)
+		t.Errorf("html corpora: %v", err)
 	}
 }
 

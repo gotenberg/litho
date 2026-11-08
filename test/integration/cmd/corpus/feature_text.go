@@ -92,7 +92,7 @@ func newTextFeature() *textFeature {
 func (f *textFeature) Name() string { return "text" }
 
 // OncePerPDF marks text extraction as profile-agnostic (see [PerPDFFeature]):
-// the litho corpus fans each fixture out to 13 profiles, and its text
+// the litho/pdf corpus fans each fixture out to 13 profiles, and its text
 // is the same under every one.
 func (f *textFeature) OncePerPDF()          {}
 func (f *textFeature) GoldenSource() string { return "pdfjs" }

@@ -186,11 +186,11 @@ func TestHasReferences_NeedsTheManifest(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	refs := &ReferenceSpec{Dir: "libreoffice", BuiltBy: "make docx-libreoffice"}
+	refs := &ReferenceSpec{Dir: "references", BuiltBy: "make office-references"}
 	if hasReferences(root, refs) {
 		t.Error("references found in an empty testdata root")
 	}
-	writeFiles(t, root, map[string]string{"libreoffice/manifest.json": `{"format": 1}`})
+	writeFiles(t, root, map[string]string{"references/manifest.json": `{"format": 1}`})
 	if !hasReferences(root, refs) {
 		t.Error("references not found beside their manifest")
 	}

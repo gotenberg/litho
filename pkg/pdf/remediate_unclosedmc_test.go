@@ -20,7 +20,7 @@ import (
 func TestRemediatePDFUAClosesANeverClosedSequence(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	data, err := os.ReadFile("../../test/integration/corpus/litho/pdfs/unclosedmc_ua1.pdf")
+	data, err := os.ReadFile("../../test/integration/corpus/litho/pdf/pdfs/unclosedmc_ua1.pdf")
 	if err != nil {
 		t.Fatalf("reading the fixture: %v", err)
 	}

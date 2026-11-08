@@ -21,7 +21,7 @@ func paritySources() string {
 	if dir := os.Getenv("LITHO_PPTX_SOURCES"); dir != "" {
 		return dir
 	}
-	return filepath.Join("..", "..", "..", "..", "test", "integration", "corpus", "pptx", "sources")
+	return filepath.Join("..", "..", "..", "..", "test", "integration", "corpus", "gotenberg", "pptx", "sources")
 }
 
 // findSource returns the path of the file name under dir, "" when absent.

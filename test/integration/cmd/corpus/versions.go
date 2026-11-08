@@ -85,8 +85,8 @@ var localToolPins = map[string]bool{
 	"DEJAVU_FONTS_URL":         true,
 	"DEJAVU_FONTS_SHA256":      true,
 
-	// The script fonts of the html corpus and the CJK collection the
-	// Gotenberg image draws with, fetched by compose/fetch-fonts.sh on the
+	// The script fonts of the html corpora and the CJK collection the
+	// Gotenberg image draws with, fetched by lib/fetch-fonts.sh on the
 	// host like the two above.
 	"NOTO_SANS_THAI_VERSION":       true,
 	"NOTO_SANS_THAI_URL":           true,
@@ -96,7 +96,7 @@ var localToolPins = map[string]bool{
 	"NOTO_SANS_DEVANAGARI_SHA256":  true,
 	"NOTO_SANS_CJK_OTC_SHA256":     true,
 	// The faces the Gotenberg image draws Calibri and Cambria with, which
-	// the docx and odt corpora name.
+	// the docx and odt documents name.
 	"CARLITO_FONTS_VERSION": true,
 	"CARLITO_FONTS_URL":     true,
 	"CARLITO_FONTS_SHA256":  true,
@@ -104,32 +104,31 @@ var localToolPins = map[string]bool{
 	"CALADEA_FONTS_URL":     true,
 	"CALADEA_FONTS_SHA256":  true,
 	// The face the Gotenberg image draws a family it lacks with, which the
-	// xlsx and ods corpora's references name.
+	// xlsx and ods references name.
 	"NOTO_SANS_CORE_VERSION": true,
 	"NOTO_SANS_CORE_URL":     true,
 	"NOTO_SANS_CORE_SHA256":  true,
-	// LibreOffice's symbol font, which the pptx and odp corpora's
-	// references draw bullets with.
+	// LibreOffice's symbol font, which the pptx and odp references draw
+	// bullets with.
 	"OPENSYMBOL_VERSION": true,
 	"OPENSYMBOL_URL":     true,
 	"OPENSYMBOL_SHA256":  true,
 
 	// The converter oracles: the web-platform-tests commit `make wpt-fetch`
 	// downloads, the WeasyPrint release `make weasyprint-fixtures` extracts,
-	// and the Gotenberg image `make html-chromium` converts with. The host
-	// runs all three; wpt/fetch.sh records WPT_COMMIT in the wpt testdata.
-	// The resvg commit `make svg-fetch` downloads at, which svg/fetch.sh
-	// records in the svg testdata.
+	// and the Gotenberg image `make html-references` and `make
+	// office-references` convert with. The host runs all three;
+	// wpt/fetch.sh records WPT_COMMIT in the wpt testdata. The resvg commit
+	// `make resvg-fetch` downloads at, which resvg/fetch.sh records in the
+	// resvg testdata.
 	"WPT_COMMIT":             true,
 	"RESVG_COMMIT":           true,
 	"WEASYPRINT_VERSION":     true,
 	"WEASYPRINT_SHA256":      true,
 	"WEASYPRINT_FONT_SHA256": true,
 	"GOTENBERG_IMAGE":        true,
-	// The LibreOffice core commit `make docx-fetch`, `make odt-fetch`,
-	// `make xlsx-fetch`, `make ods-fetch`, `make csv-fetch`, `make
-	// pptx-fetch` and `make odp-fetch` download the Office corpora's
-	// documents at.
+	// The LibreOffice core commit `make libreoffice-fetch` downloads the
+	// libreoffice corpora's documents at.
 	"LIBREOFFICE_CORE_COMMIT": true,
 }
 
@@ -171,10 +170,10 @@ var stagePins = map[string][]string{
 }
 
 // sourcePins maps each corpus source directory to the pins its PDFs come
-// from. The litho and compose corpora are committed in-tree, so git versions
-// them, and so are the weasyprint fixtures and the html corpus's Chromium
-// references. The wpt corpus's files come from the WPT commit wpt/fetch.sh
-// records, and the svg corpus's from the resvg commit svg/fetch.sh records.
+// from. The litho corpora are committed in-tree, so git versions them, and so
+// are the weasyprint fixtures and the html corpora's Chromium references. The
+// wpt corpus's files come from the WPT commit wpt/fetch.sh records, and the
+// resvg corpus's from the resvg commit resvg/fetch.sh records.
 //
 //nolint:gochecknoglobals // static dependency table
 var sourcePins = map[string][]string{
@@ -184,23 +183,32 @@ var sourcePins = map[string][]string{
 	"pdf20":   {"PDF20_REVISION"},
 	"pdfcpu":  {"PDFCPU_CORPUS_REVISION"},
 	"facturx": {"FACTURX_CORPUS_REVISION"},
-	"litho":   nil,
-	"compose": nil,
 
-	"wpt":        {"WPT_COMMIT"},
-	"svg":        {"RESVG_COMMIT"},
-	"weasyprint": nil,
-	"html":       nil,
+	"litho/pdf":  nil,
+	"litho/text": nil,
+	"litho/html": nil,
+
+	"wpt":            {"WPT_COMMIT"},
+	"resvg":          {"RESVG_COMMIT"},
+	"weasyprint":     nil,
+	"gotenberg/html": nil,
 	// The Office corpora's PDFs are LibreOffice references the host builds:
 	// their own manifest records the image and the sources, which the diff
 	// feature checks (see [diffFeature.Prepare]).
-	"docx": nil,
-	"odt":  nil,
-	"xlsx": nil,
-	"ods":  nil,
-	"csv":  nil,
-	"pptx": nil,
-	"odp":  nil,
+	"libreoffice/docx": nil,
+	"libreoffice/odt":  nil,
+	"libreoffice/xlsx": nil,
+	"libreoffice/ods":  nil,
+	"libreoffice/csv":  nil,
+	"libreoffice/pptx": nil,
+	"libreoffice/odp":  nil,
+	"gotenberg/docx":   nil,
+	"gotenberg/odt":    nil,
+	"gotenberg/xlsx":   nil,
+	"gotenberg/ods":    nil,
+	"gotenberg/csv":    nil,
+	"gotenberg/pptx":   nil,
+	"gotenberg/odp":    nil,
 }
 
 // pinEntry is one KEY=VALUE line of versions.env.

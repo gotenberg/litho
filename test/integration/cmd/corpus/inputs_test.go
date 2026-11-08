@@ -153,15 +153,21 @@ func TestCommittedConverterCorporaLoad(t *testing.T) {
 		t.Error(err)
 	}
 
-	html := filepath.Join(corpusSourceDir, "html")
-	sources, err := globInputFixtures(html, "sources/*")
-	if err != nil {
-		t.Fatal(err)
+	var sources []Fixture
+	for _, corpus := range []string{"litho/html", "gotenberg/html"} {
+		dir := filepath.Join(corpusSourceDir, filepath.FromSlash(corpus))
+		found, err := globInputFixtures(dir, "sources/*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range found {
+			if _, err := os.Stat(filepath.Join(dir, "references", s.ID+".pdf")); err != nil {
+				t.Errorf("%s source %s has no Chromium reference: run make html-references", corpus, s.ID)
+			}
+		}
+		sources = append(sources, found...)
 	}
 	for _, s := range sources {
-		if _, err := os.Stat(filepath.Join(html, "chromium", s.ID+".pdf")); err != nil {
-			t.Errorf("source %s has no Chromium reference: run make html-chromium", s.ID)
-		}
 		source, err := fixture.Load(s.PDFPath)
 		if err != nil {
 			t.Errorf("source %s: %v", s.ID, err)
@@ -211,7 +217,7 @@ func TestHostProvisionedCorporaReadTheirPin(t *testing.T) {
 		}
 	}
 	if checked != 3 {
-		t.Errorf("checked %d host-provisioned corpora, want wpt, weasyprint and svg", checked)
+		t.Errorf("checked %d host-provisioned corpora, want wpt, weasyprint and resvg", checked)
 	}
 }
 
@@ -246,14 +252,15 @@ func TestLoadInputFixtures_GlobsAndListsTogether(t *testing.T) {
 }
 
 // TestOfficeListsAndHashesAgree pins that every document the Office
-// corpora's documents.json lists is in their files.sha256, which is what
-// lib/fetch-office.sh downloads, with the licence, that the IDs name the
-// directories, extensions and caps list-office-candidates.py takes, and
-// that the lists hold the documents the caps allow.
+// libreoffice corpora's documents.json lists is in their files.sha256, which
+// is what libreoffice/fetch.sh downloads, with the licence, that the IDs name
+// the directories, extensions and caps libreoffice/list-candidates.py takes,
+// and that the lists hold the documents the caps allow.
 func TestOfficeListsAndHashesAgree(t *testing.T) {
 	t.Parallel()
 
-	// The caps of list-office-candidates.py, by LibreOffice core directory.
+	// The caps of libreoffice/list-candidates.py, by LibreOffice core
+	// directory.
 	caps := map[string]map[string]int{
 		"docx": {"sw/qa/extras/ooxmlexport/data": 250, "sw/qa/extras/ooxmlimport/data": 60, "sw/qa/extras/layout/data": 40},
 		"odt":  {"sw/qa/extras/odfexport/data": 80, "sw/qa/extras/odfimport/data": 40, "sw/qa/extras/layout/data": 30},
@@ -289,7 +296,7 @@ func TestOfficeListsAndHashesAgree(t *testing.T) {
 		return "sw/qa/extras/" + sub + "/data/" + name
 	}
 	for corpus, dirs := range caps {
-		dir := filepath.Join(corpusSourceDir, corpus)
+		dir := filepath.Join(corpusSourceDir, "libreoffice", corpus)
 		data, err := os.ReadFile(filepath.Join(dir, "documents.json"))
 		if err != nil {
 			t.Fatal(err)
@@ -341,7 +348,7 @@ func TestOfficeListsAndHashesAgree(t *testing.T) {
 	}
 }
 
-// TestCommittedOfficeSourcesLoad loads every committed Office source as the
+// TestCommittedOfficeSourcesLoad loads every gotenberg Office source as the
 // diff feature does: one document of its corpus's format and valid options.
 func TestCommittedOfficeSourcesLoad(t *testing.T) {
 	t.Parallel()
@@ -351,7 +358,7 @@ func TestCommittedOfficeSourcesLoad(t *testing.T) {
 		"pptx": pdf.FormatPPTX, "odp": pdf.FormatODP,
 	}
 	for corpus, want := range formats {
-		sources, err := globInputFixtures(filepath.Join(corpusSourceDir, corpus), "sources/*")
+		sources, err := globInputFixtures(filepath.Join(corpusSourceDir, "gotenberg", corpus), "sources/*")
 		if err != nil {
 			t.Fatal(err)
 		}

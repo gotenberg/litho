@@ -17,7 +17,7 @@ import (
 func TestSVGListAndHashesAgree(t *testing.T) {
 	t.Parallel()
 
-	dir := filepath.Join(corpusSourceDir, "svg")
+	dir := filepath.Join(corpusSourceDir, "resvg")
 	data, err := os.ReadFile(filepath.Join(dir, "tests.json"))
 	if err != nil {
 		t.Fatal(err)

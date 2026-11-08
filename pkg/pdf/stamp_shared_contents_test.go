@@ -25,7 +25,7 @@ func TestStampText_KeepsSharedContentsShared(t *testing.T) {
 		t.Run(fixture, func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
-			data, err := os.ReadFile("../../test/integration/corpus/litho/pdfs/" + fixture + ".pdf")
+			data, err := os.ReadFile("../../test/integration/corpus/litho/pdf/pdfs/" + fixture + ".pdf")
 			if err != nil {
 				t.Fatalf("reading the fixture: %v", err)
 			}
@@ -68,7 +68,7 @@ func TestStampText_PerPageCallsKeepSharedContentsShared(t *testing.T) {
 		t.Run(fixture, func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
-			data, err := os.ReadFile("../../test/integration/corpus/litho/pdfs/" + fixture + ".pdf")
+			data, err := os.ReadFile("../../test/integration/corpus/litho/pdf/pdfs/" + fixture + ".pdf")
 			if err != nil {
 				t.Fatalf("reading the fixture: %v", err)
 			}
@@ -110,7 +110,7 @@ func TestStampText_PerPageCallsKeepSharedContentsShared(t *testing.T) {
 func TestStampText_SecondCallKeepsSharedContent(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	data, err := os.ReadFile("../../test/integration/corpus/litho/pdfs/sharedtag_ua1.pdf")
+	data, err := os.ReadFile("../../test/integration/corpus/litho/pdf/pdfs/sharedtag_ua1.pdf")
 	if err != nil {
 		t.Fatalf("reading the fixture: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestStampText_SecondCallKeepsSharedContent(t *testing.T) {
 func TestStampImage_PerPageCallsKeepSharedContentsShared(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	data, err := os.ReadFile("../../test/integration/corpus/litho/pdfs/sharedtag_ua1.pdf")
+	data, err := os.ReadFile("../../test/integration/corpus/litho/pdf/pdfs/sharedtag_ua1.pdf")
 	if err != nil {
 		t.Fatalf("reading the fixture: %v", err)
 	}

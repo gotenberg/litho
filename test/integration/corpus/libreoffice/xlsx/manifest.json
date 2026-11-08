@@ -1,0 +1,17 @@
+{
+  "name": "libreoffice/xlsx",
+  "source": "libreoffice/xlsx",
+  "pdf_root": "pdfs",
+  "inputs": {
+    "list": "documents.json",
+    "list_root": "sources",
+    "fetched_by": "make libreoffice-fetch FORMATS=xlsx"
+  },
+  "references": {
+    "dir": "references",
+    "built_by": "make office-references FORMATS=xlsx"
+  },
+  "goldens": {
+    "diff": "goldens/diff"
+  }
+}

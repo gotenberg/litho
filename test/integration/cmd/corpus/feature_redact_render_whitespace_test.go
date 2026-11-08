@@ -66,7 +66,7 @@ func TestRedactRenderCatchesAWhitespaceGlyphLeftInside(t *testing.T) {
 	}
 }
 
-// TestRedactRenderExcludesRemovedWhitespaceGlyphs covers litho corpus
+// TestRedactRenderExcludesRemovedWhitespaceGlyphs covers litho/pdf corpus
 // cmapverabase_2b: a glyph read as a space whose square straddles the top edge
 // of the p1-quarter region is removed whole, so its ink above the region goes
 // too. Extraction drops the glyph's run, so only the redaction's report says

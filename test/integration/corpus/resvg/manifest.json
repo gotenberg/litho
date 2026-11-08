@@ -1,0 +1,12 @@
+{
+  "name": "resvg",
+  "source": "resvg",
+  "provisioned_by": "make resvg-fetch",
+  "inputs": {
+    "list": "tests.json"
+  },
+  "goldens_in_source": true,
+  "goldens": {
+    "svgdraw": "."
+  }
+}

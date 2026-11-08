@@ -182,12 +182,12 @@ if wants render; then
   if nonempty "$RENDER"; then
     echo "==> render goldens already present, skipping pdftoppm."
   else
-    # The litho and compose corpora are rendered whole: their fixtures are
-    # small and each exercises a construct of its own. The downloaded corpora
-    # are rendered one PDF in sixteen, chosen by a hash of the file name (see
+    # The litho corpora are rendered whole: their fixtures are small and
+    # each exercises a construct of its own. The downloaded corpora are
+    # rendered one PDF in sixteen, chosen by a hash of the file name (see
     # gen-render.sh), which keeps their goldens to a few megabytes.
     case "$CORPUS" in
-      litho | compose) SAMPLE=256 ;;
+      litho/*) SAMPLE=256 ;;
       *) SAMPLE=16 ;;
     esac
     mkdir -p "$RENDER"
@@ -238,7 +238,7 @@ if wants diff; then
     # viewer's, and the form fields' appearances use fonts it does not embed.
     HIDE=0
     case "$CORPUS" in
-      docx | odt | xlsx | ods | csv | pptx | odp) HIDE=1 ;;
+      */docx | */odt | */xlsx | */ods | */csv | */pptx | */odp) HIDE=1 ;;
     esac
     RENDER_HIDE_ANNOTATIONS="$HIDE" SHELL=/bin/bash /work/lib/gen-render.sh "$PDFS" "$DIFF/render" 256 0
     node /work/lib/gen-links.mjs \

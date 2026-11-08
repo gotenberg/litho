@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # lib/libreoffice.sh: build the LibreOffice reference PDFs of an Office corpus
-# (docx, odt, xlsx, ods, csv, pptx, odp).
+# (libreoffice/<format> or gotenberg/<format>, for docx, odt, xlsx, ods, csv,
+# pptx and odp).
 #
 # Starts the Gotenberg image versions.env pins (GOTENBERG_IMAGE) on a free
 # loopback port and posts each source to its LibreOffice route,
@@ -8,7 +9,7 @@
 # sources are the committed <corpus_dir>/sources/<name>/ directories, each
 # one document (an extension of EXTENSIONS) and an optional options.json, and the
 # LibreOffice test documents <corpus_dir>/documents.json lists, fetched into
-# <fetched_dir> by lib/fetch-office.sh, each named by its ID with "/" written
+# <fetched_dir> by libreoffice/fetch.sh, each named by its ID with "/" written
 # "__" (ooxmlexport/tdf123.docx becomes ooxmlexport__tdf123.docx).
 #
 # The form fields come from the directory's options.json (FIXTURES.md, "Per
@@ -26,7 +27,8 @@
 # built from another pin or from a source that changed since. A source the
 # route refuses is recorded under "failed" with the route's answer, and gets
 # no reference. The optional names restrict the run to those references,
-# keeping the manifest's other entries. An environment variable of the same
+# keeping the manifest's other entries; a corpus holding none of them is left
+# as it is. An environment variable of the same
 # name overrides a pin.
 #
 # Usage: lib/libreoffice.sh <corpus_dir> <fetched_dir> <out_dir> [name...]
@@ -39,6 +41,7 @@ shift 3
 ONLY=("$@")
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VERSIONS="$HERE/../versions.env"
+NAME="$(basename "$(dirname "$CORPUS")")/$(basename "$CORPUS")"
 
 pin() {
   local v="${!1:-}"
@@ -93,6 +96,7 @@ JOBS="$(mktemp)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$JOBS" "$WORK"' EXIT
 for dir in "$CORPUS"/sources/*/; do
+  [ -d "$dir" ] || continue
   dir="${dir%/}"
   name="$(basename "$dir")"
   selected "$name" || continue
@@ -130,13 +134,17 @@ if [ -f "$CORPUS/documents.json" ]; then
     name="${id//\//__}"
     selected "$name" || continue
     if [ ! -f "$FETCHED/$id" ]; then
-      echo "ERROR: $FETCHED/$id is missing: run make $(basename "$CORPUS")-fetch" >&2
+      echo "ERROR: $FETCHED/$id is missing: run make libreoffice-fetch FORMATS=$(basename "$CORPUS")" >&2
       exit 1
     fi
     printf '%s\t%s\t-\t%s\n' "$name" "$FETCHED/$id" "$id" >> "$JOBS"
   done < <(jq -r '.[].id' "$CORPUS/documents.json")
 fi
 if [ ! -s "$JOBS" ]; then
+  if [ "${#ONLY[@]}" -gt 0 ]; then
+    echo "  $NAME: none of the names is a source here"
+    exit 0
+  fi
   echo "ERROR: no source under $CORPUS matched" >&2
   exit 1
 fi
@@ -182,19 +190,19 @@ build_one() {
       --arg p "$(sha "$OUT/$name.pdf")" --arg i "$IMAGE" --arg c "$COMMIT" \
       '{($n): {source: $s, source_sha256: $sh, options_sha256: $o, pdf_sha256: $p, image: $i, libreoffice_core_commit: $c}}' \
       > "$WORK/$name.ok"
-    echo "  $(basename "$CORPUS"): libreoffice/$name.pdf ($(wc -c < "$OUT/$name.pdf" | tr -d ' ') bytes)"
+    echo "  $NAME: references/$name.pdf ($(wc -c < "$OUT/$name.pdf" | tr -d ' ') bytes)"
   else
     rm -f "$OUT/$name.pdf"
     jq -n --arg n "$name" --arg s "$source" --arg sh "$(sha "$doc")" --arg o "$opts_sha" --arg i "$IMAGE" \
       --arg st "$status" --arg b "$(head -c 300 "$WORK/$name.out" 2> /dev/null | tr -d '\000' || true)" \
       '{($n): {source: $s, source_sha256: $sh, options_sha256: $o, image: $i, status: $st, answer: $b}}' \
       > "$WORK/$name.failed"
-    echo "  $(basename "$CORPUS"): $name refused by the route (HTTP $status)" >&2
+    echo "  $NAME: $name refused by the route (HTTP $status)" >&2
   fi
   rm -f "$WORK/$name.out"
 }
 export -f build_one opt sha
-export OUT WORK URL IMAGE COMMIT CORPUS KEYS
+export OUT WORK URL IMAGE COMMIT CORPUS NAME KEYS
 
 mkdir -p "$OUT"
 # Four requests at a time: the route converts one document per LibreOffice
@@ -218,4 +226,4 @@ jq -n --argjson old "$old" --argjson ok "$ok" --argjson failed "$failed" --argjs
     failed: ((($old.failed // {}) | with_entries(select(.key as $k | $built | index($k) | not))) + $failed)}' \
   > "$MANIFEST.part"
 mv "$MANIFEST.part" "$MANIFEST"
-echo "  $(basename "$CORPUS"): $(jq length <<< "$ok") references built, $(jq length <<< "$failed") refused, with ${IMAGE} (${VERSION})"
+echo "  $NAME: $(jq length <<< "$ok") references built, $(jq length <<< "$failed") refused, with ${IMAGE} (${VERSION})"

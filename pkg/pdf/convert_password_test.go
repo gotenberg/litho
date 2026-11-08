@@ -15,7 +15,7 @@ import (
 // with another one.
 func TestConvert_DOCXPassword(t *testing.T) {
 	t.Parallel()
-	path := filepath.Join("..", "..", "test", "integration", "corpus", "docx", "sources", "protected_page_1", "protected_page_1.docx")
+	path := filepath.Join("..", "..", "test", "integration", "corpus", "gotenberg", "docx", "sources", "protected_page_1", "protected_page_1.docx")
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		t.Skip("protected_page_1.docx is not in the docx corpus sources")
