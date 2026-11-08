@@ -295,3 +295,24 @@ func TestRead_TextLinkJumps(t *testing.T) {
 		}
 	}
 }
+
+func TestRead_ParagraphDirection(t *testing.T) {
+	t.Parallel()
+	f := flat{
+		styles: `<style:default-style style:family="graphic"><style:paragraph-properties style:writing-mode="rl-tb"/></style:default-style>` +
+			`<style:style style:name="gL" style:family="graphic"><style:paragraph-properties style:writing-mode="lr-tb"/></style:style>` +
+			`<style:style style:name="gN" style:family="graphic"/>`,
+		auto: `<style:style style:name="gA" style:family="graphic" style:parent-style-name="gN"><style:paragraph-properties style:writing-mode="lr-tb"/></style:style>` +
+			`<style:style style:name="PL" style:family="paragraph"><style:paragraph-properties style:writing-mode="lr-tb"/></style:style>`,
+		body: page(`<draw:frame draw:style-name="gL" svg:width="5cm" svg:height="1cm"><draw:text-box><text:p>common</text:p></draw:text-box></draw:frame>` +
+			`<draw:frame draw:style-name="gA" svg:width="5cm" svg:height="1cm"><draw:text-box><text:p>automatic</text:p></draw:text-box></draw:frame>` +
+			`<draw:frame draw:style-name="gN" svg:width="5cm" svg:height="1cm"><draw:text-box><text:p text:style-name="PL">paragraph</text:p></draw:text-box></draw:frame>` +
+			`<draw:frame draw:style-name="gN" svg:width="5cm" svg:height="1cm"><draw:text-box><text:p>default</text:p></draw:text-box></draw:frame>`),
+	}
+	doc, _ := read(t, f.bytes())
+	for i, want := range []bool{false, true, false, true} {
+		if got := doc.Slides[0].Shapes[i].Text.Paragraphs[0].RightToLeft; got != want {
+			t.Errorf("frame %d right to left %v, want %v", i, got, want)
+		}
+	}
+}

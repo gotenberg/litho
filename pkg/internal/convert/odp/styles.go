@@ -35,11 +35,18 @@ func builtinStyles() *odf.Styles {
 // graphic, paragraph and text properties.
 type layer struct {
 	graphic, para, text odf.Props
+	// shapeAuto marks an automatic graphic or presentation style, whose
+	// style:writing-mode is the shape's text writing mode and not the
+	// direction of its paragraphs.
+	shapeAuto bool
 }
 
 // layerOf returns the properties of the style st.
 func layerOf(st *odf.Style) layer {
-	return layer{graphic: st.Props(odf.GraphicProps), para: st.Props(odf.ParagraphProps), text: st.Props(odf.TextProps)}
+	return layer{
+		graphic: st.Props(odf.GraphicProps), para: st.Props(odf.ParagraphProps), text: st.Props(odf.TextProps),
+		shapeAuto: st.Auto && (st.Family == odf.FamilyGraphic || st.Family == odf.FamilyPresentation),
+	}
 }
 
 // baseLayer returns the graphic default style's properties (ODF 1.3,

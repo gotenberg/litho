@@ -150,8 +150,20 @@ type paraState struct {
 	defaultTab               float64
 }
 
-// apply lays the paragraph properties p over ps.
-func (r *reader) applyPara(ps *paraState, p odf.Props) {
+// applyPara lays the paragraph properties p over ps; direction says
+// whether their style:writing-mode sets the paragraphs' direction, which
+// an automatic graphic or presentation style's does not: Impress takes
+// it for the shape's text writing mode, so a paragraph keeps the
+// direction of the default style or a common style.
+//
+// # Measured
+//
+//   - litho: frames of a flat presentation whose default graphic style
+//     is rl-tb print right to left with an automatic graphic or
+//     presentation style of lr-tb, left to right with a common graphic
+//     style or a paragraph style of lr-tb (odp: sd/tdf128985's outline,
+//     of an automatic lr-tb style, prints its bullet right of its text).
+func (r *reader) applyPara(ps *paraState, p odf.Props, direction bool) {
 	switch p.Get("fo:text-align") {
 	case "start":
 		ps.align = css.AlignStart
@@ -197,10 +209,11 @@ func (r *reader) applyPara(ps *paraState, p odf.Props) {
 	if l, ok := odf.Length(p.Get("style:line-spacing")); ok && l != 0 {
 		r.warn("line-spacing", "a paragraph's leading is not applied")
 	}
-	switch p.Get("style:writing-mode") {
-	case "rl-tb", "rl":
+	switch v := p.Get("style:writing-mode"); {
+	case !direction:
+	case v == "rl-tb", v == "rl":
 		ps.rtl = true
-	case "lr-tb", "lr":
+	case v == "lr-tb", v == "lr":
 		ps.rtl = false
 	}
 	if ts := p.Child("style:tab-stops"); ts != nil {
@@ -445,7 +458,7 @@ func (r *reader) paragraph(p *odf.Element, tc *textCtx, lc listCtx) slides.Parag
 	ps.spacing = 1
 	var rs runState
 	for _, l := range layers {
-		r.applyPara(&ps, l.para)
+		r.applyPara(&ps, l.para, !l.shapeAuto)
 		r.applyText(&rs, l.text)
 	}
 	out := slides.Paragraph{
