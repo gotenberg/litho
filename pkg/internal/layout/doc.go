@@ -194,7 +194,8 @@
 // the side with more room for a parallel wrap, where Writer sets it on
 // both; the wrap applies to the document's own formatting context, not
 // to table cells or other boxes that start one. The content of a chain
-// keeps no links or structure of its own: its text hangs from the link.
+// keeps its external links, not its links to places in the document nor
+// a structure of its own: its text hangs from the link.
 // A box of a vertical writing mode in a horizontal flow is the root of an
 // orthogonal flow whose text is set sideways, a horizontal layout turned
 // a quarter turn into the box (writing.go); upright glyphs, vertical-lr's

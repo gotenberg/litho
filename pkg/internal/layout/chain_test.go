@@ -71,3 +71,19 @@ func TestChain(t *testing.T) {
 func flowLink(i int, mod func(*css.Style), kids ...*Node) *Node {
 	return el(sty(width(50), height(10), mod, func(s *css.Style) { s.Chain, s.ChainIndex = "c", i }), kids...)
 }
+
+// TestChain_Links keeps the external links of the chain's content, on the
+// link that paints them, at their place in it.
+func TestChain_Links(t *testing.T) {
+	a := el(sty(), txt(sty(), "a"))
+	b := el(sty(), txt(sty(), "b"))
+	b.Href = "https://example.com/"
+	res := run(t, doc(chained(0, 0, 0, 50, 10, a, b), chained(1, 20, 50, 50, 10)), page(100, 100))
+	if len(res.Pages[0].Links) != 1 {
+		t.Fatalf("%d links, want 1", len(res.Pages[0].Links))
+	}
+	l := res.Pages[0].Links[0]
+	if l.URI != "https://example.com/" || !near(l.Rect.X, px(20)) || !near(l.Rect.Y, px(50)) {
+		t.Errorf("link %+v, want the URI at %v, %v", l, px(20), px(50))
+	}
+}

@@ -37,6 +37,9 @@ const chainEndID = "\x00chain-end"
 // none.
 type chainLink struct {
 	frags []compose.Fragment
+	// links are the external links of the link's page, in its content
+	// box's coordinates.
+	links []compose.Link
 	auto  bool
 	h     float64
 }
@@ -154,6 +157,13 @@ func layoutChain(ctx context.Context, links []linkNode, fonts *text.Fonts, opts 
 		cl := out[n]
 		if depthOf(res.Pages[i].Content) < MaxVectorDepth {
 			cl.frags = res.Pages[i].Content
+			for _, l := range res.Pages[i].Links {
+				// A link to a place in the chain's own layout has no
+				// page of the document to point at.
+				if l.URI != "" {
+					cl.links = append(cl.links, l)
+				}
+			}
 		}
 		if cl.auto {
 			cl.h = 0
@@ -201,7 +211,7 @@ func pts(d css.Dimension) float64 {
 }
 
 // chainContent paints the share of its chain's content the link b holds
-// in its content box.
+// in its content box, with its external links.
 func (p *painter) chainContent(b *box) {
 	if b.chain == nil || len(b.chain.frags) == 0 || b.hidden {
 		return
@@ -210,4 +220,8 @@ func (p *painter) chainContent(b *box) {
 	g := &compose.Group{Opacity: 1, Transform: compose.Matrix{A: 1, D: 1, E: x, F: y}, Content: adopt(b.chain.frags, b.elem, 0)}
 	page := p.e.monoPage(y, b.h)
 	p.emit(b, true, g, y, y+b.h, page)
+	for _, l := range b.chain.links {
+		r := compose.Rect{X: x + l.Rect.X, Y: y + l.Rect.Y, Width: l.Rect.Width, Height: l.Rect.Height}
+		p.links = append(p.links, pendingLink{lk: &link{href: l.URI}, rect: r})
+	}
 }
