@@ -215,7 +215,7 @@ func scanSection(src string) (*section, error) {
 		}
 		s.toks = append(s.toks, token{kind: tLit, text: t})
 	}
-	upper := strings.ToUpper(src)
+	upper := asciiUpper(src)
 	for i := 0; i < len(src); {
 		c := src[i]
 		switch {
@@ -538,4 +538,17 @@ func hasDigitBefore(toks []token) bool {
 		}
 	}
 	return false
+}
+
+// asciiUpper returns s with its ASCII letters in upper case and every
+// other byte kept, so that it indexes as s does: strings.ToUpper changes
+// the length of some letters ("ı" to "I").
+func asciiUpper(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if c >= 'a' && c <= 'z' {
+			b[i] = c - 'a' + 'A'
+		}
+	}
+	return string(b)
 }
