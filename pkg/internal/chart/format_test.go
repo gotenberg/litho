@@ -90,6 +90,10 @@ func TestTruncateLabel(t *testing.T) {
 		{"Dddddd dddddd", 130, 55, "Dddd..."},
 		{"Bbbbbbb", 70, 5, "Bbb"},
 		{"Ab", 20, 30, "Ab"},
+		// Within a character of fitting, a label still loses one.
+		{"Bbbbbbb", 72.07, -3.39, "Bbb"},
+		{"Eeiieeee", 70.06, -5.4, "Eeii..."},
+		{"Aaaa", 42.04, -33.4, "Aaaa"},
 		{"", 0, 10, ""},
 	}
 	for _, tt := range tests {

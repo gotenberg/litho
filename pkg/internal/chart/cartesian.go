@@ -633,11 +633,10 @@ func (rd *renderer) placeLabels(d *dim) {
 			if b == nil {
 				continue
 			}
-			if _, h := b.rotated(); h > room {
-				if t := truncateLabel(items[i].text, b.w, h-room); t != items[i].text {
-					items[i].text = t
-					blocks[i] = rd.measure(t, st, maxW)
-				}
+			_, h := b.rotated()
+			if t := truncateLabel(items[i].text, b.w, h-room); t != items[i].text {
+				items[i].text = t
+				blocks[i] = rd.measure(t, st, maxW)
 			}
 		}
 	}
@@ -692,14 +691,19 @@ func (rd *renderer) placeLabels(d *dim) {
 // truncateLabel shortens s, w points wide, by excess points as chart2
 // does: as many characters of the average width as cover the excess, and
 // one more, then three for an ellipsis, which follows what is left when
-// that is more than three characters.
+// that is more than three characters. The count truncates towards zero,
+// so a label that fits by less than a character's width still loses one
+// (chart2's integer division in lcl_ResizeTextShapeToFitAvailableSpace).
 func truncateLabel(s string, w, excess float64) string {
 	r := []rune(s)
-	if len(r) == 0 || !(w > 0) {
+	if len(r) == 0 || !(w > 0) || math.IsNaN(excess) {
 		return s
 	}
 	avg := w / float64(len(r))
-	remove := int(excess/avg) + 1
+	remove := int(math.Max(-1, excess/avg)) + 1
+	if remove <= 0 {
+		return s
+	}
 	n := len(r) - remove - 3
 	if n < 0 {
 		n = min(3, len(r))
