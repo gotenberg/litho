@@ -41,7 +41,7 @@ func TestText_RunStyleResolution(t *testing.T) {
 		}},
 		{"run over everything", body(`<a:bodyPr/><a:p><a:r><a:rPr sz="1000" i="1" u="sng" strike="sngStrike" baseline="30000" cap="small" spc="150" lang="fr-FR"><a:solidFill><a:schemeClr val="accent2"/></a:solidFill><a:latin typeface="Courier"/><a:ea typeface="+mn-lt"/></a:rPr><a:t>x</a:t></a:r></a:p>`), func(t *testing.T, r slides.Run) {
 			s := r.Style
-			if s.Size != 10 || !s.Italic || !s.Underline || !s.Strike || s.Script != slides.Superscript || s.Caps != slides.CapsSmall || s.Spacing != 1.5 || s.Lang != "fr-FR" {
+			if s.Size != 10 || !s.Italic || !s.Underline || !s.Strike || s.Script != slides.Superscript || s.Rise != 0.3 || s.Caps != slides.CapsSmall || s.Spacing != 1.5 || s.Lang != "fr-FR" {
 				t.Errorf("style %+v", s)
 			}
 			if !slices.Equal(s.Families, []string{"Courier", "Test Sans"}) || !sameColor(s.Color, rgb(0xC0504D)) {
@@ -210,6 +210,11 @@ func TestText_BodyProperties(t *testing.T) {
 				t.Errorf("body %+v", b)
 			}
 		}},
+		{"a block centred horizontally", `<a:bodyPr anchorCtr="1"/>`, func(t *testing.T, b *slides.TextBody) {
+			if b.HorizontalAnchor != slides.HorizontalCenter {
+				t.Errorf("body %+v", b)
+			}
+		}},
 		{"a shape fit to its text keeps its box", `<a:bodyPr anchor="ctr"><a:spAutoFit/></a:bodyPr>`, func(t *testing.T, b *slides.TextBody) {
 			if b.Autofit != slides.AutofitNone || b.Anchor != slides.AnchorMiddle {
 				t.Errorf("body %+v", b)
@@ -304,30 +309,26 @@ func TestText_InsetsFitTheBox(t *testing.T) {
 	}
 }
 
-func TestText_DefaultTabs(t *testing.T) {
+func TestText_DefaultTab(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name     string
-		stops    []float64
-		defTabSz string
-		want     []float64
+		name, body, presExtra string
+		want                  float64
 	}{
-		{"the builder's 72 points add nothing", nil, "914400", nil},
-		{"36 points from the start", nil, "457200", []float64{36, 72, 108}},
-		{"after the last explicit stop", []float64{50}, "457200", []float64{50, 72, 108}},
-		{"a distance that does not parse", []float64{50}, "x", []float64{50}},
+		{"none set", `<a:p><a:r><a:t>x</a:t></a:r></a:p>`, "", 0},
+		{"the paragraph's", `<a:p><a:pPr defTabSz="457200"><a:tabLst><a:tab pos="635000"/></a:tabLst></a:pPr><a:r><a:t>x</a:t></a:r></a:p>`, "", 36},
+		{"the presentation's default", `<a:p><a:r><a:t>x</a:t></a:r></a:p>`, `<p:defaultTextStyle><a:defPPr defTabSz="1828800"/></p:defaultTextStyle>`, 144},
+		{"one that does not parse", `<a:p><a:pPr defTabSz="x"/><a:r><a:t>x</a:t></a:r></a:p>`, "", 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := defaultTabs(tc.stops, tc.defTabSz)
-			if tc.want == nil {
-				if len(got) != 0 {
-					t.Fatalf("stops %v", got)
-				}
-				return
+			doc, _ := readDeck(t, testDeck{presExtra: tc.presExtra, slides: []testSlide{{tree: textBox("TB", 0, 0, 914400, 914400, `<a:bodyPr/>`+tc.body)}}})
+			p := doc.Slides[0].Shapes[0].Text.Paragraphs[0]
+			if p.DefaultTab != tc.want {
+				t.Errorf("default tab %v, want %v", p.DefaultTab, tc.want)
 			}
-			if n := len(got); (n != maxTabStops && n != len(tc.stops)) || !slices.Equal(got[:len(tc.want)], tc.want) {
-				t.Errorf("stops %v, want %v first and %d in all", got[:min(len(got), 5)], tc.want, maxTabStops)
+			if tc.want == 36 && !slices.Equal(p.TabStops, []float64{50}) {
+				t.Errorf("tab stops %v, want the explicit one alone", p.TabStops)
 			}
 		})
 	}

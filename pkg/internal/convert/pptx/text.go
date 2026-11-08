@@ -3,7 +3,6 @@ package pptx
 import (
 	"encoding/xml"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -227,6 +226,9 @@ func bodyProps(bc chain) *slides.TextBody {
 			}
 		}
 	}
+	if v, ok := bc.attr("anchorCtr"); ok && ooxml.OnOff(v, false) {
+		b.HorizontalAnchor = slides.HorizontalCenter
+	}
 	switch v, _ := bc.attr("anchor"); v {
 	case "ctr":
 		b.Anchor = slides.AnchorMiddle
@@ -367,8 +369,17 @@ func (r *reader) paragraph(p *ooxml.Element, ts *textStyles) slides.Paragraph {
 			}
 		}
 	}
+	// The interval of the default stops past the last explicit one,
+	// from the paragraph, its list levels, the master's text style or the
+	// presentation's default text style (21.1.2.2.7 pPr defTabSz).
+	//
+	// pptx: sd/tdf102261_testParaTabStopDefaultDistance's paragraphs of
+	// defTabSz 457200 and 1828800 print their tabbed digits every 36 and
+	// 144 points.
 	if v, ok := pc.attr("defTabSz"); ok {
-		out.TabStops = defaultTabs(out.TabStops, v)
+		if d, ok := ooxml.EMU(v); ok && d >= 1 {
+			out.DefaultTab = min(d, maxTabInterval)
+		}
 	}
 	out.Style = r.runStyle(runChain(p.Child(ooxml.NSA, "endParaRPr"), pc), ts.sc)
 	for _, k := range p.Kids() {
@@ -387,8 +398,9 @@ func (r *reader) paragraph(p *ooxml.Element, ts *textStyles) slides.Paragraph {
 				run.Format = dateFormat(attr(k, "type"), run.Style.Lang)
 			}
 			if h := pr.Child(ooxml.NSA, "hlinkClick"); h != nil {
-				if run.Href = r.href(ts.part, h); run.Href != "" {
-					r.linkStyle(&run.Style, pr, ts.sc)
+				run.Href, run.Jump = r.href(ts.part, h), r.jump(ts.part, h)
+				if run.Href != "" || run.Jump != 0 {
+					r.linkStyle(&run.Style, h, ts.sc)
 				}
 			}
 		case k.Is(ooxml.NSA, "br"):
@@ -408,30 +420,10 @@ func (r *reader) paragraph(p *ooxml.Element, ts *textStyles) slides.Paragraph {
 	return out
 }
 
-// defaultTabs returns a paragraph's tab stops followed by the default
-// stops every defTabSz (21.1.2.2.7 pPr defTabSz, in EMU) past the last of
-// them, up to [maxTabStops], as Impress sets them; stops as they were for
-// a distance of 72 points, the builder's own, or one that does not parse.
-//
-// # Corpus evidence
-//
-//   - pptx: sd/tdf102261_testParaTabStopDefaultDistance's paragraphs of
-//     defTabSz 457200 and 1828800 print their tabbed digits every 36 and
-//     144 points.
-func defaultTabs(stops []float64, defTabSz string) []float64 {
-	d, ok := ooxml.EMU(defTabSz)
-	if !ok || d < 1 || d == 72 {
-		return stops
-	}
-	last := 0.0
-	for _, s := range stops {
-		last = max(last, s)
-	}
-	for x := (math.Floor(last/d) + 1) * d; len(stops) < maxTabStops; x += d {
-		stops = append(stops, x)
-	}
-	return stops
-}
+// maxTabInterval caps the default tab interval at 1584 points, 22 inches,
+// the widest slide PowerPoint makes. Anti-DoS guard, not spec-mandated:
+// a wider interval puts every default stop past the text.
+const maxTabInterval = 1584
 
 // maxTabStops caps a paragraph's tab stops. Anti-DoS guard, not
 // spec-mandated: PowerPoint keeps at most 32.
@@ -602,6 +594,9 @@ func (r *reader) runStyle(c chain, sc scope) slides.RunStyle {
 	}
 	if v, ok := c.attr("baseline"); ok {
 		if n, ok := ooxml.Int(v); ok {
+			// The shift as a fraction of the size, ST_Percentage in
+			// thousandths of a percent.
+			s.Rise = max(-1, min(float64(n)/100000, 1))
 			switch {
 			case n > 0:
 				s.Script = slides.Superscript
@@ -634,13 +629,23 @@ func (r *reader) runStyle(c chain, sc scope) slides.RunStyle {
 	return s
 }
 
-// linkStyle gives a hyperlink run the theme's hyperlink colour and an
-// underline, as PowerPoint and Impress draw a link whose run sets no
-// colour of its own.
-func (r *reader) linkStyle(s *slides.RunStyle, pr *ooxml.Element, sc scope) {
+// linkStyle gives a hyperlink run the theme's hyperlink colour over the
+// run's own, and an underline, as Impress imports a run with a
+// hlinkClick, unless the link asks for the text's colour (the Office 2019
+// hlinkClr extension of 21.1.2.3.5 hlinkClick, val "tx").
+//
+// # Corpus evidence
+//
+//   - pptx: sd/bnc887230's link run of colour CCCCFF prints in the
+//     theme's hlink, 0000FF.
+func (r *reader) linkStyle(s *slides.RunStyle, h *ooxml.Element, sc scope) {
 	s.Underline = true
-	if pr.Child(ooxml.NSA, "solidFill") != nil {
-		return
+	for _, ext := range h.Child(ooxml.NSA, "extLst").Kids() {
+		for _, k := range ext.Kids() {
+			if k.Local == "hlinkClr" && attr(k, "val") == "tx" {
+				return
+			}
+		}
 	}
 	if col, ok := sc.resolver(nil)("hlink"); ok {
 		s.Color = col

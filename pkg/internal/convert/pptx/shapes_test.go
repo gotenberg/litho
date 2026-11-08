@@ -317,6 +317,20 @@ func TestShapes_Jumps(t *testing.T) {
 			t.Errorf("%s: shape %+v, want a jump to %d", name, s, want)
 		}
 	}
+	// A run's link jumps alike and takes the hyperlink colour.
+	run := textBox("run", 0, 0, 12700, 12700, `<a:bodyPr/><a:p><a:r><a:rPr><a:hlinkClick r:id="" action="ppaction://hlinkshowjump?jump=lastslide"/></a:rPr><a:t>x</a:t></a:r></a:p>`)
+	doc2, _ := readDeck(t, testDeck{slides: []testSlide{{tree: run}, {}}})
+	if r := doc2.Slides[0].Shapes[0].Text.Paragraphs[0].Runs[0]; r.Jump != 2 || r.Href != "" || !r.Style.Underline || !sameColor(r.Style.Color, rgb(0x0000FF)) {
+		t.Errorf("run jump %+v", r)
+	}
+	// A link run's own colour gives way to the hyperlink colour, unless
+	// the link asks for the text's.
+	own := textBox("own", 0, 0, 12700, 12700, `<a:bodyPr/><a:p><a:r><a:rPr><a:solidFill><a:srgbClr val="CCCCFF"/></a:solidFill><a:hlinkClick r:id="" action="ppaction://hlinkshowjump?jump=firstslide"/></a:rPr><a:t>x</a:t></a:r>`+
+		`<a:r><a:rPr><a:solidFill><a:srgbClr val="CCCCFF"/></a:solidFill><a:hlinkClick r:id="" action="ppaction://hlinkshowjump?jump=firstslide"><a:extLst><a:ext uri="{A12FA001-AC4F-418D-AE19-62706E023703}"><ahyp:hlinkClr xmlns:ahyp="http://schemas.microsoft.com/office/drawing/2018/hyperlinkcolor" val="tx"/></a:ext></a:extLst></a:hlinkClick></a:rPr><a:t>y</a:t></a:r></a:p>`)
+	runs := oneSlide(t, own).Shapes[0].Text.Paragraphs[0].Runs
+	if !sameColor(runs[0].Style.Color, rgb(0x0000FF)) || !sameColor(runs[1].Style.Color, rgb(0xCCCCFF)) {
+		t.Errorf("link colours %+v %+v", runs[0].Style.Color, runs[1].Style.Color)
+	}
 	if s := shapeNamed(doc.Slides[0].Shapes, "before first"); s == nil || s.Jump != 0 {
 		t.Errorf("a jump before the first slide: %+v", s)
 	}
