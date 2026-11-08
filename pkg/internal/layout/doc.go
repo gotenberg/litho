@@ -174,7 +174,13 @@
 // or of its anchor's, PageClamp keeps a frame or a float positioned from
 // its paragraph inside its page box, and DecorationCloneAll
 // draws a bordered paragraph whole on every page, and FontKerning none
-// shapes without the font's kerning. [PageBox.Frame] draws page borders,
+// shapes without the font's kerning. FrameWrap wraps the flow around a
+// page-anchored or page-clamped box, the text before its anchor included,
+// by laying the document out again with the rectangles the boxes took;
+// Chain flows the content of a chain of linked boxes from one link into
+// the next, laid out on its own as pages the size of the links' content
+// boxes; StrokeBorders strokes solid borders along their middle as Writer
+// prints them. [PageBox.Frame] draws page borders,
 // [PageBox.FootnoteRule] the separator above a page's footnotes, and a
 // [Node.Marker] whose Style has a width lays a list label out on the
 // number position.
@@ -184,7 +190,11 @@
 // The vertical alignment of a section's content on its pages (Word's
 // vAlign, Writer's page text alignment) has no equivalent: the
 // converters lay it out at the top and warn. A float cannot be anchored
-// to the page; text does not wrap around a page-anchored box.
+// to the page. The text beside a wrapped box keeps to one side of it,
+// the side with more room for a parallel wrap, where Writer sets it on
+// both; the wrap applies to the document's own formatting context, not
+// to table cells or other boxes that start one. The content of a chain
+// keeps no links or structure of its own: its text hangs from the link.
 // A box of a vertical writing mode in a horizontal flow is the root of an
 // orthogonal flow whose text is set sideways, a horizontal layout turned
 // a quarter turn into the box (writing.go); upright glyphs, vertical-lr's
