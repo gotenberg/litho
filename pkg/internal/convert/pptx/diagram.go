@@ -117,19 +117,22 @@ func (r *reader) diagram(c *shapeCtx, data *ooxml.Element, s *slides.Shape, dept
 
 // shrinkGroups ties the text bodies of a laid out diagram's shapes into
 // shrink groups, one per layout node name whose primary font size a
-// layout node's own constraints make equal (21.4.2.8 constr type
-// primFontSz, op equ, forName), so the builder shrinks the text of all
-// of them by one scale, the smallest any needs, as Impress syncs a
-// SmartArt diagram's font heights (oox Shape::syncDiagramFontHeights);
-// a constraint inside a choose, and any other shape, fits alone.
+// layout node's own constraints make equal among its descendants
+// (21.4.2.8 constr type primFontSz, for des, op equ, forName), so the
+// builder shrinks the text of all of them by one scale, the smallest any
+// needs, as Impress syncs a SmartArt diagram's font heights (oox
+// Shape::syncDiagramFontHeights); a constraint inside a choose or for
+// the children alone, and any other shape, fits alone.
 //
 // # Corpus evidence
 //
 //   - pptx: sd/smartart-maxdepth's "parTxOnly" nodes, made equal by a
 //     constraint of a dgm:else branch, print "first" broken as "fi rs t"
 //     and "second" as "se co nd", each at its own size;
-//     sd/smartart-autofit-sync, sd/smartart-vertical-block-list and
-//     sd/smartart-font-size hold theirs in their layout nodes' own lists.
+//     sd/smartart-background's "node" children, made equal for ch,
+//     print "Backgrou nd" smaller than "should", "be" and "green";
+//     sd/smartart-vertical-block-list holds its constraint for des in
+//     its layout node's own list.
 func (r *reader) shrinkGroups(shapes []*slides.Shape, layoutDef *ooxml.Element) {
 	equal := map[string]bool{}
 	var walk func(e *ooxml.Element, depth int)
@@ -140,7 +143,7 @@ func (r *reader) shrinkGroups(shapes []*slides.Shape, layoutDef *ooxml.Element) 
 		for _, k := range e.Kids() {
 			if k.Local == "constrLst" && e.Local == "layoutNode" {
 				for _, c := range k.Kids() {
-					if c.Local == "constr" && attr(c, "type") == "primFontSz" && attr(c, "op") == "equ" && attr(c, "forName") != "" {
+					if c.Local == "constr" && attr(c, "type") == "primFontSz" && attr(c, "for") == "des" && attr(c, "op") == "equ" && attr(c, "forName") != "" {
 						equal[attr(c, "forName")] = true
 					}
 				}

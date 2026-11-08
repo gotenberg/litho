@@ -47,7 +47,7 @@ func diagramDeck(drawing string) testDeck {
 		`<Relationship Id="rIdCs" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramColors" Target="../diagrams/colors1.xml"/>`
 	parts := map[string]string{
 		"ppt/diagrams/data1.xml": diagramDataXML(drawing != ""),
-		"ppt/diagrams/layout1.xml": `<dgm:layoutDef ` + dgmDecl + `><dgm:layoutNode name="root"><dgm:alg type="lin"/><dgm:shape/><dgm:constrLst><dgm:constr type="primFontSz" for="ch" forName="node" op="equ" val="65"/><dgm:constr type="primFontSz" for="ch" forName="other" val="65"/></dgm:constrLst>` +
+		"ppt/diagrams/layout1.xml": `<dgm:layoutDef ` + dgmDecl + `><dgm:layoutNode name="root"><dgm:alg type="lin"/><dgm:shape/><dgm:constrLst><dgm:constr type="primFontSz" for="des" forName="node" op="equ" val="65"/><dgm:constr type="primFontSz" for="ch" forName="other" op="equ" val="65"/></dgm:constrLst>` +
 			`<dgm:forEach axis="ch" ptType="node"><dgm:layoutNode name="node"><dgm:alg type="tx"/><dgm:shape type="ellipse"/></dgm:layoutNode></dgm:forEach></dgm:layoutNode></dgm:layoutDef>`,
 		"ppt/diagrams/quickStyle1.xml": `<dgm:styleDef ` + dgmDecl + `><dgm:styleLbl name="node1"><dgm:style><a:lnRef idx="2"><a:scrgbClr r="0" g="0" b="0"/></a:lnRef>` +
 			`<a:fillRef idx="1"><a:scrgbClr r="0" g="0" b="0"/></a:fillRef><a:effectRef idx="0"/><a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef></dgm:style></dgm:styleLbl></dgm:styleDef>`,
