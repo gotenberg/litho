@@ -35,6 +35,9 @@ type shapeText struct {
 	// anchor is the bodyPr anchor: "t", "ctr" or "b".
 	anchor string
 	wrap   bool
+	// upright keeps the text horizontal when the shape turns (bodyPr
+	// upright).
+	upright bool
 }
 
 // shapePara is one paragraph of a shape's text with its alignment, "l",
@@ -65,6 +68,7 @@ func (r *reader) shapeTextOf(tb, style *ooxml.Element) *shapeText {
 		st.anchor = a
 	}
 	st.wrap = attr(body, "wrap") != "none"
+	st.upright = boolAttr(body, "upright")
 	base := text.Style{Families: r.themeFont("+mn-lt"), Size: shapeTextSize, Color: compose.Color{A: 1}}
 	if fr := style.Child(ooxml.NSA, "fontRef"); fr != nil {
 		if c, ok := ooxml.SchemeColor(fr, r.theme); ok {

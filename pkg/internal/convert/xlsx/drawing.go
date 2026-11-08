@@ -134,6 +134,10 @@ type leaf struct {
 	geom         string
 	style        ooxml.ShapeStyle
 	text         *shapeText
+	// anchored marks a leaf that fills its anchor: its anchor holds the
+	// box the rotation leaves, its width and height swapped for a quarter
+	// turn (ECMA-376 Part 1, 20.5.2.33, as Excel writes rotated shapes).
+	anchored bool
 }
 
 // content reads the object of anchor a of the drawing part into d: a
@@ -170,6 +174,9 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 			d.Name = attr(obj.Find(nsXDR, "cNvPr"), "name")
 			var leaves []leaf
 			w.leaves(part, obj, 0, 0, 1, 1, 0, &leaves)
+			if len(leaves) == 1 {
+				leaves[0].anchored = true
+			}
 			if len(leaves) == 0 {
 				return false
 			}
@@ -325,8 +332,12 @@ func (r *reader) composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
 	out.Vector = func(ctx context.Context, rect compose.Rect) []compose.Fragment {
 		var frags []compose.Fragment
 		for _, l := range leaves {
-			box := compose.Rect{X: rect.X + l.x*rect.Width, Y: rect.Y + l.y*rect.Height, Width: l.w * rect.Width, Height: l.h * rect.Height}
-			var content []compose.Fragment
+			outer := compose.Rect{X: rect.X + l.x*rect.Width, Y: rect.Y + l.y*rect.Height, Width: l.w * rect.Width, Height: l.h * rect.Height}
+			box := outer
+			if l.anchored && quarterTurn(l.rot) {
+				box = compose.Rect{X: outer.X + (outer.Width-outer.Height)/2, Y: outer.Y + (outer.Height-outer.Width)/2, Width: outer.Height, Height: outer.Width}
+			}
+			var content, upright []compose.Fragment
 			if l.pic != nil {
 				pic := ooxml.Cropped(l.pic, l.crop)
 				if pic.Vector != nil {
@@ -337,22 +348,30 @@ func (r *reader) composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
 			} else {
 				ops, _ := ooxml.PresetPath(l.geom, box)
 				content = opaque(l.style.Paint(ops))
-				if l.text != nil {
+				switch {
+				case l.text != nil && l.text.upright:
+					upright = l.text.draw(ctx, fonts, outer)
+				case l.text != nil:
 					content = append(content, l.text.draw(ctx, fonts, box)...)
 				}
 			}
-			if len(content) == 0 {
-				continue
-			}
-			if m, ok := transform(box, l.rot, l.flipH, l.flipV); ok {
+			if m, ok := transform(box, l.rot, l.flipH, l.flipV); ok && len(content) > 0 {
 				frags = append(frags, &compose.Group{Transform: m, Content: content})
 			} else {
 				frags = append(frags, content...)
 			}
+			frags = append(frags, upright...)
 		}
 		return []compose.Fragment{&compose.Group{Clip: ooxml.RectPath(rect), Content: frags}}
 	}
 	return out
+}
+
+// quarterTurn reports a rotation of 45 to 135 or 225 to 315 degrees, for
+// which a shape's anchor holds its box turned a quarter.
+func quarterTurn(rot float64) bool {
+	rot = math.Mod(math.Mod(rot, 360)+360, 360)
+	return rot >= 45 && rot < 135 || rot >= 225 && rot < 315
 }
 
 // opaque returns the paths of frags without their fully transparent fill
