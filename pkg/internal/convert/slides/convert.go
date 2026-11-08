@@ -82,7 +82,7 @@ func (b *builder) warn(code, msg string) {
 // Each slide prints its background, then its shapes in stacking order. A
 // page of another size than the slide shows the slide scaled down to fit,
 // never up, centred. The outline holds an entry per slide written, titled
-// with the slide's title, else its name. The structure tree holds a Sect
+// with the slide's name. The structure tree holds a Sect
 // per slide: the paragraphs of its text as P, its tables as Table, its
 // pictures as Figure.
 //
@@ -207,11 +207,10 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	return out, nil
 }
 
-// outlineTitles returns the outline title of every slide: its title,
-// else its name, else "Slide n" for the n-th slide; a title an earlier
-// slide already took gets " (2)", " (3)" and so on, as Impress names the
-// pages of a presentation it imports after their titles, each page name
-// unique, hidden slides counted.
+// outlineTitles returns the outline title of every slide: its name, else
+// "Slide n" for the n-th slide; a name an earlier slide already took gets
+// " (2)", " (3)" and so on, as Impress keeps the page names of a
+// presentation unique, hidden slides counted.
 func outlineTitles(slides []*Slide) map[*Slide]string {
 	out := make(map[*Slide]string, len(slides))
 	seen := map[string]int{}
@@ -221,10 +220,7 @@ func outlineTitles(slides []*Slide) map[*Slide]string {
 			continue
 		}
 		n++
-		t := s.Title
-		if t == "" {
-			t = s.Name
-		}
+		t := s.Name
 		if t == "" {
 			t = fmt.Sprintf("Slide %d", n)
 		}

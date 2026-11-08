@@ -111,6 +111,8 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 		bx := min(indent, 0)
 		ms.Display = css.Block
 		ms.Position = css.Absolute
+		// Painted first, so that the bullet reads before the text.
+		ms.ZIndex = css.ZIndex{Level: -1}
 		ms.LineRule = css.LineRuleExact
 		ms.LineHeight = css.Pts(lb.height)
 		ms.Top = css.Pts(st.Padding[css.Top].Value - raise)
@@ -122,7 +124,7 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 		}
 		ms.Width = css.Pts(bw + 1)
 		st.TextIndent = css.Pts(max(max(indent, 0), bx+bw))
-		node.Children = append(node.Children, marker)
+		node.Children = append([]*layout.Node{marker}, node.Children...)
 		return
 	}
 	ms.Display = css.InlineBlock
