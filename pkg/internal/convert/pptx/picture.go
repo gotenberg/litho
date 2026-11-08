@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -204,54 +203,6 @@ func (r *reader) graphicFrame(c *shapeCtx, el *ooxml.Element, depth int) (*slide
 		s.Kind, s.Picture = slides.KindPicture, ooxml.Cropped(p, ref.Crop)
 	default:
 		r.warn("unsupported-content", "a graphic frame of an unknown kind is left out")
-		return nil, nil
-	}
-	return s, nil
-}
-
-// diagram reads a SmartArt graphic frame (ECMA-376 Part 1, 21.4 dgm:relIds)
-// as the group of shapes its drawing part holds (MS-ODRAWXML, 2.4: the
-// dsp:drawing PowerPoint saves beside the diagram's data, which Impress
-// draws): the data part's dsp:dataModelExt names the slide relationship
-// of the drawing. A diagram without a drawing part is left out.
-func (r *reader) diagram(c *shapeCtx, data *ooxml.Element, s *slides.Shape, depth int) (*slides.Shape, error) {
-	ids := data.Child(nsDgm, "relIds")
-	part := ""
-	if dm, ok := ids.AttrNS(ooxml.NSR, "dm"); ok {
-		if rel, ok := r.pkg.RelationshipByID(c.part, dm); ok && !rel.External {
-			if root, err := r.pkg.ParseXML(r.ctx, rel.Target, understood); err == nil {
-				if ext := root.Find(nsDSP, "dataModelExt"); ext != nil {
-					if drel, ok := r.pkg.RelationshipByID(c.part, attr(ext, "relId")); ok && !drel.External && r.pkg.Has(drel.Target) {
-						part = drel.Target
-					}
-				}
-			}
-		}
-	}
-	if part == "" {
-		r.warn("unsupported-content", "a SmartArt diagram without a saved drawing is left out")
-		return nil, nil
-	}
-	root, err := r.pkg.ParseXML(r.ctx, part, understood)
-	if err != nil {
-		if isMalformed(err) {
-			r.warn("malformed-part", fmt.Sprintf("the SmartArt drawing %s does not parse and is left out: %v", part, err))
-			return nil, nil
-		}
-		return nil, err
-	}
-	if depth >= maxGroupDepth {
-		return nil, nil
-	}
-	inner := &shapeCtx{layer: c.layer, sc: c.sc, ns: nsDSP, part: part}
-	s.Kind = slides.KindGroup
-	// The drawing's coordinates are the frame's, from its top left corner.
-	s.Child = compose.Rect{Width: s.Box.Width, Height: s.Box.Height}
-	if err := r.shapeList(&s.Kids, inner, root.Child(nsDSP, "spTree"), depth+1); err != nil {
-		return nil, err
-	}
-	if len(s.Kids) == 0 {
-		r.warn("unsupported-content", "a SmartArt diagram without a saved drawing is left out")
 		return nil, nil
 	}
 	return s, nil
