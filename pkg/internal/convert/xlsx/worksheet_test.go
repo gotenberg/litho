@@ -347,3 +347,17 @@ func TestChartsheet(t *testing.T) {
 		})
 	}
 }
+
+func TestUNCURL(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{`file:///\\host\share\a%20b.docx`, "file://host/share/a%20b.docx"},
+		{`\\host\share\x`, "file://host/share/x"},
+		{"https://example.com/", "https://example.com/"},
+		{`file:///\\`, `file:///\\`},
+	}
+	for _, tc := range tests {
+		if got := uncURL(tc.in); got != tc.want {
+			t.Errorf("uncURL(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

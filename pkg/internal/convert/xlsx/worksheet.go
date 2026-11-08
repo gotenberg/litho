@@ -475,7 +475,7 @@ func (w *sheetReader) hyperlinks(e *ooxml.Element) {
 		target := ""
 		if id, ok := h.AttrNS(ooxml.NSR, "id"); ok {
 			if rel, ok := r.pkg.RelationshipByID(w.part, id); ok && rel.External {
-				target = rel.Target
+				target = uncURL(rel.Target)
 			}
 		}
 		if loc := decodeXString(attr(h, "location")); loc != "" {
@@ -582,4 +582,24 @@ func chartSeries(c *chart.Chart) int {
 		}
 	}
 	return n
+}
+
+// uncURL returns a Windows network path, \\host\share\file or the file URL
+// Excel writes for one (file:///\\host\share\file), as the file URL
+// LibreOffice exports it as: file://host/share/file, the backslashes
+// turned to slashes; any other target unchanged.
+//
+// # Corpus evidence
+//
+//   - xlsx: sc/129969-min.xlsx links file:///\\ndhlis-cbut018\CBUT018\...,
+//     which LibreOffice exports as file://ndhlis-cbut018/CBUT018/....
+func uncURL(target string) string {
+	rest, ok := strings.CutPrefix(target, `file:///\\`)
+	if !ok {
+		rest, ok = strings.CutPrefix(target, `\\`)
+	}
+	if !ok || rest == "" {
+		return target
+	}
+	return "file://" + strings.ReplaceAll(rest, `\`, "/")
 }
