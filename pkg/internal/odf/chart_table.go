@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
+	"github.com/gotenberg/litho/pkg/internal/numfmt"
 )
 
 // tableCell is one cell of a chart's embedded table.
@@ -251,13 +252,55 @@ func (t *localTable) categories() chart.Data {
 // numberFormat translates the data style name (ODF 1.3 Part 3, 16.29)
 // into the SpreadsheetML number format code the chart model carries,
 // through the document's data styles; "" stands for General, as the
-// chart model reads it, and for a name that resolves to no style.
+// chart model reads it, and for a name that resolves to no style. A style
+// of another language than English (16.29.2 number:language and
+// number:country) writes its numbers with that locale's separators, as
+// Calc formats a chart's labels: each section of the code takes the
+// locale's tag, [$-40E] for hu-HU.
 func (r *chartReader) numberFormat(name string) string {
 	code := r.formats.Code(ScopeContent, name)
 	if code == "General" {
 		return ""
 	}
-	return code
+	el := r.formats.Element(ScopeContent, name)
+	if el == nil || code == "" || strings.Contains(code, "[$") {
+		return code
+	}
+	lang := el.A(NSNumber, "language")
+	if c := el.A(NSNumber, "country"); c != "" {
+		lang += "-" + c
+	}
+	id, ok := numfmt.LCIDOf(lang)
+	if !ok {
+		return code
+	}
+	tag := "[$-" + strings.ToUpper(strconv.FormatUint(id, 16)) + "]"
+	return tag + strings.Join(formatSections(code), ";"+tag)
+}
+
+// formatSections splits a format code at the semicolons between its
+// sections, those outside quotes, brackets and escapes (ECMA-376 Part 1,
+// 18.8.31).
+func formatSections(code string) []string {
+	var out []string
+	quoted, bracket, start := false, false, 0
+	for i := 0; i < len(code); i++ {
+		switch c := code[i]; {
+		case c == '\\' && !quoted:
+			i++
+		case c == '"':
+			quoted = !quoted
+		case quoted:
+		case c == '[':
+			bracket = true
+		case c == ']':
+			bracket = false
+		case c == ';' && !bracket:
+			out = append(out, code[start:i])
+			start = i + 1
+		}
+	}
+	return append(out, code[start:])
 }
 
 // rangeName returns the name LibreOffice gives a series of the values

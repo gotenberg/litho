@@ -2,6 +2,7 @@ package odf
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -174,13 +175,16 @@ func TestChartFromDocument_NumberFormats(t *testing.T) {
 		`<number:number-style style:name="M"><number:text>-</number:text><number:currency-symbol>$</number:currency-symbol><number:number number:decimal-places="0" number:min-integer-digits="1"/><style:map style:condition="value()&gt;=0" style:apply-style-name="P"/></number:number-style>` +
 		`<number:number-style style:name="E"><number:scientific-number number:decimal-places="2" number:min-integer-digits="1" number:min-exponent-digits="3"/></number:number-style>` +
 		`<number:date-style style:name="D"><number:year number:style="long"/><number:text>-</number:text><number:month number:style="long"/><number:text>-</number:text><number:day/></number:date-style>` +
-		`<number:number-style style:name="G"><number:number number:min-integer-digits="1"/></number:number-style>`
+		`<number:number-style style:name="G"><number:number number:min-integer-digits="1"/></number:number-style>` +
+		`<number:percentage-style style:name="H" number:language="hu" number:country="HU"><number:number number:decimal-places="2" number:min-integer-digits="1"/><number:text>%</number:text></number:percentage-style>` +
+		`<number:number-style style:name="HM" number:language="de" number:country="DE"><number:number number:decimal-places="1" number:min-integer-digits="1"/><style:map style:condition="value()&gt;=0" style:apply-style-name="G"/></number:number-style>` +
+		`<number:number-style style:name="EN" number:language="en" number:country="US"><number:number number:decimal-places="1" number:min-integer-digits="1"/></number:number-style>`
 	root, err := ParseXML(context.Background(), []byte(chartContent(st, "bar", "", series)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	r := &chartReader{formats: DataStylesOf(root, nil)}
-	tests := map[string]string{"M": `[$$]0;\-[$$]0`, "E": "0.00E+000", "D": `yyyy\-mm\-d`, "G": "", "missing": ""}
+	tests := map[string]string{"M": `[$$]0;\-[$$]0`, "E": "0.00E+000", "D": `yyyy\-mm\-d`, "G": "", "missing": "", "H": "[$-40E]0.00%", "EN": "0.0"}
 	for name, want := range tests {
 		if got := r.numberFormat(name); got != want {
 			t.Errorf("numberFormat(%s) = %q, want %q", name, got, want)
@@ -268,5 +272,21 @@ func TestChartFromDocument_MultiLevelCategoriesBreak(t *testing.T) {
 	c := readODFChart(t, chartContent(st, "bar", "", axes+series))
 	if len(c.Axes) != 2 || c.Axes[0].NoBreak || !c.Axes[1].NoBreak {
 		t.Errorf("axes = %+v %+v", c.Axes[0], c.Axes[1])
+	}
+}
+
+func TestFormatSections(t *testing.T) {
+	tests := []struct {
+		code string
+		want []string
+	}{
+		{"0.0", []string{"0.0"}},
+		{`0;\-0;"a;b"`, []string{"0", `\-0`, `"a;b"`}},
+		{`[>=0]0;\;0`, []string{"[>=0]0", `\;0`}},
+	}
+	for _, tt := range tests {
+		if got := formatSections(tt.code); !slices.Equal(got, tt.want) {
+			t.Errorf("formatSections(%q) = %q, want %q", tt.code, got, tt.want)
+		}
 	}
 }
