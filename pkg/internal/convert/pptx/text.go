@@ -3,6 +3,7 @@ package pptx
 import (
 	"encoding/xml"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -361,6 +362,9 @@ func (r *reader) paragraph(p *ooxml.Element, ts *textStyles) slides.Paragraph {
 			}
 		}
 	}
+	if v, ok := pc.attr("defTabSz"); ok {
+		out.TabStops = defaultTabs(out.TabStops, v)
+	}
 	out.Style = r.runStyle(runChain(p.Child(ooxml.NSA, "endParaRPr"), pc), ts.sc)
 	for _, k := range p.Kids() {
 		if len(out.Runs) >= maxRuns {
@@ -397,6 +401,31 @@ func (r *reader) paragraph(p *ooxml.Element, ts *textStyles) slides.Paragraph {
 	}
 	out.Bullet = r.bullet(pc, ts)
 	return out
+}
+
+// defaultTabs returns a paragraph's tab stops followed by the default
+// stops every defTabSz (21.1.2.2.7 pPr defTabSz, in EMU) past the last of
+// them, up to [maxTabStops], as Impress sets them; stops as they were for
+// a distance of 72 points, the builder's own, or one that does not parse.
+//
+// # Corpus evidence
+//
+//   - pptx: sd/tdf102261_testParaTabStopDefaultDistance's paragraphs of
+//     defTabSz 457200 and 1828800 print their tabbed digits every 36 and
+//     144 points.
+func defaultTabs(stops []float64, defTabSz string) []float64 {
+	d, ok := ooxml.EMU(defTabSz)
+	if !ok || d < 1 || d == 72 {
+		return stops
+	}
+	last := 0.0
+	for _, s := range stops {
+		last = max(last, s)
+	}
+	for x := (math.Floor(last/d) + 1) * d; len(stops) < maxTabStops; x += d {
+		stops = append(stops, x)
+	}
+	return stops
 }
 
 // maxTabStops caps a paragraph's tab stops. Anti-DoS guard, not

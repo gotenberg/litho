@@ -293,3 +293,32 @@ func TestText_InsetsFitTheBox(t *testing.T) {
 		})
 	}
 }
+
+func TestText_DefaultTabs(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		stops    []float64
+		defTabSz string
+		want     []float64
+	}{
+		{"the builder's 72 points add nothing", nil, "914400", nil},
+		{"36 points from the start", nil, "457200", []float64{36, 72, 108}},
+		{"after the last explicit stop", []float64{50}, "457200", []float64{50, 72, 108}},
+		{"a distance that does not parse", []float64{50}, "x", []float64{50}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := defaultTabs(tc.stops, tc.defTabSz)
+			if tc.want == nil {
+				if len(got) != 0 {
+					t.Fatalf("stops %v", got)
+				}
+				return
+			}
+			if n := len(got); (n != maxTabStops && n != len(tc.stops)) || !slices.Equal(got[:len(tc.want)], tc.want) {
+				t.Errorf("stops %v, want %v first and %d in all", got[:min(len(got), 5)], tc.want, maxTabStops)
+			}
+		})
+	}
+}
