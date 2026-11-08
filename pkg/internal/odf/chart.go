@@ -770,8 +770,13 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 			break
 		}
 	}
-	if se.Child(NSChart, "regression-curve") != nil {
-		r.warn(CodeChartUnsupported, "regression curves are not drawn")
+	for _, rc := range se.All(NSChart, "regression-curve") {
+		if t, ok := r.trendline(rc.A(NSChart, "style-name")); ok && len(s.Trendlines) < maxTrendlines {
+			s.Trendlines = append(s.Trendlines, t)
+		}
+		if eq := rc.Child(NSChart, "equation"); eq != nil && (eq.A(NSChart, "display-equation") == "true" || eq.A(NSChart, "display-r-square") == "true") {
+			r.warn(CodeChartUnsupported, "a regression curve's equation is not drawn")
+		}
 	}
 	if se.Child(NSChart, "error-indicator") != nil {
 		r.warn(CodeChartUnsupported, "error indicators are not drawn")
@@ -855,6 +860,67 @@ func (r *chartReader) marker(name string, kind chart.Kind) chart.Marker {
 		}
 	}
 	return m
+}
+
+// maxTrendlines caps the regression curves of one series. Anti-DoS guard,
+// not spec-mandated: LibreOffice offers one a series, Office a few.
+const maxTrendlines = 16
+
+// trendline reads the regression curve of style name (ODF 1.3 Part 3,
+// 11.15 chart:regression-curve; 20.86 chart:regression-type and the
+// chart:regression-* properties), false for none.
+func (r *chartReader) trendline(name string) (chart.Trendline, bool) {
+	var t chart.Trendline
+	v, _ := r.prop(name, "chart-properties", NSChart, "regression-type")
+	switch v {
+	case "linear":
+		t.Kind = chart.TrendLinear
+	case "logarithmic":
+		t.Kind = chart.TrendLogarithmic
+	case "exponential":
+		t.Kind = chart.TrendExponential
+	case "power":
+		t.Kind = chart.TrendPower
+	case "polynomial":
+		t.Kind = chart.TrendPolynomial
+	case "moving-average":
+		t.Kind = chart.TrendMovingAverage
+	default:
+		return t, false
+	}
+	if v := r.numProp(name, "regression-max-degree"); v >= 2 && v <= 6 {
+		t.Order = int(v) // fits int: at most 6
+	}
+	if v := r.numProp(name, "regression-period"); v >= 2 && v <= chart.MaxPoints {
+		t.Period = int(v) // fits int: at most MaxPoints
+	}
+	switch v, _ := r.prop(name, "chart-properties", NSChart, "regression-moving-type"); v {
+	case "central":
+		t.Moving = chart.MovingCentral
+	case "averaged-abscissa":
+		t.Moving = chart.MovingAveragedAbscissa
+	}
+	ext := func(local string) float64 {
+		for _, ns := range []string{NSChart, NSLOExt} {
+			if v, ok := r.prop(name, "chart-properties", ns, local); ok {
+				if f, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil && f > 0 && !math.IsInf(f, 0) {
+					return f
+				}
+			}
+		}
+		return 0
+	}
+	t.Forward, t.Backward = ext("regression-extrapolate-forward"), ext("regression-extrapolate-backward")
+	if r.boolProp(name, "regression-force-intercept", false) {
+		if v := r.numProp(name, "regression-intercept-value"); !math.IsNaN(v) {
+			t.Intercept, t.HasIntercept = v, true
+		}
+	}
+	t.Name, _ = r.prop(name, "chart-properties", NSChart, "regression-name")
+	if s := r.stroke(name, nil); s != nil {
+		t.Line = s
+	}
+	return t, true
 }
 
 // labelFrame reads the fill and border of the data labels of a

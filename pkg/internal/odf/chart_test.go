@@ -219,7 +219,7 @@ func TestParseChart_Package(t *testing.T) {
 }
 
 func TestChartFromDocument_Warnings(t *testing.T) {
-	plot := `<chart:series chart:values-cell-range-address="Sheet9.A1:Sheet9.A2"><chart:regression-curve/><chart:error-indicator/></chart:series>`
+	plot := `<chart:series chart:values-cell-range-address="Sheet9.A1:Sheet9.A2"><chart:regression-curve><chart:equation chart:display-equation="true"/></chart:regression-curve><chart:error-indicator/></chart:series>`
 	content := strings.Replace(chartContent(chartStyles, "bar", "", plot), tableXML, "", 1)
 	c := readODFChart(t, content)
 	var msgs []string
@@ -227,7 +227,7 @@ func TestChartFromDocument_Warnings(t *testing.T) {
 		msgs = append(msgs, w.Message)
 	}
 	got := strings.Join(msgs, "|")
-	for _, want := range []string{"regression", "error indicators", "no values"} {
+	for _, want := range []string{"equation", "error indicators", "no values"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("warnings %q lack %q", got, want)
 		}
@@ -304,5 +304,23 @@ func TestChartFromDocument_LabelFrameAndAxisGap(t *testing.T) {
 	f := g.Series[0].Labels.Frame
 	if f.Fill == nil || f.Fill.Color.G != 1 || f.Border == nil || f.Border.Color.B != 1 {
 		t.Errorf("label frame = %+v, want the data label style's green fill and blue border", f)
+	}
+}
+
+func TestChartFromDocument_RegressionCurves(t *testing.T) {
+	st := chartStyles + `<style:style style:name="rc" style:family="chart"><style:chart-properties chart:regression-type="moving-average" chart:regression-moving-type="averaged-abscissa" chart:regression-period="5" chart:regression-name="Avg" loext:regression-extrapolate-forward="2"/><style:graphic-properties svg:stroke-color="#8b0000" svg:stroke-width="0.04cm"/></style:style>` +
+		`<style:style style:name="rl" style:family="chart"><style:chart-properties chart:regression-type="linear" chart:regression-force-intercept="true" chart:regression-intercept-value="3"/></style:style>` +
+		`<style:style style:name="rn" style:family="chart"><style:chart-properties chart:regression-type="none"/></style:style>`
+	sers := `<chart:series chart:style-name="s1" chart:values-cell-range-address="Sheet1.B2:Sheet1.B3"><chart:regression-curve chart:style-name="rc"/><chart:regression-curve chart:style-name="rl"/><chart:regression-curve chart:style-name="rn"/></chart:series>`
+	c := readODFChart(t, chartContent(st, "line", "", sers))
+	got := c.Groups[0].Series[0].Trendlines
+	if len(got) != 2 {
+		t.Fatalf("trendlines = %+v, want two", got)
+	}
+	if a := got[0]; a.Kind != chart.TrendMovingAverage || a.Moving != chart.MovingAveragedAbscissa || a.Period != 5 || a.Name != "Avg" || a.Forward != 2 || a.Line == nil || a.Line.Color.R < 0.5 {
+		t.Errorf("first curve = %+v", a)
+	}
+	if b := got[1]; b.Kind != chart.TrendLinear || !b.HasIntercept || b.Intercept != 3 || b.Line != nil {
+		t.Errorf("second curve = %+v", b)
 	}
 }
