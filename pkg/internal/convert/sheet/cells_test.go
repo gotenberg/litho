@@ -270,3 +270,42 @@ func TestConvert_Rotation(t *testing.T) {
 		t.Errorf("text origin %.2f, %.2f under %+v, want 46.09, 726.89 turned up", x, 841.89-y, m)
 	}
 }
+
+// TestConvert_GrowHeader locks Calc's dynamic header and footer heights:
+// content taller than the margin's room, plus the spacing, moves the
+// cells; a fixed height does not.
+func TestConvert_GrowHeader(t *testing.T) {
+	tests := []struct {
+		name           string
+		grow           bool
+		spacing        float64
+		wantDown       float64
+		footerSpacing  float64
+		wantFooterRoom bool
+	}{
+		{name: "fixed height", grow: false, wantDown: 0},
+		// "H" in Liberation Sans 10 takes 11.17 points, with 7.09 of
+		// spacing 18.26 against the margin's 17.1: the cells move 1.16
+		// points down, as sc/databar.xlsx prints them.
+		{name: "dynamic height", grow: true, spacing: 7.09, wantDown: 11.17 + 7.09 - 17.1},
+		{name: "room enough", grow: true, spacing: 2, wantDown: 0},
+	}
+	var base float64
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sh := &Sheet{Name: "S", Page: a4(), Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "cell", nil)}}}}
+			sh.Page.HeaderTop = 56.7
+			sh.Page.Margin[css.Top] = 56.7 + 17.1
+			sh.HeaderFooter.Odd.Header[1] = []Span{{Text: "H"}}
+			sh.HeaderFooter.GrowHeader, sh.HeaderFooter.HeaderSpacing = tt.grow, tt.spacing
+			y := find(t, convert(t, newDoc(sh), office.Options{}).Pages[0], "cell").y
+			if i == 0 {
+				base = y
+				return
+			}
+			if !near(base-y, tt.wantDown, 0.2) {
+				t.Errorf("cells moved %.2f down, want %.2f", base-y, tt.wantDown)
+			}
+		})
+	}
+}

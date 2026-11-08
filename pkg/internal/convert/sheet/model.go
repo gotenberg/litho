@@ -540,6 +540,18 @@ type HeaderFooter struct {
 	// header and the footer in points, 0 for the content's own (ODF
 	// fo:min-height); the margins the reader set already make room.
 	HeaderMinHeight, FooterMinHeight float64
+	// GrowHeader and GrowFooter make the header's and the footer's
+	// heights follow their content, as Calc's dynamic heights do (ODF
+	// fo:min-height; a workbook header whose font leaves room in its
+	// margin, LibreOffice's HeaderIsDynamic): the tallest variant's
+	// content plus HeaderSpacing, when taller than the room the margin
+	// leaves (Margin less HeaderTop), moves the cells down; a footer
+	// moves them up alike. HeaderSpacing and FooterSpacing are the space
+	// between the header and the cells and between the cells and the
+	// footer (ODF fo:margin-bottom of the header, fo:margin-top of the
+	// footer; LibreOffice's HeaderBodyDistance).
+	GrowHeader, GrowFooter       bool
+	HeaderSpacing, FooterSpacing float64
 	// ScaleWithDoc is a workbook's scaleWithDoc flag (ECMA-376 Part 1,
 	// 18.3.1.46), kept for the record: Calc scales the header and footer
 	// text with the sheet's print scale whatever it says, and so does the

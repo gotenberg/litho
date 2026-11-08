@@ -256,3 +256,51 @@ func artifacts(frags []compose.Fragment) []compose.Fragment {
 	}
 	return frags
 }
+
+// growMargins makes room for a header or footer whose height follows its
+// content (Calc's ScPrintFunc::UpdateHFHeight): the tallest part of every
+// variant laid out across the page between the margins, plus the
+// spacing, moves the cells down from the header, or up from the footer,
+// when it needs more room than the margin leaves.
+func (b *builder) growMargins(sp *sheetPlan) {
+	hf := &sp.g.sh.HeaderFooter
+	ps := &sp.g.sh.Page
+	areaW := sp.width - sp.margin[css.Left] - sp.margin[css.Right]
+	if areaW <= 1 {
+		return
+	}
+	f := hfFields{page: 1, pages: 1, sheet: sp.g.sh.Name}
+	variants := []Margins{hf.Odd}
+	if hf.DifferentOddEven {
+		variants = append(variants, hf.Even)
+	}
+	if hf.DifferentFirst {
+		variants = append(variants, hf.First)
+	}
+	tallest := func(footer bool) float64 {
+		h := 0.0
+		aligns := [3]css.TextAlign{css.AlignLeft, css.AlignCenter, css.AlignRight}
+		for _, m := range variants {
+			parts := m.Header
+			if footer {
+				parts = m.Footer
+			}
+			for i := range parts {
+				if n := b.partNode(parts[i], f, aligns[i]); n != nil {
+					h = max(h, b.measureBlock(n, areaW))
+				}
+			}
+		}
+		return h
+	}
+	if hf.GrowHeader && headerShown(hf, false) && ps.HeaderTop >= 0 {
+		if need := tallest(false) + max(hf.HeaderSpacing, 0); need > sp.margin[css.Top]-ps.HeaderTop {
+			sp.margin[css.Top] = min(ps.HeaderTop+need, maxSide)
+		}
+	}
+	if hf.GrowFooter && headerShown(hf, true) && ps.FooterBottom >= 0 {
+		if need := tallest(true) + max(hf.FooterSpacing, 0); need > sp.margin[css.Bottom]-ps.FooterBottom {
+			sp.margin[css.Bottom] = min(ps.FooterBottom+need, maxSide)
+		}
+	}
+}

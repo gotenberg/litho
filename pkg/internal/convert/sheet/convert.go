@@ -266,6 +266,9 @@ func (b *builder) planSheet(i int, sh *Sheet) *sheetPlan {
 	if sp.margin[css.Top]+sp.margin[css.Bottom] >= sp.height-1 {
 		sp.margin[css.Top], sp.margin[css.Bottom] = 0, 0
 	}
+	if !sp.single {
+		b.growMargins(sp)
+	}
 	if n := unevaluated(sh); n > 0 {
 		b.warn(CodeConditional, fmt.Sprintf("sheet %s: %d conditional formatting rules (formulas, icon sets) are not applied", quote(sh.Name), n))
 	}
