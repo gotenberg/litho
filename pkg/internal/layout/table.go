@@ -644,13 +644,16 @@ func (e *engine) layoutTableOnce(t *box, cb cblock, y float64) {
 		if e.err != nil {
 			break
 		}
-		e.layoutCell(td, c, t.w)
+		e.layoutCell(td, c, t.w, -1)
 	}
 	e.noPaginate--
 	if e.err != nil {
 		return
 	}
 	rowH, base, hasBase := e.rowHeights(td, cb)
+	if e.relayoutPercentCells(td, rowH, cb) {
+		rowH, base, hasBase = e.rowHeights(td, cb)
+	}
 	td.rowBase, td.rowHasBase = base, hasBase
 	end, pushed := e.placeRows(td, rowH, t.contentY())
 	if pushed && e.relayout(y) {
@@ -727,8 +730,10 @@ func (e *engine) layoutTableOnce(t *box, cb cblock, y float64) {
 
 // layoutCell lays out the content of cell c of td at its column, below the
 // table's top, for a table of content width cbw: its height and baseline
-// are those of its content, and the table moves it into place.
-func (e *engine) layoutCell(td *tableData, c *box, cbw float64) {
+// are those of its content, and the table moves it into place. A fixedH
+// of 0 or more is the definite content height the cell's percentage
+// heights resolve against ([engine.relayoutPercentCells]).
+func (e *engine) layoutCell(td *tableData, c *box, cbw, fixedH float64) {
 	cd := c.cell
 	t := td.table
 	c.laidOut = true
@@ -739,6 +744,9 @@ func (e *engine) layoutCell(td *tableData, c *box, cbw float64) {
 	own := &bfc{}
 	mc := &marginState{}
 	kcb := cblock{x: c.contentX(), w: c.w}
+	if fixedH >= 0 {
+		kcb.h, kcb.hDefinite = fixedH, true
+	}
 	saved := e.enterClamp(c, kcb, c.contentY())
 	end := formatterFor(c).layout(e, c, kcb, own, c.contentY(), mc)
 	e.leaveClamp(saved)
@@ -757,6 +765,49 @@ func (e *engine) layoutCell(td *tableData, c *box, cbw float64) {
 	if by, ok := firstBaseline(c); ok {
 		cd.base, cd.hasBase = by-c.y, true
 	}
+}
+
+// relayoutPercentCells lays out again, at the height its rows give it, each
+// cell of td with a child of a percentage height, when the table, the
+// cell's row or the cell has a height of its own: the children's
+// percentages then resolve against the cell's height, as Chromium lays
+// them out (CSS Tables 3 leaves it open). It reports whether it laid one
+// out again.
+func (e *engine) relayoutPercentCells(td *tableData, rowH []float64, cb cblock) bool {
+	_, tableSet := specHeight(td.table, td.table.st.Height, cb)
+	_, vs := td.spacing()
+	again := false
+	e.noPaginate++
+	defer func() { e.noPaginate-- }()
+	for _, c := range td.cells {
+		cd := c.cell
+		if e.err != nil || !percentKid(c) {
+			continue
+		}
+		_, rowSet := specHeight(td.rows[cd.row].box, td.rows[cd.row].box.st.Height, cb)
+		_, cellSet := specHeight(c, c.st.Height, cblock{})
+		if !tableSet && !rowSet && !cellSet && !td.rows[cd.row].box.st.Height.HasPercent() && !c.st.Height.HasPercent() {
+			continue
+		}
+		h := 0.0
+		for r := cd.row; r < cd.row+cd.rowSpan && r < len(rowH); r++ {
+			h += rowH[r]
+		}
+		h += vs * float64(max(cd.rowSpan-1, 0))
+		e.layoutCell(td, c, td.table.w, max(h-vEdges(c), 0))
+		again = true
+	}
+	return again
+}
+
+// percentKid reports a cell with an in-flow child of a percentage height.
+func percentKid(c *box) bool {
+	for _, k := range c.kids {
+		if !k.abs && k.float == css.FloatNone && (k.st.Height.HasPercent() || k.st.MinHeight.HasPercent()) {
+			return true
+		}
+	}
+	return false
 }
 
 // rowHeights returns the height of every row of td (CSS 2.1, 17.5.3): its

@@ -135,3 +135,45 @@ func TestTable_FlexItems(t *testing.T) {
 		t.Errorf("column item %v, want 20 tall", got)
 	}
 }
+
+func TestTable_CellChildPercentHeight(t *testing.T) {
+	// A percentage height inside a cell resolves against the cell's
+	// height when the table has one, as Chromium lays it out; a table of
+	// auto height leaves it auto.
+	pctKid := func() *Node {
+		return el(sty(func(s *css.Style) { s.Height = css.Dimension{Kind: css.Percent, Value: 1} }), el(sty(height(5))))
+	}
+	cell := func() *Node { return part(css.TableCell, nil, pctKid()) }
+	tests := []struct {
+		name string
+		tm   []func(*css.Style)
+		want float64
+	}{
+		{"definite table", mods(height(60), width(20)), 60},
+		{"auto table", mods(width(20)), 5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rb := boxes(t, doc(table(tt.tm, tr(nil, cell()))), page(100, 100))
+			var find func(b *box) *box
+			find = func(b *box) *box {
+				if b.tpart == partCell {
+					return b
+				}
+				for _, k := range b.kids {
+					if c := find(k); c != nil {
+						return c
+					}
+				}
+				return nil
+			}
+			c := find(rb)
+			if c == nil || len(c.kids) == 0 {
+				t.Fatal("no cell")
+			}
+			if got := rect(c.kids[0])[3]; got != tt.want {
+				t.Errorf("child height %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
