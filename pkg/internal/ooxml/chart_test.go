@@ -373,3 +373,24 @@ func TestChartFromElement_CategoryPositions(t *testing.T) {
 		})
 	}
 }
+
+func TestIsDateCode(t *testing.T) {
+	for code, want := range map[string]bool{
+		"m/d/yyyy": true, "General": false, "0.00": false, `"day" 0`: false, "[Red]0": false,
+		`0\d`: false, "hh:mm": true, "0.00E+00": false, "[$-409]mmm-yy": true, "": false,
+	} {
+		if got := isDateCode(code); got != want {
+			t.Errorf("isDateCode(%q) = %v, want %v", code, got, want)
+		}
+	}
+}
+
+func TestChartFromElement_Date1904(t *testing.T) {
+	plot := `<c:lineChart><c:ser><c:idx val="0"/><c:order val="0"/><c:cat><c:numRef><c:f>S!$A$1:$A$1</c:f><c:numCache><c:formatCode>m/d/yyyy</c:formatCode><c:ptCount val="1"/><c:pt idx="0"><c:v>100</c:v></c:pt></c:numCache></c:numRef></c:cat>` +
+		`<c:val><c:numRef><c:f>S!$B$1:$B$1</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="1"/><c:pt idx="0"><c:v>100</c:v></c:pt></c:numCache></c:numRef></c:val></c:ser></c:lineChart>`
+	c := readChart(t, chartXML(`<c:date1904 val="1"/>`, "", plot), false)
+	s := c.Groups[0].Series[0]
+	if s.Categories.Values[0].Number != 1561 || s.Values.Values[0].Number != 100 {
+		t.Errorf("categories %v, values %v", s.Categories.Values, s.Values.Values)
+	}
+}

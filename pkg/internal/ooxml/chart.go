@@ -267,6 +267,15 @@ func (p *chartReader) read(root *Element) {
 		b.Color = c.AutoColor(s.Index, n)
 		s.Border = &b
 	}
+	if boolVal(root, "date1904", false) {
+		for _, g := range c.Groups {
+			for _, s := range g.Series {
+				shift1904(&s.Categories)
+				shift1904(&s.Values)
+				shift1904(&s.Sizes)
+			}
+		}
+	}
 	p.readTitle(ch)
 	for _, g := range c.Groups {
 		for _, s := range g.Series {
@@ -971,4 +980,50 @@ func splitCell(s string) (string, int, bool) {
 		return "", 0, false
 	}
 	return s[:i], row, true
+}
+
+// date1904Shift is the days a chart of a 1904 workbook adds to its date
+// serials, as LibreOffice shows them: 1461, a day short of the 1462 days
+// from the 1900 system's day 0 to 1904-01-01 that a cell's value takes
+// (ECMA-376 Part 1, 21.2.2.38 date1904; 18.17.4.1).
+//
+// # Corpus evidence
+//
+//   - pptx: chart2/1904NullDate.pptx, serial 37257 under m/d/yyyy prints
+//     1/1/2006.
+const date1904Shift = 1461
+
+// shift1904 moves the numbers of d into the 1900 date system when its
+// format shows a date or a time: a chart of a 1904 workbook counts its
+// dates from 1904-01-01 (ECMA-376 Part 1, 21.2.2.38 date1904).
+func shift1904(d *chart.Data) {
+	if !isDateCode(d.Format) {
+		return
+	}
+	for i, v := range d.Values {
+		if v.Kind == chart.Number {
+			d.Values[i].Number += date1904Shift
+		}
+	}
+}
+
+// isDateCode reports a number format code that shows a date or a time: a
+// y, m, d, h or s outside quotes, brackets and escapes (ECMA-376 Part 1,
+// 18.8.31 numFmt). A time shifted by whole days shows alike.
+func isDateCode(code string) bool {
+	for i := 0; i < len(code); i++ {
+		switch c := code[i]; c {
+		case '"':
+			for i++; i < len(code) && code[i] != '"'; i++ {
+			}
+		case '[':
+			for i++; i < len(code) && code[i] != ']'; i++ {
+			}
+		case '\\', '_', '*':
+			i++
+		case 'y', 'Y', 'm', 'M', 'd', 'D', 'h', 'H', 's', 'S':
+			return !strings.EqualFold(code, "General")
+		}
+	}
+	return false
 }
