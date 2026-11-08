@@ -17,6 +17,7 @@ func TestParseTransform(t *testing.T) {
 		// In listed order: the translation is scaled too.
 		{"translate (2pt) scale (3 2)", 9, 0, false, true},
 		{"skewX (0.5)", 1, 0, true, true},
+		{"skewY (0.5)", 1, -math.Tan(0.5), true, true},
 		{"matrix (1 0 0 1 1pt 2pt)", 2, 2, false, true},
 		{"spin (1)", 0, 0, false, false},
 		{"rotate (x)", 0, 0, false, false},
