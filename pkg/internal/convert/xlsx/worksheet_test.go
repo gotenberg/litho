@@ -300,3 +300,50 @@ func TestCell_Formulas(t *testing.T) {
 		t.Errorf("a shared formula's cell without text is kept")
 	}
 }
+
+func TestChartsheet(t *testing.T) {
+	chartXML := func(series string) string {
+		return `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea><c:lineChart>` + series +
+			`<c:axId val="1"/><c:axId val="2"/></c:lineChart><c:catAx><c:axId val="1"/><c:crossAx val="2"/></c:catAx><c:valAx><c:axId val="2"/><c:crossAx val="1"/></c:valAx></c:plotArea></c:chart></c:chartSpace>`
+	}
+	tests := []struct {
+		name   string
+		series string
+		want   int
+	}{
+		{"a series", `<c:ser><c:idx val="0"/><c:order val="0"/><c:val><c:numLit><c:ptCount val="1"/><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val></c:ser>`, 1},
+		{"no series prints nothing", "", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			files := workbookFiles([]testSheet{{name: "Data", xml: `<sheetData/>`}}, minimalStyles, "", "", map[string]string{
+				"xl/chartsheets/sheet1.xml": `<chartsheet ` + nsDecl + `><pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/><drawing r:id="rIdD"/></chartsheet>`,
+				"xl/chartsheets/_rels/sheet1.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+					`<Relationship Id="rIdD" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>`,
+				"xl/drawings/drawing1.xml": `<xdr:wsDr ` + drawingNS + `><xdr:absoluteAnchor><xdr:pos x="0" y="0"/><xdr:ext cx="9292897" cy="6069724"/>` +
+					`<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/>` +
+					`<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rIdC"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:absoluteAnchor></xdr:wsDr>`,
+				"xl/drawings/_rels/drawing1.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+					`<Relationship Id="rIdC" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>`,
+				"xl/charts/chart1.xml": chartXML(tt.series),
+			})
+			files["xl/workbook.xml"] = strings.Replace(files["xl/workbook.xml"], `</sheets>`, `<sheet name="Chart" sheetId="9" r:id="rIdCS"/></sheets>`, 1)
+			files["xl/_rels/workbook.xml.rels"] = strings.Replace(files["xl/_rels/workbook.xml.rels"], `</Relationships>`,
+				`<Relationship Id="rIdCS" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartsheet" Target="chartsheets/sheet1.xml"/></Relationships>`, 1)
+			doc, _ := readBytes(t, zipFiles(t, files))
+			if len(doc.Sheets) != 2 {
+				t.Fatalf("%d sheets", len(doc.Sheets))
+			}
+			sh := doc.Sheets[1]
+			if len(sh.Drawings) != tt.want {
+				t.Fatalf("%d drawings, want %d", len(sh.Drawings), tt.want)
+			}
+			if sh.Page.Scale != 0 || sh.Page.FitWidth != 1 || sh.Page.FitHeight != 1 {
+				t.Errorf("page %+v, want fitted to one page", sh.Page)
+			}
+			if tt.want == 1 && (!sh.Drawings[0].Absolute || sh.Drawings[0].Chart == nil) {
+				t.Errorf("drawing %+v", sh.Drawings[0])
+			}
+		})
+	}
+}

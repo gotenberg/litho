@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -557,7 +558,28 @@ func (r *reader) chartsheet(name string, sh *sheet.Sheet) error {
 	}
 	if d := root.Child(nsMain, "drawing"); d != nil {
 		id, _ := d.AttrNS(ooxml.NSR, "id")
-		return w.drawing(id)
+		if err := w.drawing(id); err != nil {
+			return err
+		}
 	}
+	// A chart without a series prints nothing.
+	kept := sh.Drawings[:0]
+	for _, d := range sh.Drawings {
+		if d.Chart == nil || chartSeries(d.Chart) > 0 {
+			kept = append(kept, d)
+		}
+	}
+	sh.Drawings = kept
 	return nil
+}
+
+// chartSeries returns the series of the chart c.
+func chartSeries(c *chart.Chart) int {
+	n := 0
+	for _, g := range c.Groups {
+		if g != nil {
+			n += len(g.Series)
+		}
+	}
+	return n
 }
