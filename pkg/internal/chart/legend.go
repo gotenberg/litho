@@ -31,6 +31,7 @@ func (rd *renderer) legendEntries(st TextStyle, maxW float64) []legendEntry {
 		hidden[h] = true
 	}
 	n := 0
+	swapped := len(rd.c.Groups) > 0 && rd.c.Groups[0].Kind == Bar && rd.c.Groups[0].Horizontal
 	for _, g := range rd.c.Groups {
 		// A pie lists its categories; another group whose points vary in
 		// colour does too.
@@ -50,12 +51,26 @@ func (rd *renderer) legendEntries(st TextStyle, maxW float64) []legendEntry {
 			}
 			continue
 		}
+		// Series enter in reverse on a horizontal bar chart that does not
+		// stack, and on a stacked chart with the legend at its side, so
+		// the legend reads as the chart does (chart2's
+		// VSeriesPlotter::createLegendEntries).
+		stacked := g.Grouping != Clustered
+		reverse := stacked && (rd.c.Legend.Position == LegendLeft || rd.c.Legend.Position == LegendRight)
+		if swapped {
+			reverse = !stacked
+		}
 		for _, s := range g.Series {
 			if len(out) >= maxLegendEntries {
 				break
 			}
 			if !s.NoLegend && !hidden[n] {
-				out = append(out, rd.entry(g, s, -1, s.Name, st, maxW))
+				e := rd.entry(g, s, -1, s.Name, st, maxW)
+				if reverse {
+					out = append([]legendEntry{e}, out...)
+				} else {
+					out = append(out, e)
+				}
 			}
 			n++
 		}
@@ -164,6 +179,28 @@ func (rd *renderer) legend(page compose.Rect, rem *compose.Rect) {
 		x, y = page.X+page.Width-legendSideMargin-w, rem.Y+legendTopMargin
 	case LegendRight:
 		x, y = page.X+page.Width-legendSideMargin-w, page.Y+page.Height/2-h/2
+	}
+	if l := lg.Layout; l != nil {
+		// A placed legend keeps its corner, and its size when the file
+		// gives one; one that would leave the chart moves back in by 30
+		// hundredths of a millimetre when that keeps it past a quarter of
+		// the chart (chart2's lcl_calculatePositionAndRemainingSpace).
+		lr := l.rect(page)
+		x, y = lr.X, lr.Y
+		if lr.Width > 0 && lr.Height > 0 {
+			w, h = lr.Width, lr.Height
+		}
+		const edge = 30 * mm100
+		if x+w > page.X+page.Width {
+			if nx := page.X + page.Width - w - edge; nx > page.X+page.Width/4 {
+				x = nx
+			}
+		}
+		if y+h > page.Y+page.Height {
+			if ny := page.Y + page.Height - h - edge; ny > page.Y+page.Height/4 {
+				y = ny
+			}
+		}
 	}
 	x = max(page.X, min(x, page.X+page.Width-w))
 	y = max(page.Y, min(y, page.Y+page.Height-h))
