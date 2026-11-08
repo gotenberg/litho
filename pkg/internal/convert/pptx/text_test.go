@@ -3,6 +3,7 @@ package pptx
 import (
 	"math"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
@@ -145,6 +146,11 @@ func TestText_ParagraphsAndBullets(t *testing.T) {
 				t.Errorf("bullet %+v", p.Bullet)
 			}
 		}},
+		{"a bullet no level gives a face draws in OpenSymbol", `<a:p><a:pPr><a:buChar char="-"/></a:pPr><a:r><a:t>x</a:t></a:r></a:p>`, func(t *testing.T, p slides.Paragraph) {
+			if p.Bullet == nil || !slices.Equal(p.Bullet.Families, []string{"OpenSymbol"}) {
+				t.Errorf("bullet %+v", p.Bullet)
+			}
+		}},
 		{"exact line spacing", `<a:p><a:pPr><a:lnSpc><a:spcPts val="2400"/></a:lnSpc></a:pPr><a:r><a:t>x</a:t></a:r></a:p>`, func(t *testing.T, p slides.Paragraph) {
 			if p.LineSpacingPoints != 24 {
 				t.Errorf("paragraph %+v", p)
@@ -155,7 +161,7 @@ func TestText_ParagraphsAndBullets(t *testing.T) {
 			t.Parallel()
 			s := oneSlide(t, title("T")+body(tc.p))
 			sh := shapeNamed(s.Shapes, "Content Placeholder 2")
-			if tc.name == "empty paragraph has no bullet" {
+			if tc.name == "empty paragraph has no bullet" || strings.Contains(tc.name, "OpenSymbol") {
 				// An empty placeholder prints nothing: read a text box.
 				s = oneSlide(t, textBox("TB", 0, 0, 1, 1, `<a:bodyPr/>`+tc.p))
 				sh = s.Shapes[0]

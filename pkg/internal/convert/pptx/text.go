@@ -581,7 +581,12 @@ func (r *reader) bullet(pc chain, ts *textStyles) *slides.Bullet {
 			b.Kind, b.Char = slides.BulletChar, "•"
 		}
 	}
-	if f := pc.first("buFont", "buFontTx"); f != nil && f.Local == "buFont" {
+	if f := pc.first("buFont", "buFontTx"); f == nil && b.Kind == slides.BulletChar {
+		// A bullet character no level gives a face draws in Impress's
+		// default bullet face (pptx: sd/n862510_2's diagram bullet prints
+		// in OpenSymbol).
+		b.Families = []string{symbolFace}
+	} else if f != nil && f.Local == "buFont" {
 		if name := ts.sc.theme.font(attr(f, "typeface")); name != "" {
 			b.Families = []string{name}
 			if c, face, ok := symbolBullet(b.Char, name); ok && b.Kind == slides.BulletChar {
