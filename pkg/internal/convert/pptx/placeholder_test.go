@@ -31,8 +31,8 @@ func TestPlaceholders_Inheritance(t *testing.T) {
 			shape: "Title 1", want: compose.Rect{X: 72, Y: 72, Width: 144, Height: 36},
 		},
 		{
-			name: "slide's own position wins",
-			deck: testDeck{slides: []testSlide{{tree: phShape("Own", "title", -1, 0, 0, 12700, 25400, para("T"))}}},
+			name:  "slide's own position wins",
+			deck:  testDeck{slides: []testSlide{{tree: phShape("Own", "title", -1, 0, 0, 12700, 25400, para("T"))}}},
 			shape: "Own", want: compose.Rect{Width: 1, Height: 2},
 		},
 		{

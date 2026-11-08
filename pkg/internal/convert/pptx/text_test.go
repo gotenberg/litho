@@ -5,8 +5,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
+	"github.com/gotenberg/litho/pkg/internal/css"
 )
 
 // rgb returns the opaque colour of 0xRRGGBB.
