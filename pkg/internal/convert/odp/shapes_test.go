@@ -296,3 +296,19 @@ func TestRead_CaptionAndMeasure(t *testing.T) {
 		}
 	})
 }
+
+func TestRead_OpenFreeformFilled(t *testing.T) {
+	tests := []struct {
+		typ      string
+		unfilled bool
+	}{
+		{"non-primitive", false},
+		{"mso-spt100", true},
+	}
+	for _, tt := range tests {
+		s := firstShape(t, flat{body: page(`<draw:custom-shape svg:width="1cm" svg:height="2cm"><draw:enhanced-geometry draw:type="` + tt.typ + `" draw:enhanced-path="M 0 0 L 10 0 10 5 N"/></draw:custom-shape>`)})
+		if s.Geometry == nil || s.Geometry.Custom == nil || s.Geometry.Custom.OpenUnfilled != tt.unfilled {
+			t.Errorf("%s: geometry = %+v, want open subpaths unfilled %v", tt.typ, s.Geometry, tt.unfilled)
+		}
+	}
+}

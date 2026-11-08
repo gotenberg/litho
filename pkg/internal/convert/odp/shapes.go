@@ -436,6 +436,12 @@ func (r *reader) enhancedGeometry(eg *odf.Element) *shape.Geometry {
 		return nil
 	}
 	g := odf.ParseGeometry(eg)
+	if g != nil && g.Custom != nil && eg.A(odf.NSDraw, "type") == "non-primitive" {
+		// A freeform of no LibreOffice type fills its open subpaths as if
+		// closed (measured on the pinned LibreOffice: the open arc of
+		// sd/tdf147978_enhancedPath_viewBox.odp prints filled).
+		g.Custom.OpenUnfilled = false
+	}
 	if g != nil && !shape.Known(g) {
 		r.warn("custom-geometry", "the shape type "+strconv.Quote(g.Preset)+" is drawn as its bounding box")
 	}
