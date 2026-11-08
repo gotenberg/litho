@@ -77,6 +77,7 @@ type reader struct {
 	fonts  *text.Fonts
 	styles *odf.Styles
 	data   *odf.DataStyles
+	draw   *odf.DrawStyles
 
 	doc      *sheet.Document
 	cellSty  map[string]*sheet.Style
@@ -242,6 +243,8 @@ type tableState struct {
 	pending []pendingRows
 	// header rows and columns seen.
 	headerRows, headerCols *sheet.Range
+	// rowHidden reports the row whose frames are being read hidden.
+	rowHidden bool
 }
 
 // pendingRows is n copies of row, without cells, from row.Index.
@@ -493,9 +496,11 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 			ts.sh.Page.RowBreaks = append(ts.sh.Page.RowBreaks, start+i)
 		}
 	}
+	ts.rowHidden = tmpl.Hidden
 	for _, f := range frames {
 		r.drawing(ts, f.el, &f.at)
 	}
+	ts.rowHidden = false
 	if len(cells) == 0 {
 		// A row without cells is listed for a height or a hidden flag of
 		// its own alone, once a later row needs its index.

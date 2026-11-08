@@ -298,6 +298,14 @@ func TestRead_Pages(t *testing.T) {
 	}
 }
 
+// TestRead_Drawings locks how frames are read: a frame of the sheet
+// placed from its origin, a frame of a cell from the cell's corner, its
+// offsets free to run past the cell, as Calc reads them.
+//
+// # Corpus evidence
+//
+//   - ods: sc/tdf125938_anchor_after_copy_paste.ods prints its picture at
+//     its svg:x and svg:y from its anchor cell's corner.
 func TestRead_Drawings(t *testing.T) {
 	manifest := `<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0">` +
 		`<manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/>` +
@@ -308,7 +316,7 @@ func TestRead_Drawings(t *testing.T) {
 		`<style:style style:name="ro1" style:family="table-row"><style:table-row-properties style:row-height="0.25in"/></style:style>` +
 		`</office:automatic-styles><office:body><office:spreadsheet><table:table table:name="S">` +
 		`<table:shapes><draw:frame draw:name="logo" svg:x="1in" svg:y="2in" svg:width="1in" svg:height="0.5in"><draw:image xlink:href="Pictures/a.png"/></draw:frame>` +
-		`<draw:custom-shape svg:x="0in" svg:y="0in"/></table:shapes>` +
+		`<draw:caption svg:x="0in" svg:y="0in"/></table:shapes>` +
 		`<table:table-column table:style-name="co1" table:number-columns-repeated="4"/>` +
 		`<table:table-row table:style-name="ro1"><table:table-cell/></table:table-row>` +
 		`<table:table-row table:style-name="ro1"><table:table-cell/><table:table-cell>` +
@@ -329,7 +337,7 @@ func TestRead_Drawings(t *testing.T) {
 	if d := ds[0]; !d.Absolute || !near(d.X, 72) || !near(d.Y, 144) || !near(d.Width, 72) || d.Picture == nil || d.Name != "logo" {
 		t.Errorf("logo = %+v", d)
 	}
-	if d := ds[1]; d.Chart == nil || d.Picture != nil || d.From.Row != 1 || d.From.Column != 1 || !near(d.From.DX, 18) || !near(d.From.DY, 3.6) ||
+	if d := ds[1]; d.Chart == nil || d.Picture != nil || d.From.Row != 1 || d.From.Column != 1 || !near(d.From.DX, 90) || !near(d.From.DY, 21.6) || !d.Unbounded ||
 		d.To == nil || d.To.Row != 4 || d.To.Column != 3 || !near(d.To.DX, 7.2) || !near(d.To.DY, 14.4) {
 		t.Errorf("chart = %+v to %+v", d, d.To)
 	}

@@ -40,11 +40,12 @@ type picResult struct {
 
 // drawing reads a shape of a table:shapes element (at nil: placed from
 // the sheet's origin) or of a cell (ODF 1.3, Part 3, 9.2.4 and 10.4): a
-// draw:frame with a picture or a chart becomes a drawing; the other
-// shapes are not drawn. A cell's frame is anchored to its cell, its
-// svg:x and svg:y being from the sheet's origin as Calc writes them, and
-// its table:end-cell-address, end-x and end-y anchor its bottom-right
-// corner.
+// draw:frame with a picture or a chart becomes a drawing, a drawing shape
+// a drawing of its geometry ([reader.shape]). A cell's frame is anchored
+// to its cell, its svg:x and svg:y being from the cell's corner as Calc
+// reads them, and its table:end-cell-address, end-x and end-y anchor its
+// bottom-right corner; a picture under a draw:transform is drawn turned
+// and skewed as the transform asks.
 func (r *reader) drawing(ts *tableState, el *odf.Element, at *sheet.Anchor) {
 	if !el.Is(odf.NSDraw, "frame") {
 		switch {
@@ -56,8 +57,10 @@ func (r *reader) drawing(ts *tableState, el *odf.Element, at *sheet.Anchor) {
 			}
 		case el.Is(odf.NSDraw, "control"):
 			r.warn("form-controls", "form controls are not drawn")
+		case shapeElement(el):
+			r.shape(ts, el, at)
 		default:
-			r.warn("shapes", "drawing shapes are not drawn")
+			r.warn("shapes", "drawing shapes of this kind are not drawn")
 		}
 		return
 	}
@@ -65,7 +68,7 @@ func (r *reader) drawing(ts *tableState, el *odf.Element, at *sheet.Anchor) {
 		r.warn("too-many-drawings", fmt.Sprintf("pictures and charts past %d are not drawn", maxDrawings))
 		return
 	}
-	d := sheet.Drawing{Name: el.A(odf.NSDraw, "name")}
+	d := sheet.Drawing{Name: el.A(odf.NSDraw, "name"), Unbounded: true}
 	if obj := el.Child(odf.NSDraw, "object"); obj != nil {
 		d.Chart = r.object(obj)
 	}
@@ -95,10 +98,14 @@ func (r *reader) drawing(ts *tableState, el *odf.Element, at *sheet.Anchor) {
 		w, h = d.Picture.Width, d.Picture.Height
 	}
 	d.Width, d.Height = w, h
+	if tr := el.A(odf.NSDraw, "transform"); tr != "" && d.Picture != nil {
+		r.transformedPicture(ts, el, at, d.Picture, tr, w, h)
+		return
+	}
 	if at == nil {
 		d.Absolute, d.X, d.Y = true, max(x, 0), max(y, 0)
 	} else {
-		d.From = sheet.Anchor{Row: at.Row, Column: at.Column, DX: max(x-ts.colLeft(at.Column), 0), DY: max(y-ts.rowY, 0)}
+		d.From = sheet.Anchor{Row: at.Row, Column: at.Column, DX: max(x, 0), DY: max(y, 0)}
 		if end, ok := cellRef(el.A(odf.NSTable, "end-cell-address")); ok {
 			ex, _ := odf.Length(el.A(odf.NSTable, "end-x"))
 			ey, _ := odf.Length(el.A(odf.NSTable, "end-y"))
