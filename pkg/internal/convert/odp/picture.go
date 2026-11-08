@@ -86,8 +86,11 @@ func (r *reader) decodePicture(el *odf.Element) *layout.Picture {
 		w, h := s.Width, s.Height
 		if !s.HasWidth || !s.HasHeight || w <= 0 || h <= 0 {
 			w, h = 300*css.Pt, 150*css.Pt
+			if s.Ratio > 0 {
+				h = w / s.Ratio
+			}
 		}
-		return &layout.Picture{Width: w, Height: h, Vector: doc.Draw}
+		return stretchedSVG(doc, w, h)
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
@@ -115,6 +118,25 @@ func (r *reader) decodePicture(el *odf.Element) *layout.Picture {
 	}
 	pic.Source = &compose.ImageSource{Image: im}
 	return pic
+}
+
+// stretchedSVG returns the SVG drawing doc of natural size w by h as a
+// picture that, placed in an area, fills it whatever its proportions, as
+// Impress stretches an SVG graphic to its frame like any other picture:
+// the drawing laid out at its natural size, then scaled to the area.
+//
+// # Corpus evidence
+//
+//   - odp: sd/tdf105362's master frame of 28.3 by 21.1 cm holding a
+//     square SVG of a viewBox alone prints black over the whole slide.
+func stretchedSVG(doc *svg.Document, w, h float64) *layout.Picture {
+	return &layout.Picture{Width: w, Height: h, NoRatio: true, Vector: func(ctx context.Context, area compose.Rect) []compose.Fragment {
+		if w <= 0 || h <= 0 {
+			return nil
+		}
+		m := compose.Matrix{A: area.Width / w, D: area.Height / h, E: area.X, F: area.Y}
+		return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: doc.Draw(ctx, compose.Rect{Width: w, Height: h})}}
+	}}
 }
 
 // vectorFormat names the Windows and StarView metafiles: WMF (placeable
