@@ -178,8 +178,13 @@ func (r *reader) textBody(c *shapeCtx, sc []*ooxml.Element, p placeholder, ref *
 	if tb == nil {
 		return nil
 	}
+	// A placeholder takes its master's text style for its type even when
+	// its layout lacks it (pptx: sd/tdf120028's body placeholder of an
+	// index its layout lacks prints in the master body style's Arial);
+	// one of the index 4294967295, which Impress looks up nowhere, takes
+	// the other style (sd-data/n759180).
 	own, isPh := phOf(sc[0])
-	isPh = isPh && len(sc) > 1
+	isPh = isPh && !own.skip
 	master := c.layer.styleFor(p, isPh)
 	if isPh && own.typ == "obj" && !own.hasIdx {
 		// An object placeholder without an index takes no list style of
