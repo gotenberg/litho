@@ -84,6 +84,11 @@ func (b *builder) note(c *odf.Element, t textState, out *[]*layout.Node, ws *wsS
 	body := b.blocks(bodyEl, blockCtx{depth: depth, defStyle: b.notePara(cfg, class)})
 	b.hf = saved
 	prefix := b.run(label, bt)
+	// The call links to its note's number and the number back to the
+	// call, as Writer exports a note.
+	callID, noteID := b.newID("call"), b.newID("note")
+	call.ID, call.Href = callID, "#"+noteID
+	prefix.ID, prefix.Href = noteID, "#"+callID
 	if len(body) > 0 && body[0].Style.Display != css.Table && body[0].Style.TextIndent.Value < 0 {
 		// Writer sets the number in a hanging first-line indent and
 		// starts the text at the paragraph's indent, as a list label.
