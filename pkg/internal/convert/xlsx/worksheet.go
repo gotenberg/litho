@@ -216,7 +216,8 @@ func (w *sheetReader) columns(cols *ooxml.Element) {
 }
 
 // sheetData reads the rows and cells (ECMA-376 Part 1, 18.3.1.80): a row
-// or cell without its index follows the previous one. A row's height is
+// or cell without its index, or with one that does not parse, follows the
+// previous one, as LibreOffice reads it. A row's height is
 // read when it is custom alone: LibreOffice gives every other row its
 // optimal height, the sheet's default height grown to the row's text,
 // whatever height the file stores.
@@ -236,11 +237,7 @@ func (w *sheetReader) sheetData(data *ooxml.Element) error {
 			continue
 		}
 		idx := next
-		if v, ok := re.Attr("r"); ok {
-			n, ok := ooxml.Int(v)
-			if !ok || n < 1 {
-				continue
-			}
+		if n, ok := ooxml.Int(attr(re, "r")); ok && n >= 1 {
 			idx = n - 1
 		}
 		if idx >= maxRows {
@@ -260,11 +257,7 @@ func (w *sheetReader) sheetData(data *ooxml.Element) error {
 				continue
 			}
 			ci := col
-			if ref, ok := c.Attr("r"); ok {
-				_, cc, ok := cellRef(ref)
-				if !ok {
-					continue
-				}
+			if _, cc, ok := cellRef(attr(c, "r")); ok {
 				ci = cc
 			}
 			if ci >= maxColumns {

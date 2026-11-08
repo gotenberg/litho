@@ -38,7 +38,7 @@ func TestRead_ColumnsAndRows(t *testing.T) {
 	doc, _ := readBytes(t, oneSheet(t, `<cols><col min="3" max="4" width="10" customWidth="1"/><col min="1" max="1" width="2"/>`+
 		`<col min="4" max="6" hidden="1"/><col min="8" max="8" style="0"/><col min="9" max="9"/></cols>`+
 		`<sheetData><row r="2" ht="30" customHeight="1"><c r="A2"><v>1</v></c></row><row r="3" ht="40"><c r="A3"><v>1</v></c></row><row r="5" hidden="1" s="0" customFormat="1"/>`+
-		`<row r="7" s="0"/><row><c><v>1</v></c><c><v>2</v></c><c r="E8"/><c r="E8" t="b"><v>1</v></c></row></sheetData>`))
+		`<row r="7" s="0"/><row><c><v>1</v></c><c r="1_1"><v>2</v></c><c r="E8"/><c r="E8" t="b"><v>1</v></c></row></sheetData>`))
 	sh := doc.Sheets[0]
 	want := []sheet.Column{{First: 0, Last: 0, Width: 11}, {First: 2, Last: 3, Width: 55}, {First: 4, Last: 5, Hidden: true}, {First: 7, Last: 7}}
 	if len(sh.Columns) != len(want) {
