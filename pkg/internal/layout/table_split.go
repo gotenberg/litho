@@ -291,8 +291,10 @@ func nestedGrid(b *box) bool {
 // through down to at, where row r starts on the next page: a row-spanning
 // cell's lines continue on the next page as a split row's do, rather
 // than straddling the cut, as Writer breaks them. The cells then sit at
-// the top of their rows.
-func (td *tableData) breakSpans(r int, cut, at float64) {
+// the top of their rows, and the last row a cell spans grows to hold the
+// content moved down, rowH holding the rows' heights and gap the spacing
+// between them.
+func (td *tableData) breakSpans(r int, cut, at float64, rowH []float64, gap float64) {
 	for _, c := range td.cells {
 		cd := c.cell
 		if cd.rowSpan < 2 || cd.row >= r || cd.row+cd.rowSpan <= r {
@@ -332,9 +334,22 @@ func (td *tableData) breakSpans(r int, cut, at float64) {
 		if brk < 0 {
 			continue
 		}
-		if d := at - top - brk; d > 0 {
-			cd.split, cd.off = true, 0
-			cd.struts = append(cd.struts, cellStrut{at: brk, d: d})
+		d := at - top - brk
+		if d <= 0 {
+			continue
+		}
+		cd.split, cd.off = true, 0
+		cd.struts = append(cd.struts, cellStrut{at: brk, d: d})
+		last := cd.row + cd.rowSpan - 1
+		bottom := at
+		for k := r; k <= last && k < len(rowH); k++ {
+			bottom += rowH[k]
+			if k > r {
+				bottom += gap
+			}
+		}
+		if need := top + end + d - bottom; need > eps && last < len(rowH) {
+			rowH[last] += need
 		}
 	}
 }

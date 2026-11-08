@@ -1205,7 +1205,7 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 					y = p + contStart(u, false)
 				}
 				onPage = 0
-				td.breakSpans(u.lo, p, y)
+				td.breakSpans(u.lo, p, y, rowH, gap)
 			}
 			if single && y+u.h+footNeed(u) > e.pageTop(page+1)+eps {
 				split(u, true)
