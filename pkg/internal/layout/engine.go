@@ -103,6 +103,9 @@ type engine struct {
 	// previous pass, which the root's formatting context starts with
 	// (framewrap.go).
 	wraps []wrapSeed
+	// chains maps the links of the chains of linked boxes to what each
+	// paints (chain.go).
+	chains map[*Node]*chainLink
 }
 
 // fail records the first error; the layout unwinds once it is set.

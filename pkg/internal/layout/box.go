@@ -74,8 +74,11 @@ func newDeco(st *css.Style) deco {
 // laid out as many times as the engine needs, and painted once.
 type box struct {
 	node *Node
-	st   *css.Style
-	kind boxKind
+	// chain is what the box paints as a link of a chain of linked boxes,
+	// nil for none (chain.go).
+	chain *chainLink
+	st    *css.Style
+	kind  boxKind
 	// ortho reports the root of an orthogonal flow, a box of a vertical
 	// writing mode whose one child, an anonymous block, holds its
 	// content turned (writing.go).

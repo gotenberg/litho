@@ -223,6 +223,24 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		e.genChildren(b, n.Children, cctx)
 		return []*box{b}
 	}
+	if cl := e.chains[n]; cl != nil {
+		// A link of a chain paints its share of the chain's content and
+		// lays none of its children out (chain.go).
+		if cl.auto {
+			own := *st
+			own.Height = css.Pts(cl.h)
+			if own.BoxSizing == css.BorderBox {
+				own.Height = css.Pts(cl.h + own.Border[css.Top].Width + own.Border[css.Bottom].Width + pts(own.Padding[css.Top]) + pts(own.Padding[css.Bottom]))
+			}
+			st = &own
+		}
+		b := e.newBox(n, st, kindBlock, ctx)
+		b.float = float
+		b.abs = isAbs(st)
+		b.chain = cl
+		e.enter(n, b, ctx)
+		return []*box{b}
+	}
 	b := e.newBox(n, st, kindBlock, ctx)
 	b.float = float
 	b.abs = isAbs(st)

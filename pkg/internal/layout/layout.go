@@ -43,12 +43,13 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("laying out: %w", err)
 	}
+	chains := prepareChains(ctx, root, fonts, opts)
 	var e *engine
 	var rb *box
 	var seeds []wrapSeed
 	for pass := range maxWrapPasses {
 		var err error
-		e, rb, err = layoutFlow(ctx, root, fonts, opts, first, seeds)
+		e, rb, err = layoutFlow(ctx, root, fonts, opts, first, seeds, chains)
 		if err != nil {
 			return nil, err
 		}
@@ -663,11 +664,12 @@ func prune(el *compose.StructElem, used map[*compose.StructElem]bool) bool {
 
 // layoutFlow lays the tree rooted at root out on pages whose first is first,
 // the rectangles of seeds kept clear as the wrapped boxes of the previous
-// pass ask (framewrap.go), and returns the engine and the root box.
-func layoutFlow(ctx context.Context, root *Node, fonts *text.Fonts, opts Options, first PageBox, seeds []wrapSeed) (*engine, *box, error) {
+// pass ask (framewrap.go), the links of chains painting what chains
+// holds for them (chain.go), and returns the engine and the root box.
+func layoutFlow(ctx context.Context, root *Node, fonts *text.Fonts, opts Options, first PageBox, seeds []wrapSeed, chains map[*Node]*chainLink) (*engine, *box, error) {
 	areaW, areaH := areaOf(first)
 	e := newEngine(ctx, fonts, opts, areaW, areaH)
-	e.wraps = seeds
+	e.wraps, e.chains = seeds, chains
 	e.geom.init(e, first)
 	e.rtlRoot = root.Style != nil && root.Style.Direction == css.RTL
 	rb := e.generate(root)

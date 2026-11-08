@@ -608,6 +608,7 @@ func (p *painter) content(b *box) {
 	for _, l := range b.lines {
 		p.line(l)
 	}
+	p.chainContent(b)
 }
 
 // replaced paints the picture of the replaced box b in its content box,
