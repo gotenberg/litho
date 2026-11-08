@@ -200,3 +200,17 @@ func TestMulticol_BaselineInItsColumn(t *testing.T) {
 		_B__
 		____`)
 }
+
+func TestMulticol_ClippedPositionedChildStaysInColumn(t *testing.T) {
+	t.Parallel()
+	// A clipping box 3 rows tall in columns 2 rows tall stays whole in the
+	// first column, its relatively positioned child with it.
+	child := el(sty(width(4), height(4), bg(blue), func(s *css.Style) { s.Position = css.Relative }))
+	clip := el(sty(height(3), bg(red), func(s *css.Style) { s.Overflow = css.OverflowHidden }), child)
+	mc := el(sty(columns(2, 1), height(2), func(s *css.Style) { s.Columns.Fill = css.FillAuto }), clip)
+	assertPixels(t, run(t, doc(mc), page(5, 4)), 1, `
+		BB___
+		BB___
+		BB___
+		_____`)
+}

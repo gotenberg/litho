@@ -219,6 +219,12 @@ func (p *painter) sync(chain []*box) *ditem {
 			parent = f.open[len(f.open)-1].item
 		}
 		g := &ditem{group: true, opacity: 1, clip: p.clipPath(b)}
+		if b.monoCol {
+			// The positioned boxes a monolithic box in columns clips move
+			// to its column with it, inside its clip.
+			ay, oy := ancestorOffsetY(b)
+			g.page, g.y0 = pageMono, b.y+ay+oy
+		}
 		parent.kids = append(parent.kids, g)
 		f.open = append(f.open, openClip{box: b, item: g})
 	}
@@ -1093,4 +1099,12 @@ func (e *engine) placeMarker(b *box) {
 		m.x = markerX(b, m, m.width)
 	}
 	m.baseline, m.placed = baseline, true
+}
+
+// ancestorOffsetY returns the vertical relative offsets of b's ancestors
+// and of b itself.
+func ancestorOffsetY(b *box) (float64, float64) {
+	_, ay := ancestorOffset(b)
+	_, oy := offset(b)
+	return ay, oy
 }
