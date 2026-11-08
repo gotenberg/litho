@@ -18,8 +18,14 @@ type fillCtx struct {
 	ph    *css.Color
 }
 
-// withPh returns fc with phClr standing for c.
+// withPh returns fc with phClr standing for c, opaque: Impress takes a
+// style reference's colour for phClr without its alpha (pptx:
+// sd/smartart-center-cycle's ellipses, whose colour definition gives
+// accent1 at half alpha, print accent1 solid).
 func (fc *fillCtx) withPh(c css.Color) *fillCtx {
+	if c.A > 0 {
+		c.A = 1
+	}
 	out := *fc
 	out.ph = &c
 	return &out

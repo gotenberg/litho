@@ -45,6 +45,11 @@ func TestShapes_FillsAndLines(t *testing.T) {
 		name, spPr, style string
 		check             func(t *testing.T, s *slides.Shape)
 	}{
+		{"a style reference's colour stands for phClr without its alpha", "", `<p:style><a:lnRef idx="0"/><a:fillRef idx="1"><a:srgbClr val="FF0000"><a:alpha val="50000"/></a:srgbClr></a:fillRef><a:effectRef idx="0"/><a:fontRef idx="minor"/></p:style>`, func(t *testing.T, s *slides.Shape) {
+			if s.Fill.Kind != slides.FillSolid || s.Fill.Color != (css.Color{R: 1, A: 1}) {
+				t.Errorf("fill %+v", s.Fill)
+			}
+		}},
 		{"a line of zero width is a hairline", `<a:ln w="0"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln>`, "", func(t *testing.T, s *slides.Shape) {
 			if !s.Line.Hairline || s.Line.Width <= 0 {
 				t.Errorf("line %+v", s.Line)
