@@ -1,12 +1,14 @@
 package ods
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 )
 
@@ -82,9 +84,58 @@ func (r *reader) resolve(scope odf.Scope, name string) sheet.Style {
 		return s.El.Lookup(odf.NSStyle, "data-style-name")
 	})
 	if dsName != "" {
-		st.Format = r.data.Code(scope, dsName)
+		st.Format = r.dataCode(scope, dsName)
 	}
 	return st
+}
+
+// dataCode returns the format code of the data style name, with a
+// [$-LCID] locale tag when the style names a locale whose separators are
+// not en-US's (ODF 1.3 Part 3, 19.351 number:language and 19.348
+// number:country), as Calc writes its numbers in the data style's locale.
+//
+// # Corpus evidence
+//
+//   - LibreOffice 26.8.2.2: 1234567.5 in a data style of two decimals with
+//     grouping prints 1.234.567,50 for number:language de and
+//     number:country DE, 1,234,567.50 for en US and for no language,
+//     whatever the default cell style's fo:language.
+func (r *reader) dataCode(scope odf.Scope, name string) string {
+	code := r.data.Code(scope, name)
+	el := r.data.Element(scope, name)
+	if el == nil || code == "" || strings.Contains(code, "[$") {
+		return code
+	}
+	lang := el.A(odf.NSNumber, "language")
+	if c := el.A(odf.NSNumber, "country"); lang != "" && c != "" {
+		lang += "-" + c
+	}
+	id, ok := numfmt.LCIDOf(lang)
+	if !ok {
+		return code
+	}
+	// Every section takes the tag: a section's locale is its own.
+	tag := fmt.Sprintf("[$-%X]", id)
+	var b strings.Builder
+	b.WriteString(tag)
+	quoted := false
+	for i := 0; i < len(code); i++ {
+		c := code[i]
+		switch {
+		case c == '\\' && i+1 < len(code):
+			b.WriteByte(c)
+			i++
+			c = code[i]
+		case c == '"':
+			quoted = !quoted
+		case c == ';' && !quoted:
+			b.WriteByte(c)
+			b.WriteString(tag)
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
 }
 
 // spanFont returns the font of a text:span of style name over cur, or

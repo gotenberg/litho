@@ -398,3 +398,17 @@ func TestRead_Formulas(t *testing.T) {
 		t.Errorf("the stored value %+v", c.Value)
 	}
 }
+
+func TestRead_DataStyleLocale(t *testing.T) {
+	styles := `<number:number-style style:name="N1" number:language="de" number:country="DE"><number:number number:decimal-places="2" number:min-integer-digits="1" number:grouping="true"/></number:number-style>` +
+		`<number:number-style style:name="N2" number:language="en" number:country="US"><number:number number:decimal-places="2" number:min-integer-digits="1"/></number:number-style>` +
+		`<style:style style:name="ce1" style:family="table-cell" style:data-style-name="N1"/><style:style style:name="ce2" style:family="table-cell" style:data-style-name="N2"/>`
+	row := `<table:table-row><table:table-cell table:style-name="ce1" office:value-type="float" office:value="1"/><table:table-cell table:style-name="ce2" office:value-type="float" office:value="1"/></table:table-row>`
+	doc, _ := read(t, flat{auto: styles, body: table("S", row)}.bytes())
+	if c := cellAt(doc.Sheets[0], 0, 0); c == nil || c.Style == nil || c.Style.Format != "[$-407]#,##0.00" {
+		t.Errorf("German format %+v", c)
+	}
+	if c := cellAt(doc.Sheets[0], 0, 1); c == nil || c.Style == nil || c.Style.Format != "0.00" {
+		t.Errorf("en-US format %+v", c)
+	}
+}

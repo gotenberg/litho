@@ -411,7 +411,7 @@ func (r *reader) condStyle(name string) *sheet.Style {
 			text = append(text, p)
 		}
 		if ds, ok := s.El.Lookup(odf.NSStyle, "data-style-name"); ok {
-			format = r.data.Code(odf.ScopeContent, ds)
+			format = r.dataCode(odf.ScopeContent, ds)
 		}
 	}
 	st := &sheet.Style{Format: format}
