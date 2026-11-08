@@ -289,7 +289,7 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	chain := inherited(c.layer, el)
 	p, isPh := phOf(el)
 	nv := nvProps(el)
-	if isPh && footerKind(p) && c.layer.parent.find(p, false) == nil {
+	if isPh && footerKind(p) && c.layer.parent.find(p) == nil {
 		return nil
 	}
 	s := &slides.Shape{Kind: slides.KindGeometry, Name: attr(nv, "name"), Href: r.href(c.part, nv.Child(ooxml.NSA, "hlinkClick")), Jump: r.jump(c.part, nv.Child(ooxml.NSA, "hlinkClick"))}

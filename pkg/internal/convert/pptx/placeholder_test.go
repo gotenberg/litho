@@ -44,6 +44,30 @@ func TestPlaceholders_Inheritance(t *testing.T) {
 			shape: "S", want: compose.Rect{X: 20, Width: 1, Height: 1},
 		},
 		{
+			name: "the same type outranks the same index alone",
+			deck: testDeck{
+				layoutTree: phShape("A", "subTitle", 1, 127000, 0, 12700, 12700, para("x")) + phShape("B", "body", -1, 254000, 0, 12700, 12700, para("x")),
+				slides:     []testSlide{{tree: phShape("S", "body", 1, 0, 0, 0, 0, para("text"))}},
+			},
+			shape: "S", want: compose.Rect{X: 20, Width: 1, Height: 1},
+		},
+		{
+			name: "a body of an index its layout lacks inherits no subtitle",
+			deck: testDeck{
+				layoutTree: phShape("Sub", "subTitle", 1, 127000, 0, 12700, 12700, para("x")),
+				slides:     []testSlide{{tree: phShape("S", "body", 13, 0, 0, 0, 0, para("text"))}},
+			},
+			shape: "S", absent: true,
+		},
+		{
+			name: "a placeholder without a type takes its layout's of the same index",
+			deck: testDeck{
+				layoutTree: phShape("T", "title", 4, 127000, 0, 12700, 12700, para("x")) + phShape("B", "body", -1, 254000, 0, 12700, 12700, para("x")),
+				slides:     []testSlide{{tree: phShape("S", "", 4, 0, 0, 0, 0, para("text"))}},
+			},
+			shape: "S", want: compose.Rect{X: 10, Width: 1, Height: 1},
+		},
+		{
 			name: "an obj placeholder takes the master's body",
 			deck: testDeck{
 				layoutTree: phShape("L", "obj", 5, 0, 0, 0, 0, para("x")),

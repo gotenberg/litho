@@ -113,6 +113,9 @@ type placeholder struct {
 	typ    string
 	idx    int
 	hasIdx bool
+	// typed reports a type the file names; skip an index of 4294967295,
+	// which Impress looks up nowhere.
+	typed, skip bool
 }
 
 // phOf returns the placeholder reference of a shape element, false for a
@@ -127,12 +130,14 @@ func phOf(el *ooxml.Element) (placeholder, bool) {
 			return placeholder{}, false
 		}
 		p := placeholder{typ: attr(ph, "type")}
-		if p.typ == "" {
+		p.typed = p.typ != ""
+		if !p.typed {
 			p.typ = "obj"
 		}
 		if v, ok := ph.Attr("idx"); ok {
 			if n, err := strconv.ParseUint(v, 10, 32); err == nil {
 				p.idx, p.hasIdx = int(n), true // fits int: at most 2^32-1, parsed as 32 bits
+				p.skip = n == 1<<32-1
 			}
 		}
 		return p, true
@@ -155,28 +160,51 @@ func (p placeholder) class() string {
 }
 
 // find returns the placeholder shape of l that p inherits from (ECMA-376
-// Part 1, 19.3.1.36: a slide's placeholder from its layout's of the same
-// idx, else of the same type; a layout's from its master's of the same
-// type), nil for none. byIdx enables the index match, which holds between
-// a slide and its layout only.
-func (l *layer) find(p placeholder, byIdx bool) *ooxml.Element {
+// Part 1, 19.3.1.36), nil for none, by Impress's priorities: the same type
+// and index, the same type, then for a centred title the title, for a
+// subtitle or an object a body, with the same index and without, then
+// the same index alone. A placeholder of no type that the slide matches
+// by index takes the layout placeholder's type first (inherited).
+//
+// # Corpus evidence
+//
+//   - pptx: sd/tdf120028's body placeholder of an index its layout lacks,
+//     on a layout of a title and a subtitle, inherits nothing: its text
+//     prints left-aligned and black, not as the subtitle's centred grey.
+func (l *layer) find(p placeholder) *ooxml.Element {
 	if l == nil {
 		return nil
 	}
-	if byIdx && p.hasIdx {
-		for _, k := range l.phs {
-			if q, _ := phOf(k); q.hasIdx && q.idx == p.idx {
-				return k
-			}
+	second := ""
+	switch p.typ {
+	case "ctrTitle":
+		second = "title"
+	case "subTitle", "obj":
+		second = "body"
+	}
+	var choice [5]*ooxml.Element
+	for _, k := range l.phs {
+		q, _ := phOf(k)
+		sameIdx := p.hasIdx == q.hasIdx && (!p.hasIdx || p.idx == q.idx)
+		prio := -1
+		switch {
+		case q.typ == p.typ && sameIdx:
+			prio = 0
+		case q.typ == p.typ:
+			prio = 1
+		case second != "" && q.typ == second && sameIdx:
+			prio = 2
+		case second != "" && q.typ == second:
+			prio = 3
+		case sameIdx:
+			prio = 4
+		}
+		if prio >= 0 && choice[prio] == nil {
+			choice[prio] = k
 		}
 	}
-	for _, k := range l.phs {
-		if q, _ := phOf(k); q.typ == p.typ {
-			return k
-		}
-	}
-	for _, k := range l.phs {
-		if q, _ := phOf(k); q.class() == p.class() {
+	for _, k := range choice {
+		if k != nil {
 			return k
 		}
 	}
@@ -187,7 +215,9 @@ func (l *layer) find(p placeholder, byIdx bool) *ooxml.Element {
 // then its layout's placeholder, then that one's master placeholder. A
 // placeholder its layout has no placeholder for inherits nothing, not even
 // from the master, and its text takes the master's other style, as Impress
-// imports it.
+// imports it; so does a placeholder of the index 4294967295, which Impress
+// looks up nowhere. A placeholder without a type that its layout has one
+// of the same index for takes that one's type.
 //
 // # Corpus evidence
 //
@@ -197,12 +227,19 @@ func (l *layer) find(p placeholder, byIdx bool) *ooxml.Element {
 func inherited(l *layer, el *ooxml.Element) []*ooxml.Element {
 	chain := []*ooxml.Element{el}
 	p, ok := phOf(el)
-	if !ok {
+	if !ok || p.skip {
 		return chain
 	}
-	byIdx := true
+	if !p.typed && p.hasIdx && l.parent != nil {
+		for _, k := range l.parent.phs {
+			if q, _ := phOf(k); q.hasIdx && q.idx == p.idx {
+				p.typ = q.typ
+				break
+			}
+		}
+	}
 	for up := l.parent; up != nil; up = up.parent {
-		k := up.find(p, byIdx)
+		k := up.find(p)
 		if k == nil {
 			break
 		}
@@ -210,7 +247,6 @@ func inherited(l *layer, el *ooxml.Element) []*ooxml.Element {
 		if q, ok := phOf(k); ok {
 			p = q
 		}
-		byIdx = false
 	}
 	return chain
 }
