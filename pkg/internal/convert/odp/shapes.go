@@ -329,6 +329,16 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 	switch el.Name.Local {
 	case "custom-shape":
 		s.Geometry = r.enhancedGeometry(el.Child(odf.NSDraw, "enhanced-geometry"))
+		if g := s.Geometry; g != nil && g.MirrorH != g.MirrorV && s.Rotation != 0 {
+			// Impress mirrors a rotated custom shape about the page's axes
+			// through its centre, after the rotation: the mirror of a
+			// shape turned one way is the mirrored shape turned the other
+			// (measured on the pinned LibreOffice, an L of either
+			// draw:mirror-horizontal or draw:mirror-vertical and
+			// draw:transform rotate (-0.349) leans 20 degrees the other way;
+			// with both mirrors, a half turn, it does not).
+			s.Rotation = 360 - s.Rotation
+		}
 	case "rect":
 		if rad, ok := odf.Length(el.A(odf.NSDraw, "corner-radius")); ok && rad > 0 {
 			if side := min(s.Box.Width, s.Box.Height); side > 0 {

@@ -248,3 +248,24 @@ func TestRead_Jump(t *testing.T) {
 		})
 	}
 }
+
+func TestRead_MirroredRotation(t *testing.T) {
+	tests := []struct {
+		mirror string
+		want   float64
+	}{
+		{``, 20},
+		{`draw:mirror-vertical="true"`, 340},
+		{`draw:mirror-horizontal="true"`, 340},
+		{`draw:mirror-horizontal="true" draw:mirror-vertical="true"`, 20},
+	}
+	for _, tt := range tests {
+		t.Run(tt.mirror, func(t *testing.T) {
+			s := firstShape(t, flat{body: page(`<draw:custom-shape svg:width="1cm" svg:height="2cm" draw:transform="rotate (-0.349065850398866) translate (1cm 1cm)">` +
+				`<draw:enhanced-geometry ` + tt.mirror + ` draw:type="non-primitive" draw:enhanced-path="M 0 0 L 10 0 10 5 Z N"/></draw:custom-shape>`)})
+			if math.Abs(s.Rotation-tt.want) > 0.01 {
+				t.Errorf("rotation = %v, want %v", s.Rotation, tt.want)
+			}
+		})
+	}
+}
