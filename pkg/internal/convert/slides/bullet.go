@@ -118,6 +118,7 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 	}
 	node.Children = append([]*layout.Node{marker}, node.Children...)
 }
+
 // maxBulletScale caps a bullet's scale of the text size. Anti-DoS guard,
 // not spec-mandated: DrawingML allows 25% to 400% (21.1.10.29
 // ST_TextBulletSizePercent).
