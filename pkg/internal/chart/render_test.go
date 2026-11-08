@@ -287,3 +287,44 @@ func TestRender_VaryColorsKeepsSeriesFill(t *testing.T) {
 		t.Errorf("a varied bar series without a fill: %d red bars, want 0", n)
 	}
 }
+
+// rotatedLabels counts the groups of frags that turn their text.
+func rotatedLabels(frags []compose.Fragment) int {
+	n := 0
+	walk(frags, 0, func(fr compose.Fragment, _ int) {
+		if g, ok := fr.(*compose.Group); ok && g.Transform.B != 0 {
+			if _, isText := g.Content[0].(*compose.Text); isText {
+				n++
+			}
+		}
+	})
+	return n
+}
+
+func TestRender_CategoryLabelsTurnOrBreak(t *testing.T) {
+	tests := []struct {
+		name    string
+		cats    []string
+		noBreak bool
+		overlap bool
+		turned  bool
+	}{
+		{name: "words break at spaces", cats: []string{"aa bb", "cc dd", "ee ff", "gg hh", "ii jj", "kk ll"}},
+		{name: "a word too wide turns them", cats: []string{"aaaaaaa", "bbbbbbb", "ccccccc", "ddddddd", "eeeeeee", "fffffff"}, turned: true},
+		{name: "no breaks turn them", cats: []string{"aa bb", "cc dd", "ee ff", "gg hh", "ii jj", "kk ll"}, noBreak: true, turned: true},
+		{name: "overlap allowed", cats: []string{"aaaaaaa", "bbbbbbb", "ccccccc", "ddddddd", "eeeeeee", "fffffff"}, noBreak: true, overlap: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := barChart(1, 2, 3, 4, 5, 6)
+			c.Groups[0].Series[0].Categories = Data{Values: strs(tt.cats...), Cached: true}
+			c.Axes[0].Labels = LabelNextTo
+			c.Axes[0].Style = TextStyle{Size: 10, Color: compose.Black}
+			c.Axes[0].NoBreak, c.Axes[0].Overlap = tt.noBreak, tt.overlap
+			frags := Render(context.Background(), ahem(t), c, compose.Rect{Width: 300, Height: 200})
+			if got := rotatedLabels(frags) > 0; got != tt.turned {
+				t.Errorf("turned = %v, want %v", got, tt.turned)
+			}
+		})
+	}
+}

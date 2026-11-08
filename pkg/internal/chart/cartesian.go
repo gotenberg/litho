@@ -2,6 +2,7 @@ package chart
 
 import (
 	"math"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 )
@@ -42,6 +43,12 @@ type dim struct {
 	// outside is where the labels go: -1 to the left or below, +1 to the
 	// right or above.
 	outside float64
+}
+
+// item is one axis label's text at its fraction of the axis.
+type item struct {
+	text string
+	f    float64
 }
 
 // tickLabel is one axis label at its position along the axis.
@@ -541,10 +548,6 @@ func (rd *renderer) placeLabels(d *dim) {
 		gap += tickLength
 	}
 	st := d.style()
-	type item struct {
-		text string
-		f    float64
-	}
 	var items []item
 	maxW := 0.0
 	if d.category {
@@ -568,26 +571,104 @@ func (rd *renderer) placeLabels(d *dim) {
 			items = append(items, item{d.tickText(v), d.sc.frac(v)})
 		}
 	}
-	for _, it := range items {
-		b := rd.measure(it.text, st, maxW)
-		if b == nil {
-			continue
+	breakable := d.category && (d.ax == nil || !d.ax.NoBreak)
+	overlap := d.ax != nil && d.ax.Overlap
+	if !breakable {
+		maxW = 0
+	}
+	measure := func(st TextStyle, maxW float64) []*block {
+		bs := make([]*block, len(items))
+		for i, it := range items {
+			bs[i] = rd.measure(it.text, st, maxW)
 		}
-		w, h := b.rotated()
-		p := d.pixel(it.f)
-		l := tickLabel{b: b, pos: p}
-		// A vertical axis's labels sit beside the line, a horizontal one's
-		// under or over it (LibreOffice's AXIS2D_TICKLABELSPACING).
-		if d.vertical {
-			l.cy = p
-			l.cx = d.lineAt + d.outside*(gap+w/2)
-		} else {
-			l.cx = p
-			l.cy = d.lineAt - d.outside*(gap+h/2)
+		return bs
+	}
+	blocks := measure(st, maxW)
+	// A label whose words break inside a word keeps its words whole on one
+	// line instead (chart2's VCartesianAxis::createTextShapes, after
+	// lcl_hasWordBreak).
+	if breakable && !d.vertical && maxW > 0 && !overlap && st.Rotation == 0 && rd.breaksWord(items[min(1, len(items)):], blocks[min(1, len(blocks)):], st, maxW) {
+		breakable, maxW = false, 0
+		blocks = measure(st, 0)
+	}
+	place := func(blocks []*block) {
+		d.labels = d.labels[:0]
+		for i, it := range items {
+			b := blocks[i]
+			if b == nil {
+				continue
+			}
+			w, h := b.rotated()
+			p := d.pixel(it.f)
+			l := tickLabel{b: b, pos: p}
+			// A vertical axis's labels sit beside the line, a horizontal
+			// one's under or over it (LibreOffice's
+			// AXIS2D_TICKLABELSPACING).
+			if d.vertical {
+				l.cy = p
+				l.cx = d.lineAt + d.outside*(gap+w/2)
+			} else {
+				l.cx = p
+				l.cy = d.lineAt - d.outside*(gap+h/2)
+				if r := b.style.Rotation; d.outside < 0 && r != 0 && math.Abs(r) < 90 {
+					// A turned label under the axis ends at its tick, its
+					// box beside it (chart2's lcl_correctRotation_Bottom).
+					a := math.Abs(r) * math.Pi / 180
+					l.cx = p - math.Copysign(w/2, r)
+					l.cy = d.lineAt + gap + b.h/2 + b.w*math.Sin(a)/2
+				}
+			}
+			d.labels = append(d.labels, l)
 		}
-		d.labels = append(d.labels, l)
+	}
+	place(blocks)
+	// Labels kept whole that still overlap turn by 45 degrees, on a
+	// horizontal axis whose labels are not turned already (chart2's
+	// canAutoAdjustLabelPlacement and autoRotate45).
+	if d.category && !d.vertical && !breakable && !overlap && st.Rotation == 0 && overlapping(d.labels) {
+		st.Rotation = 45
+		place(measure(st, 0))
 	}
 	d.labels = thin(d.labels, d.vertical)
+}
+
+// overlapping reports neighbouring labels of a horizontal axis whose boxes
+// overlap.
+func overlapping(ls []tickLabel) bool {
+	for i := 1; i < len(ls); i++ {
+		if labelsOverlap(ls[i-1], ls[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// labelsOverlap reports two labels of a horizontal axis, turned alike,
+// whose turned boxes overlap: their distance along the text and across it
+// is less than their half sizes (chart2's doesOverlap tests the turned
+// shapes, not their bounding boxes).
+func labelsOverlap(a, b tickLabel) bool {
+	r := a.b.style.Rotation * math.Pi / 180
+	dx, dy := b.cx-a.cx, b.cy-a.cy
+	along := math.Abs(dx*math.Cos(r) - dy*math.Sin(r))
+	across := math.Abs(dx*math.Sin(r) + dy*math.Cos(r))
+	return along < (a.b.w+b.b.w)/2-0.01 && across < (a.b.h+b.b.h)/2-0.01
+}
+
+// breaksWord reports a label whose layout in blocks, at most maxW wide,
+// breaks a word across lines: a word wider than maxW alone.
+func (rd *renderer) breaksWord(items []item, blocks []*block, st TextStyle, maxW float64) bool {
+	for i, b := range blocks {
+		if b == nil || len(b.lines) < 2 {
+			continue
+		}
+		for _, w := range strings.Fields(items[i].text) {
+			if wb := rd.measure(w, st, 0); wb != nil && wb.w > maxW+0.01 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // thin drops labels that overlap the previous one kept, keeping every
@@ -597,12 +678,12 @@ func thin(ls []tickLabel, vertical bool) []tickLabel {
 		return ls
 	}
 	overlaps := func(a, b tickLabel) bool {
-		aw, ah := a.b.rotated()
-		bw, bh := b.b.rotated()
 		if vertical {
+			_, ah := a.b.rotated()
+			_, bh := b.b.rotated()
 			return math.Abs(a.cy-b.cy) < (ah+bh)/2-0.01
 		}
-		return math.Abs(a.cx-b.cx) < (aw+bw)/2-0.01
+		return labelsOverlap(a, b)
 	}
 	for step := 1; step <= len(ls); step++ {
 		ok := true

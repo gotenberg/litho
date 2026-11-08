@@ -398,6 +398,13 @@ type Axis struct {
 	Style TextStyle
 	// Title is the axis title, nil for none.
 	Title *Title
+	// NoBreak keeps each category label on one line: a label wider than
+	// its category neither wraps nor breaks (LibreOffice's TextBreak off;
+	// ODF 1.3 Part 3, 20.25 text:line-break false).
+	NoBreak bool
+	// Overlap lets the labels overlap rather than be rotated or thinned
+	// out (ODF 1.3 Part 3, 20.21 chart:text-overlap).
+	Overlap bool
 	// BetweenCategories puts a category axis's categories between its tick
 	// marks rather than on them (ECMA-376 Part 1, 21.2.2.32 crossBetween).
 	BetweenCategories bool
