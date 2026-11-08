@@ -112,8 +112,16 @@ type Rule struct {
 	// maximum, whose thresholds Values hold as numbers, "min" and "max"
 	// standing for the range's extremes when Values is empty.
 	Scale []css.Color
-	// Bar is the colour of a RuleDataBar.
-	Bar css.Color
+	// Bar is the colour of a RuleDataBar; BarNegative the colour of a bar
+	// below the axis, the zero Color for red; BarSolid paints the bar flat
+	// instead of as a gradient to transparent; BarMinLength and
+	// BarMaxLength are the shortest and longest bars as fractions of the
+	// cell width, 0.1 and 0.9 when both are 0 (ECMA-376 Part 1, 18.3.1.28
+	// dataBar and its x14 extension; ODF calcext:data-bar).
+	Bar                        css.Color
+	BarNegative                css.Color
+	BarSolid                   bool
+	BarMinLength, BarMaxLength float64
 }
 
 // RuleKind is the kind of a conditional formatting rule (ECMA-376 Part 1,
