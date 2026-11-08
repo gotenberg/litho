@@ -374,3 +374,13 @@ func TestConvert_ListHeaderHeadingTakesNoNumber(t *testing.T) {
 		t.Errorf("headings = %q", got)
 	}
 }
+
+func TestConvert_ListHeadingOutlineTitle(t *testing.T) {
+	// LibreOffice measured (odfimport/empty-svg-family-name.odt): a
+	// heading in a numbered list is bookmarked with its label first.
+	body := `<text:list text:style-name="LN"><text:list-item><text:h text:outline-level="1">Head</text:h></text:list-item></text:list>`
+	res := convertDoc(t, doc{styles: listStyles, body: body}.pack(t), office.Options{})
+	if len(res.Outline) != 1 || res.Outline[0].Title != "1. Head" {
+		t.Errorf("outline = %+v", res.Outline)
+	}
+}

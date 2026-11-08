@@ -35,6 +35,13 @@ func outline(headings []heading, anchors map[string]compose.Dest, dest func(comp
 		if title == "" {
 			continue
 		}
+		if m := h.node.Marker; m != nil {
+			// A heading in a list is titled with its list label first, as
+			// Writer exports its bookmark.
+			if lbl := headingTitle(m); lbl != "" {
+				title = lbl + " " + title
+			}
+		}
 		e := &entry{o: compose.Outline{Title: title, Dest: d}, level: h.level}
 		for len(stack) > 0 && stack[len(stack)-1].level >= h.level {
 			stack = stack[:len(stack)-1]
