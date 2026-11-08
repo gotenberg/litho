@@ -205,7 +205,7 @@ func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 			case m == "vertical":
 				s.FlipV = !s.FlipV
 			}
-			if len(k.Children) > 0 && hasParagraphs(k) {
+			if strings.TrimSpace(k.TextContent()) != "" {
 				r.warn("picture-text", "the text of a picture is not drawn")
 			}
 			return s

@@ -421,8 +421,9 @@ func (r *reader) paragraph(p *odf.Element, tc *textCtx, lc listCtx) slides.Parag
 	for _, t := range ps.tabs {
 		out.TabStops = append(out.TabStops, out.MarginLeft+t)
 	}
-	w := &runWriter{r: r, atStart: true}
+	w := newRunWriter(r)
 	r.inline(p, tc, rs, "", w, 0)
+	w.trim()
 	out.Runs = w.runs
 	out.Style = rs.final(tc.bg)
 	return out
@@ -433,15 +434,21 @@ func (r *reader) paragraph(p *odf.Element, tc *textCtx, lc listCtx) slides.Parag
 // one space, none at the paragraph's start or end; text:s, text:tab and
 // text:line-break are kept as they are.
 type runWriter struct {
-	r       *reader
-	runs    []slides.Run
-	atStart bool
-	pending bool
-	full    bool
+	r    *reader
+	runs []slides.Run
+	// space reports that the last character written is white space, so
+	// collapsible white space after it writes nothing; collapsed reports
+	// that it is a collapsed space, which the paragraph's end trims.
+	space, collapsed bool
+	full             bool
 }
 
-// add appends text in style rs, merged into the last run when it has the
-// same style, link and no field.
+// newRunWriter returns a writer at a paragraph's start, where white space
+// collapses to nothing.
+func newRunWriter(r *reader) *runWriter { return &runWriter{r: r, space: true} }
+
+// add appends run, merged into the last run when it has the same style,
+// link and no field.
 func (w *runWriter) add(run slides.Run) {
 	if w.full {
 		return
@@ -461,42 +468,60 @@ func (w *runWriter) add(run slides.Run) {
 	w.runs = append(w.runs, run)
 }
 
-// flush writes a pending collapsed space before content in style st.
-func (w *runWriter) flush(st slides.RunStyle, href string) {
-	if w.pending && !w.atStart {
-		w.add(slides.Run{Text: " ", Style: st, Href: href})
-	}
-	w.pending = false
-}
-
 // text writes character data, collapsing its white space.
 func (w *runWriter) text(s string, st slides.RunStyle, href string) {
 	var b strings.Builder
 	for _, c := range s {
 		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
-			if b.Len() > 0 {
-				w.add(slides.Run{Text: b.String(), Style: st, Href: href})
-				b.Reset()
+			if w.space {
+				continue
 			}
-			w.pending = true
+			b.WriteByte(' ')
+			w.space, w.collapsed = true, true
 			continue
 		}
-		if b.Len() == 0 {
-			w.flush(st, href)
-		}
 		b.WriteRune(c)
-		w.atStart = false
+		w.space, w.collapsed = false, false
 	}
 	if b.Len() > 0 {
 		w.add(slides.Run{Text: b.String(), Style: st, Href: href})
 	}
 }
 
-// raw writes run as it is, after any pending space.
+// raw writes run as it is: a text:s, a text:tab or a field, which white
+// space around it does not collapse into (6.1.2, step 7).
 func (w *runWriter) raw(run slides.Run) {
-	w.flush(run.Style, run.Href)
 	w.add(run)
-	w.atStart = false
+	w.space, w.collapsed = false, false
+}
+
+// lineBreak writes a forced line break, after which white space
+// collapses as at the paragraph's start.
+func (w *runWriter) lineBreak(st slides.RunStyle, href string) {
+	w.trim()
+	w.add(slides.Run{Break: true, Style: st, Href: href})
+	w.space, w.collapsed = true, false
+}
+
+// trim removes a collapsed space ending the runs written.
+func (w *runWriter) trim() {
+	if !w.collapsed {
+		return
+	}
+	w.collapsed = false
+	for i := len(w.runs) - 1; i >= 0; i-- {
+		r := &w.runs[i]
+		if r.Break || r.Field != slides.FieldNone {
+			return
+		}
+		if t, ok := strings.CutSuffix(r.Text, " "); ok {
+			r.Text = t
+			if t == "" {
+				w.runs = append(w.runs[:i], w.runs[i+1:]...)
+			}
+			return
+		}
+	}
 }
 
 // sameStyle reports equal run styles.
@@ -552,9 +577,7 @@ func (r *reader) inline(el *odf.Element, tc *textCtx, rs runState, href string, 
 		case "tab":
 			w.raw(slides.Run{Text: "\t", Style: st, Href: href})
 		case "line-break":
-			w.pending = false
-			w.add(slides.Run{Break: true, Style: st, Href: href})
-			w.atStart = true
+			w.lineBreak(st, href)
 		case "page-number":
 			w.raw(slides.Run{Text: k.TextContent(), Style: st, Href: href, Field: slides.FieldSlideNumber})
 		case "page-count":

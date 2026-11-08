@@ -70,6 +70,9 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, password string) 
 	if body == nil {
 		return nil, nil, fmt.Errorf("reading ODP: %w: the document has no office:presentation body", office.ErrMalformed)
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	r := newReader(ctx, pkg, fonts)
 	doc := r.document(body)
 	if r.err != nil {

@@ -128,7 +128,7 @@ func parseTransform(s string) (matrix, bool, bool) {
 			if !ok {
 				return m, skew, false
 			}
-			skew = skew || a != 0
+			skew = skew || math.Abs(a) > 1e-9
 			if name == "skewX" {
 				op = matrix{a: 1, c: math.Tan(a), d: 1}
 			} else {
