@@ -68,6 +68,9 @@ Each reference handed to the cell as litho's conversion, scored against the gold
 
 ## Accepted disagreements
 
+- `sd/tdf124781.odp`: superscripts sit where Impress puts them, within 0.2 pt, so they share a line with the base text and litho's extraction joins "H2O" into one word where PDF.js splits LibreOffice's into items; the drawings agree.
+- `sd/repeatBitmapMode.odp`: the first page's tiled bitmap has a zero size, which LibreOffice does not print, as in `sd/slide-tile-background.odp`.
+- `sd/tdf169675_3d_object_anim.odp`: a 3D object LibreOffice renders with its scene; litho has no 3D renderer.
 - `sd/Math.fodp`, `sd/formula.fodp`: formula objects LibreOffice renders through its own formula editor; litho has no formula renderer and draws the object's replacement picture when the file holds one.
 - `sd/tdf169952_multiple_OLEs.odp`, `sd/linked_ole.odp`: embedded and linked OLE objects LibreOffice draws itself; their replacement pictures are StarView metafiles, which litho does not draw.
 - `sd/embedded-pdf.odp`: a PDF used as a picture, whose text LibreOffice renders; litho draws the replacement picture.

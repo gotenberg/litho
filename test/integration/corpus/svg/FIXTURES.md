@@ -85,6 +85,14 @@ npx prettier --write test/integration/corpus/svg/tests.json
 
 The script prints the candidate count and the commonest rejection reasons on stderr. `files.sha256` is the SHA-256 of every SVG and PNG `tests.json` names, plus `LICENSE-MIT` and the fonts `NotoSans-Regular.ttf`, `NotoSans-Bold.ttf`, `NotoSans-Italic.ttf`, `NotoSerif-Regular.ttf`, `NotoMono-Regular.ttf`, `Amiri-Regular.ttf` and their licences from `crates/resvg/tests/fonts/`, computed in the same checkout (`shasum -a 256`), sorted by path; `TestSVGListAndHashesAgree` checks that the two files agree.
 
+## Known disagreements
+
+The reference PNGs are resvg's own rasterisation, so these fixtures stay failing on purpose, recorded in `baseline.json`:
+
+- `painting/fill/rgba-0-127-0-50percent.svg`: resvg's reference paints black, rejecting the percentage alpha of `rgba()` that litho honours (CSS Color 4).
+- `painting/stroke-dasharray/negative-values.svg`, `structure/style/current-color-stroke-before-color.svg`, `structure/svg/preserveAspectRatio=xMinYMin.svg`: the differences are the anti-aliased edges of one- and two-unit strokes between the two rasterisers.
+- `structure/svg/not-UTF-8-encoding.svg`: the reference draws a system font the fixture set lacks.
+
 ## Licence
 
 resvg is under the MIT or the Apache 2.0 licence (its `LICENSE-MIT`, fetched with the tests). The Noto and Amiri fonts are under the SIL Open Font License 1.1 (`Noto-LICENSE-OFL.txt`, `Amiri-LICENSE-OFL.txt`). No resvg file is committed.

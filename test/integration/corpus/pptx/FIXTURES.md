@@ -86,6 +86,8 @@ Each reference handed to the cell as litho's conversion, scored against the gold
 
 ## Accepted disagreements
 
+- `sd/n828390_3.pptx`: subscripts sit where Impress puts them, so they share a line with the base text and litho's extraction joins the word where PDF.js splits LibreOffice's into items; the drawings agree.
+- The 3D scenes of `oox/Scene3d_*.pptx` (13 fixtures: isometricRightUp, legacyObliqueBottomRight, legacyPerspectiveTopRight, the lightRig_* variants, material_highlight, material_wireframe, obliqueTopRight, perspectiveContrastingLeft, shape_rotation): LibreOffice extrudes and lights the shapes through its 3D renderer; litho prints each shape flat with its fill and a plain rotation where the camera is one.
 - WordArt and other warped text (`oox/tdf125085_WordArtFontText.pptx`, `oox/tdf125085_WordArtFontTheme.pptx`, `oox/tdf125582_TextOnCircle.pptx`, `oox/tdf139618_ImportWordArtGradient.pptx`, `oox/tdf139618_WordArtBitmapFill.pptx`, `oox/tdf155327_WordArtDefaultColor.pptx`, `sd/ShapeTextInflateTop.pptx`, `sd/tdf116350-texteffects.pptx`, `sd/tdf125573_FontWorkScaleX.pptx`): LibreOffice draws a text warp preset (`prstTxWarp`) as outlines, so the reference holds no text PDF.js can read, where litho writes the text unwarped, selectable and searchable. Text F1 is 0 on each by construction.
 - `sd/numfmt.pptx`: the slide's date and time fields print the moment of the conversion in the reference; litho prints the print date it is given, or the text the file saved.
 - `sd/layout-clrmap-override.pptx`, `sd/tdf118776.pptx`: white text on a white slide and text at 2% opacity are read by PDF.js and left out by litho's text extraction, which reads what a reader sees; the drawings agree.

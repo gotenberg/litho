@@ -64,6 +64,7 @@ Chromium is the reference where WeasyPrint and Chromium draw a test differently,
 - `test_tables_20`: WeasyPrint and Chromium disagree on the table's layout.
 - `test_background_repeat_round_2` and `_4`: Chromium positions the rounded tiles where litho does.
 - `test_absolute_rtl_2`: an absolutely positioned box whose border box reaches past the first page takes a second page in Chromium (it prints two pages); WeasyPrint expects one.
+- `test_text_float_text_decoration`, `test_text_nested_block_text_decoration`, `test_text_nested_text_decoration_color`: WeasyPrint marks these expected grids as failing in its own suite, and they contradict `test_text_nested_text_decoration`, which passes; litho follows the passing one.
 
 ## Licence
 

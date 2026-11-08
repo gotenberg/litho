@@ -75,6 +75,12 @@ npx prettier --write test/integration/corpus/wpt/reftests.json
 
 The script prints the candidate count and the commonest rejection reasons on stderr. `files.sha256` is the SHA-256 of every path `reftests.json` names, plus `LICENSE.md` and `fonts/Ahem.ttf`, computed in the same checkout (`shasum -a 256`), sorted by path; `TestWPTListAndHashesAgree` checks that the two files agree.
 
+## Known disagreements
+
+Chromium is the reference where a test and Chromium draw differently, so these fixtures stay failing on purpose, recorded in `baseline.json`:
+
+- `css/css-text/white-space/control-chars-00E`, `-00F`, `-080`, `-083`, `-089`, `-090`, `-095`, `-099`: the tests expect a control character to draw a visible glyph; Chromium's PDF draws nothing for one, and so does litho.
+
 ## Licence
 
 web-platform-tests is under the 3-Clause BSD License (its `LICENSE.md`, fetched with the tests); Ahem comes from the same tree, `fonts/Ahem.ttf`. No WPT file is committed.

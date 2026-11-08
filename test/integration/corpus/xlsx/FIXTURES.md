@@ -83,6 +83,8 @@ Each reference handed to the cell as litho's conversion, scored against the gold
 
 ## Accepted disagreements
 
+- `sc/pivottable_tabular_mode.xlsx`: LibreOffice applies a date page field's hidden items by their display name, and several timestamps share each name, so which records it keeps depends on the item each name lands on (it shows a total of 13 where Excel shows 9); litho hides every value under a hidden name.
+- `sc/pivot_dark1.xlsx`: the pivot output matches LibreOffice's, but "Total Result" crosses a page edge, where PDF.js reads the clipped text and litho's extraction leaves it out.
 - `sc/129969-min.xlsx`, `sc/tdf111876.xlsx`, `sc/hyperlink_export.xlsx`: LibreOffice resolves relative hyperlinks against the route's upload directory, so the reference's link targets are `file:///tmp/<uuid>/...` URIs no converter can know; litho keeps the targets the workbook names. Link recall is 0 on each; `hyperlink_export` also prints the resolved paths as cell text.
 - `sc/tdf161301.xlsx`: LibreOffice prints 2024-05-28 with the `[$]ggge` era code as "CE784年2月20日", a misread era, and its page count differs; litho prints the date the code asks for.
 - `sc/cell-value.xlsx`: a 10,987 pt text overflows over 8 pages in both, but LibreOffice caches the text width in whole pixels at a resolution the page count only hints at, so its last page cuts the text one column earlier than litho's.

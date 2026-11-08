@@ -88,6 +88,8 @@ Each reference handed to the cell as litho's conversion, scored against the gold
 
 ## Accepted disagreements
 
+- `ooxmlexport/fdo59638.docx`: LibreOffice keeps the Symbol font's private-use bullet U+F0B7 in its text layer; litho maps it to the bullet it stands for, U+2022, so the text is searchable.
+- `ooxmlimport/numbering-circle.docx`: LibreOffice's text layer reads the circled list number as ".①" because of its bidi ordering; litho reads "①.".
 - Content controls (`ooxmlexport/2-id.docx`, `date-control.docx`, `Cool15788_symbolContentControl.docx`, `cell-sdt-redline.docx`, `author-property.docx`, `content-control-shape.docx`): LibreOffice exports a `w:sdt` as a PDF form field, so its text is a widget's value and not page text, and the reference's extracted text is empty where litho prints the control's content in the page. The text F1 of those pages cannot match.
 - `ooxmlexport/del-then-format.docx`: LibreOffice prints the deleted run "BBB" because a formatting change is stacked on the deletion; litho drops deleted text as a printed document does.
 - `ooxmlimport/n751077.docx`: LibreOffice prints the second text box of a page-anchored group on a page of its own although the group's geometry fits the first page; litho keeps the group on its anchor page, as the engine places every page-anchored box.
