@@ -177,6 +177,9 @@ func TestPresentation_NotesLayout(t *testing.T) {
 	if doc.NotesSlideBox != (compose.Rect{X: 90, Y: 54, Width: 360, Height: 270}) || doc.NotesTextBox != (compose.Rect{X: 54, Y: 342, Width: 432, Height: 324}) {
 		t.Errorf("slide box %+v, text box %+v", doc.NotesSlideBox, doc.NotesTextBox)
 	}
+	if doc.Slides[0].HasNotes || !doc.Slides[1].HasNotes {
+		t.Errorf("has notes %v %v, want the second slide alone", doc.Slides[0].HasNotes, doc.Slides[1].HasNotes)
+	}
 	var names []string
 	for _, s := range doc.NotesShapes {
 		names = append(names, s.Name)

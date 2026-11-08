@@ -54,11 +54,11 @@ func (r *reader) slide(n int, part string) (*slides.Slide, error) {
 		s.Name = fmt.Sprintf("Slide %d", n)
 	}
 	r.slideWarnings(part, root)
-	notes, err := r.notes(part)
+	notes, has, err := r.notes(part)
 	if err != nil {
 		return nil, err
 	}
-	s.Notes = notes
+	s.Notes, s.HasNotes = notes, has
 	return s, nil
 }
 
@@ -104,28 +104,29 @@ func (r *reader) background(sl *layer) slides.Fill {
 }
 
 // notes reads the notes of the slide part: the text of its notes slide's
-// body placeholder (19.3.1.26 notes), nil for none.
-func (r *reader) notes(slidePart string) ([]slides.Paragraph, error) {
+// body placeholder (19.3.1.26 notes), nil for none, and whether the slide
+// has a notes slide at all, empty or not.
+func (r *reader) notes(slidePart string) ([]slides.Paragraph, bool, error) {
 	part := r.related(slidePart, relNotesSlide)
 	if part == "" {
-		return nil, nil
+		return nil, false, nil
 	}
 	root, err := r.pkg.ParseXML(r.ctx, part, understood)
 	if err != nil {
 		if isMalformed(err) {
 			r.warn("malformed-part", fmt.Sprintf("the notes %s do not parse and are left out: %v", part, err))
-			return nil, nil
+			return nil, false, nil
 		}
-		return nil, err
+		return nil, false, err
 	}
 	if !root.Is(nsP, "notes") {
-		return nil, nil
+		return nil, false, nil
 	}
 	var nm *layer
 	if mpart := r.related(part, relNotesMaster); mpart != "" {
 		if nm, err = r.master(mpart); err != nil {
 			if !isMalformed(err) {
-				return nil, err
+				return nil, false, err
 			}
 			nm = nil
 		}
@@ -142,7 +143,7 @@ func (r *reader) notes(slidePart string) ([]slides.Paragraph, error) {
 	if nm != nil && !r.notesRead {
 		r.notesRead = true
 		if err := r.notesLayout(nl, nm, part); err != nil {
-			return nil, err
+			return nil, true, err
 		}
 	}
 	for _, k := range nl.phs {
@@ -152,11 +153,11 @@ func (r *reader) notes(slidePart string) ([]slides.Paragraph, error) {
 		c := &shapeCtx{layer: nl, sc: sc, ns: nsP, part: part}
 		body := r.textBody(c, inherited(nl, k), p0(k), nil)
 		if body == nil {
-			return nil, nil
+			return nil, true, nil
 		}
-		return body.Paragraphs, nil
+		return body.Paragraphs, true, nil
 	}
-	return nil, nil
+	return nil, true, nil
 }
 
 // notesLayout reads the notes page layout from the first notes slide nl
