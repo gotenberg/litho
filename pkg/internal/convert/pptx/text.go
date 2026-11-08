@@ -619,6 +619,11 @@ func (r *reader) runStyle(c chain, sc scope) slides.RunStyle {
 			if col, ok := sc.color(fill.Child(ooxml.NSA, "fgClr"), nil); ok {
 				s.Color = col
 			}
+		case "noFill":
+			// Text of no fill paints nothing: a transparent colour, which
+			// the zero colour, black, is not (pptx: sd/tdf118776's text
+			// of noFill prints nothing).
+			s.Color = css.Color{R: 1, G: 1, B: 1}
 		}
 	} else if col, ok := sc.resolver(nil)("tx1"); ok {
 		s.Color = col

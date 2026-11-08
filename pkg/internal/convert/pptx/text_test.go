@@ -48,6 +48,11 @@ func TestText_RunStyleResolution(t *testing.T) {
 				t.Errorf("faces %q colour %+v", s.Families, s.Color)
 			}
 		}},
+		{"text of no fill", body(`<a:bodyPr/><a:p><a:r><a:rPr><a:noFill/></a:rPr><a:t>x</a:t></a:r></a:p>`), func(t *testing.T, r slides.Run) {
+			if r.Style.Color.A != 0 || r.Style.Color == (css.Color{}) {
+				t.Errorf("colour %+v, want a transparent one other than the zero colour", r.Style.Color)
+			}
+		}},
 		{"level two of the body style", body(`<a:bodyPr/><a:p><a:pPr lvl="1"/><a:r><a:t>x</a:t></a:r></a:p>`), func(t *testing.T, r slides.Run) {
 			if r.Style.Size != 28 {
 				t.Errorf("size %v", r.Style.Size)
