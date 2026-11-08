@@ -98,7 +98,7 @@ func blipEffects(pic *layout.Picture, blip *ooxml.Element, color func(*ooxml.Ele
 				c.R, c.G, c.B = mix(duo[0].R, duo[1].R), mix(duo[0].G, duo[1].G), mix(duo[0].B, duo[1].B)
 			case grey || threshold >= 0:
 				// vcl's luminance: (76 R + 151 G + 29 B) / 256.
-				l := uint8((uint32(c.R)*76 + uint32(c.G)*151 + uint32(c.B)*29) >> 8)
+				l := uint8((uint32(c.R)*76 + uint32(c.G)*151 + uint32(c.B)*29) >> 8) //nolint:gosec // at most 255: the weights sum to 256
 				switch {
 				case threshold >= 0 && int(l) >= threshold:
 					l = 255

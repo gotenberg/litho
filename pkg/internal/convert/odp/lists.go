@@ -167,21 +167,17 @@ func numberScheme(format, prefix, suffix string) string {
 //     where pitch.fodp's default outline bullet, Impress's own StarBats
 //     U+F095, prints U+F095.
 func symbolChar(ch, family string) (string, string) {
-	f := strings.ToLower(strings.ReplaceAll(family, " ", ""))
-	switch f {
-	case "starbats":
-		rs := []rune(ch)
-		if len(rs) != 1 {
-			return ch, family
-		}
-		c := rs[0]
-		if c >= 0x20 && c <= 0xff {
-			c += 0xf000
-		}
-		if c >= 0xf020 && c <= 0xf0ff {
-			if m := starBats[c-0xf020]; m != 0 {
-				return string(rune(m)), "OpenSymbol"
-			}
+	rs := []rune(ch)
+	if strings.ToLower(strings.ReplaceAll(family, " ", "")) != "starbats" || len(rs) != 1 {
+		return ch, family
+	}
+	c := rs[0]
+	if c >= 0x20 && c <= 0xff {
+		c += 0xf000
+	}
+	if c >= 0xf020 && c <= 0xf0ff {
+		if m := starBats[c-0xf020]; m != 0 {
+			return string(rune(m)), "OpenSymbol"
 		}
 	}
 	return ch, family

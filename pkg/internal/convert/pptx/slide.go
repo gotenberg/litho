@@ -6,11 +6,10 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
-	"github.com/gotenberg/litho/pkg/internal/layout"
-	"github.com/gotenberg/litho/pkg/internal/shape"
-
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
 // slide reads the slide part, the n-th of the show, with its layout and

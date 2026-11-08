@@ -71,7 +71,7 @@ func adjusted(pic *layout.Picture, p odf.Props) *layout.Picture {
 			switch mode {
 			case "greyscale", "mono":
 				// vcl's luminance: (76 R + 151 G + 29 B) / 256.
-				l := uint8((uint32(c.R)*76 + uint32(c.G)*151 + uint32(c.B)*29) >> 8)
+				l := uint8((uint32(c.R)*76 + uint32(c.G)*151 + uint32(c.B)*29) >> 8) //nolint:gosec // at most 255: the weights sum to 256
 				if mode == "mono" && l >= 128 {
 					l = 255
 				} else if mode == "mono" {
