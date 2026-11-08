@@ -973,8 +973,13 @@ func (p *painter) textDecorations(it *lineItem, l *lineBox, page int, alpha floa
 				thick = max(roundPx(it.ulThick), css.Pt)
 			}
 		}
-		if thick == autoThickness {
+		auto := thick == autoThickness
+		if auto {
 			thick = max(roundPx(size/10), css.Pt)
+			if p.blink() {
+				// Blink floors the tenth of the font size.
+				thick = max(math.Floor(size/10/css.Pt)*css.Pt, css.Pt)
+			}
 		}
 		if thick <= 0 {
 			continue
@@ -987,6 +992,19 @@ func (p *painter) textDecorations(it *lineItem, l *lineBox, page int, alpha floa
 				pos = it.ulPos
 			}
 			pos = roundPx(pos)
+			if p.blink() {
+				// Chromium 9.0.0 draws the underline of every face
+				// tried (Liberation Serif and Sans, DejaVu Sans, Ahem,
+				// 13 to 64px) half its unrounded thickness below the
+				// baseline, rounded up to whole pixels, at least one,
+				// whatever the face's underline position: Blink's gap
+				// for a face without one.
+				t := thick / css.Pt
+				if auto {
+					t = size / 10 / css.Pt
+				}
+				pos = max(math.Ceil(t/2-1e-9), 1) * css.Pt
+			}
 			if d.hasOffset {
 				pos = d.offset
 			}
