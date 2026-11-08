@@ -197,7 +197,12 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 				d.Chart = w.r.chartOf(rel.Target)
 				return true
 			case uriChartEx:
+				// The chart keeps its box, which the printed range
+				// spans, as LibreOffice prints an empty chart object
+				// there.
 				w.r.warn("unsupported-content", fmt.Sprintf("the Office 2016 chart %q (a histogram, funnel, box and whisker or similar chart) is not drawn", d.Name))
+				d.Picture = &layout.Picture{Width: 1, Height: 1, Vector: func(context.Context, compose.Rect) []compose.Fragment { return nil }}
+				return true
 			case uriDiagram:
 				w.r.warn("unsupported-content", "a SmartArt diagram is left out: the workbook holds no picture of it")
 			default:

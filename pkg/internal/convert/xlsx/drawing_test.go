@@ -139,8 +139,8 @@ func TestDrawing_ChartEx(t *testing.T) {
 		rels: `<Relationship Id="rIdD" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>`,
 	}}, minimalStyles, "", "", map[string]string{"xl/drawings/drawing1.xml": drawing})
 	doc, warnings := readBytes(t, zipFiles(t, files))
-	if n := len(doc.Sheets[0].Drawings); n != 0 {
-		t.Errorf("%d drawings, want the chart left out", n)
+	if ds := doc.Sheets[0].Drawings; len(ds) != 1 || ds[0].Picture == nil || ds[0].Chart != nil {
+		t.Errorf("drawings %+v, want the chart's box kept empty", ds)
 	}
 	named := false
 	for _, w := range warnings {
