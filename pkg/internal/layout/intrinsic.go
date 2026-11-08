@@ -39,7 +39,9 @@ func (e *engine) intrinsic(b *box) (float64, float64) {
 				w = max(w-edges, 0)
 			}
 		} else if b.picture != nil {
-			w, _ = e.replacedSize(&box{st: autoWidth(src), picture: b.picture, kind: kindReplaced}, cblock{})
+			// The box carries b's padding and borders, which a
+			// border-box min or max size takes out (CSS UI 3, 4.1).
+			w, _ = e.replacedSize(&box{st: autoWidth(src), picture: b.picture, kind: kindReplaced, pd: pd, bd: bd}, cblock{})
 		}
 		lo, hi = w, w
 	} else {

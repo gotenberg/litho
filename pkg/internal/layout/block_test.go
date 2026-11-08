@@ -365,3 +365,16 @@ func TestOrphans_GiveWayToBreakAvoid(t *testing.T) {
 		})
 	}
 }
+
+func TestReplaced_BorderBoxMinWidthIntrinsic(t *testing.T) {
+	// A float shrinks to a picture of min-width 60px under border-box with
+	// 5px of padding: its content is 50px, its border box 60px (CSS UI 3,
+	// 4.1), not 60px of content.
+	img := &Node{Kind: Replaced, Style: sty(padding(5), func(s *css.Style) {
+		s.BoxSizing, s.MinWidth = css.BorderBox, css.Pts(px(60))
+	}), Picture: pic(color.NRGBA{R: 255, A: 255}, 40, 20)}
+	rb := boxes(t, doc(el(sty(float(css.FloatLeft)), img)), page(200, 100))
+	if got := rect(kid(t, rb, 0, 0))[2]; got != 60 {
+		t.Errorf("float %vpx wide, want 60", got)
+	}
+}
