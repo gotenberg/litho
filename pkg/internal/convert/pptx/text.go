@@ -691,9 +691,6 @@ func (r *reader) bullet(pc chain, ts *textStyles) *slides.Bullet {
 	} else if f != nil && f.Local == "buFont" {
 		if name := ts.sc.theme.font(attr(f, "typeface")); name != "" {
 			b.Families = []string{name}
-			if c, face, ok := symbolBullet(b.Char, name); ok && b.Kind == slides.BulletChar {
-				b.Char, b.Families = c, []string{face}
-			}
 		}
 	}
 	if c := pc.first("buClr", "buClrTx"); c != nil && c.Local == "buClr" {
