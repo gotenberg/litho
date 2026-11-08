@@ -389,6 +389,15 @@ func (s *Styles) addMaster(el *Element) {
 		Footer:      el.Child(NSStyle, "footer"), FooterLeft: el.Child(NSStyle, "footer-left"),
 		FooterFirst: el.Child(NSStyle, "footer-first"), El: el,
 	}
+	// LibreOffice wrote the first page's header and footer in its own
+	// namespace before ODF 1.3 named them (loext:header-first,
+	// loext:footer-first).
+	if mp.HeaderFirst == nil {
+		mp.HeaderFirst = el.Child(NSLOExt, "header-first")
+	}
+	if mp.FooterFirst == nil {
+		mp.FooterFirst = el.Child(NSLOExt, "footer-first")
+	}
 	if mp.Name == "" || s.masters[mp.Name] != nil {
 		return
 	}

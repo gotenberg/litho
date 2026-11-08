@@ -345,3 +345,20 @@ func TestConvert_FrameCentredOnParagraph(t *testing.T) {
 		})
 	}
 }
+
+func TestConvert_FirstPageFooterInLibreOfficeNamespace(t *testing.T) {
+	// LibreOffice's own loext:footer-first prints on the first page, the
+	// footer on the others (LibreOffice measured, odfimport/fdo79269.odt).
+	pl := `<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" fo:margin-top="2cm" fo:margin-bottom="2cm" fo:margin-left="2cm" fo:margin-right="2cm"/><style:footer-style><style:header-footer-properties fo:min-height="1cm"/></style:footer-style></style:page-layout>`
+	masters := `<style:master-page style:name="Standard" style:page-layout-name="pm1"><style:footer><text:p>SECOND</text:p></style:footer><loext:footer-first><text:p>FIRST</text:p></loext:footer-first></style:master-page>`
+	auto := `<style:style style:name="PB" style:family="paragraph"><style:paragraph-properties fo:break-before="page"/></style:style>`
+	res := convertDoc(t, doc{autoStyles: pl, masters: masters, contentAuto: auto, body: `<text:p>a</text:p><text:p text:style-name="PB">b</text:p>`}.pack(t), office.Options{})
+	if len(res.Pages) != 2 {
+		t.Fatalf("pages = %d", len(res.Pages))
+	}
+	for i, want := range []string{"FIRST", "SECOND"} {
+		if got := pageText(res.Pages[i]); !strings.Contains(got, want) {
+			t.Errorf("page %d = %q, want %s", i+1, got, want)
+		}
+	}
+}
