@@ -149,8 +149,10 @@ func (b *builder) warn(code, msg string) {
 //
 // Vertical text is laid out horizontally and turned a quarter turn;
 // upright East Asian text turns with it. A paragraph's lines all take the
-// height of its largest font. Effects (shadows, glows, reflections, 3D)
-// are not drawn.
+// height of its largest font. Blurred text shadows, text glows, inner
+// shadows, reflections and 3D effects are not drawn, as Impress prints
+// none of them. A text rotated inside its shape and text highlighting are
+// not drawn either.
 func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.Options) (*compose.Document, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
