@@ -184,3 +184,19 @@ func TestMulticol_BalancesOverAbsoluteBoxes(t *testing.T) {
 		t.Errorf("pixels:\n%s\nwant the second column to start blue and the next block on the third row", strings.Join(rows, "\n"))
 	}
 }
+
+func TestMulticol_BaselineInItsColumn(t *testing.T) {
+	t.Parallel()
+	// The container's first line lies at the top of its second column:
+	// its baseline aligns there, not one column height lower.
+	text := sty(font(1), fg(red))
+	mc := el(sty(func(s *css.Style) {
+		s.Columns.Count, s.Columns.Fill = 2, css.FillAuto
+		s.ColumnGap, s.Width, s.Height = css.Pts(0), css.Pts(px(2)), css.Pts(px(2))
+	}), strip(blue), strip(blue), el(text, txt(text, "X")))
+	row := el(sty(display(css.Flex), func(s *css.Style) { s.AlignItems = css.BoxBaseline }), el(text, txt(text, "X")), mc)
+	assertPixels(t, run(t, doc(row), page(4, 3)), 1, `
+		RBR_
+		_B__
+		____`)
+}

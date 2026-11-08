@@ -1090,6 +1090,16 @@ func (e *engine) layoutAtomic(a *box, lcb cblock) {
 // lastBaseline returns the baseline of the last line box in flow inside b
 // (CSS 2.1, 10.8.1, for inline-block).
 func lastBaseline(b *box) (float64, bool) {
+	if b.mc != nil {
+		y, ok := lastBaselineFlow(b)
+		return b.mc.place(b, y), ok
+	}
+	return lastBaselineFlow(b)
+}
+
+// lastBaselineFlow is [lastBaseline] in the column flow of a multi-column
+// container.
+func lastBaselineFlow(b *box) (float64, bool) {
 	if b.flex != nil {
 		return flexBaseline(b, true)
 	}
@@ -1115,6 +1125,16 @@ func lastBaseline(b *box) (float64, bool) {
 // firstBaseline returns the baseline of the first line box in flow inside
 // b, for the outside marker of a list item.
 func firstBaseline(b *box) (float64, bool) {
+	if b.mc != nil {
+		y, ok := firstBaselineFlow(b)
+		return b.mc.place(b, y), ok
+	}
+	return firstBaselineFlow(b)
+}
+
+// firstBaselineFlow is [firstBaseline] in the column flow of a multi-column
+// container.
+func firstBaselineFlow(b *box) (float64, bool) {
 	if b.flex != nil {
 		return flexBaseline(b, false)
 	}
@@ -1134,4 +1154,19 @@ func firstBaseline(b *box) (float64, bool) {
 		}
 	}
 	return 0, false
+}
+
+// place returns where the column flow position y of the multi-column
+// container b paints: the same place in the column it falls in, whose row
+// lies where the container's rows put it.
+func (d *mcolData) place(b *box, y float64) float64 {
+	rel := y - b.y
+	for _, s := range d.sets {
+		for _, f := range s.frags {
+			if rel >= f.vtop-eps && rel < f.vtop+f.h-eps && f.row < len(s.rows) {
+				return b.y + s.rows[f.row].top + rel - f.vtop
+			}
+		}
+	}
+	return y
 }
