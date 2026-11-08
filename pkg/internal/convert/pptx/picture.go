@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
@@ -48,7 +50,8 @@ func (r *reader) picture(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	if !place(s, chain) {
 		return nil
 	}
-	if media := mediaOf(el); media != "" {
+	media := mediaOf(el)
+	if media != "" {
 		r.warn("unsupported-content", fmt.Sprintf("%s does not play in a printout: its poster frame stands in", media))
 	}
 	ref := ooxml.ParsePicture(asPicture(el))
@@ -72,7 +75,40 @@ func (r *reader) picture(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	// builder draws it beneath the picture and the line above.
 	s.Fill = r.shapeFill(fc, chain, nil)
 	s.Picture = pic
+	if media != "" {
+		return mediaFrame(s)
+	}
 	return s
+}
+
+// mediaGrey is the colour of the box Impress prints a video or sound in.
+var mediaGrey = css.Color{R: 0x43 / 255.0, G: 0x43 / 255.0, B: 0x43 / 255.0, A: 1}
+
+// mediaFrame returns the picture shape s of a video or a sound as Impress
+// prints a media object: a #434343 box, the poster frame fitted in it
+// with its proportions kept and centred.
+//
+// # Corpus evidence
+//
+//   - pptx: sd/narration-non-media-shape's 480 by 360 point video of a
+//     nearly square poster prints the poster 324 points wide in the box's
+//     middle, between two grey bands.
+func mediaFrame(s *slides.Shape) *slides.Shape {
+	pic := s.Picture
+	box := s.Box
+	poster := *s
+	if pic.Width > 0 && pic.Height > 0 && box.Width > 0 && box.Height > 0 {
+		k := min(box.Width/pic.Width, box.Height/pic.Height)
+		w, h := pic.Width*k, pic.Height*k
+		poster.Box = compose.Rect{X: box.X + (box.Width-w)/2, Y: box.Y + (box.Height-h)/2, Width: w, Height: h}
+	}
+	poster.Href, poster.Jump, poster.Rotation, poster.FlipH, poster.FlipV = "", 0, 0, false, false
+	poster.Fill = slides.Fill{}
+	back := &slides.Shape{Kind: slides.KindGeometry, Name: s.Name, Box: box, Fill: slides.Fill{Kind: slides.FillSolid, Color: mediaGrey}}
+	return &slides.Shape{
+		Kind: slides.KindGroup, Name: s.Name, Box: box, Child: box, Rotation: s.Rotation, FlipH: s.FlipH, FlipV: s.FlipV,
+		Href: s.Href, Jump: s.Jump, Kids: []*slides.Shape{back, &poster},
+	}
 }
 
 // mediaOf names the media a picture stands in for (19.3.1.x the nvPr's
