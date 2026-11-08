@@ -566,12 +566,20 @@ func sortStops(s []css.TabStop) {
 // the number position by its lvlJc, the text at the indent; any other
 // label opens the first line, followed by its suffix, as LibreOffice
 // draws a label followed by a space.
+//
+// # Corpus evidence
+//
+//   - docx: ooxmlimport/tdf101626.docx, a U+00AD bullet, prints "-".
 func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
 	label, ordinal := rp.num.next(rp.ilvl)
 	lv := rp.num.levelOf(rp.ilvl)
 	if label == "" {
 		return
 	}
+	// A soft hyphen in a label prints as a hyphen, as LibreOffice draws a
+	// bullet made of one: a label never breaks, so the hyphen is not
+	// optional there.
+	label = strings.ReplaceAll(label, "\u00ad", "-")
 	mr := rp.mark
 	mr.underline = nil
 	mr = mr.merge(lv.rpr)
