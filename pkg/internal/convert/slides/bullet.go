@@ -47,13 +47,14 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 	var label string
 	var bw float64
 	symbol := true
-	marker := &layout.Node{Kind: layout.Element, Style: ms}
+	marker := &layout.Node{Kind: layout.Element, Style: ms, Role: "Lbl"}
 	switch bu.Kind {
 	case BulletChar:
-		label = symbolBullet(bu.Char, rs.Families)
+		label, rs.Families = symbolBullet(bu.Char, rs.Families)
 		if label == "" {
 			return
 		}
+		ms.FontFamilies = families(rs.Families)
 		marker.Children = []*layout.Node{{Kind: layout.Text, Style: ms, Text: label}}
 		bw = b.width(label, b.textStyle(&rs, 1))
 	case BulletNumber:
@@ -82,6 +83,7 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 	default:
 		return
 	}
+	raise := 0.0
 	if symbol {
 		// Centred on the first line's text height: the bullet's box, its
 		// face's ascent plus descent tall, centred on the line's natural
@@ -92,73 +94,89 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 			bh, bd = m.Ascent+m.Descent, m.Descent
 		}
 		base := lb.height - lb.text + lb.text/2 + bh/2 - bd
-		if raise := lb.ascent - base; math.Abs(raise) > 1e-3 && !math.IsInf(raise, 0) {
-			ms.VerticalAlign = css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(raise)}
+		if r := lb.ascent - base; !math.IsInf(r, 0) && !math.IsNaN(r) {
+			raise = r
 		}
 	}
+	// The bullet is an inline block opening the first line, moved up by
+	// its raise; with a hanging indent it takes no width and moves back to
+	// the indent, the text starting at the margin or past the bullet.
 	st := node.Style
-	st.Display = css.ListItem
-	node.ListValue = max(number, 1)
-	if indent < 0 && (st.TextAlign == css.AlignStart || st.TextAlign == css.AlignJustify) {
-		st.ListStylePosition = css.Outside
-		ms.Width = css.Pts(-indent)
+	ms.Display = css.InlineBlock
+	ms.Position = css.Relative
+	ms.Top = css.Pts(-raise)
+	startAligned := st.TextAlign == css.AlignStart || st.TextAlign == css.AlignJustify ||
+		(st.TextAlign == css.AlignLeft && st.Direction != css.RTL) || (st.TextAlign == css.AlignRight && st.Direction == css.RTL)
+	if indent < 0 && startAligned {
+		ms.Width = css.Pts(0)
+		if st.Direction == css.RTL {
+			ms.Left = css.Pts(-indent)
+		} else {
+			ms.Left = css.Pts(indent)
+		}
 		st.TextIndent = css.Pts(max(bw+indent, 0))
-	} else {
-		st.ListStylePosition = css.Inside
 	}
-	node.Marker = marker
+	node.Children = append([]*layout.Node{marker}, node.Children...)
 }
-
 // maxBulletScale caps a bullet's scale of the text size. Anti-DoS guard,
 // not spec-mandated: DrawingML allows 25% to 400% (21.1.10.29
 // ST_TextBulletSizePercent).
 const maxBulletScale = 4
 
 // symbolBullet returns the character c of a bullet in the families fams
-// as the fixture's faces draw it: a symbol font's private-use character
-// is mapped to the Unicode character Impress draws for it (its
-// StarSymbol mapping of Symbol and Wingdings), else a bullet.
-func symbolBullet(c string, fams []string) string {
+// as Impress draws it, with the families to draw it in: a private-use
+// character of StarSymbol's fonts draws in OpenSymbol, which holds it; one
+// of the Symbol and Wingdings fonts is mapped to the Unicode character
+// Impress draws for it in OpenSymbol (unotools' StarSymbol conversion
+// tables), else a bullet.
+func symbolBullet(c string, fams []string) (string, []string) {
 	r := []rune(c)
 	if len(r) == 0 {
-		return ""
+		return "", fams
 	}
-	if r[0] < 0xf000 || r[0] > 0xf0ff {
-		return c
-	}
-	sym := false
+	star, sym := false, false
 	for _, f := range fams {
 		switch strings.ToLower(strings.TrimSpace(f)) {
-		case "symbol", "wingdings", "wingdings 2", "wingdings 3", "starbats", "starsymbol", "opensymbol", "webdings", "monotype sorts":
+		case "starbats", "starsymbol", "opensymbol", "starmath":
+			star = true
+		case "symbol", "wingdings", "wingdings 2", "wingdings 3", "webdings", "monotype sorts":
 			sym = true
 		}
 	}
-	if !sym {
-		return c
+	switch {
+	case star:
+		return c, []string{"OpenSymbol"}
+	case !sym:
+		return c, fams
 	}
-	switch r[0] - 0xf000 {
-	case 0xb7, 0x95, 0x9f:
-		return "•"
+	opensym := []string{"OpenSymbol"}
+	v := r[0]
+	if v >= 0xf000 && v <= 0xf0ff {
+		v -= 0xf000
+	}
+	switch v {
+	case 0xb7, 0x95, 0x9f, 0x6c:
+		return "•", opensym
 	case 0xa7, 0x6e:
-		return "▪"
+		return "▪", opensym
 	case 0xa8:
-		return "◆"
+		return "◆", opensym
 	case 0xd8:
-		return "➢"
+		return "➢", opensym
 	case 0xfc:
-		return "✓"
+		return "✔", opensym
 	case 0x76:
-		return "❖"
+		return "❖", opensym
 	case 0x71:
-		return "❑"
+		return "❑", opensym
 	case 0x6f:
-		return "□"
-	case 0x2d, 0x2013:
-		return "–"
+		return "□", opensym
+	case 0x2d:
+		return "–", opensym
 	case 0x3e:
-		return ">"
+		return ">", opensym
 	}
-	return "•"
+	return "•", opensym
 }
 
 // formatNumber returns the label of the number n in the DrawingML

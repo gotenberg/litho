@@ -39,8 +39,8 @@ type builder struct {
 	warned   map[string]bool
 	// metrics caches the font metrics of the faces the text matched.
 	metrics map[string]text.Metrics
-	// slide is the slide being drawn, number its number among the slides
-	// written and count their count, for the fields.
+	// slide is the slide being drawn, number its number in the show,
+	// hidden slides counted, and count the show's slides, for the fields.
 	slide         *Slide
 	number, count int
 	// shapes counts the shapes drawn on the slide.
@@ -154,21 +154,39 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		Metadata:  doc.Meta,
 		Structure: &compose.StructElem{Role: "Document", Lang: b.lang},
 	}
-	b.count = len(shown)
-	for i, s := range shown {
+	// A slide's number is its place in the show, hidden slides counted,
+	// on its slide and on its notes page alike, as Impress numbers pages.
+	numberOf := func(s *Slide) int {
+		n := 0
+		for _, t := range doc.Slides {
+			if t != nil {
+				n++
+			}
+			if t == s {
+				return n
+			}
+		}
+		return n
+	}
+	for _, s := range doc.Slides {
+		if s != nil {
+			b.count++
+		}
+	}
+	for _, s := range shown {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		pg, sect := b.slidePage(s, i+1)
+		pg, sect := b.slidePage(s, numberOf(s))
 		out.Pages = append(out.Pages, pg)
 		out.Structure.Kids = append(out.Structure.Kids, sect)
 	}
 	if opts.NotesPages {
-		for i, s := range shown {
+		for _, s := range shown {
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			pg, sect := b.notesPage(s, i+1)
+			pg, sect := b.notesPage(s, numberOf(s))
 			out.Pages = append(out.Pages, pg)
 			out.Structure.Kids = append(out.Structure.Kids, sect)
 		}
@@ -225,7 +243,7 @@ func fitMatrix(w, h, pw, ph float64) compose.Matrix {
 	return compose.Matrix{A: s, D: s, E: (pw - w*s) / 2, F: (ph - h*s) / 2}
 }
 
-// slidePage draws the slide s, the n-th written, on its page, and returns
+// slidePage draws the slide s, numbered n, on its page, and returns
 // the page with the slide's structure element.
 func (b *builder) slidePage(s *Slide, n int) (*compose.Page, *compose.StructElem) {
 	sw, sh := b.slideSize()
@@ -246,7 +264,7 @@ func (b *builder) slidePage(s *Slide, n int) (*compose.Page, *compose.StructElem
 	return pg, sect
 }
 
-// slideContent draws the slide s, the n-th written, w by h, in slide
+// slideContent draws the slide s, numbered n, w by h, in slide
 // coordinates: its background and shapes, its links and its structure
 // element.
 func (b *builder) slideContent(s *Slide, n int, w, h float64) ([]compose.Fragment, []compose.Link, *compose.StructElem) {

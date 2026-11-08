@@ -32,7 +32,7 @@ const (
 	notesInsetY = 0.125 * 72 / 2.54
 )
 
-// notesPage draws the notes page of the slide s, the n-th written: the
+// notesPage draws the notes page of the slide s, numbered n: the
 // slide scaled into the page's upper part inside a hairline frame, its
 // notes below, as Impress's default notes master places them.
 func (b *builder) notesPage(s *Slide, n int) (*compose.Page, *compose.StructElem) {
