@@ -411,7 +411,7 @@ func opaque(frags []compose.Fragment) []compose.Fragment {
 	out := frags[:0]
 	for _, f := range frags {
 		if p, ok := f.(*compose.Path); ok {
-			if p.Fill != nil && p.Fill.Color.A <= 0 {
+			if p.Fill != nil && p.Fill.Shading == nil && p.Fill.Color.A <= 0 {
 				p.Fill = nil
 			}
 			if p.Stroke != nil && p.Stroke.Color.A <= 0 {
