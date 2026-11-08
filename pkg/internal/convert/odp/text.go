@@ -221,8 +221,8 @@ const maxTabStops = 64
 // style:text-properties), the automatic colour kept apart until the
 // background is known.
 type runState struct {
-	style                 slides.RunStyle
-	auto                  bool
+	style slides.RunStyle
+	auto  bool
 	// scale is the size the text position gives the text, a fraction of
 	// its font size, 0 for none.
 	scale                 float64
@@ -452,7 +452,7 @@ func (r *reader) paragraph(p *odf.Element, tc *textCtx, lc listCtx) slides.Parag
 		Align: ps.align, Level: lv,
 		MarginLeft: ps.marginL, Indent: ps.indent, MarginRight: ps.marginR,
 		LineSpacing: ps.spacing, LineSpacingPoints: ps.spacingPts, LineSpacingAtLeast: ps.atLeast,
-		DefaultTab: ps.defaultTab,
+		DefaultTab:  ps.defaultTab,
 		SpaceBefore: ps.before, SpaceAfter: ps.after, RightToLeft: ps.rtl,
 	}
 	if lc.inList && !lc.header {

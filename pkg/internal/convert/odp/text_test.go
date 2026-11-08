@@ -272,8 +272,8 @@ func TestRead_ParagraphSpacingTabsAndRise(t *testing.T) {
 
 func TestRead_TextLinkJumps(t *testing.T) {
 	t.Parallel()
-	f := flat{body: page(`<draw:frame svg:width="10cm" svg:height="8cm"><draw:text-box><text:p>` +
-		`<text:a xlink:href="#Slide 2">a</text:a><text:a xlink:href="#shape">b</text:a><text:a xlink:href="#nowhere">c</text:a><text:a xlink:href="https://example.com">d</text:a>` +
+	f := flat{body: page(`<draw:frame svg:width="10cm" svg:height="8cm"><draw:text-box><text:p>`+
+		`<text:a xlink:href="#Slide 2">a</text:a><text:a xlink:href="#shape">b</text:a><text:a xlink:href="#nowhere">c</text:a><text:a xlink:href="https://example.com">d</text:a>`+
 		`</text:p></draw:text-box></draw:frame>`) +
 		`<draw:page draw:name="page2" draw:master-page-name="Default"><draw:g><draw:rect draw:name="shape" svg:width="1cm" svg:height="1cm"/></draw:g></draw:page>`}
 	doc, _ := read(t, f.bytes())
