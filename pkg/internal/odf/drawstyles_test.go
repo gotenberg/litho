@@ -109,6 +109,8 @@ func TestLegacyAngles(t *testing.T) {
 		{"1.2", "LibreOffice/7.1.0.3$Linux", false},
 		{"1.2", "LibreOffice/6.4.7.2$Windows", true},
 		{"1.2", "OpenOffice/4.1.2$Win32", true},
+		{"1.2", "LibreOfficeDev/6.4.0.0.alpha0$Linux_X86_64", true},
+		{"1.2", "LibreOfficeDev/7.6.0.0.alpha0$Linux_X86_64", false},
 		{"1.2", "", false},
 		{"1.1", "", true},
 		{"", "", true},

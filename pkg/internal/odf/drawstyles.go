@@ -335,8 +335,12 @@ func LegacyAngles(p *Package) bool {
 	switch {
 	case strings.HasPrefix(gen, "OpenOffice"), strings.HasPrefix(gen, "Apache_OpenOffice"), strings.HasPrefix(gen, "StarOffice"):
 		return true
-	case strings.HasPrefix(gen, "LibreOffice/"):
-		major, _, _ := strings.Cut(strings.TrimPrefix(gen, "LibreOffice/"), ".")
+	case strings.HasPrefix(gen, "LibreOffice/"), strings.HasPrefix(gen, "LibreOfficeDev/"):
+		// A development build names itself LibreOfficeDev (odp:
+		// sd/tdf127379's LibreOfficeDev/6.4 gradients of draw:angle 300
+		// print turned 30 degrees).
+		_, ver, _ := strings.Cut(gen, "/")
+		major, _, _ := strings.Cut(ver, ".")
 		n, err := strconv.Atoi(major)
 		return err == nil && n < 7
 	}
