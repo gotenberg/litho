@@ -138,7 +138,7 @@ func (rd *renderer) drawDataTable(d *dim, t *dataTable) {
 		vals := rd.data(ts.s.Values)
 		for j := 0; j < n; j++ {
 			x0 := d.inner.X + float64(j)*colW
-			if txt := vals.label(j); txt != "" {
+			if txt := vals.label(j, rd.c.Locale); txt != "" {
 				cell(txt, x0, x0+colW, y, alignCenter, 0)
 			}
 			col := j + 1

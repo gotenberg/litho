@@ -43,7 +43,7 @@ func (rd *renderer) legendEntries(st TextStyle, maxW float64) []legendEntry {
 			s := g.Series[0]
 			cnt := max(s.Values.Len(), s.Categories.Len())
 			for j := 0; j < cnt && len(out) < maxLegendEntries; j++ {
-				name := s.Categories.label(j)
+				name := s.Categories.label(j, rd.c.Locale)
 				if name == "" && s.Categories.Len() == 0 {
 					name = formatGeneral(float64(j + 1))
 				}

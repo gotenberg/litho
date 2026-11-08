@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numfmt"
 )
 
 // layoutPasses is how often the plot area is fitted to its axis labels:
@@ -32,6 +33,8 @@ type dim struct {
 	lo, hi       float64
 	// percent formats the ticks as percentages of a percent-stacked group.
 	percent bool
+	// loc is the separators of the chart's locale.
+	loc numfmt.Locale
 	// other is the crossing dimension.
 	other *dim
 
@@ -340,7 +343,7 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 			}
 		}
 	}
-	x := &dim{ax: c.axisAt(xAxis)}
+	x := &dim{ax: c.axisAt(xAxis), loc: c.Locale}
 	horizontal := g0.Kind == Bar && g0.Horizontal
 	x.vertical = horizontal
 	if xy {
@@ -372,7 +375,7 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 			if len(ys) >= maxValueAxes {
 				y = ys[len(ys)-1]
 			} else {
-				y = &dim{ax: c.axisAt(key), zero: true, border: true, other: x, vertical: !horizontal}
+				y = &dim{ax: c.axisAt(key), zero: true, border: true, other: x, vertical: !horizontal, loc: c.Locale}
 				y.lo, y.hi = math.Inf(1), math.Inf(-1)
 				if y.ax != nil {
 					y.format = y.ax.Format
@@ -402,7 +405,7 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 				x.n = min(max(x.n, vals.Len(), cats.Len()), MaxPoints)
 				if x.names == nil && cats.Len() > 0 {
 					for i := range min(cats.Len(), MaxPoints) {
-						x.names = append(x.names, cats.labelAs(i, x.format))
+						x.names = append(x.names, cats.labelAs(i, x.format, c.Locale))
 					}
 				}
 			}
@@ -538,7 +541,7 @@ func (d *dim) style() TextStyle {
 
 // tickText formats a tick value of d.
 func (d *dim) tickText(v float64) string {
-	return formatLabel(d.format, v)
+	return formatLabel(d.format, v, d.loc)
 }
 
 // placeLabels lays out d's tick labels along its axis.

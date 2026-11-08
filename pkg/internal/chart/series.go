@@ -327,7 +327,7 @@ func (rd *renderer) labelText(g *Group, s *Series, j int, v float64, lb Labels, 
 	}
 	if lb.ShowCategory {
 		cats := rd.data(s.Categories)
-		name := cats.label(j)
+		name := cats.label(j, rd.c.Locale)
 		if name == "" {
 			name = formatGeneral(float64(j + 1))
 		}
@@ -338,7 +338,7 @@ func (rd *renderer) labelText(g *Group, s *Series, j int, v float64, lb Labels, 
 		if f == "" {
 			f = rd.data(s.Values).Format
 		}
-		parts = append(parts, formatLabel(f, v))
+		parts = append(parts, formatLabel(f, v, rd.c.Locale))
 	}
 	if lb.ShowPercent && !math.IsNaN(pct) && (g.Kind == Pie || g.Kind == Doughnut || g.Grouping == PercentStacked) {
 		f := lb.PercentFormat
@@ -348,7 +348,7 @@ func (rd *renderer) labelText(g *Group, s *Series, j int, v float64, lb Labels, 
 				f = lb.Format
 			}
 		}
-		parts = append(parts, formatLabel(f, pct))
+		parts = append(parts, formatLabel(f, pct, rd.c.Locale))
 	}
 	sep := lb.Separator
 	if sep == "" {
@@ -379,7 +379,7 @@ func (rd *renderer) customLabel(g *Group, s *Series, j int, v float64, lb Labels
 				if code == "" {
 					code = rd.data(s.Values).Format
 				}
-				b.WriteString(formatLabel(code, v))
+				b.WriteString(formatLabel(code, v, rd.c.Locale))
 			}
 		case FieldPercent:
 			if !math.IsNaN(pct) && (g.Kind == Pie || g.Kind == Doughnut || g.Grouping == PercentStacked) {
@@ -387,10 +387,10 @@ func (rd *renderer) customLabel(g *Group, s *Series, j int, v float64, lb Labels
 				if code == "" {
 					code = "0%"
 				}
-				b.WriteString(formatLabel(code, pct))
+				b.WriteString(formatLabel(code, pct, rd.c.Locale))
 			}
 		case FieldCategory:
-			b.WriteString(rd.data(s.Categories).label(j))
+			b.WriteString(rd.data(s.Categories).label(j, rd.c.Locale))
 		case FieldSeries:
 			b.WriteString(s.Name)
 		}

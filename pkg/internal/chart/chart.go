@@ -2,6 +2,7 @@ package chart
 
 import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
@@ -48,6 +49,10 @@ type Chart struct {
 	// Resolver, when set, supplies the values of a series whose file holds
 	// no cache, from its range reference.
 	Resolver Resolver
+	// Locale is the separators the chart's numbers are written with, those
+	// of the document's language, unless a number format names its own
+	// locale; the zero Locale writes en-US's.
+	Locale numfmt.Locale
 	// Notice, when set, is a text drawn over the middle of the chart in
 	// its frame, at most two thirds of the chart's width, over the plot
 	// area and its axes: the reader's note that it does not draw the

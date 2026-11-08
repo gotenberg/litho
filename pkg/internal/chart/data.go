@@ -3,6 +3,8 @@ package chart
 import (
 	"math"
 	"strconv"
+
+	"github.com/gotenberg/litho/pkg/internal/numfmt"
 )
 
 // MaxPoints caps the points of one series a reader keeps. Anti-DoS guard,
@@ -91,8 +93,8 @@ func (d Data) number(i int) (float64, bool) {
 }
 
 // label returns point i as a category label, formatted with the data's
-// format when it is a number.
-func (d Data) label(i int) string {
+// format and loc's separators when it is a number.
+func (d Data) label(i int, loc numfmt.Locale) string {
 	if i < 0 || i >= len(d.Values) {
 		return ""
 	}
@@ -101,7 +103,7 @@ func (d Data) label(i int) string {
 	case Text:
 		return v.Text
 	case Number:
-		return formatLabel(d.Format, v.Number)
+		return formatLabel(d.Format, v.Number, loc)
 	case Empty:
 	}
 	return ""
@@ -110,11 +112,11 @@ func (d Data) label(i int) string {
 // labelAs returns point i as a category label, a number formatted with
 // code when not empty, as an axis with its own number format shows its
 // numeric categories, else with the data's format.
-func (d Data) labelAs(i int, code string) string {
+func (d Data) labelAs(i int, code string, loc numfmt.Locale) string {
 	if code != "" && i >= 0 && i < len(d.Values) && d.Values[i].Kind == Number {
-		return formatLabel(code, d.Values[i].Number)
+		return formatLabel(code, d.Values[i].Number, loc)
 	}
-	return d.label(i)
+	return d.label(i, loc)
 }
 
 // numeric reports whether every non-empty point is a number.

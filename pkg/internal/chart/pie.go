@@ -224,7 +224,7 @@ func (rd *renderer) radar(avail compose.Rect) {
 		x.n = max(x.n, rd.data(s.Values).Len(), cats.Len())
 		if x.names == nil {
 			for i := range cats.Len() {
-				x.names = append(x.names, cats.label(i))
+				x.names = append(x.names, cats.label(i, rd.c.Locale))
 			}
 		}
 	}
@@ -324,7 +324,7 @@ func (rd *renderer) radar(avail compose.Rect) {
 	}
 	if y.labelled() {
 		for _, v := range y.sc.ticks() {
-			b := rd.measure(formatLabel(y.format, v), y.style(), 0)
+			b := rd.measure(formatLabel(y.format, v, rd.c.Locale), y.style(), 0)
 			if b == nil {
 				continue
 			}
