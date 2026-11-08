@@ -409,6 +409,18 @@ func (e *engine) absHeights(b *box, cb absCB, ccb cblock) {
 	if b.kind == kindReplaced {
 		h, hSet = b.h, true
 	}
+	if k := b.sizeSrc().Height.Kind; !hSet && tSet && bSet && (k == css.MinContent || k == css.MaxContent || k == css.FitContent) {
+		// An intrinsic height keyword does not stretch between the insets:
+		// a block's min-content and max-content heights are its content's
+		// height, which fit-content keeps over the room the insets leave
+		// (CSS Sizing 3, 3.2 and 5.1), the auto margins sharing what is
+		// left, negative or not.
+		e.noPaginate++
+		b.y = cb.y
+		e.absContent(b, ccb, 0, false)
+		e.noPaginate--
+		h, hSet = constrainHeight(b, b.h, ccb), true
+	}
 	if !hSet && tSet && bSet {
 		h, hSet = max(cb.h-t-bo-b.m[css.Top]-b.m[css.Bottom]-edges, 0), true
 		h = constrainHeight(b, h, ccb)
