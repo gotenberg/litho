@@ -44,3 +44,10 @@ func TestUnits_IcIsAnEm(t *testing.T) {
 		t.Errorf("width %+v, want 30pt", got)
 	}
 }
+
+func TestTextOverflow_StringSegmentBreak(t *testing.T) {
+	t.Parallel()
+	if got := styleOf(t, `text-overflow: "Hi\A ワ\D\A x"`).TextOverflow.Text; got != "Hi ワ x" {
+		t.Errorf("text %q, want the breaks as spaces", got)
+	}
+}

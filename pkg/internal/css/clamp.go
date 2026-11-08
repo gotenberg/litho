@@ -1,5 +1,7 @@
 package css
 
+import "strings"
+
 // OverflowMark is what a line shows where its content is cut: nothing,
 // an ellipsis, or a string (CSS Overflow 4, 5.1 and 6.4).
 type OverflowMark struct {
@@ -123,7 +125,10 @@ func parseLineCount(v []token) (int, bool) {
 // mark.
 func parseMark(t token, kws map[string]MarkKind) (OverflowMark, bool) {
 	if t.typ == tString {
-		return OverflowMark{Kind: MarkString, Text: t.value}, true
+		// A segment break in the string draws as a space, as in the text
+		// it stands for (CSS Text 3, 4.1.2), and as Chromium draws it.
+		text := strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ", "\f", " ").Replace(t.value)
+		return OverflowMark{Kind: MarkString, Text: text}, true
 	}
 	if t.typ != tIdent {
 		return OverflowMark{}, false
