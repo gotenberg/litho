@@ -50,6 +50,10 @@ type document struct {
 	// footnotesPart and endnotesPart name the parts the notes come from,
 	// whose relationships their hyperlinks and pictures resolve against.
 	footnotesPart, endnotesPart string
+	// linePitch is the line pitch in points of the document grid of the
+	// section whose body is being built (17.6.5 docGrid of type lines or
+	// linesAndChars), 0 for none.
+	linePitch float64
 
 	warnings []compose.Warning
 	warned   map[string]bool

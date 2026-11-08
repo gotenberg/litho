@@ -1,6 +1,7 @@
 package docx
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -283,5 +284,32 @@ func TestHeadersFooters_UndefinedFirst(t *testing.T) {
 				t.Errorf("%s: page %q shows %q", tc.name, got, w)
 			}
 		}
+	}
+}
+
+func TestSections_DocGridSpacesLines(t *testing.T) {
+	t.Parallel()
+	sect := `<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/><w:docGrid w:type="lines" w:linePitch="360"/></w:sectPr>`
+	for _, tc := range []struct {
+		name, ppr string
+		rule      css.LineRule
+		h         float64
+	}{
+		{"one pitch", ``, css.LineRuleExact, 18},
+		{"two pitches", `<w:spacing w:line="480" w:lineRule="auto"/>`, css.LineRuleExact, 36},
+		{"off the grid", `<w:snapToGrid w:val="0"/>`, css.LineRuleCSS, 0},
+		{"exact spacing kept", `<w:spacing w:line="300" w:lineRule="exact"/>`, css.LineRuleExact, 15},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := `<w:p><w:pPr>` + tc.ppr + `</w:pPr><w:r><w:t>Text</w:t></w:r></w:p>` + sect
+			ps := role(build(t, body, nil).root, "P")
+			if len(ps) != 1 {
+				t.Fatalf("%d paragraphs", len(ps))
+			}
+			st := ps[0].Style
+			if st.LineRule != tc.rule || tc.h > 0 && math.Abs(st.LineHeight.Value-tc.h) > 0.01 {
+				t.Errorf("rule %v height %+v, want %v %.0f", st.LineRule, st.LineHeight, tc.rule, tc.h)
+			}
+		})
 	}
 }

@@ -288,6 +288,23 @@ func (d *document) pageFrame(b *ooxml.Element, s *section) *layout.PageFrame {
 	return f
 }
 
+// linePitch returns the line pitch in points of the document grid of the
+// section sp (17.6.5 docGrid), 0 when its lines keep no grid: a grid of
+// type lines or linesAndChars spaces them, the default and snapToChars
+// grids do not.
+func linePitch(sp *ooxml.Element) float64 {
+	g := sp.Child(w, "docGrid")
+	switch attrOr(g, "type") {
+	case "lines", "linesAndChars":
+	default:
+		return 0
+	}
+	if v, ok := ooxml.Twips(attrOr(g, "linePitch")); ok && v >= 1 && v <= maxFontSize {
+		return v
+	}
+	return 0
+}
+
 // body builds the document body (17.2.2) into its sections.
 func (d *document) body(root *ooxml.Element) []*section {
 	body := root.Child(w, "body")
@@ -320,6 +337,22 @@ func (d *document) body(root *ooxml.Element) []*section {
 	}
 	d.inBody = true
 	if body != nil {
+		// Each paragraph lays its lines on the document grid of the
+		// section it belongs to, whose sectPr closes the section after it.
+		var grids []float64
+		for _, e := range mergeDeleted(body.Kids()) {
+			if sp := e.Child(w, "pPr").Child(w, "sectPr"); sp != nil && e.Is(w, "p") {
+				grids = append(grids, linePitch(sp))
+			}
+		}
+		grids = append(grids, linePitch(body.Child(w, "sectPr")))
+		next := func() {
+			d.linePitch = 0
+			if len(secs) < len(grids) {
+				d.linePitch = grids[len(secs)]
+			}
+		}
+		next()
 		for _, e := range mergeDeleted(body.Kids()) {
 			if d.ctx.Err() != nil {
 				break
@@ -339,11 +372,13 @@ func (d *document) body(root *ooxml.Element) []*section {
 			}
 			if sp != nil {
 				closeSection(sp)
+				next()
 			}
 		}
 	}
 	closeSection(body.Child(w, "sectPr"))
 	d.inBody = false
+	d.linePitch = 0
 	// Name the pages: a continuous break keeps the page when its size
 	// does not change; any other break starts a page, where the first
 	// paragraph keeps only the part of its space before that the last

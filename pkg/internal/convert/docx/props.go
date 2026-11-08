@@ -351,13 +351,16 @@ type paraProps struct {
 	lineRule                                  *string
 	contextual, keepNext, keepLines, widow    *bool
 	pageBreakBefore, bidi, suppressLineNumber *bool
-	borders                                   map[string]*borderSpec
-	shading                                   *css.Color
-	noShading                                 bool
-	tabs                                      []tabSpec
-	outline                                   *int
-	numID, ilvl                               *int
-	framePr                                   *ooxml.Element
+	// snapToGrid is 17.3.1.32: false keeps the paragraph off the
+	// section's document grid.
+	snapToGrid  *bool
+	borders     map[string]*borderSpec
+	shading     *css.Color
+	noShading   bool
+	tabs        []tabSpec
+	outline     *int
+	numID, ilvl *int
+	framePr     *ooxml.Element
 	// mark holds the run properties of the paragraph mark (17.3.1.29),
 	// which also style a list label.
 	mark *runProps
@@ -394,6 +397,7 @@ func (p paraProps) merge(o *paraProps) paraProps {
 		{&p.pageBreakBefore, &o.pageBreakBefore},
 		{&p.bidi, &o.bidi},
 		{&p.suppressLineNumber, &o.suppressLineNumber},
+		{&p.snapToGrid, &o.snapToGrid},
 	} {
 		if *f.src != nil {
 			*f.dst = *f.src
@@ -528,6 +532,8 @@ func (d *document) parseParaProps(e *ooxml.Element) *paraProps {
 			p.bidi = ptr(ooxml.Toggle(c))
 		case "suppressLineNumbers":
 			p.suppressLineNumber = ptr(ooxml.Toggle(c))
+		case "snapToGrid":
+			p.snapToGrid = ptr(ooxml.Toggle(c))
 		case "pBdr":
 			p.borders = map[string]*borderSpec{}
 			for _, b := range c.Kids() {

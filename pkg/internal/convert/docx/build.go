@@ -439,6 +439,9 @@ func (d *document) paraStyle(pp paraProps, mark runProps) (*css.Style, float64) 
 	if rule == css.LineRuleMultiple {
 		st.LineHeight = css.Dimension{Kind: css.Number, Value: lineMult}
 	}
+	if d.linePitch > 0 && rule != css.LineRuleExact && (pp.snapToGrid == nil || *pp.snapToGrid) {
+		d.snapLines(st, d.linePitch, lineMult)
+	}
 	st.TextDecoration = 0
 	st.BackgroundColor = css.Transparent
 	st.VerticalAlign = css.VerticalAlign{}
@@ -624,6 +627,49 @@ func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
 	}
 	n.Style.ListStylePosition = css.Inside
 	n.Marker = &layout.Node{Kind: layout.Element, Style: ms, Children: []*layout.Node{{Kind: layout.Text, Style: ms, Text: label + suffix}}}
+}
+
+// snapLines lays the lines of the paragraph style st on a document grid
+// of line pitch pitch (17.6.5 docGrid, type lines): each line takes the
+// whole pitches its natural height, times the proportional spacing mult
+// when not 0, needs, as LibreOffice spaces the lines of a page with a
+// text grid. The line keeps the baseline of an exact line of that
+// height, an approximation: Writer centres the glyphs in it.
+//
+// # Corpus evidence
+//
+//   - docx: ooxmlexport/cjklist34.docx, a grid of 18 points, prints 12
+//     point lines 18 points apart, each baseline 14.2 points below its
+//     line's top.
+func (d *document) snapLines(st *css.Style, pitch, mult float64) {
+	h := d.naturalLine(st)
+	if h <= 0 {
+		return
+	}
+	if mult > 0 {
+		h *= mult
+	}
+	n := max(math.Ceil(h/pitch-1e-6), 1)
+	st.LineRule = css.LineRuleExact
+	st.LineHeight = css.Pts(n * pitch)
+}
+
+// naturalLine returns the height of a line of text in the style st, its
+// face's ascent and descent at its size, 0 when it cannot be shaped.
+func (d *document) naturalLine(st *css.Style) float64 {
+	if d.fonts == nil {
+		return 0
+	}
+	ts := text.Style{Families: text.BrowserFamilies(st.FontFamilies), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: st.FontSize}
+	p, _, err := d.fonts.Shape(d.ctx, []text.ParagraphRun{{Text: "X", Style: ts}}, text.ParagraphOptions{})
+	if err != nil || p.Len() == 0 {
+		return 0
+	}
+	h := 0.0
+	for _, sp := range p.Line(0, p.Len(), false).Spans {
+		h = max(h, sp.Ascent+sp.Descent)
+	}
+	return h
 }
 
 // nextTabStop returns the first tab stop of the paragraph style st past x,
