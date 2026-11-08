@@ -95,15 +95,16 @@ func (r *reader) fill(p odf.Props, def string) slides.Fill {
 		if rep == "" {
 			rep = "repeat"
 		}
-		if w, ok := odf.Length(p.Get("draw:fill-image-width")); ok && w > 0 && rep != "stretch" {
-			if h, ok := odf.Length(p.Get("draw:fill-image-height")); ok && h > 0 {
-				sized := *pic
-				sized.Width, sized.Height = w, h
-				pic = &sized
-			}
-		}
+		size := fillImageSize{w: pic.Width, h: pic.Height}
+		size.read(p.Get("draw:fill-image-width"), &size.w, &size.relW)
+		size.read(p.Get("draw:fill-image-height"), &size.h, &size.relH)
 		if rep == "no-repeat" {
-			return slides.Fill{Kind: slides.FillPicture, Picture: placedOnce(pic, p.Get("draw:fill-image-ref-point"))}
+			return slides.Fill{Kind: slides.FillPicture, Picture: placedOnce(pic, p.Get("draw:fill-image-ref-point"), size)}
+		}
+		if rep == "repeat" && size.relW == 0 && size.relH == 0 && (size.w != pic.Width || size.h != pic.Height) {
+			sized := *pic
+			sized.Width, sized.Height = size.w, size.h
+			pic = &sized
 		}
 		if p.Get("draw:fill-image-ref-point") != "" && rep == "repeat" {
 			r.warn("bitmap-tile-origin", "a tiled picture fill's reference point and offsets are not applied: the tiles start at the corner")
@@ -398,16 +399,40 @@ func (r *reader) textBodyProps(tb *slides.TextBody, p odf.Props, frame bool) {
 // (the column dialog's maximum).
 const maxColumns = 16
 
+// fillImageSize is the size a picture fill paints its picture at
+// (ODF 1.3, Part 3, 20.128 draw:fill-image-width and its height twin): a
+// length, or a fraction of the filled area when relW or relH is set.
+type fillImageSize struct {
+	w, h       float64
+	relW, relH float64
+}
+
+// read reads one side: a positive length or percentage replaces the
+// natural size; 0 keeps it.
+func (fillImageSize) read(v string, abs, rel *float64) {
+	if f, ok := odf.Percent(v); ok && f > 0 {
+		*rel = f
+	} else if l, ok := odf.Length(v); ok && l > 0 {
+		*abs = l
+	}
+}
+
 // placedOnce returns a picture that, stretched over an area as the model
-// draws a fill picture, paints pic once at its own size at the reference
-// point ref of the area (ODF 1.3, Part 3, 20.125 draw:fill-image-ref-point:
+// draws a fill picture, paints pic once at size at the reference point
+// ref of the area (ODF 1.3, Part 3, 20.125 draw:fill-image-ref-point:
 // top-left, top, top-right, left, center, right, bottom-left, bottom,
 // bottom-right; center when absent), as Impress draws a fill of
 // style:repeat no-repeat (19.515).
-func placedOnce(pic *layout.Picture, ref string) *layout.Picture {
+func placedOnce(pic *layout.Picture, ref string, size fillImageSize) *layout.Picture {
 	src := pic
 	return &layout.Picture{Width: pic.Width, Height: pic.Height, NoRatio: true, Vector: func(ctx context.Context, area compose.Rect) []compose.Fragment {
-		w, h := src.Width, src.Height
+		w, h := size.w, size.h
+		if size.relW > 0 {
+			w = area.Width * size.relW
+		}
+		if size.relH > 0 {
+			h = area.Height * size.relH
+		}
 		x := area.X + (area.Width-w)/2
 		y := area.Y + (area.Height-h)/2
 		if strings.Contains(ref, "left") {
