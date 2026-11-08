@@ -185,8 +185,12 @@ func TestShades_Blink(t *testing.T) {
 	tests := []struct {
 		in, dark, light compose.Color
 	}{
-		{compose.Color{A: 1}, compose.Color{A: 1}, compose.Color{R: 0x54 / 255.0, G: 0x54 / 255.0, B: 0x54 / 255.0, A: 1}},
-		{compose.Color{B: 1, A: 1}, compose.Color{B: 2.0 / 3, A: 1}, compose.Color{B: 1, A: 1}},
+		// Too dark to darken (Chromium 9.0.0 print): the lighter shade and
+		// its lighter.
+		{compose.Color{A: 1}, compose.Color{R: 0x54 / 255.0, G: 0x54 / 255.0, B: 0x54 / 255.0, A: 1}, compose.Color{R: 0xa8 / 255.0, G: 0xa8 / 255.0, B: 0xa8 / 255.0, A: 1}},
+		{compose.Color{R: 0x21 / 255.0, A: 1}, compose.Color{R: 117 / 255.0, A: 1}, compose.Color{R: 201 / 255.0, A: 1}},
+		{compose.Color{G: 0x30 / 255.0, A: 1}, compose.Color{A: 1}, compose.Color{G: 132 / 255.0, A: 1}},
+		{compose.Color{B: 1, A: 1}, compose.Color{B: 171 / 255.0, A: 1}, compose.Color{B: 1, A: 1}},
 	}
 	for _, tt := range tests {
 		d, l := shades(tt.in)

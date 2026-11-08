@@ -353,21 +353,68 @@ func positions(rep css.Repeat, start, size, areaStart, areaSize, clipStart, clip
 // shades returns the darker and lighter shade of c a two-tone border style
 // draws with. CSS Backgrounds 3, 4.2 leaves them to the user agent; these
 // are Blink's (Color::Dark and Color::Light), which the Chromium
-// references draw: the brightest channel moved down or up by a third of
-// the range, the others scaled with it, and black lightened to #545454.
+// references draw: the brightest channel moved down or up by 0.33 of the
+// range, the others scaled with it, and black lightened to #545454. A
+// colour of a relative luminance at most #202020's is too dark to darken:
+// its shades are its lighter one and that one's lighter, as Chromium
+// 9.0.0's print measures (#000 draws #545454 and #a8a8a8, #210000 (117, 0,
+// 0) and (201, 0, 0), #003000 black and (0, 132, 0)).
 func shades(c compose.Color) (compose.Color, compose.Color) {
+	if veryDark(c) {
+		l := lighter(c)
+		return l, lighter(l)
+	}
 	v := max(c.R, c.G, c.B)
-	dark := compose.Color{A: c.A}
-	if v > 0 {
-		k := max(v-1.0/3, 0) / v
-		dark = compose.Color{R: c.R * k, G: c.G * k, B: c.B * k, A: c.A}
+	if v <= 0 {
+		return compose.Color{A: c.A}, lighter(c)
 	}
-	light := compose.Color{R: 0x54 / 255.0, G: 0x54 / 255.0, B: 0x54 / 255.0, A: c.A}
-	if v > 0 {
-		k := min(v+1.0/3, 1) / v
-		light = compose.Color{R: min(c.R*k, 1), G: min(c.G*k, 1), B: min(c.B*k, 1), A: c.A}
+	return blinkScale(c, max(v-blinkShift, 0)/v), lighter(c)
+}
+
+// blinkShift is the step of Blink's Color::Dark and Color::Light, 0.33 of
+// the range rather than a third: Chromium draws #210000's lighter shade
+// as 117, which a third would round to 118.
+const blinkShift = 0.33
+
+// lighter is Blink's Color::Light: the brightest channel up by 0.33 of the
+// range, the others scaled with it, black to #545454.
+func lighter(c compose.Color) compose.Color {
+	v := max(c.R, c.G, c.B)
+	if v <= 0 {
+		return compose.Color{R: 0x54 / 255.0, G: 0x54 / 255.0, B: 0x54 / 255.0, A: c.A}
 	}
-	return dark, light
+	return blinkScale(c, min(v+blinkShift, 1)/v)
+}
+
+// blinkScale scales the channels of c by k and truncates them to 8 bits
+// as Blink does (the channel times just under 256, rounded down).
+func blinkScale(c compose.Color, k float64) compose.Color {
+	ch := func(v float64) float64 { return min(math.Floor(min(max(v*k, 0), 1)*255.99998), 255) / 255 }
+	return compose.Color{R: ch(c.R), G: ch(c.G), B: ch(c.B), A: c.A}
+}
+
+// veryDark reports a colour whose relative luminance (WCAG 2, sRGB) is at
+// most #202020's, the bound Chromium's measured shades switch at: #202020
+// and #300000 are very dark, #212121 and #003000 are not.
+func veryDark(c compose.Color) bool {
+	lin := func(v float64) float64 {
+		v = min(max(v, 0), 1)
+		if v <= 0.04045 {
+			return v / 12.92
+		}
+		return math.Pow((v+0.055)/1.055, 2.4)
+	}
+	l := 0.2126*lin(c.R) + 0.7152*lin(c.G) + 0.0722*lin(c.B)
+	return l <= lin(0x20/255.0)+1e-9
+}
+
+// currentShades are the dark and light shades of a two-tone border whose
+// colour is currentColor: Blink paints #eeeeee and its darker #9a9a9a
+// whatever the color property, a legacy quirk Chromium 9.0.0's print
+// measures on every color tried (black, #800000).
+func currentShades(a float64) (compose.Color, compose.Color) {
+	g := func(v float64) compose.Color { return compose.Color{R: v / 255, G: v / 255, B: v / 255, A: a} }
+	return g(0x9a), g(0xee)
 }
 
 // border paints the borders of box b of style st on the border box r with
@@ -422,7 +469,7 @@ func (p *painter) border(b *box, st *css.Style, r compose.Rect, radii [4][2]floa
 	if uniform && (st.Border[ref].Style == css.Solid || st.Border[ref].Style == css.Double) {
 		// One colour all round needs no cut at the corners.
 		g := &ditem{}
-		p.side(g, css.Side(ref), st.Border[ref], r, radii, inner, iradii, bd)
+		p.side(g, css.Side(ref), st.Border[ref], st.BorderColorIsCurrent(css.Side(ref)), r, radii, inner, iradii, bd)
 		for _, k := range g.kids {
 			p.emit(b, false, k.frag, r.Y, r.Y+r.Height, -1)
 		}
@@ -447,7 +494,7 @@ func (p *painter) border(b *box, st *css.Style, r compose.Rect, radii [4][2]floa
 			// A stroke along the side stays inside it: no clip.
 			g = &ditem{group: true, opacity: 1}
 		}
-		p.side(g, css.Side(s), st.Border[s], r, radii, inner, iradii, bd)
+		p.side(g, css.Side(s), st.Border[s], st.BorderColorIsCurrent(css.Side(s)), r, radii, inner, iradii, bd)
 		if len(g.kids) == 0 {
 			continue
 		}
@@ -574,8 +621,9 @@ func sideClip(s css.Side, r, in compose.Rect) []compose.PathOp {
 }
 
 // side draws one border side of style bdr into g, which clips it to the
-// side's trapezoid.
-func (p *painter) side(g *ditem, s css.Side, bdr css.Border, r compose.Rect, radii [4][2]float64, inner compose.Rect, iradii [4][2]float64, bd [4]float64) {
+// side's trapezoid; current reports a border colour of currentColor,
+// which the two-tone styles paint as [currentShades] say.
+func (p *painter) side(g *ditem, s css.Side, bdr css.Border, current bool, r compose.Rect, radii [4][2]float64, inner compose.Rect, iradii [4][2]float64, bd [4]float64) {
 	c, _ := colorOf(bdr.Color)
 	fill := func(ops []compose.PathOp, col compose.Color) {
 		g.kids = append(g.kids, &ditem{frag: &compose.Path{Ops: ops, Fill: &compose.Fill{Color: col, Rule: compose.EvenOdd}}})
@@ -588,6 +636,9 @@ func (p *painter) side(g *ditem, s css.Side, bdr css.Border, r compose.Rect, rad
 		return insetRect(r, radii, d)
 	}
 	dark, light := shades(c)
+	if current {
+		dark, light = currentShades(c.A)
+	}
 	topLeft := s == css.Top || s == css.Left
 	switch bdr.Style {
 	case css.Double:
