@@ -245,6 +245,9 @@ func (p *chartReader) read(root *Element) {
 	c.Palette, c.PaletteCycleTint = p.palette(accents), true
 	pa := ch.Child(NSChart, "plotArea")
 	c.PlotArea = p.frame(pa.Child(NSChart, "spPr"), p.autoFrame(false))
+	if l := manualLayout(pa); l != nil && l.Width > 0 && l.Height > 0 {
+		c.PlotLayout = l
+	}
 	p.readAxes(pa)
 	for _, g := range pa.Kids() {
 		if g.Space != NSChart {
@@ -760,6 +763,7 @@ func (p *chartReader) readTitle(ch *Element) {
 		Style:   p.textStyle(own, 18, true, 1.2),
 		Frame:   p.frame(t.Child(NSChart, "spPr"), chart.Frame{}),
 		Overlay: boolVal(t, "overlay", false),
+		Layout:  manualLayout(t),
 	}
 }
 
@@ -778,6 +782,7 @@ func (p *chartReader) readLegend(lg *Element) {
 	}
 	l.Style = p.textStyle(p.textProps(lg.Child(NSChart, "txPr")), 10, false, 1)
 	l.Frame = p.frame(lg.Child(NSChart, "spPr"), chart.Frame{})
+	l.Layout = manualLayout(lg)
 	for _, e := range lg.Kids() {
 		if e.Is(NSChart, "legendEntry") && boolVal(e, "delete", false) {
 			if v, ok := Int(childVal(e, "idx")); ok && v >= 0 {
@@ -1026,4 +1031,32 @@ func isDateCode(code string) bool {
 		}
 	}
 	return false
+}
+
+// manualLayout reads the c:layout of e (ECMA-376 Part 1, 21.2.2.88 and
+// 21.2.2.95 manualLayout), nil when automatic. Only a corner in the edge
+// mode places a part: oox's LayoutConverter leaves the factor mode, an
+// offset from the automatic place and the default, automatic. A size in
+// the edge mode is the far edge, in the factor mode the size.
+func manualLayout(e *Element) *chart.ManualLayout {
+	ml := e.Child(NSChart, "layout").Child(NSChart, "manualLayout")
+	if ml == nil || childVal(ml, "xMode") != "edge" || childVal(ml, "yMode") != "edge" {
+		return nil
+	}
+	clamp := func(v float64) float64 {
+		if math.IsNaN(v) {
+			return 0
+		}
+		return math.Max(0, math.Min(1, v))
+	}
+	l := &chart.ManualLayout{X: clamp(floatVal(ml, "x")), Y: clamp(floatVal(ml, "y")), Inner: childVal(ml, "layoutTarget") == "inner"}
+	size := func(pos float64, local, mode string) float64 {
+		v := clamp(floatVal(ml, local))
+		if childVal(ml, mode) == "edge" {
+			v -= pos
+		}
+		return math.Max(0, math.Min(v, 1-pos))
+	}
+	l.Width, l.Height = size(l.X, "w", "wMode"), size(l.Y, "h", "hMode")
+	return l
 }

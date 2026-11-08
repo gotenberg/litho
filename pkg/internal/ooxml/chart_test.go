@@ -394,3 +394,31 @@ func TestChartFromElement_Date1904(t *testing.T) {
 		t.Errorf("categories %v, values %v", s.Categories.Values, s.Values.Values)
 	}
 }
+
+func TestManualLayout(t *testing.T) {
+	ml := func(kids string) *Element {
+		root, err := Parse(context.Background(), []byte(`<c:plotArea xmlns:c="`+NSChart+`"><c:layout><c:manualLayout>`+kids+`</c:manualLayout></c:layout></c:plotArea>`), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return root
+	}
+	tests := []struct {
+		name string
+		kids string
+		want *chart.ManualLayout
+	}{
+		{"edge corner, factor size", `<c:layoutTarget val="inner"/><c:xMode val="edge"/><c:yMode val="edge"/><c:x val="0.1"/><c:y val="0.2"/><c:w val="0.5"/><c:h val="0.6"/>`, &chart.ManualLayout{X: 0.1, Y: 0.2, Width: 0.5, Height: 0.6, Inner: true}},
+		{"edge size", `<c:xMode val="edge"/><c:yMode val="edge"/><c:wMode val="edge"/><c:hMode val="edge"/><c:x val="0.1"/><c:y val="0.2"/><c:w val="0.5"/><c:h val="0.6"/>`, &chart.ManualLayout{X: 0.1, Y: 0.2, Width: 0.4, Height: 0.4}},
+		{"corner only", `<c:xMode val="edge"/><c:yMode val="edge"/><c:x val="0.7"/><c:y val="0.1"/>`, &chart.ManualLayout{X: 0.7, Y: 0.1}},
+		{"factor corner", `<c:x val="0.1"/><c:y val="0.2"/>`, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := manualLayout(ml(tt.kids))
+			if (got == nil) != (tt.want == nil) || got != nil && math.Abs(got.X-tt.want.X)+math.Abs(got.Y-tt.want.Y)+math.Abs(got.Width-tt.want.Width)+math.Abs(got.Height-tt.want.Height) > 1e-9 || got != nil && got.Inner != tt.want.Inner {
+				t.Errorf("manualLayout = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
