@@ -33,8 +33,6 @@ func TestConvert_Errors(t *testing.T) {
 		{"no main part", zipFiles(t, noMain), testFonts(t), office.Options{}, office.ErrMalformed},
 		{"not a document", zipFiles(t, notWord), testFonts(t), office.Options{}, office.ErrMalformed},
 		{"too large", good, testFonts(t), office.Options{MaxInputBytes: 10}, office.ErrInputTooLarge},
-		{"bad page range", good, testFonts(t), office.Options{PageRanges: "3-1"}, office.ErrInvalidOptions},
-		{"no page selected", good, testFonts(t), office.Options{PageRanges: "5"}, office.ErrInvalidOptions},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -108,10 +106,6 @@ func TestConvert_TextAndPages(t *testing.T) {
 	}
 	if strings.Contains(docText(doc), "GONE") {
 		t.Error("deleted text drawn")
-	}
-	ranged := convertBytes(t, docx(t, body, nil), office.Options{PageRanges: "2-"})
-	if len(ranged.Pages) != 2 || pageText(ranged.Pages[0]) != "after the break" {
-		t.Errorf("page range 2- kept %d pages: %q", len(ranged.Pages), docText(ranged))
 	}
 }
 

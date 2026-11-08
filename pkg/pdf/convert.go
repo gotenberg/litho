@@ -210,9 +210,8 @@ func WithLandscape(landscape bool) ConvertOption {
 // WithPreferCSSPageSize lets an @page size descriptor of a [FormatHTML]
 // source set the page size and orientation (CSS Page 3, 5.1). Without it,
 // the default, the paper is the page: a document whose @page size differs
-// is laid out at its @page size and scaled down to fit the paper, as
-// Chromium prints without preferCSSPageSize. @page margins apply either
-// way.
+// is laid out at its @page size and scaled down to fit the paper, centred
+// on it, never scaled up. @page margins apply either way.
 func WithPreferCSSPageSize(prefer bool) ConvertOption {
 	return func(o *convertOptions) { o.preferCSSPageSize = prefer }
 }
@@ -227,28 +226,30 @@ func WithPrintScale(scale float64) ConvertOption {
 }
 
 // WithSinglePage writes a [FormatHTML] source on one page sized to its
-// content, as Gotenberg's singlePage does. The route measures the document
-// on Chromium's screen before printing, so the content is measured in one
-// continuous column 800 CSS pixels wide, forced breaks ignored, at least
-// 437.12 CSS pixels tall and 800 wide: the paper becomes that tall plus the
-// top and bottom margins, and with [WithLandscape] that wide plus the left
-// and right margins. The document is printed on it as usual and only the
-// first page is written, whatever [WithPageRanges] says. For a
-// [FormatXLSX], [FormatODS] or [FormatCSV] source it lays each sheet out
-// on one page the size of its content, as LibreOffice's SinglePageSheets
-// export does: the sheet's paper, scale and page breaks are ignored, and
-// [WithPaperSize] and [WithLandscape] too.
+// content: the document is measured first as a screen 800 CSS pixels wide
+// would show it, in one continuous column, forced breaks ignored, at
+// least 437.12 CSS pixels tall and 800 wide, and the paper becomes that
+// tall plus the top and bottom margins, and with [WithLandscape] that
+// wide plus the left and right margins. The document is printed on it as
+// usual and only the first page is written; [WithPageRanges] is ignored.
+// For a [FormatXLSX], [FormatODS] or [FormatCSV] source it lays each sheet
+// out on one page the size of its content: the sheet's paper, scale and
+// page breaks are ignored, and [WithPaperSize] and [WithLandscape] too.
 func WithSinglePage(single bool) ConvertOption {
 	return func(o *convertOptions) { o.singlePage = single }
 }
 
-// WithPageRanges selects the pages of a [FormatHTML], [FormatDOCX],
-// [FormatODT], [FormatXLSX], [FormatODS] or [FormatCSV] source written,
-// one-based, in document order, as "1-5, 8,
-// 11-13"; empty, the default, writes every page. A range past the last page is ignored. A selection
-// that keeps no page, a range whose start exceeds its end and a malformed
-// specification are refused with [ErrInvalidConvertOptions]. Page
-// counters in headers, footers and margin boxes count the whole document.
+// WithPageRanges selects the pages written, by the page range
+// specification [ParsePageRanges] reads ("1-3,7", "even", "odd", "last"),
+// resolved against the pages the document lays out on; empty, the
+// default, writes every page. The pages come out in the order the
+// specification lists them, a page listed twice written twice, as [Split]
+// honours a specification. A specification [ParsePageRanges] refuses,
+// including a page past the last one, fails the conversion with
+// [ErrInvalidConvertOptions], which also wraps [ErrInvalidPageRange]. The
+// selection happens after layout: page counters in headers, footers and
+// margin boxes count the whole document, a link to a page left out is
+// dropped, and an outline entry on one is replaced by its entries.
 func WithPageRanges(spec string) ConvertOption {
 	return func(o *convertOptions) { o.pageRanges = spec }
 }
@@ -256,10 +257,8 @@ func WithPageRanges(spec string) ConvertOption {
 // WithPrintBackground sets whether the canvas background of a [FormatHTML]
 // source prints. true, the default, prints every background; false drops
 // the background colours and images of the html and body elements, which
-// paint the canvas, and keeps every other element's, as Gotenberg's
-// Chromium route does with printBackground false (it injects html, body {
-// background: none !important } and makes every colour exact; Gotenberg
-// issue 1154).
+// paint the canvas, and keeps every other element's, so the page is white
+// behind content whose own colours stay exact.
 func WithPrintBackground(print bool) ConvertOption {
 	return func(o *convertOptions) { o.omitBackgrounds = !print }
 }
@@ -267,17 +266,17 @@ func WithPrintBackground(print bool) ConvertOption {
 // WithShrinkToFit sets whether a [FormatHTML] source wider than its page
 // area is shrunk to fit it. true, the default, lays it out at its content's
 // width, at most 1.5 times the area's, and draws it scaled down to the
-// area, as Chromium prints; false lays it out at the area's width and lets
-// the page clip what overflows, as WeasyPrint prints.
+// area, as browsers print a wide document; false lays it out at the
+// area's width and lets the page clip what overflows.
 func WithShrinkToFit(shrink bool) ConvertOption {
 	return func(o *convertOptions) { o.noShrinkToFit = !shrink }
 }
 
 // WithFractionalFontMetrics sets whether the lines of a [FormatHTML]
-// source use the fonts' fractional ascent, descent and line gap, as
-// WeasyPrint does. false, the default, rounds them to whole CSS pixels
-// first, as Chromium does for document text, so lines of line-height:
-// normal sit where Chromium puts them.
+// source use the fonts' fractional ascent, descent and line gap. false,
+// the default, rounds them to whole CSS pixels first, as browsers do for
+// document text, so lines of line-height: normal sit where a browser puts
+// them; true keeps the fractions, as print formatters do.
 func WithFractionalFontMetrics(fractional bool) ConvertOption {
 	return func(o *convertOptions) { o.fractionalFontMetrics = fractional }
 }
@@ -299,15 +298,14 @@ func WithConvertPassword(password string) ConvertOption {
 }
 
 // WithHeaderTemplate draws the HTML fragment html in the top margin of
-// every page of a [FormatHTML] source, as Chromium's printToPDF
-// headerTemplate: the fragment is the inner HTML of a box as wide as the
-// page and as tall as the margin, with Chromium's header stylesheet and
-// defaults, where the text of an element of class date, title, url,
-// pageNumber or totalPages is replaced by the print date
-// ([WithPrintDate]), the document title, the document URL
-// ([WithBaseURL]), the page number and the page count, and an element of
-// class text that reaches into the page area is hidden. Empty, the
-// default, draws nothing.
+// every page of a [FormatHTML] source: the fragment is the inner HTML of
+// a box as wide as the page and as tall as the margin, laid out with the
+// stylesheet and defaults of a browser's print header, where the text of
+// an element of class date, title, url, pageNumber or totalPages is
+// replaced by the print date ([WithPrintDate]), the document title, the
+// document URL ([WithBaseURL]), the page number and the page count, and
+// an element of class text that reaches into the page area is hidden.
+// Empty, the default, draws nothing.
 func WithHeaderTemplate(html string) ConvertOption {
 	return func(o *convertOptions) { o.headerTemplate = html }
 }
@@ -320,12 +318,11 @@ func WithFooterTemplate(html string) ConvertOption {
 }
 
 // WithPrintDate sets what the date class of the header and footer
-// templates of a [FormatHTML] source shows, formatted as Chromium formats
-// it for the en-US locale, "11/6/26, 10:30 AM", and what the date and
-// time fields of a spreadsheet source's headers and footers show, as Calc
-// formats them for that locale. The zero time, the default, shows
-// nothing. It is the only date of a conversion: the output never depends
-// on the clock.
+// templates of a [FormatHTML] source shows, formatted for the en-US
+// locale as "11/6/26, 10:30 AM", and what the date and time fields of a
+// spreadsheet source's headers and footers show, as "11/06/2026" and
+// "10:30:00". The zero time, the default, shows nothing. It is the only
+// date of a conversion: the output never depends on the clock.
 func WithPrintDate(t time.Time) ConvertOption {
 	return func(o *convertOptions) { o.date = t }
 }
@@ -459,11 +456,10 @@ type ConvertWarning struct {
 //
 // # Markdown
 //
-// [FormatMarkdown] reads Markdown in UTF-8 and renders it to HTML as
-// Gotenberg's Chromium markdown route does, with github.com/gomarkdown/markdown
-// at its defaults (tables, fenced code, autolinks, strikethrough,
-// definition lists, footnotes), in a document without a stylesheet whose
-// title is the first heading. That document is laid out as [FormatHTML]
+// [FormatMarkdown] reads Markdown in UTF-8 and renders it to HTML with
+// github.com/gomarkdown/markdown at its defaults (tables, fenced code,
+// autolinks, strikethrough, definition lists, footnotes), in a document
+// without a stylesheet whose title is the first heading. That document is laid out as [FormatHTML]
 // is, with every option of an HTML source: its relative images and links
 // resolve in [WithResources] or against [WithBaseURL]. The raw HTML a
 // Markdown document holds is kept, unsanitised: no script runs.
@@ -473,8 +469,8 @@ type ConvertWarning struct {
 // # DOCX and ODT
 //
 // [FormatDOCX] reads a WordprocessingML package and [FormatODT] an
-// OpenDocument text package, and lays each out as LibreOffice prints it:
-// the document's sections with their page size, orientation, margins,
+// OpenDocument text package, and lays each out as a word processor prints
+// it: the document's sections with their page size, orientation, margins,
 // columns, headers and footers, its paragraph and character styles,
 // numbering and lists, tables, pictures, footnotes and endnotes, fields,
 // hyperlinks and bookmarks. [WithPaperSize] and [WithLandscape] override
@@ -488,19 +484,19 @@ type ConvertWarning struct {
 // # XLSX, ODS and CSV
 //
 // [FormatXLSX] reads a SpreadsheetML workbook, [FormatODS] an OpenDocument
-// spreadsheet and [FormatCSV] a comma-separated values file as LibreOffice
-// Calc opens one through Gotenberg's LibreOffice route (fields separated
-// by commas, semicolons or tabs, quoted with double quotes, in UTF-8, with
-// numbers, dates and times detected), and lays them out as LibreOffice
-// prints a spreadsheet: every sheet that is not hidden, in book order, its
+// spreadsheet and [FormatCSV] a comma-separated values file (fields
+// separated by commas, semicolons or tabs, quoted with double quotes, in
+// UTF-8, with numbers, dates and times detected, one sheet named Sheet1),
+// and lays them out as a spreadsheet application prints a workbook: every
+// sheet that is not hidden, in book order, its
 // print ranges cut into pages by the sheet's page setup (paper,
 // orientation, margins, scale or fit-to-pages, page order, repeated rows
 // and columns, manual breaks), with its headers and footers, the cell
 // values formatted by their number formats and drawn with their fonts,
 // fills, borders, alignment, wrapping and rotation, merged cells, pictures,
 // charts and hyperlinks. Formulas are never evaluated: a cell shows the
-// value its file stores. A CSV file prints without a header, as the route
-// prints one. [WithPaperSize] and [WithLandscape] override every sheet's
+// value its file stores. A CSV file prints with a page footer and no
+// header. [WithPaperSize] and [WithLandscape] override every sheet's
 // page setup; [WithSinglePage] lays each sheet out on one page the size of
 // its content; [WithPageRanges], [WithOutline], [WithConvertPassword] and
 // [WithPrintDate] apply; the other options are ignored as for a DOCX
@@ -515,7 +511,8 @@ type ConvertWarning struct {
 //
 // Convert returns an error wrapping [ErrUnsupportedFormat] for a format it
 // does not read, [ErrInvalidLimits] or [ErrInvalidConvertOptions] for an
-// option out of range, [ErrConvertInputTooLarge] past
+// option out of range or a page range specification the document has no
+// pages for, [ErrConvertInputTooLarge] past
 // [Limits.MaxConvertInputBytes] or for an HTML document past the
 // converter's element, cascade or box caps, [ErrConvertTooManyPages] past
 // [Limits.MaxConvertPages], [ErrConvertNoFonts] when the font directories
@@ -592,6 +589,9 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	if err != nil {
 		return nil, err
 	}
+	if err := selectPages(doc, format, &o); err != nil {
+		return nil, err
+	}
 	if err := compose.Write(ctx, doc, dst, compose.Options{Logger: o.logger}); err != nil {
 		return nil, fmt.Errorf("writing the PDF: %w", err)
 	}
@@ -630,7 +630,6 @@ func convertHTML(ctx context.Context, src io.Reader, format Format, fonts *text.
 		PreferCSSPageSize:     o.preferCSSPageSize,
 		Scale:                 o.scale,
 		SinglePage:            o.singlePage,
-		PageRanges:            o.pageRanges,
 		OmitBackgrounds:       o.omitBackgrounds,
 		OmitOutline:           o.omitOutline,
 		NoShrinkToFit:         o.noShrinkToFit,
@@ -680,7 +679,6 @@ func convertOffice(ctx context.Context, src io.Reader, format Format, fonts *tex
 	opts := office.Options{
 		Landscape:        o.landscape,
 		Password:         o.password,
-		PageRanges:       o.pageRanges,
 		OmitOutline:      o.omitOutline,
 		SinglePageSheets: o.singlePage,
 		PrintDate:        o.date,
@@ -707,6 +705,25 @@ func convertOffice(ctx context.Context, src io.Reader, format Format, fonts *tex
 		// ErrMalformed and ErrEncrypted are the public sentinels themselves.
 		return nil, fmt.Errorf("converting %s: %w", name, err)
 	}
+}
+
+// selectPages keeps the pages of doc that o's page range specification
+// names, resolved against the pages the document laid out on with
+// [ParsePageRanges], in the order it lists them; an empty specification
+// keeps every page, and so does a single page of an HTML source, which is
+// the one page written whatever the specification says. A specification
+// [ParsePageRanges] refuses fails with [ErrInvalidConvertOptions] wrapping
+// its error.
+func selectPages(doc *compose.Document, format Format, o *convertOptions) error {
+	if o.pageRanges == "" || o.singlePage && (format == FormatHTML || format == FormatMarkdown) {
+		return nil
+	}
+	pages, err := ParsePageRanges(o.pageRanges, len(doc.Pages))
+	if err != nil {
+		return fmt.Errorf("selecting pages: %w: %w", ErrInvalidConvertOptions, err)
+	}
+	compose.SelectPages(doc, pages)
+	return nil
 }
 
 // maxConvertFontIndexes bounds the font indexes [convertFonts] keeps, one per

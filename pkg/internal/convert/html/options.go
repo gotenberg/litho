@@ -44,7 +44,7 @@ const DefaultMaxPages = limits.DefaultMaxConvertPages
 // implementation limit, not a litho guard.
 const maxPageSide = 14400
 
-// The range of [Options.Scale], Chromium's printToPDF bounds.
+// The range of [Options.Scale], the bounds of a browser's print scale.
 const (
 	// MinScale is the smallest content scale.
 	MinScale = 0.1
@@ -53,11 +53,13 @@ const (
 )
 
 // Options is the setup of an HTML conversion. The zero value asks for an A4
-// page without margins, for print, with no resources, every page written,
-// backgrounds and the outline in, no header or footer, no network.
+// page without margins, for print, with no resources, backgrounds and the
+// outline in, no header or footer, no network.
 //
-// The print options mirror what Chromium's Page.printToPDF offers, so a
-// service can run the same request through either engine.
+// The print options are litho's own. Where a browser's print dialog has
+// the same control, the option behaves as the browser does, so a document
+// prints the same way through either; each option says so where it
+// applies.
 type Options struct {
 	// PageWidth and PageHeight are the paper size in points, A4 (595.276 by
 	// 841.890) when both are zero. Each side lies in (0, 14400]. They name
@@ -65,44 +67,35 @@ type Options struct {
 	// @page size descriptor does to them.
 	PageWidth, PageHeight float64
 	// Landscape swaps the paper's width and height, so the page is
-	// PageHeight wide by PageWidth tall (Chromium's printToPDF landscape).
+	// PageHeight wide by PageWidth tall.
 	Landscape bool
 	// PreferCSSPageSize lets an @page size descriptor set the page size and
 	// orientation (CSS Page 3, 5.1). Without it, the default, the paper is
 	// the page: a document whose @page size differs is laid out at its
-	// @page size and scaled down to fit the paper, as Chromium's printToPDF
-	// does without preferCSSPageSize. @page margins apply either way.
+	// @page size and scaled down to fit the paper, as browsers print a
+	// document whose page size is not the paper's. @page margins apply
+	// either way.
 	PreferCSSPageSize bool
 	// Scale scales the content: 1 when zero, else in [MinScale, MaxScale].
 	// The page keeps its size and margins; the content is laid out in the
-	// page area divided by Scale and drawn at Scale (Chromium's printToPDF
-	// scale).
+	// page area divided by Scale and drawn at Scale, the way a browser's
+	// print scale works.
 	Scale float64
-	// SinglePage writes one page sized to the content, as Gotenberg's
-	// singlePage does: the route measures the document on Chromium's
-	// screen before printing, so the content is laid out once in one
-	// continuous column 800 CSS pixels wide, without margins or forced
-	// breaks, its height at least the screen's 437.12 CSS pixels and its
-	// width at least 800. The paper is then as tall as that height plus
-	// the top and bottom margins, and in Landscape as wide as that width
-	// plus the left and right margins; the document is printed on it as
-	// usual, forced breaks cutting, and only the first page is written.
-	// PageRanges is ignored.
+	// SinglePage writes one page sized to the content: the document is
+	// measured first as a screen 800 CSS pixels wide would show it, in one
+	// continuous column without margins or forced breaks, its height at
+	// least 437.12 CSS pixels and its width at least 800. The paper is
+	// then as tall as that height plus the top and bottom margins, and in
+	// Landscape as wide as that width plus the left and right margins;
+	// the document is printed on it as usual, forced breaks cutting, and
+	// only the first page is written.
 	SinglePage bool
-	// PageRanges selects the pages written, one-based, in document order,
-	// as "1-5, 8, 11-13"; empty writes every page. A range past the last
-	// page is ignored. A selection that keeps no page, a range whose start
-	// exceeds its end and a malformed specification fail with
-	// [ErrInvalidOptions]. Page counters in headers, footers and margin
-	// boxes count the whole document (Chromium's printToPDF pageRanges).
-	PageRanges string
 	// OmitBackgrounds drops the background colours and images of the html
 	// and body elements, which paint the canvas (CSS 2.1, 14.2), and keeps
-	// every other element's and the page box's, as Gotenberg's Chromium
-	// route prints with printBackground false: it injects html, body {
-	// background: none !important } and makes every colour exact rather
-	// than let Chromium's economy mode blank the backgrounds (Gotenberg
-	// issue 1154). Off, every background prints.
+	// every other element's and the page box's: the page comes out white
+	// behind content whose own colours are exact, which is what a browser
+	// prints with backgrounds off before its economy mode blanks the
+	// rest. Off, every background prints.
 	OmitBackgrounds bool
 	// OmitOutline leaves the document outline out. Off, the headings
 	// become the outline.
@@ -111,29 +104,28 @@ type Options struct {
 	// area's width, the page clipping what overflows, as WeasyPrint
 	// prints. Off, the default, such a document is laid out again at its
 	// content's width, at most 1.5 times the area's, and drawn scaled down
-	// to the area, as Chromium prints (blink::LocalFrameView::
+	// to the area, as browsers print (blink::LocalFrameView::
 	// ForceLayoutForPagination).
 	NoShrinkToFit bool
 	// FractionalFontMetrics lays lines out with the fonts' fractional
 	// ascent, descent and line gap, as WeasyPrint does. Off, the default,
-	// they are rounded to whole CSS pixels first, as Chromium rounds them
-	// for document text (blink::SimpleFontData::PlatformInit), which moves
-	// every line of line-height: normal to Chromium's place.
+	// they are rounded to whole CSS pixels first, as browsers round them
+	// for document text (blink::SimpleFontData::PlatformInit), which puts
+	// every line of line-height: normal where a browser puts it.
 	FractionalFontMetrics bool
 	// HeaderTemplate and FooterTemplate are HTML fragments drawn in the top
-	// and bottom margins of every page, as Chromium's printToPDF
-	// headerTemplate and footerTemplate: each is the inner HTML of
-	// Chromium's header or footer box, a box as wide as the page and as
-	// tall as the margin, with its stylesheet and defaults, where the
-	// text of an element of class date, title, url, pageNumber or
-	// totalPages is replaced by Date, the document title, BaseURL, the
+	// and bottom margins of every page: each is the inner HTML of a box as
+	// wide as the page and as tall as the margin, laid out with the
+	// template stylesheet of a browser's print header (see headerfooter.go),
+	// where the text of an element of class date, title, url, pageNumber
+	// or totalPages is replaced by Date, the document title, BaseURL, the
 	// page number and the page count, and an element of class text that
 	// reaches into the page area is hidden. Empty draws nothing.
 	HeaderTemplate, FooterTemplate string
-	// Date is what the date class of the templates shows, formatted as
-	// Chromium formats it for the en-US locale, "11/6/26, 10:30 AM". The
-	// zero time shows nothing. It is the only date of a conversion; the
-	// output never depends on the clock.
+	// Date is what the date class of the templates shows, formatted for
+	// the en-US locale as a browser's print header formats it, "11/6/26,
+	// 10:30 AM". The zero time shows nothing. It is the only date of a
+	// conversion; the output never depends on the clock.
 	Date time.Time
 	// BaseURL is the document's URL: what the url class of the templates
 	// shows, and what relative references resolve against when it is an
@@ -147,7 +139,7 @@ type Options struct {
 	// MediaFeatures are the discrete media features the @media rules
 	// evaluate against, by lowercase name, such as "prefers-color-scheme":
 	// "dark" (Media Queries 5, 2.4). A feature absent keeps its default:
-	// light, no-preference, none (Chromium's Emulation.setEmulatedMedia).
+	// light, no-preference, none.
 	MediaFeatures map[string]string
 	// MarginTop, MarginRight, MarginBottom and MarginLeft are the page
 	// margins in points, zero for none. Each is zero or more, and they leave
@@ -181,8 +173,8 @@ func (o Options) withDefaults() (Options, error) {
 		o.PageWidth, o.PageHeight = DefaultPageWidth, DefaultPageHeight
 	}
 	if o.Landscape {
-		// The paper turns before the @page rules see it, as printToPDF's
-		// landscape turns the print settings' paper
+		// The paper turns before the @page rules see it, as a browser's
+		// landscape setting turns the print settings' paper
 		// (printing::PrintSettings::SetOrientation); the margins stay on
 		// their sides.
 		o.PageWidth, o.PageHeight = o.PageHeight, o.PageWidth

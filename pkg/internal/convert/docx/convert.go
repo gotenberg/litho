@@ -8,7 +8,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
-	"github.com/gotenberg/litho/pkg/internal/convert/pagerange"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/offcrypto"
@@ -39,10 +38,6 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if fonts.Len() == 0 {
 		return nil, fmt.Errorf("converting DOCX: %w", text.ErrNoFonts)
 	}
-	ranges, err := pagerange.Parse(opts.PageRanges)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", office.ErrInvalidOptions, err)
-	}
 	data, err := office.ReadAll(ctx, src, opts.MaxInputBytes)
 	if err != nil {
 		return nil, fmt.Errorf("reading DOCX: %w", err)
@@ -60,7 +55,6 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err != nil {
 		return nil, fmt.Errorf("reading DOCX: %w", err)
 	}
-	d.ranges = ranges
 	return d.convert()
 }
 
@@ -126,24 +120,12 @@ func (d *document) lang() string {
 	return d.settings.lang
 }
 
-// assemble returns the document of the layout res: the pages the page
-// ranges select, their links and the outline kept for them, the
-// metadata and the warnings.
+// assemble returns the document of the layout res: every page with its
+// links, the outline, the metadata and the warnings. The caller selects
+// pages afterwards.
 func (d *document) assemble(res *layout.Result) (*compose.Document, error) {
-	keep, err := pagerange.Select(d.ranges, len(res.Pages))
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", office.ErrInvalidOptions, err)
-	}
-	at := make([]int, len(res.Pages))
-	for i, k := range keep {
-		at[k] = i + 1
-	}
 	dest := func(dd compose.Dest) (compose.Dest, bool) {
-		if dd.Page < 1 || dd.Page > len(at) || at[dd.Page-1] == 0 {
-			return dd, false
-		}
-		dd.Page = at[dd.Page-1]
-		return dd, true
+		return dd, dd.Page >= 1 && dd.Page <= len(res.Pages)
 	}
 	cp := d.pkg.CoreProperties(d.ctx)
 	subject := cp.Subject
@@ -159,8 +141,7 @@ func (d *document) assemble(res *layout.Result) (*compose.Document, error) {
 		Structure: res.Structure,
 		Warnings:  d.warnings,
 	}
-	for _, k := range keep {
-		pg := res.Pages[k]
+	for _, pg := range res.Pages {
 		links := pg.Links[:0:0]
 		for _, l := range pg.Links {
 			if l.Dest != nil {
@@ -184,14 +165,6 @@ func (d *document) assemble(res *layout.Result) (*compose.Document, error) {
 		}
 		doc.Outline = outline(d.headings, anchors)
 	}
-	if len(keep) < len(res.Pages) {
-		compose.PruneStructure(doc)
-	}
-	for _, wn := range res.Warnings {
-		if wn.Page > 0 && wn.Page <= len(at) {
-			wn.Page = at[wn.Page-1]
-		}
-		doc.Warnings = append(doc.Warnings, wn)
-	}
+	doc.Warnings = append(doc.Warnings, res.Warnings...)
 	return doc, nil
 }

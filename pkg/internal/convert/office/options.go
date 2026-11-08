@@ -13,13 +13,11 @@ const MaxPageSide = 14400
 
 // Options parametrises an Office conversion. The document's own page
 // setup, sections or sheets, margins, headers and footers apply; the
-// options override or select among them as Gotenberg's LibreOffice route
-// does.
+// options override or select among them.
 type Options struct {
 	// PageWidth and PageHeight, both positive, replace the page size of
-	// every section with this one, in points, the way the route's paperSize
-	// does; both zero, the default, keep each section's own. Each side lies
-	// in (0, MaxPageSide].
+	// every section with this one, in points; both zero, the default, keep
+	// each section's own. Each side lies in (0, MaxPageSide].
 	PageWidth, PageHeight float64
 	// Landscape lays every section out in landscape: a portrait section's
 	// width and height are swapped, a landscape one is kept.
@@ -28,12 +26,6 @@ type Options struct {
 	// 1.3 Part 2, 3.4 for OpenDocument). Empty refuses an encrypted document
 	// with ErrEncrypted; so does a wrong password.
 	Password string
-	// PageRanges selects the pages written, one-based, in document order,
-	// as "1-5, 8, 11-13"; empty writes every page. A range past the last
-	// page is ignored; a selection keeping no page, a start past its end or
-	// a malformed specification fails with ErrInvalidOptions. Page number
-	// fields count the whole document.
-	PageRanges string
 	// OmitOutline leaves the document outline out; otherwise the headings
 	// (the outline levels of the paragraph styles) become it, or the sheets
 	// of a spreadsheet.
@@ -58,8 +50,7 @@ type Options struct {
 }
 
 // Validate reports the first option out of range, wrapped in
-// [ErrInvalidOptions], nil when every option is in range. PageRanges is
-// checked when the page count is known.
+// [ErrInvalidOptions], nil when every option is in range.
 func (o Options) Validate() error {
 	if (o.PageWidth == 0) != (o.PageHeight == 0) {
 		return fmt.Errorf("%w: page width and height come together", ErrInvalidOptions)

@@ -146,10 +146,6 @@ func TestConvert_HeadersAndPages(t *testing.T) {
 	if pg := paper.Pages[0]; pg.Width != 612 || pg.Height != 792 {
 		t.Errorf("paper option: %vx%v", pg.Width, pg.Height)
 	}
-	ranged := convertDoc(t, doc{autoStyles: pl, masters: masters, contentAuto: auto, body: body}.pack(t), office.Options{PageRanges: "2-3"})
-	if len(ranged.Pages) != 2 || !strings.HasPrefix(pageText(ranged.Pages[0]), "HEAD 2 of 5") {
-		t.Errorf("ranges: %d pages, first %q", len(ranged.Pages), pageText(ranged.Pages[0]))
-	}
 }
 
 func TestConvert_Notes(t *testing.T) {

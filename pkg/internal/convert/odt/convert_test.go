@@ -92,8 +92,6 @@ func TestConvert_Errors(t *testing.T) {
 	}{
 		{"not a package", []byte("hello"), office.Options{}, office.ErrMalformed},
 		{"spreadsheet", []byte(`<office:document ` + nsDecl + ` office:mimetype="application/vnd.oasis.opendocument.spreadsheet"><office:body><office:spreadsheet/></office:body></office:document>`), office.Options{}, office.ErrMalformed},
-		{"bad ranges", doc{body: `<text:p>a</text:p>`}.pack(t), office.Options{PageRanges: "3-1"}, office.ErrInvalidOptions},
-		{"ranges keep nothing", doc{body: `<text:p>a</text:p>`}.pack(t), office.Options{PageRanges: "5"}, office.ErrInvalidOptions},
 		{"too large", doc{body: `<text:p>a</text:p>`}.pack(t), office.Options{MaxInputBytes: 10}, office.ErrInputTooLarge},
 	}
 	for _, tc := range cases {

@@ -10,7 +10,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
-	"github.com/gotenberg/litho/pkg/internal/convert/pagerange"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
@@ -39,10 +38,6 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	}
 	if fonts.Len() == 0 {
 		return nil, fmt.Errorf("converting ODT: %w", text.ErrNoFonts)
-	}
-	ranges, err := pagerange.Parse(opts.PageRanges)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", office.ErrInvalidOptions, err)
 	}
 	data, err := office.ReadAll(ctx, src, opts.MaxInputBytes)
 	if err != nil {
@@ -105,7 +100,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 			return nil, err
 		}
 	}
-	return b.assemble(res, ranges, opts, root.Lang)
+	return b.assemble(res, opts, root.Lang)
 }
 
 // textBody returns the office:text of office:body (ODF 1.3, Part 3,
@@ -288,28 +283,15 @@ func (b *builder) masterOf(c *odf.Element) (string, int, bool) {
 	return "", 0, false
 }
 
-// assemble returns the document of the layout res: the pages ranges keep,
-// the links among them, the outline of the headings, the metadata and the
-// warnings.
-func (b *builder) assemble(res *layout.Result, ranges []pagerange.Range, opts office.Options, lang string) (*compose.Document, error) {
-	keep, err := pagerange.Select(ranges, len(res.Pages))
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", office.ErrInvalidOptions, err)
-	}
-	at := make([]int, len(res.Pages))
-	for i, k := range keep {
-		at[k] = i + 1
-	}
+// assemble returns the document of the layout res: every page with its
+// links, the outline of the headings, the metadata and the warnings. The
+// caller selects pages afterwards.
+func (b *builder) assemble(res *layout.Result, opts office.Options, lang string) (*compose.Document, error) {
 	dest := func(d compose.Dest) (compose.Dest, bool) {
-		if d.Page < 1 || d.Page > len(at) || at[d.Page-1] == 0 {
-			return d, false
-		}
-		d.Page = at[d.Page-1]
-		return d, true
+		return d, d.Page >= 1 && d.Page <= len(res.Pages)
 	}
 	doc := &compose.Document{Metadata: b.metadata(lang), Structure: res.Structure}
-	for _, k := range keep {
-		pg := res.Pages[k]
+	for _, pg := range res.Pages {
 		links := pg.Links[:0:0]
 		for _, l := range pg.Links {
 			if l.Dest != nil {
@@ -327,16 +309,8 @@ func (b *builder) assemble(res *layout.Result, ranges []pagerange.Range, opts of
 	if !opts.OmitOutline {
 		doc.Outline = outline(b.headings, res.Anchors, dest)
 	}
-	if len(keep) < len(res.Pages) {
-		compose.PruneStructure(doc)
-	}
 	doc.Warnings = append(doc.Warnings, b.warnings...)
-	for _, w := range res.Warnings {
-		if w.Page > 0 && w.Page <= len(at) {
-			w.Page = at[w.Page-1]
-		}
-		doc.Warnings = append(doc.Warnings, w)
-	}
+	doc.Warnings = append(doc.Warnings, res.Warnings...)
 	return doc, nil
 }
 

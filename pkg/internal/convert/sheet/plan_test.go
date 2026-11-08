@@ -160,9 +160,9 @@ func TestConvert_Options(t *testing.T) {
 	if len(out.Outline) != 2 || out.Outline[0].Title != "S" || out.Outline[1].Title != "Second" || out.Outline[1].Dest.Page != 7 {
 		t.Errorf("outline %+v", out.Outline)
 	}
-	out = convert(t, two(), office.Options{PageRanges: "7", OmitOutline: true})
-	if len(out.Pages) != 1 || out.Outline != nil || runs(out.Pages[0])[0].text != "only" {
-		t.Errorf("selection kept %d pages, outline %v", len(out.Pages), out.Outline)
+	out = convert(t, two(), office.Options{OmitOutline: true})
+	if len(out.Pages) != 7 || out.Outline != nil || runs(out.Pages[6])[0].text != "only" {
+		t.Errorf("%d pages, outline %v", len(out.Pages), out.Outline)
 	}
 	out = convert(t, two(), office.Options{PageWidth: 612, PageHeight: 792, Landscape: true})
 	if pg := out.Pages[0]; pg.Width != 792 || pg.Height != 612 {
@@ -174,9 +174,6 @@ func TestConvert_Options(t *testing.T) {
 	}
 	if _, err := Convert(context.Background(), nil, pinnedFonts(t), office.Options{}); !errors.Is(err, office.ErrInvalidOptions) {
 		t.Errorf("nil document: %v", err)
-	}
-	if _, err := Convert(context.Background(), two(), pinnedFonts(t), office.Options{PageRanges: "9-x"}); !errors.Is(err, office.ErrInvalidOptions) {
-		t.Errorf("bad ranges: %v", err)
 	}
 	var empty *text.Fonts
 	if _, err := Convert(context.Background(), two(), empty, office.Options{}); !errors.Is(err, office.ErrInvalidOptions) {

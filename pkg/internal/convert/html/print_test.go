@@ -232,8 +232,6 @@ func TestConvert_SinglePage(t *testing.T) {
 			Options{Landscape: true, MarginLeft: 10, MarginRight: 20}, screenWidth + 30, screenHeight, 1},
 		{"portrait shrinks wide content to the paper", `<div style="width:1000pt;height:40pt"></div>`,
 			Options{}, DefaultPageWidth, screenHeight, 1 / 1.5},
-		{"page ranges ignored", `<p>a</p><p style="break-before:page">b</p>`,
-			Options{PageRanges: "2"}, DefaultPageWidth, screenHeight, 1},
 		{"capped at the PDF limit", `<div style="height:20000pt"></div>`,
 			Options{}, DefaultPageWidth, maxPageSide, 1},
 	}
@@ -259,67 +257,6 @@ func TestConvert_SinglePage(t *testing.T) {
 				t.Errorf("placement %+v, want a scale of %v", m, tt.scale)
 			}
 		})
-	}
-}
-
-func TestConvert_PageRanges(t *testing.T) {
-	t.Parallel()
-	src := `<a href="#h1">one</a> <a href="#h3">three</a> <a href="https://example.com/">out</a>` +
-		`<h1 id=h1>One</h1><h1 id=h2 style="break-before:page">Two</h1>` +
-		`<h1 id=h3 style="break-before:page">Three</h1><h1 id=h4 style="break-before:page">Four</h1>`
-	all := conv(t, src, Options{})
-	if len(all.Pages) != 4 || len(all.Outline) != 4 {
-		t.Fatalf("%d pages, %d outline entries, want 4 and 4", len(all.Pages), len(all.Outline))
-	}
-	doc := conv(t, src, Options{PageRanges: "3-3, 2"})
-	if len(doc.Pages) != 2 {
-		t.Fatalf("%d pages, want 2", len(doc.Pages))
-	}
-	var titles []string
-	for _, o := range doc.Outline {
-		titles = append(titles, o.Title)
-		if want := map[string]int{"Two": 1, "Three": 2}[o.Title]; o.Dest.Page != want {
-			t.Errorf("outline %q goes to page %d, want %d", o.Title, o.Dest.Page, want)
-		}
-	}
-	if got := strings.Join(titles, ","); got != "Two,Three" {
-		t.Errorf("outline %s, want the headings of the pages kept", got)
-	}
-	// The links sit on the first page, which is left out.
-	for i, pg := range doc.Pages {
-		if len(pg.Links) != 0 {
-			t.Errorf("page %d has %d links, want none", i+1, len(pg.Links))
-		}
-	}
-	h1s := 0
-	var walk func(*compose.StructElem)
-	walk = func(e *compose.StructElem) {
-		if e.Role == "H1" {
-			h1s++
-		}
-		for _, k := range e.Kids {
-			walk(k)
-		}
-	}
-	walk(doc.Structure)
-	if h1s != 2 {
-		t.Errorf("%d H1 structure elements, want the 2 of the pages kept", h1s)
-	}
-	// Links to a page kept are renumbered.
-	doc = conv(t, src, Options{PageRanges: "1,3"})
-	var dests []int
-	for _, l := range doc.Pages[0].Links {
-		if l.Dest != nil {
-			dests = append(dests, l.Dest.Page)
-		}
-	}
-	if len(dests) != 2 || dests[0] != 1 || dests[1] != 2 || len(doc.Pages[0].Links) != 3 {
-		t.Errorf("link destinations %v of %d links, want [1 2] of 3", dests, len(doc.Pages[0].Links))
-	}
-	for _, spec := range []string{"x", "3-2", "0", "9", "5-"} {
-		if _, err := Convert(context.Background(), strings.NewReader(src), testFonts(t), Options{PageRanges: spec}); !errors.Is(err, ErrInvalidOptions) {
-			t.Errorf("page ranges %q: %v, want ErrInvalidOptions", spec, err)
-		}
 	}
 }
 
@@ -351,10 +288,10 @@ func TestConvert_ScaledLinksAndAnchors(t *testing.T) {
 }
 
 func FuzzConvertPrintOptions(f *testing.F) {
-	f.Add(`<style>@page{size:A3;margin:1cm}</style><h1>a</h1><div style="width:900pt">w</div><p style="break-before:page">b`, uint8(0), "")
-	f.Add(`<style>@page :first{size:landscape}@page{background:red}</style><a href="#x">l</a><p id=x style="break-before:page">x`, uint8(0x2b), "2-")
-	f.Add(`<html style="print-color-adjust:exact;background:blue"><body style="color:#fff">t`, uint8(0xff), "1,1")
-	f.Fuzz(func(t *testing.T, src string, flags uint8, ranges string) {
+	f.Add(`<style>@page{size:A3;margin:1cm}</style><h1>a</h1><div style="width:900pt">w</div><p style="break-before:page">b`, uint8(0))
+	f.Add(`<style>@page :first{size:landscape}@page{background:red}</style><a href="#x">l</a><p id=x style="break-before:page">x`, uint8(0x2b))
+	f.Add(`<html style="print-color-adjust:exact;background:blue"><body style="color:#fff">t`, uint8(0xff))
+	f.Fuzz(func(t *testing.T, src string, flags uint8) {
 		o := Options{
 			Landscape:         flags&1 != 0,
 			PreferCSSPageSize: flags&2 != 0,
@@ -363,7 +300,6 @@ func FuzzConvertPrintOptions(f *testing.F) {
 			OmitOutline:       flags&16 != 0,
 			NoShrinkToFit:     flags&32 != 0,
 			Scale:             []float64{1, MinScale, 0.5, MaxScale}[flags>>6],
-			PageRanges:        ranges,
 			MaxInputBytes:     1 << 12,
 			MaxPages:          8,
 			MarginTop:         10, MarginLeft: 20,

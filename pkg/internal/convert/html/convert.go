@@ -15,7 +15,6 @@ import (
 	"golang.org/x/text/encoding"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
-	"github.com/gotenberg/litho/pkg/internal/convert/pagerange"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -59,10 +58,6 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 	if fonts.Len() == 0 {
 		return nil, fmt.Errorf("converting HTML: %w", text.ErrNoFonts)
 	}
-	ranges, err := pagerange.Parse(o.PageRanges)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidOptions, err)
-	}
 	data, err := readCapped(src, o.MaxInputBytes)
 	if err != nil {
 		return nil, err
@@ -103,7 +98,7 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 			return nil, err
 		}
 	}
-	return p.assemble(ctx, res, ranges)
+	return p.assemble(ctx, res)
 }
 
 // layOut lays the prepared document p out with lay, with its fonts.
@@ -342,20 +337,19 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	return p, nil
 }
 
-// assemble returns the document of the layout res: the pages ranges
-// selects, or the first alone for a single page, each placed on its sheet
-// (see [prepared.placement]) with its header and footer drawn on it (see
-// [prepared.decorate]), the links, the outline and the structure tree
-// kept for them. Page numbers count the whole layout before the
-// selection: a page keeps the number it was laid out with in what it
-// shows, and the selection only drops pages.
-func (p *prepared) assemble(ctx context.Context, res *layout.Result, ranges []pagerange.Range) (*compose.Document, error) {
-	keep := []int{0}
-	if !p.o.SinglePage {
-		var err error
-		if keep, err = pagerange.Select(ranges, len(res.Pages)); err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrInvalidOptions, err)
+// assemble returns the document of the layout res: every page, or the
+// first alone for a single page, each placed on its sheet (see
+// [prepared.placement]) with its header and footer drawn on it (see
+// [prepared.decorate]), the links, the outline and the structure tree.
+// The caller selects pages afterwards: a page keeps the number it was
+// laid out with in what it shows.
+func (p *prepared) assemble(ctx context.Context, res *layout.Result) (*compose.Document, error) {
+	keep := make([]int, 0, len(res.Pages))
+	for k := range res.Pages {
+		if k > 0 && p.o.SinglePage {
+			break
 		}
+		keep = append(keep, k)
 	}
 	// at maps a page of the layout to its 1-based number in the output,
 	// 0 for a page left out; places holds each kept page's placement.

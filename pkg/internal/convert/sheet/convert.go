@@ -8,7 +8,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
-	"github.com/gotenberg/litho/pkg/internal/convert/pagerange"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
@@ -67,7 +66,7 @@ func (b *builder) warnOnce(code, msg string) {
 // of the index fonts, and returns the paged document. It honours
 // office.Options: PageWidth and PageHeight and Landscape override every
 // sheet's page setup, SinglePageSheets lays each sheet out on one page the
-// size of its content, PageRanges selects pages, OmitOutline leaves the
+// size of its content, OmitOutline leaves the
 // sheet outline out, PrintDate fills the date and time fields of the
 // headers and footers, MaxPages caps the pages. It returns ctx's error
 // when ctx ends first, office.ErrInvalidOptions for options out of range
@@ -120,10 +119,6 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	if fonts.Len() == 0 {
 		return nil, fmt.Errorf("laying the spreadsheet out: %w", text.ErrNoFonts)
 	}
-	ranges, err := pagerange.Parse(opts.PageRanges)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", office.ErrInvalidOptions, err)
-	}
 	b := newBuilder(ctx, doc, fonts, opts)
 	limit := opts.MaxPages
 	if limit <= 0 {
@@ -163,23 +158,15 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 			p.number = n
 		}
 	}
-	keep, err := pagerange.Select(ranges, max(len(pages), 1))
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", office.ErrInvalidOptions, err)
-	}
 	out := &compose.Document{
 		Metadata:  doc.Meta,
 		Structure: &compose.StructElem{Role: "Document", Lang: b.lang},
 	}
 	at := make([]int, len(pages))
-	for _, k := range keep {
-		if k >= len(pages) {
-			continue
-		}
+	for k, p := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		p := pages[k]
 		pg, st, err := b.renderPage(p, k == 0 || pages[k-1].sp != p.sp, len(pages))
 		if err != nil {
 			return nil, err
@@ -219,9 +206,6 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 				}
 			}
 		}
-	}
-	if len(keep) < len(pages) {
-		compose.PruneStructure(out)
 	}
 	out.Warnings = b.warnings
 	return out, nil
