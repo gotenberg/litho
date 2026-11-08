@@ -770,11 +770,21 @@ func (r *chartReader) point(name string, idx int, s *chart.Series, g *chart.Grou
 	_, number := r.prop(name, "chart-properties", NSChart, "data-label-number")
 	_, text := r.prop(name, "chart-properties", NSChart, "data-label-text")
 	linked := r.boolProp(name, "link-data-style-to-source", false)
+	ds := r.styles[name].A(NSStyle, "data-style-name")
 	if number || text || linked {
 		p.Labels, p.HasLabels = r.labels(name, s.Labels, g), true
 		if linked {
 			// A point linked to its source's format shows the value as
 			// the cell does, General in the embedded table.
+			p.Labels.Format = "General"
+		}
+	} else if ds != "" {
+		// A point with a number format of its own shows its series'
+		// labels in it (ODF 1.3 Part 3, 16.29 style:data-style-name on a
+		// chart:data-point's style).
+		p.Labels, p.HasLabels = s.Labels, true
+		p.Labels.Format = r.numberFormat(ds)
+		if p.Labels.Format == "" {
 			p.Labels.Format = "General"
 		}
 	}

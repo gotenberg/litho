@@ -250,3 +250,14 @@ func TestChartFromDocument_AxisLabelBreaks(t *testing.T) {
 		t.Errorf("axes = %+v %+v", c.Axes[0], c.Axes[1])
 	}
 }
+
+func TestChartFromDocument_PointNumberFormat(t *testing.T) {
+	st := chartStyles + `<number:number-style style:name="E"><number:scientific-number number:decimal-places="2" number:min-integer-digits="1" number:min-exponent-digits="2"/></number:number-style>` +
+		`<style:style style:name="pe" style:family="chart" style:data-style-name="E"/>`
+	ser := `<chart:series chart:style-name="s1" chart:values-cell-range-address="Sheet1.B2:Sheet1.B3" chart:label-cell-address="Sheet1.B1:Sheet1.B1"><chart:data-point chart:style-name="pe"/></chart:series>`
+	c := readODFChart(t, chartContent(st, "bar", "", ser))
+	pts := c.Groups[0].Series[0].Points
+	if len(pts) == 0 || !pts[0].HasLabels || pts[0].Labels.Format != "0.00E+00" || !pts[0].Labels.ShowValue {
+		t.Errorf("points = %+v", pts)
+	}
+}
