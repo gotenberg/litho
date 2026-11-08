@@ -5,9 +5,8 @@ import (
 	"unicode/utf8"
 )
 
-// symbolFace is the face a bullet of a symbol font draws in once its
-// character is mapped to Unicode: LibreOffice's OpenSymbol, which Impress
-// draws Wingdings and Symbol bullets with.
+// symbolFace is the face a bullet of a symbol font draws in: LibreOffice's
+// OpenSymbol, which Impress draws Wingdings and Symbol bullets with.
 const symbolFace = "OpenSymbol"
 
 // symbolBullets maps the characters of the symbol fonts bullets use to
@@ -28,9 +27,16 @@ var symbolBullets = map[string]map[rune]rune{
 	},
 }
 
-// symbolBullet maps a bullet character of a symbol font face to Unicode
-// and the face it then draws in, false when face is no symbol font or the
-// character none the table maps.
+// symbolBullet returns a bullet character of a symbol font face as the
+// private use character Impress keeps it as (U+F020 to U+F0FF) and the
+// face it draws in, false when face is no symbol font or the character
+// none the table maps; the table's Unicode character is the glyph
+// OpenSymbol draws for it.
+//
+// # Corpus evidence
+//
+//   - pptx: sd/bulletColor's Wingdings "q" bullets print as U+F071 in
+//     OpenSymbol, sd/tdf123090's "n" as U+F06E.
 func symbolBullet(char, face string) (string, string, bool) {
 	r, size := utf8.DecodeRuneInString(char)
 	if size == 0 || size != len(char) {
@@ -47,9 +53,8 @@ func symbolBullet(char, face string) (string, string, bool) {
 	if !ok {
 		return "", "", false
 	}
-	u, ok := table[r]
-	if !ok {
+	if _, ok := table[r]; !ok {
 		return "", "", false
 	}
-	return string(u), symbolFace, true
+	return string(0xF000 + r), symbolFace, true
 }

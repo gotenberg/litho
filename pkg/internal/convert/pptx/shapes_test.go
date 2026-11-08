@@ -236,7 +236,7 @@ func TestShapes_NamesAndSymbolBullets(t *testing.T) {
 	if want := []string{"Hello", "Hello (2)", "Slide 3", "Hello (3)"}; !slices.Equal(names, want) {
 		t.Errorf("names %q, want %q", names, want)
 	}
-	if b := doc.Slides[2].Shapes[0].Text.Paragraphs[0].Bullet; b == nil || b.Char != "❑" || !slices.Equal(b.Families, []string{"OpenSymbol"}) {
+	if b := doc.Slides[2].Shapes[0].Text.Paragraphs[0].Bullet; b == nil || b.Char != "\uf071" || !slices.Equal(b.Families, []string{"OpenSymbol"}) {
 		t.Errorf("bullet %+v", b)
 	}
 }
