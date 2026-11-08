@@ -5,6 +5,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 )
@@ -17,7 +18,21 @@ const fuzzSheet = `<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><s
 	`<mergeCells><mergeCell ref="A2:B3"/></mergeCells><hyperlinks><hyperlink ref="A1" location="x"/></hyperlinks>` +
 	`<printOptions gridLines="1"/><pageMargins left="1" right="1" top="1" bottom="1" header="0.5" footer="0.5"/>` +
 	`<pageSetup paperSize="9" orientation="landscape" fitToWidth="2" fitToHeight="0"/><headerFooter><oddHeader>&amp;L&amp;B&amp;P&amp;C&amp;A</oddHeader></headerFooter>` +
-	`<rowBreaks><brk id="2" man="1"/></rowBreaks>`
+	`<rowBreaks><brk id="2" man="1"/></rowBreaks><drawing r:id="rIdD"/><tableParts count="1"><tablePart r:id="rIdT"/></tableParts>`
+
+// fuzzRels relates the fuzz worksheet's table and drawing.
+const fuzzRels = `<Relationship Id="rIdT" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/>` +
+	`<Relationship Id="rIdD" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>`
+
+// fuzzParts are the table and drawing parts of the fuzz workbook.
+var fuzzParts = map[string]string{
+	"xl/tables/table1.xml": `<table ` + nsDecl + ` id="1" name="T" displayName="T" ref="A1:C3" totalsRowCount="1"><tableColumns count="3"><tableColumn id="1" name="a"/><tableColumn id="2" name="b"/><tableColumn id="3" name="c"/></tableColumns>` +
+		`<tableStyleInfo name="TableStyleMedium9" showFirstColumn="1" showRowStripes="1" showColumnStripes="1"/></table>`,
+	"xl/drawings/drawing1.xml": `<xdr:wsDr ` + drawingNS + `><xdr:absoluteAnchor><xdr:pos x="0" y="0"/><xdr:ext cx="254000" cy="127000"/><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="B"/><xdr:cNvSpPr/></xdr:nvSpPr>` +
+		`<xdr:spPr><a:xfrm rot="5400000"/><a:prstGeom prst="ellipse"/></xdr:spPr><xdr:txBody><a:bodyPr anchor="ctr" upright="1"/><a:p><a:r><a:rPr sz="900" b="1"/><a:t>x</a:t></a:r><a:br/></a:p></xdr:txBody></xdr:sp><xdr:clientData/></xdr:absoluteAnchor></xdr:wsDr>`,
+	"xl/sharedStrings.xml": `<sst ` + nsDecl + `><si><t>a</t></si></sst>`,
+	"xl/theme/theme1.xml":  testTheme,
+}
 
 // fuzzStyles is the stylesheet of the fuzz workbook.
 const fuzzStyles = `<numFmts><numFmt numFmtId="164" formatCode="0.0"/></numFmts><fonts><font><sz val="11"/><name val="Test Sans"/></font><font><b/><u/><color theme="4" tint="0.4"/></font></fonts>` +
@@ -30,14 +45,18 @@ func FuzzConvert(f *testing.F) {
 	f.Add([]byte(fuzzSheet[:len(fuzzSheet)/2]))
 	fonts := testFonts(f)
 	f.Fuzz(func(t *testing.T, ws []byte) {
-		files := workbookFiles([]testSheet{{name: "S", xml: string(ws)}, {name: "T", state: "hidden", xml: string(ws)}}, fuzzStyles, `<workbookPr date1904="1"/>`,
-			`<definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">S!$A$1:$B$2</definedName></definedNames>`,
-			map[string]string{"xl/sharedStrings.xml": `<sst ` + nsDecl + `><si><t>a</t></si></sst>`, "xl/theme/theme1.xml": testTheme})
+		files := workbookFiles([]testSheet{{name: "S", xml: string(ws), rels: fuzzRels}, {name: "T", state: "hidden", xml: string(ws)}}, fuzzStyles, `<workbookPr date1904="1"/>`,
+			`<definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">S!$A$1:$B$2</definedName></definedNames>`, fuzzParts)
 		doc, _, err := load(context.Background(), bytes.NewReader(zipFiles(t, files)), fonts, office.Options{})
 		if err != nil {
 			return
 		}
 		checkModel(t, doc)
+		for _, d := range doc.Sheets[0].Drawings {
+			if d.Picture != nil && d.Picture.Vector != nil {
+				d.Picture.Vector(context.Background(), compose.Rect{Width: 50, Height: 20})
+			}
+		}
 	})
 }
 
