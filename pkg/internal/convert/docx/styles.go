@@ -50,6 +50,18 @@ type styleSheet struct {
 func (d *document) parseStyles(root *ooxml.Element) *styleSheet {
 	s := &styleSheet{byID: map[string]*style{}}
 	if root == nil {
+		// A document without a styles part prints in Calibri 11, Word
+		// 2007's defaults, as LibreOffice imports it.
+		//
+		// # Corpus evidence
+		//
+		//   - docx: ooxmlimport/tdf108350.docx, tdf108714.docx,
+		//     tdf108806.docx, layout/tdf117188.docx and
+		//     ooxmlimport/linked-picture.docx print in Carlito 11; the
+		//     documents whose styles part lacks docDefaults print in
+		//     Liberation Serif.
+		s.defRun.fonts = fontSpec{ascii: "Calibri", hAnsi: "Calibri"}
+		s.defRun.size = ptr(11.0)
 		return s
 	}
 	if dd := root.Child(w, "docDefaults"); dd != nil {

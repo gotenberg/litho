@@ -196,7 +196,9 @@ func TestEmptyParagraphKeepsALine(t *testing.T) {
 		name string
 		size float64
 	}{
-		{"default mark", defaultFontSize},
+		// Without a styles part the default is Calibri 11, as LibreOffice
+		// imports such a document.
+		{"default mark", 11},
 		{"24-point mark", 24},
 	}
 	for i, tt := range tests {
@@ -310,6 +312,30 @@ func TestDefaultParagraphStyle(t *testing.T) {
 			r := runWith(t, b.root, "a")
 			if r.Style.FontSize != tt.size {
 				t.Errorf("font size %v, want %v", r.Style.FontSize, tt.size)
+			}
+		})
+	}
+}
+
+func TestDefaults_WithoutStylesPart(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		extra  map[string]string
+		size   float64
+		family string
+	}{
+		{"no styles part", nil, 11, "Calibri"},
+		{"styles without defaults", map[string]string{"word/styles.xml": stylesPart(``)}, defaultFontSize, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ps := role(build(t, `<w:p><w:r><w:t>x</w:t></w:r></w:p>`, tc.extra).root, "P")
+			if len(ps) != 1 {
+				t.Fatalf("%d paragraphs", len(ps))
+			}
+			st := ps[0].Style
+			if st.FontSize != tc.size || tc.family != "" && (len(st.FontFamilies) == 0 || st.FontFamilies[0] != tc.family) {
+				t.Errorf("font %v %v, want %v %s", st.FontFamilies, st.FontSize, tc.size, tc.family)
 			}
 		})
 	}
