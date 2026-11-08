@@ -630,29 +630,46 @@ func uncURL(target string) string {
 	return "file://" + strings.ReplaceAll(rest, `\`, "/")
 }
 
-// lineBreaks drops the line breaks of a text.
-var lineBreaks = strings.NewReplacer("\r\n", "", "\n", "", "\r", "")
-
-// joinLines drops the line breaks of the text of a cell that does not
-// wrap, as LibreOffice shows such a cell of a workbook on one line.
+// joinLines drops the line feeds of the text of a cell that does not
+// wrap, as LibreOffice shows such a cell of a workbook on one line; a
+// carriage return and line feed pair, which XML keeps only escaped
+// (_x000D_, XML 1.0, 2.11), still breaks the line.
 //
 // # Corpus evidence
 //
-//   - xlsx: sc/cell-multi-line.xlsx prints "Line1\r\nLine2\r\nLine3" as
+//   - xlsx: sc/cell-multi-line.xlsx prints "Line1\nLine2\nLine3" as
 //     Line1Line2Line3 in its cell without wrapText, on three lines in the
 //     one with it; sc/preserve_space.xlsx prints "123\n" and "456" as
-//     123456.
+//     123456; sc/escape-unicode.xlsx prints "Line 1_x000D_\nLine 2" on two
+//     lines.
 func joinLines(cell *sheet.Cell) {
 	if !strings.ContainsAny(cell.Value.Text, "\r\n") {
 		return
 	}
-	cell.Value.Text = lineBreaks.Replace(cell.Value.Text)
+	cell.Value.Text = dropFeeds(cell.Value.Text)
 	runs := cell.Runs[:0]
 	for _, r := range cell.Runs {
-		r.Text = lineBreaks.Replace(r.Text)
+		r.Text = dropFeeds(r.Text)
 		if r.Text != "" {
 			runs = append(runs, r)
 		}
 	}
 	cell.Runs = runs
+}
+
+// dropFeeds returns s without its lone line feeds and carriage returns,
+// each carriage return and line feed pair a line feed.
+func dropFeeds(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		switch {
+		case s[i] == '\r' && i+1 < len(s) && s[i+1] == '\n':
+			b.WriteByte('\n')
+			i++
+		case s[i] == '\r' || s[i] == '\n':
+		default:
+			b.WriteByte(s[i])
+		}
+	}
+	return b.String()
 }

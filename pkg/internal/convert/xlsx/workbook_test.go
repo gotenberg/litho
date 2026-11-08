@@ -78,7 +78,7 @@ func TestRead_SharedStrings(t *testing.T) {
 		col  int
 		text string
 		runs int
-	}{{0, "plain", 0}, {1, "bold ", 2}, {2, "ab_x0041_", 0}} {
+	}{{0, "plain", 0}, {1, "bold ", 2}, {2, "a\nb_x0041_", 0}} {
 		c, ok := cellAt(sh, 0, tc.col)
 		if !ok || c.Value.Kind != sheet.Text || c.Value.Text != tc.text || len(c.Runs) != tc.runs {
 			t.Errorf("column %d: %+v, want text %q with %d runs", tc.col, c, tc.text, tc.runs)
@@ -138,9 +138,9 @@ func TestRead_NoFonts(t *testing.T) {
 }
 
 func TestJoinLines(t *testing.T) {
-	cell := sheet.Cell{Value: sheet.Value{Kind: sheet.Text, Text: "123\n456"}, Runs: []sheet.Run{{Text: "123\n"}, {Text: "\r\n"}, {Text: "456"}}}
+	cell := sheet.Cell{Value: sheet.Value{Kind: sheet.Text, Text: "123\n456\r\n7"}, Runs: []sheet.Run{{Text: "123\n"}, {Text: "\n"}, {Text: "456\r\n7"}}}
 	joinLines(&cell)
-	if cell.Value.Text != "123456" || len(cell.Runs) != 2 || cell.Runs[0].Text != "123" || cell.Runs[1].Text != "456" {
+	if cell.Value.Text != "123456\n7" || len(cell.Runs) != 2 || cell.Runs[0].Text != "123" || cell.Runs[1].Text != "456\n7" {
 		t.Errorf("joined cell %+v", cell)
 	}
 }
