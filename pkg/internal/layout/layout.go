@@ -25,6 +25,11 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	if err := checkPage(opts.Page); err != nil {
 		return nil, err
 	}
+	if opts.PageAt != nil {
+		// A pass after the first asks for the same pages again: each
+		// index is asked once.
+		opts.PageAt = memoPages(opts.PageAt)
+	}
 	first := opts.Page
 	switch {
 	case opts.PageFor != nil:
@@ -38,39 +43,20 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("laying out: %w", err)
 	}
-	areaW, areaH := areaOf(first)
-	e := newEngine(ctx, fonts, opts, areaW, areaH)
-	e.geom.init(e, first)
-	e.rtlRoot = root.Style != nil && root.Style.Direction == css.RTL
-	rb := e.generate(root)
-	if e.err != nil {
-		return nil, e.err
-	}
-	if e.foot != nil && !e.geom.varies() {
-		// Footnote areas shorten the slices of the flow the pages show.
-		e.geom = geometry{}
-		e.geom.init(e, first)
-	}
-	if name := pageStart(rb); name != "" {
-		// The first page's type is the root's start page value (CSS Page
-		// 3, 4.1): its box, and the flow's width, follow it.
-		e.mark(0, name, false, nil)
-		if opts.PageFor != nil {
-			first = opts.PageFor(e.infoOf(0))
-			if err := checkPage(first); err != nil {
-				return nil, err
-			}
-			e.pageW, e.pageH = areaOf(first)
-			e.geom = geometry{}
-			e.geom.init(e, first)
+	var e *engine
+	var rb *box
+	var seeds []wrapSeed
+	for pass := range maxWrapPasses {
+		var err error
+		e, rb, err = layoutFlow(ctx, root, fonts, opts, first, seeds)
+		if err != nil {
+			return nil, err
 		}
-	}
-	e.rootBox = rb
-	e.layoutRoot(rb)
-	e.layoutPositioned(rb)
-	e.finishNotes(rb.y + rb.borderH())
-	if e.err != nil {
-		return nil, e.err
+		found := e.collectWraps(rb, nil)
+		if sameWraps(found, seeds) || pass == maxWrapPasses-1 {
+			break
+		}
+		seeds = found
 	}
 	disp, links, canvas := e.paint(rb)
 	e.paintNotes()
@@ -673,4 +659,59 @@ func prune(el *compose.StructElem, used map[*compose.StructElem]bool) bool {
 	}
 	el.Kids = kids
 	return used[el] || len(kids) > 0
+}
+
+// layoutFlow lays the tree rooted at root out on pages whose first is first,
+// the rectangles of seeds kept clear as the wrapped boxes of the previous
+// pass ask (framewrap.go), and returns the engine and the root box.
+func layoutFlow(ctx context.Context, root *Node, fonts *text.Fonts, opts Options, first PageBox, seeds []wrapSeed) (*engine, *box, error) {
+	areaW, areaH := areaOf(first)
+	e := newEngine(ctx, fonts, opts, areaW, areaH)
+	e.wraps = seeds
+	e.geom.init(e, first)
+	e.rtlRoot = root.Style != nil && root.Style.Direction == css.RTL
+	rb := e.generate(root)
+	if e.err != nil {
+		return nil, nil, e.err
+	}
+	if e.foot != nil && !e.geom.varies() {
+		// Footnote areas shorten the slices of the flow the pages show.
+		e.geom = geometry{}
+		e.geom.init(e, first)
+	}
+	if name := pageStart(rb); name != "" {
+		// The first page's type is the root's start page value (CSS Page
+		// 3, 4.1): its box, and the flow's width, follow it.
+		e.mark(0, name, false, nil)
+		if opts.PageFor != nil {
+			first = opts.PageFor(e.infoOf(0))
+			if err := checkPage(first); err != nil {
+				return nil, nil, err
+			}
+			e.pageW, e.pageH = areaOf(first)
+			e.geom = geometry{}
+			e.geom.init(e, first)
+		}
+	}
+	e.rootBox = rb
+	e.layoutRoot(rb)
+	e.layoutPositioned(rb)
+	e.finishNotes(rb.y + rb.borderH())
+	if e.err != nil {
+		return nil, nil, e.err
+	}
+	return e, rb, nil
+}
+
+// memoPages returns at, asked once per index.
+func memoPages(at func(int) PageBox) func(int) PageBox {
+	seen := map[int]PageBox{}
+	return func(i int) PageBox {
+		if pb, ok := seen[i]; ok {
+			return pb
+		}
+		pb := at(i)
+		seen[i] = pb
+		return pb
+	}
 }

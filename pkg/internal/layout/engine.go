@@ -99,6 +99,10 @@ type engine struct {
 	// cols is the fragmentation context of the column set being laid out,
 	// nil outside columns: the page queries answer for its columns.
 	cols *colCtx
+	// wraps are the rectangles the wrapped page-anchored boxes took in the
+	// previous pass, which the root's formatting context starts with
+	// (framewrap.go).
+	wraps []wrapSeed
 }
 
 // fail records the first error; the layout unwinds once it is set.

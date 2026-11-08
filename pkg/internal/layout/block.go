@@ -695,6 +695,11 @@ func (e *engine) layoutBFCRoot(b *box, cb cblock, bc *bfc, top float64) {
 func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	specH, hSet := specHeight(b, b.st.Height, cb)
 	own := &bfc{}
+	if b == e.rootBox {
+		// The document's formatting context keeps clear the boxes the
+		// previous pass wrapped (framewrap.go).
+		own.floats = e.seedWraps(e.wraps)
+	}
 	mc := &marginState{kept: true}
 	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: specH, hDefinite: hSet}, cb)
 	saved := e.enterClamp(b, cb, b.contentY())

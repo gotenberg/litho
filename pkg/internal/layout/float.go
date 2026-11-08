@@ -10,6 +10,10 @@ import (
 type floatRect struct {
 	side           css.Float
 	x0, y0, x1, y1 float64
+	// wrap, when not css.FrameWrapThrough, makes the rectangle the
+	// exclusion of a wrapped page-anchored box (framewrap.go): it narrows
+	// the lines beside it by its mode, and floats and clearance ignore it.
+	wrap css.FrameWrap
 }
 
 // bfc is the state of one block formatting context: the floats placed in
@@ -50,6 +54,10 @@ func (c *bfc) floatBand(y, h, left, right float64) (float64, float64) {
 		if !f.overlaps(y, h) {
 			continue
 		}
+		if f.wrap != css.FrameWrapThrough {
+			l, r = f.wrapBand(l, r)
+			continue
+		}
 		if f.side == css.FloatLeft {
 			l = max(l, f.x1)
 		} else {
@@ -87,7 +95,9 @@ func (c *bfc) below(y, h float64) float64 {
 func (c *bfc) place(side css.Float, w, h, minY, left, right float64) (float64, float64) {
 	y := minY
 	for _, f := range c.floats {
-		y = max(y, f.y0)
+		if f.wrap == css.FrameWrapThrough {
+			y = max(y, f.y0)
+		}
 	}
 	for range len(c.floats) + 1 {
 		l, r := c.band(y, max(h, eps), left, right)
@@ -128,6 +138,9 @@ func (c *bfc) collides(y, h, x0, x1 float64) bool {
 func (c *bfc) clearTo(cl css.Clear) float64 {
 	y := math.Inf(-1)
 	for _, f := range c.floats {
+		if f.wrap != css.FrameWrapThrough {
+			continue
+		}
 		if cl == css.ClearBoth || (cl == css.ClearLeft && f.side == css.FloatLeft) || (cl == css.ClearRight && f.side == css.FloatRight) {
 			y = max(y, f.y1)
 		}
