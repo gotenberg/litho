@@ -664,7 +664,14 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 		}
 	}
 	bigTS := b.textStyle(big, f.font)
-	lb := b.lines(p, bigTS, f, body.FontLineSpacing)
+	// An empty line keeps its spacing whatever the fit scales the others
+	// by (ImpEditEngine::CreateAndInsertEmptyLine), its font scaled alone.
+	emptyFit := fit{font: f.font, spacing: 1}
+	lf := f
+	if len(runs) == 0 {
+		lf = emptyFit
+	}
+	lb := b.lines(p, bigTS, lf, body.FontLineSpacing)
 	size := bigTS.Size
 
 	st := css.Initial()
@@ -788,7 +795,7 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 		// it, as tall as the paragraph's end mark makes it.
 		if k := len(node.Children) - 1; k > 0 && hasText(runs) {
 			node.Children = node.Children[:k]
-			empty := b.lines(p, b.textStyle(&p.Style, f.font), f, body.FontLineSpacing)
+			empty := b.lines(p, b.textStyle(&p.Style, f.font), emptyFit, body.FontLineSpacing)
 			st.Padding[css.Bottom] = css.Pts(st.Padding[css.Bottom].Value + empty.height)
 		} else {
 			node.Children = append(node.Children, &layout.Node{Kind: layout.Text, Style: st, Text: "\u200b"})

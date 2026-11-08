@@ -118,6 +118,15 @@ func TestText_Autofit(t *testing.T) {
 	if r := find(t, pg, "L0"); !near(r.size, 13, 0.01) {
 		t.Errorf("with empty closing paragraphs shrunk to %.2f, want 13", r.size)
 	}
+	// Empty lines keep their spacing as the fit scales the others, as
+	// sd/autofitted-textbox-indent.odp prints: 18 points down to 11.
+	ls := RunStyle{Families: []string{"Liberation Sans"}, Size: 18, Color: css.Color{A: 1}}
+	gaps := box(28.35, 28.35, 300, 64.92, para("E0", ls), Paragraph{Style: ls}, Paragraph{Style: ls}, Paragraph{Style: ls}, para("E4", ls))
+	gaps.Text.Autofit, gaps.Text.FontLineSpacing, gaps.Text.MaxParagraphSpacing = AutofitShrink, true, true
+	pg = convert(t, deck(&Slide{Shapes: []*Shape{gaps}}), office.Options{}).Pages[0]
+	if r := find(t, pg, "E0"); !near(r.size, 11, 0.01) {
+		t.Errorf("with empty lines shrunk to %.2f, want 11", r.size)
+	}
 	for _, tc := range []struct {
 		anchor Anchor
 		box    compose.Rect
