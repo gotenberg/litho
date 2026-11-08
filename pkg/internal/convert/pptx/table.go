@@ -128,6 +128,9 @@ func (r *reader) table(c *shapeCtx, tbl *ooxml.Element, _ compose.Rect) *slides.
 	}
 	fc := &fillCtx{sc: c.sc, part: c.part}
 	background, hasBackground := r.fillOf(fc, pr)
+	if !hasBackground {
+		background, hasBackground = r.tableBackground(fc, ts.style)
+	}
 	for i, tr := range trs {
 		row := slides.TableRow{Height: max(0, emuAttr(tr, "h"))}
 		j := 0
@@ -136,8 +139,8 @@ func (r *reader) table(c *shapeCtx, tbl *ooxml.Element, _ compose.Rect) *slides.
 				continue
 			}
 			cell := r.cell(c, tc, ts, i, j)
-			if cell.Fill.Kind == slides.FillNone && hasBackground {
-				cell.Fill = background
+			if hasBackground {
+				cell.Fill = overBackground(cell.Fill, background)
 			}
 			row.Cells = append(row.Cells, cell)
 			j++
@@ -148,6 +151,68 @@ func (r *reader) table(c *shapeCtx, tbl *ooxml.Element, _ compose.Rect) *slides.
 		t.Rows = append(t.Rows, row)
 	}
 	return t
+}
+
+// tableBackground returns the background a table style gives its table
+// (20.1.4.2.25 tblBg: a fill, or a fillRef into the theme's fill styles),
+// false for none.
+func (r *reader) tableBackground(fc *fillCtx, style *ooxml.Element) (slides.Fill, bool) {
+	bg := style.Child(ooxml.NSA, "tblBg")
+	if bg == nil {
+		return slides.Fill{}, false
+	}
+	if ref := bg.Child(ooxml.NSA, "fillRef"); ref != nil {
+		f := r.styleFill(fc, ref)
+		return f, f.Kind != slides.FillNone
+	}
+	return r.fillOf(fc, bg)
+}
+
+// overBackground returns a cell's fill over its table's background bg as
+// Impress imports it: the background's colour where the cell has no fill,
+// a translucent solid fill blended over that colour into an opaque one,
+// any other fill as it is. The background paints as one colour, its best
+// solid colour: a gradient's first stop, its second when it has more than
+// two (oox FillProperties::getBestSolidColor), a pattern's background.
+//
+// # Corpus evidence
+//
+//   - pptx: sd/bnc480256's "Themed Style 1 - Accent 1" table, its tblBg
+//     the theme's second fill style, prints its second band C6DDFF, the
+//     gradient's second stop, and its first band 9BC3EE, accent1 5B9BD5
+//     at 40% over it; its "Themed Style 2" table 4697E0 and 6BACE6, white
+//     at 20% over it.
+func overBackground(cell, bg slides.Fill) slides.Fill {
+	var col css.Color
+	switch bg.Kind {
+	case slides.FillSolid:
+		col = bg.Color
+	case slides.FillGradient:
+		stops := bg.Gradient.Stops
+		if len(stops) == 0 {
+			return cell
+		}
+		col = stops[0].Color
+		if len(stops) > 2 {
+			col = stops[1].Color
+		}
+	case slides.FillPattern:
+		col = bg.Background
+	case slides.FillNone, slides.FillPicture:
+		if cell.Kind == slides.FillNone {
+			return bg
+		}
+		return cell
+	}
+	switch {
+	case cell.Kind == slides.FillNone:
+		return slides.Fill{Kind: slides.FillSolid, Color: col}
+	case cell.Kind == slides.FillSolid && cell.Color.A < 1:
+		a := max(0, cell.Color.A)
+		mix := func(c, b float64) float64 { return a*c + (1-a)*b }
+		return slides.Fill{Kind: slides.FillSolid, Color: css.Color{R: mix(cell.Color.R, col.R), G: mix(cell.Color.G, col.G), B: mix(cell.Color.B, col.B), A: max(col.A, a)}}
+	}
+	return cell
 }
 
 // tableStyle is a table style applied to one table: the style, the flags
