@@ -110,9 +110,14 @@ type reader struct {
 	pictures      map[string]*layout.Picture
 	// owner maps a placeholder shape or a text style of a layout, master
 	// or notes master to its part, whose relationships its pictures name.
-	owner    map[*ooxml.Element]string
-	warnings []compose.Warning
-	warned   map[string]bool
+	owner map[*ooxml.Element]string
+	// slideAt maps a slide part to its 1-based place in the show,
+	// slideCount counts the slides and cur is the slide being read, for
+	// the jumps of hyperlinks.
+	slideAt         map[string]int
+	slideCount, cur int
+	warnings        []compose.Warning
+	warned          map[string]bool
 }
 
 // warn records a warning, once per message.
@@ -164,6 +169,16 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*slides.D
 		subject = cp.Description
 	}
 	doc.Meta = compose.Metadata{Title: cp.Title, Author: cp.Creator, Subject: subject, Keywords: cp.Keywords, Lang: cp.Language}
+	r.slideAt = map[string]int{}
+	for _, id := range root.Child(nsP, "sldIdLst").Kids() {
+		rid, _ := id.AttrNS(ooxml.NSR, "id")
+		if rel, ok := pkg.RelationshipByID(main, rid); ok && id.Is(nsP, "sldId") && !rel.External && rel.Type == relSlide && pkg.Has(rel.Target) && r.slideCount < maxSlides {
+			r.slideCount++
+			if _, dup := r.slideAt[rel.Target]; !dup {
+				r.slideAt[rel.Target] = r.slideCount
+			}
+		}
+	}
 	for _, id := range root.Child(nsP, "sldIdLst").Kids() {
 		if !id.Is(nsP, "sldId") {
 			continue

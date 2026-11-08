@@ -11,6 +11,7 @@ import (
 // slide reads the slide part, the n-th of the show, with its layout and
 // master (ECMA-376 Part 1, 19.3.1.38 sld).
 func (r *reader) slide(n int, part string) (*slides.Slide, error) {
+	r.cur = n
 	root, err := r.pkg.ParseXML(r.ctx, part, understood)
 	if err != nil {
 		return nil, err

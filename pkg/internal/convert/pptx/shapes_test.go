@@ -281,3 +281,26 @@ func TestFillRectCrop(t *testing.T) {
 		})
 	}
 }
+
+func TestShapes_Jumps(t *testing.T) {
+	link := func(name, action, id string) string {
+		h := `<a:hlinkClick r:id="` + id + `" action="` + action + `"/>`
+		return `<p:sp><p:nvSpPr><p:cNvPr id="3" name="` + name + `">` + h + `</p:cNvPr><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="12700" cy="12700"/></a:xfrm></p:spPr></p:sp>`
+	}
+	tree := link("next", "ppaction://hlinkshowjump?jump=nextslide", "") + link("previous", "ppaction://hlinkshowjump?jump=previousslide", "") +
+		link("first", "ppaction://hlinkshowjump?jump=firstslide", "") + link("last", "ppaction://hlinkshowjump?jump=lastslide", "") +
+		link("third", "ppaction://hlinksldjump", "rIdJ") + link("none", "ppaction://hlinkshowjump?jump=endshow", "")
+	doc, _ := readDeck(t, testDeck{slides: []testSlide{
+		{tree: link("before first", "ppaction://hlinkshowjump?jump=previousslide", "")},
+		{tree: tree, rels: `<Relationship Id="rIdJ" Type="` + tRelSlide + `" Target="slide3.xml"/>`},
+		{},
+	}})
+	for name, want := range map[string]int{"next": 3, "previous": 1, "first": 1, "last": 3, "third": 3, "none": 0} {
+		if s := shapeNamed(doc.Slides[1].Shapes, name); s == nil || s.Jump != want {
+			t.Errorf("%s: shape %+v, want a jump to %d", name, s, want)
+		}
+	}
+	if s := shapeNamed(doc.Slides[0].Shapes, "before first"); s == nil || s.Jump != 0 {
+		t.Errorf("a jump before the first slide: %+v", s)
+	}
+}

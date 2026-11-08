@@ -227,6 +227,39 @@ func (r *reader) href(part string, h *ooxml.Element) string {
 	return ""
 }
 
+// jump returns the 1-based show position of the slide a hyperlink element
+// of part jumps to (19.3.1.19 hlinkClick with the actions of 21.1.2.3.5:
+// ppaction://hlinkshowjump?jump= nextslide, previousslide, firstslide or
+// lastslide from the slide being read, ppaction://hlinksldjump with its
+// relationship to a slide), 0 for none or a slide past the show's ends.
+func (r *reader) jump(part string, h *ooxml.Element) int {
+	action := strings.TrimSpace(attr(h, "action"))
+	n := 0
+	switch {
+	case strings.HasPrefix(action, "ppaction://hlinkshowjump"):
+		_, to, _ := strings.Cut(action, "jump=")
+		switch to {
+		case "nextslide":
+			n = r.cur + 1
+		case "previousslide":
+			n = r.cur - 1
+		case "firstslide":
+			n = 1
+		case "lastslide":
+			n = r.slideCount
+		}
+	case strings.HasPrefix(action, "ppaction://hlinksldjump"):
+		id, _ := h.AttrNS(ooxml.NSR, "id")
+		if rel, ok := r.pkg.RelationshipByID(part, id); ok && !rel.External {
+			n = r.slideAt[rel.Target]
+		}
+	}
+	if n < 1 || n > r.slideCount {
+		return 0
+	}
+	return n
+}
+
 // footerKind reports a date, footer, slide number or header placeholder.
 func footerKind(p placeholder) bool {
 	switch p.typ {
@@ -259,7 +292,7 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	if isPh && footerKind(p) && c.layer.parent.find(p, false) == nil {
 		return nil
 	}
-	s := &slides.Shape{Kind: slides.KindGeometry, Name: attr(nv, "name"), Href: r.href(c.part, nv.Child(ooxml.NSA, "hlinkClick"))}
+	s := &slides.Shape{Kind: slides.KindGeometry, Name: attr(nv, "name"), Href: r.href(c.part, nv.Child(ooxml.NSA, "hlinkClick")), Jump: r.jump(c.part, nv.Child(ooxml.NSA, "hlinkClick"))}
 	if !place(s, chain) {
 		// Impress drops a placeholder neither the slide, its layout nor
 		// its master places.
@@ -347,7 +380,7 @@ func (r *reader) group(c *shapeCtx, el *ooxml.Element, depth int) (*slides.Shape
 		return nil, nil
 	}
 	nv := nvProps(el)
-	s := &slides.Shape{Kind: slides.KindGroup, Name: attr(nv, "name"), Href: r.href(c.part, nv.Child(ooxml.NSA, "hlinkClick"))}
+	s := &slides.Shape{Kind: slides.KindGroup, Name: attr(nv, "name"), Href: r.href(c.part, nv.Child(ooxml.NSA, "hlinkClick")), Jump: r.jump(c.part, nv.Child(ooxml.NSA, "hlinkClick"))}
 	pr := kid(el, "grpSpPr")
 	p, ok := readXfrm(pr.Child(ooxml.NSA, "xfrm"))
 	if ok {
