@@ -39,7 +39,7 @@ func TestRead_Workbook(t *testing.T) {
 		t.Errorf("hidden %v, want %v", hidden, want)
 	}
 	first := doc.Sheets[0].Page
-	if want := []sheet.Range{{0, 0, 8, 2}, {1, 4, 1, 4}}; len(first.PrintAreas) != 2 || first.PrintAreas[0] != want[0] || first.PrintAreas[1] != want[1] {
+	if want := []sheet.Range{{LastRow: 8, LastColumn: 2}, {FirstRow: 1, FirstColumn: 4, LastRow: 1, LastColumn: 4}}; len(first.PrintAreas) != 2 || first.PrintAreas[0] != want[0] || first.PrintAreas[1] != want[1] {
 		t.Errorf("print areas %v, want %v", first.PrintAreas, want)
 	}
 	last := doc.Sheets[3].Page

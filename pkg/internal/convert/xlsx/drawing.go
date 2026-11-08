@@ -133,6 +133,7 @@ type leaf struct {
 	crop         [4]float64
 	geom         string
 	style        ooxml.ShapeStyle
+	text         *shapeText
 }
 
 // content reads the object of anchor a of the drawing part into d: a
@@ -172,7 +173,7 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 			if len(leaves) == 0 {
 				return false
 			}
-			d.Picture = composite(leaves, d)
+			d.Picture = w.r.composite(leaves, d)
 			return d.Picture != nil
 		}
 	}
@@ -228,10 +229,8 @@ func (w *sheetReader) leaves(part string, obj *ooxml.Element, x, y, bw, bh float
 		if _, ok := ooxml.PresetPath(geom, compose.Rect{Width: 1, Height: 1}); !ok {
 			r.warn("approximated", fmt.Sprintf("a %s shape is drawn as its bounding box", geom))
 		}
-		if tb := obj.Child(nsXDR, "txBody"); tb != nil && tb.Find(ooxml.NSA, "t") != nil {
-			r.warn("unsupported-content", "the text of a shape is left out")
-		}
 		l := leaf{x: x, y: y, w: bw, h: bh, geom: geom, style: ooxml.ParseShapeStyle(spPr, obj.Child(nsXDR, "style"), r.theme)}
+		l.text = r.shapeTextOf(obj.Child(nsXDR, "txBody"), obj.Child(nsXDR, "style"))
 		if xfrm := spPr.Child(ooxml.NSA, "xfrm"); xfrm != nil {
 			l.rot, l.flipH, l.flipV = ooxml.Transform2D(xfrm)
 		}
@@ -306,9 +305,10 @@ func emuAttr(e *ooxml.Element, local string) float64 {
 
 // composite returns the picture of an anchor's leaves: a lone picture
 // without rotation or flips as itself, cropped, anything else as a vector
-// picture drawing each leaf in its place. The picture's natural size is
+// picture drawing each leaf in its place, a shape's text over its
+// outline. The picture's natural size is
 // the anchor's when the anchor gives one, else the lone picture's.
-func composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
+func (r *reader) composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
 	if len(leaves) == 1 && leaves[0].pic != nil && leaves[0].rot == 0 && !leaves[0].flipH && !leaves[0].flipV {
 		pic := ooxml.Cropped(leaves[0].pic, leaves[0].crop)
 		if d.To == nil && (d.Width <= 0 || d.Height <= 0) {
@@ -321,10 +321,11 @@ func composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
 		w, h = 1, 1
 	}
 	out := &layout.Picture{Width: w, Height: h}
-	out.Vector = func(ctx context.Context, r compose.Rect) []compose.Fragment {
+	fonts := r.fonts
+	out.Vector = func(ctx context.Context, rect compose.Rect) []compose.Fragment {
 		var frags []compose.Fragment
 		for _, l := range leaves {
-			box := compose.Rect{X: r.X + l.x*r.Width, Y: r.Y + l.y*r.Height, Width: l.w * r.Width, Height: l.h * r.Height}
+			box := compose.Rect{X: rect.X + l.x*rect.Width, Y: rect.Y + l.y*rect.Height, Width: l.w * rect.Width, Height: l.h * rect.Height}
 			var content []compose.Fragment
 			if l.pic != nil {
 				pic := ooxml.Cropped(l.pic, l.crop)
@@ -336,6 +337,9 @@ func composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
 			} else {
 				ops, _ := ooxml.PresetPath(l.geom, box)
 				content = l.style.Paint(ops)
+				if l.text != nil {
+					content = append(content, l.text.draw(ctx, fonts, box)...)
+				}
 			}
 			if len(content) == 0 {
 				continue
@@ -346,7 +350,7 @@ func composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
 				frags = append(frags, content...)
 			}
 		}
-		return []compose.Fragment{&compose.Group{Clip: ooxml.RectPath(r), Content: frags}}
+		return []compose.Fragment{&compose.Group{Clip: ooxml.RectPath(rect), Content: frags}}
 	}
 	return out
 }

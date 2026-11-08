@@ -86,3 +86,42 @@ func TestRead_Drawings(t *testing.T) {
 		t.Errorf("warnings %v", warnings)
 	}
 }
+
+// TestRead_ShapeText checks a text box's paragraphs drawn over its shape:
+// aligned, anchored and in its runs' sizes and colours.
+func TestRead_ShapeText(t *testing.T) {
+	t.Parallel()
+	drawing := `<xdr:wsDr ` + drawingNS + `><xdr:absoluteAnchor><xdr:pos x="0" y="0"/><xdr:ext cx="2540000" cy="1270000"/>` +
+		`<xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="Box"/><xdr:cNvSpPr txBox="1"/></xdr:nvSpPr><xdr:spPr><a:prstGeom prst="rect"/><a:noFill/></xdr:spPr>` +
+		`<xdr:txBody><a:bodyPr lIns="0" tIns="0" rIns="0" bIns="0" anchor="b"/><a:p><a:pPr algn="r"/><a:r><a:rPr sz="2000" b="1"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:rPr><a:t>Hi</a:t></a:r></a:p></xdr:txBody></xdr:sp>` +
+		`<xdr:clientData/></xdr:absoluteAnchor></xdr:wsDr>`
+	files := workbookFiles([]testSheet{{name: "S", xml: `<sheetData/><drawing r:id="rIdD"/>`,
+		rels: `<Relationship Id="rIdD" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>`}},
+		minimalStyles, "", "", map[string]string{"xl/drawings/drawing1.xml": drawing})
+	doc, _ := readBytes(t, zipFiles(t, files))
+	ds := doc.Sheets[0].Drawings
+	if len(ds) != 1 || ds[0].Picture == nil || ds[0].Picture.Vector == nil {
+		t.Fatalf("drawings %+v", ds)
+	}
+	frags := ds[0].Picture.Vector(context.Background(), compose.Rect{Width: 200, Height: 100})
+	var texts []*compose.Text
+	var walk func([]compose.Fragment)
+	walk = func(fs []compose.Fragment) {
+		for _, f := range fs {
+			switch f := f.(type) {
+			case *compose.Text:
+				texts = append(texts, f)
+			case *compose.Group:
+				walk(f.Content)
+			}
+		}
+	}
+	walk(frags)
+	if len(texts) != 1 {
+		t.Fatalf("%d text runs, want 1", len(texts))
+	}
+	tx := texts[0]
+	if tx.Size != 20 || tx.Color != (compose.Color{R: 1, A: 1}) || tx.Origin.X != 180 || tx.Origin.Y <= 80 || tx.Origin.Y >= 100 {
+		t.Errorf("run at %+v size %v colour %+v, want 20-point red text right-aligned at the bottom", tx.Origin, tx.Size, tx.Color)
+	}
+}
