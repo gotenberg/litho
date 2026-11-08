@@ -80,3 +80,30 @@ func TestFrameWrap_FullPage(t *testing.T) {
 		t.Errorf("page 3 lines %s, want k to o", linePlaces(res, 3))
 	}
 }
+
+// TestPageTop starts a table no higher than its distance from its page's
+// top edge, and leaves it where the flow puts it when that is lower.
+func TestPageTop(t *testing.T) {
+	tests := []struct {
+		name   string
+		before int
+		want   string
+	}{
+		{"moved down", 1, "a@0,18 b@0,48 "},
+		{"flow lower", 5, "a@0,18 a@0,28 a@0,38 a@0,48 a@0,58 b@0,68 "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var kids []*Node
+			for range tt.before {
+				kids = append(kids, el(sty(), txt(sty(), "a")))
+			}
+			tb := table(mods(func(s *css.Style) { s.PageTop = px(40) }), tr(nil, td(nil, "b")))
+			kids = append(kids, tb)
+			res := run(t, doc(kids...), PageBox{Width: px(100), Height: px(200), Margin: [4]float64{px(10), 0, px(10), 0}})
+			if got := linePlaces(res, 1); got != tt.want {
+				t.Errorf("lines %s, want %s", got, tt.want)
+			}
+		})
+	}
+}

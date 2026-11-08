@@ -209,6 +209,18 @@ type Office struct {
 	// draws no border. The other border styles and the radii paint as CSS
 	// paints them.
 	StrokeBorders bool
+	// PageTop, when greater than 0, is how far below the top edge of its
+	// page's page box an in-flow table, or any block-level box that
+	// starts a block formatting context, starts at the least, in points:
+	// the box moves down to it when the flow before it ends higher, and
+	// breaks across pages as the flow does, as Writer places a floating
+	// table positioned vertically from the page (ECMA-376 Part 1, 17.4.58
+	// tblpPr with vertAnchor page and tblpY) and continues it on the next
+	// page. The box is placed no higher than the flow before it: content
+	// above PageTop on its page stays where it is. Margins included in
+	// the flow before it collapse as usual; the box's own top margin
+	// adds to PageTop none.
+	PageTop float64
 }
 
 // MinBorderStroke is the least width, in points, at which a border of

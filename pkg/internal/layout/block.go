@@ -533,9 +533,15 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	}
 	if b.kind == kindReplaced || b.establishesBFC() {
 		top := e.pastMargin(cursor, mc.strut.add(mt), mc.kept)
+		if want := e.pageTopOf(b, top); want > top+eps {
+			// The box starts no higher than its distance from its page's
+			// top edge (css.Office.PageTop).
+			mc.commit(top)
+			top = want
+		}
 		switch {
 		case cleared:
-			top = clearY
+			top = max(clearY, top)
 		default:
 			if fy, ok := mc.floatTop(); ok && math.Abs(top-fy) > eps && bc.narrowed(fy, 0, cb.x, cb.x+cb.w) {
 				// A float placed under the pending margins sits at fy: a
@@ -1174,4 +1180,15 @@ func (d *mcolData) place(b *box, y float64) float64 {
 		}
 	}
 	return y
+}
+
+// pageTopOf returns the flow position b's border box starts at the least
+// when its style places it from its page's top edge (css.Office.PageTop)
+// and top is where the flow puts it, -Inf otherwise.
+func (e *engine) pageTopOf(b *box, top float64) float64 {
+	if b.st.PageTop <= 0 || !e.paginating() || e.cols != nil {
+		return math.Inf(-1)
+	}
+	p := e.pageOf(max(top, 0))
+	return e.pageTop(p) - e.box(p).Margin[css.Top] + b.st.PageTop
 }
