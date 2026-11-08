@@ -50,6 +50,13 @@ func (m *calcCmp) eval(c lenCtx) float64 {
 
 func (l length) mixed() bool { return l.hasLen && l.hasPct }
 
+// zeroLen reports a length part that is zero in every unit, as in
+// calc(50% - 0px): with a percentage the value is that percentage alone.
+func (l length) zeroLen() bool {
+	return l.cmp == nil && l.pt == 0 && l.em == 0 && l.ex == 0 && l.ch == 0 && l.rem == 0 &&
+		l.vw == 0 && l.vh == 0 && l.vmin == 0 && l.vmax == 0 && l.lh == 0 && l.rlh == 0
+}
+
 func (l length) scale(k float64) length {
 	l.pt *= k
 	l.em *= k
@@ -313,6 +320,12 @@ func parseLength(t token, f lengthFlags) (length, bool) {
 		}
 		if v.l.hasPct && f&allowPct == 0 {
 			return length{}, false
+		}
+		if v.l.hasPct && v.l.zeroLen() {
+			// A length part that cancels out leaves a percentage, which
+			// resolves as one (CSS Values 4, 10.9: the used value is the
+			// same).
+			v.l.hasLen = false
 		}
 		if v.l.mixed() && f&allowMixed == 0 {
 			return length{}, false
