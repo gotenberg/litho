@@ -173,20 +173,25 @@ func sameColor(a, b css.Color) bool {
 	return d(a.R, b.R) && d(a.G, b.G) && d(a.B, b.B) && d(a.A, b.A)
 }
 
-// TestConditional_DataBar locks the data bar's extent, colour and axis
-// against what Calc prints for sc/databar.xlsx.
+// TestConditional_DataBar locks the data bar's zero, length and colour
+// by axis against what Calc prints for sc/databar.xlsx.
 func TestConditional_DataBar(t *testing.T) {
 	tests := []struct {
 		name     string
+		axis     BarAxis
+		minL     float64
+		maxL     float64
 		values   []Value
 		cells    []float64
-		from, to []float64
-		axis     float64
+		zero     float64
+		length   []float64
 		negative []bool
 	}{
-		{"from the minimum", []Value{str("min"), str("max")}, []float64{1, 2, 4}, []float64{0, 0, 0}, []float64{0, 1.0 / 3, 1}, -1, []bool{false, false, false}},
-		{"over zero, an axis", []Value{num(-2), num(3)}, []float64{1, 3, -2}, []float64{0.4, 0.4, 0.4}, []float64{0.6, 1, 0}, 0.4, []bool{false, false, true}},
-		{"clamped to the thresholds", []Value{num(0), num(2)}, []float64{1, 5}, []float64{0, 0}, []float64{0.5, 1}, -1, []bool{false, false}},
+		{"automatic from the minimum", BarAxisAuto, 0, 1, []Value{str("min"), str("max")}, []float64{1, 2, 4}, 0, []float64{0, 1.0 / 3, 1}, []bool{false, false, false}},
+		{"automatic over zero", BarAxisAuto, 0, 1, []Value{num(-2), num(3)}, []float64{1, 3, -2}, 0.4, []float64{1.0 / 3, 1, -1}, []bool{false, false, true}},
+		{"automatic clamped", BarAxisAuto, 0, 1, []Value{num(0), num(2)}, []float64{1, 5}, 0, []float64{0.5, 1}, []bool{false, false}},
+		{"middle", BarAxisMiddle, 0.1, 0.9, []Value{num(1), num(4)}, []float64{1, 4}, 0.5, []float64{0.225, 0.9}, []bool{false, false}},
+		{"none, the lengths", BarAxisNone, 0.1, 0.9, []Value{num(1), num(5)}, []float64{1, 3, 9}, 0, []float64{0.1, 0.5, 0.9}, []bool{false, false, false}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -195,12 +200,20 @@ func TestConditional_DataBar(t *testing.T) {
 				cells = append(cells, numCell(0, v, nil))
 			}
 			sh := column(cells...)
-			sh.Conditional = []Conditional{{Ranges: []Range{{LastRow: 9}}, Rules: []Rule{{Kind: RuleDataBar, Values: tc.values, Bar: blue}}}}
+			sh.Conditional = []Conditional{{Ranges: []Range{{LastRow: 9}}, Rules: []Rule{{
+				Kind: RuleDataBar, Values: tc.values, Bar: blue, BarAxis: tc.axis, BarMinLength: tc.minL, BarMaxLength: tc.maxL,
+			}}}}
 			g := newGrid(newDoc(sh), sh)
 			for i := range tc.cells {
-				from, to, col, axis, ok := g.dataBar(i, 0, g.cell(i, 0))
-				if !ok || !near(from, tc.from[i], 1e-9) || !near(to, tc.to[i], 1e-9) || !near(axis, tc.axis, 1e-9) {
-					t.Errorf("A%d: %v %v..%v axis %v, want %v..%v axis %v", i+1, ok, from, to, axis, tc.from[i], tc.to[i], tc.axis)
+				zero, length, col, _, ok := g.dataBar(i, 0, g.cell(i, 0))
+				if tc.length[i] == 0 {
+					if ok {
+						t.Errorf("A%d: a bar of length %v", i+1, length)
+					}
+					continue
+				}
+				if !ok || !near(zero, tc.zero, 1e-9) || !near(length, tc.length[i], 1e-9) {
+					t.Errorf("A%d: %v zero %v length %v, want %v %v", i+1, ok, zero, length, tc.zero, tc.length[i])
 				}
 				if (col == red) != tc.negative[i] {
 					t.Errorf("A%d: colour %v", i+1, col)
@@ -219,7 +232,7 @@ func TestConditional_DataBar(t *testing.T) {
 func TestConvert_ConditionalDrawing(t *testing.T) {
 	sh := column(numCell(0, 1, nil), numCell(0, 4, nil))
 	sh.Conditional = []Conditional{
-		{Ranges: []Range{{LastRow: 1}}, Rules: []Rule{{Kind: RuleDataBar, Bar: blue, Values: []Value{num(0), num(4)}}}},
+		{Ranges: []Range{{LastRow: 1}}, Rules: []Rule{{Kind: RuleDataBar, Bar: blue, Values: []Value{num(0), num(4)}, BarMaxLength: 1}}},
 		{Ranges: []Range{{FirstRow: 1, LastRow: 1}}, Rules: []Rule{
 			{Kind: RuleCellIs, Operator: "equal", Values: []Value{num(4)}, Style: &Style{Fill: Fill{Color: green}}},
 			{Kind: RuleExpression, Formula: "TRUE()"},
@@ -278,9 +291,6 @@ func TestThreshold(t *testing.T) {
 		if ok != tc.ok || !near(got, tc.want, 1e-9) {
 			t.Errorf("%s %v: %v %v, want %v %v", tc.kind, tc.v, got, ok, tc.want, tc.ok)
 		}
-	}
-	if lo, hi := MiddleAxis(-1, 4); lo != -4 || hi != 4 {
-		t.Errorf("MiddleAxis %v %v", lo, hi)
 	}
 	if _, ok := Threshold("min", 0, nil); ok {
 		t.Error("min of no number")

@@ -126,7 +126,27 @@ type Rule struct {
 	BarNegative                css.Color
 	BarSolid                   bool
 	BarMinLength, BarMaxLength float64
+	// BarAxis places the zero of a RuleDataBar's bars (MS-XLSX x14:dataBar
+	// axisPosition; ODF calcext:axis-position).
+	BarAxis BarAxis
 }
+
+// BarAxis is where a data bar's zero sits in its cells
+// (ScDataBarFormatData::meAxisPosition).
+type BarAxis uint8
+
+// The data bar axes.
+const (
+	// BarAxisAuto puts zero where it falls between the thresholds, at the
+	// left edge when both are positive.
+	BarAxisAuto BarAxis = iota
+	// BarAxisMiddle puts zero halfway, each side as long as the larger
+	// magnitude, the bars at most BarMaxLength of their side.
+	BarAxisMiddle
+	// BarAxisNone draws every bar from the left edge, from BarMinLength
+	// of the cell at the lower threshold to BarMaxLength at the upper.
+	BarAxisNone
+)
 
 // RuleKind is the kind of a conditional formatting rule (ECMA-376 Part 1,
 // 18.18.12 ST_CfType).

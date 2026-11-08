@@ -644,59 +644,112 @@ func (g *grid) condStyle(r, c int, cell *Cell, base *Style) *Style {
 	return g.cond.overlayStyle(base, res)
 }
 
-// dataBar returns the bar a data bar paints over the cell at (r, c) of
-// width w: its start and end from the cell's left edge as shares of the
-// width, the colour, and the zero axis's share when the range holds
-// values on both sides of zero, -1 otherwise.
-//
-// The bar runs along a line from the lower threshold to the upper, from
-// zero, or the lower threshold when it is positive, to the cell's value,
-// clamped to the thresholds; a negative value's bar is red
-// (ScDataBarFormat::GetDataBarInfo with its axis automatic).
+// dataBar returns the data bar of the cell at (r, c): where zero sits and
+// the bar's signed length, each a fraction (zero of the cell, the length
+// of zero's side), its colour, and whether it is painted solid; false for
+// none. Calc's rules by the rule's axis (ScDataBarFormat::GetDataBarInfo):
+// automatic puts zero between the thresholds, a positive range's at the
+// left edge; middle at half, each side the larger magnitude, the bar at
+// most BarMaxLength of it; none from the left edge, BarMinLength at the
+// lower threshold to BarMaxLength at the upper.
 //
 // # Corpus evidence
 //
 //   - xlsx: sc/databar.xlsx: over -2 to 3 the axis sits at 2/5 of the
 //     cell, 1 paints a third of the positive side and -2 the whole
 //     negative side in red; over 1 to 4 with the minimum as the lower
-//     threshold, 1 paints nothing and 4 the whole width.
-func (g *grid) dataBar(r, c int, cell *Cell) (from, to float64, col css.Color, axis float64, ok bool) {
+//     threshold, 1 paints nothing and 4 the whole width; a middle axis
+//     over 1 to 4 paints 4 across 90% of the right half, 1 a quarter of
+//     that.
+func (g *grid) dataBar(r, c int, cell *Cell) (zero, length float64, col css.Color, solid, ok bool) {
 	if g.cond == nil {
-		return 0, 0, css.Color{}, -1, false
+		return 0, 0, css.Color{}, false, false
 	}
 	res := g.cond.evaluate(g, r, c, cell)
 	if res == nil || res.bar == nil {
-		return 0, 0, css.Color{}, -1, false
+		return 0, 0, css.Color{}, false, false
 	}
-	th, ok := thresholds(res.bar.Values, 2, res.barF.statistics(g))
-	if !ok || !(th[1] > th[0]) {
-		return 0, 0, css.Color{}, -1, false
+	rule := res.bar
+	th, ok := thresholds(rule.Values, 2, res.barF.statistics(g))
+	if !ok || !(th[1] >= th[0]) {
+		return 0, 0, css.Color{}, false, false
 	}
 	lo, hi := th[0], th[1]
-	pos := func(v float64) float64 { return (min(max(v, lo), hi) - lo) / (hi - lo) }
-	zero := min(max(0, lo), hi)
+	minL, maxL := rule.BarMinLength, rule.BarMaxLength
+	if minL == 0 && maxL == 0 {
+		minL, maxL = 0.1, 0.9
+	}
 	v := cell.Value.Number
-	from, to = pos(zero), pos(v)
-	col = res.bar.Bar
+	switch rule.BarAxis {
+	case BarAxisNone:
+		switch {
+		case v <= lo:
+			length = minL
+		case v >= hi:
+			length = maxL
+		default:
+			length = minL + (v-lo)/(hi-lo)*(maxL-minL)
+		}
+	case BarAxisMiddle:
+		zero = 0.5
+		absMax := max(math.Abs(lo), math.Abs(hi))
+		if absMax == 0 {
+			return 0, 0, css.Color{}, false, false
+		}
+		switch {
+		case v < 0 && lo < 0:
+			length = maxL * max(v, lo) / absMax
+		case v > hi:
+			length = maxL * hi / absMax
+		default:
+			length = maxL * max(v, lo) / absMax
+		}
+	case BarAxisAuto:
+		if lo < 0 {
+			zero = 1
+			if hi >= 0 {
+				zero = -lo / (hi - lo)
+			}
+		}
+		pos, neg := max(0, lo), min(0, hi)
+		switch {
+		case v < 0 && lo < 0:
+			length = -1
+			if v >= lo {
+				length = -(v - neg) / (lo - neg)
+			}
+		case v > hi:
+			length = 1
+		case v <= lo:
+			length = 0
+		default:
+			length = (v - pos) / (hi - pos)
+		}
+	}
+	if !finite(length) || length == 0 {
+		return 0, 0, css.Color{}, false, false
+	}
+	col = rule.Bar
 	if col.A == 0 {
 		col = css.Color{R: 0x63 / 255.0, G: 0x8E / 255.0, B: 0xC6 / 255.0, A: 1}
 	}
-	if v < 0 && lo < 0 {
-		col = negativeBar
+	if v < 0 {
+		col = rule.BarNegative
+		if col.A == 0 {
+			col = negativeBar
+		}
 	}
-	axis = -1
-	if lo < 0 && hi > 0 {
-		axis = pos(0)
-	}
-	return from, to, col, axis, true
+	return zero, length, col, rule.BarSolid, true
 }
 
 // drawDataBar paints the data bar of the unit u, if any, as Calc draws it
-// under the cell's text: a gradient from the bar's colour at the zero
-// side to transparent at the value's end, inset from the cell's edges,
-// with the zero axis over it.
+// under the cell's text (sc/source/ui/view/output.cxx, drawDataBars): in
+// the cell inset from its edges, from zero across its share of zero's
+// side, a gradient from the bar's colour at zero to transparent at the
+// value's end or a flat fill, with the zero axis over it when zero is
+// inside the cell.
 func (b *pageBuilder) drawDataBar(u *unit) {
-	from, to, col, axis, ok := b.g.dataBar(u.r, u.c, u.cell)
+	zero, length, col, solid, ok := b.g.dataBar(u.r, u.c, u.cell)
 	if !ok {
 		return
 	}
@@ -707,23 +760,31 @@ func (b *pageBuilder) drawDataBar(u *unit) {
 	if w <= 0 || h <= 0 {
 		return
 	}
-	a, z := x0+w*from, x0+w*to
+	at := x0 + w*zero
+	var a, z float64
+	if length < 0 {
+		a, z = at, at+(at-x0)*length
+	} else {
+		a, z = at, at+(x0+w-at)*length
+	}
 	if math.Abs(z-a) > epsilon {
 		left, right := min(a, z), max(a, z)
 		c := colorOf(col)
-		clear := c
-		clear.A = 0
-		sh := &compose.Shading{
-			Kind: compose.Axial, From: compose.Point{X: a, Y: y}, To: compose.Point{X: z, Y: y},
-			Stops:     []compose.ColorStop{{Offset: 0, Color: c}, {Offset: 1, Color: clear}},
-			Transform: compose.Identity,
+		fill := &compose.Fill{Color: c}
+		if !solid {
+			clear := c
+			clear.A = 0
+			fill = &compose.Fill{Shading: &compose.Shading{
+				Kind: compose.Axial, From: compose.Point{X: a, Y: y}, To: compose.Point{X: z, Y: y},
+				Stops:     []compose.ColorStop{{Offset: 0, Color: c}, {Offset: 1, Color: clear}},
+				Transform: compose.Identity,
+			}}
 		}
-		b.fills = append(b.fills, &compose.Path{Ops: rectOps(left, y, right-left, h), Fill: &compose.Fill{Shading: sh}})
+		b.fills = append(b.fills, &compose.Path{Ops: rectOps(left, y, right-left, h), Fill: fill})
 	}
-	if axis >= 0 {
-		ax := x0 + w*axis
+	if zero > 0 && zero < 1 {
 		stroke := dataBarAxis
-		b.fills = append(b.fills, &compose.Path{Ops: lineOps(ax, y, ax, y+h), Stroke: &stroke})
+		b.fills = append(b.fills, &compose.Path{Ops: lineOps(at, y, at, y+h), Stroke: &stroke})
 	}
 }
 
@@ -794,17 +855,6 @@ func Threshold(kind string, v float64, nums []float64) (float64, bool) {
 		return Percentile(nums, v), true
 	}
 	return 0, false
-}
-
-// MiddleAxis returns the thresholds of a data bar whose axis sits in the
-// middle of its cells (ECMA-376 Part 1 as MS-XLSX, 2.6.29 axisPosition
-// middle extends it; ODF calcext:axis-position middle): the lower and
-// upper thresholds made symmetric about zero, so that zero falls halfway
-// and a value's bar runs its share of the larger magnitude across half
-// the cell (ScDataBarFormat::GetDataBarInfo, databar::MIDDLE).
-func MiddleAxis(lo, hi float64) (float64, float64) {
-	m := max(math.Abs(lo), math.Abs(hi))
-	return -m, m
 }
 
 // Percentile returns the p-th percentile of the sorted nums, interpolated
