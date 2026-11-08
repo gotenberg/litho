@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
 // NSChart is the DrawingML chart namespace (ECMA-376 Part 1, 21.2).
@@ -425,18 +426,29 @@ func (p *chartReader) fill(spPr *Element) (*chart.Paint, bool) {
 			}
 			return nil, true
 		case "gradFill":
-			stops := e.Child(NSA, "gsLst").Kids()
-			if len(stops) > 0 {
-				if c, ok := SchemeColor(stops[len(stops)/2], p.theme); ok {
-					return &chart.Paint{Color: toCompose(c)}, true
-				}
+			g := parseGradient(e, p.theme)
+			if g == nil {
+				return nil, true
 			}
-			return nil, true
+			return &chart.Paint{
+				Color: g.Stops[len(g.Stops)/2].Color,
+				Shape: &shape.Paint{Kind: shape.PaintGradient, Stops: g.Stops, Angle: g.Angle, Radial: g.Radial},
+			}, true
 		case "pattFill":
+			// A pattern without colours draws black on white (20.1.8.47
+			// pattFill's fgClr and bgClr defaults, as LibreOffice reads them).
+			fg, bg := compose.Black, compose.Color{R: 1, G: 1, B: 1, A: 1}
 			if c, ok := SchemeColor(e.Child(NSA, "fgClr"), p.theme); ok {
-				return &chart.Paint{Color: toCompose(c)}, true
+				fg = toCompose(c)
 			}
-			return nil, true
+			if c, ok := SchemeColor(e.Child(NSA, "bgClr"), p.theme); ok {
+				bg = toCompose(c)
+			}
+			prst := attrOr(e, "prst")
+			if prst == "" {
+				prst = "pct5"
+			}
+			return &chart.Paint{Color: fg, Shape: &shape.Paint{Kind: shape.PaintPattern, Pattern: prst, Color: fg, Background: bg}}, true
 		case "blipFill", "grpFill":
 			return nil, true
 		}

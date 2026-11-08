@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
 // chartXML wraps a plot area's content and the chart's other children in
@@ -331,5 +332,19 @@ func TestChartFromElement_AxisLabelBreaks(t *testing.T) {
 				t.Errorf("axes = %+v", c.Axes)
 			}
 		})
+	}
+}
+
+func TestChartFromElement_GradientAndPatternFills(t *testing.T) {
+	spPr := `<c:spPr><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill></c:spPr>`
+	plot := `<c:barChart><c:barDir val="col"/>` + ser(0, "A", spPr, "1") + `</c:barChart><c:spPr><a:pattFill prst="dkDnDiag"><a:fgClr><a:srgbClr val="00FF00"/></a:fgClr></a:pattFill></c:spPr>`
+	c := readChart(t, chartXML("", "", plot), false)
+	f := c.Groups[0].Series[0].Fill
+	if f == nil || f.Shape == nil || f.Shape.Kind != shape.PaintGradient || len(f.Shape.Stops) != 2 || f.Shape.Angle != 90 {
+		t.Errorf("series fill = %+v", f)
+	}
+	pf := c.PlotArea.Fill
+	if pf == nil || pf.Shape == nil || pf.Shape.Pattern != "dkDnDiag" || pf.Shape.Color.G != 1 || pf.Shape.Background.R != 1 {
+		t.Errorf("plot area fill = %+v", pf)
 	}
 }
