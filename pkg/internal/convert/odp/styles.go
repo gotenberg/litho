@@ -134,7 +134,8 @@ func (r *reader) shapeStyle(el *odf.Element, pc *pageCtx) *shapeStyle {
 	if family == odf.FamilyPresentation {
 		if base := r.placeholderBase(chain, ss.class, pc); len(base) > 0 {
 			// The master's style of the class goes under the shape's own.
-			lead := []layer{ls[0]}
+			lead := make([]layer, 0, len(base)+len(ls))
+			lead = append(lead, ls[0])
 			for _, st := range base {
 				lead = append(lead, layerOf(st))
 			}
