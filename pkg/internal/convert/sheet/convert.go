@@ -101,6 +101,14 @@ func (b *builder) warnOnce(code, msg string) {
 // rules hold for, paint colour scales and draw data bars, as Calc does. The grid and the row and column headings print when the
 // sheet asks for them, and pictures over the cells their anchors name.
 //
+// # Pivot tables
+//
+// A sheet's pivot tables are rebuilt from their source cells before the
+// sheet is cut into pages, as Calc rebuilds them when it loads a
+// workbook: the area the file saved the output in is emptied, and the
+// output written in its place with Calc's captions ("Total Result",
+// "(empty)", the field names), its frames and its DataPilot cell styles.
+//
 // # Not supported
 //
 // Charts are reserved as empty boxes with a warning; the conditional
@@ -122,6 +130,8 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		return nil, fmt.Errorf("laying the spreadsheet out: %w", text.ErrNoFonts)
 	}
 	b := newBuilder(ctx, doc, fonts, opts)
+	doc = b.applyPivots(doc)
+	b.doc = doc
 	limit := opts.MaxPages
 	if limit <= 0 {
 		limit = layout.DefaultMaxPages

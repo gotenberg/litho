@@ -22,4 +22,7 @@ const (
 	CodeTooManyPages = "sheet-too-many-pages"
 	// CodeConditional is a conditional formatting rule not applied.
 	CodeConditional = "sheet-conditional"
+	// CodePivot is a pivot table whose output is left as the file saved
+	// it, or computed in part.
+	CodePivot = "sheet-pivot"
 )

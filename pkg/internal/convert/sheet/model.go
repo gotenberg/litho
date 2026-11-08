@@ -67,6 +67,10 @@ type Sheet struct {
 	// file lists them; a rule earlier in the list, or of a lower Priority
 	// when both set one, wins over a later one for a cell both match.
 	Conditional []Conditional
+	// Pivots are the sheet's pivot tables, whose output the builder
+	// computes from their source cells and writes over the sheet's cells,
+	// as Calc rebuilds a pivot table when it loads a workbook.
+	Pivots []Pivot
 }
 
 // Conditional is one conditional format: the ranges it applies to and
@@ -625,3 +629,149 @@ type Anchor struct {
 	// DX and DY are the offset into the cell in points, at least 0.
 	DX, DY float64
 }
+
+// Pivot is a pivot table: a summary of a source range of cells by the
+// distinct values of some of its columns (ECMA-376 Part 1, 18.10.1.73
+// pivotTableDefinition with its cache, 18.10.1.67 pivotCacheDefinition;
+// ODF 1.3 Part 3, 9.6.2 table:data-pilot-table). The reader resolves the
+// file's fields to the source's columns and Calc's settings; the builder
+// computes the output from the source cells and writes it at Row and
+// Column after emptying Clear, laid out, captioned, framed and styled as
+// Calc's DataPilot output is.
+type Pivot struct {
+	// Name is the pivot table's name, for warnings.
+	Name string
+	// Row and Column are the output's top-left cell, page fields
+	// included.
+	Row, Column int
+	// Clear is the area the file saved the output in, emptied of values
+	// and styles before the output is written; nil for none.
+	Clear *Range
+	// SourceSheet is the index in Document.Sheets of the sheet the source
+	// range is on, Source the range: its first row names the fields, every
+	// other row is a record.
+	SourceSheet int
+	Source      Range
+	// Rows, Columns and Pages are the row, column and page fields in
+	// order; Data the data fields. A Rows or Columns entry whose Field is
+	// PivotDataLayout places the data fields' names on that axis.
+	Rows, Columns, Pages []PivotField
+	Data                 []PivotData
+	// RowGrand adds a grand total row below the rows when there are row
+	// fields, ColumnGrand a grand total column right of the columns when
+	// there are column fields (Calc's RowGrand and ColumnGrand).
+	RowGrand, ColumnGrand bool
+	// HideHeader leaves out the header row above the column fields.
+	HideHeader bool
+	// FilterButton adds a row with a filter button above the page fields.
+	FilterButton bool
+	// ExpandCollapse indents the members of the row fields that have
+	// children by one step, the room of Calc's expand and collapse
+	// buttons.
+	ExpandCollapse bool
+}
+
+// PivotDataLayout is the Field of the data layout field, the field whose
+// members are the data fields.
+const PivotDataLayout = -1
+
+// PivotField is a row, column or page field of a pivot table (ECMA-376
+// Part 1, 18.10.1.69 pivotField; ODF 1.3 Part 3, 9.6.7
+// table:data-pilot-field).
+type PivotField struct {
+	// Field is the 0-based column of the source range, or
+	// PivotDataLayout.
+	Field int
+	// Name, when not "", names the source column by its label instead of
+	// Field, as Calc finds a workbook's cache field in its source: the
+	// labels made unique as Calc's cache makes them ("Data" taken first,
+	// a repeated label numbered from 2, case ignored), a name no label
+	// matches leaving the field out.
+	Name string
+	// Caption is the field's caption, "" for its name.
+	Caption string
+	// Layout is how the field's members and subtotals are laid out.
+	Layout PivotLayout
+	// Subtotals are the subtotal functions of the field's members, in
+	// order; PivotAuto alone uses each data field's own function, nil
+	// shows no subtotal.
+	Subtotals []PivotFunction
+	// AddEmpty adds an empty line after each member.
+	AddEmpty bool
+	// ShowEmpty shows the members without data too.
+	ShowEmpty bool
+	// Sort orders the members; Order lists them for PivotManual, the
+	// members it leaves out following in ascending order.
+	Sort  PivotSort
+	Order []Value
+	// Hidden are the members not shown, whose records are left out.
+	Hidden []Value
+	// Selected, for a page field, is the member whose records alone are
+	// summarised; nil for all.
+	Selected *Value
+}
+
+// PivotData is a data field: a source column summarised by a function
+// (ECMA-376 Part 1, 18.10.1.30 dataField; ODF table:data-pilot-field with
+// table:orientation data).
+type PivotData struct {
+	// Field is the 0-based column of the source range; Name, when not
+	// "", names it as PivotField.Name does.
+	Field int
+	Name  string
+	// Function summarises the field's values.
+	Function PivotFunction
+	// Caption is the field's caption, "" for Calc's "Sum - name".
+	Caption string
+}
+
+// PivotLayout is the layout of a row or column field's members.
+type PivotLayout uint8
+
+// The pivot field layouts (com.sun.star.sheet.DataPilotFieldLayoutMode).
+const (
+	// PivotTabular starts a member's first child on its own row.
+	PivotTabular PivotLayout = iota
+	// PivotOutlineBottom gives each member a title row and its subtotals
+	// rows below its children.
+	PivotOutlineBottom
+	// PivotOutlineTop gives each member a title row showing its subtotal.
+	PivotOutlineTop
+	// PivotCompact is PivotOutlineTop with the next field's members in the
+	// same column, indented.
+	PivotCompact
+)
+
+// PivotFunction is a summary function (ECMA-376 Part 1, 18.18.16
+// ST_DataConsolidateFunction; ODF table:function).
+type PivotFunction uint8
+
+// The summary functions.
+const (
+	// PivotAuto is a subtotal in each data field's own function.
+	PivotAuto PivotFunction = iota
+	PivotSum
+	// PivotCount counts the non-empty values, PivotCountNums the numbers.
+	PivotCount
+	PivotAverage
+	PivotMax
+	PivotMin
+	PivotProduct
+	PivotCountNums
+	PivotStdDev
+	PivotStdDevP
+	PivotVar
+	PivotVarP
+	PivotMedian
+)
+
+// PivotSort is the order of a field's members.
+type PivotSort uint8
+
+// The member orders.
+const (
+	// PivotManual lists the members in Order, then the rest ascending.
+	PivotManual PivotSort = iota
+	PivotAscending
+	PivotDescending
+)
