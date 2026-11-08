@@ -179,7 +179,7 @@ type chartReader struct {
 	axes map[string]int
 	// crossBetween is each axis's c:crossBetween, "" when absent.
 	crossBetween []string
-	warned map[string]bool
+	warned       map[string]bool
 	// autoLines are the line series whose line takes the automatic
 	// colour.
 	autoLines []*chart.Series
