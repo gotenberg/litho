@@ -221,7 +221,7 @@ func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 			s.Line = r.line(ss.graphic)
 			s.Text = r.textBody(k, ss, pc)
 			r.textBodyProps(s.Text, ss.graphic, true)
-			r.effects(ss.graphic)
+			r.effects(ss.graphic, s)
 			return s
 		case k.Is(odf.NSDraw, "image"):
 			pic := r.picture(k)
@@ -389,7 +389,7 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 		s.Text = r.textBody(el, ss, pc)
 		r.textBodyProps(s.Text, ss.graphic, false)
 	}
-	r.effects(ss.graphic)
+	r.effects(ss.graphic, s)
 	return s
 }
 
