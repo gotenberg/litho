@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/remediation"
+	"github.com/gotenberg/litho/pkg/internal/render/page"
 	"github.com/gotenberg/litho/pkg/internal/semantics"
 	"github.com/gotenberg/litho/pkg/internal/signature"
 	"github.com/gotenberg/litho/pkg/internal/tagging"
@@ -91,7 +92,7 @@ var (
 	//   - its content runs more operators than one render allows.
 	//
 	// Raising MaxRenderPixels or lowering the resolution reads the first two.
-	ErrRenderTooLarge = errors.New("page render exceeds its budget")
+	ErrRenderTooLarge = page.ErrTooLarge
 
 	// ErrInvalidRenderOptions is returned, wrapped, by [Reader.RenderPage]
 	// when [WithRenderDPI] is not positive and finite, [WithRenderTarget]
@@ -100,7 +101,7 @@ var (
 	// [WithRenderColorModel] names no [RenderColorModel], or
 	// [WithRenderCMYKProfile] is given a profile litho cannot read CMYK
 	// through or is given for an RGB render.
-	ErrInvalidRenderOptions = errors.New("invalid render options")
+	ErrInvalidRenderOptions = page.ErrInvalidOptions
 
 	// ErrFormFieldNotFound is returned, wrapped, by [Writer.WriteTo] when no
 	// field has the name [Writer.SetFormField] gave: the interactive form's

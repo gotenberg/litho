@@ -70,7 +70,7 @@ func runAnnotations(ctx context.Context, args []string, stdout, stderr io.Writer
 		for _, p := range pageNums {
 			annots, err := r.ExtractAnnotations(ctx, p)
 			if err != nil {
-				fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
+				fmt.Fprintf(stderr, "%s: %v\n", path, err)
 				annots = nil
 			}
 			res.Pages = append(res.Pages, annotationPageResult{Page: p, Annotations: annots})

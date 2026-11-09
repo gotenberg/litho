@@ -48,7 +48,7 @@ func runGeo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		for _, p := range pageNums {
 			geo, err := r.ExtractGeoData(ctx, p)
 			if err != nil {
-				fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
+				fmt.Fprintf(stderr, "%s: %v\n", path, err)
 				continue
 			}
 			if len(geo) == 0 {

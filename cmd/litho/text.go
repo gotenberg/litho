@@ -91,14 +91,14 @@ func runText(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			if *unseen {
 				runs, err := r.ExtractUnseenText(ctx, p)
 				if err != nil {
-					fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
+					fmt.Fprintf(stderr, "%s: %v\n", path, err)
 				}
 				res.Pages = append(res.Pages, textPageResult{Page: p, Unseen: runs})
 				continue
 			}
 			text, err := r.ExtractText(ctx, p, textOptions(*hidden, *invisible, *clipPath, *clipped, *artifacts)...)
 			if err != nil {
-				fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
+				fmt.Fprintf(stderr, "%s: %v\n", path, err)
 				text = ""
 			}
 			res.Pages = append(res.Pages, textPageResult{Page: p, Text: text})

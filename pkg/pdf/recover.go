@@ -63,3 +63,14 @@ func (w *Writer) logger() *slog.Logger {
 	}
 	return w.reader.logger()
 }
+
+// pageError names the page a per-page [Reader] method failed on, prefixing its
+// error with "page N: ". It is the one place such an error names its page, so
+// the method's helpers leave the page out, and so does a caller. A method
+// defers it before recoverToError, so that a recovered panic names its page
+// too.
+func pageError(pageNum int, err *error) {
+	if *err != nil {
+		*err = fmt.Errorf("page %d: %w", pageNum, *err)
+	}
+}

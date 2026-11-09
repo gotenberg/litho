@@ -77,7 +77,7 @@ func runImages(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		for _, p := range pageNums {
 			metas, err := r.ExtractImages(ctx, p)
 			if err != nil {
-				fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
+				fmt.Fprintf(stderr, "%s: %v\n", path, err)
 				metas = nil
 			}
 			var imgs []imageInfo

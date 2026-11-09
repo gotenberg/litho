@@ -57,7 +57,7 @@ func runPages(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 			p, err := r.Page(ctx, i)
 			if err != nil {
 				closer()
-				fmt.Fprintf(stderr, "%s page %d: %v\n", path, i, err)
+				fmt.Fprintf(stderr, "%s: %v\n", path, err)
 				return exitError
 			}
 			res.Pages = append(res.Pages, pageInfo{

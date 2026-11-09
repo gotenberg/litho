@@ -48,7 +48,7 @@ func runTables(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		for _, p := range pageNums {
 			tables, err := r.ExtractTables(ctx, p)
 			if err != nil {
-				fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
+				fmt.Fprintf(stderr, "%s: %v\n", path, err)
 				continue
 			}
 			if len(tables) == 0 {

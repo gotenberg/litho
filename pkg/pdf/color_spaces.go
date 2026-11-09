@@ -23,6 +23,7 @@ import (
 // than colour (11.6.5.2), is not walked. Each stream is read once, and the
 // walk stops at the form nesting budget of [Limits].
 func (r *Reader) ExtractColorSpaces(ctx context.Context, pageNum int) (_ []models.ColorSpaceUse, err error) {
+	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.ExtractColorSpaces", &err)
 	page, err := r.resolvePage(ctx, pageNum)
 	if err != nil {

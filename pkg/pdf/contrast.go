@@ -127,6 +127,7 @@ func WithEnhancedContrast() ContrastOption {
 // boxes cover the page past 64 times. It is safe for concurrent use with every
 // other read of the [Reader].
 func (r *Reader) CheckTextContrast(ctx context.Context, pageNum int, opts ...ContrastOption) (_ models.ContrastReport, err error) {
+	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.CheckTextContrast", &err)
 	var o contrastOpts
 	for _, opt := range opts {
@@ -139,9 +140,9 @@ func (r *Reader) CheckTextContrast(ctx context.Context, pageNum int, opts ...Con
 	s, err := r.readScene(ctx, pg)
 	if err != nil {
 		if errors.Is(err, typography.ErrFontNotFound) {
-			return models.ContrastReport{}, fmt.Errorf("page %d: %w", pageNum, ErrFontMissing)
+			return models.ContrastReport{}, ErrFontMissing
 		}
-		return models.ContrastReport{}, fmt.Errorf("page %d: %w", pageNum, err)
+		return models.ContrastReport{}, err
 	}
 	var rep models.ContrastReport
 	runs := contrastRuns(s)
@@ -150,16 +151,16 @@ func (r *Reader) CheckTextContrast(ctx context.Context, pageNum int, opts ...Con
 	}
 	stacks, err := s.stackRuns(ctx, runs, nil)
 	if err != nil {
-		return models.ContrastReport{}, fmt.Errorf("page %d: %w", pageNum, err)
+		return models.ContrastReport{}, err
 	}
 	under := make([]contrastSamples, len(stacks))
 	verdicts, err := s.judgeOwnInk(ctx, r, pg, [4]float64{}, stackGlyphs(stacks), ownInkOptions{under: func(k int, with, without []byte) { under[k].add(with, without) }})
 	if err != nil {
-		return models.ContrastReport{}, sceneError(pageNum, err)
+		return models.ContrastReport{}, sceneError(err)
 	}
 	throughClip, err := s.shownThroughClip(ctx, r, pg, stacks, verdicts)
 	if err != nil {
-		return models.ContrastReport{}, sceneError(pageNum, err)
+		return models.ContrastReport{}, sceneError(err)
 	}
 	conv := &inkConverter{cache: &colorconv.Cache{}}
 	for n, stack := range stacks {

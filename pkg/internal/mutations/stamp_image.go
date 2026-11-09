@@ -52,7 +52,7 @@ func CheckStampImage(data []byte, mimeType string) error {
 		}
 	case "image/png":
 		if _, err := png.DecodeConfig(bytes.NewReader(data)); err != nil {
-			return fmt.Errorf("%w: PNG: %w", ErrInvalidImage, err)
+			return fmt.Errorf("%w: %w", ErrInvalidImage, err)
 		}
 	}
 	return nil
@@ -64,7 +64,7 @@ func CheckStampImage(data []byte, mimeType string) error {
 func jpegFrame(data []byte) (size [2]int, colorSpace ast.PdfName, err error) {
 	w, h, cs, err := readJPEGDimensions(data)
 	if err != nil {
-		return size, "", fmt.Errorf("%w: JPEG: %w", ErrInvalidImage, err)
+		return size, "", fmt.Errorf("%w: %w", ErrInvalidImage, err)
 	}
 	switch cs {
 	case 1:
@@ -254,7 +254,7 @@ func readJPEGDimensions(data []byte) (width, height, components int, err error) 
 		// SOF0, SOF1, SOF2: baseline, extended, progressive.
 		if marker == 0xC0 || marker == 0xC1 || marker == 0xC2 {
 			if segLen < 8 {
-				return 0, 0, 0, fmt.Errorf("SOF segment too short")
+				return 0, 0, 0, fmt.Errorf("JPEG SOF segment too short")
 			}
 			// Layout: length(2) precision(1) height(2) width(2) components(1).
 			height = int(binary.BigEndian.Uint16(data[i+3 : i+5]))
@@ -274,7 +274,7 @@ func readJPEGDimensions(data []byte) (width, height, components int, err error) 
 func buildPNGXObject(alloc *writer.ObjAllocator, data []byte) (ast.PdfStream, int, int, error) {
 	img, err := png.Decode(bytes.NewReader(data))
 	if err != nil {
-		return ast.PdfStream{}, 0, 0, fmt.Errorf("%w: PNG: %w", ErrInvalidImage, err)
+		return ast.PdfStream{}, 0, 0, fmt.Errorf("%w: %w", ErrInvalidImage, err)
 	}
 	bounds := img.Bounds()
 	w := bounds.Dx()

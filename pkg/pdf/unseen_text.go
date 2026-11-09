@@ -78,6 +78,7 @@ func invisibleMode(mode int) bool {
 // boxes cover the page past 64 times. It is safe for concurrent use with every
 // other read of the [Reader].
 func (r *Reader) ExtractUnseenText(ctx context.Context, pageNum int) (_ []models.UnseenText, err error) {
+	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.ExtractUnseenText", &err)
 	pg, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
@@ -86,9 +87,9 @@ func (r *Reader) ExtractUnseenText(ctx context.Context, pageNum int) (_ []models
 	s, err := r.readScene(ctx, pg)
 	if err != nil {
 		if errors.Is(err, typography.ErrFontNotFound) {
-			return nil, fmt.Errorf("page %d: %w", pageNum, ErrFontMissing)
+			return nil, ErrFontMissing
 		}
-		return nil, fmt.Errorf("page %d: %w", pageNum, err)
+		return nil, err
 	}
 	runs := unseenRuns(s)
 	isDrawn := func(k int) bool {
@@ -100,7 +101,7 @@ func (r *Reader) ExtractUnseenText(ctx context.Context, pageNum int) (_ []models
 		return isDrawn(a) && isDrawn(b) && (s.paints[runs[a][0]].Mode == 7) == (s.paints[runs[b][0]].Mode == 7)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("page %d: %w", pageNum, err)
+		return nil, err
 	}
 	units := stackGlyphs(stacks)
 	reasons := make([]models.UnseenReason, len(units))
@@ -117,7 +118,7 @@ func (r *Reader) ExtractUnseenText(ctx context.Context, pageNum int) (_ []models
 	}
 	seen, err := s.judgeUnseen(ctx, r, pg, units, drawn, reasons)
 	if err != nil {
-		return nil, sceneError(pageNum, err)
+		return nil, sceneError(err)
 	}
 	s.seenThroughClipCopies(units, seen, reasons)
 	s.seenInPaintedCopies(units, seen, reasons)
@@ -329,14 +330,14 @@ func (s *textScene) copiedBy(runs, by [][]int, later bool) []bool {
 
 // sceneError wraps the failure to draw a scene for a page in the public
 // error it maps to.
-func sceneError(pageNum int, err error) error {
+func sceneError(err error) error {
 	switch {
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded), errors.Is(err, ErrRenderTooLarge):
 		return err
-	case errors.Is(err, page.ErrTooLarge), errors.Is(err, errSceneTooCostly):
-		return fmt.Errorf("page %d: %w: %v", pageNum, ErrRenderTooLarge, err)
+	case errors.Is(err, errSceneTooCostly):
+		return fmt.Errorf("%w: %v", ErrRenderTooLarge, err)
 	}
-	return fmt.Errorf("drawing page %d: %w", pageNum, err)
+	return fmt.Errorf("drawing: %w", err)
 }
 
 // unseenRuns groups a scene's glyphs into runs judged as one: consecutive

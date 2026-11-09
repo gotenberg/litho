@@ -47,7 +47,7 @@ func runMeasurements(ctx context.Context, args []string, stdout, stderr io.Write
 		for _, p := range pageNums {
 			ms, err := r.ExtractMeasurements(ctx, p)
 			if err != nil {
-				fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
+				fmt.Fprintf(stderr, "%s: %v\n", path, err)
 				continue
 			}
 			if len(ms) == 0 {

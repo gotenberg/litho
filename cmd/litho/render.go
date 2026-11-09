@@ -152,7 +152,7 @@ func runRender(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	for _, p := range pageNums {
 		img, rep, err := r.RenderPageReport(ctx, p, opts...)
 		if err != nil {
-			fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
+			fmt.Fprintf(stderr, "%s: %v\n", path, err)
 			return exitError
 		}
 		name := fmt.Sprintf("%s-%d.png", *output, p)

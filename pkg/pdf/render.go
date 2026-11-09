@@ -370,6 +370,7 @@ func WithRenderRedactionReading() RenderOption {
 // [Reader.RenderPageReport] draws the same page and also says what the drawing
 // approximated.
 func (r *Reader) RenderPage(ctx context.Context, pageNum int, opts ...RenderOption) (_ image.Image, err error) {
+	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.RenderPage", &err)
 	img, _, err := r.renderPage(ctx, pageNum, opts)
 	return img, err
@@ -436,6 +437,7 @@ type RenderReport struct {
 // RenderPageReport is safe for concurrent use with every other read of the
 // [Reader], as [Reader.RenderPage] is.
 func (r *Reader) RenderPageReport(ctx context.Context, pageNum int, opts ...RenderOption) (_ image.Image, _ RenderReport, err error) {
+	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.RenderPageReport", &err)
 	img, rep, err := r.renderPage(ctx, pageNum, opts)
 	if err != nil {
@@ -486,24 +488,24 @@ func (r *Reader) renderPage(ctx context.Context, pageNum int, opts []RenderOptio
 	case RenderForPrint:
 		mode = annot.Print
 	default:
-		return nil, page.Report{}, fmt.Errorf("page %d: %w: render target %d", pageNum, ErrInvalidRenderOptions, o.target)
+		return nil, page.Report{}, fmt.Errorf("%w: render target %d", ErrInvalidRenderOptions, o.target)
 	}
 	if o.content&^RenderAllContent != 0 {
-		return nil, page.Report{}, fmt.Errorf("page %d: %w: render content %#x", pageNum, ErrInvalidRenderOptions, uint8(o.content))
+		return nil, page.Report{}, fmt.Errorf("%w: render content %#x", ErrInvalidRenderOptions, uint8(o.content))
 	}
 	box, ok := renderBoxes[o.box]
 	if !ok {
-		return nil, page.Report{}, fmt.Errorf("page %d: %w: render box %d", pageNum, ErrInvalidRenderOptions, o.box)
+		return nil, page.Report{}, fmt.Errorf("%w: render box %d", ErrInvalidRenderOptions, o.box)
 	}
 	if o.model != RenderRGB && o.model != RenderCMYK {
-		return nil, page.Report{}, fmt.Errorf("page %d: %w: colour model %d", pageNum, ErrInvalidRenderOptions, o.model)
+		return nil, page.Report{}, fmt.Errorf("%w: colour model %d", ErrInvalidRenderOptions, o.model)
 	}
 	if o.cmykProfileSet {
 		switch {
 		case o.model != RenderCMYK:
-			return nil, page.Report{}, fmt.Errorf("page %d: %w: a CMYK profile for an RGB render", pageNum, ErrInvalidRenderOptions)
+			return nil, page.Report{}, fmt.Errorf("%w: a CMYK profile for an RGB render", ErrInvalidRenderOptions)
 		case o.cmykProfileErr != nil:
-			return nil, page.Report{}, fmt.Errorf("page %d: %w: CMYK profile: %w", pageNum, ErrInvalidRenderOptions, o.cmykProfileErr)
+			return nil, page.Report{}, fmt.Errorf("%w: CMYK profile: %w", ErrInvalidRenderOptions, o.cmykProfileErr)
 		}
 	}
 	pg, err := r.resolvePage(ctx, pageNum)
@@ -536,14 +538,12 @@ func (r *Reader) renderPage(ctx context.Context, pageNum int, opts []RenderOptio
 		DefaultBlackPoint: o.redactionReading,
 	})
 	if err != nil {
-		switch {
-		case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
-		case errors.Is(err, page.ErrInvalidOptions):
-			return nil, page.Report{}, fmt.Errorf("page %d: %w: %v", pageNum, ErrInvalidRenderOptions, err)
-		case errors.Is(err, page.ErrTooLarge):
-			return nil, page.Report{}, fmt.Errorf("page %d: %w: %v", pageNum, ErrRenderTooLarge, err)
+		// The renderer's sentinels are the public ones, and its message says
+		// what failed: wrapping it would name the failure twice.
+		if errors.Is(err, ErrInvalidRenderOptions) || errors.Is(err, ErrRenderTooLarge) {
+			return nil, page.Report{}, err
 		}
-		return nil, page.Report{}, fmt.Errorf("rendering page %d: %w", pageNum, err)
+		return nil, page.Report{}, fmt.Errorf("rendering: %w", err)
 	}
 	if len(report.Unsupported) > 0 {
 		attrs := make([]any, 0, len(report.Unsupported)+1)

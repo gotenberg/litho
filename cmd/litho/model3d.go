@@ -47,7 +47,7 @@ func runModel3d(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		for _, p := range pageNums {
 			models3d, err := r.Extract3DModels(ctx, p)
 			if err != nil {
-				fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
+				fmt.Fprintf(stderr, "%s: %v\n", path, err)
 				continue
 			}
 			if len(models3d) == 0 {

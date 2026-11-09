@@ -47,7 +47,7 @@ func runRedactions(ctx context.Context, args []string, stdout, stderr io.Writer)
 		for _, p := range pageNums {
 			rt, err := r.ExtractRedactedText(ctx, p)
 			if err != nil {
-				fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
+				fmt.Fprintf(stderr, "%s: %v\n", path, err)
 				continue
 			}
 			// Report only the text a redaction mark covers. The reader

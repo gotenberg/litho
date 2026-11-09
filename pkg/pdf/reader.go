@@ -924,6 +924,7 @@ func WithArtifacts() ExtractTextOption {
 // [WithHiddenText] read every copy, as [Reader.ExtractTextElements] returns
 // every glyph.
 func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTextOption) (_ string, err error) {
+	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.ExtractText", &err)
 	var o extractTextOpts
 	for _, opt := range opts {
@@ -972,7 +973,7 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 	text, err := typography.ExtractText(ctx, r.doc, machine, targetPage, ops, config)
 	if err != nil {
 		if errors.Is(err, typography.ErrFontNotFound) {
-			return "", fmt.Errorf("page %d text extraction halted: %w", pageNum, ErrFontMissing)
+			return "", fmt.Errorf("text extraction halted: %w", ErrFontMissing)
 		}
 		return "", err
 	}
@@ -992,9 +993,9 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 		images := pdfimage.ExtractImages(ctx, r.doc, targetPage)
 		if heuristics.RequiresOCR(nil, images, pageW, pageH) {
 			if r.ocr != nil {
-				return r.runOCR(ctx, targetPage, images, pageNum)
+				return r.runOCR(ctx, targetPage, images)
 			}
-			return "", fmt.Errorf("page %d: %w", pageNum, ErrRequiresOCR)
+			return "", ErrRequiresOCR
 		}
 	}
 
@@ -1018,7 +1019,7 @@ func (r *Reader) ExtractAllText(ctx context.Context, opts ...ExtractTextOption) 
 		}
 		text, err := r.ExtractText(ctx, i+1, opts...)
 		if err != nil {
-			return "", fmt.Errorf("page %d: %w", i+1, err)
+			return "", err
 		}
 		if i > 0 {
 			sb.WriteString("\n")
@@ -1402,6 +1403,7 @@ func (r *Reader) FormFields(ctx context.Context) (_ []models.FormField, err erro
 // spatially clustering text elements into rows and inferring column boundaries
 // from consistent X-gaps.
 func (r *Reader) ExtractTables(ctx context.Context, pageNum int) (_ []models.Table, err error) {
+	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.ExtractTables", &err)
 	targetPage, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
@@ -1420,7 +1422,7 @@ func (r *Reader) ExtractTables(ctx context.Context, pageNum int) (_ []models.Tab
 	elements, err := typography.ExtractElements(ctx, r.doc, machine, targetPage, ops)
 	if err != nil {
 		if errors.Is(err, typography.ErrFontNotFound) {
-			return nil, fmt.Errorf("page %d table extraction halted: %w", pageNum, ErrFontMissing)
+			return nil, fmt.Errorf("table extraction halted: %w", ErrFontMissing)
 		}
 		return nil, err
 	}
@@ -1553,6 +1555,7 @@ func (r *Reader) EmbeddedFiles(ctx context.Context) (_ []models.EmbeddedFile, er
 
 // ExtractAnnotations extracts annotations from the given 1-based page number.
 func (r *Reader) ExtractAnnotations(ctx context.Context, pageNum int) (_ []models.Annotation, err error) {
+	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.ExtractAnnotations", &err)
 	pages, err := r.resolvePages(ctx)
 	if err != nil {
@@ -1560,7 +1563,7 @@ func (r *Reader) ExtractAnnotations(ctx context.Context, pageNum int) (_ []model
 	}
 
 	if pageNum < 1 || pageNum > len(pages) {
-		return nil, fmt.Errorf("%w: %d (document has %d pages)", ErrInvalidPageNumber, pageNum, len(pages))
+		return nil, fmt.Errorf("%w: the document has %d pages", ErrInvalidPageNumber, len(pages))
 	}
 
 	pageMap := document.BuildPageMap(pages)
@@ -1793,6 +1796,7 @@ func (r *Reader) DSSInfo(ctx context.Context) (_ *models.DSSInfo, err error) {
 // the entries those four are derived from, as written, and nil when absent. See
 // [models.Page] for the exact rules.
 func (r *Reader) Page(ctx context.Context, pageNum int) (_ models.Page, err error) {
+	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.Page", &err)
 	p, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
@@ -1851,6 +1855,7 @@ func (r *Reader) Page(ctx context.Context, pageNum int) (_ models.Page, err erro
 // the given 1-based page number. An element's Invisible reports rendering
 // mode 3 or white paint on white, judged as [Reader.ExtractText] judges it.
 func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) (_ []models.TextElement, err error) {
+	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.ExtractTextElements", &err)
 	targetPage, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
@@ -1868,7 +1873,7 @@ func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) (_ []mode
 	elements, err := typography.ExtractElements(ctx, r.doc, machine, targetPage, ops)
 	if err != nil {
 		if errors.Is(err, typography.ErrFontNotFound) {
-			return nil, fmt.Errorf("page %d text element extraction halted: %w", pageNum, ErrFontMissing)
+			return nil, fmt.Errorf("text element extraction halted: %w", ErrFontMissing)
 		}
 		return nil, err
 	}
@@ -1891,6 +1896,7 @@ func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) (_ []mode
 // does, with the same errors. Two form XObjects may each name an image Im0, so
 // a Filename can repeat on a page: Decode decodes the entry it belongs to.
 func (r *Reader) ExtractImages(ctx context.Context, pageNum int) (_ []models.ImageMeta, err error) {
+	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.ExtractImages", &err)
 	targetPage, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
@@ -1907,10 +1913,12 @@ func (r *Reader) ExtractImages(ctx context.Context, pageNum int) (_ []models.Ima
 // lists in the panic boundary and the error contract of [Reader.DecodeImage].
 func (r *Reader) imageDecoder(pageNum int, name string, decode func(context.Context) (image.Image, error)) func(context.Context) (image.Image, error) {
 	return func(ctx context.Context) (_ image.Image, err error) {
+		// Decode runs after ExtractImages returned, so it names its page itself.
+		defer pageError(pageNum, &err)
 		defer recoverToError(r.logger(), "ImageMeta.Decode", &err)
 		img, err := decode(ctx)
 		if err != nil {
-			return nil, imageDecodeError(pageNum, name, err)
+			return nil, imageDecodeError(name, err)
 		}
 		return img, nil
 	}
@@ -1939,6 +1947,7 @@ func (r *Reader) imageDecoder(pageNum int, name string, decode func(context.Cont
 // It returns [ErrImageNotFound] when the page shows no image of that name and
 // [ErrImageNotDecodable] when litho cannot decode its samples.
 func (r *Reader) DecodeImage(ctx context.Context, pageNum int, name string) (_ image.Image, err error) {
+	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.DecodeImage", &err)
 	targetPage, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
@@ -1946,33 +1955,34 @@ func (r *Reader) DecodeImage(ctx context.Context, pageNum int, name string) (_ i
 	}
 	img, err := pdfimage.DecodeImage(ctx, r.doc, targetPage, ast.PdfName(name))
 	if err != nil {
-		return nil, imageDecodeError(pageNum, name, err)
+		return nil, imageDecodeError(name, err)
 	}
 	return img, nil
 }
 
 // imageDecodeError translates an image decoding error into the public contract
 // of [Reader.DecodeImage].
-func imageDecodeError(pageNum int, name string, err error) error {
+func imageDecodeError(name string, err error) error {
 	switch {
 	case errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded):
-		return fmt.Errorf("page %d, image %q: %w", pageNum, name, err)
+		return fmt.Errorf("image %q: %w", name, err)
 	case errors.Is(err, pdfimage.ErrImageNotFound):
-		return fmt.Errorf("page %d, image %q: %w", pageNum, name, ErrImageNotFound)
+		return fmt.Errorf("image %q: %w", name, ErrImageNotFound)
 	case errors.Is(err, ErrImageTooLarge) || errors.Is(err, ErrStreamTooLarge) || errors.Is(err, ErrDamagedStream) || errors.Is(err, ErrInternalPanic):
 		// A budget the caller can raise ([Limits]), or [WithStrictStreams],
 		// refused the image, or a decoding worker panicked, and its sentinel
 		// is public, so the cause is wrapped alongside the contract.
-		return fmt.Errorf("page %d, image %q: %w: %w", pageNum, name, ErrImageNotDecodable, err)
+		return fmt.Errorf("image %q: %w: %w", name, ErrImageNotDecodable, err)
 	}
 	// The cause is formatted rather than wrapped: its sentinels are internal,
 	// and the public contract is ErrImageNotDecodable.
-	return fmt.Errorf("page %d, image %q: %w: %v", pageNum, name, ErrImageNotDecodable, err)
+	return fmt.Errorf("image %q: %w: %v", name, ErrImageNotDecodable, err)
 }
 
 // ExtractLines extracts stroked line segments from the content stream of
 // the given 1-based page number.
 func (r *Reader) ExtractLines(ctx context.Context, pageNum int) (_ []models.Line, err error) {
+	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.ExtractLines", &err)
 	targetPage, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
@@ -1993,6 +2003,7 @@ func (r *Reader) ExtractLines(ctx context.Context, pageNum int) (_ []models.Line
 // map PDF coordinates to GPS (latitude/longitude). Returns nil when the
 // page declares no geospatial data.
 func (r *Reader) ExtractGeoData(ctx context.Context, pageNum int) (_ []models.GeoData, err error) {
+	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.ExtractGeoData", &err)
 	page, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
@@ -2007,6 +2018,7 @@ func (r *Reader) ExtractGeoData(ctx context.Context, pageNum int) (_ []models.Ge
 // /Subtype /RL, returning scale axes that map PDF coordinates to
 // real-world units.
 func (r *Reader) ExtractMeasurements(ctx context.Context, pageNum int) (_ []models.Measurement, err error) {
+	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.ExtractMeasurements", &err)
 	page, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
@@ -2020,6 +2032,7 @@ func (r *Reader) ExtractMeasurements(ctx context.Context, pageNum int) (_ []mode
 // a lazy Open accessor; the stream data is not decoded until the caller
 // invokes Open. The caller must close the reader returned by Open.
 func (r *Reader) Extract3DModels(ctx context.Context, pageNum int) (_ []models.Model3D, err error) {
+	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.Extract3DModels", &err)
 	page, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
@@ -2058,6 +2071,7 @@ func (r *Reader) ExtractFormulas(ctx context.Context) (_ []models.FormulaElement
 // starts underneath.
 func (r *Reader) ExtractRedactedText(ctx context.Context, pageNum int) (_ []models.TextElement, err error) {
 	defer recoverToError(r.logger(), "Reader.ExtractRedactedText", &err)
+	// Its errors come from per-page methods, which name the page already.
 	elements, err := r.ExtractTextElements(ctx, pageNum)
 	if err != nil {
 		return nil, err
@@ -2156,7 +2170,7 @@ func (r *Reader) resolvePage(ctx context.Context, pageNum int) (*document.Page, 
 		return nil, err
 	}
 	if pageNum < 1 || pageNum > len(pages) {
-		return nil, fmt.Errorf("%w: %d (document has %d pages)", ErrInvalidPageNumber, pageNum, len(pages))
+		return nil, fmt.Errorf("%w: the document has %d pages", ErrInvalidPageNumber, len(pages))
 	}
 	return pages[pageNum-1], nil
 }
@@ -2212,7 +2226,7 @@ func declaredRect(arr ast.PdfArray) *[4]float64 {
 
 // runOCR extracts the largest image from the page, decodes it, and passes it
 // to the injected OCR engine.
-func (r *Reader) runOCR(ctx context.Context, page *document.Page, images []models.ImageMeta, pageNum int) (string, error) {
+func (r *Reader) runOCR(ctx context.Context, page *document.Page, images []models.ImageMeta) (string, error) {
 	// Find the largest image by pixel area.
 	bestArea := 0
 	bestName := ""
@@ -2224,17 +2238,17 @@ func (r *Reader) runOCR(ctx context.Context, page *document.Page, images []model
 		}
 	}
 	if bestName == "" {
-		return "", fmt.Errorf("page %d: %w", pageNum, ErrRequiresOCR)
+		return "", ErrRequiresOCR
 	}
 
 	img, err := pdfimage.DecodeImage(ctx, r.doc, page, ast.PdfName(bestName))
 	if err != nil {
-		return "", fmt.Errorf("page %d: %w: image decode failed: %v", pageNum, ErrOCRFailed, err)
+		return "", fmt.Errorf("%w: image decode failed: %v", ErrOCRFailed, err)
 	}
 
 	text, err := r.ocr.Extract(img)
 	if err != nil {
-		return "", fmt.Errorf("page %d: %w: %v", pageNum, ErrOCRFailed, err)
+		return "", fmt.Errorf("%w: %v", ErrOCRFailed, err)
 	}
 	return text, nil
 }

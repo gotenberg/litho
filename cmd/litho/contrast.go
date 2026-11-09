@@ -80,7 +80,7 @@ func runContrast(ctx context.Context, args []string, stdout, stderr io.Writer) i
 			rep, err := r.CheckTextContrast(ctx, p, opts...)
 			page := contrastPageResult{Page: p, Report: rep}
 			if err != nil {
-				fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
+				fmt.Fprintf(stderr, "%s: %v\n", path, err)
 				page.Error = err.Error()
 				code = exitError
 			}
