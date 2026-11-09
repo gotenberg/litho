@@ -68,7 +68,10 @@ test/integration/    -> Corpus matrix scoring litho against veraPDF, PDF.js and 
 
 ### Error handling
 
-- Wrap and propagate every error: `fmt.Errorf("resolving font on page %d: %w", pageNum, err)`.
+- Wrap and propagate every error: `fmt.Errorf("resolving font %q: %w", name, err)`.
+- Name each fact once. A wrap adds what the wrapped error does not already say: `invalid image data: png: invalid format`, not `invalid image data: PNG: png: invalid format`. A public sentinel that stands for an internal one is the same value (`ErrRenderTooLarge = page.ErrTooLarge`), not a new error wrapping it.
+- A per-page `Reader` method names its page once, as the first words of its error: `page 3: ...`. It defers `pageError(pageNum, &err)` before `recoverToError`. Its helpers leave the page out, and so does a caller of the method, the CLI and another per-page method included.
+- Classify what the caller causes. An error that comes from the document's bytes or from an argument wraps a sentinel `IsInvalidInput` reports, so a service answers it as a client error: a stream whose data does not decode wraps `ErrDamagedStream`. A litho bug or a host failure wraps none.
 - Match errors with `errors.Is`, never `strings.Contains`.
 - Sentinel errors live in `errors.go` per package.
 - Never assign an error to `_` without a justification comment. If justified, log it at Debug via `doc.Logger`.
@@ -200,7 +203,7 @@ Stage specific files. Never `git add -A` or `git add .`.
 ### Checklist
 
 - [ ] No `pkg/internal` type in a public signature.
-- [ ] Errors wrapped; silenced errors justified and logged.
+- [ ] Errors wrapped, each fact named once, caller-caused errors classified; silenced errors justified and logged.
 - [ ] I/O and recursive functions take and check `context.Context`.
 - [ ] Concurrency contract documented and honored under `-race`.
 - [ ] No eager materialization of binary resources.
