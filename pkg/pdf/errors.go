@@ -764,6 +764,9 @@ var (
 	// after some of it decoded, or data that breaks a rule of its format and
 	// decodes whole all the same, such as a zlib checksum missing or wrong.
 	// [Reader.SalvagedStreams] lists those streams without refusing them.
+	// The Open function of an image or an embedded file returns it, wrapped
+	// alongside the decoder's error, for a stream whose data does not decode
+	// at all, whatever the Reader's options.
 	ErrDamagedStream = filter.ErrSalvagedStream
 
 	// ErrPageContentTooLarge is returned, wrapped, when the decoded content of

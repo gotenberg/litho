@@ -65,7 +65,9 @@ var (
 	// data damaged after some of it decoded, whose prefix the filter keeps
 	// ([DecodeReport.Damaged]), or data that decodes whole despite breaking a
 	// rule of its format, such as a zlib checksum missing or wrong
-	// ([DecodeReport.Salvaged]). pkg/pdf re-exports it as
+	// ([DecodeReport.Salvaged]). The Open function of a public model wraps
+	// it around the error of a stream whose data does not decode at all
+	// (document.Document.OpenFunc). pkg/pdf re-exports it as
 	// pdf.ErrDamagedStream.
 	ErrSalvagedStream = errors.New("stream data is damaged")
 

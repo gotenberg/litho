@@ -878,9 +878,23 @@ func (d *Document) resolveFilterValue(ctx context.Context, obj ast.PdfObject) (a
 // function decodes the stream through the filter pipeline on demand.
 // Use this to populate Open fields on model types ([models.ImageMeta],
 // [models.EmbeddedFile], etc.) without loading stream data at parse time.
+//
+// A stream whose data does not decode fails with [filter.ErrSalvagedStream],
+// wrapped alongside the decoder's error: the document damages the stream, and
+// a caller tells that from a failure of its own with the sentinel. A
+// cancellation, a budget, a stream refused as damaged already and a recovered
+// panic keep their own error.
 func (d *Document) OpenFunc(stream ast.PdfStream) func(ctx context.Context) (io.ReadCloser, error) {
 	return func(ctx context.Context) (io.ReadCloser, error) {
-		return d.NewStreamReader(ctx, stream)
+		rc, err := d.NewStreamReader(ctx, stream)
+		switch {
+		case err == nil, ctx.Err() != nil,
+			errors.Is(err, filter.ErrDecompressionBomb),
+			errors.Is(err, filter.ErrSalvagedStream),
+			errors.Is(err, ErrInternalPanic):
+			return rc, err
+		}
+		return nil, fmt.Errorf("%w: %w", filter.ErrSalvagedStream, err)
 	}
 }
 
