@@ -26,10 +26,10 @@ import (
 	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
-// officeReferenceJobs is how many sources the LibreOffice route converts at
-// once: it converts one document per LibreOffice instance and queues the
-// rest, so more only waits longer.
-const officeReferenceJobs = 4
+// referenceJobsAtOnce is how many sources are converted at once: the
+// LibreOffice route converts one document per LibreOffice instance and
+// queues the rest, so more only waits longer.
+const referenceJobsAtOnce = 4
 
 // referenceAttempts is how many times a source is posted before its answer
 // counts: a container under load can drop a connection or answer 503.
@@ -47,53 +47,47 @@ const referenceTimeout = 5 * time.Minute
 // keeps.
 const maxReferenceAnswer = 300
 
-// runReferences builds the reference PDFs of the Office and html corpora
-// with the Gotenberg image versions.env pins (GOTENBERG_IMAGE), started on a
-// free loopback port: the LibreOffice references of a corpus with
-// [Manifest.References] into its testdata, the Chromium references of an
-// html corpus into its source directory's references/, which git versions.
+// runReferences builds the reference PDFs of the selected corpora with the
+// Gotenberg image versions.env pins (GOTENBERG_IMAGE), started on a free
+// loopback port, into each corpus's testdata (see [ReferenceSpec]).
 //
-//	corpus references --corpus=gotenberg/docx,litho/html [--names=a,b]
+//	corpus references [--corpus=litho/html,poi/*] [--fixtures=a,b]
 //
-// --names restricts the run to those references, keeping the others; a
+// --fixtures restricts the run to those references, keeping the others; a
 // corpus holding none of them is left as it is.
 func runReferences(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("references", flag.ExitOnError)
-	corpus := fs.String("corpus", "", "Comma-separated corpora (empty = every Office and html corpus)")
-	names := fs.String("names", "", "Comma- or space-separated references to build (empty = all)")
+	corpus := fs.String("corpus", "", corpusFlagUsage)
+	fixtures := fs.String("fixtures", "", "Comma- or space-separated references to build (empty = all)")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "parsing flags: %v\n", err)
 		return 1
 	}
-	if err := references(ctx, splitCSV(*corpus), strings.FieldsFunc(*names, func(r rune) bool { return r == ',' || r == ' ' })); err != nil {
+	ms, err := selectManifests(splitCSV(*corpus))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "references: %v\n", err)
+		return 1
+	}
+	if err := references(ctx, ms, strings.FieldsFunc(*fixtures, func(r rune) bool { return r == ',' || r == ' ' })); err != nil {
 		fmt.Fprintf(os.Stderr, "references: %v\n", err)
 		return 1
 	}
 	return 0
 }
 
-// referenceKind is how a corpus's references are built.
-type referenceKind int
-
-const (
-	noReferences referenceKind = iota
-	officeReferences
-	chromiumReferences
-)
-
-// kindOfReferences returns how m's references are built.
-func kindOfReferences(m *Manifest) referenceKind {
-	switch {
-	case m.References != nil:
-		return officeReferences
-	case m.CommittedPDFs == "references" && m.Inputs != nil:
-		return chromiumReferences
-	default:
-		return noReferences
+// references builds the references of every corpus of ms that has some,
+// the ones only names when set, with one Gotenberg container.
+func references(ctx context.Context, ms []*Manifest, only []string) error {
+	var corpora []*Manifest
+	for _, m := range ms {
+		if m.References != nil {
+			corpora = append(corpora, m)
+		}
 	}
-}
-
-func references(ctx context.Context, selected, only []string) error {
+	if len(corpora) == 0 {
+		fmt.Println("references: no selected corpus has references")
+		return nil
+	}
 	pins, err := loadPins()
 	if err != nil {
 		return err
@@ -102,45 +96,13 @@ func references(ctx context.Context, selected, only []string) error {
 	if image == "" {
 		return errors.New("GOTENBERG_IMAGE is not pinned")
 	}
-	var corpora []*Manifest
-	if len(selected) == 0 {
-		all, err := manifests()
-		if err != nil {
-			return err
-		}
-		for _, m := range all {
-			if kindOfReferences(m) != noReferences {
-				corpora = append(corpora, m)
-			}
-		}
-	} else {
-		for _, name := range selected {
-			m, err := LoadManifest(name)
-			if err != nil {
-				return err
-			}
-			if kindOfReferences(m) == noReferences {
-				return fmt.Errorf("%s builds no references", name)
-			}
-			corpora = append(corpora, m)
-		}
-	}
-	if len(corpora) == 0 {
-		return errors.New("no corpus builds references")
-	}
 	g, err := startGotenberg(ctx, image)
 	if err != nil {
 		return err
 	}
 	defer g.stop()
 	for _, m := range corpora {
-		var err error
-		if kindOfReferences(m) == officeReferences {
-			err = g.officeReferences(ctx, m, pins, only)
-		} else {
-			err = g.chromiumReferences(ctx, m, only)
-		}
-		if err != nil {
+		if err := g.references(ctx, m, pins, only); err != nil {
 			return fmt.Errorf("%s: %w", m.Name, err)
 		}
 	}
@@ -277,8 +239,11 @@ func formValue(raw json.RawMessage) string {
 }
 
 // readOptionFields reads the keys of the options.json at path, none when
-// there is no file. The caller validates the file with the fixture package.
+// path is "" or there is no file. The caller validates the file with the fixture package.
 func readOptionFields(path string) (map[string]json.RawMessage, error) {
+	if path == "" {
+		return map[string]json.RawMessage{}, nil
+	}
 	data, err := os.ReadFile(path) //nolint:gosec // a committed source's options
 	if errors.Is(err, os.ErrNotExist) {
 		return map[string]json.RawMessage{}, nil
@@ -313,107 +278,6 @@ var chromiumOptional = []string{ //nolint:gochecknoglobals // static table
 	"singlePage", "nativePages", "nativeBookmarks", "emulatedMediaFeatures",
 }
 
-// chromiumReferences posts each sources/<name>/ directory of an html corpus
-// to the Chromium route and writes the PDF to references/<name>.pdf of its
-// source directory. A directory holding index.html goes to the HTML route
-// with every sibling file; one holding index.md goes to the Markdown route
-// with [fixture.MarkdownWrapper] as its index.html. The files options.json's
-// header and footer name are posted as header.html and footer.html, and
-// options.json is not posted.
-//
-// Chromium writes the time into each PDF, so two runs write other bytes: the
-// PDFs are committed and rebuilt only when a source or the pin changes.
-func (g *gotenberg) chromiumReferences(ctx context.Context, m *Manifest, only []string) error {
-	sources := filepath.Join(m.SourceDir(), "sources")
-	out := filepath.Join(m.SourceDir(), "references")
-	entries, err := os.ReadDir(sources)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(out, 0o755); err != nil {
-		return err
-	}
-	wrap, err := os.MkdirTemp("", "litho-markdown-")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(wrap)
-	count := 0
-	for _, e := range entries {
-		name := e.Name()
-		if !e.IsDir() || (len(only) > 0 && !slices.Contains(only, name)) {
-			continue
-		}
-		dir := filepath.Join(sources, name)
-		src, err := fixture.Load(dir)
-		if errors.Is(err, fixture.ErrNoDocument) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		opts, err := readOptionFields(filepath.Join(dir, fixture.OptionsFile))
-		if err != nil {
-			return err
-		}
-		files, err := chromiumFiles(dir, src.Options)
-		if err != nil {
-			return err
-		}
-		route := "html"
-		if src.Format == fixture.FormatMarkdown {
-			route = "markdown"
-			index := filepath.Join(wrap, name+".html")
-			if err := os.WriteFile(index, []byte(fixture.MarkdownWrapper), 0o600); err != nil {
-				return err
-			}
-			files = append(files, formFile{index, fixture.HTMLDocument})
-		}
-		if src.Options.Header != "" {
-			files = append(files, formFile{filepath.Join(dir, src.Options.Header), "header.html"})
-		}
-		if src.Options.Footer != "" {
-			files = append(files, formFile{filepath.Join(dir, src.Options.Footer), "footer.html"})
-		}
-		fields := make([][2]string, 0, len(chromiumDefaults)+len(chromiumOptional))
-		for _, d := range chromiumDefaults {
-			v := d[1]
-			if raw, ok := opts[d[0]]; ok {
-				v = formValue(raw)
-			}
-			fields = append(fields, [2]string{d[0], v})
-		}
-		for _, k := range chromiumOptional {
-			if raw, ok := opts[k]; ok {
-				if v := formValue(raw); v != "" {
-					fields = append(fields, [2]string{k, v})
-				}
-			}
-		}
-		status, body, err := g.post(ctx, "/forms/chromium/convert/"+route, files, fields)
-		if err != nil {
-			return fmt.Errorf("%s: %w", name, err)
-		}
-		if status != http.StatusOK {
-			return fmt.Errorf("%s: the %s route answered %d: %s", name, route, status, firstLine(body))
-		}
-		if err := writeFileAtomic(filepath.Join(out, name+".pdf"), body); err != nil {
-			return err
-		}
-		fmt.Printf("  %s: references/%s.pdf (%d bytes, %s route)\n", m.Name, name, len(body), route)
-		count++
-	}
-	switch {
-	case count == 0 && len(only) > 0:
-		fmt.Printf("  %s: none of the names is a source here\n", m.Name)
-	case count == 0:
-		return fmt.Errorf("no sources/<name>/index.html or index.md under %s", sources)
-	default:
-		fmt.Printf("  %s: %d Chromium references built with %s\n", m.Name, count, g.image)
-	}
-	return nil
-}
-
 // chromiumFiles returns the files of a source directory posted with its
 // document, sorted: every file but options.json and the header and footer
 // templates, which go under their route names.
@@ -433,48 +297,153 @@ func chromiumFiles(dir string, opts fixture.Options) ([]formFile, error) {
 	return files, nil
 }
 
-// officeJob is one Office source to convert.
-type officeJob struct {
-	name, document, options, source string
+// referenceJob is one source to convert: path is what its fixture points at
+// (a source directory, or a fetched document), source how the reference
+// manifest names it, options its options.json ("" without one).
+type referenceJob struct {
+	name, path, options, source string
 }
 
-// officeReferences posts each source of an Office corpus to the LibreOffice
-// route and writes the PDF to <name>.pdf of the corpus's reference directory
-// in its testdata: the committed sources/<name>/ directories, one document
-// and an optional options.json each, and the documents the corpus's
+// sourceDigest returns the SHA-256 a reference records for the source at
+// path: an Office source's document, or, for Chromium, every file of the
+// source directory but options.json, by name, since a page draws its
+// stylesheets and images too.
+func sourceDigest(engine, path string) (string, error) {
+	if engine != engineChromium {
+		src, err := fixture.LoadOffice(path)
+		if err != nil {
+			return "", err
+		}
+		return fileSHA256(src.Document)
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return "", err
+	}
+	h := sha256.New()
+	for _, e := range entries {
+		if e.IsDir() || e.Name() == fixture.OptionsFile {
+			continue
+		}
+		sum, err := fileSHA256(filepath.Join(path, e.Name()))
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(h, "%s\x00%s\n", e.Name(), sum)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// convert posts one source to the route of engine and returns the status
+// and body.
+func (g *gotenberg) convert(ctx context.Context, engine string, j referenceJob) (int, []byte, error) {
+	opts, err := readOptionFields(j.options)
+	if err != nil {
+		return 0, nil, err
+	}
+	if engine != engineChromium {
+		src, err := fixture.LoadOffice(j.path)
+		if err != nil {
+			return 0, nil, err
+		}
+		var fields [][2]string
+		for _, k := range fixture.OfficeOptionNames {
+			if raw, ok := opts[k]; ok {
+				if v := formValue(raw); v != "" {
+					fields = append(fields, [2]string{k, v})
+				}
+			}
+		}
+		return g.post(ctx, "/forms/libreoffice/convert", []formFile{{src.Document, filepath.Base(src.Document)}}, fields)
+	}
+	src, err := fixture.Load(j.path)
+	if err != nil {
+		return 0, nil, err
+	}
+	files, err := chromiumFiles(j.path, src.Options)
+	if err != nil {
+		return 0, nil, err
+	}
+	route := "html"
+	if src.Format == fixture.FormatMarkdown {
+		route = "markdown"
+		wrap, err := os.MkdirTemp("", "litho-markdown-")
+		if err != nil {
+			return 0, nil, err
+		}
+		defer os.RemoveAll(wrap)
+		index := filepath.Join(wrap, "index.html")
+		if err := os.WriteFile(index, []byte(fixture.MarkdownWrapper), 0o600); err != nil {
+			return 0, nil, err
+		}
+		files = append(files, formFile{index, fixture.HTMLDocument})
+	}
+	if src.Options.Header != "" {
+		files = append(files, formFile{filepath.Join(j.path, src.Options.Header), "header.html"})
+	}
+	if src.Options.Footer != "" {
+		files = append(files, formFile{filepath.Join(j.path, src.Options.Footer), "footer.html"})
+	}
+	fields := make([][2]string, 0, len(chromiumDefaults)+len(chromiumOptional))
+	for _, d := range chromiumDefaults {
+		v := d[1]
+		if raw, ok := opts[d[0]]; ok {
+			v = formValue(raw)
+		}
+		fields = append(fields, [2]string{d[0], v})
+	}
+	for _, k := range chromiumOptional {
+		if raw, ok := opts[k]; ok {
+			if v := formValue(raw); v != "" {
+				fields = append(fields, [2]string{k, v})
+			}
+		}
+	}
+	return g.post(ctx, "/forms/chromium/convert/"+route, files, fields)
+}
+
+// references converts each source of a corpus with the route its manifest
+// names and writes the PDF to <name>.pdf of the corpus's reference directory
+// in its testdata: the committed sources/<name>/ directories (an Office
+// document or an html page, and an optional options.json each), the
+// documents a build corpus zips, and the documents the corpus's
 // documents.json lists, fetched by corpus fetch, each named by its ID with
 // "/" written "__". A key options.json leaves out keeps the route's default.
 //
 // The reference directory's manifest.json records, per reference, the image,
 // the pin the fetched documents come from and its value, and the SHA-256 of
-// the source, of its options.json and of the PDF, so corpus run refuses a
-// reference built from another pin or from a source that changed since. A
-// source the route refuses is recorded under "failed" with the route's
-// answer, and gets no reference.
-func (g *gotenberg) officeReferences(ctx context.Context, m *Manifest, pins *resolvedPins, only []string) error {
+// the source (see [sourceDigest]), of its options.json and of the PDF, so
+// corpus run refuses a reference built from another pin or from a source
+// that changed since. A source the route refuses is recorded under "failed"
+// with the route's answer, and gets no reference.
+func (g *gotenberg) references(ctx context.Context, m *Manifest, pins *resolvedPins, only []string) error {
 	if isBuildCorpus(m) {
 		if err := buildCorpus(ctx, m); err != nil {
 			return err
 		}
 	}
-	jobs, err := officeJobs(m, only)
+	jobs, err := referenceJobs(m, only)
 	if err != nil {
 		return err
 	}
 	if len(jobs) == 0 {
 		if len(only) > 0 {
-			fmt.Printf("  %s: none of the names is a source here\n", m.Name)
+			fmt.Printf("  %s: none of the fixtures is a source here\n", m.Name)
 			return nil
 		}
 		return fmt.Errorf("no source under %s", m.SourceDir())
 	}
+	engine := m.References.Engine
 	sourcePin, sourceValue := m.References.SourcePin, ""
 	if sourcePin != "" {
 		if sourceValue = pins.Values[sourcePin]; sourceValue == "" {
 			return fmt.Errorf("%s is not pinned", sourcePin)
 		}
 	}
-	version := gotenbergLibreOfficeVersion(ctx, g.image)
+	version := ""
+	if engine == engineLibreOffice {
+		version = gotenbergLibreOfficeVersion(ctx, g.image)
+	}
 	out := filepath.Join(m.TestdataRoot(), filepath.FromSlash(m.References.Dir))
 	if err := os.MkdirAll(out, 0o755); err != nil {
 		return err
@@ -485,31 +454,19 @@ func (g *gotenberg) officeReferences(ctx context.Context, m *Manifest, pins *res
 		ok     = map[string]referenceRecord{}
 		failed = map[string]referenceFailure{}
 	)
-	err = forEach(ctx, len(jobs), officeReferenceJobs, func(i int) error {
+	err = forEach(ctx, len(jobs), referenceJobsAtOnce, func(i int) error {
 		j := jobs[i]
-		srcSum, err := fileDigest(j.document)
+		srcSum, err := sourceDigest(engine, j.path)
 		if err != nil {
 			return err
 		}
 		optSum := ""
-		var fields [][2]string
 		if j.options != "" {
 			if optSum, err = fileDigest(j.options); err != nil {
 				return err
 			}
-			opts, err := readOptionFields(j.options)
-			if err != nil {
-				return err
-			}
-			for _, k := range fixture.OfficeOptionNames {
-				if raw, ok := opts[k]; ok {
-					if v := formValue(raw); v != "" {
-						fields = append(fields, [2]string{k, v})
-					}
-				}
-			}
 		}
-		status, body, err := g.post(ctx, "/forms/libreoffice/convert", []formFile{{j.document, filepath.Base(j.document)}}, fields)
+		status, body, err := g.convert(ctx, engine, j)
 		if err != nil {
 			status, body = 0, []byte(err.Error())
 		}
@@ -568,17 +525,22 @@ func (g *gotenberg) officeReferences(ctx context.Context, m *Manifest, pins *res
 	if err := writeFileAtomic(path, append(data, '\n')); err != nil {
 		return err
 	}
-	fmt.Printf("  %s: %d references built, %d refused, with %s (%s)\n", m.Name, len(ok), len(failed), g.image, version)
+	fmt.Printf("  %s: %d references built, %d refused, with %s\n", m.Name, len(ok), len(failed), g.image)
 	return nil
 }
 
-// officeJobs lists the sources of an Office corpus, the ones only names
-// when set.
-func officeJobs(m *Manifest, only []string) ([]officeJob, error) {
+// referenceJobs lists the sources of a corpus with references, the ones
+// only names when set: its committed sources/ directories, the documents a
+// build corpus zips and the documents its list names.
+func referenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
+	var jobs []referenceJob
 	if isBuildCorpus(m) {
-		return builtOfficeJobs(m, only)
+		built, err := builtReferenceJobs(m, only)
+		if err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, built...)
 	}
-	var jobs []officeJob
 	sources := filepath.Join(m.SourceDir(), "sources")
 	entries, err := os.ReadDir(sources)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -590,17 +552,10 @@ func officeJobs(m *Manifest, only []string) ([]officeJob, error) {
 			continue
 		}
 		dir := filepath.Join(sources, name)
-		src, err := fixture.LoadOffice(dir)
-		if err != nil {
-			return nil, err
-		}
-		options := ""
-		if _, err := os.Stat(filepath.Join(dir, fixture.OptionsFile)); err == nil {
-			options = filepath.Join(dir, fixture.OptionsFile)
-		}
-		jobs = append(jobs, officeJob{name, src.Document, options, "sources/" + name + "/" + filepath.Base(src.Document)})
+		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), "sources/" + name})
 	}
 	if m.Inputs == nil || m.Inputs.List == "" {
+		sort.Slice(jobs, func(i, j int) bool { return jobs[i].name < jobs[j].name })
 		return jobs, nil
 	}
 	docs, err := readDocumentList(filepath.Join(m.SourceDir(), filepath.FromSlash(m.Inputs.List)))
@@ -615,12 +570,22 @@ func officeJobs(m *Manifest, only []string) ([]officeJob, error) {
 		}
 		doc := filepath.Join(fetched, filepath.FromSlash(d.ID))
 		if _, err := os.Stat(doc); err != nil {
-			return nil, fmt.Errorf("%s is missing: run make corpus-fetch CORPUS_NAME=%s", doc, m.Name)
+			return nil, fmt.Errorf("%s is missing: run make corpus-fetch CORPUS=%s", doc, m.Name)
 		}
-		jobs = append(jobs, officeJob{name, doc, "", d.ID})
+		jobs = append(jobs, referenceJob{name, doc, "", d.ID})
 	}
 	sort.Slice(jobs, func(i, j int) bool { return jobs[i].name < jobs[j].name })
 	return jobs, nil
+}
+
+// optionsPath returns the options.json of a source directory, "" when it
+// has none.
+func optionsPath(dir string) string {
+	p := filepath.Join(dir, fixture.OptionsFile)
+	if _, err := os.Stat(p); err != nil {
+		return ""
+	}
+	return p
 }
 
 // gotenbergLibreOfficeVersion is what the image's soffice reports, or "".
@@ -638,28 +603,24 @@ func hasKey[V any](m map[string]V, k string) bool {
 	return ok
 }
 
-// builtOfficeJobs lists the documents a build corpus zips from its parts,
-// the ones only names when set: its hostile documents have no reference.
-func builtOfficeJobs(m *Manifest, only []string) ([]officeJob, error) {
+// builtReferenceJobs lists the documents a build corpus zips from its
+// parts, the ones only names when set: its hostile documents have no
+// reference.
+func builtReferenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 	names, err := partsNames(m)
 	if err != nil {
 		return nil, err
 	}
-	var jobs []officeJob
+	var jobs []referenceJob
 	for _, name := range names {
 		if len(only) > 0 && !slices.Contains(only, name) {
 			continue
 		}
 		dir := filepath.Join(buildOut(m), name)
-		src, err := fixture.LoadOffice(dir)
-		if err != nil {
-			return nil, fmt.Errorf("%w (run make corpus-build CORPUS_NAME=%s)", err, m.Name)
+		if _, err := fixture.LoadOffice(dir); err != nil {
+			return nil, fmt.Errorf("%w (run make corpus-build CORPUS=%s)", err, m.Name)
 		}
-		options := ""
-		if _, err := os.Stat(filepath.Join(dir, fixture.OptionsFile)); err == nil {
-			options = filepath.Join(dir, fixture.OptionsFile)
-		}
-		jobs = append(jobs, officeJob{name, src.Document, options, path.Join(m.Inputs.Build, name)})
+		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), path.Join(m.Inputs.Build, name)})
 	}
 	return jobs, nil
 }

@@ -133,7 +133,7 @@ type fetchFile struct {
 
 func runFetch(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("fetch", flag.ContinueOnError)
-	corpus := fs.String("corpus", "", "Comma-separated corpora, sources or \"fonts\" to fetch (poi/docx, poi, wpt, fonts); empty fetches the fixture fonts and every corpus that declares a fetch")
+	corpus := fs.String("corpus", "", corpusFlagUsage+`, or "fonts" for the fixture fonts alone`)
 	jobs := fs.Int("jobs", fetchJobs, "Files downloaded at once")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -142,43 +142,51 @@ func runFetch(ctx context.Context, args []string) int {
 		fmt.Fprintln(os.Stderr, "fetch: --jobs must be at least 1")
 		return 2
 	}
-	if err := fetch(ctx, splitCSV(*corpus), *jobs, http.DefaultClient); err != nil {
+	selected := splitCSV(*corpus)
+	fonts := len(selected) == 0 || slices.Contains(selected, fetchFontsName)
+	patterns := slices.DeleteFunc(slices.Clone(selected), func(s string) bool { return s == fetchFontsName })
+	var ms []*Manifest
+	if len(selected) == 0 || len(patterns) > 0 {
+		var err error
+		if ms, err = selectManifests(patterns); err != nil {
+			fmt.Fprintf(os.Stderr, "fetch: %v\n", err)
+			return 1
+		}
+	}
+	if err := fetch(ctx, ms, fonts, *jobs, http.DefaultClient); err != nil {
 		fmt.Fprintf(os.Stderr, "fetch: %v\n", err)
 		return 1
 	}
 	return 0
 }
 
-// fetchFontsName selects the fixture fonts in a fetch's list.
+// fetchFontsName selects the fixture fonts alone in a fetch's --corpus.
 const fetchFontsName = "fonts"
 
-// fetch downloads the fixture fonts and the files of every corpus that
-// declares a fetch when selected is empty; else the fonts when it names
-// "fonts", and the corpora it names or whose source it names.
-func fetch(ctx context.Context, selected []string, jobs int, client *http.Client) error {
+// fetchFixtureFonts installs the fixture fonts that are not at their pins.
+func fetchFixtureFonts(ctx context.Context) error {
+	return fetch(ctx, nil, true, fetchJobs, http.DefaultClient)
+}
+
+// fetch downloads the fixture fonts when fonts is set, and the files of
+// every corpus of ms that declares a fetch. A file already there with its
+// listed hash is not downloaded again.
+func fetch(ctx context.Context, ms []*Manifest, fonts bool, jobs int, client *http.Client) error {
 	pins, err := loadPins()
 	if err != nil {
 		return err
 	}
 	testdata := testdataDir()
-	all := len(selected) == 0
-	fonts := all || slices.Contains(selected, fetchFontsName)
-	selected = slices.DeleteFunc(slices.Clone(selected), func(s string) bool { return s == fetchFontsName })
 	if fonts {
 		if err := fetchFonts(ctx, client, pins.Values, filepath.Join(testdata, fixtureFontsDir)); err != nil {
 			return fmt.Errorf("fixture fonts: %w", err)
 		}
 	}
-	if !all && len(selected) == 0 {
-		return nil
-	}
-	ms, err := manifests()
-	if err != nil {
-		return err
-	}
-	chosen, err := fetchedCorpora(ms, selected)
-	if err != nil {
-		return err
+	var chosen []*Manifest
+	for _, m := range ms {
+		if m.Fetch != nil {
+			chosen = append(chosen, m)
+		}
 	}
 	var files []fetchFile
 	zips := newZipCache(client)
@@ -212,30 +220,6 @@ func fetch(ctx context.Context, selected []string, jobs int, client *http.Client
 // testdataDir is the directory the corpora are provisioned under.
 func testdataDir() string {
 	return filepath.Dir((&Manifest{Source: "x"}).TestdataRoot())
-}
-
-// fetchedCorpora returns the manifests to fetch: those that declare a fetch
-// and match selected, each a corpus name or a source (its first path
-// segment). A selected name that matches nothing fetchable is an error.
-func fetchedCorpora(ms []*Manifest, selected []string) ([]*Manifest, error) {
-	var out []*Manifest
-	matched := make(map[string]bool)
-	for _, m := range ms {
-		if m.Fetch == nil {
-			continue
-		}
-		source, _, _ := strings.Cut(m.Name, "/")
-		if len(selected) == 0 || slices.Contains(selected, m.Name) || slices.Contains(selected, source) {
-			out = append(out, m)
-			matched[m.Name], matched[source] = true, true
-		}
-	}
-	for _, s := range selected {
-		if !matched[s] {
-			return nil, fmt.Errorf("no corpus named %q declares a fetch", s)
-		}
-	}
-	return out, nil
 }
 
 // corpusFetchFiles lists the files of one corpus, each with its source and

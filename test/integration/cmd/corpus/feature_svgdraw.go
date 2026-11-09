@@ -19,7 +19,7 @@ const svgDrawDPI = 96
 
 // svgFontsTarget is the make target that fetches what the svgdraw feature
 // reads.
-const svgFontsTarget = "make corpus-fetch CORPUS_NAME=resvg"
+const svgFontsTarget = "make corpus-fetch CORPUS=resvg"
 
 // maxSVGReference bounds the side of a reference PNG, in pixels. Anti-DoS
 // guard, not spec-mandated: resvg draws its tests 300 pixels wide, and a
@@ -27,7 +27,7 @@ const svgFontsTarget = "make corpus-fetch CORPUS_NAME=resvg"
 const maxSVGReference = 4096
 
 // svgTest is one test of corpus/resvg/tests.json, written by
-// `corpus select --corpus=resvg` (select_tests.go).
+// `corpus update --corpus=resvg` (select_tests.go).
 type svgTest struct {
 	ID     string `json:"id"`
 	PNG    string `json:"png"`

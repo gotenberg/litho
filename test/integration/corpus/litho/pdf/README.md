@@ -28,7 +28,7 @@ corpus/litho/pdf/
 └── README.md       This file
 ```
 
-Nothing is downloaded: `corpus init` copies `pdfs/*.pdf` into the testdata
+Nothing is downloaded: `corpus goldens` copies `pdfs/*.pdf` into the testdata
 before the provisioning image derives the goldens.
 
 ## Regenerating

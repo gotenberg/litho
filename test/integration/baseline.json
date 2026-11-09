@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-09T18:03:59Z",
+  "captured_at": "2026-11-09T21:38:26Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -80,486 +80,6 @@
             "chars_match": 131,
             "words_match": 131
           }
-        }
-      }
-    },
-    "gotenberg/csv": {
-      "features": {
-        "diff": {
-          "matched": 2,
-          "mismatched": 0,
-          "skipped": 0,
-          "metrics": {
-            "convert_error": 0,
-            "pages_equal": 2
-          },
-          "scores": {
-            "sales": {
-              "layout": 0.9695,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "sheet": {
-              "layout": 0.9645,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            }
-          },
-          "score_tolerance": 0.02
-        }
-      }
-    },
-    "gotenberg/docx": {
-      "features": {
-        "diff": {
-          "matched": 9,
-          "mismatched": 1,
-          "skipped": 0,
-          "metrics": {
-            "convert_error": 0,
-            "pages_equal": 10
-          },
-          "scores": {
-            "contract": {
-              "layout": 0.9397,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.1,
-              "text_f1": 0.994
-            },
-            "i18n": {
-              "layout": 0.8732,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.6182
-            },
-            "long-name": {
-              "layout": 0.9748,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "memo-lo": {
-              "layout": 0.9826,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "page_1": {
-              "layout": 0.9748,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "pages_12": {
-              "layout": 0.9749,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "pages_3": {
-              "layout": 0.9756,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "protected_page_1": {
-              "layout": 0.9748,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "special-chars": {
-              "layout": 0.9748,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "tracked": {
-              "layout": 0.9383,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            }
-          },
-          "score_tolerance": 0.02
-        }
-      }
-    },
-    "gotenberg/html": {
-      "features": {
-        "diff": {
-          "matched": 14,
-          "mismatched": 1,
-          "skipped": 0,
-          "metrics": {
-            "convert_error": 0,
-            "pages_equal": 15
-          },
-          "scores": {
-            "header-default-classes": {
-              "layout": 0.9411,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "header-footer": {
-              "layout": 0.9311,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "i18n": {
-              "layout": 0.8943,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 0.7586
-            },
-            "invoice": {
-              "layout": 0.954,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "landing": {
-              "layout": 0.9766,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "landscape": {
-              "layout": 0.9268,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "markdown": {
-              "layout": 0.9583,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "outline": {
-              "layout": 0.9322,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "page-ranges": {
-              "layout": 0.9265,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "print-css": {
-              "layout": 0.9693,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "print-css-fit": {
-              "layout": 0.9556,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "single-page": {
-              "layout": 0.9268,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "single-page-header": {
-              "layout": 0.9208,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "single-page-landscape": {
-              "layout": 0.9615,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "wide-table": {
-              "layout": 0.9241,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 0.9756
-            }
-          },
-          "score_tolerance": 0.02
-        }
-      }
-    },
-    "gotenberg/odp": {
-      "features": {
-        "diff": {
-          "matched": 2,
-          "mismatched": 0,
-          "skipped": 0,
-          "metrics": {
-            "convert_error": 0,
-            "pages_equal": 2
-          },
-          "scores": {
-            "pitch": {
-              "layout": 0.9999,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "pitch-flat": {
-              "layout": 0.9999,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            }
-          },
-          "score_tolerance": 0.02
-        }
-      }
-    },
-    "gotenberg/ods": {
-      "features": {
-        "diff": {
-          "matched": 2,
-          "mismatched": 0,
-          "skipped": 0,
-          "metrics": {
-            "convert_error": 0,
-            "pages_equal": 2
-          },
-          "scores": {
-            "figures": {
-              "layout": 0.9604,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "figures-flat": {
-              "layout": 0.9622,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            }
-          },
-          "score_tolerance": 0.02
-        }
-      }
-    },
-    "gotenberg/odt": {
-      "features": {
-        "diff": {
-          "matched": 4,
-          "mismatched": 0,
-          "skipped": 0,
-          "metrics": {
-            "convert_error": 0,
-            "pages_equal": 4
-          },
-          "scores": {
-            "form": {
-              "layout": 0.9651,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "form-flat": {
-              "layout": 0.9651,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "memo": {
-              "layout": 0.9815,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "memo-flat": {
-              "layout": 0.887,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            }
-          },
-          "score_tolerance": 0.02
-        }
-      }
-    },
-    "gotenberg/pptx": {
-      "features": {
-        "diff": {
-          "matched": 4,
-          "mismatched": 0,
-          "skipped": 0,
-          "metrics": {
-            "convert_error": 0,
-            "pages_equal": 4
-          },
-          "scores": {
-            "deck": {
-              "layout": 0.9744,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.8571,
-              "text_f1": 1
-            },
-            "deck-hidden": {
-              "layout": 0.9719,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.875,
-              "text_f1": 1
-            },
-            "deck-notes": {
-              "layout": 0.9243,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.9286,
-              "text_f1": 0.9856
-            },
-            "pitch-lo": {
-              "layout": 0.9983,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            }
-          },
-          "score_tolerance": 0.02
-        }
-      }
-    },
-    "gotenberg/xlsx": {
-      "features": {
-        "diff": {
-          "matched": 5,
-          "mismatched": 0,
-          "skipped": 0,
-          "metrics": {
-            "convert_error": 0,
-            "pages_equal": 5
-          },
-          "scores": {
-            "budget": {
-              "layout": 0.9491,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "budget-single": {
-              "layout": 0.9441,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.3333,
-              "text_f1": 0.9333
-            },
-            "figures-lo": {
-              "layout": 0.9529,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "scrolled": {
-              "layout": 0.9587,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 1
-            },
-            "scrolled-pages": {
-              "layout": 0.9491,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            }
-          },
-          "score_tolerance": 0.02
         }
       }
     },
@@ -15481,12 +15001,12 @@
     "litho/docx": {
       "features": {
         "diff": {
-          "matched": 54,
+          "matched": 56,
           "mismatched": 66,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 115
+            "pages_equal": 117
           },
           "scores": {
             "altchunks": {
@@ -15969,6 +15489,14 @@
               "strict": 0,
               "text_f1": 0.7473
             },
+            "option-paper-size": {
+              "layout": 0.981,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "para-alignment": {
               "layout": 0.8045,
               "link_recall": 1,
@@ -16048,6 +15576,14 @@
               "pages": 0.5,
               "strict": 0,
               "text_f1": 0.4162
+            },
+            "protected": {
+              "layout": 0.9748,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "run-bold-italic": {
               "layout": 0.9395,
@@ -16453,7 +15989,7 @@
           "score_tolerance": 0.02
         },
         "robustness": {
-          "matched": 161,
+          "matched": 163,
           "mismatched": 4,
           "skipped": 0,
           "metrics": {
@@ -16565,6 +16101,7 @@
             "numbering-restart": "pass",
             "numbering-suffix-alignment": "pass",
             "ole-objects": "pass",
+            "option-paper-size": "pass",
             "para-alignment": "pass",
             "para-borders-shading": "pass",
             "para-dropcap-frames": "pass",
@@ -16575,6 +16112,7 @@
             "para-spacing": "pass",
             "para-tabs": "pass",
             "para-text-alignment": "pass",
+            "protected": "pass",
             "run-bold-italic": "pass",
             "run-effects": "pass",
             "run-font-slots": "pass",
@@ -16632,12 +16170,12 @@
     "litho/html": {
       "features": {
         "diff": {
-          "matched": 21,
+          "matched": 30,
           "mismatched": 1,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 22
+            "pages_equal": 31
           },
           "scores": {
             "article": {
@@ -16728,8 +16266,32 @@
               "strict": 1,
               "text_f1": 1
             },
+            "header-default-classes": {
+              "layout": 0.9411,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "header-footer": {
+              "layout": 0.9311,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "images": {
               "layout": 0.984,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "landscape": {
+              "layout": 0.9268,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -16800,8 +16362,56 @@
               "strict": 0,
               "text_f1": 1
             },
+            "outline": {
+              "layout": 0.9322,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "page-ranges": {
+              "layout": 0.9265,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "print-css-fit": {
+              "layout": 0.9556,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "scale": {
               "layout": 0.9389,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "single-page": {
+              "layout": 0.9268,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "single-page-header": {
+              "layout": 0.9208,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "single-page-landscape": {
+              "layout": 0.9615,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,

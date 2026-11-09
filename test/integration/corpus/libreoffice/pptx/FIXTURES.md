@@ -1,29 +1,28 @@
 # libreoffice/pptx corpus fixtures
 
-PresentationML presentations scored by the `diff` feature (see `FEATURES.md`) against LibreOffice Impress as Gotenberg's LibreOffice route prints them: the image `GOTENBERG_IMAGE` in `corpus/versions.env` pins (`gotenberg/gotenberg:9.0.0`, LibreOffice 26.8.2.2), route `/forms/libreoffice/convert`. A selection of LibreOffice's Impress, DrawingML and chart test presentations at the commit `LIBREOFFICE_CORE_COMMIT` pins, of which only the list and the hashes are committed; Gotenberg's own test decks are the `gotenberg/pptx` corpus. The references are built on the host and never committed. The corpus works as the libreoffice/docx corpus does, and its `FIXTURES.md` documents the reference checks and the drawing without annotations, which apply here with `pptx` for `docx`; this file documents the presentation options the odp corpus shares.
+PresentationML presentations scored by the `diff` feature (see `FEATURES.md`) against LibreOffice Impress as Gotenberg's LibreOffice route prints them: the image `GOTENBERG_IMAGE` in `corpus/versions.env` pins (`gotenberg/gotenberg:9.0.0`, LibreOffice 26.8.2.2), route `/forms/libreoffice/convert`. A selection of LibreOffice's Impress, DrawingML and chart test presentations at the commit `LIBREOFFICE_CORE_COMMIT` pins, of which only the list and the hashes are committed; the references are built by `corpus references` into the testdata and never committed. The corpus works as the libreoffice/docx corpus does, and its `FIXTURES.md` documents the reference checks and the drawing without annotations, which apply here with `pptx` for `docx`; this file documents the presentation options the odp corpus shares.
 
-| Path                | What it holds                                                                                                                                                                     |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `documents.json`    | The 315 LibreOffice test presentations, each by its ID, `<module>/<file>.pptx` (`sd/tdf123.pptx`, `oox/tdf456.pptx`, `chart2/a.pptx`, `sd-data/b.pptx`)                           |
-| `files.sha256`      | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 315 presentations and `COPYING.MPL`                                                                               |
-| `corpus select`     | Selects the presentations from a LibreOffice core checkout and writes the two files above                                                                                         |
-| `corpus fetch`      | `make corpus-fetch CORPUS_NAME=libreoffice/pptx`: downloads each listed file at the pinned commit into `testdata/libreoffice/pptx/sources/`, refusing one whose hash differs      |
-| `corpus references` | `make office-references SOURCES=libreoffice FORMATS=pptx`: converts every source with the pinned image into `testdata/libreoffice/pptx/references/<name>.pdf` and `manifest.json` |
+| Path                | What it holds                                                                                                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `documents.json`    | The 315 LibreOffice test presentations, each by its ID, `<module>/<file>.pptx` (`sd/tdf123.pptx`, `oox/tdf456.pptx`, `chart2/a.pptx`, `sd-data/b.pptx`)                  |
+| `files.sha256`      | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 315 presentations and `COPYING.MPL`                                                                      |
+| `corpus update`     | Selects the presentations from a LibreOffice core checkout and writes the two files above                                                                                |
+| `corpus fetch`      | `make corpus-fetch CORPUS=libreoffice/pptx`: downloads each listed file at the pinned commit into `testdata/libreoffice/pptx/sources/`, refusing one whose hash differs  |
+| `corpus references` | `make corpus-references CORPUS=libreoffice/pptx`: converts every source with the pinned image into `testdata/libreoffice/pptx/references/<name>.pdf` and `manifest.json` |
 
 A fetched presentation's ID names the directory whose tests it comes from: `sd/<file>` is `sd/qa/unit/data/pptx/<file>`, `sd-data/<file>` is `sd/qa/unit/data/<file>` (the Impress test directory itself, which holds a few documents of each format beside its format directories), `oox/<file>` is `oox/qa/unit/data/<file>`, `chart2/<file>` is `chart2/qa/extras/data/pptx/<file>`. Its reference is named by its ID with `/` written `__`: `sd__tdf123.pptx.pdf`.
 
 ## Provisioning
 
 ```bash
-make corpus-fetch CORPUS_NAME=libreoffice/pptx                      # the LibreOffice test documents and the fixture fonts, hash-checked
-make office-references SOURCES=libreoffice FORMATS=pptx             # the references (Docker); NAMES="a__b.pptx" for some
-go run ./test/integration/cmd/corpus init --corpus=libreoffice/pptx # the diff goldens, in the corpus image
-go run ./test/integration/cmd/corpus run --corpus=libreoffice/pptx --feature=diff
+make corpus CORPUS=libreoffice/pptx FEATURE=diff # every missing step, then the score
 ```
+
+`make corpus-prepare CORPUS=libreoffice/pptx` runs the steps alone: `corpus-fetch` downloads the documents and the fixture fonts, hash-checked; `corpus-references` converts them with the pinned image (Docker; `FIXTURES=a__b.ext` rebuilds some); `corpus-goldens` derives the diff goldens in the corpus image.
 
 ## How the documents were chosen
 
-`corpus select` reads the `.pptx` files at the top of LibreOffice core's `sd/qa/unit/data/pptx`, `oox/qa/unit/data`, `chart2/qa/extras/data/pptx` and `sd/qa/unit/data` at the pinned commit (the commit of the `libreoffice-26.8.2.2` tag, the release the image runs) and keeps one when:
+`corpus update` reads the `.pptx` files at the top of LibreOffice core's `sd/qa/unit/data/pptx`, `oox/qa/unit/data`, `chart2/qa/extras/data/pptx` and `sd/qa/unit/data` at the pinned commit (the commit of the `libreoffice-26.8.2.2` tag, the release the image runs) and keeps one when:
 
 - it is at most 150 KiB;
 - its name is plain ASCII (letters, digits, dot, underscore, hyphen), so every shell and form field carries it intact;
@@ -50,7 +49,7 @@ The cell converts with the fixture fonts `corpus fetch --corpus=fonts` installs 
 
 ## How the rig was proven
 
-Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on 314 of 319 presentations. Pages, links and outline score 1 on all, strict on all but 1 (`sd-data/n820786.pptx`, a hairline litho draws lighter than poppler). Text F1 is below 1 on 3 and under the bar on 2, where text is drawn invisible, which PDF.js reads and litho's text extraction leaves out: white on a white slide (`sd/layout-clrmap-override.pptx` at 0.829), at 2% opacity (`sd/tdf118776.pptx` at 0). Rotated text (19 references) and text past the slide edge (2) score 1. Layout averages 0.975 and falls below 0.75 on 3, nearly empty slides whose few strokes litho and poppler draw apart (`sd/tdf112633.pptx` at 0.290, a faint rotated frame poppler draws and litho does not in `sd/tdf103473.pptx` at 0.473). 102 references hold no text PDF.js reads; 11 of them draw the text their slides hold as outlines, Fontwork and WordArt (`oox/tdf125582_TextOnCircle.pptx`, `sd/tdf116350-texteffects.pptx`): a conversion that writes that text as text scores text F1 0 there. `TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens` checks the committed sources so on every run with the corpus provisioned. The counts cover this corpus and `gotenberg/pptx` together.
+Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on 314 of 319 presentations. Pages, links and outline score 1 on all, strict on all but 1 (`sd-data/n820786.pptx`, a hairline litho draws lighter than poppler). Text F1 is below 1 on 3 and under the bar on 2, where text is drawn invisible, which PDF.js reads and litho's text extraction leaves out: white on a white slide (`sd/layout-clrmap-override.pptx` at 0.829), at 2% opacity (`sd/tdf118776.pptx` at 0). Rotated text (19 references) and text past the slide edge (2) score 1. Layout averages 0.975 and falls below 0.75 on 3, nearly empty slides whose few strokes litho and poppler draw apart (`sd/tdf112633.pptx` at 0.290, a faint rotated frame poppler draws and litho does not in `sd/tdf103473.pptx` at 0.473). 102 references hold no text PDF.js reads; 11 of them draw the text their slides hold as outlines, Fontwork and WordArt (`oox/tdf125582_TextOnCircle.pptx`, `sd/tdf116350-texteffects.pptx`): a conversion that writes that text as text scores text F1 0 there. `TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens` checked the gotenberg corpus's sources so on every run; it now checks the litho Office corpora. The counts cover this corpus and the gotenberg/pptx corpus, removed on 2026-11-09, together.
 
 ## Accepted disagreements
 

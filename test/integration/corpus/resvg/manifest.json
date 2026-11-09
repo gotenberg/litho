@@ -1,7 +1,6 @@
 {
   "name": "resvg",
   "source": "resvg",
-  "provisioned_by": "make corpus-fetch CORPUS_NAME=resvg",
   "inputs": {
     "list": "tests.json"
   },

@@ -12,13 +12,13 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 )
 
-// paritySources returns the directory the Gotenberg documents of the docx
-// corpus sit under: LITHO_DOCX_SOURCES, else the corpus's sources.
+// paritySources returns the directory Gotenberg's test documents sit under:
+// LITHO_DOCX_SOURCES, else testdata/gotenberg.
 func paritySources() string {
 	if dir := os.Getenv("LITHO_DOCX_SOURCES"); dir != "" {
 		return dir
 	}
-	return filepath.Join("..", "..", "..", "..", "test", "integration", "corpus", "gotenberg", "docx", "sources")
+	return filepath.Join("testdata", "gotenberg")
 }
 
 // findSource returns the path of the file name under dir, "" when absent.

@@ -77,20 +77,18 @@ const maxReferenceProblems = 8
 // made from the references on disk.
 var errStaleReferences = errors.New("stale references")
 
-// Prepare checks, for a corpus whose references the host builds, that every
-// fixture has a reference built at the pinned GOTENBERG_IMAGE (and, for a
-// fetched corpus, at the pin its manifest's references.source_pin names)
-// from its current source and
-// options, and that the provisioned PDFs the goldens were made from are
-// those references. Any disagreement fails the cell with the command that
-// rebuilds what is stale, so no fixture is scored against a reference of
-// something else. A corpus whose references git versions passes, and so do
-// a build corpus's hostile documents, which have none.
+// Prepare checks that every fixture has a reference built at the pinned
+// GOTENBERG_IMAGE (and, for a fetched corpus, at the pin its manifest's
+// references.source_pin names) from its current source and options, and
+// that the provisioned PDFs the goldens were made from are those references
+// (see [referenceProblems]). Any disagreement fails the cell with the
+// command that rebuilds what is stale, so no fixture is scored against a
+// reference of something else.
 func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 	f.mu.RLock()
-	refs, root, corpus, pins, unreferenced := f.refs, f.testdataRoot, f.corpus, f.pins, f.unreferenced
+	m, root, pins := f.m, f.testdataRoot, f.pins
 	f.mu.RUnlock()
-	if refs == nil {
+	if m == nil || m.References == nil {
 		return nil
 	}
 	if pins == nil {
@@ -100,23 +98,48 @@ func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 		}
 		pins = resolved.Values
 	}
-	refDir := filepath.Join(root, filepath.FromSlash(refs.Dir))
+	stale, _, regolden, err := referenceProblems(m, root, fixtures, pins)
+	switch {
+	case err != nil:
+		return fmt.Errorf("%w: %w (run %s)", errStaleReferences, err, prepareRemedy(m.Name))
+	case len(stale) > 0:
+		return fmt.Errorf("%w: %s (run %s)", errStaleReferences, summarize(stale), prepareRemedy(m.Name))
+	case len(regolden) > 0:
+		return fmt.Errorf("%w: the diff goldens were not made from the references of %s (run %s)",
+			errStaleReferences, summarize(regolden), prepareRemedy(m.Name))
+	}
+	return nil
+}
+
+// referenceProblems compares a corpus's references with its fixtures: stale
+// lists what is wrong with the reference of each fixture whose reference is
+// missing, refused or built from something else (see [checkReference]),
+// rebuild the fixtures among them another build may fix, regolden the
+// fixtures whose provisioned PDF, the one the goldens were made from, is not
+// their reference. root is the corpus's testdata root. A build corpus's
+// hostile documents have no reference and are skipped. err reports an
+// unreadable reference manifest.
+func referenceProblems(m *Manifest, root string, fixtures []Fixture, pins map[string]string) (stale, rebuild, regolden []string, err error) {
+	refDir := filepath.Join(root, filepath.FromSlash(m.References.Dir))
 	data, err := os.ReadFile(filepath.Join(refDir, referenceManifestName)) //nolint:gosec // provisioned record under the corpus testdata root
 	if err != nil {
-		return fmt.Errorf("%w: %s unreadable (run %s): %w", errStaleReferences, filepath.Join(refDir, referenceManifestName), refs.BuiltBy, err)
+		return nil, nil, nil, fmt.Errorf("%s unreadable: %w", filepath.Join(refDir, referenceManifestName), err)
 	}
 	var man referenceManifest
 	if err := json.Unmarshal(data, &man); err != nil {
-		return fmt.Errorf("%w: decode %s: %w", errStaleReferences, referenceManifestName, err)
+		return nil, nil, nil, fmt.Errorf("decode %s: %w", filepath.Join(refDir, referenceManifestName), err)
 	}
-	var stale, regolden []string
+	unreferenced := unreferencedFixtures(m)
 	for _, fx := range fixtures {
 		if unreferenced[fx.ID] {
 			continue
 		}
 		name := reportName(fx.ID)
-		if problem := checkReference(man, refs.SourcePin, name, fx, pins); problem != "" {
-			stale = append(stale, problem)
+		if why, again := checkReference(man, m.References, name, fx, pins); why != "" {
+			stale = append(stale, why)
+			if again {
+				rebuild = append(rebuild, name)
+			}
 			continue
 		}
 		// The goldens come from the provisioned copy of each reference,
@@ -126,53 +149,61 @@ func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 			regolden = append(regolden, name)
 		}
 	}
-	switch {
-	case len(stale) > 0:
-		return fmt.Errorf("%w: %s (run %s)", errStaleReferences, summarize(stale), refs.BuiltBy)
-	case len(regolden) > 0:
-		return fmt.Errorf("%w: the diff goldens were not made from the references of %s (run rm -rf %s %s, then corpus init --corpus=%s)",
-			errStaleReferences, summarize(regolden), filepath.Join(root, "pdfs"), filepath.Join(root, "goldens", "diff"), corpus)
+	return stale, rebuild, regolden, nil
+}
+
+// unreferencedFixtures names the fixtures of m no reference is built for: a
+// build corpus's hostile documents, which only the robustness feature reads.
+func unreferencedFixtures(m *Manifest) map[string]bool {
+	format, err := buildFormat(m)
+	if err != nil || !isBuildCorpus(m) {
+		return nil
 	}
-	return nil
+	out := map[string]bool{}
+	for _, h := range hostileDocs(format) {
+		out[h.name] = true
+	}
+	return out
 }
 
 // checkReference returns what is wrong with the reference of one fixture,
 // or "" when it was built from the fixture's current source at the pins:
-// the image's and, when sourcePin is not "", the pin the fetched documents
-// come from.
-func checkReference(man referenceManifest, sourcePin, name string, fx Fixture, pins map[string]string) string {
+// the image's and, when refs names a source pin, the pin the fetched
+// documents come from. rebuild is false for a source the route refused from
+// the same source, options and image, which another build would refuse
+// again.
+func checkReference(man referenceManifest, refs *ReferenceSpec, name string, fx Fixture, pins map[string]string) (why string, rebuild bool) {
+	srcSum, srcErr := sourceDigest(refs.Engine, fx.PDFPath)
+	optSum := ""
+	if info, err := os.Stat(fx.PDFPath); err == nil && info.IsDir() {
+		if got, err := fileSHA256(filepath.Join(fx.PDFPath, fixture.OptionsFile)); err == nil {
+			optSum = got
+		}
+	}
+	image := pins["GOTENBERG_IMAGE"]
 	rec, ok := man.References[name]
 	if !ok {
 		if fail, refused := man.Failed[name]; refused {
-			return fmt.Sprintf("%s was refused by the route (HTTP %s: %s)", name, fail.Status, fail.Answer)
+			again := srcErr != nil || fail.Image != image || fail.SourceSHA256 != srcSum || fail.OptionsSHA256 != optSum
+			return fmt.Sprintf("%s was refused by the route (HTTP %s: %s)", name, fail.Status, fail.Answer), again
 		}
-		return name + " has no reference"
+		return name + " has no reference", true
 	}
-	if want := pins["GOTENBERG_IMAGE"]; rec.Image != want {
-		return fmt.Sprintf("%s was built with %s, the pin is %s", name, rec.Image, want)
+	if rec.Image != image {
+		return fmt.Sprintf("%s was built with %s, the pin is %s", name, rec.Image, image), true
 	}
-	source, err := fixture.LoadOffice(fx.PDFPath)
-	if err != nil {
-		return fmt.Sprintf("%s: %v", name, err)
-	}
-	if sourcePin != "" {
+	if sourcePin := refs.SourcePin; sourcePin != "" {
 		if got, want := rec.pinValue(sourcePin), pins[sourcePin]; got != want {
-			return fmt.Sprintf("%s was built from the documents of %s %q, the pin is %q", name, sourcePin, got, want)
+			return fmt.Sprintf("%s was built from the documents of %s %q, the pin is %q", name, sourcePin, got, want), true
 		}
 	}
-	if got, err := fileSHA256(source.Document); err != nil || got != rec.SourceSHA256 {
-		return name + "'s source changed since its reference was built"
+	if srcErr != nil || srcSum != rec.SourceSHA256 {
+		return name + "'s source changed since its reference was built", true
 	}
-	opts := ""
-	if info, err := os.Stat(fx.PDFPath); err == nil && info.IsDir() {
-		if got, err := fileSHA256(filepath.Join(fx.PDFPath, fixture.OptionsFile)); err == nil {
-			opts = got
-		}
+	if optSum != rec.OptionsSHA256 {
+		return name + "'s options changed since its reference was built", true
 	}
-	if opts != rec.OptionsSHA256 {
-		return name + "'s options changed since its reference was built"
-	}
-	return ""
+	return "", false
 }
 
 // summarize joins the first problems and counts the rest.

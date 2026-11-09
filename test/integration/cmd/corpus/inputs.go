@@ -30,11 +30,7 @@ func loadInputFixtures(m *Manifest) ([]Fixture, error) {
 		fixtures = append(fixtures, globbed...)
 	}
 	if in.List != "" {
-		fetchedBy := in.FetchedBy
-		if fetchedBy == "" {
-			fetchedBy = m.ProvisionedBy
-		}
-		listed, err := listInputFixtures(filepath.Join(m.SourceDir(), in.List), filepath.Join(m.TestdataRoot(), filepath.FromSlash(in.ListRoot)), fetchedBy)
+		listed, err := listInputFixtures(filepath.Join(m.SourceDir(), in.List), filepath.Join(m.TestdataRoot(), filepath.FromSlash(in.ListRoot)), prepareRemedy(m.Name))
 		if err != nil {
 			return nil, err
 		}
@@ -62,9 +58,9 @@ func loadInputFixtures(m *Manifest) ([]Fixture, error) {
 
 // listInputFixtures reads a committed list of {"id": ...} objects; each
 // fixture's source is the file at its ID under root. A listed source missing
-// on disk fails the load with the make target that fetches it, provisionedBy,
-// rather than scoring every fixture as an error.
-func listInputFixtures(listPath, root, provisionedBy string) ([]Fixture, error) {
+// on disk fails the load with the command that fetches it, remedy, rather
+// than scoring every fixture as an error.
+func listInputFixtures(listPath, root, remedy string) ([]Fixture, error) {
 	data, err := os.ReadFile(listPath) //nolint:gosec // committed corpus list
 	if err != nil {
 		return nil, fmt.Errorf("read input list: %w", err)
@@ -87,11 +83,7 @@ func listInputFixtures(listPath, root, provisionedBy string) ([]Fixture, error) 
 		seen[e.ID] = true
 		p := filepath.Join(root, filepath.FromSlash(e.ID))
 		if _, err := os.Stat(p); err != nil {
-			remedy := "provision it"
-			if provisionedBy != "" {
-				remedy = "run " + provisionedBy
-			}
-			return nil, fmt.Errorf("%w: %s is missing (%s)", errInputsUnfetched, p, remedy)
+			return nil, fmt.Errorf("%w: %s is missing (run %s)", errInputsUnfetched, p, remedy)
 		}
 		fixtures = append(fixtures, Fixture{ID: e.ID, PDFPath: p})
 	}

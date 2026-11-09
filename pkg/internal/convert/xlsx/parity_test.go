@@ -15,13 +15,13 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 )
 
-// paritySources returns the directory Gotenberg's workbooks of the xlsx
-// corpus sit under: LITHO_XLSX_SOURCES, else the corpus's sources.
+// paritySources returns the directory Gotenberg's test workbooks sit under:
+// LITHO_XLSX_SOURCES, else testdata/gotenberg.
 func paritySources() string {
 	if dir := os.Getenv("LITHO_XLSX_SOURCES"); dir != "" {
 		return dir
 	}
-	return filepath.Join("..", "..", "..", "..", "test", "integration", "corpus", "gotenberg", "xlsx", "sources")
+	return filepath.Join("testdata", "gotenberg")
 }
 
 // findSource returns the path of the file name under dir, "" when absent.

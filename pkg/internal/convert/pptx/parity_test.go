@@ -15,13 +15,13 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 )
 
-// paritySources returns the directory Gotenberg's decks of the pptx
-// corpus sit under: LITHO_PPTX_SOURCES, else the corpus's sources.
+// paritySources returns the directory Gotenberg's test decks sit under:
+// LITHO_PPTX_SOURCES, else testdata/gotenberg.
 func paritySources() string {
 	if dir := os.Getenv("LITHO_PPTX_SOURCES"); dir != "" {
 		return dir
 	}
-	return filepath.Join("..", "..", "..", "..", "test", "integration", "corpus", "gotenberg", "pptx", "sources")
+	return filepath.Join("testdata", "gotenberg")
 }
 
 // findSource returns the path of the file name under dir, "" when absent.

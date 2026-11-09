@@ -227,10 +227,9 @@ func defaultBaselinePath() string {
 
 func runBaseline(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("baseline", flag.ExitOnError)
-	corpus := fs.String("corpus", "", "Comma-separated corpus names (empty = all)")
+	corpus := fs.String("corpus", "", corpusFlagUsage)
 	feature := fs.String("feature", "", "Comma-separated feature names (empty = all)")
 	output := fs.String("output", defaultBaselinePath(), "Baseline file path to write")
-	merge := fs.Bool("merge", false, "Overlay this run's cells onto the existing baseline instead of replacing the whole file")
 	workers := fs.Int("workers", runtime.GOMAXPROCS(0), "Parallel fixture workers")
 	allowDrift := fs.Bool("allow-version-drift", false, allowVersionDriftUsage)
 	reportDir := fs.String("report-dir", defaultReportDir, reportDirUsage)
@@ -255,8 +254,10 @@ func runBaseline(ctx context.Context, args []string) int {
 		return 1
 	}
 
+	// A run narrowed to some corpora or features overlays its cells onto
+	// the baseline: it scored nothing else, so it replaces nothing else.
 	bl := baselineFromScoreboard(board)
-	if *merge {
+	if len(opts.corpora) > 0 || len(opts.features) > 0 {
 		prev, err := loadBaseline(*output)
 		switch {
 		case err == nil:
@@ -285,7 +286,7 @@ func runBaseline(ctx context.Context, args []string) int {
 
 func runCheck(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("check", flag.ExitOnError)
-	corpus := fs.String("corpus", "", "Comma-separated corpus names (empty = all)")
+	corpus := fs.String("corpus", "", corpusFlagUsage)
 	feature := fs.String("feature", "", "Comma-separated feature names (empty = all)")
 	baselinePath := fs.String("baseline", defaultBaselinePath(), "Baseline file to check against")
 	workers := fs.Int("workers", runtime.GOMAXPROCS(0), "Parallel fixture workers")

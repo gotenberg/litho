@@ -101,12 +101,22 @@ func fontReleases(pins map[string]string) ([]fontRelease, error) {
 		prefix := "fonts-crosextra-" + strings.ToLower(family) + "-" + version + "/fonts/ttf/" + family
 		return []string{prefix + "-Regular.ttf", prefix + "-Bold.ttf", prefix + "-Italic.ttf", prefix + "-BoldItalic.ttf"}
 	}
+	// The weasyprint corpus's test font, read from the release tag its
+	// fixtures come from; the directory keeps no version, the draw feature
+	// reads it by name.
+	weasyURL := "https://raw.githubusercontent.com/Kozea/WeasyPrint/v" + pin("WEASYPRINT_VERSION") + "/tests/resources/weasyprint.otf"
+	weasy := fontRelease{
+		dir:   "weasyprint",
+		stamp: weasyURL + " " + pin("WEASYPRINT_FONT_SHA256"),
+		files: []fontDownload{{url: weasyURL, shaPin: "WEASYPRINT_FONT_SHA256", name: "weasyprint.otf"}},
+	}
 	notoCore := "./usr/share/fonts/truetype/noto/"
 	out := []fontRelease{
 		archive("liberation-"+pin("LIBERATION_FONTS_VERSION"), "LIBERATION_FONTS", "tar.gz", nil, ""),
 		archive("dejavu-"+pin("DEJAVU_FONTS_VERSION"), "DEJAVU_FONTS", "tar.bz2", nil, ""),
 		cjk,
 		otc,
+		weasy,
 		archive("noto-sans-thai-"+pin("NOTO_SANS_THAI_VERSION"), "NOTO_SANS_THAI", "zip",
 			[]string{"NotoSansThai/hinted/ttf/NotoSansThai-Regular.ttf", "NotoSansThai/hinted/ttf/NotoSansThai-Bold.ttf"}, "OFL.txt"),
 		archive("noto-sans-devanagari-"+pin("NOTO_SANS_DEVANAGARI_VERSION"), "NOTO_SANS_DEVANAGARI", "zip",

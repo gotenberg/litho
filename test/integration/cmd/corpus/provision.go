@@ -19,7 +19,7 @@ import (
 // The paths of the provisioning image (corpus/Dockerfile) `corpus provision`
 // runs in.
 const (
-	// provisionOutput is where corpus init mounts the corpus testdata.
+	// provisionOutput is where corpus goldens mounts the corpus testdata.
 	provisionOutput = "/output"
 	// imageVersions records the pins the image was built with, overrides
 	// included.
@@ -40,7 +40,7 @@ const (
 const defaultProvisionFeatures = "text,metadata,compliance,remediation,remediation-aggressive"
 
 // runProvision is the provisioning image's entrypoint: it derives the
-// goldens of one corpus from the PDFs corpus init put in the mounted
+// goldens of one corpus from the PDFs corpus goldens put in the mounted
 // testdata, running only the generators the requested features read.
 //
 //	corpus provision <corpus> <profiles_csv> [features_csv] [profile_mode]
@@ -93,7 +93,7 @@ func (p *provisioner) wants(feature string) bool {
 func (p *provisioner) run(ctx context.Context) error {
 	pins, err := readEnvFile(imageVersions)
 	if err != nil {
-		return fmt.Errorf("%w: build the image through corpus init", err)
+		return fmt.Errorf("%w: build the image through corpus goldens", err)
 	}
 	p.pins = pins
 	p.tools = imageToolVersions(ctx)
@@ -101,7 +101,7 @@ func (p *provisioner) run(ctx context.Context) error {
 	pdfs := filepath.Join(p.out, "pdfs")
 	count, err := countPDFs(pdfs)
 	if err != nil || count == 0 {
-		return fmt.Errorf("no PDF in %s: corpus init installs or fetches them on the host first", pdfs)
+		return fmt.Errorf("no PDF in %s: corpus goldens installs or fetches them on the host first", pdfs)
 	}
 	fmt.Printf("==> %s: %d PDFs on disk.\n", p.corpus, count)
 

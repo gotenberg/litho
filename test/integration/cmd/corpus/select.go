@@ -50,19 +50,19 @@ var plainName = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 // unsafeID finds the runs of characters a fixture ID does not carry.
 var unsafeID = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
-func runSelect(ctx context.Context, args []string) int {
-	fs := flag.NewFlagSet("select", flag.ContinueOnError)
+func runUpdate(ctx context.Context, args []string) int {
+	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	corpus := fs.String("corpus", "", "The corpus whose lists to write (libreoffice/docx, poi/xls, wpt)")
 	checkout := fs.String("checkout", "", "A checkout of the corpus's source at its pin (none for govdocs)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if *corpus == "" {
-		fmt.Fprintln(os.Stderr, "select: --corpus is required")
+		fmt.Fprintln(os.Stderr, "update: --corpus is required")
 		return 2
 	}
 	if err := selectCorpus(ctx, *corpus, *checkout); err != nil {
-		fmt.Fprintf(os.Stderr, "select: %v\n", err)
+		fmt.Fprintf(os.Stderr, "update: %v\n", err)
 		return 1
 	}
 	return 0

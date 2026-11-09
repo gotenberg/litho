@@ -186,7 +186,7 @@ func TestHasReferences_NeedsTheManifest(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	refs := &ReferenceSpec{Dir: "references", BuiltBy: "make office-references"}
+	refs := &ReferenceSpec{Dir: "references", Engine: engineLibreOffice}
 	if hasReferences(root, refs) {
 		t.Error("references found in an empty testdata root")
 	}

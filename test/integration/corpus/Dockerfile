@@ -5,10 +5,10 @@
 # KoSIT, poppler's pdftoppm, and baseline utilities. Bakes a built pdf.js
 # checkout into the image. The host puts a corpus's PDFs in the testdata it
 # mounts at /output; the image only derives the goldens, with the corpus CLI's
-# provision subcommand, which corpus init cross-compiles and mounts at
+# provision subcommand, which corpus goldens cross-compiles and mounts at
 # /work/bin/corpus, so the image carries no Go toolchain.
 #
-# Every version comes from versions.env. `corpus init` passes each entry
+# Every version comes from versions.env. `corpus goldens` passes each entry
 # as --build-arg, so no ARG below carries a default that could drift from
 # the file. The directive on the first line silences the two build checks
 # that design trips: a FROM whose ARGs have no default, and the constant
@@ -56,8 +56,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 ARG POPPLER_VERSION
 ARG POPPLER_SHA256
-RUN : "${POPPLER_VERSION:?build through corpus init, which passes versions.env}" \
-  && : "${POPPLER_SHA256:?build through corpus init, which passes versions.env}" \
+RUN : "${POPPLER_VERSION:?build through corpus goldens, which passes versions.env}" \
+  && : "${POPPLER_SHA256:?build through corpus goldens, which passes versions.env}" \
   && cd /tmp \
   && curl -fSLO "https://poppler.freedesktop.org/poppler-${POPPLER_VERSION}.tar.xz" \
   && if ! echo "${POPPLER_SHA256}  poppler-${POPPLER_VERSION}.tar.xz" | sha256sum -c -; then \
@@ -80,8 +80,8 @@ RUN : "${POPPLER_VERSION:?build through corpus init, which passes versions.env}"
 # /Encoding is one of their CMaps (ISO 32000-1, 9.7.5.2, Table 118).
 ARG POPPLER_DATA_VERSION
 ARG POPPLER_DATA_SHA256
-RUN : "${POPPLER_DATA_VERSION:?build through corpus init, which passes versions.env}" \
-  && : "${POPPLER_DATA_SHA256:?build through corpus init, which passes versions.env}" \
+RUN : "${POPPLER_DATA_VERSION:?build through corpus goldens, which passes versions.env}" \
+  && : "${POPPLER_DATA_SHA256:?build through corpus goldens, which passes versions.env}" \
   && cd /tmp \
   && curl -fSLO "https://poppler.freedesktop.org/poppler-data-${POPPLER_DATA_VERSION}.tar.gz" \
   && if ! echo "${POPPLER_DATA_SHA256}  poppler-data-${POPPLER_DATA_VERSION}.tar.gz" | sha256sum -c -; then \
@@ -101,14 +101,14 @@ ARG NOTO_SANS_JP_SHA256
 ARG NOTO_SANS_KR_SHA256
 ARG NOTO_SANS_SC_SHA256
 ARG NOTO_SANS_TC_SHA256
-RUN : "${NOTO_CJK_SANS_VERSION:?build through corpus init, which passes versions.env}" \
+RUN : "${NOTO_CJK_SANS_VERSION:?build through corpus goldens, which passes versions.env}" \
   && dir=/usr/share/fonts/opentype/noto-cjk \
   && base="https://github.com/notofonts/noto-cjk/raw/Sans${NOTO_CJK_SANS_VERSION}" \
   && mkdir -p "${dir}" \
   && for spec in "JP ${NOTO_SANS_JP_SHA256}" "KR ${NOTO_SANS_KR_SHA256}" \
     "SC ${NOTO_SANS_SC_SHA256}" "TC ${NOTO_SANS_TC_SHA256}"; do \
     set -- ${spec}; \
-    : "${2:?build through corpus init, which passes versions.env}"; \
+    : "${2:?build through corpus goldens, which passes versions.env}"; \
     file="NotoSans$1-Regular.otf"; \
     curl -fSL -o "${dir}/${file}" "${base}/Sans/SubsetOTF/$1/${file}" || exit 1; \
     if ! echo "$2  ${dir}/${file}" | sha256sum -c -; then \
@@ -134,7 +134,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # the same pin; only that one commit is fetched. npm ci installs the
 # dependency tree the commit's lockfile names.
 ARG PDFJS_REVISION
-RUN : "${PDFJS_REVISION:?build through corpus init, which passes versions.env}" \
+RUN : "${PDFJS_REVISION:?build through corpus goldens, which passes versions.env}" \
   && ref="${PDFJS_REVISION}" \
   && if ! echo "${ref}" | grep -Eq '^[0-9a-f]{40}$'; then ref="refs/tags/${ref}"; fi \
   && git init -q /opt/pdfjs \
@@ -146,7 +146,7 @@ RUN : "${PDFJS_REVISION:?build through corpus init, which passes versions.env}" 
 # JRE, checked against the SHA-256 its release publishes.
 ARG TARGETARCH
 ARG JRE_VERSION
-RUN : "${JRE_VERSION:?build through corpus init, which passes versions.env}" \
+RUN : "${JRE_VERSION:?build through corpus goldens, which passes versions.env}" \
   && major="${JRE_VERSION%%.*}" \
   && case "${TARGETARCH}" in \
     amd64) arch=x64 ;; \
@@ -174,13 +174,13 @@ ENV PATH="/opt/java/bin:${PATH}"
 ARG PDFCPU_VERSION
 ARG PDFCPU_SHA256_AMD64
 ARG PDFCPU_SHA256_ARM64
-RUN : "${PDFCPU_VERSION:?build through corpus init, which passes versions.env}" \
+RUN : "${PDFCPU_VERSION:?build through corpus goldens, which passes versions.env}" \
   && case "${TARGETARCH}" in \
     amd64) arch=x86_64 pin=PDFCPU_SHA256_AMD64 sha256="${PDFCPU_SHA256_AMD64}" ;; \
     arm64) arch=arm64 pin=PDFCPU_SHA256_ARM64 sha256="${PDFCPU_SHA256_ARM64}" ;; \
     *) echo "no pdfcpu archive for architecture ${TARGETARCH}" >&2 && exit 1 ;; \
   esac \
-  && : "${sha256:?build through corpus init, which passes versions.env}" \
+  && : "${sha256:?build through corpus goldens, which passes versions.env}" \
   && name="pdfcpu_${PDFCPU_VERSION}_Linux_${arch}" \
   && curl -fSL -o /tmp/pdfcpu.tar.xz \
     "https://github.com/pdfcpu/pdfcpu/releases/download/v${PDFCPU_VERSION}/${name}.tar.xz" \
@@ -196,7 +196,7 @@ RUN : "${PDFCPU_VERSION:?build through corpus init, which passes versions.env}" 
 # AFRelationship, XMP fx:* properties, extension schema) plus the
 # embedded CII XML schema. Pinned to a tagged release for reproducibility.
 ARG MUSTANG_VERSION
-RUN : "${MUSTANG_VERSION:?build through corpus init, which passes versions.env}" \
+RUN : "${MUSTANG_VERSION:?build through corpus goldens, which passes versions.env}" \
   && curl -fSL -o /opt/mustang.jar \
   "https://github.com/ZUGFeRD/mustangproject/releases/download/core-${MUSTANG_VERSION}/Mustang-CLI-${MUSTANG_VERSION}.jar"
 
@@ -210,10 +210,10 @@ ARG KOSIT_VERSION
 ARG XRECHNUNG_CONFIG_TAG
 ARG XRECHNUNG_CONFIG_ASSET
 ARG EN16931_VERSION
-RUN : "${KOSIT_VERSION:?build through corpus init, which passes versions.env}" \
-  && : "${XRECHNUNG_CONFIG_TAG:?build through corpus init, which passes versions.env}" \
-  && : "${XRECHNUNG_CONFIG_ASSET:?build through corpus init, which passes versions.env}" \
-  && : "${EN16931_VERSION:?build through corpus init, which passes versions.env}" \
+RUN : "${KOSIT_VERSION:?build through corpus goldens, which passes versions.env}" \
+  && : "${XRECHNUNG_CONFIG_TAG:?build through corpus goldens, which passes versions.env}" \
+  && : "${XRECHNUNG_CONFIG_ASSET:?build through corpus goldens, which passes versions.env}" \
+  && : "${EN16931_VERSION:?build through corpus goldens, which passes versions.env}" \
   && curl -fSL -o /opt/kosit.jar \
   "https://github.com/itplr-kosit/validator/releases/download/v${KOSIT_VERSION}/validator-${KOSIT_VERSION}-standalone.jar" \
   && curl -fSL -o /tmp/xrechnung-config.zip \

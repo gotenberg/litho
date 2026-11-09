@@ -10,23 +10,22 @@ import (
 	"testing"
 )
 
+// internalSubcommands are the subcommands other processes run, which the
+// usage leaves out: the provisioning image runs provision and scan-claims,
+// the robustness feature convert-one.
+var internalSubcommands = []string{"provision", "scan-claims", "convert-one"}
+
 // helpAliases are dispatched but are not subcommands, so neither list below
 // has to name them.
 var helpAliases = map[string]bool{"-h": true, "--help": true, "help": true}
 
-// TestUsageNamesEveryDispatchableSubcommand keeps the usage block honest.
-//
-// This tool prints its subcommands TWICE: a one-line synopsis and a
-// "Subcommands:" block under it. Both are hand-written, the dispatch switch is
-// a third hand-written list, and none knew about the others. Measured when this
-// test was written, the synopsis read `<init|run|baseline|check>` while the
-// block beneath it and the switch both carried five, so the tool contradicted
-// itself two lines apart. `scan-claims` is the one that went missing, and it is
-// the subcommand provisioning ran in the image.
-//
-// Both directions are checked for both lists: a subcommand the usage never
-// names is one nobody finds, and a name the usage invents sends a reader to
-// "unknown subcommand" for a surface this tool advertises.
+// TestUsageNamesEveryDispatchableSubcommand keeps the usage block honest, the
+// rule cmd/litho's TestUsageListsEveryDispatchableCommand states for litho
+// itself: the "Subcommands:" block and the dispatch switch are both
+// hand-written, so each is checked against the other. A subcommand the usage
+// never names is one nobody finds, and a name the usage invents sends a
+// reader to "unknown subcommand". The internal subcommands, which other
+// processes run, are dispatched and left out of the usage.
 func TestUsageNamesEveryDispatchableSubcommand(t *testing.T) {
 	dispatched := dispatchSubcommandNames(t)
 
@@ -34,35 +33,33 @@ func TestUsageNamesEveryDispatchableSubcommand(t *testing.T) {
 	if len(dispatched) < 4 {
 		t.Fatalf("found only %d dispatch cases, so the switch was not parsed: %v", len(dispatched), dispatched)
 	}
-	for _, want := range []string{"scan-claims", "init"} {
+	for _, want := range []string{"scan-claims", "prepare"} {
 		if !dispatched[want] {
 			t.Fatalf("%q missing from the parsed dispatch set, so the comparison means nothing", want)
 		}
 	}
+	internal := map[string]bool{}
+	for _, name := range internalSubcommands {
+		if !dispatched[name] {
+			t.Errorf("internalSubcommands lists %q, which dispatch has no case for", name)
+		}
+		internal[name] = true
+	}
 
 	var buf bytes.Buffer
 	printUsage(&buf)
-	synopsis := usageSynopsisNames(t, buf.String())
 	block := usageBlockNames(t, buf.String())
-
-	for _, tc := range []struct {
-		desc  string
-		named map[string]bool
-	}{
-		{"the one-line synopsis", synopsis},
-		{"the Subcommands block", block},
-	} {
-		for name := range dispatched {
-			if !tc.named[name] {
-				t.Errorf("%q is dispatchable but %s never names it, so a reader cannot discover it",
-					name, tc.desc)
-			}
+	for name := range dispatched {
+		if !internal[name] && !block[name] {
+			t.Errorf("%q is dispatchable but the Subcommands block never names it, so a reader cannot discover it", name)
 		}
-		for name := range tc.named {
-			if !dispatched[name] {
-				t.Errorf("%s advertises %q but dispatch has no case for it, so it answers "+
-					"\"unknown subcommand\" to a reader who followed the help", tc.desc, name)
-			}
+	}
+	for name := range block {
+		if !dispatched[name] {
+			t.Errorf("the Subcommands block advertises %q but dispatch has no case for it", name)
+		}
+		if internal[name] {
+			t.Errorf("the Subcommands block advertises the internal %q", name)
 		}
 	}
 }
@@ -108,31 +105,6 @@ func dispatchSubcommandNames(t *testing.T) map[string]bool {
 		})
 	}
 	return names
-}
-
-// usageSynopsisNames returns the names inside the "Usage: corpus <...>" group.
-func usageSynopsisNames(t *testing.T, usage string) map[string]bool {
-	t.Helper()
-
-	names := make(map[string]bool)
-	for line := range strings.SplitSeq(usage, "\n") {
-		if !strings.HasPrefix(line, "Usage: corpus ") {
-			continue
-		}
-		open := strings.Index(line, "<")
-		close := strings.Index(line, ">")
-		if open < 0 || close < open {
-			t.Fatalf("synopsis %q carries no <a|b> group", line)
-		}
-		for name := range strings.SplitSeq(line[open+1:close], "|") {
-			if name = strings.TrimSpace(name); name != "" {
-				names[name] = true
-			}
-		}
-		return names
-	}
-	t.Fatalf("no synopsis line in the usage block:\n%s", usage)
-	return nil
 }
 
 // usageBlockNames returns the names the "Subcommands:" block lists, reading the

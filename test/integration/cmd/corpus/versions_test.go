@@ -420,8 +420,8 @@ func TestProvisionRecordsEveryGoldenDir(t *testing.T) {
 	}
 
 	for _, m := range readManifests(t) {
-		// A corpus the host provisions has no image stage to record.
-		if m.ProvisionedBy != "" {
+		// A corpus whose goldens git versions has no image stage to record.
+		if m.GoldensInSource {
 			continue
 		}
 		for feature, rel := range m.Goldens {
@@ -454,9 +454,9 @@ func TestEverySourceReadsItsPin(t *testing.T) {
 			t.Errorf("corpus %s (source %s) has no sourcePins entry", m.Name, m.Source)
 			continue
 		}
-		// A corpus the host provisions reads its pin in its make target
+		// A corpus whose goldens git versions reads its pin in its fetch
 		// (TestHostProvisionedCorporaReadTheirPin).
-		if m.ProvisionedBy != "" {
+		if m.GoldensInSource {
 			continue
 		}
 		if m.Fetch != nil && m.References == nil {
@@ -466,7 +466,7 @@ func TestEverySourceReadsItsPin(t *testing.T) {
 			continue
 		}
 		if m.CommittedPDFs == "" && m.References == nil {
-			t.Errorf("%s: corpus init has no PDFs to install: no fetch, no committed_pdfs, no references", m.Name)
+			t.Errorf("%s: corpus goldens has no PDFs to install: no fetch, no committed_pdfs, no references", m.Name)
 		}
 		if len(keys) > 0 {
 			t.Errorf("%s: installs PDFs no pin names, but sourcePins lists %v", m.Name, keys)
@@ -606,7 +606,7 @@ func TestCheckCorpusVersions(t *testing.T) {
 		if len(got.Refusals) != 1 || !strings.Contains(got.Refusals[0], "goldens/compliance was provisioned with JRE_VERSION=17.0.19+10, the pin is 17.0.20.1+1") {
 			t.Fatalf("refusals = %v, want one naming the stage, the key, the recorded and the pinned value", got.Refusals)
 		}
-		wantRemedy := "rm -rf " + filepath.Join(root, "goldens", "compliance") + " && make corpus-init CORPUS_NAME=verapdf"
+		wantRemedy := "rm -rf " + filepath.Join(root, "goldens", "compliance") + " && make corpus-prepare CORPUS=verapdf"
 		if got.Remedy != wantRemedy {
 			t.Fatalf("remedy = %q, want %q", got.Remedy, wantRemedy)
 		}
@@ -621,7 +621,7 @@ func TestCheckCorpusVersions(t *testing.T) {
 		if len(got.Refusals) != 1 || !strings.Contains(got.Refusals[0], "pdfs was provisioned with VERAPDF_CORPUS_REVISION") {
 			t.Fatalf("refusals = %v, want the download stage refused", got.Refusals)
 		}
-		if got.Remedy != "rm -rf "+root+" && make corpus-init CORPUS_NAME=verapdf" {
+		if got.Remedy != "rm -rf "+root+" && make corpus-prepare CORPUS=verapdf" {
 			t.Fatalf("remedy = %q, want the whole testdata root removed", got.Remedy)
 		}
 	})

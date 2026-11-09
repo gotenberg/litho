@@ -4,12 +4,11 @@
   "pdf_root": "pdfs",
   "inputs": {
     "list": "documents.json",
-    "list_root": "sources",
-    "fetched_by": "make corpus-fetch CORPUS_NAME=openxmlsdk/docx"
+    "list_root": "sources"
   },
   "references": {
     "dir": "references",
-    "built_by": "make office-references SOURCES=openxmlsdk FORMATS=docx",
+    "engine": "libreoffice",
     "source_pin": "OPENXMLSDK_COMMIT"
   },
   "goldens": {

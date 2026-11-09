@@ -4,12 +4,11 @@
   "pdf_root": "pdfs",
   "inputs": {
     "list": "documents.json",
-    "list_root": "sources",
-    "fetched_by": "make corpus-fetch CORPUS_NAME=libreoffice/ods"
+    "list_root": "sources"
   },
   "references": {
     "dir": "references",
-    "built_by": "make office-references SOURCES=libreoffice FORMATS=ods",
+    "engine": "libreoffice",
     "source_pin": "LIBREOFFICE_CORE_COMMIT"
   },
   "goldens": {

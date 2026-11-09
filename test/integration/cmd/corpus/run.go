@@ -84,7 +84,7 @@ type ReportWriter interface {
 
 func runRun(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
-	corpus := fs.String("corpus", "", "Comma-separated corpus names (empty = all)")
+	corpus := fs.String("corpus", "", corpusFlagUsage)
 	feature := fs.String("feature", "", "Comma-separated feature names (empty = all)")
 	profile := fs.String("profile", "", "Filter to fixtures under this profile directory")
 	format := fs.String("format", "text", "Output format: text or json")
@@ -179,18 +179,19 @@ func buildScoreboard(ctx context.Context, opts runOptions) (*Scoreboard, bool) {
 	return board, true
 }
 
-// resolveCorpora returns the corpus names to run. When the filter is
-// empty, every corpus with a manifest.json is included.
+// resolveCorpora returns the names of the corpora the filter selects (see
+// [selectManifests]), every corpus when it is empty.
 func resolveCorpora(filter []string) ([]string, error) {
-	if len(filter) > 0 {
-		return filter, nil
-	}
-	names, err := ListCorpora()
+	ms, err := selectManifests(filter)
 	if err != nil {
 		return nil, err
 	}
-	if len(names) == 0 {
+	if len(ms) == 0 {
 		return nil, errors.New("no corpora found under test/integration/corpus/")
+	}
+	names := make([]string, 0, len(ms))
+	for _, m := range ms {
+		names = append(names, m.Name)
 	}
 	return names, nil
 }

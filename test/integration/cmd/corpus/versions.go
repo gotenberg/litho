@@ -27,7 +27,7 @@ const versionRecordName = "versions.json"
 const versionRecordFormat = 1
 
 // pdfsStage is the record key of the download stage, which corpus fetch and
-// corpus init write under the name of the directory they fill.
+// corpus goldens write under the name of the directory they fill.
 const pdfsStage = "pdfs"
 
 // veraPDFHeaderBytes bounds how much of a veraPDF JSON report is read to find
@@ -114,12 +114,12 @@ var localToolPins = map[string]bool{
 	"OPENSYMBOL_URL":     true,
 	"OPENSYMBOL_SHA256":  true,
 
-	// The converter oracles: the web-platform-tests commit `make corpus-fetch CORPUS_NAME=wpt`
-	// downloads, the WeasyPrint release `make weasyprint-fixtures` extracts,
-	// and the Gotenberg image `make html-references` and `make
-	// office-references` convert with. The host runs all three;
+	// The converter oracles: the web-platform-tests commit `make corpus-fetch CORPUS=wpt`
+	// downloads, the WeasyPrint release `make corpus-update CORPUS=weasyprint`
+	// extracts, and the Gotenberg image `make corpus-references` converts
+	// with. The host runs all three;
 	// `corpus fetch` records WPT_COMMIT in the wpt testdata. The resvg commit
-	// `make corpus-fetch CORPUS_NAME=resvg` downloads at, which `corpus fetch` records in the
+	// `make corpus-fetch CORPUS=resvg` downloads at, which `corpus fetch` records in the
 	// resvg testdata.
 	"WPT_COMMIT":             true,
 	"RESVG_COMMIT":           true,
@@ -196,10 +196,9 @@ var sourcePins = map[string][]string{
 	"litho/pptx": nil,
 	"litho/html": nil,
 
-	"wpt":            {"WPT_COMMIT"},
-	"resvg":          {"RESVG_COMMIT"},
-	"weasyprint":     nil,
-	"gotenberg/html": nil,
+	"wpt":        {"WPT_COMMIT"},
+	"resvg":      {"RESVG_COMMIT"},
+	"weasyprint": nil,
 	// The Office corpora's PDFs are LibreOffice references the host builds:
 	// their own manifest records the image, the sources and the pin the
 	// fetched documents come from, which the diff feature checks (see
@@ -211,13 +210,6 @@ var sourcePins = map[string][]string{
 	"libreoffice/csv":  nil,
 	"libreoffice/pptx": nil,
 	"libreoffice/odp":  nil,
-	"gotenberg/docx":   nil,
-	"gotenberg/odt":    nil,
-	"gotenberg/xlsx":   nil,
-	"gotenberg/ods":    nil,
-	"gotenberg/csv":    nil,
-	"gotenberg/pptx":   nil,
-	"gotenberg/odp":    nil,
 	"poi/docx":         nil,
 	"poi/xlsx":         nil,
 	"poi/pptx":         nil,
@@ -621,7 +613,7 @@ func reprovisionCommand(m *Manifest, testdataRoot string, stale map[string]bool)
 		}
 		sort.Strings(targets)
 	}
-	return fmt.Sprintf("rm -rf %s && make corpus-init CORPUS_NAME=%s", strings.Join(targets, " "), m.Name)
+	return fmt.Sprintf("rm -rf %s && %s", strings.Join(targets, " "), prepareRemedy(m.Name))
 }
 
 // loadManifests loads the manifest of every named corpus, skipping the ones
@@ -667,7 +659,7 @@ func verifyVersions(w io.Writer, manifests []*Manifest, rootOf func(*Manifest) s
 	}
 	if !ok {
 		fmt.Fprintln(w, "refusing to score goldens made with other versions than test/integration/corpus/versions.env pins; "+
-			"re-provision them, or pass --allow-version-drift (CORPUS_ALLOW_VERSION_DRIFT=1) to score anyway")
+			"re-provision them, or pass --allow-version-drift (ALLOW_VERSION_DRIFT=1) to score anyway")
 	}
 	return ok
 }

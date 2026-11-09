@@ -34,11 +34,11 @@ const drawDPI = 96
 //nolint:gochecknoglobals // a fixed rule, read only
 var drawPixelRule = pixelRule{Tolerance: renderChannelTolerance}
 
-// drawFontsTarget is the make target that extracts the fixtures and fetches
-// the fonts the draw feature reads.
-const drawFontsTarget = "make weasyprint-fixtures"
+// drawFontsTarget is the make target that fetches the fonts the draw feature
+// reads, the WeasyPrint test font among them.
+const drawFontsTarget = "make corpus-fetch CORPUS=fonts"
 
-// drawFixture is one fixture corpus select writes for the weasyprint corpus.
+// drawFixture is one fixture corpus update writes for the weasyprint corpus.
 type drawFixture struct {
 	Name     string   `json:"name"`
 	Source   string   `json:"source"`

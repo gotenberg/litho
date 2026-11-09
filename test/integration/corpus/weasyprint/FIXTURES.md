@@ -13,9 +13,9 @@ The colour map is `PIXELS_BY_CHAR` of `tests/draw/__init__.py`, read from the re
 
 ## Extraction
 
-`make weasyprint-fixtures` runs `corpus select --corpus=weasyprint`, which downloads the GitHub source tarball of tag `v$WEASYPRINT_VERSION`, refuses it unless it hashes to `WEASYPRINT_SHA256`, and reads the release from it (`--checkout` names an unpacked release instead).
+`make corpus-update CORPUS=weasyprint` runs `corpus update --corpus=weasyprint`, which downloads the GitHub source tarball of tag `v$WEASYPRINT_VERSION`, refuses it unless it hashes to `WEASYPRINT_SHA256`, and reads the release from it (`--checkout` names an unpacked release instead).
 
-The command reads each `tests/draw/test_*.py`, enough of Python's grammar to find its assignments, test functions and calls, and keeps an `assert_pixels` call when both arguments are literal: a string constant, or a name bound once, in the module or the test function, to a string constant (WeasyPrint shares some grids between tests that way). A test with several calls yields one fixture per call, suffixed `_2`, `_3`. The test font, `weasyprint.otf`, goes to the gitignored font directory, checked against `WEASYPRINT_FONT_SHA256`; the other two formats of the same font are not used. The target then formats the fixtures with Prettier, which the repository's `make lint-prettier` holds JSON to.
+The command reads each `tests/draw/test_*.py`, enough of Python's grammar to find its assignments, test functions and calls, and keeps an `assert_pixels` call when both arguments are literal: a string constant, or a name bound once, in the module or the test function, to a string constant (WeasyPrint shares some grids between tests that way). A test with several calls yields one fixture per call, suffixed `_2`, `_3`. The command checks the release's test font, `weasyprint.otf`, against `WEASYPRINT_FONT_SHA256`; `corpus fetch` installs that font into the gitignored font directory from the same tag, with the other fixture fonts. The other two formats of the same font are not used. The target then formats the fixtures with Prettier, which the repository's `make lint-prettier` holds JSON to.
 
 Of the 372 `assert_pixels` calls of release 70.0, 315 became fixtures:
 

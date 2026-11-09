@@ -1,8 +1,9 @@
 {
   "name": "weasyprint",
   "source": "weasyprint",
-  "provisioned_by": "make weasyprint-fixtures",
-  "inputs": { "glob": "fixtures/*.json" },
+  "inputs": {
+    "glob": "fixtures/*.json"
+  },
   "goldens_in_source": true,
   "goldens": {
     "draw": "fixtures"

@@ -32,34 +32,38 @@ func runMain() int {
 
 func dispatch(ctx context.Context, cmd string, args []string) int {
 	switch cmd {
-	case "init":
-		return runInit(ctx, args)
+	case "prepare":
+		return runPrepare(ctx, args)
 	case "fetch":
 		return runFetch(ctx, args)
-	case "select":
-		return runSelect(ctx, args)
-	case "run":
-		return runRun(ctx, args)
-	case "baseline":
-		return runBaseline(ctx, args)
-	case "check":
-		return runCheck(ctx, args)
-	case "scan-claims":
-		return runScanClaims(ctx, args)
-	case "references":
-		return runReferences(ctx, args)
 	case "build":
 		return runBuild(ctx, args)
-	case "convert-one":
-		return runConvertOne(ctx, args)
-	case "provision":
-		return runProvision(ctx, args)
+	case "references":
+		return runReferences(ctx, args)
+	case "goldens":
+		return runGoldens(ctx, args)
+	case "run":
+		return runRun(ctx, args)
+	case "check":
+		return runCheck(ctx, args)
+	case "baseline":
+		return runBaseline(ctx, args)
+	case "update":
+		return runUpdate(ctx, args)
 	case "versions":
 		return runVersions(args)
 	case "tools":
 		return runTools(ctx, args)
+	// Internal: the provisioning image runs provision and scan-claims, the
+	// robustness feature runs convert-one.
+	case "provision":
+		return runProvision(ctx, args)
+	case "scan-claims":
+		return runScanClaims(ctx, args)
+	case "convert-one":
+		return runConvertOne(ctx, args)
 	case "-h", "--help", "help":
-		printUsage(os.Stderr)
+		printUsage(os.Stdout)
 		return 0
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", cmd)
@@ -74,25 +78,30 @@ func dispatch(ctx context.Context, cmd string, args []string) int {
 // the real text instead of a rebuilt copy of it. See
 // [TestUsageNamesEveryDispatchableSubcommand].
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: corpus <fetch|select|build|init|run|baseline|check|references|scan-claims|provision|convert-one|versions|tools> [flags]")
+	fmt.Fprintln(w, "Usage: corpus <subcommand> [flags]")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "A corpus goes through four steps before it is scored; prepare runs every one")
+	fmt.Fprintln(w, "it needs, skipping what is done:")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "  fetch -> build -> references -> goldens -> run")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
-	fmt.Fprintln(w, "  fetch         Download the fixture fonts and the files of the host-fetched corpora (--corpus=poi,wpt; --jobs=N)")
-	fmt.Fprintln(w, "  select        Write a corpus's lists from a checkout of its source (--corpus=poi/docx --checkout=DIR)")
-	fmt.Fprintln(w, "  build         Zip the litho Office corpora's documents and generate their hostile ones (--corpus=litho/docx)")
-	fmt.Fprintln(w, "  references    Build the LibreOffice and Chromium references with the pinned Gotenberg image (--corpus, --names)")
-	fmt.Fprintln(w, "  init          Provision corpora: their PDFs on the host, their goldens via Docker")
-	fmt.Fprintln(w, "  run           Compare litho against golden references across the matrix")
-	fmt.Fprintln(w, "  baseline      Run the matrix and write the per-cell match counts to a baseline file")
-	fmt.Fprintln(w, "  check         Run the matrix and fail if any cell regressed against the baseline")
-	fmt.Fprintln(w, "  scan-claims   Emit a claims.csv mapping each PDF to its claimed profile")
-	fmt.Fprintln(w, "  provision     Derive a corpus's goldens inside the provisioning image (run by init)")
-	fmt.Fprintln(w, "  convert-one   Convert one Office source and print how it ended as JSON (run by the robustness feature)")
+	fmt.Fprintln(w, "  prepare       Run every missing or stale step below, in order")
+	fmt.Fprintln(w, "  fetch         Download the fixture fonts and the files of the fetched corpora (--jobs=N; --corpus=fonts: the fonts alone)")
+	fmt.Fprintln(w, "  build         Generate the inputs kept as sources in git: Office documents, hostile documents, litho/text PDFs")
+	fmt.Fprintln(w, "  references    Convert the sources with the pinned Gotenberg image: the Chromium and LibreOffice PDFs the diff compares to (--fixtures=a,b)")
+	fmt.Fprintln(w, "  goldens       Derive the goldens the corpora lack in the provisioning image (Docker)")
+	fmt.Fprintln(w, "  run           Score litho across the (corpus, feature) matrix")
+	fmt.Fprintln(w, "  check         Score, and fail if any cell regressed against the baseline")
+	fmt.Fprintln(w, "  baseline      Score, and write the scores to the baseline file")
+	fmt.Fprintln(w, "  update        Rewrite one corpus's committed lists from its source at its pin (--checkout=DIR)")
 	fmt.Fprintln(w, "  versions      Print the pinned tool and source versions (--build-args: as docker build arguments)")
 	fmt.Fprintln(w, "  tools         Compare the local verapdf, node, java, qpdf, pdfsig and pikepdf with the pins")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Common run flags:")
-	fmt.Fprintln(w, "  --corpus=pdfjs,verapdf        Restrict to named corpora")
+	fmt.Fprintln(w, "Every subcommand takes:")
+	fmt.Fprintln(w, "  --corpus=litho/docx,*/xlsx,poi   Corpora: names, globs or sources (empty = all)")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "run, check and baseline also take:")
 	fmt.Fprintln(w, "  --feature=text,compliance     Restrict to named features")
 	fmt.Fprintln(w, "  --profile=PDF_A-2b            Restrict to fixtures under one profile")
 	fmt.Fprintln(w, "  --format=text|json            Output format")
@@ -101,5 +110,5 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  --report-dir=DIR              Where the converter cells draw their failures (empty: nowhere)")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Versions come from test/integration/corpus/versions.env; an environment variable")
-	fmt.Fprintln(w, "of the same name overrides one (VERAPDF_VERSION=1.30.2 corpus init).")
+	fmt.Fprintln(w, "of the same name overrides one (VERAPDF_VERSION=1.30.2 corpus prepare).")
 }

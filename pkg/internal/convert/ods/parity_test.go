@@ -9,8 +9,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 )
 
-// corpusSources is where the ods corpus keeps Gotenberg's spreadsheets.
-const corpusSources = "../../../../test/integration/corpus/gotenberg/ods/sources"
+// corpusSources holds Gotenberg's test spreadsheets (MIT).
+const corpusSources = "testdata/gotenberg"
 
 // TestParity_Figures reads Gotenberg's figures.ods and figures.fods: two
 // sheets, Revenue and Costs, with their markers, dates, numbers and Calc's

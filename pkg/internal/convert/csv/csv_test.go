@@ -246,8 +246,8 @@ func TestRead_Model(t *testing.T) {
 	}
 }
 
-// corpusSources is where the csv corpus keeps Gotenberg's files.
-const corpusSources = "../../../../test/integration/corpus/gotenberg/csv/sources"
+// corpusSources holds Gotenberg's test CSV files (MIT).
+const corpusSources = "testdata/gotenberg"
 
 // TestParity_Gotenberg reads Gotenberg's sales.csv and sheet.csv.
 //

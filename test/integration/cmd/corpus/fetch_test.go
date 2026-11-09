@@ -78,7 +78,7 @@ func TestCorpusFetch_GitHubAndZip(t *testing.T) {
 	list := &InputSpec{List: "documents.json", ListRoot: "sources"}
 	ms := []*Manifest{
 		{Name: "office", Source: "office", Inputs: list, Fetch: &FetchSpec{GitHub: "owner/repo", Pin: "C"}},
-		{Name: "mapped", Source: "mapped", ProvisionedBy: "x", Fetch: &FetchSpec{GitHub: "owner/repo", Pin: "C", Map: []FetchMap{
+		{Name: "mapped", Source: "mapped", GoldensInSource: true, Fetch: &FetchSpec{GitHub: "owner/repo", Pin: "C", Map: []FetchMap{
 			{Prefix: "fonts/", To: "mine/", Fonts: true}, {Prefix: "tests/", To: ""},
 		}}},
 		{Name: "zipped", Source: "zipped", Inputs: list, Fetch: &FetchSpec{Zip: srv.URL + "/zips", Pin: "T"}},
@@ -140,20 +140,26 @@ func TestCorpusFetch_GitHubAndZip(t *testing.T) {
 	}
 }
 
-func TestFetchedCorpora_SelectsByNameOrSource(t *testing.T) {
+func TestCorpusMatches_NameGlobOrSource(t *testing.T) {
 	t.Parallel()
 
-	spec := &FetchSpec{GitHub: "o/r", Pin: "P"}
-	ms := []*Manifest{{Name: "poi/docx", Fetch: spec}, {Name: "poi/xls", Fetch: spec}, {Name: "wpt", Fetch: spec}, {Name: "pdfjs"}}
-	got, err := fetchedCorpora(ms, []string{"poi", "wpt"})
-	if err != nil || len(got) != 3 {
-		t.Errorf("by source: %d corpora, %v", len(got), err)
-	}
-	if got, err := fetchedCorpora(ms, nil); err != nil || len(got) != 3 {
-		t.Errorf("all: %d corpora, %v", len(got), err)
-	}
-	if _, err := fetchedCorpora(ms, []string{"pdfjs"}); err == nil {
-		t.Error("a corpus without a fetch was selected")
+	for _, tc := range []struct {
+		pattern, name string
+		want          bool
+	}{
+		{"poi/docx", "poi/docx", true},
+		{"poi", "poi/docx", true},
+		{"poi/*", "poi/docx", true},
+		{"*/docx", "litho/docx", true},
+		{"*/docx", "litho/xlsx", false},
+		{"po", "poi/docx", false},
+		{"wpt", "wpt", true},
+		{"litho", "litho/pdf", true},
+		{"litho/p*", "litho/pptx", true},
+	} {
+		if got := corpusMatches(tc.pattern, tc.name); got != tc.want {
+			t.Errorf("corpusMatches(%q, %q) = %v, want %v", tc.pattern, tc.name, got, tc.want)
+		}
 	}
 }
 

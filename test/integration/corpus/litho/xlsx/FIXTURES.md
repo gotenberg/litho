@@ -2,7 +2,7 @@
 
 Self-authored SpreadsheetML workbooks that cover what Microsoft Excel prints. Each fixture is an unpacked OOXML part tree under `parts/<name>/`, hand-written ECMA-376 Transitional XML as Excel 2016+ writes it: real content and relationship types, `mc:Ignorable` extensions, and a cached value for every formula, since printing shows cached values. `go run ./test/integration/cmd/corpus build --corpus=litho/xlsx` zips each tree deterministically into the testdata. An `options.json` beside the parts holds the Gotenberg route options the fixture converts with.
 
-The references are LibreOffice PDFs built by `make office-references SOURCES=litho FORMATS=xlsx`, until Microsoft Excel references are available. LibreOffice ignores some constructs Excel prints (header and footer pictures, x14-only icon sets, sparklines in part); the fixtures still carry them for litho. Hostile documents are generated in Go from `minimal` and are listed in their own section.
+The references are LibreOffice PDFs built by `make corpus-references CORPUS=litho/xlsx`, until Microsoft Excel references are available. LibreOffice ignores some constructs Excel prints (header and footer pictures, x14-only icon sets, sparklines in part); the fixtures still carry them for litho. Hostile documents are generated in Go from `minimal` and are listed in their own section.
 
 Fonts are Calibri, Cambria, Arial, Times New Roman and Courier New, which have metric-compatible free substitutes, plus DejaVu Sans, Noto Sans CJK, Noto Sans Thai and Noto Sans Devanagari for other scripts. `&D`, `&T` and `&F` header codes print the conversion date and file name, so those areas differ between runs.
 

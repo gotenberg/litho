@@ -24,7 +24,7 @@ import (
 func TestParity_Pitch(t *testing.T) {
 	for _, name := range []string{"pitch/pitch.odp", "pitch-flat/pitch.fodp"} {
 		t.Run(name, func(t *testing.T) {
-			data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "test", "integration", "corpus", "gotenberg", "odp", "sources", name))
+			data, err := os.ReadFile(filepath.Join("testdata", "gotenberg", name))
 			if os.IsNotExist(err) {
 				t.Skip("the odp corpus's sources are not in this tree")
 			}

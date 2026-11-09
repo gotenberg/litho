@@ -1,29 +1,28 @@
 # libreoffice/xlsx corpus fixtures
 
-SpreadsheetML workbooks scored by the `diff` feature (see `FEATURES.md`) against LibreOffice Calc as Gotenberg's LibreOffice route prints them: the image `GOTENBERG_IMAGE` in `corpus/versions.env` pins (`gotenberg/gotenberg:9.0.0`, LibreOffice 26.8.2.2), route `/forms/libreoffice/convert`. A selection of LibreOffice's Calc and chart test workbooks at the commit `LIBREOFFICE_CORE_COMMIT` pins, of which only the list and the hashes are committed; Gotenberg's own test workbooks are the `gotenberg/xlsx` corpus. The references are built on the host and never committed. The corpus works as the libreoffice/docx corpus does, and its `FIXTURES.md` documents the reference checks and the drawing without annotations, which apply here with `xlsx` for `docx`; this file documents the spreadsheet options the ods and csv corpora share.
+SpreadsheetML workbooks scored by the `diff` feature (see `FEATURES.md`) against LibreOffice Calc as Gotenberg's LibreOffice route prints them: the image `GOTENBERG_IMAGE` in `corpus/versions.env` pins (`gotenberg/gotenberg:9.0.0`, LibreOffice 26.8.2.2), route `/forms/libreoffice/convert`. A selection of LibreOffice's Calc and chart test workbooks at the commit `LIBREOFFICE_CORE_COMMIT` pins, of which only the list and the hashes are committed; the references are built by `corpus references` into the testdata and never committed. The corpus works as the libreoffice/docx corpus does, and its `FIXTURES.md` documents the reference checks and the drawing without annotations, which apply here with `xlsx` for `docx`; this file documents the spreadsheet options the ods and csv corpora share.
 
-| Path                | What it holds                                                                                                                                                                     |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `documents.json`    | The 280 LibreOffice test workbooks, each by its ID, `<module>/<file>.xlsx` (`sc/tdf123.xlsx`, `chart2/tdf456.xlsx`)                                                               |
-| `files.sha256`      | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 280 workbooks and `COPYING.MPL`                                                                                   |
-| `corpus select`     | Selects the workbooks from a LibreOffice core checkout and writes the two files above                                                                                             |
-| `corpus fetch`      | `make corpus-fetch CORPUS_NAME=libreoffice/xlsx`: downloads each listed file at the pinned commit into `testdata/libreoffice/xlsx/sources/`, refusing one whose hash differs      |
-| `corpus references` | `make office-references SOURCES=libreoffice FORMATS=xlsx`: converts every source with the pinned image into `testdata/libreoffice/xlsx/references/<name>.pdf` and `manifest.json` |
+| Path                | What it holds                                                                                                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `documents.json`    | The 280 LibreOffice test workbooks, each by its ID, `<module>/<file>.xlsx` (`sc/tdf123.xlsx`, `chart2/tdf456.xlsx`)                                                      |
+| `files.sha256`      | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 280 workbooks and `COPYING.MPL`                                                                          |
+| `corpus update`     | Selects the workbooks from a LibreOffice core checkout and writes the two files above                                                                                    |
+| `corpus fetch`      | `make corpus-fetch CORPUS=libreoffice/xlsx`: downloads each listed file at the pinned commit into `testdata/libreoffice/xlsx/sources/`, refusing one whose hash differs  |
+| `corpus references` | `make corpus-references CORPUS=libreoffice/xlsx`: converts every source with the pinned image into `testdata/libreoffice/xlsx/references/<name>.pdf` and `manifest.json` |
 
 A fetched workbook's ID names the module whose tests it comes from: `sc/<file>` is `sc/qa/unit/data/xlsx/<file>`, `chart2/<file>` is `chart2/qa/extras/data/xlsx/<file>`. Its reference is named by its ID with `/` written `__`: `sc__tdf123.xlsx.pdf`.
 
 ## Provisioning
 
 ```bash
-make corpus-fetch CORPUS_NAME=libreoffice/xlsx                      # the LibreOffice test documents and the fixture fonts, hash-checked
-make office-references SOURCES=libreoffice FORMATS=xlsx             # the references (Docker); NAMES="a__b.xlsx" for some
-go run ./test/integration/cmd/corpus init --corpus=libreoffice/xlsx # the diff goldens, in the corpus image
-go run ./test/integration/cmd/corpus run --corpus=libreoffice/xlsx --feature=diff
+make corpus CORPUS=libreoffice/xlsx FEATURE=diff # every missing step, then the score
 ```
+
+`make corpus-prepare CORPUS=libreoffice/xlsx` runs the steps alone: `corpus-fetch` downloads the documents and the fixture fonts, hash-checked; `corpus-references` converts them with the pinned image (Docker; `FIXTURES=a__b.ext` rebuilds some); `corpus-goldens` derives the diff goldens in the corpus image.
 
 ## How the documents were chosen
 
-`corpus select` reads the `.xlsx` files at the top of LibreOffice core's `sc/qa/unit/data/xlsx` and `chart2/qa/extras/data/xlsx` at the pinned commit (the commit of the `libreoffice-26.8.2.2` tag, the release the image runs) and keeps one when:
+`corpus update` reads the `.xlsx` files at the top of LibreOffice core's `sc/qa/unit/data/xlsx` and `chart2/qa/extras/data/xlsx` at the pinned commit (the commit of the `libreoffice-26.8.2.2` tag, the release the image runs) and keeps one when:
 
 - it is at most 150 KiB;
 - its name is plain ASCII (letters, digits, dot, underscore, hyphen), so every shell and form field carries it intact;
@@ -48,7 +47,7 @@ The cell converts with the fixture fonts `corpus fetch --corpus=fonts` installs 
 
 ## How the rig was proven
 
-Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on 258 of 285 workbooks. Pages, links, outline and the strict rule score 1 on all; text F1 is below 1 on 60 and under the bar on 26, where text crosses a page edge or a clipping path, which PDF.js reads and litho's text extraction does not: a chart Calc cuts across two pages (`chart2/column-style.xlsx` at 0.236), a cell overflowing its single page (`budget-single`'s notes at 0.933), rotated cell text (`sc/tdf119292.xlsx` at 0.571). Layout averages 0.968 and falls below 0.9 on 4 (`chart2/chart-hatch-fill.xlsx` at 0.584, a hatch litho draws otherwise than poppler). `TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens` checks the committed sources so on every run with the corpus provisioned. The counts cover this corpus and `gotenberg/xlsx` together.
+Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on 258 of 285 workbooks. Pages, links, outline and the strict rule score 1 on all; text F1 is below 1 on 60 and under the bar on 26, where text crosses a page edge or a clipping path, which PDF.js reads and litho's text extraction does not: a chart Calc cuts across two pages (`chart2/column-style.xlsx` at 0.236), a cell overflowing its single page (`budget-single`'s notes at 0.933), rotated cell text (`sc/tdf119292.xlsx` at 0.571). Layout averages 0.968 and falls below 0.9 on 4 (`chart2/chart-hatch-fill.xlsx` at 0.584, a hatch litho draws otherwise than poppler). `TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens` checked the gotenberg corpus's sources so on every run; it now checks the litho Office corpora. The counts cover this corpus and the gotenberg/xlsx corpus, removed on 2026-11-09, together.
 
 ## Accepted disagreements
 

@@ -10,8 +10,8 @@ import (
 	"unicode"
 )
 
-// TestConvert_I18nTextExtractsInSourceOrder converts the html corpus's i18n
-// source with its pinned fixture fonts and extracts the text back: each
+// TestConvert_I18nTextExtractsInSourceOrder converts Gotenberg's i18n test
+// page (testdata/gotenberg-i18n) with its pinned fixture fonts and extracts the text back: each
 // paragraph reads in its source order, the Devanagari vowel sign drawn
 // before its consonant included. The word spaces of a line whose glyphs
 // carry nonspacing marks follow PDF.js and may differ, so that line is
@@ -20,12 +20,12 @@ func TestConvert_I18nTextExtractsInSourceOrder(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join("..", "..", "test", "integration")
 	fonts := filepath.Join(root, "testdata", "fonts")
-	src, err := os.ReadFile(filepath.Join(root, "corpus", "gotenberg", "html", "sources", "i18n", "index.html"))
+	src, err := os.ReadFile(filepath.Join("testdata", "gotenberg-i18n", "index.html"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(fonts, "noto-sans-devanagari-2.007")); err != nil {
-		t.Skip("the fixture fonts are not fetched: make html-fixtures")
+		t.Skip("the fixture fonts are not fetched: make corpus-fetch CORPUS=fonts")
 	}
 	ctx := context.Background()
 	var out bytes.Buffer

@@ -3,12 +3,13 @@
   "source": "litho/docx",
   "pdf_root": "pdfs",
   "inputs": {
+    "glob": "sources/*",
     "build": "parts",
     "list_root": "sources"
   },
   "references": {
     "dir": "references",
-    "built_by": "make office-references SOURCES=litho FORMATS=docx"
+    "engine": "libreoffice"
   },
   "goldens": {
     "diff": "goldens/diff",

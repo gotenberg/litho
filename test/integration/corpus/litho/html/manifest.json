@@ -8,5 +8,8 @@
   "goldens": {
     "diff": "goldens/diff"
   },
-  "committed_pdfs": "references"
+  "references": {
+    "dir": "references",
+    "engine": "chromium"
+  }
 }

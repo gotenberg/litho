@@ -105,7 +105,7 @@ const metricPagesEqual = "pages_equal"
 
 // diffFontsTarget is the make target that fetches the fonts the diff feature
 // converts with.
-const diffFontsTarget = "make html-fixtures"
+const diffFontsTarget = "make corpus-fetch CORPUS=fonts"
 
 // diffLinkGolden is the golden gen-links.mjs writes for one Chromium PDF.
 type diffLinkGolden struct {
@@ -242,17 +242,11 @@ type diffFeature struct {
 	fontDirs  []string
 	reportDir string
 
-	// refs and testdataRoot locate the reference PDFs the host builds for
-	// an Office corpus (see [Manifest.References]); refs is nil for a
-	// corpus whose references git versions. corpus names the corpus in the
-	// commands a stale reference asks for. office reads every source as an
-	// Office document.
-	refs *ReferenceSpec
-	// unreferenced names the fixtures no reference is built for: a build
-	// corpus's hostile documents, which only the robustness feature reads.
-	unreferenced map[string]bool
+	// m is the corpus: its references (see [Manifest.References]) and its
+	// name, which the commands a stale reference asks for name; testdataRoot
+	// is its testdata root. office reads every source as an Office document.
+	m            *Manifest
 	testdataRoot string
-	corpus       string
 	office       bool
 	// pins are the resolved pins the references are checked against; nil
 	// reads versions.env.
@@ -265,29 +259,22 @@ func newDiffFeature() *diffFeature {
 
 func (f *diffFeature) Name() string { return "diff" }
 
-// GoldenSource names the engine the references come from: Chromium for the
-// html corpora, LibreOffice for an Office corpus, whose manifest names its
-// references (see [diffFeature.SetManifest]).
+// GoldenSource names the engine the references come from, the one the
+// corpus's manifest names: Chromium for the html corpora, LibreOffice for an
+// Office corpus.
 func (f *diffFeature) GoldenSource() string {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	if f.office {
-		return "libreoffice"
+		return engineLibreOffice
 	}
-	return "chromium"
+	return engineChromium
 }
 
-// SetManifest records where an Office corpus's references live.
+// SetManifest records the corpus whose references the cell checks.
 func (f *diffFeature) SetManifest(m *Manifest) {
 	f.mu.Lock()
-	f.refs, f.testdataRoot, f.corpus, f.office = m.References, m.TestdataRoot(), m.Name, m.References != nil
-	f.unreferenced = nil
-	if format, err := buildFormat(m); err == nil && isBuildCorpus(m) {
-		f.unreferenced = map[string]bool{}
-		for _, h := range hostileDocs(format) {
-			f.unreferenced[h.name] = true
-		}
-	}
+	f.m, f.testdataRoot, f.office = m, m.TestdataRoot(), m.References != nil && m.References.Engine == engineLibreOffice
 	f.mu.Unlock()
 }
 

@@ -1,6 +1,6 @@
 # libreoffice/odp corpus fixtures
 
-OpenDocument presentations scored by the `diff` feature (see `FEATURES.md`) against LibreOffice Impress as Gotenberg's LibreOffice route prints them: the image `GOTENBERG_IMAGE` in `corpus/versions.env` pins (`gotenberg/gotenberg:9.0.0`, LibreOffice 26.8.2.2), route `/forms/libreoffice/convert`. A selection of LibreOffice's Impress test presentations at the commit `LIBREOFFICE_CORE_COMMIT` pins, of which only the list and the hashes are committed; Gotenberg's own test presentations are the `gotenberg/odp` corpus. The references are built on the host and never committed. The corpus works as the libreoffice/pptx corpus does: its `FIXTURES.md` documents the scripts, the provisioning and the fonts, and the libreoffice/docx corpus's the reference checks, which apply here with `odp` for `pptx` (`make corpus-fetch CORPUS_NAME=libreoffice/odp`, `make office-references SOURCES=libreoffice FORMATS=odp`).
+OpenDocument presentations scored by the `diff` feature (see `FEATURES.md`) against LibreOffice Impress as Gotenberg's LibreOffice route prints them: the image `GOTENBERG_IMAGE` in `corpus/versions.env` pins (`gotenberg/gotenberg:9.0.0`, LibreOffice 26.8.2.2), route `/forms/libreoffice/convert`. A selection of LibreOffice's Impress test presentations at the commit `LIBREOFFICE_CORE_COMMIT` pins, of which only the list and the hashes are committed; the references are built by `corpus references` into the testdata and never committed. The corpus works as the libreoffice/pptx corpus does: its `FIXTURES.md` documents the scripts, the provisioning and the fonts, and the libreoffice/docx corpus's the reference checks, which apply here with `odp` for `pptx` (`make corpus-fetch CORPUS=libreoffice/odp`, `make corpus-references CORPUS=libreoffice/odp`).
 
 | Path             | What it holds                                                                                                                                 |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -11,7 +11,7 @@ A fetched presentation's ID names the directory whose tests it comes from: `sd/<
 
 ## How the documents were chosen
 
-`corpus select` reads the `.odp` and `.fodp` files at the top of LibreOffice core's `sd/qa/unit/data/odp` and `sd/qa/unit/data` at the pinned commit and keeps a presentation when:
+`corpus update` reads the `.odp` and `.fodp` files at the top of LibreOffice core's `sd/qa/unit/data/odp` and `sd/qa/unit/data` at the pinned commit and keeps a presentation when:
 
 - it is at most 150 KiB;
 - its name is plain ASCII (letters, digits, dot, underscore, hyphen);
@@ -37,7 +37,7 @@ Of the 172 references, 134 draw Liberation Serif and 83 Liberation Sans, Impress
 
 ## How the rig was proven
 
-Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on 170 of 172 presentations. Pages, links and outline score 1 on all, strict on all but 3, hairlines and a bitmap fill litho draws otherwise than poppler (`sd/LineStylesOwn.odp`, `sd/fillbitmap2.odp`, `sd/tdf153161_FlushToSave.odp`). Text F1 is below 1 on 2 and under the bar on 1, `sd/tdf96708.odp` at 0.725, whose slide numbers are white on a white slide, which PDF.js reads and litho's text extraction leaves out. Rotated text (4 references) scores 1. Layout averages 0.977 and falls below 0.75 on 1 (`sd/tdf127267DashOnHairline.odp` at 0.736, dashed hairlines). 78 references hold no text PDF.js reads; 3 of them draw the Fontwork text their slides hold as outlines (`sd/tdf100348_Fontwork2TextWarp.odp`): a conversion that writes that text as text scores text F1 0 there. `TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens` checks the committed sources so on every run with the corpus provisioned. The counts cover this corpus and `gotenberg/odp` together.
+Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on 170 of 172 presentations. Pages, links and outline score 1 on all, strict on all but 3, hairlines and a bitmap fill litho draws otherwise than poppler (`sd/LineStylesOwn.odp`, `sd/fillbitmap2.odp`, `sd/tdf153161_FlushToSave.odp`). Text F1 is below 1 on 2 and under the bar on 1, `sd/tdf96708.odp` at 0.725, whose slide numbers are white on a white slide, which PDF.js reads and litho's text extraction leaves out. Rotated text (4 references) scores 1. Layout averages 0.977 and falls below 0.75 on 1 (`sd/tdf127267DashOnHairline.odp` at 0.736, dashed hairlines). 78 references hold no text PDF.js reads; 3 of them draw the Fontwork text their slides hold as outlines (`sd/tdf100348_Fontwork2TextWarp.odp`): a conversion that writes that text as text scores text F1 0 there. `TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens` checked the gotenberg corpus's sources so on every run; it now checks the litho Office corpora. The counts cover this corpus and the gotenberg/odp corpus, removed on 2026-11-09, together.
 
 ## Accepted disagreements
 

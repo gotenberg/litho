@@ -5,7 +5,7 @@
 # Converter corpus inputs: the bytes are the test, and the Chromium references
 # were made from them as they are.
 /test/integration/corpus/litho/html/sources/
-/test/integration/corpus/gotenberg/html/sources/
+/pkg/pdf/testdata/gotenberg-i18n/
 /test/integration/corpus/litho/docx/parts/
 /test/integration/corpus/litho/xlsx/parts/
 /test/integration/corpus/litho/pptx/parts/

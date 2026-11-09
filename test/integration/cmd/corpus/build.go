@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	textbuild "github.com/gotenberg/litho/test/integration/corpus/litho/text/build"
 	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
@@ -31,56 +32,61 @@ const contentTypesPart = "[Content_Types].xml"
 // writes the same bytes: the earliest a zip DOS time holds.
 var zipEpoch = time.Date(1980, time.January, 1, 0, 0, 0, 0, time.UTC) //nolint:gochecknoglobals // a constant time
 
-// runBuild builds the documents of the build corpora into their testdata.
+// runBuild builds the inputs the selected corpora generate from git.
 func runBuild(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
-	corpus := fs.String("corpus", "", "Comma-separated build corpora (empty = every corpus with inputs.build)")
+	corpus := fs.String("corpus", "", corpusFlagUsage)
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "parsing flags: %v\n", err)
 		return 1
 	}
-	corpora, err := buildCorpora(splitCSV(*corpus))
+	ms, err := selectManifests(splitCSV(*corpus))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "build: %v\n", err)
 		return 1
 	}
-	for _, m := range corpora {
-		if err := buildCorpus(ctx, m); err != nil {
-			fmt.Fprintf(os.Stderr, "build: %s: %v\n", m.Name, err)
-			return 1
-		}
+	if err := build(ctx, ms); err != nil {
+		fmt.Fprintf(os.Stderr, "build: %v\n", err)
+		return 1
 	}
 	return 0
 }
 
-// buildCorpora loads the named corpora, or every build corpus when none is
-// named, refusing a named one that builds nothing.
-func buildCorpora(names []string) ([]*Manifest, error) {
-	if len(names) == 0 {
-		all, err := manifests()
-		if err != nil {
-			return nil, err
+// build builds the inputs of every corpus of ms that generates some (see
+// [hasBuild]).
+func build(ctx context.Context, ms []*Manifest) error {
+	for _, m := range ms {
+		if !hasBuild(m) {
+			continue
 		}
-		var out []*Manifest
-		for _, m := range all {
-			if isBuildCorpus(m) {
-				out = append(out, m)
-			}
+		if err := buildCorpus(ctx, m); err != nil {
+			return fmt.Errorf("%s: %w", m.Name, err)
 		}
-		return out, nil
 	}
-	out := make([]*Manifest, 0, len(names))
-	for _, name := range names {
-		m, err := LoadManifest(name)
-		if err != nil {
-			return nil, err
-		}
-		if !isBuildCorpus(m) {
-			return nil, fmt.Errorf("%s builds no documents", name)
-		}
-		out = append(out, m)
+	return nil
+}
+
+// pdfBuilders build the committed PDFs of the corpora whose fixtures are
+// generated from sources in git, by corpus name. The PDFs stay committed:
+// unit tests read them.
+var pdfBuilders = map[string]func(ctx context.Context, m *Manifest) error{ //nolint:gochecknoglobals // static table
+	"litho/text": buildLithoText,
+}
+
+// hasBuild reports whether corpus build generates m's inputs: the Office
+// documents of a build corpus, or the PDFs of a corpus in [pdfBuilders].
+func hasBuild(m *Manifest) bool {
+	_, ok := pdfBuilders[m.Name]
+	return ok || isBuildCorpus(m)
+}
+
+// buildLithoText converts the litho/text sources into its committed PDFs
+// with the fixture fonts, fetched first.
+func buildLithoText(ctx context.Context, m *Manifest) error {
+	if err := fetchFixtureFonts(ctx); err != nil {
+		return err
 	}
-	return out, nil
+	return textbuild.Build(ctx, filepath.Join(m.SourceDir(), "sources"), filepath.Join(m.SourceDir(), m.CommittedPDFs), filepath.Join(testdataDir(), fixtureFontsDir))
 }
 
 // isBuildCorpus reports whether m's documents are built by `corpus build`.
@@ -151,17 +157,25 @@ func builtInputFixtures(m *Manifest) ([]Fixture, error) {
 	for _, name := range names {
 		dir := filepath.Join(out, name)
 		if _, err := os.Stat(filepath.Join(dir, name+"."+format)); err != nil {
-			return nil, fmt.Errorf("%w: %s is missing (run make corpus-build CORPUS_NAME=%s)", errInputsUnfetched, dir, m.Name)
+			return nil, fmt.Errorf("%w: %s is missing (run make corpus-build CORPUS=%s)", errInputsUnfetched, dir, m.Name)
 		}
 		fixtures = append(fixtures, Fixture{ID: name, PDFPath: dir})
 	}
 	return fixtures, nil
 }
 
-// buildCorpus zips each unpacked document of m and writes its hostile
+// buildCorpus builds m's inputs (see [hasBuild]).
+func buildCorpus(ctx context.Context, m *Manifest) error {
+	if b, ok := pdfBuilders[m.Name]; ok {
+		return b(ctx, m)
+	}
+	return buildOffice(ctx, m)
+}
+
+// buildOffice zips each unpacked document of m and writes its hostile
 // documents, each into <out>/<name>/<name>.<format>, replacing what an
 // earlier build wrote there.
-func buildCorpus(ctx context.Context, m *Manifest) error {
+func buildOffice(ctx context.Context, m *Manifest) error {
 	format, err := buildFormat(m)
 	if err != nil {
 		return err

@@ -54,10 +54,10 @@ The `file-structure` fixer never mutates; it signals `Report.NeedsFullRewrite`, 
 2. Prefer `clausePrefix(v, "6.7.3")` or whole-`Rule` identity over `descriptionContains`.
 3. Register in `fixer.go::registry` in the appropriate tier.
 4. Write a unit test in `fixer_<name>_test.go` (see `fixer_structtree_test.go` for the pattern).
-5. Run `make corpus CORPUS_FEATURE=remediation,remediation-aggressive` before and after. Corpus-unverified remediation changes regress; the `baseline.json` ratchet (`make corpus-check`) gates `parse_failed`, both `*_regressed` counters, and `disagreement`.
+5. Run `make corpus FEATURE=remediation,remediation-aggressive` before and after. Corpus-unverified remediation changes regress; the `baseline.json` ratchet (`make corpus-check`) gates `parse_failed`, both `*_regressed` counters, and `disagreement`.
 
 ## Testing
 
 Unit tests: `*_test.go` files in this package. Shared helpers in `shared_helpers_test.go`.
 
-Integration: `make corpus CORPUS_FEATURE=remediation`. See [test/integration/README.md](../../../test/integration/README.md) for variables.
+Integration: `make corpus FEATURE=remediation`. See [test/integration/README.md](../../../test/integration/README.md) for variables.

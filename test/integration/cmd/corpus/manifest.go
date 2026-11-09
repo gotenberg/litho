@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 )
 
 // Manifest describes one corpus: where its PDFs live on disk, which
@@ -75,17 +77,13 @@ type Manifest struct {
 	// GoldensInSource resolves the Goldens paths against the corpus source
 	// directory rather than its testdata root: the references of a corpus
 	// whose expectations are committed (a reftest list, extracted pixel
-	// grids) live in git beside its manifest.
+	// grids) live in git beside its manifest. Such a corpus has no goldens
+	// step: corpus prepare only fetches it.
 	GoldensInSource bool `json:"goldens_in_source,omitempty"`
 
-	// ProvisionedBy names the make target that provisions the corpus on the
-	// host, for a corpus the Docker image has no part in. corpus init skips
-	// such a corpus and says which target to run instead.
-	ProvisionedBy string `json:"provisioned_by,omitempty"`
-
 	// References, when set, names the reference PDFs a converter corpus's
-	// diff goldens come from, which the host builds into the testdata rather
-	// than git versioning them. See [ReferenceSpec].
+	// diff goldens come from, which corpus references builds into the
+	// testdata. See [ReferenceSpec].
 	References *ReferenceSpec `json:"references,omitempty"`
 
 	// Fetch, when set, names where `corpus fetch` downloads the corpus's
@@ -93,14 +91,15 @@ type Manifest struct {
 	Fetch *FetchSpec `json:"fetch,omitempty"`
 
 	// CommittedPDFs, when set, names the directory, relative to the corpus
-	// source directory, whose PDFs are the corpus's PDFs: the litho corpora's
-	// fixtures, the html corpora's Chromium references. corpus init copies
-	// them into the testdata before the image derives the goldens.
+	// source directory, whose PDFs are the corpus's PDFs: the litho/pdf and
+	// litho/text fixtures, which corpus build writes and unit tests read.
+	// corpus goldens copies them into the testdata before the image derives
+	// the goldens.
 	CommittedPDFs string `json:"committed_pdfs,omitempty"`
 }
 
-// ReferenceSpec names the reference PDFs of a converter corpus that the host
-// builds into the testdata: Dir, under the testdata root, holds one
+// ReferenceSpec names the reference PDFs of a converter corpus that corpus
+// references builds into the testdata with the pinned Gotenberg image: Dir, under the testdata root, holds one
 // <name>.pdf per fixture, the fixture ID with "/" written "__", and a
 // manifest.json recording what each was built from (corpus references), so a
 // reference built from another pin or from a source that changed since is
@@ -108,8 +107,9 @@ type Manifest struct {
 type ReferenceSpec struct {
 	// Dir is the reference directory, relative to the testdata root.
 	Dir string `json:"dir"`
-	// BuiltBy is the make target that builds the references.
-	BuiltBy string `json:"built_by"`
+	// Engine is the Gotenberg route the references come from:
+	// [engineLibreOffice] or [engineChromium].
+	Engine string `json:"engine"`
 	// SourcePin names the versions.env pin the fetched documents come
 	// from (LIBREOFFICE_CORE_COMMIT, POI_COMMIT): a reference built from
 	// the documents of another value is stale. Empty for a corpus whose
@@ -131,11 +131,6 @@ type InputSpec struct {
 	// resolve under; empty is the testdata root itself.
 	ListRoot string `json:"list_root,omitempty"`
 
-	// FetchedBy names the make target that fetches the List sources, which
-	// a load missing one names; empty falls back to the manifest's
-	// ProvisionedBy.
-	FetchedBy string `json:"fetched_by,omitempty"`
-
 	// Build names a committed directory, relative to the corpus source
 	// directory, whose subdirectories are unpacked documents, one per
 	// fixture: `corpus build` zips each into <ListRoot>/<name>/<name>.<ext>,
@@ -154,6 +149,18 @@ type InputSpec struct {
 
 // Profile mode constants. Empty string aliases "expand" for backward
 // compatibility with manifests written before the field existed.
+// The engines a [ReferenceSpec] names.
+const (
+	engineLibreOffice = "libreoffice"
+	engineChromium    = "chromium"
+)
+
+// prepareRemedy is the command that brings a corpus to a scorable state:
+// every message about a missing or stale input, reference or golden names it.
+func prepareRemedy(name string) string {
+	return "make corpus-prepare CORPUS=" + name
+}
+
 const (
 	ProfileModeExpand = "expand"
 	ProfileModeNone   = "none"
@@ -333,4 +340,50 @@ func ListCorpora() ([]string, error) {
 		names = append(names, m.Name)
 	}
 	return names, nil
+}
+
+// corpusFlagUsage documents the --corpus flag every subcommand takes.
+const corpusFlagUsage = "Corpora, comma-separated: names, globs or sources (litho/docx,*/xlsx,poi); empty = all"
+
+// selectManifests returns the corpora patterns select, in name order, every
+// corpus when there is none. A pattern is a corpus name, a path.Match glob
+// over the names (poi/*, */docx), or a source, the first element of a name
+// (poi). A pattern selecting nothing is an error, so a typo does not pass as
+// an empty selection.
+func selectManifests(patterns []string) ([]*Manifest, error) {
+	all, err := manifests()
+	if err != nil {
+		return nil, err
+	}
+	if len(patterns) == 0 {
+		return all, nil
+	}
+	var out []*Manifest
+	matched := make(map[string]bool, len(patterns))
+	for _, m := range all {
+		hit := false
+		for _, p := range patterns {
+			if corpusMatches(p, m.Name) {
+				matched[p], hit = true, true
+			}
+		}
+		if hit {
+			out = append(out, m)
+		}
+	}
+	for _, p := range patterns {
+		if !matched[p] {
+			return nil, fmt.Errorf("no corpus matches %q", p)
+		}
+	}
+	return out, nil
+}
+
+// corpusMatches reports whether pattern selects the corpus name.
+func corpusMatches(pattern, name string) bool {
+	if ok, err := path.Match(pattern, name); err == nil && ok {
+		return true
+	}
+	source, _, _ := strings.Cut(name, "/")
+	return pattern == source
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -46,7 +47,7 @@ func TestListInputFixtures_NamesTheMakeTargetForMissingFiles(t *testing.T) {
 	src, root := t.TempDir(), t.TempDir()
 	writeFiles(t, src, map[string]string{"list.json": `[{"id": "css/a.html"}, {"id": "css/b.html"}]`})
 	writeFiles(t, root, map[string]string{"css/a.html": "", "css/b.html": ""})
-	got, err := listInputFixtures(filepath.Join(src, "list.json"), root, "make corpus-fetch CORPUS_NAME=wpt")
+	got, err := listInputFixtures(filepath.Join(src, "list.json"), root, "make corpus-fetch CORPUS=wpt")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,8 +56,8 @@ func TestListInputFixtures_NamesTheMakeTargetForMissingFiles(t *testing.T) {
 	}
 
 	writeFiles(t, src, map[string]string{"list.json": `[{"id": "css/a.html"}, {"id": "css/c.html"}]`})
-	_, err = listInputFixtures(filepath.Join(src, "list.json"), root, "make corpus-fetch CORPUS_NAME=wpt")
-	if !errors.Is(err, errInputsUnfetched) || !strings.Contains(err.Error(), "make corpus-fetch CORPUS_NAME=wpt") {
+	_, err = listInputFixtures(filepath.Join(src, "list.json"), root, "make corpus-fetch CORPUS=wpt")
+	if !errors.Is(err, errInputsUnfetched) || !strings.Contains(err.Error(), "make corpus-fetch CORPUS=wpt") {
 		t.Errorf("missing source: %v", err)
 	}
 
@@ -122,8 +123,8 @@ func TestWPTListAndHashesAgree(t *testing.T) {
 
 // TestCommittedConverterCorporaLoad loads the weasyprint fixtures and the
 // html sources the way the runner does, so a fixture the draw feature cannot
-// read or a source directory without its Chromium reference fails here
-// rather than in a corpus run.
+// read or a source directory fixture cannot load fails here rather than in a
+// corpus run.
 func TestCommittedConverterCorporaLoad(t *testing.T) {
 	t.Parallel()
 
@@ -154,19 +155,9 @@ func TestCommittedConverterCorporaLoad(t *testing.T) {
 		t.Error(err)
 	}
 
-	var sources []Fixture
-	for _, corpus := range []string{"litho/html", "gotenberg/html"} {
-		dir := filepath.Join(corpusSourceDir, filepath.FromSlash(corpus))
-		found, err := globInputFixtures(dir, "sources/*")
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, s := range found {
-			if _, err := os.Stat(filepath.Join(dir, "references", s.ID+".pdf")); err != nil {
-				t.Errorf("%s source %s has no Chromium reference: run make html-references", corpus, s.ID)
-			}
-		}
-		sources = append(sources, found...)
+	sources, err := globInputFixtures(filepath.Join(corpusSourceDir, "litho", "html"), "sources/*")
+	if err != nil {
+		t.Fatal(err)
 	}
 	for _, s := range sources {
 		source, err := fixture.Load(s.PDFPath)
@@ -209,7 +200,7 @@ func TestHostProvisionedCorporaReadTheirPin(t *testing.T) {
 		if m.Fetch != nil && !pinned[m.Fetch.Pin] {
 			t.Errorf("%s fetches at %s, which versions.env does not pin", m.Name, m.Fetch.Pin)
 		}
-		if m.ProvisionedBy == "" {
+		if !m.GoldensInSource {
 			continue
 		}
 		checked++
@@ -231,12 +222,12 @@ func TestLoadInputFixtures_GlobsAndListsTogether(t *testing.T) {
 		"documents.json":         `[{"id": "export/a.docx"}]`,
 	})
 	writeFiles(t, root, map[string]string{"sources/export/a.docx": ""})
-	m := &Manifest{Name: "office", Inputs: &InputSpec{Glob: "sources/*", List: "documents.json", ListRoot: "sources", FetchedBy: "make corpus-fetch"}}
+	m := &Manifest{Name: "office", Inputs: &InputSpec{Glob: "sources/*", List: "documents.json", ListRoot: "sources"}}
 	globbed, err := globInputFixtures(src, m.Inputs.Glob)
 	if err != nil {
 		t.Fatal(err)
 	}
-	listed, err := listInputFixtures(filepath.Join(src, m.Inputs.List), filepath.Join(root, m.Inputs.ListRoot), m.Inputs.FetchedBy)
+	listed, err := listInputFixtures(filepath.Join(src, m.Inputs.List), filepath.Join(root, m.Inputs.ListRoot), "make corpus-fetch")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +237,7 @@ func TestLoadInputFixtures_GlobsAndListsTogether(t *testing.T) {
 	if err := os.Remove(filepath.Join(root, "sources", "export", "a.docx")); err != nil {
 		t.Fatal(err)
 	}
-	_, err = listInputFixtures(filepath.Join(src, m.Inputs.List), filepath.Join(root, m.Inputs.ListRoot), m.Inputs.FetchedBy)
+	_, err = listInputFixtures(filepath.Join(src, m.Inputs.List), filepath.Join(root, m.Inputs.ListRoot), "make corpus-fetch")
 	if !errors.Is(err, errInputsUnfetched) || !strings.Contains(err.Error(), "make corpus-fetch") {
 		t.Errorf("missing fetched source: %v", err)
 	}
@@ -349,33 +340,39 @@ func TestOfficeListsAndHashesAgree(t *testing.T) {
 	}
 }
 
-// TestCommittedOfficeSourcesLoad loads every gotenberg Office source as the
-// diff feature does: one document of its corpus's format and valid options.
+// TestCommittedOfficeSourcesLoad loads every committed source of a corpus
+// with LibreOffice references as the diff feature does: one document of the
+// corpus's format, valid options, and a small file.
 func TestCommittedOfficeSourcesLoad(t *testing.T) {
 	t.Parallel()
 
-	formats := map[string]pdf.Format{
-		"docx": pdf.FormatDOCX, "odt": pdf.FormatODT, "xlsx": pdf.FormatXLSX, "ods": pdf.FormatODS, "csv": pdf.FormatCSV,
-		"pptx": pdf.FormatPPTX, "odp": pdf.FormatODP,
-	}
-	for corpus, want := range formats {
-		sources, err := globInputFixtures(filepath.Join(corpusSourceDir, "gotenberg", corpus), "sources/*")
+	checked := 0
+	for _, m := range readManifests(t) {
+		if m.References == nil || m.References.Engine != engineLibreOffice || m.Inputs == nil || m.Inputs.Glob == "" {
+			continue
+		}
+		sources, err := globInputFixtures(filepath.Join(corpusSourceDir, filepath.FromSlash(m.Source)), m.Inputs.Glob)
 		if err != nil {
 			t.Fatal(err)
 		}
+		want := pdf.Format(path.Base(m.Name))
 		for _, s := range sources {
+			checked++
 			o, err := fixture.LoadOffice(s.PDFPath)
 			if err != nil {
-				t.Errorf("%s %s: %v", corpus, s.ID, err)
+				t.Errorf("%s %s: %v", m.Name, s.ID, err)
 				continue
 			}
 			if o.Format != want {
-				t.Errorf("%s %s: format %s", corpus, s.ID, o.Format)
+				t.Errorf("%s %s: format %s, want %s", m.Name, s.ID, o.Format, want)
 			}
 			if info, err := os.Stat(o.Document); err != nil || info.Size() > 200<<10 {
-				t.Errorf("%s %s: %v, over 200 KiB or unreadable", corpus, s.ID, err)
+				t.Errorf("%s %s: %v, over 200 KiB or unreadable", m.Name, s.ID, err)
 			}
 		}
+	}
+	if checked == 0 {
+		t.Error("no committed Office source loaded: litho/docx holds the encrypted one")
 	}
 }
 

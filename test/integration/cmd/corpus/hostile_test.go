@@ -11,7 +11,7 @@ import (
 
 // cheapHostile reports whether a hostile document builds in milliseconds:
 // the bombs and floods inflate or write hundreds of megabytes, minutes under
-// -race, and `corpus build` runs them at every corpus init.
+// -race, and `corpus build` runs them at every corpus prepare.
 func cheapHostile(name string) bool {
 	return !strings.Contains(name, "bomb") && !strings.Contains(name, "flood") && name != "hostile-long-word"
 }

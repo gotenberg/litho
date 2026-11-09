@@ -2,7 +2,7 @@
 
 Self-authored Word documents that cover as much of WordprocessingML as a converter meets. Each fixture is an unpacked ECMA-376 Transitional part tree under `parts/<name>/`, written as Word 2016 and later writes it: the Word namespaces with `mc:Ignorable`, real content types and relationship types. `go run ./test/integration/cmd/corpus build --corpus=litho/docx` zips each tree deterministically into `testdata/litho/docx/sources/<name>/<name>.docx`, with its `options.json` beside it when the tree has one.
 
-The references are LibreOffice's, built by `make office-references SOURCES=litho FORMATS=docx`, until Microsoft Word references are available. A LibreOffice reference proves a Word-like consumer accepts the file; it does not prove Word's layout.
+The references are LibreOffice's, built by `make corpus-references CORPUS=litho/docx`, until Microsoft Word references are available. A LibreOffice reference proves a Word-like consumer accepts the file; it does not prove Word's layout.
 
 Fonts are Calibri, Cambria, Arial, Times New Roman, Courier New, DejaVu Sans, Noto Sans CJK, Noto Sans Thai and Noto Sans Devanagari, which have metric-compatible or identical free faces. `run-fonts-fallback` names missing fonts on purpose. Media are small generated PNG, JPEG, GIF, BMP, TIFF, SVG, EMF and WMF files.
 
@@ -13,6 +13,7 @@ Fonts are Calibri, Cambria, Arial, Times New Roman, Courier New, DejaVu Sans, No
 | Fixture                              | Features                                                                                                                                                                                                                                                                                                                        |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `minimal`                            | One `w:p`, `styles.xml`, `settings.xml`, `fontTable.xml`, `webSettings.xml`, `theme1.xml`, core and app properties                                                                                                                                                                                                              |
+| `option-paper-size`                  | `minimal` with its text changed; `options.json` sets `paperWidth` 4 and `paperHeight` 6 inches over the Letter `w:pgSz`, the paper size route option                                                                                                                                                                            |
 | `run-bold-italic`                    | `w:b`, `w:i`, `w:bCs`, `w:iCs`, `w:val` on/off/0/1/false, toggle properties against a bold `w:pStyle` and a bold `w:rStyle`, `w:sz` from 4pt to 36pt, font families                                                                                                                                                             |
 | `run-underline`                      | All 18 `w:u` values, `w:u w:color` and `w:themeColor`, underline across `w:vertAlign` and size changes                                                                                                                                                                                                                          |
 | `run-effects`                        | `w:strike`, `w:dstrike`, `w:caps`, `w:smallCaps`, `w:outline`, `w:shadow`, `w:emboss`, `w:imprint`, `w:em`, `w:effect`, `w:bdr`, `w:vanish` on runs and on a paragraph mark, `w:webHidden`, `w:noProof`, `w:lang`                                                                                                               |
@@ -132,6 +133,14 @@ Fonts are Calibri, Cambria, Arial, Times New Roman, Courier New, DejaVu Sans, No
 | `sink-newsletter`                    | Newsletter: shaded masthead table, three columns with separator, drop cap, a top-and-bottom photo, a pull-quote text box, a tight-wrapped round picture, an events table, a hyperlink                                                                                                                                           |
 | `sink-cv`                            | CV: fixed two-column layout table with a shaded sidebar, round photo, skill ratings with right tabs, a styled section title with a border, custom bullets, right-aligned dates, a hyperlink                                                                                                                                     |
 | `sink-paper`                         | Academic paper: title block, abstract, a two-column continuous section, inline and numbered display equations, a figure and a table with SEQ captions, endnotes at document end, a footnote                                                                                                                                     |
+
+## Committed documents
+
+`sources/` holds the documents a part tree cannot hold, converted as they are:
+
+| Fixture     | Features                                                                                                                                                                                                                                                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `protected` | Gotenberg's `protected_page_1.docx` (MIT License, Copyright Julien Neuhart), byte for byte: an ECMA-376 agile-encrypted package in an OLE compound file, password `foo`, which `options.json` names. It came from the `gotenberg/docx` corpus, removed on 2026-11-09; `pkg/pdf`'s `TestConvert_DOCXPassword` reads it too |
 
 ## Hostile documents
 

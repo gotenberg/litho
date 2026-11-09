@@ -141,7 +141,7 @@ func fixtureFonts(t testing.TB) *text.Fonts {
 	t.Helper()
 	dir := filepath.Join("..", "..", "..", "..", "test", "integration", "testdata", "fonts")
 	if _, err := os.Stat(filepath.Join(dir, "liberation-2.1.5")); err != nil {
-		t.Skip("the fixture fonts are not fetched (make html-fixtures)")
+		t.Skip("the fixture fonts are not fetched (make corpus-fetch CORPUS=fonts)")
 	}
 	fontsOnce.Do(func() {
 		fonts, fontsErr = text.NewFonts(context.Background(), nil, []string{

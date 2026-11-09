@@ -83,120 +83,61 @@ icc-goldens: ## Regenerate the ICC transform goldens with the Pillow (littleCMS)
 	"$$venv/bin/python" -I $(ICC_GOLDENS)/gen_transform_golden.py; \
 	npx prettier --write $(ICC_GOLDENS)/transform_golden.json
 
-CORPUS := test/integration/corpus
-FIXTURE_FONTS := test/integration/testdata/fonts
-
-.PHONY: text-fixtures
-text-fixtures: ## Regenerate the litho/text corpus PDFs from their text sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first)
-	go run ./test/integration/cmd/corpus fetch --corpus=fonts
-	go run ./$(CORPUS)/litho/text/build -fonts $(FIXTURE_FONTS)
-
-WEASYPRINT := test/integration/corpus/weasyprint
-
-.PHONY: weasyprint-fixtures
-weasyprint-fixtures: ## Extract the weasyprint corpus fixtures from the WeasyPrint release test/integration/corpus/versions.env pins (tarball and test font hash-checked), and fetch the fixture fonts
-	go run ./test/integration/cmd/corpus select --corpus=weasyprint
-	npx prettier --write $(WEASYPRINT)/fixtures
-	go run ./test/integration/cmd/corpus fetch --corpus=fonts
-
-# comma and space spell the Make lists the corpus CLI takes comma-separated.
-comma := ,
-empty :=
-space := $(empty) $(empty)
-
-HTML_CORPORA := litho/html gotenberg/html
-
-.PHONY: html-references
-html-references: ## Rebuild the Chromium reference PDFs of the litho/html and gotenberg/html corpora with the Gotenberg image test/integration/corpus/versions.env pins (needs Docker). Vars: NAMES (space-separated sources, default all)
-	go run ./test/integration/cmd/corpus references --corpus=$(subst $(space),$(comma),$(HTML_CORPORA)) --names="$(NAMES)"
-
-.PHONY: html-fixtures
-html-fixtures: ## Rebuild the litho PDFs of the litho/html and gotenberg/html corpora from their sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first)
-	go run ./test/integration/cmd/corpus fetch --corpus=fonts
-	@set -e; for c in $(HTML_CORPORA); do go run ./test/integration/fixture/htmlbuild -corpus $(CORPUS)/$$c -fonts $(FIXTURE_FONTS); done
-
-OFFICE_TESTDATA := test/integration/testdata
-SOURCES ?= libreoffice gotenberg litho poi openxmlsdk govdocs
-FORMATS ?= docx odt xlsx ods csv pptx odp doc xls ppt
-
-.PHONY: office-references
-office-references: ## Build the LibreOffice reference PDFs of the Office corpora into the testdata with the Gotenberg image test/integration/corpus/versions.env pins (needs Docker and make corpus-fetch). Vars: SOURCES, FORMATS (space-separated, default all), NAMES (space-separated references, default all)
-	go run ./test/integration/cmd/corpus references --corpus=$(subst $(space),$(comma),$(strip $(foreach s,$(SOURCES),$(foreach f,$(FORMATS),$(if $(wildcard $(CORPUS)/$(s)/$(f)/manifest.json),$(s)/$(f)))))) --names="$(NAMES)"
-
-.PHONY: office-fixtures
-office-fixtures: ## Rebuild the litho PDFs of the gotenberg Office corpora from their sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first). Vars: FORMATS (space-separated, default all)
-	go run ./test/integration/cmd/corpus fetch --corpus=fonts
-	@set -e; for f in $(FORMATS); do [ -d $(CORPUS)/gotenberg/$$f ] || continue; go run ./test/integration/fixture/build -corpus $(CORPUS)/gotenberg/$$f -fonts $(FIXTURE_FONTS); done
-
-CORPUS_RUN_FLAGS :=
-ifdef CORPUS_JSON_OUTPUT
-CORPUS_RUN_FLAGS += --format=json
-endif
-ifdef CORPUS_NAME
-CORPUS_RUN_FLAGS += --corpus=$(CORPUS_NAME)
-endif
-ifdef CORPUS_FEATURE
-CORPUS_RUN_FLAGS += --feature=$(CORPUS_FEATURE)
-endif
-ifdef CORPUS_PROFILE
-CORPUS_RUN_FLAGS += --profile=$(CORPUS_PROFILE)
-endif
-ifdef CORPUS_WORKERS
-CORPUS_RUN_FLAGS += --workers=$(CORPUS_WORKERS)
-endif
-ifdef CORPUS_ALLOW_VERSION_DRIFT
-CORPUS_RUN_FLAGS += --allow-version-drift
-endif
-
-CORPUS_INIT_FLAGS :=
-ifdef CORPUS_NAME
-CORPUS_INIT_FLAGS += --corpus=$(CORPUS_NAME)
-endif
+# The corpus CLI. A corpus goes through four steps before it is scored, each
+# skipping what is already done; corpus-prepare runs every one it needs, and
+# corpus, corpus-check and corpus-baseline run corpus-prepare first:
+#
+#   fetch -> build -> references -> goldens -> score
+#
+# Every target takes CORPUS, comma-separated corpus names, globs or sources
+# (CORPUS=litho/docx,*/xlsx,poi; empty = all). Versions come from
+# test/integration/corpus/versions.env; an env var of the same name overrides one.
+CORPUS_CLI := go run ./test/integration/cmd/corpus
+CORPUS_SELECT = $(if $(CORPUS),--corpus=$(CORPUS))
+CORPUS_SCORE_FLAGS = $(CORPUS_SELECT) $(if $(FEATURE),--feature=$(FEATURE)) $(if $(PROFILE),--profile=$(PROFILE)) \
+	$(if $(WORKERS),--workers=$(WORKERS)) $(if $(FORMAT),--format=$(FORMAT)) $(if $(ALLOW_VERSION_DRIFT),--allow-version-drift)
 
 .PHONY: corpus
-corpus: ## Score litho across the (corpus, feature) matrix; auto-provisions. Vars: CORPUS_JSON_OUTPUT, CORPUS_NAME, CORPUS_FEATURE, CORPUS_PROFILE, CORPUS_WORKERS, CORPUS_ALLOW_VERSION_DRIFT
-	go run ./test/integration/cmd/corpus init $(CORPUS_INIT_FLAGS)
-	go run ./test/integration/cmd/corpus run $(CORPUS_RUN_FLAGS)
+corpus: corpus-prepare ## Score litho across the (corpus, feature) matrix. Vars: CORPUS, FEATURE, PROFILE, WORKERS, FORMAT (text|json), ALLOW_VERSION_DRIFT
+	$(CORPUS_CLI) run $(CORPUS_SCORE_FLAGS)
 
-CORPUS_FETCH_FLAGS :=
-ifdef CORPUS_NAME
-CORPUS_FETCH_FLAGS += --corpus=$(CORPUS_NAME)
-endif
-ifdef CORPUS_JOBS
-CORPUS_FETCH_FLAGS += --jobs=$(CORPUS_JOBS)
-endif
+.PHONY: corpus-check
+corpus-check: corpus-prepare ## Score, and fail if any cell regressed against test/integration/baseline.json. Vars: as corpus
+	$(CORPUS_CLI) check $(CORPUS_SCORE_FLAGS)
+
+.PHONY: corpus-baseline
+corpus-baseline: corpus-prepare ## Score, and write the scores to test/integration/baseline.json. Vars: as corpus
+	$(CORPUS_CLI) baseline $(CORPUS_SCORE_FLAGS)
+
+.PHONY: corpus-prepare
+corpus-prepare: ## Run every corpus step that is missing or stale: fetch, build (into the testdata only), references, goldens (needs Docker). Vars: CORPUS
+	$(CORPUS_CLI) prepare $(CORPUS_SELECT)
 
 .PHONY: corpus-fetch
-corpus-fetch: ## Download the fixture fonts and the files of the host-fetched corpora at the pins test/integration/corpus/versions.env holds (hash-checked, in parallel). Vars: CORPUS_NAME (corpora, sources or fonts, comma-separated; default all), CORPUS_JOBS
-	go run ./test/integration/cmd/corpus fetch $(CORPUS_FETCH_FLAGS)
-
-.PHONY: corpus-select
-corpus-select: ## Rewrite the lists of one corpus from a checkout of its source at its pin, then format them. Vars: CORPUS_NAME (one corpus), CHECKOUT (none for govdocs)
-	go run ./test/integration/cmd/corpus select --corpus=$(CORPUS_NAME) $(if $(CHECKOUT),--checkout=$(CHECKOUT))
-	npx prettier --write test/integration/corpus/$(CORPUS_NAME)/*.json
+corpus-fetch: ## Step 1: download the fixture fonts and the fetched corpora's files, hash-checked. Vars: CORPUS (or fonts), JOBS
+	$(CORPUS_CLI) fetch $(CORPUS_SELECT) $(if $(JOBS),--jobs=$(JOBS))
 
 .PHONY: corpus-build
-corpus-build: ## Zip the litho Office corpora's documents from their committed parts and generate their hostile documents into the testdata. Vars: CORPUS_NAME (comma-separated, default every litho Office corpus)
-	go run ./test/integration/cmd/corpus build $(if $(CORPUS_NAME),--corpus=$(CORPUS_NAME))
+corpus-build: ## Step 2: generate the inputs kept as sources in git: Office and hostile documents into the testdata, the committed litho/text PDFs. Vars: CORPUS
+	$(CORPUS_CLI) build $(CORPUS_SELECT)
 
-.PHONY: corpus-init
-corpus-init: ## Provision missing corpora via Docker at the versions test/integration/corpus/versions.env pins (an env var of the same name overrides one). Vars: CORPUS_NAME
-	go run ./test/integration/cmd/corpus init $(CORPUS_INIT_FLAGS)
+.PHONY: corpus-references
+corpus-references: ## Step 3: convert the sources with the pinned Gotenberg image into the Chromium and LibreOffice reference PDFs (needs Docker). Vars: CORPUS, FIXTURES
+	$(CORPUS_CLI) references $(CORPUS_SELECT) $(if $(FIXTURES),--fixtures=$(FIXTURES))
+
+.PHONY: corpus-goldens
+corpus-goldens: ## Step 4: derive the goldens the corpora lack in the provisioning image (needs Docker). Vars: CORPUS
+	$(CORPUS_CLI) goldens $(CORPUS_SELECT)
+
+.PHONY: corpus-update
+corpus-update: ## Maintainers: rewrite one corpus's committed lists from its source at its pin, then format them. Vars: CORPUS (one corpus), CHECKOUT (none for govdocs and weasyprint)
+	$(CORPUS_CLI) update --corpus=$(CORPUS) $(if $(CHECKOUT),--checkout=$(CHECKOUT))
+	npx prettier --write test/integration/corpus/$(CORPUS)/*.json $(if $(filter weasyprint,$(CORPUS)),test/integration/corpus/weasyprint/fixtures)
 
 .PHONY: corpus-tools
 corpus-tools: ## Compare the local verapdf, node, java, qpdf, pdfsig, pikepdf, fontTools and Pillow with the pinned versions
-	go run ./test/integration/cmd/corpus tools
+	$(CORPUS_CLI) tools
 
-.PHONY: corpus-baseline
-corpus-baseline: ## Rewrite test/integration/baseline.json with the current matrix scores
-	go run ./test/integration/cmd/corpus init $(CORPUS_INIT_FLAGS)
-	go run ./test/integration/cmd/corpus baseline $(CORPUS_RUN_FLAGS)
-
-.PHONY: corpus-check
-corpus-check: ## Fail if any cell regressed against test/integration/baseline.json
-	go run ./test/integration/cmd/corpus init $(CORPUS_INIT_FLAGS)
-	go run ./test/integration/cmd/corpus check $(CORPUS_RUN_FLAGS)
-
-.PHONY: clean-corpus
-clean-corpus: ## Remove all corpus testdata (forces re-provisioning on next make corpus)
+.PHONY: corpus-clean
+corpus-clean: ## Remove all corpus testdata; the next corpus-prepare starts over
 	rm -rf test/integration/testdata

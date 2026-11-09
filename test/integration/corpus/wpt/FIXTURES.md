@@ -1,17 +1,17 @@
 # wpt corpus fixtures
 
-Reftests from [web-platform-tests](https://github.com/web-platform-tests/wpt) at the commit `WPT_COMMIT` in `corpus/versions.env` pins, scored by the `reftest` feature (see `FEATURES.md`). Nothing from WPT is committed but the list of tests and the hashes of the files they read; `make corpus-fetch CORPUS_NAME=wpt` downloads the files into `test/integration/testdata/wpt/` (gitignored) and Ahem into `test/integration/testdata/fonts/ahem/`.
+Reftests from [web-platform-tests](https://github.com/web-platform-tests/wpt) at the commit `WPT_COMMIT` in `corpus/versions.env` pins, scored by the `reftest` feature (see `FEATURES.md`). Nothing from WPT is committed but the list of tests and the hashes of the files they read; `make corpus-fetch CORPUS=wpt` downloads the files into `test/integration/testdata/wpt/` (gitignored) and Ahem into `test/integration/testdata/fonts/ahem/`.
 
 | File            | What it holds                                                                                                                                               |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `reftests.json` | The 1177 tests: each test's WPT path, whether it is a print reftest, its pages compared, its resources, and each reference with its relation and fuzziness  |
 | `files.sha256`  | Every file the tests read (tests, references, their stylesheets and images, `LICENSE.md`, `fonts/Ahem.ttf`): 2082 lines of `<sha256>  <WPT path>`           |
-| `corpus select` | The selection script: reads a WPT checkout and writes `reftests.json`                                                                                       |
+| `corpus update` | The selection script: reads a WPT checkout and writes `reftests.json`                                                                                       |
 | `corpus fetch`  | Downloads each listed file from `raw.githubusercontent.com` at the pinned commit, refuses one whose hash differs, and records the commit in `versions.json` |
 
 ## How the tests were chosen
 
-`corpus select` walks these WPT directories and keeps a reftest when the test and every reference it links are plain HTML and CSS a static converter can draw:
+`corpus update` walks these WPT directories and keeps a reftest when the test and every reference it links are plain HTML and CSS a static converter can draw:
 
 - CSS 2.1 chapters: `css/CSS2/` `box-display`, `normal-flow`, `floats`, `floats-clear`, `margin-padding-clear`, `borders`, `text`, `lists`, `visuren`, `visudet`, `page-box`, `pagination`, `colors`, `backgrounds`. WPT has no `css/CSS2/page`; `page-box` and `pagination` hold its tests.
 - CSS modules: `css/css-backgrounds/`, `css/css-text/`, `css/css-lists/`, `css/css-page/`, `css/css-break/`, `css/css-flexbox/`, `css/css-align/`, and, from wave 3 on, `css/css-grid/`, `css/css-multicol/`, `css/css-writing-modes/`, `css/css-overflow/`, `css/css-text-decor/` and `css/css-sizing/`, without their `flexbox`, `grid`, `table`, `multicol`, `writing-mode`, `subgrid`, `masonry`, `grid-lanes`, `aspect-ratio`, `contain-intrinsic-size`, `scroll-markers`, `responsive-iframe`, `forms`, `tools` and `test-plan` subdirectories (layout modes and features outside the converter's scope), and without `support`, `reference`, `resources`, `crashtests`, `animations`, `animation`, `invalidation`, `parsing`, `inheritance` and tentative tests.
@@ -59,7 +59,7 @@ That leaves 4324 candidates. Each area then keeps at most its cap, the candidate
 | `css/css-sizing`                | 40    |                |
 | Total                           | 1177  | 74             |
 
-22 tests have a mismatch reference, 15 more than one reference, and 32 declare a fuzziness. Every fuzziness of the selection allows from 0 differences, so the cell, which checks only the upper bounds, decides no test otherwise than WPT would on them. One test, `css/css-page/subpixel-page-size-001-print.html`, declares `<meta name="reftest-pages" content="2">`: `corpus select` writes it as the entry's `pages`, and the cell compares only that page of the test with the reference, as WPT's runner does. 172 are XHTML files that parse as HTML.
+22 tests have a mismatch reference, 15 more than one reference, and 32 declare a fuzziness. Every fuzziness of the selection allows from 0 differences, so the cell, which checks only the upper bounds, decides no test otherwise than WPT would on them. One test, `css/css-page/subpixel-page-size-001-print.html`, declares `<meta name="reftest-pages" content="2">`: `corpus update` writes it as the entry's `pages`, and the cell compares only that page of the test with the reference, as WPT's runner does. 172 are XHTML files that parse as HTML.
 
 To list the candidates again, at the pinned commit or a new one:
 
@@ -69,10 +69,10 @@ git remote add origin https://github.com/web-platform-tests/wpt.git
 git config core.sparseCheckout true
 printf '/css/\n/fonts/Ahem.ttf\n/LICENSE.md\n' > .git/info/sparse-checkout
 git fetch -q --depth 1 --filter=blob:none origin "$WPT_COMMIT" && git checkout -q FETCH_HEAD
-cd .. && make corpus-select CORPUS_NAME=wpt CHECKOUT=wpt
+cd .. && make corpus-update CORPUS=wpt CHECKOUT=wpt
 ```
 
-`corpus select` writes `reftests.json` and `files.sha256` and prints the candidate count on stderr. `files.sha256` is the SHA-256 of every path `reftests.json` names, plus `LICENSE.md` and `fonts/Ahem.ttf`, computed in the same checkout, sorted by path in byte order; `TestWPTListAndHashesAgree` checks that the two files agree.
+`corpus update` writes `reftests.json` and `files.sha256` and prints the candidate count on stderr. `files.sha256` is the SHA-256 of every path `reftests.json` names, plus `LICENSE.md` and `fonts/Ahem.ttf`, computed in the same checkout, sorted by path in byte order; `TestWPTListAndHashesAgree` checks that the two files agree.
 
 ## Known disagreements
 

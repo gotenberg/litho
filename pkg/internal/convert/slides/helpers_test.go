@@ -34,7 +34,7 @@ func pinnedFonts(t testing.TB) *text.Fonts {
 		fixtureFonts, _ = text.NewFonts(context.Background(), nil, []string{dir})
 	})
 	if fixtureFonts == nil || fixtureFonts.Len() == 0 {
-		t.Skip("fixture fonts not fetched (make html-fixtures)")
+		t.Skip("fixture fonts not fetched (make corpus-fetch CORPUS=fonts)")
 	}
 	return fixtureFonts
 }

@@ -10,11 +10,11 @@ import (
 )
 
 // gotenbergDocument returns the bytes of one of Gotenberg's office test
-// documents (MIT): from the odt corpus's sources, else from the directory
+// documents (MIT): from testdata/gotenberg, else from the directory
 // LITHO_GOTENBERG_OFFICE names; the test skips without either.
 func gotenbergDocument(t *testing.T, name string) []byte {
 	t.Helper()
-	root := filepath.Join("..", "..", "..", "..", "test", "integration", "corpus", "gotenberg", "odt", "sources")
+	root := filepath.Join("testdata", "gotenberg")
 	candidates, _ := filepath.Glob(filepath.Join(root, "*", name))
 	candidates = append(candidates, filepath.Join(root, name))
 	if dir := os.Getenv("LITHO_GOTENBERG_OFFICE"); dir != "" {

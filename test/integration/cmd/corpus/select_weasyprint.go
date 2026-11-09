@@ -58,8 +58,9 @@ var weasyPrintFontFiles = map[string]bool{"weasyprint.otf": true, "weasyprint.ot
 // the mark.
 //
 // It copies the files of tests/resources the fixtures name and the test UA
-// stylesheet into resources/, the release's LICENSE beside it, and the test
-// font into the fixture fonts, checked against WEASYPRINT_FONT_SHA256.
+// stylesheet into resources/ and the release's LICENSE beside it, and checks
+// the release's test font against WEASYPRINT_FONT_SHA256, the font corpus
+// fetch installs.
 func selectWeasyPrint(ctx context.Context, checkout, _, dir string, pins map[string]string) error {
 	tree, err := weasyPrintTree(ctx, checkout, pins)
 	if err != nil {
@@ -154,17 +155,11 @@ func selectWeasyPrint(ctx context.Context, checkout, _, dir string, pins map[str
 	if err := os.WriteFile(filepath.Join(dir, "LICENSE"), tree["LICENSE"], 0o644); err != nil { //nolint:gosec // committed licence
 		return err
 	}
-	font := resources["weasyprint.otf"]
-	sum := sha256.Sum256(font)
+	// The fixtures draw with the release's test font, which corpus fetch
+	// installs from the same tag: the release must still ship the pinned one.
+	sum := sha256.Sum256(resources["weasyprint.otf"])
 	if got, want := hex.EncodeToString(sum[:]), pins["WEASYPRINT_FONT_SHA256"]; got != want {
 		return fmt.Errorf("the WeasyPrint test font hashes to %s, WEASYPRINT_FONT_SHA256 pins %s", got, want)
-	}
-	fonts := filepath.Join(testdataDir(), fixtureFontsDir, "weasyprint")
-	if err := os.MkdirAll(fonts, 0o755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(fonts, "weasyprint.otf"), font, 0o644); err != nil { //nolint:gosec // fixture font
-		return err
 	}
 
 	fmt.Printf("  weasyprint: %d fixtures written, %d calls skipped (computed grid or HTML), %d naming a resource over %d bytes, %d with an unparsable grid\n",

@@ -36,7 +36,7 @@ const reftestDPI = 96
 
 // reftestFontsTarget is the make target that fetches what the reftest
 // feature reads.
-const reftestFontsTarget = "make corpus-fetch CORPUS_NAME=wpt"
+const reftestFontsTarget = "make corpus-fetch CORPUS=wpt"
 
 // metricConvertError counts, in a converter cell, the fixtures litho failed
 // to convert or to read back: an error before there was anything to compare.
@@ -44,7 +44,7 @@ const reftestFontsTarget = "make corpus-fetch CORPUS_NAME=wpt"
 const metricConvertError = "convert_error"
 
 // reftestEntry is one test of corpus/wpt/reftests.json, written by
-// `corpus select --corpus=wpt` (select_tests.go).
+// `corpus update --corpus=wpt` (select_tests.go).
 type reftestEntry struct {
 	ID        string       `json:"id"`
 	Print     bool         `json:"print"`

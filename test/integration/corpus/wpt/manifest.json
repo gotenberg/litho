@@ -1,7 +1,6 @@
 {
   "name": "wpt",
   "source": "wpt",
-  "provisioned_by": "make corpus-fetch CORPUS_NAME=wpt",
   "inputs": {
     "list": "reftests.json"
   },

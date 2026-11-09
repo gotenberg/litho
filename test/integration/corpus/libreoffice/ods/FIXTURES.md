@@ -1,6 +1,6 @@
 # libreoffice/ods corpus fixtures
 
-OpenDocument spreadsheets scored by the `diff` feature (see `FEATURES.md`) against LibreOffice Calc as Gotenberg's LibreOffice route prints them: the image `GOTENBERG_IMAGE` in `corpus/versions.env` pins (`gotenberg/gotenberg:9.0.0`, LibreOffice 26.8.2.2), route `/forms/libreoffice/convert`. A selection of LibreOffice's Calc and chart test spreadsheets at the commit `LIBREOFFICE_CORE_COMMIT` pins, of which only the list and the hashes are committed; Gotenberg's own test spreadsheets are the `gotenberg/ods` corpus. The references are built on the host and never committed. The corpus works as the libreoffice/xlsx corpus does: its `FIXTURES.md` documents the scripts, the provisioning and the fonts, and the libreoffice/docx corpus's the reference checks, which apply here with `ods` for `xlsx` (`make corpus-fetch CORPUS_NAME=libreoffice/ods`, `make office-references SOURCES=libreoffice FORMATS=ods`).
+OpenDocument spreadsheets scored by the `diff` feature (see `FEATURES.md`) against LibreOffice Calc as Gotenberg's LibreOffice route prints them: the image `GOTENBERG_IMAGE` in `corpus/versions.env` pins (`gotenberg/gotenberg:9.0.0`, LibreOffice 26.8.2.2), route `/forms/libreoffice/convert`. A selection of LibreOffice's Calc and chart test spreadsheets at the commit `LIBREOFFICE_CORE_COMMIT` pins, of which only the list and the hashes are committed; the references are built by `corpus references` into the testdata and never committed. The corpus works as the libreoffice/xlsx corpus does: its `FIXTURES.md` documents the scripts, the provisioning and the fonts, and the libreoffice/docx corpus's the reference checks, which apply here with `ods` for `xlsx` (`make corpus-fetch CORPUS=libreoffice/ods`, `make corpus-references CORPUS=libreoffice/ods`).
 
 | Path             | What it holds                                                                                                                     |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
@@ -11,7 +11,7 @@ A fetched spreadsheet's ID names the module whose tests it comes from and its ex
 
 ## How the documents were chosen
 
-`corpus select` reads the files at the top of LibreOffice core's `sc/qa/unit/data/ods`, `sc/qa/unit/data/fods` and `chart2/qa/extras/data/ods` at the pinned commit, each directory for its own extension (the one flat file `sc/qa/unit/data/ods` holds is left out), and keeps a spreadsheet when:
+`corpus update` reads the files at the top of LibreOffice core's `sc/qa/unit/data/ods`, `sc/qa/unit/data/fods` and `chart2/qa/extras/data/ods` at the pinned commit, each directory for its own extension (the one flat file `sc/qa/unit/data/ods` holds is left out), and keeps a spreadsheet when:
 
 - it is at most 150 KiB;
 - its name is plain ASCII (letters, digits, dot, underscore, hyphen);
@@ -37,7 +37,7 @@ Of the 258 references, 240 draw Liberation Sans, Calc's default, 22 Carlito, 17 
 
 ## How the rig was proven
 
-Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on 247 of 258 spreadsheets. Pages, links, outline and the strict rule score 1 on all; text F1 is below 1 on 58 and under the bar on 11, where text crosses a page edge or a clipping path, which PDF.js reads and litho's text extraction does not: a chart cut across pages (`chart2/secondary_axis.ods` at 0.642), long cells running off their page (`sc/lookup_target.fods` at 0.438). Layout averages 0.972 and falls below 0.9 on 1. `TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens` checks the committed sources so on every run with the corpus provisioned. The counts cover this corpus and `gotenberg/ods` together.
+Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on 247 of 258 spreadsheets. Pages, links, outline and the strict rule score 1 on all; text F1 is below 1 on 58 and under the bar on 11, where text crosses a page edge or a clipping path, which PDF.js reads and litho's text extraction does not: a chart cut across pages (`chart2/secondary_axis.ods` at 0.642), long cells running off their page (`sc/lookup_target.fods` at 0.438). Layout averages 0.972 and falls below 0.9 on 1. `TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens` checked the gotenberg corpus's sources so on every run; it now checks the litho Office corpora. The counts cover this corpus and the gotenberg/ods corpus, removed on 2026-11-09, together.
 
 ## Accepted disagreements
 

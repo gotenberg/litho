@@ -29,7 +29,7 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 	root := filepath.Join("..", "..", "testdata", filepath.FromSlash(corpus))
 	goldens := filepath.Join(root, filepath.FromSlash(m.Goldens["diff"]))
 	if _, err := os.Stat(filepath.Join(goldens, "render")); err != nil {
-		t.Skipf("%s is not provisioned (%s, then corpus init --corpus=%s)", corpus, m.References.BuiltBy, corpus)
+		t.Skipf("%s is not provisioned (run %s)", corpus, prepareRemedy(corpus))
 	}
 	pf, err := os.Open(filepath.Join(corpusSourceDir, versionsFileName))
 	if err != nil {
@@ -45,7 +45,8 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 		t.Fatal(err)
 	}
 	f := newDiffFeature()
-	f.refs, f.testdataRoot, f.corpus, f.office, f.pins = m.References, root, corpus, true, pins.Values
+	m.Name = corpus
+	f.m, f.testdataRoot, f.office, f.pins = &m, root, true, pins.Values
 	if err := f.LoadGoldens(goldens); err != nil {
 		t.Fatal(err)
 	}
@@ -55,8 +56,21 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 			t.Fatal(err)
 		}
 	}
+	if m.Inputs.Build != "" {
+		// The documents corpus build zipped from parts/, its hostile ones
+		// left out: they have no reference.
+		entries, err := os.ReadDir(filepath.Join(src, m.Inputs.Build))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				fixtures = append(fixtures, Fixture{ID: e.Name(), PDFPath: filepath.Join(root, m.Inputs.ListRoot, e.Name())})
+			}
+		}
+	}
 	if m.Inputs.List != "" {
-		listed, err := listInputFixtures(filepath.Join(src, m.Inputs.List), filepath.Join(root, m.Inputs.ListRoot), m.Inputs.FetchedBy)
+		listed, err := listInputFixtures(filepath.Join(src, m.Inputs.List), filepath.Join(root, m.Inputs.ListRoot), prepareRemedy(corpus))
 		if err != nil {
 			t.Skip(err)
 		}
@@ -66,45 +80,37 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 }
 
 // TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens proves
-// the Office rig on its own references: each gotenberg Office source's
+// the Office rig on its own references: each litho Office corpus's
 // LibreOffice PDF, handed to the diff feature as litho's conversion, passes
-// Prepare's checks and scores 1 on pages, text, links, strict and outline
-// against the goldens made from it, and clears the layout bar, where the
-// two sides differ only by litho drawing what poppler drew. The libreoffice
-// corpora are left to a corpus run: drawing all of them takes a minute.
+// Prepare's checks and scores 1 on pages, links and outline against the
+// goldens made from it, and clears the text and layout bars but for the
+// references below, where litho's reading and drawing of the PDF part from
+// PDF.js's and poppler's. The list is exact, so a reference that comes
+// to clear the bars, or one that drops under them, fails the test. The
+// libreoffice corpora are left to a corpus run: drawing all of them takes a
+// minute.
 //
 // # Corpus evidence
 //
-//   - libreoffice/docx, gotenberg/docx, libreoffice/odt, gotenberg/odt: each of the 514 references (360 and 154) converted back
-//     through the feature passes on 498. Pages, links and outline score 1 on
-//     all; text F1 is below 1 on 18, where litho's text extraction and
-//     PDF.js's split words apart (i18n's Thai and Devanagari at 0.786,
-//     dkvert.docx's vertical text and layout/tdf137025.docx at 0), and
-//     strict fails on 6 whose hairlines and hatches litho draws lighter than
-//     poppler (odfexport/sw_hatch.odt layout 0.037); layout averages 0.966,
-//     below 0.75 on 5 (ooxmlexport/fdo67737.docx 0.32).
-//   - libreoffice/xlsx, gotenberg/xlsx, libreoffice/ods, gotenberg/ods,
-//     libreoffice/csv, gotenberg/csv: of the 554 references (285, 258 and 11), 516 pass
-//     (258, 247 and 11). Pages, links, outline and strict score 1 on all;
-//     text F1 is below 1 on 118 and under the bar on 37, where text crosses
-//     a page edge or a clipping path, which PDF.js reads and litho's
-//     extraction does not (a chart cut across two pages, a cell overflowing
-//     the page: chart2/column-style.xlsx at 0.236, sc/lookup_target.fods at
-//     0.438), or is rotated (sc/tdf119292.xlsx at 0.571); layout averages
-//     0.969, below 0.9 on 5 (chart2/chart-hatch-fill.xlsx 0.584).
-//   - libreoffice/pptx, gotenberg/pptx, libreoffice/odp, gotenberg/odp: of the 491 references (319 and 172), 484 pass (314 and
-//     170). Pages, links and outline score 1 on all, strict on all but 4
-//     hairlines and a bitmap fill; text F1 is under the bar on 3 whose
-//     text is drawn invisible, white on a white slide or at 2% opacity,
-//     which PDF.js reads and litho's extraction leaves out
-//     (sd/tdf118776.pptx at 0, sd/tdf96708.odp at 0.725); rotated text and
-//     text past the slide edge score 1; layout averages 0.976, below 0.75
-//     on 4 nearly empty slides (sd/tdf112633.pptx 0.290).
+//   - litho/docx: of the 122 references, 119 clear both bars; text F1 is
+//     under 0.85 on intl-rtl-arabic (0.809), intl-rtl-hebrew (0.829) and
+//     intl-scripts (0.774).
+//   - litho/xlsx: of the 90 references, 85 clear both bars; text F1 is under
+//     0.85 on chartex_region_map (0.500), column_widths (0.830), fonts
+//     (0.494), groups_connectors (0.500) and rtl_sheet (0.679).
+//   - litho/pptx: of the 114 references, 112 clear both bars;
+//     background-pattern's layout is 0.302 and text-complex-scripts's text
+//     F1 0.792.
 func TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
 	t.Parallel()
 
-	for _, format := range []string{"docx", "odt", "xlsx", "ods", "csv", "pptx", "odp"} {
-		corpus := "gotenberg/" + format
+	underBars := map[string]map[string]bool{
+		"docx": {"intl-rtl-arabic": true, "intl-rtl-hebrew": true, "intl-scripts": true},
+		"xlsx": {"chartex_region_map": true, "column_widths": true, "fonts": true, "groups_connectors": true, "rtl_sheet": true},
+		"pptx": {"background-pattern": true, "text-complex-scripts": true},
+	}
+	for _, format := range []string{"docx", "xlsx", "pptx"} {
+		corpus := "litho/" + format
 		t.Run(format, func(t *testing.T) {
 			t.Parallel()
 			f, fixtures := officeCorpusFeature(t, corpus)
@@ -112,7 +118,7 @@ func TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens(t *testing
 				t.Fatal(err)
 			}
 			for _, fx := range fixtures {
-				ref, err := os.ReadFile(filepath.Join(f.testdataRoot, filepath.FromSlash(f.refs.Dir), reportName(fx.ID)+".pdf"))
+				ref, err := os.ReadFile(filepath.Join(f.testdataRoot, filepath.FromSlash(f.m.References.Dir), reportName(fx.ID)+".pdf"))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -123,19 +129,12 @@ func TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens(t *testing
 				}
 				v := f.Compare(fx.ID, out)
 				s := v.Scores
-				// i18n's Thai and Devanagari: litho's text extraction and
-				// PDF.js put the spaces of a cluster apart. budget-single's
-				// notes sheet: the clipping path hides the last letter of
-				// a cell that overflows its page, which PDF.js reads.
-				wantText := 1.0
-				switch fx.ID {
-				case "i18n":
-					wantText = 0.78
-				case "budget-single":
-					wantText = 0.93
-				}
-				if s[scorePages] != 1 || s[scoreText] < wantText || s[scoreLinks] != 1 || s[scoreStrict] != 1 || s[scoreOutline] != 1 || s[scoreLayout] < diffLayoutBar {
+				if s[scorePages] != 1 || s[scoreLinks] != 1 || s[scoreOutline] != 1 {
 					t.Errorf("%s %s: %v %s", corpus, fx.ID, s, v.Reason)
+				}
+				clears := s[scoreText] >= diffTextBar && s[scoreLayout] >= diffLayoutBar
+				if clears == underBars[format][fx.ID] {
+					t.Errorf("%s %s: text %.3f, layout %.3f; listed under the bars: %v", corpus, fx.ID, s[scoreText], s[scoreLayout], underBars[format][fx.ID])
 				}
 			}
 			if len(fixtures) == 0 {
@@ -224,7 +223,7 @@ func TestDiffFeature_PrepareRefusesStaleReferences(t *testing.T) {
 			}
 			writeFiles(t, root, map[string]string{"references/manifest.json": string(data)})
 			f := newDiffFeature()
-			f.refs = &ReferenceSpec{Dir: "references", BuiltBy: "make office-references", SourcePin: "LIBREOFFICE_CORE_COMMIT"}
+			f.m = &Manifest{Name: "test/docx", References: &ReferenceSpec{Dir: "references", Engine: engineLibreOffice, SourcePin: "LIBREOFFICE_CORE_COMMIT"}}
 			f.testdataRoot, f.office, f.pins = root, true, pins
 			fixtures := []Fixture{
 				{ID: "memo", PDFPath: filepath.Join(src, "sources", "memo")},
@@ -240,9 +239,9 @@ func TestDiffFeature_PrepareRefusesStaleReferences(t *testing.T) {
 		})
 	}
 
-	// A corpus whose references git versions has nothing to check.
+	// A corpus without references has nothing to check.
 	if err := newDiffFeature().Prepare(t.Context(), nil); err != nil {
-		t.Errorf("html corpora: %v", err)
+		t.Errorf("no references: %v", err)
 	}
 }
 
@@ -252,7 +251,11 @@ func TestDiffFeature_GoldenSourceNamesLibreOfficeForAnOfficeCorpus(t *testing.T)
 	if got := f.GoldenSource(); got != "chromium" {
 		t.Fatalf("GoldenSource = %q, want chromium", got)
 	}
-	f.SetManifest(&Manifest{References: &ReferenceSpec{}})
+	f.SetManifest(&Manifest{References: &ReferenceSpec{Engine: engineChromium}})
+	if got := f.GoldenSource(); got != "chromium" {
+		t.Fatalf("GoldenSource = %q, want chromium", got)
+	}
+	f.SetManifest(&Manifest{References: &ReferenceSpec{Engine: engineLibreOffice}})
 	if got := f.GoldenSource(); got != "libreoffice" {
 		t.Fatalf("GoldenSource = %q, want libreoffice", got)
 	}
