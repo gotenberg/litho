@@ -4,13 +4,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
 // TestManifestProfilesAreMapped pins that every profile a corpus manifest
 // lists reaches each place a profile name is mapped: the veraPDF flavour of
-// the remediation feature, the flavour table of the provisioning script that
+// the remediation feature, the flavour table of corpus provision, which
 // writes the golden named after it, a litho validator, and the remediation
 // engine. A profile one of them misses scores silently: compliance calls every
 // cell compliant, and remediation skips the profile with "no verapdf flavour".
@@ -19,10 +18,6 @@ func TestManifestProfilesAreMapped(t *testing.T) {
 	t.Parallel()
 
 	root := filepath.Join("..", "..", "corpus")
-	script, err := os.ReadFile(filepath.Join(root, "lib", "run-verapdf.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	manifests, err := filepath.Glob(filepath.Join(root, "*", "manifest.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -48,8 +43,8 @@ func TestManifestProfilesAreMapped(t *testing.T) {
 				t.Errorf("%s: %s has no veraPDF flavour", m.Name, profile)
 				continue
 			}
-			if want := `["` + profile + `"]="` + flavour + `"`; !strings.Contains(string(script), want) {
-				t.Errorf("%s: run-verapdf.sh has no %s", m.Name, want)
+			if got := veraPDFFlavours[profile]; got != flavour {
+				t.Errorf("%s: corpus provision validates %s with flavour %q, the remediation feature with %q", m.Name, profile, got, flavour)
 			}
 			_, isA := dirToPDFAProfile[profile]
 			_, isUA := dirToPDFUAProfile[profile]

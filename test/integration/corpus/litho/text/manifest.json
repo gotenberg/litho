@@ -11,5 +11,6 @@
     "compliance": "goldens/compliance",
     "remediation": "goldens/compliance",
     "remediation-aggressive": "goldens/compliance"
-  }
+  },
+  "committed_pdfs": "pdfs"
 }

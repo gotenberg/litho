@@ -186,7 +186,7 @@ func TestCommittedConverterCorporaLoad(t *testing.T) {
 
 // TestHostProvisionedCorporaReadTheirPin checks that a corpus the host
 // provisions fetches its files at the pin sourcePins says they come from, as
-// TestEverySourceReadsItsPin checks of download.sh, and that every fetch names
+// TestEverySourceReadsItsPin checks of the others, and that every fetch names
 // a pin of versions.env.
 func TestHostProvisionedCorporaReadTheirPin(t *testing.T) {
 	t.Parallel()
@@ -215,9 +215,6 @@ func TestHostProvisionedCorporaReadTheirPin(t *testing.T) {
 		checked++
 		if keys := sourcePins[m.Source]; len(keys) > 0 && (m.Fetch == nil || !slices.Equal(keys, []string{m.Fetch.Pin})) {
 			t.Errorf("%s: its sources come from %v, its fetch reads %+v", m.Name, keys, m.Fetch)
-		}
-		if _, err := os.Stat(filepath.Join(corpusSourceDir, m.Source, "download.sh")); err == nil {
-			t.Errorf("%s is provisioned on the host but ships a download.sh the image would run", m.Name)
 		}
 	}
 	if checked != 3 {

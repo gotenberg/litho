@@ -2,12 +2,11 @@
 
 HTML and Markdown sources from Gotenberg's own test documents (MIT License, Copyright Julien Neuhart), converted twice: by Chromium, through the Chromium route of the Gotenberg image `GOTENBERG_IMAGE` in `corpus/versions.env` pins, and by litho. The `diff` feature scores litho's conversion against Chromium's (see `FEATURES.md`). The corpus works as `litho/html` does: its `FIXTURES.md` documents the source layout, the per-fixture options, the Chromium references (`make html-references`) and litho's PDFs (`make html-fixtures`), which apply here.
 
-| Path          | What it holds                                                                                       |
-| ------------- | --------------------------------------------------------------------------------------------------- |
-| `sources/`    | The 15 sources                                                                                      |
-| `references/` | Chromium's PDF of each source, the reference (`make html-references`, committed)                    |
-| `pdfs/`       | litho's PDF of each source (`make html-fixtures`, committed once the converter writes them)         |
-| `download.sh` | Installs `references/*.pdf` as the corpus PDFs the provisioning image derives the diff goldens from |
+| Path          | What it holds                                                                               |
+| ------------- | ------------------------------------------------------------------------------------------- |
+| `sources/`    | The 15 sources                                                                              |
+| `references/` | Chromium's PDF of each source, the reference (`make html-references`, committed)            |
+| `pdfs/`       | litho's PDF of each source (`make html-fixtures`, committed once the converter writes them) |
 
 ## Sources
 

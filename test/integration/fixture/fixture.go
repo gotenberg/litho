@@ -17,7 +17,7 @@ import (
 
 // The page a source is converted on when its options leave the paper and
 // the margins out, in points: what Chromium lays out for the A4 paper
-// chromium.sh asks for (paperWidth=210mm, paperHeight=297mm) with the
+// corpus references asks for (paperWidth=210mm, paperHeight=297mm) with the
 // Chromium route's default margins of 0.39 inch. Chromium's references carry
 // a 595.92 by 841.92 point media box and a text column 27.75 points in (37
 // CSS pixels, see [Source.Margins]), measured on the committed PDFs; converting on the exact A4 of 595.276 by 841.89
@@ -38,14 +38,14 @@ const OptionsFile = "options.json"
 
 // The documents a source directory holds, one of the two: an HTML page,
 // posted to the route's /forms/chromium/convert/html, or a Markdown page,
-// which chromium.sh wraps in [MarkdownWrapper] and posts to
+// which corpus references wraps in [MarkdownWrapper] and posts to
 // /forms/chromium/convert/markdown.
 const (
 	HTMLDocument     = "index.html"
 	MarkdownDocument = "index.md"
 )
 
-// MarkdownWrapper is the index.html chromium.sh posts beside a Markdown
+// MarkdownWrapper is the index.html corpus references posts beside a Markdown
 // source: the document litho's Markdown converter writes around the
 // rendered Markdown, so the two engines lay out the same tree.
 const MarkdownWrapper = `<!doctype html><html><head><meta charset="utf-8"><title></title></head><body>{{ toHTML "index.md" }}</body></html>`
@@ -173,7 +173,7 @@ func Load(dir string) (*Source, error) {
 // leave a fixture on the defaults unnoticed.
 func ParseOptions(data []byte) (Options, error) {
 	var o Options
-	if err := decodeStrict(data, optionNames, &o); err != nil {
+	if err := decodeStrict(data, OptionNames, &o); err != nil {
 		return Options{}, err
 	}
 	return o, o.validate()
@@ -203,10 +203,10 @@ func decodeStrict(data []byte, names []string, v any) error {
 	return nil
 }
 
-// optionNames are the keys of an options file, the JSON names of [Options].
+// OptionNames are the keys of an options file, the JSON names of [Options].
 //
 //nolint:gochecknoglobals // static list of the schema's keys
-var optionNames = []string{
+var OptionNames = []string{
 	"paperWidth", "paperHeight", "marginTop", "marginRight", "marginBottom", "marginLeft",
 	"landscape", "scale", "singlePage", "nativePages", "preferCssPageSize", "printBackground",
 	"nativeBookmarks", "emulatedMediaType", "emulatedMediaFeatures", "header", "footer",

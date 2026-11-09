@@ -18,7 +18,6 @@ litho reads none of the binary formats yet: the `doc`, `xls` and `ppt` cells sco
 | `<format>/documents.json` | The documents, each `{"id", "path"}`: the ID its path under `test-data/`, the path its path in POI                    |
 | `<format>/files.sha256`   | `<sha256>  <path>` for each document, then POI's `legal/LICENSE` and `legal/NOTICE`                                   |
 | `<format>/manifest.json`  | The corpus manifest; `references.source_pin` names `POI_COMMIT`                                                       |
-| `<format>/download.sh`    | Installs the references from the testdata volume as the corpus PDFs the diff goldens come from                        |
 | `corpus select`           | `make corpus-select CORPUS_NAME=poi/<format> CHECKOUT=<dir>`: rewrites the two lists above from a checkout at the pin |
 | `corpus fetch`            | `make corpus-fetch CORPUS_NAME=poi`: downloads the listed files from GitHub at the pin, hash-checked                  |
 

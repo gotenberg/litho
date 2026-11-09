@@ -15,14 +15,14 @@ import (
 
 // runScanClaims walks a flat pdfs/ directory, reads each PDF's XMP
 // claim, and writes one CSV line per claimed PDF. The CSV is consumed
-// by the provisioning Docker entrypoint to drive per-claim VeraPDF
+// by corpus provision to drive per-claim VeraPDF
 // validation (one PDF, one profile) instead of cartesian (every PDF
 // against every profile).
 //
 // Format: <basename>,<profile_dir>
 //
 // Files with no recognised XMP claim do not appear in the CSV. The
-// entrypoint treats absent rows as "no compliance/remediation
+// provisioning treats absent rows as "no compliance/remediation
 // fixture", which lines up with the runner's auto-mode behavior.
 func runScanClaims(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("scan-claims", flag.ExitOnError)
@@ -38,35 +38,37 @@ func runScanClaims(ctx context.Context, args []string) int {
 		fmt.Fprintln(os.Stderr, "scan-claims: --pdfs is required")
 		return 1
 	}
-	if *workers < 1 {
-		*workers = 1
+	if err := writeClaims(ctx, *pdfsDir, *out, splitCSV(*allow), *workers); err != nil {
+		fmt.Fprintf(os.Stderr, "scan-claims: %v\n", err)
+		return 1
 	}
+	return 0
+}
 
-	allowed := splitCSV(*allow)
+// writeClaims reads the claim of every PDF under pdfsDir on workers
+// goroutines and writes one "<basename>,<profile>" line per PDF claiming a
+// profile of allowed (any profile when empty), sorted by basename, to out,
+// or to standard output when out is empty.
+func writeClaims(ctx context.Context, pdfsDir, out string, allowed []string, workers int) error {
 	allowSet := make(map[string]bool, len(allowed))
 	for _, p := range allowed {
 		allowSet[p] = true
 	}
-
-	pdfs, err := collectPDFs(*pdfsDir)
+	pdfs, err := collectPDFs(pdfsDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "scan-claims: %v\n", err)
-		return 1
+		return err
 	}
-
-	rows, err := scanClaimsParallel(ctx, pdfs, allowSet, *workers)
+	rows, err := scanClaimsParallel(ctx, pdfs, allowSet, max(workers, 1))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "scan-claims: %v\n", err)
-		return 1
+		return err
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].base < rows[j].base })
 
 	w := os.Stdout
-	if *out != "" {
-		f, err := os.Create(*out) //nolint:gosec // out path supplied by trusted CLI/provisioning script
+	if out != "" {
+		f, err := os.Create(out) //nolint:gosec // out path supplied by trusted CLI/provisioning run
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "scan-claims: create %s: %v\n", *out, err)
-			return 1
+			return fmt.Errorf("create %s: %w", out, err)
 		}
 		defer f.Close()
 		w = f
@@ -74,16 +76,14 @@ func runScanClaims(ctx context.Context, args []string) int {
 	bw := bufio.NewWriter(w)
 	for _, r := range rows {
 		if _, err := fmt.Fprintf(bw, "%s,%s\n", r.base, r.profile); err != nil {
-			fmt.Fprintf(os.Stderr, "scan-claims: write: %v\n", err)
-			return 1
+			return fmt.Errorf("write: %w", err)
 		}
 	}
 	if err := bw.Flush(); err != nil {
-		fmt.Fprintf(os.Stderr, "scan-claims: flush: %v\n", err)
-		return 1
+		return fmt.Errorf("flush: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "scan-claims: scanned %d PDFs, %d claimed a profile\n", len(pdfs), len(rows))
-	return 0
+	return nil
 }
 
 type claimRow struct {

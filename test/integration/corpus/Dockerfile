@@ -2,9 +2,11 @@
 # Shared corpus provisioning image.
 #
 # Installs Node (for PDF.js), a Java runtime, veraPDF, pdfcpu, Mustang,
-# KoSIT, poppler's pdftoppm, and baseline utilities. Bakes a built pdf.js checkout into the
-# image so per-run provisioning only downloads fixtures and generates
-# goldens.
+# KoSIT, poppler's pdftoppm, and baseline utilities. Bakes a built pdf.js
+# checkout into the image. The host puts a corpus's PDFs in the testdata it
+# mounts at /output; the image only derives the goldens, with the corpus CLI's
+# provision subcommand, which corpus init cross-compiles and mounts at
+# /work/bin/corpus, so the image carries no Go toolchain.
 #
 # Every version comes from versions.env. `corpus init` passes each entry
 # as --build-arg, so no ARG below carries a default that could drift from
@@ -14,8 +16,9 @@
 #
 #   docker build $(go run ./test/integration/cmd/corpus versions --build-args) \
 #     -t litho-corpus-builder test/integration/corpus
+#   GOOS=linux CGO_ENABLED=0 go build -o /tmp/corpus ./test/integration/cmd/corpus
 #   docker run --rm -v $(pwd)/test/integration/testdata/<name>:/output \
-#     litho-corpus-builder <name> <profiles_csv>
+#     -v /tmp/corpus:/work/bin/corpus:ro litho-corpus-builder <name> <profiles_csv>
 
 ARG VERAPDF_VERSION
 ARG VERAPDF_IMAGE_DIGEST
@@ -120,19 +123,23 @@ RUN bash /usr/local/bin/bundle-poppler /tmp/build/utils /opt/poppler pdftoppm pd
 
 FROM node:${NODE_VERSION}-${NODE_DEBIAN_RELEASE}${NODE_IMAGE_DIGEST:+@}${NODE_IMAGE_DIGEST}
 
+# parallel runs the redact-render feature's poppler batches.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  git unzip curl ca-certificates parallel jq \
+  git unzip curl ca-certificates parallel \
   && rm -rf /var/lib/apt/lists/*
 
-COPY lib/fetch-revision.sh /usr/local/bin/fetch-revision
-RUN chmod +x /usr/local/bin/fetch-revision
-
-# Pre-fetch + build pdf.js at the pinned commit so the shared golden
-# generator can load it without paying the setup cost on every
-# provisioning run. npm ci installs the dependency tree the commit's
-# lockfile names.
+# Pre-fetch + build pdf.js at the pinned commit so the golden generators
+# load it without paying the setup cost on every provisioning run. The
+# revision is a full commit SHA or a tag, never a branch, which moves under
+# the same pin; only that one commit is fetched. npm ci installs the
+# dependency tree the commit's lockfile names.
 ARG PDFJS_REVISION
-RUN fetch-revision https://github.com/mozilla/pdf.js.git "${PDFJS_REVISION}" /opt/pdfjs \
+RUN : "${PDFJS_REVISION:?build through corpus init, which passes versions.env}" \
+  && ref="${PDFJS_REVISION}" \
+  && if ! echo "${ref}" | grep -Eq '^[0-9a-f]{40}$'; then ref="refs/tags/${ref}"; fi \
+  && git init -q /opt/pdfjs \
+  && git -C /opt/pdfjs fetch -q --depth 1 https://github.com/mozilla/pdf.js.git "${ref}" \
+  && git -C /opt/pdfjs -c advice.detachedHead=false checkout -q FETCH_HEAD \
   && cd /opt/pdfjs && npm ci && npx gulp generic-legacy
 
 # Java runtime for veraPDF, Mustang and KoSIT: a pinned Eclipse Temurin
@@ -246,45 +253,12 @@ RUN found="$(pdftoppm -v 2>&1 | head -n 1)" \
     echo "the image carries ${found}, versions.env pins poppler ${POPPLER_VERSION}" >&2 && exit 1; \
   fi
 
+# The Node generators: PDF.js's text, metadata, image and link goldens.
 WORKDIR /work
-COPY entrypoint.sh ./
-COPY lib/ ./lib/
-# The PDF corpora (pdfjs, verapdf, govdocs/pdf, pdf20, pdfcpu, facturx) come
-# fetched by `corpus fetch` on the host, in the mounted testdata: the image
-# only derives their goldens.
-COPY govdocs/ ./govdocs/
-# The litho corpora ship their fixtures in git rather than downloading them:
-# the litho/pdf and litho/text PDFs, and the Chromium references of the
-# litho/html sources. The gotenberg corpora likewise ship gotenberg/html's
-# Chromium references. The Office corpora's references are not in git: the
-# host builds them into the testdata (make office-references), and their
-# download scripts read them from the /output volume, so only the scripts of
-# the Office corpora (libreoffice, gotenberg, poi, openxmlsdk and the govdocs
-# Office ones) matter in the image.
-COPY litho/ ./litho/
-COPY gotenberg/ ./gotenberg/
-COPY libreoffice/ ./libreoffice/
-COPY poi/ ./poi/
-COPY openxmlsdk/ ./openxmlsdk/
-RUN chmod +x entrypoint.sh \
-  lib/run-verapdf.sh \
-  lib/run-mustang.sh \
-  lib/run-kosit.sh \
-  lib/gen-bookmarks.sh \
-  lib/gen-merges.sh \
-  lib/gen-merge-empty.sh \
-  lib/gen-render.sh \
-  lib/install-references.sh \
-  govdocs/*/download.sh \
-  litho/*/download.sh \
-  gotenberg/*/download.sh \
-  libreoffice/*/download.sh \
-  poi/*/download.sh \
-  openxmlsdk/*/download.sh
+COPY lib/*.mjs ./lib/
 
 # Record the versions this image was built with, overrides included, so
-# the entrypoint can hand the corpus revisions to the download scripts and
-# write them into each corpus's versions.json. versions.env supplies the
+# corpus provision writes them into each corpus's versions.json. versions.env supplies the
 # key names only: every value comes from the build arguments, and a key
 # with no value (a dropped digest, a local-tool pin) is left out.
 ARG VERAPDF_IMAGE_DIGEST
@@ -314,4 +288,4 @@ RUN sed -n 's/^\([A-Z][A-Z0-9_]*\)=.*/\1/p' /opt/litho/versions.pinned.env \
   done > /opt/litho/versions.env \
   && cat /opt/litho/versions.env
 
-ENTRYPOINT ["/work/entrypoint.sh"]
+ENTRYPOINT ["/work/bin/corpus", "provision"]

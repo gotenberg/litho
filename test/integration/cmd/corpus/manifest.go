@@ -19,7 +19,7 @@ type Manifest struct {
 	Name string `json:"name"`
 
 	// Source is the directory under test/integration/corpus/ that holds
-	// the corpus's manifest and download.sh, with "/" separators. Defaults
+	// the corpus's manifest, with "/" separators. Defaults
 	// to that directory when empty.
 	Source string `json:"source,omitempty"`
 
@@ -91,12 +91,18 @@ type Manifest struct {
 	// Fetch, when set, names where `corpus fetch` downloads the corpus's
 	// files from on the host. See [FetchSpec].
 	Fetch *FetchSpec `json:"fetch,omitempty"`
+
+	// CommittedPDFs, when set, names the directory, relative to the corpus
+	// source directory, whose PDFs are the corpus's PDFs: the litho corpora's
+	// fixtures, the html corpora's Chromium references. corpus init copies
+	// them into the testdata before the image derives the goldens.
+	CommittedPDFs string `json:"committed_pdfs,omitempty"`
 }
 
 // ReferenceSpec names the reference PDFs of a converter corpus that the host
 // builds into the testdata: Dir, under the testdata root, holds one
 // <name>.pdf per fixture, the fixture ID with "/" written "__", and a
-// manifest.json recording what each was built from (lib/libreoffice.sh), so a
+// manifest.json recording what each was built from (corpus references), so a
 // reference built from another pin or from a source that changed since is
 // refused.
 type ReferenceSpec struct {

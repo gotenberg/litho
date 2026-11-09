@@ -38,7 +38,7 @@ var drawPixelRule = pixelRule{Tolerance: renderChannelTolerance}
 // the fonts the draw feature reads.
 const drawFontsTarget = "make weasyprint-fixtures"
 
-// drawFixture is one fixture weasyprint/extract.py writes.
+// drawFixture is one fixture corpus select writes for the weasyprint corpus.
 type drawFixture struct {
 	Name     string   `json:"name"`
 	Source   string   `json:"source"`

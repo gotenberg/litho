@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/pdf"
@@ -381,27 +380,6 @@ func TestRenderFeatureScoresPages(t *testing.T) {
 	}
 	if v := f.Compare("broken", out); !v.Skipped {
 		t.Errorf("a PDF poppler could not open: %+v", v)
-	}
-}
-
-// The feature compares at the resolution and page count gen-render.sh draws
-// the goldens with.
-func TestRenderConstantsMatchGenerator(t *testing.T) {
-	t.Parallel()
-
-	data, err := os.ReadFile(filepath.Join(corpusSourceDir, "lib", "gen-render.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for name, want := range map[string]int{"RENDER_DPI": renderDPI, "RENDER_MAX_PAGES": renderMaxPages} {
-		m := regexp.MustCompile(`(?m)^` + name + `=(\d+)$`).FindSubmatch(data)
-		if m == nil {
-			t.Errorf("gen-render.sh sets no %s", name)
-			continue
-		}
-		if got, _ := strconv.Atoi(string(m[1])); got != want {
-			t.Errorf("gen-render.sh sets %s=%d, the feature uses %d", name, got, want)
-		}
 	}
 }
 

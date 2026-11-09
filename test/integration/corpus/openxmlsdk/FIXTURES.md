@@ -13,7 +13,6 @@ The Open XML SDK's test documents scored by the `diff` feature (see `FEATURES.md
 | `<format>/documents.json` | The documents, each `{"id", "path"}`: the ID its path under the test data storage made plain ASCII, the path its path in the SDK |
 | `<format>/files.sha256`   | `<sha256>  <path>` for each document, then the SDK's `LICENSE`                                                                   |
 | `<format>/manifest.json`  | The corpus manifest; `references.source_pin` names `OPENXMLSDK_COMMIT`                                                           |
-| `<format>/download.sh`    | Installs the references from the testdata volume as the corpus PDFs the diff goldens come from                                   |
 | `corpus select`           | `make corpus-select CORPUS_NAME=openxmlsdk/<format> CHECKOUT=<dir>`: rewrites the two lists above from a checkout at the pin     |
 | `corpus fetch`            | `make corpus-fetch CORPUS_NAME=openxmlsdk`: downloads the listed files from GitHub at the pin, hash-checked                      |
 

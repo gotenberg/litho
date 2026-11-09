@@ -20,8 +20,7 @@ byte for byte.
 
 ```
 corpus/litho/pdf/
-├── download.sh     Provisioning step: copies pdfs/ into the output dir
-├── manifest.json   Corpus manifest (profile_mode=expand over 13 profiles)
+├── manifest.json   Corpus manifest (profile_mode=expand over 13 profiles, committed_pdfs=pdfs)
 ├── text-overrides.json  Corrections to the PDF.js text goldens, with reasons
 ├── build/          pikepdf builders, one per fixture, plus _common.py
 ├── pdfs/           The committed fixtures
@@ -29,9 +28,8 @@ corpus/litho/pdf/
 └── README.md       This file
 ```
 
-`download.sh` downloads nothing. The provisioning image has no Python, so the
-Dockerfile bakes `corpus/litho/` in at `/work/litho` and the script copies
-`pdfs/*.pdf` into the output directory.
+Nothing is downloaded: `corpus init` copies `pdfs/*.pdf` into the testdata
+before the provisioning image derives the goldens.
 
 ## Regenerating
 

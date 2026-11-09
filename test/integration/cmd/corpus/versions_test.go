@@ -75,10 +75,9 @@ func TestParsePins(t *testing.T) {
 }
 
 // TestVersionsFilePinsReleasesNotBranches keeps versions.env to the forms the
-// provisioning scripts rely on. A corpus revision that is not a full SHA must
-// be a tag, which fetch-revision.sh verifies against the remote; the pinned
-// ones are all SHAs, and a branch name here would pass that check only if a
-// tag of the same name existed.
+// provisioning relies on. A corpus revision that is not a full SHA is fetched
+// as a tag; the pinned ones are all SHAs, and a branch name here would be
+// fetched only if a tag of the same name existed.
 func TestVersionsFilePinsReleasesNotBranches(t *testing.T) {
 	t.Parallel()
 
@@ -345,7 +344,7 @@ func TestDockerfileDeclaresEveryImagePinWithoutDefault(t *testing.T) {
 
 // TestDockerfileFinalStageRecordsEveryStagePin pins that the image's last
 // stage declares every pin a provisioning stage or a corpus source records.
-// /opt/litho/versions.env, which the entrypoint writes into each stage's
+// /opt/litho/versions.env, which corpus provision writes into each stage's
 // record, is built in that stage from the build arguments it declares, and a
 // build argument is scoped to the stage that declares it: a pin declared only
 // in an earlier stage records nothing, and every golden it covers reads stale
@@ -394,41 +393,41 @@ func TestDockerfileFinalStageRecordsEveryStagePin(t *testing.T) {
 	}
 }
 
-// TestEntrypointRecordsEveryGoldenDir checks that the entrypoint writes a
+// TestProvisionRecordsEveryGoldenDir checks that corpus provision writes a
 // version record for every golden directory a manifest declares, and that
 // stagePins knows which pins each depends on. A directory with no record
 // would warn "unknown" forever; one missing from stagePins would never be
 // checked.
-func TestEntrypointRecordsEveryGoldenDir(t *testing.T) {
+func TestProvisionRecordsEveryGoldenDir(t *testing.T) {
 	t.Parallel()
 
-	data, err := os.ReadFile(filepath.Join(corpusSourceDir, "entrypoint.sh"))
+	data, err := os.ReadFile("provision.go")
 	if err != nil {
-		t.Fatalf("read entrypoint.sh: %v", err)
+		t.Fatalf("read provision.go: %v", err)
 	}
-	call := regexp.MustCompile(`(?m)^\s*record_stage\s+(\S+)`)
-	recorded := make(map[string]bool)
+	call := regexp.MustCompile(`p\.(?:stage|record)\("([^"]+)"`)
+	recorded := map[string]bool{pdfsStage: true}
 	for _, m := range call.FindAllStringSubmatch(string(data), -1) {
 		recorded[m[1]] = true
 	}
-	if !recorded[pdfsStage] || len(recorded) < 5 {
-		t.Fatalf("parsed record_stage calls %v, so the entrypoint was not read", recorded)
+	if len(recorded) < 5 {
+		t.Fatalf("parsed stage records %v, so provision.go was not read", recorded)
 	}
 	for stage := range stagePins {
 		if !recorded[stage] {
-			t.Errorf("stagePins lists %s but the entrypoint never records it", stage)
+			t.Errorf("stagePins lists %s but corpus provision never records it", stage)
 		}
 	}
 
 	for _, m := range readManifests(t) {
-		// A corpus the host provisions has no entrypoint stage to record.
+		// A corpus the host provisions has no image stage to record.
 		if m.ProvisionedBy != "" {
 			continue
 		}
 		for feature, rel := range m.Goldens {
 			stage := filepath.ToSlash(filepath.Clean(rel))
 			if !recorded[stage] {
-				t.Errorf("%s/%s reads %s, which the entrypoint never records", m.Name, feature, stage)
+				t.Errorf("%s/%s reads %s, which corpus provision never records", m.Name, feature, stage)
 			}
 			if _, ok := stagePins[stage]; !ok {
 				t.Errorf("%s/%s reads %s, which stagePins does not map to its pins", m.Name, feature, stage)
@@ -437,47 +436,35 @@ func TestEntrypointRecordsEveryGoldenDir(t *testing.T) {
 	}
 }
 
-// TestEverySourceReadsItsPin checks that each corpus's download step reads the
-// revision sourcePins says its PDFs come from. The pdfjs corpus is the one
-// whose PDFs come from the image's pdf.js checkout, so its pin is read by the
-// Dockerfile.
+// TestEverySourceReadsItsPin checks that each corpus the image provisions
+// gets its PDFs from where sourcePins says: a corpus `corpus fetch` downloads
+// reads its pin through its fetch, and the others install PDFs no pin names,
+// committed ones or references whose own manifest records their pin.
 func TestEverySourceReadsItsPin(t *testing.T) {
 	t.Parallel()
 
-	dockerfile, err := os.ReadFile(filepath.Join(corpusSourceDir, "Dockerfile"))
-	if err != nil {
-		t.Fatalf("read Dockerfile: %v", err)
-	}
 	for _, m := range readManifests(t) {
 		keys, ok := sourcePins[m.Source]
 		if !ok {
 			t.Errorf("corpus %s (source %s) has no sourcePins entry", m.Name, m.Source)
 			continue
 		}
-		// A corpus the host provisions has no download.sh: its make target
-		// reads the pin (TestHostProvisionedCorporaReadTheirPin). A corpus
-		// `corpus fetch` downloads reads it through its fetch.
+		// A corpus the host provisions reads its pin in its make target
+		// (TestHostProvisionedCorporaReadTheirPin).
 		if m.ProvisionedBy != "" {
 			continue
 		}
-		if m.Fetch != nil {
+		if m.Fetch != nil && m.References == nil {
 			if len(keys) > 0 && !slices.Equal(keys, []string{m.Fetch.Pin}) {
 				t.Errorf("%s: its sources come from %v, its fetch reads %s", m.Name, keys, m.Fetch.Pin)
 			}
 			continue
 		}
-		script, err := os.ReadFile(filepath.Join(corpusSourceDir, m.Source, "download.sh"))
-		if err != nil {
-			t.Fatalf("read %s/download.sh: %v", m.Source, err)
+		if m.CommittedPDFs == "" && m.References == nil {
+			t.Errorf("%s: corpus init has no PDFs to install: no fetch, no committed_pdfs, no references", m.Name)
 		}
-		for _, k := range keys {
-			use := "${" + k
-			if !bytes.Contains(script, []byte(use)) && !bytes.Contains(dockerfile, []byte(use)) {
-				t.Errorf("%s/download.sh never expands %s, so the pin does not reach the download", m.Source, k)
-			}
-		}
-		if bytes.Contains(script, []byte("git clone")) {
-			t.Errorf("%s/download.sh still clones a branch; fetch the pinned revision instead", m.Source)
+		if len(keys) > 0 {
+			t.Errorf("%s: installs PDFs no pin names, but sourcePins lists %v", m.Name, keys)
 		}
 	}
 }

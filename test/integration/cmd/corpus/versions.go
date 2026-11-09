@@ -26,8 +26,8 @@ const versionRecordName = "versions.json"
 // versionRecordFormat is the only versions.json layout this tool reads.
 const versionRecordFormat = 1
 
-// pdfsStage is the record key of the download stage, which the entrypoint
-// writes under the name of the directory it fills.
+// pdfsStage is the record key of the download stage, which corpus fetch and
+// corpus init write under the name of the directory they fill.
 const pdfsStage = "pdfs"
 
 // veraPDFHeaderBytes bounds how much of a veraPDF JSON report is read to find
@@ -139,7 +139,7 @@ var localToolPins = map[string]bool{
 // stagePins maps each directory a provisioning stage fills to the pins its
 // output depends on: every tool that ran to produce it. A golden recorded
 // with another value of any of them is stale. The keys mirror the
-// record_stage calls in corpus/entrypoint.sh.
+// stages corpus provision records (see provision.go).
 //
 // The pdfcpu archive hashes and the poppler tarball hash are not listed. Each checks the download of the
 // release PDFCPU_VERSION names for one architecture, and a golden made on
@@ -454,7 +454,7 @@ type versionCheck struct {
 // provisioned with against the pins, for the download stage and the golden
 // directories the given features read.
 //
-// Two sources are read. versions.json, written by the entrypoint, says what
+// Two sources are read. versions.json, written by corpus provision, says what
 // every stage ran with. A veraPDF report also names its own build in its
 // header, so compliance goldens are checked against VERAPDF_VERSION even when
 // they predate versions.json. Testdata provisioned before versions.json
@@ -606,7 +606,7 @@ func veraPDFReportCore(p string) (string, error) {
 // reprovisionCommand returns the shell command that regenerates the stale
 // stages. A stale download stage means other PDFs, so the whole testdata
 // directory goes; otherwise only the stale golden directories do, and the
-// entrypoint regenerates exactly those.
+// corpus provision regenerates exactly those.
 func reprovisionCommand(m *Manifest, testdataRoot string, stale map[string]bool) string {
 	var targets []string
 	if stale[pdfsStage] {

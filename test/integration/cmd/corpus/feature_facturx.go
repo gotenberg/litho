@@ -14,7 +14,8 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
-// mustangReport is the JSON shape that lib/run-mustang.sh emits. One
+// mustangReport is the JSON shape of the Mustang goldens corpus provision
+// writes. One
 // jobs[] entry per fixture captures Mustang's overall verdict plus the
 // raw text report so the mismatch view can surface failed-rule context
 // without re-running the validator.
@@ -57,7 +58,7 @@ func newFacturxFeature() *facturxFeature {
 func (f *facturxFeature) Name() string         { return "facturx-validity" }
 func (f *facturxFeature) GoldenSource() string { return "mustang" }
 
-// LoadGoldens reads the jobs.json emitted by lib/run-mustang.sh. The
+// LoadGoldens reads the jobs.json corpus provision writes. The
 // golden dir is opt-in via the corpus manifest, so corpora that do not
 // declare the feature get [ErrNoGoldens] and render as "[no golden]".
 func (f *facturxFeature) LoadGoldens(dir string) error {

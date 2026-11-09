@@ -68,9 +68,10 @@ const corpusImage = "litho-corpus-builder"
 // re-provision can take an hour. The disagreement is reported with the
 // command that re-provisions, and run, baseline and check refuse to score it.
 //
-// A corpus that declares a fetch and builds no references (a PDF corpus) is
-// fetched on the host first, so the image derives its goldens from the PDFs
-// `corpus fetch` checked.
+// The host puts the corpus's PDFs in the testdata first, so the image only
+// derives goldens: a corpus that declares a fetch and builds no references (a
+// PDF corpus) is fetched, the others get their committed PDFs or their
+// references installed (see [installPDFs]).
 //
 // A corpus the host provisions (see [Manifest.ProvisionedBy]) is skipped with
 // the make target that provisions it: the image has no part in it. So is a
@@ -115,8 +116,14 @@ func provisionCorpus(ctx context.Context, m *Manifest, pins *resolvedPins) error
 		return nil
 	}
 
-	if m.Fetch != nil && m.References == nil {
-		if err := fetch(ctx, []string{m.Name}, fetchJobs, http.DefaultClient); err != nil {
+	if !hasPDF(filepath.Join(testdataRoot, "pdfs")) {
+		var err error
+		if m.Fetch != nil && m.References == nil {
+			err = fetch(ctx, []string{m.Name}, fetchJobs, http.DefaultClient)
+		} else {
+			err = installPDFs(m, testdataRoot)
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -135,35 +142,28 @@ func provisionCorpus(ctx context.Context, m *Manifest, pins *resolvedPins) error
 		return fmt.Errorf("docker build: %w", err)
 	}
 
-	// Auto-mode corpora rely on a small in-tree helper (the
-	// `scan-claims` subcommand) to attach each PDF's claimed conformance
-	// profile before VeraPDF runs. Cross-compile it on the host for the
-	// architecture of the image just built, then bind-mount the binary into
-	// the container so the provisioning image stays Go-free.
-	binaryMount := []string{}
-	if m.EffectiveProfileMode() == ProfileModeAuto {
-		goarch, err := imageGOARCH(image)
-		if err != nil {
-			return fmt.Errorf("build scan-claims helper: %w", err)
-		}
-		binPath, err := buildScanClaimsBinary(goarch)
-		if err != nil {
-			return fmt.Errorf("build scan-claims helper: %w", err)
-		}
-		defer os.RemoveAll(filepath.Dir(binPath))
-		binaryMount = []string{"-v", binPath + ":/work/bin/scan-claims:ro"}
+	// The image runs this CLI's provision subcommand, cross-compiled on the
+	// host for the architecture of the image just built and bind-mounted, so
+	// the image carries no Go toolchain.
+	goarch, err := imageGOARCH(image)
+	if err != nil {
+		return fmt.Errorf("build the provisioning helper: %w", err)
 	}
+	binPath, err := buildHelperBinary(goarch)
+	if err != nil {
+		return fmt.Errorf("build the provisioning helper: %w", err)
+	}
+	defer os.RemoveAll(filepath.Dir(binPath))
 
 	fmt.Printf("%s: running provisioning container...\n", m.Name)
-	args := make([]string, 0, 4+len(binaryMount)+5)
-	args = append(args, "run", "--rm", "-v", testdataRoot+":/output")
-	args = append(args, binaryMount...)
-	args = append(args, image,
+	args := []string{
+		"run", "--rm", "-v", testdataRoot + ":/output", "-v", binPath + ":" + imageHelper + ":ro",
+		image,
 		m.Source,
 		strings.Join(m.Profiles, ","),
 		strings.Join(featuresFromGoldens(m), ","),
 		m.EffectiveProfileMode(),
-	)
+	}
 	run := exec.Command("docker", args...) //nolint:gosec // paths come from CLI flags / manifest, not untrusted input
 	run.Stdout = os.Stdout
 	run.Stderr = os.Stderr
@@ -198,14 +198,18 @@ func imageGOARCH(image string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("docker image inspect %s: %w", image, err)
 	}
-	return scanClaimsGOARCH(strings.TrimSpace(string(out)))
+	return helperGOARCH(strings.TrimSpace(string(out)))
 }
 
-// scanClaimsGOARCH maps an image architecture, as Docker names it, to the
+// imageHelper is where the provisioning image runs this CLI from: its
+// entrypoint (corpus/Dockerfile).
+const imageHelper = "/work/bin/corpus"
+
+// helperGOARCH maps an image architecture, as Docker names it, to the
 // GOARCH the helper is built for. It accepts the architectures the corpus
 // Dockerfile builds for, whose JRE and pdfcpu steps refuse any other, so a
 // helper built here always has an image to run in.
-func scanClaimsGOARCH(arch string) (string, error) {
+func helperGOARCH(arch string) (string, error) {
 	switch arch {
 	case "amd64", "arm64":
 		return arch, nil
@@ -214,10 +218,10 @@ func scanClaimsGOARCH(arch string) (string, error) {
 	}
 }
 
-// scanClaimsBuildEnv is the environment the helper is built in: the caller's,
+// helperBuildEnv is the environment the helper is built in: the caller's,
 // with a static Linux target for goarch appended last, since os/exec keeps the
 // last value of a duplicated key.
-func scanClaimsBuildEnv(goarch string) []string {
+func helperBuildEnv(goarch string) []string {
 	return append(os.Environ(),
 		"GOOS=linux",
 		"GOARCH="+goarch,
@@ -225,17 +229,17 @@ func scanClaimsBuildEnv(goarch string) []string {
 	)
 }
 
-// buildScanClaimsBinary cross-compiles the `corpus scan-claims` helper for
+// buildHelperBinary cross-compiles this CLI, the provisioning image's helper, for
 // linux/goarch and returns the path to the resulting binary. The caller is
 // responsible for cleaning up the binary's parent directory.
-func buildScanClaimsBinary(goarch string) (string, error) {
-	dir, err := os.MkdirTemp("", "litho-scanclaims-")
+func buildHelperBinary(goarch string) (string, error) {
+	dir, err := os.MkdirTemp("", "litho-corpus-helper-")
 	if err != nil {
 		return "", fmt.Errorf("tempdir: %w", err)
 	}
-	binPath := filepath.Join(dir, "scan-claims")
+	binPath := filepath.Join(dir, "corpus")
 	cmd := exec.Command("go", "build", "-o", binPath, "./test/integration/cmd/corpus") //nolint:gosec // package path is fixed
-	cmd.Env = scanClaimsBuildEnv(goarch)
+	cmd.Env = helperBuildEnv(goarch)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -248,11 +252,11 @@ func buildScanClaimsBinary(goarch string) (string, error) {
 // provisioned reports whether the testdata root already carries a
 // provisioned corpus. The PDF tree must hold at least one PDF and every
 // declared golden directory must exist; a partial run (e.g. download
-// succeeded but VeraPDF crashed) returns false so the entrypoint resumes
+// succeeded but VeraPDF crashed) returns false so corpus provision resumes
 // the missing stages instead of skipping straight to scoring. Empty
 // manifests are not considered provisioned.
 //
-// One golden is legitimately empty. run-verapdf.sh buckets PDFs by the
+// One golden is legitimately empty. corpus provision buckets PDFs by the
 // profile each one claims in XMP, so an auto-mode corpus whose scan found
 // no claim at all (claims.csv present, zero rows) gets no VeraPDF report
 // and no cell in the baseline. Demanding a non-empty compliance directory
@@ -307,8 +311,8 @@ func hasReferences(testdataRoot string, refs *ReferenceSpec) bool {
 }
 
 // veraPDFGolden reports whether a feature's golden comes from the
-// entrypoint's single VeraPDF stage. Mirrors the guard in
-// test/integration/corpus/entrypoint.sh; keep the two in sync.
+// single VeraPDF stage of corpus provision. Mirrors its guard in
+// [provisioner.run]; keep the two in sync.
 func veraPDFGolden(feature string) bool {
 	switch feature {
 	case "compliance", "remediation", "remediation-aggressive":
@@ -349,7 +353,7 @@ func hasDockerfile(dir string) bool {
 }
 
 // featuresFromGoldens returns the sorted set of feature names declared
-// in the manifest's goldens map. The provisioning entrypoint uses this
+// in the manifest's goldens map. corpus provision uses this
 // list to skip golden generators a corpus does not need (e.g. PDF.js
 // text/metadata are pointless for the VeraPDF corpus).
 func featuresFromGoldens(m *Manifest) []string {
@@ -377,11 +381,11 @@ type popplerJob struct {
 const popplerBatchTimeout = 30 * time.Minute
 
 // popplerRenderScript renders every line of jobs.tsv, PDF, page and PNG root
-// separated by tabs, with the settings gen-render.sh draws the render goldens
+// separated by tabs, with the settings [renderPDFs] draws the render goldens
 // with: 72 dpi, the crop box, anti-aliased text and vectors, annotations
 // drawn. Keep the two in step. A page pdftoppm cannot render leaves no PNG
 // and its message in the root plus ".err"; 120 seconds bound one page, as
-// RENDER_TIMEOUT does there.
+// renderTimeout does there.
 const popplerRenderScript = `#!/bin/bash
 set -eu
 pdftoppm -v > /rr/poppler-version.txt 2>&1 || true

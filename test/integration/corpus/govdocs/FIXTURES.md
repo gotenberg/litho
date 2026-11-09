@@ -18,7 +18,6 @@ The Office corpora work as the libreoffice corpora do. Only the lists and the ha
 | `<format>/documents.json` | The documents, each `{"id", "path"}`: the ID `<thread>/<file>`, the path `<thread>.zip/<entry>`                                          |
 | `<format>/files.sha256`   | `<sha256>  <path>` for each document                                                                                                     |
 | `<format>/manifest.json`  | The corpus manifest; `references.source_pin` names `GOVDOCS_THREADS`                                                                     |
-| `<format>/download.sh`    | Installs the references from the testdata volume as the corpus PDFs the diff goldens come from                                           |
 | `corpus select`           | `make corpus-select CORPUS_NAME=govdocs/<format>`: rewrites the two lists above, reading the thread archives through HTTP range requests |
 | `corpus fetch`            | `make corpus-fetch CORPUS_NAME=govdocs`: reads the listed entries out of the thread archives with HTTP range requests, hash-checked      |
 

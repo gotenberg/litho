@@ -5,8 +5,7 @@ OpenDocument text documents scored by the `diff` feature (see `FEATURES.md`) aga
 | Path                                           | What it holds                                                                                                                                                               |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sources/<name>/`                              | One document each and an optional `options.json`                                                                                                                            |
-| `download.sh`                                  | Installs the references from the testdata volume as the corpus PDFs the provisioning image derives the diff goldens from                                                    |
-| `../../lib/libreoffice.sh`                     | `make office-references SOURCES=gotenberg FORMATS=odt`: converts every source with the pinned image into `testdata/gotenberg/odt/references/<name>.pdf` and `manifest.json` |
+| `corpus references`                            | `make office-references SOURCES=gotenberg FORMATS=odt`: converts every source with the pinned image into `testdata/gotenberg/odt/references/<name>.pdf` and `manifest.json` |
 | `../../../fixture/`, `../../../fixture/build/` | Read a source and its `options.json` (the `diff` feature, the builder); `make office-fixtures FORMATS=odt` writes `pdfs/<name>.pdf`                                         |
 
 A source's reference is named by its fixture ID: `<name>.pdf`.

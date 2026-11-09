@@ -2,7 +2,7 @@
 // converts the document of every <corpus>/sources/<name>/
 // directory to <corpus>/pdfs/<name>.pdf with pdf.Convert, at the options the
 // directory's options.json names (read through the fixture package, as the
-// diff feature of test/integration/cmd/corpus reads it and lib/libreoffice.sh
+// diff feature of test/integration/cmd/corpus reads it and corpus references
 // posts it to LibreOffice), and with the pinned fixture fonts alone, so two
 // machines write the same bytes. The libreoffice corpora are scored by the
 // diff feature but not built here: their documents are not committed.

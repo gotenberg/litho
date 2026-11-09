@@ -7,23 +7,15 @@ WeasyPrint's draw tests, extracted from the release `WEASYPRINT_VERSION` in `cor
 | `fixtures/`  | 315 JSON fixtures, `<module>__<test>.json`: the test name and source, whether WeasyPrint marks it `xfail`, the HTML, the expected rows, and the colour map        |
 | `resources/` | The files of WeasyPrint's `tests/resources/` the fixtures name (images, SVG, stylesheets), and `tests_ua.css`, the user agent stylesheet the tests are written to |
 | `ua.css`     | Prepended to every test by the feature: takes the margins a browser's user agent stylesheet adds back out (see the file and `FEATURES.md`)                        |
-| `extract.py` | The extraction script                                                                                                                                             |
 | `LICENSE`    | WeasyPrint's licence, copied from the release                                                                                                                     |
 
 The colour map is `PIXELS_BY_CHAR` of `tests/draw/__init__.py`, read from the release rather than restated, copied into each fixture so one file says all a test expects. A character whose colour is `null` (`z`) marks a pixel the test does not check.
 
 ## Extraction
 
-`make weasyprint-fixtures` downloads the GitHub source tarball of tag `v$WEASYPRINT_VERSION`, refuses it unless it hashes to `WEASYPRINT_SHA256`, unpacks it in a temporary directory and runs:
+`make weasyprint-fixtures` runs `corpus select --corpus=weasyprint`, which downloads the GitHub source tarball of tag `v$WEASYPRINT_VERSION`, refuses it unless it hashes to `WEASYPRINT_SHA256`, and reads the release from it (`--checkout` names an unpacked release instead).
 
-```bash
-python3 -I test/integration/corpus/weasyprint/extract.py \
-  \
-  test/integration/corpus/weasyprint/resources \
-  test/integration/testdata/fonts/weasyprint < WeasyPrint-tree > test/integration/corpus/weasyprint/fixtures
-```
-
-The script parses each `tests/draw/test_*.py` with Python's `ast` and keeps an `assert_pixels` call when both arguments are literal: a string constant, or a name bound once, in the module or the test function, to a string constant (WeasyPrint shares some grids between tests that way). A test with several calls yields one fixture per call, suffixed `_2`, `_3`. The test font, `weasyprint.otf`, goes to the gitignored font directory, where the target checks it against `WEASYPRINT_FONT_SHA256`; the other two formats of the same font are not used. The target then formats the fixtures with Prettier, which the repository's `make lint-prettier` holds JSON to.
+The command reads each `tests/draw/test_*.py`, enough of Python's grammar to find its assignments, test functions and calls, and keeps an `assert_pixels` call when both arguments are literal: a string constant, or a name bound once, in the module or the test function, to a string constant (WeasyPrint shares some grids between tests that way). A test with several calls yields one fixture per call, suffixed `_2`, `_3`. The test font, `weasyprint.otf`, goes to the gitignored font directory, checked against `WEASYPRINT_FONT_SHA256`; the other two formats of the same font are not used. The target then formats the fixtures with Prettier, which the repository's `make lint-prettier` holds JSON to.
 
 Of the 372 `assert_pixels` calls of release 70.0, 315 became fixtures:
 

@@ -39,5 +39,6 @@
   },
   "golden_overrides": {
     "text": "text-overrides.json"
-  }
+  },
+  "committed_pdfs": "pdfs"
 }

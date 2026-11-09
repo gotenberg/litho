@@ -1,7 +1,6 @@
 package fixture
 
 import (
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -146,36 +145,8 @@ func TestOptionNames_AreTheJSONNamesOfOptions(t *testing.T) {
 		name, _, _ := strings.Cut(typ.Field(i).Tag.Get("json"), ",")
 		tags = append(tags, name)
 	}
-	if !slices.Equal(tags, optionNames) {
-		t.Errorf("json names %v, optionNames %v", tags, optionNames)
-	}
-}
-
-// TestChromiumScript_ReadsTheSameSchema checks that chromium.sh, which reads
-// options.json with jq, accepts the keys this package accepts and wraps a
-// Markdown source in the same document.
-func TestChromiumScript_ReadsTheSameSchema(t *testing.T) {
-	t.Parallel()
-
-	data, err := os.ReadFile(filepath.Join("..", "corpus", "lib", "chromium.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	script := string(data)
-	_, rest, ok := strings.Cut(script, "\nKEYS='")
-	keys, _, ok2 := strings.Cut(rest, "'")
-	if !ok || !ok2 {
-		t.Fatal("chromium.sh declares no KEYS")
-	}
-	var got []string
-	if err := json.Unmarshal([]byte(keys), &got); err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(got, optionNames) {
-		t.Errorf("chromium.sh keys %v, optionNames %v", got, optionNames)
-	}
-	if !strings.Contains(script, "'"+MarkdownWrapper+"'") {
-		t.Error("chromium.sh wraps Markdown in another document than MarkdownWrapper")
+	if !slices.Equal(tags, OptionNames) {
+		t.Errorf("json names %v, OptionNames %v", tags, OptionNames)
 	}
 }
 

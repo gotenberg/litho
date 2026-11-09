@@ -95,25 +95,20 @@ WEASYPRINT := test/integration/corpus/weasyprint
 
 .PHONY: weasyprint-fixtures
 weasyprint-fixtures: ## Extract the weasyprint corpus fixtures from the WeasyPrint release test/integration/corpus/versions.env pins (tarball and test font hash-checked), and fetch the fixture fonts
-	@set -e; \
-	pin() { v="$$(printenv "$$1" || true)"; [ -n "$$v" ] || v="$$(sed -n "s/^$$1=//p" test/integration/corpus/versions.env)"; printf '%s' "$$v"; }; \
-	version="$$(pin WEASYPRINT_VERSION)"; sha="$$(pin WEASYPRINT_SHA256)"; font_sha="$$(pin WEASYPRINT_FONT_SHA256)"; \
-	tmp="$$(mktemp -d)"; trap 'rm -rf "$$tmp"' EXIT; \
-	curl -fsSL --retry 3 -o "$$tmp/weasyprint.tar.gz" "https://github.com/Kozea/WeasyPrint/archive/refs/tags/v$$version.tar.gz"; \
-	got="$$(shasum -a 256 "$$tmp/weasyprint.tar.gz" | cut -d ' ' -f 1)"; \
-	if [ "$$got" != "$$sha" ]; then echo "ERROR: WeasyPrint v$$version hashes to $$got, WEASYPRINT_SHA256 pins $$sha" >&2; exit 1; fi; \
-	mkdir "$$tmp/x"; tar -xzf "$$tmp/weasyprint.tar.gz" -C "$$tmp/x"; \
-	python3 -I $(WEASYPRINT)/extract.py "$$tmp/x/WeasyPrint-$$version" $(WEASYPRINT)/fixtures $(WEASYPRINT)/resources $(FIXTURE_FONTS)/weasyprint; \
-	got="$$(shasum -a 256 $(FIXTURE_FONTS)/weasyprint/weasyprint.otf | cut -d ' ' -f 1)"; \
-	if [ "$$got" != "$$font_sha" ]; then echo "ERROR: the WeasyPrint test font hashes to $$got, WEASYPRINT_FONT_SHA256 pins $$font_sha" >&2; exit 1; fi
+	go run ./test/integration/cmd/corpus select --corpus=weasyprint
 	npx prettier --write $(WEASYPRINT)/fixtures
 	go run ./test/integration/cmd/corpus fetch --corpus=fonts
+
+# comma and space spell the Make lists the corpus CLI takes comma-separated.
+comma := ,
+empty :=
+space := $(empty) $(empty)
 
 HTML_CORPORA := litho/html gotenberg/html
 
 .PHONY: html-references
 html-references: ## Rebuild the Chromium reference PDFs of the litho/html and gotenberg/html corpora with the Gotenberg image test/integration/corpus/versions.env pins (needs Docker). Vars: NAMES (space-separated sources, default all)
-	@set -e; for c in $(HTML_CORPORA); do $(CORPUS)/lib/chromium.sh $(CORPUS)/$$c $(NAMES); done
+	go run ./test/integration/cmd/corpus references --corpus=$(subst $(space),$(comma),$(HTML_CORPORA)) --names="$(NAMES)"
 
 .PHONY: html-fixtures
 html-fixtures: ## Rebuild the litho PDFs of the litho/html and gotenberg/html corpora from their sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first)
@@ -126,10 +121,7 @@ FORMATS ?= docx odt xlsx ods csv pptx odp doc xls ppt
 
 .PHONY: office-references
 office-references: ## Build the LibreOffice reference PDFs of the Office corpora into the testdata with the Gotenberg image test/integration/corpus/versions.env pins (needs Docker and make corpus-fetch). Vars: SOURCES, FORMATS (space-separated, default all), NAMES (space-separated references, default all)
-	@set -e; for s in $(SOURCES); do for f in $(FORMATS); do \
-		[ -f $(CORPUS)/$$s/$$f/manifest.json ] && jq -e .references $(CORPUS)/$$s/$$f/manifest.json > /dev/null || continue; \
-		$(CORPUS)/lib/libreoffice.sh $(CORPUS)/$$s/$$f $(OFFICE_TESTDATA)/$$s/$$f/sources $(OFFICE_TESTDATA)/$$s/$$f/references $(NAMES); \
-	done; done
+	go run ./test/integration/cmd/corpus references --corpus=$(subst $(space),$(comma),$(strip $(foreach s,$(SOURCES),$(foreach f,$(FORMATS),$(if $(wildcard $(CORPUS)/$(s)/$(f)/manifest.json),$(s)/$(f)))))) --names="$(NAMES)"
 
 .PHONY: office-fixtures
 office-fixtures: ## Rebuild the litho PDFs of the gotenberg Office corpora from their sources, with the fonts test/integration/corpus/versions.env pins (downloaded and hash-checked first). Vars: FORMATS (space-separated, default all)

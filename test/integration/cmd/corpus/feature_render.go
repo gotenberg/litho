@@ -15,14 +15,14 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
-// renderDPI is the resolution the render goldens are drawn at, mirroring
-// RENDER_DPI in corpus/lib/gen-render.sh: one pixel per default user space
+// renderDPI is the resolution the render goldens are drawn at by
+// [renderPDFs], which draws the goldens: one pixel per default user space
 // unit (ISO 32000-1, 8.3.2.3), so a page maps to device space by an integer
 // scale and a US Letter page is 612x792 pixels.
 const renderDPI = 72
 
 // renderMaxPages is how many leading pages of a PDF the goldens hold,
-// mirroring RENDER_MAX_PAGES in corpus/lib/gen-render.sh. Most fixtures are
+// as [renderPDFs] draws them. Most fixtures are
 // one page; three reach the page-level resources, inheritance and rotation a
 // later page carries without growing the goldens with every page of a long
 // document.
@@ -120,8 +120,8 @@ const metricRenderFailed = "render_failed"
 const metricRenderSizeMismatch = "render_size_mismatch"
 
 // renderFontsDir is the directory, under goldens/render, that holds the font
-// files poppler rendered the goldens with, mirroring the copy entrypoint.sh
-// makes of the image's poppler bundle.
+// files poppler rendered the goldens with, the copy [copyPopplerFonts] makes
+// of the image's poppler bundle.
 const renderFontsDir = "fonts"
 
 // pageRenderer renders one page (1-based) of an open document at dpi, with
@@ -268,7 +268,7 @@ func newRenderFeature() *renderFeature {
 	return &renderFeature{render: lithoRenderPage, goldens: make(map[string]*renderIndex)}
 }
 
-// renderIndex is the per-PDF index gen-render.sh writes next to the pages it
+// renderIndex is the per-PDF index [renderPDFs] writes next to the pages it
 // rendered.
 type renderIndex struct {
 	ID        string            `json:"id"`
@@ -277,7 +277,7 @@ type renderIndex struct {
 	Pages     []renderIndexPage `json:"pages"`
 	Error     string            `json:"error,omitempty"`
 	// HideAnnotations reports pages drawn without their annotations
-	// (RENDER_HIDE_ANNOTATIONS in gen-render.sh).
+	// (the diff goldens of the Office corpora).
 	HideAnnotations bool `json:"hide_annotations,omitempty"`
 }
 

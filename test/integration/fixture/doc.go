@@ -5,11 +5,9 @@
 // source, one document, for the LibreOffice route (litho/html's and each
 // gotenberg Office corpus's FIXTURES.md document the schema).
 //
-// Three readers convert a source and must agree on its options: the script
-// that posts the fields to Gotenberg for the reference (lib/chromium.sh,
-// lib/libreoffice.sh), the builder that writes litho's committed PDF
-// (fixture/htmlbuild, fixture/build), and the diff feature of
-// test/integration/cmd/corpus, which scores litho against the reference. The
-// two Go readers go through this package; the scripts read the same keys
-// with jq.
+// Three readers convert a source and must agree on its options: corpus
+// references, which posts the fields to Gotenberg for the reference, the
+// builder that writes litho's committed PDF (fixture/htmlbuild,
+// fixture/build), and the diff feature of test/integration/cmd/corpus, which
+// scores litho against the reference. All three go through this package.
 package fixture

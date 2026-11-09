@@ -14,42 +14,42 @@ import (
 // archive and refuse any other.
 var imageArchitectures = []string{"amd64", "arm64"}
 
-// TestScanClaimsGOARCHFollowsTheImage pins that the scan-claims helper is
+// TestHelperGOARCHFollowsTheImage pins that the provisioning helper is
 // built for the architecture the image runs, not for a fixed one.
 //
 // It was built for linux/amd64 whatever the image, on the reasoning that the
 // verapdf/cli base image is amd64 only. The helper does not run in that
 // image: it runs in the node image, which docker build makes native, so on an
 // arm64 host every auto-mode provisioning ran it under emulation.
-func TestScanClaimsGOARCHFollowsTheImage(t *testing.T) {
+func TestHelperGOARCHFollowsTheImage(t *testing.T) {
 	t.Parallel()
 
 	for _, arch := range imageArchitectures {
-		got, err := scanClaimsGOARCH(arch)
+		got, err := helperGOARCH(arch)
 		if err != nil {
-			t.Errorf("scanClaimsGOARCH(%q): %v", arch, err)
+			t.Errorf("helperGOARCH(%q): %v", arch, err)
 			continue
 		}
 		if got != arch {
-			t.Errorf("scanClaimsGOARCH(%q) = %q, want the image's own architecture", arch, got)
+			t.Errorf("helperGOARCH(%q) = %q, want the image's own architecture", arch, got)
 		}
 	}
 	// The Dockerfile refuses these, so no image of them can exist; a helper
 	// built for one would be a guess.
 	for _, arch := range []string{"", "arm", "386", "s390x"} {
-		if got, err := scanClaimsGOARCH(arch); err == nil {
-			t.Errorf("scanClaimsGOARCH(%q) = %q, want an error", arch, got)
+		if got, err := helperGOARCH(arch); err == nil {
+			t.Errorf("helperGOARCH(%q) = %q, want an error", arch, got)
 		}
 	}
 }
 
-// TestScanClaimsBuildTargetsLinux pins the rest of the helper's build
+// TestHelperBuildTargetsLinux pins the rest of the helper's build
 // environment: a static Linux binary, since the image carries no Go toolchain
 // and no C library the helper could link against at run time.
-func TestScanClaimsBuildTargetsLinux(t *testing.T) {
+func TestHelperBuildTargetsLinux(t *testing.T) {
 	t.Parallel()
 
-	env := scanClaimsBuildEnv("arm64")
+	env := helperBuildEnv("arm64")
 	for _, want := range []string{"GOOS=linux", "GOARCH=arm64", "CGO_ENABLED=0"} {
 		if !slices.Contains(env, want) {
 			t.Errorf("build environment lacks %s: %q", want, env)

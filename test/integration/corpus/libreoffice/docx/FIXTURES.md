@@ -2,14 +2,13 @@
 
 DOCX documents scored by the `diff` feature (see `FEATURES.md`) against LibreOffice as Gotenberg's LibreOffice route prints them: the image `GOTENBERG_IMAGE` in `corpus/versions.env` pins (`gotenberg/gotenberg:9.0.0`, LibreOffice 26.8.2.2), route `/forms/libreoffice/convert`. A selection of LibreOffice's Writer test documents at the commit `LIBREOFFICE_CORE_COMMIT` pins, of which only the list and the hashes are committed; Gotenberg's own test documents are the `gotenberg/docx` corpus. The references are built on the host and never committed.
 
-| Path                       | What it holds                                                                                                                                                                     |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `documents.json`           | The 350 LibreOffice test documents, each by its ID, `<dir>/<file>.docx` (`ooxmlexport/tdf123.docx`)                                                                               |
-| `files.sha256`             | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 350 documents and `COPYING.MPL`                                                                                   |
-| `corpus select`            | Selects the documents from a LibreOffice core checkout and writes the two files above                                                                                             |
-| `corpus fetch`             | `make corpus-fetch CORPUS_NAME=libreoffice/docx`: downloads each listed file at the pinned commit into `testdata/libreoffice/docx/sources/`, refusing one whose hash differs      |
-| `../../lib/libreoffice.sh` | `make office-references SOURCES=libreoffice FORMATS=docx`: converts every source with the pinned image into `testdata/libreoffice/docx/references/<name>.pdf` and `manifest.json` |
-| `download.sh`              | Installs the references from the testdata volume as the corpus PDFs the provisioning image derives the diff goldens from                                                          |
+| Path                | What it holds                                                                                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `documents.json`    | The 350 LibreOffice test documents, each by its ID, `<dir>/<file>.docx` (`ooxmlexport/tdf123.docx`)                                                                               |
+| `files.sha256`      | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 350 documents and `COPYING.MPL`                                                                                   |
+| `corpus select`     | Selects the documents from a LibreOffice core checkout and writes the two files above                                                                                             |
+| `corpus fetch`      | `make corpus-fetch CORPUS_NAME=libreoffice/docx`: downloads each listed file at the pinned commit into `testdata/libreoffice/docx/sources/`, refusing one whose hash differs      |
+| `corpus references` | `make office-references SOURCES=libreoffice FORMATS=docx`: converts every source with the pinned image into `testdata/libreoffice/docx/references/<name>.pdf` and `manifest.json` |
 
 A source's reference is named by its ID with `/` written `__`: `ooxmlexport__tdf123.docx.pdf`.
 
@@ -22,7 +21,7 @@ go run ./test/integration/cmd/corpus init --corpus=libreoffice/docx # the diff g
 go run ./test/integration/cmd/corpus run --corpus=libreoffice/docx --feature=diff
 ```
 
-`libreoffice.sh` records, per reference, the image, the LibreOffice core commit and the SHA-256 of the source, of its `options.json` and of the PDF, and lists the sources the route refused under `failed`. Before scoring, the cell checks every fixture against that record and refuses the run, naming `make office-references SOURCES=libreoffice FORMATS=docx`, when a reference was built from another pin, from a source or options that changed since, or is missing; and, naming the directories to remove and re-provision, when the provisioned `pdfs/` the goldens were made from are not those references. The goldens are drawn without annotations (`pdftoppm -hide-annotations`), and litho's pages too: LibreOffice exports comments as notes without an appearance, whose icon is the viewer's own, and form fields with appearances in fonts it does not embed. The text goldens never held them.
+`corpus references` records, per reference, the image, the LibreOffice core commit and the SHA-256 of the source, of its `options.json` and of the PDF, and lists the sources the route refused under `failed`. Before scoring, the cell checks every fixture against that record and refuses the run, naming `make office-references SOURCES=libreoffice FORMATS=docx`, when a reference was built from another pin, from a source or options that changed since, or is missing; and, naming the directories to remove and re-provision, when the provisioned `pdfs/` the goldens were made from are not those references. The goldens are drawn without annotations (`pdftoppm -hide-annotations`), and litho's pages too: LibreOffice exports comments as notes without an appearance, whose icon is the viewer's own, and form fields with appearances in fonts it does not embed. The text goldens never held them.
 
 ## How the documents were chosen
 

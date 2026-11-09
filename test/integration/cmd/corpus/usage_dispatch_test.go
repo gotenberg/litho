@@ -22,7 +22,7 @@ var helpAliases = map[string]bool{"-h": true, "--help": true, "help": true}
 // test was written, the synopsis read `<init|run|baseline|check>` while the
 // block beneath it and the switch both carried five, so the tool contradicted
 // itself two lines apart. `scan-claims` is the one that went missing, and it is
-// the subcommand the provisioning Docker entrypoint actually invokes.
+// the subcommand provisioning ran in the image.
 //
 // Both directions are checked for both lists: a subcommand the usage never
 // names is one nobody finds, and a name the usage invents sends a reader to

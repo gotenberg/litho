@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 )
 
@@ -24,28 +23,11 @@ func runMain() int {
 	defer stop()
 	context.AfterFunc(ctx, stop)
 
-	// Multi-call dispatch: when argv[0]'s basename matches a
-	// subcommand, treat the program as that subcommand directly. The
-	// provisioning Docker entrypoint cross-compiles this binary and
-	// bind-mounts it at /work/bin/scan-claims, then invokes it as
-	// `scan-claims --pdfs ...`. Without this dispatch the flag parser
-	// would treat `--pdfs` as an unknown subcommand.
-	if cmd := subcommandFromArgv0(); cmd != "" {
-		return dispatch(ctx, cmd, os.Args[1:])
-	}
-
 	if len(os.Args) < 2 {
 		printUsage(os.Stderr)
 		return 2
 	}
 	return dispatch(ctx, os.Args[1], os.Args[2:])
-}
-
-func subcommandFromArgv0() string {
-	if filepath.Base(os.Args[0]) == "scan-claims" {
-		return "scan-claims"
-	}
-	return ""
 }
 
 func dispatch(ctx context.Context, cmd string, args []string) int {
@@ -64,6 +46,10 @@ func dispatch(ctx context.Context, cmd string, args []string) int {
 		return runCheck(ctx, args)
 	case "scan-claims":
 		return runScanClaims(ctx, args)
+	case "references":
+		return runReferences(ctx, args)
+	case "provision":
+		return runProvision(ctx, args)
 	case "versions":
 		return runVersions(args)
 	case "tools":
@@ -84,16 +70,18 @@ func dispatch(ctx context.Context, cmd string, args []string) int {
 // the real text instead of a rebuilt copy of it. See
 // [TestUsageNamesEveryDispatchableSubcommand].
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: corpus <fetch|select|init|run|baseline|check|scan-claims|versions|tools> [flags]")
+	fmt.Fprintln(w, "Usage: corpus <fetch|select|init|run|baseline|check|references|scan-claims|provision|versions|tools> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  fetch         Download the fixture fonts and the files of the host-fetched corpora (--corpus=poi,wpt; --jobs=N)")
 	fmt.Fprintln(w, "  select        Write a corpus's lists from a checkout of its source (--corpus=poi/docx --checkout=DIR)")
-	fmt.Fprintln(w, "  init          Provision corpora via Docker (downloads PDFs and goldens)")
+	fmt.Fprintln(w, "  references    Build the LibreOffice and Chromium references with the pinned Gotenberg image (--corpus, --names)")
+	fmt.Fprintln(w, "  init          Provision corpora: their PDFs on the host, their goldens via Docker")
 	fmt.Fprintln(w, "  run           Compare litho against golden references across the matrix")
 	fmt.Fprintln(w, "  baseline      Run the matrix and write the per-cell match counts to a baseline file")
 	fmt.Fprintln(w, "  check         Run the matrix and fail if any cell regressed against the baseline")
 	fmt.Fprintln(w, "  scan-claims   Emit a claims.csv mapping each PDF to its claimed profile")
+	fmt.Fprintln(w, "  provision     Derive a corpus's goldens inside the provisioning image (run by init)")
 	fmt.Fprintln(w, "  versions      Print the pinned tool and source versions (--build-args: as docker build arguments)")
 	fmt.Fprintln(w, "  tools         Compare the local verapdf, node, java, qpdf, pdfsig and pikepdf with the pins")
 	fmt.Fprintln(w, "")

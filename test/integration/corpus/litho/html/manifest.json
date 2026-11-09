@@ -7,5 +7,6 @@
   },
   "goldens": {
     "diff": "goldens/diff"
-  }
+  },
+  "committed_pdfs": "references"
 }

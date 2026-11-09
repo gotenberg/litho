@@ -56,7 +56,7 @@ func veraEmpty() map[string]bool {
 // TestProvisionedAcceptsClaimlessAutoCorpus pins that an auto-mode corpus whose
 // scan found no profile claim counts as provisioned.
 //
-// run-verapdf.sh buckets PDFs by the profile each claims in XMP. A corpus
+// corpus provision buckets PDFs by the profile each claims in XMP. A corpus
 // whose PDFs claim none gets a claims.csv with zero rows, and its three
 // VeraPDF golden directories stay empty forever. Requiring them to be
 // non-empty marked such a corpus unprovisioned on every run, and `make

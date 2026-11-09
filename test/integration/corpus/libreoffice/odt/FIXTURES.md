@@ -2,11 +2,10 @@
 
 OpenDocument text documents scored by the `diff` feature (see `FEATURES.md`) against LibreOffice as Gotenberg's LibreOffice route prints them: the image `GOTENBERG_IMAGE` in `corpus/versions.env` pins (`gotenberg/gotenberg:9.0.0`, LibreOffice 26.8.2.2), route `/forms/libreoffice/convert`. A selection of LibreOffice's Writer test documents at the commit `LIBREOFFICE_CORE_COMMIT` pins, of which only the list and the hashes are committed; Gotenberg's own test documents are the `gotenberg/odt` corpus. The references are built on the host and never committed. The corpus works as the libreoffice/docx corpus does: its `FIXTURES.md` documents the scripts, the provisioning, the reference checks and the fonts, which apply here with `odt` for `docx` (`make corpus-fetch CORPUS_NAME=libreoffice/odt`, `make office-references SOURCES=libreoffice FORMATS=odt`).
 
-| Path             | What it holds                                                                                         |
-| ---------------- | ----------------------------------------------------------------------------------------------------- |
-| `documents.json` | The 150 LibreOffice test documents, each by its ID, `<dir>/<file>.odt` (`odfexport/tdf123.odt`)       |
-| `files.sha256`   | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 150 documents and `COPYING.MPL`       |
-| `download.sh`    | Installs the references from the testdata volume as the corpus PDFs the diff goldens are derived from |
+| Path             | What it holds                                                                                   |
+| ---------------- | ----------------------------------------------------------------------------------------------- |
+| `documents.json` | The 150 LibreOffice test documents, each by its ID, `<dir>/<file>.odt` (`odfexport/tdf123.odt`) |
+| `files.sha256`   | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 150 documents and `COPYING.MPL` |
 
 ## How the documents were chosen
 

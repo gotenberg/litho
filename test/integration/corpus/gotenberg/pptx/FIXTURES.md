@@ -5,8 +5,7 @@ PresentationML presentations scored by the `diff` feature (see `FEATURES.md`) ag
 | Path                                           | What it holds                                                                                                                                                                 |
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sources/<name>/`                              | One document each and an optional `options.json`                                                                                                                              |
-| `download.sh`                                  | Installs the references from the testdata volume as the corpus PDFs the provisioning image derives the diff goldens from                                                      |
-| `../../lib/libreoffice.sh`                     | `make office-references SOURCES=gotenberg FORMATS=pptx`: converts every source with the pinned image into `testdata/gotenberg/pptx/references/<name>.pdf` and `manifest.json` |
+| `corpus references`                            | `make office-references SOURCES=gotenberg FORMATS=pptx`: converts every source with the pinned image into `testdata/gotenberg/pptx/references/<name>.pdf` and `manifest.json` |
 | `../../../fixture/`, `../../../fixture/build/` | Read a source and its `options.json` (the `diff` feature, the builder); `make office-fixtures FORMATS=pptx` writes `pdfs/<name>.pdf`                                          |
 
 A source's reference is named by its fixture ID: `<name>.pdf`.
@@ -34,7 +33,7 @@ From Gotenberg's `test/corpus/testdata/office/` (MIT licence).
 
 ## Per-fixture options
 
-A source converts at the route's defaults unless its directory holds `options.json`, a JSON object whose keys are form fields of Gotenberg's LibreOffice route (`pkg/modules/libreoffice/routes.go`), spelt as the route spells them. `libreoffice.sh` posts each key as the form field of the same name (with `jq`); the `diff` feature and the builder map it to `pdf.With*` options through `fixture.LoadOffice`. A key outside the table, or one spelt in another case, fails all three. The fetched presentations take no options. The odp corpus reads the same table.
+A source converts at the route's defaults unless its directory holds `options.json`, a JSON object whose keys are form fields of Gotenberg's LibreOffice route (`pkg/modules/libreoffice/routes.go`), spelt as the route spells them. `corpus references` posts each key as the form field of the same name; the `diff` feature and the builder map it to `pdf.With*` options through `fixture.LoadOffice`. A key outside the table, or one spelt in another case, fails all three. The fetched presentations take no options. The odp corpus reads the same table.
 
 | Key                  | Type           | Default                         | litho option                                                                      |
 | -------------------- | -------------- | ------------------------------- | --------------------------------------------------------------------------------- |

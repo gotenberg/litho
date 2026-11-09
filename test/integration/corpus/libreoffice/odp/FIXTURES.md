@@ -6,7 +6,6 @@ OpenDocument presentations scored by the `diff` feature (see `FEATURES.md`) agai
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `documents.json` | The 170 LibreOffice test presentations, each by its ID, `<dir>/<file>` (`sd/tdf123.odp`, `sd/tdf456.fodp`, `sd-data/a.odp`, `sd-data/b.fodp`) |
 | `files.sha256`   | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 170 presentations and `COPYING.MPL`                                           |
-| `download.sh`    | Installs the references from the testdata volume as the corpus PDFs the diff goldens are derived from                                         |
 
 A fetched presentation's ID names the directory whose tests it comes from: `sd/<file>` is `sd/qa/unit/data/odp/<file>`, which holds the packaged and the flat presentations alike, and `sd-data/<file>` is `sd/qa/unit/data/<file>`, the Impress test directory itself.
 

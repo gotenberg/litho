@@ -15,8 +15,8 @@ import (
 	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
-// referenceManifestName is the record lib/libreoffice.sh writes beside the
-// references it builds.
+// referenceManifestName is the record corpus references writes beside the
+// LibreOffice references it builds.
 const referenceManifestName = "manifest.json"
 
 // referenceManifest is <testdata>/<corpus>/<references dir>/manifest.json:
@@ -33,7 +33,7 @@ type referenceManifest struct {
 // the fetched directory names it, the SHA-256 of the source, of its
 // options.json ("" without one) and of the PDF, the image that converted it,
 // and the pin the fetched documents come from with its value. CoreCommit is
-// the LibreOffice core commit of a record lib/libreoffice.sh wrote before it
+// the LibreOffice core commit of a record written before the builder
 // recorded the pin, read as the value of LIBREOFFICE_CORE_COMMIT.
 type referenceRecord struct {
 	Source         string `json:"source"`
@@ -41,9 +41,9 @@ type referenceRecord struct {
 	OptionsSHA256  string `json:"options_sha256"`
 	PDFSHA256      string `json:"pdf_sha256"`
 	Image          string `json:"image"`
-	SourcePin      string `json:"source_pin"`
-	SourcePinValue string `json:"source_pin_value"`
-	CoreCommit     string `json:"libreoffice_core_commit"`
+	SourcePin      string `json:"source_pin,omitempty"`
+	SourcePinValue string `json:"source_pin_value,omitempty"`
+	CoreCommit     string `json:"libreoffice_core_commit,omitempty"`
 }
 
 // pinValue returns the value of the pin name the record was built at, ""
@@ -60,9 +60,12 @@ func (r referenceRecord) pinValue(name string) string {
 
 // referenceFailure is a source the route refused, with its answer.
 type referenceFailure struct {
-	Source string `json:"source"`
-	Status string `json:"status"`
-	Answer string `json:"answer"`
+	Source        string `json:"source"`
+	SourceSHA256  string `json:"source_sha256"`
+	OptionsSHA256 string `json:"options_sha256"`
+	Image         string `json:"image"`
+	Status        string `json:"status"`
+	Answer        string `json:"answer"`
 }
 
 // maxReferenceProblems bounds the problems a refusal lists before it counts

@@ -1,7 +1,6 @@
 package fixture
 
 import (
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -129,33 +128,6 @@ func TestLoadOffice_MapsEveryExtension(t *testing.T) {
 	}
 }
 
-// TestLibreOfficeScript_ReadsTheSameExtensions checks that lib/libreoffice.sh
-// accepts a committed source of every extension this package maps, and no
-// other.
-func TestLibreOfficeScript_ReadsTheSameExtensions(t *testing.T) {
-	t.Parallel()
-
-	data, err := os.ReadFile(filepath.Join("..", "corpus", "lib", "libreoffice.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, rest, ok := strings.Cut(string(data), "\nEXTENSIONS='")
-	list, _, ok2 := strings.Cut(rest, "'")
-	if !ok || !ok2 {
-		t.Fatal("libreoffice.sh declares no EXTENSIONS")
-	}
-	got := strings.Fields(list)
-	var want []string
-	for ext := range officeFormats {
-		want = append(want, strings.TrimPrefix(ext, "."))
-	}
-	slices.Sort(got)
-	slices.Sort(want)
-	if !slices.Equal(got, want) {
-		t.Errorf("libreoffice.sh extensions %v, officeFormats %v", got, want)
-	}
-}
-
 func TestOfficeOptionNames_MatchTheJSONNames(t *testing.T) {
 	t.Parallel()
 
@@ -165,36 +137,8 @@ func TestOfficeOptionNames_MatchTheJSONNames(t *testing.T) {
 		name, _, _ := strings.Cut(ty.Field(i).Tag.Get("json"), ",")
 		tags = append(tags, name)
 	}
-	if !slices.Equal(tags, officeOptionNames) {
-		t.Errorf("json names %v, officeOptionNames %v", tags, officeOptionNames)
-	}
-}
-
-// TestLibreOfficeScript_ReadsTheSameSchema checks that lib/libreoffice.sh,
-// which reads options.json with jq, accepts the keys this package accepts
-// and posts each of them.
-func TestLibreOfficeScript_ReadsTheSameSchema(t *testing.T) {
-	t.Parallel()
-
-	data, err := os.ReadFile(filepath.Join("..", "corpus", "lib", "libreoffice.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	script := string(data)
-	_, rest, ok := strings.Cut(script, "\nKEYS='")
-	keys, _, ok2 := strings.Cut(rest, "'")
-	if !ok || !ok2 {
-		t.Fatal("libreoffice.sh declares no KEYS")
-	}
-	var got []string
-	if err := json.Unmarshal([]byte(keys), &got); err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(got, officeOptionNames) {
-		t.Errorf("libreoffice.sh keys %v, officeOptionNames %v", got, officeOptionNames)
-	}
-	if !strings.Contains(script, `for key in $(jq -r '.[]' <<< "$KEYS"); do`) {
-		t.Error("libreoffice.sh does not post every key of KEYS")
+	if !slices.Equal(tags, OfficeOptionNames) {
+		t.Errorf("json names %v, OfficeOptionNames %v", tags, OfficeOptionNames)
 	}
 }
 

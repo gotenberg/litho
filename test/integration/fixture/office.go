@@ -44,11 +44,11 @@ type OfficeOptions struct {
 	ExportNotesPages bool `json:"exportNotesPages,omitempty"`
 }
 
-// officeOptionNames are the keys of an Office options file, the JSON names
+// OfficeOptionNames are the keys of an Office options file, the JSON names
 // of [OfficeOptions].
 //
 //nolint:gochecknoglobals // static list of the schema's keys
-var officeOptionNames = []string{"password", "landscape", "nativePages", "nativeBookmarks", "paperWidth", "paperHeight", "singlePage", "exportHiddenSlides", "exportNotesPages"}
+var OfficeOptionNames = []string{"password", "landscape", "nativePages", "nativeBookmarks", "paperWidth", "paperHeight", "singlePage", "exportHiddenSlides", "exportNotesPages"}
 
 // officeFormats maps the extension of an Office document to the format it
 // converts from, as the converter's extensions do: a flat ODT is an
@@ -59,7 +59,7 @@ var officeOptionNames = []string{"password", "landscape", "nativePages", "native
 // OpenDocument presentation. A Word, Excel or PowerPoint 97 to 2003 file
 // converts from a format litho does not read yet, named by its extension,
 // which pdf.Convert refuses: its cell scores a convert error until it
-// does. A lib/libreoffice.sh EXTENSIONS entry each.
+// does.
 //
 //nolint:gochecknoglobals // static extension table
 var officeFormats = map[string]pdf.Format{
@@ -158,7 +158,7 @@ func LoadOffice(path string) (*Office, error) {
 // field, trailing data or a value the route refuses is an error.
 func ParseOfficeOptions(data []byte) (OfficeOptions, error) {
 	var o OfficeOptions
-	if err := decodeStrict(data, officeOptionNames, &o); err != nil {
+	if err := decodeStrict(data, OfficeOptionNames, &o); err != nil {
 		return OfficeOptions{}, err
 	}
 	return o, o.validate()

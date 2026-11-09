@@ -22,8 +22,8 @@ import (
 	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
-// diffDPI is the resolution the diff goldens are drawn at, mirroring
-// gen-render.sh: one pixel per point.
+// diffDPI is the resolution the diff goldens are drawn at, that of the render
+// goldens: one pixel per point.
 const diffDPI = renderDPI
 
 // The layout score's tolerance of position (see [layoutScore]), in pixels

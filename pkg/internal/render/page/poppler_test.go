@@ -22,7 +22,7 @@ import (
 //	    -r 72 -cropbox -aa yes -aaVector yes -singlefile -png /in/$(basename $f) /in/$(basename $f .pdf)
 //	done
 //
-// the flags gen-render.sh draws the corpus goldens with. A fixture with a
+// the flags the corpus render goldens are drawn with. A fixture with a
 // substitute program is written with it as fonts/<name>.ttf, and drawn with
 // poppler finding no other font, so both draw the same substitute. The
 // pdftoppm on the image's PATH is a wrapper that points fontconfig at the

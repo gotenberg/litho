@@ -41,6 +41,7 @@ var selectors = map[string]selector{
 	"pdfcpu":      selectPDFCPU,
 	"facturx":     selectFacturX,
 	"pdfjs":       selectPDFJS,
+	"weasyprint":  selectWeasyPrint,
 }
 
 // plainName is a file name every shell and form field carries intact.
@@ -78,7 +79,7 @@ func selectCorpus(ctx context.Context, name, checkout string) error {
 	if !ok {
 		return fmt.Errorf("no selector for the %s corpora", source)
 	}
-	if checkout == "" && source != "govdocs" {
+	if checkout == "" && source != "govdocs" && source != "weasyprint" {
 		return errors.New("--checkout is required")
 	}
 	pins, err := loadPins()

@@ -6,7 +6,6 @@ OpenDocument spreadsheets scored by the `diff` feature (see `FEATURES.md`) again
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `documents.json` | The 256 LibreOffice test spreadsheets, each by its ID, `<module>/<file>` (`sc/tdf123.ods`, `sc/tdf456.fods`, `chart2/tdf789.ods`) |
 | `files.sha256`   | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 256 spreadsheets and `COPYING.MPL`                                |
-| `download.sh`    | Installs the references from the testdata volume as the corpus PDFs the diff goldens are derived from                             |
 
 A fetched spreadsheet's ID names the module whose tests it comes from and its extension the directory: `sc/<file>.ods` is `sc/qa/unit/data/ods/<file>.ods`, `sc/<file>.fods` is `sc/qa/unit/data/fods/<file>.fods`, `chart2/<file>.ods` is `chart2/qa/extras/data/ods/<file>.ods`.
 

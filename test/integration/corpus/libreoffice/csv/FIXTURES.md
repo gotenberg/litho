@@ -4,11 +4,10 @@ Comma-separated values files scored by the `diff` feature (see `FEATURES.md`) ag
 
 The route loads a CSV with LibreOffice's import filter options `44/59/9,34,76,1,,0,false,true,true,false`: fields split at commas, semicolons and tabs alike, quoted with `"`, read as UTF-8, every column's type detected, numbers and dates detected, quoted numbers still numbers, spaces kept. It then turns the page header off on every page style of the document, since Calc's default header prints the sheet name, which is the upload's file name; the footer keeps Calc's default, the page number. Every reference prints on Letter paper, LibreOffice's default for the image's locale.
 
-| Path             | What it holds                                                                                  |
-| ---------------- | ---------------------------------------------------------------------------------------------- |
-| `documents.json` | The 9 LibreOffice test files, each by its ID, `sc/<file>.csv` (`sc/tdf148423.csv`)             |
-| `files.sha256`   | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 9 files and `COPYING.MPL`      |
-| `download.sh`    | Installs the references from the testdata volume as the corpus PDFs the diff goldens come from |
+| Path             | What it holds                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| `documents.json` | The 9 LibreOffice test files, each by its ID, `sc/<file>.csv` (`sc/tdf148423.csv`)        |
+| `files.sha256`   | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 9 files and `COPYING.MPL` |
 
 `sc/<file>.csv` is `sc/qa/unit/data/csv/<file>.csv`.
 

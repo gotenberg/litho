@@ -15,7 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
-// kositReport mirrors the JSON shape emitted by lib/run-kosit.sh.
+// kositReport is the JSON shape of the KoSIT goldens corpus provision writes.
 type kositReport struct {
 	Jobs []kositJob `json:"jobs"`
 }
