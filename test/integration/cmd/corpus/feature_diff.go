@@ -247,7 +247,10 @@ type diffFeature struct {
 	// corpus whose references git versions. corpus names the corpus in the
 	// commands a stale reference asks for. office reads every source as an
 	// Office document.
-	refs         *ReferenceSpec
+	refs *ReferenceSpec
+	// unreferenced names the fixtures no reference is built for: a build
+	// corpus's hostile documents, which only the robustness feature reads.
+	unreferenced map[string]bool
 	testdataRoot string
 	corpus       string
 	office       bool
@@ -278,6 +281,13 @@ func (f *diffFeature) GoldenSource() string {
 func (f *diffFeature) SetManifest(m *Manifest) {
 	f.mu.Lock()
 	f.refs, f.testdataRoot, f.corpus, f.office = m.References, m.TestdataRoot(), m.Name, m.References != nil
+	f.unreferenced = nil
+	if format, err := buildFormat(m); err == nil && isBuildCorpus(m) {
+		f.unreferenced = map[string]bool{}
+		for _, h := range hostileDocs(format) {
+			f.unreferenced[h.name] = true
+		}
+	}
 	f.mu.Unlock()
 }
 

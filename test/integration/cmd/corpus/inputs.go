@@ -18,8 +18,8 @@ var errInputsUnfetched = errors.New("sources not provisioned")
 // [InputSpec], in ID order, with the manifest's skips applied.
 func loadInputFixtures(m *Manifest) ([]Fixture, error) {
 	in := m.Inputs
-	if in.List == "" && in.Glob == "" {
-		return nil, errors.New("manifest inputs must set list, glob or both")
+	if in.List == "" && in.Glob == "" && in.Build == "" {
+		return nil, errors.New("manifest inputs must set list, glob or build")
 	}
 	var fixtures []Fixture
 	if in.Glob != "" {
@@ -40,11 +40,18 @@ func loadInputFixtures(m *Manifest) ([]Fixture, error) {
 		}
 		fixtures = append(fixtures, listed...)
 	}
+	if in.Build != "" {
+		built, err := builtInputFixtures(m)
+		if err != nil {
+			return nil, err
+		}
+		fixtures = append(fixtures, built...)
+	}
 	seen := make(map[string]bool, len(fixtures))
 	for i := range fixtures {
 		id := fixtures[i].ID
 		if seen[id] {
-			return nil, fmt.Errorf("fixture %q is both globbed and listed", id)
+			return nil, fmt.Errorf("fixture %q is named twice by the inputs", id)
 		}
 		seen[id] = true
 		fixtures[i].SkipReason = m.Skips[id]

@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="8" uniqueCount="8"><si><t>Merged title across A1:F2</t></si><si><t>Wrapped text in a merged block A4:C7 grows over several lines and stays inside the merged area borders.</t></si><si><t>Vertical</t></si><si><t>Hidden value under merge</t></si><si><t>visible</t></si><si><t>HIDDEN BY MERGE</t></si><si><t>Merged row spanning C13:F13 with centred text</t></si><si><t>Merged across a manual page break</t></si></sst>

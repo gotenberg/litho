@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="6" uniqueCount="6"><si><t>2-color min/max white-green</t></si><si><t>3-color red-yellow-green pct50</t></si><si><t>3-color num 0/50/100 blue</t></si><si><t>2-color percent 10..90 theme</t></si><si><t>3-color formula midpoint</t></si><si><t>Heat map 10x10</t></si></sst>

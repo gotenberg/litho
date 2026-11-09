@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<invoice xmlns="urn:litho:invoice"><customer>Northwind Traders</customer><number>INV-2026-001</number><date>2026-02-01T00:00:00</date><total>1,234.50</total><approved>true</approved></invoice>

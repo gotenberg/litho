@@ -116,7 +116,7 @@ html-fixtures: ## Rebuild the litho PDFs of the litho/html and gotenberg/html co
 	@set -e; for c in $(HTML_CORPORA); do go run ./test/integration/fixture/htmlbuild -corpus $(CORPUS)/$$c -fonts $(FIXTURE_FONTS); done
 
 OFFICE_TESTDATA := test/integration/testdata
-SOURCES ?= libreoffice gotenberg poi openxmlsdk govdocs
+SOURCES ?= libreoffice gotenberg litho poi openxmlsdk govdocs
 FORMATS ?= docx odt xlsx ods csv pptx odp doc xls ppt
 
 .PHONY: office-references
@@ -174,6 +174,10 @@ corpus-fetch: ## Download the fixture fonts and the files of the host-fetched co
 corpus-select: ## Rewrite the lists of one corpus from a checkout of its source at its pin, then format them. Vars: CORPUS_NAME (one corpus), CHECKOUT (none for govdocs)
 	go run ./test/integration/cmd/corpus select --corpus=$(CORPUS_NAME) $(if $(CHECKOUT),--checkout=$(CHECKOUT))
 	npx prettier --write test/integration/corpus/$(CORPUS_NAME)/*.json
+
+.PHONY: corpus-build
+corpus-build: ## Zip the litho Office corpora's documents from their committed parts and generate their hostile documents into the testdata. Vars: CORPUS_NAME (comma-separated, default every litho Office corpus)
+	go run ./test/integration/cmd/corpus build $(if $(CORPUS_NAME),--corpus=$(CORPUS_NAME))
 
 .PHONY: corpus-init
 corpus-init: ## Provision missing corpora via Docker at the versions test/integration/corpus/versions.env pins (an env var of the same name overrides one). Vars: CORPUS_NAME

@@ -84,10 +84,11 @@ var errStaleReferences = errors.New("stale references")
 // options, and that the provisioned PDFs the goldens were made from are
 // those references. Any disagreement fails the cell with the command that
 // rebuilds what is stale, so no fixture is scored against a reference of
-// something else. A corpus whose references git versions passes.
+// something else. A corpus whose references git versions passes, and so do
+// a build corpus's hostile documents, which have none.
 func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 	f.mu.RLock()
-	refs, root, corpus, pins := f.refs, f.testdataRoot, f.corpus, f.pins
+	refs, root, corpus, pins, unreferenced := f.refs, f.testdataRoot, f.corpus, f.pins, f.unreferenced
 	f.mu.RUnlock()
 	if refs == nil {
 		return nil
@@ -110,6 +111,9 @@ func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 	}
 	var stale, regolden []string
 	for _, fx := range fixtures {
+		if unreferenced[fx.ID] {
+			continue
+		}
 		name := reportName(fx.ID)
 		if problem := checkReference(man, refs.SourcePin, name, fx, pins); problem != "" {
 			stale = append(stale, problem)

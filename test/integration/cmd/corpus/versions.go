@@ -174,7 +174,8 @@ var stagePins = map[string][]string{
 }
 
 // sourcePins maps each corpus source directory to the pins its PDFs come
-// from. The litho corpora are committed in-tree, so git versions them, and so
+// from. The litho corpora are committed in-tree, so git versions them (the
+// Office ones as parts `corpus build` zips), and so
 // are the weasyprint fixtures and the html corpora's Chromium references. The
 // wpt corpus's files come from the WPT commit `corpus fetch` records, and the
 // resvg corpus's from the resvg commit it records.
@@ -190,6 +191,9 @@ var sourcePins = map[string][]string{
 
 	"litho/pdf":  nil,
 	"litho/text": nil,
+	"litho/docx": nil,
+	"litho/xlsx": nil,
+	"litho/pptx": nil,
 	"litho/html": nil,
 
 	"wpt":            {"WPT_COMMIT"},

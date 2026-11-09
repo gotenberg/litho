@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="5" uniqueCount="5"><si><t>Value from [1]Prices!B2</t></si><si><t>Text from [1]Prices!A3</t></si><si><t>SUM over [1]Prices!B2:B4</t></si><si><t>Defined name in the external book</t></si><si><t>Second book [2]</t></si></sst>

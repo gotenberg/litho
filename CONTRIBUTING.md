@@ -64,6 +64,7 @@ test/integration/    -> Corpus matrix scoring litho against veraPDF, PDF.js and 
 | `make corpus-select`       | Rewrite one corpus's lists from a checkout of its source at its pin (`CORPUS_NAME`, `CHECKOUT`)                                                                                                            | After a source pin or a selection rule changes          |
 | `make office-references`   | Build the LibreOffice references of the Office corpora into the testdata (needs Docker; `SOURCES`, `FORMATS`, `NAMES`)                                                                                     | After an Office source or the image pin changes         |
 | `make office-fixtures`     | Rebuild the litho PDFs of the gotenberg Office corpora with the pinned fonts (`FORMATS`)                                                                                                                   | After a converter change                                |
+| `make corpus-build`        | Zip the litho Office corpora from their committed parts and write their hostile documents into the testdata (`CORPUS_NAME`)                                                                                | After an Office parts or hostile generator change       |
 
 `make fmt` rewrites the whole tree: stage only the files your change touches.
 

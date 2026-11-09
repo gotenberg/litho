@@ -1,0 +1,188 @@
+{
+  "hostile-deep-content-controls": {
+    "result": "ErrConvertInputTooLarge",
+    "why": "5,000 nested content controls, past the nesting depth a part may have."
+  },
+  "hostile-deep-tables": {
+    "result": "ErrConvertInputTooLarge",
+    "why": "5,000 nested tables, past the nesting depth a part may have."
+  },
+  "hostile-deflate-bomb": {
+    "result": "ErrConvertInputTooLarge",
+    "why": "The main part inflates to 300 MiB of white space from 300 KiB, past the size one part may inflate to: refused before it is read."
+  },
+  "hostile-deflate-bomb-lying": {
+    "result": "ErrConvertMalformed",
+    "why": "The same bomb whose headers declare 1 KiB: the read stops past the declared size. The main document part cannot be read, so there is nothing to print: refused as malformed."
+  },
+  "hostile-deflate-bomb-parts": {
+    "result": "ErrConvertInputTooLarge",
+    "why": "Every XML part inflates to 120 MiB, under the cap on one part: together they pass what one package may inflate to."
+  },
+  "hostile-field-nesting": {
+    "result": "pdf",
+    "why": "5,000 nested IF fields, 1,000 fields never ended and 1,000 ends never begun."
+  },
+  "hostile-fuzz-1": {
+    "result": "any",
+    "why": "The main part with bytes flipped, deleted and repeated from a fixed seed: any end but a crash or a panic."
+  },
+  "hostile-fuzz-2": {
+    "result": "any",
+    "why": "The main part with bytes flipped, deleted and repeated from a fixed seed: any end but a crash or a panic."
+  },
+  "hostile-fuzz-3": {
+    "result": "any",
+    "why": "The main part with bytes flipped, deleted and repeated from a fixed seed: any end but a crash or a panic."
+  },
+  "hostile-fuzz-4": {
+    "result": "any",
+    "why": "The main part with bytes flipped, deleted and repeated from a fixed seed: any end but a crash or a panic."
+  },
+  "hostile-fuzz-5": {
+    "result": "any",
+    "why": "The main part with bytes flipped, deleted and repeated from a fixed seed: any end but a crash or a panic."
+  },
+  "hostile-fuzz-6": {
+    "result": "any",
+    "why": "The main part with bytes flipped, deleted and repeated from a fixed seed: any end but a crash or a panic."
+  },
+  "hostile-fuzz-7": {
+    "result": "any",
+    "why": "The main part with bytes flipped, deleted and repeated from a fixed seed: any end but a crash or a panic."
+  },
+  "hostile-fuzz-8": {
+    "result": "any",
+    "why": "The main part with bytes flipped, deleted and repeated from a fixed seed: any end but a crash or a panic."
+  },
+  "hostile-huge-values": {
+    "result": "pdf",
+    "why": "Spacing, indents, tabs, font size, table widths, row heights, page size, margins and column counts at 2^31 - 1 or -2^31, and a page of zero size: clamped, not refused."
+  },
+  "hostile-image-corrupt": {
+    "result": "pdf",
+    "why": "A truncated PNG, a PNG with a bad CRC, a JPEG of garbage, an empty file, a JPEG named .png and a missing part: each picture is dropped, the rest converts."
+  },
+  "hostile-image-pixel-bombs": {
+    "result": "pdf",
+    "why": "A PNG of 100,000 by 100,000 pixels, a JPEG and a GIF of 65,535 square, a PNG 2^31 pixels tall, each a few bytes: dropped, never decoded at their declared size."
+  },
+  "hostile-long-word": {
+    "result": "ErrConvertInputTooLarge",
+    "why": "One run of 50 MiB of letters with no break opportunity. Past what one layout may shape: refused as too large."
+  },
+  "hostile-no-content-types": {
+    "result": "ErrConvertMalformed",
+    "why": "No [Content_Types].xml, which every package holds (ECMA-376 Part 2, 10.1.2.1)."
+  },
+  "hostile-no-main-part": {
+    "result": "ErrConvertMalformed",
+    "why": "The package relationship names a main part the package lacks."
+  },
+  "hostile-numbering-cycle": {
+    "result": "pdf",
+    "why": "A numbering definition linked to a numbering style whose paragraph properties name it back, levels starting at 2^31 - 1, a negative start override, a missing abstract definition and levels out of range."
+  },
+  "hostile-overlap-bomb": {
+    "result": "any",
+    "max_rss_mib": 768,
+    "why": "64 pictures whose entries overlap one stored stream of 100 MiB (Fifield, \"A better zip bomb\"): 6.4 GiB inflated from 120 KiB. Pictures past the package budget may be dropped or the document refused, within the memory bound, which leaves room for how far its peak varies between runs."
+  },
+  "hostile-page-flood": {
+    "result": "ErrConvertTooManyPages",
+    "why": "10,001 page breaks, past the pages one conversion may have."
+  },
+  "hostile-rels-cycle": {
+    "result": "pdf",
+    "why": "Pictures whose relationships target the main part itself, its relationships part and [Content_Types].xml: not images, dropped."
+  },
+  "hostile-rels-external": {
+    "result": "pdf",
+    "forbid": ["root:"],
+    "why": "Pictures linked to file:///etc/passwd, a loopback URL, a UNC path and a relative path climbing out of the package: nothing outside the package is read or fetched."
+  },
+  "hostile-section-flood": {
+    "result": "pdf",
+    "why": "9,000 continuous sections, each switching the column count."
+  },
+  "hostile-strict-namespaces": {
+    "result": "pdf",
+    "require": ["Hostile marker text"],
+    "why": "Every Transitional namespace and relationship type rewritten to its Strict one (ISO/IEC 29500-1, Annex A): a conforming Strict document."
+  },
+  "hostile-style-cycle": {
+    "result": "pdf",
+    "why": "Paragraph styles based on each other, a style based on itself, a character style linked in a loop, a table style based on itself and two styles with one ID."
+  },
+  "hostile-xml-billion-laughs": {
+    "result": "ErrConvertMalformed",
+    "forbid": ["lollollol"],
+    "why": "Nine nested entities expanding to 10^9 \"lol\" (the billion laughs). OOXML parts carry no document type declaration, so the part is refused, never expanded."
+  },
+  "hostile-xml-deep-nesting": {
+    "result": "ErrConvertInputTooLarge",
+    "why": "A million nested elements in the main part, past the nesting depth a part may have."
+  },
+  "hostile-xml-external-entity": {
+    "result": "ErrConvertMalformed",
+    "forbid": ["root:"],
+    "why": "An external entity naming file:///etc/passwd: refused with its document type declaration, never resolved."
+  },
+  "hostile-xml-garbage": {
+    "result": "ErrConvertMalformed",
+    "why": "The main part is 4 KiB of random bytes. The main document part cannot be read, so there is nothing to print: refused as malformed."
+  },
+  "hostile-xml-unclosed": {
+    "result": "ErrConvertMalformed",
+    "why": "The main part stops two thirds in. The main document part cannot be read, so there is nothing to print: refused as malformed."
+  },
+  "hostile-xml-utf16": {
+    "result": "pdf",
+    "require": ["Hostile marker text"],
+    "why": "The main part in UTF-16 with a byte order mark, which every XML processor reads (XML 1.0, 4.3.3)."
+  },
+  "hostile-zip-bad-crc": {
+    "result": "ErrConvertMalformed",
+    "why": "The main part fails its CRC-32 (APPNOTE.TXT, 4.4.7). The main document part cannot be read, so there is nothing to print: refused as malformed."
+  },
+  "hostile-zip-duplicate-entry": {
+    "result": "ErrConvertMalformed",
+    "why": "Two entries share the main part's name, the second broken: readers that pick different ones disagree on the document, so it is refused (ECMA-376 Part 2, 8.2.2: part names are unique)."
+  },
+  "hostile-zip-empty": {
+    "result": "ErrConvertMalformed",
+    "why": "An empty file is no zip package (ECMA-376 Part 2, 8)."
+  },
+  "hostile-zip-encrypted-entry": {
+    "result": "any",
+    "why": "The main part is flagged as PKWARE-encrypted but holds plain deflate: a reader may refuse the flag or read the data. Any end but a crash."
+  },
+  "hostile-zip-entry-flood": {
+    "result": "ErrConvertInputTooLarge",
+    "why": "70,000 empty entries, past the entries a package may have."
+  },
+  "hostile-zip-lying-size": {
+    "result": "ErrConvertMalformed",
+    "why": "The main part inflates past the size its headers declare. The main document part cannot be read, so there is nothing to print: refused as malformed."
+  },
+  "hostile-zip-not-zip": {
+    "result": "ErrConvertMalformed",
+    "why": "Plain text is no zip package."
+  },
+  "hostile-zip-path-names": {
+    "result": "pdf",
+    "why": "Entries named ../escape.xml, /absolute.xml, a backslash path, a drive letter and a NUL byte: invalid part names nothing references, ignored."
+  },
+  "hostile-zip-prepended": {
+    "result": "ErrConvertMalformed",
+    "why": "A PDF header precedes the zip package: a polyglot. The package must start the file, where its local header signature is sniffed."
+  },
+  "hostile-zip-truncated": {
+    "result": "ErrConvertMalformed",
+    "why": "Half a package: the central directory is gone."
+  },
+  "hostile-zip-unsupported-method": {
+    "result": "ErrConvertMalformed",
+    "why": "The main part is stored with bzip2, which no OPC reader needs (ECMA-376 Part 2, 8.4.2 allows STORED and DEFLATED). The main document part cannot be read, so there is nothing to print: refused as malformed."
+  }
+}

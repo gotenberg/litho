@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="11" uniqueCount="11"><si><t>Serial</t></si><si><t>Formatted</t></si><si><t>Expected</t></si><si><t>1904-01-01</t></si><si><t>1904-01-02</t></si><si><t>1905-01-01</t></si><si><t>2026-11-09</t></si><si><t>negative: 1903-12-31 or -1 day</t></si><si><t>1904-01-02 12:00</t></si><si><t>Negative duration</t></si><si><t>-6:00 only in 1904 system</t></si></sst>

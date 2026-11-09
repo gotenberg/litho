@@ -117,8 +117,8 @@ type ReferenceSpec struct {
 	SourcePin string `json:"source_pin,omitempty"`
 }
 
-// InputSpec lists the source documents of a converter corpus: List, Glob or
-// both, whose fixture IDs must then differ.
+// InputSpec lists the source documents of a converter corpus: List, Glob,
+// Build, or several, whose fixture IDs must then differ.
 type InputSpec struct {
 	// List names a committed JSON file, relative to the corpus source
 	// directory, holding an array of objects with an "id" field: each is one
@@ -135,6 +135,15 @@ type InputSpec struct {
 	// a load missing one names; empty falls back to the manifest's
 	// ProvisionedBy.
 	FetchedBy string `json:"fetched_by,omitempty"`
+
+	// Build names a committed directory, relative to the corpus source
+	// directory, whose subdirectories are unpacked documents, one per
+	// fixture: `corpus build` zips each into <ListRoot>/<name>/<name>.<ext>,
+	// the extension the corpus name ends with (litho/docx), beside the
+	// hostile documents it generates for that format (see [hostileDocs]).
+	// A parts directory's options.json is copied beside its document
+	// rather than zipped into it.
+	Build string `json:"build,omitempty"`
 
 	// Glob matches the sources, relative to the corpus source directory,
 	// with exactly one "*": each match is one fixture, whose ID is the text

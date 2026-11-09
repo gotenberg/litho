@@ -111,6 +111,10 @@ func printFeatureRow(w io.Writer, fr *FeatureReport) {
 		fmt.Fprintf(w, "%s %s  error=%d  pages_equal=%d  text_f1=%.3f  link_recall=%.3f  layout=%.3f  strict=%.3f\n",
 			prefix, primary, fr.Metrics[metricConvertError], fr.Metrics[metricPagesEqual],
 			means[scoreText], means[scoreLinks], means[scoreLayout], means[scoreStrict])
+	case "robustness":
+		fmt.Fprintf(w, "%s %s  crash=%d  panic=%d  unexpected=%d  over_memory=%d  fetch=%d  leak=%d  missing_text=%d\n", prefix, primary,
+			fr.Metrics[metricCrash], fr.Metrics[metricPanic], fr.Metrics[metricUnexpected], fr.Metrics[metricOverMemory],
+			fr.Metrics[metricFetch], fr.Metrics[metricLeak], fr.Metrics[metricMissing])
 	case "remediation-pair":
 		fmt.Fprintf(w, "%s %s  fully_fixed=%d  disagreement=%d  parse_failed=%d\n",
 			prefix, primary, fr.Metrics["fully_fixed"], fr.Metrics["disagreement"], fr.Metrics["parse_failed"])

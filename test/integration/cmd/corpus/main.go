@@ -48,6 +48,10 @@ func dispatch(ctx context.Context, cmd string, args []string) int {
 		return runScanClaims(ctx, args)
 	case "references":
 		return runReferences(ctx, args)
+	case "build":
+		return runBuild(ctx, args)
+	case "convert-one":
+		return runConvertOne(ctx, args)
 	case "provision":
 		return runProvision(ctx, args)
 	case "versions":
@@ -70,11 +74,12 @@ func dispatch(ctx context.Context, cmd string, args []string) int {
 // the real text instead of a rebuilt copy of it. See
 // [TestUsageNamesEveryDispatchableSubcommand].
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: corpus <fetch|select|init|run|baseline|check|references|scan-claims|provision|versions|tools> [flags]")
+	fmt.Fprintln(w, "Usage: corpus <fetch|select|build|init|run|baseline|check|references|scan-claims|provision|convert-one|versions|tools> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  fetch         Download the fixture fonts and the files of the host-fetched corpora (--corpus=poi,wpt; --jobs=N)")
 	fmt.Fprintln(w, "  select        Write a corpus's lists from a checkout of its source (--corpus=poi/docx --checkout=DIR)")
+	fmt.Fprintln(w, "  build         Zip the litho Office corpora's documents and generate their hostile ones (--corpus=litho/docx)")
 	fmt.Fprintln(w, "  references    Build the LibreOffice and Chromium references with the pinned Gotenberg image (--corpus, --names)")
 	fmt.Fprintln(w, "  init          Provision corpora: their PDFs on the host, their goldens via Docker")
 	fmt.Fprintln(w, "  run           Compare litho against golden references across the matrix")
@@ -82,6 +87,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  check         Run the matrix and fail if any cell regressed against the baseline")
 	fmt.Fprintln(w, "  scan-claims   Emit a claims.csv mapping each PDF to its claimed profile")
 	fmt.Fprintln(w, "  provision     Derive a corpus's goldens inside the provisioning image (run by init)")
+	fmt.Fprintln(w, "  convert-one   Convert one Office source and print how it ended as JSON (run by the robustness feature)")
 	fmt.Fprintln(w, "  versions      Print the pinned tool and source versions (--build-args: as docker build arguments)")
 	fmt.Fprintln(w, "  tools         Compare the local verapdf, node, java, qpdf, pdfsig and pikepdf with the pins")
 	fmt.Fprintln(w, "")

@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="9" uniqueCount="9"><si><t>Two-cell anchor PNG</t></si><si><t>One-cell anchor JPEG</t></si><si><t>Absolute anchor</t></si><si><t>Cropped</t></si><si><t>Rotated 30 degrees</t></si><si><t>Alpha PNG + 50% transparency</t></si><si><t>Flipped, bordered</t></si><si><t>editAs=absolute</t></si><si><t>Stretched</t></si></sst>

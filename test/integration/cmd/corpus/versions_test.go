@@ -426,6 +426,11 @@ func TestProvisionRecordsEveryGoldenDir(t *testing.T) {
 		}
 		for feature, rel := range m.Goldens {
 			stage := filepath.ToSlash(filepath.Clean(rel))
+			// The documents `corpus build` writes depend on no tool:
+			// the robustness feature names them, and nothing records them.
+			if isBuildCorpus(m) && stage == m.Inputs.ListRoot {
+				continue
+			}
 			if !recorded[stage] {
 				t.Errorf("%s/%s reads %s, which corpus provision never records", m.Name, feature, stage)
 			}

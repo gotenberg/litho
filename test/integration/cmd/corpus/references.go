@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -451,6 +452,11 @@ type officeJob struct {
 // source the route refuses is recorded under "failed" with the route's
 // answer, and gets no reference.
 func (g *gotenberg) officeReferences(ctx context.Context, m *Manifest, pins *resolvedPins, only []string) error {
+	if isBuildCorpus(m) {
+		if err := buildCorpus(ctx, m); err != nil {
+			return err
+		}
+	}
 	jobs, err := officeJobs(m, only)
 	if err != nil {
 		return err
@@ -569,6 +575,9 @@ func (g *gotenberg) officeReferences(ctx context.Context, m *Manifest, pins *res
 // officeJobs lists the sources of an Office corpus, the ones only names
 // when set.
 func officeJobs(m *Manifest, only []string) ([]officeJob, error) {
+	if isBuildCorpus(m) {
+		return builtOfficeJobs(m, only)
+	}
 	var jobs []officeJob
 	sources := filepath.Join(m.SourceDir(), "sources")
 	entries, err := os.ReadDir(sources)
@@ -627,4 +636,30 @@ func gotenbergLibreOfficeVersion(ctx context.Context, image string) string {
 func hasKey[V any](m map[string]V, k string) bool {
 	_, ok := m[k]
 	return ok
+}
+
+// builtOfficeJobs lists the documents a build corpus zips from its parts,
+// the ones only names when set: its hostile documents have no reference.
+func builtOfficeJobs(m *Manifest, only []string) ([]officeJob, error) {
+	names, err := partsNames(m)
+	if err != nil {
+		return nil, err
+	}
+	var jobs []officeJob
+	for _, name := range names {
+		if len(only) > 0 && !slices.Contains(only, name) {
+			continue
+		}
+		dir := filepath.Join(buildOut(m), name)
+		src, err := fixture.LoadOffice(dir)
+		if err != nil {
+			return nil, fmt.Errorf("%w (run make corpus-build CORPUS_NAME=%s)", err, m.Name)
+		}
+		options := ""
+		if _, err := os.Stat(filepath.Join(dir, fixture.OptionsFile)); err == nil {
+			options = filepath.Join(dir, fixture.OptionsFile)
+		}
+		jobs = append(jobs, officeJob{name, src.Document, options, path.Join(m.Inputs.Build, name)})
+	}
+	return jobs, nil
 }

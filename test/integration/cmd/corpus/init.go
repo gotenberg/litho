@@ -90,6 +90,14 @@ func provisionCorpus(ctx context.Context, m *Manifest, pins *resolvedPins) error
 		return fmt.Errorf("mkdir testdata: %w", err)
 	}
 
+	// A build corpus's documents are zipped from git, in seconds: every
+	// init rebuilds them, so a parts change reaches the next run.
+	if isBuildCorpus(m) {
+		if err := buildCorpus(ctx, m); err != nil {
+			return err
+		}
+	}
+
 	if m.References != nil && !hasReferences(testdataRoot, m.References) {
 		fmt.Printf("%s: no references under %s (run %s first): skipping\n", m.Name, filepath.Join(testdataRoot, m.References.Dir), m.References.BuiltBy)
 		return nil

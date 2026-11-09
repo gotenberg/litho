@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="9" uniqueCount="8"><si><t>Project</t></si><si><t xml:space="preserve">    Phase A</t></si><si><t xml:space="preserve">        Task A1</t></si><si><t xml:space="preserve">            Subtask</t></si><si><t xml:space="preserve">        Task A2</t></si><si><t xml:space="preserve">    Phase B</t></si><si><t xml:space="preserve">        Task B1</t></si><si><t xml:space="preserve">        Task B2</t></si></sst>

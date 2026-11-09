@@ -6,6 +6,9 @@
 # were made from them as they are.
 /test/integration/corpus/litho/html/sources/
 /test/integration/corpus/gotenberg/html/sources/
+/test/integration/corpus/litho/docx/parts/
+/test/integration/corpus/litho/xlsx/parts/
+/test/integration/corpus/litho/pptx/parts/
 /test/integration/corpus/weasyprint/resources/
 # A fetched test suite, never formatted.
 /pkg/internal/css/testdata/css-parsing-tests/
