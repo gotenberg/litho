@@ -1105,8 +1105,8 @@ Page 2 is two units square, below the three-unit minimum of ISO 19005-2,
 dictionary. Tests t1 and t4 of the same clause are scoped to
 `TrueTypeFontProgram` instead, so they need a real embedded program whose 'cmap'
 table carries particular (platformID, encodingID) subtables, and no fixture
-embedded a TrueType program at all. `build/_truetype.py` emits them, so the
-builders still depend on nothing but pikepdf.
+embedded a TrueType program at all. `build/truetype.go` emits them, so the
+builders depend on nothing but the standard library.
 
 t1 judges non-symbolic programs and t4 symbolic ones, so no single font reaches
 both. `ttcmap_2b.pdf` draws four:
@@ -2045,7 +2045,7 @@ those differences is adjudicated, and none is a litho defect left open:
   32000-1, 8.9.4 maps the image onto the unit square with each sample filling a
   cell, so enlarging must not move it. `pkg/internal/render/imgpaint` records
   the measurement. The 14873 pixels of `complex_2b` page 1 and `multipage_2b`
-  page 2 are one cause: the same 2 by 2 image (`_common.py`, `rgb_image`)
+  page 2 are one cause: the same 2 by 2 image (`common.go`, `rgbImage`)
   drawn into the same 200 by 100 point rectangle, the whole difference inside
   it; `megafont_2b` builds that image itself and adds one pixel of a glyph
   edge. poppler's Splash backend is alone: PDFium and poppler's own Cairo
@@ -3382,11 +3382,11 @@ never be judged apart from the defect.
 ISO 19005-2, 6.2.11.4.2 t1 compares against the whole program. A `/CharSet` of
 `(/A)` on a font that paints `B` fails both readings.
 
-The font programs come from `_cff.py` and `_truetype.py`. A validator has to
+The font programs come from `cff.go` and `truetype.go`. A validator has to
 parse a real program to know which glyphs it defines, so a placeholder stream
-leaves every completeness test silent. `_cff.py` emits a bare CFF, the `Type1C`
-form of `/FontFile3`, the same way `_truetype.py` emits a TrueType: writing
-them keeps the builders' one dependency, pikepdf, the only one.
+leaves every completeness test silent. `cff.go` emits a bare CFF, the `Type1C`
+form of `/FontFile3`, the same way `truetype.go` emits a TrueType: writing
+them keeps the builders on the standard library alone.
 
 ### `linearized_1b.pdf`
 
@@ -3427,7 +3427,7 @@ ISO 19005-2, 6.2.8.3 states five tests over the JPEG 2000 data of a `JPXDecode`
 image, and every one reads a box of the JP2 container rather than the
 entropy-coded data: the channel count and bit depth from `ihdr` and `bpcc`, the
 colour specification from `colr`. So a fixture plants each defect by naming a
-value, which is what `_jp2.py` writes.
+value, which is what `jp2.go` writes.
 
 | Image      | Container                         | Answers     |
 | ---------- | --------------------------------- | ----------- |
@@ -3459,7 +3459,7 @@ answers on it too.
 
 The codestreams are embedded rather than written. A JPEG 2000 codestream is
 entropy coded, which no builder writes by hand, and the corpus builders take no
-dependency beyond pikepdf. `_jp2.py` records the OpenJPEG command line that
+dependency beyond the standard library. `jp2.go` records the OpenJPEG command line that
 produced them and strips the `COM` marker carrying the encoder version, so the
 bytes do not move when the encoder is upgraded.
 
@@ -5232,7 +5232,7 @@ LZWDecode alone, so part 1 judges none of them by the rule:
 | the page's content            | `/F /Fl`, a control                     | none | none       |
 | a form XObject the page draws | `/Filter /JPXDecode`, the full key      | none | `6.1.10/1` |
 
-The JPEG 2000 data is the codestream `_jp2.py` holds in a JP2 container with
+The JPEG 2000 data is the codestream `jp2.go` holds in a JP2 container with
 one sRGB colour specification; the JBIG2 data is an embedded stream of one
 generic region coded with MMR, the band the CCF control codes with Group 4.
 
@@ -9618,7 +9618,7 @@ a region over the stroke and clear of the outline selected nothing, and the
 stroke stayed under it. Stroked text reaches 113 corpus files (62 govdocs, 33
 pdfjs, 16 verapdf, 2 pdfcpu) and no litho fixture, so no `redact-render`
 scenario of the litho corpus reached it. The page, 400 by 400, shows one
-embedded CFF font (`_cff.py`: `A` and `B` are rectangles 400 units wide, 400
+embedded CFF font (`cff.go`: `A` and `B` are rectangles 400 units wide, 400
 and 500 high, advancing 600):
 
 | Run    | At      | Tf  | Mode | Pen                         | Reaches past its outline  |

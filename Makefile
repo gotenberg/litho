@@ -118,7 +118,7 @@ corpus-fetch: ## Step 1: download the fixture fonts and the fetched corpora's fi
 	$(CORPUS_CLI) fetch $(CORPUS_SELECT) $(if $(JOBS),--jobs=$(JOBS))
 
 .PHONY: corpus-build
-corpus-build: ## Step 2: generate the inputs kept as sources in git: Office and hostile documents into the testdata, the committed litho/text PDFs. Vars: CORPUS
+corpus-build: ## Step 2: generate the inputs kept as sources in git: Office and hostile documents into the testdata, the committed litho/pdf and litho/text PDFs. Vars: CORPUS
 	$(CORPUS_CLI) build $(CORPUS_SELECT)
 
 .PHONY: corpus-references
@@ -135,7 +135,7 @@ corpus-update: ## Maintainers: rewrite one corpus's committed lists from its sou
 	npx prettier --write test/integration/corpus/$(CORPUS)/*.json $(if $(filter weasyprint,$(CORPUS)),test/integration/corpus/weasyprint/fixtures)
 
 .PHONY: corpus-tools
-corpus-tools: ## Compare the local verapdf, node, java, qpdf, pdfsig, pikepdf, fontTools and Pillow with the pinned versions
+corpus-tools: ## Compare the local verapdf, node, java, qpdf, pdfsig, fontTools and Pillow with the pinned versions
 	$(CORPUS_CLI) tools
 
 .PHONY: corpus-clean

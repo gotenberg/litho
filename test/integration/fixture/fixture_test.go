@@ -158,19 +158,17 @@ func TestSources_LoadAndReadThroughDirFS(t *testing.T) {
 	t.Parallel()
 
 	var dirs []string
-	for _, corpus := range []string{"litho", "gotenberg"} {
-		root := filepath.Join("..", "corpus", corpus, "html", "sources")
-		entries, err := os.ReadDir(root)
-		if err != nil {
-			t.Fatal(err)
+	root := filepath.Join("..", "corpus", "litho", "html", "sources")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			t.Errorf("%s is not a source directory", filepath.Join(root, e.Name()))
+			continue
 		}
-		for _, e := range entries {
-			if !e.IsDir() {
-				t.Errorf("%s is not a source directory", filepath.Join(root, e.Name()))
-				continue
-			}
-			dirs = append(dirs, filepath.Join(root, e.Name()))
-		}
+		dirs = append(dirs, filepath.Join(root, e.Name()))
 	}
 	for _, dir := range dirs {
 		if _, err := Load(dir); err != nil {

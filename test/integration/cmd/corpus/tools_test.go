@@ -22,7 +22,7 @@ func TestLocalToolParsers(t *testing.T) {
 		{"qpdf", parseDottedVersion, "qpdf version 12.4.1\nRun qpdf --copyright to see copyright and license information.\n", "12.4.1"},
 		{"pdfsig", parseDottedVersion, "pdfsig version 26.09.0\nCopyright 2005-2026 The Poppler Developers\n", "26.09.0"},
 		{"node", parseDottedVersion, "v24.11.0\n", "24.11.0"},
-		{"pikepdf", parseDottedVersion, "9.11.0\n", "9.11.0"},
+		{"fontTools", parseDottedVersion, "4.59.0\n", "4.59.0"},
 		{"temurin", parseJavaVersion, "openjdk version \"17.0.20.1\" 2026-08-18\nOpenJDK Runtime Environment Temurin-17.0.20.1+1 (build 17.0.20.1+1)\n", "17.0.20.1"},
 		{"java with a tool-options banner", parseJavaVersion, "Picked up JAVA_TOOL_OPTIONS: -Xmx1g 2.5\nopenjdk version \"21.0.4\" 2024-07-16\n", "21.0.4"},
 	} {

@@ -34,33 +34,33 @@ test/integration/    -> Corpus matrix scoring litho against veraPDF, PDF.js and 
 
 ## Setup and Makefile
 
-| Command                  | Purpose                                                                                                 | When to use                                    |
-| ------------------------ | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `make help`              | Show the available commands                                                                             | To discover targets                            |
-| `make build`             | Build the `litho` CLI                                                                                   | Manual testing                                 |
-| `make fmt`               | Format Go code and tidy the dependencies                                                                | Before committing                              |
-| `make prettify`          | Format non-Go files (Markdown, YAML, JSON)                                                              | Before committing                              |
-| `make lint`              | Lint Go code (zero warnings permitted)                                                                  | Before committing                              |
-| `make lint-prettier`     | Lint non-Go files                                                                                       | Before committing                              |
-| `make lint-todo`         | Find TODOs in Go code                                                                                   | Before committing                              |
-| `make lint-unparam`      | Pinned unparam: unused parameters and results                                                           | Before committing                              |
-| `make test-unit`         | `go test -race ./...`                                                                                   | Before committing                              |
-| `make test-unit-386`     | `go test ./...` on linux/386, where `int` is 32 bits                                                    | Integer-width changes (needs linux/amd64)      |
-| `make bench`             | `go test -bench=. -benchmem ./...`                                                                      | Performance changes                            |
-| `make godoc`             | Serve the godoc locally                                                                                 | To check documentation                         |
-| `make corpus`            | Prepare, then score litho across the (corpus, feature) matrix (`CORPUS`, `FEATURE`)                     | To measure the corpus matrix                   |
-| `make corpus-check`      | Prepare, then fail if a (corpus, feature) cell regressed against the baseline                           | Before pushing: CI runs no corpus              |
-| `make corpus-baseline`   | Prepare, then write the scores to `test/integration/baseline.json`; a narrowed run merges               | After an intended score change                 |
-| `make corpus-prepare`    | Run every corpus step that is missing or stale: fetch, build, references, goldens (Docker)              | To provision without scoring                   |
-| `make corpus-fetch`      | Step 1: download the fixture fonts and the fetched corpora, hash-checked (`CORPUS=fonts` for the fonts) | Run by `corpus-prepare`                        |
-| `make corpus-build`      | Step 2: generate the inputs kept as sources in git (Office parts, hostile documents, litho/text)        | After a parts, generator or converter change   |
-| `make corpus-references` | Step 3: build the Chromium and LibreOffice reference PDFs with the pinned image (Docker; `FIXTURES`)    | Run by `corpus-prepare`                        |
-| `make corpus-goldens`    | Step 4: derive the missing goldens in the provisioning image (Docker)                                   | Run by `corpus-prepare`                        |
-| `make corpus-update`     | Rewrite one corpus's lists from its source at its pin (`CORPUS`, `CHECKOUT`)                            | After a source pin or a selection rule changes |
-| `make corpus-tools`      | Compare the local oracle tools with the pinned versions                                                 | When a corpus run reports version drift        |
-| `make corpus-clean`      | Remove all corpus testdata                                                                              | To start provisioning over                     |
-| `make outline-goldens`   | Regenerate the TrueType and CFF outline goldens                                                         | After a font outline change                    |
-| `make icc-goldens`       | Regenerate the ICC transform goldens                                                                    | After a color transform change                 |
+| Command                  | Purpose                                                                                                     | When to use                                    |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `make help`              | Show the available commands                                                                                 | To discover targets                            |
+| `make build`             | Build the `litho` CLI                                                                                       | Manual testing                                 |
+| `make fmt`               | Format Go code and tidy the dependencies                                                                    | Before committing                              |
+| `make prettify`          | Format non-Go files (Markdown, YAML, JSON)                                                                  | Before committing                              |
+| `make lint`              | Lint Go code (zero warnings permitted)                                                                      | Before committing                              |
+| `make lint-prettier`     | Lint non-Go files                                                                                           | Before committing                              |
+| `make lint-todo`         | Find TODOs in Go code                                                                                       | Before committing                              |
+| `make lint-unparam`      | Pinned unparam: unused parameters and results                                                               | Before committing                              |
+| `make test-unit`         | `go test -race ./...`                                                                                       | Before committing                              |
+| `make test-unit-386`     | `go test ./...` on linux/386, where `int` is 32 bits                                                        | Integer-width changes (needs linux/amd64)      |
+| `make bench`             | `go test -bench=. -benchmem ./...`                                                                          | Performance changes                            |
+| `make godoc`             | Serve the godoc locally                                                                                     | To check documentation                         |
+| `make corpus`            | Prepare, then score litho across the (corpus, feature) matrix (`CORPUS`, `FEATURE`)                         | To measure the corpus matrix                   |
+| `make corpus-check`      | Prepare, then fail if a (corpus, feature) cell regressed against the baseline                               | Before pushing: CI runs no corpus              |
+| `make corpus-baseline`   | Prepare, then write the scores to `test/integration/baseline.json`; a narrowed run merges                   | After an intended score change                 |
+| `make corpus-prepare`    | Run every corpus step that is missing or stale: fetch, build, references, goldens (Docker)                  | To provision without scoring                   |
+| `make corpus-fetch`      | Step 1: download the fixture fonts and the fetched corpora, hash-checked (`CORPUS=fonts` for the fonts)     | Run by `corpus-prepare`                        |
+| `make corpus-build`      | Step 2: generate the inputs kept as sources in git (Office parts, hostile documents, litho/pdf, litho/text) | After a parts, generator or converter change   |
+| `make corpus-references` | Step 3: build the Chromium and LibreOffice reference PDFs with the pinned image (Docker; `FIXTURES`)        | Run by `corpus-prepare`                        |
+| `make corpus-goldens`    | Step 4: derive the missing goldens in the provisioning image (Docker)                                       | Run by `corpus-prepare`                        |
+| `make corpus-update`     | Rewrite one corpus's lists from its source at its pin (`CORPUS`, `CHECKOUT`)                                | After a source pin or a selection rule changes |
+| `make corpus-tools`      | Compare the local oracle tools with the pinned versions                                                     | When a corpus run reports version drift        |
+| `make corpus-clean`      | Remove all corpus testdata                                                                                  | To start provisioning over                     |
+| `make outline-goldens`   | Regenerate the TrueType and CFF outline goldens                                                             | After a font outline change                    |
+| `make icc-goldens`       | Regenerate the ICC transform goldens                                                                        | After a color transform change                 |
 
 `make fmt` rewrites the whole tree: stage only the files your change touches.
 

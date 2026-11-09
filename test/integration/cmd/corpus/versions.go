@@ -74,7 +74,6 @@ var digestPins = map[string][]string{
 //nolint:gochecknoglobals // static key set
 var localToolPins = map[string]bool{
 	"QPDF_VERSION":      true,
-	"PIKEPDF_VERSION":   true,
 	"FONTTOOLS_VERSION": true,
 	"PILLOW_VERSION":    true,
 

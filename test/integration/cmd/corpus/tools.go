@@ -78,11 +78,6 @@ func localTools(veraPDFProbe string) []localTool {
 		{Name: "qpdf", PinKey: "QPDF_VERSION", Args: []string{"--version"}, Parse: parseDottedVersion, Matches: exact},
 		{Name: "pdfsig", PinKey: "POPPLER_VERSION", Args: []string{"-v"}, Parse: parseDottedVersion, Matches: exact},
 		{
-			Name: "python3", PinKey: "PIKEPDF_VERSION",
-			Args:  []string{"-c", "import pikepdf; print(pikepdf.__version__)"},
-			Parse: parseDottedVersion, Matches: exact,
-		},
-		{
 			Name: "python3", PinKey: "FONTTOOLS_VERSION",
 			Args:  []string{"-c", "import fontTools; print(fontTools.version)"},
 			Parse: parseDottedVersion, Matches: exact,

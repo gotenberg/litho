@@ -42,6 +42,14 @@ linters:
       - common-false-positives
       - legacy
       - std-error-handling
+    rules:
+      # The litho/pdf fixture builders mirror their Python originals line for
+      # line: content streams repeat operators, and slices grow by append as
+      # the Python lists do.
+      - path: test/integration/corpus/litho/pdf/build/
+        linters:
+          - dupword
+          - prealloc
 formatters:
   enable:
     - gci

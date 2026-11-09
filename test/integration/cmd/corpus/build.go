@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	pdfbuild "github.com/gotenberg/litho/test/integration/corpus/litho/pdf/build"
 	textbuild "github.com/gotenberg/litho/test/integration/corpus/litho/text/build"
 	"github.com/gotenberg/litho/test/integration/fixture"
 )
@@ -70,6 +71,7 @@ func build(ctx context.Context, ms []*Manifest) error {
 // generated from sources in git, by corpus name. The PDFs stay committed:
 // unit tests read them.
 var pdfBuilders = map[string]func(ctx context.Context, m *Manifest) error{ //nolint:gochecknoglobals // static table
+	"litho/pdf":  buildLithoPDF,
 	"litho/text": buildLithoText,
 }
 
@@ -78,6 +80,41 @@ var pdfBuilders = map[string]func(ctx context.Context, m *Manifest) error{ //nol
 func hasBuild(m *Manifest) bool {
 	_, ok := pdfBuilders[m.Name]
 	return ok || isBuildCorpus(m)
+}
+
+// buildLithoPDF writes every litho/pdf fixture its Go builder makes into the
+// committed PDFs, leaving a file that already holds those bytes untouched,
+// and fails on a committed PDF no builder makes.
+func buildLithoPDF(ctx context.Context, m *Manifest) error {
+	out := filepath.Join(m.SourceDir(), filepath.FromSlash(m.CommittedPDFs))
+	names := pdfbuild.Names()
+	written := 0
+	for _, name := range names {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		data, err := pdfbuild.Build(name)
+		if err != nil {
+			return err
+		}
+		p := filepath.Join(out, name+".pdf")
+		if old, err := os.ReadFile(p); err == nil && bytes.Equal(old, data) { //nolint:gosec // a committed fixture
+			continue
+		}
+		if err := os.WriteFile(p, data, 0o644); err != nil { //nolint:gosec // committed fixtures are world-readable
+			return err
+		}
+		written++
+	}
+	committed, err := topPDFs(out, false)
+	if err != nil {
+		return err
+	}
+	if len(committed) != len(names) {
+		return fmt.Errorf("%d committed PDFs under %s, %d builders: remove the PDF of a deleted builder", len(committed), out, len(names))
+	}
+	fmt.Printf("%s: %d fixtures built, %d rewritten\n", m.Name, len(names), written)
+	return nil
 }
 
 // buildLithoText converts the litho/text sources into its committed PDFs
