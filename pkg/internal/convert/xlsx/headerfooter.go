@@ -217,7 +217,7 @@ func (p *hfParser) fontName(spec string) {
 		return
 	}
 	p.font.Bold, p.font.Italic = false, false
-	for _, w := range strings.Fields(strings.ToLower(style)) {
+	for w := range strings.FieldsSeq(strings.ToLower(style)) {
 		switch w {
 		case "bold", "fett", "demibold", "halbfett", "black", "heavy", "félkövér":
 			p.font.Bold = true

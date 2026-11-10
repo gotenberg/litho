@@ -218,7 +218,8 @@ func hasWarning(warnings []compose.Warning, s string) bool {
 // header cells its sheet leaves empty.
 func TestRead_TableHeaders(t *testing.T) {
 	t.Parallel()
-	files := workbookFiles([]testSheet{{name: "S",
+	files := workbookFiles([]testSheet{{
+		name: "S",
 		xml:  `<sheetData><row r="2"><c r="B2" t="inlineStr"><is><t>Kept</t></is></c></row></sheetData><tableParts count="1"><tablePart r:id="rIdT"/></tableParts>`,
 		rels: `<Relationship Id="rIdT" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/>`,
 	}}, minimalStyles, "", "", map[string]string{"xl/tables/table1.xml": `<table ` + nsDecl + ` id="1" name="T" displayName="T" ref="A2:C5">` +

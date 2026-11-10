@@ -78,8 +78,8 @@ func prepareChains(ctx context.Context, root *Node, fonts *text.Fonts, opts Opti
 			chains[name] = append(chains[name], linkNode{n: n, index: n.Style.ChainIndex})
 			count++
 		}
-		for i := len(n.Children) - 1; i >= 0; i-- {
-			stack = append(stack, item{n.Children[i], it.depth + 1})
+		for _, v := range slices.Backward(n.Children) {
+			stack = append(stack, item{v, it.depth + 1})
 		}
 	}
 	if len(names) == 0 {

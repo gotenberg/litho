@@ -29,20 +29,32 @@ func TestEffects_EffectList(t *testing.T) {
 		rect              bool
 		warn              string
 	}{
-		{"outer shadow", `<a:effectLst><a:outerShdw blurRad="76200" dist="127000" dir="5400000"><a:srgbClr val="112233"><a:alpha val="40000"/></a:srgbClr></a:outerShdw></a:effectLst>`, "",
-			&slides.Shadow{Color: css.Color{R: 0x11 / 255.0, G: 0x22 / 255.0, B: 0x33 / 255.0, A: 1}, Opacity: 0.4, OffsetY: 10, ScaleX: 1, ScaleY: 1, Blur: 6}, nil, 0, false, ""},
-		{"a shadow without a colour is white", `<a:effectLst><a:outerShdw dist="127000"/></a:effectLst>`, "",
-			&slides.Shadow{Color: css.Color{R: 1, G: 1, B: 1, A: 1}, Opacity: 1, OffsetX: 10, ScaleX: 1, ScaleY: 1}, nil, 0, false, ""},
-		{"a scale keeps the bottom by default", `<a:effectLst><a:outerShdw sx="50000" sy="50000"><a:prstClr val="black"/></a:outerShdw></a:effectLst>`, "",
-			&slides.Shadow{Color: css.Color{A: 1}, Opacity: 1, OffsetY: 5, ScaleX: 0.5, ScaleY: 0.5}, nil, 0, false, ""},
-		{"a scale about the top left corner", `<a:effectLst><a:outerShdw sx="200000" sy="50000" algn="tl"><a:prstClr val="black"/></a:outerShdw></a:effectLst>`, "",
-			&slides.Shadow{Color: css.Color{A: 1}, Opacity: 1, OffsetX: 5, OffsetY: -5, ScaleX: 2, ScaleY: 0.5}, nil, 0, false, ""},
-		{"glow", `<a:effectLst><a:glow rad="127000"><a:schemeClr val="accent2"><a:alpha val="50000"/></a:schemeClr></a:glow></a:effectLst>`, "",
-			nil, &slides.Glow{Color: css.Color{R: 0xC0 / 255.0, G: 0x50 / 255.0, B: 0x4D / 255.0, A: 1}, Opacity: 0.5, Radius: 10}, 0, true, ""},
+		{
+			"outer shadow", `<a:effectLst><a:outerShdw blurRad="76200" dist="127000" dir="5400000"><a:srgbClr val="112233"><a:alpha val="40000"/></a:srgbClr></a:outerShdw></a:effectLst>`, "",
+			&slides.Shadow{Color: css.Color{R: 0x11 / 255.0, G: 0x22 / 255.0, B: 0x33 / 255.0, A: 1}, Opacity: 0.4, OffsetY: 10, ScaleX: 1, ScaleY: 1, Blur: 6}, nil, 0, false, "",
+		},
+		{
+			"a shadow without a colour is white", `<a:effectLst><a:outerShdw dist="127000"/></a:effectLst>`, "",
+			&slides.Shadow{Color: css.Color{R: 1, G: 1, B: 1, A: 1}, Opacity: 1, OffsetX: 10, ScaleX: 1, ScaleY: 1}, nil, 0, false, "",
+		},
+		{
+			"a scale keeps the bottom by default", `<a:effectLst><a:outerShdw sx="50000" sy="50000"><a:prstClr val="black"/></a:outerShdw></a:effectLst>`, "",
+			&slides.Shadow{Color: css.Color{A: 1}, Opacity: 1, OffsetY: 5, ScaleX: 0.5, ScaleY: 0.5}, nil, 0, false, "",
+		},
+		{
+			"a scale about the top left corner", `<a:effectLst><a:outerShdw sx="200000" sy="50000" algn="tl"><a:prstClr val="black"/></a:outerShdw></a:effectLst>`, "",
+			&slides.Shadow{Color: css.Color{A: 1}, Opacity: 1, OffsetX: 5, OffsetY: -5, ScaleX: 2, ScaleY: 0.5}, nil, 0, false, "",
+		},
+		{
+			"glow", `<a:effectLst><a:glow rad="127000"><a:schemeClr val="accent2"><a:alpha val="50000"/></a:schemeClr></a:glow></a:effectLst>`, "",
+			nil, &slides.Glow{Color: css.Color{R: 0xC0 / 255.0, G: 0x50 / 255.0, B: 0x4D / 255.0, A: 1}, Opacity: 0.5, Radius: 10}, 0, true, "",
+		},
 		{"a glow without a colour is none", `<a:effectLst><a:glow rad="127000"/></a:effectLst>`, "", nil, nil, 0, false, ""},
 		{"soft edge", `<a:effectLst><a:softEdge rad="63500"/></a:effectLst>`, "", nil, nil, 5, true, ""},
-		{"the theme's effect style", "", style,
-			&slides.Shadow{Color: css.Color{G: 1, A: 1}, Opacity: 1, OffsetX: 2, ScaleX: 1, ScaleY: 1, Blur: 3}, nil, 0, false, ""},
+		{
+			"the theme's effect style", "", style,
+			&slides.Shadow{Color: css.Color{G: 1, A: 1}, Opacity: 1, OffsetX: 2, ScaleX: 1, ScaleY: 1, Blur: 3}, nil, 0, false, "",
+		},
 		{"an empty list overrides the style", `<a:effectLst/>`, style, nil, nil, 0, false, ""},
 		{"inner shadow", `<a:effectLst><a:innerShdw blurRad="12700"><a:prstClr val="black"/></a:innerShdw></a:effectLst>`, "", nil, nil, 0, false, "inner and preset shadows"},
 		{"reflection", `<a:effectLst><a:reflection/></a:effectLst>`, "", nil, nil, 0, false, "reflections"},

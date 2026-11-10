@@ -21,8 +21,8 @@ import (
 func pngBytes(t testing.TB) string {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 4, 2))
-	for y := 0; y < 2; y++ {
-		for x := 0; x < 4; x++ {
+	for y := range 2 {
+		for x := range 4 {
 			img.Set(x, y, color.RGBA{R: 255, A: 255})
 		}
 	}
@@ -246,7 +246,9 @@ func TestShapes_Table(t *testing.T) {
 func TestShapes_NamesAndSymbolBullets(t *testing.T) {
 	t.Parallel()
 	doc, _ := readDeck(t, testDeck{slides: []testSlide{
-		{tree: title("Hello")}, {tree: title("Hello")}, {tree: textBox("TB", 0, 0, 1, 1, `<a:bodyPr/><a:p><a:pPr marL="0"><a:buFont typeface="Wingdings"/><a:buChar char="q"/></a:pPr><a:r><a:t>x</a:t></a:r></a:p>`)},
+		{tree: title("Hello")},
+		{tree: title("Hello")},
+		{tree: textBox("TB", 0, 0, 1, 1, `<a:bodyPr/><a:p><a:pPr marL="0"><a:buFont typeface="Wingdings"/><a:buChar char="q"/></a:pPr><a:r><a:t>x</a:t></a:r></a:p>`)},
 		{tree: title("Hello")},
 	}})
 	var names []string

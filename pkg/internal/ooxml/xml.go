@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -129,8 +131,8 @@ func (e *Element) Find(space, local string) *Element {
 		if cur != e && cur.Is(space, local) {
 			return cur
 		}
-		for i := len(cur.Children) - 1; i >= 0; i-- {
-			stack = append(stack, cur.Children[i])
+		for _, v := range slices.Backward(cur.Children) {
+			stack = append(stack, v)
 		}
 	}
 	return nil
@@ -213,9 +215,7 @@ func parse(ctx context.Context, data []byte, understood []string, count *int) (*
 					if !copied {
 						copied = true
 						ns = make(map[string]string, len(parent.ns)+4)
-						for k, v := range parent.ns {
-							ns[k] = v
-						}
+						maps.Copy(ns, parent.ns)
 					}
 					prefix := a.Name.Local
 					if a.Name.Space == "" {
@@ -235,7 +235,7 @@ func parse(ctx context.Context, data []byte, understood []string, count *int) (*
 			if el.Is(NSMC, "Choice") {
 				// Requires lists prefixes in the scope of the Choice.
 				var uris []string
-				for _, prefix := range strings.Fields(attrOr(el, "Requires")) {
+				for prefix := range strings.FieldsSeq(attrOr(el, "Requires")) {
 					uris = append(uris, resolvePrefix(ns, prefix, false))
 				}
 				el.Attrs = append(el.Attrs, xml.Attr{Name: xml.Name{Local: requiresURIs}, Value: strings.Join(uris, " ")})
@@ -296,7 +296,7 @@ func chooseAlternate(ac *Element, understood []string) []*Element {
 		}
 		uris, _ := c.Attr(requiresURIs)
 		ok := uris != ""
-		for _, u := range strings.Fields(uris) {
+		for u := range strings.FieldsSeq(uris) {
 			if !contains(understood, u) {
 				ok = false
 				break
@@ -314,12 +314,7 @@ func chooseAlternate(ac *Element, understood []string) []*Element {
 
 // contains reports whether list holds s.
 func contains(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, s)
 }
 
 // resolvePrefix returns the namespace URI prefix stands for in scope ns:

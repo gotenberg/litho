@@ -1,6 +1,7 @@
 package docx
 
 import (
+	"maps"
 	"strconv"
 	"strings"
 
@@ -33,8 +34,8 @@ func parseWidth(e *ooxml.Element) *widthSpec {
 	val := attrOr(e, "w")
 	switch {
 	case typ == "pct" || strings.HasSuffix(val, "%"):
-		if strings.HasSuffix(val, "%") {
-			v, err := strconv.ParseFloat(strings.TrimSuffix(val, "%"), 64)
+		if before, ok := strings.CutSuffix(val, "%"); ok {
+			v, err := strconv.ParseFloat(before, 64)
 			if err != nil {
 				return nil
 			}
@@ -106,12 +107,8 @@ func (t tableProps) merge(o *tableProps) tableProps {
 	}
 	if len(o.cellMar) > 0 {
 		m := map[string]float64{}
-		for k, v := range t.cellMar {
-			m[k] = v
-		}
-		for k, v := range o.cellMar {
-			m[k] = v
-		}
+		maps.Copy(m, t.cellMar)
+		maps.Copy(m, o.cellMar)
 		t.cellMar = m
 	}
 	if o.look != nil {
@@ -138,12 +135,8 @@ func mergeBorders(a, b map[string]*borderSpec) map[string]*borderSpec {
 		return a
 	}
 	m := make(map[string]*borderSpec, len(a)+len(b))
-	for k, v := range a {
-		m[k] = v
-	}
-	for k, v := range b {
-		m[k] = v
-	}
+	maps.Copy(m, a)
+	maps.Copy(m, b)
 	return m
 }
 
@@ -197,11 +190,11 @@ func (d *document) parseTableProps(e *ooxml.Element) *tableProps {
 		case "tblW":
 			t.width = parseWidth(c)
 		case "jc":
-			t.jc = ptr(val)
+			t.jc = new(val)
 		case "tblInd":
 			if ws := parseWidth(c); ws != nil && ws.kind == "dxa" {
 				v, _ := ooxml.Twips(attrOr(c, "w"))
-				t.ind = ptr(v)
+				t.ind = new(v)
 			}
 		case "tblBorders":
 			t.borders = d.parseBorders(c)
@@ -210,22 +203,22 @@ func (d *document) parseTableProps(e *ooxml.Element) *tableProps {
 				t.shading = &col
 			}
 		case "tblLayout":
-			t.layoutFixed = ptr(attrOr(c, "type") == "fixed")
+			t.layoutFixed = new(attrOr(c, "type") == "fixed")
 		case "tblCellMar":
 			t.cellMar = parseMargins(c)
 		case "tblLook":
 			t.look = parseLook(c)
 		case "bidiVisual":
-			t.bidi = ptr(ooxml.Toggle(c))
+			t.bidi = new(ooxml.Toggle(c))
 		case "tblpPr":
 			t.floating = c
 		case "tblStyleRowBandSize":
 			if v, ok := ooxml.Int(val); ok && v > 0 {
-				t.rowBand = ptr(v)
+				t.rowBand = new(v)
 			}
 		case "tblStyleColBandSize":
 			if v, ok := ooxml.Int(val); ok && v > 0 {
-				t.colBand = ptr(v)
+				t.colBand = new(v)
 			}
 		}
 	}
@@ -286,12 +279,8 @@ func (c cellProps) merge(o *cellProps) cellProps {
 	}
 	if len(o.margins) > 0 {
 		m := map[string]float64{}
-		for k, v := range c.margins {
-			m[k] = v
-		}
-		for k, v := range o.margins {
-			m[k] = v
-		}
+		maps.Copy(m, c.margins)
+		maps.Copy(m, o.margins)
 		c.margins = m
 	}
 	if o.vAlign != nil {
@@ -325,7 +314,7 @@ func (d *document) parseCellProps(e *ooxml.Element) *cellProps {
 			if !hasVal {
 				val = "continue"
 			}
-			c.vMerge = ptr(val)
+			c.vMerge = new(val)
 		case "tcBorders":
 			c.borders = d.parseBorders(x)
 		case "shd":
@@ -335,9 +324,9 @@ func (d *document) parseCellProps(e *ooxml.Element) *cellProps {
 		case "tcMar":
 			c.margins = parseMargins(x)
 		case "vAlign":
-			c.vAlign = ptr(val)
+			c.vAlign = new(val)
 		case "noWrap":
-			c.noWrap = ptr(ooxml.Toggle(x))
+			c.noWrap = new(ooxml.Toggle(x))
 		case "textDirection":
 			c.textDir = val
 		case "hideMark":
@@ -371,15 +360,15 @@ func parseRowProps(e *ooxml.Element) *rowProps {
 		switch x.Local {
 		case "trHeight":
 			if v, ok := ooxml.Twips(val); ok && v > 0 {
-				r.height = ptr(v)
+				r.height = new(v)
 			}
 			r.hRule = attrOr(x, "hRule")
 		case "jc":
 			r.jc = val
 		case "cantSplit":
-			r.cantSplit = ptr(ooxml.Toggle(x))
+			r.cantSplit = new(ooxml.Toggle(x))
 		case "tblHeader":
-			r.header = ptr(ooxml.Toggle(x))
+			r.header = new(ooxml.Toggle(x))
 		case "gridBefore":
 			if v, ok := ooxml.Int(val); ok && v > 0 {
 				r.gridBefore = min(v, maxGridColumns)
@@ -453,9 +442,7 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 		styleCell = styleCell.merge(st.tc)
 		stylePara = stylePara.merge(st.ppr)
 		styleRun = styleRun.merge(st.rpr)
-		for k, v := range st.cond {
-			conds[k] = v
-		}
+		maps.Copy(conds, st.cond)
 	}
 	tp = tp.merge(direct)
 	look := tableLook{}
@@ -533,9 +520,7 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 		tableSt.Width = css.Dimension{Kind: css.Percent, Value: tp.width.v}
 	}
 	cellMar := map[string]float64{"left": defaultCellMargin, "right": defaultCellMargin, "top": 0, "bottom": 0}
-	for k, v := range tp.cellMar {
-		cellMar[k] = v
-	}
+	maps.Copy(cellMar, tp.cellMar)
 	indent := 0.0
 	if tp.ind != nil {
 		indent = *tp.ind

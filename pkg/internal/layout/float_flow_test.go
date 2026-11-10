@@ -37,14 +37,16 @@ func TestFloats_PlacementRules(t *testing.T) {
 			doc(el(sty(float(css.FloatLeft), width(100), height(100)),
 				el(sty(float(css.FloatRight), width(10), height(30))),
 				el(sty(margin(0, 20, 0, 0)), el(sty(float(css.FloatLeft), width(95), height(5)))))),
-			[]int{0, 0, 1, 0}, [2]float64{0, 30},
+			[]int{0, 0, 1, 0},
+			[2]float64{0, 30},
 		},
 		{
 			// 9.5.2: clear on a float puts it below the floats it clears.
 			"cleared float",
 			doc(el(sty(float(css.FloatRight), width(10), height(10))),
 				el(sty(float(css.FloatRight), clearing(css.ClearRight), width(40), height(10)))),
-			[]int{0, 1}, [2]float64{60, 10},
+			[]int{0, 1},
+			[2]float64{60, 10},
 		},
 	}
 	for _, tt := range tests {

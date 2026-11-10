@@ -662,7 +662,7 @@ func sortByZOrder(s *DiagramShape, depth int) {
 		}
 		k[i].zorder += off
 		k[i].zoff = 0
-		for j := 0; j < off; j++ {
+		for j := range off {
 			n := i + j + 1
 			if n >= len(k) {
 				break

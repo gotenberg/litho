@@ -69,8 +69,16 @@ func TestChartFromDocument_Kinds(t *testing.T) {
 		class string
 		kind  chart.Kind
 	}{
-		{"bar", chart.Bar}, {"line", chart.Line}, {"area", chart.Area}, {"circle", chart.Pie}, {"ring", chart.Doughnut},
-		{"scatter", chart.Scatter}, {"bubble", chart.Bubble}, {"radar", chart.Radar}, {"filled-radar", chart.Radar}, {"stock", chart.Line},
+		{"bar", chart.Bar},
+		{"line", chart.Line},
+		{"area", chart.Area},
+		{"circle", chart.Pie},
+		{"ring", chart.Doughnut},
+		{"scatter", chart.Scatter},
+		{"bubble", chart.Bubble},
+		{"radar", chart.Radar},
+		{"filled-radar", chart.Radar},
+		{"stock", chart.Line},
 	}
 	for _, tt := range tests {
 		t.Run(tt.class, func(t *testing.T) {

@@ -126,8 +126,16 @@ func TestUnits(t *testing.T) {
 		want float64
 		ok   bool
 	}{
-		{"1in", 72, true}, {"2.54cm", 72, true}, {"10mm", 72 / 2.54, true}, {"12pt", 12, true},
-		{"1pc", 12, true}, {"4px", 3, true}, {"-0.5in", -36, true}, {"3", 0, false}, {"1em", 0, false}, {"1e9in", 0, false},
+		{"1in", 72, true},
+		{"2.54cm", 72, true},
+		{"10mm", 72 / 2.54, true},
+		{"12pt", 12, true},
+		{"1pc", 12, true},
+		{"4px", 3, true},
+		{"-0.5in", -36, true},
+		{"3", 0, false},
+		{"1em", 0, false},
+		{"1e9in", 0, false},
 	}
 	for _, c := range lengths {
 		got, ok := Length(c.in)

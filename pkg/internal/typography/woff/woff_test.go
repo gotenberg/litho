@@ -354,8 +354,10 @@ func minimalSfnt(t *testing.T, res *glyfResult) *truetype.Font {
 	binary.BigEndian.PutUint16(maxp[4:], uint16(res.numGlyphs)) //nolint:gosec // test
 	tag := func(s string) uint32 { return binary.BigEndian.Uint32([]byte(s)) }
 	program, err := assemble(0x00010000, []table{
-		{tag: tag("head"), data: head}, {tag: tag("maxp"), data: maxp},
-		{tag: tag("glyf"), data: res.glyf}, {tag: tag("loca"), data: res.loca},
+		{tag: tag("head"), data: head},
+		{tag: tag("maxp"), data: maxp},
+		{tag: tag("glyf"), data: res.glyf},
+		{tag: tag("loca"), data: res.loca},
 	})
 	if err != nil {
 		t.Fatal(err)

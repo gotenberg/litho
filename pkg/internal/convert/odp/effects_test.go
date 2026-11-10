@@ -31,8 +31,10 @@ func TestRead_Effects(t *testing.T) {
 	}{
 		{"hidden", `draw:shadow="hidden" draw:shadow-offset-x="1cm"`, nil, nil, 0},
 		{"pool shadow", `draw:shadow="visible"`, &slides.Shadow{Color: css.Color{R: 128.0 / 255, G: 128.0 / 255, B: 128.0 / 255, A: 1}, Opacity: 1, OffsetX: 0.2 * cm, OffsetY: 0.2 * cm, ScaleX: 1, ScaleY: 1}, nil, 0},
-		{"blurred shadow", `draw:shadow="visible" draw:shadow-offset-x="1cm" draw:shadow-offset-y="-0.5cm" draw:shadow-color="#ff0000" draw:shadow-opacity="40%" loext:shadow-blur="0.5cm"`,
-			&slides.Shadow{Color: css.Color{R: 1, A: 1}, Opacity: 0.4, OffsetX: cm, OffsetY: -0.5 * cm, ScaleX: 1, ScaleY: 1, Blur: 0.5 * cm}, nil, 0},
+		{
+			"blurred shadow", `draw:shadow="visible" draw:shadow-offset-x="1cm" draw:shadow-offset-y="-0.5cm" draw:shadow-color="#ff0000" draw:shadow-opacity="40%" loext:shadow-blur="0.5cm"`,
+			&slides.Shadow{Color: css.Color{R: 1, A: 1}, Opacity: 0.4, OffsetX: cm, OffsetY: -0.5 * cm, ScaleX: 1, ScaleY: 1, Blur: 0.5 * cm}, nil, 0,
+		},
 		{"glow", `loext:glow-radius="1cm" loext:glow-color="#00ff00" loext:glow-transparency="60%"`, nil, &slides.Glow{Color: css.Color{G: 1, A: 1}, Opacity: 0.4, Radius: cm}, 0},
 		{"black glow by default", `loext:glow-radius="1cm"`, nil, &slides.Glow{Color: css.Color{A: 1}, Opacity: 1, Radius: cm}, 0},
 		{"no glow radius", `loext:glow-radius="0cm" loext:glow-color="#00ff00"`, nil, nil, 0},

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -309,12 +310,12 @@ func (r *renderer) openUnion(s sink, op float64, regions []clipRegion) (sink, fu
 		var out []compose.Fragment
 		for _, reg := range regions {
 			content := c.out
-			for i := len(reg) - 1; i >= 0; i-- {
+			for i, r := range slices.Backward(reg) {
 				m := identity
 				if i == 0 && op >= 1 {
 					m = s.pending
 				}
-				content = []compose.Fragment{&compose.Group{Transform: m, Clip: reg[i], Opacity: 1, Content: content}}
+				content = []compose.Fragment{&compose.Group{Transform: m, Clip: r, Opacity: 1, Content: content}}
 			}
 			out = append(out, content...)
 		}

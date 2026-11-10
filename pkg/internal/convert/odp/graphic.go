@@ -3,6 +3,7 @@ package odp
 import (
 	"context"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -170,9 +171,9 @@ func (r *reader) gradient(g *odf.Gradient, alpha float64) *slides.Gradient {
 		if b > 0 {
 			out.Stops = append(out.Stops, slides.Stop{Position: 0, Color: col(stops[len(stops)-1].Color)})
 		}
-		for i := len(stops) - 1; i >= 0; i-- {
-			t := b + (1-b)*(1-stops[i].Offset)
-			out.Stops = append(out.Stops, slides.Stop{Position: t / 2, Color: col(stops[i].Color)})
+		for _, stop := range slices.Backward(stops) {
+			t := b + (1-b)*(1-stop.Offset)
+			out.Stops = append(out.Stops, slides.Stop{Position: t / 2, Color: col(stop.Color)})
 		}
 		for i := 1; i < len(stops); i++ {
 			t := b + (1-b)*(1-stops[i].Offset)
@@ -188,8 +189,8 @@ func (r *reader) gradient(g *odf.Gradient, alpha float64) *slides.Gradient {
 		}
 		out.Radial = true
 		out.CenterX, out.CenterY = g.CX, g.CY
-		for i := len(stops) - 1; i >= 0; i-- {
-			out.Stops = append(out.Stops, slides.Stop{Position: (1 - b) * (1 - stops[i].Offset), Color: col(stops[i].Color)})
+		for _, stop := range slices.Backward(stops) {
+			out.Stops = append(out.Stops, slides.Stop{Position: (1 - b) * (1 - stop.Offset), Color: col(stop.Color)})
 		}
 		if b > 0 {
 			out.Stops = append(out.Stops, slides.Stop{Position: 1, Color: col(stops[0].Color)})

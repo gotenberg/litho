@@ -74,7 +74,7 @@ func (b *builder) optimalHeights(g *grid) {
 				continue
 			}
 			lineH := 0.0
-			for _, line := range strings.Split(d.text, "\n") {
+			for line := range strings.SplitSeq(d.text, "\n") {
 				lineH = max(lineH, b.m.textLineHeight(d.font, line))
 			}
 			for _, r := range d.runs {

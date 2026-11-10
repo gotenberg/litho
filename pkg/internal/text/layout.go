@@ -509,10 +509,8 @@ func (st *layoutState) fallback(s *styleState, script language.Script, r rune) *
 		ra, rb := rankFace(s.req, a), rankFace(s.req, b)
 		return slices.Compare(ra[:], rb[:])
 	})
-	for _, fc := range rest {
-		if try(fc) {
-			return found
-		}
+	if slices.ContainsFunc(rest, try) {
+		return found
 	}
 	return nil
 }

@@ -64,10 +64,12 @@ func TestGradient_ToCornerAndRepeat(t *testing.T) {
 
 func TestGradient_RadialCircle(t *testing.T) {
 	t.Parallel()
-	g := &css.Gradient{Kind: css.RadialGradient, Circle: true, Size: css.RadialExplicit,
+	g := &css.Gradient{
+		Kind: css.RadialGradient, Circle: true, Size: css.RadialExplicit,
 		Radius: [2]css.Dimension{css.Pts(px(2)), css.Pts(px(2))},
 		Center: [2]css.Dimension{{Kind: css.Percent, Value: 0.5}, {Kind: css.Percent, Value: 0.5}},
-		Stops:  gstops(red, css.Dimension{Kind: css.Percent, Value: 1}, blue, css.Dimension{Kind: css.Percent, Value: 1})}
+		Stops:  gstops(red, css.Dimension{Kind: css.Percent, Value: 1}, blue, css.Dimension{Kind: css.Percent, Value: 1}),
+	}
 	res := run(t, doc(el(sty(width(6), height(6), grad(g)))), page(6, 6))
 	assertPixels(t, res, 1, `
 		BBBBBB
@@ -123,8 +125,10 @@ func TestGradient_ColorStops(t *testing.T) {
 		solid compose.Color
 	}{
 		{"one stop", &css.Gradient{Stops: gstops(red, math.NaN())}, compose.Color{R: 1, A: 1}},
-		{"repeating without period: equidistant average", &css.Gradient{Repeating: true, Stops: gstops(black, 3.0, black, 3.0, css.Color{R: 0.5, B: 0.5, A: 1}, 3.0, css.Color{R: 0.5, B: 0.5, A: 1}, 3.0)},
-			compose.Color{R: 0.25, B: 0.25, A: 1}},
+		{
+			"repeating without period: equidistant average", &css.Gradient{Repeating: true, Stops: gstops(black, 3.0, black, 3.0, css.Color{R: 0.5, B: 0.5, A: 1}, 3.0, css.Color{R: 0.5, B: 0.5, A: 1}, 3.0)},
+			compose.Color{R: 0.25, B: 0.25, A: 1},
+		},
 		{"radial before its centre", &css.Gradient{Stops: gstops(red, -3.0, blue, -1.0)}, compose.Color{B: 1, A: 1}},
 	} {
 		_, _, _, solid, ok := e.colorStops(tc.g, px(10), 0, px(10), tc.name == "radial before its centre", 0)

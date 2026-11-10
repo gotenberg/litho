@@ -253,7 +253,7 @@ func (d *document) resolvePara(direct *paraProps, c *cond) resolvedPara {
 	rp.run = run
 	rp.mark = run.merge(pp.mark)
 	if rp.mark.style != "" {
-		rp.mark = run.merge(ptr(ss.charStyle(rp.mark.style))).merge(pp.mark)
+		rp.mark = run.merge(new(ss.charStyle(rp.mark.style))).merge(pp.mark)
 	}
 	return rp
 }
@@ -921,7 +921,7 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 		direct.style = ""
 	}
 	if direct.style != "" {
-		props = props.merge(ptr(d.styles.charStyle(direct.style)))
+		props = props.merge(new(d.styles.charStyle(direct.style)))
 	}
 	props = props.merge(direct)
 	hidden := boolOf(props.vanish)
@@ -1000,7 +1000,7 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 			ns := st
 			if props.vertAlign == nil && props.position == nil {
 				ns = inlineStyle(st)
-				d.applyRun(ns, props.merge(&runProps{vertAlign: ptr("superscript")}), lineMult)
+				d.applyRun(ns, props.merge(&runProps{vertAlign: new("superscript")}), lineMult)
 			}
 			ref := &layout.Node{Kind: layout.Element, Style: ns, Children: []*layout.Node{{Kind: layout.Text, Style: ns, Text: s.note}}}
 			if s.noteID != "" && !s.noteRef {

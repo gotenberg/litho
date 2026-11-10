@@ -174,7 +174,7 @@ func (mc *marginState) commitFloats(y float64) {
 // establishes a block formatting context, and at inline content.
 func leadingMargins(b *box, cbw float64) strut {
 	var s strut
-	for depth := 0; depth < maxTreeDepth; depth++ {
+	for depth := range maxTreeDepth {
 		pd, bd, _ := edgesOf(b, cbw)
 		if pd[css.Top] != 0 || bd[css.Top] != 0 || b.inlineKids || (depth > 0 && b.establishesBFC()) {
 			break
@@ -1154,8 +1154,7 @@ func lastBaselineFlow(b *box) (float64, bool) {
 		l := b.lines[len(b.lines)-1]
 		return l.y + l.baseline, true
 	}
-	for i := len(b.kids) - 1; i >= 0; i-- {
-		k := b.kids[i]
+	for _, k := range slices.Backward(b.kids) {
 		if k.inline || k.float != css.FloatNone || k.abs || k.kind != kindBlock || !k.laidOut {
 			continue
 		}

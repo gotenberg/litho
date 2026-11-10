@@ -1,6 +1,8 @@
 package odf
 
 import (
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -85,12 +87,8 @@ func (p Props) merge(el *Element) Props {
 		return p
 	}
 	out := Props{attrs: make(map[string]string, len(p.attrs)+len(el.Attr)), kids: make(map[string]*Element, len(p.kids))}
-	for k, v := range p.attrs {
-		out.attrs[k] = v
-	}
-	for k, v := range p.kids {
-		out.kids[k] = v
-	}
+	maps.Copy(out.attrs, p.attrs)
+	maps.Copy(out.kids, p.kids)
 	for _, a := range el.Attr {
 		out.attrs[qname(a.Name)] = a.Value
 	}
@@ -113,12 +111,8 @@ func (p Props) Over(q Props) Props {
 	}
 	out := Props{attrs: make(map[string]string, len(p.attrs)+len(q.attrs)), kids: map[string]*Element{}}
 	for _, m := range []Props{p, q} {
-		for k, v := range m.attrs {
-			out.attrs[k] = v
-		}
-		for k, v := range m.kids {
-			out.kids[k] = v
-		}
+		maps.Copy(out.attrs, m.attrs)
+		maps.Copy(out.kids, m.kids)
 	}
 	return out
 }
@@ -488,8 +482,8 @@ func propChild(el *Element, key string) *Element {
 // the master page) are inherited too (16.2).
 func (s *Styles) Inherited(scope Scope, family, name string, get func(*Style) (string, bool)) string {
 	chain := s.Chain(scope, family, name)
-	for i := len(chain) - 1; i >= 0; i-- {
-		if v, ok := get(chain[i]); ok {
+	for _, c := range slices.Backward(chain) {
+		if v, ok := get(c); ok {
 			return v
 		}
 	}

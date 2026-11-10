@@ -57,10 +57,18 @@ func TestStrokeDash_DashArray(t *testing.T) {
 		width float64
 		want  []float64
 	}{
-		{"absolute", StrokeDash{Dots1: 1, Dots1Length: 0.5 * cm, Dots2: 1, Dots2Length: 0.1 * cm, Distance: 0.2 * cm}, 0.1 * cm,
-			[]float64{0.5 * cm, 0.2 * cm, 0.1 * cm, 0.2 * cm}},
-		{"relative", StrokeDash{Dots1: 2, Dots1Length: 2, Distance: 1, Relative: true}, 0.2 * cm,
-			[]float64{0.4 * cm, 0.2 * cm, 0.4 * cm, 0.2 * cm}},
+		{
+			"absolute",
+			StrokeDash{Dots1: 1, Dots1Length: 0.5 * cm, Dots2: 1, Dots2Length: 0.1 * cm, Distance: 0.2 * cm},
+			0.1 * cm,
+			[]float64{0.5 * cm, 0.2 * cm, 0.1 * cm, 0.2 * cm},
+		},
+		{
+			"relative",
+			StrokeDash{Dots1: 2, Dots1Length: 2, Distance: 1, Relative: true},
+			0.2 * cm,
+			[]float64{0.4 * cm, 0.2 * cm, 0.4 * cm, 0.2 * cm},
+		},
 		{"zero lengths take the width", StrokeDash{Dots1: 1, Distance: 0.05 * cm}, 0.1 * cm, []float64{0.1 * cm, 0.05 * cm}},
 		{"short absolute dashes widen", StrokeDash{Dots1: 1, Dots1Length: 0.1, Distance: 0.1}, 0, []float64{smallestDash, smallestDash}},
 		{"hairline", StrokeDash{Dots1: 1, Distance: 1, Relative: true}, 0, []float64{smallestDash, smallestDash}},

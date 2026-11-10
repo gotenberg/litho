@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"slices"
 
 	"golang.org/x/image/vector"
 
@@ -90,8 +91,7 @@ func fitRadii(r compose.Rect, radii [4][2]float64) [4][2]float64 {
 // background, clipped out of the border box, inner ones over it, clipped
 // to the padding box. The first shadow paints on top.
 func (p *painter) shadows(b *box, st *css.Style, r compose.Rect, radii [4][2]float64, bd [4]float64, inset bool) {
-	for i := len(st.BoxShadow) - 1; i >= 0; i-- {
-		sh := st.BoxShadow[i]
+	for _, sh := range slices.Backward(st.BoxShadow) {
 		if sh.Inset != inset {
 			continue
 		}

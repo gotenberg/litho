@@ -49,7 +49,7 @@ func (b *builder) builtinLayers(name, kind string) []odf.Props {
 		return nil
 	}
 	var chain []builtinStyle
-	for i := 0; i < maxBuiltinChain; i++ {
+	for range maxBuiltinChain {
 		bs, ok := builtins[name]
 		if !ok {
 			break

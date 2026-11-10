@@ -77,7 +77,7 @@ func Blur(m *image.Alpha, k Kernel) *image.Alpha {
 	w, h := out.Bounds().Dx(), out.Bounds().Dy()
 	line := make([]float64, max(w, h))
 	res := make([]float64, max(w, h))
-	for y := 0; y < h; y++ {
+	for y := range h {
 		row := out.Pix[y*out.Stride : y*out.Stride+w]
 		for x, v := range row {
 			line[x] = float64(v)
@@ -87,12 +87,12 @@ func Blur(m *image.Alpha, k Kernel) *image.Alpha {
 			row[x] = byteOf(res[x])
 		}
 	}
-	for x := 0; x < w; x++ {
-		for y := 0; y < h; y++ {
+	for x := range w {
+		for y := range h {
 			line[y] = float64(out.Pix[y*out.Stride+x])
 		}
 		convolve(line[:h], res[:h], k)
-		for y := 0; y < h; y++ {
+		for y := range h {
 			out.Pix[y*out.Stride+x] = byteOf(res[y])
 		}
 	}

@@ -231,8 +231,10 @@ func TestStampText_Basic(t *testing.T) {
 // [embed.Load], accepts a well-formed TrueType program.
 func TestValidateTTFForStamp_AcceptsAFont(t *testing.T) {
 	t.Parallel()
-	program := fontbuild.TrueType{PostScriptName: "TestSans", Family: "Test Sans", Subfamily: "Regular",
-		Glyphs: []fontbuild.Glyph{{Name: "A", Unicode: 'A', Advance: 600}}, NotdefAdvance: 500}.Build()
+	program := fontbuild.TrueType{
+		PostScriptName: "TestSans", Family: "Test Sans", Subfamily: "Regular",
+		Glyphs: []fontbuild.Glyph{{Name: "A", Unicode: 'A', Advance: 600}}, NotdefAdvance: 500,
+	}.Build()
 	if err := ValidateTTFForStamp(program); err != nil {
 		t.Fatalf("ValidateTTFForStamp: %v", err)
 	}

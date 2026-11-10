@@ -818,8 +818,8 @@ func (c *colCtx) consumed(b *box, kids []*box, end float64, abs bool) []float64 
 
 // lastFrag returns the last column with content in cons, 0 for none.
 func (c *colCtx) lastFrag(cons []float64) int {
-	for i := len(cons) - 1; i >= 0; i-- {
-		if cons[i] > eps {
+	for i, con := range slices.Backward(cons) {
+		if con > eps {
 			return i
 		}
 	}
@@ -997,10 +997,8 @@ func setOf(b, d *box) *colSet {
 		if s.spanner != nil {
 			continue
 		}
-		for _, kk := range s.kids {
-			if kk == k {
-				return s
-			}
+		if slices.Contains(s.kids, k) {
+			return s
 		}
 	}
 	return nil

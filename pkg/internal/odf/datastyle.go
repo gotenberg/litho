@@ -1,6 +1,7 @@
 package odf
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -416,8 +417,8 @@ func numberCode(el *Element, percent bool) string {
 // decimal point.
 func embed(code string, texts []*Element) string {
 	digits := []rune(code)
-	for i := len(texts) - 1; i >= 0; i-- {
-		pos, ok := attrInt(texts[i], NSNumber, "position")
+	for _, text := range slices.Backward(texts) {
+		pos, ok := attrInt(text, NSNumber, "position")
 		if !ok {
 			continue
 		}
@@ -428,7 +429,7 @@ func embed(code string, texts []*Element) string {
 				seen++
 			}
 		}
-		lit := []rune(literal(texts[i].TextContent(), false))
+		lit := []rune(literal(text.TextContent(), false))
 		digits = append(digits[:at], append(lit, digits[at:]...)...)
 	}
 	return string(digits)

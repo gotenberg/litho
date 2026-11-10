@@ -2,11 +2,10 @@ package slides
 
 import (
 	"context"
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"strings"
-
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 )

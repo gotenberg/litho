@@ -1,6 +1,7 @@
 package docx
 
 import (
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -86,8 +87,8 @@ func headingTitle(n *layout.Node) string {
 				// the heading's title, as LibreOffice bookmarks it.
 				continue
 			}
-			for i := len(cur.Children) - 1; i >= 0; i-- {
-				stack = append(stack, cur.Children[i])
+			for _, v := range slices.Backward(cur.Children) {
+				stack = append(stack, v)
 			}
 		}
 	}

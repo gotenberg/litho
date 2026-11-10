@@ -370,8 +370,7 @@ func (p *painter) fragments(b *box) []compose.Rect {
 	}
 	var top func(i int) (float64, float64)
 	var at func(y float64) int
-	for i := len(p.frames) - 1; i >= 0; i-- {
-		f := p.frames[i]
+	for _, f := range slices.Backward(p.frames) {
 		if !f.columns || f.set == nil || len(f.set.frags) == 0 {
 			continue
 		}

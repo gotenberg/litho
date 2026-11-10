@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -153,8 +154,8 @@ func (e *Element) TextContent() string {
 			b.WriteString(cur.Text)
 			continue
 		}
-		for i := len(cur.Children) - 1; i >= 0; i-- {
-			stack = append(stack, cur.Children[i])
+		for _, v := range slices.Backward(cur.Children) {
+			stack = append(stack, v)
 		}
 	}
 	return b.String()

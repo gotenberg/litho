@@ -194,8 +194,8 @@ func formatNumber(format string, n int) (string, bool) {
 	kinds := []string{"arabic", "alphaLc", "alphaUc", "romanLc", "romanUc"}
 	kind, rest := "", ""
 	for _, k := range kinds {
-		if strings.HasPrefix(format, k) {
-			kind, rest = k, strings.TrimPrefix(format, k)
+		if after, ok := strings.CutPrefix(format, k); ok {
+			kind, rest = k, after
 		}
 	}
 	var s string

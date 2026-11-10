@@ -2,6 +2,7 @@ package layout
 
 import (
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -35,8 +36,8 @@ func leaderText(b *box) *box {
 		if c.kind == kindText {
 			return c
 		}
-		for i := len(c.kids) - 1; i >= 0; i-- {
-			stack = append(stack, c.kids[i])
+		for _, v := range slices.Backward(c.kids) {
+			stack = append(stack, v)
 		}
 	}
 	return nil

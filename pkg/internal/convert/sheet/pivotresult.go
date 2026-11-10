@@ -4,6 +4,7 @@ import (
 	"math"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // maxPivotEntries caps the rows or the columns of one pivot table's
@@ -514,13 +515,13 @@ func (pr *pivotRun) dataName(m int, fn PivotFunction) string {
 // its real levels, the empty key first.
 func (pr *pivotRun) recordKeys(a *pivotAxis, r int) []string {
 	keys := []string{""}
-	k := ""
+	var k strings.Builder
 	for i := range a.levels {
 		if a.levels[i].data {
 			continue
 		}
-		k += strconv.Itoa(pr.src.ids[a.levels[i].f.Field][r]) + ","
-		keys = append(keys, k)
+		k.WriteString(strconv.Itoa(pr.src.ids[a.levels[i].f.Field][r]) + ",")
+		keys = append(keys, k.String())
 	}
 	return keys
 }

@@ -2,6 +2,7 @@ package pptx
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -101,9 +102,7 @@ func readColorMap(e *ooxml.Element, base colorMap) colorMap {
 		return base
 	}
 	m := colorMap{}
-	for k, v := range base {
-		m[k] = v
-	}
+	maps.Copy(m, base)
 	for _, a := range e.Attrs {
 		if a.Name.Space == "" {
 			m[a.Name.Local] = a.Value

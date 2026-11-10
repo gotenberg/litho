@@ -47,8 +47,8 @@ func TestConvert_I18nTextExtractsInSourceOrder(t *testing.T) {
 	}
 	got := strings.Split(strings.TrimSpace(text), "\n")
 	want := []string{"Multilingual"}
-	for _, line := range strings.Split(string(src), "\n") {
-		if i := strings.Index(line, "<p"); i >= 0 {
+	for line := range strings.SplitSeq(string(src), "\n") {
+		if found := strings.Contains(line, "<p"); found {
 			body := line[strings.Index(line, ">")+1:]
 			want = append(want, strings.TrimSuffix(body, "</p>"))
 		}

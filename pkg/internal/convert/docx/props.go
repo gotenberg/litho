@@ -1,6 +1,7 @@
 package docx
 
 import (
+	"maps"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -121,9 +122,6 @@ func (r runProps) merge(o *runProps) runProps {
 // boolOf returns the value of an on/off property, false when unset.
 func boolOf(b *bool) bool { return b != nil && *b }
 
-// ptr returns a pointer to v.
-func ptr[T any](v T) *T { return &v }
-
 // parseRunProps reads a w:rPr element; nil yields an empty set.
 func (d *document) parseRunProps(e *ooxml.Element) *runProps {
 	r := &runProps{}
@@ -141,35 +139,35 @@ func (d *document) parseRunProps(e *ooxml.Element) *runProps {
 		case "rFonts":
 			r.fonts = d.parseFonts(c)
 		case "b":
-			r.bold = ptr(ooxml.Toggle(c))
+			r.bold = new(ooxml.Toggle(c))
 		case "i":
-			r.italic = ptr(ooxml.Toggle(c))
+			r.italic = new(ooxml.Toggle(c))
 		case "caps":
-			r.caps = ptr(ooxml.Toggle(c))
+			r.caps = new(ooxml.Toggle(c))
 		case "smallCaps":
-			r.smallCaps = ptr(ooxml.Toggle(c))
+			r.smallCaps = new(ooxml.Toggle(c))
 		case "strike":
-			r.strike = ptr(ooxml.Toggle(c))
+			r.strike = new(ooxml.Toggle(c))
 		case "dstrike":
-			r.dstrike = ptr(ooxml.Toggle(c))
+			r.dstrike = new(ooxml.Toggle(c))
 		case "vanish":
-			r.vanish = ptr(ooxml.Toggle(c))
+			r.vanish = new(ooxml.Toggle(c))
 		case "specVanish":
-			r.specVanish = ptr(ooxml.Toggle(c))
+			r.specVanish = new(ooxml.Toggle(c))
 		case "outline":
-			r.outline = ptr(ooxml.Toggle(c))
+			r.outline = new(ooxml.Toggle(c))
 		case "shadow":
-			r.shadow = ptr(ooxml.Toggle(c))
+			r.shadow = new(ooxml.Toggle(c))
 		case "emboss":
-			r.emboss = ptr(ooxml.Toggle(c))
+			r.emboss = new(ooxml.Toggle(c))
 		case "imprint":
-			r.imprint = ptr(ooxml.Toggle(c))
+			r.imprint = new(ooxml.Toggle(c))
 		case "rtl":
-			r.rtl = ptr(ooxml.Toggle(c))
+			r.rtl = new(ooxml.Toggle(c))
 		case "sz":
 			// ST_HpsMeasure, half-points (17.3.2.38).
 			if v, ok := ooxml.Measure(val, 0.5); ok && v > 0 {
-				r.size = ptr(min(v, maxFontSize))
+				r.size = new(min(v, maxFontSize))
 			}
 		case "color":
 			r.color = d.parseColor(c, "val")
@@ -196,33 +194,33 @@ func (d *document) parseRunProps(e *ooxml.Element) *runProps {
 			}
 		case "spacing":
 			if v, ok := ooxml.Twips(val); ok {
-				r.spacing = ptr(max(-maxFontSize, min(maxFontSize, v)))
+				r.spacing = new(max(-maxFontSize, min(maxFontSize, v)))
 			}
 		case "w":
 			// ST_TextScale, a percentage, 1 to 600 (17.3.2.43).
 			if v, ok := ooxml.Int(strings.TrimSuffix(val, "%")); ok && v > 0 {
-				r.scale = ptr(float64(min(v, 600)) / 100)
+				r.scale = new(float64(min(v, 600)) / 100)
 			}
 		case "kern":
 			// ST_HpsMeasure, half-points (17.3.2.19).
 			if v, ok := ooxml.Measure(val, 0.5); ok {
-				r.kern = ptr(max(0, min(maxFontSize, v)))
+				r.kern = new(max(0, min(maxFontSize, v)))
 			}
 		case "position":
 			if v, ok := ooxml.Measure(val, 0.5); ok {
-				r.position = ptr(max(-maxFontSize, min(maxFontSize, v)))
+				r.position = new(max(-maxFontSize, min(maxFontSize, v)))
 			}
 		case "vertAlign":
-			r.vertAlign = ptr(val)
+			r.vertAlign = new(val)
 		case "lang":
 			if hasVal {
-				r.lang = ptr(val)
+				r.lang = new(val)
 			}
 			if v, ok := c.Attr("eastAsia"); ok {
-				r.langEastAsia = ptr(v)
+				r.langEastAsia = new(v)
 			}
 			if v, ok := c.Attr("bidi"); ok {
-				r.langBidi = ptr(v)
+				r.langBidi = new(v)
 			}
 		}
 	}
@@ -415,12 +413,8 @@ func (p paraProps) merge(o *paraProps) paraProps {
 	}
 	if len(o.borders) > 0 {
 		merged := make(map[string]*borderSpec, len(p.borders)+len(o.borders))
-		for k, v := range p.borders {
-			merged[k] = v
-		}
-		for k, v := range o.borders {
-			merged[k] = v
-		}
+		maps.Copy(merged, p.borders)
+		maps.Copy(merged, o.borders)
 		p.borders = merged
 	}
 	if o.shading != nil || o.noShading {
@@ -483,7 +477,7 @@ func (d *document) parseParaProps(e *ooxml.Element) *paraProps {
 		case "pStyle":
 			p.style = val
 		case "jc":
-			p.jc = ptr(val)
+			p.jc = new(val)
 		case "ind":
 			d.parseInd(c, p)
 		case "spacing":
@@ -492,48 +486,48 @@ func (d *document) parseParaProps(e *ooxml.Element) *paraProps {
 				dst  **float64
 			}{{"before", &p.before}, {"after", &p.after}} {
 				if v, ok := ooxml.Twips(attrOr(c, a.name)); ok {
-					*a.dst = ptr(max(0, v))
+					*a.dst = new(max(0, v))
 				}
 			}
 			// beforeLines and afterLines are hundredths of a line, which
 			// Word sizes as 12 points (17.3.1.33).
 			if v, ok := ooxml.Int(attrOr(c, "beforeLines")); ok {
-				p.before = ptr(max(0, float64(v)*0.12))
+				p.before = new(max(0, float64(v)*0.12))
 			}
 			if v, ok := ooxml.Int(attrOr(c, "afterLines")); ok {
-				p.after = ptr(max(0, float64(v)*0.12))
+				p.after = new(max(0, float64(v)*0.12))
 			}
 			if v, ok := c.Attr("beforeAutospacing"); ok {
-				p.beforeAuto = ptr(ooxml.OnOff(v, true))
+				p.beforeAuto = new(ooxml.OnOff(v, true))
 			}
 			if v, ok := c.Attr("afterAutospacing"); ok {
-				p.afterAuto = ptr(ooxml.OnOff(v, true))
+				p.afterAuto = new(ooxml.OnOff(v, true))
 			}
 			if v, ok := ooxml.Int(attrOr(c, "line")); ok {
-				p.line = ptr(float64(v))
+				p.line = new(float64(v))
 				if p.lineRule == nil {
-					p.lineRule = ptr("auto")
+					p.lineRule = new("auto")
 				}
 			}
 			if v, ok := c.Attr("lineRule"); ok {
-				p.lineRule = ptr(v)
+				p.lineRule = new(v)
 			}
 		case "contextualSpacing":
-			p.contextual = ptr(ooxml.Toggle(c))
+			p.contextual = new(ooxml.Toggle(c))
 		case "keepNext":
-			p.keepNext = ptr(ooxml.Toggle(c))
+			p.keepNext = new(ooxml.Toggle(c))
 		case "keepLines":
-			p.keepLines = ptr(ooxml.Toggle(c))
+			p.keepLines = new(ooxml.Toggle(c))
 		case "widowControl":
-			p.widow = ptr(ooxml.Toggle(c))
+			p.widow = new(ooxml.Toggle(c))
 		case "pageBreakBefore":
-			p.pageBreakBefore = ptr(ooxml.Toggle(c))
+			p.pageBreakBefore = new(ooxml.Toggle(c))
 		case "bidi":
-			p.bidi = ptr(ooxml.Toggle(c))
+			p.bidi = new(ooxml.Toggle(c))
 		case "suppressLineNumbers":
-			p.suppressLineNumber = ptr(ooxml.Toggle(c))
+			p.suppressLineNumber = new(ooxml.Toggle(c))
 		case "snapToGrid":
-			p.snapToGrid = ptr(ooxml.Toggle(c))
+			p.snapToGrid = new(ooxml.Toggle(c))
 		case "pBdr":
 			p.borders = map[string]*borderSpec{}
 			for _, b := range c.Kids() {
@@ -563,14 +557,14 @@ func (d *document) parseParaProps(e *ooxml.Element) *paraProps {
 			}
 		case "outlineLvl":
 			if v, ok := ooxml.Int(val); ok && v >= 0 && v <= 9 {
-				p.outline = ptr(v)
+				p.outline = new(v)
 			}
 		case "numPr":
 			if v, ok := ooxml.Int(attrOr(c.Child(w, "numId"), "val")); ok {
-				p.numID = ptr(v)
+				p.numID = new(v)
 			}
 			if v, ok := ooxml.Int(attrOr(c.Child(w, "ilvl"), "val")); ok {
-				p.ilvl = ptr(max(0, min(8, v)))
+				p.ilvl = new(max(0, min(8, v)))
 			}
 		case "framePr":
 			p.framePr = c
@@ -591,7 +585,7 @@ func (d *document) parseInd(c *ooxml.Element, p *paraProps) {
 	}{{[]string{"start", "left"}, &p.indLeft}, {[]string{"end", "right"}, &p.indRight}} {
 		for _, n := range a.names {
 			if v, ok := ooxml.Twips(attrOr(c, n)); ok {
-				*a.dst = ptr(v)
+				*a.dst = new(v)
 				break
 			}
 		}
@@ -599,13 +593,13 @@ func (d *document) parseInd(c *ooxml.Element, p *paraProps) {
 	// startChars and the other character units count hundredths of a
 	// character, sized here at the 10.5-point default of East Asian text.
 	if v, ok := ooxml.Int(attrOr(c, "startChars")); ok && v != 0 {
-		p.indLeft = ptr(float64(v) * 0.105)
+		p.indLeft = new(float64(v) * 0.105)
 	}
 	if v, ok := ooxml.Twips(attrOr(c, "firstLine")); ok {
-		p.firstLine = ptr(v)
+		p.firstLine = new(v)
 	}
 	if v, ok := ooxml.Twips(attrOr(c, "hanging")); ok {
-		p.firstLine = ptr(-v)
+		p.firstLine = new(-v)
 	}
 }
 

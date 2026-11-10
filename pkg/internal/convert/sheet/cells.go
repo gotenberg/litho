@@ -193,7 +193,7 @@ func (b *pageBuilder) display(u *unit) (display, bool) {
 func (b *pageBuilder) textWidth(d *display) float64 {
 	if len(d.runs) == 0 {
 		w := 0.0
-		for _, line := range strings.Split(d.text, "\n") {
+		for line := range strings.SplitSeq(d.text, "\n") {
 			w = max(w, b.m.width(d.font, line))
 		}
 		return w

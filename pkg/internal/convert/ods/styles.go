@@ -3,6 +3,7 @@ package ods
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -235,12 +236,7 @@ func (r *reader) foldFont(f sheet.Font, layers []odf.Props) sheet.Font {
 
 // contains reports s in list.
 func contains(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, s)
 }
 
 // familyKey returns the font family attribute of a script suffix (ODF
@@ -347,7 +343,7 @@ var borderWidths = map[string]float64{"thin": 0.75, "medium": 2.25, "thick": 3.7
 func border(v, widths string) sheet.Border {
 	b := sheet.Border{Color: css.Color{A: 1}}
 	widthSet := false
-	for _, f := range strings.Fields(v) {
+	for f := range strings.FieldsSeq(v) {
 		if pt, ok := odf.Length(f); ok {
 			b.Width, widthSet = max(pt, 0), true
 		} else if w, ok := borderWidths[f]; ok {

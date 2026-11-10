@@ -87,7 +87,7 @@ func (w *sheetReader) conditionalFormats(root *ooxml.Element) {
 // sqref parses a list of ranges (ECMA-376 Part 1, 18.18.76 ST_Sqref).
 func sqref(s string) []sheet.Range {
 	var out []sheet.Range
-	for _, ref := range strings.Fields(s) {
+	for ref := range strings.FieldsSeq(s) {
 		if rg, ok := rangeRef(ref); ok {
 			out = append(out, rg)
 		}

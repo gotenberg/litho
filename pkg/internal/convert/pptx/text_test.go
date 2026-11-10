@@ -83,8 +83,10 @@ func TestText_RunStyleResolution(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			doc, _ := readDeck(t, testDeck{slides: []testSlide{{tree: tc.tree,
-				rels: `<Relationship Id="rIdH" Type="` + tRelLink + `" Target="https://example.com/" TargetMode="External"/>`}}})
+			doc, _ := readDeck(t, testDeck{slides: []testSlide{{
+				tree: tc.tree,
+				rels: `<Relationship Id="rIdH" Type="` + tRelLink + `" Target="https://example.com/" TargetMode="External"/>`,
+			}}})
 			shapes := doc.Slides[0].Shapes
 			if len(shapes) != 1 || shapes[0].Text == nil || len(shapes[0].Text.Paragraphs) == 0 || len(shapes[0].Text.Paragraphs[0].Runs) == 0 {
 				t.Fatalf("shapes %+v", shapes)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image/jpeg"
 	"math"
+	"slices"
 	"strings"
 )
 
@@ -433,10 +434,8 @@ func (v *validator) outline(entries []Outline, depth int, total *int, path []*Ou
 	}
 	for i := range entries {
 		e := &entries[i]
-		for _, seen := range path {
-			if seen == e {
-				return fmt.Errorf("%w: outline entry %q contains itself", ErrNotATree, e.Title)
-			}
+		if slices.Contains(path, e) {
+			return fmt.Errorf("%w: outline entry %q contains itself", ErrNotATree, e.Title)
 		}
 		if err := v.dest(e.Dest); err != nil {
 			return fmt.Errorf("entry %q: %w", e.Title, err)

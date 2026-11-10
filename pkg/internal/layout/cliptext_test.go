@@ -38,8 +38,10 @@ func TestBackgroundClip_Text(t *testing.T) {
 	}{
 		{"block", block(txt(sty(transparent), "X X")), both},
 		{"inline block", block(txt(sty(transparent), "X "), el(ib, txt(ib, "X"))), both},
-		{"relative", block(txt(sty(transparent), "X "), el(rel, txt(rel, "X"))),
-			rowsOf("GGGGGGGGGGGGGGGGGGGG__________", 10, 10)},
+		{
+			"relative", block(txt(sty(transparent), "X "), el(rel, txt(rel, "X"))),
+			rowsOf("GGGGGGGGGGGGGGGGGGGG__________", 10, 10),
+		},
 		{"no text", doc(el(sty(width(30), height(10), bg(lime), clipText))), rowsOf(strings.Repeat("_", 30), 20, 0)},
 	}
 	for _, tt := range tests {

@@ -2,6 +2,7 @@ package layout
 
 import (
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -259,8 +260,8 @@ func alphabetic(n int, symbol func(int) string, k int) string {
 		n /= k
 	}
 	var b strings.Builder
-	for i := len(parts) - 1; i >= 0; i-- {
-		b.WriteString(parts[i])
+	for _, part := range slices.Backward(parts) {
+		b.WriteString(part)
 	}
 	return b.String()
 }

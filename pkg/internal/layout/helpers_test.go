@@ -182,7 +182,7 @@ func grid(img image.Image) []string {
 func assertPixels(t *testing.T, res *Result, n int, want string) {
 	t.Helper()
 	var rows []string
-	for _, l := range strings.Split(want, "\n") {
+	for l := range strings.SplitSeq(want, "\n") {
 		if l = strings.TrimSpace(l); l != "" {
 			rows = append(rows, l)
 		}

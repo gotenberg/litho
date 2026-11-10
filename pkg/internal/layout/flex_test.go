@@ -24,12 +24,14 @@ func flexF(grow, shrink, basis float64) func(*css.Style) {
 		}
 	}
 }
+
 func justify(a css.BoxAlign) func(*css.Style)    { return func(s *css.Style) { s.JustifyContent = a } }
 func alignItems(a css.BoxAlign) func(*css.Style) { return func(s *css.Style) { s.AlignItems = a } }
 func alignSelf(a css.BoxAlign) func(*css.Style)  { return func(s *css.Style) { s.AlignSelf = a } }
 func alignContent(a css.BoxAlign) func(*css.Style) {
 	return func(s *css.Style) { s.AlignContent = a }
 }
+
 func gaps(row, col float64) func(*css.Style) {
 	return func(s *css.Style) { s.RowGap, s.ColumnGap = css.Pts(px(row)), css.Pts(px(col)) }
 }
@@ -79,60 +81,108 @@ func TestFlex_RowLayout(t *testing.T) {
 		items []*Node
 		want  [][4]float64
 	}{
-		{"items sit side by side, stretched", nil,
+		{
+			"items sit side by side, stretched", nil,
 			[]*Node{item(10, auto), item(20, 5)},
-			[][4]float64{{0, 0, 10, 5}, {10, 0, 20, 5}}},
-		{"flex-grow shares the free space", nil,
+			[][4]float64{{0, 0, 10, 5}, {10, 0, 20, 5}},
+		},
+		{
+			"flex-grow shares the free space", nil,
 			[]*Node{item(10, 5, flexF(1, 1, -1)), item(10, 5, flexF(3, 1, -1))},
-			[][4]float64{{0, 0, 30, 5}, {30, 0, 70, 5}}},
-		{"flex-shrink weighs by the base size", nil,
+			[][4]float64{{0, 0, 30, 5}, {30, 0, 70, 5}},
+		},
+		{
+			"flex-shrink weighs by the base size", nil,
 			[]*Node{item(100, 5, flexF(0, 1, -1), func(s *css.Style) { s.MinWidthAuto = false }), item(50, 5, flexF(0, 1, -1), func(s *css.Style) { s.MinWidthAuto = false })},
-			[][4]float64{{0, 0, 66.667, 5}, {66.667, 0, 33.333, 5}}},
-		{"max-width freezes a growing item", nil,
+			[][4]float64{{0, 0, 66.667, 5}, {66.667, 0, 33.333, 5}},
+		},
+		{
+			"max-width freezes a growing item", nil,
 			[]*Node{item(auto, 5, flexF(1, 1, 0), func(s *css.Style) { s.MaxWidth = css.Pts(px(20)) }), item(auto, 5, flexF(1, 1, 0))},
-			[][4]float64{{0, 0, 20, 5}, {20, 0, 80, 5}}},
-		{"justify-content: center", []func(*css.Style){justify(css.BoxCenter)},
+			[][4]float64{{0, 0, 20, 5}, {20, 0, 80, 5}},
+		},
+		{
+			"justify-content: center",
+			[]func(*css.Style){justify(css.BoxCenter)},
 			[]*Node{item(20, 5), item(20, 5)},
-			[][4]float64{{30, 0, 20, 5}, {50, 0, 20, 5}}},
-		{"justify-content: space-between", []func(*css.Style){justify(css.BoxSpaceBetween)},
+			[][4]float64{{30, 0, 20, 5}, {50, 0, 20, 5}},
+		},
+		{
+			"justify-content: space-between",
+			[]func(*css.Style){justify(css.BoxSpaceBetween)},
 			[]*Node{item(20, 5), item(20, 5), item(20, 5)},
-			[][4]float64{{0, 0, 20, 5}, {40, 0, 20, 5}, {80, 0, 20, 5}}},
-		{"justify-content: space-evenly", []func(*css.Style){justify(css.BoxSpaceEvenly)},
+			[][4]float64{{0, 0, 20, 5}, {40, 0, 20, 5}, {80, 0, 20, 5}},
+		},
+		{
+			"justify-content: space-evenly",
+			[]func(*css.Style){justify(css.BoxSpaceEvenly)},
 			[]*Node{item(20, 5), item(20, 5)},
-			[][4]float64{{20, 0, 20, 5}, {60, 0, 20, 5}}},
-		{"auto margins take the free space", nil,
+			[][4]float64{{20, 0, 20, 5}, {60, 0, 20, 5}},
+		},
+		{
+			"auto margins take the free space", nil,
 			[]*Node{item(20, 5), item(20, 5, margin(0, 0, 0, auto))},
-			[][4]float64{{0, 0, 20, 5}, {80, 0, 20, 5}}},
-		{"row-reverse starts at the right", []func(*css.Style){dir(css.FlexRowReverse)},
+			[][4]float64{{0, 0, 20, 5}, {80, 0, 20, 5}},
+		},
+		{
+			"row-reverse starts at the right",
+			[]func(*css.Style){dir(css.FlexRowReverse)},
 			[]*Node{item(20, 5), item(30, 5)},
-			[][4]float64{{80, 0, 20, 5}, {50, 0, 30, 5}}},
-		{"rtl row starts at the right", []func(*css.Style){rtl},
+			[][4]float64{{80, 0, 20, 5}, {50, 0, 30, 5}},
+		},
+		{
+			"rtl row starts at the right",
+			[]func(*css.Style){rtl},
 			[]*Node{item(20, 5), item(30, 5)},
-			[][4]float64{{80, 0, 20, 5}, {50, 0, 30, 5}}},
-		{"gap separates items", []func(*css.Style){gaps(0, 10)},
+			[][4]float64{{80, 0, 20, 5}, {50, 0, 30, 5}},
+		},
+		{
+			"gap separates items",
+			[]func(*css.Style){gaps(0, 10)},
 			[]*Node{item(20, 5), item(20, 5)},
-			[][4]float64{{0, 0, 20, 5}, {30, 0, 20, 5}}},
-		{"align-items: center in a definite height", []func(*css.Style){height(20), alignItems(css.BoxCenter)},
+			[][4]float64{{0, 0, 20, 5}, {30, 0, 20, 5}},
+		},
+		{
+			"align-items: center in a definite height",
+			[]func(*css.Style){height(20), alignItems(css.BoxCenter)},
 			[]*Node{item(20, 10), item(20, 4)},
-			[][4]float64{{0, 5, 20, 10}, {20, 8, 20, 4}}},
-		{"align-self: flex-end", []func(*css.Style){height(20)},
+			[][4]float64{{0, 5, 20, 10}, {20, 8, 20, 4}},
+		},
+		{
+			"align-self: flex-end",
+			[]func(*css.Style){height(20)},
 			[]*Node{item(20, 10, alignSelf(css.BoxFlexEnd)), item(20, auto)},
-			[][4]float64{{0, 10, 20, 10}, {20, 0, 20, 20}}},
-		{"order sorts the items", nil,
+			[][4]float64{{0, 10, 20, 10}, {20, 0, 20, 20}},
+		},
+		{
+			"order sorts the items", nil,
 			[]*Node{item(20, 5, order(2)), item(30, 5, order(1))},
-			[][4]float64{{0, 0, 30, 5}, {30, 0, 20, 5}}},
-		{"wrap breaks lines", []func(*css.Style){wrapMode(css.Wrap), gaps(2, 0)},
+			[][4]float64{{0, 0, 30, 5}, {30, 0, 20, 5}},
+		},
+		{
+			"wrap breaks lines",
+			[]func(*css.Style){wrapMode(css.Wrap), gaps(2, 0)},
 			[]*Node{item(60, 5), item(60, 10), item(30, 4)},
-			[][4]float64{{0, 0, 60, 5}, {0, 7, 60, 10}, {60, 7, 30, 4}}},
-		{"wrap-reverse stacks lines upwards", []func(*css.Style){wrapMode(css.WrapReverse), height(30), alignContent(css.BoxFlexStart)},
+			[][4]float64{{0, 0, 60, 5}, {0, 7, 60, 10}, {60, 7, 30, 4}},
+		},
+		{
+			"wrap-reverse stacks lines upwards",
+			[]func(*css.Style){wrapMode(css.WrapReverse), height(30), alignContent(css.BoxFlexStart)},
 			[]*Node{item(60, 5), item(60, 10)},
-			[][4]float64{{0, 25, 60, 5}, {0, 15, 60, 10}}},
-		{"align-content: space-between", []func(*css.Style){wrapMode(css.Wrap), height(30), alignContent(css.BoxSpaceBetween)},
+			[][4]float64{{0, 25, 60, 5}, {0, 15, 60, 10}},
+		},
+		{
+			"align-content: space-between",
+			[]func(*css.Style){wrapMode(css.Wrap), height(30), alignContent(css.BoxSpaceBetween)},
 			[]*Node{item(60, 5), item(60, 10)},
-			[][4]float64{{0, 0, 60, 5}, {0, 20, 60, 10}}},
-		{"align-content: normal stretches the lines", []func(*css.Style){wrapMode(css.Wrap), height(30)},
+			[][4]float64{{0, 0, 60, 5}, {0, 20, 60, 10}},
+		},
+		{
+			"align-content: normal stretches the lines",
+			[]func(*css.Style){wrapMode(css.Wrap), height(30)},
 			[]*Node{item(60, auto), item(60, auto)},
-			[][4]float64{{0, 0, 60, 15}, {0, 15, 60, 15}}},
+			[][4]float64{{0, 0, 60, 15}, {0, 15, 60, 15}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -152,27 +202,48 @@ func TestFlex_ColumnLayout(t *testing.T) {
 		items []*Node
 		want  [][4]float64
 	}{
-		{"items stack, stretched across", []func(*css.Style){col},
+		{
+			"items stack, stretched across",
+			[]func(*css.Style){col},
 			[]*Node{item(auto, 10), item(30, 5)},
-			[][4]float64{{0, 0, 100, 10}, {0, 10, 30, 5}}},
-		{"flex-grow fills a definite height", []func(*css.Style){col, height(50)},
+			[][4]float64{{0, 0, 100, 10}, {0, 10, 30, 5}},
+		},
+		{
+			"flex-grow fills a definite height",
+			[]func(*css.Style){col, height(50)},
 			[]*Node{item(auto, 10, flexF(1, 1, -1)), item(auto, 10)},
-			[][4]float64{{0, 0, 100, 40}, {0, 40, 100, 10}}},
-		{"flex: 1 in an auto height keeps the content height", []func(*css.Style){col},
+			[][4]float64{{0, 0, 100, 40}, {0, 40, 100, 10}},
+		},
+		{
+			"flex: 1 in an auto height keeps the content height",
+			[]func(*css.Style){col},
 			[]*Node{item(auto, 10, func(s *css.Style) { s.FlexGrow, s.FlexBasis = 1, css.Dimension{Kind: css.Percent} })},
-			[][4]float64{{0, 0, 100, 10}}},
-		{"max-height bounds an auto height column", []func(*css.Style){col, func(s *css.Style) { s.MaxHeight = css.Pts(px(20)) }},
+			[][4]float64{{0, 0, 100, 10}},
+		},
+		{
+			"max-height bounds an auto height column",
+			[]func(*css.Style){col, func(s *css.Style) { s.MaxHeight = css.Pts(px(20)) }},
 			[]*Node{item(auto, 15, func(s *css.Style) { s.MinHeightAuto = false }), item(auto, 15, func(s *css.Style) { s.MinHeightAuto = false })},
-			[][4]float64{{0, 0, 100, 10}, {0, 10, 100, 10}}},
-		{"column-reverse starts at the bottom", []func(*css.Style){dir(css.FlexColumnReverse), height(50)},
+			[][4]float64{{0, 0, 100, 10}, {0, 10, 100, 10}},
+		},
+		{
+			"column-reverse starts at the bottom",
+			[]func(*css.Style){dir(css.FlexColumnReverse), height(50)},
 			[]*Node{item(auto, 10), item(auto, 20)},
-			[][4]float64{{0, 40, 100, 10}, {0, 20, 100, 20}}},
-		{"align-items: center centres across", []func(*css.Style){col, alignItems(css.BoxCenter)},
+			[][4]float64{{0, 40, 100, 10}, {0, 20, 100, 20}},
+		},
+		{
+			"align-items: center centres across",
+			[]func(*css.Style){col, alignItems(css.BoxCenter)},
 			[]*Node{item(40, 10)},
-			[][4]float64{{30, 0, 40, 10}}},
-		{"justify-content: flex-end", []func(*css.Style){col, height(50), justify(css.BoxFlexEnd)},
+			[][4]float64{{30, 0, 40, 10}},
+		},
+		{
+			"justify-content: flex-end",
+			[]func(*css.Style){col, height(50), justify(css.BoxFlexEnd)},
 			[]*Node{item(auto, 10)},
-			[][4]float64{{0, 40, 100, 10}}},
+			[][4]float64{{0, 40, 100, 10}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

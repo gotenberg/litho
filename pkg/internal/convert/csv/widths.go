@@ -114,7 +114,7 @@ func (c *columns) longest(col int) string {
 			s = display(f, cell.value)
 		}
 		if cell.kind == kText && strings.Contains(s, "\n") {
-			for _, line := range strings.Split(s, "\n") {
+			for line := range strings.SplitSeq(s, "\n") {
 				if l := u16len(line); l > n {
 					best, n = line, l
 				}

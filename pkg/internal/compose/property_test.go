@@ -80,8 +80,10 @@ func randomDoc(rng *rand.Rand, font *embed.Font) *compose.Document {
 		for range rng.Intn(6) {
 			switch rng.Intn(4) {
 			case 0:
-				txt := &compose.Text{Face: []*compose.Face{sans, serif}[rng.Intn(2)], Size: 1 + rng.Float64()*30, Color: color(),
-					Origin: compose.Point{X: rng.Float64() * 500, Y: rng.Float64() * 700}, Parent: parent()}
+				txt := &compose.Text{
+					Face: []*compose.Face{sans, serif}[rng.Intn(2)], Size: 1 + rng.Float64()*30, Color: color(),
+					Origin: compose.Point{X: rng.Float64() * 500, Y: rng.Float64() * 700}, Parent: parent(),
+				}
 				x := 0.0
 				for range rng.Intn(20) {
 					r := rune(0x20 + rng.Intn(95))

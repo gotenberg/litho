@@ -3,6 +3,7 @@ package compose
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
@@ -51,9 +52,9 @@ func newStructState(w *docWriter, root *StructElem) *structState {
 		stack = stack[:len(stack)-1]
 		st.order = append(st.order, e)
 		st.refs[e] = w.alloc.Alloc(ast.PdfNull{})
-		for i := len(e.Kids) - 1; i >= 0; i-- {
-			st.parent[e.Kids[i]] = e
-			stack = append(stack, e.Kids[i])
+		for _, v := range slices.Backward(e.Kids) {
+			st.parent[v] = e
+			stack = append(stack, v)
 		}
 	}
 	return st

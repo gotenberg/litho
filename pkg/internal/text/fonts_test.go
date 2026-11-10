@@ -111,10 +111,14 @@ func TestNewFonts_DirectoryOrderAndDuplicates(t *testing.T) {
 
 func TestNewFonts_Collection(t *testing.T) {
 	t.Parallel()
-	regular := fontbuild.TrueType{PostScriptName: "Coll", Family: "Coll", Subfamily: "Regular", NotdefAdvance: 500,
-		Glyphs: []fontbuild.Glyph{{Name: "space", Unicode: ' ', Advance: 250, Empty: true}, {Name: "A", Unicode: 'A', Advance: 600}}}.Build()
-	bold := withAspect(fontbuild.TrueType{PostScriptName: "Coll-Bold", Family: "Coll", Subfamily: "Bold", NotdefAdvance: 500,
-		Glyphs: []fontbuild.Glyph{{Name: "space", Unicode: ' ', Advance: 250, Empty: true}, {Name: "A", Unicode: 'A', Advance: 700}}}.Build(), 700, false)
+	regular := fontbuild.TrueType{
+		PostScriptName: "Coll", Family: "Coll", Subfamily: "Regular", NotdefAdvance: 500,
+		Glyphs: []fontbuild.Glyph{{Name: "space", Unicode: ' ', Advance: 250, Empty: true}, {Name: "A", Unicode: 'A', Advance: 600}},
+	}.Build()
+	bold := withAspect(fontbuild.TrueType{
+		PostScriptName: "Coll-Bold", Family: "Coll", Subfamily: "Bold", NotdefAdvance: 500,
+		Glyphs: []fontbuild.Glyph{{Name: "space", Unicode: ' ', Advance: 250, Empty: true}, {Name: "A", Unicode: 'A', Advance: 700}},
+	}.Build(), 700, false)
 	f := newTestFonts(t, fontFile{name: "coll.ttc", data: fontbuild.Collection(regular, bold)})
 	if f.Len() != 2 {
 		t.Fatalf("index of %d faces, want 2", f.Len())

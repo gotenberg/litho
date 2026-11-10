@@ -1,6 +1,7 @@
 package docx
 
 import (
+	"maps"
 	"strconv"
 	"strings"
 
@@ -43,9 +44,7 @@ var knownClasses = map[string]string{
 // style of its PANOSE classification (2 to 10 serif, 11 and up sans).
 func (d *document) readFontTable(root *ooxml.Element) {
 	d.fontClass = map[string]string{}
-	for k, v := range knownClasses {
-		d.fontClass[k] = v
-	}
+	maps.Copy(d.fontClass, knownClasses)
 	for _, f := range root.Kids() {
 		if !f.Is(w, "font") {
 			continue

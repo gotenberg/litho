@@ -95,7 +95,7 @@ func (d *document) parseNumbering(root *ooxml.Element) *numbering {
 				continue
 			}
 			if s, ok := ooxml.Int(attrOr(o.Child(w, "startOverride"), "val")); ok {
-				ni.starts[i] = ptr(s)
+				ni.starts[i] = new(s)
 			}
 			if l := o.Child(w, "lvl"); l != nil {
 				lv := d.parseLevel(l)

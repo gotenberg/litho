@@ -1,6 +1,9 @@
 package docx
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // cjkNumerals are the characters a positional East Asian number format
 // writes: the digits 0 to 9, the units of a group of four digits (ten,
@@ -99,8 +102,8 @@ func digitByDigit(n int, digits [10]string) string {
 		out = append(out, digits[n%10])
 	}
 	var b strings.Builder
-	for i := len(out) - 1; i >= 0; i-- {
-		b.WriteString(out[i])
+	for _, o := range slices.Backward(out) {
+		b.WriteString(o)
 	}
 	return b.String()
 }

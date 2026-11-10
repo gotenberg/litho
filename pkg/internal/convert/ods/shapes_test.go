@@ -6,9 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/odf"
-
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/odf"
 )
 
 func TestParseTransform(t *testing.T) {

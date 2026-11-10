@@ -286,9 +286,15 @@ func TestThreshold(t *testing.T) {
 		want float64
 		ok   bool
 	}{
-		{"min", 0, 1, true}, {"max", 0, 4, true}, {"autoMin", 0, 0, true}, {"autoMax", 0, 4, true},
-		{"percent", 90, 3.7, true}, {"percentile", 10, 1.3, true}, {"percentile", 50, 2.5, true},
-		{"num", 7, 7, true}, {"formula", 0, 0, false},
+		{"min", 0, 1, true},
+		{"max", 0, 4, true},
+		{"autoMin", 0, 0, true},
+		{"autoMax", 0, 4, true},
+		{"percent", 90, 3.7, true},
+		{"percentile", 10, 1.3, true},
+		{"percentile", 50, 2.5, true},
+		{"num", 7, 7, true},
+		{"formula", 0, 0, false},
 	}
 	for _, tc := range tests {
 		got, ok := Threshold(tc.kind, tc.v, nums)

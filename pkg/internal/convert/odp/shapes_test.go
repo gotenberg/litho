@@ -18,21 +18,36 @@ func TestRead_Placement(t *testing.T) {
 		rot          float64
 		flipH, flipV bool
 	}{
-		{"plain", `<draw:rect svg:x="1cm" svg:y="2cm" svg:width="4cm" svg:height="2cm"/>`,
-			compose.Rect{X: cm(1), Y: cm(2), Width: cm(4), Height: cm(2)}, 0, false, false},
+		{
+			"plain", `<draw:rect svg:x="1cm" svg:y="2cm" svg:width="4cm" svg:height="2cm"/>`,
+			compose.Rect{X: cm(1), Y: cm(2), Width: cm(4), Height: cm(2)},
+			0, false, false,
+		},
 		// Measured on the pinned LibreOffice: the box's corner at the
 		// origin turns 30 degrees counterclockwise, then moves to 10 cm,
 		// 5 cm; its centre lands at 346.73, 137.94 points.
-		{"rotated", `<draw:rect draw:transform="rotate (0.5235987756) translate (10cm 5cm)" svg:width="4cm" svg:height="2cm"/>`,
-			compose.Rect{X: 346.73 - cm(2), Y: 137.94 - cm(1), Width: cm(4), Height: cm(2)}, 330, false, false},
-		{"line backwards", `<draw:line svg:x1="5cm" svg:y1="4cm" svg:x2="1cm" svg:y2="2cm"/>`,
-			compose.Rect{X: cm(1), Y: cm(2), Width: cm(4), Height: cm(2)}, 0, true, true},
+		{
+			"rotated", `<draw:rect draw:transform="rotate (0.5235987756) translate (10cm 5cm)" svg:width="4cm" svg:height="2cm"/>`,
+			compose.Rect{X: 346.73 - cm(2), Y: 137.94 - cm(1), Width: cm(4), Height: cm(2)},
+			330, false, false,
+		},
+		{
+			"line backwards", `<draw:line svg:x1="5cm" svg:y1="4cm" svg:x2="1cm" svg:y2="2cm"/>`,
+			compose.Rect{X: cm(1), Y: cm(2), Width: cm(4), Height: cm(2)},
+			0, true, true,
+		},
 		// The geometry carries the mirroring (shape.Geometry.MirrorH), so the
 		// shape itself is not flipped.
-		{"mirrored custom shape", `<draw:custom-shape svg:x="0cm" svg:y="0cm" svg:width="1cm" svg:height="1cm"><draw:enhanced-geometry draw:type="rectangle" draw:mirror-horizontal="true"/></draw:custom-shape>`,
-			compose.Rect{Width: cm(1), Height: cm(1)}, 0, false, false},
-		{"scaled down", `<draw:rect draw:transform="scale (1 -1) translate (1cm 3cm)" svg:width="2cm" svg:height="2cm"/>`,
-			compose.Rect{X: cm(1), Y: cm(1), Width: cm(2), Height: cm(2)}, 0, false, true},
+		{
+			"mirrored custom shape", `<draw:custom-shape svg:x="0cm" svg:y="0cm" svg:width="1cm" svg:height="1cm"><draw:enhanced-geometry draw:type="rectangle" draw:mirror-horizontal="true"/></draw:custom-shape>`,
+			compose.Rect{Width: cm(1), Height: cm(1)},
+			0, false, false,
+		},
+		{
+			"scaled down", `<draw:rect draw:transform="scale (1 -1) translate (1cm 3cm)" svg:width="2cm" svg:height="2cm"/>`,
+			compose.Rect{X: cm(1), Y: cm(1), Width: cm(2), Height: cm(2)},
+			0, false, true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -81,11 +96,15 @@ func TestRead_Geometry(t *testing.T) {
 	}{
 		// A type without a path maps onto the DrawingML preset at its default
 		// adjustments, as the shared geometry reader reads it.
-		{"custom shape", `<draw:custom-shape svg:width="2cm" svg:height="1cm"><draw:enhanced-geometry draw:type="round-rectangle" draw:modifiers="3600 12.5"/></draw:custom-shape>`,
-			&shape.Geometry{Preset: "roundRect"}},
+		{
+			"custom shape", `<draw:custom-shape svg:width="2cm" svg:height="1cm"><draw:enhanced-geometry draw:type="round-rectangle" draw:modifiers="3600 12.5"/></draw:custom-shape>`,
+			&shape.Geometry{Preset: "roundRect"},
+		},
 		{"rectangle", `<draw:rect svg:width="2cm" svg:height="1cm"/>`, nil},
-		{"rounded rectangle", `<draw:rect draw:corner-radius="0.25cm" svg:width="2cm" svg:height="1cm"/>`,
-			&shape.Geometry{Preset: "roundRect", Adjust: []shape.Adjust{{Name: "adj", Value: 25000}}}},
+		{
+			"rounded rectangle", `<draw:rect draw:corner-radius="0.25cm" svg:width="2cm" svg:height="1cm"/>`,
+			&shape.Geometry{Preset: "roundRect", Adjust: []shape.Adjust{{Name: "adj", Value: 25000}}},
+		},
 		{"circle", `<draw:circle svg:width="1cm" svg:height="1cm"/>`, &shape.Geometry{Preset: "ellipse"}},
 		{"connector", `<draw:connector svg:x1="0cm" svg:y1="0cm" svg:x2="1cm" svg:y2="1cm"/>`, &shape.Geometry{Preset: "bentConnector3"}},
 		{"curved connector", `<draw:connector draw:type="curve" svg:x1="0cm" svg:y1="0cm" svg:x2="1cm" svg:y2="1cm"/>`, &shape.Geometry{Preset: "curvedConnector3"}},
@@ -111,17 +130,37 @@ func TestRead_Outlines(t *testing.T) {
 		want        [][2]float64
 		fill        bool
 	}{
-		{"path", `<draw:path svg:x="1cm" svg:y="1cm" svg:width="1cm" svg:height="1cm" svg:viewBox="0 0 10 10" svg:d="M0 0h10v10z"/>`,
-			compose.Rect{X: cm(1), Y: cm(1), Width: cm(1), Height: cm(1)}, [][2]float64{{0, 0}, {1, 0}, {1, 1}}, true},
-		{"polygon", `<draw:polygon svg:width="1cm" svg:height="1cm" svg:viewBox="0 0 100 100" draw:points="0,100 100,100 50,0"/>`,
-			compose.Rect{Width: cm(1), Height: cm(1)}, [][2]float64{{0, 1}, {1, 1}, {0.5, 0}}, true},
-		{"polyline", `<draw:polyline svg:width="1cm" svg:height="1cm" svg:viewBox="0 0 100 100" draw:points="0,0 100,100"/>`,
-			compose.Rect{Width: cm(1), Height: cm(1)}, [][2]float64{{0, 0}, {1, 1}}, false},
-		{"triangle", `<draw:regular-polygon svg:width="1cm" svg:height="1cm" draw:corners="3"/>`,
-			compose.Rect{Width: cm(1), Height: cm(1)}, [][2]float64{{0.5, 0}, {1, 1}, {0, 1}}, true},
+		{
+			"path", `<draw:path svg:x="1cm" svg:y="1cm" svg:width="1cm" svg:height="1cm" svg:viewBox="0 0 10 10" svg:d="M0 0h10v10z"/>`,
+			compose.Rect{X: cm(1), Y: cm(1), Width: cm(1), Height: cm(1)},
+			[][2]float64{{0, 0}, {1, 0}, {1, 1}},
+			true,
+		},
+		{
+			"polygon", `<draw:polygon svg:width="1cm" svg:height="1cm" svg:viewBox="0 0 100 100" draw:points="0,100 100,100 50,0"/>`,
+			compose.Rect{Width: cm(1), Height: cm(1)},
+			[][2]float64{{0, 1}, {1, 1}, {0.5, 0}},
+			true,
+		},
+		{
+			"polyline", `<draw:polyline svg:width="1cm" svg:height="1cm" svg:viewBox="0 0 100 100" draw:points="0,0 100,100"/>`,
+			compose.Rect{Width: cm(1), Height: cm(1)},
+			[][2]float64{{0, 0}, {1, 1}},
+			false,
+		},
+		{
+			"triangle", `<draw:regular-polygon svg:width="1cm" svg:height="1cm" draw:corners="3"/>`,
+			compose.Rect{Width: cm(1), Height: cm(1)},
+			[][2]float64{{0.5, 0}, {1, 1}, {0, 1}},
+			true,
+		},
 		// The route of a connector is in page coordinates in 1/100 mm.
-		{"connector route", `<draw:connector svg:x1="1cm" svg:y1="1cm" svg:x2="2cm" svg:y2="2cm" svg:viewBox="0 0 1000 1500" svg:d="M1000 1000v-500h1000v1000"/>`,
-			compose.Rect{X: cm(1), Y: cm(0.5), Width: cm(1), Height: cm(1)}, [][2]float64{{0, 0.5}, {0, 0}, {1, 0}, {1, 1}}, false},
+		{
+			"connector route", `<draw:connector svg:x1="1cm" svg:y1="1cm" svg:x2="2cm" svg:y2="2cm" svg:viewBox="0 0 1000 1500" svg:d="M1000 1000v-500h1000v1000"/>`,
+			compose.Rect{X: cm(1), Y: cm(0.5), Width: cm(1), Height: cm(1)},
+			[][2]float64{{0, 0.5}, {0, 0}, {1, 0}, {1, 1}},
+			false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -2,6 +2,7 @@ package docx
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -73,12 +74,8 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 		shared: map[string]bool{},
 	}
 	if prev != nil {
-		for k, v := range prev.headers {
-			s.headers[k] = v
-		}
-		for k, v := range prev.footers {
-			s.footers[k] = v
-		}
+		maps.Copy(s.headers, prev.headers)
+		maps.Copy(s.footers, prev.footers)
 	}
 	if e == nil {
 		return s
@@ -140,7 +137,7 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 	}
 	if p := e.Child(w, "pgNumType"); p != nil {
 		if v, ok := ooxml.Int(attrOr(p, "start")); ok {
-			s.pageStart = ptr(v)
+			s.pageStart = new(v)
 		}
 		s.pageFormat = attrOr(p, "fmt")
 	}

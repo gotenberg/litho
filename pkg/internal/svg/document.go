@@ -146,11 +146,11 @@ func decodeXML(data []byte) []byte {
 	if bytes.HasPrefix(data, []byte("\xef\xbb\xbf")) || !bytes.HasPrefix(data, []byte("<?xml")) {
 		return data
 	}
-	end := bytes.Index(data, []byte("?>"))
-	if end < 0 {
+	before, _, ok := bytes.Cut(data, []byte("?>"))
+	if !ok {
 		return data
 	}
-	m := xmlEncoding.FindSubmatch(data[:end])
+	m := xmlEncoding.FindSubmatch(before)
 	if m == nil {
 		return data
 	}

@@ -75,7 +75,7 @@ func TestFootnote_Draw(t *testing.T) {
 // normalize returns the rows of a pixel grid literal, trimmed, one a line.
 func normalize(want string) string {
 	var rows []string
-	for _, l := range strings.Split(want, "\n") {
+	for l := range strings.SplitSeq(want, "\n") {
 		if l = strings.TrimSpace(l); l != "" {
 			rows = append(rows, l)
 		}

@@ -25,8 +25,10 @@ func TestParseSrcset(t *testing.T) {
 		{"data:image/png;base64,AA== 2x", []srcCandidate{{url: "data:image/png;base64,AA==", density: 2}}},
 		{"a.png (x, y) 2x, b.png", []srcCandidate{{url: "b.png", density: 1}}},
 		// Invalid candidates are dropped, the rest kept.
-		{"a.png 2x 3x, b.png 0w, c.png 10h, d.png 1x 10w, e.png 1e1x, f.png -1x, g.png 1.x, h.png 2y, i.png 0x",
-			[]srcCandidate{{url: "e.png", density: 10}}},
+		{
+			"a.png 2x 3x, b.png 0w, c.png 10h, d.png 1x 10w, e.png 1e1x, f.png -1x, g.png 1.x, h.png 2y, i.png 0x",
+			[]srcCandidate{{url: "e.png", density: 10}},
+		},
 	} {
 		if got := parseSrcset(tc.in); !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("parseSrcset(%q) = %+v, want %+v", tc.in, got, tc.want)

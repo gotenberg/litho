@@ -459,8 +459,8 @@ func LocaleOf(lang string) Locale {
 	if loc, ok := localeSeparators[l]; ok {
 		return loc
 	}
-	if i := strings.IndexByte(l, '-'); i >= 0 {
-		if loc, ok := localeSeparators[l[:i]]; ok {
+	if before, _, ok := strings.Cut(l, "-"); ok {
+		if loc, ok := localeSeparators[before]; ok {
 			return loc
 		}
 	}

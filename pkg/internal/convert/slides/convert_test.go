@@ -3,12 +3,12 @@ package slides
 import (
 	"context"
 	"errors"
-	"github.com/gotenberg/litho/pkg/internal/css"
 	"testing"
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 

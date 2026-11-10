@@ -142,10 +142,16 @@ func TestRead_MasterShapes(t *testing.T) {
 		want       []string
 		field      slides.Field
 	}{
-		{"defaults", `<draw:page draw:master-page-name="Default" presentation:use-footer-name="ftr1" presentation:use-date-time-name="dtd1"/>`,
-			[]string{"FOOT", "FIXED-DATE", "LOGO"}, slides.FieldNone},
-		{"page number shown", `<draw:page draw:style-name="all" draw:master-page-name="Default" presentation:use-date-time-name="dtd2"/>`,
-			[]string{"", "8/11/26", "<number>", "LOGO"}, slides.FieldDate},
+		{
+			"defaults", `<draw:page draw:master-page-name="Default" presentation:use-footer-name="ftr1" presentation:use-date-time-name="dtd1"/>`,
+			[]string{"FOOT", "FIXED-DATE", "LOGO"},
+			slides.FieldNone,
+		},
+		{
+			"page number shown", `<draw:page draw:style-name="all" draw:master-page-name="Default" presentation:use-date-time-name="dtd2"/>`,
+			[]string{"", "8/11/26", "<number>", "LOGO"},
+			slides.FieldDate,
+		},
 		{"objects hidden", `<draw:page draw:style-name="off" draw:master-page-name="Default"/>`, nil, slides.FieldNone},
 	}
 	for _, tt := range tests {

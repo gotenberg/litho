@@ -1,6 +1,10 @@
 package layout
 
-import "github.com/gotenberg/litho/pkg/internal/css"
+import (
+	"slices"
+
+	"github.com/gotenberg/litho/pkg/internal/css"
+)
 
 // pageMark is what a forced break decided about the page it starts: its
 // page type name, and whether the page before it is blank.
@@ -46,7 +50,7 @@ func flowKids(b *box) []*box {
 // the page property applies to propagates, else its used value (CSS Page
 // 3, 4.1).
 func pageStart(b *box) string {
-	for depth := 0; depth < maxTreeDepth+1; depth++ {
+	for range maxTreeDepth + 1 {
 		var next *box
 		for _, k := range flowKids(b) {
 			if pageApplies(k) {
@@ -65,12 +69,12 @@ func pageStart(b *box) string {
 // pageEnd returns the end page value of b, from its last child as
 // [pageStart] does from its first.
 func pageEnd(b *box) string {
-	for depth := 0; depth < maxTreeDepth+1; depth++ {
+	for range maxTreeDepth + 1 {
 		var next *box
 		kids := flowKids(b)
-		for i := len(kids) - 1; i >= 0; i-- {
-			if pageApplies(kids[i]) {
-				next = kids[i]
+		for _, kid := range slices.Backward(kids) {
+			if pageApplies(kid) {
+				next = kid
 				break
 			}
 		}

@@ -26,20 +26,34 @@ func TestConvert_Lists(t *testing.T) {
 		name, body string
 		want       []string
 	}{
-		{"numbers and nesting", `<text:list text:style-name="LN">` + item("one") + `<text:list-item><text:p>two</text:p><text:list>` + item("sub a") + item("sub b") + `</text:list></text:list-item>` + item("three") + `</text:list>`,
-			[]string{"1.one", "2.two", "2.a)sub a", "2.b)sub b", "3.three"}},
-		{"continue numbering", `<text:list text:style-name="LN">` + item("a") + `</text:list><text:list text:style-name="LN" text:continue-numbering="true">` + item("b") + `</text:list>`,
-			[]string{"1.a", "2.b"}},
-		{"new list restarts", `<text:list text:style-name="LN">` + item("a") + `</text:list><text:list text:style-name="LN">` + item("b") + `</text:list>`,
-			[]string{"1.a", "1.b"}},
-		{"continue-list by id", `<text:list xml:id="l1" text:style-name="LN">` + item("a") + `</text:list><text:list text:style-name="LB">` + item("x") + `</text:list><text:list text:style-name="LN" text:continue-list="l1">` + item("b") + `</text:list>`,
-			[]string{"1.a", "• x", "2.b"}},
-		{"start value", `<text:list text:style-name="LN"><text:list-item text:start-value="7"><text:p>s</text:p></text:list-item>` + item("t") + `</text:list>`,
-			[]string{"7.s", "8.t"}},
-		{"header unnumbered", `<text:list text:style-name="LN"><text:list-header><text:p>head</text:p></text:list-header>` + item("a") + `</text:list>`,
-			[]string{"head", "1.a"}},
-		{"roman label width mode", `<text:list text:style-name="LR">` + item("a") + item("b") + `</text:list>`,
-			[]string{"I.a", "II.b"}},
+		{
+			"numbers and nesting", `<text:list text:style-name="LN">` + item("one") + `<text:list-item><text:p>two</text:p><text:list>` + item("sub a") + item("sub b") + `</text:list></text:list-item>` + item("three") + `</text:list>`,
+			[]string{"1.one", "2.two", "2.a)sub a", "2.b)sub b", "3.three"},
+		},
+		{
+			"continue numbering", `<text:list text:style-name="LN">` + item("a") + `</text:list><text:list text:style-name="LN" text:continue-numbering="true">` + item("b") + `</text:list>`,
+			[]string{"1.a", "2.b"},
+		},
+		{
+			"new list restarts", `<text:list text:style-name="LN">` + item("a") + `</text:list><text:list text:style-name="LN">` + item("b") + `</text:list>`,
+			[]string{"1.a", "1.b"},
+		},
+		{
+			"continue-list by id", `<text:list xml:id="l1" text:style-name="LN">` + item("a") + `</text:list><text:list text:style-name="LB">` + item("x") + `</text:list><text:list text:style-name="LN" text:continue-list="l1">` + item("b") + `</text:list>`,
+			[]string{"1.a", "• x", "2.b"},
+		},
+		{
+			"start value", `<text:list text:style-name="LN"><text:list-item text:start-value="7"><text:p>s</text:p></text:list-item>` + item("t") + `</text:list>`,
+			[]string{"7.s", "8.t"},
+		},
+		{
+			"header unnumbered", `<text:list text:style-name="LN"><text:list-header><text:p>head</text:p></text:list-header>` + item("a") + `</text:list>`,
+			[]string{"head", "1.a"},
+		},
+		{
+			"roman label width mode", `<text:list text:style-name="LR">` + item("a") + item("b") + `</text:list>`,
+			[]string{"I.a", "II.b"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -311,8 +325,10 @@ func TestConvert_TextAlignStartEndAreAbsolute(t *testing.T) {
 		align, mode string
 		left        bool
 	}{
-		{"start", "lr-tb", true}, {"end", "lr-tb", false},
-		{"start", "rl-tb", true}, {"end", "rl-tb", false},
+		{"start", "lr-tb", true},
+		{"end", "lr-tb", false},
+		{"start", "rl-tb", true},
+		{"end", "rl-tb", false},
 	} {
 		t.Run(tc.align+" "+tc.mode, func(t *testing.T) {
 			auto := `<style:style style:name="A" style:family="paragraph"><style:paragraph-properties fo:text-align="` + tc.align + `" style:writing-mode="` + tc.mode + `"/></style:style>`

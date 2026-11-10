@@ -154,17 +154,11 @@ func (rd *renderer) legend(page compose.Rect, rem *compose.Rect) {
 	n := len(entries)
 	var cols, rows int
 	if side {
-		maxRows := int((rem.Height - 2*yPad) / maxEntryH)
-		if maxRows < 1 {
-			maxRows = 1
-		}
+		maxRows := max(int((rem.Height-2*yPad)/maxEntryH), 1)
 		cols = (n + maxRows - 1) / maxRows
 		rows = (n + cols - 1) / cols
 	} else {
-		maxCols := int((rem.Width - 2*xPad) / maxEntryW)
-		if maxCols < 1 {
-			maxCols = 1
-		}
+		maxCols := max(int((rem.Width-2*xPad)/maxEntryW), 1)
 		rows = (n + maxCols - 1) / maxCols
 		cols = (n + rows - 1) / rows
 	}

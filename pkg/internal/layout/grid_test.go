@@ -71,34 +71,48 @@ func TestGrid_TrackSizing(t *testing.T) {
 		items []*Node
 		want  [][4]float64
 	}{
-		{"fixed and fr columns share the width",
+		{
+			"fixed and fr columns share the width",
 			[]func(*css.Style){cols(tpx(20), tfr(1), tfr(3)), rowsT(tpx(10))},
 			[]*Node{cell(), cell(), cell()},
-			[][4]float64{{0, 0, 20, 10}, {20, 0, 20, 10}, {40, 0, 60, 10}}},
-		{"gaps come off the free space",
+			[][4]float64{{0, 0, 20, 10}, {20, 0, 20, 10}, {40, 0, 60, 10}},
+		},
+		{
+			"gaps come off the free space",
 			[]func(*css.Style){cols(tfr(1), tfr(1)), rowsT(tpx(10), tpx(10)), gaps(5, 10)},
 			[]*Node{cell(), cell(), cell(), cell()},
-			[][4]float64{{0, 0, 45, 10}, {55, 0, 45, 10}, {0, 15, 45, 10}, {55, 15, 45, 10}}},
-		{"percentage columns resolve against the width",
+			[][4]float64{{0, 0, 45, 10}, {55, 0, 45, 10}, {0, 15, 45, 10}, {55, 15, 45, 10}},
+		},
+		{
+			"percentage columns resolve against the width",
 			[]func(*css.Style){cols(tpct(0.25), tpct(0.5)), rowsT(tpx(10))},
 			[]*Node{cell(), cell()},
-			[][4]float64{{0, 0, 25, 10}, {25, 0, 50, 10}}},
-		{"auto columns stretch over the free space",
+			[][4]float64{{0, 0, 25, 10}, {25, 0, 50, 10}},
+		},
+		{
+			"auto columns stretch over the free space",
 			[]func(*css.Style){cols(tauto(), tpx(40))},
 			[]*Node{cell(width(10), height(5)), cell(height(5))},
-			[][4]float64{{0, 0, 10, 5}, {60, 0, 40, 5}}},
-		{"auto rows take their tallest item's height",
+			[][4]float64{{0, 0, 10, 5}, {60, 0, 40, 5}},
+		},
+		{
+			"auto rows take their tallest item's height",
 			[]func(*css.Style){cols(tpx(50), tpx(50))},
 			[]*Node{cell(height(30)), cell(height(10))},
-			[][4]float64{{0, 0, 50, 30}, {50, 0, 50, 10}}},
-		{"minmax() caps the growth",
+			[][4]float64{{0, 0, 50, 30}, {50, 0, 50, 10}},
+		},
+		{
+			"minmax() caps the growth",
 			[]func(*css.Style){cols(tminmax(css.TrackBreadth{Kind: css.TrackLength, Value: px(10)}, css.TrackBreadth{Kind: css.TrackLength, Value: px(30)}), tpx(10)), rowsT(tpx(5))},
 			[]*Node{cell(), cell()},
-			[][4]float64{{0, 0, 30, 5}, {30, 0, 10, 5}}},
-		{"a spanning item grows the tracks it spans",
+			[][4]float64{{0, 0, 30, 5}, {30, 0, 10, 5}},
+		},
+		{
+			"a spanning item grows the tracks it spans",
 			[]func(*css.Style){float(css.FloatLeft), cols(tauto(), tauto()), rowsT(tpx(5), tpx(5))},
 			[]*Node{cell(spanCols(2), width(40)), cell(width(10)), cell(width(10))},
-			[][4]float64{{0, 0, 40, 5}, {0, 5, 10, 5}, {20, 5, 10, 5}}},
+			[][4]float64{{0, 0, 40, 5}, {0, 5, 10, 5}, {20, 5, 10, 5}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -128,34 +142,48 @@ func TestGrid_Placement(t *testing.T) {
 		items []*Node
 		want  [][4]float64
 	}{
-		{"auto placement fills rows",
+		{
+			"auto placement fills rows",
 			[]func(*css.Style){cols(tpx(10), tpx(10)), func(s *css.Style) { s.GridAutoRows = []css.TrackSize{tpx(5)} }},
 			[]*Node{cell(), cell(), cell()},
-			[][4]float64{{0, 0, 10, 5}, {10, 0, 10, 5}, {0, 5, 10, 5}}},
-		{"definite items are placed first",
+			[][4]float64{{0, 0, 10, 5}, {10, 0, 10, 5}, {0, 5, 10, 5}},
+		},
+		{
+			"definite items are placed first",
 			[]func(*css.Style){cols(tpx(10), tpx(10)), func(s *css.Style) { s.GridAutoRows = []css.TrackSize{tpx(5)} }},
 			[]*Node{cell(), cell(gridAt(1, 2, 1, 2))},
-			[][4]float64{{10, 0, 10, 5}, {0, 0, 10, 5}}},
-		{"negative lines count from the end",
+			[][4]float64{{10, 0, 10, 5}, {0, 0, 10, 5}},
+		},
+		{
+			"negative lines count from the end",
 			[]func(*css.Style){cols(tpx(10), tpx(10), tpx(10)), rowsT(tpx(5))},
 			[]*Node{cell(func(s *css.Style) { s.GridColumnStart = css.GridLine{N: -2} })},
-			[][4]float64{{20, 0, 10, 5}}},
-		{"column flow fills columns",
+			[][4]float64{{20, 0, 10, 5}},
+		},
+		{
+			"column flow fills columns",
 			[]func(*css.Style){rowsT(tpx(5), tpx(5)), flow(css.GridFlowColumn), func(s *css.Style) { s.GridAutoColumns = []css.TrackSize{tpx(10)} }},
 			[]*Node{cell(), cell(), cell()},
-			[][4]float64{{0, 0, 10, 5}, {0, 5, 10, 5}, {10, 0, 10, 5}}},
-		{"dense packing fills holes",
+			[][4]float64{{0, 0, 10, 5}, {0, 5, 10, 5}, {10, 0, 10, 5}},
+		},
+		{
+			"dense packing fills holes",
 			[]func(*css.Style){cols(tpx(10), tpx(10)), flow(css.GridFlowDense), func(s *css.Style) { s.GridAutoRows = []css.TrackSize{tpx(5)} }},
 			[]*Node{cell(), cell(spanCols(2)), cell()},
-			[][4]float64{{0, 0, 10, 5}, {0, 5, 20, 5}, {10, 0, 10, 5}}},
-		{"named areas place items",
+			[][4]float64{{0, 0, 10, 5}, {0, 5, 20, 5}, {10, 0, 10, 5}},
+		},
+		{
+			"named areas place items",
 			[]func(*css.Style){cols(tpx(10), tpx(20)), rowsT(tpx(5), tpx(5)), func(s *css.Style) { s.GridTemplateAreas = areas }},
 			[]*Node{cell(named("main")), cell(named("head"))},
-			[][4]float64{{10, 5, 20, 5}, {0, 0, 30, 5}}},
-		{"order changes the auto placement",
+			[][4]float64{{10, 5, 20, 5}, {0, 0, 30, 5}},
+		},
+		{
+			"order changes the auto placement",
 			[]func(*css.Style){cols(tpx(10), tpx(10)), rowsT(tpx(5))},
 			[]*Node{cell(order(2)), cell(order(1))},
-			[][4]float64{{10, 0, 10, 5}, {0, 0, 10, 5}}},
+			[][4]float64{{10, 0, 10, 5}, {0, 0, 10, 5}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -216,26 +244,36 @@ func TestGrid_Alignment(t *testing.T) {
 		items []*Node
 		want  [][4]float64
 	}{
-		{"justify-self and align-self center",
+		{
+			"justify-self and align-self center",
 			[]func(*css.Style){cols(tpx(40)), rowsT(tpx(20))},
 			[]*Node{cell(width(10), height(10), func(s *css.Style) { s.JustifySelf, s.AlignSelf = css.BoxCenter, css.BoxCenter })},
-			[][4]float64{{15, 5, 10, 10}}},
-		{"justify-items: end applies to auto items",
+			[][4]float64{{15, 5, 10, 10}},
+		},
+		{
+			"justify-items: end applies to auto items",
 			[]func(*css.Style){cols(tpx(40)), rowsT(tpx(20)), func(s *css.Style) { s.JustifyItems = css.BoxEnd }},
 			[]*Node{cell(width(10), height(10))},
-			[][4]float64{{30, 0, 10, 10}}},
-		{"justify-content: space-between spreads the tracks",
+			[][4]float64{{30, 0, 10, 10}},
+		},
+		{
+			"justify-content: space-between spreads the tracks",
 			[]func(*css.Style){cols(tpx(10), tpx(10)), rowsT(tpx(5)), justify(css.BoxSpaceBetween)},
 			[]*Node{cell(), cell()},
-			[][4]float64{{0, 0, 10, 5}, {90, 0, 10, 5}}},
-		{"auto margins center an item",
+			[][4]float64{{0, 0, 10, 5}, {90, 0, 10, 5}},
+		},
+		{
+			"auto margins center an item",
 			[]func(*css.Style){cols(tpx(40)), rowsT(tpx(20))},
 			[]*Node{cell(width(10), height(10), margin(auto))},
-			[][4]float64{{15, 5, 10, 10}}},
-		{"rtl puts the first column on the right",
+			[][4]float64{{15, 5, 10, 10}},
+		},
+		{
+			"rtl puts the first column on the right",
 			[]func(*css.Style){cols(tpx(10), tpx(20)), rowsT(tpx(5)), rtl},
 			[]*Node{cell(), cell()},
-			[][4]float64{{90, 0, 10, 5}, {70, 0, 20, 5}}},
+			[][4]float64{{90, 0, 10, 5}, {70, 0, 20, 5}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

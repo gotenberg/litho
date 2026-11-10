@@ -119,16 +119,24 @@ func TestConvert_CSSPageSizeFitsThePaper(t *testing.T) {
 		m      compose.Matrix
 	}{
 		{"no size", "", false, DefaultPageWidth, DefaultPageHeight, compose.Identity},
-		{"smaller, centred", "size: A5", false, DefaultPageWidth, DefaultPageHeight,
-			compose.Matrix{A: 1, D: 1, E: (DefaultPageWidth - a5w) / 2, F: (DefaultPageHeight - a5h) / 2}},
+		{
+			"smaller, centred", "size: A5", false, DefaultPageWidth, DefaultPageHeight,
+			compose.Matrix{A: 1, D: 1, E: (DefaultPageWidth - a5w) / 2, F: (DefaultPageHeight - a5h) / 2},
+		},
 		{"smaller, preferred", "size: A5", true, a5w, a5h, compose.Identity},
-		{"larger, scaled down", "size: A3", false, DefaultPageWidth, DefaultPageHeight,
-			compose.Matrix{A: DefaultPageWidth / a3w, D: DefaultPageWidth / a3w, F: (DefaultPageHeight - a3h*DefaultPageWidth/a3w) / 2}},
+		{
+			"larger, scaled down", "size: A3", false, DefaultPageWidth, DefaultPageHeight,
+			compose.Matrix{A: DefaultPageWidth / a3w, D: DefaultPageWidth / a3w, F: (DefaultPageHeight - a3h*DefaultPageWidth/a3w) / 2},
+		},
 		{"orientation alone", "size: landscape", false, DefaultPageHeight, DefaultPageWidth, compose.Identity},
-		{"landscape size turns the sheet", "size: 400pt 200pt", false, DefaultPageHeight, DefaultPageWidth,
-			compose.Matrix{A: 1, D: 1, E: (DefaultPageHeight - 400) / 2, F: (DefaultPageWidth - 200) / 2}},
-		{"square keeps the sheet", "size: 300pt", false, DefaultPageWidth, DefaultPageHeight,
-			compose.Matrix{A: 1, D: 1, E: (DefaultPageWidth - 300) / 2, F: (DefaultPageHeight - 300) / 2}},
+		{
+			"landscape size turns the sheet", "size: 400pt 200pt", false, DefaultPageHeight, DefaultPageWidth,
+			compose.Matrix{A: 1, D: 1, E: (DefaultPageHeight - 400) / 2, F: (DefaultPageWidth - 200) / 2},
+		},
+		{
+			"square keeps the sheet", "size: 300pt", false, DefaultPageWidth, DefaultPageHeight,
+			compose.Matrix{A: 1, D: 1, E: (DefaultPageWidth - 300) / 2, F: (DefaultPageHeight - 300) / 2},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -222,18 +230,36 @@ func TestConvert_SinglePage(t *testing.T) {
 		w, h  float64
 		scale float64
 	}{
-		{"short content takes the screen's height", `<p style="margin:0">a</p>`,
-			Options{MarginTop: 7, MarginBottom: 3}, DefaultPageWidth, screenHeight + 10, 1},
-		{"forced breaks ignored by the measure", `<div style="height:400pt"></div><div style="break-before:page;height:300pt"></div>`,
-			Options{MarginTop: 7, MarginBottom: 3}, DefaultPageWidth, 710, 1},
-		{"landscape takes the content's width", `<div style="width:1000pt;height:40pt"></div>`,
-			Options{Landscape: true, MarginLeft: 10, MarginRight: 20}, 1030, screenHeight, 1},
-		{"landscape takes the screen's width at least", `<p>a</p>`,
-			Options{Landscape: true, MarginLeft: 10, MarginRight: 20}, screenWidth + 30, screenHeight, 1},
-		{"portrait shrinks wide content to the paper", `<div style="width:1000pt;height:40pt"></div>`,
-			Options{}, DefaultPageWidth, screenHeight, 1 / 1.5},
-		{"capped at the PDF limit", `<div style="height:20000pt"></div>`,
-			Options{}, DefaultPageWidth, maxPageSide, 1},
+		{
+			"short content takes the screen's height", `<p style="margin:0">a</p>`,
+			Options{MarginTop: 7, MarginBottom: 3},
+			DefaultPageWidth, screenHeight + 10, 1,
+		},
+		{
+			"forced breaks ignored by the measure", `<div style="height:400pt"></div><div style="break-before:page;height:300pt"></div>`,
+			Options{MarginTop: 7, MarginBottom: 3},
+			DefaultPageWidth, 710, 1,
+		},
+		{
+			"landscape takes the content's width", `<div style="width:1000pt;height:40pt"></div>`,
+			Options{Landscape: true, MarginLeft: 10, MarginRight: 20},
+			1030, screenHeight, 1,
+		},
+		{
+			"landscape takes the screen's width at least", `<p>a</p>`,
+			Options{Landscape: true, MarginLeft: 10, MarginRight: 20},
+			screenWidth + 30, screenHeight, 1,
+		},
+		{
+			"portrait shrinks wide content to the paper", `<div style="width:1000pt;height:40pt"></div>`,
+			Options{},
+			DefaultPageWidth, screenHeight, 1 / 1.5,
+		},
+		{
+			"capped at the PDF limit", `<div style="height:20000pt"></div>`,
+			Options{},
+			DefaultPageWidth, maxPageSide, 1,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

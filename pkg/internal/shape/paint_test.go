@@ -49,8 +49,10 @@ func line() []compose.PathOp {
 // and a diamond centred on the start, the line stopping short of its
 // centre.
 func TestStroke_Arrowheads(t *testing.T) {
-	frags := Stroke(line(), Line{Width: 2, Color: compose.Color{A: 1},
-		Head: Arrowhead{Kind: ArrowDiamond}, Tail: Arrowhead{Kind: ArrowTriangle}})
+	frags := Stroke(line(), Line{
+		Width: 2, Color: compose.Color{A: 1},
+		Head: Arrowhead{Kind: ArrowDiamond}, Tail: Arrowhead{Kind: ArrowTriangle},
+	})
 	if len(frags) != 3 {
 		t.Fatalf("%d fragments", len(frags))
 	}

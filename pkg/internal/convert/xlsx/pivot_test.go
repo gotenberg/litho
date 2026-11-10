@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"maps"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -155,9 +156,7 @@ func TestPivotTables_ExternalSourceFromRecords(t *testing.T) {
 	data := pivotPackage(t, def)
 	files := map[string]string{}
 	zr := mustUnzip(t, data)
-	for k, v := range zr {
-		files[k] = v
-	}
+	maps.Copy(files, zr)
 	files["xl/pivotCache/pivotCacheDefinition1.xml"] = `<pivotCacheDefinition ` + nsDecl + `><cacheSource type="worksheet"><worksheetSource ref="A1:B4" sheet="Gone" r:id="rIdX"/></cacheSource>` +
 		`<cacheFields count="2"><cacheField name="name"><sharedItems count="2"><s v="x"/><e v="#N/A"/></sharedItems></cacheField><cacheField name="v"><sharedItems/></cacheField></cacheFields></pivotCacheDefinition>`
 	files["xl/pivotCache/_rels/pivotCacheDefinition1.xml.rels"] = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +

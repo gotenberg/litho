@@ -87,8 +87,10 @@ func (d doc) pack(t testing.TB) []byte {
 		if store {
 			// A STORED entry carries its sizes and CRC up front, no data
 			// descriptor, as LibreOffice requires of the mimetype.
-			w, err = zw.CreateRaw(&zip.FileHeader{Name: name, Method: zip.Store, CRC32: crc32.ChecksumIEEE([]byte(body)),
-				CompressedSize64: uint64(len(body)), UncompressedSize64: uint64(len(body))})
+			w, err = zw.CreateRaw(&zip.FileHeader{
+				Name: name, Method: zip.Store, CRC32: crc32.ChecksumIEEE([]byte(body)),
+				CompressedSize64: uint64(len(body)), UncompressedSize64: uint64(len(body)),
+			})
 		} else {
 			w, err = zw.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Deflate})
 		}

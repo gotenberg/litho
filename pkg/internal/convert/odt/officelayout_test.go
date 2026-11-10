@@ -4,10 +4,9 @@ import (
 	"context"
 	"strconv"
 	"strings"
-
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -164,12 +163,18 @@ func TestFootnoteRule(t *testing.T) {
 		want      layout.FootnoteRule
 	}{
 		{"absent", ``, layout.FootnoteRule{Width: 0.25, Thickness: 0.5, Color: css.Color{A: 1}, Align: css.AlignLeft, Line: css.Solid, SpaceAbove: 2.85, SpaceBelow: 2.85}},
-		{"centred", `<style:footnote-sep style:width="0.1cm" style:distance-before-sep="0.5cm" style:distance-after-sep="0.3cm" style:line-style="solid" style:adjustment="center" style:rel-width="50%" style:color="#ff0000"/>`,
-			layout.FootnoteRule{Width: 0.5, Thickness: 0.1 * cm, Color: css.Color{R: 1, A: 1}, Align: css.AlignCenter, Line: css.Solid, SpaceAbove: 0.5 * cm, SpaceBelow: 0.3 * cm}},
-		{"dashed right", `<style:footnote-sep style:width="1pt" style:line-style="dash" style:adjustment="right"/>`,
-			layout.FootnoteRule{Width: 0.25, Thickness: 1, Color: css.Color{A: 1}, Align: css.AlignRight, Line: css.Dashed, SpaceAbove: 2.85, SpaceBelow: 2.85}},
-		{"no thickness", `<style:footnote-sep style:width="0cm" style:distance-before-sep="0.2cm"/>`,
-			layout.FootnoteRule{Width: 0.25, Color: css.Color{A: 1}, Align: css.AlignLeft, Line: css.BorderNone, SpaceAbove: 0.2 * cm, SpaceBelow: 2.85}},
+		{
+			"centred", `<style:footnote-sep style:width="0.1cm" style:distance-before-sep="0.5cm" style:distance-after-sep="0.3cm" style:line-style="solid" style:adjustment="center" style:rel-width="50%" style:color="#ff0000"/>`,
+			layout.FootnoteRule{Width: 0.5, Thickness: 0.1 * cm, Color: css.Color{R: 1, A: 1}, Align: css.AlignCenter, Line: css.Solid, SpaceAbove: 0.5 * cm, SpaceBelow: 0.3 * cm},
+		},
+		{
+			"dashed right", `<style:footnote-sep style:width="1pt" style:line-style="dash" style:adjustment="right"/>`,
+			layout.FootnoteRule{Width: 0.25, Thickness: 1, Color: css.Color{A: 1}, Align: css.AlignRight, Line: css.Dashed, SpaceAbove: 2.85, SpaceBelow: 2.85},
+		},
+		{
+			"no thickness", `<style:footnote-sep style:width="0cm" style:distance-before-sep="0.2cm"/>`,
+			layout.FootnoteRule{Width: 0.25, Color: css.Color{A: 1}, Align: css.AlignLeft, Line: css.BorderNone, SpaceAbove: 0.2 * cm, SpaceBelow: 2.85},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -307,10 +312,16 @@ func TestColumnTracks(t *testing.T) {
 		first, last float64
 		ok          bool
 	}{
-		{"equal", col("32767*", "0cm", "0.25cm") + col("32768*", "0.25cm", "0cm"),
-			[]columnTrack{{Width: 32767.0/65535*400 - 0.25*cm, Gap: 0.5 * cm}, {Width: 32768.0/65535*400 - 0.25*cm}}, 0, 0, true},
-		{"unequal with outer indents", col("1*", "1cm", "0.5cm") + col("3*", "0.5cm", "0cm"),
-			[]columnTrack{{Width: 100 - 1.5*cm, Gap: 1 * cm}, {Width: 300 - 0.5*cm}}, 1 * cm, 0, true},
+		{
+			"equal", col("32767*", "0cm", "0.25cm") + col("32768*", "0.25cm", "0cm"),
+			[]columnTrack{{Width: 32767.0/65535*400 - 0.25*cm, Gap: 0.5 * cm}, {Width: 32768.0/65535*400 - 0.25*cm}},
+			0, 0, true,
+		},
+		{
+			"unequal with outer indents", col("1*", "1cm", "0.5cm") + col("3*", "0.5cm", "0cm"),
+			[]columnTrack{{Width: 100 - 1.5*cm, Gap: 1 * cm}, {Width: 300 - 0.5*cm}},
+			1 * cm, 0, true,
+		},
 		{"unreadable share", col("x", "0cm", "0cm") + col("1*", "0cm", "0cm"), nil, 0, 0, false},
 	}
 	for _, tc := range cases {
@@ -411,8 +422,10 @@ func TestConvert_LongWordBreaks(t *testing.T) {
 
 func TestApplyFrameWrap_PageAnchoredFrames(t *testing.T) {
 	t.Parallel()
-	for wrap, want := range map[string]css.FrameWrap{"none": css.FrameWrapNone, "left": css.FrameWrapLeft, "right": css.FrameWrapRight, "parallel": css.FrameWrapParallel,
-		"dynamic": css.FrameWrapDynamic, "biggest": css.FrameWrapLargest, "run-through": css.FrameWrapThrough, "": css.FrameWrapThrough, "contour": css.FrameWrapThrough} {
+	for wrap, want := range map[string]css.FrameWrap{
+		"none": css.FrameWrapNone, "left": css.FrameWrapLeft, "right": css.FrameWrapRight, "parallel": css.FrameWrapParallel,
+		"dynamic": css.FrameWrapDynamic, "biggest": css.FrameWrapLargest, "run-through": css.FrameWrapThrough, "": css.FrameWrapThrough, "contour": css.FrameWrapThrough,
+	} {
 		st := css.Initial()
 		applyFrameWrap(st, wrap, [4]float64{1, 2, 3, 4})
 		if st.FrameWrap != want || st.WrapGap != [4]float64{1, 2, 3, 4} {

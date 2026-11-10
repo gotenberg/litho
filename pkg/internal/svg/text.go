@@ -228,8 +228,7 @@ func (r *renderer) layoutText(chars []textChar) []*piece {
 		var v [4]float64
 		var has [4]bool
 		for k := range 4 {
-			for j := len(c.chain) - 1; j >= 0; j-- {
-				pc := c.chain[j]
+			for _, pc := range slices.Backward(c.chain) {
 				if pc.n < len(pc.lists[k]) {
 					v[k], has[k] = pc.lists[k][pc.n].resolve(r.lc(c.st), [4]axis{axisX, axisY, axisX, axisY}[k]), true
 					break

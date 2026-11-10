@@ -68,8 +68,10 @@ func TestShape_Geometry(t *testing.T) {
 		// centre covers 450..550 by 250..450.
 		{"rot90", &Shape{Box: compose.Rect{X: 400, Y: 300, Width: 200, Height: 100}, Rotation: 90, Fill: solid}, compose.Rect{X: 450, Y: 250, Width: 100, Height: 200}},
 		{"flip", &Shape{Box: compose.Rect{X: 10, Y: 20, Width: 30, Height: 40}, FlipH: true, FlipV: true, Fill: solid}, compose.Rect{X: 10, Y: 20, Width: 30, Height: 40}},
-		{"group", &Shape{Kind: KindGroup, Box: compose.Rect{X: 100, Y: 100, Width: 200, Height: 200}, Child: compose.Rect{Width: 100, Height: 100},
-			Kids: []*Shape{{Box: compose.Rect{X: 50, Y: 50, Width: 50, Height: 25}, Fill: solid}}}, compose.Rect{X: 200, Y: 200, Width: 100, Height: 50}},
+		{"group", &Shape{
+			Kind: KindGroup, Box: compose.Rect{X: 100, Y: 100, Width: 200, Height: 200}, Child: compose.Rect{Width: 100, Height: 100},
+			Kids: []*Shape{{Box: compose.Rect{X: 50, Y: 50, Width: 50, Height: 25}, Fill: solid}},
+		}, compose.Rect{X: 200, Y: 200, Width: 100, Height: 50}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pg := convert(t, deck(&Slide{Shapes: []*Shape{tc.sh}}), office.Options{}).Pages[0]

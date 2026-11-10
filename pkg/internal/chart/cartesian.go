@@ -750,7 +750,7 @@ func (rd *renderer) breaksWord(items []item, blocks []*block, st TextStyle, maxW
 		if b == nil || len(b.lines) < 2 {
 			continue
 		}
-		for _, w := range strings.Fields(items[i].text) {
+		for w := range strings.FieldsSeq(items[i].text) {
 			if wb := rd.measure(w, st, 0); wb != nil && wb.w > maxW+0.01 {
 				return true
 			}

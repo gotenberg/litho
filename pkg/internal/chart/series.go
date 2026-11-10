@@ -2,6 +2,7 @@ package chart
 
 import (
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -553,8 +554,7 @@ func (rd *renderer) areas(g *Group, x, y *dim) []func() {
 	// The last series is drawn first, at the back, so the first stays in
 	// front (chart2's AreaChart reverses a two-dimensional area chart's
 	// series, ReverseSeriesOrderAreaAndNetChart).
-	for i := len(g.Series) - 1; i >= 0; i-- {
-		s := g.Series[i]
+	for i, s := range slices.Backward(g.Series) {
 		var top, bottom []compose.Point
 		for j := 0; j < sv.n && j < x.n; j++ {
 			v := sv.hi[i][j]
@@ -583,8 +583,8 @@ func (rd *renderer) areas(g *Group, x, y *dim) []func() {
 		}
 		var pts []compose.Point
 		pts = append(pts, top...)
-		for k := len(bottom) - 1; k >= 0; k-- {
-			pts = append(pts, bottom[k])
+		for _, b := range slices.Backward(bottom) {
+			pts = append(pts, b)
 		}
 		rd.paint(polygon(pts...), rd.fillOf(g, s, -1), rd.borderOf(g, s, -1))
 		for j := 0; j < len(top); j++ {

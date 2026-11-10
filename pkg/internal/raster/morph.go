@@ -29,18 +29,18 @@ func morph(m *image.Alpha, r int, grow bool) *image.Alpha {
 	line := make([]uint8, max(w, h))
 	res := make([]uint8, max(w, h))
 	q := make([]int, 0, max(w, h)+2*r+1)
-	for y := 0; y < h; y++ {
+	for y := range h {
 		row := out.Pix[y*out.Stride : y*out.Stride+w]
 		copy(line, row)
 		extreme(line[:w], res[:w], r, grow, q)
 		copy(row, res[:w])
 	}
-	for x := 0; x < w; x++ {
-		for y := 0; y < h; y++ {
+	for x := range w {
+		for y := range h {
 			line[y] = out.Pix[y*out.Stride+x]
 		}
 		extreme(line[:h], res[:h], r, grow, q)
-		for y := 0; y < h; y++ {
+		for y := range h {
 			out.Pix[y*out.Stride+x] = res[y]
 		}
 	}
@@ -67,7 +67,7 @@ func extreme(src, dst []uint8, r int, grow bool, q []int) {
 	q = q[:0]
 	head := 0
 	next := -r
-	for i := 0; i < n; i++ {
+	for i := range n {
 		for ; next <= i+r; next++ {
 			v := at(next)
 			for len(q) > head && better(v, at(q[len(q)-1])) {

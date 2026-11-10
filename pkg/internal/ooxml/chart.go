@@ -3,6 +3,7 @@ package ooxml
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"strconv"
 	"strings"
@@ -118,12 +119,8 @@ func chartTheme(ctx context.Context, pkg *Package, part string, theme *Theme) *T
 	}
 	o := ParseTheme(&Element{Space: NSA, Local: "theme", Children: []*Element{{Space: NSA, Local: "themeElements", Children: root.Children}}})
 	out := &Theme{Colors: map[string]css.Color{}, Major: theme.Major, Minor: theme.Minor}
-	for k, v := range theme.Colors {
-		out.Colors[k] = v
-	}
-	for k, v := range o.Colors {
-		out.Colors[k] = v
-	}
+	maps.Copy(out.Colors, theme.Colors)
+	maps.Copy(out.Colors, o.Colors)
 	if root.Child(NSA, "fontScheme") != nil {
 		out.Major, out.Minor = o.Major, o.Minor
 	}

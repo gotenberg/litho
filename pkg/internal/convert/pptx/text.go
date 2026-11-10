@@ -3,6 +3,7 @@ package pptx
 import (
 	"encoding/xml"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -68,10 +69,8 @@ func (c chain) firstWith(locals ...string) (child, holder *ooxml.Element) {
 			if k.Space != ooxml.NSA {
 				continue
 			}
-			for _, l := range locals {
-				if k.Local == l {
-					return k, e
-				}
+			if slices.Contains(locals, k.Local) {
+				return k, e
 			}
 		}
 	}

@@ -25,12 +25,16 @@ func mods(m ...func(*css.Style)) []func(*css.Style) { return m }
 
 // table, tr, tbody, thead, tfoot, caption, col and colgroup return
 // elements of those displays.
-func table(m []func(*css.Style), kids ...*Node) *Node   { return part(css.Table, m, kids...) }
-func tr(m []func(*css.Style), kids ...*Node) *Node      { return part(css.TableRow, m, kids...) }
-func tbody(m []func(*css.Style), kids ...*Node) *Node   { return part(css.TableRowGroup, m, kids...) }
-func thead(m []func(*css.Style), kids ...*Node) *Node   { return part(css.TableHeaderGroup, m, kids...) }
-func tfoot(m []func(*css.Style), kids ...*Node) *Node   { return part(css.TableFooterGroup, m, kids...) }
+func table(m []func(*css.Style), kids ...*Node) *Node { return part(css.Table, m, kids...) }
+func tr(m []func(*css.Style), kids ...*Node) *Node    { return part(css.TableRow, m, kids...) }
+func tbody(m []func(*css.Style), kids ...*Node) *Node { return part(css.TableRowGroup, m, kids...) }
+
+func thead(m []func(*css.Style), kids ...*Node) *Node { return part(css.TableHeaderGroup, m, kids...) }
+
+func tfoot(m []func(*css.Style), kids ...*Node) *Node { return part(css.TableFooterGroup, m, kids...) }
+
 func caption(m []func(*css.Style), kids ...*Node) *Node { return part(css.TableCaption, m, kids...) }
+
 func colgroup(m []func(*css.Style), kids ...*Node) *Node {
 	return part(css.TableColumnGroup, m, kids...)
 }
@@ -88,7 +92,7 @@ func wpPage(w, h, m float64) PageBox {
 func assertPages(t *testing.T, res *Result, h int, want string, letters map[byte]byte) {
 	t.Helper()
 	var rows []string
-	for _, l := range strings.Split(want, "\n") {
+	for l := range strings.SplitSeq(want, "\n") {
 		if l = strings.TrimSpace(l); l != "" {
 			b := []byte(l)
 			for i := range b {

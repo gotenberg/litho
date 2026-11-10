@@ -6,7 +6,7 @@ import (
 	"hash/fnv"
 	"log/slog"
 	"math"
-	"sort"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
@@ -146,7 +146,7 @@ func (s *Subset) Write(ctx context.Context, alloc *writer.ObjAllocator, logger *
 	if !s.keep[0] {
 		gids = append(gids, 0)
 	}
-	sort.Slice(gids, func(i, j int) bool { return gids[i] < gids[j] })
+	slices.Sort(gids)
 	name := subsetTag(gids) + "+" + f.postScriptName
 
 	if f.isCFF() {

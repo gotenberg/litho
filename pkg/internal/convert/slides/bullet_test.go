@@ -29,12 +29,21 @@ func TestText_Bullets(t *testing.T) {
 		paras []Paragraph
 		want  [][3]any
 	}{
-		{"hanging", []Paragraph{bul("One", 36, -36, dot()), bul("Two", 72, -18, dot()), bul("Four", 10, -36, dot())},
-			[][3]any{{"•", 28.35, 47.2}, {"One", 64.35, 48.33}, {"•", 82.35, 71.2}, {"Two", 100.35, 72.34}, {"•", 28.35, 95.2}, {"Four", 64.35, 96.35}}},
-		{"indents", []Paragraph{bul("Three", 36, 0, dot()), bul("Four", 36, 10, dot()), centred},
-			[][3]any{{"•", 64.35, 47.2}, {"Three", 71.35, 48.33}, {"Four", 74.35, 72.34}, {"•", 124.7, 95.2}, {"Centred", 160.7, 96.35}}},
-		{"numbers", []Paragraph{bul("N1", 36, -36, num("arabicPeriod", 0)), bul("N2", 36, -36, num("arabicPeriod", 0)), sub, bul("N3", 36, -36, num("arabicPeriod", 0)), bul("R", 36, -36, num("romanUcPeriod", 4))},
-			[][3]any{{"1.", 28.35, 48.33}, {"2.", 28.35, 72.34}, {"a)", 64.35, 96.35}, {"3.", 28.35, 120.36}, {"IV.", 28.35, 144.37}}},
+		{
+			"hanging",
+			[]Paragraph{bul("One", 36, -36, dot()), bul("Two", 72, -18, dot()), bul("Four", 10, -36, dot())},
+			[][3]any{{"•", 28.35, 47.2}, {"One", 64.35, 48.33}, {"•", 82.35, 71.2}, {"Two", 100.35, 72.34}, {"•", 28.35, 95.2}, {"Four", 64.35, 96.35}},
+		},
+		{
+			"indents",
+			[]Paragraph{bul("Three", 36, 0, dot()), bul("Four", 36, 10, dot()), centred},
+			[][3]any{{"•", 64.35, 47.2}, {"Three", 71.35, 48.33}, {"Four", 74.35, 72.34}, {"•", 124.7, 95.2}, {"Centred", 160.7, 96.35}},
+		},
+		{
+			"numbers",
+			[]Paragraph{bul("N1", 36, -36, num("arabicPeriod", 0)), bul("N2", 36, -36, num("arabicPeriod", 0)), sub, bul("N3", 36, -36, num("arabicPeriod", 0)), bul("R", 36, -36, num("romanUcPeriod", 4))},
+			[][3]any{{"1.", 28.35, 48.33}, {"2.", 28.35, 72.34}, {"a)", 64.35, 96.35}, {"3.", 28.35, 120.36}, {"IV.", 28.35, 144.37}},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pg := convert(t, deck(&Slide{Shapes: []*Shape{box(28.35, 28.35, 300, 300, tc.paras...)}}), office.Options{}).Pages[0]

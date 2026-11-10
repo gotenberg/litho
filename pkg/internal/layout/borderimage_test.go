@@ -110,8 +110,10 @@ func TestBorderImage_Draw(t *testing.T) {
 			_RRRR_
 			______`},
 		{"outset", func(s *css.Style) {
-			s.BorderImage = css.BorderImage{Source: "i.png", Slice: slice1, Width: ones,
-				Outset: [4]css.Dimension{css.Pts(px(1)), {Kind: css.Number}, {Kind: css.Number}, {Kind: css.Number}}}
+			s.BorderImage = css.BorderImage{
+				Source: "i.png", Slice: slice1, Width: ones,
+				Outset: [4]css.Dimension{css.Pts(px(1)), {Kind: css.Number}, {Kind: css.Number}, {Kind: css.Number}},
+			}
 		}, `
 			_GRRR_
 			_R__R_

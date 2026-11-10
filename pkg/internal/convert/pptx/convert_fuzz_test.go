@@ -3,6 +3,7 @@ package pptx
 import (
 	"bytes"
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -33,9 +34,7 @@ func FuzzConvert(f *testing.F) {
 	png := pngBytes(f)
 	f.Fuzz(func(t *testing.T, tree []byte) {
 		parts := map[string]string{"ppt/media/image1.png": png}
-		for name, part := range dgm.parts {
-			parts[name] = part
-		}
+		maps.Copy(parts, dgm.parts)
 		files := deckFiles(testDeck{
 			slides: []testSlide{{
 				tree: string(tree), notes: string(tree),

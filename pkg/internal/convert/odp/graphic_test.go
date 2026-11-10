@@ -42,19 +42,28 @@ func TestRead_Fill(t *testing.T) {
 		// Measured on the pinned LibreOffice: a linear gradient at 90
 		// degrees runs left to right, its border in the start colour.
 		{"linear", `draw:fill="gradient" draw:fill-gradient-name="lin"`, slides.Fill{Kind: slides.FillGradient, Gradient: &slides.Gradient{
-			CenterX: 0.5, CenterY: 0.5, Border: 0.4, Stops: []slides.Stop{{Position: 0, Color: red}, {Position: 1, Color: blue}}}}},
+			CenterX: 0.5, CenterY: 0.5, Border: 0.4, Stops: []slides.Stop{{Position: 0, Color: red}, {Position: 1, Color: blue}},
+		}}},
 		// An axial gradient puts the start colour in the middle and its
 		// border in the end colour at both edges.
-		{"axial", `draw:fill="gradient" draw:fill-gradient-name="ax"`, slides.Fill{Kind: slides.FillGradient, Gradient: &slides.Gradient{Angle: 90, CenterX: 0.5, CenterY: 0.5,
-			Stops: []slides.Stop{{Position: 0, Color: blue}, {Position: 0.25, Color: blue}, {Position: 0.5, Color: red}, {Position: 0.75, Color: blue}, {Position: 1, Color: blue}}}}},
+		{"axial", `draw:fill="gradient" draw:fill-gradient-name="ax"`, slides.Fill{Kind: slides.FillGradient, Gradient: &slides.Gradient{
+			Angle: 90, CenterX: 0.5, CenterY: 0.5,
+			Stops: []slides.Stop{{Position: 0, Color: blue}, {Position: 0.25, Color: blue}, {Position: 0.5, Color: red}, {Position: 0.75, Color: blue}, {Position: 1, Color: blue}},
+		}}},
 		// A radial gradient has the end colour at the centre, its border
 		// in the start colour outside.
-		{"radial", `draw:fill="gradient" draw:fill-gradient-name="rad"`, slides.Fill{Kind: slides.FillGradient, Gradient: &slides.Gradient{Radial: true, CenterX: 0.25, CenterY: 0.75,
-			Stops: []slides.Stop{{Position: 0, Color: blue}, {Position: 0.5, Color: red}, {Position: 1, Color: red}}}}},
-		{"intensity", `draw:fill="gradient" draw:fill-gradient-name="int"`, slides.Fill{Kind: slides.FillGradient, Gradient: &slides.Gradient{Angle: 90, CenterX: 0.5, CenterY: 0.5,
-			Stops: []slides.Stop{{Position: 0, Color: css.Color{R: 128.0 / 255, A: 1}}, {Position: 1, Color: blue}}}}},
-		{"hatch", `draw:fill="hatch" draw:fill-hatch-name="h" draw:fill-hatch-solid="true" draw:fill-color="#ffffff"`,
-			slides.Fill{Kind: slides.FillPattern, Pattern: "diagCross", Color: css.Color{A: 1}, Background: css.Color{R: 1, G: 1, B: 1, A: 1}}},
+		{"radial", `draw:fill="gradient" draw:fill-gradient-name="rad"`, slides.Fill{Kind: slides.FillGradient, Gradient: &slides.Gradient{
+			Radial: true, CenterX: 0.25, CenterY: 0.75,
+			Stops: []slides.Stop{{Position: 0, Color: blue}, {Position: 0.5, Color: red}, {Position: 1, Color: red}},
+		}}},
+		{"intensity", `draw:fill="gradient" draw:fill-gradient-name="int"`, slides.Fill{Kind: slides.FillGradient, Gradient: &slides.Gradient{
+			Angle: 90, CenterX: 0.5, CenterY: 0.5,
+			Stops: []slides.Stop{{Position: 0, Color: css.Color{R: 128.0 / 255, A: 1}}, {Position: 1, Color: blue}},
+		}}},
+		{
+			"hatch", `draw:fill="hatch" draw:fill-hatch-name="h" draw:fill-hatch-solid="true" draw:fill-color="#ffffff"`,
+			slides.Fill{Kind: slides.FillPattern, Pattern: "diagCross", Color: css.Color{A: 1}, Background: css.Color{R: 1, G: 1, B: 1, A: 1}},
+		},
 	}
 	t.Run("standard", func(t *testing.T) {
 		s := firstShape(t, flat{body: page(`<draw:rect svg:width="1cm" svg:height="1cm"/>`)})
@@ -113,19 +122,29 @@ func TestRead_Line(t *testing.T) {
 	}{
 		{"none", `draw:stroke="none"`, slides.Line{}},
 		{"pool default hairline", ``, slides.Line{Width: hairline, Hairline: true, Color: cssColor(poolStroke)}},
-		{"solid", `draw:stroke="solid" svg:stroke-width="0.1cm" svg:stroke-color="#ff0000" svg:stroke-linecap="square" draw:stroke-linejoin="miter"`,
-			slides.Line{Width: cm(0.1), Color: css.Color{R: 1, A: 1}, Cap: slides.CapSquare, Join: slides.JoinMiter}},
+		{
+			"solid", `draw:stroke="solid" svg:stroke-width="0.1cm" svg:stroke-color="#ff0000" svg:stroke-linecap="square" draw:stroke-linejoin="miter"`,
+			slides.Line{Width: cm(0.1), Color: css.Color{R: 1, A: 1}, Cap: slides.CapSquare, Join: slides.JoinMiter},
+		},
 		// Measured on the pinned LibreOffice: d1 at 0.1 cm prints the dash
 		// array [14.173 5.669 2.835 5.669], d2 at 0.2 cm [11.338 5.669
 		// 11.338 5.669].
-		{"absolute dash", `draw:stroke="dash" draw:stroke-dash="d1" svg:stroke-width="0.1cm" svg:stroke-color="#000000"`,
-			slides.Line{Width: cm(0.1), Color: css.Color{A: 1}, Dash: []float64{cm(0.5), cm(0.2), cm(0.1), cm(0.2)}}},
-		{"relative dash", `draw:stroke="dash" draw:stroke-dash="d2" svg:stroke-width="0.2cm" svg:stroke-color="#000000"`,
-			slides.Line{Width: cm(0.2), Color: css.Color{A: 1}, Dash: []float64{cm(0.4), cm(0.2), cm(0.4), cm(0.2)}}},
-		{"dots", `draw:stroke="dash" draw:stroke-dash="dot" svg:stroke-width="0.1cm" svg:stroke-color="#000000"`,
-			slides.Line{Width: cm(0.1), Color: css.Color{A: 1}, Dash: []float64{cm(0.1), cm(0.05)}, Cap: slides.CapRound}},
-		{"markers", `draw:stroke="solid" svg:stroke-width="0.1cm" svg:stroke-color="#000000" draw:marker-start="Arrow" draw:marker-start-width="0.6cm" draw:marker-end="Circle"`,
-			slides.Line{Width: cm(0.1), Color: css.Color{A: 1}, Head: slides.Arrow{Kind: slides.ArrowTriangle, Width: 2, Length: 3}, Tail: slides.Arrow{Kind: slides.ArrowOval, Width: 1, Length: 1}}},
+		{
+			"absolute dash", `draw:stroke="dash" draw:stroke-dash="d1" svg:stroke-width="0.1cm" svg:stroke-color="#000000"`,
+			slides.Line{Width: cm(0.1), Color: css.Color{A: 1}, Dash: []float64{cm(0.5), cm(0.2), cm(0.1), cm(0.2)}},
+		},
+		{
+			"relative dash", `draw:stroke="dash" draw:stroke-dash="d2" svg:stroke-width="0.2cm" svg:stroke-color="#000000"`,
+			slides.Line{Width: cm(0.2), Color: css.Color{A: 1}, Dash: []float64{cm(0.4), cm(0.2), cm(0.4), cm(0.2)}},
+		},
+		{
+			"dots", `draw:stroke="dash" draw:stroke-dash="dot" svg:stroke-width="0.1cm" svg:stroke-color="#000000"`,
+			slides.Line{Width: cm(0.1), Color: css.Color{A: 1}, Dash: []float64{cm(0.1), cm(0.05)}, Cap: slides.CapRound},
+		},
+		{
+			"markers", `draw:stroke="solid" svg:stroke-width="0.1cm" svg:stroke-color="#000000" draw:marker-start="Arrow" draw:marker-start-width="0.6cm" draw:marker-end="Circle"`,
+			slides.Line{Width: cm(0.1), Color: css.Color{A: 1}, Head: slides.Arrow{Kind: slides.ArrowTriangle, Width: 2, Length: 3}, Tail: slides.Arrow{Kind: slides.ArrowOval, Width: 1, Length: 1}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -146,8 +165,10 @@ func TestRead_TextBodyProps(t *testing.T) {
 		want        slides.TextBody
 	}{
 		{"frame defaults", ``, "frame", slides.TextBody{Wrap: true, Autofit: slides.AutofitGrow}},
-		{"frame", `fo:padding="0.1cm" fo:padding-left="0.2cm" draw:textarea-vertical-align="bottom" draw:auto-grow-height="false" style:shrink-to-fit="true" fo:column-count="2" fo:column-gap="0.5cm" style:writing-mode="tb-rl"`, "frame",
-			slides.TextBody{Insets: [4]float64{cm(0.1), cm(0.1), cm(0.1), cm(0.2)}, Anchor: slides.AnchorBottom, Wrap: true, Autofit: slides.AutofitShrink, Columns: 2, ColumnGap: cm(0.5), Vertical: css.VerticalRL}},
+		{
+			"frame", `fo:padding="0.1cm" fo:padding-left="0.2cm" draw:textarea-vertical-align="bottom" draw:auto-grow-height="false" style:shrink-to-fit="true" fo:column-count="2" fo:column-gap="0.5cm" style:writing-mode="tb-rl"`, "frame",
+			slides.TextBody{Insets: [4]float64{cm(0.1), cm(0.1), cm(0.1), cm(0.2)}, Anchor: slides.AnchorBottom, Wrap: true, Autofit: slides.AutofitShrink, Columns: 2, ColumnGap: cm(0.5), Vertical: css.VerticalRL},
+		},
 		{"bottom to top", `style:writing-mode="bt-lr"`, "frame", slides.TextBody{Wrap: true, Autofit: slides.AutofitGrow, Vertical: css.SidewaysLR}},
 		{"shape no wrap", `fo:wrap-option="no-wrap" draw:textarea-vertical-align="middle"`, "shape", slides.TextBody{Anchor: slides.AnchorMiddle}},
 		{"shape grows", `draw:auto-grow-height="true" fo:wrap-option="wrap"`, "shape", slides.TextBody{Wrap: true, Autofit: slides.AutofitGrow}},
@@ -214,13 +235,16 @@ func TestTiling_Placement(t *testing.T) {
 		// A tile half the area wide, centred: the tiles straddle the
 		// centre lines.
 		{"centred", tiling{ref: "center", size: fillImageSize{relW: 0.5, relH: 1}}, []compose.Rect{
-			{X: -2.5, Y: 0, Width: 5, Height: 10}, {X: 2.5, Y: 0, Width: 5, Height: 10}, {X: 7.5, Y: 0, Width: 5, Height: 10}}},
+			{X: -2.5, Y: 0, Width: 5, Height: 10}, {X: 2.5, Y: 0, Width: 5, Height: 10}, {X: 7.5, Y: 0, Width: 5, Height: 10},
+		}},
 		// Moved by a fifth of a tile, from the corner.
 		{"moved", tiling{refX: 0.2, size: fillImageSize{w: 10, h: 10}}, []compose.Rect{
-			{X: -8, Y: 0, Width: 10, Height: 10}, {X: 2, Y: 0, Width: 10, Height: 10}}},
+			{X: -8, Y: 0, Width: 10, Height: 10}, {X: 2, Y: 0, Width: 10, Height: 10},
+		}},
 		// Every other row shifted by half a tile.
 		{"brick", tiling{offset: 0.5, size: fillImageSize{w: 10, h: 5}}, []compose.Rect{
-			{X: 0, Y: 0, Width: 10, Height: 5}, {X: -5, Y: 5, Width: 10, Height: 5}, {X: 5, Y: 5, Width: 10, Height: 5}}},
+			{X: 0, Y: 0, Width: 10, Height: 5}, {X: -5, Y: 5, Width: 10, Height: 5}, {X: 5, Y: 5, Width: 10, Height: 5},
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

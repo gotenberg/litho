@@ -292,7 +292,7 @@ func textShadow(v string) *css.Shadow {
 	}
 	sh := &css.Shadow{Color: textShadowColor}
 	var lens []float64
-	for _, f := range strings.Fields(v) {
+	for f := range strings.FieldsSeq(v) {
 		if pt, ok := odf.Length(f); ok {
 			lens = append(lens, pt)
 		} else if c, ok := odf.ParseColor(f); ok {
@@ -529,7 +529,7 @@ var borderWidths = map[string]float64{"thin": 0.75, "medium": 2.25, "thick": 3.7
 func parseBorder(v string) css.Border {
 	bd := css.Border{Color: css.Color{A: 1}}
 	widthSet := false
-	for _, f := range strings.Fields(v) {
+	for f := range strings.FieldsSeq(v) {
 		if pt, ok := odf.Length(f); ok {
 			bd.Width, widthSet = max(pt, 0), true
 		} else if w, ok := borderWidths[f]; ok {

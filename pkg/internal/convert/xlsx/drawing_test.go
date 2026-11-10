@@ -95,8 +95,10 @@ func TestRead_ShapeText(t *testing.T) {
 		`<xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="Box"/><xdr:cNvSpPr txBox="1"/></xdr:nvSpPr><xdr:spPr><a:prstGeom prst="rect"/><a:noFill/></xdr:spPr>` +
 		`<xdr:txBody><a:bodyPr lIns="0" tIns="0" rIns="0" bIns="0" anchor="b"/><a:p><a:pPr algn="r"/><a:r><a:rPr sz="2000" b="1"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:rPr><a:t>Hi</a:t></a:r></a:p></xdr:txBody></xdr:sp>` +
 		`<xdr:clientData/></xdr:absoluteAnchor></xdr:wsDr>`
-	files := workbookFiles([]testSheet{{name: "S", xml: `<sheetData/><drawing r:id="rIdD"/>`,
-		rels: `<Relationship Id="rIdD" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>`}},
+	files := workbookFiles([]testSheet{{
+		name: "S", xml: `<sheetData/><drawing r:id="rIdD"/>`,
+		rels: `<Relationship Id="rIdD" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>`,
+	}},
 		minimalStyles, "", "", map[string]string{"xl/drawings/drawing1.xml": drawing})
 	doc, _ := readBytes(t, zipFiles(t, files))
 	ds := doc.Sheets[0].Drawings

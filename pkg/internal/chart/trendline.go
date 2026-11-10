@@ -2,6 +2,7 @@ package chart
 
 import (
 	"math"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 )
@@ -90,8 +91,8 @@ func fitTrend(t Trendline, xs, ys []float64) func(float64) float64 {
 		}
 		return func(x float64) float64 {
 			y := 0.0
-			for i := len(c) - 1; i >= 0; i-- {
-				y = y*x + c[i]
+			for _, v := range slices.Backward(c) {
+				y = y*x + v
 			}
 			return y
 		}

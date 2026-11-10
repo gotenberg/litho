@@ -61,7 +61,7 @@ func (d *document) parseStyles(root *ooxml.Element) *styleSheet {
 		//     documents whose styles part lacks docDefaults print in
 		//     Liberation Serif.
 		s.defRun.fonts = fontSpec{ascii: "Calibri", hAnsi: "Calibri"}
-		s.defRun.size = ptr(11.0)
+		s.defRun.size = new(11.0)
 		return s
 	}
 	if dd := root.Child(w, "docDefaults"); dd != nil {

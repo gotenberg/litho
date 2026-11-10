@@ -22,15 +22,22 @@ func TestGradient_Parses(t *testing.T) {
 		{"background-image: linear-gradient(to top, red, blue)", &Gradient{Angle: 0, Stops: []GradientStop{stop(red, auto), stop(blue, auto)}}},
 		{"background-image: linear-gradient(to bottom left, red, blue)", &Gradient{Angle: 180, Corner: [2]int8{-1, 1}, Stops: []GradientStop{stop(red, auto), stop(blue, auto)}}},
 		{"background-image: repeating-linear-gradient(red 0 1em, 50%, currentcolor)", &Gradient{Angle: 180, Repeating: true, Stops: []GradientStop{
-			stop(red, pts(0)), stop(red, pts(15)), {Position: pct(0.5), Hint: true}, stop(blue, auto)}}},
+			stop(red, pts(0)), stop(red, pts(15)), {Position: pct(0.5), Hint: true}, stop(blue, auto),
+		}}},
 		{"background-image: linear-gradient(red)", &Gradient{Angle: 180, Stops: []GradientStop{stop(red, auto)}}},
 		{"background-image: radial-gradient(red, blue)", &Gradient{Kind: RadialGradient, Angle: 180, Center: center, Stops: []GradientStop{stop(red, auto), stop(blue, auto)}}},
-		{"background-image: radial-gradient(circle closest-side at left 25%, red, blue)", &Gradient{Kind: RadialGradient, Angle: 180, Circle: true, Size: ClosestSide,
-			Center: [2]Dimension{pct(0), pct(0.25)}, Stops: []GradientStop{stop(red, auto), stop(blue, auto)}}},
-		{"background-image: radial-gradient(10px, red, blue)", &Gradient{Kind: RadialGradient, Angle: 180, Circle: true, Size: RadialExplicit,
-			Radius: [2]Dimension{pts(7.5), pts(7.5)}, Center: center, Stops: []GradientStop{stop(red, auto), stop(blue, auto)}}},
-		{"background-image: repeating-radial-gradient(ellipse 50% 20px at 0 0, black, red)", &Gradient{Kind: RadialGradient, Angle: 180, Repeating: true, Size: RadialExplicit,
-			Radius: [2]Dimension{pct(0.5), pts(15)}, Center: [2]Dimension{pts(0), pts(0)}, Stops: []GradientStop{stop(black, auto), stop(red, auto)}}},
+		{"background-image: radial-gradient(circle closest-side at left 25%, red, blue)", &Gradient{
+			Kind: RadialGradient, Angle: 180, Circle: true, Size: ClosestSide,
+			Center: [2]Dimension{pct(0), pct(0.25)}, Stops: []GradientStop{stop(red, auto), stop(blue, auto)},
+		}},
+		{"background-image: radial-gradient(10px, red, blue)", &Gradient{
+			Kind: RadialGradient, Angle: 180, Circle: true, Size: RadialExplicit,
+			Radius: [2]Dimension{pts(7.5), pts(7.5)}, Center: center, Stops: []GradientStop{stop(red, auto), stop(blue, auto)},
+		}},
+		{"background-image: repeating-radial-gradient(ellipse 50% 20px at 0 0, black, red)", &Gradient{
+			Kind: RadialGradient, Angle: 180, Repeating: true, Size: RadialExplicit,
+			Radius: [2]Dimension{pct(0.5), pts(15)}, Center: [2]Dimension{pts(0), pts(0)}, Stops: []GradientStop{stop(black, auto), stop(red, auto)},
+		}},
 	} {
 		s := styleOf(t, tc.decl)
 		if s.BackgroundImage != "" || !reflect.DeepEqual(s.BackgroundGradient, tc.want) {

@@ -136,7 +136,7 @@ func (rd *renderer) drawDataTable(d *dim, t *dataTable) {
 			hline(t.x, d.inner.X, y+t.rowH)
 		}
 		vals := rd.data(ts.s.Values)
-		for j := 0; j < n; j++ {
+		for j := range n {
 			x0 := d.inner.X + float64(j)*colW
 			if txt := vals.label(j, rd.c.Locale); txt != "" {
 				cell(txt, x0, x0+colW, y, alignCenter, 0)

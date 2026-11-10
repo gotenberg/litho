@@ -240,8 +240,10 @@ func TestConvert_Drawings(t *testing.T) {
 //     up from y 726.89 (a point above the row's bottom at 725.89) with its
 //     baseline at x 46.09 (the column starts at 36).
 func TestConvert_Rotation(t *testing.T) {
-	sh := &Sheet{Name: "S", DefaultColumnWidth: 80, Rows: []Row{{Index: 0, Height: 80, CustomHeight: true,
-		Cells: []Cell{textCell(0, "Rotated90", &Style{Align: Alignment{Rotation: 90}})}}}}
+	sh := &Sheet{Name: "S", DefaultColumnWidth: 80, Rows: []Row{{
+		Index: 0, Height: 80, CustomHeight: true,
+		Cells: []Cell{textCell(0, "Rotated90", &Style{Align: Alignment{Rotation: 90}})},
+	}}}
 	out := convert(t, newDoc(sh), office.Options{})
 	var txt *compose.Text
 	var m compose.Matrix

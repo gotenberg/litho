@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -94,9 +95,7 @@ func TestPresentation_Errors(t *testing.T) {
 			data := []byte("not a zip")
 			if tc.mutate != nil {
 				files := map[string]string{}
-				for k, v := range good {
-					files[k] = v
-				}
+				maps.Copy(files, good)
 				tc.mutate(files)
 				data = zipFiles(t, files)
 			}

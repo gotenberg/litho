@@ -399,7 +399,7 @@ func (r *reader) column(ts *tableState, el *odf.Element, hidden, header bool) {
 	if hidden {
 		w = 0
 	}
-	for i := 0; i < n; i++ {
+	for range n {
 		ts.colX = append(ts.colX, ts.colX[len(ts.colX)-1]+w)
 	}
 }
@@ -513,7 +513,7 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 		ts.rowY += float64(n) * height
 		return
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if r.cells+len(cells) > maxCells || r.rows >= maxRowEntries {
 			r.warn("too-many-cells", fmt.Sprintf("cells past %d are not read", maxCells))
 			break
@@ -625,7 +625,7 @@ func (r *reader) rowCells(ts *tableState, el *odf.Element) ([]sheet.Cell, []shee
 				}
 			}
 		}
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if ok && len(cells) < maxCells {
 				cell.Column = col + i
 				cells = append(cells, cell)

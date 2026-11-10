@@ -30,8 +30,10 @@ func testGlyphs() []fontbuild.Glyph {
 }
 
 func testTrueType() []byte {
-	return fontbuild.TrueType{PostScriptName: "TestSans", Family: "Test Sans", Subfamily: "Regular",
-		UnitsPerEm: 2000, Glyphs: testGlyphs(), NotdefAdvance: 500}.Build()
+	return fontbuild.TrueType{
+		PostScriptName: "TestSans", Family: "Test Sans", Subfamily: "Regular",
+		UnitsPerEm: 2000, Glyphs: testGlyphs(), NotdefAdvance: 500,
+	}.Build()
 }
 
 // testOpenTypeCFF builds an OpenType program with CFF outlines over the
@@ -39,8 +41,10 @@ func testTrueType() []byte {
 // a name-keyed CFF table.
 func testOpenTypeCFF(t *testing.T) []byte {
 	t.Helper()
-	ttf := fontbuild.TrueType{PostScriptName: "TestSerif", Family: "Test Serif", Subfamily: "Regular",
-		Glyphs: testGlyphs(), NotdefAdvance: 500}.Build()
+	ttf := fontbuild.TrueType{
+		PostScriptName: "TestSerif", Family: "Test Serif", Subfamily: "Regular",
+		Glyphs: testGlyphs(), NotdefAdvance: 500,
+	}.Build()
 	records, err := truetype.ParseTableDirectory(ttf)
 	if err != nil {
 		t.Fatalf("ParseTableDirectory: %v", err)
