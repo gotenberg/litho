@@ -22,6 +22,7 @@ func runStampImage(ctx context.Context, args []string, _stdout, stderr io.Writer
 	mime := fs.String("mime", "", "MIME type (auto-detected from extension if omitted)")
 	x := fs.Float64("x", 0, "X position in points from bottom-left")
 	y := fs.Float64("y", 0, "Y position in points from bottom-left")
+	position := fs.String("position", "", positionUsage)
 	width := fs.Float64("width", 0, "Width in points (0 = proportional or natural)")
 	height := fs.Float64("height", 0, "Height in points (0 = proportional or natural)")
 	opacity := fs.Float64("opacity", 1.0, "Opacity (0.0-1.0)")
@@ -32,7 +33,7 @@ func runStampImage(ctx context.Context, args []string, _stdout, stderr io.Writer
 	}
 
 	if fs.NArg() < 1 || *output == "" || *imagePath == "" {
-		fmt.Fprintln(stderr, "Usage: litho stamp-image <file> --image logo.png [--mime image/png] [--x 100] [--y 100] [--width 200] [--height 200] [--opacity 1.0] [--pages RANGE] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho stamp-image <file> --image logo.png [--mime image/png] [--x 100] [--y 100] [--position center] [--width 200] [--height 200] [--opacity 1.0] [--pages RANGE] -o out.pdf")
 		return exitError
 	}
 
@@ -47,6 +48,12 @@ func runStampImage(ctx context.Context, args []string, _stdout, stderr io.Writer
 		mimeType = mimeFromExt(*imagePath)
 	}
 
+	pos, err := pdf.ParseStampPosition(*position)
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return exitError
+	}
+
 	stamp := pdf.ImageStamp{
 		Data:     data,
 		MimeType: mimeType,
@@ -55,6 +62,7 @@ func runStampImage(ctx context.Context, args []string, _stdout, stderr io.Writer
 		Width:    *width,
 		Height:   *height,
 		Opacity:  *opacity,
+		Position: pos,
 	}
 
 	r, closer, err := openPDF(ctx, fs.Arg(0), *password)

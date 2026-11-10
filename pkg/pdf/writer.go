@@ -740,7 +740,11 @@ type TextStamp struct {
 	Text string
 	// X and Y position the stamp in points from the page's bottom-left
 	// corner. When Rotation is non-zero, (X, Y) is the rotation origin.
+	// With a Position, they move the stamp from it instead.
 	X, Y float64
+	// Position places the stamp against the center, an edge or a corner of
+	// each page (see [StampPosition]). The zero value places it by X and Y.
+	Position StampPosition
 	// FontSize is the text size in points; zero defaults to 12.
 	FontSize float64
 	// Opacity is 0.0-1.0 (1.0 = fully opaque). Zero means fully opaque.
@@ -831,8 +835,12 @@ type ImageStamp struct {
 	Data []byte
 	// MimeType must be "image/jpeg" or "image/png".
 	MimeType string
-	// X and Y position the bottom-left of the image in points.
+	// X and Y position the bottom-left of the image in points. With a
+	// Position, they move the image from it instead.
 	X, Y float64
+	// Position places the image against the center, an edge or a corner of
+	// each page (see [StampPosition]). The zero value places it by X and Y.
+	Position StampPosition
 	// Width and Height set the target size in points. Zero for one means
 	// "proportional to the other". Zero for both means "use the image's
 	// natural pixel dimensions as points".
@@ -852,8 +860,13 @@ type PDFStamp struct {
 	// Page is the 1-based source page number. Zero is treated as 1.
 	Page int
 	// X and Y position, in points, the bottom-left corner of the source page
-	// as a viewer shows it: its crop box, turned by its /Rotate.
+	// as a viewer shows it: its crop box, turned by its /Rotate. With a
+	// Position, they move the stamp from it instead.
 	X, Y float64
+	// Position places the source page against the center, an edge or a
+	// corner of each page (see [StampPosition]). The zero value places it by
+	// X and Y.
+	Position StampPosition
 	// Scale is the uniform scale factor. Zero is treated as 1.0.
 	Scale float64
 	// Opacity is 0.0-1.0; zero treated as fully opaque.
@@ -2177,6 +2190,9 @@ func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
 	if stamp.Text == "" {
 		return ErrEmptyText
 	}
+	if err := checkStampPosition(stamp.Position); err != nil {
+		return err
+	}
 	if len(stamp.Font.ttf) == 0 && stamp.Fonts.source == nil {
 		if err := mutations.CheckStandardFontText(stamp.Text); err != nil {
 			return err
@@ -2215,6 +2231,9 @@ func (w *Writer) StampImage(stamp ImageStamp, pages ...int) error {
 	if len(stamp.Data) == 0 {
 		return ErrEmptyData
 	}
+	if err := checkStampPosition(stamp.Position); err != nil {
+		return err
+	}
 	if stamp.MimeType != "image/jpeg" && stamp.MimeType != "image/png" {
 		return fmt.Errorf("%w: %q", ErrUnsupportedMimeType, stamp.MimeType)
 	}
@@ -2236,6 +2255,7 @@ func (w *Writer) StampImage(stamp ImageStamp, pages ...int) error {
 				Height:   stamp.Height,
 				Opacity:  stamp.Opacity,
 				Rotation: stamp.Rotation,
+				Position: stamp.Position.toMutations(),
 			}, pages)
 		},
 	})
@@ -2269,6 +2289,9 @@ func (w *Writer) StampPDF(stamp PDFStamp, pages ...int) error {
 	if stamp.Source == nil {
 		return ErrNilSource
 	}
+	if err := checkStampPosition(stamp.Position); err != nil {
+		return err
+	}
 	w.queue("StampPDF", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			resolvedPages, err := w.reader.resolvePages(ctx)
@@ -2288,6 +2311,7 @@ func (w *Writer) StampPDF(stamp PDFStamp, pages ...int) error {
 				Scale:       stamp.Scale,
 				Opacity:     stamp.Opacity,
 				Rotation:    stamp.Rotation,
+				Position:    stamp.Position.toMutations(),
 			}, pages)
 		},
 	})
@@ -2305,6 +2329,7 @@ func textStampToOptions(s TextStamp) mutations.TextStampOptions {
 		Opacity:  s.Opacity,
 		Color:    s.Color,
 		Rotation: s.Rotation,
+		Position: s.Position.toMutations(),
 	}
 	if len(s.Font.ttf) > 0 {
 		opts.TTFBytes = s.Font.ttf

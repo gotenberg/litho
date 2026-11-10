@@ -1,5 +1,9 @@
 package typography
 
+//go:generate go run ../../../cmd/gen-base14-bounds
+
+import "github.com/gotenberg/litho/pkg/internal/typography/encodings"
+
 // standard14Alternatives are the alternative names of standard fonts that PDF
 // Reference 1.7, Appendix H, implementation note 62 (to section 5.5.1) says
 // Acrobat viewers accept, spelled as [canonicalFontName] spells them. ISO
@@ -67,4 +71,43 @@ func Standard14Width(baseFont, glyph string) (float64, bool) {
 // read as [Standard14Width] reads it.
 func IsStandard14(baseFont string) bool {
 	return standard14Name(baseFont) != ""
+}
+
+// Standard14GlyphBounds returns the bounding box the Adobe Font Metrics give
+// glyph in the standard font baseFont names, as llx, lly, urx and ury in glyph
+// space units, and whether baseFont names one and that font carries the
+// glyph. baseFont is read as [Standard14Width] reads it. A glyph that draws
+// nothing, such as space, has an all-zero box.
+func Standard14GlyphBounds(baseFont, glyph string) ([4]float64, bool) {
+	b, ok := standard14GlyphBounds[standard14Name(baseFont)][glyph]
+	if !ok {
+		return [4]float64{}, false
+	}
+	return [4]float64{float64(b[0]), float64(b[1]), float64(b[2]), float64(b[3])}, true
+}
+
+// Standard14CodeGlyph returns the name of the glyph code selects in the
+// standard font baseFont names, drawn by a simple font dictionary whose
+// /Encoding is WinAnsiEncoding, or that states none for Symbol and
+// ZapfDingbats, which then use their built-in encodings (ISO 32000-1, 9.6.6.1
+// and Annex D). It returns "" for a code the encoding leaves unused and for a
+// baseFont that names no standard font.
+func Standard14CodeGlyph(baseFont string, code byte) string {
+	name := standard14Name(baseFont)
+	if name == "" {
+		return ""
+	}
+	if builtin, _, _ := builtinGlyphNames(name); builtin != nil {
+		return builtin[code]
+	}
+	r, ok := encodings.WinAnsiEncoding[code]
+	if !ok {
+		return ""
+	}
+	// No-break space and soft hyphen show the space and hyphen glyphs: the
+	// Adobe Glyph List has no name of their own the metrics carry.
+	if glyph, ok := duplicateCodeGlyph[r]; ok {
+		return glyph
+	}
+	return encodings.RuneToGlyph(r)
 }

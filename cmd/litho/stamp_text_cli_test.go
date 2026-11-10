@@ -99,3 +99,35 @@ func TestStampText_RejectsAnOutOfRangePageRange(t *testing.T) {
 		"stamp-text", "-text", "X", "-pages", "99", "-o", out, src,
 	})
 }
+
+// TestStampCommands_TakeAPosition pins that --position reaches each stamp,
+// standalone and as a pipe stage, and that a name no position has is refused.
+func TestStampCommands_TakeAPosition(t *testing.T) {
+	src := writeTempPDF(t, untaggedTextPDF())
+	dir := t.TempDir()
+
+	for _, args := range [][]string{
+		{"stamp-text", "-text", "DRAFT", "-position", "center"},
+		{"stamp-pdf", "-stamp", src, "-position", "bottom-right", "-x", "-10"},
+		{"pipe", src, "stamp-text", "-text", "DRAFT", "-position", "top"},
+	} {
+		out := filepath.Join(dir, "placed.pdf")
+		full := append(append([]string{}, args...), "-o", out)
+		if args[0] != "pipe" {
+			full = append(full, src)
+		}
+		var stdout, stderr bytes.Buffer
+		if rc := run(context.Background(), full, &stdout, &stderr); rc != exitOK {
+			t.Errorf("%v exited %d; stderr: %s", full, rc, stderr.String())
+		}
+	}
+
+	out := filepath.Join(dir, "refused.pdf")
+	stampTextFails(t, out, []string{
+		"stamp-text", "-text", "X", "-position", "middle", "-o", out, src,
+	})
+	var stdout, stderr bytes.Buffer
+	if rc := run(context.Background(), []string{"pipe", src, "stamp-text", "-text", "X", "-position", "middle", "-o", out}, &stdout, &stderr); rc == exitOK {
+		t.Errorf("a pipe stage took the position \"middle\"")
+	}
+}

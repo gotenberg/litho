@@ -32,6 +32,7 @@ var notARedactionRefusal = map[string]string{
 	"ErrNoFontCovers":                  "StampText and FlattenFormWith, through the fonts a TextFontSource offers",
 	"ErrFlattenIncomplete":             "FlattenFormWith",
 	"ErrInvalidImage":                  "StampImage and CheckStampImage",
+	"ErrInvalidStampPosition":          "StampText, StampImage and StampPDF",
 	"ErrNoPageLeft":                    "DeletePages",
 	"ErrOutlineItemNotAddressable":     "ScrubOutlineTitles",
 	"ErrScanTokenEmpty":                "ScanOutputForTokens",

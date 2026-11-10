@@ -19,6 +19,7 @@ func runStampPDF(ctx context.Context, args []string, _stdout, stderr io.Writer) 
 	stampPage := fs.Int("stamp-page", 1, "1-based page number in the stamp PDF")
 	x := fs.Float64("x", 0, "X position in points from bottom-left")
 	y := fs.Float64("y", 0, "Y position in points from bottom-left")
+	position := fs.String("position", "", positionUsage)
 	pages := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (default: all)")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
@@ -26,7 +27,7 @@ func runStampPDF(ctx context.Context, args []string, _stdout, stderr io.Writer) 
 	}
 
 	if fs.NArg() < 1 || *output == "" || *stampPath == "" {
-		fmt.Fprintln(stderr, "Usage: litho stamp-pdf <file> --stamp overlay.pdf [--stamp-page 1] [--x 0] [--y 0] [--pages RANGE] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho stamp-pdf <file> --stamp overlay.pdf [--stamp-page 1] [--x 0] [--y 0] [--position center] [--pages RANGE] -o out.pdf")
 		return exitError
 	}
 
@@ -44,11 +45,18 @@ func runStampPDF(ctx context.Context, args []string, _stdout, stderr io.Writer) 
 	}
 	defer stampCloser()
 
+	pos, err := pdf.ParseStampPosition(*position)
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
+		return exitError
+	}
+
 	stamp := pdf.PDFStamp{
-		Source: stampReader,
-		Page:   *stampPage,
-		X:      *x,
-		Y:      *y,
+		Source:   stampReader,
+		Page:     *stampPage,
+		X:        *x,
+		Y:        *y,
+		Position: pos,
 	}
 
 	r, closer, err := openPDF(ctx, fs.Arg(0), *password)

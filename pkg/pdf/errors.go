@@ -224,6 +224,12 @@ var (
 	// message names the placement by its index and the problem.
 	ErrInvalidPlacement = errors.New("invalid placement")
 
+	// ErrInvalidStampPosition is returned by [Writer.StampText],
+	// [Writer.StampImage], [Writer.StampPDF] and [Pipeline.WriteTo] when a
+	// stamp's Position is none of the ones [StampPosition] lists, and by
+	// [ParseStampPosition] for a name none of them has.
+	ErrInvalidStampPosition = mutations.ErrInvalidStampPosition
+
 	// ErrWriterClosed is returned by [Writer.WriteTo], [Writer.Redact] and
 	// the remediation methods after [Writer.Close]. Close releases the
 	// remediated output a Writer holds, and a later write cannot rebuild it
@@ -957,6 +963,7 @@ var invalidInputErrors = []error{
 	ErrSourceIndexOutOfRange,
 	ErrInvalidPageSize,
 	ErrInvalidPlacement,
+	ErrInvalidStampPosition,
 	ErrSignFullRewriteIncompatible,
 	ErrSignatureFieldUnavailable,
 	ErrSignatureFieldLocked,

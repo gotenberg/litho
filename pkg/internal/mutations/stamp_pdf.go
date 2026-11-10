@@ -25,8 +25,13 @@ type PDFStampOptions struct {
 	// Page is the 1-based page number to use from SourceDoc. Zero is
 	// treated as 1.
 	Page int
-	// X and Y position the bottom-left corner of the stamp in points.
+	// X and Y position the bottom-left corner of the stamp in points. With a
+	// Position, they offset the stamp from it instead.
 	X, Y float64
+	// Position places the source page, as a viewer shows it, against a
+	// position of each page (see [stampPlacement]). [PositionNone] places it
+	// by X and Y.
+	Position StampPosition
 	// Scale is a uniform scale factor. Zero is treated as 1.0.
 	Scale float64
 	// Opacity is 0.0-1.0; zero is treated as fully opaque.
@@ -51,6 +56,9 @@ func StampPDF(
 	}
 	if len(opts.SourcePages) == 0 {
 		return fmt.Errorf("pdf stamp: source has no pages")
+	}
+	if err := checkStampPosition(opts.Position); err != nil {
+		return err
 	}
 	pages, pageNums = pagesToEdit(ctx, alloc, doc, pages, pageNums)
 	if err := stampPagesInRange(pages, pageNums); err != nil {
@@ -84,7 +92,15 @@ func StampPDF(
 	var ops strings.Builder
 	ops.WriteString("q ")
 	ops.WriteString(extGStateInvocation(extGSName))
-	ops.WriteString(buildTransformMatrix(opts.X, opts.Y, scale, scale, opts.Rotation))
+	// The form fills [0 0 W H] under the identity, W and H the source page's
+	// width and height as viewed (see [pageToFormXObject]).
+	srcBox := normalizedBox(srcPage.ViewedBox())
+	srcW, srcH := srcBox[2]-srcBox[0], srcBox[3]-srcBox[1]
+	if r := normalizedRotate(srcPage.Rotate); r == 90 || r == 270 {
+		srcW, srcH = srcH, srcW
+	}
+	x, y, place := placedOrigin(opts.Position, opts.X, opts.Y, srcW*scale, srcH*scale, opts.Rotation)
+	ops.WriteString(buildTransformMatrix(x, y, scale, scale, opts.Rotation))
 	// string(): PdfName.String already adds the slash, and "//Name Do" names
 	// no XObject at all, so the stamp never drew.
 	fmt.Fprintf(&ops, "/%s Do Q", string(formResName))
@@ -98,7 +114,7 @@ func StampPDF(
 		})
 	}
 
-	return applyStampToPages(ctx, doc, alloc, pages, pageNums, resources, ops.String())
+	return applyStampToPages(ctx, doc, alloc, pages, pageNums, resources, ops.String(), place)
 }
 
 // pageToFormXObject converts a PDF page into a Form XObject stream in the

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -146,7 +146,7 @@ func (s *sharedTextFont) write(ctx context.Context, alloc *writer.ObjAllocator, 
 	for gid := range s.keep {
 		gids = append(gids, gid)
 	}
-	sort.Slice(gids, func(i, j int) bool { return gids[i] < gids[j] })
+	slices.Sort(gids)
 	sub := *f.embeddedTTF
 	sub.postScriptName = subsetTag(gids) + "+" + f.postScriptName
 
@@ -411,6 +411,8 @@ type drawnText struct {
 	ref     ast.PdfIndirectRef
 	resName string
 	encoded string
+	// font is the program that draws the text, which a placed stamp measures.
+	font *textFont
 }
 
 // draw returns the font that draws req's text: a font of an earlier line
@@ -470,6 +472,7 @@ func (t *textFonts) use(s *sharedTextFont, text string) drawnText {
 		ref:     s.ref,
 		resName: fmt.Sprintf("TextF%d", s.ref.ObjectNum),
 		encoded: s.encode(text),
+		font:    s.font,
 	}
 }
 

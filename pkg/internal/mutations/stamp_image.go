@@ -26,8 +26,12 @@ type ImageStampOptions struct {
 	Data []byte
 	// MimeType must be "image/jpeg" or "image/png".
 	MimeType string
-	// X and Y position the bottom-left of the image in points.
+	// X and Y position the bottom-left of the image in points. With a
+	// Position, they offset the image from it instead.
 	X, Y float64
+	// Position places the image against a position of each page (see
+	// [stampPlacement]). [PositionNone] places it by X and Y.
+	Position StampPosition
 	// Width and Height set the target rectangle in points. If both are
 	// zero, the image is rendered at one PDF point per pixel. If exactly
 	// one is zero, it is computed to preserve the aspect ratio.
@@ -94,6 +98,9 @@ func StampImage(
 	}); err != nil {
 		return err
 	}
+	if err := checkStampPosition(opts.Position); err != nil {
+		return err
+	}
 	pages, pageNums = pagesToEdit(ctx, alloc, doc, pages, pageNums)
 	if err := stampPagesInRange(pages, pageNums); err != nil {
 		return err
@@ -135,7 +142,8 @@ func StampImage(
 	var ops strings.Builder
 	ops.WriteString("q ")
 	ops.WriteString(extGStateInvocation(extGSName))
-	ops.WriteString(buildTransformMatrix(opts.X, opts.Y, w, h, opts.Rotation))
+	x, y, place := placedOrigin(opts.Position, opts.X, opts.Y, w, h, opts.Rotation)
+	ops.WriteString(buildTransformMatrix(x, y, w, h, opts.Rotation))
 	// string(): PdfName.String already adds the slash, and "//Name Do" names
 	// no XObject at all, so the stamp never drew.
 	fmt.Fprintf(&ops, "/%s Do Q", string(imgResName))
@@ -149,7 +157,7 @@ func StampImage(
 		})
 	}
 
-	return applyStampToPages(ctx, doc, alloc, pages, pageNums, resources, ops.String())
+	return applyStampToPages(ctx, doc, alloc, pages, pageNums, resources, ops.String(), place)
 }
 
 // buildJPEGXObject wraps JPEG bytes as an Image XObject stream. The bytes

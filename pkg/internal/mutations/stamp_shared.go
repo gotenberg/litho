@@ -66,7 +66,7 @@ type stampSharing struct {
 // planStampSharing reads which shape each stamped page sharing its /Contents
 // object takes (see [stampSharing]). It allocates nothing, so a call stamping
 // no page that shares its /Contents writes the objects it wrote before.
-func planStampSharing(ctx context.Context, alloc *writer.ObjAllocator, pages []*document.Page, pageNums []int, contentOps string) stampSharing {
+func planStampSharing(ctx context.Context, alloc *writer.ObjAllocator, pages []*document.Page, pageNums []int, contentOps string, place *stampPlacement) stampSharing {
 	plan := stampSharing{
 		members:  make(map[int][]int),
 		shared:   make(map[int]bool),
@@ -83,7 +83,7 @@ func planStampSharing(ctx context.Context, alloc *writer.ObjAllocator, pages []*
 	stamps := make(map[int]string)
 	for _, pageNum := range pageNums {
 		if pageNum >= 1 && pageNum <= len(pages) {
-			stamps[pageNum-1] = pageStampOps(pages[pageNum-1], contentOps)
+			stamps[pageNum-1] = pageStampOps(alloc, pages[pageNum-1], contentOps, place)
 		}
 	}
 	for _, pageNum := range pageNums {
@@ -129,18 +129,18 @@ func sameStamp(members []int, stamps map[int]string) bool {
 }
 
 // pageStampOps returns the operators that draw the stamp on page: contentOps,
-// translated where the page's box does not start at the origin (see
-// [stampOriginShift]).
-func pageStampOps(page *document.Page, contentOps string) string {
-	if dx, dy, ok := stampOriginShift(page); ok {
-		return stampShiftedOps(FormatFloat(dx)+" "+FormatFloat(dy), contentOps)
+// moved onto the page by [pageStampMatrix] where they need to be.
+func pageStampOps(alloc *writer.ObjAllocator, page *document.Page, contentOps string, place *stampPlacement) string {
+	if key, ok := pageStampMatrix(alloc, page, place); ok {
+		return stampShiftedOps(key, contentOps)
 	}
 	return contentOps
 }
 
-// stampShiftedOps returns contentOps translated by key, "dx dy".
+// stampShiftedOps returns contentOps transformed by key, the six operands of
+// a cm operator.
 func stampShiftedOps(key, contentOps string) string {
-	return "q 1 0 0 1 " + key + " cm " + contentOps + " Q"
+	return "q " + key + " cm " + contentOps + " Q"
 }
 
 // pendingStampDispatch returns the XObject name the /Contents array ref names

@@ -97,6 +97,7 @@ func applyStampToPages(
 	pageNums []int,
 	resources []stampResource,
 	contentOps string,
+	place *stampPlacement,
 ) error {
 	if contentOps == "" {
 		return nil
@@ -120,18 +121,28 @@ func applyStampToPages(
 	// and the extractor's artifact stripping does the same.
 	contentOps = "/Artifact BMC " + contentOps + " EMC"
 
-	plan := planStampSharing(ctx, alloc, pages, pageNums, contentOps)
+	plan := planStampSharing(ctx, alloc, pages, pageNums, contentOps, place)
 
 	// A page drawing its stamp through a dispatch form holds the stamp in the
 	// form, so a call stamping only such pages allocates no stamp stream that
-	// nothing would draw.
+	// nothing would draw. A placed stamp moves onto nearly every page, so it
+	// allocates the unmoved stream only for a page that draws it; an unplaced
+	// one allocates it first, where its outputs have always held it.
 	var stampRef ast.PdfIndirectRef
-	if plan.drawsStream {
-		stampRef = alloc.Alloc(ast.NewStream(ast.PdfDict{}, []byte(contentOps)))
+	unmovedStamp := func() ast.PdfIndirectRef {
+		if stampRef == (ast.PdfIndirectRef{}) {
+			stampRef = alloc.Alloc(ast.NewStream(ast.PdfDict{}, []byte(contentOps)))
+		}
+		return stampRef
+	}
+	if plan.drawsStream && place == nil {
+		unmovedStamp()
 	}
 
-	// Pages whose box starts at the origin share one stamp stream. A page whose
-	// box starts elsewhere needs its own, translated copy: see stampOriginShift.
+	// Pages the stamp lands on unmoved share one stamp stream. A page it moves
+	// onto, a page whose box does not start at the origin or a placed stamp's
+	// page, takes a moved copy, shared by the pages it moves onto alike: see
+	// [pageStampMatrix].
 	shifted := make(map[string]ast.PdfIndirectRef)
 
 	brackets := newContentBrackets(alloc)
@@ -157,7 +168,7 @@ func applyStampToPages(
 		contentsRef, isRef := baseDict["Contents"].(ast.PdfIndirectRef)
 		if isRef {
 			if dispatch, ok := dispatcher.forContents(ctx, baseDict, contentsRef); ok {
-				if err := dispatcher.stamp(ctx, pageNum, page, baseDict, dispatch, pageStampOps(page, contentOps)); err != nil {
+				if err := dispatcher.stamp(ctx, pageNum, page, baseDict, dispatch, pageStampOps(alloc, page, contentOps, place)); err != nil {
 					return err
 				}
 				continue
@@ -171,15 +182,16 @@ func applyStampToPages(
 		maps.Copy(newDict, baseDict)
 		newDict["Resources"] = newResources
 
-		pageStampRef := stampRef
-		if dx, dy, ok := stampOriginShift(page); ok {
-			key := FormatFloat(dx) + " " + FormatFloat(dy)
+		var pageStampRef ast.PdfIndirectRef
+		if key, ok := pageStampMatrix(alloc, page, place); ok {
 			ref, built := shifted[key]
 			if !built {
 				ref = alloc.Alloc(ast.NewStream(ast.PdfDict{}, []byte(stampShiftedOps(key, contentOps))))
 				shifted[key] = ref
 			}
 			pageStampRef = ref
+		} else {
+			pageStampRef = unmovedStamp()
 		}
 
 		// Pages sharing one /Contents object that all take this stamp share

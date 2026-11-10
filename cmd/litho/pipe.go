@@ -1082,12 +1082,17 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 		fontSize := fs.Float64("font-size", 36, "Font size")
 		x := fs.Float64("x", 0, "X position")
 		y := fs.Float64("y", 0, "Y position")
+		position := fs.String("position", "", positionUsage)
 		pages := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (default: all)")
 		if err := fs.Parse(args); err != nil {
 			return nil, err
 		}
 		if *text == "" {
 			return nil, fmt.Errorf("--text is required")
+		}
+		pos, err := pdf.ParseStampPosition(*position)
+		if err != nil {
+			return nil, err
 		}
 		fonts, err := fontFlags.source()
 		if err != nil {
@@ -1102,6 +1107,7 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 				Opacity:  *opacity,
 				Rotation: *rotation,
 				Fonts:    fonts,
+				Position: pos,
 			}
 			if *color != "" {
 				c, err := parseHexColor(*color)
@@ -1145,6 +1151,7 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 		opacity := fs.Float64("opacity", 1.0, "Opacity")
 		x := fs.Float64("x", 0, "X position")
 		y := fs.Float64("y", 0, "Y position")
+		position := fs.String("position", "", positionUsage)
 		width := fs.Float64("width", 0, "Width")
 		height := fs.Float64("height", 0, "Height")
 		pages := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (default: all)")
@@ -1153,6 +1160,10 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 		}
 		if *image == "" {
 			return nil, fmt.Errorf("--image is required")
+		}
+		pos, err := pdf.ParseStampPosition(*position)
+		if err != nil {
+			return nil, err
 		}
 		imgData, err := os.ReadFile(*image)
 		if err != nil {
@@ -1171,6 +1182,7 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 				Width:    *width,
 				Height:   *height,
 				Opacity:  *opacity,
+				Position: pos,
 			}
 			var pageNums []int
 			if *pages != "" {
@@ -1436,8 +1448,13 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 		stampPage := fs.Int("stamp-page", 1, "1-based page number in the stamp PDF")
 		x := fs.Float64("x", 0, "X position in points from bottom-left")
 		y := fs.Float64("y", 0, "Y position in points from bottom-left")
+		position := fs.String("position", "", positionUsage)
 		pages := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (default: all)")
 		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		pos, err := pdf.ParseStampPosition(*position)
+		if err != nil {
 			return nil, err
 		}
 		if *stampPath == "" {
@@ -1463,10 +1480,11 @@ func addStage(ctx context.Context, p labeledPipeline, src *pdf.Reader, name stri
 				}
 			}
 			return w.StampPDF(pdf.PDFStamp{
-				Source: stampReader,
-				Page:   *stampPage,
-				X:      *x,
-				Y:      *y,
+				Source:   stampReader,
+				Page:     *stampPage,
+				X:        *x,
+				Y:        *y,
+				Position: pos,
 			}, pageNums...)
 		})
 		if opened != nil {

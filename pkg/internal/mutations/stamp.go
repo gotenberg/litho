@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
 
 // TextStampOptions holds everything needed to stamp a line of text on one
@@ -19,8 +20,12 @@ type TextStampOptions struct {
 	// Unicode→GID map for custom TTF fonts.
 	Text string
 	// X and Y are the position in points from the page's bottom-left
-	// corner. When Rotation is non-zero, (X, Y) is the rotation origin.
+	// corner. When Rotation is non-zero, (X, Y) is the rotation origin. With
+	// a Position, they offset the stamp from it instead.
 	X, Y float64
+	// Position places the box bounding the text's ink against a position of
+	// each page (see [stampPlacement]). [PositionNone] places it by X and Y.
+	Position StampPosition
 	// FontSize is the text size in points. Zero defaults to 12.
 	FontSize float64
 	// Opacity is 0.0-1.0 where 1.0 is fully opaque. A zero value is
@@ -76,6 +81,9 @@ func StampText(
 	}); err != nil {
 		return err
 	}
+	if err := checkStampPosition(opts.Position); err != nil {
+		return err
+	}
 	pages, pageNums = pagesToEdit(ctx, alloc, doc, pages, pageNums)
 	if err := stampPagesInRange(pages, pageNums); err != nil {
 		return err
@@ -92,12 +100,26 @@ func StampText(
 		fontResName ast.PdfName
 		encoded     string
 		err         error
+		// glyphs is what a placed stamp measures its text by.
+		glyphs []inkGlyph
 	)
 	if len(opts.TTFBytes) > 0 {
 		var f *embeddedTTF
 		f, err = parseTTF(opts.TTFBytes)
 		if err != nil {
 			return fmt.Errorf("parsing TTF for stamp: %w", err)
+		}
+
+		if opts.Position != PositionNone {
+			// Measured before subsetting, which replaces f.raw. A program
+			// with CFF outlines reads them from its CFF table.
+			var cffData []byte
+			if data, err := truetype.CFFTable(opts.TTFBytes); err == nil {
+				cffData = data
+			}
+			if glyphs, err = embeddedInkGlyphs(ctx, doc, f, cffData, opts.Text); err != nil {
+				return err
+			}
 		}
 
 		// Subset the raw TTF to just the glyphs referenced by the stamp
@@ -148,6 +170,9 @@ func StampText(
 		switch {
 		case encodable:
 			encoded = "(" + escapePDFString(string(winAnsi)) + ")"
+			if opts.Position != PositionNone {
+				glyphs = standardInkGlyphs(string(baseFont), winAnsi)
+			}
 		case opts.Fonts == nil:
 			return CheckStandardFontText(opts.Text)
 		default:
@@ -157,6 +182,12 @@ func StampText(
 			drawn, err := fonts.draw(ctx, alloc, doc, TextFontRequest{StandardFont: string(baseFont), Text: opts.Text})
 			if err != nil {
 				return err
+			}
+			if opts.Position != PositionNone {
+				// Measured before finish writes the program's subset.
+				if glyphs, err = embeddedInkGlyphs(ctx, doc, drawn.font.embeddedTTF, drawn.font.cff, opts.Text); err != nil {
+					return err
+				}
 			}
 			if err := fonts.finish(ctx, alloc, doc); err != nil {
 				return err
@@ -178,9 +209,24 @@ func StampText(
 		FormatFloat(opts.Color[2]),
 	)
 
+	// A placed stamp draws in a frame of its own, from the origin, and moves
+	// onto each page by its placement.
+	x, y := opts.X, opts.Y
+	var place *stampPlacement
+	if opts.Position != PositionNone {
+		x, y = 0, 0
+		place = &stampPlacement{
+			position: opts.Position,
+			box:      lineInkBox(glyphs, fontSize),
+			rotation: opts.Rotation,
+			dx:       opts.X,
+			dy:       opts.Y,
+		}
+	}
+
 	if opts.Rotation != 0 {
 		// Translate to the rotation origin, rotate, then draw at (0, 0).
-		ops.WriteString(buildTransformMatrix(opts.X, opts.Y, 1, 1, opts.Rotation))
+		ops.WriteString(buildTransformMatrix(x, y, 1, 1, opts.Rotation))
 		// string(), not the PdfName: its String method already supplies the
 		// leading slash, so "/%s" emitted "//StampF23": two names where the
 		// operator expects one, so the font was never selected and the stamp
@@ -191,7 +237,7 @@ func StampText(
 	} else {
 		fmt.Fprintf(&ops, "BT /%s %s Tf %s %s Td %s Tj ET ",
 			string(fontResName), FormatFloat(fontSize),
-			FormatFloat(opts.X), FormatFloat(opts.Y),
+			FormatFloat(x), FormatFloat(y),
 			encoded,
 		)
 	}
@@ -206,5 +252,5 @@ func StampText(
 		})
 	}
 
-	return applyStampToPages(ctx, doc, alloc, pages, pageNums, resources, ops.String())
+	return applyStampToPages(ctx, doc, alloc, pages, pageNums, resources, ops.String(), place)
 }

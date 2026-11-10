@@ -28,6 +28,7 @@ func runStampText(ctx context.Context, args []string, _stdout, stderr io.Writer)
 	fontSize := fs.Float64("font-size", 36, "Font size in points")
 	x := fs.Float64("x", 0, "X position in points from bottom-left")
 	y := fs.Float64("y", 0, "Y position in points from bottom-left")
+	position := fs.String("position", "", positionUsage)
 	pages := fs.String("pages", "", "Pages, such as 1-3,5, 2-, !1 or last (default: all)")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
@@ -35,7 +36,13 @@ func runStampText(ctx context.Context, args []string, _stdout, stderr io.Writer)
 	}
 
 	if fs.NArg() < 1 || *output == "" || *text == "" {
-		fmt.Fprintln(stderr, "Usage: litho stamp-text <file> --text TEXT [--opacity 0.5] [--rotation 45] [--color \"#ff0000\"] [--font path.ttf] [--font-size 36] [--x 0] [--y 0] [--pages RANGE] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho stamp-text <file> --text TEXT [--opacity 0.5] [--rotation 45] [--color \"#ff0000\"] [--font path.ttf] [--font-size 36] [--x 0] [--y 0] [--position center] [--pages RANGE] -o out.pdf")
+		return exitError
+	}
+
+	pos, err := pdf.ParseStampPosition(*position)
+	if err != nil {
+		fmt.Fprintf(stderr, "%v\n", err)
 		return exitError
 	}
 
@@ -46,6 +53,7 @@ func runStampText(ctx context.Context, args []string, _stdout, stderr io.Writer)
 		FontSize: *fontSize,
 		Opacity:  *opacity,
 		Rotation: *rotation,
+		Position: pos,
 	}
 
 	if *color != "" {
@@ -162,3 +170,7 @@ func parseHexColor(s string) ([3]float64, error) {
 	}
 	return [3]float64{float64(r) / 255.0, float64(g) / 255.0, float64(b) / 255.0}, nil
 }
+
+// positionUsage describes the --position flag of the stamp commands and
+// stages.
+const positionUsage = "Place the stamp at center, top-left, top, top-right, left, right, bottom-left, bottom or bottom-right of each page, as a viewer shows it; --x and --y then move it from there (default: place it by --x and --y)"
