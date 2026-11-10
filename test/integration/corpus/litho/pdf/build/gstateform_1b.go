@@ -80,9 +80,10 @@ func gstateform1b() ([]byte, error) {
 		return pdf.MakeIndirect(a(n("ICCBased"), pdf.MakeIndirect(stream)))
 	}
 
-	// form is one form XObject, optionally carrying a forbidden entry.
-	form := func(content string, extra ...any) *pdfgen.Stream {
-		stream := pdf.Stream([]byte(content))
+	// form is one form XObject filling its 40 x 40 box, optionally carrying
+	// a forbidden entry.
+	form := func(extra ...any) *pdfgen.Stream {
+		stream := pdf.Stream([]byte("0 0 40 40 re f\n"))
 		stream.Set("Type", n("XObject"))
 		stream.Set("Subtype", n("Form"))
 		stream.Set("BBox", a(0, 0, 40, 40))
@@ -97,7 +98,7 @@ func gstateform1b() ([]byte, error) {
 	// The soft mask's own group. It is a transparency group, which is itself
 	// forbidden at part 1, so the mask stays visibly separate from the state that
 	// selects it.
-	mask := form("0 0 40 40 re f\n", "Group", d("S", n("Transparency"), "CS", n("DeviceGray")))
+	mask := form("Group", d("S", n("Transparency"), "CS", n("DeviceGray")))
 
 	extGStates := d(
 		// 6.4 t1: a soft mask that is not /None.
@@ -114,11 +115,11 @@ func gstateform1b() ([]byte, error) {
 
 	xobjects := d(
 		// 6.2.5 t1 at part 1: a PostScript form XObject. Part 4 has no rule for it.
-		"FmPS", form("0 0 40 40 re f\n", "Subtype2", n("PS")),
+		"FmPS", form("Subtype2", n("PS")),
 		// 6.2.4 t2 at part 1, 6.2.8.1 t1 at part 4: the OPI key.
-		"FmOPI", form("0 0 40 40 re f\n", "OPI", d("Version", d())),
+		"FmOPI", form("OPI", d("Version", d())),
 		// The control: a form that carries neither.
-		"FmOK", form("0 0 40 40 re f\n"),
+		"FmOK", form(),
 	)
 
 	colourSpaces := d(

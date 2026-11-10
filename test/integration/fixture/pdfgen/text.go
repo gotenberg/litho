@@ -17,7 +17,7 @@ var unicodeToPDFDoc = map[rune]byte{
 	0x0153: 0x9c, 0x0161: 0x9d, 0x017e: 0x9e, 0xfffd: 0x9f, 0x20ac: 0xa0,
 }
 
-// Text returns the string pikepdf stores for a Python str: PDFDocEncoding
+// Text returns the PDF text string pikepdf stores for s: PDFDocEncoding
 // when every character has a code there, else UTF-16BE behind a U+FEFF byte
 // order mark. It follows qpdf's QUtil::utf8_to_pdf_doc, including its
 // refusals: U+0018 to U+001F, U+007F and U+00AD have no PDFDocEncoding code,

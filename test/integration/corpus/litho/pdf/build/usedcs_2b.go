@@ -68,11 +68,11 @@ func usedcs2b() ([]byte, error) {
 
 	iccbased := pdf.MakeIndirect(a(n("ICCBased"), iccProfile("RGB ", 3, "ICCB")))
 
-	// shading is an axial shading in the given device colour space. Python's
-	// defaults are DeviceGray and 1 component.
+	// shading is an axial shading in the given device colour space of
+	// components components.
 	shading := func(colourSpace pdfgen.Name, components int) *pdfgen.Dict {
 		c0, c1 := a(), a()
-		for i := 0; i < components; i++ {
+		for range components {
 			c0.Append(0)
 			c1.Append(1)
 		}
@@ -90,7 +90,7 @@ func usedcs2b() ([]byte, error) {
 		))
 	}
 
-	// tiling's Python default paintType is 1.
+	// tiling is a tiling pattern of paintType painting content.
 	tiling := func(content string, paintType int) *pdfgen.Stream {
 		pat := pdf.Stream([]byte(content))
 		pat.Set("Type", n("Pattern"))
@@ -105,7 +105,7 @@ func usedcs2b() ([]byte, error) {
 	}
 
 	// type3Font is a Type3 font whose only glyph procedure paints a device
-	// colour. Python's default paint is "0 g".
+	// colour with paint.
 	type3Font := func(paint string) *pdfgen.Dict {
 		proc := pdf.Stream([]byte("10 0 0 0 10 10 d1 " + paint + " 0 0 10 10 re f\n"))
 		return pdf.Indirect(d(

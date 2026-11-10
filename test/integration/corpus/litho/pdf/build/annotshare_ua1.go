@@ -37,7 +37,7 @@ func init() { register("annotshare_ua1", annotshareUa1) }
 // boxes both fail ISO 19005-2 and -3, 6.1.13 t11, which litho skipped.
 //
 // The XMP packet declares every namespace on the property element that uses it,
-// as pikepdf's metadata API writes it: pdfuaid:part 1, pdfaid:part 2 and
+// as pikepdf's metadata API wrote it when it first wrote the committed file: pdfuaid:part 1, pdfaid:part 2 and
 // conformance B, dc:title, and a PDF/A extension schema declaring the pdfuaid
 // namespace, every element of which declares its own namespace too. litho read
 // pdfuaid:part through a literal "pdfuaid:part>1<", which met only the closing
@@ -56,7 +56,7 @@ func annotshareUa1() ([]byte, error) {
 		dcNS       = "http://purl.org/dc/elements/1.1/"
 	)
 
-	// el is an element declaring its own namespace, as pikepdf writes one.
+	// el is an element declaring its own namespace, as pikepdf wrote one.
 	el := func(prefix, uri, local, inner string) string {
 		return fmt.Sprintf(`<%s:%s xmlns:%s="%s">%s</%s:%s>`, prefix, local, prefix, uri, inner, prefix, local)
 	}

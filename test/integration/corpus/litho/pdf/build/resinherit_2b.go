@@ -51,7 +51,7 @@ func init() { register("resinherit_2b", resinherit2b) }
 // qpdf cannot write a null dictionary value, which it drops, nor a reference to a
 // missing object, so both are planted as placeholder names of the same length and
 // patched as bytes after the save, which moves no offset. The tree is built by
-// hand: pikepdf's page list flattens it and pushes inherited attributes onto each
+// hand: pdf.AddPage flattens it and pushes inherited attributes onto each
 // page, which would delete the constructs the fixture exists for.
 //
 // See ../FIXTURES.md for the authoritative expected firing set.
@@ -131,8 +131,8 @@ func resinherit2b() ([]byte, error) {
 		return fmt.Sprintf("BT /%s 12 Tf 50 %d Td (A) Tj ET\n", name, y)
 	}
 
-	fillOps := func(name string, x int) string {
-		return fmt.Sprintf("/%s cs 1 scn %d 0 10 10 re f\n", name, x)
+	fillOps := func(name string) string {
+		return fmt.Sprintf("/%s cs 1 scn 0 0 10 10 re f\n", name)
 	}
 
 	node := func(parent *pdfgen.Dict, extra ...any) *pdfgen.Dict {
@@ -182,14 +182,14 @@ func resinherit2b() ([]byte, error) {
 	interMid := node(interTop)
 	attach(root, interTop, 0)
 	attach(interTop, interMid, 0)
-	attach(interMid, page(interMid, ops(textOps("F1", 700)+textOps("FR", 680)+fillOps("CS0", 0))), 1)
+	attach(interMid, page(interMid, ops(textOps("F1", 700)+textOps("FR", 680)+fillOps("CS0"))), 1)
 
 	// Own: the page states F2 alone, so its ancestor's F6 and CS4 stay out of reach.
 	ownNode := node(root, "/Resources", resources([]any{"/F6", unreachedFont("LithoOwn")}, []any{"/CS4", unreachedSpace()}))
 	attach(root, ownNode, 0)
 	attach(ownNode, page(
 		ownNode,
-		ops(textOps("F2", 700)+textOps("F6", 680)+fillOps("CS4", 0)),
+		ops(textOps("F2", 700)+textOps("F6", 680)+fillOps("CS4")),
 		"/Resources", resources([]any{"/F2", standardFont("/Courier")}, nil),
 	), 1)
 
@@ -199,13 +199,13 @@ func resinherit2b() ([]byte, error) {
 		[]any{"/CS2", separation("/SpotNull", n("DeviceCMYK"), tintCMYK)},
 	))
 	attach(root, nullNode, 0)
-	attach(nullNode, page(nullNode, ops(textOps("F3", 700)+fillOps("CS2", 0)), "/Resources", n("/LithoNullResources")), 1)
+	attach(nullNode, page(nullNode, ops(textOps("F3", 700)+fillOps("CS2")), "/Resources", n("/LithoNullResources")), 1)
 
 	// Dangle: a reference to a missing object is the page's own value, so F4 and
 	// CS3 are not inherited.
 	dangleNode := node(root, "/Resources", resources([]any{"/F4", unreachedFont("LithoDangle")}, []any{"/CS3", unreachedSpace()}))
 	attach(root, dangleNode, 0)
-	attach(dangleNode, page(dangleNode, ops(textOps("F4", 700)+fillOps("CS3", 0)), "/Resources", n("/LithoDangleRes")), 1)
+	attach(dangleNode, page(dangleNode, ops(textOps("F4", 700)+fillOps("CS3")), "/Resources", n("/LithoDangleRes")), 1)
 
 	// Parent: listed by parent_node, while its /Parent names the root.
 	parentNode := node(root, "/Resources", resources([]any{"/F5", standardFont("/Helvetica-Oblique")}, nil))

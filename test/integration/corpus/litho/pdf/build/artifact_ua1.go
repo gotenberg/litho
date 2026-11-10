@@ -87,7 +87,7 @@ func artifactUa1() ([]byte, error) {
 		"Lang", text("en-US"),
 	))
 	var paragraphs []any
-	for mcid := 0; mcid < 3; mcid++ {
+	for mcid := range 3 {
 		paragraphs = append(paragraphs, pdf.Indirect(d(
 			"Type", n("StructElem"), "S", n("P"), "P", document, "Pg", page, "K", mcid,
 		)))

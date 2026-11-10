@@ -12,11 +12,10 @@ import (
 	"github.com/gotenberg/litho/test/integration/fixture/pdfgen/zdeflate"
 )
 
-// Type 0 fonts over embedded encoding CMaps, for the cmap*_2b fixtures:
-// the port of helpers.go.
+// Type 0 fonts over embedded encoding CMaps, for the cmap*_2b fixtures.
 //
 // Each font is a CIDFontType2 over the three-glyph TrueType program of
-// _truetype. Its /CIDToGIDMap stream sends CIDs 1 to 6 to glyph A and stops
+// truetype.go. Its /CIDToGIDMap stream sends CIDs 1 to 6 to glyph A and stops
 // after CID 6, so a CID past it selects no glyph, which veraPDF reads as absent
 // (CIDFontType2Program.containsCID) and as .notdef. CID 0 is absent too:
 // containsCID refuses it, and GFGlyph exempts only code 0. The /DW equals the
@@ -26,9 +25,9 @@ import (
 // builder passes another, and name
 // themselves with a /CMapName that is no predefined CMap. A font or CMap over a
 // predefined character collection passes its CIDSystemInfo, and a font whose
-// CIDs lie elsewhere passes its own CID-to-glyph map (gid_map).
+// CIDs lie elsewhere passes its own CID-to-glyph map.
 
-// ecIdentitySystemInfo is _encodingcmap.IDENTITY_SYSTEM_INFO.
+// ecIdentitySystemInfo is the Adobe-Identity-0 /CIDSystemInfo.
 func ecIdentitySystemInfo() *pdfgen.Dict {
 	return d("Registry", text("Adobe"), "Ordering", text("Identity"), "Supplement", 0)
 }
@@ -36,7 +35,7 @@ func ecIdentitySystemInfo() *pdfgen.Dict {
 // ecBFChar is _encodingcmap.BFCHAR.
 const ecBFChar = "1 beginbfchar\n<0041> <0041>\nendbfchar\n"
 
-// ecSystemInfo is _encodingcmap.system_info: the Adobe CIDSystemInfo
+// ecSystemInfo is the Adobe CIDSystemInfo
 // dictionary of a character collection.
 func ecSystemInfo(ordering string, supplement int) *pdfgen.Dict {
 	return d("Registry", text("Adobe"), "Ordering", text(ordering), "Supplement", supplement)
@@ -63,7 +62,7 @@ func newECFixture() *ecFixture {
 	program := ttBuild([]ttSubtable{{3, 1, map[int]string{0x41: "A", 0x42: "B"}}}, nil)
 	f.fontFile = f.pdf.MakeIndirect(f.pdf.Stream(program, "Length1", len(program))).(*pdfgen.Stream)
 	raw := []byte{0, 0}
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		raw = append(raw, 0, 1)
 	}
 	gidMap := f.pdf.Stream(zdeflate.Compress(raw, 9))
@@ -88,8 +87,8 @@ func (f *ecFixture) gidMap(cids []int) *pdfgen.Stream {
 	return f.pdf.MakeIndirect(stream).(*pdfgen.Stream)
 }
 
-// ecCMapOpts are Fixture.cmap's keyword arguments; a zero field takes the
-// Python default.
+// ecCMapOpts are ecFixture.cmap's options; a zero field takes the default:
+// no /UseCMap, ecIdentitySystemInfo and the code space <0000> <FFFF>.
 type ecCMapOpts struct {
 	UseCMap   pdfgen.Object
 	Info      *pdfgen.Dict
@@ -126,7 +125,7 @@ func (f *ecFixture) cmap(name, body string, o ecCMapOpts) *pdfgen.Stream {
 }
 
 // font adds the Type 0 font key over encoding, showing the hex string shows.
-// info nil is IDENTITY_SYSTEM_INFO and gidMap nil the fixture's map.
+// info nil is ecIdentitySystemInfo and gidMap nil the fixture's map.
 func (f *ecFixture) font(key, name string, encoding pdfgen.Object, shows string, info *pdfgen.Dict, gidMap *pdfgen.Stream) {
 	pdf := f.pdf
 	if info == nil {
@@ -173,7 +172,7 @@ func (f *ecFixture) save() ([]byte, error) {
 }
 
 // iccMinimalProfile is the structurally minimal ICC profile several builders
-// define as icc_profile: a 128-byte version header and an empty tag table.
+// define: a 128-byte version header and an empty tag table.
 // tag fills the preferred CMM field, which only makes otherwise identical
 // profiles differ byte for byte.
 func iccMinimalProfile(deviceClass, colourSpace string, version uint32, tag string) []byte {
@@ -193,24 +192,23 @@ func iccMinimalProfile(deviceClass, colourSpace string, version uint32, tag stri
 	return append(header, tagTable...)
 }
 
-// Helpers shared by iccv4gray_1b and iccv4space_1b, each of which defines
-// them in its own Python builder.
+// Helpers shared by iccv4gray_1b and iccv4space_1b.
 //
 // Every product below goes through an explicit float64 conversion: Go may
-// fuse a*b+c into one rounding on some architectures, which Python never
-// does, and a one-ulp drift can move an s15Fixed16 value.
+// fuse a*b+c into one rounding on some architectures, and a one-ulp drift can
+// move an s15Fixed16 value and so the committed profiles' bytes.
 
 // iccMat3 is a 3 by 3 matrix, rows first.
 type iccMat3 [3][3]float64
 
-// iccBradfordMatrix mirrors BRADFORD.
+// iccBradfordMatrix is the Bradford cone response matrix.
 var iccBradfordMatrix = iccMat3{
 	{0.8951, 0.2664, -0.1614},
 	{-0.7502, 1.7135, 0.0367},
 	{0.0389, -0.0685, 1.0296},
 }
 
-// iccMatVec is mat_vec.
+// iccMatVec is the product of m and the column vector v.
 func iccMatVec(m iccMat3, v [3]float64) [3]float64 {
 	var out [3]float64
 	for i := range 3 {
@@ -223,7 +221,7 @@ func iccMatVec(m iccMat3, v [3]float64) [3]float64 {
 	return out
 }
 
-// iccMatMul is mat_mul.
+// iccMatMul is the matrix product a b.
 func iccMatMul(a, b iccMat3) iccMat3 {
 	var out iccMat3
 	for i := range 3 {
@@ -238,12 +236,12 @@ func iccMatMul(a, b iccMat3) iccMat3 {
 	return out
 }
 
-// iccMatInv is mat_inv.
+// iccMatInv is the inverse of m, by cofactors.
 func iccMatInv(m iccMat3) iccMat3 {
 	a, b, c := m[0][0], m[0][1], m[0][2]
 	d, e, f := m[1][0], m[1][1], m[1][2]
 	g, h, i := m[2][0], m[2][1], m[2][2]
-	// sub is x*y - z*w, each product rounded on its own as Python does.
+	// sub is x*y - z*w, each product rounded on its own.
 	sub := func(x, y, z, w float64) float64 { return float64(x*y) - float64(z*w) }
 	det := float64(float64(a*sub(e, i, f, h))-float64(b*sub(d, i, f, g))) + float64(c*sub(d, h, e, g))
 	return iccMat3{
@@ -253,7 +251,7 @@ func iccMatInv(m iccMat3) iccMat3 {
 	}
 }
 
-// iccBradford is bradford: the Bradford adaptation from white src to white
+// iccBradford is the Bradford adaptation from white src to white
 // dst (ICC.1:2010, E.3).
 func iccBradford(src, dst [3]float64) iccMat3 {
 	s, d := iccMatVec(iccBradfordMatrix, src), iccMatVec(iccBradfordMatrix, dst)
@@ -264,7 +262,7 @@ func iccBradford(src, dst [3]float64) iccMat3 {
 	return iccMatMul(iccMatInv(iccBradfordMatrix), iccMatMul(scale, iccBradfordMatrix))
 }
 
-// iccMluc is mluc: a multiLocalizedUnicodeType of one enUS record.
+// iccMluc is a multiLocalizedUnicodeType of one enUS record.
 func iccMluc(text string) []byte {
 	var units []byte
 	for _, u := range utf16.Encode([]rune(text)) {
@@ -277,7 +275,7 @@ func iccMluc(text string) []byte {
 	return append(out, units...)
 }
 
-// iccGreyProfile is the icc_profile of iccv4gray_1b and iccv4space_1b: an
+// iccGreyProfile is the profile of iccv4gray_1b and iccv4space_1b: an
 // ICC grey display profile of the given version and tags.
 func iccGreyProfile(version uint32, tags []iccTag) []byte {
 	table := iccU32(nil, len(tags))
@@ -316,15 +314,14 @@ func lithoBareSansPage(pdf *pdfgen.Doc, content string) *pdfgen.Dict {
 	))
 }
 
-// pyG formats value as Python's "%g" does: six significant digits, trailing
-// zeros and a trailing point trimmed.
+// pyG formats value as C's "%g" does: six significant digits, trailing zeros
+// and a trailing point trimmed. The committed files print their reals so.
 func pyG(value float64) string {
 	return strconv.FormatFloat(value, 'g', 6, 64)
 }
 
-// sortedLetters is Python's sorted({chr(c) for line in lines for c in line
-// if chr(c).isalpha()}) over byte strings: the distinct letters, sorted. Only
-// ASCII letters count, which is what the builders' text holds.
+// sortedLetters returns the distinct ASCII letters of lines, sorted. The
+// builders' text holds no other letters.
 func sortedLetters(lines ...string) []string {
 	seen := map[byte]bool{}
 	var letters []string
@@ -342,7 +339,7 @@ func sortedLetters(lines ...string) []string {
 }
 
 // latinTrueTypeFont is the conforming embedded TrueType several builders
-// spell out in full: _truetype.build's A and B glyphs under (3, 1) and (1, 0)
+// spell out in full: ttBuild's A and B glyphs under (3, 1) and (1, 0)
 // cmap subtables, a non-symbolic descriptor and WinAnsiEncoding over codes
 // 0x41 and 0x42. base is its /BaseFont and /FontName. Objects are created in
 // the builders' order: the font file, then the descriptor, then the font.

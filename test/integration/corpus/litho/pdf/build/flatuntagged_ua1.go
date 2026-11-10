@@ -58,7 +58,7 @@ func flatuntaggedUa1() ([]byte, error) {
 		widths[i] = 600
 		mapping[65+i] = int(g.Name[0])
 	}
-	font := type3Font(pdf, glyphs, widths, 65)
+	font := type3Font(pdf, glyphs, widths)
 	font.Set("ToUnicode", toUnicodeCMap(pdf, mapping))
 	font = pdf.Indirect(font)
 

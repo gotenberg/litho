@@ -47,9 +47,9 @@ func blankblack2b() ([]byte, error) {
 	// each over its full range, so the neutral axis is Cb = Cr = 128.
 	yccA2B0 := func() []byte {
 		var clut []int
-		for y := 0; y < 2; y++ {
-			for cb := 0; cb < 2; cb++ {
-				for cr := 0; cr < 2; cr++ {
+		for y := range 2 {
+			for cb := range 2 {
+				for cr := range 2 {
 					clut = append(clut, 255*y, 255*cr, 255*cb)
 				}
 			}
@@ -81,9 +81,9 @@ func blankblack2b() ([]byte, error) {
 	// across the image, a different phase per component.
 	ramp := func(components int) []byte {
 		var out []byte
-		for y := 0; y < size; y++ {
-			for x := 0; x < size; x++ {
-				for c := 0; c < components; c++ {
+		for y := range size {
+			for x := range size {
+				for c := range components {
 					out = append(out, byte((x*16+y*4+c*64)%256))
 				}
 			}
@@ -108,7 +108,7 @@ func blankblack2b() ([]byte, error) {
 
 	// Y high, Cb and Cr near neutral: a light picture with a tint.
 	var yccSamples []byte
-	for i := 0; i < size*size; i++ {
+	for i := range size * size {
 		yccSamples = append(yccSamples, byte(160+i%64), byte(96+i%32), byte(150-i%32))
 	}
 	// A 16-entry palette, white first, then a ramp of greens.
@@ -117,8 +117,8 @@ func blankblack2b() ([]byte, error) {
 		palette = append(palette, 40, byte(60+12*i), 40)
 	}
 	var indexedSamples []byte
-	for y := 0; y < size; y++ {
-		for x := 0; x < size; x++ {
+	for y := range size {
+		for x := range size {
 			indexedSamples = append(indexedSamples, byte(1+(x+y)%15))
 		}
 	}

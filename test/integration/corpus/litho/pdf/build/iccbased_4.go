@@ -41,7 +41,7 @@ func iccbased4() ([]byte, error) {
 	const iccVersion50 = 0x05000000
 
 	// iccProfile is a structurally minimal ICC profile with the chosen header
-	// fields. Python's defaults are version ICC_VERSION_2_1 and tag "lith".
+	// fields.
 	//
 	// `tag` is the preferred CMM field. It carries no meaning for these tests and
 	// exists only to make otherwise identical profiles differ byte for byte,

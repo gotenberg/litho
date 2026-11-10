@@ -130,7 +130,8 @@ func docxQualifies(path string) bool {
 
 func odtQualifies(path string) bool {
 	if strings.HasSuffix(path, ".fodt") {
-		// The packaged documents keep no embedded object, charts included.
+		// flatQualifies admits a chart; a text document keeps none, as the
+		// packaged ones keep no Object* entry.
 		content, ok := flatQualifies(path, []byte("<office:text"))
 		return ok && len(embeddedType.FindAllIndex(content, 2)) < 2 && !flatMedia.Match(content)
 	}

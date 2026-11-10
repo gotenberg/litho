@@ -70,7 +70,6 @@ func sharedtagUa1() ([]byte, error) {
 		pdf,
 		[]type3Proc{{"A", 600, "0 0 500 700 re f"}, {"B", 600, "0 0 500 700 re f"}},
 		[]any{600, 600},
-		65,
 	)
 	font.Set("ToUnicode", toUnicodeCMap(pdf, map[int]int{65: 0x41, 66: 0x42}))
 	pdf.Indirect(font)

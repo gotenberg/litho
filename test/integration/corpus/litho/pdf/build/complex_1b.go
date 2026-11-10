@@ -21,11 +21,11 @@ func complex1b() ([]byte, error) {
 
 	t3a := type3Font(pdf,
 		[]type3Proc{{"gA", 800, "0 0 700 700 re f"}, {"gB", 800, "0 0 600 600 re f"}},
-		[]any{500, 800}, 65)
+		[]any{500, 800})
 	t3b := type3Font(pdf,
 		[]type3Proc{{"gC", 600, "0 0 500 500 re f"}, {"gD", 900, "0 0 400 400 re f"}},
-		[]any{600, 100}, 65)
-	tt := unembeddedTrueType("/Helvetica")
+		[]any{600, 100})
+	tt := unembeddedTrueType()
 
 	img := rgbImage(pdf, true)
 

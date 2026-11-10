@@ -73,7 +73,7 @@ func tounicodepair2u() ([]byte, error) {
 	glyphNames := map[int]string{' ': "space"}
 	seen := map[int]bool{}
 	var codes []int
-	for i := 0; i < len(line); i++ {
+	for i := range len(line) {
 		c := int(line[i])
 		if !seen[c] {
 			seen[c] = true

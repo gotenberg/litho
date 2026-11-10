@@ -38,9 +38,10 @@ func init() { register("a4syntax_4", a4syntax4) }
 // the four the clause permits, a third optional content group with a distinct
 // name, and the page content stream, whose `/Length` and spacing are both correct.
 //
-// Four of the eleven are beyond pikepdf, which computes `/Length` from the data,
-// normalises object headers, and refuses to emit a name that is not valid UTF-8.
-// They are patched into the saved bytes, each replacement exactly the length of
+// Four of the eleven were beyond pikepdf, which first wrote the committed file:
+// it computes `/Length` from the data, normalises object headers, and refuses to
+// emit a name that is not valid UTF-8. pdfgen reproduces its output, and the
+// four are patched into the saved bytes, each replacement exactly the length of
 // what it replaces, so no cross-reference offset moves. The builder refuses any
 // patch that would change a length rather than silently corrupting the file. See
 // `filestruct_1b.go` and `xref_1b.go` for the same technique.
@@ -85,8 +86,8 @@ func a4syntax4() ([]byte, error) {
 	// 6.1.7 t1: a name object whose bytes are not valid UTF-8. veraPDF checks names
 	// in a few modelled positions only, and a Separation colorant name is one of
 	// them; an unknown catalog key, a resource key, a /Differences glyph name and an
-	// annotation /Name were all measured silent. pikepdf will not emit an invalid
-	// name, so a placeholder of the exact width goes in and the patch below rewrites
+	// annotation /Name were all measured silent. pikepdf, which first wrote the
+	// file, would not emit an invalid name, so a placeholder of the exact width goes in and the patch below rewrites
 	// it: seven bytes either way, /AAAAAA against /#C0#AF, where C0 AF is an
 	// overlong encoding and so not valid UTF-8.
 	const utf8Placeholder = "AAAAAA"

@@ -2,6 +2,7 @@ package build
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gotenberg/litho/test/integration/fixture/pdfgen"
 )
@@ -64,16 +65,16 @@ func tableregularUa2() ([]byte, error) {
 	))
 
 	const cellCount = 32
-	content := ""
+	var content strings.Builder
 	for i := range cellCount {
-		content += fmt.Sprintf("/TD <</MCID %d>> BDC\nBT /F1 9 Tf 40 %d Td (c%d) Tj ET\nEMC\n", i, 750-i*17, i)
+		fmt.Fprintf(&content, "/TD <</MCID %d>> BDC\nBT /F1 9 Tf 40 %d Td (c%d) Tj ET\nEMC\n", i, 750-i*17, i)
 	}
 
 	page := pdf.Indirect(d(
 		"Type", n("Page"),
 		"MediaBox", a(0, 0, 612, 792),
 		"Resources", d("Font", d("F1", font)),
-		"Contents", pdf.Stream([]byte(content)),
+		"Contents", pdf.Stream([]byte(content.String())),
 		"StructParents", 0,
 	))
 	pdf.AddPage(page)
@@ -91,8 +92,8 @@ func tableregularUa2() ([]byte, error) {
 	var leaves []any
 	nextMCID := 0
 
-	// cellOpts are cell's keyword arguments. A zero span, an empty cid and a
-	// nil headers are Python's None; noScope is scope=None.
+	// cellOpts are cell's options. A zero span, an empty cid and nil headers
+	// leave their keys out; noScope leaves /Scope out of a TH.
 	type cellOpts struct {
 		colspan, rowspan int
 		scope            string
@@ -103,7 +104,7 @@ func tableregularUa2() ([]byte, error) {
 
 	// cell is one TH or TD, owning the next marked content sequence on the page.
 	//
-	// scope=None omits /Scope from a TH, which is what pushes header
+	// noScope omits /Scope from a TH, which is what pushes header
 	// determination onto the /Headers route.
 	cell := func(kind string, parent *pdfgen.Dict, o cellOpts) *pdfgen.Dict {
 		attrs := d("O", n("/Table"))

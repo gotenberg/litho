@@ -21,7 +21,7 @@ func complex2b() ([]byte, error) {
 	// CharProc d0 advance (800). Real mismatch, must fire.
 	t3a := type3Font(pdf,
 		[]type3Proc{{"gA", 800, "0 0 700 700 re f"}, {"gB", 800, "0 0 600 600 re f"}},
-		[]any{500, 800}, 65)
+		[]any{500, 800})
 
 	// Type3 T3B: code 66 is never rendered, so its skewed /Widths entry (100 vs a
 	// d0 advance of 900) must stay silent. Guards the usage-scoping fix in
@@ -29,16 +29,16 @@ func complex2b() ([]byte, error) {
 	// so a firing here would be a false positive.
 	t3b := type3Font(pdf,
 		[]type3Proc{{"gC", 600, "0 0 500 500 re f"}, {"gD", 900, "0 0 400 400 re f"}},
-		[]any{600, 100}, 65)
+		[]any{600, 100})
 
-	tt := unembeddedTrueType("/Helvetica")
+	tt := unembeddedTrueType()
 
 	img := rgbImage(pdf, true)
 
 	// LZWDecode is forbidden outright (ISO 19005-2, 6.1.7). The payload really is
 	// LZW so the validator must reject the filter name, not a decode failure.
-	// Stream.write with an explicit filter installs the pre-encoded bytes; the
-	// plain Stream constructor would let pikepdf transcode them to Flate on save.
+	// The pre-encoded bytes go in as the stream's data with /Filter set, so the
+	// save writes them as they are.
 	lzwPayload := []byte("0 0 1 rg 5 5 20 20 re f\n")
 	lzwForm := pdf.Stream([]byte{})
 	lzwForm.Data = lzwEncode(lzwPayload, 1)

@@ -38,8 +38,8 @@ func init() { register("directstream_2b", directstream2b) }
 // copy resolved that reference into the /CropBox it wrote, which put the content
 // stream inline too.
 //
-// pikepdf cannot write a stream inline: qpdf makes every stream indirect. The base
-// revision is saved by pikepdf, and a second revision is appended by hand, as an
+// qpdf makes every stream indirect, and pdfgen reproduces its output. The base
+// revision is saved by pdfgen, and a second revision is appended by hand, as an
 // incremental update rewriting the page, indexed by a cross-reference table of
 // its own.
 //

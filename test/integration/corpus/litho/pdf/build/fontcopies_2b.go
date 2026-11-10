@@ -160,20 +160,19 @@ func fontcopies2b() ([]byte, error) {
 		}
 	}
 
-	// page's Python defaults are resources None and parent root.
-	page := func(content string, resources, parent *pdfgen.Dict) *pdfgen.Dict {
+	// page adds a page under parent; nil resources leave the key out, so the
+	// page inherits its parent's.
+	page := func(content string, resources, parent *pdfgen.Dict) {
 		dd := d("Type", n("Page"), "Parent", parent, "Contents", pdf.MakeIndirect(pdf.Stream([]byte(content))))
 		if resources != nil {
 			dd.Set("Resources", resources)
 		}
-		ref := pdf.Indirect(dd)
-		attach(parent, ref, 1)
-		return ref
+		attach(parent, pdf.Indirect(dd), 1)
 	}
 
-	// form's Python default body is TEXT.
-	form := func(resources *pdfgen.Dict, body string) *pdfgen.Stream {
-		stream := pdf.Stream([]byte(body))
+	// form is a form XObject drawing textOps with resources.
+	form := func(resources *pdfgen.Dict) *pdfgen.Stream {
+		stream := pdf.Stream([]byte(textOps))
 		stream.Set("Type", n("XObject"))
 		stream.Set("Subtype", n("Form"))
 		stream.Set("BBox", a(0, 0, 200, 100))
@@ -207,15 +206,15 @@ func fontcopies2b() ([]byte, error) {
 	page(textOps+renamed,
 		d("Font", d("U", fontU(), "W", fontW(), "C", fontC(), "U2", fontU(), "W2", fontW(), "C2", fontC())), root)
 	// One form two pages paint.
-	oneForm := form(d("Font", fonts()), textOps)
+	oneForm := form(d("Font", fonts()))
 	page("/X1 Do\n", d("XObject", d("X1", oneForm)), root)
 	page("/X1 Do\n", d("XObject", d("X1", oneForm)), root)
 	// Two forms, a copy each.
-	page("/X1 Do /X2 Do\n", d("XObject", d("X1", form(d("Font", fonts()), textOps),
-		"X2", form(d("Font", fonts()), textOps))), root)
+	page("/X1 Do /X2 Do\n", d("XObject", d("X1", form(d("Font", fonts())),
+		"X2", form(d("Font", fonts())))), root)
 	// Two forms sharing one indirect resource dictionary.
 	formsRes := pdf.Indirect(d("Font", fonts()))
-	page("/X1 Do /X2 Do\n", d("XObject", d("X1", form(formsRes, textOps), "X2", form(formsRes, textOps))), root)
+	page("/X1 Do /X2 Do\n", d("XObject", d("X1", form(formsRes), "X2", form(formsRes))), root)
 
 	type missingFont struct {
 		font *pdfgen.Dict
@@ -258,12 +257,12 @@ func fontcopies2b() ([]byte, error) {
 		missing("LithoMissingShortMap", 5, "DW", 1000, "CIDToGIDMap", gidMap(0, 1)),
 	}
 	missingRes := d()
-	missingText := ""
+	var missingText strings.Builder
 	for index, m := range missingFonts {
 		missingRes.Set(fmt.Sprintf("/M%d", index+1), m.font)
-		missingText += fmt.Sprintf("BT /M%d 12 Tf 10 %d Td <%04X> Tj ET\n", index+1, 90-10*index, m.show)
+		fmt.Fprintf(&missingText, "BT /M%d 12 Tf 10 %d Td <%04X> Tj ET\n", index+1, 90-10*index, m.show)
 	}
-	page(missingText, d("Font", missingRes), root)
+	page(missingText.String(), d("Font", missingRes), root)
 
 	// Descendant rules: two Type0 fonts sharing one unembedded descendant object,
 	// then one Type0 font written directly on two pages with its descendant in it.

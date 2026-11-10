@@ -22,16 +22,17 @@ var (
 	text = pdfgen.Text
 )
 
-// str is pikepdf's String(b"...") over raw bytes.
+// str is a PDF string over the raw bytes of s.
 func str(s string) pdfgen.String { return pdfgen.String(s) }
 
-// zlibCompress is Python's zlib.compress(data) at the default level.
+// zlibCompress is zlib at its default level, as the committed files were
+// compressed.
 func zlibCompress(data []byte) []byte { return zdeflate.Compress(data, -1) }
 
-// save is _common.save: pikepdf's save with a deterministic /ID,
-// uncompressed streams and stream decode level none. minVersion is
-// _common.save's min_version, "1.7" by default there; extra carries the
-// further pikepdf save options a builder passed.
+// save writes doc with a deterministic /ID and its streams as given, at
+// least at minVersion. extra sets further save options. The committed files
+// were first written by pikepdf over qpdf, and pdfgen reproduces that layout
+// byte for byte.
 func save(doc *pdfgen.Doc, minVersion string, extra ...func(*pdfgen.SaveOptions)) ([]byte, error) {
 	out, err := saveOutput(doc, minVersion, extra...)
 	if err != nil {
@@ -54,13 +55,16 @@ func saveOutput(doc *pdfgen.Doc, minVersion string, extra ...func(*pdfgen.SaveOp
 	return out, nil
 }
 
-// noPreservePDFA is pikepdf's preserve_pdfa=False.
+// noPreservePDFA writes no newline before endstream (pikepdf's
+// preserve_pdfa=False).
 func noPreservePDFA(o *pdfgen.SaveOptions) { o.DisablePreservePDFA = true }
 
-// noFixMetadataVersion is pikepdf's fix_metadata_version=False.
+// noFixMetadataVersion keeps the catalog's XMP packet as given (pikepdf's
+// fix_metadata_version=False).
 func noFixMetadataVersion(o *pdfgen.SaveOptions) { o.DisableFixMetadataVersion = true }
 
-// generateObjectStreams is pikepdf's object_stream_mode=generate.
+// generateObjectStreams writes object streams and a cross-reference stream
+// (pikepdf's object_stream_mode=generate).
 func generateObjectStreams(o *pdfgen.SaveOptions) { o.GenerateObjectStreams = true }
 
 // lzwEncode LZW-compresses data the way PDF's LZWDecode filter expects.
@@ -85,7 +89,7 @@ func lzwEncode(data []byte, earlyChange int) []byte {
 	var next, width int
 	reset := func() {
 		table = make(map[string]int, 4096)
-		for i := 0; i < 256; i++ {
+		for i := range 256 {
 			table[string([]byte{byte(i)})] = i
 		}
 		next, width = 258, 9
@@ -122,7 +126,7 @@ func lzwEncode(data []byte, earlyChange int) []byte {
 	return out
 }
 
-// xmpOpts are xmp_packet's keyword arguments. A nil field is Python's None.
+// xmpOpts are xmpPacket's identifiers. A nil field writes no property.
 type xmpOpts struct {
 	Part, Conformance, Rev, UAPart, UARev any
 	Extra                                 string
@@ -133,7 +137,7 @@ type xmpOpts struct {
 //
 // Passing no identifiers yields a well-formed packet with no claim,
 // which is what the "wrong claim" fixtures need as a starting point.
-// ua_rev feeds pdfuaid:rev, which ISO 14289-2, 5 requires to be 2024.
+// UARev feeds pdfuaid:rev, which ISO 14289-2, 5 requires to be 2024.
 func xmpPacket(o xmpOpts) []byte {
 	var ids []string
 	add := func(tag string, v any) {
@@ -165,10 +169,8 @@ func xmpPacket(o xmpOpts) []byte {
 
 // attachXMP attaches an XMP packet to the catalog as an uncompressed
 // stream.
-func attachXMP(doc *pdfgen.Doc, packet []byte) *pdfgen.Stream {
-	meta := doc.Stream(packet, "Type", n("Metadata"), "Subtype", n("XML"))
-	doc.Root.Set("Metadata", meta)
-	return meta
+func attachXMP(doc *pdfgen.Doc, packet []byte) {
+	doc.Root.Set("Metadata", doc.Stream(packet, "Type", n("Metadata"), "Subtype", n("XML")))
 }
 
 // type3Proc is one (glyph name, d0 advance, painting operators) entry of
@@ -181,10 +183,11 @@ type type3Proc struct {
 
 // type3Font builds a Type3 font whose CharProcs carry explicit d0 advances.
 //
-// procs is a list of (glyph name, d0 advance, painting operators).
-// widths is the /Widths array, which the caller deliberately skews to
-// plant a width mismatch on a chosen code.
-func type3Font(doc *pdfgen.Doc, procs []type3Proc, widths []any, first int) *pdfgen.Dict {
+// procs is a list of (glyph name, d0 advance, painting operators), encoded
+// from code 65 ("A") on. widths is the /Widths array, which the caller
+// deliberately skews to plant a width mismatch on a chosen code.
+func type3Font(doc *pdfgen.Doc, procs []type3Proc, widths []any) *pdfgen.Dict {
+	const first = 65
 	charprocs := d()
 	diffs := a(first)
 	for _, p := range procs {
@@ -238,9 +241,10 @@ func toUnicodeCMap(doc *pdfgen.Doc, mapping map[int]int) *pdfgen.Stream {
 	return doc.Stream([]byte(strings.Join(lines, "\n") + "\n"))
 }
 
-// unembeddedTrueType builds a simple TrueType font dict with no font
-// program. base is the font name, /Helvetica in common.go's default.
-func unembeddedTrueType(base string) *pdfgen.Dict {
+// unembeddedTrueType builds a simple TrueType font dict named Helvetica with
+// no font program.
+func unembeddedTrueType() *pdfgen.Dict {
+	const base = "/Helvetica"
 	return d(
 		"Type", n("Font"),
 		"Subtype", n("TrueType"),
@@ -284,9 +288,8 @@ func rgbImage(doc *pdfgen.Doc, interpolate bool) *pdfgen.Stream {
 // filespec builds an embedded-file specification dictionary.
 //
 // subtype is the embedded file's MIME type, empty for none. A MIME type
-// contains '/', which a PDF name can only carry as the escape #2F; the
-// Python builder parses the token so the escape is honoured: subtype is that
-// token, such as "/text#2Fxml", and is decoded the same way. relationship is
+// contains '/', which a PDF name can only carry as the escape #2F, so
+// subtype is that name token, such as "/text#2Fxml", decoded by nameToken. relationship is
 // the /AFRelationship name, empty for none.
 func filespec(doc *pdfgen.Doc, fileName string, payload []byte, relationship, subtype string) *pdfgen.Dict {
 	ef := doc.Stream(payload, "Type", n("EmbeddedFile"))
@@ -321,7 +324,7 @@ func sortedKeys[V any](m map[int]V) []int {
 }
 
 // nameToken decodes a name token as PDF syntax reads it, honouring #xx
-// escapes: pikepdf's Object.parse(b"/text#2Fxml").
+// escapes, so "/text#2Fxml" is the name text/xml.
 func nameToken(tok string) pdfgen.Name {
 	tok = strings.TrimPrefix(tok, "/")
 	var b strings.Builder
@@ -351,9 +354,10 @@ func patchOnce(data, old, repl []byte, why string) ([]byte, error) {
 	return bytes.Replace(data, old, repl, 1), nil
 }
 
-// docinfo is pikepdf's pdf.docinfo getter: the trailer's /Info, created as an
-// empty indirect dictionary when absent and made indirect when direct. Merely
-// reading pdf.docinfo in Python has this side effect.
+// docinfo returns the trailer's /Info, created as an empty indirect
+// dictionary when absent and made indirect when direct. Calling it changes
+// the object numbering, as reading pikepdf's pdf.docinfo did when the
+// committed files were first written.
 func docinfo(pdf *pdfgen.Doc) *pdfgen.Dict {
 	info, ok := pdf.Trailer.Get("Info").(*pdfgen.Dict)
 	if !ok {
@@ -366,19 +370,19 @@ func docinfo(pdf *pdfgen.Doc) *pdfgen.Dict {
 	return info
 }
 
-// idOf returns the first /ID element of a file pdfgen saved, the value
-// Python builders read back with pikepdf.open(...).trailer.ID[0].
+// idOf returns the first /ID element of a file pdfgen saved, for a builder
+// that reuses it.
 func idOf(saved []byte) pdfgen.String {
 	i := bytes.LastIndex(saved, []byte("/ID [<"))
 	if i < 0 {
 		return nil
 	}
 	rest := saved[i+len("/ID [<"):]
-	end := bytes.IndexByte(rest, '>')
-	if end < 0 {
+	before, _, ok := bytes.Cut(rest, []byte{'>'})
+	if !ok {
 		return nil
 	}
-	id, err := hex.DecodeString(string(rest[:end]))
+	id, err := hex.DecodeString(string(before))
 	if err != nil {
 		return nil
 	}

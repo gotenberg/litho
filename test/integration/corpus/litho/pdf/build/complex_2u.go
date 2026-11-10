@@ -23,10 +23,11 @@ func init() { register("complex_2u", complex2u) }
 func complex2u() ([]byte, error) {
 	pdf := pdfgen.New()
 
-	// simpleFont builds a non-embedded Type1 font, optionally with a
-	// /ToUnicode CMap. A nil encoding is /WinAnsiEncoding, a nil tounicode
-	// leaves the key out.
-	simpleFont := func(encoding, tounicode pdfgen.Object, first, last int, widths []any, base string) *pdfgen.Dict {
+	// simpleFont builds a non-embedded Type1 font whose codes start at 65
+	// ("A"), optionally with a /ToUnicode CMap. A nil encoding is
+	// /WinAnsiEncoding, a nil tounicode leaves the key out.
+	simpleFont := func(encoding, tounicode pdfgen.Object, last int, widths []any, base string) *pdfgen.Dict {
+		const first = 65
 		dd := d(
 			"Type", n("Font"),
 			"Subtype", n("Type1"),
@@ -59,23 +60,23 @@ func complex2u() ([]byte, error) {
 			"Type", n("Encoding"),
 			"Differences", a(65, n("/lithoglyphone"), 66, n("/lithoglyphtwo")),
 		),
-		nil, 65, 66, []any{722, 722}, "/LithoCustom",
+		nil, 66, []any{722, 722}, "/LithoCustom",
 	)
 
 	// FZero maps its rendered code onto U+0000, which 6.2.11.7.2 t2 forbids
 	// along with U+FEFF and U+FFFE.
-	fZero := simpleFont(nil, toUnicodeCMap(pdf, map[int]int{65: 0x0000}), 65, 65, []any{722}, "/Helvetica")
+	fZero := simpleFont(nil, toUnicodeCMap(pdf, map[int]int{65: 0x0000}), 65, []any{722}, "/Helvetica")
 
 	// FPua maps its rendered code onto a Private Use Area value. Rendered bare it
 	// fails the level-A rule 6.2.11.7.3; rendered inside a marked-content
 	// /ActualText it is exempt, and the content stream does both.
-	fPua := simpleFont(nil, toUnicodeCMap(pdf, map[int]int{65: 0xE000}), 65, 65, []any{722}, "/Helvetica")
+	fPua := simpleFont(nil, toUnicodeCMap(pdf, map[int]int{65: 0xE000}), 65, []any{722}, "/Helvetica")
 
 	// Control: a well-formed /ToUnicode onto a plain Latin letter. Must stay
 	// silent while the three above fire.
-	fOk := simpleFont(nil, toUnicodeCMap(pdf, map[int]int{65: 0x0041}), 65, 65, []any{722}, "/Helvetica")
+	fOk := simpleFont(nil, toUnicodeCMap(pdf, map[int]int{65: 0x0041}), 65, []any{722}, "/Helvetica")
 
-	tt := unembeddedTrueType("/Helvetica")
+	tt := unembeddedTrueType()
 	img := rgbImage(pdf, true)
 
 	lzwForm := pdf.Stream(nil)

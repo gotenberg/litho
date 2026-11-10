@@ -3,6 +3,7 @@ package build
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/gotenberg/litho/test/integration/fixture/pdfgen"
 )
@@ -43,7 +44,7 @@ func recolorimg2b() ([]byte, error) {
 
 	const side = 4
 
-	// image's Python default bpc is 8.
+	// image is an image of samples, Flate-compressed, at bpc bits per component.
 	image := func(samples []byte, colourSpace pdfgen.Object, bpc int, extra ...any) *pdfgen.Stream {
 		stream := pdf.Stream(zlibCompress(samples))
 		stream.Set("Type", n("XObject"))
@@ -59,11 +60,13 @@ func recolorimg2b() ([]byte, error) {
 		return pdf.MakeIndirect(stream).(*pdfgen.Stream)
 	}
 
-	// gradient's Python default scale is 1.
-	gradient := func(components, scale int) []byte {
+	// gradient is a side x side ramp of three components, 8-bit at scale 1,
+	// 16-bit at scale 2.
+	gradient := func(scale int) []byte {
+		const components = 3
 		var out []byte
-		for i := 0; i < side*side; i++ {
-			for c := 0; c < components; c++ {
+		for i := range side * side {
+			for c := range components {
 				v := (i*37 + c*71) % 256
 				out = append(out, byte(v))
 				if scale == 2 {
@@ -74,9 +77,9 @@ func recolorimg2b() ([]byte, error) {
 		return out
 	}
 
-	im16 := image(gradient(3, 2), iccRGB, 16)
+	im16 := image(gradient(2), iccRGB, 16)
 	imLab := image(
-		gradient(3, 1),
+		gradient(1),
 		a(
 			n("Lab"),
 			d(
@@ -86,14 +89,14 @@ func recolorimg2b() ([]byte, error) {
 		),
 		8,
 	)
-	keySamples := gradient(3, 1)
+	keySamples := gradient(1)
 	for _, pixel := range []int{0, 5, 10, 15} {
 		copy(keySamples[3*pixel:3*pixel+3], []byte{3, 4, 5})
 	}
 	imKey := image(keySamples, iccRGB, 8, "Mask", a(0, 8, 0, 8, 0, 8))
 
 	var alpha []byte
-	for i := 0; i < side; i++ {
+	for range side {
 		alpha = append(alpha, 255, 192, 128, 64)
 	}
 	matteMask := pdf.Stream(zlibCompress(alpha))
@@ -106,26 +109,26 @@ func recolorimg2b() ([]byte, error) {
 	matteMask.Set("Filter", n("FlateDecode"))
 	matteMask.Set("Matte", a(1, 1, 1))
 	// Preblended with white: c' = m + a(c - m), per ISO 32000-1, 11.6.5.3.
-	colour := gradient(3, 1)
+	colour := gradient(1)
 	var preblended []byte
-	for i := 0; i < side*side; i++ {
+	for i := range side * side {
 		al := float64(alpha[i]) / 255
-		for c := 0; c < 3; c++ {
+		for c := range 3 {
 			preblended = append(preblended, byte(math.RoundToEven(255+al*float64(int(colour[3*i+c])-255))))
 		}
 	}
 	imMat := image(preblended, iccRGB, 8, "SMask", pdf.MakeIndirect(matteMask))
 
-	imDec := image(gradient(3, 1), iccRGB, 8, "Decode", a(1, 0, 1, 0, 1, 0))
+	imDec := image(gradient(1), iccRGB, 8, "Decode", a(1, 0, 1, 0, 1, 0))
 
 	names := []string{"Im16", "ImLab", "ImKey", "ImMat", "ImDec"}
 	images := []*pdfgen.Stream{im16, imLab, imKey, imMat, imDec}
-	body := ""
+	var body strings.Builder
 	xobjects := d()
 	for i, name := range names {
-		body += fmt.Sprintf("q 100 0 0 100 %d 600 cm /%s Do Q\n", 20+115*i, name)
+		fmt.Fprintf(&body, "q 100 0 0 100 %d 600 cm /%s Do Q\n", 20+115*i, name)
 	}
-	contents := pdf.MakeIndirect(pdf.Stream([]byte(body)))
+	contents := pdf.MakeIndirect(pdf.Stream([]byte(body.String())))
 	for i, name := range names {
 		xobjects.Set("/"+name, images[i])
 	}

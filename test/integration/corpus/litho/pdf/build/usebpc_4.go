@@ -97,8 +97,8 @@ func usebpc4() ([]byte, error) {
 	}
 
 	var ramp []byte
-	for i := 0; i < 8; i++ {
-		ramp = append(ramp, byte(32*i))
+	for v := range byte(8) {
+		ramp = append(ramp, 32*v)
 	}
 	greyImage := image(grey, ramp, 1)
 	// A ramp on red alone, from the neutral black of its first sample.

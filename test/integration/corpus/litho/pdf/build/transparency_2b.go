@@ -2,6 +2,7 @@ package build
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gotenberg/litho/test/integration/fixture/pdfgen"
 )
@@ -146,14 +147,14 @@ func transparency2b() ([]byte, error) {
 		"HardLight", "SoftLight", "Difference", "Exclusion", "Hue", "Saturation", "Color", "Luminosity",
 	}
 	states := d()
-	content := ""
+	var content strings.Builder
 	for i, mode := range modes {
 		states.Set(fmt.Sprintf("B%d", i), d("Type", n("ExtGState"), "BM", n("/"+mode)))
 		x, y := (i%4)*40, (3-i/4)*40
-		content += fmt.Sprintf("0.9 0.5 0.1 rg %d %d 20 26 re f 0.2 0.4 0.8 rg %d %d 20 26 re f\n", x, y, x+20, y)
-		content += fmt.Sprintf("q /B%d gs 0.3 0.8 0.5 rg %d %d 30 32 re f Q\n", i, x+5, y+5)
+		fmt.Fprintf(&content, "0.9 0.5 0.1 rg %d %d 20 26 re f 0.2 0.4 0.8 rg %d %d 20 26 re f\n", x, y, x+20, y)
+		fmt.Fprintf(&content, "q /B%d gs 0.3 0.8 0.5 rg %d %d 30 32 re f Q\n", i, x+5, y+5)
 	}
-	addPage(160, 160, content, d("ExtGState", states))
+	addPage(160, 160, content.String(), d("ExtGState", states))
 
 	attachXMP(pdf, xmpPacket(xmpOpts{Part: 2, Conformance: "B"}))
 	return save(pdf, "1.7")

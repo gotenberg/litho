@@ -21,7 +21,7 @@ func init() { register("complex_2a", complex2a) }
 func complex2a() ([]byte, error) {
 	pdf := pdfgen.New()
 
-	tt := pdf.Indirect(unembeddedTrueType("/Helvetica"))
+	tt := pdf.Indirect(unembeddedTrueType())
 	img := rgbImage(pdf, true)
 
 	lzwForm := pdf.Stream(nil)

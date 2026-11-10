@@ -32,7 +32,7 @@ func init() { register("metafilter_1b", metafilter1b) }
 //
 // qpdf strips `/Filter` off a metadata stream on every save path tried, including
 // with `preserve_pdfa` and `fix_metadata_version` off, so the construct cannot
-// survive pikepdf. Each stream is therefore planted after the save, its dictionary
+// survive a save, pdfgen's included. Each stream is therefore planted after the save, its dictionary
 // padded with spaces so the object keeps its byte length and no cross-reference
 // offset moves. Padding after `endobj` instead would cost a `6.1.8/1`.
 //

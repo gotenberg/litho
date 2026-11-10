@@ -185,7 +185,7 @@ func linkfontUa2() ([]byte, error) {
 
 	// linkGroup wires a set of Link annotations under one shared Link
 	// element.
-	linkGroup := func(links []*pdfgen.Dict) *pdfgen.Dict {
+	linkGroup := func(links []*pdfgen.Dict) {
 		k := a()
 		for _, lk := range links {
 			k.Append(d("Type", n("OBJR"), "Obj", lk))
@@ -205,7 +205,6 @@ func linkfontUa2() ([]byte, error) {
 			annots = append(annots, lk)
 		}
 		docKids = append(docKids, element)
-		return element
 	}
 
 	// The defect: two structure destinations naming different elements.

@@ -100,7 +100,7 @@ func patternglyph2b() ([]byte, error) {
 
 	glyph2 := type3(
 		"BT /TT 12 Tf 0 0 Td (AB) Tj ET\n",
-		d("Font", d("TT", pdf.Indirect(unembeddedTrueType("/Helvetica")))),
+		d("Font", d("TT", pdf.Indirect(unembeddedTrueType()))),
 	)
 	cell2 := tiling(show, d("Font", d("T3", glyph2)))
 

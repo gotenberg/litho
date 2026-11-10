@@ -109,10 +109,10 @@ func imagecolour2b() ([]byte, error) {
 		{"SepNone", tinted(ramp, a(n("Separation"), n("/None"), n("DeviceGray"), tint))},
 		{"DevNone", tinted(pairs,
 			a(n("DeviceN"), a(n("/None"), n("/None")), n("DeviceGray"), tint2))},
-		{"JLabDef", jpx(jp2Container(jp2Three, 3, 8, [][]byte{labColr()}, nil))},
-		{"JLabEP", jpx(jp2Container(jp2Three, 3, 8, [][]byte{labColr(100, 0, 255, 128, 255, 128, ilD50)}, nil))},
-		{"JROMM", jpx(jp2Container(jp2Three, 3, 8, [][]byte{jp2Colr(1, 1, enumROMM)}, nil))},
-		{"JESRGB", jpx(jp2Container(jp2Three, 3, 8, [][]byte{jp2Colr(1, 1, enumESRGB)}, nil))},
+		{"JLabDef", jpx(jp2Container(jp2Three, 3, [][]byte{labColr()}, nil))},
+		{"JLabEP", jpx(jp2Container(jp2Three, 3, [][]byte{labColr(100, 0, 255, 128, 255, 128, ilD50)}, nil))},
+		{"JROMM", jpx(jp2Container(jp2Three, 3, [][]byte{jp2Colr(1, 1, enumROMM)}, nil))},
+		{"JESRGB", jpx(jp2Container(jp2Three, 3, [][]byte{jp2Colr(1, 1, enumESRGB)}, nil))},
 	}
 
 	xobjects := d()

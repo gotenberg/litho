@@ -8,11 +8,11 @@ package build
 // in the form the Adobe Type 1 Font Format defines: a clear-text portion, then
 // the eexec-encrypted portion holding the Private dictionary and the
 // CharStrings, then 512 zeros and `cleartomark`. `/Length1`, `/Length2` and
-// `/Length3` count the three. The corpus builders take no dependency beyond
-// pikepdf, so this module writes the bytes and the two encryptions (Type 1
-// Font Format, 7.1) itself.
+// `/Length3` count the three. No public font offers such a program on demand,
+// so this file writes the bytes and the two encryptions (Type 1 Font Format,
+// 7.1) itself.
 //
-// Every glyph is a rectangle with an advance of ADVANCE_WIDTH. The four
+// Every glyph is a rectangle with an advance of t1AdvanceWidth. The four
 // plaintext bytes each encryption starts with are zeros, so the program is the
 // same on every build. The first ciphertext byte is then 0xD9, which is not a
 // hexadecimal digit, so a reader takes the encrypted portion as binary.
@@ -24,10 +24,11 @@ import (
 	"strings"
 )
 
-// t1AdvanceWidth mirrors ADVANCE_WIDTH.
+// t1AdvanceWidth is every glyph's advance.
 const t1AdvanceWidth = 600
 
-// Mirrors EEXEC_KEY, CHARSTRING_KEY, C1, C2 and LEN_IV.
+// The eexec and charstring keys, the cipher constants and lenIV, Type 1 Font
+// Format, 7.1 and 7.2.
 const (
 	t1EexecKey      = 55665
 	t1CharstringKey = 4330
@@ -36,12 +37,12 @@ const (
 	t1LenIV         = 4
 )
 
-// t1GlyphHeights mirrors GLYPH_HEIGHTS. The nth glyph is 400 + 100 * (n %
-// GLYPH_HEIGHTS) high, so a program of any size keeps every height a
+// t1GlyphHeights is the number of glyph heights. The nth glyph is 400 + 100 *
+// (n % t1GlyphHeights) high, so a program of any size keeps every height a
 // charstring integer this module writes.
 const t1GlyphHeights = 8
 
-// t1Encrypt is _encrypt: the Type 1 encryption of plain under key, Type 1
+// t1Encrypt is the Type 1 encryption of plain under key, Type 1
 // Font Format, 7.1.
 func t1Encrypt(plain []byte, key int) []byte {
 	r := key
@@ -54,8 +55,8 @@ func t1Encrypt(plain []byte, key int) []byte {
 	return out
 }
 
-// t1Num is _num: a Type 1 charstring integer, Type 1 Font Format, 6.2. It
-// panics outside -1131..1131, where Python raises ValueError.
+// t1Num is a Type 1 charstring integer, Type 1 Font Format, 6.2. It
+// panics outside -1131..1131, the range the encoding covers.
 func t1Num(value int) []byte {
 	switch {
 	case -107 <= value && value <= 107:
@@ -70,7 +71,7 @@ func t1Num(value int) []byte {
 	panic("charstring integer out of the range this module writes")
 }
 
-// t1Charstring is _charstring: hsbw, then a rectangle from (50, 0) of 400 by
+// t1Charstring is one charstring: hsbw, then a rectangle from (50, 0) of 400 by
 // height, then endchar.
 func t1Charstring(height int) []byte {
 	out := t1Cat(t1Num(0), t1Num(t1AdvanceWidth), []byte{0x0d}) // hsbw
@@ -87,7 +88,7 @@ func t1Cat(parts ...[]byte) []byte {
 	return bytes.Join(parts, nil)
 }
 
-// t1ASCII mirrors str.encode("ascii"), which raises on anything else.
+// t1ASCII returns s as ASCII bytes. It panics on any other byte.
 func t1ASCII(s string) []byte {
 	for i := 0; i < len(s); i++ {
 		if s[i] >= 0x80 {
@@ -97,13 +98,12 @@ func t1ASCII(s string) []byte {
 	return []byte(s)
 }
 
-// t1EncodingArray is encoding_array: the clear-text /Encoding of a program
+// t1EncodingArray is the clear-text /Encoding of a program
 // naming codes, a {code: name} map.
 //
 // fillNotdef writes the customary loop that names every code .notdef before
 // the entries, so a code codes leaves out names .notdef. Without it the array
-// keeps the null objects `array` creates. Python defaults fill_notdef to
-// True.
+// keeps the null objects `array` creates.
 func t1EncodingArray(codes map[int]string, fillNotdef bool) []byte {
 	out := []byte("/Encoding 256 array\n")
 	if fillNotdef {
@@ -120,8 +120,8 @@ func t1EncodingArray(codes map[int]string, fillNotdef bool) []byte {
 	return append(out, "readonly def\n"...)
 }
 
-// t1Options carries build's keyword arguments. The zero value is Python's
-// defaults.
+// t1Options carries t1Build's options. The zero value builds LithoT1 with
+// glyphs A and B over StandardEncoding.
 type t1Options struct {
 	// Name is the FontName; empty means "LithoT1".
 	Name string
@@ -131,15 +131,15 @@ type t1Options struct {
 	// Encoding is the clear-text /Encoding entry; nil means
 	// StandardEncoding.
 	Encoding []byte
-	// OmitCharStrings is Python's charstrings=False.
+	// OmitCharStrings leaves the CharStrings dictionary out.
 	OmitCharStrings bool
 }
 
-// t1Build is build: return (program, length1, length2, length3) for a Type 1
+// t1Build returns (program, length1, length2, length3) for a Type 1
 // font.
 //
 // glyphs names the CharStrings beside .notdef. encoding is the clear-text
-// /Encoding entry, StandardEncoding when None. charstrings=False leaves the
+// /Encoding entry, StandardEncoding when nil. OmitCharStrings leaves the
 // Private dictionary without a CharStrings dictionary, which ends the program
 // with no glyph defined.
 func t1Build(o t1Options) (program []byte, length1, length2, length3 int) {

@@ -49,9 +49,6 @@ func noresources4() ([]byte, error) {
 		}
 		page := pdf.Indirect(dd)
 		pdf.AddPage(page)
-		// pikepdf adds a /Resources to a page on append; the pages that must state
-		// none have it removed again.
-		page.Del("Resources")
 		if resources != nil {
 			page.Set("Resources", resources)
 		}
@@ -76,7 +73,8 @@ func noresources4() ([]byte, error) {
 		)),
 	))
 
-	// /Resources null is patched in after the save: pikepdf drops a null value.
+	// /Resources null is patched in after the save: the save drops a null value,
+	// as qpdf does.
 	addPage(pdf.Stream([]byte("q Q\n")), n("/LithoNullRes"))
 
 	shared := pdf.MakeIndirect(pdf.Stream([]byte("q Q\n")))

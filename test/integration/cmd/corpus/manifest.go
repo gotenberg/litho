@@ -353,7 +353,7 @@ const corpusFlagUsage = "Corpora, comma-separated: names, globs or sources (lith
 func selectManifests(patterns []string) ([]*Manifest, error) {
 	all, err := manifests()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("loading the manifests: %w", err)
 	}
 	if len(patterns) == 0 {
 		return all, nil

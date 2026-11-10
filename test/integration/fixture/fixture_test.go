@@ -141,8 +141,8 @@ func TestOptionNames_AreTheJSONNamesOfOptions(t *testing.T) {
 
 	typ := reflect.TypeFor[Options]()
 	var tags []string
-	for i := range typ.NumField() {
-		name, _, _ := strings.Cut(typ.Field(i).Tag.Get("json"), ",")
+	for field := range typ.Fields() {
+		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
 		tags = append(tags, name)
 	}
 	if !slices.Equal(tags, OptionNames) {
@@ -190,8 +190,17 @@ func TestSources_LoadAndReadThroughDirFS(t *testing.T) {
 func TestChromiumMargin_MeasuredOnChromium(t *testing.T) {
 	// The content box offsets Chromium's PDFs show for each margin.
 	tests := []struct{ inches, points float64 }{
-		{0, 0}, {0.0104, 0}, {0.1, 6.75}, {0.2, 14.25}, {0.3, 21}, {0.35, 24.75},
-		{0.37, 26.25}, {0.39, DefaultMargin}, {0.42917, 30}, {0.5, 36}, {0.6, 42.75},
+		{0, 0},
+		{0.0104, 0},
+		{0.1, 6.75},
+		{0.2, 14.25},
+		{0.3, 21},
+		{0.35, 24.75},
+		{0.37, 26.25},
+		{0.39, DefaultMargin},
+		{0.42917, 30},
+		{0.5, 36},
+		{0.6, 42.75},
 	}
 	for _, tt := range tests {
 		if got := chromiumMargin(tt.inches); got != tt.points {

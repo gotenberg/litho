@@ -72,8 +72,7 @@ func schemaprefix1b() ([]byte, error) {
 	)
 	pdf.AddPage(pdf.Indirect(page))
 
-	// In the helpers below an empty string is Python's None: that field is
-	// omitted.
+	// In the helpers below an empty string omits its field.
 
 	// li wraps one extension schema definition as an rdf:li resource.
 	li := func(inner string) string {

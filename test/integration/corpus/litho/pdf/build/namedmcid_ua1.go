@@ -65,7 +65,7 @@ func namedmcidUa1() ([]byte, error) {
 		"ToUnicode", toUnicodeCMap(pdf, map[int]int{0x78: 0xE000}),
 	))
 
-	// show is the Python builder's text(y, s, face).
+	// show is the content showing s at height y in face, F1 by default.
 	show := func(y int, s string, face ...string) string {
 		f := "F1"
 		if len(face) > 0 {

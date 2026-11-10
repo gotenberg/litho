@@ -167,7 +167,7 @@ func defaultcs4() ([]byte, error) {
 	}
 
 	// page is a page whose /ColorSpace resource holds spaces, painting
-	// content. spaces nil is Python's None; resources are the extra resource
+	// content. spaces nil leaves /ColorSpace out; resources are the extra resource
 	// entries, extra further page entries.
 	page := func(spaces []any, content string, resources []any, extra ...any) {
 		res := d(resources...)

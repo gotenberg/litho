@@ -23,8 +23,8 @@ type Bool bool
 // Int is a PDF integer, written in decimal.
 type Int int64
 
-// Real is a PDF real, kept as the exact token qpdf writes. Use Float for a
-// value pikepdf would have converted from a Python float.
+// Real is a PDF real, kept as the exact token it is written as. Use Float
+// for a float64, formatted as qpdf formats a double.
 type Real string
 
 // Name is a PDF name, held decoded and without its leading slash. The writer
@@ -32,7 +32,7 @@ type Real string
 type Name string
 
 // String is a PDF string, held as raw bytes. The writer picks the literal
-// or the hexadecimal form the way qpdf does. Use Text for a Python str.
+// or the hexadecimal form the way qpdf does. Use Text for text.
 type String []byte
 
 func (Null) isObject()    {}
@@ -60,7 +60,7 @@ func N(s string) Name {
 	return Name(strings.TrimPrefix(s, "/"))
 }
 
-// Float returns the real pikepdf writes for a Python float: qpdf formats it
+// Float returns the real qpdf writes for a double: it formats f
 // with six decimal places, then trims trailing zeros and a trailing point, so
 // 0.5 is 0.5, 2.0 is 2 and 1/3 is 0.333333.
 func Float(f float64) Real {

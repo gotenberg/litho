@@ -36,7 +36,8 @@ func fontdict2b() ([]byte, error) {
 		)
 	}
 
-	// simpleFont: first, last and widths nil are Python's None.
+	// simpleFont is a TrueType font; first, last and widths nil leave their
+	// keys out.
 	simpleFont := func(name string, first, last any, widths []int, base bool) *pdfgen.Dict {
 		dd := d("Type", n("Font"), "Subtype", n("TrueType"), "Encoding", n("WinAnsiEncoding"))
 		if base {

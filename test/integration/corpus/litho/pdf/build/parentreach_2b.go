@@ -32,7 +32,7 @@ func init() { register("parentreach_2b", parentreach2b) }
 //
 // The root lends `GSR`, a conforming graphics state no page draws with. A CMYK
 // OutputIntent covers the DeviceCMYK alternate. The tree is built by hand:
-// pikepdf's page list flattens it and pushes inherited attributes onto each page,
+// pdf.AddPage flattens it and pushes inherited attributes onto each page,
 // which would delete the construct the fixture exists for.
 //
 // See ../FIXTURES.md for the authoritative expected firing set.

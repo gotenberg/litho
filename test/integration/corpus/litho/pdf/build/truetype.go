@@ -7,8 +7,7 @@ package build
 // ISO 19005-2, 6.2.11.6 tests 1 and 4 are scoped to `TrueTypeFontProgram`, so
 // reaching them needs a real embedded program whose 'cmap' table carries
 // specific (platformID, encodingID) subtables. No public font offers that on
-// demand, and the corpus builders take no dependency beyond pikepdf, so this
-// module emits the programs directly.
+// demand, so this file emits the programs directly.
 //
 // Each font carries three glyphs, `.notdef` plus `A` and `B`, drawn as plain
 // rectangles. That is enough for a viewer to render the fixture and for a
@@ -29,13 +28,13 @@ import (
 	"unicode/utf16"
 )
 
-// ttUnitsPerEm mirrors UNITS_PER_EM.
+// ttUnitsPerEm is the programs' unitsPerEm.
 const ttUnitsPerEm = 1000
 
-// ttAdvanceWidth mirrors ADVANCE_WIDTH.
+// ttAdvanceWidth is every glyph's advance.
 const ttAdvanceWidth = 600
 
-// ttGlyphNames mirrors GLYPH_NAMES. Treat it as read-only.
+// ttGlyphNames are the default glyph names. Treat it as read-only.
 var ttGlyphNames = []string{".notdef", "A", "B"}
 
 // ttSubtable is one (platformID, encodingID, {charCode: glyphName}) tuple of
@@ -73,7 +72,7 @@ func ttPad4(data []byte) []byte {
 	return out
 }
 
-// ttTag4 mirrors struct's "4s": the tag truncated or zero-padded to 4 bytes.
+// ttTag4 appends tag truncated or zero-padded to 4 bytes.
 func ttTag4(b []byte, tag string) []byte {
 	t := []byte(tag)
 	if len(t) > 4 {
@@ -86,7 +85,7 @@ func ttTag4(b []byte, tag string) []byte {
 	return b
 }
 
-// ttGlyfRect is _glyf_rect: one simple glyph, a single closed contour around a
+// ttGlyfRect is one simple glyph, a single closed contour around a
 // rectangle.
 func ttGlyfRect(height int) []byte {
 	xs := []int{50, 550, 550, 50}
@@ -115,7 +114,7 @@ func ttGlyfRect(height int) []byte {
 	return ttPad4(out)
 }
 
-// ttCmapFormat4 is _cmap_format4: a format 4 subtable covering mapping, one
+// ttCmapFormat4 is a format 4 subtable covering mapping, one
 // segment per code.
 func ttCmapFormat4(mapping map[int]int) []byte {
 	codes := make([]int, 0, len(mapping))
@@ -175,7 +174,7 @@ func ttCmapFormat4(mapping map[int]int) []byte {
 	return append(out, body...)
 }
 
-// ttCmap is _cmap: the 'cmap' table. subtables is a list of (platformID,
+// ttCmap is the 'cmap' table. subtables is a list of (platformID,
 // encodingID, map).
 func ttCmap(subtables []ttResolvedSubtable) []byte {
 	encoded := make([][]byte, len(subtables))
@@ -196,7 +195,7 @@ func ttCmap(subtables []ttResolvedSubtable) []byte {
 	return slices.Concat(append([][]byte{header, records}, encoded...)...)
 }
 
-// ttName is _name: a 'name' table with the four records a consumer is likely
+// ttName is a 'name' table with the four records a consumer is likely
 // to read.
 func ttName() []byte {
 	records := []struct {
@@ -223,7 +222,7 @@ func ttName() []byte {
 	return append(out, storage...)
 }
 
-// ttPost is _post: a 'post' table in format 2.0, which carries the glyph names.
+// ttPost is a 'post' table in format 2.0, which carries the glyph names.
 //
 // Format 3.0 would be shorter but stores no names, and a non-symbolic
 // TrueType resolves a code through its glyph name when the 'cmap' offers no
@@ -245,7 +244,7 @@ func ttPost(glyphNames []string) []byte {
 	names := make([]byte, 0, 8*len(glyphNames))
 	for position, name := range glyphNames[1:] {
 		indices = append(indices, 258+position)
-		names = append(names, byte(len(name))) //nolint:gosec // Pascal string length byte, as Python's bytes([len(name)]); glyph names are short.
+		names = append(names, byte(len(name))) //nolint:gosec // Pascal string length byte; glyph names are short.
 		names = append(names, ttASCII(name)...)
 	}
 	body := ttU16(nil, len(glyphNames))
@@ -255,7 +254,7 @@ func ttPost(glyphNames []string) []byte {
 	return slices.Concat(header, body, names)
 }
 
-// ttASCII mirrors str.encode("ascii"), which raises on anything else.
+// ttASCII returns s as ASCII bytes. It panics on any other byte.
 func ttASCII(s string) []byte {
 	for i := 0; i < len(s); i++ {
 		if s[i] >= 0x80 {
@@ -265,7 +264,7 @@ func ttASCII(s string) []byte {
 	return []byte(s)
 }
 
-// ttChecksum is _checksum: the sfnt table checksum, the sum of the
+// ttChecksum is the sfnt table checksum, the sum of the
 // zero-padded data's big-endian 32-bit words modulo 2^32.
 func ttChecksum(data []byte) uint32 {
 	padded := ttPad4(data)
@@ -276,14 +275,14 @@ func ttChecksum(data []byte) uint32 {
 	return sum
 }
 
-// ttBuild is build: return the bytes of a TrueType program carrying exactly
+// ttBuild returns the bytes of a TrueType program carrying exactly
 // subtables.
 //
 // subtables is a list of (platformID, encodingID, {charCode: glyphName}).
 // Passing several lets a fixture choose the count and the platform pairs the
 // 6.2.11.6 tests turn on. glyphNames renames the three glyphs in the 'post'
 // table, `.notdef` first; the outlines stay the same. A nil glyphNames means
-// ttGlyphNames, Python's default.
+// ttGlyphNames.
 func ttBuild(subtables []ttSubtable, glyphNames []string) []byte {
 	if glyphNames == nil {
 		glyphNames = ttGlyphNames
@@ -400,8 +399,8 @@ func ttBuild(subtables []ttSubtable, glyphNames []string) []byte {
 	return font
 }
 
-// ttSortedTags returns the keys of tables in byte order, as Python's sorted
-// does on bytes keys.
+// ttSortedTags returns the keys of tables in byte order, the order the sfnt
+// table directory requires.
 func ttSortedTags(tables map[string][]byte) []string {
 	tags := make([]string, 0, len(tables))
 	for t := range tables {
@@ -411,8 +410,9 @@ func ttSortedTags(tables map[string][]byte) []string {
 	return tags
 }
 
-// ttTablesOf is tables_of: split an sfnt into {tag: bytes}, the inverse of
-// assemble. Each value is a copy, as Python's bytes slices are.
+// ttTablesOf splits an sfnt into {tag: bytes}, the inverse of
+// ttAssemble. Each value is a copy, so a builder can change a table without
+// changing font.
 func ttTablesOf(font []byte) map[string][]byte {
 	num := int(binary.BigEndian.Uint16(font[4:6]))
 	out := make(map[string][]byte, num)
@@ -421,7 +421,7 @@ func ttTablesOf(font []byte) map[string][]byte {
 		tag := string(rec[0:4])
 		off := int(binary.BigEndian.Uint32(rec[8:12]))     //nolint:gosec // fixture fonts are small.
 		length := int(binary.BigEndian.Uint32(rec[12:16])) //nolint:gosec // fixture fonts are small.
-		// Python slicing clamps to the end of the data.
+		// A table running past the end of the font is cut at the end.
 		start, end := min(off, len(font)), min(off+length, len(font))
 		out[tag] = bytes.Clone(font[start:end])
 		if out[tag] == nil {
@@ -431,7 +431,7 @@ func ttTablesOf(font []byte) map[string][]byte {
 	return out
 }
 
-// ttAssemble is assemble: lay {tag: bytes} out as an sfnt under the 4-byte
+// ttAssemble lays {tag: bytes} out as an sfnt under the 4-byte
 // version given.
 //
 // The directory search fields are left at zero and no checkSumAdjustment is

@@ -35,9 +35,9 @@ func init() { register("filestruct_1b", filestruct1b) }
 // string breaking both would report one rule and leave the other unproven: the
 // odd-count string uses only hex digits, and the non-hex string has an even count.
 //
-// Three of the six cannot be written by pikepdf, which emits a conforming header
-// comment, always writes an `/ID`, and normalises every string it serialises. They
-// are patched into the saved bytes instead, each replacement the same length as
+// Three of the six were beyond pikepdf, which first wrote the committed file: it
+// emits a conforming header comment, always writes an `/ID`, and normalises every
+// string it serialises. pdfgen reproduces its output, and the three are patched into the saved bytes instead, each replacement the same length as
 // what it replaces, so every cross-reference offset stays valid. See
 // `limits_2b.go` and `xref_1b.go` for the same technique.
 //
@@ -62,7 +62,7 @@ func filestruct1b() ([]byte, error) {
 
 	// Placeholders patched into hexadecimal strings after saving. Each is exactly
 	// the length its replacement needs, counting the enclosing delimiters, so the
-	// patch never moves a byte. pikepdf writes String("ABCDEF") as "(ABCDEF)",
+	// patch never moves a byte. The save writes the string ABCDEF as "(ABCDEF)",
 	// eight bytes, which is room for "<AB CDE>" or "<ABCDZZ>".
 	const hexOddPlaceholder = "ABCDEF"
 	const hexNonhexPlaceholder = "GHIJKL"
@@ -122,7 +122,7 @@ func filestruct1b() ([]byte, error) {
 		return nil, err
 	}
 
-	// 6.1.2 t2: the four bytes after the second % must each exceed 127. pikepdf
+	// 6.1.2 t2: the four bytes after the second % must each exceed 127. The save
 	// writes 0xBF 0xF7 0xA2 0xFE; four ASCII letters occupy the same four bytes
 	// and every one of them is below 128.
 	header := regexp.MustCompile(`(?s)%PDF-\d\.\d\n%(.{4})\n`).FindSubmatch(data)

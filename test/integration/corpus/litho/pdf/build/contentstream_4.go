@@ -57,11 +57,7 @@ func contentstream4() ([]byte, error) {
 	pdf.AddPage(page)
 
 	// The page carries no /Resources of its own, so it inherits the dictionary from
-	// the page tree node (t2). pikepdf adds a /Resources to the page on append, so
-	// it is removed again here.
-	if page.Has("Resources") {
-		page.Del("Resources")
-	}
+	// the page tree node (t2).
 	pdf.Pages.Set("Resources", d("Font", d("F1", font)))
 
 	// Deliberately no /Metadata.

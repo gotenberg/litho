@@ -25,7 +25,7 @@ func complex3b() ([]byte, error) {
 	pdf := pdfgen.New()
 
 	// attachment builds one embedded-file specification, defective in at most
-	// one way. An empty mime or relationship is Python's None.
+	// one way. An empty mime or relationship leaves its key out.
 	attachment := func(name string, payload []byte, mime string, uf bool, relationship string) *pdfgen.Dict {
 		ef := pdf.Stream(payload)
 		ef.Set("Type", n("EmbeddedFile"))
@@ -58,7 +58,7 @@ func complex3b() ([]byte, error) {
 	// fire on it, so a firing is a false positive that the four above would hide.
 	conformant := attachment("good.txt", []byte("litho corpus\n"), "/text#2Fplain", true, "/Data")
 
-	tt := unembeddedTrueType("/Helvetica")
+	tt := unembeddedTrueType()
 	img := rgbImage(pdf, true)
 
 	lzwForm := pdf.Stream(nil)

@@ -61,7 +61,7 @@ func flattenannots2b() ([]byte, error) {
 		widths[i] = 600
 		toUnicode[65+i] = int(g.Name[0])
 	}
-	font := type3Font(pdf, glyphs, widths, 65)
+	font := type3Font(pdf, glyphs, widths)
 	font.Set("ToUnicode", toUnicodeCMap(pdf, toUnicode))
 	font = pdf.Indirect(font)
 

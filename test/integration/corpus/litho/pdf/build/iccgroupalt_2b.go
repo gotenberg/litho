@@ -55,7 +55,7 @@ func iccgroupalt2b() ([]byte, error) {
 	for i := range glyphs {
 		widths[i] = 600
 	}
-	font := type3Font(pdf, glyphs, widths, 65)
+	font := type3Font(pdf, glyphs, widths)
 	toUnicode := map[int]int{}
 	for i, g := range glyphs {
 		toUnicode[65+i] = int(g.Name[0])

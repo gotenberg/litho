@@ -41,8 +41,8 @@ func flattentiles1b() ([]byte, error) {
 	photoSamples := func() []byte {
 		var out []byte
 		seed := 12345
-		for y := 0; y < h; y++ {
-			for x := 0; x < w; x++ {
+		for y := range h {
+			for x := range w {
 				seed = (seed*1103515245 + 12345) & 0x7FFFFFFF
 				grain := (seed>>16)%7 - 3
 				r := 40 + x*160/w + grain

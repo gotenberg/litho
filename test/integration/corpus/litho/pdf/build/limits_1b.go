@@ -58,8 +58,8 @@ func limits1b() ([]byte, error) {
 	intsOver := pdf.Indirect(d("Hi", 2147483648, "Lo", -2147483649))
 	intsEdge := pdf.Indirect(d("Hi", 2147483647, "Lo", -2147483648))
 
-	// t2: the same, half a unit past each end. Decimal keeps the token verbatim.
-	// pikepdf writes a plain Python float of 32767.0 as the integer token `32767`,
+	// t2: the same, half a unit past each end. pdfgen.Real keeps the token
+	// verbatim; a float of 32767.0 would be written as the integer token `32767`,
 	// which is a CosInteger and tests nothing.
 	realsOver := pdf.Indirect(d("Hi", pdfgen.Real("32767.5"), "Lo", pdfgen.Real("-32767.5")))
 	realsEdge := pdf.Indirect(d("Hi", pdfgen.Real("32767.0"), "Lo", pdfgen.Real("-32767.0")))

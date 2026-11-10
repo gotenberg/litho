@@ -35,10 +35,8 @@ func init() { register("iccbadcmyk_2b", iccbadcmyk2b) }
 func iccbadcmyk2b() ([]byte, error) {
 	pdf := pdfgen.New()
 
-	// The Python builder defines its own s15, text_description, lut8, a2b0,
-	// b2a0 and icc_profile; they are byte for byte those of _icc, whose ports
-	// (icc.go) this uses: icc_profile(ICC_VERSION_2_1, device_class, tags) is
-	// iccProfile over a CMYK colour space and a Lab PCS.
+	// A version 2.1 scanner-class profile over a CMYK colour space and a Lab
+	// PCS, built with icc.go's helpers.
 	profile := iccProfile("scnr", "CMYK", "Lab ", []iccTag{
 		{"desc", iccTextDescription("litho CMYK, scanner class")},
 		{"cprt", append(append([]byte("text"), make([]byte, 4)...), "No copyright\x00"...)},

@@ -63,7 +63,7 @@ func patterncs2b() ([]byte, error) {
 	const iccHeaderSize = 128
 	const iccVersion = 0x02100000
 
-	// minimalICC is icc_profile, a structurally minimal ICC profile veraPDF
+	// minimalICC is a structurally minimal ICC profile veraPDF
 	// will parse without throwing.
 	minimalICC := func(colourSpace string, components int, tag string) *pdfgen.Stream {
 		be := binary.BigEndian

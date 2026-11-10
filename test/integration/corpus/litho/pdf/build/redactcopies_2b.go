@@ -53,7 +53,7 @@ func redactcopies2b() ([]byte, error) {
 	pdf.AddPage(page1)
 	pdf.AddPage(page2)
 
-	// The stored data is written as it stands: _common.save keeps every declared
+	// The stored data is written as it stands: save keeps every declared
 	// filter and its bytes, so the words after the checksum stay in the file.
 	private := pdf.Stream(append(zlibCompress([]byte("unrelated notes")), words...))
 	private.Set("Filter", n("FlateDecode"))

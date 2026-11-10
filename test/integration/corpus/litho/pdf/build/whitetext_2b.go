@@ -63,7 +63,7 @@ func whitetext2b() ([]byte, error) {
 		widths = append(widths, 700)
 		toUnicode[65+i] = int(letter)
 	}
-	font := type3Font(pdf, glyphs, widths, 65)
+	font := type3Font(pdf, glyphs, widths)
 	font.Set("ToUnicode", toUnicodeCMap(pdf, toUnicode))
 	pdf.Indirect(font)
 
@@ -85,8 +85,8 @@ func whitetext2b() ([]byte, error) {
 	imageStream.Set("BitsPerComponent", 8)
 	image := pdf.MakeIndirect(imageStream)
 
-	textOps := func(word string, x, y int, colour string, mode int) string {
-		return fmt.Sprintf("BT %d Tr %s rg /F 20 Tf %d %d Td <%s> Tj ET\n", mode, colour, x, y, hex.EncodeToString(shown(word)))
+	textOps := func(word string, y int, colour string, mode int) string {
+		return fmt.Sprintf("BT %d Tr %s rg /F 20 Tf 50 %d Td <%s> Tj ET\n", mode, colour, y, hex.EncodeToString(shown(word)))
 	}
 
 	const (
@@ -94,14 +94,14 @@ func whitetext2b() ([]byte, error) {
 		black = "0 0 0"
 	)
 	content := "0 0 0.5 rg 40 330 320 40 re f\n" +
-		textOps("HEAD", 50, 340, white, 0) +
+		textOps("HEAD", 340, white, 0) +
 		"q 320 0 0 40 40 270 cm /Im Do Q\n" +
-		textOps("PHOTO", 50, 280, white, 0) +
-		textOps("BLANK", 50, 220, white, 0) +
+		textOps("PHOTO", 280, white, 0) +
+		textOps("BLANK", 220, white, 0) +
 		"0 0 0.5 rg 40 150 320 40 re f\n" +
-		textOps("OCR", 50, 160, white, 3) +
-		textOps("BODY", 50, 100, black, 0) +
-		textOps("HIDDEN", 50, 40, white, 0) +
+		textOps("OCR", 160, white, 3) +
+		textOps("BODY", 100, black, 0) +
+		textOps("HIDDEN", 40, white, 0) +
 		"0 0 0.5 rg 40 30 320 40 re f\n"
 
 	page := d(

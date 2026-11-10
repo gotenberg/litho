@@ -63,7 +63,7 @@ func boxorigin2b() ([]byte, error) {
 	root.Set("Kids", a(page1, page2, page3, page4, page5, node))
 	root.Set("Count", 6)
 
-	// The tree is built by hand: pikepdf's page list flattens it, which would
+	// The tree is built by hand: pdf.AddPage flattens it, which would
 	// move the inherited crop box onto the page.
 	pdf.Root.Set("Pages", root)
 

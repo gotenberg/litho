@@ -22,7 +22,7 @@ func init() { register("multipage_2b", multipage2b) }
 func multipage2b() ([]byte, error) {
 	pdf := pdfgen.New()
 
-	font := pdf.Indirect(unembeddedTrueType("/Helvetica"))
+	font := pdf.Indirect(unembeddedTrueType())
 
 	// Page 1 paints DeviceCMYK and nothing else. ISO 19005-2, 6.2.4.3 t3 needs a
 	// CMYK output intent, and this file declares none.

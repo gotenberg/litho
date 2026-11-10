@@ -34,8 +34,8 @@ func blankkeysUa1() ([]byte, error) {
 	// ramp is a 16 x 16 DeviceRGB ramp, each sample row a different colour.
 	ramp := func(shift int, entries ...any) *pdfgen.Stream {
 		var raw []byte
-		for y := 0; y < size; y++ {
-			for x := 0; x < size; x++ {
+		for y := range size {
+			for x := range size {
 				raw = append(raw,
 					byte((x*16+shift)%256), //nolint:gosec // reduced modulo 256.
 					byte((y*16)%256),

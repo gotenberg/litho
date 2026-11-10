@@ -77,7 +77,7 @@ func inlinejpx2b() ([]byte, error) {
 		return bytes.Join([][]byte{segment(0, 48, pageInfo), segment(1, 39, region), segment(2, 49, nil)}, nil)
 	}
 
-	jpx := jp2Container(jp2Three, 3, 8, [][]byte{jp2Colr(1, 1, jp2EnumSRGB)}, nil)
+	jpx := jp2Container(jp2Three, 3, [][]byte{jp2Colr(1, 1, jp2EnumSRGB)}, nil)
 	jb2 := jbig2(g4)
 	grey := bytes.Repeat([]byte{0x00, 0x40, 0x80, 0xFF, 0xFF, 0x80, 0x40, 0x00}, 8)
 

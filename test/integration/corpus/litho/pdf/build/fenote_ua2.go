@@ -59,7 +59,7 @@ func fenoteUa2() ([]byte, error) {
 	// One marked content sequence per structure element: six referring paragraphs
 	// and the six notes they pair with.
 	var parts []byte
-	for i := 0; i < 12; i++ {
+	for i := range 12 {
 		parts = fmt.Appendf(parts, "/P <</MCID %d>> BDC\nBT /F1 10 Tf 50 %d Td (item %d) Tj ET\nEMC\n",
 			i, 740-i*24, i)
 	}

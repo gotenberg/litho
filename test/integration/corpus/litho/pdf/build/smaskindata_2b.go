@@ -146,7 +146,7 @@ func smaskindata2b() ([]byte, error) {
 		"ImPremul", image(container(premul, premultipliedOpacity), "SMaskInData", 2, "ColorSpace", n("DeviceRGB")),
 	)
 	var bands strings.Builder
-	for i := 0; i < 11; i++ {
+	for i := range 11 {
 		colour := "0 0 1"
 		if i%2 == 0 {
 			colour = "1 1 0"

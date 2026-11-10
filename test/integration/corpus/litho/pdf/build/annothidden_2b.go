@@ -87,16 +87,14 @@ func annothidden2b() ([]byte, error) {
 	}
 
 	// page is a page drawing nothing.
-	page := func(annots *pdfgen.Array) *pdfgen.Dict {
-		p := pdf.Indirect(d(
+	page := func(annots *pdfgen.Array) {
+		pdf.AddPage(pdf.Indirect(d(
 			"Type", n("Page"),
 			"MediaBox", a(0, 0, 612, 792),
 			"Resources", d(),
 			"Contents", pdf.MakeIndirect(pdf.Stream([]byte{})),
 			"Annots", annots,
-		))
-		pdf.AddPage(p)
-		return p
+		)))
 	}
 
 	// ISO 32000-1, Table 165: bit 2 Hidden, bit 3 Print, bit 6 NoView, bit 9

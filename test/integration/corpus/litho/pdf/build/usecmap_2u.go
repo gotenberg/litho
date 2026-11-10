@@ -3,6 +3,7 @@ package build
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/gotenberg/litho/test/integration/fixture/pdfgen"
 	"github.com/gotenberg/litho/test/integration/fixture/pdfgen/zdeflate"
@@ -88,11 +89,12 @@ func usecmap2u() ([]byte, error) {
 	const byteSpace = "<00> <FF>"
 
 	bfchars := func(pairs ...string) string {
-		out := fmt.Sprintf("%d beginbfchar\n", len(pairs)/2)
+		var out strings.Builder
+		fmt.Fprintf(&out, "%d beginbfchar\n", len(pairs)/2)
 		for i := 0; i+1 < len(pairs); i += 2 {
-			out += fmt.Sprintf("<%s> <%s>\n", pairs[i], pairs[i+1])
+			fmt.Fprintf(&out, "<%s> <%s>\n", pairs[i], pairs[i+1])
 		}
-		return out + "endbfchar\n"
+		return out.String() + "endbfchar\n"
 	}
 
 	cmapStream := func(program []byte, useCMap any) *pdfgen.Stream {
@@ -181,11 +183,12 @@ func usecmap2u() ([]byte, error) {
 		font := pdf.Indirect(d("Type", n("Font"), "Subtype", n("Type0"), "BaseFont", n("/"+name),
 			"Encoding", n("/Identity-H"), "DescendantFonts", a(descendant),
 			"ToUnicode", toUnicode))
-		shows := "<"
+		var shows strings.Builder
+		shows.WriteString("<")
 		for _, c := range cids {
-			shows += fmt.Sprintf("%04X", c)
+			fmt.Fprintf(&shows, "%04X", c)
 		}
-		return cidFontResult{font, shows + ">"}
+		return cidFontResult{font, shows.String() + ">"}
 	}
 
 	cidFonts := []cidFontResult{
@@ -201,21 +204,21 @@ func usecmap2u() ([]byte, error) {
 	}
 
 	fonts := d()
-	content := ""
+	var content strings.Builder
 	for index, font := range type3Fonts {
 		fonts.Set(fmt.Sprintf("/T%d", index+1), font)
-		content += fmt.Sprintf("BT /T%d 12 Tf 10 %d Td <41606165> Tj ET\n", index+1, 780-20*index)
+		fmt.Fprintf(&content, "BT /T%d 12 Tf 10 %d Td <41606165> Tj ET\n", index+1, 780-20*index)
 	}
 	for index, cf := range cidFonts {
 		fonts.Set(fmt.Sprintf("/C%d", index+1), cf.font)
-		content += fmt.Sprintf("BT /C%d 12 Tf 10 %d Td %s Tj ET\n", index+1, 660-20*index, cf.shows)
+		fmt.Fprintf(&content, "BT /C%d 12 Tf 10 %d Td %s Tj ET\n", index+1, 660-20*index, cf.shows)
 	}
 
 	page := pdf.Indirect(d(
 		"Type", n("Page"),
 		"MediaBox", a(0, 0, 612, 792),
 		"Resources", d("Font", fonts),
-		"Contents", pdf.Stream([]byte(content)),
+		"Contents", pdf.Stream([]byte(content.String())),
 	))
 	pdf.AddPage(page)
 

@@ -37,9 +37,10 @@ func init() { register("xmpsyntax_1b", xmpsyntax1b) }
 // construct working, not a second defect: the identification lives inside the
 // packet the `<` breaks.
 //
-// pikepdf regenerates the XMP packet on save unless both `preserve_pdfa` and
-// `fix_metadata_version` are off, which silently repairs the planted `<`. The
-// build asserts the byte survived rather than trusting the flags.
+// The save regenerates the XMP packet unless both `preserve_pdfa` and
+// `fix_metadata_version` are off, as pikepdf did when it first wrote the
+// committed file, and a regenerated packet silently repairs the planted `<`.
+// The build asserts the byte survived rather than trusting the flags.
 //
 // See ../FIXTURES.md for the authoritative expected firing set.
 func xmpsyntax1b() ([]byte, error) {
@@ -53,15 +54,13 @@ func xmpsyntax1b() ([]byte, error) {
 	))
 
 	// page is one conforming page. The defects live outside the page tree.
-	page := func(text string) *pdfgen.Dict {
-		made := pdf.Indirect(d(
+	page := func(text string) {
+		pdf.AddPage(pdf.Indirect(d(
 			"Type", n("Page"),
 			"MediaBox", a(0, 0, 612, 792),
 			"Resources", d("Font", d("F1", font)),
 			"Contents", pdf.Stream([]byte(fmt.Sprintf("BT /F1 12 Tf 50 700 Td (%s) Tj ET\n", text))),
-		))
-		pdf.AddPage(made)
-		return made
+		)))
 	}
 
 	// Two pages, both clean. They exist so a reader that recovers from the header

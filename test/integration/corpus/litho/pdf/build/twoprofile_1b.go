@@ -33,10 +33,6 @@ func init() { register("twoprofile_1b", twoprofile1b) }
 func twoprofile1b() ([]byte, error) {
 	pdf := pdfgen.New()
 
-	// The Python builder defines its own copy of _icc's helpers (s15,
-	// text_description, xyz, gamma_curve, lut8, a2b0, b2a0, icc_profile), byte
-	// for byte the same as _icc's, ported in icc.go.
-
 	destination := func(profile []byte, components int) *pdfgen.Stream {
 		stream := pdf.Stream(profile)
 		stream.Set("N", components)

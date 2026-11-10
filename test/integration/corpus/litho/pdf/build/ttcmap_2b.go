@@ -10,8 +10,7 @@ func init() { register("ttcmap_2b", ttcmap2b) }
 // `ttencoding_2b.pdf` explains why: those two are scoped to `TrueTypeFontProgram`
 // rather than to the font dictionary, so they need a real embedded program whose
 // 'cmap' table carries particular (platformID, encodingID) subtables. No corpus
-// fixture embedded a TrueType program at all. `truetype.go` emits them, so the
-// builders still depend on nothing but pikepdf.
+// fixture embedded a TrueType program at all. `truetype.go` emits them.
 //
 // The two tests are mutually exclusive in one font, since t1 judges non-symbolic
 // programs and t4 symbolic ones, so the fixture carries four sibling fonts: one

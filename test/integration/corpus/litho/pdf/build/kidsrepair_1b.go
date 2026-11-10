@@ -29,7 +29,7 @@ func init() { register("kidsrepair_1b", kidsrepair1b) }
 // `GSO` also carries a transfer function, and `Own` a transparency page group.
 // Every graphics state is written directly in its /ExtGState, and every
 // /ExtGState directly in its /Resources, so a repair can only be written through
-// the page tree node holding them. The tree is built by hand: pikepdf's page list
+// the page tree node holding them. The tree is built by hand: pdf.AddPage
 // flattens it and pushes inherited attributes onto each page, which would delete
 // the construct the fixture exists for.
 //

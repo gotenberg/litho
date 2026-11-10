@@ -81,7 +81,7 @@ func pageboxes2b() ([]byte, error) {
 	root.Set("Kids", a(page1, node))
 	root.Set("Count", 3)
 
-	// The tree is built by hand: pikepdf's page list flattens it, which would
+	// The tree is built by hand: pdf.AddPage flattens it, which would
 	// delete the node the fixture exists for.
 	pdf.Root.Set("Pages", root)
 

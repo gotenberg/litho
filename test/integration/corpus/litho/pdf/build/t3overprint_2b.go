@@ -56,7 +56,6 @@ func t3overprint2b() ([]byte, error) {
 			{"B", 1000, "0 1 1 0 k 0 0 1000 1000 re f"},
 		},
 		[]any{1000, 1000, 1000},
-		65,
 	)
 	font.Get("CharProcs").(*pdfgen.Dict).Set("C", pdf.Stream([]byte("1000 0 0 0 1000 1000 d1\n0 0 1000 1000 re f\n")))
 	font.Get("Encoding").(*pdfgen.Dict).Get("Differences").(*pdfgen.Array).Append(n("C"))

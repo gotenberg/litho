@@ -62,15 +62,15 @@ func jpx2b() ([]byte, error) {
 		data       []byte
 		colorSpace bool
 	}{
-		{"ImOK", jp2Container(jp2Three, 3, 8, [][]byte{jp2Colr(1, 1, jp2EnumSRGB)}, nil), false},
-		{"ImChan", jp2Container(jp2Two, 2, 8, [][]byte{jp2Colr(1, 1, jp2EnumSRGB)}, nil), false},
-		{"ImSpecs", jp2Container(jp2Three, 3, 8,
+		{"ImOK", jp2Container(jp2Three, 3, [][]byte{jp2Colr(1, 1, jp2EnumSRGB)}, nil), false},
+		{"ImChan", jp2Container(jp2Two, 2, [][]byte{jp2Colr(1, 1, jp2EnumSRGB)}, nil), false},
+		{"ImSpecs", jp2Container(jp2Three, 3,
 			[][]byte{jp2Colr(1, 1, jp2EnumSRGB), jp2Colr(1, 1, jp2EnumSRGB)}, nil), false},
-		{"ImMeth", jp2Container(jp2Three, 3, 8, [][]byte{jp2Colr(forbiddenMeth, 1, 0)}, nil), false},
-		{"ImJab", jp2Container(jp2Three, 3, 8, [][]byte{jp2Colr(1, 1, jp2EnumCIEJab)}, nil), false},
-		{"ImDepth", jp2Container(jp2Three, 3, 8, [][]byte{jp2Colr(1, 1, jp2EnumSRGB)},
+		{"ImMeth", jp2Container(jp2Three, 3, [][]byte{jp2Colr(forbiddenMeth, 1, 0)}, nil), false},
+		{"ImJab", jp2Container(jp2Three, 3, [][]byte{jp2Colr(1, 1, jp2EnumCIEJab)}, nil), false},
+		{"ImDepth", jp2Container(jp2Three, 3, [][]byte{jp2Colr(1, 1, jp2EnumSRGB)},
 			[]int{forbiddenDepth, forbiddenDepth, forbiddenDepth}), false},
-		{"ImWaived", jp2Container(jp2Three, 3, 8, [][]byte{jp2Colr(forbiddenMeth, 1, 0)}, nil), true},
+		{"ImWaived", jp2Container(jp2Three, 3, [][]byte{jp2Colr(forbiddenMeth, 1, 0)}, nil), true},
 	}
 
 	// image is one JPXDecode image XObject wrapping a JP2 container.

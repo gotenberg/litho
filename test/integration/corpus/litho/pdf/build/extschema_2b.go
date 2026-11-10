@@ -41,7 +41,7 @@ func extschema2b() ([]byte, error) {
 	)
 	pdf.AddPage(pdf.Indirect(page))
 
-	// tag appends <name>v</name> to parts unless v is nil, Python's None.
+	// tag appends <name>v</name> to parts unless v is nil.
 	tag := func(parts []string, name string, v any) []string {
 		if v == nil {
 			return parts

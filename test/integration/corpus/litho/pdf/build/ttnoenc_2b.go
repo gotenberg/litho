@@ -1,6 +1,8 @@
 package build
 
 import (
+	"maps"
+
 	"github.com/gotenberg/litho/test/integration/fixture/pdfgen"
 )
 
@@ -45,12 +47,8 @@ func ttnoenc2b() ([]byte, error) {
 	latin := map[int]string{0x41: "A", 0x42: "B"}
 	symbolRange := map[int]string{0xF041: "A", 0xF042: "B"}
 	latinAndSymbols := map[int]string{}
-	for k, v := range latin {
-		latinAndSymbols[k] = v
-	}
-	for k, v := range symbolRange {
-		latinAndSymbols[k] = v
-	}
+	maps.Copy(latinAndSymbols, latin)
+	maps.Copy(latinAndSymbols, symbolRange)
 
 	// truetype is one simple TrueType font dictionary with an embedded program and no /Encoding.
 	truetype := func(name string, flags int, subtables []ttSubtable) *pdfgen.Dict {

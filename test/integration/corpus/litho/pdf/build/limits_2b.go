@@ -20,8 +20,8 @@ func init() { register("limits_2b", limits2b) }
 // limit breach reports one rule where four are due.
 //
 // Test 2 needs a real number beyond +/-3.403e38, which no writer emits directly:
-// pikepdf renders such a value as a plain integer, and veraPDF then judges it
-// under the integer limit t1 rather than the real one. The value is therefore
+// qpdf, and pdfgen after it, renders such a value as a plain integer, and
+// veraPDF then judges it under the integer limit t1 rather than the real one. The value is therefore
 // planted as bytes after the save, replacing the last two digits of the emitted
 // integer with ".0". That keeps the token the same length, so every cross
 // reference offset stays valid, and turns it into a real that is still far above
@@ -30,7 +30,7 @@ func init() { register("limits_2b", limits2b) }
 // Not every test in the clause is reachable. `t7` needs more than 8388607
 // indirect objects and `t10` needs a CMap with an out-of-range CID, neither of
 // which belongs in a small fixture. `t5` needs a real closer to zero than
-// 1.175e-38, and pikepdf normalises such a denormal to plain `0`, which the test
+// 1.175e-38, and qpdf normalises such a denormal to plain `0`, which the test
 // explicitly permits; the same byte patch cannot help, because a denormal written
 // long enough to patch is a different value. Those stay uncovered deliberately.
 //
@@ -92,9 +92,8 @@ func limits2b() ([]byte, error) {
 		"Contents", text(strings.Repeat("s", 40000)),
 	))))
 
-	// The real that breaches 6.1.13 t2. pikepdf emits it as a 46 digit integer; the
-	// patch below turns those digits into a real of the same byte length.
-	// (Python passes Decimal("1E45"), which pikepdf converts through a double.)
+	// The real that breaches 6.1.13 t2. The save writes it as a 46 digit integer;
+	// the patch below turns those digits into a real of the same byte length.
 	pdf.Root.Set("/LithoLargeReal", pdfgen.Float(1e45))
 
 	// Deliberately no /Metadata and no /OutputIntents.

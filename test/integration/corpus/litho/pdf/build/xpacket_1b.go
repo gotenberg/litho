@@ -30,9 +30,9 @@ func init() { register("xpacket_1b", xpacket1b) }
 // neither test, so a checker matching any packet header rather than the document's
 // own is visible as an extra firing. That scope was measured, not assumed.
 //
-// pikepdf regenerates the packet on save unless both `preserve_pdfa` and
-// `fix_metadata_version` are off, and the regenerated header carries neither
-// attribute. The build asserts both survived rather than trusting the flags.
+// The save regenerates the packet unless both `preserve_pdfa` and
+// `fix_metadata_version` are off, as pikepdf did when it first wrote the
+// committed file, and the regenerated header carries neither attribute. The build asserts both survived rather than trusting the flags.
 //
 // See ../FIXTURES.md for the authoritative expected firing set.
 func xpacket1b() ([]byte, error) {

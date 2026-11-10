@@ -133,8 +133,8 @@ func TestOfficeOptionNames_MatchTheJSONNames(t *testing.T) {
 
 	var tags []string
 	ty := reflect.TypeFor[OfficeOptions]()
-	for i := range ty.NumField() {
-		name, _, _ := strings.Cut(ty.Field(i).Tag.Get("json"), ",")
+	for field := range ty.Fields() {
+		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
 		tags = append(tags, name)
 	}
 	if !slices.Equal(tags, OfficeOptionNames) {

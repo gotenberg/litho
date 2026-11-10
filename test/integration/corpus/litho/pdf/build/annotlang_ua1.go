@@ -117,15 +117,15 @@ func annotlangUa1() ([]byte, error) {
 			"Type", n("XObject"), "Subtype", n("Form"), "BBox", a(0, 0, 20, 20))
 	}
 
-	// annotation is an annotation naming, by /StructParent key, an element the
-	// tree omits.
+	// annotation is a Square annotation naming, by /StructParent key, an
+	// /Annot element the tree omits.
 	//
 	// The element's /P names the /Document, but the /Document's /K never lists
 	// it, so only the /ParentTree leads to it.
-	annotation := func(key int, subtype, elementType string, x int, elementLang *string, extra ...any) *pdfgen.Dict {
+	annotation := func(key, x int, elementLang *string, extra ...any) {
 		annot := d(
 			"Type", n("Annot"),
-			"Subtype", n(subtype),
+			"Subtype", n("Square"),
 			"Rect", a(x, 600, x+20, 620),
 			"F", 4,
 			"AP", d("N", appearance()),
@@ -137,7 +137,7 @@ func annotlangUa1() ([]byte, error) {
 		pdf.Indirect(annot)
 		element := d(
 			"Type", n("StructElem"),
-			"S", n(elementType),
+			"S", n("Annot"),
 			"P", document,
 			"Pg", page,
 			"K", d("Type", n("OBJR"), "Obj", annot, "Pg", page),
@@ -147,16 +147,15 @@ func annotlangUa1() ([]byte, error) {
 		}
 		nums.Append(key, pdf.Indirect(element))
 		annots = append(annots, annot)
-		return annot
 	}
 	lang := func(s string) *string { return &s }
 
 	// A1 and A2: a malformed and an empty tag on elements outside the tree.
-	annotation(1, "Square", "Annot", 50, lang("en_US"), "Contents", text("A1"))
-	annotation(2, "Square", "Annot", 100, lang(""), "Contents", text("A2"))
+	annotation(1, 50, lang("en_US"), "Contents", text("A1"))
+	annotation(2, 100, lang(""), "Contents", text("A2"))
 	// A3 and A4: the controls.
-	annotation(3, "Square", "Annot", 150, lang("de-DE"), "Contents", text("A3"))
-	annotation(4, "Square", "Annot", 200, nil, "Contents", text("A4"), "Lang", text("x_y"))
+	annotation(3, 150, lang("de-DE"), "Contents", text("A3"))
+	annotation(4, 200, nil, "Contents", text("A4"), "Lang", text("x_y"))
 
 	page.Set("Annots", a(annots...))
 	structRoot.Set("ParentTree", d("Nums", nums))

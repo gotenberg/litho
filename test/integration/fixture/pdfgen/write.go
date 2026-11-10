@@ -5,6 +5,8 @@ import (
 	"crypto/md5" //nolint:gosec // qpdf derives the deterministic /ID from MD5; no security role.
 	"encoding/hex"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -215,9 +217,7 @@ func (w *writer) prepare() {
 
 func (x *Dict) shallowCopy() *Dict {
 	c := &Dict{m: make(map[string]Object, len(x.m))}
-	for k, v := range x.m {
-		c.m[k] = v
-	}
+	maps.Copy(c.m, x.m)
 	return c
 }
 
@@ -253,21 +253,21 @@ func (w *writer) generateObjectStreams() {
 		switch x := resolve(o).(type) {
 		case *Stream:
 			keys := x.Keys()
-			for i := len(keys) - 1; i >= 0; i-- {
-				if v := x.m[keys[i]]; !isNull(v) && keys[i] != "Length" {
+			for _, key := range slices.Backward(keys) {
+				if v := x.m[key]; !isNull(v) && key != "Length" {
 					stack = append(stack, v)
 				}
 			}
 		case *Dict:
 			keys := x.Keys()
-			for i := len(keys) - 1; i >= 0; i-- {
-				if v := x.m[keys[i]]; !isNull(v) {
+			for _, key := range slices.Backward(keys) {
+				if v := x.m[key]; !isNull(v) {
 					stack = append(stack, v)
 				}
 			}
 		case *Array:
-			for i := len(x.Items) - 1; i >= 0; i-- {
-				stack = append(stack, x.Items[i])
+			for _, v := range slices.Backward(x.Items) {
+				stack = append(stack, v)
 			}
 		}
 	}
@@ -623,7 +623,7 @@ func (w *writer) writeObjectStream(os *ostream) {
 func (w *writer) writeXRefTable(_ int) {
 	size := w.nextObjID
 	w.writeString("xref\n0 " + strconv.Itoa(size) + "\n")
-	for i := 0; i < size; i++ {
+	for i := range size {
 		if i == 0 {
 			w.writeString("0000000000 65535 f \n")
 			continue
@@ -727,7 +727,7 @@ func (w *writer) writeXRefStream(xrefID, maxOffset int) {
 	f2 := bytesNeeded(w.maxOstreamIndex)
 	w.xref[xrefID] = xrefEntry{typ: 1, offset: w.out.Len()}
 	var data []byte
-	for i := 0; i < size; i++ {
+	for i := range size {
 		e := w.xref[i]
 		switch e.typ {
 		case 1:

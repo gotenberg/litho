@@ -76,7 +76,7 @@ func charset1b() ([]byte, error) {
 	cidsetShort := []byte{0b01000000}
 
 	// cffDescriptor is a Type 1 descriptor carrying the bare CFF, with
-	// /CharSet when asked (charset empty is None).
+	// /CharSet unless charset is empty.
 	cffDescriptor := func(name, charset string) *pdfgen.Dict {
 		program := pdf.Stream(cffProgram)
 		program.Set("Subtype", n("/Type1C"))

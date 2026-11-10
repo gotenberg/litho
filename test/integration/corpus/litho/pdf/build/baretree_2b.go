@@ -46,7 +46,7 @@ func init() { register("baretree_2b", baretree2b) }
 // issue5334.pdf reaches the catalog's /Type in the corpus, and pdfjs
 // issue15150.pdf a /Resources naming no dictionary.
 //
-// The tree is built by hand: pikepdf's page list flattens it, which would delete
+// The tree is built by hand: pdf.AddPage flattens it, which would delete
 // the constructs the fixture exists for.
 //
 // See ../FIXTURES.md for the authoritative expected firing set.

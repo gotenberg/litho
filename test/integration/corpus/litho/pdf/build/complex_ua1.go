@@ -18,7 +18,7 @@ func init() { register("complex_ua1", complexUa1) }
 func complexUa1() ([]byte, error) {
 	pdf := pdfgen.New()
 
-	font := pdf.Indirect(unembeddedTrueType("/Helvetica"))
+	font := pdf.Indirect(unembeddedTrueType())
 	img := rgbImage(pdf, false)
 
 	content := `/H1 <</MCID 0>> BDC

@@ -37,7 +37,7 @@ func forbiddenMix() ([]byte, error) {
 	lzwCompress := func(data []byte) []byte {
 		dictSize := 256
 		table := make(map[string]int, dictSize)
-		for i := 0; i < dictSize; i++ {
+		for i := range dictSize {
 			table[string([]byte{byte(i)})] = i
 		}
 		nextCode := 258

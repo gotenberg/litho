@@ -3,6 +3,7 @@ package build
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/gotenberg/litho/test/integration/fixture/pdfgen"
 	"github.com/gotenberg/litho/test/integration/fixture/pdfgen/zdeflate"
@@ -84,15 +85,15 @@ func groupspace2b() ([]byte, error) {
 		return pdf.MakeIndirect(image)
 	}
 
-	rows := ""
+	var rows strings.Builder
 	for i, c := range colours {
-		rows += fmt.Sprintf("%.4f %.4f %.4f rg %d 140 10 50 re f ", c[0], c[1], c[2], 10+10*i)
+		fmt.Fprintf(&rows, "%.4f %.4f %.4f rg %d 140 10 50 re f ", c[0], c[1], c[2], 10+10*i)
 	}
-	rows += "q "
+	rows.WriteString("q ")
 	for i, v := range greys {
-		rows += fmt.Sprintf("%.2f %.2f %.2f rg %d 80 10 50 re f ", v, v, v, 10+10*i)
+		fmt.Fprintf(&rows, "%.2f %.2f %.2f rg %d 80 10 50 re f ", v, v, v, 10+10*i)
 	}
-	rows += "Q q 80 0 0 50 10 20 cm /Im Do Q\n"
+	rows.WriteString("Q q 80 0 0 50 10 20 cm /Im Do Q\n")
 	const square = "q /H gs 0.2 0.4 0.9 rg 90 195 10 5 re f Q\n"
 
 	states := d("H", d("Type", n("ExtGState"), "ca", 0.5))
@@ -111,10 +112,10 @@ func groupspace2b() ([]byte, error) {
 	}
 
 	for _, cs := range []any{n("DeviceCMYK"), iccCMYK, n("DeviceGray")} {
-		addPage(rows+square, d("ExtGState", states, "XObject", d("Im", rgbImage())), cs)
+		addPage(rows.String()+square, d("ExtGState", states, "XObject", d("Im", rgbImage())), cs)
 	}
 
-	formStream := pdf.Stream([]byte(rows))
+	formStream := pdf.Stream([]byte(rows.String()))
 	formStream.Set("Type", n("XObject"))
 	formStream.Set("Subtype", n("Form"))
 	formStream.Set("BBox", a(0, 0, 100, 200))

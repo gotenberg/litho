@@ -61,7 +61,7 @@ func jpxintent2b() ([]byte, error) {
 
 	// METH 3, PREC 0, APPROX 1 (ISO/IEC 15444-2, M.11.7.2), then the profile.
 	colr := jp2Box("colr", slices.Concat([]byte{3, 0, 1}, rsplitProfile()))
-	image := pdf.Stream(jp2Container(one, 1, 8, [][]byte{colr}, nil))
+	image := pdf.Stream(jp2Container(one, 1, [][]byte{colr}, nil))
 	image.Set("Type", n("XObject"))
 	image.Set("Subtype", n("Image"))
 	image.Set("Width", jp2Size)

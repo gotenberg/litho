@@ -23,7 +23,7 @@ func init() { register("cmapcidtext_2b", cmapcidtext2b) }
 // | G1   | <61> to 2, <62> to 1 | 61 62 | 2, 1  | /CIDToGIDMap 1 to A, 2 to B, then cmap  | BA   |
 // | G2   | <61> to 35, <62> to 34 | 61 62 | 35, 34 | Adobe-Japan1 UCS2 (CID 34 is U+0041) | BA   |
 //
-// G1 embeds the three-glyph program of _truetype, so both its CIDs select a
+// G1 embeds the three-glyph program of truetype.go, so both its CIDs select a
 // glyph. G2 is a reference-only Adobe-Japan1 font: it fails the embedding
 // rules, and is there because ISO 32000-1, 9.10.2 reads its CIDs through the
 // collection whether or not a program is embedded.

@@ -14,10 +14,10 @@ import (
 	"testing"
 )
 
-// TestHelpersMatchPython pins the ports of truetype.go, cff.go, type1.go,
-// icc.go and jp2.go byte for byte: testdata/helpers_golden.txt holds the
-// length and SHA-256 of each case as the Python modules emit it.
-func TestHelpersMatchPython(t *testing.T) {
+// TestHelpersMatchGolden pins truetype.go, cff.go, type1.go, icc.go and
+// jp2.go byte for byte: testdata/helpers_golden.txt holds the length and
+// SHA-256 of each case, recorded from the Python modules they replaced.
+func TestHelpersMatchGolden(t *testing.T) {
 	t.Parallel()
 
 	golden := helpersGolden(t)
@@ -345,24 +345,24 @@ func helpersCases() map[string]func() []byte {
 		},
 		"jp2.two":   func() []byte { return jp2Two },
 		"jp2.three": func() []byte { return jp2Three },
-		"jp2.ok":    func() []byte { return jp2Container(jp2Three, 3, 8, [][]byte{jp2Colr(1, 1, srgb)}, nil) },
-		"jp2.chan":  func() []byte { return jp2Container(jp2Two, 2, 8, [][]byte{jp2Colr(1, 1, srgb)}, nil) },
+		"jp2.ok":    func() []byte { return jp2Container(jp2Three, 3, [][]byte{jp2Colr(1, 1, srgb)}, nil) },
+		"jp2.chan":  func() []byte { return jp2Container(jp2Two, 2, [][]byte{jp2Colr(1, 1, srgb)}, nil) },
 		"jp2.specs": func() []byte {
-			return jp2Container(jp2Three, 3, 8, [][]byte{jp2Colr(1, 1, srgb), jp2Colr(1, 1, srgb)}, nil)
+			return jp2Container(jp2Three, 3, [][]byte{jp2Colr(1, 1, srgb), jp2Colr(1, 1, srgb)}, nil)
 		},
-		"jp2.meth": func() []byte { return jp2Container(jp2Three, 3, 8, [][]byte{jp2Colr(4, 1, 0)}, nil) },
-		"jp2.jab":  func() []byte { return jp2Container(jp2Three, 3, 8, [][]byte{jp2Colr(1, 1, jp2EnumCIEJab)}, nil) },
+		"jp2.meth": func() []byte { return jp2Container(jp2Three, 3, [][]byte{jp2Colr(4, 1, 0)}, nil) },
+		"jp2.jab":  func() []byte { return jp2Container(jp2Three, 3, [][]byte{jp2Colr(1, 1, jp2EnumCIEJab)}, nil) },
 		"jp2.depth": func() []byte {
-			return jp2Container(jp2Three, 3, 8, [][]byte{jp2Colr(1, 1, srgb)}, []int{40, 40, 40})
+			return jp2Container(jp2Three, 3, [][]byte{jp2Colr(1, 1, srgb)}, []int{40, 40, 40})
 		},
-		"jp2.depth_empty": func() []byte { return jp2Container(jp2Three, 3, 8, nil, []int{}) },
-		"jp2.romm":        func() []byte { return jp2Container(jp2Three, 3, 8, [][]byte{jp2Colr(1, 1, 21)}, nil) },
-		"jp2.esrgb":       func() []byte { return jp2Container(jp2Three, 3, 8, [][]byte{jp2Colr(1, 1, 20)}, nil) },
+		"jp2.depth_empty": func() []byte { return jp2Container(jp2Three, 3, nil, []int{}) },
+		"jp2.romm":        func() []byte { return jp2Container(jp2Three, 3, [][]byte{jp2Colr(1, 1, 21)}, nil) },
+		"jp2.esrgb":       func() []byte { return jp2Container(jp2Three, 3, [][]byte{jp2Colr(1, 1, 20)}, nil) },
 		"jp2.icc": func() []byte {
-			return jp2Container([]byte{0, 1}, 1, 8, [][]byte{jp2Box("colr", append([]byte{3, 0, 1}, "profile"...))}, nil)
+			return jp2Container([]byte{0, 1}, 1, [][]byte{jp2Box("colr", append([]byte{3, 0, 1}, "profile"...))}, nil)
 		},
 		"jp2.boxes": func() []byte {
-			return helpersCat(jp2Box("cdef", []byte{0, 1}), jp2Ihdr(4, 8), jp2Colr(1, 0, srgb), jp2Colr(2, 0, 0), jp2Bpcc([]int{1, 8, 16}))
+			return helpersCat(jp2Box("cdef", []byte{0, 1}), jp2Ihdr(4), jp2Colr(1, 0, srgb), jp2Colr(2, 0, 0), jp2Bpcc([]int{1, 8, 16}))
 		},
 	}
 	return cases

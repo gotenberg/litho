@@ -64,7 +64,7 @@ func prepare(ctx context.Context, ms []*Manifest) error {
 	}
 	pins, err := loadPins()
 	if err != nil {
-		return err
+		return fmt.Errorf("loading the pins: %w", err)
 	}
 	if err := prepareReferences(ctx, ms, pins); err != nil {
 		return fmt.Errorf("references: %w", err)
@@ -115,7 +115,7 @@ func prepareReferences(ctx context.Context, ms []*Manifest, pins *resolvedPins) 
 	image := pins.Values["GOTENBERG_IMAGE"]
 	g, err := startGotenberg(ctx, image)
 	if err != nil {
-		return err
+		return fmt.Errorf("starting %s: %w", image, err)
 	}
 	defer g.stop()
 	for _, p := range todo {
@@ -142,7 +142,7 @@ func dropStaleGoldens(m *Manifest, pins *resolvedPins) error {
 	case m.References != nil:
 		fixtures, err := loadInputFixtures(m)
 		if err != nil {
-			return err
+			return fmt.Errorf("%s: %w", m.Name, err)
 		}
 		_, _, regolden, err := referenceProblems(m, root, fixtures, pins.Values)
 		if err != nil || len(regolden) == 0 {
@@ -157,8 +157,11 @@ func dropStaleGoldens(m *Manifest, pins *resolvedPins) error {
 		}
 	case m.CommittedPDFs != "":
 		changed, err := committedPDFsChanged(m, root)
-		if err != nil || len(changed) == 0 {
-			return err
+		if err != nil {
+			return fmt.Errorf("%s: %w", m.Name, err)
+		}
+		if len(changed) == 0 {
+			return nil
 		}
 		fmt.Printf("%s: %s changed since the goldens were made: deriving them again\n", m.Name, summarize(changed))
 		for _, rel := range m.Goldens {
@@ -169,7 +172,7 @@ func dropStaleGoldens(m *Manifest, pins *resolvedPins) error {
 	}
 	for _, d := range dirs {
 		if err := os.RemoveAll(d); err != nil {
-			return err
+			return fmt.Errorf("removing stale goldens: %w", err)
 		}
 	}
 	return nil
@@ -181,12 +184,12 @@ func committedPDFsChanged(m *Manifest, root string) ([]string, error) {
 	sums := func(dir string) (map[string]string, error) {
 		pdfs, err := topPDFs(dir, false)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("listing %s: %w", dir, err)
 		}
 		out := make(map[string]string, len(pdfs))
 		for _, p := range pdfs {
 			if out[filepath.Base(p)], err = fileSHA256(p); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("hashing %s: %w", p, err)
 			}
 		}
 		return out, nil

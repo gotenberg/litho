@@ -27,9 +27,9 @@ func init() { register("imgxmp_4", imgxmp4) }
 // packet on its own page. That isolation is the point of the fixture. The catalog
 // packet stays conforming, because the document has to keep declaring PDF/A-4.
 //
-// Page-level packets are also the only packets a pikepdf builder can plant a
-// header defect in. `Pdf.save` reserialises the catalog packet through its own XMP
-// writer, which repairs a `bytes=` attribute, an `encoding=` attribute, broken
+// Page-level packets are also the only packets the save leaves alone, as
+// pikepdf, which first wrote the committed file, did: it reserialises the catalog
+// packet through its own XMP writer, which repairs a `bytes=` attribute, an `encoding=` attribute, broken
 // markup and a UTF-16 encoding alike. Page-level metadata streams pass through
 // untouched.
 //

@@ -2,6 +2,7 @@ package build
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gotenberg/litho/test/integration/fixture/pdfgen"
 )
@@ -73,25 +74,27 @@ func prosecolumnsUa1() ([]byte, error) {
 	// columnsPage is page 1: a title over two prose columns sharing their
 	// baselines.
 	columnsPage := func() string {
-		out := "BT /F1 16 Tf 72 720 Td (Two columns of prose on shared baselines) Tj ET\n"
+		var out strings.Builder
+		out.WriteString("BT /F1 16 Tf 72 720 Td (Two columns of prose on shared baselines) Tj ET\n")
 		for line := range left {
 			y := 680 - 12*line
-			out += fmt.Sprintf("BT /F1 10 Tf 72 %d Td (%s) Tj ET\n", y, left[line])
-			out += fmt.Sprintf("BT /F1 10 Tf 320 %d Td (%s) Tj ET\n", y, right[line])
+			fmt.Fprintf(&out, "BT /F1 10 Tf 72 %d Td (%s) Tj ET\n", y, left[line])
+			fmt.Fprintf(&out, "BT /F1 10 Tf 320 %d Td (%s) Tj ET\n", y, right[line])
 		}
-		return out
+		return out.String()
 	}
 
 	// tablePage is page 2: a title over a borderless table of short cells.
 	tablePage := func() string {
-		out := "BT /F1 16 Tf 72 720 Td (A borderless table of short cells) Tj ET\n"
+		var out strings.Builder
+		out.WriteString("BT /F1 16 Tf 72 720 Td (A borderless table of short cells) Tj ET\n")
 		for row, cells := range table {
 			y := 680 - 16*row
 			for i, x := range []int{72, 220, 340} {
-				out += fmt.Sprintf("BT /F1 10 Tf %d %d Td (%s) Tj ET\n", x, y, cells[i])
+				fmt.Fprintf(&out, "BT /F1 10 Tf %d %d Td (%s) Tj ET\n", x, y, cells[i])
 			}
 		}
-		return out
+		return out.String()
 	}
 
 	for _, content := range []string{columnsPage(), tablePage()} {

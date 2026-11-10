@@ -151,9 +151,8 @@ func docinfo1b() ([]byte, error) {
 		"</x:xmpmeta>\n" +
 		"<?xpacket end=\"w\"?>\n")
 
-	// pikepdf's open_metadata() defaults to update_docinfo=True, which rewrites
-	// /Info from the packet and would delete every mismatch above. Writing the
-	// packet as a plain stream never touches /Info.
+	// Writing the packet as a plain stream never touches /Info, so every
+	// mismatch above stays.
 	attachXMP(pdf, packet)
 
 	return save(pdf, "1.4")

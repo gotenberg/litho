@@ -89,7 +89,7 @@ func viewerboxes2b() ([]byte, error) {
 	root.Set("Kids", a(page1, page2, page3, page4, outer))
 	root.Set("Count", 5)
 
-	// The tree is built by hand: pikepdf's page list flattens it, which would
+	// The tree is built by hand: pdf.AddPage flattens it, which would
 	// delete the nodes the fixture exists for.
 	pdf.Root.Set("Pages", root)
 

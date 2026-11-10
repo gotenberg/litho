@@ -23,7 +23,7 @@ func init() { register("complex_4", complex4) }
 func complex4() ([]byte, error) {
 	pdf := pdfgen.New()
 
-	tt := pdf.Indirect(unembeddedTrueType("/Helvetica"))
+	tt := pdf.Indirect(unembeddedTrueType())
 
 	imgInterp := rgbImage(pdf, true)
 	imgOK := rgbImage(pdf, false)

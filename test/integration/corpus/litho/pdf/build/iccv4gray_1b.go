@@ -37,8 +37,8 @@ func iccv4gray1b() ([]byte, error) {
 	pdf := pdfgen.New()
 
 	const iccVersion42 = 0x04200000
-	// Variables, not constants: Go would fold a constant quotient exactly,
-	// where Python divides two rounded floats.
+	// Variables, not constants: Go would fold a constant quotient exactly, and
+	// the committed profile holds the quotient of two rounded floats.
 	x, y, one := 0.3127, 0.3290, 1.0
 	d65 := [3]float64{x / y, 1.0, (one - x - y) / y}
 	d50 := [3]float64{0.9642, 1.0, 0.8249}

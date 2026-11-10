@@ -60,7 +60,7 @@ func xmppage2b() ([]byte, error) {
 		` xmlns:pd="http://example.com/xmppage/pd/"`+
 		` xmlns:eu="http://example.com/xmppage/eu/"`, ex, mt)
 
-	// prop's Python defaults are category "internal" and description True.
+	// prop is one extension schema property, with a description when asked.
 	prop := func(name, valueType, category string, description bool) string {
 		desc := ""
 		if description {
@@ -92,7 +92,7 @@ func xmppage2b() ([]byte, error) {
 			"</rdf:li>", name, uri, prefix, desc, items.String())
 	}
 
-	// entry: props nil is Python's None.
+	// entry is one extension schema; props nil leaves its property list out.
 	entry := func(uri, prefix string, props []string, types, extra string) string {
 		pfx := ""
 		if prefix != "" {
@@ -112,7 +112,8 @@ func xmppage2b() ([]byte, error) {
 			"%s%s%s%s</rdf:li>", uri, pfx, properties, valuetypes, extra)
 	}
 
-	// packet's Python default container is "Bag".
+	// packet is a page XMP packet whose extension schemas sit in an rdf
+	// container, Bag or Seq.
 	packet := func(head, schemas, container, body string) []byte {
 		ext := ""
 		if schemas != "" {

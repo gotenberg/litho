@@ -20,11 +20,12 @@ func init() { register("encperm_ua1", encpermUa1) }
 // permissions an encrypted document grants: bit 10 is "extract for accessibility",
 // and a document withholding it denies assistive technology the text.
 //
-// This is the one fixture written byte by byte rather than through pikepdf. qpdf
-// never clears bit 10, whatever `pikepdf.Permissions(accessibility=False)` asks
-// for: measured at revision 4 and revision 6, `/P` comes out -1028 either way, and
-// `extract=False` clears bit 5 instead. The construct is therefore unreachable
-// through pikepdf's encryption, so the standard security handler is written here
+// This fixture is written byte by byte rather than through pdfgen's encryption,
+// which reproduces qpdf's. qpdf never clears bit 10, whatever
+// `pikepdf.Permissions(accessibility=False)` asked for: measured at revision 4 and
+// revision 6, `/P` comes out -1028 either way, and `extract=False` clears bit 5
+// instead. The construct is therefore unreachable through qpdf's encryption, so
+// the standard security handler is written here
 // directly (ISO 32000-1, Algorithms 2, 3 and 5) with V=4, R=4 and a V2 crypt
 // filter.
 //

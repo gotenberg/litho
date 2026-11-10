@@ -42,7 +42,7 @@ func iccbadcmyk1b() ([]byte, error) {
 
 	const iccVersion50 = 0x05000000
 
-	// iccProfileV is icc_profile: a CMYK ICC profile of tags, (signature,
+	// iccProfileV is a CMYK ICC profile of tags, (signature,
 	// data) pairs, over a Lab PCS, its header stating version.
 	iccProfileV := func(version uint32, deviceClass string, tags []iccTag) []byte {
 		p := iccProfile(deviceClass, "CMYK", "Lab ", tags)

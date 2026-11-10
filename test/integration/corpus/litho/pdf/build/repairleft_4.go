@@ -50,7 +50,7 @@ func init() { register("repairleft_4", repairleft4) }
 // with ICCBased sRGB, changing how the conforming group composites. No corpus
 // file where that repair runs carries a device blending space no finding names.
 //
-// The tree is built by hand: pikepdf's page list pushes inherited attributes onto
+// The tree is built by hand: pdf.AddPage pushes inherited attributes onto
 // each page, which would delete the inheritance the fixture exists for.
 //
 // See ../FIXTURES.md for the authoritative expected firing set.

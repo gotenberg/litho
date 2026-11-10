@@ -121,7 +121,7 @@ func buildLithoPDF(ctx context.Context, m *Manifest) error {
 // with the fixture fonts, fetched first.
 func buildLithoText(ctx context.Context, m *Manifest) error {
 	if err := fetchFixtureFonts(ctx); err != nil {
-		return err
+		return fmt.Errorf("fetching the fixture fonts: %w", err)
 	}
 	return textbuild.Build(ctx, filepath.Join(m.SourceDir(), "sources"), filepath.Join(m.SourceDir(), m.CommittedPDFs), filepath.Join(testdataDir(), fixtureFontsDir))
 }

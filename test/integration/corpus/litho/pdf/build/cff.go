@@ -7,8 +7,8 @@ package build
 // ISO 19005-1, 6.3.5 test 2 and ISO 19005-2, 6.2.11.4.2 test 1 both compare a
 // font descriptor's `/CharSet` against the glyph names the embedded program
 // defines, so reaching them needs a program a validator can actually parse a
-// charset out of. truetype.go does the same job for `FontFile2`; the corpus
-// builders take no dependency beyond pikepdf, so this module emits the bytes
+// charset out of. truetype.go does the same job for `FontFile2`; no public
+// font offers such a program on demand, so this file emits the bytes
 // directly.
 //
 // The program holds three glyphs, `.notdef` plus `A` and `B`, drawn as plain
@@ -27,10 +27,10 @@ import (
 	"encoding/binary"
 )
 
-// cffFontName mirrors FONT_NAME.
+// cffFontName is the program's FontName.
 const cffFontName = "LithoCFF"
 
-// cffAdvanceWidth mirrors ADVANCE_WIDTH.
+// cffAdvanceWidth is every glyph's advance, in units of 1/1000 em.
 const cffAdvanceWidth = 600
 
 // Standard string identifiers of "A" and "B", ISO 32000-1, Annex D.
@@ -59,7 +59,7 @@ func cffCat(parts ...[]byte) []byte {
 	return bytes.Join(parts, nil)
 }
 
-// cffIndex is _index: one CFF INDEX. A count of zero is two bytes and nothing
+// cffIndex is one CFF INDEX. A count of zero is two bytes and nothing
 // else.
 func cffIndex(entries [][]byte) []byte {
 	if len(entries) == 0 {
@@ -88,14 +88,14 @@ func cffIndex(entries [][]byte) []byte {
 	return out
 }
 
-// cffDictInt is _dict_int: a DICT operand in the fixed-width 32-bit form.
+// cffDictInt is a DICT operand in the fixed-width 32-bit form.
 func cffDictInt(value int) []byte {
 	return cffU32([]byte{0x1d}, value)
 }
 
-// cffT2Num is _t2_num: a Type 2 charstring integer, ISO 32000-1 does not
-// restate the encoding. It panics outside -1131..1131, where Python raises
-// ValueError.
+// cffT2Num is a Type 2 charstring integer, ISO 32000-1 does not
+// restate the encoding. It panics outside -1131..1131, the range its
+// two-byte forms cover.
 func cffT2Num(value int) []byte {
 	switch {
 	case -107 <= value && value <= 107:
@@ -110,7 +110,7 @@ func cffT2Num(value int) []byte {
 	panic("charstring integer out of the range this module writes")
 }
 
-// cffRectCharstring is _rect_charstring: one glyph, a rectangle from (50, 0)
+// cffRectCharstring is one glyph, a rectangle from (50, 0)
 // to (450, height), then endchar.
 func cffRectCharstring(height int) []byte {
 	out := cffCat(cffT2Num(50), cffT2Num(0), []byte{0x15}) // rmoveto
@@ -130,7 +130,7 @@ func cffPrivate(defaultWidth int) []byte {
 // cffHeader is the 4-byte CFF header: major 1, minor 0, hdrSize 4, offSize 1.
 func cffHeader() []byte { return []byte{0x01, 0x00, 0x04, 0x01} }
 
-// cffBuild is build: return the bytes of a bare CFF holding .notdef, A and B.
+// cffBuild returns the bytes of a bare CFF holding .notdef, A and B.
 func cffBuild() []byte {
 	charstrings := [][]byte{{0x0e}, cffRectCharstring(400), cffRectCharstring(500)}
 
@@ -186,11 +186,11 @@ func cffFDSelect3(nGlyphs int) []byte {
 	return cffU16(out, nGlyphs)
 }
 
-// cffBuildCID is build_cid: return the bytes of a CID-keyed CFF holding
+// cffBuildCID returns the bytes of a CID-keyed CFF holding
 // .notdef and one glyph per CID.
 //
 // The charset maps glyph i+1 to cids[i], so a CID the list leaves out has no
-// glyph in the program. Every glyph advances ADVANCE_WIDTH: the one font
+// glyph in the program. Every glyph advances cffAdvanceWidth: the one font
 // DICT's Private DICT sets defaultWidthX, and no charstring states a width of
 // its own. A CID-keyed font carries its Private DICT in an FDArray, chosen per
 // glyph through FDSelect (Adobe Technical Note #5176, 19), and the ROS
@@ -231,13 +231,13 @@ func cffBuildCID(cids []int) []byte {
 		charset, fdselect, charstringsIndex, cffIndex([][]byte{makeFontDict(privateOff)}), private)
 }
 
-// cffBuildCharstrings is build_charstrings: build's name-keyed program with
+// cffBuildCharstrings is cffBuild's name-keyed program with
 // the CharStrings INDEX given.
 //
 // The charset still names A and B, so a program given fewer than three
 // charstrings, or none, keeps names for glyphs it holds no program for.
-// defaultWidth is the Private DICT's defaultWidthX; Python defaults it to
-// ADVANCE_WIDTH.
+// defaultWidth is the Private DICT's defaultWidthX; cffBuild uses
+// cffAdvanceWidth.
 func cffBuildCharstrings(charstrings [][]byte, defaultWidth int) []byte {
 	private := cffPrivate(defaultWidth)
 	topLen := len(cffDictInt(0))*4 + 3
@@ -260,10 +260,10 @@ func cffBuildCharstrings(charstrings [][]byte, defaultWidth int) []byte {
 		charset, charstringsIndex, private)
 }
 
-// cffBuildCIDCharstrings is build_cid_charstrings: a CID-keyed program whose
+// cffBuildCIDCharstrings is a CID-keyed program whose
 // charset maps glyphs 1 and 2 to CIDs 1 and 2, holding only the first count
 // charstrings (.notdef, then one per CID). defaultWidth is the one font DICT's
-// defaultWidthX; Python defaults it to ADVANCE_WIDTH.
+// defaultWidthX; cffBuildCID uses cffAdvanceWidth.
 func cffBuildCIDCharstrings(count, defaultWidth int) []byte {
 	cids := []int{1, 2}
 	all := make([][]byte, 1, 1+len(cids))
@@ -271,7 +271,8 @@ func cffBuildCIDCharstrings(count, defaultWidth int) []byte {
 	for range cids {
 		all = append(all, cffRectCharstring(400))
 	}
-	// Python's [:count], negative counts included.
+	// The first count charstrings; a negative count drops that many from the
+	// end.
 	n := count
 	if n < 0 {
 		n = max(0, len(all)+n)
@@ -299,7 +300,7 @@ func cffBuildCIDCharstrings(count, defaultWidth int) []byte {
 		charset, fdselect, charstringsIndex, cffIndex([][]byte{fontDict}), private)
 }
 
-// cffCFF2Index is _cff2_index: a CFF2 INDEX, whose count is a Card32
+// cffCFF2Index is a CFF2 INDEX, whose count is a Card32
 // (OpenType CFF2 table, INDEX Data).
 func cffCFF2Index(entries [][]byte) []byte {
 	if len(entries) == 0 {
@@ -320,7 +321,7 @@ func cffCFF2Index(entries [][]byte) []byte {
 	return out
 }
 
-// cffCFF2Rect is _cff2_rect: a CFF2 charstring, the rectangle of
+// cffCFF2Rect is a CFF2 charstring, the rectangle of
 // cffRectCharstring with no width operand and no endchar, neither of which
 // CFF2 has.
 func cffCFF2Rect(height int) []byte {
@@ -332,7 +333,7 @@ func cffCFF2Rect(height int) []byte {
 	return append(out, 0x05)
 }
 
-// cffBuildCFF2 is build_cff2: return a 'CFF2' table holding .notdef, A and B
+// cffBuildCFF2 returns a 'CFF2' table holding .notdef, A and B
 // (OpenType, CFF2 table).
 //
 // CFF2 drops the Name, String and charset structures and the Top DICT INDEX:

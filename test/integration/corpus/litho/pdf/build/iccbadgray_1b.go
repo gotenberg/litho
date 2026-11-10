@@ -40,11 +40,12 @@ func iccbadgray1b() ([]byte, error) {
 	pdf := pdfgen.New()
 
 	const iccVersion50 = 0x05000000
-	// Runtime float64 arithmetic, as Python computes it.
+	// Variables, not constants: Go would fold a constant quotient exactly, and
+	// the committed profile holds the quotient of two rounded floats.
 	x, y := 0.3127, 0.3290
 	d65 := []float64{x / y, 1.0, (1 - x - y) / y}
 
-	// iccProfileV is icc_profile: a grey ICC profile of tags, (signature,
+	// iccProfileV is a grey ICC profile of tags, (signature,
 	// data) pairs, its header stating version.
 	iccProfileV := func(version uint32, deviceClass string, tags []iccTag) []byte {
 		p := iccProfile(deviceClass, "GRAY", "XYZ ", tags)

@@ -33,7 +33,7 @@ func init() { register("kidsarray_2b", kidsarray2b) }
 // written directly in /Kids ("doesn't appear to be a valid PDF"), so the other
 // shape the numbering handles has no fixture.
 //
-// The tree is built by hand: pikepdf's page list flattens it, which would delete
+// The tree is built by hand: pdf.AddPage flattens it, which would delete
 // the construct the fixture exists for.
 //
 // See ../FIXTURES.md for the authoritative expected firing set.

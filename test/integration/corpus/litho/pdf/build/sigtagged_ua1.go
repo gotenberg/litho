@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/big"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -136,8 +137,8 @@ YiiYtNyf4jaR19gNs5XDnuwZFDFlbtb2jSuHEGGElLYfXPydwTeEYmc=
 				chunk = append(chunk, 0x80|byte(arc&0x7F))
 				arc >>= 7
 			}
-			for i := len(chunk) - 1; i >= 0; i-- {
-				body = append(body, chunk[i])
+			for _, c := range slices.Backward(chunk) {
+				body = append(body, c)
 			}
 		}
 		return der(0x06, body)

@@ -18,8 +18,9 @@ func init() { register("syntax_1b", syntax1b) }
 // where four are due.
 //
 // 6.7.5, which forbids `bytes` and `encoding` in the XMP packet header, is not
-// here. pikepdf reserialises any packet assigned to the catalog, reordering
-// attributes and rewriting the header, so those two attributes survive neither
+// here. pikepdf, which first wrote the committed file, reserialises any packet
+// assigned to the catalog, reordering attributes and rewriting the header, and
+// pdfgen reproduces it, so those two attributes survive neither
 // authoring nor a length-preserving patch. Reaching that clause needs a
 // hand-assembled file.
 //
@@ -41,8 +42,9 @@ func init() { register("syntax_1b", syntax1b) }
 // carrying `/A`. Each has a conforming neighbour: a `/NextPage` named action, which
 // is one of the four the clause permits, and a second field with no action at all.
 //
-// Both 6.1.7 defects are beyond pikepdf, which computes `/Length` from the data and
-// emits a conforming end-of-line. They are patched into the saved bytes,
+// Both 6.1.7 defects are beyond the save, which computes `/Length` from the data
+// and emits a conforming end-of-line, as pikepdf did when it first wrote the
+// committed file. They are patched into the saved bytes,
 // each replacement the same length as what it replaces, so no cross-reference
 // offset moves. The builder refuses any patch that would change a length.
 //

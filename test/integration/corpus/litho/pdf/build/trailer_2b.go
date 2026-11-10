@@ -12,7 +12,7 @@ func init() { register("trailer_2b", trailer2b) }
 //
 // The coverage scan against the veraPDF profile showed the whole ISO 19005-2,
 // 6.1 family unvisited by this corpus. Most of it needs byte-level malformation
-// that pikepdf will not emit, but the trailer rules of 6.1.3 are reachable: two
+// that no ordinary writer emits, but the trailer rules of 6.1.3 are reachable: two
 // by writing the file normally and then editing the bytes, one by encrypting.
 //
 // All three defects are independent and live in different parts of the file, so
@@ -22,11 +22,11 @@ func init() { register("trailer_2b", trailer2b) }
 // nothing at all rather than reporting the encryption itself.
 //
 // qpdf draws a random AES initialization vector for every encrypted string
-// and stream, so two pikepdf runs differ inside every ciphertext. This
+// and stream, so two qpdf runs differ inside every ciphertext. This
 // builder derives the vectors instead (see pdfgen.Encryption), so it
 // rebuilds byte for byte like every other fixture. The file key, /O, /U and
 // /P are the ones qpdf computes from the same passwords and /ID, so the file
-// decrypts to the same objects a pikepdf run writes.
+// decrypts to the same objects a qpdf run writes.
 //
 // See ../FIXTURES.md for the authoritative expected firing set.
 func trailer2b() ([]byte, error) {
@@ -59,7 +59,7 @@ func trailer2b() ([]byte, error) {
 	// the remaining rules stay reachable rather than being masked by a file that
 	// cannot be parsed at all. The re-save reads the plain file back, so it
 	// keeps that file's /ID[0] and its version, and compresses the content
-	// stream as pikepdf's default save does.
+	// stream as pikepdf's default save did when it first wrote the file.
 	id := idOf(plain)
 	if id == nil {
 		return nil, fmt.Errorf("trailer_2b: the plain save carries no /ID")

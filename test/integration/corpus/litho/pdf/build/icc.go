@@ -18,23 +18,23 @@ import (
 	"slices"
 )
 
-// iccVersion21 mirrors ICC_VERSION_2_1.
+// iccVersion21 is the profile version 2.1 header field.
 const iccVersion21 = 0x02100000
 
-// iccD50 mirrors D50. Treat it as read-only.
+// iccD50 is the D50 white point in XYZ. Treat it as read-only.
 var iccD50 = []float64{0.9642, 1.0, 0.8249}
 
-// iccIdentity mirrors IDENTITY. Treat it as read-only.
+// iccIdentity is the 3 x 3 identity matrix. Treat it as read-only.
 var iccIdentity = []float64{1, 0, 0, 0, 1, 0, 0, 0, 1}
 
-// iccPrimary is one entry of PRIMARIES: a colorant tag and its XYZ.
+// iccPrimary is one entry of iccPrimaries: a colorant tag and its XYZ.
 type iccPrimary struct {
 	Sig string
 	XYZ []float64
 }
 
-// iccPrimaries mirrors PRIMARIES, in its insertion order: the sRGB primaries
-// adapted to D50, the columns of its RGB-to-XYZ matrix. Treat it as
+// iccPrimaries are the sRGB primaries adapted to D50, the columns of its
+// RGB-to-XYZ matrix, in the order the profiles write them. Treat it as
 // read-only.
 var iccPrimaries = []iccPrimary{
 	{"rXYZ", []float64{0.4361, 0.2225, 0.0139}},
@@ -42,14 +42,14 @@ var iccPrimaries = []iccPrimary{
 	{"bXYZ", []float64{0.1431, 0.0606, 0.7141}},
 }
 
-// iccTag is one (signature, data) pair of icc_profile's tags.
+// iccTag is one (signature, data) pair of iccProfile's tags.
 type iccTag struct {
 	Sig  string
 	Data []byte
 }
 
-// iccCommonTags mirrors COMMON_TAGS. Treat it as read-only: build a tag list
-// with append on a new slice.
+// iccCommonTags are the tags every profile carries. Treat it as read-only:
+// build a tag list with append on a new slice.
 var iccCommonTags = []iccTag{
 	{"cprt", append(append([]byte("text"), make([]byte, 4)...), "No copyright\x00"...)},
 	{"wtpt", iccXYZ(iccD50...)},
@@ -65,8 +65,9 @@ func iccU32(b []byte, v int) []byte {
 	return binary.BigEndian.AppendUint32(b, uint32(v)) //nolint:gosec // struct packing keeps the field width; fixture values fit.
 }
 
-// iccS15 is s15: each value as an s15Fixed16Number, rounded half to even as
-// Python's round does.
+// iccS15 encodes each value as an s15Fixed16Number, rounded half to even:
+// the committed profiles were computed so, and a value rounded otherwise
+// would change their bytes.
 func iccS15(values ...float64) []byte {
 	var out []byte
 	for _, v := range values {
@@ -75,9 +76,8 @@ func iccS15(values ...float64) []byte {
 	return out
 }
 
-// iccTextDescription is text_description: a v2 textDescriptionType
-// (ICC.1:2001-04, 6.5.17): ASCII only. It panics on non-ASCII text, where
-// Python raises.
+// iccTextDescription is a v2 textDescriptionType
+// (ICC.1:2001-04, 6.5.17): ASCII only. It panics on non-ASCII text.
 func iccTextDescription(text string) []byte {
 	for i := 0; i < len(text); i++ {
 		if text[i] >= 0x80 {
@@ -91,12 +91,12 @@ func iccTextDescription(text string) []byte {
 	return append(out, make([]byte, 4+4+2+1+67)...)
 }
 
-// iccXYZ is xyz: an XYZType of values.
+// iccXYZ is an XYZType of values.
 func iccXYZ(values ...float64) []byte {
 	return append(append([]byte("XYZ "), make([]byte, 4)...), iccS15(values...)...)
 }
 
-// iccGammaCurve is gamma_curve: a curveType (ICC.1:2001-04, 6.5.3) of one
+// iccGammaCurve is a curveType (ICC.1:2001-04, 6.5.3) of one
 // entry: a u8Fixed8 gamma.
 func iccGammaCurve(gamma float64) []byte {
 	out := append([]byte("curv"), make([]byte, 4)...)
@@ -104,9 +104,9 @@ func iccGammaCurve(gamma float64) []byte {
 	return iccU16(out, int(math.RoundToEven(gamma*256)))
 }
 
-// iccLut8 is lut8: a lut8Type (ICC.1:2001-04, 6.5.8) over a two-point grid,
+// iccLut8 is a lut8Type (ICC.1:2001-04, 6.5.8) over a two-point grid,
 // with identity input and output tables. Each clut value must fit a byte; it
-// panics otherwise, where Python's bytes() raises.
+// panics otherwise.
 func iccLut8(inputs, outputs int, clut []int) []byte {
 	ramp := make([]byte, 256)
 	for i := range ramp {
@@ -130,7 +130,7 @@ func iccLut8(inputs, outputs int, clut []int) []byte {
 	return out
 }
 
-// iccA2B0 is a2b0: CMYK to Lab, lightness falls with total ink, a and b stay
+// iccA2B0 is the CMYK to Lab table: lightness falls with total ink, a and b stay
 // neutral.
 func iccA2B0() []byte {
 	clut := make([]int, 0, 16*3)
@@ -146,7 +146,7 @@ func iccA2B0() []byte {
 	return iccLut8(4, 3, clut)
 }
 
-// iccB2A0 is b2a0: Lab to CMYK, dark colours take black ink only.
+// iccB2A0 is the Lab to CMYK table: dark colours take black ink only.
 func iccB2A0() []byte {
 	clut := make([]int, 0, 8*4)
 	for lightness := range 2 {
@@ -163,10 +163,9 @@ func iccB2A0() []byte {
 	return iccLut8(3, 4, clut)
 }
 
-// iccProfile is icc_profile: a version 2.1 ICC profile of tags, (signature,
+// iccProfile is a version 2.1 ICC profile of tags, (signature,
 // data) pairs. deviceClass, colourSpace and pcs are 4-byte signatures; it
-// panics on any other length, which Python's bytearray slice assignment would
-// silently splice.
+// panics on any other length, which would shift every later header field.
 func iccProfile(deviceClass, colourSpace, pcs string, tags []iccTag) []byte {
 	for _, sig := range []string{deviceClass, colourSpace, pcs} {
 		if len(sig) != 4 {
@@ -196,7 +195,7 @@ func iccProfile(deviceClass, colourSpace, pcs string, tags []iccTag) []byte {
 	return slices.Concat(header, table, body)
 }
 
-// iccRGBDisplayProfile is rgb_display_profile: a version 2.1 RGB display
+// iccRGBDisplayProfile is a version 2.1 RGB display
 // profile.
 func iccRGBDisplayProfile() []byte {
 	tags := make([]iccTag, 0, 1+len(iccCommonTags)+len(iccPrimaries)+3)
@@ -211,7 +210,7 @@ func iccRGBDisplayProfile() []byte {
 	return iccProfile("mntr", "RGB ", "XYZ ", tags)
 }
 
-// iccCMYKPrinterProfile is cmyk_printer_profile: a version 2.1 CMYK printer
+// iccCMYKPrinterProfile is a version 2.1 CMYK printer
 // profile.
 func iccCMYKPrinterProfile() []byte {
 	tags := make([]iccTag, 0, 1+len(iccCommonTags)+2)

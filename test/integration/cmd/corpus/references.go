@@ -284,7 +284,7 @@ var chromiumOptional = []string{ //nolint:gochecknoglobals // static table
 func chromiumFiles(dir string, opts fixture.Options) ([]formFile, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reading %s: %w", dir, err)
 	}
 	var files []formFile
 	for _, e := range entries {
@@ -537,7 +537,7 @@ func referenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 	if isBuildCorpus(m) {
 		built, err := builtReferenceJobs(m, only)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%s: %w", m.Name, err)
 		}
 		jobs = append(jobs, built...)
 	}

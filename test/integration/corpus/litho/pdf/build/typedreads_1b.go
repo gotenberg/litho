@@ -70,7 +70,7 @@ func init() { register("typedreads_1b", typedreads1b) }
 // qpdf writes every string it knows as a literal, so each defective hex string is
 // planted as a placeholder literal of the same width and patched as bytes after
 // the save, which moves no offset. The page tree is built by hand, since
-// pikepdf's page list pushes an inherited /MediaBox onto each page.
+// pdf.AddPage pushes an inherited /MediaBox onto each page.
 //
 // See ../FIXTURES.md for the authoritative expected firing set.
 func typedreads1b() ([]byte, error) {
@@ -132,8 +132,8 @@ func typedreads1b() ([]byte, error) {
 	attach(root, node, 0)
 	attach(node, page(node), 1)
 	attach(node, page(node), 1)
-	// pikepdf turns an indirect number back into a Python value, so the indirect
-	// real is planted as an indirect placeholder name and patched like the strings.
+	// pikepdf, which first wrote the file, could not keep a number indirect, so
+	// the indirect real is planted as an indirect placeholder name and patched like the strings.
 	const realPlaceholder = "/QIndirectReal"
 	patches = append(patches, patch{[]byte(realPlaceholder), []byte(fmt.Sprintf("%-*s", len(realPlaceholder), "40006.5"))})
 	attach(root, page(root, "MediaBox", a(0, 0, 612, pdf.MakeIndirect(n(realPlaceholder)))), 1)

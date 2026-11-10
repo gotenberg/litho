@@ -21,7 +21,7 @@ func init() { register("tables_ua1", tablesUa1) }
 func tablesUa1() ([]byte, error) {
 	pdf := pdfgen.New()
 
-	font := pdf.Indirect(unembeddedTrueType("/Helvetica"))
+	font := pdf.Indirect(unembeddedTrueType())
 
 	// Marked content: two table cells, two list items, one paragraph. Each shows
 	// text so every element is a text item for the language rules.

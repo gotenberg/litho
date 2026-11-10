@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/gotenberg/litho/test/integration/fixture/pdfgen"
 )
@@ -42,7 +43,7 @@ func fontunread2b() ([]byte, error) {
 	dropTables := func(font []byte, drop map[string]bool) []byte {
 		num := int(binary.BigEndian.Uint16(font[4:6]))
 		tables := map[string][]byte{}
-		for i := 0; i < num; i++ {
+		for i := range num {
 			rec := font[12+16*i : 28+16*i]
 			tag := string(rec[0:4])
 			off := binary.BigEndian.Uint32(rec[8:12])
@@ -76,9 +77,8 @@ func fontunread2b() ([]byte, error) {
 		return append(out, body...)
 	}
 
-	// cffProgram is _cff.build's program, with the Name INDEX given and the
+	// cffProgram is cffBuild's program, with the Name INDEX given and the
 	// CharStrings operator replaced by a no-op when charstringsOp is false.
-	// Python's default names is (_cff.FONT_NAME,).
 	cffProgram := func(names [][]byte, charstringsOp bool) ([]byte, error) {
 		charstrings := [][]byte{{0x0e}, cffRectCharstring(400), cffRectCharstring(500)}
 		private := cffCat(cffDictInt(cffAdvanceWidth), []byte{0x14}, cffDictInt(0), []byte{0x15})
@@ -180,18 +180,18 @@ func fontunread2b() ([]byte, error) {
 	}
 
 	resources := d()
-	body := ""
+	var body strings.Builder
 	y := 750
 	for _, f := range fonts {
 		resources.Set("/"+f.tag, f.ref)
-		body += fmt.Sprintf("BT 10 %d Td /%s 12 Tf <4142> Tj ET\n", y, f.tag)
+		fmt.Fprintf(&body, "BT 10 %d Td /%s 12 Tf <4142> Tj ET\n", y, f.tag)
 		y -= 20
 	}
 	page := pdf.Indirect(d(
 		"Type", n("Page"),
 		"MediaBox", a(0, 0, 612, 792),
 		"Resources", d("Font", resources),
-		"Contents", pdf.MakeIndirect(pdf.Stream([]byte(body))),
+		"Contents", pdf.MakeIndirect(pdf.Stream([]byte(body.String()))),
 	))
 	pdf.AddPage(page)
 

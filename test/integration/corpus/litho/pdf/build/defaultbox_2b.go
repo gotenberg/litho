@@ -32,7 +32,7 @@ func init() { register("defaultbox_2b", defaultbox2b) }
 // embedded TrueType of ttcmap_2b.pdf, in DeviceGray under a CMYK OutputIntent,
 // and states its own /Resources, so no colour, font or resource clause fires.
 //
-// The tree is built by hand: pikepdf's page list flattens it, which would move
+// The tree is built by hand: pdf.AddPage flattens it, which would move
 // the node's box onto its page.
 //
 // See ../FIXTURES.md for the authoritative expected firing set.

@@ -88,7 +88,7 @@ func rolemapscopeUa2() ([]byte, error) {
 		d("Type", n("StructElem"), "S", n("/Workbook"), "P", structRoot),
 	)
 
-	// elem: ns nil, Python's default None, leaves /NS out.
+	// elem is a structure element; ns nil leaves /NS out.
 	elem := func(s string, mcid int, ns *pdfgen.Dict) *pdfgen.Dict {
 		dd := d(
 			"Type", n("StructElem"), "S", n("/"+s), "P", workbook, "Pg", page, "K", mcid,

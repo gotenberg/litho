@@ -55,8 +55,9 @@ removed since; the Go builder is the fixture's source.
 
 ## pdfgen at a glance
 
-The left column is the pikepdf idiom the builders were first written in,
-which is also how parts of the fixture docs read.
+The left column is the pikepdf idiom the builders were first written in.
+pdfgen reproduces what pikepdf wrote, so a fixture doc that names a pikepdf
+behaviour describes pdfgen's too.
 
 | pikepdf                                                                           | Go                                                                                                              |
 | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
@@ -96,20 +97,20 @@ which is also how parts of the fixture docs read.
 
 Shared helpers in `common.go` (Python names on the left):
 
-| Python                                                                               | Go                                                                      |
-| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| `lzw_encode(data, early_change=1)`                                                   | `lzwEncode(data, 1)`                                                    |
-| `xmp_packet(part=2, conformance="B", rev=..., ua_part=..., ua_rev=..., extra="...")` | `xmpPacket(xmpOpts{Part: 2, Conformance: "B", ...})` (nil field = None) |
-| `attach_xmp(pdf, packet)`                                                            | `attachXMP(pdf, packet)`                                                |
-| `type3_font(pdf, [(g, adv, ops)...], widths, first=65)`                              | `type3Font(pdf, []type3Proc{{g, adv, ops}}, []any{...}, 65)`            |
-| `tounicode_cmap(pdf, {code: cp})`                                                    | `toUnicodeCMap(pdf, map[int]int{...})`                                  |
-| `unembedded_truetype(base="/Helvetica")`                                             | `unembeddedTrueType("/Helvetica")`                                      |
-| `rgb_image(pdf, interpolate=False)`                                                  | `rgbImage(pdf, false)`                                                  |
-| `filespec(pdf, name, payload, relationship=None, subtype=None)`                      | `filespec(pdf, name, payload, "", "")` (empty string = None)            |
+| Python                                                                               | Go                                                                       |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| `lzw_encode(data, early_change=1)`                                                   | `lzwEncode(data, 1)`                                                     |
+| `xmp_packet(part=2, conformance="B", rev=..., ua_part=..., ua_rev=..., extra="...")` | `xmpPacket(xmpOpts{Part: 2, Conformance: "B", ...})` (nil field = None)  |
+| `attach_xmp(pdf, packet)`                                                            | `attachXMP(pdf, packet)`                                                 |
+| `type3_font(pdf, [(g, adv, ops)...], widths, first=65)`                              | `type3Font(pdf, []type3Proc{{g, adv, ops}}, []any{...})` (codes from 65) |
+| `tounicode_cmap(pdf, {code: cp})`                                                    | `toUnicodeCMap(pdf, map[int]int{...})`                                   |
+| `unembedded_truetype(base="/Helvetica")`                                             | `unembeddedTrueType()` (always /Helvetica)                               |
+| `rgb_image(pdf, interpolate=False)`                                                  | `rgbImage(pdf, false)`                                                   |
+| `filespec(pdf, name, payload, relationship=None, subtype=None)`                      | `filespec(pdf, name, payload, "", "")` (empty string = None)             |
 
 Font, ICC and JPEG 2000 programs come from `truetype.go`, `cff.go`,
 `type1.go`, `icc.go` and `jp2.go`, held to their Python originals by
-`TestHelpersMatchPython` (`testdata/helpers_golden.txt`); the Type 0 encoding
+`TestHelpersMatchGolden` (`testdata/helpers_golden.txt`); the Type 0 encoding
 CMap fixtures share `helpers.go`. Names take a module prefix:
 
 | Python                                                                 | Go                                                                                                              |
@@ -123,7 +124,7 @@ CMap fixtures share `helpers.go`. Names take a module prefix:
 | `_type1.encoding_array(codes, fill_notdef=True)`                       | `t1EncodingArray(codes, true)`                                                                                  |
 | `_icc.icc_profile(b"mntr", b"RGB ", b"XYZ ", tags)`                    | `iccProfile("mntr", "RGB ", "XYZ ", []iccTag{{"desc", ...}})`                                                   |
 | `_icc.s15(*v)`, `xyz(t)`, `COMMON_TAGS`, `IDENTITY`                    | `iccS15(v...)`, `iccXYZ(t...)`, `iccCommonTags`, `iccIdentity`                                                  |
-| `_jp2.container(cs, 3, 8, [colr...], depths=None)`                     | `jp2Container(jp2Three, 3, 8, [][]byte{...}, nil)`                                                              |
+| `_jp2.container(cs, 3, 8, [colr...], depths=None)`                     | `jp2Container(jp2Three, 3, [][]byte{...}, nil)` (8-bit)                                                         |
 | `_jp2.colr(4, 1)` (no enum)                                            | `jp2Colr(4, 1, 0)` (the enum is written only for method 1)                                                      |
 
 ## Gotchas

@@ -70,7 +70,7 @@ func patternreach2b() ([]byte, error) {
 	// exponential is a type 2 function from one input to components outputs.
 	exponential := func(components int) *pdfgen.Dict {
 		c0, c1 := a(), a()
-		for i := 0; i < components; i++ {
+		for range components {
 			c0.Append(0)
 			c1.Append(1)
 		}
@@ -83,8 +83,7 @@ func patternreach2b() ([]byte, error) {
 		)
 	}
 
-	// axial is an axial shading over colourSpace. Python's default
-	// components is 3.
+	// axial is an axial shading over colourSpace of components components.
 	axial := func(colourSpace pdfgen.Object, components int) *pdfgen.Dict {
 		return pdf.Indirect(d(
 			"ShadingType", 2,
@@ -127,8 +126,8 @@ func patternreach2b() ([]byte, error) {
 		return pdf.MakeIndirect(pat).(*pdfgen.Stream)
 	}
 
-	// type3 is a one-glyph Type 3 font. Python's default metrics is
-	// "1000 0 d0\n".
+	// type3 is a one-glyph Type 3 font whose glyph procedure starts with
+	// metrics.
 	type3 := func(glyph string, resources *pdfgen.Dict, metrics string) *pdfgen.Dict {
 		proc := pdf.MakeIndirect(pdf.Stream([]byte(metrics + glyph)))
 		return pdf.Indirect(d(

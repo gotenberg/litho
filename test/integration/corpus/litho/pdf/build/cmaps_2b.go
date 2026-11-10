@@ -2,6 +2,7 @@ package build
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gotenberg/litho/test/integration/fixture/pdfgen"
 )
@@ -38,23 +39,24 @@ func cmaps2b() ([]byte, error) {
 		"Registry", text("Adobe"), "Ordering", text("Identity"), "Supplement", 0,
 	)
 
-	// cmapProgram is a minimal but well-formed CMap program.
-	cmapProgram := func(name string, wmode int) []byte {
+	// cmapProgram is a minimal but well-formed CMap program, horizontal
+	// (/WMode 0).
+	cmapProgram := func(name string) []byte {
 		return []byte("%!PS-Adobe-3.0 Resource-CMap\n" +
 			"/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n" +
 			"/CIDSystemInfo 3 dict dup begin /Registry (Adobe) def " +
 			"/Ordering (Identity) def /Supplement 0 def end def\n" +
 			"/CMapName /" + name + " def\n/CMapType 1 def\n" +
-			"/WMode " + fmt.Sprint(wmode) + " def\n" +
+			"/WMode 0 def\n" +
 			"1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n" +
 			"1 begincidrange\n<0000> <FFFF> 0\nendcidrange\n" +
 			"endcmap\nCMapName currentdict /CMap defineresource pop\nend\n" + "end\n")
 	}
 
-	// embeddedCMap is one embedded CMap stream. useCMap nil is Python's
-	// None; the wmodes default to 0 there.
-	embeddedCMap := func(name string, programWMode, dictWMode int, useCMap pdfgen.Object) *pdfgen.Stream {
-		s := pdf.Stream(cmapProgram(name, programWMode))
+	// embeddedCMap is one embedded CMap stream whose dictionary declares
+	// dictWMode, and which pulls in useCMap unless it is nil.
+	embeddedCMap := func(name string, dictWMode int, useCMap pdfgen.Object) *pdfgen.Stream {
+		s := pdf.Stream(cmapProgram(name))
 		s.Set("Type", n("CMap"))
 		s.Set("CMapName", n("/"+name))
 		s.Set("CIDSystemInfo", identitySystemInfo)
@@ -99,14 +101,14 @@ func cmaps2b() ([]byte, error) {
 		// A names a CMap that is neither one of the predefined set nor embedded.
 		"T1", type0("LithoNamedCMap", n("/LithoCustomCMap")),
 		// B embeds a CMap whose dictionary /WMode contradicts its program.
-		"T2", type0("LithoWModeSplit", embeddedCMap("LithoWModeCMap", 0, 1, nil)),
+		"T2", type0("LithoWModeSplit", embeddedCMap("LithoWModeCMap", 1, nil)),
 		// C embeds a CMap that pulls in another embedded CMap whose name is not one
 		// of the predefined set.
 		"T3", type0(
 			"LithoChained",
 			embeddedCMap(
-				"LithoOuterCMap", 0, 0,
-				embeddedCMap("LithoInnerCMap", 0, 0, nil),
+				"LithoOuterCMap", 0,
+				embeddedCMap("LithoInnerCMap", 0, nil),
 			),
 		),
 		// D and E conform. D names a predefined CMap; E embeds one that agrees with
@@ -114,20 +116,20 @@ func cmaps2b() ([]byte, error) {
 		"T4", type0("LithoIdentity", n("/Identity-H")),
 		"T5", type0(
 			"LithoEmbeddedOK",
-			embeddedCMap("LithoConformingCMap", 0, 0, n("/Identity-H")),
+			embeddedCMap("LithoConformingCMap", 0, n("/Identity-H")),
 		),
 	)
 
-	content := ""
+	var content strings.Builder
 	for i, key := range fonts.Keys() {
-		content += fmt.Sprintf("BT /%s 12 Tf 50 %d Td <0041> Tj ET\n", key, 720-i*20)
+		fmt.Fprintf(&content, "BT /%s 12 Tf 50 %d Td <0041> Tj ET\n", key, 720-i*20)
 	}
 
 	page := pdf.Indirect(d(
 		"Type", n("Page"),
 		"MediaBox", a(0, 0, 612, 792),
 		"Resources", d("Font", fonts),
-		"Contents", pdf.Stream([]byte(content)),
+		"Contents", pdf.Stream([]byte(content.String())),
 	))
 	pdf.AddPage(page)
 

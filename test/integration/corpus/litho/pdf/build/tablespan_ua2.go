@@ -42,7 +42,7 @@ func tablespanUa2() ([]byte, error) {
 
 	// One marked content sequence per cell across both tables.
 	var content []byte
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		content = fmt.Appendf(content, "/TD <</MCID %d>> BDC\nBT /F1 10 Tf 50 %d Td (c%d) Tj ET\nEMC\n",
 			i, 700-i*20, i)
 	}
@@ -64,7 +64,7 @@ func tablespanUa2() ([]byte, error) {
 		"Lang", text("en-US"),
 	))
 
-	// cellOpts are cell's optional arguments; zero values are Python's None.
+	// cellOpts are cell's options; a zero value leaves its key out.
 	type cellOpts struct {
 		colspan, rowspan int
 		headers          []string

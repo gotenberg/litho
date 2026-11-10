@@ -106,7 +106,7 @@ func laterreads2u() ([]byte, error) {
 	}
 
 	// page is a page drawing content; nil leaves /Resources or /Contents out.
-	page := func(resources *pdfgen.Dict, content *string, annots *pdfgen.Array) *pdfgen.Dict {
+	page := func(resources *pdfgen.Dict, content *string, annots *pdfgen.Array) {
 		dd := d("Type", n("Page"), "MediaBox", a(0, 0, 612, 792))
 		if content != nil {
 			dd.Set("Contents", pdf.MakeIndirect(pdf.Stream([]byte(*content))))
@@ -117,9 +117,7 @@ func laterreads2u() ([]byte, error) {
 		if annots != nil {
 			dd.Set("Annots", annots)
 		}
-		p := pdf.Indirect(dd)
-		pdf.AddPage(p)
-		return p
+		pdf.AddPage(pdf.Indirect(dd))
 	}
 	content := func(s string) *string { return &s }
 

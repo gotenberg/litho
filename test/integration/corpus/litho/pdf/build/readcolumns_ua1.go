@@ -2,6 +2,7 @@ package build
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gotenberg/litho/test/integration/fixture/pdfgen"
 )
@@ -49,16 +50,17 @@ func readcolumnsUa1() ([]byte, error) {
 
 	// pageContent is the content of one page: head and title, the columns, the number.
 	pageContent := func(number int) string {
-		out := fmt.Sprintf("BT /F1 9 Tf 72 760 Td (Litho corpus: columns set line by line) Tj\n"+
+		var out strings.Builder
+		fmt.Fprintf(&out, "BT /F1 9 Tf 72 760 Td (Litho corpus: columns set line by line) Tj\n"+
 			"/F1 16 Tf 0 -70 Td (Page %d: two columns, one paragraph each) Tj ET\n", number)
 		for line := range 6 {
-			out += fmt.Sprintf("BT /F1 10 Tf 72 %d Td (Left column, page %d, line %d of six.) Tj ET\n",
+			fmt.Fprintf(&out, "BT /F1 10 Tf 72 %d Td (Left column, page %d, line %d of six.) Tj ET\n",
 				650-12*line, number, line+1)
-			out += fmt.Sprintf("BT /F1 10 Tf 320 %d Td (Right column, page %d, line %d of six.) Tj ET\n",
+			fmt.Fprintf(&out, "BT /F1 10 Tf 320 %d Td (Right column, page %d, line %d of six.) Tj ET\n",
 				644-12*line, number, line+1)
 		}
-		out += fmt.Sprintf("BT /F1 9 Tf 300 40 Td (%d) Tj ET\n", number)
-		return out
+		fmt.Fprintf(&out, "BT /F1 9 Tf 300 40 Td (%d) Tj ET\n", number)
+		return out.String()
 	}
 
 	for _, number := range []int{1, 2} {

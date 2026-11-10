@@ -112,8 +112,8 @@ func redactvectors4() ([]byte, error) {
 	))
 
 	// notesZip is a zip archive of one deflated member about page two,
-	// deterministic. It writes the bytes Python's zipfile writes for one
-	// ZipInfo member: a raw deflate stream at zlib's default level, no data
+	// deterministic. It writes the bytes the committed file holds, those of
+	// Python's zipfile for one ZipInfo member: a raw deflate stream at zlib's default level, no data
 	// descriptor, Unix as the creating system and 0o600 as the mode.
 	notesZip := func() []byte {
 		member := bytes.Repeat([]byte("notes about page two, reviewed.\n"), 32)

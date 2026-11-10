@@ -29,7 +29,7 @@ func complexUa2() ([]byte, error) {
 	pdf := pdfgen.New()
 
 	// F1 renders ordinary text and carries no font program (ISO 14289-2, 8.4.5.5.1).
-	f1 := pdf.Indirect(unembeddedTrueType("/Helvetica"))
+	f1 := pdf.Indirect(unembeddedTrueType())
 
 	// F2 maps code 65 onto a Unicode PUA value. ISO 14289-2, 8.4.3 then demands an
 	// /Alt or /ActualText on the enclosing structure element, and the P below has

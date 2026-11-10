@@ -27,9 +27,11 @@ type loDir struct {
 var libreOfficeDirs = map[string][]loDir{
 	"docx": {{"sw/qa/extras/ooxmlexport/data", 250, nil}, {"sw/qa/extras/ooxmlimport/data", 60, nil}, {"sw/qa/extras/layout/data", 40, nil}},
 	"odt": {
-		{"sw/qa/extras/odfexport/data", 80, []string{".odt"}}, {"sw/qa/extras/odfimport/data", 40, []string{".odt"}},
+		{"sw/qa/extras/odfexport/data", 80, []string{".odt"}},
+		{"sw/qa/extras/odfimport/data", 40, []string{".odt"}},
 		{"sw/qa/extras/layout/data", 30, []string{".odt"}},
-		{"sw/qa/extras/odfexport/data", 15, []string{".fodt"}}, {"sw/qa/extras/odfimport/data", 10, []string{".fodt"}},
+		{"sw/qa/extras/odfexport/data", 15, []string{".fodt"}},
+		{"sw/qa/extras/odfimport/data", 10, []string{".fodt"}},
 		{"sw/qa/extras/layout/data", 20, []string{".fodt"}},
 	},
 	"xlsx": {{"sc/qa/unit/data/xlsx", 220, nil}, {"chart2/qa/extras/data/xlsx", 60, nil}},
@@ -73,7 +75,8 @@ var libreOfficeLeftOut = []string{
 // libreOfficeDirExts returns the extensions read in the core directory d:
 // its own when it lists them; a test directory named for a format gives that
 // extension alone, so a fixture ID's extension names the directory; any
-// other directory, a mixed one, gives the corpus's extensions.
+// other directory, a Writer test's or a mixed one, gives the corpus's
+// extensions.
 func libreOfficeDirExts(d loDir, exts []string) []string {
 	if d.exts != nil {
 		return d.exts

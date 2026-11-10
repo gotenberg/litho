@@ -2,6 +2,7 @@ package build
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/gotenberg/litho/test/integration/fixture/pdfgen"
@@ -52,9 +53,7 @@ func fontcff22b() ([]byte, error) {
 			"cmap": tables["cmap"], "head": tables["head"], "maxp": maxp05,
 			"name": tables["name"], "post": tables["post"],
 		}
-		for k, v := range outlines {
-			t[k] = v
-		}
+		maps.Copy(t, outlines)
 		if metrics {
 			t["hhea"] = tables["hhea"]
 			t["hmtx"] = tables["hmtx"]
@@ -102,7 +101,8 @@ func fontcff22b() ([]byte, error) {
 		))}
 	}
 
-	type0 := func(tag, subtype string, program []byte, width int) taggedFont {
+	type0 := func(tag, subtype string, program []byte) taggedFont {
+		const width = 600
 		cid := d(
 			"Type", n("Font"),
 			"Subtype", n(subtype),
@@ -125,14 +125,14 @@ func fontcff22b() ([]byte, error) {
 
 	fonts := []taggedFont{
 		simple("F1", "Type1", cff2, a(600, 600)),
-		type0("F2", "CIDFontType0", cff2, 600),
+		type0("F2", "CIDFontType0", cff2),
 		simple("F3", "TrueType", cff2, a(600, 600)),
-		type0("F4", "CIDFontType2", cff2, 600),
+		type0("F4", "CIDFontType2", cff2),
 		simple("F5", "TrueType", cff2, a(500, 500)),
 		simple("M1", "Type1", tt, a(600, 600)),
-		type0("M2", "CIDFontType0", tt, 600),
+		type0("M2", "CIDFontType0", tt),
 		simple("M3", "TrueType", cffNoMetrics, a(600, 600)),
-		type0("M4", "CIDFontType2", cffNoMetrics, 600),
+		type0("M4", "CIDFontType2", cffNoMetrics),
 		simple("OK", "Type1", whole, a(600, 600)),
 	}
 

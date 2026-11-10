@@ -125,7 +125,7 @@ func init() {
 	}
 	genCodes(staticLtree[:], lCodes+1, blCount[:])
 
-	for n := 0; n < dCodes; n++ {
+	for n := range dCodes {
 		staticDtree[n].dl = 5
 		staticDtree[n].fc = uint16(biReverse(uint(n), 5))
 	}
@@ -148,13 +148,13 @@ func (s *state) trInit() {
 }
 
 func (s *state) initBlock() {
-	for n := 0; n < lCodes; n++ {
+	for n := range lCodes {
 		s.dynLtree[n].fc = 0
 	}
-	for n := 0; n < dCodes; n++ {
+	for n := range dCodes {
 		s.dynDtree[n].fc = 0
 	}
-	for n := 0; n < blCodes; n++ {
+	for n := range blCodes {
 		s.blTree[n].fc = 0
 	}
 	s.dynLtree[endBlock].fc = 1
@@ -310,7 +310,7 @@ func (s *state) buildTree(desc *treeDesc) {
 	s.heapLen = 0
 	s.heapMax = heapSize
 
-	for n := 0; n < elems; n++ {
+	for n := range elems {
 		if tree[n].fc != 0 {
 			s.heapLen++
 			s.heap[s.heapLen] = n
@@ -496,7 +496,7 @@ func (s *state) sendAllTrees(lcodes, dcodes, blcodes int) {
 	s.sendBits(lcodes-257, 5)
 	s.sendBits(dcodes-1, 5)
 	s.sendBits(blcodes-4, 4)
-	for rank := 0; rank < blcodes; rank++ {
+	for rank := range blcodes {
 		s.sendBits(int(s.blTree[blOrder[rank]].dl), 3)
 	}
 	s.sendTree(s.dynLtree[:], lcodes-1)
