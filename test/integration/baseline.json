@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-09T21:38:26Z",
+  "captured_at": "2026-11-10T06:01:46Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -8993,12 +8993,12 @@
     "libreoffice/odt": {
       "features": {
         "diff": {
-          "matched": 96,
-          "mismatched": 54,
+          "matched": 106,
+          "mismatched": 89,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 146
+            "pages_equal": 169
           },
           "scores": {
             "layout/2024-01-19_merged-cells-on-separate-pages-vertical-alignment.odt": {
@@ -9008,6 +9008,22 @@
               "pages": 1,
               "strict": 1,
               "text_f1": 1
+            },
+            "layout/C4_must_start_on_p1.fodt": {
+              "layout": 0.7573,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0,
+              "text_f1": 0.8611
+            },
+            "layout/Hyphenated-link.fodt": {
+              "layout": 0.6795,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.5
             },
             "layout/Tdf121509.odt": {
               "layout": 0.9995,
@@ -9025,6 +9041,22 @@
               "strict": 1,
               "text_f1": 1
             },
+            "layout/ToC-in-linked-frame-on-first-page-style.fodt": {
+              "layout": 0.0026,
+              "link_recall": 1,
+              "outline_recall": 0.4,
+              "pages": 0.6,
+              "strict": 0,
+              "text_f1": 0.1382
+            },
+            "layout/U-min.fodt": {
+              "layout": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0.5,
+              "strict": 0.5,
+              "text_f1": 0
+            },
             "layout/abi11870-2.odt": {
               "layout": 0.3928,
               "link_recall": 0.6053,
@@ -9041,6 +9073,62 @@
               "strict": 1,
               "text_f1": 1
             },
+            "layout/cell-vertical-align-middle-in-fly-at-page.fodt": {
+              "layout": 0.1106,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 1
+            },
+            "layout/changed_table_rows.fodt": {
+              "layout": 0.8083,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.6667
+            },
+            "layout/crashHyphen.fodt": {
+              "layout": 0.5068,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "layout/drop_asian_word.fodt": {
+              "layout": 0.7522,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "layout/drop_complex_word.fodt": {
+              "layout": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0
+            },
+            "layout/drop_fly_overlap.fodt": {
+              "layout": 0.9995,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0
+            },
+            "layout/drop_vertical.fodt": {
+              "layout": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0
+            },
             "layout/endOfLineComments.odt": {
               "layout": 0.9778,
               "link_recall": 1,
@@ -9056,6 +9144,78 @@
               "pages": 1,
               "strict": 0,
               "text_f1": 0.9592
+            },
+            "layout/field_hide_section.fodt": {
+              "layout": 0.9878,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "layout/fly_hidden_paragraph.fodt": {
+              "layout": 0.3973,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0
+            },
+            "layout/fomargin.fodt": {
+              "layout": 0.946,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "layout/footer-fly-table.fodt": {
+              "layout": 0.5772,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "layout/footer_field_rest_portion.fodt": {
+              "layout": 0.9727,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "layout/footnote-in-2-column-section.fodt": {
+              "layout": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 1
+            },
+            "layout/hidden-para-as-char-fly.fodt": {
+              "layout": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "layout/hidden-para-follow-frame.fodt": {
+              "layout": 0.2506,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0.5,
+              "strict": 0.5,
+              "text_f1": 0.3333
+            },
+            "layout/hiddensection.fodt": {
+              "layout": 0.976,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "layout/i94666.odt": {
               "layout": 0.8988,
@@ -9241,6 +9401,14 @@
               "strict": 1,
               "text_f1": 0
             },
+            "odfexport/CrossRefHeadingBookmark.fodt": {
+              "layout": 0.9608,
+              "link_recall": 0,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "odfexport/DUMMY2.odt": {
               "layout": 0.7404,
               "link_recall": 1,
@@ -9257,6 +9425,14 @@
               "strict": 0.6,
               "text_f1": 1
             },
+            "odfexport/IsLegal.fodt": {
+              "layout": 0.2445,
+              "link_recall": 1,
+              "outline_recall": 0,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0.8
+            },
             "odfexport/MadeByLO7.odt": {
               "layout": 0.8247,
               "link_recall": 1,
@@ -9264,6 +9440,22 @@
               "pages": 1,
               "strict": 0,
               "text_f1": 1
+            },
+            "odfexport/ParagraphMarkerMarkup.fodt": {
+              "layout": 0.9252,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 1
+            },
+            "odfexport/UnderlineTrailingSpace.fodt": {
+              "layout": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.5
             },
             "odfexport/WordTest_edit.odt": {
               "layout": 0.8941,
@@ -9313,6 +9505,14 @@
               "strict": 1,
               "text_f1": 1
             },
+            "odfexport/bookmark_order.fodt": {
+              "layout": 0.9423,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 1
+            },
             "odfexport/border_types.odt": {
               "layout": 0.8739,
               "link_recall": 1,
@@ -9352,6 +9552,22 @@
               "pages": 1,
               "strict": 0,
               "text_f1": 1
+            },
+            "odfexport/colored-sections-separators.fodt": {
+              "layout": 0.8417,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 1
+            },
+            "odfexport/deleted_table.fodt": {
+              "layout": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
             },
             "odfexport/embedded-pdf.odt": {
               "layout": 0.9905,
@@ -9409,6 +9625,14 @@
               "strict": 0,
               "text_f1": 1
             },
+            "odfexport/footnote-collect-at-end-of-section.fodt": {
+              "layout": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "odfexport/framebackgrounds.odt": {
               "layout": 0.4475,
               "link_recall": 1,
@@ -9441,6 +9665,14 @@
               "strict": 1,
               "text_f1": 1
             },
+            "odfexport/italics-in-comment.fodt": {
+              "layout": 1,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 1
+            },
             "odfexport/listformat.odt": {
               "layout": 0.9774,
               "link_recall": 1,
@@ -9448,6 +9680,14 @@
               "pages": 1,
               "strict": 1,
               "text_f1": 1
+            },
+            "odfexport/midnight_redline.fodt": {
+              "layout": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
             },
             "odfexport/nestedTableInFooter.odt": {
               "layout": 0.6969,
@@ -9511,6 +9751,14 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
+              "text_f1": 1
+            },
+            "odfexport/protection-key.fodt": {
+              "layout": 1,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
               "text_f1": 1
             },
             "odfexport/qrcode-properties.odt": {
@@ -9585,6 +9833,22 @@
               "strict": 1,
               "text_f1": 0.4
             },
+            "odfexport/section-columns-separator.fodt": {
+              "layout": 0.8537,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 1
+            },
+            "odfexport/sender-initials.fodt": {
+              "layout": 0.9702,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "odfexport/shape-relsize.odt": {
               "layout": 0.9833,
               "link_recall": 1,
@@ -9609,12 +9873,28 @@
               "strict": 0,
               "text_f1": 1
             },
+            "odfexport/signatureline-properties.fodt": {
+              "layout": 0.9644,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "odfexport/spellout-numberingtypes.odt": {
               "layout": 0.9661,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
+              "text_f1": 1
+            },
+            "odfexport/style-link.fodt": {
+              "layout": 1,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
               "text_f1": 1
             },
             "odfexport/sw_hatch.odt": {
@@ -9889,6 +10169,22 @@
               "strict": 1,
               "text_f1": 1
             },
+            "odfimport/PageAnchorZIndexFirstPage.fodt": {
+              "layout": 0.9587,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0,
+              "text_f1": 1
+            },
+            "odfimport/PageAnchorZIndexSecondPage.fodt": {
+              "layout": 0.9794,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 1
+            },
             "odfimport/PageBackground.odt": {
               "layout": 0.0999,
               "link_recall": 1,
@@ -9913,8 +10209,32 @@
               "strict": 1,
               "text_f1": 1
             },
+            "odfimport/background-image-link.fodt": {
+              "layout": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0.625
+            },
+            "odfimport/bnc800714.fodt": {
+              "layout": 0.1119,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 1
+            },
             "odfimport/borders_ooo33.odt": {
               "layout": 0.8523,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "odfimport/chained-boxes-in-min-height-cells.fodt": {
+              "layout": 0,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9929,12 +10249,52 @@
               "strict": 1,
               "text_f1": 1
             },
+            "odfimport/draw-image-embedded.fodt": {
+              "layout": 0.9555,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 1
+            },
+            "odfimport/draw-image-link.fodt": {
+              "layout": 1,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 1
+            },
+            "odfimport/draw-object-link.fodt": {
+              "layout": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 0
+            },
             "odfimport/empty-svg-family-name.odt": {
               "layout": 0.9412,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
+              "text_f1": 1
+            },
+            "odfimport/emptyParagraphLoosesFontHeight.fodt": {
+              "layout": 0.844,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
+              "text_f1": 1
+            },
+            "odfimport/empty_line_in_text_box.fodt": {
+              "layout": 0,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 0,
+              "strict": 0,
               "text_f1": 1
             },
             "odfimport/fdo37606.odt": {

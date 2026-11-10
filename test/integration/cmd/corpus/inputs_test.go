@@ -252,10 +252,14 @@ func TestOfficeListsAndHashesAgree(t *testing.T) {
 	t.Parallel()
 
 	// The caps of the libreoffice selector (libreOfficeDirs), by LibreOffice core
-	// directory.
+	// directory, or by directory and extension where a directory is read once
+	// per extension.
 	caps := map[string]map[string]int{
 		"docx": {"sw/qa/extras/ooxmlexport/data": 250, "sw/qa/extras/ooxmlimport/data": 60, "sw/qa/extras/layout/data": 40},
-		"odt":  {"sw/qa/extras/odfexport/data": 80, "sw/qa/extras/odfimport/data": 40, "sw/qa/extras/layout/data": 30},
+		"odt": {
+			"sw/qa/extras/odfexport/data odt": 80, "sw/qa/extras/odfimport/data odt": 40, "sw/qa/extras/layout/data odt": 30,
+			"sw/qa/extras/odfexport/data fodt": 15, "sw/qa/extras/odfimport/data fodt": 10, "sw/qa/extras/layout/data fodt": 20,
+		},
 		"xlsx": {"sc/qa/unit/data/xlsx": 220, "chart2/qa/extras/data/xlsx": 60},
 		"ods":  {"sc/qa/unit/data/ods": 200, "sc/qa/unit/data/fods": 16, "chart2/qa/extras/data/ods": 40},
 		"csv":  {"sc/qa/unit/data/csv": 9},
@@ -263,7 +267,7 @@ func TestOfficeListsAndHashesAgree(t *testing.T) {
 		"odp":  {"sd/qa/unit/data/odp": 150, "sd/qa/unit/data": 20},
 	}
 	exts := map[string][]string{
-		"docx": {"docx"}, "odt": {"odt"}, "xlsx": {"xlsx"}, "ods": {"ods", "fods"}, "csv": {"csv"},
+		"docx": {"docx"}, "odt": {"odt", "fodt"}, "xlsx": {"xlsx"}, "ods": {"ods", "fods"}, "csv": {"csv"},
 		"pptx": {"pptx"}, "odp": {"odp", "fodp"},
 	}
 	// corePath is the LibreOffice core path of a fixture ID: a Writer test
@@ -324,7 +328,11 @@ func TestOfficeListsAndHashesAgree(t *testing.T) {
 				continue
 			}
 			p := corePath(sub, name)
-			per[p[:strings.LastIndexByte(p, '/')]]++
+			key := p[:strings.LastIndexByte(p, '/')]
+			if _, ok := dirs[key+" "+ext]; ok {
+				key += " " + ext
+			}
+			per[key]++
 			if !listed[p] {
 				t.Errorf("%s: %s is listed but not in files.sha256", corpus, p)
 			}

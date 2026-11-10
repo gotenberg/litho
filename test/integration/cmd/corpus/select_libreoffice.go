@@ -11,40 +11,43 @@ import (
 
 // loDir is one LibreOffice core test data directory a libreoffice corpus
 // reads, and the most documents it keeps, so the export tests, which
-// outnumber the rest, do not crowd out the import and layout tests.
+// outnumber the rest, do not crowd out the import and layout tests. exts,
+// when set, are the only extensions read there: a Writer directory is read
+// once per extension, so the flat documents have caps of their own and do
+// not displace the packaged ones.
 type loDir struct {
 	path string
 	cap  int
+	exts []string
 }
 
 // libreOfficeDirs lists, per corpus, the directories read in order.
 //
 //nolint:gochecknoglobals // static table
 var libreOfficeDirs = map[string][]loDir{
-	"docx": {{"sw/qa/extras/ooxmlexport/data", 250}, {"sw/qa/extras/ooxmlimport/data", 60}, {"sw/qa/extras/layout/data", 40}},
-	"odt":  {{"sw/qa/extras/odfexport/data", 80}, {"sw/qa/extras/odfimport/data", 40}, {"sw/qa/extras/layout/data", 30}},
-	"xlsx": {{"sc/qa/unit/data/xlsx", 220}, {"chart2/qa/extras/data/xlsx", 60}},
-	"ods":  {{"sc/qa/unit/data/ods", 200}, {"sc/qa/unit/data/fods", 16}, {"chart2/qa/extras/data/ods", 40}},
-	"csv":  {{"sc/qa/unit/data/csv", 9}},
-	"pptx": {{"sd/qa/unit/data/pptx", 200}, {"oox/qa/unit/data", 61}, {"chart2/qa/extras/data/pptx", 38}, {"sd/qa/unit/data", 20}},
-	"odp":  {{"sd/qa/unit/data/odp", 150}, {"sd/qa/unit/data", 20}},
+	"docx": {{"sw/qa/extras/ooxmlexport/data", 250, nil}, {"sw/qa/extras/ooxmlimport/data", 60, nil}, {"sw/qa/extras/layout/data", 40, nil}},
+	"odt": {
+		{"sw/qa/extras/odfexport/data", 80, []string{".odt"}}, {"sw/qa/extras/odfimport/data", 40, []string{".odt"}},
+		{"sw/qa/extras/layout/data", 30, []string{".odt"}},
+		{"sw/qa/extras/odfexport/data", 15, []string{".fodt"}}, {"sw/qa/extras/odfimport/data", 10, []string{".fodt"}},
+		{"sw/qa/extras/layout/data", 20, []string{".fodt"}},
+	},
+	"xlsx": {{"sc/qa/unit/data/xlsx", 220, nil}, {"chart2/qa/extras/data/xlsx", 60, nil}},
+	"ods":  {{"sc/qa/unit/data/ods", 200, nil}, {"sc/qa/unit/data/fods", 16, nil}, {"chart2/qa/extras/data/ods", 40, nil}},
+	"csv":  {{"sc/qa/unit/data/csv", 9, nil}},
+	"pptx": {{"sd/qa/unit/data/pptx", 200, nil}, {"oox/qa/unit/data", 61, nil}, {"chart2/qa/extras/data/pptx", 38, nil}, {"sd/qa/unit/data", 20, nil}},
+	// Impress keeps its flat presentations beside the packaged ones, where
+	// Calc gives them a directory of their own.
+	"odp": {{"sd/qa/unit/data/odp", 150, []string{".odp", ".fodp"}}, {"sd/qa/unit/data", 20, nil}},
 }
 
 // libreOfficeExtensions are the extensions each corpus reads.
 //
 //nolint:gochecknoglobals // static table
 var libreOfficeExtensions = map[string][]string{
-	"docx": {".docx"}, "odt": {".odt"}, "xlsx": {".xlsx"}, "ods": {".ods", ".fods"},
+	"docx": {".docx"}, "odt": {".odt", ".fodt"}, "xlsx": {".xlsx"}, "ods": {".ods", ".fods"},
 	"csv": {".csv"}, "pptx": {".pptx"}, "odp": {".odp", ".fodp"},
 }
-
-// libreOfficeDirExtensions lists the directories named for a format that
-// hold another extension of the corpus's too: Impress keeps its flat
-// presentations beside the packaged ones, where Calc gives them a directory
-// of their own.
-//
-//nolint:gochecknoglobals // static table
-var libreOfficeDirExtensions = map[string][]string{"sd/qa/unit/data/odp": {".odp", ".fodp"}}
 
 // libreOfficeMixedDirs are the module test data directories that hold
 // documents of several formats beside the format directories under them;
@@ -67,16 +70,15 @@ var libreOfficeLeftOut = []string{
 	"sd/qa/unit/data/odp/canvas-slide.odp",
 }
 
-// libreOfficeDirExts returns the extensions read in the core directory d: a
-// test directory named for a format gives that extension alone, so a fixture
-// ID's extension names the directory, unless libreOfficeDirExtensions lists
-// it; any other directory, a Writer test's or a mixed one, gives the
-// corpus's extensions.
-func libreOfficeDirExts(d string, exts []string) []string {
-	if e, ok := libreOfficeDirExtensions[d]; ok {
-		return e
+// libreOfficeDirExts returns the extensions read in the core directory d:
+// its own when it lists them; a test directory named for a format gives that
+// extension alone, so a fixture ID's extension names the directory; any
+// other directory, a mixed one, gives the corpus's extensions.
+func libreOfficeDirExts(d loDir, exts []string) []string {
+	if d.exts != nil {
+		return d.exts
 	}
-	own := "." + d[strings.LastIndex(d, "/")+1:]
+	own := "." + d.path[strings.LastIndex(d.path, "/")+1:]
 	if slices.Contains(exts, own) {
 		return []string{own}
 	}
@@ -109,7 +111,7 @@ func selectLibreOffice(_ context.Context, checkout, format, dir string, _ map[st
 	qualifies := officeQualifiesBy[format]
 	var kept []selected
 	for _, d := range dirs {
-		exts := libreOfficeDirExts(d.path, libreOfficeExtensions[format])
+		exts := libreOfficeDirExts(d, libreOfficeExtensions[format])
 		full := filepath.Join(checkout, filepath.FromSlash(d.path))
 		entries, err := os.ReadDir(full)
 		if err != nil {

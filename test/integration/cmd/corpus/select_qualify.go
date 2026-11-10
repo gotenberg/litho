@@ -129,6 +129,11 @@ func docxQualifies(path string) bool {
 }
 
 func odtQualifies(path string) bool {
+	if strings.HasSuffix(path, ".fodt") {
+		// The packaged documents keep no embedded object, charts included.
+		content, ok := flatQualifies(path, []byte("<office:text"))
+		return ok && len(embeddedType.FindAllIndex(content, 2)) < 2 && !flatMedia.Match(content)
+	}
 	z, names := zipNames(path)
 	if z == nil {
 		return false

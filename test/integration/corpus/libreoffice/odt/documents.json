@@ -598,5 +598,185 @@
   {
     "id": "layout/tdf123898.odt",
     "path": "sw/qa/extras/layout/data/tdf123898.odt"
+  },
+  {
+    "id": "odfexport/CrossRefHeadingBookmark.fodt",
+    "path": "sw/qa/extras/odfexport/data/CrossRefHeadingBookmark.fodt"
+  },
+  {
+    "id": "odfexport/IsLegal.fodt",
+    "path": "sw/qa/extras/odfexport/data/IsLegal.fodt"
+  },
+  {
+    "id": "odfexport/ParagraphMarkerMarkup.fodt",
+    "path": "sw/qa/extras/odfexport/data/ParagraphMarkerMarkup.fodt"
+  },
+  {
+    "id": "odfexport/UnderlineTrailingSpace.fodt",
+    "path": "sw/qa/extras/odfexport/data/UnderlineTrailingSpace.fodt"
+  },
+  {
+    "id": "odfexport/bookmark_order.fodt",
+    "path": "sw/qa/extras/odfexport/data/bookmark_order.fodt"
+  },
+  {
+    "id": "odfexport/colored-sections-separators.fodt",
+    "path": "sw/qa/extras/odfexport/data/colored-sections-separators.fodt"
+  },
+  {
+    "id": "odfexport/deleted_table.fodt",
+    "path": "sw/qa/extras/odfexport/data/deleted_table.fodt"
+  },
+  {
+    "id": "odfexport/footnote-collect-at-end-of-section.fodt",
+    "path": "sw/qa/extras/odfexport/data/footnote-collect-at-end-of-section.fodt"
+  },
+  {
+    "id": "odfexport/italics-in-comment.fodt",
+    "path": "sw/qa/extras/odfexport/data/italics-in-comment.fodt"
+  },
+  {
+    "id": "odfexport/midnight_redline.fodt",
+    "path": "sw/qa/extras/odfexport/data/midnight_redline.fodt"
+  },
+  {
+    "id": "odfexport/protection-key.fodt",
+    "path": "sw/qa/extras/odfexport/data/protection-key.fodt"
+  },
+  {
+    "id": "odfexport/section-columns-separator.fodt",
+    "path": "sw/qa/extras/odfexport/data/section-columns-separator.fodt"
+  },
+  {
+    "id": "odfexport/sender-initials.fodt",
+    "path": "sw/qa/extras/odfexport/data/sender-initials.fodt"
+  },
+  {
+    "id": "odfexport/signatureline-properties.fodt",
+    "path": "sw/qa/extras/odfexport/data/signatureline-properties.fodt"
+  },
+  {
+    "id": "odfexport/style-link.fodt",
+    "path": "sw/qa/extras/odfexport/data/style-link.fodt"
+  },
+  {
+    "id": "odfimport/PageAnchorZIndexFirstPage.fodt",
+    "path": "sw/qa/extras/odfimport/data/PageAnchorZIndexFirstPage.fodt"
+  },
+  {
+    "id": "odfimport/PageAnchorZIndexSecondPage.fodt",
+    "path": "sw/qa/extras/odfimport/data/PageAnchorZIndexSecondPage.fodt"
+  },
+  {
+    "id": "odfimport/background-image-link.fodt",
+    "path": "sw/qa/extras/odfimport/data/background-image-link.fodt"
+  },
+  {
+    "id": "odfimport/bnc800714.fodt",
+    "path": "sw/qa/extras/odfimport/data/bnc800714.fodt"
+  },
+  {
+    "id": "odfimport/chained-boxes-in-min-height-cells.fodt",
+    "path": "sw/qa/extras/odfimport/data/chained-boxes-in-min-height-cells.fodt"
+  },
+  {
+    "id": "odfimport/draw-image-embedded.fodt",
+    "path": "sw/qa/extras/odfimport/data/draw-image-embedded.fodt"
+  },
+  {
+    "id": "odfimport/draw-image-link.fodt",
+    "path": "sw/qa/extras/odfimport/data/draw-image-link.fodt"
+  },
+  {
+    "id": "odfimport/draw-object-link.fodt",
+    "path": "sw/qa/extras/odfimport/data/draw-object-link.fodt"
+  },
+  {
+    "id": "odfimport/emptyParagraphLoosesFontHeight.fodt",
+    "path": "sw/qa/extras/odfimport/data/emptyParagraphLoosesFontHeight.fodt"
+  },
+  {
+    "id": "odfimport/empty_line_in_text_box.fodt",
+    "path": "sw/qa/extras/odfimport/data/empty_line_in_text_box.fodt"
+  },
+  {
+    "id": "layout/C4_must_start_on_p1.fodt",
+    "path": "sw/qa/extras/layout/data/C4_must_start_on_p1.fodt"
+  },
+  {
+    "id": "layout/Hyphenated-link.fodt",
+    "path": "sw/qa/extras/layout/data/Hyphenated-link.fodt"
+  },
+  {
+    "id": "layout/ToC-in-linked-frame-on-first-page-style.fodt",
+    "path": "sw/qa/extras/layout/data/ToC-in-linked-frame-on-first-page-style.fodt"
+  },
+  {
+    "id": "layout/U-min.fodt",
+    "path": "sw/qa/extras/layout/data/U-min.fodt"
+  },
+  {
+    "id": "layout/cell-vertical-align-middle-in-fly-at-page.fodt",
+    "path": "sw/qa/extras/layout/data/cell-vertical-align-middle-in-fly-at-page.fodt"
+  },
+  {
+    "id": "layout/changed_table_rows.fodt",
+    "path": "sw/qa/extras/layout/data/changed_table_rows.fodt"
+  },
+  {
+    "id": "layout/crashHyphen.fodt",
+    "path": "sw/qa/extras/layout/data/crashHyphen.fodt"
+  },
+  {
+    "id": "layout/drop_asian_word.fodt",
+    "path": "sw/qa/extras/layout/data/drop_asian_word.fodt"
+  },
+  {
+    "id": "layout/drop_complex_word.fodt",
+    "path": "sw/qa/extras/layout/data/drop_complex_word.fodt"
+  },
+  {
+    "id": "layout/drop_fly_overlap.fodt",
+    "path": "sw/qa/extras/layout/data/drop_fly_overlap.fodt"
+  },
+  {
+    "id": "layout/drop_vertical.fodt",
+    "path": "sw/qa/extras/layout/data/drop_vertical.fodt"
+  },
+  {
+    "id": "layout/field_hide_section.fodt",
+    "path": "sw/qa/extras/layout/data/field_hide_section.fodt"
+  },
+  {
+    "id": "layout/fly_hidden_paragraph.fodt",
+    "path": "sw/qa/extras/layout/data/fly_hidden_paragraph.fodt"
+  },
+  {
+    "id": "layout/fomargin.fodt",
+    "path": "sw/qa/extras/layout/data/fomargin.fodt"
+  },
+  {
+    "id": "layout/footer-fly-table.fodt",
+    "path": "sw/qa/extras/layout/data/footer-fly-table.fodt"
+  },
+  {
+    "id": "layout/footer_field_rest_portion.fodt",
+    "path": "sw/qa/extras/layout/data/footer_field_rest_portion.fodt"
+  },
+  {
+    "id": "layout/footnote-in-2-column-section.fodt",
+    "path": "sw/qa/extras/layout/data/footnote-in-2-column-section.fodt"
+  },
+  {
+    "id": "layout/hidden-para-as-char-fly.fodt",
+    "path": "sw/qa/extras/layout/data/hidden-para-as-char-fly.fodt"
+  },
+  {
+    "id": "layout/hidden-para-follow-frame.fodt",
+    "path": "sw/qa/extras/layout/data/hidden-para-follow-frame.fodt"
+  },
+  {
+    "id": "layout/hiddensection.fodt",
+    "path": "sw/qa/extras/layout/data/hiddensection.fodt"
   }
 ]
