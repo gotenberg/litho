@@ -51,8 +51,9 @@ const maxReferenceAnswer = 300
 // corpus's testdata (see [ReferenceSpec]): the LibreOffice and Chromium
 // ones with the Gotenberg image versions.env pins (GOTENBERG_IMAGE), started
 // on a free loopback port, the Microsoft ones with Office for the web
-// through Microsoft Graph, signed in as the personal account of the app
-// registration LITHO_CORPUS_MSGRAPH_CLIENT_ID names (see [newMSGraph]).
+// through Microsoft Graph, with the access token LITHO_CORPUS_MSGRAPH_TOKEN
+// holds or signed in through the app registration
+// LITHO_CORPUS_MSGRAPH_CLIENT_ID names (see [newMSGraph]).
 //
 //	corpus references [--corpus=litho/html,poi/*] [--fixtures=a,b]
 //
@@ -535,7 +536,10 @@ func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, 
 			}
 		}
 		status, body, err := conv.convert(ctx, engine, j)
-		if err != nil {
+		switch {
+		case errors.Is(err, errMSGraphSignIn):
+			return err
+		case err != nil:
 			status, body = 0, []byte(err.Error())
 		}
 		mu.Lock()
@@ -561,13 +565,16 @@ func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, 
 		fmt.Fprintf(os.Stderr, "  %s: %s refused by %s (HTTP %d)\n", m.Name, j.name, builder, status)
 		return nil
 	})
-	if err != nil {
+	// A sign-in that ran out stops the run: what it built is kept, so the
+	// next run, with a new token, builds the rest.
+	signIn := errors.Is(err, errMSGraphSignIn)
+	if err != nil && !signIn {
 		return err
 	}
 
 	man := referenceManifest{Format: 1, Image: builder, LibreOffice: version, References: ok, Failed: failed}
 	path := filepath.Join(out, referenceManifestName)
-	if len(only) > 0 {
+	if len(only) > 0 || signIn {
 		// A run of some sources keeps the entries of the others.
 		if data, err := os.ReadFile(path); err == nil { //nolint:gosec // the manifest this command writes
 			var old referenceManifest
@@ -594,6 +601,9 @@ func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, 
 		return err
 	}
 	fmt.Printf("  %s: %d references built, %d refused, with %s\n", m.Name, len(ok), len(failed), builder)
+	if signIn {
+		return err
+	}
 	return nil
 }
 

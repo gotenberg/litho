@@ -30,6 +30,17 @@ const microsoftRenderer = "microsoft-graph"
 // allows personal Microsoft accounts and public client flows.
 const msGraphClientIDEnv = "LITHO_CORPUS_MSGRAPH_CLIENT_ID"
 
+// msGraphTokenEnv names the environment variable holding an access token
+// to use as it is, in place of a sign-in: one Graph Explorer shows after
+// signing in with Files.ReadWrite consented, for an account no directory
+// holds, which cannot register an app. It lasts about an hour and is not
+// refreshed: a run it outlives stops, keeping what it built.
+const msGraphTokenEnv = "LITHO_CORPUS_MSGRAPH_TOKEN" //nolint:gosec // the variable's name, not a credential
+
+// errMSGraphSignIn reports a token Graph no longer accepts: it stops the
+// run rather than count every remaining source as refused.
+var errMSGraphSignIn = errors.New("the Microsoft sign-in is no longer valid")
+
 const (
 	// msGraphAuthority is the sign-in endpoint of personal Microsoft
 	// accounts.
@@ -58,6 +69,8 @@ const (
 type msGraph struct {
 	clientID, cachePath string
 	client              *http.Client
+	// static is a token given in msGraphTokenEnv, never refreshed.
+	static bool
 
 	mu    sync.Mutex
 	token msGraphToken
@@ -71,12 +84,20 @@ type msGraphToken struct {
 	Expiry       time.Time `json:"expiry"`
 }
 
-// newMSGraph signs in, from the cached refresh token when it still works,
-// otherwise with a device code the user enters in a browser.
+// newMSGraph uses the token msGraphTokenEnv holds, or signs in: from the
+// cached refresh token when it still works, otherwise with a device code
+// the user enters in a browser.
 func newMSGraph(ctx context.Context) (*msGraph, error) {
+	if token := strings.TrimSpace(strings.TrimPrefix(os.Getenv(msGraphTokenEnv), "Bearer ")); token != "" {
+		return &msGraph{
+			client: &http.Client{Timeout: referenceTimeout},
+			static: true,
+			token:  msGraphToken{AccessToken: token},
+		}, nil
+	}
 	clientID := os.Getenv(msGraphClientIDEnv)
 	if clientID == "" {
-		return nil, fmt.Errorf("the Microsoft references need the client ID of an app registration in %s", msGraphClientIDEnv)
+		return nil, fmt.Errorf("the Microsoft references need an access token in %s or the client ID of an app registration in %s", msGraphTokenEnv, msGraphClientIDEnv)
 	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
@@ -221,9 +242,9 @@ func (g *msGraph) form(ctx context.Context, endpoint string, values url.Values, 
 func (g *msGraph) accessToken(ctx context.Context) (string, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if time.Now().After(g.token.Expiry) {
+	if !g.static && time.Now().After(g.token.Expiry) {
 		if err := g.refresh(ctx); err != nil {
-			return "", err
+			return "", fmt.Errorf("%w: %w", errMSGraphSignIn, err)
 		}
 	}
 	return g.token.AccessToken, nil
@@ -260,7 +281,9 @@ func (g *msGraph) call(ctx context.Context, method, u string, body []byte) (int,
 		}
 		status = resp.StatusCode
 		switch {
-		case status == http.StatusUnauthorized && attempt == 0:
+		case status == http.StatusUnauthorized && (g.static || attempt > 0):
+			return status, data, fmt.Errorf("%w (HTTP 401: %s)", errMSGraphSignIn, data)
+		case status == http.StatusUnauthorized:
 			g.mu.Lock()
 			g.token.Expiry = time.Time{}
 			g.mu.Unlock()
