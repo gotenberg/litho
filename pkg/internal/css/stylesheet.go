@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 )
 
@@ -305,11 +306,9 @@ func (sp *sheetParser) importRule(it item, base string, cond *mediaCond, depth i
 		sp.log.DebugContext(sp.ctx, "css: @import ignored, fetching is disabled", slog.String("url", target))
 		return
 	}
-	for _, u := range sp.chain {
-		if u == target {
-			c.warn("css-import-failed", "the @import of %s was ignored: it imports itself", target)
-			return
-		}
+	if slices.Contains(sp.chain, target) {
+		c.warn("css-import-failed", "the @import of %s was ignored: it imports itself", target)
+		return
 	}
 	if depth+1 > maxImportDepth || sp.imports >= maxImports {
 		c.warn("css-limit", "the @import of %s was ignored: more than %d imports or %d levels", target, maxImports, maxImportDepth)

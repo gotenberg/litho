@@ -1,5 +1,7 @@
 package css
 
+import "maps"
+
 // shorthandDef defines a shorthand: the longhands it sets and how it
 // expands a value into them. A longhand the value leaves out is reset to
 // its initial value (CSS Cascade 4, 1.2).
@@ -147,12 +149,12 @@ func initShorthands() {
 					return nil, false
 				}
 				out := make([]entry, 0, 17)
-				for i := propID(0); i < 4; i++ {
+				for i := range propID(4) {
 					out = append(out, entry{pBorderTopStyle + i, s}, entry{pBorderTopWidth + i, w}, entry{pBorderTopColor + i, col})
 				}
 				// CSS Backgrounds 3, 4.4: border also resets border-image
 				// to its initial value.
-				for i := propID(0); i < 5; i++ {
+				for i := range propID(5) {
 					out = append(out, entry{pBorderImageSource + i, wideInitial})
 				}
 				return out, true
@@ -190,24 +192,12 @@ func initShorthands() {
 		"page-break-before": legacyBreak(pBreakBefore),
 		"page-break-after":  legacyBreak(pBreakAfter),
 	}
-	for name, def := range flexShorthands() {
-		shorthands[name] = def
-	}
-	for name, def := range gridShorthands() {
-		shorthands[name] = def
-	}
-	for name, def := range textOverflowShorthands() {
-		shorthands[name] = def
-	}
-	for name, def := range logicalShorthands() {
-		shorthands[name] = def
-	}
-	for name, def := range textFontShorthands() {
-		shorthands[name] = def
-	}
-	for name, def := range multicolShorthands() {
-		shorthands[name] = def
-	}
+	maps.Copy(shorthands, flexShorthands())
+	maps.Copy(shorthands, gridShorthands())
+	maps.Copy(shorthands, textOverflowShorthands())
+	maps.Copy(shorthands, logicalShorthands())
+	maps.Copy(shorthands, textFontShorthands())
+	maps.Copy(shorthands, multicolShorthands())
 	delete(longhandByName, "word-break")
 }
 

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf16"
 )
@@ -281,12 +282,7 @@ func pptxQualifies(path string) bool {
 }
 
 func containsString(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, s)
 }
 
 // The binary formats are compound files (MS-CFB): a FAT-chained sector file

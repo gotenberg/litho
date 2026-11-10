@@ -1,6 +1,7 @@
 package css
 
 import (
+	"slices"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -143,8 +144,7 @@ func (m *matcher) langOf(n *html.Node) string {
 		chain = append(chain, e)
 	}
 	m.charge(len(chain))
-	for k := len(chain) - 1; k >= 0; k-- {
-		e := chain[k]
+	for _, e := range slices.Backward(chain) {
 		lang := inherited
 		if v, ok := attr(e, "xml:lang"); ok {
 			lang = lower(strings.TrimSpace(v))
@@ -277,7 +277,7 @@ func matchAttr(a *attrSel, n *html.Node) bool {
 		if want == "" || strings.ContainsAny(want, " \t\n\f\r") {
 			return false
 		}
-		for _, w := range strings.Fields(v) {
+		for w := range strings.FieldsSeq(v) {
 			if w == want {
 				return true
 			}
@@ -469,7 +469,7 @@ func elementFeatures(n *html.Node) []uint64 {
 		out = append(out, featureHash('#', id))
 	}
 	if cl, ok := attr(n, "class"); ok {
-		for _, c := range strings.Fields(cl) {
+		for c := range strings.FieldsSeq(cl) {
 			out = append(out, featureHash('.', c))
 		}
 	}

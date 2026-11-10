@@ -345,7 +345,7 @@ func elementsOfClass(doc *dom.Node, cls string) []*dom.Node {
 	var out []*dom.Node
 	walk(doc, func(n *dom.Node) bool {
 		if n.Type == dom.ElementNode && n.DataAtom != atom.Template {
-			for _, c := range strings.Fields(attrOr(n, "class")) {
+			for c := range strings.FieldsSeq(attrOr(n, "class")) {
 				if c == cls {
 					out = append(out, n)
 					break

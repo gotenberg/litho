@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -326,9 +327,7 @@ func (p *provisioner) complianceGoldens(ctx context.Context, pdfs, claims string
 // with versions.env.
 func (p *provisioner) record(rel string, extra map[string]any) error {
 	entry := map[string]any{"recorded_at": time.Now().UTC().Format(time.RFC3339), "pins": p.pins, "tools": p.tools}
-	for k, v := range extra {
-		entry[k] = v
-	}
+	maps.Copy(entry, extra)
 	return mergeStageRecord(p.out, rel, entry)
 }
 
@@ -392,7 +391,7 @@ func imageToolVersions(ctx context.Context) map[string]string {
 		}
 	}
 	pdfcpu := ""
-	for _, l := range strings.Split(output(false, "pdfcpu", "version"), "\n") {
+	for l := range strings.SplitSeq(output(false, "pdfcpu", "version"), "\n") {
 		if strings.HasPrefix(l, "pdfcpu:") {
 			pdfcpu = l
 			break

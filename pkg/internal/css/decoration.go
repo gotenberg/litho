@@ -152,7 +152,7 @@ func parseBoxShadow(v []token, c *declCtx) (any, bool) {
 func parseShadow(v []token) (shadowSpec, bool) {
 	s := shadowSpec{color: colorValue{current: true}}
 	var hasColor, lensDone bool
-	for i := 0; i < len(v); i++ {
+	for i := range v {
 		t := v[i]
 		if t.isIdent("inset") && !s.inset {
 			s.inset = true

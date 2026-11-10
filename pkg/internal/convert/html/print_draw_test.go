@@ -109,7 +109,7 @@ func TestDraw_ScaleAndShrinkToFit(t *testing.T) {
 			t.Parallel()
 			got := drawPage(t, tt.src, 8, 8, tt.o)
 			var want []string
-			for _, l := range strings.Split(tt.want, "\n") {
+			for l := range strings.SplitSeq(tt.want, "\n") {
 				want = append(want, strings.TrimSpace(l))
 			}
 			if g := strings.Join(got[:len(want)], "\n"); g != strings.Join(want, "\n") {

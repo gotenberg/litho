@@ -1,6 +1,7 @@
 package html
 
 import (
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -73,8 +74,8 @@ func headingTitle(n *layout.Node) string {
 		case layout.Replaced:
 			b.WriteString(cur.Alt)
 		case layout.Element:
-			for i := len(cur.Children) - 1; i >= 0; i-- {
-				stack = append(stack, cur.Children[i])
+			for _, v := range slices.Backward(cur.Children) {
+				stack = append(stack, v)
 			}
 		}
 	}

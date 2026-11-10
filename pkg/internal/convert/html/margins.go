@@ -340,7 +340,7 @@ func resolveSides(boxes []*marginBox) {
 		// position (CSS Page 3, 5.3.2.3).
 		var clamped [3]*float64
 		var used [3]float64
-		for pass := 0; pass < 3; pass++ {
+		for range 3 {
 			s = [3]sizing{}
 			for i, mb := range sides[side] {
 				if mb == nil {

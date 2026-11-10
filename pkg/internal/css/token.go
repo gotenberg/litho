@@ -308,7 +308,7 @@ func (t *tokenizer) consumeEscape() rune {
 		return c
 	}
 	v := rune(0)
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		c, _ := t.at(t.pos)
 		if !isHexDigit(c) {
 			break

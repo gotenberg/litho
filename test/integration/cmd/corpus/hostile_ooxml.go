@@ -64,8 +64,8 @@ func relsOf(part string) string {
 // relTarget returns the target of part relative to the part from.
 func relTarget(from, part string) string {
 	dir := path.Dir(from)
-	if strings.HasPrefix(part, dir+"/") {
-		return strings.TrimPrefix(part, dir+"/")
+	if after, ok := strings.CutPrefix(part, dir+"/"); ok {
+		return after
 	}
 	return "../" + strings.TrimPrefix(part, path.Dir(dir)+"/")
 }
@@ -238,7 +238,7 @@ func addPictures(parts map[string][]byte, format string, pics []picture) error {
 	xml := string(parts[sheet])
 	mark := "</worksheet>"
 	for _, m := range []string{"<legacyDrawing", "<tableParts", "<extLst"} {
-		if i := strings.Index(xml, m); i >= 0 {
+		if found := strings.Contains(xml, m); found {
 			mark = m
 			break
 		}

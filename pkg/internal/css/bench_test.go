@@ -12,11 +12,11 @@ import (
 func BenchmarkCompute(b *testing.B) {
 	var doc strings.Builder
 	doc.WriteString("<!doctype html><html><body>")
-	for i := 0; i < 2000; i++ {
+	for i := range 2000 {
 		fmt.Fprintf(&doc, `<div class="row c%d"><p class="lead">Text <a href="#">link</a> <span id="s%d">x</span></p><ul><li>a</li></ul></div>`, i%50, i)
 	}
 	var css strings.Builder
-	for i := 0; i < 3000; i++ {
+	for i := range 3000 {
 		fmt.Fprintf(&css, ".c%d .lead > a:not(.x), #s%d, .c%d:nth-child(%dn+1) li { color: #%06x; margin: %dpx var(--g, 2px) }\n", i, i, i%50, i%7+1, i, i%9)
 	}
 	css.WriteString(":root { --g: 3px } * { box-sizing: border-box }")

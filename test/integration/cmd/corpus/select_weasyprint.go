@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path"
@@ -413,12 +414,8 @@ func weasyPrintModule(module string, src []byte, pixels map[string][]int) (found
 			continue
 		}
 		local := map[string]string{}
-		for k, v := range moduleNames {
-			local[k] = v
-		}
-		for k, v := range pyStringBindings(fn.body) {
-			local[k] = v
-		}
+		maps.Copy(local, moduleNames)
+		maps.Copy(local, pyStringBindings(fn.body))
 		for _, p := range params {
 			delete(local, p)
 		}

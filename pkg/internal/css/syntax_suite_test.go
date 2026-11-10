@@ -209,7 +209,7 @@ func colorsMatch(got, want string) bool {
 			return nil
 		}
 		var out []float64
-		for _, p := range strings.Split(s[i+1:len(s)-1], ",") {
+		for p := range strings.SplitSeq(s[i+1:len(s)-1], ",") {
 			v, err := strconv.ParseFloat(strings.TrimSpace(p), 64)
 			if err != nil {
 				return nil

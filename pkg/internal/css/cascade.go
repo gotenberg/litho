@@ -339,7 +339,7 @@ func usedLineHeight(st *Style) float64 {
 var computeOrder = func() []propID {
 	first := []propID{pFontSize, pColor, pFontFamily, pFontWeight, pFontStyle, pLineHeight}
 	out := slices.Clone(first)
-	for id := propID(0); id < numProps; id++ {
+	for id := range numProps {
 		if !slices.Contains(first, id) {
 			out = append(out, id)
 		}
@@ -405,8 +405,8 @@ func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOpt
 				kids = append(kids, c)
 			}
 		}
-		for i := len(kids) - 1; i >= 0; i-- {
-			stack = append(stack, frame{n: kids[i], parent: parent})
+		for _, kid := range slices.Backward(kids) {
+			stack = append(stack, frame{n: kid, parent: parent})
 		}
 	}
 	return &Computed{styles: cs.out, pseudo: cs.pseudo, warns: cs.warns.result()}, nil
@@ -554,7 +554,7 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 	}
 	if cl, ok := attr(n, "class"); ok {
 		seen := map[string]bool{}
-		for _, c := range strings.Fields(cl) {
+		for c := range strings.FieldsSeq(cl) {
 			if !seen[c] {
 				seen[c] = true
 				test(r.byClass[c])

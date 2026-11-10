@@ -668,7 +668,7 @@ func parseHex(s string) (colorValue, bool) {
 	if n != 3 && n != 4 && n != 6 && n != 8 {
 		return colorValue{}, false
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		c := rune(s[i])
 		if !isHexDigit(c) {
 			return colorValue{}, false

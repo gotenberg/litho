@@ -37,19 +37,19 @@ func TestRobustnessCompare(t *testing.T) {
 		got    robustnessOutput
 		metric string
 	}{
-		{"plain", robustnessOutput{convertOneResult: convertOneResult{Result: "pdf"}}, ""},
-		{"plain", robustnessOutput{convertOneResult: convertOneResult{Result: "error"}}, metricUnexpected},
+		{"plain", robustnessOutput{Result: "pdf"}, ""},
+		{"plain", robustnessOutput{Result: "error"}, metricUnexpected},
 		{"plain", robustnessOutput{Crash: "signal: killed"}, metricCrash},
-		{"plain", robustnessOutput{convertOneResult: convertOneResult{Result: "panic"}}, metricPanic},
-		{"plain", robustnessOutput{convertOneResult: convertOneResult{Result: "pdf"}, RSSMiB: robustnessMaxRSSMiB + 1}, metricOverMemory},
-		{"plain", robustnessOutput{convertOneResult: convertOneResult{Result: "pdf", Fetches: 1}}, metricFetch},
-		{"refused", robustnessOutput{convertOneResult: convertOneResult{Result: "ErrConvertMalformed"}}, ""},
-		{"refused", robustnessOutput{convertOneResult: convertOneResult{Result: "pdf"}}, metricUnexpected},
-		{"either", robustnessOutput{convertOneResult: convertOneResult{Result: "ErrConvertInputTooLarge"}}, ""},
-		{"either", robustnessOutput{convertOneResult: convertOneResult{Result: "panic"}}, metricPanic},
-		{"either", robustnessOutput{convertOneResult: convertOneResult{Result: "pdf"}, RSSMiB: 11}, metricOverMemory},
-		{"secret", robustnessOutput{convertOneResult: convertOneResult{Result: "pdf", Leaked: []string{"root:"}}}, metricLeak},
-		{"secret", robustnessOutput{convertOneResult: convertOneResult{Result: "pdf", Missing: []string{"marker"}}}, metricMissing},
+		{"plain", robustnessOutput{Result: "panic"}, metricPanic},
+		{"plain", robustnessOutput{Result: "pdf", RSSMiB: robustnessMaxRSSMiB + 1}, metricOverMemory},
+		{"plain", robustnessOutput{Result: "pdf", Fetches: 1}, metricFetch},
+		{"refused", robustnessOutput{Result: "ErrConvertMalformed"}, ""},
+		{"refused", robustnessOutput{Result: "pdf"}, metricUnexpected},
+		{"either", robustnessOutput{Result: "ErrConvertInputTooLarge"}, ""},
+		{"either", robustnessOutput{Result: "panic"}, metricPanic},
+		{"either", robustnessOutput{Result: "pdf", RSSMiB: 11}, metricOverMemory},
+		{"secret", robustnessOutput{Result: "pdf", Leaked: []string{"root:"}}, metricLeak},
+		{"secret", robustnessOutput{Result: "pdf", Missing: []string{"marker"}}, metricMissing},
 	} {
 		out, err := json.Marshal(tc.got)
 		if err != nil {

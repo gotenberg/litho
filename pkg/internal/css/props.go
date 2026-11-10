@@ -1,6 +1,9 @@
 package css
 
-import "math"
+import (
+	"maps"
+	"math"
+)
 
 // propID names a longhand. The cascade computes longhands in this order:
 // font-size first, since em units resolve against it, then color, since
@@ -848,7 +851,7 @@ func init() {
 	margins := edgeProps("margin-", "", func(s *Style) *[4]Dimension { return &s.Margin }, allowPct|allowMixed, kwAuto)
 	paddings := edgeProps("padding-", "", func(s *Style) *[4]Dimension { return &s.Padding }, allowPct|nonNeg|allowMixed, kwNoKw)
 	sides := [4]string{"border-top", "border-right", "border-bottom", "border-left"}
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		props[pMarginTop+propID(i)] = margins[i]
 		props[pPaddingTop+propID(i)] = paddings[i]
 		st, w, c := borderProps(Side(i), sides[i])
@@ -909,7 +912,7 @@ func init() {
 	for i := range props {
 		longhandByName[props[i].name] = propID(i)
 	}
-	for alias, id := range map[string]propID{
+	maps.Copy(longhandByName, map[string]propID{
 		"word-wrap": pOverflowWrap, "overflow-x": pOverflow, "overflow-y": pOverflow,
 		"overflow-block": pOverflow, "overflow-inline": pOverflow,
 		"margin-block-start": pMarginTop, "margin-block-end": pMarginBottom,
@@ -924,15 +927,9 @@ func init() {
 		"page-break-inside":            pBreakInside,
 		"-webkit-background-clip":      pBgClip,
 		"-webkit-box-decoration-break": pBoxDecorationBreak,
-	} {
-		longhandByName[alias] = id
-	}
-	for alias, id := range flexAliases {
-		longhandByName[alias] = id
-	}
-	for alias, id := range logicalAliases() {
-		longhandByName[alias] = id
-	}
+	})
+	maps.Copy(longhandByName, flexAliases)
+	maps.Copy(longhandByName, logicalAliases())
 	initShorthands()
 }
 

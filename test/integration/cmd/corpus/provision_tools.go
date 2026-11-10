@@ -115,7 +115,7 @@ func renderOne(ctx context.Context, pdf, out string, maxPages int, hide bool) (r
 		idx.Error = "pdfinfo: " + stderr
 		return idx, writeJSONFile(filepath.Join(out, id+".json"), idx)
 	}
-	for _, l := range strings.Split(info, "\n") {
+	for l := range strings.SplitSeq(info, "\n") {
 		if rest, ok := strings.CutPrefix(l, "Pages:"); ok {
 			if f := strings.Fields(rest); len(f) > 0 {
 				idx.PageCount, _ = strconv.Atoi(f[0]) //nolint:errcheck // a count pdfinfo did not print is 0 pages
@@ -288,7 +288,7 @@ func mergeGoldens(ctx context.Context, pdfs, out, partner string) error {
 func pdfcpuPageCount(ctx context.Context, pdf string) int {
 	cmd := exec.CommandContext(ctx, "pdfcpu", "info", pdf) //nolint:gosec // the image's fixed tool
 	out, _ := cmd.Output()                                 //nolint:errcheck // a PDF pdfcpu cannot read has no count
-	for _, l := range strings.Split(string(out), "\n") {
+	for l := range strings.SplitSeq(string(out), "\n") {
 		if !strings.Contains(l, "Page count:") {
 			continue
 		}
@@ -393,7 +393,7 @@ func kositOne(ctx context.Context, pdf, dir string) (kositJob, error) {
 		body = strings.TrimRight(string(data), "\n")
 	}
 	job.Report = body
-	for _, l := range strings.Split(body, "\n") {
+	for l := range strings.SplitSeq(body, "\n") {
 		if kositSkip.MatchString(l) {
 			job.Reason = "no scenario applicable"
 			return job, nil

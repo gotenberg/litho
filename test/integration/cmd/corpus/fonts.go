@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -241,10 +242,8 @@ func unpackFonts(ctx context.Context, a *fontArchive, data []byte, files map[str
 			return "LICENSE", true
 		}
 		if len(a.members) > 0 {
-			for _, m := range a.members {
-				if name == m {
-					return path.Base(name), true
-				}
+			if slices.Contains(a.members, name) {
+				return path.Base(name), true
 			}
 			return "", false
 		}

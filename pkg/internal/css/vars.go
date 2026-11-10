@@ -1,6 +1,9 @@
 package css
 
-import "strings"
+import (
+	"maps"
+	"strings"
+)
 
 // maxVarDepth caps the chain of custom properties referring to one
 // another on one element: 64. Design systems chain a handful. Anti-DoS
@@ -17,9 +20,7 @@ func (cs *computeState) resolveCustom(names []string, declared map[string][]toke
 		return parent
 	}
 	out := make(map[string][]token, len(parent)+len(names))
-	for k, v := range parent {
-		out[k] = v
-	}
+	maps.Copy(out, parent)
 	const (
 		visiting = 1
 		done     = 2

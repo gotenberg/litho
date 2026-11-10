@@ -3,6 +3,7 @@ package html
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -157,8 +158,8 @@ func nodeText(n *layout.Node) string {
 		if c.Kind == layout.Text {
 			sb.WriteString(c.Text)
 		}
-		for i := len(c.Children) - 1; i >= 0; i-- {
-			stack = append(stack, c.Children[i])
+		for _, v := range slices.Backward(c.Children) {
+			stack = append(stack, v)
 		}
 	}
 	return sb.String()
@@ -179,8 +180,8 @@ func domText(n *dom.Node) string {
 		for k := c.FirstChild; k != nil; k = k.NextSibling {
 			kids = append(kids, k)
 		}
-		for i := len(kids) - 1; i >= 0; i-- {
-			stack = append(stack, kids[i])
+		for _, kid := range slices.Backward(kids) {
+			stack = append(stack, kid)
 		}
 	}
 	return sb.String()

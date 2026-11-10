@@ -70,7 +70,7 @@ func (c *collector) styleElement(ctx context.Context, n *dom.Node) *css.Styleshe
 func (c *collector) linkElement(ctx context.Context, n *dom.Node) *css.Stylesheet {
 	rel, _ := attr(n, "rel")
 	isSheet, alternate := false, false
-	for _, tok := range strings.Fields(strings.ToLower(rel)) {
+	for tok := range strings.FieldsSeq(strings.ToLower(rel)) {
 		switch tok {
 		case "stylesheet":
 			isSheet = true

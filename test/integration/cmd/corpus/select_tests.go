@@ -403,7 +403,7 @@ func (s *wptScan) tag(name string, a map[string]string) {
 		case "reftest-pages":
 			s.pages = strings.TrimSpace(a["content"])
 		case "flags":
-			for _, f := range strings.Fields(a["content"]) {
+			for f := range strings.FieldsSeq(a["content"]) {
 				s.flags[f] = true
 			}
 		}
@@ -571,7 +571,7 @@ func parseFuzzy(values []string, ref string) ([]int, bool) {
 			continue
 		}
 		var parts []string
-		for _, p := range strings.Split(v, ";") {
+		for p := range strings.SplitSeq(v, ";") {
 			if p = strings.TrimSpace(p); p != "" {
 				parts = append(parts, p)
 			}

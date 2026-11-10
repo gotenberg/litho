@@ -300,7 +300,7 @@ func addDocumentURLs(dir string, urls map[string]string) error {
 func selectGovdocsPDF(ctx context.Context, pins map[string]string, dir string) error {
 	zips := newZipCache(http.DefaultClient)
 	var docs []selected
-	for _, t := range strings.Split(pins["GOVDOCS_THREADS"], ",") {
+	for t := range strings.SplitSeq(pins["GOVDOCS_THREADS"], ",") {
 		u := govdocsArchives + "/" + t + ".zip"
 		files, err := zips.list(ctx, u)
 		if err != nil {

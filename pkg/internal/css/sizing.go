@@ -9,6 +9,8 @@ package css
 // is not a size Chromium accepts on width or height, so it stays invalid
 // there; it sizes grid tracks alone (CSS Grid 1, 7.2.1).
 
+import "maps"
+
 // sizingKeywords are the sizing keywords and their kinds.
 var sizingKeywords = map[string]DimKind{
 	"min-content": MinContent, "-webkit-min-content": MinContent, "-moz-min-content": MinContent,
@@ -19,9 +21,7 @@ var sizingKeywords = map[string]DimKind{
 
 // withSizing returns kws with the sizing keywords added.
 func withSizing(kws map[string]DimKind) map[string]DimKind {
-	for k, v := range sizingKeywords {
-		kws[k] = v
-	}
+	maps.Copy(kws, sizingKeywords)
 	return kws
 }
 

@@ -61,7 +61,7 @@ var (
 func colourStub(w, h float64) htmlConverter {
 	return func(_ context.Context, src []byte, _ htmlSettings) ([]byte, error) {
 		var colours [][3]float64
-		for _, word := range strings.Fields(string(src)) {
+		for word := range strings.FieldsSeq(string(src)) {
 			switch word {
 			case "red":
 				colours = append(colours, red)
