@@ -47,9 +47,12 @@ const referenceTimeout = 5 * time.Minute
 // keeps.
 const maxReferenceAnswer = 300
 
-// runReferences builds the reference PDFs of the selected corpora with the
-// Gotenberg image versions.env pins (GOTENBERG_IMAGE), started on a free
-// loopback port, into each corpus's testdata (see [ReferenceSpec]).
+// runReferences builds the reference PDFs of the selected corpora into each
+// corpus's testdata (see [ReferenceSpec]): the LibreOffice and Chromium
+// ones with the Gotenberg image versions.env pins (GOTENBERG_IMAGE), started
+// on a free loopback port, the Microsoft ones with Office for the web
+// through Microsoft Graph, signed in as the personal account of the app
+// registration LITHO_CORPUS_MSGRAPH_CLIENT_ID names (see [newMSGraph]).
 //
 //	corpus references [--corpus=litho/html,poi/*] [--fixtures=a,b]
 //
@@ -76,7 +79,7 @@ func runReferences(ctx context.Context, args []string) int {
 }
 
 // references builds the references of every corpus of ms that has some,
-// the ones only names when set, with one Gotenberg container.
+// the ones only names when set.
 func references(ctx context.Context, ms []*Manifest, only []string) error {
 	var corpora []*Manifest
 	for _, m := range ms {
@@ -90,23 +93,86 @@ func references(ctx context.Context, ms []*Manifest, only []string) error {
 	}
 	pins, err := loadPins()
 	if err != nil {
-		return err
+		return fmt.Errorf("loading the pins: %w", err)
 	}
-	image := pins.Values["GOTENBERG_IMAGE"]
-	if image == "" {
-		return errors.New("GOTENBERG_IMAGE is not pinned")
-	}
-	g, err := startGotenberg(ctx, image)
-	if err != nil {
-		return err
-	}
-	defer g.stop()
+	b := &referenceBuilders{pins: pins}
+	defer b.close()
 	for _, m := range corpora {
-		if err := g.references(ctx, m, pins, only); err != nil {
+		if err := b.build(ctx, m, only); err != nil {
 			return fmt.Errorf("%s: %w", m.Name, err)
 		}
 	}
 	return nil
+}
+
+// referenceConverter converts one source into its reference PDF: a
+// Gotenberg container for the LibreOffice and Chromium references, Microsoft
+// Graph for the Microsoft ones.
+type referenceConverter interface {
+	// convert returns the status and body of the conversion of j with the
+	// route engine names.
+	convert(ctx context.Context, engine string, j referenceJob) (int, []byte, error)
+	// builder is what each reference records as having built it, the
+	// value [checkReference] expects (see [referenceBuilder]).
+	builder() string
+	// version is the converting application's version, "" when unknown.
+	version(ctx context.Context, engine string) string
+	close()
+}
+
+// referenceBuilder is the builder a reference of engine must record: the
+// pinned image, or [microsoftRenderer].
+func referenceBuilder(engine string, pins map[string]string) string {
+	if engine == engineMicrosoft {
+		return microsoftRenderer
+	}
+	return pins["GOTENBERG_IMAGE"]
+}
+
+// referenceBuilders starts each converter the first time a corpus needs
+// it, and keeps it for the next ones.
+type referenceBuilders struct {
+	pins *resolvedPins
+	g    *gotenberg
+	ms   *msGraph
+}
+
+// build builds the references of m, the ones only names when set.
+func (b *referenceBuilders) build(ctx context.Context, m *Manifest, only []string) error {
+	var conv referenceConverter
+	if m.References.Engine == engineMicrosoft {
+		if b.ms == nil {
+			ms, err := newMSGraph(ctx)
+			if err != nil {
+				return err
+			}
+			b.ms = ms
+		}
+		conv = b.ms
+	} else {
+		if b.g == nil {
+			image := b.pins.Values["GOTENBERG_IMAGE"]
+			if image == "" {
+				return errors.New("GOTENBERG_IMAGE is not pinned")
+			}
+			g, err := startGotenberg(ctx, image)
+			if err != nil {
+				return fmt.Errorf("starting %s: %w", image, err)
+			}
+			b.g = g
+		}
+		conv = b.g
+	}
+	return buildReferences(ctx, conv, m, b.pins, only)
+}
+
+func (b *referenceBuilders) close() {
+	if b.g != nil {
+		b.g.close()
+	}
+	if b.ms != nil {
+		b.ms.close()
+	}
 }
 
 // gotenberg is a running Gotenberg container.
@@ -125,7 +191,7 @@ func startGotenberg(ctx context.Context, image string) (*gotenberg, error) {
 	g := &gotenberg{image: image, id: strings.TrimSpace(string(out)), client: &http.Client{Timeout: referenceTimeout}}
 	port, err := exec.CommandContext(ctx, "docker", "port", g.id, "3000/tcp").Output() //nolint:gosec // the container just started
 	if err != nil {
-		g.stop()
+		g.close()
 		return nil, fmt.Errorf("docker port: %w", err)
 	}
 	first, _, _ := strings.Cut(strings.TrimSpace(string(port)), "\n")
@@ -140,19 +206,19 @@ func startGotenberg(ctx context.Context, image string) (*gotenberg, error) {
 			}
 		}
 		if time.Now().After(deadline) {
-			g.stop()
+			g.close()
 			return nil, fmt.Errorf("%s answered no health check within %s", image, gotenbergStartTimeout)
 		}
 		select {
 		case <-ctx.Done():
-			g.stop()
+			g.close()
 			return nil, ctx.Err()
 		case <-time.After(time.Second):
 		}
 	}
 }
 
-func (g *gotenberg) stop() {
+func (g *gotenberg) close() {
 	_ = exec.Command("docker", "stop", g.id).Run() //nolint:errcheck,gosec // --rm removes it; a stopped container is the goal either way
 }
 
@@ -402,21 +468,22 @@ func (g *gotenberg) convert(ctx context.Context, engine string, j referenceJob) 
 	return g.post(ctx, "/forms/chromium/convert/"+route, files, fields)
 }
 
-// references converts each source of a corpus with the route its manifest
-// names and writes the PDF to <name>.pdf of the corpus's reference directory
+// buildReferences converts each source of a corpus with the route its
+// manifest names, through conv, and writes the PDF to <name>.pdf of the corpus's reference directory
 // in its testdata: the committed sources/<name>/ directories (an Office
 // document or an html page, and an optional options.json each), the
 // documents a build corpus zips, and the documents the corpus's
 // documents.json lists, fetched by corpus fetch, each named by its ID with
 // "/" written "__". A key options.json leaves out keeps the route's default.
 //
-// The reference directory's manifest.json records, per reference, the image,
+// The reference directory's manifest.json records, per reference, the image
+// (or [microsoftRenderer], with the day it was built),
 // the pin the fetched documents come from and its value, and the SHA-256 of
 // the source (see [sourceDigest]), of its options.json and of the PDF, so
 // corpus run refuses a reference built from another pin or from a source
 // that changed since. A source the route refuses is recorded under "failed"
 // with the route's answer, and gets no reference.
-func (g *gotenberg) references(ctx context.Context, m *Manifest, pins *resolvedPins, only []string) error {
+func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, pins *resolvedPins, only []string) error {
 	if isBuildCorpus(m) {
 		if err := buildCorpus(ctx, m); err != nil {
 			return err
@@ -440,9 +507,10 @@ func (g *gotenberg) references(ctx context.Context, m *Manifest, pins *resolvedP
 			return fmt.Errorf("%s is not pinned", sourcePin)
 		}
 	}
-	version := ""
-	if engine == engineLibreOffice {
-		version = gotenbergLibreOfficeVersion(ctx, g.image)
+	version, builder := conv.version(ctx, engine), conv.builder()
+	builtAt := ""
+	if engine == engineMicrosoft {
+		builtAt = time.Now().UTC().Format(time.DateOnly)
 	}
 	out := filepath.Join(m.TestdataRoot(), filepath.FromSlash(m.References.Dir))
 	if err := os.MkdirAll(out, 0o755); err != nil {
@@ -466,7 +534,7 @@ func (g *gotenberg) references(ctx context.Context, m *Manifest, pins *resolvedP
 				return err
 			}
 		}
-		status, body, err := g.convert(ctx, engine, j)
+		status, body, err := conv.convert(ctx, engine, j)
 		if err != nil {
 			status, body = 0, []byte(err.Error())
 		}
@@ -479,7 +547,7 @@ func (g *gotenberg) references(ctx context.Context, m *Manifest, pins *resolvedP
 			sum := sha256.Sum256(body)
 			ok[j.name] = referenceRecord{
 				Source: j.source, SourceSHA256: srcSum, OptionsSHA256: optSum, PDFSHA256: hex.EncodeToString(sum[:]),
-				Image: g.image, SourcePin: sourcePin, SourcePinValue: sourceValue,
+				Image: builder, SourcePin: sourcePin, SourcePinValue: sourceValue, BuiltAt: builtAt,
 			}
 			fmt.Printf("  %s: references/%s.pdf (%d bytes)\n", m.Name, j.name, len(body))
 			return nil
@@ -487,17 +555,17 @@ func (g *gotenberg) references(ctx context.Context, m *Manifest, pins *resolvedP
 		_ = os.Remove(filepath.Join(out, j.name+".pdf")) //nolint:errcheck // a refused source may have had no reference
 		answer := bytes.ReplaceAll(body[:min(len(body), maxReferenceAnswer)], []byte{0}, nil)
 		failed[j.name] = referenceFailure{
-			Source: j.source, SourceSHA256: srcSum, OptionsSHA256: optSum, Image: g.image,
+			Source: j.source, SourceSHA256: srcSum, OptionsSHA256: optSum, Image: builder,
 			Status: strconv.Itoa(status), Answer: string(answer),
 		}
-		fmt.Fprintf(os.Stderr, "  %s: %s refused by the route (HTTP %d)\n", m.Name, j.name, status)
+		fmt.Fprintf(os.Stderr, "  %s: %s refused by %s (HTTP %d)\n", m.Name, j.name, builder, status)
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 
-	man := referenceManifest{Format: 1, Image: g.image, LibreOffice: version, References: ok, Failed: failed}
+	man := referenceManifest{Format: 1, Image: builder, LibreOffice: version, References: ok, Failed: failed}
 	path := filepath.Join(out, referenceManifestName)
 	if len(only) > 0 {
 		// A run of some sources keeps the entries of the others.
@@ -525,7 +593,7 @@ func (g *gotenberg) references(ctx context.Context, m *Manifest, pins *resolvedP
 	if err := writeFileAtomic(path, append(data, '\n')); err != nil {
 		return err
 	}
-	fmt.Printf("  %s: %d references built, %d refused, with %s\n", m.Name, len(ok), len(failed), g.image)
+	fmt.Printf("  %s: %d references built, %d refused, with %s\n", m.Name, len(ok), len(failed), builder)
 	return nil
 }
 
@@ -586,6 +654,17 @@ func optionsPath(dir string) string {
 		return ""
 	}
 	return p
+}
+
+// builder is the image each reference records.
+func (g *gotenberg) builder() string { return g.image }
+
+// version is the image's LibreOffice version for a LibreOffice reference.
+func (g *gotenberg) version(ctx context.Context, engine string) string {
+	if engine == engineLibreOffice {
+		return gotenbergLibreOfficeVersion(ctx, g.image)
+	}
+	return ""
 }
 
 // gotenbergLibreOfficeVersion is what the image's soffice reports, or "".

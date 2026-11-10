@@ -32,7 +32,8 @@ type referenceManifest struct {
 // referenceRecord is one reference: its source, as the corpus directory or
 // the fetched directory names it, the SHA-256 of the source, of its
 // options.json ("" without one) and of the PDF, the image that converted it,
-// and the pin the fetched documents come from with its value. CoreCommit is
+// (or [microsoftRenderer]), and the pin the fetched documents come from with
+// its value. CoreCommit is
 // the LibreOffice core commit of a record written before the builder
 // recorded the pin, read as the value of LIBREOFFICE_CORE_COMMIT.
 type referenceRecord struct {
@@ -44,6 +45,9 @@ type referenceRecord struct {
 	SourcePin      string `json:"source_pin,omitempty"`
 	SourcePinValue string `json:"source_pin_value,omitempty"`
 	CoreCommit     string `json:"libreoffice_core_commit,omitempty"`
+	// BuiltAt is the day a Microsoft reference was built (YYYY-MM-DD):
+	// Office for the web has no version to pin, so the day stands for it.
+	BuiltAt string `json:"built_at,omitempty"`
 }
 
 // pinValue returns the value of the pin name the record was built at, ""
@@ -180,7 +184,7 @@ func checkReference(man referenceManifest, refs *ReferenceSpec, name string, fx 
 			optSum = got
 		}
 	}
-	image := pins["GOTENBERG_IMAGE"]
+	image := referenceBuilder(refs.Engine, pins)
 	rec, ok := man.References[name]
 	if !ok {
 		if fail, refused := man.Failed[name]; refused {
@@ -190,7 +194,7 @@ func checkReference(man referenceManifest, refs *ReferenceSpec, name string, fx 
 		return name + " has no reference", true
 	}
 	if rec.Image != image {
-		return fmt.Sprintf("%s was built with %s, the pin is %s", name, rec.Image, image), true
+		return fmt.Sprintf("%s was built with %s, the corpus wants %s", name, rec.Image, image), true
 	}
 	if sourcePin := refs.SourcePin; sourcePin != "" {
 		if got, want := rec.pinValue(sourcePin), pins[sourcePin]; got != want {

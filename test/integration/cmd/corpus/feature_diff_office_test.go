@@ -245,7 +245,30 @@ func TestDiffFeature_PrepareRefusesStaleReferences(t *testing.T) {
 	}
 }
 
-func TestDiffFeature_GoldenSourceNamesLibreOfficeForAnOfficeCorpus(t *testing.T) {
+func TestCheckReference_MicrosoftReferencesIgnoreTheImagePin(t *testing.T) {
+	t.Parallel()
+
+	src := t.TempDir()
+	writeFiles(t, src, map[string]string{"sources/memo/memo.docx": "docx"})
+	h := sha256.Sum256([]byte("docx"))
+	fx := Fixture{ID: "memo", PDFPath: filepath.Join(src, "sources", "memo")}
+	refs := &ReferenceSpec{Dir: "references", Engine: engineMicrosoft}
+	pins := map[string]string{"GOTENBERG_IMAGE": "img:2"}
+	man := func(builder string) referenceManifest {
+		return referenceManifest{References: map[string]referenceRecord{
+			"memo": {SourceSHA256: hex.EncodeToString(h[:]), Image: builder, BuiltAt: "2026-11-10"},
+		}}
+	}
+	if why, _ := checkReference(man(microsoftRenderer), refs, "memo", fx, pins); why != "" {
+		t.Errorf("a Microsoft reference is stale: %s", why)
+	}
+	// A LibreOffice reference of a corpus that moved to Microsoft is stale.
+	if why, rebuild := checkReference(man("img:2"), refs, "memo", fx, pins); !rebuild || !strings.Contains(why, "built with img:2") {
+		t.Errorf("a LibreOffice reference in a Microsoft corpus: %q, rebuild %v", why, rebuild)
+	}
+}
+
+func TestDiffFeature_GoldenSourceNamesTheReferenceEngine(t *testing.T) {
 	t.Parallel()
 	f := newDiffFeature()
 	if got := f.GoldenSource(); got != "chromium" {
@@ -258,5 +281,9 @@ func TestDiffFeature_GoldenSourceNamesLibreOfficeForAnOfficeCorpus(t *testing.T)
 	f.SetManifest(&Manifest{References: &ReferenceSpec{Engine: engineLibreOffice}})
 	if got := f.GoldenSource(); got != "libreoffice" {
 		t.Fatalf("GoldenSource = %q, want libreoffice", got)
+	}
+	f.SetManifest(&Manifest{References: &ReferenceSpec{Engine: engineMicrosoft}})
+	if got := f.GoldenSource(); got != "microsoft" || !f.office {
+		t.Fatalf("GoldenSource = %q, office %v, want microsoft, an Office corpus", got, f.office)
 	}
 }

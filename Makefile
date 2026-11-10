@@ -122,7 +122,7 @@ corpus-build: ## Step 2: generate the inputs kept as sources in git: Office and 
 	$(CORPUS_CLI) build $(CORPUS_SELECT)
 
 .PHONY: corpus-references
-corpus-references: ## Step 3: convert the sources with the pinned Gotenberg image into the Chromium and LibreOffice reference PDFs (needs Docker). Vars: CORPUS, FIXTURES
+corpus-references: ## Step 3: convert the sources into the reference PDFs: Chromium and LibreOffice with the pinned Gotenberg image (needs Docker), Microsoft through Graph (needs LITHO_CORPUS_MSGRAPH_CLIENT_ID). Vars: CORPUS, FIXTURES
 	$(CORPUS_CLI) references $(CORPUS_SELECT) $(if $(FIXTURES),--fixtures=$(FIXTURES))
 
 .PHONY: corpus-goldens

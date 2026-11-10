@@ -349,14 +349,14 @@ func TestOfficeListsAndHashesAgree(t *testing.T) {
 }
 
 // TestCommittedOfficeSourcesLoad loads every committed source of a corpus
-// with LibreOffice references as the diff feature does: one document of the
+// with Office references as the diff feature does: one document of the
 // corpus's format, valid options, and a small file.
 func TestCommittedOfficeSourcesLoad(t *testing.T) {
 	t.Parallel()
 
 	checked := 0
 	for _, m := range readManifests(t) {
-		if m.References == nil || m.References.Engine != engineLibreOffice || m.Inputs == nil || m.Inputs.Glob == "" {
+		if m.References == nil || m.References.Engine == engineChromium || m.Inputs == nil || m.Inputs.Glob == "" {
 			continue
 		}
 		sources, err := globInputFixtures(filepath.Join(corpusSourceDir, filepath.FromSlash(m.Source)), m.Inputs.Glob)

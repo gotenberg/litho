@@ -107,8 +107,9 @@ type Manifest struct {
 type ReferenceSpec struct {
 	// Dir is the reference directory, relative to the testdata root.
 	Dir string `json:"dir"`
-	// Engine is the Gotenberg route the references come from:
-	// [engineLibreOffice] or [engineChromium].
+	// Engine is what converts the sources into the references: a
+	// Gotenberg route, [engineLibreOffice] or [engineChromium], or
+	// [engineMicrosoft], Office for the web through Microsoft Graph.
 	Engine string `json:"engine"`
 	// SourcePin names the versions.env pin the fetched documents come
 	// from (LIBREOFFICE_CORE_COMMIT, POI_COMMIT): a reference built from
@@ -153,6 +154,7 @@ type InputSpec struct {
 const (
 	engineLibreOffice = "libreoffice"
 	engineChromium    = "chromium"
+	engineMicrosoft   = "microsoft"
 )
 
 // prepareRemedy is the command that brings a corpus to a scorable state:

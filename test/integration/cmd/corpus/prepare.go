@@ -112,14 +112,10 @@ func prepareReferences(ctx context.Context, ms []*Manifest, pins *resolvedPins) 
 	if len(todo) == 0 {
 		return nil
 	}
-	image := pins.Values["GOTENBERG_IMAGE"]
-	g, err := startGotenberg(ctx, image)
-	if err != nil {
-		return fmt.Errorf("starting %s: %w", image, err)
-	}
-	defer g.stop()
+	b := &referenceBuilders{pins: pins}
+	defer b.close()
 	for _, p := range todo {
-		if err := g.references(ctx, p.m, pins, p.only); err != nil {
+		if err := b.build(ctx, p.m, p.only); err != nil {
 			return fmt.Errorf("%s: %w", p.m.Name, err)
 		}
 	}

@@ -260,13 +260,13 @@ func newDiffFeature() *diffFeature {
 func (f *diffFeature) Name() string { return "diff" }
 
 // GoldenSource names the engine the references come from, the one the
-// corpus's manifest names: Chromium for the html corpora, LibreOffice for an
-// Office corpus.
+// corpus's manifest names: Chromium for the html corpora, LibreOffice or
+// Microsoft for an Office corpus.
 func (f *diffFeature) GoldenSource() string {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	if f.office {
-		return engineLibreOffice
+	if f.m != nil && f.m.References != nil {
+		return f.m.References.Engine
 	}
 	return engineChromium
 }
@@ -274,7 +274,7 @@ func (f *diffFeature) GoldenSource() string {
 // SetManifest records the corpus whose references the cell checks.
 func (f *diffFeature) SetManifest(m *Manifest) {
 	f.mu.Lock()
-	f.m, f.testdataRoot, f.office = m, m.TestdataRoot(), m.References != nil && m.References.Engine == engineLibreOffice
+	f.m, f.testdataRoot, f.office = m, m.TestdataRoot(), m.References != nil && m.References.Engine != engineChromium
 	f.mu.Unlock()
 }
 
