@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -328,10 +329,17 @@ func (g *msGraph) convert(ctx context.Context, _ string, j referenceJob) (int, [
 	if err != nil {
 		return 0, nil, fmt.Errorf("reading %s: %w", src.Document, err)
 	}
+	ext := strings.ToLower(filepath.Ext(src.Document))
+	if t, ok := msGraphTemplates[ext]; ok {
+		if data, err = documentFromTemplate(data, t); err != nil {
+			return 0, nil, fmt.Errorf("%s: %w", j.name, err)
+		}
+		ext = t.ext
+	}
 	if len(data) > msGraphMaxUpload {
 		return 0, []byte(fmt.Sprintf("%d bytes, over the %d a single upload takes", len(data), msGraphMaxUpload)), nil
 	}
-	name := url.PathEscape(j.name + strings.ToLower(filepath.Ext(src.Document)))
+	name := url.PathEscape(j.name + ext)
 	status, body, err := g.call(ctx, http.MethodPut, msGraphAPI+"/me/drive/root:/"+msGraphFolder+"/"+name+":/content", data)
 	if err != nil || (status != http.StatusOK && status != http.StatusCreated) {
 		return status, body, err
@@ -353,6 +361,64 @@ func (g *msGraph) convert(ctx context.Context, _ string, j referenceJob) (int, [
 		return 0, nil, fmt.Errorf("deleting the upload of %s: HTTP %d: %s", j.name, delStatus, delBody)
 	}
 	return status, pdf, err
+}
+
+// msGraphTemplate is how a template Graph refuses to convert becomes the
+// document it makes: its extension, and its main part's content type.
+type msGraphTemplate struct {
+	ext, template, document string
+}
+
+// msGraphTemplates are the templates Graph answers InputFormatNotSupported
+// for (DOTX it converts): each is converted as the document PowerPoint or
+// Excel creates from it, which differs from it in the main part's content
+// type alone.
+var msGraphTemplates = map[string]msGraphTemplate{
+	".potx": {".pptx", "application/vnd.openxmlformats-officedocument.presentationml.template.main+xml", "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"},
+	".xltx": {".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.template.main+xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"},
+}
+
+// documentFromTemplate rewrites the [Content_Types].xml of a template
+// package to name its main part a document's, copying every other entry.
+func documentFromTemplate(data []byte, t msGraphTemplate) ([]byte, error) {
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, fmt.Errorf("reading the template: %w", err)
+	}
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	rewritten := false
+	for _, f := range zr.File {
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: f.Name, Method: zip.Deflate})
+		if err != nil {
+			return nil, fmt.Errorf("writing %s: %w", f.Name, err)
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return nil, fmt.Errorf("opening %s: %w", f.Name, err)
+		}
+		part, err := io.ReadAll(io.LimitReader(rc, msGraphMaxUpload*16))
+		rc.Close()
+		if err != nil {
+			return nil, fmt.Errorf("reading %s: %w", f.Name, err)
+		}
+		if f.Name == "[Content_Types].xml" {
+			if !bytes.Contains(part, []byte(t.template)) {
+				return nil, fmt.Errorf("[Content_Types].xml names no %s part", t.template)
+			}
+			part, rewritten = bytes.ReplaceAll(part, []byte(t.template), []byte(t.document)), true
+		}
+		if _, err := w.Write(part); err != nil {
+			return nil, fmt.Errorf("writing %s: %w", f.Name, err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		return nil, fmt.Errorf("closing the document: %w", err)
+	}
+	if !rewritten {
+		return nil, errors.New("the template has no [Content_Types].xml")
+	}
+	return buf.Bytes(), nil
 }
 
 // builder is what each reference records as having built it.
