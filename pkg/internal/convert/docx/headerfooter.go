@@ -106,7 +106,7 @@ func wrap(st *css.Style, n ...*layout.Node) *layout.Node {
 // box returns the page box of the page info names (PageFor): its section's
 // size and margins, the top and bottom margins grown to hold a header or
 // footer taller than its distance leaves, as Word and Writer grow them,
-// and the section's page borders.
+// the section's page borders and the document's page background.
 func (p *pages) box(info layout.PageInfo) layout.PageBox {
 	s := p.byName[info.Name]
 	if s == nil {
@@ -133,6 +133,7 @@ func (p *pages) box(info layout.PageInfo) layout.PageBox {
 		Width: s.width, Height: s.height,
 		Margin:       [4]float64{top, m[css.Right], bottom, m[css.Left] + s.gutter},
 		Frame:        s.frame,
+		Background:   p.d.background,
 		FootnoteRule: footnoteRule(s.contentWidth()),
 	}
 }

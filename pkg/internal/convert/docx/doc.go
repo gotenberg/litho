@@ -63,6 +63,8 @@
 // per page in the section's number format; every other field shows the
 // result Word last computed, SECTIONPAGES included, as LibreOffice does.
 // The empty paragraph that only carries a section break is not laid out.
+// The document's background colour, or its gradient, paints every page,
+// as Word prints it.
 //
 // # Tables
 //

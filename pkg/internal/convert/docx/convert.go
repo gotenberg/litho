@@ -67,6 +67,7 @@ func (d *document) convert() (*compose.Document, error) {
 	if !root.Is(w, "document") {
 		return nil, fmt.Errorf("%w: the main part is not a w:document", office.ErrMalformed)
 	}
+	d.background = d.pageBackground(root.Child(w, "background"))
 	secs := d.body(root)
 	if err := d.ctx.Err(); err != nil {
 		return nil, err
