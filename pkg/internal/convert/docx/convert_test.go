@@ -191,3 +191,13 @@ func TestHeadingTitle_LeavesOutAnchoredText(t *testing.T) {
 		t.Errorf("title %q, want Contents:logo", got)
 	}
 }
+
+func TestOutline_MarkerThenSpace(t *testing.T) {
+	t.Parallel()
+	st := css.Initial()
+	marker := &layout.Node{Kind: layout.Element, Style: st, Children: []*layout.Node{{Kind: layout.Text, Style: st, Text: "1.1"}}}
+	n := &layout.Node{Kind: layout.Element, Style: st, Marker: marker, Children: []*layout.Node{{Kind: layout.Text, Style: st, Text: "Section"}}}
+	if got := headingTitle(n); got != "1.1 Section" {
+		t.Errorf("title %q, want %q", got, "1.1 Section")
+	}
+}

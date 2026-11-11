@@ -63,13 +63,18 @@ func outline(headings []heading, anchors map[string]compose.Dest) []compose.Outl
 }
 
 // headingTitle returns the text a heading's subtree draws, its marker's
-// label first, whitespace collapsed, at most [maxOutlineTitleRunes]
-// characters.
+// label first and a space after it, whitespace collapsed, at most
+// [maxOutlineTitleRunes] characters.
+//
+// # Corpus evidence
+//
+//   - litho/docx numbering-headings: Word titles the bookmark of a heading
+//     numbered "1.1" followed by a tab "1.1 Section heading 1.1".
 func headingTitle(n *layout.Node) string {
 	var b strings.Builder
 	stack := []*layout.Node{n}
 	if n.Marker != nil {
-		stack = append(stack, n.Marker)
+		stack = append(stack, &layout.Node{Kind: layout.LineBreak}, n.Marker)
 	}
 	for len(stack) > 0 && b.Len() < 4*maxOutlineTitleRunes {
 		cur := stack[len(stack)-1]
