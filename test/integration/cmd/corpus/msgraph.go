@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -336,6 +338,13 @@ func (g *msGraph) convert(ctx context.Context, _ string, j referenceJob) (int, [
 		}
 		ext = t.ext
 	}
+	if ext == ".xlsx" {
+		// A package Go cannot read goes as it is: Office reads some
+		// broken zips, and its answer is the reference's.
+		if letter, err := letterPaper(data); err == nil {
+			data = letter
+		}
+	}
 	if len(data) > msGraphMaxUpload {
 		return 0, []byte(fmt.Sprintf("%d bytes, over the %d a single upload takes", len(data), msGraphMaxUpload)), nil
 	}
@@ -381,18 +390,110 @@ var msGraphTemplates = map[string]msGraphTemplate{
 // documentFromTemplate rewrites the [Content_Types].xml of a template
 // package to name its main part a document's, copying every other entry.
 func documentFromTemplate(data []byte, t msGraphTemplate) ([]byte, error) {
+	rewritten := false
+	out, err := rewriteParts(data, func(name string, part []byte) ([]byte, error) {
+		if name != "[Content_Types].xml" {
+			return part, nil
+		}
+		if !bytes.Contains(part, []byte(t.template)) {
+			return nil, fmt.Errorf("[Content_Types].xml names no %s part", t.template)
+		}
+		rewritten = true
+		return bytes.ReplaceAll(part, []byte(t.template), []byte(t.document)), nil
+	})
+	if err == nil && !rewritten {
+		err = errors.New("the template has no [Content_Types].xml")
+	}
+	return out, err
+}
+
+// sheetPart matches the worksheets and chart sheets of a workbook package.
+var sheetPart = regexp.MustCompile(`^xl/(worksheets|chartsheets)/[^/]+\.xml$`)
+
+// letterPaper gives each sheet of a workbook that has no pageSetup element
+// one naming Letter paper. Excel for the web prints a sheet without
+// pageSetup on the paper of the account's region (A4 for a French one), not
+// on the default a pageSetup without paperSize means, Letter (ECMA-376,
+// 18.3.1.63), which litho prints, as LibreOffice and Excel in a US locale
+// do: the reference must not depend on whose account built it.
+func letterPaper(data []byte) ([]byte, error) {
+	return rewriteParts(data, func(name string, part []byte) ([]byte, error) {
+		if !sheetPart.MatchString(name) {
+			return part, nil
+		}
+		return withLetterPageSetup(part)
+	})
+}
+
+// afterPageSetup are the children of a worksheet or chart sheet that come
+// after pageSetup (ECMA-376, CT_Worksheet and CT_Chartsheet).
+var afterPageSetup = map[string]bool{
+	"headerFooter": true, "rowBreaks": true, "colBreaks": true, "customProperties": true,
+	"cellWatches": true, "ignoredErrors": true, "smartTags": true, "drawing": true,
+	"legacyDrawing": true, "legacyDrawingHF": true, "drawingHF": true, "picture": true,
+	"oleObjects": true, "controls": true, "webPublishItems": true, "tableParts": true, "extLst": true,
+}
+
+// withLetterPageSetup inserts <pageSetup paperSize="1"/>, with the root's
+// prefix, where the schema places it in a sheet that has none: after
+// pageMargins, or before the first child that follows it.
+func withLetterPageSetup(sheet []byte) ([]byte, error) {
+	dec := xml.NewDecoder(bytes.NewReader(sheet))
+	var (
+		depth  int
+		prefix string
+		at     = int64(-1)
+	)
+	for {
+		start := dec.InputOffset()
+		tok, err := dec.RawToken()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("reading the sheet: %w", err)
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			depth++
+			switch {
+			case depth == 1:
+				if t.Name.Space != "" {
+					prefix = t.Name.Space + ":"
+				}
+			case depth == 2 && t.Name.Local == "pageSetup":
+				return sheet, nil
+			case depth == 2 && afterPageSetup[t.Name.Local] && at < 0:
+				at = start
+			}
+		case xml.EndElement:
+			if depth == 2 && t.Name.Local == "pageMargins" {
+				at = dec.InputOffset()
+			}
+			if depth == 1 && at < 0 {
+				at = start
+			}
+			depth--
+		}
+	}
+	if at < 0 {
+		return nil, errors.New("the sheet has no root element")
+	}
+	out := make([]byte, 0, len(sheet)+32)
+	out = append(out, sheet[:at]...)
+	out = append(out, "<"+prefix+`pageSetup paperSize="1"/>`...)
+	return append(out, sheet[at:]...), nil
+}
+
+// rewriteParts copies a zip package, passing each entry through edit.
+func rewriteParts(data []byte, edit func(name string, part []byte) ([]byte, error)) ([]byte, error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return nil, fmt.Errorf("reading the template: %w", err)
+		return nil, fmt.Errorf("reading the package: %w", err)
 	}
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
-	rewritten := false
 	for _, f := range zr.File {
-		w, err := zw.CreateHeader(&zip.FileHeader{Name: f.Name, Method: zip.Deflate})
-		if err != nil {
-			return nil, fmt.Errorf("writing %s: %w", f.Name, err)
-		}
 		rc, err := f.Open()
 		if err != nil {
 			return nil, fmt.Errorf("opening %s: %w", f.Name, err)
@@ -402,21 +503,19 @@ func documentFromTemplate(data []byte, t msGraphTemplate) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("reading %s: %w", f.Name, err)
 		}
-		if f.Name == "[Content_Types].xml" {
-			if !bytes.Contains(part, []byte(t.template)) {
-				return nil, fmt.Errorf("[Content_Types].xml names no %s part", t.template)
-			}
-			part, rewritten = bytes.ReplaceAll(part, []byte(t.template), []byte(t.document)), true
+		if part, err = edit(f.Name, part); err != nil {
+			return nil, fmt.Errorf("%s: %w", f.Name, err)
+		}
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: f.Name, Method: zip.Deflate})
+		if err != nil {
+			return nil, fmt.Errorf("writing %s: %w", f.Name, err)
 		}
 		if _, err := w.Write(part); err != nil {
 			return nil, fmt.Errorf("writing %s: %w", f.Name, err)
 		}
 	}
 	if err := zw.Close(); err != nil {
-		return nil, fmt.Errorf("closing the document: %w", err)
-	}
-	if !rewritten {
-		return nil, errors.New("the template has no [Content_Types].xml")
+		return nil, fmt.Errorf("closing the package: %w", err)
 	}
 	return buf.Bytes(), nil
 }

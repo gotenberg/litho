@@ -37,7 +37,7 @@ Of the 258 references, 240 draw Liberation Sans, Calc's default, 22 Carlito, 17 
 
 ## How the rig was proven
 
-Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on 247 of 258 spreadsheets. Pages, links, outline and the strict rule score 1 on all; text F1 is below 1 on 58 and under the bar on 11, where text crosses a page edge or a clipping path, which PDF.js reads and litho's text extraction does not: a chart cut across pages (`chart2/secondary_axis.ods` at 0.642), long cells running off their page (`sc/lookup_target.fods` at 0.438). Layout averages 0.972 and falls below 0.9 on 1. `TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens` checked the gotenberg corpus's sources so on every run; it now checks the litho Office corpora. The counts cover this corpus and the gotenberg/ods corpus, removed on 2026-11-09, together.
+Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on 247 of 258 spreadsheets. Pages, links, outline and the strict rule score 1 on all; text F1 is below 1 on 58 and under the bar on 11, where text crosses a page edge or a clipping path, which PDF.js reads and litho's text extraction does not: a chart cut across pages (`chart2/secondary_axis.ods` at 0.642), long cells running off their page (`sc/lookup_target.fods` at 0.438). Layout averages 0.972 and falls below 0.9 on 1. `TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens` checked the gotenberg corpus's sources so on every run; it now checks the litho Office corpora. The counts cover this corpus and the gotenberg/ods corpus, removed on 2026-11-09, together.
 
 ## Accepted disagreements
 

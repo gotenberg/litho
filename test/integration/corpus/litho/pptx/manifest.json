@@ -8,7 +8,7 @@
   },
   "references": {
     "dir": "references",
-    "engine": "libreoffice"
+    "engine": "microsoft"
   },
   "goldens": {
     "diff": "goldens/diff",

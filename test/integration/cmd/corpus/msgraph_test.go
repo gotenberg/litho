@@ -83,3 +83,35 @@ func TestDocumentFromTemplate_RenamesTheMainPart(t *testing.T) {
 		t.Error("a document converted again")
 	}
 }
+
+func TestWithLetterPageSetup_PlacesItWhereTheSchemaDoes(t *testing.T) {
+	t.Parallel()
+
+	const letter = `<pageSetup paperSize="1"/>`
+	for name, tc := range map[string]struct{ in, want string }{
+		"after pageMargins": {
+			`<worksheet><sheetData/><pageMargins left="1"/><drawing r:id="a"/></worksheet>`,
+			`<worksheet><sheetData/><pageMargins left="1"/>` + letter + `<drawing r:id="a"/></worksheet>`,
+		},
+		"before a later child, not a nested extLst": {
+			`<worksheet><sheetData/><conditionalFormatting><extLst/></conditionalFormatting><headerFooter/></worksheet>`,
+			`<worksheet><sheetData/><conditionalFormatting><extLst/></conditionalFormatting>` + letter + `<headerFooter/></worksheet>`,
+		},
+		"at the end, with the root's prefix": {
+			`<x:worksheet xmlns:x="u"><x:sheetData/></x:worksheet>`,
+			`<x:worksheet xmlns:x="u"><x:sheetData/><x:pageSetup paperSize="1"/></x:worksheet>`,
+		},
+		"an existing pageSetup is kept": {
+			`<worksheet><pageMargins/><pageSetup orientation="landscape"/></worksheet>`,
+			`<worksheet><pageMargins/><pageSetup orientation="landscape"/></worksheet>`,
+		},
+	} {
+		got, err := withLetterPageSetup([]byte(tc.in))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if string(got) != tc.want {
+			t.Errorf("%s:\n got %s\nwant %s", name, got, tc.want)
+		}
+	}
+}

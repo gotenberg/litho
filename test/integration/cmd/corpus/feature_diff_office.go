@@ -87,7 +87,9 @@ var errStaleReferences = errors.New("stale references")
 // that the provisioned PDFs the goldens were made from are those references
 // (see [referenceProblems]). Any disagreement fails the cell with the
 // command that rebuilds what is stale, so no fixture is scored against a
-// reference of something else.
+// reference of something else. A fixture whose converter refused it, and
+// would refuse it again, has no golden and is not scored: Prepare names
+// it with the converter's answer.
 func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 	f.mu.RLock()
 	m, root, pins := f.m, f.testdataRoot, f.pins
@@ -102,7 +104,10 @@ func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 		}
 		pins = resolved.Values
 	}
-	stale, _, regolden, err := referenceProblems(m, root, fixtures, pins)
+	stale, _, regolden, refused, err := referenceProblems(m, root, fixtures, pins)
+	if len(refused) > 0 {
+		fmt.Printf("%s: %d fixtures have no reference, not scored: %s\n", m.Name, len(refused), summarize(refused))
+	}
 	switch {
 	case err != nil:
 		return fmt.Errorf("%w: %w (run %s)", errStaleReferences, err, prepareRemedy(m.Name))
@@ -120,18 +125,20 @@ func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 // missing, refused or built from something else (see [checkReference]),
 // rebuild the fixtures among them another build may fix, regolden the
 // fixtures whose provisioned PDF, the one the goldens were made from, is not
-// their reference. root is the corpus's testdata root. A build corpus's
-// hostile documents have no reference and are skipped. err reports an
-// unreadable reference manifest.
-func referenceProblems(m *Manifest, root string, fixtures []Fixture, pins map[string]string) (stale, rebuild, regolden []string, err error) {
+// their reference, refused the fixtures the converter refused from their
+// current source, which a build would refuse again: they have no golden.
+// root is the corpus's testdata root. A build corpus's hostile documents
+// have no reference and are skipped. err reports an unreadable reference
+// manifest.
+func referenceProblems(m *Manifest, root string, fixtures []Fixture, pins map[string]string) (stale, rebuild, regolden, refused []string, err error) {
 	refDir := filepath.Join(root, filepath.FromSlash(m.References.Dir))
 	data, err := os.ReadFile(filepath.Join(refDir, referenceManifestName)) //nolint:gosec // provisioned record under the corpus testdata root
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("%s unreadable: %w", filepath.Join(refDir, referenceManifestName), err)
+		return nil, nil, nil, nil, fmt.Errorf("%s unreadable: %w", filepath.Join(refDir, referenceManifestName), err)
 	}
 	var man referenceManifest
 	if err := json.Unmarshal(data, &man); err != nil {
-		return nil, nil, nil, fmt.Errorf("decode %s: %w", filepath.Join(refDir, referenceManifestName), err)
+		return nil, nil, nil, nil, fmt.Errorf("decode %s: %w", filepath.Join(refDir, referenceManifestName), err)
 	}
 	unreferenced := unreferencedFixtures(m)
 	for _, fx := range fixtures {
@@ -139,11 +146,14 @@ func referenceProblems(m *Manifest, root string, fixtures []Fixture, pins map[st
 			continue
 		}
 		name := reportName(fx.ID)
-		if why, again := checkReference(man, m.References, name, fx, pins); why != "" {
+		why, again := checkReference(man, m.References, name, fx, pins)
+		if why != "" && again {
 			stale = append(stale, why)
-			if again {
-				rebuild = append(rebuild, name)
-			}
+			rebuild = append(rebuild, name)
+			continue
+		}
+		if why != "" {
+			refused = append(refused, why)
 			continue
 		}
 		// The goldens come from the provisioned copy of each reference,
@@ -153,7 +163,7 @@ func referenceProblems(m *Manifest, root string, fixtures []Fixture, pins map[st
 			regolden = append(regolden, name)
 		}
 	}
-	return stale, rebuild, regolden, nil
+	return stale, rebuild, regolden, refused, nil
 }
 
 // unreferencedFixtures names the fixtures of m no reference is built for: a
@@ -173,9 +183,9 @@ func unreferencedFixtures(m *Manifest) map[string]bool {
 // checkReference returns what is wrong with the reference of one fixture,
 // or "" when it was built from the fixture's current source at the pins:
 // the image's and, when refs names a source pin, the pin the fetched
-// documents come from. rebuild is false for a source the route refused from
-// the same source, options and image, which another build would refuse
-// again.
+// documents come from. rebuild is false for a source the converter refused
+// from the same source, options and builder, which another build would
+// refuse again: the only case why is set and rebuild false.
 func checkReference(man referenceManifest, refs *ReferenceSpec, name string, fx Fixture, pins map[string]string) (why string, rebuild bool) {
 	srcSum, srcErr := sourceDigest(refs.Engine, fx.PDFPath)
 	optSum := ""
@@ -189,7 +199,7 @@ func checkReference(man referenceManifest, refs *ReferenceSpec, name string, fx 
 	if !ok {
 		if fail, refused := man.Failed[name]; refused {
 			again := srcErr != nil || fail.Image != image || fail.SourceSHA256 != srcSum || fail.OptionsSHA256 != optSum
-			return fmt.Sprintf("%s was refused by the route (HTTP %s: %s)", name, fail.Status, fail.Answer), again
+			return fmt.Sprintf("%s was refused by %s (HTTP %s: %s)", name, fail.Image, fail.Status, refusalCause(fail.Answer)), again
 		}
 		return name + " has no reference", true
 	}
@@ -208,6 +218,21 @@ func checkReference(man referenceManifest, refs *ReferenceSpec, name string, fx 
 		return name + "'s options changed since its reference was built", true
 	}
 	return "", false
+}
+
+// refusalCause shortens a converter's answer to its error code when it
+// carries one (Graph's ErrorCode=WordCorruptFile, InputFormatNotSupported),
+// and to its first line otherwise.
+func refusalCause(answer string) string {
+	for _, key := range []string{"ErrorCode=", `"InnerError":{"Code":"`} {
+		if _, rest, ok := strings.Cut(answer, key); ok {
+			if end := strings.IndexFunc(rest, func(r rune) bool { return r == ' ' || r == '"' || r == ',' }); end > 0 {
+				return rest[:end]
+			}
+		}
+	}
+	first, _, _ := strings.Cut(answer, "\n")
+	return first
 }
 
 // summarize joins the first problems and counts the rest.

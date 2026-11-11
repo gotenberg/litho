@@ -1,14 +1,14 @@
 # libreoffice/docx corpus fixtures
 
-DOCX documents scored by the `diff` feature (see `FEATURES.md`) against LibreOffice as Gotenberg's LibreOffice route prints them: the image `GOTENBERG_IMAGE` in `corpus/versions.env` pins (`gotenberg/gotenberg:9.0.0`, LibreOffice 26.8.2.2), route `/forms/libreoffice/convert`. A selection of LibreOffice's Writer test documents at the commit `LIBREOFFICE_CORE_COMMIT` pins, of which only the list and the hashes are committed; the references are built by `corpus references` into the testdata and never committed.
+DOCX documents scored by the `diff` feature (see `FEATURES.md`) against Microsoft Word as Office for the web prints them through Microsoft Graph (see `cmd/corpus/msgraph.go`); each reference records the day it was built, since the service has no version to pin. The ODF and CSV corpora, which point here for how they work, are scored against LibreOffice as Gotenberg's LibreOffice route prints them: the image `GOTENBERG_IMAGE` in `corpus/versions.env` pins (`gotenberg/gotenberg:9.0.0`, LibreOffice 26.8.2.2), route `/forms/libreoffice/convert`. A selection of LibreOffice's Writer test documents at the commit `LIBREOFFICE_CORE_COMMIT` pins, of which only the list and the hashes are committed; the references are built by `corpus references` into the testdata and never committed.
 
-| Path                | What it holds                                                                                                                                                            |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `documents.json`    | The 350 LibreOffice test documents, each by its ID, `<dir>/<file>.docx` (`ooxmlexport/tdf123.docx`)                                                                      |
-| `files.sha256`      | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 350 documents and `COPYING.MPL`                                                                          |
-| `corpus update`     | Selects the documents from a LibreOffice core checkout and writes the two files above                                                                                    |
-| `corpus fetch`      | `make corpus-fetch CORPUS=libreoffice/docx`: downloads each listed file at the pinned commit into `testdata/libreoffice/docx/sources/`, refusing one whose hash differs  |
-| `corpus references` | `make corpus-references CORPUS=libreoffice/docx`: converts every source with the pinned image into `testdata/libreoffice/docx/references/<name>.pdf` and `manifest.json` |
+| Path                | What it holds                                                                                                                                                              |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `documents.json`    | The 350 LibreOffice test documents, each by its ID, `<dir>/<file>.docx` (`ooxmlexport/tdf123.docx`)                                                                        |
+| `files.sha256`      | Every fetched file, `<sha256>  <path in LibreOffice core>`: the 350 documents and `COPYING.MPL`                                                                            |
+| `corpus update`     | Selects the documents from a LibreOffice core checkout and writes the two files above                                                                                      |
+| `corpus fetch`      | `make corpus-fetch CORPUS=libreoffice/docx`: downloads each listed file at the pinned commit into `testdata/libreoffice/docx/sources/`, refusing one whose hash differs    |
+| `corpus references` | `make corpus-references CORPUS=libreoffice/docx`: converts every source through Microsoft Graph into `testdata/libreoffice/docx/references/<name>.pdf` and `manifest.json` |
 
 A source's reference is named by its ID with `/` written `__`: `ooxmlexport__tdf123.docx.pdf`.
 
@@ -18,9 +18,9 @@ A source's reference is named by its ID with `/` written `__`: `ooxmlexport__tdf
 make corpus CORPUS=libreoffice/docx FEATURE=diff # every missing step, then the score
 ```
 
-`make corpus-prepare CORPUS=libreoffice/docx` runs the steps alone: `corpus-fetch` downloads the documents and the fixture fonts, hash-checked; `corpus-references` converts them with the pinned image (Docker; `FIXTURES=a__b.ext` rebuilds some); `corpus-goldens` derives the diff goldens in the corpus image.
+`make corpus-prepare CORPUS=libreoffice/docx` runs the steps alone: `corpus-fetch` downloads the documents and the fixture fonts, hash-checked; `corpus-references` converts them through Microsoft Graph, with the access token Graph Explorer shows in `LITHO_CORPUS_MSGRAPH_TOKEN` (`FIXTURES=a__b.ext` rebuilds some) (the ODF and CSV corpora with the pinned image, in Docker); `corpus-goldens` derives the diff goldens in the corpus image.
 
-`corpus references` records, per reference, the image, the LibreOffice core commit and the SHA-256 of the source, of its `options.json` and of the PDF, and lists the sources the route refused under `failed`. Before scoring, the cell checks every fixture against that record and refuses the run, naming `make corpus-references CORPUS=libreoffice/docx`, when a reference was built from another pin, from a source or options that changed since, or is missing; and, naming the directories to remove and re-provision, when the provisioned `pdfs/` the goldens were made from are not those references. The goldens are drawn without annotations (`pdftoppm -hide-annotations`), and litho's pages too: LibreOffice exports comments as notes without an appearance, whose icon is the viewer's own, and form fields with appearances in fonts it does not embed. The text goldens never held them.
+`corpus references` records, per reference, the image (`microsoft-graph` and the day for a Microsoft reference), the pin the documents come from and the SHA-256 of the source, of its `options.json` and of the PDF, and lists the sources the converter refused under `failed`. A source refused from the same source and options is refused again on every build: the cell leaves it unscored and names it with the converter's answer. Before scoring, the cell checks every fixture against that record and refuses the run, naming `make corpus-references CORPUS=libreoffice/docx`, when a reference was built from another pin, from a source or options that changed since, or is missing; and, naming the directories to remove and re-provision, when the provisioned `pdfs/` the goldens were made from are not those references. The goldens are drawn without annotations (`pdftoppm -hide-annotations`), and litho's pages too: LibreOffice exports comments as notes without an appearance, whose icon is the viewer's own, and form fields with appearances in fonts it does not embed. The text goldens never held them.
 
 ## How the documents were chosen
 
@@ -48,9 +48,15 @@ The cell converts with the fixture fonts `corpus fetch --corpus=fonts` installs,
 
 ## How the rig was proven
 
-Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on 348 of 360 documents. Pages, links and outline score 1 on all; text F1 is below 1 on 13, where litho's text extraction and PDF.js split words apart (`i18n`'s Thai and Devanagari at 0.786, `dkvert.docx`'s vertical text and `layout/tdf137025.docx` at 0); layout averages 0.966 and falls below 0.75 on 4, where litho draws hairlines and shapes otherwise than poppler (`ooxmlexport/fdo67737.docx` at 0.32); strict fails on 1. `TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens` checked the gotenberg corpus's sources so on every run; it now checks the litho Office corpora. The counts cover this corpus and the gotenberg/docx corpus, removed on 2026-11-09, together.
+With LibreOffice's references, before Microsoft's replaced them on 2026-11-11, each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on 348 of 360 documents. Pages, links and outline score 1 on all; text F1 is below 1 on 13, where litho's text extraction and PDF.js split words apart (`i18n`'s Thai and Devanagari at 0.786, `dkvert.docx`'s vertical text and `layout/tdf137025.docx` at 0); layout averages 0.966 and falls below 0.75 on 4, where litho draws hairlines and shapes otherwise than poppler (`ooxmlexport/fdo67737.docx` at 0.32); strict fails on 1. `TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens` checked the gotenberg corpus's sources so on every run; it now checks the litho Office corpora. The counts cover this corpus and the gotenberg/docx corpus, removed on 2026-11-09, together.
 
-## Accepted disagreements
+## Refused by Microsoft
+
+9 of the 350: Word for the web cannot open them (`WordCantOpenDocument`), LibreOffice bug reports whose files are malformed on purpose. They have no reference and are not scored.
+
+## Disagreements with LibreOffice's references
+
+Recorded while LibreOffice built this corpus's references, until 2026-11-11: they describe LibreOffice's output and litho's, not Microsoft's.
 
 - `ooxmlexport/fdo59638.docx`: LibreOffice keeps the Symbol font's private-use bullet U+F0B7 in its text layer; litho maps it to the bullet it stands for, U+2022, so the text is searchable.
 - `ooxmlimport/numbering-circle.docx`: LibreOffice's text layer reads the circled list number as ".①" because of its bidi ordering; litho reads "①.".

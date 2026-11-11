@@ -99,7 +99,7 @@ func prepareReferences(ctx context.Context, ms []*Manifest, pins *resolvedPins) 
 		if err != nil {
 			return fmt.Errorf("%s: %w", m.Name, err)
 		}
-		_, rebuild, _, err := referenceProblems(m, m.TestdataRoot(), fixtures, pins.Values)
+		_, rebuild, _, _, err := referenceProblems(m, m.TestdataRoot(), fixtures, pins.Values)
 		switch {
 		case err != nil:
 			todo = append(todo, pending{m, nil})
@@ -140,7 +140,7 @@ func dropStaleGoldens(m *Manifest, pins *resolvedPins) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", m.Name, err)
 		}
-		_, _, regolden, err := referenceProblems(m, root, fixtures, pins.Values)
+		_, _, regolden, _, err := referenceProblems(m, root, fixtures, pins.Values)
 		if err != nil || len(regolden) == 0 {
 			return nil //nolint:nilerr // an unreadable reference manifest leaves the goldens step to skip the corpus
 		}

@@ -36,7 +36,7 @@ Beyond the fixture fonts (see the docx corpus), `form` and `form-flat` draw some
 
 ## How the rig was proven
 
-Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on 150 of 154 documents. Pages, links and outline score 1 on all; text F1 is below 1 on 5, where litho's text extraction and PDF.js split words apart (`odfexport/table_styles_2.odt` at 0.333); strict fails on 5, where litho draws hairlines, hatches and bitmap fills lighter than poppler (`odfexport/sw_hatch.odt`, layout 0.037); layout averages 0.966. `TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens` checked the gotenberg corpus's sources so on every run; it now checks the litho Office corpora. The counts cover this corpus and the gotenberg/odt corpus, removed on 2026-11-09, together.
+Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on 150 of 154 documents. Pages, links and outline score 1 on all; text F1 is below 1 on 5, where litho's text extraction and PDF.js split words apart (`odfexport/table_styles_2.odt` at 0.333); strict fails on 5, where litho draws hairlines, hatches and bitmap fills lighter than poppler (`odfexport/sw_hatch.odt`, layout 0.037); layout averages 0.966. `TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens` checked the gotenberg corpus's sources so on every run; it now checks the litho Office corpora. The counts cover this corpus and the gotenberg/odt corpus, removed on 2026-11-09, together.
 
 ## Accepted disagreements
 

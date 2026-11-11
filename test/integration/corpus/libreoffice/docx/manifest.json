@@ -8,7 +8,7 @@
   },
   "references": {
     "dir": "references",
-    "engine": "libreoffice",
+    "engine": "microsoft",
     "source_pin": "LIBREOFFICE_CORE_COMMIT"
   },
   "goldens": {

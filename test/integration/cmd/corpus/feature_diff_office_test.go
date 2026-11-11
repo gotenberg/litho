@@ -79,9 +79,9 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 	return f, fixtures
 }
 
-// TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens proves
-// the Office rig on its own references: each litho Office corpus's
-// LibreOffice PDF, handed to the diff feature as litho's conversion, passes
+// TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens proves the
+// Office rig on its own references: each litho Office corpus's Microsoft
+// PDF, handed to the diff feature as litho's conversion, passes
 // Prepare's checks and scores 1 on pages, links and outline against the
 // goldens made from it, and clears the text and layout bars but for the
 // references below, where litho's reading and drawing of the PDF part from
@@ -92,22 +92,29 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 //
 // # Corpus evidence
 //
-//   - litho/docx: of the 122 references, 119 clear both bars; text F1 is
-//     under 0.85 on intl-rtl-arabic (0.809), intl-rtl-hebrew (0.829) and
-//     intl-scripts (0.774).
-//   - litho/xlsx: of the 90 references, 85 clear both bars; text F1 is under
-//     0.85 on chartex_region_map (0.500), column_widths (0.830), fonts
-//     (0.494), groups_connectors (0.500) and rtl_sheet (0.679).
-//   - litho/pptx: of the 114 references, 112 clear both bars;
-//     background-pattern's layout is 0.302 and text-complex-scripts's text
-//     F1 0.792.
-func TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
+// The references are Microsoft's (Office for the web through Graph); the
+// fixtures Microsoft refused have none and are skipped.
+//
+//   - litho/docx: of the 119 references, 115 clear both bars; text F1 is
+//     under 0.85 on intl-rtl-arabic (0.368), intl-rtl-hebrew (0.241),
+//     para-alignment (0.826) and tables-rtl (0.713).
+//   - litho/xlsx: of the 88 references, 81 clear both bars; text F1 is under
+//     0.85 on chartex_region_map (0.737), defined_names (0.729), fonts
+//     (0.498), paper_sizes (0.821), rtl_sheet (0.526), sheet_background
+//     (0.656) and wide_columns (0.596).
+//   - litho/pptx: of the 109 references, 106 clear both bars; text F1 is under
+//     0.85 on text-fill-effects (0.769), text-rtl (0.392) and
+//     text-warp-wordart (0.826).
+func TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
 	t.Parallel()
 
 	underBars := map[string]map[string]bool{
-		"docx": {"intl-rtl-arabic": true, "intl-rtl-hebrew": true, "intl-scripts": true},
-		"xlsx": {"chartex_region_map": true, "column_widths": true, "fonts": true, "groups_connectors": true, "rtl_sheet": true},
-		"pptx": {"background-pattern": true, "text-complex-scripts": true},
+		"docx": {"intl-rtl-arabic": true, "intl-rtl-hebrew": true, "para-alignment": true, "tables-rtl": true},
+		"xlsx": {
+			"chartex_region_map": true, "defined_names": true, "fonts": true,
+			"paper_sizes": true, "rtl_sheet": true, "sheet_background": true, "wide_columns": true,
+		},
+		"pptx": {"text-fill-effects": true, "text-rtl": true, "text-warp-wordart": true},
 	}
 	for _, format := range []string{"docx", "xlsx", "pptx"} {
 		corpus := "litho/" + format
@@ -118,6 +125,9 @@ func TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens(t *testing
 				t.Fatal(err)
 			}
 			for _, fx := range fixtures {
+				if !f.HasGolden(fx.ID) {
+					continue // refused by Microsoft: no reference to score
+				}
 				ref, err := os.ReadFile(filepath.Join(f.testdataRoot, filepath.FromSlash(f.m.References.Dir), reportName(fx.ID)+".pdf"))
 				if err != nil {
 					t.Fatal(err)
@@ -197,7 +207,16 @@ func TestDiffFeature_PrepareRefusesStaleReferences(t *testing.T) {
 		{"refused", func(m *referenceManifest, _ string) {
 			delete(m.References, "memo")
 			m.Failed = map[string]referenceFailure{"memo": {Status: "400", Answer: "could not read"}}
-		}, "refused by the route"},
+		}, "was refused by"},
+		// A refusal of the current source, options and image would be
+		// refused again: the fixture goes unscored, the cell runs.
+		{"refused for good", func(m *referenceManifest, _ string) {
+			delete(m.References, "memo")
+			m.Failed = map[string]referenceFailure{"memo": {
+				Status: "406", Answer: "ErrorCode=WordCorruptFile Url=x", Image: "img:1",
+				SourceSHA256: sha("docx"), OptionsSHA256: sha(`{"landscape": true}`),
+			}}
+		}, ""},
 		{"goldens from another build", func(_ *referenceManifest, root string) {
 			writeFiles(t, root, map[string]string{"pdfs/memo.pdf": "pdf older"})
 		}, "goldens were not made"},
@@ -285,5 +304,19 @@ func TestDiffFeature_GoldenSourceNamesTheReferenceEngine(t *testing.T) {
 	f.SetManifest(&Manifest{References: &ReferenceSpec{Engine: engineMicrosoft}})
 	if got := f.GoldenSource(); got != "microsoft" || !f.office {
 		t.Fatalf("GoldenSource = %q, office %v, want microsoft, an Office corpus", got, f.office)
+	}
+}
+
+func TestRefusalCause_KeepsTheErrorCode(t *testing.T) {
+	t.Parallel()
+
+	for answer, want := range map[string]string{
+		`{"detail":"Error from Office Service. HttpCode=BadRequest ErrorCode=WordCantOpenDocument Url=https://x"}`: "WordCantOpenDocument",
+		`{"error":{"Code":"notSupported","InnerError":{"Code":"InputFormatNotSupported"}}}`:                        "InputFormatNotSupported",
+		"Microsoft Graph converts with no options\nmore":                                                           "Microsoft Graph converts with no options",
+	} {
+		if got := refusalCause(answer); got != want {
+			t.Errorf("refusalCause(%q) = %q, want %q", answer, got, want)
+		}
 	}
 }

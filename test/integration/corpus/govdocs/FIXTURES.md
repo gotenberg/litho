@@ -2,16 +2,16 @@
 
 Govdocs1 is a corpus of a million files Digital Corpora gathered from United States government web sites, redistributed in thread archives of about a thousand files each. Its corpora sample the threads `GOVDOCS_THREADS` in `corpus/versions.env` pins:
 
-| Corpus        | Fixtures                                | Scored against                                                     |
-| ------------- | --------------------------------------- | ------------------------------------------------------------------ |
-| `govdocs/pdf` | Every PDF of the threads, about 1,100   | PDF.js, veraPDF and the other PDF oracles; downloaded in the image |
-| `govdocs/doc` | 100 Word 97 to 2003 documents           | LibreOffice, by the `diff` feature                                 |
-| `govdocs/xls` | 100 Excel 97 to 2003 workbooks          | LibreOffice, by the `diff` feature                                 |
-| `govdocs/ppt` | 100 PowerPoint 97 to 2003 presentations | LibreOffice, by the `diff` feature                                 |
+| Corpus        | Fixtures                                | Scored against                                                        |
+| ------------- | --------------------------------------- | --------------------------------------------------------------------- |
+| `govdocs/pdf` | Every PDF of the threads, about 1,100   | PDF.js, veraPDF and the other PDF oracles; downloaded in the image    |
+| `govdocs/doc` | 100 Word 97 to 2003 documents           | Microsoft, by the `diff` feature                                      |
+| `govdocs/xls` | 100 Excel 97 to 2003 workbooks          | Microsoft, by the `diff` feature; 5 over Excel's page limit have none |
+| `govdocs/ppt` | 100 PowerPoint 97 to 2003 presentations | Microsoft, by the `diff` feature; 2 PowerPoint fails on have none     |
 
 The pinned threads hold no OOXML document: these are the real documents the binary formats were used for, where the poi corpora hold test cases. litho reads none of the binary formats yet: the three Office cells score a convert error on every document until it does.
 
-The Office corpora work as the libreoffice corpora do. Only the lists and the hashes are committed: `make corpus-fetch CORPUS=govdocs` downloads the documents and `make corpus-references CORPUS=govdocs` builds their references in the testdata; `make corpus-prepare CORPUS=govdocs` runs both, then the goldens.
+The Office corpora work as the libreoffice OOXML corpora do, against Office for the web through Microsoft Graph. A binary workbook cannot be given a Letter `pageSetup` as an OOXML one is, so a sheet without one prints on the paper of the account's region. Only the lists and the hashes are committed: `make corpus-fetch CORPUS=govdocs` downloads the documents and `make corpus-references CORPUS=govdocs` builds their references in the testdata; `make corpus-prepare CORPUS=govdocs` runs both, then the goldens.
 
 | Path                      | What it holds                                                                                                                       |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |

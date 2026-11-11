@@ -27,7 +27,7 @@ Every reference draws Liberation Sans, Calc's default, which the fixture fonts h
 
 ## How the rig was proven
 
-Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on all 11: pages, text, links, outline and the strict rule score 1 on every one, and layout averages 0.970. `TestDiffFeature_LibreOfficeReferencesScoreOneAgainstTheirGoldens` checked the gotenberg corpus's sources so on every run; it now checks the litho Office corpora. The counts cover this corpus and the gotenberg/csv corpus, removed on 2026-11-09, together.
+Each reference handed to the cell as litho's conversion, scored against the goldens made from it, passes on all 11: pages, text, links, outline and the strict rule score 1 on every one, and layout averages 0.970. `TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens` checked the gotenberg corpus's sources so on every run; it now checks the litho Office corpora. The counts cover this corpus and the gotenberg/csv corpus, removed on 2026-11-09, together.
 
 ## Accepted disagreements
 
