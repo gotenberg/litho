@@ -1181,18 +1181,19 @@ type BookmarkGenerationOptions struct {
 	// (15% larger), and a negative or non-finite value is refused.
 	MinFontSizeRatio float64
 	// SkipHeaderFooter filters out text that appears as a running header or
-	// footer on many pages. Default true.
+	// footer on many pages. False in the zero value.
 	SkipHeaderFooter bool
 	// MaxTitleLength truncates a heading longer than this many characters and
 	// appends an ellipsis. Zero selects the default 200, and a negative value
 	// is refused.
 	MaxTitleLength int
 	// PreferStructureTree uses the PDF's structure tree (tagged PDFs) when
-	// available, falling back to font heuristics otherwise. Default true.
+	// available, falling back to font heuristics otherwise. False in the
+	// zero value.
 	PreferStructureTree bool
 	// DetectNumbering parses section number prefixes (1.1, A.1, IV, §2.3,
 	// Chapter 5) to improve detection and override font-size depth with
-	// the numbering depth. Default true.
+	// the numbering depth. False in the zero value.
 	DetectNumbering bool
 	// StripNumberingFromTitle removes the numeric prefix from generated
 	// titles (e.g., "1.1 Overview" becomes "Overview"). Default false.
