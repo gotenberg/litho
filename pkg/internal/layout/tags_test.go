@@ -201,17 +201,18 @@ func TestTags_HeaderScopes(t *testing.T) {
 	}
 }
 
-// TestTags_EmptyCellsKept keeps the empty cell of a row with content, so
-// the rows of the table count the same columns.
+// TestTags_EmptyCellsKept keeps the empty cells and rows of a table with
+// content, so its rows count the same columns and its columns the same
+// rows.
 func TestTags_EmptyCellsKept(t *testing.T) {
 	in := inlineSty()
 	cell := func(kids ...*Node) *Node { return role("TD", el(sty(display(css.TableCell)), kids...)) }
 	row := func(cells ...*Node) *Node { return role("TR", el(sty(display(css.TableRow)), cells...)) }
 	wide := cell(txt(in, "a"))
 	wide.ColSpan = 2
-	table := role("Table", el(sty(display(css.Table)), row(wide), row(cell(txt(in, "b")), cell())))
+	table := role("Table", el(sty(display(css.Table)), row(wide), row(cell(txt(in, "b")), cell()), row(cell(), cell())))
 	res := run(t, doc(table), page(200, 100))
-	if got := shape(res, res.Structure); got != "Document[Table[TR[TD#] TR[TD# TD]]]" {
+	if got := shape(res, res.Structure); got != "Document[Table[TR[TD#] TR[TD# TD] TR[TD TD]]]" {
 		t.Errorf("structure %s, want the empty cell kept", got)
 	}
 }

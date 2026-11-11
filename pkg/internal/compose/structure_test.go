@@ -244,19 +244,26 @@ func TestPruneStructureDropsDanglingDests(t *testing.T) {
 	}
 }
 
-func TestPruneStructureKeepsEmptyCellsOfARow(t *testing.T) {
+func TestPruneStructureKeepsTheGridOfATable(t *testing.T) {
 	t.Parallel()
 	full := &compose.StructElem{Role: "TD"}
 	empty := &compose.StructElem{Role: "TD"}
-	gone := &compose.StructElem{Role: "TR", Kids: []*compose.StructElem{{Role: "TD"}}}
+	emptyRow := &compose.StructElem{Role: "TR", Kids: []*compose.StructElem{{Role: "TD", Kids: []*compose.StructElem{{Role: "P"}}}}}
 	row := &compose.StructElem{Role: "TR", Kids: []*compose.StructElem{full, empty}}
-	root := &compose.StructElem{Role: "Document", Kids: []*compose.StructElem{{Role: "Table", Kids: []*compose.StructElem{row, gone}}}}
+	table := &compose.StructElem{Role: "Table", Kids: []*compose.StructElem{row, emptyRow}}
+	emptyTable := &compose.StructElem{Role: "Table", Kids: []*compose.StructElem{{Role: "TR", Kids: []*compose.StructElem{{Role: "TD"}}}}}
+	root := &compose.StructElem{Role: "Document", Kids: []*compose.StructElem{table, emptyTable}}
 	r := run(t, sans, 12, compose.Point{X: 40, Y: 60}, "a")
 	r.Parent = full
 	doc := &compose.Document{Structure: root, Pages: []*compose.Page{letter(r)}}
 	compose.PruneStructure(doc)
-	table := root.Kids[0]
-	if len(table.Kids) != 1 || len(table.Kids[0].Kids) != 2 || table.Kids[0].Kids[1] != empty {
-		t.Errorf("table rows %d, cells %v: want the row with content and both its cells", len(table.Kids), table.Kids[0].Kids)
+	if len(root.Kids) != 1 || root.Kids[0] != table {
+		t.Fatalf("document kids %v, want the table with content alone", root.Kids)
+	}
+	if len(table.Kids) != 2 || len(row.Kids) != 2 || len(emptyRow.Kids) != 1 {
+		t.Errorf("table rows %d, cells %d and %d: want the whole grid", len(table.Kids), len(row.Kids), len(emptyRow.Kids))
+	}
+	if len(emptyRow.Kids[0].Kids) != 0 {
+		t.Error("the empty paragraph of an empty cell is kept")
 	}
 }

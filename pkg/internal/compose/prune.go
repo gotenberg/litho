@@ -41,52 +41,65 @@ func PruneStructure(doc *Document) {
 			}
 		}
 	}
-	// Post-order over an explicit stack: an element is kept when it is
-	// used or keeps a kid.
-	type frame struct {
-		el   *StructElem
-		next int
-		kept []*StructElem
-	}
-	stack := []*frame{{el: doc.Structure}}
-	for len(stack) > 0 {
-		top := stack[len(stack)-1]
-		if top.next < len(top.el.Kids) {
-			k := top.el.Kids[top.next]
-			top.next++
-			stack = append(stack, &frame{el: k})
-			continue
-		}
-		if top.el.Role == "TR" && len(top.kept) > 0 {
-			// A row that keeps content keeps its empty cells: with their
-			// spans, the rows of a table count the same columns (ISO
-			// 14289-1, 7.2).
-			top.kept = rowCells(top.el.Kids, top.kept)
-		}
-		top.el.Kids = top.kept
-		stack = stack[:len(stack)-1]
-		if len(stack) > 0 && (used[top.el] || len(top.kept) > 0) {
-			parent := stack[len(stack)-1]
-			parent.kept = append(parent.kept, top.el)
-		}
-	}
+	PruneTree(doc.Structure, used)
 	dropDanglingDests(doc)
 }
 
-// rowCells returns the kids of a row in order, those in kept and every
-// TD or TH cell.
-func rowCells(kids, kept []*StructElem) []*StructElem {
-	in := make(map[*StructElem]bool, len(kept))
-	for _, k := range kept {
-		in[k] = true
+// gridRoles are the table parts of a table's grid (ISO 32000-1, 14.8.4.3.4,
+// Table 337). Immutable lookup table.
+var gridRoles = map[string]bool{"THead": true, "TBody": true, "TFoot": true, "TR": true, "TH": true, "TD": true}
+
+// PruneTree drops from the tree under root the elements used does not
+// hold, directly or through their kids; root stays. A table that keeps
+// content keeps its whole grid, its row groups, rows and cells empty or
+// not: with their spans, its rows count the same columns and its columns
+// the same rows (ISO 14289-1, 7.2). The tree has passed
+// [Document.Validate] or was built within its caps.
+func PruneTree(root *StructElem, used map[*StructElem]bool) {
+	// Post-order over an explicit stack: an element reaches content when
+	// it is used or a kid does.
+	reach := map[*StructElem]bool{}
+	type frame struct {
+		el   *StructElem
+		next int
 	}
-	out := make([]*StructElem, 0, len(kids))
-	for _, k := range kids {
-		if k.Role == "TD" || k.Role == "TH" || in[k] {
-			out = append(out, k)
+	stack := []*frame{{el: root}}
+	for len(stack) > 0 {
+		top := stack[len(stack)-1]
+		if top.next < len(top.el.Kids) {
+			top.next++
+			stack = append(stack, &frame{el: top.el.Kids[top.next-1]})
+			continue
+		}
+		stack = stack[:len(stack)-1]
+		if used[top.el] || reach[top.el] {
+			reach[top.el] = true
+			if len(stack) > 0 {
+				reach[stack[len(stack)-1].el] = true
+			}
 		}
 	}
-	return out
+	// Preorder: grid reports an element of the grid of a table that
+	// reaches content.
+	type item struct {
+		el   *StructElem
+		grid bool
+	}
+	todo := []item{{el: root}}
+	for len(todo) > 0 {
+		it := todo[len(todo)-1]
+		todo = todo[:len(todo)-1]
+		grid := it.grid || it.el.Role == "Table" && reach[it.el]
+		kids := make([]*StructElem, 0, len(it.el.Kids))
+		for _, k := range it.el.Kids {
+			inGrid := grid && gridRoles[k.Role]
+			if reach[k] || inGrid {
+				kids = append(kids, k)
+				todo = append(todo, item{el: k, grid: inGrid})
+			}
+		}
+		it.el.Kids = kids
+	}
 }
 
 // dropDanglingDests clears the [Dest.Elem] of every link and outline entry

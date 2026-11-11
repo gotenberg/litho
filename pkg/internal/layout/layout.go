@@ -77,7 +77,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	e.anchorsFound = res.Anchors
 	res.Extents = e.extents(rb, len(res.Pages))
 	e.links(res, links, used)
-	prune(e.root, used)
+	compose.PruneTree(e.root, used)
 	dropPrunedDests(e.root, res)
 	for _, w := range e.warnings {
 		page := 0
@@ -682,27 +682,6 @@ func dropPrunedDests(root *compose.StructElem, res *Result) {
 			}
 		}
 	}
-}
-
-// prune drops the structure elements no fragment hangs from, directly or
-// through their kids, and reports whether el keeps content. A row that
-// keeps content keeps its empty cells too: with their spans, the rows of a
-// table then count the same columns (ISO 14289-1, 7.2).
-func prune(el *compose.StructElem, used map[*compose.StructElem]bool) bool {
-	kids := el.Kids[:0]
-	keep := make([]bool, len(el.Kids))
-	kept := false
-	for i, k := range el.Kids {
-		keep[i] = prune(k, used)
-		kept = kept || keep[i]
-	}
-	for i, k := range el.Kids {
-		if keep[i] || kept && el.Role == "TR" && (k.Role == "TD" || k.Role == "TH") {
-			kids = append(kids, k)
-		}
-	}
-	el.Kids = kids
-	return used[el] || len(kids) > 0
 }
 
 // layoutFlow lays the tree rooted at root out on pages whose first is first,
