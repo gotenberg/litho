@@ -446,3 +446,38 @@ func TestShapes_ThemePictureFill(t *testing.T) {
 		t.Errorf("background %+v, warnings %+v: want the theme's picture", f, warnings)
 	}
 }
+
+// TestShapes_Describe checks what a reader hears of a deck's drawings: a
+// picture's descr, else its title; a picture its author marked
+// decorative; and the master's own shapes, which repeat on every slide,
+// as decorative.
+func TestShapes_Describe(t *testing.T) {
+	t.Parallel()
+	pic := func(name, nv string) string {
+		return `<p:pic><p:nvPicPr><p:cNvPr id="4" name="` + name + `"` + nv + `</p:cNvPr><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rIdP"/><a:stretch/></p:blipFill>` +
+			`<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="38100" cy="25400"/></a:xfrm><a:prstGeom prst="rect"/></p:spPr></p:pic>`
+	}
+	rel := `<Relationship Id="rIdP" Type="` + tRelImage + `" Target="../media/image1.png"/>`
+	doc, _ := readDeck(t, testDeck{
+		masterTree: defaultMasterTree + `<p:sp><p:nvSpPr><p:cNvPr id="20" name="Band"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="12700" cy="12700"/></a:xfrm><a:prstGeom prst="rect"/></p:spPr></p:sp>`,
+		slides: []testSlide{{
+			tree: pic("Described", ` descr=" A cat " title="Cat">`) + pic("Titled", ` title="Logo">`) +
+				pic("Decorative", ` descr="x"><a:extLst><a:ext uri="{C183D7F6-B498-43B3-948B-1728B52AA6E4}"><adec:decorative xmlns:adec="http://schemas.microsoft.com/office/drawing/2017/decorative" val="1"/></a:ext></a:extLst>`),
+			rels: rel,
+		}},
+		parts: map[string]string{"ppt/media/image1.png": pngBytes(t)},
+	})
+	s := doc.Slides[0]
+	for _, tc := range []struct {
+		name, alt  string
+		decorative bool
+	}{{"Described", "A cat", false}, {"Titled", "Logo", false}, {"Decorative", "x", true}, {"Band", "", true}} {
+		sh := shapeNamed(s.Shapes, tc.name)
+		if sh == nil {
+			t.Fatalf("no shape %q", tc.name)
+		}
+		if sh.Alt != tc.alt || sh.Decorative != tc.decorative {
+			t.Errorf("%s: alt %q decorative %v, want %q %v", tc.name, sh.Alt, sh.Decorative, tc.alt, tc.decorative)
+		}
+	}
+}

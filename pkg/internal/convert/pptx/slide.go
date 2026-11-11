@@ -40,11 +40,11 @@ func (r *reader) slide(n int, part string) (*slides.Slide, error) {
 	m := lay.masterOf()
 	if sl.showMasterSp {
 		if lay.showMasterSp {
-			if err := r.shapeList(&s.Shapes, &shapeCtx{layer: m, sc: sl.sc, ns: nsP, part: m.part, bg: &s.Background}, m.tree, 0); err != nil {
+			if err := r.shapeList(&s.Shapes, &shapeCtx{layer: m, sc: sl.sc, ns: nsP, part: m.part, master: true, bg: &s.Background}, m.tree, 0); err != nil {
 				return nil, err
 			}
 		}
-		if err := r.shapeList(&s.Shapes, &shapeCtx{layer: lay, sc: sl.sc, ns: nsP, part: lay.part, bg: &s.Background}, lay.tree, 0); err != nil {
+		if err := r.shapeList(&s.Shapes, &shapeCtx{layer: lay, sc: sl.sc, ns: nsP, part: lay.part, master: true, bg: &s.Background}, lay.tree, 0); err != nil {
 			return nil, err
 		}
 	}

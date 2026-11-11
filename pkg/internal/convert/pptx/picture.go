@@ -47,6 +47,7 @@ func (r *reader) picture(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	chain := inherited(c.layer, el)
 	nv := nvProps(el)
 	s := &slides.Shape{Kind: slides.KindPicture, Name: attr(nv, "name"), Href: r.href(c.part, nv.Child(ooxml.NSA, "hlinkClick")), Jump: r.jump(c.part, nv.Child(ooxml.NSA, "hlinkClick"))}
+	s.Alt, s.Decorative = ooxml.Describe(nv)
 	if !place(s, chain) {
 		return nil
 	}
@@ -195,6 +196,7 @@ func (r *reader) graphicFrame(c *shapeCtx, el *ooxml.Element, depth int) (*slide
 	chain := inherited(c.layer, el)
 	nv := nvProps(el)
 	s := &slides.Shape{Name: attr(nv, "name"), Href: r.href(c.part, nv.Child(ooxml.NSA, "hlinkClick")), Jump: r.jump(c.part, nv.Child(ooxml.NSA, "hlinkClick"))}
+	s.Alt, s.Decorative = ooxml.Describe(nv)
 	if !place(s, chain) {
 		return nil, nil
 	}

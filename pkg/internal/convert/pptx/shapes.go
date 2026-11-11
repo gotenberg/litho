@@ -38,7 +38,12 @@ type shapeCtx struct {
 	// slide marks the slide's own tree, whose placeholders print; a
 	// layout's or master's placeholders are prompts and never print.
 	slide bool
-	group *slides.Fill
+	// master marks a master's or a layout's tree shown under a slide: its
+	// shapes repeat on every slide that shows them, as a page's
+	// background does, and are pagination artifacts (ISO 32000-1,
+	// 14.8.2.2.2).
+	master bool
+	group  *slides.Fill
 	// title collects the text of the slide's title placeholder.
 	title string
 	// fontColor, when not nil, is the colour every font reference of the
@@ -103,6 +108,7 @@ func (r *reader) shapeList(out *[]*slides.Shape, c *shapeCtx, tree *ooxml.Elemen
 			return err
 		}
 		if s != nil {
+			s.Decorative = s.Decorative || c.master
 			*out = append(*out, s)
 		}
 	}
@@ -302,6 +308,7 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 		return nil
 	}
 	s := &slides.Shape{Kind: slides.KindGeometry, Name: attr(nv, "name"), Href: r.href(c.part, nv.Child(ooxml.NSA, "hlinkClick")), Jump: r.jump(c.part, nv.Child(ooxml.NSA, "hlinkClick"))}
+	s.Alt, s.Decorative = ooxml.Describe(nv)
 	if !place(s, chain) {
 		// Impress drops a placeholder neither the slide, its layout nor
 		// its master places.
@@ -514,6 +521,7 @@ func (r *reader) group(c *shapeCtx, el *ooxml.Element, depth int) (*slides.Shape
 	}
 	nv := nvProps(el)
 	s := &slides.Shape{Kind: slides.KindGroup, Name: attr(nv, "name"), Href: r.href(c.part, nv.Child(ooxml.NSA, "hlinkClick")), Jump: r.jump(c.part, nv.Child(ooxml.NSA, "hlinkClick"))}
+	s.Alt, s.Decorative = ooxml.Describe(nv)
 	pr := kid(el, "grpSpPr")
 	p, ok := readXfrm(pr.Child(ooxml.NSA, "xfrm"))
 	if ok {
