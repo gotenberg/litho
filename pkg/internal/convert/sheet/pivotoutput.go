@@ -551,8 +551,21 @@ func sortedKeys(m map[int]bool) []int {
 // from the source cells is written, each cell in Calc's DataPilot style
 // over the document's default. A pivot table whose source is not a sheet
 // range keeps the cells the file saved, with a warning. doc is not
-// changed.
+// changed. Under Excel's rules every pivot table keeps the cells the file
+// saved: Excel prints a pivot table's saved output and does not refresh
+// it as it opens a workbook.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/pivottable_double_field_filter.xlsx,
+//     sc/pivot_table_first_header_row.xlsx and 14 more pivot tables print
+//     the text their sheets save (text F1 0.89 to 1). The pivot table
+//     style Excel paints over them is not drawn, which costs the layout
+//     of sc/PivotTable_CachedDefinitionAndDataInSync.xlsx and four more.
 func (b *builder) applyPivots(doc *Document) *Document {
+	if doc.ExcelRules {
+		return doc
+	}
 	any := false
 	for _, sh := range doc.Sheets {
 		any = any || (sh != nil && len(sh.Pivots) > 0)

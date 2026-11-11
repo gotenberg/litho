@@ -278,3 +278,15 @@ func TestApplyPivots_SourceNotASheet(t *testing.T) {
 		t.Errorf("warnings = %v", b.warnings)
 	}
 }
+
+// TestApplyPivots_ExcelRules locks the pivot table of a book laid out by
+// Excel's rules: its saved cells print, nothing rebuilt.
+func TestApplyPivots_ExcelRules(t *testing.T) {
+	p := Pivot{Name: "P", Column: 5, Source: Range{LastRow: 4, LastColumn: 2}, Rows: []PivotField{{Field: 0}}, Data: []PivotData{{Field: 2}}}
+	doc := newDoc(pivotSheet(p))
+	doc.ExcelRules = true
+	b := newBuilder(context.Background(), doc, nil, office.Options{})
+	if out := b.applyPivots(doc); out != doc || len(b.warnings) != 0 {
+		t.Errorf("the book changed, warnings %v", b.warnings)
+	}
+}
