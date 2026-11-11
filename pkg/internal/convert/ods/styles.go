@@ -81,6 +81,7 @@ func (r *reader) resolve(scope odf.Scope, name string) sheet.Style {
 		st.DiagonalUp = true
 	}
 	st.Align = alignment(cp, pp)
+	st.Align.Wrap = r.wraps(scope, name)
 	dsName := r.styles.Inherited(scope, odf.FamilyCell, name, func(s *odf.Style) (string, bool) {
 		return s.El.Lookup(odf.NSStyle, "data-style-name")
 	})
@@ -88,6 +89,22 @@ func (r *reader) resolve(scope odf.Scope, name string) sheet.Style {
 		st.Format = r.dataCode(scope, dsName)
 	}
 	return st
+}
+
+// wraps reports whether the cell style name wraps its text: the nearest
+// fo:wrap-option (ODF 1.3, Part 3, 20.230) along the style's chain. The
+// table-cell default style (16.4) is not read for it: Calc prints a cell
+// of the Default cell style unwrapped whatever the default style says.
+//
+// # Corpus evidence
+//
+//   - probe, ods: a workbook whose default style says wrap and whose
+//     Default cell style says nothing prints its long cell texts on one
+//     line, 16 pages in the pinned LibreOffice; wrapped, they take 31.
+func (r *reader) wraps(scope odf.Scope, name string) bool {
+	return r.styles.Inherited(scope, odf.FamilyCell, name, func(s *odf.Style) (string, bool) {
+		return s.Props(odf.CellProps).Lookup("fo:wrap-option")
+	}) == "wrap"
 }
 
 // dataCode returns the format code of the data style name, with a
