@@ -32,3 +32,8 @@ LibreOffice prints a page that names no size on Letter, the paper of its en-US l
 | `paper-grid-<paper>-<orientation>`                                                  | 16    | The page layout on A3, A4, A5 and B5 (ISO 216), Letter, Legal, Tabloid and Executive, in both orientations |
 | `paper-fit-<paper>-<orientation>`                                                   | 6     | The fitted sheet on A5, Letter and A3, in both orientations                                                |
 | `paper-grid-option-<paper>-<orientation>`, `paper-fit-option-<paper>-<orientation>` | 12    | The base with A5, Letter or A3 as options, and `landscape` for the landscape ones                          |
+
+## Accepted disagreements
+
+- `sheet-selection`: `Summary` links to a cell of `Data`, a hidden sheet. LibreOffice writes that link as a `file:///tmp/<uuid>/...` URI of the route's upload directory, a path no converter can know; litho drops a link to a sheet that does not print. Link recall is 2 of 3. `hidden-sheets`, where `Data` prints, scores the link.
+- `paper-grid` on Letter portrait and Tabloid landscape: LibreOffice fits 41 rows on the first page where litho fits 42, so every later page starts one row apart.
