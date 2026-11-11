@@ -122,3 +122,47 @@ func TestPictureStoreKeepsTheBytes(t *testing.T) {
 		}
 	}
 }
+
+// TestDecodeChargesByColourModel pins what Decode charges a JPEG source:
+// one byte a pixel for a gray file, three for a Y'CbCr one, and that
+// ReleaseImage gives it back exactly; the JPEG file itself is charged
+// while the document holds it.
+func TestDecodeChargesByColourModel(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		img  image.Image
+		cost int64
+	}{
+		{"gray", image.NewGray(image.Rect(0, 0, 10, 10)), 1},
+		{"ycbcr", image.NewRGBA(image.Rect(0, 0, 10, 10)), 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var jb bytes.Buffer
+			if err := jpeg.Encode(&jb, tc.img, nil); err != nil {
+				t.Fatal(err)
+			}
+			ctx, mem, end := limits.WithBudget(context.Background(), limits.Limits{})
+			defer end()
+			src, err := compose.JPEGImage(ctx, jb.Bytes())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mem.Held() != int64(jb.Len()) {
+				t.Errorf("the JPEG file holds %d bytes of the budget, want %d", mem.Held(), jb.Len())
+			}
+			img, err := src.Decode(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := mem.Held() - int64(jb.Len()); got != 100*tc.cost {
+				t.Errorf("Decode charged %d, want %d", got, 100*tc.cost)
+			}
+			compose.ReleaseImage(ctx, img)
+			if mem.Held() != int64(jb.Len()) {
+				t.Errorf("after ReleaseImage the budget holds %d, want %d", mem.Held(), jb.Len())
+			}
+		})
+	}
+}

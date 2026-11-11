@@ -280,7 +280,13 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 		pic.Source = src
 		return pic, nil
 	}
-	charged, err := mem.ChargePicture(cfg.Width, cfg.Height, limits.DeepModel(cfg.ColorModel))
+	// A turned picture is encoded from the copy orientImage draws, gray
+	// for a gray one and RGBA otherwise, which EncodeImage releases.
+	model := cfg.ColorModel
+	if orient > 1 && model != color.GrayModel {
+		model = color.RGBAModel
+	}
+	charged, err := mem.ChargePicture(cfg.Width, cfg.Height, model)
 	if err != nil {
 		return nil, err
 	}

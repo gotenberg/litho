@@ -3,6 +3,7 @@ package limits_test
 import (
 	"context"
 	"errors"
+	"image/color"
 	"strings"
 	"sync"
 	"testing"
@@ -62,7 +63,7 @@ func TestBudget_Nil(t *testing.T) {
 	if b.Limits() != limits.Default() {
 		t.Errorf("nil budget limits %+v", b.Limits())
 	}
-	if n, err := b.ChargePicture(1<<13, 1<<13, true); err != nil || n != 0 {
+	if n, err := b.ChargePicture(1<<13, 1<<13, color.NRGBA64Model); err != nil || n != 0 {
 		t.Errorf("nil budget picture: %d, %v", n, err)
 	}
 	if err := b.ChargeUnits(1<<40, 1<<40, "x"); err != nil || b.Err() != nil || b.Held() != 0 || b.Peak() != 0 {
@@ -106,16 +107,34 @@ func TestBudget_ChargePicture(t *testing.T) {
 
 	_, b, done := limits.WithBudget(context.Background(), limits.Limits{MaxImagePixels: 100, MaxConvertMemoryBytes: 1000})
 	defer done()
-	if n, err := b.ChargePicture(10, 10, false); err != nil || n != 400 {
+	if n, err := b.ChargePicture(10, 10, color.NRGBAModel); err != nil || n != 400 {
 		t.Errorf("10 by 10: %d, %v", n, err)
 	}
-	if _, err := b.ChargePicture(11, 10, false); !errors.Is(err, limits.ErrPictureTooLarge) || b.Err() != nil {
+	if _, err := b.ChargePicture(11, 10, color.NRGBAModel); !errors.Is(err, limits.ErrPictureTooLarge) || b.Err() != nil {
 		t.Errorf("past the pixel cap: %v, budget %v", err, b.Err())
 	}
-	if _, err := b.ChargePicture(0, 10, false); !errors.Is(err, limits.ErrPictureTooLarge) {
+	if _, err := b.ChargePicture(0, 10, color.NRGBAModel); !errors.Is(err, limits.ErrPictureTooLarge) {
 		t.Errorf("empty: %v", err)
 	}
-	if _, err := b.ChargePicture(10, 10, true); !errors.Is(err, limits.ErrMemoryBudget) {
+	if _, err := b.ChargePicture(10, 10, color.NRGBA64Model); !errors.Is(err, limits.ErrMemoryBudget) {
 		t.Errorf("deep past the budget: %v", err)
+	}
+}
+
+// TestPixelCost pins the cost of a decoded pixel by colour model: the
+// bytes a pixel of the image type the Go decoders return takes.
+func TestPixelCost(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		m    color.Model
+		want int64
+	}{
+		{color.GrayModel, 1}, {color.Palette{color.Black, color.White}, 1}, {color.Gray16Model, 2},
+		{color.YCbCrModel, 3}, {color.CMYKModel, 4}, {color.NRGBAModel, 4}, {color.RGBAModel, 4},
+		{color.NYCbCrAModel, 4}, {color.RGBA64Model, 8}, {color.NRGBA64Model, 8},
+	} {
+		if got := limits.PixelCost(tc.m); got != tc.want {
+			t.Errorf("PixelCost(%T) = %d, want %d", tc.m, got, tc.want)
+		}
 	}
 }

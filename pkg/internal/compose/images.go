@@ -171,15 +171,25 @@ func JPEGImage(ctx context.Context, data []byte) (*ImageSource, error) {
 // belongs to the caller. It returns an error wrapping [ErrInvalidImage]
 // for bytes that do not decode to the source's size, and one wrapping
 // ctx.Err() when ctx ends first. The picture is charged to the
-// conversion's memory budget before it is made, and a refused charge fails
+// conversion's memory budget before it is made, by the layout of its colour
+// model ([limits.PixelCost]), and a refused charge fails
 // with the budget's error: the caller gives the charge back with
 // [EncodeImage] or [ReleaseImage] once it drops the picture.
 func (s *ImageSource) Decode(ctx context.Context) (image.Image, error) {
 	if err := checkPixels(s.Width, s.Height); err != nil {
 		return nil, err
 	}
-	model := color.NRGBAModel
-	if s.Gray {
+	var model color.Model = color.NRGBAModel
+	switch {
+	case s.IsJPEG():
+		// image/jpeg decodes to the layout of the frame's components:
+		// gray, Y'CbCr or CMYK.
+		cfg, err := jpeg.DecodeConfig(s.jpegReader())
+		if err != nil {
+			return nil, fmt.Errorf("%w: JPEG header: %w", ErrInvalidImage, err)
+		}
+		model = cfg.ColorModel
+	case s.Gray:
 		model = color.GrayModel
 	}
 	if err := ChargeImage(ctx, s.Width, s.Height, model); err != nil {

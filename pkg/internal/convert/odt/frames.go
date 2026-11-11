@@ -136,7 +136,7 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 		pic.Source = src
 		return pic
 	}
-	charged, err := mem.ChargePicture(cfg.Width, cfg.Height, limits.DeepModel(cfg.ColorModel))
+	charged, err := mem.ChargePicture(cfg.Width, cfg.Height, cfg.ColorModel)
 	if err != nil {
 		// A refused charge also stops the conversion, which reports it.
 		b.warn("picture-pixels", fmt.Sprintf("a picture is not drawn: %v", err))

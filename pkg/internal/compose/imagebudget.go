@@ -10,18 +10,15 @@ import (
 )
 
 // A picture costs the conversion's memory budget twice over its life: its
-// decoded pixels while they live, [limits.DecodedPixelCost] or
-// [limits.DecodedPixelCost16] a pixel, charged before they are allocated
+// decoded pixels while they live, [limits.PixelCost] of their colour model a
+// pixel, charged before they are allocated
 // and released once [EncodeImage] has read them; then its compressed
 // samples, charged by [EncodeImage] and held as long as the document, which
 // keeps every [ImageSource] until it is written.
 
 // pixelCost returns what one decoded pixel of colour model m costs.
 func pixelCost(m color.Model) int64 {
-	if limits.DeepModel(m) {
-		return limits.DecodedPixelCost16
-	}
-	return limits.DecodedPixelCost
+	return limits.PixelCost(m)
 }
 
 // ChargeImage charges ctx's budget for a decoded picture of w by h pixels

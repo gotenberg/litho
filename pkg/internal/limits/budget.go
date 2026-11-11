@@ -3,6 +3,7 @@ package limits
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"sync"
 	"sync/atomic"
 )
@@ -83,21 +84,18 @@ func (b *Budget) CheckPicture(w, h int) error {
 	return nil
 }
 
-// ChargePicture checks a decoded picture of w by h pixels, deep for 16
-// bits a channel, against [Limits.MaxImagePixels], failing with an error
-// wrapping [ErrPictureTooLarge] past it or for a side that is not
-// positive, and charges its decoded pixels ([DecodedPixelCost] or
-// [DecodedPixelCost16] each) before it is decoded. It returns what it
-// charged, for the caller to release once the decoded picture is dropped.
-func (b *Budget) ChargePicture(w, h int, deep bool) (int64, error) {
+// ChargePicture checks a picture of w by h pixels of colour model m, the
+// model its header names, against [Limits.MaxImagePixels], failing with an
+// error wrapping [ErrPictureTooLarge] past it or for a side that is not
+// positive, and charges its decoded pixels ([PixelCost] each) before it is
+// decoded. It returns what it charged, for the caller to release once the
+// decoded picture is dropped.
+func (b *Budget) ChargePicture(w, h int, m color.Model) (int64, error) {
 	if err := b.CheckPicture(w, h); err != nil {
 		return 0, err
 	}
 	px := int64(w) * int64(h)
-	cost := int64(DecodedPixelCost)
-	if deep {
-		cost = DecodedPixelCost16
-	}
+	cost := PixelCost(m)
 	if err := b.ChargeUnits(px, cost, "decoded pictures"); err != nil {
 		return 0, err
 	}

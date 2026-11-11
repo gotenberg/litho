@@ -21,8 +21,8 @@ import "image/color"
 const XMLElementCost = 256
 
 // DecodedPixelCost is what one decoded pixel of a picture costs while the
-// picture lives: four bytes, the RGBA and NRGBA layouts the Go decoders
-// return. A picture of 16 bits a channel costs [DecodedPixelCost16].
+// picture lives in the layouts most colour models decode to: four bytes,
+// RGBA, NRGBA and CMYK. [PixelCost] gives every model its own.
 const DecodedPixelCost = 4
 
 // DecodedPixelCost16 is what one decoded pixel of a picture of 16 bits a
@@ -33,4 +33,29 @@ const DecodedPixelCost16 = 8
 // model m to 16 bits a channel, [DecodedPixelCost16] a pixel.
 func DeepModel(m color.Model) bool {
 	return m == color.RGBA64Model || m == color.NRGBA64Model
+}
+
+// PixelCost returns what one decoded pixel of colour model m costs, the
+// bytes a pixel of the image type the Go decoders return for it takes: one
+// for gray, alpha and paletted pictures, two for their 16-bit forms,
+// three for Y'CbCr (its 4:4:4 layout, the most a JPEG or WebP picture
+// samples its chroma at), four for Y'CbCr with alpha, CMYK and 8-bit RGBA,
+// [DecodedPixelCost16] for 16-bit RGBA, and [DecodedPixelCost] for a model
+// it does not know.
+func PixelCost(m color.Model) int64 {
+	if _, ok := m.(color.Palette); ok {
+		return 1
+	}
+	switch m {
+	case color.GrayModel, color.AlphaModel:
+		return 1
+	case color.Gray16Model, color.Alpha16Model:
+		return 2
+	case color.YCbCrModel:
+		return 3
+	case color.RGBA64Model, color.NRGBA64Model:
+		return DecodedPixelCost16
+	default:
+		return DecodedPixelCost
+	}
 }

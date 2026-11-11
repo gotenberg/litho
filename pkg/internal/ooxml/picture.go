@@ -99,7 +99,7 @@ func DecodePicture(ctx context.Context, data []byte, fonts *text.Fonts) (*layout
 		pic.Source = src
 		return pic, nil
 	}
-	charged, err := mem.ChargePicture(cfg.Width, cfg.Height, limits.DeepModel(cfg.ColorModel))
+	charged, err := mem.ChargePicture(cfg.Width, cfg.Height, cfg.ColorModel)
 	if err != nil {
 		return nil, err
 	}
