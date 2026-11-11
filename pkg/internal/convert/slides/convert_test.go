@@ -287,3 +287,32 @@ func TestConvert_ShapeLinksAreTagged(t *testing.T) {
 		t.Errorf("jump %+v", d)
 	}
 }
+
+// TestConvert_TableSpans locks a regular table: a merged cell is one TD
+// with its spans, the cells it covers have none, and a row the source
+// lists short is padded to the table's columns (ISO 14289-1, 7.2).
+func TestConvert_TableSpans(t *testing.T) {
+	txt := func(s string) *TextBody { return &TextBody{Paragraphs: []Paragraph{para(s, arial(10))}, Wrap: true} }
+	tbl := &Shape{Kind: KindTable, Box: compose.Rect{X: 0, Y: 0, Width: 300, Height: 60}, Table: &Table{
+		ColumnWidths: []float64{100, 100, 100},
+		Rows: []TableRow{
+			{Height: 20, Cells: []TableCell{{Text: txt("m"), ColSpan: 2, RowSpan: 2}, {Covered: true}, {Text: txt("c")}}},
+			{Height: 20, Cells: []TableCell{{Covered: true}, {Covered: true}}},
+			{Height: 20, Cells: []TableCell{{Text: txt("x")}}},
+		},
+	}}
+	out := convert(t, deck(&Slide{Shapes: []*Shape{tbl}}), office.Options{})
+	tb := out.Structure.Kids[0].Kids[0]
+	var got [][3]int
+	for _, tr := range tb.Kids {
+		got = append(got, [3]int{len(tr.Kids), 0, 0})
+		for _, td := range tr.Kids {
+			got[len(got)-1][1] += max(td.ColSpan, 1)
+			got[len(got)-1][2] = max(got[len(got)-1][2], td.RowSpan)
+		}
+	}
+	want := [][3]int{{2, 3, 2}, {1, 1, 0}, {3, 3, 0}}
+	if !slices.Equal(got, want) {
+		t.Errorf("rows (cells, columns, rowspan) %v, want %v", got, want)
+	}
+}

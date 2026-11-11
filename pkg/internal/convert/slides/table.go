@@ -34,7 +34,11 @@ func (b *builder) verticalCellHeight(body *TextBody, w float64) float64 {
 // columns from the box's left edge at their widths, the rows from its top
 // at their heights, each row grown to the tallest text of its cells, each
 // cell's fill, text and borders (ECMA-376 Part 1, 21.1.3.13 tbl). It hangs
-// a Table element from parent, with a TR per row and a TD per cell.
+// a Table element from parent, with a TR per row and a TD per cell, a
+// merged cell one TD with its spans and nothing for the cells it covers,
+// a row the source lists short padded with empty TDs, so every row counts
+// the table's columns (ISO 14289-1, 7.2; ISO 32000-1, 14.8.5.7). The
+// model carries no header row, so every cell is a TD.
 func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment {
 	t := s.Table
 	if t == nil || len(t.ColumnWidths) == 0 || len(t.Rows) == 0 {
@@ -88,19 +92,33 @@ func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment
 	}
 	tbl := &compose.StructElem{Role: "Table"}
 	parent.Kids = append(parent.Kids, tbl)
+	// spanned marks the cells a span covers, so that a row the source
+	// lists short still counts every column (ISO 14289-1, 7.2).
+	spanned := make([]bool, len(rows)*len(cols))
 	var fills, texts, borders []compose.Fragment
 	for r, row := range rows {
 		tr := &compose.StructElem{Role: "TR"}
 		tbl.Kids = append(tbl.Kids, tr)
 		for c := range min(len(row.Cells), len(cols)) {
 			cell := &row.Cells[c]
-			if cell.Covered {
+			if cell.Covered || spanned[r*len(cols)+c] {
 				continue
 			}
-			td := &compose.StructElem{Role: "TD"}
-			tr.Kids = append(tr.Kids, td)
 			c1 := min(c+max(cell.ColSpan, 1), len(cols))
 			r1 := min(r+max(cell.RowSpan, 1), len(rows))
+			for y := r; y < r1; y++ {
+				for x := c; x < c1; x++ {
+					spanned[y*len(cols)+x] = true
+				}
+			}
+			td := &compose.StructElem{Role: "TD"}
+			if c1-c > 1 {
+				td.ColSpan = c1 - c
+			}
+			if r1-r > 1 {
+				td.RowSpan = r1 - r
+			}
+			tr.Kids = append(tr.Kids, td)
 			rc := compose.Rect{X: xs[c], Y: ys[r], Width: xs[c1] - xs[c], Height: ys[r1] - ys[r]}
 			fills = append(fills, b.fill(&cell.Fill, rc, rectOps(rc), shape.FillNorm)...)
 			if cell.Text != nil && len(cell.Text.Paragraphs) > 0 {
@@ -132,6 +150,11 @@ func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment
 				css.Bottom: lineOps(x0, y1, x1, y1), css.Left: lineOps(x0, y0, x0, y1),
 			} {
 				borders = append(borders, b.stroke(&cell.Borders[side], ops)...)
+			}
+		}
+		for c := len(row.Cells); c < len(cols); c++ {
+			if !spanned[r*len(cols)+c] {
+				tr.Kids = append(tr.Kids, &compose.StructElem{Role: "TD"})
 			}
 		}
 	}
