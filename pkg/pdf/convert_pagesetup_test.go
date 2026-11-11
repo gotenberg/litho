@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -318,4 +320,25 @@ func TestConvert_ValidatesEveryOption(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestConvert_PPTXNotesPagesTakeTheNotesSize checks rule 5 for PPTX: a
+// notes page is the notes size the deck names, 540 by 720 points for the
+// notes-pages fixture, its slides 960 by 540.
+func TestConvert_PPTXNotesPagesTakeTheNotesSize(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join("..", "..", "test", "integration", "testdata", "litho", "pptx", "sources", "notes-pages", "notes-pages.pptx")
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		t.Skip("notes-pages.pptx is not built: make corpus-build CORPUS=litho/pptx")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, sizes := convertSizes(t, FormatPPTX, string(data), WithNotesPages(true))
+	if len(sizes) != 6 {
+		t.Fatalf("%d pages, want 3 slides and 3 notes pages", len(sizes))
+	}
+	checkSizes(t, "slides", sizes[:3], 3, 960, 540)
+	checkSizes(t, "notes", sizes[3:], 3, 540, 720)
 }
