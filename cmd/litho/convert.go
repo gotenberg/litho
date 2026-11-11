@@ -20,7 +20,7 @@ import (
 const convertUsage = "Usage: litho convert [--from text|html|markdown|docx|odt|xlsx|ods|csv|pptx|odp] [--paper A4|Letter|WxH] [--default-paper A4|Letter|WxH] [--landscape] [--margin PT | --margin T,R,B,L] " +
 	"[--font FAMILY] [--font-size PT] [--media print|screen] [--media-feature NAME=VALUE]... [--resources DIR] [--base-url URL] " +
 	"[--prefer-css-page-size] [--scale N] [--single-page] [--pages RANGES] [--background=false] [--outline=false] " +
-	"[--header FILE] [--footer FILE] [--date RFC3339|now] [--password PASSWORD] [--hidden-slides] [--notes-pages] [--font-dir DIR]... [-f json] -o out.pdf <file|http(s) URL>"
+	"[--header FILE] [--footer FILE] [--date RFC3339|now] [--password PASSWORD] [--hidden-slides] [--notes-pages] [--font-dir DIR]... " + convertTargetUsage + " [-f json] -o out.pdf <file|http(s) URL>"
 
 // convertFormats maps the --from values, and the file extensions that imply
 // them, to the formats [pdf.Convert] reads. Immutable lookup tables.
@@ -184,6 +184,7 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	var mediaFeatures stringsFlag
 	fs.Var(&mediaFeatures, "media-feature", "Media feature an HTML file's @media rules see, as NAME=VALUE such as prefers-color-scheme=dark; repeatable")
 	password := fs.String("password", "", "Password of an encrypted DOCX, ODT, XLSX, ODS, PPTX or ODP file")
+	target := registerConvertTargetFlags(fs)
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
@@ -271,9 +272,15 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		}
 	}
 
+	targetOpts, err := target.options()
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitError
+	}
 	// Every flag reaches every format: the library reports one that does
 	// not apply to the document's format as an option-ignored warning.
 	opts := []pdf.ConvertOption{pdf.WithConvertFontDirs(fontDirs...), pdf.WithFontFamilies(fonts...), pdf.WithMediaType(*media)}
+	opts = append(opts, targetOpts...)
 	if flagPassed(fs, "font-size") {
 		opts = append(opts, pdf.WithFontSize(*fontSize))
 	}
@@ -340,7 +347,7 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		for _, w := range report.Warnings {
 			res.Warnings = append(res.Warnings, convertWarningJSON(w))
 		}
-		return jsonOut(stdout, stderr, res)
+		return target.reportJSON(stdout, stderr, res, report)
 	}
 	for _, w := range report.Warnings {
 		if w.Page > 0 {
@@ -349,7 +356,7 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 			fmt.Fprintf(stderr, "warning: %s: %s\n", w.Code, w.Message)
 		}
 	}
-	return exitOK
+	return target.reportText(stderr, report)
 }
 
 // flagPassed reports whether the command line set the flag name.

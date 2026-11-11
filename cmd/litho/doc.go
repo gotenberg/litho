@@ -17,6 +17,11 @@
 //     or of the system without one. An HTML or Markdown file reads its
 //     stylesheets and images from --resources, its own directory by
 //     default; a URL, or a file with an http(s) --base-url, fetches them.
+//     --pdf-version names the PDF version, --profile a PDF/A or PDF/UA
+//     profile the file conforms to, repeatable for a pair as remediate takes
+//     it, and --lang the language of a document that names none. The -f json
+//     report then carries a conformance block, and --strict exits 2 when the
+//     profiles still find a fatal violation; the file is written either way.
 //   - pipe chains several operations on one document. A remediate stage runs
 //     at most once, as the last stage, since a remediation's report
 //     describes the output only when nothing edits it afterwards; pipe

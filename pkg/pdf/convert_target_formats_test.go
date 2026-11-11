@@ -127,7 +127,7 @@ func testPPTX(t *testing.T) []byte {
 			`<p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst></p:sldMaster>`,
 		"ppt/slideMasters/_rels/slideMaster1.xml.rels": `<Relationships ` + relsNS + `><Relationship Id="rId1" Type="` + relR + `slideLayout" Target="../slideLayouts/slideLayout1.xml"/>` +
 			`<Relationship Id="rId2" Type="` + relR + `theme" Target="../theme/theme1.xml"/></Relationships>`,
-		"ppt/slideLayouts/slideLayout1.xml": `<p:sldLayout ` + ns + `><p:cSld><p:spTree>` + group + `</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
+		"ppt/slideLayouts/slideLayout1.xml":            `<p:sldLayout ` + ns + `><p:cSld><p:spTree>` + group + `</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
 		"ppt/slideLayouts/_rels/slideLayout1.xml.rels": `<Relationships ` + relsNS + `><Relationship Id="rId1" Type="` + relR + `slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>`,
 		"ppt/slides/slide1.xml":                        `<p:sld ` + ns + `><p:cSld><p:spTree>` + group + box + `</p:spTree></p:cSld></p:sld>`,
 		"ppt/slides/_rels/slide1.xml.rels":             `<Relationships ` + relsNS + `><Relationship Id="rId1" Type="` + relR + `slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`,
@@ -316,7 +316,7 @@ func TestConvert_ReportsTheMissingAltText(t *testing.T) {
 func TestConvert_DefaultLanguageNeverReplacesTheSources(t *testing.T) {
 	dir := convertFontDir(t)
 	for src, want := range map[string]string{
-		`<!doctype html><p>Text.</p>`:                `fr-CA`,
+		`<!doctype html><p>Text.</p>`:                 `fr-CA`,
 		`<!doctype html><html lang="de"><p>Text.</p>`: `de`,
 	} {
 		var out bytes.Buffer
