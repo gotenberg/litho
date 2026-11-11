@@ -15,35 +15,46 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
-// The column width and row height Calc gives a sheet whose format
-// properties say nothing (ECMA-376 Part 1, 18.3.1.81 sheetFormatPr):
-// LibreOffice's import starts every sheet at 8.5 digits a column, and
-// leaves a row at Calc's standard height, 256 twips, which it grows to
-// fit the row's text.
-//
-// # Corpus evidence
-//
-//   - LibreOffice 26.8.2.2: a sheet without sheetFormatPr prints columns
-//     47.20 points apart for Calibri 11 and Arial 10, 42.95 for Calibri
-//     10, 51.85 for Calibri 12 and Arial 11, 51.00 for Times New Roman
-//     12 (8.5 digits each), and rows 12.79 points apart at 10 points,
-//     13.77 at 11 and 15.0 at 12 (the standard height, grown to the text).
+// The base column width and the row height of a sheet whose format
+// properties say nothing (ECMA-376 Part 1, 18.3.1.81 sheetFormatPr, whose
+// baseColWidth defaults to 8 characters; Excel's standard height of a
+// Calibri 11 row, 20 screen pixels).
 const (
-	defaultColumnDigits = 8.5
-	standardRowHeight   = 256.0 / 20
+	defaultBaseColumn = 8
+	standardRowHeight = 15.0
 )
 
-// paddingPixels is the padding LibreOffice adds to a sheet's base column
-// width (ECMA-376 Part 1, 18.3.1.81 baseColWidth), five pixels at 96 to
-// the inch, in points.
+// The screen padding Excel adds to a base column width (ECMA-376 Part 1,
+// 18.3.1.81 baseColWidth: two pixels a side and a pixel of grid line) and
+// the pixel step it rounds the sum up to, at 96 to the inch.
 //
 // # Corpus evidence
 //
-//   - LibreOffice 26.8.2.2: baseColWidth 8 prints columns 48.13 points
-//     apart for Calibri 11 (8 digits of 5.55 points and 3.75), 44.14 for
-//     Calibri 10, 52.53 for Calibri 12, and baseColWidth 10 59.24 for
-//     Calibri 11.
-const paddingPixels = 5 * 0.75
+//   - litho/xlsx: minimal, without a width, prints Calibri 11 columns 51.6
+//     points wide: 64 screen pixels of 8 digits of 7 and the padding,
+//     9.14 characters of 47 printer pixels.
+const (
+	baseColumnPadding = 5
+	baseColumnStep    = 8
+)
+
+// rowHeightScale is how much shorter Excel prints a row than its height in
+// points: a row of h points prints h times 0.968, in whole printer pixels.
+// The specification gives a row's height in points (ECMA-376 Part 1,
+// 18.3.1.73 ht); the scale is Excel's, measured.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: row_heights prints rows of 6, 18, 30, 60 and 409.5 points
+//     5.76, 17.4, 29.04, 58.08 and 396.36 points tall; multipage_grid
+//     prints rows of 15 points 14.52 apart.
+//   - libreoffice/xlsx: sc/tdf139934.xlsx and sc/database.xlsx print Arial
+//     10 rows of 12.75 and 12.8 points 12.36 apart.
+//   - libreoffice/xlsx: sc/tdf155046.xlsx prints Calibri 12 rows of 16
+//     points 15.6 apart, a scale of 0.975, and poi/xlsx
+//     GeneralFormatTests.xlsx Verdana 10 rows of 13 points 12.96 apart:
+//     the scale depends on the font, by a rule not measured.
+const rowHeightScale = 0.968
 
 // worksheet reads the worksheet part name into sh, the index-th sheet of
 // the book (ECMA-376 Part 1, 18.3.1.99 worksheet).
@@ -133,23 +144,35 @@ func (w *sheetReader) read(root *ooxml.Element) error {
 	return nil
 }
 
-// defaultSetup gives sh what Calc gives a sheet that says nothing: the
+// defaultSetup gives sh what Excel gives a sheet that says nothing: the
 // default column width and row height, the page setup of an empty
 // pageSetup and pageMargins.
 func (r *reader) defaultSetup(sh *sheet.Sheet) {
-	sh.DefaultColumnWidth = r.columnWidth(defaultColumnDigits)
-	sh.DefaultRowHeight = standardRowHeight
+	sh.DefaultColumnWidth = r.baseColumnWidth(defaultBaseColumn)
+	sh.DefaultRowHeight = r.rowHeight(standardRowHeight)
 	sh.Page = defaultPage(r.paperW, r.paperH)
 }
 
 // columnWidth converts a width in characters of the Normal font's widest
-// digit to points as LibreOffice imports it (ECMA-376 Part 1, 18.3.1.13
-// width): the digits times the digit's width, rounded to a twip.
+// digit (ECMA-376 Part 1, 18.3.1.13 width, which counts the cell's
+// padding in) to points as Excel prints it: the characters times the
+// digit's printer pixels, rounded to a pixel.
 func (r *reader) columnWidth(chars float64) float64 {
 	if math.IsNaN(chars) || chars <= 0 {
 		return 0
 	}
-	return math.Round(min(chars, maxColumnChars)*r.digitWidth*20) / 20
+	return printerPixels(min(chars, maxColumnChars) * r.digitWidth)
+}
+
+// baseColumnWidth returns the width in points of a column of a sheet whose
+// base column width is base characters (ECMA-376 Part 1, 18.3.1.81
+// baseColWidth): the digits and Excel's padding in screen pixels, rounded
+// up to its step, read back as characters truncated to 1/256 as Excel
+// stores a width, then printed as any width.
+func (r *reader) baseColumnWidth(base int) float64 {
+	d := max(r.screenDigit, 1)
+	px := math.Ceil((float64(base)*d+baseColumnPadding)/baseColumnStep) * baseColumnStep
+	return r.columnWidth(math.Floor(px/d*256) / 256)
 }
 
 // maxColumnChars is the widest column in characters (ECMA-376 Part 1,
@@ -157,15 +180,14 @@ func (r *reader) columnWidth(chars float64) float64 {
 const maxColumnChars = 255
 
 // formatPr reads the sheet's format properties (ECMA-376 Part 1,
-// 18.3.1.81): defaultColWidth, else baseColWidth with LibreOffice's five
-// pixels of padding; defaultRowHeight, rounded down to three quarters of
-// a point for a workbook Office wrote, as LibreOffice does.
+// 18.3.1.81): defaultColWidth, else baseColWidth with Excel's padding;
+// defaultRowHeight.
 func (w *sheetReader) formatPr(f *ooxml.Element) {
 	r, sh := w.r, w.sh
 	if v, err := strconv.ParseFloat(attr(f, "defaultColWidth"), 64); err == nil && v > 0 {
 		sh.DefaultColumnWidth = r.columnWidth(v)
-	} else if base := intAttr(f, "baseColWidth", 8); base > 0 {
-		sh.DefaultColumnWidth = r.columnWidth(float64(base) + paddingPixels/r.digitWidth)
+	} else if base := intAttr(f, "baseColWidth", defaultBaseColumn); base > 0 {
+		sh.DefaultColumnWidth = r.baseColumnWidth(min(base, maxColumnChars))
 	}
 	if v, err := strconv.ParseFloat(attr(f, "defaultRowHeight"), 64); err == nil && v > 0 && !math.IsInf(v, 0) {
 		if h := r.rowHeight(v); h > 0 {
@@ -178,15 +200,10 @@ func (w *sheetReader) formatPr(f *ooxml.Element) {
 // ht: Excel caps a row at 409 points).
 const maxRowHeight = 409.5
 
-// rowHeight returns a row height in points as LibreOffice imports it,
-// rounded down to three quarters of a point for a workbook Office wrote,
-// then to a twip.
+// rowHeight returns a row height in points as Excel prints a row of ht
+// points ([rowHeightScale]).
 func (r *reader) rowHeight(ht float64) float64 {
-	ht = min(ht, maxRowHeight)
-	if r.mso {
-		ht -= math.Mod(ht, 0.75)
-	}
-	return math.Round(ht*20) / 20
+	return printerPixels(min(ht, maxRowHeight) * rowHeightScale)
 }
 
 // columns reads the column ranges (ECMA-376 Part 1, 18.3.1.13 col),
@@ -232,18 +249,15 @@ func (w *sheetReader) columns(cols *ooxml.Element) {
 
 // sheetData reads the rows and cells (ECMA-376 Part 1, 18.3.1.80): a row
 // or cell without its index, or with one that does not parse, follows the
-// previous one, as LibreOffice reads it. A row's height is
-// read when it is custom alone: LibreOffice gives every other row its
-// optimal height, the sheet's default height grown to the row's text,
-// whatever height the file stores.
+// previous one, as LibreOffice reads it. A row prints at the height it
+// stores, custom or not, and a row without one at the sheet's default:
+// Excel does not fit a row to its text as it opens a workbook.
 //
 // # Corpus evidence
 //
-//   - LibreOffice 26.8.2.2: rows of 30 and 8 points without customHeight
-//     print 15 points high on a sheet of default height 15, and 13.77 (the
-//     height of Calibri 11 text) on one of default height 10; a custom row
-//     of 30 points prints 30. singlepagesheets-scrolled.xlsx prints its
-//     rows of 16.2 points 15.65 apart.
+//   - litho/xlsx: fonts prints its row of 14 point text without a height at
+//     the default 14.52 points, and row_heights its row of 34.5 points
+//     without customHeight 33.4 points tall.
 func (w *sheetReader) sheetData(data *ooxml.Element) error {
 	r, sh := w.r, w.sh
 	next := 0
@@ -260,7 +274,7 @@ func (w *sheetReader) sheetData(data *ooxml.Element) error {
 		}
 		next = idx + 1
 		row := sheet.Row{Index: idx, CustomHeight: boolAttr(re, "customHeight"), Hidden: boolAttr(re, "hidden")}
-		if v, err := strconv.ParseFloat(attr(re, "ht"), 64); err == nil && v > 0 && !math.IsInf(v, 0) && row.CustomHeight {
+		if v, err := strconv.ParseFloat(attr(re, "ht"), 64); err == nil && v > 0 && !math.IsInf(v, 0) {
 			row.Height = r.rowHeight(v)
 		}
 		if boolAttr(re, "customFormat") {

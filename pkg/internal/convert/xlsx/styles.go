@@ -24,17 +24,25 @@ const (
 	defaultFontSize = 11.0
 )
 
-// cellPadding is the inset Calc gives every cell of an imported workbook
-// on each side, in points: the default of its cell margin attribute, 20
-// twips a side (LibreOffice's SvxMarginItem default).
+// The insets of a cell's text Excel prints, in printer pixels
+// ([printerPixel]): a pixel of the screen's grid line (8 printer pixels)
+// at the cell's left and top, then 12 pixels to the text on either side.
+// The bottom inset is the room under the text's descent.
 //
 // # Corpus evidence
 //
-//   - LibreOffice 26.8.2.2: budget.xlsx, left margin 0.75 inch, prints the
-//     text of column A at x 54.99, one point past the margin; a workbook
-//     without page margins (LibreOffice's 0.748 inch, 53.86 points) at
-//     54.82.
-const cellPadding = 1.0
+//   - litho/xlsx: minimal prints left-aligned text 2.4 points past its
+//     column's left edge and right-aligned numbers 1.44 points short of
+//     its right edge; multipage_grid alike.
+const (
+	cellInsetLeft   = 20
+	cellInsetRight  = 12
+	cellInsetTop    = 8
+	cellInsetBottom = 8
+)
+
+// cellPadding is the padding of every cell's style, by [css.Side].
+var cellPadding = [4]float64{cellInsetTop * printerPixel, cellInsetRight * printerPixel, cellInsetBottom * printerPixel, cellInsetLeft * printerPixel}
 
 // The border widths LibreOffice gives the named border styles of a
 // workbook (ECMA-376 Part 1, 18.18.3 ST_BorderStyle), in points.
@@ -256,7 +264,7 @@ func (r *reader) style(i int) *sheet.Style {
 // resolve returns the style of a format record whose ids are resolved.
 func (r *reader) resolve(x xf) *sheet.Style {
 	s := r.styles
-	st := &sheet.Style{Align: x.align, Padding: [4]float64{cellPadding, cellPadding, cellPadding, cellPadding}}
+	st := &sheet.Style{Align: x.align, Padding: cellPadding}
 	st.Align.Indent = float64(x.indent) * 3 * r.spaceWidth
 	st.Font = r.fontAt(x.font)
 	if x.fill >= 0 && x.fill < len(s.fills) {

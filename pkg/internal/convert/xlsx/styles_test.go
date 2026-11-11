@@ -170,7 +170,7 @@ func TestRead_Alignment(t *testing.T) {
 			`<xf><alignment textRotation="255" vertical="justify" shrinkToFit="1" readingOrder="2"/></xf>`+
 			`<xf><alignment horizontal="distributed" vertical="distributed"/></xf>`, 5)
 	for i, want := range []sheet.Alignment{
-		{Horizontal: sheet.HCenter, Vertical: sheet.VMiddle, Wrap: true, Indent: 2 * 3 * 5.5},
+		{Horizontal: sheet.HCenter, Vertical: sheet.VMiddle, Wrap: true, Indent: 2 * 3 * 5.52},
 		{Horizontal: sheet.HLeft, Rotation: 45},
 		{Horizontal: sheet.HRight, Rotation: -45},
 		{Horizontal: sheet.HRight, Stacked: true, Vertical: sheet.VJustify, Wrap: true, Shrink: true, RightToLeft: true},
@@ -180,8 +180,8 @@ func TestRead_Alignment(t *testing.T) {
 			t.Errorf("alignment %d = %+v, want %+v", i, got, want)
 		}
 	}
-	if p := styleOf(t, doc, 0).Padding; p != [4]float64{1, 1, 1, 1} {
-		t.Errorf("padding %v, want a point a side", p)
+	if p := styleOf(t, doc, 0).Padding; p != cellPadding {
+		t.Errorf("padding %v, want Excel's insets", p)
 	}
 }
 

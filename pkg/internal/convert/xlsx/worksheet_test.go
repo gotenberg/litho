@@ -12,9 +12,11 @@ import (
 )
 
 // TestRead_ColumnsAndRows checks the column widths in digits of the
-// Normal font (Test Sans at 11 points: 5.5 points a digit), the default
-// width and height of the format properties and of a sheet without them,
-// the rows' heights, flags and styles.
+// Normal font as Excel prints them (Test Sans at 11.04 points, 92 printer
+// pixels: digits of 46 pixels, 5.52 points, and of 7 screen pixels), the
+// default width and height of the format properties and of a sheet
+// without them, the rows' heights scaled as Excel prints them, flags and
+// styles.
 func TestRead_ColumnsAndRows(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -22,16 +24,18 @@ func TestRead_ColumnsAndRows(t *testing.T) {
 		xml                string
 		defWidth, defHeigh float64
 	}{
-		{"no format properties", `<sheetData/>`, 46.75, 12.8},
-		{"base width", `<sheetFormatPr baseColWidth="10" defaultRowHeight="15"/><sheetData/>`, 58.75, 15},
-		{"default width", `<sheetFormatPr baseColWidth="10" defaultColWidth="12" defaultRowHeight="20.5"/><sheetData/>`, 66, 20.5},
-		{"default base", `<sheetFormatPr defaultRowHeight="0"/><sheetData/>`, 47.75, 12.8},
+		// 8 digits of 7 screen pixels and 5 of padding, 64 pixels, 9.140625
+		// characters of 46 printer pixels; 15 points times 0.968.
+		{"no format properties", `<sheetData/>`, 50.4, 14.52},
+		{"base width", `<sheetFormatPr baseColWidth="10" defaultRowHeight="15"/><sheetData/>`, 63.12, 14.52},
+		{"default width", `<sheetFormatPr baseColWidth="10" defaultColWidth="12" defaultRowHeight="20.5"/><sheetData/>`, 66.24, 19.8},
+		{"default base", `<sheetFormatPr defaultRowHeight="0"/><sheetData/>`, 50.4, 14.52},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			doc, _ := readBytes(t, oneSheet(t, tc.xml))
 			sh := doc.Sheets[0]
-			if math.Abs(sh.DefaultColumnWidth-tc.defWidth) > 1e-9 || sh.DefaultRowHeight != tc.defHeigh {
+			if math.Abs(sh.DefaultColumnWidth-tc.defWidth) > 1e-9 || math.Abs(sh.DefaultRowHeight-tc.defHeigh) > 1e-9 {
 				t.Errorf("defaults %v by %v, want %v by %v", sh.DefaultColumnWidth, sh.DefaultRowHeight, tc.defWidth, tc.defHeigh)
 			}
 		})
@@ -41,12 +45,12 @@ func TestRead_ColumnsAndRows(t *testing.T) {
 		`<sheetData><row r="2" ht="30" customHeight="1"><c r="A2"><v>1</v></c></row><row r="3" ht="40"><c r="A3"><v>1</v></c></row><row r="5" hidden="1" s="0" customFormat="1"/>`+
 		`<row r="7" s="0"/><row><c><v>1</v></c><c r="1_1"><v>2</v></c><c r="E8"/><c r="E8" t="b"><v>1</v></c></row></sheetData>`))
 	sh := doc.Sheets[0]
-	want := []sheet.Column{{First: 0, Last: 0, Width: 11}, {First: 2, Last: 3, Width: 55}, {First: 4, Last: 5, Hidden: true}, {First: 7, Last: 7}}
+	want := []sheet.Column{{First: 0, Last: 0, Width: 11.04}, {First: 2, Last: 3, Width: 55.2}, {First: 4, Last: 5, Hidden: true}, {First: 7, Last: 7}}
 	if len(sh.Columns) != len(want) {
 		t.Fatalf("columns %+v, want %+v", sh.Columns, want)
 	}
 	for i, c := range sh.Columns {
-		if c.First != want[i].First || c.Last != want[i].Last || c.Width != want[i].Width || c.Hidden != want[i].Hidden {
+		if c.First != want[i].First || c.Last != want[i].Last || math.Abs(c.Width-want[i].Width) > 1e-9 || c.Hidden != want[i].Hidden {
 			t.Errorf("column %d = %+v, want %+v", i, c, want[i])
 		}
 	}
@@ -60,31 +64,17 @@ func TestRead_ColumnsAndRows(t *testing.T) {
 	if !slices.Equal(idx, []int{1, 2, 4, 7}) {
 		t.Fatalf("rows %v, want 1, 2, 4 and 7", idx)
 	}
-	if r := sh.Rows[0]; r.Height != 30 || !r.CustomHeight {
+	if r := sh.Rows[0]; math.Abs(r.Height-29.04) > 1e-9 || !r.CustomHeight {
 		t.Errorf("row 2 = %+v", r)
 	}
-	if r := sh.Rows[1]; r.Height != 0 {
-		t.Errorf("row 3 = %+v, want the optimal height of a row without a custom one", r)
+	if r := sh.Rows[1]; math.Abs(r.Height-38.76) > 1e-9 || r.CustomHeight {
+		t.Errorf("row 3 = %+v, want the stored height of a row without a custom one", r)
 	}
 	if r := sh.Rows[2]; !r.Hidden || r.Style == nil {
 		t.Errorf("row 5 = %+v", r)
 	}
 	if r := sh.Rows[3]; len(r.Cells) != 3 || r.Cells[0].Column != 0 || r.Cells[1].Column != 1 || r.Cells[2].Value.Kind != sheet.Bool {
 		t.Errorf("row 8 cells %+v, want A8, B8 and the boolean E8", r.Cells)
-	}
-}
-
-// TestRead_RowHeightsOfOffice checks the row heights of a workbook an
-// Office application wrote, rounded down to three quarters of a point as
-// LibreOffice reads them.
-func TestRead_RowHeightsOfOffice(t *testing.T) {
-	t.Parallel()
-	files := workbookFiles([]testSheet{{name: "S", xml: `<sheetFormatPr defaultRowHeight="14.4"/><sheetData><row r="1" ht="20.1" customHeight="1"><c r="A1"><v>1</v></c></row></sheetData>`}}, minimalStyles, "", "",
-		map[string]string{"docProps/app.xml": `<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Microsoft Excel</Application></Properties>`})
-	doc, _ := readBytes(t, zipFiles(t, files))
-	sh := doc.Sheets[0]
-	if sh.DefaultRowHeight != 14.25 || sh.Rows[0].Height != 19.5 {
-		t.Errorf("heights %v and %v, want 14.25 and 19.5", sh.DefaultRowHeight, sh.Rows[0].Height)
 	}
 }
 
@@ -186,7 +176,9 @@ func TestRead_PageSetup(t *testing.T) {
 		{"custom paper", `<sheetData/><pageSetup paperSize="9" paperWidth="100mm" paperHeight="5in"/>`, func(p sheet.PageSetup) bool {
 			return math.Abs(p.Width-283.46) < 0.01 && p.Height == 360
 		}},
-		{"printer defaults", `<sheetData/><pageSetup paperSize="9" usePrinterDefaults="1"/>`, func(p sheet.PageSetup) bool { return p.Width == 612 }},
+		{"printer defaults", `<sheetData/><pageSetup paperSize="1" usePrinterDefaults="0"/>`, func(p sheet.PageSetup) bool { return math.Abs(p.Width-595.28) < 0.01 }},
+		{"unknown paper", `<sheetData/><pageSetup paperSize="0"/>`, func(p sheet.PageSetup) bool { return math.Abs(p.Width-595.28) < 0.01 }},
+		{"letter", `<sheetData/><pageSetup paperSize="1"/>`, func(p sheet.PageSetup) bool { return p.Width == 612 }},
 		{"print options", `<sheetData/><printOptions gridLines="1" headings="true" horizontalCentered="1" verticalCentered="1"/>`, func(p sheet.PageSetup) bool {
 			return p.GridLines && p.Headings && p.CenterHorizontally && p.CenterVertically
 		}},

@@ -63,18 +63,16 @@ type reader struct {
 	// date1904 marks a workbook whose dates count from 1904-01-01
 	// (ECMA-376 Part 1, 18.2.28 date1904).
 	date1904 bool
-	// mso marks a workbook an Office application wrote, whose row heights
-	// LibreOffice rounds down to three quarters of a point.
-	mso bool
 	// calculated marks a workbook with a formula caching a number other
 	// than 0; cachedFormulas are the cells, by sheet index, row and
 	// column, whose formula caches a result.
 	calculated     bool
 	cachedFormulas map[[3]int]bool
 	// digitWidth is the widest digit of the Normal font and spaceWidth its
-	// space, in points, rounded to twips as LibreOffice measures them.
-	digitWidth, spaceWidth float64
-	cells                  int
+	// space, in points, in whole printer pixels as Excel measures them;
+	// screenDigit is the digit in screen pixels ([reader.measureNormalFont]).
+	digitWidth, spaceWidth, screenDigit float64
+	cells                               int
 	// doc is the document being read, which the charts' series read
 	// their values from when their part holds no cache.
 	doc      *sheet.Document
@@ -145,7 +143,6 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 			return nil, nil, err
 		}
 	}
-	r.mso = r.officeWritten()
 	if err := r.readStyles(main); err != nil {
 		return nil, nil, err
 	}
@@ -153,7 +150,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	if err := r.readSharedStrings(main); err != nil {
 		return nil, nil, err
 	}
-	doc := &sheet.Document{Default: r.normal()}
+	doc := &sheet.Document{Default: r.normal(), ExcelRules: true}
 	cp := pkg.CoreProperties(ctx)
 	subject := cp.Subject
 	if subject == "" {
@@ -167,13 +164,6 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	r.resolveOperands(doc)
 	r.resolvePivots(doc)
 	return doc, r.warnings, nil
-}
-
-// officeWritten reports whether docProps/app.xml names a Microsoft
-// application, the test LibreOffice's import makes before it rounds row
-// heights down to three quarters of a point.
-func (r *reader) officeWritten() bool {
-	return strings.HasPrefix(strings.ToLower(r.application()), "microsoft")
 }
 
 // application returns the application docProps/app.xml names, "" for
@@ -232,29 +222,44 @@ func (r *reader) keepCachedResults(doc *sheet.Document) {
 	}
 }
 
-// measureNormalFont measures the widest digit and the space of the Normal
-// style's font, which the column widths and the indents count in
-// (ECMA-376 Part 1, 18.3.1.13 width), as LibreOffice measures them on its
-// reference device: the font size rounded to a hundredth of a
-// millimetre, the advance to a twip. A stylesheet without fonts gives
-// LibreOffice no font to measure: a digit is then 2 millimetres and a
-// space 1, its defaults. Without a face they take the widths of Calibri
-// at 11 points.
+// printerPixel is the pixel Excel lays a printed sheet out in, in points:
+// a 600 dpi printer's. Column widths, row heights, font sizes and the cell
+// insets of a printed sheet are whole numbers of them.
 //
 // # Corpus evidence
 //
-//   - LibreOffice 26.8.2.2: columns 20 characters wide print 110.97
-//     points wide for Calibri 11, 121.97 for Calibri 12, 100.99 for
-//     Calibri 10, 110.98 for Arial 10, 121.97 for Arial 11 and 119.99 for
-//     Times New Roman 12: digits of 111, 122, 101, 111, 122 and 120 twips,
-//     the advances of Carlito, Liberation Sans and Liberation Serif at
-//     388, 423 and 353 hundredths of a millimetre (Carlito's 111.50 twips
-//     at 11 points read as 111). The PDF draws 11-point text at 10.998.
+//   - litho/xlsx: every page Office for the web prints draws its
+//     rectangles at multiples of 0.12 points from the margins, and
+//     Calibri 11 text at 11.04 points, Arial 10 at 9.96: 92 and 83
+//     pixels.
+const printerPixel = 72.0 / 600
+
+// printerPixels rounds a length in points to whole printer pixels.
+func printerPixels(v float64) float64 {
+	return math.Round(v/printerPixel) * printerPixel
+}
+
+// measureNormalFont measures the widest digit and the space of the Normal
+// style's font, which the column widths and the indents count in
+// (ECMA-376 Part 1, 18.3.1.13 width), as Excel measures them on the
+// printer it lays a printed sheet out for: the font size rounded to whole
+// printer pixels, the digit's advance at that size rounded to a pixel.
+// screenDigit is the digit's width on Excel's 96 dpi screen, in pixels,
+// which the default column width counts in. A stylesheet without fonts
+// gives Excel no font to measure: the digits are then Calibri 11's. A
+// family no font serves is measured in LibreOffice's substitute.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: multipage_grid prints Calibri 11 columns 11 characters
+//     wide 62.06 points apart (517 pixels, 11 digits of 47); minimal prints
+//     its default columns 51.6 points wide (430 pixels, 9.14 digits).
+//   - libreoffice/xlsx: sc/tdf139934.xlsx prints Arial 10 columns of
+//     23.4375 characters 129.38 points wide (1078 pixels, digits of 46).
 func (r *reader) measureNormalFont() {
-	r.digitWidth, r.spaceWidth = 111.0/20, 50.0/20
+	r.digitWidth, r.spaceWidth, r.screenDigit = 47*printerPixel, 24*printerPixel, 7
 	s := r.styles
 	if len(s.fonts) == 0 {
-		r.digitWidth, r.spaceWidth = 2*72/25.4, 72/25.4
 		return
 	}
 	x := xf{font: 0}
@@ -262,12 +267,13 @@ func (r *reader) measureNormalFont() {
 		x = s.styleXfs[s.normalXf]
 	}
 	f := r.fontAt(max(x.font, 0))
-	size := hmmPt(math.Round(f.Size * 2540 / 72))
+	if !(f.Size > 0) {
+		return
+	}
+	size := printerPixels(f.Size)
 	if size <= 0 {
 		return
 	}
-	// A family no font serves is drawn, and measured, in LibreOffice's
-	// substitute, Noto Sans in the pinned image.
 	style := text.Style{Families: append(append([]string(nil), f.Families...), substituteFamily), Size: size, Italic: f.Italic, NoKerning: true}
 	if f.Bold {
 		style.Weight = 700
@@ -281,10 +287,14 @@ func (r *reader) measureNormalFont() {
 		digit = max(digit, p.Advance(i))
 	}
 	if digit > 0 {
-		r.digitWidth = math.Round(digit*20) / 20
+		r.digitWidth = max(printerPixels(digit), printerPixel)
+		// The screen draws the size at whole pixels of 0.75 points and
+		// the digit truncated to a pixel.
+		em := math.Round(f.Size / 0.75)
+		r.screenDigit = max(math.Floor(digit/size*em+1e-9), 1)
 	}
 	if sp := p.Advance(10); sp > 0 {
-		r.spaceWidth = math.Round(sp*20) / 20
+		r.spaceWidth = printerPixels(sp)
 	}
 }
 

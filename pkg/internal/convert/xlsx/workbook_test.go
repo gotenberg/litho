@@ -1,6 +1,7 @@
 package xlsx
 
 import (
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
@@ -126,14 +127,14 @@ func equalBools(a, b []bool) bool {
 }
 
 // TestRead_NoFonts checks the column widths of a stylesheet without
-// fonts: LibreOffice counts them in digits of 2 millimetres.
+// fonts: Excel counts them in Calibri 11's digits, 47 printer pixels.
 func TestRead_NoFonts(t *testing.T) {
 	t.Parallel()
 	files := workbookFiles([]testSheet{{name: "S", xml: `<cols><col min="1" max="1" width="30" customWidth="1"/></cols><sheetData/>`}},
 		`<cellXfs><xf numFmtId="0"/></cellXfs>`, "", "", nil)
 	doc, _ := readBytes(t, zipFiles(t, files))
-	if w := doc.Sheets[0].Columns[0].Width; w != 170.1 {
-		t.Errorf("width %v, want 30 digits of 2 mm, 170.1 points", w)
+	if w := doc.Sheets[0].Columns[0].Width; math.Abs(w-169.2) > 1e-9 {
+		t.Errorf("width %v, want 30 digits of 47 printer pixels, 169.2 points", w)
 	}
 }
 

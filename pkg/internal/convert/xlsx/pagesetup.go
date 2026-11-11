@@ -22,7 +22,7 @@ type paperSize struct {
 // table of paper sizes) onto the sizes LibreOffice gives them, which read
 // codes 12 and 13 as JIS B4 and B5 and add the Windows codes 50 to 90
 // (LibreOffice's msfilter PaperSizeConv). A code the table lacks takes
-// Letter, the default paper of the en-US locale.
+// the printer's paper ([printerPaper]).
 var paperSizes = map[int]paperSize{
 	1: {8.5, 11, false}, 2: {8.5, 11, false}, 3: {11, 17, false}, 4: {17, 11, false},
 	5: {8.5, 14, false}, 6: {5.5, 8.5, false}, 7: {7.25, 10.5, false}, 8: {297, 420, true},
@@ -152,10 +152,12 @@ func (w *sheetReader) pageSetup(root *ooxml.Element) {
 		return
 	}
 	landscape := attr(ps, "orientation") == "landscape"
-	if !boolAttr(ps, "usePrinterDefaults") {
+	if _, printer := ps.Attr("usePrinterDefaults"); printer {
+		p.Width, p.Height = paperSizes[printerPaper].points()
+	} else {
 		size, ok := paperSizes[intAttr(ps, "paperSize", 1)]
 		if !ok {
-			size = paperSizes[1]
+			size = paperSizes[printerPaper]
 		}
 		pw, ph := size.points()
 		if cw, ok := paperMeasure(attr(ps, "paperWidth")); ok {
@@ -175,6 +177,22 @@ func (w *sheetReader) pageSetup(root *ooxml.Element) {
 		p.FirstPageNumber = max(0, min(intAttr(ps, "firstPageNumber", 1), maxFirstPg))
 	}
 }
+
+// printerPaper is the paper code Excel prints on when a page setup leaves
+// the paper to the printer: a pageSetup with usePrinterDefaults, either
+// value, or a paperSize the table lacks (ECMA-376 Part 1, 18.3.1.63 lists
+// codes from 1). The printer of Office for the web prints on A4, whatever
+// the account's paper.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/check-boolean.xlsx, sc/colorscale.xlsx,
+//     sc/empty.xlsx and seven more, whose pageSetup names paperSize 1 with
+//     usePrinterDefaults false, print on A4, and every pageSetup naming
+//     paperSize 1 without it (14) on Letter.
+//   - poi/xlsx: 47504.xlsx, SampleSS.xlsx, Formatting.xlsx and five more,
+//     with paperSize 0, print on A4.
+const printerPaper = 9
 
 // paperMeasure parses a paperWidth or paperHeight (ECMA-376 Part 1,
 // 22.9.2.15 ST_PositiveUniversalMeasure, "210mm") into points, false for

@@ -39,15 +39,16 @@ func findSource(dir, name string) string {
 
 // TestParity_GotenbergWorkbooks reads Gotenberg's workbooks with the
 // pinned fixture fonts and checks the sheets, the cells at known
-// addresses and the page setup LibreOffice prints them with.
+// addresses, the page setup and the lengths Excel prints them with: the
+// default columns of Calibri 11 51.6 points wide, its rows of 15 points
+// 14.52 tall, a row's stored height kept.
 //
 // # Corpus evidence
 //
 //   - gotenberg/xlsx: budget prints Summary on a Letter portrait page and Monthly on
-//     two landscape pages repeating its first row, column A of both 48.13
-//     points wide; figures-lo prints Revenue and Costs on A4 pages with
-//     0.7875-inch margins, a Times New Roman header with the sheet name
-//     and a footer with the page number, its columns 63.97 points wide.
+//     two landscape pages repeating its first row; figures-lo prints
+//     Revenue and Costs on A4 pages with 0.7875-inch margins, a Times New
+//     Roman header with the sheet name and a footer with the page number.
 func TestParity_GotenbergWorkbooks(t *testing.T) {
 	t.Parallel()
 	fonts := pinnedFonts(t)
@@ -79,7 +80,7 @@ func TestParity_GotenbergWorkbooks(t *testing.T) {
 			if c, _ := cellAt(monthly, 1, 1); c.Style == nil || c.Style.Format != "#,##0.00" {
 				t.Errorf("B2 format %+v", c.Style)
 			}
-			if math.Abs(sum.DefaultColumnWidth-48.15) > 1e-9 || sum.DefaultRowHeight != 15 {
+			if math.Abs(sum.DefaultColumnWidth-51.6) > 1e-9 || math.Abs(sum.DefaultRowHeight-14.52) > 1e-9 {
 				t.Errorf("defaults %v by %v", sum.DefaultColumnWidth, sum.DefaultRowHeight)
 			}
 		}},
@@ -99,7 +100,7 @@ func TestParity_GotenbergWorkbooks(t *testing.T) {
 			if len(h) != 1 || h[0].Field != sheet.FieldSheet || h[0].Font.Families[0] != "Times New Roman" || h[0].Font.Size != 12 {
 				t.Errorf("header %+v", h)
 			}
-			if rev.DefaultColumnWidth != 64 {
+			if math.Abs(rev.DefaultColumnWidth-63.72) > 1e-9 {
 				t.Errorf("column width %v", rev.DefaultColumnWidth)
 			}
 		}},
@@ -107,8 +108,8 @@ func TestParity_GotenbergWorkbooks(t *testing.T) {
 			if len(doc.Sheets) == 0 || !sheetHolds(doc.Sheets[0], "Meteor") {
 				t.Error("Meteor is not in the first sheet")
 			}
-			if sh := doc.Sheets[0]; sh.Rows[0].Height != 0 || sh.Columns[0].Width != 122.1 {
-				t.Errorf("row 1 %v high, column A %v wide: want the optimal height and 22 digits", sh.Rows[0].Height, sh.Columns[0].Width)
+			if sh := doc.Sheets[0]; math.Abs(sh.Rows[0].Height-45.84) > 1e-9 || math.Abs(sh.Columns[0].Width-124.08) > 1e-9 {
+				t.Errorf("row 1 %v high, column A %v wide: want its stored height and 22 digits", sh.Rows[0].Height, sh.Columns[0].Width)
 			}
 		}},
 	} {
