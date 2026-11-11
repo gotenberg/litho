@@ -161,9 +161,8 @@ func fixContentLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 // real becomes that real, a denormal real becomes 0, and an integer past the
 // integer range becomes the real of its value when the part admits it, the
 // largest real otherwise. With preserve set, only a number that places
-// nothing ([placesNothing]) is respelled, and the others are counted as kept:
-// the respelling of an integer as the real of its value at parts 2 and 3
-// draws the same and is made all the same.
+// nothing ([placesNothing]) or whose respelling draws the same
+// ([drawsSame]) is respelled, and the others are counted as kept.
 //
 // A number is respelled where compliance judges it ([judgedLimitBreakers]):
 // an operand, an element of an array or a value of a dictionary, an inline
@@ -219,7 +218,7 @@ func clampContentNumbers(ctx context.Context, data []byte, part int, colourOff, 
 			return "", false
 		}
 		text, ok := plainNumber(tok.Value, part)
-		if ok && preserve && places && !sameValue(tok.Value, text) {
+		if ok && preserve && places && !drawsSame(tok.Value, text) {
 			kept++
 			return "", false
 		}
@@ -233,12 +232,21 @@ func clampContentNumbers(ctx context.Context, data []byte, part int, colourOff, 
 	return applyTokenSplices(data, splices), contentLimitsTally{clamped: len(splices) - len(splits), split: n, kept: kept}
 }
 
-// sameValue reports whether the number tokens a and b spell one value, as
-// an integer past the integer range and the real of its value do.
-func sameValue(a, b string) bool {
+// drawsSame reports whether a reader draws with the same number whether it
+// reads the number token a or b: ISO 32000-1, Annex C.2, Table C.1 holds a
+// real to the range and precision of a single-precision float and converts
+// one closer to 0 than 1.175e-38 to 0, so a denormal and 0 draw the same, and
+// so do an integer past the integer range and the real of its value.
+func drawsSame(a, b string) bool {
 	x, errA := strconv.ParseFloat(a, 64)
 	y, errB := strconv.ParseFloat(b, 64)
-	return errA == nil && errB == nil && x == y
+	if errA != nil || errB != nil {
+		return false
+	}
+	if y == 0 && math.Abs(x) < compliance.MinRealAbs2 {
+		return true
+	}
+	return float32(x) == float32(y)
 }
 
 // placesNothing reports whether the operator op reads its operands without
