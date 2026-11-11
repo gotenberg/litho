@@ -203,7 +203,10 @@
 //   - [Convert] takes [ConvertOption]: [WithConvertLogger],
 //     [WithConvertFontDirs], [WithPaperSize], [WithMargins],
 //     [WithFontFamilies], [WithFontSize], [WithMediaType],
-//     [WithResources], [WithConvertLimits], [WithPageRanges], the print
+//     [WithResources], [WithConvertLimits], [WithPageRanges],
+//     [WithDefaultPaperSize], [WithDefaultLanguage], the output options
+//     [WithConvertVersion], [WithConvertPDFA], [WithConvertPDFUA] and
+//     [WithConvertTempDir], the print
 //     options [WithLandscape], [WithPreferCSSPageSize], [WithPrintScale],
 //     [WithSinglePage], [WithPrintBackground], [WithOutline],
 //     [WithShrinkToFit], [WithFractionalFontMetrics],

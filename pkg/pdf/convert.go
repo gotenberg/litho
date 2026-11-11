@@ -29,6 +29,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // Format names an input format [Convert] reads.
@@ -104,6 +105,12 @@ type convertOptions struct {
 	httpClient                           *http.Client
 	mediaFeatures                        map[string]string
 	password                             string
+	version                              string
+	pdfa                                 models.PDFAProfile
+	pdfua                                models.PDFUAProfile
+	tempDir                              string
+	defaultWidth, defaultHeight          float64
+	defaultLang                          string
 }
 
 // WithConvertLogger injects a structured logger for the diagnostics of a
@@ -407,6 +414,10 @@ type ConvertReport struct {
 	// Warnings lists what the conversion could not render as the source
 	// meant it, in the order met.
 	Warnings []ConvertWarning
+	// Conformance says what the profiles of [WithConvertPDFA] and
+	// [WithConvertPDFUA] still find in the file: an empty Residual means it
+	// conforms to them. nil without a profile.
+	Conformance *RemediationReport
 }
 
 // ConvertWarning is one construct of the source [Convert] did not render
@@ -556,8 +567,10 @@ type ConvertWarning struct {
 //
 // # All formats
 //
-// The fonts are embedded, each subset to the glyphs drawn. Nothing is
-// written for PDF/A or PDF/UA conformance; remediate the output for that.
+// The fonts are embedded, each subset to the glyphs drawn. The file is PDF
+// 1.7 unless [WithConvertVersion] names another version, and claims no
+// conformance unless [WithConvertPDFA] or [WithConvertPDFUA] names a
+// profile.
 //
 // # Errors
 //
@@ -599,6 +612,10 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 		return nil, fmt.Errorf("%w: nil destination", ErrInvalidConvertOptions)
 	}
 	if err := o.limits.Validate(); err != nil {
+		return nil, err
+	}
+	target, err := resolveConvertTarget(&o)
+	if err != nil {
 		return nil, err
 	}
 	budget := o.limits.internal().WithDefaults()
@@ -644,11 +661,12 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	if err := selectPages(doc, format, &o); err != nil {
 		return nil, err
 	}
-	if err := compose.Write(ctx, doc, dst, compose.Options{Logger: o.logger}); err != nil {
-		return nil, fmt.Errorf("writing the PDF: %w", err)
+	conformance, err := writeTarget(ctx, doc, dst, target, &o)
+	if err != nil {
+		return nil, err
 	}
 
-	report := &ConvertReport{Pages: len(doc.Pages)}
+	report := &ConvertReport{Pages: len(doc.Pages), Conformance: conformance}
 	for _, w := range doc.Warnings {
 		report.Warnings = append(report.Warnings, ConvertWarning{Code: w.Code, Message: w.Message, Page: w.Page})
 	}
