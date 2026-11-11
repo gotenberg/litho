@@ -61,10 +61,13 @@ const (
 	// and the default.
 	TrackedChangesAccepted TrackedChanges = iota
 	// TrackedChangesRejected prints the text as it read before the changes:
-	// insertions left out, deletions kept.
+	// insertions left out, deletions kept. A change of formatting keeps its
+	// new formatting.
 	TrackedChangesRejected
 	// TrackedChangesMarked prints both, each marked: an insertion
-	// underlined, a deletion struck through, in the colour of its author.
+	// underlined, a deletion struck through, in the colour of its author,
+	// taken in turn from nine colours in the order the authors first appear.
+	// Change bars are not drawn, and a change of formatting is not marked.
 	TrackedChangesMarked
 )
 
@@ -370,11 +373,14 @@ func WithOutline(outline bool) ConvertOption {
 	return convertOption(func(c *convertConfig) { c.omitOutline = !outline })
 }
 
-// WithDate sets the one date of the conversion, which every date and time
-// field of the source shows: the date class of an HTML header or footer
-// template, the date and time fields of a spreadsheet's headers and
-// footers, of a slide, of a text document. The zero time, the default,
-// leaves a field showing what its file stored, or nothing where the file
+// WithDate sets the one date of the conversion, which the fields of the
+// source that show the current date or time take: the date class of an HTML
+// header or footer template, the date and time fields of a spreadsheet's
+// headers and footers and of a slide, and in a text document the fields of
+// the current date, the current time and the print date that the file
+// neither fixes nor locks. A field of the date a document was created or
+// saved keeps what the file stores. The zero time, the default, leaves
+// every field showing what its file stored, or nothing where the file
 // stores none. The output never depends on the clock.
 func WithDate(t time.Time) ConvertOption {
 	return convertOption(func(c *convertConfig) { c.date = t })
