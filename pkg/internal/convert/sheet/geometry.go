@@ -93,7 +93,16 @@ func clampSide(v float64) float64 {
 }
 
 // drawingCells returns the cells a drawing's box covers, false for an
-// empty box.
+// empty box. Under Excel's rules the box covers the cell its bottom-right
+// corner touches too, at that cell's top or left edge: Excel extends a
+// sheet's print range to a drawing's end cell even when the drawing stops
+// at its edge.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: charts_bar_column, fitted to one landscape page, with
+//     charts ending at the left edge of column T and the top of row 45,
+//     prints at 66%, the zoom that fits columns A to T: A to S fit at 70%.
 func (g *grid) drawingCells(d *Drawing) (Range, bool) {
 	rc := g.drawingRect(d)
 	if rc.Width <= 0 && rc.Height <= 0 {
@@ -109,8 +118,12 @@ func (g *grid) drawingCells(d *Drawing) (Range, bool) {
 		limit = min(max(d.From.Row, 0)+maxDrawingRows, maxRows-1)
 	}
 	r := Range{FirstRow: g.rowAt(rc.Y, limit), FirstColumn: g.colAt(rc.X)}
-	r.LastRow = g.rowAt(rc.Y+rc.Height-1e-6, limit)
-	r.LastColumn = g.colAt(rc.X + rc.Width - 1e-6)
+	end := -1e-6
+	if g.doc.ExcelRules {
+		end = 1e-6
+	}
+	r.LastRow = g.rowAt(rc.Y+rc.Height+end, limit)
+	r.LastColumn = g.colAt(rc.X + rc.Width + end)
 	r.LastRow = max(r.LastRow, r.FirstRow)
 	r.LastColumn = max(r.LastColumn, r.FirstColumn)
 	return r, true

@@ -264,3 +264,21 @@ func TestPlan_ExcelPrintsFormattedPages(t *testing.T) {
 		}
 	}
 }
+
+// TestDrawingCells_ExcelEndCell locks the cells of a drawing that ends at
+// a cell's top-left corner: Calc's rules stop before that cell, Excel's
+// take it in.
+func TestDrawingCells_ExcelEndCell(t *testing.T) {
+	for _, tc := range []struct {
+		excel        bool
+		lastR, lastC int
+	}{{false, 1, 2}, {true, 2, 3}} {
+		sh := &Sheet{Name: "S", Drawings: []Drawing{{From: Anchor{}, To: &Anchor{Row: 2, Column: 3}}}}
+		doc := newDoc(sh)
+		doc.ExcelRules = tc.excel
+		r, ok := newGrid(doc, sh).drawingCells(&sh.Drawings[0])
+		if !ok || r.LastRow != tc.lastR || r.LastColumn != tc.lastC {
+			t.Errorf("Excel's rules %v: cells %+v, want to row %d and column %d", tc.excel, r, tc.lastR, tc.lastC)
+		}
+	}
+}
