@@ -4,7 +4,7 @@ HTML and Markdown sources litho authored, converted twice: by Chromium, through 
 
 | Path                | What it holds                                                                                                                   |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `sources/`          | The 39 sources                                                                                                                  |
+| `sources/`          | The 43 sources                                                                                                                  |
 | `corpus references` | Posts each source to the Gotenberg image and writes `testdata/litho/html/references/<name>.pdf` and their `manifest.json`       |
 | `../../../fixture/` | Reads a source directory and its `options.json` for `corpus references` and the `diff` feature (shared with the Office corpora) |
 
@@ -107,6 +107,15 @@ The five sources below lock the precedence of the paper, the `@page` size and la
 | `page-larger-than-paper` | 2                | `preferCssPageSize: false`              | An A3 `@page` size laid out at A3 and scaled down to the A4 paper                                       |
 | `prefer-over-paper`      | 3                | `preferCssPageSize: true`, Letter paper | The `@page` size, A5, wins over the caller's Letter paper                                               |
 | `landscape-page-size`    | 3                | `landscape`                             | Landscape against an `@page` size: the A5 pages stay portrait, the named A4 landscape page stays turned |
+
+## User stylesheets
+
+The two sources below lock `pdf.WithUserStylesheet`, litho's own option, which no route field carries. `user-stylesheet` holds a document with its own stylesheet and `user.css`, which its `options.json` names under `userStylesheets`: normal declarations that add a line height, an italic lead and an `@page` margin and `@bottom-center` box, and lose where the document sets the same property (the heading's colour and size, the notes' colour), and `!important` ones that win over the document's (the navigation hidden, the lead set smaller). `user-stylesheet-twin` is the same document with those rules written in its own stylesheet, in the order that gives the same result: the normal user rules before the document's, the important ones after it, without `!important`. The option fixture names the twin under `reference_of`, so Chromium's conversion of the twin judges litho's conversion with the user stylesheet; litho writes the same bytes for both.
+
+| Source                 | Pages (Chromium) | Options                                                  | Exercises                                                                                       |
+| ---------------------- | ---------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `user-stylesheet`      | 2                | `userStylesheets: ["user.css"]`, `reference_of` the twin | The user origin: normal rules under the document's, important ones over them, a page-margin box |
+| `user-stylesheet-twin` | 2                | none                                                     | The same rules in the document's stylesheet                                                     |
 
 ## The Chromium references
 

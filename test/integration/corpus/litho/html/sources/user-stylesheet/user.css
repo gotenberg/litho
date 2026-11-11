@@ -1,0 +1,12 @@
+/* Normal declarations of the user origin: they add what the document does not set, and lose where it does. */
+@page {
+  margin: 25mm 20mm;
+  @bottom-center { content: "Page " counter(page) " of " counter(pages); font-family: "Liberation Sans", sans-serif; font-size: 9pt; color: #555555; }
+}
+body { line-height: 1.6; }
+h1 { color: crimson; font-size: 30pt; }
+p.note { color: crimson; }
+.lead { font-style: italic; }
+/* Important declarations of the user origin win over the document's. */
+nav.site { display: none !important; }
+.lead { font-size: 11pt !important; }

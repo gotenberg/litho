@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>User stylesheet</title>
+<style>
+/* The user stylesheet of user-stylesheet written in the document: its normal rules before the document's, its important ones after. */
+@page {
+  margin: 25mm 20mm;
+  @bottom-center { content: "Page " counter(page) " of " counter(pages); font-family: "Liberation Sans", sans-serif; font-size: 9pt; color: #555555; }
+}
+body { line-height: 1.6; }
+h1 { color: crimson; font-size: 30pt; }
+p.note { color: crimson; }
+.lead { font-style: italic; }
+body { font-family: "Liberation Serif", serif; font-size: 12pt; margin: 0; color: #222222; }
+h1 { color: navy; font-size: 24pt; }
+h2 { break-before: page; color: navy; }
+p.note { color: darkgreen; border-left: 4pt solid darkgreen; padding-left: 8pt; }
+nav.site { display: block; background: #eeeeee; padding: 6pt; font-family: "Liberation Sans", sans-serif; }
+.lead { font-size: 14pt; }
+nav.site { display: none; }
+.lead { font-size: 11pt; }
+</style>
+</head>
+<body>
+<nav class="site">Home | Products | Contact</nav>
+<h1>Quarterly notes</h1>
+<p class="lead">This document carries its own stylesheet. A user stylesheet given with the conversion hides the navigation, sets the lead paragraph smaller and in italics, adds a running footer, and loses where the document sets the same property.</p>
+<p class="note">The note keeps the document's green: the user rule that turns it red is a normal declaration of the user origin, which the author origin outranks.</p>
+<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+<h2>Second page</h2>
+<p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+<p class="note">A second note, kept green and with its rule on the left.</p>
+</body>
+</html>
