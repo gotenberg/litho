@@ -3,6 +3,7 @@ package remediation
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 	"math"
 	"strconv"
@@ -55,6 +56,9 @@ type contentLimitsTally struct {
 	// split counts the cm operators whose translation was written as
 	// several translations inside the limits.
 	split int
+	// kept counts the numbers past the limits left as written because
+	// clamping them would move or reshape what the page shows.
+	kept int
 }
 
 // fixContentLimits repairs the numbers past the implementation limits of every
@@ -69,10 +73,15 @@ type contentLimitsTally struct {
 // Compliance judges none of the operands of their colour operators, so the
 // repair leaves those as written.
 //
-// Clamping can shift a drawing coordinate, but the alternative is failing
-// compliance; the spec caps the value regardless of intent. It is a
-// content-tier repair, so the writer rolls it back when the output loses the
-// text the source shows.
+// A clamp moves or reshapes what the number places: a text matrix clamped
+// puts the text it places off the page, a path point bends the path. With
+// opts.PreserveContent, the default, such a number is left as written and its
+// violation stays a residual: the repair never trades what a page shows for
+// a verdict. It clamps there only the numbers that place nothing
+// ([placesNothing]). Without it, the aggressive mode, it clamps every number,
+// as [Options.PreserveContent] states. Either way it is a content-tier
+// repair, so the writer rolls it back when the output loses the text the
+// source shows.
 //
 // # Corpus evidence
 //
@@ -94,7 +103,7 @@ type contentLimitsTally struct {
 //   - All corpora: no file whose validation at PDF/A-1b or PDF/A-2b reports a
 //     limit violation draws a stream with its colour operators off, so reading
 //     those streams that way changes no remediation.
-func fixContentLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
+func fixContentLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, profile string) ([]string, error) {
 	part := compliance.PDFAPart(profile)
 	colourOff, err := compliance.ColourOffStreams(ctx, doc, profile)
 	if err != nil {
@@ -102,8 +111,9 @@ func fixContentLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 	}
 	var total contentLimitsTally
 	if _, err := walkStreams(ctx, alloc, doc, "content-limits", colourOff, func(ctx context.Context, data []byte, off bool) ([]byte, func()) {
-		newData, t := clampContentNumbers(ctx, data, part, off)
-		if t == (contentLimitsTally{}) {
+		newData, t := clampContentNumbers(ctx, data, part, off, opts.PreserveContent)
+		total.kept += t.kept
+		if t.clamped == 0 && t.split == 0 {
 			return nil, nil
 		}
 		return newData, func() {
@@ -119,6 +129,9 @@ func fixContentLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 	}
 	if total.split > 0 {
 		fixes = append(fixes, fmt.Sprintf("split the out-of-range translation of %d cm operator(s) in content streams", total.split))
+	}
+	if total.kept > 0 {
+		doc.Logger.Debug("remediation: content-limits left the numbers whose clamp would move what a page shows", slog.Int("numbers", total.kept))
 	}
 	return fixes, nil
 }
@@ -137,7 +150,10 @@ func fixContentLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 // Any other number is respelled by [plainNumber]: a real past the largest
 // real becomes that real, a denormal real becomes 0, and an integer past the
 // integer range becomes the real of its value when the part admits it, the
-// largest real otherwise.
+// largest real otherwise. With preserve set, only a number that places
+// nothing ([placesNothing]) is respelled, and the others are counted as kept:
+// the respelling of an integer as the real of its value at parts 2 and 3
+// draws the same and is made all the same.
 //
 // A number is respelled where compliance judges it ([judgedLimitBreakers]):
 // an operand, an element of an array or a value of a dictionary, an inline
@@ -173,29 +189,65 @@ func fixContentLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 //     failed. Split, the text is unchanged, and the output no longer fails the
 //     limit for litho or veraPDF, where it failed it 175 times when the repair
 //     did not reach the forms.
-func clampContentNumbers(ctx context.Context, data []byte, part int, colourOff bool) ([]byte, contentLimitsTally) {
+func clampContentNumbers(ctx context.Context, data []byte, part int, colourOff, preserve bool) ([]byte, contentLimitsTally) {
 	splits, n := translationSplits(ctx, data, part)
 	judged := judgedLimitBreakers(ctx, data, part, colourOff)
 	// Both walks offer the same tokens in the same order, so a token's
 	// ordinal names it in both. The judged numbers are read as validation
 	// reads them, and named by where they end.
-	ordinal := -1
+	ordinal, kept := -1, 0
 	splices, _ := contentTokenSplices(ctx, data, func(tok lexer.Token, at tokenPlace) (string, bool) {
 		ordinal++
 		if text, ok := splits[ordinal]; ok {
 			return text, true
 		}
-		if tok.Type != lexer.TokenNumber || !breaksNumberLimits(tok.Value, part) || !judged[at.end] {
+		if tok.Type != lexer.TokenNumber || !breaksNumberLimits(tok.Value, part) {
 			return "", false
 		}
-		return plainNumber(tok.Value, part)
+		places, ok := judged[at.end]
+		if !ok {
+			return "", false
+		}
+		text, ok := plainNumber(tok.Value, part)
+		if ok && preserve && places && !sameValue(tok.Value, text) {
+			kept++
+			return "", false
+		}
+		return text, ok
 	})
 	if len(splices) == 0 {
-		return data, contentLimitsTally{}
+		return data, contentLimitsTally{kept: kept}
 	}
 	// The splices of a split stand where an operand stands, which the walk
 	// keeps whatever it reads, and the others are clamps.
-	return applyTokenSplices(data, splices), contentLimitsTally{clamped: len(splices) - len(splits), split: n}
+	return applyTokenSplices(data, splices), contentLimitsTally{clamped: len(splices) - len(splits), split: n, kept: kept}
+}
+
+// sameValue reports whether the number tokens a and b spell one value, as
+// an integer past the integer range and the real of its value do.
+func sameValue(a, b string) bool {
+	x, errA := strconv.ParseFloat(a, 64)
+	y, errB := strconv.ParseFloat(b, 64)
+	return errA == nil && errB == nil && x == y
+}
+
+// placesNothing reports whether the operator op reads its operands without
+// placing or shaping anything the page shows, so that a number among them
+// clamped to the limits changes nothing a reader sees:
+//
+//   - The colour operators (ISO 32000-1, 8.6.8, Table 74): every colour
+//     space bounds its components, 0 to 1 for the device spaces (8.6.4),
+//     the /Range of a CIE-based space (8.6.5), the index range of an Indexed
+//     space and the domain of a tint transform (8.6.6, 7.10.1), and a
+//     component past the limits lies past every bound a real space states.
+//   - The marked-content operators taking a property list, BDC and DP
+//     (14.6, Table 320): a property list labels content and draws nothing.
+func placesNothing(op string) bool {
+	switch op {
+	case "g", "G", "rg", "RG", "k", "K", "sc", "SC", "scn", "SCN", "BDC", "DP":
+		return true
+	}
+	return false
 }
 
 // limitBreaker is a number token [judgedLimitBreakers] holds until the
@@ -210,7 +262,10 @@ type limitBreaker struct {
 // ([breaksNumberLimits]) that compliance judges: the ones the operator taking
 // them reads, as [compliance.ContentOperandLink] states it, while the stream
 // processes its colour operators as [compliance.ColourState] follows it.
-// colourOff reports that the stream starts with them ignored.
+// colourOff reports that the stream starts with them ignored. Each maps to
+// whether the number places or shapes something the page shows: every number
+// of an inline image's dictionary does, and an operand does unless its
+// operator places nothing ([placesNothing]).
 //
 // The stream is read as validation reads it ([visitVeraPDFTokens]), which
 // finds the operator c in "c047" and the number 047 after it, and gives a run
@@ -238,11 +293,11 @@ func judgedLimitBreakers(ctx context.Context, data []byte, part int, colourOff b
 		imageMask, maskKey bool
 	)
 	colour := compliance.NewColourState(colourOff)
-	mark := func(b limitBreaker) {
+	mark := func(b limitBreaker, places bool) {
 		if judged == nil {
 			judged = make(map[int]bool)
 		}
-		judged[b.at.end] = true
+		judged[b.at.end] = places
 	}
 	// endImage settles the inline image whose dictionary was read: veraPDF
 	// reads it only while the stream processes its colour operators, or as
@@ -250,7 +305,7 @@ func judgedLimitBreakers(ctx context.Context, data []byte, part int, colourOff b
 	endImage := func() {
 		if colour.ReadsInlineImage(imageMask) {
 			for _, b := range image {
-				mark(b)
+				mark(b, true)
 			}
 		}
 		image, imageMask, maskKey = image[:0], false, false
@@ -276,7 +331,7 @@ func judgedLimitBreakers(ctx context.Context, data []byte, part int, colourOff b
 		case at.depth == 0 && isOperatorToken(tok):
 			for _, b := range operands {
 				if operandJudged(compliance.ContentOperandLink(tok.Value, b.at.operand, at.operand, colour.On()), b) {
-					mark(b)
+					mark(b, !placesNothing(tok.Value))
 				}
 			}
 			operands = operands[:0]

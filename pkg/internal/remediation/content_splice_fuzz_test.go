@@ -36,7 +36,7 @@ func FuzzContentTokenSplices(f *testing.F) {
 		respellHexStrings(ctx, data)
 		rewriteNonFiniteNumbers(ctx, data)
 		rewriteNestedMalformedNumbers(ctx, data, 1)
-		clampContentNumbers(ctx, data, 1, false)
-		clampContentNumbers(ctx, data, 2, true)
+		clampContentNumbers(ctx, data, 1, false, false)
+		clampContentNumbers(ctx, data, 2, true, false)
 	})
 }

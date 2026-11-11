@@ -51,7 +51,7 @@ func TestClampContentNumbers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			out, tally := clampContentNumbers(context.Background(), []byte(tc.data), tc.part, false)
+			out, tally := clampContentNumbers(context.Background(), []byte(tc.data), tc.part, false, false)
 			n := tally.clamped
 			if n != tc.n {
 				t.Errorf("clamped %d numbers, want %d", n, tc.n)
@@ -67,13 +67,61 @@ func TestClampContentNumbers(t *testing.T) {
 	}
 }
 
+// TestClampContentNumbersKeepsWhatPlaces pins that, preserving content, the
+// content-limits repair leaves as written every number past the limits whose
+// clamp would move or reshape what the page shows, and counts it, while it
+// still clamps a number that places nothing, still splits a translation,
+// which draws as written, and still respells an integer as the real of its
+// value.
+func TestClampContentNumbersKeepsWhatPlaces(t *testing.T) {
+	t.Parallel()
+
+	const path = " 0 0 m 10 10 l S"
+	for _, tc := range []struct {
+		name, data, want string
+		part             int
+		clamped, kept    int
+		split            int
+	}{
+		{"a text matrix", "BT /F1 12 Tf 1 0 0 1 72 40000.5 Tm (a) Tj ET", "", 1, 0, 1, 0},
+		{"a TJ adjustment", "BT [(a) -39455.5 (b)] TJ ET", "", 1, 0, 1, 0},
+		{"path points", "99999.5 0 m 0 99999.5 l S", "", 1, 0, 2, 0},
+		{"a line width", "99999.5 w" + path, "", 1, 0, 1, 0},
+		{"an inline image", "q BI /W 1 /H 1 /BPC 8 /CS /G /D [0 99999.5] ID \x00 EI Q", "", 1, 0, 1, 0},
+		{"a grey level", "99999.5 g" + path, "32767 g" + path, 1, 1, 0, 0},
+		{"a colour component", "1 0 99999.5 rg" + path, "1 0 32767 rg" + path, 1, 1, 0, 0},
+		{"a property list", "/Span << /X 99999.5 >> BDC EMC", "/Span << /X 32767 >> BDC EMC", 1, 1, 0, 0},
+		{"an integer PDF/A-2 reads as a real", "[99999999999 2] 0 d" + path, "[99999999999.0 2] 0 d" + path, 2, 1, 0, 0},
+		{
+			"a translation, split", "1 0 0 1 72 -40000.5 cm BT 1 0 0 1 0 40100.5 Tm ET",
+			"1 0 0 1 0 -32767 cm 1 0 0 1 72 -7233.5 cm BT 1 0 0 1 0 40100.5 Tm ET", 1, 0, 1, 1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			out, tally := clampContentNumbers(context.Background(), []byte(tc.data), tc.part, false, true)
+			if tally.clamped != tc.clamped || tally.kept != tc.kept || tally.split != tc.split {
+				t.Errorf("clamped %d, kept %d, split %d, want %d, %d and %d", tally.clamped, tally.kept, tally.split, tc.clamped, tc.kept, tc.split)
+			}
+			want := tc.want
+			if want == "" {
+				want = tc.data
+			}
+			if string(out) != want {
+				t.Errorf("the repair wrote %q, want %q", out, want)
+			}
+		})
+	}
+}
+
 // TestClampContentNumbersPastADouble pins that an integer too long for a
 // double is written back as a number inside the limits of the part.
 func TestClampContentNumbersPastADouble(t *testing.T) {
 	t.Parallel()
 
 	for _, part := range []int{1, 2} {
-		out, tally := clampContentNumbers(context.Background(), []byte(strings.Repeat("9", 400)+" 0 m"), part, false)
+		out, tally := clampContentNumbers(context.Background(), []byte(strings.Repeat("9", 400)+" 0 m"), part, false, false)
 		n := tally.clamped
 		if n != 1 {
 			t.Fatalf("part %d: clamped %d numbers, want 1", part, n)
@@ -126,7 +174,7 @@ func TestClampContentNumbersSplitsTranslations(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			out, tally := clampContentNumbers(context.Background(), []byte(tc.data), tc.part, false)
+			out, tally := clampContentNumbers(context.Background(), []byte(tc.data), tc.part, false, false)
 			if tally.clamped != tc.clamped || tally.split != tc.split {
 				t.Errorf("clamped %d numbers and split %d translations, want %d and %d", tally.clamped, tally.split, tc.clamped, tc.split)
 			}
@@ -319,6 +367,33 @@ func TestFixContentLimitsLeavesNumbersThePartAdmits(t *testing.T) {
 	}
 }
 
+// TestFixContentLimitsPreservingLeavesPlacedText pins that a remediation
+// preserving content leaves a page whose text sits under a text matrix past
+// the PDF/A-1 real limit as written, where clamping it would put the text off
+// the page, and still splits the cm translation that brings it back.
+func TestFixContentLimitsPreservingLeavesPlacedText(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	const content = "1 0 0 1 0 -40000 cm BT /F1 12 Tf 1 0 0 1 72 40100.5 Tm (far) Tj ET"
+	doc, alloc := newTestDoc(t, buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << >> >>",
+		hexStreamObj("", content),
+	))
+	fixes, err := fixContentLimits(ctx, alloc, doc, Options{PreserveContent: true}, nil, "PDF/A-1b")
+	if err != nil {
+		t.Fatalf("fixContentLimits: %v", err)
+	}
+	if len(fixes) != 0 {
+		t.Errorf("fixes = %v, want none: the integer translation is admitted and the text matrix places text", fixes)
+	}
+	if _, rewritten := alloc.Pending()[4]; rewritten {
+		t.Errorf("the content stream was rewritten")
+	}
+}
+
 // TestClampContentNumbersRepairsWhatComplianceJudges pins that the
 // content-limits repair respells exactly the numbers compliance reports past
 // the limits: the ones the operator taking them reads
@@ -362,7 +437,7 @@ func TestClampContentNumbersRepairsWhatComplianceJudges(t *testing.T) {
 			t.Parallel()
 
 			reported := contentLimitsReported(t, tc.data, tc.uncoloured)
-			out, tally := clampContentNumbers(context.Background(), []byte(tc.data), 1, tc.uncoloured)
+			out, tally := clampContentNumbers(context.Background(), []byte(tc.data), 1, tc.uncoloured, false)
 			if tally.clamped != reported {
 				t.Errorf("clamped %d numbers, compliance reports %d", tally.clamped, reported)
 			}
