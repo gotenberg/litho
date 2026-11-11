@@ -129,3 +129,32 @@ func TestDiffCompare_LeavesMissingFontsUnscored(t *testing.T) {
 		t.Errorf("reference_fonts_missing %d, %v, want 0", n, ok)
 	}
 }
+
+// skippingFeature skips every fixture with one metric, counting skipped
+// metrics when counts is set.
+type skippingFeature struct{ countingFeature }
+
+func (f *skippingFeature) Compare(id string, _ []byte) Verdict {
+	return Verdict{FixtureID: id, Skipped: true, Metrics: map[string]int{metricReferenceFontsMissing: 1}}
+}
+
+// countingSkipsFeature is a skippingFeature that counts its skips' metrics.
+type countingSkipsFeature struct{ skippingFeature }
+
+func (f *countingSkipsFeature) CountsSkippedMetrics() {}
+
+// TestRunFeatureAcrossFixtures_CountsSkippedMetricsOnRequest checks that the
+// metrics of skipped verdicts count only in a cell whose feature asks.
+func TestRunFeatureAcrossFixtures_CountsSkippedMetricsOnRequest(t *testing.T) {
+	fixtures := []Fixture{{ID: "a", PDFPath: "unused.pdf"}, {ID: "b", PDFPath: "unused.pdf"}}
+	plain := &FeatureReport{}
+	runFeatureAcrossFixtures(context.Background(), &skippingFeature{}, fixtures, 1, plain)
+	if plain.Skipped != 2 || plain.Metrics[metricReferenceFontsMissing] != 0 {
+		t.Errorf("plain feature: skipped %d, metrics %v", plain.Skipped, plain.Metrics)
+	}
+	counted := &FeatureReport{}
+	runFeatureAcrossFixtures(context.Background(), &countingSkipsFeature{}, fixtures, 1, counted)
+	if counted.Skipped != 2 || counted.Matched+counted.Mismatched != 0 || counted.Metrics[metricReferenceFontsMissing] != 2 {
+		t.Errorf("counting feature: %+v", counted)
+	}
+}
