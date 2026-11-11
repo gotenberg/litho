@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -115,5 +117,40 @@ func TestConvert_RefusesATargetItCannotWrite(t *testing.T) {
 		if out.Len() != 0 {
 			t.Errorf("%s: %d bytes written before the refusal", name, out.Len())
 		}
+	}
+}
+
+// TestConvert_LeavesNoTempFile checks that a conversion to a profile writes
+// its intermediate files in the directory WithConvertTempDir names and
+// removes them, on success and on failure, and that a failure writes
+// nothing to dst.
+func TestConvert_LeavesNoTempFile(t *testing.T) {
+	dir := convertFontDir(t)
+	tmp := t.TempDir()
+	data, rep := convertText(t, dir, "A line of text.", WithConvertPDFA(models.PDFA2b), WithConvertTempDir(tmp))
+	if rep.Conformance == nil || len(data) == 0 {
+		t.Fatalf("Conformance = %v, %d bytes", rep.Conformance, len(data))
+	}
+	if entries, err := os.ReadDir(tmp); err != nil || len(entries) != 0 {
+		t.Errorf("temp dir holds %v (%v) after a conversion, want nothing", entries, err)
+	}
+
+	var out bytes.Buffer
+	_, err := Convert(context.Background(), strings.NewReader("A"), FormatText, &out,
+		WithConvertFontDirs(dir), WithConvertPDFA(models.PDFA2b), WithConvertTempDir(filepath.Join(tmp, "missing")))
+	if err == nil {
+		t.Fatal("Convert into a missing temp dir succeeded")
+	}
+	if out.Len() != 0 {
+		t.Errorf("%d bytes written before the failure", out.Len())
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := Convert(ctx, strings.NewReader("A"), FormatText, &out, WithConvertFontDirs(dir), WithConvertPDFA(models.PDFA2b), WithConvertTempDir(tmp)); err == nil {
+		t.Error("Convert with a cancelled context succeeded")
+	}
+	if entries, err := os.ReadDir(tmp); err != nil || len(entries) != 0 {
+		t.Errorf("temp dir holds %v (%v) after a failure, want nothing", entries, err)
 	}
 }

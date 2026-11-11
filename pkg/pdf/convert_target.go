@@ -1,10 +1,12 @@
 package pdf
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
+	"os"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -125,6 +127,12 @@ func resolveConvertTarget(o *convertOptions) (convertTarget, error) {
 	if o.pdfua != "" && uaPart == 0 {
 		return t, fmt.Errorf("%w: PDF/UA profile %q", ErrInvalidConvertOptions, o.pdfua)
 	}
+	if o.defaultLang != "" && (strings.TrimSpace(o.defaultLang) != o.defaultLang || !compliance.IsValidLangTag(o.defaultLang)) {
+		// ISO 32000-1, 14.9.2 takes a language identifier as BCP 47 (RFC
+		// 3066) defines it; the PDF/A and PDF/UA validators read the tag as
+		// written, so surrounding spaces are refused rather than trimmed.
+		return t, fmt.Errorf("%w: default language %q is not a well-formed language tag", ErrInvalidConvertOptions, o.defaultLang)
+	}
 	if o.pdfa == models.PDFA4f {
 		return t, fmt.Errorf("%w: %s requires an embedded file, which a conversion does not have", ErrInvalidConvertOptions, o.pdfa)
 	}
@@ -177,10 +185,20 @@ func (t convertTarget) profiles() string {
 // target's profiles still find in it, nil for a target without a profile.
 // Nothing reaches dst before the whole file is built.
 //
-// A target with a profile is written twice: the composition as a plain
-// file of the target's version, then that file through the remediation a
-// [Writer] runs, which owns conformance for every PDF litho writes.
-func writeTarget(ctx context.Context, doc *compose.Document, dst io.Writer, t convertTarget, o *convertOptions) (*RemediationReport, error) {
+// A target without a profile is written straight to dst: [compose.Write]
+// builds the whole file before it writes a byte. A target with a profile is
+// written twice: the composition as a plain file of the target's version,
+// then that file through the remediation a [Writer] runs, which owns
+// conformance for every PDF litho writes. Both files go to temp files in
+// [WithConvertTempDir], so no whole file is held in memory twice, and the
+// conforming one is copied to dst once complete. Every temp file is removed
+// before writeTarget returns, on every path.
+//
+// A residual is not an error: the file is written, claims the profile, and
+// the report lists what the profile still finds. ISO 19005-2, 6.1.1 and ISO
+// 14289-1, 5 judge a file, not the process that wrote it, so the caller
+// that asked for the profile decides what a residual means for its use.
+func writeTarget(ctx context.Context, doc *compose.Document, dst io.Writer, t convertTarget, o *convertOptions) (_ *RemediationReport, err error) {
 	opts := compose.Options{Logger: o.logger, Version: t.version, TempDir: o.tempDir, Spool: o.spool}
 	if !t.conforming() {
 		if err := compose.Write(ctx, doc, dst, opts); err != nil {
@@ -188,44 +206,91 @@ func writeTarget(ctx context.Context, doc *compose.Document, dst io.Writer, t co
 		}
 		return nil, nil
 	}
-	var plain bytes.Buffer
-	if err := compose.Write(ctx, doc, &plain, opts); err != nil {
+	logger := o.logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	plain, err := os.CreateTemp(o.tempDir, "litho-convert-*.pdf")
+	if err != nil {
+		return nil, fmt.Errorf("creating the intermediate file: %w", err)
+	}
+	defer closeAndRemoveTemp(logger, plain)
+	if err := compose.Write(ctx, doc, plain, opts); err != nil {
 		return nil, fmt.Errorf("writing the PDF: %w", err)
 	}
+	size, err := plain.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, fmt.Errorf("sizing the intermediate file: %w", err)
+	}
+	report, out, err := conformTarget(ctx, plain, size, t, o)
+	if out != nil {
+		defer closeAndRemoveTemp(logger, out)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if _, err := out.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("rewinding the PDF: %w", err)
+	}
+	if _, err := io.Copy(dst, out); err != nil {
+		return nil, fmt.Errorf("writing the PDF: %w", err)
+	}
+	return report, nil
+}
+
+// conformTarget remediates the plain file of size bytes to the target's
+// profiles and writes the result to a new temp file in
+// [WithConvertTempDir], which it returns with the report. The caller closes
+// and removes that file, even when the error is not nil. The [Reader] and
+// [Writer] it opens are closed before it returns, so the plain file is free
+// to remove.
+func conformTarget(ctx context.Context, plain io.ReaderAt, size int64, t convertTarget, o *convertOptions) (*RemediationReport, *os.File, error) {
 	openOpts := []OpenOption{WithLimits(o.limits)}
 	if o.logger != nil {
 		openOpts = append(openOpts, WithLogger(o.logger))
 	}
-	r, err := Open(ctx, bytes.NewReader(plain.Bytes()), int64(plain.Len()), openOpts...)
+	r, err := Open(ctx, plain, size, openOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("reading the PDF back: %w", err)
+		return nil, nil, fmt.Errorf("reading the PDF back: %w", err)
 	}
-	defer r.Close() //nolint:errcheck // an in-memory reader holds nothing to release late
+	defer r.Close() //nolint:errcheck // the Reader reads the caller's file, which the caller closes
 	writeOpts := []WriteOption{WithFullRewrite(), WithVersion(string(t.version))}
 	if o.tempDir != "" {
 		writeOpts = append(writeOpts, WithTempDir(o.tempDir))
 	}
 	w := NewWriter(r, writeOpts...)
-	defer w.Close() //nolint:errcheck // Close removes temp files; a failure leaves one behind and changes no output
+	defer w.Close() //nolint:errcheck // Close removes the Writer's temp files; a failure leaves one behind and changes no output
+	var remOpts []RemediateOption
+	if o.defaultLang != "" {
+		remOpts = append(remOpts, WithLanguage(o.defaultLang))
+	}
 	var report *RemediationReport
 	if t.pdfa != "" {
-		var remOpts []RemediateOption
 		if t.pdfua != "" {
 			remOpts = append(remOpts, WithPDFUA(t.pdfua))
 		}
 		report, err = w.RemediatePDFA(ctx, t.pdfa, remOpts...)
 	} else {
-		report, err = w.RemediatePDFUA(ctx, t.pdfua)
+		report, err = w.RemediatePDFUA(ctx, t.pdfua, remOpts...)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("conforming to %s: %w", t.profiles(), err)
+		return nil, nil, fmt.Errorf("conforming to %s: %w", t.profiles(), err)
 	}
-	var out bytes.Buffer
-	if err := w.WriteTo(ctx, &out); err != nil {
-		return nil, fmt.Errorf("writing the PDF: %w", err)
+	out, err := os.CreateTemp(o.tempDir, "litho-convert-*.pdf")
+	if err != nil {
+		return nil, nil, fmt.Errorf("creating the output file: %w", err)
 	}
-	if _, err := dst.Write(out.Bytes()); err != nil {
-		return nil, fmt.Errorf("writing the PDF: %w", err)
+	if err := w.WriteTo(ctx, out); err != nil {
+		return nil, out, fmt.Errorf("writing the PDF: %w", err)
 	}
-	return report, nil
+	return report, out, nil
+}
+
+// closeAndRemoveTemp closes and removes the temp file f, logging a failure
+// at Debug: the file holds an intermediate, never the output.
+func closeAndRemoveTemp(logger *slog.Logger, f *os.File) {
+	if err := f.Close(); err != nil {
+		logger.Debug("convert: closing temp file failed", slog.String("path", f.Name()), slog.Any("err", err))
+	}
+	removeTempFile(logger, f.Name())
 }
