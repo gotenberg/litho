@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/raster"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
@@ -239,6 +240,20 @@ type effectPlan struct {
 	sil   *silhouette
 	area  compose.Rect
 	twice bool
+	// mem is the conversion's memory budget the bitmaps are charged to.
+	mem *limits.Budget
+}
+
+// grid returns the grid of an effect over box, as [newGrid] does, and
+// charges the bitmap the effect keeps at its size, four bytes a pixel
+// until the document is written; false for an area too small to draw or
+// a bitmap the budget refuses, whose refusal stops the conversion.
+func (p *effectPlan) grid(box compose.Rect) (effectGrid, bool) {
+	g, ok := newGrid(box)
+	if !ok || !p.mem.Take(int64(g.w)*int64(g.h), limits.DecodedPixelCost, "effect bitmaps") {
+		return effectGrid{}, false
+	}
+	return g, true
 }
 
 // effectsTwice reports whether Impress applies the glow and the soft edge
@@ -391,7 +406,7 @@ func (b *builder) paintEffects(s *Shape, own, text []compose.Fragment, toSlide c
 		return nil, nil
 	}
 	sw, sh := b.slideSize()
-	p := &effectPlan{s: s, sil: sil, area: compose.Rect{Width: sw, Height: sh}, twice: twice}
+	p := &effectPlan{s: s, sil: sil, area: compose.Rect{Width: sw, Height: sh}, twice: twice, mem: limits.BudgetFrom(b.ctx)}
 	var top []compose.Fragment
 	var drawn []compose.Fragment
 	if s.SoftEdge > 0 {
@@ -609,7 +624,7 @@ func (p *effectPlan) glow(ctx context.Context, outer bool) compose.Fragment {
 	if !ok {
 		return nil
 	}
-	g, ok := newGrid(box)
+	g, ok := p.grid(box)
 	if !ok {
 		return nil
 	}
@@ -656,7 +671,7 @@ func (p *effectPlan) softEdge(ctx context.Context) compose.Fragment {
 	if !ok {
 		return nil
 	}
-	g, ok := newGrid(box)
+	g, ok := p.grid(box)
 	if !ok {
 		return nil
 	}
@@ -707,7 +722,7 @@ func (p *effectPlan) shadow(ctx context.Context) compose.Fragment {
 	if !ok {
 		return nil
 	}
-	g, ok := newGrid(box)
+	g, ok := p.grid(box)
 	if !ok {
 		return nil
 	}

@@ -5,6 +5,8 @@ import (
 	"context"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 )
 
 // The caps of one CSV file.
@@ -19,10 +21,9 @@ const (
 	// the file one field; a spreadsheet cell holds a sentence or a
 	// paragraph.
 	maxFieldBytes = 1 << 16
-	// maxCells bounds the non-empty fields read: 1,000,000. Anti-DoS
-	// guard, not spec-mandated: each costs a cell of the model, some
-	// hundred bytes, and a printable CSV holds a few thousand.
-	maxCells = 1_000_000
+	// maxCells bounds the non-empty fields read: sheet.MaxCells, which
+	// every workbook reader applies.
+	maxCells = sheet.MaxCells
 )
 
 // separators are the field separators of a Calc import with the comma,

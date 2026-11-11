@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
@@ -24,9 +25,9 @@ const (
 	// costs a few hundred bytes of the model.
 	maxShapes = 200_000
 	// maxGroupDepth bounds the nesting of draw:g groups and draw:a links
-	// read: 32. Anti-DoS guard, not spec-mandated: Impress nests groups a
-	// few levels deep, and the builder walks them recursively.
-	maxGroupDepth = 32
+	// read at [limits.MaxSourceGroupDepth], which says why: the builder
+	// walks them recursively, and each becomes a group of the page.
+	maxGroupDepth = limits.MaxSourceGroupDepth
 	// maxParagraphs bounds the paragraphs one document reads: 500,000.
 	// Anti-DoS guard, not spec-mandated: a slide holds a few dozen, and
 	// notes a few more.
@@ -39,10 +40,6 @@ const (
 	// expanded: 100,000. Anti-DoS guard, not spec-mandated: a table on a
 	// slide shows a few hundred cells at most.
 	maxTableCells = 100_000
-	// maxPictures bounds the distinct pictures one document decodes:
-	// 2,000. Anti-DoS guard, not spec-mandated: an illustrated deck
-	// holds a few hundred.
-	maxPictures = 2000
 )
 
 // The slide sizes of a document that names none: Impress's default 16:9

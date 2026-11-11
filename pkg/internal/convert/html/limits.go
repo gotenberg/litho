@@ -24,24 +24,6 @@ const maxResourceBytes = 32 << 20
 // further resource is left out with a warning.
 const maxTotalResourceBytes = 256 << 20
 
-// maxImages caps the distinct pictures one conversion decodes: 4096.
-// Anti-DoS guard, not spec-mandated: each is decoded into memory. A
-// catalogue of product photographs holds a few hundred. A picture named
-// again is decoded once.
-const maxImages = 4096
-
-// maxImagePixels caps the pixels of one picture: 2^26, about 67 million, a
-// 8,192 by 8,192 image, 256 MiB once decoded to RGBA. Anti-DoS guard, not
-// spec-mandated: a small compressed file can declare a huge canvas, and the
-// header is checked before any pixel is decoded.
-const maxImagePixels = 1 << 26
-
-// maxTotalImagePixels caps the pixels one conversion decodes, every picture
-// together: 2^28, about 268 million, 1 GiB of RGBA. Anti-DoS guard, not
-// spec-mandated: it bounds the memory of many pictures each under
-// [maxImagePixels].
-const maxTotalImagePixels = 1 << 28
-
 // maxSpan caps a colspan or a col span at 1000 and a rowspan at 65534, the
 // clamps of the HTML Standard, 4.9.11 (Processing model). Spec-mandated.
 const (

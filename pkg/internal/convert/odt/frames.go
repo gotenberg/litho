@@ -21,23 +21,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/svg"
-)
-
-// The picture caps.
-const (
-	// maxImagePixels bounds one picture's pixels, 50 megapixels, and
-	// maxTotalPixels a document's, 200 megapixels. Anti-DoS guard, not
-	// spec-mandated: a decoded pixel costs four bytes, and a full-page
-	// photograph at 300 dpi holds nine megapixels.
-	maxImagePixels = 50_000_000
-	maxTotalPixels = 200_000_000
-	// maxPictures bounds the distinct pictures one document decodes:
-	// 2,000. Anti-DoS guard, not spec-mandated: an illustrated manual
-	// holds a few hundred.
-	maxPictures = 2000
 )
 
 // picResult is one decoded picture or the reason it is not drawn.
@@ -76,8 +63,8 @@ func (b *builder) picture(href string, bin *odf.Element) *layout.Picture {
 	if r, ok := b.pics[key]; ok {
 		return r.pic
 	}
-	if len(b.pics) >= maxPictures {
-		b.warn("too-many-pictures", fmt.Sprintf("pictures past %d are not drawn", maxPictures))
+	if len(b.pics) >= limits.MaxConvertPictures {
+		b.warn("too-many-pictures", fmt.Sprintf("pictures past %d are not drawn", limits.MaxConvertPictures))
 		return nil
 	}
 	pic := b.decodePicture(href, bin)
@@ -134,12 +121,11 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 		b.warn("picture-format", "a picture in an unknown format is not drawn")
 		return nil
 	}
-	px := int64(cfg.Width) * int64(cfg.Height)
-	if px > maxImagePixels || b.pixels+px > maxTotalPixels {
-		b.warn("picture-pixels", "a picture past the pixel caps is not drawn")
+	mem := limits.BudgetFrom(b.ctx)
+	if err := mem.CheckPicture(cfg.Width, cfg.Height); err != nil {
+		b.warn("picture-pixels", fmt.Sprintf("a picture is not drawn: %v", err))
 		return nil
 	}
-	b.pixels += px
 	pic := &layout.Picture{Width: float64(cfg.Width) * css.Pt, Height: float64(cfg.Height) * css.Pt}
 	if format == "jpeg" && dctModel(cfg.ColorModel) {
 		src, err := compose.JPEGImage(data)
@@ -150,8 +136,15 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 		pic.Source = src
 		return pic
 	}
+	charged, err := mem.ChargePicture(cfg.Width, cfg.Height, limits.DeepModel(cfg.ColorModel))
+	if err != nil {
+		// A refused charge also stops the conversion, which reports it.
+		b.warn("picture-pixels", fmt.Sprintf("a picture is not drawn: %v", err))
+		return nil
+	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
+		mem.Release(charged)
 		b.warn("picture-decode", fmt.Sprintf("a %s picture does not decode", format))
 		return nil
 	}

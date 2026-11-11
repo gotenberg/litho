@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	budget "github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -153,6 +154,7 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 	}
 	cols := newColumns()
 	undated := false
+	mem := budget.BudgetFrom(ctx)
 	for ri, rec := range recs {
 		if ri%4096 == 0 {
 			if err := ctx.Err(); err != nil {
@@ -174,6 +176,9 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 			row.Cells = append(row.Cells, c)
 		}
 		if len(row.Cells) > 0 {
+			if err := mem.ChargeUnits(int64(len(row.Cells)), sheet.CellCost, "cells"); err != nil {
+				return nil, nil, err
+			}
 			sh.Rows = append(sh.Rows, row)
 		}
 	}

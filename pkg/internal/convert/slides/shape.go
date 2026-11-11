@@ -24,6 +24,10 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 		b.warn(CodeTooManyShapes, fmt.Sprintf("a slide has more than %d shapes; the rest are left out", maxSlideShapes))
 		return nil
 	}
+	if !b.mem.Take(1, shapeCost, "shapes") {
+		// The refusal stops the conversion, which reports it.
+		return nil
+	}
 	sm := skewedAboutCentre(s.Box, s.Rotation, s.SkewX, s.FlipH, s.FlipV)
 	var out []compose.Fragment
 	box := s.Box

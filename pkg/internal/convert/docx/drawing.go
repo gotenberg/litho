@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
@@ -168,6 +169,10 @@ func (d *document) loadPicture(part, id string) *layout.Picture {
 	if pic, ok := d.pictures[rel.Target]; ok {
 		return pic
 	}
+	if len(d.pictures) >= limits.MaxConvertPictures {
+		d.warn("too-many-pictures", fmt.Sprintf("pictures past %d are not drawn", limits.MaxConvertPictures))
+		return nil
+	}
 	d.pictures[rel.Target] = nil
 	data, err := d.pkg.Read(rel.Target)
 	if err != nil {
@@ -182,13 +187,6 @@ func (d *document) loadPicture(part, id string) *layout.Picture {
 			d.warn("unsupported-picture", fmt.Sprintf("picture %s does not decode: %v", rel.Target, err))
 		}
 		return nil
-	}
-	if pic.Source != nil && len(pic.Source.JPEG) == 0 {
-		d.pixels += int64(pic.Source.Width) * int64(pic.Source.Height)
-		if d.pixels > maxTotalPixels {
-			d.warn("too-large", "pictures past the conversion's pixel budget are left out")
-			return nil
-		}
 	}
 	d.pictures[rel.Target] = pic
 	return pic

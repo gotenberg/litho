@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
@@ -50,10 +51,10 @@ const maxSlides = 10_000
 // slide holds a few hundred shapes.
 const maxShapes = 200_000
 
-// maxGroupDepth caps the nesting of shape groups. Anti-DoS guard, not
-// spec-mandated: the reader walks groups recursively and real groups
-// rarely pass a handful of levels.
-const maxGroupDepth = 32
+// maxGroupDepth caps the nesting of shape groups at
+// [limits.MaxSourceGroupDepth], which says why: the reader walks groups
+// recursively, and each becomes a group of the page.
+const maxGroupDepth = limits.MaxSourceGroupDepth
 
 // maxParagraphs caps the paragraphs of one text body, and maxRuns the runs
 // of one paragraph. Anti-DoS guards, not spec-mandated: a slide's text
@@ -67,10 +68,6 @@ const (
 // together. Anti-DoS guard, not spec-mandated: four million characters is
 // some two thousand slides of dense text.
 const maxRunes = 4 << 20
-
-// maxTotalPixels caps the pixels one conversion decodes, every picture
-// together: 2^28, 1 GiB of RGBA. Anti-DoS guard, not spec-mandated.
-const maxTotalPixels = 1 << 28
 
 // The default slide and notes sizes when presentation.xml sets none
 // (ECMA-376 Part 1, 19.2.1.36 sldSz and 19.2.1.22 notesSz are required;
@@ -104,9 +101,8 @@ type reader struct {
 	// default style's ID (ECMA-376 Part 1, 20.1.4.2.27 tblStyleLst).
 	tableStyles map[string]*ooxml.Element
 	defTable    string
-	// shapes, runes and pixels count against the caps.
+	// shapes and runes count against the caps.
 	shapes, runes int
-	pixels        int64
 	pictures      map[string]*layout.Picture
 	// owner maps a placeholder shape or a text style of a layout, master
 	// or notes master to its part, whose relationships its pictures name.

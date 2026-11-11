@@ -49,11 +49,6 @@ const (
 // spec-mandated: LibreOffice Calc holds at most 10,000 sheets.
 const maxSheets = 10_000
 
-// maxCells caps the cells read from a workbook, all sheets together.
-// Anti-DoS guard, not spec-mandated: a million cells print on some twenty
-// thousand pages, past any page cap a conversion runs with.
-const maxCells = 1_000_000
-
 // reader is one workbook's reading state.
 type reader struct {
 	// paperW and paperH are the paper of a sheet without a pageSetup.
@@ -85,10 +80,8 @@ type reader struct {
 	doc      *sheet.Document
 	warnings []compose.Warning
 	warned   map[string]bool
-	// pictures caches decoded pictures by part name; pixels counts the
-	// pixels decoded against [maxTotalPixels].
+	// pictures caches decoded pictures by part name.
 	pictures map[string]*layout.Picture
-	pixels   int64
 	// systemColors are the theme's scheme colours that name a system
 	// colour, by scheme name.
 	systemColors map[string]css.Color

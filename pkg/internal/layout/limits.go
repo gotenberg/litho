@@ -1,10 +1,36 @@
 package layout
 
+import "github.com/gotenberg/litho/pkg/internal/limits"
+
 // MaxBoxes bounds the boxes one [Layout] call generates; past it Layout
 // fails with [ErrTooManyBoxes]. Anti-DoS guard, not spec-mandated: a box
 // costs a few hundred bytes and some layout work, and a long book generates
 // a few hundred thousand boxes at most, one per element and text run.
 const MaxBoxes = 1 << 20
+
+// boxCost is what one generated box costs the conversion's memory budget:
+// the box and the computed style it holds, 584 and 3,480 bytes on a 64-bit
+// platform, and a share of the fragments it paints. A layout pass holds its
+// boxes until the next pass or the end of the layout, which then release
+// them.
+//
+// # Corpus evidence
+//
+//   - probe, html: at the peak of the layout of 1 MiB of paragraphs, the
+//     boxes and the styles the engine copies for them hold 11 MiB of live
+//     heap, the shaped paragraphs 64 MiB and the glyph runs 52 MiB.
+const boxCost = 4 << 10
+
+// paraRuneCost is what one character of a shaped paragraph costs the
+// conversion's memory budget: its shaped glyphs, advances, breaks and
+// levels, which the layout holds until the engine is dropped.
+//
+// # Corpus evidence
+//
+//   - probe, html: 1 MiB of paragraphs shapes into about 1 million
+//     characters whose paragraphs hold 64 MiB of live heap, 64 bytes a
+//     character.
+const paraRuneCost = 64
 
 // maxTreeDepth bounds the nesting of the boxes the engine generates: a node
 // deeper than this is left out with a warning. Recursion guard, not
@@ -64,9 +90,8 @@ const maxBackgroundTiles = 10_000
 
 // maxGroupDepth bounds the groups, for opacity and clipping, nested on a
 // page: deeper ones paint their content without the group, with a warning.
-// It stays below the composition model's bound of 24, leaving room for the
-// page group. Anti-DoS guard, not spec-mandated.
-const maxGroupDepth = 20
+// It is [limits.MaxSourceGroupDepth], which says why.
+const maxGroupDepth = limits.MaxSourceGroupDepth
 
 // maxLength bounds every length the engine reads from a style, in points:
 // a longer one acts as this one. Overflow guard, not spec-mandated: sums of

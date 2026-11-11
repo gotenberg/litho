@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
@@ -163,6 +164,10 @@ func (r *reader) loadPicture(part, id string) *layout.Picture {
 	if pic, ok := r.pictures[rel.Target]; ok {
 		return pic
 	}
+	if len(r.pictures) >= limits.MaxConvertPictures {
+		r.warn("too-many-pictures", fmt.Sprintf("pictures past %d are not drawn", limits.MaxConvertPictures))
+		return nil
+	}
 	r.pictures[rel.Target] = nil
 	data, err := r.pkg.Read(rel.Target)
 	if err != nil {
@@ -177,13 +182,6 @@ func (r *reader) loadPicture(part, id string) *layout.Picture {
 			r.warn("unsupported-picture", fmt.Sprintf("picture %s does not decode: %v", rel.Target, err))
 		}
 		return nil
-	}
-	if pic.Source != nil && len(pic.Source.JPEG) == 0 {
-		r.pixels += int64(pic.Source.Width) * int64(pic.Source.Height)
-		if r.pixels > maxTotalPixels {
-			r.warn("too-large", "pictures past the conversion's pixel budget are left out")
-			return nil
-		}
 	}
 	r.pictures[rel.Target] = pic
 	return pic

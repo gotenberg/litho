@@ -17,6 +17,7 @@ import (
 	"github.com/go-text/typesetting/shaping"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
 
@@ -63,11 +64,12 @@ const maxIndexFaces = 1 << 14
 const maxLoadedFaces = 32
 
 // maxLoadedFaceBytes bounds the table bytes of the fonts a [Fonts] keeps
-// loaded, which their parsed form roughly weighs; the least recently used
+// loaded, which their parsed form roughly weighs, at
+// [limits.MaxLoadedFontBytes]; the least recently used
 // one leaves first, but the font just loaded always stays. Memory guard, not
 // spec-mandated: a Latin face weighs well under 1 MiB and a pan-CJK face
 // about 20 MiB, so six CJK faces fit beside the Latin ones.
-const maxLoadedFaceBytes int64 = 128 << 20
+const maxLoadedFaceBytes int64 = limits.MaxLoadedFontBytes
 
 // maxComposedBytes bounds the programs [Face.Compose] keeps for the faces
 // of a [Fonts]; the least recently used one leaves first, but the program

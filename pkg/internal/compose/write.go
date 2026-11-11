@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/xmp"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // Options tunes [Write]. The zero value is ready to use.
@@ -163,6 +164,7 @@ func Write(ctx context.Context, doc *Document, dst io.Writer, opts Options) erro
 		version:  version,
 		alloc:    writer.NewObjAllocator(0),
 		logger:   logger,
+		mem:      limits.BudgetFrom(ctx),
 		fonts:    make(map[string]*fontEntry),
 		images:   make(map[*ImageSource]ast.PdfIndirectRef),
 		shadings: make(map[string]shadingRefs),
@@ -197,6 +199,9 @@ type docWriter struct {
 	version Version
 	alloc   *writer.ObjAllocator
 	logger  *slog.Logger
+	// mem is the conversion's memory budget the streams it keeps in
+	// memory, not the ones it spools, are charged to.
+	mem *limits.Budget
 
 	pagesRef ast.PdfIndirectRef
 	pageRefs []ast.PdfIndirectRef
@@ -242,6 +247,10 @@ func (w *docWriter) spill(ctx context.Context) error {
 			return fmt.Errorf("writing PDF: %w", err)
 		}
 		if w.hold < 0 || w.held+int64(len(data)) <= w.hold {
+			// A stream kept in memory is held until the file is written.
+			if err := w.mem.ChargeUnits(int64(len(data)), 1, "the output streams"); err != nil {
+				return fmt.Errorf("writing PDF: %w", err)
+			}
 			w.held += int64(len(data))
 			continue
 		}

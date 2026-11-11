@@ -23,6 +23,36 @@ const MaxPackageEntries = 1 << 16
 // a thousand times its size.
 const DefaultMaxEntryBytes = limits.DefaultMaxStreamBytes
 
+// MaxInflateRatio caps how many times its compressed size one package
+// entry may inflate to, past [inflateRatioFloor] bytes: 600. It is an
+// anti-DoS guard, not spec-mandated: APPNOTE.TXT puts no bound on a
+// deflate stream's output, which reaches about 1,032 times its input, so
+// a package of a few hundred kilobytes can inflate to gigabytes of
+// parts, honest or lying in its headers. The read stops at the bound
+// whatever the header declares.
+//
+// # Corpus evidence
+//
+//   - All Office corpora: of the 300 entries of 2,698 packages that
+//     inflate past 64 KiB, the most compressed is an embedded object at
+//     341 times (libreoffice/odp tdf169979.odp), the most compressed XML
+//     part 141 times (libreoffice/ods tdf136551.ods content.xml).
+const MaxInflateRatio = 600
+
+// inflateRatioFloor is the inflated size below which [MaxInflateRatio]
+// does not apply: 1 MiB. A small entry costs little whatever its ratio,
+// and an empty part or a run of one repeated byte compresses far past it.
+const inflateRatioFloor = 1 << 20
+
+// InflateLimit returns the most bytes an entry of compressed bytes may
+// inflate to under [MaxInflateRatio], at most limit.
+func InflateLimit(compressed uint64, limit int64) int64 {
+	if compressed > uint64(limit/MaxInflateRatio) {
+		return limit
+	}
+	return min(limit, max(int64(compressed)*MaxInflateRatio, inflateRatioFloor)) // fits int64: compressed is at most limit / MaxInflateRatio, checked above
+}
+
 // Package is a zip archive an Office document is (ECMA-376 Part 2, 8 and
 // Annex C; ODF 1.3 Part 2, 3 and Appendix C), read from memory. It is safe
 // for concurrent use: every method reads it without changing it.
@@ -107,6 +137,7 @@ func (p *Package) Read(ctx context.Context, name string, fold bool, maxBytes int
 	if maxBytes <= 0 {
 		maxBytes = DefaultMaxEntryBytes
 	}
+	maxBytes = InflateLimit(f.CompressedSize64, maxBytes)
 	if f.UncompressedSize64 > uint64(maxBytes) {
 		return nil, fmt.Errorf("%w: entry %q of %d bytes past the cap of %d", ErrInputTooLarge, name, f.UncompressedSize64, maxBytes)
 	}

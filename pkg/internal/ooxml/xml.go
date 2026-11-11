@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // MaxElements caps the XML elements parsed from one package, all parts
@@ -152,6 +153,17 @@ func attrOr(e *Element, local string) string {
 // does not parse or declares a document type, and office.ErrInputTooLarge
 // past [MaxElements] for the package or [MaxDepth].
 func (p *Package) ParseXML(ctx context.Context, name string, understood []string) (*Element, error) {
+	// The inflated part is held while it is parsed: its declared size is
+	// charged before it is inflated, and given back once the tree is built.
+	mem := limits.BudgetFrom(ctx)
+	var declared int64
+	if f := p.entry(name); f != nil {
+		declared = int64(min(f.UncompressedSize64, MaxPartBytes)) // fits int64: at most MaxPartBytes
+	}
+	if err := mem.Charge(declared, "inflated package parts"); err != nil {
+		return nil, fmt.Errorf("reading %s: %w", name, err)
+	}
+	defer mem.Release(declared)
 	data, err := p.Read(name)
 	if err != nil {
 		return nil, err
@@ -178,6 +190,7 @@ var errDocType = errors.New("a document type declaration")
 func parse(ctx context.Context, data []byte, understood []string, count *int) (*Element, error) {
 	dec := xml.NewDecoder(bytes.NewReader(data))
 	dec.Strict = true
+	mem := limits.BudgetFrom(ctx)
 	type frame struct {
 		el  *Element
 		ns  map[string]string
@@ -200,6 +213,9 @@ func parse(ctx context.Context, data []byte, understood []string, count *int) (*
 				return nil, fmt.Errorf("%w: more than %d XML elements", office.ErrInputTooLarge, MaxElements)
 			}
 			if *count%4096 == 0 {
+				if err := mem.ChargeUnits(4096, limits.XMLElementCost, "XML trees"); err != nil {
+					return nil, err
+				}
 				if err := ctx.Err(); err != nil {
 					return nil, err
 				}

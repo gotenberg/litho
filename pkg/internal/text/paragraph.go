@@ -12,6 +12,7 @@ import (
 	"github.com/go-text/typesetting/shaping"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // objectReplacement is the character an [Object] run stands for in a
@@ -158,6 +159,9 @@ type Paragraph struct {
 	// level is each character's resolved embedding level (UAX #9, X1 to
 	// I2).
 	level []int8
+	// mem is the conversion's memory budget the glyph runs of its lines
+	// are charged to, nil for none.
+	mem *limits.Budget
 }
 
 // shapedItem is one shaped piece of a paragraph, in logical order: a run of
@@ -251,7 +255,7 @@ func (f *Fonts) Shape(ctx context.Context, runs []ParagraphRun, opts ParagraphOp
 		return nil, Report{}, err
 	}
 	defer st.release()
-	p := &Paragraph{}
+	p := &Paragraph{mem: limits.BudgetFrom(ctx)}
 	var shapeText []rune
 	for i, r := range runs {
 		if r.Object != nil {
@@ -663,6 +667,9 @@ func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int)
 		pen += adv
 	}
 	if len(t.Glyphs) > 0 && t.Face != nil {
+		// A refusal sticks and cancels the conversion, which stops at its
+		// next checkpoint: a line has no error to return.
+		p.mem.Take(int64(len(t.Glyphs)), glyphCost, "glyph runs")
 		sp.Text = t
 	}
 	return pen

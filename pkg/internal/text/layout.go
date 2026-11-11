@@ -19,6 +19,7 @@ import (
 	"golang.org/x/image/math/fixed"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // MaxLayoutRunes bounds the characters of one [Fonts.Layout] call, counted
@@ -28,6 +29,18 @@ import (
 // million characters fill some 300 pages; a converter lays a document out
 // paragraph by paragraph, far below it.
 const MaxLayoutRunes = 1 << 20
+
+// glyphCost is what one glyph of a laid-out line costs the conversion's
+// memory budget: its compose.Glyph, 40 bytes on a 64-bit platform, the
+// characters of its cluster and its share of the run that holds it. The
+// lines live until the document is written, so the charge is never
+// released.
+//
+// # Corpus evidence
+//
+//   - probe, text: 1 MiB of Latin text lays out into about 1.05 million
+//     glyphs whose runs hold 45 MiB of live heap, 43 bytes a glyph.
+const glyphCost = 48
 
 // MaxLayoutRuns bounds the runs of one [Fonts.Layout] call. Anti-DoS guard,
 // not spec-mandated: every run costs a face match, and a paragraph changes
@@ -213,6 +226,7 @@ func (f *Fonts) Layout(ctx context.Context, runs []Run, width float64, opts Opti
 		return nil, Report{}, err
 	}
 	defer st.release()
+	st.mem = limits.BudgetFrom(ctx)
 	norm := normalize(runs, opts.Whitespace)
 	maxWidth := st.toFixed(width)
 	var lines []Line
@@ -246,6 +260,9 @@ type layoutState struct {
 	// that failed to load, and byFont maps a parsed font back to its face:
 	// the index's cache may evict a font this call still uses.
 	kit     *shapingKit
+	// mem is the conversion's memory budget the glyph runs are charged
+	// to, nil for none.
+	mem *limits.Budget
 	parsed  map[*Face]*font.Font
 	byFont  map[*font.Font]*Face
 	cache   map[resolveKey]*Face
@@ -744,6 +761,9 @@ func (st *layoutState) line(runs shaping.Line, para []rune, styleOf []int, dir d
 		fc := st.byFont[out.Face.Font]
 		cf, err := fc.Compose()
 		if err != nil {
+			return Line{}, fmt.Errorf("laying out text: %w", err)
+		}
+		if err := st.mem.ChargeUnits(int64(len(out.Glyphs)), glyphCost, "glyph runs"); err != nil {
 			return Line{}, fmt.Errorf("laying out text: %w", err)
 		}
 		ss := st.styles[styleOf[out.Runes.Offset]]

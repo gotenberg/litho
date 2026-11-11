@@ -1,11 +1,14 @@
 package compose
 
-// maxPages caps the pages of one document. Anti-DoS guard, not
-// spec-mandated: ISO 32000-1 sets no page count. A 2000-page report sits
-// fifty times under it, and every page costs a page object, a content stream
-// and a /Kids entry, so the cap bounds the objects a model can make Write
-// allocate before any content.
-const maxPages = 100_000
+import "github.com/gotenberg/litho/pkg/internal/limits"
+
+// maxPages caps the pages of one document at the ceiling of
+// Limits.MaxConvertPages, [limits.MaxConvertPagesCeiling]: a converter holds
+// its pages to the caller's budget, and this bounds what any model can make
+// Write allocate before any content. Anti-DoS guard, not spec-mandated: ISO
+// 32000-1 sets no page count, and every page costs a page object, a content
+// stream and a /Kids entry.
+const maxPages = limits.MaxConvertPagesCeiling
 
 // maxFragmentsPerPage caps the fragments of one page, nested group content
 // and links included. Anti-DoS guard, not spec-mandated. A dense page set as
@@ -28,12 +31,10 @@ const maxOpsPerPath = 1_000_000
 // hold two to six entries.
 const maxDashEntries = 1024
 
-// maxGroupDepth caps the nesting of [Group] fragments. Each group writes one
-// q/Q pair and an image placement one more, and ISO 32000-1, Annex C, Table
-// C.1 (and ISO 19005-2, 6.1.13, Table 1) bound q nesting at 28: 24 levels of
-// groups plus the image placement keep the output under it. It also bounds
-// the recursion that walks the groups. Real layouts nest a handful of levels.
-const maxGroupDepth = 24
+// maxGroupDepth caps the nesting of [Group] fragments at
+// [limits.MaxGroupDepth], which says why. Real layouts nest a handful of
+// levels.
+const maxGroupDepth = limits.MaxGroupDepth
 
 // maxOutlineEntries caps the entries of the outline, at every level.
 // Anti-DoS guard, not spec-mandated. A 2000-page report with a heading per
@@ -51,12 +52,13 @@ const MaxStructElems = 1_000_000
 // documents nest under twenty levels.
 const maxTreeDepth = 256
 
-// maxImagePixels caps the pixels of one image, width times height. Anti-DoS
-// guard, not spec-mandated: [EncodeImage] reads a decoded picture of up to 4
-// bytes a pixel and [ImageSource.Decode] makes one, so the cap bounds that
-// picture to 256 MiB. 8192 by 8192 pixels, a 27-inch print at 300 dpi,
-// fits.
-const maxImagePixels = 1 << 26
+// maxImagePixels caps the pixels of one image, width times height, at the
+// ceiling of Limits.MaxImagePixels, [limits.MaxImagePixelsCeiling]: a
+// converter holds each picture to the caller's budget, and this bounds what
+// any model hands Write. Anti-DoS guard, not spec-mandated: [EncodeImage]
+// reads a decoded picture of up to 4 bytes a pixel and [ImageSource.Decode]
+// makes one.
+const maxImagePixels = limits.MaxImagePixelsCeiling
 
 // maxPageSize is the largest page side in points: ISO 32000-1, Annex C.2,
 // Table C.1 bounds the page size at 14400 units (200 inches) in either

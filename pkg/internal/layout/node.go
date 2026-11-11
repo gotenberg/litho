@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -310,8 +311,9 @@ type Result struct {
 	Extents map[string]compose.Rect
 }
 
-// DefaultMaxPages is the page cap when Options.MaxPages is zero.
-const DefaultMaxPages = 10_000
+// DefaultMaxPages is the page cap when Options.MaxPages is zero: the
+// default of Limits.MaxConvertPages.
+const DefaultMaxPages = limits.DefaultMaxConvertPages
 
 // Layout lays root out on pages. The output depends on root, fonts' index
 // and opts alone. It returns ctx's error when ctx ends first.

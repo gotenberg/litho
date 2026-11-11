@@ -68,6 +68,7 @@ func (e *engine) newBox(n *Node, st *css.Style, kind boxKind, ctx genCtx) *box {
 	if e.boxes > MaxBoxes {
 		e.fail(fmt.Errorf("%w: more than %d", ErrTooManyBoxes, MaxBoxes))
 	}
+	e.charge(boxCost, "boxes")
 	b := &box{node: n, st: st, kind: kind, first: true, last: true, lang: ctx.lang, elem: ctx.elem, link: ctx.link, depth: ctx.depth}
 	b.hidden = st.Visibility != css.Visible
 	if n != nil && n.ID != "" {

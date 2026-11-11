@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // The namespaces of ODF 1.3, Part 3, 1.5 (Table 1), and the LibreOffice
@@ -173,6 +174,7 @@ func ParseXML(ctx context.Context, data []byte) (*Element, error) {
 	d := xml.NewDecoder(bytes.NewReader(data))
 	d.Strict = true
 	d.CharsetReader = charsetReader
+	mem := limits.BudgetFrom(ctx)
 	var (
 		stack []*Element
 		root  *Element
@@ -191,6 +193,9 @@ func ParseXML(ctx context.Context, data []byte) (*Element, error) {
 			return nil, fmt.Errorf("%w: more than %d XML nodes", office.ErrInputTooLarge, MaxElements)
 		}
 		if count%4096 == 0 {
+			if err := mem.ChargeUnits(4096, limits.XMLElementCost, "XML trees"); err != nil {
+				return nil, err
+			}
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}

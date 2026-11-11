@@ -505,6 +505,7 @@ func (e *engine) shapePara(b *box, p *ifcPara) {
 	if b.st.UnicodeBidi == css.Plaintext {
 		opts.Direction = text.DirectionAuto
 	}
+	e.charge(int64(p.n)*paraRuneCost, "shaped paragraphs")
 	para, rep, err := e.fonts.Shape(e.ctx, p.runs, opts)
 	if err != nil {
 		e.fail(fmt.Errorf("shaping text: %w", err))

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -106,6 +107,30 @@ type engine struct {
 	// chains maps the links of the chains of linked boxes to what each
 	// paints (chain.go).
 	chains map[*Node]*chainLink
+	// mem is the conversion's memory budget, nil for none; held is what
+	// this engine charged it, released when the layout drops the engine.
+	mem  *limits.Budget
+	held int64
+}
+
+// charge charges the conversion's budget n bytes for what, failing the
+// layout when the budget refuses them.
+func (e *engine) charge(n int64, what string) {
+	if err := e.mem.Charge(n, what); err != nil {
+		e.fail(fmt.Errorf("laying out: %w", err))
+		return
+	}
+	e.held += n
+}
+
+// release gives back what the engine charged: its boxes are garbage once
+// the layout drops it.
+func (e *engine) release() {
+	if e == nil {
+		return
+	}
+	e.mem.Release(e.held)
+	e.held = 0
 }
 
 // fail records the first error; the layout unwinds once it is set.

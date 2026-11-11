@@ -552,7 +552,7 @@ func (r *reader) cacheSheet(doc *sheet.Document, pp *pendingPivot) (int, sheet.R
 	}
 	sh.Rows = append(sh.Rows, head)
 	for _, rec := range root.Kids() {
-		if !rec.Is(nsMain, "r") || len(sh.Rows) > maxPivotRecords || r.cells > maxCells {
+		if !rec.Is(nsMain, "r") || len(sh.Rows) > maxPivotRecords || r.cells > sheet.MaxCells {
 			continue
 		}
 		row := sheet.Row{Index: len(sh.Rows)}

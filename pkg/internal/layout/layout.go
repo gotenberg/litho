@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -47,9 +48,12 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	var e *engine
 	var rb *box
 	var seeds []wrapSeed
+	defer func() { e.release() }()
 	for pass := range maxWrapPasses {
 		var err error
+		prev := e
 		e, rb, err = layoutFlow(ctx, root, fonts, opts, first, seeds, chains)
+		prev.release()
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +104,7 @@ func newEngine(ctx context.Context, fonts *text.Fonts, opts Options, w, h float6
 		maxPages = DefaultMaxPages
 	}
 	return &engine{
-		ctx: ctx, fonts: fonts, opts: opts, pageW: w, pageH: h, maxPages: maxPages,
+		ctx: ctx, fonts: fonts, opts: opts, pageW: w, pageH: h, maxPages: maxPages, mem: limits.BudgetFrom(ctx),
 		warned: map[string]bool{}, images: map[string]*Picture{},
 		metrics: map[*css.Style]text.Metrics{}, spaces: map[*css.Style]float64{}, missing: map[rune]bool{},
 		root: &compose.StructElem{Role: "Document", Lang: opts.Lang},

@@ -386,7 +386,7 @@ func TestRead_Caps(t *testing.T) {
 	for _, r := range doc.Sheets[0].Rows {
 		n += len(r.Cells)
 	}
-	if n > maxCells || !hasWarning(w, "too-many-cells") {
+	if n > sheet.MaxCells || !hasWarning(w, "too-many-cells") {
 		t.Errorf("cells = %d, warnings %+v", n, w)
 	}
 }

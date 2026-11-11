@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -17,14 +18,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/svg"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
-
-// MaxPicturePixels caps the pixels of one raster picture: 2^26, an 8,192
-// by 8,192 image, 256 MiB decoded to RGBA. Anti-DoS guard, not
-// spec-mandated: the header is checked before any pixel is decoded.
-const MaxPicturePixels = 1 << 26
 
 // minPictureSide is the smallest side a picture takes, in points: the
 // layout refuses a picture without a positive size.
@@ -64,7 +61,9 @@ func PictureFormat(data []byte) string {
 // raster pictures are encoded as they decode and keep no decoded pixels,
 // SVG draws as vectors with fonts. EMF and WMF fail with
 // [ErrUnsupportedPicture], as does any other format; a raster picture past
-// [MaxPicturePixels] fails too.
+// the conversion's Limits.MaxImagePixels fails too. The decoded pixels are
+// charged to the conversion's memory budget before they are decoded, and
+// a refused charge fails with the budget's error.
 func DecodePicture(ctx context.Context, data []byte, fonts *text.Fonts) (*layout.Picture, error) {
 	switch f := PictureFormat(data); f {
 	case "svg":
@@ -83,8 +82,13 @@ func DecodePicture(ctx context.Context, data []byte, fonts *text.Fonts) (*layout
 	if err != nil {
 		return nil, fmt.Errorf("decoding the picture header: %w", err)
 	}
-	if cfg.Width <= 0 || cfg.Height <= 0 || int64(cfg.Width)*int64(cfg.Height) > MaxPicturePixels {
-		return nil, fmt.Errorf("%w: a %d by %d picture", ErrUnsupportedPicture, cfg.Width, cfg.Height)
+	mem := limits.BudgetFrom(ctx)
+	err = mem.CheckPicture(cfg.Width, cfg.Height)
+	switch {
+	case errors.Is(err, limits.ErrPictureTooLarge):
+		return nil, fmt.Errorf("%w: %w", ErrUnsupportedPicture, err)
+	case err != nil:
+		return nil, err
 	}
 	pic := &layout.Picture{Width: float64(cfg.Width) * css.Pt, Height: float64(cfg.Height) * css.Pt}
 	if format == "jpeg" && (cfg.ColorModel == color.GrayModel || cfg.ColorModel == color.YCbCrModel || cfg.ColorModel == color.CMYKModel) {
@@ -95,8 +99,13 @@ func DecodePicture(ctx context.Context, data []byte, fonts *text.Fonts) (*layout
 		pic.Source = src
 		return pic, nil
 	}
+	charged, err := mem.ChargePicture(cfg.Width, cfg.Height, limits.DeepModel(cfg.ColorModel))
+	if err != nil {
+		return nil, err
+	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
+		mem.Release(charged)
 		return nil, fmt.Errorf("decoding the %s picture: %w", format, err)
 	}
 	src, err := compose.EncodeImage(ctx, img)

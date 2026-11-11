@@ -60,10 +60,8 @@ type document struct {
 	headings []heading
 	// nextID numbers the anchors the converter makes up.
 	nextID int
-	// pictures caches decoded pictures by part name; pixels counts the
-	// pixels decoded against [maxTotalPixels].
+	// pictures caches decoded pictures by part name.
 	pictures map[string]*layout.Picture
-	pixels   int64
 	// lineFactors caches the ascent, descent and line gap of a font, as
 	// factors of its size.
 	lineFactors map[string][3]float64
@@ -97,10 +95,6 @@ type heading struct {
 	node  *layout.Node
 	level int
 }
-
-// maxTotalPixels caps the pixels one conversion decodes, every picture
-// together: 2^28, 1 GiB of RGBA. Anti-DoS guard, not spec-mandated.
-const maxTotalPixels = 1 << 28
 
 // maxNodes caps the layout nodes the converter builds. Anti-DoS guard, not
 // spec-mandated: it bounds the tree a document of [ooxml.MaxElements]

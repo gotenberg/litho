@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 func TestPrepare_MapsElementsToRoles(t *testing.T) {
@@ -434,23 +435,25 @@ func TestResources_CapImages(t *testing.T) {
 	}
 
 	files := fstest.MapFS{}
-	for i := range 5 {
+	for i := range 2 {
 		files[fmt.Sprintf("%d.png", i)] = &fstest.MapFile{Data: pngHeader(t, 1<<13, 1<<13)}
 	}
+	// A picture passes the pixel cap, then fails to decode its missing
+	// pixels and gives its charge back; one the memory budget cannot hold
+	// is refused before it is decoded.
 	r = newResources(files)
-	for i := range 4 {
-		// Each passes the caps, then fails to decode its missing pixels.
-		if _, err := r.picture(ctx, fmt.Sprintf("%s%d.png", rootPrefix, i)); err == nil || errors.Is(err, errPixelBudget) {
-			t.Errorf("picture %d: %v", i, err)
-		}
+	if _, err := r.picture(ctx, rootPrefix+"0.png"); err == nil || errors.Is(err, limits.ErrMemoryBudget) {
+		t.Errorf("picture under the budget: %v", err)
 	}
-	if _, err := r.picture(ctx, rootPrefix+"4.png"); !errors.Is(err, errPixelBudget) {
-		t.Errorf("past the pixel budget: %v", err)
+	mctx, mem, done := limits.WithBudget(ctx, limits.Limits{MaxConvertMemoryBytes: 1 << 27})
+	defer done()
+	if _, err := r.picture(mctx, rootPrefix+"1.png"); err == nil || !errors.Is(mem.Err(), limits.ErrMemoryBudget) || mem.Held() != 0 {
+		t.Errorf("past the memory budget: %v, budget %v, held %d", err, mem.Err(), mem.Held())
 	}
 
 	r = newResources(nil)
 	data := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngBytes(t, 1, 1))
-	for i := range maxImages {
+	for i := range limits.MaxConvertPictures {
 		if _, err := r.picture(ctx, fmt.Sprintf("%s#%d", data, i)); err != nil {
 			t.Fatalf("image %d: %v", i, err)
 		}

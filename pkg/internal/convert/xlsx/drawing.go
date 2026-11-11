@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
@@ -31,17 +32,13 @@ const (
 // nsC is the DrawingML chart namespace (ECMA-376 Part 1, 21.2).
 const nsC = "http://schemas.openxmlformats.org/drawingml/2006/chart"
 
-// maxTotalPixels caps the pixels one conversion decodes, every picture
-// together: 2^28, 1 GiB of RGBA. Anti-DoS guard, not spec-mandated.
-const maxTotalPixels = 1 << 28
-
 // maxDrawings caps the drawings of one sheet. Anti-DoS guard, not
 // spec-mandated: a dashboard holds a few dozen pictures and charts.
 const maxDrawings = 4096
 
-// maxGroupDepth caps the nesting of shape groups walked. Anti-DoS guard,
-// not spec-mandated: groups in groups rarely pass a few levels.
-const maxGroupDepth = 16
+// maxGroupDepth caps the nesting of shape groups walked at
+// [limits.MaxSourceGroupDepth], which says why.
+const maxGroupDepth = limits.MaxSourceGroupDepth
 
 // chartOf reads the chart part named part through the DrawingML chart
 // reader, nil with a warning when it does not parse. The chart's warnings
@@ -487,6 +484,10 @@ func (r *reader) loadPicture(part, id string) *layout.Picture {
 	if pic, ok := r.pictures[rel.Target]; ok {
 		return pic
 	}
+	if len(r.pictures) >= limits.MaxConvertPictures {
+		r.warn("too-many-pictures", fmt.Sprintf("pictures past %d are not drawn", limits.MaxConvertPictures))
+		return nil
+	}
 	r.pictures[rel.Target] = nil
 	data, err := r.pkg.Read(rel.Target)
 	if err != nil {
@@ -501,13 +502,6 @@ func (r *reader) loadPicture(part, id string) *layout.Picture {
 			r.warn("unsupported-picture", fmt.Sprintf("picture %s does not decode: %v", rel.Target, err))
 		}
 		return nil
-	}
-	if pic.Source != nil && len(pic.Source.JPEG) == 0 {
-		r.pixels += int64(pic.Source.Width) * int64(pic.Source.Height)
-		if r.pixels > maxTotalPixels {
-			r.warn("too-large", "pictures past the conversion's pixel budget are left out")
-			return nil
-		}
 	}
 	r.pictures[rel.Target] = pic
 	return pic

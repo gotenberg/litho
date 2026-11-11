@@ -155,15 +155,16 @@ func (p *Package) Read(name string) ([]byte, error) {
 	if f == nil {
 		return nil, fmt.Errorf("%w: %s", ErrNoPart, name)
 	}
-	if f.UncompressedSize64 > MaxPartBytes {
-		return nil, fmt.Errorf("%w: part %s is larger than %d bytes", office.ErrInputTooLarge, name, MaxPartBytes)
+	partCap := office.InflateLimit(f.CompressedSize64, MaxPartBytes)
+	if f.UncompressedSize64 > uint64(partCap) {
+		return nil, fmt.Errorf("%w: part %s is larger than %d bytes", office.ErrInputTooLarge, name, partCap)
 	}
 	rc, err := f.Open()
 	if err != nil {
 		return nil, fmt.Errorf("%w: opening part %s: %w", office.ErrMalformed, name, err)
 	}
 	defer rc.Close() //nolint:errcheck // a read-only zip entry has nothing to flush
-	limit := min(int64(MaxPartBytes), MaxPackageBytes-p.read)
+	limit := min(partCap, MaxPackageBytes-p.read)
 	data, err := io.ReadAll(io.LimitReader(rc, limit+1))
 	p.read += int64(len(data))
 	if err != nil {

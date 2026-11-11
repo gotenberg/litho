@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
@@ -24,12 +25,6 @@ const (
 	// past them is not read, as Calc drops it on import.
 	maxColumns = 16384
 	maxRows    = 1 << 20
-	// maxCells bounds the cells with a value or a visible style one
-	// document expands: 1,000,000. Anti-DoS guard, not spec-mandated: a
-	// repeated row or cell is one element of the file and can ask for a
-	// million copies; each cell of the model costs some hundred bytes, and
-	// a printed report holds a few thousand.
-	maxCells = 1_000_000
 	// maxRowEntries bounds the rows the model lists for one document,
 	// with or without cells: 1,048,576. Anti-DoS guard, not spec-mandated:
 	// a row without cells is listed for its height alone, and a sheet's
@@ -516,8 +511,8 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 		return
 	}
 	for i := range n {
-		if r.cells+len(cells) > maxCells || r.rows >= maxRowEntries {
-			r.warn("too-many-cells", fmt.Sprintf("cells past %d are not read", maxCells))
+		if r.cells+len(cells) > sheet.MaxCells || r.rows >= maxRowEntries {
+			r.warn("too-many-cells", fmt.Sprintf("cells past %d are not read", sheet.MaxCells))
 			break
 		}
 		idx := start + i
@@ -527,6 +522,11 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 		row.Cells = cells
 		if i > 0 {
 			row.Cells = append([]sheet.Cell(nil), cells...)
+		}
+		if err := limits.BudgetFrom(r.ctx).ChargeUnits(int64(len(cells)), sheet.CellCost, "cells"); err != nil {
+			// The refusal sticks and cancels the conversion, which stops at
+			// the reader's next context check and reports it.
+			break
 		}
 		r.cells += len(cells)
 		r.rows++
@@ -628,7 +628,7 @@ func (r *reader) rowCells(ts *tableState, el *odf.Element) ([]sheet.Cell, []shee
 			}
 		}
 		for i := range n {
-			if ok && len(cells) < maxCells {
+			if ok && len(cells) < sheet.MaxCells {
 				cell.Column = col + i
 				cells = append(cells, cell)
 			}

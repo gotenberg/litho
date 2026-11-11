@@ -25,6 +25,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // rootPrefix is the path every URL of the document resolves under: the
@@ -46,9 +47,8 @@ var (
 	errBadDataURL   = errors.New("malformed data: URL")
 	errTooLarge     = fmt.Errorf("the resource is larger than %d bytes", maxResourceBytes)
 	errBudget       = fmt.Errorf("the conversion already read %d bytes of resources", maxTotalResourceBytes)
-	errTooManyImgs  = fmt.Errorf("the document holds more than %d distinct images", maxImages)
-	errTooManyPx    = fmt.Errorf("the image holds more than %d pixels", maxImagePixels)
-	errPixelBudget  = fmt.Errorf("the conversion already decoded %d pixels", maxTotalImagePixels)
+	errTooManyImgs  = fmt.Errorf("the document holds more than %d distinct images", limits.MaxConvertPictures)
+	errTooManyPx    = errors.New("the image holds too many pixels")
 	errEmptyPicture = errors.New("the image has no pixels")
 )
 
@@ -61,7 +61,7 @@ func warningCode(err error) string {
 	case errors.Is(err, errNoResources), errors.Is(err, errAbsoluteURL), errors.Is(err, errOutsideRoot):
 		return CodeResourceRefused
 	case errors.Is(err, errTooLarge), errors.Is(err, errBudget), errors.Is(err, errTooManyImgs),
-		errors.Is(err, errTooManyPx), errors.Is(err, errPixelBudget):
+		errors.Is(err, errTooManyPx):
 		return CodeResourceLimit
 	default:
 		return CodeResourceFailed
@@ -100,7 +100,6 @@ type resources struct {
 
 	mu       sync.Mutex
 	read     int64
-	pixels   int64
 	pictures map[string]pictureResult
 	// svg is what the SVG pictures share.
 	svg svgState
@@ -214,7 +213,7 @@ func (r *resources) picture(ctx context.Context, u string) (*layout.Picture, err
 		r.mu.Unlock()
 		return res.pic, res.err
 	}
-	full := len(r.pictures) >= maxImages
+	full := len(r.pictures) >= limits.MaxConvertPictures
 	r.mu.Unlock()
 	if full {
 		return nil, errTooManyImgs
@@ -251,18 +250,13 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 	if cfg.Width <= 0 || cfg.Height <= 0 {
 		return nil, errEmptyPicture
 	}
-	px := int64(cfg.Width) * int64(cfg.Height)
-	if px > maxImagePixels {
-		return nil, errTooManyPx
-	}
-	r.mu.Lock()
-	over := r.pixels+px > maxTotalImagePixels
-	if !over {
-		r.pixels += px
-	}
-	r.mu.Unlock()
-	if over {
-		return nil, errPixelBudget
+	mem := limits.BudgetFrom(ctx)
+	err = mem.CheckPicture(cfg.Width, cfg.Height)
+	switch {
+	case errors.Is(err, limits.ErrPictureTooLarge):
+		return nil, fmt.Errorf("%w: %w", errTooManyPx, err)
+	case err != nil:
+		return nil, err
 	}
 	pic := &layout.Picture{Width: float64(cfg.Width) * css.Pt, Height: float64(cfg.Height) * css.Pt}
 	orient := 1
@@ -281,8 +275,13 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 		pic.Source = src
 		return pic, nil
 	}
+	charged, err := mem.ChargePicture(cfg.Width, cfg.Height, limits.DeepModel(cfg.ColorModel))
+	if err != nil {
+		return nil, err
+	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
+		mem.Release(charged)
 		return nil, fmt.Errorf("decoding the %s image: %w", format, err)
 	}
 	src, err := compose.EncodeImage(ctx, orientImage(img, orient))

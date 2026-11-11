@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
@@ -25,14 +26,21 @@ const (
 // few hundred shapes.
 const maxSlideShapes = 1 << 14
 
-// maxGroupDepth caps the nesting of groups followed. Anti-DoS guard, not
-// spec-mandated: real decks nest groups a few levels deep, and every
-// level costs a stack frame and a transform.
-const maxGroupDepth = 32
+// shapeCost is what one shape drawn costs the conversion's memory budget:
+// its fragments, paths and structure element, which live until the
+// document is written. The shapes of the model are read whole first and
+// cost little beside what a shape paints.
+const shapeCost = 2 << 10
+
+// maxGroupDepth caps the nesting of groups followed at
+// [limits.MaxSourceGroupDepth], which says why: every level costs a stack
+// frame, a transform and a group of the page.
+const maxGroupDepth = limits.MaxSourceGroupDepth
 
 // builder holds what one conversion shares.
 type builder struct {
 	ctx      context.Context
+	mem      *limits.Budget
 	doc      *Document
 	fonts    *text.Fonts
 	opts     office.Options
@@ -167,7 +175,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	if fonts.Len() == 0 {
 		return nil, fmt.Errorf("laying the presentation out: %w", text.ErrNoFonts)
 	}
-	b := &builder{ctx: ctx, doc: doc, fonts: fonts, opts: opts, lang: cmp.Or(doc.Meta.Lang, opts.DefaultLang), warned: map[string]bool{}, metrics: map[string]text.Metrics{}}
+	b := &builder{ctx: ctx, mem: limits.BudgetFrom(ctx), doc: doc, fonts: fonts, opts: opts, lang: cmp.Or(doc.Meta.Lang, opts.DefaultLang), warned: map[string]bool{}, metrics: map[string]text.Metrics{}}
 	var shown []*Slide
 	for _, s := range doc.Slides {
 		if s != nil && (!s.Hidden || opts.HiddenSlides) {

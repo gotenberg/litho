@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
@@ -283,8 +284,11 @@ func (w *sheetReader) sheetData(data *ooxml.Element) error {
 				continue
 			}
 			r.cells++
-			if r.cells > maxCells {
-				return fmt.Errorf("%w: more than %d cells", office.ErrInputTooLarge, maxCells)
+			if r.cells > sheet.MaxCells {
+				return fmt.Errorf("%w: more than %d cells", office.ErrInputTooLarge, sheet.MaxCells)
+			}
+			if err := limits.BudgetFrom(r.ctx).ChargeUnits(1, sheet.CellCost, "cells"); err != nil {
+				return err
 			}
 			row.Cells = append(row.Cells, cell)
 		}

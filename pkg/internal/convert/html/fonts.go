@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typography/woff"
 )
@@ -32,11 +33,13 @@ const maxFontFaces = 256
 const maxFontFaceBytes = woff.MaxSfntBytes
 
 // maxTotalFontBytes caps the font programs one conversion loads, after
-// WOFF decoding: 128 MiB. Anti-DoS guard, not spec-mandated: a file the
-// resource caps admit can decompress to a much larger program, and the
-// faces stay in memory for the whole conversion; four pan-CJK families fit
-// below it. Faces past it are skipped with a warning.
-const maxTotalFontBytes = 128 << 20
+// WOFF decoding: [limits.MaxLoadedFontBytes], the bound the font index
+// applies to the faces it keeps loaded. Anti-DoS guard, not spec-mandated:
+// a file the resource caps admit can decompress to a much larger program,
+// and the faces stay in memory for the whole conversion. Faces past it are
+// skipped with a warning. Each program is also charged to the
+// conversion's memory budget while the conversion lives.
+const maxTotalFontBytes = limits.MaxLoadedFontBytes
 
 // Reasons a font source is not used. They end up in warning messages.
 var (
@@ -177,10 +180,15 @@ func (l *fontLoader) program(ctx context.Context, u string) ([]byte, error) {
 	}
 	program, err := l.decode(ctx, u)
 	if err == nil {
-		if l.total+int64(len(program)) > maxTotalFontBytes {
+		switch {
+		case l.total+int64(len(program)) > maxTotalFontBytes:
 			program, err = nil, errFontBudget
-		} else {
-			l.total += int64(len(program))
+		default:
+			if err = limits.BudgetFrom(ctx).ChargeUnits(int64(len(program)), 1, "font programs"); err != nil {
+				program = nil
+			} else {
+				l.total += int64(len(program))
+			}
 		}
 	}
 	l.programs[u] = programResult{program: program, err: err}

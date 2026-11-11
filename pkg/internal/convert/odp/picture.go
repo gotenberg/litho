@@ -19,19 +19,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/svg"
-)
-
-// The picture caps.
-const (
-	// maxImagePixels bounds one picture's pixels, 50 megapixels, and
-	// maxTotalPixels a document's, 200 megapixels. Anti-DoS guard, not
-	// spec-mandated: a decoded pixel costs four bytes, and a full-slide
-	// photograph at 300 dpi holds eight megapixels.
-	maxImagePixels = 50_000_000
-	maxTotalPixels = 200_000_000
 )
 
 // picResult is one decoded picture, nil when it is not drawn.
@@ -51,8 +42,8 @@ func (r *reader) picture(el *odf.Element) *layout.Picture {
 	if res, ok := r.pics[key]; ok {
 		return res.pic
 	}
-	if len(r.pics) >= maxPictures {
-		r.warn("too-many-pictures", fmt.Sprintf("pictures past %d are not drawn", maxPictures))
+	if len(r.pics) >= limits.MaxConvertPictures {
+		r.warn("too-many-pictures", fmt.Sprintf("pictures past %d are not drawn", limits.MaxConvertPictures))
 		return nil
 	}
 	res := &picResult{pic: r.decodePicture(el)}
@@ -101,12 +92,11 @@ func (r *reader) decodePicture(el *odf.Element) *layout.Picture {
 		r.warn("picture-format", "a picture in an unknown format is not drawn")
 		return nil
 	}
-	px := int64(cfg.Width) * int64(cfg.Height)
-	if px > maxImagePixels || r.pixels+px > maxTotalPixels {
-		r.warn("picture-pixels", "a picture past the pixel caps is not drawn")
+	mem := limits.BudgetFrom(r.ctx)
+	if err := mem.CheckPicture(cfg.Width, cfg.Height); err != nil {
+		r.warn("picture-pixels", fmt.Sprintf("a picture is not drawn: %v", err))
 		return nil
 	}
-	r.pixels += px
 	pic := &layout.Picture{Width: float64(cfg.Width) * css.Pt, Height: float64(cfg.Height) * css.Pt}
 	if dx, dy, ok := density(data); ok {
 		pic.Width, pic.Height = float64(cfg.Width)*72/dx, float64(cfg.Height)*72/dy
@@ -120,8 +110,15 @@ func (r *reader) decodePicture(el *odf.Element) *layout.Picture {
 		pic.Source = src
 		return pic
 	}
+	charged, err := mem.ChargePicture(cfg.Width, cfg.Height, limits.DeepModel(cfg.ColorModel))
+	if err != nil {
+		// A refused charge also stops the conversion, which reports it.
+		r.warn("picture-pixels", fmt.Sprintf("a picture is not drawn: %v", err))
+		return nil
+	}
 	im, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
+		mem.Release(charged)
 		r.warn("picture-decode", fmt.Sprintf("a %s picture does not decode", format))
 		return nil
 	}
