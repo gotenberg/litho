@@ -17,7 +17,7 @@ import (
 )
 
 // convertUsage is the synopsis litho convert prints on a missing argument.
-const convertUsage = "Usage: litho convert [--from text|html|markdown|docx|odt|xlsx|ods|csv|pptx|odp] [--paper A4|Letter|WxH] [--landscape] [--margin PT | --margin T,R,B,L] " +
+const convertUsage = "Usage: litho convert [--from text|html|markdown|docx|odt|xlsx|ods|csv|pptx|odp] [--paper A4|Letter|WxH] [--default-paper A4|Letter|WxH] [--landscape] [--margin PT | --margin T,R,B,L] " +
 	"[--font FAMILY] [--font-size PT] [--media print|screen] [--media-feature NAME=VALUE]... [--resources DIR] [--base-url URL] " +
 	"[--prefer-css-page-size] [--scale N] [--single-page] [--pages RANGES] [--background=false] [--outline=false] " +
 	"[--header FILE] [--footer FILE] [--date RFC3339|now] [--password PASSWORD] [--hidden-slides] [--notes-pages] [--font-dir DIR]... [-f json] -o out.pdf <file|http(s) URL>"
@@ -148,7 +148,12 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	output := fs.String("o", "", "Output file (required), - for stdout")
 	format := fs.String("f", "text", "Report format: text (warnings on stderr) or json (the report on stdout)")
 	var paper pageSizeFlag
-	fs.Var(&paper, "paper", "Page size: letter, legal, a3, a4, a5, or WIDTHxHEIGHT in points (default a4)")
+	fs.Var(&paper, "paper", "Page size of every page, in every format: letter, legal, a3, a4, a5, or WIDTHxHEIGHT in points. "+
+		"It replaces the size and orientation of a text document's sections and a spreadsheet's sheets; a slide is scaled to fit it; "+
+		"an HTML file's @page size wins over it with --prefer-css-page-size. Without it, the size the document names, else --default-paper")
+	var defaultPaper pageSizeFlag
+	fs.Var(&defaultPaper, "default-paper", "Page size of a document that names none: a text or Markdown file, an HTML file without an @page size, "+
+		"a DOCX or ODT section and a sheet or CSV file without a page setup: letter, legal, a3, a4, a5, or WIDTHxHEIGHT in points (default a4)")
 	var margin marginFlag
 	fs.Var(&margin, "margin", "Margins in points: one for every side, or top,right,bottom,left (default 56.693, 2 cm)")
 	var fonts stringsFlag
@@ -158,7 +163,8 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	resources := fs.String("resources", "", "Directory an HTML file's relative URLs (stylesheets, images) are read from (default: the input file's directory; none for standard input)")
 	var fontDirs stringsFlag
 	fs.Var(&fontDirs, "font-dir", "Directory of font files, searched recursively; repeatable. Without it, the system font directories")
-	landscape := fs.Bool("landscape", false, "Swap the paper's width and height of an HTML file")
+	landscape := fs.Bool("landscape", false, "Turn every portrait page to landscape, in every format: text, HTML and Markdown (where an @page size that applies decides), "+
+		"DOCX and ODT sections, XLSX, ODS and CSV sheets, PPTX and ODP slides")
 	preferCSS := fs.Bool("prefer-css-page-size", false, "Let an @page size of an HTML file set the page size; without it the paper is the page and such a document is scaled to fit it")
 	scale := fs.Float64("scale", 1, "Scale of the content of an HTML file, from 0.1 to 2; the page keeps its size")
 	hiddenSlides := fs.Bool("hidden-slides", false, "Write the slides a presentation hides from its show too")
@@ -166,15 +172,17 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	singlePage := fs.Bool("single-page", false, "Lay an HTML file out on one page as tall as its content, or each sheet of a spreadsheet on one page the size of its content")
 	pages := fs.String("pages", "", "Pages to write, as 1-3,7, even, odd or last (default all)")
 	background := fs.Bool("background", true, "Print the backgrounds of an HTML file; --background=false drops the html and body backgrounds, the canvas")
-	outlineFlag := fs.Bool("outline", true, "Make the headings of an HTML file the document outline; --outline=false leaves it out")
+	outlineFlag := fs.Bool("outline", true, "Write the document outline: the headings of an HTML or Markdown file, the outline paragraphs of a DOCX or ODT file, "+
+		"the sheets of an XLSX, ODS or CSV file, the slides of a PPTX or ODP file; --outline=false leaves it out")
 	header := fs.String("header", "", "File of the HTML fragment drawn in the top margin of every page of an HTML file (classes date, title, url, pageNumber, totalPages)")
 	footer := fs.String("footer", "", "File of the HTML fragment drawn in the bottom margin of every page of an HTML file")
-	date := fs.String("date", "", "Date the header and footer of an HTML file or a spreadsheet show, RFC 3339 or now (default none)")
+	date := fs.String("date", "", "Date the header and footer templates of an HTML or Markdown file, the headers and footers of an XLSX, ODS or CSV file "+
+		"and the date fields of a PPTX or ODP file show, RFC 3339 or now (default none)")
 	baseURL := fs.String("base-url", "", "URL of the HTML file: shown by the url class of the header and footer; for an http(s) URL, relative references resolve against it "+
 		"and the CLI fetches every http(s) resource the document names (30 s timeout a request); a service embedding litho brings its own HTTP client")
 	var mediaFeatures stringsFlag
 	fs.Var(&mediaFeatures, "media-feature", "Media feature an HTML file's @media rules see, as NAME=VALUE such as prefers-color-scheme=dark; repeatable")
-	password := fs.String("password", "", "Password of an encrypted DOCX or ODT file; --landscape, --paper, --pages and --outline apply to such a file too, over its own page setup")
+	password := fs.String("password", "", "Password of an encrypted DOCX, ODT, XLSX, ODS, PPTX or ODP file")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
@@ -240,17 +248,16 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		}
 		defer body.Close() //nolint:errcheck // read-only response body
 		src, inFormat = body, format
-		if *baseURL == "" {
+		if *baseURL == "" && (format == pdf.FormatHTML || format == pdf.FormatMarkdown) {
 			printOpts = append(printOpts, pdf.WithBaseURL(final))
 		}
 	}
 	htmlLike := inFormat == pdf.FormatHTML || inFormat == pdf.FormatMarkdown
-	officeLike := isOfficeFormat(inFormat)
 	resDir := *resources
 	if resDir == "" && input != "-" && !remote {
 		resDir = filepath.Dir(input)
 	}
-	if !htmlLike {
+	if !htmlLike && *resources == "" {
 		resDir = ""
 	}
 	if resDir != "" {
@@ -263,31 +270,33 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		}
 	}
 
-	opts := []pdf.ConvertOption{pdf.WithConvertFontDirs(fontDirs...), pdf.WithFontFamilies(fonts...), pdf.WithFontSize(*fontSize)}
-	if htmlLike {
-		opts = append(opts, pdf.WithMediaType(*media))
-		opts = append(opts, printOpts...)
-		if client != nil {
-			opts = append(opts, pdf.WithHTTPClient(client))
-		}
-		if resDir != "" {
-			// An os.Root refuses a path or a symbolic link that leaves
-			// resDir, so the document reads nothing outside it.
-			root, err := os.OpenRoot(resDir)
-			if err != nil {
-				fmt.Fprintf(stderr, "--resources: %v\n", err)
-				return exitError
-			}
-			defer root.Close() //nolint:errcheck // read-only directory handle
-			opts = append(opts, pdf.WithResources(root.FS()))
-		}
+	// Every flag reaches every format: the library reports one that does
+	// not apply to the document's format as an option-ignored warning.
+	opts := []pdf.ConvertOption{pdf.WithConvertFontDirs(fontDirs...), pdf.WithFontFamilies(fonts...), pdf.WithMediaType(*media)}
+	if flagPassed(fs, "font-size") {
+		opts = append(opts, pdf.WithFontSize(*fontSize))
 	}
-	if officeLike {
-		opts = append(opts, pdf.WithLandscape(*landscape), pdf.WithPageRanges(*pages), pdf.WithOutline(*outlineFlag), pdf.WithConvertPassword(*password),
-			pdf.WithSinglePage(*singlePage), pdf.WithPrintDate(printAt), pdf.WithHiddenSlides(*hiddenSlides), pdf.WithNotesPages(*notesPages))
+	opts = append(opts, printOpts...)
+	opts = append(opts, pdf.WithConvertPassword(*password), pdf.WithHiddenSlides(*hiddenSlides), pdf.WithNotesPages(*notesPages))
+	if htmlLike && client != nil {
+		opts = append(opts, pdf.WithHTTPClient(client))
+	}
+	if resDir != "" {
+		// An os.Root refuses a path or a symbolic link that leaves resDir,
+		// so the document reads nothing outside it.
+		root, err := os.OpenRoot(resDir)
+		if err != nil {
+			fmt.Fprintf(stderr, "--resources: %v\n", err)
+			return exitError
+		}
+		defer root.Close() //nolint:errcheck // read-only directory handle
+		opts = append(opts, pdf.WithResources(root.FS()))
 	}
 	if paper.set {
 		opts = append(opts, pdf.WithPaperSize(paper.width, paper.height))
+	}
+	if defaultPaper.set {
+		opts = append(opts, pdf.WithDefaultPaperSize(defaultPaper.width, defaultPaper.height))
 	}
 	if margin.set {
 		opts = append(opts, pdf.WithMargins(margin.top, margin.right, margin.bottom, margin.left))
@@ -342,17 +351,15 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	return exitOK
 }
 
-// isOfficeFormat reports whether format is one of the Office formats,
-// whose conversion takes the Office options: the paper, landscape, page
-// ranges, outline, password, single page, print date, hidden slides and
-// notes pages flags.
-func isOfficeFormat(format pdf.Format) bool {
-	switch format {
-	case pdf.FormatDOCX, pdf.FormatODT, pdf.FormatXLSX, pdf.FormatODS, pdf.FormatCSV, pdf.FormatPPTX, pdf.FormatODP:
-		return true
-	case pdf.FormatText, pdf.FormatHTML, pdf.FormatMarkdown:
-	}
-	return false
+// flagPassed reports whether the command line set the flag name.
+func flagPassed(fs *flag.FlagSet, name string) bool {
+	passed := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			passed = true
+		}
+	})
+	return passed
 }
 
 // printDate parses --date: "" is the zero time, "now" the clock, anything
