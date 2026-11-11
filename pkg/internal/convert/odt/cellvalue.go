@@ -75,7 +75,12 @@ func (b *builder) cellValueText(c *odf.Element) (string, bool) {
 	default:
 		return "", false
 	}
-	name := b.cellDataStyle(c.A(odf.NSTable, "style-name"))
+	return b.formatValue(b.cellDataStyle(c.A(odf.NSTable, "style-name")), v)
+}
+
+// formatValue returns v in the data style name, false when name is ""
+// or names no style the converter formats.
+func (b *builder) formatValue(name string, v numfmt.Value) (string, bool) {
 	if name == "" {
 		return "", false
 	}

@@ -42,7 +42,9 @@
 //     layout's separator, endnotes on a page after the text, each
 //     citation and its note's number linked both ways.
 //   - Fields show the text the document saved, page numbers and counts
-//     in headers and footers excepted; tables of contents are rebuilt
+//     in headers and footers excepted, and the date and time fields that
+//     are not fixed, which show office.Options.PrintDate when it is set;
+//     tables of contents are rebuilt
 //     from the headings and the pages they land on, as Writer updates
 //     them before printing.
 //   - The outline from the headings, the structure roles, and the

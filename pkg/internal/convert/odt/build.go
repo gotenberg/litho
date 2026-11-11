@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -70,6 +71,9 @@ type builder struct {
 	// changes open where the builder is, innermost last.
 	changeMarks map[string]changeMark
 	openChanges []string
+	// date is the conversion date, which the date and time fields that
+	// are not fixed show; zero for none.
+	date time.Time
 	// tocs are the tables of contents, regenerated once the layout
 	// placed the headings.
 	tocs []*toc
@@ -630,6 +634,13 @@ func (b *builder) inlineElement(c *odf.Element, t textState, out *[]*layout.Node
 			b.changeMark(c)
 		case "page-number", "page-count":
 			b.pageField(c, t, out, ws)
+		case "date", "time":
+			if v, ok := b.dateField(c); ok {
+				*out = append(*out, b.run(v, t))
+				ws.space = false
+				return
+			}
+			b.inline(c, t, out, ws, depth)
 		case "hidden-text":
 			if c.A(odf.NSText, "is-hidden") != "true" {
 				b.inline(c, t, out, ws, depth)
