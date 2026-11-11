@@ -1064,6 +1064,11 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	}
 
 	if err := doc.parseXRefChain(ctx); err != nil {
+		// A parse the context cut short says nothing about the file: it is
+		// not damaged, and a rebuild would be cut short too.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
 		doc.Logger.Debug("xref chain parse failed, attempting rebuild",
 			slog.String("error", err.Error()),
 		)
@@ -1074,6 +1079,9 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		doc.trailerMergedKeys = nil
 		doc.trailerStream = false
 		if rebuildErr := doc.rebuildXRef(ctx); rebuildErr != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
 			return nil, fmt.Errorf("%w: %v (rebuild also failed: %v)", ErrDamagedXRef, err, rebuildErr)
 		}
 		doc.Rebuilt = true
