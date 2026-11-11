@@ -8,7 +8,7 @@ import (
 
 // sheetLink marks the target of a cell's link into the book itself while
 // the pages are laid out: the layout engine keeps it as a URI, and
-// [resolveSheetLinks] turns it into the page that shows its cell.
+// a [sheetLinker] turns it into the page that shows its cell.
 const sheetLink = "x-litho-sheet:"
 
 // cellHref returns the link target a cell's Href is laid out with: a
@@ -63,34 +63,65 @@ func sheetIndex(doc *Document, name string) int {
 	return -1
 }
 
-// resolveSheetLinks turns the links of out's pages that mark a target in
-// the book into links to the page that prints their cell, or the first
-// page of their sheet, as LibreOffice exports a link into the book; a
-// link to a sheet or a name that prints no page is dropped. pages are the
-// planned pages, at[k] the 1-based page of out pages[k] is, tables[i] the
-// Table element of page i+1, which the link names as its structure
-// destination (ISO 14289-2, 8.8).
+// sheetLinker turns the links of the pages that mark a target in the
+// book into links to the page that prints their cell, or the first page
+// of their sheet, as LibreOffice exports a link into the book; a link to a
+// sheet or a name that prints no page is dropped. pages are the planned
+// pages, at[k] the 1-based page pages[k] is, tables[i] the Table element
+// of page i+1, which the link names as its structure destination (ISO
+// 14289-2, 8.8).
+//
+// A page's links are resolved once the page is laid out, before it is
+// handed over: a link to a later page names that page's Table once the
+// page is laid out, through the destination it keeps in waiting, which
+// the sink reads at the end.
 //
 // # Corpus evidence
 //
 //   - libreoffice/xlsx: sc/hyperlinks.xlsx links "#Offering!$B$2", which LibreOffice
 //     exports as a link to page 3, the first of sheet Offering.
-func resolveSheetLinks(doc *Document, out *compose.Document, pages []*pagePlan, at []int, tables []*compose.StructElem) {
-	for _, pg := range out.Pages {
-		links := pg.Links[:0]
-		for _, l := range pg.Links {
-			target, ok := strings.CutPrefix(l.URI, sheetLink)
-			if !ok {
-				links = append(links, l)
-				continue
-			}
-			if page := targetPage(doc, target, pages, at); page > 0 {
-				l.URI, l.Dest = "", &compose.Dest{Page: page, Elem: tables[page-1]}
-				links = append(links, l)
-			}
-		}
-		pg.Links = links
+type sheetLinker struct {
+	doc    *Document
+	pages  []*pagePlan
+	at     []int
+	tables []*compose.StructElem
+	// waiting holds, by 1-based page, the destinations to that page made
+	// before it was laid out.
+	waiting map[int][]*compose.Dest
+}
+
+// table records t as the Table element of the next page laid out and
+// gives it to the destinations waiting for that page.
+func (sl *sheetLinker) table(t *compose.StructElem) {
+	sl.tables = append(sl.tables, t)
+	page := len(sl.tables)
+	for _, d := range sl.waiting[page] {
+		d.Elem = t
 	}
+	delete(sl.waiting, page)
+}
+
+// resolve resolves the links of pg, the last page laid out.
+func (sl *sheetLinker) resolve(pg *compose.Page) {
+	links := pg.Links[:0]
+	for _, l := range pg.Links {
+		target, ok := strings.CutPrefix(l.URI, sheetLink)
+		if !ok {
+			links = append(links, l)
+			continue
+		}
+		if page := targetPage(sl.doc, target, sl.pages, sl.at); page > 0 {
+			d := &compose.Dest{Page: page}
+			if page <= len(sl.tables) {
+				d.Elem = sl.tables[page-1]
+			} else {
+				sl.waiting[page] = append(sl.waiting[page], d)
+			}
+			l.URI, l.Dest = "", d
+			links = append(links, l)
+		}
+	}
+	pg.Links = links
 }
 
 // targetPage returns the 1-based page that prints the link target in the

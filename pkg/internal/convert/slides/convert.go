@@ -237,44 +237,62 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 			b.count++
 		}
 	}
-	for _, s := range shown {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		pg, sect := b.slidePage(s, numberOf(s))
-		out.Pages = append(out.Pages, pg)
-		out.Structure.Kids = append(out.Structure.Kids, sect)
-	}
-	if opts.NotesPages {
-		for _, s := range shown {
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-			pg, sect := b.notesPage(s, numberOf(s))
-			out.Pages = append(out.Pages, pg)
-			out.Structure.Kids = append(out.Structure.Kids, sect)
-		}
-	}
-	if len(out.Pages) == 0 {
-		// A deck that prints no slide prints one blank page of the slide
-		// size, as Impress exports an empty show.
-		w, h := b.pageSize(b.slideSize())
-		out.Pages = []*compose.Page{{Width: w, Height: h}}
+	if opts.Sink != nil {
+		opts.Sink.Expect(max(pages, 1))
 	}
 	// Every page has its Sect, in page order: a destination inside the
 	// document names the Sect of its page as its structure destination
-	// (ISO 14289-2, 8.8).
+	// (ISO 14289-2, 8.8). A destination to a page not laid out yet gets
+	// its Sect when that page is.
 	sectOf := func(page int) *compose.StructElem {
 		if page < 1 || page > len(out.Structure.Kids) {
 			return nil
 		}
 		return out.Structure.Kids[page-1]
 	}
-	for _, pg := range out.Pages {
+	waiting := map[int][]*compose.Dest{}
+	add := func(pg *compose.Page, sect *compose.StructElem) error {
+		out.Structure.Kids = append(out.Structure.Kids, sect)
+		page := len(out.Structure.Kids)
+		for _, d := range waiting[page] {
+			d.Elem = sect
+		}
+		delete(waiting, page)
 		for i := range pg.Links {
 			if d := pg.Links[i].Dest; d != nil && d.Elem == nil {
-				d.Elem = sectOf(d.Page)
+				if d.Page > page {
+					waiting[d.Page] = append(waiting[d.Page], d)
+				} else {
+					d.Elem = sectOf(d.Page)
+				}
 			}
+		}
+		return b.handOver(out, pg)
+	}
+	for _, s := range shown {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if err := add(b.slidePage(s, numberOf(s))); err != nil {
+			return nil, err
+		}
+	}
+	if opts.NotesPages {
+		for _, s := range shown {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			if err := add(b.notesPage(s, numberOf(s))); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if pages == 0 {
+		// A deck that prints no slide prints one blank page of the slide
+		// size, as Impress exports an empty show.
+		w, h := b.pageSize(b.slideSize())
+		if err := b.handOver(out, &compose.Page{Width: w, Height: h}); err != nil {
+			return nil, err
 		}
 	}
 	if !opts.OmitOutline {
@@ -341,6 +359,21 @@ func sectionHeads(all []*Slide) map[*Slide]*Slide {
 		}
 	}
 	return out
+}
+
+// handOver gives the page pg, laid out, to the sink of the options, and
+// its glyphs back to the budget, or appends it to out without a sink.
+func (b *builder) handOver(out *compose.Document, pg *compose.Page) error {
+	sink := b.opts.Sink
+	if sink == nil {
+		out.Pages = append(out.Pages, pg)
+		return nil
+	}
+	if err := sink.Page(b.ctx, pg); err != nil {
+		return fmt.Errorf("writing a page: %w", err)
+	}
+	b.mem.Release(compose.CountGlyphs(pg) * limits.GlyphCost)
+	return nil
 }
 
 // outlineTitles returns the outline title of every slide: its name, else

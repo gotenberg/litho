@@ -762,7 +762,7 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	case FormatHTML, FormatMarkdown:
 		doc, err = convertHTML(ctx, src, format, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages)
 	case FormatDOCX, FormatODT, FormatXLSX, FormatODS, FormatCSV, FormatPPTX, FormatODP:
-		doc, err = convertOffice(ctx, src, format, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages)
+		doc, err = convertOffice(ctx, src, format, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages, stream)
 	case FormatText:
 		w, h := o.width, o.height
 		if !o.paperSet {
@@ -884,13 +884,14 @@ func convertHTML(ctx context.Context, src io.Reader, format Format, fonts *text.
 	}
 }
 
-// convertOffice lays an Office source out, mapping the Office converters'
+// convertOffice lays an Office source out, handing its pages to sink as a
+// converter that streams makes them, mapping the Office converters'
 // errors onto the public sentinels: their option errors to
 // [ErrInvalidConvertOptions], their size caps to [ErrConvertInputTooLarge],
 // their page cap to [ErrConvertTooManyPages], a package that is not one
 // to [ErrConvertMalformed], an encrypted one to [ErrConvertEncrypted], and
 // a converter not written yet to [ErrUnsupportedFormat].
-func convertOffice(ctx context.Context, src io.Reader, format Format, fonts *text.Fonts, o *convertOptions, maxBytes int64, maxPages int) (*compose.Document, error) {
+func convertOffice(ctx context.Context, src io.Reader, format Format, fonts *text.Fonts, o *convertOptions, maxBytes int64, maxPages int, sink compose.PageSink) (*compose.Document, error) {
 	conv, name := docx.Convert, "DOCX"
 	switch format {
 	case FormatODT:
@@ -923,6 +924,7 @@ func convertOffice(ctx context.Context, src io.Reader, format Format, fonts *tex
 		MaxInputBytes:     maxBytes,
 		MaxPages:          maxPages,
 		Logger:            o.logger,
+		Sink:              sink,
 	}
 	if o.paperSet {
 		opts.PageWidth, opts.PageHeight = o.width, o.height

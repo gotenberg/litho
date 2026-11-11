@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"math"
 	"time"
+
+	"github.com/gotenberg/litho/pkg/internal/compose"
 )
 
 // MaxPageSide is the longest page side in points (ISO 32000-1, Annex
@@ -74,6 +76,11 @@ type Options struct {
 	// document names none, "" to leave it unknown. The caller validates
 	// it.
 	DefaultLang string
+	// Sink, when set, takes the pages of a converter that hands them over
+	// as it lays them out, and the document it returns holds no page: a
+	// page leaves memory once it is written. A converter that does not
+	// hand its pages over returns them in the document as without it.
+	Sink compose.PageSink
 }
 
 // DefaultPage returns the page size of a section or sheet whose file
