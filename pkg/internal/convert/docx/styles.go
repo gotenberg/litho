@@ -90,6 +90,12 @@ func (d *document) parseStyles(root *ooxml.Element) *styleSheet {
 		if p := e.Child(w, "pPr"); p != nil {
 			st.ppr = d.parseParaProps(p)
 		}
+		if lvl, ok := builtinHeading(st); ok && (st.ppr == nil || st.ppr.outline == nil) {
+			if st.ppr == nil {
+				st.ppr = &paraProps{}
+			}
+			st.ppr.outline = new(lvl)
+		}
 		if r := e.Child(w, "rPr"); r != nil {
 			st.rpr = d.parseRunProps(r)
 		}
@@ -222,4 +228,26 @@ func (s *styleSheet) tableStyle(id string) []*style {
 		id = s.defaultTable
 	}
 	return s.chain(id, "table")
+}
+
+// builtinHeading returns the outline level of a built-in heading style,
+// the paragraph style named "heading 1" to "heading 9" (ECMA-376 Part 1,
+// 17.7.4.9 name: the built-in styles are named by their English names),
+// 0 to 8: Word gives such a style its outline level when the style does
+// not set one (17.3.1.20 outlineLvl).
+//
+// # Corpus evidence
+//
+//   - poi/docx document/61787, libreoffice/docx ooxmlimport/tdf104167:
+//     Word bookmarks the paragraphs of heading styles whose definitions
+//     carry no w:outlineLvl, at the level their names say.
+func builtinHeading(st *style) (int, bool) {
+	if st.typ != "paragraph" {
+		return 0, false
+	}
+	n, ok := strings.CutPrefix(strings.ToLower(st.name), "heading ")
+	if !ok || len(n) != 1 || n[0] < '1' || n[0] > '9' {
+		return 0, false
+	}
+	return int(n[0] - '1'), true
 }

@@ -361,3 +361,21 @@ func TestThemeFont_ScriptOfThemeFontLang(t *testing.T) {
 		t.Errorf("minorBidi under he-IL: %q, want David", got)
 	}
 }
+
+func TestStyles_BuiltinHeadingOutlineLevel(t *testing.T) {
+	t.Parallel()
+	defs := `<w:style w:type="paragraph" w:styleId="H2"><w:name w:val="heading 2"/></w:style>` +
+		`<w:style w:type="paragraph" w:styleId="H3"><w:name w:val="Heading 3"/><w:pPr><w:outlineLvl w:val="5"/></w:pPr></w:style>` +
+		`<w:style w:type="paragraph" w:styleId="Mine"><w:name w:val="heading two"/></w:style>`
+	body := `<w:p><w:pPr><w:pStyle w:val="H2"/></w:pPr><w:r><w:t>a</w:t></w:r></w:p>` +
+		`<w:p><w:pPr><w:pStyle w:val="H3"/></w:pPr><w:r><w:t>b</w:t></w:r></w:p>` +
+		`<w:p><w:pPr><w:pStyle w:val="Mine"/></w:pPr><w:r><w:t>c</w:t></w:r></w:p>`
+	b := build(t, body, map[string]string{"word/styles.xml": stylesPart(defs)})
+	var got []int
+	for _, h := range b.d.headings {
+		got = append(got, h.level)
+	}
+	if len(got) != 2 || got[0] != 2 || got[1] != 6 {
+		t.Errorf("heading levels %v, want [2 6]", got)
+	}
+}
