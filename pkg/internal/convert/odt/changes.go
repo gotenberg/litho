@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 )
 
@@ -78,12 +79,11 @@ func rgb(r, g, b uint8) css.Color {
 // changes builds the text of a tracked-changes view of a text body in
 // place (ODF 1.3, Part 3, 5.5).
 type changes struct {
-	ctx     context.Context
 	body    *odf.Element
-	view    office.TrackedChanges
 	regions map[string]*change
-	// parent maps every node of the body to the element holding it,
-	// kept current as the tree is rebuilt.
+	// parent maps the change marks, their ancestors and the nodes the
+	// view rebuilt to the element holding each, kept current as the tree
+	// is rebuilt.
 	parent map[*odf.Element]*odf.Element
 	// starts, ends and points are the text:change-start, text:change-end
 	// and text:change marks, by change id, in document order.
@@ -110,7 +110,7 @@ func resolveChanges(ctx context.Context, body *odf.Element, view office.TrackedC
 		return nil, nil
 	}
 	c := &changes{
-		ctx: ctx, body: body, view: view, regions: map[string]*change{},
+		body: body, regions: map[string]*change{},
 		parent: map[*odf.Element]*odf.Element{},
 		starts: map[string]*odf.Element{}, ends: map[string]*odf.Element{}, points: map[string]*odf.Element{},
 		rowTracked: rowTracked, warn: warn,
@@ -119,27 +119,32 @@ func resolveChanges(ctx context.Context, body *odf.Element, view office.TrackedC
 	if len(c.regions) == 0 {
 		return nil, nil
 	}
-	c.index(body, nil, 0)
+	c.index(body, nil)
 	var marks map[string]changeMark
 	switch view {
 	case office.ChangesAccepted:
 		c.dropRows(changeDeletion)
-		if err := c.cutAll(changeDeletion); err != nil {
+		if err := c.cutAll(ctx, changeDeletion); err != nil {
 			return nil, err
 		}
 	case office.ChangesRejected:
 		c.dropRows(changeInsertion)
-		if err := c.cutAll(changeInsertion); err != nil {
+		if err := c.cutAll(ctx, changeInsertion); err != nil {
 			return nil, err
 		}
-		if err := c.spliceAll(false); err != nil {
+		if err := c.spliceAll(ctx, false); err != nil {
 			return nil, err
 		}
 	case office.ChangesMarked:
-		if err := c.spliceAll(true); err != nil {
+		if err := c.spliceAll(ctx, true); err != nil {
 			return nil, err
 		}
 		marks = c.marks()
+	}
+	// The parents recorded and the elements the view made live as long
+	// as the parsed tree, and cost about as much a node.
+	if err := limits.BudgetFrom(ctx).ChargeUnits(int64(len(c.parent)), limits.XMLElementCost, "XML trees"); err != nil {
+		return nil, err
 	}
 	return marks, nil
 }
@@ -188,44 +193,55 @@ func (c *changes) readRegions(tc *odf.Element) {
 	}
 }
 
-// index records the parent of every node under el and the change marks,
-// skipping text:tracked-changes.
-func (c *changes) index(el, parent *odf.Element, depth int) {
-	if depth > odf.MaxDepth {
-		return
-	}
-	if parent != nil {
-		c.parent[el] = parent
-	}
-	if el.Is(odf.NSText, "tracked-changes") {
+// index records the change marks under el, path holding el's ancestors
+// from the body, and the parents of each mark and of its ancestors: the
+// nodes the view climbs from. Text:tracked-changes is skipped.
+func (c *changes) index(el *odf.Element, path []*odf.Element) {
+	if len(path) > odf.MaxDepth || el.Is(odf.NSText, "tracked-changes") {
 		return
 	}
 	if el.Name.Space == odf.NSText {
 		id := el.A(odf.NSText, "change-id")
+		var m map[string]*odf.Element
 		switch el.Name.Local {
 		case "change-start":
-			c.mark(c.starts, id, el)
+			m = c.starts
 		case "change-end":
-			c.mark(c.ends, id, el)
+			m = c.ends
 		case "change":
-			c.mark(c.points, id, el)
+			m = c.points
+		}
+		if m != nil && c.mark(m, id, el) {
+			child := el
+			for _, a := range slices.Backward(path) {
+				if _, ok := c.parent[child]; ok {
+					break
+				}
+				c.parent[child] = a
+				child = a
+			}
 		}
 	}
+	path = append(path, el)
 	for _, k := range el.Children {
-		c.index(k, el, depth+1)
+		if !k.IsText() {
+			c.index(k, path)
+		}
 	}
 }
 
-// mark records the first mark of a known change.
-func (c *changes) mark(m map[string]*odf.Element, id string, el *odf.Element) {
+// mark records the first mark of a known change, reporting whether it
+// did.
+func (c *changes) mark(m map[string]*odf.Element, id string, el *odf.Element) bool {
 	if _, ok := c.regions[id]; !ok {
-		return
+		return false
 	}
 	if _, seen := m[id]; seen {
-		return
+		return false
 	}
 	m[id] = el
 	c.order = append(c.order, el)
+	return true
 }
 
 // attached reports whether el still hangs from the body.
@@ -339,10 +355,10 @@ func printsNothing(el *odf.Element) bool {
 
 // cutAll drops the text every change of kind spans, from its
 // text:change-start to its text:change-end (5.5.7), in document order.
-func (c *changes) cutAll(kind changeKind) error {
+func (c *changes) cutAll(ctx context.Context, kind changeKind) error {
 	for n, m := range c.order {
 		if n%256 == 0 {
-			if err := c.ctx.Err(); err != nil {
+			if err := ctx.Err(); err != nil {
 				return err
 			}
 		}
@@ -416,10 +432,10 @@ func (c *changes) cut(start, end *odf.Element) {
 // spliceAll puts back the text of every deletion at its text:change mark
 // (5.5.7), between a change-start and a change-end of the deletion's id
 // when wrap is set, for the marked view to draw.
-func (c *changes) spliceAll(wrap bool) error {
+func (c *changes) spliceAll(ctx context.Context, wrap bool) error {
 	for n, m := range c.order {
 		if n%256 == 0 {
-			if err := c.ctx.Err(); err != nil {
+			if err := ctx.Err(); err != nil {
 				return err
 			}
 		}
@@ -483,10 +499,7 @@ func (c *changes) splice(m *odf.Element, id string, blocks []*odf.Element, wrap 
 		// A mark between blocks: the blocks go in its place.
 		parent := path[len(path)-2]
 		i := slices.Index(parent.Children, m)
-		var kids []*odf.Element
-		kids = append(kids, open...)
-		kids = append(kids, blocks...)
-		kids = append(kids, closing...)
+		kids := slices.Concat(open, blocks, closing)
 		c.setKids(parent, slices.Concat(parent.Children[:i], kids, parent.Children[i+1:]))
 		return
 	}
