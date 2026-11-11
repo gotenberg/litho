@@ -440,6 +440,22 @@ func (s *Source) PrintOptions() []pdf.HTMLOption {
 	return opts
 }
 
+// LithoOptions returns the keys of [LithoOptionNames] the source's
+// conversion applies, in that list's order: userStylesheets when it names a
+// stylesheet, markdownTemplate when it names a template and the document is
+// Markdown, the only format that renders into one. A source that names none
+// converts as Chromium prints it.
+func (s *Source) LithoOptions() []string {
+	var keys []string
+	if len(s.Options.UserStylesheets) > 0 {
+		keys = append(keys, "userStylesheets")
+	}
+	if s.Options.MarkdownTemplate != "" && s.Format == FormatMarkdown {
+		keys = append(keys, "markdownTemplate")
+	}
+	return keys
+}
+
 // Conversion returns the conversion of src, a document of format, an HTML
 // or a Markdown one, with opts. A Markdown document renders into template,
 // litho's own when it is "".

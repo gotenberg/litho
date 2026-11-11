@@ -350,6 +350,10 @@ type officeOptions struct {
 	spreadsheet []pdf.SpreadsheetOption
 	// csv are the options of a CSV file, nil for another format.
 	csv []pdf.CSVOption
+	// litho are the keys of [OfficeLithoOptionNames] the options above
+	// apply, in schema order: those the source sets away from their default
+	// and the format takes.
+	litho []string
 }
 
 // options returns the litho options of the source's fields (see
@@ -383,48 +387,88 @@ func (o *Office) options() officeOptions {
 		if o.Options.ExportNotesPages {
 			opts.slides = append(opts.slides, pdf.WithNotesPages(true))
 		}
-		if o.Options.Handouts != 0 {
-			opts.slides = append(opts.slides, pdf.WithHandouts(o.Options.Handouts))
-		}
-	}
-	if o.Options.Date != "" {
-		// validate checked the value.
-		if t, err := time.Parse(time.RFC3339, o.Options.Date); err == nil {
-			opts.common = append(opts.common, pdf.WithDate(t))
-		}
 	}
 	switch o.Format {
 	case FormatDOCX, FormatODT:
 		if view := trackedChangesViews[o.Options.TrackedChanges]; view != pdf.TrackedChangesAccepted {
 			opts.word = append(opts.word, pdf.WithTrackedChanges(view))
+			opts.litho = append(opts.litho, "trackedChanges")
 		}
 	case FormatXLSX, FormatODS:
 		if o.Options.Sheets != nil {
 			opts.spreadsheet = append(opts.spreadsheet, pdf.WithSheets(o.Options.Sheets...))
+			opts.litho = append(opts.litho, "sheets")
 		}
 		if o.Options.SheetNumbers != nil {
 			opts.spreadsheet = append(opts.spreadsheet, pdf.WithSheetNumbers(o.Options.SheetNumbers...))
+			opts.litho = append(opts.litho, "sheetNumbers")
 		}
 		if o.Options.HiddenSheets {
 			opts.spreadsheet = append(opts.spreadsheet, pdf.WithHiddenSheets(true))
+			opts.litho = append(opts.litho, "hiddenSheets")
 		}
 		if mode := recalculationModes[o.Options.Recalculation]; mode != pdf.RecalculateAsNeeded {
 			opts.spreadsheet = append(opts.spreadsheet, pdf.WithFormulaRecalculation(mode))
+			opts.litho = append(opts.litho, "recalculation")
 		}
 	case FormatCSV:
-		// The references were made by a route that splits at a comma, a
-		// semicolon and a tab at once.
-		separators := []rune(",;\t")
+		separators := []rune(ReferenceCSVSeparators)
 		if o.Options.CSVSeparators != "" {
 			separators = []rune(o.Options.CSVSeparators)
 		}
 		opts.csv = append(opts.csv, pdf.WithCSVSeparators(separators...))
+		if !sameRunes(separators, []rune(ReferenceCSVSeparators)) {
+			opts.litho = append(opts.litho, "csvSeparators")
+		}
 		if o.Options.CSVTypeDetection != nil && !*o.Options.CSVTypeDetection {
 			opts.csv = append(opts.csv, pdf.WithCSVTypeDetection(false))
+			opts.litho = append(opts.litho, "csvTypeDetection")
 		}
-	case FormatText, FormatHTML, FormatMarkdown, FormatPPTX, FormatODP:
+	case FormatPPTX, FormatODP:
+		if o.Options.Handouts != 0 {
+			opts.slides = append(opts.slides, pdf.WithHandouts(o.Options.Handouts))
+			opts.litho = append(opts.litho, "handouts")
+		}
+	case FormatText, FormatHTML, FormatMarkdown:
+	}
+	if o.Options.Date != "" {
+		// validate checked the value.
+		if t, err := time.Parse(time.RFC3339, o.Options.Date); err == nil {
+			opts.common = append(opts.common, pdf.WithDate(t))
+			opts.litho = append(opts.litho, "date")
+		}
 	}
 	return opts
+}
+
+// ReferenceCSVSeparators are the characters the references of the CSV
+// corpora split a field at: the route splits at a comma, a semicolon and a
+// tab at once. A CSV source converts with them unless its options name
+// others.
+const ReferenceCSVSeparators = ",;\t"
+
+// sameRunes reports whether a and b hold the same characters, in any order
+// and counted once.
+func sameRunes(a, b []rune) bool {
+	set := func(rs []rune) []rune {
+		out := slices.Clone(rs)
+		slices.Sort(out)
+		return slices.Compact(out)
+	}
+	return slices.Equal(set(a), set(b))
+}
+
+// LithoOptions returns the keys of [OfficeLithoOptionNames] the source's
+// conversion applies, in the order that list names them: those
+// its options set away from their default for a format that takes them. A
+// key at its default value, or one the format has no option for, is left
+// out, as the conversion leaves it out: "trackedChanges": "accepted",
+// "recalculation": "asNeeded", "hiddenSheets": false, "csvTypeDetection":
+// true, "handouts": 0 and csvSeparators holding a comma, a semicolon and a
+// tab ([ReferenceCSVSeparators]), in any order. A source that names none
+// converts as its reference engine prints it.
+func (o *Office) LithoOptions() []string {
+	return o.options().litho
 }
 
 // isPresentation reports whether a format is a presentation's, whose slides
