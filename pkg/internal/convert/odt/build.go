@@ -71,6 +71,11 @@ type builder struct {
 	tocs []*toc
 	// meta records the paragraph blocks' spacing properties.
 	meta map[*layout.Node]paraMeta
+	// listPath maps each block a list built to the lists it sits in,
+	// outermost first, and listNums each list to its numbering, for the
+	// L elements [builder.wrapLists] groups the blocks in.
+	listPath map[*layout.Node][]int
+	listNums []compose.ListNumbering
 }
 
 // hfFields is the page a header or footer is built for.
@@ -146,6 +151,44 @@ func (b *builder) blocks(el *odf.Element, ctx blockCtx) []*layout.Node {
 		out = append(out, b.block(c, &ctx)...)
 	}
 	b.spacing(out)
+	if ctx.list == nil {
+		out = b.wrapLists(out, 0)
+	}
+	return out
+}
+
+// wrapLists groups the runs of nodes a list built, those whose list path
+// is deeper than depth, into L elements, the ones a nested list built in
+// an L of their own inside their list's (ISO 32000-1, 14.8.4.3.3: an L
+// holds its LI elements and the lists nested in them). It runs once
+// Writer's spacing is applied, so that it spaces the paragraphs of a list
+// and those around it as siblings: an L is a block with no box of its
+// own, whose margins collapse with its first and last child's.
+func (b *builder) wrapLists(nodes []*layout.Node, depth int) []*layout.Node {
+	if len(b.listPath) == 0 {
+		return nodes
+	}
+	var out []*layout.Node
+	for i := 0; i < len(nodes); {
+		path := b.listPath[nodes[i]]
+		if len(path) <= depth {
+			out = append(out, nodes[i])
+			i++
+			continue
+		}
+		id := path[depth]
+		j := i + 1
+		for j < len(nodes) {
+			if p := b.listPath[nodes[j]]; len(p) <= depth || p[depth] != id {
+				break
+			}
+			j++
+		}
+		st := baseStyle()
+		st.Display = css.Block
+		out = append(out, &layout.Node{Kind: layout.Element, Style: st, Role: "L", Numbering: b.listNums[id], Children: b.wrapLists(nodes[i:j], depth+1)})
+		i = j
+	}
 	return out
 }
 

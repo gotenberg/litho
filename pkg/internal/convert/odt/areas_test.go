@@ -3,6 +3,7 @@ package odt
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -456,5 +457,32 @@ func TestAnchorPage_LeftFirstPage(t *testing.T) {
 		if got != want {
 			t.Errorf("%s: anchor page %d, want %d", usage, got, want)
 		}
+	}
+}
+
+// TestConvert_ListsAreTagged locks that every LI sits in an L, a nested
+// list's L inside its list's, each L numbered from its level's labels.
+func TestConvert_ListsAreTagged(t *testing.T) {
+	item := func(s string) string { return `<text:list-item><text:p>` + s + `</text:p></text:list-item>` }
+	body := `<text:p>before</text:p><text:list text:style-name="LN">` + item("one") + `<text:list-item><text:p>two</text:p><text:list>` + item("sub a") + `</text:list></text:list-item></text:list>` +
+		`<text:list text:style-name="LB">` + item("x") + `</text:list><text:p>after</text:p>`
+	b := newTestBuilder(t, doc{styles: listStyles, body: body})
+	root, _ := b.document(odfBody(b))
+	var got []string
+	walkNodes(root, func(n *layout.Node) {
+		if n.Role == "L" {
+			got = append(got, fmt.Sprintf("%d:%d", n.Numbering, len(n.Children)))
+		}
+	})
+	want := []string{
+		fmt.Sprintf("%d:3", compose.NumberingDecimal), fmt.Sprintf("%d:1", compose.NumberingLowerAlpha),
+		fmt.Sprintf("%d:1", compose.NumberingDisc),
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("lists (numbering:kids) %v, want %v", got, want)
+	}
+	res := convertDoc(t, doc{styles: listStyles, body: body}.pack(t), office.Options{})
+	if r := roles(res.Structure); !strings.Contains(r, "Document,P,L,LI") || strings.Contains(r, "Document,LI") {
+		t.Errorf("structure %s", r)
 	}
 }

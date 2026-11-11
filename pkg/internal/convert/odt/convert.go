@@ -228,6 +228,7 @@ func (b *builder) document(body *odf.Element) (*layout.Node, layout.PageBox) {
 	flush()
 	for _, g := range root.Children {
 		b.spacing(g.Children)
+		g.Children = b.wrapLists(g.Children, 0)
 	}
 	if en := b.endnotes(); en != nil {
 		group.Children = append(group.Children, en)

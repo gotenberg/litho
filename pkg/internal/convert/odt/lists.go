@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
@@ -111,7 +112,65 @@ func (b *builder) list(c *odf.Element, ctx *blockCtx) []*layout.Node {
 		inner.indent = item
 		out = append(out, b.blocks(it, inner)...)
 	}
+	if len(out) > 0 && len(b.listNums) < maxLists {
+		if b.listPath == nil {
+			b.listPath = map[*layout.Node][]int{}
+		}
+		id := len(b.listNums)
+		b.listNums = append(b.listNums, listNumbering(lc.style, lc.level))
+		for _, n := range out {
+			b.listPath[n] = append([]int{id}, b.listPath[n]...)
+		}
+	}
 	return out
+}
+
+// maxLists caps the lists tagged as L elements; the blocks of the lists
+// past it hang from their parent's element. Anti-DoS guard, not
+// spec-mandated: a long text document holds a few thousand lists.
+const maxLists = 1 << 16
+
+// listNumbering returns the numbering system of the labels of level, from
+// 1, of the list style ls (ODF 1.3 Part 3, 16.32: its bullets, pictures
+// or style:num-format): the ListNumbering of its L element (ISO 32000-1,
+// 14.8.5.5, Table 347; ISO 32000-2, Table 382). A bullet is a disc, a
+// circle or a square by its character, any other bullet or a picture is
+// unordered, a number format Table 347 has no name for is ordered, and a
+// level without a label is none.
+func listNumbering(ls *odf.ListStyle, level int) compose.ListNumbering {
+	if ls == nil || level < 1 || level > odf.MaxListLevels || ls.Levels[level-1] == nil {
+		return compose.NumberingNone
+	}
+	lvl := ls.Levels[level-1]
+	switch lvl.Kind {
+	case "bullet":
+		switch lvl.El.A(odf.NSText, "bullet-char") {
+		case "", "\u2022", "\u25cf":
+			return compose.NumberingDisc
+		case "\u25cb", "\u25e6":
+			return compose.NumberingCircle
+		case "\u25a0", "\u25aa":
+			return compose.NumberingSquare
+		}
+		return compose.NumberingUnordered
+	case "image":
+		return compose.NumberingUnordered
+	}
+	switch lvl.El.A(odf.NSStyle, "num-format") {
+	case "1":
+		return compose.NumberingDecimal
+	case "I":
+		return compose.NumberingUpperRoman
+	case "i":
+		return compose.NumberingLowerRoman
+	case "A":
+		return compose.NumberingUpperAlpha
+	case "a":
+		return compose.NumberingLowerAlpha
+	case "":
+		return compose.NumberingNone
+	}
+	return compose.NumberingOrdered
 }
 
 // numberedParagraph builds a text:numbered-paragraph (ODF 1.3, Part 3,
