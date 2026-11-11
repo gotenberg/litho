@@ -134,6 +134,9 @@ type revisions struct {
 	// marked holds the runs a revision marked already: an inner one
 	// keeps its own mark.
 	marked map[*ooxml.Element]bool
+	// added counts the elements the view made, which the caller charges
+	// to the conversion's memory budget as parsed ones.
+	added int64
 }
 
 // resolve rewrites the content of el, a part's root or an element in it,
@@ -300,6 +303,7 @@ func (r *revisions) mark(el *ooxml.Element, author string, insert bool, depth in
 			continue
 		}
 		r.marked[k] = true
+		r.added += 3
 		rpr := k.Child(w, "rPr")
 		if rpr == nil {
 			rpr = &ooxml.Element{Space: w, Local: "rPr"}

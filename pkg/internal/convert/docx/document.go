@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
@@ -204,6 +205,11 @@ func (d *document) part(name string) (*ooxml.Element, error) {
 		switch root.Local {
 		case "document", "hdr", "ftr", "footnotes", "endnotes":
 			d.revisions.resolve(root, 0)
+			added := d.revisions.added
+			d.revisions.added = 0
+			if err := limits.BudgetFrom(d.ctx).ChargeUnits(added, limits.XMLElementCost, "XML trees"); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return root, nil
