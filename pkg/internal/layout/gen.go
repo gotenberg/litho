@@ -15,10 +15,12 @@ import (
 type genCtx struct {
 	elem        *compose.StructElem
 	structDepth int
-	link        *link
-	lang        string
-	decos       []deco
-	depth       int
+	// list is the nearest L element, nil outside a list.
+	list  *compose.StructElem
+	link  *link
+	lang  string
+	decos []deco
+	depth int
 	// vertical reports content inside an orthogonal flow, which keeps
 	// the writing mode of its root.
 	vertical bool
@@ -92,7 +94,17 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 		case ctx.structDepth >= maxStructDepth:
 			e.warnOnce(codeStructTooDeep, fmt.Sprintf("structure roles nested deeper than %d hang from the deepest element", maxStructDepth), -1)
 		default:
-			el := &compose.StructElem{Role: n.Role, Lang: n.Lang}
+			el := &compose.StructElem{Role: n.Role, Lang: n.Lang, Scope: n.Scope, Numbering: n.Numbering}
+			if n.Role == "TH" || n.Role == "TD" {
+				// A span is the converter's count of the grid cells the
+				// cell covers; past compose.MaxCellSpan no table holds
+				// that many.
+				el.ColSpan = min(max(n.ColSpan, 0), compose.MaxCellSpan)
+				el.RowSpan = min(max(n.RowSpan, 0), compose.MaxCellSpan)
+			}
+			if n.Role == "L" {
+				out.list = el
+			}
 			if n.Alt != "" && (n.Kind == Replaced || n.Role == "Figure" || n.Role == "Link") {
 				el.Alt = n.Alt
 			}
@@ -492,6 +504,11 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 			lbl.ActualText = alt
 		}
 		ctx.elem.Kids = append(ctx.elem.Kids, lbl, body)
+		if l := ctx.list; l != nil && l.Numbering == compose.NumberingUnset {
+			// ISO 14289-2, 8.2.5.25: a list whose items carry a Lbl
+			// states its numbering.
+			l.Numbering = listNumbering(st, pic != nil || n.Marker != nil && len(n.Marker.Children) > 0)
+		}
 		markerElem = lbl
 		ctx.elem = body
 		ctx.structDepth++
@@ -515,6 +532,39 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 	m.parent = b
 	b.kids = append(b.kids, m)
 	return ctx
+}
+
+// listNumbering returns the ListNumbering attribute (ISO 32000-1, 14.8.5.5,
+// Table 347; ISO 32000-2, Table 382) of a list whose markers have style
+// st: the value of its list-style-type when the attribute has one, Ordered
+// or Unordered for the other counter styles, and Unordered for a picture
+// or a marker of authored content (custom).
+func listNumbering(st *css.Style, custom bool) compose.ListNumbering {
+	if custom {
+		return compose.NumberingUnordered
+	}
+	switch st.ListStyleType {
+	case css.Disc:
+		return compose.NumberingDisc
+	case css.Circle:
+		return compose.NumberingCircle
+	case css.Square:
+		return compose.NumberingSquare
+	case css.Decimal:
+		return compose.NumberingDecimal
+	case css.LowerRoman:
+		return compose.NumberingLowerRoman
+	case css.UpperRoman:
+		return compose.NumberingUpperRoman
+	case css.LowerAlpha:
+		return compose.NumberingLowerAlpha
+	case css.UpperAlpha:
+		return compose.NumberingUpperAlpha
+	case css.DecimalLeadingZero, css.LowerGreek, css.Armenian, css.Georgian:
+		return compose.NumberingOrdered
+	case css.ListNone, css.ListString:
+	}
+	return compose.NumberingUnordered
 }
 
 // markerStyle returns the style of a list item's marker: the item's, as an

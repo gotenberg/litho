@@ -78,6 +78,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	res.Extents = e.extents(rb, len(res.Pages))
 	e.links(res, links, used)
 	prune(e.root, used)
+	dropPrunedDests(e.root, res)
 	for _, w := range e.warnings {
 		page := 0
 		if w.y >= 0 {
@@ -587,6 +588,11 @@ func (e *engine) anchors(rb *box, n int) map[string]compose.Dest {
 				if ok {
 					x, y = toFlow(b, x, y)
 					d := e.dest(clamp(x), max(clamp(y), 0))
+					if b.elem != e.root {
+						// The root is no destination worth naming, and a
+						// converter that merges several layouts drops it.
+						d.Elem = b.elem
+					}
 					if d.Page <= n {
 						out[b.id] = d
 					}
@@ -644,9 +650,38 @@ func (e *engine) resolveLink(pl pendingLink) (compose.Link, bool) {
 			e.warnOnce(codeLink, fmt.Sprintf("link to %q left out: no element has that ID", href), r.Y)
 			return compose.Link{}, false
 		}
-		return compose.Link{Dest: &d, Parent: pl.lk.elem}, true
+		return compose.Link{Dest: &d, Parent: pl.lk.elem, Contents: pl.lk.describe()}, true
 	}
-	return compose.Link{URI: href, Parent: pl.lk.elem}, true
+	return compose.Link{URI: href, Parent: pl.lk.elem, Contents: pl.lk.describe()}, true
+}
+
+// dropPrunedDests clears the element of every anchor and link destination
+// of res that [prune] dropped from the tree under root: the destination keeps
+// its page position alone.
+func dropPrunedDests(root *compose.StructElem, res *Result) {
+	kept := map[*compose.StructElem]bool{}
+	stack := []*compose.StructElem{root}
+	for len(stack) > 0 {
+		el := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		kept[el] = true
+		stack = append(stack, el.Kids...)
+	}
+	for id, d := range res.Anchors {
+		if d.Elem != nil && !kept[d.Elem] {
+			d.Elem = nil
+			res.Anchors[id] = d
+		}
+	}
+	for _, pg := range res.Pages {
+		for i, l := range pg.Links {
+			if l.Dest != nil && l.Dest.Elem != nil && !kept[l.Dest.Elem] {
+				d := *l.Dest
+				d.Elem = nil
+				pg.Links[i].Dest = &d
+			}
+		}
+	}
 }
 
 // prune drops the structure elements no fragment hangs from, directly or
@@ -676,6 +711,7 @@ func layoutFlow(ctx context.Context, root *Node, fonts *text.Fonts, opts Options
 	if e.err != nil {
 		return nil, nil, e.err
 	}
+	e.anonymize(rb)
 	if e.foot != nil && !e.geom.varies() {
 		// Footnote areas shorten the slices of the flow the pages show.
 		e.geom = geometry{}

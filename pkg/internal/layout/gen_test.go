@@ -76,11 +76,13 @@ func TestStructure_DocumentRoleReused(t *testing.T) {
 	root.Role = "Document"
 	root.Lang = "de"
 	res := run(t, root, page(30, 20))
-	if res.Structure.Role != "Document" || len(res.Structure.Kids) != 0 || res.Structure.Lang != "de" {
-		t.Errorf("structure %+v", res.Structure)
+	if res.Structure.Role != "Document" || len(res.Structure.Kids) != 1 || res.Structure.Lang != "de" {
+		t.Fatalf("structure %+v", res.Structure)
 	}
-	if texts(res, 1)[0].run.Parent != res.Structure {
-		t.Error("text does not hang from the Document element")
+	// The Document is a grouping element: its text hangs from a P of its
+	// own (ISO 32005, Table 5).
+	if p := res.Structure.Kids[0]; p.Role != "P" || texts(res, 1)[0].run.Parent != p {
+		t.Error("text does not hang from a P under the Document element")
 	}
 }
 

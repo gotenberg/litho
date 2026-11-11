@@ -1,6 +1,9 @@
 package layout
 
 import (
+	"strings"
+	"unicode"
+
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 )
@@ -30,6 +33,76 @@ type link struct {
 	elem *compose.StructElem
 	// node is the node the Href sits on.
 	node *Node
+	// contents caches [link.describe], described its being set.
+	contents  string
+	described bool
+}
+
+// maxLinkContents bounds the characters of a link's description. Anti-DoS
+// guard, not spec-mandated: ISO 14289-1, 7.18.5 asks for a description, and
+// a link wrapping a whole section would otherwise copy its text into every
+// annotation of every page it crosses; a sentence of the text says what
+// the link is.
+const maxLinkContents = 1000
+
+// describe returns the description of the link for a reader who cannot see
+// it (compose.Link Contents): the node's Alt, else the text it shows, white
+// space collapsed and cut at [maxLinkContents] characters, a picture's Alt
+// standing for the picture, else the target.
+func (l *link) describe() string {
+	if l.described {
+		return l.contents
+	}
+	l.described = true
+	if l.node == nil {
+		l.contents = l.href
+		return l.contents
+	}
+	if l.node.Alt != "" {
+		l.contents = l.node.Alt
+		return l.contents
+	}
+	var sb strings.Builder
+	n := 0
+	space := false
+	put := func(s string) {
+		for _, r := range s {
+			if n >= maxLinkContents {
+				return
+			}
+			if unicode.IsSpace(r) {
+				space = sb.Len() > 0
+				continue
+			}
+			if space {
+				sb.WriteByte(' ')
+				n++
+				space = false
+			}
+			sb.WriteRune(r)
+			n++
+		}
+	}
+	stack := []*Node{l.node}
+	for len(stack) > 0 && n < maxLinkContents {
+		c := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		switch c.Kind {
+		case Text:
+			put(c.Text)
+		case Replaced:
+			put(" " + c.Alt + " ")
+		case Element, LineBreak:
+		}
+		for i := len(c.Children) - 1; i >= 0; i-- {
+			stack = append(stack, c.Children[i])
+		}
+	}
+	l.contents = sb.String()
+	if l.contents == "" {
+		l.contents = l.href
+	}
+	return l.contents
 }
 
 // deco is one text decoration a box draws on its text (CSS 2.1, 16.3.1):
