@@ -419,12 +419,14 @@ func (w *docWriter) final(trailer ast.PdfDict) (*writer.ObjAllocator, ast.PdfDic
 		}
 		return n + 3 + (-num-4)/2
 	}
+	// Each object leaves the writer's maps as its renumbered copy is made,
+	// so the two sets are never held whole together.
 	out := writer.NewObjAllocator(0)
-	for num, obj := range w.reserved {
-		out.AllocAt(number(num), relink(obj, number))
-	}
-	for num, obj := range w.alloc.Pending() {
-		out.AllocAt(number(num), relink(obj, number))
+	for _, objs := range []map[int]ast.PdfObject{w.reserved, w.alloc.Pending()} {
+		for num, obj := range objs {
+			out.AllocAt(number(num), relink(obj, number))
+			delete(objs, num)
+		}
 	}
 	t, _ := relink(trailer, number).(ast.PdfDict) //nolint:errcheck // relink returns a dictionary for a dictionary
 	return out, t
