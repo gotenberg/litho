@@ -84,6 +84,12 @@ type Slide struct {
 	// notes-pages printout prints that page with its boxes where a slide
 	// without one prints the slide alone.
 	HasNotes bool
+	// NotesFill and NotesLine paint and stroke the box of the notes text
+	// on the slide's notes page, as the file styles the notes frame (ODF
+	// 1.3 Part 3, 16.19 presentation:notes, its frame of class notes);
+	// zero for none.
+	NotesFill Fill
+	NotesLine Line
 }
 
 // Shape is one shape of a slide. Kind says which fields apply; Box,
