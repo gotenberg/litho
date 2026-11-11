@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
@@ -392,30 +393,15 @@ func ordinalWords(n int) string {
 	return s[:i+1] + last
 }
 
-// symbolChars maps the code points of the Symbol font Word lists name in
-// the private use area (U+F020 to U+F0FF, the font's byte plus 0xF000) to
-// Unicode, for the characters list labels use.
-var symbolChars = map[rune]rune{
-	0xB7: '•', 0xA7: '♣', 0xA8: '♦', 0xA9: '♥', 0xAA: '♠', 0xD8: '¬', 0xAE: '→', 0xDE: '⇒', 0xB0: '°', 0x2D: '−', 0x2A: '∗',
-}
-
-// wingdingsChars maps Wingdings characters list labels use to Unicode.
-var wingdingsChars = map[rune]rune{
-	0xA7: '▪', 0xA8: '◻', 0x6E: '■', 0x6F: '□', 0x71: '❑', 0x75: '◆', 0x76: '❖', 0xD8: '➢', 0xFC: '✔', 0xFB: '✘',
-	0x9F: '•', 0xA1: '○', 0x77: '⬥', 0xE0: '➔', 0xE8: '➔', 0x4A: '☺', 0x4C: '☹', 0xF0: '⇨',
-}
-
 // mapSymbolText returns s with the private-use characters of a symbol font
 // mapped to Unicode, and whether the font family no longer applies: Symbol
 // and Wingdings are not installed where LibreOffice runs Gotenberg, which
 // draws their list bullets from its own symbol font.
 func mapSymbolText(s, family string) (string, bool) {
-	var table map[rune]rune
+	known := false
 	switch strings.ToLower(family) {
-	case "symbol":
-		table = symbolChars
-	case "wingdings", "wingdings 2", "wingdings 3":
-		table = wingdingsChars
+	case "symbol", "wingdings", "wingdings 2", "wingdings 3":
+		known = true
 	}
 	mapped := false
 	out := []rune(s)
@@ -424,17 +410,15 @@ func mapSymbolText(s, family string) (string, bool) {
 		if r >= 0xF020 && r <= 0xF0FF {
 			b = r - 0xF000
 		}
-		if table != nil {
-			if u, ok := table[b]; ok {
-				out[i], mapped = u, true
-				continue
-			}
+		if u, ok := office.SymbolChar(b, family); ok {
+			out[i], mapped = u, true
+			continue
 		}
 		if b != r {
 			out[i], mapped = b, true
 		}
 	}
-	return string(out), mapped || table != nil
+	return string(out), mapped || known
 }
 
 // numberingSystem returns the numbering system of a list whose label,

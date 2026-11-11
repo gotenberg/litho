@@ -150,3 +150,19 @@ func TestNumbering_SoftHyphenBulletPrints(t *testing.T) {
 		t.Fatalf("labels %d, %q", len(items), textOf(items[0].Marker))
 	}
 }
+
+// TestRuns_SymbolActualText locks what a reader hears of a run in a symbol
+// font: the characters its codes stand for, as its ActualText, while a run
+// in a text font carries none.
+func TestRuns_SymbolActualText(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:r><w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol"/></w:rPr><w:t>` + "a" + `</w:t></w:r><w:r><w:t>plain</w:t></w:r></w:p>`
+	b := build(t, body, nil)
+	runs := find(b.root, func(n *layout.Node) bool { return n.Kind == layout.Text })
+	if len(runs) != 2 {
+		t.Fatalf("%d runs, want 2", len(runs))
+	}
+	if runs[0].ActualText != "•α" || runs[1].ActualText != "" {
+		t.Errorf("actual texts %q and %q, want \"•α\" and none", runs[0].ActualText, runs[1].ActualText)
+	}
+}

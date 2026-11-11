@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -944,7 +945,14 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 			} else if el.Lang == "" {
 				el.Lang = lang
 			}
-			el.Children = append(el.Children, &layout.Node{Kind: layout.Text, Style: st, Text: strings.ToValidUTF8(t, "�")})
+			t = strings.ToValidUTF8(t, "�")
+			tn := &layout.Node{Kind: layout.Text, Style: st, Text: t}
+			if len(st.FontFamilies) > 0 {
+				// The codes of a symbol font name nothing a reader knows
+				// (ISO 19005-2, 6.2.11.7.3; ISO 14289-2, 8.4.3).
+				tn.ActualText = office.SymbolText(t, st.FontFamilies[0])
+			}
+			el.Children = append(el.Children, tn)
 			buf.Reset()
 		}
 	}
