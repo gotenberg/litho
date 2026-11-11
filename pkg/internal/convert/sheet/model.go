@@ -24,9 +24,11 @@ type Document struct {
 	Sheets []*Sheet
 	// ExcelRules lays the book out as Microsoft Excel prints a workbook
 	// rather than as Calc prints a spreadsheet, where the two differ: a
-	// row keeps the height its reader gives it, never grown to fit its
-	// text, since Excel prints a row at its stored height or the sheet's
-	// default. The reader sets the lengths, paddings and page setups in
+	// row with a Height keeps it whatever its text needs, and a row
+	// without one grows to fit wrapped text alone, a default row a line,
+	// since Excel prints a row at its stored height and fits a row without
+	// one to its lines as it opens a workbook. The reader sets the
+	// lengths, paddings and page setups in
 	// Excel's terms; the flag covers what the builder decides. The XLSX
 	// reader sets it; the OpenDocument and CSV readers leave it false.
 	ExcelRules bool
