@@ -61,4 +61,7 @@ var (
 	// ErrInvalidFont is returned by [Write] for a face whose program does
 	// not load, or a glyph the program does not hold.
 	ErrInvalidFont = errors.New("invalid font")
+	// ErrInvalidVersion is returned by [Write] for an [Options.Version]
+	// that is not one of the [Version] values.
+	ErrInvalidVersion = errors.New("invalid PDF version")
 )

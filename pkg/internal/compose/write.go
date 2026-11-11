@@ -21,18 +21,19 @@ type Options struct {
 	Logger *slog.Logger
 	// Producer is the /Producer of the Info dictionary, "litho" when empty.
 	Producer string
+	// Version is the PDF version the file is written for, [Version17] when
+	// empty. See [Write] for what each version changes.
+	Version Version
 }
 
-// pdfVersion is the version Write declares. PDF 1.7 is ISO 32000-1, whose
-// constructs Write emits, and the base PDF/A-2 and PDF/UA-1 build on.
-const pdfVersion = "1.7"
-
 // Write validates doc with [Document.Validate], then writes it to dst as
-// one PDF 1.7 file. It returns the validation error, unchanged, when doc is
-// refused, an error wrapping [ErrInvalidFont] for a face whose program does
-// not load or a glyph it lacks, and an error wrapping ctx.Err() when ctx
-// ends first. Nothing reaches dst before the whole file is built, so a
-// failure other than a write error on dst leaves dst untouched.
+// one PDF file of the version [Options.Version] names. It returns the
+// validation error, unchanged, when doc is refused, an error wrapping
+// [ErrInvalidVersion] for a version it does not target, an error wrapping
+// [ErrInvalidFont] for a face whose program does not load or a glyph it
+// lacks, and an error wrapping ctx.Err() when ctx ends first. Nothing
+// reaches dst before the whole file is built, so a failure other than a
+// write error on dst leaves dst untouched.
 //
 // Write reads doc and never mutates it. Its output depends on doc and opts
 // alone: two calls with equal input write equal bytes. The document's
@@ -59,6 +60,26 @@ const pdfVersion = "1.7"
 // No XMP packet, output intent or PDF/A identification is written: those
 // belong to Writer.SetMetadata and the remediation stages.
 //
+// # Versions
+//
+// The header declares the version, and the file holds no construct a later
+// version defines: what the model asks for that the version lacks is
+// written as the nearest thing the version has, so a reader of that
+// version reads the whole file.
+//
+//   - Before PDF 1.5, a page has no /Tabs entry (ISO 32000-1, Table 30),
+//     and a structure type PDF 1.5 added, a table row group among them
+//     (Table 337), is mapped by the structure tree's /RoleMap to a type
+//     PDF 1.4 defines (PDF Reference 1.4, 9.7.4; ISO 19005-1, 6.8.3.4).
+//   - PDF 2.0 writes each destination that names a structure element as a
+//     structure destination (ISO 32000-2, 12.3.2.3), carries the document
+//     information in an XMP metadata stream instead of the Info dictionary
+//     it deprecates (14.3.3), and writes a structure type PDF 2.0 removed
+//     as its replacement (14.8.6).
+//
+// At every version, a role that is not a standard structure type of the
+// version is mapped by /RoleMap to one that is.
+//
 // # Limitations
 //
 //   - A group's opacity is a constant alpha, not a transparency group:
@@ -76,6 +97,10 @@ func Write(ctx context.Context, doc *Document, dst io.Writer, opts Options) erro
 		return fmt.Errorf("%w: nil document", ErrNoPages)
 	}
 	if err := doc.Validate(); err != nil {
+		return err
+	}
+	version, err := resolveVersion(opts.Version)
+	if err != nil {
 		return err
 	}
 	logger := opts.Logger
@@ -101,7 +126,7 @@ func Write(ctx context.Context, doc *Document, dst io.Writer, opts Options) erro
 		return err
 	}
 	if err := writer.WriteRewrite(ctx, dst, writer.RewriteConfig{
-		Version:   pdfVersion,
+		Version:   string(version),
 		Allocator: w.alloc,
 		Trailer:   trailer,
 	}); err != nil {
