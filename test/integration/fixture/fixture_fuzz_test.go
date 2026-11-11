@@ -1,6 +1,10 @@
 package fixture
 
-import "testing"
+import (
+	"errors"
+	"strings"
+	"testing"
+)
 
 // FuzzParseOptions checks that no options file makes ParseOptions panic, and
 // that what it accepts maps to options without panicking either.
@@ -32,7 +36,11 @@ func FuzzParseOfficeOptions(f *testing.F) {
 		if err != nil {
 			return
 		}
-		s := &Office{Options: o}
-		s.ConvertOptions()
+		for _, format := range officeFormats {
+			s := &Office{Format: format, Options: o}
+			if _, err := s.Conversion(strings.NewReader("")); err != nil && !errors.Is(err, ErrUnsupportedFormat) {
+				t.Errorf("%s: %v", format, err)
+			}
+		}
 	})
 }

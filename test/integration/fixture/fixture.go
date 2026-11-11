@@ -50,10 +50,40 @@ const (
 // rendered Markdown, so the two engines lay out the same tree.
 const MarkdownWrapper = `<!doctype html><html><head><meta charset="utf-8"><title></title></head><body>{{ toHTML "index.md" }}</body></html>`
 
-// FormatMarkdown is litho's Markdown format, spelled as a string so the
-// corpus builds before the converter declares the constant: a conversion
-// fails with an unsupported format until it does.
-const FormatMarkdown = pdf.Format("markdown")
+// Format names the format a fixture's document converts from, by the
+// constructor of package pdf that reads it, or, for a format litho does
+// not read, by its file extension.
+type Format string
+
+// The formats litho converts from, one per constructor of package pdf.
+const (
+	FormatText     Format = "text"
+	FormatHTML     Format = "html"
+	FormatMarkdown Format = "markdown"
+	FormatDOCX     Format = "docx"
+	FormatODT      Format = "odt"
+	FormatXLSX     Format = "xlsx"
+	FormatODS      Format = "ods"
+	FormatCSV      Format = "csv"
+	FormatPPTX     Format = "pptx"
+	FormatODP      Format = "odp"
+)
+
+// ErrUnsupportedFormat reports a document of a format litho does not
+// convert from.
+var ErrUnsupportedFormat = errors.New("unsupported input format")
+
+// optionsAs returns opts as the option type of one constructor, which every
+// option of opts implements: a [pdf.ConvertOption] implements every option
+// type, a [pdf.OfficeOption] those of the Office formats, and a
+// [pdf.SheetOption] those of the sheet formats.
+func optionsAs[T, O any](opts []O) []T {
+	out := make([]T, len(opts))
+	for i, o := range opts {
+		out[i] = any(o).(T)
+	}
+	return out
+}
 
 // maxTemplateBytes bounds a header or footer template read from a source
 // directory. Anti-DoS guard, not spec-mandated: the templates of the corpus
@@ -110,6 +140,19 @@ type Options struct {
 	// the top and bottom margins. Default none.
 	Header string `json:"header,omitempty"`
 	Footer string `json:"footer,omitempty"`
+	// UserStylesheets name files of the source directory litho takes as
+	// user stylesheets, in order. It is litho's own option, no route field:
+	// Chromium prints the source without them, so a source that sets it
+	// names ReferenceOf. Default none.
+	UserStylesheets []string `json:"userStylesheets,omitempty"`
+	// MarkdownTemplate names a file of the source directory litho renders a
+	// Markdown document into. It is litho's own option, no route field: a
+	// source that sets it names ReferenceOf. Default litho's template.
+	MarkdownTemplate string `json:"markdownTemplate,omitempty"`
+	// ReferenceOf names another fixture of the same corpus, by its ID,
+	// whose reference stands for this source's (see
+	// [OfficeOptions.ReferenceOf]). It is no route field. Default none.
+	ReferenceOf string `json:"reference_of,omitempty"`
 }
 
 // Source is one source directory, read.
@@ -119,14 +162,21 @@ type Source struct {
 	// Document is the path of the document converted, Dir's index.html or,
 	// when there is none, its index.md.
 	Document string
-	// Format is the format the document is converted from.
-	Format pdf.Format
+	// Format is the format the document is converted from, FormatHTML or
+	// FormatMarkdown.
+	Format Format
 	// Options are the options read from options.json, zero when there is
 	// none.
 	Options Options
 	// HeaderTemplate and FooterTemplate are the contents of the files
 	// Options.Header and Options.Footer name.
 	HeaderTemplate, FooterTemplate string
+	// UserStylesheets are the contents of the files
+	// Options.UserStylesheets names, in order.
+	UserStylesheets []string
+	// MarkdownTemplate is the content of the file Options.MarkdownTemplate
+	// names, "" for litho's template.
+	MarkdownTemplate string
 }
 
 // ErrNoDocument reports a source directory with neither index.html nor
@@ -141,7 +191,7 @@ func Load(dir string) (*Source, error) {
 	s := &Source{Dir: dir}
 	switch {
 	case isFile(filepath.Join(dir, HTMLDocument)):
-		s.Document, s.Format = filepath.Join(dir, HTMLDocument), pdf.FormatHTML
+		s.Document, s.Format = filepath.Join(dir, HTMLDocument), FormatHTML
 	case isFile(filepath.Join(dir, MarkdownDocument)):
 		s.Document, s.Format = filepath.Join(dir, MarkdownDocument), FormatMarkdown
 	default:
@@ -165,6 +215,16 @@ func Load(dir string) (*Source, error) {
 	if s.FooterTemplate, err = readTemplate(dir, opts.Footer); err != nil {
 		return nil, err
 	}
+	for _, name := range opts.UserStylesheets {
+		css, err := readTemplate(dir, name)
+		if err != nil {
+			return nil, err
+		}
+		s.UserStylesheets = append(s.UserStylesheets, css)
+	}
+	if s.MarkdownTemplate, err = readTemplate(dir, opts.MarkdownTemplate); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -173,7 +233,8 @@ func Load(dir string) (*Source, error) {
 // leave a fixture on the defaults unnoticed.
 func ParseOptions(data []byte) (Options, error) {
 	var o Options
-	if err := decodeStrict(data, OptionNames, &o); err != nil {
+	names := append(slices.Clone(OptionNames), LithoOptionNames...)
+	if err := decodeStrict(data, append(names, ReferenceOfName), &o); err != nil {
 		return Options{}, err
 	}
 	return o, o.validate()
@@ -212,6 +273,12 @@ var OptionNames = []string{
 	"nativeBookmarks", "emulatedMediaType", "emulatedMediaFeatures", "header", "footer",
 }
 
+// LithoOptionNames are the keys of an options file that are litho's own
+// options: the route has no such field and never receives them.
+//
+//nolint:gochecknoglobals // static list of the schema's keys
+var LithoOptionNames = []string{"userStylesheets", "markdownTemplate"}
+
 // validate checks the values against the ranges the Chromium route accepts.
 func (o Options) validate() error {
 	for name, v := range map[string]*float64{
@@ -236,10 +303,16 @@ func (o Options) validate() error {
 	default:
 		return fmt.Errorf("emulatedMediaType %q: want print or screen", o.EmulatedMediaType)
 	}
-	for _, name := range []string{o.Header, o.Footer} {
+	for _, name := range append([]string{o.Header, o.Footer, o.MarkdownTemplate}, o.UserStylesheets...) {
 		if name != "" && (name != filepath.Base(name) || strings.ContainsAny(name, `/\`) || name == "." || name == "..") {
 			return fmt.Errorf("template %q: want a file name of the source directory", name)
 		}
+	}
+	if slices.Contains(o.UserStylesheets, "") {
+		return errors.New("userStylesheets: want file names of the source directory")
+	}
+	if o.ReferenceOf != strings.TrimSpace(o.ReferenceOf) || strings.Contains(o.ReferenceOf, "\x00") {
+		return fmt.Errorf("%s %q: want a fixture ID", ReferenceOfName, o.ReferenceOf)
 	}
 	return nil
 }
@@ -333,19 +406,23 @@ func (s *Source) PreferCSSPageSize() bool {
 // one but the paper, the margins, the media type and the CSS page size,
 // which the callers pass themselves: landscape, scale, page ranges, single
 // page, backgrounds, outline, header and footer templates and media
-// features. A field the options leave out maps to its corpus default.
-func (s *Source) PrintOptions() []pdf.ConvertOption {
+// features. A field the options leave out maps to its corpus default. A
+// single page sets the page ranges aside: one page has none to select, and
+// a conversion refuses the pair.
+func (s *Source) PrintOptions() []pdf.HTMLOption {
 	o := s.Options
-	opts := []pdf.ConvertOption{
-		pdf.WithLandscape(o.Landscape),
+	opts := []pdf.HTMLOption{
 		pdf.WithSinglePage(o.SinglePage),
-		pdf.WithPrintBackground(o.PrintBackground == nil || *o.PrintBackground),
+		pdf.WithCanvasBackground(o.PrintBackground == nil || *o.PrintBackground),
 		pdf.WithOutline(o.NativeBookmarks),
 	}
-	if o.Scale != nil {
-		opts = append(opts, pdf.WithPrintScale(*o.Scale))
+	if o.Landscape {
+		opts = append(opts, pdf.WithOrientation(pdf.OrientationLandscape))
 	}
-	if o.NativePages != "" {
+	if o.Scale != nil {
+		opts = append(opts, pdf.WithScale(*o.Scale))
+	}
+	if o.NativePages != "" && !o.SinglePage {
 		opts = append(opts, pdf.WithPageRanges(o.NativePages))
 	}
 	if s.HeaderTemplate != "" {
@@ -357,7 +434,24 @@ func (s *Source) PrintOptions() []pdf.ConvertOption {
 	if len(o.EmulatedMediaFeatures) > 0 {
 		opts = append(opts, pdf.WithMediaFeatures(o.EmulatedMediaFeatures))
 	}
+	for _, css := range s.UserStylesheets {
+		opts = append(opts, pdf.WithUserStylesheet(css))
+	}
 	return opts
+}
+
+// Conversion returns the conversion of src, a document of format, an HTML
+// or a Markdown one, with opts. A Markdown document renders into template,
+// litho's own when it is "".
+func Conversion(format Format, src io.Reader, template string, opts ...pdf.HTMLOption) *pdf.Conversion {
+	if format == FormatMarkdown {
+		all := optionsAs[pdf.MarkdownOption](opts)
+		if template != "" {
+			all = append(all, pdf.WithMarkdownTemplate(template))
+		}
+		return pdf.FromMarkdown(src, all...)
+	}
+	return pdf.FromHTML(src, opts...)
 }
 
 // FontFamilies are the prefixes of the font directories

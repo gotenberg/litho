@@ -19,10 +19,9 @@ var internalSubcommands = []string{"provision", "scan-claims", "convert-one"}
 // has to name them.
 var helpAliases = map[string]bool{"-h": true, "--help": true, "help": true}
 
-// TestUsageNamesEveryDispatchableSubcommand keeps the usage block honest, the
-// rule cmd/litho's TestUsageListsEveryDispatchableCommand states for litho
-// itself: the "Subcommands:" block and the dispatch switch are both
-// hand-written, so each is checked against the other. A subcommand the usage
+// TestUsageNamesEveryDispatchableSubcommand keeps the usage block honest: the
+// "Subcommands:" block and the dispatch switch are both hand-written, so each
+// is checked against the other. A subcommand the usage
 // never names is one nobody finds, and a name the usage invents sends a
 // reader to "unknown subcommand". The internal subcommands, which other
 // processes run, are dispatched and left out of the usage.

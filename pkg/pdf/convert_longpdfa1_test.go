@@ -89,33 +89,35 @@ func TestConvert_LongDocumentsReachPDFA1(t *testing.T) {
 	dir := convertFontDir(t)
 	for _, tc := range []struct {
 		name     string
-		format   Format
+		format   testFormat
 		data     []byte
 		minPages int
 	}{
 		// A page of an A4 flow is about 780 points: past page 42 the flow
 		// passes 32767.
-		{"html", FormatHTML, longHTML(780, 1), 45},
-		{"html in columns", FormatHTML, longHTML(2100, 3), 45},
-		{"docx", FormatDOCX, longDOCX(t, 780), 45},
-		{"xlsx", FormatXLSX, longXLSX(t, 2600), 45},
+		{"html", formatHTML, longHTML(780, 1), 45},
+		{"html in columns", formatHTML, longHTML(2100, 3), 45},
+		{"docx", formatDOCX, longDOCX(t, 780), 45},
+		{"xlsx", formatXLSX, longXLSX(t, 2600), 45},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			convert := func(opts ...ConvertOption) ([]byte, *ConvertReport) {
-				var out bytes.Buffer
-				rep, err := Convert(context.Background(), bytes.NewReader(tc.data), tc.format, &out, append([]ConvertOption{WithConvertFontDirs(dir), WithDefaultLanguage("en")}, opts...)...)
-				if err != nil {
-					t.Fatalf("Convert: %v", err)
-				}
-				return out.Bytes(), rep
-			}
-			plain, _ := convert()
-			a1b, rep := convert(WithConvertPDFA(models.PDFA1b))
-			if rep.Conformance == nil || len(rep.Conformance.Residual) > 0 {
-				t.Fatalf("Conformance = %+v, want nothing left", rep.Conformance)
-			}
 			ctx := context.Background()
+			conversion := func(opts ...ConvertOption) *Conversion {
+				return fromFormat(tc.format, bytes.NewReader(tc.data), append([]ConvertOption{WithConvertFontDirs(dir), WithDefaultLanguage("en")}, opts...)...)
+			}
+			var out bytes.Buffer
+			if _, err := conversion().WriteTo(ctx, &out); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+			plain := out.Bytes()
+			a1b, rep, err := convertAndRemediate(ctx, conversion(WithConvertVersion("1.4")), "1.4", models.PDFA1b, "", "en")
+			if err != nil {
+				t.Fatalf("converting to PDF/A-1b: %v", err)
+			}
+			if len(rep.Residual) > 0 {
+				t.Fatalf("Residual = %+v, want nothing left", rep.Residual)
+			}
 			r, err := Open(ctx, bytes.NewReader(a1b), int64(len(a1b)))
 			if err != nil {
 				t.Fatalf("Open: %v", err)

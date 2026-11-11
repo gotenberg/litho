@@ -12,15 +12,12 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// TestConvert_WritesTheVersionAsked checks the header of each version
-// Convert targets, and that the file reads back.
+// TestConvert_WritesTheVersionAsked checks the header of each version a
+// conversion writes, and that the file reads back.
 func TestConvert_WritesTheVersionAsked(t *testing.T) {
 	dir := convertFontDir(t)
 	for _, version := range []string{"1.4", "1.5", "1.6", "1.7", "2.0"} {
-		data, rep := convertText(t, dir, "A line of text.", WithConvertVersion(version))
-		if rep.Conformance != nil {
-			t.Errorf("version %s: Conformance = %+v, want nil without a profile", version, rep.Conformance)
-		}
+		data, _ := convertText(t, dir, "A line of text.", WithConvertVersion(version))
 		if !bytes.HasPrefix(data, []byte("%PDF-"+version)) {
 			t.Errorf("version %s: header %q", version, data[:8])
 		}
@@ -37,9 +34,10 @@ func TestConvert_WritesTheVersionAsked(t *testing.T) {
 	}
 }
 
-// TestConvert_ConformsToTheProfilesAsked checks that a conversion to a
-// profile validates at that profile, reports nothing left, and declares the
-// version the profile builds on.
+// TestConvert_ConformsToTheProfilesAsked checks that a conversion at the
+// version a profile builds on, remediated to that profile in a later
+// pipeline stage, validates at that profile, reports nothing left, and
+// declares that version.
 func TestConvert_ConformsToTheProfilesAsked(t *testing.T) {
 	dir := convertFontDir(t)
 	for name, tc := range map[string]struct {
@@ -57,14 +55,15 @@ func TestConvert_ConformsToTheProfilesAsked(t *testing.T) {
 		"PDF/A-4 + PDF/UA-2":  {pdfa: models.PDFA4, pdfua: models.PDFUA2, version: "2.0"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			data, rep := convertText(t, dir, "A line of text.\nAnother line.", WithConvertPDFA(tc.pdfa), WithConvertPDFUA(tc.pdfua), WithDefaultLanguage("en"))
-			if rep.Conformance == nil {
-				t.Fatal("Conformance = nil, want a report")
-			}
-			if len(rep.Conformance.Residual) > 0 {
-				t.Errorf("Residual = %v, want none", rep.Conformance.Residual)
-			}
 			ctx := context.Background()
+			c := FromText(strings.NewReader("A line of text.\nAnother line."), WithConvertFontDirs(dir), WithDefaultLanguage("en"), WithConvertVersion(tc.version))
+			data, rep, err := convertAndRemediate(ctx, c, tc.version, tc.pdfa, tc.pdfua, "en")
+			if err != nil {
+				t.Fatalf("converting and remediating: %v", err)
+			}
+			if len(rep.Residual) > 0 {
+				t.Errorf("Residual = %v, want none", rep.Residual)
+			}
 			r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 			if err != nil {
 				t.Fatalf("Open: %v", err)
@@ -87,68 +86,54 @@ func TestConvert_ConformsToTheProfilesAsked(t *testing.T) {
 	}
 }
 
-// TestConvert_RefusesATargetItCannotWrite checks the versions, profiles and
-// combinations Convert refuses before it reads the source.
-func TestConvert_RefusesATargetItCannotWrite(t *testing.T) {
+// TestConvert_RefusesAVersionItCannotWrite checks that a version a
+// conversion does not write fails before the source is read.
+func TestConvert_RefusesAVersionItCannotWrite(t *testing.T) {
 	dir := convertFontDir(t)
-	for name, tc := range map[string]struct {
-		opts []ConvertOption
-		also error
-	}{
-		"unknown version":        {opts: []ConvertOption{WithConvertVersion("1.3")}},
-		"unknown PDF/A profile":  {opts: []ConvertOption{WithConvertPDFA("PDF/A-9z")}},
-		"unknown PDF/UA profile": {opts: []ConvertOption{WithConvertPDFUA("PDF/UA-9")}},
-		"PDF/A-4f":               {opts: []ConvertOption{WithConvertPDFA(models.PDFA4f)}},
-		"PDF/A-1b at 1.7":        {opts: []ConvertOption{WithConvertPDFA(models.PDFA1b), WithConvertVersion("1.7")}},
-		"PDF/A-2b at 2.0":        {opts: []ConvertOption{WithConvertPDFA(models.PDFA2b), WithConvertVersion("2.0")}},
-		"PDF/UA-2 at 1.7":        {opts: []ConvertOption{WithConvertPDFUA(models.PDFUA2), WithConvertVersion("1.7")}},
-		"PDF/A-2b with PDF/UA-2": {opts: []ConvertOption{WithConvertPDFA(models.PDFA2b), WithConvertPDFUA(models.PDFUA2)}, also: ErrIncompatibleProfiles},
-		"PDF/A-4 with PDF/UA-1":  {opts: []ConvertOption{WithConvertPDFA(models.PDFA4), WithConvertPDFUA(models.PDFUA1)}, also: ErrIncompatibleProfiles},
-	} {
+	for _, version := range []string{"1.3", "1.8", "2", "x"} {
 		var out bytes.Buffer
-		opts := append([]ConvertOption{WithConvertFontDirs(dir)}, tc.opts...)
-		_, err := Convert(context.Background(), strings.NewReader("A"), FormatText, &out, opts...)
+		_, err := FromText(strings.NewReader("A"), WithConvertFontDirs(dir), WithConvertVersion(version)).WriteTo(context.Background(), &out)
 		if !errors.Is(err, ErrInvalidConvertOptions) {
-			t.Errorf("%s: error = %v, want ErrInvalidConvertOptions", name, err)
-		}
-		if tc.also != nil && !errors.Is(err, tc.also) {
-			t.Errorf("%s: error = %v, want it to wrap %v too", name, err, tc.also)
+			t.Errorf("version %q: error = %v, want ErrInvalidConvertOptions", version, err)
 		}
 		if out.Len() != 0 {
-			t.Errorf("%s: %d bytes written before the refusal", name, out.Len())
+			t.Errorf("version %q: %d bytes written before the refusal", version, out.Len())
 		}
 	}
 }
 
-// TestConvert_LeavesNoTempFile checks that a conversion to a profile writes
-// its intermediate files in the directory WithConvertTempDir names and
-// removes them, on success and on failure, and that a failure writes
-// nothing to dst.
+// TestConvert_LeavesNoTempFile checks that a conversion remediated in a
+// pipeline writes its intermediate files in the directory
+// WithConvertTempDir and WithPipelineTempDir name and removes them, on
+// success and on failure, and that a failure writes nothing to dst.
 func TestConvert_LeavesNoTempFile(t *testing.T) {
 	dir := convertFontDir(t)
 	tmp := t.TempDir()
-	data, rep := convertText(t, dir, "A line of text.", WithConvertPDFA(models.PDFA2b), WithConvertTempDir(tmp))
-	if rep.Conformance == nil || len(data) == 0 {
-		t.Fatalf("Conformance = %v, %d bytes", rep.Conformance, len(data))
+	ctx := context.Background()
+	conversion := func(tempDir string) *Conversion {
+		return FromText(strings.NewReader("A line of text."), WithConvertFontDirs(dir), WithConvertTempDir(tempDir))
+	}
+	data, rep, err := convertAndRemediate(ctx, conversion(tmp), "1.7", models.PDFA2b, "", "", WithPipelineTempDir(tmp))
+	if err != nil || rep == nil || len(data) == 0 {
+		t.Fatalf("converting to PDF/A-2b: %v, report %v, %d bytes", err, rep, len(data))
 	}
 	if entries, err := os.ReadDir(tmp); err != nil || len(entries) != 0 {
 		t.Errorf("temp dir holds %v (%v) after a conversion, want nothing", entries, err)
 	}
 
-	var out bytes.Buffer
-	_, err := Convert(context.Background(), strings.NewReader("A"), FormatText, &out,
-		WithConvertFontDirs(dir), WithConvertPDFA(models.PDFA2b), WithConvertTempDir(filepath.Join(tmp, "missing")))
+	missing := filepath.Join(tmp, "missing")
+	data, _, err = convertAndRemediate(ctx, conversion(missing), "1.7", models.PDFA2b, "", "", WithPipelineTempDir(missing))
 	if err == nil {
-		t.Fatal("Convert into a missing temp dir succeeded")
+		t.Fatal("converting into a missing temp dir succeeded")
 	}
-	if out.Len() != 0 {
-		t.Errorf("%d bytes written before the failure", out.Len())
+	if len(data) != 0 {
+		t.Errorf("%d bytes written before the failure", len(data))
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
-	if _, err := Convert(ctx, strings.NewReader("A"), FormatText, &out, WithConvertFontDirs(dir), WithConvertPDFA(models.PDFA2b), WithConvertTempDir(tmp)); err == nil {
-		t.Error("Convert with a cancelled context succeeded")
+	if _, _, err := convertAndRemediate(cancelled, conversion(tmp), "1.7", models.PDFA2b, "", "", WithPipelineTempDir(tmp)); err == nil {
+		t.Error("converting with a cancelled context succeeded")
 	}
 	if entries, err := os.ReadDir(tmp); err != nil || len(entries) != 0 {
 		t.Errorf("temp dir holds %v (%v) after a failure, want nothing", entries, err)

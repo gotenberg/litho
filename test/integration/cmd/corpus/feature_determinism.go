@@ -83,9 +83,9 @@ type determinismOp struct {
 // aggressive mode, the mutate-* Writer mutations that draw no randomness, and
 // two bookmark generations: [pdf.Writer.GenerateBookmarks] with
 // [determinismBookmarkOptions] in replace mode, and a [pdf.Split] of every
-// page that reconstructs the outline. mutate-sign and mutate-encrypt are left out, since a signature
-// and an encryption carry the random nonces, keys, salts and IVs their
-// cryptography requires. The bookmark generations come last, so they take
+// page that reconstructs the outline. mutate-sign and mutate-encrypt are
+// left out, since a signature and an encryption carry the random nonces,
+// keys, salts and IVs their cryptography requires. The bookmark generations come last, so they take
 // fixture slots that skipped before them and move no other assignment.
 //
 // A PDF has one fixture per profile of the manifest, and the operations are
@@ -471,8 +471,8 @@ func determinismBookmarkOptions() pdf.BookmarkGenerationOptions {
 }
 
 // generateBookmarksForDeterminism replaces data's outline with the one
-// [pdf.Writer.GenerateBookmarks] detects, as `litho set-bookmarks --generate`
-// does, and returns the bytes written.
+// [pdf.Writer.GenerateBookmarks] detects with [determinismBookmarkOptions],
+// in replace mode, and returns the bytes written.
 func generateBookmarksForDeterminism(ctx context.Context, data []byte) ([]byte, error) {
 	r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)))
 	if err != nil {

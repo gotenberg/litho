@@ -9,8 +9,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 func TestParseOptions_RefusesWhatTheRouteRefuses(t *testing.T) {
@@ -58,7 +56,7 @@ func TestLoad_DefaultsWithoutAnOptionsFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Format != pdf.FormatHTML || s.Document != filepath.Join(dir, HTMLDocument) {
+	if s.Format != FormatHTML || s.Document != filepath.Join(dir, HTMLDocument) {
 		t.Errorf("document %s in %s", s.Document, s.Format)
 	}
 	if w, h := s.Paper(); w != DefaultPaperWidth || h != DefaultPaperHeight {
@@ -70,8 +68,8 @@ func TestLoad_DefaultsWithoutAnOptionsFile(t *testing.T) {
 	if s.MediaType() != "print" || !s.PreferCSSPageSize() {
 		t.Errorf("media %q, prefer CSS page size %v", s.MediaType(), s.PreferCSSPageSize())
 	}
-	if n := len(s.PrintOptions()); n != 4 {
-		t.Errorf("%d print options, want the four fixed ones", n)
+	if n := len(s.PrintOptions()); n != 3 {
+		t.Errorf("%d print options, want the three fixed ones", n)
 	}
 }
 
@@ -102,8 +100,8 @@ func TestLoad_ReadsTheOptionsAndTemplates(t *testing.T) {
 	if s.HeaderTemplate != "<span class=title></span>" || s.FooterTemplate != "" {
 		t.Errorf("templates %q %q", s.HeaderTemplate, s.FooterTemplate)
 	}
-	if n := len(s.PrintOptions()); n != 8 {
-		t.Errorf("%d print options, want 8", n)
+	if n := len(s.PrintOptions()); n != 7 {
+		t.Errorf("%d print options, want 7", n)
 	}
 }
 
@@ -145,8 +143,11 @@ func TestOptionNames_AreTheJSONNamesOfOptions(t *testing.T) {
 		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
 		tags = append(tags, name)
 	}
-	if !slices.Equal(tags, OptionNames) {
-		t.Errorf("json names %v, OptionNames %v", tags, OptionNames)
+	// The route's fields, then litho's own options, then the key that
+	// borrows a reference: the last two are no fields of the route's.
+	want := append(slices.Clone(OptionNames), LithoOptionNames...)
+	if want = append(want, ReferenceOfName); !slices.Equal(tags, want) {
+		t.Errorf("json names %v, want %v", tags, want)
 	}
 }
 

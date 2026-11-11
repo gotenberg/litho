@@ -19,20 +19,20 @@ func TestConvert_SpoolKeepsTheBytes(t *testing.T) {
 	t.Parallel()
 	testdata := filepath.Join("..", "..", "test", "integration", "testdata")
 	for _, tc := range []struct {
-		format Format
+		format testFormat
 		path   string
 		src    string
 	}{
-		{format: FormatText, src: strings.Repeat("Spooled text over many lines.\n", 400)},
-		{format: FormatMarkdown, src: "# Title\n\nA paragraph with *emphasis*.\n\n![dot](img/dot.png)\n"},
-		{format: FormatHTML, src: convertHTMLPage},
-		{format: FormatCSV, src: "a,b,c\n1,2,3\n4,5,6\n"},
-		{format: FormatDOCX, path: "libreoffice/docx/sources/ooxmlimport/n764745-alignment.docx"},
-		{format: FormatODT, path: "libreoffice/odt/sources/layout/tdf119875.odt"},
-		{format: FormatXLSX, path: "libreoffice/xlsx/sources/sc/cell-borders.xlsx"},
-		{format: FormatODS, path: "libreoffice/ods/sources/sc/fdo62729.ods"},
-		{format: FormatPPTX, path: "libreoffice/pptx/sources/oox/tdf163803_image_with_fill.pptx"},
-		{format: FormatODP, path: "libreoffice/odp/sources/sd/16-9.odp"},
+		{format: formatText, src: strings.Repeat("Spooled text over many lines.\n", 400)},
+		{format: formatMarkdown, src: "# Title\n\nA paragraph with *emphasis*.\n\n![dot](img/dot.png)\n"},
+		{format: formatHTML, src: convertHTMLPage},
+		{format: formatCSV, src: "a,b,c\n1,2,3\n4,5,6\n"},
+		{format: formatDOCX, path: "libreoffice/docx/sources/ooxmlimport/n764745-alignment.docx"},
+		{format: formatODT, path: "libreoffice/odt/sources/layout/tdf119875.odt"},
+		{format: formatXLSX, path: "libreoffice/xlsx/sources/sc/cell-borders.xlsx"},
+		{format: formatODS, path: "libreoffice/ods/sources/sc/fdo62729.ods"},
+		{format: formatPPTX, path: "libreoffice/pptx/sources/oox/tdf163803_image_with_fill.pptx"},
+		{format: formatODP, path: "libreoffice/odp/sources/sd/16-9.odp"},
 	} {
 		t.Run(string(tc.format), func(t *testing.T) {
 			t.Parallel()
@@ -51,9 +51,18 @@ func TestConvert_SpoolKeepsTheBytes(t *testing.T) {
 			var outs [2][]byte
 			for i, held := range []int64{-1, 1} {
 				var out bytes.Buffer
-				opts := []ConvertOption{WithConvertFontDirs(fonts), WithResources(convertHTMLResources(t)), WithConvertTempDir(tmp), func(o *convertOptions) { o.spool = held }}
-				if _, err := Convert(context.Background(), bytes.NewReader(src), tc.format, &out, opts...); err != nil {
-					t.Fatalf("Convert with spool %d: %v", held, err)
+				opts := []ConvertOption{WithConvertFontDirs(fonts), WithConvertTempDir(tmp), withSpool(held)}
+				var c *Conversion
+				switch tc.format {
+				case formatHTML:
+					c = FromHTML(bytes.NewReader(src), append(optionsAs[HTMLOption](opts), WithResources(convertHTMLResources(t)))...)
+				case formatMarkdown:
+					c = FromMarkdown(bytes.NewReader(src), append(optionsAs[MarkdownOption](opts), WithResources(convertHTMLResources(t)))...)
+				default:
+					c = fromFormat(tc.format, bytes.NewReader(src), opts...)
+				}
+				if _, err := c.WriteTo(context.Background(), &out); err != nil {
+					t.Fatalf("WriteTo with spool %d: %v", held, err)
 				}
 				outs[i] = out.Bytes()
 				entries, err := os.ReadDir(tmp)

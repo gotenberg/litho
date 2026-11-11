@@ -12,9 +12,9 @@ func TestConvert_MarkdownLaysOutTheRenderedHTML(t *testing.T) {
 	ctx := context.Background()
 	src := "# Notes\n\nA paragraph with a [link](https://example.com/).\n\n| a | b |\n|---|---|\n| one | two |\n"
 	var out bytes.Buffer
-	rep, err := Convert(ctx, strings.NewReader(src), FormatMarkdown, &out, WithConvertFontDirs(convertFontDir(t)))
+	rep, err := FromMarkdown(strings.NewReader(src), WithConvertFontDirs(convertFontDir(t))).WriteTo(ctx, &out)
 	if err != nil {
-		t.Fatalf("Convert: %v", err)
+		t.Fatalf("WriteTo: %v", err)
 	}
 	if rep.Pages != 1 || len(rep.Warnings) != 0 {
 		t.Errorf("report %+v", rep)
@@ -39,8 +39,8 @@ func TestConvert_MarkdownLaysOutTheRenderedHTML(t *testing.T) {
 	if err != nil || meta["Title"] != "Notes" {
 		t.Errorf("metadata %v, %v", meta, err)
 	}
-	if _, err := Convert(ctx, strings.NewReader(strings.Repeat("x", 64)), FormatMarkdown, &bytes.Buffer{},
-		WithConvertFontDirs(convertFontDir(t)), WithConvertLimits(Limits{MaxConvertInputBytes: 16})); !IsInvalidInput(err) {
+	if _, err := FromMarkdown(strings.NewReader(strings.Repeat("x", 64)),
+		WithConvertFontDirs(convertFontDir(t)), WithConvertLimits(Limits{MaxConvertInputBytes: 16})).WriteTo(ctx, &bytes.Buffer{}); !IsInvalidInput(err) {
 		t.Errorf("past the cap: %v", err)
 	}
 }

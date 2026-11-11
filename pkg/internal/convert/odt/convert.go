@@ -30,6 +30,10 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
+	if opts.TrackedChanges != office.ChangesAccepted {
+		// Wave 11, cell word: remove with the feature.
+		return nil, fmt.Errorf("%w: tracked-changes views", office.ErrNotImplemented)
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

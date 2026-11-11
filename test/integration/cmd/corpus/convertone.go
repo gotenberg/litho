@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 
 	"github.com/gotenberg/litho/pkg/pdf"
+	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
 // convertOneResult is what `corpus convert-one` prints: how one conversion
@@ -44,7 +45,7 @@ var convertSentinels = []struct { //nolint:gochecknoglobals // static table
 	{"ErrConvertMalformed", pdf.ErrConvertMalformed},
 	{"ErrConvertEncrypted", pdf.ErrConvertEncrypted},
 	{"ErrConvertNoFonts", pdf.ErrConvertNoFonts},
-	{"ErrUnsupportedFormat", pdf.ErrUnsupportedFormat},
+	{"ErrUnsupportedFormat", fixture.ErrUnsupportedFormat},
 	{"ErrInvalidConvertOptions", pdf.ErrInvalidConvertOptions},
 }
 
@@ -109,13 +110,14 @@ type textChecks struct {
 //
 //   - litho/stress html-png-50: the child that held its 252 MiB PDF in a
 //     buffer peaked at 757 MiB alone and at 784 MiB beside twelve busy
-//     loops, where `litho convert` peaks at 249 MiB either way.
+//     loops, where the same conversion written straight to a file peaks at
+//     249 MiB either way.
 func convertOne(ctx context.Context, src string, fonts []string, checks textChecks) convertOneResult {
-	document, format, sourceOpts, err := loadRobustnessSource(src)
+	source, err := loadRobustnessSource(src)
 	if err != nil {
 		return convertOneResult{Result: "error", Detail: err.Error()}
 	}
-	in, err := os.Open(document) //nolint:gosec // a fixture path
+	in, err := os.Open(source.document) //nolint:gosec // a fixture path
 	if err != nil {
 		return convertOneResult{Result: "error", Detail: err.Error()}
 	}
@@ -128,12 +130,14 @@ func convertOne(ctx context.Context, src string, fonts []string, checks textChec
 	defer out.Close()
 	var fetches atomic.Int64
 	client := &http.Client{Transport: refusingTransport{&fetches}}
-	opts := []pdf.ConvertOption{pdf.WithHTTPClient(client)}
+	var opts []pdf.ConvertOption
 	if len(fonts) > 0 {
 		opts = append(opts, pdf.WithConvertFontDirs(fonts...))
 	}
-	opts = append(opts, sourceOpts...)
-	_, err = pdf.Convert(ctx, in, format, out, opts...)
+	c, err := source.conversion(in, client, opts...)
+	if err == nil {
+		_, err = c.WriteTo(ctx, out)
+	}
 	res := convertOneResult{Result: convertResultName(err), Fetches: fetches.Load()}
 	if err != nil {
 		res.Detail = err.Error()

@@ -13,7 +13,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/pdf"
 	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
@@ -363,7 +362,7 @@ func TestCommittedOfficeSourcesLoad(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := pdf.Format(path.Base(m.Name))
+		want := fixture.Format(path.Base(m.Name))
 		for _, s := range sources {
 			checked++
 			o, err := fixture.LoadOffice(s.PDFPath)

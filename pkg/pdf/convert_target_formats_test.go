@@ -179,10 +179,10 @@ func catalogLang(t *testing.T, r *Reader) string {
 	return document.DecodePdfString(s)
 }
 
-// convertTargetCase is one target of the per-format matrix.
+// convertTargetCase is one target of the per-format matrix: a version, and
+// the profiles a later pipeline stage remediates the conversion to.
 type convertTargetCase struct {
 	name    string
-	opts    []ConvertOption
 	version string
 	pdfa    models.PDFAProfile
 	pdfua   models.PDFUAProfile
@@ -190,17 +190,39 @@ type convertTargetCase struct {
 
 // convertTargets are the targets every input format is converted to.
 var convertTargets = []convertTargetCase{
-	{name: "PDF 1.4", opts: []ConvertOption{WithConvertVersion("1.4")}, version: "1.4"},
-	{name: "PDF 2.0", opts: []ConvertOption{WithConvertVersion("2.0")}, version: "2.0"},
-	{name: "PDF/A-1b", opts: []ConvertOption{WithConvertPDFA(models.PDFA1b)}, version: "1.4", pdfa: models.PDFA1b},
-	{name: "PDF/A-2a + PDF/UA-1", opts: []ConvertOption{WithConvertPDFA(models.PDFA2a), WithConvertPDFUA(models.PDFUA1)}, version: "1.7", pdfa: models.PDFA2a, pdfua: models.PDFUA1},
-	{name: "PDF/A-4 + PDF/UA-2", opts: []ConvertOption{WithConvertPDFA(models.PDFA4), WithConvertPDFUA(models.PDFUA2)}, version: "2.0", pdfa: models.PDFA4, pdfua: models.PDFUA2},
+	{name: "PDF 1.4", version: "1.4"},
+	{name: "PDF 2.0", version: "2.0"},
+	{name: "PDF/A-1b", version: "1.4", pdfa: models.PDFA1b},
+	{name: "PDF/A-2a + PDF/UA-1", version: "1.7", pdfa: models.PDFA2a, pdfua: models.PDFUA1},
+	{name: "PDF/A-4 + PDF/UA-2", version: "2.0", pdfa: models.PDFA4, pdfua: models.PDFUA2},
+}
+
+// convertToTarget converts src as format at tc's version with opts and, when
+// tc names a profile, remediates the result to it in a later pipeline
+// stage, with lang as the language of the remediation when not empty. The
+// report is nil without a profile.
+func convertToTarget(t *testing.T, format testFormat, src []byte, tc convertTargetCase, lang string, opts ...ConvertOption) ([]byte, *RemediationReport) {
+	t.Helper()
+	ctx := context.Background()
+	c := fromFormat(format, bytes.NewReader(src), append(opts, WithConvertVersion(tc.version))...)
+	if tc.pdfa == "" && tc.pdfua == "" {
+		var out bytes.Buffer
+		if _, err := c.WriteTo(ctx, &out); err != nil {
+			t.Fatalf("WriteTo: %v", err)
+		}
+		return out.Bytes(), nil
+	}
+	data, rep, err := convertAndRemediate(ctx, c, tc.version, tc.pdfa, tc.pdfua, lang)
+	if err != nil {
+		t.Fatalf("converting and remediating: %v", err)
+	}
+	return data, rep
 }
 
 // checkTarget opens data and checks what tc asks of it: one revision whose
 // header names the version, no catalog /Version, the language, and a file
 // both litho validators pass when the report says nothing is left.
-func checkTarget(t *testing.T, data []byte, rep *ConvertReport, tc convertTargetCase, lang string) {
+func checkTarget(t *testing.T, data []byte, rep *RemediationReport, tc convertTargetCase, lang string) {
 	t.Helper()
 	if got := bytes.Count(data, []byte("%%EOF")); got != 1 {
 		t.Errorf("%d %%%%EOF markers, want one revision", got)
@@ -221,13 +243,10 @@ func checkTarget(t *testing.T, data []byte, rep *ConvertReport, tc convertTarget
 		t.Errorf("Language = %q, want %q", got, lang)
 	}
 	if tc.pdfa == "" && tc.pdfua == "" {
-		if rep.Conformance != nil {
-			t.Errorf("Conformance = %+v, want nil without a profile", rep.Conformance)
-		}
 		return
 	}
-	if rep.Conformance == nil {
-		t.Fatal("Conformance = nil, want a report")
+	if rep == nil {
+		t.Fatal("remediation report = nil, want a report")
 	}
 	var found []error
 	if tc.pdfa != "" {
@@ -244,8 +263,8 @@ func checkTarget(t *testing.T, data []byte, rep *ConvertReport, tc convertTarget
 		}
 		found = append(found, violations...)
 	}
-	if (len(rep.Conformance.Residual) == 0) != (len(found) == 0) {
-		t.Errorf("Residual %v disagrees with the validators, which find %v", rep.Conformance.Residual, found)
+	if (len(rep.Residual) == 0) != (len(found) == 0) {
+		t.Errorf("Residual %v disagrees with the validators, which find %v", rep.Residual, found)
 	}
 }
 
@@ -256,27 +275,22 @@ func checkTarget(t *testing.T, data []byte, rep *ConvertReport, tc convertTarget
 func TestConvert_EveryFormatToEveryTarget(t *testing.T) {
 	dir := convertFontDir(t)
 	sources := []struct {
-		format Format
+		format testFormat
 		data   []byte
 	}{
-		{FormatHTML, []byte(`<!doctype html><title>Notes</title><h1>Notes</h1><p>One paragraph of text.</p><img src="` + testPNGDataURL(t) + `" alt="A blue square">`)},
-		{FormatDOCX, testDOCX(t)},
-		{FormatXLSX, testXLSX(t)},
-		{FormatPPTX, testPPTX(t)},
-		{FormatODT, targetODT(t)},
+		{formatHTML, []byte(`<!doctype html><title>Notes</title><h1>Notes</h1><p>One paragraph of text.</p><img src="` + testPNGDataURL(t) + `" alt="A blue square">`)},
+		{formatDOCX, testDOCX(t)},
+		{formatXLSX, testXLSX(t)},
+		{formatPPTX, testPPTX(t)},
+		{formatODT, targetODT(t)},
 	}
 	for _, src := range sources {
 		for _, tc := range convertTargets {
 			t.Run(string(src.format)+"/"+tc.name, func(t *testing.T) {
-				var out bytes.Buffer
-				opts := append([]ConvertOption{WithConvertFontDirs(dir), WithDefaultLanguage("en-GB")}, tc.opts...)
-				rep, err := Convert(context.Background(), bytes.NewReader(src.data), src.format, &out, opts...)
-				if err != nil {
-					t.Fatalf("Convert: %v", err)
-				}
-				checkTarget(t, out.Bytes(), rep, tc, "en-GB")
-				if rep.Conformance != nil && len(rep.Conformance.Residual) > 0 {
-					t.Errorf("Residual = %v, want none", rep.Conformance.Residual)
+				data, rep := convertToTarget(t, src.format, src.data, tc, "en-GB", WithConvertFontDirs(dir), WithDefaultLanguage("en-GB"))
+				checkTarget(t, data, rep, tc, "en-GB")
+				if rep != nil && len(rep.Residual) > 0 {
+					t.Errorf("Residual = %v, want none", rep.Residual)
 				}
 			})
 		}
@@ -284,28 +298,24 @@ func TestConvert_EveryFormatToEveryTarget(t *testing.T) {
 }
 
 // TestConvert_ReportsTheMissingAltText checks that a picture the source
-// gives no text for leaves the file claiming PDF/UA with a residual naming
-// the missing alternate text, at both PDF/UA parts, and that the file is
+// gives no text for leaves the remediated file with a residual naming the
+// missing alternate text, at both PDF/UA parts, and that the file is
 // written all the same.
 func TestConvert_ReportsTheMissingAltText(t *testing.T) {
 	dir := convertFontDir(t)
 	src := `<!doctype html><html lang="en"><title>Notes</title><p>Text.</p><img src="` + testPNGDataURL(t) + `"></html>`
 	for _, tc := range convertTargets[3:] {
 		t.Run(tc.name, func(t *testing.T) {
-			var out bytes.Buffer
-			rep, err := Convert(context.Background(), strings.NewReader(src), FormatHTML, &out, append([]ConvertOption{WithConvertFontDirs(dir)}, tc.opts...)...)
-			if err != nil {
-				t.Fatalf("Convert: %v", err)
-			}
-			checkTarget(t, out.Bytes(), rep, tc, "en")
+			data, rep := convertToTarget(t, formatHTML, []byte(src), tc, "", WithConvertFontDirs(dir))
+			checkTarget(t, data, rep, tc, "en")
 			alt := false
-			for _, v := range rep.Conformance.ResidualViolations() {
+			for _, v := range rep.ResidualViolations() {
 				if strings.Contains(strings.ToLower(v.Description), "alt") {
 					alt = true
 				}
 			}
 			if !alt {
-				t.Errorf("Residual = %v, want the missing alternate text", rep.Conformance.Residual)
+				t.Errorf("Residual = %v, want the missing alternate text", rep.Residual)
 			}
 		})
 	}
@@ -320,8 +330,8 @@ func TestConvert_DefaultLanguageNeverReplacesTheSources(t *testing.T) {
 		`<!doctype html><html lang="de"><p>Text.</p>`: `de`,
 	} {
 		var out bytes.Buffer
-		if _, err := Convert(context.Background(), strings.NewReader(src), FormatHTML, &out, WithConvertFontDirs(dir), WithDefaultLanguage("fr-CA")); err != nil {
-			t.Fatalf("Convert: %v", err)
+		if _, err := FromHTML(strings.NewReader(src), WithConvertFontDirs(dir), WithDefaultLanguage("fr-CA")).WriteTo(context.Background(), &out); err != nil {
+			t.Fatalf("WriteTo: %v", err)
 		}
 		r, err := Open(context.Background(), bytes.NewReader(out.Bytes()), int64(out.Len()))
 		if err != nil {
@@ -334,7 +344,7 @@ func TestConvert_DefaultLanguageNeverReplacesTheSources(t *testing.T) {
 	}
 	for _, lang := range []string{"en_US", " en", "en-", "123", "en--US"} {
 		var out bytes.Buffer
-		_, err := Convert(context.Background(), strings.NewReader("A"), FormatText, &out, WithConvertFontDirs(dir), WithDefaultLanguage(lang))
+		_, err := FromText(strings.NewReader("A"), WithConvertFontDirs(dir), WithDefaultLanguage(lang)).WriteTo(context.Background(), &out)
 		if err == nil || !strings.Contains(err.Error(), "language") {
 			t.Errorf("WithDefaultLanguage(%q): error = %v, want a refused language", lang, err)
 		}

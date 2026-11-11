@@ -771,50 +771,50 @@ var (
 
 	// ErrInvalidLimits is returned, wrapped in an error naming the field, by
 	// [Limits.Validate], by [Open] and [OpenFile] when a budget given to
-	// [WithLimits] is negative or above its ceiling, and by [Convert] for one
-	// given to [WithConvertLimits]. See [Limits].
+	// [WithLimits] is negative or above its ceiling, and by a [Conversion]
+	// for one given to [WithConvertLimits]. See [Limits].
 	ErrInvalidLimits = limits.ErrInvalid
 
-	// ErrUnsupportedFormat is returned, wrapped in an error naming the
-	// format, by [Convert] for a [Format] it does not read. Nothing is read
-	// from the source or written.
-	ErrUnsupportedFormat = errors.New("unsupported input format")
-
 	// ErrInvalidConvertOptions is returned, wrapped in an error naming the
-	// option, by [Convert] when a [ConvertOption] is out of range, whatever
-	// the format of the source: a page or font size that is not finite and
-	// positive, a page side past 14,400 points, margins that leave no room
-	// on the page, a print scale outside [0.1, 2], a media type other than
-	// print and screen, a base URL that is not absolute, a version or a
-	// profile Convert does not write.
+	// option, by a [Conversion] when an option is out of range or two
+	// options exclude each other: a paper side that is not finite, positive
+	// and at most 14,400 points, margins that leave no room on the page, a
+	// scale outside [0.1, 2], a media type other than print and screen, a
+	// base URL that is not absolute, a version a conversion does not write,
+	// a Markdown template that never calls toHTML, a sheet the workbook
+	// does not have, a single page asked with a page range.
 	ErrInvalidConvertOptions = errors.New("invalid conversion options")
 
-	// ErrConvertInputTooLarge is returned, wrapped, by [Convert] for a source
-	// longer than [Limits.MaxConvertInputBytes], for a document whose
-	// elements, cascade, boxes, parts or cells pass the converter's caps,
-	// and for one the [Limits.MaxConvertMemoryBytes] budget cannot hold, in
-	// every format. Nothing is written.
+	// ErrConversionReused is returned, wrapped, when a [Conversion] runs a
+	// second time: it reads its source once. Make a new one from a new
+	// reader of the source.
+	ErrConversionReused = errors.New("conversion already ran")
+
+	// ErrConvertInputTooLarge is returned, wrapped, by a [Conversion] for a
+	// source longer than [Limits.MaxConvertInputBytes], for a document
+	// whose elements, cascade, boxes, parts or cells pass the converter's
+	// caps, and for one the [Limits.MaxConvertMemoryBytes] budget cannot
+	// hold, in every format. Nothing is written.
 	ErrConvertInputTooLarge = errors.New("conversion input too large")
 
-	// ErrConvertTooManyPages is returned, wrapped, by [Convert] when the
-	// layout needs more than [Limits.MaxConvertPages] pages. Nothing is
+	// ErrConvertTooManyPages is returned, wrapped, by a [Conversion] when
+	// the layout needs more than [Limits.MaxConvertPages] pages. Nothing is
 	// written.
 	ErrConvertTooManyPages = plaintext.ErrTooManyPages
 
-	// ErrConvertMalformed is returned, wrapped, by [Convert] for a
-	// [FormatDOCX], [FormatODT], [FormatXLSX], [FormatODS], [FormatCSV],
-	// [FormatPPTX] or [FormatODP] source that is not a document of its
-	// format, or whose required parts are missing or unreadable.
+	// ErrConvertMalformed is returned, wrapped, by a [Conversion] for a
+	// DOCX, ODT, XLSX, ODS, PPTX or ODP source that is not a document of
+	// its format, or whose required parts are missing or unreadable.
 	ErrConvertMalformed = office.ErrMalformed
 
-	// ErrConvertEncrypted is returned, wrapped, by [Convert] for an encrypted
-	// [FormatDOCX], [FormatODT], [FormatXLSX], [FormatODS], [FormatPPTX] or
-	// [FormatODP] source that [WithConvertPassword] does not open: no
-	// password, a wrong one, or a scheme litho does not read.
+	// ErrConvertEncrypted is returned, wrapped, by a [Conversion] for an
+	// encrypted DOCX, ODT, XLSX, ODS, PPTX or ODP source that
+	// [WithOfficePassword] does not open: no password, a wrong one, or a
+	// scheme litho does not read.
 	ErrConvertEncrypted = office.ErrEncrypted
 
-	// ErrConvertNoFonts is returned, wrapped, by [Convert] when the font
-	// directories it reads hold no usable font. Nothing is written.
+	// ErrConvertNoFonts is returned, wrapped, by a [Conversion] when the
+	// font directories it reads hold no usable font. Nothing is written.
 	ErrConvertNoFonts = text.ErrNoFonts
 
 	// ErrStreamTooLarge is returned, wrapped, when decoding a stream would
@@ -900,6 +900,22 @@ var (
 	// ErrPipelineEmptyPageList indicates [Pipeline.Split] was called
 	// with an empty page list.
 	ErrPipelineEmptyPageList = errors.New("split requires at least one page")
+
+	// ErrPipelineNoPipelines indicates [Pipeline.MergePipelines] was called
+	// with no pipeline, or with a nil one.
+	ErrPipelineNoPipelines = errors.New("merging pipelines requires at least one pipeline")
+
+	// ErrPipelineNested indicates a pipeline given to
+	// [Pipeline.MergePipelines] calls MergePipelines itself.
+	ErrPipelineNested = errors.New("a merged pipeline cannot merge pipelines")
+
+	// ErrPipelineShared indicates a pipeline given to
+	// [Pipeline.MergePipelines] twice, or the pipeline that merges it.
+	ErrPipelineShared = errors.New("a pipeline is merged once")
+
+	// ErrInvalidPipelineConcurrency is returned by [Pipeline.WriteTo] when
+	// [WithPipelineConcurrency] is given a number outside [1, 64].
+	ErrInvalidPipelineConcurrency = errors.New("invalid pipeline concurrency")
 )
 
 // PipelineStageError locates a validation or execution failure to a specific
@@ -1081,7 +1097,6 @@ var invalidInputErrors = []error{
 	ErrInvalidFlattenOptions,
 	ErrTransparencyFlatteningRefused,
 	ErrInvalidLimits,
-	ErrUnsupportedFormat,
 	ErrInvalidConvertOptions,
 	ErrConvertInputTooLarge,
 	ErrConvertTooManyPages,
@@ -1093,6 +1108,7 @@ var invalidInputErrors = []error{
 	ErrImageTooLarge,
 	ErrPipelineNothingToMerge,
 	ErrPipelineEmptyPageList,
+	ErrPipelineNoPipelines,
 }
 
 // IsInvalidInput reports whether err comes from the caller's input: a

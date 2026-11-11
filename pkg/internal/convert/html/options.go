@@ -164,6 +164,11 @@ type Options struct {
 	// DefaultLang is the document language, a BCP 47 tag, when the root
 	// element names none, "" to leave it unknown. The caller validates it.
 	DefaultLang string
+	// UserStylesheets are stylesheets of the user origin, in order: their
+	// declarations cascade above the user agent's and below the document's,
+	// their !important ones above the document's (CSS Cascading 4, 6.2).
+	// Their relative URLs resolve as the document's do.
+	UserStylesheets []string
 }
 
 // withDefaults returns o with every zero field set to its default and

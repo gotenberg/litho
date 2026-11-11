@@ -52,6 +52,10 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 	if err != nil {
 		return nil, err
 	}
+	if len(o.UserStylesheets) > 0 {
+		// Wave 11, cell web: remove with the feature.
+		return nil, errors.New("converting HTML: user stylesheets are not implemented")
+	}
 	if fonts == nil {
 		return nil, fmt.Errorf("%w: no font index", ErrInvalidOptions)
 	}

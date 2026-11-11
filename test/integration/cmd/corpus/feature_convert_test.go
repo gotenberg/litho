@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/pdf"
+	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
 // fillPDF returns a PDF whose pages are w by h points, each filled with one
@@ -78,9 +78,9 @@ func colourStub(w, h float64) htmlConverter {
 }
 
 // unsupportedStub stands in for the converter before it lands: every call
-// fails as pdf.Convert does for a format it does not read.
+// fails as a format litho does not read fails.
 func unsupportedStub(context.Context, []byte, htmlSettings) ([]byte, error) {
-	return nil, fmt.Errorf("%w: %q", pdf.ErrUnsupportedFormat, pdf.FormatHTML)
+	return nil, fmt.Errorf("%w: %s", fixture.ErrUnsupportedFormat, fixture.FormatHTML)
 }
 
 // writeFiles writes name to content pairs under dir.
@@ -428,8 +428,8 @@ func TestOutlineRecall(t *testing.T) {
 
 // TestConverterFeatures_ReportErrorsWithoutTheConverter runs the three
 // converter features end to end, through the runner and the baseline, with
-// a converter that refuses every source as pdf.Convert refuses HTML before
-// the converter lands: every fixture is an error, recorded as such, and none
+// a converter that refuses every source as a format litho does not read is
+// refused: every fixture is an error, recorded as such, and none
 // crashes the run.
 func TestConverterFeatures_ReportErrorsWithoutTheConverter(t *testing.T) {
 	t.Parallel()

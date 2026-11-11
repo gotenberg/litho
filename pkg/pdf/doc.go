@@ -8,8 +8,10 @@
 //     other content. See [Open], [OpenFile].
 //   - [Writer]: queue mutations (rotate pages, stamp, encrypt, sign, ...)
 //     against a Reader and emit a new PDF via [Writer.WriteTo].
-//   - [Pipeline]: chain Split, Merge, Apply and WriteTo operations with
-//     managed intermediate storage. See [NewPipeline].
+//   - [Pipeline]: chain Convert, Split, Merge, Apply and WriteTo
+//     operations with managed intermediate storage. See [NewPipeline].
+//   - [Conversion]: lay a text, HTML, Markdown or Office source out as a
+//     new PDF. See [FromHTML] and the other From constructors.
 //
 // Specialised PDF 2.0 extractors sit on [Reader] alongside the core
 // text, image, and annotation methods: [Reader.ExtractGeoData],
@@ -22,14 +24,14 @@
 // on it, and [Reader.CheckTextContrast] the text short of the contrast WCAG
 // 2.x asks of it, an advisory check no PDF/UA validation depends on.
 //
-// [Convert] makes a new, tagged PDF from another format: plain text,
+// A [Conversion] makes a new, tagged PDF from another format: plain text,
 // Markdown, HTML with its CSS, and the Office and OpenDocument text,
-// spreadsheet and presentation formats. One call writes the PDF version
-// [WithConvertVersion] names and the PDF/A and PDF/UA profiles
-// [WithConvertPDFA] and [WithConvertPDFUA] name, through the remediation a
-// [Writer] runs. [ConvertReport.Conformance] then lists what the profiles
-// still find; the file is written and claims them either way, so read the
-// report rather than the claim.
+// spreadsheet and presentation formats. One constructor per format makes
+// it, [FromHTML] or [FromDOCX] among them, and takes the options of that
+// format alone. [Conversion.WriteTo] runs it; [Pipeline.Convert] opens a
+// pipeline on its output, where a later stage remediates it to a PDF/A or
+// PDF/UA profile, encrypts it or signs it; [Pipeline.MergePipelines] runs
+// several pipelines at once and merges what they write.
 //
 // # Quick start
 //
@@ -157,10 +159,11 @@
 //   - [Reader.CheckTextContrast] takes [ContrastOption]:
 //     [WithEnhancedContrast].
 //   - [Writer.WriteTo], [Split], [Merge], [Compose], [Pipeline.WriteTo],
-//     [Pipeline.Compose], [Pipeline.Split] and [Pipeline.Merge] take
-//     [WriteOption]:
+//     [Pipeline.Compose], [Pipeline.Split], [Pipeline.Merge] and
+//     [Pipeline.MergePipelines] take [WriteOption]:
 //     [WithFullRewrite], [WithVersion], [WithXRefStream], [WithWriteLogger],
-//     [WithBookmarks], [WithPipelineTempDir], [WithTempDir],
+//     [WithBookmarks], [WithPipelineTempDir], [WithPipelineConcurrency],
+//     [WithTempDir],
 //     [WithEncryption], [WithObjectStreams], [WithDedup],
 //     [WithImageRecompression], [WithStreamCompression], [WithFontSubsetting],
 //     [WithCompactionSkipped],
@@ -169,8 +172,9 @@
 //     which overrides them with its own, and a [WithDefaultPageSize] given to it also reaches its
 //     remediation. [WithTempDir] places the temp files of [NewWriter],
 //     [Writer.WriteTo] and [Pipeline.WriteTo], and [Split], [Merge] and
-//     [Compose] ignore it. [Pipeline.Split] and [Pipeline.Merge] honour
-//     [WithBookmarks] on their stage. [Compose] ignores [WithFullRewrite],
+//     [Compose] ignore it. [Pipeline.Split], [Pipeline.Merge] and
+//     [Pipeline.MergePipelines] honour [WithBookmarks] on their stage.
+//     [WithPipelineConcurrency] reaches [Pipeline.WriteTo] alone. [Compose] ignores [WithFullRewrite],
 //     [WithBookmarks] and [WithDefaultPageSize] (see its documentation).
 //   - [Writer.RemediatePDFA], [Writer.RemediatePDFUA],
 //     [Writer.RemediateWTPDF], [Writer.RemediateFacturX] and
@@ -206,20 +210,32 @@
 //   - [Writer.SetFormField] and [Writer.SetFormFieldValues] take
 //     [FormFieldOption]: [WithFieldFonts].
 //   - [Pipeline.Apply] takes [ApplyOption]: [WithEditLabel].
-//   - [Convert] takes [ConvertOption]: [WithConvertLogger],
-//     [WithConvertFontDirs], [WithPaperSize], [WithMargins],
-//     [WithFontFamilies], [WithFontSize], [WithMediaType],
-//     [WithResources], [WithConvertLimits], [WithPageRanges],
-//     [WithDefaultPaperSize], [WithDefaultLanguage], the output options
-//     [WithConvertVersion], [WithConvertPDFA], [WithConvertPDFUA] and
-//     [WithConvertTempDir], the print
-//     options [WithLandscape], [WithPreferCSSPageSize], [WithPrintScale],
-//     [WithSinglePage], [WithPrintBackground], [WithOutline],
-//     [WithShrinkToFit], [WithFractionalFontMetrics],
-//     [WithHeaderTemplate], [WithFooterTemplate], [WithPrintDate],
-//     [WithBaseURL], [WithHTTPClient], [WithMediaFeatures], for the
-//     Office formats [WithConvertPassword], and for presentations
-//     [WithHiddenSlides] and [WithNotesPages].
+//   - Every conversion takes [ConvertOption]: [WithPaper],
+//     [WithDefaultPaper], [WithOrientation], [WithPageRanges],
+//     [WithOutline], [WithDate], [WithDefaultLanguage],
+//     [WithConvertVersion], [WithConvertFontDirs], [WithConvertLimits],
+//     [WithConvertLogger], [WithConvertTempDir].
+//   - A conversion of text, HTML or Markdown takes [MarginOption]:
+//     [WithMargins].
+//   - [FromText] takes [TextOption]: [WithFontFamilies], [WithFontSize],
+//     [WithLineHeight], [WithTabWidth].
+//   - [FromHTML] takes [HTMLOption], and so does [FromMarkdown]:
+//     [WithResources], [WithBaseURL], [WithHTTPClient], [WithMediaType],
+//     [WithMediaFeatures], [WithScale], [WithShrinkToFit],
+//     [WithCanvasBackground], [WithHeaderTemplate], [WithFooterTemplate],
+//     [WithSinglePage], [WithFractionalFontMetrics], [WithUserStylesheet].
+//   - [FromMarkdown] takes [MarkdownOption]: [WithMarkdownTemplate].
+//   - A conversion of an Office package takes [OfficeOption]:
+//     [WithOfficePassword].
+//   - [FromDOCX] and [FromODT] take [WordProcessingOption]:
+//     [WithTrackedChanges].
+//   - A conversion of sheets takes [SheetOption]: [WithOnePagePerSheet].
+//   - [FromXLSX] and [FromODS] take [SpreadsheetOption]: [WithSheets],
+//     [WithSheetNumbers], [WithHiddenSheets], [WithFormulaRecalculation].
+//   - [FromCSV] takes [CSVOption]: [WithCSVSeparators],
+//     [WithCSVTypeDetection].
+//   - [FromPPTX] and [FromODP] take [PresentationOption]:
+//     [WithHiddenSlides], [WithNotesPages], [WithHandouts].
 //
 // [WithFullRewrite], [WithVersion], and [WithXRefStream] are advanced
 // serialization controls. The defaults suit most callers:
@@ -228,12 +244,12 @@
 // [WithEncryption] is how an output becomes encrypted. No operation preserves
 // a source's encryption, so an edited document is written in the clear unless
 // this option asks otherwise. [WithObjectStreams], [WithDedup],
-// [WithImageRecompression], [WithStreamCompression] and [WithFontSubsetting]
-// shrink a full rewrite, losslessly, and the first three decline on an
-// encrypted output. [WithCompactionSkipped] reports a write that applied none
-// of them because it appended an incremental update. [WithImageRecompression]
-// costs far more time than the others, and [WithFontSubsetting] leaves later
-// edits no glyph the document does not show: ask for each on its own.
+// [WithImageRecompression] and [WithFontSubsetting] shrink a full rewrite,
+// losslessly, and the first three decline on an encrypted output.
+// [WithCompactionSkipped] reports a write that applied none of them because
+// it appended an incremental update. [WithImageRecompression] costs far more
+// time than the other two, and [WithFontSubsetting] leaves later edits no
+// glyph the document does not show: ask for each on its own.
 //
 // # Resource limits
 //

@@ -29,11 +29,11 @@ func TestConvert_I18nTextExtractsInSourceOrder(t *testing.T) {
 	}
 	ctx := context.Background()
 	var out bytes.Buffer
-	if _, err := Convert(ctx, bytes.NewReader(src), FormatHTML, &out,
+	if _, err := FromHTML(bytes.NewReader(src),
 		WithConvertFontDirs(filepath.Join(fonts, "liberation-2.1.5"), filepath.Join(fonts, "dejavu-2.37"),
 			filepath.Join(fonts, "noto-cjk-sans-2.004"), filepath.Join(fonts, "noto-sans-thai-2.002"),
-			filepath.Join(fonts, "noto-sans-devanagari-2.007"))); err != nil {
-		t.Fatalf("Convert: %v", err)
+			filepath.Join(fonts, "noto-sans-devanagari-2.007"))).WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
 	}
 	data := out.Bytes()
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))

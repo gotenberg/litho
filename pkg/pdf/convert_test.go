@@ -46,12 +46,12 @@ func convertFontDir(t *testing.T) string {
 
 // convertText converts src with the test face and opts, failing the test on
 // error.
-func convertText(t *testing.T, dir, src string, opts ...ConvertOption) ([]byte, *ConvertReport) {
+func convertText(t *testing.T, dir, src string, opts ...TextOption) ([]byte, *ConvertReport) {
 	t.Helper()
 	var out bytes.Buffer
-	rep, err := Convert(context.Background(), strings.NewReader(src), FormatText, &out, append([]ConvertOption{WithConvertFontDirs(dir)}, opts...)...)
+	rep, err := FromText(strings.NewReader(src), append([]TextOption{WithConvertFontDirs(dir)}, opts...)...).WriteTo(context.Background(), &out)
 	if err != nil {
-		t.Fatalf("Convert: %v", err)
+		t.Fatalf("WriteTo: %v", err)
 	}
 	return out.Bytes(), rep
 }
@@ -94,7 +94,7 @@ func TestConvert_AppliesPageSetup(t *testing.T) {
 	ctx := context.Background()
 	src := strings.Repeat("ABCD EFGH\n", 30)
 	data, rep := convertText(t, convertFontDir(t), src,
-		WithPaperSize(612, 792), WithMargins(10, 10, 10, 10), WithFontSize(20), WithFontFamilies("Convert Serif"))
+		WithPaper(PaperLetter), WithMargins(10, 10, 10, 10), WithFontSize(20), WithFontFamilies("Convert Serif"))
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -126,24 +126,21 @@ func TestConvert_RefusesBadInput(t *testing.T) {
 	t.Parallel()
 	dir := convertFontDir(t)
 	for name, tc := range map[string]struct {
-		format Format
-		opts   []ConvertOption
-		src    string
-		want   error
+		opts []TextOption
+		src  string
+		want error
 	}{
-		"unknown format":     {format: "rtf", want: ErrUnsupportedFormat},
-		"empty format":       {format: "", want: ErrUnsupportedFormat},
-		"bad paper":          {format: FormatText, opts: []ConvertOption{WithPaperSize(-1, 10)}, want: ErrInvalidConvertOptions},
-		"no room":            {format: FormatText, opts: []ConvertOption{WithMargins(500, 0, 500, 0)}, want: ErrInvalidConvertOptions},
-		"NaN font size":      {format: FormatText, opts: []ConvertOption{WithFontSize(math.NaN())}, want: ErrInvalidConvertOptions},
-		"negative limit":     {format: FormatText, opts: []ConvertOption{WithConvertLimits(Limits{MaxConvertPages: -1})}, want: ErrInvalidLimits},
-		"input past limit":   {format: FormatText, src: "ABCD", opts: []ConvertOption{WithConvertLimits(Limits{MaxConvertInputBytes: 3})}, want: ErrConvertInputTooLarge},
-		"pages past limit":   {format: FormatText, src: "A\fB", opts: []ConvertOption{WithConvertLimits(Limits{MaxConvertPages: 1})}, want: ErrConvertTooManyPages},
-		"no font in the dir": {format: FormatText, opts: []ConvertOption{WithConvertFontDirs(t.TempDir())}, want: ErrConvertNoFonts},
+		"bad paper":          {opts: []TextOption{WithPaper(Paper{Width: -1, Height: 10})}, want: ErrInvalidConvertOptions},
+		"no room":            {opts: []TextOption{WithMargins(500, 0, 500, 0)}, want: ErrInvalidConvertOptions},
+		"NaN font size":      {opts: []TextOption{WithFontSize(math.NaN())}, want: ErrInvalidConvertOptions},
+		"negative limit":     {opts: []TextOption{WithConvertLimits(Limits{MaxConvertPages: -1})}, want: ErrInvalidLimits},
+		"input past limit":   {src: "ABCD", opts: []TextOption{WithConvertLimits(Limits{MaxConvertInputBytes: 3})}, want: ErrConvertInputTooLarge},
+		"pages past limit":   {src: "A\fB", opts: []TextOption{WithConvertLimits(Limits{MaxConvertPages: 1})}, want: ErrConvertTooManyPages},
+		"no font in the dir": {opts: []TextOption{WithConvertFontDirs(t.TempDir())}, want: ErrConvertNoFonts},
 	} {
 		var out bytes.Buffer
-		opts := append([]ConvertOption{WithConvertFontDirs(dir)}, tc.opts...)
-		rep, err := Convert(context.Background(), strings.NewReader(tc.src), tc.format, &out, opts...)
+		opts := append([]TextOption{WithConvertFontDirs(dir)}, tc.opts...)
+		rep, err := FromText(strings.NewReader(tc.src), opts...).WriteTo(context.Background(), &out)
 		if !errors.Is(err, tc.want) || rep != nil {
 			t.Errorf("%s: %v, %+v, want %v", name, err, rep, tc.want)
 		}
@@ -170,7 +167,7 @@ func TestConvert_IsDeterministicAndConcurrent(t *testing.T) {
 	for i := range got {
 		wg.Go(func() {
 			var out bytes.Buffer
-			_, errs[i] = Convert(context.Background(), strings.NewReader(src), FormatText, &out, WithConvertFontDirs(dir))
+			_, errs[i] = FromText(strings.NewReader(src), WithConvertFontDirs(dir)).WriteTo(context.Background(), &out)
 			got[i] = out.Bytes()
 		})
 	}
@@ -187,7 +184,7 @@ func TestConvert_HonoursTheContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	var out bytes.Buffer
-	if _, err := Convert(ctx, strings.NewReader("A"), FormatText, &out, WithConvertFontDirs(convertFontDir(t))); !errors.Is(err, context.Canceled) {
+	if _, err := FromText(strings.NewReader("A"), WithConvertFontDirs(convertFontDir(t))).WriteTo(ctx, &out); !errors.Is(err, context.Canceled) {
 		t.Errorf("cancelled: %v, want context.Canceled", err)
 	}
 }
@@ -278,16 +275,13 @@ func convertHTMLResources(t *testing.T) fstest.MapFS {
 
 // convertHTMLTest converts src as HTML with the test face, the test resources
 // and opts, failing the test on error.
-func convertHTMLTest(t *testing.T, dir, src string, opts ...ConvertOption) ([]byte, *ConvertReport) {
+func convertHTMLTest(t *testing.T, dir, src string, opts ...HTMLOption) ([]byte, *ConvertReport) {
 	t.Helper()
 	var out bytes.Buffer
-	base := []ConvertOption{WithConvertFontDirs(dir), WithResources(convertHTMLResources(t))}
-	rep, err := Convert(context.Background(), strings.NewReader(src), FormatHTML, &out, append(base, opts...)...)
-	if errors.Is(err, ErrUnsupportedFormat) {
-		t.Fatalf("Convert refuses FormatHTML: %v", err)
-	}
+	base := []HTMLOption{WithConvertFontDirs(dir), WithResources(convertHTMLResources(t))}
+	rep, err := FromHTML(strings.NewReader(src), append(base, opts...)...).WriteTo(context.Background(), &out)
 	if err != nil {
-		t.Fatalf("Convert: %v", err)
+		t.Fatalf("WriteTo: %v", err)
 	}
 	return out.Bytes(), rep
 }
@@ -358,7 +352,7 @@ func TestConvert_HTMLAppliesPageSetupAndMedia(t *testing.T) {
 	ctx := context.Background()
 	dir := convertFontDir(t)
 	src := `<style>@media screen { p { break-before: page } }</style><p>one</p><p>two</p>`
-	data, rep := convertHTMLTest(t, dir, src, WithPaperSize(612, 792), WithMargins(0, 0, 0, 0))
+	data, rep := convertHTMLTest(t, dir, src, WithPaper(PaperLetter), WithMargins(0, 0, 0, 0))
 	if rep.Pages != 1 {
 		t.Errorf("print: %d pages, want 1", rep.Pages)
 	}
@@ -373,18 +367,19 @@ func TestConvert_HTMLAppliesPageSetupAndMedia(t *testing.T) {
 	if _, rep := convertHTMLTest(t, dir, src, WithMediaType("screen")); rep.Pages != 2 {
 		t.Errorf("screen: %d pages, want 2", rep.Pages)
 	}
-	// With the CSS page size preferred, or without a caller's paper, the
-	// @page size is the page; with a caller's paper not preferred, the
-	// paper is, turned to the @page orientation.
+	// With a default paper, or without a caller's paper, the @page size is
+	// the page; with a caller's paper, the paper is, turned to the @page
+	// orientation.
 	for _, tc := range []struct {
-		prefer, paper bool
-		w, h          float64
-	}{{true, true, 595.276, 419.528}, {false, true, 841.89, 595.276}, {false, false, 595.276, 419.528}} {
-		opts := []ConvertOption{WithPreferCSSPageSize(tc.prefer)}
-		if tc.paper {
-			opts = append(opts, WithPaperSize(595.276, 841.89))
-		}
-		data, _ = convertHTMLTest(t, dir, `<style>@page { size: A5 landscape }</style><p>x`, opts...)
+		name string
+		opts []HTMLOption
+		w, h float64
+	}{
+		{"default paper", []HTMLOption{WithDefaultPaper(PaperA4)}, 595.276, 419.528},
+		{"paper", []HTMLOption{WithPaper(PaperA4)}, 841.89, 595.276},
+		{"no paper", nil, 595.276, 419.528},
+	} {
+		data, _ = convertHTMLTest(t, dir, `<style>@page { size: A5 landscape }</style><p>x`, tc.opts...)
 		r2, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 		if err != nil {
 			t.Fatalf("Open: %v", err)
@@ -392,7 +387,7 @@ func TestConvert_HTMLAppliesPageSetupAndMedia(t *testing.T) {
 		p, err := r2.Page(ctx, 1)
 		r2.Close()
 		if err != nil || math.Abs(p.Width-tc.w) > 0.01 || math.Abs(p.Height-tc.h) > 0.01 {
-			t.Errorf("@page A5 landscape, prefer %v, paper %v: %vx%v, %v; want %vx%v", tc.prefer, tc.paper, p.Width, p.Height, err, tc.w, tc.h)
+			t.Errorf("@page A5 landscape, %s: %vx%v, %v; want %vx%v", tc.name, p.Width, p.Height, err, tc.w, tc.h)
 		}
 	}
 }
@@ -401,19 +396,19 @@ func TestConvert_HTMLRefusesBadInput(t *testing.T) {
 	t.Parallel()
 	dir := convertFontDir(t)
 	for name, tc := range map[string]struct {
-		opts []ConvertOption
+		opts []HTMLOption
 		src  string
 		want error
 	}{
-		"bad media":        {opts: []ConvertOption{WithMediaType("tv")}, want: ErrInvalidConvertOptions},
-		"bad paper":        {opts: []ConvertOption{WithPaperSize(-1, 10)}, want: ErrInvalidConvertOptions},
-		"input past limit": {src: "<p>ABCD", opts: []ConvertOption{WithConvertLimits(Limits{MaxConvertInputBytes: 4})}, want: ErrConvertInputTooLarge},
-		"pages past limit": {src: `<p style="break-after: page">A<p>B`, opts: []ConvertOption{WithConvertLimits(Limits{MaxConvertPages: 1})}, want: ErrConvertTooManyPages},
+		"bad media":        {opts: []HTMLOption{WithMediaType("tv")}, want: ErrInvalidConvertOptions},
+		"bad paper":        {opts: []HTMLOption{WithPaper(Paper{Width: -1, Height: 10})}, want: ErrInvalidConvertOptions},
+		"input past limit": {src: "<p>ABCD", opts: []HTMLOption{WithConvertLimits(Limits{MaxConvertInputBytes: 4})}, want: ErrConvertInputTooLarge},
+		"pages past limit": {src: `<p style="break-after: page">A<p>B`, opts: []HTMLOption{WithConvertLimits(Limits{MaxConvertPages: 1})}, want: ErrConvertTooManyPages},
 		"too deep":         {src: strings.Repeat("<div>", 600), want: ErrConvertInputTooLarge},
 	} {
 		var out bytes.Buffer
-		opts := append([]ConvertOption{WithConvertFontDirs(dir)}, tc.opts...)
-		rep, err := Convert(context.Background(), strings.NewReader(tc.src), FormatHTML, &out, opts...)
+		opts := append([]HTMLOption{WithConvertFontDirs(dir)}, tc.opts...)
+		rep, err := FromHTML(strings.NewReader(tc.src), opts...).WriteTo(context.Background(), &out)
 		if !errors.Is(err, tc.want) || rep != nil {
 			t.Errorf("%s: %v, %+v, want %v", name, err, rep, tc.want)
 		}
@@ -429,9 +424,9 @@ func TestConvert_HTMLRefusesBadInput(t *testing.T) {
 func TestConvert_HTMLReportsWhatItLeavesOut(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
-	rep, err := Convert(context.Background(), strings.NewReader(`<p><img src="a.png" alt="alt text"><iframe src="x"></iframe>`), FormatHTML, &out, WithConvertFontDirs(convertFontDir(t)))
+	rep, err := FromHTML(strings.NewReader(`<p><img src="a.png" alt="alt text"><iframe src="x"></iframe>`), WithConvertFontDirs(convertFontDir(t))).WriteTo(context.Background(), &out)
 	if err != nil {
-		t.Fatalf("Convert: %v", err)
+		t.Fatalf("WriteTo: %v", err)
 	}
 	var got []string
 	for _, w := range rep.Warnings {

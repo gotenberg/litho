@@ -25,6 +25,10 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
+	if opts.Sheets != nil || opts.SheetNumbers != nil || opts.HiddenSheets || opts.Recalculation != office.RecalculateAsNeeded {
+		// Wave 11, cell sheets: remove with the feature.
+		return nil, fmt.Errorf("%w: sheet selection and recalculation modes", office.ErrNotImplemented)
+	}
 	if fonts == nil {
 		return nil, fmt.Errorf("%w: no font index", office.ErrInvalidOptions)
 	}

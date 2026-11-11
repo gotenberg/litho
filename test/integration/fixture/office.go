@@ -3,11 +3,13 @@ package fixture
 import (
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/pdf"
 )
@@ -43,6 +45,32 @@ type OfficeOptions struct {
 	// ExportNotesPages prints, after the slides, one notes page per slide
 	// printed. Default false.
 	ExportNotesPages bool `json:"exportNotesPages,omitempty"`
+	// TrackedChanges is how a text document prints the changes it tracks:
+	// "accepted", the default, "rejected" or "marked". litho's own option.
+	TrackedChanges string `json:"trackedChanges,omitempty"`
+	// Sheets names the sheets of a spreadsheet that print, and SheetNumbers
+	// lists them by 1-based position; at most one of the two. HiddenSheets
+	// prints the hidden sheets too. Default every sheet that is not hidden.
+	// litho's own options.
+	Sheets       []string `json:"sheets,omitempty"`
+	SheetNumbers []int    `json:"sheetNumbers,omitempty"`
+	HiddenSheets bool     `json:"hiddenSheets,omitempty"`
+	// Recalculation is when a spreadsheet's formulas are computed again:
+	// "asNeeded", the default, "never" or "always". litho's own option.
+	Recalculation string `json:"recalculation,omitempty"`
+	// CSVSeparators are the characters that end a field of a CSV file.
+	// Default ",;\t", the three the references were made with. litho's own
+	// option.
+	CSVSeparators string `json:"csvSeparators,omitempty"`
+	// CSVTypeDetection lays the fields of a CSV file that read as numbers,
+	// dates and times out as such. Default true. litho's own option.
+	CSVTypeDetection *bool `json:"csvTypeDetection,omitempty"`
+	// Handouts prints a presentation as handout pages, that many slides a
+	// page. Default 0: the slides. litho's own option.
+	Handouts int `json:"handouts,omitempty"`
+	// Date is the date of the conversion, in RFC 3339, which date and time
+	// fields show. Default none. litho's own option.
+	Date string `json:"date,omitempty"`
 	// ReferenceOf names another fixture of the same corpus, by its ID,
 	// whose reference stands for this source's: the diff cell scores this
 	// source's conversion against that fixture's goldens, and no reference
@@ -59,6 +87,15 @@ type OfficeOptions struct {
 //nolint:gochecknoglobals // static list of the schema's keys
 var OfficeOptionNames = []string{"password", "landscape", "nativePages", "nativeBookmarks", "paperWidth", "paperHeight", "singlePage", "exportHiddenSlides", "exportNotesPages"}
 
+// OfficeLithoOptionNames are the keys of an Office options file that are
+// litho's own options: no reference engine has such a field and none
+// receives them. A source that sets one is judged against the reference of
+// the fixture its reference_of names, a document that is in itself what the
+// option makes of this one.
+//
+//nolint:gochecknoglobals // static list of the schema's keys
+var OfficeLithoOptionNames = []string{"trackedChanges", "sheets", "sheetNumbers", "hiddenSheets", "recalculation", "csvSeparators", "csvTypeDetection", "handouts", "date"}
+
 // ReferenceOfName is the key of an Office options file that borrows another
 // fixture's reference (see [OfficeOptions.ReferenceOf]): it is no route
 // field, so it is not among [OfficeOptionNames].
@@ -72,33 +109,33 @@ const ReferenceOfName = "reference_of"
 // PresentationML presentation, and a flat ODP or a template an
 // OpenDocument presentation. A Word, Excel or PowerPoint 97 to 2003 file
 // converts from a format litho does not read yet, named by its extension,
-// which pdf.Convert refuses: its cell scores a convert error until it
-// does.
+// which [Office.Conversion] refuses with [ErrUnsupportedFormat]: its cell
+// scores a convert error until litho reads it.
 //
 //nolint:gochecknoglobals // static extension table
-var officeFormats = map[string]pdf.Format{
-	".docx": pdf.FormatDOCX,
-	".dotx": pdf.FormatDOCX,
-	".odt":  pdf.FormatODT,
-	".fodt": pdf.FormatODT,
-	".xlsx": pdf.FormatXLSX,
-	".xlsm": pdf.FormatXLSX,
-	".xltx": pdf.FormatXLSX,
-	".xltm": pdf.FormatXLSX,
-	".ods":  pdf.FormatODS,
-	".fods": pdf.FormatODS,
-	".ots":  pdf.FormatODS,
-	".csv":  pdf.FormatCSV,
-	".pptx": pdf.FormatPPTX,
-	".pptm": pdf.FormatPPTX,
-	".potx": pdf.FormatPPTX,
-	".ppsx": pdf.FormatPPTX,
-	".odp":  pdf.FormatODP,
-	".fodp": pdf.FormatODP,
-	".otp":  pdf.FormatODP,
-	".doc":  pdf.Format("doc"),
-	".xls":  pdf.Format("xls"),
-	".ppt":  pdf.Format("ppt"),
+var officeFormats = map[string]Format{
+	".docx": FormatDOCX,
+	".dotx": FormatDOCX,
+	".odt":  FormatODT,
+	".fodt": FormatODT,
+	".xlsx": FormatXLSX,
+	".xlsm": FormatXLSX,
+	".xltx": FormatXLSX,
+	".xltm": FormatXLSX,
+	".ods":  FormatODS,
+	".fods": FormatODS,
+	".ots":  FormatODS,
+	".csv":  FormatCSV,
+	".pptx": FormatPPTX,
+	".pptm": FormatPPTX,
+	".potx": FormatPPTX,
+	".ppsx": FormatPPTX,
+	".odp":  FormatODP,
+	".fodp": FormatODP,
+	".otp":  FormatODP,
+	".doc":  Format("doc"),
+	".xls":  Format("xls"),
+	".ppt":  Format("ppt"),
 }
 
 // Office is one Office source, read.
@@ -107,7 +144,7 @@ type Office struct {
 	Document string
 	// Format is the format the document is converted from, by its
 	// extension.
-	Format pdf.Format
+	Format Format
 	// Options are the options read from options.json, zero when there is
 	// none.
 	Options OfficeOptions
@@ -172,7 +209,8 @@ func LoadOffice(path string) (*Office, error) {
 // field, trailing data or a value the route refuses is an error.
 func ParseOfficeOptions(data []byte) (OfficeOptions, error) {
 	var o OfficeOptions
-	if err := decodeStrict(data, append(slices.Clone(OfficeOptionNames), ReferenceOfName), &o); err != nil {
+	names := append(slices.Clone(OfficeOptionNames), OfficeLithoOptionNames...)
+	if err := decodeStrict(data, append(names, ReferenceOfName), &o); err != nil {
 		return OfficeOptions{}, err
 	}
 	return o, o.validate()
@@ -195,7 +233,38 @@ func (o OfficeOptions) validate() error {
 	if o.ReferenceOf != strings.TrimSpace(o.ReferenceOf) || strings.Contains(o.ReferenceOf, "\x00") {
 		return fmt.Errorf("%s %q: want a fixture ID", ReferenceOfName, o.ReferenceOf)
 	}
+	if _, ok := trackedChangesViews[o.TrackedChanges]; !ok {
+		return fmt.Errorf("trackedChanges %q: want accepted, rejected or marked", o.TrackedChanges)
+	}
+	if _, ok := recalculationModes[o.Recalculation]; !ok {
+		return fmt.Errorf("recalculation %q: want asNeeded, never or always", o.Recalculation)
+	}
+	if o.Date != "" {
+		if _, err := time.Parse(time.RFC3339, o.Date); err != nil {
+			return fmt.Errorf("date %q: want an RFC 3339 time", o.Date)
+		}
+	}
 	return nil
+}
+
+// trackedChangesViews maps the trackedChanges values to litho's views.
+//
+//nolint:gochecknoglobals // static table
+var trackedChangesViews = map[string]pdf.TrackedChanges{
+	"":         pdf.TrackedChangesAccepted,
+	"accepted": pdf.TrackedChangesAccepted,
+	"rejected": pdf.TrackedChangesRejected,
+	"marked":   pdf.TrackedChangesMarked,
+}
+
+// recalculationModes maps the recalculation values to litho's modes.
+//
+//nolint:gochecknoglobals // static table
+var recalculationModes = map[string]pdf.Recalculation{
+	"":         pdf.RecalculateAsNeeded,
+	"asNeeded": pdf.RecalculateAsNeeded,
+	"never":    pdf.RecalculateNever,
+	"always":   pdf.RecalculateAlways,
 }
 
 // ReferencePaperWidth and ReferencePaperHeight are the paper, in points,
@@ -207,43 +276,165 @@ const (
 	ReferencePaperHeight = 792.0
 )
 
-// ConvertOptions returns the litho options of the source's fields: the
-// landscape and outline switches always, the references' paper as the
-// default paper of a text document or a spreadsheet (a presentation sizes
-// its own slides), and the page ranges, the password, the paper size, in
-// points, the single page sheets, the hidden slides and the notes pages
-// when the options name them.
-func (o *Office) ConvertOptions() []pdf.ConvertOption {
-	opts := []pdf.ConvertOption{
-		pdf.WithLandscape(o.Options.Landscape),
-		pdf.WithOutline(o.Options.NativeBookmarks == nil || *o.Options.NativeBookmarks),
+// ReferencePaper is the paper of [ReferencePaperWidth] by
+// [ReferencePaperHeight].
+//
+//nolint:gochecknoglobals // a value of two constants
+var ReferencePaper = pdf.Paper{Width: ReferencePaperWidth, Height: ReferencePaperHeight}
+
+// Conversion returns the conversion of src, the source's document, at the
+// litho options of the source's fields, then extra: the outline switch
+// always, the references' paper as the default paper of a text document or
+// a spreadsheet (a presentation sizes its own slides), and the landscape
+// switch, the page ranges, the password, the paper size, in points, the
+// single page sheets, the hidden slides and the notes pages when the
+// options name them. A CSV file splits its fields at commas, semicolons
+// and tabs alike, as its references were made.
+//
+// A field the format has no option for is left out, as the route ignores
+// it: a password for a CSV file, single page sheets for a text document or
+// a presentation, the slide fields for any other document. Single page
+// sheets set the paper and the landscape switch aside: the page takes the
+// sheet's size. A format litho does not read fails with
+// [ErrUnsupportedFormat].
+func (o *Office) Conversion(src io.Reader, extra ...pdf.ConvertOption) (*pdf.Conversion, error) {
+	opts := o.options()
+	opts.common = append(opts.common, extra...)
+	common := opts.common
+	switch o.Format {
+	case FormatDOCX, FormatODT:
+		all := append(optionsAs[pdf.WordProcessingOption](common), optionsAs[pdf.WordProcessingOption](opts.office)...)
+		all = append(all, opts.word...)
+		if o.Format == FormatODT {
+			return pdf.FromODT(src, all...), nil
+		}
+		return pdf.FromDOCX(src, all...), nil
+	case FormatXLSX, FormatODS:
+		all := append(optionsAs[pdf.SpreadsheetOption](common), optionsAs[pdf.SpreadsheetOption](opts.office)...)
+		all = append(all, optionsAs[pdf.SpreadsheetOption](opts.sheet)...)
+		all = append(all, opts.spreadsheet...)
+		if o.Format == FormatODS {
+			return pdf.FromODS(src, all...), nil
+		}
+		return pdf.FromXLSX(src, all...), nil
+	case FormatCSV:
+		all := append(optionsAs[pdf.CSVOption](common), optionsAs[pdf.CSVOption](opts.sheet)...)
+		return pdf.FromCSV(src, append(all, opts.csv...)...), nil
+	case FormatPPTX, FormatODP:
+		all := append(optionsAs[pdf.PresentationOption](common), optionsAs[pdf.PresentationOption](opts.office)...)
+		all = append(all, opts.slides...)
+		if o.Format == FormatODP {
+			return pdf.FromODP(src, all...), nil
+		}
+		return pdf.FromPPTX(src, all...), nil
+	case FormatText, FormatHTML, FormatMarkdown:
 	}
+	return nil, fmt.Errorf("%w: %s", ErrUnsupportedFormat, o.Format)
+}
+
+// officeOptions are the litho options of an Office source's fields, by the
+// formats that take them.
+type officeOptions struct {
+	// common are the options every format takes.
+	common []pdf.ConvertOption
+	// office are the options of the Office packages: the password, which a
+	// CSV file does not take.
+	office []pdf.OfficeOption
+	// sheet are the options of the sheet formats, nil for another format.
+	sheet []pdf.SheetOption
+	// slides are the options of the presentations, nil for another format.
+	slides []pdf.PresentationOption
+	// word are the options of the text documents, nil for another format.
+	word []pdf.WordProcessingOption
+	// spreadsheet are the options of the workbooks, nil for another format.
+	spreadsheet []pdf.SpreadsheetOption
+	// csv are the options of a CSV file, nil for another format.
+	csv []pdf.CSVOption
+}
+
+// options returns the litho options of the source's fields (see
+// [Office.Conversion]).
+func (o *Office) options() officeOptions {
+	var opts officeOptions
+	opts.common = []pdf.ConvertOption{pdf.WithOutline(o.Options.NativeBookmarks == nil || *o.Options.NativeBookmarks)}
 	if !isPresentation(o.Format) {
-		opts = append(opts, pdf.WithDefaultPaperSize(ReferencePaperWidth, ReferencePaperHeight))
+		opts.common = append(opts.common, pdf.WithDefaultPaper(ReferencePaper))
 	}
 	if o.Options.NativePages != "" {
-		opts = append(opts, pdf.WithPageRanges(o.Options.NativePages))
+		opts.common = append(opts.common, pdf.WithPageRanges(o.Options.NativePages))
+	}
+	onePagePerSheet := o.Options.SinglePage && isSheets(o.Format)
+	if o.Options.Landscape && !onePagePerSheet {
+		opts.common = append(opts.common, pdf.WithOrientation(pdf.OrientationLandscape))
+	}
+	if o.Options.PaperWidth != nil && o.Options.PaperHeight != nil && !onePagePerSheet {
+		opts.common = append(opts.common, pdf.WithPaper(pdf.Paper{Width: *o.Options.PaperWidth * 72, Height: *o.Options.PaperHeight * 72}))
 	}
 	if o.Options.Password != "" {
-		opts = append(opts, pdf.WithConvertPassword(o.Options.Password))
+		opts.office = append(opts.office, pdf.WithOfficePassword(o.Options.Password))
 	}
-	if o.Options.PaperWidth != nil && o.Options.PaperHeight != nil {
-		opts = append(opts, pdf.WithPaperSize(*o.Options.PaperWidth*72, *o.Options.PaperHeight*72))
+	if onePagePerSheet {
+		opts.sheet = append(opts.sheet, pdf.WithOnePagePerSheet(true))
 	}
-	if o.Options.SinglePage {
-		opts = append(opts, pdf.WithSinglePage(true))
+	if isPresentation(o.Format) {
+		if o.Options.ExportHiddenSlides {
+			opts.slides = append(opts.slides, pdf.WithHiddenSlides(true))
+		}
+		if o.Options.ExportNotesPages {
+			opts.slides = append(opts.slides, pdf.WithNotesPages(true))
+		}
+		if o.Options.Handouts != 0 {
+			opts.slides = append(opts.slides, pdf.WithHandouts(o.Options.Handouts))
+		}
 	}
-	if o.Options.ExportHiddenSlides {
-		opts = append(opts, pdf.WithHiddenSlides(true))
+	if o.Options.Date != "" {
+		// validate checked the value.
+		if t, err := time.Parse(time.RFC3339, o.Options.Date); err == nil {
+			opts.common = append(opts.common, pdf.WithDate(t))
+		}
 	}
-	if o.Options.ExportNotesPages {
-		opts = append(opts, pdf.WithNotesPages(true))
+	switch o.Format {
+	case FormatDOCX, FormatODT:
+		if view := trackedChangesViews[o.Options.TrackedChanges]; view != pdf.TrackedChangesAccepted {
+			opts.word = append(opts.word, pdf.WithTrackedChanges(view))
+		}
+	case FormatXLSX, FormatODS:
+		if o.Options.Sheets != nil {
+			opts.spreadsheet = append(opts.spreadsheet, pdf.WithSheets(o.Options.Sheets...))
+		}
+		if o.Options.SheetNumbers != nil {
+			opts.spreadsheet = append(opts.spreadsheet, pdf.WithSheetNumbers(o.Options.SheetNumbers...))
+		}
+		if o.Options.HiddenSheets {
+			opts.spreadsheet = append(opts.spreadsheet, pdf.WithHiddenSheets(true))
+		}
+		if mode := recalculationModes[o.Options.Recalculation]; mode != pdf.RecalculateAsNeeded {
+			opts.spreadsheet = append(opts.spreadsheet, pdf.WithFormulaRecalculation(mode))
+		}
+	case FormatCSV:
+		// The references were made by a route that splits at a comma, a
+		// semicolon and a tab at once.
+		separators := []rune(",;\t")
+		if o.Options.CSVSeparators != "" {
+			separators = []rune(o.Options.CSVSeparators)
+		}
+		opts.csv = append(opts.csv, pdf.WithCSVSeparators(separators...))
+		if o.Options.CSVTypeDetection != nil && !*o.Options.CSVTypeDetection {
+			opts.csv = append(opts.csv, pdf.WithCSVTypeDetection(false))
+		}
+	case FormatText, FormatHTML, FormatMarkdown, FormatPPTX, FormatODP:
 	}
 	return opts
 }
 
 // isPresentation reports whether a format is a presentation's, whose slides
 // carry their own size.
-func isPresentation(f pdf.Format) bool {
-	return f == pdf.FormatPPTX || f == pdf.FormatODP || f == pdf.Format("ppt")
+func isPresentation(f Format) bool {
+	return f == FormatPPTX || f == FormatODP || f == Format("ppt")
+}
+
+// isSheets reports whether a format is laid out as sheets, which
+// [pdf.WithOnePagePerSheet] lays out a page each.
+func isSheets(f Format) bool {
+	return f == FormatXLSX || f == FormatODS || f == FormatCSV
 }

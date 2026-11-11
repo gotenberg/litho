@@ -37,9 +37,8 @@ pkg/internal/convert/pptx/       PPTX converter: PresentationML to the slide mod
 pkg/internal/convert/odp/        ODP converter: OpenDocument presentations to the slide model (wave 6).
 pkg/internal/xmp/                The XMP packet writer the backend and the remediation share (wave 9).
 pkg/internal/limits/             The budgets of a conversion, its memory account among them (wave 9).
-pkg/pdf/convert.go               Public entry point: pdf.Convert.
-pkg/pdf/convert_target.go        The version and the profiles of the output, written through a Writer's remediation (wave 9).
-cmd/litho/convert.go             CLI: litho convert.
+pkg/pdf/convert.go               Public entry points: pdf.FromHTML and its nine siblings, pdf.Conversion.
+pkg/pdf/convert_stage.go         A conversion as the first stage of a pipeline, and pipelines merged (wave 11).
 ```
 
 Dependencies point one way: converters import `layout`, `css`, `text` and

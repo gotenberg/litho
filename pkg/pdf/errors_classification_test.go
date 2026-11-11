@@ -15,6 +15,10 @@ import (
 // and outcomes such as [ErrNoMetadata] that callers handle themselves.
 var otherErrors = []error{
 	ErrInternalPanic,
+	ErrConversionReused,
+	ErrPipelineNested,
+	ErrPipelineShared,
+	ErrInvalidPipelineConcurrency,
 	ErrOCRFailed,
 	ErrNilSource,
 	ErrWriterConsumed,

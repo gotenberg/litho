@@ -26,6 +26,10 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
+	if opts.Handouts != 0 {
+		// Wave 11, cell slides: remove with the feature.
+		return nil, fmt.Errorf("%w: handouts", office.ErrNotImplemented)
+	}
 	if fonts == nil {
 		return nil, fmt.Errorf("%w: no font index", office.ErrInvalidOptions)
 	}

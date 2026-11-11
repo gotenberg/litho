@@ -414,12 +414,12 @@ func (b *builder) slideSize() (float64, float64) {
 
 // pageSize returns the page size a slide of size w by h prints on: the
 // options' paper, else the slide's, turned to landscape when the options
-// ask and it is portrait.
+// ask and it is portrait, or to portrait when they ask and it is landscape.
 func (b *builder) pageSize(w, h float64) (float64, float64) {
 	if b.opts.PageWidth > 0 && b.opts.PageHeight > 0 {
 		w, h = b.opts.PageWidth, b.opts.PageHeight
 	}
-	if b.opts.Landscape && w < h {
+	if b.opts.Landscape && w < h || b.opts.Portrait && w > h {
 		w, h = h, w
 	}
 	return w, h

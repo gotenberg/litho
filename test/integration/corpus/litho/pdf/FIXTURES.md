@@ -9139,7 +9139,7 @@ over one lossless image of the whole band; the chart, whose frame, line and
 marks reach their cells, and the strip along the band's bottom, too short to
 hold 256 colours, show from that lossless image. The PDF/A-1b remediation,
 default and aggressive, writes 108,396 bytes, where one lossless composite
-took 111,451, and `litho flatten-transparency --jpeg-quality 90` 76,151
+took 111,451, and `Writer.FlattenTransparency` with `WithFlattenJPEGQuality(90)` 76,151
 bytes, where the lossless default takes 79,206. litho and poppler 26.09.0 draw
 each output like its source; drawn at 72 and 300 dpi by poppler and PDFium,
 the tiled output departs from the lossless one only inside the JPEG tile and

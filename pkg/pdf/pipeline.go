@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"runtime"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -79,8 +80,8 @@ type PipelineResult struct {
 type StageReport struct {
 	// Index is the 0-based position of the stage in declaration order.
 	Index int
-	// Name is the short stage identifier: "open", "compose", "split",
-	// "merge", "apply", or "write".
+	// Name is the short stage identifier: "open", "compose", "convert",
+	// "merge-pipelines", "split", "merge", "apply", or "write".
 	Name string
 	// Materialized is true if the stage flushed the pipeline state to
 	// an intermediate temp file or to the final destination.
@@ -88,6 +89,13 @@ type StageReport struct {
 	// BytesOut is the size of the intermediate file for restructuring
 	// stages, or 0 otherwise.
 	BytesOut int64
+	// Conversion is the report of a [Pipeline.Convert] stage, nil for any
+	// other stage.
+	Conversion *ConvertReport
+	// Pipelines holds the result of each pipeline a
+	// [Pipeline.MergePipelines] stage ran, in the order they were given,
+	// nil for any other stage.
+	Pipelines []*PipelineResult
 }
 
 // NewPipeline creates an empty [Pipeline]. Seed it with [Pipeline.Open].
@@ -190,6 +198,9 @@ func (p *Pipeline) buildValidationErrors() []error {
 				})
 			}
 			hasSource = true
+		} else if _, ok := s.(*mergePipelinesStage); ok && i == 0 {
+			// The merge of the pipelines is the source.
+			hasSource = true
 		} else if !hasSource {
 			errs = append(errs, &PipelineStageError{
 				Index: i, Name: s.name(), Label: stageLabel(s), Err: ErrPipelineNoSource,
@@ -215,6 +226,53 @@ func (p *Pipeline) buildValidationErrors() []error {
 					Index: i, Name: s.name(), Err: fmt.Errorf("%w: no placements", ErrInvalidPlacement),
 				})
 			}
+		case *convertStage:
+			if st.c == nil {
+				errs = append(errs, &PipelineStageError{
+					Index: i, Name: s.name(), Err: fmt.Errorf("%w: nil conversion", ErrInvalidConvertOptions),
+				})
+			}
+		case *mergePipelinesStage:
+			for _, err := range p.mergedPipelineErrors(st) {
+				errs = append(errs, &PipelineStageError{Index: i, Name: s.name(), Err: err})
+			}
+		}
+	}
+	return errs
+}
+
+// mergedPipelineErrors returns what is wrong with the pipelines a
+// [Pipeline.MergePipelines] stage of p was given: none, a nil one, p itself
+// or one given twice, one that merges pipelines itself, and what each one's
+// own validation finds, each named by its position.
+func (p *Pipeline) mergedPipelineErrors(st *mergePipelinesStage) []error {
+	if len(st.pipelines) == 0 {
+		return []error{ErrPipelineNoPipelines}
+	}
+	var errs []error
+	seen := map[*Pipeline]bool{p: true}
+	for i, sub := range st.pipelines {
+		switch {
+		case sub == nil:
+			errs = append(errs, fmt.Errorf("pipeline %d: %w: nil pipeline", i, ErrPipelineNoPipelines))
+			continue
+		case seen[sub]:
+			errs = append(errs, fmt.Errorf("pipeline %d: %w", i, ErrPipelineShared))
+			continue
+		}
+		seen[sub] = true
+		nested := false
+		for _, s := range sub.stages {
+			if _, ok := s.(*mergePipelinesStage); ok {
+				nested = true
+			}
+		}
+		if nested {
+			errs = append(errs, fmt.Errorf("pipeline %d: %w", i, ErrPipelineNested))
+			continue
+		}
+		for _, err := range sub.buildValidationErrors() {
+			errs = append(errs, fmt.Errorf("pipeline %d: %w", i, err))
 		}
 	}
 	return errs
@@ -256,16 +314,23 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 	if cfg.pageSizeErr != nil {
 		return nil, cfg.pageSizeErr
 	}
+	if cfg.concurrencyErr != nil {
+		return nil, cfg.concurrencyErr
+	}
 
+	concurrency := cfg.concurrency
+	if concurrency == 0 {
+		concurrency = min(runtime.GOMAXPROCS(0), defaultPipelineConcurrency)
+	}
 	ex := &executor{
-		tempDir:          cfg.tempDir,
-		pageSize:         cfg.pageSize,
-		finalOpts:        opts,
-		signatureRemoval: cfg.signatureRemoval,
-		finalDst:         dst,
-		totalStages:      len(p.stages),
-		logger:           logger,
-		result:           &PipelineResult{},
+		concurrency: concurrency,
+		tempDir:     cfg.tempDir,
+		pageSize:    cfg.pageSize,
+		finalOpts:   opts,
+		finalDst:    dst,
+		totalStages: len(p.stages),
+		logger:      logger,
+		result:      &PipelineResult{},
 	}
 	defer ex.cleanup()
 
@@ -314,9 +379,12 @@ const (
 	stageNameWrite    = "write"
 	stageNameOpen     = "open"
 	stageNameCompose  = "compose"
-	stageNameSplit    = "split"
-	stageNameMerge    = "merge"
-	stageNameApply    = "apply"
+	stageNameConvert  = "convert"
+	// stageNameMergePipelines names a [Pipeline.MergePipelines] stage.
+	stageNameMergePipelines = "merge-pipelines"
+	stageNameSplit          = "split"
+	stageNameMerge          = "merge"
+	stageNameApply          = "apply"
 )
 
 type stageKind int
@@ -353,6 +421,9 @@ type executor struct {
 	writer   *Writer
 	tmpFiles []*os.File
 	tempDir  string
+	// concurrency is how many pipelines a [Pipeline.MergePipelines] stage
+	// runs at once (see [WithPipelineConcurrency]).
+	concurrency int
 	// pageSize is the default page size the options of [Pipeline.WriteTo]
 	// name (see [WithDefaultPageSize]), nil for none. Every stage writes
 	// with it, not only the last: an intermediate file that gave a page a

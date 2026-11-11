@@ -25,21 +25,21 @@ func TestConvert_DOCXPassword(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name string
-		opts []ConvertOption
+		opts []WordProcessingOption
 		want error
 	}{
-		{"right password", []ConvertOption{WithConvertPassword("foo")}, nil},
-		{"wrong password", []ConvertOption{WithConvertPassword("bar")}, ErrConvertEncrypted},
+		{"right password", []WordProcessingOption{WithOfficePassword("foo")}, nil},
+		{"wrong password", []WordProcessingOption{WithOfficePassword("bar")}, ErrConvertEncrypted},
 		{"no password", nil, ErrConvertEncrypted},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
 			var out bytes.Buffer
-			opts := append([]ConvertOption{WithConvertFontDirs(convertFontDir(t))}, tc.opts...)
-			rep, err := Convert(ctx, bytes.NewReader(data), FormatDOCX, &out, opts...)
+			opts := append([]WordProcessingOption{WithConvertFontDirs(convertFontDir(t))}, tc.opts...)
+			rep, err := FromDOCX(bytes.NewReader(data), opts...).WriteTo(ctx, &out)
 			if !errors.Is(err, tc.want) {
-				t.Fatalf("Convert = %v, want %v", err, tc.want)
+				t.Fatalf("WriteTo = %v, want %v", err, tc.want)
 			}
 			if tc.want != nil {
 				if out.Len() != 0 {

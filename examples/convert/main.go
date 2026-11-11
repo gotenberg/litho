@@ -29,8 +29,13 @@ func run(ctx context.Context, args []string) error {
 		return errors.New("usage: convert out.pdf input.txt|input.html")
 	}
 
-	format := pdf.FormatText
-	opts := []pdf.ConvertOption{pdf.WithPaperSize(612, 792)}
+	in, err := os.Open(args[1]) //nolint:gosec // The input path is the example's own argument.
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	var conversion *pdf.Conversion
 	switch strings.ToLower(filepath.Ext(args[1])) {
 	case ".html", ".htm":
 		root, err := os.OpenRoot(filepath.Dir(args[1]))
@@ -38,23 +43,16 @@ func run(ctx context.Context, args []string) error {
 			return err
 		}
 		defer root.Close()
-		format = pdf.FormatHTML
-		opts = append(opts, pdf.WithResources(root.FS()), pdf.WithMediaType("print"))
+		conversion = pdf.FromHTML(in, pdf.WithPaper(pdf.PaperLetter), pdf.WithResources(root.FS()), pdf.WithMediaType("print"))
 	default:
-		opts = append(opts, pdf.WithFontSize(11))
+		conversion = pdf.FromText(in, pdf.WithPaper(pdf.PaperLetter), pdf.WithFontSize(11))
 	}
-
-	in, err := os.Open(args[1]) //nolint:gosec // The input path is the example's own argument.
-	if err != nil {
-		return err
-	}
-	defer in.Close()
 
 	out, err := os.Create(args[0]) //nolint:gosec // The output path is the example's own argument.
 	if err != nil {
 		return err
 	}
-	report, err := pdf.Convert(ctx, in, format, out, opts...)
+	report, err := conversion.WriteTo(ctx, out)
 	if err = errors.Join(err, out.Close()); err != nil {
 		return err
 	}

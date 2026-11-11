@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -271,30 +273,58 @@ func (f *robustnessFeature) Compare(fixtureID string, output []byte) Verdict {
 // directory may hold, by file name, with their format.
 var stressSources = []struct { //nolint:gochecknoglobals // static table
 	file   string
-	format pdf.Format
+	format fixture.Format
 }{
-	{"index.txt", pdf.FormatText},
-	{"index.html", pdf.FormatHTML},
+	{"index.txt", fixture.FormatText},
+	{"index.html", fixture.FormatHTML},
+}
+
+// robustnessSource is the document convert-one converts for a fixture: a
+// text or HTML document of the stress corpus, or an Office source.
+type robustnessSource struct {
+	document string
+	format   fixture.Format
+	// dir is the stress fixture's directory, an HTML document's resources.
+	dir string
+	// office is the Office source, nil for a stress document.
+	office *fixture.Office
 }
 
 // loadRobustnessSource returns the document convert-one converts for the
-// fixture at path, its format and its options: a text or HTML document of
-// the stress corpus, the files beside it its resources, or an Office
-// source at the options its options.json names (see fixture.LoadOffice).
-func loadRobustnessSource(path string) (string, pdf.Format, []pdf.ConvertOption, error) {
+// fixture at path: a text or HTML document of the stress corpus, the files
+// beside it its resources, or an Office source at the options its
+// options.json names (see fixture.LoadOffice).
+func loadRobustnessSource(path string) (robustnessSource, error) {
 	for _, s := range stressSources {
 		p := filepath.Join(path, s.file)
 		if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() {
-			var opts []pdf.ConvertOption
-			if s.format == pdf.FormatHTML {
-				opts = append(opts, pdf.WithResources(os.DirFS(path)))
-			}
-			return p, s.format, opts, nil
+			return robustnessSource{document: p, format: s.format, dir: path}, nil
 		}
 	}
 	source, err := fixture.LoadOffice(path)
 	if err != nil {
-		return "", "", nil, err
+		return robustnessSource{}, err
 	}
-	return source.Document, source.Format, source.ConvertOptions(), nil
+	return robustnessSource{document: source.Document, format: source.Format, office: source}, nil
+}
+
+// conversion returns the conversion of src, the source's document, with
+// opts: an HTML document fetches through client, which the other formats
+// never do.
+func (s robustnessSource) conversion(src io.Reader, client *http.Client, opts ...pdf.ConvertOption) (*pdf.Conversion, error) {
+	switch {
+	case s.office != nil:
+		return s.office.Conversion(src, opts...)
+	case s.format == fixture.FormatHTML:
+		html := []pdf.HTMLOption{pdf.WithHTTPClient(client), pdf.WithResources(os.DirFS(s.dir))}
+		for _, o := range opts {
+			html = append(html, o)
+		}
+		return pdf.FromHTML(src, html...), nil
+	}
+	text := make([]pdf.TextOption, 0, len(opts))
+	for _, o := range opts {
+		text = append(text, o)
+	}
+	return pdf.FromText(src, text...), nil
 }

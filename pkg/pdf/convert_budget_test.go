@@ -39,33 +39,38 @@ func TestConvert_MemoryBudget(t *testing.T) {
 	pictures := fstest.MapFS{"a.png": {Data: pic.Bytes()}}
 	docx := budgetDocx(t, 3000)
 	for name, tc := range map[string]struct {
-		format Format
-		src    string
-		opts   []ConvertOption
-		holds  string
+		format    testFormat
+		src       string
+		resources fstest.MapFS
+		holds     string
 	}{
-		"text glyph runs": {format: FormatText, src: text, holds: "glyph runs"},
-		"html styles":     {format: FormatHTML, src: styled.String(), holds: "computed styles"},
-		"csv cells":       {format: FormatCSV, src: cells.String(), holds: "cells"},
-		"docx paragraphs": {format: FormatDOCX, src: docx, holds: "XML trees"},
+		"text glyph runs": {format: formatText, src: text, holds: "glyph runs"},
+		"html styles":     {format: formatHTML, src: styled.String(), holds: "computed styles"},
+		"csv cells":       {format: formatCSV, src: cells.String(), holds: "cells"},
+		"docx paragraphs": {format: formatDOCX, src: docx, holds: "XML trees"},
 		"html picture": {
-			format: FormatHTML, src: `<img src="a.png">`, holds: "decoded pictures",
-			opts: []ConvertOption{WithResources(pictures)},
+			format: formatHTML, src: `<img src="a.png">`, holds: "decoded pictures",
+			resources: pictures,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			opts := append([]ConvertOption{WithConvertFontDirs(dir)}, tc.opts...)
+			conversion := func(opts ...ConvertOption) *Conversion {
+				opts = append([]ConvertOption{WithConvertFontDirs(dir)}, opts...)
+				if tc.resources != nil {
+					return FromHTML(strings.NewReader(tc.src), append(optionsAs[HTMLOption](opts), WithResources(tc.resources))...)
+				}
+				return fromFormat(tc.format, strings.NewReader(tc.src), opts...)
+			}
 			var out bytes.Buffer
-			low := append(opts, WithConvertLimits(Limits{MaxConvertMemoryBytes: 2 << 20}))
-			rep, err := Convert(context.Background(), strings.NewReader(tc.src), tc.format, &out, low...)
+			rep, err := conversion(WithConvertLimits(Limits{MaxConvertMemoryBytes: 2 << 20})).WriteTo(context.Background(), &out)
 			if !errors.Is(err, ErrConvertInputTooLarge) || rep != nil || !strings.Contains(err.Error(), tc.holds) {
 				t.Fatalf("under 2 MiB: %v, %+v, want ErrConvertInputTooLarge naming %s", err, rep, tc.holds)
 			}
 			if out.Len() != 0 {
 				t.Errorf("wrote %d bytes, want none", out.Len())
 			}
-			if _, err := Convert(context.Background(), strings.NewReader(tc.src), tc.format, &out, opts...); err != nil {
+			if _, err := conversion().WriteTo(context.Background(), &out); err != nil {
 				t.Errorf("under the default budget: %v", err)
 			}
 		})
@@ -83,13 +88,13 @@ func TestConvert_PagesLeaveTheBudgetOnceWritten(t *testing.T) {
 	// 4000 lines of 39 characters fill 77 pages and hold about 7 MiB of
 	// glyphs at once.
 	text := strings.Repeat("words and more words on a line of text\n", 4000)
-	low := []ConvertOption{WithConvertFontDirs(dir), WithConvertLimits(Limits{MaxConvertMemoryBytes: 2 << 20})}
+	low := []TextOption{WithConvertFontDirs(dir), WithConvertLimits(Limits{MaxConvertMemoryBytes: 2 << 20})}
 	var out bytes.Buffer
-	rep, err := Convert(context.Background(), strings.NewReader(text), FormatText, &out, low...)
+	rep, err := FromText(strings.NewReader(text), low...).WriteTo(context.Background(), &out)
 	if err != nil || rep.Pages != 77 {
 		t.Fatalf("under 2 MiB: %v, %+v, want 77 pages", err, rep)
 	}
-	_, err = Convert(context.Background(), strings.NewReader(text), FormatText, &out, append(low, WithPageRanges("last,1"))...)
+	_, err = FromText(strings.NewReader(text), append(low, WithPageRanges("last,1"))...).WriteTo(context.Background(), &out)
 	if !errors.Is(err, ErrConvertInputTooLarge) {
 		t.Errorf("a selection that holds every page under 2 MiB: %v, want ErrConvertInputTooLarge", err)
 	}

@@ -85,7 +85,7 @@ func (b *builder) notesPage(s *Slide, n int) (*compose.Page, *compose.StructElem
 	case b.opts.NotesPaperWidth > 0 && b.opts.NotesPaperHeight > 0:
 		pw, ph, corner = b.opts.NotesPaperWidth, b.opts.NotesPaperHeight, true
 	}
-	if b.opts.Landscape && pw < ph {
+	if b.opts.Landscape && pw < ph || b.opts.Portrait && pw > ph {
 		// A turned notes paper fits the notes page rather than cut it.
 		pw, ph, corner = ph, pw, false
 	}

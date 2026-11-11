@@ -1,6 +1,6 @@
 # litho/text corpus fixtures
 
-PDFs litho writes itself: each fixture is a plain text source in `sources/` that `pdf.Convert` lays out, so the corpus scores the converter's output with the oracles the matrix already runs. The PDFs are committed, so provisioning and scoring never depend on the host's fonts; only a rebuild does.
+PDFs litho writes itself: each fixture is a plain text source in `sources/` that `pdf.FromText` lays out, so the corpus scores the converter's output with the oracles the matrix already runs. The PDFs are committed, so provisioning and scoring never depend on the host's fonts; only a rebuild does.
 
 ## Oracles
 

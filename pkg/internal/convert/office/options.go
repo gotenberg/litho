@@ -38,6 +38,10 @@ type Options struct {
 	// Landscape lays every section out in landscape: a portrait section's
 	// width and height are swapped, a landscape one is kept.
 	Landscape bool
+	// Portrait lays every section out in portrait: a landscape section's
+	// width and height are swapped, a portrait one is kept. The caller sets
+	// at most one of Landscape and Portrait.
+	Portrait bool
 	// Password opens an encrypted document (MS-OFFCRYPTO for OOXML; ODF
 	// 1.3 Part 2, 3.4 for OpenDocument). Empty refuses an encrypted document
 	// with ErrEncrypted; so does a wrong password.
@@ -52,12 +56,43 @@ type Options struct {
 	// page size options above too. A text document ignores it.
 	SinglePageSheets bool
 	// PrintDate is what the date and time fields of a spreadsheet's headers
-	// and footers, and of a presentation's slides, show; the zero time
-	// shows nothing for a spreadsheet and the text the file saved for a
-	// presentation. It is the only date of a conversion: the output never
-	// depends on the clock. A text document ignores it: its date fields
-	// show the results its file stores.
+	// and footers, of a presentation's slides and of a text document show;
+	// the zero time shows nothing for a spreadsheet and the text the file
+	// saved for a presentation or a text document. It is the only date of a
+	// conversion: the output never depends on the clock.
 	PrintDate time.Time
+	// TrackedChanges is how a text document prints the changes it tracks.
+	// Other documents ignore it.
+	TrackedChanges TrackedChanges
+	// Sheets, when not nil, are the names of the sheets of a spreadsheet
+	// that print, matched exactly, in book order, hidden ones included; a
+	// name the book has no sheet for fails with ErrInvalidOptions. The
+	// caller sets at most one of Sheets and SheetNumbers. Other documents
+	// ignore both.
+	Sheets []string
+	// SheetNumbers, when not nil, are the 1-based positions in the book of
+	// the sheets that print, hidden sheets counted, in book order, hidden
+	// ones included; a number the book has no sheet for fails with
+	// ErrInvalidOptions.
+	SheetNumbers []int
+	// HiddenSheets prints the sheets a spreadsheet hides too; off, the
+	// default, they are left out. Other documents ignore it.
+	HiddenSheets bool
+	// Recalculation is when the formulas of a spreadsheet are computed
+	// again. Other documents ignore it.
+	Recalculation Recalculation
+	// CSVSeparators are the characters that end a field of a CSV file, any
+	// of them; nil is a comma alone (RFC 4180, 2). Other documents ignore
+	// it.
+	CSVSeparators []rune
+	// CSVKeepText lays every field of a CSV file out as the text the file
+	// holds; off, the default, a field that reads as a number, a date or a
+	// time is laid out as one. Other documents ignore it.
+	CSVKeepText bool
+	// Handouts, when positive, prints a presentation as handout pages in
+	// place of its slide pages, that many slides a page: 1, 2, 3, 4, 6 or
+	// 9. Zero, the default, prints the slides. Other documents ignore it.
+	Handouts int
 	// HiddenSlides prints the slides a presentation hides from its show
 	// too; off, the default, they are left out, as Impress prints a show.
 	// Other documents ignore it.
@@ -83,6 +118,37 @@ type Options struct {
 	Sink compose.PageSink
 }
 
+// TrackedChanges is how a text document prints the insertions and the
+// deletions it tracks (ECMA-376 Part 1, 17.13.5; ODF 1.3 Part 3, 5.5).
+type TrackedChanges int
+
+const (
+	// ChangesAccepted prints the text as it reads once every change is
+	// accepted: insertions kept, deletions left out. The zero value.
+	ChangesAccepted TrackedChanges = iota
+	// ChangesRejected prints the text as it read before the changes:
+	// insertions left out, deletions kept.
+	ChangesRejected
+	// ChangesMarked prints both, an insertion underlined and a deletion
+	// struck through, each in its author's colour.
+	ChangesMarked
+)
+
+// Recalculation is when a spreadsheet's formulas are computed again rather
+// than shown as the value the file stores.
+type Recalculation int
+
+const (
+	// RecalculateAsNeeded computes a formula again when the file gives no
+	// reason to trust its stored value, by each format's own rule. The zero
+	// value.
+	RecalculateAsNeeded Recalculation = iota
+	// RecalculateNever shows the stored value of every formula.
+	RecalculateNever
+	// RecalculateAlways computes every formula again.
+	RecalculateAlways
+)
+
 // DefaultPage returns the page size of a section or sheet whose file
 // names none: DefaultPageWidth and DefaultPageHeight when set, else w by
 // h, the converter's own default.
@@ -96,7 +162,8 @@ func (o Options) DefaultPage(w, h float64) (float64, float64) {
 // Paper returns the page a section or sheet of size w by h prints on:
 // PageWidth by PageHeight when set, the section's orientation replaced
 // by the paper's, else its own size; then turned to landscape when
-// Landscape asks and the page is portrait.
+// Landscape asks and the page is portrait, or to portrait when Portrait
+// asks and the page is landscape.
 //
 // # Corpus evidence
 //
@@ -108,7 +175,7 @@ func (o Options) Paper(w, h float64) (float64, float64) {
 	if o.PageWidth > 0 && o.PageHeight > 0 {
 		w, h = o.PageWidth, o.PageHeight
 	}
-	if o.Landscape && w < h {
+	if o.Landscape && w < h || o.Portrait && w > h {
 		w, h = h, w
 	}
 	return w, h
@@ -129,6 +196,18 @@ func (o Options) Validate() error {
 				return fmt.Errorf("%w: %s side %v is not in (0, %d]", ErrInvalidOptions, p.name, v, MaxPageSide)
 			}
 		}
+	}
+	if o.Landscape && o.Portrait {
+		return fmt.Errorf("%w: landscape and portrait exclude each other", ErrInvalidOptions)
+	}
+	if o.TrackedChanges < ChangesAccepted || o.TrackedChanges > ChangesMarked {
+		return fmt.Errorf("%w: tracked changes view %d", ErrInvalidOptions, o.TrackedChanges)
+	}
+	if o.Recalculation < RecalculateAsNeeded || o.Recalculation > RecalculateAlways {
+		return fmt.Errorf("%w: recalculation mode %d", ErrInvalidOptions, o.Recalculation)
+	}
+	if o.Sheets != nil && o.SheetNumbers != nil {
+		return fmt.Errorf("%w: sheet names and sheet numbers exclude each other", ErrInvalidOptions)
 	}
 	if o.MaxInputBytes < 0 {
 		return fmt.Errorf("%w: max input bytes %d is negative", ErrInvalidOptions, o.MaxInputBytes)

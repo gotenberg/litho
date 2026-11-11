@@ -19,6 +19,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
+	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
 // diffDPI is the resolution the diff goldens are drawn at, that of the render
@@ -517,7 +518,7 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 	f.mu.RLock()
 	borrowed := f.borrowed[fixtureID]
 	f.mu.RUnlock()
-	out := scoreDiff(g, doc, renderDir, settings.Format == pdf.FormatCSV, func(page int, got, want image.Image, d pixelDiff) {
+	out := scoreDiff(g, doc, renderDir, settings.Format == fixture.FormatCSV, func(page int, got, want image.Image, d pixelDiff) {
 		if reportDir == "" {
 			return
 		}

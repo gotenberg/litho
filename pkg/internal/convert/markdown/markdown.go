@@ -3,6 +3,7 @@ package markdown
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	stdhtml "html"
 	"io"
@@ -24,6 +25,17 @@ import (
 // line.
 const maxTitleBytes = 4 << 10
 
+// Options parametrises a Markdown conversion.
+type Options struct {
+	// HTML are the options the rendered document converts with.
+	HTML html.Options
+	// Template is the HTML document the Markdown renders into, a template
+	// of html/template in which {{ toHTML }} is the rendered Markdown and
+	// {{ .Title }} the text of its first heading. Empty is the default
+	// template: a document without a stylesheet.
+	Template string
+}
+
 // Convert lays the Markdown document src out as a Document.
 //
 // It reads src to its end, at most opts.MaxInputBytes bytes
@@ -33,9 +45,14 @@ const maxTitleBytes = 4 << 10
 // most, is converted by [html.Convert] with opts under the ceiling of
 // the input budget, [limits.MaxConvertInputBytesCeiling], and fails as
 // html.Convert does. A cap out of range fails with [html.ErrInvalidOptions].
-func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts html.Options) (*compose.Document, error) {
+func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, o Options) (*compose.Document, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	opts := o.HTML
+	if o.Template != "" {
+		// Wave 11, cell markdown: remove with the feature.
+		return nil, errors.New("converting Markdown: templates are not implemented")
 	}
 	maxBytes := opts.MaxInputBytes
 	if maxBytes == 0 {

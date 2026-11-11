@@ -93,7 +93,7 @@ func TestConvert_LaysOutTheMarkdown(t *testing.T) {
 	}
 	fsys := fstest.MapFS{"img/a.png": {Data: pic.Bytes()}}
 	src := "# Report\n\nText with ![a picture](img/a.png) and [a link](https://example.com/x).\n\n## Next\n"
-	doc, err := Convert(context.Background(), strings.NewReader(src), ahem(t), html.Options{Resources: fsys})
+	doc, err := Convert(context.Background(), strings.NewReader(src), ahem(t), Options{HTML: html.Options{Resources: fsys}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,22 +130,22 @@ func TestConvert_LaysOutTheMarkdown(t *testing.T) {
 func TestConvert_Caps(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	if _, err := Convert(ctx, strings.NewReader("# 12345"), ahem(t), html.Options{MaxInputBytes: 4}); !errors.Is(err, html.ErrInputTooLarge) {
+	if _, err := Convert(ctx, strings.NewReader("# 12345"), ahem(t), Options{HTML: html.Options{MaxInputBytes: 4}}); !errors.Is(err, html.ErrInputTooLarge) {
 		t.Errorf("past the cap: %v", err)
 	}
-	if _, err := Convert(ctx, strings.NewReader("x"), ahem(t), html.Options{MaxInputBytes: -1}); !errors.Is(err, html.ErrInvalidOptions) {
+	if _, err := Convert(ctx, strings.NewReader("x"), ahem(t), Options{HTML: html.Options{MaxInputBytes: -1}}); !errors.Is(err, html.ErrInvalidOptions) {
 		t.Errorf("negative cap: %v", err)
 	}
 	// The rendered HTML is larger than the Markdown under its own cap.
-	if _, err := Convert(ctx, strings.NewReader("* a\n* b\n"), ahem(t), html.Options{MaxInputBytes: 8}); err != nil {
+	if _, err := Convert(ctx, strings.NewReader("* a\n* b\n"), ahem(t), Options{HTML: html.Options{MaxInputBytes: 8}}); err != nil {
 		t.Errorf("rendered past the Markdown cap: %v", err)
 	}
 	cctx, cancel := context.WithCancel(ctx)
 	cancel()
-	if _, err := Convert(cctx, strings.NewReader("x"), ahem(t), html.Options{}); !errors.Is(err, context.Canceled) {
+	if _, err := Convert(cctx, strings.NewReader("x"), ahem(t), Options{}); !errors.Is(err, context.Canceled) {
 		t.Errorf("cancelled: %v", err)
 	}
-	if _, err := Convert(ctx, strings.NewReader("x"), ahem(t), html.Options{Scale: 9}); !errors.Is(err, html.ErrInvalidOptions) {
+	if _, err := Convert(ctx, strings.NewReader("x"), ahem(t), Options{HTML: html.Options{Scale: 9}}); !errors.Is(err, html.ErrInvalidOptions) {
 		t.Errorf("bad options: %v", err)
 	}
 }
@@ -159,7 +159,7 @@ func FuzzConvert(f *testing.F) {
 		if !bytes.HasPrefix(page, []byte("<!doctype html>")) || !bytes.HasSuffix(page, []byte("</body></html>")) {
 			t.Fatalf("wrapper broken: %q", page)
 		}
-		_, err := Convert(context.Background(), bytes.NewReader(data), ahem(t), html.Options{MaxInputBytes: 1 << 12, MaxPages: 8})
+		_, err := Convert(context.Background(), bytes.NewReader(data), ahem(t), Options{HTML: html.Options{MaxInputBytes: 1 << 12, MaxPages: 8}})
 		if err != nil && !errors.Is(err, html.ErrInputTooLarge) && !errors.Is(err, html.ErrTooManyPages) &&
 			!errors.Is(err, html.ErrTooManyElements) && !errors.Is(err, html.ErrTooDeep) {
 			t.Fatalf("Convert: %v", err)

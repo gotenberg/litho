@@ -26,6 +26,10 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
+	if opts.CSVKeepText || opts.CSVSeparators != nil && string(opts.CSVSeparators) != ",;\t" {
+		// Wave 11, cell sheets: remove with the feature.
+		return nil, fmt.Errorf("%w: CSV separators and type detection", office.ErrNotImplemented)
+	}
 	if fonts == nil {
 		return nil, fmt.Errorf("%w: no font index", office.ErrInvalidOptions)
 	}

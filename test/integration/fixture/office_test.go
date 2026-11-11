@@ -1,6 +1,8 @@
 package fixture
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -11,6 +13,16 @@ import (
 
 	"github.com/gotenberg/litho/pkg/pdf"
 )
+
+// optionCount counts the litho options of o's fields that its format takes.
+func optionCount(o *Office) int {
+	opts := o.options()
+	n := len(opts.common) + len(opts.sheet) + len(opts.slides)
+	if o.Format != FormatCSV {
+		n += len(opts.office)
+	}
+	return n
+}
 
 func TestParseOfficeOptions_RefusesWhatTheRouteRefuses(t *testing.T) {
 	t.Parallel()
@@ -56,10 +68,10 @@ func TestLoadOffice_ReadsADirectoryOrADocument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.Format != pdf.FormatODT || o.Document != filepath.Join(dir, "memo.fodt") || !o.Options.Landscape {
+	if o.Format != FormatODT || o.Document != filepath.Join(dir, "memo.fodt") || !o.Options.Landscape {
 		t.Errorf("source %+v", o)
 	}
-	if n := len(o.ConvertOptions()); n != 6 {
+	if n := optionCount(o); n != 6 {
 		t.Errorf("%d convert options, want landscape, outline, the default paper, pages, password and paper", n)
 	}
 
@@ -71,11 +83,11 @@ func TestLoadOffice_ReadsADirectoryOrADocument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.Format != pdf.FormatDOCX || o.Options != (OfficeOptions{}) || len(o.ConvertOptions()) != 3 {
+	if o.Format != FormatDOCX || !reflect.DeepEqual(o.Options, OfficeOptions{}) || optionCount(o) != 2 {
 		t.Errorf("fetched document %+v", o)
 	}
 
-	for ext, want := range map[string]pdf.Format{".doc": "doc", ".xls": "xls", ".ppt": "ppt", ".dotx": pdf.FormatDOCX} {
+	for ext, want := range map[string]Format{".doc": "doc", ".xls": "xls", ".ppt": "ppt", ".dotx": FormatDOCX} {
 		bin := filepath.Join(t.TempDir(), "fetched"+ext)
 		if err := os.WriteFile(bin, []byte{0xd0, 0xcf}, 0o600); err != nil {
 			t.Fatal(err)
@@ -108,12 +120,12 @@ func TestLoadOffice_ReadsADirectoryOrADocument(t *testing.T) {
 func TestLoadOffice_MapsEveryExtension(t *testing.T) {
 	t.Parallel()
 
-	cases := map[string]pdf.Format{
-		"a.docx": pdf.FormatDOCX, "a.odt": pdf.FormatODT, "a.fodt": pdf.FormatODT,
-		"a.xlsx": pdf.FormatXLSX, "a.XLSM": pdf.FormatXLSX, "a.xltx": pdf.FormatXLSX, "a.xltm": pdf.FormatXLSX,
-		"a.ods": pdf.FormatODS, "a.fods": pdf.FormatODS, "a.ots": pdf.FormatODS, "a.csv": pdf.FormatCSV,
-		"a.pptx": pdf.FormatPPTX, "a.PPTM": pdf.FormatPPTX, "a.potx": pdf.FormatPPTX, "a.ppsx": pdf.FormatPPTX,
-		"a.odp": pdf.FormatODP, "a.fodp": pdf.FormatODP, "a.otp": pdf.FormatODP,
+	cases := map[string]Format{
+		"a.docx": FormatDOCX, "a.odt": FormatODT, "a.fodt": FormatODT,
+		"a.xlsx": FormatXLSX, "a.XLSM": FormatXLSX, "a.xltx": FormatXLSX, "a.xltm": FormatXLSX,
+		"a.ods": FormatODS, "a.fods": FormatODS, "a.ots": FormatODS, "a.csv": FormatCSV,
+		"a.pptx": FormatPPTX, "a.PPTM": FormatPPTX, "a.potx": FormatPPTX, "a.ppsx": FormatPPTX,
+		"a.odp": FormatODP, "a.fodp": FormatODP, "a.otp": FormatODP,
 	}
 	for name, want := range cases {
 		dir := t.TempDir()
@@ -124,14 +136,18 @@ func TestLoadOffice_MapsEveryExtension(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 			continue
 		}
-		// A presentation takes no default paper: its slides carry their
-		// size.
-		n := 4
-		if want == pdf.FormatPPTX || want == pdf.FormatODP {
-			n = 3
+		// A sheet takes the outline, the default paper and one page per
+		// sheet; a text document no single page; a presentation no
+		// default paper either: its slides carry their size.
+		n := 3
+		switch want {
+		case FormatDOCX, FormatODT:
+			n = 2
+		case FormatPPTX, FormatODP:
+			n = 1
 		}
-		if o.Format != want || !o.Options.SinglePage || len(o.ConvertOptions()) != n {
-			t.Errorf("%s: format %s, options %+v, %d convert options, want %s with single page", name, o.Format, o.Options, len(o.ConvertOptions()), want)
+		if o.Format != want || !o.Options.SinglePage || optionCount(o) != n {
+			t.Errorf("%s: format %s, options %+v, %d convert options, want %s with single page", name, o.Format, o.Options, optionCount(o), want)
 		}
 	}
 }
@@ -145,25 +161,26 @@ func TestOfficeOptionNames_MatchTheJSONNames(t *testing.T) {
 		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
 		tags = append(tags, name)
 	}
-	// The route's fields, then the key that borrows a reference, which is
-	// no field of the route's.
-	if want := append(slices.Clone(OfficeOptionNames), ReferenceOfName); !slices.Equal(tags, want) {
+	// The route's fields, then litho's own options, then the key that
+	// borrows a reference: the last two are no fields of the route's.
+	want := append(slices.Clone(OfficeOptionNames), OfficeLithoOptionNames...)
+	if want = append(want, ReferenceOfName); !slices.Equal(tags, want) {
 		t.Errorf("json names %v, want %v", tags, want)
 	}
 }
 
-func TestOfficeConvertOptions_MapsThePresentationFields(t *testing.T) {
+func TestOfficeConversion_MapsThePresentationFields(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
 		name, json string
 		want       int
 	}{
-		{"defaults", `{}`, 2},
-		{"hidden slides", `{"exportHiddenSlides": true}`, 3},
-		{"notes pages", `{"exportNotesPages": true}`, 3},
-		{"both", `{"exportHiddenSlides": true, "exportNotesPages": true}`, 4},
-		{"both off", `{"exportHiddenSlides": false, "exportNotesPages": false}`, 2},
+		{"defaults", `{}`, 1},
+		{"hidden slides", `{"exportHiddenSlides": true}`, 2},
+		{"notes pages", `{"exportNotesPages": true}`, 2},
+		{"both", `{"exportHiddenSlides": true, "exportNotesPages": true}`, 3},
+		{"both off", `{"exportHiddenSlides": false, "exportNotesPages": false}`, 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -175,9 +192,38 @@ func TestOfficeConvertOptions_MapsThePresentationFields(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if n := len(o.ConvertOptions()); n != tc.want {
+			if n := optionCount(o); n != tc.want {
 				t.Errorf("%d convert options, want %d", n, tc.want)
 			}
 		})
+	}
+}
+
+// TestOfficeConversion_TakesEveryField checks that the options of every
+// field hold together for every format: the conversion passes validation
+// and fails only on the font directory, empty on purpose. A format litho
+// does not read fails with ErrUnsupportedFormat.
+func TestOfficeConversion_TakesEveryField(t *testing.T) {
+	t.Parallel()
+
+	opts, err := ParseOfficeOptions([]byte(`{"password": "foo", "landscape": true, "nativePages": "2-3", "nativeBookmarks": false, "paperWidth": 4, "paperHeight": 6, "singlePage": true, "exportHiddenSlides": true, "exportNotesPages": true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for ext, format := range officeFormats {
+		o := &Office{Format: format, Options: opts}
+		c, err := o.Conversion(strings.NewReader(""), pdf.WithConvertFontDirs(t.TempDir()))
+		if format == "doc" || format == "xls" || format == "ppt" {
+			if !errors.Is(err, ErrUnsupportedFormat) {
+				t.Errorf("%s: %v, want ErrUnsupportedFormat", ext, err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%s: %v", ext, err)
+		}
+		if _, err := c.WriteTo(context.Background(), &bytes.Buffer{}); !errors.Is(err, pdf.ErrConvertNoFonts) {
+			t.Errorf("%s: %v, want ErrConvertNoFonts", ext, err)
+		}
 	}
 }

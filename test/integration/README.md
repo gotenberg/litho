@@ -59,7 +59,7 @@ test/integration/
 │   │   ├── text/               PDFs litho converts from text sources
 │   │   │   ├── manifest.json   committed_pdfs: corpus goldens installs pdfs/
 │   │   │   ├── sources/*.txt   The UTF-8 plain text inputs
-│   │   │   ├── build/build.go  pdf.Convert builder (corpus build)
+│   │   │   ├── build/build.go  pdf.FromText builder (corpus build)
 │   │   │   ├── pdfs/*.pdf
 │   │   │   └── FIXTURES.md     Per-fixture focus, oracles and fonts
 │   │   ├── html/               HTML sources litho and Chromium convert

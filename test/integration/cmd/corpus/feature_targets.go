@@ -39,39 +39,55 @@ func (p outputProfile) name() string {
 }
 
 // outputTarget is one output flavour the targets cell converts each fixture
-// to: a PDF version, or one or two profiles, and the version the header must
-// then declare.
+// to: a PDF version, or one or two profiles a later pipeline stage
+// remediates the conversion to, and the version the header must then
+// declare.
 type outputTarget struct {
 	// ID names the target in the scores and the metrics (pass_<ID>).
 	ID string
 	// Version is the version [pdf.WithConvertVersion] asks for, "" for the
-	// one the profiles decide.
+	// plain conversion's default; for a profile, the one the profile builds
+	// on, which the remediated file is written at too.
 	Version string
-	// Profiles are the profiles [pdf.WithConvertPDFA] and
-	// [pdf.WithConvertPDFUA] ask for, PDF/A first.
+	// Profiles are the profiles [pdf.Writer.RemediatePDFA] and
+	// [pdf.Writer.RemediatePDFUA] remediate to, PDF/A first: a pair goes
+	// to RemediatePDFA with [pdf.WithPDFUA].
 	Profiles []outputProfile
 	// Header is the version the file's header must declare: the one asked,
-	// or the one the profile builds on (ISO 19005-1, clause 1 for PDF/A-1;
-	// ISO 19005-2 and -3, 6.1.2 and ISO 14289-1, 6.1 for ISO 32000-1, which
-	// Convert writes as 1.7; ISO 19005-4, 6.1.2 and ISO 14289-2, 6.1 for
+	// which for a profile is the one it builds on (ISO 19005-1, clause 1
+	// for PDF/A-1; ISO 19005-2 and -3, 6.1.2 and ISO 14289-1, 6.1 for ISO
+	// 32000-1, written as 1.7; ISO 19005-4, 6.1.2 and ISO 14289-2, 6.1 for
 	// PDF 2.0).
 	Header string
 }
 
 // options returns the conversion options of the target.
 func (t outputTarget) options() []pdf.ConvertOption {
-	var opts []pdf.ConvertOption
-	if t.Version != "" {
-		opts = append(opts, pdf.WithConvertVersion(t.Version))
+	if t.Version == "" {
+		return nil
 	}
+	return []pdf.ConvertOption{pdf.WithConvertVersion(t.Version)}
+}
+
+// remediate remediates w to the target's profiles and returns the report.
+func (t outputTarget) remediate(ctx context.Context, w *pdf.Writer) (*pdf.RemediationReport, error) {
+	var pdfa models.PDFAProfile
+	var pdfua models.PDFUAProfile
 	for _, p := range t.Profiles {
 		if p.pdfa != "" {
-			opts = append(opts, pdf.WithConvertPDFA(p.pdfa))
+			pdfa = p.pdfa
 		} else {
-			opts = append(opts, pdf.WithConvertPDFUA(p.pdfua))
+			pdfua = p.pdfua
 		}
 	}
-	return opts
+	if pdfa == "" {
+		return w.RemediatePDFUA(ctx, pdfua)
+	}
+	var opts []pdf.RemediateOption
+	if pdfua != "" {
+		opts = append(opts, pdf.WithPDFUA(pdfua))
+	}
+	return w.RemediatePDFA(ctx, pdfa, opts...)
 }
 
 // versionOnly reports whether the target names a version and no profile.
@@ -87,8 +103,9 @@ func pdfuaProfile(p models.PDFUAProfile, flavour string) outputProfile {
 
 // outputTargets are the flavours the targets cell converts to, in the order
 // it reports them: every version [pdf.WithConvertVersion] takes, every
-// PDF/A profile [pdf.WithConvertPDFA] takes, both PDF/UA profiles, and the
-// two pairs a single file can meet (as [pdf.WithPDFUA] pairs them). PDF 1.7
+// PDF/A profile a conversion remediates to (PDF/A-4f needs an embedded
+// file a conversion does not have), both PDF/UA profiles, and the two
+// pairs a single file can meet (as [pdf.WithPDFUA] pairs them). PDF 1.7
 // is the plain conversion's version too: asking for it by name is a target
 // of its own, so the default is held to its header and to the oracles as
 // every other version is, and must match the plain conversion.
@@ -100,20 +117,20 @@ var outputTargets = []outputTarget{
 	{ID: "v1.6", Version: "1.6", Header: "1.6"},
 	{ID: "v1.7", Version: "1.7", Header: "1.7"},
 	{ID: "v2.0", Version: "2.0", Header: "2.0"},
-	{ID: "a1b", Profiles: []outputProfile{pdfaProfile(models.PDFA1b, "1b")}, Header: "1.4"},
-	{ID: "a1a", Profiles: []outputProfile{pdfaProfile(models.PDFA1a, "1a")}, Header: "1.4"},
-	{ID: "a2b", Profiles: []outputProfile{pdfaProfile(models.PDFA2b, "2b")}, Header: "1.7"},
-	{ID: "a2u", Profiles: []outputProfile{pdfaProfile(models.PDFA2u, "2u")}, Header: "1.7"},
-	{ID: "a2a", Profiles: []outputProfile{pdfaProfile(models.PDFA2a, "2a")}, Header: "1.7"},
-	{ID: "a3b", Profiles: []outputProfile{pdfaProfile(models.PDFA3b, "3b")}, Header: "1.7"},
-	{ID: "a3u", Profiles: []outputProfile{pdfaProfile(models.PDFA3u, "3u")}, Header: "1.7"},
-	{ID: "a3a", Profiles: []outputProfile{pdfaProfile(models.PDFA3a, "3a")}, Header: "1.7"},
-	{ID: "a4", Profiles: []outputProfile{pdfaProfile(models.PDFA4, "4")}, Header: "2.0"},
-	{ID: "a4e", Profiles: []outputProfile{pdfaProfile(models.PDFA4e, "4e")}, Header: "2.0"},
-	{ID: "ua1", Profiles: []outputProfile{pdfuaProfile(models.PDFUA1, "ua1")}, Header: "1.7"},
-	{ID: "ua2", Profiles: []outputProfile{pdfuaProfile(models.PDFUA2, "ua2")}, Header: "2.0"},
-	{ID: "a2a+ua1", Profiles: []outputProfile{pdfaProfile(models.PDFA2a, "2a"), pdfuaProfile(models.PDFUA1, "ua1")}, Header: "1.7"},
-	{ID: "a4+ua2", Profiles: []outputProfile{pdfaProfile(models.PDFA4, "4"), pdfuaProfile(models.PDFUA2, "ua2")}, Header: "2.0"},
+	{ID: "a1b", Version: "1.4", Profiles: []outputProfile{pdfaProfile(models.PDFA1b, "1b")}, Header: "1.4"},
+	{ID: "a1a", Version: "1.4", Profiles: []outputProfile{pdfaProfile(models.PDFA1a, "1a")}, Header: "1.4"},
+	{ID: "a2b", Version: "1.7", Profiles: []outputProfile{pdfaProfile(models.PDFA2b, "2b")}, Header: "1.7"},
+	{ID: "a2u", Version: "1.7", Profiles: []outputProfile{pdfaProfile(models.PDFA2u, "2u")}, Header: "1.7"},
+	{ID: "a2a", Version: "1.7", Profiles: []outputProfile{pdfaProfile(models.PDFA2a, "2a")}, Header: "1.7"},
+	{ID: "a3b", Version: "1.7", Profiles: []outputProfile{pdfaProfile(models.PDFA3b, "3b")}, Header: "1.7"},
+	{ID: "a3u", Version: "1.7", Profiles: []outputProfile{pdfaProfile(models.PDFA3u, "3u")}, Header: "1.7"},
+	{ID: "a3a", Version: "1.7", Profiles: []outputProfile{pdfaProfile(models.PDFA3a, "3a")}, Header: "1.7"},
+	{ID: "a4", Version: "2.0", Profiles: []outputProfile{pdfaProfile(models.PDFA4, "4")}, Header: "2.0"},
+	{ID: "a4e", Version: "2.0", Profiles: []outputProfile{pdfaProfile(models.PDFA4e, "4e")}, Header: "2.0"},
+	{ID: "ua1", Version: "1.7", Profiles: []outputProfile{pdfuaProfile(models.PDFUA1, "ua1")}, Header: "1.7"},
+	{ID: "ua2", Version: "2.0", Profiles: []outputProfile{pdfuaProfile(models.PDFUA2, "ua2")}, Header: "2.0"},
+	{ID: "a2a+ua1", Version: "1.7", Profiles: []outputProfile{pdfaProfile(models.PDFA2a, "2a"), pdfuaProfile(models.PDFUA1, "ua1")}, Header: "1.7"},
+	{ID: "a4+ua2", Version: "2.0", Profiles: []outputProfile{pdfaProfile(models.PDFA4, "4"), pdfuaProfile(models.PDFUA2, "ua2")}, Header: "2.0"},
 }
 
 // Metrics of the targets cell. pass_<target> counts the fixtures each
@@ -122,7 +139,7 @@ const (
 	// metricTargetPassPrefix prefixes the count of fixtures a target passes
 	// on.
 	metricTargetPassPrefix = "pass_"
-	// metricReportDisagrees counts the targets whose conversion report says
+	// metricReportDisagrees counts the targets whose remediation report says
 	// the file conforms while litho's validator finds a violation of a
 	// profile, or the reverse.
 	metricReportDisagrees = "report_disagrees"
@@ -175,14 +192,35 @@ func oracleSampled(id string, oneIn int) bool {
 }
 
 // targetConverter converts a source at its settings to one output target,
-// the zero target being the plain conversion. It is [convertTarget]
-// outside tests; a test plants a defect through it.
-type targetConverter func(ctx context.Context, src []byte, s htmlSettings, t outputTarget) ([]byte, *pdf.ConvertReport, error)
+// the zero target being the plain conversion, and returns the remediation
+// report of a target that names a profile, nil for another. It is
+// [convertTarget] outside tests; a test plants a defect through it.
+type targetConverter func(ctx context.Context, src []byte, s htmlSettings, t outputTarget) ([]byte, *pdf.RemediationReport, error)
 
-// convertTarget converts src at s with the target's options.
-func convertTarget(ctx context.Context, src []byte, s htmlSettings, t outputTarget) ([]byte, *pdf.ConvertReport, error) {
-	s.Print = append(append([]pdf.ConvertOption(nil), s.Print...), t.options()...)
-	return convertWithReport(ctx, src, s)
+// convertTarget converts src at s at the target's version and, for a target
+// that names a profile, remediates the result in a pipeline stage after the
+// conversion, writing it in full at that version.
+func convertTarget(ctx context.Context, src []byte, s htmlSettings, t outputTarget) ([]byte, *pdf.RemediationReport, error) {
+	s.Extra = append(append([]pdf.ConvertOption(nil), s.Extra...), t.options()...)
+	if t.versionOnly() {
+		data, err := convertHTML(ctx, src, s)
+		return data, nil, err
+	}
+	c, err := conversion(src, s)
+	if err != nil {
+		return nil, nil, err
+	}
+	var report *pdf.RemediationReport
+	var buf bytes.Buffer
+	_, err = pdf.NewPipeline().Convert(c).Apply(func(ctx context.Context, w *pdf.Writer) error {
+		var err error
+		report, err = t.remediate(ctx, w)
+		return err
+	}).WriteTo(ctx, &buf, pdf.WithFullRewrite(), pdf.WithVersion(t.Version))
+	if err != nil {
+		return nil, nil, err
+	}
+	return buf.Bytes(), report, nil
 }
 
 // targetsFeature judges every output flavour of a conversion by how it
@@ -192,8 +230,8 @@ func convertTarget(ctx context.Context, src []byte, s htmlSettings, t outputTarg
 //
 //   - it converts, and its header declares the version the target implies;
 //   - litho's validator finds no violation of the target's profiles, and
-//     the conversion report's Conformance.Residual is empty; a report that
-//     disagrees with the validator also counts in report_disagrees;
+//     the remediation report's Residual is empty; a report that disagrees
+//     with the validator also counts in report_disagrees;
 //   - it looks like the base: the same page count and sizes, each page's
 //     text equal, white space aside, the same count of links and of outline
 //     items, and its first [renderMaxPages] pages drawn by litho at
@@ -666,7 +704,7 @@ const maxReasonRules = 6
 // checkConformance validates r at each of the target's profiles, holds the
 // report's Residual to the verdict, and records litho's verdicts for the
 // veraPDF comparison.
-func (f *targetsFeature) checkConformance(ctx context.Context, res *targetResult, r *pdf.Reader, t outputTarget, report *pdf.ConvertReport) {
+func (f *targetsFeature) checkConformance(ctx context.Context, res *targetResult, r *pdf.Reader, t outputTarget, report *pdf.RemediationReport) {
 	res.litho = make(map[string]lithoVerdict, len(t.Profiles))
 	validatorClean := true
 	for _, p := range t.Profiles {
@@ -692,16 +730,16 @@ func (f *targetsFeature) checkConformance(ctx context.Context, res *targetResult
 		}
 	}
 	switch {
-	case report == nil || report.Conformance == nil:
-		res.fail("the conversion report carries no conformance")
+	case report == nil:
+		res.fail("no remediation report")
 		res.ReportDisagrees = validatorClean
-	case len(report.Conformance.Residual) > 0:
-		res.fail("the conversion report lists %d residual violations", len(report.Conformance.Residual))
+	case len(report.Residual) > 0:
+		res.fail("the remediation report lists %d residual violations", len(report.Residual))
 		res.ReportDisagrees = validatorClean
 	default:
 		res.ReportDisagrees = !validatorClean
 		if res.ReportDisagrees {
-			res.fail("the conversion report says the file conforms")
+			res.fail("the remediation report says the file conforms")
 		}
 	}
 }

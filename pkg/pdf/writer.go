@@ -63,6 +63,10 @@ type writeOpts struct {
 	// Letter, and pageSizeErr the refusal of the size it was given.
 	pageSize    ast.PdfArray
 	pageSizeErr error
+	// concurrency is the number [WithPipelineConcurrency] names, 0 for the
+	// default, and concurrencyErr the refusal of the number it was given.
+	concurrency    int
+	concurrencyErr error
 }
 
 // Page sizes a default page size may take. ISO 32000-1, Annex C.2, Table C.1
@@ -440,6 +444,39 @@ func WithWriteLogger(logger *slog.Logger) WriteOption {
 func WithPipelineTempDir(dir string) WriteOption {
 	return func(o *writeOpts) {
 		o.tempDir = dir
+	}
+}
+
+// The bounds of [WithPipelineConcurrency].
+const (
+	// defaultPipelineConcurrency caps the pipelines a
+	// [Pipeline.MergePipelines] stage runs at once when the caller names no
+	// number. Memory guard, not spec-mandated: each pipeline may spend its
+	// own limits, a conversion up to twice [Limits.MaxConvertMemoryBytes],
+	// so a host of many cores must not start as many as it has.
+	defaultPipelineConcurrency = 8
+	// maxPipelineConcurrency is the most a caller may ask for. Anti-DoS
+	// guard, not spec-mandated: past it the intermediate files and the
+	// memory of the pipelines running at once outgrow any gain.
+	maxPipelineConcurrency = 64
+)
+
+// WithPipelineConcurrency sets how many of the pipelines of a
+// [Pipeline.MergePipelines] stage run at once: n in [1, 64], 1 running them
+// in turn. Without it the number is the CPUs the process may use, at most
+// 8. Any other n makes [Pipeline.WriteTo] fail with
+// [ErrInvalidPipelineConcurrency] before a stage runs.
+//
+// More pipelines at once finish sooner and hold more: each spends memory
+// within its own limits, and keeps its output in an intermediate file
+// until the merge. The merged document is the same whatever the number.
+func WithPipelineConcurrency(n int) WriteOption {
+	return func(o *writeOpts) {
+		if n < 1 || n > maxPipelineConcurrency {
+			o.concurrencyErr = fmt.Errorf("%w: %d is not in [1, %d]", ErrInvalidPipelineConcurrency, n, maxPipelineConcurrency)
+			return
+		}
+		o.concurrency, o.concurrencyErr = n, nil
 	}
 }
 

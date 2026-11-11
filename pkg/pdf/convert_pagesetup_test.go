@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 // odfNS declares the namespaces of the flat OpenDocument test sources.
@@ -78,15 +77,21 @@ func testODP(w, h string) string {
 		`<office:presentation>`+slide(1, notes)+slide(2, "")+`</office:presentation>`)
 }
 
-// convertSizes converts src from format with the test face and opts and
+// convertSizes converts src as format with the test face and opts and
 // returns the report and each page's size.
-func convertSizes(t *testing.T, format Format, src string, opts ...ConvertOption) (*ConvertReport, [][2]float64) {
+func convertSizes(t *testing.T, format testFormat, src string, opts ...ConvertOption) (*ConvertReport, [][2]float64) {
+	t.Helper()
+	return conversionSizes(t, fromFormat(format, strings.NewReader(src), append([]ConvertOption{WithConvertFontDirs(convertFontDir(t))}, opts...)...))
+}
+
+// conversionSizes runs c and returns the report and each page's size.
+func conversionSizes(t *testing.T, c *Conversion) (*ConvertReport, [][2]float64) {
 	t.Helper()
 	ctx := context.Background()
 	var out bytes.Buffer
-	rep, err := Convert(ctx, strings.NewReader(src), format, &out, append([]ConvertOption{WithConvertFontDirs(convertFontDir(t))}, opts...)...)
+	rep, err := c.WriteTo(ctx, &out)
 	if err != nil {
-		t.Fatalf("Convert %s: %v", format, err)
+		t.Fatalf("WriteTo: %v", err)
 	}
 	r, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
 	if err != nil {
@@ -128,29 +133,29 @@ const (
 )
 
 // TestConvert_DefaultPaper checks rule 3 of the page size: a source that
-// names no size takes WithDefaultPaperSize, else A4, in every format.
+// names no size takes WithDefaultPaper, else A4, in every format.
 func TestConvert_DefaultPaper(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name   string
-		format Format
+		format testFormat
 		src    string
 	}{
-		{"text", FormatText, "A line"},
-		{"html", FormatHTML, "<p>A line</p>"},
-		{"markdown", FormatMarkdown, "A line"},
-		{"odt", FormatODT, testODT("", "")},
-		{"ods", FormatODS, testODS("", "", "", 2)},
+		{"text", formatText, "A line"},
+		{"html", formatHTML, "<p>A line</p>"},
+		{"markdown", formatMarkdown, "A line"},
+		{"odt", formatODT, testODT("", "")},
+		{"ods", formatODS, testODS("", "", "", 2)},
 	} {
 		_, sizes := convertSizes(t, tc.format, tc.src)
 		checkSizes(t, tc.name, sizes, 0, a4W, a4H)
-		_, sizes = convertSizes(t, tc.format, tc.src, WithDefaultPaperSize(letterW, letterH))
+		_, sizes = convertSizes(t, tc.format, tc.src, WithDefaultPaper(PaperLetter))
 		checkSizes(t, tc.name+" Letter default", sizes, 0, letterW, letterH)
 		// A size the source names wins over the default.
-		_, sizes = convertSizes(t, tc.format, tc.src, WithDefaultPaperSize(letterW, letterH), WithPaperSize(400, 500))
+		_, sizes = convertSizes(t, tc.format, tc.src, WithDefaultPaper(PaperLetter), WithPaper(Paper{Width: 400, Height: 500}))
 		checkSizes(t, tc.name+" paper", sizes, 0, 400, 500)
 	}
-	_, sizes := convertSizes(t, FormatODT, testODT("148mm", "210mm"), WithDefaultPaperSize(letterW, letterH))
+	_, sizes := convertSizes(t, formatODT, testODT("148mm", "210mm"), WithDefaultPaper(PaperLetter))
 	checkSizes(t, "odt A5", sizes, 1, 419.528, 595.276)
 }
 
@@ -160,36 +165,69 @@ func TestConvert_DefaultPaper(t *testing.T) {
 func TestConvert_HTMLPageSizeWithoutPaper(t *testing.T) {
 	t.Parallel()
 	src := `<style>@page { size: A5 }</style><p>x`
-	_, sizes := convertSizes(t, FormatHTML, src)
+	_, sizes := convertSizes(t, formatHTML, src)
 	checkSizes(t, "A5", sizes, 1, 419.528, 595.276)
-	_, sizes = convertSizes(t, FormatHTML, src, WithLandscape(true))
+	_, sizes = convertSizes(t, formatHTML, src, WithOrientation(OrientationLandscape))
 	checkSizes(t, "A5 landscape asked", sizes, 1, 419.528, 595.276)
-	_, sizes = convertSizes(t, FormatHTML, src, WithPaperSize(letterW, letterH))
+	_, sizes = convertSizes(t, formatHTML, src, WithPaper(PaperLetter))
 	checkSizes(t, "A5 on Letter", sizes, 1, letterW, letterH)
-	_, sizes = convertSizes(t, FormatHTML, src, WithPaperSize(letterW, letterH), WithPreferCSSPageSize(true))
-	checkSizes(t, "A5 preferred over Letter", sizes, 1, 419.528, 595.276)
-	_, sizes = convertSizes(t, FormatHTML, `<p>x`, WithLandscape(true))
+	_, sizes = convertSizes(t, formatHTML, src, WithDefaultPaper(PaperLetter))
+	checkSizes(t, "A5 over a Letter default", sizes, 1, 419.528, 595.276)
+	_, sizes = convertSizes(t, formatHTML, `<p>x`, WithOrientation(OrientationLandscape))
 	checkSizes(t, "default turned", sizes, 1, a4H, a4W)
 }
 
 // TestConvert_PaperReplacesOrientation checks rule 2: a caller's paper
-// replaces a section's orientation with its own, and WithLandscape turns
-// every portrait page, text included.
+// replaces a section's orientation with its own, and
+// OrientationLandscape turns every portrait page, text included.
 func TestConvert_PaperReplacesOrientation(t *testing.T) {
 	t.Parallel()
 	land := testODT("11in", "8.5in")
-	_, sizes := convertSizes(t, FormatODT, land)
+	_, sizes := convertSizes(t, formatODT, land)
 	checkSizes(t, "own", sizes, 1, letterH, letterW)
-	_, sizes = convertSizes(t, FormatODT, land, WithPaperSize(letterW, letterH))
+	_, sizes = convertSizes(t, formatODT, land, WithPaper(PaperLetter))
 	checkSizes(t, "Letter", sizes, 1, letterW, letterH)
-	_, sizes = convertSizes(t, FormatODT, land, WithPaperSize(letterW, letterH), WithLandscape(true))
+	_, sizes = convertSizes(t, formatODT, land, WithPaper(PaperLetter), WithOrientation(OrientationLandscape))
 	checkSizes(t, "Letter landscape", sizes, 1, letterH, letterW)
-	_, sizes = convertSizes(t, FormatText, "A line", WithLandscape(true))
+	_, sizes = convertSizes(t, formatText, "A line", WithOrientation(OrientationLandscape))
 	checkSizes(t, "text landscape", sizes, 1, a4H, a4W)
-	_, sizes = convertSizes(t, FormatText, "A line", WithLandscape(true), WithPaperSize(letterH, letterW))
+	_, sizes = convertSizes(t, formatText, "A line", WithOrientation(OrientationLandscape), WithPaper(Paper{Width: letterH, Height: letterW}))
 	checkSizes(t, "text landscape paper", sizes, 1, letterH, letterW)
-	_, sizes = convertSizes(t, FormatODS, testODS("210mm", "297mm", "", 2), WithPaperSize(letterW, letterH), WithLandscape(true))
+	_, sizes = convertSizes(t, formatODS, testODS("210mm", "297mm", "", 2), WithPaper(PaperLetter), WithOrientation(OrientationLandscape))
 	checkSizes(t, "sheet", sizes, 0, letterH, letterW)
+}
+
+// TestConvert_PortraitTurnsLandscapePages checks that OrientationPortrait
+// turns a landscape page to portrait in every family, whatever named its
+// size: a paper, a default paper, a section, a sheet's page setup or a
+// slide size.
+func TestConvert_PortraitTurnsLandscapePages(t *testing.T) {
+	t.Parallel()
+	portrait := WithOrientation(OrientationPortrait)
+	landA4 := Paper{Width: a4H, Height: a4W}
+	for _, tc := range []struct {
+		name   string
+		format testFormat
+		src    string
+		opts   []ConvertOption
+		w, h   float64
+	}{
+		{"text paper", formatText, "A line", []ConvertOption{WithPaper(landA4)}, a4W, a4H},
+		{"text default paper", formatText, "A line", []ConvertOption{WithDefaultPaper(landA4)}, a4W, a4H},
+		{"html", formatHTML, "<p>A line</p>", []ConvertOption{WithDefaultPaper(landA4)}, a4W, a4H},
+		{"markdown", formatMarkdown, "A line", []ConvertOption{WithPaper(landA4)}, a4W, a4H},
+		{"odt section", formatODT, testODT("11in", "8.5in"), nil, letterW, letterH},
+		{"ods page setup", formatODS, testODS("297mm", "210mm", "", 2), nil, a4W, a4H},
+		{"csv default paper", formatCSV, "a,b\n1,2\n", []ConvertOption{WithDefaultPaper(landA4)}, a4W, a4H},
+		{"odp slides", formatODP, testODP("28cm", "15.75cm"), nil, 446.457, 793.701},
+	} {
+		_, sizes := convertSizes(t, tc.format, tc.src, tc.opts...)
+		if len(sizes) == 0 || sizes[0][0] <= sizes[0][1] {
+			t.Errorf("%s: pages %v, want landscape ones without the option", tc.name, sizes)
+		}
+		_, sizes = convertSizes(t, tc.format, tc.src, append(tc.opts, portrait)...)
+		checkSizes(t, tc.name, sizes, 0, tc.w, tc.h)
+	}
 }
 
 // TestConvert_SheetRefitsToThePaper checks rule 4: a sheet fitted to one
@@ -197,9 +235,9 @@ func TestConvert_PaperReplacesOrientation(t *testing.T) {
 func TestConvert_SheetRefitsToThePaper(t *testing.T) {
 	t.Parallel()
 	src := testODS("210mm", "297mm", ` style:scale-to-X="1" style:scale-to-Y="1"`, 120)
-	_, sizes := convertSizes(t, FormatODS, src)
+	_, sizes := convertSizes(t, formatODS, src)
 	checkSizes(t, "A4", sizes, 1, 595.276, 841.89)
-	_, sizes = convertSizes(t, FormatODS, src, WithPaperSize(396, 612), WithLandscape(true))
+	_, sizes = convertSizes(t, formatODS, src, WithPaper(Paper{Width: 396, Height: 612}), WithOrientation(OrientationLandscape))
 	checkSizes(t, "small landscape", sizes, 1, 612, 396)
 }
 
@@ -209,117 +247,17 @@ func TestConvert_SheetRefitsToThePaper(t *testing.T) {
 func TestConvert_SlidesFitThePaper(t *testing.T) {
 	t.Parallel()
 	wide := testODP("28cm", "15.75cm")
-	_, sizes := convertSizes(t, FormatODP, wide)
+	fonts := WithConvertFontDirs(convertFontDir(t))
+	_, sizes := convertSizes(t, formatODP, wide)
 	checkSizes(t, "slides", sizes, 2, 793.701, 446.457)
-	_, sizes = convertSizes(t, FormatODP, wide, WithPaperSize(letterW, letterH))
+	_, sizes = convertSizes(t, formatODP, wide, WithPaper(PaperLetter))
 	checkSizes(t, "slides on Letter", sizes, 2, letterW, letterH)
-	_, sizes = convertSizes(t, FormatODP, testODP("19.05cm", "25.4cm"), WithLandscape(true))
+	_, sizes = convertSizes(t, formatODP, testODP("19.05cm", "25.4cm"), WithOrientation(OrientationLandscape))
 	checkSizes(t, "portrait slides turned", sizes, 2, 720, 540)
-	_, sizes = convertSizes(t, FormatODP, wide, WithNotesPages(true))
+	_, sizes = conversionSizes(t, FromODP(strings.NewReader(wide), fonts, WithNotesPages(true)))
 	checkSizes(t, "notes", sizes[2:], 2, letterW, letterH)
-	_, sizes = convertSizes(t, FormatODP, wide, WithNotesPages(true), WithPaperSize(a4W, a4H))
+	_, sizes = conversionSizes(t, FromODP(strings.NewReader(wide), fonts, WithNotesPages(true), WithPaper(PaperA4)))
 	checkSizes(t, "notes on A4", sizes, 4, a4W, a4H)
-}
-
-// TestConvert_ReportsIgnoredOptions checks rule 6: an option set to other
-// than its default that the format does not take adds one option-ignored
-// warning naming it; an option at its default adds none.
-func TestConvert_ReportsIgnoredOptions(t *testing.T) {
-	t.Parallel()
-	ignored := func(rep *ConvertReport) []string {
-		var names []string
-		for _, w := range rep.Warnings {
-			if w.Code == CodeOptionIgnored {
-				names = append(names, strings.Fields(w.Message)[0])
-			}
-		}
-		return names
-	}
-	for _, tc := range []struct {
-		name   string
-		format Format
-		src    string
-		opts   []ConvertOption
-		want   []string
-	}{
-		{
-			"odt", FormatODT, testODT("", ""),
-			[]ConvertOption{
-				WithMargins(10, 10, 10, 10), WithFontFamilies("serif"), WithFontSize(14), WithMediaType("screen"),
-				WithPrintScale(1.5), WithSinglePage(true), WithPrintBackground(false), WithNotesPages(true),
-				WithPrintDate(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)), WithBaseURL("https://example.com/"),
-				WithHeaderTemplate("<p>h</p>"), WithMediaFeatures(map[string]string{"prefers-color-scheme": "dark"}),
-			},
-			[]string{
-				"WithMargins", "WithFontFamilies", "WithFontSize", "WithMediaType", "WithPrintScale", "WithSinglePage",
-				"WithPrintBackground", "WithNotesPages", "WithHeaderTemplate", "WithPrintDate", "WithBaseURL", "WithMediaFeatures",
-			},
-		},
-		{
-			"text", FormatText, "A line",
-			[]ConvertOption{WithOutline(false), WithConvertPassword("x"), WithHiddenSlides(true), WithPreferCSSPageSize(true), WithShrinkToFit(false)},
-			[]string{"WithPreferCSSPageSize", "WithShrinkToFit", "WithOutline", "WithConvertPassword", "WithHiddenSlides"},
-		},
-		{
-			"html", FormatHTML, "<p>x",
-			[]ConvertOption{WithFontSize(14), WithConvertPassword("x"), WithSinglePage(true), WithPageRanges("1")},
-			[]string{"WithFontSize", "WithPageRanges", "WithConvertPassword"},
-		},
-		{
-			"ods single page", FormatODS, testODS("", "", "", 2),
-			[]ConvertOption{WithSinglePage(true), WithPaperSize(letterW, letterH), WithLandscape(true), WithFractionalFontMetrics(true)},
-			[]string{"WithPaperSize", "WithLandscape", "WithFractionalFontMetrics"},
-		},
-		{
-			"odp", FormatODP, testODP("28cm", "15.75cm"),
-			[]ConvertOption{WithDefaultPaperSize(letterW, letterH), WithHiddenSlides(true)},
-			[]string{"WithDefaultPaperSize"},
-		},
-		{
-			"defaults", FormatODT, testODT("", ""),
-			[]ConvertOption{
-				WithMargins(56.693, 56.693, 56.693, 56.693), WithMediaType("print"), WithPrintScale(1), WithPrintBackground(true),
-				WithShrinkToFit(true), WithOutline(true), WithSinglePage(false), WithLandscape(false), WithFontFamilies(),
-			},
-			nil,
-		},
-	} {
-		rep, _ := convertSizes(t, tc.format, tc.src, tc.opts...)
-		if got := ignored(rep); strings.Join(got, ",") != strings.Join(tc.want, ",") {
-			t.Errorf("%s: ignored %q, want %q", tc.name, got, tc.want)
-		}
-	}
-}
-
-// TestConvert_ValidatesEveryOption checks that an option out of range
-// fails whatever the format, with the conversion sentinel of its own.
-func TestConvert_ValidatesEveryOption(t *testing.T) {
-	t.Parallel()
-	dir := convertFontDir(t)
-	for name, opt := range map[string]ConvertOption{
-		"scale":           WithPrintScale(5),
-		"zero scale":      WithPrintScale(0),
-		"negative margin": WithMargins(-1, 0, 0, 0),
-		"no room":         WithMargins(500, 0, 500, 0),
-		"zero font size":  WithFontSize(0),
-		"media":           WithMediaType("tv"),
-		"base URL":        WithBaseURL("relative"),
-		"feature":         WithMediaFeatures(map[string]string{"Color": "x"}),
-		"default paper":   WithDefaultPaperSize(-1, 5),
-		"paper":           WithPaperSize(20000, 5),
-	} {
-		for _, format := range []Format{FormatODT, FormatText, FormatHTML, FormatPPTX} {
-			var out bytes.Buffer
-			_, err := Convert(context.Background(), strings.NewReader(testODT("", "")), format, &out, WithConvertFontDirs(dir), opt)
-			if !errors.Is(err, ErrInvalidConvertOptions) {
-				t.Errorf("%s, %s: %v, want ErrInvalidConvertOptions", name, format, err)
-				continue
-			}
-			if strings.Contains(err.Error(), "plain text") {
-				t.Errorf("%s, %s: %q names plain text", name, format, err)
-			}
-		}
-	}
 }
 
 // TestConvert_PPTXNotesPagesTakeTheNotesSize checks rule 5 for PPTX: a
@@ -335,7 +273,7 @@ func TestConvert_PPTXNotesPagesTakeTheNotesSize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, sizes := convertSizes(t, FormatPPTX, string(data), WithNotesPages(true))
+	_, sizes := conversionSizes(t, FromPPTX(bytes.NewReader(data), WithConvertFontDirs(convertFontDir(t)), WithNotesPages(true)))
 	if len(sizes) != 6 {
 		t.Fatalf("%d pages, want 3 slides and 3 notes pages", len(sizes))
 	}

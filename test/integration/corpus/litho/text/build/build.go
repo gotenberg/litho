@@ -1,6 +1,6 @@
 // Package build regenerates the litho/text corpus fixtures: it converts every
 // UTF-8 plain text file of the sources directory to a PDF of the same base
-// name with pdf.Convert, at fixed options and with the pinned fixture fonts
+// name with pdf.FromText, at fixed options and with the pinned fixture fonts
 // alone, so two machines write the same bytes. `corpus build` runs it, after
 // fetching the fonts versions.env pins.
 //
@@ -62,9 +62,9 @@ func Build(ctx context.Context, sourcesDir, outDir, fontsDir string) error {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return fmt.Errorf("creating %s: %w", outDir, err)
 	}
-	opts := []pdf.ConvertOption{
+	opts := []pdf.TextOption{
 		pdf.WithConvertFontDirs(fontDirs...),
-		pdf.WithPaperSize(paperWidth, paperHeight),
+		pdf.WithPaper(pdf.Paper{Width: paperWidth, Height: paperHeight}),
 		pdf.WithMargins(margin, margin, margin, margin),
 		pdf.WithFontFamilies(fontFamily),
 		pdf.WithFontSize(fontSize),
@@ -123,7 +123,7 @@ func checkFonts(dir string) error {
 	return nil
 }
 
-func buildOne(ctx context.Context, source, outDir string, opts []pdf.ConvertOption) error {
+func buildOne(ctx context.Context, source, outDir string, opts []pdf.TextOption) error {
 	src, err := os.ReadFile(source) //nolint:gosec // committed corpus source
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", source, err)
@@ -155,9 +155,9 @@ func buildOne(ctx context.Context, source, outDir string, opts []pdf.ConvertOpti
 	return nil
 }
 
-func convert(ctx context.Context, src []byte, opts []pdf.ConvertOption) ([]byte, *pdf.ConvertReport, error) {
+func convert(ctx context.Context, src []byte, opts []pdf.TextOption) ([]byte, *pdf.ConvertReport, error) {
 	var buf bytes.Buffer
-	report, err := pdf.Convert(ctx, bytes.NewReader(src), pdf.FormatText, &buf, opts...)
+	report, err := pdf.FromText(bytes.NewReader(src), opts...).WriteTo(ctx, &buf)
 	if err != nil {
 		return nil, nil, err
 	}
