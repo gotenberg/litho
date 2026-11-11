@@ -30,9 +30,12 @@ func (d *Document) Validate() error {
 	if err != nil {
 		return err
 	}
-	v := validator{doc: d, elems: elems, images: make(map[*ImageSource]bool)}
+	v := validator{pages: len(d.Pages), elems: elems, images: make(map[*ImageSource]bool)}
 	for i, page := range d.Pages {
-		if err := v.page(page); err != nil {
+		if page == nil {
+			return fmt.Errorf("page %d: %w", i+1, ErrInvalidPage)
+		}
+		if err := v.page(page, page.Links); err != nil {
 			return fmt.Errorf("page %d: %w", i+1, err)
 		}
 	}
@@ -45,9 +48,17 @@ func (d *Document) Validate() error {
 
 // validator carries what the checks of one document share.
 type validator struct {
-	doc *Document
-	// elems is every element doc.Structure reaches.
-	elems map[*StructElem]bool
+	// pages is the page count destinations are checked against, -1 while
+	// the pages are still coming: a [Stream] checks them at its end.
+	pages int
+	// elems is every element doc.Structure reaches, nil while the tree is
+	// still coming: the elements named are then recorded in parents, for
+	// the end to check.
+	elems   map[*StructElem]bool
+	parents map[*StructElem]bool
+	// order lists the elements of parents in the order met, so the end
+	// reports the first fault in a fixed order.
+	order []*StructElem
 	// images is every source already checked, so a shared source is
 	// decoded once.
 	images map[*ImageSource]bool
@@ -55,10 +66,8 @@ type validator struct {
 	count int
 }
 
-func (v *validator) page(p *Page) error {
-	if p == nil {
-		return ErrInvalidPage
-	}
+// page checks p, with links in place of its own.
+func (v *validator) page(p *Page, links []Link) error {
 	// ISO 32000-1, Annex C.2, Table C.1 bounds a page side at 14400 units.
 	for _, side := range []float64{p.Width, p.Height} {
 		if !finite(side) || side <= 0 || side > maxPageSize {
@@ -68,11 +77,11 @@ func (v *validator) page(p *Page) error {
 	if err := pageBoxes(p); err != nil {
 		return err
 	}
-	v.count = len(p.Links)
+	v.count = len(links)
 	if err := v.fragments(p.Content, 0); err != nil {
 		return err
 	}
-	for i, link := range p.Links {
+	for i, link := range links {
 		if err := v.link(link); err != nil {
 			return fmt.Errorf("link %d: %w", i, err)
 		}
@@ -406,15 +415,16 @@ func (v *validator) link(l Link) error {
 }
 
 func (v *validator) dest(d Dest) error {
-	if d.Page < 1 || d.Page > len(v.doc.Pages) {
-		return fmt.Errorf("%w: page %d of %d", ErrInvalidDest, d.Page, len(v.doc.Pages))
+	if v.pages >= 0 && (d.Page < 1 || d.Page > v.pages) {
+		return fmt.Errorf("%w: page %d of %d", ErrInvalidDest, d.Page, v.pages)
 	}
 	if !finite(d.X) || !finite(d.Y) {
 		return fmt.Errorf("%w: position (%v, %v)", ErrInvalidDest, d.X, d.Y)
 	}
 	// ISO 32000-2, 12.3.2.3: a structure destination names an element of
-	// the document's structure tree.
-	if d.Elem != nil && !v.elems[d.Elem] {
+	// the document's structure tree. A link's element may still be set
+	// after its page is handed over: a [Stream] checks it at its end.
+	if d.Elem != nil && v.elems != nil && !v.elems[d.Elem] {
 		return fmt.Errorf("%w: element %q outside the structure tree", ErrInvalidDest, d.Elem.Role)
 	}
 	return nil
@@ -451,6 +461,13 @@ func (v *validator) outline(entries []Outline, depth int, total *int, path []*Ou
 }
 
 func (v *validator) parent(e *StructElem) error {
+	if e != nil && v.elems == nil {
+		if !v.parents[e] {
+			v.parents[e] = true
+			v.order = append(v.order, e)
+		}
+		return nil
+	}
 	if e != nil && !v.elems[e] {
 		return fmt.Errorf("%w: role %q", ErrDetachedElement, e.Role)
 	}

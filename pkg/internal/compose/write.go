@@ -134,67 +134,35 @@ func Write(ctx context.Context, doc *Document, dst io.Writer, opts Options) erro
 	if err := doc.Validate(); err != nil {
 		return err
 	}
-	version, err := resolveVersion(opts.Version)
+	s, err := newStream(ctx, opts, doc.Structure != nil, true)
 	if err != nil {
 		return err
 	}
-	logger := opts.Logger
-	if logger == nil {
-		logger = slog.New(slog.DiscardHandler)
-	}
-	producer := opts.Producer
-	if producer == "" {
-		producer = "litho"
-	}
-
-	spool := writer.NewSpool(opts.TempDir)
-	defer func() {
-		if err := spool.Close(); err != nil {
-			// The output is complete or abandoned: a spool file left
-			// behind changes no byte of it.
-			logger.Debug("compose: removing the spool file failed", slog.Any("error", err))
+	defer s.Abort()
+	for _, page := range doc.Pages {
+		if err := s.Page(ctx, page); err != nil {
+			return err
 		}
-	}()
-	held := opts.Spool
-	if held == 0 {
-		held = defaultSpool
 	}
-	w := &docWriter{
-		doc:      doc,
-		version:  version,
-		alloc:    writer.NewObjAllocator(0),
-		logger:   logger,
-		mem:      limits.BudgetFrom(ctx),
-		fonts:    make(map[string]*fontEntry),
-		images:   make(map[*ImageSource]ast.PdfIndirectRef),
-		shadings: make(map[string]shadingRefs),
-		id:       sha256.New(),
-		spool:    spool,
-		hold:     held,
-		mark:     1,
-		shared:   make(map[int]bool),
-	}
-	trailer, err := w.write(ctx, producer)
-	if err != nil {
-		return err
-	}
-	if err := w.spill(ctx); err != nil {
-		return err
-	}
-	if err := writer.WriteRewrite(ctx, dst, writer.RewriteConfig{
-		Version:   string(version),
-		Allocator: w.alloc,
-		Trailer:   trailer,
-	}); err != nil {
-		return fmt.Errorf("writing PDF: %w", err)
-	}
-	return nil
+	tail := *doc
+	tail.Pages = nil
+	return s.Close(ctx, &tail, dst)
 }
 
-// docWriter holds the state of one [Write] call. It is used by one
-// goroutine.
+// docWriter holds the state of one document being written. It is used by
+// one goroutine.
+//
+// The objects it makes are numbered in two spaces until the file is
+// written: the page objects, the page tree's root, the StructTreeRoot and
+// the structure elements, whose count is known only at the end, take the
+// placeholder numbers of [pageRef], [pagesRef], [structRootRef] and
+// [elemRef] and live in reserved; every other object is numbered from 1 by
+// alloc as it is made. [docWriter.final] then gives the first group the
+// numbers 1 to R and moves the second past R, so the file numbers its
+// objects as one pass over a whole document would: the page tree, the
+// pages, the structure tree, then everything else in the order it was
+// made.
 type docWriter struct {
-	doc *Document
 	// version is the version the file is written for.
 	version Version
 	alloc   *writer.ObjAllocator
@@ -203,8 +171,14 @@ type docWriter struct {
 	// memory, not the ones it spools, are charged to.
 	mem *limits.Budget
 
-	pagesRef ast.PdfIndirectRef
-	pageRefs []ast.PdfIndirectRef
+	// reserved holds the objects at placeholder numbers.
+	reserved map[int]ast.PdfObject
+	// heights holds the height of every page written, in order: its
+	// length is the page count, and a destination reads its page's height.
+	heights []float64
+	// links are the links of the pages written, whose annotations are
+	// finished at the end, once every page they may go to is known.
+	links []pendingLink
 
 	fonts     map[string]*fontEntry
 	fontOrder []*fontEntry
@@ -228,10 +202,74 @@ type docWriter struct {
 	shared map[int]bool
 }
 
-// spill considers the objects queued since the last call: a stream Write
-// made stays in memory while the bytes held stay within w.hold, and goes
-// to the spool file past it. Streams only ever move to the file, so the
-// memory they hold is bounded by w.hold and one page's worth.
+// pendingLink is a link of a page written whose annotation is finished at
+// the end: its destination's page and element are resolved then.
+type pendingLink struct {
+	// page is the 0-based index of the page that holds the link.
+	page int
+	link Link
+	// ref is the annotation's object, reserved when the page was written.
+	ref ast.PdfIndirectRef
+	// annot is the link's index among the annotations of the structure
+	// tree, -1 for none.
+	annot int
+}
+
+// The placeholder numbers of the objects whose final number depends on
+// the page count and the size of the structure tree (see [docWriter]).
+var (
+	pagesRef      = ast.PdfIndirectRef{ObjectNum: -1}
+	structRootRef = ast.PdfIndirectRef{ObjectNum: -2}
+)
+
+// pageRef returns the placeholder of the page object of the page at index
+// i.
+func pageRef(i int) ast.PdfIndirectRef {
+	return ast.PdfIndirectRef{ObjectNum: -(3 + 2*i)}
+}
+
+// elemRef returns the placeholder of the structure element at index k in
+// preorder.
+func elemRef(k int) ast.PdfIndirectRef {
+	return ast.PdfIndirectRef{ObjectNum: -(4 + 2*k)}
+}
+
+// newDocWriter returns the writer of one document of version, tagged when
+// it will carry a structure tree.
+func newDocWriter(ctx context.Context, opts Options, version Version, tagged bool) *docWriter {
+	logger := opts.Logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	held := opts.Spool
+	if held == 0 {
+		held = defaultSpool
+	}
+	w := &docWriter{
+		version:  version,
+		alloc:    writer.NewObjAllocator(0),
+		logger:   logger,
+		mem:      limits.BudgetFrom(ctx),
+		reserved: make(map[int]ast.PdfObject),
+		fonts:    make(map[string]*fontEntry),
+		images:   make(map[*ImageSource]ast.PdfIndirectRef),
+		shadings: make(map[string]shadingRefs),
+		id:       sha256.New(),
+		spool:    writer.NewSpool(opts.TempDir),
+		hold:     held,
+		mark:     1,
+		shared:   make(map[int]bool),
+	}
+	if tagged {
+		w.st = newStructState()
+	}
+	return w
+}
+
+// spill considers the objects queued since the last call: a stream the
+// writer made stays in memory while the bytes held stay within w.hold, and
+// goes to the spool file past it. Streams only ever move to the file, so
+// the memory they hold is bounded by w.hold and one page's worth.
 func (w *docWriter) spill(ctx context.Context) error {
 	next := w.alloc.NextObjNum()
 	pending := w.alloc.Pending()
@@ -240,7 +278,7 @@ func (w *docWriter) spill(ctx context.Context) error {
 		if !ok || w.shared[num] {
 			continue
 		}
-		// Every stream queued since the mark is one Write built in
+		// Every stream queued since the mark is one the writer built in
 		// memory, so Bytes reads nothing.
 		data, err := s.Bytes(ctx)
 		if err != nil {
@@ -266,40 +304,30 @@ func (w *docWriter) spill(ctx context.Context) error {
 	return nil
 }
 
-// write queues every object of the document and returns the trailer.
-func (w *docWriter) write(ctx context.Context, producer string) (ast.PdfDict, error) {
-	doc := w.doc
-	// Pages are reserved first so a link or an outline entry can name a
-	// page before it is written.
-	w.pagesRef = w.alloc.Alloc(ast.PdfNull{})
-	w.pageRefs = make([]ast.PdfIndirectRef, len(doc.Pages))
-	for i := range doc.Pages {
-		w.pageRefs[i] = w.alloc.Alloc(ast.PdfNull{})
+// finish queues the objects of the document's end, from tail's
+// metadata, outline and structure tree, and the annotations of the links
+// of the pages written, whose destinations dest maps to the ones written
+// (see [Stream.Close]), and returns the trailer. Every page has been
+// written, and tail has passed the checks of the end.
+func (w *docWriter) finish(ctx context.Context, tail *Document, producer string, dest func(Dest) Dest) (ast.PdfDict, error) {
+	n := len(w.heights)
+	if w.st != nil {
+		w.st.number(tail.Structure)
 	}
-	if doc.Structure != nil {
-		w.st = newStructState(w, doc.Structure)
-	}
-
-	kids := make(ast.PdfArray, len(doc.Pages))
-	for i, page := range doc.Pages {
-		if err := ctx.Err(); err != nil {
-			return nil, fmt.Errorf("writing page %d: %w", i+1, err)
-		}
-		if err := w.page(ctx, i, page); err != nil {
-			return nil, err
-		}
-		if err := w.spill(ctx); err != nil {
-			return nil, err
-		}
-		kids[i] = w.pageRefs[i]
+	for _, pl := range w.links {
+		w.alloc.AllocAt(pl.ref.ObjectNum, w.linkDict(pl, n, dest))
 	}
 	// ISO 32000-1, 7.7.3.2: a flat tree of one Pages node is a valid page
 	// tree.
-	w.alloc.AllocAt(w.pagesRef.ObjectNum, ast.PdfDict{
+	kids := make(ast.PdfArray, n)
+	for i := range kids {
+		kids[i] = pageRef(i)
+	}
+	w.reserved[pagesRef.ObjectNum] = ast.PdfDict{
 		"Type":  ast.PdfName("Pages"),
 		"Kids":  kids,
-		"Count": ast.PdfInt(len(doc.Pages)),
-	})
+		"Count": ast.PdfInt(n),
+	}
 
 	for _, fe := range w.fontOrder {
 		if err := ctx.Err(); err != nil {
@@ -313,19 +341,19 @@ func (w *docWriter) write(ctx context.Context, producer string) (ast.PdfDict, er
 
 	catalog := ast.PdfDict{
 		"Type":  ast.PdfName("Catalog"),
-		"Pages": w.pagesRef,
+		"Pages": pagesRef,
 	}
-	if len(doc.Outline) > 0 {
-		catalog["Outlines"] = w.outlines(doc.Outline)
+	if len(tail.Outline) > 0 {
+		catalog["Outlines"] = w.outlines(tail.Outline)
 	}
-	if doc.Metadata.Lang != "" {
-		catalog["Lang"] = textString(doc.Metadata.Lang)
+	if tail.Metadata.Lang != "" {
+		catalog["Lang"] = textString(tail.Metadata.Lang)
 	}
 	if w.st != nil {
 		if err := w.st.write(ctx, w, w.version); err != nil {
 			return nil, err
 		}
-		catalog["StructTreeRoot"] = w.st.rootRef
+		catalog["StructTreeRoot"] = structRootRef
 		// ISO 32000-1, 14.7.1, Table 321: /Marked true declares a tagged
 		// PDF.
 		catalog["MarkInfo"] = ast.PdfDict{"Marked": ast.PdfBool(true)}
@@ -333,7 +361,7 @@ func (w *docWriter) write(ctx context.Context, producer string) (ast.PdfDict, er
 		// not its file name.
 		catalog["ViewerPreferences"] = ast.PdfDict{"DisplayDocTitle": ast.PdfBool(true)}
 	}
-	info := w.info(producer)
+	info := w.info(tail.Metadata, producer)
 	var infoRef ast.PdfIndirectRef
 	if w.version == Version20 {
 		// ISO 32000-2, 14.3.3 deprecates the Info dictionary but for its
@@ -343,7 +371,7 @@ func (w *docWriter) write(ctx context.Context, producer string) (ast.PdfDict, er
 		catalog["Metadata"] = w.alloc.Alloc(ast.NewStream(ast.PdfDict{
 			"Type":    ast.PdfName("Metadata"),
 			"Subtype": ast.PdfName("XML"),
-		}, xmp.Packet(w.xmpInfo(producer))))
+		}, xmp.Packet(xmpInfo(tail.Metadata, producer))))
 	} else {
 		infoRef = w.alloc.Alloc(info)
 	}
@@ -367,10 +395,101 @@ func (w *docWriter) write(ctx context.Context, producer string) (ast.PdfDict, er
 	return trailer, nil
 }
 
+// final returns the allocator the file is written from and the trailer,
+// every placeholder and every provisional number replaced by the object's
+// number in the file (see [docWriter]). The objects keep their values:
+// only the references they hold change.
+func (w *docWriter) final(trailer ast.PdfDict) (*writer.ObjAllocator, ast.PdfDict) {
+	n := len(w.heights)
+	reservedCount := 1 + n
+	if w.st != nil {
+		reservedCount += 1 + len(w.st.order)
+	}
+	number := func(num int) int {
+		switch {
+		case num > 0:
+			return num + reservedCount
+		case num == pagesRef.ObjectNum:
+			return 1
+		case num == structRootRef.ObjectNum:
+			return n + 2
+		}
+		if k := -num - 3; k%2 == 0 {
+			return 2 + k/2
+		}
+		return n + 3 + (-num-4)/2
+	}
+	out := writer.NewObjAllocator(0)
+	for num, obj := range w.reserved {
+		out.AllocAt(number(num), relink(obj, number))
+	}
+	for num, obj := range w.alloc.Pending() {
+		out.AllocAt(number(num), relink(obj, number))
+	}
+	t, _ := relink(trailer, number).(ast.PdfDict) //nolint:errcheck // relink returns a dictionary for a dictionary
+	return out, t
+}
+
+// relink returns obj with every indirect reference renumbered by number.
+// A value that holds no reference is returned as it is; a stream keeps its
+// bytes, its dictionary renumbered.
+func relink(obj ast.PdfObject, number func(int) int) ast.PdfObject {
+	switch v := obj.(type) {
+	case ast.PdfIndirectRef:
+		return ast.PdfIndirectRef{ObjectNum: number(v.ObjectNum), GenNum: v.GenNum}
+	case ast.PdfArray:
+		if !holdsRef(v) {
+			return v
+		}
+		out := make(ast.PdfArray, len(v))
+		for i, e := range v {
+			out[i] = relink(e, number)
+		}
+		return out
+	case ast.PdfDict:
+		if !holdsRef(v) {
+			return v
+		}
+		out := make(ast.PdfDict, len(v))
+		for k, e := range v {
+			out[k] = relink(e, number)
+		}
+		return out
+	case ast.PdfStream:
+		if holdsRef(v.Dict) {
+			v.Dict, _ = relink(v.Dict, number).(ast.PdfDict) //nolint:errcheck // relink returns a dictionary for a dictionary
+		}
+		return v
+	}
+	return obj
+}
+
+// holdsRef reports whether obj holds an indirect reference.
+func holdsRef(obj ast.PdfObject) bool {
+	switch v := obj.(type) {
+	case ast.PdfIndirectRef:
+		return true
+	case ast.PdfArray:
+		for _, e := range v {
+			if holdsRef(e) {
+				return true
+			}
+		}
+	case ast.PdfDict:
+		for _, e := range v {
+			if holdsRef(e) {
+				return true
+			}
+		}
+	case ast.PdfStream:
+		return holdsRef(v.Dict)
+	}
+	return false
+}
+
 // xmpInfo returns the document information the metadata stream of a PDF
 // 2.0 file carries.
-func (w *docWriter) xmpInfo(producer string) xmp.Info {
-	m := w.doc.Metadata
+func xmpInfo(m Metadata, producer string) xmp.Info {
 	return xmp.Info{
 		Title: m.Title, Author: m.Author, Subject: m.Subject, Keywords: m.Keywords,
 		Creator: m.Creator, Producer: producer, Lang: m.Lang,
@@ -380,8 +499,7 @@ func (w *docWriter) xmpInfo(producer string) xmp.Info {
 // info returns the Info dictionary (ISO 32000-1, 14.3.3, Table 317) and
 // hashes its values into the file identifier. Dates are left out so the
 // output does not depend on when it was written.
-func (w *docWriter) info(producer string) ast.PdfDict {
-	m := w.doc.Metadata
+func (w *docWriter) info(m Metadata, producer string) ast.PdfDict {
 	info := ast.PdfDict{}
 	for _, e := range []struct {
 		key   ast.PdfName
@@ -411,9 +529,14 @@ func (w *docWriter) hashBytes(b []byte) {
 	w.id.Write(b)
 }
 
-// page writes page i: its content stream, its annotations and the page
-// object (ISO 32000-1, 7.7.3.3, Table 30).
-func (w *docWriter) page(ctx context.Context, i int, page *Page) error {
+// page writes the next page with links in place of its own: its content
+// stream, the objects of its annotations and the page object (ISO
+// 32000-1, 7.7.3.3, Table 30). The annotations are finished at the end.
+func (w *docWriter) page(ctx context.Context, page *Page, links []Link) error {
+	i := len(w.heights)
+	if w.st != nil {
+		w.st.addPage()
+	}
 	pw := newPageWriter(w, i, page)
 	if err := pw.content(ctx, page.Content); err != nil {
 		return err
@@ -440,7 +563,7 @@ func (w *docWriter) page(ctx context.Context, i int, page *Page) error {
 	}
 	dict := ast.PdfDict{
 		"Type":      ast.PdfName("Page"),
-		"Parent":    w.pagesRef,
+		"Parent":    pagesRef,
 		"MediaBox":  ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), pdfReal(page.Width), pdfReal(page.Height)},
 		"Resources": pw.resources(),
 		"Contents":  w.alloc.Alloc(stream),
@@ -455,10 +578,16 @@ func (w *docWriter) page(ctx context.Context, i int, page *Page) error {
 	if w.st != nil {
 		dict["StructParents"] = ast.PdfInt(i)
 	}
-	if len(page.Links) > 0 {
-		annots := make(ast.PdfArray, len(page.Links))
-		for j, link := range page.Links {
-			annots[j] = w.link(i, page, link)
+	if len(links) > 0 {
+		annots := make(ast.PdfArray, len(links))
+		for j, link := range links {
+			ref := w.alloc.Alloc(ast.PdfNull{})
+			pl := pendingLink{page: i, link: link, ref: ref, annot: -1}
+			if w.st != nil && link.Parent != nil {
+				pl.annot = w.st.addAnnot(i, ref, link.Parent)
+			}
+			w.links = append(w.links, pl)
+			annots[j] = ref
 		}
 		dict["Annots"] = annots
 		if w.st != nil && w.version != Version14 {
@@ -468,30 +597,36 @@ func (w *docWriter) page(ctx context.Context, i int, page *Page) error {
 			dict["Tabs"] = ast.PdfName("S")
 		}
 	}
-	w.alloc.AllocAt(w.pageRefs[i].ObjectNum, dict)
+	w.reserved[pageRef(i).ObjectNum] = dict
+	w.heights = append(w.heights, page.Height)
 	return nil
 }
 
-// link writes a Link annotation (ISO 32000-1, 12.5.6.5, Table 173) with no
-// border, the print flag PDF/A asks for (ISO 19005-2, 6.3.2), and a URI
-// action (12.6.4.7) or an explicit destination. Its /Rect is the model
-// rectangle in PDF coordinates, y flipped. A link with a parent element
-// joins the structure tree through an object reference and /StructParent
+// linkDict returns the Link annotation of pl (ISO 32000-1, 12.5.6.5, Table
+// 173) in a file of n pages, its destination resolved by dest: no border,
+// the print flag PDF/A asks for (ISO 19005-2, 6.3.2), and a URI action
+// (12.6.4.7) or an explicit destination. Its /Rect is the model rectangle
+// in PDF coordinates, y flipped. A link with a parent element joins the
+// structure tree through an object reference and /StructParent
 // (14.7.4.4). Its /Contents is the link's description, else its element's
 // Alt, else its target (ISO 14289-1, 7.18.5).
-func (w *docWriter) link(pageIndex int, page *Page, l Link) ast.PdfIndirectRef {
+func (w *docWriter) linkDict(pl pendingLink, n int, dest func(Dest) Dest) ast.PdfDict {
+	l := pl.link
 	r := l.Rect
+	height := w.heights[pl.page]
 	x0, x1 := math.Min(r.X, r.X+r.Width), math.Max(r.X, r.X+r.Width)
 	y0, y1 := math.Min(r.Y, r.Y+r.Height), math.Max(r.Y, r.Y+r.Height)
 	dict := ast.PdfDict{
 		"Type":    ast.PdfName("Annot"),
 		"Subtype": ast.PdfName("Link"),
-		"Rect":    ast.PdfArray{pdfReal(x0), pdfReal(page.Height - y1), pdfReal(x1), pdfReal(page.Height - y0)},
+		"Rect":    ast.PdfArray{pdfReal(x0), pdfReal(height - y1), pdfReal(x1), pdfReal(height - y0)},
 		"Border":  ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(0)},
 		"F":       ast.PdfInt(4),
 	}
+	var d Dest
 	if l.Dest != nil {
-		key, target := w.target(*l.Dest)
+		d = dest(*l.Dest)
+		key, target := w.target(d)
 		dict[key] = target
 	} else {
 		dict["A"] = ast.PdfDict{
@@ -500,9 +635,8 @@ func (w *docWriter) link(pageIndex int, page *Page, l Link) ast.PdfIndirectRef {
 			"URI":  uriString(l.URI),
 		}
 	}
-	ref := w.alloc.Alloc(ast.PdfNull{})
-	if w.st != nil && l.Parent != nil {
-		dict["StructParent"] = ast.PdfInt(w.st.addAnnot(pageIndex, ref, l.Parent))
+	if pl.annot >= 0 {
+		dict["StructParent"] = ast.PdfInt(n + pl.annot)
 	}
 	// ISO 14289-1, 7.18.5 and ISO 14289-2, 8.9.4.4: every link carries a
 	// description. With none from the model, the target stands in: the
@@ -515,8 +649,7 @@ func (w *docWriter) link(pageIndex int, page *Page, l Link) ast.PdfIndirectRef {
 	case l.URI != "":
 		dict["Contents"] = textString(l.URI)
 	default:
-		dict["Contents"] = textString(fmt.Sprintf("Page %d", l.Dest.Page))
+		dict["Contents"] = textString(fmt.Sprintf("Page %d", d.Page))
 	}
-	w.alloc.AllocAt(ref.ObjectNum, dict)
-	return ref
+	return dict
 }

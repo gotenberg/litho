@@ -31,16 +31,10 @@ import (
 const MaxLayoutRunes = 1 << 20
 
 // glyphCost is what one glyph of a laid-out line costs the conversion's
-// memory budget: its compose.Glyph, 40 bytes on a 64-bit platform, the
-// characters of its cluster and its share of the run that holds it. The
-// lines live until the document is written, so the charge is never
-// released.
-//
-// # Corpus evidence
-//
-//   - probe, text: 1 MiB of Latin text lays out into about 1.05 million
-//     glyphs whose runs hold 45 MiB of live heap, 43 bytes a glyph.
-const glyphCost = 48
+// memory budget, [limits.GlyphCost]. A converter that hands its pages to a
+// [compose.PageSink] gives the charge back once a page is handed over; the
+// others hold the lines until the document is written.
+const glyphCost = limits.GlyphCost
 
 // MaxLayoutRuns bounds the runs of one [Fonts.Layout] call. Anti-DoS guard,
 // not spec-mandated: every run costs a face match, and a paragraph changes

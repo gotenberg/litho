@@ -57,12 +57,11 @@ func (w *docWriter) outlineLevel(entries []Outline, parent ast.PdfIndirectRef) (
 // coordinates, y flipped from the model's, and a null zoom that keeps the
 // viewer's.
 func (w *docWriter) dest(d Dest) ast.PdfArray {
-	page := w.doc.Pages[d.Page-1]
 	return ast.PdfArray{
-		w.pageRefs[d.Page-1],
+		pageRef(d.Page - 1),
 		ast.PdfName("XYZ"),
 		pdfReal(d.X),
-		pdfReal(page.Height - d.Y),
+		pdfReal(w.heights[d.Page-1] - d.Y),
 		ast.PdfNull{},
 	}
 }

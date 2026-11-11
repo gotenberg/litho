@@ -20,6 +20,17 @@ import "image/color"
 //     element without text.
 const XMLElementCost = 256
 
+// GlyphCost is what one glyph of a laid-out line costs: its compose.Glyph,
+// 40 bytes on a 64-bit platform, the characters of its cluster and its
+// share of the run that holds it. The text stack charges it as it lays a
+// line out; the glyphs live as long as the page that holds them.
+//
+// # Corpus evidence
+//
+//   - probe, text: 1 MiB of Latin text lays out into about 1.05 million
+//     glyphs whose runs hold 45 MiB of live heap, 43 bytes a glyph.
+const GlyphCost = 48
+
 // DecodedPixelCost is what one decoded pixel of a picture costs while the
 // picture lives in the layouts most colour models decode to: four bytes,
 // RGBA, NRGBA and CMYK. [PixelCost] gives every model its own.

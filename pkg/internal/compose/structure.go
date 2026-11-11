@@ -19,59 +19,67 @@ type structItem struct {
 }
 
 // structState gathers what the structure tree needs while the pages are
-// written. It is used by the one goroutine running [Write].
+// written. It is used by the one goroutine writing the document.
+//
+// The tree itself arrives with the document's end, after the pages: what a
+// page records names elements by pointer, and the elements get their object
+// numbers when the tree is written.
 type structState struct {
-	rootRef ast.PdfIndirectRef
-	// order lists the elements in preorder, the order they are written in.
+	// order lists the elements in preorder, the order they are written in,
+	// once the tree has arrived.
 	order  []*StructElem
 	refs   map[*StructElem]ast.PdfIndirectRef
 	parent map[*StructElem]*StructElem
 	items  map[*StructElem][]structItem
 	// pageParents lists, per page, the element of each MCID in MCID order:
 	// the page's ParentTree entry.
-	pageParents [][]ast.PdfObject
+	pageParents [][]*StructElem
 	// annotParents lists the element of each annotation that has one, in
 	// /StructParent key order after the pages' keys.
-	annotParents []ast.PdfIndirectRef
+	annotParents []*StructElem
 }
 
-// newStructState reserves an object for the StructTreeRoot and for every
-// element of the tree under root, in preorder. root has passed
-// [Document.Validate], so the walk meets a tree within the caps.
-func newStructState(w *docWriter, root *StructElem) *structState {
-	st := &structState{
-		rootRef:     w.alloc.Alloc(ast.PdfNull{}),
-		refs:        make(map[*StructElem]ast.PdfIndirectRef),
-		parent:      make(map[*StructElem]*StructElem),
-		items:       make(map[*StructElem][]structItem),
-		pageParents: make([][]ast.PdfObject, len(w.doc.Pages)),
-	}
+func newStructState() *structState {
+	return &structState{items: make(map[*StructElem][]structItem)}
+}
+
+// addPage opens the ParentTree entry of the next page.
+func (st *structState) addPage() {
+	st.pageParents = append(st.pageParents, nil)
+}
+
+func (st *structState) addMCID(page, mcid int, e *StructElem) {
+	st.items[e] = append(st.items[e], structItem{page: page, mcid: mcid})
+	st.pageParents[page] = append(st.pageParents[page], e)
+}
+
+// addAnnot records that the annotation at ref on page belongs to e and
+// returns its index among the annotations: its /StructParent key is the
+// page count plus that index, keys 0 to len(pages)-1 being the pages'
+// /StructParents.
+func (st *structState) addAnnot(page int, ref ast.PdfIndirectRef, e *StructElem) int {
+	st.items[e] = append(st.items[e], structItem{page: page, annot: ref})
+	st.annotParents = append(st.annotParents, e)
+	return len(st.annotParents) - 1
+}
+
+// number gives every element of the tree under root, in preorder, the
+// reference [elemRef] stands for it with. root has passed the checks of
+// [structElems], so the walk meets a tree within the caps.
+func (st *structState) number(root *StructElem) {
+	st.refs = make(map[*StructElem]ast.PdfIndirectRef)
+	st.parent = make(map[*StructElem]*StructElem)
 	stack := []*StructElem{root}
 	for len(stack) > 0 {
 		e := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
+		st.refs[e] = elemRef(len(st.order))
 		st.order = append(st.order, e)
-		st.refs[e] = w.alloc.Alloc(ast.PdfNull{})
 		for _, v := range slices.Backward(e.Kids) {
 			st.parent[v] = e
 			stack = append(stack, v)
 		}
 	}
-	return st
-}
-
-func (st *structState) addMCID(page, mcid int, e *StructElem) {
-	st.items[e] = append(st.items[e], structItem{page: page, mcid: mcid})
-	st.pageParents[page] = append(st.pageParents[page], st.refs[e])
-}
-
-// addAnnot records that the annotation at ref on page belongs to e and
-// returns its /StructParent key: keys 0 to len(pages)-1 are the pages'
-// /StructParents, the annotations' follow.
-func (st *structState) addAnnot(page int, ref ast.PdfIndirectRef, e *StructElem) int {
-	st.items[e] = append(st.items[e], structItem{page: page, annot: ref})
-	st.annotParents = append(st.annotParents, st.refs[e])
-	return len(st.pageParents) + len(st.annotParents) - 1
 }
 
 // pdf2Namespace is the URI of the PDF 2.0 standard structure namespace
@@ -116,7 +124,7 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 		if hasParent {
 			dict["P"] = st.refs[p]
 		} else {
-			dict["P"] = st.rootRef
+			dict["P"] = structRootRef
 		}
 		role := e.Role
 		if v == Version20 {
@@ -141,21 +149,21 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 		kids := make(ast.PdfArray, 0, len(items)+len(e.Kids))
 		if len(items) > 0 {
 			pg := items[0].page
-			dict["Pg"] = w.pageRefs[pg]
+			dict["Pg"] = pageRef(pg)
 			for _, it := range items {
 				switch {
 				case it.annot.ObjectNum != 0:
 					kids = append(kids, ast.PdfDict{
 						"Type": ast.PdfName("OBJR"),
 						"Obj":  it.annot,
-						"Pg":   w.pageRefs[it.page],
+						"Pg":   pageRef(it.page),
 					})
 				case it.page == pg:
 					kids = append(kids, ast.PdfInt(it.mcid))
 				default:
 					kids = append(kids, ast.PdfDict{
 						"Type": ast.PdfName("MCR"),
-						"Pg":   w.pageRefs[it.page],
+						"Pg":   pageRef(it.page),
 						"MCID": ast.PdfInt(it.mcid),
 					})
 				}
@@ -176,7 +184,7 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 		if e.ActualText != "" {
 			dict["ActualText"] = textString(e.ActualText)
 		}
-		w.alloc.AllocAt(st.refs[e].ObjectNum, dict)
+		w.reserved[st.refs[e].ObjectNum] = dict
 	}
 
 	// The parent tree is a number tree (7.9.7) keyed by /StructParents and
@@ -184,13 +192,14 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 	// MCIDs, an annotation's its element (14.7.4.4).
 	nums := make(ast.PdfArray, 0, 2*(len(st.pageParents)+len(st.annotParents)))
 	for i, parents := range st.pageParents {
-		if parents == nil {
-			parents = ast.PdfArray{}
+		refs := make(ast.PdfArray, len(parents))
+		for k, e := range parents {
+			refs[k] = st.refs[e]
 		}
-		nums = append(nums, ast.PdfInt(i), ast.PdfArray(parents))
+		nums = append(nums, ast.PdfInt(i), refs)
 	}
-	for i, ref := range st.annotParents {
-		nums = append(nums, ast.PdfInt(len(st.pageParents)+i), ref)
+	for i, e := range st.annotParents {
+		nums = append(nums, ast.PdfInt(len(st.pageParents)+i), st.refs[e])
 	}
 	parentTree := w.alloc.Alloc(ast.PdfDict{"Nums": nums})
 	root := ast.PdfDict{
@@ -207,7 +216,7 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 		// the elements name.
 		root["Namespaces"] = ast.PdfArray{nsRef}
 	}
-	w.alloc.AllocAt(st.rootRef.ObjectNum, root)
+	w.reserved[structRootRef.ObjectNum] = root
 	return nil
 }
 
