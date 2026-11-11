@@ -30,11 +30,15 @@ func TestNotes(t *testing.T) {
 	}
 	// Each call links to its note's number and the number back, as
 	// LibreOffice exports a note.
+	// Each hangs from a Link element (ISO 14289-1, 7.18.1).
 	var dests []int
 	for _, p := range doc.Pages {
 		for _, l := range p.Links {
 			if l.Dest != nil {
 				dests = append(dests, l.Dest.Page)
+			}
+			if l.Parent == nil || l.Parent.Role != "Link" {
+				t.Errorf("note link to %+v hangs from %+v", l.Dest, l.Parent)
 			}
 		}
 	}

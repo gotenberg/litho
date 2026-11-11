@@ -44,7 +44,10 @@ func (d *document) noteCall(s *story, c *ooxml.Element, st *css.Style, sink *inl
 	}
 	// The call links to its note, and the note's number back to the call,
 	// as LibreOffice exports a note.
-	call := &layout.Node{Kind: layout.Element, Style: st, ID: callID, Href: "#" + bodyID}
+	// Each link is a Link element, as ISO 14289-1, 7.18.1 asks of every
+	// link annotation (ISO 32000-1, 14.8.4.4.2); the note's body hangs
+	// from the call's parent, not from the Link.
+	call := &layout.Node{Kind: layout.Element, Style: st, ID: callID, Href: "#" + bodyID, Role: "Link"}
 	if mark != "" {
 		call.Children = []*layout.Node{{Kind: layout.Text, Style: st, Text: mark}}
 	}

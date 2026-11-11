@@ -89,6 +89,13 @@ func (b *builder) note(c *odf.Element, t textState, out *[]*layout.Node, ws *wsS
 	callID, noteID := b.newID("call"), b.newID("note")
 	call.ID, call.Href = callID, "#"+noteID
 	prefix.ID, prefix.Href = noteID, "#"+callID
+	// Each link is a Link element, as ISO 14289-1, 7.18.1 asks of every
+	// link annotation (ISO 32000-1, 14.8.4.4.2).
+	for _, l := range []*layout.Node{call, prefix} {
+		if l.Kind == layout.Element && l.Role == "" {
+			l.Role = "Link"
+		}
+	}
 	if len(body) > 0 && body[0].Style.Display != css.Table && body[0].Style.TextIndent.Value < 0 {
 		// Writer sets the number in a hanging first-line indent and
 		// starts the text at the paragraph's indent, as a list label.

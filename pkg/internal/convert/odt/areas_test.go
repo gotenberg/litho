@@ -219,12 +219,16 @@ func TestConvert_Notes(t *testing.T) {
 	if got := pageText(res.Pages[1]); got != "iEnd body" {
 		t.Errorf("page 2 = %q", got)
 	}
-	// Writer links each citation to its note's number and back.
+	// Writer links each citation to its note's number and back, each link
+	// a Link element (ISO 14289-1, 7.18.1).
 	var dests []int
 	for _, p := range res.Pages {
 		for _, l := range p.Links {
 			if l.Dest != nil {
 				dests = append(dests, l.Dest.Page)
+			}
+			if l.Parent == nil || l.Parent.Role != "Link" {
+				t.Errorf("note link hangs from %+v", l.Parent)
 			}
 		}
 	}

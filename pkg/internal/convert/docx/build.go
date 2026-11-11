@@ -1009,7 +1009,7 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 			if s.noteID != "" && !s.noteRef {
 				// The note's number links back to its call, as LibreOffice
 				// exports a note.
-				ref.ID, ref.Href, s.noteRef = s.noteID, s.noteBack, true
+				ref.ID, ref.Href, ref.Role, s.noteRef = s.noteID, s.noteBack, "Link", true
 			}
 			sink.add(ref)
 		case c.Is(w, "drawing"):
