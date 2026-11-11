@@ -179,7 +179,7 @@ func (s *ImageSource) Decode(ctx context.Context) (image.Image, error) {
 	if err := checkPixels(s.Width, s.Height); err != nil {
 		return nil, err
 	}
-	model := color.Model(color.NRGBAModel)
+	model := color.NRGBAModel
 	switch {
 	case s.IsJPEG():
 		// image/jpeg decodes to the layout of the frame's components:
