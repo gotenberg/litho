@@ -37,8 +37,9 @@
   },
   "html-png-50": {
     "result": "pdf",
+    "max_rss_mib": 1536,
     "max_seconds": 60,
-    "why": "Fifty distinct 12-megapixel PNGs, 2.4 GB of pixels decoded one at a time: the account peaks near 310 MiB, the process near 650 MiB."
+    "why": "Fifty distinct 12-megapixel PNGs, 2.4 GB of pixels decoded one at a time: the account peaks near 310 MiB; the converting process, which holds the source and the PDF it writes, near 1.3 GiB."
   },
   "html-jpeg-10": {
     "result": "pdf",
