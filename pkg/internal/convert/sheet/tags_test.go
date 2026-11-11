@@ -56,8 +56,9 @@ func cellText(pg *compose.Page, el *compose.StructElem) string {
 }
 
 // TestConvert_TableIsRegular locks the structure of a printed page: a
-// Table of a TR for every printed row, empty ones included, holding a
-// cell for every printed column, a merge one cell with its spans, the
+// Table of a TR for every printed row that holds content, holding a
+// cell for every printed column, a merge one cell with its spans, a run
+// of empty cells one cell spanning them, the
 // repeated rows TH with a column scope, the headings artifacts and a
 // cell's link inside its cell.
 func TestConvert_TableIsRegular(t *testing.T) {
@@ -75,8 +76,9 @@ func TestConvert_TableIsRegular(t *testing.T) {
 		t.Fatalf("structure %+v", out.Structure.Kids)
 	}
 	tbl := out.Structure.Kids[0]
-	if len(tbl.Kids) != 5 {
-		t.Fatalf("%d rows, want 5", len(tbl.Kids))
+	// The empty third row is left out.
+	if len(tbl.Kids) != 4 {
+		t.Fatalf("%d rows, want 4", len(tbl.Kids))
 	}
 	for i, w := range tableWidths(tbl) {
 		if w != 4 {
@@ -92,14 +94,15 @@ func TestConvert_TableIsRegular(t *testing.T) {
 	if got := cellText(pg, tbl.Kids[0].Kids[0]); got != "Head" {
 		t.Errorf("A1 holds %q", got)
 	}
-	m := tbl.Kids[3].Kids[0]
+	m := tbl.Kids[2].Kids[0]
 	if m.Role != "TD" || m.ColSpan != 2 || m.RowSpan != 2 || cellText(pg, m) != "merged" {
 		t.Errorf("merge %s %dx%d %q", m.Role, m.ColSpan, m.RowSpan, cellText(pg, m))
 	}
-	if n := len(tbl.Kids[4].Kids); n != 2 {
-		t.Errorf("row under the merge holds %d cells, want 2", n)
+	// The empty cells of a row are one cell spanning them.
+	if k := tbl.Kids[3].Kids; len(k) != 1 || k[0].ColSpan != 2 {
+		t.Errorf("row under the merge holds %d cells, want 1 of two columns", len(k))
 	}
-	l := tbl.Kids[3].Kids[2]
+	l := tbl.Kids[2].Kids[2]
 	if len(l.Kids) != 1 || l.Kids[0].Role != "Link" || len(pg.Links) != 1 || pg.Links[0].Parent != l.Kids[0] {
 		t.Errorf("link cell %+v, links %+v", l, pg.Links)
 	}

@@ -1,16 +1,22 @@
 package sheet
 
 import (
+	"slices"
+
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 )
 
 // tagTable rebuilds the structure of a page's Table element, the first
 // Table among root's kids, as a regular table: one TR per row the page
-// prints, the repeated rows first, and in each one cell per column it
+// prints that holds content, the repeated rows first, and in each one
+// cell per column it
 // prints, the repeated columns first, a merge one cell with its spans
 // and nothing for the cells it covers (ISO 14289-1, 7.2; ISO 14289-2,
-// 8.2.5.26; ISO 32000-1, 14.8.5.7, Table 349). table is the layout tree
+// 8.2.5.26; ISO 32000-1, 14.8.5.7, Table 349). A run of empty cells in a
+// row is one TD spanning them: a reader finds the next cell in its
+// column all the same, and a sparse sheet's page does not carry an
+// element per empty cell, which doubles the file of a large one. table is the layout tree
 // the engine built root from; frags and links are what it laid out,
 // whose parents move to the cells that hold them.
 //
@@ -67,6 +73,42 @@ func (b *pageBuilder) tagTable(table *layout.Node, root *compose.StructElem, fra
 	ps := &g.sh.Page
 	inRows := func(rg *Range, r int) bool { return rg != nil && r >= rg.FirstRow && r <= rg.LastRow }
 	inCols := func(rg *Range, c int) bool { return rg != nil && c >= rg.FirstColumn && c <= rg.LastColumn }
+	printed := map[[2]int]bool{}
+	for _, r := range rows {
+		for _, c := range cols {
+			printed[key(r, c)] = true
+		}
+	}
+	// target is the cell each tagged node's content belongs to; filled
+	// marks the cells that hold content.
+	target := make([][2]int, len(nodes))
+	filled := map[[2]int]bool{}
+	for i, n := range nodes {
+		at := b.cellKeys[n]
+		k := key(at[0], at[1])
+		if !printed[k] {
+			k = nearestCell(key, rows, cols, at)
+		}
+		target[i] = k
+		filled[k] = true
+	}
+	// A row that holds no content, no header cell and no part of a merge
+	// is left out: it tells a reader nothing, and the rows kept stay
+	// regular.
+	kept := rows[:0:0]
+	for _, r := range rows {
+		keep := inRows(ps.RepeatRows, r)
+		for _, c := range cols {
+			if k := key(r, c); keep || filled[k] || !g.single(k, r, c) || inCols(ps.RepeatColumns, c) {
+				keep = true
+				break
+			}
+		}
+		if keep {
+			kept = append(kept, r)
+		}
+	}
+	rows = kept
 	cellAt := map[[2]int]*compose.StructElem{}
 	taken := make([]bool, len(rows)*len(cols))
 	trs := make([]*compose.StructElem, len(rows))
@@ -79,9 +121,23 @@ func (b *pageBuilder) tagTable(table *layout.Node, root *compose.StructElem, fra
 				continue
 			}
 			k := key(r, c)
+			colHead, rowHead := inRows(ps.RepeatRows, r), inCols(ps.RepeatColumns, c)
 			cs := 1
-			for j+cs < len(cols) && !taken[i*len(cols)+j+cs] && key(r, cols[j+cs]) == k {
-				cs++
+			if g.single(k, r, c) && !filled[k] && !colHead && !rowHead {
+				// A run of empty cells is one cell spanning them: the
+				// row keeps its columns, and the page does not carry an
+				// element per empty cell.
+				for j+cs < len(cols) && !taken[i*len(cols)+j+cs] {
+					c2 := cols[j+cs]
+					if k2 := key(r, c2); !g.single(k2, r, c2) || filled[k2] || inCols(ps.RepeatColumns, c2) {
+						break
+					}
+					cs++
+				}
+			} else {
+				for j+cs < len(cols) && !taken[i*len(cols)+j+cs] && key(r, cols[j+cs]) == k {
+					cs++
+				}
 			}
 			rs := 1
 			for i+rs < len(rows) && key(rows[i+rs], c) == k {
@@ -92,8 +148,7 @@ func (b *pageBuilder) tagTable(table *layout.Node, root *compose.StructElem, fra
 					taken[y*len(cols)+x] = true
 				}
 			}
-			el := &compose.StructElem{Role: "TD", ColSpan: cs, RowSpan: rs}
-			colHead, rowHead := inRows(ps.RepeatRows, r), inCols(ps.RepeatColumns, c)
+			el := &compose.StructElem{Role: "TD"}
 			switch {
 			case colHead && rowHead:
 				el.Role, el.Scope = "TH", compose.ScopeBoth
@@ -102,11 +157,11 @@ func (b *pageBuilder) tagTable(table *layout.Node, root *compose.StructElem, fra
 			case rowHead:
 				el.Role, el.Scope = "TH", compose.ScopeRow
 			}
-			if cs == 1 {
-				el.ColSpan = 0
+			if cs > 1 {
+				el.ColSpan = cs
 			}
-			if rs == 1 {
-				el.RowSpan = 0
+			if rs > 1 {
+				el.RowSpan = rs
 			}
 			trs[i].Kids = append(trs[i].Kids, el)
 			if _, ok := cellAt[k]; !ok {
@@ -115,12 +170,8 @@ func (b *pageBuilder) tagTable(table *layout.Node, root *compose.StructElem, fra
 		}
 	}
 	remap := map[*compose.StructElem]*compose.StructElem{tbl: nil}
-	for i, n := range nodes {
-		at := b.cellKeys[n]
-		el := cellAt[key(at[0], at[1])]
-		if el == nil {
-			el = nearestCell(cellAt, key, rows, cols, at)
-		}
+	for i := range nodes {
+		el := cellAt[target[i]]
 		remap[elems[i]] = el
 		if el != nil {
 			el.Kids = append(el.Kids, elems[i].Kids...)
@@ -135,19 +186,22 @@ func (b *pageBuilder) tagTable(table *layout.Node, root *compose.StructElem, fra
 	tbl.Kids = trs
 }
 
+// single reports that the cell at r, c, whose key is k, is no part of a
+// merge.
+func (g *grid) single(k [2]int, r, c int) bool {
+	if k != [2]int{r, c} {
+		return false
+	}
+	_, merged := g.merges[k]
+	return !merged
+}
+
 // nearestCell returns the cell of the printed row of at whose column is
 // nearest at's, for text overflowing into the page from a column it does
-// not print, nil when the page does not print at's row.
-func nearestCell(cellAt map[[2]int]*compose.StructElem, key func(r, c int) [2]int, rows, cols []int, at [2]int) *compose.StructElem {
-	printed := false
-	for _, r := range rows {
-		if r == at[0] {
-			printed = true
-			break
-		}
-	}
-	if !printed {
-		return nil
+// not print, and at itself when the page does not print its row.
+func nearestCell(key func(r, c int) [2]int, rows, cols []int, at [2]int) [2]int {
+	if !slices.Contains(rows, at[0]) {
+		return at
 	}
 	best, dist := -1, 0
 	for _, c := range cols {
@@ -159,7 +213,7 @@ func nearestCell(cellAt map[[2]int]*compose.StructElem, key func(r, c int) [2]in
 			best, dist = c, d
 		}
 	}
-	return cellAt[key(at[0], best)]
+	return key(at[0], best)
 }
 
 // printedRows returns the rows the page prints, in order: the repeated
