@@ -55,13 +55,13 @@ func near(a, b css.Color) bool {
 	return math.Abs(a.R-b.R) < 1.0/255 && math.Abs(a.G-b.G) < 1.0/255 && math.Abs(a.B-b.B) < 1.0/255 && math.Abs(a.A-b.A) < 1e-9
 }
 
-// TestRead_NumberFormats checks the built-in ids as Calc's en-US codes,
+// TestRead_NumberFormats checks the built-in ids as Excel's printed codes,
 // a workbook's own codes and the General fallback.
 func TestRead_NumberFormats(t *testing.T) {
 	t.Parallel()
 	doc := styledBook(t, `<numFmt numFmtId="164" formatCode="0.000&quot;kg&quot;"/><numFmt numFmtId="3" formatCode="00"/>`, "", "", "", "",
 		`<xf numFmtId="14"/><xf numFmtId="22"/><xf numFmtId="164"/><xf numFmtId="3"/><xf numFmtId="99"/><xf numFmtId="49"/>`, 6)
-	for i, want := range []string{"m/d/yyyy", "m/d/yyyy h:mm", `0.000"kg"`, "00", "General", "@"} {
+	for i, want := range []string{"mm/dd/yyyy", "mm/dd/yyyy hh:mm", `0.000"kg"`, "00", "General", "@"} {
 		if got := styleOf(t, doc, i).Format; got != want {
 			t.Errorf("format %d = %q, want %q", i, got, want)
 		}

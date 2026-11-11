@@ -40,7 +40,8 @@ type display struct {
 }
 
 // format returns the format of the code, General for a code numfmt
-// refuses, with a warning once per code.
+// refuses, with a warning once per code; under Excel's rules, its Excel
+// variant ([numfmt.Format.Excel]).
 func (b *builder) format(code string) *numfmt.Format {
 	if f, ok := b.formats[code]; ok {
 		return f
@@ -49,6 +50,9 @@ func (b *builder) format(code string) *numfmt.Format {
 	if err != nil {
 		b.warn(CodeFormat, "the number format "+quote(code)+" is not understood and shows as General")
 		f = numfmt.General
+	}
+	if b.doc.ExcelRules {
+		f = f.Excel()
 	}
 	if len(b.formats) < maxFormats {
 		b.formats[code] = f
