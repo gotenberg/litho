@@ -1,0 +1,15 @@
+{
+  "name": "litho/odt",
+  "source": "litho/odt",
+  "pdf_root": "pdfs",
+  "inputs": {
+    "glob": "sources/*"
+  },
+  "references": {
+    "dir": "references",
+    "engine": "libreoffice"
+  },
+  "goldens": {
+    "diff": "goldens/diff"
+  }
+}
