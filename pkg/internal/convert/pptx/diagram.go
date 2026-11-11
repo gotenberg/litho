@@ -108,11 +108,29 @@ func (r *reader) diagram(c *shapeCtx, data *ooxml.Element, s *slides.Shape, dept
 			r.diagramShapes(&s.Kids, inner, k, 0, 0, 0)
 		}
 		r.shrinkGroups(s.Kids, roots[0])
+		fitAgain(s.Kids)
 	}
 	if len(s.Kids) == 0 {
 		return nil, nil
 	}
 	return s, nil
+}
+
+// fitAgain makes the shrinking text bodies of shapes laid out from a
+// diagram's data fit their text again rather than take a saved scale:
+// nothing saved a scale for a layout litho computed.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/smartart-autofit-sync and sd/smartart-dir, laid
+//     out from their data, print their text whole only when it fits again.
+func fitAgain(shapes []*slides.Shape) {
+	for _, k := range shapes {
+		if k.Text != nil {
+			k.Text.SavedFit = false
+		}
+		fitAgain(k.Kids)
+	}
 }
 
 // shrinkGroups ties the text bodies of a laid out diagram's shapes into

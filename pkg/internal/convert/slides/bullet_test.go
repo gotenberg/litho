@@ -194,3 +194,21 @@ func TestNumbers(t *testing.T) {
 		}
 	}
 }
+
+// TestText_SavedFit checks that a body with SavedFit takes the scale its
+// file saved, overflowing or not, and never computes one.
+func TestText_SavedFit(t *testing.T) {
+	four := []Paragraph{para("L0", arial(20)), para("L1", arial(20)), para("L2", arial(20)), para("L3", arial(20))}
+	for _, tc := range []struct {
+		name  string
+		scale float64
+		size  float64
+	}{{"none saved", 0, 20}, {"half", 0.5, 10}} {
+		s := box(28.35, 28.35, 150, 50, four...)
+		s.Text.Autofit, s.Text.SavedFit, s.Text.FontScale = AutofitShrink, true, tc.scale
+		pg := convert(t, deck(&Slide{Shapes: []*Shape{s}}), office.Options{}).Pages[0]
+		if r := find(t, pg, "L0"); !near(r.size, tc.size, 0.01) {
+			t.Errorf("%s: %.2f points, want %.2f", tc.name, r.size, tc.size)
+		}
+	}
+}

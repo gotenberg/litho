@@ -272,7 +272,7 @@ func bodyProps(bc chain) *slides.TextBody {
 	switch fit := bc.first("normAutofit", "spAutoFit", "noAutofit"); {
 	case fit == nil:
 	case fit.Local == "normAutofit":
-		b.Autofit = slides.AutofitShrink
+		b.Autofit, b.SavedFit = slides.AutofitShrink, true
 		b.FontScale = percent(attr(fit, "fontScale"))
 		b.SpacingReduction = percent(attr(fit, "lnSpcReduction"))
 	case fit.Local == "spAutoFit":

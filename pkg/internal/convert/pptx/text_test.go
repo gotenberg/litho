@@ -203,7 +203,7 @@ func TestText_BodyProperties(t *testing.T) {
 			if b.Insets != [4]float64{1, 2, 3, 0} || b.Anchor != slides.AnchorBottom || b.Wrap || b.Columns != 2 || b.ColumnGap != 10 || b.Vertical != css.SidewaysLR || !b.RightToLeft {
 				t.Errorf("body %+v", b)
 			}
-			if b.Autofit != slides.AutofitShrink || b.FontScale != 0.625 || b.SpacingReduction != 0.2 {
+			if b.Autofit != slides.AutofitShrink || !b.SavedFit || b.FontScale != 0.625 || b.SpacingReduction != 0.2 {
 				t.Errorf("autofit %+v", b)
 			}
 		}},

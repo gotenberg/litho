@@ -494,7 +494,10 @@ func overflowShare(body *TextBody) float64 {
 // body that shrinks to fit takes the first of Impress's scale levels at
 // which its text fits, else the last one, and none when it fits as it is
 // (ImpEditEngine::ScaleContentToFitWindow). The scale a file saved is not
-// read: Impress computes the fit again whatever the file says.
+// read: Impress computes the fit again whatever the file says. A body
+// with SavedFit takes the scale its file saved instead, as PowerPoint
+// prints it (ECMA-376 Part 1, 21.1.2.1.3 normAutofit fontScale and
+// lnSpcReduction, 100% and 0% by default), whether the text fits or not.
 //
 // # Corpus evidence
 //
@@ -502,9 +505,16 @@ func overflowShare(body *TextBody) float64 {
 //     spacing and prints at the fourth level whatever it saves (100%, 50% or
 //     none measured): its three empty closing paragraphs would push the
 //     fit to 70%.
+//   - litho/pptx: size-banner's title and subtitle, whose shrinking bodies
+//     save no scale, print in PowerPoint's reference at their full size,
+//     overflowing the inch-tall slide; text-autofit's bodies
+//     print at the scale each saves.
 func (b *builder) fitBody(body *TextBody, w, h float64) fit {
 	if body.Autofit != AutofitShrink {
 		return noFit
+	}
+	if body.SavedFit {
+		return savedFit(body)
 	}
 	cols := max(body.Columns, 1)
 	colW := w
@@ -536,6 +546,19 @@ func (b *builder) fitBody(body *TextBody, w, h float64) fit {
 		}
 	}
 	return scaleLevels[len(scaleLevels)-1]
+}
+
+// savedFit returns the scaling a body's file saved, each part in (0, 1],
+// none for a part it saved none of or out of range.
+func savedFit(body *TextBody) fit {
+	f := noFit
+	if k := body.FontScale; k > 0 && k <= 1 {
+		f.font = k
+	}
+	if r := body.SpacingReduction; r > 0 && r < 1 {
+		f.spacing = 1 - r
+	}
+	return f
 }
 
 // emptyParagraph reports whether p holds no character at all, a line
