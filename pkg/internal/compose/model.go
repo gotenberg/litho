@@ -181,6 +181,11 @@ const (
 // recolour them, calls [ImageSource.Decode] and encodes the result as a
 // source of its own.
 //
+// Under a context carrying a [PictureStore], the constructors may keep the
+// bytes in the store's temp file instead: JPEG, Samples and Alpha are then
+// nil, [ImageSource.IsJPEG] tells the kind, and [ImageSource.Decode] and
+// [Write] read the bytes back from the file.
+//
 // The constructors set the fields and nothing changes them after: a source
 // is safe for concurrent reads.
 type ImageSource struct {
@@ -200,6 +205,10 @@ type ImageSource struct {
 	// pixel, written as a DeviceGray soft mask (ISO 32000-1, 11.6.5.3); nil
 	// when every pixel is opaque.
 	Alpha []byte
+
+	// stored is where a [PictureStore] keeps the bytes, nil when the
+	// fields above hold them.
+	stored *storedPicture
 }
 
 // Image places a picture on the page, scaled to fill Rect.

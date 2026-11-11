@@ -1,7 +1,6 @@
 package compose
 
 import (
-	"bytes"
 	"fmt"
 	"image/jpeg"
 	"math"
@@ -178,11 +177,11 @@ func checkSource(src *ImageSource) error {
 	if err := checkPixels(src.Width, src.Height); err != nil {
 		return err
 	}
-	if len(src.JPEG) > 0 {
-		if src.Samples != nil || src.Alpha != nil || src.Gray {
+	if src.IsJPEG() {
+		if src.hasSamples() || src.hasAlpha() || src.Gray {
 			return fmt.Errorf("%w: source holds both a JPEG and samples", ErrInvalidImage)
 		}
-		cfg, err := jpeg.DecodeConfig(bytes.NewReader(src.JPEG))
+		cfg, err := jpeg.DecodeConfig(src.jpegReader())
 		if err != nil {
 			return fmt.Errorf("%w: JPEG header: %w", ErrInvalidImage, err)
 		}
@@ -194,10 +193,10 @@ func checkSource(src *ImageSource) error {
 		}
 		return nil
 	}
-	if len(src.Samples) == 0 {
+	if !src.hasSamples() {
 		return fmt.Errorf("%w: source holds neither a JPEG nor samples", ErrInvalidImage)
 	}
-	if src.Gray && src.Alpha != nil {
+	if src.Gray && src.hasAlpha() {
 		return fmt.Errorf("%w: gray source with an alpha", ErrInvalidImage)
 	}
 	return nil

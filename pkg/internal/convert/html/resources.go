@@ -273,7 +273,7 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 		pic.Width, pic.Height = pic.Height, pic.Width
 	}
 	if format == "jpeg" && orient == 1 && dctModel(cfg.ColorModel) {
-		src, err := compose.JPEGImage(data)
+		src, err := compose.JPEGImage(ctx, data)
 		if err != nil {
 			return nil, fmt.Errorf("reading the JPEG image: %w", err)
 		}

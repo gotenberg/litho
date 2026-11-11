@@ -128,7 +128,7 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 	}
 	pic := &layout.Picture{Width: float64(cfg.Width) * css.Pt, Height: float64(cfg.Height) * css.Pt}
 	if format == "jpeg" && dctModel(cfg.ColorModel) {
-		src, err := compose.JPEGImage(data)
+		src, err := compose.JPEGImage(b.ctx, data)
 		if err != nil {
 			b.warn("picture-decode", "a jpeg picture does not decode")
 			return nil

@@ -11,6 +11,7 @@ import (
 	"io"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
@@ -22,8 +23,11 @@ import (
 //
 // It reads img row by row and keeps nothing of it: the caller may drop img
 // once it returns. It releases what img was charged to the conversion's
-// memory budget ([ChargeImage]) and charges the compressed samples, which
-// the document holds; a refused charge fails with the budget's error. It returns an error wrapping [ErrInvalidImage] for an
+// memory budget ([ChargeImage]) and charges the compressed samples the
+// document holds in memory, the ones a [PictureStore] on ctx does not take
+// to its file; a refused charge fails with the budget's error, and a store
+// that cannot write its file fails with that error. It returns an error
+// wrapping [ErrInvalidImage] for an
 // empty picture, one wrapping [ErrLimitExceeded] for a picture past the
 // pixels a source may hold, and one wrapping ctx.Err() when ctx ends
 // first.
@@ -36,8 +40,8 @@ func EncodeImage(ctx context.Context, img image.Image) (*ImageSource, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := chargeEncoded(ctx, src); err != nil {
-		return nil, err
+	if err := keep(ctx, src); err != nil {
+		return nil, fmt.Errorf("encoding image: %w", err)
 	}
 	return src, nil
 }
@@ -131,16 +135,19 @@ func encodeImage(ctx context.Context, img image.Image) (*ImageSource, error) {
 
 // JPEGImage returns the JPEG file data as an [ImageSource] written as it
 // is, decoded by DCTDecode (ISO 32000-1, 7.4.8). It reads the frame header
-// alone and keeps data, which the caller must not modify. It returns an
-// error wrapping [ErrInvalidImage] for a header it cannot read or a
-// colour model DCTDecode does not take, and one wrapping
-// [ErrLimitExceeded] for a picture past the pixels a source may hold.
+// alone and keeps data, which the caller must not modify, or copies it to
+// the file of a [PictureStore] on ctx, as [EncodeImage] keeps samples: data
+// kept in memory is charged to the conversion's memory budget, and a
+// refused charge fails with the budget's error. It returns an error
+// wrapping [ErrInvalidImage] for a header it cannot read or a colour model
+// DCTDecode does not take, and one wrapping [ErrLimitExceeded] for a
+// picture past the pixels a source may hold.
 //
 // An Adobe-marked CMYK JPEG stores its samples inverted, which DCTDecode
 // hands on unchanged: it is not special-cased, so such a file renders as
 // its negative. A converter that meets one decodes it and encodes the
 // picture with [EncodeImage].
-func JPEGImage(data []byte) (*ImageSource, error) {
+func JPEGImage(ctx context.Context, data []byte) (*ImageSource, error) {
 	cfg, err := jpeg.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("%w: JPEG header: %w", ErrInvalidImage, err)
@@ -151,7 +158,11 @@ func JPEGImage(data []byte) (*ImageSource, error) {
 	if err := checkPixels(cfg.Width, cfg.Height); err != nil {
 		return nil, err
 	}
-	return &ImageSource{Width: cfg.Width, Height: cfg.Height, JPEG: data}, nil
+	src := &ImageSource{Width: cfg.Width, Height: cfg.Height, JPEG: data}
+	if err := keep(ctx, src); err != nil {
+		return nil, fmt.Errorf("reading JPEG: %w", err)
+	}
+	return src, nil
 }
 
 // Decode returns the pixels of s: an [*image.Gray] for gray samples, an
@@ -190,8 +201,8 @@ func (s *ImageSource) decode(ctx context.Context) (image.Image, error) {
 	if err := checkPixels(s.Width, s.Height); err != nil {
 		return nil, err
 	}
-	if len(s.JPEG) > 0 {
-		img, err := jpeg.Decode(bytes.NewReader(s.JPEG))
+	if s.IsJPEG() {
+		img, err := jpeg.Decode(s.jpegReader())
 		if err != nil {
 			return nil, fmt.Errorf("%w: JPEG: %w", ErrInvalidImage, err)
 		}
@@ -200,7 +211,7 @@ func (s *ImageSource) decode(ctx context.Context) (image.Image, error) {
 	rect := image.Rect(0, 0, s.Width, s.Height)
 	if s.Gray {
 		img := image.NewGray(rect)
-		if err := inflateInto(s.Samples, img.Pix); err != nil {
+		if err := inflateInto(s.samplesReader(), img.Pix); err != nil {
 			return nil, err
 		}
 		return img, nil
@@ -208,16 +219,16 @@ func (s *ImageSource) decode(ctx context.Context) (image.Image, error) {
 	img := image.NewNRGBA(rect)
 	n := s.Width * s.Height // fits int: at most maxImagePixels, checked above
 	rgb := make([]byte, 3*n)
-	if err := inflateInto(s.Samples, rgb); err != nil {
+	if err := inflateInto(s.samplesReader(), rgb); err != nil {
 		return nil, err
 	}
 	for i := range n {
 		copy(img.Pix[4*i:4*i+3], rgb[3*i:3*i+3])
 		img.Pix[4*i+3] = 0xFF
 	}
-	if s.Alpha != nil {
+	if s.hasAlpha() {
 		alpha := rgb[:n]
-		if err := inflateInto(s.Alpha, alpha); err != nil {
+		if err := inflateInto(s.alphaReader(), alpha); err != nil {
 			return nil, err
 		}
 		for i, a := range alpha {
@@ -272,12 +283,12 @@ func deflateRows(ctx context.Context, rows int, row func(y int, put func([]byte)
 
 // inflateInto decompresses the zlib stream z into dst, which it must fill
 // exactly.
-func inflateInto(z, dst []byte) error {
-	r, err := zlib.NewReader(bytes.NewReader(z))
+func inflateInto(z io.Reader, dst []byte) error {
+	r, err := zlib.NewReader(z)
 	if err != nil {
 		return fmt.Errorf("%w: samples: %w", ErrInvalidImage, err)
 	}
-	defer r.Close() //nolint:errcheck // reading from memory: Close reports nothing a read did not
+	defer r.Close() //nolint:errcheck // Close reports nothing a read did not
 	if _, err := io.ReadFull(r, dst); err != nil {
 		return fmt.Errorf("%w: samples: %w", ErrInvalidImage, err)
 	}
@@ -295,8 +306,8 @@ func (w *docWriter) image(src *ImageSource) (ast.PdfIndirectRef, error) {
 		return ref, nil
 	}
 	var stream ast.PdfStream
-	if len(src.JPEG) > 0 {
-		s, err := jpegXObject(src.JPEG)
+	if src.IsJPEG() {
+		s, err := jpegXObject(src)
 		if err != nil {
 			return ast.PdfIndirectRef{}, err
 		}
@@ -310,11 +321,12 @@ func (w *docWriter) image(src *ImageSource) (ast.PdfIndirectRef, error) {
 	return ref, nil
 }
 
-// jpegXObject wraps a JPEG file as an image XObject decoded by DCTDecode
-// (ISO 32000-1, 7.4.8 and 8.9.5), its bytes as they are. Width, height and
-// colour space come from the frame header.
-func jpegXObject(data []byte) (ast.PdfStream, error) {
-	cfg, err := jpeg.DecodeConfig(bytes.NewReader(data))
+// jpegXObject wraps the JPEG file of src as an image XObject decoded by
+// DCTDecode (ISO 32000-1, 7.4.8 and 8.9.5), its bytes as they are, read
+// from a [PictureStore]'s file when it keeps them. Width, height and colour
+// space come from the frame header.
+func jpegXObject(src *ImageSource) (ast.PdfStream, error) {
+	cfg, err := jpeg.DecodeConfig(src.jpegReader())
 	if err != nil {
 		return ast.PdfStream{}, fmt.Errorf("%w: JPEG header: %w", ErrInvalidImage, err)
 	}
@@ -322,7 +334,7 @@ func jpegXObject(data []byte) (ast.PdfStream, error) {
 	if err != nil {
 		return ast.PdfStream{}, err
 	}
-	return ast.NewStream(ast.PdfDict{
+	return ast.NewLazyStream(ast.PdfDict{
 		"Type":             ast.PdfName("XObject"),
 		"Subtype":          ast.PdfName("Image"),
 		"Width":            ast.PdfInt(cfg.Width),
@@ -330,7 +342,7 @@ func jpegXObject(data []byte) (ast.PdfStream, error) {
 		"ColorSpace":       cs,
 		"BitsPerComponent": ast.PdfInt(8),
 		"Filter":           ast.PdfName("DCTDecode"),
-	}, data), nil
+	}, src.loader(src.JPEG, func(st *storedPicture) writer.Blob { return st.jpeg })), nil
 }
 
 // jpegColorSpace maps the colour model image/jpeg reads from a frame's
@@ -352,7 +364,8 @@ func jpegColorSpace(m color.Model) (ast.PdfName, error) {
 // pictureXObject writes src's samples as an 8-bit FlateDecode image
 // XObject (ISO 32000-1, 8.9.5), DeviceGray or DeviceRGB, with its alpha,
 // when it has one, as a DeviceGray soft mask (11.6.5.3) the image names in
-// /SMask. The streams share the source's bytes: nothing is copied.
+// /SMask. The streams share the source's bytes, nothing copied, or read
+// them from a [PictureStore]'s file as the file is written.
 func (w *docWriter) pictureXObject(src *ImageSource) ast.PdfStream {
 	dict := func(cs ast.PdfName) ast.PdfDict {
 		return ast.PdfDict{
@@ -365,16 +378,18 @@ func (w *docWriter) pictureXObject(src *ImageSource) ast.PdfStream {
 			"Filter":           ast.PdfName("FlateDecode"),
 		}
 	}
+	samples := src.loader(src.Samples, func(st *storedPicture) writer.Blob { return st.samples })
 	if src.Gray {
-		return ast.NewStream(dict("DeviceGray"), src.Samples)
+		return ast.NewLazyStream(dict("DeviceGray"), samples)
 	}
 	main := dict("DeviceRGB")
-	if src.Alpha != nil {
-		mask := w.alloc.Alloc(ast.NewStream(dict("DeviceGray"), src.Alpha))
+	if src.hasAlpha() {
+		alpha := src.loader(src.Alpha, func(st *storedPicture) writer.Blob { return st.alpha })
+		mask := w.alloc.Alloc(ast.NewLazyStream(dict("DeviceGray"), alpha))
 		w.shared[mask.ObjectNum] = true
 		main["SMask"] = mask
 	}
-	return ast.NewStream(main, src.Samples)
+	return ast.NewLazyStream(main, samples)
 }
 
 // straight returns the pixel of img at (x, y) with straight alpha.

@@ -102,7 +102,7 @@ func (r *reader) decodePicture(el *odf.Element) *layout.Picture {
 		pic.Width, pic.Height = float64(cfg.Width)*72/dx, float64(cfg.Height)*72/dy
 	}
 	if format == "jpeg" && (cfg.ColorModel == imgcolor.GrayModel || cfg.ColorModel == imgcolor.YCbCrModel || cfg.ColorModel == imgcolor.CMYKModel) {
-		src, err := compose.JPEGImage(data)
+		src, err := compose.JPEGImage(r.ctx, data)
 		if err != nil {
 			r.warn("picture-decode", "a jpeg picture does not decode")
 			return nil

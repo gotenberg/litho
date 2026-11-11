@@ -114,8 +114,9 @@ type convertOptions struct {
 	defaultWidth, defaultHeight          float64
 	defaultLang                          string
 
-	// spool is compose.Options.Spool: zero in every public use, set by
-	// tests to force the spool file on or off.
+	// spool is compose.Options.Spool and the hold of the conversion's
+	// compose.PictureStore: zero in every public use, set by tests to
+	// force the spool files on or off.
 	spool int64
 }
 
@@ -727,6 +728,14 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	defer endBudget()
 	defer func() { err = convertBudgetError(o.logger, mem, err) }()
 	src = chargedSource(src, mem)
+	// The pictures of a large document wait for the file in a temp file of
+	// their own, removed on every path once the file is written.
+	ctx, pictures := compose.WithPictureStore(ctx, o.tempDir, o.spool)
+	defer func() {
+		if err := pictures.Close(); err != nil && o.logger != nil {
+			o.logger.Debug("convert: removing the picture store failed", slog.Any("error", err))
+		}
+	}()
 
 	dirs := o.fontDirs
 	if len(dirs) == 0 {

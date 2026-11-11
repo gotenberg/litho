@@ -92,7 +92,7 @@ func DecodePicture(ctx context.Context, data []byte, fonts *text.Fonts) (*layout
 	}
 	pic := &layout.Picture{Width: float64(cfg.Width) * css.Pt, Height: float64(cfg.Height) * css.Pt}
 	if format == "jpeg" && (cfg.ColorModel == color.GrayModel || cfg.ColorModel == color.YCbCrModel || cfg.ColorModel == color.CMYKModel) {
-		src, err := compose.JPEGImage(data)
+		src, err := compose.JPEGImage(ctx, data)
 		if err != nil {
 			return nil, fmt.Errorf("reading the JPEG picture: %w", err)
 		}

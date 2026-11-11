@@ -180,7 +180,7 @@ func FuzzJPEGImage(f *testing.F) {
 	f.Add(buf.Bytes())
 	f.Add(buf.Bytes()[:20])
 	f.Fuzz(func(t *testing.T, data []byte) {
-		src, err := compose.JPEGImage(data)
+		src, err := compose.JPEGImage(context.Background(), data)
 		if err != nil {
 			if !errors.Is(err, compose.ErrInvalidImage) && !errors.Is(err, compose.ErrLimitExceeded) {
 				t.Fatalf("unwrapped error %v", err)

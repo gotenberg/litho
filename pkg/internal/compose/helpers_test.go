@@ -170,7 +170,7 @@ func encode(t testing.TB, img image.Image) *compose.ImageSource {
 // when its header does not read.
 func jpegSource(t testing.TB, data []byte) *compose.ImageSource {
 	t.Helper()
-	src, err := compose.JPEGImage(data)
+	src, err := compose.JPEGImage(context.Background(), data)
 	if err != nil {
 		t.Fatalf("JPEGImage: %v", err)
 	}

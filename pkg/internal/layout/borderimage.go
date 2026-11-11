@@ -470,7 +470,7 @@ type cropKey struct {
 // decode; it is called only for a part to cut. The parts are cut once per
 // paint.
 func (p *painter) cropSource(pic *Picture, r compose.Rect, decode func() image.Image) *compose.ImageSource {
-	if pic == nil || pic.Source == nil || len(pic.Source.JPEG) > 0 || !(pic.Width > 0) || !(pic.Height > 0) {
+	if pic == nil || pic.Source == nil || pic.Source.IsJPEG() || !(pic.Width > 0) || !(pic.Height > 0) {
 		return nil
 	}
 	bounds := image.Rect(0, 0, pic.Source.Width, pic.Source.Height)

@@ -80,7 +80,9 @@ func WithConvertPDFUA(profile models.PDFUAProfile) ConvertOption {
 //
 // A conversion whose output passes a few MiB keeps the page contents and
 // font programs it writes there until the file is complete, instead of in
-// memory. A conversion to a profile also writes the plain file there, then
+// memory, and one whose pictures pass 8 MiB, compressed as the file
+// stores them, keeps the rest of them there from the moment it reads
+// them. A conversion to a profile also writes the plain file there, then
 // the conforming one, each about the size of the output, and the
 // remediation its own working copy: no whole file is held in memory twice,
 // and dst receives the conforming file once it is complete.

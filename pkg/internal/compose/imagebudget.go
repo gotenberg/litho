@@ -47,12 +47,3 @@ func ReleaseImage(ctx context.Context, img image.Image) {
 	b := img.Bounds()
 	limits.BudgetFrom(ctx).Release(int64(b.Dx()) * int64(b.Dy()) * pixelCost(img.ColorModel()))
 }
-
-// chargeEncoded charges ctx's budget for the compressed samples of src,
-// which the document holds until it is written.
-func chargeEncoded(ctx context.Context, src *ImageSource) error {
-	if err := limits.BudgetFrom(ctx).ChargeUnits(int64(len(src.Samples))+int64(len(src.Alpha)), 1, "encoded pictures"); err != nil {
-		return fmt.Errorf("encoding image: %w", err)
-	}
-	return nil
-}
