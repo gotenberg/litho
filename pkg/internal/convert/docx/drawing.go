@@ -274,6 +274,10 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 		n := d.textBox(s, tb.Child(ooxml.NSW, "txbxContent"), w, h, ss, bodyInsets(bodyPr), alt, depth)
 		if id := attrOr(tb, "id"); id != "" {
 			setChain(n.Style, id, 0, h)
+		} else if vert := bodyVert(attrOr(bodyPr, "vert")); vert == "" {
+			g := ooxml.ParseGeometry(spPr)
+			d.checkGeometry(g)
+			d.shapeTextBox(n, g, ss, w, h, attrOr(bodyPr, "anchor"), bodyPr.Child(ooxml.NSA, "spAutoFit") != nil)
 		}
 		turn(n, bodyVert(attrOr(bodyPr, "vert")))
 		return n
@@ -365,6 +369,73 @@ func bodyInsets(bodyPr *ooxml.Element) [4]float64 {
 		}
 	}
 	return insets
+}
+
+// shapeTextBox gives the text box n, built by [document.textBox] at w by
+// h points, the geometry g of its shape and the vertical anchor of its
+// text (ECMA-376 Part 1, 20.1.2.1.1 bodyPr anchor; 20.1.10.59
+// ST_TextAnchoringType t, ctr, b): a shape other than a rectangle draws
+// behind the text with the fill and outline ss, which the box no longer
+// paints, and the text sits at the top, the middle or the bottom of the
+// box's inset area, as Word places it. A box that grows to fit its text
+// (a:spAutoFit) keeps its text at the top.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/ColorOverwritten: Word draws a text box
+//     of preset rightArrow as the arrow, its text centred in it; drawn so,
+//     layout rises from 0.55 to 0.78.
+//   - libreoffice/docx ooxmlexport/fdo77719: layout rises from 0.26 to 0.75.
+func (d *document) shapeTextBox(n *layout.Node, g *shape.Geometry, ss ooxml.ShapeStyle, w, h float64, anchor string, autoFit bool) {
+	rect := g == nil || (g.Custom == nil && (g.Preset == "" || g.Preset == "rect"))
+	if autoFit || (anchor != "ctr" && anchor != "b") {
+		anchor = ""
+	}
+	if (rect || !shape.Known(g)) && anchor == "" {
+		return
+	}
+	bs := n.Style
+	bs.Position = css.Relative
+	kids := n.Children
+	if anchor != "" {
+		bs.MinHeight = css.Pts(0)
+		bs.Height = css.Pts(max(h, 1))
+		area := d.blockStyle()
+		area.Display = css.Flex
+		area.FlexDirection = css.FlexColumn
+		area.Height = css.Dimension{Kind: css.Percent, Value: 1}
+		// Positioned, the text paints over the shape before it (CSS 2.1,
+		// Appendix E).
+		area.Position = css.Relative
+		area.JustifyContent = css.BoxCenter
+		if anchor == "b" {
+			area.JustifyContent = css.BoxFlexEnd
+		}
+		inner := d.blockStyle()
+		kids = []*layout.Node{{Kind: layout.Element, Style: area, Children: []*layout.Node{{Kind: layout.Element, Style: inner, Children: kids}}}}
+	}
+	if !rect && shape.Known(g) {
+		bs.BackgroundColor = css.Transparent
+		for i := range bs.Border {
+			bs.Border[i] = css.Border{}
+		}
+		bs.Office.StrokeBorders = false
+		pic := vectorShape(bs, g, ss, w, h)
+		ps := pic.Style
+		ps.Position = css.Absolute
+		ps.Display = css.Block
+		ps.MinHeight = css.Pts(0)
+		ps.Left, ps.Top = css.Pts(0), css.Pts(0)
+		ps.Right, ps.Bottom = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
+		if anchor == "" {
+			// Positioned, the text paints over the shape before it.
+			inner := d.blockStyle()
+			inner.Position = css.Relative
+			kids = []*layout.Node{{Kind: layout.Element, Style: inner, Children: kids}}
+		}
+		kids = append([]*layout.Node{pic}, kids...)
+	}
+	n.Children = kids
 }
 
 // textBox builds a text box of w by h points: an inline block holding the

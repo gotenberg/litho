@@ -280,3 +280,40 @@ func TestChart(t *testing.T) {
 		t.Error("a missing chart part was not reported")
 	}
 }
+
+// TestTextBox_ShapeAndAnchor checks that a text box of a preset other than
+// a rectangle draws its shape behind its text, and that its text sits as
+// bodyPr anchor says.
+func TestTextBox_ShapeAndAnchor(t *testing.T) {
+	t.Parallel()
+	box := func(prst, anchor string) string {
+		return `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="2540000" cy="1270000"/><wp:docPr id="4" name="t"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">` +
+			`<wps:wsp><wps:spPr><a:prstGeom prst="` + prst + `"/><a:solidFill><a:srgbClr val="00FF00"/></a:solidFill></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>boxed</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr anchor="` + anchor + `"/></wps:wsp>` +
+			`</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+	}
+	figure := func(body string) *layout.Node {
+		t.Helper()
+		figs := role(build(t, body, nil).root, "Figure")
+		if len(figs) != 1 {
+			t.Fatalf("%d figures, want 1", len(figs))
+		}
+		return figs[0]
+	}
+	arrow := figure(box("rightArrow", "ctr"))
+	if arrow.Style.BackgroundColor.A != 0 || len(arrow.Children) != 2 {
+		t.Fatalf("arrow box background %v, %d children, want transparent and 2", arrow.Style.BackgroundColor, len(arrow.Children))
+	}
+	if pic := arrow.Children[0]; pic.Kind != layout.Replaced || pic.Style.Position != css.Absolute || pic.Picture.Vector == nil {
+		t.Errorf("arrow's first child %v position %v, want the shape, absolute", pic.Kind, pic.Style.Position)
+	}
+	if area := arrow.Children[1]; area.Style.Display != css.Flex || area.Style.JustifyContent != css.BoxCenter || arrow.Style.Height != css.Pts(100) {
+		t.Errorf("arrow's text area display %v justify %v, box height %v", area.Style.Display, area.Style.JustifyContent, arrow.Style.Height)
+	}
+	rect := figure(box("rect", "t"))
+	if rect.Style.BackgroundColor.A == 0 || len(rect.Children) != 1 || rect.Children[0].Kind == layout.Replaced {
+		t.Errorf("a top-anchored rectangle changed: background %v, %d children", rect.Style.BackgroundColor, len(rect.Children))
+	}
+	if bottom := figure(box("rect", "b")); bottom.Children[0].Style.JustifyContent != css.BoxFlexEnd {
+		t.Errorf("a bottom-anchored box justifies %v", bottom.Children[0].Style.JustifyContent)
+	}
+}
