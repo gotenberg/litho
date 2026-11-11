@@ -101,6 +101,15 @@ var limitFlags = []limitFlag{
 		},
 		get: func(l pdf.Limits) int64 { return int64(l.MaxConvertPages) },
 	},
+	{
+		name: "max-convert-memory", usage: "Memory convert holds, as litho accounts it", size: true,
+		set: func(l *pdf.Limits, v string) error {
+			n, err := parseByteSize(v)
+			l.MaxConvertMemoryBytes = n
+			return err
+		},
+		get: func(l pdf.Limits) int64 { return l.MaxConvertMemoryBytes },
+	},
 }
 
 // limitFlagFor returns the resource-limit flag arg names, in its space form

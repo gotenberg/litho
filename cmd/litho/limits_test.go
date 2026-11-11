@@ -173,6 +173,7 @@ func TestRun_LimitFlagsPastTheirCeiling(t *testing.T) {
 		{"max-render-pixels", "1073741825", pdf.Limits{MaxRenderPixels: 1<<30 + 1}},
 		{"max-convert-input-bytes", "2GiB", pdf.Limits{MaxConvertInputBytes: 2 << 30}},
 		{"max-convert-pages", "100001", pdf.Limits{MaxConvertPages: 100_001}},
+		{"max-convert-memory", "65GiB", pdf.Limits{MaxConvertMemoryBytes: 65 << 30}},
 	} {
 		t.Run(tt.flag+"="+tt.value, func(t *testing.T) {
 			verr := tt.limits.Validate()

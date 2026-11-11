@@ -240,10 +240,14 @@ func WithMediaType(media string) ConvertOption {
 // https URLs are fetched through [WithHTTPClient], file: URLs never.
 //
 // A conversion reads at most 32 MiB a file and 256 MiB of files in all,
-// decodes at most 4096 distinct images of at most 67 million pixels each
-// and 268 million in all; a resource past a cap is left out with a
+// and decodes at most 4096 distinct images, each within
+// [Limits.MaxImagePixels]; a resource past a cap is left out with a
 // warning. A [FormatMarkdown] source reads its images alike; the other
-// formats report resources with [CodeOptionIgnored].
+// formats report resources with [CodeOptionIgnored]. An image costs
+// [Limits.MaxConvertMemoryBytes] 4 bytes a pixel (8 for 16 bits a channel)
+// while it is decoded, then its compressed samples for as long as the
+// conversion holds it; a JPEG written as it is costs its file: a document
+// whose images the budget cannot hold fails with [ErrConvertInputTooLarge].
 func WithResources(fsys fs.FS) ConvertOption {
 	return func(o *convertOptions) { o.resources = fsys }
 }
@@ -719,6 +723,10 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 		return nil, err
 	}
 	budget := o.limits.internal().WithDefaults()
+	ctx, mem, endBudget := withConvertBudget(ctx, budget)
+	defer endBudget()
+	defer func() { err = convertBudgetError(o.logger, mem, err) }()
+	src = chargedSource(src, mem)
 
 	dirs := o.fontDirs
 	if len(dirs) == 0 {
@@ -766,6 +774,9 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 		}
 	}
 	if err != nil {
+		return nil, err
+	}
+	if err := mem.Err(); err != nil {
 		return nil, err
 	}
 	if err := selectPages(doc, format, &o); err != nil {

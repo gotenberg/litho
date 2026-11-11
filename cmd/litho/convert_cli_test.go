@@ -167,7 +167,7 @@ func TestConvert_GlobalLimitsReachTheConversion(t *testing.T) {
 	t.Parallel()
 	src := writeTempText(t, "pages.txt", "A\fB\fA")
 	out := filepath.Join(t.TempDir(), "out.pdf")
-	for _, limit := range [][]string{{"--max-convert-pages", "2"}, {"--max-convert-input-bytes", "4"}} {
+	for _, limit := range [][]string{{"--max-convert-pages", "2"}, {"--max-convert-input-bytes", "4"}, {"--max-convert-memory", "4"}} {
 		var stdout, stderr bytes.Buffer
 		args := append(limit, "convert", "--font-dir", convertFontDir(t), "-o", out, src)
 		if rc := run(context.Background(), args, &stdout, &stderr); rc != exitError || !strings.Contains(stderr.String(), "limit") {

@@ -65,6 +65,8 @@ func TestDefaultLimits_KeepThePreviousCaps(t *testing.T) {
 		MaxRenderPixels:      50_000_000,
 		MaxConvertInputBytes: 16 << 20,
 		MaxConvertPages:      10_000,
+
+		MaxConvertMemoryBytes: 1 << 30,
 	}
 	if got := DefaultLimits(); got != want {
 		t.Errorf("DefaultLimits() = %+v, want %+v", got, want)
@@ -96,6 +98,8 @@ func TestOpen_RefusesInvalidLimits(t *testing.T) {
 		"render pixels past ceiling":    {MaxRenderPixels: limits.MaxRenderPixelsCeiling + 1},
 		"negative convert input bytes":  {MaxConvertInputBytes: -1},
 		"convert pages past ceiling":    {MaxConvertPages: limits.MaxConvertPagesCeiling + 1},
+		"negative convert memory":       {MaxConvertMemoryBytes: -1},
+		"convert memory past ceiling":   {MaxConvertMemoryBytes: limits.MaxConvertMemoryBytesCeiling + 1},
 		"one bad field among good ones": {MaxStreamBytes: 1 << 20, MaxFormDepth: -3},
 	} {
 		if _, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)), WithLimits(l)); !errors.Is(err, ErrInvalidLimits) {
@@ -112,6 +116,8 @@ func TestOpen_RefusesInvalidLimits(t *testing.T) {
 		MaxRenderPixels:      limits.MaxRenderPixelsCeiling,
 		MaxConvertInputBytes: limits.MaxConvertInputBytesCeiling,
 		MaxConvertPages:      limits.MaxConvertPagesCeiling,
+
+		MaxConvertMemoryBytes: limits.MaxConvertMemoryBytesCeiling,
 	}
 	for _, l := range []Limits{{}, DefaultLimits(), ceilings, {MaxFormDepth: 1, MaxCachedObjects: 1}} {
 		openLimited(t, data, l)
@@ -138,6 +144,7 @@ func TestLimitsValidate_IsTheCheckOpenRuns(t *testing.T) {
 		"render pixels past ceiling":   {Limits{MaxRenderPixels: limits.MaxRenderPixelsCeiling + 1}, "MaxRenderPixels"},
 		"convert input past ceiling":   {Limits{MaxConvertInputBytes: limits.MaxConvertInputBytesCeiling + 1}, "MaxConvertInputBytes"},
 		"negative convert pages":       {Limits{MaxConvertPages: -1}, "MaxConvertPages"},
+		"convert memory past ceiling":  {Limits{MaxConvertMemoryBytes: limits.MaxConvertMemoryBytesCeiling + 1}, "MaxConvertMemoryBytes"},
 		"the first bad field is named": {Limits{MaxStreamBytes: limits.MaxStreamBytesCeiling + 1, MaxFormDepth: -1}, "MaxStreamBytes"},
 	} {
 		verr := tc.l.Validate()
@@ -163,6 +170,8 @@ func TestLimitsValidate_IsTheCheckOpenRuns(t *testing.T) {
 		MaxRenderPixels:      limits.MaxRenderPixelsCeiling,
 		MaxConvertInputBytes: limits.MaxConvertInputBytesCeiling,
 		MaxConvertPages:      limits.MaxConvertPagesCeiling,
+
+		MaxConvertMemoryBytes: limits.MaxConvertMemoryBytesCeiling,
 	}
 	for _, l := range []Limits{{}, DefaultLimits(), ceilings} {
 		if err := l.Validate(); err != nil {
@@ -516,7 +525,7 @@ func TestReader_ReopenCarriesLimits(t *testing.T) {
 	t.Parallel()
 
 	data := nestedFormsPDF()
-	l := Limits{MaxStreamBytes: 1 << 20, MaxImagePixels: 1 << 16, MaxEmbeddedFileBytes: 1 << 10, MaxFormDepth: 2, MaxCachedObjects: 7, MaxRenderPixels: 1 << 20, MaxConvertInputBytes: 1 << 10, MaxConvertPages: 3}
+	l := Limits{MaxStreamBytes: 1 << 20, MaxImagePixels: 1 << 16, MaxEmbeddedFileBytes: 1 << 10, MaxFormDepth: 2, MaxCachedObjects: 7, MaxRenderPixels: 1 << 20, MaxConvertInputBytes: 1 << 10, MaxConvertPages: 3, MaxConvertMemoryBytes: 1 << 20}
 	r := openLimited(t, data, l)
 	path := filepath.Join(t.TempDir(), "reopen.pdf")
 	if err := os.WriteFile(path, data, 0o600); err != nil {

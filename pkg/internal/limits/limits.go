@@ -5,9 +5,9 @@ import (
 	"math"
 )
 
-// Limits holds the eight resource budgets of one document or conversion. A
+// Limits holds the nine resource budgets of one document or conversion. A
 // zero field stands for its default, which [Limits.WithDefaults] fills in.
-// Only these eight are
+// Only these nine are
 // configurable: the recursion guards that protect litho's own stack stay fixed
 // consts in the packages that recurse, since a Go stack overflow is fatal and
 // no recover can catch it.
@@ -51,6 +51,10 @@ type Limits struct {
 	// MaxConvertPages bounds the pages one conversion lays out. See
 	// [DefaultMaxConvertPages].
 	MaxConvertPages int
+
+	// MaxConvertMemoryBytes bounds the memory one conversion holds, as its
+	// [Budget] accounts it. See [DefaultMaxConvertMemoryBytes].
+	MaxConvertMemoryBytes int64
 }
 
 // DefaultMaxStreamBytes caps the decoded output of one stream at 256 MiB. It is
@@ -183,12 +187,16 @@ const DefaultMaxRenderPixels = 50_000_000
 
 // DefaultMaxConvertInputBytes caps the source one conversion reads at 16 MiB.
 // It is an anti-DoS guard, not spec-mandated: a converter holds its whole
-// source and the laid-out document in memory, and the document costs tens of
-// bytes for every character it draws. A converter refuses a larger source
-// rather than truncate it.
+// source and the laid-out document in memory, about 50 bytes for each
+// character of plain text it draws, within [DefaultMaxConvertMemoryBytes].
+// A converter refuses a larger source rather than truncate it.
 //
-// 16 MiB of plain text fills about 3,500 A4 pages at 12 points, and a long
+// 16 MiB of plain text fills about 4,200 A4 pages at 12 points, and a long
 // novel weighs about 1 MiB, so real documents fit many times over.
+//
+// # Corpus evidence
+//
+//   - probe, text: 16 MiB of paragraphs lays out into 4,214 pages.
 const DefaultMaxConvertInputBytes = 16 << 20
 
 // DefaultMaxConvertPages caps the pages one conversion lays out at 10,000. It
@@ -199,6 +207,63 @@ const DefaultMaxConvertInputBytes = 16 << 20
 // 10,000 pages holds the default input budget laid out at 12 points nearly
 // three times over, and a 2,000-page report five times.
 const DefaultMaxConvertPages = 10_000
+
+// DefaultMaxConvertMemoryBytes caps the memory one conversion holds, as its
+// [Budget] accounts it, at 1 GiB. It is an anti-DoS guard, not
+// spec-mandated: a source of a few megabytes can ask for gigabytes, a
+// picture header for billions of pixels, a sheet for millions of cells, a
+// small package for gigabytes of inflated parts. The account charges each
+// of these where the memory is taken, at a cost per unit measured on
+// probes, so a conversion past the budget fails before it takes the memory,
+// not after minutes of work.
+//
+// 1 GiB holds every Office, HTML and text document of the corpora many
+// times over, and a plain text source at the default input cap. The Go heap
+// peaks at two to three times what the account holds, so the default
+// keeps one conversion under about 3 GiB.
+//
+// # Corpus evidence
+//
+//   - probe, text: 16 MiB of paragraphs, 4,214 pages, peaks at 795 MiB of
+//     account and 1.7 GiB of Go heap.
+//   - probe, html: 4 MiB of paragraphs peaks at 692 MiB of account and 1.7
+//     GiB of Go heap; 16 MiB is refused 2 seconds in, where the conversion
+//     without the budget peaked at 7 GiB after 12 seconds.
+//   - probe, csv: 1,000,000 cells are refused while read, a third of a
+//     second in, where they took 2.4 GiB and 62 seconds before.
+const DefaultMaxConvertMemoryBytes = 1 << 30
+
+// MaxConvertPictures caps the distinct pictures one conversion decodes:
+// 4,096. It is an anti-DoS guard, not spec-mandated: no format bounds the
+// pictures a document holds, and each costs a decode. The memory their
+// pixels take is the budget's to bound ([DefaultMaxConvertMemoryBytes]); this
+// cap bounds the work. A catalogue of product photographs holds a few
+// hundred. A converter leaves the pictures past it out with a warning.
+const MaxConvertPictures = 4096
+
+// MaxLoadedFontBytes caps the font programs held loaded at once: 128 MiB.
+// It bounds the parsed faces a font index keeps cached, and the programs
+// one conversion loads from its own sources (CSS @font-face rules). It is
+// an anti-DoS guard, not spec-mandated: a program a small file admits can
+// decompress to far more, and a face stays in memory while it is used. A
+// Latin face weighs well under 1 MiB and a pan-CJK one about 20 MiB, so
+// six pan-CJK faces fit beside the Latin ones.
+const MaxLoadedFontBytes = 128 << 20
+
+// MaxGroupDepth caps the groups nested on a page a conversion writes: 24.
+// Each group writes one q/Q pair and an image placement one more, and ISO
+// 32000-1, Annex C, Table C.1 (and ISO 19005-2, 6.1.13, Table 1) bound q
+// nesting at 28, so 24 levels and an image placement stay under it. It
+// also bounds the recursion that walks the groups.
+const MaxGroupDepth = 24
+
+// MaxSourceGroupDepth caps the groups of a document's own that a converter
+// follows (shape groups, nested opacity and clipping): 20, which leaves
+// [MaxGroupDepth] room for the groups the converter adds around them (the
+// page, a slide's transform, an effect). Deeper groups are left out, or
+// painted without their group, with a warning. It is an anti-DoS guard,
+// not spec-mandated: real documents nest groups a few levels deep.
+const MaxSourceGroupDepth = MaxGroupDepth - 4
 
 // Ceilings bound what a caller may configure. Past its ceiling a budget stops
 // being a guard: one operation would hold more memory than a host has, or the
@@ -247,6 +312,11 @@ const (
 	// composition backend every converter writes through: a document past it
 	// cannot be written.
 	MaxConvertPagesCeiling = 100_000
+
+	// MaxConvertMemoryBytesCeiling is 64 GiB, sixty-four times the default.
+	// The process holds about twice the account, so a larger budget asks
+	// more of a host than one conversion should.
+	MaxConvertMemoryBytesCeiling = min(64<<30, math.MaxInt)
 )
 
 // Default returns every budget at its default.
@@ -260,6 +330,8 @@ func Default() Limits {
 		MaxRenderPixels:      DefaultMaxRenderPixels,
 		MaxConvertInputBytes: DefaultMaxConvertInputBytes,
 		MaxConvertPages:      DefaultMaxConvertPages,
+
+		MaxConvertMemoryBytes: DefaultMaxConvertMemoryBytes,
 	}
 }
 
@@ -290,6 +362,9 @@ func (l Limits) WithDefaults() Limits {
 	if l.MaxConvertPages == 0 {
 		l.MaxConvertPages = d.MaxConvertPages
 	}
+	if l.MaxConvertMemoryBytes == 0 {
+		l.MaxConvertMemoryBytes = d.MaxConvertMemoryBytes
+	}
 	return l
 }
 
@@ -309,6 +384,7 @@ func (l Limits) Validate() error {
 		{"MaxRenderPixels", l.MaxRenderPixels, MaxRenderPixelsCeiling},
 		{"MaxConvertInputBytes", l.MaxConvertInputBytes, MaxConvertInputBytesCeiling},
 		{"MaxConvertPages", int64(l.MaxConvertPages), MaxConvertPagesCeiling},
+		{"MaxConvertMemoryBytes", l.MaxConvertMemoryBytes, MaxConvertMemoryBytesCeiling},
 	} {
 		if b.value < 0 {
 			return fmt.Errorf("%w: %s is %d, below zero", ErrInvalid, b.name, b.value)

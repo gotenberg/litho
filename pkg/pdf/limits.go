@@ -1,12 +1,21 @@
 package pdf
 
-import "github.com/gotenberg/litho/pkg/internal/limits"
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+
+	"github.com/gotenberg/litho/pkg/internal/limits"
+)
 
 // Limits bounds the resources litho spends on one document: how many bytes a
 // stream may decode to, how many pixels an image may hold, how large an
 // embedded PDF validation opens, how deeply form XObjects nest, how many
 // parsed objects stay cached, how many pixels a rendered page may hold, and
-// how large a source [Convert] reads and how many pages it lays out. Each
+// how large a source [Convert] reads, how many pages it lays out and how
+// much memory it holds. Each
 // budget is an anti-DoS guard, not a requirement of ISO 32000: a few kilobytes
 // of crafted input can otherwise ask for gigabytes of memory or unbounded
 // work. The defaults ([DefaultLimits]) sit far above what real documents need.
@@ -71,7 +80,9 @@ type Limits struct {
 	// whatever its dictionary declares. JBIG2Decode, one bit a pixel, is held
 	// to its bytes: a bitmap may take a byte for each pixel of the budget, so
 	// a mask past it, which is read reduced to the size it is drawn at, still
-	// decodes. Default 100,000,000, at most 2^30.
+	// decodes. [Convert] holds each picture of its source to it as well: a
+	// larger one is left out with a warning. Default 100,000,000, at most
+	// 2^30.
 	MaxImagePixels int64
 
 	// MaxEmbeddedFileBytes bounds the decoded size of an embedded PDF that
@@ -110,14 +121,40 @@ type Limits struct {
 	// MaxConvertInputBytes bounds the source bytes one [Convert] call reads.
 	// A larger source fails with [ErrConvertInputTooLarge] and is never
 	// truncated. Convert holds the source and the laid-out document in
-	// memory, some tens of bytes for each character drawn. Default 16 MiB,
-	// about 3,500 A4 pages of plain text at 12 points, at most 1 GiB.
+	// memory, about 50 bytes for each character of plain text and 170 for
+	// each byte of HTML, within MaxConvertMemoryBytes. Default 16 MiB,
+	// about 4,200 A4 pages of plain text at 12 points, at most 1 GiB.
 	MaxConvertInputBytes int64
 
 	// MaxConvertPages bounds the pages one [Convert] call lays out. A source
 	// that needs more fails with [ErrConvertTooManyPages]; no page is
 	// dropped. Default 10,000, at most 100,000.
 	MaxConvertPages int
+
+	// MaxConvertMemoryBytes bounds the memory one [Convert] call holds, as
+	// litho accounts it: the source, the inflated parts of a package and the
+	// XML trees built from them, the HTML tree, the boxes of the layout and
+	// the computed style each holds, the shaped lines, the cells of a sheet,
+	// the shapes of a slide, the decoded pictures and effect bitmaps while
+	// they live, the font programs the conversion loads, and the pages and
+	// streams it writes. Each is charged before it is taken, so a conversion
+	// past the budget fails with [ErrConvertInputTooLarge], naming what was
+	// being held, before it takes the memory and without finishing its work.
+	// Nothing is written.
+	//
+	// The account follows what a conversion keeps alive, measured per
+	// format: plain text costs about 50 bytes a source byte, 190 KiB a page;
+	// HTML about 170 bytes a source byte, 690 KiB a page; a DOCX of short
+	// pages about 80 KiB a page; a sheet about 1.8 KiB a cell; a decoded
+	// picture 4 bytes a pixel (8 for 16 bits a channel), a JPEG written as
+	// it is nothing beside its file. So the default holds a text source at
+	// the default MaxConvertInputBytes, and refuses an HTML source of more
+	// than about 6 MiB of plain paragraphs, a workbook of more than about
+	// 600,000 cells, and the decoded pictures past 1 GiB. The Go heap peaks
+	// at two to three times the account, since the garbage collector frees
+	// what is released a while later: size a host for three times the
+	// budget per concurrent conversion. Default 1 GiB, at most 64 GiB.
+	MaxConvertMemoryBytes int64
 }
 
 // DefaultLimits returns the budgets a [Reader] applies when [WithLimits] is
@@ -157,6 +194,8 @@ func (l Limits) internal() limits.Limits {
 		MaxRenderPixels:      l.MaxRenderPixels,
 		MaxConvertInputBytes: l.MaxConvertInputBytes,
 		MaxConvertPages:      l.MaxConvertPages,
+
+		MaxConvertMemoryBytes: l.MaxConvertMemoryBytes,
 	}
 }
 
@@ -171,5 +210,64 @@ func limitsFromInternal(l limits.Limits) Limits {
 		MaxRenderPixels:      l.MaxRenderPixels,
 		MaxConvertInputBytes: l.MaxConvertInputBytes,
 		MaxConvertPages:      l.MaxConvertPages,
+
+		MaxConvertMemoryBytes: l.MaxConvertMemoryBytes,
 	}
+}
+
+// withConvertBudget returns ctx carrying the memory budget of one
+// conversion under l, every field filled in, and the function that ends
+// it, which [Convert] defers.
+func withConvertBudget(ctx context.Context, l limits.Limits) (context.Context, *limits.Budget, func()) {
+	return limits.WithBudget(ctx, l)
+}
+
+// convertBudgetError logs the most memory the conversion under b held, as
+// its budget accounted it, at Debug on logger, and returns err, the error
+// the conversion ended with, as [Convert] reports it: when the budget refused a charge, the
+// refusal wrapped in [ErrConvertInputTooLarge], whatever error the
+// converter saw after its context was cancelled. A converter that swallows
+// a refused charge (a picture left out with a warning) still ends with
+// the refusal, since the account it was refused on is not one the
+// conversion may pass.
+func convertBudgetError(logger *slog.Logger, b *limits.Budget, err error) error {
+	refusal := b.Err()
+	if logger != nil && b != nil {
+		logger.Debug("convert: memory account", slog.Int64("peak", b.Peak()), slog.Int64("held", b.Held()), slog.Bool("refused", refusal != nil))
+	}
+	switch {
+	case refusal == nil:
+		return err
+	case err != nil && errors.Is(err, ErrConvertInputTooLarge) && errors.Is(err, limits.ErrMemoryBudget):
+		return err
+	default:
+		return fmt.Errorf("converting: %w: %w", ErrConvertInputTooLarge, refusal)
+	}
+}
+
+// sourceByteCost is what one byte of a conversion's source costs its
+// budget: the converters hold the source whole, in one []byte.
+const sourceByteCost = 1
+
+// chargedSource returns src charging b for each byte read from it, so a
+// source the budget cannot hold fails as it is read.
+func chargedSource(src io.Reader, b *limits.Budget) io.Reader {
+	if b == nil {
+		return src
+	}
+	return &chargedReader{r: src, b: b}
+}
+
+// chargedReader charges its budget for each byte it reads.
+type chargedReader struct {
+	r io.Reader
+	b *limits.Budget
+}
+
+func (c *chargedReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	if cerr := c.b.ChargeUnits(int64(n), sourceByteCost, "the source"); cerr != nil {
+		return n, cerr
+	}
+	return n, err
 }
