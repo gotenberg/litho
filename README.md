@@ -2,8 +2,9 @@
 
 Pure-Go PDF Conforming Processor for ISO 32000 (PDF 1.4 through 2.0). It extracts text and structured content, validates against PDF/A, PDF/UA, WTPDF, Factur-X and ZUGFeRD, repairs non-conformant files, and edits, renders, encrypts and signs them, with no C dependencies.
 
-> [!NOTE]
-> litho powers the PDF operations of [Gotenberg](https://github.com/gotenberg/gotenberg) 9. Its API is pre-1.0 and may change between releases.
+**litho** is a pure-Go PDF Conforming Processor. Read, validate, remediate, and produce PDF documents with no C dependencies.
+
+litho implements ISO 32000 (PDF 1.4 through 2.0). It extracts text and structured content, validates against PDF/A, PDF/UA, WTPDF, Factur-X and ZUGFeRD, repairs non-conformant files, edits, renders, encrypts and signs them, and converts text, web and office documents to PDF.
 
 ## Install
 
@@ -32,14 +33,14 @@ violations, err := r.ValidatePDFAReport(ctx, models.PDFA2b)
 - **Remediate** PDF/A, PDF/UA and WTPDF violations, to one profile or to a PDF/A and PDF/UA pair at once, embedding the fonts you supply, behind an integrity check that rolls back a fix that degrades the document.
 - **Edit** pages (rotate, delete, insert, split, merge), stamps and watermarks, metadata, form fields, bookmarks and attachments, auto-tagging, redaction, colour conversion and transparency flattening.
 - **Render** pages to images, on screen or for print, RGB or CMYK.
-- **Convert** plain text and HTML with its CSS to tagged PDF, with no browser: the CSS 2.1 visual formatting model for paged media, `@page`, lists, backgrounds, borders and images, with links, an outline and the document's metadata.
+- **Convert** plain text, Markdown, HTML with its CSS, DOCX, ODT, XLSX, ODS, CSV, PPTX and ODP to tagged PDF, with no browser and no office suite: one constructor per format with the options of that format alone, as the first stage of a pipeline or several at once, merged.
 - **Protect** with RC4, AES-128 or AES-256 encryption, and PKCS#7 or PAdES signatures up to B-LTA.
 - **Optimize** with object streams, stream deduplication, lossless image recompression and font subsetting.
 - **Stay safe** on hostile input: configurable resource limits, no panics, deterministic output.
 
 ## Documentation
 
-- [Library reference](https://pkg.go.dev/github.com/gotenberg/litho/pkg/pdf): `Reader` opens and extracts, `Writer` queues edits and writes, `Pipeline` chains them.
+- [Library reference](https://pkg.go.dev/github.com/gotenberg/litho/pkg/pdf): `Reader` opens and extracts, `Writer` queues edits and writes, `Conversion` lays another format out as a PDF, `Pipeline` chains them.
 - [Examples](examples/): runnable programs for common tasks.
 
 ## Contributing
