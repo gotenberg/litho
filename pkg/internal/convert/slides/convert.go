@@ -207,9 +207,13 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	}
 	out.Metadata.Lang = b.lang
 	// A slide's number is its place in the show, hidden slides counted,
-	// on its slide and on its notes page alike, as Impress numbers pages.
+	// from the document's first number, on its slide and on its notes
+	// page alike.
 	numberOf := func(s *Slide) int {
 		n := 0
+		if doc.FirstNumber != 0 {
+			n = doc.FirstNumber - 1
+		}
 		for _, t := range doc.Slides {
 			if t != nil {
 				n++

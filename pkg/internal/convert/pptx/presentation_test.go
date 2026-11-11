@@ -222,4 +222,7 @@ func TestPresentation_Bookmarks(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Errorf("bookmarks %q, want %q", got, want)
 	}
+	if doc.FirstNumber != 10 {
+		t.Errorf("first number %d, want 10", doc.FirstNumber)
+	}
 }

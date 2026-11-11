@@ -49,6 +49,12 @@ var understood = append([]string{nsP, ooxml.NSA, ooxml.NSR, ooxml.NSPic, ooxml.N
 // at most.
 const maxSlides = 10_000
 
+// maxFirstSlideNumber caps the number of the first slide. Anti-DoS guard,
+// not spec-mandated: firstSlideNum is an xsd:int (ECMA-376 Part 1,
+// 19.2.1.26), and the cap keeps every later number within an int on any
+// platform; PowerPoint takes at most 9999. A number below 1 reads as 1.
+const maxFirstSlideNumber = 1_000_000
+
 // maxShapes caps the shapes read from a presentation, every slide, group
 // and notes page together. Anti-DoS guard, not spec-mandated: a dense
 // slide holds a few hundred shapes.
@@ -181,8 +187,9 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*slides.D
 	doc.Meta = compose.Metadata{Title: cp.Title, Author: cp.Creator, Subject: subject, Keywords: cp.Keywords, Lang: cp.Language}
 	first := 1
 	if n, ok := intAttr(root, "firstSlideNum"); ok {
-		first = n
+		first = min(max(n, 1), maxFirstSlideNumber)
 	}
+	doc.FirstNumber = first
 	sections := sectionsOf(root)
 	prevSection := -1
 	r.slideAt = map[string]int{}
@@ -249,7 +256,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*slides.D
 //     Hello", layouts-all's blank seventh slide "Slide 7", hidden-slides
 //     "Slide 1: Slide 1" and "Slide 3: Slide 3" for the first and third of
 //     four with the second hidden, first-slide-number "Slide 10:" to
-//     "Slide 12:".
+//     "Slide 12:", whose slide number fields print 10, 11 and 12.
 //   - libreoffice/pptx: sd/tdf103347 prints "Slide 1: Hello", "Slide 2:
 //     Hello", "Slide 3: Hello" for three slides titled "Hello".
 func bookmark(n int, title string) string {

@@ -204,6 +204,12 @@ func TestConvert_Fields(t *testing.T) {
 			t.Errorf("field %d: %q, want %q", i, got[i], want[i])
 		}
 	}
+	// A first number numbers the slides on from it, hidden ones counted.
+	doc.FirstNumber = 10
+	first := runs(convert(t, doc, office.Options{}).Pages[0])
+	if len(first) == 0 || first[0].text != "11" {
+		t.Errorf("first number 10: second slide numbered %+v, want 11", first)
+	}
 }
 
 // TestConvert_Structure checks the structure tree: a Sect per slide, the
