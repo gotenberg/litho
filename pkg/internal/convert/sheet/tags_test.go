@@ -123,6 +123,36 @@ func TestConvert_TableIsRegular(t *testing.T) {
 	walk(pg.Content)
 }
 
+// TestConvert_TableDropsRowsAMergeCovers locks that a row every printed
+// column of which continues a merge from the row above is left out, the
+// merges spanning one row fewer, so that no TR is left without a cell.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: real_dashboard's title merge over two rows and every
+//     printed column left its second row a TR without a cell, which
+//     veraPDF counts as no column.
+func TestConvert_TableDropsRowsAMergeCovers(t *testing.T) {
+	sh := &Sheet{Name: "S", Rows: []Row{
+		{Index: 0, Cells: []Cell{textCell(0, "Title", nil)}},
+		{Index: 2, Cells: []Cell{textCell(0, "a", nil), textCell(1, "b", nil), textCell(2, "c", nil)}},
+	}}
+	sh.Merges = []Range{{FirstRow: 0, LastRow: 1, FirstColumn: 0, LastColumn: 2}}
+	out := convert(t, newDoc(sh), office.Options{})
+	tbl := out.Structure.Kids[0]
+	if len(tbl.Kids) != 2 {
+		t.Fatalf("%d rows, want 2", len(tbl.Kids))
+	}
+	if m := tbl.Kids[0].Kids; len(m) != 1 || m[0].ColSpan != 3 || m[0].RowSpan != 0 {
+		t.Errorf("title row %+v, want one cell of three columns and one row", m)
+	}
+	for i, w := range tableWidths(tbl) {
+		if w != 3 {
+			t.Errorf("row %d counts %d columns, want 3", i, w)
+		}
+	}
+}
+
 // TestConvert_TableRepeatsTitlesPerPage locks that every page of a sheet
 // cut over pages is its own regular Table, its repeated rows first.
 func TestConvert_TableRepeatsTitlesPerPage(t *testing.T) {

@@ -94,7 +94,10 @@ func (b *pageBuilder) tagTable(table *layout.Node, root *compose.StructElem, fra
 	}
 	// A row that holds no content, no header cell and no part of a merge
 	// is left out: it tells a reader nothing, and the rows kept stay
-	// regular.
+	// regular. So is a row whose every column continues a merge of the
+	// row kept before it: it would be a TR without a cell, which counts
+	// no column (ISO 14289-2, 8.2.5.26), and the merges spanning it span
+	// one row fewer instead.
 	kept := rows[:0:0]
 	for _, r := range rows {
 		keep := inRows(ps.RepeatRows, r)
@@ -103,6 +106,10 @@ func (b *pageBuilder) tagTable(table *layout.Node, root *compose.StructElem, fra
 				keep = true
 				break
 			}
+		}
+		if keep && len(kept) > 0 {
+			prev := kept[len(kept)-1]
+			keep = slices.ContainsFunc(cols, func(c int) bool { return key(r, c) != key(prev, c) })
 		}
 		if keep {
 			kept = append(kept, r)
