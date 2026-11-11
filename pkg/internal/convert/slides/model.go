@@ -222,6 +222,11 @@ type Fill struct {
 	// Pattern names a FillPattern's preset (20.1.10.51 ST_PresetPatternVal:
 	// "pct50", "dkUpDiag", ...; ODF draw:hatch styles mapped onto one).
 	Pattern string
+	// PatternTile draws a FillPattern as Office draws its preset, the 8 by
+	// 8 tile at 96 pixels to the inch in the foreground colour over the
+	// background, as PowerPoint prints a PresentationML pattern; false
+	// draws the hatch Impress maps the preset to.
+	PatternTile bool
 }
 
 // FillKind is the kind of a fill.
