@@ -20,9 +20,10 @@ func TestRevisions_JoinedParagraphs(t *testing.T) {
 		want  []string
 		align css.TextAlign
 	}{
-		{"deleted mark", p(`<w:jc w:val="center"/>`+del, r("abc")) + p(``, r("def")), []string{"abcdef"}, css.AlignCenter},
+		{"deleted mark", p(`<w:jc w:val="center"/>`+del, r("abc")) + p(``, r("def")), []string{"abcdef"}, css.AlignStart},
+		{"deleted mark before a centred paragraph", p(del, r("abc")) + p(`<w:jc w:val="center"/>`, r("def")), []string{"abcdef"}, css.AlignCenter},
 		{"two deleted marks", p(del, r("a")) + p(del, r("b")) + p(``, r("c")) + p(``, r("d")), []string{"abc", "d"}, css.AlignStart},
-		{"hidden mark", p(`<w:jc w:val="center"/>`+vanish, r("abc")) + p(``, r("def")), []string{"abcdef"}, css.AlignCenter},
+		{"hidden mark", p(`<w:jc w:val="center"/>`+vanish, r("abc")) + p(``, r("def")), []string{"abcdef"}, css.AlignStart},
 		{"hidden paragraph", p(`<w:jc w:val="center"/>`+vanish, hidden("abc")) + p(``, r("def")), []string{"def"}, css.AlignStart},
 		{"last paragraph", p(``, r("x")) + p(del, r("y")), []string{"x", "y"}, css.AlignStart},
 	} {

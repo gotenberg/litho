@@ -44,9 +44,18 @@ func sectionMark(p *ooxml.Element) bool {
 
 // mergeDeleted returns the block-level elements kids with every paragraph
 // whose mark is a tracked deletion or hidden joined to the paragraph
-// after it, as LibreOffice prints a document: the joined
-// paragraph keeps the first one's properties and holds the content of
-// both. A paragraph carrying a section break is never joined.
+// after it, as Word prints a document: the joined paragraph holds the
+// content of both and takes the properties of the paragraph whose mark
+// ends it, the mark that holds them (ECMA-376 Part 1, 17.3.1.26 pPr is the
+// paragraph mark's). A paragraph carrying a section break is never joined.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx layout/merge_hidden_redline: Word prints the text
+//     of a centred paragraph whose mark is deleted or hidden at the start
+//     edge, as the next paragraph aligns; LibreOffice keeps it centred.
+//   - libreoffice/docx layout/CT-formatted-deletion: joined so, layout
+//     rises from 0.70 to 0.95.
 func mergeDeleted(kids []*ooxml.Element) []*ooxml.Element {
 	merged := false
 	for i, k := range kids {
@@ -68,45 +77,24 @@ func mergeDeleted(kids []*ooxml.Element) []*ooxml.Element {
 		}
 		for markDeleted(p) && !sectionMark(p) && i+1 < len(kids) && kids[i+1].Is(w, "p") && !sectionMark(kids[i+1]) {
 			next := kids[i+1]
-			joined := &ooxml.Element{Space: p.Space, Local: p.Local, Attrs: p.Attrs}
-			joined.Children = append(joined.Children, p.Children...)
+			joined := &ooxml.Element{Space: next.Space, Local: next.Local, Attrs: next.Attrs}
+			if ppr := next.Child(w, "pPr"); ppr != nil {
+				joined.Children = append(joined.Children, ppr)
+			}
+			for _, c := range p.Children {
+				if !c.Is(w, "pPr") {
+					joined.Children = append(joined.Children, c)
+				}
+			}
 			for _, c := range next.Children {
 				if !c.Is(w, "pPr") {
 					joined.Children = append(joined.Children, c)
 				}
 			}
-			// The joined paragraph ends with the second one's mark.
-			if !markDeleted(next) {
-				joined.Children = withMark(joined.Children, next)
-			}
 			p = joined
 			i++
 		}
 		out = append(out, p)
-	}
-	return out
-}
-
-// withMark returns the children of a joined paragraph with its pPr's run
-// properties replaced by those of next's mark, so that the joined
-// paragraph's mark is no longer deleted.
-func withMark(children []*ooxml.Element, next *ooxml.Element) []*ooxml.Element {
-	out := make([]*ooxml.Element, len(children))
-	copy(out, children)
-	for i, c := range out {
-		if !c.Is(w, "pPr") {
-			continue
-		}
-		ppr := &ooxml.Element{Space: c.Space, Local: c.Local, Attrs: c.Attrs}
-		for _, k := range c.Children {
-			if !k.Is(w, "rPr") {
-				ppr.Children = append(ppr.Children, k)
-			}
-		}
-		if r := next.Child(w, "pPr").Child(w, "rPr"); r != nil {
-			ppr.Children = append(ppr.Children, r)
-		}
-		out[i] = ppr
 	}
 	return out
 }
