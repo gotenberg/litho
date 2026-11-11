@@ -182,7 +182,9 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 		}
 		switch obj.Local {
 		case "graphicFrame":
-			d.Name = attr(obj.Find(nsXDR, "cNvPr"), "name")
+			nv := obj.Find(nsXDR, "cNvPr")
+			d.Name = attr(nv, "name")
+			d.Alt, d.Decorative = ooxml.Describe(nv)
 			data := obj.Find(ooxml.NSA, "graphicData")
 			switch attr(data, "uri") {
 			case uriChart:
@@ -223,7 +225,9 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 			if hidden(obj) {
 				return false
 			}
-			d.Name = attr(obj.Find(nsXDR, "cNvPr"), "name")
+			nv := obj.Find(nsXDR, "cNvPr")
+			d.Name = attr(nv, "name")
+			d.Alt, d.Decorative = ooxml.Describe(nv)
 			var leaves []leaf
 			w.leaves(part, obj, 0, 0, 1, 1, 0, &leaves)
 			if len(leaves) == 1 {

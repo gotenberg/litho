@@ -152,7 +152,7 @@ func (r *reader) place(ts *tableState, el *odf.Element, at *sheet.Anchor, art sh
 		m := compose.Matrix{A: sx, D: sy, E: rect.X - b.X*sx, F: rect.Y - b.Y*sy}
 		return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: draw(ctx)}}
 	}
-	d := sheet.Drawing{Name: el.A(odf.NSDraw, "name"), Picture: pic, Width: b.Width, Height: b.Height, Unbounded: true}
+	d := sheet.Drawing{Name: el.A(odf.NSDraw, "name"), Alt: odf.Describe(el), Decorative: r.decorative(el), Picture: pic, Width: b.Width, Height: b.Height, Unbounded: true}
 	end, resize := cellRef(el.A(odf.NSTable, "end-cell-address"))
 	switch {
 	case at == nil:

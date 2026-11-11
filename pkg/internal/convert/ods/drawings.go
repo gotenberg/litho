@@ -59,7 +59,7 @@ func (r *reader) drawing(ts *tableState, el *odf.Element, at *sheet.Anchor) {
 		r.warn("too-many-drawings", fmt.Sprintf("pictures and charts past %d are not drawn", maxDrawings))
 		return
 	}
-	d := sheet.Drawing{Name: el.A(odf.NSDraw, "name"), Unbounded: true}
+	d := sheet.Drawing{Name: el.A(odf.NSDraw, "name"), Alt: odf.Describe(el), Decorative: r.decorative(el), Unbounded: true}
 	if obj := el.Child(odf.NSDraw, "object"); obj != nil {
 		d.Chart = r.object(obj)
 	}
@@ -440,4 +440,10 @@ func splitRanges(v string) []string {
 		out = append(out, cur.String())
 	}
 	return out
+}
+
+// decorative reports whether the graphic style of a drawing element el
+// marks it as carrying no meaning ([odf.Decorative]).
+func (r *reader) decorative(el *odf.Element) bool {
+	return odf.Decorative(r.styles.Resolve(odf.ScopeContent, odf.FamilyGraphic, el.A(odf.NSDraw, "style-name"), odf.GraphicProps))
 }

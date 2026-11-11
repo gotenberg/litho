@@ -122,8 +122,17 @@ func (b *pageBuilder) build() ([]compose.Fragment, []compose.Link, *compose.Stru
 	b.tagTable(table, res.Structure, frags, links)
 	frags = append(frags, b.gridPaths...)
 	frags = append(frags, b.circles...)
-	frags = append(frags, b.drawings(regs)...)
-	return frags, links, res.Structure, nil
+	drawn, figs := b.drawings(regs)
+	frags = append(frags, drawn...)
+	st := res.Structure
+	if len(figs) > 0 {
+		// The Figures read after the cells they lie over.
+		if st == nil {
+			st = &compose.StructElem{Role: "Document", Lang: b.lang}
+		}
+		st.Kids = append(st.Kids, figs...)
+	}
+	return frags, links, st, nil
 }
 
 // maxSubPages caps the pages of a layout call that lays out one page.

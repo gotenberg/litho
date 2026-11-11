@@ -315,7 +315,7 @@ func TestRead_Drawings(t *testing.T) {
 		`<style:style style:name="co1" style:family="table-column"><style:table-column-properties style:column-width="1in"/></style:style>` +
 		`<style:style style:name="ro1" style:family="table-row"><style:table-row-properties style:row-height="0.25in"/></style:style>` +
 		`</office:automatic-styles><office:body><office:spreadsheet><table:table table:name="S">` +
-		`<table:shapes><draw:frame draw:name="logo" svg:x="1in" svg:y="2in" svg:width="1in" svg:height="0.5in"><draw:image xlink:href="Pictures/a.png"/></draw:frame>` +
+		`<table:shapes><draw:frame draw:name="logo" svg:x="1in" svg:y="2in" svg:width="1in" svg:height="0.5in"><draw:image xlink:href="Pictures/a.png"/><svg:title>Logo</svg:title><svg:desc>Company logo</svg:desc></draw:frame>` +
 		`<draw:caption svg:x="0in" svg:y="0in"/></table:shapes>` +
 		`<table:table-column table:style-name="co1" table:number-columns-repeated="4"/>` +
 		`<table:table-row table:style-name="ro1"><table:table-cell/></table:table-row>` +
@@ -334,7 +334,7 @@ func TestRead_Drawings(t *testing.T) {
 	if len(ds) != 3 {
 		t.Fatalf("drawings = %+v", ds)
 	}
-	if d := ds[0]; !d.Absolute || !near(d.X, 72) || !near(d.Y, 144) || !near(d.Width, 72) || d.Picture == nil || d.Name != "logo" {
+	if d := ds[0]; !d.Absolute || !near(d.X, 72) || !near(d.Y, 144) || !near(d.Width, 72) || d.Picture == nil || d.Name != "logo" || d.Alt != "Company logo" || d.Decorative {
 		t.Errorf("logo = %+v", d)
 	}
 	if d := ds[1]; d.Chart == nil || d.Picture != nil || d.From.Row != 1 || d.From.Column != 1 || !near(d.From.DX, 90) || !near(d.From.DY, 21.6) || !d.Unbounded ||

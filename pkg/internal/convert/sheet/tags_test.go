@@ -2,11 +2,14 @@ package sheet
 
 import (
 	"fmt"
+	"image"
 	"strings"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 )
 
 // tableWidths returns the columns each row of the Table tbl counts, the
@@ -202,5 +205,59 @@ func TestConvert_DestinationsNameTheTable(t *testing.T) {
 	}
 	if l := out.Pages[0].Links; len(l) != 1 || l[0].Dest == nil || l[0].Dest.Elem != out.Structure.Kids[1] {
 		t.Errorf("links %+v", l)
+	}
+}
+
+// TestConvert_DrawingsAreFigures locks how a sheet's drawings read: a
+// picture is a Figure carrying its description, a chart without one its
+// title, a decorative picture an artifact, and the outline entry of a
+// page that prints only drawings names its first Figure (ISO 14289-1,
+// 7.3; ISO 14289-2, 8.8).
+func TestConvert_DrawingsAreFigures(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	pic := &layout.Picture{Source: source(t, img), Width: 2, Height: 2}
+	sh := &Sheet{
+		Name: "S",
+		Drawings: []Drawing{
+			{From: Anchor{Row: 0, Column: 0}, Width: 40, Height: 20, Picture: pic, Name: "shown", Alt: "A red square"},
+			{From: Anchor{Row: 3, Column: 0}, Width: 40, Height: 20, Picture: pic, Name: "border", Decorative: true},
+			{From: Anchor{Row: 6, Column: 0}, Width: 200, Height: 120, Chart: &chart.Chart{Title: &chart.Title{Text: "Sales\n 2026"}}, Name: "chart"},
+		},
+	}
+	out := convert(t, newDoc(sh), office.Options{})
+	if len(out.Pages) != 1 {
+		t.Fatalf("%d pages, want 1", len(out.Pages))
+	}
+	var figs []*compose.StructElem
+	for _, k := range out.Structure.Kids {
+		if k.Role == "Figure" {
+			figs = append(figs, k)
+		}
+	}
+	if len(figs) != 2 || figs[0].Alt != "A red square" || figs[1].Alt != "Sales 2026" {
+		t.Fatalf("figures %+v, want the picture's and the chart's", figs)
+	}
+	var tagged, artifacts int
+	var walk func([]compose.Fragment)
+	walk = func(fs []compose.Fragment) {
+		for _, f := range fs {
+			switch v := f.(type) {
+			case *compose.Image:
+				if v.Parent == figs[0] {
+					tagged++
+				} else if v.Parent == nil {
+					artifacts++
+				}
+			case *compose.Group:
+				walk(v.Content)
+			}
+		}
+	}
+	walk(out.Pages[0].Content)
+	if tagged != 1 || artifacts != 1 {
+		t.Errorf("%d pictures in the Figure, %d artifacts, want 1 and 1", tagged, artifacts)
+	}
+	if len(out.Outline) != 1 || out.Outline[0].Dest.Elem != figs[0] {
+		t.Errorf("outline %+v, want an entry naming the first Figure", out.Outline)
 	}
 }

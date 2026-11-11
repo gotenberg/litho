@@ -30,10 +30,12 @@ const drawingNS = `xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/s
 	`xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"`
 
 // TestRead_Drawings checks the three anchors, a picture, a chart frame,
-// shapes and a group drawn as one picture, and a hidden shape left out.
+// shapes and a group drawn as one picture, a hidden shape left out, and
+// what each says to a reader: a description, else a title, and the
+// decorative flag.
 func TestRead_Drawings(t *testing.T) {
 	t.Parallel()
-	pic := `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="Logo"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rIdImg"/></xdr:blipFill>` +
+	pic := `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="Logo" descr="Company logo" title="Logo"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rIdImg"/></xdr:blipFill>` +
 		`<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="127000" cy="63500"/></a:xfrm><a:prstGeom prst="rect"/></xdr:spPr></xdr:pic>`
 	shape := func(name, geom, extra string) string {
 		return `<xdr:sp><xdr:nvSpPr><xdr:cNvPr id="3" name="` + name + `"` + extra + `/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="12700" cy="12700"/></a:xfrm>` +
@@ -43,11 +45,11 @@ func TestRead_Drawings(t *testing.T) {
 		`<xdr:twoCellAnchor editAs="oneCell"><xdr:from><xdr:col>1</xdr:col><xdr:colOff>12700</xdr:colOff><xdr:row>2</xdr:row><xdr:rowOff>25400</xdr:rowOff></xdr:from>` +
 		`<xdr:to><xdr:col>3</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>5</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>` + pic + `<xdr:clientData/></xdr:twoCellAnchor>` +
 		`<xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="254000" cy="127000"/>` +
-		`<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="4" name="Chart 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/>` +
+		`<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="4" name="Chart 1" title=" Sales "/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/>` +
 		`<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart r:id="rIdChart"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:oneCellAnchor>` +
 		`<xdr:absoluteAnchor><xdr:pos x="127000" y="254000"/><xdr:ext cx="127000" cy="127000"/>` + shape("Oval", "ellipse", "") + `<xdr:clientData/></xdr:absoluteAnchor>` +
 		`<xdr:absoluteAnchor><xdr:pos x="0" y="0"/><xdr:ext cx="127000" cy="127000"/>` + shape("Gone", "rect", ` hidden="1"`) + `<xdr:clientData/></xdr:absoluteAnchor>` +
-		`<xdr:absoluteAnchor><xdr:pos x="0" y="0"/><xdr:ext cx="254000" cy="127000"/><xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="9" name="Group"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr>` +
+		`<xdr:absoluteAnchor><xdr:pos x="0" y="0"/><xdr:ext cx="254000" cy="127000"/><xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="9" name="Group"><a:extLst><a:ext uri="{C183D7F6-B498-43B3-948B-1728B52AA6E4}"><adec:decorative xmlns:adec="http://schemas.microsoft.com/office/drawing/2017/decorative" val="1"/></a:ext></a:extLst></xdr:cNvPr><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr>` +
 		`<xdr:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="254000" cy="127000"/><a:chOff x="0" y="0"/><a:chExt cx="25400" cy="12700"/></a:xfrm></xdr:grpSpPr>` +
 		shape("In", "star5", "") + `</xdr:grpSp><xdr:clientData/></xdr:absoluteAnchor>` +
 		`</xdr:wsDr>`
@@ -78,6 +80,9 @@ func TestRead_Drawings(t *testing.T) {
 		t.Errorf("shape %+v", d)
 	} else if frags := d.Picture.Vector(context.Background(), compose.Rect{Width: 10, Height: 10}); len(frags) != 1 {
 		t.Errorf("shape fragments %+v", frags)
+	}
+	if ds[0].Alt != "Company logo" || ds[0].Decorative || ds[1].Alt != "Sales" || ds[2].Alt != "" || !ds[3].Decorative {
+		t.Errorf("descriptions %q %q %q, decorative %v %v", ds[0].Alt, ds[1].Alt, ds[2].Alt, ds[0].Decorative, ds[3].Decorative)
 	}
 	if d := ds[3]; d.Name != "Group" || d.Picture == nil {
 		t.Errorf("group %+v", d)

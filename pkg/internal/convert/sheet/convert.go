@@ -269,14 +269,22 @@ func (b *builder) handOver(out *compose.Document, pg *compose.Page) error {
 	return nil
 }
 
-// tableOf returns the Table element among the kids of a page's
-// structure root st, nil for none.
+// tableOf returns the element an outline entry or a link into a page
+// names as its structure destination (ISO 32000-2, 12.3.2.3; ISO 14289-2,
+// 8.8): the Table element among the kids of the page's structure root st,
+// else, on a page that prints only drawings, its first Figure; nil for
+// none.
 func tableOf(st *compose.StructElem) *compose.StructElem {
 	if st == nil {
 		return nil
 	}
 	for _, k := range st.Kids {
 		if k.Role == "Table" {
+			return k
+		}
+	}
+	for _, k := range st.Kids {
+		if k.Role == "Figure" {
 			return k
 		}
 	}
