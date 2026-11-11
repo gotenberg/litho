@@ -85,16 +85,22 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 		out.lang = n.Lang
 		b.lang = n.Lang
 	}
-	if n.Role != "" {
+	role := n.Role
+	if role == "" && n.ActualText != "" {
+		// ActualText is an entry of a structure element (ISO 32000-1,
+		// 14.9.4): a node without a role takes a Span to carry it.
+		role = "Span"
+	}
+	if role != "" {
 		switch {
-		case n.Role == "Document" && ctx.elem == e.root && ctx.structDepth == 1:
+		case role == "Document" && ctx.elem == e.root && ctx.structDepth == 1:
 			if e.root.Lang == "" && n.Lang != "" {
 				e.root.Lang = n.Lang
 			}
 		case ctx.structDepth >= maxStructDepth:
 			e.warnOnce(codeStructTooDeep, fmt.Sprintf("structure roles nested deeper than %d hang from the deepest element", maxStructDepth), -1)
 		default:
-			el := &compose.StructElem{Role: n.Role, Lang: n.Lang, Scope: n.Scope, Numbering: n.Numbering}
+			el := &compose.StructElem{Role: role, Lang: n.Lang, Scope: n.Scope, Numbering: n.Numbering, ActualText: n.ActualText}
 			if n.Role == "TH" || n.Role == "TD" {
 				// A span is the converter's count of the grid cells the
 				// cell covers; past compose.MaxCellSpan no table holds
@@ -169,6 +175,9 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		b.inline = true
 		b.text = n.Text
 		b.decos = ctx.decos
+		if n.ActualText != "" {
+			e.enter(n, b, ctx)
+		}
 		return []*box{b}
 	case LineBreak:
 		b := e.newBox(n, st, kindBreak, ctx)

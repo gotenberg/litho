@@ -148,3 +148,34 @@ func TestGenerate_MissingEmojiWarnOnce(t *testing.T) {
 		t.Errorf("missing-glyph warnings %q, want one for the emoji", msgs)
 	}
 }
+
+// TestStructure_ActualText checks that a node's ActualText reaches its
+// structure element: a role-less text run and a role-less inline element
+// each take a Span carrying it, and a node with a role keeps its role. The
+// P's own text "a" takes the anonymous Span of interleaved content.
+func TestStructure_ActualText(t *testing.T) {
+	sym := txt(inlineSty(), "b")
+	sym.ActualText = "β"
+	span := el(inlineSty(), txt(inlineSty(), "c"))
+	span.ActualText = "γ"
+	link := el(inlineSty(), txt(inlineSty(), "d"))
+	link.Role, link.ActualText = "Link", "δ"
+	p := el(sty(), txt(inlineSty(), "a"), sym, span, link)
+	p.Role = "P"
+	res := run(t, doc(p), page(100, 20))
+	if len(res.Structure.Kids) != 1 {
+		t.Fatalf("structure %+v", res.Structure)
+	}
+	var got []string
+	for _, k := range res.Structure.Kids[0].Kids {
+		got = append(got, k.Role+":"+k.ActualText)
+	}
+	if strings.Join(got, " ") != "Span: Span:β Span:γ Link:δ" {
+		t.Errorf("kids %q, want a Span per role-less node and the Link", got)
+	}
+	for _, r := range texts(res, 1) {
+		if r.text == "b" && (r.run.Parent == nil || r.run.Parent.ActualText != "β") {
+			t.Errorf("the run b hangs from %+v", r.run.Parent)
+		}
+	}
+}
