@@ -37,8 +37,21 @@ func (b *builder) tableOfContent(c *odf.Element, ctx blockCtx) []*layout.Node {
 	st.Display = css.Block
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "TOC"})
 	n.Children = b.blocks(c.Child(odf.NSText, "index-body"), ctx)
+	for _, k := range n.Children {
+		tocRole(k, "TOCI")
+	}
 	b.tocs = append(b.tocs, &toc{node: n, src: c.Child(odf.NSText, "table-of-content-source"), ctx: ctx})
 	return []*layout.Node{n}
+}
+
+// tocRole tags n, a paragraph of a table of contents, as role: an entry
+// is a TOCI and the title a Caption, as a TOC holds only TOC, TOCI and
+// Caption elements (ISO 32000-1, 14.8.4.3.2, Table 333; ISO 14289-1,
+// 7.2). A node of another role, such as a section, keeps it.
+func tocRole(n *layout.Node, role string) {
+	if n.Role == "P" || (len(n.Role) == 2 && n.Role[0] == 'H') {
+		n.Role = role
+	}
 }
 
 // headingPages returns the page number each heading landed on, in the
@@ -121,8 +134,15 @@ func (b *builder) tocBody(t *toc, pages []string) ([]*layout.Node, string) {
 	}
 	ctx := t.ctx
 	out := make([]*layout.Node, 0, len(paras))
-	for _, p := range paras {
-		out = append(out, b.block(p, &ctx)...)
+	for i, p := range paras {
+		role := "TOCI"
+		if i == 0 && title != "" {
+			role = "Caption"
+		}
+		for _, k := range b.block(p, &ctx) {
+			tocRole(k, role)
+			out = append(out, k)
+		}
 	}
 	b.spacing(out)
 	b.rightTabs(out)

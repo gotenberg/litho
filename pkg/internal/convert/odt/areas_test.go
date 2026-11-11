@@ -335,6 +335,10 @@ func TestConvert_TableOfContentsRegenerated(t *testing.T) {
 	if strings.Join(got, "|") != "Contents|One.1|Two.2" {
 		t.Errorf("table = %q", got)
 	}
+	// A TOC holds its title as a Caption and its entries as TOCI.
+	if r := roles(res.Structure); !strings.Contains(r, "TOC,Caption,TOCI,") || strings.Contains(r, "TOC,P") {
+		t.Errorf("structure %s", r)
+	}
 }
 
 func TestConvert_TextAlignStartEndAreAbsolute(t *testing.T) {
