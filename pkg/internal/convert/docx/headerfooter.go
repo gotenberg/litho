@@ -129,9 +129,15 @@ func (p *pages) box(info layout.PageInfo) layout.PageBox {
 	}
 	top = min(top, s.height/2-minPageArea/2)
 	bottom = min(bottom, s.height/2-minPageArea/2)
+	left, right := m[css.Left]+s.gutter, m[css.Right]
+	if p.d.settings.mirrorMargins && info.Index%2 == 1 {
+		// An even page of mirrored margins has its inside margin, and
+		// the gutter, on the right (17.15.1.57 mirrorMargins).
+		left, right = right, left
+	}
 	return layout.PageBox{
 		Width: s.width, Height: s.height,
-		Margin:       [4]float64{top, m[css.Right], bottom, m[css.Left] + s.gutter},
+		Margin:       [4]float64{top, right, bottom, left},
 		Frame:        s.frame,
 		Background:   p.d.background,
 		FootnoteRule: footnoteRule(s.contentWidth()),

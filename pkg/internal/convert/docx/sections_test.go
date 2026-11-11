@@ -313,3 +313,29 @@ func TestSections_DocGridSpacesLines(t *testing.T) {
 		})
 	}
 }
+
+func TestSections_GutterPlacement(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:r><w:t>s</w:t></w:r></w:p><w:sectPr><w:pgMar w:top="1440" w:right="720" w:bottom="1440" w:left="1440" w:gutter="720"/>%s</w:sectPr>`
+	settings := func(x string) map[string]string {
+		return map[string]string{"word/settings.xml": `<w:settings ` + nsDecl + `>` + x + `</w:settings>`}
+	}
+	for _, tc := range []struct {
+		name, sect, settings string
+		want, even           [4]float64
+	}{
+		{"left", ``, ``, [4]float64{72, 36, 72, 108}, [4]float64{72, 36, 72, 108}},
+		{"top", ``, `<w:gutterAtTop/>`, [4]float64{108, 36, 72, 72}, [4]float64{108, 36, 72, 72}},
+		{"right to left", `<w:rtlGutter/>`, ``, [4]float64{72, 72, 72, 72}, [4]float64{72, 72, 72, 72}},
+		{"mirrored", ``, `<w:mirrorMargins/>`, [4]float64{72, 36, 72, 108}, [4]float64{72, 108, 72, 36}},
+	} {
+		b := build(t, strings.Replace(body, "%s", tc.sect, 1), settings(tc.settings))
+		pg := b.d.newPages(b.secs)
+		if got := pg.box(layout.PageInfo{Name: b.secs[0].name}).Margin; got != tc.want {
+			t.Errorf("%s: first page margins %v, want %v", tc.name, got, tc.want)
+		}
+		if got := pg.box(layout.PageInfo{Name: b.secs[0].name, Index: 1}).Margin; got != tc.even {
+			t.Errorf("%s: second page margins %v, want %v", tc.name, got, tc.even)
+		}
+	}
+}

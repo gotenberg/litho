@@ -32,6 +32,10 @@ type settings struct {
 	// evenAndOdd selects distinct even page headers and footers
 	// (17.10.1).
 	evenAndOdd bool
+	// gutterAtTop puts every section's gutter above its top margin
+	// (17.15.1.49); mirrorMargins swaps the side margins of even pages
+	// (17.15.1.57).
+	gutterAtTop, mirrorMargins bool
 	// lang, langEastAsia and langBidi are the languages of
 	// w:themeFontLang (17.15.1.88): the document's, and those choosing
 	// the East Asian and complex script theme fonts.
@@ -196,6 +200,12 @@ func (d *document) readSettings(root *ooxml.Element) {
 	}
 	if e := root.Child(w, "evenAndOddHeaders"); e != nil {
 		d.settings.evenAndOdd = ooxml.Toggle(e)
+	}
+	if e := root.Child(w, "gutterAtTop"); e != nil {
+		d.settings.gutterAtTop = ooxml.Toggle(e)
+	}
+	if e := root.Child(w, "mirrorMargins"); e != nil {
+		d.settings.mirrorMargins = ooxml.Toggle(e)
 	}
 	if t := root.Child(w, "themeFontLang"); t != nil {
 		d.settings.lang = attrOr(t, "val")

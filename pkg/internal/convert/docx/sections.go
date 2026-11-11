@@ -148,6 +148,9 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 	if t := e.Child(w, "titlePg"); t != nil {
 		s.titlePage = ooxml.Toggle(t)
 	}
+	if s.gutter > 0 {
+		s.placeGutter(d.settings.gutterAtTop, e.Child(w, "rtlGutter") != nil && ooxml.Toggle(e.Child(w, "rtlGutter")))
+	}
 	if v := e.Child(w, "vAlign"); v != nil && attrOr(v, "val") != "top" {
 		d.warn("approximated", "a section's vertical alignment is laid out from the top")
 	}
@@ -194,6 +197,35 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 		refs[typ] = rel.Target
 	}
 	return s
+}
+
+// placeGutter moves the section's gutter into the margin it widens: the
+// top margin when the document puts the gutter at the top (ECMA-376 Part
+// 1, 17.15.1.49 gutterAtTop), the right one for a right-to-left gutter
+// (17.6.16 rtlGutter), else the gutter stays beside the left margin, on
+// the inside edge of a page with mirrored margins.
+//
+// # Corpus evidence
+//
+//   - litho/docx sections-gutter-top-rtl: Word prints a 1 inch gutter with
+//     gutterAtTop above the text, which starts 1 inch lower and keeps the
+//     full width between the side margins.
+//   - litho/docx sections-margins-gutter: Word prints the even pages of
+//     mirrored margins with the inside margin and the gutter on the right.
+func (s *section) placeGutter(atTop, rtl bool) {
+	switch {
+	case atTop:
+		if s.margin[css.Top] < 0 {
+			s.margin[css.Top] -= s.gutter
+		} else {
+			s.margin[css.Top] += s.gutter
+		}
+	case rtl:
+		s.margin[css.Right] += s.gutter
+	default:
+		return
+	}
+	s.gutter = 0
 }
 
 // part returns the kind of header or footer (which) a page of the given

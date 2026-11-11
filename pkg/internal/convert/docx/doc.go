@@ -54,7 +54,8 @@
 // whole pitches of the grid.
 //
 // Each section is a named page with its size, orientation, margins,
-// gutter, columns (unequal widths laid out equal), page borders and break
+// gutter (at the left, the top or the right, on the inside of mirrored
+// margins), columns (unequal widths laid out equal), page borders and break
 // type (a continuous break keeps the page, and its margins, when the page
 // size does not change). Headers and footers of the default, first and
 // even kinds, inherited across sections, draw in the margins, which grow
