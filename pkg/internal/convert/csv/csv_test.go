@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -188,7 +189,7 @@ func TestRead_Widths(t *testing.T) {
 	fonts := fixtureFonts(t)
 	in := "a,," + strings.Repeat("a", 12) + ",Northwind Traders,id\n,,,,25\n"
 	in += "x,,,2026-01-10,1\nh,,,,\n"
-	doc, _, err := Read(context.Background(), []byte(in), fonts, time.Time{})
+	doc, _, err := Read(context.Background(), []byte(in), fonts, office.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +205,7 @@ func TestRead_Widths(t *testing.T) {
 	}
 	// A column typed in its second row is measured with that row's
 	// format: the longest string is the currency of 1234567.
-	doc, _, err = Read(context.Background(), []byte("value\n-$5\n1234567\n12/31/2026 10:00\n"), fonts, time.Time{})
+	doc, _, err = Read(context.Background(), []byte("value\n-$5\n1234567\n12/31/2026 10:00\n"), fonts, office.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +215,7 @@ func TestRead_Widths(t *testing.T) {
 }
 
 func TestRead_Model(t *testing.T) {
-	doc, w, err := Read(context.Background(), []byte("Name,Amount,When\nAlice,100,1/10\nBob,15%,TRUE\n"), nil, time.Time{})
+	doc, w, err := Read(context.Background(), []byte("Name,Amount,When\nAlice,100,1/10\nBob,15%,TRUE\n"), nil, office.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +242,7 @@ func TestRead_Model(t *testing.T) {
 	if len(w) != 1 || w[0].Code != "date-without-year" {
 		t.Errorf("warnings = %+v", w)
 	}
-	if _, w, _ := Read(context.Background(), []byte("1/10\n"), nil, time.Date(2024, 5, 1, 0, 0, 0, 0, time.UTC)); len(w) != 0 {
+	if _, w, _ := Read(context.Background(), []byte("1/10\n"), nil, office.Options{PrintDate: time.Date(2024, 5, 1, 0, 0, 0, 0, time.UTC)}); len(w) != 0 {
 		t.Errorf("print-dated warnings = %+v", w)
 	}
 }
@@ -261,7 +262,7 @@ func TestParity_Gotenberg(t *testing.T) {
 	if err != nil {
 		t.Skipf("corpus source not present: %v", err)
 	}
-	doc, _, err := Read(context.Background(), data, nil, time.Time{})
+	doc, _, err := Read(context.Background(), data, nil, office.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +278,7 @@ func TestParity_Gotenberg(t *testing.T) {
 	if err != nil {
 		t.Skipf("corpus source not present: %v", err)
 	}
-	doc, _, err = Read(context.Background(), data, nil, time.Time{})
+	doc, _, err = Read(context.Background(), data, nil, office.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +292,7 @@ func FuzzRead(f *testing.F) {
 	f.Add(seed)
 	f.Add(seed[:len(seed)/2])
 	f.Fuzz(func(t *testing.T, data []byte) {
-		doc, _, err := Read(context.Background(), data, nil, time.Time{})
+		doc, _, err := Read(context.Background(), data, nil, office.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -197,7 +197,8 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		// A book that prints no cell prints the first page of its first
 		// sheet, the cells its styles paint, with the sheet's header and
 		// footer and its outline entry, as LibreOffice does.
-		pg := &compose.Page{Width: letterWidth, Height: letterHeight}
+		w, h := b.opts.Paper(b.opts.DefaultPage(letterWidth, letterHeight))
+		pg := &compose.Page{Width: w, Height: h}
 		if len(plans) > 0 {
 			sp := plans[0]
 			pg.Width, pg.Height = sp.width, sp.height
@@ -243,18 +244,14 @@ func indexOf(pages []*pagePlan, p *pagePlan) int {
 }
 
 // paper returns the page size of a sheet: its own, or the options'
-// paper, turned to landscape when the options ask.
+// paper in its own orientation, turned to landscape when the options ask
+// (office.Options.Paper).
 func (b *builder) paper(sh *Sheet) (float64, float64) {
 	w, h := sh.Page.Width, sh.Page.Height
 	if !(w > 0) || !(h > 0) {
-		w, h = letterWidth, letterHeight
+		w, h = b.opts.DefaultPage(letterWidth, letterHeight)
 	}
-	if b.opts.PageWidth > 0 && b.opts.PageHeight > 0 {
-		w, h = b.opts.PageWidth, b.opts.PageHeight
-	}
-	if b.opts.Landscape && w < h {
-		w, h = h, w
-	}
+	w, h = b.opts.Paper(w, h)
 	return min(w, office.MaxPageSide), min(h, office.MaxPageSide)
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -11,7 +12,9 @@ import (
 
 // The default page of a section without a pgSz or pgMar: US Letter with
 // one-inch margins and half-inch header and footer distances, Word's
-// defaults (ECMA-376 Part 1, 17.6.13 leaves them to the application).
+// defaults (ECMA-376 Part 1, 17.6.13 leaves them to the application). The
+// conversion's default paper, office.Options DefaultPageWidth and
+// DefaultPageHeight, replaces the page size.
 const (
 	defaultPageWidth  = 612
 	defaultPageHeight = 792
@@ -64,8 +67,9 @@ type section struct {
 // parseSection reads a w:sectPr (17.6.17), headers and footers it does not
 // name inherited from prev (17.10.5).
 func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
+	pw, ph := d.opts.DefaultPage(defaultPageWidth, defaultPageHeight)
 	s := &section{
-		width: defaultPageWidth, height: defaultPageHeight,
+		width: pw, height: ph,
 		margin: [4]float64{defaultMargin, defaultMargin, defaultMargin, defaultMargin},
 		header: defaultHFDistance, footer: defaultHFDistance,
 		cols: 1, colSpace: 36, breakType: "nextPage",
@@ -207,19 +211,11 @@ func (s *section) part(which, kind string) string {
 	return "default"
 }
 
-// applyOptions lays the conversion options over the section's page: the
-// paper size replaces the page size, landscape turns a portrait page.
-func (s *section) applyOptions(w, h float64, landscape bool) {
-	if w > 0 && h > 0 {
-		portrait := s.width <= s.height
-		s.width, s.height = w, h
-		if !portrait && s.width < s.height {
-			s.width, s.height = s.height, s.width
-		}
-	}
-	if landscape && s.width < s.height {
-		s.width, s.height = s.height, s.width
-	}
+// applyOptions lays the conversion options over the section's page (see
+// office.Options.Paper): the paper size replaces the page size and its
+// orientation, landscape turns a portrait page.
+func (s *section) applyOptions(opts office.Options) {
+	s.width, s.height = opts.Paper(s.width, s.height)
 	// Margins never leave less than a minimal page area.
 	if s.margin[css.Left]+s.margin[css.Right]+s.gutter > s.width-minPageArea {
 		s.margin[css.Left], s.margin[css.Right], s.gutter = 0, 0, 0
@@ -312,7 +308,7 @@ func (d *document) body(root *ooxml.Element) []*section {
 	var prev *section
 	closeSection := func(sp *ooxml.Element) {
 		s := d.parseSection(sp, prev)
-		s.applyOptions(d.opts.PageWidth, d.opts.PageHeight, d.opts.Landscape)
+		s.applyOptions(d.opts)
 		s.index = len(secs)
 		s.blocks = cur
 		s.pending = d.pending

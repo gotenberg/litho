@@ -56,10 +56,12 @@ const maxCells = 1_000_000
 
 // reader is one workbook's reading state.
 type reader struct {
-	ctx   context.Context
-	pkg   *ooxml.Package
-	fonts *text.Fonts
-	theme *ooxml.Theme
+	// paperW and paperH are the paper of a sheet without a pageSetup.
+	paperW, paperH float64
+	ctx            context.Context
+	pkg            *ooxml.Package
+	fonts          *text.Fonts
+	theme          *ooxml.Theme
 	// styles is the stylesheet, strings the shared string table.
 	styles  *styleSheet
 	strings []richText
@@ -125,13 +127,16 @@ type tableArea struct {
 const substituteFamily = "Noto Sans"
 
 // read reads the workbook pkg holds into the sheet model, with the
-// warnings of what it left out or approximated.
-func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*sheet.Document, []compose.Warning, error) {
+// warnings of what it left out or approximated. The default page of opts
+// (office.Options.DefaultPage) is the paper of a sheet without a
+// pageSetup, Letter without one.
+func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts office.Options) (*sheet.Document, []compose.Warning, error) {
 	main, err := pkg.MainPart()
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", office.ErrMalformed, err)
 	}
 	r := &reader{ctx: ctx, pkg: pkg, fonts: fonts, warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, caches: map[string]*pivotCache{}}
+	r.paperW, r.paperH = opts.DefaultPage(paperSizes[1].points())
 	root, err := pkg.ParseXML(ctx, main, understood)
 	if err != nil {
 		return nil, nil, err

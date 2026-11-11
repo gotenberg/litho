@@ -76,11 +76,11 @@ const (
 )
 
 // defaultPage is the page setup of a sheet without pageSetup and
-// pageMargins: Letter in portrait, the en-US paper LibreOffice falls back
-// on, LibreOffice's default margins, a scale of 100, the pages numbered
-// down then over and from the previous sheet's.
-func defaultPage() sheet.PageSetup {
-	w, h := paperSizes[1].points()
+// pageMargins on paper w by h, the conversion's default paper (Letter, the
+// en-US paper LibreOffice falls back on, without one): LibreOffice's
+// default margins, a scale of 100, the pages numbered down then over and
+// from the previous sheet's.
+func defaultPage(w, h float64) sheet.PageSetup {
 	p := sheet.PageSetup{Width: w, Height: h, Scale: 100}
 	p.Margin[css.Left], p.Margin[css.Right] = marginPt(defaultMarginLR), marginPt(defaultMarginLR)
 	p.Margin[css.Top], p.Margin[css.Bottom] = marginPt(defaultMarginTB), marginPt(defaultMarginTB)

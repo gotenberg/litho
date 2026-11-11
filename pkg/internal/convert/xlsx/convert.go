@@ -62,7 +62,7 @@ func load(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Opt
 	if err != nil {
 		return nil, nil, fmt.Errorf("opening XLSX: %w", err)
 	}
-	doc, warnings, err := read(ctx, pkg, fonts)
+	doc, warnings, err := read(ctx, pkg, fonts, opts)
 	if err != nil {
 		return nil, nil, fmt.Errorf("reading XLSX: %w", err)
 	}

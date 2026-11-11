@@ -16,9 +16,23 @@ const MaxPageSide = 14400
 // options override or select among them.
 type Options struct {
 	// PageWidth and PageHeight, both positive, replace the page size of
-	// every section with this one, in points; both zero, the default, keep
-	// each section's own. Each side lies in (0, MaxPageSide].
+	// every section, sheet or notes page with this one, in points, its
+	// orientation included: a landscape section takes a portrait paper
+	// portrait, as LibreOffice applies a paper format to a document. A
+	// slide is scaled to fit the paper. Both zero, the default, keep each
+	// section's own. Each side lies in (0, MaxPageSide].
 	PageWidth, PageHeight float64
+	// DefaultPageWidth and DefaultPageHeight, both positive, are the page
+	// size of a section or sheet whose file names none, in points; both
+	// zero, the converter's own default. Each side lies in (0,
+	// MaxPageSide].
+	DefaultPageWidth, DefaultPageHeight float64
+	// NotesPaperWidth and NotesPaperHeight, both positive, are the paper
+	// a notes page prints on when PageWidth is zero, the notes page drawn
+	// at its top-left corner at the notes size the file names; both zero,
+	// the default, print a notes page on its own size. The ODP converter
+	// sets them: Impress prints an OpenDocument notes page on Letter.
+	NotesPaperWidth, NotesPaperHeight float64
 	// Landscape lays every section out in landscape: a portrait section's
 	// width and height are swapped, a landscape one is kept.
 	Landscape bool
@@ -58,15 +72,51 @@ type Options struct {
 	Logger *slog.Logger
 }
 
+// DefaultPage returns the page size of a section or sheet whose file
+// names none: DefaultPageWidth and DefaultPageHeight when set, else w by
+// h, the converter's own default.
+func (o Options) DefaultPage(w, h float64) (float64, float64) {
+	if o.DefaultPageWidth > 0 && o.DefaultPageHeight > 0 {
+		return o.DefaultPageWidth, o.DefaultPageHeight
+	}
+	return w, h
+}
+
+// Paper returns the page a section or sheet of size w by h prints on:
+// PageWidth by PageHeight when set, the section's orientation replaced
+// by the paper's, else its own size; then turned to landscape when
+// Landscape asks and the page is portrait.
+//
+// # Corpus evidence
+//
+//   - probe, docx and odt: Letter asked of a landscape Letter section
+//     prints portrait Letter in LibreOffice, and A5 asked of a document of
+//     a portrait, a landscape and an A5 section prints three portrait A5
+//     sections.
+func (o Options) Paper(w, h float64) (float64, float64) {
+	if o.PageWidth > 0 && o.PageHeight > 0 {
+		w, h = o.PageWidth, o.PageHeight
+	}
+	if o.Landscape && w < h {
+		w, h = h, w
+	}
+	return w, h
+}
+
 // Validate reports the first option out of range, wrapped in
 // [ErrInvalidOptions], nil when every option is in range.
 func (o Options) Validate() error {
-	if (o.PageWidth == 0) != (o.PageHeight == 0) {
-		return fmt.Errorf("%w: page width and height come together", ErrInvalidOptions)
-	}
-	for name, v := range map[string]float64{"width": o.PageWidth, "height": o.PageHeight} {
-		if v != 0 && (math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 || v > MaxPageSide) {
-			return fmt.Errorf("%w: page %s %v is not in (0, %d]", ErrInvalidOptions, name, v, MaxPageSide)
+	for _, p := range []struct {
+		name string
+		w, h float64
+	}{{"page", o.PageWidth, o.PageHeight}, {"default page", o.DefaultPageWidth, o.DefaultPageHeight}, {"notes paper", o.NotesPaperWidth, o.NotesPaperHeight}} {
+		if (p.w == 0) != (p.h == 0) {
+			return fmt.Errorf("%w: %s width and height come together", ErrInvalidOptions, p.name)
+		}
+		for _, v := range []float64{p.w, p.h} {
+			if v != 0 && (math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 || v > MaxPageSide) {
+				return fmt.Errorf("%w: %s side %v is not in (0, %d]", ErrInvalidOptions, p.name, v, MaxPageSide)
+			}
 		}
 	}
 	if o.MaxInputBytes < 0 {

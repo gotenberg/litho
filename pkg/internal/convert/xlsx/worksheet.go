@@ -138,7 +138,7 @@ func (w *sheetReader) read(root *ooxml.Element) error {
 func (r *reader) defaultSetup(sh *sheet.Sheet) {
 	sh.DefaultColumnWidth = r.columnWidth(defaultColumnDigits)
 	sh.DefaultRowHeight = standardRowHeight
-	sh.Page = defaultPage()
+	sh.Page = defaultPage(r.paperW, r.paperH)
 }
 
 // columnWidth converts a width in characters of the Normal font's widest

@@ -205,23 +205,20 @@ func (f *pageFlow) geom(mp *odf.MasterPage, left, first bool) *pageGeom {
 	return g
 }
 
-// pageSize returns a page layout's size, as office.Options overrides it.
+// pageSize returns a page layout's size, as office.Options overrides it
+// (office.Options.Paper): a side the layout does not name is the
+// conversion's default paper's.
 func (f *pageFlow) pageSize(pp odf.Props) (float64, float64) {
+	dw, dh := f.opts.DefaultPage(defaultPageWidth, defaultPageHeight)
 	w, okW := odf.Length(pp.Get("fo:page-width"))
 	h, okH := odf.Length(pp.Get("fo:page-height"))
 	if !okW || w <= 0 || w > office.MaxPageSide {
-		w = defaultPageWidth
+		w = dw
 	}
 	if !okH || h <= 0 || h > office.MaxPageSide {
-		h = defaultPageHeight
+		h = dh
 	}
-	if f.opts.PageWidth > 0 {
-		w, h = f.opts.PageWidth, f.opts.PageHeight
-	}
-	if f.opts.Landscape && h > w {
-		w, h = h, w
-	}
-	return w, h
+	return f.opts.Paper(w, h)
 }
 
 // minPageArea is the least page area a page keeps on each axis, a

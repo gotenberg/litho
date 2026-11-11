@@ -38,7 +38,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err != nil {
 		return nil, fmt.Errorf("reading ODS: %w", err)
 	}
-	doc, warnings, err := Read(ctx, data, fonts, opts.Password)
+	doc, warnings, err := Read(ctx, data, fonts, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -52,10 +52,12 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 
 // Read reads the ODS package, or the flat FODS document, data into the
 // spreadsheet model, with the warnings for the constructs it does not
-// read. fonts, which may be nil, parses the text of SVG pictures; password
-// opens an encrypted package. It fails as [Convert] does.
-func Read(ctx context.Context, data []byte, fonts *text.Fonts, password string) (*sheet.Document, []compose.Warning, error) {
-	pkg, err := odf.Open(ctx, data, odf.Options{Password: password})
+// read. fonts, which may be nil, parses the text of SVG pictures;
+// opts.Password opens an encrypted package, and the default page of opts
+// (office.Options.DefaultPage) is the paper of a page style that names
+// none, Letter without one. It fails as [Convert] does.
+func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Options) (*sheet.Document, []compose.Warning, error) {
+	pkg, err := odf.Open(ctx, data, odf.Options{Password: opts.Password})
 	if err != nil {
 		return nil, nil, fmt.Errorf("reading ODS: %w", err)
 	}
@@ -69,6 +71,7 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, password string) 
 		return nil, nil, fmt.Errorf("reading ODS: %w: the document has no office:spreadsheet body", office.ErrMalformed)
 	}
 	r := newReader(ctx, pkg, fonts)
+	r.paperW, r.paperH = opts.DefaultPage(letterWidth, letterHeight)
 	doc := r.document(body)
 	if r.err != nil {
 		return nil, nil, r.err

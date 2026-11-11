@@ -3,6 +3,8 @@ package ods
 import (
 	"context"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 )
 
 func FuzzRead(f *testing.F) {
@@ -26,7 +28,7 @@ func FuzzRead(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		doc, _, err := Read(ctx, data, nil, "")
+		doc, _, err := Read(ctx, data, nil, office.Options{})
 		if err != nil {
 			return
 		}

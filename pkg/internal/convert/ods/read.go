@@ -72,12 +72,14 @@ const (
 
 // reader reads one document into the spreadsheet model.
 type reader struct {
-	ctx    context.Context
-	pkg    *odf.Package
-	fonts  *text.Fonts
-	styles *odf.Styles
-	data   *odf.DataStyles
-	draw   *odf.DrawStyles
+	// paperW and paperH are the paper of a page style that names none.
+	paperW, paperH float64
+	ctx            context.Context
+	pkg            *odf.Package
+	fonts          *text.Fonts
+	styles         *odf.Styles
+	data           *odf.DataStyles
+	draw           *odf.DrawStyles
 
 	doc      *sheet.Document
 	cellSty  map[string]*sheet.Style
@@ -101,7 +103,7 @@ func newReader(ctx context.Context, pkg *odf.Package, fonts *text.Fonts) *reader
 	return &reader{
 		ctx: ctx, pkg: pkg, fonts: fonts, styles: odf.NewStyles(pkg), data: odf.NewDataStyles(pkg),
 		cellSty: map[string]*sheet.Style{}, condSty: map[string]*sheet.Style{}, pages: map[string]pageResult{}, pics: map[string]*picResult{},
-		warned: map[string]bool{},
+		warned: map[string]bool{}, paperW: letterWidth, paperH: letterHeight,
 	}
 }
 

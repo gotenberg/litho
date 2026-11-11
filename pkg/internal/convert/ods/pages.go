@@ -53,7 +53,7 @@ func (r *reader) pageSetup(name string) pageResult {
 	mp := r.styles.Master(name)
 	var pr pageResult
 	if mp == nil {
-		pr = defaultPage()
+		pr = defaultPage(r.paperW, r.paperH)
 	} else {
 		pr = r.readPage(mp)
 	}
@@ -61,10 +61,11 @@ func (r *reader) pageSetup(name string) pageResult {
 	return pr
 }
 
-// defaultPage returns Calc's Default page style: Letter, 2 cm margins, the
-// sheet name centred in the header and "Page n" in the footer.
-func defaultPage() pageResult {
-	pg := sheet.PageSetup{Width: letterWidth, Height: letterHeight, Scale: 100}
+// defaultPage returns Calc's Default page style on paper w by h: 2 cm
+// margins, the sheet name centred in the header and "Page n" in the
+// footer.
+func defaultPage(w, h float64) pageResult {
+	pg := sheet.PageSetup{Width: w, Height: h, Scale: 100}
 	for i := range pg.Margin {
 		pg.Margin[i] = defaultMargin
 	}
@@ -98,7 +99,7 @@ func (r *reader) readPage(mp *odf.MasterPage) pageResult {
 		pl = *p
 	}
 	pp := pl.Page
-	pg := sheet.PageSetup{Width: letterWidth, Height: letterHeight, Scale: 100}
+	pg := sheet.PageSetup{Width: r.paperW, Height: r.paperH, Scale: 100}
 	if w, ok := odf.Length(pp.Get("fo:page-width")); ok && w > 0 {
 		pg.Width = w
 	}

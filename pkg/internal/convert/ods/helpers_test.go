@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 )
 
@@ -71,7 +72,7 @@ func zipOf(t testing.TB, entries ...string) []byte {
 // read reads data, failing the test on an error.
 func read(t testing.TB, data []byte) (*sheet.Document, []compose.Warning) {
 	t.Helper()
-	doc, w, err := Read(context.Background(), data, nil, "")
+	doc, w, err := Read(context.Background(), data, nil, office.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

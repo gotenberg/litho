@@ -373,7 +373,7 @@ func TestRead_Malformed(t *testing.T) {
 	text := []byte(`<office:document ` + nsDecl + ` office:mimetype="application/vnd.oasis.opendocument.text"><office:body><office:text/></office:body></office:document>`)
 	noBody := []byte(`<office:document ` + nsDecl + `><office:body><office:text/></office:body></office:document>`)
 	for name, data := range map[string][]byte{"text": text, "no spreadsheet": noBody, "garbage": []byte("not xml")} {
-		if _, _, err := Read(context.Background(), data, nil, ""); !errors.Is(err, office.ErrMalformed) {
+		if _, _, err := Read(context.Background(), data, nil, office.Options{}); !errors.Is(err, office.ErrMalformed) {
 			t.Errorf("%s: err = %v", name, err)
 		}
 	}

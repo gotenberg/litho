@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -42,7 +41,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if len(data) == 0 {
 		return nil, fmt.Errorf("reading CSV: %w: the file is empty", office.ErrMalformed)
 	}
-	doc, warnings, err := Read(ctx, data, fonts, opts.PrintDate)
+	doc, warnings, err := Read(ctx, data, fonts, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -95,10 +94,12 @@ const fallbackYear = 2026
 
 // Read reads the CSV data into the spreadsheet model as Calc's import
 // reads it, with the warnings for what it drops. fonts
-// measures the column widths; printDate gives a date without a year its
-// year (the zero time: [fallbackYear]). It returns ctx's error when ctx
-// ends first.
-func Read(ctx context.Context, data []byte, fonts *text.Fonts, printDate time.Time) (*sheet.Document, []compose.Warning, error) {
+// measures the column widths; opts.PrintDate gives a date without a year
+// its year (the zero time: [fallbackYear]), and the default page of opts
+// (office.Options.DefaultPage) is the paper, Letter without one. It
+// returns ctx's error when ctx ends first.
+func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Options) (*sheet.Document, []compose.Warning, error) {
+	printDate := opts.PrintDate
 	recs, lim, err := parse(ctx, decode(data))
 	if err != nil {
 		return nil, nil, err
@@ -132,7 +133,7 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, printDate time.Ti
 		Name:               "Sheet1",
 		DefaultColumnWidth: columnWidth,
 		DefaultRowHeight:   rowHeight,
-		Page:               page(),
+		Page:               page(opts.DefaultPage(pageWidth, pageHeight)),
 	}
 	sh.HeaderFooter.Odd.Footer[1] = []sheet.Span{{Text: "Page "}, {Field: sheet.FieldPage}}
 	sh.HeaderFooter.Even, sh.HeaderFooter.First = sh.HeaderFooter.Odd, sh.HeaderFooter.Odd
@@ -196,10 +197,11 @@ func cellValue(d detected, f string) sheet.Value {
 	return sheet.Value{Kind: sheet.Number, Number: d.value}
 }
 
-// page returns the page setup of a CSV import: Letter, 2 cm margins, the
-// footer's room at the bottom, scale 100, pages numbered from 1.
-func page() sheet.PageSetup {
-	pg := sheet.PageSetup{Width: pageWidth, Height: pageHeight, Scale: 100, HeaderTop: margin, FooterBottom: margin}
+// page returns the page setup of a CSV import on paper w by h: 2 cm
+// margins, the footer's room at the bottom, scale 100, pages numbered
+// from 1.
+func page(w, h float64) sheet.PageSetup {
+	pg := sheet.PageSetup{Width: w, Height: h, Scale: 100, HeaderTop: margin, FooterBottom: margin}
 	for i := range pg.Margin {
 		pg.Margin[i] = margin
 	}
