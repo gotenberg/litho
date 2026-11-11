@@ -428,3 +428,38 @@ func TestLinkedOutside(t *testing.T) {
 		}
 	}
 }
+
+// TestRead_Describe checks what a reader hears of a presentation's
+// drawings: a frame's svg:desc, else its svg:title; a shape whose style
+// marks it decorative; and a master page's own drawing, which repeats on
+// every slide, as decorative, while its placeholders are not.
+func TestRead_Describe(t *testing.T) {
+	png := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+	frame := func(name, style, kids string) string {
+		return `<draw:frame draw:name="` + name + `"` + style + ` svg:width="2cm" svg:height="1cm"><draw:image><office:binary-data>` + png + `</office:binary-data></draw:image>` + kids + `</draw:frame>`
+	}
+	doc, _ := read(t, flat{
+		auto: `<style:style style:name="d" style:family="graphic"><style:graphic-properties loext:decorative="true"/></style:style>` +
+			`<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="28cm" fo:page-height="15.75cm"/></style:page-layout>`,
+		master: `<style:master-page style:name="Default" style:page-layout-name="pm1">` + frame("Logo", "", `<svg:title>Logo</svg:title>`) +
+			`<draw:frame draw:name="Title" presentation:class="title" svg:width="20cm" svg:height="2cm"><draw:text-box/></draw:frame></style:master-page>`,
+		body: page(frame("Described", "", `<svg:title>A title</svg:title><svg:desc> A description </svg:desc>`) + frame("Titled", "", `<svg:title>Only a title</svg:title>`) +
+			frame("Plain", "", "") + frame("Decorative", ` draw:style-name="d"`, "")),
+	}.bytes())
+	got := map[string]*slides.Shape{}
+	for _, s := range doc.Slides[0].Shapes {
+		got[s.Name] = s
+	}
+	for _, tc := range []struct {
+		name, alt  string
+		decorative bool
+	}{{"Logo", "Logo", true}, {"Described", "A description", false}, {"Titled", "Only a title", false}, {"Plain", "", false}, {"Decorative", "", true}} {
+		s := got[tc.name]
+		if s == nil {
+			t.Fatalf("no shape %q", tc.name)
+		}
+		if s.Alt != tc.alt || s.Decorative != tc.decorative {
+			t.Errorf("%s: alt %q decorative %v, want %q %v", tc.name, s.Alt, s.Decorative, tc.alt, tc.decorative)
+		}
+	}
+}

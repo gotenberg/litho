@@ -113,6 +113,15 @@ func (r *reader) shape(el *odf.Element, pc *pageCtx, depth int, href string) []*
 		return nil
 	}
 	s.Name = el.A(odf.NSDraw, "name")
+	if s.Alt == "" {
+		s.Alt = odf.Describe(el)
+	}
+	if pc.master && depth == 0 && el.A(odf.NSPresentation, "class") == "" {
+		// A master page's own drawing repeats on every slide that shows
+		// it, as a page's background does: a pagination artifact (ISO
+		// 32000-1, 14.8.2.2.2), as the master page of a text document is.
+		s.Decorative = true
+	}
 	s.Jump = jump
 	if s.Href == "" && jump == 0 {
 		s.Href = href
@@ -212,6 +221,7 @@ func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 	pl := r.placementOf(el, r.placeholderBox(el, pc))
 	ss := r.shapeStyle(el, pc)
 	s := &slides.Shape{Box: pl.box, Rotation: pl.rotation, FlipH: pl.flipH, FlipV: pl.flipV, SkewX: pl.skew}
+	s.Alt, s.Decorative = odf.Describe(el), odf.Decorative(ss.graphic)
 	media := false
 	for _, k := range el.Children {
 		switch {
@@ -351,6 +361,7 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 	ss := r.shapeStyle(el, pc)
 	pl := r.placementOf(el, nil)
 	s := &slides.Shape{Kind: slides.KindGeometry, Box: pl.box, Rotation: pl.rotation, FlipH: pl.flipH, FlipV: pl.flipV, SkewX: pl.skew}
+	s.Alt, s.Decorative = odf.Describe(el), odf.Decorative(ss.graphic)
 	s.Fill = r.fill(ss.graphic, "solid")
 	s.Line = r.line(ss.graphic)
 	switch el.Name.Local {
