@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 )
@@ -102,6 +103,11 @@ func TestNumbering_Labels(t *testing.T) {
 	}
 	if lists := role(b.root, "L"); len(lists) != 1 || len(lists[0].Children) != len(want) {
 		t.Errorf("list items not grouped in one L: %d groups", len(lists))
+	} else if lists[0].Numbering != compose.NumberingDecimal {
+		t.Errorf("list numbering %d, want decimal", lists[0].Numbering)
+	}
+	if items[8].Numbering != compose.NumberingDisc || items[1].Numbering != compose.NumberingLowerAlpha {
+		t.Errorf("bullet numbering %d, letter %d", items[8].Numbering, items[1].Numbering)
 	}
 }
 

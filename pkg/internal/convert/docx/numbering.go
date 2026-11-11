@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
@@ -434,4 +435,39 @@ func mapSymbolText(s, family string) (string, bool) {
 		}
 	}
 	return string(out), mapped || table != nil
+}
+
+// numberingSystem returns the numbering system of a list whose label, in
+// the number format format (ECMA-376 Part 1, 17.18.59 ST_NumberFormat),
+// reads label: the ListNumbering of its L element (ISO 32000-1, 14.8.5.5,
+// Table 347; ISO 32000-2, Table 382). A bullet is a disc, a circle or a
+// square by its character, in a Unicode or a Symbol and Wingdings font's
+// private-use code, and any other bullet is unordered; a numbering Table
+// 347 has no name for is ordered.
+func numberingSystem(format, label string) compose.ListNumbering {
+	switch format {
+	case "decimal", "decimalZero":
+		return compose.NumberingDecimal
+	case "upperRoman":
+		return compose.NumberingUpperRoman
+	case "lowerRoman":
+		return compose.NumberingLowerRoman
+	case "upperLetter":
+		return compose.NumberingUpperAlpha
+	case "lowerLetter":
+		return compose.NumberingLowerAlpha
+	case "none":
+		return compose.NumberingNone
+	case "bullet":
+		switch strings.TrimSpace(label) {
+		case "\u2022", "\u25cf", "\uf0b7", "\uf06c":
+			return compose.NumberingDisc
+		case "o", "\u25cb", "\u25e6":
+			return compose.NumberingCircle
+		case "\u25a0", "\u25aa", "\uf0a7", "\uf06e":
+			return compose.NumberingSquare
+		}
+		return compose.NumberingUnordered
+	}
+	return compose.NumberingOrdered
 }

@@ -135,7 +135,9 @@ func finish(bs []blockNode) []*layout.Node {
 			list = nil
 			out = append(out, b.node)
 		case list == nil:
-			list = &layout.Node{Kind: layout.Element, Style: listStyle(b.node.Style), Role: "L", Children: []*layout.Node{b.node}}
+			// The list's numbering is its first item's ([document.number]
+			// leaves it on the item).
+			list = &layout.Node{Kind: layout.Element, Style: listStyle(b.node.Style), Role: "L", Numbering: b.node.Numbering, Children: []*layout.Node{b.node}}
 			out = append(out, list)
 		default:
 			list.Children = append(list.Children, b.node)
@@ -614,6 +616,7 @@ func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
 	n.Style.Display = css.ListItem
 	n.Role = "LI"
 	n.ListValue = max(ordinal, 1)
+	n.Numbering = numberingSystem(lv.format, label)
 	switch lv.jc {
 	case "center":
 		ms.TextAlign = css.AlignCenter
