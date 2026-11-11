@@ -51,7 +51,7 @@ func (s *convertStage) apply(ctx context.Context, ex *executor) error {
 	if logger == nil {
 		logger = ex.logger
 	}
-	r, err := Open(ctx, f, size, WithLogger(logger), WithLimits(s.c.cfg.limits))
+	r, err := openIntermediate(ctx, f, size, WithLogger(logger), WithLimits(s.c.cfg.limits))
 	if err != nil {
 		return fmt.Errorf("reading the converted file back: %w", err)
 	}
