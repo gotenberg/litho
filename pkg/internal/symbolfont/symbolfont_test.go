@@ -26,3 +26,11 @@ func TestRecode(t *testing.T) {
 		}
 	}
 }
+
+func TestRecodes(t *testing.T) {
+	for fam, want := range map[string]bool{"Symbol": true, " Wingdings 2 ": true, "OpenSymbol": false, "Arial": false, "": false} {
+		if got := Recodes(fam); got != want {
+			t.Errorf("Recodes(%q) = %v, want %v", fam, got, want)
+		}
+	}
+}
