@@ -37,8 +37,12 @@ const maxMeasuredCells = 1 << 16
 // optimalHeights grows every row without a custom height to the height
 // of its text, as Calc's optimal row height: the tallest cell's lines plus
 // its top and bottom padding. A cell merged down several rows does not
-// count.
+// count. A book laid out by Excel's rules keeps every row's height
+// ([Document.ExcelRules]).
 func (b *builder) optimalHeights(g *grid) {
+	if b.doc.ExcelRules {
+		return
+	}
 	pb := &pageBuilder{builder: b, g: g}
 	budget := maxMeasuredCells
 	for _, ri := range g.rowOrder {

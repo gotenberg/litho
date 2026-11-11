@@ -29,6 +29,35 @@ func TestOptimalHeights_FallbackFaces(t *testing.T) {
 	}
 }
 
+// TestOptimalHeights_ExcelRules locks the rows of a book laid out by
+// Excel's rules: a row keeps its height whatever its text needs, as Excel
+// prints a row at its stored height or the sheet's default.
+func TestOptimalHeights_ExcelRules(t *testing.T) {
+	big := &Style{Font: Font{Size: 30}}
+	sh := &Sheet{Name: "S", DefaultRowHeight: 14.52, Rows: []Row{
+		{Index: 0, Cells: []Cell{textCell(0, "Tall", big)}},
+		{Index: 1, Height: 5.76, Cells: []Cell{textCell(0, "Short", nil)}},
+	}}
+	doc := newDoc(sh)
+	doc.ExcelRules = true
+	b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
+	g := newGrid(doc, sh)
+	b.optimalHeights(g)
+	if h := g.rowHeight(0); !near(h, 14.52, 1e-9) {
+		t.Errorf("row of 30 point text %v, want the default 14.52", h)
+	}
+	if h := g.rowHeight(1); !near(h, 5.76, 1e-9) {
+		t.Errorf("row of 5.76 points %v, want it kept", h)
+	}
+	doc.ExcelRules = false
+	b = newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
+	g = newGrid(doc, sh)
+	b.optimalHeights(g)
+	if h := g.rowHeight(0); h <= 30 {
+		t.Errorf("row of 30 point text %v by Calc's rules, want it grown", h)
+	}
+}
+
 // TestFont_Substitute locks the family list a cell font draws with: its
 // families, fontconfig's generic aliases resolved, then Noto Sans, the
 // face LibreOffice substitutes for a family nothing serves.
