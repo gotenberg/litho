@@ -95,10 +95,11 @@ icc-goldens: ## Regenerate the ICC transform goldens with the Pillow (littleCMS)
 CORPUS_CLI := go run ./test/integration/cmd/corpus
 CORPUS_SELECT = $(if $(CORPUS),--corpus=$(CORPUS))
 CORPUS_SCORE_FLAGS = $(CORPUS_SELECT) $(if $(FEATURE),--feature=$(FEATURE)) $(if $(PROFILE),--profile=$(PROFILE)) \
-	$(if $(WORKERS),--workers=$(WORKERS)) $(if $(FORMAT),--format=$(FORMAT)) $(if $(ALLOW_VERSION_DRIFT),--allow-version-drift)
+	$(if $(WORKERS),--workers=$(WORKERS)) $(if $(FORMAT),--format=$(FORMAT)) $(if $(ALLOW_VERSION_DRIFT),--allow-version-drift) \
+	$(if $(ORACLE_SAMPLE),--oracle-sample=$(ORACLE_SAMPLE))
 
 .PHONY: corpus
-corpus: corpus-prepare ## Score litho across the (corpus, feature) matrix. Vars: CORPUS, FEATURE, PROFILE, WORKERS, FORMAT (text|json), ALLOW_VERSION_DRIFT
+corpus: corpus-prepare ## Score litho across the (corpus, feature) matrix. Vars: CORPUS, FEATURE, PROFILE, WORKERS, FORMAT (text|json), ALLOW_VERSION_DRIFT, ORACLE_SAMPLE
 	$(CORPUS_CLI) run $(CORPUS_SCORE_FLAGS)
 
 .PHONY: corpus-check

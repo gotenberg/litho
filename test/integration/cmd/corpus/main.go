@@ -108,6 +108,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  --workers=N                   Parallel workers (default: GOMAXPROCS)")
 	fmt.Fprintln(w, "  --allow-version-drift         Score goldens made with other versions than versions.env pins")
 	fmt.Fprintln(w, "  --report-dir=DIR              Where the converter cells draw their failures (empty: nowhere)")
+	fmt.Fprintln(w, "  --oracle-sample=N             Run the targets cell's oracles on one fixture in N (default 8; 0: none)")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Versions come from test/integration/corpus/versions.env; an environment variable")
 	fmt.Fprintln(w, "of the same name overrides one (VERAPDF_VERSION=1.30.2 corpus prepare).")

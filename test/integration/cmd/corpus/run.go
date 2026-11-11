@@ -45,6 +45,7 @@ var featureRegistry = append([]FeatureFactory{
 	func() Feature { return newDrawFeature() },
 	func() Feature { return newSVGDrawFeature() },
 	func() Feature { return newDiffFeature() },
+	func() Feature { return newTargetsFeature() },
 	func() Feature { return newRobustnessFeature() },
 }, mutationFeatureFactories()...)
 
@@ -64,6 +65,11 @@ type runOptions struct {
 	// [ReportWriter]) write them, under <corpus>/<feature>. Empty writes
 	// none.
 	reportDir string
+
+	// oracleSample is the share of the fixtures the features that run
+	// oracles on a sample run them on, one in oracleSample (see
+	// [RunTuner]); 0 runs none.
+	oracleSample int
 }
 
 // defaultReportDir is where the converter features write the images of their
@@ -82,12 +88,30 @@ type ReportWriter interface {
 	SetReportDir(dir string)
 }
 
+// RunTuner is an optional interface a [Feature] implements when it does its
+// work in Prepare and runs external oracles on a sample of the fixtures: the
+// runner calls SetRunOptions before Prepare with the run's worker count and
+// its oracle sample, one fixture in oracleSample, 0 for none.
+type RunTuner interface {
+	SetRunOptions(workers, oracleSample int)
+}
+
 // SkipCounter is an optional interface a [Feature] implements when the
 // metrics of the verdicts it skips count in its cell too: a fixture it
 // leaves unscored on purpose, counted by why.
 type SkipCounter interface {
 	CountsSkippedMetrics()
 }
+
+// GoldenBorrower is an optional interface a [Feature] implements when it
+// runs on the corpora another feature's goldens provision, and reads those
+// goldens' directory: GoldensOf names that feature.
+type GoldenBorrower interface {
+	GoldensOf() string
+}
+
+// oracleSampleUsage documents the flag run, baseline and check share.
+const oracleSampleUsage = "Run the targets cell's oracles (veraPDF, poppler, pdfcpu) on one fixture in N, by a hash of its ID; 1 runs them on every fixture, 0 on none"
 
 func runRun(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
@@ -98,6 +122,7 @@ func runRun(ctx context.Context, args []string) int {
 	workers := fs.Int("workers", runtime.GOMAXPROCS(0), "Parallel fixture workers")
 	allowDrift := fs.Bool("allow-version-drift", false, allowVersionDriftUsage)
 	reportDir := fs.String("report-dir", defaultReportDir, reportDirUsage)
+	oracleSample := fs.Int("oracle-sample", defaultOracleSample, oracleSampleUsage)
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "parsing flags: %v\n", err)
 		return 1
@@ -111,6 +136,7 @@ func runRun(ctx context.Context, args []string) int {
 		workers:           *workers,
 		allowVersionDrift: *allowDrift,
 		reportDir:         *reportDir,
+		oracleSample:      *oracleSample,
 	}
 	if opts.workers < 1 {
 		opts.workers = 1
@@ -276,7 +302,13 @@ func runCorpus(ctx context.Context, name string, opts runOptions) (*CorpusReport
 		if mr, ok := feat.(ManifestReader); ok {
 			mr.SetManifest(manifest)
 		}
+		if rt, ok := feat.(RunTuner); ok {
+			rt.SetRunOptions(opts.workers, opts.oracleSample)
+		}
 		goldenDir := manifest.GoldenDir(feat.Name())
+		if gb, ok := feat.(GoldenBorrower); ok {
+			goldenDir = manifest.GoldenDir(gb.GoldensOf())
+		}
 		if goldenDir == "" {
 			fr.NoGolden = true
 			report.Features = append(report.Features, fr)

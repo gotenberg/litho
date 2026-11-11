@@ -111,6 +111,16 @@ func printFeatureRow(w io.Writer, fr *FeatureReport) {
 		fmt.Fprintf(w, "%s %s  error=%d  pages_equal=%d  text_f1=%.3f  link_recall=%.3f  layout=%.3f  strict=%.3f\n",
 			prefix, primary, fr.Metrics[metricConvertError], fr.Metrics[metricPagesEqual],
 			means[scoreText], means[scoreLinks], means[scoreLayout], means[scoreStrict])
+	case "targets":
+		fmt.Fprintf(w, "%s %s  error=%d  report_disagrees=%d  oracle_targets=%d  verapdf_disagrees=%d  renderer_disagrees=%d  version_strict_failed=%d  unavailable=%d\n",
+			prefix, primary, fr.Metrics[metricConvertError], fr.Metrics[metricReportDisagrees], fr.Metrics[metricOracleTargets],
+			fr.Metrics[metricVeraPDFDisagrees], fr.Metrics[metricRendererDisagrees], fr.Metrics[metricVersionStrictFailed],
+			fr.Metrics[metricVeraPDFUnavailable]+fr.Metrics[metricPopplerUnavailable]+fr.Metrics[metricPdfcpuUnavailable])
+		var passes []string
+		for _, t := range outputTargets {
+			passes = append(passes, fmt.Sprintf("%s=%d", t.ID, fr.Metrics[metricTargetPassPrefix+t.ID]))
+		}
+		fmt.Fprintf(w, "    pass: %s\n", strings.Join(passes, " "))
 	case "robustness":
 		fmt.Fprintf(w, "%s %s  crash=%d  panic=%d  unexpected=%d  over_memory=%d  fetch=%d  leak=%d  missing_text=%d\n", prefix, primary,
 			fr.Metrics[metricCrash], fr.Metrics[metricPanic], fr.Metrics[metricUnexpected], fr.Metrics[metricOverMemory],

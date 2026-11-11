@@ -149,6 +149,18 @@ var costMetrics = map[string]bool{
 	// back. pages_equal, the diff cell's count of fixtures with Chromium's
 	// page count, stays gated as good-when-higher.
 	metricConvertError: true,
+
+	// The targets cell counts the (fixture, target) cells whose conversion
+	// report disagrees with litho's validator, whose oracles disagree with
+	// litho or did not run, and whose version pdfcpu refuses. Its pass_<target>
+	// counts and oracle_targets, the sample's coverage, stay gated as
+	// good-when-higher. See targetsFeature.
+	metricReportDisagrees:     true,
+	metricVeraPDFDisagrees:    true,
+	metricVeraPDFUnavailable:  true,
+	metricRendererDisagrees:   true,
+	metricVersionStrictFailed: true,
+	metricPdfcpuUnavailable:   true,
 }
 
 // uncomparedMetrics lists raw inventory totals that shift with any
@@ -236,6 +248,7 @@ func runBaseline(ctx context.Context, args []string) int {
 	workers := fs.Int("workers", runtime.GOMAXPROCS(0), "Parallel fixture workers")
 	allowDrift := fs.Bool("allow-version-drift", false, allowVersionDriftUsage)
 	reportDir := fs.String("report-dir", defaultReportDir, reportDirUsage)
+	oracleSample := fs.Int("oracle-sample", defaultOracleSample, oracleSampleUsage)
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "parsing flags: %v\n", err)
 		return 1
@@ -247,6 +260,7 @@ func runBaseline(ctx context.Context, args []string) int {
 		workers:           *workers,
 		allowVersionDrift: *allowDrift,
 		reportDir:         *reportDir,
+		oracleSample:      *oracleSample,
 	}
 	if opts.workers < 1 {
 		opts.workers = 1
@@ -295,6 +309,7 @@ func runCheck(ctx context.Context, args []string) int {
 	workers := fs.Int("workers", runtime.GOMAXPROCS(0), "Parallel fixture workers")
 	allowDrift := fs.Bool("allow-version-drift", false, allowVersionDriftUsage)
 	reportDir := fs.String("report-dir", defaultReportDir, reportDirUsage)
+	oracleSample := fs.Int("oracle-sample", defaultOracleSample, oracleSampleUsage)
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "parsing flags: %v\n", err)
 		return 1
@@ -312,6 +327,7 @@ func runCheck(ctx context.Context, args []string) int {
 		workers:           *workers,
 		allowVersionDrift: *allowDrift,
 		reportDir:         *reportDir,
+		oracleSample:      *oracleSample,
 	}
 	if opts.workers < 1 {
 		opts.workers = 1
