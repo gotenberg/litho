@@ -31,7 +31,7 @@ const excelLeapDay = 60
 func calendarDay(days int64, excel bool) (int, time.Month, int, time.Weekday) {
 	if excel && days >= 0 && days <= excelLeapDay {
 		// Excel's day 1 is a Sunday, January 1, 1900.
-		wd := time.Weekday((days + 6) % 7)
+		wd := time.Weekday((days + 6) % 7) // fits int: a remainder of 7, days is not negative
 		switch days {
 		case 0:
 			return 1900, time.January, 0, wd
