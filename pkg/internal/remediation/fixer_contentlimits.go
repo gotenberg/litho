@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"maps"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -274,7 +275,10 @@ type limitBreaker struct {
 // colourOff reports that the stream starts with them ignored. Each maps to
 // whether the number places or shapes something the page shows: every number
 // of an inline image's dictionary does, and an operand does unless its
-// operator places nothing ([placesNothing]).
+// operator places nothing ([placesNothing]). An operand of a text-positioning
+// operator ([textMoves]) places something only when text is shown after it
+// in its text object, and one of a text state operator ([textState]) only
+// when text is shown or a form drawn after it in the stream.
 //
 // The stream is read as validation reads it ([visitVeraPDFTokens]), which
 // finds the operator c in "c047" and the number 047 after it, and gives a run
@@ -300,6 +304,10 @@ func judgedLimitBreakers(ctx context.Context, data []byte, part int, colourOff b
 		// read, with imageMask and maskKey following its /IM entry.
 		operands, image    []limitBreaker
 		imageMask, maskKey bool
+		// moves holds the judged operands of the text-positioning operators
+		// no text has been shown after yet, and state those of the text
+		// state operators.
+		moves, state []limitBreaker
 	)
 	colour := compliance.NewColourState(colourOff)
 	mark := func(b limitBreaker, places bool) {
@@ -339,18 +347,84 @@ func judgedLimitBreakers(ctx context.Context, data []byte, part int, colourOff b
 			operands = append(operands, limitBreaker{at: at, integer: !strings.ContainsRune(tok.Value, '.')})
 		case at.depth == 0 && isOperatorToken(tok):
 			for _, b := range operands {
-				if operandJudged(compliance.ContentOperandLink(tok.Value, b.at.operand, at.operand, colour.On()), b) {
+				if !operandJudged(compliance.ContentOperandLink(tok.Value, b.at.operand, at.operand, colour.On()), b) {
+					continue
+				}
+				switch {
+				case textMoves(tok.Value):
+					moves = append(moves, b)
+				case textState(tok.Value):
+					state = append(state, b)
+				default:
 					mark(b, !placesNothing(tok.Value))
 				}
 			}
 			operands = operands[:0]
+			switch {
+			case showsText(tok.Value):
+				for _, b := range moves {
+					mark(b, true)
+				}
+				for _, b := range state {
+					mark(b, true)
+				}
+				moves, state = moves[:0], state[:0]
+			case tok.Value == "Do":
+				// A form draws under the text state in force (ISO 32000-1,
+				// 8.10.1), and its text shows with it.
+				for _, b := range state {
+					mark(b, true)
+				}
+				state = state[:0]
+			case tok.Value == "BT" || tok.Value == "ET":
+				// Each text object starts from the identity text matrix
+				// (9.4.1): a move no text followed placed nothing.
+				for _, b := range moves {
+					mark(b, false)
+				}
+				moves = moves[:0]
+			}
 			colour.Operator(tok.Value)
 		}
 	})
 	if len(image) > 0 {
 		endImage()
 	}
+	for _, b := range slices.Concat(moves, state) {
+		mark(b, false)
+	}
 	return judged
+}
+
+// textMoves reports whether op sets or moves the text matrix (ISO 32000-1,
+// 9.4.2, Table 108): its operands place the text shown after it in the text
+// object, and nothing when none is.
+func textMoves(op string) bool {
+	switch op {
+	case "Td", "TD", "Tm":
+		return true
+	}
+	return false
+}
+
+// textState reports whether op sets a text state parameter (ISO 32000-1,
+// 9.3.1, Table 105): it lasts as graphics state, and shapes the text shown
+// after it, and nothing when none is.
+func textState(op string) bool {
+	switch op {
+	case "Tc", "Tw", "Tz", "TL", "Tf", "Ts":
+		return true
+	}
+	return false
+}
+
+// showsText reports whether op shows text (ISO 32000-1, 9.4.3, Table 109).
+func showsText(op string) bool {
+	switch op {
+	case "Tj", "TJ", "'", `"`:
+		return true
+	}
+	return false
 }
 
 // operandJudged reports whether link, what the operator reads of an operand

@@ -70,9 +70,9 @@ func TestClampContentNumbers(t *testing.T) {
 // TestClampContentNumbersKeepsWhatPlaces pins that, preserving content, the
 // content-limits repair leaves as written every number past the limits whose
 // clamp would move or reshape what the page shows, and counts it, while it
-// still clamps a number that places nothing, still splits a translation,
-// which draws as written, and still respells an integer as the real of its
-// value.
+// still clamps a number that places nothing, a text move or a text state no
+// text follows among them, still splits a translation, which draws as
+// written, and still respells an integer as the real of its value.
 func TestClampContentNumbersKeepsWhatPlaces(t *testing.T) {
 	t.Parallel()
 
@@ -93,9 +93,14 @@ func TestClampContentNumbersKeepsWhatPlaces(t *testing.T) {
 		{"a property list", "/Span << /X 99999.5 >> BDC EMC", "/Span << /X 32767 >> BDC EMC", 1, 1, 0, 0},
 		{"an integer PDF/A-2 reads as a real", "[99999999999 2] 0 d" + path, "[99999999999.0 2] 0 d" + path, 2, 1, 0, 0},
 		{
-			"a translation, split", "1 0 0 1 72 -40000.5 cm BT 1 0 0 1 0 40100.5 Tm ET",
-			"1 0 0 1 0 -32767 cm 1 0 0 1 72 -7233.5 cm BT 1 0 0 1 0 40100.5 Tm ET", 1, 0, 1, 1,
+			"a translation, split", "1 0 0 1 72 -40000.5 cm BT 1 0 0 1 0 40100.5 Tm (a) Tj ET",
+			"1 0 0 1 0 -32767 cm 1 0 0 1 72 -7233.5 cm BT 1 0 0 1 0 40100.5 Tm (a) Tj ET", 1, 0, 1, 1,
 		},
+		{"a move no text follows", "BT (a) Tj -32767.9 50 Td ET", "BT (a) Tj -32767 50 Td ET", 1, 1, 0, 0},
+		{"a move text follows", "BT -32767.9 50 Td (a) Tj ET", "", 1, 0, 1, 0},
+		{"a horizontal scale text follows", "BT 60000.1 Tz ET BT (a) Tj ET", "", 1, 0, 1, 0},
+		{"a horizontal scale a form follows", "BT 60000.1 Tz ET /Fm0 Do", "", 1, 0, 1, 0},
+		{"a horizontal scale nothing follows", "BT (a) Tj 60000.1 Tz ET", "BT (a) Tj 32767 Tz ET", 1, 1, 0, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
