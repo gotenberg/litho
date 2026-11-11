@@ -23,7 +23,6 @@ One thing per PR. Keep features, bug fixes, and refactoring in separate PRs.
 ## Project layout
 
 ```
-cmd/litho/           -> The CLI. A thin front end to pkg/pdf.
 cmd/gen-*/           -> Generators for committed tables (rules, CMaps, fonts, Schematron).
 pkg/pdf/             -> Public API: Reader, Writer, Pipeline, options, sentinel errors.
 pkg/models/          -> Public data types pkg/pdf returns.
@@ -38,7 +37,6 @@ test/integration/    -> Corpus matrix scoring litho against veraPDF, PDF.js and 
 | Command                | Purpose                                                                      | When to use                                        |
 | ---------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------- |
 | `make help`            | Show the available commands                                                  | To discover targets                                |
-| `make build`           | Build the `litho` CLI                                                        | Manual testing                                     |
 | `make fmt`             | Format Go code and tidy the dependencies                                     | Before committing                                  |
 | `make prettify`        | Format non-Go files (Markdown, YAML, JSON)                                   | Before committing                                  |
 | `make lint`            | Lint Go code (zero warnings permitted)                                       | Before committing                                  |
@@ -70,7 +68,7 @@ test/integration/    -> Corpus matrix scoring litho against veraPDF, PDF.js and 
 
 - Wrap and propagate every error: `fmt.Errorf("resolving font %q: %w", name, err)`.
 - Name each fact once. A wrap adds what the wrapped error does not already say: `invalid image data: png: invalid format`, not `invalid image data: PNG: png: invalid format`. A public sentinel that stands for an internal one is the same value (`ErrRenderTooLarge = page.ErrTooLarge`), not a new error wrapping it.
-- A per-page `Reader` method names its page once, as the first words of its error: `page 3: ...`. It defers `pageError(pageNum, &err)` before `recoverToError`. Its helpers leave the page out, and so does a caller of the method, the CLI and another per-page method included.
+- A per-page `Reader` method names its page once, as the first words of its error: `page 3: ...`. It defers `pageError(pageNum, &err)` before `recoverToError`. Its helpers leave the page out, and so does a caller of the method, another per-page method included.
 - Classify what the caller causes. An error that comes from the document's bytes or from an argument wraps a sentinel `IsInvalidInput` reports, so a service answers it as a client error: a stream whose data does not decode wraps `ErrDamagedStream`. A litho bug or a host failure wraps none.
 - Match errors with `errors.Is`, never `strings.Contains`.
 - Sentinel errors live in `errors.go` per package.
@@ -106,7 +104,7 @@ Never load embedded files, images, or binary streams into memory during parsing.
 - Any length, count, or offset read from the PDF is untrusted. Bound it before `make`, a buffer, or a loop, against a natural limit (page count vs `/Size`, `/Length` vs `Document.FileSize()`) or a documented cap. Reject negative and overflowing values: a panicking `make` is a denial of service.
 - litho ships for 32-bit platforms, where `int` stops at 2^31 - 1. Narrow an `int64`, `uint64`, `uint32` or `uint` to `int` with `intconv.Clamp`, which saturates instead of wrapping, or state the bound on the same line: `int(n) // fits int: at most len(data), checked above`. `TestNarrowingConversionsAreClampedOrBounded` enforces it. Bound a sum or product of file-derived values before forming it, since a 32-bit `int` overflows where a 64-bit one does not.
 - Every defensive cap is a named package-level const whose comment says it is an anti-DoS guard, not spec-mandated, and why its value is safe for real documents (see `maxPageTreeDepth`). No bare numeric limits, and no conceptual limit defined twice with divergent values.
-- A cap that bounds a resource a caller trades against what litho reads joins `pdf.Limits`, with a default equal to the const it replaces, a ceiling, a CLI flag, and a test that lowers it through the public API. Code reads `Document.Limits` at run time, never the const. A cap derived from a budget keeps a documented relation to it (see `pdf.Limits`). A recursion guard that protects litho's own stack never joins it: no `recover` catches a Go stack overflow.
+- A cap that bounds a resource a caller trades against what litho reads joins `pdf.Limits`, with a default equal to the const it replaces, a ceiling, and a test that lowers it through the public API. Code reads `Document.Limits` at run time, never the const. A cap derived from a budget keeps a documented relation to it (see `pdf.Limits`). A recursion guard that protects litho's own stack never joins it: no `recover` catches a Go stack overflow.
 
 ### Panics and goroutines
 

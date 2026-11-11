@@ -18,18 +18,9 @@ litho implements ISO 32000 (PDF 1.4 through 2.0). It extracts text and structure
 
 ```bash
 go get github.com/gotenberg/litho
-go install github.com/gotenberg/litho/cmd/litho@latest
 ```
 
-Go 1.27.3+. No CGO.
-
-Prebuilt `litho` binaries for Linux (amd64, arm64, 386, armv7, ppc64le, riscv64, s390x, loong64), macOS, FreeBSD and Windows (amd64, arm64) ship with each [GitHub release](https://github.com/gotenberg/litho/releases). On Linux, macOS and FreeBSD, the install script downloads one, verifies its checksum and installs it in `/usr/local/bin`:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/gotenberg/litho/main/install.sh | sh
-```
-
-Set `LITHO_VERSION=v1.2.3` to pin a release and `LITHO_INSTALL_DIR` to install elsewhere.
+Go 1.27.3+. No CGO. litho is a library: it ships no command.
 
 ## Quick start
 
@@ -42,14 +33,6 @@ defer r.Close()
 
 violations, err := r.ValidatePDFAReport(ctx, models.PDFA2b)
 ```
-
-```bash
-litho validate --profile PDF/A-2b document.pdf
-litho remediate --profile PDF/A-2b --profile PDF/UA-1 --font-dir /usr/share/fonts -o fixed.pdf document.pdf
-litho sign --cert cert.pem --key key.pem --reason Approved -o signed.pdf document.pdf
-```
-
-Run `litho` with no arguments to list every subcommand, or `litho <command> -h` to see its flags.
 
 ## Features
 
@@ -66,7 +49,6 @@ Run `litho` with no arguments to list every subcommand, or `litho <command> -h` 
 
 - [Library reference](https://pkg.go.dev/github.com/gotenberg/litho/pkg/pdf): `Reader` opens and extracts, `Writer` queues edits and writes, `Pipeline` chains them.
 - [Examples](examples/): runnable programs for common tasks.
-- [CLI reference](https://pkg.go.dev/github.com/gotenberg/litho/cmd/litho): global flags, exit status, encrypted documents.
 
 ## Contributing
 

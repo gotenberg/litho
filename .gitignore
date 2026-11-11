@@ -1,4 +1,3 @@
-/litho
 /.idea/
 /test/integration/testdata/
 /corpus
@@ -6,4 +5,3 @@
 /.claude/
 /gen-rules
 /graphify-out/
-/dist/
