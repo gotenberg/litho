@@ -199,6 +199,7 @@ var sourcePins = map[string][]string{
 	"litho/odt": nil,
 	"litho/ods": nil,
 	"litho/odp": nil,
+	"litho/csv": nil,
 
 	"litho/stress": nil,
 
