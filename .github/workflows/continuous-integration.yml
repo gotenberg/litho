@@ -100,27 +100,3 @@ jobs:
 
       - name: Vet linux/arm/v7
         run: GOOS=linux GOARCH=arm GOARM=7 go vet ./...
-
-  snapshot:
-    if: github.event_name == 'pull_request'
-    needs:
-      - test-unit
-      - test-unit-32bit
-    name: Snapshot release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Setup Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-
-      - name: Build binaries
-        uses: goreleaser/goreleaser-action@v7
-        with:
-          version: v2.19.0
-          args: release --snapshot --clean
