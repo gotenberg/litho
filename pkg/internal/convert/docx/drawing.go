@@ -351,4 +351,3 @@ func (d *document) textBox(s *story, content *ooxml.Element, w, h float64, ss oo
 	}
 	return n
 }
-
