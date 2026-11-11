@@ -112,7 +112,7 @@ func (b *builder) note(c *odf.Element, t textState, out *[]*layout.Node, ws *wsS
 	}
 	bst := baseStyle()
 	bst.Display = css.Block
-	nb := b.node(&layout.Node{Kind: layout.Element, Style: bst, Role: "Note", Children: body})
+	nb := b.node(&layout.Node{Kind: layout.Element, Style: bst, Role: "Note", Children: b.wrapLists(body, 0)})
 	if class == "endnote" || cfg.A(odf.NSText, "footnotes-position") == "document" {
 		b.notes.ends = append(b.notes.ends, nb)
 		*out = append(*out, call)

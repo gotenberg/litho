@@ -399,7 +399,7 @@ func (f *pageFlow) hfNodes(g *hfGeom, number, pages int, format string) []*layou
 	if b.pkg.Flat {
 		b.scope = odf.ScopeContent
 	}
-	nodes := b.blocks(g.el, blockCtx{})
+	nodes := b.wrapLists(b.blocks(g.el, blockCtx{}), 0)
 	b.hf, b.scope = saved, savedScope
 	return nodes
 }

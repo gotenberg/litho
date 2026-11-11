@@ -151,9 +151,6 @@ func (b *builder) blocks(el *odf.Element, ctx blockCtx) []*layout.Node {
 		out = append(out, b.block(c, &ctx)...)
 	}
 	b.spacing(out)
-	if ctx.list == nil {
-		out = b.wrapLists(out, 0)
-	}
 	return out
 }
 
@@ -163,7 +160,10 @@ func (b *builder) blocks(el *odf.Element, ctx blockCtx) []*layout.Node {
 // holds its LI elements and the lists nested in them). It runs once
 // Writer's spacing is applied, so that it spaces the paragraphs of a list
 // and those around it as siblings: an L is a block with no box of its
-// own, whose margins collapse with its first and last child's.
+// own, whose margins collapse with its first and last child's. The
+// builders of the containers of blocks call it once they have done with
+// their blocks as siblings: the body, a section, a table cell, a text box
+// or a shape, a note, a header or a footer.
 func (b *builder) wrapLists(nodes []*layout.Node, depth int) []*layout.Node {
 	if len(b.listPath) == 0 {
 		return nodes
@@ -717,7 +717,7 @@ func (b *builder) section(c *odf.Element, ctx blockCtx) []*layout.Node {
 	}
 	b.columns(st, props.Child("style:columns"), b.currentAreaWidth()-st.Margin[css.Left].Value-st.Margin[css.Right].Value)
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "Sect", ID: c.A(odf.NSText, "name")})
-	n.Children = b.blocks(c, ctx)
+	n.Children = b.wrapLists(b.blocks(c, ctx), 0)
 	return []*layout.Node{n}
 }
 

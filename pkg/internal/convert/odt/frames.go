@@ -859,7 +859,7 @@ func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 		st.Overflow = css.OverflowHidden
 	}
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st})
-	n.Children = b.blocks(k, blockCtx{depth: depth + 1})
+	n.Children = b.wrapLists(b.blocks(k, blockCtx{depth: depth + 1}), 0)
 	return n
 }
 
