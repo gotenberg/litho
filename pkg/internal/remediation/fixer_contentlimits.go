@@ -103,6 +103,15 @@ type contentLimitsTally struct {
 //   - All corpora: no file whose validation at PDF/A-1b or PDF/A-2b reports a
 //     limit violation draws a stream with its colour operators off, so reading
 //     those streams that way changes no remediation.
+//   - libreoffice/odt layout/many-paragraphs-per-page-in-6-columns.odt: its
+//     conversion to PDF/A-1b, when the converter still wrote text matrices
+//     past the limit, clamped 147 numbers, passed veraPDF and the integrity
+//     probe, and lost the text of pages 10 to 12 (143, 134 and 4 words became
+//     135, 0 and 0).
+//   - litho/pdf fartext_1b.pdf: clamping every number, the PDF/A-1b
+//     remediation passed litho and veraPDF 1.30.4 and lost page 1's text.
+//     Preserving content, it keeps every page's text and leaves two
+//     residuals, which veraPDF fails as 6.1.12 t2.
 func fixContentLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, profile string) ([]string, error) {
 	part := compliance.PDFAPart(profile)
 	colourOff, err := compliance.ColourOffStreams(ctx, doc, profile)
