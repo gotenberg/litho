@@ -37,17 +37,16 @@ const maxMeasuredCells = 1 << 16
 // optimalHeights grows every row without a custom height to the height
 // of its text, as Calc's optimal row height: the tallest cell's lines plus
 // its top and bottom padding. A cell merged down several rows does not
-// count. A book laid out by Excel's rules keeps every row's height
-// ([Document.ExcelRules]).
+// count. A book laid out by Excel's rules grows a row alone when it has no
+// height of its own, and to fit its lines alone ([excelHeight]).
 func (b *builder) optimalHeights(g *grid) {
-	if b.doc.ExcelRules {
-		return
-	}
 	pb := &pageBuilder{builder: b, g: g}
+	excel := b.doc.ExcelRules
+	defLine := b.m.lineHeight(resolveFont(Font{}, b.doc.Default.Font))
 	budget := maxMeasuredCells
 	for _, ri := range g.rowOrder {
 		row := g.rows[ri]
-		if row.CustomHeight || row.Hidden {
+		if row.CustomHeight || row.Hidden || (excel && row.Height > 0) {
 			continue
 		}
 		base := g.defH
@@ -71,6 +70,9 @@ func (b *builder) optimalHeights(g *grid) {
 				lastC = m.LastColumn
 			}
 			budget--
+			if excel && !g.style(ri, c.Column, c).Align.Wrap && !strings.Contains(c.Value.Text, "\n") {
+				continue
+			}
 			u := &unit{r: ri, c: c.Column, lastR: ri, lastC: lastC, cell: c, st: g.style(ri, c.Column, c)}
 			u.w = g.spanW(c.Column, lastC)
 			d, ok := pb.display(u)
@@ -86,15 +88,21 @@ func (b *builder) optimalHeights(g *grid) {
 					lineH = max(lineH, b.m.lineHeight(overlay(d.font, r.Font)))
 				}
 			}
-			h := lineH * float64(strings.Count(d.text, "\n")+1)
+			lines := float64(strings.Count(d.text, "\n") + 1)
+			h := lineH * lines
 			if d.wrap {
 				w := u.w - d.padding[css.Left] - d.padding[css.Right] - max(u.st.Align.Indent, 0)
 				if w > 0 {
 					p := pb.paragraph(&d, d.font, lineH, css.AlignLeft)
 					if mh := b.measureBlock(p, w); mh > 0 {
-						h = math.Round(mh/editLine(lineH)) * editLine(lineH)
+						lines = math.Round(mh / editLine(lineH))
+						h = lines * editLine(lineH)
 					}
 				}
+			}
+			if excel {
+				need = max(need, excelHeight(g.defH, lineH, defLine, lines))
+				continue
 			}
 			if rot := u.st.Align.Rotation; rot != 0 && !u.st.Align.Stacked {
 				a := math.Abs(rot) * math.Pi / 180
@@ -109,6 +117,32 @@ func (b *builder) optimalHeights(g *grid) {
 		}
 	}
 }
+
+// excelHeight returns the height Excel gives a row without a height of
+// its own whose wrapped text takes lines lines of lineH points: a line of
+// the sheet's default row height defH for each, scaled by the line of the
+// text's font against the default font's defLine, in whole printer pixels.
+// Excel fits such a row as it opens a workbook, and leaves a row whose
+// text is merely taller than the default unfitted.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: alignment prints its rows of three wrapped lines of
+//     Calibri 11 43.56 points tall, three rows of 14.52; fonts prints its
+//     row of 14 point text without a height 14.52 points tall.
+//   - libreoffice/xlsx: sc/tdf139934.xlsx prints its rows of two wrapped
+//     lines of Arial 10 24.72 points tall, two rows of 12.36.
+func excelHeight(defH, lineH, defLine, lines float64) float64 {
+	per := defH
+	if defLine > 0 && lineH > defLine {
+		per = defH * lineH / defLine
+	}
+	return math.Round(per*max(lines, 1)/excelPixel) * excelPixel
+}
+
+// excelPixel is the printer pixel Excel lays a printed sheet out in, in
+// points.
+const excelPixel = 72.0 / 600
 
 // editLine returns the height of a wrapped line of text whose natural
 // line is h points: Calc's edit engine rounds it up to whole twips.
