@@ -1,6 +1,7 @@
 package docx
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -106,7 +107,7 @@ func (d *document) startResult(s *story, f *field, st *css.Style, sink *inlineSi
 		sink.add(&layout.Node{Kind: layout.Element, Style: st, Children: []*layout.Node{{Kind: layout.Text, Style: st, Text: v}}})
 		return
 	}
-	if href := hyperlinkTarget(instr); href != "" {
+	if href := fieldLink(instr, sink); href != "" {
 		f.link = true
 		sink.openLink(href)
 	}
@@ -129,7 +130,7 @@ func (d *document) simpleField(s *story, rp resolvedPara, ps *css.Style, lineMul
 		sink.add(&layout.Node{Kind: layout.Element, Style: st, Children: []*layout.Node{{Kind: layout.Text, Style: st, Text: v}}})
 		return
 	}
-	if href := hyperlinkTarget(instr); href != "" {
+	if href := fieldLink(instr, sink); href != "" {
 		sink.openLink(href)
 		d.inlines(s, rp, ps, lineMult, e, sink, depth+1)
 		sink.closeLink()
@@ -194,6 +195,34 @@ func (d *document) computeField(s *story, instr string) (string, bool) {
 func hiddenField(instr string) bool {
 	args := fieldArgs(instr)
 	return len(args) > 0 && strings.EqualFold(args[0], "SET")
+}
+
+// fieldLink returns the target a field's result links to, "" for none: a
+// HYPERLINK's ([hyperlinkTarget]), and the bookmark a REF, PAGEREF or
+// NOTEREF field with the \h switch names (17.16.5.51, 17.16.5.45 and
+// 17.16.5.43: \h inserts a hyperlink to the bookmarked text), unless the
+// field lies in a link already, a table of contents entry's.
+//
+// # Corpus evidence
+//
+//   - litho/docx fields-ref-bookmarks: Word links the results of REF \h,
+//     PAGEREF \h and NOTEREF \h to their bookmarks' pages, and not those
+//     of a REF or a bare bookmark field without \h.
+//   - litho/docx fields-seq-captions, poi/docx document/65099: so linked,
+//     their link recall reaches 1.
+func fieldLink(instr string, sink *inlineSink) string {
+	if href := hyperlinkTarget(instr); href != "" {
+		return href
+	}
+	args := fieldArgs(instr)
+	if len(args) < 2 || len(sink.links) > 0 || !slices.Contains(args[2:], `\h`) {
+		return ""
+	}
+	switch strings.ToUpper(args[0]) {
+	case "REF", "PAGEREF", "NOTEREF":
+		return "#" + args[1]
+	}
+	return ""
 }
 
 // hyperlinkTarget returns the target of a HYPERLINK field instruction
