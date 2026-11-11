@@ -32,8 +32,11 @@ const (
 	Replaced
 )
 
-// Picture is a decoded picture with its intrinsic size.
+// Picture is a picture with its intrinsic size: a raster one, held encoded
+// in its Source, or a vector one its Vector draws.
 type Picture struct {
+	// Source is a raster picture as the file stores it (compose.ImageSource),
+	// nil for a vector picture.
 	Source *compose.ImageSource
 	// Width and Height are the intrinsic size in points, both positive.
 	Width, Height float64
