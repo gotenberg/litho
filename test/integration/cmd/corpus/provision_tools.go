@@ -106,7 +106,10 @@ func renderSampled(name string, sample int) bool {
 // index rather than ending the run.
 func renderOne(ctx context.Context, pdf, out string, maxPages int, hide bool) (renderIndex, error) {
 	id := strings.TrimSuffix(filepath.Base(pdf), ".pdf")
-	idx := renderIndex{ID: id, DPI: renderDPI, Pages: []renderIndexPage{}}
+	// The setting is recorded before anything can fail: an index poppler
+	// drew no page for still says how its corpus draws, which the cell
+	// that loads it checks.
+	idx := renderIndex{ID: id, DPI: renderDPI, HideAnnotations: hide, Pages: []renderIndexPage{}}
 	info, stderr, err := runBounded(ctx, "pdfinfo", pdf)
 	if err != nil {
 		if stderr == "" {
@@ -146,7 +149,6 @@ func renderOne(ctx context.Context, pdf, out string, maxPages int, hide bool) (r
 		}
 		idx.Pages = append(idx.Pages, renderIndexPage{Page: page, Error: "pdftoppm: " + msg})
 	}
-	idx.HideAnnotations = hide
 	return idx, writeJSONFile(filepath.Join(out, id+".json"), idx)
 }
 
