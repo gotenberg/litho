@@ -118,7 +118,7 @@ func (p *pageWriter) fragments(ctx context.Context, content []Fragment, opacity 
 		case *Text:
 			err = p.text(ctx, f, opacity)
 		case *Image:
-			err = p.image(ctx, f, opacity)
+			err = p.image(f, opacity)
 		case *Path:
 			err = p.path(ctx, f, opacity)
 		case *Group:
@@ -379,7 +379,7 @@ func (p *pageWriter) fontName(fe *fontEntry) string {
 // image's first row maps to the top of the unit square, so under the
 // page's flip the matrix [w 0 0 -h x y+h] stands it upright with its top
 // edge at y.
-func (p *pageWriter) image(ctx context.Context, img *Image, opacity float64) error {
+func (p *pageWriter) image(img *Image, opacity float64) error {
 	r := img.Rect
 	if round(r.Width) == 0 || round(r.Height) == 0 {
 		// A degenerate rectangle paints nothing, and its singular matrix
