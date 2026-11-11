@@ -12,13 +12,17 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
-// Origin is a cascade origin (CSS Cascade 4, 6.2). There is no user
-// origin.
+// Origin is a cascade origin (CSS Cascade 4, 6.2).
 type Origin uint8
 
 // The origins, in increasing precedence for normal declarations.
 const (
+	// UserAgent is the engine's default stylesheet.
 	UserAgent Origin = iota
+	// User is the stylesheets the caller gives for any document.
+	User
+	// Author is the document's own stylesheets, style attributes and
+	// presentational hints.
 	Author
 )
 
@@ -29,17 +33,26 @@ type Sheet struct {
 }
 
 // rank orders declarations by origin and importance (CSS Cascade 4, 6.2):
-// important declarations reverse the order of the origins.
+// normal user agent, normal user, normal author, important author,
+// important user, important user agent. Important declarations reverse
+// the order of the origins.
 func rank(o Origin, important bool) int {
-	switch {
-	case !important && o == UserAgent:
-		return 0
-	case !important:
-		return 1
-	case o == Author:
-		return 2
+	if !important {
+		return int(o)
 	}
-	return 3
+	return 2*int(Author) + 1 - int(o)
+}
+
+// originOf returns the origin of a declaration of rank r, the inverse of
+// [rank] over the origin.
+func originOf(r int) Origin {
+	switch r {
+	case rank(Author, false), rank(Author, true):
+		return Author
+	case rank(User, false), rank(User, true):
+		return User
+	}
+	return UserAgent
 }
 
 // Resolver cascades a fixed set of stylesheets for one medium. It is
@@ -492,11 +505,26 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		}
 		return id
 	}
+	// user holds, per longhand, the value the user origin's declarations
+	// give it, which an author revert rolls back to (CSS Cascade 4,
+	// 7.3.4). The user origin's normal declarations sort before every
+	// author declaration, so it is complete when an author revert is met.
+	var user *[numProps]any
 	for _, c := range cands {
 		for _, w := range c.d.warns {
 			cs.warns.add(w)
 		}
 		switch {
+		case c.d.revert && originOf(c.rank) == Author && user != nil:
+			for _, e := range c.d.entries {
+				id := side(c.d, e.id)
+				if v := user[id]; v != nil {
+					winners[id] = v
+				} else {
+					winners[id] = e.v
+				}
+			}
+			continue
 		case c.d.isCustom:
 			if _, seen := custom[c.d.Property]; !seen {
 				customNames = append(customNames, c.d.Property)
@@ -509,6 +537,19 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		default:
 			for _, e := range c.d.entries {
 				winners[side(c.d, e.id)] = e.v
+			}
+		}
+		if originOf(c.rank) == User && !c.d.isCustom {
+			if user == nil {
+				user = new([numProps]any)
+			}
+			if len(c.d.pending) > 0 {
+				for _, id := range longhandsOf(c.d.Property) {
+					user[side(c.d, id)] = pendingRef{c.d}
+				}
+			}
+			for _, e := range c.d.entries {
+				user[side(c.d, e.id)] = e.v
 			}
 		}
 	}
