@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -102,16 +101,31 @@ type textChecks struct {
 }
 
 // convertOne converts src at the options its options.json names, counting
-// every request the conversion tries and refusing it.
+// every request the conversion tries and refusing it. It reads the source
+// from its file and writes the PDF to a temp file, so the memory its
+// parent measures is the conversion's and holds no copy of either.
+//
+// # Corpus evidence
+//
+//   - litho/stress html-png-50: the child that held its 252 MiB PDF in a
+//     buffer peaked at 757 MiB alone and at 784 MiB beside twelve busy
+//     loops, where `litho convert` peaks at 249 MiB either way.
 func convertOne(ctx context.Context, src string, fonts []string, checks textChecks) convertOneResult {
 	document, format, sourceOpts, err := loadRobustnessSource(src)
 	if err != nil {
 		return convertOneResult{Result: "error", Detail: err.Error()}
 	}
-	data, err := os.ReadFile(document) //nolint:gosec // a fixture path
+	in, err := os.Open(document) //nolint:gosec // a fixture path
 	if err != nil {
 		return convertOneResult{Result: "error", Detail: err.Error()}
 	}
+	defer in.Close()
+	out, err := os.CreateTemp("", "litho-convert-one-*.pdf")
+	if err != nil {
+		return convertOneResult{Result: "error", Detail: err.Error()}
+	}
+	defer os.Remove(out.Name())
+	defer out.Close()
 	var fetches atomic.Int64
 	client := &http.Client{Transport: refusingTransport{&fetches}}
 	opts := []pdf.ConvertOption{pdf.WithHTTPClient(client)}
@@ -119,14 +133,13 @@ func convertOne(ctx context.Context, src string, fonts []string, checks textChec
 		opts = append(opts, pdf.WithConvertFontDirs(fonts...))
 	}
 	opts = append(opts, sourceOpts...)
-	var out bytes.Buffer
-	_, err = pdf.Convert(ctx, bytes.NewReader(data), format, &out, opts...)
+	_, err = pdf.Convert(ctx, in, format, out, opts...)
 	res := convertOneResult{Result: convertResultName(err), Fetches: fetches.Load()}
 	if err != nil {
 		res.Detail = err.Error()
 		return res
 	}
-	res.Pages, res.Leaked, res.Missing, err = checkText(ctx, out.Bytes(), checks)
+	res.Pages, res.Leaked, res.Missing, err = checkText(ctx, out, checks)
 	if err != nil {
 		return convertOneResult{Result: "error", Detail: "read the conversion: " + err.Error(), Fetches: res.Fetches}
 	}
@@ -136,11 +149,15 @@ func convertOne(ctx context.Context, src string, fonts []string, checks textChec
 // maxTextPages caps the pages whose text is checked.
 const maxTextPages = 50
 
-// checkText returns the page count of a PDF, the forbidden strings the
-// text of its first [maxTextPages] pages holds and the required ones it
-// lacks.
-func checkText(ctx context.Context, data []byte, checks textChecks) (int, []string, []string, error) {
-	r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)))
+// checkText returns the page count of the PDF in f, the forbidden strings
+// the text of its first [maxTextPages] pages holds and the required ones
+// it lacks.
+func checkText(ctx context.Context, f *os.File, checks textChecks) (int, []string, []string, error) {
+	info, err := f.Stat()
+	if err != nil {
+		return 0, nil, nil, err
+	}
+	r, err := pdf.Open(ctx, f, info.Size())
 	if err != nil {
 		return 0, nil, nil, err
 	}

@@ -34,11 +34,11 @@
     "result": "pdf",
     "max_seconds": 20,
     "why": "Ten distinct 12-megapixel PNGs: each is held decoded, 48 MB, only while it is encoded, then its compressed samples go to the conversion's picture file past 8 MiB; the account peaks near 55 MiB, the process near 280 MiB.",
-    "max_rss_mib": 512
+    "max_rss_mib": 384
   },
   "html-png-50": {
     "result": "pdf",
-    "max_rss_mib": 768,
+    "max_rss_mib": 384,
     "max_seconds": 60,
     "why": "Fifty distinct 12-megapixel PNGs, 2.4 GB of pixels decoded one at a time, their compressed samples kept in the conversion's picture file past 8 MiB: the account peaks near 65 MiB and the Go heap near 230 MiB, where both held the samples, 310 MiB, before."
   },
