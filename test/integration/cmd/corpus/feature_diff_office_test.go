@@ -128,6 +128,12 @@ func TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
 				if !f.HasGolden(fx.ID) {
 					continue // refused by Microsoft: no reference to score
 				}
+				f.mu.RLock()
+				_, borrows := f.borrowed[fx.ID]
+				f.mu.RUnlock()
+				if borrows {
+					continue // scored against another fixture's reference, which this loop feeds back itself
+				}
 				ref, err := os.ReadFile(filepath.Join(f.testdataRoot, filepath.FromSlash(f.m.References.Dir), reportName(fx.ID)+".pdf"))
 				if err != nil {
 					t.Fatal(err)
