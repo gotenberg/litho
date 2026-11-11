@@ -447,7 +447,8 @@ func TestResources_CapImages(t *testing.T) {
 	}
 	mctx, mem, done := limits.WithBudget(ctx, limits.Limits{MaxConvertMemoryBytes: 1 << 27})
 	defer done()
-	if _, err := r.picture(mctx, rootPrefix+"1.png"); err == nil || !errors.Is(mem.Err(), limits.ErrMemoryBudget) || mem.Held() != 0 {
+	// The budget holds the file's bytes, never its pixels.
+	if _, err := r.picture(mctx, rootPrefix+"1.png"); err == nil || !errors.Is(mem.Err(), limits.ErrMemoryBudget) || mem.Held() >= 1<<10 {
 		t.Errorf("past the memory budget: %v, budget %v, held %d", err, mem.Err(), mem.Held())
 	}
 

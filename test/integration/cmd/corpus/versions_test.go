@@ -465,7 +465,9 @@ func TestEverySourceReadsItsPin(t *testing.T) {
 			}
 			continue
 		}
-		if m.CommittedPDFs == "" && m.References == nil {
+		// The stress corpus is scored by robustness alone, against the
+		// documents corpus build writes: it installs no PDF.
+		if m.CommittedPDFs == "" && m.References == nil && m.Name != stressCorpus {
 			t.Errorf("%s: corpus goldens has no PDFs to install: no fetch, no committed_pdfs, no references", m.Name)
 		}
 		if len(keys) > 0 {

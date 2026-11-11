@@ -166,6 +166,14 @@ func partsNames(m *Manifest) ([]string, error) {
 // builtNames returns every fixture name of a build corpus: its unpacked
 // documents, then its hostile ones.
 func builtNames(m *Manifest) ([]string, error) {
+	if m.Name == stressCorpus {
+		docs := stressDocs()
+		names := make([]string, 0, len(docs))
+		for _, d := range docs {
+			names = append(names, d.name)
+		}
+		return names, nil
+	}
 	format, err := buildFormat(m)
 	if err != nil {
 		return nil, err
