@@ -47,6 +47,11 @@ func (r *reader) effectList(chain []*ooxml.Element, style *ooxml.Element, fc *fi
 	var lst *ooxml.Element
 	ph := fc.ph
 	for _, el := range chain {
+		if el == nil {
+			// A table without a:tblPr (ECMA-376 Part 1, 21.1.3.15 makes it
+			// optional) has no effect list of its own.
+			continue
+		}
 		pr := spPr(el)
 		if pr == nil && el.Is(ooxml.NSA, "tblPr") {
 			pr = el

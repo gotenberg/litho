@@ -200,6 +200,11 @@ func TestShapes_Table(t *testing.T) {
 			`<a:tr h="127000">` + cell("E", "", "/>") + cell("F", "", "/>") + `</a:tr>` +
 			`</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`
 	}
+	// A table without a:tblPr (21.1.3.15 makes it optional) prints, its
+	// effect list empty.
+	if s := oneSlide(t, frame("")); len(s.Shapes) != 1 || s.Shapes[0].Kind != slides.KindTable {
+		t.Fatalf("table without tblPr: %+v", s.Shapes)
+	}
 	// The default Medium Style 2 - Accent 1 as Impress draws it.
 	s := oneSlide(t, frame(`<a:tblPr firstRow="1" bandRow="1"><a:tableStyleId>{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}</a:tableStyleId></a:tblPr>`))
 	tb := s.Shapes[0].Table
