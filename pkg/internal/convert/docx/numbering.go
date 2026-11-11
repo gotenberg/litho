@@ -437,8 +437,8 @@ func mapSymbolText(s, family string) (string, bool) {
 	return string(out), mapped || table != nil
 }
 
-// numberingSystem returns the numbering system of a list whose label, in
-// the number format format (ECMA-376 Part 1, 17.18.59 ST_NumberFormat),
+// numberingSystem returns the numbering system of a list whose label,
+// in the ST_NumberFormat named by format (ECMA-376 Part 1, 17.18.59),
 // reads label: the ListNumbering of its L element (ISO 32000-1, 14.8.5.5,
 // Table 347; ISO 32000-2, Table 382). A bullet is a disc, a circle or a
 // square by its character, in a Unicode or a Symbol and Wingdings font's
