@@ -339,3 +339,26 @@ func TestSections_GutterPlacement(t *testing.T) {
 		}
 	}
 }
+
+func TestSections_ColumnFillAndDirection(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:pPr><w:sectPr><w:cols w:num="2"/></w:sectPr></w:pPr><w:r><w:t>a</w:t></w:r></w:p>` +
+		`<w:p><w:pPr><w:sectPr><w:type w:val="continuous"/><w:cols w:num="2"/></w:sectPr></w:pPr><w:r><w:t>b</w:t></w:r></w:p>` +
+		`<w:p><w:r><w:t>c</w:t></w:r></w:p><w:sectPr><w:cols w:num="2"/><w:bidi/></w:sectPr>`
+	b := build(t, body, nil)
+	if len(b.root.Children) != 3 {
+		t.Fatalf("%d sections", len(b.root.Children))
+	}
+	for i, want := range []css.ColumnFill{css.FillBalance, css.FillAuto, css.FillAuto} {
+		if got := b.root.Children[i].Style.Columns.Fill; got != want {
+			t.Errorf("section %d fills %v, want %v", i, got, want)
+		}
+	}
+	if b.root.Children[2].Style.Direction != css.RTL || b.root.Children[1].Style.Direction != css.LTR {
+		t.Errorf("directions %v %v", b.root.Children[1].Style.Direction, b.root.Children[2].Style.Direction)
+	}
+	last := b.d.sectionNode(b.secs[2], []*layout.Node{{Kind: layout.Element, Style: b.d.blockStyle()}})
+	if last.Style.Columns.Fill != css.FillBalance {
+		t.Errorf("the last section before the endnotes fills %v", last.Style.Columns.Fill)
+	}
+}

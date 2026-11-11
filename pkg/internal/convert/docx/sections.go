@@ -62,6 +62,11 @@ type section struct {
 	pending          []pendingAnchor
 	headerH, footerH map[string]float64
 	start            int
+	// rtl lays the columns from right to left (17.6.1 bidi).
+	rtl bool
+	// balance balances the section's columns: the next section starts
+	// on its page, after a continuous break.
+	balance bool
 }
 
 // parseSection reads a w:sectPr (17.6.17), headers and footers it does not
@@ -138,6 +143,9 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 	}
 	if t := e.Child(w, "type"); t != nil {
 		s.breakType = attrOr(t, "val")
+	}
+	if b := e.Child(w, "bidi"); b != nil {
+		s.rtl = ooxml.Toggle(b)
 	}
 	if p := e.Child(w, "pgNumType"); p != nil {
 		if v, ok := ooxml.Int(attrOr(p, "start")); ok {
@@ -416,6 +424,7 @@ func (d *document) body(root *ooxml.Element) []*section {
 		if i > 0 && s.breakType == "continuous" {
 			if samePage(secs[i-1], s) {
 				s.name = secs[i-1].name
+				secs[i-1].balance = true
 			}
 		}
 		owner := s
@@ -450,6 +459,15 @@ func emptyParagraph(p *ooxml.Element) bool {
 
 // sectionNode returns the block of section s: its page name, its columns,
 // its blocks, its break to an odd or even page.
+//
+// # Corpus evidence
+//
+//   - litho/docx intl-rtl-hebrew: Word prints a right-to-left section of
+//     two columns from its right column, and leaves the left one empty
+//     where the content fits the right one: the document's last section
+//     is not balanced.
+//   - litho/docx sink-paper: Word balances the columns of the last section
+//     with the endnotes that follow it.
 func (d *document) sectionNode(s *section, extra []*layout.Node) *layout.Node {
 	st := d.blockStyle()
 	st.Page = s.name
@@ -458,6 +476,18 @@ func (d *document) sectionNode(s *section, extra []*layout.Node) *layout.Node {
 		st.ColumnGap = css.Pts(s.colSpace)
 		if len(s.colTracks) > 0 {
 			setColumnTracks(st, s.colTracks)
+		}
+		if !s.balance && len(extra) == 0 {
+			// Word balances the columns of a section only where the next
+			// section continues on its page, or where the endnotes follow
+			// it; any other section fills its columns one after the
+			// other, the document's last included.
+			st.Columns.Fill = css.FillAuto
+		}
+		if s.rtl {
+			// A right-to-left section lays its first column on the right
+			// (17.6.1 bidi); a paragraph keeps its own direction.
+			st.Direction = css.RTL
 		}
 		if s.colSep {
 			st.Columns.RuleStyle = css.Solid
