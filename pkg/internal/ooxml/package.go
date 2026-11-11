@@ -151,6 +151,25 @@ func (p *Package) Has(name string) bool { return p.entry(name) != nil }
 // [MaxPartBytes] or the package's [MaxPackageBytes], and with
 // office.ErrMalformed for an entry that does not inflate.
 func (p *Package) Read(name string) ([]byte, error) {
+	rc, err := p.open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close() //nolint:errcheck // a read-only zip entry has nothing to flush
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // partReader's errors name the part already
+	}
+	return data, nil
+}
+
+// open opens the part name for reading as it inflates: the reader fails
+// with office.ErrInputTooLarge once the part passes its cap
+// ([MaxPartBytes] under the inflate ratio) or the bytes the package has
+// left of [MaxPackageBytes], and with office.ErrMalformed for an entry
+// that does not inflate. A declared size past the part's cap is refused
+// before anything is inflated.
+func (p *Package) open(name string) (io.ReadCloser, error) {
 	f := p.entry(name)
 	if f == nil {
 		return nil, fmt.Errorf("%w: %s", ErrNoPart, name)
@@ -163,18 +182,40 @@ func (p *Package) Read(name string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: opening part %s: %w", office.ErrMalformed, name, err)
 	}
-	defer rc.Close() //nolint:errcheck // a read-only zip entry has nothing to flush
-	limit := min(partCap, MaxPackageBytes-p.read)
-	data, err := io.ReadAll(io.LimitReader(rc, limit+1))
-	p.read += int64(len(data))
-	if err != nil {
-		return nil, fmt.Errorf("%w: reading part %s: %w", office.ErrMalformed, name, err)
-	}
-	if int64(len(data)) > limit {
-		return nil, fmt.Errorf("%w: part %s exceeds the package's byte budget", office.ErrInputTooLarge, name)
-	}
-	return data, nil
+	return &partReader{rc: rc, p: p, name: name, limit: min(partCap, MaxPackageBytes-p.read)}, nil
 }
+
+// partReader reads a part as it inflates, counting its bytes against the
+// package's [MaxPackageBytes] and failing one byte past limit, whatever
+// the entry's header declares.
+type partReader struct {
+	rc    io.ReadCloser
+	p     *Package
+	name  string
+	limit int64
+	n     int64
+}
+
+func (r *partReader) Read(b []byte) (int, error) {
+	if r.n > r.limit {
+		return 0, fmt.Errorf("%w: part %s exceeds the package's byte budget", office.ErrInputTooLarge, r.name)
+	}
+	if room := r.limit + 1 - r.n; int64(len(b)) > room {
+		b = b[:room]
+	}
+	n, err := r.rc.Read(b)
+	r.n += int64(n)
+	r.p.read += int64(n)
+	if r.n > r.limit {
+		return n, fmt.Errorf("%w: part %s exceeds the package's byte budget", office.ErrInputTooLarge, r.name)
+	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		return n, fmt.Errorf("%w: reading part %s: %w", office.ErrMalformed, r.name, err)
+	}
+	return n, err //nolint:wrapcheck // io.EOF ends the part and must stay unwrapped
+}
+
+func (r *partReader) Close() error { return r.rc.Close() } //nolint:wrapcheck // a read-only zip entry has nothing to flush
 
 // ContentType returns the content type of the part name: its Override,
 // else the Default of its extension, "" for none (ECMA-376 Part 2, 10.1.2).

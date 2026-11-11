@@ -9,5 +9,7 @@
 // What is specific to one document type, text, spreadsheet or
 // presentation, stays in its converter. Every read is bounded: the
 // package's entries and sizes, the documents' elements and nesting carry
-// named caps, and no DTD is processed.
+// named caps, and no DTD is processed. A document stored in the clear is
+// parsed as its entry inflates, one token of bounded size at a time, so
+// no copy of the entry is held beside its tree.
 package odf

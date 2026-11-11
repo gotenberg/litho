@@ -3,6 +3,7 @@ package ooxml
 import (
 	"context"
 	"errors"
+	"math/rand/v2"
 	"strings"
 	"testing"
 
@@ -73,5 +74,40 @@ func TestParse_Text(t *testing.T) {
 	}
 	if root.Text != "" || len(root.Children) != 2 || root.Children[0].Text != "  a & b " || root.Children[1].Text != " " {
 		t.Errorf("text = %q, %+v", root.Text, root.Children)
+	}
+}
+
+// TestParseXML_StreamsThePart pins the streamed parse: a part holding a
+// comment of random letters past office.MaxXMLTokenBytes, under the part
+// cap and the inflate ratio, is refused as too large once the token passes
+// the token cap, and a part with a shorter one parses.
+func TestParseXML_StreamsThePart(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		pad  int
+		want error
+	}{
+		{"one token past the cap", office.MaxXMLTokenBytes + 1, office.ErrInputTooLarge},
+		{"under the cap", 1 << 20, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			files := minimalPackage()
+			r := rand.New(rand.NewPCG(1, 2))
+			noise := make([]byte, tc.pad)
+			for i := range noise {
+				noise[i] = 'a' + byte(r.IntN(26))
+			}
+			files["word/document.xml"] = `<?xml version="1.0"?><!--` + string(noise) + `-->` + files["word/document.xml"]
+			p, err := Open(buildZip(t, files))
+			if err != nil {
+				t.Fatal(err)
+			}
+			root, err := p.ParseXML(context.Background(), "word/document.xml", nil)
+			if !errors.Is(err, tc.want) || (err == nil && !root.Is(NSW, "document")) {
+				t.Fatalf("ParseXML = %v, %v; want %v", root, err, tc.want)
+			}
+		})
 	}
 }

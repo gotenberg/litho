@@ -153,22 +153,15 @@ func attrOr(e *Element, local string) string {
 // does not parse or declares a document type, and office.ErrInputTooLarge
 // past [MaxElements] for the package or [MaxDepth].
 func (p *Package) ParseXML(ctx context.Context, name string, understood []string) (*Element, error) {
-	// The inflated part is held while it is parsed: its declared size is
-	// charged before it is inflated, and given back once the tree is built.
-	mem := limits.BudgetFrom(ctx)
-	var declared int64
-	if f := p.entry(name); f != nil {
-		declared = int64(min(f.UncompressedSize64, MaxPartBytes)) //nolint:gosec // fits int64: at most MaxPartBytes
-	}
-	if err := mem.Charge(declared, "inflated package parts"); err != nil {
-		return nil, fmt.Errorf("reading %s: %w", name, err)
-	}
-	defer mem.Release(declared)
-	data, err := p.Read(name)
+	// The decoder reads the part as it inflates, one token at a time: no
+	// copy of the part is held, only the tree and one token of at most
+	// office.MaxXMLTokenBytes.
+	rc, err := p.open(name)
 	if err != nil {
 		return nil, err
 	}
-	root, err := parse(ctx, data, understood, &p.elements)
+	defer rc.Close() //nolint:errcheck // a read-only zip entry has nothing to flush
+	root, err := parse(ctx, office.NewTokenReader(rc, office.MaxXMLTokenBytes), understood, &p.elements)
 	if err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", name, err)
 	}
@@ -176,19 +169,20 @@ func (p *Package) ParseXML(ctx context.Context, name string, understood []string
 }
 
 // Parse parses data as [Package.ParseXML] does a part, against a budget of
-// [MaxElements] of its own.
+// [MaxElements] of its own. data is held whole, so a token may take all of
+// it.
 func Parse(ctx context.Context, data []byte, understood []string) (*Element, error) {
 	n := 0
-	return parse(ctx, data, understood, &n)
+	return parse(ctx, office.NewTokenReader(bytes.NewReader(data), int64(len(data))+1), understood, &n)
 }
 
 // errDocType reports a document type declaration, which no OOXML part
 // carries and which could name external entities.
 var errDocType = errors.New("a document type declaration")
 
-// parse is [Parse] with the package's element count.
-func parse(ctx context.Context, data []byte, understood []string, count *int) (*Element, error) {
-	dec := xml.NewDecoder(bytes.NewReader(data))
+// parse is [Parse] over in, with the package's element count.
+func parse(ctx context.Context, in *office.TokenReader, understood []string, count *int) (*Element, error) {
+	dec := xml.NewDecoder(in)
 	dec.Strict = true
 	mem := limits.BudgetFrom(ctx)
 	type frame struct {
@@ -203,9 +197,13 @@ func parse(ctx context.Context, data []byte, understood []string, count *int) (*
 		if errors.Is(err, io.EOF) {
 			break
 		}
+		if errors.Is(err, office.ErrInputTooLarge) || errors.Is(err, office.ErrMalformed) {
+			return nil, err
+		}
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", office.ErrMalformed, err)
 		}
+		in.Mark()
 		switch t := tok.(type) {
 		case xml.StartElement:
 			*count++

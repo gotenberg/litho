@@ -257,22 +257,10 @@ func openZip(ctx context.Context, data []byte, password string, outer bool, spen
 	return p, nil
 }
 
-// parseEntry reads and parses the XML document of the entry name into
-// dst, failing when need is set and the package does not hold it. The
-// inflated entry is held while it is parsed: its declared size is charged
-// to the conversion's budget before it is inflated, and given back once
-// the tree is built.
+// parseEntry parses the XML document of the entry name into dst, failing
+// when need is set and the package does not hold it.
 func (p *Package) parseEntry(ctx context.Context, name string, dst **Element, need bool) error {
-	mem := limits.BudgetFrom(ctx)
-	var declared int64
-	if f := p.files[name]; f != nil {
-		declared = int64(min(f.UncompressedSize64, MaxEntryBytes)) //nolint:gosec // fits int64: at most MaxEntryBytes
-	}
-	if err := mem.Charge(declared, "inflated package parts"); err != nil {
-		return fmt.Errorf("reading %s: %w", name, err)
-	}
-	defer mem.Release(declared)
-	raw, err := p.ReadFile(ctx, name)
+	el, err := p.ParseFile(ctx, name)
 	if errors.Is(err, errNoEntry) {
 		if need {
 			return fmt.Errorf("%w: the package has no %s", office.ErrMalformed, name)
@@ -282,10 +270,44 @@ func (p *Package) parseEntry(ctx context.Context, name string, dst **Element, ne
 	if err != nil {
 		return err
 	}
-	if *dst, err = ParseXML(ctx, raw); err != nil {
-		return fmt.Errorf("parsing %s: %w", name, err)
-	}
+	*dst = el
 	return nil
+}
+
+// ParseFile parses the XML document of the entry name as [ParseXML] does.
+// An entry stored in the clear is parsed as it inflates, one token at a
+// time and none past office.MaxXMLTokenBytes, so no copy of it is held; an
+// encrypted one is decrypted whole first, since its checksum covers the
+// whole entry (ODF 1.3, Part 2, 4.8.1). It fails as [Package.ReadFile] and
+// [ParseXML] do, the parse errors naming the entry.
+func (p *Package) ParseFile(ctx context.Context, name string) (*Element, error) {
+	name = cleanName(name)
+	var in *office.TokenReader
+	if ed := p.enc[name]; ed != nil {
+		data, err := p.readEncrypted(ctx, name, ed)
+		if err != nil {
+			return nil, err
+		}
+		// The decrypted entry is held while it is parsed.
+		mem := limits.BudgetFrom(ctx)
+		if err := mem.ChargeUnits(int64(len(data)), 1, "decrypted package parts"); err != nil {
+			return nil, fmt.Errorf("reading %s: %w", name, err)
+		}
+		defer mem.Release(int64(len(data)))
+		in = office.NewTokenReader(bytes.NewReader(data), int64(len(data))+1)
+	} else {
+		rc, err := p.open(name)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = rc.Close() }() // a read-only zip entry reports nothing worth handling on close
+		in = office.NewTokenReader(rc, office.MaxXMLTokenBytes)
+	}
+	el, err := parseXML(ctx, in)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", name, err)
+	}
+	return el, nil
 }
 
 // errNoEntry reports a package entry that does not exist.
@@ -376,6 +398,24 @@ func (p *Package) readEncrypted(ctx context.Context, name string, ed *Encryption
 
 // readRaw reads the entry name as stored, decompressed, within the caps.
 func (p *Package) readRaw(name string) ([]byte, error) {
+	rc, err := p.open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rc.Close() }() // a read-only zip entry reports nothing worth handling on close
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // entryReader's errors name the entry already
+	}
+	return data, nil
+}
+
+// open opens the entry name for reading as it inflates, within the caps:
+// the reader fails with office.ErrInputTooLarge one byte past
+// [MaxEntryBytes] under the inflate ratio or what the package has left of
+// [MaxTotalBytes], and with office.ErrMalformed for an entry that does not
+// inflate.
+func (p *Package) open(name string) (io.ReadCloser, error) {
 	f := p.files[name]
 	if f == nil {
 		return nil, fmt.Errorf("%w: %s", errNoEntry, name)
@@ -384,22 +424,50 @@ func (p *Package) readRaw(name string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: opening the package entry %s: %w", office.ErrMalformed, name, err)
 	}
-	defer func() { _ = rc.Close() }() // a read-only zip entry reports nothing worth handling on close
 	p.mu.Lock()
 	room := min(office.InflateLimit(f.CompressedSize64, MaxEntryBytes), MaxTotalBytes-p.read)
 	p.mu.Unlock()
-	data, err := io.ReadAll(io.LimitReader(rc, room+1))
-	if err != nil {
-		return nil, fmt.Errorf("%w: reading the package entry %s: %w", office.ErrMalformed, name, err)
-	}
-	if int64(len(data)) > room {
-		return nil, fmt.Errorf("%w: the package entry %s inflates past the caps", office.ErrInputTooLarge, name)
-	}
-	p.mu.Lock()
-	p.read += int64(len(data))
-	p.mu.Unlock()
-	return data, nil
+	return &entryReader{rc: rc, p: p, name: name, room: room}, nil
 }
+
+// entryReader reads an entry as it inflates, counting its bytes against
+// the package's [MaxTotalBytes] and failing one byte past room, whatever
+// the entry's header declares.
+type entryReader struct {
+	rc   io.ReadCloser
+	p    *Package
+	name string
+	room int64
+	n    int64
+}
+
+func (r *entryReader) Read(b []byte) (int, error) {
+	if r.n > r.room {
+		return 0, r.tooLarge()
+	}
+	if left := r.room + 1 - r.n; int64(len(b)) > left {
+		b = b[:left]
+	}
+	n, err := r.rc.Read(b)
+	r.n += int64(n)
+	r.p.mu.Lock()
+	r.p.read += int64(n)
+	r.p.mu.Unlock()
+	if r.n > r.room {
+		return n, r.tooLarge()
+	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		return n, fmt.Errorf("%w: reading the package entry %s: %w", office.ErrMalformed, r.name, err)
+	}
+	return n, err //nolint:wrapcheck // io.EOF ends the entry and must stay unwrapped
+}
+
+// tooLarge is the error one byte past the entry's room.
+func (r *entryReader) tooLarge() error {
+	return fmt.Errorf("%w: the package entry %s inflates past the caps", office.ErrInputTooLarge, r.name)
+}
+
+func (r *entryReader) Close() error { return r.rc.Close() } //nolint:wrapcheck // a read-only zip entry has nothing to flush
 
 // parseManifest reads META-INF/manifest.xml (ODF 1.3, Part 2, 4).
 func (p *Package) parseManifest(ctx context.Context, data []byte) error {

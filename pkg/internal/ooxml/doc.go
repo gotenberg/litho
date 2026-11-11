@@ -10,8 +10,9 @@
 //
 // A package is untrusted input. [Open] caps the number of zip entries,
 // every entry's uncompressed size and the bytes read from the package in
-// all; [Package.ParseXML] caps the elements and the nesting of a part and
-// of the package. XML is read with encoding/xml in strict mode: a
+// all; [Package.ParseXML] reads a part as it inflates, one token at a time,
+// holding no copy of it, and caps one token's bytes, the elements and the
+// nesting of a part and of the package. XML is read with encoding/xml in strict mode: a
 // document type declaration is refused, so no DTD and no external entity
 // is ever read, and the only entities are the five XML predefines.
 //

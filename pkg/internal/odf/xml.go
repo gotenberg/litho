@@ -171,7 +171,12 @@ var errTooDeep = errors.New("odf: XML nested too deep")
 // office.ErrMalformed, one past [MaxElements] or [MaxDepth] with
 // office.ErrInputTooLarge. It returns ctx's error when ctx ends first.
 func ParseXML(ctx context.Context, data []byte) (*Element, error) {
-	d := xml.NewDecoder(bytes.NewReader(data))
+	return parseXML(ctx, office.NewTokenReader(bytes.NewReader(data), int64(len(data))+1))
+}
+
+// parseXML is [ParseXML] over in, whose cap bounds one token.
+func parseXML(ctx context.Context, in *office.TokenReader) (*Element, error) {
+	d := xml.NewDecoder(in)
 	d.Strict = true
 	d.CharsetReader = charsetReader
 	mem := limits.BudgetFrom(ctx)
@@ -185,9 +190,13 @@ func ParseXML(ctx context.Context, data []byte) (*Element, error) {
 		if err == io.EOF {
 			break
 		}
+		if errors.Is(err, office.ErrInputTooLarge) || errors.Is(err, office.ErrMalformed) {
+			return nil, err
+		}
 		if err != nil {
 			return nil, fmt.Errorf("%w: parsing XML: %w", office.ErrMalformed, err)
 		}
+		in.Mark()
 		count++
 		if count > MaxElements {
 			return nil, fmt.Errorf("%w: more than %d XML nodes", office.ErrInputTooLarge, MaxElements)

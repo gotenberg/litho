@@ -56,19 +56,16 @@ const chartFont = "Liberation Sans"
 // errors of [Package.ReadFile] and [ParseXML].
 func ParseChart(ctx context.Context, pkg *Package, dir string) (*chart.Chart, error) {
 	dir = strings.TrimSuffix(cleanName(dir), "/")
-	data, err := pkg.ReadFile(ctx, path.Join(dir, "content.xml"))
-	if err != nil {
+	content, err := pkg.ParseFile(ctx, path.Join(dir, "content.xml"))
+	if IsNotExist(err) {
 		return nil, err
 	}
-	content, err := ParseXML(ctx, data)
 	if err != nil {
 		return nil, fmt.Errorf("parsing the chart %s: %w", dir, err)
 	}
 	var styles *Element
-	if sdata, err := pkg.ReadFile(ctx, path.Join(dir, "styles.xml")); err == nil {
-		if s, err := ParseXML(ctx, sdata); err == nil {
-			styles = s
-		}
+	if s, err := pkg.ParseFile(ctx, path.Join(dir, "styles.xml")); err == nil {
+		styles = s
 	}
 	return ChartFromDocument(content, styles)
 }

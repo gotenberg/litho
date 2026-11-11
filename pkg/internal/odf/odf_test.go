@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"math/rand/v2"
 	"strings"
 	"testing"
 
@@ -206,5 +207,35 @@ func TestStyles_Resolve(t *testing.T) {
 	mp := s.Master("Standard")
 	if mp == nil || mp.Next != "Next" || mp.Header == nil || s.PageLayouts["pm1"].Header.Get("fo:min-height") != "1cm" || s.PageLayouts["pm1"].PageUsage != "mirrored" {
 		t.Errorf("master = %+v", mp)
+	}
+}
+
+// TestOpen_StreamsTheContent pins the streamed parse of a package entry:
+// content.xml holding a comment of random letters past
+// office.MaxXMLTokenBytes is refused as too large, and one with a shorter
+// comment opens.
+func TestOpen_StreamsTheContent(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		pad  int
+		want error
+	}{
+		{"one token past the cap", office.MaxXMLTokenBytes + 1, office.ErrInputTooLarge},
+		{"under the cap", 1 << 20, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			r := rand.New(rand.NewPCG(1, 2))
+			noise := make([]byte, tc.pad)
+			for i := range noise {
+				noise[i] = 'a' + byte(r.IntN(26))
+			}
+			content := `<office:document-content ` + ns + `><!--` + string(noise) + `--><office:body/></office:document-content>`
+			p, err := Open(context.Background(), zipOf(t, "mimetype", MimeText, "content.xml", content), Options{})
+			if !errors.Is(err, tc.want) || (err == nil && !p.Content.Is(NSOffice, "document-content")) {
+				t.Fatalf("Open = %v; want %v", err, tc.want)
+			}
+		})
 	}
 }
