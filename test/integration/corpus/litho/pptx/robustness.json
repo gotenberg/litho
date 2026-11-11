@@ -68,8 +68,8 @@
     "why": "The layout's master is the layout itself and the master's layouts are the master itself."
   },
   "hostile-long-word": {
-    "result": "pdf",
-    "why": "One run of 50 MiB of letters with no break opportunity."
+    "result": "ErrConvertInputTooLarge",
+    "why": "One run of 50 MiB of letters with no break opportunity: its part inflates past 600 times its compressed size, a deflate bomb's ratio, and is refused before it is inflated."
   },
   "hostile-no-content-types": {
     "result": "ErrConvertMalformed",
