@@ -46,6 +46,18 @@ type Slide struct {
 	// PresentationML slide, the draw:name of an OpenDocument page; "Slide
 	// 3" when the file gives none.
 	Name string
+	// Bookmark, when not "", is the slide's outline entry as the format's
+	// own printer names it, written as is: "Slide 3: Results" for a
+	// PresentationML slide, as PowerPoint writes it. "" takes Name, made
+	// unique as Impress keeps its page names unique.
+	Bookmark string
+	// Section is the name of the section the slide belongs to, "" for
+	// none (PowerPoint 2010's p14:sectionLst); SectionStart marks the
+	// section's first slide in show order. The outline lists a section as
+	// an entry of its name leading to its first printed slide, its slides'
+	// entries under it.
+	Section      string
+	SectionStart bool
 	// Title is the text of the slide's title placeholder, "" for none: the
 	// slide's heading for the structure tree and the fields.
 	Title string
