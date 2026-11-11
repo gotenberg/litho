@@ -256,8 +256,11 @@ type diffFeature struct {
 	// reads versions.env.
 	pins map[string]string
 	// borrowed maps a fixture whose options.json names reference_of to the
-	// fixture whose goldens it is scored against (see [borrowedReferences]).
-	borrowed map[string]string
+	// fixture whose goldens it is scored against, and lithoOnly a fixture
+	// that sets litho's own options without one to those options: it has no
+	// golden (see [referencePlan]).
+	borrowed  map[string]string
+	lithoOnly map[string][]string
 }
 
 func newDiffFeature() *diffFeature {
@@ -443,6 +446,11 @@ func (f *diffFeature) golden(id string) *diffGolden {
 	defer f.mu.RUnlock()
 	if other, ok := f.borrowed[id]; ok {
 		id = other
+	}
+	if _, ok := f.lithoOnly[id]; ok {
+		// A golden left from a reference built before the source set
+		// litho's own options is another document's.
+		return nil
 	}
 	return f.goldens[reportName(id)]
 }

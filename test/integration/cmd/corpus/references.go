@@ -140,31 +140,36 @@ type referenceBuilders struct {
 
 // build builds the references of m, the ones only names when set.
 func (b *referenceBuilders) build(ctx context.Context, m *Manifest, only []string) error {
-	var conv referenceConverter
-	if m.References.Engine == engineMicrosoft {
+	return buildReferences(ctx, func(ctx context.Context) (referenceConverter, error) {
+		return b.converter(ctx, m.References.Engine)
+	}, m, b.pins, only)
+}
+
+// converter returns the converter of engine, started the first time a
+// corpus asks for it.
+func (b *referenceBuilders) converter(ctx context.Context, engine string) (referenceConverter, error) {
+	if engine == engineMicrosoft {
 		if b.ms == nil {
 			ms, err := newMSGraph(ctx)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			b.ms = ms
 		}
-		conv = b.ms
-	} else {
-		if b.g == nil {
-			image := b.pins.Values["GOTENBERG_IMAGE"]
-			if image == "" {
-				return errors.New("GOTENBERG_IMAGE is not pinned")
-			}
-			g, err := startGotenberg(ctx, image)
-			if err != nil {
-				return fmt.Errorf("starting %s: %w", image, err)
-			}
-			b.g = g
-		}
-		conv = b.g
+		return b.ms, nil
 	}
-	return buildReferences(ctx, conv, m, b.pins, only)
+	if b.g == nil {
+		image := b.pins.Values["GOTENBERG_IMAGE"]
+		if image == "" {
+			return nil, errors.New("GOTENBERG_IMAGE is not pinned")
+		}
+		g, err := startGotenberg(ctx, image)
+		if err != nil {
+			return nil, fmt.Errorf("starting %s: %w", image, err)
+		}
+		b.g = g
+	}
+	return b.g, nil
 }
 
 func (b *referenceBuilders) close() {
@@ -366,9 +371,12 @@ func chromiumFiles(dir string, opts fixture.Options) ([]formFile, error) {
 
 // referenceJob is one source to convert: path is what its fixture points at
 // (a source directory, or a fetched document), source how the reference
-// manifest names it, options its options.json ("" without one).
+// manifest names it, options its options.json ("" without one), litho the
+// litho-only keys it sets: a source that sets some is not converted, and
+// the reference manifest records why (see [referencePlan]).
 type referenceJob struct {
 	name, path, options, source string
+	litho                       []string
 }
 
 // sourceDigest returns the SHA-256 a reference records for the source at
@@ -470,7 +478,7 @@ func (g *gotenberg) convert(ctx context.Context, engine string, j referenceJob) 
 }
 
 // buildReferences converts each source of a corpus with the route its
-// manifest names, through conv, and writes the PDF to <name>.pdf of the corpus's reference directory
+// manifest names, through the converter open starts, and writes the PDF to <name>.pdf of the corpus's reference directory
 // in its testdata: the committed sources/<name>/ directories (an Office
 // document or an html page, and an optional options.json each), the
 // documents a build corpus zips, and the documents the corpus's
@@ -483,8 +491,13 @@ func (g *gotenberg) convert(ctx context.Context, engine string, j referenceJob) 
 // the source (see [sourceDigest]), of its options.json and of the PDF, so
 // corpus run refuses a reference built from another pin or from a source
 // that changed since. A source the route refuses is recorded under "failed"
-// with the route's answer, and gets no reference.
-func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, pins *resolvedPins, only []string) error {
+// with the route's answer, and gets no reference. So is a source that sets
+// litho's own options and names no reference_of, without being converted:
+// no engine takes those options, so its reference would print another
+// document (see [referencePlan]). open is called only when a source is to
+// be converted, so a run that records only such sources needs no container
+// and no sign-in.
+func buildReferences(ctx context.Context, open func(context.Context) (referenceConverter, error), m *Manifest, pins *resolvedPins, only []string) error {
 	if isBuildCorpus(m) || hasFlatPapers(m) {
 		if err := buildCorpus(ctx, m); err != nil {
 			return err
@@ -508,7 +521,17 @@ func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, 
 			return fmt.Errorf("%s is not pinned", sourcePin)
 		}
 	}
-	version, builder := conv.version(ctx, engine), conv.builder()
+	var (
+		conv    referenceConverter
+		version string
+		builder = referenceBuilder(engine, pins.Values)
+	)
+	if slices.ContainsFunc(jobs, func(j referenceJob) bool { return len(j.litho) == 0 }) {
+		if conv, err = open(ctx); err != nil {
+			return err
+		}
+		version, builder = conv.version(ctx, engine), conv.builder()
+	}
 	builtAt := ""
 	if engine == engineMicrosoft {
 		builtAt = time.Now().UTC().Format(time.DateOnly)
@@ -534,6 +557,18 @@ func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, 
 			if optSum, err = fileDigest(j.options); err != nil {
 				return err
 			}
+		}
+		if len(j.litho) > 0 {
+			mu.Lock()
+			defer mu.Unlock()
+			_ = os.Remove(filepath.Join(out, j.name+".pdf")) //nolint:errcheck // a reference built before the source set the options goes; there may be none
+			failed[j.name] = referenceFailure{
+				Source: j.source, SourceSHA256: srcSum, OptionsSHA256: optSum, Image: builder, Status: "0",
+				Answer:       fmt.Sprintf("sets litho's own %s, which no reference engine takes, and names no reference_of", strings.Join(j.litho, ", ")),
+				LithoOptions: j.litho,
+			}
+			fmt.Printf("  %s: %s sets litho's own %s: no reference\n", m.Name, j.name, strings.Join(j.litho, ", "))
+			return nil
 		}
 		status, body, err := conv.convert(ctx, engine, j)
 		switch {
@@ -597,6 +632,10 @@ func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, 
 					man.Failed[n] = f
 				}
 			}
+			if conv == nil {
+				// No source was converted: the version is the last run's.
+				man.LibreOffice = old.LibreOffice
+			}
 		}
 	}
 	data, err := json.MarshalIndent(man, "", "  ")
@@ -606,7 +645,13 @@ func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, 
 	if err := writeFileAtomic(path, append(data, '\n')); err != nil {
 		return err
 	}
-	fmt.Printf("  %s: %d references built, %d refused, with %s\n", m.Name, len(ok), len(failed), builder)
+	lithoOnly := 0
+	for _, f := range failed {
+		if len(f.LithoOptions) > 0 {
+			lithoOnly++
+		}
+	}
+	fmt.Printf("  %s: %d references built, %d refused, %d left to litho's own options, with %s\n", m.Name, len(ok), len(failed)-lithoOnly, lithoOnly, builder)
 	if signIn {
 		// The run stops here, whatever it kept: the operator must learn
 		// that the other sources have no reference.
@@ -619,7 +664,8 @@ func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, 
 // only names when set: its committed sources/ directories, the documents a
 // build corpus zips, the paper documents a corpus builds from its sources
 // and the documents its list names. A source whose
-// options.json borrows another fixture's reference gets none.
+// options.json borrows another fixture's reference gets none; one that sets
+// litho's own options carries them, and is recorded, not converted.
 func referenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 	var jobs []referenceJob
 	if isBuildCorpus(m) {
@@ -640,10 +686,11 @@ func referenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 			continue
 		}
 		dir := filepath.Join(sources, name)
-		if borrowsReference(dir) {
+		borrows, litho := sourceReference(dir)
+		if borrows {
 			continue
 		}
-		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), "sources/" + name})
+		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), "sources/" + name, litho})
 	}
 	jobs = append(jobs, flatPaperReferenceJobs(m, only)...)
 	if m.Inputs == nil || m.Inputs.List == "" {
@@ -664,21 +711,10 @@ func referenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 		if _, err := os.Stat(doc); err != nil {
 			return nil, fmt.Errorf("%s is missing: run make corpus-fetch CORPUS=%s", doc, m.Name)
 		}
-		jobs = append(jobs, referenceJob{name, doc, "", d.ID})
+		jobs = append(jobs, referenceJob{name, doc, "", d.ID, nil})
 	}
 	sort.Slice(jobs, func(i, j int) bool { return jobs[i].name < jobs[j].name })
 	return jobs, nil
-}
-
-// borrowsReference reports whether an Office source directory's options.json
-// names reference_of: another fixture's reference stands for it, and none is
-// built for it (see fixture.OfficeOptions.ReferenceOf).
-func borrowsReference(dir string) bool {
-	if optionsPath(dir) == "" {
-		return false
-	}
-	src, err := fixture.LoadOffice(dir)
-	return err == nil && src.Options.ReferenceOf != ""
 }
 
 // optionsPath returns the options.json of a source directory, "" when it
@@ -735,10 +771,11 @@ func builtReferenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 		if _, err := fixture.LoadOffice(dir); err != nil {
 			return nil, fmt.Errorf("%w (run make corpus-build CORPUS=%s)", err, m.Name)
 		}
-		if borrowsReference(dir) {
+		borrows, litho := sourceReference(dir)
+		if borrows {
 			continue
 		}
-		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), path.Join(m.Inputs.Build, name)})
+		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), path.Join(m.Inputs.Build, name), litho})
 	}
 	return jobs, nil
 }

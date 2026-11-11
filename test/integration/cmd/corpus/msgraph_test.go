@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -154,7 +155,7 @@ func TestBuildReferences_AnExpiredSignInFailsTheRun(t *testing.T) { //nolint:par
 	t.Chdir(dir)
 	g := &msGraph{client: &http.Client{Transport: stubGraph{srv}}, static: true, token: msGraphToken{AccessToken: "expired"}}
 	m := &Manifest{Name: "stub/docx", Source: "stub/docx", References: &ReferenceSpec{Dir: "references", Engine: engineMicrosoft}}
-	err := buildReferences(t.Context(), g, m, &resolvedPins{Values: map[string]string{}}, nil)
+	err := buildReferences(t.Context(), func(context.Context) (referenceConverter, error) { return g, nil }, m, &resolvedPins{Values: map[string]string{}}, nil)
 	if !errors.Is(err, errMSGraphSignIn) {
 		t.Fatalf("error %v, want the refused sign-in", err)
 	}

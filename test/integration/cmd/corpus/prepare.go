@@ -42,7 +42,8 @@ func runPrepare(ctx context.Context, args []string) int {
 //     committed files run only through corpus build;
 //  3. references: the references of the corpora that have some, those
 //     missing or built from another source, options or image (see
-//     [referenceProblems]), in one Gotenberg container;
+//     [referenceProblems]), in one Gotenberg container, and the record of
+//     the sources that set litho's own options, which asks no engine;
 //  4. goldens: the goldens of the corpora that lack them, after removing
 //     the ones made from references since rebuilt or from committed PDFs
 //     since changed (see [dropStaleGoldens]).
@@ -105,12 +106,12 @@ func prepareReferences(ctx context.Context, ms []*Manifest, pins *resolvedPins) 
 				fmt.Println(unbuiltMicrosoftNotice(m, unbuilt))
 			}
 		}
-		_, rebuild, _, _, err := referenceProblems(m, m.TestdataRoot(), fixtures, pins.Values)
+		check, err := referenceProblems(m, m.TestdataRoot(), fixtures, pins.Values)
 		switch {
 		case err != nil:
 			todo = append(todo, pending{m, nil})
-		case len(rebuild) > 0:
-			todo = append(todo, pending{m, rebuild})
+		case len(check.rebuild) > 0:
+			todo = append(todo, pending{m, check.rebuild})
 		default:
 			fmt.Printf("%s: references up to date\n", m.Name)
 		}
@@ -146,11 +147,11 @@ func dropStaleGoldens(m *Manifest, pins *resolvedPins) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", m.Name, err)
 		}
-		_, _, regolden, _, err := referenceProblems(m, root, fixtures, pins.Values)
-		if err != nil || len(regolden) == 0 {
+		check, err := referenceProblems(m, root, fixtures, pins.Values)
+		if err != nil || len(check.regolden) == 0 {
 			return nil //nolint:nilerr // an unreadable reference manifest leaves the goldens step to skip the corpus
 		}
-		fmt.Printf("%s: %d references changed since the goldens were made: deriving them again\n", m.Name, len(regolden))
+		fmt.Printf("%s: %d references changed since the goldens were made: deriving them again\n", m.Name, len(check.regolden))
 		// Only the PDFs and the diff goldens come from the references:
 		// another feature's golden path may name inputs (robustness reads
 		// the built documents).

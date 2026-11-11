@@ -10,7 +10,9 @@ import (
 // withoutUnbuiltMicrosoftReferences splits the fixtures of a corpus whose
 // references Microsoft builds into those whose reference was ever built or
 // refused, kept, and those it never was, with the fixtures that borrow
-// theirs, unbuilt. Only a Microsoft Graph token builds such a reference, so
+// theirs, unbuilt. A fixture that sets litho's own options is kept: no
+// engine is asked for its reference, and its record needs no sign-in (see
+// [referencePlan]). Only a Microsoft Graph token builds such a reference, so
 // a fixture added without one is left unscored, named, rather than failing
 // the whole corpus; a reference built from another source or pin still
 // fails it (see [referenceProblems]). Every fixture is kept for another
@@ -28,14 +30,14 @@ func withoutUnbuiltMicrosoftReferences(m *Manifest, root string, fixtures []Fixt
 	if err := json.Unmarshal(data, &man); err != nil {
 		return fixtures, nil
 	}
-	borrowed, err := borrowedReferences(fixtures)
+	plan, err := planReferences(fixtures)
 	if err != nil {
 		return fixtures, nil
 	}
-	unreferenced := unreferencedFixtures(m)
+	hostile := unreferencedFixtures(m)
 	missing := map[string]bool{}
 	for _, fx := range fixtures {
-		if _, borrows := borrowed[fx.ID]; borrows || unreferenced[fx.ID] {
+		if plan.ownsNoReference(fx.ID) || hostile[fx.ID] {
 			continue
 		}
 		name := reportName(fx.ID)
@@ -44,7 +46,7 @@ func withoutUnbuiltMicrosoftReferences(m *Manifest, root string, fixtures []Fixt
 		}
 	}
 	for _, fx := range fixtures {
-		if missing[fx.ID] || missing[borrowed[fx.ID]] {
+		if missing[fx.ID] || missing[plan.borrowed[fx.ID]] {
 			unbuilt = append(unbuilt, fx.ID)
 			continue
 		}

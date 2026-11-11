@@ -9,13 +9,14 @@ import (
 
 // TestWithoutUnbuiltMicrosoftReferences checks that a Microsoft corpus
 // leaves out the fixtures whose reference was never built, and those that
-// borrow one, while a refused or built one stays, and that another engine
+// borrow one, while a refused or built one stays, and so does one that sets
+// litho's own options, which needs no sign-in, and that another engine
 // keeps every fixture.
 func TestWithoutUnbuiltMicrosoftReferences(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	var fixtures []Fixture
-	for _, id := range []string{"built", "refused", "new", "borrower"} {
+	for _, id := range []string{"built", "refused", "new", "borrower", "marked"} {
 		dir := filepath.Join(root, "sources", id)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
@@ -26,6 +27,9 @@ func TestWithoutUnbuiltMicrosoftReferences(t *testing.T) {
 		fixtures = append(fixtures, Fixture{ID: id, PDFPath: dir})
 	}
 	if err := os.WriteFile(filepath.Join(root, "sources", "borrower", "options.json"), []byte(`{"landscape": true, "reference_of": "new"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sources", "marked", "options.json"), []byte(`{"trackedChanges": "marked"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	refs := filepath.Join(root, "references")
@@ -42,7 +46,7 @@ func TestWithoutUnbuiltMicrosoftReferences(t *testing.T) {
 	for _, fx := range kept {
 		keptIDs = append(keptIDs, fx.ID)
 	}
-	if want := []string{"built", "refused"}; !slices.Equal(keptIDs, want) {
+	if want := []string{"built", "refused", "marked"}; !slices.Equal(keptIDs, want) {
 		t.Errorf("kept %v, want %v", keptIDs, want)
 	}
 	if want := []string{"new", "borrower"}; !slices.Equal(unbuilt, want) {

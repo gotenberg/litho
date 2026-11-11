@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/test/integration/fixture"
@@ -62,14 +63,18 @@ func (r referenceRecord) pinValue(name string) string {
 	return ""
 }
 
-// referenceFailure is a source the route refused, with its answer.
+// referenceFailure is a source the route refused, with its answer, or one
+// no reference was asked for because it sets litho's own options, which
+// LithoOptions names (see [referencePlan]): its status is "0" and its
+// answer says why.
 type referenceFailure struct {
-	Source        string `json:"source"`
-	SourceSHA256  string `json:"source_sha256"`
-	OptionsSHA256 string `json:"options_sha256"`
-	Image         string `json:"image"`
-	Status        string `json:"status"`
-	Answer        string `json:"answer"`
+	Source        string   `json:"source"`
+	SourceSHA256  string   `json:"source_sha256"`
+	OptionsSHA256 string   `json:"options_sha256"`
+	Image         string   `json:"image"`
+	Status        string   `json:"status"`
+	Answer        string   `json:"answer"`
+	LithoOptions  []string `json:"litho_options,omitempty"`
 }
 
 // maxReferenceProblems bounds the problems a refusal lists before it counts
@@ -104,83 +109,133 @@ func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 		}
 		pins = resolved.Values
 	}
-	borrowed, err := borrowedReferences(fixtures)
+	plan, err := planReferences(fixtures)
 	if err != nil {
 		return err
 	}
+	// Notices, not the report: stdout carries the report alone.
+	if notice := plan.lithoOnlyNotice(m.Name, fixtures); notice != "" {
+		fmt.Fprintln(os.Stderr, notice)
+	}
 	fixtures, unbuilt := withoutUnbuiltMicrosoftReferences(m, root, fixtures)
 	if len(unbuilt) > 0 {
-		// A notice, not the report: stdout carries the report alone.
 		fmt.Fprintln(os.Stderr, unbuiltMicrosoftNotice(m, unbuilt))
 	}
 	f.mu.Lock()
-	f.borrowed = borrowed
+	f.borrowed, f.lithoOnly = plan.borrowed, plan.lithoOnly
 	f.mu.Unlock()
-	stale, _, regolden, refused, err := referenceProblems(m, root, fixtures, pins)
-	if len(refused) > 0 {
-		fmt.Fprintf(os.Stderr, "%s: %d fixtures have no reference, not scored: %s\n", m.Name, len(refused), summarize(refused))
+	check, err := referenceProblems(m, root, fixtures, pins)
+	if len(check.refused) > 0 {
+		fmt.Fprintf(os.Stderr, "%s: %d fixtures have no reference, not scored: %s\n", m.Name, len(check.refused), summarize(check.refused))
 	}
 	switch {
 	case err != nil:
 		return fmt.Errorf("%w: %w (run %s)", errStaleReferences, err, prepareRemedy(m.Name))
-	case len(stale) > 0:
-		return fmt.Errorf("%w: %s (run %s)", errStaleReferences, summarize(stale), prepareRemedy(m.Name))
-	case len(regolden) > 0:
+	case len(check.stale) > 0:
+		return fmt.Errorf("%w: %s (run %s)", errStaleReferences, summarize(check.stale), prepareRemedy(m.Name))
+	case len(check.regolden) > 0:
 		return fmt.Errorf("%w: the diff goldens were not made from the references of %s (run %s)",
-			errStaleReferences, summarize(regolden), prepareRemedy(m.Name))
+			errStaleReferences, summarize(check.regolden), prepareRemedy(m.Name))
 	}
 	return nil
 }
 
-// referenceProblems compares a corpus's references with its fixtures: stale
-// lists what is wrong with the reference of each fixture whose reference is
-// missing, refused or built from something else (see [checkReference]),
-// rebuild the fixtures among them another build may fix, regolden the
-// fixtures whose provisioned PDF, the one the goldens were made from, is not
-// their reference, refused the fixtures the converter refused from their
-// current source, which a build would refuse again: they have no golden.
-// root is the corpus's testdata root. A build corpus's hostile documents
-// and a fixture that borrows another's reference (see [borrowedReferences])
-// have no reference of their own and are skipped. err reports an unreadable
-// reference manifest or a reference_of that names no fixture to borrow from.
-func referenceProblems(m *Manifest, root string, fixtures []Fixture, pins map[string]string) (stale, rebuild, regolden, refused []string, err error) {
+// referenceCheck is what [referenceProblems] finds wrong with a corpus's
+// references.
+type referenceCheck struct {
+	// stale lists what is wrong with the reference of each fixture whose
+	// reference is missing, refused or built from something else (see
+	// [checkReference]).
+	stale []string
+	// rebuild names the fixtures another build may fix: those of stale,
+	// and those that set litho's own options whose record in the reference
+	// manifest does not say so for their current source (see
+	// [referencePlan]), which a build records without asking any engine.
+	rebuild []string
+	// regolden names the fixtures whose provisioned PDF, the one the
+	// goldens were made from, is not their reference.
+	regolden []string
+	// refused lists the fixtures the converter refused from their current
+	// source, which a build would refuse again: they have no golden.
+	refused []string
+}
+
+// referenceProblems compares a corpus's references with its fixtures (see
+// [referenceCheck]). root is the corpus's testdata root. A build corpus's
+// hostile documents and a fixture that borrows another's reference have no
+// reference of their own and are skipped, and so is a fixture that sets
+// litho's own options, but for its record (see [referencePlan]). err
+// reports an unreadable reference manifest or an invalid reference_of.
+func referenceProblems(m *Manifest, root string, fixtures []Fixture, pins map[string]string) (referenceCheck, error) {
+	var check referenceCheck
 	refDir := filepath.Join(root, filepath.FromSlash(m.References.Dir))
 	data, err := os.ReadFile(filepath.Join(refDir, referenceManifestName)) //nolint:gosec // provisioned record under the corpus testdata root
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("%s unreadable: %w", filepath.Join(refDir, referenceManifestName), err)
+		return check, fmt.Errorf("%s unreadable: %w", filepath.Join(refDir, referenceManifestName), err)
 	}
 	var man referenceManifest
 	if err := json.Unmarshal(data, &man); err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("decode %s: %w", filepath.Join(refDir, referenceManifestName), err)
+		return check, fmt.Errorf("decode %s: %w", filepath.Join(refDir, referenceManifestName), err)
 	}
-	unreferenced := unreferencedFixtures(m)
-	borrowed, err := borrowedReferences(fixtures)
+	hostile := unreferencedFixtures(m)
+	plan, err := planReferences(fixtures)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return check, err
 	}
 	for _, fx := range fixtures {
-		if _, borrows := borrowed[fx.ID]; unreferenced[fx.ID] || borrows {
+		name := reportName(fx.ID)
+		if keys, ok := plan.lithoOnly[fx.ID]; ok {
+			if !recordsLithoOptions(man, m.References.Engine, name, fx, keys) {
+				check.rebuild = append(check.rebuild, name)
+			}
 			continue
 		}
-		name := reportName(fx.ID)
+		if hostile[fx.ID] || plan.ownsNoReference(fx.ID) {
+			continue
+		}
 		why, again := checkReference(man, m.References, name, fx, pins)
 		if why != "" && again {
-			stale = append(stale, why)
-			rebuild = append(rebuild, name)
+			check.stale = append(check.stale, why)
+			check.rebuild = append(check.rebuild, name)
 			continue
 		}
 		if why != "" {
-			refused = append(refused, why)
+			check.refused = append(check.refused, why)
 			continue
 		}
 		// The goldens come from the provisioned copy of each reference,
 		// pdfs/<name>.pdf: a copy that differs was made from another build.
 		got, err := fileSHA256(filepath.Join(root, "pdfs", name+".pdf"))
 		if err != nil || got != man.References[name].PDFSHA256 {
-			regolden = append(regolden, name)
+			check.regolden = append(check.regolden, name)
 		}
 	}
-	return stale, rebuild, regolden, refused, nil
+	return check, nil
+}
+
+// recordsLithoOptions reports whether the reference manifest records the
+// fixture name, which sets the litho-only keys, as built from its current
+// source and options without a reference: no reference, and a failure that
+// names those keys.
+func recordsLithoOptions(man referenceManifest, engine, name string, fx Fixture, keys []string) bool {
+	fail, ok := man.Failed[name]
+	if hasKey(man.References, name) || !ok || !slices.Equal(fail.LithoOptions, keys) {
+		return false
+	}
+	srcSum, optSum, srcErr := sourceSums(engine, fx.PDFPath)
+	return srcErr == nil && fail.SourceSHA256 == srcSum && fail.OptionsSHA256 == optSum
+}
+
+// sourceSums returns the digests a reference records of the source at path:
+// the source's (see [sourceDigest]) and its options.json's, "" without one.
+func sourceSums(engine, path string) (srcSum, optSum string, srcErr error) {
+	srcSum, srcErr = sourceDigest(engine, path)
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		if got, err := fileSHA256(filepath.Join(path, fixture.OptionsFile)); err == nil {
+			optSum = got
+		}
+	}
+	return srcSum, optSum, srcErr
 }
 
 // unreferencedFixtures names the fixtures of m no reference is built for: a
@@ -204,13 +259,7 @@ func unreferencedFixtures(m *Manifest) map[string]bool {
 // from the same source, options and builder, which another build would
 // refuse again: the only case why is set and rebuild false.
 func checkReference(man referenceManifest, refs *ReferenceSpec, name string, fx Fixture, pins map[string]string) (why string, rebuild bool) {
-	srcSum, srcErr := sourceDigest(refs.Engine, fx.PDFPath)
-	optSum := ""
-	if info, err := os.Stat(fx.PDFPath); err == nil && info.IsDir() {
-		if got, err := fileSHA256(filepath.Join(fx.PDFPath, fixture.OptionsFile)); err == nil {
-			optSum = got
-		}
-	}
+	srcSum, optSum, srcErr := sourceSums(refs.Engine, fx.PDFPath)
 	image := referenceBuilder(refs.Engine, pins)
 	rec, ok := man.References[name]
 	if !ok {
@@ -272,42 +321,4 @@ func fileSHA256(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-// errBorrowedReference reports an options.json whose reference_of names no
-// fixture of its corpus that has a reference of its own.
-var errBorrowedReference = errors.New("invalid reference_of")
-
-// borrowedReferences maps each fixture of an Office corpus whose
-// options.json names reference_of to the fixture whose reference stands for
-// its own (see fixture.OfficeOptions.ReferenceOf). It fails when one names
-// itself, a fixture the corpus does not list, or a fixture that borrows in
-// turn. A source that does not load borrows nothing.
-func borrowedReferences(fixtures []Fixture) (map[string]string, error) {
-	ids := make(map[string]bool, len(fixtures))
-	for _, fx := range fixtures {
-		ids[fx.ID] = true
-	}
-	out := map[string]string{}
-	for _, fx := range fixtures {
-		info, err := os.Stat(fx.PDFPath)
-		if err != nil || !info.IsDir() {
-			continue
-		}
-		src, err := fixture.LoadOffice(fx.PDFPath)
-		if err != nil || src.Options.ReferenceOf == "" {
-			continue
-		}
-		other := src.Options.ReferenceOf
-		if other == fx.ID || !ids[other] {
-			return nil, fmt.Errorf("%w: %s names %q, not another fixture of its corpus", errBorrowedReference, fx.ID, other)
-		}
-		out[fx.ID] = other
-	}
-	for id, other := range out {
-		if _, chained := out[other]; chained {
-			return nil, fmt.Errorf("%w: %s names %s, which borrows a reference too", errBorrowedReference, id, other)
-		}
-	}
-	return out, nil
 }

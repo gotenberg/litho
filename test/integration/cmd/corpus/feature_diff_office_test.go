@@ -407,7 +407,7 @@ func TestDiffFeature_BorrowsAReference(t *testing.T) {
 		writeFiles(t, src, map[string]string{name + "/" + name + ".docx": "docx", name + "/options.json": options})
 		chained = append(chained, Fixture{ID: name, PDFPath: filepath.Join(src, name)})
 	}
-	if _, err := borrowedReferences(chained); err == nil || !strings.Contains(err.Error(), "borrows a reference too") {
+	if _, err := planReferences(chained); err == nil || !strings.Contains(err.Error(), "borrows a reference too") {
 		t.Errorf("a chain of borrowers: %v", err)
 	}
 }
