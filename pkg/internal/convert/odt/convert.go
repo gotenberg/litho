@@ -70,6 +70,9 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if b.err != nil {
 		return nil, b.err
 	}
+	// The tree is finished: its paragraphs and spans styled alike share
+	// one style.
+	layout.ShareStyles(ctx, root)
 	lay := func() (*layout.Result, error) {
 		b.pages.reset()
 		res, err := layout.Layout(ctx, root, fonts, layout.Options{

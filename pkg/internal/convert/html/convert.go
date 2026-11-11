@@ -306,6 +306,10 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	if err != nil {
 		return nil, err
 	}
+	// The cascade shares the styles of elements styled alike; the styles
+	// the builder derives from them, generated content's among them, are
+	// shared here.
+	layout.ShareStyles(ctx, root)
 
 	p := &prepared{
 		root: root,

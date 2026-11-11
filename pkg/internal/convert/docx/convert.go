@@ -80,6 +80,9 @@ func (d *document) convert() (*compose.Document, error) {
 		}
 		tree.Children = append(tree.Children, d.sectionNode(s, extra))
 	}
+	// The tree is finished: its paragraphs and runs styled alike share
+	// one style.
+	layout.ShareStyles(d.ctx, tree)
 	pg := d.newPages(secs)
 	first := pg.box(layout.PageInfo{Name: secs[0].name})
 	res, err := layout.Layout(d.ctx, tree, d.fonts, layout.Options{
