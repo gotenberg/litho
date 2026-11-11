@@ -41,3 +41,24 @@ func FuzzConvert(f *testing.F) {
 		}
 	})
 }
+
+// FuzzRevisions converts arbitrary bodies under each tracked-changes view:
+// it must neither panic nor loop.
+func FuzzRevisions(f *testing.F) {
+	seed := `<w:p><w:pPr><w:rPr><w:ins w:id="1" w:author="A"/></w:rPr></w:pPr><w:ins w:id="2" w:author="A"><w:r><w:t>a</w:t></w:r></w:ins>` +
+		`<w:del w:id="3" w:author="B"><w:r><w:delText>b</w:delText></w:r></w:del><w:moveFrom w:id="4" w:author="A"><w:r><w:t>c</w:t></w:r></w:moveFrom></w:p>` +
+		`<w:tbl><w:tr><w:trPr><w:del w:id="5" w:author="A"/></w:trPr><w:tc><w:p/></w:tc></w:tr></w:tbl><w:p/>`
+	f.Add([]byte(seed), uint8(2))
+	f.Add([]byte(seed[:len(seed)/2]), uint8(1))
+	fonts := testFonts(f)
+	f.Fuzz(func(t *testing.T, body []byte, view uint8) {
+		files := pkgFiles("", nil)
+		files["word/document.xml"] = `<w:document ` + nsDecl + `><w:body>` + string(body) + `</w:body></w:document>`
+		data := zipFiles(t, files)
+		opts := office.Options{MaxPages: 50, TrackedChanges: office.TrackedChanges(view % 3)}
+		doc, err := Convert(context.Background(), bytes.NewReader(data), fonts, opts)
+		if err == nil && len(doc.Pages) == 0 {
+			t.Fatal("no page without an error")
+		}
+	})
+}

@@ -28,15 +28,21 @@ func FuzzBuild(f *testing.F) {
 		if body == nil {
 			return
 		}
-		b := &builder{
-			ctx: context.Background(), pkg: pkg, styles: odf.NewStyles(pkg),
-			metricsCache: map[string][2]float64{}, warned: map[string]bool{}, pics: map[string]picResult{},
-			meta: map[*layout.Node]paraMeta{}, tabsRelative: true,
-		}
-		b.pages = newPageFlow(b, office.Options{})
+		b := newFuzzBuilder(pkg)
 		root, first := b.document(body)
 		if root == nil || first.Width <= 0 {
 			t.Fatalf("no root or page: %v %+v", root, first)
 		}
 	})
+}
+
+// newFuzzBuilder returns a builder of pkg's layout tree without fonts.
+func newFuzzBuilder(pkg *odf.Package) *builder {
+	b := &builder{
+		ctx: context.Background(), pkg: pkg, styles: odf.NewStyles(pkg),
+		metricsCache: map[string][2]float64{}, warned: map[string]bool{}, pics: map[string]picResult{},
+		meta: map[*layout.Node]paraMeta{}, tabsRelative: true,
+	}
+	b.pages = newPageFlow(b, office.Options{})
+	return b
 }
