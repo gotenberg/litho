@@ -3,13 +3,13 @@ package slides
 import (
 	"context"
 	"image"
+	"image/color"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/raster"
 	"github.com/gotenberg/litho/pkg/internal/shape"
-	"image/color"
 )
 
 // effectScale is the resolution in pixels a point an effect's bitmap is

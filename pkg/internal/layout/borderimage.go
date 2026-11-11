@@ -3,12 +3,12 @@ package layout
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"image/draw"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
-	"image/color"
 )
 
 // nineSource is the image a border image cuts: a picture, or a gradient
