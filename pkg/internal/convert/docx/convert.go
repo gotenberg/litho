@@ -129,7 +129,8 @@ func (d *document) lang() string {
 
 // assemble returns the document of the layout res: every page with its
 // links, the outline, the metadata and the warnings. The caller selects
-// pages afterwards.
+// pages afterwards. With a sink in the options, each page goes to it
+// once its links are resolved, and the document holds no page.
 func (d *document) assemble(res *layout.Result) (*compose.Document, error) {
 	dest := func(dd compose.Dest) (compose.Dest, bool) {
 		return dd, dd.Page >= 1 && dd.Page <= len(res.Pages)
@@ -148,7 +149,11 @@ func (d *document) assemble(res *layout.Result) (*compose.Document, error) {
 		Structure: res.Structure,
 		Warnings:  d.warnings,
 	}
-	for _, pg := range res.Pages {
+	sink := d.opts.Sink
+	if sink != nil {
+		sink.Expect(len(res.Pages))
+	}
+	for k, pg := range res.Pages {
 		links := pg.Links[:0:0]
 		for _, l := range pg.Links {
 			if l.Dest != nil {
@@ -161,7 +166,16 @@ func (d *document) assemble(res *layout.Result) (*compose.Document, error) {
 			links = append(links, l)
 		}
 		pg.Links = links
-		doc.Pages = append(doc.Pages, pg)
+		if sink == nil {
+			doc.Pages = append(doc.Pages, pg)
+			continue
+		}
+		// The page leaves the layout's result once handed over: the sink
+		// writes it and keeps none of its fragments.
+		if err := sink.Page(d.ctx, pg); err != nil {
+			return nil, fmt.Errorf("writing page %d: %w", k+1, err)
+		}
+		res.Pages[k] = nil
 	}
 	if !d.opts.OmitOutline {
 		anchors := make(map[string]compose.Dest, len(res.Anchors))
