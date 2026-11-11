@@ -39,7 +39,10 @@ func WithConvertVersion(version string) ConvertOption {
 //
 // [ConvertReport.Conformance] says what is left that the profile forbids
 // or requires. It is empty for most sources. The file claims the profile
-// either way, so read the report rather than the claim.
+// either way, so read the report rather than the claim: a residual is not
+// an error, and Convert returns nil with the file written. An RGB source
+// gains an sRGB output intent of some 3 KB; a CMYK profile is added only
+// to the pages that paint in DeviceCMYK.
 //
 // [models.PDFA4f] and the Factur-X profiles need an embedded file a
 // conversion does not have, and are refused with
@@ -63,17 +66,24 @@ func WithConvertPDFA(profile models.PDFAProfile) ConvertOption {
 // a picture, headings whose levels do not skip, a title. Where the source
 // is silent the file still claims the profile, and
 // [ConvertReport.Conformance] lists what is missing: read it rather than
-// the claim. An unknown profile is refused with
-// [ErrInvalidConvertOptions].
+// the claim. The document language comes from the source, else from
+// [WithDefaultLanguage], else it is "en", as [WithLanguage] defaults; pass
+// [WithDefaultLanguage] when the source may name none. An unknown profile is
+// refused with [ErrInvalidConvertOptions].
 func WithConvertPDFUA(profile models.PDFUAProfile) ConvertOption {
 	return func(o *convertOptions) { o.pdfua = profile }
 }
 
 // WithConvertTempDir sets the directory [Convert] writes its intermediate
-// files in, removed before it returns. Empty, the default, is the
-// operating system's temporary directory. A conversion whose output passes
-// a few MiB keeps the page contents and font programs it writes there
-// until the file is complete, instead of in memory.
+// files in, removed before it returns, on success and on failure. Empty,
+// the default, is the operating system's temporary directory.
+//
+// A conversion whose output passes a few MiB keeps the page contents and
+// font programs it writes there until the file is complete, instead of in
+// memory. A conversion to a profile also writes the plain file there, then
+// the conforming one, each about the size of the output, and the
+// remediation its own working copy: no whole file is held in memory twice,
+// and dst receives the conforming file once it is complete.
 func WithConvertTempDir(dir string) ConvertOption {
 	return func(o *convertOptions) { o.tempDir = dir }
 }

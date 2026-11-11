@@ -22,8 +22,14 @@
 // on it, and [Reader.CheckTextContrast] the text short of the contrast WCAG
 // 2.x asks of it, an advisory check no PDF/UA validation depends on.
 //
-// [Convert] makes a new, tagged PDF from another format: plain text or HTML
-// with its CSS.
+// [Convert] makes a new, tagged PDF from another format: plain text,
+// Markdown, HTML with its CSS, and the Office and OpenDocument text,
+// spreadsheet and presentation formats. One call writes the PDF version
+// [WithConvertVersion] names and the PDF/A and PDF/UA profiles
+// [WithConvertPDFA] and [WithConvertPDFUA] name, through the remediation a
+// [Writer] runs. [ConvertReport.Conformance] then lists what the profiles
+// still find; the file is written and claims them either way, so read the
+// report rather than the claim.
 //
 // # Quick start
 //
