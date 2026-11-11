@@ -486,3 +486,30 @@ func TestConvert_ListsAreTagged(t *testing.T) {
 		t.Errorf("structure %s", r)
 	}
 }
+
+// TestConvert_DrawingsDescribed locks what a reader hears of a drawing: a
+// picture's svg:title, a text box's text as its Figure's alt, a shape's
+// svg:desc, and nothing of an undescribed shape without text, an
+// artifact.
+func TestConvert_DrawingsDescribed(t *testing.T) {
+	body := `<text:p><draw:frame text:anchor-type="as-char" svg:width="2cm" svg:height="1cm"><draw:image xlink:href="Pictures/a.png"/><svg:title>A logo</svg:title></draw:frame></text:p>` +
+		`<text:p>x<draw:frame text:anchor-type="paragraph" svg:width="4cm" svg:height="2cm"><draw:text-box><text:p>In the</text:p><text:p>box</text:p></draw:text-box></draw:frame></text:p>` +
+		`<text:p><draw:rect text:anchor-type="paragraph" svg:width="2cm" svg:height="1cm"><svg:desc>A red square</svg:desc></draw:rect>` +
+		`<draw:line text:anchor-type="paragraph" svg:x1="0cm" svg:y1="0cm" svg:x2="2cm" svg:y2="0cm"/></text:p>`
+	b := newTestBuilder(t, doc{body: body, pictures: map[string][]byte{"Pictures/a.png": tinyPNG(t)}})
+	root, _ := b.document(odfBody(b))
+	var got []string
+	replaced := 0
+	walkNodes(root, func(n *layout.Node) {
+		if n.Role == "Figure" {
+			got = append(got, n.Alt)
+		}
+		if n.Kind == layout.Replaced {
+			replaced++
+		}
+	})
+	want := []string{"A logo", "In the box", "A red square"}
+	if !slices.Equal(got, want) || replaced != 3 {
+		t.Errorf("figures %q (%d drawings), want %q (3)", got, replaced, want)
+	}
+}

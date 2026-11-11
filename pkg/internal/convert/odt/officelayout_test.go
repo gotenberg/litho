@@ -400,7 +400,7 @@ func TestConvert_FrameAnchorPage(t *testing.T) {
 			root, _ := b.document(odfBody(b))
 			clipped := false
 			walkNodes(root, func(n *layout.Node) {
-				if n.Role == "Div" && n.Style.Overflow == css.OverflowHidden {
+				if n.Role == "Figure" && n.Style.Overflow == css.OverflowHidden {
 					clipped = true
 				}
 			})
@@ -480,7 +480,7 @@ func TestScanChains_LinkedTextBoxes(t *testing.T) {
 		if n.Style.Chain != "" {
 			chained = append(chained, n.Style.Chain+":"+strconv.Itoa(n.Style.ChainIndex))
 		}
-		if n.Role == "Div" && !n.Style.StrokeBorders {
+		if n.Style.Chain != "" && !n.Style.StrokeBorders {
 			t.Error("a frame's borders are not stroked")
 		}
 	})

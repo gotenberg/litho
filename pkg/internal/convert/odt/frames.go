@@ -18,6 +18,7 @@ import (
 	_ "golang.org/x/image/tiff" // registers TIFF with image.Decode
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
@@ -705,7 +706,10 @@ func (b *builder) drawing(c *odf.Element, depth int) *layout.Node {
 	case c.Is(odf.NSDraw, "g"):
 		st := baseStyle()
 		st.Display = css.InlineBlock
-		n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "Figure"})
+		n := b.node(&layout.Node{Kind: layout.Element, Style: st})
+		if alt := describe(c); alt != "" {
+			n.Role, n.Alt = "Figure", alt
+		}
 		for _, k := range c.Children {
 			if k.Name.Space == odf.NSDraw {
 				if kn := b.drawing(k, depth+1); kn != nil {
@@ -724,10 +728,7 @@ func (b *builder) drawing(c *odf.Element, depth int) *layout.Node {
 // frame builds a draw:frame (10.4.2) from its first content it draws: a
 // picture, a text box, or an object's replacement picture.
 func (b *builder) frame(c *odf.Element, g frameGeom, depth int) *layout.Node {
-	alt := strings.TrimSpace(c.Child(odf.NSSVG, "desc").TextContent())
-	if alt == "" {
-		alt = strings.TrimSpace(c.Child(odf.NSSVG, "title").TextContent())
-	}
+	alt := describe(c)
 	for _, k := range c.Children {
 		switch {
 		case k.Is(odf.NSDraw, "image"):
@@ -738,6 +739,12 @@ func (b *builder) frame(c *odf.Element, g frameGeom, depth int) *layout.Node {
 			return b.imageNode(pic, g, alt)
 		case k.Is(odf.NSDraw, "text-box"):
 			n := b.textBox(k, g, depth)
+			if hasText(n.Children) {
+				n.Role, n.Alt = "Figure", alt
+				if alt == "" {
+					n.Alt = office.ShownText(n.Children)
+				}
+			}
 			if l, ok := b.chains[c.A(odf.NSDraw, "name")]; ok {
 				applyChain(n.Style, l)
 			}
@@ -825,7 +832,12 @@ func rectOps(r compose.Rect) []compose.PathOp {
 }
 
 // textBox builds a draw:text-box (10.4.3): a block of its paragraphs in
-// the frame's box, at least its minimum height.
+// the frame's box, at least its minimum height. [builder.frame] tags one
+// that shows text as a Figure: a frame is anchored in a paragraph and
+// lies inside its P, which ISO 32005, Table 5 lets hold a Figure but not
+// the P and Div elements of the box's content, while a Figure holds
+// them. Its alt is the frame's description, else the text it shows, so
+// that a reader hears the box either way (ISO 14289-1, 7.3).
 func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 	st := b.frameBox(g)
 	applyWritingMode(st, g.props.Get("style:writing-mode"))
@@ -846,9 +858,19 @@ func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 		// continues there, shows it all, the chain not being laid out.
 		st.Overflow = css.OverflowHidden
 	}
-	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "Div"})
+	n := b.node(&layout.Node{Kind: layout.Element, Style: st})
 	n.Children = b.blocks(k, blockCtx{depth: depth + 1})
 	return n
+}
+
+// describe returns what a drawing element's svg:desc, else its svg:title,
+// says of it for a reader who cannot see it (ODF 1.3 Part 3, 19.5 and
+// 19.6), "" for nothing.
+func describe(c *odf.Element) string {
+	if alt := strings.TrimSpace(c.Child(odf.NSSVG, "desc").TextContent()); alt != "" {
+		return alt
+	}
+	return strings.TrimSpace(c.Child(odf.NSSVG, "title").TextContent())
 }
 
 // shapeSVG returns an SVG drawing of a shape (ODF 1.3, Part 3, 10.3) in
@@ -933,10 +955,30 @@ func xmlEscape(s string) string {
 // shape builds a drawing shape through [shapeSVG], or its bounding box
 // with a warning for one it does not draw; its text, when it has
 // paragraphs, is left out with a warning.
+//
+// A shape that shows text is a Figure, its alt the shape's description,
+// else its text, as a text box is ([builder.textBox]). A shape without
+// text is a Figure when its source describes it and an artifact when it
+// does not: a line or a background shape with no text and no description
+// decorates the page (ISO 32000-1, 14.8.2.2.2; ISO 14289-1, 7.1).
 func (b *builder) shape(c *odf.Element, g frameGeom, depth int) *layout.Node {
 	n := b.shapeBody(c, g)
+	alt := describe(c)
 	if text := b.shapeText(c, depth); text != nil && n != nil {
-		return b.withText(n, text, g)
+		if n.Role == "Figure" {
+			n.Role = ""
+		}
+		w := b.withText(n, text, g)
+		if w.Alt = alt; alt == "" {
+			w.Alt = office.ShownText(text.Children)
+		}
+		return w
+	}
+	if n != nil && n.Role == "Figure" {
+		n.Alt = alt
+		if alt == "" {
+			n.Role = ""
+		}
 	}
 	return n
 }
@@ -956,6 +998,7 @@ func (b *builder) shapeText(c *odf.Element, depth int) *layout.Node {
 		return nil
 	}
 	b.spacing(kids)
+	kids = b.wrapLists(kids, 0)
 	st := baseStyle()
 	st.Display = css.Block
 	return b.node(&layout.Node{Kind: layout.Element, Style: st, Children: kids})
