@@ -28,11 +28,19 @@ const maxSlideShapes = 1 << 14
 
 // shapeCost is what one shape drawn costs the conversion's memory budget:
 // its fragments, paths and structure element, which live until the
-// document is written. The shapes of the model are read whole first, and
-// the XML they are read from is charged as it is parsed. The value is an
-// estimate from the size of a shape's fragments, not measured apart from
-// the XML trees.
-const shapeCost = 2 << 10
+// document is written. The shapes of the model are read whole first, the
+// XML they are read from is charged as it is parsed, and the glyphs of
+// their text as they are laid out. The value is the most a drawn fragment
+// was measured to hold, rounded up.
+//
+// # Corpus evidence
+//
+//   - litho/pptx hostile-shape-flood: the 16,384 shapes drawn of its one
+//     slide, filled rectangles without text, hold 5.6 MB of live heap once
+//     the document is built, 340 bytes a shape.
+//   - litho/pptx deck-quarterly-report, deck-training, connectors: 152,
+//     686 and 1,035 bytes of live heap a fragment, their glyphs included.
+const shapeCost = 1 << 10
 
 // maxGroupDepth caps the nesting of groups followed at
 // [limits.MaxSourceGroupDepth], which says why: every level costs a stack
