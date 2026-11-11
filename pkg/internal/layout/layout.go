@@ -685,11 +685,19 @@ func dropPrunedDests(root *compose.StructElem, res *Result) {
 }
 
 // prune drops the structure elements no fragment hangs from, directly or
-// through their kids, and reports whether el keeps content.
+// through their kids, and reports whether el keeps content. A row that
+// keeps content keeps its empty cells too: with their spans, the rows of a
+// table then count the same columns (ISO 14289-1, 7.2).
 func prune(el *compose.StructElem, used map[*compose.StructElem]bool) bool {
 	kids := el.Kids[:0]
-	for _, k := range el.Kids {
-		if prune(k, used) {
+	keep := make([]bool, len(el.Kids))
+	kept := false
+	for i, k := range el.Kids {
+		keep[i] = prune(k, used)
+		kept = kept || keep[i]
+	}
+	for i, k := range el.Kids {
+		if keep[i] || kept && el.Role == "TR" && (k.Role == "TD" || k.Role == "TH") {
 			kids = append(kids, k)
 		}
 	}

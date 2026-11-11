@@ -243,3 +243,20 @@ func TestPruneStructureDropsDanglingDests(t *testing.T) {
 		t.Errorf("Validate after pruning: %v", err)
 	}
 }
+
+func TestPruneStructureKeepsEmptyCellsOfARow(t *testing.T) {
+	t.Parallel()
+	full := &compose.StructElem{Role: "TD"}
+	empty := &compose.StructElem{Role: "TD"}
+	gone := &compose.StructElem{Role: "TR", Kids: []*compose.StructElem{{Role: "TD"}}}
+	row := &compose.StructElem{Role: "TR", Kids: []*compose.StructElem{full, empty}}
+	root := &compose.StructElem{Role: "Document", Kids: []*compose.StructElem{{Role: "Table", Kids: []*compose.StructElem{row, gone}}}}
+	r := run(t, sans, 12, compose.Point{X: 40, Y: 60}, "a")
+	r.Parent = full
+	doc := &compose.Document{Structure: root, Pages: []*compose.Page{letter(r)}}
+	compose.PruneStructure(doc)
+	table := root.Kids[0]
+	if len(table.Kids) != 1 || len(table.Kids[0].Kids) != 2 || table.Kids[0].Kids[1] != empty {
+		t.Errorf("table rows %d, cells %v: want the row with content and both its cells", len(table.Kids), table.Kids[0].Kids)
+	}
+}

@@ -3,9 +3,10 @@ package compose
 // PruneStructure drops from doc's structure tree the elements no fragment
 // or link of its pages hangs from, directly or through their kids, once a
 // page selection left pages out or culling left content out, so the tree
-// written (ISO 32000-1, 14.7.2) names no element without content. The
-// root stays, and a destination whose element is dropped keeps its page
-// position alone. A nil tree is left alone.
+// written (ISO 32000-1, 14.7.2) names no element without content but the
+// empty cells of a row that keeps content. The root stays, and a
+// destination whose element is dropped keeps its page position alone. A
+// nil tree is left alone.
 func PruneStructure(doc *Document) {
 	if doc.Structure == nil {
 		return
@@ -56,6 +57,12 @@ func PruneStructure(doc *Document) {
 			stack = append(stack, &frame{el: k})
 			continue
 		}
+		if top.el.Role == "TR" && len(top.kept) > 0 {
+			// A row that keeps content keeps its empty cells: with their
+			// spans, the rows of a table count the same columns (ISO
+			// 14289-1, 7.2).
+			top.kept = rowCells(top.el.Kids, top.kept)
+		}
 		top.el.Kids = top.kept
 		stack = stack[:len(stack)-1]
 		if len(stack) > 0 && (used[top.el] || len(top.kept) > 0) {
@@ -64,6 +71,22 @@ func PruneStructure(doc *Document) {
 		}
 	}
 	dropDanglingDests(doc)
+}
+
+// rowCells returns the kids of a row in order, those in kept and every
+// TD or TH cell.
+func rowCells(kids, kept []*StructElem) []*StructElem {
+	in := make(map[*StructElem]bool, len(kept))
+	for _, k := range kept {
+		in[k] = true
+	}
+	out := make([]*StructElem, 0, len(kids))
+	for _, k := range kids {
+		if k.Role == "TD" || k.Role == "TH" || in[k] {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 // dropDanglingDests clears the [Dest.Elem] of every link and outline entry
