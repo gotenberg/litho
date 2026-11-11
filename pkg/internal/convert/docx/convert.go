@@ -29,10 +29,6 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
-	if opts.TrackedChanges != office.ChangesAccepted {
-		// Wave 11, cell word: remove with the feature.
-		return nil, fmt.Errorf("%w: tracked-changes views", office.ErrNotImplemented)
-	}
 	if fonts == nil {
 		return nil, fmt.Errorf("%w: no font index", office.ErrInvalidOptions)
 	}
@@ -64,10 +60,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 
 // convert builds the layout tree, lays it out and assembles the document.
 func (d *document) convert() (*compose.Document, error) {
-	root, err := d.part(d.main)
-	if err != nil {
-		return nil, fmt.Errorf("reading the DOCX main part: %w", err)
-	}
+	root := d.root
 	if !root.Is(w, "document") {
 		return nil, fmt.Errorf("%w: the main part is not a w:document", office.ErrMalformed)
 	}

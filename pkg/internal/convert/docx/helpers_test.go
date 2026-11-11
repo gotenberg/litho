@@ -260,19 +260,21 @@ type built struct {
 // layout tree.
 func build(t testing.TB, body string, extra map[string]string) *built {
 	t.Helper()
+	return buildWith(t, body, extra, office.Options{})
+}
+
+// buildWith is [build] with the options opts.
+func buildWith(t testing.TB, body string, extra map[string]string, opts office.Options) *built {
+	t.Helper()
 	pkg, err := ooxml.Open(docx(t, body, extra))
 	if err != nil {
 		t.Fatalf("ooxml.Open: %v", err)
 	}
-	d, err := load(context.Background(), pkg, testFonts(t), office.Options{})
+	d, err := load(context.Background(), pkg, testFonts(t), opts)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	root, err := d.part(d.main)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b := &built{d: d, secs: d.body(root)}
+	b := &built{d: d, secs: d.body(d.root)}
 	b.root = &layout.Node{Kind: layout.Element, Style: d.blockStyle()}
 	for _, s := range b.secs {
 		b.root.Children = append(b.root.Children, d.sectionNode(s, nil))

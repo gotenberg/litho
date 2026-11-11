@@ -107,6 +107,12 @@ type document struct {
 	marginAnchors []pendingAnchor
 	// background is the page background of every page, nil for none.
 	background *css.Style
+	// root is the main part's root, read before the parts it relates to
+	// so that the marked view numbers the authors of its revisions
+	// first.
+	root *ooxml.Element
+	// revisions rewrites each story part into the tracked-changes view.
+	revisions *revisions
 }
 
 // heading is a paragraph with an outline level, for the outline.
@@ -132,7 +138,11 @@ func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	d := &document{
 		ctx: ctx, pkg: pkg, main: main, fonts: fonts, opts: opts,
 		warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, lineFactors: map[string][3]float64{}, vmlTypes: map[string]int{},
-		settings: settings{defaultTab: 36},
+		settings:  settings{defaultTab: 36},
+		revisions: &revisions{view: opts.TrackedChanges, authors: map[string]int{}, marked: map[*ooxml.Element]bool{}},
+	}
+	if d.root, err = d.part(main); err != nil {
+		return nil, fmt.Errorf("reading the DOCX main part: %w", err)
 	}
 	d.theme = &ooxml.Theme{}
 	d.readFontTable(nil)
@@ -182,9 +192,21 @@ func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	return d, nil
 }
 
-// part parses the part name with the converter's markup compatibility.
+// part parses the part name with the converter's markup compatibility,
+// the revisions of a story part rewritten into the tracked-changes view
+// ([revisions.resolve]).
 func (d *document) part(name string) (*ooxml.Element, error) {
-	return d.pkg.ParseXML(d.ctx, name, understood)
+	root, err := d.pkg.ParseXML(d.ctx, name, understood)
+	if err != nil {
+		return nil, err
+	}
+	if root.Space == w {
+		switch root.Local {
+		case "document", "hdr", "ftr", "footnotes", "endnotes":
+			d.revisions.resolve(root, 0)
+		}
+	}
+	return root, nil
 }
 
 // isSoft reports an error a secondary part may fail with and the

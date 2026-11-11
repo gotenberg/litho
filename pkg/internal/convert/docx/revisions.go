@@ -1,6 +1,12 @@
 package docx
 
-import "github.com/gotenberg/litho/pkg/internal/ooxml"
+import (
+	"encoding/xml"
+	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/ooxml"
+)
 
 // markDeleted reports a paragraph whose mark is a tracked deletion
 // (ECMA-376 Part 1, 17.13.5.15 del in the paragraph mark's run
@@ -97,4 +103,226 @@ func mergeDeleted(kids []*ooxml.Element) []*ooxml.Element {
 		out = append(out, p)
 	}
 	return out
+}
+
+// revisionColors are the colours of the authors of a marked view, the
+// first author of the document in the first, cycling past the ninth.
+// Word's own colours are not measured: no reference prints a document's
+// changes shown; these are LibreOffice's, which prints a DOCX document's
+// changes as an OpenDocument one's.
+//
+// # Corpus evidence
+//
+//   - probe, odt: LibreOffice 26.8 (the pinned gotenberg/gotenberg:9.0.0
+//     image, soffice --convert-to pdf, changes shown) draws the changes of
+//     eleven authors in these nine colours, in the order the authors
+//     first appear in the body, the tenth and eleventh in the first two
+//     again.
+//   - litho/docx tracked-changes: Microsoft's reference prints the
+//     accepted text, without marks.
+//
+//nolint:gochecknoglobals // static palette
+var revisionColors = [...]string{"C69200", "0646A2", "579D1C", "692B9D", "C5000B", "008080", "8C8400", "35556B", "D17600"}
+
+// revisions rewrites the revisions of a part into the view
+// office.Options.TrackedChanges asks for (ECMA-376 Part 1, 17.13.5).
+type revisions struct {
+	view office.TrackedChanges
+	// authors numbers the authors of the marked view in the order the
+	// converter meets them, the main part first.
+	authors map[string]int
+	// marked holds the runs a revision marked already: an inner one
+	// keeps its own mark.
+	marked map[*ooxml.Element]bool
+}
+
+// resolve rewrites the content of el, a part's root or an element in it,
+// in place:
+//
+//   - w:ins and w:moveTo (17.13.5.18, 17.13.5.23) keep their content in
+//     the accepted and marked views and drop it in the rejected one;
+//     w:del and w:moveFrom (17.13.5.14, 17.13.5.22) the other way round,
+//     their w:delText and w:delInstrText (17.3.3.7, 17.16.13) read as
+//     w:t and w:instrText where they print.
+//   - A paragraph mark deleted in the view (17.13.5.15, 17.13.5.21: w:del
+//     or w:moveFrom in the mark's run properties for the accepted view,
+//     w:ins or w:moveTo, 17.13.5.16 and 17.13.5.24, for the rejected
+//     one) joins its paragraph to the next ([mergeDeleted]); the marked
+//     view keeps every paragraph.
+//   - A table row inserted (17.13.5.17) or deleted (17.13.5.12) goes in
+//     the view that drops it.
+//   - The marked view draws an insertion's runs underlined and a
+//     deletion's struck through, in their author's colour.
+//
+// Property changes (w:rPrChange, w:pPrChange, w:sectPrChange,
+// w:tblPrChange and the rest, 17.13.5.29 to 17.13.5.38) print the new
+// properties in every view: the converter reads the properties around
+// them, never the old ones they hold. A cell insertion, deletion or merge
+// (w:cellIns, w:cellDel, w:cellMerge, 17.13.5.4 to 17.13.5.6) prints its
+// cell as it stands.
+//
+// # Corpus evidence
+//
+//   - litho/docx tracked-changes: Word prints the accepted text, the
+//     deleted row out and the cell marked deleted in, and the formatting
+//     of every property change.
+func (r *revisions) resolve(el *ooxml.Element, depth int) {
+	if depth > ooxml.MaxDepth || len(el.Children) == 0 {
+		return
+	}
+	if strings.HasSuffix(el.Local, "Pr") || strings.HasSuffix(el.Local, "PrChange") {
+		// Properties hold revision marks, not revised content.
+		return
+	}
+	var kids []*ooxml.Element
+	changed := false
+	for _, k := range el.Children {
+		if k.Space != w {
+			r.resolve(k, depth+1)
+			kids = append(kids, k)
+			continue
+		}
+		switch k.Local {
+		case "ins", "moveTo":
+			changed = true
+			if r.view == office.ChangesRejected {
+				continue
+			}
+			r.resolve(k, depth+1)
+			if r.view == office.ChangesMarked {
+				r.mark(k, attrOr(k, "author"), true, depth+1)
+			}
+			kids = append(kids, k.Children...)
+		case "del", "moveFrom":
+			changed = true
+			if r.view == office.ChangesAccepted {
+				continue
+			}
+			r.resolve(k, depth+1)
+			undelete(k, depth+1)
+			if r.view == office.ChangesMarked {
+				r.mark(k, attrOr(k, "author"), false, depth+1)
+			}
+			kids = append(kids, k.Children...)
+		case "tr":
+			if t := k.Child(w, "trPr"); r.view == office.ChangesAccepted && t.Child(w, "del") != nil ||
+				r.view == office.ChangesRejected && t.Child(w, "ins") != nil {
+				changed = true
+				continue
+			}
+			r.resolve(k, depth+1)
+			kids = append(kids, k)
+		case "p":
+			r.paragraphMark(k)
+			r.resolve(k, depth+1)
+			kids = append(kids, k)
+		default:
+			r.resolve(k, depth+1)
+			kids = append(kids, k)
+		}
+	}
+	if changed {
+		el.Children = kids
+	}
+}
+
+// paragraphMark leaves in the run properties of p's mark a w:del when the
+// view deletes the mark, and no other revision mark.
+func (r *revisions) paragraphMark(p *ooxml.Element) {
+	rpr := p.Child(w, "pPr").Child(w, "rPr")
+	if rpr == nil {
+		return
+	}
+	var deleted, any bool
+	kids := rpr.Children[:0:0]
+	for _, c := range rpr.Children {
+		if c.Space == w {
+			switch c.Local {
+			case "del", "moveFrom":
+				any = true
+				deleted = deleted || r.view == office.ChangesAccepted
+				continue
+			case "ins", "moveTo":
+				any = true
+				deleted = deleted || r.view == office.ChangesRejected
+				continue
+			}
+		}
+		kids = append(kids, c)
+	}
+	if !any {
+		return
+	}
+	if deleted {
+		kids = append(kids, &ooxml.Element{Space: w, Local: "del"})
+	}
+	rpr.Children = kids
+}
+
+// undelete renames the deleted text and field instructions under el to
+// the text and instructions they were.
+func undelete(el *ooxml.Element, depth int) {
+	if depth > ooxml.MaxDepth {
+		return
+	}
+	for _, k := range el.Children {
+		switch {
+		case k.Is(w, "delText"):
+			k.Local = "t"
+		case k.Is(w, "delInstrText"):
+			k.Local = "instrText"
+		default:
+			undelete(k, depth+1)
+		}
+	}
+}
+
+// mark draws the runs under el in author's colour, underlined for an
+// insertion and struck through for a deletion, as direct run properties
+// that override the run's own (17.3.2.6 color, 17.3.2.40 u, 17.3.2.37
+// strike). A run an inner revision marked keeps its mark.
+func (r *revisions) mark(el *ooxml.Element, author string, insert bool, depth int) {
+	if depth > ooxml.MaxDepth {
+		return
+	}
+	n, ok := r.authors[author]
+	if !ok {
+		n = len(r.authors)
+		r.authors[author] = n
+	}
+	color := revisionColors[n%len(revisionColors)]
+	for _, k := range el.Children {
+		if !k.Is(w, "r") {
+			r.mark(k, author, insert, depth+1)
+			continue
+		}
+		if r.marked[k] {
+			continue
+		}
+		r.marked[k] = true
+		rpr := k.Child(w, "rPr")
+		if rpr == nil {
+			rpr = &ooxml.Element{Space: w, Local: "rPr"}
+			k.Children = append([]*ooxml.Element{rpr}, k.Children...)
+		}
+		props := rpr.Children[:0:0]
+		for _, c := range rpr.Children {
+			if c.Space == w && (c.Local == "color" || c.Local == "u" || c.Local == "strike" || c.Local == "dstrike") {
+				continue
+			}
+			props = append(props, c)
+		}
+		props = append(props, valElement("color", color))
+		if insert {
+			props = append(props, valElement("u", "single"))
+		} else {
+			props = append(props, valElement("strike", "1"))
+		}
+		rpr.Children = props
+	}
+}
+
+// valElement returns a WordprocessingML element local with a w:val.
+func valElement(local, val string) *ooxml.Element {
+	return &ooxml.Element{Space: w, Local: local, Attrs: []xml.Attr{{Name: xml.Name{Space: w, Local: "val"}, Value: val}}}
 }
