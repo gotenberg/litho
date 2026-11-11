@@ -32,10 +32,10 @@ func calendarDay(days int64, excel bool) (int, time.Month, int, time.Weekday) {
 	if excel && days >= 0 && days <= excelLeapDay {
 		// Excel's day 1 is a Sunday, January 1, 1900.
 		wd := time.Weekday((days + 6) % 7)
-		switch {
-		case days == 0:
+		switch days {
+		case 0:
 			return 1900, time.January, 0, wd
-		case days == excelLeapDay:
+		case excelLeapDay:
 			return 1900, time.February, 29, wd
 		}
 		d := time.Date(1899, 12, 31, 0, 0, 0, 0, time.UTC).AddDate(0, 0, int(days)) // fits int: at most excelLeapDay

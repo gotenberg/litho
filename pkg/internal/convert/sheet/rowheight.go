@@ -119,7 +119,7 @@ func (b *builder) optimalHeights(g *grid) {
 }
 
 // excelHeight returns the height Excel gives a row without a height of
-// its own whose wrapped text takes lines lines of lineH points: a line of
+// its own whose wrapped text takes a count of lines of lineH points: a line of
 // the sheet's default row height defH for each, scaled by the line of the
 // text's font against the default font's defLine, in whole printer pixels.
 // Excel fits such a row as it opens a workbook, and leaves a row whose
