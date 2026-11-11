@@ -308,9 +308,10 @@ func spreadsheetConfig(opts []SpreadsheetOption) convertConfig {
 // 4180) in UTF-8.
 //
 // The file is laid out as a spreadsheet of one sheet named Sheet1: its
-// fields split at the separators of [WithCSVSeparators], a field quoted
-// with double quotes read as text, and, unless [WithCSVTypeDetection] turns
-// it off, a field that reads as a number, a date or a time laid out as one.
+// fields split at the separators of [WithCSVSeparators], double quotes
+// enclosing a field that holds a separator, a quote or a line break, and,
+// unless [WithCSVTypeDetection] turns it off, a field that reads as a
+// number, a date or a time laid out as one, quoted or not.
 // The sheet prints on the paper of [WithDefaultPaper] with a page footer
 // and no header.
 func FromCSV(src io.Reader, opts ...CSVOption) *Conversion {

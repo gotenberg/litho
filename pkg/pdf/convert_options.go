@@ -77,16 +77,18 @@ type Recalculation int
 
 const (
 	// RecalculateAsNeeded computes a formula again when the file gives no
-	// reason to trust its stored value: every formula of an ODS source, and
-	// in an XLSX source a formula without a stored value, or every formula
-	// of a workbook no spreadsheet application wrote. It is the zero value
+	// reason to trust its stored value: every formula of an ODS source; in
+	// an XLSX source, a formula without a stored value, and every formula of
+	// a workbook that neither Microsoft Excel nor LibreOffice wrote and none
+	// of whose formulas stores a number other than 0. It is the zero value
 	// and the default.
 	RecalculateAsNeeded Recalculation = iota
 	// RecalculateNever shows the value the file stores for every formula,
 	// and nothing for a formula without one.
 	RecalculateNever
 	// RecalculateAlways computes every formula again. A formula litho does
-	// not compute keeps its stored value.
+	// not compute keeps its stored value, and so does a cell that shares
+	// the formula of another.
 	RecalculateAlways
 )
 
@@ -736,8 +738,10 @@ func WithSheetNumbers(numbers ...int) SpreadsheetOption {
 
 // WithHiddenSheets sets whether the sheets an XLSX or ODS source hides are
 // printed. false, the default, leaves them out, as a workbook is printed;
-// true prints every sheet, in book order. A workbook that hides every sheet
-// prints its first either way.
+// true prints every sheet, in book order, the sheets an XLSX source hides
+// from its own list of hidden sheets and those an ODS source marks as not
+// printed included. A workbook that hides every sheet prints its first
+// either way.
 func WithHiddenSheets(include bool) SpreadsheetOption {
 	return spreadsheetOption(func(c *convertConfig) { c.hiddenSheets = include })
 }
