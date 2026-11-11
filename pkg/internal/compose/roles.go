@@ -47,6 +47,13 @@ var types20 = map[string]bool{
 // carries its function. An inline type, empty here, becomes a P under a
 // grouping element and a Span elsewhere ([replaced20]). Immutable lookup
 // table.
+//
+// A TOC and its TOCI become a Div only when the table cannot be one in a
+// PDF 2.0 file ([structState.tocKept]): ISO 32000-2, 14.8.6.1 keeps the
+// PDF 1.7 standard structure namespace, the default one, for the types of
+// earlier versions, so a TOC written there with no /NS stays a standard
+// type of a PDF 2.0 file and holds its Caption (ISO 32005, Table 5), which
+// a Div may not.
 var removed20 = map[string]string{
 	"Art": "Sect", "Index": "Sect", "BlockQuote": "Div", "Private": "NonStruct",
 	"TOC": "Div", "TOCI": "Div", "Note": "FENote",

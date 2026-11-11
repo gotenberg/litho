@@ -271,3 +271,45 @@ func TestPruneStructureKeepsTheGridOfATable(t *testing.T) {
 		t.Error("the empty paragraph of an empty cell is kept")
 	}
 }
+
+// TestWriteVersion20KeepsTableOfContents locks that a PDF 2.0 file writes a
+// TOC and its TOCI in the default standard structure namespace, the PDF
+// 1.7 one (ISO 32000-2, 14.8.6.1), so the TOC holds its Caption as ISO
+// 32005, Table 5 lets it, where a Div may not; the Caption and the entry's
+// paragraph stay in the PDF 2.0 namespace, and the entry's link names the
+// heading it leads to in its /Ref (Table 355; ISO 14289-2, 8.2.5.8). A
+// table whose entries name no target is written as a Div.
+func TestWriteVersion20KeepsTableOfContents(t *testing.T) {
+	t.Parallel()
+	caption := &compose.StructElem{Role: "Caption"}
+	link := &compose.StructElem{Role: "Link"}
+	p := &compose.StructElem{Role: "P", Kids: []*compose.StructElem{link}}
+	toci := &compose.StructElem{Role: "TOCI", Kids: []*compose.StructElem{p}}
+	toc := &compose.StructElem{Role: "TOC", Kids: []*compose.StructElem{caption, toci}}
+	h1 := &compose.StructElem{Role: "H1"}
+	root := &compose.StructElem{Role: "Document", Kids: []*compose.StructElem{toc, h1}}
+	title := run(t, sans, 12, compose.Point{X: 40, Y: 60}, "Contents")
+	title.Parent = caption
+	entry := run(t, sans, 12, compose.Point{X: 40, Y: 80}, "One")
+	entry.Parent = link
+	heading := run(t, sans, 12, compose.Point{X: 40, Y: 120}, "One")
+	heading.Parent = h1
+	pg := letter(title, entry, heading)
+	pg.Links = []compose.Link{{Rect: compose.Rect{X: 40, Y: 70, Width: 30, Height: 12}, Dest: &compose.Dest{Page: 1, Elem: h1}, Parent: link}}
+	doc := &compose.Document{Structure: root, Pages: []*compose.Page{pg}}
+	out := writeVersion(t, doc, compose.Version20)
+	mustContain(t, out, "/S /TOC /Type /StructElem", "/S /TOCI /Type /StructElem", "/S /Caption", "/S /P")
+	mustLack(t, out, "/S /Div", "/S /TOC /Type /StructElem /NS", "/S /TOCI /Type /StructElem /NS", "/RoleMap")
+	if n := len(regexp.MustCompile(`/NS \d+ 0 R`).FindAll(out, -1)); n != 5 {
+		t.Errorf("%d elements name the PDF 2.0 namespace, want the Document, the Caption, the P, the Link and the H1", n)
+	}
+	if n := len(regexp.MustCompile(`/Ref \[\d+ 0 R\]`).FindAll(out, -1)); n != 1 {
+		t.Errorf("%d /Ref entries, want the link's", n)
+	}
+	mustLack(t, writeVersion(t, doc, compose.Version17), "/Ref ")
+	// An entry that names no target turns the table into a Div.
+	pg.Links = nil
+	out = writeVersion(t, doc, compose.Version20)
+	mustContain(t, out, "/S /Div")
+	mustLack(t, out, "/S /TOC", "/S /TOCI", "/Ref ")
+}

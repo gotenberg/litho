@@ -37,10 +37,15 @@ type structState struct {
 	// annotParents lists the element of each annotation that has one, in
 	// /StructParent key order after the pages' keys.
 	annotParents []*StructElem
+	// refers lists, per element, the elements its links lead to, in the
+	// order the links are written: a PDF 2.0 file names them in its /Ref.
+	// A destination's element is read through its pointer, so it may
+	// arrive with the tree, after the page.
+	refers map[*StructElem][]*StructElem
 }
 
 func newStructState() *structState {
-	return &structState{items: make(map[*StructElem][]structItem)}
+	return &structState{items: make(map[*StructElem][]structItem), refers: make(map[*StructElem][]*StructElem)}
 }
 
 // addPage opens the ParentTree entry of the next page.
@@ -53,12 +58,16 @@ func (st *structState) addMCID(page, mcid int, e *StructElem) {
 	st.pageParents[page] = append(st.pageParents[page], e)
 }
 
-// addAnnot records that the annotation at ref on page belongs to e and
-// returns its index among the annotations: its /StructParent key is the
+// addAnnot records that the annotation at ref on page belongs to e, and
+// leads to the element to when to is not nil, and returns its index among
+// the annotations: its /StructParent key is the
 // page count plus that index, keys 0 to len(pages)-1 being the pages'
 // /StructParents.
-func (st *structState) addAnnot(page int, ref ast.PdfIndirectRef, e *StructElem) int {
+func (st *structState) addAnnot(page int, ref ast.PdfIndirectRef, e, to *StructElem) int {
 	st.items[e] = append(st.items[e], structItem{page: page, annot: ref})
+	if to != nil && !slices.Contains(st.refers[e], to) {
+		st.refers[e] = append(st.refers[e], to)
+	}
 	st.annotParents = append(st.annotParents, e)
 	return len(st.annotParents) - 1
 }
@@ -98,8 +107,9 @@ const pdf2Namespace = "http://iso.org/pdf2/ssn"
 //
 // A PDF 2.0 file names the PDF 2.0 namespace on every element whose type
 // it holds, writing a removed PDF 1.7 type as its replacement
-// ([replaced20]); a role neither namespace holds stays in the default
-// namespace and is mapped by /RoleMap. Every other version maps by
+// ([replaced20]); a table of contents whose entries name their targets
+// ([structState.tocKept]) and a role neither namespace holds stay in the
+// default namespace, the second mapped by /RoleMap. Every other version maps by
 // /RoleMap each role it does not define.
 func (st *structState) write(ctx context.Context, w *docWriter, v Version) error {
 	var nsRef ast.PdfIndirectRef
@@ -108,6 +118,10 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 			"Type": ast.PdfName("Namespace"),
 			"NS":   ast.PdfString(pdf2Namespace),
 		})
+	}
+	var kept map[*StructElem]bool
+	if v == Version20 {
+		kept = st.tocKept()
 	}
 	written := map[string]bool{}
 	for i, e := range st.order {
@@ -132,7 +146,10 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 			if hasParent {
 				parentRole = p.Role
 			}
-			if r := replaced20(e.Role, parentRole); r != "" {
+			if kept[e] {
+				// The PDF 1.7 namespace, the default one: no /NS.
+				written[e.Role] = true
+			} else if r := replaced20(e.Role, parentRole); r != "" {
 				role = r
 				dict["S"] = ast.PdfName(r)
 				dict["NS"] = nsRef
@@ -184,6 +201,22 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 		if e.ActualText != "" {
 			dict["ActualText"] = textString(e.ActualText)
 		}
+		if v == Version20 {
+			// ISO 32000-2, 14.7.2, Table 355: /Ref names the elements the
+			// content of an element refers to, a PDF 2.0 entry. A link
+			// refers to the element it leads to, which is how an entry of a
+			// table of contents identifies its heading (ISO 14289-2,
+			// 8.2.5.8).
+			var to ast.PdfArray
+			for _, t := range st.refers[e] {
+				if r, ok := st.refs[t]; ok {
+					to = append(to, r)
+				}
+			}
+			if len(to) > 0 {
+				dict["Ref"] = to
+			}
+		}
 		w.reserved[st.refs[e].ObjectNum] = dict
 	}
 
@@ -218,6 +251,64 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 	}
 	w.reserved[structRootRef.ObjectNum] = root
 	return nil
+}
+
+// tocKept returns the TOC and TOCI elements a PDF 2.0 file writes as
+// themselves, in the default standard structure namespace, the PDF 1.7 one
+// that ISO 32000-2, 14.8.6.1 keeps for the types of earlier versions,
+// rather than as Divs ([removed20]). A TOC is kept, with its TOCI, when
+// each of its TOCI names its target through the /Ref of itself or of an
+// element under it, a link's ([structState.refers]): ISO 14289-2, 8.2.5.8
+// asks it of every entry, and a TOC whose entries say nothing of where
+// they lead is no better than the Div that ISO 32000-2, Annex L maps it
+// to. Annex L and ISO 32005, Table 5 then relate the two namespaces'
+// types: a TOC under a Sect or the Document, its Caption, TOCI and nested
+// TOC under it.
+func (st *structState) tocKept() map[*StructElem]bool {
+	refers := map[*StructElem]bool{}
+	// st.order is a preorder: walking it backwards meets every kid before
+	// its parent.
+	for _, e := range slices.Backward(st.order) {
+		for _, t := range st.refers[e] {
+			if _, ok := st.refs[t]; ok {
+				refers[e] = true
+			}
+		}
+		if refers[e] {
+			if p, ok := st.parent[e]; ok {
+				refers[p] = true
+			}
+		}
+	}
+	kept := map[*StructElem]bool{}
+	for _, e := range st.order {
+		if e.Role != "TOC" {
+			continue
+		}
+		if p, ok := st.parent[e]; ok && p.Role == "TOCI" && !kept[p] {
+			// A TOC nested in an entry of a table written as a Div is one
+			// too.
+			continue
+		}
+		entries := 0
+		named := true
+		for _, k := range e.Kids {
+			if k.Role == "TOCI" {
+				entries++
+				named = named && refers[k]
+			}
+		}
+		if entries == 0 || !named {
+			continue
+		}
+		kept[e] = true
+		for _, k := range e.Kids {
+			if k.Role == "TOCI" {
+				kept[k] = true
+			}
+		}
+	}
+	return kept
 }
 
 // attributes returns the attribute object of e, written as type role in a

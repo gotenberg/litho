@@ -586,7 +586,11 @@ func (w *docWriter) page(ctx context.Context, page *Page, links []Link) error {
 			ref := w.alloc.Alloc(ast.PdfNull{})
 			pl := pendingLink{page: i, link: link, ref: ref, annot: -1}
 			if w.st != nil && link.Parent != nil {
-				pl.annot = w.st.addAnnot(i, ref, link.Parent)
+				var to *StructElem
+				if link.Dest != nil {
+					to = link.Dest.Elem
+				}
+				pl.annot = w.st.addAnnot(i, ref, link.Parent, to)
 			}
 			w.links = append(w.links, pl)
 			annots[j] = ref
