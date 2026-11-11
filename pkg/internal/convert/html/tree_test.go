@@ -12,6 +12,7 @@ import (
 	dom "golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 )
@@ -476,6 +477,36 @@ func TestDecodeDataURL(t *testing.T) {
 		got, err := decodeDataURL(tc.in)
 		if (err == nil) != tc.ok || string(got) != tc.want {
 			t.Errorf("%q: %q, %v", tc.in, got, err)
+		}
+	}
+}
+
+func TestPrepare_ScopesHeaderCells(t *testing.T) {
+	t.Parallel()
+	p := prep(t, `<table><thead><tr><th id=h1>a<th id=h2 scope=row>b</thead>`+
+		`<tbody><tr><th id=r1>r<td>x<tr><th id=c1>c<th id=c2>d<tr><td>y<th id=c3 scope=colgroup>z</tbody></table>`, Options{})
+	for id, want := range map[string]compose.TableScope{
+		"h1": compose.ScopeColumn, "h2": compose.ScopeRow, "r1": compose.ScopeRow,
+		"c1": compose.ScopeColumn, "c2": compose.ScopeColumn, "c3": compose.ScopeColumn,
+	} {
+		if got := byID(t, p.root, id).Scope; got != want {
+			t.Errorf("%s: scope %d, want %d", id, got, want)
+		}
+	}
+}
+
+func TestPrepare_NumbersListElements(t *testing.T) {
+	t.Parallel()
+	p := prep(t, `<style>.r{list-style-type:upper-roman}.n{list-style:none}.g{list-style-type:lower-greek}</style>`+
+		`<ul id=u><li>a</ul><ol id=o><li>a</ol><ol id=r class=r><li>a</ol><ul id=n class=n><li>a</ul>`+
+		`<ol id=g class=g><li>a</ol><ul id=ug class=g><li>a</ul><dl id=d><dt>t<dd>d</dl>`, Options{})
+	for id, want := range map[string]compose.ListNumbering{
+		"u": compose.NumberingDisc, "o": compose.NumberingDecimal, "r": compose.NumberingUpperRoman,
+		"n": compose.NumberingNone, "g": compose.NumberingOrdered, "ug": compose.NumberingUnordered,
+		"d": compose.NumberingDescription,
+	} {
+		if got := byID(t, p.root, id).Numbering; got != want {
+			t.Errorf("%s: numbering %d, want %d", id, got, want)
 		}
 	}
 }

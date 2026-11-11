@@ -281,6 +281,15 @@ func (b *builder) semantics(node *layout.Node, n *dom.Node) {
 	case atom.Td, atom.Th:
 		node.ColSpan = spanAttr(n, "colspan", maxColSpan)
 		node.RowSpan = spanAttr(n, "rowspan", maxRowSpan)
+		if n.DataAtom == atom.Th {
+			node.Scope = headerScope(n)
+		}
+	case atom.Ul, atom.Ol:
+		if node.Style != nil {
+			node.Numbering = listNumbering(node.Style.ListStyleType, n.DataAtom == atom.Ol)
+		}
+	case atom.Dl:
+		node.Numbering = compose.NumberingDescription
 	case atom.Col, atom.Colgroup:
 		node.Span = spanAttr(n, "span", maxColSpan)
 	case atom.H1, atom.H2, atom.H3, atom.H4, atom.H5, atom.H6:
@@ -289,6 +298,78 @@ func (b *builder) semantics(node *layout.Node, n *dom.Node) {
 		}
 		b.headings = append(b.headings, heading{node: node, level: int(n.Data[1] - '0')})
 	}
+}
+
+// headerScope returns the cells a th heads (ISO 32000-1, 14.8.5.7, Table
+// 349): its scope attribute's (HTML Standard, 4.9.10), else its columns'
+// in a thead, its row's when it starts a row that holds a td, and its
+// columns' otherwise, as the HTML table model's auto state assigns a
+// header cell to the cells right of it and below it (HTML Standard,
+// 4.9.12.2).
+func headerScope(n *dom.Node) compose.TableScope {
+	if v, ok := attr(n, "scope"); ok {
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "row", "rowgroup":
+			return compose.ScopeRow
+		case "col", "colgroup":
+			return compose.ScopeColumn
+		}
+	}
+	tr := n.Parent
+	if tr == nil || tr.DataAtom != atom.Tr {
+		return compose.ScopeColumn
+	}
+	if g := tr.Parent; g != nil && g.DataAtom == atom.Thead {
+		return compose.ScopeColumn
+	}
+	first, data := true, false
+	for c := tr.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != dom.ElementNode {
+			continue
+		}
+		if c == n && !first {
+			return compose.ScopeColumn
+		}
+		first = false
+		if c.DataAtom == atom.Td {
+			data = true
+		}
+	}
+	if data {
+		return compose.ScopeRow
+	}
+	return compose.ScopeColumn
+}
+
+// listNumbering returns the numbering system of a list whose items' marker
+// is t (ISO 32000-1, 14.8.5.5, Table 347; CSS Counter Styles 3, 6),
+// ordered for an ol.
+func listNumbering(t css.ListStyleType, ordered bool) compose.ListNumbering {
+	switch t {
+	case css.Disc:
+		return compose.NumberingDisc
+	case css.Circle:
+		return compose.NumberingCircle
+	case css.Square:
+		return compose.NumberingSquare
+	case css.Decimal, css.DecimalLeadingZero:
+		return compose.NumberingDecimal
+	case css.LowerRoman:
+		return compose.NumberingLowerRoman
+	case css.UpperRoman:
+		return compose.NumberingUpperRoman
+	case css.LowerAlpha:
+		return compose.NumberingLowerAlpha
+	case css.UpperAlpha:
+		return compose.NumberingUpperAlpha
+	case css.ListNone:
+		return compose.NumberingNone
+	case css.LowerGreek, css.Armenian, css.Georgian, css.ListString:
+	}
+	if ordered {
+		return compose.NumberingOrdered
+	}
+	return compose.NumberingUnordered
 }
 
 // syntheticID returns an anchor ID no element of the document carries, for
