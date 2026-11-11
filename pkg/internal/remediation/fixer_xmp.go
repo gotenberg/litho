@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/xmp"
 )
 
 func matchXMP(v compliance.Violation) bool {
@@ -1727,7 +1728,8 @@ func stripForbiddenXPacketAttrs(buf []byte) ([]byte, []string) {
 }
 
 // xmlEscape escapes s for XMP character data or an attribute value in either
-// quote style, writing CR as a numeric character reference.
+// quote style, writing CR as a numeric character reference, as [xmp.Escape]
+// does for every packet litho writes.
 //
 // # Corpus evidence
 //
@@ -1735,34 +1737,7 @@ func stripForbiddenXPacketAttrs(buf []byte) ([]byte, []string) {
 //     the CR escape litho reported the sync as done while both litho and
 //     veraPDF still failed 6.7.3 test 5 on the output.
 func xmlEscape(s string) string {
-	s = strings.ReplaceAll(s, "&", "&amp;")
-	s = strings.ReplaceAll(s, "<", "&lt;")
-	s = strings.ReplaceAll(s, ">", "&gt;")
-	s = strings.ReplaceAll(s, "\"", "&quot;")
-	// Both quote characters are escaped because a value can land in an
-	// attribute, and producers write XMP attributes with either delimiter.
-	// A /Keywords of "victims' rights" spliced into a single-quoted
-	// pdf:Keywords closed the attribute early and cost the packet its
-	// well-formedness (ISO 19005-2, 6.6.2.1 tests 4 and 5).
-	s = strings.ReplaceAll(s, "'", "&apos;")
-	// A literal carriage return cannot survive a round trip: XML 1.0, 2.11
-	// requires a parser to normalise CR and CRLF to a single LF before the
-	// application ever sees the value, so an /Info string containing CR can
-	// never equal the XMP property parsed back out, and the docinfo-XMP
-	// equality rules (ISO 19005-1, 6.7.3) keep failing however faithfully the
-	// bytes were written. A numeric character reference is exempt from that
-	// normalisation and parses back as CR.
-	s = strings.ReplaceAll(s, "\r", "&#xD;")
-	// XML 1.0, 2.2 admits no other C0 control character, raw or referenced,
-	// so writing one costs the packet its well-formedness (ISO 19005-2,
-	// 6.6.2.1 test 4). The character goes, as [stripInfoControlChars] drops it
-	// from the /Info entry the value comes from.
-	return strings.Map(func(r rune) rune {
-		if compliance.XMPControlChar(r) {
-			return -1
-		}
-		return r
-	}, s)
+	return xmp.Escape(s)
 }
 
 // numericField validates one fixed-width numeric field of a PDF date and
