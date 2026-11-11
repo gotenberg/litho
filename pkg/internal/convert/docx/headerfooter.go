@@ -61,8 +61,16 @@ func (p *pages) root(part string) *ooxml.Element {
 }
 
 // content builds the blocks of a header or footer part with the page
-// fields v.
-func (p *pages) content(part string, v *fieldValues) *layout.Node {
+// fields v, and returns the drawings in it positioned from the page,
+// which the caller places once it knows where the part sits.
+//
+// # Corpus evidence
+//
+//   - litho/docx doc-watermark-picture: Word prints a picture anchored in
+//     a header from the page at its page offsets, mid-page, not beside
+//     the header's paragraph.
+//   - libreoffice/docx ooxmlimport/n779627b: layout rises from 0 to 0.37.
+func (p *pages) content(part string, v *fieldValues) (*layout.Node, []pendingAnchor) {
 	r := p.root(part)
 	st := p.d.blockStyle()
 	// A flow root keeps its paragraphs' margins inside it, as the header
@@ -70,17 +78,20 @@ func (p *pages) content(part string, v *fieldValues) *layout.Node {
 	st.Display = css.FlowRoot
 	n := &layout.Node{Kind: layout.Element, Style: st}
 	if r == nil {
-		return n
+		return n, nil
 	}
 	s := &story{part: part, fields: v}
+	p.d.inMargin, p.d.marginAnchors = true, nil
 	n.Children = finish(p.d.blocks(s, nil, r, 1))
-	return n
+	anchors := p.d.marginAnchors
+	p.d.inMargin, p.d.marginAnchors = false, nil
+	return n, anchors
 }
 
 // measure returns the height of a header or footer part laid out at the
 // width of section s's text.
 func (p *pages) measure(s *section, part string, v *fieldValues) float64 {
-	n := p.content(part, v)
+	n, _ := p.content(part, v)
 	n.ID = "\x00measure"
 	areaW := max(s.width-s.margin[css.Left]-s.margin[css.Right]-s.gutter, minPageArea)
 	n.Style.Width = css.Pts(areaW)
@@ -248,7 +259,7 @@ func (p *pages) margins(info layout.PageInfo, total int) []compose.Fragment {
 		if part == "" {
 			return
 		}
-		n := p.content(part, v)
+		n, anchors := p.content(part, v)
 		n.Style.Position = css.Absolute
 		n.Style.Left = css.Pts(pb.Margin[css.Left])
 		n.Style.Width = css.Pts(areaW)
@@ -256,6 +267,13 @@ func (p *pages) margins(info layout.PageInfo, total int) []compose.Fragment {
 			y = pb.Height - y - h
 		}
 		n.Style.Top = css.Pts(max(0, y))
+		for _, a := range anchors {
+			// The part is the drawing's containing block: its offsets
+			// from the page become offsets from the part's corner.
+			a.resolve(s)
+			a.st.Left = css.Pts(a.st.Left.Value - pb.Margin[css.Left])
+			a.st.Top = css.Pts(a.st.Top.Value - n.Style.Top.Value)
+		}
 		root.Children = append(root.Children, n)
 	}
 	hk, fk := s.part("header", kind), s.part("footer", kind)

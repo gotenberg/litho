@@ -101,6 +101,10 @@ type document struct {
 	// vmlTypes maps a VML shape type's id to its shape type number
 	// (o:spt, Part 4, 14.1.2.20), for the shapes that name it.
 	vmlTypes map[string]int
+	// inMargin is set while a header or footer is built; marginAnchors
+	// collects its drawings positioned from the page.
+	inMargin      bool
+	marginAnchors []pendingAnchor
 	// background is the page background of every page, nil for none.
 	background *css.Style
 }

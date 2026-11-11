@@ -184,12 +184,19 @@ func (d *document) place(p placement, n *layout.Node, sink *inlineSink) {
 			d.pending = append(d.pending, pendingAnchor{n: n, st: st, p: p, page: true, kids: kids})
 			return
 		}
+		if fromPageV(p.relV) && d.inMargin && d.nested == 0 {
+			// A drawing of a header or footer positioned from the page
+			// is placed when its header or footer is, on its page.
+			d.marginAnchors = append(d.marginAnchors, pendingAnchor{n: n, st: st, p: p, page: true})
+			sink.positioned = true
+			return
+		}
 		st.Left, st.Top = css.Pts(p.posH), css.Pts(p.posV)
 		// LibreOffice keeps a drawing positioned from its paragraph
 		// inside the page its paragraph is on.
 		st.PageClamp = d.pageAnchors()
 		if fromPageV(p.relV) {
-			d.warn("approximated", "a drawing positioned from the page in a header, footer, note, text box or table is positioned from its paragraph")
+			d.warn("approximated", "a drawing positioned from the page in a note, text box or table is positioned from its paragraph")
 			st.Top = css.Pts(0)
 		}
 		switch {

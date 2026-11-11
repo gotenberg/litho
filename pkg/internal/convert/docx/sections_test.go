@@ -362,3 +362,38 @@ func TestSections_ColumnFillAndDirection(t *testing.T) {
 		t.Errorf("the last section before the endnotes fills %v", last.Style.Columns.Fill)
 	}
 }
+
+// TestHeaders_PageAnchoredDrawing checks that a drawing of a header
+// positioned from the page lands where the page offsets put it, not where
+// its paragraph is.
+func TestHeaders_PageAnchoredDrawing(t *testing.T) {
+	t.Parallel()
+	box := `<w:r><w:drawing><wp:anchor behindDoc="1"><wp:positionH relativeFrom="page"><wp:posOffset>1270000</wp:posOffset></wp:positionH>` +
+		`<wp:positionV relativeFrom="page"><wp:posOffset>6350000</wp:posOffset></wp:positionV><wp:extent cx="1270000" cy="635000"/><wp:wrapNone/><wp:docPr id="1" name="w"/>` +
+		`<a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:spPr><a:prstGeom prst="rect"/></wps:spPr>` +
+		`<wps:txbx><w:txbxContent><w:p><w:r><w:t>WM</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr lIns="0" tIns="0"/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>`
+	extra := map[string]string{"word/header1.xml": `<w:hdr ` + nsDecl + `><w:p>` + box + `<w:r><w:t>Head</w:t></w:r></w:p></w:hdr>`}
+	body := `<w:p><w:r><w:t>body</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rIdheader1"/></w:sectPr>`
+	doc := convertBytes(t, docx(t, body, extra), office.Options{})
+	var found bool
+	var walk func([]compose.Fragment, float64, float64)
+	walk = func(frags []compose.Fragment, dx, dy float64) {
+		for _, f := range frags {
+			switch v := f.(type) {
+			case *compose.Text:
+				if glyphText(v) == "WM" {
+					found = true
+					if x, y := v.Origin.X+dx, v.Origin.Y+dy; abs(x-100) > 1 || y < 500 || y > 530 {
+						t.Errorf("the header's drawing draws at %.1f, %.1f, want near 100, 500 to 530", x, y)
+					}
+				}
+			case *compose.Group:
+				walk(v.Content, dx+v.Transform.E, dy+v.Transform.F)
+			}
+		}
+	}
+	walk(doc.Pages[0].Content, 0, 0)
+	if !found {
+		t.Fatalf("no WM run in %q", pageText(doc.Pages[0]))
+	}
+}
