@@ -360,7 +360,7 @@ func (r *reader) slide(pg *odf.Element, n int) *slides.Slide {
 	s.Shapes = append(s.Shapes, r.shapeList(pg.Children, pc, 0)...)
 	s.Title = r.title(pg, pc)
 	if notes := pg.Child(odf.NSPresentation, "notes"); notes != nil {
-		s.Notes = r.notes(notes, pc)
+		s.Notes, s.NotesFill, s.NotesLine = r.notes(notes, pc)
 		s.HasNotes = hasElements(notes)
 	}
 	return s
@@ -415,10 +415,18 @@ func (r *reader) title(pg *odf.Element, pc *pageCtx) string {
 // notes reads a page's presentation:notes (ODF 1.3, Part 3, 16.19): the
 // paragraphs of its notes placeholder (presentation:class notes), else
 // of the text frames it holds, which a converted document writes without
-// a class.
-func (r *reader) notes(notes *odf.Element, pc *pageCtx) []slides.Paragraph {
+// a class, with the fill and line of the notes placeholder's style.
+//
+// # Corpus evidence
+//
+//   - litho/odp: notes-pages' notes frames, of no style in a document of
+//     no styles, print on a filled and outlined box in white, the
+//     default graphic style's fill, line and text colour.
+func (r *reader) notes(notes *odf.Element, pc *pageCtx) ([]slides.Paragraph, slides.Fill, slides.Line) {
 	nc := *pc
 	var out, other []slides.Paragraph
+	var fill slides.Fill
+	var line slides.Line
 	for _, el := range notes.Children {
 		if !el.Is(odf.NSDraw, "frame") || el.A(odf.NSPresentation, "placeholder") == "true" {
 			continue
@@ -427,8 +435,12 @@ func (r *reader) notes(notes *odf.Element, pc *pageCtx) []slides.Paragraph {
 		if box == nil {
 			continue
 		}
-		body := r.textBody(box, r.shapeStyle(el, &nc), &nc)
+		ss := r.shapeStyle(el, &nc)
+		body := r.textBody(box, ss, &nc)
 		if el.A(odf.NSPresentation, "class") == "notes" {
+			if out == nil {
+				fill, line = r.fill(ss.graphic, "solid"), r.line(ss.graphic)
+			}
 			out = append(out, body.Paragraphs...)
 		} else {
 			other = append(other, body.Paragraphs...)
@@ -437,7 +449,7 @@ func (r *reader) notes(notes *odf.Element, pc *pageCtx) []slides.Paragraph {
 	if len(out) == 0 {
 		out = other
 	}
-	return out
+	return out, fill, line
 }
 
 // metadata reads meta.xml's office:meta (ODF 1.3, Part 3, 4): the title,
