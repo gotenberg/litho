@@ -43,7 +43,7 @@
 // not defined, and an expansion past 2^20 nodes. Each toHTML call inserts
 // the same HTML: a template that calls it twice prints the source twice,
 // and the identifiers of the source then repeat, which HTML does not
-// allow (HTML Living Standard, 3.2.6.1: an id is unique in its tree). An error while executing, such as an escaping error, fails with
+// allow (HTML Living Standard, 3.2.6: an id is unique in its tree). An error while executing, such as an escaping error, fails with
 // [html.ErrInvalidOptions].
 //
 // # Conversion
