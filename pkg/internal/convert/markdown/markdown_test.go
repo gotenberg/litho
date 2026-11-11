@@ -47,10 +47,25 @@ var samples = []string{
 	"<div style=\"color: red\">raw <b>HTML</b></div>\n\n![alt](img.png \"t\") [link](page.html)\n",
 }
 
-func TestToHTML_WrapsTheRendererOutput(t *testing.T) {
+// toHTML renders src into the default template, as Convert does.
+func toHTML(t testing.TB, src []byte) []byte {
+	t.Helper()
+	tmpl, err := parseTemplate("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, title := render(src)
+	page, _, err := tmpl.render(context.Background(), body, title, 1<<30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return page
+}
+
+func TestDefaultTemplate_WrapsTheRendererOutput(t *testing.T) {
 	t.Parallel()
 	for _, src := range samples {
-		got := ToHTML([]byte(src))
+		got := toHTML(t, []byte(src))
 		body := md.ToHTML([]byte(src), nil, nil)
 		head, rest, ok := bytes.Cut(got, []byte("<body>"))
 		if !ok || !bytes.HasPrefix(head, []byte(`<!doctype html><html><head><meta charset="utf-8"><title>`)) {
@@ -80,7 +95,7 @@ func TestFirstHeading(t *testing.T) {
 			t.Errorf("firstHeading(%.40q) = %.40q, want %.40q", src, got, want)
 		}
 	}
-	if got := ToHTML([]byte("# 1 < 2 & \"3\"\n")); !bytes.Contains(got, []byte("<title>1 &lt; 2 &amp; &#34;3&#34;</title>")) {
+	if got := toHTML(t, []byte("# 1 < 2 & \"3\"\n")); !bytes.Contains(got, []byte("<title>1 &lt; 2 &amp; &#34;3&#34;</title>")) {
 		t.Errorf("title not escaped: %s", got)
 	}
 }
@@ -155,7 +170,7 @@ func FuzzConvert(f *testing.F) {
 		f.Add([]byte(s))
 	}
 	f.Fuzz(func(t *testing.T, data []byte) {
-		page := ToHTML(data)
+		page := toHTML(t, data)
 		if !bytes.HasPrefix(page, []byte("<!doctype html>")) || !bytes.HasSuffix(page, []byte("</body></html>")) {
 			t.Fatalf("wrapper broken: %q", page)
 		}

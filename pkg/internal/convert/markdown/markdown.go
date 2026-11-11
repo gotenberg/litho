@@ -3,9 +3,7 @@ package markdown
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	stdhtml "html"
 	"io"
 	"strings"
 
@@ -31,35 +29,39 @@ type Options struct {
 	HTML html.Options
 	// Template is the HTML document the Markdown renders into, a template
 	// of html/template in which {{ toHTML }} is the rendered Markdown and
-	// {{ .Title }} the text of its first heading. Empty is the default
-	// template: a document without a stylesheet.
+	// {{ .Title }} the text of its first heading (see the package
+	// documentation). Empty is [DefaultTemplate].
 	Template string
 }
 
 // Convert lays the Markdown document src out as a Document.
 //
-// It reads src to its end, at most opts.MaxInputBytes bytes
-// ([html.DefaultMaxInputBytes] when zero), and returns an error wrapping
-// [html.ErrInputTooLarge] past them, before anything is rendered; src is
-// never closed. The rendered HTML, a few times larger than the Markdown at
-// most, is converted by [html.Convert] with opts under the ceiling of
-// the input budget, [limits.MaxConvertInputBytesCeiling], and fails as
-// html.Convert does. A cap out of range fails with [html.ErrInvalidOptions].
+// It checks opts.Template first and fails with an error wrapping
+// [html.ErrInvalidOptions] when the template does not parse or is refused,
+// before src is read. It then reads src to its end, at most
+// opts.MaxInputBytes bytes ([html.DefaultMaxInputBytes] when zero), and
+// returns an error wrapping [html.ErrInputTooLarge] past them, before
+// anything is rendered; src is never closed. The document the template
+// renders is capped at the ceiling of the input budget,
+// [limits.MaxConvertInputBytesCeiling], past which it fails with
+// [html.ErrInputTooLarge], and is converted by [html.Convert] with opts
+// under that ceiling, failing as html.Convert does. A cap out of range, or
+// an error executing the template, fails with [html.ErrInvalidOptions].
 func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, o Options) (*compose.Document, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	opts := o.HTML
-	if o.Template != "" {
-		// Wave 11, cell markdown: remove with the feature.
-		return nil, errors.New("converting Markdown: templates are not implemented")
-	}
 	maxBytes := opts.MaxInputBytes
 	if maxBytes == 0 {
 		maxBytes = html.DefaultMaxInputBytes
 	}
 	if maxBytes < 0 || maxBytes > limits.MaxConvertInputBytesCeiling {
 		return nil, fmt.Errorf("%w: input cap %d is not in [1, %d]", html.ErrInvalidOptions, maxBytes, int64(limits.MaxConvertInputBytesCeiling))
+	}
+	tmpl, err := parseTemplate(o.Template)
+	if err != nil {
+		return nil, err
 	}
 	data, err := io.ReadAll(io.LimitReader(src, maxBytes+1))
 	if err != nil {
@@ -68,30 +70,26 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, o Options) (
 	if int64(len(data)) > maxBytes {
 		return nil, fmt.Errorf("%w: the source is longer than %d bytes", html.ErrInputTooLarge, maxBytes)
 	}
-	page := ToHTML(data)
+	body, title := render(data)
+	page, charged, err := tmpl.render(ctx, body, title, limits.MaxConvertInputBytesCeiling)
+	if err != nil {
+		return nil, err
+	}
+	defer limits.BudgetFrom(ctx).Release(charged)
 	opts.MaxInputBytes = limits.MaxConvertInputBytesCeiling
 	return html.Convert(ctx, bytes.NewReader(page), fonts, opts)
 }
 
-// ToHTML returns the HTML document [Convert] lays the Markdown src out as:
-// the renderer's output at its defaults in the wrapper the package
-// documentation shows.
-func ToHTML(src []byte) []byte {
+// render returns the HTML the Markdown src renders to, the renderer's
+// output at its defaults, and the text of its first heading.
+func render(src []byte) (body []byte, title string) {
 	doc := md.Parse(src, nil)
 	// The renderer markdown.ToHTML(src, nil, nil) builds.
 	opts := mdhtml.RendererOptions{Flags: mdhtml.CommonFlags}
 	if root, ok := doc.(*ast.Document); ok && root.CommonMark {
 		opts.Flags = mdhtml.UseXHTML
 	}
-	body := md.Render(doc, mdhtml.NewRenderer(opts))
-	var b bytes.Buffer
-	b.Grow(len(body) + 128)
-	b.WriteString(`<!doctype html><html><head><meta charset="utf-8"><title>`)
-	b.WriteString(stdhtml.EscapeString(firstHeading(doc)))
-	b.WriteString(`</title></head><body>`)
-	b.Write(body)
-	b.WriteString(`</body></html>`)
-	return b.Bytes()
+	return md.Render(doc, mdhtml.NewRenderer(opts)), firstHeading(doc)
 }
 
 // firstHeading returns the text of the document's first heading, its
