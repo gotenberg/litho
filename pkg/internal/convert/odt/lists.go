@@ -135,8 +135,9 @@ const maxLists = 1 << 16
 // or style:num-format): the ListNumbering of its L element (ISO 32000-1,
 // 14.8.5.5, Table 347; ISO 32000-2, Table 382). A bullet is a disc, a
 // circle or a square by its character, any other bullet or a picture is
-// unordered, a number format Table 347 has no name for is ordered, and a
-// level without a label is none.
+// unordered, a number format Table 347 has no name for is ordered, a
+// level without a number whose prefix or suffix still prints is
+// unordered, and a level without a label is none.
 func listNumbering(ls *odf.ListStyle, level int) compose.ListNumbering {
 	if ls == nil || level < 1 || level > odf.MaxListLevels || ls.Levels[level-1] == nil {
 		return compose.NumberingNone
@@ -168,6 +169,13 @@ func listNumbering(ls *odf.ListStyle, level int) compose.ListNumbering {
 	case "a":
 		return compose.NumberingLowerAlpha
 	case "":
+		if lvl.El.A(odf.NSStyle, "num-prefix") != "" || lvl.El.A(odf.NSStyle, "num-suffix") != "" {
+			// A level without a number still prints its prefix and
+			// suffix as a label: a Lbl, which ISO 14289-2, 8.2.5.25 asks
+			// a numbering other than None of. It marks the items without
+			// ordering them.
+			return compose.NumberingUnordered
+		}
 		return compose.NumberingNone
 	}
 	return compose.NumberingOrdered

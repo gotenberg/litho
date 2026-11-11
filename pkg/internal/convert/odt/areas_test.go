@@ -335,8 +335,9 @@ func TestConvert_TableOfContentsRegenerated(t *testing.T) {
 	if strings.Join(got, "|") != "Contents|One.1|Two.2" {
 		t.Errorf("table = %q", got)
 	}
-	// A TOC holds its title as a Caption and its entries as TOCI.
-	if r := roles(res.Structure); !strings.Contains(r, "TOC,Caption,TOCI,") || strings.Contains(r, "TOC,P") {
+	// A TOC, in a Sect of its own, holds its title as a Caption and its
+	// entries as TOCI.
+	if r := roles(res.Structure); !strings.Contains(r, "Sect,TOC,Caption,TOCI,") || strings.Contains(r, "TOC,P") {
 		t.Errorf("structure %s", r)
 	}
 }
@@ -544,5 +545,32 @@ func TestConvert_DecorativeAndSymbols(t *testing.T) {
 	})
 	if !slices.Equal(actual, []string{"•"}) {
 		t.Errorf("actual texts %q, want the Symbol bullet's", actual)
+	}
+}
+
+// TestConvert_ListOfSuffixesIsUnordered locks the numbering of a list
+// level that prints its suffix without a number: unordered, since its
+// label is a Lbl, and none for a level that prints nothing.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfexport/tdf143605.odt prints "." before its item
+//     from a level of an empty num-format; ListNumbering None failed
+//     veraPDF's 8.2.5.25.
+func TestConvert_ListOfSuffixesIsUnordered(t *testing.T) {
+	styles := `<text:list-style style:name="LS"><text:list-level-style-number text:level="1" style:num-suffix="." style:num-format=""/></text:list-style>` +
+		`<text:list-style style:name="LE"><text:list-level-style-number text:level="1" style:num-format=""/></text:list-style>`
+	body := `<text:list text:style-name="LS"><text:list-item><text:p>a</text:p></text:list-item></text:list>` +
+		`<text:list text:style-name="LE"><text:list-item><text:p>b</text:p></text:list-item></text:list>`
+	b := newTestBuilder(t, doc{styles: styles, body: body})
+	root, _ := b.document(odfBody(b))
+	var got []compose.ListNumbering
+	walkNodes(root, func(n *layout.Node) {
+		if n.Role == "L" {
+			got = append(got, n.Numbering)
+		}
+	})
+	if want := []compose.ListNumbering{compose.NumberingUnordered, compose.NumberingNone}; !slices.Equal(got, want) {
+		t.Errorf("numberings %v, want %v", got, want)
 	}
 }

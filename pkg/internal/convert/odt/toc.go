@@ -32,6 +32,19 @@ type toc struct {
 // tableOfContent builds a text:table-of-content (ODF 1.3, Part 3, 8.3):
 // its saved index body, which [builder.updateTOCs] replaces once the
 // headings' pages are known.
+//
+// The TOC element sits in a Sect of its own: an index is a section of the
+// document, named and protected as a text:section is (8.3.1). The Sect
+// also holds the title's Caption where a reader of PDF 2.0 needs it,
+// since that version writes the TOC as a Div (ISO 32000-2, Annex L), and
+// a Caption is the first or last child of a structure element other than
+// a Div (ISO 14289-2, 8.2.5.27; ISO 32005, Table 5).
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: layout/abi11870-2.odt's table of contents left its
+//     Caption in a Div under the Document, which veraPDF rejects under
+//     both clauses; in a Sect it passes.
 func (b *builder) tableOfContent(c *odf.Element, ctx blockCtx) []*layout.Node {
 	st := baseStyle()
 	st.Display = css.Block
@@ -41,7 +54,9 @@ func (b *builder) tableOfContent(c *odf.Element, ctx blockCtx) []*layout.Node {
 		tocRole(k, "TOCI")
 	}
 	b.tocs = append(b.tocs, &toc{node: n, src: c.Child(odf.NSText, "table-of-content-source"), ctx: ctx})
-	return []*layout.Node{n}
+	sect := baseStyle()
+	sect.Display = css.Block
+	return []*layout.Node{b.node(&layout.Node{Kind: layout.Element, Style: sect, Role: "Sect", Children: []*layout.Node{n}})}
 }
 
 // tocRole tags n, a paragraph of a table of contents, as role: an entry
