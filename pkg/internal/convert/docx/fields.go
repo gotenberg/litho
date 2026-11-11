@@ -24,6 +24,9 @@ type field struct {
 	computed bool
 	// link is set when the result became a hyperlink.
 	link bool
+	// locked is the begin character's w:fldLock: the result stays as
+	// stored (17.16.18).
+	locked bool
 }
 
 // inTOC reports a run inside the result of an open TOC field (17.16.5.68).
@@ -73,7 +76,7 @@ func (d *document) fieldChar(s *story, c *ooxml.Element, st *css.Style, sink *in
 		if len(s.open) >= maxOpenFields {
 			return
 		}
-		s.open = append(s.open, &field{})
+		s.open = append(s.open, &field{locked: fieldLocked(c)})
 	case "separate":
 		if f := s.top(); f != nil && !f.result {
 			d.startResult(s, f, st, sink)
@@ -102,7 +105,7 @@ func (d *document) startResult(s *story, f *field, st *css.Style, sink *inlineSi
 		f.computed = true
 		return
 	}
-	if v, ok := d.computeField(s, instr); ok {
+	if v, ok := d.computeField(s, instr, f.locked); ok {
 		f.computed = true
 		sink.add(&layout.Node{Kind: layout.Element, Style: st, Children: []*layout.Node{{Kind: layout.Text, Style: st, Text: v}}})
 		return
@@ -120,7 +123,7 @@ func (d *document) simpleField(s *story, rp resolvedPara, ps *css.Style, lineMul
 	if hiddenField(instr) {
 		return
 	}
-	if v, ok := d.computeField(s, instr); ok {
+	if v, ok := d.computeField(s, instr, fieldLocked(e)); ok {
 		st := inlineStyle(ps)
 		props := rp.run
 		if r := e.Find(w, "rPr"); r != nil {
@@ -139,12 +142,19 @@ func (d *document) simpleField(s *story, rp resolvedPara, ps *css.Style, lineMul
 	d.inlines(s, rp, ps, lineMult, e, sink, depth+1)
 }
 
-// computeField returns the value of the page fields in a header or
-// footer, false for any other field or outside one (17.16.5.43 PAGE and
-// 17.16.5.38 NUMPAGES, with a \* format switch). Both take the page
-// number format of the section, as LibreOffice shows them; SECTIONPAGES
-// keeps its cached result, as LibreOffice does.
-func (d *document) computeField(s *story, instr string) (string, bool) {
+// computeField returns the value of the date fields ([document.dateField])
+// and of the page fields in a header or footer, false for any other field
+// or outside one (17.16.5.43 PAGE and 17.16.5.38 NUMPAGES, with a \*
+// format switch). Both take the page number format of the section, as
+// LibreOffice shows them; SECTIONPAGES keeps its cached result, as
+// LibreOffice does. A locked field keeps its cached result.
+func (d *document) computeField(s *story, instr string, locked bool) (string, bool) {
+	if locked {
+		return "", false
+	}
+	if v, ok := d.dateField(instr); ok {
+		return v, true
+	}
 	if s.fields == nil {
 		return "", false
 	}

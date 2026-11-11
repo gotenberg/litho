@@ -61,8 +61,10 @@
 // even kinds, inherited across sections, draw in the margins, which grow
 // to hold a taller header or footer; a first or even one no section
 // defines is empty, as Word and LibreOffice show it. PAGE and NUMPAGES are computed
-// per page in the section's number format; every other field shows the
-// result Word last computed, SECTIONPAGES included, as LibreOffice does.
+// per page in the section's number format; DATE, TIME and PRINTDATE show
+// office.Options.PrintDate when it is set and the field is not locked;
+// every other field shows the result Word last computed, SECTIONPAGES
+// included, as LibreOffice does.
 // The empty paragraph that only carries a section break is not laid out.
 // The document's background colour, or its gradient, paints every page,
 // as Word prints it.
@@ -99,10 +101,14 @@
 // Footnotes go to the footnote area of their page, under the separator
 // LibreOffice draws, endnotes after the text; a note's call and its
 // number link to each other. Hyperlinks to a URI or a bookmark,
-// HYPERLINK fields and bookmarks become links and anchors. Insertions print as text and deletions do not,
-// as LibreOffice prints a document with tracked changes; a paragraph whose
-// mark is deleted or hidden joins the next one; comments are
-// left out; equations draw as their text with a warning.
+// HYPERLINK fields and bookmarks become links and anchors. Tracked
+// changes print in the view office.Options.TrackedChanges asks for: the
+// accepted text, as Word prints a document, the rejected text, or both
+// with each insertion underlined and each deletion struck through in its
+// author's colour; a paragraph whose mark the view deletes, or whose mark
+// is hidden, joins the next one, and property changes print their new
+// properties. Change bars are not drawn. Comments are left out; equations
+// draw as their text with a warning.
 //
 // # Document
 //
