@@ -288,9 +288,12 @@ type computeState struct {
 	nodes  int
 	// units caches FontUnits by font selection.
 	units map[fontKey][2]float64
-	// mem is the conversion's memory budget each computed style is
-	// charged to, nil for none.
+	// mem is the conversion's memory budget each distinct computed style
+	// is charged to, nil for none.
 	mem *limits.Budget
+	// styles shares the computed styles of the tree: the elements of one
+	// class, and the many that inherit alike, hold one style.
+	styles *Styles
 }
 
 // fontKey is what selects a font for the ex and ch units.
@@ -361,7 +364,7 @@ var computeOrder = func() []propID {
 // maxComputeSteps steps, and ctx's error when it is done.
 func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOptions) (*Computed, error) {
 	cs := &computeState{
-		r: r, ctx: ctx, opts: opts, m: newMatcher(opts.Lang, maxComputeSteps), mem: limits.BudgetFrom(ctx),
+		r: r, ctx: ctx, opts: opts, m: newMatcher(opts.Lang, maxComputeSteps), mem: limits.BudgetFrom(ctx), styles: NewStyles(),
 		out: map[*html.Node]*Style{}, pseudo: map[pseudoKey]*Style{}, vars: map[*html.Node]map[string][]token{}, anc: &ancestorFilter{},
 		stamp: make([]int, len(r.rules)), spec: make([]uint32, len(r.rules)),
 	}
@@ -581,11 +584,10 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 
 // computeStyle computes every longhand from its cascaded value (CSS
 // Cascade 4, 4 and CSS 2.1, 6.1 to 6.2): inherited longhands without a
-// value take the parent's, the others their initial value.
+// value take the parent's, the others their initial value. It returns the
+// style of the tree equal to the result when there is one, so elements
+// styled alike share one [Style].
 func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRoot bool) *Style {
-	// A refusal sticks and cancels the conversion, which the cascade's
-	// next context check stops at: a style has no error to return.
-	cs.mem.Take(1, styleCost, "computed styles")
 	st := new(Style)
 	*st = *parent
 	s := &styler{parent: parent, root: cs.root}
@@ -658,7 +660,14 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 		// 2.7).
 		st.Display, _ = blockify(st.Display)
 	}
-	return st
+	shared, adopted := cs.styles.share(st)
+	if adopted {
+		// A refusal sticks and cancels the conversion, which the
+		// cascade's next context check stops at: a style has no error
+		// to return. A style equal to one held costs nothing more.
+		cs.mem.Take(1, styleCost, "computed styles")
+	}
+	return shared
 }
 
 // fixupDisplay applies CSS 2.1, 9.7: an absolutely positioned box does

@@ -8,9 +8,11 @@ package css
 // every utility) stay under 4 MiB. Anti-DoS guard, not spec-mandated.
 const maxStylesheetBytes = 8 << 20
 
-// styleCost is what one computed style costs the conversion's memory
-// budget: the [Style], 3,480 bytes on a 64-bit platform, and its share of
-// the cascade's maps. The styles live as long as the document tree.
+// styleCost is what one distinct computed style costs the conversion's
+// memory budget: the [Style], 3,480 bytes on a 64-bit platform, and its
+// entry in the [Styles] table that shares it. Elements styled alike share
+// one style and are charged it once. The styles live as long as the
+// document tree.
 const styleCost = 4 << 10
 
 // maxTokens caps the tokens of one stylesheet, whitespace included: 2^21.
