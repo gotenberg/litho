@@ -6,14 +6,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 )
 
-// The notes page size: US Letter portrait, the paper Impress prints notes
-// pages on with the en-US defaults, whatever notes size the file gives.
-//
-// # Corpus evidence
-//
-//   - gotenberg/pptx: deck.pptx (notes size 540 by 720) and pitch-lo.pptx (A4) print
-//     their notes pages on Letter; gotenberg/odp: pitch.odp, whose notes master is
-//     A4, too.
+// The notes page size of a file that gives none: US Letter portrait, the
+// paper of Impress's en-US defaults.
 const (
 	notesWidth  = 612
 	notesHeight = 792
@@ -54,12 +48,20 @@ const (
 // scaled into its box inside a hairline frame, its notes below. A slide
 // with notes takes the notes master's boxes and shapes when the document
 // gives them; otherwise the page takes Impress's default notes layout.
-// The paper is Letter, the notes page drawn at its top-left corner at the
-// document's notes size, as Impress prints it; the first slide of a
-// document whose file gave it no notes takes the paper's size instead.
+// The page is the notes size the file gives (Letter without one), as
+// Impress prints a PresentationML notes page; on the notes paper of the
+// options, the notes page is drawn at its top-left corner at that size,
+// as Impress prints an OpenDocument one; on the paper of the options, it
+// is scaled down to fit, never up, and centred, as a slide is. The first
+// slide of a document whose file gave it no notes takes the page's size
+// instead.
 //
 // # Corpus evidence
 //
+//   - litho/pptx: deck-training and notes-pages (notes size 540 by 720)
+//     print every notes page, with notes or without, 540 by 720 in the
+//     pinned LibreOffice; probe, odp: a deck whose notes masters are A4
+//     and 540 by 720 prints its notes pages on Letter.
 //   - gotenberg/pptx: deck-notes (notes size 540 by 720, a master slide picture box
 //     of 360 by 270 at 90, 54): the slides with notes print the slide in
 //     that box framed whole and the slide number placeholder; slides 3 to 6,
@@ -68,18 +70,28 @@ const (
 //     default layout over the whole Letter page, 527.98 wide at 42.01,
 //     60.19. Every frame is a C0C0C0 line 0.1 point wide.
 func (b *builder) notesPage(s *Slide, n int) (*compose.Page, *compose.StructElem) {
-	pw, ph := float64(notesWidth), float64(notesHeight)
-	if b.opts.PageWidth > 0 && b.opts.PageHeight > 0 {
+	size := func() (float64, float64) {
+		if w, h := b.doc.NotesWidth, b.doc.NotesHeight; w > 0 && h > 0 && w <= office.MaxPageSide && h <= office.MaxPageSide {
+			return w, h
+		}
+		return notesWidth, notesHeight
+	}
+	pw, ph := size()
+	corner := false
+	switch {
+	case b.opts.PageWidth > 0 && b.opts.PageHeight > 0:
 		pw, ph = b.opts.PageWidth, b.opts.PageHeight
+	case b.opts.NotesPaperWidth > 0 && b.opts.NotesPaperHeight > 0:
+		pw, ph, corner = b.opts.NotesPaperWidth, b.opts.NotesPaperHeight, true
 	}
 	if b.opts.Landscape && pw < ph {
 		pw, ph = ph, pw
 	}
-	// The notes page's own size, at the paper's top-left corner.
+	// The notes page's own size, drawn on the page.
 	nw, nh := pw, ph
 	hasNotes := s.HasNotes || s.Notes != nil
-	if w, h := b.doc.NotesWidth, b.doc.NotesHeight; w > 0 && h > 0 && w <= office.MaxPageSide && h <= office.MaxPageSide && (hasNotes || !b.firstSlide(s)) {
-		nw, nh = w, h
+	if hasNotes || !b.firstSlide(s) {
+		nw, nh = size()
 	}
 	master := hasNotes && usable(b.doc.NotesSlideBox)
 	sw, sh := b.slideSize()
@@ -123,6 +135,13 @@ func (b *builder) notesPage(s *Slide, n int) (*compose.Page, *compose.StructElem
 		pg.Content = append(pg.Content, txt.frags...)
 		pg.Links = append(pg.Links, txt.links...)
 		sect.Kids = append(sect.Kids, txt.structure...)
+	}
+	if m := fitMatrix(nw, nh, pw, ph); !corner && m != compose.Identity {
+		pg.Content = []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: pg.Content}}
+		for i, l := range pg.Links {
+			l.Rect = transformRect(m, l.Rect)
+			pg.Links[i] = l
+		}
 	}
 	return pg, sect
 }

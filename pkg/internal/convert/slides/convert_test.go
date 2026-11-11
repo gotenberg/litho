@@ -188,7 +188,10 @@ func TestConvert_Structure(t *testing.T) {
 // against deck-notes as Impress prints it: a slide with notes in the
 // master's slide box, its notes in the master's text box, its number in
 // the master's number shape; a later slide without notes in the default
-// layout over the notes size at the top of the Letter page.
+// layout over the notes size. A PresentationML notes page is the notes
+// size; on the notes paper of an OpenDocument deck, Letter, the notes page
+// sits at the top of the paper, and the first slide without notes takes
+// the whole paper.
 func TestConvert_NotesMaster(t *testing.T) {
 	num := box(305.88, 683.88, 234, 36, Paragraph{Runs: []Run{{Field: FieldSlideNumber, Text: "‹#›", Style: arial(12)}}, Style: arial(12), Align: css.AlignRight})
 	num.Text.Insets = [4]float64{3.6, 7.2, 3.6, 7.2}
@@ -204,7 +207,22 @@ func TestConvert_NotesMaster(t *testing.T) {
 		NotesShapes:   []*Shape{num},
 		Slides:        []*Slide{title("First"), withNotes, title("Third")},
 	}
-	pages := convert(t, doc, office.Options{NotesPages: true}).Pages
+	for _, paper := range []struct{ w, h float64 }{{0, 0}, {612, 792}} {
+		testNotesMaster(t, doc, paper.w, paper.h)
+	}
+}
+
+// testNotesMaster checks the notes pages of doc on the notes paper w by
+// h, none for 0.
+func testNotesMaster(t *testing.T, doc *Document, w, h float64) {
+	t.Helper()
+	pages := convert(t, doc, office.Options{NotesPages: true, NotesPaperWidth: w, NotesPaperHeight: h}).Pages
+	first := struct{ x, y, scale float64 }{30, 720 * 0.076, 0.5}
+	pw, ph := 540.0, 720.0
+	if w > 0 {
+		first.x, first.y, first.scale = 42.01, 60.19, 527.98/960
+		pw, ph = w, h
+	}
 	for i, tc := range []struct {
 		page   int
 		text   string
@@ -212,13 +230,13 @@ func TestConvert_NotesMaster(t *testing.T) {
 		scale  float64
 		number bool
 	}{
-		{3, "First", 42.01, 60.19, 527.98 / 960, false},
+		{3, "First", first.x, first.y, first.scale, false},
 		{4, "Second", 90, 54 + (270-202.5)/2, 0.375, true},
 		{5, "Third", 30, 720 * 0.076, 0.5, false},
 	} {
 		pg := pages[tc.page]
-		if pg.Width != 612 || pg.Height != 792 {
-			t.Errorf("notes page %d is %v by %v", i+1, pg.Width, pg.Height)
+		if pg.Width != pw || pg.Height != ph {
+			t.Errorf("paper %v: notes page %d is %v by %v", w, i+1, pg.Width, pg.Height)
 		}
 		r := find(t, pg, tc.text)
 		if !near(r.x, tc.x, 0.1) || !near(r.y, tc.y+40*tc.scale, 0.2) || !near(r.size, 40*tc.scale, 0.05) {

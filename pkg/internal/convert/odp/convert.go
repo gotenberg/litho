@@ -12,6 +12,18 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
+// notesPaperWidth and notesPaperHeight are the paper Impress prints an
+// OpenDocument notes page on: US Letter.
+//
+// # Corpus evidence
+//
+//   - probe, odp: a deck whose notes masters are A4 and 540 by 720 prints
+//     its notes pages 612 by 792 in the pinned LibreOffice.
+const (
+	notesPaperWidth  = 612
+	notesPaperHeight = 792
+)
+
 // Convert reads the ODP package, or the flat FODP document, src holds and
 // lays it out as a paged document, with the fonts of the index fonts. It
 // returns ctx's error when ctx ends first, and the errors office.Options
@@ -42,6 +54,10 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err != nil {
 		return nil, err
 	}
+	// Impress prints an OpenDocument notes page on Letter, the paper of its
+	// en-US defaults, whatever page layout the notes master names, the
+	// notes page at its top-left corner.
+	opts.NotesPaperWidth, opts.NotesPaperHeight = notesPaperWidth, notesPaperHeight
 	out, err := slides.Convert(ctx, doc, fonts, opts)
 	if err != nil {
 		return nil, err
