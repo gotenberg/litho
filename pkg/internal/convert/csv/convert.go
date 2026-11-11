@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -25,10 +26,6 @@ import (
 func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*compose.Document, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
-	}
-	if opts.CSVKeepText || opts.CSVSeparators != nil && string(opts.CSVSeparators) != ",;\t" {
-		// Wave 11, cell sheets: remove with the feature.
-		return nil, fmt.Errorf("%w: CSV separators and type detection", office.ErrNotImplemented)
 	}
 	if fonts == nil {
 		return nil, fmt.Errorf("%w: no font index", office.ErrInvalidOptions)
@@ -98,14 +95,21 @@ const (
 const fallbackYear = 2026
 
 // Read reads the CSV data into the spreadsheet model as Calc's import
-// reads it, with the warnings for what it drops. fonts
-// measures the column widths; opts.PrintDate gives a date without a year
-// its year (the zero time: [fallbackYear]), and the default page of opts
-// (office.Options.DefaultPage) is the paper, Letter without one. It
-// returns ctx's error when ctx ends first.
+// reads it, with the warnings for what it drops. Its fields end at any of
+// opts.CSVSeparators, a comma alone without them; opts.CSVKeepText reads
+// every field as text, else a field that reads as a value is one
+// ([detect]). fonts measures the column widths; opts.PrintDate gives a
+// date without a year its year (the zero time: [fallbackYear]), and the
+// default page of opts (office.Options.DefaultPage) is the paper, Letter
+// without one. It returns ctx's error when ctx ends first.
 func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Options) (*sheet.Document, []compose.Warning, error) {
 	printDate := opts.PrintDate
-	recs, lim, err := parse(ctx, decode(data))
+	for _, r := range opts.CSVSeparators {
+		if r == quote || r == '\n' || r == '\r' || r == utf8.RuneError || !utf8.ValidRune(r) {
+			return nil, nil, fmt.Errorf("%w: CSV separator %q", office.ErrInvalidOptions, r)
+		}
+	}
+	recs, lim, err := parse(ctx, decode(data), newSeparators(opts.CSVSeparators))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -171,7 +175,10 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 			if f == "" {
 				continue
 			}
-			d := detect(f, year)
+			var d detected
+			if !opts.CSVKeepText {
+				d = detect(f, year)
+			}
 			c := sheet.Cell{Column: ci, Style: styleOf(d.kind), Value: cellValue(d, f)}
 			if d.kind == kDateUS && printDate.IsZero() && !hasYear(f) {
 				undated = true

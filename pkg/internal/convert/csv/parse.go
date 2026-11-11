@@ -26,10 +26,54 @@ const (
 	maxCells = sheet.MaxCells
 )
 
-// separators are the field separators of a Calc import with the comma,
-// the semicolon and the tab enabled together, each splitting a field
-// alike.
-const separators = ",;\t"
+// separators is a set of field separators, any of which ends a field.
+type separators struct {
+	// ascii marks the separators below U+0080; other lists the rest.
+	ascii [utf8.RuneSelf]bool
+	other []rune
+	// blank marks a space among the separators: blanks around a quoted
+	// field then separate fields rather than belong to them.
+	blank bool
+}
+
+// newSeparators returns the set of rs, a comma alone for none (RFC 4180,
+// 2). The caller refuses a quote, a line end and U+FFFD.
+func newSeparators(rs []rune) *separators {
+	if len(rs) == 0 {
+		rs = []rune{','}
+	}
+	s := &separators{}
+	for _, r := range rs {
+		if r >= 0 && r < utf8.RuneSelf {
+			s.ascii[r] = true
+		} else {
+			s.other = append(s.other, r)
+		}
+	}
+	s.blank = s.ascii[' ']
+	return s
+}
+
+// at returns the byte length of the separator text holds at i, 0 for
+// none.
+func (s *separators) at(text string, i int) int {
+	if c := text[i]; c < utf8.RuneSelf {
+		if s.ascii[c] {
+			return 1
+		}
+		return 0
+	}
+	if len(s.other) == 0 {
+		return 0
+	}
+	r, size := utf8.DecodeRuneInString(text[i:])
+	for _, o := range s.other {
+		if r == o {
+			return size
+		}
+	}
+	return 0
+}
 
 // quote is the text delimiter of the token, 34.
 const quote = '"'
@@ -46,9 +90,9 @@ type limits struct {
 }
 
 // skipBlanks returns the index of the first non-blank byte of text at or
-// after i.
-func skipBlanks(text string, i int) int {
-	for i < len(text) && text[i] == ' ' {
+// after i; i itself when a space separates fields.
+func (s *separators) skipBlanks(text string, i int) int {
+	for !s.blank && i < len(text) && text[i] == ' ' {
 		i++
 	}
 	return i
@@ -58,9 +102,9 @@ func skipBlanks(text string, i int) int {
 // separator, a line end or the end of the data follows it, after blanks
 // (lcl_isFieldEndQuote, for the generators that do not double embedded
 // quotes).
-func fieldEndQuote(text string, i int) bool {
-	j := skipBlanks(text, i+1)
-	return j >= len(text) || strings.IndexByte(separators, text[j]) >= 0 || text[j] == '\n' || text[j] == '\r'
+func (s *separators) fieldEndQuote(text string, i int) bool {
+	j := s.skipBlanks(text, i+1)
+	return j >= len(text) || s.at(text, j) > 0 || text[j] == '\n' || text[j] == '\r'
 }
 
 // scanQuoted reads the quoted field whose opening quote is text[q],
@@ -72,7 +116,7 @@ func fieldEndQuote(text string, i int) bool {
 // stops at a DONTKNOW_QUOTE: the field then has no closing quote. It
 // returns the index after the field, false when no quote closes it, and
 // whether the scan then reached the end of the data.
-func scanQuoted(text string, q int, add func(rune)) (int, bool, bool) {
+func (s *separators) scanQuoted(text string, q int, add func(rune)) (int, bool, bool) {
 	i, n := q+1, len(text)
 	stray := false
 	for i < n {
@@ -81,8 +125,8 @@ func scanQuoted(text string, q int, add func(rune)) (int, bool, bool) {
 			add(quote)
 			i += 2
 			stray = false
-		case c == quote && fieldEndQuote(text, i):
-			for i++; i < n && text[i] == ' '; i++ {
+		case c == quote && s.fieldEndQuote(text, i):
+			for i++; !s.blank && i < n && text[i] == ' '; i++ {
 				add(' ')
 			}
 			return i, true, false
@@ -118,10 +162,10 @@ func decode(data []byte) string {
 	return strings.ToValidUTF8(string(data), "�")
 }
 
-// parse splits text into records (RFC 4180, 2, as LibreOffice reads it):
-// the line ends are CRLF, LF or CR; a quoted field may hold any of them.
-// It checks ctx every 4,096 records.
-func parse(ctx context.Context, text string) ([]record, limits, error) {
+// parse splits text into records at the separators seps (RFC 4180, 2, as
+// LibreOffice reads it): the line ends are CRLF, LF or CR; a quoted field
+// may hold any of them. It checks ctx every 4,096 records.
+func parse(ctx context.Context, text string, seps *separators) ([]record, limits, error) {
 	var (
 		out   []record
 		lim   limits
@@ -176,11 +220,11 @@ func parse(ctx context.Context, text string) ([]record, limits, error) {
 				return nil, lim, err
 			}
 		}
-		if j := skipBlanks(text, i); start && !unclosed && j < n && text[j] == quote {
+		if j := seps.skipBlanks(text, i); start && !unclosed && j < n && text[j] == quote {
 			// A quoted field, the blanks before its quote skipped
 			// (ScImportExport::ScanNextFieldFromString, for the broken
 			// generators that write "a", "b").
-			end, ok, eof := scanQuoted(text, j, addRune)
+			end, ok, eof := seps.scanQuoted(text, j, addRune)
 			if ok {
 				i, start = end, false
 				continue
@@ -193,10 +237,10 @@ func parse(ctx context.Context, text string) ([]record, limits, error) {
 			unclosed = eof
 		}
 		c := text[i]
-		switch {
-		case strings.IndexByte(separators, c) >= 0:
+		switch size := seps.at(text, i); {
+		case size > 0:
 			endField()
-			i++
+			i += size
 			start = true
 		case c == '\r' || c == '\n':
 			i++

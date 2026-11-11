@@ -2,6 +2,7 @@ package csv
 
 import (
 	"context"
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
@@ -40,9 +42,74 @@ func TestParse_Records(t *testing.T) {
 		{"empty quoted", "\"\",x", []record{{"", "x"}}},
 	}
 	for _, tt := range tests {
-		got, _, err := parse(context.Background(), tt.in)
+		got, _, err := parse(context.Background(), tt.in, legacy)
 		if err != nil || !reflect.DeepEqual(got, tt.want) {
 			t.Errorf("%s: parse(%q) = %q, %v, want %q", tt.name, tt.in, got, err, tt.want)
+		}
+	}
+}
+
+// legacy are the separators the integration references were made with:
+// the comma, the semicolon and the tab together.
+//
+//nolint:gochecknoglobals // a test fixture
+var legacy = newSeparators([]rune{',', ';', '\t'})
+
+// TestParse_Separators checks that a field ends at the separators asked
+// for and at no other, outside quotes alone.
+func TestParse_Separators(t *testing.T) {
+	tests := []struct {
+		name string
+		seps []rune
+		in   string
+		want []record
+	}{
+		{"comma by default", nil, "a,b;c\td\n", []record{{"a", "b;c\td"}}},
+		{"semicolon", []rune{';'}, "1,5;2,5;\"x;y\"\n", []record{{"1,5", "2,5", "x;y"}}},
+		{"tab", []rune{'\t'}, "a b\t\"c\td\"\te,f\n", []record{{"a b", "c\td", "e,f"}}},
+		{"pipe and comma", []rune{'|', ','}, "a|b,c;d\n", []record{{"a", "b", "c;d"}}},
+		{"beyond ASCII", []rune{'§'}, "a§b,c§\"d§e\"\n", []record{{"a", "b,c", "d§e"}}},
+		{"space", []rune{' '}, "a b  \"c d\" e\n", []record{{"a", "b", "", "c d", "e"}}},
+		{"blanks kept with a comma", []rune{','}, "a, \"b\" ,c\n", []record{{"a", "b ", "c"}}},
+	}
+	for _, tt := range tests {
+		got, _, err := parse(context.Background(), tt.in, newSeparators(tt.seps))
+		if err != nil || !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("%s: parse(%q) = %q, %v, want %q", tt.name, tt.in, got, err, tt.want)
+		}
+	}
+}
+
+// TestRead_Options checks the separators and the type detection Read
+// takes, and the separators it refuses.
+func TestRead_Options(t *testing.T) {
+	in := []byte("id;amount;when\n007;1,5;2026-01-10\n")
+	doc, _, err := Read(context.Background(), in, nil, office.Options{CSVSeparators: []rune{';'}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := doc.Sheets[0].Rows[1].Cells
+	// en-US detection: "007" is 7, "1,5" is text (a group separator takes
+	// three digits), the ISO date a date.
+	if len(r) != 3 || r[0].Value != (sheet.Value{Kind: sheet.Number, Number: 7}) || r[1].Value != (sheet.Value{Kind: sheet.Text, Text: "1,5"}) || r[2].Style == nil || r[2].Style.Format != "yyyy-mm-dd" {
+		t.Errorf("detected row = %+v", r)
+	}
+	doc, w, err := Read(context.Background(), in, nil, office.Options{CSVSeparators: []rune{';'}, CSVKeepText: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r = doc.Sheets[0].Rows[1].Cells
+	for i, want := range []string{"007", "1,5", "2026-01-10"} {
+		if r[i].Value != (sheet.Value{Kind: sheet.Text, Text: want}) || r[i].Style != nil {
+			t.Errorf("text cell %d = %+v, want %q", i, r[i], want)
+		}
+	}
+	if _, w, _ = Read(context.Background(), []byte("1/10,TRUE\n"), nil, office.Options{CSVKeepText: true}); len(w) != 0 {
+		t.Errorf("text warnings = %+v", w)
+	}
+	for _, r := range []rune{'"', '\n', '\r', utf8.RuneError, -1} {
+		if _, _, err := Read(context.Background(), in, nil, office.Options{CSVSeparators: []rune{r}}); !errors.Is(err, office.ErrInvalidOptions) {
+			t.Errorf("separator %q: err = %v", r, err)
 		}
 	}
 }
@@ -54,7 +121,7 @@ func TestDecode(t *testing.T) {
 }
 
 func TestParse_Caps(t *testing.T) {
-	recs, lim, err := parse(context.Background(), strings.Repeat("x,", maxColumns+5)+"\n\""+strings.Repeat("y", maxFieldBytes+10))
+	recs, lim, err := parse(context.Background(), strings.Repeat("x,", maxColumns+5)+"\n\""+strings.Repeat("y", maxFieldBytes+10), legacy)
 	if err != nil || !lim.columns || !lim.bytes || len(recs[0]) != maxColumns || len(recs[1][0]) != maxFieldBytes {
 		t.Errorf("caps = %+v, %v, %d", lim, err, len(recs))
 	}
