@@ -81,6 +81,10 @@ func TestTags_NoElementOwnsContentAndKids(t *testing.T) {
 			doc(role("Div", el(sty(display(css.Flex)), role("Span", el(in, txt(in, "aa")))))),
 			"Document[Div[P[Span#]]]",
 		},
+		"text of a table of contents entry": {
+			doc(role("TOC", el(sty(), role("TOCI", el(sty(), txt(in, "aa "), role("Link", el(in, txt(in, "1")))))))),
+			"Document[TOC[TOCI[P[Span# Link#]]]]",
+		},
 		"paragraph alone": {
 			doc(role("P", el(sty(), txt(in, "aa")))),
 			"Document[P#]",

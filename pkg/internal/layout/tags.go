@@ -20,11 +20,12 @@ type tagEvent struct {
 
 // groupingRoles are the grouping types of ISO 32000-1, 14.8.4.2, Table 334
 // and ISO 32000-2, 14.8.4.4, Table 364: they group elements and hold no
-// content items of their own (ISO 32005, Table 5). Immutable lookup table.
+// content items of their own (ISO 32005, Table 5), nor does a TOCI, whose
+// text a P carries. Immutable lookup table.
 var groupingRoles = map[string]bool{
 	"Document": true, "DocumentFragment": true, "Part": true, "Art": true, "Sect": true,
 	"Div": true, "BlockQuote": true, "Aside": true, "NonStruct": true, "Private": true,
-	"Index": true,
+	"Index": true, "TOCI": true,
 }
 
 // containerRoles hold either content or blocks (ISO 32000-1, 14.8.4.3.3 and
@@ -42,7 +43,7 @@ var containerRoles = map[string]bool{
 var opaqueRoles = map[string]bool{
 	"Figure": true, "Formula": true, "Form": true,
 	"L": true, "Table": true, "THead": true, "TBody": true, "TFoot": true, "TR": true,
-	"TOC": true, "TOCI": true,
+	"TOC": true,
 }
 
 // anonymize gives the own content of a structure element an element of its
