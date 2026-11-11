@@ -25,6 +25,11 @@ func TestConvert_MemoryBudget(t *testing.T) {
 	for i := range 5000 {
 		fmt.Fprintf(&cells, "%d,w%d,%d,w%d\n", i, i, i*7, i*3)
 	}
+	// Paragraphs styled alike share one style: each of these has its own.
+	var styled strings.Builder
+	for i := range 2000 {
+		fmt.Fprintf(&styled, "<p style=\"margin-left: %dpx\">a paragraph of words</p>", i)
+	}
 	var pic bytes.Buffer
 	if err := png.Encode(&pic, image.NewNRGBA(image.Rect(0, 0, 1000, 1000))); err != nil {
 		t.Fatal(err)
@@ -38,7 +43,7 @@ func TestConvert_MemoryBudget(t *testing.T) {
 		holds  string
 	}{
 		"text glyph runs": {format: FormatText, src: text, holds: "glyph runs"},
-		"html styles":     {format: FormatHTML, src: strings.Repeat("<p>a paragraph of words</p>", 2000), holds: "computed styles"},
+		"html styles":     {format: FormatHTML, src: styled.String(), holds: "computed styles"},
 		"csv cells":       {format: FormatCSV, src: cells.String(), holds: "cells"},
 		"docx paragraphs": {format: FormatDOCX, src: docx, holds: "XML trees"},
 		"html picture": {
