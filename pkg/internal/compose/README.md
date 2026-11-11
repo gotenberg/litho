@@ -35,7 +35,10 @@ pkg/internal/raster/             Coverage masks, blurs, morphology and tints: th
 pkg/internal/convert/slides/     What the presentation converters share: the slide model and its layout as Impress prints a show (wave 6).
 pkg/internal/convert/pptx/       PPTX converter: PresentationML to the slide model (wave 6).
 pkg/internal/convert/odp/        ODP converter: OpenDocument presentations to the slide model (wave 6).
+pkg/internal/xmp/                The XMP packet writer the backend and the remediation share (wave 9).
+pkg/internal/limits/             The budgets of a conversion, its memory account among them (wave 9).
 pkg/pdf/convert.go               Public entry point: pdf.Convert.
+pkg/pdf/convert_target.go        The version and the profiles of the output, written through a Writer's remediation (wave 9).
 cmd/litho/convert.go             CLI: litho convert.
 ```
 
@@ -171,12 +174,13 @@ Each wave ships behind oracles wired into the corpus matrix
 Wave 4 depends on wave 0 alone, so the Office converters run beside waves
 1 to 3 once the model is frozen.
 
-Status: waves 0 to 6 are done, and waves 7 and 8, two fidelity rounds over every corpus. `test/integration/baseline.json` records
-the oracle scores per fixture; the wpt, weasyprint, html, svg, docx, odt,
-xlsx, ods, csv, pptx and odp cells score the converters in about twenty
-minutes (`go run ./test/integration/cmd/corpus run
---corpus=wpt,weasyprint,html,svg,docx,odt,xlsx,ods,csv,pptx,odp
---feature=reftest,draw,diff,svgdraw`).
+Status: waves 0 to 6 are done, then waves 7 and 8, two fidelity rounds
+over every corpus, and wave 9, the output targets.
+`test/integration/baseline.json` records the oracle scores per fixture;
+the converter cells score a tree in about twenty minutes (`go run
+./test/integration/cmd/corpus run
+--feature=reftest,draw,svgdraw,diff,robustness`), and the `targets` cell
+in about eighty more.
 Wave 1 also took positioning, transforms, gradients, box-shadow, outlines
 and generated content from wave 3, and wave 2 took flexbox, because the
 reftests, the real pages and Chromium's header template lean on them. Wave
@@ -296,10 +300,48 @@ and percentages, the browser rendering rules of two-tone borders, list
 markers and underlines behind an option of their own, and the
 fragmentation rule of absolutely positioned boxes.
 
+Wave 9 made the output a choice and the judgement visual. `pdf.Convert`
+writes the PDF version asked, 1.4 to 2.0, and conforms to the PDF/A and
+PDF/UA profiles asked, one or a pair a single file can meet. The backend
+writes what a producer alone knows: the attributes and the role map of
+the structure tree, the constructs each version has, and page content in
+page coordinates, which keeps every number within what PDF 1.4 reads
+however long the document. The remediation a `Writer` runs, which owns
+conformance for every PDF litho writes, finishes the file through temp
+files, and the report says what the profile still finds. The converters
+say what a reader of the structure tree needs: regular tables with spans
+and header scopes, list numbering, link descriptions, the descriptions
+their sources give pictures and charts, decorative and master drawings as
+artifacts, the characters a symbol font stands for. A picture nobody
+described stays undescribed and is reported: a shape's name is not a
+description.
+
+One paper rule holds in every format: the caller's paper, else the
+document's own (a CSS `@page` size, a section's, a sheet's, a slide's),
+else the default, A4 unless the caller names another; a caller's paper
+replaces the document's orientation with it, and an option a format does
+not take is reported as a warning, never dropped. A conversion holds its
+pictures encoded as the file stores them, one decoded at a time, spools a
+large output to a temp file, parses a font face once, and spends memory
+within one budget, `Limits.MaxConvertMemoryBytes`, charged where memory
+is taken and released where it is given back, so a source too large for
+it is refused early rather than after minutes of work.
+
+Three costs remain for the next wave, each measured: every page's
+glyphs live until the file is written (40 bytes a glyph), every box holds
+a full computed style (3,480 bytes), and a package part is read whole
+before it is parsed.
+
 The differential oracle compares page count, PDF.js text with reading
 order, link sets, outline, tag tree and a layout-tolerant score over
 poppler rasters, and writes a side-by-side PNG with a diff heatmap per
-failure.
+failure. It leaves unscored a Microsoft reference drawn in a face no
+fixture font stands in for, since no converter without that face can
+match it. The `targets` cell converts every fixture to nineteen flavours
+(five versions, ten PDF/A profiles, both PDF/UA profiles, two pairs) and
+scores each by litho's validator, by the conversion's own report, and by
+whether it still looks and reads like the plain conversion, with veraPDF,
+poppler and pdfcpu judging one fixture in eight.
 
 ## Scope
 
