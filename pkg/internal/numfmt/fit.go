@@ -26,14 +26,14 @@ func (f *Format) Fit(v Value, width float64, measure func(string) float64) Resul
 	}
 	x := v.Number
 	if v.Kind != Number || !f.standard || math.IsNaN(x) || math.IsInf(x, 0) {
-		return hash(r)
+		return f.hash(r)
 	}
 	maxDigit := 0.0
 	for c := '0'; c <= '9'; c++ {
 		maxDigit = max(maxDigit, measure(string(c)))
 	}
 	if maxDigit <= 0 {
-		return hash(r)
+		return f.hash(r)
 	}
 	w := width
 	s := narrowGeneral(x, digitCount(w, maxDigit))
@@ -53,7 +53,7 @@ func (f *Format) Fit(v Value, width float64, measure func(string) float64) Resul
 		s = strings.Replace(s, ".", loc.Decimal, 1)
 	}
 	if measure(s) > w {
-		return hash(r)
+		return f.hash(r)
 	}
 	r.Text = s
 	return r
@@ -68,9 +68,13 @@ func digitCount(w, digit float64) int {
 	return int(min(n, 64))
 }
 
-// hash returns r showing "###".
-func hash(r Result) Result {
+// hash returns r showing "###", or under Excel's rules a cell filled
+// with "#".
+func (f *Format) hash(r Result) Result {
 	r.Text, r.Fill, r.FillAt, r.Hash = hashText, 0, 0, true
+	if f.excel {
+		r.Text, r.Fill = "", '#'
+	}
 	return r
 }
 

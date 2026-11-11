@@ -20,6 +20,31 @@ var monthNames = [12]string{"January", "February", "March", "April", "May", "Jun
 
 var dayNames = [7]string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
 
+// excelLeapDay is the serial number of the 1900 date system's February
+// 29, 1900, a day Excel counts and the calendar does not (ECMA-376 Part
+// 1, 18.17.4.1).
+const excelLeapDay = 60
+
+// calendarDay returns the date of the serial day days: from Calc's null
+// date, or under Excel's rules from January 0, 1900, February 29, 1900
+// included, a serial number from 61 on reading as Calc's.
+func calendarDay(days int64, excel bool) (int, time.Month, int, time.Weekday) {
+	if excel && days >= 0 && days <= excelLeapDay {
+		// Excel's day 1 is a Sunday, January 1, 1900.
+		wd := time.Weekday((days + 6) % 7)
+		switch {
+		case days == 0:
+			return 1900, time.January, 0, wd
+		case days == excelLeapDay:
+			return 1900, time.February, 29, wd
+		}
+		d := time.Date(1899, 12, 31, 0, 0, 0, 0, time.UTC).AddDate(0, 0, int(days)) // fits int: at most excelLeapDay
+		return d.Year(), d.Month(), d.Day(), wd
+	}
+	d := nullDate.AddDate(0, 0, int(days)) // fits int: |days| is at most maxSerialDays, checked by the caller
+	return d.Year(), d.Month(), d.Day(), d.Weekday()
+}
+
 // approxFloor returns the floor of v rounded to 15 significant digits,
 // which absorbs the binary error of a decimal value (rtl::math::approxFloor).
 func approxFloor(v float64) float64 {
@@ -56,6 +81,9 @@ func (s *section) date(x float64, first bool) Result {
 		case tLit, tDigit, tDot, tComma, tPercent, tExp, tSlash, tAt, tFill, tGeneral:
 		}
 	}
+	if s.excel && x < 0 {
+		return Result{Numeric: true, Fill: '#', Hash: true}
+	}
 	neg := false
 	if !hasDate && x < 0 {
 		neg = first
@@ -76,7 +104,7 @@ func (s *section) date(x float64, first bool) Result {
 	//   - libreoffice/ods: sc/tdf125099.ods, 03:23:59.999999665 in [HH]:MM:SS prints
 	//     03:23:59, and 11:23:59.999999665 in HH:MM prints 11:24.
 	whole := func(v float64) float64 {
-		if seconds && frac == 0 {
+		if seconds && frac == 0 && !s.excel {
 			return approxFloor(v)
 		}
 		return math.Floor(v + 0.5)
@@ -100,7 +128,7 @@ func (s *section) date(x float64, first bool) Result {
 	if neg && total == 0 && sub == 0 {
 		neg = false
 	}
-	day := nullDate.AddDate(0, 0, int(days)) // fits int: |x| is at most maxSerialDays, checked above
+	year, month, mday, weekday := calendarDay(days, s.excel)
 	hour, minute, sec := total/3600, total%3600/60, total%60
 	if !elapsed {
 		hour %= 24
@@ -151,14 +179,14 @@ func (s *section) date(x float64, first bool) Result {
 		case tDate:
 			switch t.key {
 			case kYear:
-				y := int64(day.Year())
+				y := int64(year)
 				if t.n <= 2 {
 					pad(y%100, 2)
 				} else {
 					pad(y, 4)
 				}
 			case kMonth:
-				mo := day.Month()
+				mo := month
 				switch t.n {
 				case 1:
 					pad(int64(mo), 1)
@@ -174,11 +202,11 @@ func (s *section) date(x float64, first bool) Result {
 			case kDay:
 				switch t.n {
 				case 1, 2:
-					pad(int64(day.Day()), t.n)
+					pad(int64(mday), t.n)
 				case 3:
-					b.WriteString(dayNames[day.Weekday()][:3])
+					b.WriteString(dayNames[weekday][:3])
 				default:
-					b.WriteString(dayNames[day.Weekday()])
+					b.WriteString(dayNames[weekday])
 				}
 			case kHour:
 				h := hour

@@ -99,6 +99,8 @@ type section struct {
 	// loc is the locale the section writes its separators in, nil for
 	// en-US.
 	loc *Locale
+	// excel formats dates and times as Excel shows them ([Format.Excel]).
+	excel bool
 }
 
 // decimal returns the decimal separator the section writes.

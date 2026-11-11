@@ -58,6 +58,9 @@ type Format struct {
 	// standard reports Calc's standard format, General alone: [Format.Fit]
 	// narrows it to a column.
 	standard bool
+	// excel reports a format that shows values as Excel does
+	// ([Format.Excel]).
+	excel bool
 	// explicitThird reports a code with three or more sections; with a
 	// condition and two sections, the third is General.
 }
@@ -96,6 +99,34 @@ func Parse(code string) (*Format, error) {
 		f.standard = f.sections[0].color == nil && !f.sections[0].explicitCond
 	}
 	return f, nil
+}
+
+// Excel returns f showing values as Excel shows them where Excel and Calc
+// differ: a date or time section shows a negative value as a cell filled
+// with "#", counts the 1900 date system's days from January 0, 1900 with
+// its February 29 (ECMA-376 Part 1, 18.17.4.1), and rounds whole seconds
+// to the nearest; a value [Format.Fit] cannot fit fills the cell with
+// "#" rather than writing "###". f is left unchanged.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: numfmt_builtin prints -1234.567 as a cell of "#" in
+//     every date and time format, 0 as 01/00/1900 and 00-Jan-00,
+//     1234.567 as 1:36:29 PM (1:36:28.8); cell_values and print_errors
+//     fill narrow number cells with "#".
+func (f *Format) Excel() *Format {
+	if f == nil || f.excel {
+		return f
+	}
+	g := *f
+	g.excel = true
+	g.sections = make([]*section, len(f.sections))
+	for i, s := range f.sections {
+		c := *s
+		c.excel = true
+		g.sections[i] = &c
+	}
+	return &g
 }
 
 // defaultConditions gives the sections the conditions LibreOffice

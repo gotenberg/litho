@@ -274,3 +274,47 @@ func TestParse_LocaleTag(t *testing.T) {
 		t.Error("an en-US tag")
 	}
 }
+
+// TestFormat_Excel locks the values Excel shows apart from Calc: negative
+// dates and times fill the cell with "#", the 1900 date system's day 0
+// and February 29, whole seconds rounded, and a value too wide filling
+// the cell with "#".
+func TestFormat_Excel(t *testing.T) {
+	for _, tc := range []struct {
+		code string
+		v    float64
+		calc string
+		want string
+	}{
+		{"mm/dd/yyyy", 0, "12/30/1899", "01/00/1900"},
+		{"mm/dd/yyyy", 60, "02/28/1900", "02/29/1900"},
+		{"mm/dd/yyyy", 61, "03/01/1900", "03/01/1900"},
+		{"ddd mm/dd/yyyy", 1, "Sun 12/31/1899", "Sun 01/01/1900"},
+		{"h:mm:ss", 1234.567, "13:36:28", "13:36:29"},
+		{"mm/dd/yyyy", -1, "", ""},
+	} {
+		f, err := Parse(tc.code)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := f.Excel().Apply(Value{Kind: Number, Number: tc.v})
+		if r.Text != tc.want {
+			t.Errorf("%s of %v: %q, want %q", tc.code, tc.v, r.Text, tc.want)
+		}
+		if tc.v < 0 && (r.Fill != '#' || !r.Hash) {
+			t.Errorf("%s of %v: fill %q, want a cell of #", tc.code, tc.v, r.Fill)
+		}
+		if tc.calc != "" && tc.v != 1 {
+			if c := f.Apply(Value{Kind: Number, Number: tc.v}); c.Text != tc.calc {
+				t.Errorf("%s of %v by Calc: %q, want %q", tc.code, tc.v, c.Text, tc.calc)
+			}
+		}
+	}
+	r := General.Excel().Fit(Value{Kind: Number, Number: 1e300}, 1, func(s string) float64 { return float64(len(s)) * 5 })
+	if r.Text != "" || r.Fill != '#' || !r.Hash {
+		t.Errorf("a value too wide: %+v, want a cell of #", r)
+	}
+	if General.Excel() == General || General.excel {
+		t.Error("Excel changed General")
+	}
+}
