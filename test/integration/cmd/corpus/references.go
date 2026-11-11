@@ -708,13 +708,14 @@ func hasKey[V any](m map[string]V, k string) bool {
 }
 
 // builtReferenceJobs lists the documents a build corpus zips from its
-// parts, the ones only names when set: its hostile documents have no
-// reference.
+// parts and its paper documents (see [paperDocs]), the ones only names when
+// set: its hostile documents have no reference.
 func builtReferenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 	names, err := partsNames(m)
 	if err != nil {
 		return nil, err
 	}
+	names = append(names, paperDocNames(m.Name)...)
 	var jobs []referenceJob
 	for _, name := range names {
 		if len(only) > 0 && !slices.Contains(only, name) {

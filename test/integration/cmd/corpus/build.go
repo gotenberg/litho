@@ -185,7 +185,7 @@ func builtNames(m *Manifest) ([]string, error) {
 	for _, h := range hostileDocs(format) {
 		names = append(names, h.name)
 	}
-	return names, nil
+	return append(names, paperDocNames(m.Name)...), nil
 }
 
 // builtInputFixtures lists the fixtures of a build corpus, each the
@@ -281,7 +281,11 @@ func buildOffice(ctx context.Context, m *Manifest) error {
 			return err
 		}
 	}
-	fmt.Printf("%s: %d documents and %d hostile ones built into %s\n", m.Name, len(names), len(hostile), out)
+	papers, err := buildPaperDocs(ctx, m.Name, partsDir, out, format)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s: %d documents, %d hostile ones and %d paper ones built into %s\n", m.Name, len(names), len(hostile), papers, out)
 	return nil
 }
 
