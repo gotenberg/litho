@@ -387,7 +387,7 @@ func (d *document) group(s *story, g *ooxml.Element, st *css.Style, w, h float64
 		var kid *layout.Node
 		switch {
 		case c.Is(ooxml.NSWPS, "wsp"):
-			kid = d.shape(s, c, st, cw, ch, depth+1)
+			kid = d.shape(s, c, st, cw, ch, "", depth+1)
 		case c.Is(ooxml.NSPic, "pic"):
 			kid = d.picture(s, ooxml.ParsePicture(c), st, cw, ch, "")
 		default:

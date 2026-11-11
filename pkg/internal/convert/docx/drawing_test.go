@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/png"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -202,5 +203,38 @@ func TestDrawings_AloneKeepALine(t *testing.T) {
 	}
 	if len(find(p, func(n *layout.Node) bool { return n.Kind == layout.Replaced })) != 1 {
 		t.Error("the drawing is lost")
+	}
+}
+
+// TestDrawings_Describe locks what a reader hears of a drawing: a
+// picture's title when it has no description, nothing of a picture marked
+// decorative, an artifact, and a text box's own text as the alt of its
+// Figure.
+func TestDrawings_Describe(t *testing.T) {
+	t.Parallel()
+	pic := func(docPr string) string {
+		return `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="1270000" cy="635000"/>` + docPr +
+			strings.Replace(graphic(""), ` descr="inner"`, ``, 1) + `</wp:inline></w:drawing></w:r></w:p>`
+	}
+	textBox := `<w:p><w:r><w:t>before</w:t></w:r><w:r><w:drawing><wp:inline><wp:extent cx="2540000" cy="1270000"/><wp:docPr id="4" name="t"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">` +
+		`<wps:wsp><wps:spPr><a:prstGeom prst="rect"/></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>Boxed</w:t></w:r></w:p><w:p><w:r><w:t>text</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp>` +
+		`</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+	body := pic(`<wp:docPr id="1" name="p" title="A title"/>`) +
+		pic(`<wp:docPr id="2" name="d" descr="ignored"><a:extLst><a:ext uri="{C183D7F6-B498-43B3-948B-1728B52AA6E4}"><adec:decorative xmlns:adec="http://schemas.microsoft.com/office/drawing/2017/decorative" val="1"/></a:ext></a:extLst></wp:docPr>`) +
+		textBox
+	b := build(t, body, map[string]string{"word/media/a.png": pngData(t, 40, 20)})
+	pics := find(b.root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+	if len(pics) != 2 {
+		t.Fatalf("%d pictures, want 2", len(pics))
+	}
+	if pics[0].Role != "Figure" || pics[0].Alt != "A title" {
+		t.Errorf("titled picture: role %q alt %q", pics[0].Role, pics[0].Alt)
+	}
+	if pics[1].Role != "" || pics[1].Alt != "" {
+		t.Errorf("decorative picture: role %q alt %q", pics[1].Role, pics[1].Alt)
+	}
+	figs := role(b.root, "Figure")
+	if len(figs) != 2 || figs[1].Kind != layout.Element || figs[1].Alt != "Boxed text" || len(role(figs[1], "P")) != 2 {
+		t.Errorf("text box figure %+v", figs)
 	}
 }

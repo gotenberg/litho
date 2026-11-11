@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -36,17 +39,16 @@ func (d *document) drawing(s *story, c *ooxml.Element, st *css.Style, sink *inli
 			wpt, _ = ooxml.EMU(attrOr(ext, "cx"))
 			hpt, _ = ooxml.EMU(attrOr(ext, "cy"))
 		}
-		alt := ""
-		if dp := k.Child(ooxml.NSWP, "docPr"); dp != nil {
-			alt = attrOr(dp, "descr")
-			if alt == "" {
-				alt = attrOr(dp, "title")
-			}
-		}
+		alt, decorative := ooxml.Describe(k.Child(ooxml.NSWP, "docPr"))
 		data := k.Child(ooxml.NSA, "graphic").Child(ooxml.NSA, "graphicData")
 		n := d.graphic(s, data, st, max(wpt, 0), max(hpt, 0), alt, depth)
 		if n == nil {
 			continue
+		}
+		if decorative && n.Role == "Figure" {
+			// A drawing its author marked decorative is an artifact
+			// (ISO 32000-1, 14.8.2.2.2; ISO 14289-1, 7.1).
+			n.Role, n.Alt = "", ""
 		}
 		if !inline {
 			d.anchor(k, n, wpt, hpt, sink)
@@ -67,7 +69,7 @@ func (d *document) graphic(s *story, data *ooxml.Element, st *css.Style, w, h fl
 		}
 	case uriShape:
 		if sp := data.Child(ooxml.NSWPS, "wsp"); sp != nil {
-			return d.shape(s, sp, st, w, h, depth)
+			return d.shape(s, sp, st, w, h, alt, depth)
 		}
 	case uriGroup:
 		if g := data.Child(ooxml.NSWPG, "wgp"); g != nil {
@@ -95,6 +97,11 @@ func box(st *css.Style, w, h float64) *layout.Node {
 // picture builds a picture of size w by h points (0 for its natural size)
 // from its reference: a Figure replaced box, cropped, rotated and flipped
 // as the reference says.
+//
+// A picture is a Figure, its alt the description its drawing or its own
+// properties carry; one its properties mark decorative is an artifact
+// (ISO 32000-1, 14.8.2.2.2). A picture described nowhere stays a Figure
+// without one: the source holds nothing to say about it.
 func (d *document) picture(s *story, ref ooxml.PictureRef, st *css.Style, w, h float64, alt string) *layout.Node {
 	if alt == "" {
 		alt = ref.Descr
@@ -126,7 +133,11 @@ func (d *document) picture(s *story, ref ooxml.PictureRef, st *css.Style, w, h f
 	ps.LineHeight = css.Dimension{Kind: css.Normal}
 	ps.MinLineHeight = 0
 	setTransform(ps, ref.Rotation, ref.FlipH, ref.FlipV)
-	return &layout.Node{Kind: layout.Replaced, Style: ps, Picture: pic, Role: "Figure", Alt: alt}
+	n := &layout.Node{Kind: layout.Replaced, Style: ps, Picture: pic, Role: "Figure", Alt: alt}
+	if ref.Decorative {
+		n.Role, n.Alt = "", ""
+	}
+	return n
 }
 
 // setTransform rotates and mirrors the box of st about its centre.
@@ -187,8 +198,12 @@ func (d *document) loadPicture(part, id string) *layout.Picture {
 
 // shape builds a wps:wsp (MS-ODRAWXML, 2.3.4): a text box as a block of
 // its content over the shape's fill, any other shape as a vector picture
-// of its preset or custom geometry.
-func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float64, depth int) *layout.Node {
+// of its preset or custom geometry. alt describes the shape, "" to read
+// its own non-visual properties.
+func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float64, alt string, depth int) *layout.Node {
+	if alt == "" {
+		alt, _ = ooxml.Describe(sp.Child(ooxml.NSWPS, "cNvPr"))
+	}
 	spPr := sp.Child(ooxml.NSWPS, "spPr")
 	ss := ooxml.ParseShapeStyle(spPr, sp.Child(ooxml.NSWPS, "style"), d.theme)
 	if ref := ooxml.ParsePicture(sp); ref.Embed != "" && spPr.Child(ooxml.NSA, "blipFill") != nil {
@@ -196,7 +211,7 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 	}
 	if tb := sp.Child(ooxml.NSWPS, "txbx"); tb != nil {
 		bodyPr := sp.Child(ooxml.NSWPS, "bodyPr")
-		n := d.textBox(s, tb.Child(ooxml.NSW, "txbxContent"), w, h, ss, bodyInsets(bodyPr), depth)
+		n := d.textBox(s, tb.Child(ooxml.NSW, "txbxContent"), w, h, ss, bodyInsets(bodyPr), alt, depth)
 		if id := attrOr(tb, "id"); id != "" {
 			setChain(n.Style, id, 0, h)
 		}
@@ -207,7 +222,7 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 		// A later link of a chain of text boxes holds none of the
 		// chain's content, which flows into it from the link before.
 		bodyPr := sp.Child(ooxml.NSWPS, "bodyPr")
-		n := d.textBox(s, nil, w, h, ss, bodyInsets(bodyPr), depth)
+		n := d.textBox(s, nil, w, h, ss, bodyInsets(bodyPr), "", depth)
 		seq, _ := ooxml.Int(attrOr(l, "seq"))
 		setChain(n.Style, attrOr(l, "id"), seq, h)
 		turn(n, bodyVert(attrOr(bodyPr, "vert")))
@@ -295,7 +310,14 @@ func bodyInsets(bodyPr *ooxml.Element) [4]float64 {
 // textBox builds a text box of w by h points: an inline block holding the
 // content's blocks, with the shape's fill and outline and the insets,
 // top, right, bottom and left.
-func (d *document) textBox(s *story, content *ooxml.Element, w, h float64, ss ooxml.ShapeStyle, insets [4]float64, depth int) *layout.Node {
+//
+// A text box with content is a Figure: it is anchored in a paragraph and
+// lies inside that paragraph's P, which ISO 32005, Table 5 lets hold a
+// Figure but not the P and Div elements of the box's content, while a
+// Figure holds them. Its alt is alt, the description of its drawing,
+// else the text it shows, so that a reader hears the box either way
+// (ISO 14289-1, 7.3).
+func (d *document) textBox(s *story, content *ooxml.Element, w, h float64, ss ooxml.ShapeStyle, insets [4]float64, alt string, depth int) *layout.Node {
 	bs := d.blockStyle()
 	bs.Display = css.InlineBlock
 	bs.Width = css.Pts(max(w, 1))
@@ -322,5 +344,50 @@ func (d *document) textBox(s *story, content *ooxml.Element, w, h float64, ss oo
 		kids = finish(d.blocks(ts, nil, content, depth+1))
 		d.nested--
 	}
-	return &layout.Node{Kind: layout.Element, Style: bs, Children: kids}
+	n := &layout.Node{Kind: layout.Element, Style: bs, Children: kids}
+	if len(kids) > 0 {
+		n.Role = "Figure"
+		if n.Alt = alt; alt == "" {
+			n.Alt = shownText(kids)
+		}
+	}
+	return n
+}
+
+// maxAltText caps the characters of the text a text box's alt repeats.
+// Anti-DoS guard, not spec-mandated: a text box shows a few paragraphs,
+// and a reader is told the first few thousand characters of a longer
+// one.
+const maxAltText = 4096
+
+// shownText returns the text of nodes, a space between blocks, at most
+// [maxAltText] bytes cut at a character.
+func shownText(nodes []*layout.Node) string {
+	var sb strings.Builder
+	stack := slices.Clone(nodes)
+	slices.Reverse(stack)
+	for len(stack) > 0 && sb.Len() < maxAltText {
+		n := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		switch {
+		case n == nil:
+		case n.Kind == layout.Text:
+			sb.WriteString(n.Text)
+		case n.Kind == layout.LineBreak:
+			sb.WriteByte(' ')
+		default:
+			if n.Style != nil && n.Style.Display != css.Inline && sb.Len() > 0 {
+				sb.WriteByte(' ')
+			}
+			for i := len(n.Children) - 1; i >= 0; i-- {
+				stack = append(stack, n.Children[i])
+			}
+		}
+	}
+	out := strings.Join(strings.Fields(sb.String()), " ")
+	for len(out) > maxAltText {
+		_, size := utf8.DecodeLastRuneInString(out)
+		out = out[:len(out)-size]
+	}
+	return out
 }
