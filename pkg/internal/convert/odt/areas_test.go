@@ -521,3 +521,28 @@ func TestConvert_DrawingsDescribed(t *testing.T) {
 		t.Errorf("figures %q (%d drawings), want %q (3)", got, replaced, want)
 	}
 }
+
+// TestConvert_DecorativeAndSymbols locks two things a reader is told or
+// spared: a picture whose style marks it decorative is an artifact, and a
+// run in a symbol font carries the characters its codes stand for as its
+// ActualText.
+func TestConvert_DecorativeAndSymbols(t *testing.T) {
+	auto := `<style:style style:name="fr" style:family="graphic"><style:graphic-properties loext:decorative="true"/></style:style>` +
+		`<style:style style:name="sy" style:family="text"><style:text-properties fo:font-family="Symbol"/></style:style>`
+	body := `<text:p><draw:frame draw:style-name="fr" text:anchor-type="as-char" svg:width="2cm" svg:height="1cm"><draw:image xlink:href="Pictures/a.png"/><svg:title>ignored</svg:title></draw:frame></text:p>` +
+		`<text:p>x <text:span text:style-name="sy">` + "" + `</text:span></text:p>`
+	b := newTestBuilder(t, doc{contentAuto: auto, body: body, pictures: map[string][]byte{"Pictures/a.png": tinyPNG(t)}})
+	root, _ := b.document(odfBody(b))
+	var actual []string
+	walkNodes(root, func(n *layout.Node) {
+		if n.Kind == layout.Replaced && (n.Role != "" || n.Alt != "") {
+			t.Errorf("decorative picture: role %q alt %q", n.Role, n.Alt)
+		}
+		if n.ActualText != "" {
+			actual = append(actual, n.ActualText)
+		}
+	})
+	if !slices.Equal(actual, []string{"•"}) {
+		t.Errorf("actual texts %q, want the Symbol bullet's", actual)
+	}
+}

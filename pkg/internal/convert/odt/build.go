@@ -535,7 +535,13 @@ func (b *builder) run(s string, t textState) *layout.Node {
 		st.LineHeight = css.Pts(0)
 	}
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Lang: t.langTag()})
-	n.Children = []*layout.Node{b.node(&layout.Node{Kind: layout.Text, Style: st, Text: s})}
+	tn := &layout.Node{Kind: layout.Text, Style: st, Text: s}
+	if len(st.FontFamilies) > 0 {
+		// The codes of a symbol font name nothing a reader knows (ISO
+		// 19005-2, 6.2.11.7.3; ISO 14289-2, 8.4.3).
+		tn.ActualText = office.SymbolText(s, st.FontFamilies[0])
+	}
+	n.Children = []*layout.Node{b.node(tn)}
 	return n
 }
 
