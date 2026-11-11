@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/odf"
 )
 
 // region returns a text:changed-region of id, kind and author, holding
@@ -209,5 +210,31 @@ func TestConvert_TrackedChangesAuthorsCycle(t *testing.T) {
 	}
 	if c := got["run"+string(rune('a'+len(authorColors)))].Color; c != authorColors[0] {
 		t.Errorf("tenth author %v, want the first colour %v", c, authorColors[0])
+	}
+}
+
+func TestResolveChanges_KeepsTheSpaceASplitPutsFirst(t *testing.T) {
+	for _, view := range []office.TrackedChanges{office.ChangesRejected, office.ChangesMarked} {
+		b := newTestBuilder(t, doc{body: `<text:tracked-changes>` + region("d", "deletion", "Ada", `<text:p/><text:p/>`) +
+			`</text:tracked-changes><text:p>first<text:change text:change-id="d"/> second</text:p>`})
+		el := odfBody(b)
+		if _, err := resolveChanges(context.Background(), el, view, b.rowTracked, b.warn); err != nil {
+			t.Fatal(err)
+		}
+		ps := el.All(odf.NSText, "p")
+		if len(ps) != 2 {
+			t.Fatalf("view %d: %d paragraphs, want 2", view, len(ps))
+		}
+		var kinds []string
+		for _, k := range ps[1].Children {
+			if k.IsText() {
+				kinds = append(kinds, "text:"+k.Text)
+			} else {
+				kinds = append(kinds, k.Name.Local)
+			}
+		}
+		if got := strings.Join(kinds, ","); !strings.Contains(got, "s,text:second") {
+			t.Errorf("view %d: second paragraph %s, want a text:s before %q", view, got, "second")
+		}
 	}
 }

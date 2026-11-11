@@ -524,9 +524,47 @@ func (c *changes) splice(m *odf.Element, id string, blocks []*odf.Element, wrap 
 		c.setKids(right, slices.Concat(closing, right.Children))
 		out = append(out, right)
 	}
+	keepLeadingSpace(right)
 	grand := path[host-1]
 	i := slices.Index(grand.Children, h)
 	c.setKids(grand, slices.Concat(grand.Children[:i], out, grand.Children[i+1:]))
+}
+
+// keepLeadingSpace turns a space opening the paragraph p, which the
+// paragraph's white space rules would drop (ODF 1.3, Part 3, 6.1.2), into
+// a text:s: the space was inside a paragraph before the split put it
+// first.
+//
+// # Corpus evidence
+//
+//   - probe, odt: LibreOffice 26.8 rejecting a deleted paragraph break
+//     recorded before " with the next one." prints the second paragraph
+//     with its opening space.
+func keepLeadingSpace(p *odf.Element) {
+	el := p
+	for range odf.MaxDepth {
+		// Change marks print nothing: the first text may follow one.
+		i := slices.IndexFunc(el.Children, func(k *odf.Element) bool {
+			return !k.Is(odf.NSText, "change-start") && !k.Is(odf.NSText, "change-end")
+		})
+		if i < 0 {
+			return
+		}
+		first := el.Children[i]
+		if first.IsText() {
+			if !strings.HasPrefix(first.Text, " ") {
+				return
+			}
+			space := &odf.Element{Name: xml.Name{Space: odf.NSText, Local: "s"}}
+			rest := &odf.Element{Text: first.Text[1:]}
+			el.Children = slices.Concat(el.Children[:i], []*odf.Element{space, rest}, el.Children[i+1:])
+			return
+		}
+		if !first.Is(odf.NSText, "span") {
+			return
+		}
+		el = first
+	}
 }
 
 // dropRows drops the table rows whose changes are the row's own and whose
