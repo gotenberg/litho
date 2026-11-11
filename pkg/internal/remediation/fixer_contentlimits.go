@@ -113,6 +113,14 @@ type contentLimitsTally struct {
 //     remediation passed litho and veraPDF 1.30.4 and lost page 1's text.
 //     Preserving content, it keeps every page's text and leaves two
 //     residuals, which veraPDF fails as 6.1.12 t2.
+//   - verapdf PDF_A-1b__veraPDF_test_suite_6-1-12-t02-fail-c.pdf and
+//     -fail-e.pdf: show a glyph under 60000.1 Tz, which clamped to 32767
+//     draws 45% narrower. Their PDF/A-1a and 1b remediations, which passed,
+//     now leave the scale and its residual, on litho and veraPDF 1.30.4 alike.
+//   - litho/pdf csnames_2b.pdf and offlimits_1b.pdf: set 2147483648 w, which
+//     part 1 respells 32767. Their PDF/A-1a and 1b remediations, which failed
+//     on other rules, now leave it too. No other remediation of the verapdf
+//     and litho/pdf corpora changes, default or aggressive.
 func fixContentLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, profile string) ([]string, error) {
 	part := compliance.PDFAPart(profile)
 	colourOff, err := compliance.ColourOffStreams(ctx, doc, profile)
