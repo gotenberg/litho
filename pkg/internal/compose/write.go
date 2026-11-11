@@ -469,7 +469,7 @@ func (w *docWriter) page(ctx context.Context, i int, page *Page) error {
 // rectangle in PDF coordinates, y flipped. A link with a parent element
 // joins the structure tree through an object reference and /StructParent
 // (14.7.4.4). Its /Contents is the link's description, else its element's
-// Alt (ISO 14289-1, 7.18.5).
+// Alt, else its target (ISO 14289-1, 7.18.5).
 func (w *docWriter) link(pageIndex int, page *Page, l Link) ast.PdfIndirectRef {
 	r := l.Rect
 	x0, x1 := math.Min(r.X, r.X+r.Width), math.Max(r.X, r.X+r.Width)
@@ -495,11 +495,18 @@ func (w *docWriter) link(pageIndex int, page *Page, l Link) ast.PdfIndirectRef {
 	if w.st != nil && l.Parent != nil {
 		dict["StructParent"] = ast.PdfInt(w.st.addAnnot(pageIndex, ref, l.Parent))
 	}
+	// ISO 14289-1, 7.18.5 and ISO 14289-2, 8.9.4.4: every link carries a
+	// description. With none from the model, the target stands in: the
+	// URI, or the page an internal link goes to.
 	switch {
 	case l.Contents != "":
 		dict["Contents"] = textString(l.Contents)
 	case l.Parent != nil && l.Parent.Alt != "":
 		dict["Contents"] = textString(l.Parent.Alt)
+	case l.URI != "":
+		dict["Contents"] = textString(l.URI)
+	default:
+		dict["Contents"] = textString(fmt.Sprintf("Page %d", l.Dest.Page))
 	}
 	w.alloc.AllocAt(ref.ObjectNum, dict)
 	return ref

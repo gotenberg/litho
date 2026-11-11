@@ -110,10 +110,14 @@ func TestWriteLinkContents(t *testing.T) {
 	out = writeVersion(t, doc, compose.Version17)
 	mustContain(t, out, "/Contents (Title)")
 	mustLack(t, out, "/Contents (Go to the title)")
+	// With neither, the target stands in.
 	el["Link"].Alt = ""
 	doc.Pages[0].Links[0].Contents = ""
 	out = writeVersion(t, doc, compose.Version17)
-	mustLack(t, out, "/Contents (")
+	mustContain(t, out, "/Contents (Page 1)")
+	doc.Pages[0].Links[0].Dest, doc.Pages[0].Links[0].URI = nil, "https://example.com/"
+	out = writeVersion(t, doc, compose.Version17)
+	mustContain(t, out, "/Contents (https://example.com/)")
 }
 
 func TestWriteVersion14(t *testing.T) {
