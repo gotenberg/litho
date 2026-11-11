@@ -4,6 +4,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
 // The notes page size of a file that gives none: US Letter portrait, the
@@ -132,6 +133,9 @@ func (b *builder) notesPage(s *Slide, n int) (*compose.Page, *compose.StructElem
 			box = b.doc.NotesTextBox
 			in[css.Left], in[css.Right], in[css.Top], in[css.Bottom] = masterInsetX, masterInsetX, masterInsetY, masterInsetY
 		}
+		// The notes frame's own fill and line paint under its text.
+		pg.Content = append(pg.Content, b.fill(&s.NotesFill, box, rectOps(box), shape.FillNorm)...)
+		pg.Content = append(pg.Content, b.stroke(&s.NotesLine, rectOps(box))...)
 		txt := b.shapeText(&TextBody{Paragraphs: s.Notes, Insets: in, Wrap: true}, nil, box)
 		pg.Content = append(pg.Content, txt.frags...)
 		pg.Links = append(pg.Links, txt.links...)

@@ -226,6 +226,27 @@ func TestNotes_HasNotes(t *testing.T) {
 	}
 }
 
+// TestNotes_Fill checks that a notes page paints its text box with the
+// notes frame's fill and line, under the text.
+func TestNotes_Fill(t *testing.T) {
+	green := css.Color{G: 0.6, A: 1}
+	s := &Slide{Notes: []Paragraph{para("note", arial(12))}, NotesFill: Fill{Kind: FillSolid, Color: green}, NotesLine: Line{Width: 1, Color: green}}
+	pg := convert(t, deck(s), office.Options{NotesPages: true}).Pages[1]
+	var filled, stroked bool
+	for _, f := range pg.Content {
+		if p, ok := f.(*compose.Path); ok {
+			filled = filled || p.Fill != nil && p.Fill.Color.G == 0.6
+			stroked = stroked || p.Stroke != nil && p.Stroke.Color.G == 0.6
+		}
+	}
+	if !filled || !stroked {
+		t.Errorf("notes box filled %v, stroked %v", filled, stroked)
+	}
+	if find(t, pg, "note").text == "" {
+		t.Error("the notes text is gone")
+	}
+}
+
 // TestTable_VerticalCells checks that a row grows to the length of its
 // vertical cells' lines, at most the cell's width, and that a cell's text
 // turned clockwise sits at its left edge.
