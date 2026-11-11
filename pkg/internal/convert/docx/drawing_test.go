@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 )
@@ -236,5 +237,46 @@ func TestDrawings_Describe(t *testing.T) {
 	figs := role(b.root, "Figure")
 	if len(figs) != 2 || figs[1].Kind != layout.Element || figs[1].Alt != "Boxed text" || len(role(figs[1], "P")) != 2 {
 		t.Errorf("text box figure %+v", figs)
+	}
+}
+
+// TestChart checks that a chart frame draws its chart part, its title and
+// category labels as text, at the frame's extent, and that a frame whose
+// part is missing keeps its room with a warning.
+func TestChart(t *testing.T) {
+	t.Parallel()
+	frame := func(id string) string {
+		return `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="3810000" cy="2540000"/><wp:docPr id="1" name="c" descr="Sales chart"/>` +
+			`<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">` +
+			`<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="` + id + `"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+	}
+	part := `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart>` +
+		`<c:title><c:tx><c:rich><a:p><a:r><a:t>Quarterly</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>` +
+		`<c:plotArea><c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:idx val="0"/><c:order val="0"/>` +
+		`<c:cat><c:strLit><c:ptCount val="2"/><c:pt idx="0"><c:v>North</c:v></c:pt><c:pt idx="1"><c:v>South</c:v></c:pt></c:strLit></c:cat>` +
+		`<c:val><c:numLit><c:ptCount val="2"/><c:pt idx="0"><c:v>3</c:v></c:pt><c:pt idx="1"><c:v>5</c:v></c:pt></c:numLit></c:val></c:ser>` +
+		`<c:axId val="1"/><c:axId val="2"/></c:barChart><c:catAx><c:axId val="1"/><c:axPos val="b"/><c:crossAx val="2"/></c:catAx>` +
+		`<c:valAx><c:axId val="2"/><c:axPos val="l"/><c:crossAx val="1"/></c:valAx></c:plotArea></c:chart></c:chartSpace>`
+	b := build(t, frame("rIdchart1"), map[string]string{"word/charts/chart1.xml": part})
+	charts := find(b.root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+	if len(charts) != 1 {
+		t.Fatalf("%d replaced boxes, want 1", len(charts))
+	}
+	c := charts[0]
+	if c.Role != "Figure" || c.Alt != "Sales chart" || c.Style.Width != css.Pts(300) || c.Style.Height != css.Pts(200) || c.Picture.Vector == nil {
+		t.Fatalf("chart role %q alt %q size %v x %v vector %v", c.Role, c.Alt, c.Style.Width, c.Style.Height, c.Picture.Vector != nil)
+	}
+	doc := convertBytes(t, docx(t, frame("rIdchart1"), map[string]string{"word/charts/chart1.xml": part}), office.Options{})
+	for _, want := range []string{"Quarterly", "North", "South"} {
+		if got := docText(doc); !strings.Contains(got, want) {
+			t.Errorf("text %q lacks %q", got, want)
+		}
+	}
+	missing := build(t, frame("rIdnone"), nil)
+	if n := find(missing.root, func(n *layout.Node) bool { return n.Kind == layout.Replaced }); len(n) != 0 {
+		t.Errorf("a missing chart part drew %d boxes", len(n))
+	}
+	if len(missing.d.warnings) == 0 {
+		t.Error("a missing chart part was not reported")
 	}
 }

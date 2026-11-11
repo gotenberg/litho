@@ -34,16 +34,17 @@ const nsDecl = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006
 // relTypes maps the extra parts a test package may hold to their
 // relationship types from the main part.
 var relTypes = map[string]string{
-	"word/styles.xml":       "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles",
-	"word/numbering.xml":    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering",
-	"word/settings.xml":     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings",
-	"word/footnotes.xml":    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes",
-	"word/endnotes.xml":     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes",
-	"word/theme/theme1.xml": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme",
-	"word/header1.xml":      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
-	"word/header2.xml":      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
-	"word/footer1.xml":      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer",
-	"word/media/a.png":      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+	"word/styles.xml":        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles",
+	"word/numbering.xml":     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering",
+	"word/settings.xml":      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings",
+	"word/footnotes.xml":     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes",
+	"word/endnotes.xml":      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes",
+	"word/theme/theme1.xml":  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme",
+	"word/header1.xml":       "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
+	"word/header2.xml":       "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
+	"word/footer1.xml":       "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer",
+	"word/media/a.png":       "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+	"word/charts/chart1.xml": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart",
 }
 
 // pkgFiles returns the files of a DOCX package with body as the content of

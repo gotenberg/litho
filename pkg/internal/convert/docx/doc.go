@@ -86,9 +86,10 @@
 // paragraph. Text boxes, preset rectangles, rounded rectangles, ellipses
 // and lines, and groups are drawn, in DrawingML and in VML: VML groups
 // with their coordinate spaces, text boxes, pictures, and shapes with
-// their fill, opacity and stroke. PNG, JPEG, GIF, BMP,
-// TIFF and SVG pictures decode; EMF, WMF, charts, SmartArt and embedded
-// objects without a fallback picture are left out with a warning.
+// their fill, opacity and stroke. Charts, Office 2016 charts included,
+// draw from their chart parts. PNG, JPEG, GIF, BMP, TIFF and SVG pictures
+// decode; EMF, WMF, SmartArt and embedded objects without a fallback
+// picture are left out with a warning.
 //
 // # Notes, links and revisions
 //
@@ -116,6 +117,6 @@
 // # Not supported
 //
 // Vertical text, columns of unequal widths, section vertical alignment,
-// charts and SmartArt, VML shapes of custom geometry, form fields beyond
+// SmartArt, VML shapes of custom geometry, form fields beyond
 // their text, and the binary .doc format.
 package docx

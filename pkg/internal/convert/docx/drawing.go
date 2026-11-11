@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -23,7 +24,64 @@ const (
 	uriGroup   = "http://schemas.microsoft.com/office/word/2010/wordprocessingGroup"
 	uriChart   = "http://schemas.openxmlformats.org/drawingml/2006/chart"
 	uriDiagram = "http://schemas.openxmlformats.org/drawingml/2006/diagram"
+	// uriChartEx is an Office 2016 chart (MS-ODRAWXML, 2.24 cx:chart).
+	uriChartEx = ooxml.NSChartEx
 )
+
+// chart builds the chart a graphic frame's c:chart or cx:chart element
+// names through its r:id (ECMA-376 Part 1, 21.2.2.27; MS-ODRAWXML, 2.24.3):
+// a Figure replaced box of w by h points that draws the chart part's
+// model, read by [ooxml.ParseChart], or [ooxml.ParseChartEx] when ex is
+// set. It returns nil with a warning when the part is missing or does not
+// parse, the frame then keeping its room empty.
+//
+// An Office 2016 chart sits in an mc:AlternateContent whose Choice
+// requires the cx1 or cx2 namespace; the converter takes the Choice, as
+// Word draws the chart and not the Fallback picture ([understood]).
+//
+// # Corpus evidence
+//
+//   - litho/docx charts-bar-column, charts-line-area,
+//     charts-scatter-bubble-radar, charts-stock-combo: Word draws each
+//     chart part; drawn, they pass, their layout from 0 to 0.76 to 0.87.
+//   - litho/docx charts-chartex: Word prints the titles, legends and axis
+//     labels of the Office 2016 charts and not their fallback pictures;
+//     the Choice raises text F1 from 0.11 to 0.50.
+func (d *document) chart(s *story, ref *ooxml.Element, st *css.Style, w, h float64, alt string, ex bool) *layout.Node {
+	id, _ := ref.AttrNS(ooxml.NSR, "id")
+	rel, ok := d.pkg.RelationshipByID(s.part, id)
+	if !ok || rel.External || !d.pkg.Has(rel.Target) {
+		d.warn("unsupported-content", "a chart whose part is missing is left out")
+		return nil
+	}
+	if w <= 0 || h <= 0 {
+		return nil
+	}
+	parse := ooxml.ParseChart
+	if ex {
+		parse = ooxml.ParseChartEx
+	}
+	c, err := parse(d.ctx, d.pkg, rel.Target)
+	if err != nil {
+		d.warn("chart-malformed", fmt.Sprintf("chart %s does not parse and is left out: %v", rel.Target, err))
+		return nil
+	}
+	for _, cw := range c.Warnings {
+		d.warn(cw.Code, cw.Message)
+	}
+	ps := inlineStyle(st)
+	ps.Display = css.Inline
+	ps.Width, ps.Height = css.Pts(w), css.Pts(h)
+	ps.VerticalAlign = css.VerticalAlign{}
+	ps.LineHeight = css.Dimension{Kind: css.Normal}
+	ps.MinLineHeight = 0
+	fonts := d.fonts
+	pic := &layout.Picture{Width: w, Height: h}
+	pic.Vector = func(ctx context.Context, r compose.Rect) []compose.Fragment {
+		return chart.Render(ctx, fonts, c, r)
+	}
+	return &layout.Node{Kind: layout.Replaced, Style: ps, Picture: pic, Role: "Figure", Alt: alt}
+}
 
 // drawing builds a w:drawing (17.3.3.9): each wp:inline as an inline box,
 // each wp:anchor placed by its wrapping (20.4.2.3).
@@ -75,7 +133,13 @@ func (d *document) graphic(s *story, data *ooxml.Element, st *css.Style, w, h fl
 			return d.group(s, g, st, w, h, depth)
 		}
 	case uriChart:
-		d.warn("unsupported-content", "a chart is left out: the document holds no picture of it")
+		if n := d.chart(s, data.Child(ooxml.NSChart, "chart"), st, w, h, alt, false); n != nil {
+			return n
+		}
+	case uriChartEx:
+		if n := d.chart(s, data.Child(ooxml.NSChartEx, "chart"), st, w, h, alt, true); n != nil {
+			return n
+		}
 	case uriDiagram:
 		d.warn("unsupported-content", "a SmartArt diagram is left out: the document holds no picture of it")
 	default:
