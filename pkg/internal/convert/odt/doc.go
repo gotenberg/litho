@@ -47,6 +47,10 @@
 //     them before printing.
 //   - The outline from the headings, the structure roles, and the
 //     document information of meta.xml.
+//   - Tracked changes (5.5) in the view office.Options.TrackedChanges
+//     asks for: the accepted text, the rejected text, or both with each
+//     insertion underlined and each deletion struck through in its
+//     author's colour; formatting changes keep their new formatting.
 //   - Encrypted packages (ODF 1.3, Part 2, 3.4), opened with the options'
 //     password: Blowfish, AES-CBC and AES-GCM entries, and LibreOffice's
 //     whole-package encryption. A missing or wrong password fails with
@@ -56,6 +60,8 @@
 //
 // WMF, EMF and SVM pictures, form controls' content, the tables of
 // drawing shapes, other custom shape geometries, ruby annotations, line
-// numbering, drop caps, tracked change marks and comments are not drawn,
-// each with a warning where the document holds one.
+// numbering, drop caps and comments are not drawn, each with a warning
+// where the document holds one; nor are the change bars, the shading of a
+// tracked table row and the marks of a formatting change LibreOffice
+// draws with the changes shown.
 package odt

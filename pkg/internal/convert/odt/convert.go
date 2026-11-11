@@ -30,10 +30,6 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
-	if opts.TrackedChanges != office.ChangesAccepted {
-		// Wave 11, cell word: remove with the feature.
-		return nil, fmt.Errorf("%w: tracked-changes views", office.ErrNotImplemented)
-	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -63,6 +59,11 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 		metricsCache: map[string][2]float64{}, warned: map[string]bool{}, pics: map[string]picResult{}, meta: map[*layout.Node]paraMeta{},
 		tabsRelative: configBool(pkg.Settings, "TabsRelativeToIndent", true),
 	}
+	marks, err := resolveChanges(ctx, body, opts.TrackedChanges, b.rowTracked, b.warn)
+	if err != nil {
+		return nil, err
+	}
+	b.changeMarks = marks
 	b.pages = newPageFlow(b, opts)
 	if lc := odf.Section(pkg.Styles, "styles").Child(odf.NSText, "linenumbering-configuration"); lc.A(odf.NSText, "number-lines") == "true" {
 		b.warn("line-numbering", "line numbers are not drawn")

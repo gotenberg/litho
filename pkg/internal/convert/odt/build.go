@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -64,6 +65,11 @@ type builder struct {
 	// tabsRelative is settings.xml's TabsRelativeToIndent: tab positions
 	// count from the paragraph's indent, Writer's default.
 	tabsRelative bool
+	// changeMarks is how the marked view draws each tracked change, by
+	// id, nil for the other views; openChanges are the ids of the
+	// changes open where the builder is, innermost last.
+	changeMarks map[string]changeMark
+	openChanges []string
 	// tocs are the tables of contents, regenerated once the layout
 	// placed the headings.
 	tocs []*toc
@@ -302,7 +308,12 @@ func (b *builder) block(c *odf.Element, ctx *blockCtx) []*layout.Node {
 		case "tracked-changes", "sequence-decls", "variable-decls", "user-field-decls",
 			"dde-connection-decls", "alphabetical-index-auto-mark-file", "soft-page-break":
 			return nil
-		case "change", "change-start", "change-end", "bookmark", "bookmark-start", "bookmark-end":
+		case "change-start", "change-end":
+			// A change of the marked view may open or close between
+			// paragraphs.
+			b.changeMark(c)
+			return nil
+		case "change", "bookmark", "bookmark-start", "bookmark-end":
 			// Change marks and bookmarks between paragraphs carry no text.
 			return nil
 		}
@@ -523,6 +534,19 @@ func (b *builder) run(s string, t textState) *layout.Node {
 	if t.relief != "" {
 		b.warn("text-relief", "embossed and engraved text is approximated by a grey shadow")
 	}
+	if n := len(b.openChanges); n > 0 {
+		// The innermost open change of the marked view draws the run in
+		// its author's colour, an insertion underlined and a deletion
+		// struck through, line and text alike.
+		m := b.changeMarks[b.openChanges[n-1]]
+		line := decoLine{on: true, style: css.DecorationSolid}
+		t.color = &m.color
+		if m.insert {
+			t.under = line
+		} else {
+			t.through = line
+		}
+	}
 	st := baseStyle()
 	applyText(st, t, true)
 	if t.auto != 0 {
@@ -601,9 +625,9 @@ func (b *builder) inlineElement(c *odf.Element, t textState, out *[]*layout.Node
 		case "bookmark-end", "reference-mark-end", "soft-page-break", "toc-mark", "toc-mark-start",
 			"toc-mark-end", "alphabetical-index-mark", "alphabetical-index-mark-start",
 			"alphabetical-index-mark-end", "user-index-mark", "user-index-mark-start",
-			"user-index-mark-end", "change-end", "change":
-		case "change-start":
-			b.changeStart(c)
+			"user-index-mark-end", "change":
+		case "change-start", "change-end":
+			b.changeMark(c)
 		case "page-number", "page-count":
 			b.pageField(c, t, out, ws)
 		case "hidden-text":
@@ -666,11 +690,19 @@ func (b *builder) link(c *odf.Element, t textState, out *[]*layout.Node, ws *wsS
 	*out = append(*out, n)
 }
 
-// changeStart notes a tracked change in the text: Writer prints the
-// document with its changes as recorded, the deletions out of the text
-// (they live in text:tracked-changes) and the insertions in it.
-func (b *builder) changeStart(*odf.Element) {
-	b.warn("tracked-changes", "tracked changes print as the accepted text, without change marks")
+// changeMark opens or closes, at a text:change-start or text:change-end
+// (ODF 1.3, Part 3, 5.5.7), the change of the marked view whose mark the
+// runs between are drawn with ([builder.run]); the other views have
+// rewritten the text already ([resolveChanges]).
+func (b *builder) changeMark(c *odf.Element) {
+	id := c.A(odf.NSText, "change-id")
+	if _, ok := b.changeMarks[id]; !ok {
+		return
+	}
+	b.openChanges = slices.DeleteFunc(b.openChanges, func(s string) bool { return s == id })
+	if c.Name.Local == "change-start" {
+		b.openChanges = append(b.openChanges, id)
+	}
 }
 
 // pageField appends a text:page-number or text:page-count (ODF 1.3, Part
