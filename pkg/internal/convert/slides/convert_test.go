@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -314,5 +316,48 @@ func TestConvert_TableSpans(t *testing.T) {
 	want := [][3]int{{2, 3, 2}, {1, 1, 0}, {3, 3, 0}}
 	if !slices.Equal(got, want) {
 		t.Errorf("rows (cells, columns, rowspan) %v, want %v", got, want)
+	}
+}
+
+// TestConvert_Describe checks what a reader hears of a slide's drawings: a
+// picture's Figure carries its description, a chart's its title when it
+// has no description, and a decorative picture is an artifact while its
+// link keeps its Link element.
+func TestConvert_Describe(t *testing.T) {
+	at := func(y float64) compose.Rect { return compose.Rect{X: 0, Y: y, Width: 100, Height: 50} }
+	pic := &Shape{Kind: KindPicture, Name: "Picture 3", Alt: "A red square", Box: at(0), Picture: tinyPicture(t)}
+	deco := &Shape{Kind: KindPicture, Name: "Line", Alt: "ignored", Decorative: true, Href: "https://example.com", Box: at(60), Picture: tinyPicture(t)}
+	pie := &chart.Chart{
+		Title:  &chart.Title{Text: "Sales\nby  region"},
+		Groups: []*chart.Group{{Kind: chart.Pie, Series: []*chart.Series{{Name: "S", Values: chart.Data{Values: []chart.Value{chart.Num(1), chart.Num(2)}, Cached: true}}}}},
+	}
+	ch := &Shape{Kind: KindChart, Name: "Chart 1", Box: at(120), Chart: pie}
+	out := convert(t, deck(&Slide{Shapes: []*Shape{pic, deco, ch}}), office.Options{})
+	var got []string
+	for _, k := range out.Structure.Kids[0].Kids {
+		got = append(got, k.Role+":"+k.Alt)
+	}
+	want := []string{"Figure:A red square", "Link:", "Figure:Sales by region"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("structure %q, want %q", got, want)
+	}
+	images := 0
+	var walk func([]compose.Fragment)
+	walk = func(frags []compose.Fragment) {
+		for _, f := range frags {
+			switch v := f.(type) {
+			case *compose.Image:
+				images++
+				if images == 2 && v.Parent != nil {
+					t.Errorf("decorative picture hangs from %q", v.Parent.Role)
+				}
+			case *compose.Group:
+				walk(v.Content)
+			}
+		}
+	}
+	walk(out.Pages[0].Content)
+	if images != 2 {
+		t.Errorf("%d pictures drawn, want 2", images)
 	}
 }

@@ -2,6 +2,7 @@ package slides
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -14,6 +15,9 @@ import (
 func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.StructElem) []compose.Fragment {
 	if s == nil || !finite(s.Box) {
 		return nil
+	}
+	if s.Decorative && parent != nil {
+		return b.decorative(s, m, depth, parent)
 	}
 	b.shapes++
 	if b.shapes > maxSlideShapes {
@@ -31,7 +35,7 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 			b.warn(CodePicture, "picture "+quote(s.Name)+" has nothing to draw")
 			return nil
 		}
-		fig := &compose.StructElem{Role: "Figure", Alt: s.Name}
+		fig := &compose.StructElem{Role: "Figure", Alt: s.Alt}
 		frags := b.picture(s.Picture, box)
 		for _, f := range frags {
 			if img, ok := f.(*compose.Image); ok {
@@ -52,7 +56,13 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 		if s.Chart == nil {
 			return nil
 		}
-		out = group(sm, chart.Render(b.ctx, b.fonts, s.Chart, box))
+		frags := chart.Render(b.ctx, b.fonts, s.Chart, box)
+		if len(frags) > 0 && parent != nil {
+			fig := &compose.StructElem{Role: "Figure", Alt: chartAlt(s)}
+			adopt(frags, fig)
+			parent.Kids = append(parent.Kids, fig)
+		}
+		out = group(sm, frags)
 	case KindTable:
 		out = group(sm, b.contentEffects(s, b.table(s, parent), m))
 	case KindGroup:
@@ -84,6 +94,64 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 	}
 	b.link(s, then(sm, m), box, parent)
 	return out
+}
+
+// decorative returns the fragments of s, a shape its source marks as
+// carrying no meaning, as artifacts (ISO 32000-1, 14.8.2.2.2; ISO 14289-1,
+// 7.1): drawn as any shape, with no structure element of its own. The Link
+// elements of its links still hang from parent, since every link
+// annotation needs one (ISO 14289-1, 7.18.1).
+func (b *builder) decorative(s *Shape, m compose.Matrix, depth int, parent *compose.StructElem) []compose.Fragment {
+	kept := *s
+	kept.Decorative = false
+	scratch := &compose.StructElem{}
+	out := b.shape(&kept, m, depth, scratch)
+	adopt(out, nil)
+	parent.Kids = append(parent.Kids, links(scratch, nil)...)
+	return out
+}
+
+// links appends to out the Link elements under e, depth first.
+func links(e *compose.StructElem, out []*compose.StructElem) []*compose.StructElem {
+	for _, k := range e.Kids {
+		if k == nil {
+			continue
+		}
+		if k.Role == "Link" {
+			k.Kids = nil
+			out = append(out, k)
+			continue
+		}
+		out = links(k, out)
+	}
+	return out
+}
+
+// adopt hangs every fragment of frags, inside groups too, from parent; a
+// nil parent makes them artifacts.
+func adopt(frags []compose.Fragment, parent *compose.StructElem) {
+	for _, fr := range frags {
+		switch v := fr.(type) {
+		case *compose.Text:
+			v.Parent = parent
+		case *compose.Image:
+			v.Parent = parent
+		case *compose.Path:
+			v.Parent = parent
+		case *compose.Group:
+			adopt(v.Content, parent)
+		}
+	}
+}
+
+// chartAlt returns what a chart's Figure says of it: the shape's
+// description, else the chart's title (ISO 14289-1, 7.3), "" when the
+// source gives neither.
+func chartAlt(s *Shape) string {
+	if s.Alt != "" || s.Chart == nil || s.Chart.Title == nil {
+		return s.Alt
+	}
+	return strings.Join(strings.Fields(s.Chart.Title.Text), " ")
 }
 
 // link records the link of s over box, mapped by m to the slide: its
