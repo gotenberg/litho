@@ -3,6 +3,7 @@ package slides
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -55,6 +56,11 @@ func TestConvert_Pages(t *testing.T) {
 				for i := range got {
 					if got[i] != tc.outline[i] || out.Outline[i].Dest.Page != i%per+1 {
 						t.Errorf("outline %d: %q to %d, want %q", i, got[i], out.Outline[i].Dest.Page, tc.outline[i])
+					}
+					// The entry names its slide's Sect as its structure
+					// destination (ISO 14289-2, 8.8).
+					if e := out.Outline[i].Dest.Elem; e == nil || e != out.Structure.Kids[i%per] {
+						t.Errorf("outline %d names %+v", i, e)
 					}
 				}
 			}
@@ -254,5 +260,30 @@ func testNotesMaster(t *testing.T, doc *Document, w, h float64) {
 	}
 	if n := find(t, pages[4], "NOTE"); !near(n.x, 61.2, 0.1) || !near(n.y, 365.6, 0.2) {
 		t.Errorf("note at %.2f, want 61.2", n.x)
+	}
+}
+
+// TestConvert_ShapeLinksAreTagged locks that a shape's hyperlink and its
+// jump to a slide hang from Link elements of the slide's Sect, the jump
+// naming the Sect of its target's page (ISO 14289-1, 7.18.1; ISO 14289-2,
+// 8.8).
+func TestConvert_ShapeLinksAreTagged(t *testing.T) {
+	web := box(10, 10, 300, 100, para("web", arial(20)))
+	web.Href = "https://example.com/"
+	jump := box(10, 200, 300, 100, para("jump", arial(20)))
+	jump.Jump = 2
+	doc := deck(&Slide{Shapes: []*Shape{web, jump}}, &Slide{Shapes: []*Shape{box(0, 0, 100, 100, para("two", arial(20)))}})
+	out := convert(t, doc, office.Options{})
+	links := out.Pages[0].Links
+	if len(links) != 2 {
+		t.Fatalf("%d links, want 2", len(links))
+	}
+	for _, l := range links {
+		if l.Parent == nil || l.Parent.Role != "Link" || !slices.Contains(out.Structure.Kids[0].Kids, l.Parent) {
+			t.Errorf("link %+v hangs from %+v", l, l.Parent)
+		}
+	}
+	if d := links[1].Dest; d == nil || d.Page != 2 || d.Elem != out.Structure.Kids[1] {
+		t.Errorf("jump %+v", d)
 	}
 }

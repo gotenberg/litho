@@ -237,10 +237,26 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		w, h := b.pageSize(b.slideSize())
 		out.Pages = []*compose.Page{{Width: w, Height: h}}
 	}
+	// Every page has its Sect, in page order: a destination inside the
+	// document names the Sect of its page as its structure destination
+	// (ISO 14289-2, 8.8).
+	sectOf := func(page int) *compose.StructElem {
+		if page < 1 || page > len(out.Structure.Kids) {
+			return nil
+		}
+		return out.Structure.Kids[page-1]
+	}
+	for _, pg := range out.Pages {
+		for i := range pg.Links {
+			if d := pg.Links[i].Dest; d != nil && d.Elem == nil {
+				d.Elem = sectOf(d.Page)
+			}
+		}
+	}
 	if !opts.OmitOutline {
 		titles := outlineTitles(doc.Slides)
 		for i, s := range shown {
-			out.Outline = append(out.Outline, compose.Outline{Title: titles[s], Dest: compose.Dest{Page: i + 1}})
+			out.Outline = append(out.Outline, compose.Outline{Title: titles[s], Dest: compose.Dest{Page: i + 1, Elem: sectOf(i + 1)}})
 		}
 		if opts.NotesPages {
 			// Impress writes the bookmarks again for the notes pages, each

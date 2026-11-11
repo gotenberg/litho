@@ -82,25 +82,37 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 		}
 		out = group(sm, frags)
 	}
-	b.link(s, then(sm, m), box)
+	b.link(s, then(sm, m), box, parent)
 	return out
 }
 
 // link records the link of s over box, mapped by m to the slide: its
 // hyperlink, else its jump to the page of the slide it names when that
-// slide prints.
-func (b *builder) link(s *Shape, m compose.Matrix, box compose.Rect) {
+// slide prints. The annotation hangs from a Link element of its own under
+// parent, as ISO 14289-1, 7.18.1 and ISO 32000-1, 14.8.4.4.2 ask of every
+// link annotation.
+func (b *builder) link(s *Shape, m compose.Matrix, box compose.Rect, parent *compose.StructElem) {
 	if box.Width <= 0 || box.Height <= 0 {
 		return
 	}
+	l := compose.Link{Rect: transformRect(m, box)}
 	switch {
 	case s.Href != "":
-		b.links = append(b.links, compose.Link{Rect: transformRect(m, box), URI: s.Href})
+		l.URI = s.Href
 	case s.Jump > 0 && s.Jump <= len(b.doc.Slides):
-		if pg, ok := b.pages[b.doc.Slides[s.Jump-1]]; ok {
-			b.links = append(b.links, compose.Link{Rect: transformRect(m, box), Dest: &compose.Dest{Page: pg}})
+		pg, ok := b.pages[b.doc.Slides[s.Jump-1]]
+		if !ok {
+			return
 		}
+		l.Dest = &compose.Dest{Page: pg}
+	default:
+		return
 	}
+	if parent != nil {
+		l.Parent = &compose.StructElem{Role: "Link"}
+		parent.Kids = append(parent.Kids, l.Parent)
+	}
+	b.links = append(b.links, l)
 }
 
 // geometry returns the fragments of the geometry shape s: its paths
@@ -144,6 +156,6 @@ func (b *builder) geometry(s *Shape, m compose.Matrix, parent *compose.StructEle
 		}
 		parent.Kids = append(parent.Kids, txt.structure...)
 	}
-	b.link(s, then(sm, m), box)
+	b.link(s, then(sm, m), box, parent)
 	return out
 }
