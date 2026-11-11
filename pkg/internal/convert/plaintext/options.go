@@ -5,6 +5,7 @@ import (
 	"math"
 	"slices"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
@@ -93,6 +94,10 @@ type Options struct {
 	// DefaultLang is the document language, a BCP 47 tag, "" to leave it
 	// unknown: a text file names none. The caller validates it.
 	DefaultLang string
+	// Sink, when set, takes each page as soon as it is full, and the
+	// document [Convert] returns holds no page: a page leaves memory once
+	// it is written. nil keeps every page in the document.
+	Sink compose.PageSink
 }
 
 // withDefaults returns o with every zero field set to its default, or an

@@ -20,7 +20,9 @@ import (
 func TestConvert_MemoryBudget(t *testing.T) {
 	t.Parallel()
 	dir := convertFontDir(t)
-	text := strings.Repeat("words and more words on a line of text\n", 4000)
+	// One source line is one paragraph, laid out whole: its glyphs are held
+	// at once, whatever the pages they fill.
+	text := strings.Repeat("words and more words on a line of text ", 1600)
 	var cells strings.Builder
 	for i := range 5000 {
 		fmt.Fprintf(&cells, "%d,w%d,%d,w%d\n", i, i, i*7, i*3)
@@ -67,6 +69,29 @@ func TestConvert_MemoryBudget(t *testing.T) {
 				t.Errorf("under the default budget: %v", err)
 			}
 		})
+	}
+}
+
+// TestConvert_PagesLeaveTheBudgetOnceWritten pins the streaming of pages
+// through the public API: a text whose pages together pass the budget
+// converts under it, each page's glyphs given back once the page is
+// written, with or without a page selection that holds every page until
+// the count is known.
+func TestConvert_PagesLeaveTheBudgetOnceWritten(t *testing.T) {
+	t.Parallel()
+	dir := convertFontDir(t)
+	// 4000 lines of 39 characters fill 77 pages and hold about 7 MiB of
+	// glyphs at once.
+	text := strings.Repeat("words and more words on a line of text\n", 4000)
+	low := []ConvertOption{WithConvertFontDirs(dir), WithConvertLimits(Limits{MaxConvertMemoryBytes: 2 << 20})}
+	var out bytes.Buffer
+	rep, err := Convert(context.Background(), strings.NewReader(text), FormatText, &out, low...)
+	if err != nil || rep.Pages != 77 {
+		t.Fatalf("under 2 MiB: %v, %+v, want 77 pages", err, rep)
+	}
+	_, err = Convert(context.Background(), strings.NewReader(text), FormatText, &out, append(low, WithPageRanges("last,1"))...)
+	if !errors.Is(err, ErrConvertInputTooLarge) {
+		t.Errorf("a selection that holds every page under 2 MiB: %v, want ErrConvertInputTooLarge", err)
 	}
 }
 

@@ -193,27 +193,27 @@ func (t convertTarget) profiles() string {
 	return string(t.pdfua)
 }
 
-// writeTarget writes doc to dst as the target's file and returns what the
-// target's profiles still find in it, nil for a target without a profile.
-// Nothing reaches dst before the whole file is built.
+// writeTarget finishes the file stream wrote the pages of with tail, the
+// document's end, writes it to dst as the target's file, and returns what
+// the target's profiles still find in it, nil for a target without a
+// profile. Nothing reaches dst before the whole file is built.
 //
-// A target without a profile is written straight to dst: [compose.Write]
-// builds the whole file before it writes a byte. A target with a profile is
-// written twice: the composition as a plain file of the target's version,
-// then that file through the remediation a [Writer] runs, which owns
-// conformance for every PDF litho writes. Both files go to temp files in
-// [WithConvertTempDir], so no whole file is held in memory twice, and the
-// conforming one is copied to dst once complete. Every temp file is removed
-// before writeTarget returns, on every path.
+// A target without a profile is written straight to dst: the stream
+// builds the whole file before it writes a byte. A target with a profile
+// is written twice: the composition as a plain file of the target's
+// version, then that file through the remediation a [Writer] runs, which
+// owns conformance for every PDF litho writes. Both files go to temp files
+// in [WithConvertTempDir], so no whole file is held in memory twice, and
+// the conforming one is copied to dst once complete. Every temp file is
+// removed before writeTarget returns, on every path.
 //
 // A residual is not an error: the file is written, claims the profile, and
 // the report lists what the profile still finds. ISO 19005-2, clause 5 and ISO
 // 14289-1, clause 5 judge a file, not the process that wrote it, so the caller
 // that asked for the profile decides what a residual means for its use.
-func writeTarget(ctx context.Context, doc *compose.Document, dst io.Writer, t convertTarget, o *convertOptions) (*RemediationReport, error) {
-	opts := compose.Options{Logger: o.logger, Version: t.version, TempDir: o.tempDir, Spool: o.spool}
+func writeTarget(ctx context.Context, stream *compose.Stream, tail *compose.Document, dst io.Writer, t convertTarget, o *convertOptions) (*RemediationReport, error) {
 	if !t.conforming() {
-		if err := compose.Write(ctx, doc, dst, opts); err != nil {
+		if err := stream.Close(ctx, tail, dst); err != nil {
 			return nil, fmt.Errorf("writing the PDF: %w", err)
 		}
 		return nil, nil
@@ -227,7 +227,7 @@ func writeTarget(ctx context.Context, doc *compose.Document, dst io.Writer, t co
 		return nil, fmt.Errorf("creating the intermediate file: %w", err)
 	}
 	defer closeAndRemoveTemp(logger, plain)
-	if err := compose.Write(ctx, doc, plain, opts); err != nil {
+	if err := stream.Close(ctx, tail, plain); err != nil {
 		return nil, fmt.Errorf("writing the PDF: %w", err)
 	}
 	size, err := plain.Seek(0, io.SeekCurrent)

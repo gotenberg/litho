@@ -749,6 +749,14 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	if !o.marginsSet {
 		o.marginTop, o.marginRight, o.marginBottom, o.marginLeft = plaintext.DefaultMargin, plaintext.DefaultMargin, plaintext.DefaultMargin, plaintext.DefaultMargin
 	}
+	// Every converter tags its output, so the stream marks content as it
+	// writes each page.
+	stream, err := compose.NewStream(ctx, compose.Options{Logger: o.logger, Version: target.version, TempDir: o.tempDir, Spool: o.spool}, true)
+	if err != nil {
+		return nil, fmt.Errorf("writing the PDF: %w", err)
+	}
+	defer stream.Abort()
+	selectPages(stream, format, &o)
 	var doc *compose.Document
 	switch format {
 	case FormatHTML, FormatMarkdown:
@@ -775,6 +783,7 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 			MaxInputBytes: budget.MaxConvertInputBytes,
 			MaxPages:      budget.MaxConvertPages,
 			DefaultLang:   o.defaultLang,
+			Sink:          stream,
 		})
 		switch {
 		case errors.Is(err, plaintext.ErrInvalidOptions):
@@ -791,16 +800,22 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	if err := mem.Err(); err != nil {
 		return nil, err
 	}
-	if err := selectPages(doc, format, &o); err != nil {
-		return nil, err
+	// A converter that does not hand its pages over as it makes them
+	// returns them: they go to the stream now.
+	for _, p := range doc.Pages {
+		if err := stream.Page(ctx, p); err != nil {
+			return nil, fmt.Errorf("writing the PDF: %w", err)
+		}
 	}
-	conformance, err := writeTarget(ctx, doc, dst, target, &o)
+	tail := *doc
+	tail.Pages = nil
+	conformance, err := writeTarget(ctx, stream, &tail, dst, target, &o)
 	if err != nil {
 		return nil, err
 	}
 
-	report := &ConvertReport{Pages: len(doc.Pages), Conformance: conformance, Warnings: ignoredOptions(format, &o)}
-	for _, w := range doc.Warnings {
+	report := &ConvertReport{Pages: stream.Pages(), Conformance: conformance, Warnings: ignoredOptions(format, &o)}
+	for _, w := range tail.Warnings {
 		report.Warnings = append(report.Warnings, ConvertWarning{Code: w.Code, Message: w.Message, Page: w.Page})
 	}
 	return report, nil
@@ -930,23 +945,25 @@ func convertOffice(ctx context.Context, src io.Reader, format Format, fonts *tex
 	}
 }
 
-// selectPages keeps the pages of doc that o's page range specification
-// names, resolved against the pages the document laid out on with
-// [ParsePageRanges], in the order it lists them; an empty specification
-// keeps every page, and so does a single page of an HTML source, which is
-// the one page written whatever the specification says. A specification
-// [ParsePageRanges] refuses fails with [ErrInvalidConvertOptions] wrapping
-// its error.
-func selectPages(doc *compose.Document, format Format, o *convertOptions) error {
+// selectPages makes stream write the pages that o's page range
+// specification names, resolved against the pages the document lays out
+// on with [ParsePageRanges], in the order it lists them; an empty
+// specification keeps every page, and so does a single page of an HTML
+// source, which is the one page written whatever the specification says.
+// A specification [ParsePageRanges] refuses fails the stream with
+// [ErrInvalidConvertOptions] wrapping its error.
+func selectPages(stream *compose.Stream, format Format, o *convertOptions) {
 	if o.pageRanges == "" || o.singlePage && (format == FormatHTML || format == FormatMarkdown) {
-		return nil
+		return
 	}
-	pages, err := ParsePageRanges(o.pageRanges, len(doc.Pages))
-	if err != nil {
-		return fmt.Errorf("selecting pages: %w: %w", ErrInvalidConvertOptions, err)
-	}
-	compose.SelectPages(doc, pages)
-	return nil
+	spec := o.pageRanges
+	stream.Select(func(count int) ([]int, error) {
+		pages, err := ParsePageRanges(spec, count)
+		if err != nil {
+			return nil, fmt.Errorf("selecting pages: %w: %w", ErrInvalidConvertOptions, err)
+		}
+		return pages, nil
+	})
 }
 
 // maxConvertFontIndexes bounds the font indexes [convertFonts] keeps, one per

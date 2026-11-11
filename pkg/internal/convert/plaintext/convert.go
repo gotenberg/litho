@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -52,6 +53,12 @@ var bom = []byte{0xEF, 0xBB, 0xBF}
 // The document always has at least one page, blank for an empty source. Its
 // output depends on the bytes of src, opts and the faces fonts indexed alone.
 // See the package documentation for the layout rules.
+//
+// With [Options.Sink], each page goes to the sink once the next one starts
+// or the source ends, its glyphs given back to the conversion's memory
+// budget, and the document returned holds no page: its warnings name the
+// pages in the order they were handed over. An error the sink returns ends
+// the conversion with it.
 func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options) (*compose.Document, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -85,14 +92,18 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 		bottom:     o.PageHeight - o.MarginBottom,
 		root:       &compose.StructElem{Role: "Document"},
 		seen:       make(map[rune]bool),
+		mem:        limits.BudgetFrom(ctx),
 	}
 	if err := l.run(ctx, data); err != nil {
 		return nil, err
 	}
-	if len(l.doc.Pages) == 0 {
-		if err := l.newPage(); err != nil {
+	if l.pages == 0 {
+		if err := l.newPage(ctx); err != nil {
 			return nil, err
 		}
+	}
+	if err := l.handOver(ctx); err != nil {
+		return nil, err
 	}
 	l.doc.Structure = l.root
 	l.doc.Metadata.Lang = o.DefaultLang
@@ -122,8 +133,14 @@ type layouter struct {
 	// width is the line width, bottom the lowest a line's descent may reach.
 	width, bottom float64
 
-	doc  compose.Document
-	page *compose.Page
+	doc compose.Document
+	// page is the page being filled, nil before the first and once handed
+	// over; pages counts the pages begun.
+	page  *compose.Page
+	pages int
+	// mem is the conversion's budget, which the glyphs of a page handed
+	// over are given back to.
+	mem *limits.Budget
 	// next is the baseline of the next line on page, and onPage the lines
 	// already placed on it.
 	next   float64
@@ -165,7 +182,7 @@ func (l *layouter) run(ctx context.Context, data []byte) error {
 	}
 	endLine := func() error {
 		if buf.Len() == 0 && !formFed {
-			if err := l.place(nil); err != nil {
+			if err := l.place(ctx, nil); err != nil {
 				return err
 			}
 		}
@@ -216,7 +233,7 @@ func (l *layouter) run(ctx context.Context, data []byte) error {
 			l.doc.Warnings = append(l.doc.Warnings, compose.Warning{
 				Code:    CodeLineSplit,
 				Message: fmt.Sprintf("a source line longer than %d characters was laid out in pieces, each starting a new line", maxParagraphRunes),
-				Page:    len(l.doc.Pages),
+				Page:    l.pages,
 			})
 		}
 	}
@@ -236,21 +253,21 @@ func (l *layouter) paragraph(ctx context.Context, s string) error {
 	if len(lines) == 0 {
 		// A piece of characters Layout drops, such as control characters,
 		// draws nothing and takes a line as an empty line does.
-		if err := l.place(nil); err != nil {
+		if err := l.place(ctx, nil); err != nil {
 			return err
 		}
 	}
 	first := 0
 	for i := range lines {
-		if err := l.place(lines[i].Runs); err != nil {
+		if err := l.place(ctx, lines[i].Runs); err != nil {
 			return err
 		}
 		if i == 0 {
-			first = len(l.doc.Pages)
+			first = l.pages
 		}
 	}
 	if first == 0 {
-		first = len(l.doc.Pages)
+		first = l.pages
 	}
 	l.reportMissing(rep.MissingGlyphs, first)
 	if len(rep.MissingEmoji) > 0 && !l.emojiWarned {
@@ -266,20 +283,20 @@ func (l *layouter) paragraph(ctx context.Context, s string) error {
 
 // place puts one line of runs, nil for a blank line, at the next baseline,
 // starting a page when the line does not fit or a form feed asks for one.
-func (l *layouter) place(runs []*compose.Text) error {
+func (l *layouter) place(ctx context.Context, runs []*compose.Text) error {
 	if l.page == nil && l.breaks > 0 {
 		// The source starts with a form feed: the first page stays blank.
-		if err := l.newPage(); err != nil {
+		if err := l.newPage(ctx); err != nil {
 			return err
 		}
 	}
 	for ; l.breaks > 0; l.breaks-- {
-		if err := l.newPage(); err != nil {
+		if err := l.newPage(ctx); err != nil {
 			return err
 		}
 	}
 	if l.page == nil || (l.onPage > 0 && l.next+l.descent > l.bottom) {
-		if err := l.newPage(); err != nil {
+		if err := l.newPage(ctx); err != nil {
 			return err
 		}
 	}
@@ -297,15 +314,38 @@ func (l *layouter) place(runs []*compose.Text) error {
 	return nil
 }
 
-// newPage appends a blank page and moves to its first baseline.
-func (l *layouter) newPage() error {
-	if len(l.doc.Pages) >= l.opts.MaxPages {
+// newPage hands the page being filled over, starts a blank page and moves
+// to its first baseline.
+func (l *layouter) newPage(ctx context.Context) error {
+	if l.pages >= l.opts.MaxPages {
 		return fmt.Errorf("%w: the text needs more than %d pages", ErrTooManyPages, l.opts.MaxPages)
 	}
+	if err := l.handOver(ctx); err != nil {
+		return err
+	}
 	l.page = &compose.Page{Width: l.opts.PageWidth, Height: l.opts.PageHeight}
-	l.doc.Pages = append(l.doc.Pages, l.page)
+	l.pages++
+	if l.opts.Sink == nil {
+		l.doc.Pages = append(l.doc.Pages, l.page)
+	}
 	l.next = l.opts.MarginTop + l.ascent
 	l.onPage = 0
+	return nil
+}
+
+// handOver gives the page being filled to [Options.Sink], when there is
+// one, and gives its glyphs back to the budget: the sink keeps none of
+// them.
+func (l *layouter) handOver(ctx context.Context) error {
+	if l.opts.Sink == nil || l.page == nil {
+		return nil
+	}
+	p := l.page
+	l.page = nil
+	if err := l.opts.Sink.Page(ctx, p); err != nil {
+		return fmt.Errorf("writing page %d: %w", l.pages, err)
+	}
+	l.mem.Release(compose.CountGlyphs(p) * limits.GlyphCost)
 	return nil
 }
 
