@@ -2,6 +2,7 @@ package ooxml
 
 import (
 	"math"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 )
@@ -25,8 +26,36 @@ type PictureRef struct {
 	// Width and Height are the size of the shape's transform in points, 0
 	// when absent.
 	Width, Height float64
-	// Name and Descr are the picture's non-visual name and description.
+	// Name and Descr are the picture's non-visual name and description,
+	// its title when it has no description ([Describe]).
 	Name, Descr string
+	// Decorative marks a picture its author flagged as decorative.
+	Decorative bool
+}
+
+// NSADec is the namespace of the decorative flag Office writes in the
+// extension list of a drawing's non-visual properties (MS-ODRAWXML,
+// adec:decorative).
+const NSADec = "http://schemas.microsoft.com/office/drawing/2017/decorative"
+
+// Describe reads what a drawing's non-visual properties nv (ECMA-376 Part
+// 1, 20.1.2.2.8 cNvPr; 20.4.2.5 wp:docPr) say for a reader who cannot see
+// it: its descr, else its title, and whether its author marked it
+// decorative, an adec:decorative extension whose val is not false. A nil
+// nv says nothing.
+func Describe(nv *Element) (alt string, decorative bool) {
+	if nv == nil {
+		return "", false
+	}
+	alt = strings.TrimSpace(attrOr(nv, "descr"))
+	if alt == "" {
+		alt = strings.TrimSpace(attrOr(nv, "title"))
+	}
+	if dec := nv.Find(NSADec, "decorative"); dec != nil {
+		v := attrOr(dec, "val")
+		decorative = v != "0" && v != "false"
+	}
+	return alt, decorative
 }
 
 // ParsePicture reads a pic:pic element, or any element with a blip fill
@@ -34,7 +63,8 @@ type PictureRef struct {
 func ParsePicture(e *Element) PictureRef {
 	var r PictureRef
 	if nv := e.Find(NSPic, "cNvPr"); nv != nil {
-		r.Name, r.Descr = attrOr(nv, "name"), attrOr(nv, "descr")
+		r.Name = attrOr(nv, "name")
+		r.Descr, r.Decorative = Describe(nv)
 	}
 	fill := e.Find(NSPic, "blipFill")
 	if fill == nil {
