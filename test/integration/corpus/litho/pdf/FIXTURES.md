@@ -263,7 +263,7 @@ What each fixture plants, the rules each must and must not fire, and the diverge
 | `noteicons_2b.pdf`     | PDF/A-2b     | Text annotations with no `/AP`, one for each predefined icon     |
 | `structsplit_ua1.pdf`  | PDF/UA-1     | Structure elements whose marked content a redaction cuts         |
 | `annotstraddle_2b.pdf` | PDF/A-2b     | An annotation across the regions; a removed one's pop-up, reply  |
-| `symbolenc_2b.pdf`     | PDF/A-2b     | Symbolic TrueType fonts that state a base encoding               |
+| `fartext_1b.pdf`       | PDF/A-1b     | Content placed past the real limit; clamps that would move it    |
 
 ### Must-not-fire controls
 
@@ -619,6 +619,7 @@ measured on veraPDF 1.30.2 lists them without it.
 | `extschema_2b.pdf`     | 12   | 9    | 11   | 8    | 9    | 12   | 9    | 10   | 6   | 6    | 7    | 8    | 9    |
 | `exttypes_2b.pdf`      | 10   | 7    | 9    | 6    | 7    | 10   | 7    | 8    | 5   | 5    | 6    | 5    | 7    |
 | `extvalue_2b.pdf`      | 7    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 5   | 5    | 6    | 5    | 7    |
+| `fartext_1b.pdf`       | 5    | 3    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 6    | 7    |
 | `fenote_ua2.pdf`       | 4    | 3    | 5    | 4    | 4    | 5    | 4    | 4    | 3   | 3    | 4    | 5    | 6    |
 | `fieldkids_2b.pdf`     | 6    | 3    | 5    | 2    | 3    | 6    | 3    | 4    | 5   | 5    | 6    | 8    | 7    |
 | `filestruct_1b.pdf`    | 15   | 13   | 12   | 10   | 10   | 12   | 10   | 10   | 13  | 13   | 14   | 10   | 9    |
@@ -1966,6 +1967,36 @@ catalog's, so both tools report all four.
 this fixture shows no glyphs, only image XObjects. `6f22ce2` made a text item a
 precondition of the rule, as under `docinfo_1b.pdf` above, so neither tool
 reports it here.
+
+## Content placed past the real limit
+
+A producer that lays a long flow out once and shows each page's slice of it
+under a translation writes numbers past the PDF/A-1 real limit of 32767: a
+translation of -40000 brings back text whose matrix places it 40100 points
+down. Clamping such a number to 32767 moves what it places. `fartext_1b.pdf`
+plants it with controls:
+
+| Page | Construct                                                          | A remediation preserving content |
+| ---- | ------------------------------------------------------------------ | -------------------------------- |
+| 1    | text under the matrix `1 0 0 1 20 40100.5`, behind an integer cm   | leaves it, `6.1.12/2` residual   |
+| 2    | text under the integer matrix `1 0 0 1 20 40100`, behind a real cm | splits the cm, draws as written  |
+| 3    | a curve whose control point lies at x = 40000.5                    | leaves it, `6.1.12/2` residual   |
+| 4    | a grey level and a marked-content property of 99999.5              | clamps both                      |
+| 5    | ten lines of text inside the limits                                | nothing to do                    |
+
+Page 5 makes the four characters page 1 shows weigh under a tenth of the
+document's text, so a clamp that loses them passes the integrity probe, which
+weighs the text of the whole document. Before the content-limits repair told
+the numbers that place something from the ones that place nothing, the PDF/A-1b
+remediation clamped all four numbers, passed litho and veraPDF 1.30.4, and lost
+page 1's text: the clamped matrix put it 7000 points below the page. Preserving
+content, it now leaves the matrix and the control point, keeps every page's
+text, and reports the two reals as residuals, which veraPDF 1.30.4 fails as
+`6.1.12/2` with two checks. The aggressive remediation clamps them, as
+`WithAggressiveFixes` states.
+
+At every profile litho and veraPDF 1.30.4 report the same rule set on the
+source. Part 2 and later admit the reals, so only part 1 reports `6.1.12/2`.
 
 ## Known divergences
 
