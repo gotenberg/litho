@@ -5,11 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"slices"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -348,46 +346,9 @@ func (d *document) textBox(s *story, content *ooxml.Element, w, h float64, ss oo
 	if len(kids) > 0 {
 		n.Role = "Figure"
 		if n.Alt = alt; alt == "" {
-			n.Alt = shownText(kids)
+			n.Alt = office.ShownText(kids)
 		}
 	}
 	return n
 }
 
-// maxAltText caps the characters of the text a text box's alt repeats.
-// Anti-DoS guard, not spec-mandated: a text box shows a few paragraphs,
-// and a reader is told the first few thousand characters of a longer
-// one.
-const maxAltText = 4096
-
-// shownText returns the text of nodes, a space between blocks, at most
-// [maxAltText] bytes cut at a character.
-func shownText(nodes []*layout.Node) string {
-	var sb strings.Builder
-	stack := slices.Clone(nodes)
-	slices.Reverse(stack)
-	for len(stack) > 0 && sb.Len() < maxAltText {
-		n := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		switch {
-		case n == nil:
-		case n.Kind == layout.Text:
-			sb.WriteString(n.Text)
-		case n.Kind == layout.LineBreak:
-			sb.WriteByte(' ')
-		default:
-			if n.Style != nil && n.Style.Display != css.Inline && sb.Len() > 0 {
-				sb.WriteByte(' ')
-			}
-			for i := len(n.Children) - 1; i >= 0; i-- {
-				stack = append(stack, n.Children[i])
-			}
-		}
-	}
-	out := strings.Join(strings.Fields(sb.String()), " ")
-	for len(out) > maxAltText {
-		_, size := utf8.DecodeLastRuneInString(out)
-		out = out[:len(out)-size]
-	}
-	return out
-}
