@@ -203,9 +203,13 @@ func FromHTML(src io.Reader, opts ...HTMLOption) *Conversion {
 // FromMarkdown returns the conversion of src, a Markdown document in UTF-8.
 //
 // The Markdown is rendered to HTML by github.com/gomarkdown/markdown with
-// its common extensions (tables, fenced code, autolinks, strikethrough,
-// definition lists, heading identifiers, among others) and placed in the
-// template of [WithMarkdownTemplate]. That document is laid out as
+// its common extensions: tables, fenced code blocks, autolinks,
+// strikethrough, definition lists, heading identifiers written {#id},
+// backslash line breaks, and math between dollar signs printed as its TeX
+// source; and with smart punctuation: curly quotes, en and em dashes,
+// fractions. Footnotes, automatic heading identifiers, superscripts and
+// subscripts are not supported. The HTML is placed in the template of
+// [WithMarkdownTemplate]. That document is laid out as
 // [FromHTML] lays one out, with every option of an HTML source: its
 // relative images and links resolve in [WithResources] or against
 // [WithBaseURL]. The raw HTML a Markdown document holds is kept,

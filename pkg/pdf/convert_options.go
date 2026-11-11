@@ -661,10 +661,16 @@ const DefaultMarkdownTemplate = `<!doctype html><html><head><meta charset="utf-8
 // the page rules of the output. Without it the template is
 // [DefaultMarkdownTemplate].
 //
-// A template that does not parse, or that never calls toHTML, fails the
-// conversion with [ErrInvalidConvertOptions]: the source would not be
-// printed. A template that renders past [Limits.MaxConvertInputBytes]'s
-// ceiling fails with [ErrConvertInputTooLarge].
+// A template that does not parse, or in which no toHTML call can be
+// reached, fails the conversion with [ErrInvalidConvertOptions]: the source
+// would not be printed. The template sees the function toHTML and the field
+// .Title alone: a builtin function, another field, a range, a template that
+// calls itself or one that is not defined, or one that expands past 2^20
+// nodes fails the same way, as does an error while executing it. Each
+// toHTML call inserts the same HTML, so a second call prints the source
+// twice. A template longer than 1 MiB is refused, and one that renders past
+// [Limits.MaxConvertInputBytes]'s ceiling fails with
+// [ErrConvertInputTooLarge].
 func WithMarkdownTemplate(tmpl string) MarkdownOption {
 	return markdownOption(func(c *convertConfig) { c.markdownTemplate, c.markdownTemplateSet = tmpl, true })
 }
