@@ -78,9 +78,13 @@ func (b *builder) warnOnce(code, msg string) {
 //
 // # Pages
 //
-// Every sheet that is not hidden prints, in book order: each of its print
-// areas, else its used range (the cells with a value, a fill or a border,
-// and its drawings), cut into pages as Calc cuts it. Hidden rows and
+// The sheets [Printed] selects print, in book order: every sheet that is
+// not hidden without a selection. A sheet that does not print still feeds
+// the formulas, charts and pivot tables of the sheets that do; a link to
+// it is dropped, and the page counts of the headers and footers count the
+// pages that print. A sheet prints each of its print areas, else its used
+// range (the cells with a value, a fill or a border, and its drawings),
+// cut into pages as Calc cuts it. Hidden rows and
 // columns take no room. Columns fill a page's width less its margins at
 // the print scale, rows its height, the repeated rows and columns taking
 // their room from every page after the first; manual breaks start a page
@@ -143,14 +147,12 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	}
 	var plans []*sheetPlan
 	var pages []*pagePlan
-	anyVisible := false
-	for _, sh := range doc.Sheets {
-		anyVisible = anyVisible || (sh != nil && !sh.Hidden)
+	printed, err := printedSheets(doc, opts)
+	if err != nil {
+		return nil, err
 	}
 	for i, sh := range doc.Sheets {
-		// A book whose sheets are all hidden shows its first one, as
-		// Calc does.
-		if sh == nil || (sh.Hidden && (anyVisible || len(plans) > 0)) {
+		if !printed[i] {
 			continue
 		}
 		if err := ctx.Err(); err != nil {

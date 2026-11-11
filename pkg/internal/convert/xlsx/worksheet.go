@@ -58,7 +58,7 @@ const rowHeightScale = 0.968
 
 // worksheet reads the worksheet part name into sh, the index-th sheet of
 // the book (ECMA-376 Part 1, 18.3.1.99 worksheet).
-func (r *reader) worksheet(name string, sh *sheet.Sheet, index int) error {
+func (r *reader) worksheet(name string, sh *sheet.Sheet, index int, printed bool) error {
 	root, err := r.pkg.ParseXML(r.ctx, name, understood)
 	if err != nil {
 		if isMalformed(err) {
@@ -68,7 +68,7 @@ func (r *reader) worksheet(name string, sh *sheet.Sheet, index int) error {
 		}
 		return err
 	}
-	ws := &sheetReader{r: r, part: name, sh: sh, index: index}
+	ws := &sheetReader{r: r, part: name, sh: sh, index: index, printed: printed}
 	return ws.read(root)
 }
 
@@ -84,6 +84,9 @@ type sheetReader struct {
 	rowAt map[int]int
 	// index is the sheet's index in the book.
 	index int
+	// printed marks a sheet that prints; one that does not is read
+	// without its drawings and conditional formats.
+	printed bool
 }
 
 // maxCachedFormulas caps the formulas with a cached result a workbook
@@ -128,17 +131,19 @@ func (w *sheetReader) read(root *ooxml.Element) error {
 	}
 	sh.Page.RowBreaks = breaks(root.Child(nsMain, "rowBreaks"), maxRows)
 	sh.Page.ColumnBreaks = breaks(root.Child(nsMain, "colBreaks"), maxColumns)
-	if d := root.Child(nsMain, "drawing"); d != nil {
+	if d := root.Child(nsMain, "drawing"); d != nil && w.printed {
 		id, _ := d.AttrNS(ooxml.NSR, "id")
 		if err := w.drawing(id); err != nil {
 			return err
 		}
 	}
-	w.conditionalFormats(root)
+	if w.printed {
+		w.conditionalFormats(root)
+	}
 	if err := w.pivotTables(); err != nil {
 		return err
 	}
-	if root.Child(nsMain, "picture") != nil {
+	if root.Child(nsMain, "picture") != nil && w.printed {
 		r.warn("unsupported-content", "a sheet background picture is left out")
 	}
 	return nil
@@ -348,8 +353,9 @@ func dedupCells(cells []sheet.Cell) []sheet.Cell {
 // recalculate a workbook it loads unless [reader.recalculates]; one
 // without (18.3.1.40 f, no v) keeps its text for the builder to compute
 // (an empty v is none, as budget.xlsx saves its totals), a shared
-// formula's other cells excepted. It reports false for a cell without a value, a formula or a
-// style.
+// formula's other cells excepted. That is office.RecalculateAsNeeded;
+// [reader.recalculation] may keep every formula or none. It reports false
+// for a cell without a value, a formula or a style.
 func (w *sheetReader) cell(c *ooxml.Element, col int, row *sheet.Row) (sheet.Cell, bool) {
 	r := w.r
 	cell := sheet.Cell{Column: col}
@@ -410,9 +416,13 @@ func (w *sheetReader) cell(c *ooxml.Element, col int, row *sheet.Row) (sheet.Cel
 	if cell.Value.Kind == sheet.Text && cell.Value.Text == "" && len(cell.Runs) == 0 {
 		cell.Value = sheet.Value{}
 	}
-	if f := c.Child(nsMain, "f"); f != nil && len(f.Text) <= maxFormulaRunes {
+	if f := c.Child(nsMain, "f"); f != nil && len(f.Text) <= maxFormulaRunes && r.recalculation != office.RecalculateNever {
+		// Under office.RecalculateNever no formula is kept: the cell shows
+		// the result the file caches, nothing without one. Under
+		// office.RecalculateAlways every formula is kept for the builder
+		// to compute, a cached result or not.
 		cell.Formula = strings.TrimSpace(f.Text)
-		if v != nil && strings.TrimSpace(v.Text) != "" {
+		if v != nil && strings.TrimSpace(v.Text) != "" && r.recalculation == office.RecalculateAsNeeded {
 			// A cached result shows unless the workbook is recalculated
 			// ([reader.keepCachedResults]).
 			if t := attr(c, "t"); (t == "" || t == "n") && cell.Value.Kind == sheet.Number && cell.Value.Number != 0 {

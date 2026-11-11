@@ -19,7 +19,10 @@ type definedName struct {
 
 // workbook reads the workbook part root of main: its properties, its
 // defined names and its sheets in book order (ECMA-376 Part 1, 18.2.27).
-func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document) error {
+// A sheet the selection of opts leaves out ([sheet.Printed]) is read
+// without its drawings and conditional formats, which only print: its
+// cells, merges, tables and pivot tables still feed the sheets that print.
+func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document, opts office.Options) error {
 	r.doc = doc
 	if pr := root.Child(nsMain, "workbookPr"); pr != nil {
 		r.date1904 = boolAttr(pr, "date1904")
@@ -38,6 +41,10 @@ func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document)
 			continue
 		}
 		names = append(names, definedName{name: strings.ToLower(n), local: intAttr(d, "localSheetId", -1), formula: d.Text})
+	}
+	printed, err := printedSheets(root.Child(nsMain, "sheets"), opts)
+	if err != nil {
+		return err
 	}
 	for _, s := range root.Child(nsMain, "sheets").Kids() {
 		if !s.Is(nsMain, "sheet") {
@@ -59,9 +66,12 @@ func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document)
 			r.warn("malformed-part", fmt.Sprintf("sheet %q has no part: it prints empty", sh.Name))
 			r.defaultSetup(sh)
 		case rel.Type == relWorksheet:
-			if err := r.worksheet(rel.Target, sh, index); err != nil {
+			if err := r.worksheet(rel.Target, sh, index, printed[index]); err != nil {
 				return err
 			}
+		case rel.Type == relChartsheet && !printed[index]:
+			// A chartsheet holds nothing a printed sheet reads.
+			r.defaultSetup(sh)
 		case rel.Type == relChartsheet:
 			if err := r.chartsheet(rel.Target, sh); err != nil {
 				return err
@@ -120,4 +130,24 @@ func (r *reader) applyNames(names []definedName, index int, sh *sheet.Sheet) {
 			}
 		}
 	}
+}
+
+// printedSheets returns which of the sheet elements of sheets print under
+// opts ([sheet.Printed]), by their names and states (ECMA-376 Part 1,
+// 18.2.19: state hidden or veryHidden), past maxSheets none.
+func printedSheets(sheets *ooxml.Element, opts office.Options) ([]bool, error) {
+	var names []string
+	var hidden []bool
+	for _, s := range sheets.Kids() {
+		if !s.Is(nsMain, "sheet") {
+			continue
+		}
+		if len(names) >= maxSheets {
+			break
+		}
+		names = append(names, attr(s, "name"))
+		state := attr(s, "state")
+		hidden = append(hidden, state == "hidden" || state == "veryHidden")
+	}
+	return sheet.Printed(names, hidden, opts)
 }

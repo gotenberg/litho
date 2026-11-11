@@ -2,8 +2,9 @@
 // is the model the XLSX, ODS and CSV converters fill ([Document], a book of
 // [Sheet] values whose cells carry a value, a number format and a style,
 // each sheet with its page setup, headers and footers, merges and
-// drawings) and the builder that paginates it: every sheet that is not
-// hidden, in book order, its print ranges cut into pages by the sheet's
+// drawings) and the builder that paginates it: the sheets the options
+// select, every sheet that is not hidden without a selection, in book
+// order, each one's print ranges cut into pages by the sheet's
 // paper, margins, scale or fit-to-pages, page order, repeated rows and
 // columns and manual breaks, the cells formatted by their number formats
 // and drawn with their fonts, fills, borders, alignment, wrapping and

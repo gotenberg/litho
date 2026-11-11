@@ -85,6 +85,10 @@ type reader struct {
 	rows     int
 	merges   int
 	drawings int
+	// keepFormulas keeps the formulas of the cells for the builder to
+	// compute; off, under office.RecalculateNever, a cell shows the value
+	// the file stores.
+	keepFormulas bool
 
 	warned   map[string]bool
 	warnings []compose.Warning
@@ -96,7 +100,7 @@ type reader struct {
 func newReader(ctx context.Context, pkg *odf.Package, fonts *text.Fonts) *reader {
 	return &reader{
 		ctx: ctx, pkg: pkg, fonts: fonts, styles: odf.NewStyles(pkg), data: odf.NewDataStyles(pkg),
-		cellSty: map[string]*sheet.Style{}, condSty: map[string]*sheet.Style{}, pages: map[string]pageResult{}, pics: map[string]*picResult{},
+		keepFormulas: true, cellSty: map[string]*sheet.Style{}, condSty: map[string]*sheet.Style{}, pages: map[string]pageResult{}, pics: map[string]*picResult{},
 		warned: map[string]bool{}, paperW: letterWidth, paperH: letterHeight,
 	}
 }

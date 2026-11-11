@@ -68,6 +68,8 @@ type reader struct {
 	// column, whose formula caches a result.
 	calculated     bool
 	cachedFormulas map[[3]int]bool
+	// recalculation is the options' recalculation mode.
+	recalculation office.Recalculation
 	// digitWidth is the widest digit of the Normal font and spaceWidth its
 	// space, in points, in whole printer pixels as Excel measures them;
 	// screenDigit is the digit in screen pixels ([reader.measureNormalFont]).
@@ -126,7 +128,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", office.ErrMalformed, err)
 	}
-	r := &reader{ctx: ctx, pkg: pkg, fonts: fonts, warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, caches: map[string]*pivotCache{}}
+	r := &reader{ctx: ctx, pkg: pkg, fonts: fonts, recalculation: opts.Recalculation, warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, caches: map[string]*pivotCache{}}
 	r.paperW, r.paperH = opts.DefaultPage(paperSizes[1].points())
 	root, err := pkg.ParseXML(ctx, main, understood)
 	if err != nil {
@@ -157,7 +159,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 		subject = cp.Description
 	}
 	doc.Meta = compose.Metadata{Title: cp.Title, Author: cp.Creator, Subject: subject, Keywords: cp.Keywords, Lang: cp.Language}
-	if err := r.workbook(main, root, doc); err != nil {
+	if err := r.workbook(main, root, doc, opts); err != nil {
 		return nil, nil, err
 	}
 	r.keepCachedResults(doc)
@@ -202,7 +204,8 @@ func (r *reader) recalculates() bool {
 
 // keepCachedResults clears the formula of every cell of doc whose
 // formula caches a result, unless LibreOffice recalculates the workbook
-// ([reader.recalculates]): such a cell shows its cached result.
+// ([reader.recalculates]): such a cell shows its cached result. Under
+// office.RecalculateAlways no formula is listed, and none cleared.
 func (r *reader) keepCachedResults(doc *sheet.Document) {
 	if len(r.cachedFormulas) == 0 || r.recalculates() {
 		return

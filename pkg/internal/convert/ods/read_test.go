@@ -405,6 +405,19 @@ func TestRead_Formulas(t *testing.T) {
 	if c := cellAt(sh, 0, 0); c.Value.Number != 5 {
 		t.Errorf("the stored value %+v", c.Value)
 	}
+	// Never keeps no formula: A1 shows its stored 5, B1, which stores
+	// nothing, is not listed.
+	doc, _, err := Read(context.Background(), flat{body: table("S", row)}.bytes(), nil, office.Options{Recalculation: office.RecalculateNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sh = doc.Sheets[0]
+	if c := cellAt(sh, 0, 0); c == nil || c.Formula != "" || c.Value.Number != 5 {
+		t.Errorf("never: A1 %+v", c)
+	}
+	if c := cellAt(sh, 0, 1); c != nil {
+		t.Errorf("never: B1 %+v, want nothing", c)
+	}
 }
 
 func TestRead_DataStyleLocale(t *testing.T) {

@@ -47,14 +47,15 @@ func (r *reader) cell(el *odf.Element) (sheet.Cell, bool) {
 	}
 	// Calc recalculates an OpenDocument spreadsheet as it loads it,
 	// whatever program wrote it: every formula is kept for the builder
-	// to compute (ODF 1.3 Part 3, 19.643 table:formula).
+	// to compute (ODF 1.3 Part 3, 19.643 table:formula), under
+	// office.RecalculateAsNeeded and office.RecalculateAlways alike.
 	//
 	// # Corpus evidence
 	//
 	//   - LibreOffice 26.8.2.2: a cell =[.A1]+2 saved with the result 5
 	//     prints 4, A1 holding 2, whether LibreOffice, Gnumeric or no
 	//     program is named as the file's generator.
-	if f := el.A(odf.NSTable, "formula"); f != "" && len(f) <= maxFormulaLen {
+	if f := el.A(odf.NSTable, "formula"); f != "" && len(f) <= maxFormulaLen && r.keepFormulas {
 		c.Formula = f
 	}
 	return c, c.Value.Kind != sheet.Empty || visible(c.Style) || c.Formula != ""

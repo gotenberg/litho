@@ -278,10 +278,12 @@ type Cell struct {
 	// file, as the file writes it (ECMA-376 Part 1, 18.3.1.40 f, of a cell
 	// saved without its result, or of every cell of a workbook Calc
 	// recalculates whole; ODF 1.3 Part 3, 19.643 table:formula, of every
-	// cell, Calc recalculating an OpenDocument spreadsheet whole):
-	// the builder computes the arithmetic, the comparisons and SUM,
-	// AVERAGE, MIN, MAX and COUNT over the cells and ranges of the book,
-	// and keeps Value for what it does not compute.
+	// cell, Calc recalculating an OpenDocument spreadsheet whole), the
+	// office.RecalculateAsNeeded rule; the reader keeps every formula
+	// under office.RecalculateAlways and none under
+	// office.RecalculateNever. The builder computes the arithmetic, the
+	// comparisons and SUM, AVERAGE, MIN, MAX and COUNT over the cells and
+	// ranges of the book, and keeps Value for what it does not compute.
 	Formula string
 }
 

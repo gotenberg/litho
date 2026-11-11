@@ -25,10 +25,6 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
-	if opts.Sheets != nil || opts.SheetNumbers != nil || opts.HiddenSheets || opts.Recalculation != office.RecalculateAsNeeded {
-		// Wave 11, cell sheets: remove with the feature.
-		return nil, fmt.Errorf("%w: sheet selection and recalculation modes", office.ErrNotImplemented)
-	}
 	if fonts == nil {
 		return nil, fmt.Errorf("%w: no font index", office.ErrInvalidOptions)
 	}
@@ -59,7 +55,8 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 // read. fonts, which may be nil, parses the text of SVG pictures;
 // opts.Password opens an encrypted package, and the default page of opts
 // (office.Options.DefaultPage) is the paper of a page style that names
-// none, Letter without one. It fails as [Convert] does.
+// none, Letter without one; under office.RecalculateNever no cell keeps
+// its formula. It fails as [Convert] does.
 func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Options) (*sheet.Document, []compose.Warning, error) {
 	pkg, err := odf.Open(ctx, data, odf.Options{Password: opts.Password})
 	if err != nil {
@@ -76,6 +73,7 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 	}
 	r := newReader(ctx, pkg, fonts)
 	r.paperW, r.paperH = opts.DefaultPage(letterWidth, letterHeight)
+	r.keepFormulas = opts.Recalculation != office.RecalculateNever
 	doc := r.document(body)
 	if r.err != nil {
 		return nil, nil, r.err

@@ -420,6 +420,9 @@ func (p *fparser) name() (fval, bool) {
 		}
 		name := strings.ReplaceAll(p.src[p.pos+1:p.pos+1+end], "''", "'")
 		p.pos += end + 3
+		if external(name) {
+			return fval{}, false
+		}
 		if sheet = p.e.sheetIndex(name); sheet < 0 {
 			return fval{v: Value{Kind: Error, Text: errRef}}, true
 		}
@@ -456,6 +459,15 @@ func (p *fparser) name() (fval, bool) {
 	}
 	p.pos = idStart
 	return p.a1Ref(sheet)
+}
+
+// external reports a quoted sheet name that names another workbook's
+// sheet ("[1]Sheet1", "C:\dir\[book.xlsx]Sheet1"): the formula grammar
+// brackets the workbook of an external reference (ECMA-376 Part 1,
+// 18.17.2, book-prefix). Such a formula keeps its stored result: a
+// computation reads nothing outside the file.
+func external(name string) bool {
+	return strings.ContainsAny(name, "[]")
 }
 
 // sheetIndex returns the index of the sheet named name, -1 for none.
@@ -542,6 +554,12 @@ func (p *fparser) odfRef() (fval, bool) {
 		sheet = p.sheet
 		dot := strings.LastIndexByte(s, '.')
 		if dot < 0 {
+			return 0, 0, 0, false
+		}
+		if strings.Contains(s[:dot], "'#") {
+			// Another document's sheet (ODF 1.3 Part 4, 5.8: an IRI in
+			// quotes, '#', then the sheet), which the formula keeps
+			// its stored result for.
 			return 0, 0, 0, false
 		}
 		if name := strings.TrimPrefix(s[:dot], "$"); name != "" {
