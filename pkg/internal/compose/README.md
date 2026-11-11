@@ -186,10 +186,11 @@ Wave 4 depends on wave 0 alone, so the Office converters run beside waves
 1 to 3 once the model is frozen.
 
 Status: waves 0 to 6 are done, then waves 7 and 8, two fidelity rounds
-over every corpus, and wave 9, the output targets.
+over every corpus, wave 9, the output targets, and wave 10, the memory
+of a conversion and the Microsoft references.
 `test/integration/baseline.json` records the oracle scores per fixture;
 the whole matrix, the converter cells and the `targets` cell included,
-scores a tree in about forty-five minutes on ten cores (`make corpus`).
+scores a tree in about fifty minutes on ten cores (`make corpus`).
 Wave 1 also took positioning, transforms, gradients, box-shadow, outlines
 and generated content from wave 3, and wave 2 took flexbox, because the
 reftests, the real pages and Chromium's header template lean on them. Wave
@@ -336,10 +337,37 @@ within one budget, `Limits.MaxConvertMemoryBytes`, charged where memory
 is taken and released where it is given back, so a source too large for
 it is refused early rather than after minutes of work.
 
-Three costs remain for the next wave, each measured: every page's
-glyphs live until the file is written (40 bytes a glyph), every box holds
-a full computed style (3,480 bytes), and a package part is read whole
-before it is parsed.
+Wave 10 took the three memory costs wave 9 measured and left. A text,
+spreadsheet or presentation conversion writes each page as it is laid out,
+through `compose.Stream`, and keeps of a page only what the end of the
+file needs: its size, its links, the glyphs each font draws, its structure
+elements. A package part is parsed as it inflates, never read whole. The
+compressed bytes of pictures wait in a temp file past 8 MiB. Boxes that
+compute the same style share one (`layout.ShareStyles`), and no code
+writes a style after the share. One cost remains: the HTML and text
+document routes lay the whole document out before the first page is
+written, so their peak is the layout's. A 4 MiB HTML source peaks near
+1.25 GiB resident, and a 16 MiB one is refused. Releasing paragraphs as
+they paint is a change to the layout engine, not to the backend.
+
+The wave also turned the OOXML converters to Microsoft Office, the
+reference of the DOCX, XLSX and PPTX corpora. A workbook read from XLSX
+prints by Excel's rules (`sheet.Document.ExcelRules`): column widths from
+the character grid at 600 dpi, Excel's row heights, cell insets and grid
+line, its 1900 date system and number formats, pivot tables from their
+saved cells. A deck read from PPTX prints by PowerPoint's: an outline
+entry per slide with its number and title, sections above them, Office's
+pattern tiles, and shrunk text at the scale the file saved. A DOCX gained
+its charts, page background, text boxes, gutters and the outline titles
+Word writes. The OpenDocument formats and CSV keep LibreOffice as their
+reference.
+
+A paper matrix judges the paper rule. `corpus build` generates, from five
+base documents, one document per format on each of eight papers in both
+orientations, and the paper options over three of them, 224 fixtures in
+all. Each is compared with its reference engine printing the same paper:
+Chromium for HTML and Markdown, LibreOffice for ODT, ODS and ODP,
+Microsoft Office for DOCX, XLSX and PPTX.
 
 The differential oracle compares page count, PDF.js text with reading
 order, link sets, outline, tag tree and a layout-tolerant score over
