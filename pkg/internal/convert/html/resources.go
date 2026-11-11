@@ -164,6 +164,11 @@ func (r *resources) fetch(ctx context.Context, u string) ([]byte, error) {
 		r.read = maxTotalResourceBytes
 		return nil, errBudget
 	}
+	// A resource's bytes are held as long as what is built from them: a
+	// JPEG is written as it is, a stylesheet's rules live with the cascade.
+	if err := limits.BudgetFrom(ctx).ChargeUnits(int64(len(data)), 1, "resources"); err != nil {
+		return nil, err
+	}
 	r.read += int64(len(data))
 	return data, nil
 }
