@@ -85,12 +85,14 @@ type convertOptions struct {
 	marginsSet                           bool
 	families                             []string
 	fontSize                             float64
+	fontSizeSet                          bool
 	limits                               Limits
 	media                                string
 	resources                            fs.FS
 	landscape                            bool
 	preferCSSPageSize                    bool
 	scale                                float64
+	scaleSet                             bool
 	singlePage                           bool
 	hiddenSlides                         bool
 	notesPages                           bool
@@ -143,16 +145,32 @@ func WithConvertFontDirs(dirs ...string) ConvertOption {
 	}
 }
 
-// WithPaperSize sets the page size in points, width then height. The default
-// is A4, 595.276 by 841.890 points. Each side must be finite, positive and at
-// most 14,400 points (ISO 32000-1, Annex C.2), or [Convert] fails with
-// [ErrInvalidConvertOptions]. Both zero keep the default. A [FormatDOCX] or
-// [FormatODT] source has a page size of its own, per section, and a
-// spreadsheet source one per sheet, which applies unless this option
-// names another: then every section or sheet is laid out on this paper. A
-// presentation's pages are its slide size unless this option names
-// another: then each slide is scaled down to fit the paper, never up, and
-// centred on it.
+// WithPaperSize sets the size of every page in points, width then height,
+// in every format: the paper replaces the size and the orientation the
+// source names, and [WithLandscape] then turns it. Each side must be
+// finite, positive and at most 14,400 points (ISO 32000-1, Annex C.2), or
+// [Convert] fails with [ErrInvalidConvertOptions], whatever the format.
+// Both zero is the same as no paper.
+//
+// Without it, the source's own size applies: an @page size of a
+// [FormatHTML] or [FormatMarkdown] source, each section of a
+// [FormatDOCX] or [FormatODT] source, each sheet of a spreadsheet, the
+// slide size of a presentation. A source that names none takes
+// [WithDefaultPaperSize], A4 without it.
+//
+//   - [FormatHTML] and [FormatMarkdown]: the paper is the page unless
+//     [WithPreferCSSPageSize] lets an @page size win, as browsers print.
+//     A page whose @page size differs is laid out at that size and drawn
+//     scaled down to fit the paper, centred, the paper turned to the
+//     page's orientation.
+//   - [FormatDOCX], [FormatODT] and the spreadsheets: every section or
+//     sheet is laid out on the paper, portrait or landscape as the paper
+//     is, as LibreOffice applies a paper. A sheet fitted to a page count
+//     is fitted to the new paper.
+//   - [FormatPPTX] and [FormatODP]: each slide, and each notes page, is
+//     scaled down to fit the paper, never up, and centred on it.
+//   - With [WithSinglePage], a sheet takes its content's size and the
+//     paper is reported as ignored.
 func WithPaperSize(width, height float64) ConvertOption {
 	return func(o *convertOptions) {
 		o.width, o.height = width, height
@@ -163,7 +181,12 @@ func WithPaperSize(width, height float64) ConvertOption {
 // WithMargins sets the page margins in points, zero for none. Without it
 // every side is 56.693 points, 2 cm. A margin must be finite and zero or
 // more, and the margins must leave room on the page, or [Convert] fails
-// with [ErrInvalidConvertOptions].
+// with [ErrInvalidConvertOptions], whatever the format.
+//
+// [FormatText], [FormatHTML] and [FormatMarkdown] apply them, an @page
+// margin winning on its side. The Office formats keep the margins their
+// documents carry: there, margins other than the default are reported
+// with [CodeOptionIgnored].
 func WithMargins(top, right, bottom, left float64) ConvertOption {
 	return func(o *convertOptions) {
 		o.marginTop, o.marginRight, o.marginBottom, o.marginLeft = top, right, bottom, left
@@ -172,13 +195,13 @@ func WithMargins(top, right, bottom, left float64) ConvertOption {
 }
 
 // WithFontFamilies sets the font families a [FormatText] source is drawn
-// in, in preference order,
-// matched without regard to case or spaces. The generic families serif,
-// sans-serif, monospace, cursive, fantasy and system-ui expand to common
-// families of their kind. The default is Liberation Serif, the family a word
-// processor opens a text file in, then serif. A character the chosen face
-// lacks is drawn from another face that covers it. A [FormatHTML] source
-// takes its fonts from its stylesheets and ignores this option.
+// in, in preference order, matched without regard to case or spaces. The
+// generic families serif, sans-serif, monospace, cursive, fantasy and
+// system-ui expand to common families of their kind. The default is
+// Liberation Serif, the family a word processor opens a text file in, then
+// serif. A character the chosen face lacks is drawn from another face that
+// covers it. Every other format takes its fonts from the document: there,
+// a family list is reported with [CodeOptionIgnored].
 func WithFontFamilies(families ...string) ConvertOption {
 	return func(o *convertOptions) {
 		o.families = slices.Clone(families)
@@ -187,18 +210,20 @@ func WithFontFamilies(families ...string) ConvertOption {
 
 // WithFontSize sets the font size in points of a [FormatText] source, 12
 // by default. It must be finite, positive and at most 1000, or [Convert]
-// fails with [ErrInvalidConvertOptions]. Lines sit 1.15 times the size
-// apart. A [FormatHTML] source takes its sizes from its stylesheets and
-// ignores this option.
+// fails with [ErrInvalidConvertOptions], whatever the format. Lines sit
+// 1.15 times the size apart. Every other format takes its sizes from the
+// document: there, the option is reported with [CodeOptionIgnored].
 func WithFontSize(size float64) ConvertOption {
 	return func(o *convertOptions) {
-		o.fontSize = size
+		o.fontSize, o.fontSizeSet = size, true
 	}
 }
 
-// WithMediaType sets the media type the stylesheets of a [FormatHTML]
-// source are evaluated for: "print", the default, or "screen". Any other
-// value is refused with [ErrInvalidConvertOptions].
+// WithMediaType sets the media type the stylesheets of a [FormatHTML] or
+// [FormatMarkdown] source are evaluated for: "print", the default, or
+// "screen". Any other value is refused with [ErrInvalidConvertOptions],
+// whatever the format; "screen" is reported with [CodeOptionIgnored] for
+// the other formats.
 func WithMediaType(media string) ConvertOption {
 	return func(o *convertOptions) { o.media = media }
 }
@@ -213,57 +238,73 @@ func WithMediaType(media string) ConvertOption {
 // A conversion reads at most 32 MiB a file and 256 MiB of files in all,
 // decodes at most 4096 distinct images of at most 67 million pixels each
 // and 268 million in all; a resource past a cap is left out with a
-// warning.
+// warning. A [FormatMarkdown] source reads its images alike; the other
+// formats report resources with [CodeOptionIgnored].
 func WithResources(fsys fs.FS) ConvertOption {
 	return func(o *convertOptions) { o.resources = fsys }
 }
 
-// WithLandscape swaps the paper's width and height of a [FormatHTML]
-// source, so the page is as wide as the paper is tall: [WithPaperSize]
-// names the portrait sheet. It lays every section of a [FormatDOCX] or
-// [FormatODT] source, and every sheet of a spreadsheet source, out in
-// landscape: a portrait section's width and height are swapped, a
-// landscape one is kept. It turns a portrait page of a presentation
-// source alike.
+// WithLandscape turns every portrait page to landscape, its long side
+// across, in every format, whatever named its size: the paper of
+// [WithPaperSize], the size the source names or the default paper. A
+// landscape page is kept.
+//
+//   - [FormatHTML] and [FormatMarkdown]: the paper turns before the @page
+//     rules see it, as a browser's landscape setting turns its paper. An
+//     @page size that applies (with [WithPreferCSSPageSize], or without
+//     [WithPaperSize]) wins over it, as in Chromium; an @page orientation
+//     alone turns the page again.
+//   - [FormatDOCX] and [FormatODT]: every section; spreadsheets: every
+//     sheet; presentations: every slide page and notes page.
+//   - With [WithSinglePage], a sheet takes its content's size and the
+//     option is reported with [CodeOptionIgnored].
 func WithLandscape(landscape bool) ConvertOption {
 	return func(o *convertOptions) { o.landscape = landscape }
 }
 
 // WithPreferCSSPageSize lets an @page size descriptor of a [FormatHTML]
-// source set the page size and orientation (CSS Page 3, 5.1). Without it,
-// the default, the paper is the page: a document whose @page size differs
-// is laid out at its @page size and scaled down to fit the paper, centred
-// on it, never scaled up. @page margins apply either way.
+// or [FormatMarkdown] source set the page size and orientation over
+// [WithPaperSize] (CSS Page 3, 5.1), as Chromium's preferCSSPageSize
+// does. Without it, the default, the caller's paper is the page: a
+// document whose @page size differs is laid out at its @page size and
+// scaled down to fit the paper, centred on it, never scaled up. Without
+// [WithPaperSize] the @page size is the page either way. @page margins
+// apply either way. The other formats report true with
+// [CodeOptionIgnored].
 func WithPreferCSSPageSize(prefer bool) ConvertOption {
 	return func(o *convertOptions) { o.preferCSSPageSize = prefer }
 }
 
-// WithPrintScale scales the content of a [FormatHTML] source: 1, the
-// default, draws it as laid out; a scale in [0.1, 2] lays the content out
-// in the page area divided by it and draws it at that scale, the page
-// keeping its size and margins. Any other value is refused with
-// [ErrInvalidConvertOptions].
+// WithPrintScale scales the content of a [FormatHTML] or [FormatMarkdown]
+// source: 1, the default, draws it as laid out; a scale in [0.1, 2] lays
+// the content out in the page area divided by it and draws it at that
+// scale, the page keeping its size and margins. Any other value, 0
+// included, is refused with [ErrInvalidConvertOptions], whatever the
+// format. The other formats report a scale other than 1 with
+// [CodeOptionIgnored]: a spreadsheet's print scale is its page setup's.
 func WithPrintScale(scale float64) ConvertOption {
-	return func(o *convertOptions) { o.scale = scale }
+	return func(o *convertOptions) { o.scale, o.scaleSet = scale, true }
 }
 
-// WithSinglePage writes a [FormatHTML] source on one page sized to its
-// content: the document is measured first as a screen 800 CSS pixels wide
-// would show it, in one continuous column, forced breaks ignored, at
-// least 437.12 CSS pixels tall and 800 wide, and the paper becomes that
-// tall plus the top and bottom margins, and with [WithLandscape] that
-// wide plus the left and right margins. The document is printed on it as
-// usual and only the first page is written; [WithPageRanges] is ignored.
-// For a [FormatXLSX], [FormatODS] or [FormatCSV] source it lays each sheet
-// out on one page the size of its content: the sheet's paper, scale and
-// page breaks are ignored, and [WithPaperSize] and [WithLandscape] too.
+// WithSinglePage writes a [FormatHTML] or [FormatMarkdown] source on one
+// page sized to its content: the document is measured first as a screen
+// 800 CSS pixels wide would show it, in one continuous column, forced
+// breaks ignored, at least 437.12 CSS pixels tall and 800 wide, and the
+// paper becomes that tall plus the top and bottom margins, and with
+// [WithLandscape] that wide plus the left and right margins. The document
+// is printed on it as usual and only the first page is written;
+// [WithPageRanges] is reported as ignored. For a [FormatXLSX], [FormatODS]
+// or [FormatCSV] source it lays each sheet out on one page the size of its
+// content: the sheet's paper, scale and page breaks are ignored, and
+// [WithPaperSize] and [WithLandscape] are reported as ignored. The other
+// formats report it with [CodeOptionIgnored].
 func WithSinglePage(single bool) ConvertOption {
 	return func(o *convertOptions) { o.singlePage = single }
 }
 
-// WithPageRanges selects the pages written, by the page range
-// specification [ParsePageRanges] reads ("1-3,7", "even", "odd", "last"),
-// resolved against the pages the document lays out on; empty, the
+// WithPageRanges selects the pages written, in every format, by the page
+// range specification [ParsePageRanges] reads ("1-3,7", "even", "odd",
+// "last"), resolved against the pages the document lays out on; empty, the
 // default, writes every page. The pages come out in the order the
 // specification lists them, a page listed twice written twice, as [Split]
 // honours a specification. A specification [ParsePageRanges] refuses,
@@ -277,36 +318,42 @@ func WithPageRanges(spec string) ConvertOption {
 }
 
 // WithPrintBackground sets whether the canvas background of a [FormatHTML]
-// source prints. true, the default, prints every background; false drops
-// the background colours and images of the html and body elements, which
-// paint the canvas, and keeps every other element's, so the page is white
-// behind content whose own colours stay exact.
+// or [FormatMarkdown] source prints. true, the default, prints every
+// background; false drops the background colours and images of the html
+// and body elements, which paint the canvas, and keeps every other
+// element's, so the page is white behind content whose own colours stay
+// exact. The other formats report false with [CodeOptionIgnored].
 func WithPrintBackground(print bool) ConvertOption {
 	return func(o *convertOptions) { o.omitBackgrounds = !print }
 }
 
-// WithShrinkToFit sets whether a [FormatHTML] source wider than its page
-// area is shrunk to fit it. true, the default, lays it out at its content's
-// width, at most 1.5 times the area's, and draws it scaled down to the
-// area, as browsers print a wide document; false lays it out at the
-// area's width and lets the page clip what overflows.
+// WithShrinkToFit sets whether a [FormatHTML] or [FormatMarkdown] source
+// wider than its page area is shrunk to fit it. true, the default, lays it
+// out at its content's width, at most 1.5 times the area's, and draws it
+// scaled down to the area, as browsers print a wide document; false lays
+// it out at the area's width and lets the page clip what overflows. The
+// other formats report false with [CodeOptionIgnored].
 func WithShrinkToFit(shrink bool) ConvertOption {
 	return func(o *convertOptions) { o.noShrinkToFit = !shrink }
 }
 
-// WithFractionalFontMetrics sets whether the lines of a [FormatHTML]
-// source use the fonts' fractional ascent, descent and line gap. false,
-// the default, rounds them to whole CSS pixels first, as browsers do for
-// document text, so lines of line-height: normal sit where a browser puts
-// them; true keeps the fractions, as print formatters do.
+// WithFractionalFontMetrics sets whether the lines of a [FormatHTML] or
+// [FormatMarkdown] source use the fonts' fractional ascent, descent and
+// line gap. false, the default, rounds them to whole CSS pixels first, as
+// browsers do for document text, so lines of line-height: normal sit where
+// a browser puts them; true keeps the fractions, as print formatters do.
+// The other formats report true with [CodeOptionIgnored].
 func WithFractionalFontMetrics(fractional bool) ConvertOption {
 	return func(o *convertOptions) { o.fractionalFontMetrics = fractional }
 }
 
-// WithOutline sets whether the headings of a [FormatHTML] source, the
-// paragraphs of a [FormatDOCX] or [FormatODT] source whose style has an
-// outline level, the sheets of a spreadsheet source, or the slides of a
-// presentation source, become the document outline. true is the default.
+// WithOutline sets whether the headings of a [FormatHTML] or
+// [FormatMarkdown] source, the paragraphs of a [FormatDOCX] or [FormatODT]
+// source whose style has an outline level, the sheets of a [FormatXLSX],
+// [FormatODS] or [FormatCSV] source, or the slides of a [FormatPPTX] or
+// [FormatODP] source, become the document outline. true is the default. A
+// [FormatText] source has no outline and reports false with
+// [CodeOptionIgnored].
 func WithOutline(outline bool) ConvertOption {
 	return func(o *convertOptions) { o.omitOutline = !outline }
 }
@@ -314,7 +361,9 @@ func WithOutline(outline bool) ConvertOption {
 // WithConvertPassword opens an encrypted [FormatDOCX], [FormatODT],
 // [FormatXLSX], [FormatODS], [FormatPPTX] or [FormatODP] source with
 // password. Without it, or with a wrong one, an encrypted source fails
-// with [ErrConvertEncrypted]. Other formats ignore it.
+// with [ErrConvertEncrypted]. [FormatText], [FormatHTML], [FormatMarkdown]
+// and [FormatCSV] are never encrypted and report a password with
+// [CodeOptionIgnored].
 func WithConvertPassword(password string) ConvertOption {
 	return func(o *convertOptions) { o.password = password }
 }
@@ -322,77 +371,90 @@ func WithConvertPassword(password string) ConvertOption {
 // WithHiddenSlides sets whether the slides a [FormatPPTX] or [FormatODP]
 // source hides from its show are written. false, the default, leaves
 // them out, as a show is printed; true writes every slide. Slide numbers
-// count the slides written. Other formats ignore it.
+// count the slides written. The other formats report true with
+// [CodeOptionIgnored].
 func WithHiddenSlides(include bool) ConvertOption {
 	return func(o *convertOptions) { o.hiddenSlides = include }
 }
 
 // WithNotesPages writes, after the slides of a [FormatPPTX] or
 // [FormatODP] source, one notes page per slide written: the slide drawn
-// at the top of the notes page size and the slide's notes below it.
-// false, the default, writes the slides alone. Other formats ignore it.
+// in its box and the slide's notes below it. A PPTX notes page is the
+// notes size the presentation names; an ODP notes page prints on Letter,
+// the notes page at its top-left corner, as Impress prints them. With
+// [WithPaperSize] the notes page is scaled down to fit the paper and
+// centred. false, the default, writes the slides alone. The other formats
+// report true with [CodeOptionIgnored].
 func WithNotesPages(notes bool) ConvertOption {
 	return func(o *convertOptions) { o.notesPages = notes }
 }
 
 // WithHeaderTemplate draws the HTML fragment html in the top margin of
-// every page of a [FormatHTML] source: the fragment is the inner HTML of
-// a box as wide as the page and as tall as the margin, laid out with the
-// stylesheet and defaults of a browser's print header, where the text of
-// an element of class date, title, url, pageNumber or totalPages is
-// replaced by the print date ([WithPrintDate]), the document title, the
-// document URL ([WithBaseURL]), the page number and the page count, and
-// an element of class text that reaches into the page area is hidden.
-// Empty, the default, draws nothing.
+// every page of a [FormatHTML] or [FormatMarkdown] source: the fragment is
+// the inner HTML of a box as wide as the page and as tall as the margin,
+// laid out with the stylesheet and defaults of a browser's print header,
+// where the text of an element of class date, title, url, pageNumber or
+// totalPages is replaced by the print date ([WithPrintDate]), the
+// document title, the document URL ([WithBaseURL]), the page number and
+// the page count, and an element of class text that reaches into the page
+// area is hidden. Empty, the default, draws nothing. The other formats
+// report a template with [CodeOptionIgnored].
 func WithHeaderTemplate(html string) ConvertOption {
 	return func(o *convertOptions) { o.headerTemplate = html }
 }
 
 // WithFooterTemplate draws the HTML fragment html in the bottom margin of
-// every page of a [FormatHTML] source, as [WithHeaderTemplate] does in the
-// top one.
+// every page of a [FormatHTML] or [FormatMarkdown] source, as
+// [WithHeaderTemplate] does in the top one. The other formats report a
+// template with [CodeOptionIgnored].
 func WithFooterTemplate(html string) ConvertOption {
 	return func(o *convertOptions) { o.footerTemplate = html }
 }
 
 // WithPrintDate sets what the date class of the header and footer
-// templates of a [FormatHTML] source shows, formatted for the en-US
-// locale as "11/6/26, 10:30 AM", and what the date and time fields of a
-// spreadsheet source's headers and footers show, as "11/06/2026" and
-// "10:30:00", and what the date and time fields of a presentation's
-// slides show in place of the text their file saved. The zero time, the
+// templates of a [FormatHTML] or [FormatMarkdown] source shows, formatted
+// for the en-US locale as "11/6/26, 10:30 AM", what the date and time
+// fields of the headers and footers of a [FormatXLSX], [FormatODS] or
+// [FormatCSV] source show, as "11/06/2026" and "10:30:00", and what the
+// date and time fields of the slides of a [FormatPPTX] or [FormatODP]
+// source show in place of the text their file saved. The zero time, the
 // default, shows nothing in a spreadsheet and the saved text in a
 // presentation. It is the only date of a conversion: the output never
-// depends on the clock.
+// depends on the clock. A [FormatDOCX] or [FormatODT] source shows the
+// field results its file stores, and a [FormatText] source has no date:
+// both report a date with [CodeOptionIgnored].
 func WithPrintDate(t time.Time) ConvertOption {
 	return func(o *convertOptions) { o.date = t }
 }
 
-// WithBaseURL sets the URL of a [FormatHTML] source: what the url class
-// of the header and footer templates shows, and, for an http or https
-// URL, what relative references resolve against, fetched through
-// [WithHTTPClient]. Empty, the default, resolves relative references in
-// [WithResources]. A URL that is not absolute is refused with
-// [ErrInvalidConvertOptions].
+// WithBaseURL sets the URL of a [FormatHTML] or [FormatMarkdown] source:
+// what the url class of the header and footer templates shows, and, for an
+// http or https URL, what relative references resolve against, fetched
+// through [WithHTTPClient]. Empty, the default, resolves relative
+// references in [WithResources]. A URL that is not absolute is refused
+// with [ErrInvalidConvertOptions], whatever the format. The other formats
+// report a URL with [CodeOptionIgnored].
 func WithBaseURL(u string) ConvertOption {
 	return func(o *convertOptions) { o.baseURL = u }
 }
 
-// WithHTTPClient fetches the http and https resources a [FormatHTML]
-// source names, stylesheets, images and fonts, through c, each read up to
-// the caps of [WithResources]. The caller's client decides what the
-// document may reach: its transport, its timeouts and its redirects.
-// nil, the default, leaves every such reference out with a warning.
+// WithHTTPClient fetches the http and https resources a [FormatHTML] or
+// [FormatMarkdown] source names, stylesheets, images and fonts, through c,
+// each read up to the caps of [WithResources]. The caller's client decides
+// what the document may reach: its transport, its timeouts and its
+// redirects. nil, the default, leaves every such reference out with a
+// warning. The other formats report a client with [CodeOptionIgnored].
 func WithHTTPClient(c *http.Client) ConvertOption {
 	return func(o *convertOptions) { o.httpClient = c }
 }
 
 // WithMediaFeatures sets the discrete media features the @media rules of
-// a [FormatHTML] source evaluate against, by lowercase name, such as
-// "prefers-color-scheme": "dark" (Media Queries 5, 2.4). A feature absent
-// keeps its default: light, no-preference, none, what a printer reports.
-// A name that is not lowercase is refused with
-// [ErrInvalidConvertOptions].
+// a [FormatHTML] or [FormatMarkdown] source evaluate against, by lowercase
+// name, such as "prefers-color-scheme": "dark" (Media Queries 5, 2.4). A
+// feature absent keeps its default: light, no-preference, none, what a
+// printer reports. A name that is not lowercase is refused with
+// [ErrInvalidConvertOptions], whatever the format. The other formats
+// report features with [CodeOptionIgnored].
 func WithMediaFeatures(features map[string]string) ConvertOption {
 	return func(o *convertOptions) { o.mediaFeatures = features }
 }
@@ -433,7 +495,8 @@ type ConvertWarning struct {
 	// out, "resource-no-network" for an http or https one without
 	// [WithHTTPClient], "resource-http-status" for one the server answered
 	// outside 2xx, "image-format-unsupported" for an AVIF, JPEG XL or ICO
-	// picture, "unsupported-element" and "form-control".
+	// picture, "unsupported-element" and "form-control". [CodeOptionIgnored]
+	// names an option the source's format does not take.
 	Code string
 	// Message explains the construct and what was done instead.
 	Message string
@@ -478,9 +541,10 @@ type ConvertWarning struct {
 // attributes and its presentational attributes, evaluated for the media
 // type of [WithMediaType]. No script runs.
 //
-//   - The page is the paper and margins of [WithPaperSize] and
-//     [WithMargins] unless an @page rule sets a size, an orientation or a
-//     margin. :first, :left and :right page rules do not apply.
+//   - The page is the @page size, else the paper, with the margins of
+//     [WithMargins] unless an @page rule sets one (see "Paper and
+//     orientation" below). :first, :left and :right page rules do not
+//     apply.
 //   - Stylesheets and images are read from [WithResources], or fetched
 //     through [WithHTTPClient] for http and https URLs. PNG, JPEG, GIF,
 //     WebP, BMP and TIFF images are drawn at their pixel size at 96 dpi
@@ -520,10 +584,10 @@ type ConvertWarning struct {
 // numbering and lists, tables, pictures, footnotes and endnotes, fields,
 // hyperlinks and bookmarks. [WithPaperSize] and [WithLandscape] override
 // the sections' page setup; [WithPageRanges], [WithOutline] and
-// [WithConvertPassword] apply; the other options of an HTML source are ignored,
-// and so are [WithMargins], [WithFontFamilies] and [WithFontSize]: the
-// document carries its own. A construct that is not drawn is reported as a
-// warning. Macros never run; embedded objects draw as their preview
+// [WithConvertPassword] apply; the other options of an HTML source, and
+// [WithMargins], [WithFontFamilies] and [WithFontSize], do not, and are
+// reported with [CodeOptionIgnored]: the document carries its own. A
+// construct that is not drawn is reported as a warning. Macros never run; embedded objects draw as their preview
 // picture when the package holds one.
 //
 // # XLSX, ODS and CSV
@@ -544,7 +608,7 @@ type ConvertWarning struct {
 // header. [WithPaperSize] and [WithLandscape] override every sheet's
 // page setup; [WithSinglePage] lays each sheet out on one page the size of
 // its content; [WithPageRanges], [WithOutline], [WithConvertPassword] and
-// [WithPrintDate] apply; the other options are ignored as for a DOCX
+// [WithPrintDate] apply; the other options are reported as for a DOCX
 // source. A construct that is not drawn is reported as a warning.
 //
 // # PPTX and ODP
@@ -561,9 +625,38 @@ type ConvertWarning struct {
 // adds a notes page per slide. [WithPaperSize] and [WithLandscape] set the
 // page size, the slide scaled to fit it; [WithPageRanges], [WithOutline]
 // (the slide titles), [WithConvertPassword] and [WithPrintDate] apply;
-// the other options are ignored as for a DOCX source. Transitions,
+// the other options are reported as for a DOCX source. Transitions,
 // animations, narration and comments are not printed. A construct that
 // is not drawn is reported as a warning.
+//
+// # Paper and orientation
+//
+// The page size follows one rule in every format:
+//
+//  1. [WithPaperSize] sets every page, its size and its orientation,
+//     replacing what the source names. One exception, as browsers print:
+//     with [WithPreferCSSPageSize], an @page size of an HTML or Markdown
+//     source wins over it.
+//  2. Without it, the source's own size applies: an @page size, each
+//     section of a DOCX or ODT source, each sheet's page setup, the slide
+//     size of a presentation, the notes size of its notes pages.
+//  3. A source that names none, a text or Markdown file, an HTML document
+//     without an @page size, a section or a sheet without a page setup, a
+//     CSV file, takes [WithDefaultPaperSize], else A4.
+//
+// [WithLandscape] then turns every portrait page to landscape, in every
+// format; in an HTML or Markdown source an @page size that applies keeps
+// its own orientation, as in Chromium. A slide on a paper of another
+// size is scaled down to fit it, never up, and centred; a sheet fitted
+// to a page count is fitted to the new paper.
+//
+// # Options a format does not take
+//
+// Every option is checked whatever the format: an option out of range
+// fails with [ErrInvalidConvertOptions] even where the format would not
+// read it. An option set to something other than its default that the
+// source's format does not take adds one [CodeOptionIgnored] warning
+// naming it; each option's documentation says which formats take it.
 //
 // # All formats
 //
@@ -614,6 +707,9 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	if err := o.limits.Validate(); err != nil {
 		return nil, err
 	}
+	if err := o.validate(); err != nil {
+		return nil, err
+	}
 	target, err := resolveConvertTarget(&o)
 	if err != nil {
 		return nil, err
@@ -639,9 +735,16 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 	case FormatDOCX, FormatODT, FormatXLSX, FormatODS, FormatCSV, FormatPPTX, FormatODP:
 		doc, err = convertOffice(ctx, src, format, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages)
 	case FormatText:
+		w, h := o.width, o.height
+		if !o.paperSet {
+			w, h = o.defaultPaper()
+		}
+		if o.landscape && w < h {
+			w, h = h, w
+		}
 		doc, err = plaintext.Convert(ctx, src, fonts, plaintext.Options{
-			PageWidth:     o.width,
-			PageHeight:    o.height,
+			PageWidth:     w,
+			PageHeight:    h,
 			MarginTop:     o.marginTop,
 			MarginRight:   o.marginRight,
 			MarginBottom:  o.marginBottom,
@@ -651,7 +754,9 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 			MaxInputBytes: budget.MaxConvertInputBytes,
 			MaxPages:      budget.MaxConvertPages,
 		})
-		if err != nil {
+		if errors.Is(err, plaintext.ErrInvalidOptions) {
+			err = fmt.Errorf("converting text: %w: %w", ErrInvalidConvertOptions, err)
+		} else if err != nil {
 			err = fmt.Errorf("converting text: %w", err)
 		}
 	}
@@ -666,7 +771,7 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 		return nil, err
 	}
 
-	report := &ConvertReport{Pages: len(doc.Pages), Conformance: conformance}
+	report := &ConvertReport{Pages: len(doc.Pages), Conformance: conformance, Warnings: ignoredOptions(format, &o)}
 	for _, w := range doc.Warnings {
 		report.Warnings = append(report.Warnings, ConvertWarning{Code: w.Code, Message: w.Message, Page: w.Page})
 	}
@@ -683,9 +788,18 @@ func convertHTML(ctx context.Context, src io.Reader, format Format, fonts *text.
 	if format == FormatMarkdown {
 		conv, name = markdown.Convert, "Markdown"
 	}
+	// Without a caller's paper, the document's @page size is the page, as
+	// a browser prints a document on no paper of its own (CSS Page 3,
+	// 5.1): the default paper only stands in for a page that names none.
+	// A single page keeps the paper it measures.
+	w, h, prefer := o.width, o.height, o.preferCSSPageSize
+	if !o.paperSet {
+		w, h = o.defaultPaper()
+		prefer = prefer || !o.singlePage
+	}
 	doc, err := conv(ctx, src, fonts, htmlconv.Options{
-		PageWidth:     o.width,
-		PageHeight:    o.height,
+		PageWidth:     w,
+		PageHeight:    h,
 		MarginTop:     o.marginTop,
 		MarginRight:   o.marginRight,
 		MarginBottom:  o.marginBottom,
@@ -697,7 +811,7 @@ func convertHTML(ctx context.Context, src io.Reader, format Format, fonts *text.
 		Logger:        o.logger,
 
 		Landscape:             o.landscape,
-		PreferCSSPageSize:     o.preferCSSPageSize,
+		PreferCSSPageSize:     prefer,
 		Scale:                 o.scale,
 		SinglePage:            o.singlePage,
 		OmitBackgrounds:       o.omitBackgrounds,
@@ -750,17 +864,20 @@ func convertOffice(ctx context.Context, src io.Reader, format Format, fonts *tex
 	case FormatDOCX, FormatText, FormatHTML, FormatMarkdown:
 		// DOCX is the default; the others never reach here.
 	}
+	dw, dh := o.defaultPaper()
 	opts := office.Options{
-		Landscape:        o.landscape,
-		Password:         o.password,
-		OmitOutline:      o.omitOutline,
-		SinglePageSheets: o.singlePage,
-		PrintDate:        o.date,
-		HiddenSlides:     o.hiddenSlides,
-		NotesPages:       o.notesPages,
-		MaxInputBytes:    maxBytes,
-		MaxPages:         maxPages,
-		Logger:           o.logger,
+		Landscape:         o.landscape,
+		DefaultPageWidth:  dw,
+		DefaultPageHeight: dh,
+		Password:          o.password,
+		OmitOutline:       o.omitOutline,
+		SinglePageSheets:  o.singlePage,
+		PrintDate:         o.date,
+		HiddenSlides:      o.hiddenSlides,
+		NotesPages:        o.notesPages,
+		MaxInputBytes:     maxBytes,
+		MaxPages:          maxPages,
+		Logger:            o.logger,
 	}
 	if o.paperSet {
 		opts.PageWidth, opts.PageHeight = o.width, o.height

@@ -781,11 +781,13 @@ var (
 	ErrUnsupportedFormat = errors.New("unsupported input format")
 
 	// ErrInvalidConvertOptions is returned, wrapped in an error naming the
-	// option, by [Convert] when a [ConvertOption] is out of range: a page or
-	// font size that is not finite and positive, a page side past 14,400
-	// points, margins that leave no room on the page, or a media type other
-	// than print and screen.
-	ErrInvalidConvertOptions = plaintext.ErrInvalidOptions
+	// option, by [Convert] when a [ConvertOption] is out of range, whatever
+	// the format of the source: a page or font size that is not finite and
+	// positive, a page side past 14,400 points, margins that leave no room
+	// on the page, a print scale outside [0.1, 2], a media type other than
+	// print and screen, a base URL that is not absolute, a version or a
+	// profile Convert does not write.
+	ErrInvalidConvertOptions = errors.New("invalid conversion options")
 
 	// ErrConvertInputTooLarge is returned, wrapped, by [Convert] for a source
 	// longer than [Limits.MaxConvertInputBytes], and for an HTML document
