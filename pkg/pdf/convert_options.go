@@ -183,7 +183,7 @@ func ignoredOptions(format Format, o *convertOptions) []ConvertWarning {
 		{"WithPreferCSSPageSize", o.preferCSSPageSize, html, "it has no CSS"},
 		{"WithPrintScale", o.scaleSet && o.scale != 1, html, ""},
 		{"WithSinglePage", o.singlePage, html || fam == familySheet, ""},
-		{"WithPageRanges", o.pageRanges != "", !(html && o.singlePage), "WithSinglePage writes one page"},
+		{"WithPageRanges", o.pageRanges != "", !html || !o.singlePage, "WithSinglePage writes one page"},
 		{"WithPrintBackground", o.omitBackgrounds, html, ""},
 		{"WithShrinkToFit", o.noShrinkToFit, html, ""},
 		{"WithFractionalFontMetrics", o.fractionalFontMetrics, html, ""},
