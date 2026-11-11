@@ -12,6 +12,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/xmp"
 )
 
 // Options tunes [Write]. The zero value is ready to use.
@@ -77,13 +78,15 @@ const defaultSpool = 4 << 20
 //     painted with sh inside the clip of its path; translucent stops add a
 //     luminosity soft mask per placement.
 //   - Link annotations, the outline, the Info dictionary from
-//     [Document.Metadata] (no dates), and /Lang when Metadata.Lang is set.
+//     [Document.Metadata] (no dates), or its XMP metadata stream in a PDF
+//     2.0 file, and /Lang when Metadata.Lang is set.
 //   - With [Document.Structure], a structure tree, marked content with
 //     MCIDs, a parent tree and /MarkInfo << /Marked true >>; content with no
 //     parent is marked /Artifact.
 //
-// No XMP packet, output intent or PDF/A identification is written: those
-// belong to Writer.SetMetadata and the remediation stages.
+// No output intent or PDF/A identification is written, nor an XMP packet
+// before PDF 2.0: those belong to Writer.SetMetadata and the remediation
+// stages.
 //
 // # Versions
 //
@@ -96,11 +99,15 @@ const defaultSpool = 4 << 20
 //     and a structure type PDF 1.5 added, a table row group among them
 //     (Table 337), is mapped by the structure tree's /RoleMap to a type
 //     PDF 1.4 defines (PDF Reference 1.4, 9.7.4; ISO 19005-1, 6.8.3.4).
+//     A header cell has no Scope attribute there (Table 349).
+//   - Before PDF 2.0, a list numbering PDF 2.0 added is written as the
+//     nearest ISO 32000-1 value (see [ListNumbering]).
 //   - PDF 2.0 writes each destination that names a structure element as a
 //     structure destination (ISO 32000-2, 12.3.2.3), carries the document
 //     information in an XMP metadata stream instead of the Info dictionary
 //     it deprecates (14.3.3), and writes a structure type PDF 2.0 removed
-//     as its replacement (14.8.6).
+//     as its replacement (14.8.6), every standard element naming the PDF
+//     2.0 namespace.
 //
 // At every version, a role that is not a standard structure type of the
 // version is mapped by /RoleMap to one that is.
@@ -109,7 +116,9 @@ const defaultSpool = 4 << 20
 //
 //   - A group's opacity is a constant alpha, not a transparency group:
 //     overlapping children blend one by one (see [Group]).
-//   - An element's own content precedes its child elements in its /K.
+//   - An element's own content precedes its child elements in its /K: a
+//     producer that interleaves the two gives the content an element of
+//     its own.
 //   - An Adobe-marked CMYK JPEG is not inverted and renders as its negative.
 //   - Arrays sized by the document, the page tree's /Kids and the parent
 //     tree's /Nums, are flat and pass the 8191-element limit ISO 32000-1,
@@ -151,6 +160,7 @@ func Write(ctx context.Context, doc *Document, dst io.Writer, opts Options) erro
 	}
 	w := &docWriter{
 		doc:      doc,
+		version:  version,
 		alloc:    writer.NewObjAllocator(0),
 		logger:   logger,
 		fonts:    make(map[string]*fontEntry),
@@ -182,9 +192,11 @@ func Write(ctx context.Context, doc *Document, dst io.Writer, opts Options) erro
 // docWriter holds the state of one [Write] call. It is used by one
 // goroutine.
 type docWriter struct {
-	doc    *Document
-	alloc  *writer.ObjAllocator
-	logger *slog.Logger
+	doc *Document
+	// version is the version the file is written for.
+	version Version
+	alloc   *writer.ObjAllocator
+	logger  *slog.Logger
 
 	pagesRef ast.PdfIndirectRef
 	pageRefs []ast.PdfIndirectRef
@@ -301,7 +313,7 @@ func (w *docWriter) write(ctx context.Context, producer string) (ast.PdfDict, er
 		catalog["Lang"] = textString(doc.Metadata.Lang)
 	}
 	if w.st != nil {
-		if err := w.st.write(ctx, w); err != nil {
+		if err := w.st.write(ctx, w, w.version); err != nil {
 			return nil, err
 		}
 		catalog["StructTreeRoot"] = w.st.rootRef
@@ -312,10 +324,21 @@ func (w *docWriter) write(ctx context.Context, producer string) (ast.PdfDict, er
 		// not its file name.
 		catalog["ViewerPreferences"] = ast.PdfDict{"DisplayDocTitle": ast.PdfBool(true)}
 	}
-	catalogRef := w.alloc.Alloc(catalog)
-
 	info := w.info(producer)
-	infoRef := w.alloc.Alloc(info)
+	var infoRef ast.PdfIndirectRef
+	if w.version == Version20 {
+		// ISO 32000-2, 14.3.3 deprecates the Info dictionary but for its
+		// dates, which the model does not carry: the document information
+		// goes to the catalog's metadata stream (14.3.2), uncompressed so
+		// a reader that does not decode the file still finds it.
+		catalog["Metadata"] = w.alloc.Alloc(ast.NewStream(ast.PdfDict{
+			"Type":    ast.PdfName("Metadata"),
+			"Subtype": ast.PdfName("XML"),
+		}, xmp.Packet(w.xmpInfo(producer))))
+	} else {
+		infoRef = w.alloc.Alloc(info)
+	}
+	catalogRef := w.alloc.Alloc(catalog)
 
 	// A file identifier is optional in ISO 32000-1, 14.4 but required by
 	// PDF/A (ISO 19005-2, 6.1.3), and output bytes must depend on the input
@@ -325,11 +348,24 @@ func (w *docWriter) write(ctx context.Context, producer string) (ast.PdfDict, er
 	// original, not an update (14.4).
 	sum := w.id.Sum(nil)[:16]
 	id := ast.PdfString(sum)
-	return ast.PdfDict{
+	trailer := ast.PdfDict{
 		"Root": catalogRef,
-		"Info": infoRef,
 		"ID":   ast.PdfArray{id, id},
-	}, nil
+	}
+	if infoRef.ObjectNum != 0 {
+		trailer["Info"] = infoRef
+	}
+	return trailer, nil
+}
+
+// xmpInfo returns the document information the metadata stream of a PDF
+// 2.0 file carries.
+func (w *docWriter) xmpInfo(producer string) xmp.Info {
+	m := w.doc.Metadata
+	return xmp.Info{
+		Title: m.Title, Author: m.Author, Subject: m.Subject, Keywords: m.Keywords,
+		Creator: m.Creator, Producer: producer, Lang: m.Lang,
+	}
 }
 
 // info returns the Info dictionary (ISO 32000-1, 14.3.3, Table 317) and
@@ -416,9 +452,10 @@ func (w *docWriter) page(ctx context.Context, i int, page *Page) error {
 			annots[j] = w.link(i, page, link)
 		}
 		dict["Annots"] = annots
-		if w.st != nil {
+		if w.st != nil && w.version != Version14 {
 			// ISO 14289-1, 7.18.3: a page with annotations in a tagged
-			// document orders them by the structure tree.
+			// document orders them by the structure tree. /Tabs is a PDF
+			// 1.5 entry (ISO 32000-1, Table 30).
 			dict["Tabs"] = ast.PdfName("S")
 		}
 	}
@@ -431,8 +468,8 @@ func (w *docWriter) page(ctx context.Context, i int, page *Page) error {
 // action (12.6.4.7) or an explicit destination. Its /Rect is the model
 // rectangle in PDF coordinates, y flipped. A link with a parent element
 // joins the structure tree through an object reference and /StructParent
-// (14.7.4.4), and carries the element's Alt as /Contents (ISO 14289-1,
-// 7.18.1).
+// (14.7.4.4). Its /Contents is the link's description, else its element's
+// Alt (ISO 14289-1, 7.18.5).
 func (w *docWriter) link(pageIndex int, page *Page, l Link) ast.PdfIndirectRef {
 	r := l.Rect
 	x0, x1 := math.Min(r.X, r.X+r.Width), math.Max(r.X, r.X+r.Width)
@@ -445,7 +482,8 @@ func (w *docWriter) link(pageIndex int, page *Page, l Link) ast.PdfIndirectRef {
 		"F":       ast.PdfInt(4),
 	}
 	if l.Dest != nil {
-		dict["Dest"] = w.dest(*l.Dest)
+		key, target := w.target(*l.Dest)
+		dict[key] = target
 	} else {
 		dict["A"] = ast.PdfDict{
 			"Type": ast.PdfName("Action"),
@@ -456,9 +494,12 @@ func (w *docWriter) link(pageIndex int, page *Page, l Link) ast.PdfIndirectRef {
 	ref := w.alloc.Alloc(ast.PdfNull{})
 	if w.st != nil && l.Parent != nil {
 		dict["StructParent"] = ast.PdfInt(w.st.addAnnot(pageIndex, ref, l.Parent))
-		if l.Parent.Alt != "" {
-			dict["Contents"] = textString(l.Parent.Alt)
-		}
+	}
+	switch {
+	case l.Contents != "":
+		dict["Contents"] = textString(l.Contents)
+	case l.Parent != nil && l.Parent.Alt != "":
+		dict["Contents"] = textString(l.Parent.Alt)
 	}
 	w.alloc.AllocAt(ref.ObjectNum, dict)
 	return ref

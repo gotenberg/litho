@@ -101,9 +101,22 @@ through `writer.WriteRewrite`:
   Outline entries become the outline tree.
 - A document with `Structure` writes a StructTreeRoot, marked content with
   MCIDs, a ParentTree and `/MarkInfo << /Marked true >>`. Content with no
-  parent is wrapped in `/Artifact BMC ... EMC`.
-- Metadata writes the Info dictionary. XMP is left to `Writer.SetMetadata`
-  and to the remediation stages, which already own it.
+  parent is wrapped in `/Artifact BMC ... EMC`. Table cells carry their
+  spans and scope and lists their numbering as attribute objects, and
+  `/RoleMap` maps every role the output version does not define.
+- `Options.Version` picks the version, 1.4 to 2.0: before 1.5 no `/Tabs`
+  and the row groups mapped; at 2.0 the PDF 2.0 namespace on every
+  standard element, removed types written as their replacements,
+  structure destinations, and an XMP metadata stream (`pkg/internal/xmp`)
+  instead of the Info dictionary.
+- Metadata writes the Info dictionary before PDF 2.0. The PDF/A and
+  PDF/UA identification is left to `Writer.SetMetadata` and to the
+  remediation stages, which already own it.
+
+The layout engine gives the own content of an element that also holds
+elements, or of a grouping element, an anonymous P or Span of its own, so
+no element holds content items and elements at once and `/K` reads in
+document order.
 
 Every size read from the model is bounded before allocation. The number
 of pages, fragments per page, glyphs per run and ops per path each have a

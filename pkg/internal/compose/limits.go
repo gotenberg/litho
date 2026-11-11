@@ -40,10 +40,10 @@ const maxGroupDepth = 24
 // half page holds a few thousand entries.
 const maxOutlineEntries = 100_000
 
-// maxStructElems caps the elements of the structure tree. Anti-DoS guard,
-// not spec-mandated. A 2000-page report tagged to the span holds a few
+// MaxStructElems caps the elements of the structure tree: [Document.Validate]
+// refuses a tree with more. Anti-DoS guard, not spec-mandated. A 2000-page report tagged to the span holds a few
 // hundred thousand elements at most.
-const maxStructElems = 1_000_000
+const MaxStructElems = 1_000_000
 
 // maxTreeDepth caps the depth of the outline and the structure tree, whose
 // walks recurse. Anti-DoS guard protecting litho's own stack, not

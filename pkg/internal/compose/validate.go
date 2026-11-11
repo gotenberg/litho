@@ -413,6 +413,11 @@ func (v *validator) dest(d Dest) error {
 	if !finite(d.X) || !finite(d.Y) {
 		return fmt.Errorf("%w: position (%v, %v)", ErrInvalidDest, d.X, d.Y)
 	}
+	// ISO 32000-2, 12.3.2.3: a structure destination names an element of
+	// the document's structure tree.
+	if d.Elem != nil && !v.elems[d.Elem] {
+		return fmt.Errorf("%w: element %q outside the structure tree", ErrInvalidDest, d.Elem.Role)
+	}
 	return nil
 }
 
@@ -455,7 +460,7 @@ func (v *validator) parent(e *StructElem) error {
 
 // structElems returns every element root reaches, or an error when the
 // tree reaches an element twice, holds a nil or roleless element, or passes
-// [maxStructElems] or [maxTreeDepth]. ISO 32000-1, 14.7.2 makes the
+// [MaxStructElems] or [maxTreeDepth]. ISO 32000-1, 14.7.2 makes the
 // structure hierarchy a tree: each element has one parent (/P).
 func structElems(root *StructElem) (map[*StructElem]bool, error) {
 	seen := make(map[*StructElem]bool)
@@ -481,9 +486,12 @@ func structElems(root *StructElem) (map[*StructElem]bool, error) {
 		if seen[it.e] {
 			return nil, fmt.Errorf("%w: element %q reached twice", ErrNotATree, it.e.Role)
 		}
+		if err := checkAttributes(it.e); err != nil {
+			return nil, err
+		}
 		seen[it.e] = true
-		if len(seen) > maxStructElems {
-			return nil, fmt.Errorf("%w: more than %d structure elements", ErrLimitExceeded, maxStructElems)
+		if len(seen) > MaxStructElems {
+			return nil, fmt.Errorf("%w: more than %d structure elements", ErrLimitExceeded, MaxStructElems)
 		}
 		if it.depth > maxTreeDepth {
 			return nil, fmt.Errorf("%w: structure tree deeper than %d", ErrLimitExceeded, maxTreeDepth)
@@ -493,6 +501,22 @@ func structElems(root *StructElem) (map[*StructElem]bool, error) {
 		}
 	}
 	return seen, nil
+}
+
+// checkAttributes checks the attribute fields of e: spans in [0,
+// [MaxCellSpan]] and known scope and numbering values (ISO 32000-1,
+// 14.8.5.5 and 14.8.5.7, Tables 347 and 349).
+func checkAttributes(e *StructElem) error {
+	if e.ColSpan < 0 || e.ColSpan > MaxCellSpan || e.RowSpan < 0 || e.RowSpan > MaxCellSpan {
+		return fmt.Errorf("%w: %q spans %d columns and %d rows, each in [0, %d]", ErrInvalidElement, e.Role, e.ColSpan, e.RowSpan, MaxCellSpan)
+	}
+	if e.Scope > ScopeBoth {
+		return fmt.Errorf("%w: %q has scope %d", ErrInvalidElement, e.Role, e.Scope)
+	}
+	if e.Numbering > NumberingDescription {
+		return fmt.Errorf("%w: %q has list numbering %d", ErrInvalidElement, e.Role, e.Numbering)
+	}
+	return nil
 }
 
 // checkColor checks that every channel lies in [0, 1], which also refuses

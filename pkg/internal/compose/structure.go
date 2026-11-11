@@ -74,8 +74,12 @@ func (st *structState) addAnnot(page int, ref ast.PdfIndirectRef, e *StructElem)
 	return len(st.pageParents) + len(st.annotParents) - 1
 }
 
+// pdf2Namespace is the URI of the PDF 2.0 standard structure namespace
+// (ISO 32000-2, 14.8.6.1).
+const pdf2Namespace = "http://iso.org/pdf2/ssn"
+
 // write writes every element, the parent tree and the StructTreeRoot (ISO
-// 32000-1, 14.7.2, Tables 322 and 323).
+// 32000-1, 14.7.2, Tables 322 and 323) for a file of version v.
 //
 // An element's /K lists its own content first, in paint order page by page,
 // then its child elements: the model orders the kids but does not say where
@@ -83,7 +87,21 @@ func (st *structState) addAnnot(page int, ref ast.PdfIndirectRef, e *StructElem)
 // element's first content, and each item on that page is an MCID integer;
 // an item on another page is a marked-content reference naming its page
 // (14.7.4.3, Table 324), an annotation an object reference (Table 325).
-func (st *structState) write(ctx context.Context, w *docWriter) error {
+//
+// A PDF 2.0 file names the PDF 2.0 namespace on every element whose type
+// it holds, writing a removed PDF 1.7 type as its replacement
+// ([replaced20]); a role neither namespace holds stays in the default
+// namespace and is mapped by /RoleMap. Every other version maps by
+// /RoleMap each role it does not define.
+func (st *structState) write(ctx context.Context, w *docWriter, v Version) error {
+	var nsRef ast.PdfIndirectRef
+	if v == Version20 {
+		nsRef = w.alloc.Alloc(ast.PdfDict{
+			"Type": ast.PdfName("Namespace"),
+			"NS":   ast.PdfString(pdf2Namespace),
+		})
+	}
+	written := map[string]bool{}
 	for i, e := range st.order {
 		if i%ctxCheckInterval == 0 {
 			if err := ctx.Err(); err != nil {
@@ -94,10 +112,30 @@ func (st *structState) write(ctx context.Context, w *docWriter) error {
 			"Type": ast.PdfName("StructElem"),
 			"S":    ast.PdfName(e.Role),
 		}
-		if p, ok := st.parent[e]; ok {
+		p, hasParent := st.parent[e]
+		if hasParent {
 			dict["P"] = st.refs[p]
 		} else {
 			dict["P"] = st.rootRef
+		}
+		role := e.Role
+		if v == Version20 {
+			parentRole := ""
+			if hasParent {
+				parentRole = p.Role
+			}
+			if r := replaced20(e.Role, parentRole); r != "" {
+				role = r
+				dict["S"] = ast.PdfName(r)
+				dict["NS"] = nsRef
+			} else {
+				written[e.Role] = true
+			}
+		} else {
+			written[e.Role] = true
+		}
+		if a := attributes(e, role, v); a != nil {
+			dict["A"] = a
 		}
 		items := st.items[e]
 		kids := make(ast.PdfArray, 0, len(items)+len(e.Kids))
@@ -155,11 +193,87 @@ func (st *structState) write(ctx context.Context, w *docWriter) error {
 		nums = append(nums, ast.PdfInt(len(st.pageParents)+i), ref)
 	}
 	parentTree := w.alloc.Alloc(ast.PdfDict{"Nums": nums})
-	w.alloc.AllocAt(st.rootRef.ObjectNum, ast.PdfDict{
+	root := ast.PdfDict{
 		"Type":              ast.PdfName("StructTreeRoot"),
 		"K":                 st.refs[st.order[0]],
 		"ParentTree":        parentTree,
 		"ParentTreeNextKey": ast.PdfInt(len(st.pageParents) + len(st.annotParents)),
-	})
+	}
+	if rm := roleMap(written, v); rm != nil {
+		root["RoleMap"] = rm
+	}
+	if v == Version20 {
+		// ISO 32000-2, 14.7.2, Table 355: /Namespaces lists the namespaces
+		// the elements name.
+		root["Namespaces"] = ast.PdfArray{nsRef}
+	}
+	w.alloc.AllocAt(st.rootRef.ObjectNum, root)
 	return nil
+}
+
+// attributes returns the attribute object of e, written as type role in a
+// file of version v, nil for none: the Table attributes of a TH or TD cell
+// (ISO 32000-1, 14.8.5.7, Table 349), its spans past one and a header
+// cell's Scope, and the List attribute of an L (14.8.5.5, Table 347). Scope
+// is a PDF 1.5 attribute and is left out of an older file.
+func attributes(e *StructElem, role string, v Version) ast.PdfObject {
+	switch role {
+	case "TH", "TD":
+		a := ast.PdfDict{}
+		if e.RowSpan > 1 {
+			a["RowSpan"] = ast.PdfInt(e.RowSpan)
+		}
+		if e.ColSpan > 1 {
+			a["ColSpan"] = ast.PdfInt(e.ColSpan)
+		}
+		if role == "TH" && v != Version14 {
+			switch e.Scope {
+			case ScopeRow:
+				a["Scope"] = ast.PdfName("Row")
+			case ScopeColumn:
+				a["Scope"] = ast.PdfName("Column")
+			case ScopeBoth:
+				a["Scope"] = ast.PdfName("Both")
+			}
+		}
+		if len(a) == 0 {
+			return nil
+		}
+		a["O"] = ast.PdfName("Table")
+		return a
+	case "L":
+		if n := listNumbering(e.Numbering, v); n != "" {
+			return ast.PdfDict{"O": ast.PdfName("List"), "ListNumbering": ast.PdfName(n)}
+		}
+	}
+	return nil
+}
+
+// listNumbering returns the ListNumbering value of n in a file of version
+// v, "" for [NumberingUnset]. PDF 2.0 adds Ordered, Unordered and
+// Description (ISO 32000-2, 14.8.5.5, Table 382); an older file writes the
+// nearest value ISO 32000-1, Table 347 defines: Decimal, Disc and None.
+func listNumbering(n ListNumbering, v Version) string {
+	names := [...]string{
+		NumberingNone: "None", NumberingDisc: "Disc", NumberingCircle: "Circle",
+		NumberingSquare: "Square", NumberingDecimal: "Decimal",
+		NumberingUpperRoman: "UpperRoman", NumberingLowerRoman: "LowerRoman",
+		NumberingUpperAlpha: "UpperAlpha", NumberingLowerAlpha: "LowerAlpha",
+		NumberingOrdered: "Ordered", NumberingUnordered: "Unordered",
+		NumberingDescription: "Description",
+	}
+	if n == NumberingUnset || int(n) >= len(names) {
+		return ""
+	}
+	if v != Version20 {
+		switch n {
+		case NumberingOrdered:
+			return "Decimal"
+		case NumberingUnordered:
+			return "Disc"
+		case NumberingDescription:
+			return "None"
+		}
+	}
+	return names[n]
 }
