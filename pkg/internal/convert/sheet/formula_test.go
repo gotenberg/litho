@@ -54,6 +54,9 @@ func TestApplyFormulas(t *testing.T) {
 		{"HOUR(0.5208333)+MINUTE(0.5208333)/100", num(12.3), ""},
 		{`of:=COM.MICROSOFT.SWITCH([.A1];1;"one";2;"two";"other")`, Value{Kind: Text, Text: "two"}, ""},
 		{`COM.MICROSOFT.SWITCH(A1,"2","text two","other")`, Value{Kind: Text, Text: "text two"}, ""},
+		// A second address without a sheet is on the first one's, not on
+		// the formula's: T holds 10 in A1 and nothing below, S holds 2 and 3.
+		{"of:=SUM([$T.A1:.A2])", num(10), ""},
 		{"A1+", num(-1), ""},
 	}
 	var formulas []string

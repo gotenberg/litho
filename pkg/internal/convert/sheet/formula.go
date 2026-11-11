@@ -550,8 +550,7 @@ func (p *fparser) odfRef() (fval, bool) {
 	body := p.src[p.pos+1 : p.pos+end]
 	p.pos += end + 1
 	first, second, two := strings.Cut(body, ":")
-	part := func(s string) (sheet, row, col int, ok bool) {
-		sheet = p.sheet
+	part := func(s string, sheet int) (_, row, col int, ok bool) {
 		dot := strings.LastIndexByte(s, '.')
 		if dot < 0 {
 			return 0, 0, 0, false
@@ -572,7 +571,7 @@ func (p *fparser) odfRef() (fval, bool) {
 		row, col, ok = q.cellRef()
 		return sheet, row, col, ok && q.pos == len(q.src)
 	}
-	s0, r0, c0, ok := part(first)
+	s0, r0, c0, ok := part(first, p.sheet)
 	if !ok {
 		return fval{}, false
 	}
@@ -581,7 +580,9 @@ func (p *fparser) odfRef() (fval, bool) {
 	}
 	r1, c1 := r0, c0
 	if two {
-		s1, rr, cc, ok := part(second)
+		// A second address that names no sheet is on the first one's (ODF
+		// 1.3 Part 4, 5.8).
+		s1, rr, cc, ok := part(second, s0)
 		if !ok || s1 != s0 {
 			return fval{}, false
 		}
