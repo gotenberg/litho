@@ -79,11 +79,12 @@ var mappedDown = map[string]string{
 
 // standard reports whether role is a standard structure type of version v.
 func standard(role string, v Version) bool {
-	switch {
-	case v == Version20:
+	switch v {
+	case Version20:
 		return types20[role]
-	case v == Version14:
+	case Version14:
 		return types14[role]
+	case Version15, Version16, Version17:
 	}
 	return types14[role] || types15[role]
 }
@@ -99,8 +100,8 @@ func fallbackRole(role string, v Version) string {
 	return "NonStruct"
 }
 
-// replaced20 returns the type a PDF 2.0 file writes for an element of role
-// role whose parent has role parent: role itself when the PDF 2.0
+// replaced20 returns the type a PDF 2.0 file writes for an element of the
+// given role under a parent of role parent: the role itself when the PDF 2.0
 // namespace holds it, its [removed20] replacement otherwise, and "" for a
 // role that is no standard type of either namespace.
 func replaced20(role, parent string) string {

@@ -243,4 +243,3 @@ func TestPruneStructureDropsDanglingDests(t *testing.T) {
 		t.Errorf("Validate after pruning: %v", err)
 	}
 }
-

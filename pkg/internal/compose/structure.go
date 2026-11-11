@@ -234,6 +234,7 @@ func attributes(e *StructElem, role string, v Version) ast.PdfObject {
 				a["Scope"] = ast.PdfName("Column")
 			case ScopeBoth:
 				a["Scope"] = ast.PdfName("Both")
+			case ScopeNone:
 			}
 		}
 		if len(a) == 0 {
@@ -266,7 +267,7 @@ func listNumbering(n ListNumbering, v Version) string {
 		return ""
 	}
 	if v != Version20 {
-		switch n {
+		switch n { //nolint:exhaustive // the ISO 32000-1 values write as they are
 		case NumberingOrdered:
 			return "Decimal"
 		case NumberingUnordered:
