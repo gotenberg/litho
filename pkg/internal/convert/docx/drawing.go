@@ -419,7 +419,7 @@ func (d *document) shapeTextBox(n *layout.Node, g *shape.Geometry, ss ooxml.Shap
 		for i := range bs.Border {
 			bs.Border[i] = css.Border{}
 		}
-		bs.Office.StrokeBorders = false
+		bs.StrokeBorders = false
 		pic := vectorShape(bs, g, ss, w, h)
 		ps := pic.Style
 		ps.Position = css.Absolute
