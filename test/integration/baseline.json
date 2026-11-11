@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-11T17:03:57Z",
+  "captured_at": "2026-11-11T17:21:48Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -68405,12 +68405,12 @@
     "litho/xlsx": {
       "features": {
         "diff": {
-          "matched": 82,
-          "mismatched": 37,
+          "matched": 84,
+          "mismatched": 35,
           "skipped": 9,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 109,
+            "pages_equal": 111,
             "reference_fonts_missing": 9
           },
           "scores": {
@@ -69023,20 +69023,20 @@
               "text_f1": 1
             },
             "paper-grid-b5-landscape": {
-              "layout": 0.5461,
+              "layout": 0.8972,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0,
+              "pages": 1,
               "strict": 0,
-              "text_f1": 0.2024
+              "text_f1": 0.9254
             },
             "paper-grid-b5-portrait": {
-              "layout": 0.2948,
+              "layout": 0.9336,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0,
-              "strict": 0,
-              "text_f1": 0.2007
+              "pages": 1,
+              "strict": 0.75,
+              "text_f1": 1
             },
             "paper-grid-executive-landscape": {
               "layout": 0.9397,
