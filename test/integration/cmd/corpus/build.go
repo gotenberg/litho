@@ -126,7 +126,9 @@ func buildLithoText(ctx context.Context, m *Manifest) error {
 	return textbuild.Build(ctx, filepath.Join(m.SourceDir(), "sources"), filepath.Join(m.SourceDir(), m.CommittedPDFs), filepath.Join(testdataDir(), fixtureFontsDir))
 }
 
-// isBuildCorpus reports whether m's documents are built by `corpus build`.
+// isBuildCorpus reports whether m's documents are built by `corpus build`:
+// an Office corpus zipped from its parts, or the stress corpus (see
+// [stressDocs]).
 func isBuildCorpus(m *Manifest) bool {
 	return m.Inputs != nil && m.Inputs.Build != ""
 }
@@ -181,6 +183,9 @@ func builtNames(m *Manifest) ([]string, error) {
 // builtInputFixtures lists the fixtures of a build corpus, each the
 // directory its document was built into, refusing one not built yet.
 func builtInputFixtures(m *Manifest) ([]Fixture, error) {
+	if m.Name == stressCorpus {
+		return stressFixtures(m)
+	}
 	format, err := buildFormat(m)
 	if err != nil {
 		return nil, err
@@ -205,6 +210,9 @@ func builtInputFixtures(m *Manifest) ([]Fixture, error) {
 func buildCorpus(ctx context.Context, m *Manifest) error {
 	if b, ok := pdfBuilders[m.Name]; ok {
 		return b(ctx, m)
+	}
+	if m.Name == stressCorpus {
+		return buildStress(ctx, m)
 	}
 	return buildOffice(ctx, m)
 }

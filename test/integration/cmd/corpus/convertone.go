@@ -14,7 +14,6 @@ import (
 	"sync/atomic"
 
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
 // convertOneResult is what `corpus convert-one` prints: how one conversion
@@ -105,11 +104,11 @@ type textChecks struct {
 // convertOne converts src at the options its options.json names, counting
 // every request the conversion tries and refusing it.
 func convertOne(ctx context.Context, src string, fonts []string, checks textChecks) convertOneResult {
-	source, err := fixture.LoadOffice(src)
+	document, format, sourceOpts, err := loadRobustnessSource(src)
 	if err != nil {
 		return convertOneResult{Result: "error", Detail: err.Error()}
 	}
-	data, err := os.ReadFile(source.Document)
+	data, err := os.ReadFile(document) //nolint:gosec // a fixture path
 	if err != nil {
 		return convertOneResult{Result: "error", Detail: err.Error()}
 	}
@@ -119,9 +118,9 @@ func convertOne(ctx context.Context, src string, fonts []string, checks textChec
 	if len(fonts) > 0 {
 		opts = append(opts, pdf.WithConvertFontDirs(fonts...))
 	}
-	opts = append(opts, source.ConvertOptions()...)
+	opts = append(opts, sourceOpts...)
 	var out bytes.Buffer
-	_, err = pdf.Convert(ctx, bytes.NewReader(data), source.Format, &out, opts...)
+	_, err = pdf.Convert(ctx, bytes.NewReader(data), format, &out, opts...)
 	res := convertOneResult{Result: convertResultName(err), Fetches: fetches.Load()}
 	if err != nil {
 		res.Detail = err.Error()

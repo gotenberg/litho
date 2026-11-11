@@ -200,6 +200,8 @@ var sourcePins = map[string][]string{
 	"litho/ods": nil,
 	"litho/odp": nil,
 
+	"litho/stress": nil,
+
 	"wpt":        {"WPT_COMMIT"},
 	"resvg":      {"RESVG_COMMIT"},
 	"weasyprint": nil,

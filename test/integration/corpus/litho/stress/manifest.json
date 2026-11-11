@@ -1,0 +1,12 @@
+{
+  "name": "litho/stress",
+  "source": "litho/stress",
+  "pdf_root": "pdfs",
+  "inputs": {
+    "build": "generated",
+    "list_root": "sources"
+  },
+  "goldens": {
+    "robustness": "sources"
+  }
+}

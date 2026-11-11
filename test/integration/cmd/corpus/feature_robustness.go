@@ -12,6 +12,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gotenberg/litho/pkg/pdf"
+	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
 // robustnessFile is the committed file, in a build corpus's source
@@ -32,6 +35,7 @@ const (
 	metricCrash      = "crash"
 	metricPanic      = "panic"
 	metricOverMemory = "over_memory"
+	metricOverTime   = "over_time"
 	metricFetch      = "fetch"
 	metricLeak       = "leak"
 	metricMissing    = "missing_text"
@@ -45,6 +49,9 @@ type robustnessExpectation struct {
 	Result string `json:"result"`
 	// MaxRSSMiB overrides [robustnessMaxRSSMiB].
 	MaxRSSMiB int64 `json:"max_rss_mib,omitempty"`
+	// MaxSeconds bounds the conversion's wall time, child start to exit,
+	// when set: a refusal must come early, not after the work.
+	MaxSeconds float64 `json:"max_seconds,omitempty"`
 	// Forbid lists strings the PDF's text must not hold: what a document
 	// tries to pull in from the machine converting it.
 	Forbid []string `json:"forbid,omitempty"`
@@ -213,6 +220,9 @@ func (f *robustnessFeature) Compare(fixtureID string, output []byte) Verdict {
 	if got.RSSMiB > e.MaxRSSMiB {
 		fail(metricOverMemory, "peaked at %d MiB, past %d MiB", got.RSSMiB, e.MaxRSSMiB)
 	}
+	if e.MaxSeconds > 0 && got.Seconds > e.MaxSeconds {
+		fail(metricOverTime, "took %.1f s, past %.1f s", got.Seconds, e.MaxSeconds)
+	}
 	if got.Fetches > 0 {
 		fail(metricFetch, "tried %d network requests", got.Fetches)
 	}
@@ -229,4 +239,36 @@ func (f *robustnessFeature) Compare(fixtureID string, output []byte) Verdict {
 	}
 	v.Reason = strings.Join(problems, "; ")
 	return v
+}
+
+// stressSources are the text and HTML documents a stress fixture's
+// directory may hold, by file name, with their format.
+var stressSources = []struct { //nolint:gochecknoglobals // static table
+	file   string
+	format pdf.Format
+}{
+	{"index.txt", pdf.FormatText},
+	{"index.html", pdf.FormatHTML},
+}
+
+// loadRobustnessSource returns the document convert-one converts for the
+// fixture at path, its format and its options: a text or HTML document of
+// the stress corpus, the files beside it its resources, or an Office
+// source at the options its options.json names (see fixture.LoadOffice).
+func loadRobustnessSource(path string) (string, pdf.Format, []pdf.ConvertOption, error) {
+	for _, s := range stressSources {
+		p := filepath.Join(path, s.file)
+		if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() {
+			var opts []pdf.ConvertOption
+			if s.format == pdf.FormatHTML {
+				opts = append(opts, pdf.WithResources(os.DirFS(path)))
+			}
+			return p, s.format, opts, nil
+		}
+	}
+	source, err := fixture.LoadOffice(path)
+	if err != nil {
+		return "", "", nil, err
+	}
+	return source.Document, source.Format, source.ConvertOptions(), nil
 }
