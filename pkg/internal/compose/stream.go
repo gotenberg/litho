@@ -160,7 +160,7 @@ func newStream(ctx context.Context, opts Options, tagged, checked bool) (*Stream
 // memory of all its pages.
 func (s *Stream) Select(resolve func(count int) ([]int, error)) {
 	if s.received > 0 {
-		s.fail(fmt.Errorf("%w: a page selection after the first page", ErrInvalidPage))
+		s.record(fmt.Errorf("%w: a page selection after the first page", ErrInvalidPage))
 		return
 	}
 	s.resolve = resolve
@@ -172,18 +172,18 @@ func (s *Stream) Expect(n int) {
 		return
 	}
 	if s.received > 0 || s.expected >= 0 {
-		s.fail(fmt.Errorf("%w: a page count announced after the first page or twice", ErrInvalidPage))
+		s.record(fmt.Errorf("%w: a page count announced after the first page or twice", ErrInvalidPage))
 		return
 	}
 	if n < 1 || n > maxPages {
-		s.fail(fmt.Errorf("%w: %d pages announced, in [1, %d]", ErrLimitExceeded, n, maxPages))
+		s.record(fmt.Errorf("%w: %d pages announced, in [1, %d]", ErrLimitExceeded, n, maxPages))
 		return
 	}
 	s.expected = n
 	if s.resolve != nil {
 		pages, err := s.resolve(n)
 		if err != nil {
-			s.fail(err)
+			s.record(err)
 			return
 		}
 		s.sel = newSelection(pages, n)
@@ -327,10 +327,16 @@ func (s *Stream) charge(p *Page, into *int64) error {
 // fail records err as the Stream's error, unless one is recorded, and
 // returns the recorded one; a nil err records nothing.
 func (s *Stream) fail(err error) error {
+	s.record(err)
+	return s.err
+}
+
+// record is [Stream.fail] for a call that returns no error: the next call
+// that does returns it.
+func (s *Stream) record(err error) {
 	if s.err == nil {
 		s.err = err
 	}
-	return s.err
 }
 
 // Pages returns the number of pages written: after [Stream.Close], the
