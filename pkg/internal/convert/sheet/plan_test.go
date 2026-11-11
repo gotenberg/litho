@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -238,6 +239,28 @@ func TestConvert_ExcelClipsWholeText(t *testing.T) {
 		}
 		if !strings.HasPrefix(got, tc.want[:4]) || (tc.excel && got != tc.want) || (!tc.excel && got == "Overflowing text") {
 			t.Errorf("Excel's rules %v: %q, want %q", tc.excel, got, tc.want)
+		}
+	}
+}
+
+// TestPlan_ExcelPrintsFormattedPages locks the page of formatted cells
+// alone: Calc leaves it out, Excel prints it.
+//
+// # Corpus evidence
+//
+//   - poi/xlsx: 61605.xlsx prints a second page holding a yellow bordered
+//     cell without a value; 53798.xlsx and 60384.xlsx alike.
+func TestPlan_ExcelPrintsFormattedPages(t *testing.T) {
+	filled := &Style{Fill: Fill{Color: css.Color{R: 255, G: 255, A: 255}}}
+	for _, tc := range []struct {
+		excel bool
+		want  int
+	}{{false, 1}, {true, 2}} {
+		sh := &Sheet{Name: "S", DefaultColumnWidth: 100, Rows: []Row{{Index: 0, Cells: []Cell{numCell(0, 1, nil), {Column: 8, Style: filled}}}}}
+		doc := newDoc(sh)
+		doc.ExcelRules = tc.excel
+		if n := len(convert(t, doc, office.Options{}).Pages); n != tc.want {
+			t.Errorf("Excel's rules %v: %d pages, want %d", tc.excel, n, tc.want)
 		}
 	}
 }

@@ -256,7 +256,9 @@ const epsilon = 1e-6
 
 // empty reports a range Calc does not print a page for: no cell in it
 // shows a value, hidden rows and columns aside, and no drawing overlaps it
-// (ScDocument::IsPrintEmpty).
+// (ScDocument::IsPrintEmpty). Under Excel's rules a cell whose own style
+// paints a fill or a border counts as a value: Excel prints a page of
+// formatted cells alone.
 //
 // # Corpus evidence
 //
@@ -269,7 +271,7 @@ func (g *grid) empty(a Range) bool {
 		cells := row.Cells
 		j := sort.Search(len(cells), func(j int) bool { return cells[j].Column >= a.FirstColumn })
 		for ; j < len(cells) && cells[j].Column <= a.LastColumn; j++ {
-			if hasContent(&cells[j]) && !g.colHidden(cells[j].Column) && !row.Hidden {
+			if (hasContent(&cells[j]) || (g.doc.ExcelRules && visible(cells[j].Style))) && !g.colHidden(cells[j].Column) && !row.Hidden {
 				return false
 			}
 		}
