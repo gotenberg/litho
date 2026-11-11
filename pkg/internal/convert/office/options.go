@@ -70,6 +70,10 @@ type Options struct {
 	MaxPages int
 	// Logger receives diagnostics, nil for none.
 	Logger *slog.Logger
+	// DefaultLang is the document language, a BCP 47 tag, when the
+	// document names none, "" to leave it unknown. The caller validates
+	// it.
+	DefaultLang string
 }
 
 // DefaultPage returns the page size of a section or sheet whose file

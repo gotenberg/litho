@@ -1,6 +1,7 @@
 package sheet
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -37,7 +38,7 @@ type builder struct {
 // newBuilder returns the builder of one conversion.
 func newBuilder(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.Options) *builder {
 	b := &builder{
-		ctx: ctx, doc: doc, fonts: fonts, opts: opts, lang: doc.Meta.Lang,
+		ctx: ctx, doc: doc, fonts: fonts, opts: opts, lang: cmp.Or(doc.Meta.Lang, opts.DefaultLang),
 		formats: map[string]*numfmt.Format{}, warned: map[string]bool{},
 	}
 	b.m = newMeasurer(ctx, fonts, b.lang)
@@ -177,6 +178,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		Metadata:  doc.Meta,
 		Structure: &compose.StructElem{Role: "Document", Lang: b.lang},
 	}
+	out.Metadata.Lang = b.lang
 	at := make([]int, len(pages))
 	// tables holds the Table element of each page, by page index, for the
 	// structure destinations of the outline and the links (ISO 14289-2,

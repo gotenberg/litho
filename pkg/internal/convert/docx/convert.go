@@ -112,12 +112,15 @@ func (d *document) endnoteBlocks() []*layout.Node {
 }
 
 // lang returns the document's language: the default run language of its
-// styles, else its theme font language.
+// styles, else its theme font language, else the caller's default.
 func (d *document) lang() string {
 	if l := d.styles.defRun.lang; l != nil && *l != "" {
 		return *l
 	}
-	return d.settings.lang
+	if d.settings.lang != "" {
+		return d.settings.lang
+	}
+	return d.opts.DefaultLang
 }
 
 // assemble returns the document of the layout res: every page with its

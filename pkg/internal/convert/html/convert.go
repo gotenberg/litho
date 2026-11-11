@@ -221,6 +221,9 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	if err != nil {
 		return nil, err
 	}
+	if scan.lang == "" {
+		scan.lang, scan.meta.Lang = o.DefaultLang, o.DefaultLang
+	}
 	res := newResources(o.Resources)
 	res.svg.fonts = fonts
 	res.client = o.HTTPClient

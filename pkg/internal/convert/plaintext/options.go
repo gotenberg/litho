@@ -90,6 +90,9 @@ type Options struct {
 	// MaxPages caps the output pages, [DefaultMaxPages] when zero, at most
 	// [limits.MaxConvertPagesCeiling].
 	MaxPages int
+	// DefaultLang is the document language, a BCP 47 tag, "" to leave it
+	// unknown: a text file names none. The caller validates it.
+	DefaultLang string
 }
 
 // withDefaults returns o with every zero field set to its default, or an

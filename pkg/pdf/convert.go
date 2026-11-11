@@ -757,6 +757,7 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 			FontSize:      o.fontSize,
 			MaxInputBytes: budget.MaxConvertInputBytes,
 			MaxPages:      budget.MaxConvertPages,
+			DefaultLang:   o.defaultLang,
 		})
 		if errors.Is(err, plaintext.ErrInvalidOptions) {
 			err = fmt.Errorf("converting text: %w: %w", ErrInvalidConvertOptions, err)
@@ -828,6 +829,7 @@ func convertHTML(ctx context.Context, src io.Reader, format Format, fonts *text.
 		BaseURL:               o.baseURL,
 		HTTPClient:            o.httpClient,
 		MediaFeatures:         o.mediaFeatures,
+		DefaultLang:           o.defaultLang,
 	})
 	switch {
 	case err == nil:
@@ -879,6 +881,7 @@ func convertOffice(ctx context.Context, src io.Reader, format Format, fonts *tex
 		PrintDate:         o.date,
 		HiddenSlides:      o.hiddenSlides,
 		NotesPages:        o.notesPages,
+		DefaultLang:       o.defaultLang,
 		MaxInputBytes:     maxBytes,
 		MaxPages:          maxPages,
 		Logger:            o.logger,

@@ -64,6 +64,9 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 		b.warn("line-numbering", "line numbers are not drawn")
 	}
 	root, first := b.document(body)
+	if root.Lang == "" {
+		root.Lang = opts.DefaultLang
+	}
 	if b.err != nil {
 		return nil, b.err
 	}

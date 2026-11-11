@@ -68,7 +68,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 		return nil, err
 	}
 
-	style := text.Style{Families: o.FontFamilies, Size: o.FontSize, Color: compose.Black}
+	style := text.Style{Families: o.FontFamilies, Size: o.FontSize, Color: compose.Black, Lang: o.DefaultLang}
 	face := fonts.Match(style)
 	if face == nil {
 		return nil, fmt.Errorf("matching %s: %w", strings.Join(o.FontFamilies, ", "), text.ErrNoFonts)
@@ -95,6 +95,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 		}
 	}
 	l.doc.Structure = l.root
+	l.doc.Metadata.Lang = o.DefaultLang
 	return &l.doc, nil
 }
 
