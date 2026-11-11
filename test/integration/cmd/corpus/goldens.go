@@ -65,10 +65,13 @@ const corpusImage = "litho-corpus-builder"
 // references installed (see [installPDFs]).
 //
 // A corpus whose goldens git versions (see [Manifest.GoldensInSource]) has
-// none to derive. A corpus whose references are not built yet (see
-// [Manifest.References]) is skipped with the command that builds them.
+// none to derive, and neither has a corpus nothing gives a PDF: no fetch, no
+// committed PDFs and no references, as the stress corpus, whose one feature
+// reads the documents the build step writes. A corpus whose references are
+// not built yet (see [Manifest.References]) is skipped with the command that
+// builds them.
 func goldensCorpus(ctx context.Context, m *Manifest, pins *resolvedPins) error {
-	if m.GoldensInSource {
+	if m.GoldensInSource || !hasPDFSource(m) {
 		return nil
 	}
 	testdataRoot, err := filepath.Abs(m.TestdataRoot())
@@ -434,4 +437,10 @@ func renderWithPoppler(ctx context.Context, dir string, jobs []popplerJob) (stri
 		return "", fmt.Errorf("%w: %w", errPopplerUnavailable, err)
 	}
 	return version, nil
+}
+
+// hasPDFSource reports whether something gives the corpus the PDFs the image
+// derives goldens from: a fetch, committed PDFs or references.
+func hasPDFSource(m *Manifest) bool {
+	return m.Fetch != nil || m.CommittedPDFs != "" || m.References != nil
 }
