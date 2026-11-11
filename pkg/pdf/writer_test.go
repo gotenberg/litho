@@ -3472,6 +3472,46 @@ func TestEvaluateRegression(t *testing.T) {
 			wantOK:   false,
 		},
 		{
+			// Three pages of thirty emptied: a tenth of the document's
+			// text, within the tolerance as a whole, far past it on each
+			// of the three pages.
+			name:     "pages emptied in a long document",
+			baseline: integritySnap{pageCount: 30, textLen: 3000, pageText: slices.Repeat([]int{100}, 30)},
+			post:     integritySnap{pageCount: 30, textLen: 2700, pageText: append(slices.Repeat([]int{100}, 27), 0, 0, 0)},
+			tol:      DefaultRegressionTolerance,
+			wantOK:   false,
+		},
+		{
+			name:     "every page within the tolerance",
+			baseline: integritySnap{pageCount: 3, textLen: 300, pageText: []int{100, 100, 100}},
+			post:     integritySnap{pageCount: 3, textLen: 273, pageText: []int{91, 92, 90}},
+			tol:      DefaultRegressionTolerance,
+			wantOK:   true,
+		},
+		{
+			name:     "a page past the tolerance",
+			baseline: integritySnap{pageCount: 3, textLen: 300, pageText: []int{100, 100, 100}},
+			post:     integritySnap{pageCount: 3, textLen: 289, pageText: []int{100, 100, 89}},
+			tol:      DefaultRegressionTolerance,
+			wantOK:   false,
+		},
+		{
+			name:     "a page without text in the source",
+			baseline: integritySnap{pageCount: 2, textLen: 100, pageText: []int{100, 0}},
+			post:     integritySnap{pageCount: 2, textLen: 100, pageText: []int{100, 0}},
+			tol:      RegressionTolerance{MaxTextDropRatio: 0.0, MaxImageDropRatio: 1.0},
+			wantOK:   true,
+		},
+		{
+			// A page dropped by consent: the pages no longer align, and
+			// the text is weighed as a whole.
+			name:     "page loss weighs the whole document",
+			baseline: integritySnap{pageCount: 3, textLen: 300, pageText: []int{100, 100, 100}},
+			post:     integritySnap{pageCount: 2, textLen: 280, pageText: []int{140, 140}},
+			tol:      RegressionTolerance{MaxTextDropRatio: 0.1, AllowPageLoss: true},
+			wantOK:   true,
+		},
+		{
 			// Unreadable source: baseline is zero across the board. Every
 			// check should skip so post content (legitimately non-zero)
 			// does not register as a regression.

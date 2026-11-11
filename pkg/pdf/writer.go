@@ -501,11 +501,13 @@ type remediateOpts struct {
 // regresses, remediation fails with [ErrRemediationBrokePDF].
 // Values are immutable and safe for concurrent use.
 type RegressionTolerance struct {
-	// MaxTextDropRatio is the largest acceptable fraction of total
+	// MaxTextDropRatio is the largest acceptable fraction of a page's
 	// extracted text that remediation may remove. 0.0 forbids any drop;
 	// 1.0 accepts any drop (including going from text to no text). The
-	// ratio is evaluated against the sum of [Reader.ExtractText] lengths
-	// across all pages. Defaults to 0.1 (10%).
+	// ratio is evaluated on each page against the length of its
+	// [Reader.ExtractText], so emptying a few pages of a long document
+	// counts; when AllowPageLoss lets the page count change, against the
+	// sum across all pages. Defaults to 0.1 (10%).
 	MaxTextDropRatio float64
 	// MaxImageDropRatio is the largest acceptable fraction of
 	// [Reader.ExtractImages] entries that remediation may remove.
@@ -3031,7 +3033,10 @@ type integritySnap struct {
 	pageCount int
 	// textLen counts the characters of extractable text, see
 	// [probeIntegrity].
-	textLen    int
+	textLen int
+	// pageText counts them page by page, textLen being their sum: the
+	// probe weighs a drop on each page ([evaluateRegression]).
+	pageText   []int
 	imageCount int
 	// invisible reports that textLen counts invisible text too
 	// ([WithInvisibleText]), as a remediation that flattened transparency
@@ -3040,7 +3045,7 @@ type integritySnap struct {
 }
 
 // probeIntegrity samples the observable surface area of a document: its
-// page count, the number of characters of extractable text across every page,
+// page count, the number of characters of extractable text on each page,
 // and the total number of image references. Per-page extraction failures
 // (missing fonts, OCR-only pages, decode errors) count as zero rather than
 // aborting the probe. The baseline may suffer the same failures, and the
@@ -3098,9 +3103,12 @@ func probeIntegrityText(ctx context.Context, r *Reader, invisible bool) (integri
 			opts = append(opts, WithInvisibleText())
 		}
 		text, extractErr := r.ExtractText(ctx, p, opts...)
+		n := 0
 		if extractErr == nil {
-			snap.textLen += utf8.RuneCountInString(text)
+			n = utf8.RuneCountInString(text)
 		}
+		snap.textLen += n
+		snap.pageText = append(snap.pageText, n)
 		images, imagesErr := r.ExtractImages(ctx, p)
 		if imagesErr == nil {
 			snap.imageCount += len(images)
@@ -3464,6 +3472,23 @@ func (w *Writer) materializeNow(ctx context.Context, method string) (undo func()
 // is within tolerance of baseline. Each field guards on a positive
 // baseline so an unreadable source (zero baseline) does not spuriously
 // flag a post that has legitimate content.
+//
+// Text is weighed page by page when both samples count the same pages, the
+// tolerance applying to each page: over the whole document, a repair that
+// empties a few pages of a long one stays within it. A sample without
+// per-page counts, or whose pages moved under [RegressionTolerance]
+// AllowPageLoss, is weighed as a whole.
+//
+// # Corpus evidence
+//
+//   - litho/pdf fartext_1b.pdf: the aggressive clamp of its out-of-range
+//     coordinates left page 1's "ABBA" unextractable, 4 of the document's
+//     141 characters, which the whole-document rule let through at PDF/A-1a
+//     and 1b; page by page it rolls the clamp back.
+//   - litho/pdf fontcopies_2b.pdf: a repair at PDF/A-1a and 1b dropped five
+//     of page 16's twelve codes no mapping gives a character, 5 of 126 over
+//     the document; page by page the content tier rolls back, in both modes.
+//   - verapdf, facturx: no fixture moves.
 func evaluateRegression(baseline, post integritySnap, tol RegressionTolerance) string {
 	if baseline.pageCount > 0 {
 		if !tol.AllowPageLoss && post.pageCount != baseline.pageCount {
@@ -3473,7 +3498,14 @@ func evaluateRegression(baseline, post integritySnap, tol RegressionTolerance) s
 			return fmt.Sprintf("page count grew from %d to %d", baseline.pageCount, post.pageCount)
 		}
 	}
-	if baseline.textLen > 0 {
+	if len(baseline.pageText) > 0 && len(baseline.pageText) == len(post.pageText) {
+		for i, base := range baseline.pageText {
+			minText := int(float64(base) * (1.0 - tol.MaxTextDropRatio))
+			if base > 0 && post.pageText[i] < minText {
+				return fmt.Sprintf("extracted text of page %d dropped from %d to %d characters (min %d)", i+1, base, post.pageText[i], minText)
+			}
+		}
+	} else if baseline.textLen > 0 {
 		minText := int(float64(baseline.textLen) * (1.0 - tol.MaxTextDropRatio))
 		if post.textLen < minText {
 			return fmt.Sprintf("extracted text dropped from %d to %d characters (min %d)", baseline.textLen, post.textLen, minText)
