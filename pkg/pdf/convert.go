@@ -321,7 +321,10 @@ func WithSinglePage(single bool) ConvertOption {
 // [ErrInvalidConvertOptions], which also wraps [ErrInvalidPageRange]. The
 // selection happens after layout: page counters in headers, footers and
 // margin boxes count the whole document, a link to a page left out is
-// dropped, and an outline entry on one is replaced by its entries.
+// dropped, and an outline entry on one is replaced by its entries. A
+// [FormatText] source, which knows its page count only once laid out,
+// holds every page in memory until the last with a selection, where
+// without one each page leaves memory once written.
 func WithPageRanges(spec string) ConvertOption {
 	return func(o *convertOptions) { o.pageRanges = spec }
 }

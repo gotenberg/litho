@@ -86,7 +86,18 @@ encodes:
 ## The backend
 
 `Write(ctx, doc, dst, opts)` validates the model, then writes one PDF
-through `writer.WriteRewrite`:
+through `writer.WriteRewrite`. It is a `Stream` fed every page of a whole
+document: a converter given a `PageSink` hands each page over as it lays
+it out, the stream writes its content stream at once (spooled past
+`Options.Spool`) and keeps only what the end of the file needs, the
+page's size, its links, the glyphs each font draws and the elements its
+marked content belongs to, and the metadata, outline and structure tree
+arrive with `Stream.Close`. The objects whose numbers depend on the page
+count and the tree are renumbered when the file is written, so the bytes
+are those `Write` writes for the whole document. A page selection
+resolves when the converter announces its page count (`PageSink.Expect`),
+holding only the pages that come before their turn; without the count, it
+holds every page until the end.
 
 - One content stream per page, Flate-compressed, operators in paint order.
   Groups become `q ... Q` with `cm`, a clip (`W n`) and an ExtGState for
