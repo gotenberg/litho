@@ -259,10 +259,10 @@ type layoutState struct {
 	// drew with, parsed the parsed font each one loaded, nil for a face
 	// that failed to load, and byFont maps a parsed font back to its face:
 	// the index's cache may evict a font this call still uses.
-	kit     *shapingKit
+	kit *shapingKit
 	// mem is the conversion's memory budget the glyph runs are charged
 	// to, nil for none.
-	mem *limits.Budget
+	mem     *limits.Budget
 	parsed  map[*Face]*font.Font
 	byFont  map[*font.Font]*Face
 	cache   map[resolveKey]*Face

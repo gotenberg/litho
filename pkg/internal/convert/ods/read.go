@@ -81,7 +81,6 @@ type reader struct {
 	condSty  map[string]*sheet.Style
 	pages    map[string]pageResult
 	pics     map[string]*picResult
-	pixels   int64
 	cells    int
 	rows     int
 	merges   int

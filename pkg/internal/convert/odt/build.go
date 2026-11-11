@@ -53,8 +53,6 @@ type builder struct {
 	lists *listState
 	notes *noteState
 	pics  map[string]picResult
-	// pixels counts the decoded pictures' pixels against maxTotalPixels.
-	pixels int64
 	// pageOrigin is the first page body's top-left corner on its page,
 	// which the offsets of a header's or footer's page-relative frames
 	// are moved by.

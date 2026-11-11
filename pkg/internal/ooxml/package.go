@@ -156,7 +156,7 @@ func (p *Package) Read(name string) ([]byte, error) {
 		return nil, fmt.Errorf("%w: %s", ErrNoPart, name)
 	}
 	partCap := office.InflateLimit(f.CompressedSize64, MaxPartBytes)
-	if f.UncompressedSize64 > uint64(partCap) {
+	if f.UncompressedSize64 > uint64(partCap) { //nolint:gosec // partCap is positive: at least the inflate floor
 		return nil, fmt.Errorf("%w: part %s is larger than %d bytes", office.ErrInputTooLarge, name, partCap)
 	}
 	rc, err := f.Open()

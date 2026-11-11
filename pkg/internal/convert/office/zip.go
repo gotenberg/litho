@@ -47,7 +47,7 @@ const inflateRatioFloor = 1 << 20
 // InflateLimit returns the most bytes an entry of compressed bytes may
 // inflate to under [MaxInflateRatio], at most limit.
 func InflateLimit(compressed uint64, limit int64) int64 {
-	if compressed > uint64(limit/MaxInflateRatio) {
+	if limit <= 0 || compressed > uint64(limit/MaxInflateRatio) { //nolint:gosec // limit is positive, checked first
 		return limit
 	}
 	return min(limit, max(int64(compressed)*MaxInflateRatio, inflateRatioFloor)) //nolint:gosec // fits int64: compressed is at most limit / MaxInflateRatio, checked above
@@ -138,7 +138,7 @@ func (p *Package) Read(ctx context.Context, name string, fold bool, maxBytes int
 		maxBytes = DefaultMaxEntryBytes
 	}
 	maxBytes = InflateLimit(f.CompressedSize64, maxBytes)
-	if f.UncompressedSize64 > uint64(maxBytes) {
+	if f.UncompressedSize64 > uint64(maxBytes) { //nolint:gosec // maxBytes is positive: InflateLimit returns at most a positive cap
 		return nil, fmt.Errorf("%w: entry %q of %d bytes past the cap of %d", ErrInputTooLarge, name, f.UncompressedSize64, maxBytes)
 	}
 	rc, err := f.Open()

@@ -65,7 +65,6 @@ type reader struct {
 	shapes   int
 	paras    int
 	pics     map[string]*picResult
-	pixels   int64
 	// layers maps a draw:layer name to its draw:display (ODF 1.3, Part 3,
 	// 10.2.3 and 19.153): always, screen, printer or none.
 	layers map[string]string
