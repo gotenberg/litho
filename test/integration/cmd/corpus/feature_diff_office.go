@@ -117,7 +117,7 @@ func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 	f.mu.Unlock()
 	stale, _, regolden, refused, err := referenceProblems(m, root, fixtures, pins)
 	if len(refused) > 0 {
-		fmt.Printf("%s: %d fixtures have no reference, not scored: %s\n", m.Name, len(refused), summarize(refused))
+		fmt.Fprintf(os.Stderr, "%s: %d fixtures have no reference, not scored: %s\n", m.Name, len(refused), summarize(refused))
 	}
 	switch {
 	case err != nil:
