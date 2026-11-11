@@ -1,6 +1,7 @@
 package sheet
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"strings"
@@ -210,15 +211,20 @@ func TestConvert_DestinationsNameTheTable(t *testing.T) {
 
 // TestConvert_DrawingsAreFigures locks how a sheet's drawings read: a
 // picture is a Figure carrying its description, a chart without one its
-// title, a decorative picture an artifact, and the outline entry of a
+// title, a decorative picture and an undescribed shape artifacts, and
+// the outline entry of a
 // page that prints only drawings names its first Figure (ISO 14289-1,
 // 7.3; ISO 14289-2, 8.8).
 func TestConvert_DrawingsAreFigures(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
 	pic := &layout.Picture{Source: source(t, img), Width: 2, Height: 2}
+	box := &layout.Picture{Width: 2, Height: 2, Vector: func(_ context.Context, r compose.Rect) []compose.Fragment {
+		return []compose.Fragment{&compose.Path{Ops: rectOps(r.X, r.Y, r.Width, r.Height), Fill: &compose.Fill{}}}
+	}}
 	sh := &Sheet{
 		Name: "S",
 		Drawings: []Drawing{
+			{From: Anchor{Row: 2, Column: 3}, Width: 20, Height: 20, Picture: box, Name: "rect", Shape: true},
 			{From: Anchor{Row: 0, Column: 0}, Width: 40, Height: 20, Picture: pic, Name: "shown", Alt: "A red square"},
 			{From: Anchor{Row: 3, Column: 0}, Width: 40, Height: 20, Picture: pic, Name: "border", Decorative: true},
 			{From: Anchor{Row: 6, Column: 0}, Width: 200, Height: 120, Chart: &chart.Chart{Title: &chart.Title{Text: "Sales\n 2026"}}, Name: "chart"},
@@ -237,7 +243,7 @@ func TestConvert_DrawingsAreFigures(t *testing.T) {
 	if len(figs) != 2 || figs[0].Alt != "A red square" || figs[1].Alt != "Sales 2026" {
 		t.Fatalf("figures %+v, want the picture's and the chart's", figs)
 	}
-	var tagged, artifacts int
+	var tagged, artifacts, shapes int
 	var walk func([]compose.Fragment)
 	walk = func(fs []compose.Fragment) {
 		for _, f := range fs {
@@ -248,14 +254,18 @@ func TestConvert_DrawingsAreFigures(t *testing.T) {
 				} else if v.Parent == nil {
 					artifacts++
 				}
+			case *compose.Path:
+				if v.Fill != nil && v.Parent == nil && len(v.Ops) == 5 {
+					shapes++
+				}
 			case *compose.Group:
 				walk(v.Content)
 			}
 		}
 	}
 	walk(out.Pages[0].Content)
-	if tagged != 1 || artifacts != 1 {
-		t.Errorf("%d pictures in the Figure, %d artifacts, want 1 and 1", tagged, artifacts)
+	if tagged != 1 || artifacts != 1 || shapes == 0 {
+		t.Errorf("%d pictures in the Figure, %d artifacts, %d shape paths untagged, want 1, 1 and some", tagged, artifacts, shapes)
 	}
 	if len(out.Outline) != 1 || out.Outline[0].Dest.Elem != figs[0] {
 		t.Errorf("outline %+v, want an entry naming the first Figure", out.Outline)

@@ -81,6 +81,9 @@ func TestRead_Drawings(t *testing.T) {
 	} else if frags := d.Picture.Vector(context.Background(), compose.Rect{Width: 10, Height: 10}); len(frags) != 1 {
 		t.Errorf("shape fragments %+v", frags)
 	}
+	if ds[0].Shape || ds[1].Shape || !ds[2].Shape || !ds[3].Shape {
+		t.Errorf("shapes alone %v %v %v %v, want the oval and the group", ds[0].Shape, ds[1].Shape, ds[2].Shape, ds[3].Shape)
+	}
 	if ds[0].Alt != "Company logo" || ds[0].Decorative || ds[1].Alt != "Sales" || ds[2].Alt != "" || !ds[3].Decorative {
 		t.Errorf("descriptions %q %q %q, decorative %v %v", ds[0].Alt, ds[1].Alt, ds[2].Alt, ds[0].Decorative, ds[3].Decorative)
 	}

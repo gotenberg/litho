@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -236,6 +237,7 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 			if len(leaves) == 0 {
 				return false
 			}
+			d.Shape = !slices.ContainsFunc(leaves, func(l leaf) bool { return l.pic != nil })
 			d.Picture = w.r.composite(leaves, d)
 			return d.Picture != nil
 		}

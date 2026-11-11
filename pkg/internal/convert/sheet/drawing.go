@@ -83,10 +83,12 @@ func (b *pageBuilder) drawings(regs []*region) ([]compose.Fragment, []*compose.S
 // gives it, a chart without one its title, as ISO 14289-1, 7.3 asks of a
 // Figure's alternate description; a picture its source does not describe
 // stays a Figure without one, which only the workbook's author can give
-// and a PDF/UA conversion reports. A drawing its source marks decorative
-// is an artifact (ISO 32000-1, 14.8.2.2.2; ISO 14289-1, 7.1).
+// and a PDF/UA conversion reports. A drawing its source marks decorative,
+// and one of shapes alone its source does not describe, is an artifact
+// (ISO 32000-1, 14.8.2.2.2; ISO 14289-1, 7.1), as the undescribed shapes
+// of a slide or a text document are.
 func figureOf(d *Drawing) *compose.StructElem {
-	if d.Decorative {
+	if d.Decorative || (d.Shape && d.Alt == "") {
 		return nil
 	}
 	alt := d.Alt

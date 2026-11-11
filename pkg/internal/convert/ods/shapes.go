@@ -59,6 +59,9 @@ type shapeArt struct {
 	// table:end-cell-address); nil for a line or a dimension line, whose
 	// ends place it.
 	logic *logicBox
+	// picture marks the art of a turned picture, which is no shape
+	// ([sheet.Drawing.Shape]).
+	picture bool
 }
 
 // logicBox is a shape's unturned box: its corner (x, y) on the sheet, its
@@ -152,7 +155,7 @@ func (r *reader) place(ts *tableState, el *odf.Element, at *sheet.Anchor, art sh
 		m := compose.Matrix{A: sx, D: sy, E: rect.X - b.X*sx, F: rect.Y - b.Y*sy}
 		return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: draw(ctx)}}
 	}
-	d := sheet.Drawing{Name: el.A(odf.NSDraw, "name"), Alt: odf.Describe(el), Decorative: r.decorative(el), Picture: pic, Width: b.Width, Height: b.Height, Unbounded: true}
+	d := sheet.Drawing{Name: el.A(odf.NSDraw, "name"), Alt: odf.Describe(el), Decorative: r.decorative(el), Shape: !art.picture, Picture: pic, Width: b.Width, Height: b.Height, Unbounded: true}
 	end, resize := cellRef(el.A(odf.NSTable, "end-cell-address"))
 	switch {
 	case at == nil:
@@ -635,7 +638,8 @@ func (r *reader) transformedPicture(ts *tableState, el *odf.Element, at *sheet.A
 		draw: func(ctx context.Context) []compose.Fragment {
 			return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: local(ctx, compose.Rect{Width: w, Height: h})}}
 		},
-		logic: &logicBox{x: m.E, y: m.F, w: w, h: h, lin: lin, local: local},
+		logic:   &logicBox{x: m.E, y: m.F, w: w, h: h, lin: lin, local: local},
+		picture: true,
 	})
 }
 
