@@ -183,7 +183,7 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 		if !ok {
 			id, _ = img.AttrNS(ooxml.NSO, "relid")
 		}
-		n := d.picture(s, ooxml.PictureRef{Embed: id}, st, w, h, attrOr(img, "title"))
+		n := d.picture(s, ooxml.PictureRef{Embed: id}, st, w, h, vmlAlt(k, img))
 		if n != nil {
 			setTransform(n.Style, vmlRotation(vs), strings.Contains(vs["flip"], "x"), strings.Contains(vs["flip"], "y"))
 		}
@@ -387,4 +387,16 @@ func (d *document) vmlGroup(s *story, g *ooxml.Element, st *css.Style, w, h floa
 		n.Children = append(n.Children, kid)
 	}
 	return n
+}
+
+// vmlAlt returns what a VML picture says of itself for a reader who cannot
+// see it: its shape's alt attribute, else its v:imagedata's o:title, in
+// the Office namespace (ECMA-376 Part 4, 19.1.2, the VML elements), ""
+// for neither.
+func vmlAlt(shape, img *ooxml.Element) string {
+	if alt := strings.TrimSpace(attrOr(shape, "alt")); alt != "" {
+		return alt
+	}
+	title, _ := img.AttrNS(ooxml.NSO, "title")
+	return strings.TrimSpace(title)
 }

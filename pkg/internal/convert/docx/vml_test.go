@@ -99,3 +99,25 @@ func TestVMLFlow(t *testing.T) {
 		}
 	}
 }
+
+// TestVML_PictureAlt locks what a reader hears of a VML picture: its
+// shape's alt, else its image's o:title.
+//
+// # Corpus evidence
+//
+//   - litho/docx: shapes-vml's picture titled "vml picture" in o:title was
+//     a Figure without a description.
+func TestVML_PictureAlt(t *testing.T) {
+	t.Parallel()
+	pic := func(shapeAttrs, title string) string {
+		return `<w:p><w:r><w:pict><v:shape style="width:30pt;height:20pt"` + shapeAttrs + `><v:imagedata r:id="rIda" o:title="` + title + `"/></v:shape></w:pict></w:r></w:p>`
+	}
+	b := build(t, pic(` alt="The alt"`, "The title")+pic("", "The title"), map[string]string{"word/media/a.png": pngData(t, 4, 4)})
+	var got []string
+	for _, n := range find(b.root, func(n *layout.Node) bool { return n.Kind == layout.Replaced }) {
+		got = append(got, n.Role+":"+n.Alt)
+	}
+	if len(got) != 2 || got[0] != "Figure:The alt" || got[1] != "Figure:The title" {
+		t.Errorf("pictures %q", got)
+	}
+}
