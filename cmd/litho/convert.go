@@ -155,7 +155,8 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	fs.Var(&defaultPaper, "default-paper", "Page size of a document that names none: a text or Markdown file, an HTML file without an @page size, "+
 		"a DOCX or ODT section and a sheet or CSV file without a page setup: letter, legal, a3, a4, a5, or WIDTHxHEIGHT in points (default a4)")
 	var margin marginFlag
-	fs.Var(&margin, "margin", "Margins in points: one for every side, or top,right,bottom,left (default 56.693, 2 cm)")
+	fs.Var(&margin, "margin", "Margins in points of a text, HTML or Markdown file: one for every side, or top,right,bottom,left (default 56.693, 2 cm); "+
+		"an Office document keeps its own and reports the flag as ignored")
 	var fonts stringsFlag
 	fs.Var(&fonts, "font", "Font family of a text file, repeatable in preference order (default Liberation Serif, then serif); HTML takes its fonts from its CSS")
 	fontSize := fs.Float64("font-size", 0, "Font size in points of a text file (default 12); HTML takes its sizes from its CSS")
