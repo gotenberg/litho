@@ -175,7 +175,21 @@ var (
 	sharedFontsOnce sync.Once
 	sharedFonts     *text.Fonts
 	sharedFontsErr  error
+	// sharedFontsDir is the directory testFonts made, "" when it made none.
+	sharedFontsDir string
 )
+
+// TestMain removes the directory of the test face once the tests end: the
+// index reads the face's file on first use, so no single test owns it.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	// Running the Once first orders this read after the write of any test.
+	sharedFontsOnce.Do(func() {})
+	if sharedFontsDir != "" {
+		os.RemoveAll(sharedFontsDir)
+	}
+	os.Exit(code)
+}
 
 // testFonts returns an index of the test face, built once for the
 // package.
@@ -187,6 +201,7 @@ func testFonts(t testing.TB) *text.Fonts {
 			sharedFontsErr = err
 			return
 		}
+		sharedFontsDir = dir
 		if err := os.WriteFile(filepath.Join(dir, "test_sans.ttf"), testSans(), 0o600); err != nil {
 			sharedFontsErr = err
 			return
