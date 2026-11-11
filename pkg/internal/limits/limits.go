@@ -219,18 +219,22 @@ const DefaultMaxConvertPages = 10_000
 //
 // 1 GiB holds every Office, HTML and text document of the corpora many
 // times over, and a plain text source at the default input cap. The Go heap
-// peaks at two to three times what the account holds, so the default
-// keeps one conversion under about 3 GiB.
+// peaks at about twice what the account holds, so the default keeps one
+// conversion near 2 GiB.
 //
 // # Corpus evidence
 //
-//   - probe, text: 16 MiB of paragraphs, 4,214 pages, peaks at 795 MiB of
-//     account and 1.7 GiB of Go heap.
-//   - probe, html: 4 MiB of paragraphs peaks at 692 MiB of account and 1.7
-//     GiB of Go heap; 16 MiB is refused 2 seconds in, where the conversion
-//     without the budget peaked at 7 GiB after 12 seconds.
-//   - probe, csv: 1,000,000 cells are refused while read, a third of a
+//   - probe, text: 16 MiB of paragraphs, 4,214 pages, peaks at 785 MiB of
+//     account and 1.5 GiB of Go heap.
+//   - probe, html: 4 MiB of paragraphs peaks at 692 MiB of account and 1.5
+//     GiB of Go heap; 16 MiB is refused under a second in, where the
+//     conversion without the budget peaked at 7 GiB after 12 seconds.
+//   - probe, csv: 1,000,000 cells are refused while read, a fifth of a
 //     second in, where they took 2.4 GiB and 62 seconds before.
+//   - probe, html: fifty distinct 12-megapixel PNGs, decoded one at a
+//     time, peak at 310 MiB of account and 570 MiB of Go heap.
+//   - All Office, HTML and text corpora: none of the 2,965 documents is
+//     refused.
 const DefaultMaxConvertMemoryBytes = 1 << 30
 
 // MaxConvertPictures caps the distinct pictures one conversion decodes:

@@ -145,15 +145,15 @@ type Limits struct {
 	// The account follows what a conversion keeps alive, measured per
 	// format: plain text costs about 50 bytes a source byte, 190 KiB a page;
 	// HTML about 170 bytes a source byte, 690 KiB a page; a DOCX of short
-	// pages about 80 KiB a page; a sheet about 1.8 KiB a cell; a decoded
-	// picture 4 bytes a pixel (8 for 16 bits a channel), a JPEG written as
-	// it is nothing beside its file. So the default holds a text source at
-	// the default MaxConvertInputBytes, and refuses an HTML source of more
-	// than about 6 MiB of plain paragraphs, a workbook of more than about
-	// 600,000 cells, and the decoded pictures past 1 GiB. The Go heap peaks
-	// at two to three times the account, since the garbage collector frees
-	// what is released a while later: size a host for three times the
-	// budget per concurrent conversion. Default 1 GiB, at most 64 GiB.
+	// pages about 80 KiB a page; a sheet about 1.8 KiB a cell; a picture
+	// 4 bytes a pixel (8 for 16 bits a channel) while it is decoded, then
+	// its compressed samples, and a JPEG written as it is its file. So the
+	// default holds a text source at the default MaxConvertInputBytes, and
+	// refuses an HTML source of more than about 6 MiB of plain paragraphs
+	// and a workbook of more than about 600,000 cells. The Go heap peaks at
+	// about twice the account, since the garbage collector frees what is
+	// released a while later: size a host for twice the budget per
+	// concurrent conversion. Default 1 GiB, at most 64 GiB.
 	MaxConvertMemoryBytes int64
 }
 

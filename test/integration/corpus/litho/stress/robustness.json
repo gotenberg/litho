@@ -7,53 +7,52 @@
   "text-4mib": {
     "result": "pdf",
     "max_seconds": 20,
-    "why": "4 MiB of paragraphs, about 1,050 pages: the account holds about 200 MiB at its peak, the Go heap about 470 MiB."
+    "why": "4 MiB of paragraphs, about 1,050 pages: the account holds about 200 MiB at its peak, the Go heap about 390 MiB."
   },
   "text-16mib": {
     "result": "pdf",
-    "max_rss_mib": 2560,
-    "why": "16 MiB of paragraphs, the default input cap, about 4,200 pages: the account holds about 800 MiB at its peak, under the 1 GiB budget, and the Go heap about 1.7 GiB."
+    "max_rss_mib": 2048,
+    "why": "16 MiB of paragraphs, the default input cap, about 4,200 pages: the account holds about 790 MiB at its peak, under the 1 GiB budget, and the process about 1.6 GiB."
   },
   "html-1mib": {
     "result": "pdf",
     "max_seconds": 20,
-    "why": "1 MiB of paragraphs, 257 pages: the account holds about 170 MiB at its peak, the Go heap about 390 MiB."
+    "why": "1 MiB of paragraphs, 257 pages: the account holds about 170 MiB at its peak, the Go heap about 340 MiB."
   },
   "html-4mib": {
     "result": "pdf",
-    "max_rss_mib": 2560,
-    "why": "4 MiB of paragraphs, about 1,025 pages: the account holds about 690 MiB at its peak, the Go heap about 1.7 GiB."
+    "max_rss_mib": 2048,
+    "why": "4 MiB of paragraphs, about 1,025 pages: the account holds about 690 MiB at its peak, the process about 1.5 GiB."
   },
   "html-16mib": {
     "result": "ErrConvertInputTooLarge",
-    "max_rss_mib": 2048,
+    "max_rss_mib": 1536,
     "max_seconds": 10,
-    "why": "16 MiB of paragraphs: the styles, boxes, shaped paragraphs and glyph runs would hold about 2.7 GiB, and the budget refuses them during the layout, a few seconds in."
+    "why": "16 MiB of paragraphs: the styles, boxes, shaped paragraphs and glyph runs would hold about 2.7 GiB, and the budget refuses them during the layout, under a second in; the process peaks near 1.2 GiB."
   },
   "html-png-10": {
     "result": "pdf",
-    "max_rss_mib": 2048,
-    "why": "Ten distinct 12-megapixel PNGs: 480 MB of decoded pixels, under the budget, held until the document is written."
+    "max_seconds": 20,
+    "why": "Ten distinct 12-megapixel PNGs: each is held decoded, 48 MB, only while it is encoded, then as its compressed samples; the account peaks near 100 MiB."
   },
   "html-png-50": {
-    "result": "ErrConvertInputTooLarge",
-    "max_rss_mib": 2048,
-    "max_seconds": 10,
-    "why": "Fifty distinct 12-megapixel PNGs: 2.4 GB of decoded pixels while every picture is held until the document is written; the budget refuses the picture past 1 GiB before decoding it."
+    "result": "pdf",
+    "max_seconds": 60,
+    "why": "Fifty distinct 12-megapixel PNGs, 2.4 GB of pixels decoded one at a time: the account peaks near 310 MiB, the process near 650 MiB."
   },
   "html-jpeg-10": {
     "result": "pdf",
     "max_seconds": 20,
-    "why": "Ten distinct 12-megapixel JPEGs, written as they are: no pixel is decoded or charged."
+    "why": "Ten distinct 12-megapixel JPEGs, written as they are: their files are charged, no pixel is decoded."
   },
   "html-jpeg-50": {
     "result": "pdf",
     "max_seconds": 20,
-    "why": "Fifty distinct 12-megapixel JPEGs, written as they are: no pixel is decoded or charged."
+    "why": "Fifty distinct 12-megapixel JPEGs, written as they are: their 35 MB of files are charged, no pixel is decoded."
   },
   "csv-100k": {
     "result": "pdf",
-    "why": "100,000 cells, 197 pages: the account holds about 180 MiB at its peak, the Go heap about 310 MiB."
+    "why": "100,000 cells, 182 pages: the account holds about 180 MiB at its peak, the Go heap about 270 MiB."
   },
   "csv-1000k": {
     "result": "ErrConvertInputTooLarge",
@@ -63,6 +62,6 @@
   "docx-2000pages": {
     "result": "pdf",
     "max_seconds": 20,
-    "why": "2,000 pages of one paragraph each: the account holds about 160 MiB at its peak, the Go heap about 510 MiB."
+    "why": "2,000 pages of one paragraph each: the account holds about 160 MiB at its peak, the Go heap about 370 MiB."
   }
 }
