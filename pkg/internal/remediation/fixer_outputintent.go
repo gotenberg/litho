@@ -617,6 +617,10 @@ func fixDeviceColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *
 //   - probe, html: a one-page Chromium invoice painting DeviceRGB alone
 //     (gotenberg/litho#8) remediated to PDF/A-3b took 48,203 bytes, and
 //     19,608 with no DefaultCMYK; veraPDF passes both.
+//   - All converter corpora, 452 documents converted to PDF/A-2b: the
+//     median output went from 3.0 to 1.25 times the plain file, and veraPDF
+//     passes all 452 before and after. The verapdf, litho/pdf and facturx
+//     remediation cells score the same on every fixture.
 func defaultCMYKPages(violations []compliance.Violation) (pages map[int]bool, all bool) {
 	placed := false
 	for _, v := range violations {
