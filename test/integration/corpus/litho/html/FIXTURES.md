@@ -120,7 +120,7 @@ The `diff` feature converts each source at its options (by default on Chromium's
 
 ## Paper documents
 
-`corpus build` generates the paper documents from the committed `paper-base` (about three pages: headings, justified paragraphs, quotes, a table the width of the page, a picture, its stylesheet holding `@page { size: auto; }`) and `paper-markdown` (the same text in Markdown) into the testdata (`paperDocs` in `cmd/corpus/papers.go`, `papers/<name>/`), never committed.
+`corpus build` generates the paper documents from the committed `paper-base` (about three pages: headings, justified paragraphs, quotes, a table the width of the page, a picture, its stylesheet holding `@page { size: auto; }`) and `paper-markdown` (the same text in Markdown) into the testdata (`paperDocs` in `cmd/corpus/papers.go`, `papers/<name>/`), never committed. Measured on the references: with `preferCssPageSize` false, Chromium keeps the paper of the options but takes the orientation an `@page` size names (`paper-css-ledger-landscape-paper` prints on A4 landscape, 841.92 by 595.92 points), and with it true prints an `@page` keyword size rounded to whole CSS pixels (A4 is 594.96 by 841.92 points).
 
 | Fixture                                    | Count | What sets the page                                                                                                                                                                                                     |
 | ------------------------------------------ | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
