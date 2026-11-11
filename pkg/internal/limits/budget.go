@@ -125,7 +125,7 @@ func (b *Budget) Charge(n int64, what string) error {
 	held := b.held.Add(n)
 	if held > b.limit || held < 0 {
 		b.held.Add(-n)
-		return b.refuse(fmt.Errorf("%w: holding %d more bytes of %s would take the conversion past %d bytes", ErrMemoryBudget, n, what, b.limit))
+		return b.refuse(fmt.Errorf("%w: holding %d more bytes of %s would take the conversion past its memory limit of %d bytes", ErrMemoryBudget, n, what, b.limit))
 	}
 	for {
 		p := b.peak.Load()

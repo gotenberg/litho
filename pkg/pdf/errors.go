@@ -790,10 +790,11 @@ var (
 	ErrInvalidConvertOptions = errors.New("invalid conversion options")
 
 	// ErrConvertInputTooLarge is returned, wrapped, by [Convert] for a source
-	// longer than [Limits.MaxConvertInputBytes], and for an HTML document
-	// whose elements, cascade or boxes pass the converter's caps. Nothing is
-	// written.
-	ErrConvertInputTooLarge = plaintext.ErrInputTooLarge
+	// longer than [Limits.MaxConvertInputBytes], for a document whose
+	// elements, cascade, boxes, parts or cells pass the converter's caps,
+	// and for one the [Limits.MaxConvertMemoryBytes] budget cannot hold, in
+	// every format. Nothing is written.
+	ErrConvertInputTooLarge = errors.New("conversion input too large")
 
 	// ErrConvertTooManyPages is returned, wrapped, by [Convert] when the
 	// layout needs more than [Limits.MaxConvertPages] pages. Nothing is

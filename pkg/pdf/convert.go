@@ -767,9 +767,12 @@ func Convert(ctx context.Context, src io.Reader, format Format, dst io.Writer, o
 			MaxPages:      budget.MaxConvertPages,
 			DefaultLang:   o.defaultLang,
 		})
-		if errors.Is(err, plaintext.ErrInvalidOptions) {
+		switch {
+		case errors.Is(err, plaintext.ErrInvalidOptions):
 			err = fmt.Errorf("converting text: %w: %w", ErrInvalidConvertOptions, err)
-		} else if err != nil {
+		case errors.Is(err, plaintext.ErrInputTooLarge):
+			err = fmt.Errorf("converting text: %w: %w", ErrConvertInputTooLarge, err)
+		case err != nil:
 			err = fmt.Errorf("converting text: %w", err)
 		}
 	}
