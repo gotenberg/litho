@@ -377,6 +377,11 @@ type TextBody struct {
 	// as fractions of 1: 0.8 and 0.2; 0 when the file saved none, and the
 	// builder computes the fit itself.
 	FontScale, SpacingReduction float64
+	// SavedFit lays an AutofitShrink body out at the FontScale and
+	// SpacingReduction the file saved, 0 reading as none, as PowerPoint
+	// prints a PresentationML body; false computes the fit again, as
+	// Impress does whatever the file saved.
+	SavedFit bool
 	// Columns is the number of text columns, 1 or 0 for one; ColumnGap
 	// the space between them in points.
 	Columns   int
