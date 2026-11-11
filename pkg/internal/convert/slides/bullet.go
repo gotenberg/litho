@@ -3,6 +3,7 @@ package slides
 import (
 	"math"
 	"strings"
+	"unicode"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -163,6 +164,11 @@ const maxRecode = 1024
 // characters stand for, by recode: a bullet drawn at an OpenSymbol code
 // point reads as its symbol font's private-use code. The bullets are the
 // runs of the frags whose structure element is a Lbl.
+//
+// A private-use code means nothing to a reader, so the Lbl of a recoded
+// bullet carries the character drawn as its ActualText, a bullet when
+// that one is private-use too (ISO 19005-2, 6.2.11.7.3; ISO 14289-2,
+// 8.4.3).
 func recodeLabels(frags []compose.Fragment, recode map[string]string) {
 	for _, f := range frags {
 		switch v := f.(type) {
@@ -172,6 +178,9 @@ func recodeLabels(frags []compose.Fragment, recode map[string]string) {
 			}
 			for i := range v.Glyphs {
 				if t, ok := recode[v.Glyphs[i].Text]; ok {
+					if v.Parent.ActualText == "" {
+						v.Parent.ActualText = readable(v.Glyphs[i].Text)
+					}
 					v.Glyphs[i].Text = t
 				}
 			}
@@ -179,6 +188,17 @@ func recodeLabels(frags []compose.Fragment, recode map[string]string) {
 			recodeLabels(v.Content, recode)
 		}
 	}
+}
+
+// readable returns s, or a bullet when s holds a private-use character
+// (Unicode, 23.5), which a reader cannot name.
+func readable(s string) string {
+	for _, r := range s {
+		if unicode.In(r, unicode.Co) {
+			return "•"
+		}
+	}
+	return s
 }
 
 // maxBulletScale caps a bullet's scale of the text size. Anti-DoS guard,

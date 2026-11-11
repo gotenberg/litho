@@ -92,9 +92,25 @@ func TestText_SymbolBulletText(t *testing.T) {
 	p := para("aaa", arial(18))
 	p.MarginLeft, p.Indent = 18, -18
 	p.Bullet = &Bullet{Kind: BulletChar, Char: "n", Families: []string{"Wingdings"}}
-	pg := convert(t, deck(&Slide{Shapes: []*Shape{box(10, 10, 300, 100, p)}}), office.Options{}).Pages[0]
+	out := convert(t, deck(&Slide{Shapes: []*Shape{box(10, 10, 300, 100, p)}}), office.Options{})
+	pg := out.Pages[0]
 	find(t, pg, "\uf06e")
 	find(t, pg, "aaa")
+	// Its Lbl reads as the character drawn, not the private-use code.
+	var lbl *compose.StructElem
+	var walk func(*compose.StructElem)
+	walk = func(e *compose.StructElem) {
+		if e.Role == "Lbl" && lbl == nil {
+			lbl = e
+		}
+		for _, k := range e.Kids {
+			walk(k)
+		}
+	}
+	walk(out.Structure)
+	if lbl == nil || lbl.ActualText == "" || []rune(lbl.ActualText)[0] >= 0xe000 && []rune(lbl.ActualText)[0] <= 0xf8ff {
+		t.Errorf("bullet Lbl %+v", lbl)
+	}
 }
 
 // TestText_Autofit checks the scale levels a shrinking body takes and the
