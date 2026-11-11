@@ -1,6 +1,7 @@
 package pptx
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -140,7 +141,7 @@ func mediaOf(el *ooxml.Element) string {
 func (r *reader) pictureOf(part string, ref ooxml.PictureRef) *layout.Picture {
 	var pic *layout.Picture
 	if ref.SVG != "" {
-		pic = r.loadPicture(part, ref.SVG)
+		pic = stretched(r.loadPicture(part, ref.SVG))
 	}
 	if pic == nil && ref.Embed != "" {
 		pic = r.loadPicture(part, ref.Embed)
@@ -149,6 +150,36 @@ func (r *reader) pictureOf(part string, ref ooxml.PictureRef) *layout.Picture {
 		r.warn("unsupported-content", "a linked picture is left out: linked files are not read")
 	}
 	return pic
+}
+
+// stretched returns the vector picture pic drawn stretched over the box it
+// is given, its own aspect ratio ignored, as PowerPoint prints an
+// asvg:svgBlip (MS-ODRAWXML, 2.3.7.1) scaled to its frame; pic as it is
+// when it is no vector picture.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: picture-svg's circle drawn in a frame twice as tall as
+//     wide prints as an ellipse filling the frame in PowerPoint's
+//     reference, and its frame scaled wide as a wide ellipse.
+func stretched(pic *layout.Picture) *layout.Picture {
+	if pic == nil || pic.Vector == nil || !(pic.Width > 0) || !(pic.Height > 0) {
+		return pic
+	}
+	inner := *pic
+	out := *pic
+	out.Vector = func(ctx context.Context, box compose.Rect) []compose.Fragment {
+		if !(box.Width > 0) || !(box.Height > 0) {
+			return nil
+		}
+		content := inner.Vector(ctx, compose.Rect{Width: inner.Width, Height: inner.Height})
+		if len(content) == 0 {
+			return nil
+		}
+		m := compose.Matrix{A: box.Width / inner.Width, D: box.Height / inner.Height, E: box.X, F: box.Y}
+		return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: content}}
+	}
+	return &out
 }
 
 // loadPicture decodes the picture the relationship id of part names, once

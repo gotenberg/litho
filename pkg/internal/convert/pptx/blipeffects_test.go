@@ -76,3 +76,24 @@ func decoded(t testing.TB, src *compose.ImageSource) *image.NRGBA {
 	}
 	return n
 }
+
+// TestStretched checks that an SVG picture is drawn stretched over its box,
+// its own aspect ratio ignored.
+func TestStretched(t *testing.T) {
+	var drawn compose.Rect
+	pic := &layout.Picture{Width: 10, Height: 10, Vector: func(_ context.Context, r compose.Rect) []compose.Fragment {
+		drawn = r
+		return []compose.Fragment{ooxml.RectPath(r)}
+	}}
+	out := stretched(pic).Vector(context.Background(), compose.Rect{X: 5, Y: 7, Width: 40, Height: 20})
+	g, ok := out[0].(*compose.Group)
+	if len(out) != 1 || !ok {
+		t.Fatalf("fragments %v", out)
+	}
+	if want := (compose.Matrix{A: 4, D: 2, E: 5, F: 7}); g.Transform != want || drawn != (compose.Rect{Width: 10, Height: 10}) {
+		t.Errorf("transform %+v drawing %+v, want %+v over the natural size", g.Transform, drawn, want)
+	}
+	if stretched(nil) != nil {
+		t.Error("a missing picture stretches to something")
+	}
+}
