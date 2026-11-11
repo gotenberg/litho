@@ -562,6 +562,12 @@ func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, 
 			Source: j.source, SourceSHA256: srcSum, OptionsSHA256: optSum, Image: builder,
 			Status: strconv.Itoa(status), Answer: string(answer),
 		}
+		if status == 0 {
+			// No answer came back: the source was never sent, or the
+			// request failed. The cause says which.
+			fmt.Fprintf(os.Stderr, "  %s: %s has no reference from %s: %s\n", m.Name, j.name, builder, answer)
+			return nil
+		}
 		fmt.Fprintf(os.Stderr, "  %s: %s refused by %s (HTTP %d)\n", m.Name, j.name, builder, status)
 		return nil
 	})
