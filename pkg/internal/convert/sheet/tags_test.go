@@ -148,3 +148,26 @@ func TestConvert_TableRepeatsTitlesPerPage(t *testing.T) {
 		t.Errorf("page 2 first band row %q, want %q", got, want)
 	}
 }
+
+// TestConvert_DestinationsNameTheTable locks that the outline entry of a
+// sheet and a link into the book name the Table of the page they show as
+// their structure destination (ISO 14289-2, 8.8).
+func TestConvert_DestinationsNameTheTable(t *testing.T) {
+	a := &Sheet{Name: "A", Rows: []Row{{Index: 0, Cells: []Cell{{Column: 0, Value: Value{Kind: Text, Text: "to B"}, Href: "#B!A1"}}}}}
+	bs := &Sheet{Name: "B", Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "b", nil)}}}}
+	doc := newDoc(a)
+	newDoc(bs)
+	doc.Sheets = append(doc.Sheets, bs)
+	out := convert(t, doc, office.Options{})
+	if len(out.Pages) != 2 || len(out.Outline) != 2 || len(out.Structure.Kids) != 2 {
+		t.Fatalf("%d pages, %d outline entries, %d tables", len(out.Pages), len(out.Outline), len(out.Structure.Kids))
+	}
+	for i, o := range out.Outline {
+		if o.Dest.Elem != out.Structure.Kids[i] {
+			t.Errorf("outline entry %d names %+v", i, o.Dest.Elem)
+		}
+	}
+	if l := out.Pages[0].Links; len(l) != 1 || l[0].Dest == nil || l[0].Dest.Elem != out.Structure.Kids[1] {
+		t.Errorf("links %+v", l)
+	}
+}

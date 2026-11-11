@@ -178,6 +178,10 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		Structure: &compose.StructElem{Role: "Document", Lang: b.lang},
 	}
 	at := make([]int, len(pages))
+	// tables holds the Table element of each page, by page index, for the
+	// structure destinations of the outline and the links (ISO 14289-2,
+	// 8.8).
+	var tables []*compose.StructElem
 	for k, p := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -188,11 +192,12 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		}
 		out.Pages = append(out.Pages, pg)
 		at[k] = len(out.Pages)
+		tables = append(tables, tableOf(st))
 		if st != nil {
 			out.Structure.Kids = append(out.Structure.Kids, st.Kids...)
 		}
 	}
-	resolveSheetLinks(doc, out, pages, at)
+	resolveSheetLinks(doc, out, pages, at, tables)
 	if len(pages) == 0 {
 		// A book that prints no cell prints the first page of its first
 		// sheet, the cells its styles paint, with the sheet's header and
@@ -209,11 +214,15 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 				p = &pagePlan{sp: sp}
 			}
 			p.number = max(sp.g.sh.Page.FirstPageNumber, 1)
-			if r, _, err := b.renderPage(p, true, 1); err == nil {
+			var tbl *compose.StructElem
+			if r, st, err := b.renderPage(p, true, 1); err == nil {
 				pg = r
+				if tbl = tableOf(st); tbl != nil {
+					out.Structure.Kids = append(out.Structure.Kids, st.Kids...)
+				}
 			}
 			if !opts.OmitOutline {
-				out.Outline = []compose.Outline{{Title: sp.g.sh.Name, Dest: compose.Dest{Page: 1}}}
+				out.Outline = []compose.Outline{{Title: sp.g.sh.Name, Dest: compose.Dest{Page: 1, Elem: tbl}}}
 			}
 		}
 		out.Pages = []*compose.Page{pg}
@@ -223,7 +232,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 			for _, p := range sp.pages {
 				idx := indexOf(pages, p)
 				if idx >= 0 && at[idx] > 0 {
-					out.Outline = append(out.Outline, compose.Outline{Title: sp.g.sh.Name, Dest: compose.Dest{Page: at[idx]}})
+					out.Outline = append(out.Outline, compose.Outline{Title: sp.g.sh.Name, Dest: compose.Dest{Page: at[idx], Elem: tables[at[idx]-1]}})
 					break
 				}
 			}
@@ -231,6 +240,20 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	}
 	out.Warnings = b.warnings
 	return out, nil
+}
+
+// tableOf returns the Table element among the kids of a page's
+// structure root st, nil for none.
+func tableOf(st *compose.StructElem) *compose.StructElem {
+	if st == nil {
+		return nil
+	}
+	for _, k := range st.Kids {
+		if k.Role == "Table" {
+			return k
+		}
+	}
+	return nil
 }
 
 // indexOf returns the index of p in pages, -1 when absent.

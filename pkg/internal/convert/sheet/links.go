@@ -67,13 +67,15 @@ func sheetIndex(doc *Document, name string) int {
 // the book into links to the page that prints their cell, or the first
 // page of their sheet, as LibreOffice exports a link into the book; a
 // link to a sheet or a name that prints no page is dropped. pages are the
-// planned pages, at[k] the 1-based page of out pages[k] is.
+// planned pages, at[k] the 1-based page of out pages[k] is, tables[i] the
+// Table element of page i+1, which the link names as its structure
+// destination (ISO 14289-2, 8.8).
 //
 // # Corpus evidence
 //
 //   - libreoffice/xlsx: sc/hyperlinks.xlsx links "#Offering!$B$2", which LibreOffice
 //     exports as a link to page 3, the first of sheet Offering.
-func resolveSheetLinks(doc *Document, out *compose.Document, pages []*pagePlan, at []int) {
+func resolveSheetLinks(doc *Document, out *compose.Document, pages []*pagePlan, at []int, tables []*compose.StructElem) {
 	for _, pg := range out.Pages {
 		links := pg.Links[:0]
 		for _, l := range pg.Links {
@@ -83,7 +85,7 @@ func resolveSheetLinks(doc *Document, out *compose.Document, pages []*pagePlan, 
 				continue
 			}
 			if page := targetPage(doc, target, pages, at); page > 0 {
-				l.URI, l.Dest = "", &compose.Dest{Page: page}
+				l.URI, l.Dest = "", &compose.Dest{Page: page, Elem: tables[page-1]}
 				links = append(links, l)
 			}
 		}
