@@ -10,7 +10,8 @@
 //     @font-face rules with their media conditions. Values are parsed and
 //     shorthands expanded into longhands here; a value holding var() waits
 //     for computed-value time.
-//   - [NewResolver] takes stylesheets in cascade order with their origins,
+//   - [NewResolver] takes stylesheets in cascade order with their origins
+//     (the user agent's, the user's and the author's, CSS Cascade 4, 6.2),
 //     drops the rules whose @media conditions do not match a [Media], and
 //     indexes the selectors by their rightmost compound.
 //   - [Resolver.Compute] matches selectors (a Selectors 4 subset), sorts

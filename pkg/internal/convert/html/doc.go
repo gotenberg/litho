@@ -41,9 +41,10 @@
 //
 // # Styles
 //
-// The cascade holds [css.HTMLUserAgent], then each <style> element and
-// each <link rel=stylesheet> in document order, under its media attribute,
-// with their @import rules read as above, the style attributes and the
+// The cascade holds [css.HTMLUserAgent], then [Options.UserStylesheets]
+// in the user origin, then each <style> element and each <link
+// rel=stylesheet> in document order, under its media attribute, with
+// their @import rules read as above, the style attributes and the
 // presentational hints of [css.HTMLHints]. The stylesheets are evaluated
 // for [Options.Media] on the page area of the first page, which the
 // viewport units measure too.

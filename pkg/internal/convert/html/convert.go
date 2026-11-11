@@ -52,10 +52,6 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 	if err != nil {
 		return nil, err
 	}
-	if len(o.UserStylesheets) > 0 {
-		// Wave 11, cell web: remove with the feature.
-		return nil, errors.New("converting HTML: user stylesheets are not implemented")
-	}
 	if fonts == nil {
 		return nil, fmt.Errorf("%w: no font index", ErrInvalidOptions)
 	}
@@ -232,7 +228,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	res.svg.fonts = fonts
 	res.client = o.HTTPClient
 	c := &collector{res: res, base: scan.resourceBase, logger: o.Logger}
-	sheets := c.stylesheets(ctx, scan.sheets)
+	sheets := c.stylesheets(ctx, o.UserStylesheets, scan.sheets)
 
 	media := css.Media{Type: o.Media, Features: o.MediaFeatures}
 	media.Width, media.Height = paperArea(o)

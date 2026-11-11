@@ -27,11 +27,19 @@ type collector struct {
 }
 
 // stylesheets returns the sheets of the cascade in order (CSS Cascade 4,
-// 6.2): the user agent stylesheet, then the author's <style> and <link
-// rel=stylesheet> elements in document order (HTML Standard, 4.2.6 and
-// 4.6.7.18).
-func (c *collector) stylesheets(ctx context.Context, elems []*dom.Node) []css.Sheet {
+// 6.2): the user agent stylesheet, the user stylesheets user in the order
+// given, then the author's <style> and <link rel=stylesheet> elements in
+// document order (HTML Standard, 4.2.6 and 4.6.7.18).
+func (c *collector) stylesheets(ctx context.Context, user []string, elems []*dom.Node) []css.Sheet {
 	sheets := []css.Sheet{{Sheet: css.HTMLUserAgent(), Origin: css.UserAgent}}
+	for i, body := range user {
+		if ctx.Err() != nil {
+			break
+		}
+		if s := c.userSheet(ctx, i+1, body); s != nil {
+			sheets = append(sheets, css.Sheet{Sheet: s, Origin: css.User})
+		}
+	}
 	for _, n := range elems {
 		if ctx.Err() != nil {
 			break
@@ -49,6 +57,26 @@ func (c *collector) stylesheets(ctx context.Context, elems []*dom.Node) []css.Sh
 	return sheets
 }
 
+// userSheet parses body, the n-th user stylesheet. It is held to the caps
+// of a resource and charged to the conversion's budget as a linked
+// stylesheet is, and left out with the same warning past them; its url()
+// values and imports resolve against the document's base, as a <style>
+// element's do.
+func (c *collector) userSheet(ctx context.Context, n int, body string) *css.Stylesheet {
+	name := fmt.Sprintf("user stylesheet %d", n)
+	if err := c.res.admit(ctx, len(body)); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		c.warn(warningCode(err), fmt.Sprintf("the %s was left out: %v", name, err))
+		return nil
+	}
+	// The query keeps its key distinct from the document's own URL and
+	// from every <style> element's.
+	key := resolveRef(c.base, fmt.Sprintf("?litho-user-style=%d", n))
+	return c.parse(ctx, []byte(body), key, "", name)
+}
+
 // styleElement parses a <style> element whose type is CSS (HTML Standard,
 // 4.2.6): an absent or empty type, or text/css.
 func (c *collector) styleElement(ctx context.Context, n *dom.Node) *css.Stylesheet {
@@ -61,7 +89,7 @@ func (c *collector) styleElement(ctx context.Context, n *dom.Node) *css.Styleshe
 	// document's own URL and from every other style element's.
 	key := resolveRef(c.base, fmt.Sprintf("?litho-style=%d", c.styles))
 	media, _ := attr(n, "media")
-	return c.parse(ctx, []byte(textContent(n)), key, media)
+	return c.parse(ctx, []byte(textContent(n)), key, media, "")
 }
 
 // linkElement parses the stylesheet a <link rel=stylesheet href> names
@@ -105,14 +133,15 @@ func (c *collector) linkElement(ctx context.Context, n *dom.Node) *css.Styleshee
 	media, _ := attr(n, "media")
 	// Its url() values and imports resolve against its own URL, the
 	// response's after redirects (CSS Values 4, 4.5.1).
-	return c.parse(ctx, f.data, f.url, media)
+	return c.parse(ctx, f.data, f.url, media, "")
 }
 
 // parse parses body, the stylesheet at u, under the media query list
-// media, "" for all. A media list is applied by importing the sheet under
+// media, "" for all. A warning names the sheet name, its URL when name is
+// empty. A media list is applied by importing the sheet under
 // it, so its rules carry the condition as @import gives it (CSS Cascade 4,
 // 2) and its own imports stay valid.
-func (c *collector) parse(ctx context.Context, body []byte, u, media string) *css.Stylesheet {
+func (c *collector) parse(ctx context.Context, body []byte, u, media, name string) *css.Stylesheet {
 	fetch := func(ctx context.Context, target string) ([]byte, string, error) {
 		if target == u {
 			return body, u, nil
@@ -134,7 +163,10 @@ func (c *collector) parse(ctx context.Context, body []byte, u, media string) *cs
 		if errors.Is(err, css.ErrTooLarge) {
 			// The rules read before the cap still apply, as a browser
 			// applies a stylesheet cut short.
-			c.warn("css-limit", fmt.Sprintf("the stylesheet %s was cut short: %v", displayURL(u), displayURL(err.Error())))
+			if name == "" {
+				name = "stylesheet " + displayURL(u)
+			}
+			c.warn("css-limit", fmt.Sprintf("the %s was cut short: %v", name, displayURL(err.Error())))
 			return s
 		}
 		return nil

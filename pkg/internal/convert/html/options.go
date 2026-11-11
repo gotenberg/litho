@@ -166,8 +166,16 @@ type Options struct {
 	DefaultLang string
 	// UserStylesheets are stylesheets of the user origin, in order: their
 	// declarations cascade above the user agent's and below the document's,
-	// their !important ones above the document's (CSS Cascading 4, 6.2).
-	// Their relative URLs resolve as the document's do.
+	// their !important ones above the document's (CSS Cascading 4, 6.2),
+	// and an author declaration of revert takes their value. They hold
+	// what an author sheet holds: @page rules and their margin boxes,
+	// whose size counts as one the document names for PreferCSSPageSize,
+	// @font-face, @media and @import. Their relative URLs resolve against
+	// the document's base. Each counts against the resource caps as a
+	// linked stylesheet does, and one past them is left out with a
+	// warning. They style the document only, not HeaderTemplate and
+	// FooterTemplate, which are documents of their own with the defaults
+	// of Chromium's template page: a template carries its own <style>.
 	UserStylesheets []string
 }
 

@@ -173,6 +173,27 @@ func (r *resources) fetch(ctx context.Context, u string) ([]byte, error) {
 	return data, nil
 }
 
+// admit counts n bytes the caller gave, a user stylesheet, as a resource
+// read: [errTooLarge] past [maxResourceBytes], [errBudget] past
+// [maxTotalResourceBytes], and charged to the conversion's budget, since
+// what is built from them lives with the cascade.
+func (r *resources) admit(ctx context.Context, n int) error {
+	if n > maxResourceBytes {
+		return errTooLarge
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.read+int64(n) > maxTotalResourceBytes {
+		r.read = maxTotalResourceBytes
+		return errBudget
+	}
+	if err := limits.BudgetFrom(ctx).ChargeUnits(int64(n), 1, "resources"); err != nil {
+		return err
+	}
+	r.read += int64(n)
+	return nil
+}
+
 // decodeDataURL returns the payload of a data: URL (RFC 2397, 3):
 // base64 when the media type part ends in ";base64", percent-encoded
 // otherwise. The payload is no larger than the URL, which the source cap
