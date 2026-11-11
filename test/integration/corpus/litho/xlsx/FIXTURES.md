@@ -117,6 +117,13 @@ Fonts are Calibri, Cambria, Arial, Times New Roman and Courier New, which have m
 | `paper-fit-<paper>-<orientation>`                                                   | 6     | `paper-fit` on A5, Letter and A3, in both orientations                                                                                                      |
 | `paper-grid-option-<paper>-<orientation>`, `paper-fit-option-<paper>-<orientation>` | 12    | The base unchanged, `options.json` naming A5, Letter or A3 and `landscape` for the landscape ones, `reference_of` the generated workbook of that paper      |
 
+## Accepted disagreements
+
+Excel's export prints a paper it lacks on Letter, turned as the sheet asks. litho prints the paper the code names (ECMA-376 Part 1, 18.3.1.63).
+
+- `paper_sizes`: the envelopes #10 and DL (codes 20 and 27), the Japanese postcard (43) and A6 (70) come back on Letter. The seven other sheets agree, JIS B5 at code 13 among them.
+- `paper-grid-b5-portrait`, `paper-grid-b5-landscape`: code 34, the only code the table gives 176 by 250 mm, is an envelope, and comes back on Letter.
+
 ## Hostile documents
 
 `corpus build` generates these from `minimal` (`hostile_*.go` in `cmd/corpus`); they are never committed. The `robustness` feature converts them, and every fixture above, in a child process and checks each ends as [`robustness.json`](robustness.json) says: a PDF, the error the document must be refused with, or `any` end but a crash or a panic, always under the memory bound (1 GiB unless the document sets its own), with no network request, no text a document pulls from the machine (`forbid`) and the text it must keep (`require`). No reference is built for them.
