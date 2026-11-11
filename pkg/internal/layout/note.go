@@ -21,7 +21,7 @@ func (e *engine) noteStyle(p int) *css.Style {
 		return st
 	}
 	if e.rootBox != nil {
-		return anonStyle(e.rootBox.st)
+		return e.anonOf(e.rootBox.st)
 	}
 	return css.Initial()
 }
@@ -49,7 +49,7 @@ func (e *engine) layoutNoteArea(p int, calls []*box, st *css.Style) *box {
 		for _, k := range area.kids {
 			if k.inline {
 				a := &box{
-					st: anonStyle(st), kind: kindBlock, anon: true, first: true, last: true, parent: area,
+					st: e.anonOf(st), kind: kindBlock, anon: true, first: true, last: true, parent: area,
 					lang: area.lang, depth: area.depth + 1, inlineKids: true, kids: []*box{k},
 				}
 				k.parent = a

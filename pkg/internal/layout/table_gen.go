@@ -328,7 +328,7 @@ func (e *engine) anonPart(parent *box, st *css.Style, p tablePart) *box {
 // genTable generates the boxes of a table element n of style st: a
 // wrapper box holding the captions and the table box (CSS 2.1, 17.4).
 func (e *engine) genTable(n *Node, st *css.Style, ctx genCtx, float css.Float) *box {
-	w := e.newBox(n, wrapperStyle(st), kindBlock, ctx)
+	w := e.newBox(n, e.shareStyle(wrapperStyle(st)), kindBlock, ctx)
 	w.tpart = partWrapper
 	w.float = float
 	w.inline = float == css.FloatNone && st.Display == css.InlineTable
@@ -336,7 +336,7 @@ func (e *engine) genTable(n *Node, st *css.Style, ctx genCtx, float css.Float) *
 	if w.float != css.FloatNone || w.inline {
 		cctx.decos = ownDecos(st)
 	}
-	t := e.newBox(nil, tableStyle(st), kindBlock, cctx)
+	t := e.newBox(nil, e.shareStyle(tableStyle(st)), kindBlock, cctx)
 	t.tpart = partTable
 	t.parent = w
 	tctx := cctx
@@ -496,9 +496,9 @@ func (e *engine) wrapOrphans(parent *box, kids []*box, inline bool) []*box {
 		if inline {
 			d = css.InlineTable
 		}
-		w := e.anonPart(parent, partStyle(parent.st, d), partWrapper)
+		w := e.anonPart(parent, e.shareStyle(partStyle(parent.st, d)), partWrapper)
 		w.inline = inline
-		t := e.anonPart(w, partStyle(parent.st, d), partTable)
+		t := e.anonPart(w, e.shareStyle(partStyle(parent.st, d)), partTable)
 		e.buildTable(w, t, run)
 		out = append(out, w)
 		i = j
@@ -521,7 +521,7 @@ func (e *engine) fixRow(row *box, kids []*box) {
 		for j < len(kids) && kids[j].tpart != partCell {
 			j++
 		}
-		c := e.anonPart(row, partStyle(row.st, css.TableCell), partCell)
+		c := e.anonPart(row, e.shareStyle(partStyle(row.st, css.TableCell)), partCell)
 		e.adopt(c, kids[i:j])
 		row.kids = append(row.kids, c)
 		i = j
@@ -543,7 +543,7 @@ func (e *engine) fixGroup(g *box, kids []*box) {
 		for j < len(kids) && kids[j].tpart != partRow {
 			j++
 		}
-		r := e.anonPart(g, partStyle(g.st, css.TableRow), partRow)
+		r := e.anonPart(g, e.shareStyle(partStyle(g.st, css.TableRow)), partRow)
 		e.fixRow(r, kids[i:j])
 		g.kids = append(g.kids, r)
 		i = j
@@ -567,7 +567,7 @@ func (e *engine) buildTable(w, t *box, raw []*box) {
 		if len(loose) == 0 {
 			return
 		}
-		r := e.anonPart(t, partStyle(t.st, css.TableRow), partRow)
+		r := e.anonPart(t, e.shareStyle(partStyle(t.st, css.TableRow)), partRow)
 		e.fixRow(r, loose)
 		pending = append(pending, r)
 		loose = nil
@@ -577,7 +577,7 @@ func (e *engine) buildTable(w, t *box, raw []*box) {
 		if len(pending) == 0 {
 			return
 		}
-		g := e.anonPart(t, partStyle(t.st, css.TableRowGroup), partRowGroup)
+		g := e.anonPart(t, e.shareStyle(partStyle(t.st, css.TableRowGroup)), partRowGroup)
 		for _, r := range pending {
 			r.parent = g
 		}

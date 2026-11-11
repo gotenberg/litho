@@ -69,6 +69,7 @@ func (e *engine) newBox(n *Node, st *css.Style, kind boxKind, ctx genCtx) *box {
 		e.fail(fmt.Errorf("%w: more than %d", ErrTooManyBoxes, MaxBoxes))
 	}
 	e.charge(boxCost, "boxes")
+	e.holdStyle(st)
 	b := &box{node: n, st: st, kind: kind, first: true, last: true, lang: ctx.lang, elem: ctx.elem, link: ctx.link, depth: ctx.depth}
 	b.hidden = st.Visibility != css.Visible
 	if n != nil && n.ID != "" {
@@ -404,7 +405,7 @@ func (e *engine) normalize(b *box) {
 			continue
 		}
 		a := &box{
-			st: anonStyle(b.st), kind: kindBlock, anon: true, first: true, last: true, parent: b,
+			st: e.anonOf(b.st), kind: kindBlock, anon: true, first: true, last: true, parent: b,
 			lang: b.lang, elem: b.elem, link: b.link, depth: b.depth + 1, inlineKids: true,
 		}
 		e.boxes++
@@ -531,10 +532,10 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 	mctx.elem = markerElem
 	var m *box
 	if pic != nil {
-		m = e.newBox(nil, markerStyle(st), kindReplaced, mctx)
+		m = e.newBox(nil, e.markerOf(st), kindReplaced, mctx)
 		m.picture = pic
 	} else {
-		m = e.newBox(nil, markerStyle(st), kindText, mctx)
+		m = e.newBox(nil, e.markerOf(st), kindText, mctx)
 		m.text = label
 	}
 	m.inline = true
@@ -632,7 +633,7 @@ func (e *engine) genFlex(b *box, children []*Node, ctx genCtx) {
 		}
 		if !blank {
 			a := &box{
-				st: anonStyle(b.st), kind: kindBlock, anon: true, first: true, last: true, parent: b,
+				st: e.anonOf(b.st), kind: kindBlock, anon: true, first: true, last: true, parent: b,
 				lang: b.lang, elem: b.elem, link: b.link, depth: b.depth + 1, inlineKids: true, flexItem: true,
 			}
 			a.hidden = a.st.Visibility != css.Visible

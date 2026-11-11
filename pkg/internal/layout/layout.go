@@ -106,7 +106,7 @@ func newEngine(ctx context.Context, fonts *text.Fonts, opts Options, w, h float6
 	return &engine{
 		ctx: ctx, fonts: fonts, opts: opts, pageW: w, pageH: h, maxPages: maxPages, mem: limits.BudgetFrom(ctx),
 		warned: map[string]bool{}, images: map[string]*Picture{},
-		metrics: map[*css.Style]text.Metrics{}, spaces: map[*css.Style]float64{}, missing: map[rune]bool{},
+		metrics: map[*css.Style]text.Metrics{}, spaces: map[spaceKey]float64{}, missing: map[rune]bool{},
 		root: &compose.StructElem{Role: "Document", Lang: opts.Lang},
 	}
 }

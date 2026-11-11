@@ -64,7 +64,7 @@ type engine struct {
 	noPaginate int
 	images     map[string]*Picture
 	metrics    map[*css.Style]text.Metrics
-	spaces     map[*css.Style]float64
+	spaces     map[spaceKey]float64
 	missing    map[rune]bool
 	root       *compose.StructElem
 	rootBox    *box
@@ -111,6 +111,9 @@ type engine struct {
 	// this engine charged it, released when the layout drops the engine.
 	mem  *limits.Budget
 	held int64
+	// shared holds the styles of the boxes the engine makes of its own
+	// and what it charged for the styles its boxes hold (share.go).
+	shared sharedStyles
 }
 
 // charge charges the conversion's budget n bytes for what, failing the
@@ -393,16 +396,24 @@ func (e *engine) lineHeight(st *css.Style) float64 {
 	return m.Ascent + m.Descent + max(m.LineGap, 0)
 }
 
+// spaceKey is what the advance of a space depends on: the style and the
+// language, which can pick another face.
+type spaceKey struct {
+	st   *css.Style
+	lang string
+}
+
 // spaceWidth returns the advance of U+0020 SPACE in st, for tab stops.
 func (e *engine) spaceWidth(st *css.Style, lang string) float64 {
-	if w, ok := e.spaces[st]; ok {
+	k := spaceKey{st, lang}
+	if w, ok := e.spaces[k]; ok {
 		return w
 	}
 	w := 0.25 * e.fontSize(st)
 	if p, _, err := e.fonts.Shape(e.ctx, []text.ParagraphRun{{Text: " ", Style: e.textStyle(st, lang)}}, text.ParagraphOptions{}); err == nil && p.Len() == 1 {
 		w = p.Advance(0)
 	}
-	e.spaces[st] = w
+	e.spaces[k] = w
 	return w
 }
 

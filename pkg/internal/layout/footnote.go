@@ -80,7 +80,7 @@ func (e *engine) genFootnote(n *Node, b *box, ctx genCtx) {
 	if len(body) > 1 {
 		// An inline body split around a block: an anonymous block holds
 		// its pieces.
-		a := &box{st: anonStyle(n.Footnote.Style), kind: kindBlock, anon: true, first: true, last: true, kids: body, lang: b.lang, elem: b.elem, depth: b.depth}
+		a := &box{st: e.anonOf(n.Footnote.Style), kind: kindBlock, anon: true, first: true, last: true, kids: body, lang: b.lang, elem: b.elem, depth: b.depth}
 		for _, k := range body {
 			k.parent = a
 		}
@@ -148,7 +148,7 @@ func (e *engine) areaStyle(p int) *css.Style {
 		return st
 	}
 	if e.rootBox != nil {
-		return anonStyle(e.rootBox.st)
+		return e.anonOf(e.rootBox.st)
 	}
 	return css.Initial()
 }
