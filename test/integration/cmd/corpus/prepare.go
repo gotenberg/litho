@@ -99,6 +99,12 @@ func prepareReferences(ctx context.Context, ms []*Manifest, pins *resolvedPins) 
 		if err != nil {
 			return fmt.Errorf("%s: %w", m.Name, err)
 		}
+		if !microsoftSignInAvailable() {
+			var unbuilt []string
+			if fixtures, unbuilt = withoutUnbuiltMicrosoftReferences(m, m.TestdataRoot(), fixtures); len(unbuilt) > 0 {
+				fmt.Println(unbuiltMicrosoftNotice(m, unbuilt))
+			}
+		}
 		_, rebuild, _, _, err := referenceProblems(m, m.TestdataRoot(), fixtures, pins.Values)
 		switch {
 		case err != nil:

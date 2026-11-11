@@ -108,6 +108,10 @@ func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 	if err != nil {
 		return err
 	}
+	fixtures, unbuilt := withoutUnbuiltMicrosoftReferences(m, root, fixtures)
+	if len(unbuilt) > 0 {
+		fmt.Println(unbuiltMicrosoftNotice(m, unbuilt))
+	}
 	f.mu.Lock()
 	f.borrowed = borrowed
 	f.mu.Unlock()
