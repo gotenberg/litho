@@ -685,7 +685,7 @@ func (b *builder) drawing(c *odf.Element, depth int) *layout.Node {
 	g := b.geometry(c)
 	switch {
 	case c.Is(odf.NSDraw, "frame"):
-		return b.frame(c, g, depth)
+		return undescribed(b.frame(c, g, depth), g)
 	case c.Is(odf.NSDraw, "control"):
 		st := b.frameBox(g)
 		st.Display = css.InlineBlock
@@ -707,7 +707,7 @@ func (b *builder) drawing(c *odf.Element, depth int) *layout.Node {
 		st := baseStyle()
 		st.Display = css.InlineBlock
 		n := b.node(&layout.Node{Kind: layout.Element, Style: st})
-		if alt := describe(c); alt != "" {
+		if alt := odf.Describe(c); alt != "" {
 			n.Role, n.Alt = "Figure", alt
 		}
 		for _, k := range c.Children {
@@ -720,15 +720,26 @@ func (b *builder) drawing(c *odf.Element, depth int) *layout.Node {
 		b.warn("draw-group", "the shapes of a group are laid out side by side")
 		return n
 	case c.Name.Space == odf.NSDraw:
-		return b.shape(c, g, depth)
+		return undescribed(b.shape(c, g, depth), g)
 	}
 	return nil
+}
+
+// undescribed returns n, a drawing of geometry g, as an artifact when its
+// graphic properties mark it decorative and it shows no text (ISO
+// 32000-1, 14.8.2.2.2; ISO 14289-1, 7.1). A drawing that shows text keeps
+// its Figure, which holds the text's paragraphs.
+func undescribed(n *layout.Node, g frameGeom) *layout.Node {
+	if n != nil && n.Kind == layout.Replaced && n.Role == "Figure" && odf.Decorative(g.props) {
+		n.Role, n.Alt = "", ""
+	}
+	return n
 }
 
 // frame builds a draw:frame (10.4.2) from its first content it draws: a
 // picture, a text box, or an object's replacement picture.
 func (b *builder) frame(c *odf.Element, g frameGeom, depth int) *layout.Node {
-	alt := describe(c)
+	alt := odf.Describe(c)
 	for _, k := range c.Children {
 		switch {
 		case k.Is(odf.NSDraw, "image"):
@@ -863,16 +874,6 @@ func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 	return n
 }
 
-// describe returns what a drawing element's svg:desc, else its svg:title,
-// says of it for a reader who cannot see it (ODF 1.3 Part 3, 19.5 and
-// 19.6), "" for nothing.
-func describe(c *odf.Element) string {
-	if alt := strings.TrimSpace(c.Child(odf.NSSVG, "desc").TextContent()); alt != "" {
-		return alt
-	}
-	return strings.TrimSpace(c.Child(odf.NSSVG, "title").TextContent())
-}
-
 // shapeSVG returns an SVG drawing of a shape (ODF 1.3, Part 3, 10.3) in
 // its own box: rectangles, ellipses, circles, lines, polylines, polygons
 // and paths with their viewBox; "" for a shape it does not draw (a custom
@@ -963,7 +964,7 @@ func xmlEscape(s string) string {
 // decorates the page (ISO 32000-1, 14.8.2.2.2; ISO 14289-1, 7.1).
 func (b *builder) shape(c *odf.Element, g frameGeom, depth int) *layout.Node {
 	n := b.shapeBody(c, g)
-	alt := describe(c)
+	alt := odf.Describe(c)
 	if text := b.shapeText(c, depth); text != nil && n != nil {
 		if n.Role == "Figure" {
 			n.Role = ""
