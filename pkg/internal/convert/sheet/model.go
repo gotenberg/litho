@@ -687,6 +687,17 @@ type Drawing struct {
 	Chart *chart.Chart
 	// Name is the drawing's name, for warnings.
 	Name string
+	// Alt describes the drawing for a reader who cannot see it, as the
+	// source states it (ECMA-376 Part 1, 20.5.2.8 cNvPr descr, else title;
+	// ODF 1.3 Part 3, 10.3.17 svg:desc, else 10.3.16 svg:title), "" when it
+	// states nothing. A picture or a chart is a Figure that carries it; a
+	// chart without one takes its title. A page whose only content is
+	// drawings then has an element an outline entry or a link can name.
+	Alt string
+	// Decorative marks a drawing the source says carries no meaning (the
+	// decorative flag of Office 2019, adec:decorative): it is drawn as an
+	// artifact, outside the structure tree.
+	Decorative bool
 	// Unbounded lets the offsets of From and To run past their cells, and
 	// below 0 to the cells above and left, as Calc reads the anchors of an
 	// OpenDocument spreadsheet (ODF 1.3 Part 3, 19.663 table:end-x and
