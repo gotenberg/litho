@@ -139,10 +139,10 @@ func WithConvertLogger(logger *slog.Logger) ConvertOption {
 // for later calls with the same list, so a font added to a directory after
 // its first conversion is not seen. A few lists are kept at a time; a call
 // with a new list past them drops the oldest. Indexing the system directories
-// of a desktop takes seconds, and the index holds every font file it read in
-// memory, up to 1 GiB of them, with their parsed tables beside: a desktop of
-// several hundred fonts costs gigabytes. A directory of the few families a
-// service needs costs a fraction of that.
+// of a desktop takes seconds. An index keeps about a kilobyte a face, and
+// the faces conversions draw with: up to 128 MiB of parsed fonts and 128
+// MiB of font programs, the least recently used leaving first. A directory
+// of the few families a service needs costs a fraction of that.
 func WithConvertFontDirs(dirs ...string) ConvertOption {
 	return func(o *convertOptions) {
 		o.fontDirs = slices.Clone(dirs)
@@ -924,9 +924,9 @@ func selectPages(doc *compose.Document, format Format, o *convertOptions) error 
 }
 
 // maxConvertFontIndexes bounds the font indexes [convertFonts] keeps, one per
-// list of directories. Anti-DoS guard, not spec-mandated: an index holds the
-// font files it read, up to 1 GiB, so a caller cycling through directory
-// lists must not pile them up. A service converts with one list, the system
+// list of directories. Anti-DoS guard, not spec-mandated: an index holds up
+// to 256 MiB of parsed fonts and font programs, so a caller cycling through
+// directory lists must not pile them up. A service converts with one list, the system
 // directories or its own, and rarely with more than two.
 const maxConvertFontIndexes = 4
 

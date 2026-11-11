@@ -212,6 +212,7 @@ func (f *Fonts) Layout(ctx context.Context, runs []Run, width float64, opts Opti
 	if err != nil {
 		return nil, Report{}, err
 	}
+	defer st.release()
 	norm := normalize(runs, opts.Whitespace)
 	maxWidth := st.toFixed(width)
 	var lines []Line
@@ -240,18 +241,17 @@ type layoutState struct {
 	// unit is the number of shaping units per point.
 	unit float64
 
-	// local holds this call's go-text face of every face it drew with,
-	// parsed the parsed font each one loaded, nil for a face that failed to
-	// load, and byFont maps a parsed font back to its face: the index's
-	// cache may evict a font this call still uses.
-	local   map[*Face]*font.Face
+	// kit holds this call's shaper and the go-text face of every face it
+	// drew with, parsed the parsed font each one loaded, nil for a face
+	// that failed to load, and byFont maps a parsed font back to its face:
+	// the index's cache may evict a font this call still uses.
+	kit     *shapingKit
 	parsed  map[*Face]*font.Font
 	byFont  map[*font.Font]*Face
 	cache   map[resolveKey]*Face
 	missing map[rune]struct{}
 	emoji   map[rune]struct{}
 
-	shaper  shaping.HarfbuzzShaper
 	seg     shaping.Segmenter
 	wrapper shaping.LineWrapper
 	lineSeg segmenter.Segmenter
@@ -300,7 +300,7 @@ func newLayoutState(f *Fonts, runs []Run) (*layoutState, error) {
 		fonts:   f,
 		styles:  make([]styleState, len(runs)),
 		unit:    unit,
-		local:   make(map[*Face]*font.Face),
+		kit:     f.takeKit(),
 		parsed:  make(map[*Face]*font.Font),
 		byFont:  make(map[*font.Font]*Face),
 		cache:   make(map[resolveKey]*Face),
@@ -398,13 +398,23 @@ func (st *layoutState) font(fc *Face) *font.Font {
 
 // face returns this call's own go-text face for fc, whose font loads:
 // go-text faces cache glyph lookups and are not safe for concurrent use.
+// The kit's face from an earlier call serves while its font is the one
+// this call loaded; a font the cache evicted and parsed again since takes
+// a new face.
 func (st *layoutState) face(fc *Face) *font.Face {
-	if face, ok := st.local[fc]; ok {
+	ft := st.font(fc)
+	if face, ok := st.kit.faces[fc]; ok && face.Font == ft {
 		return face
 	}
-	face := font.NewFace(st.font(fc))
-	st.local[fc] = face
+	face := font.NewFace(ft)
+	st.kit.faces[fc] = face
 	return face
+}
+
+// release hands the call's kit back for later calls.
+func (st *layoutState) release() {
+	st.fonts.releaseKit(st.kit)
+	st.kit = nil
 }
 
 // resolve returns the face that draws r in the run of style index style.
@@ -581,7 +591,7 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 			}
 			piece.FontFeatures = s.style.features()
 			for _, in := range shaping.SplitByFace(piece, styleFontmap{st: st, style: idx, script: piece.Script}) {
-				out := st.shaper.Shape(in)
+				out := st.kit.shaper.Shape(in)
 				rescale(&out, in.Size)
 				st.collectMissing(&out, para)
 				outputs = append(outputs, out)

@@ -35,8 +35,9 @@
 //
 // A [Fonts] is safe for concurrent use once [NewFonts] returns. Every
 // [Fonts.Layout] call shapes with its own HarfBuzz state and go-text faces,
-// so concurrent calls share only the read-only index and a mutex-guarded
-// cache of parsed fonts, which go-text never mutates.
+// which a finished call hands on to a later one but never two calls share,
+// so concurrent calls share only the read-only index and the mutex-guarded
+// caches of parsed fonts and font programs, which go-text never mutates.
 //
 // # Determinism
 //

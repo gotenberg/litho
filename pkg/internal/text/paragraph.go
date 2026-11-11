@@ -250,6 +250,7 @@ func (f *Fonts) Shape(ctx context.Context, runs []ParagraphRun, opts ParagraphOp
 	if err != nil {
 		return nil, Report{}, err
 	}
+	defer st.release()
 	p := &Paragraph{}
 	var shapeText []rune
 	for i, r := range runs {
@@ -382,7 +383,7 @@ func (p *Paragraph) shapeSegment(st *layoutState, text []rune, start, end int, b
 				piece.Direction = di.DirectionRTL
 			}
 			for _, in := range shaping.SplitByFace(piece, styleFontmap{st: st, style: idx, script: piece.Script}) {
-				out := st.shaper.Shape(in)
+				out := st.kit.shaper.Shape(in)
 				rescale(&out, in.Size)
 				st.collectMissing(&out, text)
 				if ss.word != 0 {
