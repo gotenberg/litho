@@ -609,7 +609,8 @@ func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, 
 
 // referenceJobs lists the sources of a corpus with references, the ones
 // only names when set: its committed sources/ directories, the documents a
-// build corpus zips and the documents its list names.
+// build corpus zips and the documents its list names. A source whose
+// options.json borrows another fixture's reference gets none.
 func referenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 	var jobs []referenceJob
 	if isBuildCorpus(m) {
@@ -630,6 +631,9 @@ func referenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 			continue
 		}
 		dir := filepath.Join(sources, name)
+		if borrowsReference(dir) {
+			continue
+		}
 		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), "sources/" + name})
 	}
 	if m.Inputs == nil || m.Inputs.List == "" {
@@ -654,6 +658,17 @@ func referenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 	}
 	sort.Slice(jobs, func(i, j int) bool { return jobs[i].name < jobs[j].name })
 	return jobs, nil
+}
+
+// borrowsReference reports whether an Office source directory's options.json
+// names reference_of: another fixture's reference stands for it, and none is
+// built for it (see fixture.OfficeOptions.ReferenceOf).
+func borrowsReference(dir string) bool {
+	if optionsPath(dir) == "" {
+		return false
+	}
+	src, err := fixture.LoadOffice(dir)
+	return err == nil && src.Options.ReferenceOf != ""
 }
 
 // optionsPath returns the options.json of a source directory, "" when it
@@ -708,6 +723,9 @@ func builtReferenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 		dir := filepath.Join(buildOut(m), name)
 		if _, err := fixture.LoadOffice(dir); err != nil {
 			return nil, fmt.Errorf("%w (run make corpus-build CORPUS=%s)", err, m.Name)
+		}
+		if borrowsReference(dir) {
+			continue
 		}
 		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), path.Join(m.Inputs.Build, name)})
 	}

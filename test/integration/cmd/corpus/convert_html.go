@@ -55,6 +55,13 @@ type htmlConverter func(ctx context.Context, src []byte, s htmlSettings) ([]byte
 // Office document carries its own page setup and styles. The report's
 // warnings are not an error: the oracles score what was drawn.
 func convertHTML(ctx context.Context, src []byte, s htmlSettings) ([]byte, error) {
+	data, _, err := convertWithReport(ctx, src, s)
+	return data, err
+}
+
+// convertWithReport is [convertHTML] that returns the conversion's report
+// beside the PDF bytes.
+func convertWithReport(ctx context.Context, src []byte, s htmlSettings) ([]byte, *pdf.ConvertReport, error) {
 	if isOfficeFormat(s.Format) {
 		opts := make([]pdf.ConvertOption, 0, 1+len(s.Print))
 		if len(s.FontDirs) > 0 {
@@ -62,10 +69,11 @@ func convertHTML(ctx context.Context, src []byte, s htmlSettings) ([]byte, error
 		}
 		opts = append(opts, s.Print...)
 		var buf bytes.Buffer
-		if _, err := pdf.Convert(ctx, bytes.NewReader(src), s.Format, &buf, opts...); err != nil {
-			return nil, err
+		report, err := pdf.Convert(ctx, bytes.NewReader(src), s.Format, &buf, opts...)
+		if err != nil {
+			return nil, nil, err
 		}
-		return buf.Bytes(), nil
+		return buf.Bytes(), report, nil
 	}
 	opts := []pdf.ConvertOption{
 		pdf.WithMediaType(s.Media),
@@ -87,10 +95,57 @@ func convertHTML(ctx context.Context, src []byte, s htmlSettings) ([]byte, error
 		format = pdf.FormatHTML
 	}
 	var buf bytes.Buffer
-	if _, err := pdf.Convert(ctx, bytes.NewReader(src), format, &buf, opts...); err != nil {
-		return nil, err
+	report, err := pdf.Convert(ctx, bytes.NewReader(src), format, &buf, opts...)
+	if err != nil {
+		return nil, nil, err
 	}
-	return buf.Bytes(), nil
+	return buf.Bytes(), report, nil
+}
+
+// sourceSettings reads a converter corpus source, a source directory or an
+// Office document, and returns its document's bytes with the settings the
+// diff and targets cells convert it at: the options its options.json names,
+// and the font directories fonts. office reads it as an Office source.
+func sourceSettings(srcPath string, office bool, fonts []string) ([]byte, htmlSettings, error) {
+	if office {
+		source, err := fixture.LoadOffice(srcPath)
+		if err != nil {
+			return nil, htmlSettings{}, fmt.Errorf("read: %w", err)
+		}
+		src, err := os.ReadFile(source.Document)
+		if err != nil {
+			return nil, htmlSettings{}, fmt.Errorf("read: %w", err)
+		}
+		return src, htmlSettings{FontDirs: fonts, Format: source.Format, Print: source.ConvertOptions()}, nil
+	}
+	dir := srcPath
+	if info, err := os.Stat(srcPath); err == nil && !info.IsDir() {
+		dir = filepath.Dir(srcPath)
+	}
+	source, err := fixture.Load(dir)
+	if err != nil {
+		return nil, htmlSettings{}, fmt.Errorf("read: %w", err)
+	}
+	src, err := os.ReadFile(source.Document)
+	if err != nil {
+		return nil, htmlSettings{}, fmt.Errorf("read: %w", err)
+	}
+	width, height := source.Paper()
+	top, right, bottom, left := source.Margins()
+	return src, htmlSettings{
+		Media:             source.MediaType(),
+		Width:             width,
+		Height:            height,
+		Top:               top,
+		Right:             right,
+		Bottom:            bottom,
+		Left:              left,
+		Resources:         os.DirFS(dir),
+		FontDirs:          fonts,
+		PreferCSSPageSize: source.PreferCSSPageSize(),
+		Format:            source.Format,
+		Print:             source.PrintOptions(),
+	}, nil
 }
 
 // isOfficeFormat reports whether a format is one of the Office documents

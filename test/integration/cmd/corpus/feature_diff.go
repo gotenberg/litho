@@ -19,7 +19,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
 // diffDPI is the resolution the diff goldens are drawn at, that of the render
@@ -162,6 +161,10 @@ type diffGolden struct {
 	sizes []diffPageSize
 	// outline is the reference's outline, flattened in outline order.
 	outline []diffOutlineItem
+	// missingFonts are the faces a Microsoft reference draws that no
+	// fixture font stands in for (see [missingReferenceFaces]): the
+	// fixture is then left unscored.
+	missingFonts []string
 }
 
 // diffPageSize is a page's width and height in points, after /Rotate.
@@ -251,6 +254,9 @@ type diffFeature struct {
 	// pins are the resolved pins the references are checked against; nil
 	// reads versions.env.
 	pins map[string]string
+	// borrowed maps a fixture whose options.json names reference_of to the
+	// fixture whose goldens it is scored against (see [borrowedReferences]).
+	borrowed map[string]string
 }
 
 func newDiffFeature() *diffFeature {
@@ -294,6 +300,7 @@ func (f *diffFeature) SetReportDir(dir string) {
 func (f *diffFeature) LoadGoldens(dir string) error {
 	f.mu.RLock()
 	office := f.office
+	checkFonts := f.m != nil && f.m.References != nil && f.m.References.Engine == engineMicrosoft
 	f.mu.RUnlock()
 	texts := make(map[string]*pdfjsReference)
 	var textMu sync.RWMutex
@@ -330,7 +337,16 @@ func (f *diffFeature) LoadGoldens(dir string) error {
 			}
 			return fmt.Errorf("diff reference %s: %w", id, err)
 		}
-		goldens[id] = &diffGolden{text: t, render: r, links: l, sizes: sizes, outline: outline}
+		g := &diffGolden{text: t, render: r, links: l, sizes: sizes, outline: outline}
+		if checkFonts {
+			faces, err := referenceFonts(context.Background(), filepath.Join(pdfsDir, id+".pdf"))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "diff: reading the fonts of reference %s: %v; scored as it is\n", id, err)
+			} else {
+				g.missingFonts = missingReferenceFaces(faces)
+			}
+		}
+		goldens[id] = g
 	}
 	if len(goldens) == 0 {
 		return ErrNoGoldens
@@ -424,8 +440,15 @@ func (f *diffFeature) HasGolden(fixtureID string) bool { return f.golden(fixture
 func (f *diffFeature) golden(id string) *diffGolden {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
+	if other, ok := f.borrowed[id]; ok {
+		id = other
+	}
 	return f.goldens[reportName(id)]
 }
+
+// CountsSkippedMetrics counts the metrics of the fixtures the cell leaves
+// unscored, reference_fonts_missing.
+func (f *diffFeature) CountsSkippedMetrics() {}
 
 // diffOutput is Run's output.
 type diffOutput struct {
@@ -435,6 +458,12 @@ type diffOutput struct {
 	GoldenPages int                `json:"golden_pages"`
 	Scores      map[string]float64 `json:"scores"`
 	PageResults []diffPageResult   `json:"page_results,omitempty"`
+	// ReferenceOf names the fixture whose reference the conversion was
+	// scored against, when its options.json borrows one.
+	ReferenceOf string `json:"reference_of,omitempty"`
+	// MissingFonts are the faces the reference draws that no fixture font
+	// stands in for: the fixture is left unscored.
+	MissingFonts []string `json:"reference_fonts_missing,omitempty"`
 }
 
 // diffPageResult is the comparison of one page.
@@ -470,15 +499,10 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 	f.mu.RLock()
 	fonts, renderDir, reportDir, office := f.fontDirs, f.renderDir, f.reportDir, f.office
 	f.mu.RUnlock()
-	var (
-		data   []byte
-		format pdf.Format
-		err    error
-	)
-	if office {
-		data, format, err = f.convertOffice(ctx, srcPath, fonts)
-	} else {
-		data, err = f.convertHTMLSource(ctx, srcPath, fonts)
+	src, settings, err := sourceSettings(srcPath, office, fonts)
+	var data []byte
+	if err == nil {
+		data, err = f.convert(ctx, src, settings)
 	}
 	var doc diffLithoDoc
 	if err == nil {
@@ -490,7 +514,10 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 		}
 		return json.Marshal(diffOutput{Outcome: outcomeError, Reason: err.Error(), GoldenPages: g.text.NumPages, Scores: zeroDiffScores()})
 	}
-	out := scoreDiff(g, doc, renderDir, format == pdf.FormatCSV, func(page int, got, want image.Image, d pixelDiff) {
+	f.mu.RLock()
+	borrowed := f.borrowed[fixtureID]
+	f.mu.RUnlock()
+	out := scoreDiff(g, doc, renderDir, settings.Format == pdf.FormatCSV, func(page int, got, want image.Image, d pixelDiff) {
 		if reportDir == "" {
 			return
 		}
@@ -499,56 +526,8 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 			fmt.Fprintf(os.Stderr, "diff: report for %s page %d: %v\n", fixtureID, page, err)
 		}
 	})
+	out.ReferenceOf, out.MissingFonts = borrowed, g.missingFonts
 	return json.Marshal(out)
-}
-
-// convertOffice converts an Office source, a source directory or a fetched
-// document, at the options its options.json names, and returns the format
-// it converted from.
-func (f *diffFeature) convertOffice(ctx context.Context, srcPath string, fonts []string) ([]byte, pdf.Format, error) {
-	source, err := fixture.LoadOffice(srcPath)
-	if err != nil {
-		return nil, "", fmt.Errorf("read: %w", err)
-	}
-	src, err := os.ReadFile(source.Document)
-	if err != nil {
-		return nil, "", fmt.Errorf("read: %w", err)
-	}
-	data, err := f.convert(ctx, src, htmlSettings{FontDirs: fonts, Format: source.Format, Print: source.ConvertOptions()})
-	return data, source.Format, err
-}
-
-// convertHTMLSource converts an html source at the options its
-// options.json names.
-func (f *diffFeature) convertHTMLSource(ctx context.Context, srcPath string, fonts []string) ([]byte, error) {
-	dir := srcPath
-	if info, err := os.Stat(srcPath); err == nil && !info.IsDir() {
-		dir = filepath.Dir(srcPath)
-	}
-	source, err := fixture.Load(dir)
-	if err != nil {
-		return nil, fmt.Errorf("read: %w", err)
-	}
-	src, err := os.ReadFile(source.Document)
-	if err != nil {
-		return nil, fmt.Errorf("read: %w", err)
-	}
-	width, height := source.Paper()
-	top, right, bottom, left := source.Margins()
-	return f.convert(ctx, src, htmlSettings{
-		Media:             source.MediaType(),
-		Width:             width,
-		Height:            height,
-		Top:               top,
-		Right:             right,
-		Bottom:            bottom,
-		Left:              left,
-		Resources:         os.DirFS(dir),
-		FontDirs:          fonts,
-		PreferCSSPageSize: source.PreferCSSPageSize(),
-		Format:            source.Format,
-		Print:             source.PrintOptions(),
-	})
 }
 
 // zeroDiffScores is the score set of a fixture litho could not convert.
@@ -924,18 +903,34 @@ func (f *diffFeature) Compare(fixtureID string, output []byte) Verdict {
 	if err := json.Unmarshal(output, &got); err != nil {
 		return Verdict{
 			FixtureID: fixtureID, Outcome: outcomeError, Reason: fmt.Sprintf("decode output: %v", err),
-			Scores: zeroDiffScores(), Metrics: map[string]int{metricConvertError: 1, metricPagesEqual: 0},
+			Scores: zeroDiffScores(), Metrics: map[string]int{metricConvertError: 1, metricPagesEqual: 0, metricReferenceFontsMissing: 0},
 		}
 	}
 	if got.Scores == nil {
 		got.Scores = zeroDiffScores()
+	}
+	if got.ReferenceOf != "" && got.Reason != "" {
+		got.Reason = fmt.Sprintf("against the reference of %s: %s", got.ReferenceOf, got.Reason)
+	}
+	if len(got.MissingFonts) > 0 {
+		// Unscored, outside matched and mismatched, the scores kept for a
+		// reader: no converter can match the metrics of a face it has no
+		// stand-in for.
+		reason := "unscored: the reference draws " + strings.Join(got.MissingFonts, ", ") + ", which no fixture font stands in for"
+		if got.Reason != "" {
+			reason += "; " + got.Reason
+		}
+		return Verdict{
+			FixtureID: fixtureID, Skipped: true, Outcome: got.Outcome, Reason: reason, Scores: got.Scores,
+			Metrics: map[string]int{metricReferenceFontsMissing: 1},
+		}
 	}
 	v := Verdict{
 		FixtureID: fixtureID,
 		Outcome:   got.Outcome,
 		Reason:    got.Reason,
 		Scores:    got.Scores,
-		Metrics:   map[string]int{metricConvertError: 0, metricPagesEqual: 0},
+		Metrics:   map[string]int{metricConvertError: 0, metricPagesEqual: 0, metricReferenceFontsMissing: 0},
 	}
 	s := got.Scores
 	v.Score = (s[scorePages] + s[scoreText] + s[scoreLinks] + s[scoreLayout]) / 4

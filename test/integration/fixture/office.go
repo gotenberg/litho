@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/pdf"
@@ -42,6 +43,14 @@ type OfficeOptions struct {
 	// ExportNotesPages prints, after the slides, one notes page per slide
 	// printed. Default false.
 	ExportNotesPages bool `json:"exportNotesPages,omitempty"`
+	// ReferenceOf names another fixture of the same corpus, by its ID,
+	// whose reference stands for this source's: the diff cell scores this
+	// source's conversion against that fixture's goldens, and no reference
+	// is built for this one. It is no route field: Microsoft Graph converts
+	// with no option, so an option fixture of an OOXML corpus borrows the
+	// reference of a document that sets in itself what its options ask.
+	// Default none.
+	ReferenceOf string `json:"reference_of,omitempty"`
 }
 
 // OfficeOptionNames are the keys of an Office options file, the JSON names
@@ -49,6 +58,11 @@ type OfficeOptions struct {
 //
 //nolint:gochecknoglobals // static list of the schema's keys
 var OfficeOptionNames = []string{"password", "landscape", "nativePages", "nativeBookmarks", "paperWidth", "paperHeight", "singlePage", "exportHiddenSlides", "exportNotesPages"}
+
+// ReferenceOfName is the key of an Office options file that borrows another
+// fixture's reference (see [OfficeOptions.ReferenceOf]): it is no route
+// field, so it is not among [OfficeOptionNames].
+const ReferenceOfName = "reference_of"
 
 // officeFormats maps the extension of an Office document to the format it
 // converts from, as the converter's extensions do: a flat ODT is an
@@ -158,7 +172,7 @@ func LoadOffice(path string) (*Office, error) {
 // field, trailing data or a value the route refuses is an error.
 func ParseOfficeOptions(data []byte) (OfficeOptions, error) {
 	var o OfficeOptions
-	if err := decodeStrict(data, OfficeOptionNames, &o); err != nil {
+	if err := decodeStrict(data, append(slices.Clone(OfficeOptionNames), ReferenceOfName), &o); err != nil {
 		return OfficeOptions{}, err
 	}
 	return o, o.validate()
@@ -166,7 +180,9 @@ func ParseOfficeOptions(data []byte) (OfficeOptions, error) {
 
 // validate checks the values against what the LibreOffice route accepts:
 // a paper size needs both sides (the route answers 400 to one alone), each
-// positive and finite.
+// positive and finite. A borrowed reference names a fixture ID, without
+// surrounding white space; whether that fixture exists is the corpus's to
+// check.
 func (o OfficeOptions) validate() error {
 	if (o.PaperWidth == nil) != (o.PaperHeight == nil) {
 		return errors.New("paperWidth and paperHeight: want both or neither")
@@ -175,6 +191,9 @@ func (o OfficeOptions) validate() error {
 		if v != nil && (*v <= 0 || math.IsInf(*v, 0) || math.IsNaN(*v)) {
 			return fmt.Errorf("%s %v: want a positive size in inches", name, *v)
 		}
+	}
+	if o.ReferenceOf != strings.TrimSpace(o.ReferenceOf) || strings.Contains(o.ReferenceOf, "\x00") {
+		return fmt.Errorf("%s %q: want a fixture ID", ReferenceOfName, o.ReferenceOf)
 	}
 	return nil
 }

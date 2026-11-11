@@ -82,6 +82,13 @@ type ReportWriter interface {
 	SetReportDir(dir string)
 }
 
+// SkipCounter is an optional interface a [Feature] implements when the
+// metrics of the verdicts it skips count in its cell too: a fixture it
+// leaves unscored on purpose, counted by why.
+type SkipCounter interface {
+	CountsSkippedMetrics()
+}
+
 func runRun(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	corpus := fs.String("corpus", "", corpusFlagUsage)
@@ -352,11 +359,20 @@ func runFeatureAcrossFixtures(ctx context.Context, feat Feature, fixtures []Fixt
 		close(results)
 	}()
 
+	_, countSkipped := feat.(SkipCounter)
 	for v := range results {
 		fr.Verdicts = append(fr.Verdicts, v)
 		switch {
 		case v.Skipped:
 			fr.Skipped++
+			if countSkipped {
+				for k, val := range v.Metrics {
+					if fr.Metrics == nil {
+						fr.Metrics = make(map[string]int)
+					}
+					fr.Metrics[k] += val
+				}
+			}
 		case v.Match:
 			fr.Matched++
 			for k, val := range v.Metrics {

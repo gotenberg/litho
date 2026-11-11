@@ -104,6 +104,13 @@ func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 		}
 		pins = resolved.Values
 	}
+	borrowed, err := borrowedReferences(fixtures)
+	if err != nil {
+		return err
+	}
+	f.mu.Lock()
+	f.borrowed = borrowed
+	f.mu.Unlock()
 	stale, _, regolden, refused, err := referenceProblems(m, root, fixtures, pins)
 	if len(refused) > 0 {
 		fmt.Printf("%s: %d fixtures have no reference, not scored: %s\n", m.Name, len(refused), summarize(refused))
@@ -128,8 +135,9 @@ func (f *diffFeature) Prepare(_ context.Context, fixtures []Fixture) error {
 // their reference, refused the fixtures the converter refused from their
 // current source, which a build would refuse again: they have no golden.
 // root is the corpus's testdata root. A build corpus's hostile documents
-// have no reference and are skipped. err reports an unreadable reference
-// manifest.
+// and a fixture that borrows another's reference (see [borrowedReferences])
+// have no reference of their own and are skipped. err reports an unreadable
+// reference manifest or a reference_of that names no fixture to borrow from.
 func referenceProblems(m *Manifest, root string, fixtures []Fixture, pins map[string]string) (stale, rebuild, regolden, refused []string, err error) {
 	refDir := filepath.Join(root, filepath.FromSlash(m.References.Dir))
 	data, err := os.ReadFile(filepath.Join(refDir, referenceManifestName)) //nolint:gosec // provisioned record under the corpus testdata root
@@ -141,8 +149,12 @@ func referenceProblems(m *Manifest, root string, fixtures []Fixture, pins map[st
 		return nil, nil, nil, nil, fmt.Errorf("decode %s: %w", filepath.Join(refDir, referenceManifestName), err)
 	}
 	unreferenced := unreferencedFixtures(m)
+	borrowed, err := borrowedReferences(fixtures)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
 	for _, fx := range fixtures {
-		if unreferenced[fx.ID] {
+		if _, borrows := borrowed[fx.ID]; unreferenced[fx.ID] || borrows {
 			continue
 		}
 		name := reportName(fx.ID)
@@ -255,4 +267,42 @@ func fileSHA256(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// errBorrowedReference reports an options.json whose reference_of names no
+// fixture of its corpus that has a reference of its own.
+var errBorrowedReference = errors.New("invalid reference_of")
+
+// borrowedReferences maps each fixture of an Office corpus whose
+// options.json names reference_of to the fixture whose reference stands for
+// its own (see fixture.OfficeOptions.ReferenceOf). It fails when one names
+// itself, a fixture the corpus does not list, or a fixture that borrows in
+// turn. A source that does not load borrows nothing.
+func borrowedReferences(fixtures []Fixture) (map[string]string, error) {
+	ids := make(map[string]bool, len(fixtures))
+	for _, fx := range fixtures {
+		ids[fx.ID] = true
+	}
+	out := map[string]string{}
+	for _, fx := range fixtures {
+		info, err := os.Stat(fx.PDFPath)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		src, err := fixture.LoadOffice(fx.PDFPath)
+		if err != nil || src.Options.ReferenceOf == "" {
+			continue
+		}
+		other := src.Options.ReferenceOf
+		if other == fx.ID || !ids[other] {
+			return nil, fmt.Errorf("%w: %s names %q, not another fixture of its corpus", errBorrowedReference, fx.ID, other)
+		}
+		out[fx.ID] = other
+	}
+	for id, other := range out {
+		if _, chained := out[other]; chained {
+			return nil, fmt.Errorf("%w: %s names %s, which borrows a reference too", errBorrowedReference, id, other)
+		}
+	}
+	return out, nil
 }

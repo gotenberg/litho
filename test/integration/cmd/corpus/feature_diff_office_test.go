@@ -320,3 +320,76 @@ func TestRefusalCause_KeepsTheErrorCode(t *testing.T) {
 		}
 	}
 }
+
+// TestDiffFeature_BorrowsAReference checks a fixture whose options.json
+// names reference_of: Prepare asks no reference of it and refuses none, its
+// golden is the named fixture's, and a reference_of that names itself, no
+// fixture, or a fixture that borrows in turn fails the cell.
+func TestDiffFeature_BorrowsAReference(t *testing.T) {
+	t.Parallel()
+
+	sha := func(s string) string {
+		h := sha256.Sum256([]byte(s))
+		return hex.EncodeToString(h[:])
+	}
+	cases := []struct {
+		name, options, reason string
+	}{
+		{"borrows", `{"landscape": true, "reference_of": "memo"}`, ""},
+		{"itself", `{"reference_of": "wide"}`, "not another fixture"},
+		{"no such fixture", `{"reference_of": "gone"}`, "not another fixture"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			src, root := t.TempDir(), t.TempDir()
+			writeFiles(t, src, map[string]string{
+				"sources/memo/memo.docx":    "docx",
+				"sources/wide/wide.docx":    "wide docx",
+				"sources/wide/options.json": tc.options,
+			})
+			writeFiles(t, root, map[string]string{"pdfs/memo.pdf": "pdf memo"})
+			man := referenceManifest{
+				References: map[string]referenceRecord{"memo": {SourceSHA256: sha("docx"), PDFSHA256: sha("pdf memo"), Image: microsoftRenderer}},
+				// The refusal an earlier build recorded for the borrower
+				// is no stale reference.
+				Failed: map[string]referenceFailure{"wide": {Status: "0", Answer: "Microsoft Graph converts with no options"}},
+			}
+			data, err := json.Marshal(man)
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeFiles(t, root, map[string]string{"references/manifest.json": string(data)})
+			f := newDiffFeature()
+			f.m = &Manifest{Name: "test/docx", References: &ReferenceSpec{Dir: "references", Engine: engineMicrosoft}}
+			f.testdataRoot, f.office, f.pins = root, true, map[string]string{}
+			f.goldens = map[string]*diffGolden{"memo": {}}
+			err = f.Prepare(t.Context(), []Fixture{
+				{ID: "memo", PDFPath: filepath.Join(src, "sources", "memo")},
+				{ID: "wide", PDFPath: filepath.Join(src, "sources", "wide")},
+			})
+			if tc.reason != "" {
+				if err == nil || !errors.Is(err, errBorrowedReference) || !strings.Contains(err.Error(), tc.reason) {
+					t.Errorf("Prepare error %v, want one naming %q", err, tc.reason)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Prepare: %v", err)
+			}
+			if !f.HasGolden("wide") || f.golden("wide") != f.golden("memo") {
+				t.Error("the borrower is not scored against memo's goldens")
+			}
+		})
+	}
+
+	chained := []Fixture{}
+	src := t.TempDir()
+	for name, options := range map[string]string{"a": `{"reference_of": "b"}`, "b": `{"reference_of": "c"}`, "c": `{}`} {
+		writeFiles(t, src, map[string]string{name + "/" + name + ".docx": "docx", name + "/options.json": options})
+		chained = append(chained, Fixture{ID: name, PDFPath: filepath.Join(src, name)})
+	}
+	if _, err := borrowedReferences(chained); err == nil || !strings.Contains(err.Error(), "borrows a reference too") {
+		t.Errorf("a chain of borrowers: %v", err)
+	}
+}

@@ -29,6 +29,8 @@ func TestParseOfficeOptions_RefusesWhatTheRouteRefuses(t *testing.T) {
 		{"width alone", `{"paperWidth": 4}`, "both or neither"},
 		{"zero paper", `{"paperWidth": 0, "paperHeight": 6}`, "paperWidth"},
 		{"negative paper", `{"paperWidth": 4, "paperHeight": -6}`, "paperHeight"},
+		{"borrowed reference", `{"landscape": true, "reference_of": "page-landscape"}`, ""},
+		{"borrowed reference padded", `{"reference_of": " page-landscape"}`, "want a fixture ID"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -137,8 +139,10 @@ func TestOfficeOptionNames_MatchTheJSONNames(t *testing.T) {
 		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
 		tags = append(tags, name)
 	}
-	if !slices.Equal(tags, OfficeOptionNames) {
-		t.Errorf("json names %v, OfficeOptionNames %v", tags, OfficeOptionNames)
+	// The route's fields, then the key that borrows a reference, which is
+	// no field of the route's.
+	if want := append(slices.Clone(OfficeOptionNames), ReferenceOfName); !slices.Equal(tags, want) {
+		t.Errorf("json names %v, want %v", tags, want)
 	}
 }
 

@@ -157,6 +157,9 @@ var costMetrics = map[string]bool{
 //
 //nolint:gochecknoglobals // static skip table for the comparator
 var uncomparedMetrics = map[string]bool{
+	// The diff fixtures left unscored because their reference draws a face
+	// no fixture font stands in for: an inventory of the references.
+	metricReferenceFontsMissing: true,
 	"litho_pre":     true,
 	"litho_post":    true,
 	"litho_fixed":   true,
