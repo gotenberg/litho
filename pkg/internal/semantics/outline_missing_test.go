@@ -57,8 +57,8 @@ func buildDanglingOutlinePDF() []byte {
 // Per ISO 32000-1, 7.3.9 a reference to an undefined object is a reference to
 // null, and 7.3.7 makes a null entry equivalent to an absent one. An object
 // whose declared offset holds no object is indistinguishable from an undefined
-// one. Returning an error here made Bookmarks the only reader call that failed
-// on such a file, and `litho bookmarks` exited non-zero.
+// one. Returning an error here made Reader.Bookmarks the only reader call that
+// failed on such a file.
 //
 // # Corpus evidence
 //

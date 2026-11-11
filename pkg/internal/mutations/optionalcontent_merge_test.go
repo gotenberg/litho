@@ -144,7 +144,7 @@ func ocgIdentity(t *testing.T, data []byte) (off []ast.PdfName, absent []ast.Pdf
 // groups, which it no longer did.
 //
 // litho's own reader cannot catch this: it extracts hidden optional content on
-// purpose, so `litho text` reads the same before and after.
+// purpose, so Reader.ExtractText reads the same before and after.
 //
 // # Corpus evidence
 //

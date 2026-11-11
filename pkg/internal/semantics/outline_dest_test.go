@@ -57,7 +57,7 @@ func actionInDestPDF(t *testing.T) []byte {
 // producer wraps its destination in an action dictionary.
 //
 // litho accepted only an array, a name or a byte string, so such outlines
-// reported no page at all for every single bookmark: `litho bookmarks` printed
+// reported no page at all for every single bookmark: Reader.Bookmarks returned
 // page 0 throughout while every other reader resolved them.
 //
 // # Corpus evidence

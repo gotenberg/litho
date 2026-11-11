@@ -66,8 +66,9 @@ func pipeRotateThenRemediate(t *testing.T) []byte {
 //
 // Remediation applies its fixers eagerly against the source and its results win
 // at the same object number when the write happens, so a rotation queued first
-// was simply dropped: `litho pipe f rotate -angle 90 remediate -profile PDF/A-2b`
-// wrote a file with no rotation while the two commands run separately rotated it.
+// was simply dropped: a pipeline of RotatePages(90) then RemediatePDFA at
+// PDF/A-2b wrote a file with no rotation while the two run as separate writes
+// rotated it.
 func TestPipelineRemediateKeepsAnEarlierRotation(t *testing.T) {
 	t.Parallel()
 
@@ -218,7 +219,7 @@ func openPageRewriteFixture(t *testing.T) *Reader {
 //
 // The integrity baseline came from the source Reader, so a delete queued before
 // remediation left the gate comparing a page count remediation never had:
-// `litho pipe f delete -pages 1 remediate -profile PDF/A-2b` failed outright
+// a pipeline of DeletePages(1) then RemediatePDFA at PDF/A-2b failed outright
 // with "remediation broke the PDF beyond the configured regression tolerance:
 // page count changed from 41 to 40" and rolled back a remediation that had done
 // nothing wrong.
@@ -268,10 +269,9 @@ func TestPipelineRemediateAfterDeleteIsNotAFalseRegression(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - pdfjs bug1708041.pdf: came out of
-//     `litho pipe f remediate -profile PDF/A-2b rotate -angle 90` with no
-//     rotation on any of its six pages, while the two commands run separately
-//     rotated it.
+//   - pdfjs bug1708041.pdf: came out of a pipeline of RemediatePDFA at
+//     PDF/A-2b then RotatePages(90) with no rotation on any of its six pages,
+//     while the two run as separate writes rotated it.
 func TestIncrementalWriteComposesOverridesWithMutations(t *testing.T) {
 	t.Parallel()
 

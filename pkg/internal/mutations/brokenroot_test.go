@@ -83,8 +83,8 @@ func TestCatalogRefRecoversFromAMisrootedTrailer(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - pdfjs issue9418.pdf: `litho attach` exited 0 and reported success while
-//     writing /Names into the /Info dictionary, and `litho attachments` on
+//   - pdfjs issue9418.pdf: Writer.AddAttachment returned no error while
+//     writing /Names into the /Info dictionary, and Reader.EmbeddedFiles on
 //     that same output reported no attachments.
 func TestAddAttachmentTargetsTheRecoveredCatalog(t *testing.T) {
 	t.Parallel()

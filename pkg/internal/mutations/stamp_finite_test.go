@@ -10,9 +10,9 @@ import (
 // spelling for is reported rather than written.
 //
 // ISO 32000-1, 7.3.3 defines a number as an optional sign, digits and an
-// optional decimal point: there is no NaN and no infinity. Go's flag package
-// parses both into a float64, and the formatter wrote them straight into the
-// content stream, so `litho stamp-text -x NaN` exited 0 and produced a page
+// optional decimal point: there is no NaN and no infinity. A float64 holds
+// both, and the formatter wrote them straight into the content stream, so
+// Writer.StampText with an X of NaN returned no error and produced a page
 // poppler rejects with "Unknown operator 'NaN'" and then "Too few (1) args to
 // 'Td'".
 func TestStampTextRejectsNonFiniteGeometry(t *testing.T) {

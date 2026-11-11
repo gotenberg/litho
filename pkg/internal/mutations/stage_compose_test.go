@@ -74,9 +74,9 @@ func composeFixture(t *testing.T) (context.Context, *document.Document, []*docum
 // another in the same allocator builds on it instead of replacing it.
 //
 // Both rewrite whole page dictionaries at the page's own object number. Copying
-// the source dictionary throws away whatever the earlier stage wrote, so
-// `litho pipe f rotate -angle 90 delete -pages 1` produced a file with no
-// rotation at all, while running the two commands separately rotated it.
+// the source dictionary throws away whatever the earlier stage wrote, so a
+// pipeline of RotatePages(90) then DeletePages(1) produced a file with no
+// rotation at all, while the two edits written separately rotated it.
 func TestDeleteKeepsAnEarlierStagesPageEdits(t *testing.T) {
 	t.Parallel()
 

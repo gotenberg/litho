@@ -29,8 +29,9 @@ func multiImagePDF() []byte {
 // images in the same order.
 //
 // The resource dictionary is a Go map, and ranging it directly takes the
-// randomised iteration order: `litho images` answered with a different ordering
-// on every run, so anyone diffing two runs saw changes that were not there.
+// randomised iteration order: Reader.ExtractImages answered with a different
+// ordering on every run, so anyone diffing two runs saw changes that were not
+// there.
 // litho's own rule is that ordered output never comes from a map walk.
 func TestExtractImages_OrderIsStable(t *testing.T) {
 	t.Parallel()

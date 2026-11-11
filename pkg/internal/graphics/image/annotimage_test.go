@@ -31,8 +31,8 @@ func annotImageObjs(annot string) []string {
 // # Corpus evidence
 //
 //   - pdfjs firefox_logo.pdf: shows a 512x543 image through a /Stamp
-//     annotation and nothing else, so `litho images` reported an empty page
-//     while poppler drew one.
+//     annotation and nothing else, so Reader.ExtractImages reported an empty
+//     page while poppler drew one.
 func TestExtractImagesRecursiveFindsAnnotationImages(t *testing.T) {
 	t.Parallel()
 

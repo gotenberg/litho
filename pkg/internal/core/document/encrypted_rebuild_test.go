@@ -102,8 +102,8 @@ func escapePdfLiteral(b []byte) string {
 //
 //   - pdfjs issue5909_original.pdf: its final startxref points into a
 //     superseded revision, and all 43 objects were cached as ciphertext.
-//     `litho metadata` printed the encrypted bytes as the /Author and
-//     `litho text` found nothing in a document poppler reads in full.
+//     Reader.Metadata returned the encrypted bytes as the /Author and
+//     Reader.ExtractText found nothing in a document poppler reads in full.
 func TestEncryptedDocumentRecoveredByRebuildStillDecrypts(t *testing.T) {
 	t.Parallel()
 

@@ -69,9 +69,9 @@ func pageAnnots(t *testing.T, alloc *writer.ObjAllocator) (ast.PdfArray, bool) {
 //
 // ISO 32000-1, 12.5.6.15 lets an annotation carry its own file specification,
 // so a file can reach the document without the /Names /EmbeddedFiles tree.
-// RemoveAttachment walked only that tree, so `litho detach` exited 0, wrote a
-// file byte-identical in size to the input, and left the attachment, and its
-// bytes, in place.
+// RemoveAttachment walked only that tree, so Writer.RemoveAttachment returned
+// no error, wrote a file byte-identical in size to the input, and left the
+// attachment, and its bytes, in place.
 func TestDetachRemovesAnAnnotationAttachment(t *testing.T) {
 	t.Parallel()
 

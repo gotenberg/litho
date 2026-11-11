@@ -60,14 +60,13 @@ func openForm(t *testing.T) *document.Document {
 //
 // [ExtractFormData] records a field only when it carries a /V, which is right
 // for "what did the user type" and wrong for "what fields are there": it hid
-// the unfilled fields from `litho forms`, and left no way to discover the
-// names to pass to set-form.
+// the unfilled fields from Reader.FormFields, and left no way to discover the
+// names to pass to Writer.SetFormField.
 //
 // # Corpus evidence
 //
-//   - pdfjs issue14301.pdf: has 660 named fields, and `litho forms` printed
-//     "(no form fields)" for it, because only its 320 checkboxes hold a
-//     value.
+//   - pdfjs issue14301.pdf: has 660 named fields, and Reader.FormFields
+//     returned none for it, because only its 320 checkboxes hold a value.
 func TestExtractFormFieldsListsUnfilledFields(t *testing.T) {
 	t.Parallel()
 
@@ -115,7 +114,7 @@ func TestExtractFormDataKeepsOnlyFilledFields(t *testing.T) {
 
 // TestFormListingOrderIsStable pins that the listing does not depend on Go map
 // iteration order, which the writer's determinism rule forbids and which made
-// repeated `litho forms` runs disagree with each other.
+// repeated Reader.FormFields calls disagree with each other.
 func TestFormListingOrderIsStable(t *testing.T) {
 	t.Parallel()
 

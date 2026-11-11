@@ -71,9 +71,8 @@ func twoInterpolatedImagesPDF(t *testing.T) []byte {
 // its notes in the same order on every run.
 //
 // The fix descriptions name the image they describe, and they reach the caller
-// in the order the fixer produced them: `litho remediate` prints them as lines
-// and serialises them as the JSON "fixed" array, neither of which is sorted
-// downstream. Ranging the /XObject dictionary directly would therefore hand two
+// in the order the fixer produced them: RemediationReport.Fixed lists them in
+// that order, and nothing sorts them downstream. Ranging the /XObject dictionary directly would therefore hand two
 // different orders to two identical runs.
 //
 // Repeated rather than run once on purpose. Go randomises map iteration, so a

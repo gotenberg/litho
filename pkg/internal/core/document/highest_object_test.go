@@ -50,10 +50,10 @@ func inflatedSizePDF(declaredSize int) []byte {
 // # Corpus evidence
 //
 //   - pdfjs issue16091.pdf: the catalog names its page tree 156325 while the
-//     trailer declares /Size 156342 in a 107 KB file, and `litho attach` wrote
-//     the update's own cross-reference stream at 156325. poppler read the input
-//     fine and then refused the output with "Top-level pages object is wrong
-//     type (stream)".
+//     trailer declares /Size 156342 in a 107 KB file, and Writer.AddAttachment
+//     wrote the update's own cross-reference stream at 156325. poppler read the
+//     input fine and then refused the output with "Top-level pages object is
+//     wrong type (stream)".
 func TestHighestObjectNumberHonoursAnInflatedTrailerSize(t *testing.T) {
 	t.Parallel()
 

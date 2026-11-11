@@ -973,10 +973,11 @@ func (d *Document) Limits() limits.Limits {
 //     file that ends like a PDF is read.
 //   - pdfjs issue5909_original.pdf: its final startxref points into a
 //     superseded revision, and the rebuild left all 43 objects cached as
-//     ciphertext, so `litho metadata` reported the encrypted bytes as the
-//     /Author and `litho text` found nothing in a document poppler reads. A
-//     full rewrite then dropped /Encrypt while copying those bytes verbatim,
-//     turning a readable file into an unreadable one and reporting success.
+//     ciphertext, so Reader.Metadata returned the encrypted bytes as the
+//     /Author and Reader.ExtractText found nothing in a document poppler
+//     reads. A full rewrite then dropped /Encrypt while copying those bytes
+//     verbatim, turning a readable file into an unreadable one and
+//     reporting success.
 //     The caches are reset once the crypto handler exists for that reason.
 func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Logger, opts ...Option) (*Document, error) {
 	var o options

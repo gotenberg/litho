@@ -60,7 +60,7 @@ func outlineDoc(t *testing.T, entry string) *document.Document {
 // Per ISO 32000-1, 7.3.9 a reference to an undefined object is a reference to
 // null, and per 7.3.7 an entry whose value is null is equivalent to the entry
 // being absent. Treating /Outlines at a free object as a broken outline made
-// `litho bookmarks` fail on a file both poppler and pikepdf read as simply
+// Reader.Bookmarks fail on a file both poppler and pikepdf read as simply
 // having none.
 //
 // # Corpus evidence

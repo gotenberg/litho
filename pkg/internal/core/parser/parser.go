@@ -1113,7 +1113,7 @@ func (p *Parser) parseStreamAfterDict(ctx context.Context, dict ast.PdfDict) (as
 //     Trimming the counted newline left the comment unterminated, so it
 //     swallowed the "q" that opened the next part of the same /Contents
 //     array. The unbalanced q/Q pair moved the rest of the page out of view,
-//     so `litho split` produced a page whose text no reader could find.
+//     so Split produced a page whose text no reader could find.
 func separatorPrecedesEndstream(src io.ReaderAt, off int64) bool {
 	var b [1]byte
 	if _, err := src.ReadAt(b[:], off); err != nil {

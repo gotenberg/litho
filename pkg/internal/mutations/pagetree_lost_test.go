@@ -72,9 +72,10 @@ func unreadablePageTreePDF() []byte {
 //
 // # Corpus evidence
 //
-//   - pdfjs: `litho attach` on an encrypted file whose page tree sits in an
-//     undecodable object stream turned a 47 KB one-page document into a 1.9 KB
-//     zero-page one and exited 0, while `litho rotate` on the same file failed.
+//   - pdfjs: Writer.AddAttachment on an encrypted file whose page tree sits in
+//     an undecodable object stream turned a 47 KB one-page document into a
+//     1.9 KB zero-page one and returned no error, while Writer.RotatePages on
+//     the same file failed.
 func TestFullRewriteRefusesToDropADefinedPageTree(t *testing.T) {
 	t.Parallel()
 

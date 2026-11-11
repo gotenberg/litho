@@ -40,10 +40,11 @@ func bareDocPDF() []byte {
 // TestAbsentMetadataReportsTheSentinel pins that a document carrying no
 // metadata reports [ErrNoMetadata] rather than an anonymous error.
 //
-// Absence is not a defect, and the CLI must be able to tell it from a genuine
-// extraction failure without matching on the message, which CONTRIBUTING
-// forbids. Before this, `litho metadata` exited non-zero on a valid document
-// while the sibling verbs printed "(no ...)" and exited 0.
+// Absence is not a defect, and a caller must be able to tell it from a
+// genuine extraction failure without matching on the message, which
+// CONTRIBUTING forbids. Before this, Reader.Metadata returned an error no
+// sentinel matched on a valid document, while the sibling reader calls
+// returned an empty result.
 func TestAbsentMetadataReportsTheSentinel(t *testing.T) {
 	t.Parallel()
 

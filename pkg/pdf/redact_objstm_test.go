@@ -123,7 +123,7 @@ func TestWriter_Redact_PackedSourceWithoutACopySucceeds(t *testing.T) {
 }
 
 // TestScanOutputForTokens_ReadsMembersOfACompactOutput scans a redacted file
-// written with object streams, as `litho redact --compact` writes it. The
+// written with object streams, as WriteTo with [WithObjectStreams] writes it. The
 // surviving private note is packed into an /ObjStm in that output, so its bytes
 // are compressed and a byte grep finds nothing: only a scan that reads members
 // sees it.

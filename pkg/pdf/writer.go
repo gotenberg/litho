@@ -3300,8 +3300,8 @@ func pdfaEncryptionClause(profile models.PDFAProfile) string {
 // stamp drawn at half opacity puts on a page, which ISO 19005-2, 6.2.10
 // judges, went unseen, and a page deletion left the report claiming repairs
 // to objects only the deleted page used. Its integrity baseline had needed
-// the same document: `litho pipe f delete -pages 1 remediate -profile
-// PDF/A-2b` once measured the source, reported "page count changed from 41 to
+// the same document: a pipeline of DeletePages(1) then RemediatePDFA at
+// PDF/A-2b once measured the source, reported "page count changed from 41 to
 // 40", and rolled back a remediation that had done nothing wrong, and
 // remediating a redacted document was refused for "dropping" the text Redact
 // had removed.

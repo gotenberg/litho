@@ -43,8 +43,8 @@ func misrootedVersionPDF(rootObjNum int) []byte {
 // and per §7.5.5 Table 15 /Root shall be the catalog, so a file naming
 // something else is malformed and [Document.CatalogRef] recovers from it.
 // Reading the raw /Root meant such a file silently kept its header version:
-// `litho info` reported 1.4 for a document declaring 2.0. The reported version
-// drives profile decisions, so the error does not stay cosmetic.
+// Reader.Version reported 1.4 for a document declaring 2.0. The version
+// it reports drives profile decisions, so the error does not stay cosmetic.
 func TestCatalogVersionFollowsTheRecoveredCatalog(t *testing.T) {
 	t.Parallel()
 

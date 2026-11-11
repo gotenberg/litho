@@ -31,9 +31,9 @@ import (
 // # Corpus evidence
 //
 //   - pdfjs issue9418.pdf: the final trailer points /Root at the /Info
-//     dictionary. `litho attach` reported success and wrote /Names into /Info,
-//     leaving the real catalog untouched, so `litho attachments` on that same
-//     output reported no attachments. The mutation was lost, and the /Info
+//     dictionary. Writer.AddAttachment returned no error and wrote /Names
+//     into /Info, leaving the real catalog untouched, so Reader.EmbeddedFiles
+//     on that same output reported no attachments. The mutation was lost, and the /Info
 //     dictionary corrupted.
 func CatalogRef(ctx context.Context, doc *document.Document) (ast.PdfIndirectRef, bool) {
 	if ref, ok := doc.CatalogRef(ctx); ok {
@@ -64,11 +64,11 @@ func CatalogRef(ctx context.Context, doc *document.Document) (ast.PdfIndirectRef
 //
 //   - pdfjs issue18986.pdf: the catalog's entry addresses the offset of an
 //     unrelated empty dictionary, so resolving the reference yields "<<>>"
-//     with no error. `litho set-bookmarks` copied those zero entries, wrote
-//     "<< /Outlines 9 0 R >>" over the catalog, and reported success: the
+//     with no error. Writer.GenerateBookmarks copied those zero entries, wrote
+//     "<< /Outlines 9 0 R >>" over the catalog, and returned no error: the
 //     output lost /Type, /Pages and every other key, leaving a document with
-//     no page tree that pikepdf rejects and litho's own `bookmarks` reads as
-//     empty.
+//     no page tree that pikepdf rejects and litho's own Reader.Bookmarks reads
+//     as empty.
 func CatalogDict(ctx context.Context, doc *document.Document, ref ast.PdfIndirectRef) (ast.PdfDict, error) {
 	dict, err := document.ResolveDict(ctx, doc, ref)
 	if err == nil && len(dict) > 0 {

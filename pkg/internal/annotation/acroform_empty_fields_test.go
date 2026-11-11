@@ -53,8 +53,8 @@ func acroFormDoc(t *testing.T, acroForm string) *document.Document {
 //
 // ISO 32000-1, Table 218 permits an empty /Fields: a form may carry only /DA,
 // /DR or /NeedAppearances. An empty array resolves to a nil slice, which the
-// code rejected as "fields is not an array", so `litho forms` failed outright on
-// a conformant document.
+// code rejected as "fields is not an array", so Reader.FormFields failed
+// outright on a conformant document.
 func TestEmptyFieldsArrayIsNotAnError(t *testing.T) {
 	t.Parallel()
 

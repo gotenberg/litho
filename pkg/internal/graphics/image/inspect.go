@@ -36,8 +36,8 @@ func ExtractImages(ctx context.Context, doc *document.Document, page *document.P
 	var images []models.ImageMeta
 
 	// Sort the resource names before walking them. Ranging the dict directly
-	// takes Go's randomised map order, so `litho images` answered with a
-	// different ordering on every run and any caller diffing two runs saw
+	// takes Go's randomised map order, so Reader.ExtractImages answered with
+	// a different ordering on every run and any caller diffing two runs saw
 	// changes that were not there.
 	names := make([]string, 0, len(xobjDict))
 	for name := range xobjDict {

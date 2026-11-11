@@ -26,14 +26,13 @@ func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.Form
 //
 // [ExtractFormData] reports only fields that carry a /V, which is what a caller
 // asking "what did the user type" wants. Listing a form needs the other answer:
-// reporting only valued fields hid the unfilled ones from `litho forms`, and
-// left no way to discover the names to hand to set-form.
+// reporting only valued fields hid the unfilled ones from Reader.FormFields,
+// and left no way to discover the names to hand to Writer.SetFormField.
 //
 // # Corpus evidence
 //
-//   - pdfjs issue14301.pdf: has 660 named fields, and `litho forms` printed
-//     "(no form fields)" for it, because only its 320 checkboxes carry a
-//     value.
+//   - pdfjs issue14301.pdf: has 660 named fields, and Reader.FormFields
+//     returned none for it, because only its 320 checkboxes carry a value.
 func ExtractFormFields(ctx context.Context, doc *document.Document) ([]models.FormField, error) {
 	return extractForm(ctx, doc, true)
 }
@@ -44,14 +43,14 @@ func ExtractFormFields(ctx context.Context, doc *document.Document) ([]models.Fo
 // The interactive form lists its fields in /AcroForm (ISO 32000-1, 12.7.2) and
 // the pages carry the widgets that present them (12.5.6.19). A producer may
 // write only the widget, so asking the catalog alone answers "no" for a document
-// whose fields `litho forms` lists.
+// whose fields Reader.FormFields lists.
 //
 // The walk stops at the first field found, so a document with a large form costs
 // no more than one.
 //
 // # Corpus evidence
 //
-//   - pdfjs issue12963.pdf: has 27 fields that `litho forms` lists and no
+//   - pdfjs issue12963.pdf: has 27 fields that Reader.FormFields lists and no
 //     /AcroForm at all.
 func HasPageWidgetField(ctx context.Context, doc *document.Document) bool {
 	catalog, err := document.ResolveCatalog(ctx, doc)
@@ -227,7 +226,7 @@ func widgetDictFieldRoot(ctx context.Context, doc *document.Document, annotObj a
 // # Corpus evidence
 //
 //   - pdfjs issue12963.pdf: has 241 fields the interactive form does not
-//     list, and `litho forms` reported none of them.
+//     list, and Reader.FormFields reported none of them.
 func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool) ([]models.FormField, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -301,7 +300,8 @@ func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool)
 		// no root fields. An empty array resolves to a nil slice, and
 		// document.ResolveArray already reports a genuine type mismatch as an
 		// error, so this is "no root fields" rather than a malformed entry.
-		// Rejecting it made `litho forms` fail outright on a conformant file.
+		// Rejecting it made Reader.FormFields fail outright on a conformant
+		// file.
 		return xfaOnly()
 	}
 
@@ -337,7 +337,8 @@ func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool)
 
 	// Filled-in values only, unless includeEmpty, in document order. Ranging
 	// the map emitted a different order on every run, which the writer's
-	// determinism rule forbids and which made `litho forms` output unstable.
+	// determinism rule forbids and which made the Reader.FormFields order
+	// unstable.
 	var results []models.FormField
 	for _, name := range col.order {
 		value, ok := col.formData[name]
@@ -387,7 +388,7 @@ func nameValue(v ast.PdfName) string {
 //
 //   - pdfjs annotation-choice-widget.pdf: holds
 //     ["Ipsum" "Amet" "Consectetur" "Elit"] in one multi-select list box, and
-//     `litho forms` printed nothing for it.
+//     Reader.FormFields returned no value for it.
 func joinChoiceValue(ctx context.Context, doc *document.Document, arr ast.PdfArray) string {
 	parts := make([]string, 0, len(arr))
 	for _, item := range arr {

@@ -109,7 +109,7 @@ func TestParseStream_EncryptedStreamNotTrimmed(t *testing.T) {
 //     declared as /Length 27 with the separator written after it. Trimming
 //     the counted newline swallowed the "q" that opened the next part. The
 //     unbalanced q/Q pair moved the rest of the page out of view and
-//     `litho split` produced a page whose text no reader could find.
+//     Split produced a page whose text no reader could find.
 func TestParseStream_CountedNewlineTerminatesComment(t *testing.T) {
 	t.Parallel()
 

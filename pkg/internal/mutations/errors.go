@@ -44,9 +44,9 @@ var ErrCatalogUnreadable = errors.New("document catalog could not be read")
 //
 // # Corpus evidence
 //
-//   - pdfjs: `litho attach` on an encrypted file turned a 47 KB one-page
-//     document into a 1.9 KB zero-page one and exited 0, while `litho rotate`
-//     on the same file failed.
+//   - pdfjs: Writer.AddAttachment on an encrypted file turned a 47 KB
+//     one-page document into a 1.9 KB zero-page one and returned no error,
+//     while Writer.RotatePages on the same file failed.
 var ErrPageTreeNotReproduced = errors.New("source page tree could not be reproduced in the rewrite")
 
 // ErrSpanOutOfRange reports a byte span that does not lie within the content it

@@ -93,9 +93,9 @@ func formDAGPDF(levels, branching int) []byte {
 //
 // # Corpus evidence
 //
-//   - pdfjs issue6961.pdf: nests ten levels wide enough that `litho remediate
-//     -profile PDF/UA-1` ran over 50 minutes at 142% CPU without finishing,
-//     and it never completed in any corpus run.
+//   - pdfjs issue6961.pdf: nests ten levels wide enough that
+//     Writer.RemediatePDFUA at PDF/UA-1 ran over 50 minutes at 142% CPU
+//     without finishing, and it never completed in any corpus run.
 //   - pdfjs issue6961.pdf: re-inflates a 29 KB Flate stream at every one of
 //     the tree walk's visits.
 func TestTextBearingXObjects_SharedFormsDecodedOnce(t *testing.T) {
