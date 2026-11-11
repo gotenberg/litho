@@ -130,6 +130,21 @@ func TestConvert_Tables(t *testing.T) {
 	if res.Structure == nil || !strings.Contains(roles(res.Structure), "Table,THead,TR,TH") {
 		t.Errorf("structure = %s", roles(res.Structure))
 	}
+	// The header rows' cells head their columns; the merge spans two.
+	b := newTestBuilder(t, doc{contentAuto: auto, body: body})
+	root, _ := b.document(odfBody(b))
+	var ths, spans int
+	walkNodes(root, func(n *layout.Node) {
+		if n.Role == "TH" && n.Scope == compose.ScopeColumn {
+			ths++
+		}
+		if n.Role == "TD" && n.ColSpan == 2 {
+			spans++
+		}
+	})
+	if ths != 3 || spans != 1 {
+		t.Errorf("%d column header cells, %d spans; want 3 and 1", ths, spans)
+	}
 }
 
 // roles returns the structure tree's roles in document order.

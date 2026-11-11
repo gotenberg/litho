@@ -3,6 +3,7 @@ package odt
 import (
 	"strconv"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
@@ -228,6 +229,13 @@ func (b *builder) cell(c *odf.Element, tb *tableBuild, header bool) *layout.Node
 		role = "TH"
 	}
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: role})
+	if header {
+		// The rows of table:table-header-rows repeat atop every page as
+		// the table's heading (ODF 1.3 Part 3, 9.1.12): their cells head
+		// their columns (ISO 32000-1, 14.8.5.7, Table 349; ISO 14289-1,
+		// 7.5).
+		n.Scope = compose.ScopeColumn
+	}
 	if v, err := strconv.Atoi(c.A(odf.NSTable, "number-columns-spanned")); err == nil && v > 1 {
 		n.ColSpan = min(v, maxRepeat)
 	}
