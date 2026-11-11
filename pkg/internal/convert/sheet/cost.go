@@ -9,11 +9,11 @@ package sheet
 const MaxCells = 1_000_000
 
 // CellCost is what one cell costs the conversion's memory budget, charged
-// when it is read: the cell of the model, and the glyph runs, structure
-// element and fragments the pages build from it, which live until the
-// document is written. Charging the whole cost when the cell is read lets
-// a workbook the budget cannot lay out fail while it is read, before any
-// page is planned.
+// when it is read: the cell of the model, and the structure element,
+// fragments and plan entries the pages build from it, which live until
+// the document is written. Its glyph runs are charged apart, when they are
+// laid out. Charging the rest when the cell is read lets a workbook the
+// budget cannot lay out fail while it is read, before any page is planned.
 //
 // # Corpus evidence
 //
