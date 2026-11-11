@@ -48,6 +48,7 @@ type xobjUse struct {
 type pageWriter struct {
 	w      *docWriter
 	index  int
+	width  float64
 	height float64
 	buf    bytes.Buffer
 
@@ -79,6 +80,7 @@ func newPageWriter(w *docWriter, index int, page *Page) *pageWriter {
 	return &pageWriter{
 		w:         w,
 		index:     index,
+		width:     page.Width,
 		height:    page.Height,
 		fontNames: make(map[*fontEntry]string),
 		xobjNames: make(map[*ImageSource]string),
@@ -149,6 +151,12 @@ func (p *pageWriter) fragments(ctx context.Context, content []Fragment, opacity 
 		}
 	}
 	return nil
+}
+
+// onPage reports whether a translation by (x, y) keeps the origin within
+// the page's size of the page's origin.
+func (p *pageWriter) onPage(x, y float64) bool {
+	return math.Abs(x) <= p.width && math.Abs(y) <= p.height
 }
 
 // extent returns the largest magnitude of the numbers f writes, the
@@ -532,21 +540,37 @@ func (p *pageWriter) ops(ctx context.Context, ops []PathOp) error {
 // (ISO 32000-1, 8.5.4), its opacity as an ExtGState, its content, then Q
 // (8.4.2).
 //
-// The translation of a group is not written as cm: it is folded into the
-// coordinates of what the group holds, text origins, path points, image
-// rectangles, clips and shading placements alike, and a transform that
-// also scales, rotates or skews takes the folded translation into its own
-// cm. Content is so written near the page's coordinates whatever the
-// translation the producer laid it out under: the engines place a page's
-// slice of a long flow under a translation that grows with the page, and
-// PDF 1.4 readers hold real numbers within +/-32767 (PDF Reference 1.4,
-// Appendix C, Table C.1), a limit PDF/A-1 makes a rule (ISO 19005-1,
-// 6.1.12). The sum is exact to the precision every number is written at.
+// A translation that moves the group's origin off the page is not written
+// as cm: it is folded into the coordinates of what the group holds, text
+// origins, path points, image rectangles, clips and shading placements
+// alike, and a transform that also scales, rotates or skews takes the
+// folded translation into its own cm. Content is so written near the
+// page's coordinates whatever the translation the producer laid it out
+// under: the engines place a page's slice of a long flow under a
+// translation that grows with the page, and PDF 1.4 readers hold real
+// numbers within +/-32767 (PDF Reference 1.4, Appendix C, Table C.1), a
+// limit PDF/A-1 makes a rule (ISO 19005-1, 6.1.12). The sum is exact to
+// the precision every number is written at. A translation within the page
+// stays a cm: what the group holds is then near its own origin, and its
+// numbers are shorter as they are.
 //
 // The opacity is a constant alpha (11.6.4.4), not a transparency group
 // (11.4.7): it multiplies into every child's own alpha, so the children
 // blend with the backdrop one by one and two overlapping children show
 // through each other.
+//
+// # Corpus evidence
+//
+//   - probe, html: an 87-page document of paragraphs wrote
+//     1 0 0 1 56.693 -62594.7 cm on its last page and numbers past 32767
+//     from page 45 on, which failed veraPDF at PDF/A-1b. Folded, its largest
+//     number is 1513.7 and it passes.
+//   - libreoffice/odt layout/many-paragraphs-per-page-in-6-columns.odt: wrote
+//     text matrices past 32767 from page 8 on. Folded, its largest number is
+//     1122.48, and the file is 2.1% smaller.
+//   - libreoffice/xlsx sc/forum-mso-en4-134670.xlsx: folding every
+//     translation, those within the page included, made the file 0.25%
+//     larger; keeping those as cm leaves it byte for byte as it was.
 func (p *pageWriter) group(ctx context.Context, g *Group, opacity float64) error {
 	p.endMark()
 	p.buf.WriteString("q\n")
@@ -556,8 +580,8 @@ func (p *pageWriter) group(ctx context.Context, g *Group, opacity float64) error
 	e, f := m.E+p.off.X, m.F+p.off.Y
 	det := m.A*m.D - m.B*m.C
 	switch {
-	case m == (Matrix{}):
-	case m.A == 1 && m.B == 0 && m.C == 0 && m.D == 1:
+	case m == (Matrix{}) || m == Identity:
+	case m.A == 1 && m.B == 0 && m.C == 0 && m.D == 1 && !p.onPage(e, f):
 		p.off = Point{X: e, Y: f}
 	case p.limited() && max(math.Abs(e), math.Abs(f)) > realLimit && det != 0 && finite(det):
 		// The translation passes what PDF 1.4 holds: the cm keeps the
