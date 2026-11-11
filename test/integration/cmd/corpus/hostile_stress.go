@@ -30,6 +30,8 @@ const (
 	stressCellsPerRow = 10
 	// stressDocxPages is how many pages the long DOCX breaks into.
 	stressDocxPages = 2000
+	// stressSlides is how many slides the long deck holds.
+	stressSlides = 500
 )
 
 // stressDoc is one document of the stress corpus.
@@ -73,6 +75,13 @@ func stressDocs() []stressDoc {
 			return err
 		}
 		return os.WriteFile(filepath.Join(dir, "index.docx"), data, 0o644) //nolint:gosec // testdata is world-readable
+	}})
+	docs = append(docs, stressDoc{fmt.Sprintf("pptx-%dslides", stressSlides), "index.pptx", func(dir string) error {
+		data, err := stressPptx(stressSlides)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(dir, "index.pptx"), data, 0o644) //nolint:gosec // testdata is world-readable
 	}})
 	return docs
 }
@@ -245,4 +254,91 @@ func stressDocx(pages int) ([]byte, error) {
 			`<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>` + body.String() +
 			`<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`),
 	})
+}
+
+// The namespaces and relationship types of the stress deck's parts.
+const (
+	stressPresentationNS = `xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ` +
+		`xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ` +
+		`xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"`
+	stressRelNS    = `xmlns="http://schemas.openxmlformats.org/package/2006/relationships"`
+	stressRelTypes = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/"
+	stressPMLTypes = "application/vnd.openxmlformats-officedocument.presentationml."
+)
+
+// stressPptx returns a PresentationML deck of slides slides on one master
+// and one layout, each a title and a bulleted paragraph of text.
+func stressPptx(slides int) ([]byte, error) {
+	r := rand.New(rand.NewPCG(7, 8)) //nolint:gosec // a fixed seed, for the same bytes each build
+	rel := func(id, typ, target string) string {
+		return `<Relationship Id="` + id + `" Type="` + stressRelTypes + typ + `" Target="` + target + `"/>`
+	}
+	rels := func(body string) []byte {
+		return []byte(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships ` + stressRelNS + `>` + body + `</Relationships>`)
+	}
+	shape := func(id int, ph, x, y, w, h, body string) string {
+		return fmt.Sprintf(`<p:sp><p:nvSpPr><p:cNvPr id="%d" name="Shape %d"/><p:cNvSpPr/><p:nvPr>%s</p:nvPr></p:nvSpPr>`+
+			`<p:spPr><a:xfrm><a:off x="%s" y="%s"/><a:ext cx="%s" cy="%s"/></a:xfrm></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/>%s</p:txBody></p:sp>`,
+			id, id, ph, x, y, w, h, body)
+	}
+	tree := func(shapes string) string {
+		return `<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>` + shapes + `</p:spTree></p:cSld>`
+	}
+	masterShapes := shape(2, `<p:ph type="title"/>`, "457200", "274638", "8229600", "1143000", `<a:p><a:endParaRPr/></a:p>`) +
+		shape(3, `<p:ph type="body" idx="1"/>`, "457200", "1600200", "8229600", "4525963", `<a:p><a:endParaRPr/></a:p>`)
+	parts := map[string][]byte{
+		"_rels/.rels": rels(`<Relationship Id="rId1" Type="` + stressRelTypes + `officeDocument" Target="ppt/presentation.xml"/>`),
+		"ppt/theme/theme1.xml": []byte(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme ` + stressPresentationNS + ` name="Stress"><a:themeElements>` +
+			`<a:clrScheme name="Stress"><a:dk1><a:srgbClr val="000000"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1F497D"/></a:dk2><a:lt2><a:srgbClr val="EEECE1"/></a:lt2>` +
+			`<a:accent1><a:srgbClr val="4F81BD"/></a:accent1><a:accent2><a:srgbClr val="C0504D"/></a:accent2><a:accent3><a:srgbClr val="9BBB59"/></a:accent3>` +
+			`<a:accent4><a:srgbClr val="8064A2"/></a:accent4><a:accent5><a:srgbClr val="4BACC6"/></a:accent5><a:accent6><a:srgbClr val="F79646"/></a:accent6>` +
+			`<a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink></a:clrScheme>` +
+			`<a:fontScheme name="Stress"><a:majorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>` +
+			`<a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>` +
+			`<a:fmtScheme name="Stress"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst>` +
+			`<a:lnStyleLst><a:ln w="9525"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="25400"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="38100"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst>` +
+			`<a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>` +
+			`<a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme>` +
+			`</a:themeElements></a:theme>`),
+		"ppt/slideMasters/slideMaster1.xml": []byte(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldMaster ` + stressPresentationNS + `>` + tree(masterShapes) +
+			`<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>` +
+			`<p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>` +
+			`<p:txStyles><p:titleStyle><a:lvl1pPr algn="ctr"><a:defRPr sz="4400"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill><a:latin typeface="+mj-lt"/></a:defRPr></a:lvl1pPr></p:titleStyle>` +
+			`<p:bodyStyle><a:lvl1pPr marL="342900" indent="-342900"><a:buFont typeface="Arial"/><a:buChar char="&#8226;"/><a:defRPr sz="2000"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill><a:latin typeface="+mn-lt"/></a:defRPr></a:lvl1pPr></p:bodyStyle>` +
+			`<p:otherStyle><a:lvl1pPr><a:defRPr sz="1800"/></a:lvl1pPr></p:otherStyle></p:txStyles></p:sldMaster>`),
+		"ppt/slideMasters/_rels/slideMaster1.xml.rels": rels(rel("rId1", "slideLayout", "../slideLayouts/slideLayout1.xml") + rel("rId2", "theme", "../theme/theme1.xml")),
+		"ppt/slideLayouts/slideLayout1.xml": []byte(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout ` + stressPresentationNS + ` type="obj">` +
+			tree(shape(2, `<p:ph type="title"/>`, "457200", "274638", "8229600", "1143000", `<a:p><a:endParaRPr/></a:p>`)+
+				shape(3, `<p:ph idx="1"/>`, "457200", "1600200", "8229600", "4525963", `<a:p><a:endParaRPr/></a:p>`)) +
+			`<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`),
+		"ppt/slideLayouts/_rels/slideLayout1.xml.rels": rels(rel("rId1", "slideMaster", "../slideMasters/slideMaster1.xml")),
+	}
+	var types, ids, presRels strings.Builder
+	presRels.WriteString(rel("rId1", "slideMaster", "slideMasters/slideMaster1.xml") + rel("rId2", "theme", "theme/theme1.xml"))
+	for i := range slides {
+		name := fmt.Sprintf("slide%d.xml", i+1)
+		fmt.Fprintf(&types, `<Override PartName="/ppt/slides/%s" ContentType="%sslide+xml"/>`, name, stressPMLTypes)
+		fmt.Fprintf(&ids, `<p:sldId id="%d" r:id="rId%d"/>`, 256+i, i+3)
+		presRels.WriteString(rel(fmt.Sprintf("rId%d", i+3), "slide", "slides/"+name))
+		body := `<a:p><a:r><a:rPr lang="en-US"/><a:t>` + stressParagraph(r) + `</a:t></a:r></a:p>`
+		parts["ppt/slides/"+name] = []byte(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld ` + stressPresentationNS + `>` +
+			tree(shape(2, `<p:ph type="title"/>`, "457200", "274638", "8229600", "1143000", fmt.Sprintf(`<a:p><a:r><a:rPr lang="en-US"/><a:t>Slide %d</a:t></a:r></a:p>`, i+1))+
+				shape(3, `<p:ph idx="1"/>`, "457200", "1600200", "8229600", "4525963", body)) +
+			`<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`)
+		parts["ppt/slides/_rels/"+name+".rels"] = rels(rel("rId1", "slideLayout", "../slideLayouts/slideLayout1.xml"))
+	}
+	parts["ppt/presentation.xml"] = []byte(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation ` + stressPresentationNS + `>` +
+		`<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>` + ids.String() + `</p:sldIdLst>` +
+		`<p:sldSz cx="9144000" cy="6858000" type="screen4x3"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`)
+	parts["ppt/_rels/presentation.xml.rels"] = rels(presRels.String())
+	parts[contentTypesPart] = []byte(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+		`<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+		`<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+		`<Default Extension="xml" ContentType="application/xml"/>` +
+		`<Override PartName="/ppt/presentation.xml" ContentType="` + stressPMLTypes + `presentation.main+xml"/>` +
+		`<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="` + stressPMLTypes + `slideMaster+xml"/>` +
+		`<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="` + stressPMLTypes + `slideLayout+xml"/>` +
+		`<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>` +
+		types.String() + `</Types>`)
+	return zipPackage(parts)
 }

@@ -2,17 +2,17 @@
   "text-1mib": {
     "result": "pdf",
     "max_seconds": 20,
-    "why": "1 MiB of paragraphs, 264 pages: the account holds about 49 MiB at its peak."
+    "why": "1 MiB of paragraphs, 264 pages: each page leaves memory once written, so the account peaks near 2 MiB and the process near 60 MiB."
   },
   "text-4mib": {
     "result": "pdf",
     "max_seconds": 20,
-    "why": "4 MiB of paragraphs, about 1,050 pages: the account holds about 200 MiB at its peak, the Go heap about 390 MiB."
+    "why": "4 MiB of paragraphs, about 1,050 pages: each page leaves memory once written, so the account peaks near 8 MiB and the process near 90 MiB."
   },
   "text-16mib": {
     "result": "pdf",
-    "max_rss_mib": 2048,
-    "why": "16 MiB of paragraphs, the default input cap, about 4,200 pages: the account holds about 790 MiB at its peak, under the 1 GiB budget, and the process about 1.6 GiB."
+    "max_rss_mib": 384,
+    "why": "16 MiB of paragraphs, the default input cap, about 4,200 pages: each page leaves memory once written, so the account peaks near 20 MiB, the source and the output streams it keeps past the spool threshold, and the process near 220 MiB."
   },
   "html-1mib": {
     "result": "pdf",
@@ -54,7 +54,8 @@
   },
   "csv-100k": {
     "result": "pdf",
-    "why": "100,000 cells, 182 pages: the account holds about 180 MiB at its peak, the Go heap about 270 MiB."
+    "why": "100,000 cells, about 190 pages: each page leaves memory once written, but every cell is charged when it is read, so the account still peaks near 160 MiB; the process peaks near 280 MiB.",
+    "max_rss_mib": 512
   },
   "csv-1000k": {
     "result": "ErrConvertInputTooLarge",
@@ -65,5 +66,11 @@
     "result": "pdf",
     "max_seconds": 20,
     "why": "2,000 pages of one paragraph each: the account holds about 160 MiB at its peak, the Go heap about 370 MiB."
+  },
+  "pptx-500slides": {
+    "result": "pdf",
+    "max_rss_mib": 192,
+    "max_seconds": 20,
+    "why": "500 slides of a title and a paragraph on one master: each page leaves memory once written, so the account peaks near 9 MiB and the process near 70 MiB."
   }
 }
