@@ -363,6 +363,12 @@ type Dest struct {
 	// X and Y are the position on the page, in page coordinates, that the
 	// viewer scrolls to the top-left corner of its window.
 	X, Y float64
+	// Elem is the structure element the destination shows, nil for none.
+	// A PDF 2.0 file names it as a structure destination beside the page
+	// position (ISO 32000-2, 12.3.2.3), which ISO 14289-2, 8.8 asks of
+	// every destination inside the document; an earlier version writes the
+	// page position alone. It belongs to the document's structure tree.
+	Elem *StructElem
 }
 
 // Link is a clickable region. Exactly one of URI and Dest is set.
@@ -375,6 +381,13 @@ type Link struct {
 	// Parent is the Link structure element the region belongs to, nil for
 	// an untagged document.
 	Parent *StructElem
+	// Contents describes the link for a reader who cannot see it: the
+	// annotation's /Contents (ISO 32000-1, 12.5.2, Table 164), which ISO
+	// 14289-1, 7.18.5 requires of every link. A converter sets it to the
+	// text the link shows, or to what its source says the link is for.
+	// Empty, the Parent's Alt stands in, and with neither the entry is
+	// left out.
+	Contents string
 }
 
 // Outline is one bookmark and its children.
@@ -399,6 +412,78 @@ type StructElem struct {
 	// ActualText replaces the subtree's content for extraction, "" for
 	// none.
 	ActualText string
+	// ColSpan and RowSpan are the columns and rows a TH or TD cell spans
+	// (ISO 32000-1, 14.8.5.7, Table 349), 0 or 1 for one. With them the
+	// rows of a table whose cells merge count the same columns, as ISO
+	// 14289-1, 7.2 requires. Other roles ignore them. Each is at most
+	// [MaxCellSpan].
+	ColSpan, RowSpan int
+	// Scope says which cells a TH cell heads (Table 349), [ScopeNone] to
+	// leave the attribute out. Other roles ignore it.
+	Scope TableScope
+	// Numbering is the numbering system of the labels of an L element
+	// (ISO 32000-1, 14.8.5.5, Table 347), [NumberingUnset] to leave the
+	// attribute out. Other roles ignore it.
+	Numbering ListNumbering
 	// Kids are the child elements in logical reading order.
 	Kids []*StructElem
 }
+
+// MaxCellSpan bounds [StructElem.ColSpan] and [StructElem.RowSpan].
+// Anti-DoS guard, not spec-mandated: a span is an integer attribute a
+// reader multiplies into a table grid, and no sheet or page holds more
+// cells across than a spreadsheet's 16,384 columns or down than its
+// 1,048,576 rows.
+const MaxCellSpan = 1 << 20
+
+// TableScope says which cells a header cell heads: the Scope attribute of a
+// TH element (ISO 32000-1, 14.8.5.7, Table 349).
+type TableScope uint8
+
+// The scopes of a header cell.
+const (
+	// ScopeNone leaves the attribute out.
+	ScopeNone TableScope = iota
+	// ScopeRow heads the cells of the cell's row.
+	ScopeRow
+	// ScopeColumn heads the cells of the cell's column.
+	ScopeColumn
+	// ScopeBoth heads the cells of both.
+	ScopeBoth
+)
+
+// ListNumbering is the numbering system of a list's labels: the
+// ListNumbering attribute of an L element. The values past
+// [NumberingLowerAlpha] are those PDF 2.0 adds (ISO 32000-2, 14.8.5.5,
+// Table 382); a file of an earlier version writes the nearest value its
+// version defines (ISO 32000-1, Table 347).
+type ListNumbering uint8
+
+// The numbering systems of a list.
+const (
+	// NumberingUnset leaves the attribute out.
+	NumberingUnset ListNumbering = iota
+	// NumberingNone is a list whose items carry no label.
+	NumberingNone
+	// NumberingDisc, NumberingCircle and NumberingSquare are bullets of
+	// that shape.
+	NumberingDisc
+	NumberingCircle
+	NumberingSquare
+	// NumberingDecimal is Arabic numerals.
+	NumberingDecimal
+	// NumberingUpperRoman and NumberingLowerRoman are Roman numerals.
+	NumberingUpperRoman
+	NumberingLowerRoman
+	// NumberingUpperAlpha and NumberingLowerAlpha are letters.
+	NumberingUpperAlpha
+	NumberingLowerAlpha
+	// NumberingOrdered is an ordered list numbered another way, such as
+	// with the numerals of another script.
+	NumberingOrdered
+	// NumberingUnordered is an unordered list labelled another way, such
+	// as with a picture or a dash.
+	NumberingUnordered
+	// NumberingDescription is a list of terms and their descriptions.
+	NumberingDescription
+)

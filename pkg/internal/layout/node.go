@@ -83,7 +83,8 @@ type Node struct {
 	// Lang is the node's language as a BCP 47 tag, "" to inherit.
 	Lang string
 	// Alt describes a Replaced node, or a Role Figure or Link, for a reader
-	// who cannot see it.
+	// who cannot see it. A link without one is described by the text it
+	// shows (compose.Link Contents).
 	Alt string
 	// ID names the node as a link target. [Result.Anchors] records where it
 	// lands. An empty ID names nothing.
@@ -109,8 +110,16 @@ type Node struct {
 	// edge, with the label's start, centre or end on the box's start
 	// edge, the number position, as the Style's TextAlign says.
 	Marker *Node
-	// ColSpan and RowSpan are the spans of a table cell, 0 for 1.
+	// ColSpan and RowSpan are the spans of a table cell, 0 for 1. The
+	// engine copies them to the cell's structure element.
 	ColSpan, RowSpan int
+	// Scope says which cells a header cell, a node of Role TH, heads: its
+	// row's, its column's or both (compose.StructElem Scope). The zero
+	// value says nothing.
+	Scope compose.TableScope
+	// Numbering is the numbering system of the labels of a list, a node of
+	// Role L (compose.StructElem Numbering). The zero value says nothing.
+	Numbering compose.ListNumbering
 	// Span is the span of a table column or column group, 0 for 1.
 	Span int
 	// Leader marks a leader (CSS Generated Content 3, leader()): an
