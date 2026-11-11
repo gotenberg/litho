@@ -4,7 +4,7 @@ HTML and Markdown sources litho authored, converted twice: by Chromium, through 
 
 | Path                | What it holds                                                                                                                   |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `sources/`          | The 31 sources                                                                                                                  |
+| `sources/`          | The 36 sources                                                                                                                  |
 | `corpus references` | Posts each source to the Gotenberg image and writes `testdata/litho/html/references/<name>.pdf` and their `manifest.json`       |
 | `../../../fixture/` | Reads a source directory and its `options.json` for `corpus references` and the `diff` feature (shared with the Office corpora) |
 
@@ -90,6 +90,18 @@ The scenario sources (`pages-12-html`, `wide-table-html`, `page-1-html`, `page-o
 `bidi-letter` draws its Arabic and Hebrew with DejaVu Sans and `cjk-article` its Japanese with Noto Sans CJK JP (its Chinese and Korean paragraphs with Noto Sans CJK SC and KR), named in their stylesheets: the faces Chromium picks in the Gotenberg image, which the fixture fonts carry.
 
 No other source holds a script. The six self-authored sources use the Liberation families by name, which both the Gotenberg image and the fixture fonts carry; their images (`tile.png`, `photo.jpg`, `chart.png`, `dot.png`) were drawn by a small Go program for this corpus.
+
+## Paper and orientation
+
+The five sources below lock the precedence of the paper, the `@page` size and landscape, as Chromium applies them on the route. Each is self-authored generated text in Liberation Serif; the page sizes are Chromium's, measured on the pinned image.
+
+| Source                   | Pages (Chromium) | Options                                 | Exercises                                                                                               |
+| ------------------------ | ---------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `paper-letter`           | 3                | `paperWidth: 8.5`, `paperHeight: 11`    | A paper other than A4: every page 612 by 792 points                                                     |
+| `page-a5-landscape`      | 3                | none                                    | `@page { size: A5 landscape }` preferred: every page 594.96 by 420 points                               |
+| `page-larger-than-paper` | 2                | `preferCssPageSize: false`              | An A3 `@page` size laid out at A3 and scaled down to the A4 paper                                       |
+| `prefer-over-paper`      | 3                | `preferCssPageSize: true`, Letter paper | The `@page` size, A5, wins over the caller's Letter paper                                               |
+| `landscape-page-size`    | 3                | `landscape`                             | Landscape against an `@page` size: the A5 pages stay portrait, the named A4 landscape page stays turned |
 
 ## The Chromium references
 
