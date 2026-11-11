@@ -110,3 +110,36 @@ func TestConvert_IconSetDrawing(t *testing.T) {
 		t.Errorf("values printed beside the icons alone: %v", rs)
 	}
 }
+
+// TestConvert_IconSetDrawingExcel locks the icon Excel's rules draw: 1.08
+// times the font size, at most the row's height, past the grid line.
+func TestConvert_IconSetDrawingExcel(t *testing.T) {
+	sh := column(numCell(0, 1, nil), numCell(0, 3, nil))
+	sh.DefaultRowHeight = 14.52
+	sh.Conditional = []Conditional{{Ranges: []Range{{LastRow: 1}}, Rules: []Rule{{
+		Kind: RuleIconSet, Icons: "3Arrows", Values: []Value{num(1), num(2), num(3)},
+	}}}}
+	doc := newDoc(sh)
+	doc.ExcelRules = true
+	out := convert(t, doc, office.Options{})
+	side := 10 * excelIconScale
+	var found *compose.Group
+	var walk func([]compose.Fragment)
+	walk = func(fs []compose.Fragment) {
+		for _, f := range fs {
+			if g, ok := f.(*compose.Group); ok {
+				if found == nil && near(g.Transform.A, side/16, 1e-9) {
+					found = g
+				}
+				walk(g.Content)
+			}
+		}
+	}
+	walk(out.Pages[0].Content)
+	if found == nil {
+		t.Fatal("no icon of Excel's size drawn")
+	}
+	if !near(found.Transform.E, excelIconInsetX, 1e-6) || !near(found.Transform.F, 14.52-excelIconInsetY-side, 1e-6) {
+		t.Errorf("first icon at (%v, %v)", found.Transform.E, found.Transform.F)
+	}
+}

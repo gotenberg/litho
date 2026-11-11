@@ -995,7 +995,8 @@ func (g *grid) iconAt(r, c int, cell *Cell) (icon, bool) {
 }
 
 // drawIcon draws the icon of the cell of u at its bottom-left corner, the
-// size of its font's icon, as Calc paints an icon set's icon.
+// size of its font's icon, as Calc paints an icon set's icon, or as Excel
+// does under its rules.
 func (b *pageBuilder) drawIcon(u *unit) {
 	ic, _ := b.g.iconAt(u.r, u.c, u.cell)
 	if ic == nil {
@@ -1006,5 +1007,28 @@ func (b *pageBuilder) drawIcon(u *unit) {
 	if s <= 0 || u.w <= 0 || u.h <= 0 {
 		return
 	}
+	if b.g.doc.ExcelRules {
+		s = f.size * excelIconScale
+		if s > u.h {
+			s = u.h
+		}
+		b.fills = append(b.fills, placeIcon(ic, u.x+excelIconInsetX, u.y+u.h-excelIconInsetY-s, s))
+		return
+	}
 	b.fills = append(b.fills, placeIcon(ic, u.x+iconInsetX, u.y+u.h-iconInsetY-s, s))
 }
+
+// The icon Excel draws for an icon set's rule: a side of 1.08 times the
+// cell's font size, at most the row's height, 1.7 points right of the
+// cell's left edge (past its grid line) and 0.2 points above its bottom.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: cf_icon_sets, Calibri 11 at a 92.7% fit, draws its icons
+//     11.04 points square, 0.7 points right of the grid line and 0.18
+//     above the row's bottom edge.
+const (
+	excelIconScale  = 1.08
+	excelIconInsetX = 1.7
+	excelIconInsetY = 0.2
+)
