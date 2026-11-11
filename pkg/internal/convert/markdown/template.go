@@ -80,7 +80,7 @@ func (p *pageTemplate) render(ctx context.Context, body []byte, title string, ma
 	// the source through, as a browser-based converter receives it: the
 	// body is HTML, not text to escape again.
 	p.body = template.HTML(body) //nolint:gosec // the rendered Markdown is the document itself; litho runs no script
-	w := &cappedWriter{ctx: ctx, mem: limits.BudgetFrom(ctx), max: maxBytes}
+	w := &cappedWriter{stopped: ctx.Err, mem: limits.BudgetFrom(ctx), max: maxBytes}
 	w.buf.Grow(len(body) + len(DefaultTemplate))
 	err = p.t.Execute(w, templateData{Title: title})
 	switch {
@@ -96,9 +96,12 @@ func (p *pageTemplate) render(ctx context.Context, body []byte, title string, ma
 }
 
 // cappedWriter collects the rendered document, failing past max bytes,
-// once ctx ends, or once the budget refuses the bytes.
+// once the conversion's context ends, or once the budget refuses the
+// bytes.
 type cappedWriter struct {
-	ctx     context.Context //nolint:containedctx // lives for one Execute call; html/template takes an io.Writer
+	// stopped is the Err method of the conversion's context, checked on
+	// every write: html/template takes an io.Writer, not a context.
+	stopped func() error
 	mem     *limits.Budget
 	max     int64
 	buf     bytes.Buffer
@@ -111,7 +114,7 @@ func (w *cappedWriter) Write(b []byte) (int, error) {
 	if w.err != nil {
 		return 0, w.err
 	}
-	if err := w.ctx.Err(); err != nil {
+	if err := w.stopped(); err != nil {
 		w.err = err
 		return 0, err
 	}
