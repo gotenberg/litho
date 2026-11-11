@@ -86,16 +86,19 @@ func pdfuaProfile(p models.PDFUAProfile, flavour string) outputProfile {
 }
 
 // outputTargets are the flavours the targets cell converts to, in the order
-// it reports them: every version [pdf.WithConvertVersion] takes but 1.7, the
-// plain conversion's, every PDF/A profile [pdf.WithConvertPDFA] takes,
-// both PDF/UA profiles, and the two pairs a single file can meet (as
-// [pdf.WithPDFUA] pairs them).
+// it reports them: every version [pdf.WithConvertVersion] takes, every
+// PDF/A profile [pdf.WithConvertPDFA] takes, both PDF/UA profiles, and the
+// two pairs a single file can meet (as [pdf.WithPDFUA] pairs them). PDF 1.7
+// is the plain conversion's version too: asking for it by name is a target
+// of its own, so the default is held to its header and to the oracles as
+// every other version is, and must match the plain conversion.
 //
 //nolint:gochecknoglobals // static target table
 var outputTargets = []outputTarget{
 	{ID: "v1.4", Version: "1.4", Header: "1.4"},
 	{ID: "v1.5", Version: "1.5", Header: "1.5"},
 	{ID: "v1.6", Version: "1.6", Header: "1.6"},
+	{ID: "v1.7", Version: "1.7", Header: "1.7"},
 	{ID: "v2.0", Version: "2.0", Header: "2.0"},
 	{ID: "a1b", Profiles: []outputProfile{pdfaProfile(models.PDFA1b, "1b")}, Header: "1.4"},
 	{ID: "a1a", Profiles: []outputProfile{pdfaProfile(models.PDFA1a, "1a")}, Header: "1.4"},

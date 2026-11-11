@@ -30,7 +30,19 @@ const targetsSource = `<!doctype html><html lang="en"><head><meta charset="utf-8
 // PDF/A profile the source meets and a PDF/UA profile it does not.
 //
 //nolint:gochecknoglobals // static test table
-var targetsTestTargets = []outputTarget{outputTargets[0], outputTargets[6], outputTargets[14]}
+var targetsTestTargets = targetsByID("v1.4", "a2b", "ua1")
+
+// targetsByID returns the targets of [outputTargets] with the given IDs, in
+// the table's order, so a target added to the table moves no test.
+func targetsByID(ids ...string) []outputTarget {
+	var out []outputTarget
+	for _, t := range outputTargets {
+		if slices.Contains(ids, t.ID) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
 
 // newTargetsSourceDir writes targetsSource and its picture into a fresh
 // directory.
