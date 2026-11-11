@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -194,5 +195,49 @@ func TestConvert_SinglePageSheets(t *testing.T) {
 	}
 	if r := find(t, out.Pages[0], "r0c0"); !near(r.x, 1, 0.1) {
 		t.Errorf("first cell at x %v, want 1", r.x)
+	}
+}
+
+// TestPlan_ExcelGridLine locks the room Excel's rules give the grid line
+// beside a page's columns: columns that fill the page's width exactly
+// print on one page by Calc's rules and two by Excel's.
+func TestPlan_ExcelGridLine(t *testing.T) {
+	for _, tc := range []struct {
+		excel bool
+		want  int
+	}{{false, 1}, {true, 2}} {
+		page := a4()
+		// Five columns of a fifth of the page's room each.
+		w := (page.Width - page.Margin[1] - page.Margin[3]) / 5
+		sh := &Sheet{Name: "S", DefaultColumnWidth: w, Page: page, Rows: []Row{{Index: 0, Cells: []Cell{numCell(0, 1, nil), numCell(4, 5, nil)}}}}
+		doc := newDoc(sh)
+		doc.ExcelRules = tc.excel
+		if n := len(convert(t, doc, office.Options{}).Pages); n != tc.want {
+			t.Errorf("Excel's rules %v: %d pages, want %d", tc.excel, n, tc.want)
+		}
+	}
+}
+
+// TestConvert_ExcelClipsWholeText locks the text of a cell its neighbour
+// clips: Calc's rules shorten it to the characters that show, Excel's
+// write it whole under the clip.
+func TestConvert_ExcelClipsWholeText(t *testing.T) {
+	for _, tc := range []struct {
+		excel bool
+		want  string
+	}{{false, "Overflo"}, {true, "Overflowing text"}} {
+		sh := &Sheet{Name: "S", DefaultColumnWidth: 30, Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "Overflowing text", nil), textCell(1, "B", nil)}}}}
+		doc := newDoc(sh)
+		doc.ExcelRules = tc.excel
+		pg := convert(t, doc, office.Options{}).Pages[0]
+		got := ""
+		for _, r := range runs(pg) {
+			if strings.HasPrefix(r.text, "Over") {
+				got = r.text
+			}
+		}
+		if !strings.HasPrefix(got, tc.want[:4]) || (tc.excel && got != tc.want) || (!tc.excel && got == "Overflowing text") {
+			t.Errorf("Excel's rules %v: %q, want %q", tc.excel, got, tc.want)
+		}
 	}
 }

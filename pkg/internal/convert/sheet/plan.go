@@ -14,6 +14,21 @@ const (
 	headingFontSize = 10
 )
 
+// excelGridLine is the room Excel gives the grid line beside a page's
+// columns, in points: a screen pixel drawn as 8 printer pixels, kept
+// whatever the print scale. The specification gives a page's printable
+// width as the paper less its margins (ECMA-376 Part 1, 18.3.1.62); the
+// line's room is Excel's, measured.
+//
+// # Corpus evidence
+//
+//   - poi/xlsx: 54288.xlsx, Arial 10 columns J to S of 4060 printer pixels
+//     on an A4 page with 0.75-inch margins, 4061 pixels of room, prints S
+//     on the next page.
+//   - litho/xlsx: minimal and column_widths clip their cells from 0.96
+//     points right of the left margin, at 100% and at 77.6%.
+const excelGridLine = 8 * excelPixel
+
 // The print zoom bounds, in percent: Calc's ZOOM_MIN
 // (sc/source/ui/view/printfun.cxx) and the largest scale its dialog
 // takes.
@@ -61,10 +76,15 @@ type sheetPlan struct {
 
 // docArea returns the room for cells on a page at zoom percent, in sheet
 // points: the paper less the margins, divided by the zoom, less the
-// headings (ScPrintFunc::GetDocPageSize).
+// headings (ScPrintFunc::GetDocPageSize). Under Excel's rules the grid
+// line that closes a page's last column takes its room too, unscaled
+// ([excelGridLine]).
 func (sp *sheetPlan) docArea(zoom int) (float64, float64) {
 	z := float64(zoom) / 100
 	w := (sp.width - sp.margin[1] - sp.margin[3]) / z
+	if sp.g.doc.ExcelRules {
+		w -= excelGridLine / z
+	}
 	// A header's and a footer's room is unscaled: only the page margins
 	// beyond them are divided by the zoom.
 	top, bottom := sp.margin[0]/z, sp.margin[2]/z

@@ -349,12 +349,13 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 	if d.wrap {
 		boxX = u.x + left
 	}
-	if !d.wrap && !d.value && len(d.runs) == 0 && !strings.Contains(d.text, "\n") && d.textW > 0 {
+	if !b.doc.ExcelRules && !d.wrap && !d.value && len(d.runs) == 0 && !strings.Contains(d.text, "\n") && d.textW > 0 {
 		// A clipped text is shortened as LibreOffice shortens it
 		// (ScOutputData::LayoutStringsImpl, aShort): a left-aligned one
 		// to its characters in the proportion its visible width bears to
 		// its width, plus one, a right-aligned one from its end; a
-		// centred one is kept whole.
+		// centred one is kept whole. Excel writes the whole text and
+		// clips it.
 		rs := []rune(d.text)
 		switch {
 		case align == css.AlignLeft && boxX+d.textW > cx1+epsilon:
