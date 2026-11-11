@@ -18,6 +18,9 @@ const MaxCells = 1_000_000
 // # Corpus evidence
 //
 //   - probe, csv: 100,000 cells of numbers and short words, ten a row,
-//     hold about 1.5 KiB of live heap a cell at the peak of the
-//     conversion.
+//     peak at 311 MiB of Go heap, live and garbage together, about 3.2 KiB
+//     a cell, while the account holds 177 MiB.
+//   - probe, csv: 1,000,000 cells are refused a third of a second in,
+//     while read, where they took 62 seconds and 2.4 GiB before the
+//     composition refused them.
 const CellCost = 1536

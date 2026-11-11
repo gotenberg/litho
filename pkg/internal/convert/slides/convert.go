@@ -28,8 +28,10 @@ const maxSlideShapes = 1 << 14
 
 // shapeCost is what one shape drawn costs the conversion's memory budget:
 // its fragments, paths and structure element, which live until the
-// document is written. The shapes of the model are read whole first and
-// cost little beside what a shape paints.
+// document is written. The shapes of the model are read whole first, and
+// the XML they are read from is charged as it is parsed. The value is an
+// estimate from the size of a shape's fragments, not measured apart from
+// the XML trees.
 const shapeCost = 2 << 10
 
 // maxGroupDepth caps the nesting of groups followed at

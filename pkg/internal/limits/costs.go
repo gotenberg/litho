@@ -13,8 +13,11 @@ import "image/color"
 //
 // # Corpus evidence
 //
-//   - libreoffice/ods fdo67682-2.ods: 2.9 MB of XML parse into trees that
-//     hold 9.8 MiB of live heap, 3.4 bytes a byte of XML.
+//   - libreoffice/ods fdo67682-2.ods: the 29,901 elements of content.xml
+//     hold 9.8 MiB of live heap, about 340 bytes an element with its text.
+//   - litho/pptx hostile-shape-flood: the 1,300,037 elements of a 47.6 MB
+//     slide part hold about 104 MiB while it is parsed, about 80 bytes an
+//     element without text.
 const XMLElementCost = 256
 
 // DecodedPixelCost is what one decoded pixel of a picture costs while the
