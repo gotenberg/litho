@@ -15,5 +15,6 @@ go run ./examples/extract document.pdf
 | [sign](sign/)           | A PAdES signature from PEM certificate and key files                     |
 | [render](render/)       | The first page drawn to a PNG image                                      |
 | [convert](convert/)     | A plain text or HTML file laid out as a tagged PDF in the system's fonts |
+| [convert-archive](convert-archive/) | A document converted to PDF/A-2b and PDF/UA-1 in one call, and what is left |
 
 The [godoc](https://pkg.go.dev/github.com/gotenberg/litho/pkg/pdf) carries more as testable examples, such as `ExampleWithFontFiles` and `ExampleNewSigner`.
