@@ -33,6 +33,11 @@ type Document struct {
 	// notes page: the slide number, date and footer placeholders when they
 	// show, and its decorations.
 	NotesShapes []*Shape
+	// FirstNumber is the number of the first slide, the slides after it
+	// numbered on from it, hidden ones counted, on their slide number
+	// fields and notes pages (ECMA-376 Part 1, 19.2.1.26 presentation
+	// firstSlideNum); 0 numbers from 1.
+	FirstNumber int
 	// Slides lists the slides in show order. A hidden slide is listed and
 	// not printed unless the options ask for it.
 	Slides []*Slide
