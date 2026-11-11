@@ -38,7 +38,7 @@ type paperSize struct {
 	// key names the paper in a fixture name.
 	key  string
 	w, h float64
-	// code is the paperSize code SpreadsheetML gives the paper (ECMA-376
+	// code is the paperSize code a workbook names the paper with (ECMA-376
 	// Part 1, 18.3.1.63, the table of paperSize values).
 	code int
 	// css is the size keyword CSS Paged Media names the paper with (CSS
@@ -49,14 +49,28 @@ type paperSize struct {
 // paperSizes are the papers every format is laid out on: the ISO 216 A3,
 // A4 and A5, the ISO 216 B5, and the North American Letter, Legal, Tabloid
 // (ANSI B) and Executive, at the sides ISO 216 and ANSI/ASME Y14.1 give
-// them. Their SpreadsheetML codes are 8, 9, 11, 34, 1, 5, 3 and 7.
+// them. Their SpreadsheetML codes are 8, 9, 11, 13, 1, 5, 3 and 7.
+//
+// A workbook's B5 is the JIS one, 182 by 257 mm, which Excel prints for
+// code 13. SpreadsheetML names the ISO size as an envelope alone, code 34,
+// and Excel's export prints a paper it lacks on Letter, so a workbook at
+// that code would judge the export's paper list, not the converter.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx paper_sizes: Excel prints codes 1, 3, 5, 8, 9 and 11 on
+//     their papers and code 13 on 515.88 by 728.52 points, JIS B5; it
+//     prints codes 20 and 27 (envelopes #10 and DL), 43 (Japanese
+//     postcard) and 70 (A6) on Letter, turned as the sheet asks.
+//   - probe, xlsx: paper-grid at code 34 came back from Excel as 9 pages
+//     of 612 by 792 points; litho lays it on 12 pages of 176 by 250 mm.
 //
 //nolint:gochecknoglobals // static table
 var paperSizes = []paperSize{
 	{key: "a3", w: 297, h: 420, code: 8, css: "A3"},
 	{key: "a4", w: 210, h: 297, code: 9, css: "A4"},
 	{key: "a5", w: 148, h: 210, code: 11, css: "A5"},
-	{key: "b5", w: 176, h: 250, code: 34, css: "B5"},
+	{key: "b5", w: 176, h: 250, code: 13, css: "B5"},
 	{key: "letter", w: 215.9, h: 279.4, code: 1, css: "letter"},
 	{key: "legal", w: 215.9, h: 355.6, code: 5, css: "legal"},
 	{key: "tabloid", w: 279.4, h: 431.8, code: 3, css: "ledger"},

@@ -80,7 +80,7 @@ func TestPaperDocsStatePageSetup(t *testing.T) {
 		{"litho/docx", "paper-executive-portrait", docxPaperPart, []string{`<w:pgSz w:w="10440" w:h="15120"/>`}},
 		{"litho/docx", "paper-mixed-orientation", docxPaperPart, []string{`<w:pgSz w:w="12240" w:h="15840"/>`, `<w:pgSz w:w="15840" w:h="12240" w:orient="landscape"/>`}},
 		{"litho/docx", "paper-mixed-sizes", docxPaperPart, []string{`<w:pgSz w:w="11906" w:h="16838"/>`, `<w:pgSz w:w="8391" w:h="11906"/>`}},
-		{"litho/xlsx", "paper-grid-b5-portrait", xlsxPaperPart, []string{`paperSize="34" orientation="portrait"`}},
+		{"litho/xlsx", "paper-grid-b5-portrait", xlsxPaperPart, []string{`paperSize="13" orientation="portrait"`}},
 		{"litho/xlsx", "paper-grid-tabloid-landscape", xlsxPaperPart, []string{`paperSize="3" orientation="landscape"`}},
 		{"litho/xlsx", "paper-fit-a3-landscape", xlsxPaperPart, []string{`paperSize="8" orientation="landscape" fitToWidth="1" fitToHeight="0"`}},
 		{"litho/pptx", "paper-deck-a3", pptxPaperPart, []string{`<p:sldSz cx="15120000" cy="10692000" type="A3"/>`}},

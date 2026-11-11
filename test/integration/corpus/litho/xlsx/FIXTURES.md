@@ -107,22 +107,19 @@ Fonts are Calibri, Cambria, Arial, Times New Roman and Courier New, which have m
 
 ## Paper documents
 
-`corpus build` generates, beside the hostile documents, the paper documents from two committed bases (`paperDocs` in `cmd/corpus/papers.go`), never committed: the same bases give the same bytes. Each sheet states its paper by its `pageSetup` `paperSize` code (ECMA-376 Part 1, 18.3.1.63: 8 A3, 9 A4, 11 A5, 34 B5 (ISO), 1 Letter, 5 Legal, 3 Tabloid, 7 Executive) and its `orientation`.
+`corpus build` generates, beside the hostile documents, the paper documents from two committed bases (`paperDocs` in `cmd/corpus/papers.go`), never committed: the same bases give the same bytes. Each sheet states its paper by its `pageSetup` `paperSize` code (ECMA-376 Part 1, 18.3.1.63: 8 A3, 9 A4, 11 A5, 13 B5, 1 Letter, 5 Legal, 3 Tabloid, 7 Executive) and its `orientation`. Code 13 is the JIS B5 Excel prints, 182 by 257 mm: the table names ISO B5 as an envelope alone, code 34, which Excel prints on Letter.
 
 | Fixture                                                                             | Count | Page setup                                                                                                                                                  |
 | ----------------------------------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `paper-grid`                                                                        | 1     | Committed: a grid of 20 columns by 130 rows, wider and longer than any paper, with a header and a "Page X of Y" footer, on portrait Letter (`paperSize` 1)  |
 | `paper-fit`                                                                         | 1     | Committed: 16 columns by 120 rows fitted to one page wide (`fitToPage`, `fitToWidth` 1, `fitToHeight` 0), so the paper decides the scale and the pages down |
-| `paper-grid-<paper>-<orientation>`                                                  | 16    | `paper-grid` on A3, A4, A5 and B5 (ISO 216), Letter, Legal, Tabloid and Executive, in both orientations                                                     |
+| `paper-grid-<paper>-<orientation>`                                                  | 16    | `paper-grid` on A3, A4 and A5 (ISO 216), B5 (JIS), Letter, Legal, Tabloid and Executive, in both orientations                                                     |
 | `paper-fit-<paper>-<orientation>`                                                   | 6     | `paper-fit` on A5, Letter and A3, in both orientations                                                                                                      |
 | `paper-grid-option-<paper>-<orientation>`, `paper-fit-option-<paper>-<orientation>` | 12    | The base unchanged, `options.json` naming A5, Letter or A3 and `landscape` for the landscape ones, `reference_of` the generated workbook of that paper      |
 
 ## Accepted disagreements
 
-Excel's export prints a paper it lacks on Letter, turned as the sheet asks. litho prints the paper the code names (ECMA-376 Part 1, 18.3.1.63).
-
-- `paper_sizes`: the envelopes #10 and DL (codes 20 and 27), the Japanese postcard (43) and A6 (70) come back on Letter. The seven other sheets agree, JIS B5 at code 13 among them.
-- `paper-grid-b5-portrait`, `paper-grid-b5-landscape`: code 34, the only code the table gives 176 by 250 mm, is an envelope, and comes back on Letter.
+- `paper_sizes`: Excel's export prints a paper it lacks on Letter, turned as the sheet asks: the envelopes #10 and DL (codes 20 and 27), the Japanese postcard (43) and A6 (70). litho prints the paper the code names (ECMA-376 Part 1, 18.3.1.63). The seven other sheets agree, JIS B5 at code 13 among them.
 
 ## Hostile documents
 
