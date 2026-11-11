@@ -227,13 +227,114 @@ func (d *document) parseRunProps(e *ooxml.Element) *runProps {
 	return r
 }
 
+// themeFont returns the typeface of a theme font name (ECMA-376 Part 1,
+// 17.18.96 ST_Theme), "" for none. An East Asian or complex script name
+// the theme's font scheme leaves empty takes the scheme's typeface for the
+// script of the language w:themeFontLang names for that class (17.15.1.88:
+// the languages that choose the theme fonts of the East Asian and complex
+// script text).
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx layout/merge_hidden_redline: runs in minorBidi under
+//     a theme whose a:cs is empty and a w:themeFontLang bidi of ar-SA print
+//     in Arial, the theme's Arab typeface.
+func (d *document) themeFont(name string) string {
+	if f := d.theme.Font(name); f != "" || d.theme == nil {
+		return f
+	}
+	fs := d.theme.Minor
+	if strings.HasPrefix(name, "major") {
+		fs = d.theme.Major
+	}
+	var script string
+	switch {
+	case strings.HasSuffix(name, "Bidi"):
+		script = langScript(d.settings.langBidi)
+	case strings.HasSuffix(name, "EastAsia"):
+		script = langScript(d.settings.langEastAsia)
+	}
+	if script == "" {
+		return ""
+	}
+	return fs.Scripts[script]
+}
+
+// langScript returns the ISO 15924 code of the script a BCP 47 language
+// tag is written in, as a theme's a:font script names it (ECMA-376 Part
+// 1, 20.1.4.1.16), "" for a language it does not know.
+func langScript(tag string) string {
+	lang, region, _ := strings.Cut(strings.ToLower(tag), "-")
+	switch lang {
+	case "ar", "fa", "ur", "ps", "sd", "ug":
+		return "Arab"
+	case "he", "yi":
+		return "Hebr"
+	case "th":
+		return "Thai"
+	case "ja":
+		return "Jpan"
+	case "ko":
+		return "Hang"
+	case "zh":
+		switch region {
+		case "tw", "hk", "mo", "hant":
+			return "Hant"
+		}
+		return "Hans"
+	case "hi", "mr", "ne", "sa":
+		return "Deva"
+	case "bn", "as":
+		return "Beng"
+	case "ta":
+		return "Taml"
+	case "te":
+		return "Telu"
+	case "gu":
+		return "Gujr"
+	case "kn":
+		return "Knda"
+	case "ml":
+		return "Mlym"
+	case "pa":
+		return "Guru"
+	case "si":
+		return "Sinh"
+	case "km":
+		return "Khmr"
+	case "lo":
+		return "Laoo"
+	case "my":
+		return "Mymr"
+	case "am", "ti":
+		return "Ethi"
+	case "dv":
+		return "Thaa"
+	case "bo":
+		return "Tibt"
+	case "mn":
+		return "Mong"
+	case "chr":
+		return "Cher"
+	case "iu":
+		return "Cans"
+	case "syr":
+		return "Syrc"
+	case "ka":
+		return "Geor"
+	case "hy":
+		return "Armn"
+	}
+	return ""
+}
+
 // parseFonts reads a w:rFonts element, resolving the theme font attributes
 // (asciiTheme, hAnsiTheme, eastAsiaTheme, cstheme), which take precedence
 // over the plain ones (ECMA-376 Part 1, 17.3.2.26).
 func (d *document) parseFonts(e *ooxml.Element) fontSpec {
 	pick := func(plain, theme string) string {
 		if t, ok := e.Attr(theme); ok {
-			if f := d.theme.Font(t); f != "" {
+			if f := d.themeFont(t); f != "" {
 				return f
 			}
 		}

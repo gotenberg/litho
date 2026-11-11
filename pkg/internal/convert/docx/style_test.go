@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
 func TestRunProperties(t *testing.T) {
@@ -339,5 +340,24 @@ func TestDefaults_WithoutStylesPart(t *testing.T) {
 				t.Errorf("font %v %v, want %v %s", st.FontFamilies, st.FontSize, tc.size, tc.family)
 			}
 		})
+	}
+}
+
+func TestThemeFont_ScriptOfThemeFontLang(t *testing.T) {
+	t.Parallel()
+	d := &document{theme: &ooxml.Theme{
+		Minor: ooxml.FontScheme{Latin: "Calibri", Scripts: map[string]string{"Arab": "Arial", "Hebr": "David", "Hant": "PMingLiU", "Jpan": "MS Mincho"}},
+		Major: ooxml.FontScheme{Latin: "Cambria", ComplexScript: "Times New Roman"},
+	}, settings: settings{langBidi: "ar-SA", langEastAsia: "zh-TW"}}
+	for name, want := range map[string]string{
+		"minorBidi": "Arial", "minorEastAsia": "PMingLiU", "minorHAnsi": "Calibri", "majorBidi": "Times New Roman", "majorEastAsia": "",
+	} {
+		if got := d.themeFont(name); got != want {
+			t.Errorf("%s: %q, want %q", name, got, want)
+		}
+	}
+	d.settings.langBidi = "he-IL"
+	if got := d.themeFont("minorBidi"); got != "David" {
+		t.Errorf("minorBidi under he-IL: %q, want David", got)
 	}
 }

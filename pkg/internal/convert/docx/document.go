@@ -32,7 +32,10 @@ type settings struct {
 	// evenAndOdd selects distinct even page headers and footers
 	// (17.10.1).
 	evenAndOdd bool
-	lang       string
+	// lang, langEastAsia and langBidi are the languages of
+	// w:themeFontLang (17.15.1.88): the document's, and those choosing
+	// the East Asian and complex script theme fonts.
+	lang, langEastAsia, langBidi string
 	// compat is the Word version the document asks to be laid out as
 	// (MS-DOCX, 2.3.4 compatibilityMode): 15 for Word 2013 and later, 0
 	// when unset, which reads as an earlier version.
@@ -196,6 +199,8 @@ func (d *document) readSettings(root *ooxml.Element) {
 	}
 	if t := root.Child(w, "themeFontLang"); t != nil {
 		d.settings.lang = attrOr(t, "val")
+		d.settings.langEastAsia = attrOr(t, "eastAsia")
+		d.settings.langBidi = attrOr(t, "bidi")
 	}
 	for _, c := range root.Child(w, "compat").Kids() {
 		if c.Is(w, "compatSetting") && attrOr(c, "name") == "compatibilityMode" {
