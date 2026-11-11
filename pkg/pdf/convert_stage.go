@@ -70,38 +70,47 @@ func (s *convertStage) apply(ctx context.Context, ex *executor) error {
 // [Pipeline.Merge] appends Readers. The stage honours the options [Merge]
 // honours.
 //
-// At most [WithPipelineConcurrency] pipelines run at a time, each to an
-// intermediate file in the pipeline's temp directory, written in the clear
-// and removed before [Pipeline.WriteTo] returns. Each runs within its own
-// limits, so size a host for as many budgets as pipelines run at once. When
-// one fails, those still running are cancelled and the stage fails with its
-// error, naming the pipeline by its position; when several fail, the stage
-// reports one of them. The result of each is the stage's
-// [StageReport.Pipelines].
+// At most [WithPipelineConcurrency] pipelines run at a time, taken in the
+// order given, each to an intermediate file in the pipeline's temp
+// directory, written in the clear and removed before [Pipeline.WriteTo]
+// returns. Each runs as [Pipeline.WriteTo] runs it, with the logger, the temp
+// directory and the [WithDefaultPageSize] of the pipeline that merges it. The
+// merged bytes are the same whatever the concurrency.
+//
+// Each pipeline spends memory within its own limits, a conversion up to
+// twice [Limits.MaxConvertMemoryBytes], so size a host for that many times
+// what one pipeline holds, plus the merge, which reads every output at
+// once. Concurrency 1 holds one pipeline at a time.
+//
+// When one fails, those still running are cancelled through their context,
+// none starts after it, and the stage fails naming the pipeline by its
+// position and wrapping its error. When several fail, the stage reports the
+// lowest position that failed for a reason other than that cancellation. A
+// panic in a pipeline, an Apply closure's included, fails the stage with an
+// error wrapping [ErrInternalPanic]. The result of each is the stage's
+// [StageReport.Pipelines], and the signatures each drops, and those of its
+// output the merge drops, reach [PipelineResult.DroppedSignatures].
 //
 // A pipeline given here is declared like any other and never written by
 // the caller: the stage writes it. It must not call MergePipelines itself
-// ([ErrPipelineNested]) nor be given twice ([ErrPipelineShared]), and the
-// list holds at least one ([ErrPipelineNoPipelines]). The caller keeps
-// every Reader those pipelines open or merge open until
-// [Pipeline.WriteTo] returns.
+// ([ErrPipelineNested]) nor be given twice, in this stage or another one of
+// the pipeline, nor be the pipeline itself ([ErrPipelineShared]), and the
+// list holds at least one, none nil ([ErrPipelineNoPipelines]). The caller
+// keeps every Reader those pipelines open or merge open until
+// [Pipeline.WriteTo] returns. One Reader may be opened by several of them.
+//
+// An encryption a pipeline asks for, by [Writer.Encrypt] in an Apply stage or
+// by [WithEncryption] on one of its stages, is asked of the output of the
+// pipeline that merges it, as one of its own stages would ask (see
+// [Pipeline]). When several ask, the last given wins, and a later request of
+// the merging pipeline replaces it. A pipeline that reads an encrypted
+// document makes the merge count as encrypted, so a later [Writer.Sign] is
+// refused.
 //
 // The merged document conforms to no profile whatever its parts claimed:
-// remediate it in a later [Pipeline.Apply] stage.
+// remediate it in a later [Pipeline.Apply] stage. A MergePipelines after the
+// stage that remediates is refused with [ErrEditAfterRemediation].
 func (p *Pipeline) MergePipelines(pipelines []*Pipeline, opts ...WriteOption) *Pipeline {
 	cp := append([]*Pipeline(nil), pipelines...)
 	return p.add(&mergePipelinesStage{pipelines: cp, opts: opts})
-}
-
-type mergePipelinesStage struct {
-	pipelines []*Pipeline
-	opts      []WriteOption
-}
-
-func (s *mergePipelinesStage) kind() stageKind { return kindMerge }
-func (s *mergePipelinesStage) name() string    { return stageNameMergePipelines }
-
-// apply is written by wave 11, cell pipeline.
-func (s *mergePipelinesStage) apply(_ context.Context, ex *executor) error {
-	return fmt.Errorf("merging %d pipelines, %d at once, with %d options: not implemented", len(s.pipelines), ex.concurrency, len(s.opts))
 }

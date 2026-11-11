@@ -15,9 +15,10 @@ import (
 
 // Pipeline chains write operations against a single PDF state that
 // evolves from stage to stage. [Pipeline.Open] seeds the state, or
-// [Pipeline.Compose] in its place, [Pipeline.Apply] queues mutations through a [Writer] closure,
-// [Pipeline.Split] and [Pipeline.Merge] restructure the document, and
-// [Pipeline.WriteTo] executes the pipeline.
+// [Pipeline.Compose], [Pipeline.Convert] or [Pipeline.MergePipelines] in its
+// place, [Pipeline.Apply] queues mutations through a [Writer] closure,
+// [Pipeline.Split], [Pipeline.Merge] and [Pipeline.MergePipelines]
+// restructure the document, and [Pipeline.WriteTo] executes the pipeline.
 //
 // Restructuring stages materialize the current state to an intermediate
 // temp file and reopen it as a new [Reader]. A temp file is removed as soon
@@ -168,8 +169,10 @@ func WithEditLabel(label string) ApplyOption {
 
 // Validate runs build-time structural checks without executing the
 // pipeline. It catches empty pipelines, missing [Pipeline.Open], empty
-// page lists, empty merge sources, and a [Pipeline.Compose] with no
-// placements or after another stage. Cross-stage compatibility (Sign
+// page lists, empty merge sources, a [Pipeline.Compose] with no
+// placements or after another stage, and the pipelines a
+// [Pipeline.MergePipelines] cannot run, with what each one's own validation
+// finds. Cross-stage compatibility (Sign
 // combined with encryption, a stage after a remediation)
 // depends on what the Apply closures call, and is enforced at execution time:
 // it does not appear here.
@@ -186,6 +189,9 @@ func (p *Pipeline) buildValidationErrors() []error {
 	}
 
 	hasSource := false
+	// The pipelines the MergePipelines stages of p were given, each once
+	// across every stage: running one twice would read its sources twice.
+	merged := map[*Pipeline]bool{p: true}
 	for i, s := range p.stages {
 		if s.kind() == kindOpen {
 			if i != 0 {
@@ -233,7 +239,7 @@ func (p *Pipeline) buildValidationErrors() []error {
 				})
 			}
 		case *mergePipelinesStage:
-			for _, err := range p.mergedPipelineErrors(st) {
+			for _, err := range p.mergedPipelineErrors(st, merged) {
 				errs = append(errs, &PipelineStageError{Index: i, Name: s.name(), Err: err})
 			}
 		}
@@ -243,14 +249,14 @@ func (p *Pipeline) buildValidationErrors() []error {
 
 // mergedPipelineErrors returns what is wrong with the pipelines a
 // [Pipeline.MergePipelines] stage of p was given: none, a nil one, p itself
-// or one given twice, one that merges pipelines itself, and what each one's
-// own validation finds, each named by its position.
-func (p *Pipeline) mergedPipelineErrors(st *mergePipelinesStage) []error {
+// or one given twice, in this stage or an earlier one (seen holds those), one
+// that merges pipelines itself, and what each one's own validation finds,
+// each named by its position.
+func (p *Pipeline) mergedPipelineErrors(st *mergePipelinesStage, seen map[*Pipeline]bool) []error {
 	if len(st.pipelines) == 0 {
 		return []error{ErrPipelineNoPipelines}
 	}
 	var errs []error
-	seen := map[*Pipeline]bool{p: true}
 	for i, sub := range st.pipelines {
 		switch {
 		case sub == nil:
@@ -337,32 +343,8 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 	logger.Debug("pipeline started",
 		slog.Int("stages", len(p.stages)),
 	)
-
-	for i, s := range p.stages {
-		if err := ctx.Err(); err != nil {
-			return nil, &PipelineStageError{Index: i, Name: s.name(), Label: stageLabel(s), Err: err}
-		}
-		ex.stageIdx = i
-		if err := s.apply(ctx, ex); err != nil {
-			logger.Debug("stage failed",
-				slog.Int("stage", i),
-				slog.String("name", s.name()),
-				slog.String("label", stageLabel(s)),
-				slog.Any("err", err),
-			)
-			return nil, &PipelineStageError{Index: i, Name: s.name(), Label: stageLabel(s), Err: err}
-		}
-	}
-
-	// Terminal flush.
-	if !ex.dstWritten {
-		ex.ensureWriter()
-		if err := ex.writer.WriteTo(ctx, dst, opts...); err != nil {
-			return nil, &PipelineStageError{
-				Index: len(p.stages) - 1, Name: stageNameWrite, Err: err,
-			}
-		}
-		ex.recordDropped(ex.writer.DroppedSignatures()...)
+	if err := ex.run(ctx, p.stages); err != nil {
+		return nil, err
 	}
 	if cfg.droppedSignatures != nil {
 		*cfg.droppedSignatures = slices.Clone(ex.result.DroppedSignatures)
@@ -372,6 +354,61 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 		slog.Int("stages_executed", len(ex.result.Stages)),
 	)
 	return ex.result, nil
+}
+
+// run applies stages in order, then writes the document they leave to
+// ex.finalDst unless the last one wrote it. A failure is a
+// [PipelineStageError] naming the stage.
+func (ex *executor) run(ctx context.Context, stages []stage) error {
+	for i, s := range stages {
+		if err := ctx.Err(); err != nil {
+			return &PipelineStageError{Index: i, Name: s.name(), Label: stageLabel(s), Err: err}
+		}
+		ex.stageIdx = i
+		if err := s.apply(ctx, ex); err != nil {
+			ex.logger.Debug("stage failed",
+				slog.Int("stage", i),
+				slog.String("name", s.name()),
+				slog.String("label", stageLabel(s)),
+				slog.Any("err", err),
+			)
+			return &PipelineStageError{Index: i, Name: s.name(), Label: stageLabel(s), Err: err}
+		}
+	}
+	if ex.dstWritten {
+		return nil
+	}
+	// Terminal flush.
+	ex.ensureWriter()
+	ex.outputFrom = []*Reader{ex.cur}
+	if err := ex.writer.WriteTo(ctx, ex.finalDst, ex.terminalOptions()...); err != nil {
+		return &PipelineStageError{Index: len(stages) - 1, Name: stageNameWrite, Err: err}
+	}
+	ex.recordDropped(ex.writer.DroppedSignatures()...)
+	return nil
+}
+
+// terminalOptions returns the options the Writer of the last stage writes
+// the pipeline's output with: those of [Pipeline.WriteTo]. A merged
+// pipeline's output is an intermediate file of the pipeline that merges it,
+// written in the clear: the encryption the Writer was asked for is carried
+// to the merging pipeline's output instead (see [executor.carryEncryption]),
+// and an encrypted source the Writer would otherwise copy as the ciphertext
+// it is gets rewritten in full, decrypted, since no password reopens it.
+func (ex *executor) terminalOptions() []WriteOption {
+	if !ex.merged {
+		return ex.finalOpts
+	}
+	var encrypt *EncryptConfig
+	if ex.writer.encryptCfg != nil {
+		cfg := encryptConfigFromInternal(*ex.writer.encryptCfg)
+		encrypt = &cfg
+	}
+	opts := append(slices.Clone(ex.finalOpts), ex.carryEncryption(encrypt))
+	if ex.cur.doc.IsEncrypted {
+		opts = append(opts, WithFullRewrite())
+	}
+	return opts
 }
 
 const (
@@ -436,6 +473,15 @@ type executor struct {
 	totalStages int
 	logger      *slog.Logger
 	result      *PipelineResult
+	// merged is true while the executor runs a pipeline a
+	// [Pipeline.MergePipelines] stage merges: its output is an intermediate
+	// file of the merging pipeline, written in the clear (see
+	// [executor.terminalOptions]).
+	merged bool
+	// outputFrom holds the documents the pipeline's output was written from,
+	// set once the output is written: the current document, or the sources
+	// of the Split, Merge or Compose that wrote it.
+	outputFrom []*Reader
 	// encrypt is the encryption an earlier stage asked for, which the
 	// pipeline's output owes the caller although every intermediate file is
 	// written in the clear (see [executor.carryEncryption]). nil when none did.
@@ -547,7 +593,9 @@ func (ex *executor) recordRestructured(ctx context.Context, sources ...*Reader) 
 // restructureOptions returns the options a Split or a Merge stage writes with,
 // given the ones the stage carries. The last stage writes the pipeline's
 // output: the encryption an earlier stage asked for, then the options of
-// [Pipeline.WriteTo], then the stage's own, so a later request wins. Any other
+// [Pipeline.WriteTo], then the stage's own, so a later request wins; a merged
+// pipeline writes it in the clear and carries that encryption to the merging
+// pipeline's output (see [executor.terminalOptions]). Any other
 // writes an intermediate file, in the clear, and an encryption among its
 // options is carried to the output (see [executor.carryEncryption]).
 func (ex *executor) restructureOptions(stageOpts []WriteOption) []WriteOption {
@@ -557,7 +605,15 @@ func (ex *executor) restructureOptions(stageOpts []WriteOption) []WriteOption {
 			opts = append(opts, WithEncryption(*ex.encrypt))
 		}
 		opts = append(opts, ex.finalOpts...)
-		return append(opts, stageOpts...)
+		opts = append(opts, stageOpts...)
+		if ex.merged {
+			cfg := writeOpts{}
+			for _, o := range opts {
+				o(&cfg)
+			}
+			opts = append(opts, ex.carryEncryption(cfg.encrypt))
+		}
+		return opts
 	}
 	cfg := writeOpts{}
 	for _, o := range stageOpts {
@@ -701,6 +757,7 @@ func (s *splitStage) apply(ctx context.Context, ex *executor) error {
 		if err := Split(ctx, ex.cur, s.pages, ex.finalDst, opts...); err != nil {
 			return err
 		}
+		ex.outputFrom = []*Reader{ex.cur}
 		ex.recordRestructured(ctx, ex.cur)
 		ex.dstWritten = true
 		ex.recordStage(s.name(), true, 0)
@@ -746,6 +803,7 @@ func (s *mergeStage) apply(ctx context.Context, ex *executor) error {
 		if err := Merge(ctx, sources, ex.finalDst, opts...); err != nil {
 			return err
 		}
+		ex.outputFrom = sources
 		ex.recordRestructured(ctx, sources...)
 		ex.dstWritten = true
 		ex.recordStage(s.name(), true, 0)
