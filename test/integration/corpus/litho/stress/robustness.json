@@ -17,18 +17,18 @@
   "html-1mib": {
     "result": "pdf",
     "max_seconds": 20,
-    "why": "1 MiB of paragraphs, 257 pages: the account holds about 170 MiB at its peak, the Go heap about 340 MiB."
+    "why": "1 MiB of paragraphs, 257 pages: the account holds about 135 MiB at its peak, the Go heap about 300 MiB."
   },
   "html-4mib": {
     "result": "pdf",
     "max_rss_mib": 2048,
-    "why": "4 MiB of paragraphs, about 1,025 pages: the account holds about 690 MiB at its peak, the process about 1.5 GiB."
+    "why": "4 MiB of paragraphs, about 1,025 pages: the account holds about 540 MiB at its peak, the process about 1.2 GiB."
   },
   "html-16mib": {
     "result": "ErrConvertInputTooLarge",
-    "max_rss_mib": 1536,
-    "max_seconds": 10,
-    "why": "16 MiB of paragraphs: the styles, boxes, shaped paragraphs and glyph runs would hold about 2.7 GiB, and the budget refuses them during the layout, under a second in; the process peaks near 1.2 GiB."
+    "max_rss_mib": 2048,
+    "max_seconds": 20,
+    "why": "16 MiB of paragraphs: the shaped paragraphs alone would hold over 1 GiB, and the budget refuses them during the layout, about five seconds in; the paragraphs share their styles, which the account no longer charges per element, so the layout gets further than it did and the process peaks near 1.6 GiB, under twice the budget."
   },
   "html-png-10": {
     "result": "pdf",
