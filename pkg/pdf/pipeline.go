@@ -663,7 +663,7 @@ func (ex *executor) reopenAsCurrent(ctx context.Context, f *os.File, from []*Rea
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return fmt.Errorf("seeking intermediate file: %w", err)
 	}
-	next, err := openIntermediate(ctx, f, stat.Size(), ex.cur.reopenOptions()...)
+	next, err := Open(ctx, f, stat.Size(), ex.cur.reopenOptions()...)
 	if err != nil {
 		return fmt.Errorf("reopening intermediate file: %w", err)
 	}
@@ -684,21 +684,6 @@ func (ex *executor) reopenAsCurrent(ctx context.Context, f *os.File, from []*Rea
 	ex.curFile = f
 	ex.releaseWriter()
 	return nil
-}
-
-// openIntermediate opens f, an intermediate file the pipeline wrote in full,
-// as [Open] does. A failure while ctx is done is the cancellation: [Open]
-// reports a parse it stopped for ctx as a damaged cross-reference table, an
-// input error the file the pipeline wrote does not have.
-func openIntermediate(ctx context.Context, f *os.File, size int64, opts ...OpenOption) (*Reader, error) {
-	r, err := Open(ctx, f, size, opts...)
-	if err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return nil, ctxErr
-		}
-		return nil, err
-	}
-	return r, nil
 }
 
 func (ex *executor) newTempFile() (*os.File, error) {

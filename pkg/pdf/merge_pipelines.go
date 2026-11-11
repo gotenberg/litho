@@ -235,7 +235,7 @@ func (ex *executor) runMerged(ctx context.Context, i int, p *Pipeline, out *merg
 	// The output is read with the configuration of the document it was
 	// written from, as an intermediate file of the pipeline itself is (see
 	// [executor.reopenAsCurrent]).
-	r, err := openIntermediate(ctx, out.file, stat.Size(), from[0].reopenOptions()...)
+	r, err := Open(ctx, out.file, stat.Size(), from[0].reopenOptions()...)
 	if err != nil {
 		return fmt.Errorf("reading the pipeline's output back: %w", err)
 	}
