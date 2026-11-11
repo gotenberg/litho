@@ -37,7 +37,6 @@ test/integration/    -> Corpus matrix scoring litho against veraPDF, PDF.js and 
 | Command                  | Purpose                                                                                                     | When to use                                    |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | `make help`              | Show the available commands                                                                                 | To discover targets                            |
-| `make build`             | Build the `litho` CLI                                                                                       | Manual testing                                 |
 | `make fmt`               | Format Go code and tidy the dependencies                                                                    | Before committing                              |
 | `make prettify`          | Format non-Go files (Markdown, YAML, JSON)                                                                  | Before committing                              |
 | `make lint`              | Lint Go code (zero warnings permitted)                                                                      | Before committing                              |

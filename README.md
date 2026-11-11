@@ -11,7 +11,7 @@ Pure-Go PDF Conforming Processor for ISO 32000 (PDF 1.4 through 2.0). It extract
 go get github.com/gotenberg/litho
 ```
 
-Go 1.27.3+. No CGO.
+Go 1.27.3+. No CGO. litho is a library: it ships no command.
 
 ## Quick start
 
