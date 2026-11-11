@@ -76,10 +76,12 @@ var pdfBuilders = map[string]func(ctx context.Context, m *Manifest) error{ //nol
 }
 
 // hasBuild reports whether corpus build generates m's inputs: the Office
-// documents of a build corpus, or the PDFs of a corpus in [pdfBuilders].
+// documents of a build corpus, the PDFs of a corpus in [pdfBuilders], or
+// the paper documents of a corpus with committed sources (see
+// [hasFlatPapers]).
 func hasBuild(m *Manifest) bool {
 	_, ok := pdfBuilders[m.Name]
-	return ok || isBuildCorpus(m)
+	return ok || isBuildCorpus(m) || hasFlatPapers(m)
 }
 
 // buildLithoPDF writes every litho/pdf fixture its Go builder makes into the
@@ -221,6 +223,9 @@ func buildCorpus(ctx context.Context, m *Manifest) error {
 	}
 	if m.Name == stressCorpus {
 		return buildStress(ctx, m)
+	}
+	if hasFlatPapers(m) {
+		return buildFlatPaperDocs(ctx, m)
 	}
 	return buildOffice(ctx, m)
 }

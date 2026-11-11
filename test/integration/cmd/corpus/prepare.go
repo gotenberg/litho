@@ -55,7 +55,7 @@ func prepare(ctx context.Context, ms []*Manifest) error {
 	// is run on purpose, with corpus build, never as a side effect of a run.
 	var testdataBuilds []*Manifest
 	for _, m := range ms {
-		if isBuildCorpus(m) {
+		if isBuildCorpus(m) || hasFlatPapers(m) {
 			testdataBuilds = append(testdataBuilds, m)
 		}
 	}

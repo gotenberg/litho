@@ -485,7 +485,7 @@ func (g *gotenberg) convert(ctx context.Context, engine string, j referenceJob) 
 // that changed since. A source the route refuses is recorded under "failed"
 // with the route's answer, and gets no reference.
 func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, pins *resolvedPins, only []string) error {
-	if isBuildCorpus(m) {
+	if isBuildCorpus(m) || hasFlatPapers(m) {
 		if err := buildCorpus(ctx, m); err != nil {
 			return err
 		}
@@ -609,7 +609,8 @@ func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, 
 
 // referenceJobs lists the sources of a corpus with references, the ones
 // only names when set: its committed sources/ directories, the documents a
-// build corpus zips and the documents its list names. A source whose
+// build corpus zips, the paper documents a corpus builds from its sources
+// and the documents its list names. A source whose
 // options.json borrows another fixture's reference gets none.
 func referenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 	var jobs []referenceJob
@@ -636,6 +637,7 @@ func referenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 		}
 		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), "sources/" + name})
 	}
+	jobs = append(jobs, flatPaperReferenceJobs(m, only)...)
 	if m.Inputs == nil || m.Inputs.List == "" {
 		sort.Slice(jobs, func(i, j int) bool { return jobs[i].name < jobs[j].name })
 		return jobs, nil

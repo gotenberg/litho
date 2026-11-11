@@ -15,7 +15,8 @@ import (
 var errInputsUnfetched = errors.New("sources not provisioned")
 
 // loadInputFixtures lists the fixtures of a converter corpus from its
-// [InputSpec], in ID order, with the manifest's skips applied.
+// [InputSpec], and the paper documents it builds from its committed sources
+// (see [hasFlatPapers]), in ID order, with the manifest's skips applied.
 func loadInputFixtures(m *Manifest) ([]Fixture, error) {
 	in := m.Inputs
 	if in.List == "" && in.Glob == "" && in.Build == "" {
@@ -43,6 +44,11 @@ func loadInputFixtures(m *Manifest) ([]Fixture, error) {
 		}
 		fixtures = append(fixtures, built...)
 	}
+	papers, err := flatPaperFixtures(m)
+	if err != nil {
+		return nil, err
+	}
+	fixtures = append(fixtures, papers...)
 	seen := make(map[string]bool, len(fixtures))
 	for i := range fixtures {
 		id := fixtures[i].ID

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Paper sizes and the printed page</title>
+<style>
+@page { size: auto; }
+body { font-family: 'Liberation Sans', sans-serif; font-size: 11pt; line-height: 1.35; margin: 0; }
+h1, h2 { font-family: 'Liberation Serif', serif; color: #2f5496; break-after: avoid; }
+h1 { font-size: 16pt; margin: 14pt 0 4pt; }
+h2 { font-size: 13pt; margin: 8pt 0 4pt; }
+p { text-align: justify; margin: 0 0 8pt; }
+blockquote { font-family: 'Liberation Serif', serif; font-style: italic; font-size: 12pt; margin: 0 36pt 8pt; }
+table { width: 100%; border-collapse: collapse; margin: 0 0 8pt; font-size: 10pt; }
+th, td { border: 0.5pt solid #000; padding: 3pt; text-align: left; }
+th { background: #d9e1f2; }
+figure { margin: 0 0 8pt; text-align: center; break-inside: avoid; }
+figcaption { font-size: 9pt; font-style: italic; color: #44546a; }
+</style>
+</head>
+<body>
+<h1>1. Paper and the printed page</h1>
+<p>A document meets its reader on a sheet of paper or on a screen that pretends to be one. The size of that sheet decides where every line ends, where every page breaks and how much of a table fits across. A converter that reads the size wrong moves every word that follows, so the paper is the first thing a faithful conversion must get right.</p>
+<p>Two families of sizes share the world. The ISO 216 series starts from a sheet of one square metre whose sides keep the ratio of one to the square root of two, so that halving a sheet gives the next size with the same shape. North America keeps the inch sizes of its paper mills: Letter, Legal, Tabloid and Executive, whose shapes owe nothing to one another.</p>
+<p>Orientation turns a sheet on its side. A portrait page is taller than it is wide; a landscape page is the same sheet turned a quarter, which suits a wide table, a chart with many columns or a slide. The sheet does not change, only the direction the text runs across it.</p>
+<h2>1.1 How a section states its paper</h2>
+<p>A word processor stores the page size with each section of the document, together with its margins, its header and its footer. When a section ends, the next one may change the size, turn the page or both, so a single file can mix a portrait report with a landscape appendix printed on a larger sheet.</p>
+<blockquote>The page is the unit of reading. A reader remembers that a passage sat at the top of a left-hand page long after the words themselves have faded, and a converter that moves the break moves that memory with it.</blockquote>
+<p>A spreadsheet states its paper per sheet, by a numbered code from a table of paper sizes, with an orientation and a scale. A presentation states one slide size for the whole deck, and each slide is drawn on a page of exactly that size.</p>
+<figure><img src="picture.png" width="288" height="144" alt="Three coloured shapes in a frame"><figcaption>A picture placed inline with the text keeps its size on every paper.</figcaption></figure>
+<h1>2. Measures that follow the width</h1>
+<p>The measure is the length of a line of text. On a narrow sheet such as A5 the measure shrinks and a paragraph takes more lines; on a wide sheet such as A3 in landscape the measure grows and the same paragraph takes fewer. Every page break after the first moves accordingly, which is why a document must be laid out again, not scaled, when the paper changes.</p>
+<p>Headings keep with the paragraph that follows them, so a heading never sits alone at the foot of a page. Tables split between rows, and a row that fits on no page is cut where the page ends. Pictures stay with the line that holds them and push that line to the next page when they do not fit.</p>
+<table><thead><tr><th>Paper</th><th>Series</th><th>Width</th><th>Height</th></tr></thead><tbody><tr><td>A3</td><td>ISO 216</td><td>297 mm</td><td>420 mm</td></tr><tr><td>A4</td><td>ISO 216</td><td>210 mm</td><td>297 mm</td></tr><tr><td>A5</td><td>ISO 216</td><td>148 mm</td><td>210 mm</td></tr><tr><td>B5</td><td>ISO 216</td><td>176 mm</td><td>250 mm</td></tr><tr><td>Letter</td><td>ANSI</td><td>8.5 in</td><td>11 in</td></tr><tr><td>Legal</td><td>ANSI</td><td>8.5 in</td><td>14 in</td></tr><tr><td>Tabloid</td><td>ANSI</td><td>11 in</td><td>17 in</td></tr><tr><td>Executive</td><td>ANSI</td><td>7.25 in</td><td>10.5 in</td></tr></tbody></table>
+<p>The table above takes the whole width of the text column, so its columns grow and shrink with the paper while its rows keep their height. A narrow sheet wraps the longer cells onto a second line; a wide sheet leaves room to spare.</p>
+<h2>2.1 Headers, footers and page numbers</h2>
+<p>The header and the footer repeat on every page of a section. The footer of this document carries the number of the page and the count of pages, which both change with the paper: a document that takes three pages on Letter may take five on A5 and two on A3.</p>
+<p>Margins stay fixed when the paper changes, so the text column gains or loses exactly what the sheet gains or loses. One inch on each side leaves a column of six and a half inches on Letter, a little more than six inches on A4 and barely four on A5.</p>
+<blockquote>Executive paper, seven and a quarter inches by ten and a half, is the smallest of the common American sizes and the one most often forgotten by software that lists only Letter and Legal.</blockquote>
+<h1>3. Checking a conversion</h1>
+<p>A conversion is judged by how it looks. The reference engine prints the document on the paper it names; the converter prints it on the same paper; both are drawn and compared page by page. The size of each page must agree to within a point, the count of pages must agree, and the ink on each page must fall in the same places.</p>
+<p>A mistake in reading the size shows at once on the page box of the very first page. A mistake in laying text out at another width shows only further down, where a line breaks one word early and every later line follows. Both are found by printing the same document on many papers, in both orientations, and comparing every page.</p>
+<p>The papers covered here are A3, A4, A5 and B5 from the ISO series, and Letter, Legal, Tabloid and Executive from the American sizes, each in portrait and in landscape. Sixteen documents, each a copy of this one with only its paper changed, cover the whole range from the smallest to the largest common sheet.</p>
+<p>When the caller names a paper, it replaces the paper of every section, and the landscape switch turns every page that is not already turned. A document that names no paper at all prints on the default paper of the engine, which for the references is Letter.</p>
+</body>
+</html>

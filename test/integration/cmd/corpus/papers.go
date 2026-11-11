@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -162,6 +163,14 @@ func paperDocs(corpus string) []paperDoc {
 		return xlsxPaperDocs()
 	case "litho/pptx":
 		return pptxPaperDocs()
+	case "litho/odt":
+		return odtPaperDocs()
+	case "litho/ods":
+		return odsPaperDocs()
+	case "litho/odp":
+		return odpPaperDocs()
+	case "litho/html":
+		return htmlPaperDocs()
 	}
 	return nil
 }
@@ -424,4 +433,344 @@ func paperDocBytes(d paperDoc, base map[string][]byte) ([]byte, error) {
 		}
 	}
 	return zipPackage(files)
+}
+
+// flatPapersDir is the directory, under a corpus's testdata root, a corpus
+// whose sources are committed rather than built gets its paper documents
+// in, one directory each.
+const flatPapersDir = "papers"
+
+// hasFlatPapers reports whether m's paper documents are written from its
+// committed sources (an OpenDocument or HTML corpus) rather than zipped
+// beside the documents of a build corpus.
+func hasFlatPapers(m *Manifest) bool {
+	return !isBuildCorpus(m) && len(paperDocs(m.Name)) > 0
+}
+
+// flatPapersOut returns the directory m's flat paper documents are written
+// into.
+func flatPapersOut(m *Manifest) string {
+	return filepath.Join(m.TestdataRoot(), flatPapersDir)
+}
+
+// buildFlatPaperDocs writes the paper documents of a corpus with committed
+// sources into <testdata root>/papers/<name>/: every file of its base's
+// sources/<base>/ directory but options.json, as edited, and its own
+// options.json, replacing what an earlier build wrote there.
+func buildFlatPaperDocs(ctx context.Context, m *Manifest) error {
+	out := flatPapersOut(m)
+	if err := os.RemoveAll(out); err != nil {
+		return err
+	}
+	docs := paperDocs(m.Name)
+	bases := map[string]map[string][]byte{}
+	for _, d := range docs {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		base, ok := bases[d.base]
+		if !ok {
+			var err error
+			if base, err = readParts(filepath.Join(m.SourceDir(), "sources", d.base)); err != nil {
+				return fmt.Errorf("%s starts from %s: %w", d.name, d.base, err)
+			}
+			bases[d.base] = base
+		}
+		files := cloneParts(base)
+		if d.edit != nil {
+			if err := d.edit(files); err != nil {
+				return fmt.Errorf("%s: %w", d.name, err)
+			}
+		}
+		if d.options != nil {
+			files[fixture.OptionsFile] = d.options
+		}
+		dir := filepath.Join(out, d.name)
+		for _, name := range packageOrder(files) {
+			p := filepath.Join(dir, filepath.FromSlash(name))
+			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+				return err
+			}
+			if err := os.WriteFile(p, files[name], 0o644); err != nil { //nolint:gosec // testdata is world-readable
+				return err
+			}
+		}
+	}
+	fmt.Printf("%s: %d paper documents built into %s\n", m.Name, len(docs), out)
+	return nil
+}
+
+// flatPaperFixtures lists the paper documents of a corpus with committed
+// sources, each the directory it was built into, refusing one not built
+// yet.
+func flatPaperFixtures(m *Manifest) ([]Fixture, error) {
+	if !hasFlatPapers(m) {
+		return nil, nil
+	}
+	names := paperDocNames(m.Name)
+	fixtures := make([]Fixture, 0, len(names))
+	for _, name := range names {
+		dir := filepath.Join(flatPapersOut(m), name)
+		if _, err := os.Stat(dir); err != nil {
+			return nil, fmt.Errorf("%w: %s is missing (run make corpus-build CORPUS=%s)", errInputsUnfetched, dir, m.Name)
+		}
+		fixtures = append(fixtures, Fixture{ID: name, PDFPath: dir})
+	}
+	return fixtures, nil
+}
+
+// flatPaperReferenceJobs lists the paper documents of a corpus with
+// committed sources that have a reference of their own, the ones only names
+// when set.
+func flatPaperReferenceJobs(m *Manifest, only []string) []referenceJob {
+	if !hasFlatPapers(m) {
+		return nil
+	}
+	var jobs []referenceJob
+	for _, name := range paperDocNames(m.Name) {
+		if len(only) > 0 && !slices.Contains(only, name) {
+			continue
+		}
+		dir := filepath.Join(flatPapersOut(m), name)
+		if borrowsReference(dir) {
+			continue
+		}
+		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), flatPapersDir + "/" + name})
+	}
+	return jobs
+}
+
+// The page setup of the OpenDocument bases: the page layout pm1, portrait
+// Letter, that the Standard (text) or Default (spreadsheet) master page
+// uses; paper-base also holds pm2, of the master page Second, which no
+// paragraph uses until a mixed document's PartTwo style names it (ODF 1.3
+// Part 3, 16.5 style:page-layout, 16.9 style:master-page-name).
+const (
+	odfBasePageLayout = `style:name="%s"><style:page-layout-properties fo:page-width="8.5in" fo:page-height="11in" style:print-orientation="portrait"`
+	odtPaperBase      = "paper-base"
+	odtPaperPart      = "paper-base.fodt"
+	odtPartTwo        = `<style:style style:name="PartTwo" style:family="paragraph" style:parent-style-name="Heading_20_1"/>`
+	odsGridPart       = "paper-grid.fods"
+	odsFitPart        = "paper-fit.fods"
+)
+
+// odfPageLayout returns the start of a page layout named name on paper p,
+// turned by landscape: fo:page-width and fo:page-height as the page is
+// turned, and style:print-orientation (ODF 1.3 Part 3, 17.2
+// style:page-layout-properties).
+func odfPageLayout(name string, p paperSize, landscape bool) string {
+	w, h, o := p.w, p.h, "portrait"
+	if landscape {
+		w, h, o = p.h, p.w, "landscape"
+	}
+	return fmt.Sprintf(`style:name="%s"><style:page-layout-properties fo:page-width="%smm" fo:page-height="%smm" style:print-orientation="%s"`,
+		name, strconv.FormatFloat(w, 'f', -1, 64), strconv.FormatFloat(h, 'f', -1, 64), o)
+}
+
+// odfRepaper returns an edit that lays the page layout name of part out on
+// p, turned by landscape.
+func odfRepaper(part, name string, p paperSize, landscape bool) func(map[string][]byte) error {
+	return func(files map[string][]byte) error {
+		return replaceOnce(files, part, fmt.Sprintf(odfBasePageLayout, name), odfPageLayout(name, p, landscape))
+	}
+}
+
+// odtPaperDocs are the ODT paper documents: paper-base on each paper in
+// each orientation, the base with the papers of [paperSpan] named as
+// options, and two documents of two page styles, the second from the
+// second Heading 1. The LibreOffice route takes the options, so an option
+// fixture has a reference of its own.
+func odtPaperDocs() []paperDoc {
+	var docs []paperDoc
+	for _, p := range paperSizes {
+		for _, o := range orientations {
+			docs = append(docs, paperDoc{
+				name: fmt.Sprintf("paper-%s-%s", p.key, o),
+				base: odtPaperBase,
+				edit: odfRepaper(odtPaperPart, "pm1", p, o == "landscape"),
+			})
+		}
+	}
+	for _, key := range paperSpan {
+		for _, o := range orientations {
+			docs = append(docs, paperDoc{
+				name:    fmt.Sprintf("paper-option-%s-%s", key, o),
+				base:    odtPaperBase,
+				options: paperOptions(paperByKey(key), o == "landscape", ""),
+			})
+		}
+	}
+	twoStyles := func(first, second paperSize, secondLandscape bool) func(map[string][]byte) error {
+		return func(files map[string][]byte) error {
+			if err := odfRepaper(odtPaperPart, "pm1", first, false)(files); err != nil {
+				return err
+			}
+			if err := odfRepaper(odtPaperPart, "pm2", second, secondLandscape)(files); err != nil {
+				return err
+			}
+			return replaceOnce(files, odtPaperPart, odtPartTwo, strings.Replace(odtPartTwo, "/>", ` style:master-page-name="Second"/>`, 1))
+		}
+	}
+	letter, a4, a5 := paperByKey("letter"), paperByKey("a4"), paperByKey("a5")
+	return append(docs,
+		paperDoc{name: "paper-mixed-orientation", base: odtPaperBase, edit: twoStyles(letter, letter, true)},
+		paperDoc{name: "paper-mixed-sizes", base: odtPaperBase, edit: twoStyles(a4, a5, false)},
+	)
+}
+
+// odsPaperDocs are the ODS paper documents, as [xlsxPaperDocs] makes the
+// XLSX ones, the option fixtures with references of their own. paper-fit
+// is fitted to one page wide (style:scale-to-X 1, style:scale-to-Y 0).
+func odsPaperDocs() []paperDoc {
+	var docs []paperDoc
+	bases := []struct{ name, part string }{{xlsxGridBase, odsGridPart}, {xlsxFitBase, odsFitPart}}
+	for _, p := range paperSizes {
+		for _, o := range orientations {
+			docs = append(docs, paperDoc{name: fmt.Sprintf("%s-%s-%s", xlsxGridBase, p.key, o), base: xlsxGridBase, edit: odfRepaper(odsGridPart, "pm1", p, o == "landscape")})
+		}
+	}
+	for _, key := range paperSpan {
+		for _, o := range orientations {
+			docs = append(docs, paperDoc{name: fmt.Sprintf("%s-%s-%s", xlsxFitBase, key, o), base: xlsxFitBase, edit: odfRepaper(odsFitPart, "pm1", paperByKey(key), o == "landscape")})
+		}
+	}
+	for _, b := range bases {
+		for _, key := range paperSpan {
+			for _, o := range orientations {
+				docs = append(docs, paperDoc{
+					name:    fmt.Sprintf("%s-option-%s-%s", b.name, key, o),
+					base:    b.name,
+					options: paperOptions(paperByKey(key), o == "landscape", ""),
+				})
+			}
+		}
+	}
+	return docs
+}
+
+// odpSize is a slide size Impress offers in its slide properties, in
+// centimetres.
+type odpSize struct {
+	key  string
+	w, h float64
+}
+
+// odpSizes are the ODP decks' slide sizes: Impress's screen formats (4:3,
+// 16:9, 16:10, Widescreen and the On-screen Show ones), its paper formats
+// in landscape (A3, A4, A5, B5 (ISO), Letter, Legal, Tabloid), the 36 by 24
+// mm Dia Slide, and the Japanese Postcard and A4 portrait.
+//
+//nolint:gochecknoglobals // static table
+var odpSizes = []odpSize{
+	{"screen-4x3", 28, 21}, {"screen-16x9", 28, 15.75}, {"screen-16x10", 28, 17.5}, {"widescreen", 33.867, 19.05},
+	{"onscreen-4x3", 25.4, 19.05}, {"onscreen-16x9", 25.4, 14.288}, {"onscreen-16x10", 25.4, 15.875},
+	{"a3", 42, 29.7}, {"a4", 29.7, 21}, {"a5", 21, 14.8}, {"b5iso", 25, 17.6},
+	{"letter", 27.94, 21.59}, {"legal", 35.56, 21.59}, {"tabloid", 43.18, 27.94},
+	{"dia", 3.6, 2.4}, {"postcard", 10, 14.8}, {"a4-portrait", 21, 29.7},
+}
+
+// The slide size of the ODP base, paper-deck: Screen 4:3, the page layout
+// of its Default master page.
+const (
+	odpPaperBase   = "paper-deck"
+	odpPaperPart   = "paper-deck.fodp"
+	odpBaseSlideSz = `fo:page-width="28cm" fo:page-height="21cm" style:print-orientation="landscape"`
+)
+
+// odpPaperDocs are the ODP paper documents: paper-deck on each slide size of
+// [odpSizes]. None takes an option: Impress prints a slide on a page of its
+// own size whatever the route asks.
+func odpPaperDocs() []paperDoc {
+	docs := make([]paperDoc, 0, len(odpSizes))
+	for _, s := range odpSizes {
+		o := "landscape"
+		if s.h > s.w {
+			o = "portrait"
+		}
+		size := fmt.Sprintf(`fo:page-width="%scm" fo:page-height="%scm" style:print-orientation="%s"`,
+			strconv.FormatFloat(s.w, 'f', -1, 64), strconv.FormatFloat(s.h, 'f', -1, 64), o)
+		docs = append(docs, paperDoc{
+			name: "paper-deck-" + s.key,
+			base: odpPaperBase,
+			edit: func(files map[string][]byte) error {
+				return replaceOnce(files, odpPaperPart, odpBaseSlideSz, size)
+			},
+		})
+	}
+	return docs
+}
+
+// cssPageSizes are the page-size keywords of CSS Paged Media Level 3, 7.2.1
+// (Table 1), as an @page size names them.
+//
+//nolint:gochecknoglobals // static list
+var cssPageSizes = []string{"A5", "A4", "A3", "B5", "B4", "JIS-B5", "JIS-B4", "letter", "legal", "ledger"}
+
+// cssLengthSizes are two @page sizes in lengths: a narrow page in inches
+// and a wide one in centimetres (CSS Paged Media Level 3, 7.2.1).
+//
+//nolint:gochecknoglobals // static table
+var cssLengthSizes = []struct{ key, size string }{
+	{"lengths-narrow", "6in 9in"},
+	{"lengths-wide", "25cm 15cm"},
+}
+
+// The page rule of the HTML base, paper-base, and the Markdown base.
+const (
+	htmlPaperBase     = "paper-base"
+	htmlPaperPart     = "index.html"
+	htmlBasePageRule  = "@page { size: auto; }"
+	markdownPaperBase = "paper-markdown"
+)
+
+// htmlPaperDocs are the HTML and Markdown paper documents: paper-base on
+// each paper in each orientation through the route's paperWidth,
+// paperHeight and landscape; paper-base with an @page size of each keyword,
+// with and without landscape, and of two sizes in lengths, each once with
+// preferCssPageSize and once without; and paper-markdown on the papers of
+// [paperSpan].
+func htmlPaperDocs() []paperDoc {
+	var docs []paperDoc
+	for _, p := range paperSizes {
+		for _, o := range orientations {
+			docs = append(docs, paperDoc{
+				name:    fmt.Sprintf("paper-option-%s-%s", p.key, o),
+				base:    htmlPaperBase,
+				options: paperOptions(p, o == "landscape", ""),
+			})
+		}
+	}
+	css := func(key, size string) {
+		rule := "@page { size: " + size + "; }"
+		for _, prefer := range []bool{true, false} {
+			mode := "prefer"
+			if !prefer {
+				mode = "paper"
+			}
+			docs = append(docs, paperDoc{
+				name: fmt.Sprintf("paper-css-%s-%s", key, mode),
+				base: htmlPaperBase,
+				edit: func(files map[string][]byte) error {
+					return replaceOnce(files, htmlPaperPart, htmlBasePageRule, rule)
+				},
+				options: []byte(fmt.Sprintf("{\n  \"preferCssPageSize\": %t\n}\n", prefer)),
+			})
+		}
+	}
+	for _, kw := range cssPageSizes {
+		key := strings.ToLower(kw)
+		css(key+"-portrait", kw)
+		css(key+"-landscape", kw+" landscape")
+	}
+	for _, l := range cssLengthSizes {
+		css(l.key, l.size)
+	}
+	for _, key := range paperSpan {
+		docs = append(docs, paperDoc{
+			name:    "paper-markdown-" + key,
+			base:    markdownPaperBase,
+			options: paperOptions(paperByKey(key), false, ""),
+		})
+	}
+	return docs
 }
