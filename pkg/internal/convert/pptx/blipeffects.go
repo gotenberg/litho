@@ -80,6 +80,11 @@ func blipEffects(ctx context.Context, pic *layout.Picture, blip *ooxml.Element, 
 		table[v] = uint8(math.Round(max(0, min(255, float64(v)*scale+offset))))
 	}
 	b := src.Bounds()
+	if err := compose.ChargeImage(ctx, b.Dx(), b.Dy(), imgcolor.NRGBAModel); err != nil {
+		// The refusal stops the conversion, which reports it.
+		compose.ReleaseImage(ctx, src)
+		return pic
+	}
 	out := image.NewNRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
 	for y := b.Min.Y; y < b.Max.Y; y++ {
 		for x := b.Min.X; x < b.Max.X; x++ {
@@ -107,6 +112,7 @@ func blipEffects(ctx context.Context, pic *layout.Picture, blip *ooxml.Element, 
 		}
 	}
 	enc, err := compose.EncodeImage(ctx, out)
+	compose.ReleaseImage(ctx, src)
 	if err != nil {
 		return pic
 	}

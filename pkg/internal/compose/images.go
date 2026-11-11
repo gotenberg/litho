@@ -11,6 +11,7 @@ import (
 	"io"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // EncodeImage returns img as an [ImageSource] of Flate-compressed 8-bit
@@ -20,11 +21,29 @@ import (
 // soft mask expects (ISO 32000-1, 11.6.5.3).
 //
 // It reads img row by row and keeps nothing of it: the caller may drop img
-// once it returns. It returns an error wrapping [ErrInvalidImage] for an
+// once it returns. It releases what img was charged to the conversion's
+// memory budget ([ChargeImage]) and charges the compressed samples, which
+// the document holds; a refused charge fails with the budget's error. It returns an error wrapping [ErrInvalidImage] for an
 // empty picture, one wrapping [ErrLimitExceeded] for a picture past the
 // pixels a source may hold, and one wrapping ctx.Err() when ctx ends
 // first.
 func EncodeImage(ctx context.Context, img image.Image) (*ImageSource, error) {
+	if img == nil {
+		return nil, fmt.Errorf("%w: nil picture", ErrInvalidImage)
+	}
+	defer ReleaseImage(ctx, img)
+	src, err := encodeImage(ctx, img)
+	if err != nil {
+		return nil, err
+	}
+	if err := chargeEncoded(ctx, src); err != nil {
+		return nil, err
+	}
+	return src, nil
+}
+
+// encodeImage is [EncodeImage] without the budget.
+func encodeImage(ctx context.Context, img image.Image) (*ImageSource, error) {
 	if img == nil {
 		return nil, fmt.Errorf("%w: nil picture", ErrInvalidImage)
 	}
@@ -140,8 +159,31 @@ func JPEGImage(data []byte) (*ImageSource, error) {
 // what image/jpeg decodes for a JPEG. The picture is new on every call and
 // belongs to the caller. It returns an error wrapping [ErrInvalidImage]
 // for bytes that do not decode to the source's size, and one wrapping
-// ctx.Err() when ctx ends first.
+// ctx.Err() when ctx ends first. The picture is charged to the
+// conversion's memory budget before it is made, and a refused charge fails
+// with the budget's error: the caller gives the charge back with
+// [EncodeImage] or [ReleaseImage] once it drops the picture.
 func (s *ImageSource) Decode(ctx context.Context) (image.Image, error) {
+	if err := checkPixels(s.Width, s.Height); err != nil {
+		return nil, err
+	}
+	model := color.NRGBAModel
+	if s.Gray {
+		model = color.GrayModel
+	}
+	if err := ChargeImage(ctx, s.Width, s.Height, model); err != nil {
+		return nil, err
+	}
+	img, err := s.decode(ctx)
+	if err != nil {
+		limits.BudgetFrom(ctx).Release(int64(s.Width) * int64(s.Height) * pixelCost(model))
+		return nil, err
+	}
+	return img, nil
+}
+
+// decode is [ImageSource.Decode] without the budget.
+func (s *ImageSource) decode(ctx context.Context) (image.Image, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("decoding image: %w", err)
 	}

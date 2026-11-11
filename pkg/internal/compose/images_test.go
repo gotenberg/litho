@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // oneShot returns data compressed in one write, as the backend compressed
@@ -161,7 +162,7 @@ func TestEncodeImageRefuses(t *testing.T) {
 	if _, err := compose.EncodeImage(ctx, boundsOnly(image.Rect(0, 0, 0, 4))); !errors.Is(err, compose.ErrInvalidImage) {
 		t.Errorf("empty: %v", err)
 	}
-	if _, err := compose.EncodeImage(ctx, boundsOnly(image.Rect(0, 0, 1<<14, 1<<14))); !errors.Is(err, compose.ErrLimitExceeded) {
+	if _, err := compose.EncodeImage(ctx, boundsOnly(image.Rect(0, 0, 1<<16, 1<<15))); !errors.Is(err, compose.ErrLimitExceeded) {
 		t.Errorf("huge: %v", err)
 	}
 	canceled, cancel := context.WithCancel(ctx)
@@ -190,4 +191,35 @@ func FuzzJPEGImage(f *testing.F) {
 			t.Fatalf("source %d by %d", src.Width, src.Height)
 		}
 	})
+}
+
+// TestEncodeImageBudget pins the picture's two charges: its decoded pixels,
+// released once it is encoded, then its compressed samples, held.
+func TestEncodeImageBudget(t *testing.T) {
+	t.Parallel()
+	ctx, mem, done := limits.WithBudget(context.Background(), limits.Limits{})
+	defer done()
+	if err := compose.ChargeImage(ctx, 100, 100, color.NRGBAModel); err != nil || mem.Held() != 40_000 {
+		t.Fatalf("charge: %v, held %d", err, mem.Held())
+	}
+	src, err := compose.EncodeImage(ctx, image.NewNRGBA(image.Rect(0, 0, 100, 100)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := int64(len(src.Samples) + len(src.Alpha)); mem.Held() != want {
+		t.Errorf("held %d after encoding, want the %d compressed bytes", mem.Held(), want)
+	}
+	img, err := src.Decode(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compose.ReleaseImage(ctx, img)
+	if want := int64(len(src.Samples) + len(src.Alpha)); mem.Held() != want {
+		t.Errorf("held %d after a decode released, want %d", mem.Held(), want)
+	}
+	small, _, done2 := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 1000})
+	defer done2()
+	if _, err := src.Decode(small); !errors.Is(err, limits.ErrMemoryBudget) {
+		t.Errorf("decode past the budget: %v", err)
+	}
 }

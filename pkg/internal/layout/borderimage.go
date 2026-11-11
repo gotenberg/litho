@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"image/color"
 )
 
 // nineSource is the image a border image cuts: a picture, or a gradient
@@ -77,6 +78,7 @@ func (p *painter) borderImage(b *box, st *css.Style, r compose.Rect, bd [4]float
 	// The picture is decoded once for the nine pieces, on the first cut,
 	// and dropped with them.
 	var pixels image.Image
+	defer func() { compose.ReleaseImage(p.e.ctx, pixels) }()
 	decode := func() image.Image {
 		if pixels == nil {
 			img, err := src.pic.Source.Decode(p.e.ctx)
@@ -489,6 +491,10 @@ func (p *painter) cropSource(pic *Picture, r compose.Rect, decode func() image.I
 	}
 	img := decode()
 	if img == nil {
+		return nil
+	}
+	if err := compose.ChargeImage(p.e.ctx, rect.Dx(), rect.Dy(), color.NRGBAModel); err != nil {
+		// The refusal stops the conversion, which reports it.
 		return nil
 	}
 	out := image.NewNRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))

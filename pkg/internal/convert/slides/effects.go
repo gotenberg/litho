@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/raster"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"image/color"
 )
 
 // effectScale is the resolution in pixels a point an effect's bitmap is
@@ -245,9 +246,10 @@ type effectPlan struct {
 }
 
 // grid returns the grid of an effect over box, as [newGrid] does, and
-// charges the bitmap the effect keeps at its size, four bytes a pixel
-// until the document is written; false for an area too small to draw or
-// a bitmap the budget refuses, whose refusal stops the conversion.
+// charges the bitmap the effect paints at its size, four bytes a pixel,
+// which [compose.EncodeImage] releases once it has encoded it; false for
+// an area too small to draw or a bitmap the budget refuses, whose refusal
+// stops the conversion.
 func (p *effectPlan) grid(box compose.Rect) (effectGrid, bool) {
 	g, ok := newGrid(box)
 	if !ok || !p.mem.Take(int64(g.w)*int64(g.h), limits.DecodedPixelCost, "effect bitmaps") {
@@ -531,6 +533,7 @@ func retint(ctx context.Context, src *compose.ImageSource, c compose.Color) *com
 	if err != nil {
 		return nil
 	}
+	defer compose.ReleaseImage(ctx, pixels)
 	img, ok := pixels.(*image.NRGBA)
 	if !ok {
 		return nil
@@ -538,6 +541,9 @@ func retint(ctx context.Context, src *compose.ImageSource, c compose.Color) *com
 	a := image.NewAlpha(img.Bounds())
 	for i := range a.Pix {
 		a.Pix[i] = img.Pix[4*i+3]
+	}
+	if err := compose.ChargeImage(ctx, a.Rect.Dx(), a.Rect.Dy(), color.NRGBAModel); err != nil {
+		return nil
 	}
 	out, err := compose.EncodeImage(ctx, raster.Tint(a, c))
 	if err != nil {

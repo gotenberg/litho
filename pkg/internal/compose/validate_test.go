@@ -86,7 +86,7 @@ func TestValidateRefuses(t *testing.T) {
 		{"JPEG size", page(&Image{Source: &ImageSource{Width: 2, Height: 1, JPEG: tinyJPEG(t)}}), ErrInvalidImage},
 		{"empty picture", page(&Image{Source: &ImageSource{Width: 0, Height: 3, Samples: []byte{1}}}), ErrInvalidImage},
 		{"NaN image rect", page(&Image{Rect: Rect{Width: nan}, Source: &ImageSource{Width: 1, Height: 1, Samples: []byte{1}}}), ErrInvalidImage},
-		{"image pixels", page(&Image{Source: &ImageSource{Width: 1 << 14, Height: 1 << 14, Samples: []byte{1}}}), ErrLimitExceeded},
+		{"image pixels", page(&Image{Source: &ImageSource{Width: 1 << 16, Height: 1 << 15, Samples: []byte{1}}}), ErrLimitExceeded},
 		{"NaN path point", page(&Path{Ops: []PathOp{{Kind: MoveTo, P: [3]Point{{X: nan}}}}, Fill: &Fill{Color: Black}}), ErrInvalidPath},
 		{"NaN curve control", page(&Path{Ops: []PathOp{{Kind: MoveTo}, {Kind: CurveTo, P: [3]Point{{}, {Y: inf}, {}}}}}), ErrInvalidPath},
 		{"path without MoveTo", page(&Path{Ops: []PathOp{{Kind: LineTo}}}), ErrInvalidPath},

@@ -198,6 +198,10 @@ func (p *painter) blurred(shape []compose.PathOp, area compose.Rect, blur float6
 		}
 	}
 	blurAlpha(mask, blur/2*k, inner)
+	if err := compose.ChargeImage(p.e.ctx, w, h, color.NRGBAModel); err != nil {
+		// The refusal stops the conversion, which reports it.
+		return nil
+	}
 	img := image.NewNRGBA(image.Rect(0, 0, w, h))
 	r8, g8, b8 := uint8(col.R*255+0.5), uint8(col.G*255+0.5), uint8(col.B*255+0.5)
 	for i, v := range mask.Pix {
