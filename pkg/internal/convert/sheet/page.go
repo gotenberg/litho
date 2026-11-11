@@ -29,6 +29,9 @@ type pageBuilder struct {
 	// dataW and dataH are the size of the page's cells, headings
 	// included, in sheet points.
 	dataW, dataH float64
+	// cellKeys maps each TD node to the row and column of the cell or
+	// merge whose content it holds.
+	cellKeys map[*layout.Node][2]int
 }
 
 // style returns the base style of a node.
@@ -79,6 +82,7 @@ func (b *pageBuilder) layoutRegions() []*region {
 // points from the top-left corner of the cells, with their links.
 func (b *pageBuilder) build() ([]compose.Fragment, []compose.Link, *compose.StructElem, error) {
 	b.cellBudget = maxPageCells
+	b.cellKeys = map[*layout.Node][2]int{}
 	regs := b.layoutRegions()
 	root := b.style()
 	root.Position = css.Relative
@@ -115,6 +119,7 @@ func (b *pageBuilder) build() ([]compose.Fragment, []compose.Link, *compose.Stru
 		frags = append(frags, res.Pages[0].Content...)
 		links = res.Pages[0].Links
 	}
+	b.tagTable(table, res.Structure, frags, links)
 	frags = append(frags, b.gridPaths...)
 	frags = append(frags, b.circles...)
 	frags = append(frags, b.drawings(regs)...)
@@ -146,6 +151,7 @@ func (b *pageBuilder) region(rg *region) *layout.Node {
 		if n == nil || cx1 <= rg.x0+epsilon || cx0 >= rg.x0+rg.w-epsilon {
 			return
 		}
+		b.cellKeys[n] = [2]int{u.r, u.c}
 		if cx1-cx0 > u.w+epsilon {
 			spans[u.r] = append(spans[u.r], [2]float64{cx0, cx1})
 		}

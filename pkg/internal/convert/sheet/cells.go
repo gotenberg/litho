@@ -435,6 +435,7 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 	}}
 	if u.cell.Href != "" {
 		para.Href = cellHref(u.cell.Href)
+		para.Role = "Link"
 	}
 	return n, cx0, cx1
 }
