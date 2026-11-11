@@ -162,6 +162,23 @@ func (f *robustnessFeature) expectation(fixtureID string) robustnessExpectation 
 	return e
 }
 
+// FixtureTimeout gives a fixture whose expectation bounds its time that
+// time on top of the runner's own deadline. A conversion slower than its
+// bound is then measured and reported with its time, and one the
+// expectation allows more than the runner's deadline is not cut at it.
+//
+// # Corpus evidence
+//
+//   - litho/stress html-png-50: allowed 60 seconds, the conversion takes 14
+//     to 15 alone and was cut at the runner's 20 beside the whole matrix.
+func (f *robustnessFeature) FixtureTimeout(fixtureID string) time.Duration {
+	e := f.expectation(fixtureID)
+	if e.MaxSeconds <= 0 {
+		return 0
+	}
+	return perFileTimeout + time.Duration(e.MaxSeconds*float64(time.Second))
+}
+
 // Run converts the fixture in a child process and measures it.
 func (f *robustnessFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byte, error) {
 	e := f.expectation(fixtureID)

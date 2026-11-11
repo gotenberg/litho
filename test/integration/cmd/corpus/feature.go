@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 )
 
 // Feature is one comparison dimension: a way to exercise a PDF with litho
@@ -107,6 +108,14 @@ var ErrNoGoldens = errors.New("no goldens available")
 // Corpora that already list one fixture per PDF are unaffected.
 type PerPDFFeature interface {
 	OncePerPDF()
+}
+
+// TimeBounder is an optional interface a [Feature] implements when a
+// fixture's own expectation bounds its time. The runner gives a fixture
+// the deadline FixtureTimeout returns in place of [perFileTimeout]; zero
+// keeps the runner's.
+type TimeBounder interface {
+	FixtureTimeout(fixtureID string) time.Duration
 }
 
 // GoldenOverrider is an optional interface a [Feature] implements when a

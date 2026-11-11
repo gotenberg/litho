@@ -450,7 +450,13 @@ func processFixture(ctx context.Context, feat Feature, fx Fixture) (v Verdict) {
 		}
 	}()
 
-	fctx, cancel := context.WithTimeout(ctx, perFileTimeout)
+	timeout := perFileTimeout
+	if tb, ok := feat.(TimeBounder); ok {
+		if d := tb.FixtureTimeout(fx.ID); d > 0 {
+			timeout = d
+		}
+	}
+	fctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	output, err := feat.Run(fctx, fx.PDFPath, fx.ID)

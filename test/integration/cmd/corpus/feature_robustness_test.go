@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/pdf"
 )
@@ -66,6 +67,31 @@ func TestRobustnessCompare(t *testing.T) {
 			t.Errorf("%s %+v: outcome %s, metrics %v, want a fail counting %s", tc.id, tc.got, v.Outcome, v.Metrics, tc.metric)
 		}
 	}
+}
+
+// TestRobustnessFixtureTimeout pins the deadline of a fixture: the
+// runner's own unless the expectation bounds the time, then that bound on
+// top of it.
+func TestRobustnessFixtureTimeout(t *testing.T) {
+	t.Parallel()
+
+	f := newRobustnessFeature()
+	f.expect = map[string]robustnessExpectation{
+		"slow":    {Result: "pdf", MaxSeconds: 60},
+		"refused": {Result: "ErrConvertInputTooLarge", MaxSeconds: 0.5},
+		"plain":   {Result: "pdf"},
+	}
+	for id, want := range map[string]time.Duration{
+		"slow":     perFileTimeout + 60*time.Second,
+		"refused":  perFileTimeout + 500*time.Millisecond,
+		"plain":    0,
+		"unlisted": 0,
+	} {
+		if got := f.FixtureTimeout(id); got != want {
+			t.Errorf("FixtureTimeout(%q) = %v, want %v", id, got, want)
+		}
+	}
+	var _ TimeBounder = f
 }
 
 // TestConvertResultName pins the names the expectations give the
