@@ -28,7 +28,7 @@ const modulePath = "github.com/gotenberg/litho"
 var fitsMarker = regexp.MustCompile(`//.*\bfits u?int:`)
 
 // TestNarrowingConversionsAreClampedOrBounded pins that no conversion in the
-// shipped code, pkg/ and cmd/litho, silently wraps on a 32-bit platform: every int64, uint64,
+// shipped code under pkg/ silently wraps on a 32-bit platform: every int64, uint64,
 // uint32 or uint value converted to int, and every int64 or uint64 value
 // converted to uint, goes through [Clamp] or carries a same-line comment
 // "fits int: <bound>" (or "fits uint:") that names what keeps it in range.
@@ -46,7 +46,7 @@ func TestNarrowingConversionsAreClampedOrBounded(t *testing.T) {
 	imp := importer.ForCompiler(fset, "source", nil)
 	var packages, covered int
 	var offenders []string
-	for _, top := range []string{"pkg", "cmd/litho"} {
+	for _, top := range []string{"pkg"} {
 		root := filepath.Join(moduleRoot, top)
 		err := filepath.WalkDir(root, func(dir string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -103,8 +103,7 @@ func TestNarrowingConversionsAreClampedOrBounded(t *testing.T) {
 		t.Errorf("%s: narrows on a 32-bit platform; use intconv.Clamp or state the bound in a same-line \"fits int:\" comment", o)
 	}
 
-	// Lower bounds under what pkg/ and cmd/litho hold (69 packages, over 330
-	// clamped or vouched-for conversions), so a guard that stopped seeing
+	// Lower bounds under what pkg/ holds, so a guard that stopped seeing
 	// packages or conversions fails instead of passing.
 	if packages < 60 || covered < 300 {
 		t.Fatalf("guard saw %d packages and %d clamped or narrowing conversions; it no longer inspects the module", packages, covered)

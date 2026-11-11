@@ -512,8 +512,8 @@ func textBearingXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 //     but invoke three /Annot_* forms; judging /X0 by its own bytes marked it
 //     decoration and lost the name the form was filled in with.
 //   - pdfjs issue6961.pdf: nests forms ten levels deep, and reading each form
-//     once per path made `litho remediate -profile PDF/UA-1` on it run for over
-//     50 minutes at 142% CPU, re-inflating the same streams, until the depth
+//     once per path made a PDF/UA-1 remediation of it run for over 50
+//     minutes at 142% CPU, re-inflating the same streams, until the depth
 //     cap finally exhausted the search. It never returned within any run of the
 //     corpus harness.
 //   - All corpora: one page lists forms whose resources list each other back,

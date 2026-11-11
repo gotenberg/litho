@@ -50,9 +50,9 @@ func bareDocumentPDF() []byte {
 // out) without any internal test noticing, because semantics keeps asserting
 // its own value and stays green.
 //
-// It is not decorative either: cmd/litho's metadata command branches on
-// errors.Is(err, pdf.ErrNoMetadata) to tell "this document has none" from a
-// real extraction failure.
+// It is not decorative either: a caller branches on errors.Is(err,
+// pdf.ErrNoMetadata) to tell "this document has none" from a real
+// extraction failure.
 //
 // Both directions are asserted deliberately. Checking only that a bare
 // document errors would pass on any error at all; checking only that a
@@ -60,8 +60,8 @@ func bareDocumentPDF() []byte {
 //
 // # Corpus evidence
 //
-//   - All corpora: no corpus gate reaches cmd/litho, so none of them exercises
-//     the metadata command's branch on the sentinel.
+//   - All corpora: no corpus gate branches on the sentinel, so none of them
+//     exercises it.
 func TestMetadata_BareDocumentReturnsTheSentinel(t *testing.T) {
 	t.Parallel()
 

@@ -11,12 +11,11 @@ import (
 )
 
 // RotatePages modifies /Rotate on the specified page dictionaries. An empty
-// pageNums rotates every page, matching [StampText] and the "default: all"
-// the rotate command advertises for its -pages flag.
+// pageNums rotates every page, matching [StampText].
 //
-// Without this, rotating a whole document was a silent no-op: the CLI leaves
-// its page list empty when -pages is absent, the loop below ran zero times, and
-// litho reported success over a byte-identical file.
+// Without this, rotating a whole document was a silent no-op: a caller that
+// names no page passes an empty list, the loop below ran zero times, and the
+// write succeeded over a byte-identical file.
 //
 // Every page is every page the document holds as alloc stages it, so a page
 // an earlier insertion added is rotated too (see [pagesToEdit]).
