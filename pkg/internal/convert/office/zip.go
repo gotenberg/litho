@@ -50,7 +50,7 @@ func InflateLimit(compressed uint64, limit int64) int64 {
 	if compressed > uint64(limit/MaxInflateRatio) {
 		return limit
 	}
-	return min(limit, max(int64(compressed)*MaxInflateRatio, inflateRatioFloor)) // fits int64: compressed is at most limit / MaxInflateRatio, checked above
+	return min(limit, max(int64(compressed)*MaxInflateRatio, inflateRatioFloor)) //nolint:gosec // fits int64: compressed is at most limit / MaxInflateRatio, checked above
 }
 
 // Package is a zip archive an Office document is (ECMA-376 Part 2, 8 and

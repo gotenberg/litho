@@ -266,7 +266,7 @@ func (p *Package) parseEntry(ctx context.Context, name string, dst **Element, ne
 	mem := limits.BudgetFrom(ctx)
 	var declared int64
 	if f := p.files[name]; f != nil {
-		declared = int64(min(f.UncompressedSize64, MaxEntryBytes)) // fits int64: at most MaxEntryBytes
+		declared = int64(min(f.UncompressedSize64, MaxEntryBytes)) //nolint:gosec // fits int64: at most MaxEntryBytes
 	}
 	if err := mem.Charge(declared, "inflated package parts"); err != nil {
 		return fmt.Errorf("reading %s: %w", name, err)

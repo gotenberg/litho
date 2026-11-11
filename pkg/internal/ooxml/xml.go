@@ -158,7 +158,7 @@ func (p *Package) ParseXML(ctx context.Context, name string, understood []string
 	mem := limits.BudgetFrom(ctx)
 	var declared int64
 	if f := p.entry(name); f != nil {
-		declared = int64(min(f.UncompressedSize64, MaxPartBytes)) // fits int64: at most MaxPartBytes
+		declared = int64(min(f.UncompressedSize64, MaxPartBytes)) //nolint:gosec // fits int64: at most MaxPartBytes
 	}
 	if err := mem.Charge(declared, "inflated package parts"); err != nil {
 		return nil, fmt.Errorf("reading %s: %w", name, err)

@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
@@ -29,6 +30,7 @@ func TestConvert_MemoryBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	pictures := fstest.MapFS{"a.png": {Data: pic.Bytes()}}
+	docx := budgetDocx(t, 3000)
 	for name, tc := range map[string]struct {
 		format Format
 		src    string
@@ -38,6 +40,7 @@ func TestConvert_MemoryBudget(t *testing.T) {
 		"text glyph runs": {format: FormatText, src: text, holds: "glyph runs"},
 		"html styles":     {format: FormatHTML, src: strings.Repeat("<p>a paragraph of words</p>", 2000), holds: "computed styles"},
 		"csv cells":       {format: FormatCSV, src: cells.String(), holds: "cells"},
+		"docx paragraphs": {format: FormatDOCX, src: docx, holds: "XML trees"},
 		"html picture": {
 			format: FormatHTML, src: `<img src="a.png">`, holds: "decoded pictures",
 			opts: []ConvertOption{WithResources(pictures)},
@@ -60,4 +63,35 @@ func TestConvert_MemoryBudget(t *testing.T) {
 			}
 		})
 	}
+}
+
+// budgetDocx returns a WordprocessingML document of n short paragraphs.
+func budgetDocx(t *testing.T, n int) string {
+	t.Helper()
+	var body strings.Builder
+	for i := range n {
+		fmt.Fprintf(&body, `<w:p><w:r><w:t>Paragraph %d of words</w:t></w:r></w:p>`, i)
+	}
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for _, part := range []struct{ name, data string }{
+		{"[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+			`<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>` +
+			`<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`},
+		{"_rels/.rels", `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+			`<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`},
+		{"word/document.xml", `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>` + body.String() + `</w:body></w:document>`},
+	} {
+		w, err := zw.Create(part.name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(part.data)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String()
 }
