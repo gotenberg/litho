@@ -640,6 +640,8 @@ func WithFractionalFontMetrics(fractional bool) HTMLOption {
 // wants of any document without editing it: an @page size or margin, a
 // page-margin box, a font, a rule hiding an element. Several stylesheets
 // apply in the order given. Its relative URLs resolve as the document's do.
+// It styles the document only, not the templates of [WithHeaderTemplate]
+// and [WithFooterTemplate], which carry their own stylesheet.
 //
 // A stylesheet counts against the caps of [WithResources], and a construct
 // of it the engine does not support is reported as a warning, as one of the
