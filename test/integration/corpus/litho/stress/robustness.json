@@ -33,13 +33,14 @@
   "html-png-10": {
     "result": "pdf",
     "max_seconds": 20,
-    "why": "Ten distinct 12-megapixel PNGs: each is held decoded, 48 MB, only while it is encoded, then as its compressed samples; the account peaks near 100 MiB."
+    "why": "Ten distinct 12-megapixel PNGs: each is held decoded, 48 MB, only while it is encoded, then its compressed samples go to the conversion's picture file past 8 MiB; the account peaks near 55 MiB, the process near 280 MiB.",
+    "max_rss_mib": 512
   },
   "html-png-50": {
     "result": "pdf",
-    "max_rss_mib": 1536,
+    "max_rss_mib": 768,
     "max_seconds": 60,
-    "why": "Fifty distinct 12-megapixel PNGs, 2.4 GB of pixels decoded one at a time: the account peaks near 310 MiB; the converting process, which holds the source and the PDF it writes, near 1.3 GiB."
+    "why": "Fifty distinct 12-megapixel PNGs, 2.4 GB of pixels decoded one at a time, their compressed samples kept in the conversion's picture file past 8 MiB: the account peaks near 65 MiB and the Go heap near 230 MiB, where both held the samples, 310 MiB, before."
   },
   "html-jpeg-10": {
     "result": "pdf",
@@ -49,7 +50,7 @@
   "html-jpeg-50": {
     "result": "pdf",
     "max_seconds": 20,
-    "why": "Fifty distinct 12-megapixel JPEGs, written as they are: their 35 MB of files are charged, no pixel is decoded."
+    "why": "Fifty distinct 12-megapixel JPEGs, written as they are: the first 8 MiB of their files are held and charged, the rest wait in the conversion's picture file; no pixel is decoded."
   },
   "csv-100k": {
     "result": "pdf",

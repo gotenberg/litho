@@ -86,7 +86,8 @@
   },
   "hostile-path-flood": {
     "result": "pdf",
-    "why": "One custom geometry of 500,000 segments."
+    "max_rss_mib": 640,
+    "why": "One custom geometry of 500,000 segments: the process peaks near 430 MiB."
   },
   "hostile-rels-cycle": {
     "result": "pdf",
@@ -99,7 +100,8 @@
   },
   "hostile-shape-flood": {
     "result": "pdf",
-    "why": "100,000 shapes on one slide."
+    "max_rss_mib": 576,
+    "why": "100,000 shapes on one slide, 16,384 drawn: the process peaks near 400 MiB."
   },
   "hostile-slide-flood": {
     "result": "ErrConvertTooManyPages",
