@@ -192,9 +192,15 @@ func faceCovered(name string) bool {
 //
 // # Corpus evidence
 //
-//   - litho/docx: 114 of 119 Microsoft references draw Calibri Light or
-//     Aptos, the headings' theme fonts.
-//   - litho/pptx: 32 of 109; libreoffice/pptx: 23 of 311.
+//   - litho/docx: 117 of 119 Microsoft references draw a face with no
+//     stand-in, 114 of them Calibri Light, the headings' theme font; the
+//     others MS Mincho, Verdana, Cambria Math, Microsoft JhengHei.
+//   - litho/xlsx 13 of 88, litho/pptx 40 of 109, libreoffice/docx 58 of
+//     341, libreoffice/xlsx 24 of 252, libreoffice/pptx 40 of 311, poi/docx
+//     14 of 118, poi/xlsx 25 of 185, poi/pptx 10 of 52, openxmlsdk/docx 46 of
+//     249, openxmlsdk/xlsx 5 of 54, openxmlsdk/pptx 34 of 182: Calibri Light
+//     and Aptos most, then Tahoma, Cambria Math, Segoe UI and the East Asian
+//     system faces.
 func missingReferenceFaces(faces []string) []string {
 	var out []string
 	for _, f := range faces {

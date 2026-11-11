@@ -207,6 +207,23 @@ func convertTarget(ctx context.Context, src []byte, s htmlSettings, t outputTarg
 //
 // Everything runs in Prepare, where the oracles can batch; Run looks the
 // result up.
+//
+// # Corpus evidence
+//
+//   - litho/html, litho/docx, litho/xlsx, litho/pptx, libreoffice/odt,
+//     libreoffice/ods, libreoffice/odp (978 sources, 104 sampled, 1,872
+//     targets the oracles judged): no conversion error, no report that
+//     disagrees with the validator, no veraPDF verdict apart from litho's.
+//   - libreoffice/odp sd/LineStylesOwn.odp, sd/fillbitmap2.odp and litho/pptx
+//     fill-pattern: poppler draws page 1 apart from litho at all 18
+//     targets, the version targets included (11,641, 58,565 and 16,144
+//     pixels at v1.4), pages of pattern and bitmap fills: the renderers'
+//     disagreement rather than a target's.
+//   - libreoffice/odp sd/tdf148966-withflag.odp, libreoffice/ods
+//     sc/rich-text-cells.ods, libreoffice/odt odfimport/ooo77837-1.odt: pdfcpu
+//     refuses v1.4, a page's /Tabs, which PDF 1.5 introduced.
+//   - libreoffice/odt layout/many-paragraphs-per-page-in-6-columns.odt: a1b
+//     and a1a lose words of page 10, 9 "xxx" read as 1.
 type targetsFeature struct {
 	convert targetConverter
 	// vera validates a directory at a veraPDF flavour, [batchValidate]
