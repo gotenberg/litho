@@ -212,8 +212,9 @@ func Run(ctx context.Context, alloc *writer.ObjAllocator, trailer ast.PdfDict, c
 // # Corpus evidence
 //
 //   - litho/pdf glyphs_2b.pdf: two fonts draw from byte-identical programs. A
-//     subset of its own for each grew the output of flatten-form --compact
-//     from 2,066 to 2,561 bytes, since dedup no longer merged them.
+//     subset of its own for each grew the output of a form flattening
+//     written with object streams and dedup from 2,066 to 2,561 bytes, since
+//     dedup no longer merged them.
 func programGroups(ctx context.Context, g *graph) ([][]int, error) {
 	var nums []int
 	for num, slots := range g.refs {
