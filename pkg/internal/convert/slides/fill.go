@@ -129,19 +129,25 @@ func (b *builder) picture(pic *layout.Picture, r compose.Rect) []compose.Fragmen
 }
 
 // patternFill returns the pattern fill f of the area ops encloses within
-// box as Impress draws a DrawingML preset pattern: the hatch its import
-// maps the preset to, sets of parallel lines 0.1 point wide in the
-// foreground colour, over the background colour (ECMA-376 Part 1,
-// 20.1.8.47 pattFill, 20.1.10.51 ST_PresetPatternVal; LibreOffice's
-// oox/inc/drawingml/hatchmap.hxx). A preset the map lacks paints the
-// foreground at half opacity over the background.
+// box (ECMA-376 Part 1, 20.1.8.47 pattFill, 20.1.10.51
+// ST_PresetPatternVal). With PatternTile set it is Office's: the preset's
+// 8 by 8 tile at 96 pixels to the inch, through the shape engine. Without,
+// it is Impress's: the hatch its import maps the preset to, sets of
+// parallel lines 0.1 point wide in the foreground colour, over the
+// background colour (LibreOffice's oox/inc/drawingml/hatchmap.hxx), a
+// preset the map lacks painting the foreground at half opacity over the
+// background.
 //
 // # Corpus evidence
 //
-//   - libreoffice/pptx: sd-data/n820786.pptx's narVert rectangle prints vertical lines
-//     1.39 points apart at the page's 0.1-point width over its background,
-//     and none of its 48 pattern swatches prints a picture.
+//   - litho/pptx: background-pattern's dkDnDiag slide prints in PowerPoint's
+//     reference as diagonal bands 3 points apart, the preset's 4-pixel
+//     pitch at 96 pixels to the inch, where the 0.1-point hatch lines
+//     print the slide nearly white.
 func (b *builder) patternFill(f *Fill, box compose.Rect, ops []compose.PathOp) []compose.Fragment {
+	if f.PatternTile {
+		return shape.Fill(ops, box, shape.Paint{Kind: shape.PaintPattern, Pattern: f.Pattern, Color: colorOf(f.Color), Background: colorOf(f.Background)})
+	}
 	var out []compose.Fragment
 	if f.Background.A > 0 {
 		out = append(out, &compose.Path{Ops: ops, Fill: &compose.Fill{Color: colorOf(f.Background)}})

@@ -139,7 +139,8 @@ func TestFill_Kinds(t *testing.T) {
 	if len(tiled.Content) != 6 {
 		t.Errorf("%d tiles, want 6", len(tiled.Content))
 	}
-	lines := Fill(ops, box, Paint{Kind: PaintPattern, Pattern: "horz"})
+	ink, paper := compose.Color{A: 1}, compose.Color{R: 1, G: 1, B: 1, A: 1}
+	lines := Fill(ops, box, Paint{Kind: PaintPattern, Pattern: "horz", Color: ink, Background: paper})
 	g, ok := lines[1].(*compose.Group)
 	if len(lines) != 2 || !ok || g.Clip == nil || g.Content[0].(*compose.Path).Stroke == nil {
 		t.Fatalf("horz pattern %v", lines)
@@ -147,9 +148,16 @@ func TestFill_Kinds(t *testing.T) {
 	if n := len(g.Content[0].(*compose.Path).Ops); n != 2*5 {
 		t.Errorf("horz: %d ops, want 5 lines 6 pt apart", n)
 	}
-	blend := Fill(ops, box, Paint{Kind: PaintPattern, Pattern: "pct25"})
+	blend := Fill(ops, box, Paint{Kind: PaintPattern, Pattern: "pct25", Color: ink, Background: paper})
 	if g := blend[1].(*compose.Group); g.Opacity != 0.25 {
 		t.Errorf("pct25 opacity %g", g.Opacity)
+	}
+	// A transparent background or foreground paints nothing.
+	if clear := Fill(ops, box, Paint{Kind: PaintPattern, Pattern: "horz", Color: ink}); len(clear) != 1 {
+		t.Errorf("transparent background: %d fragments, want the lines alone", len(clear))
+	}
+	if clear := Fill(ops, box, Paint{Kind: PaintPattern, Pattern: "horz", Background: paper}); len(clear) != 1 {
+		t.Errorf("transparent foreground: %d fragments, want the background alone", len(clear))
 	}
 }
 

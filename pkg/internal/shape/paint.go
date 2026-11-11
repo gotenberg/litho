@@ -228,14 +228,23 @@ type linePattern struct {
 }
 
 // linePatterns are the line patterns of 20.1.10.51, by name, as their 8 by
-// 8 tiles draw them.
+// 8 tiles draw them. A diagonal's weight counts the pixels it inks along a
+// row, so its stroke is that weight over the square root of 2.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: fill-pattern's PowerPoint reference inks a quarter of
+//     ltDnDiag, half of dkDnDiag and three eighths of wdDnDiag, and 0.175
+//     of dnDiag and upDiag, which this table draws as lines 1.4 pixels wide
+//     every 8; drawn so, every line swatch's mean grey lies within 11 of
+//     the reference's on 255 but diagCross's, 18 lighter.
 var linePatterns = map[string]linePattern{ //nolint:gochecknoglobals // a read-only spec table, ECMA-376 Part 1, 20.1.10.51.
 	"horz": {horz: true, pitch: 8, weight: 1}, "vert": {vert: true, pitch: 8, weight: 1},
 	"ltHorz": {horz: true, pitch: 4, weight: 1}, "ltVert": {vert: true, pitch: 4, weight: 1},
 	"dkHorz": {horz: true, pitch: 4, weight: 2}, "dkVert": {vert: true, pitch: 4, weight: 2},
 	"narHorz": {horz: true, pitch: 2, weight: 1}, "narVert": {vert: true, pitch: 2, weight: 1},
 	"dashHorz": {horz: true, pitch: 4, weight: 1, dash: true}, "dashVert": {vert: true, pitch: 4, weight: 1, dash: true},
-	"dnDiag": {down: true, pitch: 4, weight: 1}, "upDiag": {up: true, pitch: 4, weight: 1},
+	"dnDiag": {down: true, pitch: 8, weight: 1.4}, "upDiag": {up: true, pitch: 8, weight: 1.4},
 	"ltDnDiag": {down: true, pitch: 4, weight: 1}, "ltUpDiag": {up: true, pitch: 4, weight: 1},
 	"dkDnDiag": {down: true, pitch: 4, weight: 2}, "dkUpDiag": {up: true, pitch: 4, weight: 2},
 	"wdDnDiag": {down: true, pitch: 8, weight: 3}, "wdUpDiag": {up: true, pitch: 8, weight: 3},
@@ -245,14 +254,23 @@ var linePatterns = map[string]linePattern{ //nolint:gochecknoglobals // a read-o
 }
 
 // patternCoverage is the share of a preset pattern's tile its foreground
-// inks, for the patterns drawn as a blend (20.1.10.51).
-var patternCoverage = map[string]float64{ //nolint:gochecknoglobals // a read-only spec table, ECMA-376 Part 1, 20.1.10.51.
-	"pct5": 0.05, "pct10": 0.10, "pct20": 0.20, "pct25": 0.25, "pct30": 0.30, "pct40": 0.40,
-	"pct50": 0.50, "pct60": 0.60, "pct70": 0.70, "pct75": 0.75, "pct80": 0.80, "pct90": 0.90,
-	"smCheck": 0.5, "lgCheck": 0.5, "dotGrid": 0.125, "smConfetti": 0.25, "lgConfetti": 0.375,
-	"horzBrick": 0.25, "diagBrick": 0.25, "solidDmnd": 0.5, "openDmnd": 0.25, "dotDmnd": 0.125,
-	"plaid": 0.5, "sphere": 0.5, "weave": 0.375, "divot": 0.125, "shingle": 0.25, "wave": 0.25,
-	"trellis": 0.5, "zigZag": 0.25,
+// inks, for the patterns drawn as a blend (20.1.10.51), as Office prints
+// them: the percentage presets do not ink their nominal share.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: fill-pattern's PowerPoint reference, each swatch's mean
+//     grey between its background's and its foreground's, inks pct5 0.04,
+//     pct10 0.07, pct20 0.13, pct25 0.25, pct30 0.38, pct40 0.47, pct50
+//     0.50, pct60 0.63, pct70 0.75, pct75 0.88, pct80 0.94, pct90 0.97, and
+//     the shares this table gives the others to within 0.01.
+var patternCoverage = map[string]float64{ //nolint:gochecknoglobals // a read-only table of Office's preset tiles, ECMA-376 Part 1, 20.1.10.51.
+	"pct5": 0.04, "pct10": 0.07, "pct20": 0.13, "pct25": 0.25, "pct30": 0.38, "pct40": 0.47,
+	"pct50": 0.50, "pct60": 0.63, "pct70": 0.75, "pct75": 0.88, "pct80": 0.94, "pct90": 0.97,
+	"smCheck": 0.5, "lgCheck": 0.5, "dotGrid": 0.13, "smConfetti": 0.13, "lgConfetti": 0.375,
+	"horzBrick": 0.37, "diagBrick": 0.18, "solidDmnd": 0.41, "openDmnd": 0.24, "dotDmnd": 0.09,
+	"plaid": 0.51, "sphere": 0.59, "weave": 0.31, "divot": 0.10, "shingle": 0.19, "wave": 0.21,
+	"trellis": 0.75, "zigZag": 0.25,
 }
 
 // maxPatternLines caps the lines of a line pattern. Anti-DoS guard, not
@@ -261,10 +279,21 @@ const maxPatternLines = 4096
 
 // patternFill paints a preset pattern.
 func patternFill(ops []compose.PathOp, box compose.Rect, p Paint, flat func(compose.Color) *compose.Path) []compose.Fragment {
-	out := []compose.Fragment{flat(p.Background)}
+	// A transparent colour paints nothing, and the backend refuses it.
+	var out []compose.Fragment
+	if p.Background.A > 0 {
+		out = append(out, flat(p.Background))
+	}
+	if p.Color.A <= 0 {
+		return out
+	}
 	if lp, ok := linePatterns[p.Pattern]; ok {
 		if lines := patternLines(box, lp); lines != nil {
-			stroke := &compose.Stroke{Color: p.Color, Width: lp.weight * patternPixel}
+			w := lp.weight * patternPixel
+			if lp.down || lp.up {
+				w /= math.Sqrt2
+			}
+			stroke := &compose.Stroke{Color: p.Color, Width: w}
 			if lp.dash {
 				stroke.Dash = []float64{4 * patternPixel, 4 * patternPixel}
 			}

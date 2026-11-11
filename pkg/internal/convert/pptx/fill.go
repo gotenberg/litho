@@ -84,7 +84,8 @@ func (r *reader) fillChoice(fc *fillCtx, k *ooxml.Element) (slides.Fill, bool) {
 		}
 		return slides.Fill{Kind: slides.FillPicture, Picture: pic, Tile: tile}, true
 	case "pattFill":
-		f := slides.Fill{Kind: slides.FillPattern, Pattern: attr(k, "prst"), Color: css.Color{A: 1}, Background: css.Color{R: 1, G: 1, B: 1, A: 1}}
+		// PowerPoint prints the preset's tile, not Impress's hatch.
+		f := slides.Fill{Kind: slides.FillPattern, Pattern: attr(k, "prst"), PatternTile: true, Color: css.Color{A: 1}, Background: css.Color{R: 1, G: 1, B: 1, A: 1}}
 		if f.Pattern == "" {
 			f.Pattern = "pct5"
 		}
