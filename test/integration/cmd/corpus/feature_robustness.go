@@ -179,14 +179,23 @@ func (f *robustnessFeature) FixtureTimeout(fixtureID string) time.Duration {
 	return perFileTimeout + time.Duration(e.MaxSeconds*float64(time.Second))
 }
 
-// Run converts the fixture in a child process and measures it.
+// Run converts the fixture in a child process and measures it. The child
+// keeps its temp files in a directory of its own, removed when it ends: a
+// child cut at its deadline is killed, and removes nothing itself.
 func (f *robustnessFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byte, error) {
 	e := f.expectation(fixtureID)
 	f.mu.RLock()
 	exe, fonts := f.exe, f.fonts
 	f.mu.RUnlock()
+	tmp, err := os.MkdirTemp("", "litho-robustness-*")
+	if err != nil {
+		return nil, fmt.Errorf("temp directory of the conversion: %w", err)
+	}
+	defer os.RemoveAll(tmp)
 	cmd := exec.CommandContext(ctx, exe, "convert-one", //nolint:gosec // this binary, a fixture path
 		"--fonts="+strings.Join(fonts, string(os.PathListSeparator)), "--forbid="+strings.Join(e.Forbid, "\n"), "--require="+strings.Join(e.Require, "\n"), srcPath)
+	// os.TempDir reads TMPDIR on Unix and TMP on Windows.
+	cmd.Env = append(os.Environ(), "TMPDIR="+tmp, "TMP="+tmp)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	start := time.Now()
