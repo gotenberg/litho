@@ -708,6 +708,13 @@ type Drawing struct {
 	// decorative flag of Office 2019, adec:decorative): it is drawn as an
 	// artifact, outside the structure tree.
 	Decorative bool
+	// Shape marks a drawing of shapes alone, geometry, lines and text
+	// boxes with no picture or chart among them (ECMA-376 Part 1, 20.5.2.29
+	// sp, 20.5.2.13 cxnSp, 20.5.2.17 grpSp; ODF 1.3 Part 3, 10.3 drawing
+	// shapes). One without an Alt is drawn as an artifact, as a slide's
+	// and a text document's undescribed shapes are; one with an Alt is a
+	// Figure that carries it.
+	Shape bool
 	// Unbounded lets the offsets of From and To run past their cells, and
 	// below 0 to the cells above and left, as Calc reads the anchors of an
 	// OpenDocument spreadsheet (ODF 1.3 Part 3, 19.663 table:end-x and
