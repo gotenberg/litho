@@ -205,10 +205,10 @@ func (t convertTarget) profiles() string {
 // before writeTarget returns, on every path.
 //
 // A residual is not an error: the file is written, claims the profile, and
-// the report lists what the profile still finds. ISO 19005-2, 6.1.1 and ISO
-// 14289-1, 5 judge a file, not the process that wrote it, so the caller
+// the report lists what the profile still finds. ISO 19005-2, clause 5 and ISO
+// 14289-1, clause 5 judge a file, not the process that wrote it, so the caller
 // that asked for the profile decides what a residual means for its use.
-func writeTarget(ctx context.Context, doc *compose.Document, dst io.Writer, t convertTarget, o *convertOptions) (_ *RemediationReport, err error) {
+func writeTarget(ctx context.Context, doc *compose.Document, dst io.Writer, t convertTarget, o *convertOptions) (*RemediationReport, error) {
 	opts := compose.Options{Logger: o.logger, Version: t.version, TempDir: o.tempDir, Spool: o.spool}
 	if !t.conforming() {
 		if err := compose.Write(ctx, doc, dst, opts); err != nil {
