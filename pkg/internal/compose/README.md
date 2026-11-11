@@ -177,10 +177,8 @@ Wave 4 depends on wave 0 alone, so the Office converters run beside waves
 Status: waves 0 to 6 are done, then waves 7 and 8, two fidelity rounds
 over every corpus, and wave 9, the output targets.
 `test/integration/baseline.json` records the oracle scores per fixture;
-the converter cells score a tree in about twenty minutes (`go run
-./test/integration/cmd/corpus run
---feature=reftest,draw,svgdraw,diff,robustness`), and the `targets` cell
-in about eighty more.
+the whole matrix, the converter cells and the `targets` cell included,
+scores a tree in about forty-five minutes on ten cores (`make corpus`).
 Wave 1 also took positioning, transforms, gradients, box-shadow, outlines
 and generated content from wave 3, and wave 2 took flexbox, because the
 reftests, the real pages and Chromium's header template lean on them. Wave
