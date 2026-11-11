@@ -282,29 +282,7 @@ func runCorpus(ctx context.Context, name string, opts runOptions) (*CorpusReport
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		fr := &FeatureReport{
-			Name:         feat.Name(),
-			GoldenSource: feat.GoldenSource(),
-		}
-		if _, ok := feat.(OutcomeFeature); ok {
-			fr.RecordsOutcomes = true
-		}
-		if sf, ok := feat.(ScoreFeature); ok {
-			fr.ScoreTolerance = sf.ScoreTolerance()
-		}
-		if rw, ok := feat.(ReportWriter); ok {
-			dir := ""
-			if opts.reportDir != "" {
-				dir = filepath.Join(opts.reportDir, manifest.Name, feat.Name())
-			}
-			rw.SetReportDir(dir)
-		}
-		if mr, ok := feat.(ManifestReader); ok {
-			mr.SetManifest(manifest)
-		}
-		if rt, ok := feat.(RunTuner); ok {
-			rt.SetRunOptions(opts.workers, opts.oracleSample)
-		}
+		fr := setUpFeature(feat, manifest, opts)
 		goldenDir := manifest.GoldenDir(feat.Name())
 		if gb, ok := feat.(GoldenBorrower); ok {
 			goldenDir = manifest.GoldenDir(gb.GoldensOf())
@@ -351,6 +329,37 @@ func runCorpus(ctx context.Context, name string, opts runOptions) (*CorpusReport
 		report.Features = append(report.Features, fr)
 	}
 	return report, nil
+}
+
+// setUpFeature hands feat the corpus manifest and the run's options, and
+// returns the report of its cell. The report reads the feature's golden
+// source after the manifest, which names the engine of a corpus's
+// references ([diffFeature.GoldenSource]).
+func setUpFeature(feat Feature, manifest *Manifest, opts runOptions) *FeatureReport {
+	if rw, ok := feat.(ReportWriter); ok {
+		dir := ""
+		if opts.reportDir != "" {
+			dir = filepath.Join(opts.reportDir, manifest.Name, feat.Name())
+		}
+		rw.SetReportDir(dir)
+	}
+	if mr, ok := feat.(ManifestReader); ok {
+		mr.SetManifest(manifest)
+	}
+	if rt, ok := feat.(RunTuner); ok {
+		rt.SetRunOptions(opts.workers, opts.oracleSample)
+	}
+	fr := &FeatureReport{
+		Name:         feat.Name(),
+		GoldenSource: feat.GoldenSource(),
+	}
+	if _, ok := feat.(OutcomeFeature); ok {
+		fr.RecordsOutcomes = true
+	}
+	if sf, ok := feat.(ScoreFeature); ok {
+		fr.ScoreTolerance = sf.ScoreTolerance()
+	}
+	return fr
 }
 
 // runFeatureAcrossFixtures dispatches one feature over every fixture

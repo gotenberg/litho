@@ -313,6 +313,18 @@ func TestDiffFeature_GoldenSourceNamesTheReferenceEngine(t *testing.T) {
 	}
 }
 
+// TestSetUpFeature_NamesTheCorpusEngine locks that a diff cell's report
+// names the engine of its corpus's references, read after the manifest.
+func TestSetUpFeature_NamesTheCorpusEngine(t *testing.T) {
+	t.Parallel()
+	for engine, want := range map[string]string{engineChromium: "chromium", engineLibreOffice: "libreoffice", engineMicrosoft: "microsoft"} {
+		m := &Manifest{Name: "test/" + engine, References: &ReferenceSpec{Dir: "references", Engine: engine}}
+		if got := setUpFeature(newDiffFeature(), m, runOptions{}).GoldenSource; got != want {
+			t.Errorf("%s corpus: report names %q, want %q", engine, got, want)
+		}
+	}
+}
+
 func TestRefusalCause_KeepsTheErrorCode(t *testing.T) {
 	t.Parallel()
 
