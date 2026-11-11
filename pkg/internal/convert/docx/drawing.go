@@ -174,9 +174,8 @@ func (d *document) loadPicture(part, id string) *layout.Picture {
 		}
 		return nil
 	}
-	if pic.Source != nil && pic.Source.Image != nil {
-		b := pic.Source.Image.Bounds()
-		d.pixels += int64(b.Dx()) * int64(b.Dy())
+	if pic.Source != nil && len(pic.Source.JPEG) == 0 {
+		d.pixels += int64(pic.Source.Width) * int64(pic.Source.Height)
 		if d.pixels > maxTotalPixels {
 			d.warn("too-large", "pictures past the conversion's pixel budget are left out")
 			return nil

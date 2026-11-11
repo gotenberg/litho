@@ -52,9 +52,10 @@ const maxStructElems = 1_000_000
 const maxTreeDepth = 256
 
 // maxImagePixels caps the pixels of one image, width times height. Anti-DoS
-// guard, not spec-mandated: Write holds the samples of a decoded picture in
-// memory, 4 bytes per pixel at most, so the cap bounds that buffer to 256
-// MiB. 8192 by 8192 pixels, a 27-inch print at 300 dpi, fits.
+// guard, not spec-mandated: [EncodeImage] reads a decoded picture of up to 4
+// bytes a pixel and [ImageSource.Decode] makes one, so the cap bounds that
+// picture to 256 MiB. 8192 by 8192 pixels, a 27-inch print at 300 dpi,
+// fits.
 const maxImagePixels = 1 << 26
 
 // maxPageSize is the largest page side in points: ISO 32000-1, Annex C.2,

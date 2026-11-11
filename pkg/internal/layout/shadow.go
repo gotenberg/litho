@@ -206,8 +206,12 @@ func (p *painter) blurred(shape []compose.PathOp, area compose.Rect, blur float6
 		img.Pix[4*i+2] = b8
 		img.Pix[4*i+3] = uint8(float64(v)*col.A + 0.5)
 	}
+	src, err := compose.EncodeImage(p.e.ctx, img)
+	if err != nil {
+		return nil
+	}
 	rect := compose.Rect{X: bounds.X, Y: bounds.Y, Width: float64(w) / k, Height: float64(h) / k}
-	return &compose.Image{Rect: rect, Source: &compose.ImageSource{Image: img}}
+	return &compose.Image{Rect: rect, Source: src}
 }
 
 // rasterize draws the path ops, in flow coordinates, into a w by h alpha

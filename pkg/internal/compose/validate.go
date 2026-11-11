@@ -18,7 +18,7 @@ import (
 // [ErrNotATree] or [ErrLimitExceeded].
 //
 // Validate reads d and never mutates it. It reads the header of each JPEG
-// and the bounds of each picture, and loads no font: a face whose program
+// and the size of each picture, decompresses no samples, and loads no font: a face whose program
 // does not load fails [Write], not Validate.
 func (d *Document) Validate() error {
 	if len(d.Pages) == 0 {
@@ -171,17 +171,17 @@ func (v *validator) image(img *Image) error {
 	return v.parent(img.Parent)
 }
 
-// checkSource checks that src holds exactly one picture, with pixels and
-// within [maxImagePixels].
+// checkSource checks that src holds one picture, a JPEG whose header
+// matches its size or compressed samples, with pixels and within
+// [maxImagePixels].
 func checkSource(src *ImageSource) error {
-	var w, h int
-	switch {
-	case src.Image != nil && len(src.JPEG) > 0:
-		return fmt.Errorf("%w: source holds both Image and JPEG", ErrInvalidImage)
-	case src.Image != nil:
-		b := src.Image.Bounds()
-		w, h = b.Dx(), b.Dy()
-	case len(src.JPEG) > 0:
+	if err := checkPixels(src.Width, src.Height); err != nil {
+		return err
+	}
+	if len(src.JPEG) > 0 {
+		if src.Samples != nil || src.Alpha != nil || src.Gray {
+			return fmt.Errorf("%w: source holds both a JPEG and samples", ErrInvalidImage)
+		}
 		cfg, err := jpeg.DecodeConfig(bytes.NewReader(src.JPEG))
 		if err != nil {
 			return fmt.Errorf("%w: JPEG header: %w", ErrInvalidImage, err)
@@ -189,17 +189,16 @@ func checkSource(src *ImageSource) error {
 		if _, err := jpegColorSpace(cfg.ColorModel); err != nil {
 			return err
 		}
-		w, h = cfg.Width, cfg.Height
-	default:
-		return fmt.Errorf("%w: source holds neither Image nor JPEG", ErrInvalidImage)
+		if cfg.Width != src.Width || cfg.Height != src.Height {
+			return fmt.Errorf("%w: JPEG of %d by %d pixels in a source of %d by %d", ErrInvalidImage, cfg.Width, cfg.Height, src.Width, src.Height)
+		}
+		return nil
 	}
-	if w <= 0 || h <= 0 {
-		return fmt.Errorf("%w: %d by %d pixels", ErrInvalidImage, w, h)
+	if len(src.Samples) == 0 {
+		return fmt.Errorf("%w: source holds neither a JPEG nor samples", ErrInvalidImage)
 	}
-	// Dividing keeps the comparison free of the overflow w*h risks on a
-	// 32-bit int.
-	if w > maxImagePixels/h {
-		return fmt.Errorf("%w: image of %d by %d pixels, at most %d pixels", ErrLimitExceeded, w, h, maxImagePixels)
+	if src.Gray && src.Alpha != nil {
+		return fmt.Errorf("%w: gray source with an alpha", ErrInvalidImage)
 	}
 	return nil
 }

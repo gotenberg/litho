@@ -1,6 +1,7 @@
 package slides
 
 import (
+	"context"
 	"image"
 	"math"
 
@@ -85,9 +86,14 @@ func (g effectGrid) radius(r float64) int {
 }
 
 // image returns the bitmap img placed over the grid's area, in slide
-// coordinates.
-func (g effectGrid) image(img image.Image) compose.Fragment {
-	return &compose.Image{Rect: g.box, Source: &compose.ImageSource{Image: img}}
+// coordinates, encoded at once so the bitmap is dropped; nil when ctx
+// ends first.
+func (g effectGrid) image(ctx context.Context, img image.Image) compose.Fragment {
+	src, err := compose.EncodeImage(ctx, img)
+	if err != nil {
+		return nil
+	}
+	return &compose.Image{Rect: g.box, Source: src}
 }
 
 // silhouette is what a shape paints, as the filters see it: its painted
@@ -377,7 +383,7 @@ func (b *builder) paintEffects(s *Shape, own, text []compose.Fragment, toSlide c
 	sil := silhouetteOf(own, toSlide)
 	if sil == nil {
 		if s.Shadow != nil && s.Shadow.Opacity > 0 && len(text) > 0 && !(s.Shadow.Blur > 0) {
-			return group(back, b.hardShadow(s.Shadow, nil, text, toSlide, compose.Rect{})), nil
+			return group(back, b.hardShadow(b.ctx, s.Shadow, nil, text, toSlide, compose.Rect{})), nil
 		}
 		if s.Shadow != nil && s.Shadow.Blur > 0 && len(text) > 0 {
 			b.warn(CodeEffect, "the shadow of the text of "+quote(s.Name)+" is not drawn")
@@ -389,7 +395,7 @@ func (b *builder) paintEffects(s *Shape, own, text []compose.Fragment, toSlide c
 	var top []compose.Fragment
 	var drawn []compose.Fragment
 	if s.SoftEdge > 0 {
-		if img := p.softEdge(); img != nil {
+		if img := p.softEdge(b.ctx); img != nil {
 			drawn = []compose.Fragment{img}
 		} else {
 			b.warn(CodeEffect, "the soft edge of "+quote(s.Name)+" is not drawn: its fill is not a single colour")
@@ -398,17 +404,17 @@ func (b *builder) paintEffects(s *Shape, own, text []compose.Fragment, toSlide c
 	var glows []compose.Fragment
 	if g := s.Glow; g != nil && g.Radius > 0 && g.Opacity > 0 {
 		if twice {
-			if img := p.glow(true); img != nil {
+			if img := p.glow(b.ctx, true); img != nil {
 				glows = append(glows, img)
 			}
 		}
-		if img := p.glow(false); img != nil {
+		if img := p.glow(b.ctx, false); img != nil {
 			glows = append(glows, img)
 		}
 	}
 	if sh := s.Shadow; sh != nil && sh.Opacity > 0 {
 		if sh.Blur > 0 {
-			if img := p.shadow(); img != nil {
+			if img := p.shadow(b.ctx); img != nil {
 				top = append(top, img)
 			}
 			if len(text) > 0 {
@@ -419,9 +425,9 @@ func (b *builder) paintEffects(s *Shape, own, text []compose.Fragment, toSlide c
 			if drawn != nil {
 				hard = nil
 			}
-			top = append(top, b.hardShadow(sh, glows, append(append([]compose.Fragment(nil), hard...), text...), toSlide, sil.bounds)...)
+			top = append(top, b.hardShadow(b.ctx, sh, glows, append(append([]compose.Fragment(nil), hard...), text...), toSlide, sil.bounds)...)
 			if drawn != nil {
-				top = append(top, p.recolorBitmap(drawn[0], sh)...)
+				top = append(top, p.recolorBitmap(b.ctx, drawn[0], sh)...)
 			}
 		}
 	}
@@ -460,7 +466,7 @@ func shadowMatrix(sh *Shadow, bounds compose.Rect) compose.Matrix {
 // by toSlide) and of the glow bitmaps (in slide coordinates) in the
 // shadow's colour, moved by the shadow's transform, at its opacity, in
 // slide coordinates.
-func (b *builder) hardShadow(sh *Shadow, glows, frags []compose.Fragment, toSlide compose.Matrix, bounds compose.Rect) []compose.Fragment {
+func (b *builder) hardShadow(ctx context.Context, sh *Shadow, glows, frags []compose.Fragment, toSlide compose.Matrix, bounds compose.Rect) []compose.Fragment {
 	if bounds.Width == 0 && bounds.Height == 0 {
 		bounds = transformRect(toSlide, compose.Rect{})
 	}
@@ -469,8 +475,8 @@ func (b *builder) hardShadow(sh *Shadow, glows, frags []compose.Fragment, toSlid
 	var content []compose.Fragment
 	for _, g := range glows {
 		if img, ok := g.(*compose.Image); ok {
-			if src, ok := img.Source.Image.(*image.NRGBA); ok {
-				content = append(content, &compose.Image{Rect: img.Rect, Source: &compose.ImageSource{Image: retint(src, c)}})
+			if src := retint(ctx, img.Source, c); src != nil {
+				content = append(content, &compose.Image{Rect: img.Rect, Source: src})
 			}
 		}
 	}
@@ -484,28 +490,45 @@ func (b *builder) hardShadow(sh *Shadow, glows, frags []compose.Fragment, toSlid
 
 // recolorBitmap returns the hard shadow of a soft edge's bitmap in slide
 // coordinates: its alpha in the shadow's colour, moved and faded.
-func (p *effectPlan) recolorBitmap(f compose.Fragment, sh *Shadow) []compose.Fragment {
+func (p *effectPlan) recolorBitmap(ctx context.Context, f compose.Fragment, sh *Shadow) []compose.Fragment {
 	img, ok := f.(*compose.Image)
-	if !ok {
-		return nil
-	}
-	src, ok := img.Source.Image.(*image.NRGBA)
 	if !ok {
 		return nil
 	}
 	c := colorOf(sh.Color)
 	c.A = 1
-	cp := &compose.Image{Rect: img.Rect, Source: &compose.ImageSource{Image: retint(src, c)}}
+	src := retint(ctx, img.Source, c)
+	if src == nil {
+		return nil
+	}
+	cp := &compose.Image{Rect: img.Rect, Source: src}
 	return []compose.Fragment{&compose.Group{Transform: shadowMatrix(sh, p.sil.bounds), Opacity: min(sh.Opacity, 1), Content: []compose.Fragment{cp}}}
 }
 
-// retint returns img in the one colour c, its alpha kept.
-func retint(img *image.NRGBA, c compose.Color) *image.NRGBA {
+// retint returns the effect bitmap src in the one colour c, its alpha
+// kept; nil for a picture that is not an effect bitmap or when ctx ends
+// first.
+func retint(ctx context.Context, src *compose.ImageSource, c compose.Color) *compose.ImageSource {
+	if src == nil || len(src.JPEG) > 0 || src.Gray {
+		return nil
+	}
+	pixels, err := src.Decode(ctx)
+	if err != nil {
+		return nil
+	}
+	img, ok := pixels.(*image.NRGBA)
+	if !ok {
+		return nil
+	}
 	a := image.NewAlpha(img.Bounds())
 	for i := range a.Pix {
 		a.Pix[i] = img.Pix[4*i+3]
 	}
-	return raster.Tint(a, c)
+	out, err := compose.EncodeImage(ctx, raster.Tint(a, c))
+	if err != nil {
+		return nil
+	}
+	return out
 }
 
 // maxRecolorDepth bounds the groups recolor descends. Anti-DoS guard, not
@@ -576,7 +599,7 @@ func (p *effectPlan) glowMask(g effectGrid, tr compose.Matrix, outer bool) *imag
 //     a bitmap over its outline grown by 11 pt, at 102 of 255 inside the
 //     outline, fading to 0 at the bitmap's edge over 30 pixels at 2.7
 //     pixels a point.
-func (p *effectPlan) glow(outer bool) compose.Fragment {
+func (p *effectPlan) glow(ctx context.Context, outer bool) compose.Fragment {
 	gl := p.s.Glow
 	reach := gl.Radius
 	if outer {
@@ -593,7 +616,7 @@ func (p *effectPlan) glow(outer bool) compose.Fragment {
 	mask := p.glowMask(g, compose.Identity, outer)
 	c := colorOf(gl.Color)
 	c.A = min(gl.Opacity, 1)
-	return g.image(raster.Tint(mask, c))
+	return g.image(ctx, raster.Tint(mask, c))
 }
 
 // softMask returns a soft edge's coverage on g: the silhouette made
@@ -625,7 +648,7 @@ func (p *effectPlan) softMask(g effectGrid, tr compose.Matrix) *image.Alpha {
 //   - libreoffice/pptx: sd/shape-soft-edges's diamond and rectangle print as bitmaps
 //     of their outlines' bounds, the line inside, the text on top; the
 //     rectangle, 10 pt soft, is transparent 3 pt in and opaque 20 pt in.
-func (p *effectPlan) softEdge() compose.Fragment {
+func (p *effectPlan) softEdge(ctx context.Context) compose.Fragment {
 	if !p.sil.flat {
 		return nil
 	}
@@ -651,7 +674,7 @@ func (p *effectPlan) softEdge() compose.Fragment {
 			img.Pix[4*i+3] = v
 		}
 	}
-	return g.image(img)
+	return g.image(ctx, img)
 }
 
 // shadow returns the bitmap of the shape's blurred shadow in slide
@@ -669,7 +692,7 @@ func (p *effectPlan) softEdge() compose.Fragment {
 //     outline, 32 of 255 a quarter of the way.
 //   - probe, pptx: a rectangle reaching past the slide's right edge prints its
 //     shadow's bitmap cut 6 pt, its blur, past the edge.
-func (p *effectPlan) shadow() compose.Fragment {
+func (p *effectPlan) shadow(ctx context.Context) compose.Fragment {
 	sh := p.s.Shadow
 	tr := shadowMatrix(sh, p.sil.bounds)
 	reach := p.sil.bounds
@@ -707,7 +730,7 @@ func (p *effectPlan) shadow() compose.Fragment {
 	mask = raster.Blur(mask, raster.Tent(float64(g.radius(sh.Blur))))
 	c := colorOf(sh.Color)
 	c.A = min(sh.Opacity, 1)
-	return g.image(raster.Tint(mask, c))
+	return g.image(ctx, raster.Tint(mask, c))
 }
 
 // scale multiplies the coverage of m by f, in place.

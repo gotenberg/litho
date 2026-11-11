@@ -141,7 +141,12 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 	b.pixels += px
 	pic := &layout.Picture{Width: float64(cfg.Width) * css.Pt, Height: float64(cfg.Height) * css.Pt}
 	if format == "jpeg" && dctModel(cfg.ColorModel) {
-		pic.Source = &compose.ImageSource{JPEG: data}
+		src, err := compose.JPEGImage(data)
+		if err != nil {
+			b.warn("picture-decode", "a jpeg picture does not decode")
+			return nil
+		}
+		pic.Source = src
 		return pic
 	}
 	img, _, err := image.Decode(bytes.NewReader(data))
@@ -149,7 +154,12 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 		b.warn("picture-decode", fmt.Sprintf("a %s picture does not decode", format))
 		return nil
 	}
-	pic.Source = &compose.ImageSource{Image: img}
+	src, err := compose.EncodeImage(b.ctx, img)
+	if err != nil {
+		b.warn("picture-decode", fmt.Sprintf("a %s picture does not encode: %v", format, err))
+		return nil
+	}
+	pic.Source = src
 	return pic
 }
 

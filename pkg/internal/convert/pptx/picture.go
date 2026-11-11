@@ -56,7 +56,7 @@ func (r *reader) picture(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	}
 	ref := ooxml.ParsePicture(asPicture(el))
 	fc := &fillCtx{sc: c.sc, part: c.part, group: c.group}
-	pic := blipEffects(r.pictureOf(c.part, ref), kid(el, "blipFill").Child(ooxml.NSA, "blip"), fc.colorChoice)
+	pic := blipEffects(r.ctx, r.pictureOf(c.part, ref), kid(el, "blipFill").Child(ooxml.NSA, "blip"), fc.colorChoice)
 	if pic == nil {
 		return nil
 	}
@@ -177,9 +177,8 @@ func (r *reader) loadPicture(part, id string) *layout.Picture {
 		}
 		return nil
 	}
-	if pic.Source != nil && pic.Source.Image != nil {
-		b := pic.Source.Image.Bounds()
-		r.pixels += int64(b.Dx()) * int64(b.Dy())
+	if pic.Source != nil && len(pic.Source.JPEG) == 0 {
+		r.pixels += int64(pic.Source.Width) * int64(pic.Source.Height)
 		if r.pixels > maxTotalPixels {
 			r.warn("too-large", "pictures past the conversion's pixel budget are left out")
 			return nil

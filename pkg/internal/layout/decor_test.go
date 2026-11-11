@@ -6,7 +6,6 @@ import (
 	"image/color"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 )
 
@@ -140,7 +139,7 @@ func imageLoader() func(context.Context, string) (*Picture, error) {
 	img := image.NewNRGBA(image.Rect(0, 0, 2, 1))
 	img.Set(0, 0, color.NRGBA{R: 255, A: 255})
 	img.Set(1, 0, color.NRGBA{B: 255, A: 255})
-	p := &Picture{Source: &compose.ImageSource{Image: img}, Width: px(2), Height: px(1)}
+	p := &Picture{Source: source(img), Width: px(2), Height: px(1)}
 	return func(context.Context, string) (*Picture, error) { return p, nil }
 }
 

@@ -192,7 +192,7 @@ func TestConvert_HeaderFooter(t *testing.T) {
 // the cells, and the chart hook's warning.
 func TestConvert_Drawings(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
-	pic := &layout.Picture{Source: &compose.ImageSource{Image: img}, Width: 2, Height: 2}
+	pic := &layout.Picture{Source: source(t, img), Width: 2, Height: 2}
 	sh := &Sheet{
 		Name: "S", DefaultColumnWidth: 50, Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "x", nil)}}},
 		Drawings: []Drawing{
@@ -359,4 +359,15 @@ func TestConvert_InvalidCircle(t *testing.T) {
 	if p := found.Ops[0].P[0]; !near(p.X, 128+circleGrowX, 1e-6) || !near(found.Stroke.Width, 1.559, 0.001) {
 		t.Errorf("circle starts at %+v, width %v", p, found.Stroke.Width)
 	}
+}
+
+// source returns img encoded as an image source, failing t when it does
+// not encode.
+func source(t testing.TB, img image.Image) *compose.ImageSource {
+	t.Helper()
+	src, err := compose.EncodeImage(context.Background(), img)
+	if err != nil {
+		t.Fatalf("EncodeImage: %v", err)
+	}
+	return src
 }

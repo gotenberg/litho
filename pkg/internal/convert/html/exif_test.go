@@ -143,8 +143,8 @@ func TestPrepare_AppliesEXIFOrientation(t *testing.T) {
 // checkSize fails the test when the decoded picture of s is not w by h.
 func checkSize(t *testing.T, id string, s *compose.ImageSource, w, h int) {
 	t.Helper()
-	if s.Image == nil || s.Image.Bounds().Dx() != w || s.Image.Bounds().Dy() != h {
-		t.Errorf("%s: decoded picture %v", id, s.Image)
+	if len(s.JPEG) > 0 || s.Width != w || s.Height != h {
+		t.Errorf("%s: picture of %d by %d, JPEG %v", id, s.Width, s.Height, len(s.JPEG) > 0)
 	}
 }
 

@@ -74,8 +74,21 @@ func (p *painter) borderImage(b *box, st *css.Style, r compose.Rect, bd [4]float
 	pieces := ninePieces(bi, src, slices, widths, area)
 	g := &ditem{group: true, opacity: 1}
 	tiles := 0
+	// The picture is decoded once for the nine pieces, on the first cut,
+	// and dropped with them.
+	var pixels image.Image
+	decode := func() image.Image {
+		if pixels == nil {
+			img, err := src.pic.Source.Decode(p.e.ctx)
+			if err != nil {
+				return nil
+			}
+			pixels = img
+		}
+		return pixels
+	}
 	for _, pc := range pieces {
-		pc.crop = p.cropSource(src.pic, pc.src)
+		pc.crop = p.cropSource(src.pic, pc.src, decode)
 		for _, t := range pc.tiles() {
 			if tiles == maxBackgroundTiles {
 				p.e.warn(codeBackgroundTiles, fmt.Sprintf("a border image repeated more than %d times was cut short", maxBackgroundTiles), r.Y)
@@ -450,18 +463,19 @@ type cropKey struct {
 
 // cropSource returns the part r, in points, of the raster picture pic as
 // an image of its own, its edges rounded to whole image pixels; nil for a
-// vector picture, a JPEG kept as it is, or an empty part. The parts are
-// cut once per paint.
-func (p *painter) cropSource(pic *Picture, r compose.Rect) *compose.ImageSource {
-	if pic == nil || pic.Source == nil || pic.Source.Image == nil || !(pic.Width > 0) || !(pic.Height > 0) {
+// vector picture, a JPEG kept as it is, an empty part, or pixels that do
+// not decode. decode returns the picture's pixels, nil when they do not
+// decode; it is called only for a part to cut. The parts are cut once per
+// paint.
+func (p *painter) cropSource(pic *Picture, r compose.Rect, decode func() image.Image) *compose.ImageSource {
+	if pic == nil || pic.Source == nil || len(pic.Source.JPEG) > 0 || !(pic.Width > 0) || !(pic.Height > 0) {
 		return nil
 	}
-	img := pic.Source.Image
-	bounds := img.Bounds()
+	bounds := image.Rect(0, 0, pic.Source.Width, pic.Source.Height)
 	kx, ky := float64(bounds.Dx())/pic.Width, float64(bounds.Dy())/pic.Height
 	rect := image.Rect(
-		bounds.Min.X+int(math.Round(r.X*kx)), bounds.Min.Y+int(math.Round(r.Y*ky)),
-		bounds.Min.X+int(math.Round((r.X+r.Width)*kx)), bounds.Min.Y+int(math.Round((r.Y+r.Height)*ky)),
+		int(math.Round(r.X*kx)), int(math.Round(r.Y*ky)),
+		int(math.Round((r.X+r.Width)*kx)), int(math.Round((r.Y+r.Height)*ky)),
 	).Intersect(bounds)
 	if rect.Empty() {
 		return nil
@@ -473,9 +487,16 @@ func (p *painter) cropSource(pic *Picture, r compose.Rect) *compose.ImageSource 
 	if c, ok := p.crops[key]; ok {
 		return c
 	}
+	img := decode()
+	if img == nil {
+		return nil
+	}
 	out := image.NewNRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))
 	draw.Draw(out, out.Bounds(), img, rect.Min, draw.Src)
-	c := &compose.ImageSource{Image: out}
+	c, err := compose.EncodeImage(p.e.ctx, out)
+	if err != nil {
+		return nil
+	}
 	if p.crops == nil {
 		p.crops = map[cropKey]*compose.ImageSource{}
 	}

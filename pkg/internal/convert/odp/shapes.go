@@ -237,7 +237,7 @@ func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 				continue
 			}
 			s.Kind = slides.KindPicture
-			s.Picture = r.cropped(adjusted(pic, ss.graphic), ss.graphic.Get("fo:clip"))
+			s.Picture = r.cropped(adjusted(r.ctx, pic, ss.graphic), ss.graphic.Get("fo:clip"))
 			if v, ok := odf.Percent(ss.graphic.Get("draw:image-opacity")); ok && v < 1 {
 				s.Picture = translucent(s.Picture, max(v, 0))
 			}

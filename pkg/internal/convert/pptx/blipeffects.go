@@ -1,10 +1,9 @@
 package pptx
 
 import (
-	"bytes"
+	"context"
 	"image"
 	imgcolor "image/color"
-	"image/jpeg"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -29,7 +28,7 @@ import (
 //   - libreoffice/pptx: sd/tdf112209's picture fill of grayscl prints grey;
 //     sd/tdf123684's background picture of duotone, phClr shaded to 69%
 //     then tinted, prints dark teal.
-func blipEffects(pic *layout.Picture, blip *ooxml.Element, color func(*ooxml.Element) (css.Color, bool)) *layout.Picture {
+func blipEffects(ctx context.Context, pic *layout.Picture, blip *ooxml.Element, color func(*ooxml.Element) (css.Color, bool)) *layout.Picture {
 	if pic == nil || pic.Source == nil || blip == nil {
 		return pic
 	}
@@ -65,13 +64,9 @@ func blipEffects(pic *layout.Picture, blip *ooxml.Element, color func(*ooxml.Ele
 	if !grey && threshold < 0 && duo == nil && lum == 0 && con == 0 {
 		return pic
 	}
-	src := pic.Source.Image
-	if src == nil {
-		im, err := jpeg.Decode(bytes.NewReader(pic.Source.JPEG))
-		if err != nil {
-			return pic
-		}
-		src = im
+	src, err := pic.Source.Decode(ctx)
+	if err != nil {
+		return pic
 	}
 	scale := 1.0
 	if con < 0 {
@@ -111,5 +106,9 @@ func blipEffects(pic *layout.Picture, blip *ooxml.Element, color func(*ooxml.Ele
 			out.SetNRGBA(x-b.Min.X, y-b.Min.Y, c)
 		}
 	}
-	return &layout.Picture{Width: pic.Width, Height: pic.Height, NoRatio: pic.NoRatio, Source: &compose.ImageSource{Image: out}}
+	enc, err := compose.EncodeImage(ctx, out)
+	if err != nil {
+		return pic
+	}
+	return &layout.Picture{Width: pic.Width, Height: pic.Height, NoRatio: pic.NoRatio, Source: enc}
 }

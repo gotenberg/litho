@@ -386,7 +386,7 @@ func (p *pageWriter) image(ctx context.Context, img *Image, opacity float64) err
 		// trips some viewers.
 		return nil
 	}
-	ref, err := p.w.image(ctx, img.Source)
+	ref, err := p.w.image(img.Source)
 	if err != nil {
 		return err
 	}

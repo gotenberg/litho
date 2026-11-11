@@ -195,7 +195,7 @@ func TestWriteImageWithAlpha(t *testing.T) {
 			pic.SetNRGBA(x, y, c)
 		}
 	}
-	src := &compose.ImageSource{Image: pic}
+	src := encode(t, pic)
 	page := &compose.Page{Width: 200, Height: 200, Content: []compose.Fragment{
 		&compose.Image{Rect: compose.Rect{X: 40, Y: 60, Width: 80, Height: 80}, Source: src},
 		&compose.Image{Rect: compose.Rect{X: 140, Y: 10, Width: 20, Height: 20}, Source: src},
@@ -238,7 +238,7 @@ func TestWriteJPEGPassesThrough(t *testing.T) {
 		t.Fatalf("jpeg.Encode: %v", err)
 	}
 	page := &compose.Page{Width: 100, Height: 100, Content: []compose.Fragment{
-		&compose.Image{Rect: compose.Rect{X: 10, Y: 10, Width: 32, Height: 16}, Source: &compose.ImageSource{JPEG: jpg.Bytes()}},
+		&compose.Image{Rect: compose.Rect{X: 10, Y: 10, Width: 32, Height: 16}, Source: jpegSource(t, jpg.Bytes())},
 	}}
 	out := write(t, &compose.Document{Pages: []*compose.Page{page}})
 	start := bytes.Index(out, []byte("/DCTDecode"))
@@ -443,7 +443,7 @@ func taggedDoc(t *testing.T) *compose.Document {
 				}}),
 			{Width: 612, Height: 792, Content: []compose.Fragment{
 				l2,
-				&compose.Image{Rect: compose.Rect{X: 40, Y: 100, Width: 50, Height: 50}, Source: &compose.ImageSource{Image: pic}, Parent: fig},
+				&compose.Image{Rect: compose.Rect{X: 40, Y: 100, Width: 50, Height: 50}, Source: encode(t, pic), Parent: fig},
 				label,
 			}, Links: []compose.Link{{Rect: compose.Rect{X: 40, Y: 188, Width: 40, Height: 14}, URI: "https://example.com", Parent: link}}},
 		},

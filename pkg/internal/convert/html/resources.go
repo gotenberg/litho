@@ -231,7 +231,7 @@ func (r *resources) picture(ctx context.Context, u string) (*layout.Picture, err
 
 // decodePicture reads and decodes the picture u names. A JPEG whose colour
 // model the backend writes as DCTDecode is kept as its bytes; every other
-// picture is decoded to pixels.
+// picture is decoded and encoded at once, keeping no decoded pixels.
 func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Picture, error) {
 	f, err := r.fetchTyped(ctx, u)
 	if err != nil {
@@ -274,14 +274,22 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 		pic.Width, pic.Height = pic.Height, pic.Width
 	}
 	if format == "jpeg" && orient == 1 && dctModel(cfg.ColorModel) {
-		pic.Source = &compose.ImageSource{JPEG: data}
+		src, err := compose.JPEGImage(data)
+		if err != nil {
+			return nil, fmt.Errorf("reading the JPEG image: %w", err)
+		}
+		pic.Source = src
 		return pic, nil
 	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decoding the %s image: %w", format, err)
 	}
-	pic.Source = &compose.ImageSource{Image: orientImage(img, orient)}
+	src, err := compose.EncodeImage(ctx, orientImage(img, orient))
+	if err != nil {
+		return nil, fmt.Errorf("encoding the %s image: %w", format, err)
+	}
+	pic.Source = src
 	return pic, nil
 }
 

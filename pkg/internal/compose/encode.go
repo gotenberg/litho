@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"compress/zlib"
 	"fmt"
+	"io"
 	"math"
 	"strings"
+	"sync"
 	"unicode/utf16"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -56,12 +58,33 @@ func uriString(uri string) ast.PdfString {
 	return ast.PdfString(b.String())
 }
 
+// zlibWriters keeps the zlib writers of finished streams for the next
+// one: a writer's compressor tables weigh about a megabyte, and a document
+// compresses one stream a page and a picture. A writer reset is in the
+// state a new one starts in, so it writes the same bytes.
+var zlibWriters = sync.Pool{New: func() any { return zlib.NewWriter(io.Discard) }}
+
+// newZlib returns a zlib writer at the default level writing to w.
+func newZlib(w io.Writer) *zlib.Writer {
+	z := zlibWriters.Get().(*zlib.Writer) //nolint:errcheck // the pool holds *zlib.Writer alone
+	z.Reset(w)
+	return z
+}
+
+// releaseZlib returns z to the pool, pointed away from its last output so
+// the pool keeps no buffer alive.
+func releaseZlib(z *zlib.Writer) {
+	z.Reset(io.Discard)
+	zlibWriters.Put(z)
+}
+
 // flate returns data zlib-compressed, the format the FlateDecode filter
 // reads (ISO 32000-1, 7.4.4). Writing to a bytes.Buffer cannot fail, so
 // the errors zlib returns are propagated only for form.
 func flate(data []byte) ([]byte, error) {
 	var buf bytes.Buffer
-	w := zlib.NewWriter(&buf)
+	w := newZlib(&buf)
+	defer releaseZlib(w)
 	if _, err := w.Write(data); err != nil {
 		return nil, fmt.Errorf("compressing: %w", err)
 	}

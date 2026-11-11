@@ -15,7 +15,7 @@ func TestBlipEffects(t *testing.T) {
 	t.Parallel()
 	im := image.NewNRGBA(image.Rect(0, 0, 1, 1))
 	im.SetNRGBA(0, 0, imgcolor.NRGBA{R: 200, G: 40, B: 40, A: 255})
-	pic := &layout.Picture{Width: 1, Height: 1, Source: &compose.ImageSource{Image: im}}
+	pic := &layout.Picture{Width: 1, Height: 1, Source: source(t, im)}
 	fc := &fillCtx{}
 	tests := []struct {
 		name, effects string
@@ -35,17 +35,44 @@ func TestBlipEffects(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			out, ok := blipEffects(pic, blip, fc.colorChoice).Source.Image.(*image.NRGBA)
-			if !ok {
+			got := blipEffects(context.Background(), pic, blip, fc.colorChoice)
+			if got == pic {
 				t.Fatal("not redrawn")
 			}
+			out := decoded(t, got.Source)
 			if c := out.NRGBAAt(0, 0); c != tt.want {
 				t.Errorf("pixel %+v, want %+v", c, tt.want)
 			}
 		})
 	}
 	blip, _ := ooxml.Parse(context.Background(), []byte(`<a:blip xmlns:a="`+ooxml.NSA+`"/>`), nil)
-	if blipEffects(pic, blip, fc.colorChoice) != pic {
+	if blipEffects(context.Background(), pic, blip, fc.colorChoice) != pic {
 		t.Error("a blip of no effect redraws its picture")
 	}
+}
+
+// source returns img encoded as an image source, failing t when it does
+// not encode.
+func source(t testing.TB, img image.Image) *compose.ImageSource {
+	t.Helper()
+	src, err := compose.EncodeImage(context.Background(), img)
+	if err != nil {
+		t.Fatalf("EncodeImage: %v", err)
+	}
+	return src
+}
+
+// decoded returns the pixels of src as an NRGBA picture, failing t when
+// they do not decode to one.
+func decoded(t testing.TB, src *compose.ImageSource) *image.NRGBA {
+	t.Helper()
+	img, err := src.Decode(context.Background())
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	n, ok := img.(*image.NRGBA)
+	if !ok {
+		t.Fatalf("decoded picture is a %T, want *image.NRGBA", img)
+	}
+	return n
 }

@@ -315,7 +315,7 @@ func TestText_OverflowAnchor(t *testing.T) {
 // its line over it.
 func TestShape_PictureFill(t *testing.T) {
 	pic := &Shape{
-		Kind: KindPicture, Box: compose.Rect{X: 10, Y: 10, Width: 100, Height: 100}, Picture: tinyPicture(),
+		Kind: KindPicture, Box: compose.Rect{X: 10, Y: 10, Width: 100, Height: 100}, Picture: tinyPicture(t),
 		Fill: Fill{Kind: FillSolid, Color: css.Color{A: 1}}, Line: Line{Width: 2, Color: css.Color{R: 1, A: 1}},
 	}
 	pg := convert(t, deck(&Slide{Shapes: []*Shape{pic}}), office.Options{}).Pages[0]

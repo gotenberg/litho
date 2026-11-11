@@ -1,9 +1,10 @@
 package compose
 
 import (
+	"bytes"
 	"errors"
 	"image"
-	"image/color"
+	"image/jpeg"
 	"math"
 	"testing"
 )
@@ -17,12 +18,15 @@ func square() []PathOp {
 	}
 }
 
-// hugeImage reports bounds past maxImagePixels without holding pixels.
-type hugeImage struct{}
-
-func (hugeImage) ColorModel() color.Model { return color.RGBAModel }
-func (hugeImage) Bounds() image.Rectangle { return image.Rect(0, 0, 1<<14, 1<<14) }
-func (hugeImage) At(int, int) color.Color { return color.Black }
+// tinyJPEG returns a JPEG file of one pixel.
+func tinyJPEG(t *testing.T) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, image.NewGray(image.Rect(0, 0, 1, 1)), nil); err != nil {
+		t.Fatalf("jpeg.Encode: %v", err)
+	}
+	return buf.Bytes()
+}
 
 func TestValidateRefuses(t *testing.T) {
 	t.Parallel()
@@ -75,11 +79,14 @@ func TestValidateRefuses(t *testing.T) {
 		{"transparent fill", page(&Path{Ops: square(), Fill: &Fill{Color: Color{R: 1}}}), ErrInvalidColor},
 		{"nil source", page(&Image{}), ErrInvalidImage},
 		{"empty source", page(&Image{Source: &ImageSource{}}), ErrInvalidImage},
-		{"both sources", page(&Image{Source: &ImageSource{Image: image.NewGray(image.Rect(0, 0, 1, 1)), JPEG: []byte{0xFF}}}), ErrInvalidImage},
-		{"bad JPEG", page(&Image{Source: &ImageSource{JPEG: []byte("nope")}}), ErrInvalidImage},
-		{"empty picture", page(&Image{Source: &ImageSource{Image: image.NewGray(image.Rect(0, 0, 0, 3))}}), ErrInvalidImage},
-		{"NaN image rect", page(&Image{Rect: Rect{Width: nan}, Source: &ImageSource{Image: image.NewGray(image.Rect(0, 0, 1, 1))}}), ErrInvalidImage},
-		{"image pixels", page(&Image{Source: &ImageSource{Image: hugeImage{}}}), ErrLimitExceeded},
+		{"no samples", page(&Image{Source: &ImageSource{Width: 1, Height: 1}}), ErrInvalidImage},
+		{"both sources", page(&Image{Source: &ImageSource{Width: 1, Height: 1, Samples: []byte{1}, JPEG: []byte{0xFF}}}), ErrInvalidImage},
+		{"gray with alpha", page(&Image{Source: &ImageSource{Width: 1, Height: 1, Gray: true, Samples: []byte{1}, Alpha: []byte{1}}}), ErrInvalidImage},
+		{"bad JPEG", page(&Image{Source: &ImageSource{Width: 1, Height: 1, JPEG: []byte("nope")}}), ErrInvalidImage},
+		{"JPEG size", page(&Image{Source: &ImageSource{Width: 2, Height: 1, JPEG: tinyJPEG(t)}}), ErrInvalidImage},
+		{"empty picture", page(&Image{Source: &ImageSource{Width: 0, Height: 3, Samples: []byte{1}}}), ErrInvalidImage},
+		{"NaN image rect", page(&Image{Rect: Rect{Width: nan}, Source: &ImageSource{Width: 1, Height: 1, Samples: []byte{1}}}), ErrInvalidImage},
+		{"image pixels", page(&Image{Source: &ImageSource{Width: 1 << 14, Height: 1 << 14, Samples: []byte{1}}}), ErrLimitExceeded},
 		{"NaN path point", page(&Path{Ops: []PathOp{{Kind: MoveTo, P: [3]Point{{X: nan}}}}, Fill: &Fill{Color: Black}}), ErrInvalidPath},
 		{"NaN curve control", page(&Path{Ops: []PathOp{{Kind: MoveTo}, {Kind: CurveTo, P: [3]Point{{}, {Y: inf}, {}}}}}), ErrInvalidPath},
 		{"path without MoveTo", page(&Path{Ops: []PathOp{{Kind: LineTo}}}), ErrInvalidPath},

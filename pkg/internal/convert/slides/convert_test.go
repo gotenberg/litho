@@ -159,7 +159,7 @@ func TestConvert_Fields(t *testing.T) {
 // TestConvert_Structure checks the structure tree: a Sect per slide, the
 // paragraphs as P, a picture as a Figure, a table as a Table.
 func TestConvert_Structure(t *testing.T) {
-	pic := &Shape{Kind: KindPicture, Name: "logo", Box: compose.Rect{X: 0, Y: 200, Width: 10, Height: 10}, Picture: tinyPicture()}
+	pic := &Shape{Kind: KindPicture, Name: "logo", Box: compose.Rect{X: 0, Y: 200, Width: 10, Height: 10}, Picture: tinyPicture(t)}
 	tbl := &Shape{Kind: KindTable, Box: compose.Rect{X: 0, Y: 300, Width: 200, Height: 40}, Table: &Table{
 		ColumnWidths: []float64{100, 100},
 		Rows:         []TableRow{{Height: 20, Cells: []TableCell{{Text: &TextBody{Paragraphs: []Paragraph{para("c1", arial(10))}, Wrap: true}}, {}}}},

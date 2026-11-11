@@ -154,3 +154,25 @@ func inflated(t *testing.T, out []byte) []byte {
 		rest = rest[j:]
 	}
 }
+
+// encode returns img as an image source, failing t when it does not
+// encode.
+func encode(t testing.TB, img image.Image) *compose.ImageSource {
+	t.Helper()
+	src, err := compose.EncodeImage(context.Background(), img)
+	if err != nil {
+		t.Fatalf("EncodeImage: %v", err)
+	}
+	return src
+}
+
+// jpegSource returns the JPEG file data as an image source, failing t
+// when its header does not read.
+func jpegSource(t testing.TB, data []byte) *compose.ImageSource {
+	t.Helper()
+	src, err := compose.JPEGImage(data)
+	if err != nil {
+		t.Fatalf("JPEGImage: %v", err)
+	}
+	return src
+}

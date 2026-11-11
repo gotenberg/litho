@@ -5,7 +5,6 @@ import (
 	"image/color"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 )
 
@@ -338,7 +337,7 @@ func floatTable(d css.Display, dir css.Direction) *Node {
 		}
 	}
 	img.Set(0, 0, color.NRGBA{R: 255, A: 255})
-	pattern := &Picture{Source: &compose.ImageSource{Image: img}, Width: px(4), Height: px(4)}
+	pattern := &Picture{Source: source(img), Width: px(4), Height: px(4)}
 	left := &Node{Kind: Replaced, Style: inlineSty(float(css.FloatLeft)), Picture: pattern}
 	right := &Node{Kind: Replaced, Style: inlineSty(float(css.FloatRight)), Picture: pic(color.NRGBA{B: 255, A: 255}, 4, 4)}
 	tb := wpTable(mods(display(d)), tbody(nil, tr(nil, td(nil, "a"))))

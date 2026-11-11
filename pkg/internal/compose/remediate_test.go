@@ -44,12 +44,12 @@ func mixedDoc(t *testing.T) *compose.Document {
 				run(t, sans, 12, compose.Point{X: 40, Y: 60}, "Plain text"),
 				&compose.Group{Opacity: 0.5, Transform: compose.Matrix{A: 2, D: 2}, Clip: &compose.Path{Ops: rect(0, 0, 200, 200)}, Content: []compose.Fragment{
 					&compose.Path{Ops: rect(20, 40, 30, 30), Fill: &compose.Fill{Color: compose.Color{R: 1, A: 0.8}}, Stroke: &compose.Stroke{Color: compose.Black, Width: 1}},
-					&compose.Image{Rect: compose.Rect{X: 60, Y: 40, Width: 30, Height: 30}, Source: &compose.ImageSource{Image: pic}},
+					&compose.Image{Rect: compose.Rect{X: 60, Y: 40, Width: 30, Height: 30}, Source: encode(t, pic)},
 				}},
 			),
 			{Width: 400, Height: 400, Content: []compose.Fragment{
 				run(t, serif, 10, compose.Point{X: 40, Y: 60}, "Serif"),
-				&compose.Image{Rect: compose.Rect{X: 40, Y: 80, Width: 20, Height: 20}, Source: &compose.ImageSource{Image: gray}},
+				&compose.Image{Rect: compose.Rect{X: 40, Y: 80, Width: 20, Height: 20}, Source: encode(t, gray)},
 			}, Links: []compose.Link{{Rect: compose.Rect{X: 40, Y: 50, Width: 30, Height: 12}, Dest: &compose.Dest{Page: 1}}}},
 		},
 		Outline: []compose.Outline{{Title: "Start", Dest: compose.Dest{Page: 1}}},

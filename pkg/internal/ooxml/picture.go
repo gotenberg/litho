@@ -60,8 +60,9 @@ func PictureFormat(data []byte) string {
 
 // DecodePicture decodes picture data into a layout picture at its natural
 // size (96 pixels an inch for a raster picture, as Word and LibreOffice
-// size one without a resolution). JPEG pictures keep their bytes, SVG
-// draws as vectors with fonts. EMF and WMF fail with
+// size one without a resolution). JPEG pictures keep their bytes, other
+// raster pictures are encoded as they decode and keep no decoded pixels,
+// SVG draws as vectors with fonts. EMF and WMF fail with
 // [ErrUnsupportedPicture], as does any other format; a raster picture past
 // [MaxPicturePixels] fails too.
 func DecodePicture(ctx context.Context, data []byte, fonts *text.Fonts) (*layout.Picture, error) {
@@ -87,14 +88,22 @@ func DecodePicture(ctx context.Context, data []byte, fonts *text.Fonts) (*layout
 	}
 	pic := &layout.Picture{Width: float64(cfg.Width) * css.Pt, Height: float64(cfg.Height) * css.Pt}
 	if format == "jpeg" && (cfg.ColorModel == color.GrayModel || cfg.ColorModel == color.YCbCrModel || cfg.ColorModel == color.CMYKModel) {
-		pic.Source = &compose.ImageSource{JPEG: data}
+		src, err := compose.JPEGImage(data)
+		if err != nil {
+			return nil, fmt.Errorf("reading the JPEG picture: %w", err)
+		}
+		pic.Source = src
 		return pic, nil
 	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decoding the %s picture: %w", format, err)
 	}
-	pic.Source = &compose.ImageSource{Image: img}
+	src, err := compose.EncodeImage(ctx, img)
+	if err != nil {
+		return nil, fmt.Errorf("encoding the %s picture: %w", format, err)
+	}
+	pic.Source = src
 	return pic, nil
 }
 

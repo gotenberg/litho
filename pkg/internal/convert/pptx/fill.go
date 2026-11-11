@@ -73,7 +73,7 @@ func (r *reader) fillChoice(fc *fillCtx, k *ooxml.Element) (slides.Fill, bool) {
 		return slides.Fill{Kind: slides.FillGradient, Gradient: g}, true
 	case "blipFill":
 		ref := ooxml.ParsePicture(&ooxml.Element{Space: ooxml.NSPic, Local: "pic", Children: []*ooxml.Element{k}})
-		pic := blipEffects(r.pictureOf(fc.part, ref), k.Child(ooxml.NSA, "blip"), fc.colorChoice)
+		pic := blipEffects(r.ctx, r.pictureOf(fc.part, ref), k.Child(ooxml.NSA, "blip"), fc.colorChoice)
 		if pic == nil {
 			return slides.Fill{}, true
 		}

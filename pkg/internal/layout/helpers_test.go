@@ -78,7 +78,17 @@ func pic(c color.Color, w, h int) *Picture {
 			img.Set(x, y, c)
 		}
 	}
-	return &Picture{Source: &compose.ImageSource{Image: img}, Width: px(float64(w)), Height: px(float64(h))}
+	return &Picture{Source: source(img), Width: px(float64(w)), Height: px(float64(h))}
+}
+
+// source returns img encoded as an image source. A test picture always
+// encodes, so a failure is a broken test.
+func source(img image.Image) *compose.ImageSource {
+	src, err := compose.EncodeImage(context.Background(), img)
+	if err != nil {
+		panic(err)
+	}
+	return src
 }
 
 // page returns a page box of w by h px with no margins.

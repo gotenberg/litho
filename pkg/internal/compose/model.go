@@ -1,7 +1,5 @@
 package compose
 
-import "image"
-
 // Document is a laid-out document: its pages in order, document-wide
 // metadata, the outline and, when the converter kept the semantics of its
 // input, the structure tree the fragments hang from.
@@ -171,14 +169,37 @@ const (
 	MaxHScale = 6
 )
 
-// ImageSource is the pixels of an [Image], shared by every placement of it.
-// Exactly one of Image and JPEG is set.
+// ImageSource is the picture of an [Image] in the form the file stores it,
+// shared by every placement of it: a JPEG file kept as it is, or 8-bit
+// samples already Flate-compressed. [Write] copies these bytes into the
+// file untouched, one image XObject per distinct source pointer.
+//
+// A converter builds a source with [EncodeImage] or [JPEGImage] when it
+// meets the picture and drops the decoded pixels, so a document holds no
+// decoded picture: a conversion keeps one picture decoded at a time, the
+// one it is encoding. A converter that needs the pixels again, to crop or
+// recolour them, calls [ImageSource.Decode] and encodes the result as a
+// source of its own.
+//
+// The constructors set the fields and nothing changes them after: a source
+// is safe for concurrent reads.
 type ImageSource struct {
-	// Image is a decoded picture, written lossless. Its alpha, when any,
-	// becomes a soft mask.
-	Image image.Image
-	// JPEG is a JPEG file kept as it is, written as a DCTDecode stream.
+	// Width and Height are the picture's size in pixels, both positive.
+	Width, Height int
+	// JPEG is a JPEG file written as a DCTDecode stream. When it is set,
+	// Gray, Samples and Alpha are unset.
 	JPEG []byte
+	// Gray is true when Samples holds one DeviceGray sample a pixel, false
+	// when it holds three, DeviceRGB.
+	Gray bool
+	// Samples is the zlib stream (RFC 1950), the format FlateDecode reads
+	// (ISO 32000-1, 7.4.4), of the picture's 8-bit samples, row by row from
+	// the top, colours straight, not premultiplied.
+	Samples []byte
+	// Alpha is the zlib stream of the picture's 8-bit alpha, one sample a
+	// pixel, written as a DeviceGray soft mask (ISO 32000-1, 11.6.5.3); nil
+	// when every pixel is opaque.
+	Alpha []byte
 }
 
 // Image places a picture on the page, scaled to fill Rect.

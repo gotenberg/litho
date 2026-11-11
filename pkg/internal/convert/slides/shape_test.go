@@ -159,7 +159,7 @@ func TestShape_Fills(t *testing.T) {
 	if p, ok := unknown[0].(*compose.Path); !ok || p.Fill.Color.A != 0.5 || len(b.warnings) != 1 {
 		t.Errorf("unknown pattern %+v, warnings %v", unknown, b.warnings)
 	}
-	pic := tinyPicture()
+	pic := tinyPicture(t)
 	pic.Width, pic.Height = 8, 8
 	tiles := b.fill(&Fill{Kind: FillPicture, Tile: true, Picture: pic}, box, ops, shape.FillNorm)
 	if g := tiles[0].(*compose.Group); len(g.Content) != 25*13 {

@@ -27,7 +27,7 @@ func TestWriteRandomDocumentsOpen(t *testing.T) {
 		t.Run(fmt.Sprint(seed), func(t *testing.T) {
 			t.Parallel()
 			rng := rand.New(rand.NewSource(seed)) //nolint:gosec // deterministic test data, not security
-			doc := randomDoc(rng, font)
+			doc := randomDoc(t, rng, font)
 			if err := doc.Validate(); err != nil {
 				t.Fatalf("random document refused: %v", err)
 			}
@@ -52,7 +52,7 @@ func TestWriteRandomDocumentsOpen(t *testing.T) {
 	}
 }
 
-func randomDoc(rng *rand.Rand, font *embed.Font) *compose.Document {
+func randomDoc(t *testing.T, rng *rand.Rand, font *embed.Font) *compose.Document {
 	doc := &compose.Document{Metadata: compose.Metadata{Title: fmt.Sprint("doc ", rng.Int())}}
 	var elems []*compose.StructElem
 	if rng.Intn(2) == 0 {
@@ -72,7 +72,7 @@ func randomDoc(rng *rand.Rand, font *embed.Font) *compose.Document {
 	color := func() compose.Color {
 		return compose.Color{R: rng.Float64(), G: rng.Float64(), B: rng.Float64(), A: rng.Float64()}
 	}
-	pic := &compose.ImageSource{Image: image.NewNRGBA(image.Rect(0, 0, 1+rng.Intn(4), 1+rng.Intn(4)))}
+	pic := encode(t, image.NewNRGBA(image.Rect(0, 0, 1+rng.Intn(4), 1+rng.Intn(4))))
 	pages := 1 + rng.Intn(3)
 	var frags func(depth int) []compose.Fragment
 	frags = func(depth int) []compose.Fragment {

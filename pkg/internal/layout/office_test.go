@@ -78,7 +78,7 @@ func TestOffice_CroppedPicture(t *testing.T) {
 		img.Set(x, 0, c)
 		img.Set(x, 1, c)
 	}
-	src := &compose.ImageSource{Image: img}
+	src := source(img)
 	crop := &Picture{Width: px(2), Height: px(2), Vector: func(_ context.Context, r compose.Rect) []compose.Fragment {
 		// The picture's right half fills r: the whole is twice as wide.
 		whole := compose.Rect{X: r.X - r.Width, Y: r.Y, Width: 2 * r.Width, Height: r.Height}

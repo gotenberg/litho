@@ -1,10 +1,9 @@
 package odp
 
 import (
-	"bytes"
+	"context"
 	"image"
 	imgcolor "image/color"
-	"image/jpeg"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -31,7 +30,7 @@ const (
 //
 //   - libreoffice/odp: sd/tdf127901's greyscale, mono and watermark pictures print
 //     grey, black and white, and pale.
-func adjusted(pic *layout.Picture, p odf.Props) *layout.Picture {
+func adjusted(ctx context.Context, pic *layout.Picture, p odf.Props) *layout.Picture {
 	mode := p.Get("draw:color-mode")
 	lum, _ := odf.Percent(p.Get("draw:luminance"))
 	con, _ := odf.Percent(p.Get("draw:contrast"))
@@ -43,13 +42,9 @@ func adjusted(pic *layout.Picture, p odf.Props) *layout.Picture {
 	if pic == nil || pic.Source == nil || (mode != "greyscale" && mode != "mono" && lum == 0 && con == 0) {
 		return pic
 	}
-	src := pic.Source.Image
-	if src == nil {
-		im, err := jpeg.Decode(bytes.NewReader(pic.Source.JPEG))
-		if err != nil {
-			return pic
-		}
-		src = im
+	src, err := pic.Source.Decode(ctx)
+	if err != nil {
+		return pic
 	}
 	// Bitmap::Adjust's linear map of every channel.
 	scale := 1.0
@@ -83,5 +78,9 @@ func adjusted(pic *layout.Picture, p odf.Props) *layout.Picture {
 			out.SetNRGBA(x-b.Min.X, y-b.Min.Y, c)
 		}
 	}
-	return &layout.Picture{Width: pic.Width, Height: pic.Height, NoRatio: pic.NoRatio, Source: &compose.ImageSource{Image: out}}
+	enc, err := compose.EncodeImage(ctx, out)
+	if err != nil {
+		return pic
+	}
+	return &layout.Picture{Width: pic.Width, Height: pic.Height, NoRatio: pic.NoRatio, Source: enc}
 }

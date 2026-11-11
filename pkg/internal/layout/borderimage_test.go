@@ -81,7 +81,7 @@ func nineLoader() func(context.Context, string) (*Picture, error) {
 	}
 	img.Set(1, 1, color.NRGBA{B: 255, A: 255})
 	img.Set(0, 0, color.NRGBA{G: 255, A: 255})
-	p := &Picture{Source: &compose.ImageSource{Image: img}, Width: px(3), Height: px(3)}
+	p := &Picture{Source: source(img), Width: px(3), Height: px(3)}
 	return func(context.Context, string) (*Picture, error) { return p, nil }
 }
 
@@ -173,7 +173,14 @@ func TestBorderImage_Gradient(t *testing.T) {
 
 func TestBorderImage_CropSource(t *testing.T) {
 	pic, _ := nineLoader()(context.Background(), "i.png")
-	p := &painter{}
+	p := &painter{e: &engine{ctx: context.Background()}}
+	decode := func() image.Image {
+		img, err := pic.Source.Decode(context.Background())
+		if err != nil {
+			t.Fatalf("Decode: %v", err)
+		}
+		return img
+	}
 	tests := []struct {
 		name string
 		r    compose.Rect
@@ -186,16 +193,20 @@ func TestBorderImage_CropSource(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := p.cropSource(pic, tt.r)
-			if c == nil || c.Image.Bounds() != tt.want || (c == pic.Source) != tt.same {
+			c := p.cropSource(pic, tt.r, decode)
+			if c == nil || image.Rect(0, 0, c.Width, c.Height) != tt.want || (c == pic.Source) != tt.same {
 				t.Fatalf("got %+v", c)
 			}
 		})
 	}
-	if c := p.cropSource(pic, compose.Rect{Width: px(1), Height: px(1)}); c != p.cropSource(pic, compose.Rect{Width: px(1), Height: px(1)}) {
+	if c := p.cropSource(pic, compose.Rect{Width: px(1), Height: px(1)}, decode); c != p.cropSource(pic, compose.Rect{Width: px(1), Height: px(1)}, decode) {
 		t.Error("a part is cut once")
 	}
-	if got := p.cropSource(pic, compose.Rect{X: px(1), Width: px(1), Height: px(1)}).Image.At(0, 0); got != (color.NRGBA{R: 255, A: 255}) {
+	crop, err := p.cropSource(pic, compose.Rect{X: px(1), Width: px(1), Height: px(1)}, decode).Decode(context.Background())
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got := crop.At(0, 0); got != (color.NRGBA{R: 255, A: 255}) {
 		t.Errorf("top edge pixel = %v, want red", got)
 	}
 }

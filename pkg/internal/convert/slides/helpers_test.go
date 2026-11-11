@@ -132,7 +132,33 @@ func near(a, b, tol float64) bool {
 }
 
 // tinyPicture returns a 2 by 2 raster picture.
-func tinyPicture() *layout.Picture {
+func tinyPicture(t testing.TB) *layout.Picture {
 	img := image.NewNRGBA(image.Rect(0, 0, 2, 2))
-	return &layout.Picture{Source: &compose.ImageSource{Image: img}, Width: 2, Height: 2}
+	return &layout.Picture{Source: source(t, img), Width: 2, Height: 2}
+}
+
+// source returns img encoded as an image source, failing t when it does
+// not encode.
+func source(t testing.TB, img image.Image) *compose.ImageSource {
+	t.Helper()
+	src, err := compose.EncodeImage(context.Background(), img)
+	if err != nil {
+		t.Fatalf("EncodeImage: %v", err)
+	}
+	return src
+}
+
+// decoded returns the pixels of src as an NRGBA picture, failing t when
+// they do not decode to one.
+func decoded(t testing.TB, src *compose.ImageSource) *image.NRGBA {
+	t.Helper()
+	img, err := src.Decode(context.Background())
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	n, ok := img.(*image.NRGBA)
+	if !ok {
+		t.Fatalf("decoded picture is a %T, want *image.NRGBA", img)
+	}
+	return n
 }

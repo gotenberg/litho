@@ -1,6 +1,7 @@
 package odp
 
 import (
+	"context"
 	"image"
 	imgcolor "image/color"
 	"testing"
@@ -15,7 +16,7 @@ func TestAdjusted_ColorModes(t *testing.T) {
 	im := image.NewNRGBA(image.Rect(0, 0, 2, 1))
 	im.SetNRGBA(0, 0, imgcolor.NRGBA{R: 200, G: 40, B: 40, A: 255})
 	im.SetNRGBA(1, 0, imgcolor.NRGBA{R: 40, G: 200, B: 200, A: 128})
-	pic := &layout.Picture{Width: 2, Height: 1, Source: &compose.ImageSource{Image: im}}
+	pic := &layout.Picture{Width: 2, Height: 1, Source: source(t, im)}
 	tests := []struct {
 		name  string
 		props string
@@ -35,11 +36,11 @@ func TestAdjusted_ColorModes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got := adjusted(pic, odf.PropsOf(root))
-			out, ok := got.Source.Image.(*image.NRGBA)
-			if !ok {
-				t.Fatalf("picture %+v", got.Source)
+			got := adjusted(t.Context(), pic, odf.PropsOf(root))
+			if got == pic {
+				t.Fatal("not redrawn")
 			}
+			out := decoded(t, got.Source)
 			for i, w := range tt.want {
 				if c := out.NRGBAAt(i, 0); c != w {
 					t.Errorf("pixel %d %+v, want %+v", i, c, w)
@@ -47,7 +48,33 @@ func TestAdjusted_ColorModes(t *testing.T) {
 			}
 		})
 	}
-	if got := adjusted(pic, odf.Props{}); got != pic {
+	if got := adjusted(t.Context(), pic, odf.Props{}); got != pic {
 		t.Errorf("a standard picture is redrawn")
 	}
+}
+
+// source returns img encoded as an image source, failing t when it does
+// not encode.
+func source(t testing.TB, img image.Image) *compose.ImageSource {
+	t.Helper()
+	src, err := compose.EncodeImage(context.Background(), img)
+	if err != nil {
+		t.Fatalf("EncodeImage: %v", err)
+	}
+	return src
+}
+
+// decoded returns the pixels of src as an NRGBA picture, failing t when
+// they do not decode to one.
+func decoded(t testing.TB, src *compose.ImageSource) *image.NRGBA {
+	t.Helper()
+	img, err := src.Decode(context.Background())
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	n, ok := img.(*image.NRGBA)
+	if !ok {
+		t.Fatalf("decoded picture is a %T, want *image.NRGBA", img)
+	}
+	return n
 }

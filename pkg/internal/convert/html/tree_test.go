@@ -147,13 +147,13 @@ func TestPrepare_DecodesImages(t *testing.T) {
 	if a.Kind != layout.Replaced || a.Picture == nil || a.Picture.Width != 40*css.Pt || a.Picture.Height != 20*css.Pt {
 		t.Fatalf("PNG node %+v, picture %+v", a, a.Picture)
 	}
-	if a.Role != "Figure" || a.Alt != "A" || a.Picture.Source.Image == nil {
+	if a.Role != "Figure" || a.Alt != "A" || len(a.Picture.Source.Samples) == 0 {
 		t.Errorf("PNG role %q alt %q", a.Role, a.Alt)
 	}
 	if a.Style == nil || a.Style.Display != css.Inline {
 		t.Errorf("PNG keeps its own style: %+v", a.Style)
 	}
-	if b := byID(t, p.root, "b"); b.Picture == nil || len(b.Picture.Source.JPEG) == 0 || b.Picture.Source.Image != nil {
+	if b := byID(t, p.root, "b"); b.Picture == nil || len(b.Picture.Source.JPEG) == 0 || b.Picture.Source.Samples != nil {
 		t.Errorf("JPEG not kept as its bytes: %+v", b.Picture)
 	}
 	if c := byID(t, p.root, "c"); c.Picture == nil || c.Role != "" {

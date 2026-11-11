@@ -124,7 +124,7 @@ func TestPrepare_SelectsPictureSources(t *testing.T) {
 	} {
 		p := prep(t, tc.src, Options{Resources: fsys})
 		pic := byID(t, p.root, "i").Picture
-		if pic == nil || pic.Source == nil || pic.Source.Image == nil || pic.Source.Image.Bounds().Dx() != tc.want {
+		if pic == nil || pic.Source == nil || pic.Source.Width != tc.want {
 			t.Errorf("%s: picture %+v, want the one %d px wide; warnings %+v", tc.src, pic, tc.want, p.warnings)
 			continue
 		}

@@ -58,10 +58,7 @@ func effectPage(t *testing.T, shapes ...*Shape) ([]placed, []compose.Warning) {
 // alphaAt returns the alpha of an effect bitmap at the page point (x, y).
 func alphaAt(t *testing.T, p placed, x, y float64) uint8 {
 	t.Helper()
-	img, ok := p.img.Source.Image.(*image.NRGBA)
-	if !ok {
-		t.Fatalf("effect bitmap is a %T, want *image.NRGBA", p.img.Source.Image)
-	}
+	img := decoded(t, p.img.Source)
 	r := p.bounds()
 	b := img.Bounds()
 	px := int((x - r.X) / r.Width * float64(b.Dx()))
@@ -124,7 +121,7 @@ func TestShape_BlurredShadow(t *testing.T) {
 	if got, want := ps[0].bounds(), (compose.Rect{X: 102, Y: 112, Width: 216, Height: 116}); !rectNear(got, want, 0.01) {
 		t.Errorf("shadow bounds %+v, want %+v", got, want)
 	}
-	img := ps[0].img.Source.Image.(*image.NRGBA)
+	img := decoded(t, ps[0].img.Source)
 	if b := img.Bounds(); b.Dx()*b.Dy() > effectPixels || b.Dx() != 682 || b.Dy() != 366 {
 		t.Errorf("shadow bitmap %v, want 682 by 366 within the budget", b)
 	}
@@ -215,7 +212,7 @@ func TestShape_SoftEdge(t *testing.T) {
 			if got := ps[0].bounds(); !rectNear(got, box, 0.01) {
 				t.Errorf("bitmap bounds %+v, want %+v", got, box)
 			}
-			img := ps[0].img.Source.Image.(*image.NRGBA)
+			img := decoded(t, ps[0].img.Source)
 			if c := img.NRGBAAt(img.Bounds().Dx()/2, img.Bounds().Dy()/2); c != (color.NRGBA{R: 255, A: 255}) {
 				t.Errorf("middle %v, want opaque red", c)
 			}
@@ -236,7 +233,7 @@ func TestShape_SoftEdge(t *testing.T) {
 // blurred, under the picture.
 func TestShape_PictureShadow(t *testing.T) {
 	src := image.NewNRGBA(image.Rect(0, 0, 4, 4))
-	pic := &layout.Picture{Source: &compose.ImageSource{Image: src}, Width: 4, Height: 4}
+	pic := &layout.Picture{Source: source(t, src), Width: 4, Height: 4}
 	sh := &Shape{Kind: KindPicture, Box: compose.Rect{X: 50, Y: 50, Width: 80, Height: 40}, Picture: pic, Shadow: &Shadow{Color: css.Color{A: 1}, Opacity: 1, OffsetX: 5, Blur: 4}}
 	ps, _ := effectPage(t, sh)
 	if len(ps) != 2 || ps[0].img == nil || ps[1].img == nil {
