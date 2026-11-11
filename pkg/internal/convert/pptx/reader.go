@@ -20,6 +20,9 @@ const (
 	nsP   = "http://schemas.openxmlformats.org/presentationml/2006/main"
 	nsDSP = "http://schemas.microsoft.com/office/drawing/2008/diagram"
 	nsDgm = "http://schemas.openxmlformats.org/drawingml/2006/diagram"
+	// nsP14 is PowerPoint 2010's extension namespace ([MS-PPTX] 2.3), the
+	// sections' among them.
+	nsP14 = "http://schemas.microsoft.com/office/powerpoint/2010/main"
 )
 
 // The relationship types the reader follows (ECMA-376 Part 1, 13.3;
@@ -176,6 +179,12 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*slides.D
 		subject = cp.Description
 	}
 	doc.Meta = compose.Metadata{Title: cp.Title, Author: cp.Creator, Subject: subject, Keywords: cp.Keywords, Lang: cp.Language}
+	first := 1
+	if n, ok := intAttr(root, "firstSlideNum"); ok {
+		first = n
+	}
+	sections := sectionsOf(root)
+	prevSection := -1
 	r.slideAt = map[string]int{}
 	for _, id := range root.Child(nsP, "sldIdLst").Kids() {
 		rid, _ := id.AttrNS(ooxml.NSR, "id")
@@ -214,11 +223,83 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*slides.D
 			}
 			return nil, nil, err
 		}
+		s.Bookmark = bookmark(first+len(doc.Slides), s.Title)
+		if sec, ok := sections[attr(id, "id")]; ok {
+			s.Section, s.SectionStart = sec.name, sec.index != prevSection
+			prevSection = sec.index
+		} else {
+			prevSection = -1
+		}
 		doc.Slides = append(doc.Slides, s)
 	}
 	uniqueNames(doc.Slides)
 	doc.NotesSlideBox, doc.NotesTextBox, doc.NotesShapes = r.notesSlideBox, r.notesTextBox, r.notesShapes
 	return doc, r.warnings, nil
+}
+
+// bookmark returns the outline entry PowerPoint writes for the slide
+// numbered n titled title: "Slide n: title", "Slide n" for a slide without
+// a title. n counts hidden slides and starts at the presentation's
+// firstSlideNum (ECMA-376 Part 1, 19.2.1.26 presentation). The names are
+// unique by their numbers, so PowerPoint numbers no duplicate.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: every reference names its entries so, minimal "Slide 1:
+//     Hello", layouts-all's blank seventh slide "Slide 7", hidden-slides
+//     "Slide 1: Slide 1" and "Slide 3: Slide 3" for the first and third of
+//     four with the second hidden, first-slide-number "Slide 10:" to
+//     "Slide 12:".
+//   - libreoffice/pptx: sd/tdf103347 prints "Slide 1: Hello", "Slide 2:
+//     Hello", "Slide 3: Hello" for three slides titled "Hello".
+func bookmark(n int, title string) string {
+	if title == "" {
+		return fmt.Sprintf("Slide %d", n)
+	}
+	return fmt.Sprintf("Slide %d: %s", n, title)
+}
+
+// section is one section of a presentation: its name and its place in the
+// section list.
+type section struct {
+	name  string
+	index int
+}
+
+// sectionsOf maps every slide ID the presentation's section list names to
+// its section (PowerPoint 2010's p14:sectionLst, [MS-PPTX] 2.3.20). A
+// section that lists no slide has none to map.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: sections-custom-shows prints the entries "Introduction",
+//     "Body" and "Wrap-up", each over its slides' entries, and none for
+//     its empty section.
+//   - libreoffice/pptx: sd/slide-sections nests its seven slides under
+//     "Default Section" and "section-demo".
+func sectionsOf(root *ooxml.Element) map[string]section {
+	var list *ooxml.Element
+	for _, ext := range root.Child(nsP, "extLst").Kids() {
+		if l := ext.Child(nsP14, "sectionLst"); l != nil {
+			list = l
+			break
+		}
+	}
+	out := map[string]section{}
+	for i, sec := range list.Kids() {
+		if !sec.Is(nsP14, "section") {
+			continue
+		}
+		name := attr(sec, "name")
+		for _, id := range sec.Child(nsP14, "sldIdLst").Kids() {
+			if v := attr(id, "id"); id.Is(nsP14, "sldId") && v != "" {
+				if _, dup := out[v]; !dup {
+					out[v] = section{name: name, index: i}
+				}
+			}
+		}
+	}
+	return out
 }
 
 // uniqueNames makes the slides' names unique as Impress names the pages of

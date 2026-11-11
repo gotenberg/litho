@@ -266,10 +266,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		}
 	}
 	if !opts.OmitOutline {
-		titles := outlineTitles(doc.Slides)
-		for i, s := range shown {
-			out.Outline = append(out.Outline, compose.Outline{Title: titles[s], Dest: compose.Dest{Page: i + 1, Elem: sectOf(i + 1)}})
-		}
+		out.Outline = outline(doc.Slides, shown, sectOf)
 		if opts.NotesPages {
 			// Impress writes the bookmarks again for the notes pages, each
 			// leading to its slide's page.
@@ -278,6 +275,60 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	}
 	out.Warnings = b.warnings
 	return out, nil
+}
+
+// outline returns the outline of the printed slides shown, the i-th on
+// page i + 1: an entry per slide titled by its Bookmark, else by its
+// outline title, and the slides of a section under an entry of the
+// section's name that leads to its first printed slide. A section none of
+// whose slides prints has no entry.
+func outline(all, shown []*Slide, sectOf func(int) *compose.StructElem) []compose.Outline {
+	titles := outlineTitles(all)
+	head := sectionHeads(all)
+	var out []compose.Outline
+	var open *Slide
+	for i, s := range shown {
+		dest := compose.Dest{Page: i + 1, Elem: sectOf(i + 1)}
+		title := s.Bookmark
+		if title == "" {
+			title = titles[s]
+		}
+		entry := compose.Outline{Title: title, Dest: dest}
+		h := head[s]
+		if h == nil {
+			open = nil
+			out = append(out, entry)
+			continue
+		}
+		if h != open {
+			out = append(out, compose.Outline{Title: h.Section, Dest: dest})
+			open = h
+		}
+		last := &out[len(out)-1]
+		last.Kids = append(last.Kids, entry)
+	}
+	return out
+}
+
+// sectionHeads maps every slide in a section to the section's first slide.
+func sectionHeads(all []*Slide) map[*Slide]*Slide {
+	out := map[*Slide]*Slide{}
+	var head *Slide
+	for _, s := range all {
+		if s == nil {
+			continue
+		}
+		switch {
+		case s.Section == "":
+			head = nil
+		case s.SectionStart || head == nil || head.Section != s.Section:
+			head = s
+		}
+		if head != nil {
+			out[s] = head
+		}
+	}
+	return out
 }
 
 // outlineTitles returns the outline title of every slide: its name, else

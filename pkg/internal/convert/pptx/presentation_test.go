@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"strconv"
@@ -189,5 +190,36 @@ func TestPresentation_NotesLayout(t *testing.T) {
 	num := doc.NotesShapes[1]
 	if num.Box.Y < 683 || num.Box.Y > 684 || num.Text == nil || num.Text.Paragraphs[0].Runs[0].Field != slides.FieldSlideNumber {
 		t.Errorf("slide number %+v %+v", num.Box, num.Text)
+	}
+}
+
+// TestPresentation_Bookmarks checks that a slide's bookmark is PowerPoint's
+// "Slide n: title", n counting hidden slides from firstSlideNum, and that
+// the section list names each listed slide's section, marking its first.
+func TestPresentation_Bookmarks(t *testing.T) {
+	t.Parallel()
+	d := testDeck{
+		slides: []testSlide{
+			{tree: title("Hello")},
+			{tree: title("Hidden"), attrs: `show="0"`},
+			{tree: textBox("TB", 0, 0, 914400, 914400, para("no title"))},
+			{tree: title("Hello")},
+		},
+		presExtra: `<p:extLst><p:ext uri="{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"><p14:sectionLst xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main">` +
+			`<p14:section name="One" id="{1}"><p14:sldIdLst><p14:sldId id="256"/><p14:sldId id="257"/></p14:sldIdLst></p14:section>` +
+			`<p14:section name="Empty" id="{2}"><p14:sldIdLst/></p14:section>` +
+			`<p14:section name="Two" id="{3}"><p14:sldIdLst><p14:sldId id="258"/><p14:sldId id="259"/></p14:sldIdLst></p14:section>` +
+			`</p14:sectionLst></p:ext></p:extLst>`,
+	}
+	files := deckFiles(d)
+	files["ppt/presentation.xml"] = strings.Replace(files["ppt/presentation.xml"], `<p:presentation `, `<p:presentation firstSlideNum="10" `, 1)
+	doc := loadFiles(t, files)
+	var got []string
+	for _, s := range doc.Slides {
+		got = append(got, fmt.Sprintf("%s|%s|%v", s.Bookmark, s.Section, s.SectionStart))
+	}
+	want := []string{"Slide 10: Hello|One|true", "Slide 11: Hidden|One|false", "Slide 12|Two|true", "Slide 13: Hello|Two|false"}
+	if !slices.Equal(got, want) {
+		t.Errorf("bookmarks %q, want %q", got, want)
 	}
 }

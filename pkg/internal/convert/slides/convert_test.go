@@ -70,6 +70,48 @@ func TestConvert_Pages(t *testing.T) {
 	}
 }
 
+// TestConvert_OutlineSections checks that a slide's Bookmark titles its
+// entry as is, and that a section is an entry over its slides', leading to
+// its first printed slide, a section none of whose slides prints having
+// none.
+func TestConvert_OutlineSections(t *testing.T) {
+	slide := func(bookmark, section string, start, hidden bool) *Slide {
+		return &Slide{Name: "same", Bookmark: bookmark, Section: section, SectionStart: start, Hidden: hidden}
+	}
+	doc := &Document{Width: 960, Height: 540, Slides: []*Slide{
+		slide("Slide 1: Intro", "Intro", true, false),
+		slide("Slide 2: Hidden", "Body", true, true),
+		slide("Slide 3: Body", "Body", false, false),
+		slide("Slide 4: Body", "Body", false, false),
+		slide("Slide 5: Gone", "Gone", true, true),
+		slide("Slide 6: Again", "Intro", true, false),
+		slide("", "", false, false),
+	}}
+	out := convert(t, doc, office.Options{})
+	type entry struct {
+		title string
+		page  int
+	}
+	var got []entry
+	var walk func([]compose.Outline, string)
+	walk = func(list []compose.Outline, indent string) {
+		for _, o := range list {
+			got = append(got, entry{indent + o.Title, o.Dest.Page})
+			walk(o.Kids, indent+"  ")
+		}
+	}
+	walk(out.Outline, "")
+	want := []entry{
+		{"Intro", 1}, {"  Slide 1: Intro", 1},
+		{"Body", 2}, {"  Slide 3: Body", 2}, {"  Slide 4: Body", 3},
+		{"Intro", 4}, {"  Slide 6: Again", 4},
+		{"same (7)", 5},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("outline %v, want %v", got, want)
+	}
+}
+
 // TestConvert_PaperFit checks that a slide is scaled down to fit a page
 // and centred, never scaled up.
 func TestConvert_PaperFit(t *testing.T) {
