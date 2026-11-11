@@ -288,6 +288,8 @@ func (b *builder) semantics(node *layout.Node, n *dom.Node) {
 		if node.Style != nil {
 			node.Numbering = listNumbering(node.Style.ListStyleType, n.DataAtom == atom.Ol)
 		}
+	case atom.Figure:
+		node.Alt = figureName(n)
 	case atom.Dl:
 		node.Numbering = compose.NumberingDescription
 	case atom.Col, atom.Colgroup:
@@ -592,4 +594,36 @@ func (b *builder) warnOnce(code, key, msg string) {
 	}
 	b.warned[code+"\x00"+key] = true
 	b.warnings = append(b.warnings, compose.Warning{Code: code, Message: msg})
+}
+
+// maxFigureName caps the bytes of the name a figure's Figure carries.
+// Anti-DoS guard, not spec-mandated: a caption is a sentence or two, and
+// a reader is told the first few thousand characters of a longer one.
+const maxFigureName = 4096
+
+// figureName returns the name of a figure element, the Alt its Figure
+// carries (ISO 14289-1, 7.3), as HTML-AAM computes a figure's accessible
+// name: its aria-label, else the text of its first figcaption child,
+// else its title; "" for none. A figure names its figcaption's text
+// because a Figure's Alt replaces what it holds for a reader.
+func figureName(n *dom.Node) string {
+	name := ""
+	if v, ok := attr(n, "aria-label"); ok {
+		name = collapse(v)
+	}
+	for c := n.FirstChild; c != nil && name == ""; c = c.NextSibling {
+		if c.Type == dom.ElementNode && c.DataAtom == atom.Figcaption && c.Namespace == "" {
+			name = collapse(textContent(c))
+			break
+		}
+	}
+	if name == "" {
+		v, _ := attr(n, "title")
+		name = collapse(v)
+	}
+	for len(name) > maxFigureName {
+		_, size := utf8.DecodeLastRuneInString(name)
+		name = name[:len(name)-size]
+	}
+	return name
 }

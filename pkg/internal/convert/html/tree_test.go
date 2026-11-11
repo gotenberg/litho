@@ -80,6 +80,24 @@ func TestPrepare_MapsElementsToRoles(t *testing.T) {
 	}
 }
 
+// TestPrepare_FigureName locks the Alt of a figure's Figure: its
+// aria-label, else its first figcaption's text, else its title, as
+// HTML-AAM names a figure.
+func TestPrepare_FigureName(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ html, alt string }{
+		{`<figure id=x aria-label=" Named " title=t><figcaption>c</figcaption></figure>`, "Named"},
+		{`<figure id=x title=t><p>x</p><figcaption> A   caption </figcaption><figcaption>b</figcaption></figure>`, "A caption"},
+		{`<figure id=x title="The title">a</figure>`, "The title"},
+		{`<figure id=x>a</figure>`, ""},
+	} {
+		p := prep(t, tc.html, Options{})
+		if got := byID(t, p.root, "x").Alt; got != tc.alt {
+			t.Errorf("%s: alt %q, want %q", tc.html, got, tc.alt)
+		}
+	}
+}
+
 func TestPrepare_RootStartsNoRole(t *testing.T) {
 	t.Parallel()
 	p := prep(t, `<html lang="fr-CA"><p>Bonjour</p>`, Options{})
