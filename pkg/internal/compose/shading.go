@@ -150,7 +150,7 @@ func stopFunction(stops []ColorStop, comp func(Color) ast.PdfArray) ast.PdfObjec
 // of the stops' alpha in the same coordinates, the mask's coordinate
 // system being the one in force when gs selects it.
 func (p *pageWriter) shadingFill(ctx context.Context, pa *Path, opacity float64) error {
-	sh := pa.Fill.Shading
+	sh, m := placedShading(pa.Fill.Shading, p.off)
 	refs := p.w.shading(sh)
 	p.mark(pa.Parent)
 	p.buf.WriteString("q\n")
@@ -163,13 +163,12 @@ func (p *pageWriter) shadingFill(ctx context.Context, pa *Path, opacity float64)
 	} else {
 		p.buf.WriteString("W n\n")
 	}
-	m := shadingMatrix(sh)
 	if m != Identity {
 		fmt.Fprintf(&p.buf, "%s %s %s %s %s %s cm\n", num(m.A), num(m.B), num(m.C), num(m.D), num(m.E), num(m.F))
 	}
 	cur := p.currentAlpha()
 	if refs.translucent {
-		form := p.w.maskForm(refs.alpha, inverseBBox(pa.Ops, m))
+		form := p.w.maskForm(refs.alpha, inverseBBox(pa.Ops, p.off, m))
 		name := fmt.Sprintf("GM%d", len(p.masks)+1)
 		p.masks = append(p.masks, maskUse{name: name, alpha: alphaState{fill: round(opacity), stroke: cur.stroke}, smask: form})
 		fmt.Fprintf(&p.buf, "/%s gs\n", name)
@@ -179,6 +178,29 @@ func (p *pageWriter) shadingFill(ctx context.Context, pa *Path, opacity float64)
 	fmt.Fprintf(&p.buf, "/%s sh\nQ\n", p.shadingName(refs.color))
 	p.alpha = p.alpha[:len(p.alpha)-1]
 	return nil
+}
+
+// placedShading returns the shading sh paints with once the folded
+// translation off of the groups (see [pageWriter.group]) joins it, and the
+// matrix that places it in the coordinates written. A shading with no
+// transform of its own takes the translation into its coordinates, so its
+// dictionary holds numbers near the page's (6.1.12 of ISO 19005-1 bounds
+// every real of a PDF/A-1 file, a dictionary's too); one with a transform
+// takes it into the matrix, its coordinates being its own space's.
+func placedShading(sh *Shading, off Point) (*Shading, Matrix) {
+	m := shadingMatrix(sh)
+	if off == (Point{}) {
+		return sh, m
+	}
+	if m == Identity {
+		c := *sh
+		c.From = Point{X: sh.From.X + off.X, Y: sh.From.Y + off.Y}
+		c.To = Point{X: sh.To.X + off.X, Y: sh.To.Y + off.Y}
+		return &c, m
+	}
+	m.E += off.X
+	m.F += off.Y
+	return sh, m
 }
 
 // shadingName returns the page's resource name of the shading ref.
@@ -219,13 +241,14 @@ func (w *docWriter) maskForm(alpha ast.PdfIndirectRef, bbox [4]float64) ast.PdfI
 }
 
 // inverseBBox returns the bounding box [x0 y0 x1 y1] of the points of ops
-// mapped through the inverse of m, grown by one unit a side: the control
-// points of a curve hold it in their hull, so the box covers the path in
-// the shading's coordinates. Validate has checked m invertible.
-func inverseBBox(ops []PathOp, m Matrix) [4]float64 {
+// moved by off and mapped through the inverse of m, grown by one unit a
+// side: the control points of a curve hold it in their hull, so the box
+// covers the path in the shading's coordinates. Validate has checked m
+// invertible.
+func inverseBBox(ops []PathOp, off Point, m Matrix) [4]float64 {
 	det := m.A*m.D - m.B*m.C
 	inv := func(pt Point) (float64, float64) {
-		x, y := pt.X-m.E, pt.Y-m.F
+		x, y := pt.X+off.X-m.E, pt.Y+off.Y-m.F
 		return (m.D*x - m.C*y) / det, (-m.B*x + m.A*y) / det
 	}
 	box := [4]float64{math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)}

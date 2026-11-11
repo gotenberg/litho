@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
@@ -60,6 +61,10 @@ type pageWriter struct {
 	masks     []maskUse
 	// alpha is a stack mirroring q/Q: its top is the alpha in force.
 	alpha []alphaState
+	// off is the translation of the groups folded into the coordinates
+	// written: a point of the model's current space is written at its
+	// coordinates plus off (see [pageWriter.group]).
+	off Point
 
 	// Marked content: whether a sequence is open, and for which element
 	// (nil for an artifact).
@@ -116,11 +121,26 @@ func (p *pageWriter) fragments(ctx context.Context, content []Fragment, opacity 
 		var err error
 		switch f := f.(type) {
 		case *Text:
-			err = p.text(ctx, f, opacity)
+			if k := p.fitScale(p.extent(f)); k != 1 {
+				c := scaledText(f, p.off, k)
+				err = p.fitted(k, f.Parent, func() error { return p.text(ctx, c, opacity) })
+			} else {
+				err = p.text(ctx, f, opacity)
+			}
 		case *Image:
-			err = p.image(f, opacity)
+			if k := p.fitScale(p.extent(f)); k != 1 {
+				c := scaledImage(f, p.off, k)
+				err = p.fitted(k, f.Parent, func() error { return p.image(c, opacity) })
+			} else {
+				err = p.image(f, opacity)
+			}
 		case *Path:
-			err = p.path(ctx, f, opacity)
+			if k := p.fitScale(p.extent(f)); k != 1 {
+				c := scaledPath(f, p.off, k)
+				err = p.fitted(k, f.Parent, func() error { return p.path(ctx, c, opacity) })
+			} else {
+				err = p.path(ctx, f, opacity)
+			}
 		case *Group:
 			err = p.group(ctx, f, opacity)
 		}
@@ -129,6 +149,25 @@ func (p *pageWriter) fragments(ctx context.Context, content []Fragment, opacity 
 		}
 	}
 	return nil
+}
+
+// extent returns the largest magnitude of the numbers f writes, the
+// folded translation included, when the version bounds them, and 0
+// otherwise, so a later version spends no pass on it.
+func (p *pageWriter) extent(f Fragment) float64 {
+	if !p.limited() {
+		return 0
+	}
+	switch f := f.(type) {
+	case *Text:
+		return textExtent(f, p.off)
+	case *Image:
+		return imageExtent(f, p.off)
+	case *Path:
+		return pathExtent(f, p.off)
+	case *Group:
+	}
+	return 0
 }
 
 // mark opens the marked-content sequence a fragment with parent belongs to,
@@ -268,7 +307,7 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 		x, y := t.Origin.X+g.X*hs, t.Origin.Y+g.Y
 		if !started || round(y) != round(baseline) {
 			tj.end()
-			fmt.Fprintf(&p.buf, "%s 0 %s %s %s %s Tm\n", num(size), num(size*t.Skew), num(-size), num(x), num(y))
+			fmt.Fprintf(&p.buf, "%s 0 %s %s %s %s Tm\n", num(size), num(size*t.Skew), num(-size), num(x+p.off.X), num(y+p.off.Y))
 			started, penX, baseline = true, x, y
 		} else if adj := round((penX - x) / (size * hs) * 1000); adj != 0 {
 			// A positive adjustment moves the next glyph left (9.4.3, the
@@ -400,7 +439,7 @@ func (p *pageWriter) image(img *Image, opacity float64) error {
 	cur := p.currentAlpha()
 	p.setAlpha(alphaState{fill: opacity, stroke: cur.stroke})
 	fmt.Fprintf(&p.buf, "q %s 0 0 %s %s %s cm /%s Do Q\n",
-		num(r.Width), num(-r.Height), num(r.X), num(r.Y+r.Height), name)
+		num(r.Width), num(-r.Height), num(r.X+p.off.X), num(r.Y+r.Height+p.off.Y), name)
 	return nil
 }
 
@@ -467,20 +506,21 @@ func (p *pageWriter) path(ctx context.Context, pa *Path, opacity float64) error 
 }
 
 // ops writes path construction operators: m, l, c and h (ISO 32000-1,
-// 8.5.2.1, Table 59).
+// 8.5.2.1, Table 59), each point moved by the folded translation.
 func (p *pageWriter) ops(ctx context.Context, ops []PathOp) error {
+	ox, oy := p.off.X, p.off.Y
 	for _, op := range ops {
 		if err := p.step(ctx); err != nil {
 			return err
 		}
 		switch op.Kind {
 		case MoveTo:
-			fmt.Fprintf(&p.buf, "%s %s m\n", num(op.P[0].X), num(op.P[0].Y))
+			fmt.Fprintf(&p.buf, "%s %s m\n", num(op.P[0].X+ox), num(op.P[0].Y+oy))
 		case LineTo:
-			fmt.Fprintf(&p.buf, "%s %s l\n", num(op.P[0].X), num(op.P[0].Y))
+			fmt.Fprintf(&p.buf, "%s %s l\n", num(op.P[0].X+ox), num(op.P[0].Y+oy))
 		case CurveTo:
 			fmt.Fprintf(&p.buf, "%s %s %s %s %s %s c\n",
-				num(op.P[0].X), num(op.P[0].Y), num(op.P[1].X), num(op.P[1].Y), num(op.P[2].X), num(op.P[2].Y))
+				num(op.P[0].X+ox), num(op.P[0].Y+oy), num(op.P[1].X+ox), num(op.P[1].Y+oy), num(op.P[2].X+ox), num(op.P[2].Y+oy))
 		case ClosePath:
 			p.buf.WriteString("h\n")
 		}
@@ -492,6 +532,17 @@ func (p *pageWriter) ops(ctx context.Context, ops []PathOp) error {
 // (ISO 32000-1, 8.5.4), its opacity as an ExtGState, its content, then Q
 // (8.4.2).
 //
+// The translation of a group is not written as cm: it is folded into the
+// coordinates of what the group holds, text origins, path points, image
+// rectangles, clips and shading placements alike, and a transform that
+// also scales, rotates or skews takes the folded translation into its own
+// cm. Content is so written near the page's coordinates whatever the
+// translation the producer laid it out under: the engines place a page's
+// slice of a long flow under a translation that grows with the page, and
+// PDF 1.4 readers hold real numbers within +/-32767 (PDF Reference 1.4,
+// Appendix C, Table C.1), a limit PDF/A-1 makes a rule (ISO 19005-1,
+// 6.1.12). The sum is exact to the precision every number is written at.
+//
 // The opacity is a constant alpha (11.6.4.4), not a transparency group
 // (11.4.7): it multiplies into every child's own alpha, so the children
 // blend with the backdrop one by one and two overlapping children show
@@ -500,18 +551,28 @@ func (p *pageWriter) group(ctx context.Context, g *Group, opacity float64) error
 	p.endMark()
 	p.buf.WriteString("q\n")
 	p.alpha = append(p.alpha, p.currentAlpha())
+	saved := p.off
 	m := g.Transform
-	if m != (Matrix{}) && m != Identity {
-		fmt.Fprintf(&p.buf, "%s %s %s %s %s %s cm\n", num(m.A), num(m.B), num(m.C), num(m.D), num(m.E), num(m.F))
+	e, f := m.E+p.off.X, m.F+p.off.Y
+	det := m.A*m.D - m.B*m.C
+	switch {
+	case m == (Matrix{}):
+	case m.A == 1 && m.B == 0 && m.C == 0 && m.D == 1:
+		p.off = Point{X: e, Y: f}
+	case p.limited() && max(math.Abs(e), math.Abs(f)) > realLimit && det != 0 && finite(det):
+		// The translation passes what PDF 1.4 holds: the cm keeps the
+		// linear part alone, and the translation, mapped back through
+		// its inverse, folds into the content, which writes the numbers
+		// it still cannot hold under a scale of their own.
+		fmt.Fprintf(&p.buf, "%s %s %s %s 0 0 cm\n", num(m.A), num(m.B), num(m.C), num(m.D))
+		p.off = Point{X: (m.D*e - m.C*f) / det, Y: (m.A*f - m.B*e) / det}
+	default:
+		fmt.Fprintf(&p.buf, "%s %s %s %s %s %s cm\n", num(m.A), num(m.B), num(m.C), num(m.D), num(e), num(f))
+		p.off = Point{}
 	}
 	if g.Clip != nil {
-		if err := p.ops(ctx, g.Clip.Ops); err != nil {
+		if err := p.clip(ctx, g.Clip); err != nil {
 			return err
-		}
-		if g.Clip.Fill != nil && g.Clip.Fill.Rule == EvenOdd {
-			p.buf.WriteString("W* n\n")
-		} else {
-			p.buf.WriteString("W n\n")
 		}
 	}
 	eff := opacity * groupOpacity(g)
@@ -524,6 +585,7 @@ func (p *pageWriter) group(ctx context.Context, g *Group, opacity float64) error
 	p.endMark()
 	p.buf.WriteString("Q\n")
 	p.alpha = p.alpha[:len(p.alpha)-1]
+	p.off = saved
 	return nil
 }
 
