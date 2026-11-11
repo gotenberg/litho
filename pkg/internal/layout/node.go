@@ -89,6 +89,13 @@ type Node struct {
 	// who cannot see it. A link without one is described by the text it
 	// shows (compose.Link Contents).
 	Alt string
+	// ActualText replaces the text of the node's subtree for a reader of
+	// the structure tree (compose.StructElem ActualText): the characters a
+	// run of glyphs stands for when the glyphs' own codes do not say it, as
+	// the private-use codes of a symbol font do not. It needs a Role, which
+	// the engine gives the node a Span for when it has none. Empty replaces
+	// nothing.
+	ActualText string
 	// ID names the node as a link target. [Result.Anchors] records where it
 	// lands. An empty ID names nothing.
 	ID string

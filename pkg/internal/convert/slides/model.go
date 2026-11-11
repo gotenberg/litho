@@ -125,6 +125,17 @@ type Shape struct {
 	Jump int
 	// Name is the shape's name, for warnings.
 	Name string
+	// Alt describes the shape for a reader who cannot see it, as the source
+	// states it (ECMA-376 Part 1, 19.3.1.12 cNvPr descr, else title; ODF
+	// 1.3 Part 3, 10.3.17 svg:desc, else 10.3.16 svg:title), "" when it
+	// states nothing. A picture or a chart with an Alt is a Figure that
+	// carries it; one without stays a Figure without a description, which
+	// only the source's author can give.
+	Alt string
+	// Decorative marks a shape the source says carries no meaning (the
+	// decorative flag of Office 2019, adec:decorative): it is drawn as an
+	// artifact, outside the structure tree.
+	Decorative bool
 }
 
 // Shadow is a shape's drop shadow: a copy of the shape's silhouette,
