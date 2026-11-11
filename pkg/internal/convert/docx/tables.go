@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -684,6 +685,13 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 				role = "TH"
 			}
 			cn := &layout.Node{Kind: layout.Element, Style: cst, Role: role, Children: kids}
+			if isHeader {
+				// A tblHeader row repeats atop every page as the table's
+				// heading (ECMA-376 Part 1, 17.4.49): its cells head
+				// their columns (ISO 32000-1, 14.8.5.7, Table 349;
+				// ISO 14289-1, 7.5).
+				cn.Scope = compose.ScopeColumn
+			}
 			if span > 1 {
 				cn.ColSpan = span
 			}

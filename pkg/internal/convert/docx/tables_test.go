@@ -3,6 +3,7 @@ package docx
 import (
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 )
@@ -38,6 +39,11 @@ func TestTables(t *testing.T) {
 	}
 	if h := find(tbl, func(n *layout.Node) bool { return n.Style != nil && n.Style.Display == css.TableHeaderGroup }); len(h) != 1 || len(role(h[0], "TH")) != 3 {
 		t.Error("no header row group of three header cells")
+	}
+	for _, th := range role(tbl, "TH") {
+		if th.Scope != compose.ScopeColumn {
+			t.Errorf("header cell %q scope %d, want column", textOf(th), th.Scope)
+		}
 	}
 	cells := append(role(tbl, "TH"), role(tbl, "TD")...)
 	byText := map[string]*layout.Node{}
