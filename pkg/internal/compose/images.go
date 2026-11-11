@@ -263,6 +263,7 @@ func (w *docWriter) image(src *ImageSource) (ast.PdfIndirectRef, error) {
 		stream = w.pictureXObject(src)
 	}
 	ref := w.alloc.Alloc(stream)
+	w.shared[ref.ObjectNum] = true
 	w.images[src] = ref
 	return ref, nil
 }
@@ -327,7 +328,9 @@ func (w *docWriter) pictureXObject(src *ImageSource) ast.PdfStream {
 	}
 	main := dict("DeviceRGB")
 	if src.Alpha != nil {
-		main["SMask"] = w.alloc.Alloc(ast.NewStream(dict("DeviceGray"), src.Alpha))
+		mask := w.alloc.Alloc(ast.NewStream(dict("DeviceGray"), src.Alpha))
+		w.shared[mask.ObjectNum] = true
+		main["SMask"] = mask
 	}
 	return ast.NewStream(main, src.Samples)
 }

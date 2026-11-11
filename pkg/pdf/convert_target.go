@@ -69,8 +69,9 @@ func WithConvertPDFUA(profile models.PDFUAProfile) ConvertOption {
 
 // WithConvertTempDir sets the directory [Convert] writes its intermediate
 // files in, removed before it returns. Empty, the default, is the
-// operating system's temporary directory. A conversion without a profile
-// writes none today.
+// operating system's temporary directory. A conversion whose output passes
+// a few MiB keeps the page contents and font programs it writes there
+// until the file is complete, instead of in memory.
 func WithConvertTempDir(dir string) ConvertOption {
 	return func(o *convertOptions) { o.tempDir = dir }
 }
@@ -180,7 +181,7 @@ func (t convertTarget) profiles() string {
 // file of the target's version, then that file through the remediation a
 // [Writer] runs, which owns conformance for every PDF litho writes.
 func writeTarget(ctx context.Context, doc *compose.Document, dst io.Writer, t convertTarget, o *convertOptions) (*RemediationReport, error) {
-	opts := compose.Options{Logger: o.logger, Version: t.version}
+	opts := compose.Options{Logger: o.logger, Version: t.version, TempDir: o.tempDir, Spool: o.spool}
 	if !t.conforming() {
 		if err := compose.Write(ctx, doc, dst, opts); err != nil {
 			return nil, fmt.Errorf("writing the PDF: %w", err)

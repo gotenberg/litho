@@ -24,7 +24,23 @@ type Options struct {
 	// Version is the PDF version the file is written for, [Version17] when
 	// empty. See [Write] for what each version changes.
 	Version Version
+	// TempDir is the directory of the spool file, the operating system's
+	// temporary directory when empty.
+	TempDir string
+	// Spool is the bytes of the streams Write makes, the page contents and
+	// the font programs, it holds in memory: past it, the next ones go to
+	// a spool file in TempDir until the file is written. 0 is 4 MiB, a
+	// negative value never spools. The output is the same either way.
+	Spool int64
 }
+
+// defaultSpool is [Options.Spool] when zero: 4 MiB. Memory guard, not
+// spec-mandated. Most conversions write less, so they never touch the
+// disk, and below it the streams weigh little beside what a conversion
+// already holds (its fonts and its laid-out pages, tens of MiB). Past it,
+// the file's own streams grow with its pages, about 4 KiB a page of text,
+// and a long document holds them all until its last byte is written.
+const defaultSpool = 4 << 20
 
 // Write validates doc with [Document.Validate], then writes it to dst as
 // one PDF file of the version [Options.Version] names. It returns the
@@ -36,8 +52,17 @@ type Options struct {
 // write error on dst leaves dst untouched.
 //
 // Write reads doc and never mutates it. Its output depends on doc and opts
-// alone: two calls with equal input write equal bytes. The document's
-// Warnings are not written; the caller surfaces them.
+// alone: two calls with equal input write equal bytes, whether the
+// streams went through the spool file or not. The document's Warnings are
+// not written; the caller surfaces them.
+//
+// The streams Write makes past [Options.Spool] bytes are written to a
+// temp file in [Options.TempDir] as they are made and read back as the
+// file is written to dst; the file is removed before Write returns, on
+// every path. A spool file that cannot be created or written fails Write
+// before dst receives anything; one that cannot be read back fails it
+// while dst is being written. The pictures of the document are never
+// spooled: they are written from their [ImageSource] bytes.
 //
 // # Output
 //
@@ -112,6 +137,18 @@ func Write(ctx context.Context, doc *Document, dst io.Writer, opts Options) erro
 		producer = "litho"
 	}
 
+	spool := writer.NewSpool(opts.TempDir)
+	defer func() {
+		if err := spool.Close(); err != nil {
+			// The output is complete or abandoned: a spool file left
+			// behind changes no byte of it.
+			logger.Debug("compose: removing the spool file failed", slog.Any("error", err))
+		}
+	}()
+	held := opts.Spool
+	if held == 0 {
+		held = defaultSpool
+	}
 	w := &docWriter{
 		doc:      doc,
 		alloc:    writer.NewObjAllocator(0),
@@ -120,9 +157,16 @@ func Write(ctx context.Context, doc *Document, dst io.Writer, opts Options) erro
 		images:   make(map[*ImageSource]ast.PdfIndirectRef),
 		shadings: make(map[string]shadingRefs),
 		id:       sha256.New(),
+		spool:    spool,
+		hold:     held,
+		mark:     1,
+		shared:   make(map[int]bool),
 	}
 	trailer, err := w.write(ctx, producer)
 	if err != nil {
+		return err
+	}
+	if err := w.spill(ctx); err != nil {
 		return err
 	}
 	if err := writer.WriteRewrite(ctx, dst, writer.RewriteConfig{
@@ -154,6 +198,51 @@ type docWriter struct {
 	st *structState
 	// id hashes what the file /ID is derived from.
 	id hash.Hash
+
+	// spool takes the streams queued past hold bytes, negative for never;
+	// held counts the bytes of those kept in memory. Objects from mark on
+	// have not been considered yet; shared holds the objects whose bytes
+	// are the model's own, the pictures, which spooling would copy without
+	// freeing anything.
+	spool  *writer.Spool
+	hold   int64
+	held   int64
+	mark   int
+	shared map[int]bool
+}
+
+// spill considers the objects queued since the last call: a stream Write
+// made stays in memory while the bytes held stay within w.hold, and goes
+// to the spool file past it. Streams only ever move to the file, so the
+// memory they hold is bounded by w.hold and one page's worth.
+func (w *docWriter) spill(ctx context.Context) error {
+	next := w.alloc.NextObjNum()
+	pending := w.alloc.Pending()
+	for num := w.mark; num < next; num++ {
+		s, ok := pending[num].(ast.PdfStream)
+		if !ok || w.shared[num] {
+			continue
+		}
+		// Every stream queued since the mark is one Write built in
+		// memory, so Bytes reads nothing.
+		data, err := s.Bytes(ctx)
+		if err != nil {
+			return fmt.Errorf("writing PDF: %w", err)
+		}
+		if w.hold < 0 || w.held+int64(len(data)) <= w.hold {
+			w.held += int64(len(data))
+			continue
+		}
+		spooled, err := w.spool.Stream(s.Dict, data)
+		if err != nil {
+			return fmt.Errorf("writing PDF: %w", err)
+		}
+		w.alloc.AllocAt(num, spooled)
+		// Past the threshold every later stream spools: held stays put.
+		w.held = w.hold
+	}
+	w.mark = next
+	return nil
 }
 
 // write queues every object of the document and returns the trailer.
@@ -178,6 +267,9 @@ func (w *docWriter) write(ctx context.Context, producer string) (ast.PdfDict, er
 		if err := w.page(ctx, i, page); err != nil {
 			return nil, err
 		}
+		if err := w.spill(ctx); err != nil {
+			return nil, err
+		}
 		kids[i] = w.pageRefs[i]
 	}
 	// ISO 32000-1, 7.7.3.2: a flat tree of one Pages node is a valid page
@@ -193,6 +285,9 @@ func (w *docWriter) write(ctx context.Context, producer string) (ast.PdfDict, er
 			return nil, fmt.Errorf("writing fonts: %w", err)
 		}
 		fe.subset.Write(ctx, w.alloc, w.logger, fe.ref)
+		if err := w.spill(ctx); err != nil {
+			return nil, err
+		}
 	}
 
 	catalog := ast.PdfDict{

@@ -113,6 +113,10 @@ type convertOptions struct {
 	tempDir                              string
 	defaultWidth, defaultHeight          float64
 	defaultLang                          string
+
+	// spool is compose.Options.Spool: zero in every public use, set by
+	// tests to force the spool file on or off.
+	spool int64
 }
 
 // WithConvertLogger injects a structured logger for the diagnostics of a
