@@ -127,6 +127,14 @@ Fonts are Calibri, Calibri Light, Cambria, Arial, Times New Roman and Courier Ne
 
 The shared master is the Office theme master with title, body, date, footer and slide number placeholders and the 11 standard layouts. Every fixture names `Calibri` and `Calibri Light` through the theme unless its row says otherwise.
 
+## Paper documents
+
+`corpus build` generates, beside the hostile documents, one deck per slide size from the committed `paper-deck` (`paperDocs` in `cmd/corpus/papers.go`), never committed. `paper-deck` is two 4:3 slides (`sldSz` `screen4x3`, 10 by 7.5 inches) on the master of `size-4x3`; each generated deck changes `sldSz` alone, so the master's placeholders keep their place and the size decides only the page box and what the slide clips. No deck takes an option: no engine re-papers a deck.
+
+| Fixture             | Count | `sldSz`                                                                                                                                                                                                                                                                            |
+| ------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `paper-deck-<size>` | 18    | One per `ST_SlideSizeType` value but `custom` (screen4x3, letter, A4, 35mm, overhead, banner, ledger, A3, B4ISO, B5ISO, B4JIS, B5JIS, hagakiCard, screen16x9, screen16x10), the paper ones on their paper in landscape, and the custom widescreen, A4 portrait and Letter portrait |
+
 ## Hostile documents
 
 `corpus build` generates these from `minimal` (`hostile_*.go` in `cmd/corpus`); they are never committed. The `robustness` feature converts them, and every fixture above, in a child process and checks each ends as [`robustness.json`](robustness.json) says: a PDF, the error the document must be refused with, or `any` end but a crash or a panic, always under the memory bound (1 GiB unless the document sets its own), with no network request, no text a document pulls from the machine (`forbid`) and the text it must keep (`require`). No reference is built for them.

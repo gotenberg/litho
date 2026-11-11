@@ -14,3 +14,14 @@ LibreOffice prints a page that names no size on Letter, the paper of its en-US l
 | `fit-one-page`           | 1                   | none                                               | A sheet of 90 rows by 12 columns fitted to one page (`style:scale-to-X` and `-Y` 1) on A4         |
 | `fit-one-page-paper`     | 1                   | `paperWidth: 5.5`, `paperHeight: 8.5`, `landscape` | The fitted sheet refitted to the caller's landscape paper: one 612 by 396 point page              |
 | `no-page-size`           | 4                   | none                                               | The Default page style without a size: the default paper, Letter in LibreOffice                   |
+
+## Paper documents
+
+`corpus build` generates the paper documents from the committed `paper-grid` and `paper-fit` into the testdata (`paperDocs` in `cmd/corpus/papers.go`, `papers/<name>/`), never committed. They are the workbooks of `litho/xlsx`'s bases in ODF: a grid of 24 columns by 160 rows with a header and a footer, and 16 columns by 120 rows fitted to one page wide (`style:scale-to-X` 1, `style:scale-to-Y` 0), on portrait Letter. The LibreOffice route takes the paper options, so the option documents have references of their own.
+
+| Fixture                                                                             | Count | Page setup                                                                                                 |
+| ----------------------------------------------------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------- |
+| `paper-grid`, `paper-fit`                                                           | 2     | Committed, portrait Letter                                                                                 |
+| `paper-grid-<paper>-<orientation>`                                                  | 16    | The page layout on A3, A4, A5 and B5 (ISO 216), Letter, Legal, Tabloid and Executive, in both orientations |
+| `paper-fit-<paper>-<orientation>`                                                   | 6     | The fitted sheet on A5, Letter and A3, in both orientations                                                |
+| `paper-grid-option-<paper>-<orientation>`, `paper-fit-option-<paper>-<orientation>` | 12    | The base with A5, Letter or A3 as options, and `landscape` for the landscape ones                          |

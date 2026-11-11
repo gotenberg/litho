@@ -12,3 +12,15 @@ LibreOffice prints a page that names no size on Letter, the paper of its en-US l
 | `mixed-sections-paper`     | 3                   | `paperWidth: 5.5`, `paperHeight: 8.5` | The caller's paper replaces every section's size and orientation: three portrait 396 by 612 point pages, the landscape one included |
 | `mixed-sections-landscape` | 3                   | `landscape`                           | Every portrait section turned, the landscape one kept: 792 by 612 twice, then 595 by 420                                            |
 | `no-page-size`             | 1                   | none                                  | A page layout that names no size: the default paper, Letter in LibreOffice                                                          |
+
+## Paper documents
+
+`corpus build` generates the paper documents from the committed `paper-base` into the testdata (`paperDocs` in `cmd/corpus/papers.go`, `papers/<name>/`), never committed: the same base gives the same bytes. `paper-base` is the text of `litho/docx`'s `paper-base` in ODF: about three pages on portrait Letter (page layout `pm1`), Cambria headings, Calibri text, a Times New Roman quote, an Arial table, an inline picture, a header and a "Page X of Y" footer. The LibreOffice route takes the paper options, so the option documents have references of their own.
+
+| Fixture                              | Count | Page setup                                                                                                                                                      |
+| ------------------------------------ | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `paper-base`                         | 1     | Committed, portrait Letter                                                                                                                                      |
+| `paper-<paper>-<orientation>`        | 16    | `pm1` on A3, A4, A5 and B5 (ISO 216), Letter, Legal, Tabloid and Executive (`fo:page-width`, `fo:page-height`, `style:print-orientation`), in both orientations |
+| `paper-option-<paper>-<orientation>` | 6     | `paper-base` with `paperWidth` and `paperHeight` of A5, Letter or A3, and `landscape` for the landscape ones                                                    |
+| `paper-mixed-orientation`            | 1     | The second Heading 1 starts the master page `Second`: portrait Letter, then landscape Letter                                                                    |
+| `paper-mixed-sizes`                  | 1     | Portrait A4, then portrait A5                                                                                                                                   |

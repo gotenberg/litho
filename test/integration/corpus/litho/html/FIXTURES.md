@@ -117,3 +117,15 @@ The text F1 score reads Chromium's PDF with PDF.js. Chromium writes its Arabic a
 ## litho's conversion
 
 The `diff` feature converts each source at its options (by default on Chromium's measured A4 page, 595.92 by 841.92 points with 27.75 point margins, for print), the source's directory as the resource root and the Liberation, DejaVu, Noto Sans CJK, Noto Sans Thai and Noto Sans Devanagari fixture fonts alone (`make corpus-fetch CORPUS=fonts`). The CJK faces are the region subsets and the `NotoSansCJK-Regular.ttc` collection the Gotenberg image installs, whose `Noto Sans CJK JP` family both converters draw an unlabelled CJK line with.
+
+## Paper documents
+
+`corpus build` generates the paper documents from the committed `paper-base` (about three pages: headings, justified paragraphs, quotes, a table the width of the page, a picture, its stylesheet holding `@page { size: auto; }`) and `paper-markdown` (the same text in Markdown) into the testdata (`paperDocs` in `cmd/corpus/papers.go`, `papers/<name>/`), never committed.
+
+| Fixture                                    | Count | What sets the page                                                                                                                                                                                                     |
+| ------------------------------------------ | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `paper-base`, `paper-markdown`             | 2     | Committed, the corpus default paper                                                                                                                                                                                    |
+| `paper-option-<paper>-<orientation>`       | 16    | `paperWidth` and `paperHeight` of A3, A4, A5 and B5 (ISO 216), Letter, Legal, Tabloid and Executive, and `landscape` for the landscape ones                                                                            |
+| `paper-css-<keyword>-<orientation>-<mode>` | 40    | `@page { size: <keyword> }` and `<keyword> landscape` for each keyword of CSS Paged Media Level 3 (A5, A4, A3, B5, B4, JIS-B5, JIS-B4, letter, legal, ledger), `preferCssPageSize` true (`prefer`) and false (`paper`) |
+| `paper-css-lengths-<shape>-<mode>`         | 4     | `@page { size: 6in 9in }` and `25cm 15cm`, each with and without `preferCssPageSize`                                                                                                                                   |
+| `paper-markdown-<paper>`                   | 3     | `paper-markdown` on A5, Letter and A3                                                                                                                                                                                  |

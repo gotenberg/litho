@@ -284,7 +284,7 @@ const (
 // both bases with those papers named as options, borrowing the reference of
 // the workbook of that paper.
 func xlsxPaperDocs() []paperDoc {
-	var docs []paperDoc
+	docs := make([]paperDoc, 0, len(orientations)*(len(paperSizes)+3*len(paperSpan)))
 	sheet := func(base string, p paperSize, o string) paperDoc {
 		setup := fmt.Sprintf(`paperSize="%d" orientation="%s"`, p.code, o)
 		return paperDoc{
@@ -622,7 +622,7 @@ func odtPaperDocs() []paperDoc {
 // XLSX ones, the option fixtures with references of their own. paper-fit
 // is fitted to one page wide (style:scale-to-X 1, style:scale-to-Y 0).
 func odsPaperDocs() []paperDoc {
-	var docs []paperDoc
+	docs := make([]paperDoc, 0, len(orientations)*(len(paperSizes)+3*len(paperSpan)))
 	bases := []struct{ name, part string }{{xlsxGridBase, odsGridPart}, {xlsxFitBase, odsFitPart}}
 	for _, p := range paperSizes {
 		for _, o := range orientations {
@@ -662,11 +662,23 @@ type odpSize struct {
 //
 //nolint:gochecknoglobals // static table
 var odpSizes = []odpSize{
-	{"screen-4x3", 28, 21}, {"screen-16x9", 28, 15.75}, {"screen-16x10", 28, 17.5}, {"widescreen", 33.867, 19.05},
-	{"onscreen-4x3", 25.4, 19.05}, {"onscreen-16x9", 25.4, 14.288}, {"onscreen-16x10", 25.4, 15.875},
-	{"a3", 42, 29.7}, {"a4", 29.7, 21}, {"a5", 21, 14.8}, {"b5iso", 25, 17.6},
-	{"letter", 27.94, 21.59}, {"legal", 35.56, 21.59}, {"tabloid", 43.18, 27.94},
-	{"dia", 3.6, 2.4}, {"postcard", 10, 14.8}, {"a4-portrait", 21, 29.7},
+	{"screen-4x3", 28, 21},
+	{"screen-16x9", 28, 15.75},
+	{"screen-16x10", 28, 17.5},
+	{"widescreen", 33.867, 19.05},
+	{"onscreen-4x3", 25.4, 19.05},
+	{"onscreen-16x9", 25.4, 14.288},
+	{"onscreen-16x10", 25.4, 15.875},
+	{"a3", 42, 29.7},
+	{"a4", 29.7, 21},
+	{"a5", 21, 14.8},
+	{"b5iso", 25, 17.6},
+	{"letter", 27.94, 21.59},
+	{"legal", 35.56, 21.59},
+	{"tabloid", 43.18, 27.94},
+	{"dia", 3.6, 2.4},
+	{"postcard", 10, 14.8},
+	{"a4-portrait", 21, 29.7},
 }
 
 // The slide size of the ODP base, paper-deck: Screen 4:3, the page layout

@@ -146,6 +146,18 @@ Fonts are Calibri, Cambria, Arial, Times New Roman, Courier New, DejaVu Sans, No
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `protected` | Gotenberg's `protected_page_1.docx` (MIT License, Copyright Julien Neuhart), byte for byte: an ECMA-376 agile-encrypted package in an OLE compound file, password `foo`, which `options.json` names. It came from the `gotenberg/docx` corpus, removed on 2026-11-09; `pkg/pdf`'s `TestConvert_DOCXPassword` reads it too |
 
+## Paper documents
+
+`corpus build` generates, beside the hostile documents, the paper documents from one committed base (`paperDocs` in `cmd/corpus/papers.go`), never committed: the same base gives the same bytes. They judge how a conversion reads a section's paper and lays the same text out at another width.
+
+| Fixture                                             | Count | Page setup                                                                                                                                                                                               |
+| --------------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `paper-base`                                        | 1     | Committed: about three pages on portrait Letter, Cambria headings, Calibri text, a Times New Roman quote, an Arial table the width of the column, an inline picture, a header and a "Page X of Y" footer |
+| `paper-<paper>-portrait`, `paper-<paper>-landscape` | 16    | `paper-base` with its `w:pgSz` on A3, A4, A5 and B5 (ISO 216), Letter, Legal, Tabloid and Executive, the landscape ones with `w:orient="landscape"` and the sides swapped                                |
+| `paper-option-<paper>-<orientation>`                | 6     | `paper-base` unchanged, `options.json` naming A5, Letter or A3 (`paperWidth`, `paperHeight`, and `landscape` for the landscape ones), `reference_of` the generated document of that paper                |
+| `paper-mixed-orientation`                           | 1     | Two sections from the second Heading 1: portrait Letter, then landscape Letter                                                                                                                           |
+| `paper-mixed-sizes`                                 | 1     | Two sections: portrait A4, then portrait A5                                                                                                                                                              |
+
 ## Hostile documents
 
 `corpus build` generates these from `minimal` (`hostile_*.go` in `cmd/corpus`); they are never committed. The `robustness` feature converts them, and every fixture above, in a child process and checks each ends as [`robustness.json`](robustness.json) says: a PDF, the error the document must be refused with, or `any` end but a crash or a panic, always under the memory bound (1 GiB unless the document sets its own), with no network request, no text a document pulls from the machine (`forbid`) and the text it must keep (`require`). No reference is built for them.

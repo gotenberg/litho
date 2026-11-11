@@ -105,6 +105,18 @@ Fonts are Calibri, Cambria, Arial, Times New Roman and Courier New, which have m
 | `real_timesheet`                 | Realistic timesheet: time and `[h]:mm` durations, weekend shading by expression, overtime highlight, time validation, pay calculation                                                                                                                                                                                             |
 | `real_dashboard`                 | Realistic dashboard: KPI tiles with merged cells and colored delta formats, stacked column with target line, pie, sparklines, icon sets                                                                                                                                                                                           |
 
+## Paper documents
+
+`corpus build` generates, beside the hostile documents, the paper documents from two committed bases (`paperDocs` in `cmd/corpus/papers.go`), never committed: the same bases give the same bytes. Each sheet states its paper by its `pageSetup` `paperSize` code (ECMA-376 Part 1, 18.3.1.63: 8 A3, 9 A4, 11 A5, 34 B5 (ISO), 1 Letter, 5 Legal, 3 Tabloid, 7 Executive) and its `orientation`.
+
+| Fixture                                                                             | Count | Page setup                                                                                                                                                  |
+| ----------------------------------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `paper-grid`                                                                        | 1     | Committed: a grid of 24 columns by 160 rows, wider and longer than any paper, with a header and a "Page X of Y" footer, on portrait Letter (`paperSize` 1)  |
+| `paper-fit`                                                                         | 1     | Committed: 16 columns by 120 rows fitted to one page wide (`fitToPage`, `fitToWidth` 1, `fitToHeight` 0), so the paper decides the scale and the pages down |
+| `paper-grid-<paper>-<orientation>`                                                  | 16    | `paper-grid` on A3, A4, A5 and B5 (ISO 216), Letter, Legal, Tabloid and Executive, in both orientations                                                     |
+| `paper-fit-<paper>-<orientation>`                                                   | 6     | `paper-fit` on A5, Letter and A3, in both orientations                                                                                                      |
+| `paper-grid-option-<paper>-<orientation>`, `paper-fit-option-<paper>-<orientation>` | 12    | The base unchanged, `options.json` naming A5, Letter or A3 and `landscape` for the landscape ones, `reference_of` the generated workbook of that paper      |
+
 ## Hostile documents
 
 `corpus build` generates these from `minimal` (`hostile_*.go` in `cmd/corpus`); they are never committed. The `robustness` feature converts them, and every fixture above, in a child process and checks each ends as [`robustness.json`](robustness.json) says: a PDF, the error the document must be refused with, or `any` end but a crash or a panic, always under the memory bound (1 GiB unless the document sets its own), with no network request, no text a document pulls from the machine (`forbid`) and the text it must keep (`require`). No reference is built for them.

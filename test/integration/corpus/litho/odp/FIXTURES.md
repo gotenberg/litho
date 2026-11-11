@@ -15,3 +15,11 @@ Each source is a directory, `sources/<name>/`, holding one flat OpenDocument fil
 ## Accepted disagreements
 
 Impress applies neither the route's paper nor its landscape to a presentation: it prints each slide on a page of the slide size. litho follows its own rule, the same in every format: the caller's paper is every page, and a slide is scaled down to fit it, never up, and centred. `wide-deck-paper` and `portrait-deck-landscape` score that difference in their `pages` and layout cells.
+
+## Paper documents
+
+`corpus build` generates one deck per slide size from the committed `paper-deck` into the testdata (`paperDocs` in `cmd/corpus/papers.go`, `papers/<name>/`), never committed. `paper-deck` is the deck of `wide-deck` on Screen 4:3, 28 by 21 cm; each generated deck changes the slide page layout alone.
+
+| Fixture             | Count | Slide size                                                                                                                                                                                                           |
+| ------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `paper-deck-<size>` | 17    | Impress's Screen 4:3, 16:9, 16:10 and Widescreen, On-screen Show 4:3, 16:9 and 16:10, A3, A4, A5, B5 (ISO), Letter, Legal and Tabloid in landscape, the 36 by 24 mm Dia Slide, the Japanese Postcard and A4 portrait |
