@@ -194,6 +194,11 @@ var sourcePins = map[string][]string{
 	"litho/xlsx": nil,
 	"litho/pptx": nil,
 	"litho/html": nil,
+	// The flat OpenDocument sources, against LibreOffice references the
+	// host builds, as the libreoffice corpora's below.
+	"litho/odt": nil,
+	"litho/ods": nil,
+	"litho/odp": nil,
 
 	"wpt":        {"WPT_COMMIT"},
 	"resvg":      {"RESVG_COMMIT"},
