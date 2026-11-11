@@ -22,6 +22,14 @@ type Document struct {
 	// Sheets lists the sheets in book order. A hidden sheet is listed and
 	// not printed.
 	Sheets []*Sheet
+	// ExcelRules lays the book out as Microsoft Excel prints a workbook
+	// rather than as Calc prints a spreadsheet, where the two differ: a
+	// row keeps the height its reader gives it, never grown to fit its
+	// text, since Excel prints a row at its stored height or the sheet's
+	// default. The reader sets the lengths, paddings and page setups in
+	// Excel's terms; the flag covers what the builder decides. The XLSX
+	// reader sets it; the OpenDocument and CSV readers leave it false.
+	ExcelRules bool
 }
 
 // Sheet is one worksheet (ECMA-376 Part 1, 18.3; ODF 1.3 Part 3, 9.1.2,
