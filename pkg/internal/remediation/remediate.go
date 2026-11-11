@@ -179,6 +179,12 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		}
 	}
 
+	// A page the write that follows would carry over malformed is queued
+	// with the other repairs, so a rollback of the content tier keeps it.
+	if n := queueMalformedPages(ctx, alloc, doc); n > 0 {
+		doc.Logger.Debug("remediate: queued malformed pages for the write", slog.Int("objects", n))
+	}
+
 	// A trailer SHRINK (e.g. removing /Info for PDF/A-4 §6.1.3) can only
 	// stick through a full rewrite, because earlier trailers inherit absent
 	// keys via /Prev. Only fixers outside the content tier edit the trailer,
