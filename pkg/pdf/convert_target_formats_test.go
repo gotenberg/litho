@@ -134,8 +134,8 @@ func testPPTX(t *testing.T) []byte {
 	})
 }
 
-// testODT returns an ODT of one paragraph.
-func testODT(t *testing.T) []byte {
+// targetODT returns an ODT of one paragraph.
+func targetODT(t *testing.T) []byte {
 	t.Helper()
 	ns := `xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" ` +
 		`xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" office:version="1.3"`
@@ -263,7 +263,7 @@ func TestConvert_EveryFormatToEveryTarget(t *testing.T) {
 		{FormatDOCX, testDOCX(t)},
 		{FormatXLSX, testXLSX(t)},
 		{FormatPPTX, testPPTX(t)},
-		{FormatODT, testODT(t)},
+		{FormatODT, targetODT(t)},
 	}
 	for _, src := range sources {
 		for _, tc := range convertTargets {
