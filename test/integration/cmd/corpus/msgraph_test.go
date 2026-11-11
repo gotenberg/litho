@@ -7,6 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -113,5 +116,49 @@ func TestWithLetterPageSetup_PlacesItWhereTheSchemaDoes(t *testing.T) {
 		if string(got) != tc.want {
 			t.Errorf("%s:\n got %s\nwant %s", name, got, tc.want)
 		}
+	}
+}
+
+// stubGraph sends every request of a client to the stub server srv.
+type stubGraph struct{ srv *httptest.Server }
+
+func (s stubGraph) RoundTrip(r *http.Request) (*http.Response, error) {
+	u, err := url.Parse(s.srv.URL)
+	if err != nil {
+		return nil, err
+	}
+	r = r.Clone(r.Context())
+	r.URL.Scheme, r.URL.Host = u.Scheme, u.Host
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+// Not parallel: it changes the working directory, where the corpus and
+// its testdata are found.
+func TestBuildReferences_AnExpiredSignInFailsTheRun(t *testing.T) { //nolint:paralleltest // t.Chdir
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"code":"InvalidAuthenticationToken"}}`)) //nolint:errcheck // the test reads the status
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	src := filepath.Join(dir, "test", "integration", "corpus", "stub", "docx", "sources", "doc")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "doc.docx"), []byte("PK"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "test", "integration", "testdata", "stub", "docx"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	g := &msGraph{client: &http.Client{Transport: stubGraph{srv}}, static: true, token: msGraphToken{AccessToken: "expired"}}
+	m := &Manifest{Name: "stub/docx", Source: "stub/docx", References: &ReferenceSpec{Dir: "references", Engine: engineMicrosoft}}
+	err := buildReferences(t.Context(), g, m, &resolvedPins{Values: map[string]string{}}, nil)
+	if !errors.Is(err, errMSGraphSignIn) {
+		t.Fatalf("error %v, want the refused sign-in", err)
+	}
+	if msg := err.Error(); !strings.Contains(msg, "HTTP 401") || !strings.Contains(msg, "0 of 1 references built") {
+		t.Errorf("error %q, want the status and the count of references built", msg)
 	}
 }

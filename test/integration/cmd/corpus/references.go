@@ -523,7 +523,7 @@ func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, 
 		ok     = map[string]referenceRecord{}
 		failed = map[string]referenceFailure{}
 	)
-	err = forEach(ctx, len(jobs), referenceJobsAtOnce, func(i int) error {
+	runErr := forEach(ctx, len(jobs), referenceJobsAtOnce, func(i int) error {
 		j := jobs[i]
 		srcSum, err := sourceDigest(engine, j.path)
 		if err != nil {
@@ -567,9 +567,9 @@ func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, 
 	})
 	// A sign-in that ran out stops the run: what it built is kept, so the
 	// next run, with a new token, builds the rest.
-	signIn := errors.Is(err, errMSGraphSignIn)
-	if err != nil && !signIn {
-		return err
+	signIn := errors.Is(runErr, errMSGraphSignIn)
+	if runErr != nil && !signIn {
+		return runErr
 	}
 
 	man := referenceManifest{Format: 1, Image: builder, LibreOffice: version, References: ok, Failed: failed}
@@ -602,7 +602,9 @@ func buildReferences(ctx context.Context, conv referenceConverter, m *Manifest, 
 	}
 	fmt.Printf("  %s: %d references built, %d refused, with %s\n", m.Name, len(ok), len(failed), builder)
 	if signIn {
-		return err
+		// The run stops here, whatever it kept: the operator must learn
+		// that the other sources have no reference.
+		return fmt.Errorf("%w: %d of %d references built, the others not; sign in again and run the command anew", runErr, len(ok), len(jobs))
 	}
 	return nil
 }
