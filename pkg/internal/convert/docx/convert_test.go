@@ -178,8 +178,16 @@ func TestHeadingTitle_LeavesOutAnchoredText(t *testing.T) {
 	}
 	h := &layout.Node{Kind: layout.Element, Style: inline, Children: []*layout.Node{
 		txtNode(inline, "Contents:"), txtNode(float, "Box"), txtNode(abs, "Frame"),
+		{Kind: layout.Replaced, Style: abs, Alt: "image2"},
+		{Kind: layout.Replaced, Style: float, Alt: "image3"},
 	}}
 	if got := headingTitle(h); got != "Contents:" {
 		t.Errorf("title %q, want Contents:", got)
+	}
+	// A picture in the line is part of the heading: its description reads
+	// in the title.
+	h.Children = append(h.Children, &layout.Node{Kind: layout.Replaced, Style: inline, Alt: "logo"})
+	if got := headingTitle(h); got != "Contents:logo" {
+		t.Errorf("title %q, want Contents:logo", got)
 	}
 }

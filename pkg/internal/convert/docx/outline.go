@@ -80,6 +80,11 @@ func headingTitle(n *layout.Node) string {
 		case layout.LineBreak:
 			b.WriteByte(' ')
 		case layout.Replaced:
+			if cur.Style.Float != css.FloatNone || cur.Style.Position == css.Absolute {
+				// An anchored picture's description is no more the
+				// heading's title than an anchored drawing's text.
+				continue
+			}
 			b.WriteString(cur.Alt)
 		case layout.Element:
 			if cur.Footnote != nil || cur != n && (cur.Style.Float != css.FloatNone || cur.Style.Position == css.Absolute) {
