@@ -454,32 +454,44 @@ func flatPapersOut(m *Manifest) string {
 }
 
 // buildFlatPaperDocs writes the paper documents of a corpus with committed
-// sources into <testdata root>/papers/<name>/: every file of its base's
-// sources/<base>/ directory but options.json, as edited, and its own
-// options.json, replacing what an earlier build wrote there.
+// sources into <testdata root>/papers/ (see [writeFlatPaperDocs]),
+// replacing what an earlier build wrote there.
 func buildFlatPaperDocs(ctx context.Context, m *Manifest) error {
 	out := flatPapersOut(m)
 	if err := os.RemoveAll(out); err != nil {
 		return err
 	}
-	docs := paperDocs(m.Name)
+	n, err := writeFlatPaperDocs(ctx, m.Name, filepath.Join(m.SourceDir(), "sources"), out)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s: %d paper documents built into %s\n", m.Name, n, out)
+	return nil
+}
+
+// writeFlatPaperDocs writes each paper document of corpus into
+// <out>/<name>/: every file of its base's directory under sourcesDir but
+// options.json, as edited, and its own options.json, and returns how many
+// it wrote.
+func writeFlatPaperDocs(ctx context.Context, corpus, sourcesDir, out string) (int, error) {
+	docs := paperDocs(corpus)
 	bases := map[string]map[string][]byte{}
 	for _, d := range docs {
 		if err := ctx.Err(); err != nil {
-			return err
+			return 0, err
 		}
 		base, ok := bases[d.base]
 		if !ok {
 			var err error
-			if base, err = readParts(filepath.Join(m.SourceDir(), "sources", d.base)); err != nil {
-				return fmt.Errorf("%s starts from %s: %w", d.name, d.base, err)
+			if base, err = readParts(filepath.Join(sourcesDir, d.base)); err != nil {
+				return 0, fmt.Errorf("%s starts from %s: %w", d.name, d.base, err)
 			}
 			bases[d.base] = base
 		}
 		files := cloneParts(base)
 		if d.edit != nil {
 			if err := d.edit(files); err != nil {
-				return fmt.Errorf("%s: %w", d.name, err)
+				return 0, fmt.Errorf("%s: %w", d.name, err)
 			}
 		}
 		if d.options != nil {
@@ -489,15 +501,14 @@ func buildFlatPaperDocs(ctx context.Context, m *Manifest) error {
 		for _, name := range packageOrder(files) {
 			p := filepath.Join(dir, filepath.FromSlash(name))
 			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-				return err
+				return 0, err
 			}
 			if err := os.WriteFile(p, files[name], 0o644); err != nil { //nolint:gosec // testdata is world-readable
-				return err
+				return 0, err
 			}
 		}
 	}
-	fmt.Printf("%s: %d paper documents built into %s\n", m.Name, len(docs), out)
-	return nil
+	return len(docs), nil
 }
 
 // flatPaperFixtures lists the paper documents of a corpus with committed

@@ -192,9 +192,13 @@ func TestPaperDocsDeterministic(t *testing.T) {
 // of a committed fixture or of another paper document of its corpus.
 func TestPaperDocsNamesAreUnique(t *testing.T) {
 	t.Parallel()
-	for _, corpus := range []string{"litho/docx", "litho/xlsx", "litho/pptx"} {
+	for _, corpus := range []string{"litho/docx", "litho/xlsx", "litho/pptx", "litho/odt", "litho/ods", "litho/odp", "litho/html"} {
 		seen := map[string]bool{}
-		entries, err := os.ReadDir(filepath.Join(testCorpusRoot, filepath.FromSlash(corpus), "parts"))
+		dir := "parts"
+		if !buildFormats[filepath.Base(corpus)] {
+			dir = "sources"
+		}
+		entries, err := os.ReadDir(filepath.Join(testCorpusRoot, filepath.FromSlash(corpus), dir))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -206,6 +210,93 @@ func TestPaperDocsNamesAreUnique(t *testing.T) {
 				t.Errorf("%s: %s is named twice", corpus, name)
 			}
 			seen[name] = true
+		}
+	}
+}
+
+// buildFlatPaperCorpus writes the paper documents of a corpus with
+// committed sources into a temporary directory and returns it.
+func buildFlatPaperCorpus(t *testing.T, corpus string) string {
+	t.Helper()
+	out := t.TempDir()
+	n, err := writeFlatPaperDocs(context.Background(), corpus, filepath.Join(testCorpusRoot, filepath.FromSlash(corpus), "sources"), out)
+	if err != nil {
+		t.Fatalf("writeFlatPaperDocs(%s): %v", corpus, err)
+	}
+	if n != len(paperDocs(corpus)) {
+		t.Fatalf("writeFlatPaperDocs(%s) wrote %d documents, want %d", corpus, n, len(paperDocs(corpus)))
+	}
+	return out
+}
+
+// TestFlatPaperDocsStatePageSetup checks the page setup each OpenDocument
+// and HTML paper document states, and the options it converts with.
+func TestFlatPaperDocsStatePageSetup(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		corpus, name, file string
+		want               []string
+	}{
+		{"litho/odt", "paper-a5-landscape", odtPaperPart, []string{`style:name="pm1"><style:page-layout-properties fo:page-width="210mm" fo:page-height="148mm" style:print-orientation="landscape"`}},
+		{"litho/odt", "paper-executive-portrait", odtPaperPart, []string{`fo:page-width="184.15mm" fo:page-height="266.7mm" style:print-orientation="portrait"`}},
+		{"litho/odt", "paper-mixed-orientation", odtPaperPart, []string{`style:name="pm2"><style:page-layout-properties fo:page-width="279.4mm" fo:page-height="215.9mm" style:print-orientation="landscape"`, `style:name="PartTwo" style:family="paragraph" style:parent-style-name="Heading_20_1" style:master-page-name="Second"/>`}},
+		{"litho/odt", "paper-option-a3-landscape", fixture.OptionsFile, []string{`"paperWidth": 11.6929`, `"paperHeight": 16.5354`, `"landscape": true`}},
+		{"litho/ods", "paper-grid-b5-portrait", odsGridPart, []string{`fo:page-width="176mm" fo:page-height="250mm" style:print-orientation="portrait"`}},
+		{"litho/ods", "paper-fit-letter-landscape", odsFitPart, []string{`fo:page-width="279.4mm" fo:page-height="215.9mm" style:print-orientation="landscape"`, `style:scale-to-X="1" style:scale-to-Y="0"`}},
+		{"litho/odp", "paper-deck-dia", odpPaperPart, []string{`fo:page-width="3.6cm" fo:page-height="2.4cm" style:print-orientation="landscape"`}},
+		{"litho/odp", "paper-deck-postcard", odpPaperPart, []string{`fo:page-width="10cm" fo:page-height="14.8cm" style:print-orientation="portrait"`}},
+		{"litho/html", "paper-option-legal-landscape", fixture.OptionsFile, []string{`"paperWidth": 8.5`, `"paperHeight": 14`, `"landscape": true`}},
+		{"litho/html", "paper-css-jis-b4-landscape-paper", htmlPaperPart, []string{"@page { size: JIS-B4 landscape; }"}},
+		{"litho/html", "paper-css-jis-b4-landscape-paper", fixture.OptionsFile, []string{`"preferCssPageSize": false`}},
+		{"litho/html", "paper-css-lengths-wide-prefer", htmlPaperPart, []string{"@page { size: 25cm 15cm; }"}},
+		{"litho/html", "paper-markdown-a5", fixture.OptionsFile, []string{`"paperWidth": 5.8268`, `"paperHeight": 8.2677`}},
+	}
+	outs := map[string]string{}
+	for _, c := range cases {
+		if outs[c.corpus] == "" {
+			outs[c.corpus] = buildFlatPaperCorpus(t, c.corpus)
+		}
+		data, err := os.ReadFile(filepath.Join(outs[c.corpus], c.name, c.file))
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		for _, w := range c.want {
+			if !strings.Contains(string(data), w) {
+				t.Errorf("%s: %s does not state %s", c.name, c.file, w)
+			}
+		}
+	}
+}
+
+// TestFlatPaperDocsLoad checks that every OpenDocument and HTML paper
+// document loads as the fixture package reads a source, with options the
+// route accepts, and that two builds write the same bytes.
+func TestFlatPaperDocsLoad(t *testing.T) {
+	t.Parallel()
+	for _, corpus := range []string{"litho/odt", "litho/ods", "litho/odp", "litho/html"} {
+		a, b := buildFlatPaperCorpus(t, corpus), buildFlatPaperCorpus(t, corpus)
+		for _, name := range paperDocNames(corpus) {
+			dir := filepath.Join(a, name)
+			var err error
+			if corpus == "litho/html" {
+				_, err = fixture.Load(dir)
+			} else {
+				_, err = fixture.LoadOffice(dir)
+			}
+			if err != nil {
+				t.Errorf("%s: %v", name, err)
+			}
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, e := range entries {
+				da, errA := os.ReadFile(filepath.Join(dir, e.Name()))
+				db, errB := os.ReadFile(filepath.Join(b, name, e.Name()))
+				if errA != nil || errB != nil || !bytes.Equal(da, db) {
+					t.Errorf("%s: %s differs between two builds", name, e.Name())
+				}
+			}
 		}
 	}
 }
