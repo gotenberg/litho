@@ -59,8 +59,8 @@ func TestLoadOffice_ReadsADirectoryOrADocument(t *testing.T) {
 	if o.Format != pdf.FormatODT || o.Document != filepath.Join(dir, "memo.fodt") || !o.Options.Landscape {
 		t.Errorf("source %+v", o)
 	}
-	if n := len(o.ConvertOptions()); n != 5 {
-		t.Errorf("%d convert options, want landscape, outline, pages, password and paper", n)
+	if n := len(o.ConvertOptions()); n != 6 {
+		t.Errorf("%d convert options, want landscape, outline, the default paper, pages, password and paper", n)
 	}
 
 	doc := filepath.Join(t.TempDir(), "fetched.DOCX")
@@ -71,7 +71,7 @@ func TestLoadOffice_ReadsADirectoryOrADocument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.Format != pdf.FormatDOCX || o.Options != (OfficeOptions{}) || len(o.ConvertOptions()) != 2 {
+	if o.Format != pdf.FormatDOCX || o.Options != (OfficeOptions{}) || len(o.ConvertOptions()) != 3 {
 		t.Errorf("fetched document %+v", o)
 	}
 
@@ -124,7 +124,13 @@ func TestLoadOffice_MapsEveryExtension(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 			continue
 		}
-		if o.Format != want || !o.Options.SinglePage || len(o.ConvertOptions()) != 3 {
+		// A presentation takes no default paper: its slides carry their
+		// size.
+		n := 4
+		if want == pdf.FormatPPTX || want == pdf.FormatODP {
+			n = 3
+		}
+		if o.Format != want || !o.Options.SinglePage || len(o.ConvertOptions()) != n {
 			t.Errorf("%s: format %s, options %+v, %d convert options, want %s with single page", name, o.Format, o.Options, len(o.ConvertOptions()), want)
 		}
 	}

@@ -198,14 +198,28 @@ func (o OfficeOptions) validate() error {
 	return nil
 }
 
+// ReferencePaperWidth and ReferencePaperHeight are the paper, in points,
+// the references print a document on when it names none: US Letter, the
+// paper of the LibreOffice image's locale and of the Microsoft account
+// that builds the references, where litho's own default is A4.
+const (
+	ReferencePaperWidth  = 612.0
+	ReferencePaperHeight = 792.0
+)
+
 // ConvertOptions returns the litho options of the source's fields: the
-// landscape and outline switches always, and the page ranges, the password,
-// the paper size, in points, the single page sheets, the hidden slides and
-// the notes pages when the options name them.
+// landscape and outline switches always, the references' paper as the
+// default paper of a text document or a spreadsheet (a presentation sizes
+// its own slides), and the page ranges, the password, the paper size, in
+// points, the single page sheets, the hidden slides and the notes pages
+// when the options name them.
 func (o *Office) ConvertOptions() []pdf.ConvertOption {
 	opts := []pdf.ConvertOption{
 		pdf.WithLandscape(o.Options.Landscape),
 		pdf.WithOutline(o.Options.NativeBookmarks == nil || *o.Options.NativeBookmarks),
+	}
+	if !isPresentation(o.Format) {
+		opts = append(opts, pdf.WithDefaultPaperSize(ReferencePaperWidth, ReferencePaperHeight))
 	}
 	if o.Options.NativePages != "" {
 		opts = append(opts, pdf.WithPageRanges(o.Options.NativePages))
@@ -226,4 +240,10 @@ func (o *Office) ConvertOptions() []pdf.ConvertOption {
 		opts = append(opts, pdf.WithNotesPages(true))
 	}
 	return opts
+}
+
+// isPresentation reports whether a format is a presentation's, whose slides
+// carry their own size.
+func isPresentation(f pdf.Format) bool {
+	return f == pdf.FormatPPTX || f == pdf.FormatODP || f == pdf.Format("ppt")
 }
