@@ -135,6 +135,15 @@ corpus-update: ## Maintainers: rewrite one corpus's committed lists from its sou
 	$(CORPUS_CLI) update --corpus=$(CORPUS) $(if $(CHECKOUT),--checkout=$(CHECKOUT))
 	npx prettier --write test/integration/corpus/$(CORPUS)/*.json $(if $(filter weasyprint,$(CORPUS)),test/integration/corpus/weasyprint/fixtures)
 
+.PHONY: corpus-cost
+corpus-cost: ## Measure what each conversion and PDF operation costs, one process a run; decides nothing. Vars: ROWS, RUNS, COPIES, FORMAT (text|json), COST_OUT, COST_PROFILE, COST_INPUTS
+	$(CORPUS_CLI) cost $(if $(ROWS),--rows=$(ROWS)) $(if $(RUNS),--runs=$(RUNS)) $(if $(COPIES),--copies=$(COPIES)) $(if $(FORMAT),--format=$(FORMAT)) \
+		$(if $(COST_OUT),--out=$(COST_OUT)) $(if $(COST_PROFILE),--profile=$(COST_PROFILE)) $(if $(COST_INPUTS),--inputs=$(COST_INPUTS))
+
+.PHONY: corpus-cost-compare
+corpus-cost-compare: ## Compare two cost readings row by row, with the change in each column. Vars: BEFORE, AFTER
+	$(CORPUS_CLI) cost --compare $(BEFORE) $(AFTER)
+
 .PHONY: corpus-tools
 corpus-tools: ## Compare the local verapdf, node, java, qpdf, pdfsig, fontTools and Pillow with the pinned versions
 	$(CORPUS_CLI) tools

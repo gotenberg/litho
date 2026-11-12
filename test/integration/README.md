@@ -170,6 +170,40 @@ Every target runs `go run ./test/integration/cmd/corpus <step>`; `go run ./test/
 
 The `targets` cell converts each source of the converter corpora `diff` runs on 19 times, plainly and to every output flavour, and runs veraPDF, the pinned poppler and pdfcpu on a sample of the files (see [Output flavours](FEATURES.md#output-flavours)): `make corpus FEATURE=targets CORPUS=litho/docx`. It needs the provisioned corpora, the `verapdf` on PATH at the pinned release and the corpus image; a tool missing fails the sampled targets it would judge rather than passing them. With 3 workers it took 1 minute 41 seconds on `litho/html` and 32 minutes on the seven corpora `litho/html`, `litho/docx`, `litho/xlsx`, `litho/pptx`, `libreoffice/odt`, `libreoffice/ods` and `libreoffice/odp`, and 78 minutes on every corpus it runs on (3,471 sources, 658 of them Word, Excel and PowerPoint 97 to 2003 files litho refuses at once), on a machine other jobs loaded part of that time. Capture the baseline at the default sample: another sample judges other fixtures.
 
+## Measuring cost
+
+`corpus cost` measures what a conversion or a PDF operation costs. Each row is one operation on one input, and each run of a row is a child process of its own (`corpus convert-one --measure`), so the child's peak memory is the operation's. The runs go round the rows, and the table prints each column's median, with the spread of the wall time, the CPU time and the peak memory as a share of the median. The reading decides nothing: it depends on the machine and its load, no bound reads it, and `baseline.json` holds none of it. Take a wall time with nothing else running.
+
+```bash
+make corpus-cost # every row, three runs each
+make corpus-cost ROWS='html-*,docx-report-m' RUNS=5 COST_OUT=before.json
+make corpus-cost ROWS=xlsx-sales-l COST_PROFILE=profiles # one more run writes the row's profiles
+make corpus-cost ROWS=html-1mib COPIES=4                 # four copies at once in one process
+GOGC=50 make corpus-cost ROWS=html-1mib COPIES=4         # the child inherits GOGC and GOMEMLIMIT
+make corpus-cost-compare BEFORE=before.json AFTER=after.json
+go run ./test/integration/cmd/corpus cost --list # the rows and their inputs
+```
+
+| Column       | What it reads                                                                                                                                    |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `wall s`     | The operation's wall time, call to return, in the child                                                                                          |
+| `cpu s`      | The child's user and system CPU time over the operation, every goroutine and the collector included (`getrusage`)                                |
+| `rss MiB`    | The child process's peak resident memory, start to exit, as the parent reads it                                                                  |
+| `heap MiB`   | The most heap the live and unswept objects held, sampled every millisecond (`/memory/classes/heap/objects:bytes`)                                |
+| `budget MiB` | The most a conversion's memory budget accounted at once, read from the Debug record the conversion logs as it ends; 0 for a PDF operation        |
+| `alloc MiB`  | The bytes the operation allocated in total; `allocs k` counts the objects                                                                        |
+| `gc`         | The collections the operation ran; `pause ms` their stop-the-world pauses; `gc cpu %` the runtime's estimate of the collector's share of the CPU |
+| `base MiB`   | The child's peak resident memory before the operation began: the runtime, and for a conversion the font index                                    |
+| `proc s`     | The child's wall time, start to exit                                                                                                             |
+| `in`, `out`  | The input's bytes (an HTML page's pictures included), the output's pages and bytes (text or pixels for an operation that writes no PDF)          |
+| ratios       | For a conversion: peak resident memory over the input's bytes and over the budget's peak, allocated bytes over the input's bytes                 |
+
+A conversion runs after a one-line text conversion has built the font index, as in a service that converts more than once; the `cold/text-line` row measures a conversion in a process whose index is not built yet. With `COPIES=N`, N copies of the operation run at once on goroutines of one process, the budget's peak summed over them.
+
+The PDF inputs are files of the provisioned `govdocs/pdf` and `pdfjs` corpora, named by kind and size (`pdf-text-l`, `pdf-tagged-m`). The documents converted are built by code from a fixed seed, the same bytes on every build, into `testdata/cost` the first time a row needs them (`COST_INPUTS` names another directory): plain text and HTML paragraphs, reports of headings, paragraphs, lists and tables in HTML, Markdown, DOCX and ODT, sales workbooks in XLSX and ODS with formulas, CSV, and decks in PPTX and ODP, each small, medium and large.
+
+The PDF operations are `text` (every page's text), `rewrite` (a full rewrite with object streams), `merge` (the document with itself), `split` (the first half of the pages), `render` (the first page at 150 dpi), `pdfa` and `pdfua` (validation against PDF/A-2b and PDF/UA-1), `remediate` (to PDF/A-2b), `flatten` (the form, then every printed annotation), `stamp` (a text watermark on every page) and `colors` (to the built-in CMYK profile).
+
 ## Tool versions
 
 `corpus/versions.env` pins every tool and corpus source provisioning uses, one commented `KEY=VALUE` per line: veraPDF (the `verapdf/cli` image tag and the digest of the one build the goldens came from), Node (the `node` base image, by digest), the Temurin JRE veraPDF, Mustang and KoSIT run on, the PDF.js commit the image builds, pdfcpu (with the SHA-256 of its Linux archive for each architecture the image builds for, amd64 and arm64), Mustang, KoSIT with its XRechnung bundle and EN 16931 XSLT, poppler (the release, the SHA-256 of its tarball, and the Debian base image it builds on, by digest), and the revision of each downloaded corpus (a commit SHA or a tag, never a branch; govdocs by its fixed thread list). A last group pins the tools the host runs for live checks, the outline goldens and the ICC transform goldens (qpdf, fontTools, Pillow), which the image does not install, and the Liberation and DejaVu font archives the litho/text fixtures are converted with, each by URL and SHA-256; the host's poppler `pdfsig` is checked against the poppler pin the image builds. The converter corpora add five host pins: the web-platform-tests commit (`WPT_COMMIT`), the resvg commit (`RESVG_COMMIT`), the WeasyPrint release with the SHA-256 of its source tarball and of its test font (`WEASYPRINT_VERSION`, `WEASYPRINT_SHA256`, `WEASYPRINT_FONT_SHA256`), the Gotenberg image the Chromium and LibreOffice references come from (`GOTENBERG_IMAGE`), and the LibreOffice core commit the Office corpora's test documents come from (`LIBREOFFICE_CORE_COMMIT`), the commit of the release the image runs; the fixture fonts gain Carlito and Caladea (`CARLITO_FONTS_*`, `CALADEA_FONTS_*`), the faces the image draws Calibri and Cambria with, and Noto Sans (`NOTO_SANS_CORE_*`), the face it draws a family it lacks with. An Office reference's own `manifest.json` records the image, the commit and the SHA-256 of its source and options, and the `diff` cell refuses a reference that disagrees with the pins or the sources. `corpus fetch` records `WPT_COMMIT` in `testdata/wpt/versions.json`, so the wpt cell refuses files fetched at another commit as the image-provisioned cells do; `corpus fetch` records `RESVG_COMMIT` in `testdata/resvg/versions.json` likewise.

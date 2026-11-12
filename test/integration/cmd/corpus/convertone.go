@@ -30,6 +30,8 @@ type convertOneResult struct {
 	Leaked []string `json:"leaked,omitempty"`
 	// Missing lists the required strings the PDF's text lacks.
 	Missing []string `json:"missing,omitempty"`
+	// Cost is what the operation cost, read when `corpus cost` asks for it.
+	Cost *costSample `json:"cost,omitempty"`
 }
 
 // convertSentinels are the errors a conversion may end with, by the name a
@@ -65,21 +67,32 @@ func convertResultName(err error) string {
 // runConvertOne converts one Office source, a document or a directory
 // holding one and its options.json, and prints a [convertOneResult]. It
 // runs as a child of the robustness feature, which measures its time and
-// memory; it exits 0 whatever the conversion did.
+// memory, and of `corpus cost`, which asks it with --measure to read what
+// the operation costs and with --op to run a PDF operation in place of a
+// conversion (see [measureOne]); it exits 0 whatever the operation did.
 func runConvertOne(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("convert-one", flag.ExitOnError)
 	fonts := fs.String("fonts", "", "Font directories, separated by the OS path list separator")
 	forbid := fs.String("forbid", "", "Strings, separated by newlines, the PDF's text must not hold")
 	require := fs.String("require", "", "Strings, separated by newlines, the PDF's text must hold")
-	if err := fs.Parse(args); err != nil || fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: corpus convert-one [--fonts=DIRS] [--forbid=TEXT] [--require=TEXT] SOURCE")
+	measure := fs.Bool("measure", false, "Read what the operation costs")
+	op := fs.String("op", "convert", "With --measure: convert, cold (a conversion before the font index is built), or a PDF operation of corpus cost")
+	copies := fs.Int("copies", 1, "With --measure: how many copies of the operation run at once")
+	profile := fs.String("profile", "", "With --measure: the directory the CPU, heap, mutex and block profiles go to")
+	if err := fs.Parse(args); err != nil || fs.NArg() != 1 || *copies < 1 {
+		fmt.Fprintln(os.Stderr, "usage: corpus convert-one [--fonts=DIRS] [--forbid=TEXT] [--require=TEXT] [--measure [--op=NAME] [--copies=N] [--profile=DIR]] SOURCE")
 		return 2
 	}
 	var dirs []string
 	if *fonts != "" {
 		dirs = filepath.SplitList(*fonts)
 	}
-	res := convertOne(ctx, fs.Arg(0), dirs, textChecks{forbid: lines(*forbid), require: lines(*require)})
+	var res convertOneResult
+	if *measure {
+		res = measureOne(ctx, *op, fs.Arg(0), dirs, *copies, *profile)
+	} else {
+		res = convertOne(ctx, fs.Arg(0), dirs, textChecks{forbid: lines(*forbid), require: lines(*require)})
+	}
 	if err := json.NewEncoder(os.Stdout).Encode(res); err != nil {
 		fmt.Fprintf(os.Stderr, "convert-one: %v\n", err)
 		return 1

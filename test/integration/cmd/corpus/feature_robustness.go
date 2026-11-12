@@ -269,18 +269,20 @@ func (f *robustnessFeature) Compare(fixtureID string, output []byte) Verdict {
 	return v
 }
 
-// stressSources are the text and HTML documents a stress fixture's
-// directory may hold, by file name, with their format.
+// stressSources are the text, HTML and Markdown documents a stress or
+// measurement fixture's directory may hold, by file name, with their format.
 var stressSources = []struct {
 	file   string
 	format fixture.Format
 }{
 	{"index.txt", fixture.FormatText},
 	{"index.html", fixture.FormatHTML},
+	{"index.md", fixture.FormatMarkdown},
 }
 
 // robustnessSource is the document convert-one converts for a fixture: a
-// text or HTML document of the stress corpus, or an Office source.
+// text, HTML or Markdown document of the stress corpus or of the
+// measurement inputs, or an Office source.
 type robustnessSource struct {
 	document string
 	format   fixture.Format
@@ -315,12 +317,12 @@ func (s robustnessSource) conversion(src io.Reader, client *http.Client, opts ..
 	switch {
 	case s.office != nil:
 		return s.office.Conversion(src, opts...)
-	case s.format == fixture.FormatHTML:
+	case s.format == fixture.FormatHTML || s.format == fixture.FormatMarkdown:
 		html := []pdf.HTMLOption{pdf.WithHTTPClient(client), pdf.WithResources(os.DirFS(s.dir))}
 		for _, o := range opts {
 			html = append(html, o)
 		}
-		return pdf.FromHTML(src, html...), nil
+		return fixture.Conversion(s.format, src, "", html...), nil
 	}
 	text := make([]pdf.TextOption, 0, len(opts))
 	for _, o := range opts {

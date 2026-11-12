@@ -54,8 +54,10 @@ func dispatch(ctx context.Context, cmd string, args []string) int {
 		return runVersions(args)
 	case "tools":
 		return runTools(ctx, args)
+	case "cost":
+		return runCost(ctx, args)
 	// Internal: the provisioning image runs provision and scan-claims, the
-	// robustness feature runs convert-one.
+	// robustness feature and cost run convert-one.
 	case "provision":
 		return runProvision(ctx, args)
 	case "scan-claims":
@@ -97,6 +99,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  update        Rewrite one corpus's committed lists from its source at its pin (--checkout=DIR)")
 	fmt.Fprintln(w, "  versions      Print the pinned tool and source versions (--build-args: as docker build arguments)")
 	fmt.Fprintln(w, "  tools         Compare the local verapdf, node, java, qpdf, pdfsig, fontTools and Pillow with the pins")
+	fmt.Fprintln(w, "  cost          Measure what each conversion and PDF operation costs, one process a run (--rows, --runs, --profile; --compare BEFORE AFTER)")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Every subcommand takes:")
 	fmt.Fprintln(w, "  --corpus=litho/docx,*/xlsx,poi   Corpora: names, globs or sources (empty = all)")
