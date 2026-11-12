@@ -91,9 +91,13 @@ const (
 // Arg is one operand of a formula or a path command: a literal, a guide
 // or a built-in value.
 type Arg struct {
-	Kind  ArgKind
+	// Kind says which of Value and Ref the operand reads.
+	Kind ArgKind
+	// Value is an [ArgConst] operand's number.
 	Value float64
-	Ref   int
+	// Ref is an [ArgGuide] operand's guide index or an [ArgBuiltin]
+	// operand's [Builtin].
+	Ref int
 }
 
 // Builtin is a value every guide formula can name without defining it
@@ -191,7 +195,10 @@ var drawingMLOps = map[string]struct { //nolint:gochecknoglobals // a read-only 
 // Guide is one named value of a geometry: an adjustment's default or a
 // guide formula over literals, earlier guides and built-ins.
 type Guide struct {
+	// Name is the name formulas and paths refer to the guide by.
 	Name string
+	// Op and Args are the formula: the operator over up to three
+	// operands, a missing one 0.
 	Op   Op
 	Args [3]Arg
 }

@@ -32,7 +32,9 @@ type Geometry struct {
 
 // Adjust is one adjustment value of a preset geometry.
 type Adjust struct {
-	Name  string
+	// Name is the adjustment guide's name in the preset.
+	Name string
+	// Value is the value set, in the preset's units.
 	Value float64
 }
 
@@ -79,6 +81,7 @@ type Custom struct {
 // TextBox is a text rectangle by its left, top, right and bottom edges in
 // guide space.
 type TextBox struct {
+	// L, T, R and B are the left, top, right and bottom edges.
 	L, T, R, B Arg
 }
 
@@ -165,6 +168,8 @@ const (
 
 // Cmd is one path command with its operands.
 type Cmd struct {
+	// Kind is the command; Args its operands, in the order its
+	// [CmdKind] lists them, a missing one 0.
 	Kind CmdKind
 	Args []Arg
 }
@@ -192,7 +197,9 @@ const (
 // Path is one outline of a geometry fitted to a box, with how it is
 // painted: the shape's fill when Fill is set, its line when Stroke is.
 type Path struct {
-	Ops    []compose.PathOp
+	// Ops is the outline in the box's coordinates.
+	Ops []compose.PathOp
+	// Fill and Stroke say whether the outline is filled and stroked.
 	Fill   bool
 	Stroke bool
 	// Mode is the fill mode of a filled path: [FillNorm], or one of the

@@ -23,6 +23,7 @@ const (
 
 // Paint is a fill as plain values, for [Fill].
 type Paint struct {
+	// Kind says which of the fields below paint.
 	Kind PaintKind
 	// Color is a PaintSolid's colour and a PaintPattern's foreground.
 	Color compose.Color

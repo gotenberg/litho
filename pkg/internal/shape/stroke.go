@@ -40,7 +40,9 @@ const (
 
 // Arrowhead is the arrowhead at one end of a line.
 type Arrowhead struct {
-	Kind          ArrowKind
+	// Kind is the arrowhead's outline, [ArrowNone] for none.
+	Kind ArrowKind
+	// Width and Length are its size across and along the line.
 	Width, Length ArrowSize
 }
 
@@ -52,6 +54,7 @@ type Line struct {
 	// Dash is the dash array in points, nil for a solid line ([PresetDash]
 	// resolves a preset).
 	Dash []float64
+	// Cap and Join are the line's caps and joins.
 	Cap  compose.LineCap
 	Join compose.LineJoin
 	// Head and Tail are the arrowheads at the start of the first subpath
