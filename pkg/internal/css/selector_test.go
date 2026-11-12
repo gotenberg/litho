@@ -130,7 +130,7 @@ func TestSelector_Invalid(t *testing.T) {
 	for _, sel := range []string{
 		"", "p,", ",p", "p >", "> p", "#1a", ".", "p..q", "[", "[a=]", "[a=b c]", "p:unknown",
 		":nth-child(foo)", "::before p", "::before.x", ":not(::before)", "p:has(a)",
-		"a || b", "p::unknown", ":not()", ":lang()",
+		"a || b", "p::unknown", ":not()", ":lang()", ":lang(en,)", ":lang(,en)", ":lang(en,,fr)",
 		strings.Repeat(":not(", 10) + "p" + strings.Repeat(")", 10),
 		strings.Repeat("a ", 40) + "b",
 	} {

@@ -552,8 +552,15 @@ func parsePseudo(t token, depth int) (pseudoSel, *selectorError) {
 			}
 			return pseudoSel{kind: kind, a: a, b: b, of: of}, nil
 		case "lang":
+			// The argument is a comma-separated list of one or more
+			// language ranges (Selectors 4, 7.2; CSS Values 4, 2.2 #):
+			// an empty item, trailing or not, makes the selector invalid.
+			args := significant(t.children)
+			if n := len(args); n > 0 && args[n-1].typ == tComma {
+				return pseudoSel{}, &selectorError{}
+			}
 			var langs []string
-			for _, part := range splitCommas(significant(t.children)) {
+			for _, part := range splitCommas(args) {
 				if len(part) != 1 || (part[0].typ != tIdent && part[0].typ != tString) {
 					return pseudoSel{}, &selectorError{}
 				}
