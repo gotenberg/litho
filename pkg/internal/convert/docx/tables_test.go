@@ -348,3 +348,18 @@ func TestTables_OwnShading(t *testing.T) {
 		}
 	}
 }
+
+// TestTables_FixedCellsClip locks the cells of a table of fixed layout
+// clipping their content, those of an autofit table not.
+func TestTables_FixedCellsClip(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		layout string
+		want   css.Overflow
+	}{{`<w:tblLayout w:type="fixed"/>`, css.OverflowHidden}, {``, css.OverflowVisible}} {
+		body := `<w:tbl><w:tblPr>` + tc.layout + `</w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>`
+		if o := role(build(t, body, nil).root, "TD")[0].Style.Overflow; o != tc.want {
+			t.Errorf("layout %q: cell overflow %v, want %v", tc.layout, o, tc.want)
+		}
+	}
+}

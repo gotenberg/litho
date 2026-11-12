@@ -750,6 +750,16 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 			if isHeader {
 				role = "TH"
 			}
+			if boolOf(tp.layoutFixed) {
+				// A cell of a table of fixed layout (17.4.53 tblLayout)
+				// clips what is wider than it, as Word prints it.
+				//
+				// # Corpus evidence
+				//
+				//   - litho/docx tables-images-lists: Word cuts a picture
+				//     wider than its fixed cell at the cell's right edge.
+				cst.Overflow = css.OverflowHidden
+			}
 			cn := &layout.Node{Kind: layout.Element, Style: cst, Role: role, Children: kids}
 			if isHeader {
 				// A tblHeader row repeats atop every page as the table's
