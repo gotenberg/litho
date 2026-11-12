@@ -2,6 +2,7 @@ package html
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -292,7 +293,9 @@ func (p *prepared) buildTemplate(pb layout.PageBox, page, pages int) (*headerFoo
 		return true
 	})
 	if head == nil || hf.body == nil || hf.header == nil || hf.footer == nil {
-		return nil, fmt.Errorf("%w: the template page lost its structure", ErrInvalidOptions)
+		// The skeleton is litho's own constant: losing its structure is a
+		// litho bug, not an invalid input.
+		return nil, errors.New("the template page lost its structure")
 	}
 	setStyle(hf.body, fmt.Sprintf("width: %spt; height: %spt", ptString(pb.Width), ptString(pb.Height)))
 	setStyle(hf.header, fmt.Sprintf("height: %spt", ptString(pb.Margin[css.Top])))
