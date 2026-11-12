@@ -23,8 +23,9 @@ type area struct {
 	x0, y0, x1, y1 float64
 }
 
-// empty reports an area without extent.
-func (a area) empty() bool { return !(a.x1 > a.x0) || !(a.y1 > a.y0) }
+// hasExtent reports whether a is wider and taller than nothing. An area
+// with a NaN edge has no extent.
+func (a area) hasExtent() bool { return a.x1 > a.x0 && a.y1 > a.y0 }
 
 // meets reports whether a and b overlap or touch.
 func (a area) meets(b area) bool {
@@ -91,7 +92,7 @@ func cullGroup(g *compose.Group, m compose.Matrix, clip area, depth int) (*compo
 	if g.Clip != nil {
 		if b, ok := opsArea(g.Clip.Ops, gm, 0); ok {
 			inner = clip.cut(b)
-			if inner.empty() && len(g.Content) > 0 {
+			if !inner.hasExtent() && len(g.Content) > 0 {
 				return nil, true
 			}
 		}

@@ -428,8 +428,10 @@ func htmlFloat(s string) (float64, bool) {
 	if i != len(s) {
 		return 0, false
 	}
+	// The grammar above admits no NaN or infinity: ParseFloat fails only
+	// on a value past the float64 range, which it returns as an infinity.
 	v, err := strconv.ParseFloat(s, 64)
-	return v, err == nil && v-v == 0
+	return v, err == nil
 }
 
 // isHTMLSpace reports ASCII whitespace (HTML Standard, Infra 4.6).

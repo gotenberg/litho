@@ -95,7 +95,8 @@ func (s printSetup) fitFactor(boxes ...layout.PageBox) (printSetup, []compose.Wa
 func (p *prepared) refit(res *layout.Result) (printSetup, bool) {
 	s := p.setup
 	lw, _ := areaOf(s.layoutBox(p.first))
-	if !(lw > 0) || !(res.ContentWidth-lw > shrinkSlack) {
+	wider := res.ContentWidth-lw > shrinkSlack
+	if !positive(lw) || !wider {
 		return s, false
 	}
 	if s.measure || p.o.NoShrinkToFit {
@@ -145,6 +146,9 @@ func (p *prepared) placement(lp *compose.Page) placement {
 	}
 	return pl
 }
+
+// positive reports whether v is greater than zero. NaN is not.
+func positive(v float64) bool { return v > 0 }
 
 // nearly reports a and b equal to a billionth.
 func nearly(a, b float64) bool {

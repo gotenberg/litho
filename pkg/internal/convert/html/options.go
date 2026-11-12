@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
-	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -228,7 +227,7 @@ func (o Options) withDefaults() (Options, error) {
 		{"bottom margin", o.MarginBottom},
 		{"left margin", o.MarginLeft},
 	} {
-		if !(v.value >= 0 && v.value < math.Inf(1)) {
+		if !isMargin(v.value) {
 			return o, fmt.Errorf("%w: %s %v is not a finite number of points, zero or more", ErrInvalidOptions, v.name, v.value)
 		}
 	}
@@ -241,6 +240,7 @@ func (o Options) withDefaults() (Options, error) {
 	if o.Media != MediaPrint && o.Media != MediaScreen {
 		return o, fmt.Errorf("%w: media type %q is neither %q nor %q", ErrInvalidOptions, o.Media, MediaPrint, MediaScreen)
 	}
+	// The negated range also refuses NaN.
 	if !(o.Scale >= MinScale && o.Scale <= MaxScale) {
 		return o, fmt.Errorf("%w: scale %v is not in [%v, %v]", ErrInvalidOptions, o.Scale, MinScale, MaxScale)
 	}

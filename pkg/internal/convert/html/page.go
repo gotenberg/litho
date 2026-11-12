@@ -101,7 +101,7 @@ func pageBox(r *css.Resolver, o Options, sel css.PageSelector) (layout.PageBox, 
 		default:
 			box.Margin[side] = opt[side]
 		}
-		if !(box.Margin[side] >= 0 && box.Margin[side] < math.Inf(1)) {
+		if !isMargin(box.Margin[side]) {
 			box.Margin[side] = opt[side]
 		}
 	}
@@ -136,6 +136,10 @@ func pageBox(r *css.Resolver, o Options, sel css.PageSelector) (layout.PageBox, 
 func areaOf(b layout.PageBox) (float64, float64) {
 	return b.Width - b.Margin[css.Left] - b.Margin[css.Right], b.Height - b.Margin[css.Top] - b.Margin[css.Bottom]
 }
+
+// isMargin reports whether v is a margin in points: finite and zero or
+// more. NaN is not.
+func isMargin(v float64) bool { return v >= 0 && v < math.Inf(1) }
 
 // fits reports a page box whose margins leave a positive page area.
 func fits(b layout.PageBox) bool {
