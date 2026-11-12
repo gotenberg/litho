@@ -211,7 +211,7 @@ func (p *pageWriter) mark(parent *StructElem) {
 		p.w.logger.Debug("typeset: structure role not a PDF name", "role", parent.Role, "error", err)
 	}
 	fmt.Fprintf(&p.buf, " <</MCID %d>> BDC\n", mcid)
-	st.addMCID(p.index, mcid, parent)
+	st.addMCID(p.index, parent)
 }
 
 // endMark closes the open marked-content sequence, if any. Sequences never

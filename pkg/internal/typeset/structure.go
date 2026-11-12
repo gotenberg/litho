@@ -18,19 +18,40 @@ type structItem struct {
 	annot ast.PdfIndirectRef
 }
 
+// annotItem is an annotation an element owns, and how many marked-content
+// sequences the pages recorded before it.
+type annotItem struct {
+	structItem
+	seq int
+}
+
 // structState gathers what the structure tree needs while the pages are
 // written. It is used by the one goroutine writing the document.
 //
 // The tree itself arrives with the document's end, after the pages: what a
 // page records names elements by pointer, and the elements get their object
 // numbers when the tree is written.
+//
+// The marked-content sequences an element owns are not listed by element
+// while the pages are written: pageParents lists the element of each, in
+// the order the pages recorded them, and [structState.write] gathers each
+// element's from it. A page records its sequences one after the other,
+// MCID 0 up, and the pages one after the other, so that order is the
+// order of (page, MCID); an annotation records how many sequences came
+// before it, which places it among them.
 type structState struct {
 	// order lists the elements in preorder, the order they are written in,
 	// once the tree has arrived.
-	order  []*StructElem
-	refs   map[*StructElem]ast.PdfIndirectRef
-	parent map[*StructElem]*StructElem
-	items  map[*StructElem][]structItem
+	order []*StructElem
+	refs  map[*StructElem]ast.PdfIndirectRef
+	// parents holds, at each element's index in order, its parent's index
+	// there, -1 for the root.
+	parents []int
+	// annots lists, per element, the annotations it owns in the order they
+	// were recorded.
+	annots map[*StructElem][]annotItem
+	// marks counts the marked-content sequences recorded.
+	marks int
 	// pageParents lists, per page, the element of each MCID in MCID order:
 	// the page's ParentTree entry.
 	pageParents [][]*StructElem
@@ -45,7 +66,7 @@ type structState struct {
 }
 
 func newStructState() *structState {
-	return &structState{items: make(map[*StructElem][]structItem), refers: make(map[*StructElem][]*StructElem)}
+	return &structState{annots: make(map[*StructElem][]annotItem), refers: make(map[*StructElem][]*StructElem)}
 }
 
 // addPage opens the ParentTree entry of the next page.
@@ -53,9 +74,11 @@ func (st *structState) addPage() {
 	st.pageParents = append(st.pageParents, nil)
 }
 
-func (st *structState) addMCID(page, mcid int, e *StructElem) {
-	st.items[e] = append(st.items[e], structItem{page: page, mcid: mcid})
+// addMCID records that the next marked-content sequence of page
+// belongs to e.
+func (st *structState) addMCID(page int, e *StructElem) {
 	st.pageParents[page] = append(st.pageParents[page], e)
+	st.marks++
 }
 
 // addAnnot records that the annotation at ref on page belongs to e, and
@@ -64,7 +87,7 @@ func (st *structState) addMCID(page, mcid int, e *StructElem) {
 // page count plus that index, keys 0 to len(pages)-1 being the pages'
 // /StructParents.
 func (st *structState) addAnnot(page int, ref ast.PdfIndirectRef, e, to *StructElem) int {
-	st.items[e] = append(st.items[e], structItem{page: page, annot: ref})
+	st.annots[e] = append(st.annots[e], annotItem{structItem: structItem{page: page, annot: ref}, seq: st.marks})
 	if to != nil && !slices.Contains(st.refers[e], to) {
 		st.refers[e] = append(st.refers[e], to)
 	}
@@ -77,18 +100,84 @@ func (st *structState) addAnnot(page int, ref ast.PdfIndirectRef, e, to *StructE
 // [structElems], so the walk meets a tree within the caps.
 func (st *structState) number(root *StructElem) {
 	st.refs = make(map[*StructElem]ast.PdfIndirectRef)
-	st.parent = make(map[*StructElem]*StructElem)
-	stack := []*StructElem{root}
+	type entry struct {
+		e      *StructElem
+		parent int
+	}
+	stack := []entry{{root, -1}}
 	for len(stack) > 0 {
-		e := stack[len(stack)-1]
+		it := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
-		st.refs[e] = elemRef(len(st.order))
-		st.order = append(st.order, e)
-		for _, v := range slices.Backward(e.Kids) {
-			st.parent[v] = e
-			stack = append(stack, v)
+		i := len(st.order)
+		st.refs[it.e] = elemRef(i)
+		st.order = append(st.order, it.e)
+		st.parents = append(st.parents, it.parent)
+		for _, v := range slices.Backward(it.e.Kids) {
+			stack = append(stack, entry{v, i})
 		}
 	}
+}
+
+// index returns the index of e in order, false for an element the tree
+// does not hold.
+func (st *structState) index(e *StructElem) (int, bool) {
+	ref, ok := st.refs[e]
+	if !ok {
+		return 0, false
+	}
+	return (-ref.ObjectNum - 4) / 2, true
+}
+
+// marked returns the marked-content sequences of every element: those of
+// the element at index i in order are marks[at[i]:at[i+1]], in the order
+// the pages recorded them. A sequence of an element the tree does not
+// hold is left out.
+func (st *structState) marked() (at []int, marks []structItem) {
+	at = make([]int, len(st.order)+1)
+	for _, parents := range st.pageParents {
+		for _, e := range parents {
+			if i, ok := st.index(e); ok {
+				at[i+1]++
+			}
+		}
+	}
+	for i := range len(st.order) {
+		at[i+1] += at[i]
+	}
+	marks = make([]structItem, at[len(st.order)])
+	next := slices.Clone(at[:len(st.order)])
+	for page, parents := range st.pageParents {
+		for mcid, e := range parents {
+			if i, ok := st.index(e); ok {
+				marks[next[i]] = structItem{page: page, mcid: mcid}
+				next[i]++
+			}
+		}
+	}
+	return at, marks
+}
+
+// items returns the content of e in the order it was
+// recorded: its marked-content sequences, marks, with its annotations
+// placed among them. starts holds the sequences the pages before each page
+// recorded.
+func (st *structState) items(e *StructElem, marks []structItem, starts []int) []structItem {
+	annots := st.annots[e]
+	if len(annots) == 0 {
+		return marks
+	}
+	out := make([]structItem, 0, len(marks)+len(annots))
+	k := 0
+	for _, a := range annots {
+		// A sequence recorded before the annotation comes first: it is
+		// one of the a.seq sequences of the pages before it.
+		for k < len(marks) && starts[marks[k].page]+marks[k].mcid < a.seq {
+			out = append(out, marks[k])
+			k++
+		}
+		out = append(out, a.structItem)
+	}
+	return append(out, marks[k:]...)
 }
 
 // pdf2Namespace is the URI of the PDF 2.0 standard structure namespace
@@ -124,6 +213,12 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 		kept = st.tocKept()
 	}
 	written := map[string]bool{}
+	at, marks := st.marked()
+	// starts holds the sequences the pages before each page recorded.
+	starts := make([]int, len(st.pageParents))
+	for i := 1; i < len(starts); i++ {
+		starts[i] = starts[i-1] + len(st.pageParents[i-1])
+	}
 	for i, e := range st.order {
 		if i%ctxCheckInterval == 0 {
 			if err := ctx.Err(); err != nil {
@@ -134,8 +229,10 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 			"Type": ast.PdfName("StructElem"),
 			"S":    ast.PdfName(e.Role),
 		}
-		p, hasParent := st.parent[e]
+		var p *StructElem
+		hasParent := st.parents[i] >= 0
 		if hasParent {
+			p = st.order[st.parents[i]]
 			dict["P"] = st.refs[p]
 		} else {
 			dict["P"] = structRootRef
@@ -159,7 +256,7 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 		} else {
 			written[e.Role] = true
 		}
-		items := st.items[e]
+		items := st.items(e, marks[at[i]:at[i+1]], starts)
 		widget := slices.ContainsFunc(items, func(it structItem) bool { return it.annot.ObjectNum != 0 })
 		if a := attributes(e, role, v, widget); a != nil {
 			dict["A"] = a
@@ -269,24 +366,22 @@ func (st *structState) tocKept() map[*StructElem]bool {
 	refers := map[*StructElem]bool{}
 	// st.order is a preorder: walking it backwards meets every kid before
 	// its parent.
-	for _, e := range slices.Backward(st.order) {
+	for i, e := range slices.Backward(st.order) {
 		for _, t := range st.refers[e] {
 			if _, ok := st.refs[t]; ok {
 				refers[e] = true
 			}
 		}
-		if refers[e] {
-			if p, ok := st.parent[e]; ok {
-				refers[p] = true
-			}
+		if refers[e] && st.parents[i] >= 0 {
+			refers[st.order[st.parents[i]]] = true
 		}
 	}
 	kept := map[*StructElem]bool{}
-	for _, e := range st.order {
+	for i, e := range st.order {
 		if e.Role != "TOC" {
 			continue
 		}
-		if p, ok := st.parent[e]; ok && p.Role == "TOCI" && !kept[p] {
+		if pi := st.parents[i]; pi >= 0 && st.order[pi].Role == "TOCI" && !kept[st.order[pi]] {
 			// A TOC nested in an entry of a table written as a Div is one
 			// too.
 			continue
