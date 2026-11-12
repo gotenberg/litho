@@ -1,6 +1,7 @@
 package ods
 
 import (
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -274,7 +275,7 @@ func (r *reader) condition(sh *sheet.Sheet, v string, ranges []sheet.Range, rel 
 		if strings.HasSuffix(name, "percent") {
 			// The share of the range's values, truncated
 			// (ScConditionEntry::IsTopNPercent).
-			n = float64(int(float64(len(sheet.RangeNumbers(sh, ranges))) * n / 100))
+			n = saturatedCount(float64(len(sheet.RangeNumbers(sh, ranges))) * n / 100)
 		}
 		rule.Values = []sheet.Value{{Kind: sheet.Number, Number: n}}
 		return rule
@@ -290,6 +291,22 @@ func (r *reader) condition(sh *sheet.Sheet, v string, ranges []sheet.Range, rel 
 		}
 	}
 	return sheet.Rule{Kind: sheet.RuleExpression, Formula: v}
+}
+
+// saturatedCount truncates v toward zero, saturated to the int64 range, NaN read
+// as 0. A conversion of v to int would leave a value out of range to the
+// platform (The Go Programming Language Specification, Conversions), and
+// a document's percentage may be any number.
+func saturatedCount(v float64) float64 {
+	switch {
+	case math.IsNaN(v):
+		return 0
+	case v >= 1<<63:
+		return 1 << 63
+	case v <= -1<<63:
+		return -1 << 63
+	}
+	return float64(int64(v)) // fits int64: checked above
 }
 
 // splitArgs splits a function's arguments at the commas and semicolons

@@ -203,3 +203,28 @@ func TestConditionalFormats_OperandsOfALongSheet(t *testing.T) {
 		}
 	}
 }
+
+// TestRead_TopPercentOutOfRange locks the count of a top-percent rule
+// whose percentage leaves the int64 range: saturated, NaN read as 0, the
+// same on every platform.
+func TestRead_TopPercentOutOfRange(t *testing.T) {
+	cond := func(v string) string {
+		return `<calcext:conditional-format calcext:target-range-address="S.A1:S.A2"><calcext:condition calcext:value="` + v + `" calcext:base-cell-address="S.A1"/></calcext:conditional-format>`
+	}
+	body := `<table:table table:name="S">` +
+		`<table:table-row><table:table-cell office:value-type="float" office:value="1"/></table:table-row>` +
+		`<table:table-row><table:table-cell office:value-type="float" office:value="2"/></table:table-row>` +
+		`<calcext:conditional-formats>` + cond("top-percent(1e300)") + cond("bottom-percent(-1e300)") + cond("top-percent(NaN)") + cond("top-percent(50)") +
+		`</calcext:conditional-formats></table:table>`
+	doc, _ := read(t, flat{body: body}.bytes())
+	cf := doc.Sheets[0].Conditional
+	want := []float64{1 << 63, -1 << 63, 0, 1}
+	if len(cf) != len(want) {
+		t.Fatalf("%d conditional formats, want %d", len(cf), len(want))
+	}
+	for i, w := range want {
+		if r := cf[i].Rules[0]; len(r.Values) != 1 || r.Values[0].Number != w {
+			t.Errorf("rule %d: %+v, want the count %v", i, r, w)
+		}
+	}
+}
