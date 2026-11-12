@@ -104,11 +104,13 @@
 // HYPERLINK fields and bookmarks become links and anchors. Tracked
 // changes print in the view office.Options.TrackedChanges asks for: the
 // accepted text, as Word prints a document, the rejected text, or both
-// with each insertion underlined and each deletion struck through in its
-// author's colour; a paragraph whose mark the view deletes, or whose mark
-// is hidden, joins the next one, and property changes print their new
-// properties. Change bars are not drawn. Comments are left out; equations
-// draw as their text with a warning.
+// marked as LibreOffice marks them: each insertion underlined and each
+// deletion struck through in its author's colour, moved text doubly so in
+// green, the runs of a property change bold, an inserted or deleted row
+// shaded, and a change bar beside each changed line; a paragraph whose
+// mark the view deletes, or whose mark is hidden, joins the next one, and
+// property changes print their new properties. Comments are left out;
+// equations draw as their text with a warning.
 //
 // # Document
 //
