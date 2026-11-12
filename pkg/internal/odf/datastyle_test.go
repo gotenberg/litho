@@ -2,6 +2,7 @@ package odf
 
 import (
 	"context"
+	"encoding/xml"
 	"testing"
 )
 
@@ -78,5 +79,23 @@ func TestDataStyles_OtherScope(t *testing.T) {
 	}
 	if got := NewDataStyles(p).Code(ScopeContent, "N2"); got != "0.00" {
 		t.Errorf("N2 from content = %q", got)
+	}
+}
+
+// TestNumberCode_ManyEmbeddedTexts writes a number element of many
+// number:embedded-text children within the cap: each one copied the code
+// written so far, the work and the code growing without bound.
+func TestNumberCode_ManyEmbeddedTexts(t *testing.T) {
+	t.Parallel()
+	num := &Element{Name: xml.Name{Space: NSNumber, Local: "number"}}
+	for range 20_000 {
+		num.Children = append(num.Children, &Element{
+			Name:     xml.Name{Space: NSNumber, Local: "embedded-text"},
+			Attr:     []xml.Attr{{Name: xml.Name{Space: NSNumber, Local: "position"}, Value: "1"}},
+			Children: []*Element{{Text: "x"}},
+		})
+	}
+	if code := numberCode(num, false); len(code) > maxFormatCode {
+		t.Errorf("code of %d bytes, past %d", len(code), maxFormatCode)
 	}
 }

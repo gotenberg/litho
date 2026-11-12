@@ -396,6 +396,9 @@ func numberCode(el *Element, percent bool) string {
 	grouping := el.A(NSNumber, "grouping") == "true"
 	factor := el.A(NSNumber, "display-factor")
 	embedded := el.All(NSNumber, "embedded-text")
+	if len(embedded) > maxEmbeddedTexts {
+		embedded = embedded[:maxEmbeddedTexts]
+	}
 	if !hasPlaces && !grouping && ints <= 1 && factor == "" && len(embedded) == 0 && !percent {
 		return "General"
 	}
@@ -411,6 +414,12 @@ func numberCode(el *Element, percent bool) string {
 	}
 	return code
 }
+
+// maxEmbeddedTexts bounds the number:embedded-text elements of one number
+// element written: 64. Anti-DoS guard, not spec-mandated: each insertion
+// copies the code written so far, so the work grows with their square,
+// and a format code of [maxFormatCode] bytes holds far fewer.
+const maxEmbeddedTexts = 64
 
 // embed inserts the number:embedded-text elements into the integer
 // digits code, each at its number:position, the digits counted from the
