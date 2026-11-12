@@ -360,20 +360,57 @@ type planEntry struct {
 	indices    []int
 }
 
+// classify returns, for each fixer in registry order that matches any of
+// violations, the violations it matches and their indices, in the order of
+// violations.
+//
+// A fixer's matcher reads a violation's Rule and Context alone, so it runs
+// once for each distinct pair: a validator states one rule for every glyph,
+// page or object that breaks it, and the pairs are far fewer than the
+// violations.
+//
+// # Corpus evidence
+//
+//   - govdocs/pdf thread_100_100171.pdf: validation against PDF/A-2b returns
+//     749180 violations, whose messages read 5301 distinct texts.
 func classify(violations []compliance.Violation) []planEntry {
-	// For each fixer in registry order, collect matching violations.
-	// The indices are gathered first, so each fixer's violations are copied
-	// once into a slice of their number.
+	type pair struct {
+		rule    compliance.Rule
+		context string
+	}
+	// slotOf holds the distinct pair of each violation, by its index in
+	// firsts, the first violation of each pair.
+	slotOf := make([]int, len(violations))
+	slots := make(map[pair]int)
+	var firsts []int
+	for i, v := range violations {
+		k := pair{rule: v.Rule, context: v.Context}
+		slot, ok := slots[k]
+		if !ok {
+			slot = len(firsts)
+			slots[k] = slot
+			firsts = append(firsts, i)
+		}
+		slotOf[i] = slot
+	}
+	matches := make([]bool, len(firsts))
 	var plan []planEntry
 	for _, f := range registry {
+		found := false
+		for slot, i := range firsts {
+			matches[slot] = f.matches(violations[i])
+			found = found || matches[slot]
+		}
+		if !found {
+			continue
+		}
+		// The indices are gathered first, so the fixer's violations are
+		// copied once into a slice of their number.
 		var indices []int
-		for i, v := range violations {
-			if f.matches(v) {
+		for i, slot := range slotOf {
+			if matches[slot] {
 				indices = append(indices, i)
 			}
-		}
-		if len(indices) == 0 {
-			continue
 		}
 		matched := make([]compliance.Violation, len(indices))
 		for k, i := range indices {
