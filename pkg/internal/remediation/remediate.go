@@ -362,25 +362,30 @@ type planEntry struct {
 
 func classify(violations []compliance.Violation) []planEntry {
 	// For each fixer in registry order, collect matching violations.
+	// The indices are gathered first, so each fixer's violations are copied
+	// once into a slice of their number.
 	var plan []planEntry
 	for _, f := range registry {
-		var matched []compliance.Violation
 		var indices []int
 		for i, v := range violations {
 			if f.matches(v) {
-				matched = append(matched, v)
 				indices = append(indices, i)
 			}
 		}
-		if len(matched) > 0 {
-			plan = append(plan, planEntry{f: f, violations: matched, indices: indices})
+		if len(indices) == 0 {
+			continue
 		}
+		matched := make([]compliance.Violation, len(indices))
+		for k, i := range indices {
+			matched[k] = violations[i]
+		}
+		plan = append(plan, planEntry{f: f, violations: matched, indices: indices})
 	}
 	return plan
 }
 
 func toViolations(errors []error) []compliance.Violation {
-	var result []compliance.Violation
+	result := make([]compliance.Violation, 0, len(errors))
 	for _, err := range errors {
 		if v, ok := err.(compliance.Violation); ok {
 			result = append(result, v)
