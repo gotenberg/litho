@@ -12,6 +12,7 @@ import (
 	"math"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -168,6 +169,11 @@ type diffGolden struct {
 	// fixture font stands in for (see [missingReferenceFaces]): the
 	// fixture is then left unscored.
 	missingFonts []string
+	// widgets are the widgets of the reference's interactive form, push
+	// buttons left out, which [scoreFields] scores; formUnread is set for
+	// a reference with a form qpdf was not there to read.
+	widgets    []diffWidget
+	formUnread bool
 }
 
 // diffPageSize is a page's width and height in points, after /Rotate.
@@ -218,7 +224,7 @@ func flattenOutline(marks []models.Bookmark) []diffOutlineItem {
 // options.json names and compared with the PDF that route wrote, a
 // reference the host builds and [diffFeature.Prepare] checks, both sides
 // drawn without annotations. Six scores, each in [0, 1], land in the
-// baseline per fixture:
+// baseline per fixture, and a seventh for a reference with form fields:
 //
 //   - pages: the smaller page count over the larger, times the share of the
 //     pages both have whose width and height lie within diffPageSizeSlack of
@@ -234,6 +240,9 @@ func flattenOutline(marks []models.Bookmark) []diffOutlineItem {
 //   - strict: the share of pages the render cell's pixel rule matches.
 //   - outline_recall: the share of the reference's outline items, by title
 //     and target page, litho's outline holds; 1 when the reference has none.
+//   - field_recall, for a reference whose interactive form holds widgets:
+//     the share of them litho's output holds by kind, page, place and
+//     value (see [scoreFields]).
 //
 // A missing page scores 0 on every per-page score. Two engines lay text out
 // with their own line breaking and font metrics, so strict stays low even
@@ -263,10 +272,17 @@ type diffFeature struct {
 	// golden (see [referencePlan]).
 	borrowed  map[string]string
 	lithoOnly map[string][]string
+	// qpdf is the qpdf the forms of the references and of litho's output
+	// are read with ([scoreFields]), "" when it is not installed.
+	qpdf string
 }
 
 func newDiffFeature() *diffFeature {
-	return &diffFeature{convert: convertHTML, goldens: make(map[string]*diffGolden)}
+	f := &diffFeature{convert: convertHTML, goldens: make(map[string]*diffGolden)}
+	if p, err := exec.LookPath("qpdf"); err == nil {
+		f.qpdf = p
+	}
+	return f
 }
 
 func (f *diffFeature) Name() string { return "diff" }
@@ -344,6 +360,9 @@ func (f *diffFeature) LoadGoldens(dir string) error {
 			return fmt.Errorf("diff reference %s: %w", id, err)
 		}
 		g := &diffGolden{text: t, render: r, links: l, sizes: sizes, outline: outline}
+		if office {
+			f.referenceForm(g, filepath.Join(pdfsDir, id+".pdf"))
+		}
 		if checkFonts {
 			faces, err := referenceFonts(context.Background(), filepath.Join(pdfsDir, id+".pdf"))
 			if err != nil {
@@ -542,7 +561,44 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 	out.ReferenceOf, out.MissingFonts = borrowed, g.missingFonts
 	sum := sha256.Sum256(data)
 	out.PDFSHA256 = hex.EncodeToString(sum[:])
+	f.scoreForm(ctx, g, data, &out)
 	return json.Marshal(out)
+}
+
+// referenceForm reads the widgets of the reference at path into g, which
+// [diffFeature.scoreForm] scores litho's against.
+func (f *diffFeature) referenceForm(g *diffGolden, path string) {
+	data, err := os.ReadFile(path) //nolint:gosec // provisioned reference under the corpus testdata root
+	if err != nil || !bytes.Contains(data, []byte("/AcroForm")) {
+		return
+	}
+	if f.qpdf == "" {
+		g.formUnread = true
+		return
+	}
+	widgets, err := readWidgets(context.Background(), f.qpdf, data)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "diff: reading the form of reference %s: %v; its fields are not scored\n", path, err)
+		return
+	}
+	g.widgets = widgets
+}
+
+// scoreForm adds [scoreFields] to out for a reference with a form: the
+// share of its widgets data, litho's output, holds too; 0 when qpdf is not
+// there to read the reference.
+func (f *diffFeature) scoreForm(ctx context.Context, g *diffGolden, data []byte, out *diffOutput) {
+	switch {
+	case g.formUnread:
+		out.Scores[scoreFields] = 0
+		out.Reason = strings.TrimPrefix(out.Reason+"; qpdf is not installed to read the reference's form fields", "; ")
+	case len(g.widgets) > 0:
+		got, err := readWidgets(ctx, f.qpdf, data)
+		if err != nil {
+			out.Reason = strings.TrimPrefix(out.Reason+"; "+err.Error(), "; ")
+		}
+		out.Scores[scoreFields] = fieldRecall(g.widgets, got)
+	}
 }
 
 // zeroDiffScores is the score set of a fixture litho could not convert.

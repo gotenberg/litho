@@ -45,6 +45,13 @@ type OfficeOptions struct {
 	// ExportNotesPages prints, after the slides, one notes page per slide
 	// printed. Default false.
 	ExportNotesPages bool `json:"exportNotesPages,omitempty"`
+	// ExportFormFields writes the form controls of a text document as
+	// interactive form fields. The route's default is true, so every
+	// LibreOffice reference of a document with controls holds its fields;
+	// Word prints none. Left out, a source converts as its reference engine
+	// prints it: an ODT source, which LibreOffice prints, with its fields,
+	// a DOCX source, which Word prints, without.
+	ExportFormFields *bool `json:"exportFormFields,omitempty"`
 	// TrackedChanges is how a text document prints the changes it tracks:
 	// "accepted", the default, "rejected" or "marked". litho's own option.
 	TrackedChanges string `json:"trackedChanges,omitempty"`
@@ -85,7 +92,7 @@ type OfficeOptions struct {
 // of [OfficeOptions].
 //
 //nolint:gochecknoglobals // static list of the schema's keys
-var OfficeOptionNames = []string{"password", "landscape", "nativePages", "nativeBookmarks", "paperWidth", "paperHeight", "singlePage", "exportHiddenSlides", "exportNotesPages"}
+var OfficeOptionNames = []string{"password", "landscape", "nativePages", "nativeBookmarks", "paperWidth", "paperHeight", "singlePage", "exportHiddenSlides", "exportNotesPages", "exportFormFields"}
 
 // OfficeLithoOptionNames are the keys of an Office options file that are
 // litho's own options: no reference engine has such a field and none
@@ -284,7 +291,8 @@ var ReferencePaper = pdf.Paper{Width: ReferencePaperWidth, Height: ReferencePape
 
 // Conversion returns the conversion of src, the source's document, at the
 // litho options of the source's fields, then extra: the outline switch
-// always, the references' paper as the default paper of a text document or
+// always, the form fields of a text document as [OfficeOptions.ExportFormFields]
+// says, the references' paper as the default paper of a text document or
 // a spreadsheet (a presentation sizes its own slides), and the landscape
 // switch, the page ranges, the password, the paper size, in points, the
 // single page sheets, the hidden slides and the notes pages when the
@@ -390,6 +398,9 @@ func (o *Office) options() officeOptions {
 	}
 	switch o.Format {
 	case FormatDOCX, FormatODT:
+		if o.formFields() {
+			opts.word = append(opts.word, pdf.WithFormFields(true))
+		}
 		if view := trackedChangesViews[o.Options.TrackedChanges]; view != pdf.TrackedChangesAccepted {
 			opts.word = append(opts.word, pdf.WithTrackedChanges(view))
 			opts.litho = append(opts.litho, "trackedChanges")
@@ -439,6 +450,16 @@ func (o *Office) options() officeOptions {
 		}
 	}
 	return opts
+}
+
+// formFields reports whether a text document converts with its form fields:
+// as its options say, else as its reference engine prints it (see
+// [OfficeOptions.ExportFormFields]).
+func (o *Office) formFields() bool {
+	if o.Options.ExportFormFields != nil {
+		return *o.Options.ExportFormFields
+	}
+	return o.Format == FormatODT
 }
 
 // ReferenceCSVSeparators are the characters the references of the CSV
