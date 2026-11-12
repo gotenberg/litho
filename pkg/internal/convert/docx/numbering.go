@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxLevels is the number of list levels WordprocessingML defines
@@ -119,6 +120,7 @@ func (d *document) parseLevel(l *ooxml.Element) level {
 	}
 	if f := l.Child(w, "numFmt"); f != nil {
 		lv.format = attrOr(f, "val")
+		d.checkNumberFormat(lv.format)
 	}
 	if t := l.Child(w, "lvlText"); t != nil {
 		lv.text = attrOr(t, "val")
@@ -247,6 +249,36 @@ func (ni *numInstance) label(ilvl int) string {
 	return b.String()
 }
 
+// checkNumberFormat warns of an ST_NumberFormat value (ECMA-376 Part 1,
+// 17.18.59) the converter does not write, which prints in decimal
+// digits: the counting words of thaiCounting, hindiCounting and
+// vietnameseCounting, which the clause gives by example only, bahtText,
+// dollarText, custom, decimalFullWidth2 and ideographZodiacTraditional.
+func (d *document) checkNumberFormat(format string) {
+	if format == "" || knownNumberFormat(format) {
+		return
+	}
+	d.warn(warn.ContentUnsupported, warn.Approximated, "the number format "+format+" is written in decimal digits")
+}
+
+// knownNumberFormat reports whether [formatNumber] writes the
+// ST_NumberFormat format, rather than falling back to decimal.
+func knownNumberFormat(format string) bool {
+	if _, ok := cjkFormat(1, format); ok {
+		return true
+	}
+	if _, ok := scriptFormat(1, format); ok {
+		return true
+	}
+	switch format {
+	case "decimal", "none", "bullet", "decimalZero", "upperRoman", "lowerRoman", "upperLetter", "lowerLetter",
+		"ordinal", "cardinalText", "ordinalText", "decimalEnclosedCircle", "decimalEnclosedCircleChinese",
+		"decimalEnclosedFullstop", "decimalEnclosedParen", "russianLower", "russianUpper":
+		return true
+	}
+	return false
+}
+
 // romanNumerals are the additive symbols of roman numbers.
 var romanNumerals = []struct {
 	v int
@@ -254,9 +286,14 @@ var romanNumerals = []struct {
 }{{1000, "M"}, {900, "CM"}, {500, "D"}, {400, "CD"}, {100, "C"}, {90, "XC"}, {50, "L"}, {40, "XL"}, {10, "X"}, {9, "IX"}, {5, "V"}, {4, "IV"}, {1, "I"}}
 
 // formatNumber writes n in an ST_NumberFormat (ECMA-376 Part 1,
-// 17.18.59); a format the converter does not write falls back to decimal.
+// 17.18.59); a format the converter does not write falls back to decimal
+// ([knownNumberFormat] names those it writes).
 func formatNumber(n int, format string) string {
-	if s, ok := cjkFormat(n, format); ok {
+	s, ok := cjkFormat(n, format)
+	if !ok {
+		s, ok = scriptFormat(n, format)
+	}
+	if ok {
 		if s == "" {
 			return strconv.Itoa(n)
 		}

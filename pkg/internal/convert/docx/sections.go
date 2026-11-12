@@ -157,6 +157,7 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 			s.pageStart = new(v)
 		}
 		s.pageFormat = attrOr(p, "fmt")
+		d.checkNumberFormat(s.pageFormat)
 	}
 	if t := e.Child(w, "titlePg"); t != nil {
 		s.titlePage = ooxml.Toggle(t)

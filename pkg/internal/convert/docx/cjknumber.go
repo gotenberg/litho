@@ -134,22 +134,29 @@ func koreanNative(n int) string {
 }
 
 // cjkFormat writes n in the East Asian ST_NumberFormat format (ECMA-376
-// Part 1, 17.18.59) as LibreOffice prints it, and reports whether format
-// is one; "" when the format has no form for n, which then prints in
-// decimal digits.
+// Part 1, 17.18.59), and reports whether format is one; "" when the
+// format has no form for n, which then prints in decimal digits.
+// chineseCounting and taiwaneseCounting follow the clause, as Word
+// prints them; the other formats print as LibreOffice prints them, which
+// the Word references below do not contradict.
 //
 // # Corpus evidence
 //
 //   - libreoffice/docx: ooxmlexport/cjklist30.docx to cjklist44.docx print
 //     their labels in these formats as the probe below does.
-//   - probe, docx: every format at 1, 9 to 12, 20, 21, 99 to 101, 110, 1000
-//     and 10000: the counting formats print 十, 十一, 一百零一, 一百一十,
-//     一万; the legal ones 壹拾, 壹佰零壹; koreanDigital2 一零; the stems
-//     and branches stop after 癸 and 亥; taiwaneseDigital,
-//     japaneseDigitalTenThousand and decimalFullWidth print ASCII digits.
+//   - litho/docx: numbering-formats prints in Word every one of these
+//     formats as the probe at 1 to 3, and chineseCounting at 99 to 101 as
+//     九十九, 一○○ and 一○一, where the probe prints 一百 and 一百零一.
+//   - probe, docx: in LibreOffice, every format at 1, 9 to 12, 20, 21, 99
+//     to 101, 110, 1000 and 10000: chineseCountingThousand,
+//     japaneseCounting and taiwaneseCountingThousand print 十, 十一,
+//     一百零一, 一百一十, 一万; the legal ones 壹拾, 壹佰零壹;
+//     koreanDigital2 一零; the stems and branches stop after 癸 and 亥.
 func cjkFormat(n int, format string) (string, bool) {
 	switch format {
-	case "chineseCounting", "chineseCountingThousand", "japaneseCounting", "taiwaneseCounting", "taiwaneseCountingThousand", "ideographDigital":
+	case "chineseCounting", "taiwaneseCounting":
+		return chineseCounting(n), true
+	case "chineseCountingThousand", "japaneseCounting", "taiwaneseCountingThousand":
 		return cjkCounting.count(n), true
 	case "ideographLegalTraditional":
 		return cjkLegalTraditional.count(n), true
