@@ -456,3 +456,31 @@ func TestRead_DataStyleLocale(t *testing.T) {
 		t.Errorf("en-US format %+v", c)
 	}
 }
+
+// TestRead_TableGroupDepth locks the bound on the nesting of the elements
+// that hold columns and rows, table:table-columns and table:table-rows
+// alike: a column and a row inside [maxGroupDepth] of them are read, those
+// inside one more are left out with a warning.
+func TestRead_TableGroupDepth(t *testing.T) {
+	auto := `<style:style style:name="co1" style:family="table-column"><style:table-column-properties style:column-width="1in"/></style:style>`
+	nested := func(n int, local, inner string) string {
+		return strings.Repeat(`<table:`+local+`>`, n) + inner + strings.Repeat(`</table:`+local+`>`, n)
+	}
+	column := `<table:table-column table:style-name="co1"/>`
+	row := `<table:table-row><table:table-cell office:value-type="float" office:value="1"/></table:table-row>`
+	for _, tc := range []struct {
+		depth   int
+		read    bool
+		warning bool
+	}{{maxGroupDepth, true, false}, {maxGroupDepth + 1, false, true}} {
+		body := table("S", nested(tc.depth, "table-columns", column)+nested(tc.depth, "table-rows", row))
+		doc, w := read(t, flat{auto: auto, body: body}.bytes())
+		sh := doc.Sheets[0]
+		if got := len(sh.Columns) == 1 && cellAt(sh, 0, 0) != nil; got != tc.read {
+			t.Errorf("depth %d: columns %+v, rows %+v, want read %v", tc.depth, sh.Columns, sh.Rows, tc.read)
+		}
+		if got := hasWarning(w, "table-group-depth"); got != tc.warning {
+			t.Errorf("depth %d: warnings %+v, want a table-group-depth warning %v", tc.depth, w, tc.warning)
+		}
+	}
+}

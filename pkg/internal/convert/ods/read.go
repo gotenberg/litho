@@ -39,8 +39,10 @@ const (
 	// break asks for one per repetition, and a printed sheet holds a few
 	// dozen pages.
 	maxBreaks = 4096
-	// maxGroupDepth bounds the nesting of column and row groups read:
-	// 32. Anti-DoS guard, not spec-mandated: Calc nests groups 8 deep.
+	// maxGroupDepth bounds the nesting of column and row groups, header
+	// columns and rows, and their table:table-columns and table:table-rows
+	// read: 32. Anti-DoS guard, not spec-mandated: Calc nests groups 8
+	// deep.
 	maxGroupDepth = 32
 	// maxMerges bounds the merged ranges of one document: 100,000.
 	// Anti-DoS guard, not spec-mandated: a repeated merged cell asks for
@@ -337,7 +339,13 @@ func repeat(el *odf.Element, local string, limit int) int {
 // columns reads the table:table-column elements of el and of its column
 // groups and header columns (ODF 1.3, Part 3, 9.1.6 to 9.1.11). A group
 // whose table:display is false is collapsed: its columns are hidden.
+// depth is the number of elements around el that hold columns; columns
+// nested past [maxGroupDepth] are left out, with a warning.
 func (r *reader) columns(ts *tableState, el *odf.Element, hidden, header bool, depth int) {
+	if depth > maxGroupDepth {
+		r.warn("table-group-depth", fmt.Sprintf("column and row groups nested past %d levels are not read", maxGroupDepth))
+		return
+	}
 	for _, c := range el.Children {
 		if !r.tick() {
 			return
@@ -350,9 +358,7 @@ func (r *reader) columns(ts *tableState, el *odf.Element, hidden, header bool, d
 		case c.Is(odf.NSTable, "table-header-columns"):
 			r.columns(ts, c, hidden, true, depth+1)
 		case c.Is(odf.NSTable, "table-column-group"):
-			if depth < maxGroupDepth {
-				r.columns(ts, c, hidden || c.A(odf.NSTable, "display") == "false", header, depth+1)
-			}
+			r.columns(ts, c, hidden || c.A(odf.NSTable, "display") == "false", header, depth+1)
 		}
 	}
 }
@@ -433,8 +439,14 @@ func (ts *tableState) colLeft(c int) float64 {
 }
 
 // rowsOf reads the rows of el and of its row groups and header rows
-// (ODF 1.3, Part 3, 9.1.3, 9.1.7, 9.1.9 and 9.1.10).
+// (ODF 1.3, Part 3, 9.1.3, 9.1.7, 9.1.9 and 9.1.10). depth is the number
+// of elements around el that hold rows; rows nested past [maxGroupDepth]
+// are left out, with a warning.
 func (r *reader) rowsOf(ts *tableState, el *odf.Element, hidden, header bool, depth int) {
+	if depth > maxGroupDepth {
+		r.warn("table-group-depth", fmt.Sprintf("column and row groups nested past %d levels are not read", maxGroupDepth))
+		return
+	}
 	for _, c := range el.Children {
 		if !r.tick() || ts.row >= maxRows {
 			return
@@ -447,9 +459,7 @@ func (r *reader) rowsOf(ts *tableState, el *odf.Element, hidden, header bool, de
 		case c.Is(odf.NSTable, "table-header-rows"):
 			r.rowsOf(ts, c, hidden, true, depth+1)
 		case c.Is(odf.NSTable, "table-row-group"):
-			if depth < maxGroupDepth {
-				r.rowsOf(ts, c, hidden || c.A(odf.NSTable, "display") == "false", header, depth+1)
-			}
+			r.rowsOf(ts, c, hidden || c.A(odf.NSTable, "display") == "false", header, depth+1)
 		}
 	}
 }
