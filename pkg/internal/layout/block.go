@@ -477,6 +477,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	if e.err != nil {
 		return cursor
 	}
+	e.tick()
 	b.laidOut = true
 	resolveEdges(b, cb.w)
 	e.resolveSizing(b, cb, -1, -1)

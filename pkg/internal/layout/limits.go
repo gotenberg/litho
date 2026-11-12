@@ -48,6 +48,11 @@ const paraRuneCost = 64
 // level, and real documents nest a few dozen levels deep.
 const maxTreeDepth = 512
 
+// ctxCheckEvery is how many boxes the engine generates or lays out
+// between two checks of its context, beside the check at every new page:
+// a document of many boxes on one page reaches no new page.
+const ctxCheckEvery = 1024
+
 // maxStructDepth bounds the depth of the structure tree: a role deeper than
 // this does not start an element, its fragments hang from the deepest one.
 // It stays below the composition model's own bound of 256 levels. Anti-DoS

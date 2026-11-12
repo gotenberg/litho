@@ -58,6 +58,9 @@ type engine struct {
 	warned       map[string]bool
 	boxes        int
 	relayouts    int
+	// ticks counts the boxes generated and laid out, for the context
+	// check of [engine.tick].
+	ticks int
 	// seenPage is the highest page index the layout reached, for the
 	// per-page context check.
 	seenPage int
@@ -169,6 +172,18 @@ func (e *engine) relayout(y float64) bool {
 	}
 	e.relayouts++
 	return true
+}
+
+// tick counts one box generated or laid out and checks the context every
+// [ctxCheckEvery] of them.
+func (e *engine) tick() {
+	e.ticks++
+	if e.ticks%ctxCheckEvery != 0 || e.err != nil {
+		return
+	}
+	if err := e.ctx.Err(); err != nil {
+		e.fail(fmt.Errorf("laying out: %w", err))
+	}
 }
 
 // paginating reports whether placement honours page breaks.

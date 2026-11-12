@@ -3,6 +3,7 @@ package layout
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image/color"
 	"strings"
 	"sync"
@@ -100,6 +101,27 @@ func TestLayout_Deterministic(t *testing.T) {
 	}
 	if !bytes.Equal(build(), build()) {
 		t.Error("two layouts of the same tree wrote different bytes")
+	}
+}
+
+// TestLayout_CancelledWhileGenerating checks that a context that ends
+// while the boxes of a one-page document are generated fails the layout:
+// the document reaches no second page, where the engine checks it too.
+func TestLayout_CancelledWhileGenerating(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	item := sty(display(css.ListItem), func(s *css.Style) { s.ListStyleImage = "marker.png" })
+	kids := []*Node{el(item)}
+	for range 4 * ctxCheckEvery {
+		kids = append(kids, el(sty()))
+	}
+	loader := func(context.Context, string) (*Picture, error) {
+		cancel()
+		return pic(color.Black, 1, 1), nil
+	}
+	_, err := Layout(ctx, el(sty(), kids...), ahem(t), Options{Page: page(40, 20), Image: loader})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Layout = %v, want context.Canceled", err)
 	}
 }
 

@@ -65,6 +65,7 @@ func (e *engine) generate(root *Node) *box {
 // [MaxBoxes].
 func (e *engine) newBox(n *Node, st *css.Style, kind boxKind, ctx genCtx) *box {
 	e.boxes++
+	e.tick()
 	if e.boxes > MaxBoxes {
 		e.fail(fmt.Errorf("%w: more than %d", ErrTooManyBoxes, MaxBoxes))
 	}
