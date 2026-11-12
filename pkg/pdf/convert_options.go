@@ -798,11 +798,22 @@ func WithNotesPages(notes bool) PresentationOption {
 
 // WithHandouts writes a PPTX or ODP source as handout pages in place of
 // its slide pages: slidesPerPage slides drawn small on each page, in show
-// order, on the handout page the presentation names, with the header,
-// footer, date and page number of its handout master. slidesPerPage is 1,
-// 2, 3, 4, 6 or 9; 0, the default, writes the slides, one a page. Any other
-// value, or [WithNotesPages] beside it, fails the conversion with
+// order row by row, with the header, footer, date and page number of the
+// presentation's handout master. slidesPerPage is 1, 2, 3, 4, 6 or 9; 0,
+// the default, writes the slides, one a page. Any other value, or
+// [WithNotesPages] beside it, fails the conversion with
 // [ErrInvalidConvertOptions].
+//
+// The page is the handout page of the presentation: the page of an ODP
+// handout master, the notes size of a PPTX, Letter when the source names
+// neither. The slides are laid out on it as LibreOffice lays a handout
+// out, those of a PPTX too. Three a page, the slides take one column of a
+// portrait page or one row of a landscape page, each with seven lines
+// ruled beside it for notes.
+//
+// [WithPaper] and [WithOrientation] scale the handout page down to fit
+// the paper and centre it, as they do a slide. They do not lay the slides
+// out again: a landscape handout comes from a landscape handout page.
 func WithHandouts(slidesPerPage int) PresentationOption {
 	return presentationOption(func(c *convertConfig) { c.handouts = slidesPerPage })
 }
