@@ -228,7 +228,7 @@
 //   - A conversion of an Office package takes [OfficeOption]:
 //     [WithOfficePassword].
 //   - [FromDOCX] and [FromODT] take [WordProcessingOption]:
-//     [WithTrackedChanges].
+//     [WithTrackedChanges], [WithFormFields].
 //   - A conversion of sheets takes [SheetOption]: [WithOnePagePerSheet].
 //   - [FromXLSX] and [FromODS] take [SpreadsheetOption]: [WithSheets],
 //     [WithSheetNumbers], [WithHiddenSheets], [WithFormulaRecalculation].
