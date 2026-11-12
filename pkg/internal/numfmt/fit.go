@@ -59,13 +59,18 @@ func (f *Format) Fit(v Value, width float64, measure func(string) float64) Resul
 	return r
 }
 
+// maxFitDigits caps the digits a General number is narrowed to. Anti-DoS
+// guard, not spec-mandated: a double carries 17 significant digits, and
+// formatFloat writes at most 15.
+const maxFitDigits = 64
+
 // digitCount returns how many digits of width digit fit in w.
 func digitCount(w, digit float64) int {
 	n := math.Floor(w / digit)
 	if n < 0 || math.IsNaN(n) {
 		return 0
 	}
-	return int(min(n, 64))
+	return int(min(n, maxFitDigits))
 }
 
 // hash returns r showing "###", or under Excel's rules a cell filled

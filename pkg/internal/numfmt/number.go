@@ -18,6 +18,26 @@ const maxExponentDigits = 8
 // LibreOffice writes zeros past the fifteenth.
 const maxDecimalPlaces = 64
 
+// maxPercentSigns caps the percent signs that each scale a number by 100,
+// and maxScalingCommas the commas that each divide it by 1,000.
+// Anti-DoS guard, not spec-mandated: a code writes one or two, and more
+// only drive the number to infinity or zero.
+const (
+	maxPercentSigns  = 4
+	maxScalingCommas = 8
+)
+
+// maxDenominatorDigits caps the placeholders of a fraction's denominator
+// honoured: denominators up to 9,999,999. Anti-DoS guard, not
+// spec-mandated: a code writes one to three, and a double cannot tell
+// finer fractions apart.
+const maxDenominatorDigits = 7
+
+// maxConvergents caps the continued fraction terms [approximate] reads.
+// Anti-DoS guard, not spec-mandated: a double's continued fraction ends
+// within about 40 terms.
+const maxConvergents = 64
+
 // mantissa locates the parts of a number section.
 type mantissa struct {
 	// dot is the index of the decimal point, exp of the exponent, both
@@ -93,10 +113,10 @@ func (s *section) fixed(x float64, first bool) Result {
 	neg := x < 0 && first
 	x = math.Abs(x)
 	m := s.analyse()
-	for range min(m.percent, 4) {
+	for range min(m.percent, maxPercentSigns) {
 		x *= 100
 	}
-	for range min(m.scale, 8) {
+	for range min(m.scale, maxScalingCommas) {
 		x /= 1000
 	}
 	dec := min(m.decDigits, maxDecimalPlaces)
@@ -400,7 +420,7 @@ scan:
 		num = int64(math.Floor(fr*float64(d) + 0.5))
 	} else {
 		maxDen := int64(1)
-		for range min(len(denPlaces), 7) {
+		for range min(len(denPlaces), maxDenominatorDigits) {
 			maxDen *= 10
 		}
 		num, den = approximate(fr, maxDen-1)
@@ -479,7 +499,7 @@ func approximate(x float64, maxDen int64) (int64, int64) {
 	v := x
 	bestP, bestQ := int64(math.Floor(x+0.5)), int64(1)
 	bestErr := math.Abs(x - float64(bestP))
-	for range 64 {
+	for range maxConvergents {
 		a := math.Floor(v)
 		if a > 1e12 {
 			break

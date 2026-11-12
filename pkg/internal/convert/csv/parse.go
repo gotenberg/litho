@@ -26,6 +26,10 @@ const (
 	maxCells = sheet.MaxCells
 )
 
+// ctxCheckRecords is how many records the reader goes through between
+// two checks of its context.
+const ctxCheckRecords = 4096
+
 // separators is a set of field separators, any of which ends a field.
 type separators struct {
 	// ascii marks the separators below U+0080; other lists the rest.
@@ -164,7 +168,8 @@ func decode(data []byte) string {
 
 // parse splits text into records at the separators seps (RFC 4180, 2, as
 // LibreOffice reads it): the line ends are CRLF, LF or CR; a quoted field
-// may hold any of them. It checks ctx every 4,096 records.
+// may hold any of them. It checks ctx every
+// [ctxCheckRecords] records.
 func parse(ctx context.Context, text string, seps *separators) ([]record, limits, error) {
 	var (
 		out   []record
@@ -215,7 +220,7 @@ func parse(ctx context.Context, text string, seps *separators) ([]record, limits
 	i, n := 0, len(text)
 	start, unclosed := true, false
 	for i < n {
-		if len(out)%4096 == 0 && start {
+		if len(out)%ctxCheckRecords == 0 && start {
 			if err := ctx.Err(); err != nil {
 				return nil, lim, err
 			}

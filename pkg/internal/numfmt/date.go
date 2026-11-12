@@ -12,6 +12,17 @@ import (
 // spec-mandated: Calc's dates end in the year 32767.
 const maxSerialDays = 1e7
 
+// maxSecondDigits caps the digits of a fraction of a second shown: a
+// nanosecond. Anti-DoS guard, not spec-mandated: a double holds a time of
+// day to about ten microseconds.
+const maxSecondDigits = 9
+
+// maxElapsedDigits caps the width an elapsed time keyword ([hh], [mm],
+// [ss]) pads its count to. Anti-DoS guard, not spec-mandated: a code
+// writes two or three letters, and nine digits hold any count of hours
+// within maxSerialDays.
+const maxElapsedDigits = 9
+
 // nullDate is Calc's day 0 (ECMA-376 Part 1, 18.17.4.1, the 1900 date
 // system as Calc counts it, without the 1900 leap day).
 var nullDate = time.Date(1899, 12, 30, 0, 0, 0, 0, time.UTC)
@@ -84,7 +95,7 @@ func (s *section) date(x float64, first bool) Result {
 		case tAMPM, tAP:
 			ampm = true
 		case tSecFrac:
-			frac = max(frac, min(t.n, 9))
+			frac = max(frac, min(t.n, maxSecondDigits))
 		case tLit, tDigit, tDot, tComma, tPercent, tExp, tSlash, tAt, tFill, tGeneral:
 		}
 	}
@@ -172,11 +183,11 @@ func (s *section) date(x float64, first bool) Result {
 				b.WriteByte('a')
 			}
 		case tSecFrac:
-			ds := strconv.FormatFloat(sub, 'f', min(t.n, 9), 64)
+			ds := strconv.FormatFloat(sub, 'f', min(t.n, maxSecondDigits), 64)
 			if i := strings.IndexByte(ds, '.'); i >= 0 {
 				b.WriteString(ds[i:])
 			} else {
-				b.WriteString("." + strings.Repeat("0", min(t.n, 9)))
+				b.WriteString("." + strings.Repeat("0", min(t.n, maxSecondDigits)))
 			}
 		case tDate:
 			switch t.key {
@@ -228,12 +239,12 @@ func (s *section) date(x float64, first bool) Result {
 				pad(sec, min(t.n, 2))
 			case kElapsedHour:
 				elapsedHour = true
-				pad(total/3600, min(t.n, 9))
+				pad(total/3600, min(t.n, maxElapsedDigits))
 			case kElapsedMinute:
 				elapsedMinute = true
-				pad(total/60, min(t.n, 9))
+				pad(total/60, min(t.n, maxElapsedDigits))
 			case kElapsedSecond:
-				pad(total, min(t.n, 9))
+				pad(total, min(t.n, maxElapsedDigits))
 			}
 		case tDigit, tDot, tComma, tPercent, tExp, tSlash, tAt, tGeneral:
 		}

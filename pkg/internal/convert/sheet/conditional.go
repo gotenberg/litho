@@ -48,6 +48,14 @@ var dataBarAxis = compose.Stroke{Color: compose.Black, Width: 0.25, Dash: []floa
 // red sc/databar.xlsx prints).
 var negativeBar = css.Color{R: 1, A: 1}
 
+// positiveBar is the colour of a data bar whose rule names none.
+var positiveBar = css.Color{R: 0x63 / 255.0, G: 0x8E / 255.0, B: 0xC6 / 255.0, A: 1}
+
+// unprioritized is the sort key the rules without a priority start from:
+// past any priority a sheet's rules give, so that they follow them in
+// file order.
+const unprioritized = maxConditionals * 1024
+
 // condRule is one rule of a sheet with the format it belongs to and its
 // place in the evaluation order.
 type condRule struct {
@@ -148,7 +156,7 @@ func newConditions(doc *Document, sh *Sheet) *conditions {
 			if !evaluable(r) {
 				continue
 			}
-			key := len(cs.rules) + maxConditionals*1024
+			key := len(cs.rules) + unprioritized
 			if r.Priority > 0 {
 				key = r.Priority
 			}
@@ -823,7 +831,7 @@ func (g *grid) dataBar(r, c int, cell *Cell) (zero, length float64, col css.Colo
 	}
 	col = rule.Bar
 	if col.A == 0 {
-		col = css.Color{R: 0x63 / 255.0, G: 0x8E / 255.0, B: 0xC6 / 255.0, A: 1}
+		col = positiveBar
 	}
 	if v < 0 {
 		col = rule.BarNegative

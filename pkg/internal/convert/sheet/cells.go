@@ -21,6 +21,14 @@ const maxOverflowScan = 256
 // spec-mandated: Excel stops at 32,767 characters a cell.
 const maxCellText = 32767
 
+// shrinkAgainMax is how many times Calc shrinks a text by shrinkStep
+// again after its first fit while it still overflows (ScOutputData,
+// SC_SHRINKAGAIN_MAX).
+const (
+	shrinkAgainMax = 7
+	shrinkStep     = 0.9
+)
+
 // slack widens a box sized to its measured text so that rounding never
 // wraps it.
 const slack = 0.5
@@ -320,8 +328,8 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		// text's, then 10% less at a time while it overflows, at most
 		// seven times (ScOutputData, SC_SHRINKAGAIN_MAX).
 		scale := avail / d.textW
-		for i := 0; i < 7 && d.textW*scale > avail; i++ {
-			scale *= 0.9
+		for i := 0; i < shrinkAgainMax && d.textW*scale > avail; i++ {
+			scale *= shrinkStep
 		}
 		f.size *= scale
 		d.textW *= scale

@@ -52,13 +52,25 @@ type frange struct {
 	rg    Range
 }
 
+// evalState is where a formula cell stands in its evaluation: a cell met
+// again while evaluating is a circular reference, which keeps its stored
+// value.
+type evalState uint8
+
+// The evaluation states.
+const (
+	unvisited evalState = iota
+	evaluating
+	evaluated
+)
+
 // formulaEval evaluates the formulas of a document's cells.
 type formulaEval struct {
 	doc   *Document
 	grids []*grid
-	// state is 1 for a cell being evaluated, 2 for one done; done holds
+	// state tells the cells being evaluated from those done; done holds
 	// the results.
-	state map[[3]int]uint8
+	state map[[3]int]evalState
 	done  map[[3]int]fval
 	ok    map[[3]int]bool
 	reads int
@@ -69,7 +81,7 @@ type formulaEval struct {
 // newFormulaEval returns an evaluator over doc, which the formulas of its
 // cells and of its conditional formats read.
 func newFormulaEval(doc *Document) *formulaEval {
-	e := &formulaEval{doc: doc, grids: make([]*grid, len(doc.Sheets)), state: map[[3]int]uint8{}, done: map[[3]int]fval{}, ok: map[[3]int]bool{}, unsupported: map[string]bool{}}
+	e := &formulaEval{doc: doc, grids: make([]*grid, len(doc.Sheets)), state: map[[3]int]evalState{}, done: map[[3]int]fval{}, ok: map[[3]int]bool{}, unsupported: map[string]bool{}}
 	for i, sh := range doc.Sheets {
 		if sh != nil {
 			e.grids[i] = newPlainGrid(doc, sh)
@@ -93,12 +105,12 @@ func (e *formulaEval) cellValue(s, r, c, depth int) fval {
 	if cell.Formula != "" && depth < maxFormulaDepth {
 		k := [3]int{s, r, c}
 		switch e.state[k] {
-		case 2:
+		case evaluated:
 			return e.done[k]
-		case 0:
-			e.state[k] = 1
+		case unvisited:
+			e.state[k] = evaluating
 			res, ok := e.eval(cell.Formula, s, r, c, 0, 0, depth+1)
-			e.state[k] = 2
+			e.state[k] = evaluated
 			if ok && res.rng == nil {
 				e.done[k] = res
 				e.ok[k] = true

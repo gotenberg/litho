@@ -164,7 +164,7 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 	undated := false
 	mem := budget.BudgetFrom(ctx)
 	for ri, rec := range recs {
-		if ri%4096 == 0 {
+		if ri%ctxCheckRecords == 0 {
 			if err := ctx.Err(); err != nil {
 				return nil, nil, err
 			}
