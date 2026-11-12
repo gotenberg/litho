@@ -74,6 +74,14 @@ func TestTables(t *testing.T) {
 	}
 }
 
+// TestTables_LegacyIndent locks where a table's edge sits from its indent
+// and its alignment.
+//
+// # Corpus evidence
+//
+//   - litho/docx tables-row-heights: Word prints the table whose last row
+//     carries a centred row alignment at the left margin, the text of its
+//     first column at 77.8 pt on a 72 pt margin, as every other table.
 func TestTables_LegacyIndent(t *testing.T) {
 	t.Parallel()
 	table := func(tblPr, rowPr string) string {
@@ -81,15 +89,15 @@ func TestTables_LegacyIndent(t *testing.T) {
 	}
 	// Before Word 2013 an indent places the text, the table's edge the
 	// cell margin left of it; without an indent the edge is at the
-	// margin, as LibreOffice prints both. A row's alignment aligns a
-	// table that sets none.
+	// margin, as LibreOffice prints both. A row's alignment leaves the
+	// table where its own properties put it.
 	for _, tc := range []struct {
 		name, tblPr, rowPr string
 		want               css.Dimension
 	}{
 		{"indent", `<w:tblInd w:w="0" w:type="dxa"/>`, ``, css.Pts(-defaultCellMargin)},
 		{"no indent", ``, ``, css.Pts(0)},
-		{"row alignment", ``, `<w:jc w:val="center"/>`, css.Dimension{Kind: css.Auto}},
+		{"row alignment", ``, `<w:jc w:val="center"/>`, css.Pts(0)},
 		{"table alignment first", `<w:jc w:val="left"/>`, `<w:jc w:val="right"/>`, css.Pts(0)},
 	} {
 		b := build(t, table(tc.tblPr, tc.rowPr), nil)

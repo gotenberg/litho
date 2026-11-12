@@ -345,9 +345,6 @@ type rowProps struct {
 	header     *bool
 	gridBefore int
 	gridAfter  int
-	// jc is the row's alignment (17.4.80), which LibreOffice applies to
-	// the table when its properties set none.
-	jc string
 }
 
 // parseRowProps reads a w:trPr.
@@ -364,8 +361,6 @@ func parseRowProps(e *ooxml.Element) *rowProps {
 				r.height = new(v)
 			}
 			r.hRule = attrOr(x, "hRule")
-		case "jc":
-			r.jc = val
 		case "cantSplit":
 			r.cantSplit = new(ooxml.Toggle(x))
 		case "tblHeader":
@@ -540,15 +535,10 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 		indent -= left
 	}
 	tableSt.Margin[css.Left] = css.Pts(indent)
-	jc := tp.jc
-	for _, r := range placed {
-		if jc == nil && r.props.jc != "" {
-			// A row's alignment aligns the table that sets none, as
-			// LibreOffice lays a table out (its rows share one alignment).
-			jc = &r.props.jc
-		}
-	}
-	if jc != nil {
+	// Only the table's own alignment (17.4.28) places it: Word prints a
+	// table whose row carries the legacy row alignment (17.4.27) where
+	// the table's properties put it.
+	if jc := tp.jc; jc != nil {
 		switch *jc {
 		case "center":
 			tableSt.Margin[css.Left], tableSt.Margin[css.Right] = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
