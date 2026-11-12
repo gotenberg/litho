@@ -1,12 +1,12 @@
 package ods
 
 import (
-	"math"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 )
 
@@ -92,7 +92,7 @@ func value(el *odf.Element, shown string) sheet.Value {
 	}
 	num := func(s string) (float64, bool) {
 		v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
-		return v, err == nil && !math.IsNaN(v) && !math.IsInf(v, 0)
+		return v, err == nil && numeric.Finite(v)
 	}
 	switch vt {
 	case "float", "percentage", "currency":

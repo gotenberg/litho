@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 )
@@ -474,7 +475,7 @@ func angle(v string) (float64, bool) {
 		}
 	}
 	d, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
-	if err != nil || math.IsNaN(d) || math.IsInf(d, 0) {
+	if err != nil || !numeric.Finite(d) {
 		return 0, false
 	}
 	d = math.Mod(d*unit, 360)

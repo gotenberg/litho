@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -153,10 +154,10 @@ func (r *reader) place(ts *tableState, el *odf.Element, at *sheet.Anchor, art sh
 		// nowhere.
 		return
 	}
-	if !positive(b.Width) {
+	if !numeric.Positive(b.Width) {
 		b.Width = 1
 	}
-	if !positive(b.Height) {
+	if !numeric.Positive(b.Height) {
 		b.Height = 1
 	}
 	draw := art.draw
@@ -192,9 +193,6 @@ func (r *reader) place(ts *tableState, el *odf.Element, at *sheet.Anchor, art sh
 	r.drawings++
 	ts.sh.Drawings = append(ts.sh.Drawings, d)
 }
-
-// positive reports whether v is greater than 0; NaN is not.
-func positive(v float64) bool { return v > 0 }
 
 // turnEpsilon is the slack under which a transform's shear or a text's
 // angle reads as none, against the rounding of the trigonometry that
