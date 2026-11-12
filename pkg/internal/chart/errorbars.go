@@ -14,10 +14,39 @@ import (
 //   - libreoffice/ods: chart2/error_bar.ods prints its caps 5.67 points long.
 const errorCap = 100 * mm100
 
+// errorStats is what the length of an error bar reads of its whole
+// series: the largest magnitude, and the count, sum and sum of squares of
+// the values.
+type errorStats struct {
+	max, n, sum, sq float64
+}
+
+// seriesErrorStats returns the statistics bars e read of the series vals,
+// once for all its points.
+func seriesErrorStats(e ErrorBars, vals Data) errorStats {
+	var st errorStats
+	switch e.Kind {
+	case ErrorMargin:
+		for i := range min(vals.Len(), MaxPoints) {
+			if x, ok := vals.number(i); ok {
+				st.max = math.Max(st.max, math.Abs(x))
+			}
+		}
+	case ErrorStdDev, ErrorStdErr, ErrorVariance:
+		for i := range min(vals.Len(), MaxPoints) {
+			if x, ok := vals.number(i); ok {
+				st.n, st.sum, st.sq = st.n+1, st.sum+x, st.sq+x*x
+			}
+		}
+	case ErrorFixed, ErrorPercent, ErrorCustom:
+	}
+	return st
+}
+
 // errorAmounts returns the error above and below point j of a series of
-// vals for bars e: chart2's VSeriesPlotter::getErrorBarLength, NaN for
-// none.
-func (rd *renderer) errorAmounts(e ErrorBars, vals Data, j int) (float64, float64) {
+// vals for bars e, st the series' statistics: chart2's
+// VSeriesPlotter::getErrorBarLength, NaN for none.
+func (rd *renderer) errorAmounts(e ErrorBars, vals Data, st errorStats, j int) (float64, float64) {
 	v, ok := vals.number(j)
 	if !ok {
 		return math.NaN(), math.NaN()
@@ -29,13 +58,7 @@ func (rd *renderer) errorAmounts(e ErrorBars, vals Data, j int) (float64, float6
 		a := math.Abs(v) * e.Plus / 100
 		return a, a
 	case ErrorMargin:
-		m := 0.0
-		for i := range min(vals.Len(), MaxPoints) {
-			if x, ok := vals.number(i); ok {
-				m = math.Max(m, math.Abs(x))
-			}
-		}
-		a := m * e.Plus / 100
+		a := st.max * e.Plus / 100
 		return a, a
 	case ErrorCustom:
 		up, down := math.NaN(), math.NaN()
@@ -47,12 +70,7 @@ func (rd *renderer) errorAmounts(e ErrorBars, vals Data, j int) (float64, float6
 		}
 		return up, down
 	case ErrorStdDev, ErrorStdErr, ErrorVariance:
-		n, sum, sq := 0.0, 0.0, 0.0
-		for i := range min(vals.Len(), MaxPoints) {
-			if x, ok := vals.number(i); ok {
-				n, sum, sq = n+1, sum+x, sq+x*x
-			}
-		}
+		n, sum, sq := st.n, st.sum, st.sq
 		if n < 2 {
 			return math.NaN(), math.NaN()
 		}
@@ -88,12 +106,13 @@ func (rd *renderer) errorBars(g *Group, s *Series, x, y *dim, at func(j int) (fl
 		if cs == nil {
 			continue
 		}
+		stats := seriesErrorStats(e, data)
 		for j := range min(rd.data(s.Values).Len(), MaxPoints) {
 			cx, cy, ok := at(j)
 			if !ok {
 				continue
 			}
-			up, down := rd.errorAmounts(e, data, j)
+			up, down := rd.errorAmounts(e, data, stats, j)
 			pos := func(xv, yv float64) compose.Point {
 				if g.Kind == Scatter || g.Kind == Bubble {
 					return compose.Point{X: x.valuePixel(xv), Y: y.valuePixel(yv)}
