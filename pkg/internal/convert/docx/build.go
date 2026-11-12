@@ -334,6 +334,13 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 			d.applyRun(ms, rp.mark, lineMult)
 			pst.FontFamilies, pst.FontSize, pst.FontWeight, pst.FontStyle = ms.FontFamilies, ms.FontSize, ms.FontWeight, ms.FontStyle
 			kids = append(kids, &layout.Node{Kind: layout.LineBreak, Style: ms})
+		} else if i == len(segs)-1 && endsWithBreak(kids) {
+			// A line break ending the paragraph leaves the mark a line of
+			// its own, as Word prints it (17.3.3.1 br), where a CSS line
+			// break ends the last line.
+			ms := inlineStyle(pst)
+			d.applyRun(ms, rp.mark, lineMult)
+			kids = append(kids, &layout.Node{Kind: layout.LineBreak, Style: ms})
 		}
 		n.Children = kids
 		if sink.positioned {
@@ -404,6 +411,31 @@ func hasContent(nodes []*layout.Node) bool {
 				return true
 			}
 		}
+	}
+	return false
+}
+
+// endsWithBreak reports nodes whose last content is a line break.
+//
+// # Corpus evidence
+//
+//   - poi/docx integration/stress006: Word prints a paragraph of one run
+//     holding a text wrapping break as two Times New Roman 12 point lines.
+func endsWithBreak(nodes []*layout.Node) bool {
+	for i := len(nodes) - 1; i >= 0; i-- {
+		n := nodes[i]
+		switch {
+		case n.Kind == layout.LineBreak:
+			return true
+		case n.Kind == layout.Text && n.Text == "":
+			continue
+		case n.Kind == layout.Element && n.Style != nil && n.Style.Display == css.Inline && n.Footnote == nil:
+			if !hasContent(n.Children) {
+				continue
+			}
+			return endsWithBreak(n.Children)
+		}
+		return false
 	}
 	return false
 }
