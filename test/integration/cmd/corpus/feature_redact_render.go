@@ -255,7 +255,7 @@ func centredQuarter(box [4]float64, _ []models.TextElement) ([4]float64, bool) {
 // textBand returns the p1-band region.
 func textBand(box [4]float64, text []models.TextElement) ([4]float64, bool) {
 	h := box[3] - box[1]
-	if !(h > 0) {
+	if h <= 0 || math.IsNaN(h) {
 		return [4]float64{}, false
 	}
 	centre := (box[1] + box[3]) / 2
@@ -1372,7 +1372,7 @@ func popplerPin() string {
 // [pdf.Reader.Page] reports for the box a viewer uses.
 func viewedBox(pg models.Page) [4]float64 {
 	unit := pg.UserUnit
-	if !(unit > 0) || math.IsInf(unit, 0) {
+	if unit <= 0 || math.IsNaN(unit) || math.IsInf(unit, 0) {
 		unit = 1
 	}
 	for _, b := range [][4]float64{pg.CropBox, pg.MediaBox} {
@@ -1401,7 +1401,7 @@ type redactGeometry struct {
 func redactPageGeometry(pg models.Page) redactGeometry {
 	box := viewedBox(pg)
 	unit := pg.UserUnit
-	if !(unit > 0) || math.IsInf(unit, 0) {
+	if unit <= 0 || math.IsNaN(unit) || math.IsInf(unit, 0) {
 		unit = 1
 	}
 	s := renderDPI / 72.0 * unit
