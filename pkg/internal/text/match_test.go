@@ -234,6 +234,46 @@ func TestLayout_CJKFallbackByLang(t *testing.T) {
 	}
 }
 
+func TestLayout_ArabicAndHebrewFallBackToDejaVuSansFirst(t *testing.T) {
+	t.Parallel()
+	const alef, hebrewAlef = 'ا', 'א'
+	f := newTestFonts(t,
+		fontFile{name: "a_sans.ttf", data: familyFace("Test Sans", "Regular", 400, false)},
+		fontFile{name: "b_arabic.ttf", data: familyFace("Noto Sans Arabic", "Regular", 400, false, alef)},
+		fontFile{name: "c_naskh.ttf", data: familyFace("Noto Naskh Arabic", "Regular", 400, false, alef)},
+		fontFile{name: "d_hebrew.ttf", data: familyFace("Noto Sans Hebrew", "Regular", 400, false, hebrewAlef)},
+		fontFile{name: "e_dejavu.ttf", data: familyFace("DejaVu Sans", "Regular", 400, false, alef, hebrewAlef)},
+	)
+	for _, text := range []string{"A" + string(alef), "A" + string(hebrewAlef)} {
+		lines, rep := layout(t, f, text, style(), 100, Collapse)
+		if len(rep.MissingGlyphs) != 0 || len(lines[0].Runs) != 2 {
+			t.Fatalf("%q: report %+v, runs %d", text, rep, len(lines[0].Runs))
+		}
+		for _, r := range lines[0].Runs {
+			if r.Face.Key != lines[0].Runs[0].Face.Key && !strings.Contains(r.Face.Key, "e_dejavu") {
+				t.Errorf("%q: drawn with %s, want DejaVu Sans", text, r.Face.Key)
+			}
+		}
+	}
+}
+
+func TestLayout_SymbolsFallBackToTheSansSerifListBeforeOtherFaces(t *testing.T) {
+	t.Parallel()
+	const star = '★'
+	f := newTestFonts(t,
+		fontFile{name: "a_sans.ttf", data: familyFace("Test Sans", "Regular", 400, false)},
+		fontFile{name: "b_cjk.ttf", data: familyFace("Noto Sans CJK JP", "Regular", 400, false, star)},
+		fontFile{name: "c_dejavu.ttf", data: familyFace("DejaVu Sans", "Regular", 400, false, star)},
+	)
+	lines, rep := layout(t, f, "A"+string(star), style(), 100, Collapse)
+	if len(rep.MissingGlyphs) != 0 || len(lines[0].Runs) != 2 {
+		t.Fatalf("report %+v, runs %d", rep, len(lines[0].Runs))
+	}
+	if k := lines[0].Runs[1].Face.Key; !strings.Contains(k, "c_dejavu") {
+		t.Errorf("★ drawn with %s, want DejaVu Sans", k)
+	}
+}
+
 func TestFonts_LoadsFacesLazily(t *testing.T) {
 	t.Parallel()
 	f := newTestFonts(t, append(sansFamily(), fontFile{name: "digits.ttf", data: testDigits()})...)

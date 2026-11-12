@@ -454,10 +454,25 @@ func firstGeneric(style Style) generic {
 
 // scriptFamilies returns the families fontconfig prefers for a character of
 // script, as keys: the generic list of g for Latin, Greek and Cyrillic, the
-// Noto CJK families for a CJK script with region's first, and the Noto or
-// DejaVu family of the script for Arabic, Hebrew, Devanagari and Thai, after
-// the orth-based preferences of fontconfig's conf.d/65-nonlatin.conf and
-// conf.d/70-noto-cjk.conf. Other scripts have no preference.
+// Noto CJK families for a CJK script with region's first, DejaVu Sans then
+// the Noto families of the script for Arabic and Hebrew, and the Noto family
+// of the script for Devanagari and Thai, after the orth-based preferences of
+// fontconfig's conf.d/65-nonlatin.conf and conf.d/70-noto-cjk.conf. Other
+// scripts have no preference.
+//
+// DejaVu Sans comes first for Arabic and Hebrew because fontconfig sorts the
+// faces that cover a character by its family lists, and 60-latin.conf names
+// DejaVu Sans in the sans-serif and serif lists where no list names a Noto
+// Arabic or Hebrew family.
+//
+// # Corpus evidence
+//
+//   - probe, html: in the gotenberg/gotenberg:9.4.1 image, Chromium prints
+//     a paragraph of Arabic that names no font in DejaVu Sans, although Noto
+//     Sans Arabic, Noto Naskh Arabic and Noto Kufi Arabic are installed.
+//   - probe, odt: LibreOffice in the same image prints the paragraph in
+//     DejaVu Sans, and a paragraph of Hebrew too; fc-match -s there ranks
+//     DejaVu Sans first for U+0627 and U+05D0 under sans-serif and serif.
 func scriptFamilies(script language.Script, g generic, region string) []string {
 	var l familyList
 	switch script { //nolint:exhaustive // only the scripts the fontconfig confs prefer families for have a list
@@ -472,11 +487,11 @@ func scriptFamilies(script language.Script, g generic, region string) []string {
 			l.add(familyKey(cjkFamily(genericSansSerif, rg)))
 		}
 	case language.Arabic:
-		for _, name := range []string{"Noto Sans Arabic", "Noto Naskh Arabic", "DejaVu Sans"} {
+		for _, name := range []string{"DejaVu Sans", "Noto Sans Arabic", "Noto Naskh Arabic"} {
 			l.add(familyKey(name))
 		}
 	case language.Hebrew:
-		for _, name := range []string{"Noto Sans Hebrew", "DejaVu Sans"} {
+		for _, name := range []string{"DejaVu Sans", "Noto Sans Hebrew"} {
 			l.add(familyKey(name))
 		}
 	case language.Devanagari:
@@ -486,6 +501,27 @@ func scriptFamilies(script language.Script, g generic, region string) []string {
 	}
 	return l.keys
 }
+
+// fallbackFamilies are the keys of the sans-serif list, aliases expanded,
+// which a character no requested or script family covers tries before any
+// other face. fontconfig adds sans-serif to a pattern that names no generic
+// family (conf.d/49-sansserif.conf), and Chromium asks fontconfig for a
+// character's fallback with no family at all, so the sans-serif list ranks
+// the faces that cover the character where no other list names one.
+//
+// # Corpus evidence
+//
+//   - probe, html: in the gotenberg/gotenberg:9.4.1 image, Chromium prints
+//     U+2605, U+2606, U+2713 and U+2717 of a paragraph that names no font
+//     in DejaVu Sans, which neither Liberation Serif nor DejaVu Serif covers,
+//     where litho drew them in Noto Sans CJK JP, the first face in index
+//     order to cover them.
+//   - probe, odt: LibreOffice in the same image prints them in DejaVu Sans.
+var fallbackFamilies = func() []string {
+	var l familyList
+	l.addGeneric(genericSansSerif, "")
+	return l.keys
+}()
 
 // request is the aspect a [Style] asks for.
 type request struct {

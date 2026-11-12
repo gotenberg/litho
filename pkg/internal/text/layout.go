@@ -165,9 +165,10 @@ type Report struct {
 //     generic list of the style's first generic family (sans-serif without
 //     one) for Latin, Greek and Cyrillic; the Noto CJK families for Han,
 //     kana, Hangul and Bopomofo, the one of [Style.Lang] first and Japanese
-//     first without one; Noto Sans Arabic, Noto Naskh Arabic and DejaVu Sans
-//     for Arabic; Noto Sans Hebrew and DejaVu Sans for Hebrew; Noto Sans
+//     first without one; DejaVu Sans, Noto Sans Arabic and Noto Naskh Arabic
+//     for Arabic; DejaVu Sans and Noto Sans Hebrew for Hebrew; Noto Sans
 //     Devanagari; Noto Sans Thai;
+//   - the sans-serif list, fontconfig's family of last resort;
 //   - any indexed face, closest in aspect first, then in index order, with
 //     Apple's LastResort placeholder font last.
 //
@@ -511,6 +512,11 @@ func (st *layoutState) fallback(s *styleState, script language.Script, r rune) *
 		}
 	}
 	for _, key := range scriptFamilies(script, s.generic, s.region) {
+		if try(f.bestInFamily(key, s.req, r)) {
+			return found
+		}
+	}
+	for _, key := range fallbackFamilies {
 		if try(f.bestInFamily(key, s.req, r)) {
 			return found
 		}
