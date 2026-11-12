@@ -269,7 +269,8 @@ func toggleScript(s, kind sheet.Script) sheet.Script {
 // header and the cells is the room its margin leaves, less the height of
 // its text as the import estimates it, each line as tall as its largest
 // font size, base for a line without one; a header that leaves no space
-// keeps a fixed height. The footer alike.
+// keeps a fixed height. The footer alike. base, the Normal font's size,
+// is positive, as every font record's is ([reader.fontProps]).
 //
 // # Corpus evidence
 //
@@ -278,9 +279,6 @@ func toggleScript(s, kind sheet.Script) sheet.Script {
 //     points lower than the margin: the header's 11.17-point line and its
 //     7.09-point spacing need more than the margin's 17.10 points.
 func dynamicHeights(sh *sheet.Sheet, base float64) {
-	if !(base > 0) {
-		base = 11
-	}
 	hf := &sh.HeaderFooter
 	variants := []sheet.Margins{hf.Odd}
 	if hf.DifferentOddEven {

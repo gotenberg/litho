@@ -269,10 +269,8 @@ func (r *reader) measureNormalFont() {
 	if s.normalXf < len(s.styleXfs) {
 		x = s.styleXfs[s.normalXf]
 	}
+	// The font records hold a positive size ([reader.fontProps]).
 	f := r.fontAt(max(x.font, 0))
-	if !(f.Size > 0) {
-		return
-	}
 	size := printerPixels(f.Size)
 	if size <= 0 {
 		return
