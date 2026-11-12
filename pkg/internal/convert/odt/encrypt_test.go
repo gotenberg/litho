@@ -70,8 +70,11 @@ func encryptODT(t *testing.T, pkg []byte, password string, o encryptOptions) []b
 	b64 := base64.StdEncoding.EncodeToString
 	encrypt := func(plain []byte) ([]byte, string) {
 		var z bytes.Buffer
+		// NewWriter fails only for a level out of range.
 		w, _ := flate.NewWriter(&z, flate.BestCompression)
-		w.Write(plain)
+		if _, err := w.Write(plain); err != nil {
+			t.Fatal(err)
+		}
 		w.Close()
 		deflated := z.Bytes()
 		var start []byte
@@ -111,7 +114,9 @@ func encryptODT(t *testing.T, pkg []byte, password string, o encryptOptions) []b
 			if err != nil {
 				t.Fatal(err)
 			}
-			w.Write(e.data)
+			if _, err := w.Write(e.data); err != nil {
+				t.Fatal(err)
+			}
 		}
 		if err := zw.Close(); err != nil {
 			t.Fatal(err)

@@ -9,8 +9,10 @@ import (
 
 // mark is a path of the element e at (x, y).
 func mark(e *compose.StructElem, x, y float64) *compose.Path {
-	return &compose.Path{Ops: []compose.PathOp{{Kind: compose.MoveTo, P: [3]compose.Point{{X: x, Y: y}}}, {Kind: compose.LineTo, P: [3]compose.Point{{X: x + 4, Y: y + 4}}}},
-		Stroke: &compose.Stroke{Color: compose.Black, Width: 1}, Parent: e}
+	return &compose.Path{
+		Ops:    []compose.PathOp{{Kind: compose.MoveTo, P: [3]compose.Point{{X: x, Y: y}}}, {Kind: compose.LineTo, P: [3]compose.Point{{X: x + 4, Y: y + 4}}}},
+		Stroke: &compose.Stroke{Color: compose.Black, Width: 1}, Parent: e,
+	}
 }
 
 func TestAttach(t *testing.T) {

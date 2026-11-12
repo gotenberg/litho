@@ -133,7 +133,7 @@ func (d doc) pack(t testing.TB) []byte {
 var (
 	fontsOnce sync.Once
 	fonts     *text.Fonts
-	fontsErr  error
+	errFonts  error
 )
 
 // fixtureFonts returns the index of the pinned fixture fonts LibreOffice
@@ -146,12 +146,12 @@ func fixtureFonts(t testing.TB) *text.Fonts {
 		t.Skip("the fixture fonts are not fetched (make corpus-fetch CORPUS=fonts)")
 	}
 	fontsOnce.Do(func() {
-		fonts, fontsErr = text.NewFonts(context.Background(), nil, []string{
+		fonts, errFonts = text.NewFonts(context.Background(), nil, []string{
 			filepath.Join(dir, "liberation-2.1.5"), filepath.Join(dir, "dejavu-2.37"),
 		})
 	})
-	if fontsErr != nil {
-		t.Fatalf("indexing the fixture fonts: %v", fontsErr)
+	if errFonts != nil {
+		t.Fatalf("indexing the fixture fonts: %v", errFonts)
 	}
 	return fonts
 }
