@@ -276,6 +276,40 @@ func TestConvert_Rotation(t *testing.T) {
 	}
 }
 
+// TestConvert_RotatedKeptWhole checks that a rotated text wider than its
+// column is kept whole, where LibreOffice shortens a clipped text that
+// runs across the cell.
+//
+// # Corpus evidence
+//
+//   - litho/ods: cjk-cells prints "UDHR 1948" and "1948年12月10日"
+//     turned a quarter in a 15 mm column whole.
+func TestConvert_RotatedKeptWhole(t *testing.T) {
+	sh := &Sheet{Name: "S", DefaultColumnWidth: 30, Rows: []Row{{
+		Index: 0, Height: 120, CustomHeight: true,
+		Cells: []Cell{textCell(0, "UDHR 1948", &Style{Align: Alignment{Rotation: 90}})},
+	}}}
+	out := convert(t, newDoc(sh), office.Options{})
+	var got strings.Builder
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
+		for _, f := range fs {
+			switch v := f.(type) {
+			case *typeset.Text:
+				for _, g := range v.Glyphs {
+					got.WriteString(g.Text)
+				}
+			case *typeset.Group:
+				walk(v.Content)
+			}
+		}
+	}
+	walk(out.Pages[0].Content)
+	if !strings.Contains(got.String(), "UDHR 1948") {
+		t.Errorf("text = %q, want UDHR 1948 whole", got.String())
+	}
+}
+
 // TestConvert_GrowHeader locks Calc's dynamic header and footer heights:
 // content taller than the margin's room, plus the spacing, moves the
 // cells; a fixed height does not. Header text naming no font takes
