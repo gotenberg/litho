@@ -78,7 +78,7 @@ func (rd *renderer) pies(plot compose.Rect) {
 	maxW, maxH := 0.0, 0.0
 	for _, s := range series {
 		for j := range rd.data(s.Values).Len() {
-			lb := labelsAt(g, s, j)
+			lb := rd.labelsAt(g, s, j)
 			if lb.Any() && lb.Placement == LabelOutsideEnd {
 				outside = true
 				if b := rd.measure(rd.labelText(g, s, j, 0, lb, 0), lb.Style, 0); b != nil {
@@ -139,7 +139,7 @@ func (rd *renderer) pies(plot compose.Rect) {
 			a = a1
 			mid := (a0 + a1) / 2
 			ex := s.Explosion
-			if p := s.point(j); p != nil && p.HasExplosion {
+			if p := rd.point(s, j); p != nil && p.HasExplosion {
 				ex = p.Explosion
 			}
 			ex = math.Max(0, math.Min(ex, 400)) / 100 * r
@@ -166,7 +166,7 @@ func (rd *renderer) pies(plot compose.Rect) {
 				}
 				rd.out = append(rd.out, p)
 			}
-			lb := labelsAt(g, s, j)
+			lb := rd.labelsAt(g, s, j)
 			if !lb.Any() {
 				continue
 			}

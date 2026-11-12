@@ -160,4 +160,6 @@ type renderer struct {
 	// fixed is the plot area's rectangle without its axis labels when the
 	// file fixes it, nil when the layout finds it.
 	fixed *compose.Rect
+	// points indexes each series' point overrides by point index.
+	points map[*Series]map[int]*Point
 }

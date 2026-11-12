@@ -62,7 +62,7 @@ func lined(k Kind) bool { return k == Line || k == Scatter || k == Radar }
 // fillOf returns the fill of point j of series s in group g, j -1 for the
 // series itself.
 func (rd *renderer) fillOf(g *Group, s *Series, j int) *Paint {
-	if p := s.point(j); p != nil && p.Fill != nil {
+	if p := rd.point(s, j); p != nil && p.Fill != nil {
 		return p.Fill
 	}
 	// A pie varies its colours over the series' fill; another kind only
@@ -79,7 +79,7 @@ func (rd *renderer) fillOf(g *Group, s *Series, j int) *Paint {
 // borderOf returns the outline of point j of series s, nil for none. A
 // line kind's border is its line, in the automatic colour by default.
 func (rd *renderer) borderOf(g *Group, s *Series, j int) *Stroke {
-	if p := s.point(j); p != nil && p.Border != nil {
+	if p := rd.point(s, j); p != nil && p.Border != nil {
 		return p.Border
 	}
 	if s.Border != nil {
@@ -91,23 +91,33 @@ func (rd *renderer) borderOf(g *Group, s *Series, j int) *Stroke {
 	return nil
 }
 
-// point returns the override of point j, nil for none.
-func (s *Series) point(j int) *Point {
-	if j < 0 {
+// point returns the override of point j of series s, nil for none: the
+// first of s.Points with that index. The series' overrides are indexed on
+// first use, so a lookup per plotted point stays linear in the points.
+func (rd *renderer) point(s *Series, j int) *Point {
+	if j < 0 || len(s.Points) == 0 {
 		return nil
 	}
-	for i := range s.Points {
-		if s.Points[i].Index == j {
-			return &s.Points[i]
+	idx, ok := rd.points[s]
+	if !ok {
+		idx = make(map[int]*Point, len(s.Points))
+		for i := range s.Points {
+			if _, seen := idx[s.Points[i].Index]; !seen {
+				idx[s.Points[i].Index] = &s.Points[i]
+			}
 		}
+		if rd.points == nil {
+			rd.points = make(map[*Series]map[int]*Point)
+		}
+		rd.points[s] = idx
 	}
-	return nil
+	return idx[j]
 }
 
 // markerOf returns the marker of point j of series s, its symbol resolved.
 func (rd *renderer) markerOf(g *Group, s *Series, j int) Marker {
 	m := s.Marker
-	if p := s.point(j); p != nil && p.HasMarker {
+	if p := rd.point(s, j); p != nil && p.HasMarker {
 		m = p.Marker
 	}
 	if m.Symbol == MarkerAuto {
