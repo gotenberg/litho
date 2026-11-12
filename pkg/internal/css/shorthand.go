@@ -164,7 +164,7 @@ func initShorthands() {
 		"outline":       {longhands: ids(pOutlineStyle, 3), expand: expandOutline},
 		"background":    {longhands: append(ids(pBgColor, 7), pBgAttachment), expand: expandBackground},
 		"font": {
-			longhands: []propID{pFontStyle, pFontVariant, pFontWeight, pFontSize, pLineHeight, pFontFamily, pFontStretch},
+			longhands: []propID{pFontStyle, pFontVariant, pFontWeight, pFontSize, pLineHeight, pFontFamily, pFontStretch, pFontKerning},
 			expand:    expandFont,
 		},
 		"list-style": {longhands: []propID{pListStyleType, pListStylePosition, pListStyleImage}, expand: expandListStyle},

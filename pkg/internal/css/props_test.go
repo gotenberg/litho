@@ -358,3 +358,18 @@ func TestPosition_RejectsUnknownKeywords(t *testing.T) {
 		}
 	}
 }
+
+// TestFont_ShorthandCoversKerning locks font-kerning among the longhands
+// of font (CSS Fonts 4, 2.8): a CSS-wide keyword or a var() on the
+// shorthand reaches it as an explicit value does.
+func TestFont_ShorthandCoversKerning(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<div id=p><div id=a></div><div id=b></div></div>`,
+		`#p { font-kerning: none } #a { font-kerning: normal; font: inherit } #b { --f: 12px serif; font-kerning: none; font: var(--f) }`)
+	if k := c.of("a").FontKerning; k != KerningNone {
+		t.Errorf("font: inherit leaves font-kerning %v, want the parent's none", k)
+	}
+	if k := c.of("b").FontKerning; k != KerningAuto {
+		t.Errorf("font: var() leaves font-kerning %v, want it reset to auto", k)
+	}
+}
