@@ -496,7 +496,7 @@ func (e *odfEntry) decrypt(key, stored []byte) ([]byte, error) {
 	case odfBlowfishCFB:
 		b, err := blowfish.NewCipher(key)
 		if err != nil {
-			return nil, odfMalformed("%v", err)
+			return nil, fmt.Errorf("%w: ODF encryption data: %w", office.ErrMalformed, err)
 		}
 		return cfbDecrypt(b, e.iv, stored), nil
 	case odfAESCBC:
@@ -504,11 +504,11 @@ func (e *odfEntry) decrypt(key, stored []byte) ([]byte, error) {
 	case odfAESGCM:
 		b, err := aes.NewCipher(key)
 		if err != nil {
-			return nil, odfMalformed("%v", err)
+			return nil, fmt.Errorf("%w: ODF encryption data: %w", office.ErrMalformed, err)
 		}
 		g, err := cipher.NewGCM(b)
 		if err != nil {
-			return nil, odfMalformed("%v", err)
+			return nil, fmt.Errorf("%w: ODF encryption data: %w", office.ErrMalformed, err)
 		}
 		// xmlenc-core1, 5.2.4: the IV precedes the ciphertext and the
 		// 128-bit tag follows it; LibreOffice also writes the IV to the
@@ -581,7 +581,7 @@ func (e *odfEntry) inflate(ctx context.Context, plain []byte) ([]byte, error) {
 	defer r.Close() //nolint:errcheck // a flate reader over memory has nothing to release
 	out, err := io.ReadAll(io.LimitReader(r, limit+1))
 	if err != nil {
-		return nil, odfMalformed("the decrypted entry does not inflate: %v", err)
+		return nil, fmt.Errorf("%w: ODF encryption data: the decrypted entry does not inflate: %w", office.ErrMalformed, err)
 	}
 	if int64(len(out)) > limit {
 		if e.hasSize {
