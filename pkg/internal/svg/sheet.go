@@ -13,7 +13,6 @@ import (
 type rule struct {
 	sel   *css.Selector
 	decls []declaration
-	order int
 }
 
 // declaration is one property declaration as written.
@@ -70,7 +69,7 @@ func parseSheet(src string, limit int) []rule {
 		if !ok {
 			continue
 		}
-		out = append(out, rule{sel: sel, decls: parseDeclarations(body), order: len(out)})
+		out = append(out, rule{sel: sel, decls: parseDeclarations(body)})
 	}
 	return out
 }
