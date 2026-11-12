@@ -2,6 +2,7 @@ package raster
 
 import (
 	"image"
+	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 )
@@ -63,7 +64,7 @@ func Mask(img *image.NRGBA, m *image.Alpha) {
 
 // unit clamps v to [0, 1], NaN to 0.
 func unit(v float64) float64 {
-	if !(v > 0) {
+	if math.IsNaN(v) || v <= 0 {
 		return 0
 	}
 	return min(v, 1)

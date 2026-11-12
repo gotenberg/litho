@@ -53,7 +53,7 @@ func Draw(m *image.Alpha, paths []Path, tr compose.Matrix) {
 		z.DrawOp = draw.Over
 		if p.Width > 0 {
 			w := p.Width * math.Sqrt(math.Abs(tr.A*tr.D-tr.B*tr.C))
-			if !(w > 0) || math.IsInf(w, 0) {
+			if math.IsNaN(w) || w <= 0 || math.IsInf(w, 0) {
 				continue
 			}
 			stroke(z, polylines(p.Ops, tr), w/2)

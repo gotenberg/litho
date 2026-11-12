@@ -410,6 +410,10 @@ func (r *reader) own(l *layer) {
 	}
 }
 
+// positive reports whether v is greater than zero. NaN is not: a size a
+// file leaves undefined draws as none.
+func positive(v float64) bool { return v > 0 }
+
 // related returns the target of part's first internal relationship of
 // type typ the package holds, "" for none.
 func (r *reader) related(part, typ string) string {

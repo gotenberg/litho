@@ -3,6 +3,7 @@ package pptx
 import (
 	"encoding/xml"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -291,7 +292,7 @@ func percent(v string) float64 {
 	v = strings.TrimSpace(v)
 	if s, ok := strings.CutSuffix(v, "%"); ok {
 		f, err := strconv.ParseFloat(s, 64)
-		if err != nil || f != f {
+		if err != nil || math.IsNaN(f) {
 			return 0
 		}
 		return max(0, min(1, f/100))
@@ -462,7 +463,7 @@ func percentAny(v string) float64 {
 	v = strings.TrimSpace(v)
 	if s, ok := strings.CutSuffix(v, "%"); ok {
 		f, err := strconv.ParseFloat(s, 64)
-		if err != nil || f != f {
+		if err != nil || math.IsNaN(f) {
 			return 0
 		}
 		return max(0, min(132, f/100))

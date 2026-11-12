@@ -163,13 +163,13 @@ func (r *reader) pictureOf(part string, ref ooxml.PictureRef) *layout.Picture {
 //     wide prints as an ellipse filling the frame in PowerPoint's
 //     reference, and its frame scaled wide as a wide ellipse.
 func stretched(pic *layout.Picture) *layout.Picture {
-	if pic == nil || pic.Vector == nil || !(pic.Width > 0) || !(pic.Height > 0) {
+	if pic == nil || pic.Vector == nil || !positive(pic.Width) || !positive(pic.Height) {
 		return pic
 	}
 	inner := *pic
 	out := *pic
 	out.Vector = func(ctx context.Context, box compose.Rect) []compose.Fragment {
-		if !(box.Width > 0) || !(box.Height > 0) {
+		if !positive(box.Width) || !positive(box.Height) {
 			return nil
 		}
 		content := inner.Vector(ctx, compose.Rect{Width: inner.Width, Height: inner.Height})

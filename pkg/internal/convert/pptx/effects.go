@@ -160,7 +160,7 @@ func outerShadow(e *ooxml.Element, box compose.Rect) *slides.Shadow {
 		sh.Blur = min(v, maxEffectRadius)
 	}
 	dist := emuAttr(e, "dist")
-	if !(dist > 0) || math.IsInf(dist, 0) {
+	if !positive(dist) || math.IsInf(dist, 0) {
 		dist = 0
 	}
 	dist = min(dist, maxEffectRadius)

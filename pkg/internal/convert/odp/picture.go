@@ -10,6 +10,7 @@ import (
 	_ "image/gif"  // registers GIF with image.Decode
 	_ "image/jpeg" // registers JPEG with image.Decode
 	_ "image/png"  // registers PNG with image.Decode
+	"math"
 	"strings"
 
 	_ "golang.org/x/image/bmp"  // registers BMP with image.Decode
@@ -77,7 +78,7 @@ func (r *reader) decodePicture(el *odf.Element) *layout.Picture {
 		w, h := s.Width, s.Height
 		if !s.HasWidth || !s.HasHeight || w <= 0 || h <= 0 {
 			w, h = 300*css.Pt, 150*css.Pt
-			if !(s.Ratio > 0) {
+			if math.IsNaN(s.Ratio) || s.Ratio <= 0 {
 				// A drawing of neither size nor viewBox Impress fits by
 				// its content's bounds, which the drawing does not give:
 				// it fills the frame as the SVG viewport rules place it.

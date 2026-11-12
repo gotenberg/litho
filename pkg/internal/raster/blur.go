@@ -23,7 +23,7 @@ const MaxKernelRadius = 1024
 // below a pixel's fraction returns the identity, one above
 // [MaxKernelRadius] is clipped to it.
 func Tent(r float64) Kernel {
-	if !(r > 0) {
+	if math.IsNaN(r) || r <= 0 {
 		return Kernel{1}
 	}
 	r = min(r, MaxKernelRadius)
@@ -41,13 +41,17 @@ func Tent(r float64) Kernel {
 	return k
 }
 
+// minSigma is the smallest deviation a Gaussian blur takes, in pixels:
+// a hundredth of a pixel moves no coverage.
+const minSigma = 0.01
+
 // Gaussian returns the Gaussian kernel of standard deviation sigma pixels,
 // cut at three deviations (CSS Filter Effects 1, 13.7.3 feGaussianBlur:
 // a blur radius r is a deviation of r/2 for box-shadow and text-shadow,
 // CSS Backgrounds 3, 7.1). A deviation below a hundredth of a pixel
 // returns the identity; the radius is clipped to [MaxKernelRadius].
 func Gaussian(sigma float64) Kernel {
-	if !(sigma >= 0.01) {
+	if math.IsNaN(sigma) || sigma < minSigma {
 		return Kernel{1}
 	}
 	n := int(min(math.Ceil(3*sigma), MaxKernelRadius))
