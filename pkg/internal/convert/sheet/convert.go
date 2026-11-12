@@ -429,9 +429,13 @@ func (b *builder) renderPage(p *pagePlan, first bool, total int) (*typeset.Page,
 	if !sp.single {
 		pg.Content = append(pg.Content, b.margins(p, first, p.number, total, sp.width, sp.height)...)
 	}
+	grow := 0.0
+	if !sp.g.doc.ExcelRules {
+		grow = pb.borderOverhang()
+	}
 	pg.Content = append(pg.Content, &typeset.Group{
 		Transform: typeset.Matrix{A: z, D: z, E: ox, F: oy},
-		Clip:      &typeset.Path{Ops: rectOps(0, 0, pb.dataW, pb.dataH), Fill: &typeset.Fill{}},
+		Clip:      &typeset.Path{Ops: rectOps(-grow, -grow, pb.dataW+2*grow, pb.dataH+2*grow), Fill: &typeset.Fill{}},
 		Opacity:   1,
 		Content:   frags,
 	})
@@ -462,4 +466,46 @@ func calcOrigin(v, z float64) float64 {
 		return v
 	}
 	return z * math.Floor(v/z*2540/72+1e-6) * 72 / 2540
+}
+
+// borderOverhang returns how far the page's cell borders reach past the
+// edges of its cells: each line's ends and half its width. Calc draws a
+// border on the edge of the printed cells whole, its outer half too, so
+// the page's clip grows that far.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/pivot-table-median.ods and
+//     sc/tdf124651_simplePivotTable.ods print the 2-point frame of their
+//     pivot tables on the first and last row's edge, both halves of the
+//     line.
+func (b *pageBuilder) borderOverhang() float64 {
+	reach := 0.0
+	for _, f := range b.borderPaths {
+		p, ok := f.(*typeset.Path)
+		if !ok || p.Stroke == nil || !numeric.Finite(p.Stroke.Width) || len(p.Ops) == 0 {
+			continue
+		}
+		half := min(max(p.Stroke.Width, 0), maxBorderWidth) / 2
+		x0, y0 := p.Ops[0].P[0].X, p.Ops[0].P[0].Y
+		x1, y1 := x0, y0
+		for _, op := range p.Ops {
+			x0, x1 = min(x0, op.P[0].X), max(x1, op.P[0].X)
+			y0, y1 = min(y0, op.P[0].Y), max(y1, op.P[0].Y)
+		}
+		// A straight line's width spreads across it alone: its ends
+		// already reach past the corners as far as it is drawn.
+		hx, hy := half, half
+		if y0 == y1 {
+			hx = 0
+		}
+		if x0 == x1 {
+			hy = 0
+		}
+		reach = max(reach, hx-x0, hy-y0, x1+hx-b.dataW, y1+hy-b.dataH)
+	}
+	if !numeric.Finite(reach) {
+		return 0
+	}
+	return min(reach, maxBorderWidth)
 }

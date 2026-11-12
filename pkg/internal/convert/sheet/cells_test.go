@@ -349,6 +349,40 @@ func TestConvert_FormatFill(t *testing.T) {
 	}
 }
 
+// TestConvert_BorderClip checks that the clip of a page's cells lets the
+// outer half of a border on their edge print, under Calc's rules alone.
+func TestConvert_BorderClip(t *testing.T) {
+	thick := Border{Line: LineSolid, Width: 2, Color: css.Color{A: 1}}
+	st := &Style{Border: [4]Border{css.Bottom: thick}}
+	for _, excel := range []bool{false, true} {
+		sh := &Sheet{Name: "S", Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "a", st)}}}}
+		doc := newDoc(sh)
+		doc.ExcelRules = excel
+		out := convert(t, doc, office.Options{})
+		var clip *typeset.Path
+		for _, f := range out.Pages[0].Content {
+			if g, ok := f.(*typeset.Group); ok && g.Clip != nil {
+				clip = g.Clip
+			}
+		}
+		if clip == nil {
+			t.Fatalf("excel %v: no clipped group", excel)
+		}
+		bottom := 0.0
+		for _, op := range clip.Ops {
+			bottom = max(bottom, op.P[0].Y)
+		}
+		h := calcPrinted(12.78)
+		want := h + 1
+		if excel {
+			want = 12.78
+		}
+		if !near(bottom, want, 1e-9) {
+			t.Errorf("excel %v: clip bottom %v, want %v", excel, bottom, want)
+		}
+	}
+}
+
 // TestConvert_InvalidCircle locks the red ellipse around a cell marked
 // invalid: the cell grown 0.25 cm left and right and 0.07 cm up and down,
 // stroked 0.55 mm wide.
