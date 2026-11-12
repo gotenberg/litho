@@ -203,9 +203,10 @@ func isCJKIdeographOrSymbol(r rune) bool {
 //   - litho/docx paper-*: of 345 lines Word justifies in Calibri 11 points
 //     across the paper matrix, a rule of at most 22% of each space and at
 //     most a third of the word and its space past the end breaks 337 as
-//     Word does; the space limit alone breaks 286, LibreOffice's 25%
+//     Word does; a 20% space limit alone breaks 286, LibreOffice's 25%
 //     alone 254. Most of the 8 others are within the difference between
-//     Calibri's hinted advances, which Word lays out with, and Carlito's.
+//     the advances Word places Calibri's glyphs at, up to 0.2 point a
+//     glyph off the font's at 11 points, and Carlito's.
 const shrinkWordOverflow = 1.0 / 3
 
 // shrinkBreak returns where the justified line from start breaks when its
@@ -213,7 +214,8 @@ const shrinkWordOverflow = 1.0 / 3
 // breaks at natural spacing. The line takes the next word when the part
 // of it past avail fits in the room the separators give up, that is
 // JustifyShrink of each, and is at most shrinkWordOverflow of the width
-// of the word and the spaces before it. It takes one word at most, and none from a line holding a tab.
+// of the word and the spaces before it. It takes one word at most, and
+// none from a line holding a tab.
 func (e *engine) shrinkBreak(p *ifcPara, w []float64, start, end int, x0, avail float64, root *box, org float64) int {
 	spaces, space := 0, 0.0
 	for i := start; i < end; i++ {
