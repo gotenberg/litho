@@ -114,10 +114,10 @@ func (r *reader) wraps(scope odf.Scope, name string) bool {
 //
 // # Corpus evidence
 //
-//   - LibreOffice 26.8.2.2: 1234567.5 in a data style of two decimals with
-//     grouping prints 1.234.567,50 for number:language de and
-//     number:country DE, 1,234,567.50 for en US and for no language,
-//     whatever the default cell style's fo:language.
+//   - probe, ods: 1234567.5 in a data style of two decimals with grouping
+//     prints, in LibreOffice 26.8.2.2, 1.234.567,50 for number:language
+//     de and number:country DE, 1,234,567.50 for en US and for no
+//     language, whatever the default cell style's fo:language.
 func (r *reader) dataCode(scope odf.Scope, name string) string {
 	code := r.data.Code(scope, name)
 	el := r.data.Element(scope, name)
@@ -309,8 +309,8 @@ var sideNames = [4]string{"top", "right", "bottom", "left"}
 //
 // # Corpus evidence
 //
-//   - litho/pdf: figures.ods prints its left-aligned text 1 point right of the
-//     column's edge, its right-aligned numbers 1 point left of the next
+//   - gotenberg/ods: figures.ods prints its left-aligned text 1 point right
+//     of the column's edge, its right-aligned numbers 1 point left of the next
 //     column's, and its baselines 1 point above the descent from the
 //     row's bottom.
 const cellPadding = 1

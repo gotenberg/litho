@@ -34,6 +34,12 @@ const (
 // cell reads the value, text, style and link of a table:table-cell (ODF
 // 1.3, Part 3, 9.1.4) and whether it is listed: it holds a value or text,
 // or a style that shows on paper without one.
+//
+// # Corpus evidence
+//
+//   - probe, ods: a cell =[.A1]+2 saved with the result 5 prints, in
+//     LibreOffice 26.8.2.2, 4, A1 holding 2, whether LibreOffice,
+//     Gnumeric or no program is named as the file's generator.
 func (r *reader) cell(el *odf.Element) (sheet.Cell, bool) {
 	c := sheet.Cell{Style: r.cellStyle(el.A(odf.NSTable, "style-name"))}
 	tc := r.cellText(el, c.Style)
@@ -49,12 +55,6 @@ func (r *reader) cell(el *odf.Element) (sheet.Cell, bool) {
 	// whatever program wrote it: every formula is kept for the builder
 	// to compute (ODF 1.3 Part 3, 19.643 table:formula), under
 	// office.RecalculateAsNeeded and office.RecalculateAlways alike.
-	//
-	// # Corpus evidence
-	//
-	//   - LibreOffice 26.8.2.2: a cell =[.A1]+2 saved with the result 5
-	//     prints 4, A1 holding 2, whether LibreOffice, Gnumeric or no
-	//     program is named as the file's generator.
 	if f := el.A(odf.NSTable, "formula"); f != "" && len(f) <= maxFormulaLen && r.keepFormulas {
 		c.Formula = f
 	}

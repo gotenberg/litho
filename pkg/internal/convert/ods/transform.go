@@ -37,6 +37,13 @@ const maxTransformOps = 16
 // in radians, counterclockwise on the page; translate and the matrix's
 // translation are ODF lengths. It returns the composed transform and
 // whether it parsed.
+//
+// # Corpus evidence
+//
+//   - probe, odp: a positive skew angle leans a shape's top right of its
+//     bottom on the page, y pointing down, as the counterclockwise rotate
+//     turns it, in the pinned LibreOffice's Impress, whose drawing layer
+//     Calc shares.
 func parseTransform(s string) (compose.Matrix, bool) {
 	m := compose.Identity
 	rest := strings.TrimSpace(s)
@@ -100,8 +107,7 @@ func parseTransform(s string) (compose.Matrix, bool) {
 			}
 			// A positive angle leans a shape's top right of its bottom on
 			// the page, y pointing down, as the counterclockwise rotate
-			// turns it (measured on the pinned LibreOffice for Impress,
-			// whose drawing layer Calc shares).
+			// turns it.
 			if name == "skewX" {
 				op = compose.Matrix{A: 1, C: -math.Tan(a), D: 1}
 			} else {

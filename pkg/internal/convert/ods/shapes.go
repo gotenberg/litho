@@ -77,20 +77,26 @@ type logicBox struct {
 // drawing whose picture paints its geometry with its fill and stroke, under
 // its draw:transform, as Calc's drawing layer prints it; at is its anchor
 // cell, nil for a shape of the sheet. The text of a shape is not drawn.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/legacycellanchoredrotatedhiddenshape.ods prints
+//     no shape, its anchor row hidden.
+//   - libreoffice/ods: sc/LargeAnchorOffset.ods prints its dimension line
+//     from the left edge of its anchor column E.
+//   - libreoffice/ods: sc/hideColsShow.ods prints its shape 15 mm right of
+//     its anchor column C.
 func (r *reader) shape(ts *tableState, el *odf.Element, at *sheet.Anchor) {
 	if at != nil && (ts.rowHidden || ts.colHidden(at.Column)) {
 		// Calc hides a shape whose anchor cell is in a hidden row or
-		// column (sc/legacycellanchoredrotatedhiddenshape.ods).
+		// column.
 		return
 	}
 	p := r.styles.Resolve(odf.ScopeContent, odf.FamilyGraphic, el.A(odf.NSDraw, "style-name"), odf.GraphicProps)
 	paint := r.shapePaint(p)
 	line := r.shapeLine(p)
 	// Calc writes the position of a shape anchored to a cell from the
-	// cell's corner (measured on the pinned LibreOffice:
-	// sc/LargeAnchorOffset.ods prints its dimension line from the left
-	// edge of its anchor column E, sc/hideColsShow.ods its shape 15 mm
-	// right of its anchor column C).
+	// cell's corner.
 	dx, dy := 0.0, 0.0
 	if at != nil {
 		dx, dy = ts.colLeft(at.Column), ts.rowY
@@ -131,6 +137,11 @@ func hasText(el *odf.Element) bool {
 // the offset from its corner kept, and its bottom-right corner to the
 // cell table:end-cell-address names when the shape gives one, as Calc
 // resizes a shape with its cells; from the sheet's origin when at is nil.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/formula-across-sheets.ods prints no line, its
+//     ends both left of the sheet's origin.
 func (r *reader) place(ts *tableState, el *odf.Element, at *sheet.Anchor, art shapeArt) {
 	if r.drawings >= maxDrawings {
 		r.warn("too-many-drawings", fmt.Sprintf("pictures and charts past %d are not drawn", maxDrawings))
@@ -139,7 +150,7 @@ func (r *reader) place(ts *tableState, el *odf.Element, at *sheet.Anchor, art sh
 	b := art.bounds
 	if b.X+b.Width <= 0 || b.Y+b.Height <= 0 {
 		// A shape wholly left of or above the sheet's origin prints
-		// nowhere (sc/formula-across-sheets.ods).
+		// nowhere.
 		return
 	}
 	if !positive(b.Width) {
@@ -411,6 +422,11 @@ func appendFrag(out []compose.Fragment, f compose.Fragment) []compose.Fragment {
 // point, starting draw:guide-distance from it and passing the dimension
 // line by draw:guide-overhang; [reader.measureText] adds the measured
 // value.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf137576_Measureline.ods, measured downwards,
+//     prints its dimension line right of its points.
 func measureArt(el *odf.Element, s *shapeStroke, p odf.Props, dx, dy float64) (shapeArt, bool) {
 	x1, y1, x2, y2, ok := lineEnds(el, dx, dy)
 	n := math.Hypot(x2-x1, y2-y1)
@@ -427,9 +443,7 @@ func measureArt(el *odf.Element, s *shapeStroke, p odf.Props, dx, dy float64) (s
 	over := length("draw:guide-overhang", measureGuideOverhang)
 	gap := length("draw:guide-distance", measureGuideDistance)
 	// The normal turns the way from the first point to the second a
-	// quarter counterclockwise on the page (measured on the pinned
-	// LibreOffice: sc/tdf137576_Measureline.ods, measured downwards,
-	// prints its dimension line right of its points).
+	// quarter counterclockwise on the page.
 	nx, ny := (y2-y1)/n, -(x2-x1)/n
 	ax, ay := x1+nx*dist, y1+ny*dist
 	bx, by := x2+nx*dist, y2+ny*dist
@@ -646,10 +660,14 @@ func (r *reader) transformedPicture(ts *tableState, el *odf.Element, at *sheet.A
 	})
 }
 
-// The measured value's font when no style sets one: Liberation Serif at 12
-// points (measured on the pinned LibreOffice, sc/tdf137576_Measureline.ods
-// prints "37 mm" in it at 11.991 points), and the gap between the
-// dimension line and the text's baseline, 0.935 points.
+// The measured value's font when no style sets one: Liberation Serif at
+// 11.991 points, Calc's 12 points as it prints them, and the gap between
+// the dimension line and the text's baseline, 0.935 points.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf137576_Measureline.ods prints "37 mm" in
+//     Liberation Serif at 11.991 points.
 const (
 	measureFontSize = 11.991
 	measureTextGap  = 0.935
@@ -715,8 +733,13 @@ const maxMeasureFont = 1000
 // measureValue returns a length in points as Calc writes a dimension
 // line's value: in millimetres, at most two decimals, the trailing zeros
 // dropped, a full stop for the decimal separator whatever the file's
-// locale wrote (measured on the pinned LibreOffice: sc/LargeAnchorOffset.ods
-// prints its "79,99" as 79.99, sc/tdf137576_Measureline.ods 37 mm as 37).
+// locale wrote.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/LargeAnchorOffset.ods prints its "79,99" as
+//     79.99.
+//   - libreoffice/ods: sc/tdf137576_Measureline.ods prints 37 mm as 37.
 func measureValue(pt float64) string {
 	s := strconv.FormatFloat(math.Round(pt*2540/72)/100, 'f', 2, 64)
 	s = strings.TrimRight(strings.TrimRight(s, "0"), ".")
