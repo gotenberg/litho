@@ -184,6 +184,9 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 			return n
 		}
 	}
+	if n := d.vmlHorizontalRule(k, st, w, h); n != nil {
+		return n
+	}
 	if img := k.Child(ooxml.NSV, "imagedata"); img != nil {
 		id, ok := img.AttrNS(ooxml.NSR, "id")
 		if !ok {
