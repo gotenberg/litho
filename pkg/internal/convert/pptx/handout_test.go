@@ -104,3 +104,19 @@ func TestConvert_Handouts(t *testing.T) {
 		}
 	}
 }
+
+func FuzzHandoutMaster(f *testing.F) {
+	master := handoutFiles("")["ppt/handoutMasters/handoutMaster1.xml"]
+	f.Add([]byte(master))
+	f.Add([]byte(master[:len(master)/2]))
+	fonts := testFonts(f)
+	f.Fuzz(func(t *testing.T, data []byte) {
+		files := handoutFiles("")
+		files["ppt/handoutMasters/handoutMaster1.xml"] = string(data)
+		doc, _, err := load(context.Background(), bytes.NewReader(zipFiles(t, files)), fonts, office.Options{Handouts: 6})
+		if err != nil {
+			return
+		}
+		checkShapes(t, doc.HandoutShapes)
+	})
+}

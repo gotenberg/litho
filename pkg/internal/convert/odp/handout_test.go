@@ -91,3 +91,23 @@ func TestHandoutMaster(t *testing.T) {
 		})
 	}
 }
+
+func FuzzHandoutMaster(f *testing.F) {
+	full := handoutDoc(`presentation:display-page-number="true"`)
+	f.Add(full)
+	f.Add(full[:len(full)/2])
+	f.Fuzz(func(t *testing.T, data []byte) {
+		doc, _, err := readDocument(context.Background(), data, nil, "", true)
+		if err != nil {
+			return
+		}
+		if doc.HandoutWidth < 0 || doc.HandoutHeight < 0 || (doc.HandoutWidth == 0) != (doc.HandoutHeight == 0) {
+			t.Fatalf("handout page %v by %v", doc.HandoutWidth, doc.HandoutHeight)
+		}
+		for _, m := range doc.HandoutMargins {
+			if !(m >= 0) {
+				t.Fatalf("margins %v", doc.HandoutMargins)
+			}
+		}
+	})
+}
