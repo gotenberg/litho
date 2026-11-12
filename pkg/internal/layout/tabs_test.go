@@ -79,16 +79,17 @@ func stop(pos float64, a css.TabAlign, l css.TabLeader) css.TabStop {
 //
 // # Corpus evidence
 //
-//   - LibreOffice 9.0.0 image: a .fodt in Liberation Mono 10pt, tab stops
-//     at 1in left, 2.5in centre, 4in right, 5in decimal: "a", "L", "CCCC"
-//     centred, "RR" ending on its stop, "12.345" with "12" before it; a
-//     dotted leader filling to a right stop; text past a stop going to the
-//     next 0.5in default; "abc" before a right stop too close for its text
-//     starting the text at "abc"'s end; a stop at 8in, past the line's
-//     end, sending the next text to the next line; the default stop at
-//     the line's end moving the tab to the next line, where it advances to
-//     0.5in; a stop with a word too wide after it leaving a line holding
-//     the tab alone; "1234,5" on a French decimal stop.
+//   - probe, odt: through gotenberg/gotenberg:9.0.0, a .fodt in Liberation
+//     Mono 10pt, tab stops at 1in left, 2.5in centre, 4in right, 5in
+//     decimal: "a", "L", "CCCC" centred, "RR" ending on its stop, "12.345"
+//     with "12" before it; a dotted leader filling to a right stop; text
+//     past a stop going to the next 0.5in default; "abc" before a right
+//     stop too close for its text starting the text at "abc"'s end; a stop
+//     at 8in, past the line's end, sending the next text to the next line;
+//     the default stop at the line's end moving the tab to the next line,
+//     where it advances to 0.5in; a stop with a word too wide after it
+//     leaving a line holding the tab alone; "1234,5" on a French decimal
+//     stop.
 func TestTabs_Office(t *testing.T) {
 	L, C, R, D := css.TabLeft, css.TabCenter, css.TabRight, css.TabDecimal
 	none := css.TabLeaderNone

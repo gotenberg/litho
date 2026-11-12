@@ -14,10 +14,11 @@ import (
 //
 // # Corpus evidence
 //
-//   - LibreOffice 9.0.0 image: a .fodt list in label-alignment mode,
-//     margin 1in, text indent -0.5in, a list tab at 1in: the label "1."
-//     starts at 0.5in when aligned start, ends there when aligned end and
-//     centres on it when centred; the text starts at 1in on every line.
+//   - probe, odt: through gotenberg/gotenberg:9.0.0, a .fodt list in
+//     label-alignment mode, margin 1in, text indent -0.5in, a list tab at
+//     1in: the label "1." starts at 0.5in when aligned start, ends there
+//     when aligned end and centres on it when centred; the text starts at
+//     1in on every line.
 func TestMarker_OfficeBox(t *testing.T) {
 	tests := []struct {
 		name  string

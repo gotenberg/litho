@@ -13,9 +13,9 @@ import (
 //
 // # Corpus evidence
 //
-//   - LibreOffice 9.0.0 image: a .fodt paragraph with a 2pt border and
-//     4pt padding running over seven pages draws its four borders on every
-//     page, the text 4pt inside them.
+//   - probe, odt: through gotenberg/gotenberg:9.0.0, a .fodt paragraph with
+//     a 2pt border and 4pt padding running over seven pages draws its four
+//     borders on every page, the text 4pt inside them.
 func TestClone_AcrossPages(t *testing.T) {
 	small := func(s *css.Style) { s.FontSize = px(2); s.Orphans, s.Widows = 1, 1 }
 	st := sty(small, border(1, css.Solid, red), fg(blue), func(s *css.Style) { s.BoxDecorationBreak = css.DecorationCloneAll })

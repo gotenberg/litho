@@ -12,14 +12,14 @@ import (
 //
 // # Corpus evidence
 //
-//   - LibreOffice 9.0.0 image: a .fodt in Liberation Mono 10pt, whose
-//     natural line is 11.35pt with the baseline 8.35pt down: fo:line-height
-//     30pt puts the baseline 24pt down, 6pt puts it 4.8pt down, both four
-//     fifths; 200% and 150% keep it 8.35pt down and add the room below,
-//     60% puts it at four fifths of 6.8pt; line-height-at-least 30pt puts
-//     it 27pt down, the room above, and 6pt changes nothing; a line mixing
-//     10pt and 20pt text at 150% is 1.5 times the 20pt text's height with
-//     the baseline under its ascent.
+//   - probe, odt: through gotenberg/gotenberg:9.0.0, a .fodt in Liberation
+//     Mono 10pt, whose natural line is 11.35pt with the baseline 8.35pt
+//     down: fo:line-height 30pt puts the baseline 24pt down, 6pt puts it
+//     4.8pt down, both four fifths; 200% and 150% keep it 8.35pt down and
+//     add the room below, 60% puts it at four fifths of 6.8pt;
+//     line-height-at-least 30pt puts it 27pt down, the room above, and 6pt
+//     changes nothing; a line mixing 10pt and 20pt text at 150% is 1.5
+//     times the 20pt text's height with the baseline under its ascent.
 func TestLineRule_Office(t *testing.T) {
 	small := func(s *css.Style) { s.FontSize = px(10) }
 	big := inlineSty(func(s *css.Style) { s.FontSize = px(20) })
@@ -94,11 +94,12 @@ func TestLineRule_EmptyLine(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - LibreOffice 9.0.0 image: a .fodt in Liberation Serif 12pt, whose
-//     line is 13.8pt, holding an as-char picture 1cm tall: at 100% the
-//     line is the picture plus the 2.6pt descent, at 115% and 200% 2.07pt
-//     and 13.8pt more, the picture's top at the line's top; at 80% four
-//     fifths of the natural line, the baseline at four fifths of it.
+//   - probe, odt: through gotenberg/gotenberg:9.0.0, a .fodt in Liberation
+//     Serif 12pt, whose line is 13.8pt, holding an as-char picture 1cm
+//     tall: at 100% the line is the picture plus the 2.6pt descent, at 115%
+//     and 200% 2.07pt and 13.8pt more, the picture's top at the line's top;
+//     at 80% four fifths of the natural line, the baseline at four fifths
+//     of it.
 func TestLineRule_InlinePicture(t *testing.T) {
 	multiple := func(f float64) func(*css.Style) {
 		return func(s *css.Style) {
