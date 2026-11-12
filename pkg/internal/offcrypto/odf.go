@@ -105,6 +105,13 @@ const maxArgon2Work = 2 << 20
 // 3.1 allows 2^24 - 1.
 const maxArgon2Lanes = 16
 
+// maxODFKeyBytes caps the start key and derived key sizes a manifest
+// states, in bytes, before they are checked against the algorithm's:
+// past it the entry fails as a scheme this package does not read.
+// Anti-DoS guard, not spec-mandated: ODF 1.3 Part 2, 4.16.7 gives the
+// size no bound, and the largest key read is Blowfish's 56 bytes.
+const maxODFKeyBytes = 1 << 10
+
 // maxODFEntryBytes caps one decrypted, inflated entry at the bound litho
 // puts on one decoded PDF stream, 256 MiB: a content.xml past it is past
 // what the converters lay out. Anti-DoS guard, not spec-mandated.
@@ -242,7 +249,7 @@ func parseODFParams(p ODFParams) (*odfEntry, error) {
 		if e.startSHA256 {
 			want = sha256.Size
 		}
-		if n, err := parseCount("start key manifest:key-size", p.StartKeySize, 1<<10); err != nil {
+		if n, err := parseCount("start key manifest:key-size", p.StartKeySize, maxODFKeyBytes); err != nil {
 			return nil, err
 		} else if n != want {
 			return nil, odfNotRead("a start key of %d bytes from a %d-byte digest", n, want)
@@ -294,14 +301,14 @@ func parseODFParams(p ODFParams) (*odfEntry, error) {
 	// ODF 1.3 Part 2, 4.16.7: the derived key defaults to 16 bytes;
 	// LibreOffice takes the AES IRI's size when the attribute is absent.
 	if p.KeySize != "" {
-		n, err := parseCount("manifest:key-size", p.KeySize, 1<<10)
+		n, err := parseCount("manifest:key-size", p.KeySize, maxODFKeyBytes)
 		if err != nil {
 			return nil, err
 		}
 		switch {
 		case e.cipher == odfBlowfishCFB && n >= 4 && n <= 56:
 			e.keyBytes = int(n) // fits int: at most 56
-		case e.cipher != odfBlowfishCFB && int(n) == e.keyBytes: // fits int: at most 1024
+		case e.cipher != odfBlowfishCFB && int(n) == e.keyBytes: // fits int: at most maxODFKeyBytes
 		default:
 			return nil, odfMalformed("a derived key of %d bytes for %s", n, name)
 		}
@@ -471,7 +478,7 @@ func pbkdf2SHA1(ctx context.Context, password, salt []byte, iter, keyLen int) ([
 		u = prf.Sum(u[:0])
 		copy(t, u)
 		for i := 1; i < iter; i++ {
-			if i&0x3FFF == 0 {
+			if i%roundsPerCheck == 0 {
 				if err := ctx.Err(); err != nil {
 					return nil, err
 				}

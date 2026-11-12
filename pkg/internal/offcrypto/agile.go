@@ -184,6 +184,10 @@ func checkAgileParams(elem string, p agileParams) (agileCipher, error) {
 	return c, nil
 }
 
+// roundsPerCheck is how many rounds a password hash or a key derivation
+// runs between two checks of its context.
+const roundsPerCheck = 16384
+
 // iteratedHash is the password hash of MS-OFFCRYPTO, 2.3.4.7 and 2.3.4.11:
 // H0 hashes the salt then the UTF-16LE password, and each of spin rounds
 // hashes the little-endian round number then the previous hash. It checks
@@ -195,7 +199,7 @@ func iteratedHash(ctx context.Context, newHash func() hash.Hash, salt []byte, pa
 	cur := h.Sum(nil)
 	buf := make([]byte, 4+len(cur))
 	for i := range spin {
-		if i&0x3FFF == 0x3FFF {
+		if i%roundsPerCheck == roundsPerCheck-1 {
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
