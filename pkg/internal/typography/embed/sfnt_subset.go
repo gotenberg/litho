@@ -262,13 +262,11 @@ func expandCompositeClosure(keep map[uint16]bool, glyfData []byte, offsets []uin
 					added = true
 				}
 				pos += 4
-				// Argument bytes.
 				if flags&0x0001 != 0 { // ARG_1_AND_2_ARE_WORDS
 					pos += 4
 				} else {
 					pos += 2
 				}
-				// Transform bytes.
 				switch {
 				case flags&0x0008 != 0: // WE_HAVE_A_SCALE
 					pos += 2
@@ -303,7 +301,6 @@ func encodeTTF(tables map[string][]byte) []byte {
 	numTables := len(tags)
 	headerSize := 12 + numTables*16
 
-	// Compute each table's length, offset, and checksum.
 	type tableInfo struct {
 		tag      string
 		data     []byte
@@ -324,14 +321,12 @@ func encodeTTF(tables map[string][]byte) []byte {
 			checksum: tableChecksum(data),
 		}
 		infos = append(infos, info)
-		// Advance offset with 4-byte padding.
 		offset += (length + 3) &^ 3
 	}
 
 	total := offset
 	buf := make([]byte, total)
 
-	// SFNT header.
 	binary.BigEndian.PutUint32(buf[0:4], 0x00010000)        // version for TrueType
 	binary.BigEndian.PutUint16(buf[4:6], uint16(numTables)) //nolint:gosec // one entry per distinct source tag, counted by a uint16 directory field
 	searchRange, entrySelector, rangeShift := sfntSearchParams(numTables)
@@ -339,7 +334,6 @@ func encodeTTF(tables map[string][]byte) []byte {
 	binary.BigEndian.PutUint16(buf[8:10], entrySelector)
 	binary.BigEndian.PutUint16(buf[10:12], rangeShift)
 
-	// Table directory entries.
 	for i, info := range infos {
 		rec := buf[12+i*16 : 12+(i+1)*16]
 		copy(rec[0:4], info.tag)
@@ -348,7 +342,6 @@ func encodeTTF(tables map[string][]byte) []byte {
 		binary.BigEndian.PutUint32(rec[12:16], info.length)
 	}
 
-	// Table data.
 	for _, info := range infos {
 		copy(buf[info.offset:info.offset+info.length], info.data)
 	}
