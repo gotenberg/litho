@@ -328,3 +328,20 @@ func TestFontUnits_ResolveExAndCh(t *testing.T) {
 		t.Errorf("font-size %v, width %+v, height %+v", s.FontSize, s.Width, s.Height)
 	}
 }
+
+// TestDisplay_RejectsStrayKeywords locks the two-keyword grammar of
+// display (CSS Display 3, 2): an outer and an inner display type, nothing
+// else, so an invalid value leaves the earlier declaration in force.
+func TestDisplay_RejectsStrayKeywords(t *testing.T) {
+	t.Parallel()
+	for _, v := range []string{"flex foo", "flow table", "inline flex block", "foo grid", "inline block", "block block"} {
+		if s := styleOf(t, "display: inline-table; display: "+v); s.Display != InlineTable {
+			t.Errorf("display: %s computes to %v, want it rejected", v, s.Display)
+		}
+	}
+	for v, want := range map[string]Display{"flex inline": InlineFlex, "grid block": Grid, "inline list-item flow": InlineListItem} {
+		if s := styleOf(t, "display: "+v); s.Display != want {
+			t.Errorf("display: %s computes to %v, want %v", v, s.Display, want)
+		}
+	}
+}

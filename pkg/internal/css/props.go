@@ -443,6 +443,10 @@ func parseDisplay(v []token, c *declCtx) (any, bool) {
 		}
 		return ListItem, true
 	}
+	// Otherwise the value is one outer and one inner display type.
+	if len(words) != 2 || !inline && !words["block"] {
+		return nil, false
+	}
 	switch {
 	case words["flow"]:
 		if inline {
