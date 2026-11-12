@@ -90,12 +90,13 @@ func (p *painter) borderImage(b *box, st *css.Style, r compose.Rect, bd [4]float
 		}
 		return pixels
 	}
+cut:
 	for _, pc := range pieces {
 		pc.crop = p.cropSource(src.pic, pc.src, decode)
 		for _, t := range pc.tiles() {
 			if tiles == maxBackgroundTiles {
 				p.e.warn(codeBackgroundTiles, fmt.Sprintf("a border image repeated more than %d times was cut short", maxBackgroundTiles), r.Y)
-				break
+				break cut
 			}
 			if k := p.nineTile(src, pc, t); k != nil {
 				g.kids = append(g.kids, k)

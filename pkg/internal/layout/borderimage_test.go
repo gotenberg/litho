@@ -241,3 +241,33 @@ func TestBorderImage_InlineStrip(t *testing.T) {
 		t.Errorf("line 2 draws a left edge: %v", c)
 	}
 }
+
+// TestBorderImage_TileCapWarnsOnce locks one warning for a border image
+// cut short at maxBackgroundTiles, whatever pieces remain to draw: the top
+// and bottom edges and the middle, rounded along a box some 5,000 widths
+// long, pass the cap at the bottom edge, before the left edge and the
+// middle.
+func TestBorderImage_TileCapWarnsOnce(t *testing.T) {
+	t.Parallel()
+	slice1 := [4]css.Dimension{{Kind: css.Number, Value: 1}, {Kind: css.Number, Value: 1}, {Kind: css.Number, Value: 1}, {Kind: css.Number, Value: 1}}
+	thin := [4]css.Dimension{css.Pts(0.1), css.Pts(0.1), css.Pts(0.1), css.Pts(0.1)}
+	root := doc(el(sty(width(700), height(10), func(s *css.Style) {
+		s.BorderImage = css.BorderImage{
+			Source: "i.png", Slice: slice1, Width: thin, Fill: true,
+			Repeat: [2]css.ImageRepeat{css.ImageRound, css.ImageStretch},
+		}
+	})))
+	res, err := Layout(context.Background(), root, ahem(t), Options{Page: page(800, 100), Image: nineLoader()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, w := range res.Warnings {
+		if w.Code == codeBackgroundTiles {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("%d warnings %q, want 1", n, codeBackgroundTiles)
+	}
+}
