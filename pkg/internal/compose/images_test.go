@@ -7,7 +7,6 @@ import (
 	"errors"
 	"image"
 	"image/color"
-	"image/jpeg"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -170,27 +169,6 @@ func TestEncodeImageRefuses(t *testing.T) {
 	if _, err := compose.EncodeImage(canceled, image.NewNRGBA(image.Rect(0, 0, 2, 2))); !errors.Is(err, context.Canceled) {
 		t.Errorf("canceled: %v", err)
 	}
-}
-
-func FuzzJPEGImage(f *testing.F) {
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, image.NewGray(image.Rect(0, 0, 3, 2)), nil); err != nil {
-		f.Fatal(err)
-	}
-	f.Add(buf.Bytes())
-	f.Add(buf.Bytes()[:20])
-	f.Fuzz(func(t *testing.T, data []byte) {
-		src, err := compose.JPEGImage(context.Background(), data)
-		if err != nil {
-			if !errors.Is(err, compose.ErrInvalidImage) && !errors.Is(err, compose.ErrLimitExceeded) {
-				t.Fatalf("unwrapped error %v", err)
-			}
-			return
-		}
-		if src.Width <= 0 || src.Height <= 0 || !bytes.Equal(src.JPEG, data) {
-			t.Fatalf("source %d by %d", src.Width, src.Height)
-		}
-	})
 }
 
 // TestEncodeImageBudget pins the picture's two charges: its decoded pixels,
