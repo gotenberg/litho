@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-12T12:44:16Z",
+  "captured_at": "2026-11-12T15:50:06Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -11603,8 +11603,8 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 325,
-          "mismatched": 25,
+          "matched": 327,
+          "mismatched": 23,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -11612,7 +11612,7 @@
             "pass_a1a": 350,
             "pass_a1b": 350,
             "pass_a2a": 350,
-            "pass_a2a+ua1": 325,
+            "pass_a2a+ua1": 327,
             "pass_a2b": 350,
             "pass_a2u": 350,
             "pass_a3a": 350,
@@ -11621,7 +11621,7 @@
             "pass_a4": 350,
             "pass_a4+ua2": 334,
             "pass_a4e": 350,
-            "pass_ua1": 325,
+            "pass_ua1": 327,
             "pass_ua2": 334,
             "pass_v1.4": 350,
             "pass_v1.5": 350,
@@ -15946,7 +15946,7 @@
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
-              "a2a+ua1": 0,
+              "a2a+ua1": 1,
               "a2b": 1,
               "a2u": 1,
               "a3a": 1,
@@ -15955,7 +15955,7 @@
               "a4": 1,
               "a4+ua2": 1,
               "a4e": 1,
-              "ua1": 0,
+              "ua1": 1,
               "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
@@ -18361,7 +18361,7 @@
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
-              "a2a+ua1": 0,
+              "a2a+ua1": 1,
               "a2b": 1,
               "a2u": 1,
               "a3a": 1,
@@ -18370,7 +18370,7 @@
               "a4": 1,
               "a4+ua2": 1,
               "a4e": 1,
-              "ua1": 0,
+              "ua1": 1,
               "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
@@ -23980,12 +23980,12 @@
     "libreoffice/ods": {
       "features": {
         "diff": {
-          "matched": 189,
-          "mismatched": 67,
+          "matched": 193,
+          "mismatched": 63,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 240,
+            "pages_equal": 244,
             "reference_fonts_missing": 0
           },
           "scores": {
@@ -24046,7 +24046,7 @@
               "text_f1": 1
             },
             "chart2/combined_chart_secondary_axis.ods": {
-              "layout": 0.9319,
+              "layout": 0.9424,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24190,7 +24190,7 @@
               "text_f1": 0.7383
             },
             "chart2/tdf120348.ods": {
-              "layout": 0.7028,
+              "layout": 0.7034,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24214,7 +24214,7 @@
               "text_f1": 0.9773
             },
             "chart2/tdf131115.ods": {
-              "layout": 0.9606,
+              "layout": 0.9692,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24230,7 +24230,7 @@
               "text_f1": 0.906
             },
             "chart2/tdf132076.ods": {
-              "layout": 0.9845,
+              "layout": 0.9918,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24358,7 +24358,7 @@
               "text_f1": 1
             },
             "sc/SolverModel.ods": {
-              "layout": 0.9451,
+              "layout": 0.9473,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24734,11 +24734,11 @@
               "text_f1": 1
             },
             "sc/formula-across-sheets.ods": {
-              "layout": 0.7849,
+              "layout": 0.9131,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.6667,
+              "strict": 1,
               "text_f1": 0.9683
             },
             "sc/formula-delete-contents.ods": {
@@ -25046,7 +25046,7 @@
               "text_f1": 1
             },
             "sc/pivot-table-num-fmt.ods": {
-              "layout": 0.9172,
+              "layout": 0.9188,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25078,7 +25078,7 @@
               "text_f1": 1
             },
             "sc/pivottable_no_columns_layout.ods": {
-              "layout": 0.9344,
+              "layout": 0.9587,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25320,7 +25320,7 @@
               "text_f1": 1
             },
             "sc/tdf109409.ods": {
-              "layout": 0.9468,
+              "layout": 0.9562,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25344,7 +25344,7 @@
               "text_f1": 0.9017
             },
             "sc/tdf113500_autofillMixed.ods": {
-              "layout": 0.9414,
+              "layout": 0.9528,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25352,7 +25352,7 @@
               "text_f1": 1
             },
             "sc/tdf113646.ods": {
-              "layout": 0.9574,
+              "layout": 0.9475,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25416,12 +25416,12 @@
               "text_f1": 0
             },
             "sc/tdf119191_FitToCellSize.ods": {
-              "layout": 0.4928,
+              "layout": 0.9857,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.5,
-              "strict": 0.5,
-              "text_f1": 0.5
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "sc/tdf119191_transformedShape.ods": {
               "layout": 0.9674,
@@ -25467,8 +25467,8 @@
               "layout": 0.9751,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0,
-              "strict": 0,
+              "pages": 1,
+              "strict": 1,
               "text_f1": 1
             },
             "sc/tdf121718_UseFirstPageNumber.ods": {
@@ -25513,7 +25513,7 @@
               "text_f1": 1
             },
             "sc/tdf123225_pivotTable_no_col_items.ods": {
-              "layout": 0.9171,
+              "layout": 0.9187,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25521,7 +25521,7 @@
               "text_f1": 1
             },
             "sc/tdf123225_pivotTable_row_col_items.ods": {
-              "layout": 0.8771,
+              "layout": 0.8778,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25529,7 +25529,7 @@
               "text_f1": 0.9526
             },
             "sc/tdf123421_1datafield.ods": {
-              "layout": 0.8723,
+              "layout": 0.8676,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25537,7 +25537,7 @@
               "text_f1": 0.9737
             },
             "sc/tdf123421_2datafields.ods": {
-              "layout": 0.9131,
+              "layout": 0.9164,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25625,7 +25625,7 @@
               "text_f1": 0.3712
             },
             "sc/tdf129681.ods": {
-              "layout": 0.9683,
+              "layout": 0.9793,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25777,12 +25777,12 @@
               "text_f1": 1
             },
             "sc/tdf137033_RotShearResizeAnchor.ods": {
-              "layout": 0.4984,
+              "layout": 0.9969,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.5,
-              "strict": 0.5,
-              "text_f1": 0.5
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "sc/tdf137044_CoverHiddenRows.ods": {
               "layout": 0.0131,
@@ -25865,7 +25865,7 @@
               "text_f1": 0.8148
             },
             "sc/tdf137624_autofillMergedMixed.ods": {
-              "layout": 0.9733,
+              "layout": 0.9749,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25873,7 +25873,7 @@
               "text_f1": 1
             },
             "sc/tdf137625_autofillMergedUserlist.ods": {
-              "layout": 0.9706,
+              "layout": 0.9721,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25881,7 +25881,7 @@
               "text_f1": 1
             },
             "sc/tdf137653_137654_autofillUserlist.ods": {
-              "layout": 0.9347,
+              "layout": 0.9437,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25889,12 +25889,12 @@
               "text_f1": 1
             },
             "sc/tdf138138_MoveCellWithRotatedShape.ods": {
-              "layout": 0.4986,
+              "layout": 0.9972,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.5,
-              "strict": 0.5,
-              "text_f1": 0.5
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "sc/tdf138507.ods": {
               "layout": 0.4218,
@@ -26033,7 +26033,7 @@
               "text_f1": 1
             },
             "sc/tdf162963_DatabaseRange.fods": {
-              "layout": 0.8672,
+              "layout": 0.8641,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -26044,8 +26044,8 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 203,
-          "mismatched": 53,
+          "matched": 204,
+          "mismatched": 52,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -26060,10 +26060,10 @@
             "pass_a3b": 256,
             "pass_a3u": 256,
             "pass_a4": 256,
-            "pass_a4+ua2": 203,
+            "pass_a4+ua2": 204,
             "pass_a4e": 256,
             "pass_ua1": 209,
-            "pass_ua2": 203,
+            "pass_ua2": 204,
             "pass_v1.4": 256,
             "pass_v1.5": 256,
             "pass_v1.6": 256,
@@ -30772,10 +30772,10 @@
               "a3b": 1,
               "a3u": 1,
               "a4": 1,
-              "a4+ua2": 0,
+              "a4+ua2": 1,
               "a4e": 1,
               "ua1": 1,
-              "ua2": 0,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -55753,11 +55753,11 @@
           "score_tolerance": 0.02
         },
         "robustness": {
-          "matched": 228,
-          "mismatched": 3,
+          "matched": 229,
+          "mismatched": 2,
           "skipped": 0,
           "metrics": {
-            "unexpected": 3
+            "unexpected": 2
           },
           "outcomes": {
             "altchunks": "pass",
@@ -55815,7 +55815,7 @@
             "hostile-fuzz-6": "pass",
             "hostile-fuzz-7": "pass",
             "hostile-fuzz-8": "pass",
-            "hostile-huge-values": "fail",
+            "hostile-huge-values": "pass",
             "hostile-image-corrupt": "pass",
             "hostile-image-pixel-bombs": "pass",
             "hostile-long-word": "pass",
@@ -55994,8 +55994,8 @@
           }
         },
         "targets": {
-          "matched": 154,
-          "mismatched": 32,
+          "matched": 155,
+          "mismatched": 31,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -56003,7 +56003,7 @@
             "pass_a1a": 184,
             "pass_a1b": 186,
             "pass_a2a": 184,
-            "pass_a2a+ua1": 154,
+            "pass_a2a+ua1": 155,
             "pass_a2b": 186,
             "pass_a2u": 184,
             "pass_a3a": 184,
@@ -56012,7 +56012,7 @@
             "pass_a4": 186,
             "pass_a4+ua2": 156,
             "pass_a4e": 186,
-            "pass_ua1": 154,
+            "pass_ua1": 155,
             "pass_ua2": 156,
             "pass_v1.4": 186,
             "pass_v1.5": 186,
@@ -56809,7 +56809,7 @@
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
-              "a2a+ua1": 0,
+              "a2a+ua1": 1,
               "a2b": 1,
               "a2u": 1,
               "a3a": 1,
@@ -56818,7 +56818,7 @@
               "a4": 1,
               "a4+ua2": 1,
               "a4e": 1,
-              "ua1": 0,
+              "ua1": 1,
               "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
@@ -65185,12 +65185,12 @@
     "litho/ods": {
       "features": {
         "diff": {
-          "matched": 68,
-          "mismatched": 11,
+          "matched": 78,
+          "mismatched": 1,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 75,
+            "pages_equal": 79,
             "reference_fonts_missing": 0
           },
           "scores": {
@@ -65211,7 +65211,7 @@
               "text_f1": 0.9957
             },
             "hidden-sheets": {
-              "layout": 0.9166,
+              "layout": 0.9216,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -65219,7 +65219,7 @@
               "text_f1": 1
             },
             "hidden-sheets-ref": {
-              "layout": 0.9166,
+              "layout": 0.9216,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -65259,23 +65259,23 @@
               "text_f1": 0.9971
             },
             "paper-fit": {
-              "layout": 0.9629,
+              "layout": 0.9614,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9916
+              "text_f1": 1
             },
             "paper-fit-a3-landscape": {
-              "layout": 0.9318,
+              "layout": 0.9553,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.974
+              "strict": 0.3333,
+              "text_f1": 1
             },
             "paper-fit-a3-portrait": {
-              "layout": 0.9721,
+              "layout": 0.9703,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -65283,47 +65283,47 @@
               "text_f1": 1
             },
             "paper-fit-a4-landscape": {
-              "layout": 0.9364,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9516
-            },
-            "paper-fit-a4-portrait": {
-              "layout": 0.9704,
+              "layout": 0.9645,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
               "text_f1": 1
             },
-            "paper-fit-a5-landscape": {
-              "layout": 0.9484,
+            "paper-fit-a4-portrait": {
+              "layout": 0.9711,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9521
+              "strict": 0.5,
+              "text_f1": 1
+            },
+            "paper-fit-a5-landscape": {
+              "layout": 0.9704,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "paper-fit-a5-portrait": {
-              "layout": 0.9692,
+              "layout": 0.9676,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9909
+              "strict": 0.5,
+              "text_f1": 1
             },
             "paper-fit-option-a3-landscape": {
-              "layout": 0.9318,
+              "layout": 0.9553,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.974
+              "strict": 0.3333,
+              "text_f1": 1
             },
             "paper-fit-option-a3-portrait": {
-              "layout": 0.9721,
+              "layout": 0.9703,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -65331,271 +65331,271 @@
               "text_f1": 1
             },
             "paper-fit-option-a4-landscape": {
-              "layout": 0.9364,
+              "layout": 0.9645,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9516
+              "text_f1": 1
             },
             "paper-fit-option-a4-portrait": {
+              "layout": 0.9711,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 1
+            },
+            "paper-fit-option-a5-landscape": {
               "layout": 0.9704,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-fit-option-a5-portrait": {
+              "layout": 0.9676,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 1
+            },
+            "paper-grid": {
+              "layout": 0.964,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.25,
+              "text_f1": 1
+            },
+            "paper-grid-a3-landscape": {
+              "layout": 0.9574,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
               "strict": 0,
               "text_f1": 1
             },
-            "paper-fit-option-a5-landscape": {
-              "layout": 0.9484,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9521
-            },
-            "paper-fit-option-a5-portrait": {
-              "layout": 0.9692,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9909
-            },
-            "paper-grid": {
-              "layout": 0.7426,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.8526
-            },
-            "paper-grid-a3-landscape": {
-              "layout": 0.9412,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9771
-            },
             "paper-grid-a3-portrait": {
+              "layout": 0.9583,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0,
+              "text_f1": 1
+            },
+            "paper-grid-a4-landscape": {
+              "layout": 0.9505,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.6,
+              "text_f1": 1
+            },
+            "paper-grid-a4-portrait": {
+              "layout": 0.9313,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.3333,
+              "text_f1": 1
+            },
+            "paper-grid-a5-landscape": {
+              "layout": 0.9374,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.9583,
+              "text_f1": 1
+            },
+            "paper-grid-a5-portrait": {
+              "layout": 0.9409,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.4,
+              "text_f1": 1
+            },
+            "paper-grid-b5-landscape": {
+              "layout": 0.9597,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-grid-b5-portrait": {
+              "layout": 0.9575,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.25,
+              "text_f1": 1
+            },
+            "paper-grid-default-landscape": {
+              "layout": 0.9313,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.3333,
+              "text_f1": 1
+            },
+            "paper-grid-default-portrait": {
+              "layout": 0.9313,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.3333,
+              "text_f1": 1
+            },
+            "paper-grid-executive-landscape": {
+              "layout": 0.9605,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-grid-executive-portrait": {
+              "layout": 0.9584,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.25,
+              "text_f1": 1
+            },
+            "paper-grid-legal-landscape": {
+              "layout": 0.9363,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.6,
+              "text_f1": 1
+            },
+            "paper-grid-legal-portrait": {
+              "layout": 0.9645,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.3333,
+              "text_f1": 1
+            },
+            "paper-grid-letter-landscape": {
+              "layout": 0.9551,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.6,
+              "text_f1": 1
+            },
+            "paper-grid-letter-portrait": {
+              "layout": 0.964,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.25,
+              "text_f1": 1
+            },
+            "paper-grid-margins-narrow-a3-landscape": {
+              "layout": 0.9596,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0,
+              "text_f1": 1
+            },
+            "paper-grid-margins-narrow-a3-portrait": {
+              "layout": 0.9472,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0,
+              "text_f1": 0.9923
+            },
+            "paper-grid-margins-narrow-a4-landscape": {
               "layout": 0.9507,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9924
-            },
-            "paper-grid-a4-landscape": {
-              "layout": 0.8939,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9171
-            },
-            "paper-grid-a4-portrait": {
-              "layout": 0.912,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9781
-            },
-            "paper-grid-a5-landscape": {
-              "layout": 0.9212,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.0417,
+              "strict": 0.6,
               "text_f1": 1
-            },
-            "paper-grid-a5-portrait": {
-              "layout": 0.8832,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9199
-            },
-            "paper-grid-b5-landscape": {
-              "layout": 0.8954,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.8844
-            },
-            "paper-grid-b5-portrait": {
-              "layout": 0.9151,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9511
-            },
-            "paper-grid-default-landscape": {
-              "layout": 0.912,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9781
-            },
-            "paper-grid-default-portrait": {
-              "layout": 0.912,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9781
-            },
-            "paper-grid-executive-landscape": {
-              "layout": 0.8583,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.8683
-            },
-            "paper-grid-executive-portrait": {
-              "layout": 0.88,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9339
-            },
-            "paper-grid-legal-landscape": {
-              "layout": 0.8519,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.1,
-              "text_f1": 0.9089
-            },
-            "paper-grid-legal-portrait": {
-              "layout": 0.9259,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9674
-            },
-            "paper-grid-letter-landscape": {
-              "layout": 0.8706,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.904
-            },
-            "paper-grid-letter-portrait": {
-              "layout": 0.7426,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.8526
-            },
-            "paper-grid-margins-narrow-a3-landscape": {
-              "layout": 0.9434,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9766
-            },
-            "paper-grid-margins-narrow-a3-portrait": {
-              "layout": 0.9619,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 1
-            },
-            "paper-grid-margins-narrow-a4-landscape": {
-              "layout": 0.6583,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 0.8,
-              "strict": 0,
-              "text_f1": 0.3924
             },
             "paper-grid-margins-narrow-a4-portrait": {
-              "layout": 0.9404,
+              "layout": 0.9578,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9768
+              "text_f1": 1
             },
             "paper-grid-margins-narrow-a5-landscape": {
-              "layout": 0.8477,
+              "layout": 0.9613,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.826
+              "strict": 0.8571,
+              "text_f1": 1
             },
             "paper-grid-margins-narrow-a5-portrait": {
-              "layout": 0.6251,
+              "layout": 0.9508,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.8,
-              "strict": 0,
-              "text_f1": 0.2667
+              "pages": 1,
+              "strict": 0.2,
+              "text_f1": 1
             },
             "paper-grid-margins-none-a3-landscape": {
-              "layout": 0.932,
+              "layout": 0.9622,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9736
+              "strict": 0.3333,
+              "text_f1": 1
             },
             "paper-grid-margins-none-a3-portrait": {
-              "layout": 0.9429,
+              "layout": 0.9494,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9922
+              "strict": 0.25,
+              "text_f1": 1
             },
             "paper-grid-margins-none-a4-landscape": {
-              "layout": 0.9459,
+              "layout": 0.9016,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 1
+              "strict": 0.5,
+              "text_f1": 0.9533
             },
             "paper-grid-margins-none-a4-portrait": {
-              "layout": 0.9284,
+              "layout": 0.9602,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9738
-            },
-            "paper-grid-margins-none-a5-landscape": {
-              "layout": 0.7109,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 0.8333,
-              "strict": 0,
-              "text_f1": 0.3886
-            },
-            "paper-grid-margins-none-a5-portrait": {
-              "layout": 0.9516,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
+              "strict": 0.3333,
               "text_f1": 1
             },
+            "paper-grid-margins-none-a5-landscape": {
+              "layout": 0.9595,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5833,
+              "text_f1": 1
+            },
+            "paper-grid-margins-none-a5-portrait": {
+              "layout": 0.9064,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0,
+              "text_f1": 0.9532
+            },
             "paper-grid-margins-uneven-a3-landscape": {
-              "layout": 0.9657,
+              "layout": 0.9611,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -65603,23 +65603,23 @@
               "text_f1": 1
             },
             "paper-grid-margins-uneven-a3-portrait": {
-              "layout": 0.9475,
+              "layout": 0.9539,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9924
+              "text_f1": 1
             },
             "paper-grid-margins-uneven-a4-landscape": {
-              "layout": 0.9052,
+              "layout": 0.9454,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9232
+              "strict": 0.6,
+              "text_f1": 1
             },
             "paper-grid-margins-uneven-a4-portrait": {
-              "layout": 0.9631,
+              "layout": 0.9592,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -65627,167 +65627,167 @@
               "text_f1": 1
             },
             "paper-grid-margins-uneven-a5-landscape": {
-              "layout": 0.7519,
+              "layout": 0.9646,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.8889,
-              "strict": 0,
-              "text_f1": 0.3657
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "paper-grid-margins-uneven-a5-portrait": {
-              "layout": 0.9079,
+              "layout": 0.948,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9235
+              "strict": 0.3333,
+              "text_f1": 1
             },
             "paper-grid-option-a3-landscape": {
-              "layout": 0.9412,
+              "layout": 0.9574,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9771
+              "text_f1": 1
             },
             "paper-grid-option-a3-portrait": {
-              "layout": 0.9507,
+              "layout": 0.9583,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9924
+              "text_f1": 1
             },
             "paper-grid-option-a4-landscape": {
-              "layout": 0.8939,
+              "layout": 0.9505,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9171
+              "strict": 0.6,
+              "text_f1": 1
             },
             "paper-grid-option-a4-portrait": {
-              "layout": 0.912,
+              "layout": 0.9313,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9781
+              "strict": 0.3333,
+              "text_f1": 1
             },
             "paper-grid-option-a5-landscape": {
-              "layout": 0.9212,
+              "layout": 0.9374,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.0417,
+              "strict": 0.9583,
               "text_f1": 1
             },
             "paper-grid-option-a5-portrait": {
-              "layout": 0.8832,
+              "layout": 0.9409,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9199
+              "strict": 0.4,
+              "text_f1": 1
             },
             "paper-grid-option-b5-landscape": {
-              "layout": 0.8954,
+              "layout": 0.9597,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.8844
+              "strict": 1,
+              "text_f1": 1
             },
             "paper-grid-option-b5-portrait": {
-              "layout": 0.9151,
+              "layout": 0.9575,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9511
+              "strict": 0.25,
+              "text_f1": 1
             },
             "paper-grid-option-executive-landscape": {
-              "layout": 0.8583,
+              "layout": 0.9605,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.8683
+              "strict": 1,
+              "text_f1": 1
             },
             "paper-grid-option-executive-portrait": {
-              "layout": 0.88,
+              "layout": 0.9584,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9339
+              "strict": 0.25,
+              "text_f1": 1
             },
             "paper-grid-option-legal-landscape": {
-              "layout": 0.8519,
+              "layout": 0.9363,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.1,
-              "text_f1": 0.9089
+              "strict": 0.6,
+              "text_f1": 1
             },
             "paper-grid-option-legal-portrait": {
-              "layout": 0.9259,
+              "layout": 0.9645,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9674
+              "strict": 0.3333,
+              "text_f1": 1
             },
             "paper-grid-option-letter-landscape": {
-              "layout": 0.8706,
+              "layout": 0.9551,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.904
+              "strict": 0.6,
+              "text_f1": 1
             },
             "paper-grid-option-letter-portrait": {
-              "layout": 0.7426,
+              "layout": 0.964,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.8526
+              "strict": 0.25,
+              "text_f1": 1
             },
             "paper-grid-option-tabloid-landscape": {
-              "layout": 0.736,
+              "layout": 0.9605,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.8399
+              "strict": 0.25,
+              "text_f1": 1
             },
             "paper-grid-option-tabloid-portrait": {
-              "layout": 0.9556,
+              "layout": 0.9603,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9923
+              "text_f1": 1
             },
             "paper-grid-tabloid-landscape": {
-              "layout": 0.736,
+              "layout": 0.9605,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.8399
+              "strict": 0.25,
+              "text_f1": 1
             },
             "paper-grid-tabloid-portrait": {
-              "layout": 0.9556,
+              "layout": 0.9603,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9923
+              "text_f1": 1
             },
             "sheet-numbers": {
-              "layout": 0.9255,
+              "layout": 0.9313,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -65795,7 +65795,7 @@
               "text_f1": 1
             },
             "sheet-numbers-ref": {
-              "layout": 0.9255,
+              "layout": 0.9313,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -65803,7 +65803,7 @@
               "text_f1": 1
             },
             "sheet-selection": {
-              "layout": 0.9142,
+              "layout": 0.9191,
               "link_recall": 0.6667,
               "outline_recall": 1,
               "pages": 1,
@@ -65811,7 +65811,7 @@
               "text_f1": 1
             },
             "sheets-by-name": {
-              "layout": 0.8914,
+              "layout": 0.8947,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -65819,7 +65819,7 @@
               "text_f1": 0.9717
             },
             "sheets-by-name-ref": {
-              "layout": 0.8914,
+              "layout": 0.8947,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67531,8 +67531,8 @@
     "litho/odt": {
       "features": {
         "diff": {
-          "matched": 69,
-          "mismatched": 1,
+          "matched": 70,
+          "mismatched": 0,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -67606,15 +67606,15 @@
               "text_f1": 1
             },
             "paper-a3-landscape": {
-              "layout": 0.9418,
+              "layout": 0.9486,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-a3-portrait": {
-              "layout": 0.9509,
+              "layout": 0.9583,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67622,7 +67622,7 @@
               "text_f1": 1
             },
             "paper-a4-landscape": {
-              "layout": 0.9495,
+              "layout": 0.9497,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67630,15 +67630,15 @@
               "text_f1": 1
             },
             "paper-a4-portrait": {
-              "layout": 0.9552,
+              "layout": 0.9572,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 0.5,
               "text_f1": 1
             },
             "paper-a5-landscape": {
-              "layout": 0.9539,
+              "layout": 0.954,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67646,63 +67646,63 @@
               "text_f1": 1
             },
             "paper-a5-portrait": {
-              "layout": 0.9408,
+              "layout": 0.9401,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.6,
+              "strict": 0.8,
               "text_f1": 0.9965
             },
             "paper-b5-landscape": {
-              "layout": 0.9432,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.25,
-              "text_f1": 1
-            },
-            "paper-b5-portrait": {
-              "layout": 0.9534,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.6667,
-              "text_f1": 1
-            },
-            "paper-base": {
-              "layout": 0.9538,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.3333,
-              "text_f1": 1
-            },
-            "paper-default-landscape": {
-              "layout": 0.9552,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 1
-            },
-            "paper-default-portrait": {
-              "layout": 0.9552,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 1
-            },
-            "paper-executive-landscape": {
-              "layout": 0.9426,
+              "layout": 0.947,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
               "text_f1": 1
             },
+            "paper-b5-portrait": {
+              "layout": 0.9563,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-base": {
+              "layout": 0.9547,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.6667,
+              "text_f1": 1
+            },
+            "paper-default-landscape": {
+              "layout": 0.9572,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 1
+            },
+            "paper-default-portrait": {
+              "layout": 0.9572,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 1
+            },
+            "paper-executive-landscape": {
+              "layout": 0.9463,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.75,
+              "text_f1": 1
+            },
             "paper-executive-portrait": {
-              "layout": 0.9473,
+              "layout": 0.9476,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67710,7 +67710,7 @@
               "text_f1": 1
             },
             "paper-legal-landscape": {
-              "layout": 0.952,
+              "layout": 0.9521,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67718,15 +67718,15 @@
               "text_f1": 1
             },
             "paper-legal-portrait": {
-              "layout": 0.9395,
+              "layout": 0.9456,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-letter-landscape": {
-              "layout": 0.9501,
+              "layout": 0.9509,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67734,23 +67734,23 @@
               "text_f1": 1
             },
             "paper-letter-portrait": {
-              "layout": 0.9538,
+              "layout": 0.9547,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.3333,
+              "strict": 0.6667,
               "text_f1": 1
             },
             "paper-margins-narrow-a3-landscape": {
-              "layout": 0.9293,
+              "layout": 0.9383,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-margins-narrow-a3-portrait": {
-              "layout": 0.9467,
+              "layout": 0.9519,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67758,7 +67758,7 @@
               "text_f1": 1
             },
             "paper-margins-narrow-a4-landscape": {
-              "layout": 0.9498,
+              "layout": 0.9505,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67766,15 +67766,15 @@
               "text_f1": 1
             },
             "paper-margins-narrow-a4-portrait": {
-              "layout": 0.9531,
+              "layout": 0.9545,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-margins-narrow-a5-landscape": {
-              "layout": 0.9511,
+              "layout": 0.9509,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67782,15 +67782,15 @@
               "text_f1": 1
             },
             "paper-margins-narrow-a5-portrait": {
-              "layout": 0.9633,
+              "layout": 0.9658,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 0.75,
               "text_f1": 1
             },
             "paper-margins-none-a3-landscape": {
-              "layout": 0.9431,
+              "layout": 0.9533,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67798,7 +67798,7 @@
               "text_f1": 1
             },
             "paper-margins-none-a3-portrait": {
-              "layout": 0.9409,
+              "layout": 0.9555,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67806,15 +67806,15 @@
               "text_f1": 1
             },
             "paper-margins-none-a4-landscape": {
-              "layout": 0.6251,
+              "layout": 0.9335,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.3333,
-              "text_f1": 0.8293
+              "text_f1": 0.9922
             },
             "paper-margins-none-a4-portrait": {
-              "layout": 0.9457,
+              "layout": 0.9535,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67822,15 +67822,15 @@
               "text_f1": 1
             },
             "paper-margins-none-a5-landscape": {
-              "layout": 0.9445,
+              "layout": 0.9476,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.25,
+              "strict": 0.5,
               "text_f1": 1
             },
             "paper-margins-none-a5-portrait": {
-              "layout": 0.8722,
+              "layout": 0.8811,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67838,31 +67838,31 @@
               "text_f1": 0.9799
             },
             "paper-margins-uneven-a3-landscape": {
-              "layout": 0.9497,
+              "layout": 0.9584,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-margins-uneven-a3-portrait": {
-              "layout": 0.9447,
+              "layout": 0.9509,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-margins-uneven-a4-landscape": {
-              "layout": 0.9403,
+              "layout": 0.9426,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 0.75,
               "text_f1": 1
             },
             "paper-margins-uneven-a4-portrait": {
-              "layout": 0.9544,
+              "layout": 0.9581,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67870,23 +67870,23 @@
               "text_f1": 1
             },
             "paper-margins-uneven-a5-landscape": {
-              "layout": 0.9541,
+              "layout": 0.9552,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.8571,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-margins-uneven-a5-portrait": {
-              "layout": 0.9491,
+              "layout": 0.9507,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.4,
+              "strict": 0.6,
               "text_f1": 1
             },
             "paper-mixed-orientation": {
-              "layout": 0.9499,
+              "layout": 0.9502,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67894,7 +67894,7 @@
               "text_f1": 1
             },
             "paper-mixed-sizes": {
-              "layout": 0.9579,
+              "layout": 0.9582,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67902,15 +67902,15 @@
               "text_f1": 1
             },
             "paper-option-a3-landscape": {
-              "layout": 0.9418,
+              "layout": 0.9486,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-option-a3-portrait": {
-              "layout": 0.9509,
+              "layout": 0.9583,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67918,7 +67918,7 @@
               "text_f1": 1
             },
             "paper-option-a4-landscape": {
-              "layout": 0.9495,
+              "layout": 0.9497,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67926,15 +67926,15 @@
               "text_f1": 1
             },
             "paper-option-a4-portrait": {
-              "layout": 0.9552,
+              "layout": 0.9572,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 0.5,
               "text_f1": 1
             },
             "paper-option-a5-landscape": {
-              "layout": 0.9539,
+              "layout": 0.954,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67942,39 +67942,39 @@
               "text_f1": 1
             },
             "paper-option-a5-portrait": {
-              "layout": 0.9408,
+              "layout": 0.9401,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.6,
+              "strict": 0.8,
               "text_f1": 0.9965
             },
             "paper-option-b5-landscape": {
-              "layout": 0.9432,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.25,
-              "text_f1": 1
-            },
-            "paper-option-b5-portrait": {
-              "layout": 0.9535,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.6667,
-              "text_f1": 1
-            },
-            "paper-option-executive-landscape": {
-              "layout": 0.9426,
+              "layout": 0.947,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
               "text_f1": 1
             },
+            "paper-option-b5-portrait": {
+              "layout": 0.9563,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-option-executive-landscape": {
+              "layout": 0.9463,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.75,
+              "text_f1": 1
+            },
             "paper-option-executive-portrait": {
-              "layout": 0.9473,
+              "layout": 0.9476,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67982,7 +67982,7 @@
               "text_f1": 1
             },
             "paper-option-legal-landscape": {
-              "layout": 0.952,
+              "layout": 0.9521,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -67990,15 +67990,15 @@
               "text_f1": 1
             },
             "paper-option-legal-portrait": {
-              "layout": 0.9395,
+              "layout": 0.9456,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-option-letter-landscape": {
-              "layout": 0.9501,
+              "layout": 0.9509,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -68006,15 +68006,15 @@
               "text_f1": 1
             },
             "paper-option-letter-portrait": {
-              "layout": 0.9538,
+              "layout": 0.9547,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.3333,
+              "strict": 0.6667,
               "text_f1": 1
             },
             "paper-option-tabloid-landscape": {
-              "layout": 0.9465,
+              "layout": 0.9489,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -68022,15 +68022,15 @@
               "text_f1": 0.9938
             },
             "paper-option-tabloid-portrait": {
-              "layout": 0.9459,
+              "layout": 0.9547,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 0.9976
             },
             "paper-tabloid-landscape": {
-              "layout": 0.9465,
+              "layout": 0.9489,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -68038,11 +68038,11 @@
               "text_f1": 0.9938
             },
             "paper-tabloid-portrait": {
-              "layout": 0.9459,
+              "layout": 0.9547,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 0.9976
             },
             "tracked-changes": {
@@ -68105,8 +68105,8 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 68,
-          "mismatched": 2,
+          "matched": 70,
+          "mismatched": 0,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -68114,7 +68114,7 @@
             "pass_a1a": 70,
             "pass_a1b": 70,
             "pass_a2a": 70,
-            "pass_a2a+ua1": 68,
+            "pass_a2a+ua1": 70,
             "pass_a2b": 70,
             "pass_a2u": 70,
             "pass_a3a": 70,
@@ -68123,7 +68123,7 @@
             "pass_a4": 70,
             "pass_a4+ua2": 70,
             "pass_a4e": 70,
-            "pass_ua1": 68,
+            "pass_ua1": 70,
             "pass_ua2": 70,
             "pass_v1.4": 70,
             "pass_v1.5": 70,
@@ -68185,7 +68185,7 @@
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
-              "a2a+ua1": 0,
+              "a2a+ua1": 1,
               "a2b": 1,
               "a2u": 1,
               "a3a": 1,
@@ -68194,7 +68194,7 @@
               "a4": 1,
               "a4+ua2": 1,
               "a4e": 1,
-              "ua1": 0,
+              "ua1": 1,
               "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
@@ -68206,7 +68206,7 @@
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
-              "a2a+ua1": 0,
+              "a2a+ua1": 1,
               "a2b": 1,
               "a2u": 1,
               "a3a": 1,
@@ -68215,7 +68215,7 @@
               "a4": 1,
               "a4+ua2": 1,
               "a4e": 1,
-              "ua1": 0,
+              "ua1": 1,
               "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
@@ -74214,12 +74214,12 @@
     "litho/xlsx": {
       "features": {
         "diff": {
-          "matched": 121,
-          "mismatched": 35,
+          "matched": 125,
+          "mismatched": 31,
           "skipped": 9,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 148,
+            "pages_equal": 150,
             "reference_fonts_missing": 9
           },
           "scores": {
@@ -74616,7 +74616,7 @@
               "text_f1": 1
             },
             "options_paper_fit": {
-              "layout": 0.8116,
+              "layout": 0.9481,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -74624,7 +74624,7 @@
               "text_f1": 1
             },
             "options_paper_fit_ref": {
-              "layout": 0.8116,
+              "layout": 0.9481,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -74720,12 +74720,12 @@
               "text_f1": 0.989
             },
             "paper-fit": {
-              "layout": 0.9105,
+              "layout": 0.9671,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9633
+              "strict": 0.5,
+              "text_f1": 0.991
             },
             "paper-fit-a3-landscape": {
               "layout": 0.9386,
@@ -74736,44 +74736,44 @@
               "text_f1": 1
             },
             "paper-fit-a3-portrait": {
-              "layout": 0.95,
+              "layout": 0.956,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9899
+              "text_f1": 1
             },
             "paper-fit-a5-landscape": {
-              "layout": 0.7035,
+              "layout": 0.9555,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.75,
-              "strict": 0,
-              "text_f1": 0.6363
+              "pages": 1,
+              "strict": 0.25,
+              "text_f1": 1
             },
             "paper-fit-a5-portrait": {
-              "layout": 0.7482,
+              "layout": 0.9734,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9031
+              "strict": 0.5,
+              "text_f1": 1
             },
             "paper-fit-letter-landscape": {
-              "layout": 0.9461,
+              "layout": 0.9593,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9755
+              "strict": 0.6667,
+              "text_f1": 1
             },
             "paper-fit-letter-portrait": {
-              "layout": 0.9105,
+              "layout": 0.9671,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9633
+              "strict": 0.5,
+              "text_f1": 0.991
             },
             "paper-fit-option-a3-landscape": {
               "layout": 0.9386,
@@ -74784,44 +74784,44 @@
               "text_f1": 1
             },
             "paper-fit-option-a3-portrait": {
-              "layout": 0.95,
+              "layout": 0.956,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9899
+              "text_f1": 1
             },
             "paper-fit-option-a5-landscape": {
-              "layout": 0.7035,
+              "layout": 0.9555,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.75,
-              "strict": 0,
-              "text_f1": 0.6363
+              "pages": 1,
+              "strict": 0.25,
+              "text_f1": 1
             },
             "paper-fit-option-a5-portrait": {
-              "layout": 0.7482,
+              "layout": 0.9734,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9031
+              "strict": 0.5,
+              "text_f1": 1
             },
             "paper-fit-option-letter-landscape": {
-              "layout": 0.9461,
+              "layout": 0.9593,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9755
+              "strict": 0.6667,
+              "text_f1": 1
             },
             "paper-fit-option-letter-portrait": {
-              "layout": 0.9105,
+              "layout": 0.9671,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9633
+              "strict": 0.5,
+              "text_f1": 0.991
             },
             "paper-grid": {
               "layout": 0.912,
@@ -75296,7 +75296,7 @@
               "text_f1": 1
             },
             "real_budget": {
-              "layout": 0.2784,
+              "layout": 0.2047,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -96602,8 +96602,8 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 119,
-          "mismatched": 10,
+          "matched": 120,
+          "mismatched": 9,
           "skipped": 0,
           "metrics": {
             "convert_error": 1,
@@ -96611,7 +96611,7 @@
             "pass_a1a": 128,
             "pass_a1b": 128,
             "pass_a2a": 127,
-            "pass_a2a+ua1": 119,
+            "pass_a2a+ua1": 120,
             "pass_a2b": 128,
             "pass_a2u": 128,
             "pass_a3a": 127,
@@ -96620,7 +96620,7 @@
             "pass_a4": 128,
             "pass_a4+ua2": 124,
             "pass_a4e": 128,
-            "pass_ua1": 119,
+            "pass_ua1": 120,
             "pass_ua2": 124,
             "pass_v1.4": 128,
             "pass_v1.5": 128,
@@ -98089,7 +98089,7 @@
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
-              "a2a+ua1": 0,
+              "a2a+ua1": 1,
               "a2b": 1,
               "a2u": 1,
               "a3a": 1,
@@ -98098,7 +98098,7 @@
               "a4": 1,
               "a4+ua2": 1,
               "a4e": 1,
-              "ua1": 0,
+              "ua1": 1,
               "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
@@ -108906,11 +108906,11 @@
               "text_f1": 1
             },
             "spreadsheet/47737.xlsx": {
-              "layout": 0.6447,
+              "layout": 0.6638,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.75,
-              "strict": 0.5,
+              "strict": 0.75,
               "text_f1": 0.7115
             },
             "spreadsheet/47862.xlsx": {
