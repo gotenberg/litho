@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"image"
 	"image/color"
 	"image/png"
@@ -345,8 +346,8 @@ func TestConvert_DefaultLanguageNeverReplacesTheSources(t *testing.T) {
 	for _, lang := range []string{"en_US", " en", "en-", "123", "en--US"} {
 		var out bytes.Buffer
 		_, err := FromText(strings.NewReader("A"), WithConvertFontDirs(dir), WithDefaultLanguage(lang)).WriteTo(context.Background(), &out)
-		if err == nil || !strings.Contains(err.Error(), "language") {
-			t.Errorf("WithDefaultLanguage(%q): error = %v, want a refused language", lang, err)
+		if !errors.Is(err, ErrInvalidConvertOptions) {
+			t.Errorf("WithDefaultLanguage(%q): error = %v, want ErrInvalidConvertOptions", lang, err)
 		}
 	}
 }

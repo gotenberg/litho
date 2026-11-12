@@ -2,9 +2,10 @@ package pdf
 
 import (
 	"go/ast"
+	"go/build"
 	"go/parser"
 	"go/token"
-	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -22,11 +23,11 @@ func TestPublicGodocNeverMentionsCorpus(t *testing.T) {
 	checked := 0
 	for _, dir := range []string{".", "../models", "../plugins"} {
 		fset := token.NewFileSet()
-		pkgs, err := parser.ParseDir(fset, dir, func(fi os.FileInfo) bool {
-			return !strings.HasSuffix(fi.Name(), "_test.go")
-		}, parser.ParseComments)
+		// The files the build of this platform compiles, as go/build selects
+		// them: build constraints honoured, test files left out.
+		bp, err := build.ImportDir(dir, 0)
 		if err != nil {
-			t.Fatalf("parsing %s: %v", dir, err)
+			t.Fatalf("listing %s: %v", dir, err)
 		}
 		check := func(name string, doc *ast.CommentGroup) {
 			if doc == nil {
@@ -37,12 +38,14 @@ func TestPublicGodocNeverMentionsCorpus(t *testing.T) {
 				t.Errorf("%s: godoc of %s mentions the corpus", fset.Position(doc.Pos()), name)
 			}
 		}
-		for _, pkg := range pkgs {
-			for _, file := range pkg.Files {
-				check("package "+pkg.Name, file.Doc)
-				for _, decl := range file.Decls {
-					checkPublicDecl(decl, check)
-				}
+		for _, name := range bp.GoFiles {
+			file, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.ParseComments)
+			if err != nil {
+				t.Fatalf("parsing %s: %v", name, err)
+			}
+			check("package "+bp.Name, file.Doc)
+			for _, decl := range file.Decls {
+				checkPublicDecl(decl, check)
 			}
 		}
 	}
