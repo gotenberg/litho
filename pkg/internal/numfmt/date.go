@@ -55,7 +55,14 @@ func approxFloor(v float64) float64 {
 	return math.Floor(r)
 }
 
-// date formats the serial number x by a date or time section.
+// date formats the serial number x by a date or time section. A time
+// that shows whole seconds is cut to the second, one that shows fractions
+// of a second or no seconds is rounded.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf125099.ods, 03:23:59.999999665 in [HH]:MM:SS
+//     prints 03:23:59, and 11:23:59.999999665 in HH:MM prints 11:24.
 func (s *section) date(x float64, first bool) Result {
 	r := Result{Numeric: true}
 	hasDate, elapsed, ampm, seconds := false, false, false, false
@@ -98,11 +105,6 @@ func (s *section) date(x float64, first bool) Result {
 	// reads, the value first rounded to 15 significant digits; one that
 	// shows fractions of a second, or no seconds, is rounded to the
 	// precision it keeps (SvNumberformat::ImpGetTimeOutput).
-	//
-	// # Corpus evidence
-	//
-	//   - libreoffice/ods: sc/tdf125099.ods, 03:23:59.999999665 in [HH]:MM:SS prints
-	//     03:23:59, and 11:23:59.999999665 in HH:MM prints 11:24.
 	whole := func(v float64) float64 {
 		if seconds && frac == 0 && !s.excel {
 			return approxFloor(v)

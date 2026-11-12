@@ -15,8 +15,8 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho/pdf: a flat ODS of Liberation Sans 10 point text with 1 point of
-//     padding, converted by Gotenberg 9.0.0: a row of three wrapped lines
+//   - probe, ods: a flat ODS of Liberation Sans 10 point text with 1 point
+//     of padding, converted by Gotenberg 9.0.0: a row of three wrapped lines
 //     of 11.2 points is 35.04 points tall, 47 pixels of 0.7455 points: 45
 //     for the text and one a padding.
 //   - gotenberg/xlsx: scrolled-pages, rows of Calibri 12 point text (Carlito, 14.65
@@ -149,8 +149,8 @@ const excelPixel = 72.0 / 600
 //
 // # Corpus evidence
 //
-//   - litho/pdf: a flat ODS of wrapped Liberation Sans 10 point text (11.17
-//     points a line), converted by Gotenberg 9.0.0, sets its lines 11.2
+//   - probe, ods: a flat ODS of wrapped Liberation Sans 10 point text
+//     (11.17 points a line), converted by Gotenberg 9.0.0, sets its lines 11.2
 //     points apart.
 func editLine(h float64) float64 {
 	return math.Ceil(h*20-1e-6) / 20

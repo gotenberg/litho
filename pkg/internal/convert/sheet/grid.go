@@ -251,8 +251,9 @@ func visible(st *Style) bool {
 //
 // # Corpus evidence
 //
-//   - libreoffice/xlsx, gotenberg/xlsx: sc/cell-value.xlsx, whose D3 text overflows far past its last
-//     column, prints 8 pages; budget-single, whose Notes sheet's A2 text
+//   - libreoffice/xlsx: sc/cell-value.xlsx, whose D3 text overflows far
+//     past its last column, prints 8 pages.
+//   - gotenberg/xlsx: budget-single, whose Notes sheet's A2 text
 //     overflows, prints a page of column A alone as one page of content.
 func (g *grid) usedRange(single bool) (Range, bool) {
 	u := Range{FirstRow: math.MaxInt32, FirstColumn: math.MaxInt32, LastRow: -1, LastColumn: -1}

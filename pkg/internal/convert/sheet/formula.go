@@ -887,8 +887,8 @@ func textOfValue(v Value) string {
 //
 // # Corpus evidence
 //
-//   - LibreOffice 26.8.2.2: a workbook cell =-A1+10% without a result,
-//     A1 holding 2, prints -190.00%.
+//   - probe, xlsx: in LibreOffice 26.8.2.2, a workbook cell =-A1+10%
+//     without a result, A1 holding 2, prints -190.00%.
 const percentFormat = "0.00%"
 
 // applyFormulas returns doc with the cells whose formula Calc computes as
@@ -900,11 +900,12 @@ const percentFormat = "0.00%"
 //
 // # Corpus evidence
 //
-//   - LibreOffice 26.8.2.2: a workbook's uncached =A1+2, =SUM(A1:A3),
-//     =AVERAGE(A1:A3), =MAX(A1:A3)-MIN(A1:A3), =COUNT(A1:A3), =A1/0,
-//     =A1>1, ="x"&A1 print 4, 9, 3, 2, 3, #DIV/0!, TRUE and x2 over 2, 3,
-//     4, a cached =A1+2 saved as 5 prints 5; an OpenDocument cell
-//     =[.A1]+2 saved as 5 prints 4, whatever program wrote the file.
+//   - probe, xlsx: in LibreOffice 26.8.2.2, a workbook's uncached =A1+2,
+//     =SUM(A1:A3), =AVERAGE(A1:A3), =MAX(A1:A3)-MIN(A1:A3), =COUNT(A1:A3),
+//     =A1/0, =A1>1, ="x"&A1 print 4, 9, 3, 2, 3, #DIV/0!, TRUE and x2
+//     over 2, 3, 4, and a cached =A1+2 saved as 5 prints 5.
+//   - probe, ods: in LibreOffice 26.8.2.2, a cell =[.A1]+2 saved as 5
+//     prints 4, whatever program wrote the file.
 func (b *builder) applyFormulas(doc *Document) *Document {
 	any := false
 	for _, sh := range doc.Sheets {
@@ -990,6 +991,11 @@ func (b *builder) applyFormulas(doc *Document) *Document {
 // a reference, ABS, INT, MOD, ROUND, ISEVEN, ISODD, IF, AND, OR, NOT,
 // HOUR, MINUTE, SECOND and SWITCH, as Calc defines them; false for
 // another function or a wrong count of arguments.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf130583.ods, SWITCH matches the number 1
+//     with the text "1".
 func (p *fparser) scalarFunction(fn string, args []fval) (fval, bool) {
 	for _, a := range args {
 		if a.rng != nil && fn != "ROW" && fn != "COLUMN" {
@@ -1102,7 +1108,7 @@ func (p *fparser) scalarFunction(fn string, args []fval) (fval, bool) {
 		for i := 1; i+1 < len(args); i += 2 {
 			x := scalar(args[i])
 			// A number and a text compare as texts, as Calc's SWITCH
-			// matches 1 with "1" (sc/tdf130583.ods).
+			// matches 1 with "1".
 			if (e.Kind == Text) != (x.Kind == Text) && e.Kind != Error && x.Kind != Error {
 				if strings.EqualFold(textOfValue(e), textOfValue(x)) {
 					return args[i+1], true

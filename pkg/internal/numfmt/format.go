@@ -465,7 +465,8 @@ type Locale struct {
 //
 // # Corpus evidence
 //
-//   - LibreOffice 26.8.2.2: 1234567.5 in #,##0.00 of each locale prints
+//   - probe, ods: in LibreOffice 26.8.2.2, 1234567.5 in #,##0.00 of each
+//     locale prints
 //     1.234.567,50 in de-DE, es-ES, it-IT, nl-NL, pt-BR, da-DK, tr-TR,
 //     el-GR, ro-RO, id-ID, vi-VN, ca-ES, hr-HR, sl-SI and lt-LT;
 //     1 234 567,50 with a no-break space in fr-FR, fr-CA, hu-HU, ru-RU,

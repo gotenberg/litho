@@ -16,7 +16,7 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho/pdf: a flat ODS on A4 with half-inch margins, four columns of 80
+//   - probe, ods: a flat ODS on A4 with half-inch margins, four columns of 80
 //     points, Liberation Sans 10, converted by Gotenberg 9.0.0: "Hello"
 //     at x 36.99 baseline 796.20, "123" ending at 194.96, the overflowing
 //     text from 36.99 to 187.58 on the second row (783.41), the

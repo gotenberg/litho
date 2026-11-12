@@ -31,7 +31,7 @@ func grid150(ps PageSetup) *Sheet {
 //
 // # Corpus evidence
 //
-//   - litho/pdf: three flat ODS sheets of 150 rows of 12.8 points by 20
+//   - probe, ods: three flat ODS sheets of 150 rows of 12.8 points by 20
 //     columns of 50 points on A4 with half-inch margins, converted by
 //     Gotenberg 9.0.0: fitted one page wide they print at 52% (5.2 point
 //     text) on 2 pages, one page wide and tall at 40% on 1 page, two

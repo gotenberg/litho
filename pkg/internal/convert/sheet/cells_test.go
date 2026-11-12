@@ -141,7 +141,7 @@ func TestConvert_Borders(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho/pdf: a flat ODS of two sheets, three pages, whose header shows
+//   - probe, ods: a flat ODS of two sheets, three pages, whose header shows
 //     every field, converted by Gotenberg 9.0.0: "D:11/07/2026
 //     T:21:39:35", "S:Alpha P:1/3" and on the third page "S:Beta P:3/3";
 //     the ODS default header centres "Revenue" at x 306 on Letter, its
@@ -235,7 +235,7 @@ func TestConvert_Drawings(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - litho/pdf: a flat ODS cell 80 points wide and tall rotated 90 degrees,
+//   - probe, ods: a flat ODS cell 80 points wide and tall rotated 90 degrees,
 //     Liberation Sans 10, converted by Gotenberg 9.0.0, sets "Rotated90"
 //     up from y 726.89 (a point above the row's bottom at 725.89) with its
 //     baseline at x 46.09 (the column starts at 36).

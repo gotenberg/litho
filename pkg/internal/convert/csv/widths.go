@@ -19,13 +19,15 @@ import (
 //
 // # Corpus evidence
 //
-//   - litho/pdf: CSVs of one string per column ("a" to twelve "a", "n" to
-//     thirty "n"), sales.csv's columns and a row of one value of each
-//     detected type print with column widths that this arithmetic gives
-//     to 0.03 points: "a" 14.08, twelve "a" 73.58, "Northwind Traders"
-//     89.78, "2026-01-10" 58.13, "12/31/26 10:00 AM" 93.62,
+//   - probe, csv: CSVs of one string per column ("a" to twelve "a", "n"
+//     to thirty "n") and a row of one value of each detected type print
+//     with column widths that this arithmetic gives to 0.03 points: "a"
+//     14.08, twelve "a" 73.58, "12/31/26 10:00 AM" 93.62,
 //     "1.23456789012346E+019" 122.18 points; a column without content
 //     keeps 64 points.
+//   - gotenberg/csv: sales.csv's columns print with the widths this
+//     arithmetic gives to 0.03 points: "Northwind Traders" 89.78 and
+//     "2026-01-10" 58.13 points.
 const (
 	// screenPPEM is the size in pixels Liberation Sans 10 is measured at
 	// on the 96 dpi screen device: 13.33 pixels, rounded to 13.
