@@ -2,6 +2,9 @@ package svg
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -41,6 +44,29 @@ func FuzzPath(f *testing.F) {
 					t.Fatalf("non-finite point %v", p)
 				}
 			}
+		}
+	})
+}
+
+func FuzzParseOutlineFont(f *testing.F) {
+	data, err := os.ReadFile(filepath.Join("..", "layout", "testdata", "Ahem.ttf"))
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Add(data)
+	f.Add(data[:len(data)/2])
+	f.Fuzz(func(t *testing.T, data []byte) {
+		font, err := parseOutlineFont(data)
+		if err != nil {
+			if !errors.Is(err, errNoOutlines) {
+				t.Fatalf("error %v does not wrap errNoOutlines", err)
+			}
+			return
+		}
+		// A glyph that does not decode is an error runOutline skips: the
+		// target asks only that reading it neither panics nor hangs.
+		for gid := range 4 {
+			_, _, _ = font.glyph(context.Background(), gid)
 		}
 	})
 }
