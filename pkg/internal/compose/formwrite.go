@@ -47,7 +47,18 @@ type formState struct {
 	// font is the default resources' font, allocated with the first field
 	// that sets text; zero before.
 	font ast.PdfIndirectRef
+	// charged is what the widgets held until the end cost the
+	// conversion's budget.
+	charged int64
 }
+
+// widgetCost is what one widget held until the end of the file costs the
+// conversion's budget: its dictionary of a dozen entries, as Go maps and
+// values, and its place in the lists of the form. Memory guard, not
+// spec-mandated: a widget's dictionary holds a few hundred bytes, and
+// a field's name, value and options are bounded by [MaxFieldText] and
+// [maxFieldOptions] each.
+const widgetCost = 2 << 10
 
 // nameUse is the field a name was given to.
 type nameUse struct {
@@ -148,6 +159,14 @@ func (w *docWriter) fields(ctx context.Context, page int, height float64, fields
 // whose /Parent is its group's field.
 func (w *docWriter) widget(ctx context.Context, page int, height float64, f *Field) (ast.PdfIndirectRef, error) {
 	fs := &w.form
+	cost := int64(widgetCost) + int64(len(f.Name)+len(f.Description)+len(f.Value))
+	for _, o := range f.Options {
+		cost += int64(len(o))
+	}
+	if err := w.mem.Charge(cost, "the form fields"); err != nil {
+		return ast.PdfIndirectRef{}, fmt.Errorf("writing page %d: %w", page+1, err)
+	}
+	fs.charged += cost
 	fs.count++
 	name, group := fs.fieldName(f)
 	ref := w.alloc.Alloc(ast.PdfNull{})
@@ -392,6 +411,8 @@ func (w *docWriter) finishForm(n int) ast.PdfDict {
 		w.alloc.AllocAt(pw.ref.ObjectNum, pw.dict)
 	}
 	fs.widgets = nil
+	w.mem.Release(fs.charged)
+	fs.charged = 0
 	for _, g := range fs.groups {
 		value := ast.PdfName("Off")
 		if g.value != "" {

@@ -522,6 +522,8 @@ func (s *Stream) Abort() {
 	s.closed = true
 	s.w.mem.Release(s.charged)
 	s.charged = 0
+	s.w.mem.Release(s.w.form.charged)
+	s.w.form.charged = 0
 	s.whole = nil
 	if s.sel != nil {
 		for n, c := range s.sel.heldCost {
