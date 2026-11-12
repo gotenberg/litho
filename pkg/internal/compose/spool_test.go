@@ -18,7 +18,7 @@ func spoolDoc(t *testing.T) *compose.Document {
 	face := buildFace("Spool", 100)
 	pic := image.NewNRGBA(image.Rect(0, 0, 8, 8))
 	for i := range pic.Pix {
-		pic.Pix[i] = uint8(i) //nolint:gosec // test values wrap on purpose
+		pic.Pix[i] = uint8(i) // test values wrap on purpose
 	}
 	src := encode(t, pic)
 	doc := &compose.Document{}
@@ -88,11 +88,11 @@ func TestWriteSpoolIsRemovedOnFailure(t *testing.T) {
 	emptyDir(t, dir)
 	func() {
 		defer func() {
-			if r := recover(); r != errDst { //nolint:errorlint // the panic value is the sentinel itself
+			if r := recover(); r != errDst { // the panic value is the sentinel itself
 				t.Errorf("recovered %v, want the dst panic", r)
 			}
 		}()
-		_ = compose.Write(context.Background(), doc, failingWriter{panics: true}, compose.Options{TempDir: dir, Spool: 1}) //nolint:errcheck // the call panics before it returns
+		_ = compose.Write(context.Background(), doc, failingWriter{panics: true}, compose.Options{TempDir: dir, Spool: 1}) // the call panics before it returns
 	}()
 	emptyDir(t, dir)
 	if err := compose.Write(context.Background(), doc, &bytes.Buffer{}, compose.Options{TempDir: dir + "/missing", Spool: 1}); err == nil {

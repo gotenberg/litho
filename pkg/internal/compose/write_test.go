@@ -648,6 +648,7 @@ func TestWriteHorizontalScaling(t *testing.T) {
 	}
 	for _, hs := range []float64{0.5, 2} {
 		t.Run(fmt.Sprint(hs), func(t *testing.T) {
+			t.Parallel()
 			txt := run(t, sans, 20, compose.Point{X: 40, Y: 100}, "HHAB")
 			txt.Glyphs[2].X += 3
 			txt.HScale = hs

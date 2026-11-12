@@ -18,15 +18,15 @@ func storeDoc(t *testing.T, ctx context.Context) *compose.Document {
 	t.Helper()
 	rgba := image.NewNRGBA(image.Rect(0, 0, 9, 7))
 	for i := range rgba.Pix {
-		rgba.Pix[i] = uint8(i * 7) //nolint:gosec // test values wrap on purpose
+		rgba.Pix[i] = uint8(i * 7) // test values wrap on purpose
 	}
 	gray := image.NewGray(image.Rect(0, 0, 5, 5))
 	for i := range gray.Pix {
-		gray.Pix[i] = uint8(i * 11) //nolint:gosec // test values wrap on purpose
+		gray.Pix[i] = uint8(i * 11) // test values wrap on purpose
 	}
 	pic := image.NewRGBA(image.Rect(0, 0, 6, 4))
 	for i := range pic.Pix {
-		pic.Pix[i] = uint8(i * 13) //nolint:gosec // test values wrap on purpose
+		pic.Pix[i] = uint8(i * 13) // test values wrap on purpose
 	}
 	var jb bytes.Buffer
 	if err := jpeg.Encode(&jb, pic, nil); err != nil {
@@ -73,7 +73,7 @@ func TestPictureStoreKeepsTheBytes(t *testing.T) {
 			if mem.Held() != 0 {
 				t.Errorf("pictures in the store's file hold %d bytes of the budget", mem.Held())
 			}
-			if entries, _ := os.ReadDir(dir); len(entries) != 1 { //nolint:errcheck // an unreadable dir fails the check
+			if entries, _ := os.ReadDir(dir); len(entries) != 1 { // an unreadable dir fails the check
 				t.Errorf("%d store files, want 1", len(entries))
 			}
 		} else if mem.Held() == 0 {

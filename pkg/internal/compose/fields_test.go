@@ -280,7 +280,7 @@ func TestTakeContentAndBounds(t *testing.T) {
 		t.Errorf("Bounds of the path = %v, %v", r, ok)
 	}
 	r, ok = m.Bounds(taken[:1])
-	if !ok || r.X != 20 || !(r.Y < 30) || !(r.Width > 0) || !(r.Y+r.Height > 30) {
+	if !ok || r.X != 20 || r.Y >= 30 || r.Width <= 0 || r.Y+r.Height <= 30 {
 		t.Errorf("Bounds of the run = %v, %v", r, ok)
 	}
 	if _, ok := m.Bounds(nil); ok {

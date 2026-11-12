@@ -45,10 +45,10 @@ func TestEncodeImageMatchesOneShot(t *testing.T) {
 			nrgba.SetNRGBA(x, y, c)
 			rgb = append(rgb, c.R, c.G, c.B)
 			alpha = append(alpha, c.A)
-			o := color.RGBA{R: uint8(x), G: uint8(y), B: 7, A: 255} //nolint:gosec // test values under 256
+			o := color.RGBA{R: uint8(x), G: uint8(y), B: 7, A: 255} // test values under 256
 			rgba.SetRGBA(3+x, 5+y, o)
 			opaqueRGB = append(opaqueRGB, o.R, o.G, o.B)
-			g := uint8(x + y) //nolint:gosec // test values under 256
+			g := uint8(x + y) // test values under 256
 			gray.SetGray(x, y, color.Gray{Y: g})
 			grays = append(grays, g)
 		}
@@ -107,7 +107,7 @@ func TestImageSourceDecodeRoundTrip(t *testing.T) {
 	t.Parallel()
 	img := image.NewNRGBA(image.Rect(0, 0, 5, 3))
 	for i := range img.Pix {
-		img.Pix[i] = uint8(i * 17) //nolint:gosec // test values wrap on purpose
+		img.Pix[i] = uint8(i * 17) // test values wrap on purpose
 	}
 	src, err := compose.EncodeImage(context.Background(), img)
 	if err != nil {

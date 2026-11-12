@@ -24,7 +24,7 @@ func buildFace(name string, scale int) *compose.Face {
 	for r := rune(0x20); r <= 0x7E; r++ {
 		adv := (400 + int(r%7)*50) * scale / 100
 		glyphs = append(glyphs, fontbuild.Glyph{
-			Name:    "g" + string(rune('A'+r%26)) + string(rune('a'+r/26)),
+			Name:    "g" + string('A'+r%26) + string('a'+r/26),
 			Unicode: r,
 			Advance: uint16(adv), //nolint:gosec // test advances stay under 2000
 			Empty:   r == ' ',
