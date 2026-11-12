@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"testing"
+	"time"
 )
 
 func TestParseLocaOffsets_Short(t *testing.T) {
@@ -554,5 +555,29 @@ func TestSubsetTTF_RefusesOverlapPastTheProgram(t *testing.T) {
 	}
 	if _, err := subsetTTF(overlappingTTF(1000, 4096, false, 0), every(1000, 1)); err != nil {
 		t.Errorf("a program whose glyphs and tables lie apart: %v", err)
+	}
+}
+
+// TestExpandCompositeClosure_LinearOnAChain locks the walk's cost: a chain
+// of 65,535 composites, each referencing the one before, is read once per
+// glyph. A pass over the whole set per added glyph took about 2 s at
+// 16,000 glyphs and grows with the square of the chain.
+func TestExpandCompositeClosure_LinearOnAChain(t *testing.T) {
+	t.Parallel()
+	const n = 1<<16 - 1
+	glyf := buildSimpleGlyph()
+	offsets := []uint32{0, uint32(len(glyf))}
+	for i := 1; i < n; i++ {
+		glyf = append(glyf, buildCompositeGlyph([]uint16{uint16(i - 1)})...)
+		offsets = append(offsets, uint32(len(glyf))) //nolint:gosec // under 1 MiB
+	}
+	keep := map[uint16]bool{n - 1: true}
+	start := time.Now()
+	expandCompositeClosure(keep, glyf, offsets)
+	if len(keep) != n {
+		t.Errorf("kept %d glyphs, want %d", len(keep), n)
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Errorf("the closure took %v, want well under 5 s", d)
 	}
 }

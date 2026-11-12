@@ -70,8 +70,7 @@ func subsetTTF(raw []byte, keepGIDs map[uint16]bool) ([]byte, error) {
 	}
 
 	// Walk composite glyphs to expand the keep set with transitively
-	// referenced components. Iterate to a fixed point because composites
-	// can reference other composites.
+	// referenced components: composites can reference other composites.
 	expandCompositeClosure(keep, glyfData, offsets)
 
 	// Build the new glyf table: kept glyphs keep their original bytes,
@@ -210,78 +209,80 @@ func encodeLoca(offsets []uint32, useShort bool) []byte {
 	return buf
 }
 
-// expandCompositeClosure walks the glyf table iteratively, expanding the
-// keep set to include the transitively referenced components of every
-// composite glyph currently in the set. Runs to a fixed point so
-// composites that reference other composites are fully covered.
+// expandCompositeClosure expands the keep set to include the transitively
+// referenced components of every composite glyph in it, composites that
+// reference other composites included. Each glyph is read once, from a
+// work list of the glyphs added, so the walk is linear in the glyf table:
+// a pass over the whole set per added glyph would be quadratic on a chain
+// of composites.
 func expandCompositeClosure(keep map[uint16]bool, glyfData []byte, offsets []uint32) {
 	glyfLen := uint32(len(glyfData)) //nolint:gosec // glyf table size fits in uint32
-	for {
-		added := false
-		for gid := range keep {
-			if int(gid)+1 >= len(offsets) {
-				continue
-			}
-			start := offsets[gid]
-			end := offsets[gid+1]
-			// The offsets come from the file's loca table, so they need not be
-			// ordered or in range. Compare them before doing any arithmetic:
-			// start+10 is a uint32 addition, which a loca entry of 0xFFFFFFFF
-			// wraps to 9, past the length test and into a slice that panics.
-			// The rebuild loop rejects start > end too, but this walk runs
-			// first.
-			if start > end || end > glyfLen || end-start <= 10 {
-				// Out of range, or too short to have a composite header.
-				continue
-			}
-			data := glyfData[start:end]
-			numberOfContours := int16(binary.BigEndian.Uint16(data[0:2])) //nolint:gosec // signed by spec
-			if numberOfContours >= 0 {
-				continue // simple glyph, no components
-			}
-			// Composite glyph header:
-			//   int16 numberOfContours (-1)
-			//   int16 xMin, yMin, xMax, yMax (8 bytes)
-			//   then a sequence of components.
-			//
-			// Each component:
-			//   uint16 flags
-			//   uint16 glyphIndex
-			//   (argument bytes, 1 or 2 based on flags)
-			//   (optional transform bytes)
-			//
-			// The walk only reads each component far enough to extract
-			// its glyphIndex. The MORE_COMPONENTS bit (0x0020) indicates
-			// another component follows.
-			pos := 10 // skip the 10-byte header
-			for pos+4 <= len(data) {
-				flags := binary.BigEndian.Uint16(data[pos : pos+2])
-				componentGID := binary.BigEndian.Uint16(data[pos+2 : pos+4])
-				if !keep[componentGID] {
-					keep[componentGID] = true
-					added = true
-				}
-				pos += 4
-				if flags&0x0001 != 0 { // ARG_1_AND_2_ARE_WORDS
-					pos += 4
-				} else {
-					pos += 2
-				}
-				switch {
-				case flags&0x0008 != 0: // WE_HAVE_A_SCALE
-					pos += 2
-				case flags&0x0040 != 0: // WE_HAVE_AN_X_AND_Y_SCALE
-					pos += 4
-				case flags&0x0080 != 0: // WE_HAVE_A_TWO_BY_TWO
-					pos += 8
-				}
-				if flags&0x0020 == 0 { // MORE_COMPONENTS
-					break
-				}
-			}
+	work := make([]uint16, 0, len(keep))
+	for gid := range keep {
+		work = append(work, gid)
+	}
+	for len(work) > 0 {
+		gid := work[len(work)-1]
+		work = work[:len(work)-1]
+		if int(gid)+1 >= len(offsets) {
+			continue
 		}
-		if !added {
-			return
+		start := offsets[gid]
+		end := offsets[gid+1]
+		// The offsets come from the file's loca table, so they need not be
+		// ordered or in range. Compare them before doing any arithmetic:
+		// start+10 is a uint32 addition, which a loca entry of 0xFFFFFFFF
+		// wraps to 9, past the length test and into a slice that panics.
+		// The rebuild loop rejects start > end too, but this walk runs
+		// first.
+		if start > end || end > glyfLen || end-start <= 10 {
+			// Out of range, or too short to have a composite header.
+			continue
+		}
+		data := glyfData[start:end]
+		numberOfContours := int16(binary.BigEndian.Uint16(data[0:2])) //nolint:gosec // signed by spec
+		if numberOfContours >= 0 {
+			continue // simple glyph, no components
+		}
+		// Composite glyph header:
+		//   int16 numberOfContours (-1)
+		//   int16 xMin, yMin, xMax, yMax (8 bytes)
+		//   then a sequence of components.
+		//
+		// Each component:
+		//   uint16 flags
+		//   uint16 glyphIndex
+		//   (argument bytes, 1 or 2 based on flags)
+		//   (optional transform bytes)
+		//
+		// The walk only reads each component far enough to extract
+		// its glyphIndex. The MORE_COMPONENTS bit (0x0020) indicates
+		// another component follows.
+		pos := 10 // skip the 10-byte header
+		for pos+4 <= len(data) {
+			flags := binary.BigEndian.Uint16(data[pos : pos+2])
+			componentGID := binary.BigEndian.Uint16(data[pos+2 : pos+4])
+			if !keep[componentGID] {
+				keep[componentGID] = true
+				work = append(work, componentGID)
+			}
+			pos += 4
+			if flags&0x0001 != 0 { // ARG_1_AND_2_ARE_WORDS
+				pos += 4
+			} else {
+				pos += 2
+			}
+			switch {
+			case flags&0x0008 != 0: // WE_HAVE_A_SCALE
+				pos += 2
+			case flags&0x0040 != 0: // WE_HAVE_AN_X_AND_Y_SCALE
+				pos += 4
+			case flags&0x0080 != 0: // WE_HAVE_A_TWO_BY_TWO
+				pos += 8
+			}
+			if flags&0x0020 == 0 { // MORE_COMPONENTS
+				break
+			}
 		}
 	}
 }
