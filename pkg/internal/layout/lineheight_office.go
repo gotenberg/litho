@@ -168,7 +168,7 @@ func lineContent(l *lineBox) (runs, atomics bool) {
 		switch {
 		case it.atomic != nil:
 			atomics = true
-		case it.text != nil:
+		case it.text != nil && len(it.text.Glyphs) > 0:
 			runs = true
 		}
 	}
