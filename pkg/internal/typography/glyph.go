@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
@@ -500,9 +501,9 @@ func decodeNextCode(font *Font, data []byte) (char string, n int, skip, standIn 
 	if font.Subtype == "Type0" && font.CIDIdentityFallback {
 		char, standIn = resolveGlyphFallback(font, data, &n)
 	} else if r, ok := type0TableRune(font, data); ok {
-		char, n = string(r), 2
+		char, n = runeString(r), 2
 	} else if r, ok := font.Encoding[data[0]]; ok {
-		char = string(r)
+		char = runeString(r)
 	} else {
 		char, standIn = resolveGlyphFallback(font, data, &n)
 	}
@@ -515,6 +516,23 @@ func decodeNextCode(font *Font, data []byte) (char string, n int, skip, standIn 
 		char, standIn = " ", false
 	}
 	return char, n, false, standIn
+}
+
+// asciiStrings holds the one-character string of each ASCII character, so
+// [runeString] returns one without allocating.
+var asciiStrings = func() (t [utf8.RuneSelf]string) {
+	for i := range t {
+		t[i] = string(rune(i))
+	}
+	return t
+}()
+
+// runeString returns string(r), shared rather than allocated when r is ASCII.
+func runeString(r rune) string {
+	if r >= 0 && r < utf8.RuneSelf {
+		return asciiStrings[r]
+	}
+	return string(r)
 }
 
 // encodingCIDTableChar reads code, which a Type 0 font's encoding CMap splits
