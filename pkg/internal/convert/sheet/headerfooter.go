@@ -230,6 +230,9 @@ func (b *builder) measureBlock(n *layout.Node, w float64) float64 {
 		MaxPages: maxSubPages,
 	})
 	if err != nil {
+		// A block that cannot be laid out takes no room: the caller keeps
+		// its default height, and a cancelled ctx fails the conversion at
+		// Convert's next check.
 		return 0
 	}
 	return res.Extents[n.ID].Height

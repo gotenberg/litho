@@ -61,8 +61,6 @@ type Format struct {
 	// excel reports a format that shows values as Excel does
 	// ([Format.Excel]).
 	excel bool
-	// explicitThird reports a code with three or more sections; with a
-	// condition and two sections, the third is General.
 }
 
 // General is the General format.

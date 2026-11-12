@@ -85,7 +85,7 @@ func (o *pivotOut) setStyle(c1, r1, c2, r2 int, s pivotStyle) {
 	}
 }
 
-// line returns a solid black frame line of width w.
+// frameLine returns a solid black frame line of width w.
 func frameLine(w float64) Border {
 	return Border{Line: LineSolid, Width: w, Color: css.Color{A: 1}}
 }

@@ -129,7 +129,6 @@ func (sp *sheetPlan) layoutPages(a Range, zoom int) ([]band, []band, [][]bool) {
 			rowBreak[r] = true
 		}
 	}
-	// Columns.
 	starts := map[int]bool{}
 	var repC *band
 	if rc := ps.RepeatColumns; rc != nil {
@@ -179,7 +178,6 @@ func (sp *sheetPlan) layoutPages(a Range, zoom int) ([]band, []band, [][]bool) {
 	if vis {
 		cols = append(cols, band{from, a.LastColumn})
 	}
-	// Rows.
 	var repR *band
 	if rr := ps.RepeatRows; rr != nil {
 		repR = &band{first: min(max(rr.FirstRow, 0), maxRows-1), last: min(max(rr.LastRow, 0), maxRows-1)}
@@ -350,8 +348,8 @@ func (sp *sheetPlan) zoomFor(a Range) int {
 	return zoom
 }
 
-// plan returns the pages of the sheet: per print range, its zoom, then
-// its pages in the sheet's page order.
+// plan fills the pages of the sheet: per print range, its zoom, then its
+// pages in the sheet's page order.
 func (sp *sheetPlan) plan() {
 	g := sp.g
 	ps := &g.sh.Page

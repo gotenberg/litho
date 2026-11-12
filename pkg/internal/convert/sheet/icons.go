@@ -149,7 +149,7 @@ func shapeOf(ops []compose.PathOp, fill, line compose.Color) compose.Fragment {
 	return p
 }
 
-// stroke returns the open path ops stroked in c, w pixels wide.
+// strokeOf returns the open path ops stroked in c, w pixels wide.
 func strokeOf(ops []compose.PathOp, c compose.Color, w float64) compose.Fragment {
 	return &compose.Path{Ops: ops, Stroke: &compose.Stroke{Color: c, Width: w, Cap: compose.RoundCap, Join: compose.RoundJoin}}
 }

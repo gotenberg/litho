@@ -131,7 +131,7 @@ const (
 	secText                        // @ with literals
 )
 
-// The standard colours of the colour keywords (LibreOffice
+// namedColors are the standard colours of the colour keywords (LibreOffice
 // svl/source/numbers/zforscan.cxx, StandardColor: COL_BLACK, COL_LIGHTBLUE,
 // COL_LIGHTGREEN, COL_LIGHTCYAN, COL_LIGHTRED, COL_LIGHTMAGENTA, COL_BROWN,
 // COL_GRAY, COL_YELLOW, COL_WHITE).

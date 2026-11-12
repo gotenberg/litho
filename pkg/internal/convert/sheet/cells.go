@@ -72,7 +72,7 @@ func quote(s string) string {
 	return "\"" + s + "\""
 }
 
-// value returns the numfmt value of v.
+// numValue returns the numfmt value of v.
 func numValue(v Value) numfmt.Value {
 	switch v.Kind {
 	case Number:

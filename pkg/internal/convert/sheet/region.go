@@ -20,7 +20,7 @@ func (rg *region) y(g *grid, r int) float64 {
 	return rg.y0 + g.rowY(r) - g.rowY(rg.rows.first)
 }
 
-// span returns the width of the columns [a, b].
+// spanW returns the width of the columns [a, b].
 func (g *grid) spanW(a, b int) float64 {
 	return g.colX(b+1) - g.colX(a)
 }

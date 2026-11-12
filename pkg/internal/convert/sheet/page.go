@@ -44,7 +44,7 @@ func (b *builder) style() *css.Style {
 	return st
 }
 
-// regions returns the page's regions: the repeated rows over the repeated
+// layoutRegions returns the page's regions: the repeated rows over the repeated
 // columns, the repeated rows over the band, the band's rows beside the
 // repeated columns, the band, after the headings.
 func (b *pageBuilder) layoutRegions() []*region {
