@@ -265,8 +265,7 @@ func TestRunKerning(t *testing.T) {
 }
 
 // TestJustifyShrink shrinks the spaces of justified lines in Word 2013's
-// compatibility mode and later, as LibreOffice lays them out, and not
-// before.
+// compatibility mode and later, as Word lays them out, and not before.
 func TestJustifyShrink(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -274,7 +273,7 @@ func TestJustifyShrink(t *testing.T) {
 		compat string
 		want   float64
 	}{
-		{"word 2013", "15", 0.25},
+		{"word 2013", "15", 0.22},
 		{"word 2010", "14", 0},
 		{"none", "", 0},
 	}

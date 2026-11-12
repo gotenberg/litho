@@ -1060,12 +1060,12 @@ type Style struct {
 	PageClamp bool
 	// JustifyShrink is the share of its width a word separator of a
 	// justified line may give up, 0 for none: a justified block container
-	// breaks a line where its text fits once the separators the line
-	// holds, and one more, are that much narrower, and justification
-	// shrinks them to fit, as LibreOffice lays out WordprocessingML of
-	// Word 2013's compatibility mode and later (MS-DOCX, 2.3.4
-	// compatibilityMode 15: its JustifyLinesWithShrinking, 0.25). A line
-	// holding a tab does not shrink. No CSS property sets it.
+	// takes one more word on a line when it fits once the separators the
+	// line holds, and the one before it, are that much narrower and two
+	// thirds of the word and its separator fit before them, and
+	// justification shrinks them to fit, as Word lays out WordprocessingML of Word 2013's compatibility
+	// mode and later (MS-DOCX, 2.3.4 compatibilityMode 15). A line holding
+	// a tab does not shrink. No CSS property sets it.
 	JustifyShrink float64
 	// TextScale scales the glyphs of the text horizontally, 1 for the
 	// natural width, 0 for 1 (WordprocessingML w, ODF style:text-scale). No

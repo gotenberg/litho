@@ -190,3 +190,78 @@ func isCJKIdeographOrSymbol(r rune) bool {
 	}
 	return false
 }
+
+// shrinkWordOverflow is the share of the word a shrinking justified line
+// takes, with the space before it, that may reach past the line's end at
+// natural spacing: Word moves a word onto a line by narrowing the spaces
+// only when at least two thirds of it and its space fit unshrunk, a
+// measurement of Word, which ECMA-376 leaves to the application (Part 1,
+// 17.18.44 ST_Jc both).
+//
+// # Corpus evidence
+//
+//   - litho/docx paper-*: of 345 lines Word justifies in Calibri 11 points
+//     across the paper matrix, a rule of at most 22% of each space and at
+//     most a third of the word and its space past the end breaks 337 as
+//     Word does; the space limit alone breaks 286, LibreOffice's 25%
+//     alone 254. Most of the 8 others are within the difference between
+//     Calibri's hinted advances, which Word lays out with, and Carlito's.
+const shrinkWordOverflow = 1.0 / 3
+
+// shrinkBreak returns where the justified line from start breaks when its
+// word separators may shrink (css.Style.JustifyShrink), end being where it
+// breaks at natural spacing. The line takes the next word when the part
+// of it past avail fits in the room the separators give up, that is
+// JustifyShrink of each, and is at most shrinkWordOverflow of the width
+// of the word and the spaces before it. It takes one word at most, and none from a line holding a tab.
+func (e *engine) shrinkBreak(p *ifcPara, w []float64, start, end int, x0, avail float64, root *box, org float64) int {
+	spaces, space := 0, 0.0
+	for i := start; i < end; i++ {
+		if p.infos[p.p.RunOf(i)].kind == runTab {
+			return end
+		}
+		if p.p.Rune(i) == ' ' {
+			spaces++
+			space = w[i]
+		}
+	}
+	for i := end - 1; i >= start && p.p.Rune(i) == ' '; i-- {
+		spaces--
+	}
+	if spaces <= 0 || space <= 0 {
+		return end
+	}
+	more := root.st.JustifyShrink * space * float64(spaces+1)
+	end2, fits := e.breakLineIn(p, w, start, x0, avail+more, root, org)
+	if !fits || end2 <= end {
+		return end
+	}
+	next := end + 1
+	for next < end2 && !p.allowed(next) {
+		next++
+	}
+	for i := start; i < next; i++ {
+		if p.infos[p.p.RunOf(i)].kind == runTab {
+			return end
+		}
+	}
+	last := next
+	for last > end && p.hangs(last-1) {
+		last--
+	}
+	from := end
+	for from > start && p.p.Rune(from-1) == ' ' {
+		from--
+	}
+	x, word := x0, 0.0
+	for i := start; i < last; i++ {
+		x += w[i]
+		if i >= from {
+			word += w[i]
+		}
+	}
+	if x-avail > shrinkWordOverflow*word+eps {
+		return end
+	}
+	return next
+}

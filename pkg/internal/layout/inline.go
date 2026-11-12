@@ -307,30 +307,7 @@ func (e *engine) breakLine(p *ifcPara, w []float64, start int, x0, avail float64
 	if !fits || end >= p.p.Len() || root == nil || root.st.JustifyShrink <= 0 || lineAlign(root.st, false) != css.AlignJustify {
 		return end, fits
 	}
-	// A justified line whose word separators may shrink takes the text
-	// that fits once they, and the one before the next word, are that
-	// much narrower (css.Style.JustifyShrink).
-	spaces, space := 0, 0.0
-	for i := start; i < end; i++ {
-		if p.infos[p.p.RunOf(i)].kind == runTab {
-			return end, fits
-		}
-		if p.p.Rune(i) == ' ' {
-			spaces++
-			space = w[i]
-		}
-	}
-	for i := end - 1; i >= start && p.p.Rune(i) == ' '; i-- {
-		spaces--
-	}
-	if spaces <= 0 || space <= 0 {
-		return end, fits
-	}
-	more := root.st.JustifyShrink * space * float64(spaces+1)
-	if end2, fits2 := e.breakLineIn(p, w, start, x0, avail+more, root, org); fits2 && end2 > end {
-		return end2, true
-	}
-	return end, fits
+	return e.shrinkBreak(p, w, start, end, x0, avail, root, org), true
 }
 
 // breakLineIn returns where the line from start breaks in avail, as

@@ -8,8 +8,11 @@ import (
 
 // TestJustifyShrink lets a justified line take the word that fits once its
 // spaces, and the one before that word, give up their JustifyShrink share,
-// and shrinks the spaces to fit; a line with no room even so, a line
-// holding a tab and a container that does not justify break as before.
+// when no more than a third of the word and its space reaches past the
+// line's end, and
+// shrinks the spaces to fit; a line with no room even so, a word reaching
+// further, a line holding a tab and a container that does not justify
+// break as before.
 func TestJustifyShrink(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -23,6 +26,11 @@ func TestJustifyShrink(t *testing.T) {
 		// may give up 2.5px each, 5px, and the two spaces shrink by 2px.
 		{"shrinks", "aa bb cc dd", 76, css.AlignJustify, "aa bb cc", []float64{0, 10, 28, 38, 56, 66}},
 		{"no room", "aa bb cc dd", 74, css.AlignJustify, "aa bb", nil},
+		// "a a a a a a bb" is 140px: in 131px " bb" reaches 9px past the
+		// end, under a third of its 30px; in 129px 11px, within the 15px
+		// the six spaces give up but over a third.
+		{"word fits", "a a a a a a bb cc", 131, css.AlignJustify, "a a a a a a bb", nil},
+		{"word reaches", "a a a a a a bb cc", 129, css.AlignJustify, "a a a a a a", nil},
 		{"tab", "aa\tbb cc dd", 76, css.AlignJustify, "aabb", nil},
 		{"start", "aa bb cc dd", 76, css.AlignStart, "aa bb", nil},
 	}
