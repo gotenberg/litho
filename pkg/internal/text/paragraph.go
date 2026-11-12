@@ -426,6 +426,9 @@ func (p *Paragraph) convert(st *layoutState, out *shaping.Output, run int, style
 		}
 		it.face = cf
 		it.stroke, it.skew = synthesis(requestOf(style), fc, style.Size)
+		if m, ok := fc.wordMetrics(style, style.Size); ok {
+			it.ascent, it.descent, it.gap = m.Ascent, m.Descent, m.LineGap
+		}
 	}
 	if upem := float64(out.Face.Upem()); upem > 0 {
 		k := style.Size / upem

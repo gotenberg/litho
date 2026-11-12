@@ -108,6 +108,14 @@ type Style struct {
 	// feature at 0, which turns off the GPOS kern feature and the kern
 	// table alike. The default kerns.
 	NoKerning bool
+	// WordMetrics gives the line box of a run the vertical metrics Word
+	// lays a Microsoft face out with when a metric-compatible stand-in
+	// draws the face the style names, as Word prints WordprocessingML:
+	// its ascent and descent, and no line gap. Only the line box changes:
+	// the glyphs keep the stand-in's outlines and advances. A face whose
+	// stand-in records Word's metrics keeps them, and when the index
+	// holds the named face itself, it draws the run and nothing changes.
+	WordMetrics bool
 }
 
 // kernOff is the feature list that shapes without kerning (OpenType
