@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // MaxXMLTokenBytes caps the bytes of a package part an XML decoder reads
@@ -46,7 +48,7 @@ func NewTokenReader(r io.Reader, limit int64) *TokenReader {
 func (t *TokenReader) Mark() { t.since = 0 }
 
 // ReadByte returns the next byte, failing with an error wrapping
-// [ErrInputTooLarge] past the cap of one token.
+// [limits.ErrInputTooLarge] past the cap of one token.
 func (t *TokenReader) ReadByte() (byte, error) {
 	if t.since >= t.limit {
 		return 0, t.tooLarge()
@@ -58,7 +60,7 @@ func (t *TokenReader) ReadByte() (byte, error) {
 	return b, err // the decoder reports io.EOF as the end of the part: wrapping would hide it
 }
 
-// Read reads into p, failing with an error wrapping [ErrInputTooLarge]
+// Read reads into p, failing with an error wrapping [limits.ErrInputTooLarge]
 // past the cap of one token.
 func (t *TokenReader) Read(p []byte) (int, error) {
 	room := t.limit - t.since
@@ -75,5 +77,5 @@ func (t *TokenReader) Read(p []byte) (int, error) {
 
 // tooLarge is the error past the cap.
 func (t *TokenReader) tooLarge() error {
-	return fmt.Errorf("%w: an XML token past %d bytes", ErrInputTooLarge, t.limit)
+	return fmt.Errorf("%w: an XML token past %d bytes", limits.ErrInputTooLarge, t.limit)
 }

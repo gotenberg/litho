@@ -3,7 +3,6 @@ package sheet
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"math"
 
@@ -83,9 +82,9 @@ func (b *builder) warnOnce(code, msg string) {
 // size of its content, OmitOutline leaves the
 // sheet outline out, PrintDate fills the date and time fields of the
 // headers and footers, MaxPages caps the pages. It returns ctx's error
-// when ctx ends first, office.ErrInvalidOptions for options out of range
+// when ctx ends first, typeset.ErrInvalidOptions for options out of range
 // or a nil fonts or doc, text.ErrNoFonts for an index without faces, and
-// office.ErrTooManyPages past the page cap. The output depends on doc,
+// limits.ErrTooManyPages past the page cap. The output depends on doc,
 // fonts' index and opts alone.
 //
 // # Pages
@@ -140,7 +139,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		return nil, err
 	}
 	if doc == nil || fonts == nil {
-		return nil, fmt.Errorf("%w: no document or no font index", office.ErrInvalidOptions)
+		return nil, fmt.Errorf("%w: no document or no font index", typeset.ErrInvalidOptions)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -177,7 +176,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		starts = append(starts, len(pages))
 		pages = append(pages, sp.pages...)
 		if len(pages) > limit {
-			return nil, fmt.Errorf("%w: more than %d pages", office.ErrTooManyPages, limit)
+			return nil, fmt.Errorf("%w: more than %d", limits.ErrTooManyPages, limit)
 		}
 	}
 	// Page numbers: each sheet from its first page number, else on from
@@ -387,9 +386,6 @@ func (b *builder) renderPage(p *pagePlan, first bool, total int) (*typeset.Page,
 	pb := &pageBuilder{builder: b, g: sp.g, p: p}
 	frags, links, st, err := pb.build()
 	if err != nil {
-		if errors.Is(err, layout.ErrTooManyPages) {
-			return nil, nil, fmt.Errorf("%w: %w", office.ErrTooManyPages, err)
-		}
 		return nil, nil, err
 	}
 	ps := &sp.g.sh.Page

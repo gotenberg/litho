@@ -15,28 +15,28 @@ import (
 // Convert reads the ODS package, or the flat FODS document, src holds and
 // lays it out as a paged document, with the fonts of the index fonts. It
 // returns ctx's error when ctx ends first, and the errors office.Options
-// documents: office.ErrInvalidOptions for options out of range or a nil
+// documents: typeset.ErrInvalidOptions for options out of range or a nil
 // fonts, text.ErrNoFonts for an index without faces, office.ErrEncrypted
 // for an encrypted package opts.Password does not open, office.ErrMalformed
 // for a document that is not an OpenDocument spreadsheet,
-// office.ErrInputTooLarge past a size cap and office.ErrTooManyPages past
+// limits.ErrInputTooLarge past a size cap and limits.ErrTooManyPages past
 // the page cap. The output depends on src, fonts' index and opts alone.
 func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*typeset.Document, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
 	if fonts == nil {
-		return nil, fmt.Errorf("%w: no font index", office.ErrInvalidOptions)
+		return nil, fmt.Errorf("%w: no font index", typeset.ErrInvalidOptions)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if fonts.Len() == 0 {
-		return nil, fmt.Errorf("converting ODS: %w", text.ErrNoFonts)
+		return nil, text.ErrNoFonts
 	}
 	data, err := office.ReadAll(ctx, src, opts.MaxInputBytes)
 	if err != nil {
-		return nil, fmt.Errorf("reading ODS: %w", err)
+		return nil, err
 	}
 	doc, warnings, err := Read(ctx, data, fonts, opts)
 	if err != nil {
@@ -60,16 +60,16 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Options) (*sheet.Document, []typeset.Warning, error) {
 	pkg, err := odf.Open(ctx, data, odf.Options{Password: opts.Password})
 	if err != nil {
-		return nil, nil, fmt.Errorf("reading ODS: %w", err)
+		return nil, nil, fmt.Errorf("opening the package: %w", err)
 	}
 	switch pkg.MimeType {
 	case "", odf.MimeSpreadsheet, odf.MimeSpreadsheetTemplate:
 	default:
-		return nil, nil, fmt.Errorf("reading ODS: %w: the document is %q, not a spreadsheet", office.ErrMalformed, pkg.MimeType)
+		return nil, nil, fmt.Errorf("%w: the document is %q, not a spreadsheet", office.ErrMalformed, pkg.MimeType)
 	}
 	body := odf.Section(pkg.Content, "body").Child(odf.NSOffice, "spreadsheet")
 	if body == nil {
-		return nil, nil, fmt.Errorf("reading ODS: %w: the document has no office:spreadsheet body", office.ErrMalformed)
+		return nil, nil, fmt.Errorf("%w: the document has no office:spreadsheet body", office.ErrMalformed)
 	}
 	r := newReader(ctx, pkg, fonts)
 	r.paperW, r.paperH = opts.DefaultPage(sheet.FallbackWidth, sheet.FallbackHeight)

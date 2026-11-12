@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/html"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestParseTemplate_Check(t *testing.T) {
@@ -47,7 +48,7 @@ func TestParseTemplate_Check(t *testing.T) {
 		switch {
 		case tc.want == "" && err != nil:
 			t.Errorf("%s: %v", name, err)
-		case tc.want != "" && (!errors.Is(err, html.ErrInvalidOptions) || !strings.Contains(err.Error(), tc.want)):
+		case tc.want != "" && (!errors.Is(err, typeset.ErrInvalidOptions) || !strings.Contains(err.Error(), tc.want)):
 			t.Errorf("%s: %v, want an invalid option naming %q", name, err, tc.want)
 		}
 	}
@@ -62,7 +63,7 @@ func TestParseTemplate_ExpansionBound(t *testing.T) {
 		b.WriteString(`{{ define "l` + string(rune('a'+i)) + `" }}{{ template "l` + string(rune('b'+i)) + `" }}{{ template "l` + string(rune('b'+i)) + `" }}{{ end }}`)
 	}
 	b.WriteString(`{{ define "l` + string(rune('a'+24)) + `" }}x{{ end }}{{ template "la" }}{{ toHTML }}`)
-	if _, err := parseTemplate(b.String()); !errors.Is(err, html.ErrInvalidOptions) || !strings.Contains(err.Error(), "expands past") {
+	if _, err := parseTemplate(b.String()); !errors.Is(err, typeset.ErrInvalidOptions) || !strings.Contains(err.Error(), "expands past") {
 		t.Errorf("exponential expansion: %v", err)
 	}
 }
@@ -96,7 +97,7 @@ func TestRender_Fails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := tmpl.render(ctx, body, title, int64(len(body))+10); !errors.Is(err, html.ErrInputTooLarge) {
+	if _, _, err := tmpl.render(ctx, body, title, int64(len(body))+10); !errors.Is(err, limits.ErrInputTooLarge) {
 		t.Errorf("past the cap: %v", err)
 	}
 	cctx, cancel := context.WithCancel(ctx)
@@ -109,7 +110,7 @@ func TestRender_Fails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := bad.render(ctx, body, title, 1<<20); !errors.Is(err, html.ErrInvalidOptions) {
+	if _, _, err := bad.render(ctx, body, title, 1<<20); !errors.Is(err, typeset.ErrInvalidOptions) {
 		t.Errorf("escaping error: %v", err)
 	}
 }
@@ -149,7 +150,7 @@ func TestConvert_Template(t *testing.T) {
 		t.Errorf("pages %d, first %vx%v", len(doc.Pages), doc.Pages[0].Width, doc.Pages[0].Height)
 	}
 	// The template is checked before the source is read.
-	if _, err := Convert(ctx, failingReader{}, ahem(t), Options{Template: "<p></p>"}); !errors.Is(err, html.ErrInvalidOptions) {
+	if _, err := Convert(ctx, failingReader{}, ahem(t), Options{Template: "<p></p>"}); !errors.Is(err, typeset.ErrInvalidOptions) {
 		t.Errorf("no toHTML: %v", err)
 	}
 }
@@ -166,13 +167,13 @@ func FuzzTemplate(f *testing.F) {
 	f.Fuzz(func(t *testing.T, text string) {
 		tmpl, err := parseTemplate(text)
 		if err != nil {
-			if !errors.Is(err, html.ErrInvalidOptions) {
+			if !errors.Is(err, typeset.ErrInvalidOptions) {
 				t.Fatalf("parse: %v", err)
 			}
 			return
 		}
 		_, _, err = tmpl.render(context.Background(), body, title, 1<<16)
-		if err != nil && !errors.Is(err, html.ErrInvalidOptions) && !errors.Is(err, html.ErrInputTooLarge) {
+		if err != nil && !errors.Is(err, typeset.ErrInvalidOptions) && !errors.Is(err, limits.ErrInputTooLarge) {
 			t.Fatalf("render: %v", err)
 		}
 	})

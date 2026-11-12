@@ -19,8 +19,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/plaintext"
 	"github.com/gotenberg/litho/pkg/internal/convert/pptx"
 	"github.com/gotenberg/litho/pkg/internal/convert/xlsx"
-	"github.com/gotenberg/litho/pkg/internal/css"
-	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -478,7 +476,7 @@ func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ 
 	budget := o.limits.internal().WithDefaults()
 	ctx, mem, endBudget := limits.WithBudget(ctx, budget)
 	defer endBudget()
-	defer func() { err = convertBudgetError(o.logger, mem, err) }()
+	defer func() { err = convertBudgetError(o.logger, name, mem, err) }()
 	src := &chargedReader{r: c.src, b: mem}
 	// The pictures of a large document wait for the file in a temp file of
 	// their own, removed on every path once the file is written.
@@ -597,8 +595,7 @@ func (o *convertConfig) margins() (top, right, bottom, left float64) {
 }
 
 // convertPlainText lays a text source out, handing its pages to sink as it
-// makes them, mapping the text converter's errors onto the public
-// sentinels.
+// makes them. Its errors wrap the public sentinels themselves.
 func convertPlainText(ctx context.Context, src io.Reader, fonts *text.Fonts, o *convertConfig, maxBytes int64, maxPages int, sink typeset.PageSink) (*typeset.Document, error) {
 	w, h := o.turned(o.basePaper())
 	top, right, bottom, left := o.margins()
@@ -618,21 +615,17 @@ func convertPlainText(ctx context.Context, src io.Reader, fonts *text.Fonts, o *
 		DefaultLang:   o.defaultLang,
 		Sink:          sink,
 	})
-	switch {
-	case errors.Is(err, plaintext.ErrInvalidOptions):
-		err = fmt.Errorf("converting text: %w: %w", ErrInvalidConvertOptions, err)
-	case errors.Is(err, plaintext.ErrInputTooLarge):
-		err = fmt.Errorf("converting text: %w: %w", ErrConvertInputTooLarge, err)
-	case err != nil:
+	if err != nil {
+		// The converter's errors wrap the public sentinels themselves.
 		err = fmt.Errorf("converting text: %w", err)
 	}
 	return doc, err
 }
 
-// convertHTML lays an HTML or Markdown source out, mapping the HTML
-// converter's errors onto the public sentinels: its option errors to
+// convertHTML lays an HTML or Markdown source out. Its errors wrap the
+// public sentinels themselves: its option errors
 // [ErrInvalidConvertOptions], every cap on the document's size or
-// complexity to [ErrConvertInputTooLarge], its page cap to
+// complexity [ErrConvertInputTooLarge], its page cap
 // [ErrConvertTooManyPages].
 func convertHTML(ctx context.Context, src io.Reader, kind convertKind, fonts *text.Fonts, o *convertConfig, maxBytes int64, maxPages int) (*typeset.Document, error) {
 	// The converter takes the paper as a portrait sheet and a landscape
@@ -686,27 +679,19 @@ func convertHTML(ctx context.Context, src io.Reader, kind convertKind, fonts *te
 	} else {
 		doc, err = htmlconv.Convert(ctx, src, fonts, opts)
 	}
-	switch {
-	case err == nil:
-		return doc, nil
-	case errors.Is(err, htmlconv.ErrInvalidOptions):
-		return nil, fmt.Errorf("converting %s: %w: %w", name, ErrInvalidConvertOptions, err)
-	case errors.Is(err, htmlconv.ErrInputTooLarge), errors.Is(err, htmlconv.ErrTooManyElements), errors.Is(err, htmlconv.ErrTooDeep),
-		errors.Is(err, css.ErrTooComplex), errors.Is(err, layout.ErrTooManyBoxes):
-		return nil, fmt.Errorf("converting %s: %w: %w", name, ErrConvertInputTooLarge, err)
-	case errors.Is(err, htmlconv.ErrTooManyPages):
-		return nil, fmt.Errorf("converting %s: %w: %w", name, ErrConvertTooManyPages, err)
-	default:
+	if err != nil {
+		// The converter's errors wrap the public sentinels themselves.
 		return nil, fmt.Errorf("converting %s: %w", name, err)
 	}
+	return doc, nil
 }
 
 // convertOffice lays an Office source out, handing its pages to sink as a
-// converter that streams makes them, mapping the Office converters' errors
-// onto the public sentinels: their option errors to
-// [ErrInvalidConvertOptions], their size caps to [ErrConvertInputTooLarge],
-// their page cap to [ErrConvertTooManyPages], a package that is not one to
-// [ErrConvertMalformed], an encrypted one to [ErrConvertEncrypted].
+// converter that streams makes them. Its errors wrap the public sentinels
+// themselves: its option errors [ErrInvalidConvertOptions], its size caps
+// [ErrConvertInputTooLarge], its page cap [ErrConvertTooManyPages], a
+// package that is not one [ErrConvertMalformed], an encrypted one
+// [ErrConvertEncrypted].
 func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *text.Fonts, o *convertConfig, maxBytes int64, maxPages int, sink typeset.PageSink) (*typeset.Document, error) {
 	name := kind.name()
 	var conv func(context.Context, io.Reader, *text.Fonts, office.Options) (*typeset.Document, error)
@@ -766,19 +751,11 @@ func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *
 		opts.CSVSeparators = o.csvSeparators
 	}
 	doc, err := conv(ctx, src, fonts, opts)
-	switch {
-	case err == nil:
-		return doc, nil
-	case errors.Is(err, office.ErrInvalidOptions):
-		return nil, fmt.Errorf("converting %s: %w: %w", name, ErrInvalidConvertOptions, err)
-	case errors.Is(err, office.ErrInputTooLarge), errors.Is(err, layout.ErrTooManyBoxes):
-		return nil, fmt.Errorf("converting %s: %w: %w", name, ErrConvertInputTooLarge, err)
-	case errors.Is(err, office.ErrTooManyPages):
-		return nil, fmt.Errorf("converting %s: %w: %w", name, ErrConvertTooManyPages, err)
-	default:
-		// ErrMalformed and ErrEncrypted are the public sentinels themselves.
+	if err != nil {
+		// The converters' errors wrap the public sentinels themselves.
 		return nil, fmt.Errorf("converting %s: %w", name, err)
 	}
+	return doc, nil
 }
 
 // selectPages makes stream write the pages that o's page range

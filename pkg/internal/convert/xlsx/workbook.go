@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
@@ -51,7 +52,7 @@ func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document,
 			continue
 		}
 		if len(doc.Sheets) >= maxSheets {
-			return fmt.Errorf("%w: more than %d sheets", office.ErrInputTooLarge, maxSheets)
+			return fmt.Errorf("%w: more than %d sheets", limits.ErrInputTooLarge, maxSheets)
 		}
 		index := len(doc.Sheets)
 		sh := &sheet.Sheet{Name: attr(s, "name")}

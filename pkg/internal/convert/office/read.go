@@ -14,7 +14,7 @@ const DefaultMaxInputBytes = limits.DefaultMaxConvertInputBytes
 
 // ReadAll reads src to its end, at most maxBytes bytes
 // ([DefaultMaxInputBytes] when maxBytes is zero), and fails with
-// [ErrInputTooLarge] past that. A package is a zip archive, whose central
+// [limits.ErrInputTooLarge] past that. A package is a zip archive, whose central
 // directory sits at its end, so a converter reads the whole source before
 // it opens it. It returns ctx's error when ctx ends first.
 func ReadAll(ctx context.Context, src io.Reader, maxBytes int64) ([]byte, error) {
@@ -29,7 +29,7 @@ func ReadAll(ctx context.Context, src io.Reader, maxBytes int64) ([]byte, error)
 		return nil, fmt.Errorf("reading the source: %w", err)
 	}
 	if int64(len(data)) > maxBytes {
-		return nil, fmt.Errorf("%w: source exceeds %d bytes", ErrInputTooLarge, maxBytes)
+		return nil, fmt.Errorf("%w: source exceeds %d bytes", limits.ErrInputTooLarge, maxBytes)
 	}
 	return data, nil
 }

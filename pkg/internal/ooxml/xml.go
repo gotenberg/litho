@@ -150,7 +150,7 @@ func attrOr(e *Element, local string) string {
 // content of its first mc:Choice whose Requires names only namespaces of
 // understood, else by its mc:Fallback (ECMA-376 Part 3, 10.2). It fails
 // with [ErrNoPart] for a missing part, office.ErrMalformed for XML that
-// does not parse or declares a document type, and office.ErrInputTooLarge
+// does not parse or declares a document type, and limits.ErrInputTooLarge
 // past [MaxElements] for the package or [MaxDepth].
 func (p *Package) ParseXML(ctx context.Context, name string, understood []string) (*Element, error) {
 	// The decoder reads the part as it inflates, one token at a time: no
@@ -201,7 +201,7 @@ func parse(ctx context.Context, in *office.TokenReader, understood []string, cou
 		if errors.Is(err, io.EOF) {
 			break
 		}
-		if errors.Is(err, office.ErrInputTooLarge) || errors.Is(err, office.ErrMalformed) {
+		if errors.Is(err, limits.ErrInputTooLarge) || errors.Is(err, office.ErrMalformed) {
 			return nil, err
 		}
 		if err != nil {
@@ -212,7 +212,7 @@ func parse(ctx context.Context, in *office.TokenReader, understood []string, cou
 		case xml.StartElement:
 			*count++
 			if *count > MaxElements {
-				return nil, fmt.Errorf("%w: more than %d XML elements", office.ErrInputTooLarge, MaxElements)
+				return nil, fmt.Errorf("%w: more than %d XML elements", limits.ErrInputTooLarge, MaxElements)
 			}
 			if *count%elementsPerCharge == 0 {
 				if err := mem.ChargeUnits(elementsPerCharge, limits.XMLElementCost, "XML trees"); err != nil {
@@ -223,7 +223,7 @@ func parse(ctx context.Context, in *office.TokenReader, understood []string, cou
 				}
 			}
 			if len(stack) > MaxDepth {
-				return nil, fmt.Errorf("%w: XML nested deeper than %d", office.ErrInputTooLarge, MaxDepth)
+				return nil, fmt.Errorf("%w: XML nested deeper than %d", limits.ErrInputTooLarge, MaxDepth)
 			}
 			parent := stack[len(stack)-1]
 			ns := parent.ns

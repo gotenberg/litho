@@ -46,7 +46,7 @@
 // Every function fails with office.ErrEncrypted when the password is wrong
 // or empty, or when the document uses a scheme this package does not read;
 // with office.ErrMalformed when the container or its encryption descriptor
-// cannot be read; with office.ErrInputTooLarge when a decrypted entry passes
+// cannot be read; with limits.ErrInputTooLarge when a decrypted entry passes
 // its cap. The message says which.
 //
 // # Cost

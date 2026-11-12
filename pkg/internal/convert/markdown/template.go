@@ -8,8 +8,8 @@ import (
 	"html/template"
 	"text/template/parse"
 
-	"github.com/gotenberg/litho/pkg/internal/convert/html"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // DefaultTemplate is the template a Markdown document renders into when
@@ -48,23 +48,23 @@ type pageTemplate struct {
 }
 
 // parseTemplate parses text, [DefaultTemplate] when empty, and checks it
-// (see [checkTemplate]). An error wraps [html.ErrInvalidOptions].
+// (see [checkTemplate]). An error wraps [typeset.ErrInvalidOptions].
 func parseTemplate(text string) (*pageTemplate, error) {
 	if text == "" {
 		text = DefaultTemplate
 	}
 	if len(text) > maxTemplateBytes {
-		return nil, fmt.Errorf("%w: the Markdown template is longer than %d bytes", html.ErrInvalidOptions, maxTemplateBytes)
+		return nil, fmt.Errorf("%w: the template is longer than %d bytes", typeset.ErrInvalidOptions, maxTemplateBytes)
 	}
 	p := &pageTemplate{}
 	t, err := template.New("markdown").Funcs(template.FuncMap{
 		templateFunc: func() template.HTML { return p.body },
 	}).Parse(text)
 	if err != nil {
-		return nil, fmt.Errorf("%w: parsing the Markdown template: %w", html.ErrInvalidOptions, err)
+		return nil, fmt.Errorf("%w: parsing the template: %w", typeset.ErrInvalidOptions, err)
 	}
 	if err := checkTemplate(t); err != nil {
-		return nil, fmt.Errorf("%w: Markdown template: %w", html.ErrInvalidOptions, err)
+		return nil, fmt.Errorf("%w: the template: %w", typeset.ErrInvalidOptions, err)
 	}
 	p.t = t
 	return p, nil
@@ -73,8 +73,8 @@ func parseTemplate(text string) (*pageTemplate, error) {
 // render executes the template on body and title, into at most maxBytes
 // bytes it charges to the budget of ctx. The caller releases the
 // returned charge once it lets the document go. Past maxBytes it fails
-// with an error wrapping [html.ErrInputTooLarge]; it stops at the first
-// write after ctx ends. An execution error wraps [html.ErrInvalidOptions].
+// with an error wrapping [limits.ErrInputTooLarge]; it stops at the first
+// write after ctx ends. An execution error wraps [typeset.ErrInvalidOptions].
 func (p *pageTemplate) render(ctx context.Context, body []byte, title string, maxBytes int64) (doc []byte, charged int64, err error) {
 	// The renderer escapes the text it writes and passes the raw HTML of
 	// the source through, as a browser-based converter receives it: the
@@ -91,7 +91,7 @@ func (p *pageTemplate) render(ctx context.Context, body []byte, title string, ma
 		return nil, 0, w.err
 	default:
 		w.release()
-		return nil, 0, fmt.Errorf("%w: executing the Markdown template: %w", html.ErrInvalidOptions, err)
+		return nil, 0, fmt.Errorf("%w: executing the template: %w", typeset.ErrInvalidOptions, err)
 	}
 }
 
@@ -119,7 +119,7 @@ func (w *cappedWriter) Write(b []byte) (int, error) {
 		return 0, err
 	}
 	if int64(w.buf.Len())+int64(len(b)) > w.max {
-		w.err = fmt.Errorf("%w: the Markdown template renders past %d bytes", html.ErrInputTooLarge, w.max)
+		w.err = fmt.Errorf("%w: the template renders past %d bytes", limits.ErrInputTooLarge, w.max)
 		return 0, w.err
 	}
 	if err := w.mem.Charge(int64(len(b)), "rendered Markdown"); err != nil {
@@ -137,7 +137,7 @@ func (w *cappedWriter) release() {
 
 // errTemplateRefused marks a construct the template language allows and a
 // Markdown template does not take.
-var errTemplateRefused = errors.New("not supported in a Markdown template")
+var errTemplateRefused = errors.New("not supported")
 
 // checkTemplate refuses a template in which no toHTML call is reachable
 // from the top-level template, or whose execution is not bounded.

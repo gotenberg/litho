@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // treeGen derives a content tree and a page box from fuzz bytes, a byte at
@@ -327,7 +328,7 @@ func FuzzLayout(f *testing.F) {
 		root := g.node(0)
 		res, err := Layout(context.Background(), root, fonts, opts)
 		if err != nil {
-			if errors.Is(err, ErrTooManyPages) || errors.Is(err, ErrInvalidOptions) {
+			if errors.Is(err, limits.ErrTooManyPages) || errors.Is(err, ErrInvalidOptions) {
 				return
 			}
 			t.Fatalf("Layout: %v", err)

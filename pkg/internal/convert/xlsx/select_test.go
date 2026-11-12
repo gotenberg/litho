@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // TestRead_RecalculationModes locks what each recalculation mode keeps of
@@ -82,7 +83,7 @@ func TestRead_SheetSelection(t *testing.T) {
 		t.Errorf("left out by name: %d drawings, want none", n)
 	}
 	_, err := Convert(context.Background(), bytes.NewReader(data), testFonts(t), office.Options{Sheets: []string{"Back"}})
-	if !errors.Is(err, office.ErrInvalidOptions) || !strings.Contains(err.Error(), `"Back"`) {
+	if !errors.Is(err, typeset.ErrInvalidOptions) || !strings.Contains(err.Error(), `"Back"`) {
 		t.Errorf("missing sheet: %v", err)
 	}
 }

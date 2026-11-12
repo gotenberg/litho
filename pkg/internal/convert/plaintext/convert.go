@@ -44,9 +44,9 @@ var bom = []byte{0xEF, 0xBB, 0xBF}
 // Convert lays src out as a Document.
 //
 // It reads src to its end, at most o.MaxInputBytes bytes, and returns an
-// error wrapping [ErrInputTooLarge] past them; src is never closed. It
-// returns an error wrapping [ErrInvalidOptions] for opts out of range or a
-// nil fonts, [text.ErrNoFonts] when fonts indexed no face, [ErrTooManyPages]
+// error wrapping [limits.ErrInputTooLarge] past them; src is never closed. It
+// returns an error wrapping [typeset.ErrInvalidOptions] for opts out of range or a
+// nil fonts, [text.ErrNoFonts] when fonts indexed no face, [limits.ErrTooManyPages]
 // when the layout needs more than o.MaxPages pages, and ctx's error when ctx
 // ends first.
 //
@@ -68,7 +68,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 		return nil, err
 	}
 	if fonts == nil {
-		return nil, fmt.Errorf("%w: no font index", ErrInvalidOptions)
+		return nil, fmt.Errorf("%w: no font index", typeset.ErrInvalidOptions)
 	}
 	data, err := readCapped(src, o.MaxInputBytes)
 	if err != nil {
@@ -110,7 +110,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 	return &l.doc, nil
 }
 
-// readCapped reads src to its end, failing with [ErrInputTooLarge] past max
+// readCapped reads src to its end, failing with [limits.ErrInputTooLarge] past max
 // bytes.
 func readCapped(src io.Reader, maxBytes int64) ([]byte, error) {
 	data, err := io.ReadAll(io.LimitReader(src, maxBytes+1))
@@ -118,7 +118,7 @@ func readCapped(src io.Reader, maxBytes int64) ([]byte, error) {
 		return nil, fmt.Errorf("reading the plain text source: %w", err)
 	}
 	if int64(len(data)) > maxBytes {
-		return nil, fmt.Errorf("%w: the source is longer than %d bytes", ErrInputTooLarge, maxBytes)
+		return nil, fmt.Errorf("%w: the source is longer than %d bytes", limits.ErrInputTooLarge, maxBytes)
 	}
 	return data, nil
 }
@@ -318,7 +318,7 @@ func (l *layouter) place(ctx context.Context, runs []*typeset.Text) error {
 // to its first baseline.
 func (l *layouter) newPage(ctx context.Context) error {
 	if l.pages >= l.opts.MaxPages {
-		return fmt.Errorf("%w: the text needs more than %d pages", ErrTooManyPages, l.opts.MaxPages)
+		return fmt.Errorf("%w: more than %d", limits.ErrTooManyPages, l.opts.MaxPages)
 	}
 	if err := l.handOver(ctx); err != nil {
 		return err

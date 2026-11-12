@@ -37,16 +37,16 @@ type Options struct {
 // Convert lays the Markdown document src out as a Document.
 //
 // It checks opts.Template first and fails with an error wrapping
-// [html.ErrInvalidOptions] when the template does not parse or is refused,
+// [typeset.ErrInvalidOptions] when the template does not parse or is refused,
 // before src is read. It then reads src to its end, at most
 // opts.MaxInputBytes bytes ([html.DefaultMaxInputBytes] when zero), and
-// returns an error wrapping [html.ErrInputTooLarge] past them, before
+// returns an error wrapping [limits.ErrInputTooLarge] past them, before
 // anything is rendered; src is never closed. The document the template
 // renders is capped at the ceiling of the input budget,
 // [limits.MaxConvertInputBytesCeiling], past which it fails with
-// [html.ErrInputTooLarge], and is converted by [html.Convert] with opts
+// [limits.ErrInputTooLarge], and is converted by [html.Convert] with opts
 // under that ceiling, failing as html.Convert does. A cap out of range, or
-// an error executing the template, fails with [html.ErrInvalidOptions].
+// an error executing the template, fails with [typeset.ErrInvalidOptions].
 func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, o Options) (*typeset.Document, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, o Options) (
 		maxBytes = html.DefaultMaxInputBytes
 	}
 	if maxBytes < 0 || maxBytes > limits.MaxConvertInputBytesCeiling {
-		return nil, fmt.Errorf("%w: input cap %d is not in [1, %d]", html.ErrInvalidOptions, maxBytes, int64(limits.MaxConvertInputBytesCeiling))
+		return nil, fmt.Errorf("%w: input cap %d is not in [1, %d]", typeset.ErrInvalidOptions, maxBytes, int64(limits.MaxConvertInputBytesCeiling))
 	}
 	tmpl, err := parseTemplate(o.Template)
 	if err != nil {
@@ -65,10 +65,10 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, o Options) (
 	}
 	data, err := io.ReadAll(io.LimitReader(src, maxBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("reading the Markdown source: %w", err)
+		return nil, fmt.Errorf("reading the source: %w", err)
 	}
 	if int64(len(data)) > maxBytes {
-		return nil, fmt.Errorf("%w: the source is longer than %d bytes", html.ErrInputTooLarge, maxBytes)
+		return nil, fmt.Errorf("%w: the source is longer than %d bytes", limits.ErrInputTooLarge, maxBytes)
 	}
 	body, title := render(data)
 	page, charged, err := tmpl.render(ctx, body, title, limits.MaxConvertInputBytesCeiling)

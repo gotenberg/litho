@@ -256,7 +256,7 @@ func (e *engine) reach(y float64) {
 	}
 	p := e.pageOf(y)
 	if p >= e.maxPages {
-		e.fail(fmt.Errorf("%w: more than %d pages", ErrTooManyPages, e.maxPages))
+		e.fail(fmt.Errorf("%w: more than %d", limits.ErrTooManyPages, e.maxPages))
 		return
 	}
 	if p > e.seenPage {

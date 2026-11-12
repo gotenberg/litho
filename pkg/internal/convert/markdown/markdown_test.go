@@ -14,6 +14,7 @@ import (
 	md "github.com/gomarkdown/markdown"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/html"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -145,10 +146,10 @@ func TestConvert_LaysOutTheMarkdown(t *testing.T) {
 func TestConvert_Caps(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	if _, err := Convert(ctx, strings.NewReader("# 12345"), ahem(t), Options{HTML: html.Options{MaxInputBytes: 4}}); !errors.Is(err, html.ErrInputTooLarge) {
+	if _, err := Convert(ctx, strings.NewReader("# 12345"), ahem(t), Options{HTML: html.Options{MaxInputBytes: 4}}); !errors.Is(err, limits.ErrInputTooLarge) {
 		t.Errorf("past the cap: %v", err)
 	}
-	if _, err := Convert(ctx, strings.NewReader("x"), ahem(t), Options{HTML: html.Options{MaxInputBytes: -1}}); !errors.Is(err, html.ErrInvalidOptions) {
+	if _, err := Convert(ctx, strings.NewReader("x"), ahem(t), Options{HTML: html.Options{MaxInputBytes: -1}}); !errors.Is(err, typeset.ErrInvalidOptions) {
 		t.Errorf("negative cap: %v", err)
 	}
 	// The rendered HTML is larger than the Markdown under its own cap.
@@ -160,7 +161,7 @@ func TestConvert_Caps(t *testing.T) {
 	if _, err := Convert(cctx, strings.NewReader("x"), ahem(t), Options{}); !errors.Is(err, context.Canceled) {
 		t.Errorf("cancelled: %v", err)
 	}
-	if _, err := Convert(ctx, strings.NewReader("x"), ahem(t), Options{HTML: html.Options{Scale: 9}}); !errors.Is(err, html.ErrInvalidOptions) {
+	if _, err := Convert(ctx, strings.NewReader("x"), ahem(t), Options{HTML: html.Options{Scale: 9}}); !errors.Is(err, typeset.ErrInvalidOptions) {
 		t.Errorf("bad options: %v", err)
 	}
 }
@@ -175,7 +176,7 @@ func FuzzConvert(f *testing.F) {
 			t.Fatalf("wrapper broken: %q", page)
 		}
 		_, err := Convert(context.Background(), bytes.NewReader(data), ahem(t), Options{HTML: html.Options{MaxInputBytes: 1 << 12, MaxPages: 8}})
-		if err != nil && !errors.Is(err, html.ErrInputTooLarge) && !errors.Is(err, html.ErrTooManyPages) &&
+		if err != nil && !errors.Is(err, limits.ErrInputTooLarge) && !errors.Is(err, limits.ErrTooManyPages) &&
 			!errors.Is(err, html.ErrTooManyElements) && !errors.Is(err, html.ErrTooDeep) {
 			t.Fatalf("Convert: %v", err)
 		}

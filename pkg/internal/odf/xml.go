@@ -173,7 +173,7 @@ var errTooDeep = errors.New("odf: XML nested too deep")
 // is skipped, never processed, so no entity but the five predefined ones
 // expands; a document that is not well-formed fails with
 // office.ErrMalformed, one past [MaxElements] or [MaxDepth] with
-// office.ErrInputTooLarge. It returns ctx's error when ctx ends first.
+// limits.ErrInputTooLarge. It returns ctx's error when ctx ends first.
 func ParseXML(ctx context.Context, data []byte) (*Element, error) {
 	return parseXML(ctx, office.NewTokenReader(bytes.NewReader(data), int64(len(data))+1))
 }
@@ -194,7 +194,7 @@ func parseXML(ctx context.Context, in *office.TokenReader) (*Element, error) {
 		if errors.Is(err, io.EOF) {
 			break
 		}
-		if errors.Is(err, office.ErrInputTooLarge) || errors.Is(err, office.ErrMalformed) {
+		if errors.Is(err, limits.ErrInputTooLarge) || errors.Is(err, office.ErrMalformed) {
 			return nil, err
 		}
 		if err != nil {
@@ -203,7 +203,7 @@ func parseXML(ctx context.Context, in *office.TokenReader) (*Element, error) {
 		in.Mark()
 		count++
 		if count > MaxElements {
-			return nil, fmt.Errorf("%w: more than %d XML nodes", office.ErrInputTooLarge, MaxElements)
+			return nil, fmt.Errorf("%w: more than %d XML nodes", limits.ErrInputTooLarge, MaxElements)
 		}
 		if count%xmlChargeEvery == 0 {
 			if err := mem.ChargeUnits(xmlChargeEvery, limits.XMLElementCost, "XML trees"); err != nil {
@@ -216,7 +216,7 @@ func parseXML(ctx context.Context, in *office.TokenReader) (*Element, error) {
 		switch t := tok.(type) {
 		case xml.StartElement:
 			if len(stack) >= MaxDepth {
-				return nil, fmt.Errorf("%w: %w past %d levels", office.ErrInputTooLarge, errTooDeep, MaxDepth)
+				return nil, fmt.Errorf("%w: %w past %d levels", limits.ErrInputTooLarge, errTooDeep, MaxDepth)
 			}
 			el := &Element{Name: t.Name, Attr: t.Attr}
 			if len(stack) == 0 {

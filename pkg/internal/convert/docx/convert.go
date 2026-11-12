@@ -2,7 +2,6 @@ package docx
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 
@@ -18,42 +17,42 @@ import (
 // Convert reads the DOCX package src holds and lays it out as a paged
 // document, with the fonts of the index fonts. It returns ctx's error when
 // ctx ends first, and the errors office.Options documents:
-// office.ErrInvalidOptions for options out of range or a nil fonts,
+// typeset.ErrInvalidOptions for options out of range or a nil fonts,
 // text.ErrNoFonts for an index without faces, office.ErrEncrypted for an
 // encrypted package opts.Password does not open (missing, wrong, or a
 // scheme offcrypto does not read), office.ErrMalformed for a package that
-// is not a WordprocessingML document or a compound file that cannot be read, office.ErrInputTooLarge past a size cap and
-// office.ErrTooManyPages past the page cap. The output depends on src,
+// is not a WordprocessingML document or a compound file that cannot be read, limits.ErrInputTooLarge past a size cap and
+// limits.ErrTooManyPages past the page cap. The output depends on src,
 // fonts' index and opts alone.
 func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*typeset.Document, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
 	if fonts == nil {
-		return nil, fmt.Errorf("%w: no font index", office.ErrInvalidOptions)
+		return nil, fmt.Errorf("%w: no font index", typeset.ErrInvalidOptions)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if fonts.Len() == 0 {
-		return nil, fmt.Errorf("converting DOCX: %w", text.ErrNoFonts)
+		return nil, text.ErrNoFonts
 	}
 	data, err := office.ReadAll(ctx, src, opts.MaxInputBytes)
 	if err != nil {
-		return nil, fmt.Errorf("reading DOCX: %w", err)
+		return nil, err
 	}
 	// A zip package comes back unchanged; a compound file is an encrypted
 	// package (MS-OFFCRYPTO, 2.3.4.4) opened with the password.
 	if data, err = offcrypto.OpenOOXML(ctx, data, opts.Password); err != nil {
-		return nil, fmt.Errorf("opening DOCX: %w", err)
+		return nil, fmt.Errorf("opening the package: %w", err)
 	}
 	pkg, err := ooxml.Open(data)
 	if err != nil {
-		return nil, fmt.Errorf("opening DOCX: %w", err)
+		return nil, fmt.Errorf("opening the package: %w", err)
 	}
 	d, err := load(ctx, pkg, fonts, opts)
 	if err != nil {
-		return nil, fmt.Errorf("reading DOCX: %w", err)
+		return nil, err
 	}
 	return d.convert()
 }
@@ -92,10 +91,7 @@ func (d *document) convert() (*typeset.Document, error) {
 		Logger:        d.opts.Logger,
 	})
 	if err != nil {
-		if errors.Is(err, layout.ErrTooManyPages) {
-			return nil, fmt.Errorf("%w: %w", office.ErrTooManyPages, err)
-		}
-		return nil, fmt.Errorf("laying out the DOCX document: %w", err)
+		return nil, err
 	}
 	return d.assemble(res)
 }

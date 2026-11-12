@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestPrinted(t *testing.T) {
@@ -33,7 +34,7 @@ func TestPrinted(t *testing.T) {
 	for _, tt := range tests {
 		got, err := Printed(names, hidden, tt.opts)
 		if tt.err != "" {
-			if !errors.Is(err, office.ErrInvalidOptions) || !strings.Contains(err.Error(), tt.err) {
+			if !errors.Is(err, typeset.ErrInvalidOptions) || !strings.Contains(err.Error(), tt.err) {
 				t.Errorf("%s: err = %v, want %q", tt.name, err, tt.err)
 			}
 			continue
@@ -46,7 +47,7 @@ func TestPrinted(t *testing.T) {
 	if got, err := Printed([]string{"X", "Y"}, []bool{true, true}, office.Options{}); err != nil || !slices.Equal(got, []bool{true, false}) {
 		t.Errorf("all hidden: %v, %v", got, err)
 	}
-	if _, err := Printed([]string{"X"}, nil, office.Options{}); !errors.Is(err, office.ErrInvalidOptions) {
+	if _, err := Printed([]string{"X"}, nil, office.Options{}); !errors.Is(err, typeset.ErrInvalidOptions) {
 		t.Errorf("unequal lengths: %v", err)
 	}
 }
@@ -119,7 +120,7 @@ func TestConvert_SheetSelection(t *testing.T) {
 		t.Errorf("destinations %v, want [2]", dests)
 	}
 
-	if _, err := Convert(context.Background(), selectionBook(), pinnedFonts(t), office.Options{Sheets: []string{"Six"}}); !errors.Is(err, office.ErrInvalidOptions) || !strings.Contains(err.Error(), `"Six"`) {
+	if _, err := Convert(context.Background(), selectionBook(), pinnedFonts(t), office.Options{Sheets: []string{"Six"}}); !errors.Is(err, typeset.ErrInvalidOptions) || !strings.Contains(err.Error(), `"Six"`) {
 		t.Errorf("missing sheet: %v", err)
 	}
 }

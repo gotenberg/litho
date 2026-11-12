@@ -203,7 +203,7 @@ func parseODFParams(p ODFParams) (*odfEntry, error) {
 	if p.Size != "" {
 		if e.size, err = parseCount("manifest:size", p.Size, maxODFEntryBytes); err != nil {
 			if errors.Is(err, office.ErrEncrypted) {
-				return nil, fmt.Errorf("%w: ODF entry of %s bytes past the cap of %d", office.ErrInputTooLarge, p.Size, maxODFEntryBytes)
+				return nil, fmt.Errorf("%w: ODF entry of %s bytes past the cap of %d", limits.ErrInputTooLarge, p.Size, maxODFEntryBytes)
 			}
 			return nil, err
 		}
@@ -403,7 +403,7 @@ func (e *odfEntry) attempts(password string) []odfAttempt {
 // It fails with office.ErrEncrypted when the password is empty or wrong,
 // or when p names an algorithm, start key, key derivation or a cost past
 // the caps this package does not read; with office.ErrMalformed when p or
-// the decrypted entry cannot be read; with office.ErrInputTooLarge when the
+// the decrypted entry cannot be read; with limits.ErrInputTooLarge when the
 // entry inflates past 256 MiB. It returns ctx's error when ctx ends first.
 // stored is not modified; the result is a new slice. Each call derives its
 // own key: a caller bounds the encrypted entries it opens.
@@ -594,7 +594,7 @@ func (e *odfEntry) inflate(ctx context.Context, plain []byte) ([]byte, error) {
 		if e.hasSize {
 			return nil, odfMalformed("the entry inflates past its manifest:size of %d", e.size)
 		}
-		return nil, fmt.Errorf("%w: ODF entry inflates past %d bytes", office.ErrInputTooLarge, maxODFEntryBytes)
+		return nil, fmt.Errorf("%w: ODF entry inflates past %d bytes", limits.ErrInputTooLarge, maxODFEntryBytes)
 	}
 	if e.hasSize && int64(len(out)) != e.size {
 		return nil, odfMalformed("the entry inflates to %d bytes, its manifest:size is %d", len(out), e.size)

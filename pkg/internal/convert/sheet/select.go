@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Printed returns, for each sheet of a book in book order, whether it
@@ -14,10 +15,10 @@ import (
 // first sheet of a book that hides them all, as Calc shows a book whose
 // sheets are all hidden. names and hidden, of equal length, are the
 // sheets' names and hidden flags. A name or a number the book has no
-// sheet for fails with office.ErrInvalidOptions naming it.
+// sheet for fails with typeset.ErrInvalidOptions naming it.
 func Printed(names []string, hidden []bool, opts office.Options) ([]bool, error) {
 	if len(names) != len(hidden) {
-		return nil, fmt.Errorf("%w: %d sheet names for %d hidden flags", office.ErrInvalidOptions, len(names), len(hidden))
+		return nil, fmt.Errorf("%w: %d sheet names for %d hidden flags", typeset.ErrInvalidOptions, len(names), len(hidden))
 	}
 	printed := make([]bool, len(names))
 	switch {
@@ -30,13 +31,13 @@ func Printed(names []string, hidden []bool, opts office.Options) ([]bool, error)
 				}
 			}
 			if !found {
-				return nil, fmt.Errorf("%w: the workbook has no sheet named %q", office.ErrInvalidOptions, want)
+				return nil, fmt.Errorf("%w: the workbook has no sheet named %q", typeset.ErrInvalidOptions, want)
 			}
 		}
 	case opts.SheetNumbers != nil:
 		for _, n := range opts.SheetNumbers {
 			if n < 1 || n > len(names) {
-				return nil, fmt.Errorf("%w: the workbook has no sheet %d: it has %d", office.ErrInvalidOptions, n, len(names))
+				return nil, fmt.Errorf("%w: the workbook has no sheet %d: it has %d", typeset.ErrInvalidOptions, n, len(names))
 			}
 			printed[n-1] = true
 		}

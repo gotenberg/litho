@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // MaxEntries caps the zip entries of a package. Anti-DoS guard, not
@@ -94,7 +95,7 @@ type Relationship struct {
 // Open opens the package data holds. It fails with office.ErrEncrypted
 // for a compound file, an encrypted package that needs a password first,
 // with office.ErrMalformed for anything else that is not a zip archive or
-// holds no content types, and with office.ErrInputTooLarge past
+// holds no content types, and with limits.ErrInputTooLarge past
 // [MaxEntries].
 func Open(data []byte) (*Package, error) {
 	if bytes.HasPrefix(data, cfbSignature) {
@@ -105,7 +106,7 @@ func Open(data []byte) (*Package, error) {
 		return nil, fmt.Errorf("%w: not a zip package: %w", office.ErrMalformed, err)
 	}
 	if len(zr.File) > MaxEntries {
-		return nil, fmt.Errorf("%w: %d zip entries, more than %d", office.ErrInputTooLarge, len(zr.File), MaxEntries)
+		return nil, fmt.Errorf("%w: %d zip entries, more than %d", limits.ErrInputTooLarge, len(zr.File), MaxEntries)
 	}
 	p := &Package{
 		entries:   make(map[string]*zip.File, len(zr.File)),
@@ -150,7 +151,7 @@ func (p *Package) entry(name string) *zip.File {
 func (p *Package) Has(name string) bool { return p.entry(name) != nil }
 
 // Read returns the bytes of the part name. It fails with [ErrNoPart] for a
-// part the package does not hold, with office.ErrInputTooLarge past
+// part the package does not hold, with limits.ErrInputTooLarge past
 // [MaxPartBytes] or the package's [MaxPackageBytes], and with
 // office.ErrMalformed for an entry that does not inflate.
 func (p *Package) Read(name string) ([]byte, error) {
@@ -167,7 +168,7 @@ func (p *Package) Read(name string) ([]byte, error) {
 }
 
 // open opens the part name for reading as it inflates: the reader fails
-// with office.ErrInputTooLarge once the part passes its cap
+// with limits.ErrInputTooLarge once the part passes its cap
 // ([MaxPartBytes] under the inflate ratio) or the bytes the package has
 // left of [MaxPackageBytes], and with office.ErrMalformed for an entry
 // that does not inflate. A declared size past the part's cap is refused
@@ -179,7 +180,7 @@ func (p *Package) open(name string) (io.ReadCloser, error) {
 	}
 	partCap := office.InflateLimit(f.CompressedSize64, MaxPartBytes)
 	if f.UncompressedSize64 > uint64(partCap) { //nolint:gosec // partCap is positive: at least the inflate floor
-		return nil, fmt.Errorf("%w: part %s is larger than %d bytes", office.ErrInputTooLarge, name, partCap)
+		return nil, fmt.Errorf("%w: part %s is larger than %d bytes", limits.ErrInputTooLarge, name, partCap)
 	}
 	rc, err := f.Open()
 	if err != nil {
@@ -201,7 +202,7 @@ type partReader struct {
 
 func (r *partReader) Read(b []byte) (int, error) {
 	if r.n > r.limit {
-		return 0, fmt.Errorf("%w: part %s exceeds the package's byte budget", office.ErrInputTooLarge, r.name)
+		return 0, fmt.Errorf("%w: part %s exceeds the package's byte budget", limits.ErrInputTooLarge, r.name)
 	}
 	if room := r.limit + 1 - r.n; int64(len(b)) > room {
 		b = b[:room]
@@ -210,7 +211,7 @@ func (r *partReader) Read(b []byte) (int, error) {
 	r.n += int64(n)
 	r.p.read += int64(n)
 	if r.n > r.limit {
-		return n, fmt.Errorf("%w: part %s exceeds the package's byte budget", office.ErrInputTooLarge, r.name)
+		return n, fmt.Errorf("%w: part %s exceeds the package's byte budget", limits.ErrInputTooLarge, r.name)
 	}
 	if err != nil && !errors.Is(err, io.EOF) {
 		return n, fmt.Errorf("%w: reading part %s: %w", office.ErrMalformed, r.name, err)

@@ -65,7 +65,7 @@ type Package struct {
 // OpenPackage reads the central directory of the zip archive data holds.
 // data is retained, not copied, and must not change while the Package is in
 // use. It fails with [ErrMalformed] when data is not a zip archive or names
-// an entry twice, and with [ErrInputTooLarge] past [MaxPackageEntries]
+// an entry twice, and with [limits.ErrInputTooLarge] past [MaxPackageEntries]
 // entries.
 func OpenPackage(data []byte) (*Package, error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
@@ -73,7 +73,7 @@ func OpenPackage(data []byte) (*Package, error) {
 		return nil, fmt.Errorf("%w: not a zip archive: %w", ErrMalformed, err)
 	}
 	if len(zr.File) > MaxPackageEntries {
-		return nil, fmt.Errorf("%w: %d package entries past the cap of %d", ErrInputTooLarge, len(zr.File), MaxPackageEntries)
+		return nil, fmt.Errorf("%w: %d package entries past the cap of %d", limits.ErrInputTooLarge, len(zr.File), MaxPackageEntries)
 	}
 	p := &Package{files: zr.File, exact: make(map[string]int, len(zr.File)), fold: make(map[string]int, len(zr.File))}
 	for i, f := range zr.File {
@@ -124,7 +124,7 @@ func (p *Package) Has(name string) bool {
 // as OOXML part names compare (ECMA-376 Part 2, 6.2.2.3); ODF names are
 // case-sensitive. It fails with [ErrMalformed] when the entry is missing,
 // uses a compression method other than STORED or DEFLATED, or fails its
-// CRC-32, and with [ErrInputTooLarge] past maxBytes. It returns ctx's error
+// CRC-32, and with [limits.ErrInputTooLarge] past maxBytes. It returns ctx's error
 // when ctx ends first.
 func (p *Package) Read(ctx context.Context, name string, fold bool, maxBytes int64) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
@@ -139,7 +139,7 @@ func (p *Package) Read(ctx context.Context, name string, fold bool, maxBytes int
 	}
 	maxBytes = InflateLimit(f.CompressedSize64, maxBytes)
 	if f.UncompressedSize64 > uint64(maxBytes) { //nolint:gosec // maxBytes is positive: InflateLimit returns at most a positive cap
-		return nil, fmt.Errorf("%w: entry %q of %d bytes past the cap of %d", ErrInputTooLarge, name, f.UncompressedSize64, maxBytes)
+		return nil, fmt.Errorf("%w: entry %q of %d bytes past the cap of %d", limits.ErrInputTooLarge, name, f.UncompressedSize64, maxBytes)
 	}
 	rc, err := f.Open()
 	if err != nil {
@@ -150,7 +150,7 @@ func (p *Package) Read(ctx context.Context, name string, fold bool, maxBytes int
 	// cap whatever the header says.
 	out, err := io.ReadAll(io.LimitReader(rc, maxBytes+1))
 	if int64(len(out)) > maxBytes {
-		return nil, fmt.Errorf("%w: entry %q inflates past the cap of %d", ErrInputTooLarge, name, maxBytes)
+		return nil, fmt.Errorf("%w: entry %q inflates past the cap of %d", limits.ErrInputTooLarge, name, maxBytes)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: entry %q: %w", ErrMalformed, name, err)
@@ -162,7 +162,7 @@ func (p *Package) Read(ctx context.Context, name string, fold bool, maxBytes int
 // stores them, which an encrypted ODF entry is (ODF 1.3 Part 2, 3.4.1: it
 // is flagged STORED and holds its deflated, encrypted content). The slice
 // is new. It fails with [ErrMalformed] when the entry is missing or not
-// STORED, and with [ErrInputTooLarge] past [DefaultMaxEntryBytes].
+// STORED, and with [limits.ErrInputTooLarge] past [DefaultMaxEntryBytes].
 func (p *Package) ReadStored(name string) ([]byte, error) {
 	f, ok := p.lookup(name, false)
 	if !ok {
@@ -172,7 +172,7 @@ func (p *Package) ReadStored(name string) ([]byte, error) {
 		return nil, fmt.Errorf("%w: entry %q is compressed, an encrypted entry is STORED", ErrMalformed, name)
 	}
 	if f.CompressedSize64 > DefaultMaxEntryBytes {
-		return nil, fmt.Errorf("%w: entry %q of %d bytes past the cap of %d", ErrInputTooLarge, name, f.CompressedSize64, int64(DefaultMaxEntryBytes))
+		return nil, fmt.Errorf("%w: entry %q of %d bytes past the cap of %d", limits.ErrInputTooLarge, name, f.CompressedSize64, int64(DefaultMaxEntryBytes))
 	}
 	r, err := f.OpenRaw()
 	if err != nil {

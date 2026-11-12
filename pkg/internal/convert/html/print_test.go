@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -347,7 +348,7 @@ func FuzzConvertPrintOptions(f *testing.F) {
 			MarginTop:         10, MarginLeft: 20,
 		}
 		doc, err := Convert(context.Background(), strings.NewReader(src), testFonts(t), o)
-		if errors.Is(err, ErrInvalidOptions) || errors.Is(err, ErrInputTooLarge) || errors.Is(err, ErrTooManyPages) ||
+		if errors.Is(err, typeset.ErrInvalidOptions) || errors.Is(err, limits.ErrInputTooLarge) || errors.Is(err, limits.ErrTooManyPages) ||
 			errors.Is(err, ErrTooDeep) || errors.Is(err, ErrTooManyElements) || errors.Is(err, css.ErrTooComplex) ||
 			errors.Is(err, layout.ErrTooManyBoxes) {
 			return

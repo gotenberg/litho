@@ -16,6 +16,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -26,14 +27,14 @@ type layoutFunc func(ctx context.Context, root *layout.Node, fonts *text.Fonts, 
 // Convert lays the HTML document src out as a Document.
 //
 // It reads src to its end, at most o.MaxInputBytes bytes, and returns an
-// error wrapping [ErrInputTooLarge] past them; src is never closed. It
-// returns an error wrapping [ErrInvalidOptions] for opts out of range or a
+// error wrapping [limits.ErrInputTooLarge] past them; src is never closed. It
+// returns an error wrapping [typeset.ErrInvalidOptions] for opts out of range or a
 // nil fonts, [text.ErrNoFonts] when fonts indexed no face,
 // [ErrTooManyElements] for a document of more than [MaxElements] elements,
 // [ErrTooDeep] for one nested deeper than the parser follows,
 // [css.ErrTooComplex] for a cascade past its work cap,
 // [layout.ErrTooManyBoxes] for a layout past its box cap,
-// [ErrTooManyPages] when the layout needs more than o.MaxPages pages, and
+// [limits.ErrTooManyPages] when the layout needs more than o.MaxPages pages, and
 // ctx's error when ctx ends first.
 //
 // The document always has at least one page. Its output depends on the
@@ -53,10 +54,10 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 		return nil, err
 	}
 	if fonts == nil {
-		return nil, fmt.Errorf("%w: no font index", ErrInvalidOptions)
+		return nil, fmt.Errorf("%w: no font index", typeset.ErrInvalidOptions)
 	}
 	if fonts.Len() == 0 {
-		return nil, fmt.Errorf("converting HTML: %w", text.ErrNoFonts)
+		return nil, text.ErrNoFonts
 	}
 	data, err := readCapped(src, o.MaxInputBytes)
 	if err != nil {
@@ -105,23 +106,20 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 func layOut(ctx context.Context, lay layoutFunc, p *prepared) (*layout.Result, error) {
 	res, err := lay(ctx, p.root, p.fonts, p.layout)
 	if err != nil {
-		if errors.Is(err, layout.ErrTooManyPages) {
-			return nil, fmt.Errorf("%w: %w", ErrTooManyPages, err)
-		}
-		return nil, fmt.Errorf("laying out the HTML document: %w", err)
+		return nil, err
 	}
 	return res, nil
 }
 
-// readCapped reads src to its end, failing with [ErrInputTooLarge] past max
+// readCapped reads src to its end, failing with [limits.ErrInputTooLarge] past max
 // bytes.
 func readCapped(src io.Reader, maxBytes int64) ([]byte, error) {
 	data, err := io.ReadAll(io.LimitReader(src, maxBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("reading the HTML source: %w", err)
+		return nil, fmt.Errorf("reading the source: %w", err)
 	}
 	if int64(len(data)) > maxBytes {
-		return nil, fmt.Errorf("%w: the source is longer than %d bytes", ErrInputTooLarge, maxBytes)
+		return nil, fmt.Errorf("%w: the source is longer than %d bytes", limits.ErrInputTooLarge, maxBytes)
 	}
 	return data, nil
 }
@@ -267,7 +265,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	computeOpts := css.ComputeOptions{Hints: css.HTMLHints, Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts)}
 	computed, err := resolver.Compute(ctx, doc, computeOpts)
 	if err != nil {
-		return nil, fmt.Errorf("computing the HTML document's styles: %w", err)
+		return nil, fmt.Errorf("computing styles: %w", err)
 	}
 	if name := startPage(computed, scan.root); name != "" && resolver.HasNamedPages() && !setup.measure {
 		// The first page takes the root's start page value (CSS Page 3,
@@ -282,7 +280,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 			media.ViewportWidth, media.ViewportHeight = nw, nh
 			resolver = css.NewResolver(media, sheets)
 			if computed, err = resolver.Compute(ctx, doc, computeOpts); err != nil {
-				return nil, fmt.Errorf("computing the HTML document's styles: %w", err)
+				return nil, fmt.Errorf("computing styles: %w", err)
 			}
 		}
 	}

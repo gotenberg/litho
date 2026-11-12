@@ -159,7 +159,7 @@ var zipMagic = []byte("PK\x03\x04")
 //
 // It fails with office.ErrMalformed for anything else, office.ErrEncrypted
 // for a package whose content or styles are encrypted and opts.Password
-// is empty or does not open, office.ErrInputTooLarge past the caps, and
+// is empty or does not open, limits.ErrInputTooLarge past the caps, and
 // ctx's error when ctx ends first.
 func Open(ctx context.Context, data []byte, opts Options) (*Package, error) {
 	if bytes.HasPrefix(data, zipMagic) {
@@ -195,7 +195,7 @@ func openZip(ctx context.Context, data []byte, password string, outer bool, spen
 		return nil, fmt.Errorf("%w: reading the zip archive: %w", office.ErrMalformed, err)
 	}
 	if len(zr.File) > MaxEntries {
-		return nil, fmt.Errorf("%w: more than %d package entries", office.ErrInputTooLarge, MaxEntries)
+		return nil, fmt.Errorf("%w: more than %d package entries", limits.ErrInputTooLarge, MaxEntries)
 	}
 	p := &Package{files: make(map[string]*zip.File, len(zr.File)), enc: map[string]*EncryptionData{}, password: password, read: spent}
 	for _, f := range zr.File {
@@ -341,7 +341,7 @@ func (p *Package) Encryption(name string) *EncryptionData {
 // with an error [IsNotExist] reports for an entry the package does not
 // hold; office.ErrEncrypted for an encrypted one when the password is
 // empty or does not open it, or past [MaxDecryptedEntries] decryptions;
-// office.ErrInputTooLarge past [MaxEntryBytes] or [MaxTotalBytes]; and
+// limits.ErrInputTooLarge past [MaxEntryBytes] or [MaxTotalBytes]; and
 // ctx's error when ctx ends first.
 func (p *Package) ReadFile(ctx context.Context, name string) ([]byte, error) {
 	name = cleanName(name)
@@ -366,7 +366,7 @@ func (p *Package) readEncrypted(ctx context.Context, name string, ed *Encryption
 		return nil, fmt.Errorf("%w: the encrypted package entry %s is compressed, not STORED", office.ErrMalformed, name)
 	}
 	if f.CompressedSize64 > MaxEntryBytes {
-		return nil, fmt.Errorf("%w: the package entry %s is past the caps", office.ErrInputTooLarge, name)
+		return nil, fmt.Errorf("%w: the package entry %s is past the caps", limits.ErrInputTooLarge, name)
 	}
 	p.mu.Lock()
 	if p.opened >= MaxDecryptedEntries {
@@ -390,7 +390,7 @@ func (p *Package) readEncrypted(ctx context.Context, name string, ed *Encryption
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if int64(len(data)) > min(int64(MaxEntryBytes), MaxTotalBytes-p.read) {
-		return nil, fmt.Errorf("%w: the package entry %s inflates past the caps", office.ErrInputTooLarge, name)
+		return nil, fmt.Errorf("%w: the package entry %s inflates past the caps", limits.ErrInputTooLarge, name)
 	}
 	p.read += int64(len(data))
 	return data, nil
@@ -411,7 +411,7 @@ func (p *Package) readRaw(name string) ([]byte, error) {
 }
 
 // open opens the entry name for reading as it inflates, within the caps:
-// the reader fails with office.ErrInputTooLarge one byte past
+// the reader fails with limits.ErrInputTooLarge one byte past
 // [MaxEntryBytes] under the inflate ratio or what the package has left of
 // [MaxTotalBytes], and with office.ErrMalformed for an entry that does not
 // inflate.
@@ -464,7 +464,7 @@ func (r *entryReader) Read(b []byte) (int, error) {
 
 // tooLarge is the error one byte past the entry's room.
 func (r *entryReader) tooLarge() error {
-	return fmt.Errorf("%w: the package entry %s inflates past the caps", office.ErrInputTooLarge, r.name)
+	return fmt.Errorf("%w: the package entry %s inflates past the caps", limits.ErrInputTooLarge, r.name)
 }
 
 func (r *entryReader) Close() error { return r.rc.Close() } // a read-only zip entry has nothing to flush

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // tableOf returns the table data of the first table in the body of root,
@@ -471,8 +472,8 @@ func TestTable_BreakProperties(t *testing.T) {
 
 func TestTable_MaxPages(t *testing.T) {
 	_, err := Layout(context.Background(), doc(pagedTable(100, 10, true)), ahem(t), Options{Page: page(20, 50), MaxPages: 3})
-	if !errors.Is(err, ErrTooManyPages) {
-		t.Errorf("error %v, want ErrTooManyPages", err)
+	if !errors.Is(err, limits.ErrTooManyPages) {
+		t.Errorf("error %v, want limits.ErrTooManyPages", err)
 	}
 }
 

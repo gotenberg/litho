@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -171,11 +172,11 @@ func TestConvert_Errors(t *testing.T) {
 		opts  office.Options
 		want  error
 	}{
-		{"nil doc", ctx, nil, fonts, office.Options{}, office.ErrInvalidOptions},
-		{"nil fonts", ctx, many, nil, office.Options{}, office.ErrInvalidOptions},
-		{"bad options", ctx, many, fonts, office.Options{PageWidth: 10}, office.ErrInvalidOptions},
+		{"nil doc", ctx, nil, fonts, office.Options{}, typeset.ErrInvalidOptions},
+		{"nil fonts", ctx, many, nil, office.Options{}, typeset.ErrInvalidOptions},
+		{"bad options", ctx, many, fonts, office.Options{PageWidth: 10}, typeset.ErrInvalidOptions},
 		{"empty index", ctx, many, &text.Fonts{}, office.Options{}, text.ErrNoFonts},
-		{"too many pages", ctx, many, fonts, office.Options{MaxPages: 2}, office.ErrTooManyPages},
+		{"too many pages", ctx, many, fonts, office.Options{MaxPages: 2}, limits.ErrTooManyPages},
 		{"cancelled", cancelled, many, fonts, office.Options{}, context.Canceled},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

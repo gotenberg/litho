@@ -6,7 +6,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
-	"github.com/gotenberg/litho/pkg/internal/convert/plaintext"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
@@ -20,6 +19,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/signature"
 	"github.com/gotenberg/litho/pkg/internal/tagging"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Exported errors for granular error handling by consumers.
@@ -794,7 +794,7 @@ var (
 	// base URL that is not absolute, a version a conversion does not write,
 	// a Markdown template that never calls toHTML, a sheet the workbook
 	// does not have, a single page asked with a page range.
-	ErrInvalidConvertOptions = errors.New("invalid conversion options")
+	ErrInvalidConvertOptions = typeset.ErrInvalidOptions
 
 	// ErrConversionReused is returned, wrapped, when a [Conversion] runs a
 	// second time: it reads its source once. Make a new one from a new
@@ -806,12 +806,12 @@ var (
 	// whose elements, cascade, boxes, parts or cells pass the converter's
 	// caps, and for one the [Limits.MaxConvertMemoryBytes] budget cannot
 	// hold, in every format. Nothing is written.
-	ErrConvertInputTooLarge = errors.New("conversion input too large")
+	ErrConvertInputTooLarge = limits.ErrInputTooLarge
 
 	// ErrConvertTooManyPages is returned, wrapped, by a [Conversion] when
 	// the layout needs more than [Limits.MaxConvertPages] pages. Nothing is
 	// written.
-	ErrConvertTooManyPages = plaintext.ErrTooManyPages
+	ErrConvertTooManyPages = limits.ErrTooManyPages
 
 	// ErrConvertMalformed is returned, wrapped, by a [Conversion] for a
 	// DOCX, ODT, XLSX, ODS, PPTX or ODP source that is not a document of

@@ -31,8 +31,8 @@ func TestOptions_RefusesOutOfRange(t *testing.T) {
 		"negative pages":  {MaxPages: -1},
 		"pages past cap":  {MaxPages: limits.MaxConvertPagesCeiling + 1},
 	} {
-		if _, err := o.withDefaults(); !errors.Is(err, ErrInvalidOptions) {
-			t.Errorf("%s: %v, want ErrInvalidOptions", name, err)
+		if _, err := o.withDefaults(); !errors.Is(err, typeset.ErrInvalidOptions) {
+			t.Errorf("%s: %v, want typeset.ErrInvalidOptions", name, err)
 		}
 	}
 	o, err := Options{}.withDefaults()
@@ -45,7 +45,7 @@ func TestConvert_RefusesBadInput(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	fonts := testFonts(t)
-	if _, err := convert(ctx, strings.NewReader("<p>x"), nil, Options{}, stubLayout); !errors.Is(err, ErrInvalidOptions) {
+	if _, err := convert(ctx, strings.NewReader("<p>x"), nil, Options{}, stubLayout); !errors.Is(err, typeset.ErrInvalidOptions) {
 		t.Errorf("nil fonts: %v", err)
 	}
 	empty, err := text.NewFonts(ctx, nil, []string{t.TempDir()})
@@ -55,7 +55,7 @@ func TestConvert_RefusesBadInput(t *testing.T) {
 	if _, err := convert(ctx, strings.NewReader("<p>x"), empty, Options{}, stubLayout); !errors.Is(err, text.ErrNoFonts) {
 		t.Errorf("no faces: %v", err)
 	}
-	if _, err := convert(ctx, strings.NewReader("<p>xx"), fonts, Options{MaxInputBytes: 4}, stubLayout); !errors.Is(err, ErrInputTooLarge) {
+	if _, err := convert(ctx, strings.NewReader("<p>xx"), fonts, Options{MaxInputBytes: 4}, stubLayout); !errors.Is(err, limits.ErrInputTooLarge) {
 		t.Errorf("past the input cap: %v", err)
 	}
 	if _, err := convert(ctx, strings.NewReader("<p>x"), fonts, Options{MaxInputBytes: 4}, stubLayout); err != nil {
@@ -67,9 +67,9 @@ func TestConvert_RefusesBadInput(t *testing.T) {
 		t.Errorf("cancelled: %v", err)
 	}
 	tooMany := func(context.Context, *layout.Node, *text.Fonts, layout.Options) (*layout.Result, error) {
-		return nil, fmt.Errorf("wrapped: %w", layout.ErrTooManyPages)
+		return nil, fmt.Errorf("wrapped: %w", limits.ErrTooManyPages)
 	}
-	if _, err := convert(ctx, strings.NewReader("<p>x"), fonts, Options{}, tooMany); !errors.Is(err, ErrTooManyPages) {
+	if _, err := convert(ctx, strings.NewReader("<p>x"), fonts, Options{}, tooMany); !errors.Is(err, limits.ErrTooManyPages) {
 		t.Errorf("too many pages: %v", err)
 	}
 }

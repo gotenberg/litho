@@ -76,7 +76,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	used := map[*typeset.StructElem]bool{}
 	res.Pages = e.assemble(disp, canvas, rb, used)
 	if len(res.Pages) > e.maxPages {
-		return nil, fmt.Errorf("%w: %d pages, at most %d", ErrTooManyPages, len(res.Pages), e.maxPages)
+		return nil, fmt.Errorf("%w: %d, at most %d", limits.ErrTooManyPages, len(res.Pages), e.maxPages)
 	}
 	res.Anchors = e.anchors(rb, len(res.Pages))
 	e.anchorsFound = res.Anchors

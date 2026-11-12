@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 func TestParse_AlternateContent(t *testing.T) {
@@ -58,7 +59,7 @@ func TestParse_Refuses(t *testing.T) {
 		{"mismatched", `<x><y></x></y>`, office.ErrMalformed},
 		{"unclosed", `<x><y>`, office.ErrMalformed},
 		{"empty", ``, office.ErrMalformed},
-		{"deep", deep, office.ErrInputTooLarge},
+		{"deep", deep, limits.ErrInputTooLarge},
 	} {
 		if _, err := Parse(context.Background(), []byte(tc.doc), nil); !errors.Is(err, tc.want) {
 			t.Errorf("%s: Parse = %v, want %v", tc.name, err, tc.want)
@@ -88,7 +89,7 @@ func TestParseXML_StreamsThePart(t *testing.T) {
 		pad  int
 		want error
 	}{
-		{"one token past the cap", office.MaxXMLTokenBytes + 1, office.ErrInputTooLarge},
+		{"one token past the cap", office.MaxXMLTokenBytes + 1, limits.ErrInputTooLarge},
 		{"under the cap", 1 << 20, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

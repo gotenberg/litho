@@ -106,10 +106,10 @@ func (b *builder) warn(code, msg string) {
 // outline unless OmitOutline, the date and time fields showing PrintDate.
 // PageWidth and PageHeight, when set, are the page size, the slide scaled
 // to fit it and centred; Landscape turns a portrait page. It returns ctx's
-// error when ctx ends first, office.ErrInvalidOptions for options out of
+// error when ctx ends first, typeset.ErrInvalidOptions for options out of
 // range, Handouts other than 0, 1, 2, 3, 4, 6 or 9 or beside NotesPages,
 // or a nil fonts or doc, text.ErrNoFonts for an index without faces, and
-// office.ErrTooManyPages past the page cap. The output depends on doc,
+// limits.ErrTooManyPages past the page cap. The output depends on doc,
 // fonts' index and opts alone.
 //
 // # Pages
@@ -199,7 +199,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		return nil, err
 	}
 	if doc == nil || fonts == nil {
-		return nil, fmt.Errorf("%w: no document or no font index", office.ErrInvalidOptions)
+		return nil, fmt.Errorf("%w: no document or no font index", typeset.ErrInvalidOptions)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -216,7 +216,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	}
 	per := opts.Handouts
 	if per != 0 && (!validHandouts(per) || opts.NotesPages) {
-		return nil, fmt.Errorf("%w: %d slides a handout page, notes pages %t: 1, 2, 3, 4, 6 or 9, without notes pages", office.ErrInvalidOptions, per, opts.NotesPages)
+		return nil, fmt.Errorf("%w: %d slides a handout page, notes pages %t: 1, 2, 3, 4, 6 or 9, without notes pages", typeset.ErrInvalidOptions, per, opts.NotesPages)
 	}
 	// pageOf is the page a printed slide shows on: its own, or the
 	// handout page that holds it.
@@ -244,7 +244,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		pages *= 2
 	}
 	if pages > limit {
-		return nil, fmt.Errorf("%w: more than %d pages", office.ErrTooManyPages, limit)
+		return nil, fmt.Errorf("%w: more than %d", limits.ErrTooManyPages, limit)
 	}
 	out := &typeset.Document{
 		Metadata:  doc.Meta,

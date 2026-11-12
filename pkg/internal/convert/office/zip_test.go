@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 type zipEntry struct {
@@ -62,7 +64,7 @@ func TestPackage_Read(t *testing.T) {
 		{"WORD/Document.xml", true, 0, big, nil},
 		{"WORD/Document.xml", false, 0, nil, ErrMalformed},
 		{"missing", true, 0, nil, ErrMalformed},
-		{"word/document.xml", false, 100, nil, ErrInputTooLarge},
+		{"word/document.xml", false, 100, nil, limits.ErrInputTooLarge},
 	} {
 		got, err := p.Read(ctx, tc.name, tc.fold, tc.max)
 		if !errors.Is(err, tc.wantErr) || (tc.wantErr == nil && !bytes.Equal(got, tc.want)) {

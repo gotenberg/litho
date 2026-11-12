@@ -12,7 +12,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestConvert_Errors(t *testing.T) {
@@ -29,13 +31,13 @@ func TestConvert_Errors(t *testing.T) {
 		opts  office.Options
 		want  error
 	}{
-		{"nil fonts", good, nil, office.Options{}, office.ErrInvalidOptions},
-		{"half a page size", good, testFonts(t), office.Options{PageWidth: 100}, office.ErrInvalidOptions},
+		{"nil fonts", good, nil, office.Options{}, typeset.ErrInvalidOptions},
+		{"half a page size", good, testFonts(t), office.Options{PageWidth: 100}, typeset.ErrInvalidOptions},
 		{"malformed compound file", append([]byte{0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1}, make([]byte, 600)...), testFonts(t), office.Options{}, office.ErrMalformed},
 		{"not a zip", []byte("plain text"), testFonts(t), office.Options{}, office.ErrMalformed},
 		{"no main part", zipFiles(t, noMain), testFonts(t), office.Options{}, office.ErrMalformed},
 		{"not a document", zipFiles(t, notWord), testFonts(t), office.Options{}, office.ErrMalformed},
-		{"too large", good, testFonts(t), office.Options{MaxInputBytes: 10}, office.ErrInputTooLarge},
+		{"too large", good, testFonts(t), office.Options{MaxInputBytes: 10}, limits.ErrInputTooLarge},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

@@ -72,5 +72,11 @@ var (
 	ErrInvalidVersion = errors.New("invalid PDF version")
 )
 
+// ErrInvalidOptions is returned, wrapped in an error naming the option, by
+// every converter for options out of range or excluding each other, and
+// for a nil font index. It names no format: pkg/pdf names the format and
+// re-exports it as pdf.ErrInvalidConvertOptions.
+var ErrInvalidOptions = errors.New("invalid conversion options")
+
 // errStreamDone is the error of a [Stream] used after it ended.
 var errStreamDone = errors.New("the stream is closed")

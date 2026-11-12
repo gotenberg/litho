@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 const ns = `xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" ` +
@@ -94,7 +95,7 @@ func TestOpen_Refusals(t *testing.T) {
 		{"bad zip", []byte("PK\x03\x04garbage"), office.ErrMalformed},
 		{"encrypted content", zipOf(t, "mimetype", MimeText, "META-INF/manifest.xml", encManifest, "content.xml", "xx"), office.ErrEncrypted},
 		{"bad xml", zipOf(t, "mimetype", MimeText, "content.xml", "<a><b></a>"), office.ErrMalformed},
-		{"too deep", zipOf(t, "mimetype", MimeText, "content.xml", deep), office.ErrInputTooLarge},
+		{"too deep", zipOf(t, "mimetype", MimeText, "content.xml", deep), limits.ErrInputTooLarge},
 		{"flat not a document", []byte(`<office:document-content ` + ns + `/>`), office.ErrMalformed},
 		{"empty", nil, office.ErrMalformed},
 	}
@@ -221,7 +222,7 @@ func TestOpen_StreamsTheContent(t *testing.T) {
 		pad  int
 		want error
 	}{
-		{"one token past the cap", office.MaxXMLTokenBytes + 1, office.ErrInputTooLarge},
+		{"one token past the cap", office.MaxXMLTokenBytes + 1, limits.ErrInputTooLarge},
 		{"under the cap", 1 << 20, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

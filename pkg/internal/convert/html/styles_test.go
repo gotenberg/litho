@@ -7,6 +7,7 @@ import (
 	"testing/fstest"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 var (
@@ -281,7 +282,7 @@ func TestPrepare_EvaluatesTheMediaFeaturesGiven(t *testing.T) {
 		t.Errorf("prefers-color-scheme: dark did not match the feature given")
 	}
 	o := Options{MediaFeatures: map[string]string{"Prefers-Color-Scheme": "dark"}}
-	if _, err := o.withDefaults(); !errors.Is(err, ErrInvalidOptions) {
-		t.Errorf("a feature name that is not lowercase: got %v, want ErrInvalidOptions", err)
+	if _, err := o.withDefaults(); !errors.Is(err, typeset.ErrInvalidOptions) {
+		t.Errorf("a feature name that is not lowercase: got %v, want typeset.ErrInvalidOptions", err)
 	}
 }

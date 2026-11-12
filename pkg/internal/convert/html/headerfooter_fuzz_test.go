@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -31,7 +32,7 @@ func FuzzPageDecorations(f *testing.F) {
 			MaxInputBytes: 1 << 14, MaxPages: 16,
 		}
 		doc, err := Convert(context.Background(), strings.NewReader(src), testFonts(t), o)
-		if errors.Is(err, ErrInputTooLarge) || errors.Is(err, ErrTooManyPages) || errors.Is(err, ErrTooDeep) ||
+		if errors.Is(err, limits.ErrInputTooLarge) || errors.Is(err, limits.ErrTooManyPages) || errors.Is(err, ErrTooDeep) ||
 			errors.Is(err, ErrTooManyElements) || errors.Is(err, css.ErrTooComplex) || errors.Is(err, layout.ErrTooManyBoxes) {
 			return
 		}

@@ -6,6 +6,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // decodeAll decodes every token of in, marking each, and returns the
@@ -25,7 +27,7 @@ func decodeAll(in *TokenReader) error {
 
 // TestTokenReader_CapsOneToken pins the cap on one token: a document of
 // many tokens each under it reads to its end however long it is, and one
-// token past it fails with ErrInputTooLarge before the decoder holds it.
+// token past it fails with limits.ErrInputTooLarge before the decoder holds it.
 func TestTokenReader_CapsOneToken(t *testing.T) {
 	t.Parallel()
 	long := "<a>" + strings.Repeat("<b>12345678</b>", 1000) + "</a>"
@@ -38,8 +40,8 @@ func TestTokenReader_CapsOneToken(t *testing.T) {
 		"attribute":      `<a v="` + strings.Repeat("x", 100) + `"/>`,
 		"comment":        "<a><!--" + strings.Repeat("x", 100) + "--></a>",
 	} {
-		if err := decodeAll(NewTokenReader(strings.NewReader(doc), 64)); !errors.Is(err, ErrInputTooLarge) {
-			t.Errorf("%s: %v, want ErrInputTooLarge", name, err)
+		if err := decodeAll(NewTokenReader(strings.NewReader(doc), 64)); !errors.Is(err, limits.ErrInputTooLarge) {
+			t.Errorf("%s: %v, want limits.ErrInputTooLarge", name, err)
 		}
 	}
 }
@@ -54,7 +56,7 @@ func TestTokenReader_CharsetInput(t *testing.T) {
 	if n != 10 || err != nil {
 		t.Fatalf("Read = %d, %v; want 10 bytes", n, err)
 	}
-	if _, err := in.Read(buf); !errors.Is(err, ErrInputTooLarge) {
+	if _, err := in.Read(buf); !errors.Is(err, limits.ErrInputTooLarge) {
 		t.Fatalf("Read past the cap = %v", err)
 	}
 	in.Mark()

@@ -32,7 +32,7 @@
 // the @page rules, the title.
 //
 // A template is checked before the source is read. It fails with
-// [html.ErrInvalidOptions] when it does not parse, when no toHTML call is
+// [typeset.ErrInvalidOptions] when it does not parse, when no toHTML call is
 // reachable from the top-level template, or when it uses what the check
 // cannot bound. The check walks the parse trees from the top-level
 // template and follows {{ template }} and {{ block }} calls: a call in
@@ -44,12 +44,12 @@
 // the same HTML: a template that calls it twice prints the source twice,
 // and the identifiers of the source then repeat, which HTML does not
 // allow (HTML Living Standard, 3.2.6: an id is unique in its tree). An error while executing, such as an escaping error, fails with
-// [html.ErrInvalidOptions].
+// [typeset.ErrInvalidOptions].
 //
 // # Conversion
 //
 // The rendered document is capped at [limits.MaxConvertInputBytesCeiling]
-// bytes, past which the conversion fails with [html.ErrInputTooLarge], and
+// bytes, past which the conversion fails with [limits.ErrInputTooLarge], and
 // converts through the html package with the caller's [html.Options]: its
 // relative images and links resolve as an HTML document's do, in
 // [html.Options.Resources] or against [html.Options.BaseURL], and every

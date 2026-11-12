@@ -10,7 +10,9 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // grid150 returns a sheet of 150 rows by 20 columns of 50 points, each
@@ -172,14 +174,14 @@ func TestConvert_Options(t *testing.T) {
 		t.Errorf("page %vx%v, want 792x612", pg.Width, pg.Height)
 	}
 	_, err := Convert(context.Background(), two(), pinnedFonts(t), office.Options{MaxPages: 3})
-	if !errors.Is(err, office.ErrTooManyPages) {
+	if !errors.Is(err, limits.ErrTooManyPages) {
 		t.Errorf("MaxPages 3: %v, want ErrTooManyPages", err)
 	}
-	if _, err := Convert(context.Background(), nil, pinnedFonts(t), office.Options{}); !errors.Is(err, office.ErrInvalidOptions) {
+	if _, err := Convert(context.Background(), nil, pinnedFonts(t), office.Options{}); !errors.Is(err, typeset.ErrInvalidOptions) {
 		t.Errorf("nil document: %v", err)
 	}
 	var empty *text.Fonts
-	if _, err := Convert(context.Background(), two(), empty, office.Options{}); !errors.Is(err, office.ErrInvalidOptions) {
+	if _, err := Convert(context.Background(), two(), empty, office.Options{}); !errors.Is(err, typeset.ErrInvalidOptions) {
 		t.Errorf("nil fonts: %v", err)
 	}
 }

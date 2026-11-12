@@ -227,7 +227,7 @@ type Options struct {
 	// warning and the image is left out.
 	Image func(ctx context.Context, url string) (*Picture, error)
 	// MaxPages bounds the pages laid out; past it Layout fails with
-	// [ErrTooManyPages]. Zero means [DefaultMaxPages].
+	// [limits.ErrTooManyPages]. Zero means [DefaultMaxPages].
 	MaxPages int
 	// Logger receives diagnostics, nil for none.
 	Logger *slog.Logger

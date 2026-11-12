@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Page setup defaults: A4, the ISO 216 size, 210 by 297 mm.
@@ -180,7 +181,7 @@ type Options struct {
 
 // withDefaults returns o with every zero field set to its default and
 // the paper turned for Landscape, or an error wrapping
-// [ErrInvalidOptions] for a field out of range. It is called once per
+// [typeset.ErrInvalidOptions] for a field out of range. It is called once per
 // conversion: Landscape stays set, so a second call would turn the paper
 // back.
 func (o Options) withDefaults() (Options, error) {
@@ -215,7 +216,7 @@ func (o Options) withDefaults() (Options, error) {
 	}{{"page width", o.PageWidth}, {"page height", o.PageHeight}} {
 		// The negated range also refuses NaN.
 		if !(v.value > 0 && v.value <= maxPageSide) {
-			return o, fmt.Errorf("%w: %s %v is not in (0, %v]", ErrInvalidOptions, v.name, v.value, maxPageSide)
+			return o, fmt.Errorf("%w: %s %v is not in (0, %v]", typeset.ErrInvalidOptions, v.name, v.value, maxPageSide)
 		}
 	}
 	for _, v := range []struct {
@@ -228,38 +229,38 @@ func (o Options) withDefaults() (Options, error) {
 		{"left margin", o.MarginLeft},
 	} {
 		if !isMargin(v.value) {
-			return o, fmt.Errorf("%w: %s %v is not a finite number of points, zero or more", ErrInvalidOptions, v.name, v.value)
+			return o, fmt.Errorf("%w: %s %v is not a finite number of points, zero or more", typeset.ErrInvalidOptions, v.name, v.value)
 		}
 	}
 	if o.MarginLeft+o.MarginRight >= o.PageWidth {
-		return o, fmt.Errorf("%w: left and right margins %v and %v leave no room on a page %v points wide", ErrInvalidOptions, o.MarginLeft, o.MarginRight, o.PageWidth)
+		return o, fmt.Errorf("%w: left and right margins %v and %v leave no room on a page %v points wide", typeset.ErrInvalidOptions, o.MarginLeft, o.MarginRight, o.PageWidth)
 	}
 	if o.MarginTop+o.MarginBottom >= o.PageHeight {
-		return o, fmt.Errorf("%w: top and bottom margins %v and %v leave no room on a page %v points high", ErrInvalidOptions, o.MarginTop, o.MarginBottom, o.PageHeight)
+		return o, fmt.Errorf("%w: top and bottom margins %v and %v leave no room on a page %v points high", typeset.ErrInvalidOptions, o.MarginTop, o.MarginBottom, o.PageHeight)
 	}
 	if o.Media != MediaPrint && o.Media != MediaScreen {
-		return o, fmt.Errorf("%w: media type %q is neither %q nor %q", ErrInvalidOptions, o.Media, MediaPrint, MediaScreen)
+		return o, fmt.Errorf("%w: media type %q is neither %q nor %q", typeset.ErrInvalidOptions, o.Media, MediaPrint, MediaScreen)
 	}
 	// The negated range also refuses NaN.
 	if !(o.Scale >= MinScale && o.Scale <= MaxScale) {
-		return o, fmt.Errorf("%w: scale %v is not in [%v, %v]", ErrInvalidOptions, o.Scale, MinScale, MaxScale)
+		return o, fmt.Errorf("%w: scale %v is not in [%v, %v]", typeset.ErrInvalidOptions, o.Scale, MinScale, MaxScale)
 	}
 	if o.BaseURL != "" {
 		u, err := url.Parse(o.BaseURL)
 		if err != nil || !u.IsAbs() {
-			return o, fmt.Errorf("%w: base URL %q is not an absolute URL", ErrInvalidOptions, o.BaseURL)
+			return o, fmt.Errorf("%w: base URL %q is not an absolute URL", typeset.ErrInvalidOptions, o.BaseURL)
 		}
 	}
 	for name := range o.MediaFeatures {
 		if name == "" || name != strings.ToLower(name) {
-			return o, fmt.Errorf("%w: media feature %q is not a lowercase name", ErrInvalidOptions, name)
+			return o, fmt.Errorf("%w: media feature %q is not a lowercase name", typeset.ErrInvalidOptions, name)
 		}
 	}
 	if o.MaxInputBytes < 0 || o.MaxInputBytes > limits.MaxConvertInputBytesCeiling {
-		return o, fmt.Errorf("%w: input cap %d is not in [1, %d]", ErrInvalidOptions, o.MaxInputBytes, int64(limits.MaxConvertInputBytesCeiling))
+		return o, fmt.Errorf("%w: input cap %d is not in [1, %d]", typeset.ErrInvalidOptions, o.MaxInputBytes, int64(limits.MaxConvertInputBytesCeiling))
 	}
 	if o.MaxPages < 0 || o.MaxPages > limits.MaxConvertPagesCeiling {
-		return o, fmt.Errorf("%w: page cap %d is not in [1, %d]", ErrInvalidOptions, o.MaxPages, limits.MaxConvertPagesCeiling)
+		return o, fmt.Errorf("%w: page cap %d is not in [1, %d]", typeset.ErrInvalidOptions, o.MaxPages, limits.MaxConvertPagesCeiling)
 	}
 	return o, nil
 }

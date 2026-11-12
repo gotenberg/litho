@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -137,7 +138,7 @@ func (b *builder) warnEach(code, key, msg string) {
 func (b *builder) node(n *layout.Node) *layout.Node {
 	b.nodes++
 	if b.nodes > maxNodes && b.err == nil {
-		b.err = fmt.Errorf("%w: more than %d layout nodes", office.ErrInputTooLarge, maxNodes)
+		b.err = fmt.Errorf("%w: more than %d layout nodes", limits.ErrInputTooLarge, maxNodes)
 	}
 	if b.nodes%nodeCheckEvery == 0 && b.err == nil {
 		b.err = b.ctx.Err()

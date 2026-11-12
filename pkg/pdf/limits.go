@@ -215,15 +215,15 @@ func limitsFromInternal(l limits.Limits) Limits {
 	}
 }
 
-// convertBudgetError logs the most memory the conversion under b held, as
-// its budget accounted it, at Debug on logger, and returns err, the error
-// the conversion ended with, as [Conversion.WriteTo] reports it: when the
-// budget refused a charge, the refusal wrapped in [ErrConvertInputTooLarge],
-// whatever error the converter saw after its context was cancelled. A converter that swallows
-// a refused charge (a picture left out with a warning) still ends with
-// the refusal, since the account it was refused on is not one the
-// conversion may pass.
-func convertBudgetError(logger *slog.Logger, b *limits.Budget, err error) error {
+// convertBudgetError logs the most memory the conversion of a name source
+// under b held, as its budget accounted it, at Debug on logger, and returns
+// err, the error the conversion ended with, as [Conversion.WriteTo] reports
+// it: when the budget refused a charge, the refusal, which wraps
+// [ErrConvertInputTooLarge], whatever error the converter saw after its
+// context was cancelled. A converter that swallows a refused charge (a
+// picture left out with a warning) still ends with the refusal, since the
+// account it was refused on is not one the conversion may pass.
+func convertBudgetError(logger *slog.Logger, name string, b *limits.Budget, err error) error {
 	refusal := b.Err()
 	if logger != nil {
 		logger.Debug("convert: memory account", slog.Int64("peak", b.Peak()), slog.Int64("held", b.Held()), slog.Bool("refused", refusal != nil))
@@ -231,10 +231,10 @@ func convertBudgetError(logger *slog.Logger, b *limits.Budget, err error) error 
 	switch {
 	case refusal == nil:
 		return err
-	case errors.Is(err, ErrConvertInputTooLarge) && errors.Is(err, limits.ErrMemoryBudget):
+	case errors.Is(err, limits.ErrMemoryBudget):
 		return err
 	default:
-		return fmt.Errorf("converting: %w: %w", ErrConvertInputTooLarge, refusal)
+		return fmt.Errorf("converting %s: %w", name, refusal)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 func testXML(n int) []byte {
@@ -121,7 +122,7 @@ func TestOpenODFEntry_Refusals(t *testing.T) {
 		{"salt", stored, with(func(p *ODFParams) { p.Salt = "" }), office.ErrMalformed, "salt"},
 		{"key size", stored, with(func(p *ODFParams) { p.KeySize = "16" }), office.ErrMalformed, "derived key"},
 		{"checksum base64", stored, with(func(p *ODFParams) { p.Checksum = "%" }), office.ErrMalformed, "checksum"},
-		{"size cap", stored, with(func(p *ODFParams) { p.Size = "999999999999" }), office.ErrInputTooLarge, "cap"},
+		{"size cap", stored, with(func(p *ODFParams) { p.Size = "999999999999" }), limits.ErrInputTooLarge, "cap"},
 		{"size mismatch", stored, with(func(p *ODFParams) { p.Size = "10" }), office.ErrMalformed, "manifest:size"},
 		{"size short", stored, with(func(p *ODFParams) { p.Size = "999999" }), office.ErrMalformed, "manifest:size"},
 		{"cbc blocks", stored[:len(stored)-1], base, office.ErrMalformed, "AES-CBC"},

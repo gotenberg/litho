@@ -17,6 +17,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestParse_Records(t *testing.T) {
@@ -106,7 +107,7 @@ func TestRead_Options(t *testing.T) {
 		t.Errorf("text warnings = %+v", w)
 	}
 	for _, r := range []rune{'"', '\n', '\r', utf8.RuneError, -1} {
-		if _, _, err := Read(context.Background(), in, nil, office.Options{CSVSeparators: []rune{r}}); !errors.Is(err, office.ErrInvalidOptions) {
+		if _, _, err := Read(context.Background(), in, nil, office.Options{CSVSeparators: []rune{r}}); !errors.Is(err, typeset.ErrInvalidOptions) {
 			t.Errorf("separator %q: err = %v", r, err)
 		}
 	}

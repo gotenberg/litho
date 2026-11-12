@@ -491,11 +491,11 @@ func TestConvert_HandoutsHiddenSlides(t *testing.T) {
 }
 
 // TestConvert_HandoutsInvalid checks that a count no handout layout has,
-// or handouts beside notes pages, fail with office.ErrInvalidOptions.
+// or handouts beside notes pages, fail with typeset.ErrInvalidOptions.
 func TestConvert_HandoutsInvalid(t *testing.T) {
 	for _, opts := range []office.Options{{Handouts: 5}, {Handouts: -1}, {Handouts: 12}, {Handouts: 2, NotesPages: true}} {
-		if _, err := Convert(context.Background(), handoutDeck(), pinnedFonts(t), opts); !errors.Is(err, office.ErrInvalidOptions) {
-			t.Errorf("%+v: %v, want office.ErrInvalidOptions", opts, err)
+		if _, err := Convert(context.Background(), handoutDeck(), pinnedFonts(t), opts); !errors.Is(err, typeset.ErrInvalidOptions) {
+			t.Errorf("%+v: %v, want typeset.ErrInvalidOptions", opts, err)
 		}
 	}
 }

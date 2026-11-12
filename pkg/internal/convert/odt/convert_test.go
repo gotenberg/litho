@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 func TestConvert_TextAndStyles(t *testing.T) {
@@ -92,7 +93,7 @@ func TestConvert_Errors(t *testing.T) {
 	}{
 		{"not a package", []byte("hello"), office.Options{}, office.ErrMalformed},
 		{"spreadsheet", []byte(`<office:document ` + nsDecl + ` office:mimetype="application/vnd.oasis.opendocument.spreadsheet"><office:body><office:spreadsheet/></office:body></office:document>`), office.Options{}, office.ErrMalformed},
-		{"too large", doc{body: `<text:p>a</text:p>`}.pack(t), office.Options{MaxInputBytes: 10}, office.ErrInputTooLarge},
+		{"too large", doc{body: `<text:p>a</text:p>`}.pack(t), office.Options{MaxInputBytes: 10}, limits.ErrInputTooLarge},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

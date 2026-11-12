@@ -17,10 +17,10 @@ import (
 // Convert reads the CSV file src holds and lays it out as a paged
 // document, with the fonts of the index fonts. It returns ctx's error when
 // ctx ends first, and the errors office.Options documents:
-// office.ErrInvalidOptions for options out of range or a nil fonts,
+// typeset.ErrInvalidOptions for options out of range or a nil fonts,
 // text.ErrNoFonts for an index without faces, office.ErrMalformed for a
-// file that is not text, office.ErrInputTooLarge past a size cap and
-// office.ErrTooManyPages past the page cap. A CSV file is never encrypted:
+// file that is not text, limits.ErrInputTooLarge past a size cap and
+// limits.ErrTooManyPages past the page cap. A CSV file is never encrypted:
 // opts.Password is ignored. The output depends on src, fonts' index and
 // opts alone.
 func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*typeset.Document, error) {
@@ -28,20 +28,20 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 		return nil, err
 	}
 	if fonts == nil {
-		return nil, fmt.Errorf("%w: no font index", office.ErrInvalidOptions)
+		return nil, fmt.Errorf("%w: no font index", typeset.ErrInvalidOptions)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if fonts.Len() == 0 {
-		return nil, fmt.Errorf("converting CSV: %w", text.ErrNoFonts)
+		return nil, text.ErrNoFonts
 	}
 	data, err := office.ReadAll(ctx, src, opts.MaxInputBytes)
 	if err != nil {
-		return nil, fmt.Errorf("reading CSV: %w", err)
+		return nil, err
 	}
 	if len(data) == 0 {
-		return nil, fmt.Errorf("reading CSV: %w: the file is empty", office.ErrMalformed)
+		return nil, fmt.Errorf("%w: the file is empty", office.ErrMalformed)
 	}
 	doc, warnings, err := Read(ctx, data, fonts, opts)
 	if err != nil {
@@ -105,7 +105,7 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 	printDate := opts.PrintDate
 	for _, r := range opts.CSVSeparators {
 		if r == quote || r == '\n' || r == '\r' || r == utf8.RuneError || !utf8.ValidRune(r) {
-			return nil, nil, fmt.Errorf("%w: CSV separator %q", office.ErrInvalidOptions, r)
+			return nil, nil, fmt.Errorf("%w: CSV separator %q", typeset.ErrInvalidOptions, r)
 		}
 	}
 	recs, lim, err := parse(ctx, decode(data), newSeparators(opts.CSVSeparators))

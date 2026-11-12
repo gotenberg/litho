@@ -101,7 +101,7 @@ type Options struct {
 }
 
 // withDefaults returns o with every zero field set to its default, or an
-// error wrapping [ErrInvalidOptions] for a field out of range. It never
+// error wrapping [typeset.ErrInvalidOptions] for a field out of range. It never
 // aliases o.FontFamilies.
 func (o Options) withDefaults() (Options, error) {
 	if o.PageWidth == 0 && o.PageHeight == 0 {
@@ -140,7 +140,7 @@ func (o Options) withDefaults() (Options, error) {
 	} {
 		// The negated range also refuses NaN.
 		if !(v.value > 0 && v.value <= v.max) {
-			return o, fmt.Errorf("%w: %s %v is not in (0, %v]", ErrInvalidOptions, v.name, v.value, v.max)
+			return o, fmt.Errorf("%w: %s %v is not in (0, %v]", typeset.ErrInvalidOptions, v.name, v.value, v.max)
 		}
 	}
 	for _, v := range []struct {
@@ -154,23 +154,23 @@ func (o Options) withDefaults() (Options, error) {
 	} {
 		// The negated range also refuses NaN.
 		if !(v.value >= 0 && v.value < math.Inf(1)) {
-			return o, fmt.Errorf("%w: %s %v is not a finite number of points, zero or more", ErrInvalidOptions, v.name, v.value)
+			return o, fmt.Errorf("%w: %s %v is not a finite number of points, zero or more", typeset.ErrInvalidOptions, v.name, v.value)
 		}
 	}
 	if o.MarginLeft+o.MarginRight >= o.PageWidth {
-		return o, fmt.Errorf("%w: left and right margins %v and %v leave no room on a page %v points wide", ErrInvalidOptions, o.MarginLeft, o.MarginRight, o.PageWidth)
+		return o, fmt.Errorf("%w: left and right margins %v and %v leave no room on a page %v points wide", typeset.ErrInvalidOptions, o.MarginLeft, o.MarginRight, o.PageWidth)
 	}
 	if o.MarginTop+o.MarginBottom >= o.PageHeight {
-		return o, fmt.Errorf("%w: top and bottom margins %v and %v leave no room on a page %v points high", ErrInvalidOptions, o.MarginTop, o.MarginBottom, o.PageHeight)
+		return o, fmt.Errorf("%w: top and bottom margins %v and %v leave no room on a page %v points high", typeset.ErrInvalidOptions, o.MarginTop, o.MarginBottom, o.PageHeight)
 	}
 	if o.TabWidth < 0 || o.TabWidth > maxTabWidth {
-		return o, fmt.Errorf("%w: tab width %d is not in [1, %d]", ErrInvalidOptions, o.TabWidth, maxTabWidth)
+		return o, fmt.Errorf("%w: tab width %d is not in [1, %d]", typeset.ErrInvalidOptions, o.TabWidth, maxTabWidth)
 	}
 	if o.MaxInputBytes < 0 || o.MaxInputBytes > limits.MaxConvertInputBytesCeiling {
-		return o, fmt.Errorf("%w: input cap %d is not in [1, %d]", ErrInvalidOptions, o.MaxInputBytes, int64(limits.MaxConvertInputBytesCeiling))
+		return o, fmt.Errorf("%w: input cap %d is not in [1, %d]", typeset.ErrInvalidOptions, o.MaxInputBytes, int64(limits.MaxConvertInputBytesCeiling))
 	}
 	if o.MaxPages < 0 || o.MaxPages > limits.MaxConvertPagesCeiling {
-		return o, fmt.Errorf("%w: page cap %d is not in [1, %d]", ErrInvalidOptions, o.MaxPages, limits.MaxConvertPagesCeiling)
+		return o, fmt.Errorf("%w: page cap %d is not in [1, %d]", typeset.ErrInvalidOptions, o.MaxPages, limits.MaxConvertPagesCeiling)
 	}
 	return o, nil
 }

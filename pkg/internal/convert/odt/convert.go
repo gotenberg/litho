@@ -2,7 +2,6 @@ package odt
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -22,8 +21,8 @@ import (
 // documents: office.ErrMalformed for a source that is not an
 // OpenDocument text document, office.ErrEncrypted for an encrypted one
 // opts.Password does not open (ODF 1.3, Part 2, 3.4),
-// office.ErrInputTooLarge past the package, XML or layout caps,
-// office.ErrTooManyPages past opts.MaxPages. The output depends on src,
+// limits.ErrInputTooLarge past the package, XML or layout caps,
+// limits.ErrTooManyPages past opts.MaxPages. The output depends on src,
 // fonts' index and opts alone. See the package documentation for what is
 // drawn.
 func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*typeset.Document, error) {
@@ -34,18 +33,18 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 		return nil, err
 	}
 	if fonts == nil {
-		return nil, fmt.Errorf("%w: no font index", office.ErrInvalidOptions)
+		return nil, fmt.Errorf("%w: no font index", typeset.ErrInvalidOptions)
 	}
 	if fonts.Len() == 0 {
-		return nil, fmt.Errorf("converting ODT: %w", text.ErrNoFonts)
+		return nil, text.ErrNoFonts
 	}
 	data, err := office.ReadAll(ctx, src, opts.MaxInputBytes)
 	if err != nil {
-		return nil, fmt.Errorf("reading ODT: %w", err)
+		return nil, err
 	}
 	pkg, err := odf.Open(ctx, data, odf.Options{Password: opts.Password})
 	if err != nil {
-		return nil, fmt.Errorf("reading ODT: %w", err)
+		return nil, fmt.Errorf("opening the package: %w", err)
 	}
 	if !textMime(pkg.MimeType) {
 		return nil, fmt.Errorf("%w: the document is %q, not a text document", office.ErrMalformed, pkg.MimeType)
@@ -92,10 +91,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 			Logger:        opts.Logger,
 		})
 		if err != nil {
-			if errors.Is(err, layout.ErrTooManyPages) {
-				return nil, fmt.Errorf("%w: %w", office.ErrTooManyPages, err)
-			}
-			return nil, fmt.Errorf("laying out the ODT document: %w", err)
+			return nil, err
 		}
 		return res, nil
 	}

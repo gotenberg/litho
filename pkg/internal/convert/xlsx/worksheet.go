@@ -305,7 +305,7 @@ func (w *sheetReader) sheetData(data *ooxml.Element) error {
 			}
 			r.cells++
 			if r.cells > sheet.MaxCells {
-				return fmt.Errorf("%w: more than %d cells", office.ErrInputTooLarge, sheet.MaxCells)
+				return fmt.Errorf("%w: more than %d cells", limits.ErrInputTooLarge, sheet.MaxCells)
 			}
 			if err := limits.BudgetFrom(r.ctx).ChargeUnits(1, sheet.CellCost, "cells"); err != nil {
 				return err

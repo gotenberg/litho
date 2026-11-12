@@ -32,28 +32,28 @@ func notesPaper(opts office.Options) (float64, float64) {
 // Convert reads the ODP package, or the flat FODP document, src holds and
 // lays it out as a paged document, with the fonts of the index fonts. It
 // returns ctx's error when ctx ends first, and the errors office.Options
-// documents: office.ErrInvalidOptions for options out of range or a nil
+// documents: typeset.ErrInvalidOptions for options out of range or a nil
 // fonts, text.ErrNoFonts for an index without faces, office.ErrEncrypted
 // for an encrypted package opts.Password does not open, office.ErrMalformed
 // for a document that is not an OpenDocument presentation,
-// office.ErrInputTooLarge past a size cap and office.ErrTooManyPages past
+// limits.ErrInputTooLarge past a size cap and limits.ErrTooManyPages past
 // the page cap. The output depends on src, fonts' index and opts alone.
 func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*typeset.Document, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
 	if fonts == nil {
-		return nil, fmt.Errorf("%w: no font index", office.ErrInvalidOptions)
+		return nil, fmt.Errorf("%w: no font index", typeset.ErrInvalidOptions)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if fonts.Len() == 0 {
-		return nil, fmt.Errorf("converting ODP: %w", text.ErrNoFonts)
+		return nil, text.ErrNoFonts
 	}
 	data, err := office.ReadAll(ctx, src, opts.MaxInputBytes)
 	if err != nil {
-		return nil, fmt.Errorf("reading ODP: %w", err)
+		return nil, err
 	}
 	doc, warnings, err := readDocument(ctx, data, fonts, opts.Password, opts.Handouts > 0)
 	if err != nil {
@@ -83,16 +83,16 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, password string) 
 func readDocument(ctx context.Context, data []byte, fonts *text.Fonts, password string, handouts bool) (*slides.Document, []typeset.Warning, error) {
 	pkg, err := odf.Open(ctx, data, odf.Options{Password: password})
 	if err != nil {
-		return nil, nil, fmt.Errorf("reading ODP: %w", err)
+		return nil, nil, fmt.Errorf("opening the package: %w", err)
 	}
 	switch pkg.MimeType {
 	case "", odf.MimePresentation, odf.MimePresentationTemplate:
 	default:
-		return nil, nil, fmt.Errorf("reading ODP: %w: the document is %q, not a presentation", office.ErrMalformed, pkg.MimeType)
+		return nil, nil, fmt.Errorf("%w: the document is %q, not a presentation", office.ErrMalformed, pkg.MimeType)
 	}
 	body := odf.Section(pkg.Content, "body").Child(odf.NSOffice, "presentation")
 	if body == nil {
-		return nil, nil, fmt.Errorf("reading ODP: %w: the document has no office:presentation body", office.ErrMalformed)
+		return nil, nil, fmt.Errorf("%w: the document has no office:presentation body", office.ErrMalformed)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
@@ -103,7 +103,7 @@ func readDocument(ctx context.Context, data []byte, fonts *text.Fonts, password 
 		r.handoutMaster(doc)
 	}
 	if r.err != nil {
-		return nil, nil, fmt.Errorf("reading ODP: %w", r.err)
+		return nil, nil, r.err
 	}
 	return doc, r.warnings, nil
 }

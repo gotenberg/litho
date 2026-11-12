@@ -67,14 +67,14 @@ type Options struct {
 	TrackedChanges TrackedChanges
 	// Sheets, when not nil, are the names of the sheets of a spreadsheet
 	// that print, matched exactly, in book order, hidden ones included; a
-	// name the book has no sheet for fails with ErrInvalidOptions. The
+	// name the book has no sheet for fails with typeset.ErrInvalidOptions. The
 	// caller sets at most one of Sheets and SheetNumbers. Other documents
 	// ignore both.
 	Sheets []string
 	// SheetNumbers, when not nil, are the 1-based positions in the book of
 	// the sheets that print, hidden sheets counted, in book order, hidden
 	// ones included; a number the book has no sheet for fails with
-	// ErrInvalidOptions.
+	// typeset.ErrInvalidOptions.
 	SheetNumbers []int
 	// HiddenSheets prints the sheets a spreadsheet hides too; off, the
 	// default, they are left out. Other documents ignore it.
@@ -188,38 +188,38 @@ func (o Options) Paper(w, h float64) (float64, float64) {
 }
 
 // Validate reports the first option out of range, wrapped in
-// [ErrInvalidOptions], nil when every option is in range.
+// [typeset.ErrInvalidOptions], nil when every option is in range.
 func (o Options) Validate() error {
 	for _, p := range []struct {
 		name string
 		w, h float64
 	}{{"page", o.PageWidth, o.PageHeight}, {"default page", o.DefaultPageWidth, o.DefaultPageHeight}, {"notes paper", o.NotesPaperWidth, o.NotesPaperHeight}} {
 		if (p.w == 0) != (p.h == 0) {
-			return fmt.Errorf("%w: %s width and height come together", ErrInvalidOptions, p.name)
+			return fmt.Errorf("%w: %s width and height come together", typeset.ErrInvalidOptions, p.name)
 		}
 		for _, v := range []float64{p.w, p.h} {
 			if v != 0 && (math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 || v > MaxPageSide) {
-				return fmt.Errorf("%w: %s side %v is not in (0, %d]", ErrInvalidOptions, p.name, v, MaxPageSide)
+				return fmt.Errorf("%w: %s side %v is not in (0, %d]", typeset.ErrInvalidOptions, p.name, v, MaxPageSide)
 			}
 		}
 	}
 	if o.Landscape && o.Portrait {
-		return fmt.Errorf("%w: landscape and portrait exclude each other", ErrInvalidOptions)
+		return fmt.Errorf("%w: landscape and portrait exclude each other", typeset.ErrInvalidOptions)
 	}
 	if o.TrackedChanges < ChangesAccepted || o.TrackedChanges > ChangesMarked {
-		return fmt.Errorf("%w: tracked changes view %d", ErrInvalidOptions, o.TrackedChanges)
+		return fmt.Errorf("%w: tracked changes view %d", typeset.ErrInvalidOptions, o.TrackedChanges)
 	}
 	if o.Recalculation < RecalculateAsNeeded || o.Recalculation > RecalculateAlways {
-		return fmt.Errorf("%w: recalculation mode %d", ErrInvalidOptions, o.Recalculation)
+		return fmt.Errorf("%w: recalculation mode %d", typeset.ErrInvalidOptions, o.Recalculation)
 	}
 	if o.Sheets != nil && o.SheetNumbers != nil {
-		return fmt.Errorf("%w: sheet names and sheet numbers exclude each other", ErrInvalidOptions)
+		return fmt.Errorf("%w: sheet names and sheet numbers exclude each other", typeset.ErrInvalidOptions)
 	}
 	if o.MaxInputBytes < 0 {
-		return fmt.Errorf("%w: max input bytes %d is negative", ErrInvalidOptions, o.MaxInputBytes)
+		return fmt.Errorf("%w: max input bytes %d is negative", typeset.ErrInvalidOptions, o.MaxInputBytes)
 	}
 	if o.MaxPages < 0 {
-		return fmt.Errorf("%w: max pages %d is negative", ErrInvalidOptions, o.MaxPages)
+		return fmt.Errorf("%w: max pages %d is negative", typeset.ErrInvalidOptions, o.MaxPages)
 	}
 	return nil
 }

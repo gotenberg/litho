@@ -148,7 +148,7 @@ func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 		revisions: &revisions{view: opts.TrackedChanges, authors: map[string]int{}, marked: map[*ooxml.Element]bool{}, markEnd: map[*ooxml.Element]bool{}, markStart: map[*ooxml.Element]bool{}, moved: map[*ooxml.Element]bool{}},
 	}
 	if d.root, err = d.part(main); err != nil {
-		return nil, fmt.Errorf("reading the DOCX main part: %w", err)
+		return nil, fmt.Errorf("reading the main part: %w", err)
 	}
 	d.theme = &ooxml.Theme{}
 	d.readFontTable(nil)

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/plaintext"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -268,8 +269,8 @@ func TestConvert_RefusesASourcePastTheByteCap(t *testing.T) {
 	if _, err := plaintext.Convert(context.Background(), strings.NewReader("ABCD"), f, o); err != nil {
 		t.Errorf("4 bytes under a 4-byte cap: %v", err)
 	}
-	if _, err := plaintext.Convert(context.Background(), strings.NewReader("ABCDE"), f, o); !errors.Is(err, plaintext.ErrInputTooLarge) {
-		t.Errorf("5 bytes under a 4-byte cap: %v, want ErrInputTooLarge", err)
+	if _, err := plaintext.Convert(context.Background(), strings.NewReader("ABCDE"), f, o); !errors.Is(err, limits.ErrInputTooLarge) {
+		t.Errorf("5 bytes under a 4-byte cap: %v, want limits.ErrInputTooLarge", err)
 	}
 }
 
@@ -281,11 +282,11 @@ func TestConvert_RefusesPastThePageCap(t *testing.T) {
 	if doc := convert(t, f, "A\fB", o); len(doc.Pages) != 2 {
 		t.Errorf("%d pages, want 2", len(doc.Pages))
 	}
-	if _, err := plaintext.Convert(context.Background(), strings.NewReader("A\fB\fC"), f, o); !errors.Is(err, plaintext.ErrTooManyPages) {
-		t.Errorf("three pages under a two-page cap: %v, want ErrTooManyPages", err)
+	if _, err := plaintext.Convert(context.Background(), strings.NewReader("A\fB\fC"), f, o); !errors.Is(err, limits.ErrTooManyPages) {
+		t.Errorf("three pages under a two-page cap: %v, want limits.ErrTooManyPages", err)
 	}
-	if _, err := plaintext.Convert(context.Background(), strings.NewReader(strings.Repeat("A\n", 200)), f, o); !errors.Is(err, plaintext.ErrTooManyPages) {
-		t.Errorf("200 lines under a two-page cap: %v, want ErrTooManyPages", err)
+	if _, err := plaintext.Convert(context.Background(), strings.NewReader(strings.Repeat("A\n", 200)), f, o); !errors.Is(err, limits.ErrTooManyPages) {
+		t.Errorf("200 lines under a two-page cap: %v, want limits.ErrTooManyPages", err)
 	}
 }
 
@@ -362,12 +363,12 @@ func TestConvert_ValidatesOptions(t *testing.T) {
 		"negative page cap":    {MaxPages: -1},
 		"page cap past ceil":   {MaxPages: 100_001},
 	} {
-		if _, err := plaintext.Convert(context.Background(), strings.NewReader("A"), f, o); !errors.Is(err, plaintext.ErrInvalidOptions) {
-			t.Errorf("%s: %v, want ErrInvalidOptions", name, err)
+		if _, err := plaintext.Convert(context.Background(), strings.NewReader("A"), f, o); !errors.Is(err, typeset.ErrInvalidOptions) {
+			t.Errorf("%s: %v, want typeset.ErrInvalidOptions", name, err)
 		}
 	}
-	if _, err := plaintext.Convert(context.Background(), strings.NewReader("A"), nil, opts()); !errors.Is(err, plaintext.ErrInvalidOptions) {
-		t.Errorf("nil fonts: %v, want ErrInvalidOptions", err)
+	if _, err := plaintext.Convert(context.Background(), strings.NewReader("A"), nil, opts()); !errors.Is(err, typeset.ErrInvalidOptions) {
+		t.Errorf("nil fonts: %v, want typeset.ErrInvalidOptions", err)
 	}
 	empty, err := text.NewFonts(context.Background(), nil, []string{t.TempDir()})
 	if err != nil {

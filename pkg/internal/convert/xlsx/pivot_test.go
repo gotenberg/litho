@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // pivotWorkbook returns a workbook whose sheet S holds name and v in
@@ -143,7 +144,7 @@ func FuzzPivotTable(f *testing.F) {
 			return
 		}
 		checkModel(t, doc)
-		if _, err := sheet.Convert(context.Background(), doc, fonts, office.Options{MaxPages: 50}); err != nil && !errors.Is(err, office.ErrTooManyPages) {
+		if _, err := sheet.Convert(context.Background(), doc, fonts, office.Options{MaxPages: 50}); err != nil && !errors.Is(err, limits.ErrTooManyPages) {
 			t.Fatalf("convert: %v", err)
 		}
 	})

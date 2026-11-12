@@ -104,7 +104,7 @@ func (b *pageBuilder) build() ([]typeset.Fragment, []typeset.Link, *typeset.Stru
 		Logger:   b.opts.Logger,
 	})
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("laying out a page of sheet %s: %w", quote(b.g.sh.Name), err)
+		return nil, nil, nil, fmt.Errorf("sheet %s: %w", quote(b.g.sh.Name), err)
 	}
 	b.warnings = append(b.warnings, res.Warnings...)
 	var frags []typeset.Fragment

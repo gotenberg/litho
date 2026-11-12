@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/plaintext"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/pdf"
@@ -30,7 +31,7 @@ func FuzzConvert(f *testing.F) {
 		fuzzFontsOnce.Do(func() { fuzzFonts = testFonts(t) })
 		o := plaintext.Options{FontFamilies: []string{"Test Serif"}, MaxInputBytes: 1 << 14, MaxPages: 64}
 		doc, err := plaintext.Convert(context.Background(), bytes.NewReader(data), fuzzFonts, o)
-		if errors.Is(err, plaintext.ErrInputTooLarge) || errors.Is(err, plaintext.ErrTooManyPages) {
+		if errors.Is(err, limits.ErrInputTooLarge) || errors.Is(err, limits.ErrTooManyPages) {
 			return
 		}
 		if err != nil {

@@ -7,6 +7,8 @@ import (
 	"errors"
 	"math/rand/v2"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // TestRead_InflateRatio pins [MaxInflateRatio]: an entry inflating past
@@ -43,8 +45,8 @@ func TestRead_InflateRatio(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if _, err := p.Read(ctx, "bomb", false, 0); !errors.Is(err, ErrInputTooLarge) {
-		t.Errorf("4 MiB of zeros: %v, want ErrInputTooLarge", err)
+	if _, err := p.Read(ctx, "bomb", false, 0); !errors.Is(err, limits.ErrInputTooLarge) {
+		t.Errorf("4 MiB of zeros: %v, want limits.ErrInputTooLarge", err)
 	}
 	for _, name := range []string{"small", "noise"} {
 		if _, err := p.Read(ctx, name, false, 0); err != nil {

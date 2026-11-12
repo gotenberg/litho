@@ -1,24 +1,21 @@
 package html
 
-import "errors"
+import (
+	"fmt"
 
-// Sentinel errors [Convert] wraps. Match them with errors.Is.
+	"github.com/gotenberg/litho/pkg/internal/limits"
+)
+
+// Sentinel errors [Convert] wraps beside limits.ErrInputTooLarge,
+// limits.ErrTooManyPages and typeset.ErrInvalidOptions, which every
+// converter shares. Match them with errors.Is.
 var (
-	// ErrInvalidOptions is returned for [Options] out of range: a page size
-	// that is not finite and positive or past the PDF size limit, margins
-	// that leave no room, an unknown media type, a cap below zero or above
-	// its ceiling, or a nil font index.
-	ErrInvalidOptions = errors.New("invalid HTML conversion options")
-	// ErrInputTooLarge is returned for a source longer than
-	// [Options.MaxInputBytes]. Nothing is parsed.
-	ErrInputTooLarge = errors.New("HTML source exceeds the input limit")
 	// ErrTooManyElements is returned for a document of more than
-	// [MaxElements] elements. Nothing is laid out.
-	ErrTooManyElements = errors.New("HTML document exceeds the element limit")
+	// [MaxElements] elements. It wraps limits.ErrInputTooLarge. Nothing is
+	// laid out.
+	ErrTooManyElements = fmt.Errorf("%w: too many elements", limits.ErrInputTooLarge)
 	// ErrTooDeep is returned for a document that nests elements deeper
-	// than the HTML parser follows, 512. Nothing is laid out.
-	ErrTooDeep = errors.New("HTML document nests elements too deeply")
-	// ErrTooManyPages is returned when the layout needs more than
-	// [Options.MaxPages] pages.
-	ErrTooManyPages = errors.New("HTML layout exceeds the page limit")
+	// than the HTML parser follows, 512. It wraps limits.ErrInputTooLarge.
+	// Nothing is laid out.
+	ErrTooDeep = fmt.Errorf("%w: elements nested too deeply", limits.ErrInputTooLarge)
 )

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // para returns a block of n lines "a".
@@ -120,8 +121,8 @@ func TestFragmentation_FloatFragments(t *testing.T) {
 
 func TestLayout_MaxPages(t *testing.T) {
 	_, err := Layout(context.Background(), doc(para()(50)), ahem(t), Options{Page: page(10, 30), MaxPages: 3})
-	if !errors.Is(err, ErrTooManyPages) {
-		t.Errorf("error %v, want ErrTooManyPages", err)
+	if !errors.Is(err, limits.ErrTooManyPages) {
+		t.Errorf("error %v, want limits.ErrTooManyPages", err)
 	}
 }
 
