@@ -888,9 +888,10 @@ var (
 	// ErrPipelineEmpty indicates a pipeline has no source stage.
 	ErrPipelineEmpty = errors.New("pipeline has no source")
 
-	// ErrPipelineNoSource indicates a stage was declared before
-	// [Pipeline.Open] or [Pipeline.Compose], or one of those two after
-	// another stage.
+	// ErrPipelineNoSource indicates a stage was declared before the stage
+	// that seeds the pipeline, [Pipeline.Open], [Pipeline.Compose],
+	// [Pipeline.Convert] or [Pipeline.MergePipelines], or one of the first
+	// three after another stage.
 	ErrPipelineNoSource = errors.New("pipeline stage requires a loaded source")
 
 	// ErrPipelineNothingToMerge indicates [Pipeline.Merge] was called

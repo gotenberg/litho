@@ -99,7 +99,8 @@ type StageReport struct {
 	Pipelines []*PipelineResult
 }
 
-// NewPipeline creates an empty [Pipeline]. Seed it with [Pipeline.Open].
+// NewPipeline creates an empty [Pipeline]. Seed it with [Pipeline.Open],
+// [Pipeline.Compose], [Pipeline.Convert] or [Pipeline.MergePipelines].
 func NewPipeline() *Pipeline { return &Pipeline{} }
 
 func (p *Pipeline) add(s stage) *Pipeline {

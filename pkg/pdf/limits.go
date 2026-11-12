@@ -14,17 +14,16 @@ import (
 // stream may decode to, how many pixels an image may hold, how large an
 // embedded PDF validation opens, how deeply form XObjects nest, how many
 // parsed objects stay cached, how many pixels a rendered page may hold, and
-// how large a source [Convert] reads, how many pages it lays out and how
-// much memory it holds. Each
-// budget is an anti-DoS guard, not a requirement of ISO 32000: a few kilobytes
-// of crafted input can otherwise ask for gigabytes of memory or unbounded
-// work. The defaults ([DefaultLimits]) sit far above what real documents need.
+// how large a source a [Conversion] reads, how many pages it lays out and
+// how much memory it holds. Each budget is an anti-DoS guard, not a
+// requirement of ISO 32000: a few kilobytes of crafted input can otherwise
+// ask for gigabytes of memory or unbounded work. The defaults ([DefaultLimits]) sit far above what real documents need.
 //
 // A zero field keeps its default, so Limits{MaxStreamBytes: 1 << 30} raises
 // one budget and leaves the others alone. A negative field, or one above its
-// ceiling, makes [Open] and [Convert] fail with [ErrInvalidLimits], and
-// [Limits.Validate] reports the same error without opening a document. Pass it
-// to [Open] or [OpenFile] with [WithLimits], and to [Convert] with
+// ceiling, makes [Open] and [Conversion.WriteTo] fail with
+// [ErrInvalidLimits], and [Limits.Validate] reports the same error without opening a document. Pass it
+// to [Open] or [OpenFile] with [WithLimits], and to a [Conversion] with
 // [WithConvertLimits].
 //
 // The ceilings below hold on a 64-bit platform. On a 32-bit one, where a Go
@@ -80,8 +79,8 @@ type Limits struct {
 	// whatever its dictionary declares. JBIG2Decode, one bit a pixel, is held
 	// to its bytes: a bitmap may take a byte for each pixel of the budget, so
 	// a mask past it, which is read reduced to the size it is drawn at, still
-	// decodes. [Convert] holds each picture of its source to it as well: a
-	// larger one is left out with a warning. Default 100,000,000, at most
+	// decodes. A [Conversion] holds each picture of its source to it as well:
+	// a larger one is left out with a warning. Default 100,000,000, at most
 	// 2^30.
 	MaxImagePixels int64
 
@@ -118,26 +117,28 @@ type Limits struct {
 	// page at 600 dpi, at most 2^30.
 	MaxRenderPixels int64
 
-	// MaxConvertInputBytes bounds the source bytes one [Convert] call reads.
+	// MaxConvertInputBytes bounds the source bytes one [Conversion] reads.
 	// A larger source fails with [ErrConvertInputTooLarge] and is never
-	// truncated. Convert holds the source and the laid-out document in
+	// truncated. A conversion holds the source and the laid-out document in
 	// memory, about 50 bytes for each character of plain text and 170 for
 	// each byte of HTML, within MaxConvertMemoryBytes. Default 16 MiB,
 	// about 4,200 A4 pages of plain text at 12 points, at most 1 GiB.
 	MaxConvertInputBytes int64
 
-	// MaxConvertPages bounds the pages one [Convert] call lays out. A source
+	// MaxConvertPages bounds the pages one [Conversion] lays out. A source
 	// that needs more fails with [ErrConvertTooManyPages]; no page is
 	// dropped. Default 10,000, at most 100,000.
 	MaxConvertPages int
 
-	// MaxConvertMemoryBytes bounds the memory one [Convert] call holds, as
+	// MaxConvertMemoryBytes bounds the memory one [Conversion] holds, as
 	// litho accounts it: the source, the inflated parts of a package and the
 	// XML trees built from them, the HTML tree, the boxes of the layout and
 	// the computed style each holds, the shaped lines, the cells of a sheet,
 	// the shapes of a slide, the decoded pictures and effect bitmaps while
-	// they live, the font programs the conversion loads, and the pages and
-	// streams it writes. Each is charged before it is taken, so a conversion
+	// they live, the font programs an HTML source's @font-face rules load,
+	// and the pages and streams it writes. The index of the installed fonts,
+	// and the faces it keeps parsed, are shared by the process and charged
+	// to no conversion: [WithConvertFontDirs] says what they hold. Each is charged before it is taken, so a conversion
 	// past the budget fails with [ErrConvertInputTooLarge], naming what was
 	// being held, before it takes the memory and without finishing its work.
 	// Nothing is written.
@@ -217,16 +218,16 @@ func limitsFromInternal(l limits.Limits) Limits {
 
 // withConvertBudget returns ctx carrying the memory budget of one
 // conversion under l, every field filled in, and the function that ends
-// it, which [Convert] defers.
+// it, which [Conversion.WriteTo] defers.
 func withConvertBudget(ctx context.Context, l limits.Limits) (context.Context, *limits.Budget, func()) {
 	return limits.WithBudget(ctx, l)
 }
 
 // convertBudgetError logs the most memory the conversion under b held, as
 // its budget accounted it, at Debug on logger, and returns err, the error
-// the conversion ended with, as [Convert] reports it: when the budget refused a charge, the
-// refusal wrapped in [ErrConvertInputTooLarge], whatever error the
-// converter saw after its context was cancelled. A converter that swallows
+// the conversion ended with, as [Conversion.WriteTo] reports it: when the
+// budget refused a charge, the refusal wrapped in [ErrConvertInputTooLarge],
+// whatever error the converter saw after its context was cancelled. A converter that swallows
 // a refused charge (a picture left out with a warning) still ends with
 // the refusal, since the account it was refused on is not one the
 // conversion may pass.

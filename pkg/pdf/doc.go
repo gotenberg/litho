@@ -2,7 +2,7 @@
 // and producing PDF documents.
 //
 // litho is a pure-Go implementation of ISO 32000 (PDF 1.4 - 2.0) with no
-// C dependencies. The package groups its functionality into three types:
+// C dependencies. The package groups its functionality into four types:
 //
 //   - [Reader]: open an existing PDF, query metadata, extract text and
 //     other content. See [Open], [OpenFile].
@@ -257,7 +257,8 @@
 // suggests, so every [Reader] runs under six budgets: the decoded bytes of
 // one stream, the pixels of one image, the size of an embedded PDF validation
 // opens, the nesting of form XObjects, the entries of the object cache, and
-// the pixels of one rendered page.
+// the pixels of one rendered page. A [Conversion] runs under three more:
+// the bytes of its source, the pages it lays out and the memory it holds.
 // [DefaultLimits] suits ordinary documents. A service that reads untrusted
 // input can lower them, and one that handles unusually large images can raise
 // them, through [WithLimits]:

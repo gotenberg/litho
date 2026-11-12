@@ -96,14 +96,18 @@ func (k convertKind) name() string {
 //
 // The file is tagged PDF (ISO 32000-1, 14.8) of the version
 // [WithConvertVersion] names, 1.7 by default. Its fonts are embedded, each
-// subset to the glyphs drawn. It claims no conformance: remediate it in a
+// subset to the glyphs drawn; a font program that cannot be subset is
+// embedded whole, which [WithConvertLogger] reports. It claims no
+// conformance: remediate it in a
 // later pipeline stage to conform to a PDF/A or PDF/UA profile. Identical
 // source bytes, options and font files write identical bytes.
 //
 // # Memory
 //
 // A conversion spends memory within [Limits.MaxConvertMemoryBytes] and
-// fails with [ErrConvertInputTooLarge] past it. A text source, a
+// fails with [ErrConvertInputTooLarge] past it. The index of the installed
+// fonts is not charged to it: the process shares it between conversions
+// (see [WithConvertFontDirs]). A text source, a
 // spreadsheet and a presentation write each page as it is laid out; an HTML
 // or Markdown source and a DOCX or ODT source are laid out whole first.
 //
@@ -312,8 +316,8 @@ func spreadsheetConfig(opts []SpreadsheetOption) convertConfig {
 // enclosing a field that holds a separator, a quote or a line break, and,
 // unless [WithCSVTypeDetection] turns it off, a field that reads as a
 // number, a date or a time laid out as one, quoted or not.
-// The sheet prints on the paper of [WithDefaultPaper] with a page footer
-// and no header.
+// The sheet prints on the paper of [WithPaper], else of [WithDefaultPaper],
+// with a page footer and no header.
 func FromCSV(src io.Reader, opts ...CSVOption) *Conversion {
 	var cfg convertConfig
 	for _, o := range opts {
@@ -380,7 +384,7 @@ type ConvertReport struct {
 // render faithfully.
 // Concurrent reads of a value are safe; a write needs synchronization.
 type ConvertWarning struct {
-	// Code is a stable identifier in kebab-case. "missing-glyph" flags a
+	// Code names the kind of construct, in kebab-case. "missing-glyph" flags a
 	// character no font covers, drawn as a placeholder glyph, reported once
 	// per character. "line-split" flags a source line of more than 65,536
 	// characters, laid out in pieces that each start a new line. An HTML
@@ -390,7 +394,11 @@ type ConvertWarning struct {
 	// out, "resource-no-network" for an http or https one without
 	// [WithHTTPClient], "resource-http-status" for one the server answered
 	// outside 2xx, "image-format-unsupported" for an AVIF, JPEG XL or ICO
-	// picture, "unsupported-element" and "form-control".
+	// picture, "unsupported-element" and "form-control". The set of codes
+	// is open: act on the ones the program knows and read any other as a
+	// construct not rendered. A code may carry a name the source spells: the
+	// one an ODT source reports for a shape it does not draw is "odt-shape-"
+	// followed by the element's local name as the file writes it.
 	Code string
 	// Message explains the construct and what was done instead.
 	Message string
@@ -400,9 +408,11 @@ type ConvertWarning struct {
 
 // WriteTo runs the conversion and writes the PDF to dst.
 //
-// It reads the source to its end and writes dst; it closes neither. On an
-// error other than a write error on dst, nothing reaches dst: the whole
-// file is built before it is written.
+// It reads the source to its end and writes dst; it closes neither.
+// Nothing reaches dst until the whole file is laid out, so a failure before
+// then leaves dst as it was. The file is then copied to dst, and a failure
+// during that copy, dst's own error, ctx ending or a temporary file that
+// does not read back, leaves dst holding part of the file.
 //
 // It returns an error wrapping [ErrConversionReused] when the conversion
 // already ran, [ErrNilSource] for a nil source, [ErrInvalidLimits] or

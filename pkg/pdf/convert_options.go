@@ -9,6 +9,7 @@ import (
 )
 
 // Paper is a page size in points, 1/72 inch: 25.4 mm is 72 points.
+// Concurrent reads of a value are safe; a write needs synchronization.
 type Paper struct {
 	// Width and Height are the sides in points. A paper wider than it is
 	// high is a landscape paper.
@@ -64,10 +65,15 @@ const (
 	// insertions left out, deletions kept. A change of formatting keeps its
 	// new formatting.
 	TrackedChangesRejected
-	// TrackedChangesMarked prints both, each marked: an insertion
-	// underlined, a deletion struck through, in the colour of its author,
-	// taken in turn from nine colours in the order the authors first appear.
-	// Change bars are not drawn, and a change of formatting is not marked.
+	// TrackedChangesMarked prints both, each marked as LibreOffice shows
+	// tracked changes: an insertion underlined, a deletion struck through
+	// and text whose formatting changed in bold, each in the colour of its
+	// author, taken in turn from nine colours in the order the authors first
+	// appear; moved text double underlined where it went and double struck
+	// through where it was, in green; an inserted table row on a light blue
+	// ground and a deleted one on a pink ground. A change bar, a black
+	// hairline left of the text column, stands beside each line a change
+	// touches, the lines of a text box excepted.
 	TrackedChangesMarked
 )
 
@@ -485,8 +491,9 @@ func WithMargins(top, right, bottom, left float64) MarginOption {
 // preference order, matched without regard to case or spaces. The generic
 // families serif, sans-serif, monospace, cursive, fantasy and system-ui
 // expand to common families of their kind. The default is Liberation Serif,
-// the family a word processor opens a text file in, then serif. A character
-// the chosen face lacks is drawn from another face that covers it.
+// the family a word processor opens a text file in, then serif; no family
+// keeps it. A character the chosen face lacks is drawn from another face
+// that covers it.
 func WithFontFamilies(families ...string) TextOption {
 	families = slices.Clone(families)
 	return textOption(func(c *convertConfig) { c.families = families })
@@ -703,7 +710,7 @@ func WithOfficePassword(password string) OfficeOption {
 //
 // The view covers inserted and deleted text, paragraphs and table rows. A
 // tracked change of formatting prints with the new formatting under every
-// view.
+// view, and [TrackedChangesMarked] marks it.
 func WithTrackedChanges(view TrackedChanges) WordProcessingOption {
 	return wordProcessingOption(func(c *convertConfig) { c.trackedChanges = view })
 }
