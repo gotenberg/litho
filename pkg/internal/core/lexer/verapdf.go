@@ -226,7 +226,7 @@ func (l *Lexer) readVeraPDFNumber(first byte) (Token, error) {
 		}
 		raw = append(raw, c)
 	}
-	return Token{Type: TokenNumber, Value: veraPDFNumber(string(raw))}, nil
+	return Token{Type: TokenNumber, Value: veraPDFNumber(l.text(raw))}, nil
 }
 
 // veraPDFNumber returns the text of the number token [Lexer.readVeraPDFNumber]

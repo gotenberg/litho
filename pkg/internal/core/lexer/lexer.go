@@ -85,6 +85,11 @@ type Lexer struct {
 	// deep counts the arrays and dictionaries open past the
 	// [maxTrackedNesting] that open remembers.
 	deep int
+	// scratch holds the bytes of the name, string or hex string being read.
+	// The token takes a copy, so one buffer serves every token of the lexer.
+	scratch []byte
+	// interned holds the texts [Lexer.WithInterning] remembers, or is nil.
+	interned *[internSlots]string
 }
 
 // Reader returns the underlying [ioat.Reader] used by this lexer.
@@ -137,10 +142,10 @@ func isDelimiter(c byte) bool {
 //     object body.
 //   - pdfjs issue11678.pdf: its 4 malformed escapes are each followed by a
 //     regular character, which joins the name as before.
-func (l *Lexer) readNameEscape(buf *strings.Builder) (bool, error) {
+func (l *Lexer) readNameEscape(buf *[]byte) (bool, error) {
 	hi, err := l.reader.ReadByte()
 	if err != nil {
-		buf.WriteByte('#')
+		*buf = append(*buf, '#')
 		if errors.Is(err, io.EOF) {
 			return true, nil
 		}
@@ -148,19 +153,19 @@ func (l *Lexer) readNameEscape(buf *strings.Builder) (bool, error) {
 	}
 	if isWhitespace(hi) || isDelimiter(hi) {
 		_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
-		buf.WriteByte('#')
+		*buf = append(*buf, '#')
 		return true, nil
 	}
 	h, ok := hexVal(hi)
 	if !ok {
-		buf.WriteByte('#')
-		buf.WriteByte(hi)
+		*buf = append(*buf, '#')
+		*buf = append(*buf, hi)
 		return false, nil
 	}
 	lo, err := l.reader.ReadByte()
 	if err != nil {
-		buf.WriteByte('#')
-		buf.WriteByte(hi)
+		*buf = append(*buf, '#')
+		*buf = append(*buf, hi)
 		if errors.Is(err, io.EOF) {
 			return true, nil
 		}
@@ -168,16 +173,16 @@ func (l *Lexer) readNameEscape(buf *strings.Builder) (bool, error) {
 	}
 	lv, ok := hexVal(lo)
 	if ok {
-		buf.WriteByte(h<<4 | lv)
+		*buf = append(*buf, h<<4|lv)
 		return false, nil
 	}
-	buf.WriteByte('#')
-	buf.WriteByte(hi)
+	*buf = append(*buf, '#')
+	*buf = append(*buf, hi)
 	if isWhitespace(lo) || isDelimiter(lo) {
 		_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 		return true, nil
 	}
-	buf.WriteByte(lo)
+	*buf = append(*buf, lo)
 	return false, nil
 }
 
@@ -335,7 +340,7 @@ func (l *Lexer) readRegular() (Token, error) {
 		command = l.commands.has(buf)
 	}
 
-	val := string(buf)
+	val := l.text(buf)
 	if isNumber(val) {
 		return Token{Type: TokenNumber, Value: val}, nil
 	}
@@ -442,8 +447,7 @@ func (l *Lexer) NextToken() (Token, error) {
 
 		switch c {
 		case '/':
-			var buf strings.Builder
-			buf.WriteByte(c)
+			buf := append(l.scratch[:0], c)
 			for {
 				cc, err := l.reader.ReadByte()
 				if err != nil {
@@ -471,21 +475,21 @@ func (l *Lexer) NextToken() (Token, error) {
 					}
 					continue
 				}
-				buf.WriteByte(cc)
+				buf = append(buf, cc)
 			}
-			return Token{Type: TokenName, Value: buf.String()}, nil
+			l.scratch = buf
+			return Token{Type: TokenName, Value: l.text(buf)}, nil
 
 		case '(':
-			var buf strings.Builder
-			buf.WriteByte(c)
+			buf := append(l.scratch[:0], c)
 			nesting := 1
 			for {
 				cc, err := l.reader.ReadByte()
 				if err != nil {
 					return Token{Type: TokenError, Value: "unexpected EOF in string literal"}, err
 				}
-				buf.WriteByte(cc)
-				if buf.Len() > maxStringAccum {
+				buf = append(buf, cc)
+				if len(buf) > maxStringAccum {
 					return Token{Type: TokenError, Value: "string literal exceeds maximum size"}, fmt.Errorf("string literal exceeds %d bytes", maxStringAccum)
 				}
 				if cc == '\\' {
@@ -493,7 +497,7 @@ func (l *Lexer) NextToken() (Token, error) {
 					if err != nil {
 						return Token{Type: TokenError, Value: "unexpected EOF in string escape"}, err
 					}
-					buf.WriteByte(nextC)
+					buf = append(buf, nextC)
 					continue
 				}
 				if cc == '(' {
@@ -505,7 +509,8 @@ func (l *Lexer) NextToken() (Token, error) {
 					}
 				}
 			}
-			return Token{Type: TokenString, Value: buf.String()}, nil
+			l.scratch = buf
+			return Token{Type: TokenString, Value: string(buf)}, nil
 
 		case ')', '{', '}':
 			if l.atOperator() {
@@ -529,22 +534,22 @@ func (l *Lexer) NextToken() (Token, error) {
 			_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 
 			// Hex string
-			var buf strings.Builder
-			buf.WriteByte(c)
+			buf := append(l.scratch[:0], c)
 			for {
 				cc, err := l.reader.ReadByte()
 				if err != nil {
 					return Token{Type: TokenError, Value: "unexpected EOF in hex string"}, err
 				}
-				buf.WriteByte(cc)
+				buf = append(buf, cc)
 				if cc == '>' {
 					break
 				}
-				if buf.Len() > maxStringAccum {
+				if len(buf) > maxStringAccum {
 					return Token{Type: TokenError, Value: "hex string exceeds maximum size"}, fmt.Errorf("hex string exceeds %d bytes", maxStringAccum)
 				}
 			}
-			return Token{Type: TokenHexString, Value: buf.String()}, nil
+			l.scratch = buf
+			return Token{Type: TokenHexString, Value: string(buf)}, nil
 
 		case '>':
 			if l.atOperator() {
