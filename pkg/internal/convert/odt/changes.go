@@ -23,6 +23,10 @@ import (
 // (insertions in, deletions out), with a warning.
 const maxTrackedChanges = 20_000
 
+// changeCheckEvery is how many change marks the view rewrites between
+// two checks of its context: each rewrite copies a path of the tree.
+const changeCheckEvery = 256
+
 // changeKind is what a changed region records (ODF 1.3, Part 3, 5.5.3 to
 // 5.5.5).
 type changeKind uint8
@@ -334,7 +338,7 @@ func printsNothing(el *odf.Element) bool {
 // text:change-start to its text:change-end (5.5.7), in document order.
 func (c *changes) cutAll(ctx context.Context, kind changeKind) error {
 	for n, m := range c.order {
-		if n%256 == 0 {
+		if n%changeCheckEvery == 0 {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
@@ -411,7 +415,7 @@ func (c *changes) cut(start, end *odf.Element) {
 // when wrap is set, for the marked view to draw.
 func (c *changes) spliceAll(ctx context.Context, wrap bool) error {
 	for n, m := range c.order {
-		if n%256 == 0 {
+		if n%changeCheckEvery == 0 {
 			if err := ctx.Err(); err != nil {
 				return err
 			}

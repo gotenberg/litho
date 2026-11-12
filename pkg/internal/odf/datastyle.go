@@ -266,7 +266,7 @@ func sectionCode(el *Element) string {
 		case "seconds":
 			b.WriteString(pick(long, "ss", "s"))
 			if n, err := strconv.Atoi(c.A(NSNumber, "decimal-places")); err == nil && n > 0 {
-				b.WriteString("." + strings.Repeat("0", min(n, 9)))
+				b.WriteString("." + strings.Repeat("0", min(n, maxSecondDecimals)))
 			}
 		case "am-pm":
 			b.WriteString("AM/PM")
@@ -274,6 +274,11 @@ func sectionCode(el *Element) string {
 	}
 	return b.String()
 }
+
+// maxSecondDecimals bounds the decimal places of the seconds written: 9,
+// a nanosecond. Anti-DoS guard, not spec-mandated: a time value holds no
+// finer part.
+const maxSecondDecimals = 9
 
 // autoOrderDate writes a date style of number:automatic-order (ODF 1.3,
 // Part 3, 19.340) whose elements are a day, a month and a year in the

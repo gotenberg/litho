@@ -281,6 +281,10 @@ func parseDash(el *Element) *StrokeDash {
 // clamp01 returns v clamped to [0, 1].
 func clamp01(v float64) float64 { return math.Max(0, math.Min(1, v)) }
 
+// maxAngle bounds an angle read, in its unit: 1e9. Anti-DoS guard, not
+// spec-mandated: past it the remainder of a turn loses its precision.
+const maxAngle = 1e9
+
 // ParseAngle parses an ODF angle (ODF 1.3, Part 3, 18.3.1, angle): a
 // number with deg, grad or rad, or a number without a unit in degrees, as
 // degrees in [0, 360), and whether it parsed. legacy reads a number
@@ -303,7 +307,7 @@ func ParseAngle(s string, legacy bool) (float64, bool) {
 		}
 	}
 	v, err := strconv.ParseFloat(s, 64)
-	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > 1e9 {
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > maxAngle {
 		return 0, false
 	}
 	v = math.Mod(v*scale, 360)
@@ -347,6 +351,11 @@ func LegacyAngles(p *Package) bool {
 	return false
 }
 
+// maxViewBox bounds a number of an svg:viewBox read: 1e12. Anti-DoS
+// guard, not spec-mandated: a coordinate space of real drawings spans a
+// few hundred thousand units, and a bounded value keeps the scale finite.
+const maxViewBox = 1e12
+
 // ParseViewBox parses svg:viewBox, four numbers (ODF 1.3, Part 3,
 // 19.574; SVG 1.1, 7.7), and whether it parsed with a positive width and
 // height.
@@ -358,7 +367,7 @@ func ParseViewBox(s string) ([4]float64, bool) {
 	}
 	for i, x := range f {
 		v, err := strconv.ParseFloat(x, 64)
-		if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > 1e12 {
+		if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > maxViewBox {
 			return vb, false
 		}
 		vb[i] = v

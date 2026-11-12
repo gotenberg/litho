@@ -43,15 +43,21 @@ func Length(s string) (float64, bool) {
 	return v, true
 }
 
+// maxPercent bounds a percentage read: 1,000,000. Anti-DoS guard, not
+// spec-mandated: a scale or a share of a real document stays within a few
+// thousand percent, and a bounded value keeps the arithmetic finite.
+const maxPercent = 1e6
+
 // Percent parses an ODF percentage, "115%" (ODF 1.3, Part 3, 18.3.23): the
-// fraction, 1.15, and whether it parsed.
+// fraction, 1.15, and whether it parsed; a value past [maxPercent] is
+// refused.
 func Percent(s string) (float64, bool) {
 	s = strings.TrimSpace(s)
 	if !strings.HasSuffix(s, "%") {
 		return 0, false
 	}
 	v, err := strconv.ParseFloat(strings.TrimSpace(s[:len(s)-1]), 64)
-	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > 1e6 {
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > maxPercent {
 		return 0, false
 	}
 	return v / 100, true

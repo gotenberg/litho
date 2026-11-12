@@ -162,6 +162,10 @@ func (e *Element) TextContent() string {
 	return b.String()
 }
 
+// xmlChargeEvery is how many nodes the parser reads between two charges
+// to the memory budget and two checks of its context.
+const xmlChargeEvery = 4096
+
 // errTooDeep reports a document nested past [MaxDepth].
 var errTooDeep = errors.New("odf: XML nested too deep")
 
@@ -201,8 +205,8 @@ func parseXML(ctx context.Context, in *office.TokenReader) (*Element, error) {
 		if count > MaxElements {
 			return nil, fmt.Errorf("%w: more than %d XML nodes", office.ErrInputTooLarge, MaxElements)
 		}
-		if count%4096 == 0 {
-			if err := mem.ChargeUnits(4096, limits.XMLElementCost, "XML trees"); err != nil {
+		if count%xmlChargeEvery == 0 {
+			if err := mem.ChargeUnits(xmlChargeEvery, limits.XMLElementCost, "XML trees"); err != nil {
 				return nil, err
 			}
 			if err := ctx.Err(); err != nil {

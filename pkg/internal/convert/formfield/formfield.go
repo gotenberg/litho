@@ -65,6 +65,15 @@ type formElem struct {
 // placed rather than spend unbounded time.
 const maxWalk = 50_000_000
 
+// The room [attach] searches for the first fragment of a control that
+// flows with the text, in points from its node's anchor: the first glyph
+// starts where the inline box does, within flowSlack, its baseline below
+// the box's top by at most maxBaselineDrop, a line of the largest text.
+const (
+	flowSlack       = 2
+	maxBaselineDrop = 48
+)
+
 // Attach makes the controls into the form fields of the pages of res: for
 // each control whose content landed on one page, it takes that content off
 // the page (compose.TakeContent) into the field's appearance, with the
@@ -114,10 +123,7 @@ func attach(res *layout.Result, c *Control, byPage map[int][]*formElem, m *compo
 			if f.at.X < box.X-slack || f.at.X > box.X+box.Width+slack || f.at.Y < box.Y-slack || f.at.Y > box.Y+box.Height+slack {
 				continue
 			}
-		} else if dx < -2 || dx > 2 || dy < -2 || dy > 48 {
-			// The first glyph of a control that flows with the text
-			// starts where its inline box does, its baseline below the
-			// box's top by at most a line of the largest text.
+		} else if dx < -flowSlack || dx > flowSlack || dy < -flowSlack || dy > maxBaselineDrop {
 			continue
 		}
 		if d := math.Hypot(dx, dy); d < bestD {

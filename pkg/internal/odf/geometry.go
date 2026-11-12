@@ -188,11 +188,16 @@ func parseEnhanced(el *Element, path string) *shape.Custom {
 // warning. Anti-DoS guard, not spec-mandated: a handful say what is wrong.
 const maxUnresolvedNames = 16
 
+// maxUnresolvedBytes caps the bytes of one name or formula a geometry
+// records for its warning. Anti-DoS guard, not spec-mandated: the start
+// of a formula says which one is wrong.
+const maxUnresolvedBytes = 64
+
 // unresolved records a name or formula that did not resolve.
 func (e *enhanced) unresolved(s string) {
 	if len(e.c.Unresolved) < maxUnresolvedNames {
-		if len(s) > 64 {
-			s = s[:64]
+		if len(s) > maxUnresolvedBytes {
+			s = s[:maxUnresolvedBytes]
 		}
 		e.c.Unresolved = append(e.c.Unresolved, s)
 	}

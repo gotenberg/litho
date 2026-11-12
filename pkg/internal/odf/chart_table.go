@@ -182,6 +182,11 @@ func rangeShape(addr string) (int, int, bool) {
 	return abs(b[0]-a[0]) + 1, abs(b[1]-a[1]) + 1, true
 }
 
+// maxColumnRef bounds the column of a cell address read: 1,048,576.
+// Anti-DoS guard, not spec-mandated: Calc's sheets end at 16,384
+// columns, and the bound stops the letters' sum from overflowing.
+const maxColumnRef = 1 << 20
+
 // cellRef returns the column and row of a cell address's cell part, nil
 // when it does not parse.
 func cellRef(s string) []int {
@@ -192,7 +197,7 @@ func cellRef(s string) []int {
 	col, i := 0, 0
 	for ; i < len(s) && s[i] >= 'A' && s[i] <= 'Z'; i++ {
 		col = col*26 + int(s[i]-'A'+1)
-		if col > 1<<20 {
+		if col > maxColumnRef {
 			return nil
 		}
 	}

@@ -25,6 +25,10 @@ import (
 // builds some 500,000 nodes.
 const maxNodes = 4_000_000
 
+// nodeCheckEvery is how many layout nodes the builder makes between two
+// checks of its context.
+const nodeCheckEvery = 4096
+
 // builder turns the body of a text document into a layout tree.
 type builder struct {
 	ctx    context.Context
@@ -125,7 +129,7 @@ func (b *builder) node(n *layout.Node) *layout.Node {
 	if b.nodes > maxNodes && b.err == nil {
 		b.err = fmt.Errorf("%w: more than %d layout nodes", office.ErrInputTooLarge, maxNodes)
 	}
-	if b.nodes%4096 == 0 && b.err == nil {
+	if b.nodes%nodeCheckEvery == 0 && b.err == nil {
 		b.err = b.ctx.Err()
 	}
 	return n
