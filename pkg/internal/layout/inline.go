@@ -458,11 +458,12 @@ func (e *engine) fixOrphans(b *box, forced map[int]bool) bool {
 		}
 		before, after := k-segStart, next-k
 		switch {
-		case before < orphans && segStart == 0 && !forced[0] && !e.atPageTop(lines[0].y) && !avoidedBefore(b):
+		case before < orphans && segStart == 0 && !forced[0] && !e.atPageTop(lines[0].y) && (b.st.WordRules > 0 || !avoidedBefore(b)):
 			// Moving the first lines would break before b where
 			// break-before or break-after avoids it: orphans and widows
 			// give way first (CSS Fragmentation 3, 4.4), as Chromium
-			// lays them out.
+			// lays them out. Word moves the blocks kept with b along
+			// (css.Style.WordRules).
 			forced[0] = true
 			changed = true
 		case after < widows && next == len(lines):

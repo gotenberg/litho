@@ -55,3 +55,36 @@ func TestWordRules_WidowsKeepNext(t *testing.T) {
 		t.Errorf("paragraph's first line at %v, want 50", got)
 	}
 }
+
+// TestWordRules_OrphansKeepNext moves a heading kept with a paragraph that
+// moves whole for its orphans along with it, as Word does, where CSS lets
+// the orphans give way to the heading's break-after: avoid.
+//
+// # Corpus evidence
+//
+//   - litho/docx paper-a5-landscape: Word prints the heading "3. Checking
+//     a conversion" and the four lines of the paragraph it keeps with at
+//     the top of page 5, where the heading and one line fit on page 4.
+func TestWordRules_OrphansKeepNext(t *testing.T) {
+	tests := []struct {
+		name       string
+		word       int
+		head, para float64
+	}{
+		{"css", 0, 20, 30},
+		{"word", 15, 40, 50},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := sty(width(10), func(s *css.Style) { s.WordRules = tt.word })
+			head := sty(width(10), func(s *css.Style) { s.WordRules = tt.word; s.BreakAfter = css.BreakAvoidPage })
+			rb := boxes(t, doc(el(st, txt(st, "a a")), el(head, txt(head, "a")), el(st, txt(st, "a a a"))), page(10, 40))
+			if got := kid(t, rb, 0, 1).lines[0].y / css.Pt; !near(got, tt.head) {
+				t.Errorf("heading at %v, want %v", got, tt.head)
+			}
+			if got := kid(t, rb, 0, 2).lines[0].y / css.Pt; !near(got, tt.para) {
+				t.Errorf("paragraph's first line at %v, want %v", got, tt.para)
+			}
+		})
+	}
+}
