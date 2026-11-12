@@ -146,7 +146,8 @@ func parsePosition(v []token) ([2]length, bool) {
 		case "top", "bottom":
 			return [2]length{pctLength(50), pctLength(edge[k])}, true
 		default:
-			return [2]length{pctLength(edge[k]), pctLength(50)}, true
+			e, ok := edge[k]
+			return [2]length{pctLength(e), pctLength(50)}, ok
 		}
 	case 2:
 		a, b := kw(v[0]), kw(v[1])
@@ -176,7 +177,7 @@ func parsePosition(v []token) ([2]length, bool) {
 		var set [2]bool
 		for i := 0; i < len(v); {
 			k := kw(v[i])
-			if k == "" {
+			if _, ok := edge[k]; !ok {
 				return out, false
 			}
 			i++

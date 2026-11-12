@@ -345,3 +345,16 @@ func TestDisplay_RejectsStrayKeywords(t *testing.T) {
 		}
 	}
 }
+
+// TestPosition_RejectsUnknownKeywords locks the keywords of <position>
+// (CSS Backgrounds 3, 3.6): an identifier other than left, right, top,
+// bottom and center makes the declaration invalid.
+func TestPosition_RejectsUnknownKeywords(t *testing.T) {
+	t.Parallel()
+	for _, v := range []string{"foo", "foo 10px top", "left 10% foo", "foo top 10px"} {
+		s := styleOf(t, "background-position: 10% 20%; background-position: "+v+"; object-position: 10% 20%; object-position: "+v)
+		if s.BackgroundPosition != [2]Dimension{pct(0.1), pct(0.2)} || s.ObjectPosition != [2]Dimension{pct(0.1), pct(0.2)} {
+			t.Errorf("%s: background %+v, object %+v, want it rejected", v, s.BackgroundPosition, s.ObjectPosition)
+		}
+	}
+}
