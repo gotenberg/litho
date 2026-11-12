@@ -665,6 +665,28 @@ func TestConvert_ListOfSuffixesIsUnordered(t *testing.T) {
 	}
 }
 
+// TestConvert_RightToLeftTable checks that a table of style:writing-mode
+// rl-tb lays its first column out on the right.
+//
+// # Corpus evidence
+//
+//   - litho/odt: ar-rtl and he-bidi-numbers print the first column of
+//     their tables of style:writing-mode rl-tb on the right.
+func TestConvert_RightToLeftTable(t *testing.T) {
+	auto := `<style:style style:name="T" style:family="table"><style:table-properties style:width="10cm" style:writing-mode="rl-tb"/></style:style>` +
+		`<style:style style:name="C" style:family="table-column"><style:table-column-properties style:column-width="5cm"/></style:style>`
+	body := `<table:table table:style-name="T"><table:table-column table:style-name="C" table:number-columns-repeated="2"/>` +
+		`<table:table-row><table:table-cell><text:p>first</text:p></table:table-cell><table:table-cell><text:p>second</text:p></table:table-cell></table:table-row></table:table>`
+	rs := runs(convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{}).Pages[0])
+	x := map[string]float64{}
+	for _, r := range rs {
+		x[r.text] = r.x
+	}
+	if x["first"] <= x["second"] {
+		t.Errorf("first column at x %.2f, second at %.2f, want the first on the right", x["first"], x["second"])
+	}
+}
+
 // TestConvert_RightToLeftListLabel checks that the label of a
 // right-to-left list item sits right of its text, from the first line's
 // start, 4 mm left of the right margin, its text ending on the list tab,

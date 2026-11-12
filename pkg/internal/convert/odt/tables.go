@@ -2,6 +2,7 @@ package odt
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -39,7 +40,14 @@ type tableBuild struct {
 // table builds a table:table (ODF 1.3, Part 3, 9.1) through the CSS table
 // model: a fixed-layout table of its columns' widths, its header rows
 // repeated on every page, its rows and cells with their spans, borders,
-// padding, backgrounds and vertical alignment.
+// padding, backgrounds and vertical alignment. A table whose
+// style:writing-mode is rl-tb lays its columns out from the right (ODF
+// 1.3, Part 3, 20.394).
+//
+// # Corpus evidence
+//
+//   - litho/odt: ar-rtl and he-bidi-numbers print the first column of
+//     their tables of style:writing-mode rl-tb on the right.
 func (b *builder) table(c *odf.Element, ctx blockCtx) []*layout.Node {
 	props := b.styles.Resolve(b.scope, odf.FamilyTable, c.A(odf.NSTable, "style-name"), odf.TableProps)
 	st := baseStyle()
@@ -78,6 +86,9 @@ func (b *builder) table(c *odf.Element, ctx blockCtx) []*layout.Node {
 		if col, ok := odf.ParseColor(v); ok {
 			st.BackgroundColor = cssColor(col)
 		}
+	}
+	if strings.HasPrefix(props.Get("style:writing-mode"), "rl") {
+		st.Direction = css.RTL
 	}
 	st.BreakBefore = pageBreak(props.Get("fo:break-before"), css.BreakAuto)
 	st.BreakAfter = pageBreak(props.Get("fo:break-after"), css.BreakAuto)
