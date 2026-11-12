@@ -349,6 +349,29 @@ func TestRead_Drawings(t *testing.T) {
 	}
 }
 
+// TestRead_MetafileWarnings locks the warning code of each metafile
+// format, which is not drawn.
+func TestRead_MetafileWarnings(t *testing.T) {
+	emf := make([]byte, 48)
+	copy(emf[40:], " EMF")
+	frame := func(name string) string {
+		return `<draw:frame svg:width="1in" svg:height="1in"><draw:image xlink:href="Pictures/` + name + `"/></draw:frame>`
+	}
+	content := `<office:document-content ` + nsDecl + `><office:body><office:spreadsheet><table:table table:name="S"><table:shapes>` +
+		frame("a.wmf") + frame("b.emf") + frame("c.svm") + `</table:shapes></table:table></office:spreadsheet></office:body></office:document-content>`
+	data := zipOf(t, "mimetype", "application/vnd.oasis.opendocument.spreadsheet", "content.xml", content,
+		"Pictures/a.wmf", "\xd7\xcd\xc6\x9a0000", "Pictures/b.emf", string(emf), "Pictures/c.svm", "VCLMTF0000")
+	doc, w := read(t, data)
+	if n := len(doc.Sheets[0].Drawings); n != 0 {
+		t.Errorf("%d drawings, want none", n)
+	}
+	for _, code := range []string{"picture-wmf", "picture-emf", "picture-svm"} {
+		if !hasWarning(w, code) {
+			t.Errorf("no %s warning in %+v", code, w)
+		}
+	}
+}
+
 func TestRead_MetaAndWarnings(t *testing.T) {
 	f := flat{
 		meta: `<dc:title>Budget</dc:title><dc:creator>Ann</dc:creator><meta:keyword>a</meta:keyword><meta:keyword>b</meta:keyword><dc:language>fr-FR</dc:language>`,

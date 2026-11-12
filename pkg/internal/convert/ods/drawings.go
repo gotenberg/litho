@@ -240,7 +240,15 @@ func (r *reader) decodePicture(img *odf.Element) *layout.Picture {
 		return nil
 	}
 	if name := vectorFormat(data); name != "" {
-		r.warn("picture-"+strings.ToLower(name), fmt.Sprintf("%s pictures are not drawn", name))
+		msg := fmt.Sprintf("%s pictures are not drawn", name)
+		switch name {
+		case "WMF":
+			r.warn("picture-wmf", msg)
+		case "EMF":
+			r.warn("picture-emf", msg)
+		case "SVM":
+			r.warn("picture-svm", msg)
+		}
 		return nil
 	}
 	if isSVG(data) {
