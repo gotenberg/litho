@@ -241,3 +241,41 @@ func TestValidateRefusesBadFields(t *testing.T) {
 		}
 	}
 }
+
+func TestTakeContentAndBounds(t *testing.T) {
+	t.Parallel()
+	form := &compose.StructElem{Role: "Form"}
+	span := &compose.StructElem{Role: "Span"}
+	form.Kids = []*compose.StructElem{span}
+	value := run(t, sans, 10, compose.Point{X: 20, Y: 30}, "Ada")
+	value.Parent = span
+	other := run(t, sans, 10, compose.Point{X: 20, Y: 60}, "Other")
+	box := &compose.Path{Ops: rect(10, 10, 5, 5), Stroke: &compose.Stroke{Color: compose.Black, Width: 2}, Parent: form}
+	group := &compose.Group{Transform: compose.Matrix{A: 1, D: 1, E: 100}, Content: []compose.Fragment{box, other}}
+	page := letter(value, group)
+	taken := compose.TakeContent(page, form)
+	if len(taken) != 2 || taken[0] != value {
+		t.Fatalf("taken = %+v", taken)
+	}
+	if g, ok := taken[1].(*compose.Group); !ok || len(g.Content) != 1 || g.Content[0] != box || g.Transform.E != 100 {
+		t.Errorf("the path came back as %+v", taken[1])
+	}
+	if len(page.Content) != 1 || len(group.Content) != 2 {
+		t.Errorf("page = %+v, shared group changed: %d", page.Content, len(group.Content))
+	}
+	m := compose.NewMeasurer()
+	r, ok := m.Bounds(taken[1:])
+	if !ok || r != (compose.Rect{X: 109, Y: 9, Width: 7, Height: 7}) {
+		t.Errorf("Bounds of the path = %v, %v", r, ok)
+	}
+	r, ok = m.Bounds(taken[:1])
+	if !ok || r.X != 20 || !(r.Y < 30) || !(r.Width > 0) || !(r.Y+r.Height > 30) {
+		t.Errorf("Bounds of the run = %v, %v", r, ok)
+	}
+	if _, ok := m.Bounds(nil); ok {
+		t.Error("Bounds of nothing reports a rectangle")
+	}
+	if gid, ok := m.Glyph(sans, 'A'); !ok || gid == 0 {
+		t.Errorf("Glyph('A') = %d, %v", gid, ok)
+	}
+}
