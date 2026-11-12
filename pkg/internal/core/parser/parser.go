@@ -117,6 +117,10 @@ type Parser struct {
 	// boxed remembers the number and name objects
 	// [Parser.WithBoxedOperands] hands out again, or is nil.
 	boxed *boxedOperands
+
+	// elements stacks the elements of the arrays being read, innermost last.
+	// See [Parser.parseArray].
+	elements []ast.PdfObject
 }
 
 // NewParser creates a new Parser that reads PDF objects from the given lexer.
@@ -1524,13 +1528,19 @@ func cryptParmsIsIdentity(parms ast.PdfObject) bool {
 // parseArray reads the elements of an array up to its closing `]`, tolerating
 // EOF, a premature endobj and malformed elements.
 //
+// The elements are read onto the parser's element stack, which the arrays
+// nested in this one share, and copied into an array of their number once the
+// array closes: one allocation an array, of its size, rather than one each
+// time append outgrows it.
+//
 // # Corpus evidence
 //
 //   - pdfjs bug1953099.pdf: writes a lone "-" between two strings in a TJ
 //     array. Consuming that bad keyword twice swallowed the (e) that followed
 //     it, so the word "extensively" came out a letter short.
 func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
-	var arr ast.PdfArray
+	base := len(p.elements)
+	defer p.popElements(base)
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("parsing array: %w", err)
@@ -1574,9 +1584,21 @@ func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
 			}
 			continue
 		}
-		arr = append(arr, obj)
+		p.elements = append(p.elements, obj)
+	}
+	var arr ast.PdfArray
+	if n := len(p.elements) - base; n > 0 {
+		arr = make(ast.PdfArray, n)
+		copy(arr, p.elements[base:])
 	}
 	return arr, nil //nolint:nilerr // An element that cannot be skipped ends the lenient array, keeping the ones parsed.
+}
+
+// popElements drops the elements stacked past base, so that the stack holds
+// no reference to an array's elements once the array is read.
+func (p *Parser) popElements(base int) {
+	clear(p.elements[base:])
+	p.elements = p.elements[:base]
 }
 
 func (p *Parser) parseString(val string) (ast.PdfString, error) {
