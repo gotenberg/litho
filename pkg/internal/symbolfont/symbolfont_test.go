@@ -34,3 +34,25 @@ func TestRecodes(t *testing.T) {
 		}
 	}
 }
+
+func TestLookup(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		family string
+		code   rune
+		want   rune
+		ok     bool
+	}{
+		{"StarBats", 0x22, 0x25cf, true},
+		{"StarBats", 0xf022, 0x25cf, true},
+		{"Star Bats", 0xf095, 0x2022, true},
+		{"StarBats", 0x5b, 0, false},
+		{"StarBats", 0x10, 0, false},
+		{"StarBats", 0x2022, 0, false},
+		{"Arial", 0x22, 0, false},
+	} {
+		if got, ok := Lookup(tc.family, tc.code); got != tc.want || ok != tc.ok {
+			t.Errorf("Lookup(%q, %#x) = %#x, %t, want %#x, %t", tc.family, tc.code, got, ok, tc.want, tc.ok)
+		}
+	}
+}
