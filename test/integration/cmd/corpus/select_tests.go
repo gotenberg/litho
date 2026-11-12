@@ -218,15 +218,27 @@ var wptDirs = []string{
 	"css/css-backgrounds", "css/css-text", "css/css-lists", "css/css-page", "css/css-break", "css/css-flexbox",
 	"css/css-align", "css/css-grid", "css/css-multicol", "css/css-writing-modes", "css/css-overflow",
 	"css/css-text-decor", "css/css-sizing",
+	"css/CSS2/tables", "css/CSS2/fonts", "css/CSS2/linebox", "css/CSS2/positioning", "css/CSS2/abspos",
+	"css/CSS2/generated-content", "css/CSS2/values", "css/CSS2/selectors", "css/css-tables", "css/css-fonts",
+	"css/css-inline", "css/css-position", "css/css-transforms", "css/css-ruby", "css/css-content",
+	"css/css-counter-styles", "css/css-values", "css/css-variables", "css/selectors", "css/css-color",
+	"css/css-images",
 }
 
 // wptAreaCap bounds the tests one area contributes, an area being a CSS2
 // chapter directory or a whole CSS module, so the large ones do not crowd out
-// the others; every CSS2 chapter takes the "css/CSS2" cap.
+// the others; a CSS2 chapter without a cap of its own takes the "css/CSS2"
+// cap. An area of a feature the converter does not lay out (ruby) keeps a
+// few tests: they say the feature is missing as well as many would.
 var wptAreaCap = map[string]int{
 	"css/CSS2": 24, "css/css-backgrounds": 80, "css/css-text": 120, "css/css-lists": 40, "css/css-page": 40,
 	"css/css-break": 40, "css/css-flexbox": 200, "css/css-align": 20, "css/css-grid": 200, "css/css-multicol": 80,
 	"css/css-writing-modes": 60, "css/css-overflow": 40, "css/css-text-decor": 40, "css/css-sizing": 40,
+	"css/CSS2/tables": 100, "css/CSS2/fonts": 40, "css/CSS2/positioning": 40, "css/CSS2/generated-content": 60,
+	"css/CSS2/selectors": 40, "css/css-tables": 80, "css/css-fonts": 60, "css/css-inline": 60,
+	"css/css-position": 60, "css/css-transforms": 100, "css/css-ruby": 10, "css/css-content": 40,
+	"css/css-counter-styles": 40, "css/css-values": 60, "css/css-variables": 60, "css/selectors": 60,
+	"css/css-color": 60, "css/css-images": 60,
 }
 
 func compileAll(flags string, patterns ...string) []*regexp.Regexp {
@@ -237,13 +249,25 @@ func compileAll(flags string, patterns ...string) []*regexp.Regexp {
 	return out
 }
 
+// The forbidden patterns an area may lift (wptAreaRules.lift).
+var (
+	wptFontFace = regexp.MustCompile(`(?i)@font-face`)
+	wptVertical = regexp.MustCompile(`(?i)vertical-(rl|lr)`)
+	wptSideways = regexp.MustCompile(`(?i)sideways`)
+)
+
 // wptForbidden keeps a test out: scripts, SVG, MathML, form controls,
 // embedded documents and media, @font-face, data: and javascript: URLs, a
 // reftest-wait class, vertical writing and event handlers.
-var wptForbidden = compileAll("(?i)",
+var wptForbidden = append(compileAll("(?i)",
 	`<script\b`, `<svg\b`, `<math\b`, `<iframe\b`, `<object\b`, `<embed\b`, `<canvas\b`, `<video\b`, `<audio\b`,
-	`<input\b`, `<button\b`, `<select\b`, `<textarea\b`, `<frameset\b`, `@font-face`, `\bdata:`, `\bjavascript:`,
-	`\.svg\b`, `reftest-wait`, `vertical-(rl|lr)`, `sideways`, `\bon[a-z]+\s*=`)
+	`<input\b`, `<button\b`, `<select\b`, `<textarea\b`, `<frameset\b`, `\bdata:`, `\bjavascript:`,
+	`\.svg\b`, `reftest-wait`, `\bon[a-z]+\s*=`), wptFontFace, wptVertical, wptSideways)
+
+// wptTransform3D finds a 3D transform: a perspective, a 3D rendering
+// context, a back face, or a 3D transform function (CSS Transforms 2).
+var wptTransform3D = regexp.MustCompile(`(?i)perspective|preserve-3d|backface-visibility|matrix3d|` +
+	`\b(translate|rotate|scale)(3d|Z)\s*\(|\brotate[XY]\s*\(`)
 
 // wptFlexForbidden are what the flexbox and alignment areas leave out on top
 // of wptForbidden: features the converter does not lay out in a flex
@@ -276,23 +300,75 @@ func wptOtherWritingMode(text string) bool {
 	return false
 }
 
-// wptAreaRules are an area's extra forbidden patterns, whether it forbids
-// another writing mode, and what every test of it must hold.
+// wptAreaRules are an area's extra forbidden patterns, the patterns of
+// wptForbidden it lifts, whether it forbids another writing mode, and what
+// every test of it must hold.
 type wptAreaRules struct {
 	forbidden   []*regexp.Regexp
+	lift        []*regexp.Regexp
 	writingMode bool
 	required    *regexp.Regexp
 }
 
+// wptFontFaceRules are the rules of the areas that take a test with an
+// @font-face rule: its fonts resolve inside the test's directory as its
+// other resources do, and the converter loads them.
+var wptFontFaceRules = wptAreaRules{lift: []*regexp.Regexp{wptFontFace}}
+
 var wptAreas = map[string]wptAreaRules{
-	"css/css-flexbox":       {forbidden: wptFlexForbidden},
-	"css/css-align":         {forbidden: wptFlexForbidden, required: regexp.MustCompile(`(?i)display\s*:\s*(inline-)?flex\b`)},
-	"css/css-grid":          {forbidden: wptLayoutForbidden, writingMode: true},
-	"css/css-multicol":      {forbidden: wptLayoutForbidden, writingMode: true},
-	"css/css-writing-modes": {forbidden: wptLayoutForbidden, writingMode: true, required: regexp.MustCompile(`(?i)direction\s*:\s*rtl|unicode-bidi|\bdir\s*=\s*["']?(rtl|auto)`)},
-	"css/css-overflow":      {forbidden: wptLayoutForbidden, writingMode: true},
-	"css/css-text-decor":    {forbidden: wptLayoutForbidden, writingMode: true},
-	"css/css-sizing":        {forbidden: wptLayoutForbidden, writingMode: true},
+	"css/css-flexbox":            {forbidden: wptFlexForbidden},
+	"css/css-align":              {forbidden: wptFlexForbidden, required: regexp.MustCompile(`(?i)display\s*:\s*(inline-)?flex\b`)},
+	"css/css-grid":               {forbidden: wptLayoutForbidden, writingMode: true},
+	"css/css-multicol":           {forbidden: wptLayoutForbidden, writingMode: true},
+	"css/css-writing-modes":      {forbidden: wptLayoutForbidden, writingMode: true, required: regexp.MustCompile(`(?i)direction\s*:\s*rtl|unicode-bidi|\bdir\s*=\s*["']?(rtl|auto)`)},
+	"css/css-overflow":           {forbidden: wptLayoutForbidden, writingMode: true},
+	"css/css-text-decor":         {forbidden: wptLayoutForbidden, writingMode: true},
+	"css/css-sizing":             {forbidden: wptLayoutForbidden, writingMode: true},
+	"css/CSS2/tables":            wptFontFaceRules,
+	"css/CSS2/fonts":             wptFontFaceRules,
+	"css/CSS2/linebox":           wptFontFaceRules,
+	"css/CSS2/positioning":       wptFontFaceRules,
+	"css/CSS2/abspos":            wptFontFaceRules,
+	"css/CSS2/generated-content": wptFontFaceRules,
+	"css/CSS2/values":            wptFontFaceRules,
+	"css/CSS2/selectors":         wptFontFaceRules,
+	"css/css-tables":             wptFontFaceRules,
+	"css/css-fonts":              wptFontFaceRules,
+	"css/css-inline":             wptFontFaceRules,
+	"css/css-position":           wptFontFaceRules,
+	"css/css-transforms":         {forbidden: []*regexp.Regexp{wptTransform3D}, lift: wptFontFaceRules.lift},
+	"css/css-ruby":               wptFontFaceRules,
+	"css/css-content":            wptFontFaceRules,
+	"css/css-counter-styles":     wptFontFaceRules,
+	"css/css-values":             wptFontFaceRules,
+	"css/css-variables":          wptFontFaceRules,
+	"css/selectors":              wptFontFaceRules,
+	"css/css-color":              wptFontFaceRules,
+	"css/css-images":             wptFontFaceRules,
+}
+
+// wptProbe is a part of an area a rule singles out and caps on its own: the
+// tests of a feature the converter does not lay out, of which a few say as
+// much as many would. Its tests are not candidates of the area's own rules,
+// which forbid what the probe requires.
+type wptProbe struct {
+	name, dir string
+	rules     wptAreaRules
+	cap       int
+}
+
+var wptProbes = []wptProbe{
+	{
+		name: "css/css-writing-modes vertical", dir: "css/css-writing-modes", cap: 10,
+		rules: wptAreaRules{
+			forbidden: wptLayoutForbidden, lift: []*regexp.Regexp{wptVertical, wptSideways},
+			required: regexp.MustCompile(`(?i)writing-mode\s*:\s*(vertical-(rl|lr)|sideways-(rl|lr))`),
+		},
+	},
+	{
+		name: "css/css-transforms 3D", dir: "css/css-transforms", cap: 10,
+		rules: wptAreaRules{lift: wptFontFaceRules.lift, required: wptTransform3D},
+	},
 }
 
 // wptSkipDirs hold no reftest of their own, tests of another kind, or
@@ -451,6 +527,9 @@ func wptRejectReason(err error) string {
 // wptForbids returns the forbidden pattern text holds, empty when none.
 func wptForbids(text string, rules wptAreaRules) string {
 	for _, re := range append(slices.Clone(wptForbidden), rules.forbidden...) {
+		if slices.Contains(rules.lift, re) {
+			continue
+		}
 		if re.MatchString(text) {
 			return strings.TrimPrefix(re.String(), "(?i)")
 		}
@@ -654,10 +733,25 @@ func selectWPT(_ context.Context, checkout, _, dir string, _ map[string]string) 
 	for _, t := range tests {
 		byArea[wptArea(t.ID)] = append(byArea[wptArea(t.ID)], t)
 	}
+	limits := maps.Clone(wptAreaCap)
+	for _, p := range wptProbes {
+		err := walkWPT(checkout, p.dir, func(rel string) error {
+			e, why, err := wptCandidate(checkout, rel, p.rules)
+			if err == nil && why == "" {
+				byArea[p.name] = append(byArea[p.name], e)
+				tests = append(tests, e)
+			}
+			return err
+		})
+		if err != nil {
+			return err
+		}
+		limits[p.name] = p.cap
+	}
 	var kept []wptEntry
 	for a, group := range byArea {
-		limit := wptAreaCap[a]
-		if strings.HasPrefix(a, "css/CSS2/") {
+		limit, ok := limits[a]
+		if !ok && strings.HasPrefix(a, "css/CSS2/") {
 			limit = wptAreaCap["css/CSS2"]
 		}
 		key := func(t wptEntry) string { s := sha256.Sum256([]byte(t.ID)); return hex.EncodeToString(s[:]) }

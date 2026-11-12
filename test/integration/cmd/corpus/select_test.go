@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"unicode/utf16"
 )
@@ -280,5 +281,103 @@ func TestWPTRules(t *testing.T) {
 	}
 	if !resvgRejected([]byte(`<use href="other.svg#a"/>`)) || resvgRejected([]byte(`<use href="#a"/>`)) {
 		t.Error("the resvg href rule")
+	}
+}
+
+// TestWPTCandidateReasons pins the reason a test is kept out under, which
+// `corpus update` tallies, and the rules a new area lifts.
+func TestWPTCandidateReasons(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	write := func(rel, text string) {
+		t.Helper()
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const match = `<link rel="match" href="a-ref.html">`
+	write("css/x/a-ref.html", `<p>reference</p>`)
+	write("css/x/chained-ref.html", `<link rel="match" href="a-ref.html">`)
+	write("css/x/fonts/f.woff", "font")
+	write("css/x/plain.html", `<p>no reference</p>`)
+	write("css/x/script.html", match+`<script>x()</script>`)
+	write("css/x/chained.html", `<link rel="match" href="chained-ref.html">`)
+	write("css/x/up.html", match+`<img src="../y.png">`)
+	write("css/x/face.html", match+`<style>@font-face { font-family: F; src: url(fonts/f.woff) }</style>`)
+	write("css/x/face-gone.html", match+`<style>@font-face { font-family: F; src: url(fonts/g.woff) }</style>`)
+	write("css/x/flat.html", match+`<div style="transform: rotate(10deg)">`)
+	write("css/x/deep.html", match+`<div style="transform: rotateY(10deg)">`)
+	write("css/x/tall.html", match+`<div style="writing-mode: vertical-rl">`)
+	transforms := wptAreas["css/css-transforms"]
+	for _, c := range []struct {
+		rel   string
+		rules wptAreaRules
+		want  string
+	}{
+		{"css/x/plain.html", wptAreaRules{}, wptNotReftest},
+		{"css/x/script.html", wptFontFaceRules, `<script\b`},
+		{"css/x/chained.html", wptAreaRules{}, "chained reference"},
+		{"css/x/up.html", wptAreaRules{}, "resource outside the test's directory"},
+		{"css/x/face.html", wptAreaRules{}, "@font-face"},
+		{"css/x/face.html", wptFontFaceRules, ""},
+		{"css/x/face-gone.html", wptFontFaceRules, "missing resource"},
+		{"css/x/flat.html", transforms, ""},
+		{"css/x/deep.html", transforms, wptTransform3D.String()},
+		{"css/x/deep.html", wptProbes[1].rules, ""},
+		{"css/x/flat.html", wptProbes[1].rules, "lacks " + wptTransform3D.String()[len("(?i)"):]},
+		{"css/x/tall.html", wptAreas["css/css-writing-modes"], "vertical-(rl|lr)"},
+		{"css/x/tall.html", wptProbes[0].rules, ""},
+	} {
+		e, why, err := wptCandidate(root, c.rel, c.rules)
+		if err != nil {
+			t.Fatalf("%s: %v", c.rel, err)
+		}
+		if why != strings.TrimPrefix(c.want, "(?i)") {
+			t.Errorf("%s: reason %q, want %q", c.rel, why, strings.TrimPrefix(c.want, "(?i)"))
+		}
+		if why == "" && (e.ID != c.rel || len(e.Refs) != 1) {
+			t.Errorf("%s: entry %+v", c.rel, e)
+		}
+	}
+	if got := wptTopReasons(map[string]int{"b": 2, "a": 2, "c": 5, "d": 1}, 3); !slices.Equal(got, []string{"c", "a", "b"}) {
+		t.Errorf("top reasons %v", got)
+	}
+}
+
+// TestWPTProbesLeaveTheirArea pins that a probe and the area it singles a
+// part out of hold no test in common: the area's rules forbid what the
+// probe requires.
+func TestWPTProbesLeaveTheirArea(t *testing.T) {
+	t.Parallel()
+
+	for _, p := range wptProbes {
+		if _, ok := wptAreaCap[p.dir]; !ok || !slices.Contains(wptDirs, p.dir) {
+			t.Errorf("probe %s: %s is not a walked area", p.name, p.dir)
+		}
+		if p.rules.required == nil {
+			t.Fatalf("probe %s requires nothing", p.name)
+		}
+	}
+	for text, probe := range map[string]int{
+		"writing-mode: vertical-rl": 0, "writing-mode:sideways-lr": 0,
+		"transform: translateZ(1px)": 1, "perspective: 10px": 1, "transform: rotateX(1deg)": 1,
+	} {
+		p := wptProbes[probe]
+		if !p.rules.required.MatchString(text) {
+			t.Errorf("probe %s does not require %q", p.name, text)
+		}
+		if wptForbids(text, wptAreas[p.dir]) == "" {
+			t.Errorf("area %s admits %q, which probe %s requires", p.dir, text, p.name)
+		}
+	}
+	for _, text := range []string{"transform: rotate(1deg)", "transform: translate(1px, 2px) scale(2)", "rotate: 45deg"} {
+		if wptTransform3D.MatchString(text) {
+			t.Errorf("%q read as a 3D transform", text)
+		}
 	}
 }
