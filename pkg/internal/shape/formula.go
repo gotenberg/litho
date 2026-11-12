@@ -4,6 +4,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // Op is the operator of a guide formula. The DrawingML operators are
@@ -258,7 +260,7 @@ func parseNumber(s string) (float64, bool) {
 		return 0, false
 	}
 	v, err := strconv.ParseFloat(s, 64)
-	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
+	if err != nil || !numeric.Finite(v) {
 		return 0, false
 	}
 	return v, true
