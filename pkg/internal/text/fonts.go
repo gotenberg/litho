@@ -451,6 +451,25 @@ func (f *Fonts) Match(style Style) *Face {
 	return f.faces[0]
 }
 
+// Covers reports whether a face of family covers r by its character map,
+// a face of one of its metric-compatible aliases too when aliases is set
+// (see [Fonts.Match]). It reads no font file.
+func (f *Fonts) Covers(family string, aliases bool, r rune) bool {
+	key := familyKey(family)
+	keys := []string{key}
+	if aliases {
+		keys = append(keys, metricAliases[key]...)
+	}
+	for _, k := range keys {
+		for _, fc := range f.byFamily[k] {
+			if fc.covers(r) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Family returns the face's typographic family name (name ID 16), or its
 // family name (name ID 1) when it records none.
 func (fc *Face) Family() string {

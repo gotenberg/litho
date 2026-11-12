@@ -53,11 +53,13 @@ type settings struct {
 type document struct {
 	// ctx is the conversion's context: a document lives for the one
 	// [Convert] call that makes it.
-	ctx       context.Context
-	pkg       *ooxml.Package
-	main      string
-	fonts     *text.Fonts
-	opts      office.Options
+	ctx   context.Context
+	pkg   *ooxml.Package
+	main  string
+	fonts *text.Fonts
+	opts  office.Options
+	// symbols maps what the symbol runs draw back to their codes.
+	symbols   *office.SymbolCodes
 	theme     *ooxml.Theme
 	styles    *styleSheet
 	numbering *numbering
@@ -149,7 +151,7 @@ func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 		return nil, fmt.Errorf("%w: the main part is %s, not WordprocessingML", office.ErrMalformed, ct)
 	}
 	d := &document{
-		ctx: ctx, pkg: pkg, main: main, fonts: fonts, opts: opts,
+		ctx: ctx, pkg: pkg, main: main, fonts: fonts, opts: opts, symbols: office.NewSymbolCodes(),
 		warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, lineFactors: map[string][3]float64{}, vmlTypes: map[string]int{}, vmlTypeElems: map[string]*ooxml.Element{},
 		settings:  settings{defaultTab: 36},
 		revisions: &revisions{view: opts.TrackedChanges, authors: map[string]int{}, marked: map[*ooxml.Element]bool{}, markEnd: map[*ooxml.Element]bool{}, markStart: map[*ooxml.Element]bool{}, moved: map[*ooxml.Element]bool{}},

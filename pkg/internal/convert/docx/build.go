@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/symbolfont"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -995,11 +996,7 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 			}
 			t = strings.ToValidUTF8(t, "�")
 			tn := &layout.Node{Kind: layout.Text, Style: st, Text: t}
-			if len(st.FontFamilies) > 0 {
-				// The codes of a symbol font name nothing a reader knows
-				// (ISO 19005-2, 6.2.11.7.3; ISO 14289-2, 8.4.3).
-				tn.ActualText = office.SymbolText(t, st.FontFamilies[0])
-			}
+			office.SymbolNode(tn, d.fonts, symbolfont.RuleWord, d.symbols)
 			el.Children = append(el.Children, tn)
 			buf.Reset()
 		}

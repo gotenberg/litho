@@ -59,7 +59,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 		return nil, fmt.Errorf("%w: the document has no office:text body", office.ErrMalformed)
 	}
 	b := &builder{
-		ctx: ctx, pkg: pkg, styles: odf.NewStyles(pkg), fonts: fonts,
+		ctx: ctx, pkg: pkg, styles: odf.NewStyles(pkg), fonts: fonts, symbols: office.NewSymbolCodes(),
 		metricsCache: map[string][2]float64{}, warned: map[string]bool{}, pics: map[string]picResult{}, meta: map[*layout.Node]paraMeta{},
 		tabsRelative:  configBool(pkg.Settings, "TabsRelativeToIndent", true),
 		absoluteAlign: odf.AbsoluteStartEnd(pkg),
@@ -347,6 +347,7 @@ func (b *builder) assemble(res *layout.Result, opts office.Options, lang string)
 		sink.Expect(len(res.Pages))
 	}
 	for k, pg := range res.Pages {
+		b.symbols.Restore(pg)
 		links := pg.Links[:0:0]
 		for _, l := range pg.Links {
 			if l.Dest != nil {

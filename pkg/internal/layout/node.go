@@ -115,7 +115,9 @@ type Node struct {
 	// into the marker's label, the first Replaced child with a Picture
 	// draws in place of the label. A Marker without children draws the
 	// default marker in its Style; one whose content is empty draws
-	// nothing. Its Alt is what a reader hears for a picture. nil draws
+	// nothing. Its Alt is what a reader hears for a picture, and for a
+	// label of text the characters it stands for, the Lbl's ActualText
+	// (ISO 32000-1, 14.9.4), as a symbol font's codes need. nil draws
 	// the default marker in the item's Style. An outside marker whose
 	// Style has a Width in Points is an Office list label: a box that
 	// wide outside the item at its start edge, ending on the content

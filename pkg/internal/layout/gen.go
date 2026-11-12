@@ -478,6 +478,9 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 	st := b.st
 	var pic *Picture
 	var label, alt string
+	// authored is set for a marker of authored text whose Alt names what
+	// its characters stand for.
+	authored := false
 	switch m := n.Marker; {
 	case m != nil && len(m.Children) > 0:
 		if m.Style != nil {
@@ -493,6 +496,7 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 			}
 		}
 		label, alt = sb.String(), m.Alt
+		authored = pic == nil && alt != ""
 		if pic != nil && alt == "" {
 			alt = label
 		}
@@ -517,7 +521,7 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 	if n.Role == "LI" && ctx.elem != nil && ctx.elem.Role == "LI" && ctx.structDepth < maxStructDepth {
 		lbl := &typeset.StructElem{Role: "Lbl"}
 		body := &typeset.StructElem{Role: "LBody"}
-		if pic != nil || symbol {
+		if pic != nil || symbol || authored {
 			lbl.ActualText = alt
 		}
 		ctx.elem.Kids = append(ctx.elem.Kids, lbl, body)

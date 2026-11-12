@@ -17,6 +17,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/symbolfont"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -41,6 +42,9 @@ type builder struct {
 	styles *odf.Styles
 	scope  odf.Scope
 	fonts  *text.Fonts
+	// symbols maps what the symbol runs and bullets draw back to their
+	// codes.
+	symbols *office.SymbolCodes
 	// metricsCache holds the faces' ascents and descents, by family list,
 	// weight and slant.
 	metricsCache map[string][2]float64
@@ -622,11 +626,7 @@ func (b *builder) runNode(s string, t textState, changed bool) *layout.Node {
 	}
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Lang: t.langTag(), ChangeBar: changed})
 	tn := &layout.Node{Kind: layout.Text, Style: st, Text: s}
-	if len(st.FontFamilies) > 0 {
-		// The codes of a symbol font name nothing a reader knows (ISO
-		// 19005-2, 6.2.11.7.3; ISO 14289-2, 8.4.3).
-		tn.ActualText = office.SymbolText(s, st.FontFamilies[0])
-	}
+	office.SymbolNode(tn, b.fonts, symbolfont.RuleLibreOffice, b.symbols)
 	n.Children = []*layout.Node{b.node(tn)}
 	return n
 }

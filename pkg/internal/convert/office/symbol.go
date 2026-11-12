@@ -1,11 +1,129 @@
 package office
 
 import (
+	"slices"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
+	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/symbolfont"
+	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
+
+// maxSymbolTexts caps the ActualText values a [SymbolCodes] records.
+// Anti-DoS guard, not spec-mandated: a document writes a few distinct
+// runs of a symbol font, bullets and checkboxes, and a run past the cap
+// keeps the drawn characters as its glyphs' text, which its ActualText
+// names for a reader all the same.
+const maxSymbolTexts = 1 << 12
+
+// SymbolCodes maps the characters symbol runs draw in place of codes back
+// to the codes, which [SymbolCodes.Restore] gives the drawn glyphs as
+// their text. The character map's keys come from the recoding tables and
+// the codes U+0020 to U+00FF, a few hundred at most. Build one with
+// [NewSymbolCodes]; [SymbolNode] writes into it.
+type SymbolCodes struct {
+	codes map[rune]rune
+	// actual holds the ActualText of every run recorded, which tells its
+	// glyphs from those of other runs.
+	actual map[string]bool
+}
+
+// NewSymbolCodes returns an empty [SymbolCodes].
+func NewSymbolCodes() *SymbolCodes {
+	return &SymbolCodes{codes: map[rune]rune{}, actual: map[string]bool{}}
+}
+
+// Restore gives every glyph of pg that draws a recorded character, in a
+// run whose structure element carries the ActualText of a recorded run,
+// the code the source wrote as its text: the text a symbol font's glyph
+// stands for in the printed text, as Word and LibreOffice write it, while
+// the ActualText names it for a reader (ISO 19005-2, 6.2.11.7.3).
+func (c *SymbolCodes) Restore(pg *typeset.Page) {
+	if c == nil || len(c.codes) == 0 {
+		return
+	}
+	c.restore(pg.Content)
+}
+
+// restore is [SymbolCodes.Restore] for one list of fragments.
+func (c *SymbolCodes) restore(frags []typeset.Fragment) {
+	for _, f := range frags {
+		switch v := f.(type) {
+		case *typeset.Text:
+			if v.Parent == nil || !c.actual[v.Parent.ActualText] {
+				continue
+			}
+			for i := range v.Glyphs {
+				v.Glyphs[i].Text = strings.Map(func(r rune) rune {
+					if src, ok := c.codes[r]; ok {
+						return src
+					}
+					return r
+				}, v.Glyphs[i].Text)
+			}
+		case *typeset.Group:
+			c.restore(v.Content)
+		}
+	}
+}
+
+// record notes that draw, the text of a run whose ActualText is actual,
+// stands for src, character by character.
+func (c *SymbolCodes) record(actual, src, draw string) {
+	if c == nil || actual == "" || len(c.actual) >= maxSymbolTexts {
+		return
+	}
+	s := []rune(src)
+	if len(s) != utf8.RuneCountInString(draw) {
+		return
+	}
+	c.actual[actual] = true
+	i := 0
+	for _, d := range draw {
+		if _, ok := c.codes[d]; !ok && d != s[i] {
+			c.codes[d] = s[i]
+		}
+		i++
+	}
+}
+
+// SymbolNode sets what tn, a text node, draws when its first family is a
+// symbol font [symbolfont.Recodes] knows, after rule ([symbolfont.Draw]),
+// and gives it the text its codes stand for as its ActualText: the codes
+// of a symbol font name nothing a reader knows (ISO 19005-2, 6.2.11.7.3;
+// ISO 14289-2, 8.4.3). It records in codes each character drawn in place
+// of a code. A node that draws in OpenSymbol takes a style of its own;
+// tn's style is not modified. fonts nil leaves the codes as they are.
+func SymbolNode(tn *layout.Node, fonts *text.Fonts, rule symbolfont.Rule, codes *SymbolCodes) {
+	if tn.Style == nil || len(tn.Style.FontFamilies) == 0 {
+		return
+	}
+	family := tn.Style.FontFamilies[0]
+	if !symbolfont.Recodes(family) {
+		return
+	}
+	tn.ActualText = SymbolText(tn.Text, family)
+	if fonts == nil {
+		return
+	}
+	draw, fams, ok := symbolfont.Draw(tn.Text, family, rule, fonts.Covers)
+	if !ok {
+		return
+	}
+	if tn.ActualText == "" && draw != tn.Text {
+		tn.ActualText = tn.Text
+	}
+	codes.record(tn.ActualText, tn.Text, draw)
+	tn.Text = draw
+	if fams != nil {
+		st := *tn.Style
+		st.FontFamilies = slices.Concat(fams, tn.Style.FontFamilies)
+		tn.Style = &st
+	}
+}
 
 // SymbolText returns the characters text stands for when it is written in
 // family, a symbol font LibreOffice recodes (Symbol, Wingdings, Webdings

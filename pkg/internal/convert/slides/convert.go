@@ -50,11 +50,13 @@ const maxGroupDepth = limits.MaxSourceGroupDepth
 
 // builder holds what one conversion shares.
 type builder struct {
-	ctx      context.Context
-	mem      *limits.Budget
-	doc      *Document
-	fonts    *text.Fonts
-	opts     office.Options
+	ctx   context.Context
+	mem   *limits.Budget
+	doc   *Document
+	fonts *text.Fonts
+	opts  office.Options
+	// symbols maps what the symbol runs draw back to their codes.
+	symbols  *office.SymbolCodes
 	lang     string
 	warnings []typeset.Warning
 	warned   map[string]bool
@@ -208,7 +210,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	if fonts.Len() == 0 {
 		return nil, fmt.Errorf("laying the presentation out: %w", text.ErrNoFonts)
 	}
-	b := &builder{ctx: ctx, mem: limits.BudgetFrom(ctx), doc: doc, fonts: fonts, opts: opts, lang: cmp.Or(doc.Meta.Lang, opts.DefaultLang), warned: map[string]bool{}, metrics: map[string]text.Metrics{}}
+	b := &builder{ctx: ctx, mem: limits.BudgetFrom(ctx), doc: doc, fonts: fonts, opts: opts, symbols: office.NewSymbolCodes(), lang: cmp.Or(doc.Meta.Lang, opts.DefaultLang), warned: map[string]bool{}, metrics: map[string]text.Metrics{}}
 	var shown []*Slide
 	for _, s := range doc.Slides {
 		if s != nil && (!s.Hidden || opts.HiddenSlides) {
@@ -446,6 +448,7 @@ func (b *builder) dest(s *Slide) *typeset.Dest {
 // handOver gives the page pg, laid out, to the sink of the options, and
 // its glyphs back to the budget, or appends it to out without a sink.
 func (b *builder) handOver(out *typeset.Document, pg *typeset.Page) error {
+	b.symbols.Restore(pg)
 	sink := b.opts.Sink
 	if sink == nil {
 		out.Pages = append(out.Pages, pg)

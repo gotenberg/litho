@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/symbolfont"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -851,6 +852,16 @@ func textColor(c css.Color) css.Color {
 	return c
 }
 
+// symbolRule returns the rule a run of a symbol font draws by: Impress's
+// for an OpenDocument presentation, Word's, which PowerPoint shares, for
+// the others.
+func (b *builder) symbolRule() symbolfont.Rule {
+	if b.doc.Fallback == text.FallbackLibreOffice {
+		return symbolfont.RuleLibreOffice
+	}
+	return symbolfont.RuleWord
+}
+
 // inline returns the style of a run of style rs at the font scale k,
 // inside a paragraph of style ps.
 func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
@@ -1087,7 +1098,9 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 		if href == "" && r.Jump > 0 {
 			href = jumpPrefix + strconv.Itoa(r.Jump)
 		}
-		run := &layout.Node{Kind: layout.Element, Style: is, Lang: r.Style.Lang, Href: href, Children: []*layout.Node{{Kind: layout.Text, Style: is, Text: s}}}
+		tn := &layout.Node{Kind: layout.Text, Style: is, Text: s}
+		office.SymbolNode(tn, b.fonts, b.symbolRule(), b.symbols)
+		run := &layout.Node{Kind: layout.Element, Style: is, Lang: r.Style.Lang, Href: href, Children: []*layout.Node{tn}}
 		if href != "" {
 			run.Role = "Link"
 		}

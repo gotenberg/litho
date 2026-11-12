@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
+	"github.com/gotenberg/litho/pkg/internal/symbolfont"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -37,10 +38,12 @@ const (
 
 // builder holds what one conversion shares.
 type builder struct {
-	ctx      context.Context
-	doc      *Document
-	fonts    *text.Fonts
-	opts     office.Options
+	ctx   context.Context
+	doc   *Document
+	fonts *text.Fonts
+	opts  office.Options
+	// symbols maps what the symbol cells draw back to their codes.
+	symbols  *office.SymbolCodes
 	m        *measurer
 	lang     string
 	formats  map[string]*numfmt.Format
@@ -51,7 +54,7 @@ type builder struct {
 // newBuilder returns the builder of one conversion.
 func newBuilder(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.Options) *builder {
 	b := &builder{
-		ctx: ctx, doc: doc, fonts: fonts, opts: opts, lang: cmp.Or(doc.Meta.Lang, opts.DefaultLang),
+		ctx: ctx, doc: doc, fonts: fonts, opts: opts, symbols: office.NewSymbolCodes(), lang: cmp.Or(doc.Meta.Lang, opts.DefaultLang),
 		formats: map[string]*numfmt.Format{}, warned: map[string]bool{},
 	}
 	b.m = newMeasurer(ctx, fonts, b.lang)
@@ -66,6 +69,15 @@ func (b *builder) fallback() text.Fallback {
 		return text.FallbackFontconfig
 	}
 	return text.FallbackLibreOffice
+}
+
+// symbolRule returns the rule a cell of a symbol font draws by: Excel's,
+// which Word's stands for, or Calc's.
+func (b *builder) symbolRule() symbolfont.Rule {
+	if b.doc.ExcelRules {
+		return symbolfont.RuleWord
+	}
+	return symbolfont.RuleLibreOffice
 }
 
 // warn records a warning once per code, effect and message.
@@ -302,6 +314,7 @@ func blankBookPaper(pg *typeset.Page, w, h float64) {
 // handOver gives the page pg, laid out, to the sink of the options, and
 // its glyphs back to the budget, or appends it to out without a sink.
 func (b *builder) handOver(out *typeset.Document, pg *typeset.Page) error {
+	b.symbols.Restore(pg)
 	sink := b.opts.Sink
 	if sink == nil {
 		out.Pages = append(out.Pages, pg)

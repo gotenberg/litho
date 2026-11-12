@@ -6,6 +6,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
@@ -440,7 +441,9 @@ func (b *pageBuilder) paragraph(d *display, f font, lineH float64, align css.Tex
 	st := b.paraStyle(f, lineH, align, d.wrap, t)
 	n := &layout.Node{Kind: layout.Element, Style: st}
 	if len(d.runs) == 0 {
-		n.Children = []*layout.Node{{Kind: layout.Text, Style: st, Text: d.text}}
+		tn := &layout.Node{Kind: layout.Text, Style: st, Text: d.text}
+		office.SymbolNode(tn, b.fonts, b.symbolRule(), b.symbols)
+		n.Children = []*layout.Node{tn}
 		return n
 	}
 	for _, r := range d.runs {
@@ -453,10 +456,9 @@ func (b *pageBuilder) paragraph(d *display, f font, lineH float64, align css.Tex
 		if !b.doc.ExcelRules && r.Font != nil {
 			rs.LineHeight = css.Dimension{Kind: css.Number, Value: b.runLine(rf, d.wrap) / math.Max(rf.size, 0.01)}
 		}
-		n.Children = append(n.Children, &layout.Node{
-			Kind: layout.Element, Style: rs,
-			Children: []*layout.Node{{Kind: layout.Text, Style: rs, Text: r.Text}},
-		})
+		tn := &layout.Node{Kind: layout.Text, Style: rs, Text: r.Text}
+		office.SymbolNode(tn, b.fonts, b.symbolRule(), b.symbols)
+		n.Children = append(n.Children, &layout.Node{Kind: layout.Element, Style: rs, Children: []*layout.Node{tn}})
 	}
 	return n
 }

@@ -169,6 +169,7 @@ func (d *document) assemble(res *layout.Result) (*typeset.Document, error) {
 		sink.Expect(len(res.Pages))
 	}
 	for k, pg := range res.Pages {
+		d.symbols.Restore(pg)
 		links := pg.Links[:0:0]
 		for _, l := range pg.Links {
 			if l.Dest != nil {

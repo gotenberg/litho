@@ -58,3 +58,105 @@ func Recode(c string, fams []string) (draw, txt string, out []string) {
 	}
 	return c, c, append([]string{"OpenSymbol"}, fams...)
 }
+
+// Rule names the program whose drawing of a symbol font's codes [Draw]
+// follows.
+type Rule uint8
+
+const (
+	// RuleWord draws the codes as Microsoft Word does where the font is
+	// missing: in a metric-compatible clone of the font, at the code
+	// itself, when the clone covers every code of the text; else as
+	// [RuleLibreOffice] does.
+	RuleWord Rule = iota
+	// RuleLibreOffice recodes the codes into OpenSymbol, as LibreOffice
+	// draws a symbol font the printing system lacks ([Recode]).
+	RuleLibreOffice
+)
+
+// Draw returns what to draw for s, text set in the symbol font family, by
+// rule: the text and the families to draw it in, nil for the run's own,
+// and whether either changed. A family [Recodes] does not know, and text
+// whose every character a face of family itself covers, draw as they are.
+// covers reports whether a face of fam covers r, one of its
+// metric-compatible clones too when aliases is set. A code whose recoding
+// OpenSymbol lacks keeps its character, which the run's fallback draws.
+//
+// A code is a character from U+0020 to U+00FF, or that code in the
+// private use area at U+F000, where Word and the fonts' own symbol cmaps
+// place them.
+//
+// # Corpus evidence
+//
+//   - probe, odt: LibreOffice in the gotenberg/gotenberg:9.4.1 image, which
+//     holds no Symbol or Wingdings font, prints "abg", U+F061 U+F062 U+F067
+//     U+F0B7 in Symbol and U+F04A U+F0FC U+F028 in Wingdings in OpenSymbol.
+//   - libreoffice/odt: odfexport/WordTest_edit.odt prints its U+F0B7 bullets
+//     in Symbol in OpenSymbol.
+//   - litho/docx: run-fonts-fallback and fields-logic-formula print Symbol
+//     runs in SymbolMT and Wingdings runs in Wingdings in Word, whose
+//     metrics Standard Symbols PS, Symbol's clone, keeps.
+func Draw(s, family string, rule Rule, covers func(fam string, aliases bool, r rune) bool) (string, []string, bool) {
+	if !Recodes(family) || s == "" {
+		return s, nil, false
+	}
+	own := true
+	for _, r := range s {
+		if !covers(family, false, r) {
+			own = false
+			break
+		}
+	}
+	if own {
+		return s, nil, false
+	}
+	if rule == RuleWord {
+		var b strings.Builder
+		clone := true
+		for _, r := range s {
+			c := code(r)
+			if c < 0 {
+				c = r
+			}
+			if !covers(family, true, c) {
+				clone = false
+				break
+			}
+			b.WriteRune(c)
+		}
+		if clone {
+			return b.String(), nil, b.String() != s
+		}
+	}
+	var b strings.Builder
+	recoded := false
+	for _, r := range s {
+		if code(r) < 0 {
+			b.WriteRune(r)
+			continue
+		}
+		draw, _, _ := Recode(string(r), []string{family})
+		if d := []rune(draw); len(d) != 1 || !covers("OpenSymbol", false, d[0]) {
+			b.WriteRune(r)
+			continue
+		}
+		recoded = true
+		b.WriteString(draw)
+	}
+	if !recoded {
+		return s, nil, false
+	}
+	return b.String(), []string{"OpenSymbol"}, true
+}
+
+// code returns the code r stands for in a symbol font, a byte from 0x20
+// to 0xFF, -1 for a character that is no code.
+func code(r rune) rune {
+	if r >= 0xf020 && r <= 0xf0ff {
+		r -= 0xf000
+	}
+	if r < 0x20 || r > 0xff {
+		return -1
+	}
+	return r
+}

@@ -141,6 +141,7 @@ func TestLayout_LastResortKeepsTheFaceOfTheRun(t *testing.T) {
 		t.Errorf("ப alone drawn with %s, want Noto Sans Grantha, first in index order", got)
 	}
 }
+
 func TestWithoutBrowserDefaultsUndoesTheInserts(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ in, want []string }{
@@ -151,5 +152,21 @@ func TestWithoutBrowserDefaultsUndoesTheInserts(t *testing.T) {
 		if got := withoutBrowserDefaults(BrowserFamilies(tc.in)); !slices.Equal(got, tc.want) {
 			t.Errorf("withoutBrowserDefaults(BrowserFamilies(%q)) = %q, want %q", tc.in, got, tc.want)
 		}
+	}
+}
+
+func TestFonts_CoversByFamilyAndAliases(t *testing.T) {
+	t.Parallel()
+	f := newTestFonts(t,
+		fontFile{name: "a_symbols.ttf", data: familyFace("Standard Symbols PS", "Regular", 400, false)},
+	)
+	if f.Covers("Symbol", false, 'A') {
+		t.Error("Symbol covers A by itself, want only through its clone")
+	}
+	if !f.Covers("Symbol", true, 'A') {
+		t.Error("Symbol does not cover A through Standard Symbols PS")
+	}
+	if f.Covers("Standard Symbols PS", true, 'Z') {
+		t.Error("Standard Symbols PS covers Z, which it lacks")
 	}
 }

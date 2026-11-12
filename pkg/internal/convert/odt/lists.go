@@ -6,9 +6,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/symbolfont"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -393,7 +395,13 @@ func (item *itemCtx) attach(b *builder, n *layout.Node, t textState) {
 	n.Role = "LI"
 	n.ListValue = max(item.value, 1)
 	marker := &layout.Node{Kind: layout.Element, Style: mst}
-	label := item.label
+	// A bullet of a symbol font draws as LibreOffice draws it, recoded
+	// into OpenSymbol where the font is missing.
+	sym := &layout.Node{Kind: layout.Text, Style: mst, Text: item.label}
+	office.SymbolNode(sym, b.fonts, symbolfont.RuleLibreOffice, b.symbols)
+	mst.FontFamilies = sym.Style.FontFamilies
+	sym.Style = mst
+	label := sym.Text
 	lp := lvl.Props
 	align := css.AlignStart
 	switch lp.Get("fo:text-align") {
@@ -475,7 +483,13 @@ func (item *itemCtx) attach(b *builder, n *layout.Node, t textState) {
 		marker.Children = []*layout.Node{{Kind: layout.Replaced, Style: pst, Picture: item.pic}}
 		marker.Alt = "•"
 	} else {
-		marker.Children = []*layout.Node{{Kind: layout.Text, Style: mst, Text: label}}
+		if sym.ActualText != "" {
+			// A marker's text nodes are drawn as one label: the marker
+			// carries what they stand for (ISO 19005-2, 6.2.11.7.3).
+			marker.Alt = strings.TrimSuffix(sym.ActualText+strings.TrimPrefix(label, sym.Text), " ")
+		}
+		sym.Text = label
+		marker.Children = []*layout.Node{sym}
 	}
 	n.Marker = marker
 }
