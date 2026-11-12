@@ -109,13 +109,11 @@ func flateStream(dict ast.PdfDict, data []byte) ast.PdfStream {
 }
 
 // cidWidthArray emits the /W array of a CIDFont (ISO 32000-1, 9.7.4.3),
-// keyed by code, scaled to the 1000-unit glyph space. The format used here
-// is the sparse "c [w]" variant: one run per code, which is slightly verbose
-// but trivial to generate.
+// keyed by code, scaled to the 1000-unit glyph space from unitsPerEm, which
+// [Font.scaler] never leaves 0. The format used here is the sparse "c [w]"
+// variant: one run per code, which is slightly verbose but trivial to
+// generate.
 func cidWidthArray(widths map[uint16]uint16, unitsPerEm float64) ast.PdfArray {
-	if unitsPerEm == 0 {
-		unitsPerEm = 1000
-	}
 	codes := make([]int, 0, len(widths))
 	for code := range widths {
 		codes = append(codes, int(code))

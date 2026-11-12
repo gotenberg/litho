@@ -387,7 +387,7 @@ func rebuildWOFF2(flavor uint32, entries []woff2Entry, pick []int, stream []byte
 		t.checksum = checksum(t.data)
 		tables = append(tables, t)
 	}
-	if hasGlyf && rebuilt != nil {
+	if rebuilt != nil {
 		if maxp, ok := byTag[tagMaxp]; ok {
 			m := bytesOf(maxp)
 			if len(m) >= 6 && int(binary.BigEndian.Uint16(m[4:])) != rebuilt.numGlyphs {
