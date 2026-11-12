@@ -129,9 +129,16 @@ func TestPixelCost(t *testing.T) {
 		m    color.Model
 		want int64
 	}{
-		{color.GrayModel, 1}, {color.Palette{color.Black, color.White}, 1}, {color.Gray16Model, 2},
-		{color.YCbCrModel, 3}, {color.CMYKModel, 4}, {color.NRGBAModel, 4}, {color.RGBAModel, 4},
-		{color.NYCbCrAModel, 4}, {color.RGBA64Model, 8}, {color.NRGBA64Model, 8},
+		{color.GrayModel, 1},
+		{color.Palette{color.Black, color.White}, 1},
+		{color.Gray16Model, 2},
+		{color.YCbCrModel, 3},
+		{color.CMYKModel, 4},
+		{color.NRGBAModel, 4},
+		{color.RGBAModel, 4},
+		{color.NYCbCrAModel, 4},
+		{color.RGBA64Model, 8},
+		{color.NRGBA64Model, 8},
 	} {
 		if got := limits.PixelCost(tc.m); got != tc.want {
 			t.Errorf("PixelCost(%T) = %d, want %d", tc.m, got, tc.want)
