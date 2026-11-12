@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -207,6 +208,18 @@ func TestValidateRefusesBadSemantics(t *testing.T) {
 		"negative span":     func(_ *typeset.Document, el map[string]*typeset.StructElem) { el["TD"].RowSpan = -1 },
 		"unknown scope":     func(_ *typeset.Document, el map[string]*typeset.StructElem) { el["TH"].Scope = 9 },
 		"unknown numbering": func(_ *typeset.Document, el map[string]*typeset.StructElem) { el["L"].Numbering = 99 },
+		"unknown print role": func(_ *typeset.Document, el map[string]*typeset.StructElem) {
+			el["Lbl"].PrintField.Role = 99
+		},
+		"unknown check state": func(_ *typeset.Document, el map[string]*typeset.StructElem) {
+			el["Lbl"].PrintField.Checked = 9
+		},
+		"description past the cap": func(_ *typeset.Document, el map[string]*typeset.StructElem) {
+			el["Lbl"].PrintField.Desc = strings.Repeat("a", typeset.MaxFieldText+1)
+		},
+		"description not UTF-8": func(_ *typeset.Document, el map[string]*typeset.StructElem) {
+			el["Lbl"].PrintField.Desc = "\xff"
+		},
 	} {
 		doc, el := semanticDoc(t)
 		mutate(doc, el)
@@ -312,4 +325,51 @@ func TestWriteVersion20KeepsTableOfContents(t *testing.T) {
 	out = writeVersion(t, doc, typeset.Version20)
 	mustContain(t, out, "/S /Div")
 	mustLack(t, out, "/S /TOC", "/S /TOCI", "/Ref ")
+}
+
+// printFieldDoc is a tagged page with a check box printed as content and a
+// list box printed as text, each a Form element with PrintField
+// attributes and no widget, and a text field whose Form element, which
+// carries the attributes too, holds its widget.
+func printFieldDoc(t *testing.T) *typeset.Document {
+	t.Helper()
+	box := &typeset.StructElem{Role: "Form", PrintField: typeset.PrintField{Role: typeset.PrintCheckBox, Checked: typeset.CheckOn, Desc: "Agree"}}
+	list := &typeset.StructElem{Role: "Form", PrintField: typeset.PrintField{Role: typeset.PrintList, Desc: "Fruit"}}
+	field := &typeset.StructElem{Role: "Form", PrintField: typeset.PrintField{Role: typeset.PrintText, Desc: "Name"}}
+	root := &typeset.StructElem{Role: "Document", Kids: []*typeset.StructElem{
+		{Role: "P", Kids: []*typeset.StructElem{box, list, field}},
+	}}
+	mark := &typeset.Path{Ops: []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: 40, Y: 40}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: 50, Y: 50}}},
+	}, Stroke: &typeset.Stroke{Color: typeset.Black, Width: 1}, Parent: box}
+	item := run(t, sans, 12, typeset.Point{X: 40, Y: 80}, "Apple")
+	item.Parent = list
+	page := letter(mark, item)
+	page.Fields = []typeset.Field{{Kind: typeset.FieldText, Rect: typeset.Rect{X: 40, Y: 100, Width: 100, Height: 16}, Name: "name", Value: "Ada", Parent: field}}
+	return &typeset.Document{Metadata: typeset.Metadata{Title: "Printed", Lang: "en"}, Structure: root, Pages: []*typeset.Page{page}}
+}
+
+// TestWritePrintFieldAttributes writes the PrintField attributes of a Form
+// element that holds content and no widget, as ISO 32000-1, Table 348
+// spells them in a PDF 1.7 file and ISO 32000-2, Table 383 in a PDF 2.0
+// one, leaves them out of the Form element that holds its widget, and out
+// of a file that predates them.
+func TestWritePrintFieldAttributes(t *testing.T) {
+	t.Parallel()
+	out := writeVersion(t, printFieldDoc(t), typeset.Version17)
+	mustContain(t, out,
+		"/A << /Desc (Agree) /O /PrintField /Role /cb /checked /on>>",
+		"/A << /Desc (Fruit) /O /PrintField /Role /tv>>",
+	)
+	mustLack(t, out, "(Name)", "/Checked")
+	out = writeVersion(t, printFieldDoc(t), typeset.Version20)
+	mustContain(t, out,
+		"/A << /Checked /on /Desc (Agree) /O /PrintField /Role /cb>>",
+		"/A << /Desc (Fruit) /O /PrintField /Role /lb>>",
+	)
+	mustLack(t, out, "/checked")
+	for _, v := range []typeset.Version{typeset.Version14, typeset.Version16} {
+		mustLack(t, writeVersion(t, printFieldDoc(t), v), "/PrintField")
+	}
 }

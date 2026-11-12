@@ -159,10 +159,11 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 		} else {
 			written[e.Role] = true
 		}
-		if a := attributes(e, role, v); a != nil {
+		items := st.items[e]
+		widget := slices.ContainsFunc(items, func(it structItem) bool { return it.annot.ObjectNum != 0 })
+		if a := attributes(e, role, v, widget); a != nil {
 			dict["A"] = a
 		}
-		items := st.items[e]
 		kids := make(ast.PdfArray, 0, len(items)+len(e.Kids))
 		if len(items) > 0 {
 			pg := items[0].page
@@ -314,10 +315,16 @@ func (st *structState) tocKept() map[*StructElem]bool {
 // attributes returns the attribute object of e, written as type role in a
 // file of version v, nil for none: the Table attributes of a TH or TD cell
 // (ISO 32000-1, 14.8.5.7, Table 349), its spans past one and a header
-// cell's Scope, and the List attribute of an L (14.8.5.5, Table 347). Scope
-// is a PDF 1.5 attribute and is left out of an older file.
-func attributes(e *StructElem, role string, v Version) ast.PdfObject {
+// cell's Scope, the List attribute of an L (14.8.5.5, Table 347), and the
+// PrintField attributes of a Form ([printField]) that holds no widget
+// annotation. Scope is a PDF 1.5 attribute and is left out of an older
+// file.
+func attributes(e *StructElem, role string, v Version, widget bool) ast.PdfObject {
 	switch role {
+	case "Form":
+		if !widget {
+			return printField(e.PrintField, v)
+		}
 	case "TH", "TD":
 		a := ast.PdfDict{}
 		if e.RowSpan > 1 {
@@ -348,6 +355,52 @@ func attributes(e *StructElem, role string, v Version) ast.PdfObject {
 		}
 	}
 	return nil
+}
+
+// printField returns the PrintField attribute object of a Form element
+// that shows the non-interactive field pf in a file of version v, nil when
+// pf says nothing or v predates the attributes, which ISO 32000-1, Table
+// 348 marks PDF 1.7.
+//
+// ISO 32000-1, 14.8.4.5, Table 340 lets a Form element with a Role
+// attribute hold the content that represents a non-interactive field, and
+// asks one without of holding the widget annotation alone, which ISO
+// 14289-1, 7.18.4 makes a requirement of PDF/UA-1. The state is written
+// as checked in a PDF 1.7 file (ISO 32000-1, Table 348) and as Checked in
+// a PDF 2.0 one, whose Table 383 deprecates the lower-case key; a list box
+// takes the lb role there, and tv, the value shown as text, before it.
+func printField(pf PrintField, v Version) ast.PdfObject {
+	if pf.Role == PrintRoleNone || v != Version17 && v != Version20 {
+		return nil
+	}
+	roles := [...]string{PrintRadio: "rb", PrintCheckBox: "cb", PrintPushButton: "pb", PrintText: "tv", PrintList: "tv"}
+	if int(pf.Role) >= len(roles) {
+		return nil
+	}
+	role := roles[pf.Role]
+	if pf.Role == PrintList && v == Version20 {
+		role = "lb"
+	}
+	a := ast.PdfDict{"O": ast.PdfName("PrintField"), "Role": ast.PdfName(role)}
+	if pf.Role == PrintRadio || pf.Role == PrintCheckBox {
+		key := ast.PdfName("checked")
+		if v == Version20 {
+			key = "Checked"
+		}
+		switch pf.Checked {
+		case CheckOn:
+			a[key] = ast.PdfName("on")
+		case CheckOff:
+			a[key] = ast.PdfName("off")
+		case CheckNeutral:
+			a[key] = ast.PdfName("neutral")
+		case CheckUnset:
+		}
+	}
+	if pf.Desc != "" {
+		a["Desc"] = textString(pf.Desc)
+	}
+	return a
 }
 
 // listNumbering returns the ListNumbering value of n in a file of version

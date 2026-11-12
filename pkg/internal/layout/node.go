@@ -132,6 +132,10 @@ type Node struct {
 	// Numbering is the numbering system of the labels of a list, a node of
 	// Role L (typeset.StructElem Numbering). The zero value says nothing.
 	Numbering typeset.ListNumbering
+	// PrintField describes the non-interactive form field a node of Role
+	// Form shows (typeset.StructElem PrintField). The zero value says
+	// nothing.
+	PrintField typeset.PrintField
 	// Span is the span of a table column or column group, 0 for 1.
 	Span int
 	// Leader marks a leader (CSS Generated Content 3, leader()): an

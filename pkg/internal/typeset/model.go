@@ -458,6 +458,13 @@ type StructElem struct {
 	// (ISO 32000-1, 14.8.5.5, Table 347), [NumberingUnset] to leave the
 	// attribute out. Other roles ignore it.
 	Numbering ListNumbering
+	// PrintField describes the non-interactive form field a Form element
+	// shows. The backend writes it on a Form element that holds no
+	// widget annotation, in a PDF 1.7 or PDF 2.0 file: the attributes are
+	// PDF 1.7 ones, and a Form element holding its field's widget keeps
+	// to that widget (ISO 32000-1, 14.8.4.5, Table 340). Other roles
+	// ignore it.
+	PrintField PrintField
 	// Kids are the child elements in logical reading order.
 	Kids []*StructElem
 }
@@ -519,4 +526,62 @@ const (
 	NumberingUnordered
 	// NumberingDescription is a list of terms and their descriptions.
 	NumberingDescription
+)
+
+// PrintField describes the non-interactive form field a Form element
+// shows: its PrintField attributes (ISO 32000-1, 14.8.5.6, Table 348; ISO
+// 32000-2, 14.8.5.6). A Form element with them holds the content that
+// represents the field, where one without holds only the widget annotation
+// of an interactive field (ISO 32000-1, 14.8.4.5, Table 340). The zero
+// value says nothing.
+type PrintField struct {
+	// Role is the kind of field, [PrintRoleNone] to leave every
+	// attribute out.
+	Role PrintRole
+	// Checked is the state of a check box or a radio button,
+	// [CheckUnset] to leave the attribute out, which a reader takes as
+	// off. Other roles ignore it.
+	Checked CheckState
+	// Desc describes the field, as a field's alternate name does
+	// ([Field.Description]); "" leaves it out. It holds at most
+	// [MaxFieldText] bytes of UTF-8.
+	Desc string
+}
+
+// PrintRole is the kind of a non-interactive form field: the Role
+// attribute of the PrintField owner (ISO 32000-1, Table 348).
+type PrintRole uint8
+
+// The kinds of a non-interactive form field.
+const (
+	// PrintRoleNone leaves the PrintField attributes out.
+	PrintRoleNone PrintRole = iota
+	// PrintRadio is a radio button, rb.
+	PrintRadio
+	// PrintCheckBox is a check box, cb.
+	PrintCheckBox
+	// PrintPushButton is a push button, pb.
+	PrintPushButton
+	// PrintText is a field whose value shows as text, tv: a text field, a
+	// drop-down list or a combo box.
+	PrintText
+	// PrintList is a list box: lb in a PDF 2.0 file (ISO 32000-2, Table
+	// 383), tv in an older one, whose Table 348 has no list role.
+	PrintList
+)
+
+// CheckState is the state of a check box or a radio button: the checked
+// attribute of the PrintField owner (ISO 32000-1, Table 348).
+type CheckState uint8
+
+// The states of a check box or a radio button.
+const (
+	// CheckUnset leaves the attribute out.
+	CheckUnset CheckState = iota
+	// CheckOn is on.
+	CheckOn
+	// CheckOff is off.
+	CheckOff
+	// CheckNeutral is neither on nor off.
+	CheckNeutral
 )

@@ -114,6 +114,9 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 			if n.Role == "L" {
 				out.list = el
 			}
+			if n.Role == "Form" {
+				el.PrintField = n.PrintField
+			}
 			if n.Alt != "" && (n.Kind == Replaced || n.Role == "Figure" || n.Role == "Link") {
 				el.Alt = n.Alt
 			}

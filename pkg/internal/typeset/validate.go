@@ -6,6 +6,7 @@ import (
 	"math"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
@@ -530,8 +531,10 @@ func structElems(root *StructElem) (map[*StructElem]bool, error) {
 }
 
 // checkAttributes checks the attribute fields of e: spans in [0,
-// [MaxCellSpan]] and known scope and numbering values (ISO 32000-1,
-// 14.8.5.5 and 14.8.5.7, Tables 347 and 349).
+// [MaxCellSpan]], known scope and numbering values (ISO 32000-1, 14.8.5.5
+// and 14.8.5.7, Tables 347 and 349), and known PrintField values with a
+// description of at most [MaxFieldText] bytes of UTF-8 (14.8.5.6, Table
+// 348).
 func checkAttributes(e *StructElem) error {
 	if e.ColSpan < 0 || e.ColSpan > MaxCellSpan || e.RowSpan < 0 || e.RowSpan > MaxCellSpan {
 		return fmt.Errorf("%w: %q spans %d columns and %d rows, each in [0, %d]", ErrInvalidElement, e.Role, e.ColSpan, e.RowSpan, MaxCellSpan)
@@ -541,6 +544,12 @@ func checkAttributes(e *StructElem) error {
 	}
 	if e.Numbering > NumberingDescription {
 		return fmt.Errorf("%w: %q has list numbering %d", ErrInvalidElement, e.Role, e.Numbering)
+	}
+	if pf := e.PrintField; pf.Role > PrintList || pf.Checked > CheckNeutral {
+		return fmt.Errorf("%w: %q has print field role %d and state %d", ErrInvalidElement, e.Role, pf.Role, pf.Checked)
+	}
+	if d := e.PrintField.Desc; len(d) > MaxFieldText || !utf8.ValidString(d) {
+		return fmt.Errorf("%w: %q has a print field description of %d bytes, at most %d of UTF-8", ErrInvalidElement, e.Role, len(d), MaxFieldText)
 	}
 	return nil
 }
