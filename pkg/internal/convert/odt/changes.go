@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxTrackedChanges bounds the tracked changes a document's view is built
@@ -74,7 +75,7 @@ type changes struct {
 	// rowTracked reports a table row whose changes are the row's own
 	// (LibreOffice's loext:text-changes-only false).
 	rowTracked func(*odf.Element) bool
-	warn       func(code, msg string)
+	report     func(what string, code warn.Code, msg string)
 }
 
 // resolveChanges rewrites body, the office:text of a document, into the
@@ -85,7 +86,7 @@ type changes struct {
 // too, both kept, each change's text drawn by its mark. A formatting
 // change prints with its new formatting under every view: the file keeps
 // no record of the old one but what text:format-change names (5.5.5).
-func resolveChanges(ctx context.Context, body *odf.Element, view office.TrackedChanges, rowTracked func(*odf.Element) bool, warn func(code, msg string)) (map[string]changeMark, error) {
+func resolveChanges(ctx context.Context, body *odf.Element, view office.TrackedChanges, rowTracked func(*odf.Element) bool, report func(what string, code warn.Code, msg string)) (map[string]changeMark, error) {
 	tc := body.Child(odf.NSText, "tracked-changes")
 	if tc == nil {
 		return nil, nil
@@ -94,7 +95,7 @@ func resolveChanges(ctx context.Context, body *odf.Element, view office.TrackedC
 		body: body, regions: map[string]*change{},
 		parent: map[*odf.Element]*odf.Element{},
 		starts: map[string]*odf.Element{}, ends: map[string]*odf.Element{}, points: map[string]*odf.Element{},
-		rowTracked: rowTracked, warn: warn,
+		rowTracked: rowTracked, report: report,
 	}
 	c.readRegions(tc)
 	if len(c.regions) == 0 {
@@ -138,7 +139,7 @@ func (c *changes) readRegions(tc *odf.Element) {
 			continue
 		}
 		if len(c.regions) >= maxTrackedChanges {
-			c.warn("tracked-changes-cap", fmt.Sprintf("changes past the first %d print as the file stores them", maxTrackedChanges))
+			c.report("tracked-changes-cap", warn.LimitReached, fmt.Sprintf("changes past the first %d print as the file stores them", maxTrackedChanges))
 			return
 		}
 		// ODF 1.3 names a region by xml:id; text:id is its ODF 1.2 name,

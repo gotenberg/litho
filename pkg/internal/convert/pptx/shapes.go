@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // The graphic data URIs of a graphic frame (ECMA-376 Part 1, 20.1.2.2.17
@@ -73,7 +74,7 @@ func (r *reader) shapeList(out *[]*slides.Shape, c *shapeCtx, tree *ooxml.Elemen
 		switch el.Local {
 		case "sp", "cxnSp", "pic", "graphicFrame", "grpSp":
 		case "contentPart":
-			r.warn("unsupported-content", "ink drawn on a slide is left out")
+			r.warn(warn.ContentUnsupported, "ink drawn on a slide is left out")
 			continue
 		default:
 			continue
@@ -83,7 +84,7 @@ func (r *reader) shapeList(out *[]*slides.Shape, c *shapeCtx, tree *ooxml.Elemen
 		}
 		r.shapes++
 		if r.shapes > maxShapes {
-			r.warn("too-large", fmt.Sprintf("the presentation holds more than %d shapes: the rest are left out", maxShapes))
+			r.warn(warn.LimitReached, fmt.Sprintf("the presentation holds more than %d shapes: the rest are left out", maxShapes))
 			return errStop
 		}
 		if hidden(el) {
@@ -455,7 +456,7 @@ func (r *reader) effects(chain []*ooxml.Element, s *slides.Shape) {
 				return
 			}
 		}
-		r.warn("unsupported-content", "3D shape properties are not drawn: shapes print flat")
+		r.warn(warn.ContentUnsupported, "3D shape properties are not drawn: shapes print flat")
 		return
 	}
 }
@@ -517,7 +518,7 @@ func flatCamera(scene *ooxml.Element) (float64, bool) {
 // fill.
 func (r *reader) group(c *shapeCtx, el *ooxml.Element, depth int) (*slides.Shape, error) {
 	if depth >= maxGroupDepth {
-		r.warn("too-large", fmt.Sprintf("shape groups nested deeper than %d are left out", maxGroupDepth))
+		r.warn(warn.LimitReached, fmt.Sprintf("shape groups nested deeper than %d are left out", maxGroupDepth))
 		return nil, nil
 	}
 	nv := nvProps(el)

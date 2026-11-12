@@ -13,12 +13,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/woff"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
-
-// CodeFontFaceSkipped flags an @font-face rule none of whose sources
-// loaded, with the reason of each; its family then resolves to the next
-// family of each list that names it.
-const CodeFontFaceSkipped = "font-face-skipped"
 
 // maxFontFaces caps the @font-face rules one conversion loads: 256. Anti-DoS
 // guard, not spec-mandated: every face costs a parse and its tables in
@@ -89,7 +85,7 @@ type programResult struct {
 // loadFontFaces loads the faces of rules, in rule order, through res and
 // the local faces of fonts (CSS Fonts 4, 4.3). Each rule's sources are tried
 // in order and the first that loads is its face; a rule none of whose
-// sources loads is reported with [CodeFontFaceSkipped] and still declares
+// sources loads is reported with [warn.FontNotLoaded] and still declares
 // its family. fonts may be nil, which loads nothing.
 func loadFontFaces(ctx context.Context, rules []css.FontFace, res *resources, fonts *text.Fonts, logger *slog.Logger) (*text.FaceSet, []typeset.Warning) {
 	if fonts == nil || len(rules) == 0 {
@@ -151,7 +147,7 @@ func (l *fontLoader) load(ctx context.Context, rule css.FontFace) *text.Face {
 func (l *fontLoader) skip(rule css.FontFace, reasons []string) {
 	msg := fmt.Sprintf("the @font-face rule for %q loaded no face (%s); its family falls back to the next one", rule.Family, strings.Join(reasons, "; "))
 	l.logger.Debug("html: skipping an @font-face rule", slog.String("family", rule.Family), slog.String("reasons", strings.Join(reasons, "; ")))
-	l.warnings = append(l.warnings, typeset.Warning{Code: CodeFontFaceSkipped, Message: msg})
+	l.warnings = append(l.warnings, typeset.Warning{Code: warn.FontNotLoaded, Message: msg})
 }
 
 // loadSource loads one src entry: a local() face of the index, or the file

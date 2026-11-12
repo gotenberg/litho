@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // pxPt is the size of a VML pixel, the unit of a top-level shape's
@@ -42,7 +43,7 @@ func (d *document) vml(s *story, c *ooxml.Element, st *css.Style, sink *inlineSi
 		sink.add(n)
 	}
 	if !drawn && c.Local == "object" {
-		d.warn("unsupported-content", "an embedded object without a picture is left out")
+		d.warn(warn.ContentUnsupported, "an embedded object without a picture is left out")
 	}
 }
 
@@ -192,7 +193,7 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 	}
 	geom := d.vmlGeometry(k)
 	if geom == "" {
-		d.warn("approximated", "a VML shape of a custom geometry is left out")
+		d.warn(warn.ContentUnsupported, "a VML shape of a custom geometry is left out")
 		if !inLine || w <= 0 && h <= 0 {
 			return nil
 		}

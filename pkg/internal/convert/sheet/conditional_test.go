@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 var (
@@ -270,7 +271,7 @@ func TestConvert_ConditionalDrawing(t *testing.T) {
 	}
 	warned := false
 	for _, w := range out.Warnings {
-		warned = warned || w.Code == CodeConditional
+		warned = warned || w.Code == warn.ContentUnsupported
 	}
 	if !warned {
 		t.Error("no warning for the expression")

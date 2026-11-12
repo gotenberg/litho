@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxGradientStops bounds the stops the shading of one gradient holds once
@@ -23,9 +24,6 @@ const maxGradientStops = 1024
 // interpolation is not linear in straight alpha (CSS Images 3, 3.4.3).
 // Eight pieces keep the curve within a few levels of 8-bit colour.
 const gradientSplits = 8
-
-// codeGradient is the warning code of a gradient painted approximately.
-const codeGradient = "gradient-approximated"
 
 // gstop is a colour stop or hint after the fixup of CSS Images 3, 3.4.3,
 // its position in points along the gradient line or ray.
@@ -199,7 +197,7 @@ func (e *engine) colorStops(g *css.Gradient, length, from, to float64, ray bool,
 		}
 		kmin, kmax := math.Floor((from-p0)/period), math.Ceil((to-p0)/period)
 		if n := (kmax - kmin + 1) * float64(len(ps)); math.IsNaN(n) || n > maxGradientStops/2 {
-			e.warnOnce(codeGradient, fmt.Sprintf("a repeating gradient of more than %d stops was painted with its average colour", maxGradientStops), y)
+			e.warnOnce(warn.LimitReached, fmt.Sprintf("a repeating gradient of more than %d stops was painted with its average colour", maxGradientStops), y)
 			return nil, 0, 0, average(ps), false
 		}
 		for k := kmin; k <= kmax; k++ {
@@ -255,7 +253,7 @@ func (e *engine) colorStops(g *css.Gradient, length, from, to float64, ray bool,
 		splits = 1
 	}
 	if len(stops) > maxGradientStops || len(stops) < 2 {
-		e.warnOnce(codeGradient, fmt.Sprintf("a gradient of more than %d stops was painted with its average colour", maxGradientStops), y)
+		e.warnOnce(warn.LimitReached, fmt.Sprintf("a gradient of more than %d stops was painted with its average colour", maxGradientStops), y)
 		return nil, 0, 0, average(ps), false
 	}
 	stops[0].Offset, stops[len(stops)-1].Offset = 0, 1

@@ -473,9 +473,9 @@ func TestRead_WarningCodesAreFixed(t *testing.T) {
 		`<draw:frame svg:width="1cm" svg:height="1cm"><draw:applet/></draw:frame>`)}.bytes())
 	var got []string
 	for _, w := range warnings {
-		got = append(got, w.Code+": "+w.Message)
+		got = append(got, w.Code.String()+": "+w.Message)
 	}
-	want := []string{"unsupported-shape: draw:unknown-shape is not drawn", "unsupported-shape: draw:other-shape is not drawn", "unsupported-frame: draw:applet is not drawn"}
+	want := []string{"content-unsupported: draw:unknown-shape is not drawn", "content-unsupported: draw:other-shape is not drawn", "content-unsupported: draw:applet is not drawn"}
 	if !slices.Equal(got, want) {
 		t.Errorf("warnings = %q, want %q", got, want)
 	}

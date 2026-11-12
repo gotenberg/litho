@@ -1,5 +1,7 @@
 package typeset
 
+import "github.com/gotenberg/litho/pkg/internal/warn"
+
 // Document is a laid-out document: its pages in order, document-wide
 // metadata, the outline and, when the converter kept the semantics of its
 // input, the structure tree the fragments hang from.
@@ -39,9 +41,9 @@ type Metadata struct {
 // Warning is one construct of the input the converter did not render as the
 // source meant it.
 type Warning struct {
-	// Code is a stable, machine-readable identifier in kebab-case, such as
-	// "unsupported-css-property" or "font-fallback".
-	Code string
+	// Code names the kind of construct, one of the closed set of package
+	// warn.
+	Code warn.Code
 	// Message explains the construct and what was done instead.
 	Message string
 	// Page is the 1-based page the construct lands on, 0 when it has none.

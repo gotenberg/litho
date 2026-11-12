@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestParsePath_Commands(t *testing.T) {
@@ -222,14 +223,14 @@ func TestParse_ForeignContentNames(t *testing.T) {
 func TestDraw_Warnings(t *testing.T) {
 	tests := []struct {
 		src  string
-		code string
+		code warn.Code
 	}{
-		{`<svg><filter id="f"/><rect width="1" height="1" filter="url(#f)"/></svg>`, "unsupported-svg-property"},
-		{`<svg><mask id="m"/><rect width="1" height="1" mask="url(#m)"/></svg>`, "unsupported-svg-property"},
-		{`<svg><path d="M0 0L1 1" marker-end="url(#m)"/></svg>`, "unsupported-svg-property"},
-		{`<svg><pattern id="p"/><rect width="1" height="1" fill="url(#p) red"/></svg>`, "unsupported-svg-paint"},
-		{`<svg><linearGradient id="g" spreadMethod="repeat"><stop/><stop offset="1"/></linearGradient><rect width="1" height="1" fill="url(#g)"/></svg>`, "unsupported-svg-paint"},
-		{`<svg><foreignObject/></svg>`, "unsupported-svg-element"},
+		{`<svg><filter id="f"/><rect width="1" height="1" filter="url(#f)"/></svg>`, warn.ContentUnsupported},
+		{`<svg><mask id="m"/><rect width="1" height="1" mask="url(#m)"/></svg>`, warn.ContentUnsupported},
+		{`<svg><path d="M0 0L1 1" marker-end="url(#m)"/></svg>`, warn.ContentUnsupported},
+		{`<svg><pattern id="p"/><rect width="1" height="1" fill="url(#p) red"/></svg>`, warn.ContentUnsupported},
+		{`<svg><linearGradient id="g" spreadMethod="repeat"><stop/><stop offset="1"/></linearGradient><rect width="1" height="1" fill="url(#g)"/></svg>`, warn.ContentUnsupported},
+		{`<svg><foreignObject/></svg>`, warn.ContentUnsupported},
 	}
 	for _, tt := range tests {
 		ws := parse(t, tt.src).Warnings()
@@ -257,7 +258,7 @@ func TestDraw_UseRecursionBounded(t *testing.T) {
 	}
 	found := false
 	for _, w := range d.Warnings() {
-		found = found || w.Code == "svg-limit"
+		found = found || w.Code == warn.LimitReached
 	}
 	if !found {
 		t.Errorf("no limit warning: %v", d.Warnings())

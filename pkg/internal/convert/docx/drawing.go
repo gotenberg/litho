@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // The graphic data URIs (ECMA-376 Part 1, 20.1.2.2.17) the converter
@@ -51,7 +52,7 @@ func (d *document) chart(s *story, ref *ooxml.Element, st *css.Style, w, h float
 	id, _ := ref.AttrNS(ooxml.NSR, "id")
 	rel, ok := d.pkg.RelationshipByID(d.ctx, s.part, id)
 	if !ok || rel.External || !d.pkg.Has(rel.Target) {
-		d.warn("unsupported-content", "a chart whose part is missing is left out")
+		d.warn(warn.PartMalformed, "a chart whose part is missing is left out")
 		return nil
 	}
 	if w <= 0 || h <= 0 {
@@ -66,7 +67,7 @@ func (d *document) chart(s *story, ref *ooxml.Element, st *css.Style, w, h float
 		if d.stop(err) {
 			return nil
 		}
-		d.warn("chart-malformed", fmt.Sprintf("chart %s does not parse and is left out: %v", rel.Target, err))
+		d.warn(warn.PartMalformed, fmt.Sprintf("chart %s does not parse and is left out: %v", rel.Target, err))
 		return nil
 	}
 	for _, cw := range c.Warnings {
@@ -144,9 +145,9 @@ func (d *document) graphic(s *story, data *ooxml.Element, st *css.Style, w, h fl
 			return n
 		}
 	case uriDiagram:
-		d.warn("unsupported-content", "a SmartArt diagram is left out: the document holds no picture of it")
+		d.warn(warn.ContentUnsupported, "a SmartArt diagram is left out: the document holds no picture of it")
 	default:
-		d.warn("unsupported-content", "a drawing of an unknown kind is left out")
+		d.warn(warn.ContentUnsupported, "a drawing of an unknown kind is left out")
 	}
 	return box(st, w, h)
 }
@@ -180,7 +181,7 @@ func (d *document) picture(s *story, ref ooxml.PictureRef, st *css.Style, w, h f
 		pic = d.loadPicture(s.part, ref.Embed)
 	}
 	if pic == nil && ref.Link != "" {
-		d.warn("unsupported-content", "a linked picture is left out: linked files are not read")
+		d.warn(warn.PictureMissing, "a linked picture is left out: linked files are not read")
 	}
 	if pic == nil {
 		if w > 0 && h > 0 {
@@ -229,7 +230,7 @@ func (d *document) loadPicture(part, id string) *layout.Picture {
 	rel, ok := d.pkg.RelationshipByID(d.ctx, part, id)
 	if !ok || rel.External {
 		if ok {
-			d.warn("unsupported-content", "a linked picture is left out: linked files are not read")
+			d.warn(warn.PictureMissing, "a linked picture is left out: linked files are not read")
 		}
 		return nil
 	}
@@ -237,7 +238,7 @@ func (d *document) loadPicture(part, id string) *layout.Picture {
 		return pic
 	}
 	if len(d.pictures) >= limits.MaxConvertPictures {
-		d.warn("too-many-pictures", fmt.Sprintf("pictures past %d are not drawn", limits.MaxConvertPictures))
+		d.warn(warn.LimitReached, fmt.Sprintf("pictures past %d are not drawn", limits.MaxConvertPictures))
 		return nil
 	}
 	d.pictures[rel.Target] = nil
@@ -246,7 +247,7 @@ func (d *document) loadPicture(part, id string) *layout.Picture {
 		if d.stop(err) {
 			return nil
 		}
-		d.warn("missing-picture", fmt.Sprintf("picture %s cannot be read: %v", rel.Target, err))
+		d.warn(warn.PictureMissing, fmt.Sprintf("picture %s cannot be read: %v", rel.Target, err))
 		return nil
 	}
 	pic, err := ooxml.DecodePicture(d.ctx, data, d.fonts)
@@ -254,9 +255,9 @@ func (d *document) loadPicture(part, id string) *layout.Picture {
 		switch {
 		case d.stop(err):
 		case errors.Is(err, ooxml.ErrUnsupportedPicture):
-			d.warn("unsupported-picture", fmt.Sprintf("picture %s is left out: %v", rel.Target, err))
+			d.warn(warn.PictureFormatUnsupported, fmt.Sprintf("picture %s is left out: %v", rel.Target, err))
 		default:
-			d.warn("unsupported-picture", fmt.Sprintf("picture %s does not decode: %v", rel.Target, err))
+			d.warn(warn.PictureUnreadable, fmt.Sprintf("picture %s does not decode: %v", rel.Target, err))
 		}
 		return nil
 	}
@@ -314,9 +315,9 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 // or whose guides do not all resolve.
 func (d *document) checkGeometry(g *shape.Geometry) {
 	if !shape.Known(g) {
-		d.warn("approximated", fmt.Sprintf("a %s shape is drawn as its bounding box", g.Preset))
+		d.warn(warn.ContentUnsupported, fmt.Sprintf("a %s shape is drawn as its bounding box", g.Preset))
 	} else if err := shape.Check(g); err != nil {
-		d.warn("approximated", fmt.Sprintf("a shape's geometry is drawn in part: %v", err))
+		d.warn(warn.ContentUnsupported, fmt.Sprintf("a shape's geometry is drawn in part: %v", err))
 	}
 }
 

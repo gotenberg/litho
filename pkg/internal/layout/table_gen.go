@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // tablePart is a box's part in a table (CSS 2.1, 17.2).
@@ -652,7 +653,7 @@ func (e *engine) buildTable(w, t *box, raw []*box) {
 // overlap an earlier cell stops short of it.
 func (e *engine) placeCells(td *tableData, head, foot *box) {
 	tooLarge := func(what string) {
-		e.warnOnce(codeTableTooLarge, fmt.Sprintf("a table with more than %s: the rest left out", what), -1)
+		e.warnOnce(warn.LimitReached, fmt.Sprintf("a table with more than %s: the rest left out", what), -1)
 	}
 	for _, g := range td.groups {
 		kept := g.kids[:0]

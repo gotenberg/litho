@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"golang.org/x/net/html"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 const selectorDoc = `<!doctype html><html lang="en"><body>
@@ -178,7 +180,7 @@ func TestSelector_Specificity(t *testing.T) {
 func TestSelector_UnsupportedWarned(t *testing.T) {
 	t.Parallel()
 	s := mustParse(t, `p:has(a) { color: red } p { color: blue }`)
-	if len(s.rules) != 1 || !hasWarning(s.Warnings(), "unsupported-css-selector", ":has()") {
+	if len(s.rules) != 1 || !hasWarning(s.Warnings(), warn.CSSUnsupported, ":has()") {
 		t.Errorf("rules %d warnings %v", len(s.rules), s.Warnings())
 	}
 }

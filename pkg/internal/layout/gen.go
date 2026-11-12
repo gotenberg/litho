@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // genCtx is what box generation hands down the content tree.
@@ -101,7 +102,7 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 				e.root.Lang = n.Lang
 			}
 		case ctx.structDepth >= maxStructDepth:
-			e.warnOnce(codeStructTooDeep, fmt.Sprintf("structure roles nested deeper than %d hang from the deepest element", maxStructDepth), -1)
+			e.warnOnce(warn.LimitReached, fmt.Sprintf("structure roles nested deeper than %d hang from the deepest element", maxStructDepth), -1)
 		default:
 			el := &typeset.StructElem{Role: role, Lang: n.Lang, Scope: n.Scope, Numbering: n.Numbering, ActualText: n.ActualText}
 			if n.Role == "TH" || n.Role == "TD" {
@@ -165,7 +166,7 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		return nil
 	}
 	if ctx.depth >= maxTreeDepth {
-		e.warnOnce(codeTooDeep, fmt.Sprintf("content nested deeper than %d levels left out", maxTreeDepth), -1)
+		e.warnOnce(warn.LimitReached, fmt.Sprintf("content nested deeper than %d levels left out", maxTreeDepth), -1)
 		return nil
 	}
 	st := n.Style

@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // asPicture returns a p:pic (or a diagram drawing's) as the DrawingML
@@ -56,7 +57,7 @@ func (r *reader) picture(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	}
 	media := mediaOf(el)
 	if media != "" {
-		r.warn("unsupported-content", fmt.Sprintf("%s does not play in a printout: its poster frame stands in", media))
+		r.warn(warn.ContentUnsupported, fmt.Sprintf("%s does not play in a printout: its poster frame stands in", media))
 	}
 	ref := ooxml.ParsePicture(asPicture(el))
 	fc := &fillCtx{sc: c.sc, part: c.part, group: c.group}
@@ -148,7 +149,7 @@ func (r *reader) pictureOf(part string, ref ooxml.PictureRef) *layout.Picture {
 		pic = r.loadPicture(part, ref.Embed)
 	}
 	if pic == nil && ref.Link != "" && ref.Embed == "" {
-		r.warn("unsupported-content", "a linked picture is left out: linked files are not read")
+		r.warn(warn.PictureMissing, "a linked picture is left out: linked files are not read")
 	}
 	return pic
 }
@@ -189,7 +190,7 @@ func (r *reader) loadPicture(part, id string) *layout.Picture {
 	rel, ok := r.pkg.RelationshipByID(r.ctx, part, id)
 	if !ok || rel.External {
 		if ok {
-			r.warn("unsupported-content", "a linked picture is left out: linked files are not read")
+			r.warn(warn.PictureMissing, "a linked picture is left out: linked files are not read")
 		}
 		return nil
 	}
@@ -197,7 +198,7 @@ func (r *reader) loadPicture(part, id string) *layout.Picture {
 		return pic
 	}
 	if len(r.pictures) >= limits.MaxConvertPictures {
-		r.warn("too-many-pictures", fmt.Sprintf("pictures past %d are not drawn", limits.MaxConvertPictures))
+		r.warn(warn.LimitReached, fmt.Sprintf("pictures past %d are not drawn", limits.MaxConvertPictures))
 		return nil
 	}
 	r.pictures[rel.Target] = nil
@@ -206,7 +207,7 @@ func (r *reader) loadPicture(part, id string) *layout.Picture {
 		if r.stop(err) {
 			return nil
 		}
-		r.warn("missing-picture", fmt.Sprintf("picture %s cannot be read: %v", rel.Target, err))
+		r.warn(warn.PictureMissing, fmt.Sprintf("picture %s cannot be read: %v", rel.Target, err))
 		return nil
 	}
 	pic, err := ooxml.DecodePicture(r.ctx, data, r.fonts)
@@ -214,9 +215,9 @@ func (r *reader) loadPicture(part, id string) *layout.Picture {
 		switch {
 		case r.stop(err):
 		case errors.Is(err, ooxml.ErrUnsupportedPicture):
-			r.warn("unsupported-picture", fmt.Sprintf("picture %s is left out: %v", rel.Target, err))
+			r.warn(warn.PictureFormatUnsupported, fmt.Sprintf("picture %s is left out: %v", rel.Target, err))
 		default:
-			r.warn("unsupported-picture", fmt.Sprintf("picture %s does not decode: %v", rel.Target, err))
+			r.warn(warn.PictureUnreadable, fmt.Sprintf("picture %s does not decode: %v", rel.Target, err))
 		}
 		return nil
 	}
@@ -248,7 +249,7 @@ func (r *reader) graphicFrame(c *shapeCtx, el *ooxml.Element, depth int) (*slide
 		id, _ := data.Child(ooxml.NSChart, "chart").AttrNS(ooxml.NSR, "id")
 		rel, ok := r.pkg.RelationshipByID(r.ctx, c.part, id)
 		if !ok || rel.External || !r.pkg.Has(rel.Target) {
-			r.warn("malformed-part", "a chart whose part is missing is left out")
+			r.warn(warn.PartMalformed, "a chart whose part is missing is left out")
 			return nil, nil
 		}
 		ch, err := ooxml.ParseChart(r.ctx, r.pkg, rel.Target)
@@ -256,7 +257,7 @@ func (r *reader) graphicFrame(c *shapeCtx, el *ooxml.Element, depth int) (*slide
 			if limits.Stops(err) {
 				return nil, err
 			}
-			r.warn("chart-malformed", fmt.Sprintf("chart %s does not parse and is left out: %v", rel.Target, err))
+			r.warn(warn.PartMalformed, fmt.Sprintf("chart %s does not parse and is left out: %v", rel.Target, err))
 			return nil, nil
 		}
 		for _, w := range ch.Warnings {
@@ -275,7 +276,7 @@ func (r *reader) graphicFrame(c *shapeCtx, el *ooxml.Element, depth int) (*slide
 		ole := data.Child(nsP, "oleObj")
 		pic := ole.Child(nsP, "pic")
 		if pic == nil {
-			r.warn("unsupported-content", "an embedded object without a picture of it is left out")
+			r.warn(warn.ContentUnsupported, "an embedded object without a picture of it is left out")
 			return nil, nil
 		}
 		ref := ooxml.ParsePicture(asPicture(pic))
@@ -285,7 +286,7 @@ func (r *reader) graphicFrame(c *shapeCtx, el *ooxml.Element, depth int) (*slide
 		}
 		s.Kind, s.Picture = slides.KindPicture, ooxml.Cropped(p, ref.Crop)
 	default:
-		r.warn("unsupported-content", "a graphic frame of an unknown kind is left out")
+		r.warn(warn.ContentUnsupported, "a graphic frame of an unknown kind is left out")
 		return nil, nil
 	}
 	return s, nil

@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxTableColumns and maxTableRows cap a table's grid, maxTableCells its
@@ -38,7 +39,7 @@ func (r *reader) readTableStyles() {
 	root, err := r.pkg.ParseXML(r.ctx, name, understood)
 	if err != nil {
 		if !r.stop(err) {
-			r.warn("malformed-part", fmt.Sprintf("the table styles %s do not parse: %v", name, err))
+			r.warn(warn.PartMalformed, fmt.Sprintf("the table styles %s do not parse: %v", name, err))
 		}
 		return
 	}
@@ -74,7 +75,7 @@ func (r *reader) tableStyle(pr *ooxml.Element) *ooxml.Element {
 	}
 	s := builtinTableStyle(r.ctx, id)
 	if s == nil {
-		r.warn("approximated", fmt.Sprintf("table style %s is not one litho knows: its tables print without it", id))
+		r.warn(warn.ContentUnsupported, fmt.Sprintf("table style %s is not one litho knows: its tables print without it", id))
 		return nil
 	}
 	r.tableStyles[id] = s
@@ -98,7 +99,7 @@ func (r *reader) table(c *shapeCtx, tbl *ooxml.Element) (*slides.Table, error) {
 			continue
 		}
 		if len(t.ColumnWidths) >= maxTableColumns {
-			r.warn("too-large", fmt.Sprintf("a table has more than %d columns: the rest are left out", maxTableColumns))
+			r.warn(warn.LimitReached, fmt.Sprintf("a table has more than %d columns: the rest are left out", maxTableColumns))
 			break
 		}
 		t.ColumnWidths = append(t.ColumnWidths, max(0, emuAttr(g, "w")))
@@ -111,7 +112,7 @@ func (r *reader) table(c *shapeCtx, tbl *ooxml.Element) (*slides.Table, error) {
 	for _, tr := range tbl.Kids() {
 		if tr.Is(ooxml.NSA, "tr") {
 			if len(trs) >= maxTableRows || (len(trs)+1)*ncols > maxTableCells {
-				r.warn("too-large", fmt.Sprintf("a table has more than %d rows or %d cells: the rest are left out", maxTableRows, maxTableCells))
+				r.warn(warn.LimitReached, fmt.Sprintf("a table has more than %d rows or %d cells: the rest are left out", maxTableRows, maxTableCells))
 				break
 			}
 			trs = append(trs, tr)

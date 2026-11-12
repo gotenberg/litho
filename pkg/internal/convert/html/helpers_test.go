@@ -22,6 +22,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // testSerif builds a "Test Serif" face covering printable ASCII, every
@@ -105,7 +106,7 @@ func stubLayout(_ context.Context, root *layout.Node, _ *text.Fonts, opts layout
 		Pages:     []*typeset.Page{{Width: opts.Page.Width, Height: opts.Page.Height}},
 		Structure: &typeset.StructElem{Role: "Document", Lang: opts.Lang},
 		Anchors:   map[string]typeset.Dest{},
-		Warnings:  []typeset.Warning{{Code: "layout-stub", Message: "laid out by the stub"}},
+		Warnings:  []typeset.Warning{{Code: warn.LimitReached, Message: "laid out by the stub"}},
 	}
 	y := 0.0
 	eachNode(root, func(n *layout.Node) {
@@ -161,13 +162,13 @@ func treeText(n *layout.Node) string {
 func codes(ws []typeset.Warning) []string {
 	var out []string
 	for _, w := range ws {
-		out = append(out, w.Code)
+		out = append(out, w.Code.String())
 	}
 	return out
 }
 
 // hasWarning reports a warning of code whose message holds sub.
-func hasWarning(ws []typeset.Warning, code, sub string) bool {
+func hasWarning(ws []typeset.Warning, code warn.Code, sub string) bool {
 	for _, w := range ws {
 		if w.Code == code && strings.Contains(w.Message, sub) {
 			return true

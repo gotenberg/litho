@@ -18,6 +18,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestParse_Records(t *testing.T) {
@@ -305,7 +306,7 @@ func TestRead_Model(t *testing.T) {
 	if d := doc.Default; d.Font.Families[0] != "Liberation Sans" || d.Font.Size != 10 || d.Padding != [4]float64{1, 1, 1, 1} {
 		t.Errorf("default = %+v", d)
 	}
-	if len(w) != 1 || w[0].Code != "date-without-year" {
+	if len(w) != 1 || w[0].Code != warn.ContentUnsupported {
 		t.Errorf("warnings = %+v", w)
 	}
 	if _, w, _ := Read(context.Background(), []byte("1/10\n"), nil, office.Options{PrintDate: time.Date(2024, 5, 1, 0, 0, 0, 0, time.UTC)}); len(w) != 0 {

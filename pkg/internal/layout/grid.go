@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // This file lays out grid containers (CSS Grid 1). Box generation makes
@@ -125,7 +126,7 @@ func (g *gridData) placement(e *engine, b *box, items []*box, rep [2]int) *gridP
 			e.fail(fmt.Errorf("placing grid items: %w", err))
 		}
 		if p.overBudget {
-			e.warnOnce(codeGridPlacement, "a grid's auto-placement ran past its work budget: the items left each take a track of their own after the grid", -1)
+			e.warnOnce(warn.LimitReached, "a grid's auto-placement ran past its work budget: the items left each take a track of their own after the grid", -1)
 		}
 		g.place = p
 		g.rep = rep

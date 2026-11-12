@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxListValue bounds a list ordinal read from an attribute: 2^30, the
@@ -190,7 +191,7 @@ func (b *builder) element(ctx context.Context, n *dom.Node, parent *css.Style, d
 		return nil, nil
 	}
 	if unsupported[n.DataAtom] {
-		b.warnOnce(CodeUnsupportedElement, n.Data, fmt.Sprintf("the content of <%s> is not drawn", n.Data))
+		b.warnOnce(warn.ContentUnsupported, n.Data, fmt.Sprintf("the content of <%s> is not drawn", n.Data))
 		return nil, nil
 	}
 	return b.styled(ctx, n, parent, depth)
@@ -206,7 +207,7 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 		st = withoutBackground(st)
 	}
 	if depth >= maxTreeDepth {
-		b.warnOnce(CodeTooDeep, "depth", fmt.Sprintf("content nested deeper than %d elements was left out", maxTreeDepth))
+		b.warnOnce(warn.LimitReached, "depth", fmt.Sprintf("content nested deeper than %d elements was left out", maxTreeDepth))
 		return nil, nil
 	}
 	v := b.applyCounters(n, st)
@@ -221,9 +222,9 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 		case atom.Input, atom.Select, atom.Textarea:
 			return b.control(n, st), nil
 		case atom.Button:
-			b.warnOnce(CodeFormControl, "form", "form controls are drawn as their text, without their widgets")
+			b.warnOnce(warn.FormWidgetOmitted, "form", "form controls are drawn as their text, without their widgets")
 		case atom.Object:
-			b.warnOnce(CodeUnsupportedElement, n.Data, "the content of <object> is not drawn; its fallback content is")
+			b.warnOnce(warn.ContentUnsupported, n.Data, "the content of <object> is not drawn; its fallback content is")
 			return b.children(ctx, n, parent, depth)
 		case atom.Canvas:
 			// Without scripts a canvas shows its fallback content (HTML
@@ -471,7 +472,7 @@ func (b *builder) image(ctx context.Context, n *dom.Node, st, parent *css.Style)
 // text it shows (HTML Standard, 15.5): an input's value or placeholder, a
 // select's selected option, a textarea's text.
 func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
-	b.warnOnce(CodeFormControl, "form", "form controls are drawn as their text, without their widgets")
+	b.warnOnce(warn.FormWidgetOmitted, "form", "form controls are drawn as their text, without their widgets")
 	var s string
 	switch n.DataAtom { //nolint:exhaustive // every other element takes the default path
 	case atom.Input:
@@ -588,11 +589,12 @@ func spanAttr(n *dom.Node, key string, maxSpan int) int {
 }
 
 // warnOnce records a warning the first time key is met.
-func (b *builder) warnOnce(code, key, msg string) {
-	if b.warned[code+"\x00"+key] {
+func (b *builder) warnOnce(code warn.Code, key, msg string) {
+	k := code.String() + "\x00" + key
+	if b.warned[k] {
 		return
 	}
-	b.warned[code+"\x00"+key] = true
+	b.warned[k] = true
 	b.warnings = append(b.warnings, typeset.Warning{Code: code, Message: msg})
 }
 

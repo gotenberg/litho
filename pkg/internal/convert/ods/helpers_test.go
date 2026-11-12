@@ -6,11 +6,13 @@ import (
 	"context"
 	"image"
 	"image/png"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // nsDecl declares the namespaces the test documents use.
@@ -100,9 +102,20 @@ func cellAt(sh *sheet.Sheet, row, col int) *sheet.Cell {
 }
 
 // hasWarning reports the warning code among w.
-func hasWarning(w []typeset.Warning, code string) bool {
+func hasWarning(w []typeset.Warning, code warn.Code) bool {
 	for _, x := range w {
 		if x.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+// hasWarningAbout reports a warning of code among w whose message holds
+// sub.
+func hasWarningAbout(w []typeset.Warning, code warn.Code, sub string) bool {
+	for _, x := range w {
+		if x.Code == code && strings.Contains(x.Message, sub) {
 			return true
 		}
 	}

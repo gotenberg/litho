@@ -383,22 +383,9 @@ type ConvertReport struct {
 // render faithfully.
 // Concurrent reads of a value are safe; a write needs synchronization.
 type ConvertWarning struct {
-	// Code names the kind of construct, in kebab-case. "missing-glyph" flags a
-	// character no font covers, drawn as a placeholder glyph, reported once
-	// per character. "line-split" flags a source line of more than 65,536
-	// characters, laid out in pieces that each start a new line. An HTML
-	// conversion adds, among others, "unsupported-css-property" and the
-	// other codes of a construct the cascade dropped, "resource-refused",
-	// "resource-failed" and "resource-limit" for a stylesheet or image left
-	// out, "resource-no-network" for an http or https one without
-	// [WithHTTPClient], "resource-http-status" for one the server answered
-	// outside 2xx, "image-format-unsupported" for an AVIF, JPEG XL or ICO
-	// picture, "unsupported-element" and "form-control". The set of codes
-	// is open: act on the ones the program knows and read any other as a
-	// construct not rendered. A code may carry a name the source spells: the
-	// one an ODT source reports for a shape it does not draw is "odt-shape-"
-	// followed by the element's local name as the file writes it.
-	Code string
+	// Code names the kind of construct: one of the Warning constants (see
+	// [ConvertWarningCode]).
+	Code ConvertWarningCode
 	// Message explains the construct and what was done instead.
 	Message string
 	// Page is the 1-based page the construct lands on, 0 when it has none.
@@ -540,7 +527,7 @@ func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ 
 
 	report := &ConvertReport{Pages: stream.Pages()}
 	for _, w := range tail.Warnings {
-		report.Warnings = append(report.Warnings, ConvertWarning{Code: w.Code, Message: w.Message, Page: w.Page})
+		report.Warnings = append(report.Warnings, ConvertWarning{Code: ConvertWarningCode(w.Code.String()), Message: w.Message, Page: w.Page})
 	}
 	return report, nil
 }

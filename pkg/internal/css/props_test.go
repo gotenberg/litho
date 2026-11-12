@@ -3,7 +3,10 @@ package css
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // styleOf computes one <div id=t> styled by decls, inside a 20px body.
@@ -242,11 +245,11 @@ func TestProperties_UnknownWarnedOnce(t *testing.T) {
 	s := mustParse(t, `p { foo: 1; foo: 2; -webkit-foo: 1; cursor: pointer } div { foo: 3; display: contents; display: contents }`)
 	n := 0
 	for _, w := range s.Warnings() {
-		if w.Code == "unsupported-css-property" {
+		if w.Code == warn.CSSUnsupported && strings.HasPrefix(w.Message, "property ") {
 			n++
 		}
 	}
-	if n != 1 || !hasWarning(s.Warnings(), "unsupported-css-value", "display: contents") {
+	if n != 1 || !hasWarning(s.Warnings(), warn.CSSUnsupported, "display: contents") {
 		t.Errorf("warnings = %v", s.Warnings())
 	}
 }
@@ -280,7 +283,7 @@ func TestVars_Substitution(t *testing.T) {
 	if !reflect.DeepEqual(d.FontFamilies, []string{"serif"}) || d.BackgroundImage != "f.png" || d.BackgroundRepeat[0] != RepeatNoRepeat {
 		t.Errorf("d families %q image %q", d.FontFamilies, d.BackgroundImage)
 	}
-	if !hasWarning(c.c.Warnings(), "invalid-css-value", `"width"`) {
+	if !hasWarning(c.c.Warnings(), warn.CSSInvalid, `"width"`) {
 		t.Errorf("warnings = %v", c.c.Warnings())
 	}
 }
@@ -299,7 +302,7 @@ func TestVars_ExponentialGrowthIsCapped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !hasWarning(c.Warnings(), "css-limit", "var()") {
+	if !hasWarning(c.Warnings(), warn.LimitReached, "var()") {
 		t.Errorf("warnings = %v", c.Warnings())
 	}
 	if got := c.Style(byID(doc, "p")).FontFamilies; !reflect.DeepEqual(got, []string{"serif"}) {

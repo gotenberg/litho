@@ -107,7 +107,7 @@ func TestConvert_AssemblesMetadataWarningsAndOutline(t *testing.T) {
 	if doc.Metadata != want {
 		t.Errorf("metadata %+v, want %+v", doc.Metadata, want)
 	}
-	if got := strings.Join(codes(doc.Warnings), ","); got != "unsupported-css-property,resource-refused,layout-stub" {
+	if got := strings.Join(codes(doc.Warnings), ","); got != "css-unsupported,resource-refused,limit-reached" {
 		t.Errorf("warning codes %s, want the cascade's, the converter's, then the layout's", got)
 	}
 	var lines []string

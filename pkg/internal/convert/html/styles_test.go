@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 var (
@@ -91,7 +92,7 @@ func TestPrepare_ReadsImportsAndURLsThroughTheResources(t *testing.T) {
 	if pic, err := p.layout.Image(t.Context(), x.Style.BackgroundImage); err != nil || pic.Width != 2*css.Pt {
 		t.Errorf("background picture %+v, %v", pic, err)
 	}
-	if !hasWarning(p.warnings, "css-import-failed", "leaves the resources root") {
+	if !hasWarning(p.warnings, warn.ResourceFailed, "leaves the resources root") {
 		t.Errorf("warnings %+v, want the escaping import refused", p.warnings)
 	}
 	for _, w := range p.warnings {
@@ -107,13 +108,13 @@ func TestPrepare_RefusesStylesheetsOutsideTheResources(t *testing.T) {
 	for _, tc := range []struct {
 		href string
 		fsys fstest.MapFS
-		code string
+		code warn.Code
 	}{
-		{"https://example.com/a.css", fsys, CodeResourceNoNetwork},
-		{"file:///a.css", fsys, CodeResourceRefused},
-		{"../a.css", fsys, CodeResourceRefused},
-		{"a.css", nil, CodeResourceRefused},
-		{"missing.css", fsys, CodeResourceFailed},
+		{"https://example.com/a.css", fsys, warn.ResourceNoNetwork},
+		{"file:///a.css", fsys, warn.ResourceRefused},
+		{"../a.css", fsys, warn.ResourceRefused},
+		{"a.css", nil, warn.ResourceRefused},
+		{"missing.css", fsys, warn.ResourceFailed},
 	} {
 		o := Options{}
 		if tc.fsys != nil {
@@ -186,7 +187,7 @@ func TestPageBox_AppliesPageRules(t *testing.T) {
 		if pb.Width != tc.width || pb.Height != tc.height || pb.Margin != tc.margin {
 			t.Errorf("%q: page %+v, want %vx%v %v", tc.css, pb, tc.width, tc.height, tc.margin)
 		}
-		if got := hasWarning(p.warnings, CodePageBox, ""); got != tc.warn {
+		if got := hasWarning(p.warnings, warn.PageSetupUnsupported, ""); got != tc.warn {
 			t.Errorf("%q: page-box warning %v, want %v: %+v", tc.css, got, tc.warn, p.warnings)
 		}
 	}

@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // ParseOptions configures [Parse] and [ParseDeclarations].
@@ -144,7 +146,7 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 		sels, err := parseSelectorList(it.prelude, 0, false)
 		if err != nil {
 			if err.unsupported != "" {
-				c.warn("unsupported-css-selector", "a rule with the selector %s was ignored", err.unsupported)
+				c.warn(warn.CSSUnsupported, "a rule with the selector %s was ignored", err.unsupported)
 			}
 			return
 		}
@@ -195,7 +197,7 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 			}
 		default:
 			if !ignoredAtRules[name] && !strings.HasPrefix(name, "-") {
-				c.warn("unsupported-css-at-rule", "the @%s rule is not supported and was ignored", name)
+				c.warn(warn.CSSUnsupported, "the @%s rule is not supported and was ignored", name)
 			}
 		}
 	}
@@ -306,11 +308,11 @@ func (sp *sheetParser) importRule(ctx context.Context, it item, base string, con
 		return
 	}
 	if slices.Contains(sp.chain, target) {
-		c.warn("css-import-failed", "the @import of %s was ignored: it imports itself", target)
+		c.warn(warn.ResourceFailed, "the @import of %s was ignored: it imports itself", target)
 		return
 	}
 	if depth+1 > maxImportDepth || sp.imports >= maxImports {
-		c.warn("css-limit", "the @import of %s was ignored: more than %d imports or %d levels", target, maxImports, maxImportDepth)
+		c.warn(warn.LimitReached, "the @import of %s was ignored: more than %d imports or %d levels", target, maxImports, maxImportDepth)
 		return
 	}
 	sp.imports++
@@ -321,7 +323,7 @@ func (sp *sheetParser) importRule(ctx context.Context, it item, base string, con
 			return
 		}
 		sp.log.DebugContext(ctx, "css: @import failed", slog.String("url", target), slog.String("error", err.Error()))
-		c.warn("css-import-failed", "the @import of %s failed: %v", target, err)
+		c.warn(warn.ResourceFailed, "the @import of %s failed: %v", target, err)
 		return
 	}
 	if len(body) > maxStylesheetBytes {

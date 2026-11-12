@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // The header and footer text of a span naming no font where
@@ -54,7 +55,7 @@ func (b *builder) spanText(s Span, f hfFields) string {
 		}
 		return b.opts.PrintDate.Format("15:04:05")
 	case FieldFile, FieldPath:
-		b.warnOnce(CodeField, "the file name and path fields of headers and footers show nothing: the conversion has no file name")
+		b.warn(warn.PageSetupUnsupported, "the file name and path fields of headers and footers show nothing: the conversion has no file name")
 		return ""
 	case FieldNone:
 	}
@@ -186,7 +187,7 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 		MaxPages: maxSubPages,
 	})
 	if err != nil || len(res.Pages) == 0 {
-		b.warn(CodeHeader, fmt.Sprintf("a header or footer of sheet %s could not be laid out", quote(p.sp.g.sh.Name)))
+		b.warn(warn.PageSetupUnsupported, fmt.Sprintf("a header or footer of sheet %s could not be laid out", quote(p.sp.g.sh.Name)))
 		return nil
 	}
 	frags := artifacts(res.Pages[0].Content)

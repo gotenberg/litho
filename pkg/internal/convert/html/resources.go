@@ -26,6 +26,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // rootPrefix is the path every URL of the document resolves under: the
@@ -53,18 +54,18 @@ var (
 )
 
 // warningCode returns the warning code a resource error stands for.
-func warningCode(err error) string {
-	if code := networkCode(err); code != "" {
+func warningCode(err error) warn.Code {
+	if code, ok := networkCode(err); ok {
 		return code
 	}
 	switch {
 	case errors.Is(err, errNoResources), errors.Is(err, errAbsoluteURL), errors.Is(err, errOutsideRoot):
-		return CodeResourceRefused
+		return warn.ResourceRefused
 	case errors.Is(err, errTooLarge), errors.Is(err, errBudget), errors.Is(err, errTooManyImgs),
 		errors.Is(err, errTooManyPx):
-		return CodeResourceLimit
+		return warn.LimitReached
 	default:
-		return CodeResourceFailed
+		return warn.ResourceFailed
 	}
 }
 

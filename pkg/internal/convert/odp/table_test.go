@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // TestRead_TableGridCap locks the cell cap on the grid a table lays out,
@@ -35,7 +36,7 @@ func TestRead_TableGridCap(t *testing.T) {
 			if cells > maxTableCells {
 				t.Errorf("the grid holds %d cells, want at most %d", cells, maxTableCells)
 			}
-			if !hasWarning(warnings, "table-cells") {
+			if !hasWarning(warnings, warn.LimitReached) {
 				t.Errorf("warnings = %+v, want table-cells", warnings)
 			}
 			if tb.Rows[0].Cells[0].Covered || tb.Rows[0].Cells[0].ColSpan != 1 {

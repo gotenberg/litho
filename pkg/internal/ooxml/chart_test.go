@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // chartXML wraps a plot area's content and the chart's other children in
@@ -455,7 +456,7 @@ func TestChartFromElement_CustomLabels(t *testing.T) {
 
 func TestChartFromElement_ChartTypeWithoutSeries(t *testing.T) {
 	c := readChart(t, chartXML("", `<c:title/>`, `<c:barChart><c:barDir val="col"/><c:axId val="1"/><c:axId val="2"/></c:barChart>`+axes), false)
-	if len(c.Groups) != 0 || hasWarning(c, CodeChartUnsupported) {
+	if len(c.Groups) != 0 || hasWarning(c, warn.ContentUnsupported) {
 		t.Errorf("groups %+v, warnings %+v: want no group and no warning", c.Groups, c.Warnings)
 	}
 	if c.Title == nil || c.Title.Text != "Chart Title" {
@@ -517,7 +518,7 @@ func TestChartFromElement_Trendlines(t *testing.T) {
 	if b := got[1]; b.Kind != chart.TrendMovingAverage || b.Period != 4 || b.Order != 2 || b.Line != nil {
 		t.Errorf("second trendline = %+v", b)
 	}
-	if !hasWarning(c, CodeChartUnsupported) {
+	if !hasWarning(c, warn.ContentUnsupported) {
 		t.Error("an equation shown is not reported")
 	}
 }

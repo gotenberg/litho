@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestPrepare_MapsElementsToRoles(t *testing.T) {
@@ -193,8 +194,8 @@ func TestPrepare_DecodesImages(t *testing.T) {
 			t.Errorf("%s: fallback text %q, want %q", id, got, alt)
 		}
 	}
-	if !hasWarning(p.warnings, CodeResourceFailed, "img/missing.png") ||
-		!hasWarning(p.warnings, CodeResourceFailed, "img/bad.png") {
+	if !hasWarning(p.warnings, warn.ResourceFailed, "img/missing.png") ||
+		!hasWarning(p.warnings, warn.ResourceFailed, "img/bad.png") {
 		t.Errorf("warnings %+v", p.warnings)
 	}
 	if len(p.warnings) != 2 {
@@ -209,16 +210,16 @@ func TestPrepare_RefusesURLsOutsideTheResources(t *testing.T) {
 		src  string
 		fsys fstest.MapFS
 		want string
-		code string
+		code warn.Code
 	}{
-		{"https://example.com/a.png", fsys, "no HTTP client", CodeResourceNoNetwork},
-		{"file:///etc/a.png", fsys, "file: URLs are never fetched", CodeResourceRefused},
-		{"ftp://example.com/a.png", fsys, "absolute URLs", CodeResourceRefused},
-		{"//example.com/a.png", fsys, "absolute URLs", CodeResourceRefused},
-		{"../a.png", fsys, "leaves the resources root", CodeResourceRefused},
-		{"sub/../../a.png", fsys, "leaves the resources root", CodeResourceRefused},
-		{"/a.png", fsys, "leaves the resources root", CodeResourceRefused},
-		{"a.png", nil, "no resources", CodeResourceRefused},
+		{"https://example.com/a.png", fsys, "no HTTP client", warn.ResourceNoNetwork},
+		{"file:///etc/a.png", fsys, "file: URLs are never fetched", warn.ResourceRefused},
+		{"ftp://example.com/a.png", fsys, "absolute URLs", warn.ResourceRefused},
+		{"//example.com/a.png", fsys, "absolute URLs", warn.ResourceRefused},
+		{"../a.png", fsys, "leaves the resources root", warn.ResourceRefused},
+		{"sub/../../a.png", fsys, "leaves the resources root", warn.ResourceRefused},
+		{"/a.png", fsys, "leaves the resources root", warn.ResourceRefused},
+		{"a.png", nil, "no resources", warn.ResourceRefused},
 	} {
 		o := Options{}
 		if tc.fsys != nil {
@@ -283,7 +284,7 @@ func TestPrepare_HonoursBaseForResources(t *testing.T) {
 	// An http(s) base moves the resources to the network (HTML Standard,
 	// 4.2.3), which needs a client.
 	abs := prep(t, `<base href="https://cdn.example.com/assets/"><p id=x><img src="a.png" alt=alt>`, Options{Resources: fsys})
-	if !hasWarning(abs.warnings, CodeResourceNoNetwork, "") || treeText(byID(t, abs.root, "x")) != "alt" {
+	if !hasWarning(abs.warnings, warn.ResourceNoNetwork, "") || treeText(byID(t, abs.root, "x")) != "alt" {
 		t.Errorf("absolute base not applied to a resource: %+v", abs.warnings)
 	}
 	// Any other absolute base resolves links alone.
@@ -346,7 +347,7 @@ func TestPrepare_DrawsFormControlsAsText(t *testing.T) {
 			t.Errorf("%s: display %v, want inline-block", id, n.Style.Display)
 		}
 	}
-	if got := codes(p.warnings); len(got) != 1 || got[0] != CodeFormControl {
+	if got := codes(p.warnings); len(got) != 1 || got[0] != warn.FormWidgetOmitted.String() {
 		t.Errorf("warnings %v, want one form-control", got)
 	}
 }
@@ -358,7 +359,7 @@ func TestPrepare_LeavesEmbeddedContentOut(t *testing.T) {
 	if got := treeText(byID(t, p.root, "x")); got != "amfallbackcanvas-fallback" {
 		t.Errorf("text %q", got)
 	}
-	want := []string{CodeUnsupportedElement, CodeUnsupportedElement, CodeUnsupportedElement}
+	want := []string{"content-unsupported", "content-unsupported", "content-unsupported"}
 	if got := codes(p.warnings); strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("warnings %v, want three unsupported-element (video once)", got)
 	}
@@ -391,7 +392,7 @@ func TestPrepare_CapsTheTreeDepth(t *testing.T) {
 	if strings.Contains(treeText(p.root), "deep") {
 		t.Errorf("content past the depth cap kept")
 	}
-	if !hasWarning(p.warnings, CodeTooDeep, "512") {
+	if !hasWarning(p.warnings, warn.LimitReached, "512") {
 		t.Errorf("warnings %+v", p.warnings)
 	}
 }
@@ -430,7 +431,7 @@ func TestResources_CapImages(t *testing.T) {
 	ctx := context.Background()
 
 	r := newResources(fstest.MapFS{"huge.png": {Data: pngHeader(t, 1<<14, 1<<13)}})
-	if _, err := r.picture(ctx, rootPrefix+"huge.png"); !errors.Is(err, errTooManyPx) || warningCode(err) != CodeResourceLimit {
+	if _, err := r.picture(ctx, rootPrefix+"huge.png"); !errors.Is(err, errTooManyPx) || warningCode(err) != warn.LimitReached {
 		t.Errorf("huge picture: %v", err)
 	}
 

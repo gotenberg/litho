@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // NSChartEx is the namespace of the charts Office 2016 added (MS-ODRAWXML,
@@ -55,7 +56,7 @@ const chartExLineWidth = 18 * 72.0 / 2540
 // formula naming a workbook's defined name (Excel names chartex data
 // "_xlchart.v1.0" and alike) is replaced by the range the name holds, so
 // the converter's [chart.Resolver] can read it. A series without cache keeps
-// its range and is reported with [CodeChartNoCache].
+// its range and is reported with [warn.ChartNoCache].
 //
 // It fails with [ErrNoPart] for a missing part and wraps the parse errors
 // of [Package.ParseXML]; a part whose root is not cx:chartSpace fails
@@ -219,7 +220,7 @@ func (x *chartExReader) read(root *Element) {
 			Style: chart.TextStyle{Families: []string{"Liberation Serif"}, Size: 10, Color: typeset.Black},
 			Frame: chart.Frame{Fill: &chart.Paint{Color: white}, Border: &chart.Stroke{Color: white}},
 		}
-		x.warn(CodeChartUnsupported, "an Office 2016 chart of a kind other than a histogram is drawn without its series")
+		x.warn(warn.ContentUnsupported, "an Office 2016 chart of a kind other than a histogram is drawn without its series")
 	}
 	x.readTitle(cxChild(ch, "title"))
 	for _, s := range g.Series {
@@ -335,7 +336,7 @@ func (x *chartExReader) dimData(dim *Element, numeric bool) chart.Data {
 		}
 	}
 	if !d.Cached && d.Ref != "" {
-		x.warn(CodeChartNoCache, "an Office 2016 chart's data have no cached values in the file and are drawn empty")
+		x.warn(warn.ChartNoCache, "an Office 2016 chart's data have no cached values in the file and are drawn empty")
 	}
 	return d
 }

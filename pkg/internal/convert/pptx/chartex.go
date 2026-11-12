@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // chartExChoices are the namespaces of the mc:Choice of an Office 2016
@@ -31,7 +32,7 @@ func (r *reader) chartExOf(part string, data *ooxml.Element) *chart.Chart {
 	id, _ := data.Child(ooxml.NSChartEx, "chart").AttrNS(ooxml.NSR, "id")
 	rel, ok := r.pkg.RelationshipByID(r.ctx, part, id)
 	if !ok || rel.External || !r.pkg.Has(rel.Target) {
-		r.warn("unsupported-content", "an Office 2016 chart (funnel, waterfall, sunburst, treemap, histogram, box and whisker) without its chart part is left out")
+		r.warn(warn.ContentUnsupported, "an Office 2016 chart (funnel, waterfall, sunburst, treemap, histogram, box and whisker) without its chart part is left out")
 		return nil
 	}
 	ch, err := ooxml.ParseChartEx(r.ctx, r.pkg, rel.Target)
@@ -39,7 +40,7 @@ func (r *reader) chartExOf(part string, data *ooxml.Element) *chart.Chart {
 		if r.stop(err) {
 			return nil
 		}
-		r.warn("unsupported-content", fmt.Sprintf("the Office 2016 chart part %q is left out: %v", rel.Target, err))
+		r.warn(warn.ContentUnsupported, fmt.Sprintf("the Office 2016 chart part %q is left out: %v", rel.Target, err))
 		return nil
 	}
 	for _, w := range ch.Warnings {

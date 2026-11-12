@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // TestRead_ConditionalFormats locks the reading of conditionalFormatting
@@ -41,7 +42,7 @@ func TestRead_ConditionalFormats(t *testing.T) {
 		`<x14:cfRule type="endsWith" priority="17" operator="endsWith" id="{3}"><xm:f>x</xm:f><xm:f>Nowhere!$B$1</xm:f></x14:cfRule><xm:sqref>A1:A2</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings></ext></extLst>`
 	doc, warnings := readBytes(t, zipFiles(t, workbookFiles([]testSheet{{name: "S", xml: ws}}, styles, "", "", nil)))
 	for _, w := range warnings {
-		if w.Code == "unsupported-content" {
+		if w.Code == warn.ContentUnsupported {
 			t.Errorf("warning %v", w)
 		}
 	}

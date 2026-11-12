@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestBorderImage_TileSpans(t *testing.T) {
@@ -263,11 +264,11 @@ func TestBorderImage_TileCapWarnsOnce(t *testing.T) {
 	}
 	n := 0
 	for _, w := range res.Warnings {
-		if w.Code == codeBackgroundTiles {
+		if w.Code == warn.LimitReached {
 			n++
 		}
 	}
 	if n != 1 {
-		t.Errorf("%d warnings %q, want 1", n, codeBackgroundTiles)
+		t.Errorf("%d warnings %q, want 1", n, warn.LimitReached)
 	}
 }

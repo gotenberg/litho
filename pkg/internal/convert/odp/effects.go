@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // The shadow Impress's item pool gives a shape whose styles set
@@ -81,6 +82,6 @@ func (r *reader) effects(p odf.Props, s *slides.Shape) {
 		s.SoftEdge = rad
 	}
 	if rad := length("loext:glow-text-radius", 0); rad > 0 {
-		r.warn("glow", "text glows are not drawn")
+		r.warn("glow", warn.ContentUnsupported, "text glows are not drawn")
 	}
 }

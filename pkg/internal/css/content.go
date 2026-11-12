@@ -1,6 +1,10 @@
 package css
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
+)
 
 // maxContentItems bounds the items of one content value: 256. Anti-DoS
 // guard, not spec-mandated: a generated label holds a few items, and each
@@ -142,10 +146,10 @@ func contentItem(t token, c *declCtx) (ContentItem, bool) {
 		return it, valid
 	}
 	if unsupportedImages[name] {
-		c.warn("unsupported-css-value", "content: %s() is not generated", name)
+		c.warn(warn.CSSUnsupported, "content: %s() is not generated", name)
 		return ContentItem{}, false
 	}
-	c.warn("unsupported-css-value", "content: %s() is not supported and the declaration was ignored", name)
+	c.warn(warn.CSSUnsupported, "content: %s() is not supported and the declaration was ignored", name)
 	return ContentItem{}, false
 }
 
@@ -191,11 +195,11 @@ func counterStyle(arg []token, c *declCtx) (ListStyleType, bool) {
 		if lt, ok := listStyleTypes[k]; ok {
 			return lt, true
 		}
-		c.warn("unsupported-css-value", "counter style %s is not supported and computes to decimal", k)
+		c.warn(warn.CSSUnsupported, "counter style %s is not supported and computes to decimal", k)
 		return Decimal, true
 	case tFunction:
 		if eqFold(arg[0].value, "symbols") {
-			c.warn("unsupported-css-value", "symbols() is not supported and computes to decimal")
+			c.warn(warn.CSSUnsupported, "symbols() is not supported and computes to decimal")
 			return Decimal, true
 		}
 	}

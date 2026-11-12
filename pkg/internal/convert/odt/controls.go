@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // The faces, sizes and places LibreOffice prints a form control's content
@@ -134,7 +135,7 @@ func (b *builder) formControl(c *odf.Element, g frameGeom) *layout.Node {
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "Form"})
 	el := b.controlElem(c)
 	if el == nil {
-		b.warn("form-control", "a form control whose element the forms do not hold prints as its empty frame")
+		b.warn("form-control", warn.FormWidgetOmitted, "a form control whose element the forms do not hold prints as its empty frame")
 		frame(st)
 		n.PrintField = typeset.PrintField{Role: typeset.PrintText}
 		return n
@@ -176,7 +177,7 @@ func (b *builder) formControl(c *odf.Element, g frameGeom) *layout.Node {
 		n.Children[0].Style.TextAlign = css.AlignCenter
 	default:
 		frame(st)
-		b.warn("form-control", "a form control of a kind litho does not draw prints as its empty frame")
+		b.warn("form-control", warn.FormWidgetOmitted, "a form control of a kind litho does not draw prints as its empty frame")
 	}
 	if ok && b.formFields {
 		ctl := &formfield.Control{ID: formfield.NodeID(len(b.controls)), Box: true, Field: f, Other: other}
@@ -497,7 +498,7 @@ func (b *builder) attachControls(res *layout.Result) error {
 		return err
 	}
 	if missed > 0 && len(b.controls) > 0 {
-		b.warn("form-field", "a form control that spans pages or shows nothing is printed without its field")
+		b.warn("form-field", warn.FormFieldOmitted, "a form control that spans pages or shows nothing is printed without its field")
 	}
 	return nil
 }

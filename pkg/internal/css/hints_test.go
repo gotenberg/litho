@@ -2,6 +2,8 @@ package css
 
 import (
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestHTMLUserAgent_ParsesClean(t *testing.T) {
@@ -173,7 +175,7 @@ func TestHint_AndParseDeclarations(t *testing.T) {
 	if !decls[0].Important || decls[1].Property != "--X" || decls[2].Property != "width" || decls[3].Property != "margin" {
 		t.Errorf("decls = %+v", decls)
 	}
-	if !hasWarning(decls[2].warns, "unsupported-css-property", "bogus") {
+	if !hasWarning(decls[2].warns, warn.CSSUnsupported, "bogus") {
 		t.Errorf("the bogus warning is lost: %+v", decls)
 	}
 	if d := ParseDeclarations(`bogus: 1`, ParseOptions{}); len(d) != 1 || d[0].declares() || len(d[0].warns) != 1 {

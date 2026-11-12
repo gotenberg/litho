@@ -3,6 +3,8 @@ package css
 import (
 	"reflect"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestGradient_Parses(t *testing.T) {
@@ -78,7 +80,7 @@ func TestGradient_ConicWarnsAndComputesToNone(t *testing.T) {
 	if s := c.of("t"); s.BackgroundGradient != nil || s.BackgroundImage != "" {
 		t.Errorf("conic gradient computed to %+v %q", s.BackgroundGradient, s.BackgroundImage)
 	}
-	if !hasWarning(c.c.Warnings(), "unsupported-css-value", "conic-gradient") {
+	if !hasWarning(c.c.Warnings(), warn.CSSUnsupported, "conic-gradient") {
 		t.Errorf("no warning in %v", c.c.Warnings())
 	}
 }

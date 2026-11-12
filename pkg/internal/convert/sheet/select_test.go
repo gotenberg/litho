@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestPrinted(t *testing.T) {
@@ -147,7 +148,7 @@ func TestApplyFormulas_Outside(t *testing.T) {
 			t.Errorf("cell %d (%q) = %v, want %v", i, got[i].Formula, got[i].Value, want)
 		}
 	}
-	if len(b.warnings) != 1 || b.warnings[0].Code != CodeFormula || !strings.Contains(b.warnings[0].Message, "NOW, RAND, TODAY") {
+	if len(b.warnings) != 1 || b.warnings[0].Code != warn.ContentUnsupported || !strings.Contains(b.warnings[0].Message, "NOW, RAND, TODAY") {
 		t.Errorf("warnings %+v", b.warnings)
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"golang.org/x/net/html"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // a4 is an A4 print medium.
@@ -115,7 +117,7 @@ func rgb(r, g, b uint8) Color { return rgb8(r, g, b) }
 
 // hasWarning reports whether ws holds a warning with code whose message
 // contains part.
-func hasWarning(ws []Warning, code, part string) bool {
+func hasWarning(ws []Warning, code warn.Code, part string) bool {
 	for _, w := range ws {
 		if w.Code == code && strings.Contains(w.Message, part) {
 			return true

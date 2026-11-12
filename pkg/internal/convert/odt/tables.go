@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxRepeat bounds what one table:number-columns-repeated or
@@ -134,7 +135,7 @@ func (b *builder) tableParts(el *odf.Element, tb *tableBuild, header bool) []*la
 		case "table-row":
 			for range repeat(c, "number-rows-repeated") {
 				if tb.cells > maxTableCells {
-					b.warn("table-cells", "a table's rows past its cell cap are left out")
+					b.warn("table-cells", warn.LimitReached, "a table's rows past its cell cap are left out")
 					return out
 				}
 				out = append(out, b.row(c, tb, header))

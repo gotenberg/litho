@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // measureSide is the side of the page a measuring layout runs on: 14,400
@@ -295,7 +296,7 @@ func (p *prepared) warnMargins(err error) {
 func (p *prepared) warnOnce(msg string) {
 	if !p.pages.seen[msg] {
 		p.pages.seen[msg] = true
-		p.pages.warnings = append(p.pages.warnings, typeset.Warning{Code: CodePageBox, Message: msg})
+		p.pages.warnings = append(p.pages.warnings, typeset.Warning{Code: warn.PageSetupUnsupported, Message: msg})
 	}
 }
 

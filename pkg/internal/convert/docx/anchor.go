@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // placement is where an anchored drawing goes (ECMA-376 Part 1, 20.4.2.3
@@ -197,7 +198,7 @@ func (d *document) place(p placement, n *layout.Node, sink *inlineSink) {
 		// inside the page its paragraph is on.
 		st.PageClamp = d.pageAnchors()
 		if fromPageV(p.relV) {
-			d.warn("approximated", "a drawing positioned from the page in a note, text box or table is positioned from its paragraph")
+			d.warn(warn.ContentUnsupported, "a drawing positioned from the page in a note, text box or table is positioned from its paragraph")
 			st.Top = css.Pts(0)
 		}
 		switch {
@@ -491,6 +492,6 @@ func (d *document) frame(n *layout.Node, pp paraProps) {
 		st.Margin[css.Right] = css.Pts(v)
 	}
 	if attrOr(f, "dropCap") == "" && (hasAttr(f, "x") || hasAttr(f, "y")) {
-		d.warn("approximated", "a text frame at a page position floats beside its anchor")
+		d.warn(warn.ContentUnsupported, "a text frame at a page position floats beside its anchor")
 	}
 }

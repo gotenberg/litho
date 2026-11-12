@@ -1,5 +1,7 @@
 package css
 
+import "github.com/gotenberg/litho/pkg/internal/warn"
+
 // unsupportedImages are the <image> functions litho parses and does not
 // paint: a background or a marker using one computes to none with a
 // warning (CSS Images 3 and 4). A background takes the linear and radial
@@ -26,7 +28,7 @@ func imageValue(t token, c *declCtx, prop string) (string, bool) {
 		return u, true
 	}
 	if t.typ == tFunction && unsupportedImages[lower(t.value)] {
-		c.warn("unsupported-css-value", "%s: %s() is not supported and computes to none", prop, lower(t.value))
+		c.warn(warn.CSSUnsupported, "%s: %s() is not supported and computes to none", prop, lower(t.value))
 		return "", true
 	}
 	return "", false
@@ -52,7 +54,7 @@ func firstLayer(v []token, c *declCtx, prop string) ([]token, bool) {
 		}
 	}
 	if len(layers) > 1 {
-		c.warn("unsupported-css-value", "%s: only the first of several background layers is drawn", prop)
+		c.warn(warn.CSSUnsupported, "%s: only the first of several background layers is drawn", prop)
 	}
 	if len(layers) == 0 {
 		return nil, false
@@ -284,7 +286,7 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 		return nil, false
 	}
 	if len(layers) > 1 {
-		c.warn("unsupported-css-value", "background: only the first of several background layers is drawn")
+		c.warn(warn.CSSUnsupported, "background: only the first of several background layers is drawn")
 	}
 	out := []entry{
 		{pBgColor, wideInitial},

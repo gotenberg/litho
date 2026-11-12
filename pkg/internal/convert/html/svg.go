@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/svg"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // errNestedSVG refuses an SVG image an SVG image's image element names:
@@ -165,7 +166,7 @@ func (b *builder) inlineSVG(ctx context.Context, n *dom.Node, st *css.Style) []*
 	})
 	if err != nil {
 		if ctx.Err() == nil {
-			b.warnings = append(b.warnings, typeset.Warning{Code: CodeResourceFailed, Message: fmt.Sprintf("an inline SVG was left out: %v", err)})
+			b.warnings = append(b.warnings, typeset.Warning{Code: warn.ResourceFailed, Message: fmt.Sprintf("an inline SVG was left out: %v", err)})
 		}
 		return nil
 	}

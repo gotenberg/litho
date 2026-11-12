@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // pngData returns a w by h PNG.
@@ -90,7 +91,7 @@ func TestDrawings_UnsupportedPicture(t *testing.T) {
 	if len(find(b.root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })) != 0 {
 		t.Error("an EMF picture was drawn")
 	}
-	if len(b.d.warnings) == 0 || b.d.warnings[0].Code != "unsupported-picture" {
+	if len(b.d.warnings) == 0 || b.d.warnings[0].Code != warn.PictureFormatUnsupported {
 		t.Errorf("warnings %+v", b.d.warnings)
 	}
 }

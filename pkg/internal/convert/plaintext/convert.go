@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxParagraphRunes bounds the characters one [text.Fonts.Layout] call lays
@@ -26,17 +27,6 @@ const maxParagraphRunes = 1 << 16
 // point once, and a warning a character would then outweigh the document.
 // One more warning says the list stops.
 const maxMissingGlyphWarnings = 256
-
-// Warning codes [Convert] reports.
-const (
-	// CodeMissingGlyph flags a character no indexed face covers, drawn as
-	// the matched face's .notdef glyph, or, once per document, emoji no
-	// indexed face covers, drawn blank.
-	CodeMissingGlyph = "missing-glyph"
-	// CodeLineSplit flags a source line longer than [maxParagraphRunes]
-	// characters, laid out in pieces.
-	CodeLineSplit = "line-split"
-)
 
 // bom is the UTF-8 encoding of U+FEFF, the byte order mark.
 var bom = []byte{0xEF, 0xBB, 0xBF}
@@ -231,7 +221,7 @@ func (l *layouter) run(ctx context.Context, data []byte) error {
 				return err
 			}
 			l.doc.Warnings = append(l.doc.Warnings, typeset.Warning{
-				Code:    CodeLineSplit,
+				Code:    warn.LimitReached,
 				Message: fmt.Sprintf("a source line longer than %d characters was laid out in pieces, each starting a new line", maxParagraphRunes),
 				Page:    l.pages,
 			})
@@ -273,7 +263,7 @@ func (l *layouter) paragraph(ctx context.Context, s string) error {
 	if len(rep.MissingEmoji) > 0 && !l.emojiWarned {
 		l.emojiWarned = true
 		l.doc.Warnings = append(l.doc.Warnings, typeset.Warning{
-			Code:    CodeMissingGlyph,
+			Code:    warn.MissingGlyph,
 			Message: "colour emoji fonts are not supported: emoji no text font covers are drawn blank",
 			Page:    first,
 		})
@@ -360,7 +350,7 @@ func (l *layouter) reportMissing(missing []rune, page int) {
 		if len(l.seen) >= maxMissingGlyphWarnings {
 			l.truncated = true
 			l.doc.Warnings = append(l.doc.Warnings, typeset.Warning{
-				Code:    CodeMissingGlyph,
+				Code:    warn.MissingGlyph,
 				Message: fmt.Sprintf("more than %d characters no font covers; the others are not listed", maxMissingGlyphWarnings),
 				Page:    page,
 			})
@@ -368,7 +358,7 @@ func (l *layouter) reportMissing(missing []rune, page int) {
 		}
 		l.seen[r] = true
 		l.doc.Warnings = append(l.doc.Warnings, typeset.Warning{
-			Code:    CodeMissingGlyph,
+			Code:    warn.MissingGlyph,
 			Message: fmt.Sprintf("no font covers U+%04X; asked for %s, drawn as the .notdef glyph", r, strings.Join(l.opts.FontFamilies, ", ")),
 			Page:    page,
 		})

@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxClipGlyphs bounds the glyphs whose outlines one background-clip:
@@ -22,9 +23,6 @@ const maxClipGlyphs = 20_000
 // the glyphs of one clip. Recursion guard, not spec-mandated: the text a
 // box clips its background to sits a few boxes below it.
 const maxClipDepth = maxGroupDepth * 8
-
-// codeClipText is the warning of a text clip cut short.
-const codeClipText = "background-clip-text"
 
 // textClip returns the clip of background-clip: text for the box b (CSS
 // Backgrounds 4, 2.4): the outlines of the glyphs b and its in-flow
@@ -50,7 +48,7 @@ func (p *painter) textClip(b *box) *typeset.Path {
 		for _, g := range t.Glyphs {
 			if glyphs == maxClipGlyphs {
 				cut = true
-				p.e.warnOnce(codeClipText, fmt.Sprintf("a background clipped to more than %d glyphs was clipped to the first", maxClipGlyphs), y)
+				p.e.warnOnce(warn.LimitReached, fmt.Sprintf("a background clipped to more than %d glyphs was clipped to the first", maxClipGlyphs), y)
 				return
 			}
 			glyphs++

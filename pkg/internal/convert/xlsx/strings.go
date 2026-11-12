@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxCellRunes caps the characters of one cell's text. Anti-DoS guard, not
@@ -30,7 +31,7 @@ func (r *reader) readSharedStrings(main string) error {
 	root, err := r.pkg.ParseXML(r.ctx, name, understood)
 	if err != nil {
 		if isMalformed(err) {
-			r.warn("malformed-part", fmt.Sprintf("the shared strings do not parse: %v", err))
+			r.warn(warn.PartMalformed, fmt.Sprintf("the shared strings do not parse: %v", err))
 			return nil
 		}
 		return err

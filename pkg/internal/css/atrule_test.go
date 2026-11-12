@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestMedia_Queries(t *testing.T) {
@@ -114,10 +116,10 @@ p { color: black }
 	if !colorEq(p.Color, rgb(0, 128, 0)) || p.FontSize != 22.5 || !dimEq(p.Margin[Top], pts(3.75)) {
 		t.Errorf("color %+v size %v margin %+v", p.Color, p.FontSize, p.Margin[Top])
 	}
-	if !hasWarning(c.c.Warnings(), "unsupported-css-at-rule", "@container") {
+	if !hasWarning(c.c.Warnings(), warn.CSSUnsupported, "@container") {
 		t.Errorf("warnings = %v", c.c.Warnings())
 	}
-	if hasWarning(c.c.Warnings(), "unsupported-css-at-rule", "keyframes") {
+	if hasWarning(c.c.Warnings(), warn.CSSUnsupported, "keyframes") {
 		t.Errorf("@keyframes warned")
 	}
 }
@@ -243,7 +245,7 @@ func TestImport_FetchesAndGuards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !hasWarning(s.Warnings(), "css-import-failed", "missing.css") || !hasWarning(s.Warnings(), "css-import-failed", "imports itself") {
+	if !hasWarning(s.Warnings(), warn.ResourceFailed, "missing.css") || !hasWarning(s.Warnings(), warn.ResourceFailed, "imports itself") {
 		t.Errorf("warnings = %v", s.Warnings())
 	}
 	doc := parseHTML(t, `<p id=p>`)
@@ -264,7 +266,7 @@ func TestImport_FetchesAndGuards(t *testing.T) {
 		return []byte(fmt.Sprintf(`@import url(%s-x.css);`, strings.TrimSuffix(u, ".css"))), "", nil
 	}
 	s, err = Parse(context.Background(), []byte(`@import url(c.css);`), ParseOptions{BaseURL: "https://e.com/", Fetch: chain})
-	if err != nil || !hasWarning(s.Warnings(), "css-limit", "@import") {
+	if err != nil || !hasWarning(s.Warnings(), warn.LimitReached, "@import") {
 		t.Errorf("deep chain: %v %v", err, s.Warnings())
 	}
 	// Without Fetch, imports are skipped.

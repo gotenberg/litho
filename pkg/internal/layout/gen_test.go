@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestGenerate_DisplayNoneAndColumns(t *testing.T) {
@@ -31,7 +32,7 @@ func TestGenerate_DepthCapWarns(t *testing.T) {
 	res := run(t, el(sty(), n), page(100, 20))
 	found := false
 	for _, w := range res.Warnings {
-		found = found || w.Code == codeTooDeep
+		found = found || w.Code == warn.LimitReached
 	}
 	if !found {
 		t.Error("no warning for content past the depth cap")
@@ -41,11 +42,7 @@ func TestGenerate_DepthCapWarns(t *testing.T) {
 func TestGenerate_SupportedDoNotWarn(t *testing.T) {
 	abs := sty(func(s *css.Style) { s.Position = css.Absolute; s.FontVariant = css.SmallCaps })
 	res := run(t, doc(el(abs, txt(abs, "a"))), page(100, 20))
-	codes := map[string]int{}
-	for _, w := range res.Warnings {
-		codes[w.Code]++
-	}
-	if codes[codeUnsupported] != 0 {
+	if len(res.Warnings) != 0 {
 		t.Errorf("warnings %+v, want none: small-caps synthesised, positioning laid out", res.Warnings)
 	}
 }
@@ -54,7 +51,7 @@ func TestGenerate_MissingGlyphWarns(t *testing.T) {
 	res := run(t, doc(el(sty(), txt(sty(), "a中"))), page(100, 20))
 	found := false
 	for _, w := range res.Warnings {
-		found = found || w.Code == codeMissingGlyph
+		found = found || w.Code == warn.MissingGlyph
 	}
 	if !found {
 		t.Errorf("warnings %+v, want the missing glyph", res.Warnings)
@@ -147,7 +144,7 @@ func TestLayout_Concurrent(t *testing.T) {
 
 func TestBackground_NoLoaderWarns(t *testing.T) {
 	res := run(t, doc(el(sty(height(2), func(s *css.Style) { s.BackgroundImage = "x.png" }))), page(10, 10))
-	if len(res.Warnings) != 1 || res.Warnings[0].Code != codeImage || res.Warnings[0].Page != 1 {
+	if len(res.Warnings) != 1 || res.Warnings[0].Code != warn.PictureUnreadable || res.Warnings[0].Page != 1 {
 		t.Errorf("warnings %+v, want one image warning on page 1", res.Warnings)
 	}
 }
@@ -163,7 +160,7 @@ func TestGenerate_MissingEmojiWarnOnce(t *testing.T) {
 	res := run(t, doc(el(sty(), txt(sty(), "a\U0001F680"), el(sty(), txt(sty(), "\U0001F389")))), page(100, 40))
 	var msgs []string
 	for _, w := range res.Warnings {
-		if w.Code == codeMissingGlyph {
+		if w.Code == warn.MissingGlyph {
 			msgs = append(msgs, w.Message)
 		}
 	}

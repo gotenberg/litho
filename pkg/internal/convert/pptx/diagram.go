@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // emuPerPoint is the EMUs in a point (ECMA-376 Part 1, 20.1.2.1).
@@ -74,7 +75,7 @@ func (r *reader) diagram(c *shapeCtx, data *ooxml.Element, s *slides.Shape, dept
 		root, err := r.pkg.ParseXML(r.ctx, part, understood)
 		if err != nil {
 			if isMalformed(err) {
-				r.warn("malformed-part", fmt.Sprintf("the SmartArt drawing %s does not parse and is left out: %v", part, err))
+				r.warn(warn.PartMalformed, fmt.Sprintf("the SmartArt drawing %s does not parse and is left out: %v", part, err))
 				return nil, nil
 			}
 			return nil, err
@@ -97,7 +98,7 @@ func (r *reader) diagram(c *shapeCtx, data *ooxml.Element, s *slides.Shape, dept
 		}
 		d = ooxml.ParseDiagram(dataRoot, roots[0], roots[1], roots[2])
 		if d.Layout == nil {
-			r.warn("unsupported-content", "a SmartArt diagram without a saved drawing or a layout definition is left out")
+			r.warn(warn.ContentUnsupported, "a SmartArt diagram without a saved drawing or a layout definition is left out")
 			return nil, nil
 		}
 		root := d.LayOut(emu(s.Box.Width), emu(s.Box.Height))
@@ -203,7 +204,7 @@ func (r *reader) diagramPart(part string) (*ooxml.Element, error) {
 	root, err := r.pkg.ParseXML(r.ctx, part, understood)
 	if err != nil {
 		if isMalformed(err) {
-			r.warn("malformed-part", fmt.Sprintf("the SmartArt part %s does not parse: %v", part, err))
+			r.warn(warn.PartMalformed, fmt.Sprintf("the SmartArt part %s does not parse: %v", part, err))
 			return nil, nil
 		}
 		return nil, err

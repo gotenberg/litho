@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // understood lists the namespaces whose mc:Choice the converter reads
@@ -285,7 +286,7 @@ func (d *document) readNotes(name, kind string) (map[string]*ooxml.Element, erro
 	root, err := d.part(name)
 	if err != nil {
 		if isSoft(err) {
-			d.warn("malformed-part", fmt.Sprintf("the %s part does not parse; its notes are left out", kind))
+			d.warn(warn.PartMalformed, fmt.Sprintf("the %s part does not parse; its notes are left out", kind))
 			return notes, nil
 		}
 		return nil, err
@@ -303,8 +304,8 @@ func (d *document) readNotes(name, kind string) (map[string]*ooxml.Element, erro
 }
 
 // warn records a warning, once per message.
-func (d *document) warn(code, msg string) {
-	key := code + "\x00" + msg
+func (d *document) warn(code warn.Code, msg string) {
+	key := code.String() + "\x00" + msg
 	if d.warned[key] {
 		return
 	}

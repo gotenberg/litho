@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // listItem is the implicit counter of list items (CSS Lists 3, 4.6).
@@ -124,7 +125,7 @@ func (b *builder) applyCounters(n *dom.Node, st *css.Style) int {
 	c := &b.counters
 	inst := func(name string, v int, rev bool) {
 		if !c.instantiate(name, clampCounter(v), rev) {
-			b.warnOnce(CodeGeneratedLimit, "counters", fmt.Sprintf("more than %d counters in scope; the others were left out", maxCounters))
+			b.warnOnce(warn.LimitReached, "counters", fmt.Sprintf("more than %d counters in scope; the others were left out", maxCounters))
 		}
 	}
 	for _, op := range st.CounterReset {
@@ -379,7 +380,7 @@ func (b *builder) generate(ctx context.Context, n *dom.Node, ps *css.Style) []*l
 	}
 	flush()
 	if cut {
-		b.warnOnce(CodeGeneratedLimit, "text", fmt.Sprintf("generated content past %d bytes was left out", maxGeneratedBytes))
+		b.warnOnce(warn.LimitReached, "text", fmt.Sprintf("generated content past %d bytes was left out", maxGeneratedBytes))
 	}
 	return out
 }

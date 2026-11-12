@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // The defaults of Calc's Default page style. Its paper is the
@@ -175,7 +176,7 @@ func (r *reader) readPage(mp *odf.MasterPage) pageResult {
 		}
 	}
 	if pl.Header.Has("fo:border") || pl.Footer.Has("fo:border") || pl.Header.Has("fo:background-color") || pl.Footer.Has("fo:background-color") {
-		r.warn("header-footer-box", "the borders and backgrounds of headers and footers are not drawn")
+		r.warn("header-footer-box", warn.PageSetupUnsupported, "the borders and backgrounds of headers and footers are not drawn")
 	}
 	hf.Even, hf.First = hf.Odd, hf.Odd
 	if hf.DifferentOddEven {
@@ -276,7 +277,7 @@ func (r *reader) scale(pg *sheet.PageSetup, pp odf.Props) {
 	if n, ok := count("style:scale-to-pages"); ok && n > 0 {
 		pg.Scale, pg.FitWidth, pg.FitHeight = 0, n, n
 		if n > 1 {
-			r.warn("scale-to-pages", "a sheet fitted to a page count is fitted to as many pages across and down")
+			r.warn("scale-to-pages", warn.PageSetupUnsupported, "a sheet fitted to a page count is fitted to as many pages across and down")
 		}
 	}
 }

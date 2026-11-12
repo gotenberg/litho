@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // runKind says what one run of an inline paragraph stands for.
@@ -520,9 +521,9 @@ func (e *engine) shapePara(b *box, p *ifcPara) {
 		}
 	}
 	if len(fresh) > 0 {
-		e.warn(codeMissingGlyph, fmt.Sprintf("no font covers %q: drawn as the font's missing-glyph box", string(fresh)), -1)
+		e.warn(warn.MissingGlyph, fmt.Sprintf("no font covers %q: drawn as the font's missing-glyph box", string(fresh)), -1)
 	}
 	if len(rep.MissingEmoji) > 0 {
-		e.warnOnce(codeMissingGlyph, "colour emoji fonts are not supported: emoji no text font covers are drawn blank", -1)
+		e.warnOnce(warn.MissingGlyph, "colour emoji fonts are not supported: emoji no text font covers are drawn blank", -1)
 	}
 }

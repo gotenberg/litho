@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // shadowScale is the resolution of a blurred shadow's raster: 2 pixels per
@@ -27,9 +28,6 @@ const maxShadowPixels = 4 << 20
 // layout: 64 Mpx. Past it a blurred shadow is drawn sharp, with a warning.
 // Anti-DoS guard, not spec-mandated: each raster is kept in the output.
 const maxShadowBudget = 64 << 20
-
-// codeShadowBlur is the warning code of a blur left out.
-const codeShadowBlur = "layout-shadow-blur"
 
 // growRect returns r grown by d on every side, shrunk when d is negative,
 // and its corner radii adjusted the way CSS Backgrounds 3, 7.2 adjusts a
@@ -188,7 +186,7 @@ func (p *painter) blurred(shape []typeset.PathOp, area typeset.Rect, blur float6
 		return nil
 	}
 	if p.shadowPixels+w*h > maxShadowBudget {
-		p.e.warnOnce(codeShadowBlur, fmt.Sprintf("blurred shadows past %d raster pixels drawn sharp", maxShadowBudget), y)
+		p.e.warnOnce(warn.LimitReached, fmt.Sprintf("blurred shadows past %d raster pixels drawn sharp", maxShadowBudget), y)
 		return nil
 	}
 	p.shadowPixels += w * h

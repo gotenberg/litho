@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // chartExXML wraps data and a chart's content in a chartex chart space.
@@ -116,8 +117,8 @@ func TestChartExFromElement_Histogram(t *testing.T) {
 	if !c.Axes[0].BetweenCategories || c.Axes[1].MajorGrid == nil {
 		t.Errorf("axes = %+v %+v", c.Axes[0], c.Axes[1])
 	}
-	if !hasWarning(c, CodeChartNoCache) {
-		t.Errorf("warnings %+v lack %s", c.Warnings, CodeChartNoCache)
+	if !hasWarning(c, warn.ChartNoCache) {
+		t.Errorf("warnings %+v lack %s", c.Warnings, warn.ChartNoCache)
 	}
 }
 
@@ -186,7 +187,7 @@ func TestParseChartEx_DefinedNamesAndTheme(t *testing.T) {
 }
 
 // hasWarning reports a warning of code.
-func hasWarning(c *chart.Chart, code string) bool {
+func hasWarning(c *chart.Chart, code warn.Code) bool {
 	for _, w := range c.Warnings {
 		if w.Code == code {
 			return true

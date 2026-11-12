@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // opts asks for the test face and every other default.
@@ -236,7 +237,7 @@ func TestConvert_ReplacesInvalidUTF8(t *testing.T) {
 		t.Fatalf("warnings %+v, want one for U+FFFD", doc.Warnings)
 	}
 	w := doc.Warnings[0]
-	if w.Code != plaintext.CodeMissingGlyph || !strings.Contains(w.Message, "U+FFFD") || !strings.Contains(w.Message, "Test Serif") || w.Page != 1 {
+	if w.Code != warn.MissingGlyph || !strings.Contains(w.Message, "U+FFFD") || !strings.Contains(w.Message, "Test Serif") || w.Page != 1 {
 		t.Errorf("warning %+v", w)
 	}
 	write(t, doc)
@@ -249,7 +250,7 @@ func TestConvert_WarnsOncePerMissingCharacter(t *testing.T) {
 	var got []string
 	for _, w := range doc.Warnings {
 		got = append(got, w.Message[:len("no font covers U+00E9")])
-		if w.Code != plaintext.CodeMissingGlyph {
+		if w.Code != warn.MissingGlyph {
 			t.Errorf("code %q", w.Code)
 		}
 	}
@@ -330,7 +331,7 @@ func TestConvert_SplitsAHugeLine(t *testing.T) {
 	doc := convert(t, f, strings.Repeat("A", 1<<16+10), o)
 	n := 0
 	for _, w := range doc.Warnings {
-		if w.Code == plaintext.CodeLineSplit {
+		if w.Code == warn.LimitReached {
 			n++
 		}
 	}

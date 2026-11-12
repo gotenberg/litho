@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // theme is a master's theme (ECMA-376 Part 1, 20.1.6): its colour and font
@@ -58,7 +59,7 @@ func (r *reader) themeOf(master string) *theme {
 			t.bgFills = fs.Child(ooxml.NSA, "bgFillStyleLst").Kids()
 			t.effects = fs.Child(ooxml.NSA, "effectStyleLst").Kids()
 		} else {
-			r.warn("malformed-part", fmt.Sprintf("theme %s does not parse: the Office theme stands in: %v", name, err))
+			r.warn(warn.PartMalformed, fmt.Sprintf("theme %s does not parse: the Office theme stands in: %v", name, err))
 		}
 	}
 	t.part = name

@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestRead_Document(t *testing.T) {
@@ -208,9 +209,19 @@ func TestRead_Warnings(t *testing.T) {
 	body := page(`<anim:par/><dr3d:scene/><draw:measure/><draw:control/><office:annotation><text:p>c</text:p></office:annotation>`) +
 		`<presentation:show presentation:name="s" presentation:pages="page1"/>`
 	_, w := read(t, flat{body: body}.bytes())
-	for _, code := range []string{"animations", "3d-scene", "measure", "form-controls", "comments", "custom-show"} {
-		if !hasWarning(w, code) {
-			t.Errorf("no %q warning in %v", code, w)
+	for _, want := range []struct {
+		code  warn.Code
+		about string
+	}{
+		{warn.ContentUnsupported, "animations"},
+		{warn.ContentUnsupported, "3D scenes"},
+		{warn.ContentUnsupported, "dimension lines"},
+		{warn.FormWidgetOmitted, "form controls"},
+		{warn.ContentUnsupported, "comments"},
+		{warn.ContentUnsupported, "custom slide shows"},
+	} {
+		if !hasWarningAbout(w, want.code, want.about) {
+			t.Errorf("no %s warning about %s in %v", want.code, want.about, w)
 		}
 	}
 }

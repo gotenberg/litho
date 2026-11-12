@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // The frame widths of Calc's DataPilot output, in points: the inner lines
@@ -590,7 +591,7 @@ func (b *builder) applyPivots(doc *Document) (*Document, error) {
 				return nil, err
 			}
 			if !ok {
-				b.warn(CodePivot, fmt.Sprintf("pivot table %s: its output is printed as the file saved it", quote(p.Name)))
+				b.warn(warn.ContentUnsupported, fmt.Sprintf("pivot table %s: its output is printed as the file saved it", quote(p.Name)))
 				continue
 			}
 			if p.Clear != nil {

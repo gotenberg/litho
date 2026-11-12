@@ -6,6 +6,7 @@ import (
 	"testing/fstest"
 
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestGenerated_BeforeAndAfter(t *testing.T) {
@@ -100,7 +101,7 @@ func TestGenerated_Images(t *testing.T) {
 	if len(g.Children) != 3 || g.Children[1].Kind != layout.Replaced || g.Children[1].Picture == nil || treeText(g) != "ab" {
 		t.Errorf("generated %+v, want a, the picture, b", g.Children)
 	}
-	if !hasWarning(p.warnings, CodeResourceRefused, "missing.png") && !hasWarning(p.warnings, CodeResourceFailed, "missing.png") {
+	if !hasWarning(p.warnings, warn.ResourceRefused, "missing.png") && !hasWarning(p.warnings, warn.ResourceFailed, "missing.png") {
 		t.Errorf("no warning for the missing image: %v", p.warnings)
 	}
 }
@@ -120,7 +121,7 @@ func TestGenerated_CapsText(t *testing.T) {
 			longest = max(longest, len(n.Text))
 		}
 	})
-	if longest > maxGeneratedBytes || !hasWarning(p.warnings, CodeGeneratedLimit, "") {
+	if longest > maxGeneratedBytes || !hasWarning(p.warnings, warn.LimitReached, "") {
 		t.Errorf("longest generated text %d bytes, warnings %v", longest, p.warnings)
 	}
 }

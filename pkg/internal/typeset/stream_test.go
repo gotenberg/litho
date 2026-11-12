@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // streamDoc builds a tagged document of n pages whose pages link to each
@@ -59,7 +60,7 @@ func streamDoc(t *testing.T, n int) *typeset.Document {
 		d.Elem = doc.Structure.Kids[d.Page-1].Kids[0]
 		doc.Outline = append(doc.Outline, typeset.Outline{Title: fmt.Sprintf("Page %d", i+1), Dest: typeset.Dest{Page: i + 1, Elem: doc.Structure.Kids[i].Kids[0]}})
 	}
-	doc.Warnings = []typeset.Warning{{Code: "first", Page: 1}, {Code: "last", Page: n}, {Code: "none"}}
+	doc.Warnings = []typeset.Warning{{Code: warn.MissingGlyph, Message: "first", Page: 1}, {Code: warn.MissingGlyph, Message: "last", Page: n}, {Code: warn.MissingGlyph, Message: "none"}}
 	return doc
 }
 

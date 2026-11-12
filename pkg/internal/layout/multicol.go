@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // This file lays out multi-column containers (CSS Multicol 1).
@@ -1249,7 +1250,7 @@ func (e *engine) balanceBudget(y float64) bool {
 	if e.balancePasses < maxBalanceLayouts {
 		return true
 	}
-	e.warnOnce(codeRelayoutBudget, fmt.Sprintf("more than %d layouts to balance columns: later columns keep their unbalanced heights", maxBalanceLayouts), y)
+	e.warnOnce(warn.LimitReached, fmt.Sprintf("more than %d layouts to balance columns: later columns keep their unbalanced heights", maxBalanceLayouts), y)
 	return false
 }
 

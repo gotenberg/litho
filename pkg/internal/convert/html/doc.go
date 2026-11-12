@@ -165,9 +165,7 @@
 //     and font from the document, and the document's <style> elements
 //     style its content. An image element inside an SVG image draws a
 //     raster picture; an SVG one is left out with a warning. The svg
-//     package's warnings (codes unsupported-svg-element,
-//     unsupported-svg-property, unsupported-svg-paint, svg-image, svg-text
-//     and svg-limit) join the document's.
+//     package's warnings join the document's.
 //   - srcset, sizes and <picture> with its <source media type srcset sizes>
 //     choose the picture as the HTML Standard's source selection does
 //     (4.8.4.3), at a device pixel ratio of 1: the first <source> whose
@@ -202,7 +200,7 @@
 // # Warnings
 //
 // The document's warnings list, in order, those of the cascade, those of
-// the converter (codes Code* of this package) and those of the layout.
+// the converter and those of the layout, each with a code of package warn.
 //
 // # Determinism
 //

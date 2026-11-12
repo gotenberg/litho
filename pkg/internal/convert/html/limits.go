@@ -36,35 +36,6 @@ const (
 // text would otherwise copy it into the outline. A real heading is a line.
 const maxOutlineTitleRunes = 1024
 
-// Warning codes [Convert] reports beside those of the css and layout
-// packages.
-const (
-	// CodeResourceRefused flags a URL the conversion does not read: an
-	// absolute URL with a scheme, a path that leaves the resources root, or
-	// any URL when no resources are given.
-	CodeResourceRefused = "resource-refused"
-	// CodeResourceFailed flags a resource that could not be read or decoded.
-	CodeResourceFailed = "resource-failed"
-	// CodeResourceLimit flags a resource left out by a cap on bytes, images
-	// or pixels.
-	CodeResourceLimit = "resource-limit"
-	// CodeUnsupportedElement flags an element whose content is not drawn:
-	// embedded documents and media.
-	CodeUnsupportedElement = "unsupported-element"
-	// CodeFormControl flags form controls drawn as their text, once a
-	// document.
-	CodeFormControl = "form-control"
-	// CodePageBox flags an @page size or margin that leaves no page area,
-	// replaced by the options.
-	CodePageBox = "page-box"
-	// CodeTooDeep flags content nested past the depth the converter
-	// follows.
-	CodeTooDeep = "content-too-deep"
-	// CodeGeneratedLimit flags generated content or counters cut short by
-	// a cap.
-	CodeGeneratedLimit = "generated-content-limit"
-)
-
 // maxCounters caps the counter instances alive at once: 16,384. Anti-DoS
 // guard, not spec-mandated: a counter costs a map entry, and a document
 // whose siblings each reset new names would otherwise grow them with its

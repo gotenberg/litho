@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // faceOf parses one @font-face block with body and returns its rule and
@@ -92,11 +94,11 @@ func TestFontFace_IgnoredDescriptorsWarn(t *testing.T) {
 		t.Fatalf("the rule was dropped: %+v", f)
 	}
 	for _, name := range []string{"size-adjust", "font-feature-settings", "ascent-override"} {
-		if !hasWarning(warns, "unsupported-css-property", name) {
+		if !hasWarning(warns, warn.CSSUnsupported, name) {
 			t.Errorf("no warning for %s: %v", name, warns)
 		}
 	}
-	if hasWarning(warns, "unsupported-css-property", "font-display") {
+	if hasWarning(warns, warn.CSSUnsupported, "font-display") {
 		t.Errorf("font-display warned: %v", warns)
 	}
 }

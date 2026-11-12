@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // FontFace is an @font-face rule (CSS Fonts 4, 4): the descriptors that
@@ -117,7 +118,7 @@ func parseFontFace(block []token, c *declCtx) (FontFace, bool) {
 			// 4.9).
 		default:
 			if ignoredFaceDescriptors[name] {
-				c.warn("unsupported-css-property", "the @font-face descriptor %q is not supported and was ignored", name)
+				c.warn(warn.CSSUnsupported, "the @font-face descriptor %q is not supported and was ignored", name)
 			}
 		}
 		return true

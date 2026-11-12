@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // relTable is the relationship type of a table part (ECMA-376 Part 1,
@@ -48,7 +49,7 @@ func (w *sheetReader) tables(parts *ooxml.Element) error {
 		root, err := r.pkg.ParseXML(r.ctx, rel.Target, understood)
 		if err != nil {
 			if isMalformed(err) {
-				r.warn("malformed-part", fmt.Sprintf("table %s does not parse: %v", rel.Target, err))
+				r.warn(warn.PartMalformed, fmt.Sprintf("table %s does not parse: %v", rel.Target, err))
 				continue
 			}
 			return err

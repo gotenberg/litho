@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // formulaDoc returns a document of two sheets: S holds 2, 3, 4 in A1:A3,
@@ -86,7 +87,7 @@ func TestApplyFormulas(t *testing.T) {
 	if doc.Sheets[0].Rows[3].Cells[0].Value != num(-1) {
 		t.Error("the document changed")
 	}
-	if len(b.warnings) != 1 || b.warnings[0].Code != CodeFormula {
+	if len(b.warnings) != 1 || b.warnings[0].Code != warn.ContentUnsupported {
 		t.Errorf("warnings %+v", b.warnings)
 	}
 }

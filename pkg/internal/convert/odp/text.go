@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // defaultFontSize is the size of text no style sizes: the built-in
@@ -103,7 +104,7 @@ func (r *reader) blocks(el *odf.Element, tc *textCtx, lc listCtx, out *[]slides.
 		switch {
 		case k.Is(odf.NSText, "p"), k.Is(odf.NSText, "h"):
 			if r.paras >= maxParagraphs {
-				r.warn("too-many-paragraphs", fmt.Sprintf("paragraphs past %d are not read", maxParagraphs))
+				r.warn("too-many-paragraphs", warn.LimitReached, fmt.Sprintf("paragraphs past %d are not read", maxParagraphs))
 				return
 			}
 			r.paras++
@@ -208,7 +209,7 @@ func (r *reader) applyPara(ps *paraState, p odf.Props, direction bool) {
 		ps.defaultTab = l
 	}
 	if l, ok := odf.Length(p.Get("style:line-spacing")); ok && l != 0 {
-		r.warn("line-spacing", "a paragraph's leading is not applied")
+		r.warn("line-spacing", warn.ContentUnsupported, "a paragraph's leading is not applied")
 	}
 	switch v := p.Get("style:writing-mode"); {
 	case !direction:
@@ -330,7 +331,7 @@ func (r *reader) applyText(rs *runState, p odf.Props) {
 			rs.style.Caps = slides.CapsNone
 		}
 	case "lowercase", "capitalize":
-		r.warn("text-transform", "lowercase and capitalized text transforms are not applied")
+		r.warn("text-transform", warn.ContentUnsupported, "lowercase and capitalized text transforms are not applied")
 	}
 	switch p.Get("fo:font-variant") {
 	case "small-caps":
@@ -344,13 +345,13 @@ func (r *reader) applyText(rs *runState, p odf.Props) {
 		rs.lang, rs.country = v, p.Get("fo:country")
 	}
 	if v := p.Get("fo:text-shadow"); v != "" && v != "none" {
-		r.warn("text-shadow", "text shadows are not drawn")
+		r.warn("text-shadow", warn.ContentUnsupported, "text shadows are not drawn")
 	}
 	if p.Get("style:text-outline") == "true" {
-		r.warn("text-outline", "outlined text is drawn filled")
+		r.warn("text-outline", warn.ContentUnsupported, "outlined text is drawn filled")
 	}
 	if v := p.Get("fo:background-color"); v != "" && v != "transparent" {
-		r.warn("text-highlight", "a text background colour is not drawn")
+		r.warn("text-highlight", warn.ContentUnsupported, "a text background colour is not drawn")
 	}
 }
 
@@ -534,7 +535,7 @@ func (w *runWriter) add(run slides.Run) {
 		}
 	}
 	if len(w.runs) >= maxRuns {
-		w.r.warn("too-many-runs", fmt.Sprintf("runs past %d in a paragraph are not read", maxRuns))
+		w.r.warn("too-many-runs", warn.LimitReached, fmt.Sprintf("runs past %d in a paragraph are not read", maxRuns))
 		w.full = true
 		return
 	}
@@ -633,7 +634,7 @@ func (r *reader) inline(el *odf.Element, tc *textCtx, rs runState, href string, 
 		}
 		if k.Name.Space != odf.NSText {
 			if k.Is(odf.NSOffice, "annotation") {
-				r.warn("comments", "comments are not printed")
+				r.warn("comments", warn.ContentUnsupported, "comments are not printed")
 			}
 			continue
 		}

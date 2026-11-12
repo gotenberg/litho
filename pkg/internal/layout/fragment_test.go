@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // para returns a block of n lines "a".
@@ -182,7 +183,7 @@ func TestLinks_AndAnchors(t *testing.T) {
 	}
 	found := false
 	for _, w := range res.Warnings {
-		found = found || w.Code == codeLink
+		found = found || w.Code == warn.LinkUnresolved
 	}
 	if !found {
 		t.Errorf("warnings %+v, want the unresolved link", res.Warnings)

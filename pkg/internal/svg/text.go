@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxFontSize is the largest font size the text package shapes at; a
@@ -52,7 +53,7 @@ type textCtx struct {
 // and rotate are not drawn.
 func (r *renderer) text(n *html.Node, st *style, s sink) {
 	if r.d.opts.Fonts == nil {
-		r.d.warn("svg-text", "text is not drawn: no fonts are available")
+		r.d.warn(warn.TextNotLaidOut, "text is not drawn: no fonts are available")
 		return
 	}
 	if st.clipPath != "" {
@@ -76,7 +77,7 @@ func (r *renderer) textPieces(n *html.Node, st *style) []*piece {
 	tc := &textCtx{}
 	r.collectText(n, st, nil, tc, attrNS(n, "xml", "space") == "preserve", 0)
 	if tc.over {
-		r.d.warn("svg-limit", fmt.Sprintf("text past %d characters was left out", maxTextRunes))
+		r.d.warn(warn.LimitReached, fmt.Sprintf("text past %d characters was left out", maxTextRunes))
 	}
 	collapseSpaces(tc.chars)
 	return r.layoutText(tc.chars)
@@ -88,7 +89,7 @@ func (r *renderer) textPieces(n *html.Node, st *style) []*piece {
 // visible add nothing.
 func (r *renderer) textOutline(n *html.Node, st *style) []typeset.PathOp {
 	if r.d.opts.Fonts == nil {
-		r.d.warn("svg-text", "text is not drawn: no fonts are available")
+		r.d.warn(warn.TextNotLaidOut, "text is not drawn: no fonts are available")
 		return nil
 	}
 	var out []typeset.PathOp
@@ -158,7 +159,7 @@ func (r *renderer) collectText(n *html.Node, st *style, chain []*posCtx, tc *tex
 			}
 			r.collectText(c, cs, chain, tc, preserve, depth+1)
 		case c.Type == html.ElementNode && c.Namespace == "svg" && c.Data == "textPath":
-			r.d.warn("unsupported-svg-element", "text on a path is not drawn")
+			r.d.warn(warn.ContentUnsupported, "text on a path is not drawn")
 		}
 	}
 }
@@ -335,7 +336,7 @@ func (r *renderer) shapePiece(p *piece) {
 	}
 	para, _, err := r.d.opts.Fonts.Shape(r.ctx, []text.ParagraphRun{{Text: str, Style: textStyle(p.st)}}, text.ParagraphOptions{})
 	if err != nil {
-		r.d.warn("svg-text", fmt.Sprintf("text was left out: %v", err))
+		r.d.warn(warn.TextNotLaidOut, fmt.Sprintf("text was left out: %v", err))
 		return
 	}
 	line := para.Line(0, para.Len(), false)

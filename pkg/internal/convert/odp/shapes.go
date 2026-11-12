@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // shapeList reads the drawing shapes among els (ODF 1.3, Part 3, 10.3 to
@@ -56,7 +57,7 @@ func (r *reader) shapeList(els []*odf.Element, pc *pageCtx, depth int) []*slides
 // LibreOffice).
 func (r *reader) shape(el *odf.Element, pc *pageCtx, depth int, href string) []*slides.Shape {
 	if depth > maxGroupDepth {
-		r.warn("group-depth", fmt.Sprintf("groups nested past %d levels are not drawn", maxGroupDepth))
+		r.warn("group-depth", warn.LimitReached, fmt.Sprintf("groups nested past %d levels are not drawn", maxGroupDepth))
 		return nil
 	}
 	switch {
@@ -69,16 +70,16 @@ func (r *reader) shape(el *odf.Element, pc *pageCtx, depth int, href string) []*
 		}
 		return out
 	case el.Name.Space == odf.NSAnim, el.Is(odf.NSPresentation, "animations"):
-		r.warn("animations", "animations are not played: every shape prints in its final place")
+		r.warn("animations", warn.ContentUnsupported, "animations are not played: every shape prints in its final place")
 		return nil
 	case el.Name.Space == odf.NSDr3d:
-		r.warn("3d-scene", "3D scenes are not drawn")
+		r.warn("3d-scene", warn.ContentUnsupported, "3D scenes are not drawn")
 		return nil
 	case el.Is(odf.NSOffice, "annotation"), el.Is(odf.NSOfficeOOO, "annotation"):
-		r.warn("comments", "comments are not printed")
+		r.warn("comments", warn.ContentUnsupported, "comments are not printed")
 		return nil
 	case el.Is(odf.NSDraw, "control"):
-		r.warn("form-controls", "form controls are not drawn")
+		r.warn("form-controls", warn.FormWidgetOmitted, "form controls are not drawn")
 		return nil
 	case el.Is(odf.NSOffice, "forms"), el.Is(odf.NSPresentation, "notes"), el.Is(odf.NSDraw, "page-thumbnail"),
 		el.Is(odf.NSOffice, "event-listeners"), el.Name.Space == odf.NSLOExt:
@@ -90,7 +91,7 @@ func (r *reader) shape(el *odf.Element, pc *pageCtx, depth int, href string) []*
 		return nil
 	}
 	if r.shapes >= maxShapes {
-		r.warn("too-many-shapes", fmt.Sprintf("shapes past %d are not drawn", maxShapes))
+		r.warn("too-many-shapes", warn.LimitReached, fmt.Sprintf("shapes past %d are not drawn", maxShapes))
 		return nil
 	}
 	r.shapes++
@@ -107,7 +108,7 @@ func (r *reader) shape(el *odf.Element, pc *pageCtx, depth int, href string) []*
 	case "custom-shape", "rect", "ellipse", "circle", "line", "connector", "polygon", "polyline", "path", "regular-polygon", "caption", "measure":
 		s = r.drawShape(el, pc)
 	default:
-		r.warnOnce("shape-"+el.Name.Local, "unsupported-shape", fmt.Sprintf("draw:%s is not drawn", el.Name.Local))
+		r.warn("shape-"+el.Name.Local, warn.ContentUnsupported, fmt.Sprintf("draw:%s is not drawn", el.Name.Local))
 	}
 	if s == nil {
 		return nil
@@ -206,7 +207,7 @@ func (r *reader) placementOf(el *odf.Element, def *typeset.Rect) placement {
 	}
 	m, _, ok := parseTransform(tr)
 	if !ok {
-		r.warn("transform", "a draw:transform that does not parse is not applied")
+		r.warn("transform", warn.ContentUnsupported, "a draw:transform that does not parse is not applied")
 		return placement{box: typeset.Rect{X: x, Y: y, Width: w, Height: h}}
 	}
 	m = m.mul(translation(x, y))
@@ -282,7 +283,7 @@ func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 				return s
 			}
 		case k.Is(odf.NSDraw, "object-ole"):
-			r.warn("ole-object", "embedded OLE objects are drawn as their replacement picture")
+			r.warn("ole-object", warn.ContentUnsupported, "embedded OLE objects are drawn as their replacement picture")
 		case k.Is(odf.NSTable, "table"):
 			if t := r.table(k, s.Box, pc); t != nil {
 				s.Kind = slides.KindTable
@@ -290,10 +291,10 @@ func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 				return s
 			}
 		case k.Is(odf.NSDraw, "plugin"):
-			r.warn("media", "audio and video are drawn as their replacement picture")
+			r.warn("media", warn.ContentUnsupported, "audio and video are drawn as their replacement picture")
 			media = true
 		case k.Is(odf.NSDraw, "applet"), k.Is(odf.NSDraw, "floating-frame"):
-			r.warnOnce("frame-"+k.Name.Local, "unsupported-frame", fmt.Sprintf("draw:%s is not drawn", k.Name.Local))
+			r.warn("frame-"+k.Name.Local, warn.ContentUnsupported, fmt.Sprintf("draw:%s is not drawn", k.Name.Local))
 		}
 	}
 	if media {
@@ -404,7 +405,7 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 		s.Fill = slides.Fill{}
 		s.Geometry = &shape.Geometry{Preset: "line"}
 		if el.Name.Local == "measure" {
-			r.warn("measure", "dimension lines are drawn as their measured line, without their extension lines")
+			r.warn("measure", warn.ContentUnsupported, "dimension lines are drawn as their measured line, without their extension lines")
 		}
 		if el.Name.Local == "connector" {
 			s.Geometry = &shape.Geometry{Preset: connectorPreset(el.A(odf.NSDraw, "type"))}
@@ -497,7 +498,7 @@ func (r *reader) enhancedGeometry(eg *odf.Element) *shape.Geometry {
 		g.Custom.OpenUnfilled = false
 	}
 	if g != nil && !shape.Known(g) {
-		r.warn("custom-geometry", "the shape type "+strconv.Quote(g.Preset)+" is drawn as its bounding box")
+		r.warn("custom-geometry", warn.ContentUnsupported, "the shape type "+strconv.Quote(g.Preset)+" is drawn as its bounding box")
 	}
 	return g
 }
@@ -522,7 +523,7 @@ func (r *reader) outline(el *odf.Element) *shape.Geometry {
 		c = odf.RegularPolygon(n, el.A(odf.NSDraw, "concave") == "true", sharp)
 	}
 	if c == nil {
-		r.warn("custom-geometry", fmt.Sprintf("the outline of draw:%s is drawn as its bounding box", el.Name.Local))
+		r.warn("custom-geometry", warn.ContentUnsupported, fmt.Sprintf("the outline of draw:%s is drawn as its bounding box", el.Name.Local))
 		return nil
 	}
 	return &shape.Geometry{Custom: c}

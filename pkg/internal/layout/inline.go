@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // lineBox is one line box of an inline formatting context (CSS 2.1,
@@ -564,7 +565,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				return y
 			}
 			if len(s.lines) >= maxLinesPerBlock {
-				e.warnOnce(codeTooManyLines, fmt.Sprintf("a block of more than %d lines was cut short", maxLinesPerBlock), y)
+				e.warnOnce(warn.LimitReached, fmt.Sprintf("a block of more than %d lines was cut short", maxLinesPerBlock), y)
 				b.lines = s.lines
 				return y
 			}
@@ -944,7 +945,7 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 				it.text = sp.Text
 				s.glyphs += len(sp.Text.Glyphs)
 			} else if sp.Text != nil {
-				e.warnOnce(codeTooManyGlyphs, fmt.Sprintf("a line of more than %d glyphs was cut short", maxGlyphsPerLine), -1)
+				e.warnOnce(warn.LimitReached, fmt.Sprintf("a line of more than %d glyphs was cut short", maxGlyphsPerLine), -1)
 			}
 		case runTab:
 			it.tab = true

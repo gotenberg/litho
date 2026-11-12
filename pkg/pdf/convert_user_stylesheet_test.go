@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -86,11 +87,11 @@ func TestConvert_UserStylesheetPageSizeYieldsToThePaper(t *testing.T) {
 func TestConvert_UserStylesheetReportsWhatItLeavesOut(t *testing.T) {
 	t.Parallel()
 	_, rep := convertHTMLTest(t, convertFontDir(t), `<p>x`, WithUserStylesheet(`@import "missing.css"; p { color: red }`))
-	var got []string
+	var got []ConvertWarningCode
 	for _, w := range rep.Warnings {
 		got = append(got, w.Code)
 	}
-	if strings.Join(got, ",") != "css-import-failed" {
+	if !slices.Equal(got, []ConvertWarningCode{WarningResourceFailed}) {
 		t.Errorf("warnings %+v, want the import's failure, as a <style> element's", rep.Warnings)
 	}
 }

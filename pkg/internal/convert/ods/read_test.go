@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func near(a, b float64) bool { return math.Abs(a-b) < 0.01 }
@@ -346,7 +347,7 @@ func TestRead_Drawings(t *testing.T) {
 	if d := ds[2]; d.Chart != nil || d.Picture == nil || d.To != nil || !near(d.Height, 72) {
 		t.Errorf("formula replacement = %+v", d)
 	}
-	if !hasWarning(w, "shapes") {
+	if !hasWarning(w, warn.ContentUnsupported) {
 		t.Errorf("warnings = %+v", w)
 	}
 }
@@ -367,9 +368,9 @@ func TestRead_MetafileWarnings(t *testing.T) {
 	if n := len(doc.Sheets[0].Drawings); n != 0 {
 		t.Errorf("%d drawings, want none", n)
 	}
-	for _, code := range []string{"picture-wmf", "picture-emf", "picture-svm"} {
-		if !hasWarning(w, code) {
-			t.Errorf("no %s warning in %+v", code, w)
+	for _, format := range []string{"WMF", "EMF", "SVM"} {
+		if !hasWarningAbout(w, warn.PictureFormatUnsupported, format) {
+			t.Errorf("no %s warning about %s in %+v", warn.PictureFormatUnsupported, format, w)
 		}
 	}
 }
@@ -387,9 +388,9 @@ func TestRead_MetaAndWarnings(t *testing.T) {
 	if c := cellAt(doc.Sheets[0], 0, 0); c == nil || c.Value.Text != "v" || !c.MarkedInvalid {
 		t.Errorf("annotated cell = %+v", c)
 	}
-	for _, code := range []string{"comments", "validations", "named-expressions"} {
-		if !hasWarning(w, code) {
-			t.Errorf("no %s warning in %+v", code, w)
+	for _, about := range []string{"cell comments", "cell validations", "named ranges"} {
+		if !hasWarningAbout(w, warn.ContentUnsupported, about) {
+			t.Errorf("no %s warning about %s in %+v", warn.ContentUnsupported, about, w)
 		}
 	}
 }
@@ -411,7 +412,7 @@ func TestRead_Caps(t *testing.T) {
 	for _, r := range doc.Sheets[0].Rows {
 		n += len(r.Cells)
 	}
-	if n > sheet.MaxCells || !hasWarning(w, "too-many-cells") {
+	if n > sheet.MaxCells || !hasWarning(w, warn.LimitReached) {
 		t.Errorf("cells = %d, warnings %+v", n, w)
 	}
 }
@@ -481,7 +482,7 @@ func TestRead_TableGroupDepth(t *testing.T) {
 		if got := len(sh.Columns) == 1 && cellAt(sh, 0, 0) != nil; got != tc.read {
 			t.Errorf("depth %d: columns %+v, rows %+v, want read %v", tc.depth, sh.Columns, sh.Rows, tc.read)
 		}
-		if got := hasWarning(w, "table-group-depth"); got != tc.warning {
+		if got := hasWarning(w, warn.LimitReached); got != tc.warning {
 			t.Errorf("depth %d: warnings %+v, want a table-group-depth warning %v", tc.depth, w, tc.warning)
 		}
 	}
@@ -591,7 +592,7 @@ func TestRead_ChartPastACapStops(t *testing.T) {
 		t.Errorf("a chart past the depth cap: %v, want limits.ErrInputTooLarge", err)
 	}
 	_, w := read(t, pkg(`<office:document-content `+nsDecl+`><office:body>`))
-	if !hasWarning(w, "chart-malformed") {
+	if !hasWarning(w, warn.PartMalformed) {
 		t.Errorf("a chart that does not parse: warnings %+v, want chart-malformed", w)
 	}
 }

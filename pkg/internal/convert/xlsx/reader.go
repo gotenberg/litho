@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // nsMain is the SpreadsheetML namespace (ECMA-376 Part 1, 18; the Strict
@@ -313,8 +314,8 @@ func (r *reader) measureNormalFont() {
 }
 
 // warn records a warning, once per message.
-func (r *reader) warn(code, msg string) {
-	key := code + "\x00" + msg
+func (r *reader) warn(code warn.Code, msg string) {
+	key := code.String() + "\x00" + msg
 	if r.warned[key] {
 		return
 	}

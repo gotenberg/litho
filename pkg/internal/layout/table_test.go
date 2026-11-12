@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // tableOf returns the table data of the first table in the body of root,
@@ -319,7 +320,7 @@ func TestTable_SpanCaps(t *testing.T) {
 	res := run(t, doc(table(nil, row)), page(100, 100))
 	found := false
 	for _, w := range res.Warnings {
-		found = found || w.Code == codeTableTooLarge
+		found = found || w.Code == warn.LimitReached
 	}
 	if !found {
 		t.Error("no warning for the cells past the column cap")
@@ -410,9 +411,7 @@ func TestTable_TallRowOverflows(t *testing.T) {
 	root := doc(table(nil, tr(nil, td(mods(height(80), bg(blue)), "")), tr(nil, td(mods(height(10)), "b"))))
 	res := run(t, root, page(20, 50))
 	for _, w := range res.Warnings {
-		if w.Code == codeClipped {
-			t.Errorf("warning %q, want none: the row overflows, it is not clipped", w.Message)
-		}
+		t.Errorf("warning %q, want none: the row overflows, it is not clipped", w.Message)
 	}
 	if len(res.Pages) != 2 {
 		t.Fatalf("%d pages, want 2", len(res.Pages))

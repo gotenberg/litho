@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxStyleRecords caps the entries of each stylesheet table (number
@@ -141,7 +142,7 @@ func (r *reader) readStyles(main string) error {
 	root, err := r.pkg.ParseXML(r.ctx, name, understood)
 	if err != nil {
 		if isMalformed(err) {
-			r.warn("malformed-part", fmt.Sprintf("the styles part does not parse: %v", err))
+			r.warn(warn.PartMalformed, fmt.Sprintf("the styles part does not parse: %v", err))
 			return nil
 		}
 		return err
@@ -480,7 +481,7 @@ func (r *reader) fill(e *ooxml.Element) sheet.Fill {
 			return sheet.Fill{}
 		}
 		sort.SliceStable(stops, func(i, j int) bool { return stops[i].pos < stops[j].pos })
-		r.warn("approximated", "a gradient fill is drawn as the mean of its first two colours")
+		r.warn(warn.ContentUnsupported, "a gradient fill is drawn as the mean of its first two colours")
 		c := stops[0].c
 		if len(stops) > 1 && stops[1].pos != stops[0].pos {
 			c = mix(c, stops[1].c, 0x40)

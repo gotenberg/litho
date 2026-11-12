@@ -12,6 +12,7 @@ import (
 	budget "github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // Convert reads the CSV file src holds and lays it out as a paged
@@ -113,18 +114,20 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 		return nil, nil, err
 	}
 	var warnings []typeset.Warning
-	warn := func(code, msg string) { warnings = append(warnings, typeset.Warning{Code: code, Message: msg}) }
+	report := func(code warn.Code, msg string) {
+		warnings = append(warnings, typeset.Warning{Code: code, Message: msg})
+	}
 	if lim.rows {
-		warn("too-many-rows", fmt.Sprintf("rows past %d are not read", maxRows))
+		report(warn.LimitReached, fmt.Sprintf("rows past %d are not read", maxRows))
 	}
 	if lim.columns {
-		warn("too-many-columns", fmt.Sprintf("fields past %d in a row are not read", maxColumns))
+		report(warn.LimitReached, fmt.Sprintf("fields past %d in a row are not read", maxColumns))
 	}
 	if lim.bytes {
-		warn("field-too-long", fmt.Sprintf("fields are cut at %d bytes", maxFieldBytes))
+		report(warn.LimitReached, fmt.Sprintf("fields are cut at %d bytes", maxFieldBytes))
 	}
 	if lim.cells {
-		warn("too-many-cells", fmt.Sprintf("fields past %d are not read", maxCells))
+		report(warn.LimitReached, fmt.Sprintf("fields past %d are not read", maxCells))
 	}
 	year := fallbackYear
 	if !printDate.IsZero() {
@@ -193,7 +196,7 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 		}
 	}
 	if undated {
-		warn("date-without-year", fmt.Sprintf("a date without a year takes %d, not the current year", fallbackYear))
+		report(warn.ContentUnsupported, fmt.Sprintf("a date without a year takes %d, not the current year", fallbackYear))
 	}
 	sh.Columns = cols.widths(ctx, fonts)
 	return &sheet.Document{Default: def, Sheets: []*sheet.Sheet{sh}}, warnings, nil

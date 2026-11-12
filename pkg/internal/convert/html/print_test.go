@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // conv converts src with the real layout engine and checks the document
@@ -197,7 +198,7 @@ func TestConvert_ScaleWarnsPastThePageLimit(t *testing.T) {
 	doc := conv(t, `<style>@page { size: 10000pt }</style><p>x`, Options{Scale: 0.1, PreferCSSPageSize: true})
 	var msgs []string
 	for _, w := range doc.Warnings {
-		if w.Code == CodePageBox {
+		if w.Code == warn.PageSetupUnsupported {
 			msgs = append(msgs, w.Message)
 		}
 	}

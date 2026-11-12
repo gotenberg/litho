@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // handoutMaster reads the presentation's handout master into doc
@@ -33,13 +34,13 @@ func (r *reader) handoutMaster(root *ooxml.Element, doc *slides.Document) error 
 	rid, _ := id.AttrNS(ooxml.NSR, "id")
 	rel, ok := r.pkg.RelationshipByID(r.ctx, r.main, rid)
 	if !ok || rel.External || rel.Type != relHandoutMaster || !r.pkg.Has(rel.Target) {
-		r.warn("malformed-part", fmt.Sprintf("handout master %s is missing and left out", rid))
+		r.warn(warn.PartMalformed, fmt.Sprintf("handout master %s is missing and left out", rid))
 		return nil
 	}
 	hm, err := r.master(rel.Target)
 	if err != nil {
 		if isMalformed(err) {
-			r.warn("malformed-part", fmt.Sprintf("the handout master %s does not parse and is left out: %v", rel.Target, err))
+			r.warn(warn.PartMalformed, fmt.Sprintf("the handout master %s does not parse and is left out: %v", rel.Target, err))
 			return nil
 		}
 		return err

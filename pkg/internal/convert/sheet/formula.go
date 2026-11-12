@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxFormulaLen caps the characters of a formula evaluated. Anti-DoS
@@ -1030,7 +1031,7 @@ func (b *builder) applyFormulas(doc *Document) (*Document, error) {
 		if len(names) > 0 {
 			msg += " (" + strings.Join(names, ", ") + ")"
 		}
-		b.warn(CodeFormula, msg)
+		b.warn(warn.ContentUnsupported, msg)
 	}
 	if e.err != nil {
 		return nil, e.err

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 const cascadeDoc = `<!doctype html>
@@ -169,10 +171,13 @@ func TestCompute_Deterministic(t *testing.T) {
 			t.Errorf("style of <%s> differs", n.Data)
 		}
 	}
-	for _, want := range []struct{ code, part string }{
-		{"unsupported-css-value", "conic-gradient"},
-		{"unsupported-css-value", "display: contents"},
-		{"unsupported-css-property", `"foo"`},
+	for _, want := range []struct {
+		code warn.Code
+		part string
+	}{
+		{warn.CSSUnsupported, "conic-gradient"},
+		{warn.CSSUnsupported, "display: contents"},
+		{warn.CSSUnsupported, `"foo"`},
 	} {
 		if !hasWarning(a.Warnings(), want.code, want.part) {
 			t.Errorf("no %s warning about %s in %v", want.code, want.part, a.Warnings())

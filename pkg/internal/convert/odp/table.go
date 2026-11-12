@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // tableRow is one table:table-row read, before the columns are known.
@@ -80,7 +81,7 @@ func (r *reader) table(t *odf.Element, box typeset.Rect, pc *pageCtx) *slides.Ta
 		budget = 0
 	}
 	if budget <= 0 {
-		r.warn("table-cells", fmt.Sprintf("table cells past %d are not read", maxTableCells))
+		r.warn("table-cells", warn.LimitReached, fmt.Sprintf("table cells past %d are not read", maxTableCells))
 	}
 	if len(rows) == 0 {
 		return nil

@@ -13,6 +13,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // collector parses the document's stylesheets. It lives for one [Convert]
@@ -166,7 +167,7 @@ func (c *collector) parse(ctx context.Context, body []byte, u, media, name strin
 			if name == "" {
 				name = "stylesheet " + displayURL(u)
 			}
-			c.warn("css-limit", fmt.Sprintf("the %s was cut short: %v", name, displayURL(err.Error())))
+			c.warn(warn.LimitReached, fmt.Sprintf("the %s was cut short: %v", name, displayURL(err.Error())))
 			return s
 		}
 		// The only other error is ctx's, which the conversion returns at
@@ -177,7 +178,7 @@ func (c *collector) parse(ctx context.Context, body []byte, u, media, name strin
 }
 
 // warn records a warning.
-func (c *collector) warn(code, msg string) {
+func (c *collector) warn(code warn.Code, msg string) {
 	c.warnings = append(c.warnings, typeset.Warning{Code: code, Message: msg})
 }
 

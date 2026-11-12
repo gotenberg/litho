@@ -17,6 +17,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // defaultFontSize is the size of a run whose style gives none: Impress's
@@ -223,7 +224,7 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box typeset.Rect)
 	inner := insetRect(shape.TextRect(g, box), body.Insets)
 	vertical := body.Vertical.Vertical()
 	if body.Vertical == css.VerticalLR {
-		b.warn(CodeVertical, "vertical text with lines from left to right is laid out as from right to left")
+		b.warn(warn.ContentUnsupported, "vertical text with lines from left to right is laid out as from right to left")
 	}
 	lw, lh := inner.Width, inner.Height
 	if vertical {
@@ -601,7 +602,7 @@ func scaledSize(s, k float64) float64 {
 func (b *builder) layoutBody(body *TextBody, w, h float64, f fit) *laidBody {
 	paras := body.Paragraphs
 	if len(paras) > maxParagraphs {
-		b.warn(CodeText, fmt.Sprintf("a text body has more than %d paragraphs; the rest are left out", maxParagraphs))
+		b.warn(warn.LimitReached, fmt.Sprintf("a text body has more than %d paragraphs; the rest are left out", maxParagraphs))
 		paras = paras[:maxParagraphs]
 	}
 	root := css.Initial()
@@ -635,7 +636,7 @@ func (b *builder) layoutBody(body *TextBody, w, h float64, f fit) *laidBody {
 	})
 	if err != nil {
 		if !errors.Is(err, b.ctx.Err()) {
-			b.warn(CodeText, "a text body could not be laid out: "+err.Error())
+			b.warn(warn.TextNotLaidOut, "a text body could not be laid out: "+err.Error())
 		}
 		return nil
 	}
@@ -920,7 +921,7 @@ func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, number int, budget *int) *layout.Node {
 	runs := p.Runs
 	if len(runs) > maxRuns {
-		b.warn(CodeText, fmt.Sprintf("a paragraph has more than %d runs; the rest are left out", maxRuns))
+		b.warn(warn.LimitReached, fmt.Sprintf("a paragraph has more than %d runs; the rest are left out", maxRuns))
 		runs = runs[:maxRuns]
 	}
 	// The style the line heights and the bullet follow: the largest run's,
@@ -1057,7 +1058,7 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 			continue
 		}
 		if utf8.RuneCountInString(s) > *budget {
-			b.warn(CodeText, fmt.Sprintf("a text body has more than %d characters; the rest are left out", maxBodyText))
+			b.warn(warn.LimitReached, fmt.Sprintf("a text body has more than %d characters; the rest are left out", maxBodyText))
 			break
 		}
 		*budget -= utf8.RuneCountInString(s)
@@ -1170,7 +1171,7 @@ func (b *builder) dateText(r *Run) string {
 	}
 	f, err := numfmt.Parse(code)
 	if err != nil {
-		b.warn(CodeText, "the field format "+quote(code)+" is not understood; the default one shows")
+		b.warn(warn.ValueFormatUnsupported, "the field format "+quote(code)+" is not understood; the default one shows")
 		if r.Field == FieldTime {
 			f, err = numfmt.Parse(defaultTimeFormat)
 		} else {

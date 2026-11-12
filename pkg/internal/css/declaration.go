@@ -3,15 +3,17 @@ package css
 import (
 	"fmt"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // Warning is one construct of a stylesheet or a document the cascade did
 // not apply as written.
 type Warning struct {
-	// Code is a stable kebab-case identifier: unsupported-css-property,
-	// unsupported-css-value, invalid-css-value, unsupported-css-selector,
-	// unsupported-css-at-rule, css-import-failed or css-limit.
-	Code string
+	// Code names the kind of construct: [warn.CSSUnsupported],
+	// [warn.CSSInvalid], [warn.ResourceFailed] for an @import that does not
+	// load, or [warn.LimitReached] past a cap of the cascade.
+	Code warn.Code
 	// Message names the construct and says what was done instead.
 	Message string
 }
@@ -43,7 +45,7 @@ func (w *warnings) add(x Warning) {
 func (w *warnings) result() []Warning {
 	out := append([]Warning(nil), w.list...)
 	if w.dropped > 0 {
-		out = append(out, Warning{Code: "css-limit", Message: fmt.Sprintf("%d more CSS warnings were dropped", w.dropped)})
+		out = append(out, Warning{Code: warn.LimitReached, Message: fmt.Sprintf("%d more CSS warnings were dropped", w.dropped)})
 	}
 	return out
 }
@@ -101,7 +103,7 @@ type declCtx struct {
 	quiet bool
 }
 
-func (c *declCtx) warn(code, format string, args ...any) {
+func (c *declCtx) warn(code warn.Code, format string, args ...any) {
 	if c.quiet {
 		return
 	}
@@ -156,7 +158,7 @@ func (c *declCtx) declare(name string, value []token, important bool) Declaratio
 	d := Declaration{Property: name, Important: important}
 	if !knownProperty(name) {
 		if !strings.HasPrefix(name, "-") && !silentProperties[name] {
-			c.warn("unsupported-css-property", "property %q is not supported and was ignored", name)
+			c.warn(warn.CSSUnsupported, "property %q is not supported and was ignored", name)
 		}
 		return d
 	}
@@ -171,9 +173,9 @@ func (c *declCtx) declare(name string, value []token, important bool) Declaratio
 	}
 	if !ok {
 		if mixedCalc(value) {
-			c.warn("invalid-css-value", "%q: a calc() mixing lengths and percentages cannot be computed here and was ignored", name)
+			c.warn(warn.CSSInvalid, "%q: a calc() mixing lengths and percentages cannot be computed here and was ignored", name)
 		} else {
-			c.warn("invalid-css-value", "invalid value for %q was ignored", name)
+			c.warn(warn.CSSInvalid, "invalid value for %q was ignored", name)
 		}
 		return d
 	}

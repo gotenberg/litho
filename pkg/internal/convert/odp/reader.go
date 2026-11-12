@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // The caps of one presentation.
@@ -117,19 +118,25 @@ func newReader(ctx context.Context, pkg *odf.Package, fonts *text.Fonts) *reader
 	return r
 }
 
-// warn records a warning once per code.
-func (r *reader) warn(code, msg string) {
-	r.warnOnce(code, code, msg)
-}
-
-// warnOnce records a warning once per key: a code a document's element or
-// style names several constructs under, each warned of once.
-func (r *reader) warnOnce(key, code, msg string) {
-	if r.warned[key] {
+// warn records a warning once per construct: what is a fixed word that
+// names it, or one with the name of the element or style it reports, never
+// other data of the document, which goes in msg. Several constructs share
+// a code, each warned of once.
+func (r *reader) warn(what string, code warn.Code, msg string) {
+	if r.warned[what] {
 		return
 	}
-	r.warned[key] = true
+	r.warned[what] = true
 	r.warnings = append(r.warnings, typeset.Warning{Code: code, Message: msg})
+}
+
+// chartWarning returns the construct a chart's warning of code is warned
+// of once as: its missing values, or the rest of what it does not draw.
+func chartWarning(code warn.Code) string {
+	if code == warn.ChartNoCache {
+		return "chart-no-cache"
+	}
+	return "chart-unsupported"
 }
 
 // tickSteps is how many reading steps pass between two checks of ctx.
@@ -187,7 +194,7 @@ func (r *reader) document(body *odf.Element) *slides.Document {
 				r.dates[n] = el
 			}
 		case el.Is(odf.NSPresentation, "show"):
-			r.warn("custom-show", "custom slide shows are not applied: every slide prints in document order")
+			r.warn("custom-show", warn.ContentUnsupported, "custom slide shows are not applied: every slide prints in document order")
 		}
 	}
 	first := r.masterOf(nil)
@@ -214,7 +221,7 @@ func (r *reader) document(body *odf.Element) *slides.Document {
 	}
 	for i, pg := range pages {
 		if i >= maxSlides {
-			r.warn("too-many-slides", fmt.Sprintf("slides past %d are not read", maxSlides))
+			r.warn("too-many-slides", warn.LimitReached, fmt.Sprintf("slides past %d are not read", maxSlides))
 			break
 		}
 		if !r.tick() {

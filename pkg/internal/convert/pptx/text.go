@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // The defaults of a text body (ECMA-376 Part 1, 21.1.2.1.1 bodyPr: insets
@@ -231,7 +232,7 @@ func (r *reader) textBody(c *shapeCtx, sc []*ooxml.Element, p placeholder, ref *
 	}
 	body := bodyProps(bodies)
 	if w := bodies.child("prstTxWarp"); w != nil && attr(w, "prst") != "textNoShape" {
-		r.warn("approximated", "warped text (WordArt) is drawn unwarped")
+		r.warn(warn.ContentUnsupported, "warped text (WordArt) is drawn unwarped")
 	}
 	body.Paragraphs = r.paragraphs(tb, ts)
 	return body
@@ -334,11 +335,11 @@ func (r *reader) paragraphs(tb *ooxml.Element, ts *textStyles) []slides.Paragrap
 			continue
 		}
 		if len(out) >= maxParagraphs {
-			r.warn("too-large", fmt.Sprintf("a text body holds more than %d paragraphs: the rest are left out", maxParagraphs))
+			r.warn(warn.LimitReached, fmt.Sprintf("a text body holds more than %d paragraphs: the rest are left out", maxParagraphs))
 			break
 		}
 		if r.runes > maxRunes {
-			r.warn("too-large", fmt.Sprintf("the presentation holds more than %d characters of text: the rest are left out", maxRunes))
+			r.warn(warn.LimitReached, fmt.Sprintf("the presentation holds more than %d characters of text: the rest are left out", maxRunes))
 			break
 		}
 		out = append(out, r.paragraph(p, ts))
@@ -413,7 +414,7 @@ func (r *reader) paragraph(p *ooxml.Element, ts *textStyles) slides.Paragraph {
 	out.Style = r.runStyle(runChain(p.Child(ooxml.NSA, "endParaRPr"), pc), ts.sc)
 	for _, k := range p.Kids() {
 		if len(out.Runs) >= maxRuns {
-			r.warn("too-large", fmt.Sprintf("a paragraph holds more than %d runs: the rest are left out", maxRuns))
+			r.warn(warn.LimitReached, fmt.Sprintf("a paragraph holds more than %d runs: the rest are left out", maxRuns))
 			break
 		}
 		var run slides.Run

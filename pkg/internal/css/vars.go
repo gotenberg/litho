@@ -3,6 +3,8 @@ package css
 import (
 	"maps"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxVarDepth caps the chain of custom properties referring to one
@@ -116,7 +118,7 @@ func (cs *computeState) substitute(l []token, lookup func(string) ([]token, bool
 			}
 			*budget -= len(v)
 			if *budget < 0 || !cs.m.charge(len(v)) {
-				cs.warns.add(Warning{Code: "css-limit", Message: "a var() substitution grew past the size limit and was dropped"})
+				cs.warns.add(Warning{Code: warn.LimitReached, Message: "a var() substitution grew past the size limit and was dropped"})
 				return nil, false
 			}
 			out = append(out, v...)
@@ -131,7 +133,7 @@ func (cs *computeState) substitute(l []token, lookup func(string) ([]token, bool
 		}
 		*budget--
 		if *budget < 0 {
-			cs.warns.add(Warning{Code: "css-limit", Message: "a var() substitution grew past the size limit and was dropped"})
+			cs.warns.add(Warning{Code: warn.LimitReached, Message: "a var() substitution grew past the size limit and was dropped"})
 			return nil, false
 		}
 		out = append(out, t)
@@ -157,7 +159,7 @@ func (cs *computeState) substituteDecl(d *Declaration, vars map[string][]token) 
 		cs.warns.add(w)
 	}
 	if !ok {
-		cs.warns.add(Warning{Code: "invalid-css-value", Message: "a var() value for \"" + d.Property + "\" is invalid after substitution; the property computes as unset"})
+		cs.warns.add(Warning{Code: warn.CSSInvalid, Message: "a var() value for \"" + d.Property + "\" is invalid after substitution; the property computes as unset"})
 		return nil
 	}
 	return entries

@@ -34,6 +34,6 @@
 // # Warnings
 //
 // Each character no indexed face covers is reported once, as a
-// "missing-glyph" warning naming it and the families asked for, and a
-// source line laid out in pieces as a "line-split" warning.
+// [warn.MissingGlyph] warning naming it and the families asked for, and a
+// source line laid out in pieces as a [warn.LimitReached] warning.
 package plaintext

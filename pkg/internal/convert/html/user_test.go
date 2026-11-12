@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestPrepare_UserStylesheetsCascadeBetweenEngineAndDocument(t *testing.T) {
@@ -63,13 +64,13 @@ func TestPrepare_UserStylesheetHeldToTheResourceCaps(t *testing.T) {
 	if got := byID(t, p.root, "x").Style.Margin[css.Top]; got != css.Pts(5.25) {
 		t.Errorf("the next user stylesheet did not apply: margin-top %+v", got)
 	}
-	if !hasWarning(p.warnings, CodeResourceLimit, "user stylesheet 1 was left out") {
+	if !hasWarning(p.warnings, warn.LimitReached, "user stylesheet 1 was left out") {
 		t.Errorf("warnings %+v, want the sheet left out", p.warnings)
 	}
 
 	r := newResources(nil)
 	r.read = maxTotalResourceBytes - 4
-	if err := r.admit(context.Background(), 5); warningCode(err) != CodeResourceLimit {
+	if err := r.admit(context.Background(), 5); warningCode(err) != warn.LimitReached {
 		t.Errorf("admit past the total cap: %v", err)
 	}
 

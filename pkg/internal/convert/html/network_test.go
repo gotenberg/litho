@@ -12,6 +12,7 @@ import (
 	"testing/fstest"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // testServer serves routes, each a content type and a body, counting
@@ -121,15 +122,17 @@ func TestPrepare_ReportsHTTPFailures(t *testing.T) {
 		"/fav.ico":   {ctype: "image/x-icon", body: []byte{0, 0, 1, 0, 1, 0, 16, 16}},
 	})
 	for _, tc := range []struct {
-		src, code, sub string
+		src  string
+		code warn.Code
+		sub  string
 	}{
-		{`<img src="missing.png" alt=a>`, CodeResourceHTTPStatus, "404"},
-		{`<img src="gone.png" alt=a>`, CodeResourceHTTPStatus, "410"},
-		{`<link rel=stylesheet href="boom.css">`, CodeResourceHTTPStatus, "500"},
-		{`<link rel=stylesheet href="plain.css">`, CodeResourceFailed, "text/plain"},
-		{`<img src="pic.avif" alt=a>`, CodeImageFormatUnsupported, "AVIF"},
-		{`<img src="fav.ico" alt=a>`, CodeImageFormatUnsupported, "ICO"},
-		{`<img src="file:///etc/passwd" alt=a>`, CodeResourceRefused, "file:"},
+		{`<img src="missing.png" alt=a>`, warn.ResourceHTTPStatus, "404"},
+		{`<img src="gone.png" alt=a>`, warn.ResourceHTTPStatus, "410"},
+		{`<link rel=stylesheet href="boom.css">`, warn.ResourceHTTPStatus, "500"},
+		{`<link rel=stylesheet href="plain.css">`, warn.ResourceFailed, "text/plain"},
+		{`<img src="pic.avif" alt=a>`, warn.PictureFormatUnsupported, "AVIF"},
+		{`<img src="fav.ico" alt=a>`, warn.PictureFormatUnsupported, "ICO"},
+		{`<img src="file:///etc/passwd" alt=a>`, warn.ResourceRefused, "file:"},
 	} {
 		p := prep(t, tc.src, Options{BaseURL: ts.URL + "/", HTTPClient: ts.Client()})
 		if !hasWarning(p.warnings, tc.code, tc.sub) {
@@ -145,7 +148,7 @@ func TestPrepare_ReportsHTTPFailures(t *testing.T) {
 	// Without a client nothing is fetched.
 	hits := ts.hits.Load()
 	p := prep(t, `<link rel=stylesheet href="a.css"><img src="a.png" alt=a>`, Options{BaseURL: ts.URL + "/"})
-	if got := codes(p.warnings); len(got) != 2 || got[0] != CodeResourceNoNetwork || got[1] != CodeResourceNoNetwork {
+	if got := codes(p.warnings); len(got) != 2 || got[0] != warn.ResourceNoNetwork.String() || got[1] != warn.ResourceNoNetwork.String() {
 		t.Errorf("no client: %+v", p.warnings)
 	}
 	if ts.hits.Load() != hits {
@@ -173,7 +176,7 @@ func TestResources_NetworkCaps(t *testing.T) {
 	ctx := context.Background()
 	r := newResources(nil)
 	r.client = ts.Client()
-	if _, err := r.fetch(ctx, ts.URL+"/huge"); warningCode(err) != CodeResourceLimit {
+	if _, err := r.fetch(ctx, ts.URL+"/huge"); warningCode(err) != warn.LimitReached {
 		t.Errorf("huge: %v", err)
 	}
 	for i := range maxNetworkRequests - 1 {
@@ -182,7 +185,7 @@ func TestResources_NetworkCaps(t *testing.T) {
 		}
 	}
 	_, err := r.fetch(ctx, ts.URL+"/one-more")
-	if warningCode(err) != CodeResourceLimit || !strings.Contains(err.Error(), "HTTP requests") {
+	if warningCode(err) != warn.LimitReached || !strings.Contains(err.Error(), "HTTP requests") {
 		t.Errorf("request past the cap: %v", err)
 	}
 	// A URL already fetched still answers from the cache.
@@ -193,7 +196,7 @@ func TestResources_NetworkCaps(t *testing.T) {
 	r = newResources(nil)
 	r.client = ts.Client()
 	r.read = maxTotalResourceBytes - 10
-	if _, err := r.fetch(ctx, ts.URL+"/x"); warningCode(err) != CodeResourceLimit {
+	if _, err := r.fetch(ctx, ts.URL+"/x"); warningCode(err) != warn.LimitReached {
 		t.Errorf("past the budget: %v", err)
 	}
 	// A cancelled context stops the fetch.

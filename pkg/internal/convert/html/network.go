@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxNetworkRequests caps the HTTP requests one conversion sends through
@@ -19,19 +21,6 @@ import (
 // stylesheets, fonts and pictures; a product catalogue a few hundred.
 // A URL named again is fetched once.
 const maxNetworkRequests = 512
-
-// Warning codes of the network resources.
-const (
-	// CodeResourceNoNetwork flags an http or https reference left out
-	// because no [Options.HTTPClient] is given.
-	CodeResourceNoNetwork = "resource-no-network"
-	// CodeResourceHTTPStatus flags an http or https resource whose server
-	// answered with a status outside 2xx; the message names the code.
-	CodeResourceHTTPStatus = "resource-http-status"
-	// CodeImageFormatUnsupported flags a picture in a format Chromium
-	// draws and litho does not decode: AVIF, JPEG XL, ICO and CUR.
-	CodeImageFormatUnsupported = "image-format-unsupported"
-)
 
 // Errors of the network resources. They end up in warning messages.
 var (
@@ -49,23 +38,23 @@ func (e *httpStatusError) Error() string {
 	return fmt.Sprintf("the server answered %d %s", e.code, http.StatusText(e.code))
 }
 
-// networkCode returns the warning code of a network error, "" for an
+// networkCode returns the warning code of a network error, false for an
 // error that is not one.
-func networkCode(err error) string {
+func networkCode(err error) (warn.Code, bool) {
 	var status *httpStatusError
 	switch {
 	case errors.Is(err, errNoNetwork):
-		return CodeResourceNoNetwork
+		return warn.ResourceNoNetwork, true
 	case errors.As(err, &status):
-		return CodeResourceHTTPStatus
+		return warn.ResourceHTTPStatus, true
 	case errors.Is(err, errFileURL):
-		return CodeResourceRefused
+		return warn.ResourceRefused, true
 	case errors.Is(err, errTooManyRequests):
-		return CodeResourceLimit
+		return warn.LimitReached, true
 	case errors.Is(err, errFormatUnsupported):
-		return CodeImageFormatUnsupported
+		return warn.PictureFormatUnsupported, true
 	}
-	return ""
+	return warn.Code{}, false
 }
 
 // isNetworkURL reports an http or https URL, the schemes

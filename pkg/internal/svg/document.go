@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // Errors [Parse] and [FromNode] return.
@@ -266,7 +267,7 @@ func newDocument(ctx context.Context, root *html.Node, opts Options, image bool)
 	}
 	walk(root, 0)
 	if count > maxElements {
-		d.warn("svg-limit", fmt.Sprintf("the drawing holds more than %d elements; the rest were left out", maxElements))
+		d.warn(warn.LimitReached, fmt.Sprintf("the drawing holds more than %d elements; the rest were left out", maxElements))
 	}
 	for _, s := range sheets {
 		d.rules = append(d.rules, parseSheet(s, maxStyleRules-len(d.rules))...)
@@ -413,7 +414,7 @@ func (d *Document) render(ctx context.Context, w, h float64) ([]typeset.Fragment
 }
 
 // warn records a warning once per message.
-func (d *Document) warn(code, msg string) {
+func (d *Document) warn(code warn.Code, msg string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.warned[msg] || len(d.warns) >= maxWarnings {

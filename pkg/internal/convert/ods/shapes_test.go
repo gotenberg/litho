@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestParseTransform(t *testing.T) {
@@ -181,7 +182,7 @@ func TestRead_ShapeGroupDepth(t *testing.T) {
 	if len(ds) != 1 || ds[0].Name != "kept" {
 		t.Errorf("drawings %+v, want the shape kept alone", ds)
 	}
-	if !hasWarning(w, "group-depth") {
+	if !hasWarning(w, warn.LimitReached) {
 		t.Errorf("no group-depth warning in %+v", w)
 	}
 }

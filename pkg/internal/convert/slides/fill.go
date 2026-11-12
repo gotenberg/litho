@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxTiles caps the copies of a tiled picture drawn over one area.
@@ -93,7 +94,7 @@ func centreRadial(frags []typeset.Fragment, box typeset.Rect, cx, cy float64) {
 // tile is set.
 func (b *builder) pictureFill(pic *layout.Picture, tile bool, box typeset.Rect) []typeset.Fragment {
 	if pic == nil || (pic.Source == nil && pic.Vector == nil) {
-		b.warn(CodePicture, "a picture fill has no picture and paints nothing")
+		b.warn(warn.PictureMissing, "a picture fill has no picture and paints nothing")
 		return nil
 	}
 	if !tile || !numeric.Positive(pic.Width) || !numeric.Positive(pic.Height) {
@@ -102,7 +103,7 @@ func (b *builder) pictureFill(pic *layout.Picture, tile bool, box typeset.Rect) 
 	nx := math.Ceil(box.Width / pic.Width)
 	ny := math.Ceil(box.Height / pic.Height)
 	if nx*ny > maxTiles {
-		b.warn(CodePicture, "a tiled picture fill needs too many copies and is stretched instead")
+		b.warn(warn.LimitReached, "a tiled picture fill needs too many copies and is stretched instead")
 		return b.picture(pic, box)
 	}
 	var out []typeset.Fragment
@@ -165,7 +166,7 @@ func (b *builder) patternFill(f *Fill, box typeset.Rect, ops []typeset.PathOp) [
 	h.angle += 10 * b.hatchTurn
 	lines := hatchOps(h, box)
 	if !ok || lines == nil {
-		b.warn(CodePattern, "the pattern "+quote(f.Pattern)+" is drawn as its foreground at half opacity")
+		b.warn(warn.ContentUnsupported, "the pattern "+quote(f.Pattern)+" is drawn as its foreground at half opacity")
 		c := colorOf(f.Color)
 		c.A /= 2
 		return append(out, &typeset.Path{Ops: ops, Fill: &typeset.Fill{Color: c}})

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestSelectPages_KeepsTheOrderAndRenumbers(t *testing.T) {
@@ -25,7 +27,7 @@ func TestSelectPages_KeepsTheOrderAndRenumbers(t *testing.T) {
 			{Title: "One", Dest: Dest{Page: 1}, Kids: []Outline{{Title: "One.a", Dest: Dest{Page: 2}}, {Title: "One.b", Dest: Dest{Page: 3}}}},
 			{Title: "Four", Dest: Dest{Page: 4}},
 		}
-		doc.Warnings = []Warning{{Code: "a", Page: 1}, {Code: "b", Page: 3}, {Code: "c"}}
+		doc.Warnings = []Warning{{Code: warn.MissingGlyph, Message: "a", Page: 1}, {Code: warn.MissingGlyph, Message: "b", Page: 3}, {Code: warn.MissingGlyph, Message: "c"}}
 		return doc
 	}
 

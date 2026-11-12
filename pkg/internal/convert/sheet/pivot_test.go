@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // pivotSheet returns a sheet whose A1:C5 holds field1 (1, 1, 2, 2),
@@ -274,7 +275,7 @@ func TestApplyPivots_SourceNotASheet(t *testing.T) {
 	if out := b.pivotsOf(t, doc); out.Sheets[0] != doc.Sheets[0] {
 		t.Errorf("the sheet changed")
 	}
-	if len(b.warnings) != 1 || b.warnings[0].Code != CodePivot {
+	if len(b.warnings) != 1 || b.warnings[0].Code != warn.ContentUnsupported {
 		t.Errorf("warnings = %v", b.warnings)
 	}
 }

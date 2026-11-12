@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestConvert_TextAndStyles(t *testing.T) {
@@ -174,9 +175,9 @@ func TestConvert_UnknownElementWarningCode(t *testing.T) {
 	res := convertDoc(t, doc{body: `<text:p>a</text:p><text:frobnicate/><text:widget/><text:frobnicate/>`}.pack(t), office.Options{})
 	var msgs []string
 	for _, w := range res.Warnings {
-		if strings.HasPrefix(w.Code, "odt-unknown") {
-			if w.Code != "odt-unknown-element" {
-				t.Errorf("code %q, want odt-unknown-element", w.Code)
+		if strings.HasPrefix(w.Message, "the element ") {
+			if w.Code != warn.ContentUnsupported {
+				t.Errorf("code %q, want %s", w.Code, warn.ContentUnsupported)
 			}
 			msgs = append(msgs, w.Message)
 		}

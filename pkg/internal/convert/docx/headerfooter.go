@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxSubLayoutPages caps the pages of a header or footer laid out on its
@@ -56,7 +57,7 @@ func (p *pages) root(part string) *ooxml.Element {
 	r, err := p.d.part(part)
 	if err != nil {
 		if !p.d.stop(err) {
-			p.d.warn("malformed-part", "a header or footer does not parse and is left out")
+			p.d.warn(warn.PartMalformed, "a header or footer does not parse and is left out")
 		}
 		r = nil
 	}

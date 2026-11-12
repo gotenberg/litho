@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // image draws an image element styled st (SVG 1.1, 5.7): the raster
@@ -51,7 +52,7 @@ func (r *renderer) image(n *html.Node, st *style, s sink) {
 	if inner.alpha < 1 {
 		// An image carries no alpha of its own: a translucent one needs a
 		// group, which the nesting cap has run out of.
-		r.d.warn("svg-limit", "a translucent image nested too deep is drawn opaque")
+		r.d.warn(warn.LimitReached, "a translucent image nested too deep is drawn opaque")
 	}
 	img := &typeset.Image{Rect: rect, Source: pic.Source}
 	if par.slice && !par.none {
@@ -74,14 +75,14 @@ func (r *renderer) raster(ref string) *Raster {
 		return pic
 	}
 	if d.opts.Image == nil {
-		d.warn("svg-image", "image elements are not drawn: no image loader")
+		d.warn(warn.PictureUnreadable, "image elements are not drawn: no image loader")
 	} else {
 		p, err := d.opts.Image(r.ctx, ref)
 		switch {
 		case err != nil:
-			d.warn("svg-image", fmt.Sprintf("an image element was left out: %v", err))
+			d.warn(warn.PictureUnreadable, fmt.Sprintf("an image element was left out: %v", err))
 		case p == nil || p.Source == nil || !numeric.Positive(p.Width) || !numeric.Positive(p.Height):
-			d.warn("svg-image", "an image element was left out: the picture has no size")
+			d.warn(warn.PictureUnreadable, "an image element was left out: the picture has no size")
 		default:
 			pic = p
 		}

@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // The page Writer lays a document out on when it names no page layout:
@@ -247,7 +248,7 @@ func (f *pageFlow) buildGeom(mp *odf.MasterPage, left, first, hf bool) *pageGeom
 	}
 	pp := pl.Page
 	if va := pp.Get("style:vertical-align"); va != "" && va != "top" && va != "auto" {
-		f.b.warn("page-vertical-align", "a page's text is laid out from the top, not "+va)
+		f.b.warn("page-vertical-align", warn.PageSetupUnsupported, "a page's text is laid out from the top, not "+va)
 	}
 	g := &pageGeom{format: pp.Get("style:num-format"), mirrored: pl.PageUsage == "mirrored"}
 	if _, ok := pp.Lookup("style:num-format"); !ok {

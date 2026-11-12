@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestMarkerText_Styles(t *testing.T) {
@@ -157,7 +158,7 @@ func TestListMarkers_ImageFailureWarns(t *testing.T) {
 	}
 	found := false
 	for _, w := range res.Warnings {
-		found = found || w.Code == codeImage
+		found = found || w.Code == warn.PictureUnreadable
 	}
 	if !found {
 		t.Errorf("warnings %+v, want an image failure", res.Warnings)

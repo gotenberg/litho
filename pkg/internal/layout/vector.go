@@ -6,6 +6,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // typesetGroupDepth is the typeset model's bound on group nesting, 24,
@@ -97,7 +98,7 @@ func (e *engine) fitLeaf(f typeset.Fragment, depth int) typeset.Fragment {
 		return f
 	}
 	if 1+depth+depthOf([]typeset.Fragment{g}) > typesetGroupDepth {
-		e.warnOnce(codeGroupDepth, fmt.Sprintf("a vector picture under groups nested deeper than %d levels was left out", typesetGroupDepth-1-MaxVectorDepth), -1)
+		e.warnOnce(warn.LimitReached, fmt.Sprintf("a vector picture under groups nested deeper than %d levels was left out", typesetGroupDepth-1-MaxVectorDepth), -1)
 		return nil
 	}
 	return f
@@ -148,7 +149,7 @@ func (e *engine) vectorTiles(tiles []typeset.Rect, nodes int, y float64) []types
 	if len(tiles) <= limit {
 		return tiles
 	}
-	e.warn(codeBackgroundTiles, fmt.Sprintf("a vector background repeated past %d fragments was drawn %d times", maxVectorNodes, limit), y)
+	e.warn(warn.LimitReached, fmt.Sprintf("a vector background repeated past %d fragments was drawn %d times", maxVectorNodes, limit), y)
 	return tiles[:limit]
 }
 

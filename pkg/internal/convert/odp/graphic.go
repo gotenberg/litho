@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // The colours Impress's item pool paints with when no style gives one:
@@ -48,7 +49,7 @@ func (r *reader) opacity(p odf.Props) float64 {
 	}
 	if g := r.draw.Opacities[p.Get("draw:opacity-name")]; g != nil {
 		if g.StartValue != g.EndValue {
-			r.warn("opacity-gradient", "a transparency gradient is drawn as its mean opacity")
+			r.warn("opacity-gradient", warn.ContentUnsupported, "a transparency gradient is drawn as its mean opacity")
 		}
 		return (g.StartValue + g.EndValue) / 2
 	}
@@ -93,7 +94,7 @@ func (r *reader) fill(p odf.Props, def string) slides.Fill {
 			return slides.Fill{}
 		}
 		if alpha < 1 {
-			r.warn("bitmap-opacity", "the transparency of a picture fill is not applied")
+			r.warn("bitmap-opacity", warn.ContentUnsupported, "the transparency of a picture fill is not applied")
 		}
 		rep := p.Get("style:repeat")
 		if rep == "" {
@@ -135,7 +136,7 @@ func (r *reader) fill(p odf.Props, def string) slides.Fill {
 		if p.Get("draw:fill-hatch-solid") == "true" {
 			f.Background = color("draw:fill-color", poolFill)
 		}
-		r.warn("hatch", "hatches are drawn as the nearest preset pattern")
+		r.warn("hatch", warn.ContentUnsupported, "hatches are drawn as the nearest preset pattern")
 		return f
 	}
 	return slides.Fill{}
@@ -185,7 +186,7 @@ func (r *reader) gradient(g *odf.Gradient, alpha float64) *slides.Gradient {
 		out.Angle = axisAngle(g.Angle)
 	case "radial", "ellipsoid", "square", "rectangular":
 		if g.Style != "radial" {
-			r.warnOnce("gradient-"+g.Style, "gradient-style", g.Style+" gradients are drawn radial")
+			r.warn("gradient-"+g.Style, warn.ContentUnsupported, g.Style+" gradients are drawn radial")
 		}
 		out.Radial = true
 		out.CenterX, out.CenterY = g.CX, g.CY

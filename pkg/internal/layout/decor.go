@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // kappa places the control points of a cubic Bézier that approximates a
@@ -237,7 +238,7 @@ func addSides(a, b [4]float64) [4]float64 {
 func (e *engine) tiles(st *css.Style, pic *Picture, area, clip typeset.Rect, y float64) []typeset.Rect {
 	out, over := tileRects(st, pic, area, clip)
 	if over {
-		e.warn(codeBackgroundTiles, fmt.Sprintf("a background repeated more than %d times was drawn once", maxBackgroundTiles), y)
+		e.warn(warn.LimitReached, fmt.Sprintf("a background repeated more than %d times was drawn once", maxBackgroundTiles), y)
 	}
 	return out
 }

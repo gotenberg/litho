@@ -18,6 +18,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxNodes bounds the layout nodes one document builds: 4,000,000.
@@ -117,21 +118,22 @@ type heading struct {
 	label, text string
 }
 
-// warn records a warning once per code. The code is a fixed identifier,
-// never the document's data, which goes in msg.
-func (b *builder) warn(code, msg string) {
-	b.warnEach(code, "", msg)
+// warn records a warning once per construct: what is a fixed word that
+// names it, never the document's data, which goes in msg. Several
+// constructs share a code, each warned of once.
+func (b *builder) warn(what string, code warn.Code, msg string) {
+	b.warnEach(what, "", code, msg)
 }
 
-// warnEach records a warning once per code and key: once per element
-// name for a code that reports elements of any name.
-func (b *builder) warnEach(code, key, msg string) {
-	k := code + "\x00" + key
+// warnEach records a warning once per construct and key: once per element
+// name for a construct of elements of any name.
+func (b *builder) warnEach(what, key string, code warn.Code, msg string) {
+	k := what + "\x00" + key
 	if b.warned[k] {
 		return
 	}
 	b.warned[k] = true
-	b.warnings = append(b.warnings, typeset.Warning{Code: "odt-" + code, Message: msg})
+	b.warnings = append(b.warnings, typeset.Warning{Code: code, Message: msg})
 }
 
 // stop records err as the builder's error when it ends the conversion (see
@@ -372,7 +374,7 @@ func (b *builder) block(c *odf.Element, ctx *blockCtx) []*layout.Node {
 		}
 	}
 	if !c.IsText() && c.Name.Local != "" {
-		b.warnEach("unknown-element", c.Name.Local, fmt.Sprintf("the element %s is not drawn", c.Name.Local))
+		b.warnEach("unknown-element", c.Name.Local, warn.ContentUnsupported, fmt.Sprintf("the element %s is not drawn", c.Name.Local))
 	}
 	return nil
 }
@@ -433,7 +435,7 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 	applyText(st, t, false)
 	b.applyPara(st, p, t)
 	if p.dropCap != nil {
-		b.warn("drop-cap", "drop caps are drawn as the paragraph's first letters in line")
+		b.warn("drop-cap", warn.ContentUnsupported, "drop caps are drawn as the paragraph's first letters in line")
 	}
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "P", Lang: t.langTag()})
 	n.ID = b.paragraphID(el)
@@ -570,10 +572,10 @@ func (b *builder) spanText(t textState, name string) textState {
 // run returns the inline node of the text s in the text properties t.
 func (b *builder) run(s string, t textState) *layout.Node {
 	if t.outline {
-		b.warn("text-outline", "outlined text is drawn filled")
+		b.warn("text-outline", warn.ContentUnsupported, "outlined text is drawn filled")
 	}
 	if t.relief != "" {
-		b.warn("text-relief", "embossed and engraved text is approximated by a grey shadow")
+		b.warn("text-relief", warn.ContentUnsupported, "embossed and engraved text is approximated by a grey shadow")
 	}
 	changed := len(b.openChanges) > 0
 	if changed {
@@ -678,7 +680,7 @@ func (b *builder) inlineElement(c *odf.Element, t textState, out *[]*layout.Node
 			}
 		case "hidden-paragraph":
 		case "ruby":
-			b.warn("ruby", "ruby annotations are left out; the base text is drawn")
+			b.warn("ruby", warn.ContentUnsupported, "ruby annotations are left out; the base text is drawn")
 			b.inline(c.Child(odf.NSText, "ruby-base"), t, out, ws, depth)
 		case "conditional-text":
 			b.inline(c, t, out, ws, depth)

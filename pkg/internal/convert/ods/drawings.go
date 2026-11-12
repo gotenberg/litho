@@ -22,6 +22,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/svg"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxShapeGroupDepth bounds the nesting of draw:g shape groups read at
@@ -49,7 +50,7 @@ func (r *reader) drawing(ts *tableState, el *odf.Element, at *sheet.Anchor, dept
 		switch {
 		case el.Is(odf.NSDraw, "g"):
 			if depth >= maxShapeGroupDepth {
-				r.warn("group-depth", fmt.Sprintf("shape groups nested past %d levels are not drawn", maxShapeGroupDepth))
+				r.warn("group-depth", warn.LimitReached, fmt.Sprintf("shape groups nested past %d levels are not drawn", maxShapeGroupDepth))
 				return
 			}
 			for _, c := range el.Children {
@@ -58,16 +59,16 @@ func (r *reader) drawing(ts *tableState, el *odf.Element, at *sheet.Anchor, dept
 				}
 			}
 		case el.Is(odf.NSDraw, "control"):
-			r.warn("form-controls", "form controls are not drawn")
+			r.warn("form-controls", warn.FormWidgetOmitted, "form controls are not drawn")
 		case shapeElement(el):
 			r.shape(ts, el, at)
 		default:
-			r.warn("shapes", "drawing shapes of this kind are not drawn")
+			r.warn("shapes", warn.ContentUnsupported, "drawing shapes of this kind are not drawn")
 		}
 		return
 	}
 	if r.drawings >= maxDrawings {
-		r.warn("too-many-drawings", fmt.Sprintf("pictures and charts past %d are not drawn", maxDrawings))
+		r.warn("too-many-drawings", warn.LimitReached, fmt.Sprintf("pictures and charts past %d are not drawn", maxDrawings))
 		return
 	}
 	d := sheet.Drawing{Name: el.A(odf.NSDraw, "name"), Alt: odf.Describe(el), Decorative: r.decorative(el), Unbounded: true}
@@ -78,9 +79,9 @@ func (r *reader) drawing(ts *tableState, el *odf.Element, at *sheet.Anchor, dept
 		img := el.Child(odf.NSDraw, "image")
 		if img == nil {
 			if el.Child(odf.NSDraw, "text-box") != nil {
-				r.warn("text-boxes", "text boxes are not drawn")
+				r.warn("text-boxes", warn.ContentUnsupported, "text boxes are not drawn")
 			} else if el.Child(odf.NSDraw, "object") == nil && el.Child(odf.NSDraw, "object-ole") != nil {
-				r.warn("ole-objects", "embedded OLE objects are not drawn")
+				r.warn("ole-objects", warn.ContentUnsupported, "embedded OLE objects are not drawn")
 			}
 			return
 		}
@@ -159,11 +160,11 @@ func (r *reader) chartOf(dir string, inline *odf.Element) *chart.Chart {
 		if r.stop(err) {
 			return nil
 		}
-		r.warn("chart-malformed", "a chart does not parse and is left out: "+err.Error())
+		r.warn("chart-malformed", warn.PartMalformed, "a chart does not parse and is left out: "+err.Error())
 		return nil
 	}
 	for _, w := range c.Warnings {
-		r.warn(w.Code, w.Message)
+		r.warn(chartWarning(w.Code), w.Code, w.Message)
 	}
 	c.Resolver = r.rangeValues
 	return c
@@ -247,23 +248,23 @@ func (r *reader) decodePicture(img *odf.Element) *layout.Picture {
 	data, err := r.pkg.PictureBytes(r.ctx, img)
 	switch {
 	case errors.Is(err, odf.ErrExternalPicture):
-		r.warn("external-picture", "a linked picture outside the package is not fetched")
+		r.warn("external-picture", warn.PictureMissing, "a linked picture outside the package is not fetched")
 		return nil
 	case r.stop(err):
 		return nil
 	case err != nil:
-		r.warn("missing-picture", fmt.Sprintf("a picture is not read: %v", err))
+		r.warn("missing-picture", warn.PictureMissing, fmt.Sprintf("a picture is not read: %v", err))
 		return nil
 	}
 	if name := vectorFormat(data); name != "" {
 		msg := fmt.Sprintf("%s pictures are not drawn", name)
 		switch name {
 		case "WMF":
-			r.warn("picture-wmf", msg)
+			r.warn("picture-wmf", warn.PictureFormatUnsupported, msg)
 		case "EMF":
-			r.warn("picture-emf", msg)
+			r.warn("picture-emf", warn.PictureFormatUnsupported, msg)
 		case "SVM":
-			r.warn("picture-svm", msg)
+			r.warn("picture-svm", warn.PictureFormatUnsupported, msg)
 		}
 		return nil
 	}
@@ -273,7 +274,7 @@ func (r *reader) decodePicture(img *odf.Element) *layout.Picture {
 			if r.stop(err) {
 				return nil
 			}
-			r.warn("svg", fmt.Sprintf("an SVG picture is not drawn: %v", err))
+			r.warn("svg", warn.PictureUnreadable, fmt.Sprintf("an SVG picture is not drawn: %v", err))
 			return nil
 		}
 		s := doc.Size()
@@ -285,12 +286,12 @@ func (r *reader) decodePicture(img *odf.Element) *layout.Picture {
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
-		r.warn("picture-format", "a picture in an unknown format is not drawn")
+		r.warn("picture-format", warn.PictureFormatUnsupported, "a picture in an unknown format is not drawn")
 		return nil
 	}
 	mem := limits.BudgetFrom(r.ctx)
 	if err := mem.CheckPicture(cfg.Width, cfg.Height); err != nil {
-		r.warn("picture-pixels", fmt.Sprintf("a picture is not drawn: %v", err))
+		r.warn("picture-pixels", warn.LimitReached, fmt.Sprintf("a picture is not drawn: %v", err))
 		return nil
 	}
 	pic := &layout.Picture{Width: float64(cfg.Width) * css.Pt, Height: float64(cfg.Height) * css.Pt}
@@ -300,7 +301,7 @@ func (r *reader) decodePicture(img *odf.Element) *layout.Picture {
 			if r.stop(err) {
 				return nil
 			}
-			r.warn("picture-decode", "a jpeg picture does not decode")
+			r.warn("picture-decode", warn.PictureUnreadable, "a jpeg picture does not decode")
 			return nil
 		}
 		pic.Source = src
@@ -311,13 +312,13 @@ func (r *reader) decodePicture(img *odf.Element) *layout.Picture {
 		if r.stop(err) {
 			return nil
 		}
-		r.warn("picture-pixels", fmt.Sprintf("a picture is not drawn: %v", err))
+		r.warn("picture-pixels", warn.LimitReached, fmt.Sprintf("a picture is not drawn: %v", err))
 		return nil
 	}
 	im, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		mem.Release(charged)
-		r.warn("picture-decode", fmt.Sprintf("a %s picture does not decode", format))
+		r.warn("picture-decode", warn.PictureUnreadable, fmt.Sprintf("a %s picture does not decode", format))
 		return nil
 	}
 	src, err := typeset.EncodeImage(r.ctx, im)
@@ -325,7 +326,7 @@ func (r *reader) decodePicture(img *odf.Element) *layout.Picture {
 		if r.stop(err) {
 			return nil
 		}
-		r.warn("picture-decode", fmt.Sprintf("a %s picture does not encode: %v", format, err))
+		r.warn("picture-decode", warn.PictureUnreadable, fmt.Sprintf("a %s picture does not encode: %v", format, err))
 		return nil
 	}
 	pic.Source = src

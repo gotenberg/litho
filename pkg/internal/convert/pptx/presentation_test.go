@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // title returns a title placeholder of text s.
@@ -119,7 +120,7 @@ func TestPresentation_BrokenSlideIsSkipped(t *testing.T) {
 	if len(doc.Slides) != 1 || doc.Slides[0].Title != "b" {
 		t.Fatalf("slides %+v", doc.Slides)
 	}
-	if !hasWarning(warnings, "malformed-part") {
+	if !hasWarning(warnings, warn.PartMalformed) {
 		t.Errorf("warnings %+v", warnings)
 	}
 }
@@ -142,7 +143,7 @@ func TestPresentation_Warnings(t *testing.T) {
 }
 
 // hasWarning reports a warning of code.
-func hasWarning(ws []typeset.Warning, code string) bool {
+func hasWarning(ws []typeset.Warning, code warn.Code) bool {
 	for _, w := range ws {
 		if w.Code == code {
 			return true

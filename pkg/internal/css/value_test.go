@@ -2,6 +2,8 @@ package css
 
 import (
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // oneValue tokenizes src into its significant component values.
@@ -86,7 +88,7 @@ func TestParseLength_Units(t *testing.T) {
 func TestParseCalc_MixedIsWarned(t *testing.T) {
 	t.Parallel()
 	s := mustParse(t, `div { vertical-align: calc(100% - 2em); vertical-align: 80% }`)
-	if !hasWarning(s.Warnings(), "invalid-css-value", `"vertical-align": a calc() mixing lengths and percentages`) {
+	if !hasWarning(s.Warnings(), warn.CSSInvalid, `"vertical-align": a calc() mixing lengths and percentages`) {
 		t.Errorf("warnings = %v", s.Warnings())
 	}
 }

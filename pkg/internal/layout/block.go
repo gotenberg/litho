@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // cblock is a containing block: the content box edges a box resolves its
@@ -1060,7 +1061,7 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 		e.clampToPage(f, clampPage)
 	}
 	if len(bc.floats) >= maxFloats {
-		e.warnOnce(codeTooManyFloats, fmt.Sprintf("more than %d floats in one formatting context: later ones do not push content aside", maxFloats), f.y)
+		e.warnOnce(warn.LimitReached, fmt.Sprintf("more than %d floats in one formatting context: later ones do not push content aside", maxFloats), f.y)
 		return -1
 	}
 	r := floatRect{

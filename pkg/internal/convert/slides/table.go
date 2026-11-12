@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxTableCells caps the cells of a table drawn. Anti-DoS guard, not
@@ -58,7 +59,7 @@ func (b *builder) table(s *Shape, parent *typeset.StructElem) []typeset.Fragment
 	// Divided rather than multiplied: the product of two lengths a
 	// document sets overflows a 32-bit int.
 	if len(rows) > maxTableCells/len(cols) {
-		b.warn(CodeTable, fmt.Sprintf("a table has more than %d cells; the rest are left out", maxTableCells))
+		b.warn(warn.LimitReached, fmt.Sprintf("a table has more than %d cells; the rest are left out", maxTableCells))
 		if len(cols) > maxTableCells {
 			cols = cols[:maxTableCells]
 		}

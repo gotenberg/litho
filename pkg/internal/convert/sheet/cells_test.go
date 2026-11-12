@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // texts returns the texts of a page's runs.
@@ -183,7 +184,7 @@ func TestConvert_HeaderFooter(t *testing.T) {
 	if !near(baseline, 841.89-67.25, 0.3) {
 		t.Errorf("header baseline %v", baseline)
 	}
-	if len(out.Warnings) == 0 || out.Warnings[0].Code != CodeField {
+	if len(out.Warnings) == 0 || out.Warnings[0].Code != warn.PageSetupUnsupported {
 		t.Errorf("warnings %+v, want the file field's", out.Warnings)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // formState is what the document knows of the form controls it makes
@@ -441,7 +442,7 @@ func (d *document) attachControls(res *layout.Result) error {
 		return err
 	}
 	if missed > 0 {
-		d.warn("form-field", "a form control that spans pages or shows nothing is printed without its field")
+		d.warn(warn.FormFieldOmitted, "a form control that spans pages or shows nothing is printed without its field")
 	}
 	return nil
 }

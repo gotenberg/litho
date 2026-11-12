@@ -4,6 +4,8 @@ import (
 	"context"
 	"slices"
 	"sync"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // MarginBox names one of the sixteen page-margin boxes (CSS Page 3, 5),
@@ -172,7 +174,7 @@ func pageCtxDecls(block []token, c *declCtx) ([]Declaration, []marginRule) {
 				b, ok = noteArea, true
 			}
 			if !ok || !it.hasBlock {
-				c.warn("unsupported-css-at-rule", "the @%s rule inside @page is not supported and was ignored", lower(it.name))
+				c.warn(warn.CSSUnsupported, "the @%s rule inside @page is not supported and was ignored", lower(it.name))
 				return true
 			}
 			boxes = append(boxes, marginRule{box: b, decls: parseDeclList(it.block, c)})

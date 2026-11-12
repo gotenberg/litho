@@ -52,7 +52,7 @@ func TestConvert_ACapPassedInAPartStopsTheConversion(t *testing.T) {
 	}
 	found := false
 	for _, w := range rep.Warnings {
-		found = found || w.Code == "chart-malformed"
+		found = found || w.Code == WarningPartMalformed
 	}
 	if !found {
 		t.Errorf("warnings %+v lack chart-malformed", rep.Warnings)

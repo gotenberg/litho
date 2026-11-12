@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // shape returns the fragments of s in its parent's coordinates, m mapping
@@ -28,7 +29,7 @@ func (b *builder) shape(s *Shape, m typeset.Matrix, depth int, parent *typeset.S
 	}
 	b.shapes++
 	if b.shapes > maxSlideShapes {
-		b.warn(CodeTooManyShapes, fmt.Sprintf("a slide has more than %d shapes; the rest are left out", maxSlideShapes))
+		b.warn(warn.LimitReached, fmt.Sprintf("a slide has more than %d shapes; the rest are left out", maxSlideShapes))
 		return nil
 	}
 	if !b.mem.Take(1, shapeCost, "shapes") {
@@ -43,7 +44,7 @@ func (b *builder) shape(s *Shape, m typeset.Matrix, depth int, parent *typeset.S
 		return b.geometry(s, m, parent)
 	case KindPicture:
 		if s.Picture == nil || (s.Picture.Source == nil && s.Picture.Vector == nil) {
-			b.warn(CodePicture, "picture "+quote(s.Name)+" has nothing to draw")
+			b.warn(warn.PictureMissing, "picture "+quote(s.Name)+" has nothing to draw")
 			return nil
 		}
 		fig := &typeset.StructElem{Role: "Figure", Alt: s.Alt}
@@ -76,7 +77,7 @@ func (b *builder) shape(s *Shape, m typeset.Matrix, depth int, parent *typeset.S
 		out = group(sm, b.contentEffects(s, b.table(s, parent), m))
 	case KindGroup:
 		if depth >= maxGroupDepth {
-			b.warn(CodeGroupDepth, fmt.Sprintf("groups nest deeper than %d levels; the deeper ones are left out", maxGroupDepth))
+			b.warn(warn.LimitReached, fmt.Sprintf("groups nest deeper than %d levels; the deeper ones are left out", maxGroupDepth))
 			return nil
 		}
 		child := s.Child
@@ -202,7 +203,7 @@ func (b *builder) geometry(s *Shape, m typeset.Matrix, parent *typeset.StructEle
 		box = txt.box
 	}
 	if !shape.Known(s.Geometry) {
-		b.warn(CodeGeometry, "the geometry "+quote(s.Geometry.Preset)+" is drawn as its bounding rectangle")
+		b.warn(warn.ContentUnsupported, "the geometry "+quote(s.Geometry.Preset)+" is drawn as its bounding rectangle")
 	}
 	sm := skewedAboutCentre(box, s.Rotation, s.SkewX, s.FlipH, s.FlipV)
 	paths := shape.Paths(s.Geometry, box)

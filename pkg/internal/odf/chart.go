@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // The namespaces of OpenDocument charts (ODF 1.3 Part 3, 11 and
@@ -18,17 +19,6 @@ import (
 const (
 	NSChart    = "urn:oasis:names:tc:opendocument:xmlns:chart:1.0"
 	NSChartOOO = "http://openoffice.org/2010/chart"
-)
-
-// Warning codes [ParseChart] reports.
-const (
-	// CodeChartUnsupported flags a chart construct drawn approximately or
-	// not at all: a 3D chart drawn flat, regression curves, error
-	// indicators, a stock chart.
-	CodeChartUnsupported = "chart-unsupported"
-	// CodeChartNoData flags a series the embedded table holds no values
-	// for, drawn empty unless the converter resolves its range.
-	CodeChartNoData = "chart-no-cache"
 )
 
 // maxTableCells caps the cells of a chart's embedded table read.
@@ -48,7 +38,7 @@ const chartFont = "Liberation Sans"
 // The data comes from the table the chart embeds (11.3 table:table), the
 // cache LibreOffice writes of its source ranges; a series the table does
 // not cover keeps its range reference and is reported with
-// [CodeChartNoData]. What the styles leave unset takes LibreOffice's chart
+// [warn.ChartNoCache]. What the styles leave unset takes LibreOffice's chart
 // defaults: Liberation Sans text, its twelve series colours.
 //
 // It fails with an error [IsNotExist] reports when the object has no
@@ -109,7 +99,7 @@ type chartReader struct {
 }
 
 // warn records a warning once per message.
-func (r *chartReader) warn(code, msg string) {
+func (r *chartReader) warn(code warn.Code, msg string) {
 	if r.warned == nil {
 		r.warned = map[string]bool{}
 	}
@@ -319,7 +309,7 @@ func (r *chartReader) read(ch *Element) {
 	}
 	pa := ch.Child(NSChart, "plot-area")
 	if pa == nil {
-		r.warn(CodeChartUnsupported, "the chart has no plot area")
+		r.warn(warn.ContentUnsupported, "the chart has no plot area")
 		return
 	}
 	r.plotArea(ch, pa)
@@ -377,7 +367,7 @@ func (r *chartReader) plotArea(ch, pa *Element) {
 	pName := pa.A(NSChart, "style-name")
 	class := strings.TrimPrefix(ch.A(NSChart, "class"), "chart:")
 	if r.boolProp(pName, "three-dimensional", false) {
-		r.warn(CodeChartUnsupported, "a 3D chart is drawn flat")
+		r.warn(warn.ContentUnsupported, "a 3D chart is drawn flat")
 	}
 	// The axes first: the groups name them.
 	axisIndex := map[string]int{}
@@ -426,7 +416,7 @@ func (r *chartReader) plotArea(ch, pa *Element) {
 	var order []string
 	for i, se := range pa.All(NSChart, "series") {
 		if len(order) > 0 && len(groups[order[0]].Series) >= chart.MaxSeries {
-			r.warn(CodeChartUnsupported, "series past the chart's limit are not drawn")
+			r.warn(warn.LimitReached, "series past the chart's limit are not drawn")
 			break
 		}
 		sClass := strings.TrimPrefix(se.A(NSChart, "class"), "chart:")
@@ -438,7 +428,7 @@ func (r *chartReader) plotArea(ch, pa *Element) {
 		if g == nil {
 			g = r.group(sClass, pName, xAxis, yAxis)
 			if g == nil {
-				r.warn(CodeChartUnsupported, "a chart of class "+sClass+" is not drawn")
+				r.warn(warn.ContentUnsupported, "a chart of class "+sClass+" is not drawn")
 				continue
 			}
 			ax := se.A(NSChart, "attached-axis")
@@ -525,7 +515,7 @@ func (r *chartReader) group(class, pName string, xAxis, yAxis int) *chart.Group 
 		g.Kind = chart.Radar
 		g.Filled = true
 	case "stock":
-		r.warn(CodeChartUnsupported, "a stock chart is drawn as a line chart")
+		r.warn(warn.ContentUnsupported, "a stock chart is drawn as a line chart")
 		g.Kind = chart.Line
 	default:
 		return nil
@@ -675,7 +665,7 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 		s.Values.Ref = addr
 	}
 	if !s.Values.Cached && s.Values.Ref != "" {
-		r.warn(CodeChartNoData, "a series has no values in the chart's table and is drawn empty")
+		r.warn(warn.ChartNoCache, "a series has no values in the chart's table and is drawn empty")
 	}
 	s.Categories = cats
 	if r.table != nil {
@@ -774,7 +764,7 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 			s.Trendlines = append(s.Trendlines, t)
 		}
 		if eq := rc.Child(NSChart, "equation"); eq != nil && (eq.A(NSChart, "display-equation") == "true" || eq.A(NSChart, "display-r-square") == "true") {
-			r.warn(CodeChartUnsupported, "a regression curve's equation is not drawn")
+			r.warn(warn.ContentUnsupported, "a regression curve's equation is not drawn")
 		}
 	}
 	for _, ei := range se.All(NSChart, "error-indicator") {

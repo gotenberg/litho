@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // The slide size of a document that gives none, Impress's 4:3 screen
@@ -88,8 +89,8 @@ type builder struct {
 }
 
 // warn records a warning once per code and message.
-func (b *builder) warn(code, msg string) {
-	k := code + "\x00" + msg
+func (b *builder) warn(code warn.Code, msg string) {
+	k := code.String() + "\x00" + msg
 	if b.warned[k] {
 		return
 	}

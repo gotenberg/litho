@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // pageSel returns the selector of the unnamed page at a 0-based index:
@@ -80,7 +81,7 @@ func pageBox(ctx context.Context, r *css.Resolver, o Options, sel css.PageSelect
 	case ps.Width > 0 && ps.Height > 0:
 		w, h = ps.Width, ps.Height
 		if w > maxPageSide || h > maxPageSide || math.IsInf(w, 0) || math.IsInf(h, 0) {
-			warns = append(warns, typeset.Warning{Code: CodePageBox, Message: fmt.Sprintf(
+			warns = append(warns, typeset.Warning{Code: warn.PageSetupUnsupported, Message: fmt.Sprintf(
 				"the @page size of %v by %v points was clamped to %v points a side, the PDF limit", w, h, maxPageSide)})
 			w, h = min(w, maxPageSide), min(h, maxPageSide)
 		}
@@ -130,14 +131,14 @@ func pageBox(ctx context.Context, r *css.Resolver, o Options, sel css.PageSelect
 		return box, warns, nil
 	}
 	if fromRules {
-		warns = append(warns, typeset.Warning{Code: CodePageBox, Message: fmt.Sprintf(
+		warns = append(warns, typeset.Warning{Code: warn.PageSetupUnsupported, Message: fmt.Sprintf(
 			"the @page margins leave no room on a page of %v by %v points; the conversion's margins apply", w, h)})
 	}
 	box.Margin = opt
 	if !fits(box) {
 		// The options' margins were checked against the paper; an @page
 		// size can be smaller than they allow.
-		warns = append(warns, typeset.Warning{Code: CodePageBox, Message: fmt.Sprintf(
+		warns = append(warns, typeset.Warning{Code: warn.PageSetupUnsupported, Message: fmt.Sprintf(
 			"the margins leave no room on the @page size of %v by %v points; the page has none", w, h)})
 		box.Margin = [4]float64{}
 	}

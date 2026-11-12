@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // Convert reads the ODT package src holds, or a flat .fodt document, and
@@ -67,7 +68,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	b.formFields = opts.FormFields
 	b.pages = newPageFlow(b, opts)
 	if lc := odf.Section(pkg.Styles, "styles").Child(odf.NSText, "linenumbering-configuration"); lc.A(odf.NSText, "number-lines") == "true" {
-		b.warn("line-numbering", "line numbers are not drawn")
+		b.warn("line-numbering", warn.ContentUnsupported, "line numbers are not drawn")
 	}
 	root, first := b.document(body)
 	if root.Lang == "" {

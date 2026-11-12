@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // definedName is one of the print names of a workbook (ECMA-376 Part 1,
@@ -64,7 +65,7 @@ func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document,
 		rel, ok := r.pkg.RelationshipByID(r.ctx, main, id)
 		switch {
 		case !ok || rel.External || !r.pkg.Has(rel.Target):
-			r.warn("malformed-part", fmt.Sprintf("sheet %q has no part: it prints empty", sh.Name))
+			r.warn(warn.PartMalformed, fmt.Sprintf("sheet %q has no part: it prints empty", sh.Name))
 			r.defaultSetup(sh)
 		case rel.Type == relWorksheet:
 			if err := r.worksheet(rel.Target, sh, index, printed[index]); err != nil {
@@ -78,7 +79,7 @@ func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document,
 				return err
 			}
 		default:
-			r.warn("unsupported-content", fmt.Sprintf("sheet %q is not a worksheet: it prints empty", sh.Name))
+			r.warn(warn.ContentUnsupported, fmt.Sprintf("sheet %q is not a worksheet: it prints empty", sh.Name))
 			r.defaultSetup(sh)
 		}
 		r.applyNames(names, index, sh)

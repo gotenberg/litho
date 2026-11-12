@@ -13,6 +13,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // Font files of the repository the tests load: Ahem, public domain, and
@@ -110,7 +111,7 @@ p { font-size: 20px; margin: 0 }
 <p>SERIFX</p>`
 	doc := convertFonts(t, src)
 	for _, w := range doc.Warnings {
-		if w.Code == CodeFontFaceSkipped {
+		if w.Code == warn.FontNotLoaded {
 			t.Errorf("warning: %s", w.Message)
 		}
 	}
@@ -168,7 +169,7 @@ p { font-family: Web, "Test Serif"; font-size: 20px }</style><p>MARKX</p>`)
 			}
 			var msgs []string
 			for _, w := range doc.Warnings {
-				if w.Code == CodeFontFaceSkipped {
+				if w.Code == warn.FontNotLoaded {
 					msgs = append(msgs, w.Message)
 				}
 			}
@@ -228,7 +229,7 @@ func TestFontFace_TooManyFaces(t *testing.T) {
 	doc := convertFonts(t, b.String())
 	n := 0
 	for _, w := range doc.Warnings {
-		if w.Code == CodeFontFaceSkipped && strings.Contains(w.Message, "more than") {
+		if w.Code == warn.FontNotLoaded && strings.Contains(w.Message, "more than") {
 			n++
 		}
 	}

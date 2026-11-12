@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // The caps of one spreadsheet.
@@ -107,13 +108,24 @@ func newReader(ctx context.Context, pkg *odf.Package, fonts *text.Fonts) *reader
 	}
 }
 
-// warn records the warning code once.
-func (r *reader) warn(code, msg string) {
-	if r.warned[code] {
+// warn records a warning once per construct: what is a fixed word that
+// names it, never the document's data, which goes in msg. Several
+// constructs share a code, each warned of once.
+func (r *reader) warn(what string, code warn.Code, msg string) {
+	if r.warned[what] {
 		return
 	}
-	r.warned[code] = true
+	r.warned[what] = true
 	r.warnings = append(r.warnings, typeset.Warning{Code: code, Message: msg})
+}
+
+// chartWarning returns the construct a chart's warning of code is warned
+// of once as: its missing values, or the rest of what it does not draw.
+func chartWarning(code warn.Code) string {
+	if code == warn.ChartNoCache {
+		return "chart-no-cache"
+	}
+	return "chart-unsupported"
 }
 
 // stop records err as the reader's error when it ends the conversion (see
@@ -156,7 +168,7 @@ func (r *reader) document(body *odf.Element) *sheet.Document {
 		switch {
 		case c.Is(odf.NSTable, "table"):
 			if len(r.doc.Sheets) >= maxSheets {
-				r.warn("too-many-sheets", fmt.Sprintf("sheets past %d are not read", maxSheets))
+				r.warn("too-many-sheets", warn.LimitReached, fmt.Sprintf("sheets past %d are not read", maxSheets))
 				continue
 			}
 			if sh := r.table(c); sh != nil {
@@ -165,12 +177,12 @@ func (r *reader) document(body *odf.Element) *sheet.Document {
 			}
 		case c.Is(odf.NSTable, "named-expressions"):
 			if len(c.Children) > 0 {
-				r.warn("named-expressions", "named ranges and expressions are not read")
+				r.warn("named-expressions", warn.ContentUnsupported, "named ranges and expressions are not read")
 			}
 		case c.Is(odf.NSTable, "data-pilot-tables"):
-			r.warn("data-pilot", "pivot tables are shown as the cells the file stores")
+			r.warn("data-pilot", warn.ContentUnsupported, "pivot tables are shown as the cells the file stores")
 		case c.Is(odf.NSTable, "content-validations"):
-			r.warn("validations", "cell validations are not applied")
+			r.warn("validations", warn.ContentUnsupported, "cell validations are not applied")
 		case c.Is(odf.NSTable, "database-ranges"), c.Is(odf.NSTable, "calculation-settings"):
 			// They print nothing of their own: no warning.
 		}
@@ -325,17 +337,17 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 		switch {
 		case c.Is(odf.NSTable, "named-expressions"):
 			if len(c.Children) > 0 {
-				r.warn("named-expressions", "named ranges and expressions are not read")
+				r.warn("named-expressions", warn.ContentUnsupported, "named ranges and expressions are not read")
 			}
 		case c.Is(nsCalcExt, "conditional-formats"):
 			r.conditionalFormats(sh, c)
 			calcext = true
 		case c.Is(odf.NSOffice, "forms"):
 			if len(c.Children) > 0 {
-				r.warn("form-controls", "form controls are not drawn")
+				r.warn("form-controls", warn.FormWidgetOmitted, "form controls are not drawn")
 			}
 		case c.Is(odf.NSTable, "scenario"):
-			r.warn("scenarios", "scenarios are not read")
+			r.warn("scenarios", warn.ContentUnsupported, "scenarios are not read")
 		}
 	}
 	if !calcext {
@@ -361,7 +373,7 @@ func repeat(el *odf.Element, local string, limit int) int {
 // nested past [maxGroupDepth] are left out, with a warning.
 func (r *reader) columns(ts *tableState, el *odf.Element, hidden, header bool, depth int) {
 	if depth > maxGroupDepth {
-		r.warn("table-group-depth", fmt.Sprintf("column and row groups nested past %d levels are not read", maxGroupDepth))
+		r.warn("table-group-depth", warn.LimitReached, fmt.Sprintf("column and row groups nested past %d levels are not read", maxGroupDepth))
 		return
 	}
 	for _, c := range el.Children {
@@ -462,7 +474,7 @@ func (ts *tableState) colLeft(c int) float64 {
 // are left out, with a warning.
 func (r *reader) rowsOf(ts *tableState, el *odf.Element, hidden, header bool, depth int) {
 	if depth > maxGroupDepth {
-		r.warn("table-group-depth", fmt.Sprintf("column and row groups nested past %d levels are not read", maxGroupDepth))
+		r.warn("table-group-depth", warn.LimitReached, fmt.Sprintf("column and row groups nested past %d levels are not read", maxGroupDepth))
 		return
 	}
 	for _, c := range el.Children {
@@ -543,7 +555,7 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 	}
 	for i := range n {
 		if r.cells+len(cells) > sheet.MaxCells || r.rows >= maxRowEntries {
-			r.warn("too-many-cells", fmt.Sprintf("cells past %d are not read", sheet.MaxCells))
+			r.warn("too-many-cells", warn.LimitReached, fmt.Sprintf("cells past %d are not read", sheet.MaxCells))
 			break
 		}
 		idx := start + i
@@ -648,7 +660,7 @@ func (r *reader) rowCells(ts *tableState, el *odf.Element) ([]sheet.Cell, []shee
 			case k.Name.Space == odf.NSDraw:
 				frames = append(frames, frameAt{el: k, at: sheet.Anchor{Row: ts.row, Column: col}})
 			case k.Is(odf.NSOffice, "annotation"):
-				r.warn("comments", "cell comments are not printed")
+				r.warn("comments", warn.ContentUnsupported, "cell comments are not printed")
 			case k.Is(odf.NSTable, "detective"):
 				for _, h := range k.Children {
 					if h.Is(odf.NSTable, "highlighted-range") && h.A(odf.NSTable, "marked-invalid") == "true" {

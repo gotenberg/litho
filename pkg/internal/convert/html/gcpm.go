@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxNamedStringBytes bounds the value of one named string: 4 KiB.
@@ -60,7 +61,7 @@ func (b *builder) gcpmID() string {
 // record adds the assignment a to list, false past [maxAssignments].
 func (b *builder) record(list *[]assignment, a assignment) bool {
 	if len(b.gcpm.strings)+len(b.gcpm.running) >= maxAssignments {
-		b.warnOnce(CodeGeneratedLimit, "gcpm", fmt.Sprintf("more than %d named strings and running elements; the others were left out", maxAssignments))
+		b.warnOnce(warn.LimitReached, "gcpm", fmt.Sprintf("more than %d named strings and running elements; the others were left out", maxAssignments))
 		return false
 	}
 	*list = append(*list, a)

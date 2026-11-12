@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // The PresentationML namespaces (ECMA-376 Part 1, 19; the Strict ones
@@ -132,7 +133,7 @@ type reader struct {
 }
 
 // warn records a warning, once per message.
-func (r *reader) warn(code, msg string) {
+func (r *reader) warn(code warn.Code, msg string) {
 	if r.warned[msg] {
 		return
 	}
@@ -223,13 +224,13 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts b
 			return nil, nil, err
 		}
 		if len(doc.Slides) >= maxSlides {
-			r.warn("too-large", fmt.Sprintf("the presentation holds more than %d slides: the rest are left out", maxSlides))
+			r.warn(warn.LimitReached, fmt.Sprintf("the presentation holds more than %d slides: the rest are left out", maxSlides))
 			break
 		}
 		rid, _ := id.AttrNS(ooxml.NSR, "id")
 		rel, ok := pkg.RelationshipByID(ctx, main, rid)
 		if !ok || rel.External || rel.Type != relSlide || !pkg.Has(rel.Target) {
-			r.warn("malformed-part", fmt.Sprintf("slide %s is missing and left out", rid))
+			r.warn(warn.PartMalformed, fmt.Sprintf("slide %s is missing and left out", rid))
 			continue
 		}
 		s, err := r.slide(len(doc.Slides)+1, rel.Target)
@@ -238,7 +239,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts b
 		}
 		if err != nil {
 			if isMalformed(err) {
-				r.warn("malformed-part", fmt.Sprintf("slide %s does not parse and is left out: %v", rel.Target, err))
+				r.warn(warn.PartMalformed, fmt.Sprintf("slide %s does not parse and is left out: %v", rel.Target, err))
 				continue
 			}
 			return nil, nil, err

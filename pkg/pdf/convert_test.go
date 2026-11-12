@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -117,7 +118,7 @@ func TestConvert_ReportsMissingGlyphs(t *testing.T) {
 	if len(rep.Warnings) != 1 {
 		t.Fatalf("warnings %+v, want one", rep.Warnings)
 	}
-	if w := rep.Warnings[0]; w.Code != "missing-glyph" || !strings.Contains(w.Message, "U+00E9") || w.Page != 1 {
+	if w := rep.Warnings[0]; w.Code != WarningMissingGlyph || !strings.Contains(w.Message, "U+00E9") || w.Page != 1 {
 		t.Errorf("warning %+v", w)
 	}
 }
@@ -428,11 +429,11 @@ func TestConvert_HTMLReportsWhatItLeavesOut(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WriteTo: %v", err)
 	}
-	var got []string
+	var got []ConvertWarningCode
 	for _, w := range rep.Warnings {
 		got = append(got, w.Code)
 	}
-	if strings.Join(got, ",") != "resource-refused,unsupported-element" {
+	if !slices.Equal(got, []ConvertWarningCode{WarningResourceRefused, WarningContentUnsupported}) {
 		t.Errorf("warnings %+v", rep.Warnings)
 	}
 }

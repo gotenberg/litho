@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxShadows caps the shadows of one box-shadow value: 32. Real designs
@@ -137,7 +138,7 @@ func parseBoxShadow(v []token, c *declCtx) (any, bool) {
 	}
 	layers := splitCommas(v)
 	if len(layers) > maxShadows {
-		c.warn("unsupported-css-value", "box-shadow: only the first %d shadows are drawn", maxShadows)
+		c.warn(warn.CSSUnsupported, "box-shadow: only the first %d shadows are drawn", maxShadows)
 		layers = layers[:maxShadows]
 	}
 	out := make([]shadowSpec, 0, len(layers))

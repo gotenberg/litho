@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // NSChart is the DrawingML chart namespace (ECMA-376 Part 1, 21.2).
@@ -21,17 +22,6 @@ const NSChart = "http://schemas.openxmlformats.org/drawingml/2006/chart"
 // RelChart is the relationship type of a chart part (ECMA-376 Part 1,
 // 14.2.1).
 const RelChart = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart"
-
-// Warning codes [ParseChart] reports.
-const (
-	// CodeChartUnsupported flags a chart construct drawn approximately or
-	// not at all: a 3D chart drawn flat, a trendline's equation, user
-	// shapes, an unknown chart type.
-	CodeChartUnsupported = "chart-unsupported"
-	// CodeChartNoCache flags a series whose file holds no cached values,
-	// drawn empty unless the converter resolves its range.
-	CodeChartNoCache = "chart-no-cache"
-)
 
 // defaultChartStyle is the chart style a chart space without c:style takes
 // (ECMA-376 Part 1, 21.2.2.202: 2).
@@ -62,7 +52,7 @@ func hexColor(v uint32) css.Color {
 //
 // The data comes from the series' caches (c:strCache, c:numCache, literal
 // c:strLit and c:numLit); a series with none keeps its range reference and
-// is reported with [CodeChartNoCache]. External data and the formatting of
+// is reported with [warn.ChartNoCache]. External data and the formatting of
 // Office 2013's chart style parts are ignored; 3D charts are read as their
 // flat kind.
 //
@@ -94,7 +84,7 @@ func ParseChart(ctx context.Context, pkg *Package, part string) (*chart.Chart, e
 	if rels, err := pkg.Relationships(ctx, part); err == nil {
 		for _, r := range rels {
 			if strings.HasSuffix(r.Type, "/chartUserShapes") {
-				c.Warnings = append(c.Warnings, typeset.Warning{Code: CodeChartUnsupported, Message: "the shapes drawn over a chart are not drawn"})
+				c.Warnings = append(c.Warnings, typeset.Warning{Code: warn.ContentUnsupported, Message: "the shapes drawn over a chart are not drawn"})
 			}
 		}
 	}
@@ -220,7 +210,7 @@ type chartReader struct {
 }
 
 // warn records a warning once per message.
-func (p *chartReader) warn(code, msg string) {
+func (p *chartReader) warn(code warn.Code, msg string) {
 	if p.warned == nil {
 		p.warned = map[string]bool{}
 	}
@@ -299,7 +289,7 @@ func (p *chartReader) read(root *Element) {
 		}
 	}
 	if !known {
-		p.warn(CodeChartUnsupported, "the chart has no chart type the reader draws")
+		p.warn(warn.ContentUnsupported, "the chart has no chart type the reader draws")
 	}
 	p.categoryPositions()
 	n := 0

@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/svg"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // svgPage converts src on a 400 by 400 point page without margins.
@@ -133,7 +134,7 @@ func TestSVG_NestedSVGImageRefused(t *testing.T) {
 	if got := filled(doc, svgRed); len(got) != 1 {
 		t.Errorf("red paths %v, want the rect", got)
 	}
-	if !hasWarning(doc.Warnings, "svg-image", "inside an SVG image") {
+	if !hasWarning(doc.Warnings, warn.PictureUnreadable, "inside an SVG image") {
 		t.Errorf("warnings %+v, want the nested image refused", doc.Warnings)
 	}
 }
@@ -141,7 +142,7 @@ func TestSVG_NestedSVGImageRefused(t *testing.T) {
 func TestSVG_UnsupportedFeaturesWarn(t *testing.T) {
 	src := `<svg width="10" height="10"><filter id="f"/><rect width="10" height="10" fill="red" filter="url(#f)"/></svg>`
 	doc := svgPage(t, src, nil)
-	if !hasWarning(doc.Warnings, "unsupported-svg-property", "filter") {
+	if !hasWarning(doc.Warnings, warn.ContentUnsupported, "filter") {
 		t.Errorf("warnings %+v", doc.Warnings)
 	}
 	if got := filled(doc, svgRed); len(got) != 1 {

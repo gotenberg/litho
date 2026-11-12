@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxGridColumns caps the grid columns of a table. Anti-DoS guard, not
@@ -476,7 +477,7 @@ func rowCells(r *ooxml.Element, depth int) []*ooxml.Element {
 // conditional formatting applied per cell (17.7.6).
 func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	if depth > maxNesting {
-		d.warn("too-deep", "a table nested too deep is left out")
+		d.warn(warn.LimitReached, "a table nested too deep is left out")
 		return nil
 	}
 	direct := d.parseTableProps(t.Child(w, "tblPr"))

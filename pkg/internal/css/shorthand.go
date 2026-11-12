@@ -1,6 +1,10 @@
 package css
 
-import "maps"
+import (
+	"maps"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
+)
 
 // shorthandDef defines a shorthand: the longhands it sets and how it
 // expands a value into them. A longhand the value leaves out is reset to
@@ -300,7 +304,7 @@ func expandFont(v []token, c *declCtx) ([]entry, bool) {
 		{pFontKerning, wideInitial},
 	}
 	if k, ok := keyword(v); ok && systemFonts[k] {
-		c.warn("unsupported-css-value", "font: the system font %s is not supported and computes to the initial font", k)
+		c.warn(warn.CSSUnsupported, "font: the system font %s is not supported and computes to the initial font", k)
 		return out, true
 	}
 	i := 0
