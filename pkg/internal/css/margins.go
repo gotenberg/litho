@@ -289,7 +289,7 @@ func (r *Resolver) PageIn(sel PageSelector, root *Style) PageStyle {
 	if root == nil {
 		root = initialStyle
 	}
-	cs := &computeState{r: r, root: root}
+	cs := &computeState{r: r, root: root, m: newMatcher("", maxComputeSteps)}
 	var ctxCands []cand
 	var boxCands [NumMarginBoxes + 2][]cand
 	for _, s := range srcs {

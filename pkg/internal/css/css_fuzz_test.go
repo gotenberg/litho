@@ -22,6 +22,7 @@ func FuzzParse(f *testing.F) {
 	f.Add([]byte(fuzzSheet))
 	f.Add([]byte(fuzzSheet[:len(fuzzSheet)/2]))
 	f.Add([]byte("p{a:(((((((((("))
+	f.Add([]byte(`@page { --x: "b"; @top-center { content: var(--x, "a") } }`))
 	f.Add([]byte("@page { background: linear-gradient(45deg, red 10%, 40%, blue) 0 0 / 50% auto } p { background: radial-gradient(circle 4px at left, red, blue 2px 3px) }"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		fetch := func(context.Context, string) ([]byte, string, error) { return data, "", nil }

@@ -139,3 +139,17 @@ func TestPageIn_NoteArea(t *testing.T) {
 		t.Errorf("content %+v, want %+v", st.Content.Items, want)
 	}
 }
+
+func TestPageIn_VarInMarginBox(t *testing.T) {
+	for _, tt := range []struct{ src, want string }{
+		{`@page { @top-center { content: var(--x, "a") } }`, "a"},
+		{`@page { --x: "b"; @top-center { content: var(--x) } }`, "b"},
+		{`@page { @top-center { --y: "c"; content: var(--y) } }`, "c"},
+	} {
+		ps := resolverOf(t, tt.src).PageIn(PageSelector{Right: true}, nil)
+		tc := ps.MarginBoxes[MarginTopCenter]
+		if tc == nil || len(tc.Content.Items) != 1 || tc.Content.Items[0].Text != tt.want {
+			t.Errorf("%s: top-center %+v, want content %q", tt.src, tc, tt.want)
+		}
+	}
+}
