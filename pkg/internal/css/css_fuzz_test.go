@@ -122,6 +122,8 @@ func FuzzCompute(f *testing.F) {
 
 func FuzzMatchMedia(f *testing.F) {
 	m := Media{Type: "print", Width: 595, Height: 842}
+	f.Add("print and (min-width: 100px), not screen and (orientation: landscape)")
+	f.Add("print and (min-wi")
 	f.Fuzz(func(_ *testing.T, q string) {
 		MatchMedia(q, m)
 	})
