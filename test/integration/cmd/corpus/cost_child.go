@@ -284,7 +284,7 @@ func (h budgetPeakHandler) WithGroup(string) slog.Handler      { return h }
 // reads the fonts of the font directories.
 var costOps = map[string]costOp{
 	// text opens the PDF and extracts the text of every page.
-	"text": func(ctx context.Context, src string, _ []string, out io.Writer) (int64, error) {
+	"text": func(ctx context.Context, src string, _ []string, _ io.Writer) (int64, error) {
 		r, err := pdf.OpenFile(ctx, src)
 		if err != nil {
 			return 0, err
@@ -300,11 +300,7 @@ var costOps = map[string]costOp{
 			if err != nil && !errors.Is(err, pdf.ErrRequiresOCR) {
 				return 0, fmt.Errorf("page %d: %w", p, err)
 			}
-			k, err := io.WriteString(out, t)
-			if err != nil {
-				return 0, err
-			}
-			total += int64(k)
+			total += int64(len(t))
 		}
 		return total, nil
 	},
@@ -410,9 +406,9 @@ func costWrite(edit func(context.Context, *pdf.Writer, []string) error, opts ...
 }
 
 // costValidate returns an operation that validates the document with
-// check, writing one line a violation.
+// check, counting the bytes of a line a violation.
 func costValidate(check func(context.Context, *pdf.Reader) ([]pdf.Violation, error)) costOp {
-	return func(ctx context.Context, src string, _ []string, out io.Writer) (int64, error) {
+	return func(ctx context.Context, src string, _ []string, _ io.Writer) (int64, error) {
 		r, err := pdf.OpenFile(ctx, src)
 		if err != nil {
 			return 0, err
@@ -424,11 +420,7 @@ func costValidate(check func(context.Context, *pdf.Reader) ([]pdf.Violation, err
 		}
 		var total int64
 		for _, v := range vs {
-			k, err := fmt.Fprintln(out, v.Error())
-			if err != nil {
-				return 0, err
-			}
-			total += int64(k)
+			total += int64(len(v.Error()) + 1)
 		}
 		return total, nil
 	}
