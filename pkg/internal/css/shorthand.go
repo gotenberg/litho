@@ -221,7 +221,7 @@ func initShorthands() {
 // properties are not longhands and keep their values.
 func allLonghands() []propID {
 	out := make([]propID, 0, numProps)
-	for id := range propID(numProps) {
+	for id := range numProps {
 		if id != pDirection && id != pUnicodeBidi {
 			out = append(out, id)
 		}
