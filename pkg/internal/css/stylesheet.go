@@ -52,7 +52,6 @@ type fontFaceRule struct {
 
 // sheetParser parses one stylesheet and its imports.
 type sheetParser struct {
-	ctx     context.Context
 	opts    ParseOptions
 	log     *slog.Logger
 	sheet   *Stylesheet
@@ -75,7 +74,7 @@ type sheetParser struct {
 // error when it is done; the returned Stylesheet then holds the rules read
 // so far.
 func Parse(ctx context.Context, src []byte, opts ParseOptions) (*Stylesheet, error) {
-	sp := &sheetParser{ctx: ctx, opts: opts, log: opts.Logger, sheet: &Stylesheet{}}
+	sp := &sheetParser{opts: opts, log: opts.Logger, sheet: &Stylesheet{}}
 	if sp.log == nil {
 		sp.log = slog.New(slog.DiscardHandler)
 	}
@@ -85,22 +84,18 @@ func Parse(ctx context.Context, src []byte, opts ParseOptions) (*Stylesheet, err
 	if opts.BaseURL != "" {
 		sp.chain = append(sp.chain, opts.BaseURL)
 	}
-	sp.parseSheet(src, opts.BaseURL, nil, 0)
+	sp.parseSheet(ctx, src, opts.BaseURL, nil, 0)
 	sp.sheet.warns = sp.warns.result()
 	return sp.sheet, sp.err
 }
 
 // parseSheet parses one stylesheet's text into the shared result.
-func (sp *sheetParser) parseSheet(src []byte, base string, cond *mediaCond, depth int) {
+func (sp *sheetParser) parseSheet(ctx context.Context, src []byte, base string, cond *mediaCond, depth int) {
 	text := strings.TrimPrefix(string(src), "\xef\xbb\xbf")
 	p := &parser{tz: newTokenizer(text, maxTokens)}
 	importsAllowed := true
 	p.rules(true, func(it item) bool {
-		if err := sp.ctx.Err(); err != nil {
-			sp.err = err
-			return false
-		}
-		sp.rule(it, base, cond, depth, &importsAllowed)
+		sp.rule(ctx, it, base, cond, depth, &importsAllowed)
 		return sp.err == nil
 	})
 	if sp.err == nil && (p.tz.over || p.deep) {
@@ -136,7 +131,11 @@ var ignoredAtRules = map[string]bool{
 }
 
 // rule handles one top-level or nested rule.
-func (sp *sheetParser) rule(it item, base string, cond *mediaCond, depth int, importsAllowed *bool) {
+func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *mediaCond, depth int, importsAllowed *bool) {
+	if err := ctx.Err(); err != nil {
+		sp.err = err
+		return
+	}
 	c := &declCtx{baseURL: base}
 	defer sp.flush(c)
 	switch it.kind { //nolint:exhaustive // declarations and errors cannot reach the top level
@@ -153,7 +152,7 @@ func (sp *sheetParser) rule(it item, base string, cond *mediaCond, depth int, im
 			return
 		}
 		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: parseDeclList(it.block, c), cond: cond})
-		sp.nestedRules(it, base, cond, depth)
+		sp.nestedRules(ctx, it, base, cond, depth)
 	case itemAtRule:
 		name := lower(it.name)
 		if name != "import" && name != "charset" && (name != "layer" || it.hasBlock) {
@@ -162,15 +161,15 @@ func (sp *sheetParser) rule(it item, base string, cond *mediaCond, depth int, im
 		switch name {
 		case "import":
 			if *importsAllowed {
-				sp.importRule(it, base, cond, depth, c)
+				sp.importRule(ctx, it, base, cond, depth, c)
 			}
 		case "media":
 			if it.hasBlock {
-				sp.nested(it.block, base, &mediaCond{list: it.prelude, parent: cond}, depth)
+				sp.nested(ctx, it.block, base, &mediaCond{list: it.prelude, parent: cond}, depth)
 			}
 		case "supports":
 			if it.hasBlock && evalSupports(it.prelude) {
-				sp.nested(it.block, base, cond, depth)
+				sp.nested(ctx, it.block, base, cond, depth)
 			}
 		case "layer":
 			// Cascade layers (CSS Cascade 5) are flattened: a layer's
@@ -178,7 +177,7 @@ func (sp *sheetParser) rule(it item, base string, cond *mediaCond, depth int, im
 			// what layered frameworks draw and loses only the layer
 			// precedence.
 			if it.hasBlock {
-				sp.nested(it.block, base, cond, depth)
+				sp.nested(ctx, it.block, base, cond, depth)
 			}
 		case "page":
 			sels, ok := parsePageSelectors(it.prelude)
@@ -206,7 +205,7 @@ func (sp *sheetParser) rule(it item, base string, cond *mediaCond, depth int, im
 // Nesting 1, 2 and 3): each starts with the nesting selector &, which
 // stands for each selector of the parent rule in turn, and follows the
 // parent's declarations in the cascade order.
-func (sp *sheetParser) nestedRules(it item, base string, cond *mediaCond, depth int) {
+func (sp *sheetParser) nestedRules(ctx context.Context, it item, base string, cond *mediaCond, depth int) {
 	if sp.nesting >= maxNestingDepth {
 		return
 	}
@@ -236,7 +235,7 @@ func (sp *sheetParser) nestedRules(it item, base string, cond *mediaCond, depth 
 				return true
 			}
 		}
-		sp.rule(item{kind: itemQualified, prelude: prelude, block: n.block}, base, cond, depth, &allowed)
+		sp.rule(ctx, item{kind: itemQualified, prelude: prelude, block: n.block}, base, cond, depth, &allowed)
 		return sp.err == nil
 	})
 }
@@ -249,10 +248,10 @@ const maxNestedPrelude = 4096
 
 // nested parses the rule list inside a conditional group rule (CSS
 // Conditional 3, 2).
-func (sp *sheetParser) nested(block []token, base string, cond *mediaCond, depth int) {
+func (sp *sheetParser) nested(ctx context.Context, block []token, base string, cond *mediaCond, depth int) {
 	allowed := false
 	newListParser(block).rules(false, func(it item) bool {
-		sp.rule(it, base, cond, depth, &allowed)
+		sp.rule(ctx, it, base, cond, depth, &allowed)
 		return sp.err == nil
 	})
 }
@@ -278,7 +277,7 @@ func (d *Declaration) declares() bool {
 
 // importRule handles @import (CSS Cascade 4, 2): the URL, an optional
 // layer, an optional supports() condition and a media query list.
-func (sp *sheetParser) importRule(it item, base string, cond *mediaCond, depth int, c *declCtx) {
+func (sp *sheetParser) importRule(ctx context.Context, it item, base string, cond *mediaCond, depth int, c *declCtx) {
 	pre := trimWS(it.prelude)
 	if len(pre) == 0 {
 		return
@@ -303,7 +302,7 @@ func (sp *sheetParser) importRule(it item, base string, cond *mediaCond, depth i
 	}
 	target := resolveURL(base, ref)
 	if sp.opts.Fetch == nil {
-		sp.log.DebugContext(sp.ctx, "css: @import ignored, fetching is disabled", slog.String("url", target))
+		sp.log.DebugContext(ctx, "css: @import ignored, fetching is disabled", slog.String("url", target))
 		return
 	}
 	if slices.Contains(sp.chain, target) {
@@ -315,13 +314,13 @@ func (sp *sheetParser) importRule(it item, base string, cond *mediaCond, depth i
 		return
 	}
 	sp.imports++
-	body, final, err := sp.opts.Fetch(sp.ctx, target)
+	body, final, err := sp.opts.Fetch(ctx, target)
 	if err != nil {
-		if ctxErr := sp.ctx.Err(); ctxErr != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
 			sp.err = ctxErr
 			return
 		}
-		sp.log.DebugContext(sp.ctx, "css: @import failed", slog.String("url", target), slog.String("error", err.Error()))
+		sp.log.DebugContext(ctx, "css: @import failed", slog.String("url", target), slog.String("error", err.Error()))
 		c.warn("css-import-failed", "the @import of %s failed: %v", target, err)
 		return
 	}
@@ -338,7 +337,7 @@ func (sp *sheetParser) importRule(it item, base string, cond *mediaCond, depth i
 	}
 	sp.chain = append(sp.chain, target)
 	sp.flush(c)
-	sp.parseSheet(body, final, inner, depth+1)
+	sp.parseSheet(ctx, body, final, inner, depth+1)
 	sp.chain = sp.chain[:len(sp.chain)-1]
 }
 
