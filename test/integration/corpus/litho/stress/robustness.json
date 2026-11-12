@@ -28,7 +28,7 @@
     "result": "ErrConvertInputTooLarge",
     "max_rss_mib": 2048,
     "max_seconds": 20,
-    "why": "16 MiB of paragraphs: the shaped paragraphs alone would hold over 1 GiB, and the budget refuses them during the layout, about five seconds in; the paragraphs share their styles, which the account no longer charges per element, so the layout gets further than it did and the process peaks near 1.6 GiB, under twice the budget."
+    "why": "16 MiB of paragraphs: the glyph runs of the laid-out lines alone would hold over 1 GiB, and the budget refuses them during the layout. The shaped paragraphs are given back to the account as the flow settles, so the refusal comes once the lines themselves pass the budget, and the process peaks near 1.4 GiB, under twice the budget."
   },
   "html-png-10": {
     "result": "pdf",
