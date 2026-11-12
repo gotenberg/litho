@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
@@ -245,7 +246,7 @@ func (s ShapeStyle) dash() []float64 {
 		out[i] = v * w
 		sum += out[i]
 	}
-	if !(sum > 0) {
+	if !numeric.Positive(sum) {
 		return nil
 	}
 	return out

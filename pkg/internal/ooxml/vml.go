@@ -1,6 +1,7 @@
 package ooxml
 
 import (
+	"math"
 	"strconv"
 	"strings"
 
@@ -93,7 +94,7 @@ func VMLFraction(s string) (float64, bool) {
 		s, scale = s[:len(s)-1], 0.01
 	}
 	v, err := strconv.ParseFloat(s, 64)
-	if err != nil || v != v {
+	if err != nil || math.IsNaN(v) {
 		return 0, false
 	}
 	return max(0, min(1, v*scale)), true
@@ -104,10 +105,10 @@ func VMLFraction(s string) (float64, bool) {
 func VMLPair(s string, def float64) (float64, float64) {
 	a, b, _ := strings.Cut(s, ",")
 	x, y := def, def
-	if v, err := strconv.ParseFloat(strings.TrimSpace(a), 64); err == nil && v == v {
+	if v, err := strconv.ParseFloat(strings.TrimSpace(a), 64); err == nil && !math.IsNaN(v) {
 		x = max(-maxLength, min(maxLength, v))
 	}
-	if v, err := strconv.ParseFloat(strings.TrimSpace(b), 64); err == nil && v == v {
+	if v, err := strconv.ParseFloat(strings.TrimSpace(b), 64); err == nil && !math.IsNaN(v) {
 		y = max(-maxLength, min(maxLength, v))
 	}
 	return x, y

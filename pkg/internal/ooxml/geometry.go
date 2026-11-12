@@ -3,6 +3,7 @@ package ooxml
 import (
 	"strconv"
 
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
@@ -74,7 +75,7 @@ func ParseCustomGeometry(el *Element) *shape.Custom {
 // when absent or invalid.
 func pathSize(s string) float64 {
 	v, err := strconv.ParseFloat(s, 64)
-	if err != nil || v <= 0 || v > maxPathSize {
+	if err != nil || !numeric.Positive(v) || v > maxPathSize {
 		return 0
 	}
 	return v

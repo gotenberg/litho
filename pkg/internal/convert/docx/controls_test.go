@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // controlsBody holds inline content controls of every kind a field takes,
@@ -39,7 +40,7 @@ func TestConvertContentControlsAsFields(t *testing.T) {
 	var have []got
 	for _, f := range d.Pages[0].Fields {
 		have = append(have, got{f.Kind, f.Name, f.Value, f.Checked})
-		if f.Parent == nil || f.Parent.Role != "Form" || !(f.Rect.Width > 0) {
+		if f.Parent == nil || f.Parent.Role != "Form" || !numeric.Positive(f.Rect.Width) {
 			t.Errorf("field %q: parent %v, rectangle %v", f.Name, f.Parent, f.Rect)
 		}
 	}
