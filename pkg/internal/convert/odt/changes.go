@@ -764,10 +764,15 @@ func (b *builder) rowFill(row *odf.Element) (css.Color, bool) {
 }
 
 // maxMoveText bounds the characters of a change's text the marked view
-// compares to find moved text: 4,096. Anti-DoS guard, not spec-mandated:
-// the texts are copied to be compared, and a moved sentence or paragraph
-// is far shorter; a longer change is drawn as an insertion or a deletion.
-const maxMoveText = 4096
+// compares to find moved text, 4,096, and maxMoveBytes the characters of
+// all of them, 1 MiB. Anti-DoS guard, not spec-mandated: the texts are
+// copied to be compared, and a moved sentence or paragraph is far
+// shorter; a longer change, and every change past the total, is drawn as
+// an insertion or a deletion.
+const (
+	maxMoveText  = 4096
+	maxMoveBytes = 1 << 20
+)
 
 // moves returns the ids of the deletions and insertions the marked view
 // draws as moved text: a deletion of one paragraph's text and an
@@ -775,29 +780,44 @@ const maxMoveText = 4096
 func (c *changes) moves() map[string]bool {
 	texts := map[string]*strings.Builder{}
 	var open []string
-	broken := map[string]bool{}
+	budget := maxMoveBytes
+	// drop stops collecting the open insertions: one crossing a
+	// paragraph break or past maxMoveText pairs with nothing.
+	drop := func(keep func(id string) bool) {
+		open = slices.DeleteFunc(open, func(id string) bool {
+			if keep(id) {
+				return false
+			}
+			delete(texts, id)
+			return true
+		})
+	}
+	write := func(s string) {
+		for _, id := range open {
+			budget -= max(len(s), 1)
+			texts[id].WriteString(s)
+		}
+		if budget < 0 {
+			drop(func(string) bool { return false })
+			return
+		}
+		drop(func(id string) bool { return texts[id].Len() <= maxMoveText })
+	}
 	var walk func(el *odf.Element, depth int)
 	walk = func(el *odf.Element, depth int) {
 		if depth > odf.MaxDepth || el.Is(odf.NSText, "tracked-changes") {
 			return
 		}
 		if isPara(el) {
-			// An insertion crossing a paragraph break pairs with nothing.
-			for _, id := range open {
-				broken[id] = true
-			}
+			drop(func(string) bool { return false })
 		}
 		for _, k := range el.Children {
 			switch {
 			case k.IsText():
-				for _, id := range open {
-					if b := texts[id]; b.Len() <= maxMoveText {
-						b.WriteString(k.Text)
-					}
-				}
+				write(k.Text)
 			case k.Is(odf.NSText, "change-start"):
 				id := k.A(odf.NSText, "change-id")
-				if r := c.regions[id]; r != nil && r.kind == changeInsertion && texts[id] == nil {
+				if r := c.regions[id]; r != nil && r.kind == changeInsertion && texts[id] == nil && budget > 0 {
 					texts[id] = &strings.Builder{}
 					open = append(open, id)
 				}
@@ -805,19 +825,13 @@ func (c *changes) moves() map[string]bool {
 				id := k.A(odf.NSText, "change-id")
 				open = slices.DeleteFunc(open, func(s string) bool { return s == id })
 			case k.Is(odf.NSText, "s"):
-				for _, id := range open {
-					if b := texts[id]; b.Len() <= maxMoveText {
-						b.WriteString(strings.Repeat(" ", spaces(k)))
-					}
-				}
+				write(strings.Repeat(" ", spaces(k)))
 			default:
 				walk(k, depth+1)
 			}
 		}
 		if isPara(el) {
-			for _, id := range open {
-				broken[id] = true
-			}
+			drop(func(string) bool { return false })
 		}
 	}
 	walk(c.body, 0)
@@ -843,13 +857,20 @@ func (c *changes) moves() map[string]bool {
 		}
 	}
 	for id, b := range texts {
-		if !broken[id] {
-			add(id, c.regions[id].author, b.String(), false)
-		}
+		add(id, c.regions[id].author, b.String(), false)
 	}
-	for id, r := range c.regions {
-		if r.kind == changeDeletion && len(r.content) == 1 && isPara(r.content[0]) {
-			add(id, r.author, flatText(r.content[0], 0), true)
+	for _, m := range c.order {
+		// The deletions in document order, so that the total cuts the
+		// same ones every time.
+		id := m.A(odf.NSText, "change-id")
+		r := c.regions[id]
+		if budget <= 0 {
+			break
+		}
+		if m.Is(odf.NSText, "change") && r.kind == changeDeletion && len(r.content) == 1 && isPara(r.content[0]) {
+			t := flatText(r.content[0], 0)
+			budget -= len(t)
+			add(id, r.author, t, true)
 		}
 	}
 	out := map[string]bool{}

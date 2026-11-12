@@ -465,11 +465,15 @@ func (r *revisions) bound(p *ooxml.Element, ps *css.Style, sink *inlineSink, sta
 }
 
 // maxMoveText bounds the characters of a revision's text the marked view
-// compares to find moved text: 4,096. Anti-DoS guard, not spec-mandated:
-// the texts are copied to be compared, and a moved sentence or paragraph
-// is far shorter; a longer revision is drawn as an insertion or a
-// deletion.
-const maxMoveText = 4096
+// compares to find moved text, 4,096, and maxMoveBytes the characters of
+// all of them in a part, 1 MiB. Anti-DoS guard, not spec-mandated: the
+// texts are copied to be compared, and a moved sentence or paragraph is
+// far shorter; a longer revision, and every revision past the total, is
+// drawn as an insertion or a deletion.
+const (
+	maxMoveText  = 4096
+	maxMoveBytes = 1 << 20
+)
 
 // findMoves records in r.moved the w:ins and w:del (17.13.5.18,
 // 17.13.5.14) under root whose texts pair as moved text
@@ -483,19 +487,25 @@ const maxMoveText = 4096
 func (r *revisions) findMoves(root *ooxml.Element) {
 	type pair struct{ del, ins []*ooxml.Element }
 	keys := map[string]*pair{}
+	budget := maxMoveBytes
 	var walk func(el *ooxml.Element, depth int)
 	walk = func(el *ooxml.Element, depth int) {
 		if depth > ooxml.MaxDepth {
 			return
 		}
 		for _, k := range el.Children {
+			if budget <= 0 {
+				return
+			}
 			del := k.Is(w, "del")
 			if !del && !k.Is(w, "ins") {
 				walk(k, depth+1)
 				continue
 			}
 			var b strings.Builder
-			if !revisionText(k, &b, depth+1) || b.Len() > maxMoveText {
+			ok := revisionText(k, &b, depth+1)
+			budget -= max(b.Len(), 1)
+			if !ok || b.Len() > maxMoveText {
 				continue
 			}
 			key, ok := office.MoveKey(attrOr(k, "author"), b.String())
