@@ -334,9 +334,18 @@ type familyLists struct {
 
 // maxFamilyCache caps the family lists [resolvedFamilies] keeps. Memory
 // guard, not spec-mandated: a document names a few dozen font lists in a
-// few languages; a list past the cap is resolved again at each call, to
-// the same keys.
+// few languages. A table that is full is emptied before the next list
+// goes in, so the lists of the documents being converted are the ones
+// kept, whatever an earlier document filled it with.
 const maxFamilyCache = 4096
+
+// maxFamilyKeyBytes caps the key, the language and the family names, of a
+// list [resolvedFamilies] keeps: 512 bytes. Anti-DoS guard, not
+// spec-mandated: the table outlives the conversion that fills it, so a
+// document must not park kilobytes of names in it. The font list of a
+// stylesheet is a few dozen bytes; a longer one is resolved at each call,
+// to the same keys.
+const maxFamilyKeyBytes = 512
 
 // familyCache holds the family lists of each list of families and
 // language resolved, for every conversion of the process: a list resolves
@@ -363,22 +372,28 @@ func resolvedFamilies(style Style) familyLists {
 		kb = append(kb, ':')
 		kb = append(kb, f...)
 	}
-	familyCache.mu.RLock()
-	l, ok := familyCache.m[string(kb)]
-	familyCache.mu.RUnlock()
-	if ok {
-		return l
+	kept := len(kb) <= maxFamilyKeyBytes
+	if kept {
+		familyCache.mu.RLock()
+		l, ok := familyCache.m[string(kb)]
+		familyCache.mu.RUnlock()
+		if ok {
+			return l
+		}
 	}
 	region := cjkRegion(style.Lang)
 	requested := slices.Clip(buildRequested(style.Families, region))
 	m := familyList{keys: requested}
 	m.addGeneric(genericSansSerif, region)
-	l = familyLists{requested: requested, match: slices.Clip(m.keys)}
-	familyCache.mu.Lock()
-	if len(familyCache.m) < maxFamilyCache {
+	l := familyLists{requested: requested, match: slices.Clip(m.keys)}
+	if kept {
+		familyCache.mu.Lock()
+		if len(familyCache.m) >= maxFamilyCache {
+			familyCache.m = make(map[string]familyLists, maxFamilyCache/4)
+		}
 		familyCache.m[string(kb)] = l
+		familyCache.mu.Unlock()
 	}
-	familyCache.mu.Unlock()
 	return l
 }
 
