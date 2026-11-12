@@ -8,6 +8,7 @@ import (
 	"github.com/go-text/typesetting/shaping"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // maxFontSize bounds [Style.Size], and the magnitude of [Style.LetterSpacing]
@@ -141,7 +142,7 @@ func (s Style) scale() float64 {
 
 // validate reports whether s can be laid out.
 func (s Style) validate() error {
-	if !(s.Size > 0 && s.Size <= maxFontSize) {
+	if !numeric.Positive(s.Size) || s.Size > maxFontSize {
 		return fmt.Errorf("%w: size %v outside (0, %d]", ErrInvalidStyle, s.Size, maxFontSize)
 	}
 	if !finiteWithin(s.LetterSpacing, maxFontSize) {
@@ -156,7 +157,7 @@ func (s Style) validate() error {
 	if !finiteWithin(s.WordSpacing, maxFontSize) {
 		return fmt.Errorf("%w: word spacing %v outside [-%d, %d]", ErrInvalidStyle, s.WordSpacing, maxFontSize, maxFontSize)
 	}
-	if s.Scale != 0 && !(s.Scale >= compose.MinHScale && s.Scale <= compose.MaxHScale) {
+	if s.Scale != 0 && (!numeric.Finite(s.Scale) || s.Scale < compose.MinHScale || s.Scale > compose.MaxHScale) {
 		return fmt.Errorf("%w: scale %v outside [%v, %v]", ErrInvalidStyle, s.Scale, compose.MinHScale, compose.MaxHScale)
 	}
 	return nil

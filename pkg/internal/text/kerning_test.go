@@ -59,7 +59,7 @@ func TestShape_NoKerningMeasuresTheNaturalAdvances(t *testing.T) {
 		kerned, natural := widths[0][j], widths[1][j]
 		// The A-V and V-A pairs of Liberation Serif kern by about 13 points
 		// each at 100 points.
-		if !(natural-kerned > 10) || math.IsNaN(kerned) {
+		if d := natural - kerned; math.IsNaN(d) || d <= 10 {
 			t.Errorf("%s: kerned %v, unkerned %v: want the unkerned wider", name, kerned, natural)
 		}
 	}
