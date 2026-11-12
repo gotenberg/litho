@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // kind is the format Calc's Standard column type gives a detected value
@@ -165,7 +167,7 @@ func detectNumber(s string) (detected, bool) {
 		num += "e" + exp
 	}
 	v, err := strconv.ParseFloat(strings.TrimSuffix(num, "."), 64)
-	if err != nil || math.IsInf(v, 0) || math.IsNaN(v) {
+	if err != nil || !numeric.Finite(v) {
 		return detected{}, false
 	}
 	if neg {
