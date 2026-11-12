@@ -3,6 +3,8 @@ package numfmt
 import (
 	"math"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // hashText is what Calc shows for a number too wide for its cell.
@@ -25,7 +27,7 @@ func (f *Format) Fit(v Value, width float64, measure func(string) float64) Resul
 		return r
 	}
 	x := v.Number
-	if v.Kind != Number || !f.standard || math.IsNaN(x) || math.IsInf(x, 0) {
+	if v.Kind != Number || !f.standard || !numeric.Finite(x) {
 		return f.hash(r)
 	}
 	maxDigit := 0.0
@@ -67,7 +69,7 @@ const maxFitDigits = 64
 // digitCount returns how many digits of width digit fit in w.
 func digitCount(w, digit float64) int {
 	n := math.Floor(w / digit)
-	if n < 0 || math.IsNaN(n) {
+	if !numeric.NonNegative(n) {
 		return 0
 	}
 	return int(min(n, maxFitDigits))

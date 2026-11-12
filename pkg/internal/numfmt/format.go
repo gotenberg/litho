@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // Kind is the kind of a [Value].
@@ -298,7 +299,7 @@ func (f *Format) Apply(v Value) Result {
 	case Number:
 	}
 	x := v.Number
-	if math.IsNaN(x) || math.IsInf(x, 0) {
+	if !numeric.Finite(x) {
 		return Result{Text: "#NUM!"}
 	}
 	i := f.pick(x)
@@ -421,7 +422,7 @@ const expLowerBound = 1e-4
 // roundTo rounds x half away from zero at dec decimals, through its
 // shortest decimal representation.
 func roundTo(x float64, dec int) float64 {
-	if x == 0 || math.IsInf(x, 0) || math.IsNaN(x) {
+	if x == 0 || !numeric.Finite(x) {
 		return x
 	}
 	if dec >= 0 && (math.Abs(x) >= 0x1p52 || x == math.Trunc(x)) {
