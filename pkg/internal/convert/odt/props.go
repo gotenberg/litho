@@ -438,9 +438,12 @@ func foldPara(p paraState, layer odf.Props) paraState {
 		p.keepTogether = v == "always"
 	}
 	if v, ok := layer.Lookup("fo:widows"); ok {
+		// A value that does not read leaves Atoi's 0, which applyPara
+		// raises to 1; one out of range its saturated bound.
 		p.widows, _ = strconv.Atoi(v)
 	}
 	if v, ok := layer.Lookup("fo:orphans"); ok {
+		// As fo:widows.
 		p.orphans, _ = strconv.Atoi(v)
 	}
 	if v, ok := layer.Lookup("fo:break-before"); ok {

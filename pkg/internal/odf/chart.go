@@ -63,6 +63,8 @@ func ParseChart(ctx context.Context, pkg *Package, dir string) (*chart.Chart, er
 	if err != nil {
 		return nil, fmt.Errorf("parsing the chart %s: %w", dir, err)
 	}
+	// A chart reads without its styles document, missing or not, as
+	// LibreOffice's defaults.
 	var styles *Element
 	if s, err := pkg.ParseFile(ctx, path.Join(dir, "styles.xml")); err == nil {
 		styles = s

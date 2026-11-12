@@ -64,6 +64,7 @@ func (b *builder) dateField(c *odf.Element) (string, bool) {
 	}
 	f, err := numfmt.Parse(code)
 	if err != nil {
+		// The default codes are constants that parse.
 		return "", false
 	}
 	return f.Apply(v).Text, true

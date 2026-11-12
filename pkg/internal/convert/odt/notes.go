@@ -45,6 +45,8 @@ func (b *builder) note(c *odf.Element, t textState, out *[]*layout.Node, ws *wsS
 		label = strings.TrimSpace(cit.TextContent())
 	}
 	if label == "" {
+		// An absent or unreadable text:start-value counts from 0, Atoi's
+		// result on an error.
 		start, _ := strconv.Atoi(cfg.A(odf.NSText, "start-value"))
 		format := cfg.A(odf.NSStyle, "num-format")
 		if format == "" {

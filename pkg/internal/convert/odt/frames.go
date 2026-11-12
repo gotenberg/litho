@@ -1063,6 +1063,8 @@ func (b *builder) shapeBody(c *odf.Element, g frameGeom) *layout.Node {
 	}
 	doc, err := svg.Parse(b.ctx, []byte(src), svg.Options{})
 	if err != nil {
+		// The SVG is the converter's own, its path data and viewBox the
+		// document's: one that does not parse draws nothing.
 		return nil
 	}
 	pic := &layout.Picture{Width: math.Max(g.w, 1), Height: math.Max(g.h, 1), Vector: doc.Draw}

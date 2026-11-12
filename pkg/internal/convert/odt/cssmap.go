@@ -469,6 +469,8 @@ func (b *builder) textWidth(s string, st *css.Style) float64 {
 	ts := text.Style{Families: text.BrowserFamilies(st.FontFamilies), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: st.FontSize}
 	p, _, err := b.fonts.Shape(b.ctx, []text.ParagraphRun{{Text: s, Style: ts}}, text.ParagraphOptions{})
 	if err != nil || p.Len() == 0 {
+		// A label that does not shape is measured as nothing: the layout
+		// shapes it again and reports what fails.
 		return 0
 	}
 	return p.Line(0, p.Len(), false).Width
