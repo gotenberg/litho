@@ -2,6 +2,7 @@ package css
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -134,5 +135,26 @@ func TestDisplay_ListItemKeywords(t *testing.T) {
 		if got := c.of(id).Display; got != want {
 			t.Errorf("#%s display %v, want %v", id, got, want)
 		}
+	}
+}
+
+// TestContent_AltTextLinear locks the cost of a long alternative text: it
+// builds in one buffer, not by one copy per string.
+func TestContent_AltTextLinear(t *testing.T) {
+	src := `"x" /` + strings.Repeat(` "abcd"`, 4096)
+	toks, _ := parseComponentValues(src)
+	toks = significant(toks)
+	var alt string
+	allocs := testing.AllocsPerRun(1, func() {
+		v, ok := parseContent(toks, &declCtx{})
+		if ok {
+			alt = v.(Content).Alt
+		}
+	})
+	if len(alt) != 4*4096 {
+		t.Fatalf("alt text of %d bytes, want %d", len(alt), 4*4096)
+	}
+	if allocs > 64 {
+		t.Errorf("%v allocations for 4096 strings, want the alt text built in one buffer", allocs)
 	}
 }

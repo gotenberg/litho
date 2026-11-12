@@ -1,5 +1,7 @@
 package css
 
+import "strings"
+
 // maxContentItems bounds the items of one content value: 256. Anti-DoS
 // guard, not spec-mandated: a generated label holds a few items, and each
 // one costs a counter lookup per pseudo-element.
@@ -66,6 +68,7 @@ func parseContent(v []token, c *declCtx) (any, bool) {
 		}
 		out.Items = append(out.Items, it)
 	}
+	var b strings.Builder
 	for _, t := range alt {
 		if t.typ != tString {
 			if t.typ == tFunction && eqFold(t.value, "attr") {
@@ -73,8 +76,9 @@ func parseContent(v []token, c *declCtx) (any, bool) {
 			}
 			return nil, false
 		}
-		out.Alt += t.value
+		b.WriteString(t.value)
 	}
+	out.Alt = b.String()
 	return out, true
 }
 
