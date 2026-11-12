@@ -66,6 +66,7 @@ func flow(f css.GridAutoFlow) func(*css.Style) { return func(s *css.Style) { s.G
 func cell(mods ...func(*css.Style)) *Node { return el(sty(mods...)) }
 
 func TestGrid_TrackSizing(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		cont  []func(*css.Style)
@@ -127,6 +128,7 @@ func TestGrid_TrackSizing(t *testing.T) {
 }
 
 func TestGrid_Placement(t *testing.T) {
+	t.Parallel()
 	areas := &css.GridAreas{Rows: 2, Cols: 2, Areas: []css.GridArea{
 		{Name: "head", Row0: 0, Row1: 1, Col0: 0, Col1: 2},
 		{Name: "main", Row0: 1, Row1: 2, Col0: 1, Col1: 2},
@@ -208,6 +210,7 @@ func TestGrid_Placement(t *testing.T) {
 }
 
 func TestGrid_AutoRepeat(t *testing.T) {
+	t.Parallel()
 	rep := func(fit bool) func(*css.Style) {
 		return func(s *css.Style) {
 			s.GridTemplateColumns = css.TrackList{
@@ -239,6 +242,7 @@ func TestGrid_AutoRepeat(t *testing.T) {
 }
 
 func TestGrid_Alignment(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		cont  []func(*css.Style)
@@ -349,6 +353,7 @@ func TestGrid_Draw(t *testing.T) {
 }
 
 func TestSizing_Keywords(t *testing.T) {
+	t.Parallel()
 	inline := func(w float64) *Node {
 		return el(sty(display(css.InlineBlock), width(w), height(10)))
 	}

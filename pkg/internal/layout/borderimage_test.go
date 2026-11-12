@@ -231,7 +231,7 @@ func TestBorderImage_InlineStrip(t *testing.T) {
 	// glyphs), its top edge at y 3; line 2's from 0 to 22 at y 23, with a
 	// right border alone.
 	end1, end2 := at(img, 19, 3), at(img, 19, 23)
-	if !(end1.R > end1.B) || !(end2.B > end2.R) {
+	if end1.R <= end1.B || end2.B <= end2.R {
 		t.Errorf("fragment ends: line 1 %v, line 2 %v; want reddish then bluish", end1, end2)
 	}
 	if c := at(img, 21, 8); c != (color.NRGBA{255, 255, 255, 255}) {
