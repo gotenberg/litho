@@ -265,7 +265,7 @@ func decodeWOFF(data []byte) ([]byte, error) {
 		} else {
 			inflated, err := inflate(stored, int(e.origLength)) // fits int: at most MaxSfntBytes, checked above
 			if err != nil {
-				return nil, invalid("table %s: %v", tagString(e.tag), err)
+				return nil, fmt.Errorf("%w: table %s: %w", ErrInvalid, tagString(e.tag), err)
 			}
 			t.data = inflated
 		}

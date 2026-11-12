@@ -425,7 +425,7 @@ func reconstructHmtx(data []byte, numHMetrics int, xMin []int16) ([]byte, error)
 		}
 	}
 	if r.err != nil {
-		return nil, invalid("hmtx: %v", r.err)
+		return nil, fmt.Errorf("hmtx: %w", r.err)
 	}
 	out := make([]byte, 0, 4*numHMetrics+2*(numGlyphs-numHMetrics))
 	for i := range numGlyphs {

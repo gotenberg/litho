@@ -299,7 +299,7 @@ func readCollectionFirstFont(r *reader, numTables int) (uint32, []int, error) {
 func unbrotli(src []byte, n int) ([]byte, error) {
 	out, err := readExactly(brotli.NewReader(bytes.NewReader(src)), n)
 	if err != nil {
-		return nil, invalid("Brotli stream: %v", err)
+		return nil, fmt.Errorf("%w: Brotli stream: %w", ErrInvalid, err)
 	}
 	return out, nil
 }

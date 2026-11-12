@@ -37,14 +37,20 @@ func subsetTTF(raw []byte, keepGIDs map[uint16]bool) ([]byte, error) {
 	}
 
 	headData, err := truetype.TableData(raw, records, "head")
-	if err != nil || len(headData) < 54 {
+	if err != nil {
 		return raw, fmt.Errorf("read head table: %w", err)
+	}
+	if len(headData) < 54 {
+		return raw, fmt.Errorf("%w: head table of %d bytes, 54 expected", truetype.ErrInvalidFont, len(headData))
 	}
 	indexToLocFormat := int16(binary.BigEndian.Uint16(headData[50:52])) //nolint:gosec // signed by spec
 
 	maxpData, err := truetype.TableData(raw, records, "maxp")
-	if err != nil || len(maxpData) < 6 {
+	if err != nil {
 		return raw, fmt.Errorf("read maxp table: %w", err)
+	}
+	if len(maxpData) < 6 {
+		return raw, fmt.Errorf("%w: maxp table of %d bytes, 6 expected", truetype.ErrInvalidFont, len(maxpData))
 	}
 	numGlyphs := int(binary.BigEndian.Uint16(maxpData[4:6]))
 
