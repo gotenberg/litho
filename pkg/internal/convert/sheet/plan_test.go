@@ -310,3 +310,22 @@ func TestConvert_FallbackPaper(t *testing.T) {
 		})
 	}
 }
+
+// TestConvert_ScaledHeaderRoom shrinks the header's room in the top
+// margin with the print scale under Calc's rules, the cells starting
+// higher, and keeps the margin whole under Excel's.
+func TestConvert_ScaledHeaderRoom(t *testing.T) {
+	y := map[bool]float64{}
+	for _, excel := range []bool{false, true} {
+		sh := &Sheet{Name: "S", Page: a4(), Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "cell", nil)}}}}
+		sh.Page.Scale = 50
+		sh.Page.HeaderTop, sh.Page.Margin[css.Top] = 21.6, 54
+		sh.HeaderFooter.Odd.Header[1] = []Span{{Text: "H"}}
+		doc := newDoc(sh)
+		doc.ExcelRules = excel
+		y[excel] = find(t, convert(t, doc, office.Options{}).Pages[0], "cell").y
+	}
+	if d := y[false] - y[true]; math.Abs(d-(54-21.6)*0.5) > 0.5 {
+		t.Errorf("Excel's cells %.2f points below Calc's, want %.2f", d, (54-21.6)*0.5)
+	}
+}

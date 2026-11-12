@@ -76,9 +76,17 @@ type sheetPlan struct {
 
 // docArea returns the room for cells on a page at zoom percent, in sheet
 // points: the paper less the margins, divided by the zoom, less the
-// headings (ScPrintFunc::GetDocPageSize). Under Excel's rules the grid
-// line that closes a page's last column takes its room too, unscaled
-// ([excelGridLine]).
+// headings (ScPrintFunc::GetDocPageSize), the room of a header and a
+// footer in the margins unscaled. Under Excel's rules the margins divide
+// whole, and the grid line that closes a page's last column takes its
+// room too, unscaled ([excelGridLine]).
+//
+// # Corpus evidence
+//
+//   - litho/xlsx paper-fit-a5-landscape: fitted to the width of an A5
+//     page at a scale below 100, Excel starts the cells at the 0.75 inch
+//     top margin and prints 36 rows a page, where the header's room
+//     scaled would start them 15 points higher and fit 40.
 func (sp *sheetPlan) docArea(zoom int) (float64, float64) {
 	z := float64(zoom) / 100
 	w := (sp.width - sp.margin[1] - sp.margin[3]) / z
@@ -90,6 +98,10 @@ func (sp *sheetPlan) docArea(zoom int) (float64, float64) {
 	top, bottom := sp.margin[0]/z, sp.margin[2]/z
 	ps := &sp.g.sh.Page
 	hf := &sp.g.sh.HeaderFooter
+	if sp.g.doc.ExcelRules {
+		// Excel keeps the margins whole: no header or footer room.
+		hf = &HeaderFooter{}
+	}
 	if !sp.single && headerShown(hf, false) && ps.HeaderTop >= 0 && ps.HeaderTop < sp.margin[0] {
 		top = ps.HeaderTop/z + sp.margin[0] - ps.HeaderTop
 	}

@@ -400,9 +400,10 @@ func (b *builder) renderPage(p *pagePlan, first bool, total int) (*typeset.Page,
 	// The header's and the footer's room in the margins shrinks with the
 	// print scale, as Calc adds their height in zoomed units to the page
 	// margins (ScPrintFunc::GetDocPageSize): the cells start that much
-	// higher, and the room below them grows as much.
+	// higher, and the room below them grows as much. Excel keeps the
+	// margins whole (sheetPlan.docArea).
 	hf := &sp.g.sh.HeaderFooter
-	if z != 1 && !sp.single {
+	if z != 1 && !sp.single && !sp.g.doc.ExcelRules {
 		if headerShown(hf, false) && ps.HeaderTop >= 0 && ps.HeaderTop < sp.margin[css.Top] {
 			shrink := (sp.margin[css.Top] - ps.HeaderTop) * (1 - z)
 			oy -= shrink
