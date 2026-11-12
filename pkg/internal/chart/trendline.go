@@ -14,7 +14,7 @@ const trendSamples = 100
 // LibreOffice offer 2 to 6.
 const maxPolynomialOrder = 6
 
-// trendPoints returns the points a trendline t fits through: the series'
+// trendPoints returns the points a trendline fits through: the series'
 // valid x and y values in order.
 func trendPoints(xs, ys []float64) ([]float64, []float64) {
 	var fx, fy []float64

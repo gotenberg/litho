@@ -72,7 +72,7 @@ func (d *dim) labelled() bool {
 	return d.visible() && (d.ax == nil || d.ax.Labels != LabelNone)
 }
 
-// frac returns where category i, or value v, lies along d.
+// catFrac returns where category i lies along d.
 func (d *dim) catFrac(i float64) float64 {
 	var f float64
 	switch {

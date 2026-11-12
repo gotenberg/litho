@@ -35,8 +35,8 @@ const (
 	minorTickLength = tickLength * 3 / 4
 	// labelSpacing is the gap between an axis and its labels: 100.
 	labelSpacing = 100 * mm100
-	// axisTitleDistance is the gap between the axes and an axis title: 420
-	// below the x axis, 450 left of the y axis.
+	// xTitleDistance and yTitleDistance are the gaps between the axes and
+	// an axis title: 420 below the x axis, 450 left of the y axis.
 	xTitleDistance = 420 * mm100
 	yTitleDistance = 450 * mm100
 	// titleHPad and titleVPad pad a title's text: 0.18 and 0.30 of its font
@@ -230,8 +230,9 @@ func (s *Stroke) compose() *compose.Stroke {
 // # Corpus evidence
 //
 //   - libreoffice/pptx: chart2/funnel-pp1.pptx prints the 10-point Liberation Serif
-//     notice 275.93 points wide, where its advances sum to 282.78;
-//     xlsx: chart2/funnel1.xlsx its first line 185.51 for 190.50.
+//     notice 275.93 points wide, where its advances sum to 282.78.
+//   - libreoffice/xlsx: chart2/funnel1.xlsx prints the notice's first line
+//     185.51 points wide, where its advances sum to 190.50.
 const noticeNarrowing = 0.9757
 
 // maxStrokeWidth caps a line's width, in points: Office allows 1584.
