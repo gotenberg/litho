@@ -235,7 +235,9 @@ func (s *Stroke) compose() *compose.Stroke {
 //     185.51 points wide, where its advances sum to 190.50.
 const noticeNarrowing = 0.9757
 
-// maxStrokeWidth caps a line's width, in points: Office allows 1584.
+// maxStrokeWidth caps a line's width, in points. Anti-DoS guard, not
+// spec-mandated: ECMA-376's ST_LineWidth allows at most 20116800 EMU,
+// 1584 points.
 const maxStrokeWidth = 1584
 
 // rectPath returns the outline of r.
