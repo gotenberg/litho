@@ -104,7 +104,7 @@ const maxRise = 1
 //     up, sub 58% 1.4 points down, 33% 58% 6.6 points up.
 func scriptShift(size float64, m text.Metrics, sub bool) float64 {
 	h := m.Ascent + m.Descent
-	if !(h > 0) {
+	if !positive(h) {
 		return 0
 	}
 	share := m.Ascent / h
@@ -380,7 +380,7 @@ func (b *builder) stretchText(body *TextBody, inner compose.Rect, res *textResul
 	nb.Wrap, nb.Autofit = false, AutofitNone
 	w := b.naturalWidth(&nb, noFit) + blockSlack
 	lay := b.layoutBody(&nb, w, inner.Height, noFit)
-	if lay == nil || !(w > blockSlack) || !(lay.height > 0) {
+	if lay == nil || w <= blockSlack || !positive(lay.height) {
 		return res
 	}
 	sx, sy := inner.Width/w, inner.Height/lay.height
@@ -581,7 +581,7 @@ func roundPt(v float64) float64 {
 // scaledSize returns the size s at the font scale k: s rounded to a
 // point, scaled, and rounded again when k is not 1.
 func scaledSize(s, k float64) float64 {
-	if !(s > 0) {
+	if !positive(s) {
 		s = defaultFontSize
 	}
 	s = min(s, maxFontSize)
@@ -741,7 +741,7 @@ func (b *builder) lines(p *Paragraph, ts text.Style, f fit, fontLines bool) line
 	case p.LineSpacingPoints > 0 && !math.IsInf(p.LineSpacingPoints, 0):
 		lb.height = min(p.LineSpacingPoints, maxCoordinate) * sf
 		lb.ascent = a + lb.height - n
-	case !(prop > 0) || prop == 1 || math.IsInf(prop, 0):
+	case !positiveFinite(prop) || prop == 1:
 		if sf < 1 {
 			lb.height = n * sf
 			lb.ascent = min(a, n*sf)
@@ -1003,10 +1003,10 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 	st.TabStops = stops
 	space := func(pts, pct float64) float64 {
 		v := pts
-		if pct > 0 && !(pts > 0) {
+		if pct > 0 && !positive(pts) {
 			v = pct * size
 		}
-		if !(v > 0) || math.IsInf(v, 0) {
+		if !positiveFinite(v) {
 			return 0
 		}
 		return min(v, maxCoordinate) * f.spacing
@@ -1023,7 +1023,7 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 				psize = scaledSize(prev.Runs[0].Style.Size, f.font)
 			}
 			after := prev.SpaceAfter
-			if prev.SpaceAfterPct > 0 && !(after > 0) {
+			if prev.SpaceAfterPct > 0 && !positive(after) {
 				after = prev.SpaceAfterPct * psize
 			}
 			if after > 0 && !math.IsInf(after, 0) {
@@ -1205,7 +1205,7 @@ func (b *builder) groupFits(shapes []*Shape) map[int]fit {
 			}
 			if s.Kind == KindGroup {
 				child := s.Child
-				if !(child.Width > 0) || !(child.Height > 0) || !finite(child) {
+				if !usable(child) {
 					child = s.Box
 				}
 				sx, sy := s.Box.Width/child.Width, s.Box.Height/child.Height

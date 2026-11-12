@@ -105,7 +105,7 @@ func handoutAreas(w, h float64, m [4]float64, sw, sh float64, per int) (slides, 
 	partW := (aw - float64(cols-1)*handoutGap) / float64(cols)
 	partH := (ah - float64(rows-1)*handoutGap) / float64(rows)
 	slides, ruled = make([]compose.Rect, len(cells)), make([]compose.Rect, len(ruledCells))
-	if !(partW > 0) || !(partH > 0) || !(sw > 0) || !(sh > 0) {
+	if !positive(partW) || !positive(partH) || !positive(sw) || !positive(sh) {
 		return slides, ruled
 	}
 	k := min(partW/sw, partH/sh)
@@ -183,7 +183,7 @@ func turned(w, h, pw, ph float64) bool {
 func turnBox(r compose.Rect, flexible bool, w, h float64, m [4]float64) compose.Rect {
 	cw, ch := w-m[css.Left]-m[css.Right], h-m[css.Top]-m[css.Bottom]
 	tw, th := h-m[css.Left]-m[css.Right], w-m[css.Top]-m[css.Bottom]
-	if !(cw > 0) || !(ch > 0) || !(tw > 0) || !(th > 0) {
+	if !positive(cw) || !positive(ch) || !positive(tw) || !positive(th) {
 		return r
 	}
 	fx, fy := tw/cw, th/ch
@@ -244,7 +244,7 @@ func (b *builder) handoutPage(n int, group []*Slide, numberOf func(*Slide) int) 
 	for i, s := range group {
 		frags, slideLinks, sect := b.slideContent(s, numberOf(s), sw, sh)
 		sects = append(sects, sect)
-		if i >= len(areas) || !(areas[i].Width > 0) {
+		if i >= len(areas) || !positive(areas[i].Width) {
 			continue
 		}
 		r := areas[i]

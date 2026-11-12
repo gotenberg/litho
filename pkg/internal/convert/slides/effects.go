@@ -53,7 +53,7 @@ type effectGrid struct {
 // at effectScale pixels a point, rounded up, the whole reduced to
 // effectPixels when it holds more; false for an area too small to draw.
 func newGrid(box compose.Rect) (effectGrid, bool) {
-	if !finite(box) || !(box.Width > 0) || !(box.Height > 0) {
+	if !usable(box) {
 		return effectGrid{}, false
 	}
 	w0, h0 := math.Ceil(box.Width*effectScale), math.Ceil(box.Height*effectScale)
@@ -81,7 +81,7 @@ func (g effectGrid) pixels() compose.Matrix {
 // budget's reduction, then truncated.
 func (g effectGrid) radius(r float64) int {
 	v := math.Ceil(r*effectScale) * g.unit / effectScale
-	if !(v >= 1) {
+	if math.IsNaN(v) || v < 1 {
 		return 0
 	}
 	return int(min(v, raster.MaxKernelRadius)) // fits int: at most MaxKernelRadius
@@ -171,10 +171,11 @@ func silhouetteOf(frags []compose.Fragment, m compose.Matrix) *silhouette {
 		}
 	}
 	walk(frags, m, 0)
-	if len(s.paths) == 0 || !(x1 > x0) || !(y1 > y0) {
+	w, h := x1-x0, y1-y0
+	if len(s.paths) == 0 || !positive(w) || !positive(h) {
 		return nil
 	}
-	s.bounds = compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
+	s.bounds = compose.Rect{X: x0, Y: y0, Width: w, Height: h}
 	return s
 }
 
@@ -208,10 +209,11 @@ func grow(r compose.Rect, d float64) compose.Rect {
 func intersect(a, b compose.Rect) (compose.Rect, bool) {
 	x0, y0 := max(a.X, b.X), max(a.Y, b.Y)
 	x1, y1 := min(a.X+a.Width, b.X+b.Width), min(a.Y+a.Height, b.Y+b.Height)
-	if !(x1 > x0) || !(y1 > y0) {
+	w, h := x1-x0, y1-y0
+	if !positive(w) || !positive(h) {
 		return compose.Rect{}, false
 	}
-	return compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}, true
+	return compose.Rect{X: x0, Y: y0, Width: w, Height: h}, true
 }
 
 // union raises the coverage of m by that of n, source-over, in place.
@@ -222,10 +224,15 @@ func union(m, n *image.Alpha) {
 	}
 }
 
+// minDeterminant is the smallest determinant a transform inverts with:
+// one closer to zero flattens the shape to a line, whose inverse is not
+// finite.
+const minDeterminant = 1e-12
+
 // invert returns the inverse of m, false when m is singular.
 func invert(m compose.Matrix) (compose.Matrix, bool) {
 	det := m.A*m.D - m.B*m.C
-	if !(math.Abs(det) > 1e-12) || math.IsInf(det, 0) {
+	if math.IsNaN(det) || math.Abs(det) <= minDeterminant || math.IsInf(det, 0) {
 		return compose.Matrix{}, false
 	}
 	return compose.Matrix{
@@ -305,7 +312,7 @@ func effectsTwice(s *Shape) bool {
 //     shadow (a bitmap of the shape and both glows, at 40% opacity), the
 //     outer glow, the glow, then the rectangle.
 func (b *builder) effects(s *Shape, paths []shape.Path, box compose.Rect, m compose.Matrix, txt *textResult) ([]compose.Fragment, []shape.Path) {
-	if s.Shadow == nil && s.Glow == nil && !(s.SoftEdge > 0) {
+	if s.Shadow == nil && s.Glow == nil && !positive(s.SoftEdge) {
 		return nil, paths
 	}
 	sm := skewedAboutCentre(box, s.Rotation, s.SkewX, s.FlipH, s.FlipV)
@@ -356,7 +363,7 @@ func invertOr(m compose.Matrix) compose.Matrix {
 //     prints its table's borders again 10 pt down and right in the
 //     shadow's red, its text once.
 func (b *builder) contentEffects(s *Shape, frags []compose.Fragment, m compose.Matrix) []compose.Fragment {
-	if s.Shadow == nil && s.Glow == nil && !(s.SoftEdge > 0) {
+	if s.Shadow == nil && s.Glow == nil && !positive(s.SoftEdge) {
 		return frags
 	}
 	if s.SoftEdge > 0 {
@@ -399,7 +406,7 @@ func (b *builder) paintEffects(s *Shape, own, text []compose.Fragment, toSlide c
 	}
 	sil := silhouetteOf(own, toSlide)
 	if sil == nil {
-		if s.Shadow != nil && s.Shadow.Opacity > 0 && len(text) > 0 && !(s.Shadow.Blur > 0) {
+		if s.Shadow != nil && s.Shadow.Opacity > 0 && len(text) > 0 && !positive(s.Shadow.Blur) {
 			return group(back, b.hardShadow(b.ctx, s.Shadow, nil, text, toSlide, compose.Rect{})), nil
 		}
 		if s.Shadow != nil && s.Shadow.Blur > 0 && len(text) > 0 {

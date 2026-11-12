@@ -120,6 +120,13 @@ func finite(r compose.Rect) bool {
 	return r.Width >= 0 && r.Height >= 0
 }
 
+// positive reports whether v is greater than zero. NaN is not: a size a
+// source leaves undefined draws as none.
+func positive(v float64) bool { return v > 0 }
+
+// positiveFinite reports whether v is a finite number greater than zero.
+func positiveFinite(v float64) bool { return v > 0 && !math.IsInf(v, 1) }
+
 // maxCoordinate bounds the coordinates of a box drawn, in points.
 // Anti-DoS guard, not spec-mandated: ten times the largest PDF page side
 // holds every shape a slide shows, and keeps the arithmetic finite.

@@ -35,7 +35,7 @@ import (
 func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb lineBox, f fit, number int, indent float64) {
 	bu := p.Bullet
 	rel := bu.Scale
-	if !(rel > 0) || rel > maxBulletScale {
+	if !positive(rel) || rel > maxBulletScale {
 		rel = 1
 	}
 	size := min(max(first.Size, 0), maxFontSize)
@@ -87,7 +87,7 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 		symbol = false
 	case BulletPicture:
 		pic := bu.Picture
-		if pic == nil || (pic.Source == nil && pic.Vector == nil) || !(pic.Width > 0) || !(pic.Height > 0) {
+		if pic == nil || (pic.Source == nil && pic.Vector == nil) || !positive(pic.Width) || !positive(pic.Height) {
 			b.warn(CodePicture, "a picture bullet has no picture and is left out")
 			return
 		}

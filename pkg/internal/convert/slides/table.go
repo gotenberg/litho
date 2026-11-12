@@ -2,7 +2,6 @@ package slides
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -54,7 +53,7 @@ func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment
 		rows = rows[:max(maxTableCells/len(cols), 1)]
 	}
 	side := func(v float64) float64 {
-		if !(v > 0) || math.IsInf(v, 0) {
+		if !positiveFinite(v) {
 			return 0
 		}
 		return min(v, maxCoordinate)

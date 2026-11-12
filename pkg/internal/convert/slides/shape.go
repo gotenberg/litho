@@ -75,7 +75,7 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 			return nil
 		}
 		child := s.Child
-		if !(child.Width > 0) || !(child.Height > 0) || !finite(child) {
+		if !usable(child) {
 			child = box
 		}
 		sx, sy := box.Width/child.Width, box.Height/child.Height

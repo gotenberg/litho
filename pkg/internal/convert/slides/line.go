@@ -30,7 +30,7 @@ func (b *builder) stroke(l *Line, ops []compose.PathOp) []compose.Fragment {
 		// the line itself is a PDF zero-width line, the thinnest the
 		// device draws.
 		width = hairlineArrowWidth
-	} else if !(width > 0) || math.IsInf(width, 0) {
+	} else if !positiveFinite(width) {
 		return nil
 	}
 	sl := shape.Line{Width: min(width, maxLineWidth), Color: colorOf(l.Color), Head: arrowheadOf(l.Head), Tail: arrowheadOf(l.Tail)}
@@ -53,7 +53,7 @@ func (b *builder) stroke(l *Line, ops []compose.PathOp) []compose.Fragment {
 	if len(l.Dash) > 0 && len(l.Dash) <= maxDash {
 		ok, sum := true, 0.0
 		for _, d := range l.Dash {
-			if !(d >= 0) || math.IsInf(d, 0) {
+			if math.IsNaN(d) || d < 0 || math.IsInf(d, 0) {
 				ok = false
 			}
 			sum += d

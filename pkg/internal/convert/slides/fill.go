@@ -95,7 +95,7 @@ func (b *builder) pictureFill(pic *layout.Picture, tile bool, box compose.Rect) 
 		b.warn(CodePicture, "a picture fill has no picture and paints nothing")
 		return nil
 	}
-	if !tile || !(pic.Width > 0) || !(pic.Height > 0) {
+	if !tile || !positive(pic.Width) || !positive(pic.Height) {
 		return b.picture(pic, box)
 	}
 	nx := math.Ceil(box.Width / pic.Width)
@@ -208,7 +208,7 @@ type hatch struct {
 // corner, nil for a hatch without spacing or with too many lines.
 func hatchOps(h hatch, box compose.Rect) []compose.PathOp {
 	d := h.distance * 72 / 2540
-	if !(d > 0) || !finite(box) {
+	if !positive(d) || !finite(box) {
 		return nil
 	}
 	angles := []float64{h.angle / 10}
