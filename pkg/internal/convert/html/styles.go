@@ -169,6 +169,8 @@ func (c *collector) parse(ctx context.Context, body []byte, u, media, name strin
 			c.warn("css-limit", fmt.Sprintf("the %s was cut short: %v", name, displayURL(err.Error())))
 			return s
 		}
+		// The only other error is ctx's, which the conversion returns at
+		// its next check.
 		return nil
 	}
 	return s
