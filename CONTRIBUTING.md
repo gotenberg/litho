@@ -114,6 +114,7 @@ Never load embedded files, images, or binary streams into memory during parsing.
 ### Panics and goroutines
 
 - Internal code never panics and never calls `recover()`. Every exported `pkg/pdf` entry point that processes document bytes installs a top-level `recover()` that logs the panic at Error and returns a wrapped sentinel.
+- One exception: a call into a third-party library that reports an error only by panicking converts the panic at that call into an error the caller handles. The comment at the call names the library and what it panics on (see `evalBoolean` in `pkg/internal/schematron`). A panic of litho's own is never recovered this way.
 - Every goroutine exits before its parent call returns. `ctx` reaches every goroutine, and result collection selects on `ctx.Done()`.
 - Each worker recovers its own panics into an error wrapping `document.ErrInternalPanic`, since the entry point's `recover()` never sees them.
 - Fan-out is bounded by a fixed count or a pool, never one goroutine per untrusted-input element.
