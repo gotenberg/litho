@@ -2,6 +2,7 @@ package layout
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -41,10 +42,10 @@ func rtl(s *css.Style)             { s.Direction = css.RTL }
 // item returns a block of w by h px, auto for a NaN size.
 func item(w, h float64, mods ...func(*css.Style)) *Node {
 	ms := []func(*css.Style){}
-	if w == w {
+	if !math.IsNaN(w) {
 		ms = append(ms, width(w))
 	}
-	if h == h {
+	if !math.IsNaN(h) {
 		ms = append(ms, height(h))
 	}
 	return el(sty(append(ms, mods...)...))

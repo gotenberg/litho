@@ -186,7 +186,7 @@ func TestShape_Arrowheads(t *testing.T) {
 			continue
 		}
 		end := out[0].(*typeset.Path).Ops[1].P[0].X
-		if tc.docked && !(end < 100) || !tc.docked && !near(end, 100, 1e-9) {
+		if tc.docked && (math.IsNaN(end) || end >= 100) || !tc.docked && !near(end, 100, 1e-9) {
 			t.Errorf("kind %d: line ends at %v", tc.kind, end)
 		}
 		if tc.kind == ArrowTriangle {

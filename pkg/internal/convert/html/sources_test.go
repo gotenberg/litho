@@ -6,6 +6,7 @@ import (
 	"testing/fstest"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 func TestParseSrcset(t *testing.T) {
@@ -161,7 +162,7 @@ func FuzzParseSrcset(f *testing.F) {
 			}
 		}
 		slot := b.slotSize(sizes)
-		if !(slot > 0) {
+		if !numeric.Positive(slot) {
 			t.Fatalf("slot %v", slot)
 		}
 		if len(cands) > 0 {

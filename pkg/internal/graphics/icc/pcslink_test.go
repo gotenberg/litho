@@ -58,7 +58,7 @@ func TestPCSLinkTakesUnclippedXYZ(t *testing.T) {
 	}
 	// A green past the sRGB primary: green stays the dominant channel.
 	l.Convert([]float64{-0.1, 0.6, 0.05}, out)
-	if !(out[1] > out[0] && out[1] > out[2]) {
+	if math.IsNaN(out[0]) || math.IsNaN(out[1]) || math.IsNaN(out[2]) || out[1] <= out[0] || out[1] <= out[2] {
 		t.Fatalf("an out-of-gamut green = %v, want green dominant", out)
 	}
 	for _, v := range out {

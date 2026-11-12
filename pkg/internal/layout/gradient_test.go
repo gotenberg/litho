@@ -145,7 +145,7 @@ func TestGradient_ColorStops(t *testing.T) {
 	// order within [0, 1].
 	g = &css.Gradient{Stops: gstops(red, 0.0, nil, 2.0, css.Color{B: 1, A: 0.5}, 10.0)}
 	stops, lo, hi, _, ok := e.colorStops(g, px(10), 0, px(10), false, 0)
-	if !ok || len(stops) < gradientSplits || !(hi > lo) || stops[0].Offset != 0 || stops[len(stops)-1].Offset != 1 {
+	if !ok || len(stops) < gradientSplits || math.IsNaN(hi) || math.IsNaN(lo) || hi <= lo || stops[0].Offset != 0 || stops[len(stops)-1].Offset != 1 {
 		t.Fatalf("stops %v over [%v, %v]", stops, lo, hi)
 	}
 	sh := &typeset.Shading{To: typeset.Point{X: 1}, Stops: stops}

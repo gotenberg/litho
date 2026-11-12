@@ -1,6 +1,7 @@
 package html
 
 import (
+	"math"
 	"testing"
 )
 
@@ -64,7 +65,7 @@ func TestFootnotes_CallsAndBodies(t *testing.T) {
 	}
 	pg := doc.Pages[0]
 	one, two := find(t, pg, "1. First note"), find(t, pg, "2. Second note")
-	if !(one.y > 150 && two.y > one.y) {
+	if math.IsNaN(one.y) || math.IsNaN(two.y) || one.y <= 150 || two.y <= one.y {
 		t.Errorf("bodies at %v and %v, want at the bottom of the page area in order", one.y, two.y)
 	}
 	call := find(t, pg, "One")
@@ -121,7 +122,7 @@ func TestNotes_CallsAndBodies(t *testing.T) {
 	}
 	pg := doc.Pages[0]
 	body, flow := find(t, pg, "1. First note back"), find(t, pg, "One")
-	if !(body.y < flow.y) {
+	if math.IsNaN(body.y) || math.IsNaN(flow.y) || body.y >= flow.y {
 		t.Errorf("body at %v, flow at %v: want the note area above the flow", body.y, flow.y)
 	}
 	if hasText(pg, "One First") {
@@ -143,10 +144,10 @@ func TestRunning_ShrinksToFitItsBox(t *testing.T) {
 	doc := convertDoc(t, src, Options{PreferCSSPageSize: true})
 	pg := doc.Pages[0]
 	head, foot := find(t, pg, "Head"), find(t, pg, "Foot")
-	if !(head.x > 150 && head.x < 200) {
+	if math.IsNaN(head.x) || head.x <= 150 || head.x >= 200 {
 		t.Errorf("running header at %v, want centred on the page", head.x)
 	}
-	if !(foot.x > 300) {
+	if math.IsNaN(foot.x) || foot.x <= 300 {
 		t.Errorf("running footer at %v, want at the right edge", foot.x)
 	}
 }

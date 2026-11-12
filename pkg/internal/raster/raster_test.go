@@ -3,6 +3,7 @@ package raster
 import (
 	"errors"
 	"image"
+	"math"
 	"slices"
 	"testing"
 
@@ -181,7 +182,7 @@ func TestGaussian_Weights(t *testing.T) {
 	if d := sum - 1; d > 1e-12 || d < -1e-12 {
 		t.Errorf("Gaussian(1) sums to %v", sum)
 	}
-	if !(k[3] > k[2] && k[2] > k[1] && k[1] > k[0]) {
+	if slices.ContainsFunc(k[:4], math.IsNaN) || k[3] <= k[2] || k[2] <= k[1] || k[1] <= k[0] {
 		t.Errorf("Gaussian(1) = %v does not fall from its middle", k)
 	}
 }

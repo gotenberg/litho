@@ -2,6 +2,7 @@ package layout
 
 import (
 	"context"
+	"math"
 	"os"
 	"testing"
 
@@ -59,7 +60,7 @@ func TestFontKerning(t *testing.T) {
 			auto := vAt(css.KerningAuto, tt.inline)
 			// Liberation Serif's A is 72.22 points wide at 100 points and
 			// the A-V pair kerns by about 13.
-			if !near(natural, 72.216796875) || !(natural-kerned > 10) || !near(auto, kerned) {
+			if !near(natural, 72.216796875) || math.IsNaN(natural-kerned) || natural-kerned <= 10 || !near(auto, kerned) {
 				t.Errorf("V at %v kerned, %v auto, %v unkerned", kerned, auto, natural)
 			}
 		})

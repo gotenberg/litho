@@ -139,7 +139,7 @@ func TestMarginBoxes_PositionsAndCounters(t *testing.T) {
 	}
 	// Middle of the 40pt top margin: the line box is centred.
 	tl, k := find(t, p1, "TL"), find(t, p1, "K")
-	if !(tl.y > 20 && tl.y < 40) || !(k.y < tl.y) {
+	if math.IsNaN(tl.y) || math.IsNaN(k.y) || tl.y <= 20 || tl.y >= 40 || k.y >= tl.y {
 		t.Errorf("top-left baseline %v, corner %v: want the corner top-aligned above the centred box", tl.y, k.y)
 	}
 	if !approx(k.x, 0, 0.01) {
@@ -153,7 +153,7 @@ func TestMarginBoxes_PositionsAndCounters(t *testing.T) {
 	if br.y < 260 {
 		t.Errorf("bottom-right baseline %v, want in the bottom margin", br.y)
 	}
-	if lm := find(t, p1, "LM"); !approx(lm.x, 25-5, 0.01) || !(lm.y > 140 && lm.y < 160) {
+	if lm := find(t, p1, "LM"); !approx(lm.x, 25-5, 0.01) || math.IsNaN(lm.y) || lm.y <= 140 || lm.y >= 160 {
 		t.Errorf("left-middle at %v,%v: want centred in the left margin, mid-page", lm.x, lm.y)
 	}
 }
@@ -288,13 +288,13 @@ func TestHeaderFooter_Positions(t *testing.T) {
 	h := find(t, doc.Pages[1], "T1 2/2")
 	// The header's .text is 8pt, below the header's 15pt padding: its
 	// baseline under 15+8*1.2 and over 15.
-	if !approx(h.x, 0, 0.01) || !(h.y > 15 && h.y < 15+8*1.25) || h.size != 8 {
+	if !approx(h.x, 0, 0.01) || math.IsNaN(h.y) || h.y <= 15 || h.y >= 15+8*1.25 || h.size != 8 {
 		t.Errorf("header at %v,%v size %v", h.x, h.y, h.size)
 	}
 	f := find(t, doc.Pages[0], "11/6/26, 10:30 AM https://example.com/doc.html")
 	// The footer's paragraph sits on its 15pt padding, its 10pt bottom
 	// margin above it: the baseline above 300-25.
-	if !(f.y < 300-25 && f.y > 300-25-12) || f.size != 10 {
+	if math.IsNaN(f.y) || f.y >= 300-25 || f.y <= 300-25-12 || f.size != 10 {
 		t.Errorf("footer baseline %v size %v, want just above 275", f.y, f.size)
 	}
 }

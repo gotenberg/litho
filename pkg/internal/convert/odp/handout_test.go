@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // handoutDoc returns a two-page presentation whose handout master, on an
@@ -105,7 +106,7 @@ func FuzzHandoutMaster(f *testing.F) {
 			t.Fatalf("handout page %v by %v", doc.HandoutWidth, doc.HandoutHeight)
 		}
 		for _, m := range doc.HandoutMargins {
-			if !(m >= 0) {
+			if !numeric.NonNegative(m) {
 				t.Fatalf("margins %v", doc.HandoutMargins)
 			}
 		}

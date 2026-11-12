@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -128,7 +130,7 @@ func TestHandoutAreas_Grid(t *testing.T) {
 					return a.X >= margins[css.Left] && a.Y >= margins[css.Top] && a.X+a.Width <= page[0]-margins[css.Right] && a.Y+a.Height <= page[1]-margins[css.Bottom]
 				}
 				for i, a := range areas {
-					if !(a.Width > 0) || !near(a.Width/a.Height, 720.0/405, 1e-9) {
+					if !numeric.Positive(a.Width) || !near(a.Width/a.Height, 720.0/405, 1e-9) {
 						t.Errorf("area %d is %+v", i, a)
 					}
 					if !inside(a) {
@@ -278,7 +280,9 @@ func TestConvert_Handouts(t *testing.T) {
 				for i, name := range shown {
 					pg := out.Pages[i/per]
 					r := find(t, pg, name)
-					if i%per > 0 && !(r.y > prev.y+0.5 || near(r.y, prev.y, 0.5) && r.x > prev.x) {
+					unordered := (math.IsNaN(r.y) || math.IsNaN(prev.y) || r.y <= prev.y+0.5) &&
+						(!near(r.y, prev.y, 0.5) || math.IsNaN(r.x) || math.IsNaN(prev.x) || r.x <= prev.x)
+					if i%per > 0 && unordered {
 						t.Errorf("%s at %.1f, %.1f does not follow %.1f, %.1f", name, r.x, r.y, prev.x, prev.y)
 					}
 					prev = r
@@ -421,11 +425,12 @@ func TestConvert_HandoutsTurned(t *testing.T) {
 			if !near(at[i].y, first.y, 0.5) || !near(at[i].x, above.x, 0.5) {
 				t.Errorf("%s at %.1f, %.1f is not in column %d of row %d", shown[i], at[i].x, at[i].y, col, row)
 			}
-			if col > 0 && !(at[i].x > at[i-1].x) || row > 0 && !(at[i].y > at[i-cols].y) {
+			if col > 0 && (math.IsNaN(at[i].x) || math.IsNaN(at[i-1].x) || at[i].x <= at[i-1].x) ||
+				row > 0 && (math.IsNaN(at[i].y) || math.IsNaN(at[i-cols].y) || at[i].y <= at[i-cols].y) {
 				t.Errorf("%s at %.1f, %.1f does not follow in its row and column", shown[i], at[i].x, at[i].y)
 			}
 		}
-		if n := find(t, pg, "1"); !(n.x > w/2) || !(n.y > h/2) || n.y > h {
+		if n := find(t, pg, "1"); math.IsNaN(n.x) || math.IsNaN(n.y) || math.IsNaN(w) || math.IsNaN(h) || n.x <= w/2 || n.y <= h/2 || n.y > h {
 			t.Errorf("the page number is at %.1f, %.1f on a page %v by %v", n.x, n.y, w, h)
 		}
 	}
@@ -456,7 +461,7 @@ func TestConvert_HandoutsTurnedPaper(t *testing.T) {
 	if !ok || g.Transform != (typeset.Matrix{A: 1, D: 1, E: 61, F: 27.5}) {
 		t.Errorf("handout page placed by %+v", pg.Content[0])
 	}
-	if a, b := find(t, pg, "S1"), find(t, pg, "S3"); !near(a.y, b.y, 0.5) || !(b.x > a.x) {
+	if a, b := find(t, pg, "S1"), find(t, pg, "S3"); !near(a.y, b.y, 0.5) || math.IsNaN(a.x) || math.IsNaN(b.x) || b.x <= a.x {
 		t.Errorf("S1 at %.1f, %.1f and S3 at %.1f, %.1f are not in one row", a.x, a.y, b.x, b.y)
 	}
 }
