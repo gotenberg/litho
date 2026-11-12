@@ -1,6 +1,7 @@
 package ods
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 
@@ -374,26 +375,36 @@ func operand(sh *sheet.Sheet, s string, rel *relative) (sheet.Value, bool) {
 			return sheet.Value{}, false
 		}
 	}
-	for _, rw := range sh.Rows {
-		if rw.Index != at.row {
-			continue
-		}
-		for _, c := range rw.Cells {
-			if c.Column != at.col {
-				continue
-			}
-			switch c.Value.Kind {
-			case sheet.Number, sheet.Bool:
-				return sheet.Value{Kind: sheet.Number, Number: c.Value.Number}, true
-			case sheet.Text:
-				return sheet.Value{Kind: sheet.Text, Text: c.Value.Text}, true
-			case sheet.Error:
-				return sheet.Value{}, false
-			case sheet.Empty:
-			}
-		}
+	v := cellValue(sh, at.row, at.col)
+	switch v.Kind {
+	case sheet.Number, sheet.Bool:
+		return sheet.Value{Kind: sheet.Number, Number: v.Number}, true
+	case sheet.Text:
+		return sheet.Value{Kind: sheet.Text, Text: v.Text}, true
+	case sheet.Error:
+		return sheet.Value{}, false
+	case sheet.Empty:
 	}
 	return sheet.Value{Kind: sheet.Number}, true
+}
+
+// cellValue returns the value of the cell at row, col of sh, the empty
+// value when the sheet lists none there. It halves the rows and the
+// row's cells, which the model keeps by rising index and column
+// ([sheet.Sheet.Rows], [sheet.Row.Cells]): a table's conditions read
+// up to [maxCondFormats] times [maxCondRules] operands, and a scan of
+// every row for each would be quadratic in the document.
+func cellValue(sh *sheet.Sheet, row, col int) sheet.Value {
+	i := sort.Search(len(sh.Rows), func(i int) bool { return sh.Rows[i].Index >= row })
+	if i == len(sh.Rows) || sh.Rows[i].Index != row {
+		return sheet.Value{}
+	}
+	cells := sh.Rows[i].Cells
+	j := sort.Search(len(cells), func(j int) bool { return cells[j].Column >= col })
+	if j == len(cells) || cells[j].Column != col {
+		return sheet.Value{}
+	}
+	return cells[j].Value
 }
 
 // condStyle returns the cell style name a condition applies as the
@@ -481,22 +492,22 @@ func (r *reader) styleMaps(sh *sheet.Sheet) {
 	}
 	var order []string
 	ranges := map[string][]sheet.Range{}
-	hasRules := map[string]bool{}
+	rules := map[string][]sheet.Rule{}
 	n := 0
 	add := func(st *sheet.Style, rg sheet.Range) {
 		name, ok := names[st]
 		if !ok || n >= maxMapRanges {
 			return
 		}
-		has, seen := hasRules[name]
+		rs, seen := rules[name]
 		if !seen {
-			has = len(r.mapRules(sh, name)) > 0
-			hasRules[name] = has
-			if has {
+			rs = r.mapRules(sh, name)
+			rules[name] = rs
+			if len(rs) > 0 {
 				order = append(order, name)
 			}
 		}
-		if has {
+		if len(rs) > 0 {
 			n++
 			ranges[name] = append(ranges[name], rg)
 		}
@@ -517,7 +528,7 @@ func (r *reader) styleMaps(sh *sheet.Sheet) {
 		if len(sh.Conditional) >= maxCondFormats {
 			break
 		}
-		sh.Conditional = append(sh.Conditional, sheet.Conditional{Ranges: ranges[name], Rules: r.mapRules(sh, name)})
+		sh.Conditional = append(sh.Conditional, sheet.Conditional{Ranges: ranges[name], Rules: rules[name]})
 	}
 }
 

@@ -1,10 +1,14 @@
 package ods
 
 import (
+	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/odf"
 )
 
 // TestRead_ConditionalFormats locks the reading of
@@ -151,5 +155,51 @@ func TestRead_StyleMaps(t *testing.T) {
 	doc, _ = read(t, flat{styles: styles, auto: auto, body: body(`<calcext:conditional-formats/>`)}.bytes())
 	if cf := doc.Sheets[0].Conditional; len(cf) != 0 {
 		t.Errorf("a calcext table reads its maps: %+v", cf)
+	}
+}
+
+// TestConditionalFormats_OperandsOfALongSheet locks that a cell operand
+// is found without walking the sheet's rows: every operand of the most
+// conditions a table reads, over a sheet of many rows, resolves within
+// a few seconds, where a walk per operand takes minutes.
+func TestConditionalFormats_OperandsOfALongSheet(t *testing.T) {
+	sh := &sheet.Sheet{Name: "S", Rows: make([]sheet.Row, 500_000)}
+	for i := range sh.Rows {
+		sh.Rows[i].Index = i + 1
+	}
+	sh.Rows[len(sh.Rows)-1].Cells = []sheet.Cell{{Column: 1, Value: sheet.Value{Kind: sheet.Number, Number: 7}}}
+	var b strings.Builder
+	b.WriteString(`<calcext:conditional-formats ` + nsDecl + `>`)
+	for range maxCondFormats {
+		b.WriteString(`<calcext:conditional-format calcext:target-range-address="S.A1:S.A2">`)
+		for range maxCondRules {
+			// A1 is listed in no row, B500001 in the last one.
+			b.WriteString(`<calcext:condition calcext:value="between([.$A$1],[.$B$500001])"/>`)
+		}
+		b.WriteString(`</calcext:conditional-format>`)
+	}
+	b.WriteString(`</calcext:conditional-formats>`)
+	el, err := odf.ParseXML(context.Background(), []byte(b.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		(&reader{}).conditionalFormats(sh, el)
+	}()
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the operands are not resolved within 20 s")
+	}
+	if n := len(sh.Conditional); n != maxCondFormats {
+		t.Fatalf("%d conditional formats, want %d", n, maxCondFormats)
+	}
+	want := []sheet.Value{{Kind: sheet.Number}, {Kind: sheet.Number, Number: 7}}
+	for _, r := range sh.Conditional[maxCondFormats-1].Rules {
+		if len(r.Values) != 2 || r.Values[0] != want[0] || r.Values[1] != want[1] {
+			t.Fatalf("operands %+v, want %+v", r.Values, want)
+		}
 	}
 }
