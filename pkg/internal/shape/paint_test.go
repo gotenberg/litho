@@ -208,3 +208,49 @@ func TestFill_FarFromOrigin(t *testing.T) {
 		}
 	}
 }
+
+// TestFill_RectGradient checks a rectangle path gradient: four triangles
+// from the box's centre, each shaded from the centre to its edge, under
+// the shape's clip.
+func TestFill_RectGradient(t *testing.T) {
+	box := typeset.Rect{X: 10, Y: 20, Width: 100, Height: 50}
+	ops := Paths(nil, box)[0].Ops
+	stops := []typeset.ColorStop{{Offset: 0, Color: typeset.Color{R: 1, A: 1}}, {Offset: 1, Color: typeset.Color{B: 1, A: 1}}}
+	frags := Fill(ops, box, Paint{Kind: PaintGradient, Stops: stops, Rect: true})
+	g, ok := frags[0].(*typeset.Group)
+	if len(frags) != 1 || !ok || g.Clip == nil || len(g.Content) != 4 {
+		t.Fatalf("%+v", frags)
+	}
+	top := g.Content[0].(*typeset.Path).Fill.Shading
+	if top.From != (typeset.Point{X: 60, Y: 45}) || top.To != (typeset.Point{X: 60, Y: 20}) {
+		t.Errorf("top triangle shades %v to %v, want the centre to the top edge", top.From, top.To)
+	}
+}
+
+// TestGradientStroke checks that a gradient line fills its stroke's
+// outline with the gradient: a 4-point line along x has an outline 4
+// points tall.
+func TestGradientStroke(t *testing.T) {
+	ops := []typeset.PathOp{{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: 0, Y: 10}}}, {Kind: typeset.LineTo, P: [3]typeset.Point{{X: 100, Y: 10}}}}
+	stops := []typeset.ColorStop{{Offset: 0, Color: typeset.Color{R: 1, A: 1}}, {Offset: 1, Color: typeset.Color{B: 1, A: 1}}}
+	frags := GradientStroke(ops, Line{Width: 4}, Paint{Kind: PaintGradient, Stops: stops}, typeset.Rect{Width: 100, Height: 20})
+	if len(frags) != 1 {
+		t.Fatalf("%d fragments", len(frags))
+	}
+	p := frags[0].(*typeset.Path)
+	if p.Fill == nil || p.Fill.Shading == nil || p.Stroke != nil {
+		t.Fatalf("not a shaded fill: %+v", p)
+	}
+	y0, y1 := math.Inf(1), math.Inf(-1)
+	for _, op := range p.Ops {
+		if op.Kind != typeset.ClosePath {
+			y0, y1 = math.Min(y0, op.P[0].Y), math.Max(y1, op.P[0].Y)
+		}
+	}
+	if math.Abs(y0-8) > 1e-6 || math.Abs(y1-12) > 1e-6 {
+		t.Errorf("outline spans y %v..%v, want 8..12", y0, y1)
+	}
+	if GradientStroke(ops, Line{}, Paint{}, typeset.Rect{}) != nil {
+		t.Error("a line of no width painted")
+	}
+}

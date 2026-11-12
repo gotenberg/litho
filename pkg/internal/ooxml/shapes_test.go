@@ -119,3 +119,33 @@ func TestParseShapeStyle_HSLAndLinearRGB(t *testing.T) {
 		t.Errorf("scrgbClr fill %+v, want red at half its lightness", lin.Fill)
 	}
 }
+
+// TestParseShapeStyle_PatternPictureLineGradient checks a pattern fill, a
+// picture fill and a gradient line (20.1.8.47 pattFill, 20.1.8.14
+// blipFill, 20.1.2.2.24 ln).
+func TestParseShapeStyle_PatternPictureLineGradient(t *testing.T) {
+	patt := ParseShapeStyle(spPrOf(t, `<a:pattFill prst="smCheck"><a:fgClr><a:srgbClr val="C00000"/></a:fgClr><a:bgClr><a:srgbClr val="FFFFFF"/></a:bgClr></a:pattFill>`), nil, nil)
+	if p := patt.paint(shape.FillNorm); p.Kind != shape.PaintPattern || p.Pattern != "smCheck" || p.Background.G != 1 || p.Color.G != 0 {
+		t.Errorf("pattern paint %+v", p)
+	}
+	tile := ParseShapeStyle(spPrOf(t, `<a:blipFill><a:blip r:embed="rId6" xmlns:r="`+NSR+`"/><a:tile sx="50000" sy="100000"/></a:blipFill>`), nil, nil)
+	if tile.Blip == nil || tile.Blip.Embed != "rId6" || !tile.Blip.Tile || tile.Blip.ScaleX != 0.5 || tile.Blip.ScaleY != 1 {
+		t.Fatalf("blip %+v", tile.Blip)
+	}
+	if p := tile.paint(shape.FillNorm); p.Kind != shape.PaintNone {
+		t.Errorf("an unresolved picture paints %v", p.Kind)
+	}
+	tile.Blip.Picture, tile.Blip.Width, tile.Blip.Height = &typeset.ImageSource{}, 12, 12
+	if p := tile.paint(shape.FillNorm); p.Kind != shape.PaintPicture || p.TileWidth != 6 || p.TileHeight != 12 {
+		t.Errorf("tile paint %+v", p)
+	}
+	line := ParseShapeStyle(spPrOf(t, `<a:noFill/><a:ln w="76200"><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="0"/></a:gradFill></a:ln>`), nil, nil)
+	frags := line.Paint(&shape.Geometry{Preset: "ellipse"}, typeset.Rect{Width: 280, Height: 64})
+	if p, ok := frags[0].(*typeset.Path); len(frags) != 1 || !ok || p.Fill == nil || p.Fill.Shading == nil {
+		t.Errorf("gradient line drew %+v", frags)
+	}
+	rect := ParseShapeStyle(spPrOf(t, `<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FFC000"/></a:gs></a:gsLst><a:path path="rect"/></a:gradFill>`), nil, nil)
+	if rect.Gradient == nil || !rect.Gradient.Rect || rect.Gradient.Radial {
+		t.Errorf("path rect %+v", rect.Gradient)
+	}
+}

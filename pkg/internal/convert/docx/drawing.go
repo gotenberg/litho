@@ -278,9 +278,10 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 	}
 	spPr := sp.Child(ooxml.NSWPS, "spPr")
 	ss := ooxml.ParseShapeStyle(spPr, sp.Child(ooxml.NSWPS, "style"), d.theme)
-	if ref := ooxml.ParsePicture(sp); ref.Embed != "" && spPr.Child(ooxml.NSA, "blipFill") != nil {
+	if ref := ooxml.ParsePicture(sp); ref.Embed != "" && spPr.Child(ooxml.NSA, "blipFill") != nil && pictureShape(spPr, ss) {
 		return d.picture(s, ref, st, w, h, "")
 	}
+	d.resolveBlip(s, &ss)
 	if tb := sp.Child(ooxml.NSWPS, "txbx"); tb != nil {
 		bodyPr := sp.Child(ooxml.NSWPS, "bodyPr")
 		n := d.textBox(s, tb.Child(ooxml.NSW, "txbxContent"), w, h, ss, bodyInsets(bodyPr), alt, depth)
@@ -312,6 +313,38 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 		setTransform(n.Style, rot, fh, fv)
 	}
 	return n
+}
+
+// pictureShape reports whether a shape filled with a picture draws as the
+// picture itself: a rectangle without an outline whose picture stretches
+// over it. Any other shape draws its geometry filled with the picture
+// (20.1.8.14 blipFill), stretched or tiled, under its outline.
+//
+// # Corpus evidence
+//
+//   - litho/docx shapes-fills-lines: Word tiles a 16-pixel texture at 12
+//     points from the top left of a rectangle with a dotted outline, and
+//     stretches a picture over a rounded rectangle clipped to its corners,
+//     both under their outlines.
+func pictureShape(spPr *ooxml.Element, ss ooxml.ShapeStyle) bool {
+	if ss.Line != nil || (ss.Blip != nil && ss.Blip.Tile) {
+		return false
+	}
+	g := ooxml.ParseGeometry(spPr)
+	return g == nil || (g.Custom == nil && (g.Preset == "" || g.Preset == "rect"))
+}
+
+// resolveBlip loads the picture of a shape's picture fill, when it has
+// one, into ss.
+func (d *document) resolveBlip(s *story, ss *ooxml.ShapeStyle) {
+	if ss.Blip == nil || ss.Blip.Embed == "" {
+		return
+	}
+	if pic := d.loadPicture(s.part, ss.Blip.Embed); pic != nil && pic.Source != nil {
+		b := *ss.Blip
+		b.Picture, b.Width, b.Height = pic.Source, pic.Width, pic.Height
+		ss.Blip = &b
+	}
 }
 
 // checkGeometry warns of a geometry the engine draws as its bounding box

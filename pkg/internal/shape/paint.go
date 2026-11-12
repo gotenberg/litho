@@ -36,6 +36,10 @@ type Paint struct {
 	Stops  []typeset.ColorStop
 	Angle  float64
 	Radial bool
+	// Rect makes the gradient run from the box's centre, stop 0, to its
+	// edges, stop 1, along rectangles (20.1.10.67 ST_PathShadeType rect);
+	// it takes over Radial.
+	Rect bool
 	// Picture is a PaintPicture's image, stretched over the box unless
 	// TileWidth and TileHeight, in points, are both positive, which
 	// repeat it from the box's corner at that size.
@@ -83,6 +87,11 @@ func Fill(ops []typeset.PathOp, box typeset.Rect, p Paint) []typeset.Fragment {
 		stops := normalStops(p.Stops)
 		if len(stops) == 0 {
 			return nil
+		}
+		if p.Rect {
+			if frags := rectGradient(ops, box, stops); frags != nil {
+				return frags
+			}
 		}
 		sh := gradientShading(box, stops, p.Angle, p.Radial)
 		if sh == nil {
@@ -199,6 +208,43 @@ func gradientShading(box typeset.Rect, stops []typeset.ColorStop, angle float64,
 		To:    typeset.Point{X: cx + dx*half, Y: cy + dy*half},
 		Stops: stops,
 	}
+}
+
+// rectGradient returns a rectangle path gradient over box clipped to ops:
+// the four triangles between the box's centre and its edges, each shaded
+// from the centre, stop 0, to its edge, stop 1. nil when the box has no
+// area.
+//
+// # Corpus evidence
+//
+//   - litho/docx shapes-fills-lines: Word fills a path rect gradient of
+//     FFC000 at 0 and 7030A0 at 1 orange at the centre and purple at every
+//     edge, the seams running from the corners to the centre.
+func rectGradient(ops []typeset.PathOp, box typeset.Rect, stops []typeset.ColorStop) []typeset.Fragment {
+	if box.Width <= 0 || box.Height <= 0 {
+		return nil
+	}
+	c := typeset.Point{X: box.X + box.Width/2, Y: box.Y + box.Height/2}
+	tl, tr := typeset.Point{X: box.X, Y: box.Y}, typeset.Point{X: box.X + box.Width, Y: box.Y}
+	br, bl := typeset.Point{X: tr.X, Y: box.Y + box.Height}, typeset.Point{X: box.X, Y: box.Y + box.Height}
+	tri := func(a, b typeset.Point, edge typeset.Point) typeset.Fragment {
+		return &typeset.Path{
+			Ops: []typeset.PathOp{
+				{Kind: typeset.MoveTo, P: [3]typeset.Point{c}}, {Kind: typeset.LineTo, P: [3]typeset.Point{a}},
+				{Kind: typeset.LineTo, P: [3]typeset.Point{b}}, {Kind: typeset.ClosePath},
+			},
+			Fill: &typeset.Fill{Rule: typeset.NonZero, Shading: &typeset.Shading{Kind: typeset.Axial, From: c, To: edge, Stops: stops}},
+		}
+	}
+	return []typeset.Fragment{&typeset.Group{
+		Clip: &typeset.Path{Ops: ops, Fill: &typeset.Fill{Rule: FillRule}},
+		Content: []typeset.Fragment{
+			tri(tl, tr, typeset.Point{X: c.X, Y: box.Y}),
+			tri(tr, br, typeset.Point{X: tr.X, Y: c.Y}),
+			tri(br, bl, typeset.Point{X: c.X, Y: br.Y}),
+			tri(bl, tl, typeset.Point{X: box.X, Y: c.Y}),
+		},
+	}}
 }
 
 // maxPictureTiles caps the copies of a tiled picture. Anti-DoS guard, not

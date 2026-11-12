@@ -5,6 +5,8 @@ import (
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/render/geom"
+	"github.com/gotenberg/litho/pkg/internal/render/stroke"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -362,4 +364,93 @@ func arrowhead(a Arrowhead, w, base float64, tip, dir typeset.Point, c typeset.C
 //     ovals of the same sizes.
 var arrowDock = map[ArrowKind]float64{ // a read-only table of LibreOffice's marker docking.
 	ArrowTriangle: 1, ArrowOpen: 1, ArrowStealth: 0.6, ArrowDiamond: 0.5, ArrowOval: 0.5,
+}
+
+// strokeTolerance is the flattening tolerance of a stroke outline, as a
+// share of the outline's diagonal: fine enough that the curve's facets do
+// not show at print sizes.
+const strokeTolerance = 1e-4
+
+// GradientStroke returns the fragments that stroke the outline ops with
+// the width, dash, cap and join of l, painted with p over box: the
+// stroke's own outline filled with p, as a gradient line (ECMA-376 Part
+// 1, 20.1.2.2.24 ln with a gradFill) paints. Arrowheads are left out. nil
+// when the stroke paints nothing or its outline cannot be built.
+func GradientStroke(ops []typeset.PathOp, l Line, p Paint, box typeset.Rect) []typeset.Fragment {
+	if len(ops) == 0 || !numeric.PositiveFinite(l.Width) {
+		return nil
+	}
+	var path geom.Path
+	pt := func(q typeset.Point) geom.Point { return geom.Point{X: q.X, Y: q.Y} }
+	x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
+	for _, op := range ops {
+		for _, q := range op.P {
+			if op.Kind != typeset.ClosePath {
+				x0, y0, x1, y1 = math.Min(x0, q.X), math.Min(y0, q.Y), math.Max(x1, q.X), math.Max(y1, q.Y)
+			}
+		}
+		switch op.Kind {
+		case typeset.MoveTo:
+			path.MoveTo(pt(op.P[0]))
+		case typeset.LineTo:
+			path.LineTo(pt(op.P[0]))
+		case typeset.CurveTo:
+			path.CubicTo(pt(op.P[0]), pt(op.P[1]), pt(op.P[2]))
+		case typeset.ClosePath:
+			path.Close()
+		}
+	}
+	diag := math.Hypot(x1-x0, y1-y0) + l.Width
+	if !numeric.PositiveFinite(diag) {
+		return nil
+	}
+	st := stroke.Style{Width: l.Width, Cap: stroke.Cap(l.Cap), Join: stroke.Join(l.Join), MiterLimit: stroke.DefaultMiterLimit, Dash: l.Dash}
+	out, err := stroke.Outline(path, st, geom.Identity, diag*strokeTolerance)
+	if err != nil {
+		return nil
+	}
+	var res []typeset.PathOp
+	i := 0
+	next := func() typeset.Point {
+		q := out.Pts[i]
+		i++
+		return typeset.Point{X: q.X, Y: q.Y}
+	}
+walk:
+	for _, op := range out.Ops {
+		switch op {
+		case geom.MoveTo, geom.LineTo:
+			if i >= len(out.Pts) {
+				break walk
+			}
+			k := typeset.MoveTo
+			if op == geom.LineTo {
+				k = typeset.LineTo
+			}
+			res = append(res, typeset.PathOp{Kind: k, P: [3]typeset.Point{next()}})
+		case geom.CubicTo:
+			if i+3 > len(out.Pts) {
+				break walk
+			}
+			a, b := next(), next()
+			res = append(res, typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{a, b, next()}})
+		case geom.Close:
+			res = append(res, typeset.PathOp{Kind: typeset.ClosePath})
+		}
+	}
+	if len(res) == 0 {
+		return nil
+	}
+	if p.Kind != PaintGradient {
+		return []typeset.Fragment{&typeset.Path{Ops: res, Fill: &typeset.Fill{Color: p.Color, Rule: typeset.NonZero}}}
+	}
+	stops := normalStops(p.Stops)
+	sh := gradientShading(box, stops, p.Angle, p.Radial)
+	if sh == nil {
+		if len(stops) == 0 {
+			return nil
+		}
+		return []typeset.Fragment{&typeset.Path{Ops: res, Fill: &typeset.Fill{Color: stops[0].Color, Rule: typeset.NonZero}}}
+	}
+	return []typeset.Fragment{&typeset.Path{Ops: res, Fill: &typeset.Fill{Rule: typeset.NonZero, Shading: sh}}}
 }
