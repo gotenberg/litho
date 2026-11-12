@@ -37,10 +37,6 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
-	if opts.Handouts != 0 {
-		// Wave 11, cell slides: remove with the feature.
-		return nil, fmt.Errorf("%w: handouts", office.ErrNotImplemented)
-	}
 	if fonts == nil {
 		return nil, fmt.Errorf("%w: no font index", office.ErrInvalidOptions)
 	}
@@ -54,7 +50,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if err != nil {
 		return nil, fmt.Errorf("reading ODP: %w", err)
 	}
-	doc, warnings, err := Read(ctx, data, fonts, opts.Password)
+	doc, warnings, err := readDocument(ctx, data, fonts, opts.Password, opts.Handouts > 0)
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +73,12 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 // which may be nil, parses the text of SVG pictures; password opens an
 // encrypted package. It fails as [Convert] does.
 func Read(ctx context.Context, data []byte, fonts *text.Fonts, password string) (*slides.Document, []compose.Warning, error) {
+	return readDocument(ctx, data, fonts, password, false)
+}
+
+// readDocument reads data as [Read] does, and the handout master too when
+// handouts asks for it.
+func readDocument(ctx context.Context, data []byte, fonts *text.Fonts, password string, handouts bool) (*slides.Document, []compose.Warning, error) {
 	pkg, err := odf.Open(ctx, data, odf.Options{Password: password})
 	if err != nil {
 		return nil, nil, fmt.Errorf("reading ODP: %w", err)
@@ -95,6 +97,9 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, password string) 
 	}
 	r := newReader(ctx, pkg, fonts)
 	doc := r.document(body)
+	if handouts && r.err == nil {
+		r.handoutMaster(doc)
+	}
 	if r.err != nil {
 		return nil, nil, fmt.Errorf("reading ODP: %w", r.err)
 	}

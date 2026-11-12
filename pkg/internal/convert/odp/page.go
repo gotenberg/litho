@@ -23,6 +23,8 @@ type pageCtx struct {
 	showFooter, showHeader, showDate, showNumber bool
 	// date is the slide's date-time declaration, nil for none.
 	date *odf.Element
+	// handout marks the handout master, whose header shows.
+	handout bool
 }
 
 // decls reads which declarations and master fields the page pg shows
@@ -45,13 +47,16 @@ func (pc *pageCtx) decls(r *reader, pg *odf.Element, dp odf.Props) {
 // class named class shows on a slide: the placeholders of the layout (title,
 // outline, subtitle, text, graphic, object, chart, table, orgchart,
 // page, notes, handout) are templates the slide's own shapes fill and
-// never print; the header shows on notes and handouts alone; the footer,
-// date-time and page-number placeholders as the slide's flags say; a
-// shape of no class always (ODF 1.3, Part 3, 19.393).
+// never print; the header shows on notes and handouts alone, on the
+// handout master as its flag says; the footer, date-time and page-number
+// placeholders as the page's flags say; a shape of no class always (ODF
+// 1.3, Part 3, 19.393).
 func (pc *pageCtx) masterShows(class string) bool {
 	switch class {
 	case "":
 		return true
+	case "header":
+		return pc.handout && pc.showHeader
 	case "footer":
 		return pc.showFooter
 	case "date-time":
