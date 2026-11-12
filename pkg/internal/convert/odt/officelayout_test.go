@@ -554,3 +554,19 @@ func TestApplyExactHeight_Rows(t *testing.T) {
 		t.Errorf("exact rows %v, want [true false false]", got)
 	}
 }
+
+// TestColumnTracks_NaNShare refuses a style:rel-width that reads as NaN,
+// which strconv parses: its tracks were NaN wide.
+func TestColumnTracks_NaNShare(t *testing.T) {
+	t.Parallel()
+	col := func(w string) *odf.Element {
+		return &odf.Element{Name: xmlName(odf.NSStyle, "column"), Attr: []xml.Attr{xmlAttr(odf.NSStyle, "rel-width", w)}}
+	}
+	b := &builder{}
+	if tracks, _, _, ok := b.columnTracks([]*odf.Element{col("NaN*"), col("1*")}, 400); ok {
+		t.Errorf("tracks %v from a NaN share", tracks)
+	}
+	if _, _, _, ok := b.columnTracks([]*odf.Element{col("1*"), col("1*")}, 400); !ok {
+		t.Error("equal shares refused")
+	}
+}

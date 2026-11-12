@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
@@ -837,13 +838,13 @@ func (b *builder) currentAreaWidth() float64 {
 // less its fo:start-indent and fo:end-indent, the gap after it being its
 // end indent and the next one's start indent; first and last are the
 // first column's start indent and the last one's end indent. ok is false
-// when a column's share does not read.
+// when a column's share does not read as a finite, non-negative number.
 func (b *builder) columnTracks(kids []*odf.Element, width float64) (tracks []columnTrack, first, last float64, ok bool) {
 	rel := make([]float64, len(kids))
 	sum := 0.0
 	for i, k := range kids {
 		v, err := strconv.ParseFloat(strings.TrimSuffix(k.A(odf.NSStyle, "rel-width"), "*"), 64)
-		if err != nil || v < 0 || math.IsInf(v, 0) {
+		if err != nil || !numeric.NonNegative(v) || math.IsInf(v, 0) {
 			return nil, 0, 0, false
 		}
 		rel[i] = v
