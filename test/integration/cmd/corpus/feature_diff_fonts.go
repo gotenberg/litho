@@ -184,15 +184,24 @@ func faceCovered(name string) bool {
 //
 // # Corpus evidence
 //
-//   - litho/docx: 117 of 119 Microsoft references draw a face with no
-//     stand-in, 114 of them Calibri Light, the headings' theme font; the
-//     others MS Mincho, Verdana, Cambria Math, Microsoft JhengHei.
-//   - litho/xlsx 13 of 88, litho/pptx 40 of 109, libreoffice/docx 58 of
-//     341, libreoffice/xlsx 24 of 252, libreoffice/pptx 40 of 311, poi/docx
-//     14 of 118, poi/xlsx 25 of 185, poi/pptx 10 of 52, openxmlsdk/docx 46 of
-//     249, openxmlsdk/xlsx 5 of 54, openxmlsdk/pptx 34 of 182: Calibri Light
-//     and Aptos most, then Tahoma, Cambria Math, Segoe UI and the East Asian
-//     system faces.
+//   - The Microsoft references that draw a face with no stand-in: litho/docx
+//     26 of 162, litho/xlsx 9 of 138, litho/pptx 13 of 133,
+//     libreoffice/docx 58 of 341, libreoffice/xlsx 24 of 252,
+//     libreoffice/pptx 40 of 311, poi/docx 14 of 118, poi/xlsx 25 of 185,
+//     poi/pptx 10 of 52, openxmlsdk/docx 46 of 249, openxmlsdk/xlsx 5 of
+//     54, openxmlsdk/pptx 34 of 182: 304. By family, the references each
+//     draws in and those it alone keeps unscored: Verdana 35 and 14,
+//     Calibri Light 31 and 28, SimSun 27 and 18, MS Gothic 20 and 9,
+//     Cambria Math 20 and 16, MS Mincho 20 and 6, Tahoma 19 and 14, Aptos
+//     15 and 15, Segoe UI 11 and 10, Arial Black 11 and 10, of 73 families.
+//   - The same references, advance widths compared glyph by glyph between
+//     the programs they embed and the fixture fonts: Carlito matches
+//     Calibri on all 288 shared glyphs but Calibri Light on 17 of 86; no
+//     fixture font comes within a unit per em on more than a third of the
+//     glyphs of Verdana, Tahoma, Segoe UI, Aptos, Georgia, Arial Black,
+//     Trebuchet MS or Cambria Math. Noto Sans Mono CJK matches the advances
+//     of MS Gothic (321 of 321), SimSun (2445 of 2449) and MS Mincho (690
+//     of 697), but its line is 1.448 em high where theirs is 1 em.
 func missingReferenceFaces(faces []string) []string {
 	var out []string
 	for _, f := range faces {
