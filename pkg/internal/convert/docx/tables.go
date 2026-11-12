@@ -495,18 +495,7 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	}
 	styleShading := tp.shading
 	tp = tp.merge(direct)
-	if direct.shading != nil && (tp.cellSpacing == nil || *tp.cellSpacing <= 0) {
-		// Word fills the cells of a table without cell spacing with no
-		// shading of the table's own properties (17.4.60 tblPr, its
-		// shd): the table style's, if any, fills them.
-		//
-		// # Corpus evidence
-		//
-		//   - litho/docx tables-diagonal-shading, tables-nested and
-		//     tables-floating: Word prints white the cells without their
-		//     own shading of tables whose tblPr sets a light fill.
-		tp.shading = styleShading
-	}
+	tp.shading = cellsShading(&tp, direct, styleShading)
 	look := tableLook{}
 	if tp.look != nil {
 		look = *tp.look
@@ -750,17 +739,7 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 			if isHeader {
 				role = "TH"
 			}
-			if boolOf(tp.layoutFixed) && !holdsAnchored(kids, 0) {
-				// A cell of a table of fixed layout (17.4.53 tblLayout)
-				// clips what is wider than it, as Word prints it.
-				//
-				// # Corpus evidence
-				//
-				//   - litho/docx tables-images-lists: Word cuts a picture
-				//     wider than its fixed cell at the cell's right edge.
-				//   - libreoffice/docx layout/tdf136613.docx: it leaves whole
-				//     the pictures anchored in a fixed cell, floated or
-				//     positioned, which a clip would cut away.
+			if clipsCell(&tp, kids) {
 				cst.Overflow = css.OverflowHidden
 			}
 			cn := &layout.Node{Kind: layout.Element, Style: cst, Role: role, Children: kids}
@@ -822,6 +801,40 @@ func endsWithTableMark(tc *ooxml.Element) bool {
 		prev, last = last, k
 	}
 	return last != nil && prev != nil && last.Is(w, "p") && prev.Is(w, "tbl") && emptyParagraph(last) && last.Child(w, "pPr").Child(w, "numPr") == nil
+}
+
+// cellsShading returns the shading that fills the cells of the table of
+// properties tp, its own properties direct over its style's, whose
+// shading is styleShading: Word fills the cells of a table without cell
+// spacing with no shading of the table's own properties (17.4.60 tblPr,
+// its shd), the table style's, if any, filling them.
+//
+// # Corpus evidence
+//
+//   - litho/docx tables-diagonal-shading, tables-nested and
+//     tables-floating: Word prints white the cells without their own
+//     shading of tables whose tblPr sets a light fill.
+func cellsShading(tp, direct *tableProps, styleShading *css.Color) *css.Color {
+	if direct.shading != nil && (tp.cellSpacing == nil || *tp.cellSpacing <= 0) {
+		return styleShading
+	}
+	return tp.shading
+}
+
+// clipsCell reports whether a cell of the table of properties tp, whose
+// content is kids, clips what is wider than it: a cell of a table of
+// fixed layout (17.4.53 tblLayout) does, as Word prints it, unless it
+// holds a drawing anchored in it, which Word lays out whole.
+//
+// # Corpus evidence
+//
+//   - litho/docx tables-images-lists: Word cuts a picture wider than its
+//     fixed cell at the cell's right edge.
+//   - libreoffice/docx layout/tdf136613.docx: it leaves whole the
+//     pictures anchored in a fixed cell, floated or positioned, which a
+//     clip would cut away.
+func clipsCell(tp *tableProps, kids []*layout.Node) bool {
+	return boolOf(tp.layoutFixed) && !holdsAnchored(kids, 0)
 }
 
 // holdsAnchored reports whether the nodes or their descendants hold a
@@ -894,9 +907,12 @@ func alignRowTops(cells []*layout.Node, spaced bool) {
 func (d *document) spaceCells(st *css.Style, spacing float64, tb map[string]*borderSpec) {
 	st.BorderCollapse = css.SeparateBorders
 	st.BorderSpacing = [2]float64{2 * spacing, 2 * spacing}
-	for side, name := range map[css.Side]string{css.Top: "top", css.Right: "right", css.Bottom: "bottom", css.Left: "left"} {
-		if b := tb[name]; b != nil {
-			st.Border[side] = b.Border
+	for _, sn := range [...]struct {
+		side css.Side
+		name string
+	}{{css.Top, "top"}, {css.Right, "right"}, {css.Bottom, "bottom"}, {css.Left, "left"}} {
+		if b := tb[sn.name]; b != nil {
+			st.Border[sn.side] = b.Border
 		}
 	}
 	strokeBorders(st)
@@ -910,7 +926,19 @@ type cellPlace struct {
 
 // cellStyle returns the style of a table cell: its margins as padding,
 // its borders (its own, else the table's outer or inside borders by its
-// place), its shading and its vertical alignment.
+// place), its shading and its vertical alignment. Word measures a cell's
+// left and right margins from the middle of its collapsed border.
+//
+// # Corpus evidence
+//
+//   - litho/docx tables-borders: Word prints the first cell's text of a
+//     table at 78.3 pt on a 72 pt margin with 1.5 pt single borders, at
+//     79.8 pt with 4.5 pt double borders, at 81.3 pt with 7.5 pt triple
+//     borders: 5.4 pt from the middle of the border.
+//   - litho/docx tables-nested: at 78.5 pt with 2.25 pt double borders.
+//   - libreoffice/docx ooxmlexport/NumberedList.docx: the text of a
+//     nested table with 1.5 pt borders and 4.3 pt margins sits 5.05 pt
+//     right of the table's edge, half the border and the margin.
 func (d *document) cellStyle(cp cellProps, tableMar map[string]float64, tb map[string]*borderSpec, shading *css.Color, at cellPlace) *css.Style {
 	st := d.blockStyle()
 	st.Display = css.TableCell
