@@ -67,6 +67,11 @@ type pageWriter struct {
 	// coordinates plus off (see [pageWriter.group]).
 	off Point
 
+	// bare writes no marked content: the stream is a widget's
+	// appearance, whose content the structure tree names through the
+	// annotation (see [docWriter.appearance]).
+	bare bool
+
 	// Marked content: whether a sequence is open, and for which element
 	// (nil for an artifact).
 	marked     bool
@@ -185,7 +190,7 @@ func (p *pageWriter) extent(f Fragment) float64 {
 // /Artifact (14.8.2.2). An untagged document marks nothing.
 func (p *pageWriter) mark(parent *StructElem) {
 	st := p.w.st
-	if st == nil {
+	if st == nil || p.bare {
 		return
 	}
 	if p.marked && p.markedElem == parent {

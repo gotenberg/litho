@@ -12,7 +12,7 @@ import (
 // package's caps. It returns nil or the first fault found, wrapping one of
 // the package's sentinel errors: [ErrNoPages], [ErrInvalidPage],
 // [ErrInvalidFragment], [ErrInvalidText], [ErrInvalidImage],
-// [ErrInvalidPath], [ErrInvalidShading], [ErrInvalidGroup], [ErrInvalidLink], [ErrInvalidDest],
+// [ErrInvalidPath], [ErrInvalidShading], [ErrInvalidGroup], [ErrInvalidLink], [ErrInvalidField], [ErrInvalidDest],
 // [ErrInvalidColor], [ErrDetachedElement], [ErrInvalidElement],
 // [ErrNotATree] or [ErrLimitExceeded].
 //
@@ -84,6 +84,14 @@ func (v *validator) page(p *Page, links []Link) error {
 	for i, link := range links {
 		if err := v.link(link); err != nil {
 			return fmt.Errorf("link %d: %w", i, err)
+		}
+	}
+	if len(p.Fields) > maxFieldsPerPage {
+		return fmt.Errorf("%w: %d form fields on the page, at most %d", ErrLimitExceeded, len(p.Fields), maxFieldsPerPage)
+	}
+	for i := range p.Fields {
+		if err := v.field(&p.Fields[i]); err != nil {
+			return fmt.Errorf("form field %d: %w", i, err)
 		}
 	}
 	return nil

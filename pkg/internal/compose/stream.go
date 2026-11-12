@@ -30,8 +30,9 @@ type PageSink interface {
 // Stream writes one PDF file a page at a time: each page handed to
 // [Stream.Page] is written at once, its content stream compressed and
 // held or spooled as [Write] holds or spools it, and the sink keeps only
-// what the end of the file needs: the page's size, its links, the glyphs
-// each font draws, the structure elements its marked content belongs to,
+// what the end of the file needs: the page's size, its links, the widget
+// dictionaries of its form fields, whose appearances are written at once,
+// the glyphs each font draws, the structure elements its marked content belongs to,
 // and what the file identifier hashes. The document's end, its metadata,
 // outline and structure tree, arrives with [Stream.Close], which writes
 // the file to its destination.

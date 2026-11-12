@@ -1,8 +1,9 @@
 package compose
 
-// PruneStructure drops from doc's structure tree the elements no fragment
-// or link of its pages hangs from, directly or through their kids, once a
-// page selection left pages out or culling left content out, so the tree
+// PruneStructure drops from doc's structure tree the elements no fragment,
+// link or form field of its pages hangs from, directly or through their
+// kids, once a page selection left pages out or culling left content out,
+// so the tree
 // written (ISO 32000-1, 14.7.2) names no element without content but the
 // empty cells of a row that keeps content. The root stays, and a
 // destination whose element is dropped keeps its page position alone. A
@@ -18,6 +19,11 @@ func PruneStructure(doc *Document) {
 		for _, l := range pg.Links {
 			if l.Parent != nil {
 				used[l.Parent] = true
+			}
+		}
+		for _, f := range pg.Fields {
+			if f.Parent != nil {
+				used[f.Parent] = true
 			}
 		}
 	}

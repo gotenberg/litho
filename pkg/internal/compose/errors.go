@@ -32,6 +32,11 @@ var (
 	// ErrInvalidLink is returned for a link holding neither or both of URI
 	// and Dest, or whose rectangle is not finite.
 	ErrInvalidLink = errors.New("invalid link")
+	// ErrInvalidField is returned for a form field of an unknown kind, a
+	// rectangle that is not finite or not positive, a text that is not
+	// UTF-8, an on state named Off, a selection out of order or outside
+	// its options, or a negative maximum length or font size.
+	ErrInvalidField = errors.New("invalid form field")
 	// ErrInvalidDest is returned for a destination naming a page outside
 	// 1..len(Pages), or a position that is not finite.
 	ErrInvalidDest = errors.New("invalid destination")
@@ -55,8 +60,9 @@ var (
 	ErrNotATree = errors.New("structure or outline is not a tree")
 	// ErrLimitExceeded is returned when the document passes one of the
 	// package's anti-DoS caps: pages, fragments per page, glyphs per run,
-	// operators per path, dash entries, shading stops, group nesting, outline entries,
-	// structure elements, tree depth or image pixels.
+	// operators per path, dash entries, shading stops, group nesting,
+	// outline entries, form fields, their options and texts, structure
+	// elements, tree depth or image pixels.
 	ErrLimitExceeded = errors.New("composition limit exceeded")
 	// ErrInvalidFont is returned by [Write] for a face whose program does
 	// not load, or a glyph the program does not hold.

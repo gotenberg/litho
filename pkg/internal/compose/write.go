@@ -78,6 +78,10 @@ const defaultSpool = 4 << 20
 //   - One shading dictionary per distinct [Shading] geometry and stops,
 //     painted with sh inside the clip of its path; translucent stops add a
 //     luminosity soft mask per placement.
+//   - Form fields as an interactive form: a widget annotation per field
+//     with its appearance streams, the radio buttons of one name under one
+//     field, and Helvetica, unembedded, in the form's default resources
+//     for the text a reader types (see [Field]).
 //   - Link annotations, the outline, the Info dictionary from
 //     [Document.Metadata] (no dates), or its XMP metadata stream in a PDF
 //     2.0 file, and /Lang when Metadata.Lang is set.
@@ -187,6 +191,8 @@ type docWriter struct {
 	shadings map[string]shadingRefs
 	// st is nil for an untagged document.
 	st *structState
+	// form gathers the interactive form of the pages written.
+	form formState
 	// id hashes what the file /ID is derived from.
 	id hash.Hash
 
@@ -345,6 +351,9 @@ func (w *docWriter) finish(ctx context.Context, tail *Document, producer string,
 	}
 	if len(tail.Outline) > 0 {
 		catalog["Outlines"] = w.outlines(tail.Outline)
+	}
+	if form := w.finishForm(n); form != nil {
+		catalog["AcroForm"] = form
 	}
 	if tail.Metadata.Lang != "" {
 		catalog["Lang"] = textString(tail.Metadata.Lang)
@@ -580,8 +589,12 @@ func (w *docWriter) page(ctx context.Context, page *Page, links []Link) error {
 	if w.st != nil {
 		dict["StructParents"] = ast.PdfInt(i)
 	}
-	if len(links) > 0 {
-		annots := make(ast.PdfArray, len(links))
+	widgets, err := w.fields(ctx, i, page.Height, page.Fields)
+	if err != nil {
+		return err
+	}
+	if len(links) > 0 || len(widgets) > 0 {
+		annots := make(ast.PdfArray, len(links), len(links)+len(widgets))
 		for j, link := range links {
 			ref := w.alloc.Alloc(ast.PdfNull{})
 			pl := pendingLink{page: i, link: link, ref: ref, annot: -1}
@@ -595,7 +608,7 @@ func (w *docWriter) page(ctx context.Context, page *Page, links []Link) error {
 			w.links = append(w.links, pl)
 			annots[j] = ref
 		}
-		dict["Annots"] = annots
+		dict["Annots"] = append(annots, widgets...)
 		if w.st != nil && w.version != Version14 {
 			// ISO 14289-1, 7.18.3: a page with annotations in a tagged
 			// document orders them by the structure tree. /Tabs is a PDF
