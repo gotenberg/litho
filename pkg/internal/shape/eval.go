@@ -1,7 +1,6 @@
 package shape
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -397,11 +396,6 @@ func (pb *pathBuilder) arcRect(a func(int) float64, move, clockwise bool) {
 	}
 	pb.ellipse(cx, cy, rx, ry, t0, dt)
 }
-
-// ErrUnresolved reports a geometry whose guides do not all resolve: a
-// name the reader did not know, a reference cycle, or a chain of
-// references deeper than [MaxGuideDepth]. Each such value evaluates to 0.
-var ErrUnresolved = errors.New("shape: unresolved geometry guides")
 
 // Check evaluates g's guides in a unit box and returns nil when every
 // one resolves, else an error wrapping [ErrUnresolved] that names the
