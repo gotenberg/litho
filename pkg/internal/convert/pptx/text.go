@@ -566,6 +566,45 @@ func dateFormat(typ, lang string) string {
 	return code
 }
 
+// underline maps an ST_TextUnderlineType (ECMA-376 Part 1, 20.1.10.82)
+// onto whether the run is underlined, the line's style and whether it is
+// heavy. The long dashes and the dash-dot patterns draw as dashes and the
+// double wavy line as one wavy line, the closest of the layout's styles.
+// words underlines the spaces too: PowerPoint draws it as sng, against
+// the clause's "just the words and not the spaces between them".
+//
+// # Corpus evidence
+//
+//   - litho/pptx: text-character-format prints in PowerPoint dbl as two
+//     lines, heavy at twice sng's thickness, dotted, dash, dashLong and
+//     the dot-dash patterns as dots and dashes, wavy and wavyHeavy as one
+//     wavy line, wavyDbl as two, and words under the spaces too.
+//   - openxmlsdk/pptx: O14ISOStrict uDbl_rprU_UnderlineDouble prints two
+//     0.72 pt lines 1.44 pt apart at 18 pt.
+func underline(v string) (bool, css.DecorationStyle, bool) {
+	switch v {
+	case "", "none":
+		return false, css.DecorationSolid, false
+	case "dbl":
+		return true, css.DecorationDouble, false
+	case "heavy":
+		return true, css.DecorationSolid, true
+	case "dotted":
+		return true, css.DecorationDotted, false
+	case "dottedHeavy":
+		return true, css.DecorationDotted, true
+	case "dash", "dashLong", "dotDash", "dotDotDash":
+		return true, css.DecorationDashed, false
+	case "dashHeavy", "dashLongHeavy", "dotDashHeavy", "dotDotDashHeavy":
+		return true, css.DecorationDashed, true
+	case "wavy", "wavyDbl":
+		return true, css.DecorationWavy, false
+	case "wavyHeavy":
+		return true, css.DecorationWavy, true
+	}
+	return true, css.DecorationSolid, false
+}
+
 // hasText reports whether a run holds text.
 func hasText(runs []slides.Run) bool {
 	for _, r := range runs {
@@ -610,10 +649,17 @@ func (r *reader) runStyle(c chain, sc scope) slides.RunStyle {
 		s.Italic = ooxml.OnOff(v, true)
 	}
 	if v, ok := c.attr("u"); ok {
-		s.Underline = v != "none" && v != ""
+		s.Underline, s.UnderlineStyle, s.UnderlineHeavy = underline(v)
+		switch v {
+		case "dashLong", "dashLongHeavy", "dotDash", "dotDashHeavy", "dotDotDash", "dotDotDashHeavy":
+			r.warn(warn.ContentUnsupported, warn.Approximated, "a "+v+" underline is drawn dashed")
+		case "wavyDbl":
+			r.warn(warn.ContentUnsupported, warn.Approximated, "a double wavy underline is drawn as one wavy line")
+		}
 	}
 	if v, ok := c.attr("strike"); ok {
 		s.Strike = v == "sngStrike" || v == "dblStrike"
+		s.DoubleStrike = v == "dblStrike"
 	}
 	if v, ok := c.attr("spc"); ok {
 		if n, ok := ooxml.Int(v); ok {

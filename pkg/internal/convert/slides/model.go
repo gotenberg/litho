@@ -604,9 +604,14 @@ type RunStyle struct {
 	Size float64
 	// Bold and Italic select the face.
 	Bold, Italic bool
-	// Underline and Strike decorate the text; Strike draws one line.
-	Underline bool
-	Strike    bool
+	// Underline and Strike decorate the text. UnderlineStyle is the
+	// underline's line, solid by default, and UnderlineHeavy draws it
+	// twice as thick; DoubleStrike draws the strike as two lines.
+	Underline      bool
+	UnderlineStyle css.DecorationStyle
+	UnderlineHeavy bool
+	Strike         bool
+	DoubleStrike   bool
 	// Color is the text colour, black when zero.
 	Color css.Color
 	// Spacing is the extra space between characters in points.

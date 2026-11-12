@@ -601,7 +601,8 @@ func (w *runWriter) trim() {
 // sameStyle reports equal run styles.
 func sameStyle(a, b slides.RunStyle) bool {
 	return slices.Equal(a.Families, b.Families) && a.Size == b.Size && a.Bold == b.Bold && a.Italic == b.Italic &&
-		a.Underline == b.Underline && a.Strike == b.Strike && a.Color == b.Color && a.Spacing == b.Spacing &&
+		a.Underline == b.Underline && a.UnderlineStyle == b.UnderlineStyle && a.UnderlineHeavy == b.UnderlineHeavy &&
+		a.Strike == b.Strike && a.DoubleStrike == b.DoubleStrike && a.Color == b.Color && a.Spacing == b.Spacing &&
 		a.Script == b.Script && a.Rise == b.Rise && a.Caps == b.Caps && a.Lang == b.Lang
 }
 

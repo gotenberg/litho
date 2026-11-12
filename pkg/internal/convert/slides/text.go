@@ -875,9 +875,27 @@ func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 	st.TextDecorationColor = st.Color
 	if rs.Underline {
 		st.TextDecoration |= css.Underline
+		st.TextDecorationStyle = rs.UnderlineStyle
+		switch {
+		case rs.UnderlineHeavy:
+			// A tenth of the size, unrounded: PowerPoint draws a heavy
+			// underline 1.44 pt thick under 14 pt text, twice its single
+			// one.
+			st.TextDecorationThickness = css.Pts(st.FontSize / 10)
+		case rs.UnderlineStyle == css.DecorationDouble:
+			// Two lines a twenty-fifth of the size thick: PowerPoint
+			// draws them 0.72 pt thick under 18 pt text, where the
+			// rounded tenth of a single line would set them 4.5 pt deep.
+			st.TextDecorationThickness = css.Pts(st.FontSize / 25)
+		}
 	}
 	if rs.Strike {
 		st.TextDecoration |= css.LineThrough
+		// One decoration style serves every line of a run: a double
+		// strike over an underline keeps the underline's.
+		if rs.DoubleStrike && !rs.Underline {
+			st.TextDecorationStyle = css.DecorationDouble
+		}
 	}
 	if sp := rs.Spacing; sp != 0 && !math.IsNaN(sp) && math.Abs(sp) < maxFontSize {
 		st.LetterSpacing = css.Pts(sp * k)

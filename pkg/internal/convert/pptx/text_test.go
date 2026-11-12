@@ -361,3 +361,56 @@ func TestText_ShapeTakesNoOtherStyle(t *testing.T) {
 		t.Errorf("text box size %v, want the default text style's 18", s.Size)
 	}
 }
+
+// TestText_UnderlineAndStrikeStyles locks the line of each
+// ST_TextUnderlineType (ECMA-376 Part 1, 20.1.10.82) and the double
+// strike of ST_TextStrikeType (20.1.10.79).
+//
+// # Corpus evidence
+//
+//   - litho/pptx: text-character-format prints in PowerPoint dbl and
+//     dblStrike as two lines, heavy twice as thick as sng, dotted and
+//     dash dotted and dashed, wavy wavy, and words under the spaces too.
+func TestText_UnderlineAndStrikeStyles(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		u     string
+		on    bool
+		style css.DecorationStyle
+		heavy bool
+	}{
+		{"none", false, css.DecorationSolid, false},
+		{"sng", true, css.DecorationSolid, false},
+		{"words", true, css.DecorationSolid, false},
+		{"dbl", true, css.DecorationDouble, false},
+		{"heavy", true, css.DecorationSolid, true},
+		{"dotted", true, css.DecorationDotted, false},
+		{"dottedHeavy", true, css.DecorationDotted, true},
+		{"dash", true, css.DecorationDashed, false},
+		{"dashHeavy", true, css.DecorationDashed, true},
+		{"dashLong", true, css.DecorationDashed, false},
+		{"dashLongHeavy", true, css.DecorationDashed, true},
+		{"dotDash", true, css.DecorationDashed, false},
+		{"dotDashHeavy", true, css.DecorationDashed, true},
+		{"dotDotDash", true, css.DecorationDashed, false},
+		{"dotDotDashHeavy", true, css.DecorationDashed, true},
+		{"wavy", true, css.DecorationWavy, false},
+		{"wavyHeavy", true, css.DecorationWavy, true},
+		{"wavyDbl", true, css.DecorationWavy, false},
+	} {
+		on, style, heavy := underline(tc.u)
+		if on != tc.on || style != tc.style || heavy != tc.heavy {
+			t.Errorf("u=%s: %v %v %v, want %v %v %v", tc.u, on, style, heavy, tc.on, tc.style, tc.heavy)
+		}
+	}
+	doc, _ := readDeck(t, testDeck{slides: []testSlide{{
+		tree: textBox("TB", 0, 0, 1, 1, `<a:bodyPr/><a:p><a:r><a:rPr u="dottedHeavy" strike="dblStrike"/><a:t>x</a:t></a:r><a:r><a:rPr strike="dblStrike"/><a:t>y</a:t></a:r></a:p>`),
+	}}})
+	runs := doc.Slides[0].Shapes[0].Text.Paragraphs[0].Runs
+	if s := runs[0].Style; !s.Underline || s.UnderlineStyle != css.DecorationDotted || !s.UnderlineHeavy || !s.Strike || !s.DoubleStrike {
+		t.Errorf("run %+v", s)
+	}
+	if s := runs[1].Style; s.Underline || !s.Strike || !s.DoubleStrike {
+		t.Errorf("run %+v", s)
+	}
+}

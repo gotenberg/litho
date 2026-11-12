@@ -51,6 +51,7 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 	rs := *first
 	rs.Size = size
 	rs.Underline, rs.Strike, rs.Script, rs.Caps, rs.Spacing = false, false, Baseline, CapsNone, 0
+	rs.UnderlineStyle, rs.UnderlineHeavy, rs.DoubleStrike = css.DecorationSolid, false, false
 	if len(bu.Families) > 0 {
 		rs.Families = bu.Families
 	}
