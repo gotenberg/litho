@@ -92,7 +92,7 @@ func (rd *renderer) measure(s string, st TextStyle, maxW float64) *block {
 	b.style.Size = ts.Size
 	for _, l := range lines {
 		b.w = max(b.w, l.Width)
-		h := lineHeight(l, ts.Size)
+		h := lineHeight(ts.Size)
 		b.lineH = append(b.lineH, h)
 		b.h += h
 	}
@@ -106,7 +106,7 @@ func (rd *renderer) measure(s string, st TextStyle, maxW float64) *block {
 const chartLineHeight = 1.12
 
 // lineHeight returns the height a chart text line of size points takes.
-func lineHeight(_ text.Line, size float64) float64 {
+func lineHeight(size float64) float64 {
 	return size * chartLineHeight
 }
 
