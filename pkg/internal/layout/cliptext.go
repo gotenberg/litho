@@ -87,7 +87,9 @@ func (p *painter) textClip(b *box) *compose.Path {
 	if b.kind == kindInline {
 		// An inline box clips to its own text: the lines of its block
 		// container that hold it.
-		for root = b.parent; root != nil && root.kind == kindInline; root = root.parent {
+		root = b.parent
+		for root != nil && root.kind == kindInline {
+			root = root.parent
 		}
 		if root == nil {
 			return nil

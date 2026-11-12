@@ -181,7 +181,10 @@ func (e *engine) pageOf(y float64) int {
 		return 0
 	}
 	if g := &e.geom; g.varies() {
-		for g.tops[len(g.tops)-1] <= y+eps && g.grow() {
+		for g.tops[len(g.tops)-1] <= y+eps {
+			if !g.grow() {
+				break
+			}
 		}
 		if last := g.tops[len(g.tops)-1]; last <= y+eps {
 			// Past the page cap: the pages beyond are as tall as the first.
@@ -202,7 +205,10 @@ func (e *engine) pageTop(p int) float64 {
 		return e.cols.top(p)
 	}
 	if g := &e.geom; g.varies() {
-		for p >= len(g.tops) && g.grow() {
+		for p >= len(g.tops) {
+			if !g.grow() {
+				break
+			}
 		}
 		if p < len(g.tops) {
 			return g.tops[max(p, 0)]

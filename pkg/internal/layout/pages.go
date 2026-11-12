@@ -121,7 +121,10 @@ func (e *engine) box(p int) PageBox {
 	if !g.varies() {
 		return e.opts.Page
 	}
-	for p >= len(g.boxes) && g.grow() {
+	for p >= len(g.boxes) {
+		if !g.grow() {
+			break
+		}
 	}
 	return g.boxes[min(max(p, 0), len(g.boxes)-1)]
 }

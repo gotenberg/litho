@@ -143,7 +143,7 @@ func lineClusters(l *lineBox) []jcluster {
 				gi++
 			}
 			r, _ := utf8.DecodeRuneInString(gs[start].Text)
-			out = append(out, jcluster{it: it, g0: start, g1: gi, r: r, sep: gs[start].Text == " " || gs[start].Text == " "})
+			out = append(out, jcluster{it: it, g0: start, g1: gi, r: r, sep: gs[start].Text == " " || gs[start].Text == "\u00a0"})
 		}
 		// The spaces that hang are the logically last separators: the
 		// visually first ones of a right-to-left run.

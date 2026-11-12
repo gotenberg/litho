@@ -50,7 +50,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	var rb *box
 	var seeds []wrapSeed
 	defer func() { e.release() }()
-	for pass := range maxWrapPasses {
+	for range maxWrapPasses {
 		var err error
 		prev := e
 		e, rb, err = layoutFlow(ctx, root, fonts, opts, first, seeds, chains)
@@ -59,7 +59,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 			return nil, err
 		}
 		found := e.collectWraps(rb, nil)
-		if sameWraps(found, seeds) || pass == maxWrapPasses-1 {
+		if sameWraps(found, seeds) {
 			break
 		}
 		seeds = found

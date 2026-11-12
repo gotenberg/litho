@@ -37,9 +37,6 @@ func (e *engine) replacedSize(b *box, cb cblock) (float64, float64) {
 	w, wSet := specWidth(b, b.st.Width, cb.w)
 	h, hSet := specHeight(b, b.st.Height, cb)
 	ratio := pictureRatio(p)
-	if p == nil && iw > 0 && ih > 0 {
-		ratio = iw / ih
-	}
 	switch {
 	case wSet && hSet:
 		return cw(w), ch(h)
