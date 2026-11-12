@@ -1,7 +1,6 @@
 package pdf
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -216,13 +215,6 @@ func limitsFromInternal(l limits.Limits) Limits {
 	}
 }
 
-// withConvertBudget returns ctx carrying the memory budget of one
-// conversion under l, every field filled in, and the function that ends
-// it, which [Conversion.WriteTo] defers.
-func withConvertBudget(ctx context.Context, l limits.Limits) (context.Context, *limits.Budget, func()) {
-	return limits.WithBudget(ctx, l)
-}
-
 // convertBudgetError logs the most memory the conversion under b held, as
 // its budget accounted it, at Debug on logger, and returns err, the error
 // the conversion ended with, as [Conversion.WriteTo] reports it: when the
@@ -233,13 +225,13 @@ func withConvertBudget(ctx context.Context, l limits.Limits) (context.Context, *
 // conversion may pass.
 func convertBudgetError(logger *slog.Logger, b *limits.Budget, err error) error {
 	refusal := b.Err()
-	if logger != nil && b != nil {
+	if logger != nil {
 		logger.Debug("convert: memory account", slog.Int64("peak", b.Peak()), slog.Int64("held", b.Held()), slog.Bool("refused", refusal != nil))
 	}
 	switch {
 	case refusal == nil:
 		return err
-	case err != nil && errors.Is(err, ErrConvertInputTooLarge) && errors.Is(err, limits.ErrMemoryBudget):
+	case errors.Is(err, ErrConvertInputTooLarge) && errors.Is(err, limits.ErrMemoryBudget):
 		return err
 	default:
 		return fmt.Errorf("converting: %w: %w", ErrConvertInputTooLarge, refusal)
@@ -250,16 +242,8 @@ func convertBudgetError(logger *slog.Logger, b *limits.Budget, err error) error 
 // budget: the converters hold the source whole, in one []byte.
 const sourceByteCost = 1
 
-// chargedSource returns src charging b for each byte read from it, so a
-// source the budget cannot hold fails as it is read.
-func chargedSource(src io.Reader, b *limits.Budget) io.Reader {
-	if b == nil {
-		return src
-	}
-	return &chargedReader{r: src, b: b}
-}
-
-// chargedReader charges its budget for each byte it reads.
+// chargedReader reads a conversion's source, charging its budget for each
+// byte read, so a source the budget cannot hold fails as it is read.
 type chargedReader struct {
 	r io.Reader
 	b *limits.Budget

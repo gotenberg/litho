@@ -22,6 +22,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/xlsx"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -475,10 +476,10 @@ func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ 
 	}
 
 	budget := o.limits.internal().WithDefaults()
-	ctx, mem, endBudget := withConvertBudget(ctx, budget)
+	ctx, mem, endBudget := limits.WithBudget(ctx, budget)
 	defer endBudget()
 	defer func() { err = convertBudgetError(o.logger, mem, err) }()
-	src := chargedSource(c.src, mem)
+	src := &chargedReader{r: c.src, b: mem}
 	// The pictures of a large document wait for the file in a temp file of
 	// their own, removed on every path once the file is written.
 	ctx, pictures := compose.WithPictureStore(ctx, o.tempDir, o.spool)
@@ -702,8 +703,11 @@ func convertHTML(ctx context.Context, src io.Reader, kind convertKind, fonts *te
 // their page cap to [ErrConvertTooManyPages], a package that is not one to
 // [ErrConvertMalformed], an encrypted one to [ErrConvertEncrypted].
 func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *text.Fonts, o *convertConfig, maxBytes int64, maxPages int, sink compose.PageSink) (*compose.Document, error) {
-	conv := docx.Convert
+	name := kind.name()
+	var conv func(context.Context, io.Reader, *text.Fonts, office.Options) (*compose.Document, error)
 	switch kind {
+	case kindDOCX:
+		conv = docx.Convert
 	case kindODT:
 		conv = odt.Convert
 	case kindXLSX:
@@ -716,8 +720,9 @@ func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *
 		conv = pptx.Convert
 	case kindODP:
 		conv = odp.Convert
-	case kindDOCX, kindText, kindHTML, kindMarkdown:
-		// DOCX is the default; the others never reach here.
+	case kindText, kindHTML, kindMarkdown:
+		// run lays these kinds out without an Office converter.
+		return nil, fmt.Errorf("converting %s: no Office converter reads it", name)
 	}
 	dw, dh := o.fallbackPaper()
 	opts := office.Options{
@@ -755,7 +760,6 @@ func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *
 	if o.csvSeparatorSet {
 		opts.CSVSeparators = o.csvSeparators
 	}
-	name := kind.name()
 	doc, err := conv(ctx, src, fonts, opts)
 	switch {
 	case err == nil:
