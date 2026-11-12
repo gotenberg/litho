@@ -925,6 +925,12 @@ var (
 	// [Pipeline.MergePipelines] twice, or the pipeline that merges it.
 	ErrPipelineShared = errors.New("a pipeline is merged once")
 
+	// ErrPipelineConversionShared indicates a [Conversion] given to
+	// [Pipeline.Convert] twice: by a pipeline and a pipeline it merges, or
+	// by two pipelines [Pipeline.MergePipelines] merges. A Conversion reads
+	// its source once. The pipeline refuses it before any stage runs.
+	ErrPipelineConversionShared = errors.New("a conversion runs in one pipeline")
+
 	// ErrInvalidPipelineConcurrency is returned by [Pipeline.WriteTo] when
 	// [WithPipelineConcurrency] is given a number outside [1, 64].
 	ErrInvalidPipelineConcurrency = errors.New("invalid pipeline concurrency")

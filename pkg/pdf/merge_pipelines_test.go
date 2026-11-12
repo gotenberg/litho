@@ -371,6 +371,40 @@ func TestMergePipelinesRefusesWhatItCannotRun(t *testing.T) {
 	}
 }
 
+// TestMergePipelinesRefusesASharedConversion checks that one Conversion given
+// to two of the pipelines a MergePipelines stage runs, or to the merging
+// pipeline and one it merges, is refused when the pipeline is checked, at
+// every concurrency, before its source is read.
+func TestMergePipelinesRefusesASharedConversion(t *testing.T) {
+	t.Parallel()
+	fonts := WithConvertFontDirs(convertFontDir(t))
+	for _, concurrency := range []int{1, 2, 4} {
+		src := strings.NewReader("A")
+		c := FromText(src, fonts)
+		for name, p := range map[string]*Pipeline{
+			"two merged pipelines": NewPipeline().MergePipelines([]*Pipeline{
+				NewPipeline().Convert(c), mergedText(t, "B"), NewPipeline().Convert(c),
+			}),
+			"the merging pipeline and a merged one": NewPipeline().Convert(c).MergePipelines([]*Pipeline{NewPipeline().Convert(c)}),
+		} {
+			if err := p.Validate(); !errors.Is(err, ErrPipelineConversionShared) {
+				t.Errorf("%s: Validate = %v, want ErrPipelineConversionShared", name, err)
+			}
+			var out bytes.Buffer
+			_, err := p.WriteTo(context.Background(), &out, WithPipelineConcurrency(concurrency))
+			if !errors.Is(err, ErrPipelineConversionShared) || IsInvalidInput(err) {
+				t.Errorf("%s at concurrency %d: WriteTo = %v, want ErrPipelineConversionShared, not invalid input", name, concurrency, err)
+			}
+			if out.Len() != 0 {
+				t.Errorf("%s at concurrency %d: wrote %d bytes, want none", name, concurrency, out.Len())
+			}
+		}
+		if src.Len() != 1 {
+			t.Errorf("concurrency %d: the shared source was read", concurrency)
+		}
+	}
+}
+
 func TestMergePipelinesRefusesAConcurrencyOutOfRange(t *testing.T) {
 	t.Parallel()
 	r := openThreePage(t)

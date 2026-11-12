@@ -94,8 +94,10 @@ func (s *convertStage) apply(ctx context.Context, ex *executor) error {
 // A pipeline given here is declared like any other and never written by
 // the caller: the stage writes it. It must not call MergePipelines itself
 // ([ErrPipelineNested]) nor be given twice, in this stage or another one of
-// the pipeline, nor be the pipeline itself ([ErrPipelineShared]), and the
-// list holds at least one, none nil ([ErrPipelineNoPipelines]). The caller
+// the pipeline, nor be the pipeline itself ([ErrPipelineShared]), nor
+// convert a [Conversion] another of them, or the pipeline itself, converts
+// ([ErrPipelineConversionShared]), and the list holds at least one, none nil
+// ([ErrPipelineNoPipelines]). The caller
 // keeps every Reader those pipelines open or merge open until
 // [Pipeline.WriteTo] returns. One Reader may be opened by several of them.
 //

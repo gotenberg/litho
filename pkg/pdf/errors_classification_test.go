@@ -18,6 +18,7 @@ var otherErrors = []error{
 	ErrConversionReused,
 	ErrPipelineNested,
 	ErrPipelineShared,
+	ErrPipelineConversionShared,
 	ErrInvalidPipelineConcurrency,
 	ErrOCRFailed,
 	ErrNilSource,

@@ -171,17 +171,21 @@ func WithEditLabel(label string) ApplyOption {
 // Validate runs build-time structural checks without executing the
 // pipeline. It catches empty pipelines, missing [Pipeline.Open], empty
 // page lists, empty merge sources, a [Pipeline.Compose] with no
-// placements or after another stage, and the pipelines a
-// [Pipeline.MergePipelines] cannot run, with what each one's own validation
-// finds. Cross-stage compatibility (Sign
+// placements or after another stage, a [Conversion] given to two stages,
+// and the pipelines a [Pipeline.MergePipelines] cannot run, with what each
+// one's own validation finds. Cross-stage compatibility (Sign
 // combined with encryption, a stage after a remediation)
 // depends on what the Apply closures call, and is enforced at execution time:
 // it does not appear here.
 func (p *Pipeline) Validate() error {
-	return errors.Join(p.buildValidationErrors()...)
+	return errors.Join(p.buildValidationErrors(map[*Conversion]bool{})...)
 }
 
-func (p *Pipeline) buildValidationErrors() []error {
+// buildValidationErrors returns what is wrong with p's declaration. converts
+// holds the Conversions the stages checked so far were given, p's and those
+// of the pipelines it merges: a Conversion given twice is refused, since it
+// reads its source once.
+func (p *Pipeline) buildValidationErrors(converts map[*Conversion]bool) []error {
 	var errs []error
 	if len(p.stages) == 0 {
 		return append(errs, &PipelineStageError{
@@ -234,13 +238,20 @@ func (p *Pipeline) buildValidationErrors() []error {
 				})
 			}
 		case *convertStage:
-			if st.c == nil {
+			switch {
+			case st.c == nil:
 				errs = append(errs, &PipelineStageError{
 					Index: i, Name: s.name(), Err: fmt.Errorf("nil conversion: %w", ErrNilSource),
 				})
+			case converts[st.c]:
+				errs = append(errs, &PipelineStageError{
+					Index: i, Name: s.name(), Err: ErrPipelineConversionShared,
+				})
+			default:
+				converts[st.c] = true
 			}
 		case *mergePipelinesStage:
-			for _, err := range p.mergedPipelineErrors(st, merged) {
+			for _, err := range p.mergedPipelineErrors(st, merged, converts) {
 				errs = append(errs, &PipelineStageError{Index: i, Name: s.name(), Err: err})
 			}
 		}
@@ -252,8 +263,8 @@ func (p *Pipeline) buildValidationErrors() []error {
 // [Pipeline.MergePipelines] stage of p was given: none, a nil one, p itself
 // or one given twice, in this stage or an earlier one (seen holds those), one
 // that merges pipelines itself, and what each one's own validation finds,
-// each named by its position.
-func (p *Pipeline) mergedPipelineErrors(st *mergePipelinesStage, seen map[*Pipeline]bool) []error {
+// a Conversion converts holds included, each named by its position.
+func (p *Pipeline) mergedPipelineErrors(st *mergePipelinesStage, seen map[*Pipeline]bool, converts map[*Conversion]bool) []error {
 	if len(st.pipelines) == 0 {
 		return []error{ErrPipelineNoPipelines}
 	}
@@ -278,7 +289,7 @@ func (p *Pipeline) mergedPipelineErrors(st *mergePipelinesStage, seen map[*Pipel
 			errs = append(errs, fmt.Errorf("pipeline %d: %w", i, ErrPipelineNested))
 			continue
 		}
-		for _, err := range sub.buildValidationErrors() {
+		for _, err := range sub.buildValidationErrors(converts) {
 			errs = append(errs, fmt.Errorf("pipeline %d: %w", i, err))
 		}
 	}
