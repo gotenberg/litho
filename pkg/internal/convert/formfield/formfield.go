@@ -3,6 +3,8 @@ package formfield
 import (
 	"math"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
@@ -29,6 +31,52 @@ type Control struct {
 	// shows, in page coordinates, and the widget's rectangle. nil draws
 	// nothing for that state.
 	Other func(shown []typeset.Fragment, r typeset.Rect, m *typeset.Measurer) []typeset.Fragment
+}
+
+// Printed returns the PrintField attributes of the Form element of a
+// control that becomes the field f, or prints as it would show: the
+// attributes a reader of the structure tree finds where no widget is
+// (ISO 32000-1, 14.8.5.6, Table 348). A text field, a drop-down list and
+// a combo box show their value as text, the tv role; a list box takes
+// [typeset.PrintList]; a check box and a radio button take cb and rb with
+// their state, on or off. The description is the one the field's
+// alternate name would carry: f's Description, else its Name, cut at
+// [typeset.MaxFieldText] bytes.
+func Printed(f *typeset.Field) typeset.PrintField {
+	pf := typeset.PrintField{Role: typeset.PrintText, Desc: f.Description}
+	if pf.Desc == "" {
+		pf.Desc = f.Name
+	}
+	pf.Desc = Clip(pf.Desc)
+	switch f.Kind {
+	case typeset.FieldCheckBox, typeset.FieldRadio:
+		pf.Role, pf.Checked = typeset.PrintCheckBox, typeset.CheckOff
+		if f.Kind == typeset.FieldRadio {
+			pf.Role = typeset.PrintRadio
+		}
+		if f.Checked {
+			pf.Checked = typeset.CheckOn
+		}
+	case typeset.FieldList:
+		pf.Role = typeset.PrintList
+	case typeset.FieldText, typeset.FieldCombo:
+	}
+	return pf
+}
+
+// Clip returns s cut at [typeset.MaxFieldText] bytes, on a character's
+// boundary, its invalid UTF-8 replaced: a text a PrintField description
+// holds.
+func Clip(s string) string {
+	s = strings.ToValidUTF8(s, "�")
+	if len(s) <= typeset.MaxFieldText {
+		return s
+	}
+	cut := typeset.MaxFieldText
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
 }
 
 // idPrefix starts the IDs [NodeID] makes: a control character no XML

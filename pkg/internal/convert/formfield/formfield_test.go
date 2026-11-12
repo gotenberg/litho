@@ -1,7 +1,9 @@
 package formfield
 
 import (
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -62,5 +64,35 @@ func TestAttach(t *testing.T) {
 	}
 	if len(page2.Fields) != 0 || len(page2.Content) != 2 {
 		t.Errorf("page 2 changed: %d fields, %d fragments", len(page2.Fields), len(page2.Content))
+	}
+}
+
+func TestPrinted(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		f    typeset.Field
+		want typeset.PrintField
+	}{
+		{typeset.Field{Kind: typeset.FieldText, Name: "n", Description: "Your name"}, typeset.PrintField{Role: typeset.PrintText, Desc: "Your name"}},
+		{typeset.Field{Kind: typeset.FieldCombo, Name: "city"}, typeset.PrintField{Role: typeset.PrintText, Desc: "city"}},
+		{typeset.Field{Kind: typeset.FieldList}, typeset.PrintField{Role: typeset.PrintList}},
+		{typeset.Field{Kind: typeset.FieldCheckBox, Name: "a", Checked: true}, typeset.PrintField{Role: typeset.PrintCheckBox, Checked: typeset.CheckOn, Desc: "a"}},
+		{typeset.Field{Kind: typeset.FieldRadio, Name: "c"}, typeset.PrintField{Role: typeset.PrintRadio, Checked: typeset.CheckOff, Desc: "c"}},
+	} {
+		if got := Printed(&tc.f); got != tc.want {
+			t.Errorf("Printed(%+v) = %+v, want %+v", tc.f, got, tc.want)
+		}
+	}
+}
+
+func TestClip(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("é", typeset.MaxFieldText)
+	got := Clip(long)
+	if len(got) > typeset.MaxFieldText || !utf8.ValidString(got) || len(got) < typeset.MaxFieldText-1 {
+		t.Errorf("Clip kept %d bytes, valid %v", len(got), utf8.ValidString(got))
+	}
+	if got := Clip("a\xffb"); got != "a�b" {
+		t.Errorf("Clip(invalid) = %q", got)
 	}
 }

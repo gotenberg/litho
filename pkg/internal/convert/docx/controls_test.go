@@ -102,3 +102,42 @@ func TestConvertContentControlsOff(t *testing.T) {
 		t.Errorf("the checked legacy check box draws %+v", box)
 	}
 }
+
+// TestConvertLegacyCheckBoxPrintField gives the Form element of a legacy
+// check box printed without its field a cb role, its state and its name:
+// the box's strokes carry no character, and a Form element holding content
+// needs a role (ISO 14289-1, 7.18.4).
+func TestConvertLegacyCheckBoxPrintField(t *testing.T) {
+	t.Parallel()
+	d := convertBytes(t, docx(t, controlsBody, nil), office.Options{})
+	var forms []*typeset.StructElem
+	stack := []*typeset.StructElem{d.Structure}
+	for len(stack) > 0 {
+		e := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if e.Role == "Form" {
+			forms = append(forms, e)
+		}
+		stack = append(stack, e.Kids...)
+	}
+	want := typeset.PrintField{Role: typeset.PrintCheckBox, Checked: typeset.CheckOn, Desc: "Check1"}
+	if len(forms) != 1 || forms[0].PrintField != want {
+		t.Fatalf("Form elements = %+v, want one with %+v", forms, want)
+	}
+}
+
+// TestConvertContentControlsPrintField gives every Form element of a
+// control made a field the PrintField attributes of that field, which the
+// backend writes where the field does not land.
+func TestConvertContentControlsPrintField(t *testing.T) {
+	t.Parallel()
+	d := convertBytes(t, docx(t, controlsBody, nil), office.Options{FormFields: true})
+	for _, f := range d.Pages[0].Fields {
+		if f.Parent.PrintField.Role == typeset.PrintRoleNone {
+			t.Errorf("field %q: its Form element has no PrintField role", f.Name)
+		}
+	}
+	if p := d.Pages[0].Fields[0].Parent.PrintField; p.Role != typeset.PrintText || p.Desc != "Customer" {
+		t.Errorf("text control's PrintField = %+v", p)
+	}
+}

@@ -192,3 +192,54 @@ func FuzzControls(f *testing.F) {
 		}
 	})
 }
+
+// formElems returns the Form elements of the tree under root, in
+// preorder.
+func formElems(root *typeset.StructElem) []*typeset.StructElem {
+	var out []*typeset.StructElem
+	stack := []*typeset.StructElem{root}
+	for len(stack) > 0 {
+		e := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if e == nil {
+			continue
+		}
+		if e.Role == "Form" {
+			out = append(out, e)
+		}
+		for _, k := range slices.Backward(e.Kids) {
+			stack = append(stack, k)
+		}
+	}
+	return out
+}
+
+// TestConvertFormControlsPrintField gives the Form element of each control
+// printed without its field the PrintField attributes of that field, so
+// that a Form element holding content says what it shows (ISO 14289-1,
+// 7.18.4).
+func TestConvertFormControlsPrintField(t *testing.T) {
+	t.Parallel()
+	d := convertDoc(t, controlsDoc(t), office.Options{})
+	var have []typeset.PrintField
+	for _, e := range formElems(d.Structure) {
+		have = append(have, e.PrintField)
+	}
+	text := typeset.PrintText
+	want := []typeset.PrintField{
+		{Role: text, Desc: "Your name"},
+		{Role: text, Desc: "notes"},
+		{Role: typeset.PrintCheckBox, Checked: typeset.CheckOn, Desc: "agree"},
+		{Role: typeset.PrintRadio, Checked: typeset.CheckOff, Desc: "color"},
+		{Role: typeset.PrintRadio, Checked: typeset.CheckOn, Desc: "color"},
+		{Role: typeset.PrintList, Desc: "fruit"},
+		{Role: text, Desc: "country"},
+		{Role: text, Desc: "city"},
+		{Role: text, Desc: "day"},
+		{Role: typeset.PrintPushButton, Desc: "go"},
+		{Role: text, Desc: "empty"},
+	}
+	if !slices.Equal(have, want) {
+		t.Errorf("print fields = %+v\nwant %+v", have, want)
+	}
+}

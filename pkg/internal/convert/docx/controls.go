@@ -178,7 +178,9 @@ func (d *document) inlineControl(s *story, rp resolvedPara, ps *css.Style, lineM
 
 // closeControl ends the frame the control ctl's content was collected in
 // and adds it as one inline element of the Role Form, the control a field
-// when it holds content.
+// when it holds content. The element carries the PrintField attributes of
+// its field (formfield.Printed), which the backend writes when the field
+// does not land and the element prints its content alone.
 func (d *document) closeControl(sink *inlineSink, ctl *formfield.Control) {
 	if len(sink.links) == 0 {
 		return
@@ -196,7 +198,7 @@ func (d *document) closeControl(sink *inlineSink, ctl *formfield.Control) {
 	if c := st.Color; c.A > 0 {
 		ctl.Field.Color = typeset.Color{R: c.R, G: c.G, B: c.B, A: c.A}
 	}
-	sink.add(&layout.Node{Kind: layout.Element, Style: inlineStyle(&st), Role: "Form", ID: ctl.ID, Children: fr.nodes})
+	sink.add(&layout.Node{Kind: layout.Element, Style: inlineStyle(&st), Role: "Form", ID: ctl.ID, PrintField: formfield.Printed(&ctl.Field), Children: fr.nodes})
 	d.form.controls = append(d.form.controls, ctl)
 }
 
@@ -339,6 +341,7 @@ func (d *document) legacyResult(fl *field, st *css.Style, sink *inlineSink) bool
 		return true
 	}
 	n := legacyBox(st, f.Checked)
+	n.PrintField = formfield.Printed(&f)
 	if on {
 		ctl.Box = true
 		ctl.Other = func(_ []typeset.Fragment, r typeset.Rect, _ *typeset.Measurer) []typeset.Fragment {
@@ -355,7 +358,10 @@ func (d *document) legacyResult(fl *field, st *css.Style, sink *inlineSink) bool
 // prints in the run style st: a square as wide as the text's size, drawn
 // with a hairline, its bottom 0.155 of the size below the baseline, and
 // both its diagonals when checked. Its size (17.16.7) is ignored, as
-// LibreOffice ignores it.
+// LibreOffice ignores it. The box is a Form element, whose PrintField
+// attributes, a cb role and its state, the caller sets: the strokes carry
+// no character, and the attributes are what tells a reader of the
+// structure tree the box is checked (ISO 32000-1, 14.8.5.6, Table 348).
 //
 // # Corpus evidence
 //
@@ -364,6 +370,11 @@ func (d *document) legacyResult(fl *field, st *css.Style, sink *inlineSink) bool
 //     box in 11 point text prints as a 10.95 point square of 0.1 point
 //     lines, its bottom 1.7 points below the baseline, the checked ones
 //     with both diagonals; the 14 point one (w:size 28) prints the same.
+//   - litho/docx form-fields-legacy, poi/docx document/checkboxes.docx
+//     and libreoffice/docx ooxmlexport/fdo53985.docx, converted by
+//     LibreOffice on gotenberg/gotenberg:9.4.1 with exportFormFields
+//     false and nativePdfua PDF/UA-1: no Form or Figure element, no
+//     PrintField attribute and no text for a box or its state.
 func legacyBox(st *css.Style, checked bool) *layout.Node {
 	size := st.FontSize
 	box := *st

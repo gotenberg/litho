@@ -136,12 +136,14 @@ func (b *builder) formControl(c *odf.Element, g frameGeom) *layout.Node {
 	if el == nil {
 		b.warn("form-control", "a form control whose element the forms do not hold prints as its empty frame")
 		frame(st)
+		n.PrintField = typeset.PrintField{Role: typeset.PrintText}
 		return n
 	}
 	if b.hf != nil || el.A(odf.NSForm, "printable") == "false" {
 		return n
 	}
 	f, ok := controlField(el, len(b.controls))
+	n.PrintField = printedControl(el, &f)
 	var other func([]typeset.Fragment, typeset.Rect, *typeset.Measurer) []typeset.Fragment
 	switch el.Name.Local {
 	case "text", "formatted-text", "date", "time", "number", "combobox":
@@ -182,6 +184,36 @@ func (b *builder) formControl(c *odf.Element, g frameGeom) *layout.Node {
 		b.controls = append(b.controls, ctl)
 	}
 	return n
+}
+
+// printedControl returns the PrintField attributes of the Form element of
+// the control el, f the field [controlField] reads from it: the field's
+// own (formfield.Printed), pb for a push button or an image button
+// (form:button and form:image, ODF 1.3, Part 3, 13.5), and tv, the role of a value shown as
+// text, for a kind no field takes, which prints as its frame. A Form
+// element that holds content and no widget needs a role (ISO 14289-1,
+// 7.18.4), and these attributes are written only where the control
+// becomes no widget.
+//
+// # Corpus evidence
+//
+//   - litho/odt form-controls, converted by LibreOffice on
+//     gotenberg/gotenberg:9.4.1 with exportFormFields false and
+//     nativePdfua PDF/UA-1: each of the 21 printed controls is a Figure
+//     with a Layout BBox and Placement and neither Alt nor ActualText,
+//     which veraPDF refuses under ISO 14289-1, 7.3; no Form element, no
+//     PrintField attribute.
+func printedControl(el *odf.Element, f *typeset.Field) typeset.PrintField {
+	pf := formfield.Printed(f)
+	switch el.Name.Local {
+	case "button", "image":
+		pf.Role, pf.Checked = typeset.PrintPushButton, typeset.CheckUnset
+	case "text", "textarea", "formatted-text", "date", "time", "number",
+		"combobox", "listbox", "checkbox", "radio":
+	default:
+		pf.Role, pf.Checked = typeset.PrintText, typeset.CheckUnset
+	}
+	return pf
 }
 
 // frame gives st the frame LibreOffice prints around a text or list
