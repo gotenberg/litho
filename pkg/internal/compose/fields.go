@@ -152,10 +152,10 @@ func (v *validator) field(f *Field) error {
 	if !finiteRect(f.Rect) || f.Rect.Width <= 0 || f.Rect.Height <= 0 || f.Rect.Width > maxPageSize || f.Rect.Height > maxPageSize {
 		return fmt.Errorf("%w: rectangle %v", ErrInvalidField, f.Rect)
 	}
-	texts := append([]string{f.Name, f.Description, f.Value, f.OnState}, f.Options...)
 	if len(f.Options) > maxFieldOptions {
 		return fmt.Errorf("%w: %d options, at most %d", ErrLimitExceeded, len(f.Options), maxFieldOptions)
 	}
+	texts := append([]string{f.Name, f.Description, f.Value, f.OnState}, f.Options...)
 	for _, s := range texts {
 		if len(s) > MaxFieldText {
 			return fmt.Errorf("%w: a text of %d bytes, at most %d", ErrLimitExceeded, len(s), MaxFieldText)
