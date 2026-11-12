@@ -1,6 +1,8 @@
 package docx
 
 import (
+	"math"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -107,13 +109,122 @@ func TestTables_LegacyIndent(t *testing.T) {
 	}
 }
 
+// TestTables_Nested locks a nested table: built inside its cell, its
+// edge at its indent from the cell's text whatever the compatibility
+// mode, and the empty paragraph that ends its cell after it left out.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/NumberedList.docx: in a Word 2010
+//     document Word prints the text of a nested table with a 360 twip
+//     indent and 86 twip cell margins at 131.1 pt, 18 + 4.3 pt and half
+//     its 1.5 pt border right of its cell's text at 108 pt, where the
+//     legacy rule of a table in the body would put it 4.3 pt further
+//     left.
+//   - libreoffice/docx ooxmlexport/fdo73389.docx: the text of a nested
+//     table without its own indent starts 5.9 pt right of its cell's
+//     text.
 func TestTables_Nested(t *testing.T) {
 	t.Parallel()
-	inner := `<w:tbl><w:tblGrid><w:gridCol w:w="500"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>in</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`
-	body := `<w:tbl><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc>` + inner + `<w:p/></w:tc></w:tr></w:tbl>`
+	inner := func(tblPr string) string {
+		return `<w:tbl><w:tblPr>` + tblPr + `</w:tblPr><w:tblGrid><w:gridCol w:w="500"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>in</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`
+	}
+	outer := func(cell string) string {
+		return `<w:tbl><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc>` + cell + `</w:tc></w:tr></w:tbl>`
+	}
+	for _, tc := range []struct {
+		name, cell string
+		paras      int
+	}{
+		{"empty paragraph after the table", inner(``) + `<w:p/>`, 0},
+		{"paragraph with text after the table", inner(``) + `<w:p><w:r><w:t>after</w:t></w:r></w:p>`, 1},
+		{"empty paragraph after text", `<w:p><w:r><w:t>before</w:t></w:r></w:p><w:p/>`, 2},
+		{"numbered empty paragraph", inner(``) + `<w:p><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr></w:p>`, 1},
+	} {
+		b := build(t, outer(tc.cell), nil)
+		td := role(role(b.root, "Table")[0], "TD")[0]
+		paras := 0
+		for _, k := range td.Children {
+			if k.Role == "P" || k.Role == "L" {
+				paras++
+			}
+		}
+		if paras != tc.paras {
+			t.Errorf("%s: %d paragraphs in the cell, want %d", tc.name, paras, tc.paras)
+		}
+	}
+	b := build(t, outer(inner(`<w:tblInd w:w="360" w:type="dxa"/>`)+`<w:p/>`), nil)
+	tables := role(b.root, "Table")
+	if len(tables) != 2 {
+		t.Fatalf("%d tables, want 2", len(tables))
+	}
+	if m := tables[1].Style.Margin[css.Left]; m != css.Pts(18) {
+		t.Errorf("nested table margin %v, want 18pt: no legacy shift in a cell", m)
+	}
+}
+
+// TestTables_BorderWidths locks the widths Word draws a table's
+// compound borders at and the margins it measures from their middle.
+//
+// # Corpus evidence
+//
+//   - litho/docx tables-borders: Word prints the first cell's text of a
+//     table with 1.5 pt single borders at 78.3 pt on a 72 pt margin, with
+//     4.5 pt double borders at 79.8 pt, with 7.5 pt triple borders at
+//     81.3 pt: 5.4 pt from the middle of the border.
+//   - litho/docx tables-nested: the same with 2.25 pt double borders, at
+//     78.5 pt.
+func TestTables_BorderWidths(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		border         string
+		width, padLeft float64
+		cellSpacingXML string
+	}{
+		{`w:val="single" w:sz="12"`, 1.5, 4.65, ``},
+		{`w:val="double" w:sz="12"`, 4.5, 3.15, ``},
+		{`w:val="triple" w:sz="12"`, 7.5, 1.65, ``},
+		{`w:val="thinThickSmallGap" w:sz="12"`, 3, 3.9, ``},
+		{`w:val="threeDEmboss" w:sz="12"`, 3, 3.9, ``},
+		{`w:val="wave" w:sz="6"`, 3, 3.9, ``},
+		{`w:val="single" w:sz="48"`, 6, 2.4, ``},
+		{`w:val="single" w:sz="12"`, 1.5, 5.4, `<w:tblCellSpacing w:w="72" w:type="dxa"/>`},
+	} {
+		var sides strings.Builder
+		for _, side := range []string{"top", "left", "bottom", "right", "insideH", "insideV"} {
+			sides.WriteString(`<w:` + side + ` ` + tc.border + `/>`)
+		}
+		body := `<w:tbl><w:tblPr>` + tc.cellSpacingXML + `<w:tblBorders>` + sides.String() + `</w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>` +
+			`<w:tr><w:tc><w:p/></w:tc><w:tc><w:p/></w:tc></w:tr></w:tbl>`
+		b := build(t, body, nil)
+		td := role(b.root, "TD")
+		if len(td) != 2 {
+			t.Fatalf("%s: %d cells", tc.border, len(td))
+		}
+		st := td[1].Style
+		if w := st.Border[css.Left].Width; math.Abs(w-tc.width) > 1e-9 {
+			t.Errorf("%s: border width %v, want %v", tc.border, w, tc.width)
+		}
+		if p := st.Padding[css.Left].Value; math.Abs(p-tc.padLeft) > 1e-9 {
+			t.Errorf("%s%s: left padding %v, want %v", tc.border, tc.cellSpacingXML, p, tc.padLeft)
+		}
+	}
+}
+
+// TestTables_CellSpacing locks a table with cell spacing: separated
+// borders, twice the spacing between the cells, the table's outer
+// borders on the table box.
+func TestTables_CellSpacing(t *testing.T) {
+	t.Parallel()
+	body := `<w:tbl><w:tblPr><w:tblCellSpacing w:w="72" w:type="dxa"/><w:tblBorders><w:top w:val="outset" w:sz="12"/><w:left w:val="outset" w:sz="12"/></w:tblBorders></w:tblPr>` +
+		`<w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>`
 	b := build(t, body, nil)
-	if n := len(role(b.root, "Table")); n != 2 {
-		t.Errorf("%d tables, want 2", n)
+	st := role(b.root, "Table")[0].Style
+	if st.BorderCollapse != css.SeparateBorders || st.BorderSpacing != [2]float64{7.2, 7.2} {
+		t.Errorf("collapse %v spacing %v, want separate 7.2", st.BorderCollapse, st.BorderSpacing)
+	}
+	if st.Border[css.Top].Width != 1.5 || st.Border[css.Left].Style != css.Outset || st.Border[css.Right].Width != 0 {
+		t.Errorf("table borders %+v", st.Border)
 	}
 }
 

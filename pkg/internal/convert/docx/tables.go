@@ -75,6 +75,7 @@ type tableProps struct {
 	shading     *css.Color
 	layoutFixed *bool
 	cellMar     map[string]float64
+	cellSpacing *float64
 	look        *tableLook
 	bidi        *bool
 	floating    *ooxml.Element
@@ -112,6 +113,9 @@ func (t tableProps) merge(o *tableProps) tableProps {
 		maps.Copy(m, o.cellMar)
 		t.cellMar = m
 	}
+	if o.cellSpacing != nil {
+		t.cellSpacing = o.cellSpacing
+	}
 	if o.look != nil {
 		t.look = o.look
 	}
@@ -141,8 +145,8 @@ func mergeBorders(a, b map[string]*borderSpec) map[string]*borderSpec {
 	return m
 }
 
-// parseBorders reads a tblBorders, tcBorders or pBdr element, start and
-// end read as left and right.
+// parseBorders reads a tblBorders or tcBorders element, start and end
+// read as left and right, each border as wide as Word draws it.
 func (d *document) parseBorders(e *ooxml.Element) map[string]*borderSpec {
 	m := map[string]*borderSpec{}
 	for _, b := range e.Kids() {
@@ -153,9 +157,38 @@ func (d *document) parseBorders(e *ooxml.Element) map[string]*borderSpec {
 		case "end":
 			name = "right"
 		}
-		m[name] = d.parseBorder(b)
+		bs := d.parseBorder(b)
+		if k := tableBorderLines(attrOr(b, "val")); k > 0 && bs.Width > 0 {
+			if v, ok := ooxml.Int(attrOr(b, "sz")); ok {
+				bs.Width = float64(max(2, min(96, v))) / 8 * k
+			}
+		}
+		m[name] = bs
 	}
 	return m
+}
+
+// tableBorderLines returns the width of a table border of style val in
+// multiples of its sz (ECMA-376 Part 1, 17.4.38, ST_Border 17.18.2, which
+// leaves the drawn width to the application), 0 where the border is as
+// wide as its sz says or a double line's three widths apply.
+//
+// # Corpus evidence
+//
+//   - litho/docx tables-borders: at sz 12 (1.5 pt) Word draws a triple
+//     border 7.5 pt wide (three 1.5 pt lines, two 1.5 pt gaps), a
+//     thinThickSmallGap and a threeDEmboss border 3 pt wide, and at sz 6
+//     a wave border 3 pt wide; its rows grow by those widths.
+func tableBorderLines(val string) float64 {
+	switch val {
+	case "triple":
+		return 5
+	case "thinThickSmallGap", "thickThinSmallGap", "threeDEmboss", "threeDEngrave":
+		return 2
+	case "wave":
+		return 4
+	}
+	return 0
 }
 
 // parseMargins reads a tblCellMar or tcMar element into points by side
@@ -207,6 +240,10 @@ func (d *document) parseTableProps(e *ooxml.Element) *tableProps {
 			t.layoutFixed = new(attrOr(c, "type") == "fixed")
 		case "tblCellMar":
 			t.cellMar = parseMargins(c)
+		case "tblCellSpacing":
+			if ws := parseWidth(c); ws != nil && ws.kind == "dxa" {
+				t.cellSpacing = new(ws.v)
+			}
 		case "tblLook":
 			t.look = parseLook(c)
 		case "bidiVisual":
@@ -507,6 +544,10 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	tableSt.BoxDecorationBreak = css.DecorationCloneAll
 	tableSt.TableLayout = css.TableFixed
 	tableSt.LineHeight = css.Dimension{Kind: css.Normal}
+	spaced := tp.cellSpacing != nil && *tp.cellSpacing > 0
+	if spaced {
+		d.spaceCells(tableSt, *tp.cellSpacing, tp.borders)
+	}
 	width := 0.0
 	for _, g := range grid {
 		width += g
@@ -521,11 +562,13 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	if tp.ind != nil {
 		indent = *tp.ind
 	}
-	if d.settings.compat < 15 && tp.ind != nil {
+	if d.settings.compat < 15 && tp.ind != nil && d.inCell == 0 {
 		// Before Word 2013 an indent places the first cell's text, so the
 		// table's edge sits its left margin further out, as LibreOffice
 		// lays such documents out (MS-DOCX, 2.3.4); a table without an
-		// indent keeps its edge at the margin.
+		// indent keeps its edge at the margin. Word places a nested
+		// table's edge at its indent from the cell's text whatever the
+		// mode (see [tableIndent]).
 		left := cellMar["left"]
 		if cells := placed[0].cells; len(cells) > 0 {
 			if m, ok := cells[0].props.margins["left"]; ok {
@@ -660,14 +703,18 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 				}
 			}
 			cp = cp.merge(&c.props)
-			cst := d.cellStyle(cp, cellMar, tblBorders, shading, first, last, firstCol, lastCol)
+			cst := d.cellStyle(cp, cellMar, tblBorders, shading, cellPlace{first, last, firstCol, lastCol, spaced})
 			if ci == 0 && row.props.gridBefore > 0 {
 				cst.Border[css.Left] = css.Border{}
 			}
 			ts := s
 			d.nested++
 			d.inCell++
-			kids := finish(d.blocks(ts, cc, c.xml, depth+1))
+			bs := d.blocks(ts, cc, c.xml, depth+1)
+			if n := len(bs); n >= 2 && endsWithTableMark(c.xml) && bs[n-2].node.Role == "Table" && bs[n-1].node.Role == "P" && bs[n-1].node.ID == "" {
+				bs = bs[:n-1]
+			}
+			kids := finish(bs)
 			d.inCell--
 			d.nested--
 			role := "TD"
@@ -711,10 +758,63 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	return tbl
 }
 
+// endsWithTableMark reports a cell whose last paragraph is empty and
+// follows a nested table: the paragraph a cell must end with (ECMA-376
+// Part 1, 17.4.66), which Word does not lay out after a table.
+//
+// # Corpus evidence
+//
+//   - litho/docx tables-nested: Word ends the row of a cell holding a
+//     table and an empty paragraph at the nested table's bottom border;
+//     the paragraph's line and its 8 pt space after take no room.
+//   - libreoffice/docx ooxmlexport/fdo73389.docx: the row of a cell ending
+//     with a nested table and an empty paragraph ends at the nested
+//     table, 13.2 pt above where one more line would end it.
+func endsWithTableMark(tc *ooxml.Element) bool {
+	var prev, last *ooxml.Element
+	for _, k := range tc.Kids() {
+		if k.Space != w || k.Local == "tcPr" || k.Local == "bookmarkStart" || k.Local == "bookmarkEnd" || k.Local == "proofErr" {
+			continue
+		}
+		prev, last = last, k
+	}
+	return last != nil && prev != nil && last.Is(w, "p") && prev.Is(w, "tbl") && emptyParagraph(last) && last.Child(w, "pPr").Child(w, "numPr") == nil
+}
+
+// spaceCells separates the cells of the table st by its cell spacing
+// (ECMA-376 Part 1, 17.4, tblCellSpacing) in the separated borders model:
+// the table draws its outer borders around its cells, which draw their
+// own.
+//
+// # Corpus evidence
+//
+//   - litho/docx tables-borders: with a cell spacing of 72 twips (3.6 pt)
+//     Word leaves 7 pt between two cells and 6.25 pt between a cell and
+//     the table's border, its columns 107.3 pt apart on a 100 pt grid,
+//     its rows 32.5 pt apart around 25.5 pt cells: twice the spacing
+//     between the cells, as the spacing is the space each cell keeps on
+//     its sides.
+func (d *document) spaceCells(st *css.Style, spacing float64, tb map[string]*borderSpec) {
+	st.BorderCollapse = css.SeparateBorders
+	st.BorderSpacing = [2]float64{2 * spacing, 2 * spacing}
+	for side, name := range map[css.Side]string{css.Top: "top", css.Right: "right", css.Bottom: "bottom", css.Left: "left"} {
+		if b := tb[name]; b != nil {
+			st.Border[side] = b.Border
+		}
+	}
+	strokeBorders(st)
+}
+
+// cellPlace is where a cell sits in its table: on which of its edges,
+// and whether the table spaces its cells apart.
+type cellPlace struct {
+	first, last, firstCol, lastCol, spaced bool
+}
+
 // cellStyle returns the style of a table cell: its margins as padding,
 // its borders (its own, else the table's outer or inside borders by its
 // place), its shading and its vertical alignment.
-func (d *document) cellStyle(cp cellProps, tableMar map[string]float64, tb map[string]*borderSpec, shading *css.Color, first, last, firstCol, lastCol bool) *css.Style {
+func (d *document) cellStyle(cp cellProps, tableMar map[string]float64, tb map[string]*borderSpec, shading *css.Color, at cellPlace) *css.Style {
 	st := d.blockStyle()
 	st.Display = css.TableCell
 	st.LineHeight = css.Dimension{Kind: css.Normal}
@@ -738,11 +838,23 @@ func (d *document) cellStyle(cp cellProps, tableMar map[string]float64, tb map[s
 		}
 		return css.Border{}
 	}
-	st.Border[css.Top] = pick("top", "top", "insideH", first)
-	st.Border[css.Bottom] = pick("bottom", "bottom", "insideH", last)
-	st.Border[css.Left] = pick("left", "left", "insideV", firstCol)
-	st.Border[css.Right] = pick("right", "right", "insideV", lastCol)
+	st.Border[css.Top] = pick("top", "top", "insideH", at.first)
+	st.Border[css.Bottom] = pick("bottom", "bottom", "insideH", at.last)
+	st.Border[css.Left] = pick("left", "left", "insideV", at.firstCol)
+	st.Border[css.Right] = pick("right", "right", "insideV", at.lastCol)
 	strokeBorders(st)
+	// Word measures a cell's left and right margins from the middle of
+	// its collapsed border (17.4.42 tblCellMar): the inner half of the
+	// border takes from the margin. A spaced cell's margin starts inside
+	// its whole border.
+	for _, side := range []css.Side{css.Left, css.Right} {
+		if at.spaced {
+			break
+		}
+		if b := st.Border[side]; b.Style != css.BorderNone && b.Width > 0 && st.Padding[side].Kind == css.Points {
+			st.Padding[side] = css.Pts(max(0, st.Padding[side].Value-b.Width/2))
+		}
+	}
 	if shading != nil {
 		st.BackgroundColor = *shading
 	}
