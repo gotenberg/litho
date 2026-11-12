@@ -77,6 +77,29 @@ func TestConvert_ValidatesEveryOption(t *testing.T) {
 	}
 }
 
+// TestConvert_NamesTheSameBadMediaFeature checks that, of several media
+// feature names WithMediaFeatures refuses, the error names the same one at
+// every run.
+func TestConvert_NamesTheSameBadMediaFeature(t *testing.T) {
+	t.Parallel()
+	features := map[string]string{"Zeta": "x", "Alpha": "x", "Mid": "x", "ok": "x"}
+	var first string
+	for i := range 50 {
+		_, err := FromHTML(strings.NewReader("x"), WithMediaFeatures(features)).WriteTo(context.Background(), &bytes.Buffer{})
+		if !errors.Is(err, ErrInvalidConvertOptions) {
+			t.Fatalf("WriteTo: %v, want ErrInvalidConvertOptions", err)
+		}
+		if i == 0 {
+			first = err.Error()
+		} else if err.Error() != first {
+			t.Fatalf("run %d: %q, run 0: %q", i, err.Error(), first)
+		}
+	}
+	if !strings.Contains(first, `"Alpha"`) {
+		t.Errorf("error %q does not name the first bad name in order, Alpha", first)
+	}
+}
+
 // TestConvert_PaperLiesInThePageSizes checks that WithPaper and
 // WithDefaultPaper take the page sizes ISO 32000-1, Annex C.2 allows, 3 to
 // 14,400 points a side, and refuse any other, the zero Paper included, with

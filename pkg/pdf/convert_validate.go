@@ -2,8 +2,10 @@ package pdf
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"net/url"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -136,7 +138,9 @@ func (o *convertConfig) validateHTML() error {
 			return fmt.Errorf("%w: base URL %q is not an absolute URL", ErrInvalidConvertOptions, o.baseURL)
 		}
 	}
-	for name := range o.mediaFeatures {
+	// The names are checked in order, so that of several bad names the
+	// error names the same one every time.
+	for _, name := range slices.Sorted(maps.Keys(o.mediaFeatures)) {
 		if name == "" || name != strings.ToLower(name) {
 			return fmt.Errorf("%w: media feature %q is not a lowercase name", ErrInvalidConvertOptions, name)
 		}
