@@ -3,6 +3,8 @@ package css
 import (
 	"math"
 	"slices"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // maxShadows caps the shadows of one box-shadow value: 32. Real designs
@@ -16,7 +18,7 @@ const maxShadows = 32
 // becomes 1px, a wider one rounds down to a whole number of pixels.
 // A NaN width snaps to 0 like a negative one.
 func snapBorderWidth(pt float64) float64 {
-	if pt <= 0 || math.IsNaN(pt) {
+	if !numeric.Positive(pt) {
 		return 0
 	}
 	px := pt / Pt

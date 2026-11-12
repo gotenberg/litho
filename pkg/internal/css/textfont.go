@@ -1,5 +1,7 @@
 package css
 
+import "github.com/gotenberg/litho/pkg/internal/numeric"
+
 // TextJustify is the text-justify property (CSS Text 3, 7.4).
 type TextJustify uint8
 
@@ -182,7 +184,7 @@ func parseStretch(t token) (float64, bool) {
 		p, ok := stretchKeywords[lower(t.value)]
 		return p, ok
 	case tPercentage:
-		return t.num, finite(t.num) && t.num >= 0 && t.num <= maxFontStretch
+		return t.num, numeric.Finite(t.num) && t.num >= 0 && t.num <= maxFontStretch
 	}
 	return 0, false
 }

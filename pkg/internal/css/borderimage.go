@@ -1,5 +1,7 @@
 package css
 
+import "github.com/gotenberg/litho/pkg/internal/numeric"
+
 // This file parses the border image properties (CSS Backgrounds 3, 6) and
 // the mask border ones that share their syntax (CSS Masking 1, 7).
 
@@ -91,7 +93,7 @@ func parseSlice(v []token, _ *declCtx) (any, bool) {
 			return nil, false
 		}
 		switch {
-		case t.typ == tPercentage && finite(t.num) && t.num >= 0:
+		case t.typ == tPercentage && numeric.Finite(t.num) && t.num >= 0:
 			vals = append(vals, Dimension{Kind: Percent, Value: clampLen(t.num / 100)})
 		default:
 			n, ok := parseNumber(t)

@@ -10,6 +10,7 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // Origin is a cascade origin (CSS Cascade 4, 6.2).
@@ -326,7 +327,7 @@ func (cs *computeState) fontUnits(st *Style) (float64, float64) {
 		return u[0], u[1]
 	}
 	ex, ch := cs.opts.FontUnits(st)
-	if !finite(ex) || !finite(ch) {
+	if !numeric.Finite(ex) || !numeric.Finite(ch) {
 		ex, ch = 0, 0
 	}
 	if cs.units == nil {

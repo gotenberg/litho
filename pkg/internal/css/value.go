@@ -4,6 +4,8 @@ import (
 	"math"
 	"net/url"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // length is a specified <length-percentage>: a linear combination of units
@@ -201,8 +203,6 @@ func unitLength(n float64, unit string) (length, bool) {
 	return l, true
 }
 
-func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
-
 // lengthFlags say what a property's <length> accepts.
 type lengthFlags uint8
 
@@ -278,7 +278,7 @@ func compare(vals []calcValue, isMax bool) (calcValue, bool) {
 				v = x.num
 			}
 		}
-		return calcValue{isNum: true, num: v}, finite(v)
+		return calcValue{isNum: true, num: v}, numeric.Finite(v)
 	}
 	pcts, pure := 0, true
 	for _, x := range vals {
@@ -339,12 +339,12 @@ func parseLength(t token, f lengthFlags) (length, bool) {
 			return length{hasLen: true}, true
 		}
 	case tDimension:
-		if !finite(t.num) || (f&nonNeg != 0 && t.num < 0) {
+		if !numeric.Finite(t.num) || (f&nonNeg != 0 && t.num < 0) {
 			return length{}, false
 		}
 		return unitLength(t.num, t.value)
 	case tPercentage:
-		if f&allowPct == 0 || !finite(t.num) || (f&nonNeg != 0 && t.num < 0) {
+		if f&allowPct == 0 || !numeric.Finite(t.num) || (f&nonNeg != 0 && t.num < 0) {
 			return length{}, false
 		}
 		return length{pct: t.num, hasPct: true}, true
@@ -441,7 +441,7 @@ func parseCalc(list []token, depth int) (calcValue, bool) {
 		sum.num += rhs.num
 		sum.l = sum.l.add(rhs.l)
 	}
-	if !finite(sum.num) {
+	if !numeric.Finite(sum.num) {
 		return calcValue{}, false
 	}
 	return sum, true
@@ -496,15 +496,15 @@ func calcLeaf(c *calcCursor, depth int) (calcValue, bool) {
 	c.i++
 	switch t.typ { //nolint:exhaustive // the other token types are invalid here
 	case tNumber:
-		return calcValue{isNum: true, num: t.num}, finite(t.num)
+		return calcValue{isNum: true, num: t.num}, numeric.Finite(t.num)
 	case tDimension:
-		if !finite(t.num) {
+		if !numeric.Finite(t.num) {
 			return calcValue{}, false
 		}
 		l, ok := unitLength(t.num, t.value)
 		return calcValue{l: l}, ok
 	case tPercentage:
-		return calcValue{l: length{pct: t.num, hasPct: true}}, finite(t.num)
+		return calcValue{l: length{pct: t.num, hasPct: true}}, numeric.Finite(t.num)
 	case tLParen:
 		return parseCalc(t.children, depth+1)
 	case tFunction:
@@ -538,7 +538,7 @@ const calcInfinity = 1e100
 func parseNumber(t token) (float64, bool) {
 	switch t.typ { //nolint:exhaustive // the other token types are invalid here
 	case tNumber:
-		return t.num, finite(t.num)
+		return t.num, numeric.Finite(t.num)
 	case tFunction:
 		if isCalc(&t) {
 			v, ok := calcOf(&t, 0)
@@ -558,7 +558,7 @@ const maxInteger = 1 << 30
 
 // parseInteger parses an <integer> (CSS Values 4, 5.3).
 func parseInteger(t token) (int, bool) {
-	if t.typ == tNumber && t.integer && finite(t.num) && math.Abs(t.num) < maxInteger {
+	if t.typ == tNumber && t.integer && numeric.Finite(t.num) && math.Abs(t.num) < maxInteger {
 		return int(t.num), true
 	}
 	return 0, false
@@ -567,7 +567,7 @@ func parseInteger(t token) (int, bool) {
 // parseAngle parses an <angle> or a bare number, in degrees (CSS Values 4,
 // 7.1).
 func parseAngle(t token) (float64, bool) {
-	if !finite(t.num) {
+	if !numeric.Finite(t.num) {
 		return 0, false
 	}
 	switch t.typ { //nolint:exhaustive // the other token types are invalid here
@@ -744,7 +744,7 @@ func colorArgs(list []token) (ch []token, alpha *token, legacy bool, ok bool) {
 func numberOrPct(t token, allowNone bool) (v float64, pct bool, ok bool) {
 	switch t.typ { //nolint:exhaustive // the other token types are invalid here
 	case tPercentage:
-		return t.num / 100, true, finite(t.num)
+		return t.num / 100, true, numeric.Finite(t.num)
 	case tIdent:
 		if allowNone && t.isIdent("none") {
 			return 0, false, true

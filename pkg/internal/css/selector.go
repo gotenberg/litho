@@ -3,6 +3,8 @@ package css
 import (
 	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // attrOp is an attribute selector's operator (Selectors 4, 6).
@@ -739,7 +741,7 @@ func allDigits(s string) bool {
 const maxAnB = 1 << 30
 
 func intOf(v float64) (int, bool) {
-	if !finite(v) || v > maxAnB || v < -maxAnB {
+	if !numeric.Finite(v) || v > maxAnB || v < -maxAnB {
 		return 0, false
 	}
 	return int(v), true

@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // This file parses the properties of grid layout (CSS Grid 1, 7 and 8)
@@ -251,7 +253,7 @@ func parseBreadth(t token, flex bool) (breadthSpec, bool) {
 		return breadthSpec{}, false
 	}
 	if t.typ == tDimension && eqFold(t.value, "fr") {
-		if !flex || !finite(t.num) || t.num < 0 {
+		if !flex || !numeric.Finite(t.num) || t.num < 0 {
 			return breadthSpec{}, false
 		}
 		return breadthSpec{kind: TrackFlex, fr: min(t.num, maxFlexFactor)}, true

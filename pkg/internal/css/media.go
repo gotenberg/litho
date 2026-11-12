@@ -1,6 +1,10 @@
 package css
 
-import "math"
+import (
+	"math"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
+)
 
 // Media is the medium a [Resolver] evaluates @media rules against.
 type Media struct {
@@ -187,9 +191,9 @@ func mediaLength(t token) (float64, bool) {
 func mediaRatio(l []token) (float64, bool) {
 	switch {
 	case len(l) == 1 && l[0].typ == tNumber:
-		return l[0].num, finite(l[0].num)
+		return l[0].num, numeric.Finite(l[0].num)
 	case len(l) == 3 && l[0].typ == tNumber && l[1].isDelim('/') && l[2].typ == tNumber && l[2].num != 0:
-		return l[0].num / l[2].num, finite(l[0].num / l[2].num)
+		return l[0].num / l[2].num, numeric.Finite(l[0].num / l[2].num)
 	}
 	return 0, false
 }

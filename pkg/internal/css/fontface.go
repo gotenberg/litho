@@ -3,6 +3,8 @@ package css
 import (
 	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // FontFace is an @font-face rule (CSS Fonts 4, 4): the descriptors that
@@ -288,7 +290,7 @@ func parseFaceStretch(v []token) (float64, float64, bool) {
 			p, ok := stretchKeywords[lower(t.value)]
 			return p, ok
 		}
-		if t.typ == tPercentage && finite(t.num) && t.num >= 0 {
+		if t.typ == tPercentage && numeric.Finite(t.num) && t.num >= 0 {
 			return t.num, true
 		}
 		return 0, false
