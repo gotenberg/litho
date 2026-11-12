@@ -599,6 +599,9 @@ func outline(el *odf.Element) *shape.Geometry {
 	case "polygon", "polyline":
 		c = odf.Points(el.A(odf.NSDraw, "points"), view, el.Name.Local == "polygon")
 	case "regular-polygon":
+		// A count that does not parse reads as 0, which RegularPolygon
+		// refuses; a sharpness that does not parse reads as 0, a concave
+		// polygon's inner corners left on its outer circle.
 		n, _ := strconv.Atoi(el.A(odf.NSDraw, "corners"))
 		sharp, _ := strconv.ParseFloat(strings.TrimSuffix(el.A(odf.NSDraw, "sharpness"), "%"), 64)
 		c = odf.RegularPolygon(n, el.A(odf.NSDraw, "concave") == "true", sharp)

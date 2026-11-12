@@ -20,10 +20,12 @@ const (
 	// guard, not spec-mandated: a cell indents its text by a few.
 	maxSpaces = 1024
 	// maxCellRuns bounds the rich text runs of one cell: 256. Anti-DoS
-	// guard, not spec-mandated.
+	// guard, not spec-mandated: a cell styles a few words apart, and the
+	// runs past it keep their text in the last run's font.
 	maxCellRuns = 256
 	// maxTextDepth bounds the nesting of spans and links read in a cell:
-	// 16. Anti-DoS guard, not spec-mandated.
+	// 16. Anti-DoS guard, not spec-mandated: a cell nests a span in a link
+	// or two, and the reading recurses once per level.
 	maxTextDepth = 16
 )
 

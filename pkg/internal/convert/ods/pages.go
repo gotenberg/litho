@@ -277,7 +277,7 @@ func (r *reader) regions(el *odf.Element) [3][]sheet.Span {
 }
 
 // maxSpans bounds the spans of one header or footer part: 256. Anti-DoS
-// guard, not spec-mandated.
+// guard, not spec-mandated: a part holds a few fields and styled words.
 const maxSpans = 256
 
 // maxPartText bounds the bytes of text one header or footer part holds:
