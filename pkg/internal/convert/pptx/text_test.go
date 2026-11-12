@@ -10,6 +10,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
+	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // rgb returns the opaque colour of 0xRRGGBB.
@@ -425,5 +427,27 @@ func TestText_UnderlineAndStrikeStyles(t *testing.T) {
 	}
 	if s := runs[1].Style; s.Underline || !s.Strike || !s.DoubleStrike {
 		t.Errorf("run %+v", s)
+	}
+}
+
+// TestOuterShadow_RotWithShape reads outerShdw rotWithShape (ECMA-376
+// Part 1, 20.1.8.45), true when absent by the schema's default.
+func TestOuterShadow_RotWithShape(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		xml  string
+		want bool
+	}{
+		{`<a:outerShdw xmlns:a="` + ooxml.NSA + `" dist="38100"/>`, true},
+		{`<a:outerShdw xmlns:a="` + ooxml.NSA + `" dist="38100" rotWithShape="0"/>`, false},
+		{`<a:outerShdw xmlns:a="` + ooxml.NSA + `" dist="38100" rotWithShape="1"/>`, true},
+	} {
+		e, err := ooxml.Parse(t.Context(), []byte(tc.xml), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := outerShadow(e, typeset.Rect{Width: 10, Height: 10}).RotateWithShape; got != tc.want {
+			t.Errorf("%s: %v, want %v", tc.xml, got, tc.want)
+		}
 	}
 }

@@ -317,6 +317,7 @@ func (b *builder) effects(s *Shape, paths []shape.Path, box typeset.Rect, m type
 	if s.Shadow == nil && s.Glow == nil && !numeric.Positive(s.SoftEdge) {
 		return nil, paths
 	}
+	s = turnedShadow(s)
 	sm := skewedAboutCentre(box, s.Rotation, s.SkewX, s.FlipH, s.FlipV)
 	toSlide := then(sm, m)
 	var own []typeset.Fragment
@@ -368,6 +369,7 @@ func (b *builder) contentEffects(s *Shape, frags []typeset.Fragment, m typeset.M
 	if s.Shadow == nil && s.Glow == nil && !numeric.Positive(s.SoftEdge) {
 		return frags
 	}
+	s = turnedShadow(s)
 	if s.SoftEdge > 0 {
 		b.warn(warn.ContentUnsupported, warn.Approximated, "the soft edge of "+quote(s.Name)+" is not drawn")
 	}
@@ -466,15 +468,15 @@ func (b *builder) paintEffects(s *Shape, own, text []typeset.Fragment, toSlide t
 
 // shadowMatrix returns the shadow's transform in slide coordinates: the
 // scale about the centre of bounds, then the offsets (ECMA-376 Part 1,
-// 20.1.8.45: sx, sy, dist and dir, which the reader resolves into the
-// scale and the offsets). The shadow does not turn with a turned shape:
-// its offsets are the slide's.
+// 20.1.8.45 outerShdw: sx, sy, dist and dir, which the reader resolves
+// into the scale and the offsets, turned with the shape by
+// [turnedShadow] when the shadow turns with it).
 //
 // # Corpus evidence
 //
-//   - probe, pptx: two rectangles turned 30 degrees with a shadow 20 pt to the
-//     right print the same shadow bitmap 20 pt to the right of each,
-//     whether rotWithShape is 0 or 1.
+//   - probe, pptx: in Impress, two rectangles turned 30 degrees with a
+//     shadow 20 pt to the right print the same shadow bitmap 20 pt to the
+//     right of each, whether rotWithShape is 0 or 1.
 func shadowMatrix(sh *Shadow, bounds typeset.Rect) typeset.Matrix {
 	sx, sy := sh.ScaleX, sh.ScaleY
 	if sx == 0 || !numeric.Finite(sx) {
@@ -486,6 +488,31 @@ func shadowMatrix(sh *Shadow, bounds typeset.Rect) typeset.Matrix {
 	cx, cy := bounds.X+bounds.Width/2, bounds.Y+bounds.Height/2
 	m := then(translate(-cx, -cy), typeset.Matrix{A: sx, D: sy})
 	return then(m, translate(cx+sh.OffsetX, cy+sh.OffsetY))
+}
+
+// turnedShadow returns s with its shadow's offsets turned clockwise by
+// the shape's rotation when the shadow turns with the shape (ECMA-376
+// Part 1, 20.1.8.45 outerShdw rotWithShape: "whether the shadow rotates
+// with the shape if the shape is rotated"), else s itself. Impress keeps
+// the slide's offsets either way; PowerPoint, the judge of PresentationML,
+// turns them.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: effects-shadow prints in PowerPoint the shadow of its
+//     right arrow turned a quarter turn, 15 pt toward 0 degrees with
+//     rotWithShape 1, 15 pt below the arrow.
+func turnedShadow(s *Shape) *Shape {
+	sh := s.Shadow
+	if sh == nil || !sh.RotateWithShape || s.Rotation == 0 || !numeric.Finite(s.Rotation) {
+		return s
+	}
+	sin, cos := math.Sincos(s.Rotation * math.Pi / 180)
+	t := *sh
+	t.OffsetX, t.OffsetY = sh.OffsetX*cos-sh.OffsetY*sin, sh.OffsetX*sin+sh.OffsetY*cos
+	c := *s
+	c.Shadow = &t
+	return &c
 }
 
 // hardShadow returns a hard shadow: a copy of frags (mapped to the slide

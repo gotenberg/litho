@@ -154,10 +154,14 @@ const maxShadowScale = 10
 // degree, clockwise from the x axis, y down), sx and sy (1,000ths of a
 // percent, 100,000 for none), and the alignment algn (20.1.10.3
 // ST_RectAlignment, "b" by default) the scale keeps fixed, folded into
-// the offsets as a scale about box's centre. rotWithShape is not read:
-// Impress keeps a turned shape's shadow at the slide's offsets.
+// the offsets as a scale about box's centre, and rotWithShape, true by
+// default (the schema's CT_OuterShadowEffect), whether the offsets turn
+// with the shape.
 func outerShadow(e *ooxml.Element, box typeset.Rect) *slides.Shadow {
-	sh := &slides.Shadow{ScaleX: 1, ScaleY: 1}
+	sh := &slides.Shadow{ScaleX: 1, ScaleY: 1, RotateWithShape: true}
+	if v, ok := e.Attr("rotWithShape"); ok {
+		sh.RotateWithShape = ooxml.OnOff(v, true)
+	}
 	if v := emuAttr(e, "blurRad"); numeric.PositiveFinite(v) {
 		sh.Blur = min(v, maxEffectRadius)
 	}

@@ -202,6 +202,9 @@ type Shadow struct {
 	ScaleX, ScaleY float64
 	// Blur is the blur radius in points, 0 for a hard shadow.
 	Blur float64
+	// RotateWithShape turns the offsets with the shape's rotation
+	// (ECMA-376 Part 1, 20.1.8.45 outerShdw rotWithShape).
+	RotateWithShape bool
 }
 
 // Glow is a shape's glow: a blurred halo of Radius points around the
