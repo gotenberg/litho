@@ -59,9 +59,9 @@ func (d *document) diagram(s *story, data *ooxml.Element, st *css.Style, w, h fl
 	dg := ooxml.ParseDiagram(roots[0], roots[1], roots[2], roots[3])
 	count := 0
 	if drawing := d.diagramDrawing(s, dg); drawing != nil {
-		d.diagramTree(s, drawing.Child(nsDSP, "spTree"), st, n, &count, depth)
+		d.diagramTree(drawing.Child(nsDSP, "spTree"), st, n, &count, depth)
 	} else if root := dg.LayOut(emuOf(w), emuOf(h)); root != nil {
-		d.diagramLaidOut(s, root, st, n, 0, 0, &count, depth)
+		d.diagramLaidOut(root, st, n, 0, 0, &count, depth)
 	}
 	if len(n.Children) == 0 {
 		d.warn(warn.ContentUnsupported, warn.Omitted, "a SmartArt diagram is left out: the document holds neither its layout nor a drawing of it")
@@ -123,7 +123,7 @@ func (d *document) diagramDrawing(s *story, dg *ooxml.Diagram) *ooxml.Element {
 
 // diagramLaidOut adds a laid out shape and its kids to n, at ox, oy EMU
 // in the frame: a group draws only its kids.
-func (d *document) diagramLaidOut(s *story, ds *ooxml.DiagramShape, st *css.Style, n *layout.Node, ox, oy int64, count *int, depth int) {
+func (d *document) diagramLaidOut(ds *ooxml.DiagramShape, st *css.Style, n *layout.Node, ox, oy int64, count *int, depth int) {
 	if depth > maxNesting || *count >= maxDiagramShapes {
 		return
 	}
@@ -135,16 +135,16 @@ func (d *document) diagramLaidOut(s *story, ds *ooxml.DiagramShape, st *css.Styl
 		sp := ds.Element(nsDSP, preset, draws)
 		b := box4{float64(x) / 12700, float64(y) / 12700, float64(max(0, ds.W)) / 12700, float64(max(0, ds.H)) / 12700}
 		rot := float64(ds.Rot)/60000 + ds.DiagramRot
-		n.Children = append(n.Children, d.diagramShapeAt(s, sp, st, b, rot, b, rot+float64(ds.TextRot), draws)...)
+		n.Children = append(n.Children, d.diagramShapeAt(sp, st, b, rot, b, rot+float64(ds.TextRot), draws)...)
 	}
 	for _, k := range ds.Kids {
-		d.diagramLaidOut(s, k, st, n, x, y, count, depth+1)
+		d.diagramLaidOut(k, st, n, x, y, count, depth+1)
 	}
 }
 
 // diagramTree adds the shapes of a saved drawing's shape tree or group to
 // n, in the frame's coordinates: a drawing's offsets are the frame's own.
-func (d *document) diagramTree(s *story, tree *ooxml.Element, st *css.Style, n *layout.Node, count *int, depth int) {
+func (d *document) diagramTree(tree *ooxml.Element, st *css.Style, n *layout.Node, count *int, depth int) {
 	if depth > maxNesting {
 		return
 	}
@@ -154,7 +154,7 @@ func (d *document) diagramTree(s *story, tree *ooxml.Element, st *css.Style, n *
 		}
 		switch {
 		case k.Is(nsDSP, "grpSp"):
-			d.diagramTree(s, k, st, n, count, depth+1)
+			d.diagramTree(k, st, n, count, depth+1)
 		case k.Is(nsDSP, "sp"):
 			*count++
 			xfrm := k.Child(nsDSP, "spPr").Child(ooxml.NSA, "xfrm")
@@ -165,7 +165,7 @@ func (d *document) diagramTree(s *story, tree *ooxml.Element, st *css.Style, n *
 				tb = xfrmBox(tx)
 				trot, _, _ = ooxml.Transform2D(tx)
 			}
-			n.Children = append(n.Children, d.diagramShapeAt(s, k, st, b, rot, tb, trot, true)...)
+			n.Children = append(n.Children, d.diagramShapeAt(k, st, b, rot, tb, trot, true)...)
 		}
 	}
 }
@@ -176,7 +176,7 @@ type box4 [4]float64
 // diagramShapeAt returns the nodes of one dsp:sp drawn in the box b turned
 // by rot degrees, when draws: its geometry; then its text in the box tb
 // turned by trot degrees.
-func (d *document) diagramShapeAt(s *story, sp *ooxml.Element, st *css.Style, b box4, rot float64, tb box4, trot float64, draws bool) []*layout.Node {
+func (d *document) diagramShapeAt(sp *ooxml.Element, st *css.Style, b box4, rot float64, tb box4, trot float64, draws bool) []*layout.Node {
 	spPr := sp.Child(nsDSP, "spPr")
 	var out []*layout.Node
 	if draws && (b[2] > 0 || b[3] > 0) {
@@ -191,7 +191,7 @@ func (d *document) diagramShapeAt(s *story, sp *ooxml.Element, st *css.Style, b 
 	if body == nil || body.Find(ooxml.NSA, "t") == nil {
 		return out
 	}
-	t := d.drawingText(s, body, sp.Child(nsDSP, "style").Child(ooxml.NSA, "fontRef"), tb[2], tb[3])
+	t := d.drawingText(body, sp.Child(nsDSP, "style").Child(ooxml.NSA, "fontRef"), tb[2], tb[3])
 	setTransform(t.Style, trot, false, false)
 	return append(out, absolute(t, tb[0], tb[1]))
 }
@@ -224,7 +224,7 @@ func absolute(n *layout.Node, x, y float64) *layout.Node {
 // of the shape's font reference (20.1.4.2.10 fontRef), else black; its
 // face its latin typeface, else the theme font fontRef names, else the
 // theme's minor font.
-func (d *document) drawingText(s *story, body, fontRef *ooxml.Element, w, h float64) *layout.Node {
+func (d *document) drawingText(body, fontRef *ooxml.Element, w, h float64) *layout.Node {
 	bodyPr := body.Child(ooxml.NSA, "bodyPr")
 	bs := d.blockStyle()
 	bs.Width, bs.Height = css.Pts(max(w, 1)), css.Pts(max(h, 1))
@@ -253,7 +253,7 @@ func (d *document) drawingText(s *story, body, fontRef *ooxml.Element, w, h floa
 	var paras []*layout.Node
 	for _, p := range body.Kids() {
 		if p.Is(ooxml.NSA, "p") {
-			paras = append(paras, d.drawingPara(s, p, face, color, scale))
+			paras = append(paras, d.drawingPara(p, face, color, scale))
 		}
 	}
 	return &layout.Node{Kind: layout.Element, Style: bs, Children: []*layout.Node{{Kind: layout.Element, Style: inner, Children: paras}}}
@@ -276,7 +276,7 @@ func (d *document) themeFace(idx string) string {
 // line breaks, aligned as its pPr algn says (20.1.10.58 ST_TextAlignType),
 // its proportional line spacing (21.1.2.2.10 lnSpc spcPct) applied to each
 // run, a font size missing from a run 18 points (21.1.2.3.9 rPr sz).
-func (d *document) drawingPara(s *story, p *ooxml.Element, face string, color css.Color, scale float64) *layout.Node {
+func (d *document) drawingPara(p *ooxml.Element, face string, color css.Color, scale float64) *layout.Node {
 	ps := d.blockStyle()
 	pPr := p.Child(ooxml.NSA, "pPr")
 	switch attrOr(pPr, "algn") {
