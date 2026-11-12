@@ -352,11 +352,11 @@ func (b *builder) resolveJump(l *compose.Link) bool {
 	if err != nil || i < 1 || i > len(b.doc.Slides) {
 		return false
 	}
-	pg, ok := b.pages[b.doc.Slides[i-1]]
-	if !ok {
+	d := b.dest(b.doc.Slides[i-1])
+	if d == nil {
 		return false
 	}
-	l.URI, l.Dest = "", &compose.Dest{Page: pg}
+	l.URI, l.Dest = "", d
 	return true
 }
 

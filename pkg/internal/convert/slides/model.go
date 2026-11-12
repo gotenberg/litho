@@ -33,6 +33,27 @@ type Document struct {
 	// notes page: the slide number, date and footer placeholders when they
 	// show, and its decorations.
 	NotesShapes []*Shape
+	// HandoutWidth and HandoutHeight are the handout page size in points,
+	// both positive when the file gives one, else 0 for the notes page
+	// size: the notes size of a PresentationML presentation, which its
+	// handout master's placeholders span (ECMA-376 Part 1, 19.2.1.22
+	// notesSz and 19.3.1.24 handoutMaster); the page layout of an
+	// OpenDocument handout master (ODF 1.3 Part 3, 16.8
+	// style:handout-master).
+	HandoutWidth, HandoutHeight float64
+	// HandoutMargins are the handout page's margins in points, indexed by
+	// css.Top, css.Right, css.Bottom and css.Left (the fo:margin-*
+	// properties of the handout master's page layout; zero for a
+	// PresentationML presentation, whose handout master names none).
+	HandoutMargins [4]float64
+	// HandoutBackground paints every handout page first: the handout
+	// master's background.
+	HandoutBackground Fill
+	// HandoutShapes are the handout master's shapes drawn on every handout
+	// page over the slides: its header, footer, date and page number
+	// placeholders as they show, and its decorations. A page number field
+	// among them shows the handout page's number.
+	HandoutShapes []*Shape
 	// FirstNumber is the number of the first slide, the slides after it
 	// numbered on from it, hidden ones counted, on their slide number
 	// fields and notes pages (ECMA-376 Part 1, 19.2.1.26 presentation

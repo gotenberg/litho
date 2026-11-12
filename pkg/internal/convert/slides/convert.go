@@ -67,8 +67,11 @@ type builder struct {
 	shapes int
 	// links collects the slide's links in slide coordinates.
 	links []compose.Link
-	// pages maps each slide printed to its 1-based page number.
-	pages map[*Slide]int
+	// pages maps each slide printed to its 1-based page number, the
+	// handout page that holds it with handouts; targets maps each
+	// destination a link of the pages leads to, to its slide.
+	pages   map[*Slide]int
+	targets map[*compose.Dest]*Slide
 	// autoScript moves the scripts of the body being laid out
 	// automatically, as an OpenDocument text's.
 	autoScript bool
@@ -98,12 +101,14 @@ func (b *builder) warn(code, msg string) {
 // the index fonts, and returns the paged document: one page per slide at
 // the slide size, hidden slides left out unless office.Options.HiddenSlides
 // asks for them, a notes page per slide after the slides when
-// office.Options.NotesPages asks, the slides' names as the outline unless
-// OmitOutline, the date and time fields showing PrintDate. PageWidth and
-// PageHeight, when set, are the page size, the slide scaled to fit it and
-// centred; Landscape turns a portrait page. It returns ctx's error when
-// ctx ends first, office.ErrInvalidOptions for options out of range or a
-// nil fonts or doc, text.ErrNoFonts for an index without faces, and
+// office.Options.NotesPages asks, or handout pages in place of the slide
+// pages when office.Options.Handouts asks, the slides' names as the
+// outline unless OmitOutline, the date and time fields showing PrintDate.
+// PageWidth and PageHeight, when set, are the page size, the slide scaled
+// to fit it and centred; Landscape turns a portrait page. It returns ctx's
+// error when ctx ends first, office.ErrInvalidOptions for options out of
+// range, Handouts other than 0, 1, 2, 3, 4, 6 or 9 or beside NotesPages,
+// or a nil fonts or doc, text.ErrNoFonts for an index without faces, and
 // office.ErrTooManyPages past the page cap. The output depends on doc,
 // fonts' index and opts alone.
 //
@@ -118,8 +123,21 @@ func (b *builder) warn(code, msg string) {
 // notes master's boxes with its shapes, any other in Impress's default
 // notes layout. A shape that jumps to a slide links to that slide's page.
 // The structure tree holds a Sect
-// per slide: the paragraphs of its text as P, its tables as Table, its
+// per slide page and notes page: the paragraphs of its text as P, its tables as Table, its
 // pictures as Figure.
+//
+// # Handouts
+//
+// A handout page holds Handouts slides, in show order, the last page what
+// is left: the handout page size the document gives (the notes page size,
+// else Letter), its background, the slides laid out on it as Impress lays
+// a handout out (see [handoutAreas]), each drawn as its slide page is,
+// scaled into its rectangle, inside a hairline frame, then the handout
+// master's shapes, a page number field showing the handout page's number.
+// The paper and the orientation of the options apply to a handout page as
+// to a slide. The outline entry of a slide and a link to it lead to the
+// handout page that holds it; the structure tree holds a Sect per slide,
+// in show order.
 //
 // # Shapes
 //
@@ -192,10 +210,22 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 			shown = append(shown, s)
 		}
 	}
+	per := opts.Handouts
+	if per != 0 && (!validHandouts(per) || opts.NotesPages) {
+		return nil, fmt.Errorf("%w: %d slides a handout page, notes pages %t: 1, 2, 3, 4, 6 or 9, without notes pages", office.ErrInvalidOptions, per, opts.NotesPages)
+	}
+	// pageOf is the page a printed slide shows on: its own, or the
+	// handout page that holds it.
+	pageOf := func(i int) int {
+		if per > 0 {
+			return i/per + 1
+		}
+		return i + 1
+	}
 	b.pages = make(map[*Slide]int, len(shown))
 	for i, s := range shown {
 		if _, ok := b.pages[s]; !ok {
-			b.pages[s] = i + 1
+			b.pages[s] = pageOf(i)
 		}
 	}
 	limit := opts.MaxPages
@@ -203,7 +233,10 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		limit = layout.DefaultMaxPages
 	}
 	pages := len(shown)
-	if opts.NotesPages {
+	switch {
+	case per > 0:
+		pages = (len(shown) + per - 1) / per
+	case opts.NotesPages:
 		pages *= 2
 	}
 	if pages > limit {
@@ -240,41 +273,60 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	if opts.Sink != nil {
 		opts.Sink.Expect(max(pages, 1))
 	}
-	// Every page has its Sect, in page order: a destination inside the
-	// document names the Sect of its page as its structure destination
-	// (ISO 14289-2, 8.8). A destination to a page not laid out yet gets
-	// its Sect when that page is.
-	sectOf := func(page int) *compose.StructElem {
-		if page < 1 || page > len(out.Structure.Kids) {
-			return nil
-		}
-		return out.Structure.Kids[page-1]
-	}
-	waiting := map[int][]*compose.Dest{}
-	add := func(pg *compose.Page, sect *compose.StructElem) error {
-		out.Structure.Kids = append(out.Structure.Kids, sect)
-		page := len(out.Structure.Kids)
-		for _, d := range waiting[page] {
-			d.Elem = sect
-		}
-		delete(waiting, page)
-		for i := range pg.Links {
-			if d := pg.Links[i].Dest; d != nil && d.Elem == nil {
-				if d.Page > page {
-					waiting[d.Page] = append(waiting[d.Page], d)
-				} else {
-					d.Elem = sectOf(d.Page)
-				}
+	// Every slide printed has its Sect, in show order, a page's slides in
+	// order on it: a destination inside the document names the Sect of
+	// the slide it leads to as its structure destination (ISO 14289-2,
+	// 8.8). A destination to a slide not laid out yet gets its Sect when that
+	// slide is.
+	sects := make(map[*Slide]*compose.StructElem, len(shown))
+	waiting := map[*Slide][]*compose.Dest{}
+	add := func(pg *compose.Page, held []*Slide, kids []*compose.StructElem) error {
+		for i, sect := range kids {
+			out.Structure.Kids = append(out.Structure.Kids, sect)
+			s := held[i]
+			if _, ok := sects[s]; !ok {
+				sects[s] = sect
 			}
+			for _, d := range waiting[s] {
+				d.Elem = sect
+			}
+			delete(waiting, s)
+		}
+		for i := range pg.Links {
+			d := pg.Links[i].Dest
+			if d == nil || d.Elem != nil {
+				continue
+			}
+			s := b.targets[d]
+			if sect, ok := sects[s]; ok || s == nil {
+				d.Elem = sect
+				continue
+			}
+			waiting[s] = append(waiting[s], d)
 		}
 		return b.handOver(out, pg)
 	}
-	for _, s := range shown {
-		if err := ctx.Err(); err != nil {
-			return nil, err
+	switch {
+	case per > 0:
+		for i := 0; i < len(shown); i += per {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			group := shown[i:min(i+per, len(shown))]
+			pg, kids := b.handoutPage(i/per+1, group, numberOf)
+			if err := add(pg, group, kids); err != nil {
+				return nil, err
+			}
 		}
-		if err := add(b.slidePage(s, numberOf(s))); err != nil {
-			return nil, err
+	default:
+		for _, s := range shown {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			pg, sect := b.slidePage(s, numberOf(s))
+			if err := add(pg, []*Slide{s}, []*compose.StructElem{sect}); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if opts.NotesPages {
@@ -282,7 +334,8 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			if err := add(b.notesPage(s, numberOf(s))); err != nil {
+			pg, sect := b.notesPage(s, numberOf(s))
+			if err := add(pg, []*Slide{s}, []*compose.StructElem{sect}); err != nil {
 				return nil, err
 			}
 		}
@@ -296,7 +349,11 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		}
 	}
 	if !opts.OmitOutline {
-		out.Outline = outline(doc.Slides, shown, sectOf)
+		dests := make([]compose.Dest, len(shown))
+		for i, s := range shown {
+			dests[i] = compose.Dest{Page: pageOf(i), Elem: sects[s]}
+		}
+		out.Outline = outline(doc.Slides, shown, dests)
 		if opts.NotesPages {
 			// Impress writes the bookmarks again for the notes pages, each
 			// leading to its slide's page.
@@ -307,18 +364,18 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	return out, nil
 }
 
-// outline returns the outline of the printed slides shown, the i-th on
-// page i + 1: an entry per slide titled by its Bookmark, else by its
-// outline title, and the slides of a section under an entry of the
+// outline returns the outline of the printed slides shown, the i-th
+// leading to dests[i]: an entry per slide titled by its Bookmark, else by
+// its outline title, and the slides of a section under an entry of the
 // section's name that leads to its first printed slide. A section none of
 // whose slides prints has no entry.
-func outline(all, shown []*Slide, sectOf func(int) *compose.StructElem) []compose.Outline {
+func outline(all, shown []*Slide, dests []compose.Dest) []compose.Outline {
 	titles := outlineTitles(all)
 	head := sectionHeads(all)
 	var out []compose.Outline
 	var open *Slide
 	for i, s := range shown {
-		dest := compose.Dest{Page: i + 1, Elem: sectOf(i + 1)}
+		dest := dests[i]
 		title := s.Bookmark
 		if title == "" {
 			title = titles[s]
@@ -359,6 +416,21 @@ func sectionHeads(all []*Slide) map[*Slide]*Slide {
 		}
 	}
 	return out
+}
+
+// dest returns a destination leading to the page the slide s prints on,
+// nil when s does not print.
+func (b *builder) dest(s *Slide) *compose.Dest {
+	pg, ok := b.pages[s]
+	if !ok {
+		return nil
+	}
+	d := &compose.Dest{Page: pg}
+	if b.targets == nil {
+		b.targets = map[*compose.Dest]*Slide{}
+	}
+	b.targets[d] = s
+	return d
 }
 
 // handOver gives the page pg, laid out, to the sink of the options, and

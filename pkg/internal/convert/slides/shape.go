@@ -172,11 +172,11 @@ func (b *builder) link(s *Shape, m compose.Matrix, box compose.Rect, parent *com
 	case s.Href != "":
 		l.URI = s.Href
 	case s.Jump > 0 && s.Jump <= len(b.doc.Slides):
-		pg, ok := b.pages[b.doc.Slides[s.Jump-1]]
-		if !ok {
+		d := b.dest(b.doc.Slides[s.Jump-1])
+		if d == nil {
 			return
 		}
-		l.Dest = &compose.Dest{Page: pg}
+		l.Dest = d
 	default:
 		return
 	}
