@@ -4886,11 +4886,12 @@ func appendPromotedPageTree(alloc *writer.ObjAllocator, doc *document.Document) 
 }
 
 // writeBufferSize is the buffer [Writer.writeToInternal] wraps its destination
-// in. It is a throughput choice, not a limit: the serializer writes a few bytes
-// at a time, so the buffer decides how many of those become one syscall. 64 KiB
-// is the usual page-cache friendly size and bounds the extra memory at a fixed
-// amount regardless of document size.
-const writeBufferSize = 64 << 10
+// in, the one a full rewrite is serialized through. It is a throughput
+// choice, not a limit: the serializer writes a few bytes at a time, so the
+// buffer decides how many of those become one syscall. 64 KiB is the usual
+// page-cache friendly size and bounds the extra memory at a fixed amount
+// regardless of document size.
+const writeBufferSize = writer.BufferSize
 
 // mediaBoxDefault returns what chooses the media box a write of the Writer
 // given cfg gives a page that neither states nor inherits one a viewer uses

@@ -1,6 +1,7 @@
 package writer
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -119,10 +120,17 @@ func Compact(ctx context.Context, alloc *ObjAllocator, trailer ast.PdfDict, cfg 
 	return packed, nil
 }
 
+// BufferSize is the size of the buffer a file is serialized through, 64 KiB:
+// large enough that a write to the destination carries many objects, small
+// enough to cost nothing beside one decoded stream.
+const BufferSize = 64 << 10
+
 // WriteRewrite emits a complete PDF file to dst from the objects in the
 // allocator. Objects are written in ascending object-number order with
 // sequential byte offsets. The compaction passes run before it, through
-// [Compact], and before any encryption of the pending objects.
+// [Compact], and before any encryption of the pending objects. It writes
+// dst through a buffer of [BufferSize] bytes and flushes it before it
+// returns, so dst needs none of its own.
 func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("rewrite canceled: %w", err)
@@ -180,10 +188,16 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 		}
 	}
 
+	// The serializer writes a file token by token. The buffer keeps a token
+	// from being a write of its own on the caller's destination, which on a
+	// file is one system call a token. A destination that is a large enough
+	// bufio.Writer already is used as it is.
+	out := bufio.NewWriterSize(dst, BufferSize)
+
 	var offset int64
 
 	header := fmt.Sprintf("%%PDF-%s\n%%\xe2\xe3\xcf\xd3\n", version)
-	n, err := io.WriteString(dst, header)
+	n, err := io.WriteString(out, header)
 	offset += int64(n)
 	if err != nil {
 		return fmt.Errorf("writing header: %w", err)
@@ -211,7 +225,7 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 			Offset: offset,
 		})
 
-		written, err := SerializeIndirect(ctx, dst, objNum, 0, pending[objNum])
+		written, err := SerializeIndirect(ctx, out, objNum, 0, pending[objNum])
 		if err != nil {
 			return fmt.Errorf("serializing object %d: %w", objNum, err)
 		}
@@ -243,18 +257,21 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 	xrefOffset := offset
 
 	if useXRefStream {
-		if _, err := WriteXRefStream(ctx, dst, records, trailer, cfg.Allocator, xrefOffset); err != nil {
+		if _, err := WriteXRefStream(ctx, out, records, trailer, cfg.Allocator, xrefOffset); err != nil {
 			return fmt.Errorf("writing xref stream: %w", err)
 		}
 	} else {
-		if _, err := WriteXRefTable(ctx, dst, records, trailer); err != nil {
+		if _, err := WriteXRefTable(ctx, out, records, trailer); err != nil {
 			return fmt.Errorf("writing xref table: %w", err)
 		}
 	}
 
 	tail := fmt.Sprintf("startxref\n%d\n%%%%EOF\n", xrefOffset)
-	if _, err := io.WriteString(dst, tail); err != nil {
+	if _, err := io.WriteString(out, tail); err != nil {
 		return fmt.Errorf("writing startxref: %w", err)
+	}
+	if err := out.Flush(); err != nil {
+		return fmt.Errorf("writing the file: %w", err)
 	}
 
 	return nil
