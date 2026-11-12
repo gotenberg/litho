@@ -99,10 +99,12 @@ const maxDepth = 125
 // bidi.Paragraph.Segment takes no context and is quadratic on some runs,
 // a run of terminators (W5), of European numbers after a right-to-left
 // letter (W7) or of numbers and separators, and of bracket pairs (N0). At
-// 16,384 characters the worst of them takes under a fifth of a second, so
-// the time grows with the text's length, not its square, and a context
-// check comes between two pieces. A paragraph of no right-to-left
-// character, nearly every one, never calls the algorithm for its levels.
+// 32,768 characters the worst of them takes under a second, so the time
+// grows with the text's length, not its square, and a context check comes
+// between two pieces. The value holds the longest text Excel lets a cell
+// hold, 32,767 characters, in one piece. A paragraph of no
+// right-to-left character, nearly every one, never calls the algorithm
+// for its levels.
 //
 // A longer text is resolved, and itemized, in pieces of at most
 // maxBidiRunes characters, each cut after a space of its last
@@ -117,10 +119,12 @@ const maxDepth = 125
 //     in Segment; 80,000 characters of "1," after a Hebrew letter took
 //     2.7 s, of "(a)" 0.76 s; 100,000 characters of Hebrew words took
 //     8 ms (Apple silicon).
-//   - probe, txt: at 16,384 characters the digits took 0.13 s, "1," 0.09 s,
-//     "#" 0.03 s, "(a)" 0.03 s; the levels of 2^20 characters of "(a)"
-//     after a Hebrew letter took 1.8 s in pieces.
-const maxBidiRunes = 1 << 14
+//   - probe, txt: at 32,768 characters the digits took 0.72 s, "1," 0.68 s,
+//     "#" 0.28 s, "(a)" 0.23 s on a loaded machine; the levels of 2^20
+//     characters of "(a)" after a Hebrew letter took 5.2 s in pieces.
+//   - litho/xlsx: text_overflow holds a cell of 32,767 characters, which
+//     pieces of 16,384 cut.
+const maxBidiRunes = 1 << 15
 
 // bidiCutSlack is how far back from [maxBidiRunes] a cut looks for a
 // space.

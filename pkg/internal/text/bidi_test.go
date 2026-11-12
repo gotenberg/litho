@@ -190,18 +190,18 @@ func TestBidiCut(t *testing.T) {
 }
 
 // TestResolveLevels_Pieces checks a right-to-left paragraph longer than
-// maxBidiRunes: a Hebrew letter then European digits resolve in pieces,
-// the digits at level 2 as in one paragraph, and a cancelled context stops
-// the resolution with its error.
+// maxBidiRunes: Hebrew words then European digits resolve in pieces, the
+// letters at level 1 and the digits at level 2 as in one paragraph, and a
+// cancelled context stops the resolution with its error.
 func TestResolveLevels_Pieces(t *testing.T) {
 	t.Parallel()
-	text := []rune("ש" + strings.Repeat("1", 3*maxBidiRunes))
+	text := []rune(strings.Repeat("שלום ", maxBidiRunes/2) + "12")
 	got, err := resolveLevels(t.Context(), text, identity(len(text)), LeftToRight)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got[0] != 1 || got[1] != 2 {
-		t.Errorf("levels %d and %d, want 1 and 2", got[0], got[1])
+	if n := len(got); got[0] != 1 || got[n-6] != 1 || got[n-2] != 2 || got[n-1] != 2 {
+		t.Errorf("levels %d, %d, %d, %d, want 1, 1, 2, 2", got[0], got[n-6], got[n-2], got[n-1])
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
