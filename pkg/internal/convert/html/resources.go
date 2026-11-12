@@ -25,6 +25,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/svg"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -53,17 +54,32 @@ var (
 	errEmptyPicture = errors.New("the image has no pixels")
 )
 
+// pictureDataError marks an error as the fault of a picture's own data,
+// which was read whole: it has no pixels, or its bytes do not decode or
+// parse. Its message is its cause's.
+type pictureDataError struct{ err error }
+
+func (e pictureDataError) Error() string { return e.err.Error() }
+
+func (e pictureDataError) Unwrap() error { return e.err }
+
 // warningCode returns the warning code a resource error stands for.
 func warningCode(err error) warn.Code {
 	if code, ok := networkCode(err); ok {
 		return code
 	}
+	var fault pictureDataError
 	switch {
 	case errors.Is(err, errNoResources), errors.Is(err, errAbsoluteURL), errors.Is(err, errOutsideRoot):
 		return warn.ResourceRefused
 	case errors.Is(err, errTooLarge), errors.Is(err, errBudget), errors.Is(err, errTooManyImgs),
-		errors.Is(err, errTooManyPx):
+		errors.Is(err, errTooManyPx), errors.Is(err, svg.ErrTooLarge):
 		return warn.LimitReached
+	case errors.Is(err, image.ErrFormat):
+		// Bytes no decoder knows: a format litho does not decode.
+		return warn.PictureFormatUnsupported
+	case errors.As(err, &fault):
+		return warn.PictureUnreadable
 	default:
 		return warn.ResourceFailed
 	}
@@ -272,10 +288,10 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return nil, fmt.Errorf("decoding the image header: %w", err)
+		return nil, pictureDataError{fmt.Errorf("decoding the image header: %w", err)}
 	}
 	if cfg.Width <= 0 || cfg.Height <= 0 {
-		return nil, errEmptyPicture
+		return nil, pictureDataError{errEmptyPicture}
 	}
 	mem := limits.BudgetFrom(ctx)
 	err = mem.CheckPicture(cfg.Width, cfg.Height)
@@ -297,7 +313,7 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 	if format == "jpeg" && orient == 1 && dctModel(cfg.ColorModel) {
 		src, err := typeset.JPEGImage(ctx, data)
 		if err != nil {
-			return nil, fmt.Errorf("reading the JPEG image: %w", err)
+			return nil, pictureDataError{fmt.Errorf("reading the JPEG image: %w", err)}
 		}
 		pic.Source = src
 		return pic, nil
@@ -315,7 +331,7 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		mem.Release(charged)
-		return nil, fmt.Errorf("decoding the %s image: %w", format, err)
+		return nil, pictureDataError{fmt.Errorf("decoding the %s image: %w", format, err)}
 	}
 	oriented, err := orientImage(ctx, img, orient)
 	if err != nil {

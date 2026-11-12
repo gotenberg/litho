@@ -52,10 +52,12 @@ const (
 	// answered with a status outside 2xx, which the message names. It is
 	// left out. HTML and Markdown report it.
 	WarningResourceHTTPStatus ConvertWarningCode = "resource-http-status"
-	// WarningResourceFailed is a stylesheet, @import, picture, font or
-	// inline SVG that the conversion could read but that does not load:
-	// its bytes do not decode or parse, or the read failed. It is left out,
-	// and the message gives the reason. HTML and Markdown report it.
+	// WarningResourceFailed is a stylesheet, @import or picture that does
+	// not load, for a reason no other resource code names: a file that
+	// does not exist, a read that fails, a stylesheet served as another
+	// type. It is left out, and the message gives the reason. A picture
+	// that reads and does not decode is a [WarningPictureUnreadable]. HTML
+	// and Markdown report it.
 	WarningResourceFailed ConvertWarningCode = "resource-failed"
 	// WarningPictureFormatUnsupported is a picture in a format litho does
 	// not decode: WMF, EMF, SVM, AVIF, JPEG XL, ICO, CUR or an unknown one.

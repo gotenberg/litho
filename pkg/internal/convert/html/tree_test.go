@@ -195,7 +195,7 @@ func TestPrepare_DecodesImages(t *testing.T) {
 		}
 	}
 	if !hasWarning(p.warnings, warn.ResourceFailed, "img/missing.png") ||
-		!hasWarning(p.warnings, warn.ResourceFailed, "img/bad.png") {
+		!hasWarning(p.warnings, warn.PictureFormatUnsupported, "img/bad.png") {
 		t.Errorf("warnings %+v", p.warnings)
 	}
 	if len(p.warnings) != 2 {
@@ -530,6 +530,36 @@ func TestPrepare_NumbersListElements(t *testing.T) {
 	} {
 		if got := byID(t, p.root, id).Numbering; got != want {
 			t.Errorf("%s: numbering %d, want %d", id, got, want)
+		}
+	}
+}
+
+// TestPrepare_PictureFaults checks that a picture the document names is
+// reported by what is wrong with it, as an Office converter reports the
+// same picture: one that is absent as a resource that failed, bytes of no
+// known format as a format not decoded, and data that does not decode or
+// parse as an unreadable picture.
+func TestPrepare_PictureFaults(t *testing.T) {
+	t.Parallel()
+	png := pngBytes(t, 4, 4)
+	fsys := fstest.MapFS{
+		"unknown.png": {Data: []byte("not a picture")},
+		"cut.png":     {Data: png[:len(png)/2]},
+		"broken.svg":  {Data: []byte(`<?xml version="1.0"?><html/>`)},
+	}
+	for _, tc := range []struct {
+		src  string
+		code warn.Code
+		name string
+	}{
+		{`<img src="gone.png">`, warn.ResourceFailed, "gone.png"},
+		{`<img src="unknown.png">`, warn.PictureFormatUnsupported, "unknown.png"},
+		{`<img src="cut.png">`, warn.PictureUnreadable, "cut.png"},
+		{`<img src="broken.svg">`, warn.PictureUnreadable, "broken.svg"},
+	} {
+		p := prep(t, "<p>"+tc.src+"</p>", Options{Resources: fsys})
+		if !hasWarning(p.warnings, tc.code, tc.name) {
+			t.Errorf("%s: warnings %+v, want %s naming %q", tc.src, p.warnings, tc.code, tc.name)
 		}
 	}
 }
