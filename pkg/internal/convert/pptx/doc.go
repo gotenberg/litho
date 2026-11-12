@@ -2,4 +2,8 @@
 // slides.Convert lays out as Impress prints a presentation. LibreOffice is
 // the reference wherever the specification leaves room or LibreOffice
 // departs from it; see [Convert].
+//
+// A typeface the presentation embeds (19.2.1.9) draws with its embedded
+// faces, stored as sfnt programs or Embedded OpenType files; a face
+// compressed with MicroType Express is not read.
 package pptx

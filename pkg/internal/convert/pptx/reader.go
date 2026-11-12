@@ -162,12 +162,13 @@ func isMalformed(err error) bool {
 }
 
 // read reads the presentation pkg holds into the slide model, with the
-// warnings of what it left out or approximated, and its handout master
+// fonts to lay it out with (fonts and the faces the presentation embeds),
+// the warnings of what it left out or approximated, and its handout master
 // when handouts asks for it.
-func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts bool) (*slides.Document, []typeset.Warning, error) {
+func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts bool) (*slides.Document, *text.Fonts, []typeset.Warning, error) {
 	main, err := pkg.MainPart(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	r := &reader{
 		ctx: ctx, pkg: pkg, fonts: fonts, main: main,
@@ -176,10 +177,10 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts b
 	}
 	root, err := pkg.ParseXML(ctx, main, understood)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if !root.Is(nsP, "presentation") {
-		return nil, nil, fmt.Errorf("%w: the main part is not a PresentationML presentation", office.ErrMalformed)
+		return nil, nil, nil, fmt.Errorf("%w: the main part is not a PresentationML presentation", office.ErrMalformed)
 	}
 	doc := &slides.Document{Width: defaultSlideWidth, Height: defaultSlideHeight}
 	if w, h, ok := size(root.Child(nsP, "sldSz")); ok {
@@ -189,11 +190,14 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts b
 		doc.NotesWidth, doc.NotesHeight = w, h
 	}
 	r.slideW, r.slideH = doc.Width, doc.Height
+	if r.loadEmbeddedFonts(root); r.err != nil {
+		return nil, nil, nil, r.err
+	}
 	r.defaultText = root.Child(nsP, "defaultTextStyle")
 	r.readTableStyles()
 	cp, err := pkg.CoreProperties(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	subject := cp.Subject
 	if subject == "" {
@@ -222,7 +226,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts b
 			continue
 		}
 		if err := ctx.Err(); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if len(doc.Slides) >= maxSlides {
 			r.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("the presentation holds more than %d slides: the rest are left out", maxSlides))
@@ -243,7 +247,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts b
 				r.warn(warn.PartMalformed, warn.Omitted, fmt.Sprintf("slide %s does not parse and is left out: %v", rel.Target, err))
 				continue
 			}
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		s.Bookmark = bookmark(first+len(doc.Slides), s.Title)
 		if sec, ok := sections[attr(id, "id")]; ok {
@@ -258,13 +262,13 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts b
 	doc.NotesSlideBox, doc.NotesTextBox, doc.NotesShapes = r.notesSlideBox, r.notesTextBox, r.notesShapes
 	if handouts {
 		if err := r.handoutMaster(root, doc); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 	if r.err != nil {
-		return nil, nil, r.err
+		return nil, nil, nil, r.err
 	}
-	return doc, r.warnings, nil
+	return doc, r.fonts, r.warnings, nil
 }
 
 // bookmark returns the outline entry PowerPoint writes for the slide

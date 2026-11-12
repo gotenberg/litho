@@ -291,7 +291,7 @@ func zipFiles(t testing.TB, files map[string]string) []byte {
 // readDeck reads a test deck into the model with the test fonts.
 func readDeck(t testing.TB, d testDeck) (*slides.Document, []typeset.Warning) {
 	t.Helper()
-	doc, warnings, err := load(context.Background(), bytes.NewReader(zipFiles(t, deckFiles(d))), testFonts(t), office.Options{})
+	doc, _, warnings, err := load(context.Background(), bytes.NewReader(zipFiles(t, deckFiles(d))), testFonts(t), office.Options{})
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -301,7 +301,7 @@ func readDeck(t testing.TB, d testDeck) (*slides.Document, []typeset.Warning) {
 // loadFiles reads the parts files into the model with the test fonts.
 func loadFiles(t testing.TB, files map[string]string) *slides.Document {
 	t.Helper()
-	doc, _, err := load(context.Background(), bytes.NewReader(zipFiles(t, files)), testFonts(t), office.Options{})
+	doc, _, _, err := load(context.Background(), bytes.NewReader(zipFiles(t, files)), testFonts(t), office.Options{})
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}

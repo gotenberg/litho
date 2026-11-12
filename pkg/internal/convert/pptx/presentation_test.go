@@ -45,7 +45,7 @@ func TestPresentation_Slides(t *testing.T) {
 	// Reorder the slide list: the show order is sldIdLst's, not the parts'.
 	files["ppt/presentation.xml"] = strings.Replace(files["ppt/presentation.xml"],
 		`<p:sldId id="256" r:id="rIdS1"/><p:sldId id="257" r:id="rIdS2"/>`, `<p:sldId id="257" r:id="rIdS2"/><p:sldId id="256" r:id="rIdS1"/>`, 1)
-	doc, _, err := load(context.Background(), bytes.NewReader(zipFiles(t, files)), testFonts(t), office.Options{})
+	doc, _, _, err := load(context.Background(), bytes.NewReader(zipFiles(t, files)), testFonts(t), office.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestPresentation_Errors(t *testing.T) {
 				tc.mutate(files)
 				data = zipFiles(t, files)
 			}
-			_, _, err := load(context.Background(), bytes.NewReader(data), testFonts(t), office.Options{})
+			_, _, _, err := load(context.Background(), bytes.NewReader(data), testFonts(t), office.Options{})
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("err %v, want %v", err, tc.want)
 			}
@@ -113,7 +113,7 @@ func TestPresentation_BrokenSlideIsSkipped(t *testing.T) {
 	t.Parallel()
 	files := deckFiles(testDeck{slides: []testSlide{{tree: title("a")}, {tree: title("b")}}})
 	files["ppt/slides/slide1.xml"] = `<p:sld ` + nsDecl + `><p:cSld>`
-	doc, warnings, err := load(context.Background(), bytes.NewReader(zipFiles(t, files)), testFonts(t), office.Options{})
+	doc, _, warnings, err := load(context.Background(), bytes.NewReader(zipFiles(t, files)), testFonts(t), office.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

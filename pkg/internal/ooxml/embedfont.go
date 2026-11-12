@@ -2,12 +2,14 @@ package ooxml
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
 
 // obfuscatedBytes is the length of the head of an embedded font program
@@ -92,6 +94,14 @@ func (e *EmbeddedFonts) Load(ctx context.Context, program []byte, family string,
 	if italic {
 		d.Style = text.FaceItalic
 	}
+	// litho embeds the program in the PDF it writes: a font whose licence
+	// forbids embedding is not used (OpenType, OS/2 table, fsType; the EOT
+	// format, 2.3, asks the same of a reader of embedded fonts).
+	if truetype.IsSfnt(program) {
+		if info, err := truetype.ReadInfo(program); err == nil && info.EmbeddingRestricted() {
+			return fmt.Errorf("%w: fsType 0x%04X", ErrFontRestricted, info.FSType)
+		}
+	}
 	fc, err := text.LoadFace(ctx, program, d)
 	if err != nil {
 		return err
@@ -114,4 +124,65 @@ func (e *EmbeddedFonts) Apply(fonts *text.Fonts) *text.Fonts {
 		return fonts
 	}
 	return fonts.WithFaces(text.NewFaceSet(e.faces))
+}
+
+// The EOT header fields litho reads (W3C Member Submission, Embedded
+// OpenType File Format, 2008, 3): their offsets, the magic number and the
+// processing flags of 4.2 and 4.4.
+const (
+	eotHeaderBytes    = 36
+	eotMagic          = 0x504C
+	eotFlagCompressed = 0x00000004
+	eotFlagXOR        = 0x10000000
+	eotXORKey         = 0x50
+	eotVersion1       = 0x00010000
+	eotVersion21      = 0x00020001
+	eotVersion22      = 0x00020002
+	eotOffsetSize     = 0
+	eotOffsetDataSize = 4
+	eotOffsetVersion  = 8
+	eotOffsetFlags    = 12
+	eotOffsetMagic    = 34
+)
+
+// EmbeddedFontProgram returns the sfnt program of a font part a
+// PresentationML document embeds (ECMA-376 Part 1, 19.2.1.9 embeddedFont):
+// data as it is when it already is an sfnt program, else the FontData of
+// the Embedded OpenType file it holds, the last field of every version of
+// the format (W3C Member Submission, Embedded OpenType File Format, 3),
+// XOR-decrypted when its flags say so (4.4). The result may alias data,
+// which it decrypts in place.
+//
+// It returns an error wrapping [ErrFontCompressed] for FontData compressed
+// with MicroType Express (4.2, TTEMBED_TTCOMPRESSED), which litho does not
+// decompress, and [ErrFontContainer] for data that is neither an sfnt
+// program nor an EOT file whose sizes fit it.
+func EmbeddedFontProgram(data []byte) ([]byte, error) {
+	if truetype.IsSfnt(data) {
+		return data, nil
+	}
+	if len(data) < eotHeaderBytes || binary.LittleEndian.Uint16(data[eotOffsetMagic:]) != eotMagic {
+		return nil, fmt.Errorf("%w: no sfnt or EOT header", ErrFontContainer)
+	}
+	switch binary.LittleEndian.Uint32(data[eotOffsetVersion:]) {
+	case eotVersion1, eotVersion21, eotVersion22:
+	default:
+		return nil, fmt.Errorf("%w: EOT version 0x%08X", ErrFontContainer, binary.LittleEndian.Uint32(data[eotOffsetVersion:]))
+	}
+	size := uint64(binary.LittleEndian.Uint32(data[eotOffsetSize:]))
+	fontSize := uint64(binary.LittleEndian.Uint32(data[eotOffsetDataSize:]))
+	if size > uint64(len(data)) || fontSize > size || size-fontSize < eotHeaderBytes {
+		return nil, fmt.Errorf("%w: EOT sizes %d and %d past the %d-byte part", ErrFontContainer, size, fontSize, len(data))
+	}
+	flags := binary.LittleEndian.Uint32(data[eotOffsetFlags:])
+	if flags&eotFlagCompressed != 0 {
+		return nil, ErrFontCompressed
+	}
+	program := data[size-fontSize : size]
+	if flags&eotFlagXOR != 0 {
+		for i := range program {
+			program[i] ^= eotXORKey
+		}
+	}
+	return program, nil
 }

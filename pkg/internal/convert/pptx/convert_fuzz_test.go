@@ -43,7 +43,7 @@ func FuzzConvert(f *testing.F) {
 			layoutTree: string(tree),
 			parts:      parts,
 		})
-		doc, _, err := load(context.Background(), bytes.NewReader(zipFiles(t, files)), fonts, office.Options{})
+		doc, _, _, err := load(context.Background(), bytes.NewReader(zipFiles(t, files)), fonts, office.Options{})
 		if err != nil {
 			return
 		}

@@ -22,3 +22,15 @@ func FuzzDeobfuscateFont(f *testing.F) {
 		}
 	})
 }
+
+func FuzzEmbeddedFontProgram(f *testing.F) {
+	valid := eotFile(append([]byte{0, 1, 0, 0}, bytes.Repeat([]byte{7}, 28)...), 0x10000000)
+	f.Add(valid)
+	f.Add(valid[:40])
+	f.Fuzz(func(t *testing.T, data []byte) {
+		program, err := EmbeddedFontProgram(data)
+		if err == nil && len(program) > len(data) {
+			t.Fatal("a program longer than its part")
+		}
+	})
+}

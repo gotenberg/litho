@@ -15,3 +15,15 @@ var ErrFontKey = errors.New("ooxml: font key is not a GUID")
 // ErrFontTooShort reports an embedded font part too short to hold the
 // obfuscated head of a font program.
 var ErrFontTooShort = errors.New("ooxml: embedded font too short")
+
+// ErrFontRestricted reports an embedded font whose OS/2 fsType forbids
+// embedding it.
+var ErrFontRestricted = errors.New("ooxml: the font's licence forbids embedding")
+
+// ErrFontCompressed reports an embedded Embedded OpenType font compressed
+// with MicroType Express, which litho does not decompress.
+var ErrFontCompressed = errors.New("ooxml: the embedded font is compressed with MicroType Express")
+
+// ErrFontContainer reports an embedded font part that is neither an sfnt
+// program nor an Embedded OpenType file.
+var ErrFontContainer = errors.New("ooxml: the embedded font is neither sfnt nor EOT")

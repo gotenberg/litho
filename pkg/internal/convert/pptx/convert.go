@@ -39,7 +39,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	// The readers add the SVG pictures they parse to the collector; laying
 	// the pages out draws them, which may add warnings the reader never saw.
 	ctx, drawings := svg.WithCollector(ctx)
-	doc, warnings, err := load(ctx, src, fonts, opts)
+	doc, fonts, warnings, err := load(ctx, src, fonts, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -52,24 +52,21 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	return out, nil
 }
 
-// load reads src into the slide model with the reader's warnings.
-func load(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*slides.Document, []typeset.Warning, error) {
+// load reads src into the slide model with the fonts to lay it out with
+// and the reader's warnings.
+func load(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*slides.Document, *text.Fonts, []typeset.Warning, error) {
 	data, err := office.ReadAll(ctx, src, opts.MaxInputBytes)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	// A zip package comes back unchanged; a compound file is an encrypted
 	// package (MS-OFFCRYPTO, 2.3.4.4) opened with the password.
 	if data, err = offcrypto.OpenOOXML(ctx, data, opts.Password); err != nil {
-		return nil, nil, fmt.Errorf("opening the package: %w", err)
+		return nil, nil, nil, fmt.Errorf("opening the package: %w", err)
 	}
 	pkg, err := ooxml.Open(ctx, data)
 	if err != nil {
-		return nil, nil, fmt.Errorf("opening the package: %w", err)
+		return nil, nil, nil, fmt.Errorf("opening the package: %w", err)
 	}
-	doc, warnings, err := read(ctx, pkg, fonts, opts.Handouts > 0)
-	if err != nil {
-		return nil, nil, err
-	}
-	return doc, warnings, nil
+	return read(ctx, pkg, fonts, opts.Handouts > 0)
 }

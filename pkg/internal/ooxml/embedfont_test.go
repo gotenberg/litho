@@ -2,6 +2,7 @@ package ooxml
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"testing"
 )
@@ -37,5 +38,52 @@ func TestDeobfuscateFont(t *testing.T) {
 	short := plain[:31]
 	if err := DeobfuscateFont(short, key); !errors.Is(err, ErrFontTooShort) || !bytes.Equal(short, plain[:31]) {
 		t.Errorf("a 31-byte part: %v; want ErrFontTooShort and no change", err)
+	}
+}
+
+// eotFile returns a version 0x00010000 Embedded OpenType file of data with
+// empty names and flags (W3C Member Submission, Embedded OpenType File
+// Format, 3.1).
+func eotFile(data []byte, flags uint32) []byte {
+	const header = 36 + 16 + 8 + 4 + 16 + 2 + 4*4
+	out := make([]byte, header, header+len(data))
+	binary.LittleEndian.PutUint32(out[0:], uint32(header+len(data)))
+	binary.LittleEndian.PutUint32(out[4:], uint32(len(data)))
+	binary.LittleEndian.PutUint32(out[8:], 0x00010000)
+	binary.LittleEndian.PutUint32(out[12:], flags)
+	binary.LittleEndian.PutUint16(out[34:], 0x504C)
+	return append(out, data...)
+}
+
+// TestEmbeddedFontProgram locks what a PresentationML font part yields: an
+// sfnt program as it is, the FontData of an EOT file, XOR-decrypted with
+// 0x50 when its flags say so (4.4), and refusals for MicroType Express
+// compression (4.2), a bad magic number and sizes past the part.
+func TestEmbeddedFontProgram(t *testing.T) {
+	sfnt := append([]byte{0, 1, 0, 0}, bytes.Repeat([]byte{7}, 20)...)
+	if got, err := EmbeddedFontProgram(sfnt); err != nil || !bytes.Equal(got, sfnt) {
+		t.Errorf("sfnt: % x, %v; want it as it is", got, err)
+	}
+	if got, err := EmbeddedFontProgram(eotFile(sfnt, 0)); err != nil || !bytes.Equal(got, sfnt) {
+		t.Errorf("EOT: % x, %v; want its font data", got, err)
+	}
+	xored := bytes.Clone(sfnt)
+	for i := range xored {
+		xored[i] ^= 0x50
+	}
+	if got, err := EmbeddedFontProgram(eotFile(xored, 0x10000000)); err != nil || !bytes.Equal(got, sfnt) {
+		t.Errorf("XOR EOT: % x, %v; want the decrypted font data", got, err)
+	}
+	if _, err := EmbeddedFontProgram(eotFile(sfnt, 0x4)); !errors.Is(err, ErrFontCompressed) {
+		t.Errorf("compressed EOT: %v; want ErrFontCompressed", err)
+	}
+	badMagic := eotFile(sfnt, 0)
+	badMagic[34] = 0
+	long := eotFile(sfnt, 0)
+	binary.LittleEndian.PutUint32(long[4:], uint32(len(long)))
+	for name, data := range map[string][]byte{"bad magic": badMagic, "font data past the file": long, "short": sfnt[1:8]} {
+		if _, err := EmbeddedFontProgram(data); !errors.Is(err, ErrFontContainer) {
+			t.Errorf("%s: %v; want ErrFontContainer", name, err)
+		}
 	}
 }

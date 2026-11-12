@@ -65,7 +65,7 @@ func TestHandoutMaster(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			doc, _, err := load(context.Background(), bytes.NewReader(zipFiles(t, handoutFiles(tc.hf))), testFonts(t), office.Options{Handouts: tc.handouts})
+			doc, _, _, err := load(context.Background(), bytes.NewReader(zipFiles(t, handoutFiles(tc.hf))), testFonts(t), office.Options{Handouts: tc.handouts})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -113,7 +113,7 @@ func FuzzHandoutMaster(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
 		files := handoutFiles("")
 		files["ppt/handoutMasters/handoutMaster1.xml"] = string(data)
-		doc, _, err := load(context.Background(), bytes.NewReader(zipFiles(t, files)), fonts, office.Options{Handouts: 6})
+		doc, _, _, err := load(context.Background(), bytes.NewReader(zipFiles(t, files)), fonts, office.Options{Handouts: 6})
 		if err != nil {
 			return
 		}

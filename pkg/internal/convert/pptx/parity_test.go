@@ -121,7 +121,7 @@ func TestParity_GotenbergDecks(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			doc, _, err := load(context.Background(), bytes.NewReader(data), testFonts(t), office.Options{})
+			doc, _, _, err := load(context.Background(), bytes.NewReader(data), testFonts(t), office.Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
