@@ -105,7 +105,7 @@ func newReader(ctx context.Context, pkg *odf.Package, fonts *text.Fonts) *reader
 	r := &reader{
 		ctx: ctx, pkg: pkg, fonts: fonts,
 		styles: odf.NewStyles(pkg), draw: odf.NewDrawStyles(pkg), data: odf.NewDataStyles(pkg),
-		builtin: builtinStyles(),
+		builtin: builtinStyles(ctx),
 		warned:  map[string]bool{}, pics: map[string]*picResult{}, layers: map[string]string{},
 		footers: map[string]string{}, headers: map[string]string{}, dates: map[string]*odf.Element{},
 	}

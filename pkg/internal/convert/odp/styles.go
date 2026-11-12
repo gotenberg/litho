@@ -22,9 +22,11 @@ const builtinXML = `<office:document-styles xmlns:office="` + odf.NSOffice + `" 
 	`<style:text-properties style:use-window-font-color="true" fo:font-family="'Liberation Sans'" fo:font-size="18pt" fo:font-style="normal" fo:font-weight="normal" style:text-underline-style="none" style:text-line-through-style="none" style:font-family-asian="'Noto Sans CJK SC'" style:font-family-complex="'Noto Sans Devanagari'"/></style:style>` +
 	`</office:styles></office:document-styles>`
 
-// builtinStyles parses [builtinXML].
-func builtinStyles() *odf.Styles {
-	root, err := odf.ParseXML(context.Background(), []byte(builtinXML))
+// builtinStyles parses [builtinXML] under ctx. Only ctx's error can fail
+// the parse: the styles are then empty, and the conversion stops at its
+// next check of ctx.
+func builtinStyles(ctx context.Context) *odf.Styles {
+	root, err := odf.ParseXML(ctx, []byte(builtinXML))
 	if err != nil {
 		return odf.NewStyles(&odf.Package{})
 	}
