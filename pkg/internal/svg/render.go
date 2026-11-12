@@ -46,6 +46,8 @@ func (s sink) with(local compose.Matrix) sink {
 
 // renderer draws one Document at one viewport size.
 type renderer struct {
+	// ctx is the context of the one rendering the renderer serves: it
+	// lives within [Document.render] and never past it.
 	ctx context.Context
 	d   *Document
 	// vw and vh are the viewport percentages resolve against, in user
