@@ -340,6 +340,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 			PixelFontMetrics: !o.FractionalFontMetrics,
 			BrowserRules:     true,
 			Lang:             scan.lang,
+			Fallback:         text.FallbackChromium,
 			Image:            res.picture,
 			MaxPages:         o.MaxPages,
 			Logger:           o.Logger,

@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -431,7 +432,7 @@ func (f *pageFlow) measure(g *hfGeom, pages int) float64 {
 	box := &layout.Node{Kind: layout.Element, Style: st, ID: "odt-hf-measure", Children: nodes}
 	res, err := layout.Layout(f.b.ctx, wrap(box), f.b.fonts, layout.Options{
 		Page: layout.PageBox{Width: g.w + 2, Height: office.MaxPageSide}, MaxPages: maxSubLayoutPages,
-		Image: f.b.loadPicture,
+		Image: f.b.loadPicture, Fallback: text.FallbackLibreOffice,
 	})
 	if err != nil {
 		// A header that does not lay out takes no room.
@@ -482,7 +483,7 @@ func (f *pageFlow) marginContent(info layout.PageInfo, pages int) []typeset.Frag
 	}
 	res, err := layout.Layout(f.b.ctx, rn, f.b.fonts, layout.Options{
 		Page: layout.PageBox{Width: e.box.Width, Height: e.box.Height}, MaxPages: maxSubLayoutPages,
-		Image: f.b.loadPicture,
+		Image: f.b.loadPicture, Fallback: text.FallbackLibreOffice,
 	})
 	if err != nil || len(res.Pages) == 0 {
 		// A header or footer that does not lay out prints nothing.

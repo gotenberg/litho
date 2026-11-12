@@ -217,8 +217,11 @@ type Face struct {
 	ascent, descent, lineGap float64
 	// xHeight is the OS/2 x-height in font units, 0 when the face records
 	// none.
-	xHeight  float64
-	upem     float64
+	xHeight float64
+	upem    float64
+	// revision is the head table's fontRevision, a 16.16 fixed-point
+	// number, which ranks faces of last resort (see [compareLastResort]).
+	revision uint32
 	coverage []runeRange
 	// size is the sum of the face's table lengths.
 	size int64

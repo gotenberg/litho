@@ -517,8 +517,8 @@ func (p *prepared) measureHeights(ctx context.Context, boxes []*marginBox) error
 // boxes.
 func (p *prepared) measure(ctx context.Context, root *layout.Node) (map[string]typeset.Rect, error) {
 	res, err := layout.Layout(ctx, wrapRoot(root), p.fonts, layout.Options{
-		Page:  layout.PageBox{Width: measureSide, Height: measureSide},
-		Lang:  p.layout.Lang,
+		Page: layout.PageBox{Width: measureSide, Height: measureSide},
+		Lang: p.layout.Lang, Fallback: p.layout.Fallback,
 		Image: p.layout.Image, MaxPages: maxSubLayoutPages,
 	})
 	if err != nil {
@@ -562,8 +562,8 @@ func (p *prepared) paintMargins(ctx context.Context, boxes []*marginBox, pb layo
 		targets = p.b.gcpm.placed
 	}
 	res, err := layout.Layout(ctx, wrapRoot(root), p.fonts, layout.Options{
-		Page:  layout.PageBox{Width: pb.Width, Height: pb.Height},
-		Lang:  p.layout.Lang,
+		Page: layout.PageBox{Width: pb.Width, Height: pb.Height},
+		Lang: p.layout.Lang, Fallback: p.layout.Fallback,
 		Image: p.layout.Image, MaxPages: maxSubLayoutPages,
 		Targets: targets,
 	})

@@ -214,7 +214,7 @@ func (b *pageBuilder) textWidth(d *display) float64 {
 	}
 	runs := make([]text.ParagraphRun, 0, len(d.runs))
 	for _, r := range d.runs {
-		runs = append(runs, text.ParagraphRun{Text: r.Text, Style: overlay(d.font, r.Font).textStyle(b.m.lang)})
+		runs = append(runs, text.ParagraphRun{Text: r.Text, Style: overlay(d.font, r.Font).textStyle(b.m.lang, b.m.fallback)})
 	}
 	return b.m.runsWidth(runs)
 }

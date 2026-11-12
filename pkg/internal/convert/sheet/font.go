@@ -167,7 +167,7 @@ func (f font) apply(st *css.Style) {
 }
 
 // textStyle returns the text stack's style of f.
-func (f font) textStyle(lang string) text.Style {
+func (f font) textStyle(lang string, fallback text.Fallback) text.Style {
 	w := 400
 	if f.bold {
 		w = 700
@@ -182,6 +182,7 @@ func (f font) textStyle(lang string) text.Style {
 		Italic:   f.italic,
 		Size:     size,
 		Lang:     lang,
+		Fallback: fallback,
 		Color:    typeset.Color{R: f.color.R, G: f.color.G, B: f.color.B, A: f.color.A},
 		// Calc draws cell text without the font's kerning.
 		NoKerning: true,
@@ -193,6 +194,8 @@ type measurer struct {
 	ctx   context.Context
 	fonts *text.Fonts
 	lang  string
+	// fallback is the font fallback rule cell text is measured with.
+	fallback text.Fallback
 	// cache holds the width and the line height of each text measured, by
 	// its font's key.
 	cache map[measureKey]float64
@@ -271,7 +274,7 @@ func (m *measurer) width(f font, s string) float64 {
 	if w, ok := m.cache[k]; ok {
 		return w
 	}
-	w := m.runsWidth([]text.ParagraphRun{{Text: s, Style: f.textStyle(m.lang)}})
+	w := m.runsWidth([]text.ParagraphRun{{Text: s, Style: f.textStyle(m.lang, m.fallback)}})
 	if len(m.cache) < maxMeasureCache {
 		m.cache[k] = w
 	}
@@ -317,7 +320,7 @@ func (m *measurer) textLineHeight(f font, s string) float64 {
 	if v, ok := m.cache[k]; ok {
 		return v
 	}
-	p, _, err := m.fonts.Shape(m.ctx, []text.ParagraphRun{{Text: s, Style: f.textStyle(m.lang)}}, text.ParagraphOptions{})
+	p, _, err := m.fonts.Shape(m.ctx, []text.ParagraphRun{{Text: s, Style: f.textStyle(m.lang, m.fallback)}}, text.ParagraphOptions{})
 	if err == nil {
 		for _, sp := range p.Line(0, p.Len(), false).Spans {
 			h = max(h, sp.Ascent+sp.Descent)
@@ -336,7 +339,7 @@ func (m *measurer) lineHeight(f font) float64 {
 	if h, ok := m.lineCache[k]; ok {
 		return h
 	}
-	ts := f.textStyle(m.lang)
+	ts := f.textStyle(m.lang, m.fallback)
 	h := ts.Size * 1.2
 	if fc := m.fonts.Match(ts); fc != nil {
 		mt := fc.Metrics(ts.Size)

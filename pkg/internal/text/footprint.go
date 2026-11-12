@@ -356,6 +356,7 @@ func readFootprint(ld *ot.Loader, records []truetype.TableRecord) (*Face, error)
 	names, _, _ := tables.ParseName(rawName) // a face without a readable name table matches no family by name and stays a fallback candidate
 	fc := &Face{
 		upem:     float64(headTable.Upem()),
+		revision: binary.BigEndian.Uint32(head[4:8]), // ParseHead read 54 bytes or more
 		coverage: coverage,
 		size:     total,
 	}

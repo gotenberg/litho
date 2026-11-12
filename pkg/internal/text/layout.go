@@ -160,17 +160,23 @@ type Report struct {
 //
 //   - the other faces of the matched face's family;
 //   - the families the run's style asks for, aliases and generic lists
-//     expanded as [Fonts.Match] expands them;
+//     expanded as [Fonts.Match] expands them, or as [Style.Fallback] says;
 //   - the families fontconfig prefers for the character's script: the
-//     generic list of the style's first generic family (sans-serif without
-//     one) for Latin, Greek and Cyrillic; the Noto CJK families for Han,
-//     kana, Hangul and Bopomofo, the one of [Style.Lang] first and Japanese
-//     first without one; DejaVu Sans, Noto Sans Arabic and Noto Naskh Arabic
-//     for Arabic; DejaVu Sans and Noto Sans Hebrew for Hebrew; Noto Sans
-//     Devanagari; Noto Sans Thai;
+//     generic list of the rule's generic family for Latin, Greek and
+//     Cyrillic (the style's first, sans-serif without one, for
+//     [FallbackFontconfig]); the Noto CJK families for Han, kana, Hangul
+//     and Bopomofo, the one of [Style.Lang] first, else Japanese first
+//     (Simplified Chinese for [FallbackLibreOffice]); DejaVu Sans, Noto
+//     Sans Arabic and Noto Naskh Arabic for Arabic; DejaVu Sans and Noto
+//     Sans Hebrew for Hebrew; Noto Sans Devanagari; Noto Sans Thai;
+//   - the generic list of the rule's generic family, for
+//     [FallbackChromium] and [FallbackLibreOffice];
 //   - the sans-serif list, fontconfig's family of last resort;
-//   - any indexed face, closest in aspect first, then in index order, with
-//     Apple's LastResort placeholder font last.
+//   - the face of last resort that drew the run's last character of the
+//     same script, when it covers this one;
+//   - any indexed face, closest in aspect first, then of the higher font
+//     revision, then in index order, with Apple's LastResort placeholder
+//     font last.
 //
 // Colour emoji faces are not indexed, so emoji fall to an outline face that
 // covers them, if any, which draws their text presentation. An emoji no face
@@ -258,10 +264,13 @@ type layoutState struct {
 	kit *shapingKit
 	// mem is the conversion's memory budget the glyph runs are charged
 	// to, nil for none.
-	mem     *limits.Budget
-	parsed  map[*Face]*font.Font
-	byFont  map[*font.Font]*Face
-	cache   map[resolveKey]*Face
+	mem    *limits.Budget
+	parsed map[*Face]*font.Font
+	byFont map[*font.Font]*Face
+	cache  map[resolveKey]*Face
+	// sticky holds the face of last resort each style and script drew
+	// with last, nil until one does.
+	sticky  map[stickyKey]*Face
 	missing map[rune]struct{}
 	emoji   map[rune]struct{}
 
@@ -274,12 +283,11 @@ type layoutState struct {
 type styleState struct {
 	style Style
 	req   request
-	// families are the keys of the families the style asks for, generic
-	// the generic family its script preferences follow, region the Noto
-	// CJK variant of its language.
+	// families are the keys of the families the style asks for; plan is
+	// what a character the primary face lacks tries, set on the first such
+	// character: most runs need none.
 	families []string
-	generic  generic
-	region   string
+	plan     *fallbackPlan
 	// refs is the family list with the document faces of [Fonts.WithFaces]
 	// in place, nil when the style names no document family.
 	refs    []familyRef
@@ -340,15 +348,13 @@ func newLayoutState(f *Fonts, runs []Run) (*layoutState, error) {
 		}
 		key := matchKey{families: strings.Join(r.Style.Families, "\x00"), req: s.req, lang: r.Style.Lang}
 		if prev, ok := matched[key]; ok {
-			s.families, s.generic, s.region, s.primary, s.refs = prev.families, prev.generic, prev.region, prev.primary, prev.refs
+			s.families, s.primary, s.refs = prev.families, prev.primary, prev.refs
 		} else {
 			s.families = requestedFamilies(r.Style)
 			if s.refs = f.familyRefs(r.Style); s.refs != nil {
 				s.families = indexKeys(s.refs)
 				selectRefs(s.refs, s.req)
 			}
-			s.generic = firstGeneric(r.Style)
-			s.region = cjkRegion(r.Style.Lang)
 			primary, err := st.usablePrimary(&s, f.Match(r.Style))
 			if err != nil {
 				return nil, err
@@ -359,6 +365,68 @@ func newLayoutState(f *Fonts, runs []Run) (*layoutState, error) {
 		st.styles[i] = s
 	}
 	return st, nil
+}
+
+// fallbackPlan is what the fallback of a run tries, after the rule its
+// style names: fallback holds the keys of the families tried after the
+// primary face's own; generic is the generic family the script
+// preferences of a character of a non-CJK script follow and cjkGeneric
+// that of a CJK script; region is the Noto CJK variant tried first;
+// system holds the keys of generic's list, tried after the script
+// preferences, nil when fallback already expands the generic lists.
+type fallbackPlan struct {
+	fallback, system    []string
+	generic, cjkGeneric generic
+	region              string
+}
+
+// setFallback sets the plan of the fallback of s, after the rule
+// style.Fallback names (see [Fallback]).
+//
+// # Corpus evidence
+//
+//   - probe, html: in the gotenberg/gotenberg:9.4.1 image, Chromium prints
+//     Armenian and Georgian that name no font in DejaVu Sans, where the
+//     serif list would give DejaVu Serif, and Han, kana and Hangul in Noto
+//     Sans CJK, JP without a language and the variant of lang="ja",
+//     "zh-CN", "zh-TW" or "ko" with one, whether the body is serif or
+//     sans-serif.
+//   - probe, odt: LibreOffice in the same image prints Armenian in DejaVu
+//     Serif under Liberation Serif and in DejaVu Sans under Liberation
+//     Sans, Carlito, Noto Serif and a family the image lacks; Han under an
+//     Asian family the image lacks in Noto Sans CJK SC, or JP, KR and TC
+//     for style:language-asian ja, ko and zh-TW, and under Liberation Serif
+//     or DejaVu Serif named as the Asian family in Noto Serif CJK SC.
+//   - libreoffice/odt: odfexport/ruby-position.odt, libreoffice/ods:
+//     sc/tdf129940.ods and libreoffice/odp: sd/tdf153161_FlushToSave.odp
+//     name Asian families the image lacks and print Han in Noto Sans CJK
+//     SC.
+func (f *Fonts) setFallback(s *styleState, style Style) {
+	p := &fallbackPlan{fallback: s.families, generic: firstGeneric(style), region: cjkRegion(style.Lang)}
+	p.cjkGeneric = p.generic
+	s.plan = p
+	switch style.Fallback.rule() {
+	case FallbackChromium:
+		p.fallback = f.chromiumFamilies(style.Families)
+		p.generic, p.cjkGeneric = genericSansSerif, genericSansSerif
+	case FallbackLibreOffice:
+		p.fallback, p.generic = libreOfficeFamilies(withoutBrowserDefaults(style.Families))
+		if g := style.Fallback.generic(); g != genericNone {
+			p.generic = g
+		}
+		p.cjkGeneric = genericSansSerif
+		if g := style.Fallback.cjkGeneric(); g != genericNone {
+			p.cjkGeneric = g
+		}
+		if p.region == "" {
+			p.region = "SC"
+		}
+	case FallbackFontconfig:
+		return
+	}
+	var l familyList
+	l.addGeneric(p.generic, "")
+	p.system = l.keys
 }
 
 // usablePrimary returns matched when its font loads, else the face that
@@ -483,6 +551,10 @@ func isPlaceholderFace(fc *Face) bool {
 // most [maxFallbackLoads] times.
 func (st *layoutState) fallback(s *styleState, script language.Script, r rune) *Face {
 	f := st.fonts
+	if s.plan == nil {
+		f.setFallback(s, s.style)
+	}
+	p := s.plan
 	tried := make(map[*Face]bool)
 	loads := 0
 	var found *Face
@@ -501,25 +573,20 @@ func (st *layoutState) fallback(s *styleState, script language.Script, r rune) *
 		}
 		return false
 	}
-	for _, key := range s.primary.keys {
-		if try(f.bestInFamily(key, s.req, r)) {
-			return found
+	g := p.generic
+	if isCJKScript(script) {
+		g = p.cjkGeneric
+	}
+	for _, keys := range [][]string{s.primary.keys, p.fallback, scriptFamilies(script, g, p.region), p.system, fallbackFamilies} {
+		for _, key := range keys {
+			if try(f.bestInFamily(key, s.req, r)) {
+				return found
+			}
 		}
 	}
-	for _, key := range s.families {
-		if try(f.bestInFamily(key, s.req, r)) {
-			return found
-		}
-	}
-	for _, key := range scriptFamilies(script, s.generic, s.region) {
-		if try(f.bestInFamily(key, s.req, r)) {
-			return found
-		}
-	}
-	for _, key := range fallbackFamilies {
-		if try(f.bestInFamily(key, s.req, r)) {
-			return found
-		}
+	sk := stickyKey{s: s, script: script}
+	if fc := st.sticky[sk]; fc != nil && fc.covers(r) && try(fc) {
+		return found
 	}
 	var rest []*Face
 	for _, fc := range f.faces {
@@ -528,19 +595,77 @@ func (st *layoutState) fallback(s *styleState, script language.Script, r rune) *
 		}
 	}
 	slices.SortFunc(rest, func(a, b *Face) int {
-		if pa, pb := isPlaceholderFace(a), isPlaceholderFace(b); pa != pb {
-			if pa {
-				return 1
-			}
-			return -1
-		}
-		ra, rb := rankFace(s.req, a), rankFace(s.req, b)
-		return slices.Compare(ra[:], rb[:])
+		return compareLastResort(s.req, a, b)
 	})
 	if slices.ContainsFunc(rest, try) {
+		if found != nil {
+			if st.sticky == nil {
+				st.sticky = make(map[stickyKey]*Face)
+			}
+			st.sticky[sk] = found
+		}
 		return found
 	}
 	return nil
+}
+
+// stickyKey names the faces of last resort a layout call keeps drawing
+// with: one per style and script.
+type stickyKey struct {
+	s      *styleState
+	script language.Script
+}
+
+// isCJKScript reports whether script is one of the Chinese, Japanese and
+// Korean scripts the Noto CJK families cover.
+func isCJKScript(script language.Script) bool {
+	switch script { //nolint:exhaustive // only the CJK scripts
+	case language.Han, language.Hiragana, language.Katakana, language.Hangul, language.Bopomofo:
+		return true
+	}
+	return false
+}
+
+// compareLastResort orders two faces no family list names, both covering
+// the character, as fontconfig sorts them once their coverage, family and
+// language tie (fcmatch.c, the priorities after PRI_LANG): Apple's
+// LastResort placeholder font last, then by aspect, then the higher font
+// revision (head fontRevision, fontconfig's fontversion) first, then in
+// index order.
+//
+// A face that drew a character of the same script and style this way
+// draws the next one it covers before any other (see [layoutState.fallback]):
+// Chromium shapes the rest of a run with the fallback face it found for the
+// run's first missing character, and LibreOffice does likewise for the
+// characters its glyph fallback collects.
+//
+// # Corpus evidence
+//
+//   - probe, html: in the gotenberg/gotenberg:9.4.1 image, Chromium prints
+//     Gujarati, Kannada and Sinhala that name no font in Noto Serif
+//     Gujarati, Kannada and Sinhala (revision 2.002) over their Noto Sans
+//     faces (2.001), Khmer in Noto Sans Khmer alone where Noto Looped Thai,
+//     first in index order, covers U+17CB, and Tamil in Noto Sans Tamil
+//     alone where Noto Sans Grantha covers U+0BAA and U+0BB5.
+//   - probe, odt: LibreOffice in the same image prints the same faces.
+func compareLastResort(req request, a, b *Face) int {
+	if pa, pb := isPlaceholderFace(a), isPlaceholderFace(b); pa != pb {
+		if pa {
+			return 1
+		}
+		return -1
+	}
+	ra, rb := rankFace(req, a), rankFace(req, b)
+	if c := slices.Compare(ra[:5], rb[:5]); c != 0 {
+		return c
+	}
+	if a.revision != b.revision {
+		if a.revision > b.revision {
+			return -1
+		}
+		return 1
+	}
+	return a.order - b.order
 }
 
 // styleFontmap resolves faces for one style and script, the

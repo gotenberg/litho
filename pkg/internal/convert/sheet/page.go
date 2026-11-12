@@ -106,6 +106,7 @@ func (b *pageBuilder) build() ([]typeset.Fragment, []typeset.Link, *typeset.Stru
 	res, err := layout.Layout(b.ctx, table, b.fonts, layout.Options{
 		Page:     layout.PageBox{Width: max(b.dataW, 1), Height: max(b.dataH, 1)},
 		Lang:     b.lang,
+		Fallback: b.fallback(),
 		MaxPages: maxSubPages,
 		Logger:   b.opts.Logger,
 	})

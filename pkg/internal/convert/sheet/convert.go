@@ -55,7 +55,17 @@ func newBuilder(ctx context.Context, doc *Document, fonts *text.Fonts, opts offi
 		formats: map[string]*numfmt.Format{}, warned: map[string]bool{},
 	}
 	b.m = newMeasurer(ctx, fonts, b.lang)
+	b.m.fallback = b.fallback()
 	return b
+}
+
+// fallback returns the font fallback rule of the program the book is
+// printed as: Excel keeps fontconfig's, Calc follows LibreOffice's.
+func (b *builder) fallback() text.Fallback {
+	if b.doc.ExcelRules {
+		return text.FallbackFontconfig
+	}
+	return text.FallbackLibreOffice
 }
 
 // warn records a warning once per code, effect and message.

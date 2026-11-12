@@ -92,6 +92,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 			PageFor:       b.pages.pageFor,
 			MarginContent: b.pages.marginContent,
 			Lang:          root.Lang,
+			Fallback:      text.FallbackLibreOffice,
 			Image:         b.loadPicture,
 			MaxPages:      opts.MaxPages,
 			Logger:        opts.Logger,

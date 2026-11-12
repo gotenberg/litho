@@ -57,6 +57,9 @@ type Style struct {
 	Weight int
 	// Italic asks for an italic face, then an oblique one.
 	Italic bool
+	// Fallback is the rule that picks the face of a character the matched
+	// face lacks (see [Fonts.Layout]); the zero value follows fontconfig.
+	Fallback Fallback
 	// Oblique, when not zero with Italic, asks for an oblique face of that
 	// angle in degrees, CSS font-style: oblique <angle>: a face without
 	// one is slanted by it rather than by the default synthetic angle

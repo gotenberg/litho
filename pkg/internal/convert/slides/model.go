@@ -5,6 +5,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -15,6 +16,10 @@ import (
 type Document struct {
 	// Meta is the document information written to the PDF.
 	Meta typeset.Metadata
+	// Fallback is the font fallback rule of the program the presentation
+	// is printed as: the zero value, fontconfig's, for PowerPoint;
+	// LibreOffice's for Impress.
+	Fallback text.Fallback
 	// Width and Height are the slide size in points (ECMA-376 Part 1,
 	// 19.2.1.36 sldSz; ODF fo:page-width and fo:page-height of the master
 	// pages' page layout), both positive.

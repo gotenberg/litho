@@ -52,10 +52,13 @@ type engine struct {
 	noPaginate int
 	images     map[string]*Picture
 	metrics    map[*css.Style]text.Metrics
-	spaces     map[spaceKey]float64
-	missing    map[rune]bool
-	root       *typeset.StructElem
-	rootBox    *box
+	// fallbacks holds the font fallback rule of each style, under
+	// LibreOffice's rule, nil before the first.
+	fallbacks map[*css.Style]text.Fallback
+	spaces    map[spaceKey]float64
+	missing   map[rune]bool
+	root      *typeset.StructElem
+	rootBox   *box
 	// pageFrags counts the fragments of every page as they are assembled.
 	pageFrags []int
 	// geom is where the pages cut the flow.
@@ -333,6 +336,24 @@ func (e *engine) fontSize(st *css.Style) float64 {
 	return s
 }
 
+// fallback returns the font fallback rule of a run of style st: the one of
+// [Options.Fallback], which for LibreOffice's carries the generic family
+// of st's own families, read once per style.
+func (e *engine) fallback(st *css.Style) text.Fallback {
+	if e.opts.Fallback != text.FallbackLibreOffice {
+		return e.opts.Fallback
+	}
+	if fb, ok := e.fallbacks[st]; ok {
+		return fb
+	}
+	if e.fallbacks == nil {
+		e.fallbacks = make(map[*css.Style]text.Fallback)
+	}
+	fb := text.LibreOfficeFallback(st.FontFamilies)
+	e.fallbacks[st] = fb
+	return fb
+}
+
 // textStyle returns the text stack's style for st in language lang.
 func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 	c, _ := colorOf(st.Color)
@@ -364,6 +385,7 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 		AutospaceNumeric:  st.TextAutospace&css.AutospaceIdeographNumeric != 0,
 		Size:              size,
 		Lang:              lang,
+		Fallback:          e.fallback(st),
 		Color:             c,
 		LetterSpacing:     spacing(st.LetterSpacing),
 		WordSpacing:       spacing(st.WordSpacing),

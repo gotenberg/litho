@@ -234,6 +234,10 @@ type Options struct {
 	// Lang is the document language as a BCP 47 tag, used for a node
 	// without one in its ancestry, "" for unknown.
 	Lang string
+	// Fallback is the rule that picks the face of a character a run's
+	// font lacks: the one of the program whose output the converter
+	// follows (see [text.Fallback]). The zero value follows fontconfig.
+	Fallback text.Fallback
 	// Image loads the picture a style names by URL, for backgrounds and
 	// list markers. nil refuses every URL. An error is reported as a
 	// warning and the image is left out.

@@ -631,6 +631,7 @@ func (b *builder) layoutBody(body *TextBody, w, h float64, f fit) *laidBody {
 	res, err := layout.Layout(b.ctx, tree, b.fonts, layout.Options{
 		Page:     layout.PageBox{Width: min(max(w, 1), office.MaxPageSide), Height: office.MaxPageSide},
 		Lang:     b.lang,
+		Fallback: b.doc.Fallback,
 		MaxPages: 2,
 		Logger:   b.opts.Logger,
 	})

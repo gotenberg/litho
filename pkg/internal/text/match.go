@@ -435,6 +435,235 @@ func BrowserFamilies(families []string) []string {
 	return out
 }
 
+// Fallback names the program whose font fallback [Fonts.Layout] follows
+// for a character the face [Fonts.Match] picks lacks. The zero value
+// follows fontconfig's resolution of the style's families; a converter sets
+// the rule of the program whose output its format is judged against.
+type Fallback uint8
+
+const (
+	// FallbackFontconfig tries the families the style asks for with their
+	// generic lists expanded, then the preferences of the character's
+	// script under the style's first generic family.
+	FallbackFontconfig Fallback = iota
+	// FallbackChromium follows Chromium on Linux. Each family of the style
+	// stands for one family: a concrete family for itself and its metric
+	// aliases, a generic family for the family [BrowserFamilies] puts
+	// before it, or, for monospace and system-ui, the first family of the
+	// generic's list the index holds. A character none of them covers then
+	// takes the face fontconfig ranks first for a pattern that names no
+	// family: the sans-serif preferences, the Noto CJK family of the
+	// language, Japanese without one.
+	FallbackChromium
+	// FallbackLibreOffice follows LibreOffice. The concrete families of
+	// the style come first, each with its metric aliases. A character none
+	// of them covers then takes the face fontconfig ranks first for a
+	// pattern that names the style's first family: the preferences of that
+	// family's generic family (fontconfig's conf.d/45-latin.conf, sans-serif
+	// for a family it does not name), the Noto CJK family of the language,
+	// Simplified Chinese without one. A character of a CJK script takes the
+	// preferences of the generic family of the style's first family alone,
+	// sans-serif for one fontconfig gives none. [LibreOfficeFallback]
+	// reads the generic family from the list as the document names it;
+	// FallbackLibreOffice alone reads it from [Style.Families], which
+	// [BrowserFamilies] may have given a serif family the document did not
+	// name.
+	FallbackLibreOffice
+)
+
+// fallbackRuleBits are the low bits of a [Fallback] that name its rule;
+// the fallbackGenericBits above them hold the generic family
+// [LibreOfficeFallback] read for the run, and the next ones that for a
+// character of a CJK script, 0 for none.
+const (
+	fallbackRuleBits    = 2
+	fallbackGenericBits = 3
+)
+
+// rule returns the rule fb names.
+func (fb Fallback) rule() Fallback {
+	return fb & (1<<fallbackRuleBits - 1)
+}
+
+// generic returns the generic family fb carries, genericNone for none.
+func (fb Fallback) generic() generic {
+	return generic(fb>>fallbackRuleBits) & (1<<fallbackGenericBits - 1)
+}
+
+// cjkGeneric returns the generic family fb carries for a character of a
+// CJK script, genericNone for none.
+func (fb Fallback) cjkGeneric() generic {
+	return generic(fb >> (fallbackRuleBits + fallbackGenericBits))
+}
+
+// LibreOfficeFallback returns [FallbackLibreOffice] for a run whose
+// document names the families named, before [BrowserFamilies] rewrites
+// them, its script's own family first: it carries the generic family
+// fontconfig ranks the run's fallback faces by, that of the first entry of
+// named that is a generic family or a family fontconfig gives one,
+// sans-serif when none is; and for a character of a CJK script that of
+// the first family alone, sans-serif when fontconfig gives it none, since
+// LibreOffice asks fontconfig for the Asian family by itself.
+//
+// # Corpus evidence
+//
+//   - probe, odt: in the gotenberg/gotenberg:9.4.1 image, LibreOffice
+//     prints Han under an Asian family it lacks in Noto Sans CJK SC
+//     whatever the western family, and under Liberation Serif or DejaVu
+//     Serif named as the Asian family in Noto Serif CJK SC.
+func LibreOfficeFallback(named []string) Fallback {
+	_, g := libreOfficeFamilies(named)
+	cjk := genericSansSerif
+	if len(named) > 0 {
+		if first := genericOf(named[0]); first != genericNone {
+			cjk = first
+		} else if first := familyGeneric(familyKey(named[0])); first != genericNone {
+			cjk = first
+		}
+	}
+	return FallbackLibreOffice | Fallback(g)<<fallbackRuleBits | Fallback(cjk)<<(fallbackRuleBits+fallbackGenericBits)
+}
+
+// fontconfigGenerics are the generic families fontconfig gives the families
+// it knows, by family key: the defaults of conf.d/45-latin.conf and of the
+// URW base 35 files conf.d/61-urw-*.conf. fontconfig appends sans-serif to
+// a pattern that names none of them (conf.d/49-sansserif.conf).
+var fontconfigGenerics = func() map[string]generic {
+	m := make(map[string]generic)
+	for g, names := range map[generic][]string{
+		genericSerif: {
+			"Bitstream Vera Serif", "Cambria", "Constantia", "DejaVu Serif", "Elephant", "Garamond",
+			"Georgia", "Liberation Serif", "Luxi Serif", "MS Serif", "Nimbus Roman No9 L", "Nimbus Roman",
+			"Palatino Linotype", "Thorndale AMT", "Thorndale", "Times New Roman", "Times",
+			"C059", "P052", "Standard Symbols PS", "URW Bookman",
+		},
+		genericSansSerif: {
+			"Albany AMT", "Albany", "Arial Unicode MS", "Arial", "Bitstream Vera Sans", "Britannic",
+			"Calibri", "Candara", "Century Gothic", "Corbel", "DejaVu Sans", "Helvetica LT Std",
+			"Helvetica", "Haettenschweiler", "Liberation Sans", "MS Sans Serif", "Nimbus Sans L",
+			"Nimbus Sans", "Luxi Sans", "Tahoma", "Trebuchet MS", "Twentieth Century", "Verdana",
+			"Nimbus Sans Narrow", "URW Gothic",
+		},
+		genericMonospace: {
+			"Andale Mono", "Bitstream Vera Sans Mono", "Consolas", "Courier New", "Courier Std",
+			"Courier", "Cumberland AMT", "Cumberland", "DejaVu Sans Mono", "Fixedsys", "Inconsolata",
+			"Liberation Mono", "Luxi Mono", "Nimbus Mono L", "Nimbus Mono", "Nimbus Mono PS", "Terminal",
+		},
+		genericFantasy:  {"Bauhaus Std", "Cooper Std", "Copperplate Gothic Std", "Impact"},
+		genericCursive:  {"Comic Sans MS", "ITC Zapf Chancery Std", "Zapfino", "Z003"},
+		genericSystemUI: {"Cantarell", "Noto Sans UI", "Segoe UI", "Segoe UI Historic", "Segoe UI Symbol"},
+	} {
+		for _, name := range names {
+			m[familyKey(name)] = g
+		}
+	}
+	return m
+}()
+
+// familyGeneric returns the generic family fontconfig gives the family of
+// key: its own, else that of its first metric-compatible alias fontconfig
+// names, as conf.d/30-metric-aliases.conf adds the aliases to the pattern
+// before 45-latin.conf runs; genericNone for a family neither names.
+func familyGeneric(key string) generic {
+	if g, ok := fontconfigGenerics[key]; ok {
+		return g
+	}
+	for _, alias := range metricAliases[key] {
+		if g, ok := fontconfigGenerics[alias]; ok {
+			return g
+		}
+	}
+	return genericNone
+}
+
+// chromiumFamilies returns the keys of the families [FallbackChromium]
+// tries for a character the matched face lacks, in order: each concrete
+// family of families with its metric aliases, the families
+// [BrowserFamilies] inserts included, and for a generic family without a
+// browser default the first family of its list f holds.
+func (f *Fonts) chromiumFamilies(families []string) []string {
+	var l familyList
+	for _, name := range families {
+		g := genericOf(name)
+		switch {
+		case g == genericNone:
+			l.addWithAliases(name)
+		case browserDefaults[g] == "":
+			var gl familyList
+			gl.addGeneric(g, "")
+			for _, key := range gl.keys {
+				if len(f.byFamily[key]) > 0 {
+					l.add(key)
+					break
+				}
+			}
+		}
+	}
+	return l.keys
+}
+
+// withoutBrowserDefaults returns families, a list [BrowserFamilies]
+// rewrote, as close as it tells to the list it was given: without the
+// families it puts before a generic family, and without the serif family
+// it appends after the last of them. It returns families itself when
+// [BrowserFamilies] inserted nothing, a new list otherwise.
+func withoutBrowserDefaults(families []string) []string {
+	var out []string
+	for i, name := range families {
+		switch {
+		case isBrowserDefault(families, i):
+		case i == len(families)-1 && i > 0 && genericOf(name) == genericSerif && isBrowserDefault(families, i-1) && !slices.ContainsFunc(families[:i-1], func(n string) bool { return genericOf(n) != genericNone }):
+		default:
+			if out != nil {
+				out = append(out, name)
+			}
+			continue
+		}
+		if out == nil {
+			out = append(make([]string, 0, len(families)), families[:i]...)
+		}
+	}
+	if out == nil {
+		return families
+	}
+	return out
+}
+
+// isBrowserDefault reports whether families[i] is the family
+// [BrowserFamilies] puts before the generic family that follows it.
+func isBrowserDefault(families []string, i int) bool {
+	if i+1 >= len(families) {
+		return false
+	}
+	d := browserDefaults[genericOf(families[i+1])]
+	return d != "" && familyKey(d) == familyKey(families[i])
+}
+
+// libreOfficeFamilies returns the keys of the families
+// [FallbackLibreOffice] tries for a character the matched face lacks, the
+// concrete families of named with their metric aliases, and the generic
+// family fontconfig ranks the rest of the faces by: that of the first entry
+// of named that is a generic family or a family fontconfig gives one
+// ([familyGeneric]), sans-serif when none is.
+func libreOfficeFamilies(named []string) ([]string, generic) {
+	var l familyList
+	g := genericNone
+	for _, name := range named {
+		ng := genericOf(name)
+		if ng == genericNone {
+			l.addWithAliases(name)
+			ng = familyGeneric(familyKey(name))
+		}
+		if g == genericNone {
+			g = ng
+		}
+	}
+	if g == genericNone {
+		g = genericSansSerif
+	}
+	return l.keys, g
+}
+
 // matchFamilies returns the families [Fonts.Match] tries for style: the
 // requested ones, then sans-serif, which takes an unknown family.
 func matchFamilies(style Style) []string {

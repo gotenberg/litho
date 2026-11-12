@@ -184,6 +184,7 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 	res, err := layout.Layout(b.ctx, tree, b.fonts, layout.Options{
 		Page:     layout.PageBox{Width: width, Height: height},
 		Lang:     b.lang,
+		Fallback: b.fallback(),
 		MaxPages: maxSubPages,
 	})
 	if err != nil || len(res.Pages) == 0 {
@@ -228,6 +229,7 @@ func (b *builder) measureBlock(n *layout.Node, w float64) float64 {
 	res, err := layout.Layout(b.ctx, &layout.Node{Kind: layout.Element, Style: st, Children: []*layout.Node{n}}, b.fonts, layout.Options{
 		Page:     layout.PageBox{Width: w, Height: measureHeight},
 		Lang:     b.lang,
+		Fallback: b.fallback(),
 		MaxPages: maxSubPages,
 	})
 	if err != nil {
