@@ -33,6 +33,16 @@ func familyKey(name string) string {
 	}, strings.ToLower(strings.TrimSpace(name)))
 }
 
+// isASCII reports whether s holds ASCII bytes alone.
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			return false
+		}
+	}
+	return true
+}
+
 // generic names a CSS generic family.
 type generic uint8
 
@@ -46,22 +56,37 @@ const (
 	genericSystemUI
 )
 
+// genericNames are the names of the generic families, lower case.
+var genericNames = [...]struct {
+	name string
+	g    generic
+}{
+	{"serif", genericSerif},
+	{"sans-serif", genericSansSerif},
+	{"monospace", genericMonospace},
+	{"cursive", genericCursive},
+	{"fantasy", genericFantasy},
+	{"system-ui", genericSystemUI},
+}
+
 // genericOf returns the generic family name stands for, genericNone for a
-// concrete family.
+// concrete family. Case does not count.
 func genericOf(name string) generic {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "serif":
-		return genericSerif
-	case "sans-serif":
-		return genericSansSerif
-	case "monospace":
-		return genericMonospace
-	case "cursive":
-		return genericCursive
-	case "fantasy":
-		return genericFantasy
-	case "system-ui":
-		return genericSystemUI
+	name = strings.TrimSpace(name)
+	if isASCII(name) {
+		// ASCII folds as it lower-cases, and comparing so copies nothing.
+		for _, n := range genericNames {
+			if strings.EqualFold(name, n.name) {
+				return n.g
+			}
+		}
+		return genericNone
+	}
+	lower := strings.ToLower(name)
+	for _, n := range genericNames {
+		if lower == n.name {
+			return n.g
+		}
 	}
 	return genericNone
 }
@@ -325,25 +350,21 @@ var familyCache = struct {
 // resolvedFamilies returns the family lists of style's families and
 // language.
 func resolvedFamilies(style Style) familyLists {
-	var kb strings.Builder
-	n := len(style.Lang) + 8
-	for _, f := range style.Families {
-		n += len(f) + 8
-	}
-	kb.Grow(n)
+	// The key is built on the stack and looked up without a copy: a
+	// paragraph whose list was resolved before allocates nothing here.
 	// Each name is written after its length, so that no two lists, nor a
 	// list and its language, write one key.
-	kb.WriteString(strconv.Itoa(len(style.Lang)))
-	kb.WriteByte(':')
-	kb.WriteString(style.Lang)
+	var buf [256]byte
+	kb := strconv.AppendInt(buf[:0], int64(len(style.Lang)), 10)
+	kb = append(kb, ':')
+	kb = append(kb, style.Lang...)
 	for _, f := range style.Families {
-		kb.WriteString(strconv.Itoa(len(f)))
-		kb.WriteByte(':')
-		kb.WriteString(f)
+		kb = strconv.AppendInt(kb, int64(len(f)), 10)
+		kb = append(kb, ':')
+		kb = append(kb, f...)
 	}
-	key := kb.String()
 	familyCache.mu.RLock()
-	l, ok := familyCache.m[key]
+	l, ok := familyCache.m[string(kb)]
 	familyCache.mu.RUnlock()
 	if ok {
 		return l
@@ -355,7 +376,7 @@ func resolvedFamilies(style Style) familyLists {
 	l = familyLists{requested: requested, match: slices.Clip(m.keys)}
 	familyCache.mu.Lock()
 	if len(familyCache.m) < maxFamilyCache {
-		familyCache.m[key] = l
+		familyCache.m[string(kb)] = l
 	}
 	familyCache.mu.Unlock()
 	return l

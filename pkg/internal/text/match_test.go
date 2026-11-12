@@ -347,3 +347,51 @@ func (f *Fonts) loadedFaces() int {
 	defer f.mu.Unlock()
 	return f.loaded
 }
+
+func TestGenericOfIgnoresCaseAndSpaces(t *testing.T) {
+	for name, want := range map[string]generic{
+		"serif": genericSerif, " Sans-Serif ": genericSansSerif, "MONOSPACE": genericMonospace,
+		"System-UI": genericSystemUI, "Liberation Sans": genericNone, "": genericNone,
+		// U+017F folds to s but lower-cases to itself: not serif.
+		"ſerif": genericNone,
+	} {
+		if got := genericOf(name); got != want {
+			t.Errorf("genericOf(%q) = %d, want %d", name, got, want)
+		}
+	}
+}
+
+func TestResolvedFamiliesKeepListsAndLanguagesApart(t *testing.T) {
+	sans := requestedFamilies(Style{Families: []string{"sans-serif"}})
+	cases := []Style{
+		{Families: []string{"a:b"}},
+		{Families: []string{"a", "b"}},
+		{Families: []string{""}},
+		{},
+		{Families: []string{"sans-serif"}, Lang: "ja"},
+	}
+	seen := map[string]Style{}
+	for _, st := range cases {
+		key := strings.Join(requestedFamilies(st), ",")
+		if prev, ok := seen[key]; ok {
+			t.Errorf("%+v and %+v resolve to one list %q", prev, st, key)
+		}
+		seen[key] = st
+	}
+	if got := requestedFamilies(Style{}); !slices.Equal(got, sans) {
+		t.Errorf("no family resolves to %q, sans-serif to %q", got, sans)
+	}
+}
+
+func TestMatchFamiliesLeavesTheRequestedListAlone(t *testing.T) {
+	st := Style{Families: []string{"Liberation Sans", "serif"}}
+	want := slices.Clone(requestedFamilies(st))
+	for range 2 {
+		if m := matchFamilies(st); len(m) <= len(want) {
+			t.Fatalf("matchFamilies = %q, no fallback after %q", m, want)
+		}
+	}
+	if got := requestedFamilies(st); !slices.Equal(got, want) {
+		t.Errorf("requestedFamilies = %q after matchFamilies, want %q", got, want)
+	}
+}
