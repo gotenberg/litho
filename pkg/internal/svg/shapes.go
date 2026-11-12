@@ -31,7 +31,7 @@ func (r *renderer) geometry(n *html.Node, st *style) []compose.PathOp {
 	case "rect":
 		x, y := num("x", axisX), num("y", axisY)
 		w, h := num("width", axisX), num("height", axisY)
-		if !(w > 0) || !(h > 0) {
+		if !positive(w) || !positive(h) {
 			return nil
 		}
 		// SVG 1.1, 9.2: an auto radius takes the other's value, and each
@@ -62,7 +62,7 @@ func (r *renderer) geometry(n *html.Node, st *style) []compose.PathOp {
 		return roundRect(x, y, w, h, rx, ry)
 	case "circle":
 		rad := num("r", axisDiag)
-		if !(rad > 0) {
+		if !positive(rad) {
 			return nil
 		}
 		return ellipseOps(num("cx", axisX), num("cy", axisY), rad, rad)
@@ -80,7 +80,7 @@ func (r *renderer) geometry(n *html.Node, st *style) []compose.PathOp {
 		case ryok && !rxok:
 			rx = ry
 		}
-		if !(rx > 0) || !(ry > 0) {
+		if !positive(rx) || !positive(ry) {
 			return nil
 		}
 		return ellipseOps(num("cx", axisX), num("cy", axisY), rx, ry)
@@ -318,7 +318,7 @@ func (r *renderer) strokeOf(st *style, box bbox) (*compose.Stroke, *compose.Shad
 		return nil, nil
 	}
 	w := st.strokeWidth.resolve(r.lc(st), axisDiag)
-	if !(w > 0) {
+	if !positive(w) {
 		return nil, nil
 	}
 	var sh *compose.Shading

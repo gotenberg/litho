@@ -20,7 +20,7 @@ type viewBox struct {
 // the element as if it had none.
 func parseViewBox(s string) viewBox {
 	v, ok := parseNumberList(s, 4)
-	if !ok || len(v) != 4 || !(v[2] > 0) || !(v[3] > 0) {
+	if !ok || len(v) != 4 || !positive(v[2]) || !positive(v[3]) {
 		return viewBox{}
 	}
 	return viewBox{x: v[0], y: v[1], w: v[2], h: v[3], ok: true}
@@ -93,7 +93,7 @@ func alignOf(s string) (int, bool) {
 // apart with none, else uniformly by the smaller scale for meet or the
 // larger for slice, and aligned. It reports false for an empty viewport.
 func viewBoxTransform(vb viewBox, par aspect, w, h float64) (compose.Matrix, bool) {
-	if !(w > 0) || !(h > 0) || !vb.ok {
+	if !positive(w) || !positive(h) || !vb.ok {
 		return identity, false
 	}
 	sx, sy := w/vb.w, h/vb.h
@@ -112,7 +112,7 @@ func viewBoxTransform(vb viewBox, par aspect, w, h float64) (compose.Matrix, boo
 // fitRect returns where content of size cw by ch lands in the rectangle
 // (x, y, w, h) under par, for an image element (SVG 1.1, 7.8 and 14.7).
 func fitRect(cw, ch float64, par aspect, x, y, w, h float64) compose.Rect {
-	if par.none || !(cw > 0) || !(ch > 0) {
+	if par.none || !positive(cw) || !positive(ch) {
 		return compose.Rect{X: x, Y: y, Width: w, Height: h}
 	}
 	s := min(w/cw, h/ch)

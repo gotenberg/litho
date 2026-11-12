@@ -193,7 +193,7 @@ func (r *renderer) shading(p paint, st *style, box bbox) (*compose.Shading, *pai
 	lc := r.lc(st)
 	if bboxUnits {
 		w, h := box.x1-box.x0, box.y1-box.y0
-		if !box.ok || !(w > 0) || !(h > 0) {
+		if !box.ok || !positive(w) || !positive(h) {
 			// A bounding box without area cannot carry a gradient in its
 			// units: the gradient is not drawn (SVG 1.1, 7.11).
 			return nil, nil, true
@@ -255,7 +255,7 @@ func (r *renderer) shading(p paint, st *style, box bbox) (*compose.Shading, *pai
 		fy = coord("fy", axisY, "50%")
 	}
 	fr := max(coord("fr", axisDiag, "0%"), 0)
-	if !(rad > 0) || len(stops) == 1 {
+	if !positive(rad) || len(stops) == 1 {
 		return solid()
 	}
 	// SVG 1.1, 13.2.3: a focal point outside the end circle moves onto it.
@@ -390,7 +390,7 @@ func (r *renderer) clipPath(n *html.Node, id string, box *bbox, seen []*html.Nod
 		} else {
 			b = r.bboxOf(n, cs, identity, 0)
 		}
-		if !b.ok || !(b.x1 > b.x0) || !(b.y1 > b.y0) {
+		if !b.hasArea() {
 			return nil, true
 		}
 		m = mul(compose.Matrix{A: b.x1 - b.x0, D: b.y1 - b.y0, E: b.x0, F: b.y0}, m)

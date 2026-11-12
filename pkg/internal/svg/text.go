@@ -325,7 +325,7 @@ func textStyle(st *style) text.Style {
 // shapePiece shapes p with the text package and records its glyph runs
 // and advance.
 func (r *renderer) shapePiece(p *piece) {
-	if !(p.st.fontSize > 0) || len(p.text) == 0 {
+	if !positive(p.st.fontSize) || len(p.text) == 0 {
 		return
 	}
 	str := string(p.text)

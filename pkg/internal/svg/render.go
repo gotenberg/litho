@@ -424,14 +424,14 @@ func transformLeaf(f compose.Fragment, m compose.Matrix) (compose.Fragment, bool
 		p.Ops = transformOps(v.Ops, m)
 		return &p, true
 	case *compose.Image:
-		if m.B != 0 || m.C != 0 || !(m.A > 0) || !(m.D > 0) {
+		if m.B != 0 || m.C != 0 || !positive(m.A) || !positive(m.D) {
 			return nil, false
 		}
 		im := *v
 		im.Rect = compose.Rect{X: m.A*v.Rect.X + m.E, Y: m.D*v.Rect.Y + m.F, Width: m.A * v.Rect.Width, Height: m.D * v.Rect.Height}
 		return &im, true
 	case *compose.Text:
-		if m.B != 0 || m.C != 0 || m.A != m.D || !(m.A > 0) || v.Size*m.A > maxFontSize {
+		if m.B != 0 || m.C != 0 || m.A != m.D || !positive(m.A) || v.Size*m.A > maxFontSize {
 			return nil, false
 		}
 		k := m.A
@@ -455,7 +455,7 @@ func transformLeaf(f compose.Fragment, m compose.Matrix) (compose.Fragment, bool
 func similarity(m compose.Matrix) (float64, bool) {
 	const eps = 1e-9
 	k := math.Hypot(m.A, m.B)
-	if !(k > 0) {
+	if !positive(k) {
 		return 0, false
 	}
 	rot := math.Abs(m.A-m.D) <= eps*k && math.Abs(m.B+m.C) <= eps*k
@@ -478,7 +478,7 @@ func (r *renderer) nestedSVG(n *html.Node, st *style, s sink, depth int) {
 // viewport at (x, y) of w by h, with the viewBox and preserveAspectRatio
 // of vbOf: a nested svg, or a symbol a use instantiates.
 func (r *renderer) viewport(n *html.Node, st *style, s sink, depth int, x, y, w, h float64, vbOf *html.Node) {
-	if !(w > 0) || !(h > 0) {
+	if !positive(w) || !positive(h) {
 		// A zero width or height disables rendering (SVG 1.1, 7.9).
 		return
 	}
@@ -577,7 +577,7 @@ func (r *renderer) use(n *html.Node, st *style, s sink, depth int) {
 // symbol draws the content of a symbol a use instantiates, styled st, in
 // a viewport of w by h (SVG 1.1, 5.5).
 func (r *renderer) symbol(sym *html.Node, st *style, s sink, depth int, w, h float64) {
-	if !(w > 0) || !(h > 0) {
+	if !positive(w) || !positive(h) {
 		return
 	}
 	var clip *compose.Path

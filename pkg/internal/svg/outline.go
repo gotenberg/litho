@@ -41,7 +41,7 @@ const maxOutlineGlyphs = 20_000
 func strokeOutline(ops []compose.PathOp, s *compose.Stroke) []compose.PathOp {
 	b := opsBBox(ops)
 	diag := math.Hypot(b.x1-b.x0, b.y1-b.y0) + s.Width
-	if !b.ok || !(diag > 0) || !finite(diag) {
+	if !b.ok || !positive(diag) || !finite(diag) {
 		return nil
 	}
 	miter := s.Miter

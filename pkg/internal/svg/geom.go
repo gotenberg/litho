@@ -61,6 +61,11 @@ func invert(m compose.Matrix) (compose.Matrix, bool) {
 // finite reports whether v is neither NaN nor infinite.
 func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 
+// positive reports whether v is greater than zero. NaN is not: a size, a
+// radius or a scale that fails it draws nothing, whether it is zero,
+// negative or NaN.
+func positive(v float64) bool { return v > 0 }
+
 // clampCoord bounds a coordinate to [maxCoordinate], NaN to 0.
 func clampCoord(v float64) float64 {
 	switch {
@@ -79,6 +84,10 @@ type bbox struct {
 	x0, y0, x1, y1 float64
 	ok             bool
 }
+
+// hasArea reports whether b holds a box of positive width and height. A
+// box with a NaN edge has none.
+func (b bbox) hasArea() bool { return b.ok && b.x1 > b.x0 && b.y1 > b.y0 }
 
 // add grows b to hold p.
 func (b *bbox) add(p compose.Point) {
