@@ -51,8 +51,8 @@ func TestVML_Shapes(t *testing.T) {
 	if oval.Style.Position != css.Absolute || !near(oval.Style.Left, 10) || !near(oval.Style.Top, 20) || oval.Style.ZIndex.Level != -1 || paras[1].Style.Position != css.Relative {
 		t.Errorf("oval position %v at %v, %v z %v", oval.Style.Position, oval.Style.Left, oval.Style.Top, oval.Style.ZIndex)
 	}
-	if rr := paras[2].Children[0]; rr.Style.Float != css.FloatRight {
-		t.Errorf("square-wrapped shape floats %v", rr.Style.Float)
+	if rr := paras[2].Children[0].Style; rr.Float == css.FloatNone || !rr.WordAnchor.Set || !near(css.Pts(rr.WordAnchor.X), 468-30) {
+		t.Errorf("square-wrapped shape floats %v at %+v", rr.Float, rr.WordAnchor)
 	}
 	if kids := paras[4].Children; len(kids) != 2 || kids[0].Style.Position != css.Static || !near(kids[0].Style.Height, 40) {
 		t.Errorf("custom shapes: %d boxes, want the room of the one in the line", len(kids)-1)

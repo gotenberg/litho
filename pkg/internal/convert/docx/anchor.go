@@ -24,7 +24,12 @@ type placement struct {
 	behind         bool
 	alignH, alignV string
 	posH, posV     float64
-	relH, relV     string
+	// pctH and pctV, when hasPctH or hasPctV, are an offset in fractions
+	// of the area the position is relative to (MS-ODRAWXML, 2.3.2.3
+	// pctPosHOffset, 2.3.2.4 pctPosVOffset), in place of posH or posV.
+	pctH, pctV       float64
+	hasPctH, hasPctV bool
+	relH, relV       string
 	// dist is the distance kept from the text, top, right, bottom, left.
 	dist [4]float64
 	// w and h are the drawing's size in points.
@@ -32,6 +37,16 @@ type placement struct {
 	// z orders the drawings in front of the text (20.4.2.3
 	// relativeHeight), 0 for none.
 	z int
+	// poly is the wrap polygon of a tight or through wrapping (20.4.2.16),
+	// in fractions of the drawing's size, nil for none.
+	poly []css.WrapPoint
+	// noOverlap keeps the drawing off the other drawings (20.4.2.3
+	// allowOverlap off).
+	noOverlap bool
+	// simple places the drawing at simpleX, simpleY from the page's
+	// top-left corner (20.4.2.13 simplePos, the anchor's simplePos on).
+	simple           bool
+	simpleX, simpleY float64
 }
 
 // maxZ bounds the stack level read from a drawing. Anti-DoS guard, not
@@ -54,6 +69,8 @@ type pendingAnchor struct {
 	// kids are the shapes of a group anchored to the page, laid out
 	// beside it at their offsets from it.
 	kids []*layout.Node
+	// word sets the offsets of a float of css.Office.WordAnchor.
+	word bool
 }
 
 // anchor places the anchored drawing n by its wp:anchor k (20.4.2.3).
@@ -63,18 +80,30 @@ func (d *document) anchor(k *ooxml.Element, n *layout.Node, w, h float64, sink *
 		return max(0, v)
 	}
 	p := placement{w: w, h: h}
-	p.posH, p.alignH, p.relH = position(k.Child(ooxml.NSWP, "positionH"))
-	p.posV, p.alignV, p.relV = position(k.Child(ooxml.NSWP, "positionV"))
+	ph, pv := k.Child(ooxml.NSWP, "positionH"), k.Child(ooxml.NSWP, "positionV")
+	p.posH, p.alignH, p.relH = position(ph)
+	p.posV, p.alignV, p.relV = position(pv)
+	p.pctH, p.hasPctH = pctPosition(ph, "pctPosHOffset")
+	p.pctV, p.hasPctV = pctPosition(pv, "pctPosVOffset")
 	p.behind = hasAttr(k, "behindDoc") && ooxml.OnOff(attrOr(k, "behindDoc"), true)
 	if v, ok := ooxml.Int(attrOr(k, "relativeHeight")); ok {
 		p.z = max(0, min(v, maxZ))
 	}
+	p.noOverlap = hasAttr(k, "allowOverlap") && !ooxml.OnOff(attrOr(k, "allowOverlap"), true)
 	p.dist = [4]float64{dist("distT"), dist("distR"), dist("distB"), dist("distL")}
+	if hasAttr(k, "simplePos") && ooxml.OnOff(attrOr(k, "simplePos"), true) {
+		if sp := k.Child(ooxml.NSWP, "simplePos"); sp != nil {
+			p.simple = true
+			p.simpleX, _ = ooxml.EMU(attrOr(sp, "x"))
+			p.simpleY, _ = ooxml.EMU(attrOr(sp, "y"))
+		}
+	}
 	p.wrap = "wrapNone"
 	for _, c := range k.Kids() {
 		if c.Space == ooxml.NSWP && strings.HasPrefix(c.Local, "wrap") {
 			p.wrap = c.Local
 			p.wrapText = attrOr(c, "wrapText")
+			p.poly = wrapPolygon(c.Child(ooxml.NSWP, "wrapPolygon"))
 			break
 		}
 	}
@@ -112,6 +141,10 @@ func fromPageV(rel string) bool {
 // paragraph's start at the margin.
 func (d *document) place(p placement, n *layout.Node, sink *inlineSink) {
 	st := n.Style
+	if d.pageAnchors() && wordWraps(p.wrap) {
+		d.placeWord(p, n)
+		return
+	}
 	pageH := fromPageH(p.relH) && d.pageAnchors()
 	if !p.behind && p.z > 0 {
 		// The drawings in front of the text stack in the order of their
@@ -176,7 +209,7 @@ func (d *document) place(p placement, n *layout.Node, sink *inlineSink) {
 		if p.behind {
 			st.ZIndex = css.ZIndex{Level: -1}
 		}
-		if fromPageV(p.relV) && d.pageAnchors() {
+		if (fromPageV(p.relV) || p.simple) && d.pageAnchors() {
 			st.PageAnchor = true
 			kids := detachKids(n, 0, 0, 0)
 			for _, k := range kids {
@@ -202,7 +235,9 @@ func (d *document) place(p placement, n *layout.Node, sink *inlineSink) {
 			st.Top = css.Pts(0)
 		}
 		switch {
-		case pageH:
+		case pageH || (p.alignH != "" && d.pageAnchors()):
+			// An alignment in the column needs the column's width, which
+			// the section's properties give.
 			d.pending = append(d.pending, pendingAnchor{n: n, st: st, p: p})
 		case p.alignH == "center":
 			st.Left = css.Dimension{Kind: css.Percent, Value: 0.5}
@@ -211,6 +246,109 @@ func (d *document) place(p placement, n *layout.Node, sink *inlineSink) {
 		}
 		sink.positioned = true
 	}
+}
+
+// wordWraps reports a wrapping that takes room in the text (20.4.2.15 to
+// 20.4.2.19): every one but wrapNone.
+func wordWraps(wrap string) bool {
+	switch wrap {
+	case "wrapSquare", "wrapTight", "wrapThrough", "wrapTopAndBottom":
+		return true
+	}
+	return false
+}
+
+// placeWord lays the anchored drawing n of the body out by its placement
+// p as Word places a drawing that wraps the text: a float of
+// css.Office.WordAnchor at the offsets its positions give (20.4.2.10,
+// 20.4.2.11), set when its section's page is known, that overlaps what
+// is there. The text keeps its distances from it (20.4.2.3 distT, distB,
+// distL, distR), along its wrap polygon for a tight or through wrapping
+// (20.4.2.16), and takes the sides its wrapText says (20.4.3.7):
+// bothSides both, left and right the one named, largest the one with
+// more room; wrapTopAndBottom takes none.
+//
+// # Corpus evidence
+//
+//   - litho/docx images-wrap: Word sets a left-aligned 93.6 pt picture
+//     with distL and distR of 9 pt at the margin, 72 pt, and the text
+//     beside it at 174.6 pt; the lines of the heading above its
+//     paragraph that its distT of 3.6 pt reaches wrap too. The text of a
+//     centered picture of wrapTight bothSides runs on both sides of its
+//     diamond contour, each piece justified, 9 pt from the contour over
+//     the line grown by about 3 pt.
+//   - litho/docx images-positioning: two pictures of wrapSquare offset
+//     28.8 pt apart overlap, the text beside the one each line meets; of
+//     two pictures of allowOverlap 0, Word moves the second right of the
+//     first, and a line beside both takes "measure" in the 48.6 pt left
+//     of the second.
+func (d *document) placeWord(p placement, n *layout.Node) {
+	st := n.Style
+	if !p.behind && p.z > 0 {
+		st.ZIndex = css.ZIndex{Level: p.z}
+		if st.Position == css.Static {
+			st.Position = css.Relative
+		}
+	}
+	st.Float = css.FloatLeft
+	st.Margin = [4]css.Dimension{css.Pts(0), css.Pts(0), css.Pts(0), css.Pts(0)}
+	st.WordAnchor = css.WordAnchor{Set: true}
+	setWrapGap(st, p.dist)
+	switch {
+	case p.wrap == "wrapTopAndBottom":
+		st.FrameWrap = css.FrameWrapNone
+	case p.wrapText == "left":
+		st.FrameWrap = css.FrameWrapLeft
+	case p.wrapText == "right":
+		st.FrameWrap = css.FrameWrapRight
+	case p.wrapText == "largest":
+		st.FrameWrap = css.FrameWrapLargest
+	default:
+		st.FrameWrap = css.FrameWrapBoth
+	}
+	if p.wrap == "wrapTight" || p.wrap == "wrapThrough" {
+		st.WrapPolygon = p.poly
+	}
+	// Word keeps a drawing anchored in the body on its paragraph's page.
+	st.PageClamp = true
+	if st.Display == css.Inline || st.Display == css.InlineBlock {
+		st.Display = css.Block
+	}
+	d.pending = append(d.pending, pendingAnchor{n: n, st: st, p: p, word: true})
+}
+
+// maxPolygonPoints bounds the points read from a wrap polygon.
+// Anti-DoS guard, not spec-mandated: Word writes a few dozen, and the
+// layout follows at most as many.
+const maxPolygonPoints = 1024
+
+// wrapPolygonSpace is the size of the space Word writes a wrap polygon's
+// coordinates in, whatever the drawing's size: 21600 by 21600.
+const wrapPolygonSpace = 21600.0
+
+// wrapPolygon reads a wp:wrapPolygon (20.4.2.16): its wp:start and
+// wp:lineTo points, in fractions of the drawing's size, nil for fewer
+// than three.
+func wrapPolygon(e *ooxml.Element) []css.WrapPoint {
+	if e == nil {
+		return nil
+	}
+	var out []css.WrapPoint
+	for _, c := range e.Kids() {
+		if c.Space != ooxml.NSWP || (c.Local != "start" && c.Local != "lineTo") || len(out) >= maxPolygonPoints {
+			continue
+		}
+		x, okX := ooxml.Int(attrOr(c, "x"))
+		y, okY := ooxml.Int(attrOr(c, "y"))
+		if !okX || !okY {
+			continue
+		}
+		out = append(out, css.WrapPoint{X: float64(x) / wrapPolygonSpace, Y: float64(y) / wrapPolygonSpace})
+	}
+	if len(out) < 3 {
+		return nil
+	}
+	return out
 }
 
 // pageAnchors reports whether a drawing being built can be positioned
@@ -224,16 +362,11 @@ func (d *document) pageAnchors() bool { return d.inBody && d.nested == 0 }
 func (a pendingAnchor) resolve(s *section) {
 	p, st := a.p, a.st
 	left := s.margin[css.Left] + s.gutter
-	x0, aw := hArea(s, p.relH)
-	x := x0 + p.posH
-	switch p.alignH {
-	case "left", "inside":
-		x = x0
-	case "center":
-		x = x0 + (aw-p.w)/2
-	case "right", "outside":
-		x = x0 + aw - p.w
+	if a.word {
+		a.resolveWord(s)
+		return
 	}
+	x := hPos(s, p)
 	switch {
 	case a.float:
 		st.Margin[css.Left] = css.Pts(max(0, x-left))
@@ -253,21 +386,76 @@ func (a pendingAnchor) resolve(s *section) {
 			x = left + s.contentWidth() - p.w
 		}
 	}
-	y0, ah := vArea(s, p.relV)
-	y := y0 + p.posV
-	switch p.alignV {
-	case "top", "inside":
-		y = y0
-	case "center":
-		y = y0 + (ah-p.h)/2
-	case "bottom", "outside":
-		y = y0 + ah - p.h
+	if p.simple {
+		x, y := p.simpleX, p.simpleY
+		st.Left, st.Top = css.Pts(x), css.Pts(y)
+		st.Right, st.Bottom = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
+		return
 	}
+	y := vPos(s, p)
 	st.Left, st.Top = css.Pts(x), css.Pts(y)
 	st.Right, st.Bottom = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
 	for _, k := range a.kids {
 		k.Style.Left, k.Style.Top = css.Pts(x+k.Style.Left.Value), css.Pts(y+k.Style.Top.Value)
 	}
+}
+
+// resolveWord sets the offsets of a float of css.Office.WordAnchor on a
+// page of section s: the horizontal one from the start of the text area,
+// the vertical one from its paragraph's top, or from the page area's top
+// for a position from the page or its margins (20.4.3.4, 20.4.3.5).
+func (a pendingAnchor) resolveWord(s *section) {
+	p, st := a.p, a.st
+	left := s.margin[css.Left] + s.gutter
+	top := math.Abs(s.margin[css.Top])
+	if p.simple {
+		st.WordAnchor = css.WordAnchor{Set: true, X: p.simpleX - left, Y: p.simpleY - top, FromPage: true, NoOverlap: p.noOverlap}
+		return
+	}
+	x := hPos(s, p)
+	if !fromPageV(p.relV) {
+		st.WordAnchor = css.WordAnchor{Set: true, X: x - left, Y: p.posV, NoOverlap: p.noOverlap}
+		return
+	}
+	st.WordAnchor = css.WordAnchor{Set: true, X: x - left, Y: vPos(s, p) - top, FromPage: true, NoOverlap: p.noOverlap}
+}
+
+// hPos returns the left edge, from the page's, of a drawing of placement
+// p on a page of section s: its offset or alignment in the area its
+// horizontal position is relative to (20.4.2.10).
+func hPos(s *section, p placement) float64 {
+	x0, aw := hArea(s, p.relH)
+	switch p.alignH {
+	case "left", "inside":
+		return x0
+	case "center":
+		return x0 + (aw-p.w)/2
+	case "right", "outside":
+		return x0 + aw - p.w
+	}
+	if p.hasPctH {
+		return x0 + p.pctH*aw
+	}
+	return x0 + p.posH
+}
+
+// vPos returns the top edge, from the page's, of a drawing of placement p
+// positioned from the page or its margins on a page of section s
+// (20.4.2.11).
+func vPos(s *section, p placement) float64 {
+	y0, ah := vArea(s, p.relV)
+	switch p.alignV {
+	case "top", "inside":
+		return y0
+	case "center":
+		return y0 + (ah-p.h)/2
+	case "bottom", "outside":
+		return y0 + ah - p.h
+	}
+	if p.hasPctV {
+		return y0 + p.pctV*ah
+	}
+	return y0 + p.posV
 }
 
 // detachKids takes the shapes of the group n, and of the groups in it,
@@ -311,8 +499,24 @@ func hArea(s *section, rel string) (float64, float64) {
 		return 0, left
 	case "rightMargin", "outsideMargin":
 		return s.width - s.margin[css.Right], s.margin[css.Right]
+	case "margin":
+		return left, s.contentWidth()
 	}
-	return left, s.contentWidth()
+	return left, s.columnWidth()
+}
+
+// columnWidth returns the width of the first column of section s, the
+// column a position relative to the column is measured in: the layout
+// sets a box of a later column at the same offset from that column's
+// start.
+func (s *section) columnWidth() float64 {
+	if s.cols <= 1 {
+		return s.contentWidth()
+	}
+	if len(s.colTracks) > 0 {
+		return max(minPageArea, s.colTracks[0].w)
+	}
+	return max(minPageArea, (s.contentWidth()-float64(s.cols-1)*s.colSpace)/float64(s.cols))
 }
 
 // vArea returns the top edge and the height of the area a vertical
@@ -347,6 +551,22 @@ func position(e *ooxml.Element) (float64, string, string) {
 		off, _ = ooxml.EMU(strings.TrimSpace(o.Text))
 	}
 	return off, "", rel
+}
+
+// pctPosition reads the wp14 percentage offset child name of a
+// wp:positionH or wp:positionV (MS-ODRAWXML, 2.3.2.3, 2.3.2.4): a
+// fraction of the area the position is relative to, the element holding
+// thousandths of a percent.
+func pctPosition(e *ooxml.Element, name string) (float64, bool) {
+	c := e.Child(ooxml.NSWP14, name)
+	if c == nil {
+		return 0, false
+	}
+	v, ok := ooxml.Int(strings.TrimSpace(c.Text))
+	if !ok {
+		return 0, false
+	}
+	return float64(v) / 100000, true
 }
 
 // group builds a wpg:wgp (MS-ODRAWXML, 2.3.4.3): an inline block of w by h

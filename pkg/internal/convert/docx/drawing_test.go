@@ -57,11 +57,11 @@ func TestDrawings(t *testing.T) {
 	if p.Role != "Figure" || p.Alt != "A chart" || p.Style.Width != css.Pts(100) || p.Style.Height != css.Pts(50) || p.Picture.Vector == nil || len(p.Style.Transform) != 2 {
 		t.Errorf("inline picture role %q alt %q size %v x %v vector %v transform %v", p.Role, p.Alt, p.Style.Width, p.Style.Height, p.Picture.Vector != nil, p.Style.Transform)
 	}
-	if f := pics[1].Style; f.Float != css.FloatRight || f.Display != css.Block {
-		t.Errorf("square wrap float %v display %v", f.Float, f.Display)
+	if f := pics[1].Style; f.Float == css.FloatNone || f.Display != css.Block || f.FrameWrap != css.FrameWrapBoth || f.WordAnchor != (css.WordAnchor{Set: true, X: 468 - 100, Y: 10}) {
+		t.Errorf("square wrap float %v display %v wrap %v at %+v", f.Float, f.Display, f.FrameWrap, f.WordAnchor)
 	}
-	if f := pics[2].Style; f.Display != css.Block || f.Margin[css.Left].Kind != css.Auto || f.Margin[css.Right].Kind != css.Auto {
-		t.Errorf("top and bottom wrap display %v margins %+v", f.Display, f.Margin)
+	if f := pics[2].Style; f.Display != css.Block || f.FrameWrap != css.FrameWrapNone || f.WordAnchor != (css.WordAnchor{Set: true, X: (468 - 100) / 2, Y: 10}) {
+		t.Errorf("top and bottom wrap display %v wrap %v at %+v", f.Display, f.FrameWrap, f.WordAnchor)
 	}
 	if f := pics[3].Style; f.Position != css.Absolute || f.Left != css.Pts(20) || f.Top != css.Pts(10) {
 		t.Errorf("no wrap position %v left %v top %v", f.Position, f.Left, f.Top)
@@ -140,8 +140,8 @@ func TestDrawings_FromThePage(t *testing.T) {
 				t.Fatalf("page anchor %v float %v, want %v %v", st.PageAnchor, st.Float, tc.page, tc.float)
 			}
 			if tc.float != css.FloatNone {
-				if !near(st.Margin[css.Left], tc.marginLeft) {
-					t.Errorf("left margin %v, want %v", st.Margin[css.Left], tc.marginLeft)
+				if !st.WordAnchor.Set || !near(css.Pts(st.WordAnchor.X), tc.marginLeft) {
+					t.Errorf("offset %+v, want %v", st.WordAnchor, tc.marginLeft)
 				}
 				return
 			}
@@ -188,8 +188,8 @@ func TestDrawings_StackOrderAndFloatOffset(t *testing.T) {
 	if front.ZIndex != (css.ZIndex{Level: 200}) || float.ZIndex != (css.ZIndex{Level: 300}) || behind.ZIndex.Level >= 0 {
 		t.Errorf("stack levels %v %v %v", front.ZIndex, float.ZIndex, behind.ZIndex)
 	}
-	if float.Position != css.Relative || float.Float != css.FloatLeft || !near(float.Margin[css.Top], 20) {
-		t.Errorf("float position %v float %v top margin %v", float.Position, float.Float, float.Margin[css.Top])
+	if float.Position != css.Relative || float.Float != css.FloatLeft || !near(css.Pts(float.WordAnchor.Y), 20) {
+		t.Errorf("float position %v float %v offset %+v", float.Position, float.Float, float.WordAnchor)
 	}
 }
 

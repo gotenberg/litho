@@ -436,8 +436,12 @@ func (d *document) body(root *ooxml.Element) []*section {
 				break
 			}
 		}
+		// The drawings take the page of the section whose pages s
+		// shares, and the columns of s.
+		geo := *owner
+		geo.cols, geo.colSpace, geo.colTracks = s.cols, s.colSpace, s.colTracks
 		for _, a := range s.pending {
-			a.resolve(owner)
+			a.resolve(&geo)
 		}
 		if i > 0 && s.name != secs[i-1].name && len(s.blocks) > 0 && len(secs[i-1].blocks) > 0 {
 			first, last := s.blocks[0].info, secs[i-1].blocks[len(secs[i-1].blocks)-1].info
