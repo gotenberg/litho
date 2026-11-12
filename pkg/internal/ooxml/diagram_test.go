@@ -274,19 +274,8 @@ func TestParseDiagramReadsNoNonFiniteNumber(t *testing.T) {
 			`<dgm:constrLst><dgm:constr type="w" forName="node" refType="w" fact="` + v + `" val="` + v + `"/></dgm:constrLst>`
 		d := ParseDiagram(nil, mustParse(t, diagramLayout(body)), nil, nil)
 		for _, a := range d.Layout.Kids {
-			switch a.Kind {
-			case AtomAlg:
-				if a.Ratio != 0 {
-					t.Errorf("%s: ratio %v, want 0", v, a.Ratio)
-				}
-			case AtomShape:
-				if a.Rot != 0 {
-					t.Errorf("%s: rotation %v, want 0", v, a.Rot)
-				}
-			case AtomConstraint:
-				if a.Constraint.Factor != 1 || a.Constraint.Value != 0 {
-					t.Errorf("%s: factor %v and value %v, want 1 and 0", v, a.Constraint.Factor, a.Constraint.Value)
-				}
+			if a.Ratio != 0 || a.Rot != 0 || a.Kind == AtomConstraint && (a.Constraint.Factor != 1 || a.Constraint.Value != 0) {
+				t.Errorf("%s: atom %v read ratio %v, rotation %v, factor %v, value %v", v, a.Kind, a.Ratio, a.Rot, a.Constraint.Factor, a.Constraint.Value)
 			}
 		}
 	}
