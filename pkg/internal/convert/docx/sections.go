@@ -353,9 +353,6 @@ func (d *document) body(root *ooxml.Element) []*section {
 		s.blocks = cur
 		s.pending = d.pending
 		cur, d.pending = nil, nil
-		// A column break starts a page in a section of one column. In
-		// columns it starts the next line, an approximation: the model has
-		// no column break.
 		// A column break is a page break in a section of one column
 		// (17.18.3 ST_BrType column) and a break to the next column in
 		// one of several.

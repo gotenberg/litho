@@ -387,6 +387,8 @@ func (r *revisions) markAttributes(p, pChange *ooxml.Element, depth int) {
 				r.markRun(k, attrOr(c, "author"), office.MarkAttribute)
 			}
 		case k.Is(w, "pPr"), k.Is(w, "tbl"), k.Is(w, "p"):
+			// The properties hold no run; a nested paragraph, a table's
+			// included, marks its own runs.
 		default:
 			r.markAttributes(k, pChange, depth+1)
 		}

@@ -394,7 +394,7 @@ func ordinalWords(n int) string {
 }
 
 // mapSymbolText returns s with the private-use characters of a symbol font
-// mapped to Unicode, and whether the font family no longer applies: Symbol
+// mapped to Unicode, and whether the text leaves the font family: Symbol
 // and Wingdings are not installed where LibreOffice runs Gotenberg, which
 // draws their list bullets from its own symbol font.
 func mapSymbolText(s, family string) (string, bool) {

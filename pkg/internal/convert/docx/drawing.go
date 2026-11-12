@@ -313,7 +313,7 @@ func (d *document) checkGeometry(g *shape.Geometry) {
 }
 
 // vectorShape returns the replaced box of w by h points drawing the
-// geometry g, nil for a rectangle, with the fill and outline ss.
+// geometry g with the fill and outline ss.
 func vectorShape(st *css.Style, g *shape.Geometry, ss ooxml.ShapeStyle, w, h float64) *layout.Node {
 	ps := inlineStyle(st)
 	ps.Width, ps.Height = css.Pts(max(w, 0.1)), css.Pts(max(h, 0.1))
@@ -375,8 +375,8 @@ func bodyInsets(bodyPr *ooxml.Element) [4]float64 {
 // h points, the geometry g of its shape and the vertical anchor of its
 // text (ECMA-376 Part 1, 20.1.2.1.1 bodyPr anchor; 20.1.10.59
 // ST_TextAnchoringType t, ctr, b): a shape other than a rectangle draws
-// behind the text with the fill and outline ss, which the box no longer
-// paints, and the text sits at the top, the middle or the bottom of the
+// behind the text with the fill and outline ss, which the box then leaves
+// unpainted, and the text sits at the top, the middle or the bottom of the
 // box's inset area, as Word places it. A box that grows to fit its text
 // (a:spAutoFit) keeps its text at the top.
 //

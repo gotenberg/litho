@@ -50,6 +50,8 @@ type settings struct {
 // document is one conversion's state: the package, its resolved parts
 // and what the build collects.
 type document struct {
+	// ctx is the conversion's context: a document lives for the one
+	// [Convert] call that makes it.
 	ctx       context.Context
 	pkg       *ooxml.Package
 	main      string
@@ -81,10 +83,11 @@ type document struct {
 	lineFactors map[string][3]float64
 	// fontClass maps a lower-cased family to its fallback face.
 	fontClass map[string]string
-	// noteNumber counts the footnotes and endnotes numbered so far.
+	// footnoteNumber and endnoteNumber count the footnotes and endnotes
+	// numbered so far.
 	footnoteNumber, endnoteNumber int
 	endnoteBodies                 []*layout.Node
-	// elements counts the layout nodes built, against [maxNodes].
+	// nodes counts the layout nodes built, against [maxNodes].
 	nodes int
 	// pending collects the drawings of the section being read whose
 	// position needs its page; inBody is set while the body is read and
