@@ -51,7 +51,7 @@ func TestStampInputErrorsAreClassified(t *testing.T) {
 func TestStampTextInAFontThatCoversIt(t *testing.T) {
 	t.Parallel()
 
-	font, err := NewTTFFont(minimalTTF(t))
+	font, err := NewTTFFont(t.Context(), minimalTTF(t))
 	if err != nil {
 		t.Fatalf("NewTTFFont: %v", err)
 	}

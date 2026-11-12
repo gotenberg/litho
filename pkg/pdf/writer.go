@@ -898,15 +898,16 @@ var (
 // bytes in the output PDF. The bytes are retained by the returned value,
 // so callers may reuse them across multiple stamps. The font is validated
 // (table directory + required tables) at call time; parse errors surface
-// here rather than at write time.
-func NewTTFFont(data []byte) (StampFont, error) {
+// here rather than at write time. It returns ctx's error when ctx ends
+// before the font is read.
+func NewTTFFont(ctx context.Context, data []byte) (StampFont, error) {
 	if len(data) < 12 {
 		return StampFont{}, fmt.Errorf("%w: data too short (%d bytes)", ErrInvalidFont, len(data))
 	}
-	// NewTTFFont takes no context: the program is the caller's own, and
-	// the walks over its cmap stop at the 0x10FFFF code points a cmap can
-	// map.
-	if err := mutations.ValidateTTFForStamp(context.Background(), data); err != nil {
+	if err := mutations.ValidateTTFForStamp(ctx, data); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return StampFont{}, fmt.Errorf("validating the TrueType font: %w", ctxErr)
+		}
 		// Wrap with the public sentinel. ErrInvalidFont is documented as
 		// covering data that is "too short or structurally invalid", but only
 		// the length check above ever returned it: every parse failure came

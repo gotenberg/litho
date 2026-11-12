@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"testing"
@@ -48,7 +49,7 @@ func TestNewTTFFont_StructurallyInvalidReturnsTheSentinel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := NewTTFFont(tt.data)
+			_, err := NewTTFFont(t.Context(), tt.data)
 			if err == nil {
 				t.Fatalf("NewTTFFont(%s) succeeded, want an error", tt.name)
 			}
@@ -65,7 +66,7 @@ func TestNewTTFFont_StructurallyInvalidReturnsTheSentinel(t *testing.T) {
 // refusing every input, which is the failure mode a "reject harder" change
 // introduces.
 func TestNewTTFFont_AcceptsAValidFont(t *testing.T) {
-	font, err := NewTTFFont(minimalTTF(t))
+	font, err := NewTTFFont(t.Context(), minimalTTF(t))
 	if err != nil {
 		t.Fatalf("NewTTFFont(minimalTTF): %v, want a usable font: if this now fails, "+
 			"the sentinel assertions above no longer discriminate between a malformed "+
@@ -73,5 +74,17 @@ func TestNewTTFFont_AcceptsAValidFont(t *testing.T) {
 	}
 	if len(font.ttf) == 0 {
 		t.Error("the returned StampFont carries no font bytes")
+	}
+}
+
+// TestNewTTFFont_ACancelledContextIsNotAnInvalidFont checks that a context
+// that ended reports its own error: a valid font read under it is not
+// refused as malformed.
+func TestNewTTFFont_ACancelledContextIsNotAnInvalidFont(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err := NewTTFFont(ctx, minimalTTF(t))
+	if !errors.Is(err, context.Canceled) || errors.Is(err, ErrInvalidFont) {
+		t.Errorf("NewTTFFont on a cancelled context = %v, want context.Canceled and not ErrInvalidFont", err)
 	}
 }

@@ -165,7 +165,7 @@ func TestStampPositionPlacesTheInkAsViewed(t *testing.T) {
 		},
 	}
 	textStamp := func(t *testing.T, w *Writer, pos StampPosition, rotation float64) error {
-		ttf, err := NewTTFFont(font)
+		ttf, err := NewTTFFont(t.Context(), font)
 		if err != nil {
 			t.Fatalf("NewTTFFont: %v", err)
 		}

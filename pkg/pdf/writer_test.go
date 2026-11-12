@@ -2937,14 +2937,14 @@ func TestWriter_StampText_Rotation(t *testing.T) {
 }
 
 func TestNewTTFFont_RejectsShort(t *testing.T) {
-	if _, err := NewTTFFont([]byte{0, 1, 2}); err == nil {
+	if _, err := NewTTFFont(t.Context(), []byte{0, 1, 2}); err == nil {
 		t.Error("expected error for short TTF data")
 	}
 }
 
 func TestWriter_StampText_CustomTTF(t *testing.T) {
 	ttf := minimalTTF(t)
-	font, err := NewTTFFont(ttf)
+	font, err := NewTTFFont(t.Context(), ttf)
 	if err != nil {
 		t.Fatalf("NewTTFFont: %v", err)
 	}
