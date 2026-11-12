@@ -48,7 +48,7 @@ func parsePath(d string) (ops []compose.PathOp, ok bool) {
 			// SVG 1.1, 8.3.2: path data must begin with a moveto.
 			return ops, false
 		}
-		upper := cmd &^ 0x20
+		upper := upperASCII(cmd)
 		rel := cmd >= 'a'
 		base := compose.Point{}
 		if rel {
@@ -197,11 +197,20 @@ func parsePath(d string) (ops []compose.PathOp, ok bool) {
 
 // isCommand reports a path command letter (SVG 1.1, 8.3.9).
 func isCommand(c byte) bool {
-	switch c &^ 0x20 {
+	switch upperASCII(c) {
 	case 'M', 'Z', 'L', 'H', 'V', 'C', 'S', 'Q', 'T', 'A':
 		return true
 	}
 	return false
+}
+
+// upperASCII returns the ASCII letter c in upper case, any other byte as
+// it is.
+func upperASCII(c byte) byte {
+	if c >= 'a' && c <= 'z' {
+		return c - 'a' + 'A'
+	}
+	return c
 }
 
 // point reads a coordinate pair.
