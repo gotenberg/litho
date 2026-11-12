@@ -298,12 +298,12 @@ func inflateInto(z io.Reader, dst []byte) error {
 	if err != nil {
 		return fmt.Errorf("%w: samples: %w", ErrInvalidImage, err)
 	}
-	defer r.Close() //nolint:errcheck // Close reports nothing a read did not
+	defer r.Close() // Close reports nothing a read did not
 	if _, err := io.ReadFull(r, dst); err != nil {
 		return fmt.Errorf("%w: samples: %w", ErrInvalidImage, err)
 	}
 	var one [1]byte
-	if n, _ := r.Read(one[:]); n > 0 { //nolint:errcheck // only the count matters: a byte past the size is the fault
+	if n, _ := r.Read(one[:]); n > 0 { // only the count matters: a byte past the size is the fault
 		return fmt.Errorf("%w: samples past %d bytes", ErrInvalidImage, len(dst))
 	}
 	return nil

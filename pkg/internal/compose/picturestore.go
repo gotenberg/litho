@@ -53,7 +53,7 @@ func WithPictureStore(ctx context.Context, dir string, hold int64) (context.Cont
 
 // pictureStoreFrom returns the PictureStore ctx carries, nil for none.
 func pictureStoreFrom(ctx context.Context) *PictureStore {
-	s, _ := ctx.Value(pictureStoreKey{}).(*PictureStore) //nolint:errcheck // a type assertion, nil when absent
+	s, _ := ctx.Value(pictureStoreKey{}).(*PictureStore) // a type assertion, nil when absent
 	return s
 }
 

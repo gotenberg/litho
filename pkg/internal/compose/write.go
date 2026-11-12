@@ -437,7 +437,7 @@ func (w *docWriter) final(trailer ast.PdfDict) (*writer.ObjAllocator, ast.PdfDic
 			delete(objs, num)
 		}
 	}
-	t, _ := relink(trailer, number).(ast.PdfDict) //nolint:errcheck // relink returns a dictionary for a dictionary
+	t, _ := relink(trailer, number).(ast.PdfDict) // relink returns a dictionary for a dictionary
 	return out, t
 }
 
@@ -468,7 +468,7 @@ func relink(obj ast.PdfObject, number func(int) int) ast.PdfObject {
 		return out
 	case ast.PdfStream:
 		if holdsRef(v.Dict) {
-			v.Dict, _ = relink(v.Dict, number).(ast.PdfDict) //nolint:errcheck // relink returns a dictionary for a dictionary
+			v.Dict, _ = relink(v.Dict, number).(ast.PdfDict) // relink returns a dictionary for a dictionary
 		}
 		return v
 	}

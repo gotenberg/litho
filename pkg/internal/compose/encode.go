@@ -37,7 +37,7 @@ func textString(s string) ast.PdfString {
 	out := make([]byte, 0, 2+2*len(units))
 	out = append(out, 0xFE, 0xFF)
 	for _, u := range units {
-		out = append(out, byte(u>>8), byte(u&0xFF)) //nolint:gosec // G115: a uint16 shifted or masked to 8 bits fits a byte
+		out = append(out, byte(u>>8), byte(u&0xFF))
 	}
 	return ast.PdfString(out)
 }
@@ -66,7 +66,7 @@ var zlibWriters = sync.Pool{New: func() any { return zlib.NewWriter(io.Discard) 
 
 // newZlib returns a zlib writer at the default level writing to w.
 func newZlib(w io.Writer) *zlib.Writer {
-	z := zlibWriters.Get().(*zlib.Writer) //nolint:errcheck // the pool holds *zlib.Writer alone
+	z := zlibWriters.Get().(*zlib.Writer) // the pool holds *zlib.Writer alone
 	z.Reset(w)
 	return z
 }
