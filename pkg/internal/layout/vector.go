@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // composeGroupDepth is the composition model's bound on group nesting, 24,
@@ -109,7 +110,7 @@ func (e *engine) fitLeaf(f compose.Fragment, depth int) compose.Fragment {
 // the default sizing algorithm against the area). Any other picture is
 // returned as it is.
 func naturalPicture(pic *Picture, w, h float64) *Picture {
-	if pic.Vector == nil || !pic.NoNaturalWidth && !pic.NoNaturalHeight || !(w > 0) || !(h > 0) {
+	if pic.Vector == nil || !pic.NoNaturalWidth && !pic.NoNaturalHeight || !numeric.Positive(w) || !numeric.Positive(h) {
 		return pic
 	}
 	p := *pic
@@ -153,7 +154,7 @@ func (e *engine) vectorTiles(tiles []compose.Rect, nodes int, y float64) []compo
 
 // pictureRatio returns the natural aspect ratio of pic, 0 for none.
 func pictureRatio(pic *Picture) float64 {
-	if pic == nil || pic.NoRatio || !(pic.Width > 0) || !(pic.Height > 0) {
+	if pic == nil || pic.NoRatio || !numeric.Positive(pic.Width) || !numeric.Positive(pic.Height) {
 		return 0
 	}
 	return pic.Width / pic.Height

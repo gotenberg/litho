@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // maxGradientStops bounds the stops the shading of one gradient holds once
@@ -190,14 +191,14 @@ func (e *engine) colorStops(g *css.Gradient, length, from, to float64, ray bool,
 	var span []gpiece
 	if g.Repeating {
 		period := pn - p0
-		if !(period > eps) {
+		if math.IsNaN(period) || period <= eps {
 			return nil, 0, 0, averageEquidistant(gs), false
 		}
 		if ray {
 			from = max(from, 0)
 		}
 		kmin, kmax := math.Floor((from-p0)/period), math.Ceil((to-p0)/period)
-		if !((kmax-kmin+1)*float64(len(ps)) <= maxGradientStops/2) {
+		if n := (kmax - kmin + 1) * float64(len(ps)); math.IsNaN(n) || n > maxGradientStops/2 {
 			e.warnOnce(codeGradient, fmt.Sprintf("a repeating gradient of more than %d stops was painted with its average colour", maxGradientStops), y)
 			return nil, 0, 0, average(ps), false
 		}
@@ -224,7 +225,7 @@ func (e *engine) colorStops(g *css.Gradient, length, from, to float64, ray bool,
 			lo = max(lo, 0)
 		}
 	}
-	if !(hi > lo) {
+	if !numeric.Positive(hi - lo) {
 		return nil, 0, 0, last, false
 	}
 	splits := gradientSplits
@@ -288,7 +289,7 @@ func average(ps []gpiece) compose.Color {
 	const samples = 16
 	for _, p := range ps {
 		w := p.b - p.a
-		if !(w > 0) {
+		if !numeric.Positive(w) {
 			continue
 		}
 		for i := range samples {
@@ -301,7 +302,7 @@ func average(ps []gpiece) compose.Color {
 			total += k
 		}
 	}
-	if !(a > 0) || !(total > 0) {
+	if !numeric.Positive(a) || !numeric.Positive(total) {
 		return compose.Color{}
 	}
 	return compose.Color{R: min(r/a, 1), G: min(g/a, 1), B: min(b/a, 1), A: min(a/total, 1)}
@@ -330,7 +331,7 @@ func averageEquidistant(gs []gstop) compose.Color {
 // origin: a shading, or a flat colour when the gradient paints one. ok is
 // false when it paints nothing.
 func (e *engine) gradientFill(g *css.Gradient, w, h, y float64) (*compose.Fill, bool) {
-	if !(w > 0) || !(h > 0) || len(g.Stops) == 0 {
+	if !numeric.Positive(w) || !numeric.Positive(h) || len(g.Stops) == 0 {
 		return nil, false
 	}
 	if g.Kind == css.RadialGradient {
@@ -426,7 +427,7 @@ func (e *engine) radialFill(g *css.Gradient, w, h, y float64) (*compose.Fill, bo
 			ry = rx
 		}
 	}
-	if !(rx > 0) || !(ry > 0) || math.IsInf(rx, 0) || math.IsInf(ry, 0) {
+	if !numeric.PositiveFinite(rx) || !numeric.PositiveFinite(ry) {
 		rx, ry = minRadius, minRadius
 	}
 	k := ry / rx
@@ -453,7 +454,7 @@ func (e *engine) radialFill(g *css.Gradient, w, h, y float64) (*compose.Fill, bo
 // is an image without intrinsic size or ratio, so its size is the area's
 // (CSS Backgrounds 3, 3.9), placed and repeated as an image is.
 func (e *engine) gradientTiles(st *css.Style, area, clip compose.Rect, y float64) []*compose.Path {
-	if !(area.Width > 0) || !(area.Height > 0) {
+	if !numeric.Positive(area.Width) || !numeric.Positive(area.Height) {
 		return nil
 	}
 	sized := *st

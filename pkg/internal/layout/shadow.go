@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // shadowScale is the resolution of a blurred shadow's raster: 2 pixels per
@@ -258,7 +259,7 @@ func rasterize(ops []compose.PathOp, bounds compose.Rect, k float64, w, h int) *
 // of standard deviation sigma pixels. Pixels past the edge read as the
 // edge's when extend is set, else as transparent.
 func blurAlpha(m *image.Alpha, sigma float64, extend bool) {
-	if !(sigma > 0) {
+	if !numeric.Positive(sigma) {
 		return
 	}
 	w, h := m.Rect.Dx(), m.Rect.Dy()

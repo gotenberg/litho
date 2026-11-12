@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -645,7 +646,7 @@ func (p *painter) replaced(b *box) {
 // and contain.
 func objectRect(st *css.Style, pic *Picture, box compose.Rect) compose.Rect {
 	iw, ih := pic.Width, pic.Height
-	if st.ObjectFit == css.FitFill || !(iw > 0) || !(ih > 0) {
+	if st.ObjectFit == css.FitFill || !numeric.Positive(iw) || !numeric.Positive(ih) {
 		return box
 	}
 	contain := min(box.Width/iw, box.Height/ih)

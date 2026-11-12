@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // nineSource is the image a border image cuts: a picture, or a gradient
@@ -63,7 +64,7 @@ func (p *painter) borderImage(b *box, st *css.Style, r compose.Rect, bd [4]float
 		Width:  r.Width + out[css.Left] + out[css.Right],
 		Height: r.Height + out[css.Top] + out[css.Bottom],
 	}
-	if !(area.Width > 0) || !(area.Height > 0) || math.IsInf(area.Width, 0) || math.IsInf(area.Height, 0) {
+	if !numeric.PositiveFinite(area.Width) || !numeric.PositiveFinite(area.Height) {
 		return true
 	}
 	src, ok := p.nineSource(bi, area, r.Y)
@@ -275,7 +276,7 @@ type ninePiece struct {
 
 // scaleOf returns w over s, 0 when either is zero.
 func scaleOf(w, s float64) float64 {
-	if !(w > 0) || !(s > 0) {
+	if !numeric.Positive(w) || !numeric.Positive(s) {
 		return 0
 	}
 	return w / s
@@ -342,11 +343,11 @@ type span struct{ at, size float64 }
 // fill; space fits as many whole ones as it can, the room left spread
 // evenly before, between and after them, and none when not one fits.
 func tileSpans(rep css.ImageRepeat, start, size, n, k float64) []span {
-	if !(size > 0) || !(n > 0) {
+	if !numeric.Positive(size) || !numeric.Positive(n) {
 		return nil
 	}
 	t := n * k
-	if rep == css.ImageStretch || !(t > 0) || math.IsInf(t, 0) {
+	if rep == css.ImageStretch || !numeric.PositiveFinite(t) {
 		return []span{{start, size}}
 	}
 	limit := float64(maxBackgroundTiles)
@@ -391,7 +392,7 @@ func tileSpans(rep css.ImageRepeat, start, size, n, k float64) []span {
 // tiles returns the placements of the piece's image part over its
 // region.
 func (pc ninePiece) tiles() []compose.Rect {
-	if !(pc.src.Width > 0) || !(pc.src.Height > 0) || !(pc.dst.Width > 0) || !(pc.dst.Height > 0) {
+	if !numeric.Positive(pc.src.Width) || !numeric.Positive(pc.src.Height) || !numeric.Positive(pc.dst.Width) || !numeric.Positive(pc.dst.Height) {
 		return nil
 	}
 	xs := tileSpans(pc.rep[0], pc.dst.X, pc.dst.Width, pc.src.Width, pc.sx)
@@ -470,7 +471,7 @@ type cropKey struct {
 // decode; it is called only for a part to cut. The parts are cut once per
 // paint.
 func (p *painter) cropSource(pic *Picture, r compose.Rect, decode func() image.Image) *compose.ImageSource {
-	if pic == nil || pic.Source == nil || pic.Source.IsJPEG() || !(pic.Width > 0) || !(pic.Height > 0) {
+	if pic == nil || pic.Source == nil || pic.Source.IsJPEG() || !numeric.Positive(pic.Width) || !numeric.Positive(pic.Height) {
 		return nil
 	}
 	bounds := image.Rect(0, 0, pic.Source.Width, pic.Source.Height)

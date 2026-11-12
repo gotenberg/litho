@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // kappa places the control points of a cubic Bézier that approximates a
@@ -284,7 +285,7 @@ func tileRects(st *css.Style, pic *Picture, area, clip compose.Rect) ([]compose.
 	case rep[1] == css.RepeatRound && rep[0] != css.RepeatRound && autoW && h0 > 0:
 		w = w0 * h / h0
 	}
-	if !(w > 0) || !(h > 0) || math.IsInf(w, 0) || math.IsInf(h, 0) {
+	if !numeric.PositiveFinite(w) || !numeric.PositiveFinite(h) {
 		return nil, false
 	}
 	x0 := area.X + resolve(st.BackgroundPosition[0], area.Width-w)
@@ -564,7 +565,7 @@ func squareDots(w float64) bool { return w < 3*css.Pt }
 // of length dash, gaps between them, in length l, dashes on both ends
 // (Blink's StrokeData::SelectBestDashGap).
 func bestGap(l, dash, gap float64) float64 {
-	if !(l > 0) || !(dash+gap > 0) {
+	if !numeric.Positive(l) || !numeric.Positive(dash+gap) {
 		return gap
 	}
 	lo := math.Floor((l + gap) / (dash + gap))
