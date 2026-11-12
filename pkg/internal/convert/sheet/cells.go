@@ -389,27 +389,15 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 			}
 		}
 	}
-	para := b.paragraph(&d, f, lineH, align)
-	inner := b.style()
-	inner.Position = css.Absolute
-	inner.Left = css.Pts(boxX - cx0)
-	inner.Top = css.Pts(0)
-	inner.Width = css.Pts(math.Max(boxW, 0.01))
-	inner.Height = css.Pts(u.h)
-	inner.BoxSizing = css.BorderBox
-	inner.Padding[css.Top] = css.Pts(pad[css.Top])
-	inner.Padding[css.Bottom] = css.Pts(pad[css.Bottom])
-	inner.Display = css.Flex
-	inner.FlexDirection = css.FlexColumn
-	switch st.Align.Vertical {
-	case VTop, VJustify, VDistributed:
-		inner.JustifyContent = css.BoxFlexStart
-	case VMiddle:
-		inner.JustifyContent = css.BoxCenter
-	case VBottom:
-		inner.JustifyContent = css.BoxFlexEnd
-	}
-	if rot := st.Align.Rotation; rot != 0 && !st.Align.Stacked {
+	rotated := st.Align.Rotation != 0 && !st.Align.Stacked
+	para := b.paragraph(&d, f, lineH, align, paraTurn{rotated: rotated, rtl: st.Align.RightToLeft})
+	ik := innerKey{left: boxX - cx0, width: math.Max(boxW, 0.01), height: u.h, top: pad[css.Top], bottom: pad[css.Bottom], vertical: st.Align.Vertical}
+	var inner *css.Style
+	if !rotated {
+		inner = b.innerStyle(ik)
+	} else {
+		inner = b.newInnerStyle(ik)
+		rot := st.Align.Rotation
 		// Rotated text starts in the cell's bottom-left corner when it
 		// turns counter-clockwise, its top-left when clockwise, the line
 		// turned about its own corner and moved right by its height's
@@ -431,19 +419,9 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 			inner.TransformOrigin = [2]css.Dimension{{Kind: css.Percent}, {Kind: css.Percent}}
 		}
 		inner.Transform = []css.TransformFunc{{Kind: css.TransformRotate, V: [6]float64{-a}}}
-		para.Style.TextAlign = css.AlignLeft
 		b.warn(warn.ContentUnsupported, warn.Approximated, "text rotated by other than a quarter turn starts in the cell's corner, an approximation of Calc's placement")
 	}
-	clip := b.style()
-	clip.Position = css.Absolute
-	clip.Left = css.Pts(cx0 - rg.x0)
-	clip.Top = css.Pts(0)
-	clip.Width = css.Pts(math.Max(cx1-cx0, 0.01))
-	clip.Height = css.Pts(u.h)
-	clip.Overflow = css.OverflowHidden
-	if st.Align.RightToLeft {
-		para.Style.Direction = css.RTL
-	}
+	clip := b.clipStyle(clipKey{left: cx0 - rg.x0, width: math.Max(cx1-cx0, 0.01), height: u.h})
 	n := &layout.Node{Kind: layout.Element, Style: clip, Role: "TD", Children: []*layout.Node{
 		{Kind: layout.Element, Style: inner, Children: []*layout.Node{para}},
 	}}
@@ -454,24 +432,10 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 	return n, cx0, cx1
 }
 
-// paragraph returns the block holding d's text in the font f.
-func (b *pageBuilder) paragraph(d *display, f font, lineH float64, align css.TextAlign) *layout.Node {
-	st := b.style()
-	f.apply(st)
-	st.Display = css.Block
-	st.TextAlign = align
-	st.TextAlignLast = css.AlignAuto
-	if align == css.AlignJustifyAll {
-		st.TextAlign = css.AlignJustify
-		st.TextAlignLast = css.AlignJustify
-	}
-	st.LineHeight = css.Dimension{Kind: css.Number, Value: lineH / math.Max(f.size, 0.01)}
-	st.WhiteSpace = css.Pre
-	if d.wrap {
-		st.WhiteSpace = css.PreWrap
-		st.OverflowWrap = css.BreakWord
-		st.LineHeight.Value = editLine(lineH) / math.Max(f.size, 0.01)
-	}
+// paragraph returns the block holding d's text in the font f, turned
+// as t says.
+func (b *pageBuilder) paragraph(d *display, f font, lineH float64, align css.TextAlign, t paraTurn) *layout.Node {
+	st := b.paraStyle(f, lineH, align, d.wrap, t)
 	n := &layout.Node{Kind: layout.Element, Style: st}
 	if len(d.runs) == 0 {
 		n.Children = []*layout.Node{{Kind: layout.Text, Style: st, Text: d.text}}

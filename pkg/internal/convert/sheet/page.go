@@ -32,6 +32,8 @@ type pageBuilder struct {
 	// cellKeys maps each TD node to the row and column of the cell or
 	// merge whose content it holds.
 	cellKeys map[*layout.Node][2]int
+	// styles holds the styles the page's cells share.
+	styles cellStyles
 }
 
 // style returns the base style of a node.

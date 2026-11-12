@@ -99,7 +99,7 @@ func (b *builder) optimalHeights(g *grid) error {
 			if d.wrap {
 				w := u.w - d.padding[css.Left] - d.padding[css.Right] - max(u.st.Align.Indent, 0)
 				if w > 0 {
-					p := pb.paragraph(&d, d.font, lineH, css.AlignLeft)
+					p := pb.paragraph(&d, d.font, lineH, css.AlignLeft, paraTurn{})
 					if mh := b.measureBlock(p, w); mh > 0 {
 						lines = math.Round(mh / editLine(lineH))
 						h = lines * editLine(lineH)
