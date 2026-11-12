@@ -42,6 +42,12 @@ const (
 	maxOperandBlock = 1 << 12
 )
 
+// minInterningBytes is the shortest stream whose parse shares the texts and
+// the objects of the operands it repeats ([lexer.Lexer.WithInterning],
+// [parser.Parser.WithBoxedOperands]). Their tables take about 12 KiB, which a
+// shorter stream does not repeat enough operands to pay back.
+const minInterningBytes = 4096
+
 // operationList collects the operations of one parse.
 type operationList struct {
 	ops []Operation

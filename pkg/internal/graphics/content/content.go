@@ -1,7 +1,6 @@
 package content
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -541,6 +540,10 @@ func GluedOperators(keyword string) []string {
 // option answers that with no operation at all ([gaveUp]), and [WholeStream],
 // which reads the same containers, reads on.
 //
+// With intern, the parse shares the texts and the objects of the operands it
+// reads again ([lexer.Lexer.WithInterning], [parser.Parser.WithBoxedOperands]),
+// which changes no operation it reads.
+//
 // # Corpus evidence
 //
 //   - All corpora: giving no operation for a stream veraPDF gives up on
@@ -560,12 +563,21 @@ func GluedOperators(keyword string) []string {
 //   - pdfjs bug1130815.pdf: its damaged page loses every finding, 153
 //     undefined operators and the integer, real and q/Q nesting limits among
 //     them. veraPDF cannot open the file.
-func newParser(data []byte, o readOptions) *parser.Parser {
-	p := parser.NewParser(newLexer(data, o))
+func newParser(data []byte, o readOptions, intern bool) *parser.Parser {
+	p := parser.NewParser(newLexer(data, o, intern))
 	if o.commands == nil && !o.repair {
 		p.WithVeraPDFContainers()
 	}
+	if intern {
+		p.WithBoxedOperands()
+	}
 	return p
+}
+
+// interns reports whether a parse of a whole stream shares the operands it
+// reads again: it does for a stream of [minInterningBytes] or more.
+func interns(data []byte) bool {
+	return len(data) >= minInterningBytes
 }
 
 // gaveUp reports whether a parse under o gives no operation for the stream p
@@ -631,8 +643,11 @@ func gaveUp(p *parser.Parser, o readOptions) bool {
 //     operator. Page 8, which veraPDF reports none for, goes from 5 to 2.
 //   - pdfjs issue15893_reduced.pdf: two undefined operators around a ")"
 //     read as one. veraPDF cannot open the file.
-func newLexer(data []byte, o readOptions) *lexer.Lexer {
-	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
+func newLexer(data []byte, o readOptions, intern bool) *lexer.Lexer {
+	lex := lexer.NewLexer(ioat.NewBytesReader(data, 0))
+	if intern {
+		lex.WithInterning()
+	}
 	switch {
 	case o.commands != nil:
 		lex.WithCommands(o.commands)
@@ -653,7 +668,7 @@ func newLexer(data []byte, o readOptions) *lexer.Lexer {
 // of inline images as veraPDF does ([inlineImages]).
 func ParseStreamData(ctx context.Context, data []byte, opts ...Option) ([]Operation, error) {
 	o := optionsOf(ctx, opts)
-	p := newParser(data, o)
+	p := newParser(data, o, interns(data))
 	return parseOperations(ctx, p, o, data, nil, nil)
 }
 
@@ -667,7 +682,7 @@ func ParseStreamData(ctx context.Context, data []byte, opts ...Option) ([]Operat
 // two bytes after it.
 func ParseStreamDataWithOffsets(ctx context.Context, data []byte, opts ...Option) ([]Operation, []ByteRange, error) {
 	o := optionsOf(ctx, opts)
-	p := newParser(data, o).WithOffsetTracking()
+	p := newParser(data, o, interns(data)).WithOffsetTracking()
 	ranges := make([]ByteRange, 0, reservedOperations(len(data)))
 	ops, err := parseOperations(ctx, p, o, data, &ranges, nil)
 	if err != nil || gaveUp(p, o) {
@@ -684,7 +699,7 @@ func ParseStreamDataWithOffsets(ctx context.Context, data []byte, opts ...Option
 // violations detected by the parser.
 func ParseStreamDataFormatChecked(ctx context.Context, data []byte) ([]Operation, []error) {
 	o := optionsOf(ctx, nil)
-	p := newParser(data, o).WithFormatChecking()
+	p := newParser(data, o, interns(data)).WithFormatChecking()
 	ops, _ := parseOperations(ctx, p, o, data, nil, nil)
 	if gaveUp(p, o) {
 		return nil, nil
@@ -698,7 +713,7 @@ func ParseStreamDataFormatChecked(ctx context.Context, data []byte) ([]Operation
 // [parser.Parser.IntegerOverflows]).
 func ParseStreamDataWithOverflows(ctx context.Context, data []byte) ([]Operation, []float64, error) {
 	o := optionsOf(ctx, nil)
-	p := newParser(data, o)
+	p := newParser(data, o, interns(data))
 	ops, err := parseOperations(ctx, p, o, data, nil, nil)
 	if gaveUp(p, o) {
 		return nil, nil, nil
@@ -719,7 +734,7 @@ func ParseStreamDataWithOverflows(ctx context.Context, data []byte) ([]Operation
 // veraPDF gives up on ([newParser]) gives nothing at all.
 func ParseStreamDataForCompliance(ctx context.Context, data []byte) ([]Operation, []float64, []FormatViolation, error) {
 	o := optionsOf(ctx, nil)
-	p := newParser(data, o).WithFormatChecking()
+	p := newParser(data, o, interns(data)).WithFormatChecking()
 	placer := &violationPlacer{p: p}
 	ops, err := parseOperations(ctx, p, o, data, nil, placer)
 	if gaveUp(p, o) {
@@ -942,7 +957,7 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 		slog.Int("total_bytes", len(allData)),
 	)
 
-	p := newParser(allData, o)
+	p := newParser(allData, o, interns(allData))
 	ops, err := parseOperations(ctx, p, o, allData, nil, nil)
 	if err != nil {
 		return nil, err

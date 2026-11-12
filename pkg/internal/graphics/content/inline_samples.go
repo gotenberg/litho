@@ -21,7 +21,7 @@ import (
 func InlineImageSamples(ctx context.Context, data []byte) ([]ByteRange, error) {
 	var spans []ByteRange
 	o := readOptions{whole: true, samples: &spans}
-	if _, err := parseOperations(ctx, newParser(data, o), o, data, nil, nil); err != nil {
+	if _, err := parseOperations(ctx, newParser(data, o, interns(data)), o, data, nil, nil); err != nil {
 		return nil, fmt.Errorf("reading inline images: %w", err)
 	}
 	return spans, nil

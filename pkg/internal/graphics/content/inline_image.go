@@ -506,7 +506,7 @@ func (r *inlineImages) header(ctx context.Context, q int) *nextImage {
 		return nil
 	}
 	end := min(len(r.data), q+r.budget)
-	p := newParser(r.data[q:end], readOptions{})
+	p := newParser(r.data[q:end], readOptions{}, false)
 	dict, err := p.ParseInlineImageHeader(ctx)
 	read := intconv.Clamp(p.Position())
 	r.budget -= max(read, 1)

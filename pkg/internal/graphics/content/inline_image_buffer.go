@@ -105,7 +105,7 @@ func (r *inlineImages) objectEnd(pos, q int) int {
 		return q + 1
 	}
 	window := min(len(r.data), pos+veraObjectWindow)
-	p := newParser(r.data[q:window], readOptions{}).WithOffsetTracking()
+	p := newParser(r.data[q:window], readOptions{}, false).WithOffsetTracking()
 	end := window
 	tok, err := p.Peek(0)
 	switch {
