@@ -784,9 +784,11 @@ func cidFontsByDescriptor(ctx context.Context, alloc *writer.ObjAllocator, doc *
 // lists them: for a TrueType program, every GID from 1 below maxp.numGlyphs
 // under an Identity /CIDToGIDMap, the default (ISO 32000-1, 9.7.4.2, Table
 // 117), and under a map stream every CID from 1 whose GID the program holds;
-// for a CFF program, the CIDs of its charset. A map stream is read the way the
-// check reads it ([compliance.CIDToGIDStreamEntries]), and one that cannot be
-// read falls back to the Identity reading.
+// for a CID-keyed CFF program, the CIDs of its charset; for a name-keyed one,
+// which has no CIDs of its own, every GID from 1, the CIDs a CIDFont reads it
+// by (ISO 32000-1, 9.7.4.2). A map stream is read the way the check reads it
+// ([compliance.CIDToGIDStreamEntries]), and one that cannot be read falls back
+// to the Identity reading.
 //
 // Only the program is needed for the Identity and CFF readings. The map is the
 // CIDFont's own, so two CIDFonts sharing one program through one descriptor can
@@ -794,6 +796,9 @@ func cidFontsByDescriptor(ctx context.Context, alloc *writer.ObjAllocator, doc *
 func programCIDs(ctx context.Context, doc *document.Document, cidFont ast.PdfDict, fontData []byte) map[uint16]bool {
 	numGlyphs := typography.ExtractNumGlyphs(fontData)
 	if numGlyphs <= 0 {
+		if glyphs, _, ok := typography.ExtractNameKeyedCFFGlyphs(fontData); ok {
+			return glyphCIDs(glyphs)
+		}
 		return typography.ExtractValidCIDs(fontData)
 	}
 	if mapObj, ok := cidFont["CIDToGIDMap"]; ok {
@@ -809,9 +814,16 @@ func programCIDs(ctx context.Context, doc *document.Document, cidFont ast.PdfDic
 			}
 		}
 	}
+	return glyphCIDs(numGlyphs)
+}
+
+// glyphCIDs returns the CIDs of a program of numGlyphs glyphs read by glyph
+// index: every GID from 1, .notdef left out as the /CIDSet check leaves it.
+func glyphCIDs(numGlyphs int) map[uint16]bool {
+	numGlyphs = min(numGlyphs, math.MaxUint16+1)
 	cids := make(map[uint16]bool, numGlyphs)
 	for gid := 1; gid < numGlyphs; gid++ {
-		cids[uint16(gid)] = true //nolint:gosec // gid < numGlyphs, a uint16 from maxp.
+		cids[uint16(gid)] = true //nolint:gosec // gid < numGlyphs <= math.MaxUint16+1.
 	}
 	return cids
 }
