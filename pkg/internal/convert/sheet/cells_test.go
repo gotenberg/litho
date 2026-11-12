@@ -275,12 +275,22 @@ func TestConvert_Rotation(t *testing.T) {
 
 // TestConvert_GrowHeader locks Calc's dynamic header and footer heights:
 // content taller than the margin's room, plus the spacing, moves the
-// cells; a fixed height does not.
+// cells; a fixed height does not. Header text naming no font takes
+// HeaderFooter.Font, Liberation Sans 10 points when it names none.
+//
+// # Corpus evidence
+//
+//   - litho/ods paper-grid-margins-narrow-a5-portrait: a header whose
+//     text names no font prints in the book's default cell font, Carlito
+//     11 points, and its 13.43 points with the 7.2 point spacing move the
+//     cells 56.63 points down from a 36 point margin.
 func TestConvert_GrowHeader(t *testing.T) {
+	carlito := Font{Families: []string{"Carlito"}, Size: 11}
 	tests := []struct {
 		name     string
 		grow     bool
 		spacing  float64
+		font     Font
 		wantDown float64
 	}{
 		{name: "fixed height", grow: false, wantDown: 0},
@@ -289,6 +299,8 @@ func TestConvert_GrowHeader(t *testing.T) {
 		// points down, as sc/databar.xlsx prints them.
 		{name: "dynamic height", grow: true, spacing: 7.09, wantDown: 11.17 + 7.09 - 17.1},
 		{name: "room enough", grow: true, spacing: 2, wantDown: 0},
+		// Carlito 11 takes 13.43 points.
+		{name: "document font", grow: true, spacing: 7.09, font: carlito, wantDown: 13.43 + 7.09 - 17.1},
 	}
 	var base float64
 	for i, tt := range tests {
@@ -298,7 +310,12 @@ func TestConvert_GrowHeader(t *testing.T) {
 			sh.Page.Margin[css.Top] = 56.7 + 17.1
 			sh.HeaderFooter.Odd.Header[1] = []Span{{Text: "H"}}
 			sh.HeaderFooter.GrowHeader, sh.HeaderFooter.HeaderSpacing = tt.grow, tt.spacing
-			y := find(t, convert(t, newDoc(sh), office.Options{}).Pages[0], "cell").y
+			sh.HeaderFooter.Font = tt.font
+			pg := convert(t, newDoc(sh), office.Options{}).Pages[0]
+			if h, want := find(t, pg, "H").size, max(tt.font.Size, 10); h != want {
+				t.Errorf("header text at %v points, want %v", h, want)
+			}
+			y := find(t, pg, "cell").y
 			if i == 0 {
 				base = y
 				return

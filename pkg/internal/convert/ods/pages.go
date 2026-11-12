@@ -58,6 +58,7 @@ func (r *reader) pageSetup(name string) pageResult {
 	} else {
 		pr = r.readPage(mp)
 	}
+	pr.hf.Font = r.doc.Default.Font
 	r.pages[name] = pr
 	return pr
 }
@@ -78,6 +79,8 @@ func defaultPage(w, h float64) pageResult {
 	hf.Odd.Footer[1] = []sheet.Span{{Text: "Page "}, {Field: sheet.FieldPage}}
 	hf.HeaderMinHeight = defaultHFHeight - defaultHFSpacing
 	hf.FooterMinHeight = defaultHFHeight - defaultHFSpacing
+	hf.GrowHeader, hf.HeaderSpacing = true, defaultHFSpacing
+	hf.GrowFooter, hf.FooterSpacing = true, defaultHFSpacing
 	return pageResult{page: pg, hf: hf}
 }
 
@@ -147,9 +150,10 @@ func (r *reader) readPage(mp *odf.MasterPage) pageResult {
 	}
 	var hf sheet.HeaderFooter
 	if shown(mp.Header) {
-		h, textH := hfHeight(pl.Header, "fo:margin-bottom")
-		pg.Margin[css.Top] += h
-		hf.HeaderMinHeight = textH
+		g := hfHeight(pl.Header, "fo:margin-bottom")
+		pg.Margin[css.Top] += g.room
+		hf.HeaderMinHeight = g.room - g.spacing
+		hf.GrowHeader, hf.HeaderSpacing = g.dynamic, g.spacing
 		hf.Odd.Header = r.regions(mp.Header)
 		if shown(mp.HeaderLeft) {
 			hf.DifferentOddEven = true
@@ -159,9 +163,10 @@ func (r *reader) readPage(mp *odf.MasterPage) pageResult {
 		}
 	}
 	if shown(mp.Footer) {
-		h, textH := hfHeight(pl.Footer, "fo:margin-top")
-		pg.Margin[css.Bottom] += h
-		hf.FooterMinHeight = textH
+		g := hfHeight(pl.Footer, "fo:margin-top")
+		pg.Margin[css.Bottom] += g.room
+		hf.FooterMinHeight = g.room - g.spacing
+		hf.GrowFooter, hf.FooterSpacing = g.dynamic, g.spacing
 		hf.Odd.Footer = r.regions(mp.Footer)
 		if shown(mp.FooterLeft) {
 			hf.DifferentOddEven = true
@@ -193,24 +198,43 @@ func (r *reader) readPage(mp *odf.MasterPage) pageResult {
 	return pageResult{page: pg, hf: hf, hideZeros: hideZeros}
 }
 
-// hfHeight returns the room a shown header or footer takes from the page
-// margin, its fo:min-height, which includes its spacing to the cells
-// (spacing, fo:margin-bottom of a header, fo:margin-top of a footer), and
-// the height left for its text. A style without a min-height takes Calc's
-// default, 0.75 cm with 0.25 cm spacing.
-func hfHeight(p odf.Props, spacing string) (room, text float64) {
+// hfGeometry is the room a shown header or footer takes from the page
+// margin, room, which includes its spacing to the cells, spacing; dynamic
+// reports a height that grows with the content.
+type hfGeometry struct {
+	room, spacing float64
+	dynamic       bool
+}
+
+// hfHeight returns the geometry of a shown header or footer whose
+// header-footer-properties are p (ODF 1.3, Part 3, 17.5): fo:min-height
+// is a least height the content grows past, svg:height a fixed one, each
+// including the spacing (spacing, fo:margin-bottom of a header,
+// fo:margin-top of a footer), as Calc reads them. A style without either
+// takes Calc's default, 0.75 cm with 0.25 cm spacing, which grows.
+//
+// # Corpus evidence
+//
+//   - litho/ods paper-grid-margins-narrow-a5-portrait: a header of 0.2 in
+//     min-height and 0.1 in spacing under a 0.5 in top margin, its text
+//     in Carlito 11 points 13.43 points tall, starts the cells 56.63
+//     points down: the margin, the text and the spacing.
+//   - probe, ods: the same header in Carlito 14 points starts the cells
+//     3.66 points lower, the text's own growth.
+func hfHeight(p odf.Props, spacing string) hfGeometry {
 	h, ok := odf.Length(p.Get("fo:min-height"))
+	dynamic := ok
 	if !ok {
 		h, ok = odf.Length(p.Get("svg:height"))
 	}
 	if !ok || h <= 0 {
-		return defaultHFHeight, defaultHFHeight - defaultHFSpacing
+		return hfGeometry{room: defaultHFHeight, spacing: defaultHFSpacing, dynamic: true}
 	}
 	sp, ok := odf.Length(p.Get(spacing))
 	if !ok || sp < 0 {
 		sp = 0
 	}
-	return h, max(h-sp, 0)
+	return hfGeometry{room: h, spacing: min(sp, h), dynamic: dynamic}
 }
 
 // maxScaleTo bounds the page counts of style:scale-to-pages, -X and -Y

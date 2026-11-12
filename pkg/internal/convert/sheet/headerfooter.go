@@ -10,9 +10,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
-// The header and footer text of a span naming no font: Calc's header and
-// footer edit engine default, Liberation Sans 10 points, whatever the
-// book's default cell font.
+// The header and footer text of a span naming no font where
+// HeaderFooter.Font names none either: Calc's header and footer edit engine
+// default, Liberation Sans 10 points.
 //
 // # Corpus evidence
 //
@@ -21,8 +21,6 @@ import (
 //     part is centred in the header's height, the date shows as
 //     11/07/2026 and the time as 21:39:35, the file name as the
 //     document's URL and the title as the document's title.
-//   - libreoffice/ods: sc/tdf138507.ods, a book whose default cell font is "Sans",
-//     prints its default header and footer in Liberation Sans.
 const (
 	headerFamily = "Liberation Sans"
 	headerSize   = 10
@@ -64,18 +62,19 @@ func (b *builder) spanText(s Span, f hfFields) string {
 }
 
 // partNode returns the block of one header or footer part, nil when it
-// shows nothing.
-func (b *builder) partNode(spans []Span, f hfFields, align css.TextAlign) *layout.Node {
+// shows nothing; def is the font of its spans that name none
+// (HeaderFooter.Font).
+func (b *builder) partNode(spans []Span, f hfFields, align css.TextAlign, def Font) *layout.Node {
 	if len(spans) == 0 {
 		return nil
 	}
-	base := font{families: []string{headerFamily}, size: headerSize, color: css.Color{A: 1}}
+	base := resolveFont(def, Font{Families: []string{headerFamily}, Size: headerSize})
 	st := b.style()
 	base.apply(st)
 	st.TextAlign = align
 	st.WhiteSpace = css.PreWrap
 	st.OverflowWrap = css.BreakWord
-	st.LineHeight = css.Dimension{Kind: css.Number, Value: b.m.lineHeight(base) / headerSize}
+	st.LineHeight = css.Dimension{Kind: css.Number, Value: b.m.lineHeight(base) / base.size}
 	n := &layout.Node{Kind: layout.Element, Style: st}
 	empty := true
 	for _, s := range spans {
@@ -87,7 +86,7 @@ func (b *builder) partNode(spans []Span, f hfFields, align css.TextAlign) *layou
 		rs := b.style()
 		fnt := base
 		if s.Font != nil {
-			fnt = resolveFont(*s.Font, Font{Families: []string{headerFamily}, Size: headerSize})
+			fnt = resolveFont(*s.Font, Font{Families: base.families, Size: base.size})
 		}
 		fnt.apply(rs)
 		rs.Display = css.Inline
@@ -145,7 +144,7 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 		var nodes [3]*layout.Node
 		any := false
 		for i := range parts {
-			nodes[i] = b.partNode(parts[i], f, aligns[i])
+			nodes[i] = b.partNode(parts[i], f, aligns[i], hf.Font)
 			any = any || nodes[i] != nil
 		}
 		if !any {
@@ -290,7 +289,7 @@ func (b *builder) growMargins(sp *sheetPlan) {
 				parts = m.Footer
 			}
 			for i := range parts {
-				if n := b.partNode(parts[i], f, aligns[i]); n != nil {
+				if n := b.partNode(parts[i], f, aligns[i], hf.Font); n != nil {
 					h = max(h, b.measureBlock(n, areaW))
 				}
 			}

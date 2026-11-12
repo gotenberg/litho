@@ -619,6 +619,10 @@ type HeaderFooter struct {
 	// footer; LibreOffice's HeaderBodyDistance).
 	GrowHeader, GrowFooter       bool
 	HeaderSpacing, FooterSpacing float64
+	// Font is the font of the header and footer text a span's Font leaves
+	// unnamed; a zero Font takes Calc's header default, Liberation Sans
+	// 10 points.
+	Font Font
 	// ScaleWithDoc is a workbook's scaleWithDoc flag (ECMA-376 Part 1,
 	// 18.3.1.46), kept for the record: Calc scales the header and footer
 	// text with the sheet's print scale whatever it says, and so does the
@@ -641,8 +645,8 @@ type Span struct {
 	Text string
 	// Field, when not FieldNone, is what the span shows.
 	Field Field
-	// Font, when not nil, overrides the header font (Calc's default header
-	// style) for the span.
+	// Font, when not nil, overrides the header font (HeaderFooter.Font)
+	// for the span.
 	Font *Font
 }
 

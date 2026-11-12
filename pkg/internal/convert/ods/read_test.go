@@ -538,3 +538,35 @@ func TestRead_HeaderTextCap(t *testing.T) {
 		t.Errorf("%d bytes of header text, want at most %d", n, maxPartText)
 	}
 }
+
+// TestRead_HeaderGeometry reads a header of fo:min-height as one that
+// grows with its content and one of svg:height alone as fixed, both with
+// their spacing, and gives header text the book's default cell font.
+func TestRead_HeaderGeometry(t *testing.T) {
+	hfStyle := func(props string) string {
+		return `<style:header-style><style:header-footer-properties ` + props + `/></style:header-style>`
+	}
+	doc, _ := read(t, flat{
+		styles: `<style:default-style style:family="table-cell"><style:text-properties style:font-name="Carlito" fo:font-size="11pt"/></style:default-style>`,
+		auto: `<style:page-layout style:name="dyn"><style:page-layout-properties fo:margin-top="0.5in"/>` + hfStyle(`fo:min-height="0.2in" fo:margin-bottom="0.1in"`) + `</style:page-layout>` +
+			`<style:page-layout style:name="fix"><style:page-layout-properties fo:margin-top="0.5in"/>` + hfStyle(`svg:height="0.2in" fo:margin-bottom="0.1in"`) + `</style:page-layout>` +
+			`<style:style style:name="ta1" style:family="table" style:master-page-name="Dyn"/><style:style style:name="ta2" style:family="table" style:master-page-name="Fix"/>`,
+		master: `<style:master-page style:name="Dyn" style:page-layout-name="dyn"><style:header><text:p>H</text:p></style:header></style:master-page>` +
+			`<style:master-page style:name="Fix" style:page-layout-name="fix"><style:header><text:p>H</text:p></style:header></style:master-page>`,
+		body: `<table:table table:name="A" table:style-name="ta1"><table:table-row><table:table-cell office:value-type="string"><text:p>a</text:p></table:table-cell></table:table-row></table:table>` +
+			`<table:table table:name="B" table:style-name="ta2"><table:table-row><table:table-cell office:value-type="string"><text:p>b</text:p></table:table-cell></table:table-row></table:table>`,
+	}.bytes())
+	if len(doc.Sheets) != 2 {
+		t.Fatalf("%d sheets, want 2", len(doc.Sheets))
+	}
+	for i, want := range []bool{true, false} {
+		sh := doc.Sheets[i]
+		hf := sh.HeaderFooter
+		if hf.GrowHeader != want || !near(hf.HeaderSpacing, 7.2) || !near(hf.HeaderMinHeight, 7.2) || !near(sh.Page.Margin[css.Top], 36+14.4) {
+			t.Errorf("%s: grow %v spacing %v min %v top %v, want grow %v, 7.2, 7.2, 50.4", sh.Name, hf.GrowHeader, hf.HeaderSpacing, hf.HeaderMinHeight, sh.Page.Margin[css.Top], want)
+		}
+		if len(hf.Font.Families) == 0 || hf.Font.Families[0] != "Carlito" || hf.Font.Size != 11 {
+			t.Errorf("%s: header font %+v, want Carlito 11", sh.Name, hf.Font)
+		}
+	}
+}
