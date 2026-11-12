@@ -447,7 +447,8 @@ func (l *Lexer) NextToken() (Token, error) {
 
 		switch c {
 		case '/':
-			buf := append(l.scratch[:0], c)
+			buf := l.scratch[:0]
+			buf = append(buf, c)
 			for {
 				cc, err := l.reader.ReadByte()
 				if err != nil {
@@ -481,7 +482,8 @@ func (l *Lexer) NextToken() (Token, error) {
 			return Token{Type: TokenName, Value: l.text(buf)}, nil
 
 		case '(':
-			buf := append(l.scratch[:0], c)
+			buf := l.scratch[:0]
+			buf = append(buf, c)
 			nesting := 1
 			for {
 				cc, err := l.reader.ReadByte()
@@ -534,7 +536,8 @@ func (l *Lexer) NextToken() (Token, error) {
 			_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 
 			// Hex string
-			buf := append(l.scratch[:0], c)
+			buf := l.scratch[:0]
+			buf = append(buf, c)
 			for {
 				cc, err := l.reader.ReadByte()
 				if err != nil {

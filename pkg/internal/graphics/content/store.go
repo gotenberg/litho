@@ -74,7 +74,7 @@ func reservedOperations(n int) int {
 // The blocks hold interfaces, never the bytes of the stream: an operand the
 // parser read is a value of its own, so the operations live as long as their
 // caller keeps them, whatever becomes of the stream they were read from. An
-// operation a caller keeps keeps its block, and the other operations' operands
+// operation a caller keeps holds its block, and the other operations' operands
 // the block holds, alive; the operations of a parse are kept or dropped
 // together by every reader of them.
 type operationList struct {
