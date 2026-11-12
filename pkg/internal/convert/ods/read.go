@@ -507,14 +507,18 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 		Hidden: hidden || el.A(odf.NSTable, "visibility") == "collapse" || el.A(odf.NSTable, "visibility") == "filter",
 		Style:  r.cellStyle(el.A(odf.NSTable, "default-cell-style-name")),
 	}
+	// style:use-optimal-row-height false keeps the height the user set
+	// (ODF 1.3, Part 3, 20.391).
+	optimal := props.Get("style:use-optimal-row-height") != "false"
 	if h, ok := odf.Length(props.Get("style:row-height")); ok && h > 0 {
 		h = calcTwips(h)
+		if optimal {
+			h = r.optimalFloor(h)
+		}
 		tmpl.Height = h
 		ts.lastRowHeight = h
 	}
-	// style:use-optimal-row-height false keeps the height the user set
-	// (ODF 1.3, Part 3, 20.391).
-	tmpl.CustomHeight = props.Get("style:use-optimal-row-height") == "false" && tmpl.Height > 0
+	tmpl.CustomHeight = !optimal && tmpl.Height > 0
 	brk := props.Get("fo:break-before") == "page"
 	if header {
 		ts.headerRows = extend(ts.headerRows, ts.row, ts.row+n-1, true)
@@ -601,6 +605,29 @@ func hasValue(cells []sheet.Cell) bool {
 		}
 	}
 	return false
+}
+
+// optimalFloor returns the height h of a row of optimal height raised to
+// Calc's standard row height when the document's default font is Calc's
+// own, Liberation Sans 10: Calc recomputes the height of every row of
+// optimal height it reads (ScXMLTableRowContext::endFastElement,
+// sc/source/filter/xml/xmlrowi.cxx, and ScDocRowHeightUpdater), and a
+// row of that font is never shorter. A taller row keeps h: the sheet's
+// optimal heights grow it to its text.
+//
+// # Corpus evidence
+//
+//   - probe, ods: rows of optimal height of 0.1in, 0.1681in, 0.3in and
+//     0.5in without text, converted by Gotenberg 9.4.1, all print 12.784
+//     points apart, 256 twips.
+//   - libreoffice/ods: sc/cell-anchored-shapes.ods, rows of optimal height
+//     of 0.1681in written by LibreOffice 3.6, prints them 256 twips tall.
+func (r *reader) optimalFloor(h float64) float64 {
+	f := r.doc.Default.Font
+	if f.Size != defaultFontSize || len(f.Families) == 0 || f.Families[0] != defaultFamily {
+		return h
+	}
+	return max(h, defaultRowHeight)
 }
 
 // calcTwips returns a row height or column width of v points as Calc

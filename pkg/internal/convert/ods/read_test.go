@@ -140,6 +140,31 @@ func TestCalcTwips(t *testing.T) {
 	}
 }
 
+// TestRead_OptimalFloor checks that a row of optimal height shorter than
+// Calc's standard height reads at the standard, as Calc recomputes it,
+// while a row of the user's height and a taller row keep theirs.
+func TestRead_OptimalFloor(t *testing.T) {
+	f := flat{
+		auto: `<style:style style:name="ro1" style:family="table-row"><style:table-row-properties style:row-height="0.1681in" style:use-optimal-row-height="true"/></style:style>` +
+			`<style:style style:name="ro2" style:family="table-row"><style:table-row-properties style:row-height="0.1in" style:use-optimal-row-height="false"/></style:style>` +
+			`<style:style style:name="ro3" style:family="table-row"><style:table-row-properties style:row-height="0.5in"/></style:style>`,
+		body: table("S",
+			`<table:table-row table:style-name="ro1"><table:table-cell office:value-type="string"><text:p>a</text:p></table:table-cell></table:table-row>`+
+				`<table:table-row table:style-name="ro2"><table:table-cell office:value-type="string"><text:p>b</text:p></table:table-cell></table:table-row>`+
+				`<table:table-row table:style-name="ro3"><table:table-cell office:value-type="string"><text:p>c</text:p></table:table-cell></table:table-row>`),
+	}
+	doc, _ := read(t, f.bytes())
+	rows := doc.Sheets[0].Rows
+	if len(rows) != 3 {
+		t.Fatalf("rows = %+v", rows)
+	}
+	for i, want := range []float64{12.8, 7.2, 36} {
+		if !near(rows[i].Height, want) {
+			t.Errorf("row %d height %v, want %v", i, rows[i].Height, want)
+		}
+	}
+}
+
 func TestRead_Values(t *testing.T) {
 	cells := []struct {
 		xml  string
