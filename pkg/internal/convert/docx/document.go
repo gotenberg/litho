@@ -109,6 +109,9 @@ type document struct {
 	// vmlTypes maps a VML shape type's id to its shape type number
 	// (o:spt, Part 4, 14.1.2.20), for the shapes that name it.
 	vmlTypes map[string]int
+	// vmlTypeElems maps a VML shape type's id to its element, whose
+	// textpath a shape of the type inherits.
+	vmlTypeElems map[string]*ooxml.Element
 	// inMargin is set while a header or footer is built; marginAnchors
 	// collects its drawings positioned from the page.
 	inMargin      bool
@@ -147,7 +150,7 @@ func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	}
 	d := &document{
 		ctx: ctx, pkg: pkg, main: main, fonts: fonts, opts: opts,
-		warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, lineFactors: map[string][3]float64{}, vmlTypes: map[string]int{},
+		warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, lineFactors: map[string][3]float64{}, vmlTypes: map[string]int{}, vmlTypeElems: map[string]*ooxml.Element{},
 		settings:  settings{defaultTab: 36},
 		revisions: &revisions{view: opts.TrackedChanges, authors: map[string]int{}, marked: map[*ooxml.Element]bool{}, markEnd: map[*ooxml.Element]bool{}, markStart: map[*ooxml.Element]bool{}, moved: map[*ooxml.Element]bool{}},
 	}

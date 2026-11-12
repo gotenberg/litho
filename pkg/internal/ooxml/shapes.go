@@ -223,6 +223,18 @@ func (s ShapeStyle) Paint(g *shape.Geometry, r typeset.Rect) []typeset.Fragment 
 	return append(out, strokes...)
 }
 
+// PaintOps returns the fragments that fill the outline ops, fitted to r,
+// with the style's fill, then stroke it with the style's line, its dash,
+// cap and join.
+func (s ShapeStyle) PaintOps(ops []typeset.PathOp, r typeset.Rect) []typeset.Fragment {
+	out := shape.Fill(ops, r, s.paint(shape.FillNorm))
+	if s.Line != nil && s.LineWidth > 0 {
+		c := typeset.Color{R: s.Line.R, G: s.Line.G, B: s.Line.B, A: s.Line.A}
+		out = append(out, shape.Stroke(ops, shape.Line{Width: s.LineWidth, Color: c, Cap: s.Cap, Join: s.Join, Dash: s.dash()})...)
+	}
+	return out
+}
+
 // maxCustDashes bounds the dash and space lengths of a custom dash read:
 // 64, 32 pairs.
 // Anti-DoS guard, not spec-mandated: Office's dialogs make at most a few,

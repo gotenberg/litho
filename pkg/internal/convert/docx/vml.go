@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
@@ -53,6 +54,9 @@ func (d *document) readShapeTypes(c *ooxml.Element) {
 	for _, k := range c.Kids() {
 		if !k.Is(ooxml.NSV, "shapetype") {
 			continue
+		}
+		if len(d.vmlTypeElems) < maxVMLTypes {
+			d.vmlTypeElems[attrOr(k, "id")] = k
 		}
 		spt, ok := k.AttrNS(ooxml.NSO, "spt")
 		if !ok {
@@ -191,6 +195,12 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 		}
 		return n
 	}
+	if d.vmlType(k) == sptPlainText {
+		if n := d.vmlTextPath(k, st, w, h); n != nil {
+			setTransform(n.Style, vmlRotation(vs), strings.Contains(vs["flip"], "x"), strings.Contains(vs["flip"], "y"))
+			return n
+		}
+	}
 	geom := d.vmlGeometry(k)
 	if geom == "" {
 		d.warn(warn.ContentUnsupported, warn.Omitted, "a VML shape of a custom geometry is left out")
@@ -249,19 +259,35 @@ func (d *document) vmlGeometry(k *ooxml.Element) string {
 	default:
 		return ""
 	}
-	spt, ok := 0, false
-	if v, has := k.AttrNS(ooxml.NSO, "spt"); has {
-		spt, ok = ooxml.Int(v)
-	}
-	if !ok {
-		spt, ok = d.vmlTypes[strings.TrimPrefix(attrOr(k, "type"), "#")]
-	}
-	if !ok {
+	spt := d.vmlType(k)
+	if spt < 0 {
 		return ""
 	}
 	p, _ := ooxml.VMLPreset(spt)
 	return p
 }
+
+// vmlType returns the shape type number of a v:shape: its own o:spt, else
+// its shape type's (Part 4, 14.1.2.20), -1 for none.
+func (d *document) vmlType(k *ooxml.Element) int {
+	if !k.Is(ooxml.NSV, "shape") {
+		return -1
+	}
+	if v, has := k.AttrNS(ooxml.NSO, "spt"); has {
+		if spt, ok := ooxml.Int(v); ok {
+			return spt
+		}
+	}
+	if spt, ok := d.vmlTypes[strings.TrimPrefix(attrOr(k, "type"), "#")]; ok {
+		return spt
+	}
+	return -1
+}
+
+// maxVMLTypes caps the VML shape types a document records. Anti-DoS
+// guard, not spec-mandated: Word writes one shape type per kind of shape
+// it uses, a few dozen at most.
+const maxVMLTypes = 4096
 
 // vmlShapeStyle returns the fill and stroke of a VML shape (Part 4,
 // 14.1.2.19 filled, fillcolor, stroked, strokecolor, strokeweight, and
@@ -285,6 +311,7 @@ func vmlShapeStyle(k *ooxml.Element) ooxml.ShapeStyle {
 		}
 		if fill == nil || vmlOn(fill, "on") {
 			ss.Fill = &c
+			ss.Gradient = vmlGradient(fill, c)
 		}
 	}
 	if vmlOn(k, "stroked") {
@@ -310,6 +337,33 @@ func vmlShapeStyle(k *ooxml.Element) ooxml.ShapeStyle {
 		}
 	}
 	return ss
+}
+
+// vmlGradient returns the linear gradient of a v:fill of type gradient
+// (Part 4, 14.1.2.5 type, color2, angle) whose first colour is c: from
+// color2 to c along the direction angle plus 90 degrees, clockwise from
+// the positive x axis; white for a missing color2. nil for another type.
+//
+// # Corpus evidence
+//
+//   - litho/docx shapes-wordart: Word fills the Classic WordArt of fill
+//     colour #4472C4, color2 #ED7D31 and angle -90 from #ED7D31 at its
+//     left edge to #4472C4 at its right.
+func vmlGradient(fill *ooxml.Element, c css.Color) *ooxml.Gradient {
+	if attrOr(fill, "type") != "gradient" {
+		return nil
+	}
+	c2 := css.Color{R: 1, G: 1, B: 1, A: c.A}
+	if v, ok := ooxml.VMLColor(attrOr(fill, "color2")); ok {
+		c2 = v
+		c2.A = c.A
+	}
+	angle, _ := ooxml.Measure(strings.TrimSuffix(attrOr(fill, "angle"), "fd"), 1)
+	if strings.HasSuffix(attrOr(fill, "angle"), "fd") {
+		angle /= 65536
+	}
+	tc := func(c css.Color) typeset.Color { return typeset.Color{R: c.R, G: c.G, B: c.B, A: c.A} }
+	return &ooxml.Gradient{Stops: []typeset.ColorStop{{Offset: 0, Color: tc(c2)}, {Offset: 1, Color: tc(c)}}, Angle: angle + 90}
 }
 
 // vmlOn reads a VML boolean attribute (Part 4, 14.1.2.19 ST_TrueFalse: t,
