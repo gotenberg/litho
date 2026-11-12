@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -644,7 +645,7 @@ func (e *engine) links(res *Result, links []pendingLink, used map[*compose.Struc
 // an empty region or a target no element names, which it warns about.
 func (e *engine) resolveLink(pl pendingLink) (compose.Link, bool) {
 	r := pl.rect
-	if !(r.Width > 0) || !(r.Height > 0) {
+	if !numeric.Positive(r.Width) || !numeric.Positive(r.Height) {
 		return compose.Link{}, false
 	}
 	href := pl.lk.href

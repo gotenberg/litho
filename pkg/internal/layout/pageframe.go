@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // checkFrame reports a page frame whose insets [Layout] cannot draw: not
@@ -43,7 +44,7 @@ func (e *engine) paintFrame(pg *compose.Page, pb PageBox) {
 		Width:  pb.Width - f.Inset[css.Left] - f.Inset[css.Right],
 		Height: pb.Height - f.Inset[css.Top] - f.Inset[css.Bottom],
 	}
-	if !(r.Width > 0) || !(r.Height > 0) {
+	if !numeric.Positive(r.Width) || !numeric.Positive(r.Height) {
 		return
 	}
 	fb := &box{st: f.Style, kind: kindBlock}

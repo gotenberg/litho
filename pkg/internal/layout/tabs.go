@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -45,7 +46,7 @@ func (e *engine) officeStep(st *css.Style, lang string) float64 {
 func (e *engine) nextStop(root *box, at float64) (css.TabStop, bool) {
 	last := 0.0
 	for _, ts := range root.st.TabStops {
-		if ts.Align == css.TabBar || !(ts.Pos >= 0) || math.IsInf(ts.Pos, 1) {
+		if ts.Align == css.TabBar || !numeric.NonNegative(ts.Pos) || math.IsInf(ts.Pos, 1) {
 			continue
 		}
 		if ts.Pos > at+eps {
@@ -222,7 +223,7 @@ func (e *engine) tabLeader(p *ifcPara, it *lineItem) *compose.Text {
 func barRules(root *box, cb cblock, x float64) []float64 {
 	var out []float64
 	for _, ts := range root.st.TabStops {
-		if ts.Align != css.TabBar || !(ts.Pos >= 0) || math.IsInf(ts.Pos, 1) {
+		if ts.Align != css.TabBar || !numeric.NonNegative(ts.Pos) || math.IsInf(ts.Pos, 1) {
 			continue
 		}
 		if root.st.Direction == css.RTL {

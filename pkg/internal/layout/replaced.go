@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // replacedSize returns the used content width and height of the replaced
@@ -66,7 +67,7 @@ func (e *engine) replacedSize(b *box, cb cblock) (float64, float64) {
 		pd, bd, m := edgesOf(b, cb.w)
 		iw = max(cb.w-pd[css.Left]-pd[css.Right]-bd[css.Left]-bd[css.Right]-m[css.Left]-m[css.Right], 0)
 		ih = iw / ratio
-		if !(iw > 0) {
+		if !numeric.Positive(iw) {
 			return cw(0), ch(0)
 		}
 	}

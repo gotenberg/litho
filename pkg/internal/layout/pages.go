@@ -5,20 +5,20 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // checkPage reports a page box whose size or margins [Layout] cannot lay
 // out on.
 func checkPage(pb PageBox) error {
-	finite := func(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
-	if !finite(pb.Width) || !finite(pb.Height) || pb.Width <= 0 || pb.Height <= 0 || pb.Width > maxPageSide || pb.Height > maxPageSide {
+	if !numeric.Finite(pb.Width) || !numeric.Finite(pb.Height) || pb.Width <= 0 || pb.Height <= 0 || pb.Width > maxPageSide || pb.Height > maxPageSide {
 		return fmt.Errorf("%w: page of %v by %v points", ErrInvalidOptions, pb.Width, pb.Height)
 	}
-	if !finite(pb.Bleed) || pb.Bleed < 0 || pb.Width+2*pb.Bleed > maxPageSide || pb.Height+2*pb.Bleed > maxPageSide {
+	if !numeric.Finite(pb.Bleed) || pb.Bleed < 0 || pb.Width+2*pb.Bleed > maxPageSide || pb.Height+2*pb.Bleed > maxPageSide {
 		return fmt.Errorf("%w: bleed of %v points on a page of %v by %v", ErrInvalidOptions, pb.Bleed, pb.Width, pb.Height)
 	}
 	for _, m := range pb.Margin {
-		if !finite(m) || m < 0 {
+		if !numeric.Finite(m) || m < 0 {
 			return fmt.Errorf("%w: page margin %v", ErrInvalidOptions, m)
 		}
 	}

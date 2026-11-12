@@ -3,12 +3,12 @@ package layout
 import (
 	"cmp"
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // genCtx is what box generation hands down the content tree.
@@ -286,7 +286,7 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 // validPicture reports a picture the engine can draw: a source or a
 // vector, and a finite, positive intrinsic size.
 func validPicture(p *Picture) bool {
-	return p != nil && (p.Source != nil || p.Vector != nil) && p.Width > 0 && p.Height > 0 && !math.IsInf(p.Width, 0) && !math.IsInf(p.Height, 0)
+	return p != nil && (p.Source != nil || p.Vector != nil) && numeric.PositiveFinite(p.Width) && numeric.PositiveFinite(p.Height)
 }
 
 // genInline generates an inline element: its inline box, split around the

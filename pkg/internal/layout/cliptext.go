@@ -37,7 +37,7 @@ func (p *painter) textClip(b *box) *compose.Path {
 			return
 		}
 		upem := float64(f.Upem())
-		if !(upem > 0) {
+		if upem == 0 {
 			return
 		}
 		k := t.Size / upem
