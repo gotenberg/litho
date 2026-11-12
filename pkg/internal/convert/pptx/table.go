@@ -83,10 +83,11 @@ func (r *reader) tableStyle(pr *ooxml.Element) *ooxml.Element {
 // cells, each cell's text, margins, anchor, fill and borders, its own
 // properties over the parts of the table style the table's flags turn on
 // (20.1.4.2: wholeTbl, the row then the column bands, firstCol, lastCol,
-// firstRow, lastRow and the corner cells, in that order).
-func (r *reader) table(c *shapeCtx, tbl *ooxml.Element) *slides.Table {
+// firstRow, lastRow and the corner cells, in that order). It returns
+// ctx's error when ctx ends first.
+func (r *reader) table(c *shapeCtx, tbl *ooxml.Element) (*slides.Table, error) {
 	if tbl == nil {
-		return nil
+		return nil, nil
 	}
 	pr := tbl.Child(ooxml.NSA, "tblPr")
 	t := &slides.Table{}
@@ -102,7 +103,7 @@ func (r *reader) table(c *shapeCtx, tbl *ooxml.Element) *slides.Table {
 	}
 	ncols := len(t.ColumnWidths)
 	if ncols == 0 {
-		return nil
+		return nil, nil
 	}
 	var trs []*ooxml.Element
 	for _, tr := range tbl.Kids() {
@@ -115,7 +116,7 @@ func (r *reader) table(c *shapeCtx, tbl *ooxml.Element) *slides.Table {
 		}
 	}
 	if len(trs) == 0 {
-		return nil
+		return nil, nil
 	}
 	ts := &tableStyle{
 		style: r.tableStyle(pr),
@@ -131,6 +132,9 @@ func (r *reader) table(c *shapeCtx, tbl *ooxml.Element) *slides.Table {
 		background, hasBackground = r.tableBackground(fc, ts.style)
 	}
 	for i, tr := range trs {
+		if err := r.ctx.Err(); err != nil {
+			return nil, err
+		}
 		row := slides.TableRow{Height: max(0, emuAttr(tr, "h"))}
 		j := 0
 		for _, tc := range tr.Kids() {
@@ -149,7 +153,7 @@ func (r *reader) table(c *shapeCtx, tbl *ooxml.Element) *slides.Table {
 		}
 		t.Rows = append(t.Rows, row)
 	}
-	return t
+	return t, nil
 }
 
 // tableBackground returns the background a table style gives its table
