@@ -31,6 +31,12 @@ func translation(x, y float64) compose.Matrix { return compose.Matrix{A: 1, D: 1
 // translation at most.
 const maxTransformOps = 16
 
+// maxTransformNumber bounds the magnitude of a draw:transform number read:
+// 1e9. Anti-DoS guard, not spec-mandated: it keeps the composition of
+// [maxTransformOps] operations finite, and a sheet's coordinates stay
+// under a million points.
+const maxTransformNumber = 1e9
+
 // parseTransform parses a draw:transform (ODF 1.3, Part 3, 19.228): a list
 // of rotate, scale, translate, skewX, skewY and matrix operations, applied
 // in the order they are listed, as Calc applies them. A rotate angle is
@@ -69,7 +75,7 @@ func parseTransform(s string) (compose.Matrix, bool) {
 				}
 			}
 			v, err := strconv.ParseFloat(args[i], 64)
-			if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > 1e9 {
+			if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > maxTransformNumber {
 				return 0, false
 			}
 			return v, true

@@ -116,13 +116,17 @@ func (r *reader) warn(code, msg string) {
 	r.warnings = append(r.warnings, compose.Warning{Code: code, Message: msg})
 }
 
-// tick checks ctx every 4,096 steps.
+// ctxCheckInterval is the steps between two checks of ctx: 4,096, a
+// check cheap against the work between.
+const ctxCheckInterval = 4096
+
+// tick checks ctx every [ctxCheckInterval] steps.
 func (r *reader) tick() bool {
 	if r.err != nil {
 		return false
 	}
 	r.steps++
-	if r.steps%4096 == 0 {
+	if r.steps%ctxCheckInterval == 0 {
 		if err := r.ctx.Err(); err != nil {
 			r.err = err
 			return false

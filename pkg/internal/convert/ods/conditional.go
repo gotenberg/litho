@@ -119,7 +119,7 @@ func (r *reader) condRule(sh *sheet.Sheet, e *odf.Element, ranges []sheet.Range)
 			rule.BarMinLength = min(max(v, 0), 100) / 100
 		}
 		if v, err := strconv.ParseFloat(e.A(nsCalcExt, "max-length"), 64); err == nil {
-			rule.BarMaxLength = max(min(max(v, 0), 100)/100, 0.001)
+			rule.BarMaxLength = max(min(max(v, 0), 100)/100, minBarMaxLength)
 		}
 		rule.BarSolid = e.A(nsCalcExt, "gradient") == "false"
 		if c, ok := color(e.A(nsCalcExt, "negative-color")); ok {
@@ -151,6 +151,10 @@ func (r *reader) condRule(sh *sheet.Sheet, e *odf.Element, ranges []sheet.Range)
 	}
 	return sheet.Rule{}, false
 }
+
+// minBarMaxLength is the shortest a data bar's longest bar is read: 0.1
+// percent of the cell, which keeps the bars' scale positive.
+const minBarMaxLength = 0.001
 
 // thresholdKinds maps the calcext:type of a colour scale or data bar entry
 // (LibreOffice's ScXMLColorScaleFormatEntryContext) to the kinds of

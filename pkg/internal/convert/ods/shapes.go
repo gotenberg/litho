@@ -196,6 +196,11 @@ func (r *reader) place(ts *tableState, el *odf.Element, at *sheet.Anchor, art sh
 // positive reports whether v is greater than 0; NaN is not.
 func positive(v float64) bool { return v > 0 }
 
+// turnEpsilon is the slack under which a transform's shear or a text's
+// angle reads as none, against the rounding of the trigonometry that
+// builds it.
+const turnEpsilon = 1e-9
+
 // shapePaint reads the fill of graphic properties p (ODF 1.3, Part 3,
 // 20.118 draw:fill and the properties it selects), nil for none: a fill
 // no style sets is solid, as LibreOffice's item pool gives it. A gradient
@@ -498,7 +503,7 @@ func (r *reader) geometryArt(el *odf.Element, paint *shape.Paint, s *shapeStroke
 	case "rect":
 		if rad, ok := odf.Length(el.A(odf.NSDraw, "corner-radius")); ok && rad > 0 {
 			if side := math.Min(w, h); side > 0 {
-				g = &shape.Geometry{Preset: "roundRect", Adjust: []shape.Adjust{{Name: "adj", Value: math.Min(rad/side, 0.5) * 100000}}}
+				g = &shape.Geometry{Preset: "roundRect", Adjust: []shape.Adjust{{Name: "adj", Value: math.Min(rad/side, 0.5) * adjustUnit}}}
 			}
 		}
 	case "ellipse", "circle":
@@ -525,7 +530,7 @@ func (r *reader) geometryArt(el *odf.Element, paint *shape.Paint, s *shapeStroke
 		}
 	}
 	m = mul(translation(dx, dy), m)
-	if g != nil && g.MirrorH != g.MirrorV && (math.Abs(m.B) > 1e-9 || math.Abs(m.C) > 1e-9) {
+	if g != nil && g.MirrorH != g.MirrorV && (math.Abs(m.B) > turnEpsilon || math.Abs(m.C) > turnEpsilon) {
 		// LibreOffice mirrors a turned custom shape about the page's axis
 		// through its centre, after the turn: the geometry's own mirror,
 		// undone, then mirrored on the page.
@@ -571,6 +576,10 @@ func (r *reader) geometryArt(el *odf.Element, paint *shape.Paint, s *shapeStroke
 		logic: &logicBox{x: m.E, y: m.F, w: w, h: h, lin: lin, local: local},
 	}, true
 }
+
+// adjustUnit is the unit of a preset geometry's adjust value: 100,000 for
+// the whole (ECMA-376 Part 1, 20.1.10.40 ST_PositiveFixedPercentage).
+const adjustUnit = 100000
 
 // outline reads the outline of a draw:path, draw:polygon, draw:polyline
 // or draw:regular-polygon (ODF 1.3, Part 3, 10.3.7, 10.3.5, 10.3.4,
@@ -669,6 +678,7 @@ func (r *reader) transformedPicture(ts *tableState, el *odf.Element, at *sheet.A
 //   - libreoffice/ods: sc/tdf137576_Measureline.ods prints "37 mm" in
 //     Liberation Serif at 11.991 points.
 const (
+	measureFamily   = "Liberation Serif"
 	measureFontSize = 11.991
 	measureTextGap  = 0.935
 )
@@ -696,14 +706,14 @@ func (r *reader) measureText(el *odf.Element, art *shapeArt) {
 	if v, ok := odf.Length(tp.Get("fo:font-size")); ok && v > 0 {
 		size = min(v, maxMeasureFont)
 	}
-	families := []string{"Liberation Serif"}
+	families := []string{measureFamily}
 	if f := strings.Trim(tp.Get("fo:font-family"), "'\""); f != "" {
-		families = []string{f, "Liberation Serif"}
+		families = []string{f, measureFamily}
 	}
 	fonts, prev := r.fonts, art.draw
 	ax, ay, bx, by := art.line[0], art.line[1], art.line[2], art.line[3]
 	angle := math.Atan2(by-ay, bx-ax)
-	if angle >= math.Pi/2-1e-9 || angle < -math.Pi/2-1e-9 {
+	if angle >= math.Pi/2-turnEpsilon || angle < -math.Pi/2-turnEpsilon {
 		// Text reads left to right or upwards, never upside down.
 		angle -= math.Pi
 	}
@@ -711,7 +721,7 @@ func (r *reader) measureText(el *odf.Element, art *shapeArt) {
 	mx, my := (ax+bx)/2, (ay+by)/2
 	art.draw = func(ctx context.Context) []compose.Fragment {
 		out := prev(ctx)
-		lines, _, err := fonts.Layout(ctx, []text.Run{{Text: txt, Style: text.Style{Families: families, Size: size, Color: compose.Color{A: 1}}}}, 1<<16, text.Options{Whitespace: text.Preserve})
+		lines, _, err := fonts.Layout(ctx, []text.Run{{Text: txt, Style: text.Style{Families: families, Size: size, Color: compose.Color{A: 1}}}}, measureLineWidth, text.Options{Whitespace: text.Preserve})
 		if err != nil || len(lines) == 0 {
 			return out
 		}
@@ -725,6 +735,11 @@ func (r *reader) measureText(el *odf.Element, art *shapeArt) {
 		return append(out, &compose.Group{Transform: compose.Matrix{A: cos, B: sin, C: -sin, D: cos, E: mx, F: my}, Opacity: 1, Content: runs})
 	}
 }
+
+// measureLineWidth is the width a dimension line's text is laid out in:
+// 65,536 points, wider than any text [maxFieldText] bytes long, so the
+// text stays on one line.
+const measureLineWidth = 1 << 16
 
 // maxMeasureFont caps a dimension line's font size, in points. Anti-DoS
 // guard, not spec-mandated: Calc stops at 999.9 points.

@@ -172,6 +172,10 @@ func (r *reader) spanFont(base sheet.Font, cur *sheet.Font, name string) *sheet.
 	return &f
 }
 
+// boldWeight is the lightest numeric font weight read as bold: 600, the
+// first of CSS's bold weights (CSS Fonts Module Level 3, 3.2 font-weight).
+const boldWeight = 600
+
 // foldFont lays the text property layers over f (ODF 1.3, Part 3, 20.x):
 // the Western, Asian and complex font names through the font-face
 // declarations (16.23), in that order, the size in points or percent,
@@ -205,7 +209,7 @@ func (r *reader) foldFont(f sheet.Font, layers []odf.Props) sheet.Font {
 		}
 		if v, ok := l.Lookup("fo:font-weight"); ok {
 			n, err := strconv.Atoi(v)
-			f.Bold = v == "bold" || err == nil && n >= 600
+			f.Bold = v == "bold" || err == nil && n >= boldWeight
 		}
 		if v, ok := l.Lookup("fo:font-style"); ok {
 			f.Italic = v == "italic" || v == "oblique"

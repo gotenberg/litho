@@ -271,7 +271,7 @@ func (r *reader) decodePicture(img *odf.Element) *layout.Picture {
 		s := doc.Size()
 		w, h := s.Width, s.Height
 		if !s.HasWidth || !s.HasHeight || w <= 0 || h <= 0 {
-			w, h = 300*css.Pt, 150*css.Pt
+			w, h = svgDefaultWidth, svgDefaultHeight
 		}
 		return &layout.Picture{Width: w, Height: h, Vector: doc.Draw}
 	}
@@ -316,6 +316,14 @@ func (r *reader) decodePicture(img *odf.Element) *layout.Picture {
 	return pic
 }
 
+// svgDefaultWidth and svgDefaultHeight are the size of an SVG picture that
+// gives none: 300 by 150 pixels, a replaced element's default object size
+// (CSS 2.1, 10.3.2 and 10.6.2).
+const (
+	svgDefaultWidth  = 300 * css.Pt
+	svgDefaultHeight = 150 * css.Pt
+)
+
 // vectorFormat names the Windows and StarView metafiles: WMF (placeable
 // or not), EMF and SVM; "" for anything else.
 func vectorFormat(d []byte) string {
@@ -330,10 +338,18 @@ func vectorFormat(d []byte) string {
 	return ""
 }
 
+// The windows isSVG sniffs: the white space before an SVG's first tag,
+// and the XML declaration, comments and doctype before its svg element.
+// A sniff window, not a cap: an SVG that starts later is not drawn.
+const (
+	svgLeadWindow = 512
+	svgHeadWindow = 4096
+)
+
 // isSVG reports an SVG document by its start.
 func isSVG(d []byte) bool {
-	head := bytes.TrimLeft(d[:min(len(d), 512)], "\xef\xbb\xbf \t\r\n")
-	return bytes.HasPrefix(head, []byte("<svg")) || bytes.HasPrefix(head, []byte("<?xml")) && bytes.Contains(d[:min(len(d), 4096)], []byte("<svg"))
+	head := bytes.TrimLeft(d[:min(len(d), svgLeadWindow)], "\xef\xbb\xbf \t\r\n")
+	return bytes.HasPrefix(head, []byte("<svg")) || bytes.HasPrefix(head, []byte("<?xml")) && bytes.Contains(d[:min(len(d), svgHeadWindow)], []byte("<svg"))
 }
 
 // ref is a cell address, 0-based.
