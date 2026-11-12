@@ -158,7 +158,7 @@ func (p *Package) Read(name string) ([]byte, error) {
 	defer rc.Close() //nolint:errcheck // a read-only zip entry has nothing to flush
 	data, err := io.ReadAll(rc)
 	if err != nil {
-		return nil, err //nolint:wrapcheck // partReader's errors name the part already
+		return nil, err // partReader's errors name the part already
 	}
 	return data, nil
 }
@@ -212,10 +212,10 @@ func (r *partReader) Read(b []byte) (int, error) {
 	if err != nil && !errors.Is(err, io.EOF) {
 		return n, fmt.Errorf("%w: reading part %s: %w", office.ErrMalformed, r.name, err)
 	}
-	return n, err //nolint:wrapcheck // io.EOF ends the part and must stay unwrapped
+	return n, err // io.EOF ends the part and must stay unwrapped
 }
 
-func (r *partReader) Close() error { return r.rc.Close() } //nolint:wrapcheck // a read-only zip entry has nothing to flush
+func (r *partReader) Close() error { return r.rc.Close() }
 
 // ContentType returns the content type of the part name: its Override,
 // else the Default of its extension, "" for none (ECMA-376 Part 2, 10.1.2).

@@ -9,7 +9,7 @@ package ooxml
 // the host control (201) have no preset, and the WordArt types (24 to 31,
 // 136 to 175), which LibreOffice maps onto the text warps of 20.1.10.76
 // ST_TextShapeType, are not shapes.
-var vmlPresets = map[int]string{ //nolint:gochecknoglobals // a read-only table, LibreOffice's MSO_SPT to OOXML mapping.
+var vmlPresets = map[int]string{
 	1:   "rect",                       // rectangle
 	2:   "roundRect",                  // round-rectangle
 	3:   "ellipse",                    // ellipse

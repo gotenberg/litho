@@ -51,8 +51,6 @@ func (s VMLStyle) Length(name string, unit float64) (float64, bool) {
 
 // vmlColors are the sixteen colour names of VML (Part 4, 14.1.2.19
 // ST_ColorType, the HTML 4 names).
-//
-//nolint:gochecknoglobals // static table of the named colours
 var vmlColors = map[string]uint32{
 	"black": 0x000000, "silver": 0xC0C0C0, "gray": 0x808080, "white": 0xFFFFFF,
 	"maroon": 0x800000, "red": 0xFF0000, "purple": 0x800080, "fuchsia": 0xFF00FF,

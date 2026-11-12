@@ -22,19 +22,19 @@ type cjkNumerals struct {
 // The numeral sets of the counting and legal formats of ECMA-376 Part 1,
 // 17.18.59 ST_NumberFormat, as LibreOffice writes them.
 var (
-	cjkCounting = cjkNumerals{ //nolint:gochecknoglobals // read-only numeral table
+	cjkCounting = cjkNumerals{
 		digits: [10]string{"零", "一", "二", "三", "四", "五", "六", "七", "八", "九"},
 		units:  [3]string{"十", "百", "千"}, myriad: "万", dropOne: true, zero: true,
 	}
-	cjkLegalTraditional = cjkNumerals{ //nolint:gochecknoglobals // read-only numeral table
+	cjkLegalTraditional = cjkNumerals{
 		digits: [10]string{"零", "壹", "貳", "參", "肆", "伍", "陸", "柒", "捌", "玖"},
 		units:  [3]string{"拾", "佰", "仟"}, myriad: "萬", zero: true,
 	}
-	cjkLegalSimplified = cjkNumerals{ //nolint:gochecknoglobals // read-only numeral table
+	cjkLegalSimplified = cjkNumerals{
 		digits: [10]string{"零", "壹", "贰", "叁", "肆", "伍", "陆", "柒", "捌", "玖"},
 		units:  [3]string{"拾", "佰", "仟"}, myriad: "万", zero: true,
 	}
-	koreanCounting = cjkNumerals{ //nolint:gochecknoglobals // read-only numeral table
+	koreanCounting = cjkNumerals{
 		digits: [10]string{"영", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구"},
 		units:  [3]string{"십", "백", "천"}, myriad: "만", dropAll: true,
 	}
