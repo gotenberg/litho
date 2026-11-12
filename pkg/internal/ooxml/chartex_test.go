@@ -2,11 +2,13 @@ package ooxml
 
 import (
 	"context"
+	"errors"
 	"math"
 	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 )
 
 // chartExXML wraps data and a chart's content in a chartex chart space.
@@ -136,9 +138,9 @@ func TestChartExFromElement_MissingAxesAndNotChartEx(t *testing.T) {
 	if !c.Axes[0].Deleted || !c.Axes[1].Deleted {
 		t.Errorf("axes = %+v %+v, want both missing", c.Axes[0], c.Axes[1])
 	}
-	root, _ := Parse(context.Background(), []byte(chartXML("", "", "")), nil)
-	if _, err := ChartExFromElement(root, nil, ChartOptions{}, nil); err == nil {
-		t.Error("a c:chartSpace reads as a chartex chart")
+	root := mustParse(t, chartXML("", "", ""))
+	if _, err := ChartExFromElement(root, nil, ChartOptions{}, nil); !errors.Is(err, office.ErrMalformed) {
+		t.Errorf("a c:chartSpace read as a chartex chart: %v, want office.ErrMalformed", err)
 	}
 }
 

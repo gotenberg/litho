@@ -2,11 +2,13 @@ package ooxml
 
 import (
 	"context"
+	"errors"
 	"math"
 	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
@@ -213,8 +215,8 @@ func TestChartFromElement_Warnings(t *testing.T) {
 			t.Errorf("warnings %q lack %q", got, want)
 		}
 	}
-	if _, err := ChartFromElement(&Element{Space: NSChart, Local: "chart"}, nil, ChartOptions{}); err == nil {
-		t.Error("read a part that is not a chart space")
+	if _, err := ChartFromElement(&Element{Space: NSChart, Local: "chart"}, nil, ChartOptions{}); !errors.Is(err, office.ErrMalformed) {
+		t.Errorf("a part that is not a chart space: %v, want office.ErrMalformed", err)
 	}
 }
 

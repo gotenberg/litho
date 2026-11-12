@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
@@ -67,7 +68,7 @@ func hexColor(v uint32) css.Color {
 //
 // It fails with [ErrNoPart] for a missing part and wraps the parse errors
 // of [Package.ParseXML]; a part whose root is not c:chartSpace fails with
-// office.ErrMalformed through the error message. ctx's error stops it.
+// office.ErrMalformed. ctx's error stops it.
 func ParseChart(ctx context.Context, pkg *Package, part string) (*chart.Chart, error) {
 	root, err := pkg.ParseXML(ctx, part, nil)
 	if err != nil {
@@ -128,7 +129,7 @@ func chartTheme(ctx context.Context, pkg *Package, part string, theme *Theme) *T
 }
 
 // errNotChart reports a part whose root is not a chart space.
-var errNotChart = fmt.Errorf("not a c:chartSpace")
+var errNotChart = fmt.Errorf("%w: not a c:chartSpace", office.ErrMalformed)
 
 // relExtendedProperties is the relationship type of the extended
 // properties part (ECMA-376 Part 1, 15.2.12.3).

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 )
 
 // NSChartEx is the namespace of the charts Office 2016 added (MS-ODRAWXML,
@@ -56,7 +57,7 @@ const chartExLineWidth = 18 * 72.0 / 2540
 //
 // It fails with [ErrNoPart] for a missing part and wraps the parse errors
 // of [Package.ParseXML]; a part whose root is not cx:chartSpace fails
-// through the error message. ctx's error stops it.
+// with office.ErrMalformed. ctx's error stops it.
 func ParseChartEx(ctx context.Context, pkg *Package, part string) (*chart.Chart, error) {
 	root, err := pkg.ParseXML(ctx, part, nil)
 	if err != nil {
@@ -114,7 +115,7 @@ func definedNames(wb *Element) map[string]string {
 }
 
 // errNotChartEx reports a part whose root is not a chartex chart space.
-var errNotChartEx = fmt.Errorf("not a cx:chartSpace")
+var errNotChartEx = fmt.Errorf("%w: not a cx:chartSpace", office.ErrMalformed)
 
 // cxChild returns the first child cx:local of e.
 func cxChild(e *Element, local string) *Element { return e.Child(NSChartEx, local) }
