@@ -243,7 +243,8 @@ func TestConvert_SheetRefitsToThePaper(t *testing.T) {
 
 // TestConvert_SlidesFitThePaper checks that a slide is scaled to fit a
 // caller's paper, landscape turns a portrait slide, and an ODP notes page
-// prints on Letter, or on the caller's paper.
+// prints on the default paper, A4 unless the caller names another, or on
+// the caller's paper.
 func TestConvert_SlidesFitThePaper(t *testing.T) {
 	t.Parallel()
 	wide := testODP("28cm", "15.75cm")
@@ -255,7 +256,9 @@ func TestConvert_SlidesFitThePaper(t *testing.T) {
 	_, sizes = convertSizes(t, formatODP, testODP("19.05cm", "25.4cm"), WithOrientation(OrientationLandscape))
 	checkSizes(t, "portrait slides turned", sizes, 2, 720, 540)
 	_, sizes = conversionSizes(t, FromODP(strings.NewReader(wide), fonts, WithNotesPages(true)))
-	checkSizes(t, "notes", sizes[2:], 2, letterW, letterH)
+	checkSizes(t, "notes", sizes[2:], 2, a4W, a4H)
+	_, sizes = conversionSizes(t, FromODP(strings.NewReader(wide), fonts, WithNotesPages(true), WithDefaultPaper(PaperLetter)))
+	checkSizes(t, "notes on the default paper", sizes[2:], 2, letterW, letterH)
 	_, sizes = conversionSizes(t, FromODP(strings.NewReader(wide), fonts, WithNotesPages(true), WithPaper(PaperA4)))
 	checkSizes(t, "notes on A4", sizes, 4, a4W, a4H)
 }

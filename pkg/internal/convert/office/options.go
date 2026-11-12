@@ -33,7 +33,8 @@ type Options struct {
 	// a notes page prints on when PageWidth is zero, the notes page drawn
 	// at its top-left corner at the notes size the file names; both zero,
 	// the default, print a notes page on its own size. The ODP converter
-	// sets them: Impress prints an OpenDocument notes page on Letter.
+	// sets them to the default paper: Impress prints an OpenDocument notes
+	// page on the paper it falls back to.
 	NotesPaperWidth, NotesPaperHeight float64
 	// Landscape lays every section out in landscape: a portrait section's
 	// width and height are swapped, a landscape one is kept.

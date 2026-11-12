@@ -855,9 +855,10 @@ func WithHiddenSlides(include bool) PresentationOption {
 // WithNotesPages writes, after the slides of a PPTX or ODP source, one
 // notes page per slide written: the slide drawn in its box and the slide's
 // notes below it. A PPTX notes page is the notes size the presentation
-// names; an ODP notes page prints on Letter, the notes page at its top-left
-// corner. With [WithPaper] the notes page is scaled down to fit the paper
-// and centred. false, the default, writes the slides alone.
+// names; an ODP notes page prints on the default paper ([WithDefaultPaper],
+// A4 without it), the notes page at its top-left corner, whatever size the
+// presentation gives it. With [WithPaper] the notes page is scaled down to
+// fit the paper and centred. false, the default, writes the slides alone.
 func WithNotesPages(notes bool) PresentationOption {
 	return presentationOption(func(c *convertConfig) { c.notesPages = notes })
 }
@@ -871,8 +872,9 @@ func WithNotesPages(notes bool) PresentationOption {
 // [ErrInvalidConvertOptions].
 //
 // The page is the handout page of the presentation: the page of an ODP
-// handout master, the notes size of a PPTX, Letter when the source names
-// neither. The slides are laid out on it as LibreOffice lays a handout
+// handout master, the notes size of a PPTX, the default paper
+// ([WithDefaultPaper]) when the source names neither. The slides are laid
+// out on it as LibreOffice lays a handout
 // out, those of a PPTX too. Three a page, the slides take one column of a
 // portrait page or one row of a landscape page, each with seven lines
 // ruled beside it for notes.

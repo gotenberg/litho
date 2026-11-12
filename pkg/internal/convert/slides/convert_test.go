@@ -30,7 +30,8 @@ func TestConvert_Pages(t *testing.T) {
 	}{
 		{"shown", office.Options{}, 2, [][2]float64{{960, 540}, {960, 540}}, []string{"A", "A (2)"}},
 		{"hidden", office.Options{HiddenSlides: true}, 3, nil, []string{"A", "B", "A (2)"}},
-		{"notes", office.Options{NotesPages: true}, 4, [][2]float64{{960, 540}, {960, 540}, {612, 792}, {612, 792}}, []string{"A", "A (2)", "A", "A (2)"}},
+		{"notes", office.Options{NotesPages: true}, 4, [][2]float64{{960, 540}, {960, 540}, {595.276, 841.89}, {595.276, 841.89}}, []string{"A", "A (2)", "A", "A (2)"}},
+		{"notes on the default paper", office.Options{NotesPages: true, DefaultPageWidth: 612, DefaultPageHeight: 792}, 4, [][2]float64{{960, 540}, {960, 540}, {612, 792}, {612, 792}}, nil},
 		{"paper", office.Options{PageWidth: 595, PageHeight: 842, Landscape: true}, 2, [][2]float64{{842, 595}, {842, 595}}, nil},
 		{"no outline", office.Options{OmitOutline: true}, 2, nil, []string{}},
 	} {
@@ -141,10 +142,10 @@ func TestConvert_PaperFit(t *testing.T) {
 
 // TestConvert_NotesPage checks the default notes page against Impress's
 // (deck.pptx's first notes page: the 16:9 slide 527.98 wide at 42.01,
-// 60.19 on Letter).
+// 60.19 on Letter, the default paper of the measurement).
 func TestConvert_NotesPage(t *testing.T) {
 	doc := &Document{Width: 960, Height: 540, Slides: []*Slide{{Name: "S", Shapes: []*Shape{box(0, 0, 400, 100, para("Slide", arial(40)))}, Notes: []Paragraph{para("Note", arial(20))}}}}
-	pg := convert(t, doc, office.Options{NotesPages: true}).Pages[1]
+	pg := convert(t, doc, office.Options{NotesPages: true, DefaultPageWidth: 612, DefaultPageHeight: 792}).Pages[1]
 	s := find(t, pg, "Slide")
 	k := 527.98 / 960
 	if !near(s.x, 42.01, 0.1) || !near(s.y, 60.19+40*k, 0.2) || !near(s.size, 40*k, 0.05) {

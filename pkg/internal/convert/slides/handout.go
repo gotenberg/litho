@@ -138,14 +138,15 @@ func noteLines(r compose.Rect) []compose.PathOp {
 }
 
 // handoutSize returns the handout page size: the one the file gives, else
-// the notes page size, else Letter, each side within the PDF's limits.
+// the notes page size, else the default paper, each side within the PDF's
+// limits.
 func (b *builder) handoutSize() (float64, float64) {
 	for _, s := range [][2]float64{{b.doc.HandoutWidth, b.doc.HandoutHeight}, {b.doc.NotesWidth, b.doc.NotesHeight}} {
 		if w, h := s[0], s[1]; w > 0 && h > 0 && w <= office.MaxPageSide && h <= office.MaxPageSide {
 			return w, h
 		}
 	}
-	return notesWidth, notesHeight
+	return b.defaultPaper()
 }
 
 // turned reports whether a handout page w by h turns to print on a page pw

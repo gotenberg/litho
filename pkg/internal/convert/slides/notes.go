@@ -7,12 +7,19 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
-// The notes page size of a file that gives none: US Letter portrait, the
-// paper of Impress's en-US defaults.
+// a4Width and a4Height are ISO 216 A4 in points: the paper of a notes or
+// handout page whose file names no size, when the options name no default
+// paper either.
 const (
-	notesWidth  = 612
-	notesHeight = 792
+	a4Width  = 595.276
+	a4Height = 841.890
 )
+
+// defaultPaper returns the paper of a notes or handout page whose file
+// names no size: the default paper of the options, else A4.
+func (b *builder) defaultPaper() (float64, float64) {
+	return b.opts.DefaultPage(a4Width, a4Height)
+}
 
 // The boxes of Impress's default notes page, as fractions of the page
 // (sd/xml/objectlist.xml, PageKind::Notes): the slide drawn in the upper
@@ -49,8 +56,8 @@ const (
 // scaled into its box inside a hairline frame, its notes below. A slide
 // with notes takes the notes master's boxes and shapes when the document
 // gives them; otherwise the page takes Impress's default notes layout.
-// The page is the notes size the file gives (Letter without one), as
-// Impress prints a PresentationML notes page; on the notes paper of the
+// The page is the notes size the file gives (the default paper without
+// one), as Impress prints a PresentationML notes page; on the notes paper of the
 // options, the notes page is drawn at its top-left corner at that size,
 // as Impress prints an OpenDocument one; on the paper of the options, it
 // is scaled down to fit, never up, and centred, as a slide is. The first
@@ -62,8 +69,11 @@ const (
 //   - litho/pptx: deck-training and notes-pages (notes size 540 by 720)
 //     print every notes page, with notes or without, 540 by 720 in the
 //     pinned LibreOffice.
-//   - probe, odp: a deck whose notes masters are A4 and 540 by 720 prints
-//     its notes pages on Letter.
+//   - probe, odp: a deck whose notes master is A4, A5, 540 by 720 or A4
+//     landscape prints its notes pages on the paper LibreOffice falls
+//     back to, whatever the master names: Letter through the route of
+//     gotenberg/gotenberg:9.0.0, whose locale is en-US, A4 through the
+//     route of 9.4.1 and through soffice in both.
 //   - gotenberg/pptx: deck-notes (notes size 540 by 720, a master slide picture box
 //     of 360 by 270 at 90, 54): the slides with notes print the slide in
 //     that box framed whole and the slide number placeholder; slides 3 to 6,
@@ -76,7 +86,7 @@ func (b *builder) notesPage(s *Slide, n int) (*compose.Page, *compose.StructElem
 		if w, h := b.doc.NotesWidth, b.doc.NotesHeight; w > 0 && h > 0 && w <= office.MaxPageSide && h <= office.MaxPageSide {
 			return w, h
 		}
-		return notesWidth, notesHeight
+		return b.defaultPaper()
 	}
 	pw, ph := size()
 	corner := false
