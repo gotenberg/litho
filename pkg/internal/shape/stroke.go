@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // ArrowKind is an arrowhead kind (ECMA-376 Part 1, 20.1.10.33
@@ -79,7 +80,7 @@ func PresetDash(name string, width float64, c compose.LineCap) []float64 {
 	if !ok {
 		return nil
 	}
-	if width <= 0 || !finite(width) {
+	if !numeric.PositiveFinite(width) {
 		width = 1
 	}
 	out := make([]float64, len(rel))
@@ -128,7 +129,7 @@ func arrowFactor(s ArrowSize, open bool) float64 {
 // the line stops just short of the arrowhead's base, notch or centre. A closed subpath has no
 // arrowheads. A zero width strokes nothing.
 func Stroke(ops []compose.PathOp, l Line) []compose.Fragment {
-	if len(ops) == 0 || l.Width <= 0 || !finite(l.Width) {
+	if len(ops) == 0 || !numeric.PositiveFinite(l.Width) {
 		return nil
 	}
 	// A copy, so shortening leaves the caller's outline alone.
@@ -222,7 +223,7 @@ func endTangent(ops []compose.PathOp) (compose.Point, compose.Point, bool) {
 // unit returns (x, y) scaled to length 1, false for a null vector.
 func unit(x, y float64) (compose.Point, bool) {
 	n := math.Hypot(x, y)
-	if n < 1e-9 || !finite(n) {
+	if n < 1e-9 || !numeric.Finite(n) {
 		return compose.Point{}, false
 	}
 	return compose.Point{X: x / n, Y: y / n}, true

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // TestPresetTable_EveryPresetEvaluates evaluates every preset of the
@@ -44,7 +45,7 @@ func TestPresetTable_EveryPresetEvaluates(t *testing.T) {
 				}
 				for _, op := range p.Ops {
 					for _, pt := range op.P {
-						if !finite(pt.X) || !finite(pt.Y) {
+						if !numeric.Finite(pt.X) || !numeric.Finite(pt.Y) {
 							t.Fatalf("%s in %v: point %v", name, r, pt)
 						}
 						if op.Kind != compose.ClosePath && r.Width > 0 && (pt.X < lo || pt.X > hi) {
@@ -54,7 +55,7 @@ func TestPresetTable_EveryPresetEvaluates(t *testing.T) {
 				}
 			}
 			tr := TextRect(g, r)
-			if !finite(tr.X) || !finite(tr.Width) || tr.Width < 0 || tr.Height < 0 {
+			if !numeric.Finite(tr.X) || !numeric.Finite(tr.Width) || tr.Width < 0 || tr.Height < 0 {
 				t.Errorf("%s: text rectangle %v", name, tr)
 			}
 		}

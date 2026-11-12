@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // emuPerPoint is the number of EMUs in a point (ECMA-376 Part 1, 20.1.2.1:
@@ -90,7 +91,7 @@ func newEvaluator(def *Custom, g *Geometry, r compose.Rect) *evaluator {
 			break
 		}
 		for _, a := range g.Adjust {
-			if a.Name != "" && a.Name == def.Adjust[i].Name && finite(a.Value) {
+			if a.Name != "" && a.Name == def.Adjust[i].Name && numeric.Finite(a.Value) {
 				ev.vals[i], ev.state[i] = a.Value, guideDone
 			}
 		}
@@ -108,9 +109,6 @@ func ratio(a, b float64) float64 {
 	}
 	return a / b
 }
-
-// finite reports whether v is neither NaN nor infinite.
-func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 
 // guide returns the value of guide i, evaluating it on first use.
 func (ev *evaluator) guide(i int) float64 {
@@ -139,7 +137,7 @@ func (ev *evaluator) guide(i int) float64 {
 	}
 	v := apply(gd.Op, ev.arg(gd.Args[0]), ev.arg(gd.Args[1]), ev.arg(gd.Args[2]))
 	ev.depth--
-	if !finite(v) {
+	if !numeric.Finite(v) {
 		v = 0
 	}
 	ev.vals[i], ev.state[i] = v, guideDone

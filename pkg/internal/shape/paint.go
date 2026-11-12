@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // PaintKind is how an area is painted.
@@ -143,7 +144,7 @@ func normalStops(in []compose.ColorStop) []compose.ColorStop {
 	}
 	s := make([]compose.ColorStop, 0, len(in)+2)
 	for _, st := range in {
-		if !finite(st.Offset) {
+		if !numeric.Finite(st.Offset) {
 			continue
 		}
 		st.Offset = math.Max(0, math.Min(1, st.Offset))
@@ -173,7 +174,7 @@ func normalStops(in []compose.ColorStop) []compose.ColorStop {
 // gradientShading returns the shading of a gradient over box, nil when
 // the box has no area.
 func gradientShading(box compose.Rect, stops []compose.ColorStop, angle float64, radial bool) *compose.Shading {
-	if box.Width <= 0 || box.Height <= 0 || !finite(angle) {
+	if box.Width <= 0 || box.Height <= 0 || !numeric.Finite(angle) {
 		return nil
 	}
 	cx, cy := box.X+box.Width/2, box.Y+box.Height/2
@@ -203,7 +204,7 @@ const maxPictureTiles = 4096
 // pictureTiles places a picture fill's image over box.
 func pictureTiles(box compose.Rect, p Paint) []compose.Fragment {
 	tw, th := p.TileWidth, p.TileHeight
-	if tw > 0 && th > 0 && finite(tw) && finite(th) && math.Ceil(box.Width/tw)*math.Ceil(box.Height/th) <= maxPictureTiles {
+	if numeric.PositiveFinite(tw) && numeric.PositiveFinite(th) && math.Ceil(box.Width/tw)*math.Ceil(box.Height/th) <= maxPictureTiles {
 		var out []compose.Fragment
 		for y := box.Y; y < box.Y+box.Height; y += th {
 			for x := box.X; x < box.X+box.Width; x += tw {
