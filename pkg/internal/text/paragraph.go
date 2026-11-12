@@ -290,7 +290,11 @@ func (f *Fonts) Shape(ctx context.Context, runs []ParagraphRun, opts ParagraphOp
 	if n == 0 {
 		return p, st.report(), nil
 	}
-	p.level = resolveLevels(bidiText, at, p.base)
+	level, err := resolveLevels(ctx, bidiText, at, p.base)
+	if err != nil {
+		return nil, Report{}, fmt.Errorf("shaping text: %w", err)
+	}
+	p.level = level
 	p.segment(st, shapeText)
 	if err := p.shape(ctx, st, shapeText); err != nil {
 		return nil, Report{}, err
@@ -357,7 +361,7 @@ func (p *Paragraph) shape(ctx context.Context, st *layoutState, text []rune) err
 // error stops it between two items.
 func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []rune, start, end int, baseDir di.Direction) error {
 	first := st.styles[p.runOf[start]]
-	items := slices.Clone(st.seg.Split(shaping.Input{
+	items, err := st.split(ctx, shaping.Input{
 		Text:      text,
 		RunStart:  start,
 		RunEnd:    end,
@@ -365,7 +369,10 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 		Face:      st.face(first.primary),
 		Size:      first.size,
 		Language:  first.lang,
-	}, fixedFontmap{face: st.face(first.primary)}))
+	}, fixedFontmap{face: st.face(first.primary)})
+	if err != nil {
+		return fmt.Errorf("shaping text: %w", err)
+	}
 	for _, item := range items {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("shaping text: %w", err)

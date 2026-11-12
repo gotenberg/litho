@@ -1,6 +1,9 @@
 package text
 
 import (
+	"context"
+	"unicode"
+
 	gobidi "github.com/go-text/typesetting/bidi"
 	"github.com/go-text/typesetting/di"
 	"golang.org/x/text/unicode/bidi"
@@ -91,9 +94,90 @@ func appendControls(out, cs []rune, open bool) []rune {
 // maxDepth is the deepest embedding level of UAX #9 (BD2).
 const maxDepth = 125
 
+// maxBidiRunes caps the characters litho hands go-text's bidi algorithm
+// in one call. Anti-DoS guard, not spec-mandated: go-text's
+// bidi.Paragraph.Segment takes no context and is quadratic on some runs,
+// a run of terminators (W5), of European numbers after a right-to-left
+// letter (W7) or of numbers and separators, and of bracket pairs (N0). At
+// 16,384 characters the worst of them takes under a fifth of a second, so
+// the time grows with the text's length, not its square, and a context
+// check comes between two pieces. A paragraph of no right-to-left
+// character, nearly every one, never calls the algorithm for its levels.
+//
+// A longer text is resolved, and itemized, in pieces of at most
+// maxBidiRunes characters, each cut after a space of its last
+// [bidiCutSlack] characters when it has one: each piece is a paragraph of
+// its own to the implicit rules (UAX #9, W1 to I2), so a character next
+// to a cut may take another direction than in the whole paragraph, and
+// shaping restarts at each cut.
+//
+// # Corpus evidence
+//
+//   - probe, txt: a Hebrew letter then 100,000 European digits took 4.5 s
+//     in Segment; 80,000 characters of "1," after a Hebrew letter took
+//     2.7 s, of "(a)" 0.76 s; 100,000 characters of Hebrew words took
+//     8 ms (Apple silicon).
+//   - probe, txt: at 16,384 characters the digits took 0.13 s, "1," 0.09 s,
+//     "#" 0.03 s, "(a)" 0.03 s; the levels of 2^20 characters of "(a)"
+//     after a Hebrew letter took 1.8 s in pieces.
+const maxBidiRunes = 1 << 14
+
+// bidiCutSlack is how far back from [maxBidiRunes] a cut looks for a
+// space.
+const bidiCutSlack = 1024
+
+// bidiCut returns the end of the piece of text[start:end] that starts at
+// start: end when the rest fits [maxBidiRunes], else just after the last
+// space of the piece's last [bidiCutSlack] characters, else before the
+// character that starts a grapheme closest to maxBidiRunes.
+func bidiCut(text []rune, start, end int) int {
+	if end-start <= maxBidiRunes {
+		return end
+	}
+	limit := start + maxBidiRunes
+	for i := limit - 1; i >= limit-bidiCutSlack; i-- {
+		if unicode.IsSpace(text[i]) {
+			return i + 1
+		}
+	}
+	cut := limit
+	for cut > start+1 && continuesGrapheme(text[cut]) {
+		cut--
+	}
+	return cut
+}
+
+// needsBidi reports whether the paragraph text of base direction base
+// may hold a right-to-left level: a right-to-left base, or a character
+// of class R, AL or AN, or an explicit right-to-left embedding, override
+// or isolate. Without one every character resolves to an even level, left
+// to right (UAX #9, X1 to I2), and go-text's algorithm has nothing to say.
+func needsBidi(text []rune, base Direction) bool {
+	if base == RightToLeft {
+		return true
+	}
+	for _, c := range text {
+		switch c {
+		case RLE, RLO, RLI:
+			return true
+		}
+		if c < 0x0590 {
+			// Below Hebrew no character is of class R, AL or AN.
+			continue
+		}
+		p, _ := bidi.LookupRune(c)
+		switch p.Class() {
+		case bidi.R, bidi.AL, bidi.AN:
+			return true
+		}
+	}
+	return false
+}
+
 // resolveLevels resolves the embedding level of each character of the
 // paragraph (UAX #9, X1 to I2) whose base direction is base, from the
-// bidi text bidiInput built and the index of each character in it.
+// bidi text bidiInput built and the index of each character in it. ctx's
+// error stops it between two pieces of [maxBidiRunes].
 //
 // go-text's implementation of the algorithm reports each character's
 // direction, not its level: the explicit levels come from X1 to X8 here,
@@ -101,7 +185,7 @@ const maxDepth = 125
 // one level up (I1 and I2); one whose direction agrees sits on it, but for
 // a number at an even level after a right-to-left strong character, which
 // sits two levels up (W2, W4, W5, W7 and I1).
-func resolveLevels(bidiText []rune, at []int, base Direction) []int8 {
+func resolveLevels(ctx context.Context, bidiText []rune, at []int, base Direction) ([]int8, error) {
 	def := gobidi.LeftToRight
 	baseLevel := 0
 	if base == RightToLeft {
@@ -111,12 +195,21 @@ func resolveLevels(bidiText []rune, at []int, base Direction) []int8 {
 	for i := range rtl {
 		rtl[i] = baseLevel == 1
 	}
-	var bp gobidi.Paragraph
-	res := bp.Segment(bidiText, def)
-	for i := range res.NumRuns() {
-		r := res.Run(i)
-		for k := max(r.Start, 0); k < min(r.End, len(rtl)); k++ {
-			rtl[k] = !r.IsLeftToRight()
+	if needsBidi(bidiText, base) {
+		var bp gobidi.Paragraph
+		for start := 0; start < len(bidiText); {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			end := bidiCut(bidiText, start, len(bidiText))
+			res := bp.Segment(bidiText[start:end], def)
+			for i := range res.NumRuns() {
+				r := res.Run(i)
+				for k := max(r.Start, 0); k < min(r.End, end-start); k++ {
+					rtl[start+k] = !r.IsLeftToRight()
+				}
+			}
+			start = end
 		}
 	}
 	explicit, overridden := explicitLevels(bidiText, baseLevel)
@@ -136,7 +229,7 @@ func resolveLevels(bidiText []rune, at []int, base Direction) []int8 {
 		}
 		out[i] = int8(min(lv, maxDepth+1)) //nolint:gosec // at most 126
 	}
-	return out
+	return out, nil
 }
 
 // explicitLevels applies rules X1 to X8 of UAX #9 to text, a paragraph of

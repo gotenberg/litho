@@ -1,6 +1,8 @@
 package text
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -108,5 +110,102 @@ func TestNumericRuns_Terminators(t *testing.T) {
 		if got.String() != tc.want {
 			t.Errorf("numericRuns(%q) = %s, want %s", tc.text, got.String(), tc.want)
 		}
+	}
+}
+
+// identity returns the index of each of n characters in a bidi text that
+// holds them alone.
+func identity(n int) []int {
+	at := make([]int, n)
+	for i := range at {
+		at[i] = i
+	}
+	return at
+}
+
+// TestNeedsBidi pins the paragraphs whose levels go-text's algorithm
+// resolves: a right-to-left base, letter, Arabic number or explicit
+// formatting character; not terminators, numbers, brackets or a
+// left-to-right embedding alone.
+func TestNeedsBidi(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		text string
+		base Direction
+		want bool
+	}{
+		{"abc #1, (x) % ε ж", LeftToRight, false},
+		{string(LRE) + "12" + string(PDF), LeftToRight, false},
+		{"abc", RightToLeft, true},
+		{"abc ש", LeftToRight, true},
+		{"abc ع", LeftToRight, true},
+		{"abc ١", LeftToRight, true},
+		{"abc ‏", LeftToRight, true},
+		{string(RLI) + "a" + string(PDI), LeftToRight, true},
+	} {
+		if got := needsBidi([]rune(tc.text), tc.base); got != tc.want {
+			t.Errorf("needsBidi(%q, %v) = %v, want %v", tc.text, tc.base, got, tc.want)
+		}
+	}
+}
+
+// TestResolveLevels_LeftToRightSkipsTheAlgorithm checks that a paragraph
+// needsBidi passes resolves as go-text resolves it: every character at
+// its explicit level, an even one, terminators and numbers included.
+func TestResolveLevels_LeftToRightSkipsTheAlgorithm(t *testing.T) {
+	t.Parallel()
+	text := []rune("a #1, (b) " + string(LRE) + "c 2%" + string(PDF) + " d")
+	got, err := resolveLevels(t.Context(), text, identity(len(text)), LeftToRight)
+	if err != nil {
+		t.Fatal(err)
+	}
+	explicit, _ := explicitLevels(text, 0)
+	for i, lv := range got {
+		if int(lv) != explicit[i] {
+			t.Errorf("character %d %q at level %d, want %d", i, text[i], lv, explicit[i])
+		}
+	}
+}
+
+// TestBidiCut checks the pieces a long text is resolved in: none longer
+// than maxBidiRunes, each ending after a space when its last characters
+// hold one, together the whole text.
+func TestBidiCut(t *testing.T) {
+	t.Parallel()
+	text := []rune(strings.Repeat("abcdefg ", 3*maxBidiRunes/8) + strings.Repeat("x", 2*maxBidiRunes))
+	start := 0
+	for start < len(text) {
+		end := bidiCut(text, start, len(text))
+		if end <= start || end-start > maxBidiRunes {
+			t.Fatalf("piece [%d, %d)", start, end)
+		}
+		if end < len(text) && end-start > maxBidiRunes-bidiCutSlack && text[end-1] != ' ' && strings.ContainsRune(string(text[end-bidiCutSlack:end]), ' ') {
+			t.Errorf("piece [%d, %d) ends on %q with a space in its last characters", start, end, text[end-1])
+		}
+		start = end
+	}
+	if start != len(text) {
+		t.Errorf("the pieces end at %d of %d", start, len(text))
+	}
+}
+
+// TestResolveLevels_Pieces checks a right-to-left paragraph longer than
+// maxBidiRunes: a Hebrew letter then European digits resolve in pieces,
+// the digits at level 2 as in one paragraph, and a cancelled context stops
+// the resolution with its error.
+func TestResolveLevels_Pieces(t *testing.T) {
+	t.Parallel()
+	text := []rune("ש" + strings.Repeat("1", 3*maxBidiRunes))
+	got, err := resolveLevels(t.Context(), text, identity(len(text)), LeftToRight)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0] != 1 || got[1] != 2 {
+		t.Errorf("levels %d and %d, want 1 and 2", got[0], got[1])
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := resolveLevels(ctx, text, identity(len(text)), LeftToRight); !errors.Is(err, context.Canceled) {
+		t.Errorf("resolveLevels on a cancelled context = %v, want context.Canceled", err)
 	}
 }

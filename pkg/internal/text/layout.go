@@ -562,6 +562,25 @@ func (m fixedFontmap) ResolveFace(rune) *font.Face {
 	return m.face
 }
 
+// split itemizes in.Text[in.RunStart:in.RunEnd] by direction, script and
+// face with go-text's segmenter, in pieces of at most [maxBidiRunes]
+// characters cut by [bidiCut], so its bidi algorithm never sees more at
+// once. ctx's error stops it between two pieces. The items are the
+// caller's.
+func (st *layoutState) split(ctx context.Context, in shaping.Input, faces shaping.Fontmap) ([]shaping.Input, error) {
+	var items []shaping.Input
+	for start, end := in.RunStart, in.RunEnd; start < end; {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		piece := in
+		piece.RunStart, piece.RunEnd = start, bidiCut(in.Text, start, end)
+		items = append(items, st.seg.Split(piece, faces)...)
+		start = piece.RunEnd
+	}
+	return items, nil
+}
+
 // paragraph lays out one paragraph, or one piece of it [layoutState.wrapPieces]
 // cut, para, whose runes come from the runs styleOf names, in the paragraph
 // direction dir, and appends its lines to lines. style is the run a blank
@@ -576,7 +595,7 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 		return append(lines, Line{Ascent: m.Ascent, Descent: m.Descent, LineGap: m.LineGap}), nil
 	}
 	first := st.styles[styleOf[0]]
-	items := slices.Clone(st.seg.Split(shaping.Input{
+	items, err := st.split(ctx, shaping.Input{
 		Text:      para,
 		RunStart:  0,
 		RunEnd:    len(para),
@@ -584,7 +603,10 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 		Face:      st.face(first.primary),
 		Size:      first.size,
 		Language:  first.lang,
-	}, fixedFontmap{face: st.face(first.primary)}))
+	}, fixedFontmap{face: st.face(first.primary)})
+	if err != nil {
+		return nil, fmt.Errorf("laying out text: %w", err)
+	}
 
 	var outputs []shaping.Output
 	for _, item := range items {
