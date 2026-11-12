@@ -394,7 +394,7 @@ func evalSupports(l []token) bool {
 			if len(it.name) > 2 && it.name[:2] == "--" {
 				return true, true
 			}
-			name := lower(it.name)
+			name := propertyName(lower(it.name))
 			if !knownProperty(name) {
 				return false, true
 			}

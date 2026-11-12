@@ -165,11 +165,14 @@ func (c *declCtx) declare(name string, value []token, important bool) Declaratio
 	if strings.HasPrefix(name, "--") {
 		return Declaration{Property: name, Important: important, custom: trimWS(value), isCustom: true}
 	}
-	name = lower(name)
+	written := lower(name)
+	name = propertyName(written)
 	d := Declaration{Property: name, Important: important}
 	if !knownProperty(name) {
-		if !strings.HasPrefix(name, "-") && !silentProperties[name] {
-			c.warn(warn.CSSUnsupported, warn.Approximated, "property %q is not supported and was ignored", name)
+		// An unknown vendor-prefixed name is ignored without a warning; a
+		// legacy name alias warns as the property it names.
+		if (!strings.HasPrefix(written, "-") || written != name) && !silentProperties[name] {
+			c.warn(warn.CSSUnsupported, warn.Approximated, "property %q is not supported and was ignored", written)
 		}
 		return d
 	}

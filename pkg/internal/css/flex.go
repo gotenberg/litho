@@ -257,15 +257,6 @@ func flexProps() map[propID]propDef {
 	}
 }
 
-// flexAliases are the legacy and prefixed names of the flex longhands.
-var flexAliases = map[string]propID{
-	"grid-row-gap": pRowGap, "grid-column-gap": pColumnGap,
-	"-webkit-flex-direction": pFlexDirection, "-webkit-flex-wrap": pFlexWrap, "-webkit-order": pOrder,
-	"-webkit-flex-grow": pFlexGrow, "-webkit-flex-shrink": pFlexShrink, "-webkit-flex-basis": pFlexBasis,
-	"-webkit-justify-content": pJustifyContent, "-webkit-align-content": pAlignContent,
-	"-webkit-align-items": pAlignItems, "-webkit-align-self": pAlignSelf,
-}
-
 // expandFlex expands the flex shorthand (CSS Flexbox 1, 7.1): none |
 // [ <'flex-grow'> <'flex-shrink'>? || <'flex-basis'> ]. none is 0 0 auto,
 // auto is 1 1 auto; a flex-shrink left out is 1 and a flex basis left out
@@ -418,9 +409,9 @@ func flexShorthands() map[string]shorthandDef {
 	flow := shorthandDef{longhands: []propID{pFlexDirection, pFlexWrap}, expand: expandFlexFlow}
 	gap := shorthandDef{longhands: []propID{pRowGap, pColumnGap}, expand: expandGap}
 	return map[string]shorthandDef{
-		"flex": flex, "-webkit-flex": flex,
-		"flex-flow": flow, "-webkit-flex-flow": flow,
-		"gap": gap, "grid-gap": gap,
+		"flex":          flex,
+		"flex-flow":     flow,
+		"gap":           gap,
 		"place-content": placeShorthand(pAlignContent, pJustifyContent),
 		"place-items":   placeShorthand(pAlignItems, pJustifyItems),
 		"place-self":    placeShorthand(pAlignSelf, pJustifySelf),

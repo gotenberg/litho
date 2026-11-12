@@ -919,7 +919,7 @@ func init() {
 		longhandByName[props[i].name] = propID(i)
 	}
 	maps.Copy(longhandByName, map[string]propID{
-		"word-wrap": pOverflowWrap, "overflow-x": pOverflow, "overflow-y": pOverflow,
+		"overflow-x": pOverflow, "overflow-y": pOverflow,
 		"overflow-block": pOverflow, "overflow-inline": pOverflow,
 		"margin-block-start": pMarginTop, "margin-block-end": pMarginBottom,
 		"margin-inline-start": pMarginLeft, "margin-inline-end": pMarginRight,
@@ -931,10 +931,8 @@ func init() {
 		"min-inline-size": pMinWidth, "min-block-size": pMinHeight,
 		"max-inline-size": pMaxWidth, "max-block-size": pMaxHeight,
 		"page-break-inside":            pBreakInside,
-		"-webkit-background-clip":      pBgClip,
 		"-webkit-box-decoration-break": pBoxDecorationBreak,
 	})
-	maps.Copy(longhandByName, flexAliases)
 	maps.Copy(longhandByName, logicalAliases())
 	initShorthands()
 }
