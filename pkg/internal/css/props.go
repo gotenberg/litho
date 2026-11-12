@@ -839,7 +839,7 @@ func init() {
 			}
 		}, copyFrom: field(func(s *Style) *[2]float64 { return &s.BorderSpacing })}},
 		{pCaptionSide, enumProp("caption-side", true, func(s *Style) *CaptionSide { return &s.CaptionSide }, map[string]CaptionSide{
-			"top": CaptionTop, "bottom": CaptionBottom, "block-start": CaptionTop, "block-end": CaptionBottom,
+			"top": CaptionTop, "bottom": CaptionBottom,
 		})},
 		{pEmptyCells, enumProp("empty-cells", true, func(s *Style) *EmptyCells { return &s.EmptyCells }, map[string]EmptyCells{"show": Show, "hide": Hide})},
 		{pTableLayout, enumProp("table-layout", false, func(s *Style) *TableLayout { return &s.TableLayout }, map[string]TableLayout{"auto": TableAuto, "fixed": TableFixed})},
@@ -930,7 +930,6 @@ func init() {
 		"inline-size": pWidth, "block-size": pHeight,
 		"min-inline-size": pMinWidth, "min-block-size": pMinHeight,
 		"max-inline-size": pMaxWidth, "max-block-size": pMaxHeight,
-		"page-break-inside":            pBreakInside,
 		"-webkit-box-decoration-break": pBoxDecorationBreak,
 	})
 	maps.Copy(longhandByName, logicalAliases())
@@ -1043,7 +1042,8 @@ func parseBorderSpacing(v []token, _ *declCtx) (any, bool) {
 
 // parseWordSpaceTransform parses word-space-transform (CSS Text 4, 4.3):
 // none, or space or ideographic-space with or without auto-phrase, which
-// litho ignores.
+// litho ignores. auto-phrase alone is invalid: the grammar is none |
+// [ space | ideographic-space ] && auto-phrase?.
 func parseWordSpaceTransform(v []token, _ *declCtx) (any, bool) {
 	if k, ok := keyword(v); ok && k == "none" {
 		return WordSpaceNone, true
@@ -1074,7 +1074,7 @@ func parseWordSpaceTransform(v []token, _ *declCtx) (any, bool) {
 			return nil, false
 		}
 	}
-	return w, true
+	return w, w != WordSpaceNone
 }
 
 // parseDecorationLine parses text-decoration-line (CSS Text Decoration

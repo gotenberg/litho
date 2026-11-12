@@ -201,6 +201,7 @@ func initShorthands() {
 		"mask-border":       {longhands: ids(pMaskBorderSource, 5), expand: expandBorderImage(pMaskBorderSource)},
 		"page-break-before": legacyBreak(pBreakBefore),
 		"page-break-after":  legacyBreak(pBreakAfter),
+		"page-break-inside": legacyBreakInside(),
 		"all":               {longhands: allLonghands(), expand: expandAll},
 		"font-variant":      {longhands: []propID{pFontVariant}, expand: expandFontVariant},
 	}
@@ -249,6 +250,22 @@ func legacyBreak(id propID) shorthandDef {
 				"auto": BreakAuto, "always": Page, "avoid": BreakAvoid, "left": LeftPage, "right": RightPage,
 			}[k]
 			return []entry{{id, b}}, ok
+		},
+	}
+}
+
+// legacyBreakInside maps page-break-inside onto break-inside (CSS
+// Fragmentation 3, 3.4): auto and avoid alone, the values the two share.
+func legacyBreakInside() shorthandDef {
+	return shorthandDef{
+		longhands: []propID{pBreakInside},
+		expand: func(v []token, _ *declCtx) ([]entry, bool) {
+			k, ok := keyword(v)
+			if !ok {
+				return nil, false
+			}
+			b, ok := map[string]BreakInside{"auto": InsideAuto, "avoid": InsideAvoid}[k]
+			return []entry{{pBreakInside, b}}, ok
 		},
 	}
 }

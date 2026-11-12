@@ -784,7 +784,8 @@ const (
 	CollapseBorders
 )
 
-// CaptionSide is the caption-side property (CSS 2.1, 17.4.1).
+// CaptionSide is the caption-side property (CSS Tables 3, 3.5.3): top or
+// bottom.
 type CaptionSide uint8
 
 // The caption-side values.

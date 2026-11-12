@@ -255,8 +255,10 @@ func counterProp(name string, def int, f func(*Style) *[]CounterOp) propDef {
 	}
 }
 
-// quotesProp defines quotes (CSS Generated Content 3, 2.1): auto, none,
-// or pairs of strings. match-parent computes as inherit.
+// quotesProp defines quotes (CSS Generated Content 3, 4.1): auto, none,
+// or pairs of strings. The value that computes to the parent's content
+// language has no settled name in the draft (Issue 5478) and is refused,
+// match-parent, an earlier draft's name for it, included.
 func quotesProp() propDef {
 	return propDef{
 		name: "quotes", inherited: true,
@@ -267,8 +269,6 @@ func quotesProp() propDef {
 					return Quotes{}, true
 				case "none":
 					return Quotes{None: true}, true
-				case "match-parent":
-					return wideInherit, true
 				}
 				return nil, false
 			}
