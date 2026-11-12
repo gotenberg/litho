@@ -425,3 +425,15 @@ func TestRead_Recalculation(t *testing.T) {
 		})
 	}
 }
+
+func TestCell_FormulaCapCountsCharacters(t *testing.T) {
+	accented := `"` + strings.Repeat("é", 3000) + `"`
+	long := strings.Repeat("1+", maxFormulaRunes/2) + "1"
+	doc, _ := readBytes(t, oneSheet(t, `<sheetData><row r="1"><c r="A1"><f>`+accented+`</f></c><c r="B1"><f>`+long+`</f></c></row></sheetData>`))
+	if c, ok := cellAt(doc.Sheets[0], 0, 0); !ok || c.Formula != accented {
+		t.Errorf("a formula of 3,002 characters in 6,002 bytes is not kept")
+	}
+	if c, ok := cellAt(doc.Sheets[0], 0, 1); ok && c.Formula != "" {
+		t.Errorf("a formula of %d characters is kept", len(long))
+	}
+}

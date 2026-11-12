@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -417,7 +418,7 @@ func (w *sheetReader) cell(c *ooxml.Element, col int, row *sheet.Row) (sheet.Cel
 	if cell.Value.Kind == sheet.Text && cell.Value.Text == "" && len(cell.Runs) == 0 {
 		cell.Value = sheet.Value{}
 	}
-	if f := c.Child(nsMain, "f"); f != nil && len(f.Text) <= maxFormulaRunes && r.recalculation != office.RecalculateNever {
+	if f := c.Child(nsMain, "f"); f != nil && formulaFits(f.Text) && r.recalculation != office.RecalculateNever {
 		// Under office.RecalculateNever no formula is kept: the cell shows
 		// the result the file caches, nothing without one. Under
 		// office.RecalculateAlways every formula is kept for the builder
@@ -454,9 +455,16 @@ func (r *reader) richTextOf(s string) string {
 	return s
 }
 
-// maxFormulaRunes caps the formula text kept for a cell. Anti-DoS guard,
-// not spec-mandated: Excel stops at 8,192 characters.
+// maxFormulaRunes caps the formula text kept for a cell, in characters.
+// Anti-DoS guard, not spec-mandated: Excel stops at 8,192 characters.
 const maxFormulaRunes = 8192
+
+// formulaFits reports whether the formula text s holds at most
+// [maxFormulaRunes] characters. A text of more bytes than the cap's longest
+// UTF-8 form is not counted.
+func formulaFits(s string) bool {
+	return len(s) <= utf8.UTFMax*maxFormulaRunes && utf8.RuneCountInString(s) <= maxFormulaRunes
+}
 
 // date1904Shift is the days from Calc's null date, 1899-12-30, to the
 // 1904 date system's, 1904-01-01 (ECMA-376 Part 1, 18.17.4.1).
