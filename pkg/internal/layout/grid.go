@@ -269,7 +269,8 @@ func (e *engine) colContrib(it *gitem, k contribKind, tracks []*gtrack) float64 
 	return out
 }
 
-// gridLayout is the state of one grid container layout.
+// gridLayout is the state of one grid container layout, which lives
+// within the [Layout] call of its engine.
 type gridLayout struct {
 	e   *engine
 	b   *box
@@ -1015,7 +1016,6 @@ func gridAbsCB(c, k *box, pad absCB) absCB {
 	out := pad
 	cx, cy := c.contentX(), c.contentY()
 	st := k.st
-	// Columns.
 	if xs := g.lines[colAxis]; len(xs) > 0 {
 		a, b, aOK, bOK := g.place.absLines(colAxis, st.GridColumnStart, st.GridColumnEnd)
 		x0, x1 := pad.x, pad.x+pad.w

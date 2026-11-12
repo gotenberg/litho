@@ -151,8 +151,8 @@ type fitem struct {
 	stretchTo float64
 	// align is the item's used align-self.
 	align css.BoxAlign
-	// measured is the content height the item measured at, for a row
-	// item, and its baselines below its border box top.
+	// m is the content height a row item measured at and its baselines
+	// below its border box top, valid when hasM.
 	m    itemMeasure
 	hasM bool
 	// mpos and cpos are the offsets of the margin box from the line's
@@ -463,7 +463,6 @@ func (e *engine) layoutFlex(b *box, cb cblock, top float64) float64 {
 		alignCross(ln, ax)
 	}
 
-	// Write the used margins back, then place the items.
 	for _, it := range items {
 		k := it.b
 		k.m[ms], k.m[me], k.m[cs], k.m[ce] = it.mm[0], it.mm[1], it.cm[0], it.cm[1]
@@ -1077,7 +1076,8 @@ func alignCross(ln *flexLine, ax flexAxes) {
 }
 
 // placement maps the logical positions of a flex layout onto the flow
-// and lays the items out where they land.
+// and lays the items out where they land. It lives for one container
+// layout, within the [Layout] call of its engine.
 type placement struct {
 	e                     *engine
 	fd                    *flexData

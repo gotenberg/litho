@@ -1467,7 +1467,7 @@ func (td *tableData) exactCell(c *box) bool {
 }
 
 // spreadFree spreads extra over the heights hs whose exact flag is false,
-// in proportion to them, and over all of them when none is free.
+// in proportion to them; it changes nothing when none is free.
 func spreadFree(hs []float64, exact []bool, extra float64) {
 	var idx []int
 	for i := range hs {

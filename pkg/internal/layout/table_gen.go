@@ -907,8 +907,9 @@ func (td *tableData) hEdge(above, below, c int) cborder {
 	return r.result()
 }
 
-// vEdge resolves the collapsed border of row r on the grid line before
-// column i, the column count for the last line (CSS 2.1, 17.6.2.1).
+// vEdge resolves the collapsed border, in the row of index row, of the
+// grid line before column i, the column count for the last line (CSS
+// 2.1, 17.6.2.1).
 func (td *tableData) vEdge(row, i int) cborder {
 	cl, cr := td.cellAt(row, i-1), td.cellAt(row, i)
 	if cl != nil && cl == cr {

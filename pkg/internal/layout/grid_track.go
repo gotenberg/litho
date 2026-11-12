@@ -135,8 +135,7 @@ type gridSizer struct {
 	ax      int
 }
 
-// spanSize returns the sum of the tracks [s, e) of f's sizes, with the
-// gaps between them.
+// gaps returns the gaps between the tracks [s, e) that are not collapsed.
 func (z *gridSizer) gaps(s, e int) float64 {
 	n := 0
 	for i := s; i < e; i++ {

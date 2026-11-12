@@ -61,7 +61,7 @@ type pendingLink struct {
 }
 
 // painter turns the laid-out box tree into a display list in the painting
-// order of CSS 2.1, Appendix E.
+// order of CSS 2.1, Appendix E. It lives for one [engine.paint] call.
 type painter struct {
 	e      *engine
 	top    *ditem

@@ -174,6 +174,8 @@ func columnLayout(c *css.Columns, u, g float64) (int, float64) {
 
 // colCtx is the fragmentation context of the column set being laid out:
 // it answers the engine's page queries in the column flow's coordinates.
+// It lives for the layout of its column set, within the [Layout] call of
+// its engine.
 type colCtx struct {
 	e      *engine
 	parent *colCtx
