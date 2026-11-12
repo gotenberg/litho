@@ -148,16 +148,71 @@ func (b *builder) handoutSize() (float64, float64) {
 	return notesWidth, notesHeight
 }
 
+// turned reports whether a handout page w by h turns to print on a page pw
+// by ph: one is upright and the other on its side. A square page turns
+// nothing.
+func turned(w, h, pw, ph float64) bool {
+	return w != h && pw != ph && (w > h) != (pw > ph)
+}
+
+// turnBox returns the box a shape of the handout master takes once its
+// page, w by h with the margins m (indexed by css.Top and the others), is
+// turned, the margins staying on their sides: the centre of the box r
+// keeps its place in proportion to the page less its margins; a flexible
+// box, a rectangle or a text frame, keeps its share of that area too, and
+// any other keeps its size, so a picture is not stretched. A page whose
+// margins leave no area either way keeps r.
+//
+// It is the rule Impress sizes the boxes it gives a handout master by:
+// each a share of the page less its margins, in a corner of that area
+// (SdPage::CreateDefaultPresObj), so the four boxes of such a master land
+// on a turned page where Impress would have put them had it made the
+// master for that page.
+//
+// # Corpus evidence
+//
+//   - probe, odp: the handout master the pinned LibreOffice gives a deck
+//     that has none, on an A4 portrait page without margins, holds a
+//     header, a date, a footer and a page number box 9.113 by 1.484 cm,
+//     43.4% of the width and 5% of the height, one in each corner.
+//   - probe, odp: where LibreOffice puts the boxes of a master it turns
+//     is not measured. It turns a handout page in its print dialog and
+//     its page setup alone; a macro that sets the master's size leaves
+//     the boxes where they were, and one that empties the master and
+//     sets its layout brings back the slides without them.
+func turnBox(r compose.Rect, flexible bool, w, h float64, m [4]float64) compose.Rect {
+	cw, ch := w-m[css.Left]-m[css.Right], h-m[css.Top]-m[css.Bottom]
+	tw, th := h-m[css.Left]-m[css.Right], w-m[css.Top]-m[css.Bottom]
+	if !(cw > 0) || !(ch > 0) || !(tw > 0) || !(th > 0) {
+		return r
+	}
+	fx, fy := tw/cw, th/ch
+	if flexible {
+		return compose.Rect{
+			X: m[css.Left] + (r.X-m[css.Left])*fx, Y: m[css.Top] + (r.Y-m[css.Top])*fy,
+			Width: r.Width * fx, Height: r.Height * fy,
+		}
+	}
+	cx := m[css.Left] + (r.X+r.Width/2-m[css.Left])*fx
+	cy := m[css.Top] + (r.Y+r.Height/2-m[css.Top])*fy
+	return compose.Rect{X: cx - r.Width/2, Y: cy - r.Height/2, Width: r.Width, Height: r.Height}
+}
+
 // handoutPage draws the handout page numbered n holding the slides group,
 // numberOf giving each slide's number: the handout master's background,
 // each slide scaled into its rectangle of [handoutAreas] inside the
 // hairline frame a notes page draws round its slide, three a page the
 // lines ruled for its notes ([noteLines]) beside it, then the handout
 // master's shapes, its page number field showing n. It returns the page
-// with the structure element of each slide, in order. The page is the
-// handout page size; on the paper of the options, or turned by them, the
-// handout page is scaled down to fit, never up, and centred, as a slide
-// is.
+// with the structure element of each slide, in order.
+//
+// The handout page takes the orientation of the page it prints on, the
+// paper of the options or its own size, turned as they ask: a page
+// [turned] has its sides swapped, the slides laid out on it again, as
+// Impress lays a handout out for the orientation of the printer's page
+// (InitHandoutTemplate in sd's DocumentRenderer), and the master's shapes
+// moved by [turnBox]. It is then scaled down to fit the page, never up,
+// and centred, as a slide is.
 //
 // # Corpus evidence
 //
@@ -172,8 +227,13 @@ func (b *builder) handoutSize() (float64, float64) {
 //     drawn the width of the frame, where a line of no width would be the
 //     thinnest a device draws, which ISO 32000-1, 8.4.3.2 advises against.
 func (b *builder) handoutPage(n int, group []*Slide, numberOf func(*Slide) int) (*compose.Page, []*compose.StructElem) {
-	hw, hh := b.handoutSize()
-	pw, ph := b.pageSize(hw, hh)
+	mw, mh := b.handoutSize()
+	pw, ph := b.pageSize(mw, mh)
+	hw, hh := mw, mh
+	turn := turned(mw, mh, pw, ph)
+	if turn {
+		hw, hh = mh, mw
+	}
 	sw, sh := b.slideSize()
 	areas, ruled := handoutAreas(hw, hh, b.doc.HandoutMargins, sw, sh, b.opts.Handouts)
 	whole := compose.Rect{Width: hw, Height: hh}
@@ -215,6 +275,13 @@ func (b *builder) handoutPage(n int, group []*Slide, numberOf func(*Slide) int) 
 		}
 		art := *sp
 		art.Decorative = true
+		if turn {
+			// A group's shapes stay in the space of the box it had.
+			if art.Kind == KindGroup && art.Child == (compose.Rect{}) {
+				art.Child = art.Box
+			}
+			art.Box = turnBox(art.Box, art.Kind == KindGeometry && art.Geometry == nil, mw, mh, b.doc.HandoutMargins)
+		}
 		content = append(content, b.shape(&art, compose.Identity, 0, scratch)...)
 	}
 	b.links = nil

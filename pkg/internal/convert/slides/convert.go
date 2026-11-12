@@ -134,8 +134,10 @@ func (b *builder) warn(code, msg string) {
 // a handout out (see [handoutAreas]), each drawn as its slide page is,
 // scaled into its rectangle, inside a hairline frame, then the handout
 // master's shapes, a page number field showing the handout page's number.
-// The paper and the orientation of the options apply to a handout page as
-// to a slide. The outline entry of a slide and a link to it lead to the
+// A handout page takes the orientation of the page the options print it
+// on: turned, its slides are laid out again and its master's shapes moved
+// (see [builder.handoutPage]); it is then scaled to fit as a slide is. The
+// outline entry of a slide and a link to it lead to the
 // handout page that holds it; the structure tree holds a Sect per slide,
 // in show order.
 //

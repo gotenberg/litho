@@ -306,6 +306,161 @@ func TestConvert_Handouts(t *testing.T) {
 	}
 }
 
+// TestTurned checks which handout pages turn: one upright for a page on
+// its side or the reverse, never a square one.
+func TestTurned(t *testing.T) {
+	cases := []struct {
+		w, h, pw, ph float64
+		want         bool
+	}{
+		{540, 720, 720, 540, true},
+		{720, 540, 595, 842, true},
+		{540, 720, 595, 842, false},
+		{720, 540, 842, 595, false},
+		{540, 720, 600, 600, false},
+		{600, 600, 842, 595, false},
+	}
+	for _, c := range cases {
+		if got := turned(c.w, c.h, c.pw, c.ph); got != c.want {
+			t.Errorf("turned(%v, %v, %v, %v) = %t", c.w, c.h, c.pw, c.ph, got)
+		}
+	}
+}
+
+// TestTurnBox checks where a handout master's shapes go on a turned page.
+// The four boxes Impress gives a master, each a share of the page less
+// its margins in a corner of that area, land where the same shares put
+// them on the turned page; a shape that is no rectangle keeps its size,
+// its centre keeping its place in proportion.
+//
+// # Corpus evidence
+//
+//   - probe, odp: the pinned LibreOffice's own handout master on an A4
+//     portrait page without margins: boxes 9.113 by 1.484 cm at x 0 and
+//     11.886 cm, y 0 and 28.215 cm. The boxes on the turned page, and
+//     those of a page with margins, follow the shares its source states
+//     (SdPage::CreateDefaultPresObj) and are not measured.
+func TestTurnBox(t *testing.T) {
+	cm := func(v float64) float64 { return v * 72 / 2.54 }
+	// impress returns the four boxes of Impress's rule on a page w by h cm
+	// with the margins m: 43.4% of the width and 5% of the height of the
+	// page less its margins, in the corners of that area.
+	impress := func(w, h float64, m [4]float64) []compose.Rect {
+		cw, ch := w-m[css.Left]-m[css.Right], h-m[css.Top]-m[css.Bottom]
+		bw, bh := cw*0.434, ch*0.05
+		var out []compose.Rect
+		for _, y := range []float64{m[css.Top], m[css.Top] + ch - bh} {
+			for _, x := range []float64{m[css.Left], m[css.Left] + cw - bw} {
+				out = append(out, compose.Rect{X: cm(x), Y: cm(y), Width: cm(bw), Height: cm(bh)})
+			}
+		}
+		return out
+	}
+	measured := []compose.Rect{
+		{X: 0, Y: 0, Width: cm(9.113), Height: cm(1.484)},
+		{X: cm(11.886), Y: 0, Width: cm(9.113), Height: cm(1.484)},
+		{X: 0, Y: cm(28.215), Width: cm(9.113), Height: cm(1.484)},
+		{X: cm(11.886), Y: cm(28.215), Width: cm(9.113), Height: cm(1.484)},
+	}
+	same := func(a, b compose.Rect, tol float64) bool {
+		return near(a.X, b.X, tol) && near(a.Y, b.Y, tol) && near(a.Width, b.Width, tol) && near(a.Height, b.Height, tol)
+	}
+	for i, want := range impress(29.7, 21, [4]float64{}) {
+		if got := turnBox(measured[i], true, cm(21), cm(29.7), [4]float64{}); !same(got, want, 0.1) {
+			t.Errorf("measured box %d turns to %+v, want %+v", i, got, want)
+		}
+	}
+	margins := [4]float64{css.Top: 0.5, css.Right: 0.7, css.Bottom: 0.9, css.Left: 1.5}
+	pt := [4]float64{css.Top: cm(0.5), css.Right: cm(0.7), css.Bottom: cm(0.9), css.Left: cm(1.5)}
+	before, after := impress(21, 29.7, margins), impress(29.7, 21, margins)
+	for i := range before {
+		if got := turnBox(before[i], true, cm(21), cm(29.7), pt); !same(got, after[i], 1e-6) {
+			t.Errorf("box %d with margins turns to %+v, want %+v", i, got, after[i])
+		}
+		// Turned back, a box is where it was.
+		if got := turnBox(after[i], true, cm(29.7), cm(21), pt); !same(got, before[i], 1e-6) {
+			t.Errorf("box %d turns back to %+v, want %+v", i, got, before[i])
+		}
+	}
+	// A picture 60 by 30 in the top right corner of a 540 by 720 page keeps
+	// its size; its centre, at 510 of 540 and 15 of 720, goes to 680 of 720
+	// and 11.25 of 540.
+	if got := turnBox(compose.Rect{X: 480, Y: 0, Width: 60, Height: 30}, false, 540, 720, [4]float64{}); !same(got, compose.Rect{X: 650, Y: -3.75, Width: 60, Height: 30}, 1e-9) {
+		t.Errorf("a picture turns to %+v", got)
+	}
+	// Margins that leave no area keep the box.
+	r := compose.Rect{X: 10, Y: 20, Width: 30, Height: 40}
+	if got := turnBox(r, true, 540, 720, [4]float64{css.Left: 300, css.Right: 300}); got != r {
+		t.Errorf("a page without area moves the box to %+v", got)
+	}
+}
+
+// TestConvert_HandoutsTurned checks that a handout page turned by the
+// options lays its slides out again: six a page in two rows of three on a
+// portrait page turned to landscape, and in three rows of two on a
+// landscape page turned to portrait, the master's page number inside the
+// turned page.
+func TestConvert_HandoutsTurned(t *testing.T) {
+	shown := []string{"S1", "S2", "S3", "S5", "S6", "S7"}
+	check := func(t *testing.T, out *compose.Document, w, h float64, cols int) {
+		t.Helper()
+		if len(out.Pages) != 1 {
+			t.Fatalf("%d pages, want 1", len(out.Pages))
+		}
+		pg := out.Pages[0]
+		if !near(pg.Width, w, 0.01) || !near(pg.Height, h, 0.01) {
+			t.Fatalf("page %v by %v, want %v by %v", pg.Width, pg.Height, w, h)
+		}
+		var at []run
+		for _, name := range shown {
+			at = append(at, find(t, pg, name))
+		}
+		for i := range at {
+			col, row := i%cols, i/cols
+			first, above := at[row*cols], at[col]
+			if !near(at[i].y, first.y, 0.5) || !near(at[i].x, above.x, 0.5) {
+				t.Errorf("%s at %.1f, %.1f is not in column %d of row %d", shown[i], at[i].x, at[i].y, col, row)
+			}
+			if col > 0 && !(at[i].x > at[i-1].x) || row > 0 && !(at[i].y > at[i-cols].y) {
+				t.Errorf("%s at %.1f, %.1f does not follow in its row and column", shown[i], at[i].x, at[i].y)
+			}
+		}
+		if n := find(t, pg, "1"); !(n.x > w/2) || !(n.y > h/2) || n.y > h {
+			t.Errorf("the page number is at %.1f, %.1f on a page %v by %v", n.x, n.y, w, h)
+		}
+	}
+	t.Run("to landscape", func(t *testing.T) {
+		check(t, convert(t, handoutDeck(), office.Options{Handouts: 6, Landscape: true}), 720, 540, 3)
+	})
+	t.Run("to portrait", func(t *testing.T) {
+		deck := handoutDeck()
+		deck.HandoutWidth, deck.HandoutHeight = 720, 540
+		deck.HandoutShapes[0].Box = compose.Rect{X: 480, Y: 500, Width: 200, Height: 30}
+		check(t, convert(t, deck, office.Options{Handouts: 6, Portrait: true}), 540, 720, 2)
+	})
+	t.Run("as it is", func(t *testing.T) {
+		check(t, convert(t, handoutDeck(), office.Options{Handouts: 6}), 540, 720, 2)
+	})
+}
+
+// TestConvert_HandoutsTurnedPaper checks that a paper on its side turns an
+// upright handout page before it is scaled to fit: the slides in two rows
+// of three, the turned page centred on the paper.
+func TestConvert_HandoutsTurnedPaper(t *testing.T) {
+	out := convert(t, handoutDeck(), office.Options{Handouts: 6, PageWidth: 842, PageHeight: 595})
+	pg := out.Pages[0]
+	if pg.Width != 842 || pg.Height != 595 || len(pg.Content) != 1 {
+		t.Fatalf("page %v by %v, %d fragments", pg.Width, pg.Height, len(pg.Content))
+	}
+	g, ok := pg.Content[0].(*compose.Group)
+	if !ok || g.Transform != (compose.Matrix{A: 1, D: 1, E: 61, F: 27.5}) {
+		t.Errorf("handout page placed by %+v", pg.Content[0])
+	}
+	if a, b := find(t, pg, "S1"), find(t, pg, "S3"); !near(a.y, b.y, 0.5) || !(b.x > a.x) {
+		t.Errorf("S1 at %.1f, %.1f and S3 at %.1f, %.1f are not in one row", a.x, a.y, b.x, b.y)
+	}
+}
+
 // TestConvert_HandoutsPaper checks that a paper scales the handout page
 // down to fit and centres it, as it does a slide.
 func TestConvert_HandoutsPaper(t *testing.T) {

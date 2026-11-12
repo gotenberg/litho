@@ -317,7 +317,8 @@ func (presentationOption) presentationOption()             {}
 //     or sheet is laid out again on the paper. A sheet fitted to a page
 //     count is fitted to the new paper.
 //   - [FromPPTX], [FromODP]: each slide, notes page and handout page is
-//     scaled down to fit the paper, never up, and centred on it.
+//     scaled down to fit the paper, never up, and centred on it. A handout
+//     page takes the paper's orientation first (see [WithHandouts]).
 //
 // Without it the source's own size applies, and [WithDefaultPaper] where
 // the source names none.
@@ -811,9 +812,13 @@ func WithNotesPages(notes bool) PresentationOption {
 // portrait page or one row of a landscape page, each with seven lines
 // ruled beside it for notes.
 //
-// [WithPaper] and [WithOrientation] scale the handout page down to fit
-// the paper and centre it, as they do a slide. They do not lay the slides
-// out again: a landscape handout comes from a landscape handout page.
+// The handout page takes the orientation of the page it prints on.
+// [WithOrientation], or a [WithPaper] of the other orientation, turns it:
+// the slides are laid out again on the turned page, six a page in two rows
+// of three where they stood in three rows of two, and the header, footer,
+// date and page number keep their place in proportion to the page. Another
+// shape of the handout master keeps its size. [WithPaper] then scales the
+// handout page down to fit the paper, never up, and centres it.
 func WithHandouts(slidesPerPage int) PresentationOption {
 	return presentationOption(func(c *convertConfig) { c.handouts = slidesPerPage })
 }

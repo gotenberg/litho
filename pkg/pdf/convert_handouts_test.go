@@ -111,7 +111,8 @@ func TestConvert_Handouts(t *testing.T) {
 }
 
 // TestConvert_HandoutsSelectAndFit checks that a page range selects
-// handout pages and that a paper fits the handout page.
+// handout pages, that a paper fits the handout page and that a paper of
+// the other orientation turns it.
 func TestConvert_HandoutsSelectAndFit(t *testing.T) {
 	t.Parallel()
 	fonts := WithConvertFontDirs(convertFontDir(t))
@@ -119,6 +120,10 @@ func TestConvert_HandoutsSelectAndFit(t *testing.T) {
 	checkSizes(t, "handout pages 2 and 3", sizes, 2, a4W, a4H)
 	_, sizes = conversionSizes(t, FromODP(strings.NewReader(handoutODP()), fonts, WithHandouts(4), WithPaper(PaperLetter)))
 	checkSizes(t, "handouts on Letter", sizes, 2, letterW, letterH)
+	// A paper on its side turns the handout page: six slides on one page
+	// that fills the paper's width.
+	_, sizes = conversionSizes(t, FromODP(strings.NewReader(handoutODP()), fonts, WithHandouts(6), WithPaper(Paper{Width: letterH, Height: letterW})))
+	checkSizes(t, "handouts on Letter on its side", sizes, 1, letterH, letterW)
 }
 
 // TestConvert_PPTXHandouts checks that the handout pages of a PPTX source
