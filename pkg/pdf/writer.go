@@ -77,6 +77,23 @@ const (
 	maxPageSize = 14400.0
 )
 
+// checkPageSize reports a page width by height points whose sides do not
+// both lie in [minPageSize, maxPageSize], NaN included, as an error wrapping
+// [ErrInvalidPageSize]: the default page size of a write, the page of a
+// composition and the paper of a conversion.
+func checkPageSize(width, height float64) error {
+	if pageSideAllowed(width) && pageSideAllowed(height) {
+		return nil
+	}
+	return fmt.Errorf("%w: %g by %g, each side must lie between %g and %g", ErrInvalidPageSize, width, height, minPageSize, maxPageSize)
+}
+
+// pageSideAllowed reports whether v lies in [minPageSize, maxPageSize]; NaN
+// does not.
+func pageSideAllowed(v float64) bool {
+	return v >= minPageSize && v <= maxPageSize
+}
+
 // WithDefaultPageSize sets the size, in points, a write tries for a page with
 // no usable media box, after the sizes of the document's own pages. Without it,
 // the write tries none.
@@ -113,9 +130,8 @@ const (
 // remediation of the Writer repairs.
 func WithDefaultPageSize(width, height float64) WriteOption {
 	return func(o *writeOpts) {
-		if !(width >= minPageSize && width <= maxPageSize && height >= minPageSize && height <= maxPageSize) {
-			o.pageSize = nil
-			o.pageSizeErr = fmt.Errorf("%w: %g by %g, each side must lie between %g and %g", ErrInvalidPageSize, width, height, minPageSize, maxPageSize)
+		if err := checkPageSize(width, height); err != nil {
+			o.pageSize, o.pageSizeErr = nil, err
 			return
 		}
 		o.pageSize = ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), pageExtent(width), pageExtent(height)}

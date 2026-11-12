@@ -574,7 +574,7 @@ func (o *convertConfig) basePaper() (float64, float64) {
 // fallbackPaper returns the paper of a source that names none: the one
 // [WithDefaultPaper] names, else [PaperA4].
 func (o *convertConfig) fallbackPaper() (float64, float64) {
-	if o.defaultPaper != (Paper{}) {
+	if o.defaultPaperSet {
 		return o.defaultPaper.Width, o.defaultPaper.Height
 	}
 	return PaperA4.Width, PaperA4.Height

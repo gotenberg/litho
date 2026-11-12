@@ -77,6 +77,32 @@ func TestConvert_ValidatesEveryOption(t *testing.T) {
 	}
 }
 
+// TestConvert_PaperLiesInThePageSizes checks that WithPaper and
+// WithDefaultPaper take the page sizes ISO 32000-1, Annex C.2 allows, 3 to
+// 14,400 points a side, and refuse any other, the zero Paper included, with
+// an error wrapping both ErrInvalidConvertOptions and ErrInvalidPageSize.
+func TestConvert_PaperLiesInThePageSizes(t *testing.T) {
+	t.Parallel()
+	fonts := WithConvertFontDirs(convertFontDir(t))
+	for _, p := range []Paper{{}, {Width: 1, Height: 1}, {Width: 2.99, Height: 500}, {Width: 500, Height: 14400.5}, {Width: math.Inf(1), Height: 500}} {
+		for name, opt := range map[string]ConvertOption{"WithPaper": WithPaper(p), "WithDefaultPaper": WithDefaultPaper(p)} {
+			var out bytes.Buffer
+			_, err := FromText(strings.NewReader("A"), fonts, opt).WriteTo(context.Background(), &out)
+			if !errors.Is(err, ErrInvalidConvertOptions) || !errors.Is(err, ErrInvalidPageSize) {
+				t.Errorf("%s(%v): %v, want ErrInvalidConvertOptions and ErrInvalidPageSize", name, p, err)
+			}
+		}
+	}
+	for _, p := range []Paper{{Width: 3, Height: 3}, {Width: 14400, Height: 14400}} {
+		for name, opt := range map[string]ConvertOption{"WithPaper": WithPaper(p), "WithDefaultPaper": WithDefaultPaper(p)} {
+			var out bytes.Buffer
+			if _, err := FromText(strings.NewReader("A"), fonts, opt, WithMargins(0, 0, 0, 0)).WriteTo(context.Background(), &out); err != nil {
+				t.Errorf("%s(%v): %v, want no error", name, p, err)
+			}
+		}
+	}
+}
+
 // TestConvert_ConversionRunsOnce checks that a conversion reads its source
 // once: a second run, alone or in a pipeline, fails with
 // ErrConversionReused and writes nothing.

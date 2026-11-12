@@ -105,15 +105,16 @@ type convertConfig struct {
 	limits   Limits
 	tempDir  string
 
-	paper        Paper
-	paperSet     bool
-	defaultPaper Paper
-	orientation  Orientation
-	pageRanges   string
-	omitOutline  bool
-	date         time.Time
-	defaultLang  string
-	version      string
+	paper           Paper
+	paperSet        bool
+	defaultPaper    Paper
+	defaultPaperSet bool
+	orientation     Orientation
+	pageRanges      string
+	omitOutline     bool
+	date            time.Time
+	defaultLang     string
+	version         string
 
 	marginTop, marginRight, marginBottom, marginLeft float64
 	marginsSet                                       bool
@@ -313,9 +314,10 @@ func (presentationOption) presentationOption()             {}
 // WithPaper lays every page out on paper, whatever the source names: the
 // paper replaces the size and the orientation of an HTML document's @page
 // rules, of each section of a text document, of each sheet, and
-// [WithOrientation] then turns it. Each side must be finite, positive and at
-// most 14,400 points (ISO 32000-1, Annex C.2), or the conversion fails with
-// [ErrInvalidConvertOptions].
+// [WithOrientation] then turns it. Each side must lie between 3 and 14,400
+// points, the page sizes ISO 32000-1, Annex C.2 allows, or the conversion
+// fails with [ErrInvalidConvertOptions], which also wraps
+// [ErrInvalidPageSize].
 //
 //   - [FromHTML], [FromMarkdown]: a page whose @page size differs is laid
 //     out at that size and drawn scaled down to fit the paper, centred, the
@@ -337,11 +339,11 @@ func WithPaper(paper Paper) ConvertOption {
 // Markdown file, an HTML document without an @page size, a section or a
 // sheet without a page setup, a CSV file. Without it that paper is
 // [PaperA4]. It never replaces a size the source names, which [WithPaper]
-// does, and a presentation always names its slide size. Each side must be
-// finite, positive and at most 14,400 points, or the conversion fails with
-// [ErrInvalidConvertOptions].
+// does, and a presentation always names its slide size. Each side must lie
+// between 3 and 14,400 points, as [WithPaper] asks, or the conversion fails
+// with [ErrInvalidConvertOptions], which also wraps [ErrInvalidPageSize].
 func WithDefaultPaper(paper Paper) ConvertOption {
-	return convertOption(func(c *convertConfig) { c.defaultPaper = paper })
+	return convertOption(func(c *convertConfig) { c.defaultPaper, c.defaultPaperSet = paper, true })
 }
 
 // WithOrientation turns the pages of the conversion: [OrientationPortrait]

@@ -217,8 +217,8 @@ func Compose(ctx context.Context, width, height float64, placements []Placement,
 // points, or [ErrInvalidPageSize] when a side lies outside the sizes ISO
 // 32000-1, Annex C.2, Table C.1 allows.
 func composedMediaBox(width, height float64) (ast.PdfArray, error) {
-	if !(width >= minPageSize && width <= maxPageSize && height >= minPageSize && height <= maxPageSize) {
-		return nil, fmt.Errorf("%w: %g by %g, each side must lie between %g and %g", ErrInvalidPageSize, width, height, minPageSize, maxPageSize)
+	if err := checkPageSize(width, height); err != nil {
+		return nil, err
 	}
 	return ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), pageExtent(width), pageExtent(height)}, nil
 }

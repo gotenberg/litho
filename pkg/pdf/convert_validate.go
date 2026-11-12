@@ -11,10 +11,6 @@ import (
 	htmlconv "github.com/gotenberg/litho/pkg/internal/convert/html"
 )
 
-// maxConvertPageSide is the longest page side in points (ISO 32000-1,
-// Annex C.2, Table C.1).
-const maxConvertPageSide = 14400
-
 // maxConvertFontSize is the largest font size [WithFontSize] takes, in
 // points: the largest the text stack lays out.
 const maxConvertFontSize = 1000
@@ -50,7 +46,7 @@ func (o *convertConfig) validate() error {
 			return err
 		}
 	}
-	if o.defaultPaper != (Paper{}) {
+	if o.defaultPaperSet {
 		if err := checkPaper("default paper", o.defaultPaper); err != nil {
 			return err
 		}
@@ -76,14 +72,12 @@ func (o *convertConfig) validate() error {
 	return o.validateOffice()
 }
 
-// checkPaper reports a paper whose sides are not both in (0, 14400]
-// points, the PDF page limit (ISO 32000-1, Annex C.2).
+// checkPaper reports a paper whose sides do not both lie in the page sizes
+// ISO 32000-1, Annex C.2, Table C.1 allows, as an error wrapping both
+// [ErrInvalidConvertOptions] and [ErrInvalidPageSize].
 func checkPaper(name string, p Paper) error {
-	for _, side := range []float64{p.Width, p.Height} {
-		// The negated range also refuses NaN.
-		if !(side > 0 && side <= maxConvertPageSide) {
-			return fmt.Errorf("%w: %s %v by %v points: each side must be in (0, %d]", ErrInvalidConvertOptions, name, p.Width, p.Height, maxConvertPageSide)
-		}
+	if err := checkPageSize(p.Width, p.Height); err != nil {
+		return fmt.Errorf("%w: %s: %w", ErrInvalidConvertOptions, name, err)
 	}
 	return nil
 }

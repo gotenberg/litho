@@ -216,8 +216,10 @@ var (
 	// ErrInvalidPageSize is returned by [Writer.WriteTo], [Split], [Merge],
 	// [Compose], [Pipeline.WriteTo] and the remediation methods when
 	// [WithDefaultPageSize] names a width or a height outside the page sizes
-	// ISO 32000-1, Annex C.2, Table C.1 allows, 3 to 14,400 units, and by
-	// [Compose] when the page size it is given lies outside them.
+	// ISO 32000-1, Annex C.2, Table C.1 allows, 3 to 14,400 units, by
+	// [Compose] when the page size it is given lies outside them, and,
+	// wrapped beside [ErrInvalidConvertOptions], by a [Conversion] for a
+	// [WithPaper] or [WithDefaultPaper] outside them.
 	ErrInvalidPageSize = errors.New("invalid page size")
 
 	// ErrInvalidPlacement is returned by [Compose] and [Pipeline.WriteTo]
@@ -777,8 +779,8 @@ var (
 
 	// ErrInvalidConvertOptions is returned, wrapped in an error naming the
 	// option, by a [Conversion] when an option is out of range or two
-	// options exclude each other: a paper side that is not finite, positive
-	// and at most 14,400 points, margins that leave no room on the page, a
+	// options exclude each other: a paper side outside 3 to 14,400 points,
+	// margins that leave no room on the page, a
 	// scale outside [0.1, 2], a media type other than print and screen, a
 	// base URL that is not absolute, a version a conversion does not write,
 	// a Markdown template that never calls toHTML, a sheet the workbook
