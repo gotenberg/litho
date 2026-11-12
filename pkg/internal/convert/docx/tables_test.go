@@ -174,6 +174,8 @@ func TestTables_Nested(t *testing.T) {
 //     81.3 pt: 5.4 pt from the middle of the border.
 //   - litho/docx tables-nested: the same with 2.25 pt double borders, at
 //     78.5 pt.
+//   - libreoffice/docx ooxmlexport/all_gaps_word.docx: the widths of the
+//     gap and 3D borders, read from the lines Word draws.
 func TestTables_BorderWidths(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -187,6 +189,10 @@ func TestTables_BorderWidths(t *testing.T) {
 		{`w:val="thinThickSmallGap" w:sz="12"`, 3, 3.9, ``},
 		{`w:val="threeDEmboss" w:sz="12"`, 3, 3.9, ``},
 		{`w:val="wave" w:sz="6"`, 3, 3.9, ``},
+		{`w:val="thickThinSmallGap" w:sz="48"`, 7.5, 1.65, ``},
+		{`w:val="thickThinMediumGap" w:sz="6"`, 1.25, 4.775, ``},
+		{`w:val="thickThinLargeGap" w:sz="4"`, 2.75, 4.025, ``},
+		{`w:val="threeDEngrave" w:sz="36"`, 7.5, 1.65, ``},
 		{`w:val="single" w:sz="48"`, 6, 2.4, ``},
 		{`w:val="single" w:sz="12"`, 1.5, 5.4, `<w:tblCellSpacing w:w="72" w:type="dxa"/>`},
 	} {
@@ -297,6 +303,27 @@ func TestTables_DecorationsCloned(t *testing.T) {
 			if n.Style.BoxDecorationBreak != css.DecorationCloneAll {
 				t.Errorf("%s: decoration break %v, want clone", r, n.Style.BoxDecorationBreak)
 			}
+		}
+	}
+}
+
+// TestTables_RowTops locks the content of a row's cells starting below
+// the row's thickest top border.
+func TestTables_RowTops(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		spacing string
+		want    float64
+	}{{``, 0.75}, {`<w:tblCellSpacing w:w="20" w:type="dxa"/>`, 1.5}} {
+		body := `<w:tbl><w:tblPr>` + tc.spacing + `</w:tblPr><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid><w:tr>` +
+			`<w:tc><w:tcPr><w:tcBorders><w:top w:val="single" w:sz="4"/></w:tcBorders></w:tcPr><w:p/></w:tc>` +
+			`<w:tc><w:tcPr><w:tcBorders><w:top w:val="single" w:sz="16"/></w:tcBorders></w:tcPr><w:p/></w:tc></w:tr></w:tbl>`
+		td := role(build(t, body, nil).root, "TD")
+		if p := td[0].Style.Padding[css.Top].Value; p != tc.want {
+			t.Errorf("spacing %q: thin cell's top padding %v, want %v", tc.spacing, p, tc.want)
+		}
+		if p := td[1].Style.Padding[css.Top].Value; p != 0 {
+			t.Errorf("spacing %q: thick cell's top padding %v, want 0", tc.spacing, p)
 		}
 	}
 }

@@ -2,6 +2,7 @@ package docx
 
 import (
 	"maps"
+	"math"
 	"strconv"
 	"strings"
 
@@ -158,9 +159,9 @@ func (d *document) parseBorders(e *ooxml.Element) map[string]*borderSpec {
 			name = "right"
 		}
 		bs := d.parseBorder(b)
-		if k := tableBorderLines(attrOr(b, "val")); k > 0 && bs.Width > 0 {
-			if v, ok := ooxml.Int(attrOr(b, "sz")); ok {
-				bs.Width = float64(max(2, min(96, v))) / 8 * k
+		if v, ok := ooxml.Int(attrOr(b, "sz")); ok && bs.Width > 0 {
+			if w := tableBorderWidth(attrOr(b, "val"), float64(max(2, min(96, v)))/8); w > 0 {
+				bs.Width = w
 			}
 		}
 		m[name] = bs
@@ -168,25 +169,40 @@ func (d *document) parseBorders(e *ooxml.Element) map[string]*borderSpec {
 	return m
 }
 
-// tableBorderLines returns the width of a table border of style val in
-// multiples of its sz (ECMA-376 Part 1, 17.4.38, ST_Border 17.18.2, which
-// leaves the drawn width to the application), 0 where the border is as
-// wide as its sz says or a double line's three widths apply.
+// tableBorderWidth returns the width Word draws a table border of style
+// val and sz w points at, 0 where the border is as wide as w or a double
+// line's three widths: ST_Border (ECMA-376 Part 1, 17.18.2) leaves the
+// drawn width of the compound lines to the application.
 //
 // # Corpus evidence
 //
+//   - libreoffice/docx ooxmlexport/all_gaps_word.docx: Word draws a
+//     small-gap thick and thin border a 0.75 pt line and a 0.75 pt gap
+//     beside the thick line of sz (1.5 to 6 pt); a medium-gap one a gap
+//     and a thin line of half the sz each, in quarter points (0.5 to
+//     6 pt); a large-gap one a 1.5 pt line, a 0.75 pt line and a gap as
+//     wide as the sz (0.5 to 6 pt); a 3D border the sz between two lines
+//     of 0.75 pt below 3 pt and of 1.5 pt from 3 pt (1.5 to 6 pt).
 //   - litho/docx tables-borders: at sz 12 (1.5 pt) Word draws a triple
-//     border 7.5 pt wide (three 1.5 pt lines, two 1.5 pt gaps), a
-//     thinThickSmallGap and a threeDEmboss border 3 pt wide, and at sz 6
-//     a wave border 3 pt wide; its rows grow by those widths.
-func tableBorderLines(val string) float64 {
+//     border 7.5 pt wide (three 1.5 pt lines, two 1.5 pt gaps) and at sz
+//     6 a wave border 3 pt wide; its rows grow by those widths.
+func tableBorderWidth(val string, w float64) float64 {
 	switch val {
 	case "triple":
-		return 5
-	case "thinThickSmallGap", "thickThinSmallGap", "threeDEmboss", "threeDEngrave":
-		return 2
+		return 5 * w
+	case "thinThickSmallGap", "thickThinSmallGap":
+		return w + 1.5
+	case "thinThickMediumGap", "thickThinMediumGap":
+		return w + 2*math.Floor(w/2*4)/4
+	case "thinThickLargeGap", "thickThinLargeGap":
+		return w + 2.25
+	case "threeDEmboss", "threeDEngrave":
+		if w < 3 {
+			return w + 1.5
+		}
+		return w + 3
 	case "wave":
-		return 4
+		return 4 * w
 	}
 	return 0
 }
@@ -741,6 +757,7 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 			}
 			rn.Children = append(rn.Children, cn)
 		}
+		alignRowTops(rn.Children, spaced)
 		if isHeader {
 			header = append(header, rn)
 		} else {
@@ -779,6 +796,42 @@ func endsWithTableMark(tc *ooxml.Element) bool {
 		prev, last = last, k
 	}
 	return last != nil && prev != nil && last.Is(w, "p") && prev.Is(w, "tbl") && emptyParagraph(last) && last.Child(w, "pPr").Child(w, "numPr") == nil
+}
+
+// alignRowTops starts the content of every cell of a row below the
+// thickest top border of the row, as Word lays a row out: a cell under a
+// thinner border gets the difference as padding, half of it where the
+// collapsing border model already starts each cell half its own border
+// lower, all of it where the table spaces its cells apart.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/all_gaps_word.docx: Word prints the
+//     text of a row whose cells have top borders 3 to 7.5 pt wide on one
+//     line, 20.7 pt below the paragraph above, where it would be 2.2 pt
+//     higher under the thinnest border alone; the text of a row of a
+//     table with cell spacing whose cells have top borders 0.25 to 6 pt
+//     wide on one line too.
+func alignRowTops(cells []*layout.Node, spaced bool) {
+	share := 0.5
+	if spaced {
+		share = 1
+	}
+	top := func(st *css.Style) float64 {
+		if b := st.Border[css.Top]; b.Style != css.BorderNone {
+			return b.Width
+		}
+		return 0
+	}
+	thickest := 0.0
+	for _, c := range cells {
+		thickest = max(thickest, top(c.Style))
+	}
+	for _, c := range cells {
+		if d := thickest - top(c.Style); d > 0 && c.Style.Padding[css.Top].Kind == css.Points {
+			c.Style.Padding[css.Top] = css.Pts(c.Style.Padding[css.Top].Value + d*share)
+		}
+	}
 }
 
 // spaceCells separates the cells of the table st by its cell spacing
