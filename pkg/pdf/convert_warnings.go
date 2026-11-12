@@ -22,10 +22,12 @@ const (
 	//
 	// Its effect is always [EffectOmitted]: the character does not print.
 	WarningMissingGlyph ConvertWarningCode = "missing-glyph"
-	// WarningFontNotLoaded is an @font-face rule none of whose sources
-	// loads. Its text prints in the next family of each font-family list
-	// that names it; the message names the family and why each source
-	// failed. HTML and Markdown report it.
+	// WarningFontNotLoaded is a font the source carries that does not
+	// load: an @font-face rule none of whose sources loads, or a font a
+	// DOCX or PPTX embeds that does not read, is compressed in a way litho
+	// does not decode, or whose licence bits forbid embedding. Its text
+	// prints in the next family that names it; the message names the
+	// family and the reason. HTML, Markdown, DOCX and PPTX report it.
 	//
 	// Its effect is always [EffectApproximated].
 	WarningFontNotLoaded ConvertWarningCode = "font-not-loaded"

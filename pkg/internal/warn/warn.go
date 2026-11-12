@@ -15,7 +15,9 @@ func (c Code) String() string { return c.name }
 var (
 	// MissingGlyph is a character no font covers.
 	MissingGlyph = Code{"missing-glyph"}
-	// FontNotLoaded is an @font-face rule none of whose sources loads.
+	// FontNotLoaded is a font the source carries that does not load: an
+	// @font-face rule none of whose sources loads, a font a DOCX or PPTX
+	// embeds that litho does not read.
 	FontNotLoaded = Code{"font-not-loaded"}
 	// TextNotLaidOut is text that does not shape or lay out, left out.
 	TextNotLaidOut = Code{"text-not-laid-out"}
