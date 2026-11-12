@@ -41,4 +41,3 @@ The pinned image leaves LibreOffice's locale empty, so LibreOffice prints a page
 ## Accepted disagreements
 
 - `sheet-selection`: `Summary` links to a cell of `Data`, a hidden sheet. LibreOffice writes that link as a `file:///tmp/<uuid>/...` URI of the route's upload directory, a path no converter can know; litho drops a link to a sheet that does not print. Link recall is 2 of 3. `hidden-sheets`, where `Data` prints, scores the link.
-- `paper-grid` on Letter portrait and Tabloid landscape: LibreOffice fits 41 rows on the first page where litho fits 42, so every later page starts one row apart.
