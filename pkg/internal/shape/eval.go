@@ -184,11 +184,11 @@ func (ev *evaluator) mirror(x, y float64) (float64, float64) {
 // pathBuilder accumulates one path's operations in path space and maps
 // them onto the box.
 type pathBuilder struct {
-	ev                  *evaluator
-	ops                 []compose.PathOp
-	ox, oy, sx, sy      float64
-	cx, cy, startX, sy0 float64
-	open                bool
+	ev                     *evaluator
+	ops                    []compose.PathOp
+	ox, oy, sx, sy         float64
+	cx, cy, startX, startY float64
+	open                   bool
 }
 
 // path evaluates the commands cmds of pd into box operations.
@@ -231,7 +231,7 @@ func (pb *pathBuilder) emit(k compose.OpKind, pts ...float64) {
 // moveTo starts a subpath at (x, y).
 func (pb *pathBuilder) moveTo(x, y float64) {
 	pb.emit(compose.MoveTo, x, y)
-	pb.cx, pb.cy, pb.startX, pb.sy0 = x, y, x, y
+	pb.cx, pb.cy, pb.startX, pb.startY = x, y, x, y
 	pb.open = true
 }
 
@@ -273,7 +273,7 @@ func (pb *pathBuilder) cmd(c *Cmd) {
 	case CmdClose:
 		if pb.open {
 			pb.ops = append(pb.ops, compose.PathOp{Kind: compose.ClosePath})
-			pb.cx, pb.cy = pb.startX, pb.sy0
+			pb.cx, pb.cy = pb.startX, pb.startY
 			pb.open = false
 		}
 	case CmdArc:
@@ -351,12 +351,12 @@ func (pb *pathBuilder) ellipse(cx, cy, rx, ry, t0, dt float64) {
 // subpath open a T starts one, as LibreOffice draws it, rather than a
 // line from the origin.
 func (pb *pathBuilder) angleEllipse(x, y, w, h, t0, t1 float64, move bool) {
-	sweep := math.Mod(t1-t0, 360)
-	if sweep <= 0 && t1 != t0 {
-		sweep += 360
-	}
 	if t1 == t0 {
 		return
+	}
+	sweep := math.Mod(t1-t0, 360)
+	if sweep <= 0 {
+		sweep += 360
 	}
 	// Counter-clockwise on the y-down page is a falling parametric angle.
 	a0 := -t0 * math.Pi / 180

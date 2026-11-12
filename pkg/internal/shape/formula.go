@@ -268,21 +268,15 @@ func angle60k(v float64) float64 { return v / 60000 * math.Pi / 180 }
 
 // apply computes op over the operands x, y and z.
 func apply(op Op, x, y, z float64) float64 {
-	div := func(a, b float64) float64 {
-		if b == 0 {
-			return 0
-		}
-		return a / b
-	}
 	switch op {
 	case OpVal:
 		return x
 	case OpMulDiv:
-		return div(x*y, z)
+		return ratio(x*y, z)
 	case OpAddSub:
 		return x + y - z
 	case OpAddDiv:
-		return div(x+y, z)
+		return ratio(x+y, z)
 	case OpIfElse:
 		if x > 0 {
 			return y
@@ -328,7 +322,7 @@ func apply(op Op, x, y, z float64) float64 {
 	case OpMul:
 		return x * y
 	case OpDiv:
-		return div(x, y)
+		return ratio(x, y)
 	case OpNeg:
 		return -x
 	case OpSinRad:
