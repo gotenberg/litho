@@ -189,7 +189,9 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 		if !ok {
 			id, _ = img.AttrNS(ooxml.NSO, "relid")
 		}
-		n := d.picture(s, ooxml.PictureRef{Embed: id}, st, w, h, vmlAlt(k, img))
+		ref := ooxml.PictureRef{Embed: id}
+		ref.Bright, ref.Contrast = vmlLum(img)
+		n := d.picture(s, ref, st, w, h, vmlAlt(k, img))
 		if n != nil {
 			setTransform(n.Style, vmlRotation(vs), strings.Contains(vs["flip"], "x"), strings.Contains(vs["flip"], "y"))
 		}

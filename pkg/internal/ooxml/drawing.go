@@ -31,6 +31,9 @@ type PictureRef struct {
 	Name, Descr string
 	// Decorative marks a picture its author flagged as decorative.
 	Decorative bool
+	// Bright and Contrast are the blip's luminance effect (20.1.8.42 lum
+	// bright, contrast) as fractions in [-1, 1], 0 for none.
+	Bright, Contrast float64
 }
 
 // NSADec is the namespace of the decorative flag Office writes in the
@@ -75,6 +78,13 @@ func ParsePicture(e *Element) PictureRef {
 		r.Link, _ = blip.AttrNS(NSR, "link")
 		if svg := blip.Find(NSASVG, "svgBlip"); svg != nil {
 			r.SVG, _ = svg.AttrNS(NSR, "embed")
+		}
+		if lum := blip.Child(NSA, "lum"); lum != nil {
+			// ST_FixedPercentage in thousandths of a percent.
+			b, _ := Int(attrOr(lum, "bright"))
+			c, _ := Int(attrOr(lum, "contrast"))
+			r.Bright = max(-1, min(float64(b)/100000, 1))
+			r.Contrast = max(-1, min(float64(c)/100000, 1))
 		}
 	}
 	if src := fill.Child(NSA, "srcRect"); src != nil {

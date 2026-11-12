@@ -189,7 +189,10 @@ func (d *document) picture(s *story, ref ooxml.PictureRef, st *css.Style, w, h f
 		}
 		return nil
 	}
-	pic = ooxml.Cropped(pic, ref.Crop)
+	pic = ooxml.Cropped(d.adjustLum(pic, ref.Bright, ref.Contrast), ref.Crop)
+	if pic == nil {
+		return nil
+	}
 	ps := inlineStyle(st)
 	ps.Display = css.Inline
 	if w <= 0 || h <= 0 {
