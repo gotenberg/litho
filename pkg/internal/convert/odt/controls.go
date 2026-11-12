@@ -106,7 +106,7 @@ func (b *builder) fieldControl(c *odf.Element, g frameGeom, n *layout.Node) bool
 	ctl := &formfield.Control{ID: formfield.NodeID(len(b.controls)), Box: true}
 	var kids []*layout.Node
 	switch el.Name.Local {
-	case "text", "textarea", "formatted-text", "date", "time", "number", "password":
+	case "text", "textarea", "formatted-text", "date", "time", "number":
 		f.Kind = compose.FieldText
 		f.Value = controlText(el)
 		f.Multiline = el.Name.Local == "textarea"

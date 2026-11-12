@@ -712,6 +712,62 @@ func WithTrackedChanges(view TrackedChanges) WordProcessingOption {
 // interactive form fields (ISO 32000-1, 12.7), which a reader fills in a
 // PDF viewer. false, the default, prints each control as it shows, with
 // nothing to fill in.
+//
+// In a DOCX source, an inline content control (ECMA-376 Part 1, 17.5.2)
+// becomes a field: a plain or rich text control or a date picker a text
+// field, a drop-down list a combo box, a combo box an editable combo box,
+// an Office 2010 check box a check box; and so does a legacy form field,
+// FORMTEXT a text field, FORMDROPDOWN a combo box, FORMCHECKBOX a check
+// box. In an ODT source, a form control drawn by a draw:control (ODF 1.3,
+// Part 3, 13) becomes a field: a text, text area, formatted, date, time or
+// number field a text field, a check box a check box, the radio buttons
+// of one name one radio button group, a list box a list box, a drop-down
+// list box or a combo box a combo box.
+//
+// A field holds the value its control shows, the items of a list, and its
+// control's state: checked, read-only (a locked or disabled control),
+// required, its maximum length. Its name is the control's tag, else its
+// alias, for a content control, the w:name of a legacy field, the
+// form:name of an ODT control, "Field" for none; a name an earlier field
+// took gets the suffix "_2", "_3" and so on, but for the radio buttons of
+// one name, which stay one group. Its description, the tooltip a viewer
+// shows and a screen reader speaks, is the alias, the help text or the
+// form:title, else the name.
+//
+// The page looks as it does with the option off: what a control shows
+// moves from the page into its field's appearance, which every viewer
+// draws and prints, the control's frame staying on the page, so a viewer
+// that does not fill forms shows the same page. Two controls litho does
+// not print without the option print with it: an ODT control shows its
+// value in its field, in Liberation Sans at 8 points, and a legacy check
+// box prints as a box, crossed when checked.
+//
+// A control a field does not take prints as it shows: a DOCX content
+// control around paragraphs or table rows, a picture, building block,
+// citation, equation or repeating section control, a control inside
+// another; an ODT push button, a hidden, image or grid control, one that
+// does not print; any control in a header or a footer, and one whose
+// content breaks across two pages, which [ConvertReport.Warnings]
+// reports.
+//
+// Each field costs a widget annotation and an appearance stream, two for
+// a check box or a radio button, about a kilobyte. The appearances draw
+// with the document's embedded fonts, whose subsets hold only the glyphs
+// the document draws, so the text a reader types into a text or choice
+// field is set in Helvetica, which the form's default resources name and
+// do not embed: every reader holds it, its encoding (WinAnsiEncoding)
+// covers Latin text alone, and PDF 2.0 deprecates a font left unembedded.
+// No field asks the reader to draw its appearance (/NeedAppearances), and
+// in a tagged document each widget hangs from a Form structure element,
+// so a file with fields remediates to PDF/A and PDF/UA as it does
+// without them: the Helvetica of the default resources draws in no
+// content stream.
+//
+// Not supported: push buttons, signature fields, actions, scripts and
+// calculations (a legacy field's macros, a date field's format), a
+// field's border and background, which stay on the page, a list box's
+// highlighting of its selection, and export values: the items of a list
+// are written by the text they show.
 func WithFormFields(fields bool) WordProcessingOption {
 	return wordProcessingOption(func(c *convertConfig) { c.formFields = fields })
 }

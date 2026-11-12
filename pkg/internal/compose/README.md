@@ -77,6 +77,14 @@ encodes:
   colour, and a shear of the glyphs about their baseline.
 - Structure is a tree of `StructElem` fragments point into. A fragment
   with a nil parent in a structured document is an artifact.
+- A page holds its interactive form fields as it holds its links: a
+  `Field` is a kind (text, check box, radio button, list box, combo box),
+  a rectangle, a name, a value, the options of a choice, the flags, the
+  description and the Form element it belongs to, and the fragments its
+  widget draws, in page coordinates. A converter moves what a control
+  shows from the page into the field (`TakeContent`), so the page and its
+  widgets paint what the page alone painted. The radio buttons of one name
+  are one group wherever they sit.
 - Dates never enter the model. Output bytes depend on input and options
   alone.
 - `Warnings` records what a converter could not render. Nothing fails
@@ -112,6 +120,16 @@ holds every page until the end.
   alpha; `JPEG` writes as DCTDecode untouched.
 - Links become Link annotations with a URI action or an XYZ destination.
   Outline entries become the outline tree.
+- Fields become one widget annotation each, merged with its field but for
+  a radio button, whose group is its parent field, under one `/AcroForm`.
+  Each widget's appearance is a form XObject of its rectangle, drawn with
+  the document's embedded faces and written with its page; a check box
+  and a radio button have an on and an off state. Text and choice fields
+  name Helvetica, unembedded, in the form's default resources and default
+  appearance, for the text a reader types; `/NeedAppearances` is never
+  set. A name taken by another field takes a suffix, `_2` and on, as
+  LibreOffice names a second control of one name. A tagged document hangs
+  each widget from its Form element through `/StructParent`.
 - A document with `Structure` writes a StructTreeRoot, marked content with
   MCIDs, a ParentTree and `/MarkInfo << /Marked true >>`. Content with no
   parent is wrapped in `/Artifact BMC ... EMC`. Table cells carry their
