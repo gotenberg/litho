@@ -5,6 +5,7 @@ import (
 	"iter"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -459,11 +460,37 @@ func clausePrefix(v compliance.Violation, prefixes ...string) bool {
 
 // descriptionContains checks if a violation's description contains a substring (case-insensitive).
 func descriptionContains(v compliance.Violation, sub string) bool {
-	return strings.Contains(strings.ToLower(v.Rule.Description), strings.ToLower(sub))
+	return containsLower(v.Rule.Description, sub)
 }
 
 // contextContains checks if a violation's context (the bracketed detail
 // emitted by the validator) contains a substring (case-insensitive).
 func contextContains(v compliance.Violation, sub string) bool {
-	return strings.Contains(strings.ToLower(v.Context), strings.ToLower(sub))
+	return containsLower(v.Context, sub)
+}
+
+// containsLower reports whether strings.ToLower(s) contains
+// strings.ToLower(sub). [classify] asks it of every violation for every
+// fixer, so it folds ASCII text in place rather than building two lowered
+// copies a call; text holding any other byte takes the lowered copies.
+func containsLower(s, sub string) bool {
+	if !isASCII(s) || !isASCII(sub) {
+		return strings.Contains(strings.ToLower(s), strings.ToLower(sub))
+	}
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if strings.EqualFold(s[i:i+len(sub)], sub) {
+			return true
+		}
+	}
+	return false
+}
+
+// isASCII reports whether s holds ASCII bytes alone.
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
 }
