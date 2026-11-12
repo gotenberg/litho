@@ -114,19 +114,21 @@ func (b *builder) setStrings(n *dom.Node, node *layout.Node, st *css.Style, befo
 					sb.WriteString(layout.CounterText(it.Style, v))
 				}
 			case css.ItemContent:
+				// content() collapses white space as white-space: normal
+				// lays it out (CSS GCPM 3, 2.1.1.1).
 				switch it.Text {
 				case "before":
-					sb.WriteString(collapseSpace(nodeText(before)))
+					sb.WriteString(collapse(nodeText(before)))
 				case "after":
-					sb.WriteString(collapseSpace(nodeText(after)))
+					sb.WriteString(collapse(nodeText(after)))
 				case "first-letter":
-					sb.WriteString(firstLetter(collapseSpace(domText(n))))
+					sb.WriteString(firstLetter(collapse(domText(n))))
 				case "marker":
 					if node.Marker != nil {
-						sb.WriteString(collapseSpace(nodeText(node.Marker)))
+						sb.WriteString(collapse(nodeText(node.Marker)))
 					}
 				default:
-					sb.WriteString(collapseSpace(domText(n)))
+					sb.WriteString(collapse(domText(n)))
 				}
 			case css.ItemOpenQuote, css.ItemCloseQuote, css.ItemNoOpenQuote, css.ItemNoCloseQuote,
 				css.ItemImage, css.ItemLeader, css.ItemNamedString, css.ItemElement:
@@ -185,14 +187,6 @@ func domText(n *dom.Node) string {
 		}
 	}
 	return sb.String()
-}
-
-// collapseSpace returns s as white-space: normal lays it out: each run of
-// white space one space, none at either end (CSS GCPM 3, 2.1.1.1).
-func collapseSpace(s string) string {
-	return strings.Join(strings.FieldsFunc(s, func(r rune) bool {
-		return r == ' ' || r == '\t' || r == '\n' || r == '\r' || r == '\f'
-	}), " ")
 }
 
 // firstLetter returns the first letter of s with the punctuation before
