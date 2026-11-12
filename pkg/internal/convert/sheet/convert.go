@@ -118,11 +118,11 @@ func (b *builder) warnOnce(code, msg string) {
 //
 // # Not supported
 //
-// Charts are reserved as empty boxes with a warning; the conditional
-// formatting rules whose formula is not computed are left out with a
-// warning; right-to-left sheets are laid out left to
-// right with a warning; rotated text turns about the cell's centre; the
-// accounting underlines draw as plain ones.
+// The conditional formatting rules whose formula is not computed are
+// left out with a warning; right-to-left sheets are laid out left to
+// right with a warning; text rotated by other than a quarter turn starts
+// in the cell's corner, an approximation, with a warning; the accounting
+// underlines draw as plain ones.
 func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.Options) (*compose.Document, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err

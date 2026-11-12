@@ -9,8 +9,6 @@ const (
 	// CodeTooManyCells is a page with more cells than the builder lays
 	// out.
 	CodeTooManyCells = "sheet-too-many-cells"
-	// CodeChart is a chart not drawn.
-	CodeChart = "sheet-chart"
 	// CodeField is a header or footer field that shows nothing.
 	CodeField = "sheet-field"
 	// CodeHeader is a header or footer that could not be laid out.
