@@ -112,3 +112,17 @@ func TestScale_MinorTicksAccumulateTheStep(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+// TestScale_TicksStopAtTheIntervalCap checks that an axis draws at most
+// maxIntervals + 1 major ticks, linear or logarithmic, both ends included.
+func TestScale_TicksStopAtTheIntervalCap(t *testing.T) {
+	if n := len(scale{min: 0, max: maxIntervals, major: 1}.ticks()); n != maxIntervals+1 {
+		t.Errorf("%d intervals: %d ticks, want %d", maxIntervals, n, maxIntervals+1)
+	}
+	if n := len(scale{min: 0, max: 2 * maxIntervals, major: 1}.ticks()); n != maxIntervals+1 {
+		t.Errorf("%d intervals: %d ticks, want %d", 2*maxIntervals, n, maxIntervals+1)
+	}
+	if n := len(scale{min: 1, max: math.Pow(10, 2*maxIntervals/10), major: 0.1, log: 10}.ticks()); n != maxIntervals+1 {
+		t.Errorf("logarithmic: %d ticks, want %d", n, maxIntervals+1)
+	}
+}

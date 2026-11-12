@@ -6,14 +6,15 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
-// maxTicks caps the major ticks of an axis. Anti-DoS guard, not
-// spec-mandated: LibreOffice allows 500 for a fixed interval, and a tick
-// costs a label and a gridline.
-const maxTicks = 500
+// maxIntervals caps the intervals between the major ticks of an axis, so
+// an axis draws at most maxIntervals + 1 major ticks, both ends included.
+// Anti-DoS guard, not spec-mandated: LibreOffice allows 500 for a fixed
+// interval, and a tick costs a label and a gridline.
+const maxIntervals = 500
 
-// maxMinorTicks caps the minor ticks of an axis. Anti-DoS guard, not
-// spec-mandated: five minor ticks per major one at the major cap.
-const maxMinorTicks = maxTicks * 5
+// maxMinorTicks caps the minor intervals of an axis. Anti-DoS guard, not
+// spec-mandated: five minor intervals per major one at the major cap.
+const maxMinorTicks = maxIntervals * 5
 
 // maxMinorSteps caps the additions that walk the minor ticks. Anti-DoS
 // guard, not spec-mandated: a rounded addition that moves a tick moves it
@@ -140,7 +141,7 @@ func autoScale(ax *Axis, lo, hi float64, opt scaleOptions) scale {
 	autoDist := math.IsNaN(fixMajor)
 	maxCount := opt.maxCount
 	if !autoDist {
-		maxCount = maxTicks
+		maxCount = maxIntervals
 	}
 	dist := fixMajor
 	norm, mag := 0.0, 0.0
@@ -210,7 +211,7 @@ func autoScale(ax *Axis, lo, hi float64, opt scaleOptions) scale {
 	if !above(sc.max, sc.min) {
 		sc.max = sc.min + 1
 	}
-	if !numeric.Positive(sc.major) || (sc.max-sc.min)/sc.major > maxTicks {
+	if !numeric.Positive(sc.major) || (sc.max-sc.min)/sc.major > maxIntervals {
 		sc.major = (sc.max - sc.min) / maxAutoTicks
 	}
 	return sc
@@ -308,7 +309,7 @@ func (s scale) ticks() []float64 {
 	if s.log > 0 {
 		lmin := math.Log(s.min) / math.Log(s.log)
 		lmax := math.Log(s.max) / math.Log(s.log)
-		for e := lmin; e <= lmax+1e-9 && len(out) <= maxTicks; e += s.major {
+		for e := lmin; e <= lmax+1e-9 && len(out) <= maxIntervals; e += s.major {
 			out = append(out, math.Pow(s.log, e))
 		}
 		return out
@@ -317,7 +318,7 @@ func (s scale) ticks() []float64 {
 	if math.Abs(start-s.min) > 1e-9*math.Max(1, math.Abs(s.major)) && start-s.major >= s.min-1e-9*s.major {
 		start -= s.major
 	}
-	for i := 0; i <= maxTicks; i++ {
+	for i := 0; i <= maxIntervals; i++ {
 		v := start + float64(i)*s.major
 		if v > s.max+1e-9*s.major {
 			break
