@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -177,6 +178,23 @@ func TestConvert_Errors(t *testing.T) {
 				t.Errorf("err %v, want %v", err, tc.want)
 			}
 		})
+	}
+}
+
+// TestConvert_CancelledOnLastSlide checks that a context that ends while
+// the last slide is drawn fails the conversion rather than return the
+// slide cut short.
+func TestConvert_CancelledOnLastSlide(t *testing.T) {
+	fonts := pinnedFonts(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stop := &Shape{Kind: KindPicture, Box: compose.Rect{Width: 10, Height: 10}, Picture: &layout.Picture{Width: 10, Height: 10, Vector: func(context.Context, compose.Rect) []compose.Fragment {
+		cancel()
+		return nil
+	}}}
+	after := box(0, 0, 100, 100, para("after", arial(12)))
+	if _, err := Convert(ctx, deck(&Slide{Shapes: []*Shape{stop, after}}), fonts, office.Options{}); !errors.Is(err, context.Canceled) {
+		t.Errorf("err %v, want %v", err, context.Canceled)
 	}
 }
 

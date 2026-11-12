@@ -342,6 +342,11 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 			}
 		}
 	}
+	// A page cuts its drawing short when ctx ends during it: the last one
+	// has no next page to check ctx before.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if pages == 0 {
 		// A deck that prints no slide prints one blank page of the slide
 		// size, as Impress exports an empty show.
