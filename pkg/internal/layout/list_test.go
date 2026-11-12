@@ -208,3 +208,51 @@ func TestListMarkersDraw_Square(t *testing.T) {
 		____________________________KKK_________
 		________________________________________`)
 }
+
+// TestListItems_HoldLblAndLBody locks the structure of list items: an LI
+// holds a Lbl and a LBody alone (ISO 32000-2, 14.8.4.8.3; ISO/TS 32005,
+// Table 5, which PDF/UA-2 tests), its content in the LBody whether a
+// marker draws or not.
+//
+// # Corpus evidence
+//
+//   - probe, html: list items with list-style none, display block or flex
+//     left an LI holding a Link or a Span after PDF/UA-2 remediation; none
+//     with this structure, which veraPDF passes at PDF/UA-1 and PDF/UA-2.
+func TestListItems_HoldLblAndLBody(t *testing.T) {
+	in := inlineSty()
+	item := func(lt css.ListStyleType, kids ...*Node) *Node {
+		return role("LI", el(sty(display(css.ListItem), func(s *css.Style) { s.ListStyleType = lt }), kids...))
+	}
+	for name, tc := range map[string]struct {
+		root *Node
+		want string
+	}{
+		"item with a marker": {
+			doc(role("L", el(sty(), item(css.Disc, txt(in, "a"))))),
+			"Document[L[LI[Lbl# LBody#]]]",
+		},
+		"item with no marker": {
+			doc(role("L", el(sty(), item(css.ListNone, txt(in, "a"))))),
+			"Document[L[LI[LBody#]]]",
+		},
+		"item holding a link and no marker": {
+			doc(role("L", el(sty(), item(css.ListNone, role("Link", el(in, txt(in, "a"))))))),
+			"Document[L[LI[LBody[Link#]]]]",
+		},
+		"item holding paragraphs and a list": {
+			doc(role("L", el(sty(), item(css.Decimal, role("P", el(sty(), txt(in, "a"))), role("L", el(sty(), item(css.Disc, txt(in, "b")))))))),
+			"Document[L[LI[Lbl# LBody[P# L[LI[Lbl# LBody#]]]]]]",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			res := run(t, tc.root, page(200, 200))
+			if got := shape(res, res.Structure); got != tc.want {
+				t.Errorf("structure %s, want %s", got, tc.want)
+			}
+			if err := document(res).Validate(t.Context()); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}

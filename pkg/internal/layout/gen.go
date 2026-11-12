@@ -17,7 +17,10 @@ type genCtx struct {
 	elem        *typeset.StructElem
 	structDepth int
 	// list is the nearest L element, nil outside a list.
-	list  *typeset.StructElem
+	list *typeset.StructElem
+	// item is the LI element the node just entered starts, nil for any
+	// other node: the marker's Lbl joins it.
+	item  *typeset.StructElem
 	link  *link
 	lang  string
 	decos []deco
@@ -82,9 +85,14 @@ func (e *engine) newBox(n *Node, st *css.Style, kind boxKind, ctx genCtx) *box {
 
 // enter returns the context the children of n's box b see: its structure
 // element, link, language and propagated decorations.
+//
+// An LI holds a Lbl and a LBody alone (ISO 32000-2, 14.8.4.8.3; ISO/TS
+// 32005, Table 5): the item's content hangs from a LBody the LI starts
+// with, and [engine.genMarker] puts the marker's Lbl before it.
 func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 	out := ctx
 	out.depth = ctx.depth + 1
+	out.item = nil
 	if n.Lang != "" {
 		out.lang = n.Lang
 		b.lang = n.Lang
@@ -95,13 +103,14 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 		// 14.9.4): a node without a role takes a Span to carry it.
 		role = "Span"
 	}
+	own := ctx.elem
 	if role != "" {
 		switch {
 		case role == "Document" && ctx.elem == e.root && ctx.structDepth == 1:
 			if e.root.Lang == "" && n.Lang != "" {
 				e.root.Lang = n.Lang
 			}
-		case ctx.structDepth >= maxStructDepth:
+		case out.structDepth >= maxStructDepth:
 			e.warnOnce(warn.LimitReached, warn.Approximated, fmt.Sprintf("structure roles nested deeper than %d hang from the deepest element", maxStructDepth), -1)
 		default:
 			el := &typeset.StructElem{Role: role, Lang: n.Lang, Scope: n.Scope, Numbering: n.Numbering, ActualText: n.ActualText}
@@ -124,11 +133,18 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 			if ctx.elem != nil {
 				ctx.elem.Kids = append(ctx.elem.Kids, el)
 			}
+			own = el
 			out.elem = el
-			out.structDepth = ctx.structDepth + 1
+			out.structDepth++
+			if role == "LI" && out.structDepth < maxStructDepth {
+				body := &typeset.StructElem{Role: "LBody"}
+				el.Kids = append(el.Kids, body)
+				out.elem, out.item = body, el
+				out.structDepth++
+			}
 		}
 	}
-	b.elem = out.elem
+	b.elem = own
 	if n.Href != "" {
 		l := &link{href: n.Href, node: n}
 		if out.elem != nil && out.elem.Role == "Link" {
@@ -518,21 +534,18 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 	symbol := e.opts.BrowserRules && outside && pic == nil && markerBoxWidth(n.Marker) == 0 && (n.Marker == nil || len(n.Marker.Children) == 0) &&
 		(st.ListStyleType == css.Disc || st.ListStyleType == css.Circle || st.ListStyleType == css.Square)
 	markerElem := ctx.elem
-	if n.Role == "LI" && ctx.elem != nil && ctx.elem.Role == "LI" && ctx.structDepth < maxStructDepth {
+	if n.Role == "LI" && ctx.item != nil {
 		lbl := &typeset.StructElem{Role: "Lbl"}
-		body := &typeset.StructElem{Role: "LBody"}
 		if pic != nil || symbol || authored {
 			lbl.ActualText = alt
 		}
-		ctx.elem.Kids = append(ctx.elem.Kids, lbl, body)
+		ctx.item.Kids = slices.Insert(ctx.item.Kids, 0, lbl)
 		if l := ctx.list; l != nil && l.Numbering == typeset.NumberingUnset {
 			// ISO 14289-2, 8.2.5.25: a list whose items carry a Lbl
 			// states its numbering.
 			l.Numbering = listNumbering(st, pic != nil || n.Marker != nil && len(n.Marker.Children) > 0)
 		}
 		markerElem = lbl
-		ctx.elem = body
-		ctx.structDepth++
 	}
 	if outside {
 		b.outside = &markerBox{text: label, picture: pic, elem: markerElem, st: st, boxW: markerBoxWidth(n.Marker), symbol: symbol}
