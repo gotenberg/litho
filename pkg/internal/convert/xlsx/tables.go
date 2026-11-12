@@ -2,6 +2,7 @@ package xlsx
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
@@ -94,12 +95,12 @@ func (w *sheetReader) row(row int) *sheet.Row {
 	if at, ok := w.rowAt[row]; ok {
 		return &sh.Rows[at]
 	}
-	sh.Rows = append(sh.Rows, sheet.Row{Index: row})
-	sort.SliceStable(sh.Rows, func(i, j int) bool { return sh.Rows[i].Index < sh.Rows[j].Index })
-	for i, rw := range sh.Rows {
-		w.rowAt[rw.Index] = i
+	at := sort.Search(len(sh.Rows), func(i int) bool { return sh.Rows[i].Index > row })
+	sh.Rows = slices.Insert(sh.Rows, at, sheet.Row{Index: row})
+	for i := at; i < len(sh.Rows); i++ {
+		w.rowAt[sh.Rows[i].Index] = i
 	}
-	return &sh.Rows[w.rowAt[row]]
+	return &sh.Rows[at]
 }
 
 // setEmptyText gives the cell at row and col the text s when it holds no

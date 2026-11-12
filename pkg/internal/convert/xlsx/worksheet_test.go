@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
@@ -276,6 +277,33 @@ func TestRead_TableStyles(t *testing.T) {
 	}
 	if c, ok := cellAt(mine, 1, 1); ok && c.Style != nil && c.Style.Fill.Color.A != 0 {
 		t.Errorf("workbook style body %+v", c.Style)
+	}
+}
+
+// TestRead_TableStyleWholeSheet checks a table whose area names the whole
+// sheet: its style reaches a cell the sheet holds past maxTableCells, and
+// the reading follows the sheet's cells, not the area's 17 billion.
+func TestRead_TableStyleWholeSheet(t *testing.T) {
+	t.Parallel()
+	for _, ref := range []string{"A1:XFD1048576", "A1:A1048576"} {
+		t.Run(ref, func(t *testing.T) {
+			t.Parallel()
+			table := `<table ` + nsDecl + ` id="1" name="T" displayName="T" ref="` + ref + `"><tableColumns count="1"><tableColumn id="1" name="A"/></tableColumns>` +
+				`<tableStyleInfo name="TableStyleMedium2" showRowStripes="1"/></table>`
+			files := workbookFiles([]testSheet{{
+				name: "S",
+				xml:  `<sheetData><row r="1048576"><c r="A1048576"><v>1</v></c></row></sheetData><tableParts count="1"><tablePart r:id="rIdT"/></tableParts>`,
+				rels: `<Relationship Id="rIdT" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/>`,
+			}}, minimalStyles, "", "", map[string]string{"xl/tables/table1.xml": table, "xl/theme/theme1.xml": testTheme})
+			start := time.Now()
+			doc, _ := readBytes(t, zipFiles(t, files))
+			if elapsed := time.Since(start); elapsed > 20*time.Second {
+				t.Errorf("reading took %v", elapsed)
+			}
+			if c, ok := cellAt(doc.Sheets[0], 1048575, 0); !ok || c.Style == nil || c.Value.Number != 1 {
+				t.Errorf("last cell %+v, want its value styled", c)
+			}
+		})
 	}
 }
 

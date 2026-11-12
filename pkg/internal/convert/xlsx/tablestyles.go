@@ -1,6 +1,9 @@
 package xlsx
 
 import (
+	"slices"
+	"sort"
+
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -162,30 +165,52 @@ const maxTableCells = 1 << 16
 // columns, the row and column stripes outside the total row, the whole
 // table.
 func (w *sheetReader) styleTable(ts *tableStyle, t tableInfo) {
-	r := w.r
 	area := t.area
-	added := 0
 	cache := map[styleKey]*sheet.Style{}
-	normal := r.normal()
+	normal := w.r.normal()
+	apply := func(cell *sheet.Cell, row, col int) {
+		key := styleKey{base: w.styleAt(cell, row, col), overlay: ts.overlay(t, row, col)}
+		if key.overlay == (overlay{}) {
+			return
+		}
+		st, ok := cache[key]
+		if !ok {
+			st = key.apply(normal)
+			cache[key] = st
+		}
+		cell.Style = st
+	}
+	// The cells of the area are styled in reading order, an empty one
+	// added, until maxTableCells cells without a style of their own are;
+	// past that position only the cells the sheet holds are, so the work
+	// follows the sheet's cells and not the area, which can name the
+	// whole sheet.
+	added := 0
+	stopRow, stopCol := area.LastRow+1, area.FirstColumn
+fill:
 	for row := area.FirstRow; row <= area.LastRow; row++ {
 		for col := area.FirstColumn; col <= area.LastColumn; col++ {
-			cell := w.cellRef(row, col, added < maxTableCells)
-			if cell == nil {
-				continue
+			if added >= maxTableCells {
+				stopRow, stopCol = row, col
+				break fill
 			}
+			cell := w.cellRef(row, col)
 			if cell.Style == nil {
 				added++
 			}
-			key := styleKey{base: w.styleAt(cell, row, col), overlay: ts.overlay(t, row, col)}
-			if key.overlay == (overlay{}) {
+			apply(cell, row, col)
+		}
+	}
+	rows := w.sh.Rows
+	for i := sort.Search(len(rows), func(i int) bool { return rows[i].Index >= stopRow }); i < len(rows) && rows[i].Index <= area.LastRow; i++ {
+		row := rows[i].Index
+		cells := rows[i].Cells
+		for j := range cells {
+			col := cells[j].Column
+			if col < area.FirstColumn || col > area.LastColumn || row == stopRow && col < stopCol {
 				continue
 			}
-			st, ok := cache[key]
-			if !ok {
-				st = key.apply(normal)
-				cache[key] = st
-			}
-			cell.Style = st
+			apply(&cells[j], row, col)
 		}
 	}
 }
@@ -355,15 +380,15 @@ var elementRegions = [...]struct {
 }
 
 // cellRef returns the cell at row and col, added with its row when the
-// sheet lacks it and add is set, nil otherwise.
-func (w *sheetReader) cellRef(row, col int, add bool) *sheet.Cell {
-	if c, ok := w.cellAt(row, col); ok || !add {
+// sheet lacks it.
+func (w *sheetReader) cellRef(row, col int) *sheet.Cell {
+	if c, ok := w.cellAt(row, col); ok {
 		return c
 	}
 	rw := w.row(row)
-	rw.Cells = dedupCells(append(rw.Cells, sheet.Cell{Column: col}))
-	c, _ := w.cellAt(row, col)
-	return c
+	at := columnIndex(rw.Cells, col)
+	rw.Cells = slices.Insert(rw.Cells, at, sheet.Cell{Column: col})
+	return &rw.Cells[at]
 }
 
 // cellAt returns the cell at row and col, false when the sheet lacks it.
@@ -373,12 +398,16 @@ func (w *sheetReader) cellAt(row, col int) (*sheet.Cell, bool) {
 		return nil, false
 	}
 	cells := w.sh.Rows[at].Cells
-	for i := range cells {
-		if cells[i].Column == col {
-			return &cells[i], true
-		}
+	if i := columnIndex(cells, col); i < len(cells) && cells[i].Column == col {
+		return &cells[i], true
 	}
 	return nil, false
+}
+
+// columnIndex returns the index of the first of cells, sorted by column
+// as [sheetReader.sheetData] leaves them, at or past column col.
+func columnIndex(cells []sheet.Cell, col int) int {
+	return sort.Search(len(cells), func(i int) bool { return cells[i].Column >= col })
 }
 
 // styleAt returns the style the cell draws with: its own, else its row's,
