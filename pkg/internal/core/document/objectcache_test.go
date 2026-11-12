@@ -168,3 +168,38 @@ func TestHeaderOfEachObjectReadOnce(t *testing.T) {
 		}
 	}
 }
+
+// TestRecordedObjectIsNotCheckedAgain pins that in compliance mode an object
+// whose format violations are recorded is parsed again without the format
+// checks, which read its header bytes: the first record stands, and the
+// violations reported are the same.
+func TestRecordedObjectIsNotCheckedAgain(t *testing.T) {
+	t.Parallel()
+	data, offsets := formatViolationPDF(t,
+		"<< /Type /Catalog >>\n",
+		"<< /A 1 >>",       // no EOL before endobj: one violation
+		"<< /B <414> >>\n", // odd count of hex digits: one violation
+	)
+	doc := formatViolationDoc(data, offsets)
+	counter := &countingReaderAt{r: bytes.NewReader(data), reads: map[[2]int64]int{}}
+	doc.r = counter
+	doc.maxCacheSize = 1
+	doc.SetComplianceMode(true)
+
+	ctx := context.Background()
+	for range 5 {
+		for n := 1; n <= 3; n++ {
+			if _, err := doc.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: n}); err != nil {
+				t.Fatalf("Resolve %d: %v", n, err)
+			}
+		}
+	}
+	for n := 1; n <= 3; n++ {
+		if got := counter.reads[[2]int64{offsets[n], 40}]; got != 1 {
+			t.Errorf("the header format of object %d was read %d times over 5 parses, want once", n, got)
+		}
+	}
+	if got := doc.FormatViolations(); len(got) != 2 {
+		t.Errorf("recorded %d violations, want 2: %v", len(got), got)
+	}
+}

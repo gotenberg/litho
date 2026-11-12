@@ -1643,7 +1643,10 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 
 	// Read compliance mode once, so a concurrent validator toggling it
 	// mid-resolution cannot change this parse's branches once it started.
-	checkFormat := d.ComplianceMode()
+	// An object whose findings are recorded is not checked again: the first
+	// record stands (see [Document.RecordFormatViolations]), and a file whose
+	// cache replaces objects parses the same object many times.
+	checkFormat := d.ComplianceMode() && !d.formatRecorded(ref.ObjectNum)
 
 	switch entry.Type {
 	case xref.XRefTypeNormal:

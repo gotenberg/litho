@@ -277,6 +277,15 @@ func (d *Document) RecordFormatViolations(objNum int, violations ...error) {
 	d.formatViolations[objNum] = slices.Clone(violations)
 }
 
+// formatRecorded reports whether the format violations of objNum are
+// recorded, so that no later parse changes them.
+func (d *Document) formatRecorded(objNum int) bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	_, ok := d.formatViolations[objNum]
+	return ok
+}
+
 // FormatViolations returns the recorded format violations ordered by object
 // number, then by the order in which they were found within that object.
 // The order never depends on map iteration or on the order the objects were
