@@ -44,7 +44,7 @@ func TestStylesKeepUnequalValuesApart(t *testing.T) {
 		"nested slice other":  func(s *Style) { s.Content.Items = []ContentItem{{Text: "b"}} },
 		"shadow current":      func(s *Style) { s.BoxShadow = []Shadow{{current: true}} },
 		"shadow not current":  func(s *Style) { s.BoxShadow = []Shadow{{}} },
-		"office":              func(s *Style) { s.Office.ExactHeight = true },
+		"office":              func(s *Style) { s.ExactHeight = true },
 		"monospace keyword":   func(s *Style) { s.fontSizeKeyword = 3 },
 		"quotes":              func(s *Style) { s.Quotes.Pairs = [][2]string{{"«", "»"}} },
 		"grid areas absent":   func(s *Style) { s.GridTemplateAreas = nil },

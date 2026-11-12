@@ -47,7 +47,7 @@ func serializeList(l []token) []any {
 	for _, t := range l {
 		out = append(out, serializeToken(t))
 		if t.eof {
-			switch t.typ {
+			switch t.typ { //nolint:exhaustive // only strings and urls end at eof with an error
 			case tString:
 				out = append(out, []any{"error", "eof-in-string"})
 			case tURL:
@@ -66,7 +66,7 @@ func numType(t token) string {
 }
 
 func serializeToken(t token) any {
-	switch t.typ {
+	switch t.typ { //nolint:exhaustive // a list never holds tEOF, which ends it
 	case tIdent:
 		return []any{"ident", t.value}
 	case tAtKeyword:
@@ -124,7 +124,7 @@ func serializeToken(t token) any {
 }
 
 func serializeItem(it item) any {
-	switch it.kind {
+	switch it.kind { //nolint:exhaustive // an error item takes the fallback
 	case itemAtRule:
 		var block any
 		if it.hasBlock {
