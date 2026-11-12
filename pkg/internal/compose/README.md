@@ -173,7 +173,7 @@ Each wave ships behind oracles wired into the corpus matrix
 
 | Wave | Deliverable                                                                                                                                   | Oracles                                                                                                                                                  |
 | ---- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | Model, backend, text stack, plain text converter, `pdf.Convert`, `litho convert`                                                              | Round trip: extracted text equals the source. PDF/A-2b and PDF/UA-1 clean after remediation. Deterministic bytes. litho and poppler rasters agree. Fuzz. |
+| 0    | Model, backend, text stack, plain text converter, the public entry point                                                                      | Round trip: extracted text equals the source. PDF/A-2b and PDF/UA-1 clean after remediation. Deterministic bytes. litho and poppler rasters agree. Fuzz. |
 | 1    | HTML and CSS 2.1 visual formatting, css-text, css-page, lists, backgrounds, borders, images, auto tables                                      | WPT reftests through the engine with the render cell's pixel rule. WeasyPrint draw tests. Differential against Chromium on Gotenberg's fixtures.         |
 | 2    | Route parity: headers and footers, page ranges, scale, paper, media type, outline, tags, links, Markdown, URL, @font-face, image formats, SVG | Gotenberg integration features on both routes.                                                                                                           |
 | 3    | Flexbox, grid, positioning, transforms, multicol, generated content, BiDi, CJK                                                                | WPT grid, multicol, writing modes and text pass rates. WeasyPrint's GCPM tests.                                                                          |
@@ -185,8 +185,9 @@ Wave 4 depends on wave 0 alone, so the Office converters run beside waves
 1 to 3 once the model is frozen.
 
 Status: waves 0 to 6 are done, then waves 7 and 8, two fidelity rounds
-over every corpus, wave 9, the output targets, and wave 10, the memory
-of a conversion and the Microsoft references.
+over every corpus, wave 9, the output targets, wave 10, the memory of a
+conversion and the Microsoft references, and wave 11, the typed
+conversions and the pipeline.
 `test/integration/baseline.json` records the oracle scores per fixture;
 the whole matrix, the converter cells and the `targets` cell included,
 scores a tree in about fifty minutes on ten cores (`make corpus`).
@@ -309,9 +310,10 @@ and percentages, the browser rendering rules of two-tone borders, list
 markers and underlines behind an option of their own, and the
 fragmentation rule of absolutely positioned boxes.
 
-Wave 9 made the output a choice and the judgement visual. `pdf.Convert`
-writes the PDF version asked, 1.4 to 2.0, and conforms to the PDF/A and
-PDF/UA profiles asked, one or a pair a single file can meet. The backend
+Wave 9 made the output a choice and the judgement visual. A conversion
+writes the PDF version asked, 1.4 to 2.0, and its output conforms to the
+PDF/A and PDF/UA profiles asked, one or a pair a single file can meet,
+once remediated. The backend
 writes what a producer alone knows: the attributes and the role map of
 the structure tree, the constructs each version has, and page content in
 page coordinates, which keeps every number within what PDF 1.4 reads
@@ -328,8 +330,7 @@ description.
 One paper rule holds in every format: the caller's paper, else the
 document's own (a CSS `@page` size, a section's, a sheet's, a slide's),
 else the default, A4 unless the caller names another; a caller's paper
-replaces the document's orientation with it, and an option a format does
-not take is reported as a warning, never dropped. A conversion holds its
+replaces the document's orientation with it. A conversion holds its
 pictures encoded as the file stores them, one decoded at a time, spools a
 large output to a temp file, parses a font face once, and spends memory
 within one budget, `Limits.MaxConvertMemoryBytes`, charged where memory
@@ -361,6 +362,48 @@ its charts, page background, text boxes, gutters and the outline titles
 Word writes. The OpenDocument formats and CSV keep LibreOffice as their
 reference.
 
+Wave 11 gave the conversions the shape of the rest of the library. litho
+is a library alone: the command line, its installer and its binary
+release left, for Gotenberg to carry one. A format has its constructor,
+`pdf.FromText`, `FromHTML`, `FromMarkdown`, `FromDOCX`, `FromODT`,
+`FromXLSX`, `FromODS`, `FromCSV`, `FromPPTX` and `FromODP`, each
+returning a `Conversion`, and an option names the formats that take it
+in its type, so a paper for any format, margins for the flowed ones, a
+password for the packages or a sheet selection for the workbooks compile
+where they mean something and nowhere else. Options that contradict
+each other fail the conversion; none is ignored. A conversion writes a
+PDF by itself (`Conversion.WriteTo`) or opens a pipeline
+(`Pipeline.Convert`), and `Pipeline.MergePipelines` runs several
+pipelines at once in a bounded pool and merges what they write, the
+same bytes at any concurrency, the peak memory growing with the
+pipelines that run together. Conformance left the conversion, which
+writes PDF 1.7 unless asked another version: PDF/A and PDF/UA are a
+remediation stage of the pipeline, `Writer.RemediatePDFA` and
+`Writer.RemediatePDFUA`, as for any PDF.
+
+The wave also built the options the first design carried and no
+converter honoured. A Markdown document prints through a template of
+the caller's (`html/template`, the document's HTML where the template
+calls `toHTML`), the default one writing what the converter wrote
+before. A caller's style sheets enter the cascade at the user origin
+(CSS Cascading 4, 6.2). A text document prints its tracked changes
+accepted, rejected or marked as LibreOffice marks them, and its date
+fields at the date the caller gives. A workbook prints the sheets
+selected by name or number, hidden ones on request, recalculated as
+needed, never or always; a CSV file takes its separators and may keep
+every field as text. A presentation prints as handouts, 1, 2, 3, 4, 6
+or 9 slides a page on its handout page, laid out as LibreOffice lays a
+handout out: the pinned LibreOffice prints no handout without its print
+dialog, so the rule is locked to the 48 layouts it stores in a handout
+master instead.
+
+An option no reference engine has is judged through a twin: a fixture
+names, as its `reference_of`, a document whose plain conversion by the
+reference engine is the picture the option should give, such as a
+workbook holding only the sheets a selection keeps. The `diff` cell
+scores the fixture against the twin's reference, and the rig builds no
+reference of its own for it.
+
 A paper matrix judges the paper rule. `corpus build` generates, from five
 base documents, one document per format on each of eight papers in both
 orientations, and the paper options over three of them, 224 fixtures in
@@ -375,7 +418,7 @@ failure. It leaves unscored a Microsoft reference drawn in a face no
 fixture font stands in for, since no converter without that face can
 match it. The `targets` cell converts every fixture to nineteen flavours
 (five versions, ten PDF/A profiles, both PDF/UA profiles, two pairs) and
-scores each by litho's validator, by the conversion's own report, and by
+scores each by litho's validator, by the remediation's own report, and by
 whether it still looks and reads like the plain conversion, with veraPDF,
 poppler and pdfcpu judging one fixture in eight.
 
