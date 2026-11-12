@@ -9,6 +9,7 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -325,7 +326,7 @@ func textStyle(st *style) text.Style {
 // shapePiece shapes p with the text package and records its glyph runs
 // and advance.
 func (r *renderer) shapePiece(p *piece) {
-	if !positive(p.st.fontSize) || len(p.text) == 0 {
+	if !numeric.Positive(p.st.fontSize) || len(p.text) == 0 {
 		return
 	}
 	str := string(p.text)

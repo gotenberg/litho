@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // identity is the transform that changes nothing.
@@ -42,13 +43,13 @@ func isIdentity(m compose.Matrix) bool { return m == identity }
 // paints nothing (SVG 1.1, 7.5).
 func invertible(m compose.Matrix) bool {
 	det := m.A*m.D - m.B*m.C
-	return det != 0 && finite(det) && finite(m.A) && finite(m.B) && finite(m.C) && finite(m.D) && finite(m.E) && finite(m.F)
+	return det != 0 && numeric.Finite(det) && numeric.Finite(m.A) && numeric.Finite(m.B) && numeric.Finite(m.C) && numeric.Finite(m.D) && numeric.Finite(m.E) && numeric.Finite(m.F)
 }
 
 // invert returns the inverse of m, false when it has none.
 func invert(m compose.Matrix) (compose.Matrix, bool) {
 	det := m.A*m.D - m.B*m.C
-	if det == 0 || !finite(det) {
+	if det == 0 || !numeric.Finite(det) {
 		return identity, false
 	}
 	inv := compose.Matrix{
@@ -57,14 +58,6 @@ func invert(m compose.Matrix) (compose.Matrix, bool) {
 	}
 	return inv, invertible(inv)
 }
-
-// finite reports whether v is neither NaN nor infinite.
-func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
-
-// positive reports whether v is greater than zero. NaN is not: a size, a
-// radius or a scale that fails it draws nothing, whether it is zero,
-// negative or NaN.
-func positive(v float64) bool { return v > 0 }
 
 // clampCoord bounds a coordinate to [maxCoordinate], NaN to 0.
 func clampCoord(v float64) float64 {

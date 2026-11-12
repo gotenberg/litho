@@ -7,6 +7,7 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // kappa is the control point distance, in radii, of the cubic Bézier that
@@ -31,7 +32,7 @@ func (r *renderer) geometry(n *html.Node, st *style) []compose.PathOp {
 	case "rect":
 		x, y := num("x", axisX), num("y", axisY)
 		w, h := num("width", axisX), num("height", axisY)
-		if !positive(w) || !positive(h) {
+		if !numeric.Positive(w) || !numeric.Positive(h) {
 			return nil
 		}
 		// SVG 1.1, 9.2: an auto radius takes the other's value, and each
@@ -62,7 +63,7 @@ func (r *renderer) geometry(n *html.Node, st *style) []compose.PathOp {
 		return roundRect(x, y, w, h, rx, ry)
 	case "circle":
 		rad := num("r", axisDiag)
-		if !positive(rad) {
+		if !numeric.Positive(rad) {
 			return nil
 		}
 		return ellipseOps(num("cx", axisX), num("cy", axisY), rad, rad)
@@ -80,7 +81,7 @@ func (r *renderer) geometry(n *html.Node, st *style) []compose.PathOp {
 		case ryok && !rxok:
 			rx = ry
 		}
-		if !positive(rx) || !positive(ry) {
+		if !numeric.Positive(rx) || !numeric.Positive(ry) {
 			return nil
 		}
 		return ellipseOps(num("cx", axisX), num("cy", axisY), rx, ry)
@@ -318,7 +319,7 @@ func (r *renderer) strokeOf(st *style, box bbox) (*compose.Stroke, *compose.Shad
 		return nil, nil
 	}
 	w := st.strokeWidth.resolve(r.lc(st), axisDiag)
-	if !positive(w) {
+	if !numeric.Positive(w) {
 		return nil, nil
 	}
 	var sh *compose.Shading
@@ -366,7 +367,7 @@ func (r *renderer) strokeOf(st *style, box bbox) (*compose.Stroke, *compose.Shad
 		if len(dash)%2 == 1 {
 			dash = append(dash, dash...)
 		}
-		if sum > 0 && finite(sum) {
+		if numeric.PositiveFinite(sum) {
 			s.Dash = dash
 			off := st.dashOffset.resolve(r.lc(st), axisDiag)
 			period := 2 * sum

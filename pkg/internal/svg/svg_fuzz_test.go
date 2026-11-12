@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 func FuzzParse(f *testing.F) {
@@ -40,7 +41,7 @@ func FuzzPath(f *testing.F) {
 		}
 		for _, op := range ops {
 			for _, p := range op.P {
-				if !finite(p.X) || !finite(p.Y) {
+				if !numeric.Finite(p.X) || !numeric.Finite(p.Y) {
 					t.Fatalf("non-finite point %v", p)
 				}
 			}

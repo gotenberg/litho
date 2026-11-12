@@ -14,6 +14,7 @@ import (
 	"golang.org/x/net/html/charset"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -337,7 +338,7 @@ const ptPerPx = 0.75
 // copies one before changing it. An empty viewport, or one whose content
 // cannot be drawn, yields nil.
 func (d *Document) Draw(ctx context.Context, r compose.Rect) []compose.Fragment {
-	if d.disabled || !positive(r.Width) || !positive(r.Height) || !finite(r.Width) || !finite(r.Height) || !finite(r.X) || !finite(r.Y) {
+	if d.disabled || !numeric.PositiveFinite(r.Width) || !numeric.PositiveFinite(r.Height) || !numeric.Finite(r.X) || !numeric.Finite(r.Y) {
 		return nil
 	}
 	w, h := r.Width/ptPerPx, r.Height/ptPerPx

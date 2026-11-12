@@ -8,6 +8,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/stroke"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
@@ -41,7 +42,7 @@ const maxOutlineGlyphs = 20_000
 func strokeOutline(ops []compose.PathOp, s *compose.Stroke) []compose.PathOp {
 	b := opsBBox(ops)
 	diag := math.Hypot(b.x1-b.x0, b.y1-b.y0) + s.Width
-	if !b.ok || !positive(diag) || !finite(diag) {
+	if !b.ok || !numeric.PositiveFinite(diag) {
 		return nil
 	}
 	miter := s.Miter

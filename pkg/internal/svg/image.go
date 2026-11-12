@@ -7,6 +7,7 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // image draws an image element styled st (SVG 1.1, 5.7): the raster
@@ -40,7 +41,7 @@ func (r *renderer) image(n *html.Node, st *style, s sink) {
 		h = hl.resolve(r.lc(st), axisY)
 		w = h * pic.Width / pic.Height
 	}
-	if !positive(w) || !positive(h) {
+	if !numeric.Positive(w) || !numeric.Positive(h) {
 		return
 	}
 	par := parseAspect(attrOf(n, "preserveAspectRatio"))
@@ -79,7 +80,7 @@ func (r *renderer) raster(ref string) *Raster {
 		switch {
 		case err != nil:
 			d.warn("svg-image", fmt.Sprintf("an image element was left out: %v", err))
-		case p == nil || p.Source == nil || !positive(p.Width) || !positive(p.Height):
+		case p == nil || p.Source == nil || !numeric.Positive(p.Width) || !numeric.Positive(p.Height):
 			d.warn("svg-image", "an image element was left out: the picture has no size")
 		default:
 			pic = p

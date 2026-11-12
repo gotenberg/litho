@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // parsePath parses path data (SVG 1.1, 8.3) into path operators in user
@@ -284,7 +285,7 @@ func arcToCubics(p0 compose.Point, rx, ry, rotDeg float64, large, sweep bool, p1
 	} else if sweep && delta < 0 {
 		delta += 2 * math.Pi
 	}
-	if !finite(delta) || !finite(theta) || !finite(cx) || !finite(cy) {
+	if !numeric.Finite(delta) || !numeric.Finite(theta) || !numeric.Finite(cx) || !numeric.Finite(cy) {
 		return []compose.PathOp{{Kind: compose.LineTo, P: [3]compose.Point{p1}}}
 	}
 	n := int(math.Ceil(math.Abs(delta)/(math.Pi/2) - 1e-9)) // at most 4: |delta| <= 2π
