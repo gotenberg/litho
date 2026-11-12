@@ -132,3 +132,27 @@ func TestComputeChargesAStyleOnce(t *testing.T) {
 		t.Errorf("500 paragraphs styled alike hold %d bytes of styles, one %d", many, one)
 	}
 }
+
+func TestStylesShareCopyNeverHoldsItsArgument(t *testing.T) {
+	tb := NewStyles()
+	scratch := Initial()
+	first, adopted := tb.shareCopy(scratch)
+	if !adopted || first == scratch || !equalStyle(first, scratch) {
+		t.Fatal("a new style is not adopted as a copy")
+	}
+	scratch.FontSize = 20
+	if first.FontSize == 20 {
+		t.Fatal("the adopted copy follows a write to the argument")
+	}
+	scratch.FontSize = first.FontSize
+	if got, adopted := tb.shareCopy(scratch); got != first || adopted {
+		t.Fatal("an equal style is not shared")
+	}
+	if allocs := testing.AllocsPerRun(10, func() { tb.shareCopy(scratch) }); allocs != 0 {
+		t.Errorf("sharing an equal style allocates %v times", allocs)
+	}
+	var none *Styles
+	if got, adopted := none.shareCopy(scratch); got == scratch || adopted || !equalStyle(got, scratch) {
+		t.Error("a nil table does not return a copy")
+	}
+}

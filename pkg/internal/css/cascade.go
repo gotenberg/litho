@@ -308,6 +308,10 @@ type computeState struct {
 	// styles shares the computed styles of the tree: the elements of one
 	// class, and the many that inherit alike, hold one style.
 	styles *Styles
+	// scratch is the style computeStyle computes into: a style equal to
+	// one the tree holds costs no allocation, and a new one is copied
+	// out of it.
+	scratch Style
 }
 
 // fontKey is what selects a font for the ex and ch units.
@@ -630,7 +634,7 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 // style of the tree equal to the result when there is one, so elements
 // styled alike share one [Style].
 func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRoot bool) *Style {
-	st := new(Style)
+	st := &cs.scratch
 	*st = *parent
 	s := &styler{parent: parent, root: cs.root}
 	rootFS := mediumFontSize
@@ -702,7 +706,7 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 		// 2.7).
 		st.Display, _ = blockify(st.Display)
 	}
-	shared, adopted := cs.styles.share(st)
+	shared, adopted := cs.styles.shareCopy(st)
 	if adopted {
 		// A refusal sticks and cancels the conversion, which the
 		// cascade's next context check stops at: a style has no error

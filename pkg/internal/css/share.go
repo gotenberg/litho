@@ -51,13 +51,34 @@ func (t *Styles) Share(st *Style) *Style {
 // share is [Styles.Share], also reporting whether t adopted st, a style
 // its caller then accounts as held.
 func (t *Styles) share(st *Style) (*Style, bool) {
-	if t == nil || st == nil {
+	return t.adopt(st, false)
+}
+
+// shareCopy is [Styles.share] for a style its caller writes again after
+// the call: t adopts a copy of st, never st, and a nil t returns a copy.
+// A style equal to one t holds costs no copy.
+func (t *Styles) shareCopy(st *Style) (*Style, bool) {
+	return t.adopt(st, true)
+}
+
+// adopt returns the style t holds equal to st, or adopts st, or a copy of
+// it when clone is set, reporting whether it adopted one.
+func (t *Styles) adopt(st *Style, clone bool) (*Style, bool) {
+	if st == nil {
+		return nil, false
+	}
+	if t == nil {
+		if clone {
+			c := *st
+			return &c, false
+		}
 		return st, false
 	}
 	h := t.hash(st)
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if old, ok := t.byHash[h]; ok {
+	old, found := t.byHash[h]
+	if found {
 		if old == st || equalStyle(old, st) {
 			return old, false
 		}
@@ -66,6 +87,12 @@ func (t *Styles) share(st *Style) (*Style, bool) {
 				return o, false
 			}
 		}
+	}
+	if clone {
+		c := *st
+		st = &c
+	}
+	if found {
 		if t.more == nil {
 			t.more = map[uint64][]*Style{}
 		}
