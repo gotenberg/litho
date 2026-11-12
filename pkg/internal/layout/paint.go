@@ -1137,6 +1137,7 @@ func (e *engine) placeMarker(b *box) {
 		}
 		para, _, err := e.fonts.Shape(e.ctx, []text.ParagraphRun{{Text: m.text, Style: style}}, text.ParagraphOptions{Direction: dir})
 		if err != nil {
+			e.shapeFailed(err, "list marker", b.contentY())
 			return
 		}
 		pl := para.Line(0, para.Len(), false)

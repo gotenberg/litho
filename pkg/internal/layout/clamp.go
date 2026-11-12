@@ -208,7 +208,11 @@ func (s *inlineState) marked(p *ifcPara, start, end int, x, w, indent float64, m
 		dir = text.RightToLeft
 	}
 	mp, _, err := e.fonts.Shape(e.ctx, []text.ParagraphRun{{Text: mark, Style: e.textStyle(s.root.st, s.root.lang)}}, text.ParagraphOptions{Direction: dir})
-	if err != nil || mp.Len() == 0 {
+	if err != nil {
+		e.shapeFailed(err, "line clamp's ellipsis", -1)
+		return nil
+	}
+	if mp.Len() == 0 {
 		return nil
 	}
 	ml := mp.Line(0, mp.Len(), false)

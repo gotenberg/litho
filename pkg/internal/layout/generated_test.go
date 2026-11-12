@@ -1,9 +1,14 @@
 package layout
 
 import (
+	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
 func TestCounterText_Styles(t *testing.T) {
@@ -100,5 +105,19 @@ func TestListMarkers_InlineListItem(t *testing.T) {
 	got, _ := lineTexts(res, 1)
 	if len(got) != 1 || got[0] != "1. a5. b" {
 		t.Errorf("lines %q, want both inline items with inside markers on one line", got)
+	}
+}
+
+// TestListMarkers_TextPastTheCapFails checks that a marker whose text
+// passes the cap of one shaping call fails the layout with an error
+// wrapping limits.ErrInputTooLarge, where it was left out unseen.
+func TestListMarkers_TextPastTheCapFails(t *testing.T) {
+	st := sty(display(css.ListItem), func(s *css.Style) {
+		s.ListStyleType, s.ListStyleString = css.ListString, strings.Repeat("x", text.MaxLayoutRunes+1)
+	})
+	li := el(st, txt(st, "x"))
+	_, err := Layout(context.Background(), doc(el(sty(padding(0, 0, 0, 40)), li)), ahem(t), Options{Page: page(200, 100)})
+	if !errors.Is(err, limits.ErrInputTooLarge) {
+		t.Fatalf("Layout: %v, want limits.ErrInputTooLarge", err)
 	}
 }

@@ -30,6 +30,7 @@ const (
 	codeStructTooDeep    = "structure-too-deep"
 	codeTooManyFragments = "too-many-fragments"
 	codeTableTooLarge    = "table-too-large"
+	codeTextNotShaped    = "text-not-shaped"
 )
 
 // eps absorbs the rounding of float sums when comparing positions.
@@ -146,6 +147,18 @@ func (e *engine) fail(err error) {
 	if e.err == nil {
 		e.err = err
 	}
+}
+
+// shapeFailed settles an error of shaping the text a construct draws of
+// its own, what (a list marker, a clamp's ellipsis, a tab leader): one
+// that ends the conversion (see limits.Stops) fails the layout, any other
+// leaves the text out with a warning at flow position y.
+func (e *engine) shapeFailed(err error, what string, y float64) {
+	if limits.Stops(err) {
+		e.fail(fmt.Errorf("shaping %s: %w", what, err))
+		return
+	}
+	e.warnOnce(codeTextNotShaped, fmt.Sprintf("a %s is not drawn: %v", what, err), y)
 }
 
 // warn records a warning at flow position y, negative for none.

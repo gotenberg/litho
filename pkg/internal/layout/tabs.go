@@ -187,7 +187,11 @@ func (e *engine) tabLeader(p *ifcPara, it *lineItem) *typeset.Text {
 		return nil
 	}
 	para, _, err := e.fonts.Shape(e.ctx, []text.ParagraphRun{{Text: string(r), Style: e.textStyle(it.box.st, it.box.lang)}}, text.ParagraphOptions{})
-	if err != nil || para.Len() != 1 {
+	if err != nil {
+		e.shapeFailed(err, "tab leader", -1)
+		return nil
+	}
+	if para.Len() != 1 {
 		return nil
 	}
 	pl := para.Line(0, 1, false)
