@@ -112,11 +112,6 @@ const maxArgon2Lanes = 16
 // size no bound, and the largest key read is Blowfish's 56 bytes.
 const maxODFKeyBytes = 1 << 10
 
-// maxODFEntryBytes caps one decrypted, inflated entry at the bound litho
-// puts on one decoded PDF stream, 256 MiB: a content.xml past it is past
-// what the converters lay out. Anti-DoS guard, not spec-mandated.
-const maxODFEntryBytes = limits.DefaultMaxStreamBytes
-
 // odfCipher is the algorithm of <manifest:algorithm>.
 type odfCipher int
 
@@ -201,9 +196,9 @@ func parseODFParams(p ODFParams) (*odfEntry, error) {
 	e := &odfEntry{}
 	var err error
 	if p.Size != "" {
-		if e.size, err = parseCount("manifest:size", p.Size, maxODFEntryBytes); err != nil {
+		if e.size, err = parseCount("manifest:size", p.Size, office.DefaultMaxEntryBytes); err != nil {
 			if errors.Is(err, office.ErrEncrypted) {
-				return nil, fmt.Errorf("%w: ODF entry of %s bytes past the cap of %d", limits.ErrInputTooLarge, p.Size, maxODFEntryBytes)
+				return nil, fmt.Errorf("%w: ODF entry of %s bytes past the cap of %d", limits.ErrInputTooLarge, p.Size, office.DefaultMaxEntryBytes)
 			}
 			return nil, err
 		}
@@ -580,7 +575,7 @@ func (e *odfEntry) inflate(ctx context.Context, plain []byte) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	limit := int64(maxODFEntryBytes)
+	limit := int64(office.DefaultMaxEntryBytes)
 	if e.hasSize {
 		limit = e.size
 	}
@@ -594,7 +589,7 @@ func (e *odfEntry) inflate(ctx context.Context, plain []byte) ([]byte, error) {
 		if e.hasSize {
 			return nil, odfMalformed("the entry inflates past its manifest:size of %d", e.size)
 		}
-		return nil, fmt.Errorf("%w: ODF entry inflates past %d bytes", limits.ErrInputTooLarge, maxODFEntryBytes)
+		return nil, fmt.Errorf("%w: ODF entry inflates past %d bytes", limits.ErrInputTooLarge, office.DefaultMaxEntryBytes)
 	}
 	if e.hasSize && int64(len(out)) != e.size {
 		return nil, odfMalformed("the entry inflates to %d bytes, its manifest:size is %d", len(out), e.size)

@@ -17,23 +17,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/offcrypto"
 )
 
-// The caps of one package.
+// The caps of one package beside office.MaxPackageEntries,
+// office.DefaultMaxEntryBytes and office.MaxPackageBytes, which bound every
+// package.
 const (
-	// MaxEntries bounds the entries of a package's zip archive: 10,000.
-	// Anti-DoS guard, not spec-mandated: a document with hundreds of
-	// pictures holds a few hundred entries, and every entry costs a
-	// central directory record read up front.
-	MaxEntries = 10_000
-	// MaxEntryBytes bounds the uncompressed size of one entry read: 128
-	// MiB. Anti-DoS guard, not spec-mandated: the content.xml of a
-	// thousand-page document stays under 20 MiB, and a deflate stream
-	// inflates up to 1032 times its size, so the cap stops a zip bomb.
-	MaxEntryBytes = 128 << 20
-	// MaxTotalBytes bounds the uncompressed bytes all the reads of one
-	// package take together: 512 MiB. Anti-DoS guard, not spec-mandated:
-	// it bounds the work a package of many entries each under
-	// [MaxEntryBytes] can make a converter do.
-	MaxTotalBytes = 512 << 20
 	// MaxDecryptedEntries bounds the encrypted entries one package
 	// decrypts: 256. Anti-DoS guard, not spec-mandated: each decryption
 	// derives its key anew at the cost the manifest names (PBKDF2 up to
@@ -187,15 +174,15 @@ func openFlat(ctx context.Context, data []byte) (*Package, error) {
 // openZip reads a zip package (ODF 1.3, Part 2, 3). outer allows the
 // whole-package encryption: the package it decrypts is opened with outer
 // false, so an encrypted package nests once at most. spent is what the
-// package's reads start from against [MaxTotalBytes]: the package an
+// package's reads start from against office.MaxPackageBytes: the package an
 // encrypted one decrypts reads within what its outer package left.
 func openZip(ctx context.Context, data []byte, password string, outer bool, spent int64) (*Package, error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return nil, fmt.Errorf("%w: reading the zip archive: %w", office.ErrMalformed, err)
 	}
-	if len(zr.File) > MaxEntries {
-		return nil, fmt.Errorf("%w: more than %d package entries", limits.ErrInputTooLarge, MaxEntries)
+	if len(zr.File) > office.MaxPackageEntries {
+		return nil, fmt.Errorf("%w: more than %d package entries", limits.ErrInputTooLarge, office.MaxPackageEntries)
 	}
 	p := &Package{files: make(map[string]*zip.File, len(zr.File)), enc: map[string]*EncryptionData{}, password: password, read: spent}
 	for _, f := range zr.File {
@@ -341,7 +328,7 @@ func (p *Package) Encryption(name string) *EncryptionData {
 // with an error [IsNotExist] reports for an entry the package does not
 // hold; office.ErrEncrypted for an encrypted one when the password is
 // empty or does not open it, or past [MaxDecryptedEntries] decryptions;
-// limits.ErrInputTooLarge past [MaxEntryBytes] or [MaxTotalBytes]; and
+// limits.ErrInputTooLarge past office.DefaultMaxEntryBytes or office.MaxPackageBytes; and
 // ctx's error when ctx ends first.
 func (p *Package) ReadFile(ctx context.Context, name string) ([]byte, error) {
 	name = cleanName(name)
@@ -365,7 +352,7 @@ func (p *Package) readEncrypted(ctx context.Context, name string, ed *Encryption
 	if f.Method != zip.Store {
 		return nil, fmt.Errorf("%w: the encrypted package entry %s is compressed, not STORED", office.ErrMalformed, name)
 	}
-	if f.CompressedSize64 > MaxEntryBytes {
+	if f.CompressedSize64 > office.DefaultMaxEntryBytes {
 		return nil, fmt.Errorf("%w: the package entry %s is past the caps", limits.ErrInputTooLarge, name)
 	}
 	p.mu.Lock()
@@ -379,7 +366,7 @@ func (p *Package) readEncrypted(ctx context.Context, name string, ed *Encryption
 	if err != nil {
 		return nil, fmt.Errorf("%w: opening the package entry %s: %w", office.ErrMalformed, name, err)
 	}
-	stored, err := io.ReadAll(io.LimitReader(rc, MaxEntryBytes+1))
+	stored, err := io.ReadAll(io.LimitReader(rc, office.DefaultMaxEntryBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("%w: reading the package entry %s: %w", office.ErrMalformed, name, err)
 	}
@@ -389,7 +376,7 @@ func (p *Package) readEncrypted(ctx context.Context, name string, ed *Encryption
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if int64(len(data)) > min(int64(MaxEntryBytes), MaxTotalBytes-p.read) {
+	if int64(len(data)) > min(int64(office.DefaultMaxEntryBytes), office.MaxPackageBytes-p.read) {
 		return nil, fmt.Errorf("%w: the package entry %s inflates past the caps", limits.ErrInputTooLarge, name)
 	}
 	p.read += int64(len(data))
@@ -412,8 +399,8 @@ func (p *Package) readRaw(name string) ([]byte, error) {
 
 // open opens the entry name for reading as it inflates, within the caps:
 // the reader fails with limits.ErrInputTooLarge one byte past
-// [MaxEntryBytes] under the inflate ratio or what the package has left of
-// [MaxTotalBytes], and with office.ErrMalformed for an entry that does not
+// office.DefaultMaxEntryBytes under the inflate ratio or what the package has left of
+// office.MaxPackageBytes, and with office.ErrMalformed for an entry that does not
 // inflate.
 func (p *Package) open(name string) (io.ReadCloser, error) {
 	f := p.files[name]
@@ -425,13 +412,13 @@ func (p *Package) open(name string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("%w: opening the package entry %s: %w", office.ErrMalformed, name, err)
 	}
 	p.mu.Lock()
-	room := min(office.InflateLimit(f.CompressedSize64, MaxEntryBytes), MaxTotalBytes-p.read)
+	room := min(office.InflateLimit(f.CompressedSize64, office.DefaultMaxEntryBytes), office.MaxPackageBytes-p.read)
 	p.mu.Unlock()
 	return &entryReader{rc: rc, p: p, name: name, room: room}, nil
 }
 
 // entryReader reads an entry as it inflates, counting its bytes against
-// the package's [MaxTotalBytes] and failing one byte past room, whatever
+// the package's office.MaxPackageBytes and failing one byte past room, whatever
 // the entry's header declares.
 type entryReader struct {
 	rc   io.ReadCloser

@@ -12,16 +12,26 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
-// MaxPackageEntries caps the entries of a package at 65,536. A DOCX or ODT
-// holds a few dozen, one with many images a few hundred. Anti-DoS guard,
-// not spec-mandated: APPNOTE.TXT allows 2^64 in ZIP64.
+// MaxPackageEntries caps the entries of a package at 65,536, OOXML and
+// OpenDocument alike. A DOCX or ODT holds a few dozen, one with many images
+// a few hundred. Anti-DoS guard, not spec-mandated: APPNOTE.TXT allows 2^64
+// in ZIP64, and every entry costs a central directory record read up
+// front.
 const MaxPackageEntries = 1 << 16
 
-// DefaultMaxEntryBytes caps one inflated entry when [Package.Read] is given
-// no cap: the bound litho puts on one decoded PDF stream, 256 MiB.
-// Anti-DoS guard, not spec-mandated: a deflate stream inflates up to about
-// a thousand times its size.
+// DefaultMaxEntryBytes caps one inflated entry of a package, OOXML and
+// OpenDocument alike, and one entry [Package.Read] reads when given no
+// cap: the bound litho puts on one decoded PDF stream, 256 MiB. Anti-DoS
+// guard, not spec-mandated: the content.xml or document.xml of a
+// thousand-page document stays under 20 MiB, and a deflate stream inflates
+// up to about a thousand times its size.
 const DefaultMaxEntryBytes = limits.DefaultMaxStreamBytes
+
+// MaxPackageBytes caps the uncompressed bytes the reads of one package take
+// together, 512 MiB, so a zip bomb of many entries each under
+// [DefaultMaxEntryBytes] cannot exhaust memory. Anti-DoS guard, not
+// spec-mandated: two entries at the cap of one.
+const MaxPackageBytes = 2 * DefaultMaxEntryBytes
 
 // MaxInflateRatio caps how many times its compressed size one package
 // entry may inflate to, past [inflateRatioFloor] bytes: 600. It is an
