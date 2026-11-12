@@ -413,11 +413,14 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 	maps.Copy(newCID, cidFont)
 	var pending []string
 
-	// Fix /W array, only when the validator reported a width mismatch.
+	// Fix /W array, only when the validator reported a width mismatch, and
+	// only when the CIDs can be led to their glyphs: guessing the route
+	// rewrites every width that was right.
 	if wObj, ok := cidFont["W"]; ok && fixWidths {
 		wArr, err := document.ResolveArray(ctx, doc, wObj)
-		if err == nil && wArr != nil {
-			if newW, corrected := correctCIDWidths(ctx, doc, wArr, binaryWidths, upm); corrected {
+		widthOf, routed := programWidthByCID(ctx, doc, cidFont, binaryWidths)
+		if err == nil && wArr != nil && routed {
+			if newW, corrected := correctCIDWidths(ctx, doc, wArr, widthOf, upm); corrected {
 				newCID["W"] = newW
 				pending = append(pending, fmt.Sprintf("corrected /W widths for CIDFont %s", baseName))
 			}
@@ -581,7 +584,56 @@ func correctDefaultCIDWidth(ctx context.Context, doc *document.Document, cidFont
 	return ast.PdfReal(math.Round(expected*100) / 100), true
 }
 
-func correctCIDWidths(ctx context.Context, doc *document.Document, wArr ast.PdfArray, binaryWidths map[uint16]float64, upm uint16) (ast.PdfArray, bool) {
+// programWidthByCID returns the lookup of a CID's advance in the CIDFont's
+// program, in font units, from widths as [typography.ExtractCIDBinaryWidths]
+// keys them: by CID for a CFF program, by GID for a TrueType one.
+//
+// A CIDFontType2 reaches its glyphs through /CIDToGIDMap (ISO 32000-1,
+// 9.7.4.2, Table 117). Under Identity, the default, the GID is the CID. Under
+// a map stream it is the entry the stream holds for the CID, and glyph 0 for a
+// CID past the stream, which is how the width check reads it too. ok is false
+// when the map is a stream that cannot be read.
+//
+// # Corpus evidence
+//
+//   - litho/docx: fields-logic-formula and run-fonts-fallback convert with
+//     Carlito subsets under a map stream. One mismatch in another font had
+//     every Carlito width rewritten by glyph index, and the PDF/A-2b report
+//     listed 324 residual violations where it lists one with the map read.
+func programWidthByCID(ctx context.Context, doc *document.Document, cidFont ast.PdfDict, widths map[uint16]float64) (widthOf func(cid uint16) (float64, bool), ok bool) {
+	direct := func(cid uint16) (float64, bool) {
+		w, has := widths[cid]
+		return w, has
+	}
+	if sub, _ := document.ResolveName(ctx, doc, cidFont["Subtype"]); sub != "CIDFontType2" {
+		return direct, true
+	}
+	mapObj, has := cidFont["CIDToGIDMap"]
+	if !has {
+		return direct, true
+	}
+	if name, _ := document.ResolveName(ctx, doc, mapObj); name != "" {
+		return direct, true
+	}
+	gids, ok := compliance.CIDToGIDStreamEntries(ctx, doc, mapObj)
+	if !ok {
+		return nil, false
+	}
+	return func(cid uint16) (float64, bool) {
+		gid := 0
+		if int(cid) < len(gids) {
+			gid = gids[cid]
+		}
+		w, has := widths[uint16(gid)] //nolint:gosec // gid is two bytes of the map stream, at most 0xFFFF.
+		return w, has
+	}, true
+}
+
+// correctCIDWidths returns wArr with each width of a bracketed run that is
+// more than one unit from the program's replaced by the program's, and
+// whether it replaced any. widthOf gives a CID's advance in font units of upm
+// to the em; a CID it does not know keeps its width.
+func correctCIDWidths(ctx context.Context, doc *document.Document, wArr ast.PdfArray, widthOf func(cid uint16) (float64, bool), upm uint16) (ast.PdfArray, bool) {
 	modified := false
 	newW := make(ast.PdfArray, 0, len(wArr))
 
@@ -600,7 +652,7 @@ func correctCIDWidths(ctx context.Context, doc *document.Document, wArr ast.PdfA
 			for j, wObj := range nextArr {
 				pdfWidth := document.Float(wObj)
 				cid := uint16(startCID + j) //nolint:gosec // CID range bounded
-				if bw, ok := binaryWidths[cid]; ok {
+				if bw, ok := widthOf(cid); ok {
 					expected := bw * 1000.0 / float64(upm)
 					if math.Abs(pdfWidth-expected) > 1.0 {
 						corrected[j] = ast.PdfReal(math.Round(expected*100) / 100)
