@@ -422,6 +422,9 @@ func (b *builder) renderPage(p *pagePlan, first bool, total int) (*typeset.Page,
 	if ps.CenterVertically {
 		oy += (areaH - pb.dataH*z) / 2
 	}
+	if !sp.single && !sp.g.doc.ExcelRules {
+		ox, oy = calcOrigin(ox, z), calcOrigin(oy, z)
+	}
 	pg := &typeset.Page{Width: sp.width, Height: sp.height}
 	if !sp.single {
 		pg.Content = append(pg.Content, b.margins(p, first, p.number, total, sp.width, sp.height)...)
@@ -437,4 +440,26 @@ func (b *builder) renderPage(p *pagePlan, first bool, total int) (*typeset.Page,
 		pg.Links = append(pg.Links, l)
 	}
 	return pg, st, nil
+}
+
+// calcOrigin returns where Calc starts a page's cells, v page points from
+// the paper's edge at zoom z: Calc adds the margin and the header's room in
+// twips, unzoomed, and truncates the sum to whole 1/100 mm
+// (ScPrintFunc::PrintPage, nStartX and nStartY, sc/source/ui/view
+// printfun.cxx), as it truncates the rows and columns ([calcPrinted]).
+//
+// # Corpus evidence
+//
+//   - probe, ods: margins of 17.77 points (355 twips) and of 1.2345 cm
+//     (700 twips) under a header of 0.777 cm (441 twips), converted by
+//     Gotenberg 9.4.1, start the cells at 626, 1,234 and 2,012 hundredths
+//     of a millimetre from the paper's edge (their border line one
+//     hundredth further out): the twips' sums truncated, where the
+//     lengths read straight in hundredths would start them at 627 and
+//     1,235.
+func calcOrigin(v, z float64) float64 {
+	if !numeric.Positive(v) || !numeric.Positive(z) {
+		return v
+	}
+	return z * math.Floor(v/z*2540/72+1e-6) * 72 / 2540
 }

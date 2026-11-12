@@ -68,3 +68,20 @@ func TestGrid_PrintedAndLayout(t *testing.T) {
 		t.Errorf("Excel rowY(20) = %v, want 299", got)
 	}
 }
+
+// TestCalcOrigin checks where Calc starts a page's cells, measured in its
+// PDFs: the margin and header in twips, truncated to 1/100 mm, at the
+// zoom's scale.
+func TestCalcOrigin(t *testing.T) {
+	// hmm is the page's hundredths: the unzoomed ones scaled by z.
+	tests := []struct{ twips, z, hmm float64 }{
+		{355, 1, 626}, {700, 1, 1234}, {1141, 1, 2012}, {1559, 1, 2749}, {1134, 1, 2000},
+		{1134, 0.5, 2000}, {355, 0.5, 626}, {700, 0.73, 1691 * 0.73},
+	}
+	for _, tt := range tests {
+		got := calcOrigin(tt.twips/20, tt.z)
+		if want := tt.hmm * 72 / 2540; math.Abs(got-want) > 1e-9 {
+			t.Errorf("calcOrigin(%v twips, %v) = %v, want %v", tt.twips, tt.z, got, want)
+		}
+	}
+}
