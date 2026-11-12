@@ -137,7 +137,7 @@ const maxNodes = 4_000_000
 
 // load opens the package's main part and the parts it relates to.
 func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts office.Options) (*document, error) {
-	main, err := pkg.MainPart()
+	main, err := pkg.MainPart(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -155,14 +155,14 @@ func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	}
 	d.theme = &ooxml.Theme{}
 	d.readFontTable(nil)
-	if name := pkg.RelatedPart(main, ooxml.RelTheme); name != "" {
+	if name := pkg.RelatedPart(ctx, main, ooxml.RelTheme); name != "" {
 		if root, err := d.part(name); err == nil {
 			d.theme = ooxml.ParseTheme(root)
 		} else if !isSoft(err) {
 			return nil, err
 		}
 	}
-	if name := pkg.RelatedPart(main, ooxml.RelSettings); name != "" {
+	if name := pkg.RelatedPart(ctx, main, ooxml.RelSettings); name != "" {
 		root, err := d.part(name)
 		if err != nil && !isSoft(err) {
 			return nil, err
@@ -170,31 +170,31 @@ func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 		d.readSettings(root)
 	}
 	var stylesRoot *ooxml.Element
-	if name := pkg.RelatedPart(main, ooxml.RelStyles); name != "" {
+	if name := pkg.RelatedPart(ctx, main, ooxml.RelStyles); name != "" {
 		if stylesRoot, err = d.part(name); err != nil && !isSoft(err) {
 			return nil, err
 		}
 	}
 	d.styles = d.parseStyles(stylesRoot)
 	var numRoot *ooxml.Element
-	if name := pkg.RelatedPart(main, ooxml.RelNumbering); name != "" {
+	if name := pkg.RelatedPart(ctx, main, ooxml.RelNumbering); name != "" {
 		if numRoot, err = d.part(name); err != nil && !isSoft(err) {
 			return nil, err
 		}
 	}
 	d.numbering = d.parseNumbering(numRoot)
 	var fontRoot *ooxml.Element
-	if name := pkg.RelatedPart(main, ooxml.RelFontTable); name != "" {
+	if name := pkg.RelatedPart(ctx, main, ooxml.RelFontTable); name != "" {
 		if fontRoot, err = d.part(name); err != nil && !isSoft(err) {
 			return nil, err
 		}
 	}
 	d.readFontTable(fontRoot)
-	d.footnotesPart = pkg.RelatedPart(main, ooxml.RelFootnotes)
+	d.footnotesPart = pkg.RelatedPart(ctx, main, ooxml.RelFootnotes)
 	if d.footnotes, err = d.readNotes(d.footnotesPart, "footnote"); err != nil {
 		return nil, err
 	}
-	d.endnotesPart = pkg.RelatedPart(main, ooxml.RelEndnotes)
+	d.endnotesPart = pkg.RelatedPart(ctx, main, ooxml.RelEndnotes)
 	if d.endnotes, err = d.readNotes(d.endnotesPart, "endnote"); err != nil {
 		return nil, err
 	}

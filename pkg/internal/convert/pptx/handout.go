@@ -31,7 +31,7 @@ func (r *reader) handoutMaster(root *ooxml.Element, doc *slides.Document) error 
 		return nil
 	}
 	rid, _ := id.AttrNS(ooxml.NSR, "id")
-	rel, ok := r.pkg.RelationshipByID(r.main, rid)
+	rel, ok := r.pkg.RelationshipByID(r.ctx, r.main, rid)
 	if !ok || rel.External || rel.Type != relHandoutMaster || !r.pkg.Has(rel.Target) {
 		r.warn("malformed-part", fmt.Sprintf("handout master %s is missing and left out", rid))
 		return nil

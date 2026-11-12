@@ -77,7 +77,7 @@ func (r *reader) slideWarnings(part string, root *ooxml.Element) {
 	}
 	// A relationships part that does not parse relates nothing: the slide
 	// has no comments to warn of.
-	rels, _ := r.pkg.Relationships(part)
+	rels, _ := r.pkg.Relationships(r.ctx, part)
 	for _, rel := range rels {
 		if rel.Type == relComments || strings.HasSuffix(rel.Type, "/relationships/comments") {
 			r.warn("unsupported-content", "slide comments do not print")

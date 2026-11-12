@@ -129,7 +129,7 @@ const substituteFamily = "Noto Sans"
 // pageSetup, Letter without one, the paperSize SpreadsheetML defaults to
 // (ECMA-376 Part 1, 18.3.1.63).
 func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts office.Options) (*sheet.Document, []typeset.Warning, error) {
-	main, err := pkg.MainPart()
+	main, err := pkg.MainPart(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -142,7 +142,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	if !root.Is(nsMain, "workbook") {
 		return nil, nil, fmt.Errorf("%w: the main part is not a SpreadsheetML workbook", office.ErrMalformed)
 	}
-	if name := pkg.RelatedPart(main, ooxml.RelTheme); name != "" {
+	if name := pkg.RelatedPart(ctx, main, ooxml.RelTheme); name != "" {
 		if t, err := pkg.ParseXML(ctx, name, understood); err == nil {
 			r.theme = ooxml.ParseTheme(t)
 			r.systemColors = systemColors(t)
@@ -182,7 +182,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 // application returns the application docProps/app.xml names, "" for
 // none.
 func (r *reader) application() string {
-	name := r.pkg.RelatedPart("", relExtendedProps)
+	name := r.pkg.RelatedPart(r.ctx, "", relExtendedProps)
 	if name == "" {
 		return ""
 	}

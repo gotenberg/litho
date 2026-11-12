@@ -49,7 +49,7 @@ const (
 //     the Choice raises text F1 from 0.11 to 0.50.
 func (d *document) chart(s *story, ref *ooxml.Element, st *css.Style, w, h float64, alt string, ex bool) *layout.Node {
 	id, _ := ref.AttrNS(ooxml.NSR, "id")
-	rel, ok := d.pkg.RelationshipByID(s.part, id)
+	rel, ok := d.pkg.RelationshipByID(d.ctx, s.part, id)
 	if !ok || rel.External || !d.pkg.Has(rel.Target) {
 		d.warn("unsupported-content", "a chart whose part is missing is left out")
 		return nil
@@ -226,7 +226,7 @@ func setTransform(st *css.Style, rot float64, flipH, flipV bool) {
 // loadPicture decodes the picture the relationship id of part names,
 // once per target, nil with a warning when it cannot be drawn.
 func (d *document) loadPicture(part, id string) *layout.Picture {
-	rel, ok := d.pkg.RelationshipByID(part, id)
+	rel, ok := d.pkg.RelationshipByID(d.ctx, part, id)
 	if !ok || rel.External {
 		if ok {
 			d.warn("unsupported-content", "a linked picture is left out: linked files are not read")

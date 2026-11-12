@@ -158,7 +158,7 @@ func TestParseChartEx_DefinedNamesAndTheme(t *testing.T) {
 			`<a:fontScheme name="f"><a:majorFont><a:latin typeface="Calibri Light"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>`,
 		"xl/charts/chartEx1.xml": chartExXML(cxData("0", "_xlchart.v1.0", nil), `<cx:plotArea><cx:plotAreaRegion><cx:series layoutId="boxWhisker"><cx:dataId val="0"/></cx:series></cx:plotAreaRegion>`+cxAxes+`</cx:plotArea>`),
 	}
-	pkg, err := Open(buildZip(t, files))
+	pkg, err := Open(t.Context(), buildZip(t, files))
 	if err != nil {
 		t.Fatal(err)
 	}

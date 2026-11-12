@@ -538,7 +538,7 @@ func (w *sheetReader) hyperlinks(e *ooxml.Element) {
 		}
 		target := ""
 		if id, ok := h.AttrNS(ooxml.NSR, "id"); ok {
-			if rel, ok := r.pkg.RelationshipByID(w.part, id); ok && rel.External {
+			if rel, ok := r.pkg.RelationshipByID(w.r.ctx, w.part, id); ok && rel.External {
 				target = uncURL(rel.Target)
 			}
 		}

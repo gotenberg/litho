@@ -58,7 +58,7 @@ func load(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Opt
 	if data, err = offcrypto.OpenOOXML(ctx, data, opts.Password); err != nil {
 		return nil, nil, fmt.Errorf("opening the package: %w", err)
 	}
-	pkg, err := ooxml.Open(data)
+	pkg, err := ooxml.Open(ctx, data)
 	if err != nil {
 		return nil, nil, fmt.Errorf("opening the package: %w", err)
 	}

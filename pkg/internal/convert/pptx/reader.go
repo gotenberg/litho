@@ -163,7 +163,7 @@ func isMalformed(err error) bool {
 // warnings of what it left out or approximated, and its handout master
 // when handouts asks for it.
 func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts bool) (*slides.Document, []typeset.Warning, error) {
-	main, err := pkg.MainPart()
+	main, err := pkg.MainPart(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -208,7 +208,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts b
 	r.slideAt = map[string]int{}
 	for _, id := range root.Child(nsP, "sldIdLst").Kids() {
 		rid, _ := id.AttrNS(ooxml.NSR, "id")
-		if rel, ok := pkg.RelationshipByID(main, rid); ok && id.Is(nsP, "sldId") && !rel.External && rel.Type == relSlide && pkg.Has(rel.Target) && r.slideCount < maxSlides {
+		if rel, ok := pkg.RelationshipByID(ctx, main, rid); ok && id.Is(nsP, "sldId") && !rel.External && rel.Type == relSlide && pkg.Has(rel.Target) && r.slideCount < maxSlides {
 			r.slideCount++
 			if _, dup := r.slideAt[rel.Target]; !dup {
 				r.slideAt[rel.Target] = r.slideCount
@@ -227,7 +227,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts b
 			break
 		}
 		rid, _ := id.AttrNS(ooxml.NSR, "id")
-		rel, ok := pkg.RelationshipByID(main, rid)
+		rel, ok := pkg.RelationshipByID(ctx, main, rid)
 		if !ok || rel.External || rel.Type != relSlide || !pkg.Has(rel.Target) {
 			r.warn("malformed-part", fmt.Sprintf("slide %s is missing and left out", rid))
 			continue
@@ -427,5 +427,5 @@ func (r *reader) own(l *layer) {
 // related returns the target of part's first internal relationship of
 // type typ the package holds, "" for none.
 func (r *reader) related(part, typ string) string {
-	return r.pkg.RelatedPart(part, typ)
+	return r.pkg.RelatedPart(r.ctx, part, typ)
 }

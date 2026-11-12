@@ -266,7 +266,7 @@ func build(t testing.TB, body string, extra map[string]string) *built {
 // buildWith is [build] with the options opts.
 func buildWith(t testing.TB, body string, extra map[string]string, opts office.Options) *built {
 	t.Helper()
-	pkg, err := ooxml.Open(docx(t, body, extra))
+	pkg, err := ooxml.Open(t.Context(), docx(t, body, extra))
 	if err != nil {
 		t.Fatalf("ooxml.Open: %v", err)
 	}

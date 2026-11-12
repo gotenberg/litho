@@ -236,7 +236,7 @@ func (r *reader) href(part string, h *ooxml.Element) string {
 	if id == "" {
 		return ""
 	}
-	if rel, ok := r.pkg.RelationshipByID(part, id); ok && rel.External {
+	if rel, ok := r.pkg.RelationshipByID(r.ctx, part, id); ok && rel.External {
 		return rel.Target
 	}
 	return ""
@@ -265,7 +265,7 @@ func (r *reader) jump(part string, h *ooxml.Element) int {
 		}
 	case strings.HasPrefix(action, "ppaction://hlinksldjump"):
 		id, _ := h.AttrNS(ooxml.NSR, "id")
-		if rel, ok := r.pkg.RelationshipByID(part, id); ok && !rel.External {
+		if rel, ok := r.pkg.RelationshipByID(r.ctx, part, id); ok && !rel.External {
 			n = r.slideAt[rel.Target]
 		}
 	}

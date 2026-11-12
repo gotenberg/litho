@@ -76,7 +76,7 @@ func (r *reader) pivotCacheParts(main string, root *ooxml.Element) map[int]strin
 			continue
 		}
 		id, _ := c.AttrNS(ooxml.NSR, "id")
-		rel, ok := r.pkg.RelationshipByID(main, id)
+		rel, ok := r.pkg.RelationshipByID(r.ctx, main, id)
 		if !ok || rel.External || !r.pkg.Has(rel.Target) {
 			continue
 		}
@@ -93,7 +93,7 @@ func (r *reader) pivotCacheParts(main string, root *ooxml.Element) map[int]strin
 func (w *sheetReader) pivotTables() error {
 	r := w.r
 	// A worksheet without relationships relates to no pivot table.
-	rels, _ := r.pkg.Relationships(w.part)
+	rels, _ := r.pkg.Relationships(w.r.ctx, w.part)
 	for _, rel := range rels {
 		if rel.Type != relPivotTable || rel.External || !r.pkg.Has(rel.Target) {
 			continue
@@ -114,7 +114,7 @@ func (w *sheetReader) pivotTables() error {
 		}
 		cachePart := r.pivotCaches[intAttr(root, "cacheId", -1)]
 		if cachePart == "" {
-			cachePart = r.pkg.RelatedPart(rel.Target, relPivotCache)
+			cachePart = r.pkg.RelatedPart(w.r.ctx, rel.Target, relPivotCache)
 		}
 		cache, err := r.pivotCache(cachePart)
 		if err != nil {
@@ -145,7 +145,7 @@ func (r *reader) pivotCache(name string) (*pivotCache, error) {
 		}
 		return nil, err
 	}
-	c := &pivotCache{records: r.pkg.RelatedPart(name, relPivotRecords), dummy: -1}
+	c := &pivotCache{records: r.pkg.RelatedPart(r.ctx, name, relPivotRecords), dummy: -1}
 	if src := root.Child(nsMain, "cacheSource"); src != nil {
 		c.worksheet = attr(src, "type") == "worksheet"
 		if ws := src.Child(nsMain, "worksheetSource"); ws != nil {

@@ -25,7 +25,7 @@ const maxPropertyRunes = 4096
 // limits.Stops): ctx ended, or the part passed a cap.
 func (p *Package) CoreProperties(ctx context.Context) (CoreProperties, error) {
 	var cp CoreProperties
-	name := p.RelatedPart("", RelCoreProperties)
+	name := p.RelatedPart(ctx, "", RelCoreProperties)
 	if name == "" {
 		return cp, nil
 	}

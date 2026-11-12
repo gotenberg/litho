@@ -915,7 +915,7 @@ func (d *document) inlines(s *story, rp resolvedPara, ps *css.Style, lineMult fl
 // relationship, else "#" and its anchor.
 func (d *document) hyperlink(s *story, e *ooxml.Element) string {
 	if id, ok := e.AttrNS(ooxml.NSR, "id"); ok {
-		if rel, ok := d.pkg.RelationshipByID(s.part, id); ok && rel.External {
+		if rel, ok := d.pkg.RelationshipByID(d.ctx, s.part, id); ok && rel.External {
 			href := rel.Target
 			if a := attrOr(e, "anchor"); a != "" {
 				href += "#" + a

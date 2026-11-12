@@ -23,7 +23,7 @@ type richText struct {
 // readSharedStrings reads the shared string table of the workbook part
 // main (ECMA-376 Part 1, 18.4.9 sst); a missing part leaves it empty.
 func (r *reader) readSharedStrings(main string) error {
-	name := r.pkg.RelatedPart(main, relSharedStrings)
+	name := r.pkg.RelatedPart(r.ctx, main, relSharedStrings)
 	if name == "" {
 		return nil
 	}

@@ -46,7 +46,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if data, err = offcrypto.OpenOOXML(ctx, data, opts.Password); err != nil {
 		return nil, fmt.Errorf("opening the package: %w", err)
 	}
-	pkg, err := ooxml.Open(data)
+	pkg, err := ooxml.Open(ctx, data)
 	if err != nil {
 		return nil, fmt.Errorf("opening the package: %w", err)
 	}

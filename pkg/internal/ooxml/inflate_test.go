@@ -23,7 +23,7 @@ func TestPackage_Read_InflateRatio(t *testing.T) {
 	files["bomb"] = string(make([]byte, 4<<20))
 	files["small"] = string(make([]byte, 1<<20))
 	files["noise"] = string(noise)
-	p, err := Open(buildZip(t, files))
+	p, err := Open(t.Context(), buildZip(t, files))
 	if err != nil {
 		t.Fatal(err)
 	}

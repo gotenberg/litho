@@ -68,9 +68,9 @@ func ParseChartEx(ctx context.Context, pkg *Package, part string) (*chart.Chart,
 	theme := officeTheme
 	opts := ChartOptions{}
 	var names map[string]string
-	if main, err := pkg.MainPart(); err == nil {
+	if main, err := pkg.MainPart(ctx); err == nil {
 		opts.Presentation = strings.HasSuffix(main, "/presentation.xml")
-		if name := pkg.RelatedPart(main, RelTheme); name != "" {
+		if name := pkg.RelatedPart(ctx, main, RelTheme); name != "" {
 			if troot, err := pkg.ParseXML(ctx, name, nil); err == nil {
 				if t := ParseTheme(troot); len(t.Colors) > 0 {
 					theme = t

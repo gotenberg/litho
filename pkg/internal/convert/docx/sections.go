@@ -198,7 +198,7 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 			}
 		}
 		id, _ := c.AttrNS(ooxml.NSR, "id")
-		rel, ok := d.pkg.RelationshipByID(d.main, id)
+		rel, ok := d.pkg.RelationshipByID(d.ctx, d.main, id)
 		if !ok || rel.External {
 			continue
 		}

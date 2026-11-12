@@ -87,7 +87,7 @@ func (r *reader) rangeValues(ref string) []chart.Value {
 // drawings, which hold comments, are not read: comments do not print.
 func (w *sheetReader) drawing(id string) error {
 	r := w.r
-	rel, ok := r.pkg.RelationshipByID(w.part, id)
+	rel, ok := r.pkg.RelationshipByID(w.r.ctx, w.part, id)
 	if !ok || rel.External || rel.Type != relDrawing || !r.pkg.Has(rel.Target) {
 		return nil
 	}
@@ -193,7 +193,7 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 			switch attr(data, "uri") {
 			case uriChart:
 				id, _ := data.Child(nsC, "chart").AttrNS(ooxml.NSR, "id")
-				rel, ok := w.r.pkg.RelationshipByID(part, id)
+				rel, ok := w.r.pkg.RelationshipByID(w.r.ctx, part, id)
 				if !ok || rel.External || !w.r.pkg.Has(rel.Target) {
 					return false
 				}
@@ -204,7 +204,7 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 				// Excel caches no data for it, so the chart reads its
 				// ranges through the workbook.
 				id, _ := data.Child(ooxml.NSChartEx, "chart").AttrNS(ooxml.NSR, "id")
-				rel, ok := w.r.pkg.RelationshipByID(part, id)
+				rel, ok := w.r.pkg.RelationshipByID(w.r.ctx, part, id)
 				if !ok || rel.External || !w.r.pkg.Has(rel.Target) {
 					return false
 				}
@@ -486,7 +486,7 @@ func transform(box typeset.Rect, rot float64, flipH, flipV bool) (typeset.Matrix
 // loadPicture decodes the picture the relationship id of part names, once
 // per target, nil with a warning when it cannot be drawn.
 func (r *reader) loadPicture(part, id string) *layout.Picture {
-	rel, ok := r.pkg.RelationshipByID(part, id)
+	rel, ok := r.pkg.RelationshipByID(r.ctx, part, id)
 	if !ok || rel.External {
 		if ok {
 			r.warn("unsupported-content", "a linked picture is left out: linked files are not read")

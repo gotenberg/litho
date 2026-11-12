@@ -81,8 +81,9 @@ type Relationship struct {
 // for a compound file, an encrypted package that needs a password first,
 // with office.ErrMalformed for anything else that is not a zip archive or
 // holds no content types, and with limits.ErrInputTooLarge past
-// office.MaxPackageEntries.
-func Open(data []byte) (*Package, error) {
+// office.MaxPackageEntries. The content types are parsed under ctx and its
+// memory budget.
+func Open(ctx context.Context, data []byte) (*Package, error) {
 	if bytes.HasPrefix(data, cfbSignature) {
 		return nil, fmt.Errorf("%w: a compound file, not a zip package", office.ErrEncrypted)
 	}
@@ -108,7 +109,7 @@ func Open(data []byte) (*Package, error) {
 		}
 		p.entries[name] = f
 	}
-	if err := p.readContentTypes(); err != nil {
+	if err := p.readContentTypes(ctx); err != nil {
 		return nil, err
 	}
 	return p, nil
@@ -218,11 +219,11 @@ func (p *Package) ContentType(name string) string {
 }
 
 // readContentTypes reads [Content_Types].xml (ECMA-376 Part 2, 10.1.2).
-func (p *Package) readContentTypes() error {
+func (p *Package) readContentTypes(ctx context.Context) error {
 	if !p.Has("[Content_Types].xml") {
 		return fmt.Errorf("%w: no [Content_Types].xml", office.ErrMalformed)
 	}
-	root, err := p.ParseXML(context.Background(), "[Content_Types].xml", nil)
+	root, err := p.ParseXML(ctx, "[Content_Types].xml", nil)
 	if err != nil {
 		return err
 	}
@@ -245,8 +246,9 @@ func (p *Package) readContentTypes() error {
 // package for source "" (ECMA-376 Part 2, 9.3.2: the part's relationships
 // part sits in a _rels folder beside it), in document order; none when
 // the relationships part is missing. Internal targets are resolved
-// against source.
-func (p *Package) Relationships(source string) ([]Relationship, error) {
+// against source. The relationships part is parsed under ctx and its
+// memory budget, once: later calls return the cached list.
+func (p *Package) Relationships(ctx context.Context, source string) ([]Relationship, error) {
 	key := partKey(source)
 	if rels, ok := p.rels[key]; ok {
 		return rels, nil
@@ -257,7 +259,7 @@ func (p *Package) Relationships(source string) ([]Relationship, error) {
 		p.rels[key] = nil
 		return nil, nil
 	}
-	root, err := p.ParseXML(context.Background(), relsName, nil)
+	root, err := p.ParseXML(ctx, relsName, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -310,8 +312,8 @@ func ResolveTarget(source, target string) string {
 
 // RelationshipByID returns the relationship of source with the id, false
 // when there is none.
-func (p *Package) RelationshipByID(source, id string) (Relationship, bool) {
-	rels, err := p.Relationships(source)
+func (p *Package) RelationshipByID(ctx context.Context, source, id string) (Relationship, bool) {
+	rels, err := p.Relationships(ctx, source)
 	if err != nil {
 		return Relationship{}, false
 	}
@@ -325,8 +327,8 @@ func (p *Package) RelationshipByID(source, id string) (Relationship, bool) {
 
 // RelatedPart returns the target of source's first internal relationship
 // of type relType that the package holds, "" for none.
-func (p *Package) RelatedPart(source, relType string) string {
-	rels, err := p.Relationships(source)
+func (p *Package) RelatedPart(ctx context.Context, source, relType string) string {
+	rels, err := p.Relationships(ctx, source)
 	if err != nil {
 		return ""
 	}
@@ -341,8 +343,8 @@ func (p *Package) RelatedPart(source, relType string) string {
 // MainPart returns the package's main part, the target of its
 // officeDocument relationship (ECMA-376 Part 1, 11.3.10), and fails with
 // office.ErrMalformed when there is none.
-func (p *Package) MainPart() (string, error) {
-	rels, err := p.Relationships("")
+func (p *Package) MainPart(ctx context.Context) (string, error) {
+	rels, err := p.Relationships(ctx, "")
 	if err != nil {
 		return "", err
 	}

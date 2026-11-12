@@ -48,7 +48,7 @@ func (r *reader) diagram(c *shapeCtx, data *ooxml.Element, s *slides.Shape, dept
 		dst  *string
 	}{{"dm", &parts.data}, {"lo", &parts.layout}, {"qs", &parts.style}, {"cs", &parts.colors}} {
 		if id, ok := ids.AttrNS(ooxml.NSR, p.name); ok {
-			if rel, ok := r.pkg.RelationshipByID(c.part, id); ok && !rel.External && r.pkg.Has(rel.Target) {
+			if rel, ok := r.pkg.RelationshipByID(r.ctx, c.part, id); ok && !rel.External && r.pkg.Has(rel.Target) {
 				*p.dst = rel.Target
 			}
 		}
@@ -217,7 +217,7 @@ func (r *reader) diagramPart(part string) (*ooxml.Element, error) {
 // dsp:sp; "" for none.
 func (r *reader) diagramDrawing(c *shapeCtx, d *ooxml.Diagram) string {
 	for _, id := range d.Drawings {
-		rel, ok := r.pkg.RelationshipByID(c.part, id)
+		rel, ok := r.pkg.RelationshipByID(r.ctx, c.part, id)
 		if !ok || rel.External || !r.pkg.Has(rel.Target) {
 			continue
 		}

@@ -101,7 +101,7 @@ func TestParseXML_StreamsThePart(t *testing.T) {
 				noise[i] = 'a' + byte(r.IntN(26))
 			}
 			files["word/document.xml"] = `<?xml version="1.0"?><!--` + string(noise) + `-->` + files["word/document.xml"]
-			p, err := Open(buildZip(t, files))
+			p, err := Open(t.Context(), buildZip(t, files))
 			if err != nil {
 				t.Fatal(err)
 			}

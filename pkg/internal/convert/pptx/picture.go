@@ -186,7 +186,7 @@ func stretched(pic *layout.Picture) *layout.Picture {
 // loadPicture decodes the picture the relationship id of part names, once
 // per target, nil with a warning when it cannot be drawn.
 func (r *reader) loadPicture(part, id string) *layout.Picture {
-	rel, ok := r.pkg.RelationshipByID(part, id)
+	rel, ok := r.pkg.RelationshipByID(r.ctx, part, id)
 	if !ok || rel.External {
 		if ok {
 			r.warn("unsupported-content", "a linked picture is left out: linked files are not read")
@@ -246,7 +246,7 @@ func (r *reader) graphicFrame(c *shapeCtx, el *ooxml.Element, depth int) (*slide
 		r.effectList([]*ooxml.Element{data.Child(ooxml.NSA, "tbl").Child(ooxml.NSA, "tblPr")}, nil, &fillCtx{sc: c.sc, part: c.part, group: c.group}, s)
 	case uriChart:
 		id, _ := data.Child(ooxml.NSChart, "chart").AttrNS(ooxml.NSR, "id")
-		rel, ok := r.pkg.RelationshipByID(c.part, id)
+		rel, ok := r.pkg.RelationshipByID(r.ctx, c.part, id)
 		if !ok || rel.External || !r.pkg.Has(rel.Target) {
 			r.warn("malformed-part", "a chart whose part is missing is left out")
 			return nil, nil

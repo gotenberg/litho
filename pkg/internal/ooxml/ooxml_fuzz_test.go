@@ -11,17 +11,18 @@ func FuzzOpen(f *testing.F) {
 	f.Add(full)
 	f.Add(full[:len(full)/2])
 	f.Fuzz(func(t *testing.T, data []byte) {
-		p, err := Open(data)
+		ctx := t.Context()
+		p, err := Open(ctx, data)
 		if err != nil {
 			return
 		}
-		main, err := p.MainPart()
+		main, err := p.MainPart(ctx)
 		if err != nil {
 			return
 		}
-		_, _ = p.ParseXML(context.Background(), main, []string{NSWPS})
-		_, _ = p.CoreProperties(context.Background()) // a fuzz target checks it does not panic
-		_, _ = p.Relationships(main)
+		_, _ = p.ParseXML(ctx, main, []string{NSWPS})
+		_, _ = p.CoreProperties(ctx) // a fuzz target checks it does not panic
+		_, _ = p.Relationships(ctx, main)
 	})
 }
 

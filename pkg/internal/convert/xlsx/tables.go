@@ -41,7 +41,7 @@ func (w *sheetReader) tables(parts *ooxml.Element) error {
 		}
 		n++
 		id, _ := tp.AttrNS(ooxml.NSR, "id")
-		rel, ok := r.pkg.RelationshipByID(w.part, id)
+		rel, ok := r.pkg.RelationshipByID(w.r.ctx, w.part, id)
 		if !ok || rel.External || rel.Type != relTable || !r.pkg.Has(rel.Target) {
 			continue
 		}

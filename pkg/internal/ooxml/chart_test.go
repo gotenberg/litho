@@ -230,7 +230,7 @@ func TestParseChart_ThemeAndOffice2007(t *testing.T) {
 	files["_rels/.rels"] = strings.Replace(packageRels, "</Relationships>", `<Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>`, 1)
 	files["docProps/app.xml"] = `<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Microsoft Excel</Application><AppVersion>12.0000</AppVersion></Properties>`
 	files["word/charts/chart1.xml"] = chartXML("", "", `<c:pieChart>`+ser(0, "Pies", "", "1", "2")+`</c:pieChart>`)
-	pkg, err := Open(buildZip(t, files))
+	pkg, err := Open(t.Context(), buildZip(t, files))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -474,7 +474,7 @@ func TestParseChart_ThemeOverride(t *testing.T) {
 	files["word/charts/_rels/chart1.xml.rels"] = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
 		`<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/themeOverride" Target="../theme/themeOverride1.xml"/></Relationships>`
 	files["word/theme/themeOverride1.xml"] = `<a:themeOverride xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:clrScheme name="o"><a:accent1><a:srgbClr val="5B9BD5"/></a:accent1></a:clrScheme></a:themeOverride>`
-	pkg, err := Open(buildZip(t, files))
+	pkg, err := Open(t.Context(), buildZip(t, files))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -29,7 +29,7 @@ var chartExChoices = []string{
 // own warnings join the reader's.
 func (r *reader) chartExOf(part string, data *ooxml.Element) *chart.Chart {
 	id, _ := data.Child(ooxml.NSChartEx, "chart").AttrNS(ooxml.NSR, "id")
-	rel, ok := r.pkg.RelationshipByID(part, id)
+	rel, ok := r.pkg.RelationshipByID(r.ctx, part, id)
 	if !ok || rel.External || !r.pkg.Has(rel.Target) {
 		r.warn("unsupported-content", "an Office 2016 chart (funnel, waterfall, sunburst, treemap, histogram, box and whisker) without its chart part is left out")
 		return nil

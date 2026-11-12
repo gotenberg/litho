@@ -134,7 +134,7 @@ func (r *reader) readStyles(main string) error {
 		s.palette[i] = rgb(v)
 	}
 	r.styles = s
-	name := r.pkg.RelatedPart(main, relStyles)
+	name := r.pkg.RelatedPart(r.ctx, main, relStyles)
 	if name == "" {
 		return nil
 	}

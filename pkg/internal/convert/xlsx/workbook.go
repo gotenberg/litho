@@ -61,7 +61,7 @@ func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document,
 			sh.Hidden = true
 		}
 		id, _ := s.AttrNS(ooxml.NSR, "id")
-		rel, ok := r.pkg.RelationshipByID(main, id)
+		rel, ok := r.pkg.RelationshipByID(r.ctx, main, id)
 		switch {
 		case !ok || rel.External || !r.pkg.Has(rel.Target):
 			r.warn("malformed-part", fmt.Sprintf("sheet %q has no part: it prints empty", sh.Name))

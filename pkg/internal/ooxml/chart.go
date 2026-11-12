@@ -76,9 +76,9 @@ func ParseChart(ctx context.Context, pkg *Package, part string) (*chart.Chart, e
 	}
 	theme := officeTheme
 	opts := ChartOptions{MSO2007: isMSO2007(ctx, pkg)}
-	if main, err := pkg.MainPart(); err == nil {
+	if main, err := pkg.MainPart(ctx); err == nil {
 		opts.Presentation = strings.HasSuffix(main, "/presentation.xml")
-		if name := pkg.RelatedPart(main, RelTheme); name != "" {
+		if name := pkg.RelatedPart(ctx, main, RelTheme); name != "" {
 			if troot, err := pkg.ParseXML(ctx, name, nil); err == nil {
 				if t := ParseTheme(troot); len(t.Colors) > 0 {
 					theme = t
@@ -91,7 +91,7 @@ func ParseChart(ctx context.Context, pkg *Package, part string) (*chart.Chart, e
 	if err != nil {
 		return nil, fmt.Errorf("reading the chart %s: %w", part, err)
 	}
-	if rels, err := pkg.Relationships(part); err == nil {
+	if rels, err := pkg.Relationships(ctx, part); err == nil {
 		for _, r := range rels {
 			if strings.HasSuffix(r.Type, "/chartUserShapes") {
 				c.Warnings = append(c.Warnings, typeset.Warning{Code: CodeChartUnsupported, Message: "the shapes drawn over a chart are not drawn"})
@@ -110,7 +110,7 @@ const relThemeOverride = "http://schemas.openxmlformats.org/officeDocument/2006/
 // colour, font or format scheme the chart takes instead of the
 // document's), theme itself without one.
 func chartTheme(ctx context.Context, pkg *Package, part string, theme *Theme) *Theme {
-	name := pkg.RelatedPart(part, relThemeOverride)
+	name := pkg.RelatedPart(ctx, part, relThemeOverride)
 	if name == "" {
 		return theme
 	}
@@ -141,7 +141,7 @@ const relExtendedProperties = "http://schemas.openxmlformats.org/officeDocument/
 // specification, and LibreOffice reads such files with Office 2007's
 // defaults (oox's XmlFilterBase::isMSO2007Document).
 func isMSO2007(ctx context.Context, pkg *Package) bool {
-	name := pkg.RelatedPart("", relExtendedProperties)
+	name := pkg.RelatedPart(ctx, "", relExtendedProperties)
 	if name == "" {
 		return false
 	}
