@@ -58,14 +58,14 @@ func newBuilder(ctx context.Context, doc *Document, fonts *text.Fonts, opts offi
 	return b
 }
 
-// warn records a warning once per code and message.
-func (b *builder) warn(code warn.Code, msg string) {
-	k := code.String() + "\x00" + msg
+// warn records a warning once per code, effect and message.
+func (b *builder) warn(code warn.Code, effect warn.Effect, msg string) {
+	k := code.String() + "\x00" + effect.String() + "\x00" + msg
 	if b.warned[k] {
 		return
 	}
 	b.warned[k] = true
-	b.warnings = append(b.warnings, typeset.Warning{Code: code, Message: msg})
+	b.warnings = append(b.warnings, typeset.Warning{Code: code, Effect: effect, Message: msg})
 }
 
 // Convert lays doc out as LibreOffice prints a spreadsheet, with the fonts
@@ -363,16 +363,16 @@ func (b *builder) planSheet(i int, sh *Sheet) (*sheetPlan, error) {
 		b.growMargins(sp)
 	}
 	if n := unevaluated(g); n > 0 {
-		b.warn(warn.ContentUnsupported, fmt.Sprintf("sheet %s: %d conditional formatting rules (formulas, unknown icon sets) are not applied", quote(sh.Name), n))
+		b.warn(warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("sheet %s: %d conditional formatting rules (formulas, unknown icon sets) are not applied", quote(sh.Name), n))
 	}
 	if sh.RightToLeft {
-		b.warn(warn.ContentUnsupported, "a right-to-left sheet is laid out left to right")
+		b.warn(warn.ContentUnsupported, warn.Approximated, "a right-to-left sheet is laid out left to right")
 	}
 	if err := sp.plan(b.ctx); err != nil {
 		return nil, err
 	}
 	if len(sp.pages) >= maxSheetPages {
-		b.warn(warn.LimitReached, fmt.Sprintf("sheet %s has more than %d pages; the rest are left out", quote(sh.Name), maxSheetPages))
+		b.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("sheet %s has more than %d pages; the rest are left out", quote(sh.Name), maxSheetPages))
 	}
 	if sp.single && len(sp.pages) > 0 {
 		// LibreOffice's SinglePageSheets export sizes the page to the

@@ -44,6 +44,10 @@ type Warning struct {
 	// Code names the kind of construct, one of the closed set of package
 	// warn.
 	Code warn.Code
+	// Effect says what the construct's fault cost the output: content
+	// left out, or content printed differently. It is never the zero
+	// Effect.
+	Effect warn.Effect
 	// Message explains the construct and what was done instead.
 	Message string
 	// Page is the 1-based page the construct lands on, 0 when it has none.

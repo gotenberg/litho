@@ -88,14 +88,14 @@ type builder struct {
 	hatchTurn float64
 }
 
-// warn records a warning once per code and message.
-func (b *builder) warn(code warn.Code, msg string) {
-	k := code.String() + "\x00" + msg
+// warn records a warning once per code, effect and message.
+func (b *builder) warn(code warn.Code, effect warn.Effect, msg string) {
+	k := code.String() + "\x00" + effect.String() + "\x00" + msg
 	if b.warned[k] {
 		return
 	}
 	b.warned[k] = true
-	b.warnings = append(b.warnings, typeset.Warning{Code: code, Message: msg})
+	b.warnings = append(b.warnings, typeset.Warning{Code: code, Effect: effect, Message: msg})
 }
 
 // Convert lays doc out as Impress prints a presentation, with the fonts of

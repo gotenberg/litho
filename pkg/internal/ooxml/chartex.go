@@ -220,7 +220,7 @@ func (x *chartExReader) read(root *Element) {
 			Style: chart.TextStyle{Families: []string{"Liberation Serif"}, Size: 10, Color: typeset.Black},
 			Frame: chart.Frame{Fill: &chart.Paint{Color: white}, Border: &chart.Stroke{Color: white}},
 		}
-		x.warn(warn.ContentUnsupported, "an Office 2016 chart of a kind other than a histogram is drawn without its series")
+		x.warn(warn.ContentUnsupported, warn.Omitted, "an Office 2016 chart of a kind other than a histogram is drawn without its series")
 	}
 	x.readTitle(cxChild(ch, "title"))
 	for _, s := range g.Series {
@@ -336,7 +336,7 @@ func (x *chartExReader) dimData(dim *Element, numeric bool) chart.Data {
 		}
 	}
 	if !d.Cached && d.Ref != "" {
-		x.warn(warn.ChartNoCache, "an Office 2016 chart's data have no cached values in the file and are drawn empty")
+		x.warn(warn.ChartNoCache, warn.Omitted, "an Office 2016 chart's data have no cached values in the file and are drawn empty")
 	}
 	return d
 }

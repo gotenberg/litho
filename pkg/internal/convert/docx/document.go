@@ -286,7 +286,7 @@ func (d *document) readNotes(name, kind string) (map[string]*ooxml.Element, erro
 	root, err := d.part(name)
 	if err != nil {
 		if isSoft(err) {
-			d.warn(warn.PartMalformed, fmt.Sprintf("the %s part does not parse; its notes are left out", kind))
+			d.warn(warn.PartMalformed, warn.Omitted, fmt.Sprintf("the %s part does not parse; its notes are left out", kind))
 			return notes, nil
 		}
 		return nil, err
@@ -303,14 +303,14 @@ func (d *document) readNotes(name, kind string) (map[string]*ooxml.Element, erro
 	return notes, nil
 }
 
-// warn records a warning, once per message.
-func (d *document) warn(code warn.Code, msg string) {
-	key := code.String() + "\x00" + msg
+// warn records a warning, once per effect and message.
+func (d *document) warn(code warn.Code, effect warn.Effect, msg string) {
+	key := code.String() + "\x00" + effect.String() + "\x00" + msg
 	if d.warned[key] {
 		return
 	}
 	d.warned[key] = true
-	d.warnings = append(d.warnings, typeset.Warning{Code: code, Message: msg})
+	d.warnings = append(d.warnings, typeset.Warning{Code: code, Effect: effect, Message: msg})
 }
 
 // newID returns an anchor ID no document name can take.

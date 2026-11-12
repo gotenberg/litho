@@ -31,7 +31,7 @@ func (r *reader) readSharedStrings(main string) error {
 	root, err := r.pkg.ParseXML(r.ctx, name, understood)
 	if err != nil {
 		if isMalformed(err) {
-			r.warn(warn.PartMalformed, fmt.Sprintf("the shared strings do not parse: %v", err))
+			r.warn(warn.PartMalformed, warn.Omitted, fmt.Sprintf("the shared strings do not parse: %v", err))
 			return nil
 		}
 		return err

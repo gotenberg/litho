@@ -267,7 +267,7 @@ func newDocument(ctx context.Context, root *html.Node, opts Options, image bool)
 	}
 	walk(root, 0)
 	if count > maxElements {
-		d.warn(warn.LimitReached, fmt.Sprintf("the drawing holds more than %d elements; the rest were left out", maxElements))
+		d.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("the drawing holds more than %d elements; the rest were left out", maxElements))
 	}
 	for _, s := range sheets {
 		d.rules = append(d.rules, parseSheet(s, maxStyleRules-len(d.rules))...)
@@ -413,15 +413,16 @@ func (d *Document) render(ctx context.Context, w, h float64) ([]typeset.Fragment
 	return content, nil
 }
 
-// warn records a warning once per message.
-func (d *Document) warn(code warn.Code, msg string) {
+// warn records a warning once per effect and message.
+func (d *Document) warn(code warn.Code, effect warn.Effect, msg string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.warned[msg] || len(d.warns) >= maxWarnings {
+	k := effect.String() + "\x00" + msg
+	if d.warned[k] || len(d.warns) >= maxWarnings {
 		return
 	}
-	d.warned[msg] = true
-	d.warns = append(d.warns, typeset.Warning{Code: code, Message: msg})
+	d.warned[k] = true
+	d.warns = append(d.warns, typeset.Warning{Code: code, Effect: effect, Message: msg})
 }
 
 // attrOf returns the value of n's attribute key with no namespace.

@@ -1031,7 +1031,7 @@ func (b *builder) applyFormulas(doc *Document) (*Document, error) {
 		if len(names) > 0 {
 			msg += " (" + strings.Join(names, ", ") + ")"
 		}
-		b.warn(warn.ContentUnsupported, msg)
+		b.warn(warn.ContentUnsupported, warn.Approximated, msg)
 	}
 	if e.err != nil {
 		return nil, e.err

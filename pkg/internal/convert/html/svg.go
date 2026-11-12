@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/svg"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // errNestedSVG refuses an SVG image an SVG image's image element names:
@@ -39,7 +40,7 @@ func (s *svgState) addWarnings(u string, ws []typeset.Warning) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, w := range ws {
-		s.warns = append(s.warns, typeset.Warning{Code: w.Code, Message: fmt.Sprintf("in the SVG image %s: %s", displayURL(u), w.Message)})
+		s.warns = append(s.warns, typeset.Warning{Code: w.Code, Effect: w.Effect, Message: fmt.Sprintf("in the SVG image %s: %s", displayURL(u), w.Message)})
 	}
 }
 
@@ -165,12 +166,12 @@ func (b *builder) inlineSVG(ctx context.Context, n *dom.Node, st *css.Style) []*
 	})
 	if err != nil {
 		if ctx.Err() == nil {
-			b.warnings = append(b.warnings, typeset.Warning{Code: warningCode(pictureDataError{err}), Message: fmt.Sprintf("an inline SVG was left out: %v", err)})
+			b.warnings = append(b.warnings, typeset.Warning{Code: warningCode(pictureDataError{err}), Effect: warn.Omitted, Message: fmt.Sprintf("an inline SVG was left out: %v", err)})
 		}
 		return nil
 	}
 	for _, w := range doc.Warnings() {
-		b.warnOnce(w.Code, w.Message, "in an inline SVG: "+w.Message)
+		b.warnOnce(w.Code, w.Effect, w.Message, "in an inline SVG: "+w.Message)
 	}
 	sized := *st
 	for i, key := range [2]string{"width", "height"} {

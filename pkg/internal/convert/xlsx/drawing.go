@@ -52,11 +52,11 @@ func (r *reader) chartOf(part string) *chart.Chart {
 		if r.stop(err) {
 			return nil
 		}
-		r.warn(warn.PartMalformed, fmt.Sprintf("chart %s does not parse and is left out: %v", part, err))
+		r.warn(warn.PartMalformed, warn.Omitted, fmt.Sprintf("chart %s does not parse and is left out: %v", part, err))
 		return nil
 	}
 	for _, w := range c.Warnings {
-		r.warn(w.Code, w.Message)
+		r.warn(w.Code, w.Effect, w.Message)
 	}
 	c.Resolver = r.rangeValues
 	return c
@@ -95,14 +95,14 @@ func (w *sheetReader) drawing(id string) error {
 	root, err := r.pkg.ParseXML(r.ctx, rel.Target, understood)
 	if err != nil {
 		if isMalformed(err) {
-			r.warn(warn.PartMalformed, fmt.Sprintf("the drawings of sheet %q do not parse: %v", w.sh.Name, err))
+			r.warn(warn.PartMalformed, warn.Omitted, fmt.Sprintf("the drawings of sheet %q do not parse: %v", w.sh.Name, err))
 			return nil
 		}
 		return err
 	}
 	for _, a := range root.Kids() {
 		if len(w.sh.Drawings) >= maxDrawings {
-			r.warn(warn.LimitReached, fmt.Sprintf("sheet %q holds more than %d drawings: the rest are left out", w.sh.Name, maxDrawings))
+			r.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("sheet %q holds more than %d drawings: the rest are left out", w.sh.Name, maxDrawings))
 			break
 		}
 		var d sheet.Drawing
@@ -214,19 +214,19 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 					if w.r.stop(err) {
 						return false
 					}
-					w.r.warn(warn.ContentUnsupported, fmt.Sprintf("the Office 2016 chart %q is left out: %v", d.Name, err))
+					w.r.warn(warn.ContentUnsupported, warn.Omitted, fmt.Sprintf("the Office 2016 chart %q is left out: %v", d.Name, err))
 					return false
 				}
 				for _, x := range c.Warnings {
-					w.r.warn(x.Code, x.Message)
+					w.r.warn(x.Code, x.Effect, x.Message)
 				}
 				c.Resolver = w.r.rangeValues
 				d.Chart = c
 				return true
 			case uriDiagram:
-				w.r.warn(warn.ContentUnsupported, "a SmartArt diagram is left out: the workbook holds no picture of it")
+				w.r.warn(warn.ContentUnsupported, warn.Omitted, "a SmartArt diagram is left out: the workbook holds no picture of it")
 			default:
-				w.r.warn(warn.ContentUnsupported, "a drawing of an unknown kind is left out")
+				w.r.warn(warn.ContentUnsupported, warn.Omitted, "a drawing of an unknown kind is left out")
 			}
 			return false
 		case "pic", "sp", "cxnSp", "grpSp":
@@ -280,7 +280,7 @@ func (w *sheetReader) leaves(part string, obj *ooxml.Element, x, y, bw, bh float
 			pic = r.loadPicture(part, ref.Embed)
 		}
 		if pic == nil && ref.Link != "" {
-			r.warn(warn.PictureMissing, "a linked picture is left out: linked files are not read")
+			r.warn(warn.PictureMissing, warn.Omitted, "a linked picture is left out: linked files are not read")
 		}
 		if pic != nil {
 			*out = append(*out, leaf{x: x, y: y, w: bw, h: bh, rot: ref.Rotation, flipH: ref.FlipH, flipV: ref.FlipV, pic: pic, crop: ref.Crop})
@@ -293,10 +293,10 @@ func (w *sheetReader) leaves(part string, obj *ooxml.Element, x, y, bw, bh float
 			// A connector the engine does not know joins its ends.
 			g = &shape.Geometry{Preset: "line"}
 		case !shape.Known(g):
-			r.warn(warn.ContentUnsupported, fmt.Sprintf("a %s shape is drawn as its bounding box", g.Preset))
+			r.warn(warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("a %s shape is drawn as its bounding box", g.Preset))
 		default:
 			if err := shape.Check(g); err != nil {
-				r.warn(warn.ContentUnsupported, fmt.Sprintf("a shape's geometry is drawn in part: %v", err))
+				r.warn(warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("a shape's geometry is drawn in part: %v", err))
 			}
 		}
 		l := leaf{x: x, y: y, w: bw, h: bh, geom: g, style: ooxml.ParseShapeStyle(spPr, obj.Child(nsXDR, "style"), r.theme)}
@@ -307,7 +307,7 @@ func (w *sheetReader) leaves(part string, obj *ooxml.Element, x, y, bw, bh float
 		*out = append(*out, l)
 	case "grpSp":
 		if depth >= maxGroupDepth {
-			r.warn(warn.LimitReached, "shape groups nested too deep are left out")
+			r.warn(warn.LimitReached, warn.Omitted, "shape groups nested too deep are left out")
 			return
 		}
 		xfrm := obj.Child(nsXDR, "grpSpPr").Child(ooxml.NSA, "xfrm")
@@ -324,7 +324,7 @@ func (w *sheetReader) leaves(part string, obj *ooxml.Element, x, y, bw, bh float
 			switch k.Local {
 			case "pic", "sp", "cxnSp", "grpSp":
 			case "graphicFrame":
-				r.warn(warn.ContentUnsupported, "a chart inside a shape group is left out")
+				r.warn(warn.ContentUnsupported, warn.Omitted, "a chart inside a shape group is left out")
 				continue
 			default:
 				continue
@@ -490,7 +490,7 @@ func (r *reader) loadPicture(part, id string) *layout.Picture {
 	rel, ok := r.pkg.RelationshipByID(r.ctx, part, id)
 	if !ok || rel.External {
 		if ok {
-			r.warn(warn.PictureMissing, "a linked picture is left out: linked files are not read")
+			r.warn(warn.PictureMissing, warn.Omitted, "a linked picture is left out: linked files are not read")
 		}
 		return nil
 	}
@@ -498,7 +498,7 @@ func (r *reader) loadPicture(part, id string) *layout.Picture {
 		return pic
 	}
 	if len(r.pictures) >= limits.MaxConvertPictures {
-		r.warn(warn.LimitReached, fmt.Sprintf("pictures past %d are not drawn", limits.MaxConvertPictures))
+		r.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("pictures past %d are not drawn", limits.MaxConvertPictures))
 		return nil
 	}
 	r.pictures[rel.Target] = nil
@@ -507,7 +507,7 @@ func (r *reader) loadPicture(part, id string) *layout.Picture {
 		if r.stop(err) {
 			return nil
 		}
-		r.warn(warn.PictureMissing, fmt.Sprintf("picture %s cannot be read: %v", rel.Target, err))
+		r.warn(warn.PictureMissing, warn.Omitted, fmt.Sprintf("picture %s cannot be read: %v", rel.Target, err))
 		return nil
 	}
 	pic, err := ooxml.DecodePicture(r.ctx, data, r.fonts)
@@ -515,9 +515,9 @@ func (r *reader) loadPicture(part, id string) *layout.Picture {
 		switch {
 		case r.stop(err):
 		case errors.Is(err, ooxml.ErrUnsupportedPicture):
-			r.warn(warn.PictureFormatUnsupported, fmt.Sprintf("picture %s is left out: %v", rel.Target, err))
+			r.warn(warn.PictureFormatUnsupported, warn.Omitted, fmt.Sprintf("picture %s is left out: %v", rel.Target, err))
 		default:
-			r.warn(warn.PictureUnreadable, fmt.Sprintf("picture %s does not decode: %v", rel.Target, err))
+			r.warn(warn.PictureUnreadable, warn.Omitted, fmt.Sprintf("picture %s does not decode: %v", rel.Target, err))
 		}
 		return nil
 	}

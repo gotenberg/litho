@@ -65,7 +65,7 @@ func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document,
 		rel, ok := r.pkg.RelationshipByID(r.ctx, main, id)
 		switch {
 		case !ok || rel.External || !r.pkg.Has(rel.Target):
-			r.warn(warn.PartMalformed, fmt.Sprintf("sheet %q has no part: it prints empty", sh.Name))
+			r.warn(warn.PartMalformed, warn.Omitted, fmt.Sprintf("sheet %q has no part: it prints empty", sh.Name))
 			r.defaultSetup(sh)
 		case rel.Type == relWorksheet:
 			if err := r.worksheet(rel.Target, sh, index, printed[index]); err != nil {
@@ -79,7 +79,7 @@ func (r *reader) workbook(main string, root *ooxml.Element, doc *sheet.Document,
 				return err
 			}
 		default:
-			r.warn(warn.ContentUnsupported, fmt.Sprintf("sheet %q is not a worksheet: it prints empty", sh.Name))
+			r.warn(warn.ContentUnsupported, warn.Omitted, fmt.Sprintf("sheet %q is not a worksheet: it prints empty", sh.Name))
 			r.defaultSetup(sh)
 		}
 		r.applyNames(names, index, sh)

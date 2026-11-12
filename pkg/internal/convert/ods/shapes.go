@@ -120,7 +120,7 @@ func (r *reader) shape(ts *tableState, el *odf.Element, at *sheet.Anchor) {
 		return
 	}
 	if hasText(el) && el.Name.Local != "measure" {
-		r.warn("shape-text", warn.ContentUnsupported, "the text of drawing shapes is not drawn")
+		r.warn("shape-text", warn.ContentUnsupported, warn.Omitted, "the text of drawing shapes is not drawn")
 	}
 	r.place(ts, el, at, art)
 }
@@ -146,7 +146,7 @@ func hasText(el *odf.Element) bool {
 //     ends both left of the sheet's origin.
 func (r *reader) place(ts *tableState, el *odf.Element, at *sheet.Anchor, art shapeArt) {
 	if r.drawings >= maxDrawings {
-		r.warn("too-many-drawings", warn.LimitReached, fmt.Sprintf("pictures and charts past %d are not drawn", maxDrawings))
+		r.warn("too-many-drawings", warn.LimitReached, warn.Omitted, fmt.Sprintf("pictures and charts past %d are not drawn", maxDrawings))
 		return
 	}
 	b := art.bounds
@@ -250,7 +250,7 @@ func (r *reader) shapePaint(p odf.Props) *shape.Paint {
 		}
 		return pt
 	case "hatch", "bitmap":
-		r.warn("shape-fill", warn.ContentUnsupported, "hatched and picture fills of drawing shapes are drawn as their fill colour")
+		r.warn("shape-fill", warn.ContentUnsupported, warn.Approximated, "hatched and picture fills of drawing shapes are drawn as their fill colour")
 		return solid()
 	}
 	return solid()
@@ -498,7 +498,7 @@ func (r *reader) geometryArt(el *odf.Element, paint *shape.Paint, s *shapeStroke
 			g = odf.ParseGeometry(eg)
 		}
 		if g != nil && !shape.Known(g) {
-			r.warn("custom-geometry", warn.ContentUnsupported, "the shape type "+strconv.Quote(g.Preset)+" is drawn as its bounding box")
+			r.warn("custom-geometry", warn.ContentUnsupported, warn.Approximated, "the shape type "+strconv.Quote(g.Preset)+" is drawn as its bounding box")
 		}
 	case "rect":
 		if rad, ok := odf.Length(el.A(odf.NSDraw, "corner-radius")); ok && rad > 0 {
@@ -508,13 +508,13 @@ func (r *reader) geometryArt(el *odf.Element, paint *shape.Paint, s *shapeStroke
 		}
 	case "ellipse", "circle":
 		if k := el.A(odf.NSDraw, "kind"); k != "" && k != "full" {
-			r.warn("approximated", warn.ContentUnsupported, "ellipse sections, cuts and arcs are drawn as whole ellipses")
+			r.warn("approximated", warn.ContentUnsupported, warn.Approximated, "ellipse sections, cuts and arcs are drawn as whole ellipses")
 		}
 		g = &shape.Geometry{Preset: "ellipse"}
 	case "polyline", "polygon", "path", "regular-polygon":
 		g = outline(el)
 		if g == nil {
-			r.warn("custom-geometry", warn.ContentUnsupported, fmt.Sprintf("the outline of draw:%s is drawn as its bounding box", el.Name.Local))
+			r.warn("custom-geometry", warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("the outline of draw:%s is drawn as its bounding box", el.Name.Local))
 		}
 		if el.Name.Local == "polyline" {
 			paint = nil
@@ -524,7 +524,7 @@ func (r *reader) geometryArt(el *odf.Element, paint *shape.Paint, s *shapeStroke
 	if tr := el.A(odf.NSDraw, "transform"); tr != "" {
 		t, ok := parseTransform(tr)
 		if !ok {
-			r.warn("transform", warn.ContentUnsupported, "a draw:transform that does not parse is not applied")
+			r.warn("transform", warn.ContentUnsupported, warn.Approximated, "a draw:transform that does not parse is not applied")
 		} else {
 			m = mul(t, m)
 		}
@@ -637,7 +637,7 @@ func (ts *tableState) colHidden(c int) bool {
 func (r *reader) transformedPicture(ts *tableState, el *odf.Element, at *sheet.Anchor, pic *layout.Picture, tr string, w, h float64) {
 	m, ok := parseTransform(tr)
 	if !ok {
-		r.warn("transform", warn.ContentUnsupported, "a draw:transform that does not parse is not applied")
+		r.warn("transform", warn.ContentUnsupported, warn.Approximated, "a draw:transform that does not parse is not applied")
 		m = typeset.Identity
 	}
 	x, _ := odf.Length(el.A(odf.NSSVG, "x"))

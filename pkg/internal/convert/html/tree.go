@@ -191,7 +191,7 @@ func (b *builder) element(ctx context.Context, n *dom.Node, parent *css.Style, d
 		return nil, nil
 	}
 	if unsupported[n.DataAtom] {
-		b.warnOnce(warn.ContentUnsupported, n.Data, fmt.Sprintf("the content of <%s> is not drawn", n.Data))
+		b.warnOnce(warn.ContentUnsupported, warn.Omitted, n.Data, fmt.Sprintf("the content of <%s> is not drawn", n.Data))
 		return nil, nil
 	}
 	return b.styled(ctx, n, parent, depth)
@@ -207,7 +207,7 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 		st = withoutBackground(st)
 	}
 	if depth >= maxTreeDepth {
-		b.warnOnce(warn.LimitReached, "depth", fmt.Sprintf("content nested deeper than %d elements was left out", maxTreeDepth))
+		b.warnOnce(warn.LimitReached, warn.Omitted, "depth", fmt.Sprintf("content nested deeper than %d elements was left out", maxTreeDepth))
 		return nil, nil
 	}
 	v := b.applyCounters(n, st)
@@ -222,9 +222,9 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 		case atom.Input, atom.Select, atom.Textarea:
 			return b.control(n, st), nil
 		case atom.Button:
-			b.warnOnce(warn.FormWidgetOmitted, "form", "form controls are drawn as their text, without their widgets")
+			b.warnOnce(warn.FormWidgetOmitted, warn.Approximated, "form", "form controls are drawn as their text, without their widgets")
 		case atom.Object:
-			b.warnOnce(warn.ContentUnsupported, n.Data, "the content of <object> is not drawn; its fallback content is")
+			b.warnOnce(warn.ContentUnsupported, warn.Approximated, n.Data, "the content of <object> is not drawn; its fallback content is")
 			return b.children(ctx, n, parent, depth)
 		case atom.Canvas:
 			// Without scripts a canvas shows its fallback content (HTML
@@ -440,7 +440,7 @@ func (b *builder) image(ctx context.Context, n *dom.Node, st, parent *css.Style)
 		if ctx.Err() != nil {
 			return nil
 		}
-		b.warnings = append(b.warnings, typeset.Warning{Code: warningCode(err), Message: fmt.Sprintf(
+		b.warnings = append(b.warnings, typeset.Warning{Code: warningCode(err), Effect: warn.Omitted, Message: fmt.Sprintf(
 			"the image %s was left out: %v", displayURL(strings.TrimSpace(src)), err)})
 		return fallback()
 	}
@@ -472,7 +472,7 @@ func (b *builder) image(ctx context.Context, n *dom.Node, st, parent *css.Style)
 // text it shows (HTML Standard, 15.5): an input's value or placeholder, a
 // select's selected option, a textarea's text.
 func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
-	b.warnOnce(warn.FormWidgetOmitted, "form", "form controls are drawn as their text, without their widgets")
+	b.warnOnce(warn.FormWidgetOmitted, warn.Approximated, "form", "form controls are drawn as their text, without their widgets")
 	var s string
 	switch n.DataAtom { //nolint:exhaustive // every other element takes the default path
 	case atom.Input:
@@ -588,14 +588,15 @@ func spanAttr(n *dom.Node, key string, maxSpan int) int {
 	return min(i, maxSpan)
 }
 
-// warnOnce records a warning the first time key is met.
-func (b *builder) warnOnce(code warn.Code, key, msg string) {
-	k := code.String() + "\x00" + key
+// warnOnce records a warning the first time key is met with its code and
+// effect.
+func (b *builder) warnOnce(code warn.Code, effect warn.Effect, key, msg string) {
+	k := code.String() + "\x00" + effect.String() + "\x00" + key
 	if b.warned[k] {
 		return
 	}
 	b.warned[k] = true
-	b.warnings = append(b.warnings, typeset.Warning{Code: code, Message: msg})
+	b.warnings = append(b.warnings, typeset.Warning{Code: code, Effect: effect, Message: msg})
 }
 
 // maxFigureName caps the bytes of the name a figure's Figure carries.

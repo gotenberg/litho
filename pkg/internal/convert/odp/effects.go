@@ -82,6 +82,6 @@ func (r *reader) effects(p odf.Props, s *slides.Shape) {
 		s.SoftEdge = rad
 	}
 	if rad := length("loext:glow-text-radius", 0); rad > 0 {
-		r.warn("glow", warn.ContentUnsupported, "text glows are not drawn")
+		r.warn("glow", warn.ContentUnsupported, warn.Approximated, "text glows are not drawn")
 	}
 }

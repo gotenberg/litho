@@ -96,7 +96,7 @@ cut:
 		pc.crop = p.cropSource(src.pic, pc.src, decode)
 		for _, t := range pc.tiles() {
 			if tiles == maxBackgroundTiles {
-				p.e.warn(warn.LimitReached, fmt.Sprintf("a border image repeated more than %d times was cut short", maxBackgroundTiles), r.Y)
+				p.e.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("a border image repeated more than %d times was cut short", maxBackgroundTiles), r.Y)
 				break cut
 			}
 			if k := p.nineTile(src, pc, t); k != nil {

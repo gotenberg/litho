@@ -1396,7 +1396,7 @@ func (e *engine) measureItem(fd *flexData, it *fitem, w, h float64, hDef bool, p
 		return m
 	}
 	if e.flexPasses >= maxFlexPasses {
-		e.warnOnce(warn.LimitReached, fmt.Sprintf("more than %d flex item layouts: later items keep their last layout", maxFlexPasses), y)
+		e.warnOnce(warn.LimitReached, warn.Approximated, fmt.Sprintf("more than %d flex item layouts: later items keep their last layout", maxFlexPasses), y)
 		return itemMeasure{h: k.h}
 	}
 	e.flexPasses++

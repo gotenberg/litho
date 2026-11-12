@@ -98,14 +98,15 @@ type chartReader struct {
 	textDefault chart.TextStyle
 }
 
-// warn records a warning once per message.
-func (r *chartReader) warn(code warn.Code, msg string) {
+// warn records a warning once per effect and message.
+func (r *chartReader) warn(code warn.Code, effect warn.Effect, msg string) {
 	if r.warned == nil {
 		r.warned = map[string]bool{}
 	}
-	if !r.warned[msg] {
-		r.warned[msg] = true
-		r.c.Warnings = append(r.c.Warnings, typeset.Warning{Code: code, Message: msg})
+	k := effect.String() + "\x00" + msg
+	if !r.warned[k] {
+		r.warned[k] = true
+		r.c.Warnings = append(r.c.Warnings, typeset.Warning{Code: code, Effect: effect, Message: msg})
 	}
 }
 
@@ -309,7 +310,7 @@ func (r *chartReader) read(ch *Element) {
 	}
 	pa := ch.Child(NSChart, "plot-area")
 	if pa == nil {
-		r.warn(warn.ContentUnsupported, "the chart has no plot area")
+		r.warn(warn.ContentUnsupported, warn.Omitted, "the chart has no plot area")
 		return
 	}
 	r.plotArea(ch, pa)
@@ -367,7 +368,7 @@ func (r *chartReader) plotArea(ch, pa *Element) {
 	pName := pa.A(NSChart, "style-name")
 	class := strings.TrimPrefix(ch.A(NSChart, "class"), "chart:")
 	if r.boolProp(pName, "three-dimensional", false) {
-		r.warn(warn.ContentUnsupported, "a 3D chart is drawn flat")
+		r.warn(warn.ContentUnsupported, warn.Approximated, "a 3D chart is drawn flat")
 	}
 	// The axes first: the groups name them.
 	axisIndex := map[string]int{}
@@ -416,7 +417,7 @@ func (r *chartReader) plotArea(ch, pa *Element) {
 	var order []string
 	for i, se := range pa.All(NSChart, "series") {
 		if len(order) > 0 && len(groups[order[0]].Series) >= chart.MaxSeries {
-			r.warn(warn.LimitReached, "series past the chart's limit are not drawn")
+			r.warn(warn.LimitReached, warn.Omitted, "series past the chart's limit are not drawn")
 			break
 		}
 		sClass := strings.TrimPrefix(se.A(NSChart, "class"), "chart:")
@@ -428,7 +429,7 @@ func (r *chartReader) plotArea(ch, pa *Element) {
 		if g == nil {
 			g = r.group(sClass, pName, xAxis, yAxis)
 			if g == nil {
-				r.warn(warn.ContentUnsupported, "a chart of class "+sClass+" is not drawn")
+				r.warn(warn.ContentUnsupported, warn.Omitted, "a chart of class "+sClass+" is not drawn")
 				continue
 			}
 			ax := se.A(NSChart, "attached-axis")
@@ -515,7 +516,7 @@ func (r *chartReader) group(class, pName string, xAxis, yAxis int) *chart.Group 
 		g.Kind = chart.Radar
 		g.Filled = true
 	case "stock":
-		r.warn(warn.ContentUnsupported, "a stock chart is drawn as a line chart")
+		r.warn(warn.ContentUnsupported, warn.Approximated, "a stock chart is drawn as a line chart")
 		g.Kind = chart.Line
 	default:
 		return nil
@@ -665,7 +666,7 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 		s.Values.Ref = addr
 	}
 	if !s.Values.Cached && s.Values.Ref != "" {
-		r.warn(warn.ChartNoCache, "a series has no values in the chart's table and is drawn empty")
+		r.warn(warn.ChartNoCache, warn.Omitted, "a series has no values in the chart's table and is drawn empty")
 	}
 	s.Categories = cats
 	if r.table != nil {
@@ -764,7 +765,7 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 			s.Trendlines = append(s.Trendlines, t)
 		}
 		if eq := rc.Child(NSChart, "equation"); eq != nil && (eq.A(NSChart, "display-equation") == "true" || eq.A(NSChart, "display-r-square") == "true") {
-			r.warn(warn.ContentUnsupported, "a regression curve's equation is not drawn")
+			r.warn(warn.ContentUnsupported, warn.Omitted, "a regression curve's equation is not drawn")
 		}
 	}
 	for _, ei := range se.All(NSChart, "error-indicator") {

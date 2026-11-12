@@ -91,3 +91,31 @@ func All() []Code {
 		LimitReached,
 	}
 }
+
+// Effect names what a construct's fault cost the output, whatever its
+// code. Its field is unexported, so only the variables of this package
+// hold one; the zero Effect is no effect and no converter reports it.
+type Effect struct{ name string }
+
+// String returns the effect's kebab-case name, the value of its public
+// constant.
+func (e Effect) String() string { return e.name }
+
+// The effects. Each one's public constant in pkg/pdf documents it for a
+// caller.
+var (
+	// Omitted is content of the source missing from the output, in whole
+	// or in part: a picture left out, text cut at a cap, a sheet not
+	// printed.
+	Omitted = Effect{"omitted"}
+	// Approximated is content of the source all in the output, printed
+	// differently: a simpler shape, a default format, a fallback font or
+	// value, a stand-in the file itself stores.
+	Approximated = Effect{"approximated"}
+)
+
+// Effects returns every effect, in a fixed order: the order of the
+// variables above.
+func Effects() []Effect {
+	return []Effect{Omitted, Approximated}
+}

@@ -74,10 +74,42 @@ func TestConvertWarnings_Families(t *testing.T) {
 		found := false
 		for _, w := range rep.Warnings {
 			found = found || w.Code == tc.code && strings.Contains(w.Message, tc.about)
+			if w.Effect != EffectOmitted && w.Effect != EffectApproximated {
+				t.Errorf("%s: the %s warning %q has the effect %q", tc.family, w.Code, w.Message, w.Effect)
+			}
 		}
 		if !found {
 			t.Errorf("%s: no %s warning about %q in %+v", tc.family, tc.code, tc.about, rep.Warnings)
 		}
+	}
+}
+
+// TestConvertWarnings_EffectTellsLossFromApproximation converts two HTML
+// documents whose warnings share a code: one whose picture does not load,
+// which loses content, and one whose stylesheet does not load, which
+// prints all its content without the styles. The effect alone tells them
+// apart.
+func TestConvertWarnings_EffectTellsLossFromApproximation(t *testing.T) {
+	t.Parallel()
+
+	fonts := WithConvertFontDirs(convertFontDir(t))
+	effect := func(src string) ConvertWarningEffect {
+		t.Helper()
+		var out bytes.Buffer
+		rep, err := FromHTML(strings.NewReader(src), fonts, WithResources(fstest.MapFS{})).WriteTo(context.Background(), &out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rep.Warnings) != 1 || rep.Warnings[0].Code != WarningResourceFailed {
+			t.Fatalf("want one %s warning, got %+v", WarningResourceFailed, rep.Warnings)
+		}
+		return rep.Warnings[0].Effect
+	}
+	if got := effect(`<p>a<img src="gone.png" alt="">`); got != EffectOmitted {
+		t.Errorf("a picture left out: effect %q, want %q", got, EffectOmitted)
+	}
+	if got := effect(`<link rel="stylesheet" href="gone.css"><p>a`); got != EffectApproximated {
+		t.Errorf("a stylesheet left out: effect %q, want %q", got, EffectApproximated)
 	}
 }
 

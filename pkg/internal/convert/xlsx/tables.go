@@ -49,7 +49,7 @@ func (w *sheetReader) tables(parts *ooxml.Element) error {
 		root, err := r.pkg.ParseXML(r.ctx, rel.Target, understood)
 		if err != nil {
 			if isMalformed(err) {
-				r.warn(warn.PartMalformed, fmt.Sprintf("table %s does not parse: %v", rel.Target, err))
+				r.warn(warn.PartMalformed, warn.Approximated, fmt.Sprintf("table %s does not parse: %v", rel.Target, err))
 				continue
 			}
 			return err

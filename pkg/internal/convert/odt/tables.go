@@ -135,7 +135,7 @@ func (b *builder) tableParts(el *odf.Element, tb *tableBuild, header bool) []*la
 		case "table-row":
 			for range repeat(c, "number-rows-repeated") {
 				if tb.cells > maxTableCells {
-					b.warn("table-cells", warn.LimitReached, "a table's rows past its cell cap are left out")
+					b.warn("table-cells", warn.LimitReached, warn.Omitted, "a table's rows past its cell cap are left out")
 					return out
 				}
 				out = append(out, b.row(c, tb, header))

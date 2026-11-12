@@ -165,7 +165,7 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 		s.placeGutter(d.settings.gutterAtTop, e.Child(w, "rtlGutter") != nil && ooxml.Toggle(e.Child(w, "rtlGutter")))
 	}
 	if v := e.Child(w, "vAlign"); v != nil && attrOr(v, "val") != "top" {
-		d.warn(warn.PageSetupUnsupported, "a section's vertical alignment is laid out from the top")
+		d.warn(warn.PageSetupUnsupported, warn.Approximated, "a section's vertical alignment is laid out from the top")
 	}
 	if b := e.Child(w, "pgBorders"); b != nil {
 		s.frame = d.pageFrame(b, s)

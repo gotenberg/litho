@@ -198,7 +198,7 @@ func (d *document) place(p placement, n *layout.Node, sink *inlineSink) {
 		// inside the page its paragraph is on.
 		st.PageClamp = d.pageAnchors()
 		if fromPageV(p.relV) {
-			d.warn(warn.ContentUnsupported, "a drawing positioned from the page in a note, text box or table is positioned from its paragraph")
+			d.warn(warn.ContentUnsupported, warn.Approximated, "a drawing positioned from the page in a note, text box or table is positioned from its paragraph")
 			st.Top = css.Pts(0)
 		}
 		switch {
@@ -492,6 +492,6 @@ func (d *document) frame(n *layout.Node, pp paraProps) {
 		st.Margin[css.Right] = css.Pts(v)
 	}
 	if attrOr(f, "dropCap") == "" && (hasAttr(f, "x") || hasAttr(f, "y")) {
-		d.warn(warn.ContentUnsupported, "a text frame at a page position floats beside its anchor")
+		d.warn(warn.ContentUnsupported, warn.Approximated, "a text frame at a page position floats beside its anchor")
 	}
 }

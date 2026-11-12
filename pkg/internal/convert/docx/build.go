@@ -83,7 +83,7 @@ func (d *document) blocks(s *story, c *cond, parent *ooxml.Element, depth int) [
 // blocksInto appends the block-level content of parent to out.
 func (d *document) blocksInto(s *story, c *cond, parent *ooxml.Element, depth int, out *[]blockNode) {
 	if depth > maxNesting {
-		d.warn(warn.LimitReached, "content nested too deep is left out")
+		d.warn(warn.LimitReached, warn.Omitted, "content nested too deep is left out")
 		return
 	}
 	for _, e := range mergeDeleted(parent.Kids()) {
@@ -102,7 +102,7 @@ func (d *document) blocksInto(s *story, c *cond, parent *ooxml.Element, depth in
 		case "customXml", "ins", "moveTo", "smartTag":
 			d.blocksInto(s, c, e, depth+1, out)
 		case "altChunk":
-			d.warn(warn.ContentUnsupported, "an imported chunk (altChunk) is left out")
+			d.warn(warn.ContentUnsupported, warn.Omitted, "an imported chunk (altChunk) is left out")
 		case "br":
 			// A break outside a run, which the schema does not allow and
 			// LibreOffice reads: a page or column break moves the next
@@ -949,7 +949,7 @@ func (d *document) math(ps *css.Style, e *ooxml.Element, sink *inlineSink) {
 	if b.Len() == 0 {
 		return
 	}
-	d.warn(warn.ContentUnsupported, "an equation is drawn as its plain text")
+	d.warn(warn.ContentUnsupported, warn.Approximated, "an equation is drawn as its plain text")
 	st := inlineStyle(ps)
 	st.FontStyle = css.FontItalic
 	st.FontFamilies = append([]string{"Cambria Math", "DejaVu Serif"}, st.FontFamilies...)
@@ -961,7 +961,7 @@ func (d *document) math(ps *css.Style, e *ooxml.Element, sink *inlineSink) {
 func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float64, r *ooxml.Element, sink *inlineSink, depth int) {
 	d.nodes++
 	if d.nodes > maxNodes {
-		d.warn(warn.LimitReached, fmt.Sprintf("the document builds more than %d nodes; the rest is left out", maxNodes))
+		d.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("the document builds more than %d nodes; the rest is left out", maxNodes))
 		return
 	}
 	direct := d.parseRunProps(r.Child(w, "rPr"))

@@ -65,7 +65,7 @@ func (b *builder) picture(href string, bin *odf.Element) *layout.Picture {
 		return r.pic
 	}
 	if len(b.pics) >= limits.MaxConvertPictures {
-		b.warn("too-many-pictures", warn.LimitReached, fmt.Sprintf("pictures past %d are not drawn", limits.MaxConvertPictures))
+		b.warn("too-many-pictures", warn.LimitReached, warn.Omitted, fmt.Sprintf("pictures past %d are not drawn", limits.MaxConvertPictures))
 		return nil
 	}
 	pic := b.decodePicture(href, bin)
@@ -79,11 +79,11 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 	switch {
 	case href != "":
 		if strings.Contains(href, "://") {
-			b.warn("external-picture", warn.PictureMissing, "a linked picture outside the package is not fetched")
+			b.warn("external-picture", warn.PictureMissing, warn.Omitted, "a linked picture outside the package is not fetched")
 			return nil
 		}
 		if b.pkg.Flat {
-			b.warn("missing-picture", warn.PictureMissing, fmt.Sprintf("the picture %s is not in the document", href))
+			b.warn("missing-picture", warn.PictureMissing, warn.Omitted, fmt.Sprintf("the picture %s is not in the document", href))
 			return nil
 		}
 		d, err := b.pkg.ReadFile(b.ctx, href)
@@ -91,20 +91,20 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 			if b.stop(err) {
 				return nil
 			}
-			b.warn("missing-picture", warn.PictureMissing, fmt.Sprintf("the picture %s is not read: %v", href, err))
+			b.warn("missing-picture", warn.PictureMissing, warn.Omitted, fmt.Sprintf("the picture %s is not read: %v", href, err))
 			return nil
 		}
 		data = d
 	default:
 		d, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(bin.TextContent()), ""))
 		if err != nil {
-			b.warn("binary-data", warn.PictureUnreadable, "an inline picture's base64 does not decode")
+			b.warn("binary-data", warn.PictureUnreadable, warn.Omitted, "an inline picture's base64 does not decode")
 			return nil
 		}
 		data = d
 	}
 	if name := vectorFormat(data); name != "" {
-		b.warn("picture-"+strings.ToLower(name), warn.PictureFormatUnsupported, fmt.Sprintf("%s pictures are not drawn", name))
+		b.warn("picture-"+strings.ToLower(name), warn.PictureFormatUnsupported, warn.Omitted, fmt.Sprintf("%s pictures are not drawn", name))
 		return nil
 	}
 	if isSVG(data) {
@@ -113,7 +113,7 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 			if b.stop(err) {
 				return nil
 			}
-			b.warn("svg", warn.PictureUnreadable, fmt.Sprintf("an SVG picture is not drawn: %v", err))
+			b.warn("svg", warn.PictureUnreadable, warn.Omitted, fmt.Sprintf("an SVG picture is not drawn: %v", err))
 			return nil
 		}
 		s := doc.Size()
@@ -125,12 +125,12 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 	}
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
-		b.warn("picture-format", warn.PictureFormatUnsupported, "a picture in an unknown format is not drawn")
+		b.warn("picture-format", warn.PictureFormatUnsupported, warn.Omitted, "a picture in an unknown format is not drawn")
 		return nil
 	}
 	mem := limits.BudgetFrom(b.ctx)
 	if err := mem.CheckPicture(cfg.Width, cfg.Height); err != nil {
-		b.warn("picture-pixels", warn.LimitReached, fmt.Sprintf("a picture is not drawn: %v", err))
+		b.warn("picture-pixels", warn.LimitReached, warn.Omitted, fmt.Sprintf("a picture is not drawn: %v", err))
 		return nil
 	}
 	pic := &layout.Picture{Width: float64(cfg.Width) * css.Pt, Height: float64(cfg.Height) * css.Pt}
@@ -140,7 +140,7 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 			if b.stop(err) {
 				return nil
 			}
-			b.warn("picture-decode", warn.PictureUnreadable, "a jpeg picture does not decode")
+			b.warn("picture-decode", warn.PictureUnreadable, warn.Omitted, "a jpeg picture does not decode")
 			return nil
 		}
 		pic.Source = src
@@ -151,13 +151,13 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 		if b.stop(err) {
 			return nil
 		}
-		b.warn("picture-pixels", warn.LimitReached, fmt.Sprintf("a picture is not drawn: %v", err))
+		b.warn("picture-pixels", warn.LimitReached, warn.Omitted, fmt.Sprintf("a picture is not drawn: %v", err))
 		return nil
 	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		mem.Release(charged)
-		b.warn("picture-decode", warn.PictureUnreadable, fmt.Sprintf("a %s picture does not decode", format))
+		b.warn("picture-decode", warn.PictureUnreadable, warn.Omitted, fmt.Sprintf("a %s picture does not decode", format))
 		return nil
 	}
 	src, err := typeset.EncodeImage(b.ctx, img)
@@ -165,7 +165,7 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 		if b.stop(err) {
 			return nil
 		}
-		b.warn("picture-decode", warn.PictureUnreadable, fmt.Sprintf("a %s picture does not encode: %v", format, err))
+		b.warn("picture-decode", warn.PictureUnreadable, warn.Omitted, fmt.Sprintf("a %s picture does not encode: %v", format, err))
 		return nil
 	}
 	pic.Source = src
@@ -687,7 +687,7 @@ func (b *builder) drawing(c *odf.Element, depth int) *layout.Node {
 				}
 			}
 		}
-		b.warn("draw-group", warn.ContentUnsupported, "the shapes of a group are laid out side by side")
+		b.warn("draw-group", warn.ContentUnsupported, warn.Approximated, "the shapes of a group are laid out side by side")
 		return n
 	case c.Name.Space == odf.NSDraw:
 		return undescribed(b.shape(c, g, depth), g)
@@ -733,7 +733,7 @@ func (b *builder) frame(c *odf.Element, g frameGeom, depth int) *layout.Node {
 		case k.Is(odf.NSDraw, "object"), k.Is(odf.NSDraw, "object-ole"):
 			// The replacement picture, a draw:image after the object, is
 			// tried next.
-			b.warn("object", warn.ContentUnsupported, "embedded objects are drawn as their replacement picture")
+			b.warn("object", warn.ContentUnsupported, warn.Approximated, "embedded objects are drawn as their replacement picture")
 		}
 	}
 	st := b.frameBox(g)
@@ -1026,7 +1026,7 @@ func (b *builder) customShape(c *odf.Element, g frameGeom) *layout.Picture {
 		return nil
 	}
 	if err := shape.Check(geom); err != nil {
-		b.warn("shape-custom-shape", warn.ContentUnsupported, fmt.Sprintf("a custom shape's geometry is drawn in part: %v", err))
+		b.warn("shape-custom-shape", warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("a custom shape's geometry is drawn in part: %v", err))
 	}
 	fill := &typeset.Color{R: 0x72 / 255.0, G: 0x9f / 255.0, B: 0xcf / 255.0, A: 1}
 	if g.props.Get("draw:fill") == "none" {
@@ -1071,7 +1071,7 @@ func (b *builder) shapeBody(c *odf.Element, g frameGeom) *layout.Node {
 	}
 	src := shapeSVG(c, g)
 	if src == "" {
-		b.warnEach("shape-box", c.Name.Local, warn.ContentUnsupported, fmt.Sprintf("the shape %s is drawn as its empty box", c.Name.Local))
+		b.warnEach("shape-box", c.Name.Local, warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("the shape %s is drawn as its empty box", c.Name.Local))
 		st := b.frameBox(g)
 		st.Display = css.InlineBlock
 		return b.node(&layout.Node{Kind: layout.Element, Style: st})
@@ -1096,7 +1096,7 @@ func (b *builder) shapeNode(c *odf.Element, pic *layout.Picture) *layout.Node {
 	st.Display = css.Inline
 	st.Width, st.Height = css.Pts(pic.Width), css.Pts(pic.Height)
 	if c.A(odf.NSDraw, "transform") != "" {
-		b.warn("shape-transform", warn.ContentUnsupported, "a shape's draw:transform is not applied")
+		b.warn("shape-transform", warn.ContentUnsupported, warn.Approximated, "a shape's draw:transform is not applied")
 	}
 	return b.node(&layout.Node{Kind: layout.Replaced, Style: st, Picture: pic, Role: "Figure"})
 }

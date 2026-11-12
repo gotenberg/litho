@@ -151,7 +151,7 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 		sels, err := parseSelectorList(it.prelude, 0, false)
 		if err != nil {
 			if err.unsupported != "" {
-				c.warn(warn.CSSUnsupported, "a rule with the selector %s was ignored", err.unsupported)
+				c.warn(warn.CSSUnsupported, warn.Approximated, "a rule with the selector %s was ignored", err.unsupported)
 			}
 			return
 		}
@@ -202,7 +202,7 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 			}
 		default:
 			if !ignoredAtRules[name] && !strings.HasPrefix(name, "-") {
-				c.warn(warn.CSSUnsupported, "the @%s rule is not supported and was ignored", name)
+				c.warn(warn.CSSUnsupported, warn.Approximated, "the @%s rule is not supported and was ignored", name)
 			}
 		}
 	}
@@ -313,11 +313,11 @@ func (sp *sheetParser) importRule(ctx context.Context, it item, base string, con
 		return
 	}
 	if slices.Contains(sp.chain, target) {
-		c.warn(warn.ResourceFailed, "the @import of %s was ignored: it imports itself", target)
+		c.warn(warn.ResourceFailed, warn.Approximated, "the @import of %s was ignored: it imports itself", target)
 		return
 	}
 	if depth+1 > maxImportDepth || sp.imports >= maxImports {
-		c.warn(warn.LimitReached, "the @import of %s was ignored: more than %d imports or %d levels", target, maxImports, maxImportDepth)
+		c.warn(warn.LimitReached, warn.Approximated, "the @import of %s was ignored: more than %d imports or %d levels", target, maxImports, maxImportDepth)
 		return
 	}
 	sp.imports++
@@ -332,7 +332,9 @@ func (sp *sheetParser) importRule(ctx context.Context, it item, base string, con
 		if sp.opts.FetchCode != nil {
 			code = sp.opts.FetchCode(err)
 		}
-		c.warn(code, "the @import of %s failed: %v", target, err)
+		// An import left out loses styles, never content: the document's
+		// content prints, styled without the sheet.
+		c.warn(code, warn.Approximated, "the @import of %s failed: %v", target, err)
 		return
 	}
 	if len(body) > maxStylesheetBytes {

@@ -346,7 +346,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	}
 	p.setupPages(ctx, resolver)
 	for _, w := range computed.Warnings() {
-		p.warnings = append(p.warnings, typeset.Warning{Code: w.Code, Message: displayURL(w.Message)})
+		p.warnings = append(p.warnings, typeset.Warning{Code: w.Code, Effect: w.Effect, Message: displayURL(w.Message)})
 	}
 	p.warnings = append(p.warnings, c.warnings...)
 	p.warnings = append(p.warnings, fontWarns...)

@@ -65,7 +65,7 @@ func (r *reader) worksheet(name string, sh *sheet.Sheet, index int, printed bool
 	root, err := r.pkg.ParseXML(r.ctx, name, understood)
 	if err != nil {
 		if isMalformed(err) {
-			r.warn(warn.PartMalformed, fmt.Sprintf("sheet %q does not parse: it prints empty: %v", sh.Name, err))
+			r.warn(warn.PartMalformed, warn.Omitted, fmt.Sprintf("sheet %q does not parse: it prints empty: %v", sh.Name, err))
 			r.defaultSetup(sh)
 			return nil
 		}
@@ -147,7 +147,7 @@ func (w *sheetReader) read(root *ooxml.Element) error {
 		return err
 	}
 	if root.Child(nsMain, "picture") != nil && w.printed {
-		r.warn(warn.ContentUnsupported, "a sheet background picture is left out")
+		r.warn(warn.ContentUnsupported, warn.Omitted, "a sheet background picture is left out")
 	}
 	return nil
 }
@@ -615,7 +615,7 @@ func (r *reader) chartsheet(name string, sh *sheet.Sheet) error {
 	root, err := r.pkg.ParseXML(r.ctx, name, understood)
 	if err != nil {
 		if isMalformed(err) {
-			r.warn(warn.PartMalformed, fmt.Sprintf("sheet %q does not parse: it prints empty: %v", sh.Name, err))
+			r.warn(warn.PartMalformed, warn.Omitted, fmt.Sprintf("sheet %q does not parse: it prints empty: %v", sh.Name, err))
 			r.defaultSetup(sh)
 			return nil
 		}

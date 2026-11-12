@@ -81,7 +81,7 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 		var ok bool
 		label, ok = formatNumber(bu.Format, max(number, 1))
 		if !ok {
-			b.warn(warn.ValueFormatUnsupported, "the number format "+quote(bu.Format)+" is drawn as Arabic numbers with a full stop")
+			b.warn(warn.ValueFormatUnsupported, warn.Approximated, "the number format "+quote(bu.Format)+" is drawn as Arabic numbers with a full stop")
 		}
 		marker.Children = []*layout.Node{{Kind: layout.Text, Style: ms, Text: label}}
 		bw = b.width(label, b.textStyle(&rs, 1))
@@ -89,7 +89,7 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 	case BulletPicture:
 		pic := bu.Picture
 		if pic == nil || (pic.Source == nil && pic.Vector == nil) || !numeric.Positive(pic.Width) || !numeric.Positive(pic.Height) {
-			b.warn(warn.PictureMissing, "a picture bullet has no picture and is left out")
+			b.warn(warn.PictureMissing, warn.Omitted, "a picture bullet has no picture and is left out")
 			return
 		}
 		ps := css.Initial()

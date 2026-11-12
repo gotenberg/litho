@@ -304,7 +304,7 @@ func expandFont(v []token, c *declCtx) ([]entry, bool) {
 		{pFontKerning, wideInitial},
 	}
 	if k, ok := keyword(v); ok && systemFonts[k] {
-		c.warn(warn.CSSUnsupported, "font: the system font %s is not supported and computes to the initial font", k)
+		c.warn(warn.CSSUnsupported, warn.Approximated, "font: the system font %s is not supported and computes to the initial font", k)
 		return out, true
 	}
 	i := 0

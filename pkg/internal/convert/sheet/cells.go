@@ -57,7 +57,7 @@ func (b *builder) format(code string) *numfmt.Format {
 	}
 	f, err := numfmt.Parse(code)
 	if err != nil {
-		b.warn(warn.ValueFormatUnsupported, "the number format "+quote(code)+" is not understood and shows as General")
+		b.warn(warn.ValueFormatUnsupported, warn.Approximated, "the number format "+quote(code)+" is not understood and shows as General")
 		f = numfmt.General
 	}
 	if b.doc.ExcelRules {
@@ -432,7 +432,7 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		}
 		inner.Transform = []css.TransformFunc{{Kind: css.TransformRotate, V: [6]float64{-a}}}
 		para.Style.TextAlign = css.AlignLeft
-		b.warn(warn.ContentUnsupported, "text rotated by other than a quarter turn starts in the cell's corner, an approximation of Calc's placement")
+		b.warn(warn.ContentUnsupported, warn.Approximated, "text rotated by other than a quarter turn starts in the cell's corner, an approximation of Calc's placement")
 	}
 	clip := b.style()
 	clip.Position = css.Absolute

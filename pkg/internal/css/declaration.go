@@ -14,6 +14,9 @@ type Warning struct {
 	// [warn.CSSInvalid], [warn.ResourceFailed] for an @import that does not
 	// load, or [warn.LimitReached] past a cap of the cascade.
 	Code warn.Code
+	// Effect says what the construct's fault cost the output: content
+	// left out, or content printed differently.
+	Effect warn.Effect
 	// Message names the construct and says what was done instead.
 	Message string
 }
@@ -23,6 +26,8 @@ type warnings struct {
 	list    []Warning
 	seen    map[Warning]bool
 	dropped int
+	// lost records that a dropped warning reported omitted content.
+	lost bool
 }
 
 func (w *warnings) add(x Warning) {
@@ -34,6 +39,7 @@ func (w *warnings) add(x Warning) {
 	}
 	if len(w.list) >= maxWarnings {
 		w.dropped++
+		w.lost = w.lost || x.Effect == warn.Omitted
 		return
 	}
 	w.seen[x] = true
@@ -41,11 +47,16 @@ func (w *warnings) add(x Warning) {
 }
 
 // result returns the warnings in the order they were first seen, with a
-// last one counting the dropped ones.
+// last one counting the dropped ones. That one stands for them all: its
+// effect is omitted content when any of them reported some.
 func (w *warnings) result() []Warning {
 	out := append([]Warning(nil), w.list...)
 	if w.dropped > 0 {
-		out = append(out, Warning{Code: warn.LimitReached, Message: fmt.Sprintf("%d more CSS warnings were dropped", w.dropped)})
+		effect := warn.Approximated
+		if w.lost {
+			effect = warn.Omitted
+		}
+		out = append(out, Warning{Code: warn.LimitReached, Effect: effect, Message: fmt.Sprintf("%d more CSS warnings were dropped", w.dropped)})
 	}
 	return out
 }
@@ -103,11 +114,11 @@ type declCtx struct {
 	quiet bool
 }
 
-func (c *declCtx) warn(code warn.Code, format string, args ...any) {
+func (c *declCtx) warn(code warn.Code, effect warn.Effect, format string, args ...any) {
 	if c.quiet {
 		return
 	}
-	c.warns = append(c.warns, Warning{Code: code, Message: fmt.Sprintf(format, args...)})
+	c.warns = append(c.warns, Warning{Code: code, Effect: effect, Message: fmt.Sprintf(format, args...)})
 }
 
 // silentProperties are properties with no effect on a static paged
@@ -158,7 +169,7 @@ func (c *declCtx) declare(name string, value []token, important bool) Declaratio
 	d := Declaration{Property: name, Important: important}
 	if !knownProperty(name) {
 		if !strings.HasPrefix(name, "-") && !silentProperties[name] {
-			c.warn(warn.CSSUnsupported, "property %q is not supported and was ignored", name)
+			c.warn(warn.CSSUnsupported, warn.Approximated, "property %q is not supported and was ignored", name)
 		}
 		return d
 	}
@@ -173,9 +184,9 @@ func (c *declCtx) declare(name string, value []token, important bool) Declaratio
 	}
 	if !ok {
 		if mixedCalc(value) {
-			c.warn(warn.CSSInvalid, "%q: a calc() mixing lengths and percentages cannot be computed here and was ignored", name)
+			c.warn(warn.CSSInvalid, warn.Approximated, "%q: a calc() mixing lengths and percentages cannot be computed here and was ignored", name)
 		} else {
-			c.warn(warn.CSSInvalid, "invalid value for %q was ignored", name)
+			c.warn(warn.CSSInvalid, warn.Approximated, "invalid value for %q was ignored", name)
 		}
 		return d
 	}

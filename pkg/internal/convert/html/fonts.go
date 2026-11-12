@@ -147,7 +147,7 @@ func (l *fontLoader) load(ctx context.Context, rule css.FontFace) *text.Face {
 func (l *fontLoader) skip(rule css.FontFace, reasons []string) {
 	msg := fmt.Sprintf("the @font-face rule for %q loaded no face (%s); its family falls back to the next one", rule.Family, strings.Join(reasons, "; "))
 	l.logger.Debug("html: skipping an @font-face rule", slog.String("family", rule.Family), slog.String("reasons", strings.Join(reasons, "; ")))
-	l.warnings = append(l.warnings, typeset.Warning{Code: warn.FontNotLoaded, Message: msg})
+	l.warnings = append(l.warnings, typeset.Warning{Code: warn.FontNotLoaded, Effect: warn.Approximated, Message: msg})
 }
 
 // loadSource loads one src entry: a local() face of the index, or the file

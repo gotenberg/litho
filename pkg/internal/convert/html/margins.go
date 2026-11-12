@@ -289,14 +289,14 @@ func (p *prepared) marginContent(ctx context.Context, info layout.PageInfo, page
 
 // warnMargins records that the page-margin boxes could not be laid out.
 func (p *prepared) warnMargins(err error) {
-	p.warnOnce(fmt.Sprintf("the page-margin boxes were left out: %v", err))
+	p.warnOnce(warn.Omitted, fmt.Sprintf("the page-margin boxes were left out: %v", err))
 }
 
 // warnOnce records a page decoration warning the first time it is met.
-func (p *prepared) warnOnce(msg string) {
+func (p *prepared) warnOnce(effect warn.Effect, msg string) {
 	if !p.pages.seen[msg] {
 		p.pages.seen[msg] = true
-		p.pages.warnings = append(p.pages.warnings, typeset.Warning{Code: warn.PageSetupUnsupported, Message: msg})
+		p.pages.warnings = append(p.pages.warnings, typeset.Warning{Code: warn.PageSetupUnsupported, Effect: effect, Message: msg})
 	}
 }
 

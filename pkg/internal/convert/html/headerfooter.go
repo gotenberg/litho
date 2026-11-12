@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // textDefaultsCSS is chrome://resources/css/text_defaults.css, the first
@@ -199,7 +200,7 @@ func (p *prepared) decorate(ctx context.Context, pg *typeset.Page, k, total int)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		p.warnOnce(fmt.Sprintf("the header and footer of page %d were left out: %v", k+1, err))
+		p.warnOnce(warn.Omitted, fmt.Sprintf("the header and footer of page %d were left out: %v", k+1, err))
 		return nil
 	}
 	if t := pg.TrimBox; t != nil && len(frags) > 0 {

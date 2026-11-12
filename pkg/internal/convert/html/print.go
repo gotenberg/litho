@@ -83,7 +83,7 @@ func (s printSetup) fitFactor(boxes ...layout.PageBox) (printSetup, []typeset.Wa
 		return s, nil
 	}
 	limit := maxPageSide / side
-	w := typeset.Warning{Code: warn.PageSetupUnsupported, Message: fmt.Sprintf(
+	w := typeset.Warning{Code: warn.PageSetupUnsupported, Effect: warn.Approximated, Message: fmt.Sprintf(
 		"the page of %v points a side cannot be laid out %.3g times larger, past the PDF page limit; it is laid out %.3g times larger", side, s.factor, limit)}
 	s.factor = limit
 	return s, []typeset.Warning{w}

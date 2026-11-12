@@ -125,7 +125,7 @@ func (b *builder) applyCounters(n *dom.Node, st *css.Style) int {
 	c := &b.counters
 	inst := func(name string, v int, rev bool) {
 		if !c.instantiate(name, clampCounter(v), rev) {
-			b.warnOnce(warn.LimitReached, "counters", fmt.Sprintf("more than %d counters in scope; the others were left out", maxCounters))
+			b.warnOnce(warn.LimitReached, warn.Approximated, "counters", fmt.Sprintf("more than %d counters in scope; the others were left out", maxCounters))
 		}
 	}
 	for _, op := range st.CounterReset {
@@ -380,7 +380,7 @@ func (b *builder) generate(ctx context.Context, n *dom.Node, ps *css.Style) []*l
 	}
 	flush()
 	if cut {
-		b.warnOnce(warn.LimitReached, "text", fmt.Sprintf("generated content past %d bytes was left out", maxGeneratedBytes))
+		b.warnOnce(warn.LimitReached, warn.Omitted, "text", fmt.Sprintf("generated content past %d bytes was left out", maxGeneratedBytes))
 	}
 	return out
 }
@@ -394,7 +394,7 @@ func (b *builder) contentImage(ctx context.Context, u string) *layout.Picture {
 	pic, err := b.res.picture(ctx, u)
 	if err != nil {
 		if ctx.Err() == nil {
-			b.warnings = append(b.warnings, typeset.Warning{Code: warningCode(err), Message: fmt.Sprintf(
+			b.warnings = append(b.warnings, typeset.Warning{Code: warningCode(err), Effect: warn.Omitted, Message: fmt.Sprintf(
 				"the generated image %s was left out: %v", displayURL(u), err)})
 		}
 		return nil

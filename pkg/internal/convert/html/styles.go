@@ -69,7 +69,7 @@ func (c *collector) userSheet(ctx context.Context, n int, body string) *css.Styl
 		if ctx.Err() != nil {
 			return nil
 		}
-		c.warn(warningCode(err), fmt.Sprintf("the %s was left out: %v", name, err))
+		c.warn(warningCode(err), warn.Approximated, fmt.Sprintf("the %s was left out: %v", name, err))
 		return nil
 	}
 	// The query keeps its key distinct from the document's own URL and
@@ -128,7 +128,7 @@ func (c *collector) linkElement(ctx context.Context, n *dom.Node) *css.Styleshee
 		if ctx.Err() != nil {
 			return nil
 		}
-		c.warn(warningCode(err), fmt.Sprintf("the stylesheet %s was left out: %v", displayURL(strings.TrimSpace(href)), err))
+		c.warn(warningCode(err), warn.Approximated, fmt.Sprintf("the stylesheet %s was left out: %v", displayURL(strings.TrimSpace(href)), err))
 		return nil
 	}
 	media, _ := attr(n, "media")
@@ -167,7 +167,7 @@ func (c *collector) parse(ctx context.Context, body []byte, u, media, name strin
 			if name == "" {
 				name = "stylesheet " + displayURL(u)
 			}
-			c.warn(warn.LimitReached, fmt.Sprintf("the %s was cut short: %v", name, displayURL(err.Error())))
+			c.warn(warn.LimitReached, warn.Approximated, fmt.Sprintf("the %s was cut short: %v", name, displayURL(err.Error())))
 			return s
 		}
 		// The only other error is ctx's, which the conversion returns at
@@ -177,9 +177,9 @@ func (c *collector) parse(ctx context.Context, body []byte, u, media, name strin
 	return s
 }
 
-// warn records a warning.
-func (c *collector) warn(code warn.Code, msg string) {
-	c.warnings = append(c.warnings, typeset.Warning{Code: code, Message: msg})
+// warn records a warning of the given effect.
+func (c *collector) warn(code warn.Code, effect warn.Effect, msg string) {
+	c.warnings = append(c.warnings, typeset.Warning{Code: code, Effect: effect, Message: msg})
 }
 
 // cssString escapes s for a double-quoted CSS string (CSS Syntax 3, 4.3.5).

@@ -112,7 +112,7 @@ func (r *renderer) geometry(n *html.Node, st *style) []typeset.PathOp {
 		ops, ok := parsePath(attrOf(n, "d"))
 		if !ok {
 			if len(ops) >= maxPathSegments {
-				r.d.warn(warn.LimitReached, fmt.Sprintf("a path of more than %d segments was cut short", maxPathSegments))
+				r.d.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("a path of more than %d segments was cut short", maxPathSegments))
 			}
 		}
 		return trimTrailingMove(ops)

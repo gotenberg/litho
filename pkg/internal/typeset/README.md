@@ -94,7 +94,11 @@ encodes:
   code named by what happened to which kind of construct, whichever
   converter met it, and the message names the construct. A code cannot be
   made outside `warn`, so no converter reports one outside the set, and
-  `pkg/pdf` mirrors every code as a public constant.
+  `pkg/pdf` mirrors every code as a public constant. Each warning also
+  carries an effect of `warn`, stated where it is made: content of the
+  source left out, or content printed differently. A helper that makes
+  warnings takes the effect from its caller, and a test reads the source
+  so that no warning literal leaves it out.
 
 ## The backend
 

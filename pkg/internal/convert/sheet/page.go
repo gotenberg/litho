@@ -96,7 +96,7 @@ func (b *pageBuilder) build() ([]typeset.Fragment, []typeset.Link, *typeset.Stru
 		table.Children = append(table.Children, b.headings(regs)...)
 	}
 	if b.cellBudget <= 0 {
-		b.warn(warn.LimitReached, fmt.Sprintf("a page of sheet %s holds more than %d cells; the rest are left out", quote(b.g.sh.Name), maxPageCells))
+		b.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("a page of sheet %s holds more than %d cells; the rest are left out", quote(b.g.sh.Name), maxPageCells))
 	}
 	res, err := layout.Layout(b.ctx, table, b.fonts, layout.Options{
 		Page:     layout.PageBox{Width: max(b.dataW, 1), Height: max(b.dataH, 1)},

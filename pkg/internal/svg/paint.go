@@ -75,7 +75,7 @@ func (r *renderer) flatPaint(p paint, st *style, box bbox, what string) (typeset
 		if sh == nil {
 			return typeset.Color{}, false
 		}
-		r.d.warn(warn.ContentUnsupported, fmt.Sprintf("a gradient %s is drawn in the gradient's middle colour", what))
+		r.d.warn(warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("a gradient %s is drawn in the gradient's middle colour", what))
 		return middleColor(sh.Stops), true
 	}
 	if fb == nil {
@@ -126,7 +126,7 @@ func (r *renderer) resolveGradient(id string) (*gradient, bool) {
 	el := r.d.ids[id]
 	if el == nil || el.Data != "linearGradient" && el.Data != "radialGradient" {
 		if el != nil && el.Data == "pattern" {
-			r.d.warn(warn.ContentUnsupported, "patterns are not drawn; their fallback colour is")
+			r.d.warn(warn.ContentUnsupported, warn.Approximated, "patterns are not drawn; their fallback colour is")
 		}
 		return nil, false
 	}
@@ -153,7 +153,7 @@ func (r *renderer) resolveGradient(id string) (*gradient, bool) {
 				for c := cur.FirstChild; c != nil; c = c.NextSibling {
 					if c.Type == html.ElementNode && c.Namespace == "svg" && c.Data == "stop" {
 						if len(g.stops) >= maxGradientStops {
-							r.d.warn(warn.LimitReached, fmt.Sprintf("gradient stops past %d were left out", maxGradientStops))
+							r.d.warn(warn.LimitReached, warn.Approximated, fmt.Sprintf("gradient stops past %d were left out", maxGradientStops))
 							break
 						}
 						g.stops = append(g.stops, c)
@@ -226,7 +226,7 @@ func (r *renderer) shading(p paint, st *style, box bbox) (*typeset.Shading, *pai
 		return l.resolve(lc, a)
 	}
 	if sm := g.attrs["spreadMethod"]; sm == "reflect" || sm == "repeat" {
-		r.d.warn(warn.ContentUnsupported, "gradient spreadMethod "+sm+" is drawn as pad")
+		r.d.warn(warn.ContentUnsupported, warn.Approximated, "gradient spreadMethod "+sm+" is drawn as pad")
 	}
 	sh := &typeset.Shading{Stops: stops, Transform: m}
 	last := stops[len(stops)-1].Color
@@ -466,7 +466,7 @@ func (r *renderer) clipPath(n *html.Node, id string, box *bbox, seen []*html.Nod
 		}
 	}
 	if len(regions) > maxClipRegions {
-		r.d.warn(warn.LimitReached, fmt.Sprintf("a clip path uniting more than %d regions clips to the first %d", maxClipRegions, maxClipRegions))
+		r.d.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("a clip path uniting more than %d regions clips to the first %d", maxClipRegions, maxClipRegions))
 		regions = regions[:maxClipRegions]
 	}
 	return regions, false

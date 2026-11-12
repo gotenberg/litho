@@ -653,7 +653,7 @@ func (e *engine) buildTable(w, t *box, raw []*box) {
 // overlap an earlier cell stops short of it.
 func (e *engine) placeCells(td *tableData, head, foot *box) {
 	tooLarge := func(what string) {
-		e.warnOnce(warn.LimitReached, fmt.Sprintf("a table with more than %s: the rest left out", what), -1)
+		e.warnOnce(warn.LimitReached, warn.Omitted, fmt.Sprintf("a table with more than %s: the rest left out", what), -1)
 	}
 	for _, g := range td.groups {
 		kept := g.kids[:0]

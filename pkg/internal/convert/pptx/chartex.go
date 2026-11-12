@@ -32,7 +32,7 @@ func (r *reader) chartExOf(part string, data *ooxml.Element) *chart.Chart {
 	id, _ := data.Child(ooxml.NSChartEx, "chart").AttrNS(ooxml.NSR, "id")
 	rel, ok := r.pkg.RelationshipByID(r.ctx, part, id)
 	if !ok || rel.External || !r.pkg.Has(rel.Target) {
-		r.warn(warn.ContentUnsupported, "an Office 2016 chart (funnel, waterfall, sunburst, treemap, histogram, box and whisker) without its chart part is left out")
+		r.warn(warn.ContentUnsupported, warn.Omitted, "an Office 2016 chart (funnel, waterfall, sunburst, treemap, histogram, box and whisker) without its chart part is left out")
 		return nil
 	}
 	ch, err := ooxml.ParseChartEx(r.ctx, r.pkg, rel.Target)
@@ -40,11 +40,11 @@ func (r *reader) chartExOf(part string, data *ooxml.Element) *chart.Chart {
 		if r.stop(err) {
 			return nil
 		}
-		r.warn(warn.ContentUnsupported, fmt.Sprintf("the Office 2016 chart part %q is left out: %v", rel.Target, err))
+		r.warn(warn.ContentUnsupported, warn.Omitted, fmt.Sprintf("the Office 2016 chart part %q is left out: %v", rel.Target, err))
 		return nil
 	}
 	for _, w := range ch.Warnings {
-		r.warn(w.Code, w.Message)
+		r.warn(w.Code, w.Effect, w.Message)
 	}
 	return ch
 }

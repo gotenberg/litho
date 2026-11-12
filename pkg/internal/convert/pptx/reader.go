@@ -132,13 +132,14 @@ type reader struct {
 	err error
 }
 
-// warn records a warning, once per message.
-func (r *reader) warn(code warn.Code, msg string) {
-	if r.warned[msg] {
+// warn records a warning, once per effect and message.
+func (r *reader) warn(code warn.Code, effect warn.Effect, msg string) {
+	k := effect.String() + "\x00" + msg
+	if r.warned[k] {
 		return
 	}
-	r.warned[msg] = true
-	r.warnings = append(r.warnings, typeset.Warning{Code: code, Message: msg})
+	r.warned[k] = true
+	r.warnings = append(r.warnings, typeset.Warning{Code: code, Effect: effect, Message: msg})
 }
 
 // stop records err as the reader's error when it ends the conversion (see
@@ -224,13 +225,13 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts b
 			return nil, nil, err
 		}
 		if len(doc.Slides) >= maxSlides {
-			r.warn(warn.LimitReached, fmt.Sprintf("the presentation holds more than %d slides: the rest are left out", maxSlides))
+			r.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("the presentation holds more than %d slides: the rest are left out", maxSlides))
 			break
 		}
 		rid, _ := id.AttrNS(ooxml.NSR, "id")
 		rel, ok := pkg.RelationshipByID(ctx, main, rid)
 		if !ok || rel.External || rel.Type != relSlide || !pkg.Has(rel.Target) {
-			r.warn(warn.PartMalformed, fmt.Sprintf("slide %s is missing and left out", rid))
+			r.warn(warn.PartMalformed, warn.Omitted, fmt.Sprintf("slide %s is missing and left out", rid))
 			continue
 		}
 		s, err := r.slide(len(doc.Slides)+1, rel.Target)
@@ -239,7 +240,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts b
 		}
 		if err != nil {
 			if isMalformed(err) {
-				r.warn(warn.PartMalformed, fmt.Sprintf("slide %s does not parse and is left out: %v", rel.Target, err))
+				r.warn(warn.PartMalformed, warn.Omitted, fmt.Sprintf("slide %s does not parse and is left out: %v", rel.Target, err))
 				continue
 			}
 			return nil, nil, err

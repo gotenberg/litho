@@ -138,7 +138,7 @@ func parseBoxShadow(v []token, c *declCtx) (any, bool) {
 	}
 	layers := splitCommas(v)
 	if len(layers) > maxShadows {
-		c.warn(warn.CSSUnsupported, "box-shadow: only the first %d shadows are drawn", maxShadows)
+		c.warn(warn.CSSUnsupported, warn.Approximated, "box-shadow: only the first %d shadows are drawn", maxShadows)
 		layers = layers[:maxShadows]
 	}
 	out := make([]shadowSpec, 0, len(layers))

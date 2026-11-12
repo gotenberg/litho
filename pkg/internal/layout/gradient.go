@@ -197,7 +197,7 @@ func (e *engine) colorStops(g *css.Gradient, length, from, to float64, ray bool,
 		}
 		kmin, kmax := math.Floor((from-p0)/period), math.Ceil((to-p0)/period)
 		if n := (kmax - kmin + 1) * float64(len(ps)); math.IsNaN(n) || n > maxGradientStops/2 {
-			e.warnOnce(warn.LimitReached, fmt.Sprintf("a repeating gradient of more than %d stops was painted with its average colour", maxGradientStops), y)
+			e.warnOnce(warn.LimitReached, warn.Approximated, fmt.Sprintf("a repeating gradient of more than %d stops was painted with its average colour", maxGradientStops), y)
 			return nil, 0, 0, average(ps), false
 		}
 		for k := kmin; k <= kmax; k++ {
@@ -253,7 +253,7 @@ func (e *engine) colorStops(g *css.Gradient, length, from, to float64, ray bool,
 		splits = 1
 	}
 	if len(stops) > maxGradientStops || len(stops) < 2 {
-		e.warnOnce(warn.LimitReached, fmt.Sprintf("a gradient of more than %d stops was painted with its average colour", maxGradientStops), y)
+		e.warnOnce(warn.LimitReached, warn.Approximated, fmt.Sprintf("a gradient of more than %d stops was painted with its average colour", maxGradientStops), y)
 		return nil, 0, 0, average(ps), false
 	}
 	stops[0].Offset, stops[len(stops)-1].Offset = 0, 1

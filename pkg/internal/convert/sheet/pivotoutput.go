@@ -591,7 +591,7 @@ func (b *builder) applyPivots(doc *Document) (*Document, error) {
 				return nil, err
 			}
 			if !ok {
-				b.warn(warn.ContentUnsupported, fmt.Sprintf("pivot table %s: its output is printed as the file saved it", quote(p.Name)))
+				b.warn(warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("pivot table %s: its output is printed as the file saved it", quote(p.Name)))
 				continue
 			}
 			if p.Clear != nil {

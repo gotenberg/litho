@@ -48,7 +48,7 @@ func (p *painter) textClip(b *box) *typeset.Path {
 		for _, g := range t.Glyphs {
 			if glyphs == maxClipGlyphs {
 				cut = true
-				p.e.warnOnce(warn.LimitReached, fmt.Sprintf("a background clipped to more than %d glyphs was clipped to the first", maxClipGlyphs), y)
+				p.e.warnOnce(warn.LimitReached, warn.Omitted, fmt.Sprintf("a background clipped to more than %d glyphs was clipped to the first", maxClipGlyphs), y)
 				return
 			}
 			glyphs++

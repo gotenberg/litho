@@ -105,7 +105,7 @@ func (w *sheetReader) pivotTables() error {
 		root, err := r.pkg.ParseXML(r.ctx, rel.Target, understood)
 		if err != nil {
 			if isMalformed(err) {
-				r.warn(warn.PartMalformed, fmt.Sprintf("pivot table %s does not parse: %v", rel.Target, err))
+				r.warn(warn.PartMalformed, warn.Approximated, fmt.Sprintf("pivot table %s does not parse: %v", rel.Target, err))
 				continue
 			}
 			return err
@@ -140,7 +140,7 @@ func (r *reader) pivotCache(name string) (*pivotCache, error) {
 	root, err := r.pkg.ParseXML(r.ctx, name, understood)
 	if err != nil {
 		if isMalformed(err) {
-			r.warn(warn.PartMalformed, fmt.Sprintf("pivot cache %s does not parse: %v", name, err))
+			r.warn(warn.PartMalformed, warn.Approximated, fmt.Sprintf("pivot cache %s does not parse: %v", name, err))
 			r.caches[name] = nil
 			return nil, nil
 		}
@@ -332,7 +332,7 @@ func (w *sheetReader) pivotTable(root *ooxml.Element, cache *pivotCache) (pendin
 		p.Data = append(p.Data, sheet.PivotData{Field: dbIndex[x], Name: cache.fields[x].name, Function: pivotFunction(attr(d, "subtotal")), Caption: decodeXString(attr(d, "name"))})
 	}
 	if unsupported != "" {
-		r.warn(warn.ContentUnsupported, fmt.Sprintf("pivot table %q holds %s: its output prints as the file saved it", name, unsupported))
+		r.warn(warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("pivot table %q holds %s: its output prints as the file saved it", name, unsupported))
 		return pendingPivot{}, false
 	}
 	// Page fields sit above the location, with an empty row between,
@@ -464,7 +464,7 @@ func (r *reader) resolvePivots(doc *sheet.Document) {
 	for _, pp := range r.pivots {
 		idx, rg, ok := r.pivotSource(doc, &pp)
 		if !ok {
-			r.warn(warn.ContentUnsupported, fmt.Sprintf("pivot table %q: its source is not a range of the workbook, its output prints as the file saved it", pp.pivot.Name))
+			r.warn(warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("pivot table %q: its source is not a range of the workbook, its output prints as the file saved it", pp.pivot.Name))
 			continue
 		}
 		p := pp.pivot

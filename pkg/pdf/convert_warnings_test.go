@@ -17,6 +17,31 @@ import (
 func TestConvertWarningCodes_MirrorTheInternalSet(t *testing.T) {
 	t.Parallel()
 
+	var internal []string
+	for _, c := range warn.All() {
+		internal = append(internal, c.String())
+	}
+	mirrors(t, "ConvertWarningCode", internal)
+}
+
+// TestConvertWarningEffects_MirrorTheInternalSet holds the
+// ConvertWarningEffect constants declared in convert_warnings.go equal to
+// the internal effects, one for one, in order and value for value.
+func TestConvertWarningEffects_MirrorTheInternalSet(t *testing.T) {
+	t.Parallel()
+
+	var internal []string
+	for _, e := range warn.Effects() {
+		internal = append(internal, e.String())
+	}
+	mirrors(t, "ConvertWarningEffect", internal)
+}
+
+// mirrors checks that the string constants of type typ declared in
+// convert_warnings.go hold the values internal, in order.
+func mirrors(t *testing.T, typ string, internal []string) {
+	t.Helper()
+
 	f, err := parser.ParseFile(token.NewFileSet(), "convert_warnings.go", nil, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +55,7 @@ func TestConvertWarningCodes_MirrorTheInternalSet(t *testing.T) {
 		}
 		for _, s := range g.Specs {
 			v := s.(*ast.ValueSpec)
-			if id, ok := v.Type.(*ast.Ident); !ok || id.Name != "ConvertWarningCode" {
+			if id, ok := v.Type.(*ast.Ident); !ok || id.Name != typ {
 				continue
 			}
 			for i, name := range v.Names {
@@ -47,13 +72,12 @@ func TestConvertWarningCodes_MirrorTheInternalSet(t *testing.T) {
 		}
 	}
 
-	internal := warn.All()
 	if len(public) != len(internal) {
-		t.Fatalf("%d public codes, %d internal ones", len(public), len(internal))
+		t.Fatalf("%d public %s constants, %d internal ones", len(public), typ, len(internal))
 	}
 	for i, c := range internal {
-		if public[i].value != c.String() {
-			t.Errorf("public code %d, %s, is %q; the internal one is %q", i, public[i].name, public[i].value, c)
+		if public[i].value != c {
+			t.Errorf("public %s %d, %s, is %q; the internal one is %q", typ, i, public[i].name, public[i].value, c)
 		}
 	}
 }

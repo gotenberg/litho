@@ -28,7 +28,7 @@ func imageValue(t token, c *declCtx, prop string) (string, bool) {
 		return u, true
 	}
 	if t.typ == tFunction && unsupportedImages[lower(t.value)] {
-		c.warn(warn.CSSUnsupported, "%s: %s() is not supported and computes to none", prop, lower(t.value))
+		c.warn(warn.CSSUnsupported, warn.Omitted, "%s: %s() is not supported and computes to none", prop, lower(t.value))
 		return "", true
 	}
 	return "", false
@@ -54,7 +54,7 @@ func firstLayer(v []token, c *declCtx, prop string) ([]token, bool) {
 		}
 	}
 	if len(layers) > 1 {
-		c.warn(warn.CSSUnsupported, "%s: only the first of several background layers is drawn", prop)
+		c.warn(warn.CSSUnsupported, warn.Omitted, "%s: only the first of several background layers is drawn", prop)
 	}
 	if len(layers) == 0 {
 		return nil, false
@@ -286,7 +286,7 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 		return nil, false
 	}
 	if len(layers) > 1 {
-		c.warn(warn.CSSUnsupported, "background: only the first of several background layers is drawn")
+		c.warn(warn.CSSUnsupported, warn.Omitted, "background: only the first of several background layers is drawn")
 	}
 	out := []entry{
 		{pBgColor, wideInitial},

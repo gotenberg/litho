@@ -1250,7 +1250,7 @@ func (e *engine) balanceBudget(y float64) bool {
 	if e.balancePasses < maxBalanceLayouts {
 		return true
 	}
-	e.warnOnce(warn.LimitReached, fmt.Sprintf("more than %d layouts to balance columns: later columns keep their unbalanced heights", maxBalanceLayouts), y)
+	e.warnOnce(warn.LimitReached, warn.Approximated, fmt.Sprintf("more than %d layouts to balance columns: later columns keep their unbalanced heights", maxBalanceLayouts), y)
 	return false
 }
 

@@ -442,7 +442,7 @@ func (d *document) attachControls(res *layout.Result) error {
 		return err
 	}
 	if missed > 0 {
-		d.warn(warn.FormFieldOmitted, "a form control that spans pages or shows nothing is printed without its field")
+		d.warn(warn.FormFieldOmitted, warn.Approximated, "a form control that spans pages or shows nothing is printed without its field")
 	}
 	return nil
 }

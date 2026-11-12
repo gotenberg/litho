@@ -313,14 +313,14 @@ func (r *reader) measureNormalFont() {
 	}
 }
 
-// warn records a warning, once per message.
-func (r *reader) warn(code warn.Code, msg string) {
-	key := code.String() + "\x00" + msg
+// warn records a warning, once per effect and message.
+func (r *reader) warn(code warn.Code, effect warn.Effect, msg string) {
+	key := code.String() + "\x00" + effect.String() + "\x00" + msg
 	if r.warned[key] {
 		return
 	}
 	r.warned[key] = true
-	r.warnings = append(r.warnings, typeset.Warning{Code: code, Message: msg})
+	r.warnings = append(r.warnings, typeset.Warning{Code: code, Effect: effect, Message: msg})
 }
 
 // stop records err as the reader's error when it ends the conversion (see

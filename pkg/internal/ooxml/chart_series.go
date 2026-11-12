@@ -24,7 +24,7 @@ func (p *chartReader) group(e *Element) *chart.Group {
 		g.Kind = chart.Pie
 		g.VaryColors = true
 		if e.Local == "ofPieChart" {
-			p.warn(warn.ContentUnsupported, "a pie-of-pie or bar-of-pie chart is drawn as a pie")
+			p.warn(warn.ContentUnsupported, warn.Approximated, "a pie-of-pie or bar-of-pie chart is drawn as a pie")
 		}
 	case "doughnutChart":
 		g.Kind = chart.Doughnut
@@ -38,17 +38,17 @@ func (p *chartReader) group(e *Element) *chart.Group {
 		g.Kind = chart.Radar
 		g.Filled = childVal(e, "radarStyle") == "filled"
 	case "surfaceChart", "surface3DChart":
-		p.warn(warn.ContentUnsupported, "a surface chart is not drawn")
+		p.warn(warn.ContentUnsupported, warn.Omitted, "a surface chart is not drawn")
 		return nil
 	default:
 		return nil
 	}
 	if strings.HasSuffix(e.Local, "3DChart") {
 		g.ThreeD = true
-		p.warn(warn.ContentUnsupported, "a 3D "+g.Kind.String()+" chart is drawn flat")
+		p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D "+g.Kind.String()+" chart is drawn flat")
 	}
 	if e.Local == "stockChart" {
-		p.warn(warn.ContentUnsupported, "a stock chart is drawn as a line chart")
+		p.warn(warn.ContentUnsupported, warn.Approximated, "a stock chart is drawn as a line chart")
 	}
 	switch childVal(e, "grouping") {
 	case "stacked":
@@ -94,7 +94,7 @@ func (p *chartReader) group(e *Element) *chart.Group {
 	}
 	g.Labels = p.labels(e.Child(NSChart, "dLbls"), chart.Labels{})
 	if e.Child(NSChart, "hiLowLines") != nil {
-		p.warn(warn.ContentUnsupported, "a chart's high-low lines are not drawn")
+		p.warn(warn.ContentUnsupported, warn.Omitted, "a chart's high-low lines are not drawn")
 	}
 	scatterLines := true
 	if g.Kind == chart.Scatter {
@@ -110,7 +110,7 @@ func (p *chartReader) group(e *Element) *chart.Group {
 			continue
 		}
 		if len(g.Series) >= chart.MaxSeries {
-			p.warn(warn.LimitReached, "series past the chart's limit are not drawn")
+			p.warn(warn.LimitReached, warn.Omitted, "series past the chart's limit are not drawn")
 			break
 		}
 		s := p.series(se, g, scatterLines, lineMarkers)
@@ -178,7 +178,7 @@ func (p *chartReader) trendline(e *Element) (chart.Trendline, bool) {
 		t.Line = p.stroke(ln, nil)
 	}
 	if boolVal(e, "dispEq", false) || boolVal(e, "dispRSqr", false) {
-		p.warn(warn.ContentUnsupported, "a trendline's equation is not drawn")
+		p.warn(warn.ContentUnsupported, warn.Omitted, "a trendline's equation is not drawn")
 	}
 	return t, true
 }
@@ -525,7 +525,7 @@ func (p *chartReader) data(e *Element, what string) chart.Data {
 	}
 	d := readData(e)
 	if !d.Cached && d.Ref != "" {
-		p.warn(warn.ChartNoCache, "a series' "+what+" have no cached values in the file and are drawn empty")
+		p.warn(warn.ChartNoCache, warn.Omitted, "a series' "+what+" have no cached values in the file and are drawn empty")
 	}
 	return d
 }

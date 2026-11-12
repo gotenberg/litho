@@ -126,7 +126,7 @@ func (g *gridData) placement(e *engine, b *box, items []*box, rep [2]int) *gridP
 			e.fail(fmt.Errorf("placing grid items: %w", err))
 		}
 		if p.overBudget {
-			e.warnOnce(warn.LimitReached, "a grid's auto-placement ran past its work budget: the items left each take a track of their own after the grid", -1)
+			e.warnOnce(warn.LimitReached, warn.Approximated, "a grid's auto-placement ran past its work budget: the items left each take a track of their own after the grid", -1)
 		}
 		g.place = p
 		g.rep = rep

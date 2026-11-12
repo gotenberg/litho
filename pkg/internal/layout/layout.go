@@ -90,7 +90,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 		if w.y >= 0 {
 			page = min(e.pageOf(w.y)+1, len(res.Pages))
 		}
-		res.Warnings = append(res.Warnings, typeset.Warning{Code: w.code, Message: w.msg, Page: page})
+		res.Warnings = append(res.Warnings, typeset.Warning{Code: w.code, Effect: w.effect, Message: w.msg, Page: page})
 		if opts.Logger != nil {
 			opts.Logger.Debug("layout: "+w.msg, slog.String("code", w.code.String()), slog.Int("page", page))
 		}
@@ -301,7 +301,7 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*typeset.StructEle
 			for _, p := range slices.Sorted(mapKeys(sub)) {
 				frags := sub[p]
 				if depth+1 >= maxGroupDepth {
-					e.warnOnce(warn.LimitReached, fmt.Sprintf("opacity and clipping nested deeper than %d levels painted without the inner groups", maxGroupDepth), -1)
+					e.warnOnce(warn.LimitReached, warn.Approximated, fmt.Sprintf("opacity and clipping nested deeper than %d levels painted without the inner groups", maxGroupDepth), -1)
 					out[p] = append(out[p], frags...)
 					continue
 				}
@@ -359,13 +359,13 @@ func groupTransform(it *ditem) typeset.Matrix {
 // the flow (CSS 2.1, 9.6.1). The copies after the first are artifacts.
 func (e *engine) repeat(it *ditem, depth, n int, used map[*typeset.StructElem]bool, out map[int][]typeset.Fragment) {
 	if depth+1 >= maxGroupDepth {
-		e.warnOnce(warn.LimitReached, fmt.Sprintf("opacity and clipping nested deeper than %d levels painted without the inner groups", maxGroupDepth), -1)
+		e.warnOnce(warn.LimitReached, warn.Omitted, fmt.Sprintf("opacity and clipping nested deeper than %d levels painted without the inner groups", maxGroupDepth), -1)
 		return
 	}
 	leaves := countLeaves(it)
 	for p := range n {
 		if e.pageFrags[p]+leaves > maxPageFragments {
-			e.warnOnce(warn.LimitReached, fmt.Sprintf("a page of more than %d fragments was cut short", maxPageFragments), e.pageTop(p))
+			e.warnOnce(warn.LimitReached, warn.Omitted, fmt.Sprintf("a page of more than %d fragments was cut short", maxPageFragments), e.pageTop(p))
 			continue
 		}
 		e.pageFrags[p] += leaves
@@ -452,7 +452,7 @@ func (e *engine) admit(p int) bool { return e.admitN(p, 1) }
 // [maxPageFragments].
 func (e *engine) admitN(p, n int) bool {
 	if e.pageFrags[p]+n > maxPageFragments {
-		e.warnOnce(warn.LimitReached, fmt.Sprintf("a page of more than %d fragments was cut short", maxPageFragments), e.pageTop(p))
+		e.warnOnce(warn.LimitReached, warn.Omitted, fmt.Sprintf("a page of more than %d fragments was cut short", maxPageFragments), e.pageTop(p))
 		return false
 	}
 	e.pageFrags[p] += n
@@ -658,7 +658,9 @@ func (e *engine) resolveLink(pl pendingLink) (typeset.Link, bool) {
 	if id, ok := strings.CutPrefix(href, "#"); ok {
 		d, found := e.anchorsFound[id]
 		if !found || id == "" {
-			e.warnOnce(warn.LinkUnresolved, fmt.Sprintf("link to %q left out: no element has that ID", href), r.Y)
+			// The text prints; the target the link names is not in the
+			// source either, so nothing of the source is missing.
+			e.warnOnce(warn.LinkUnresolved, warn.Approximated, fmt.Sprintf("link to %q left out: no element has that ID", href), r.Y)
 			return typeset.Link{}, false
 		}
 		return typeset.Link{Dest: &d, Parent: pl.lk.elem, Contents: pl.lk.describe()}, true

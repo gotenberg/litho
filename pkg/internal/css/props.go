@@ -407,7 +407,7 @@ func parseDisplay(v []token, c *declCtx) (any, bool) {
 			return d, true
 		}
 		if d, ok := displays3[k]; ok {
-			c.warn(warn.CSSUnsupported, "display: %s is laid out as %s", k, displayName(d))
+			c.warn(warn.CSSUnsupported, warn.Approximated, "display: %s is laid out as %s", k, displayName(d))
 			if flexOrGrid[k] {
 				return laidAs{d: d, webkitBox: k == "-webkit-box" || k == "-webkit-inline-box"}, true
 			}
@@ -1137,13 +1137,13 @@ func parseListStyleType(v []token, c *declCtx) (any, bool) {
 		if lt, ok := listStyleTypes[k]; ok {
 			return lt, true
 		}
-		c.warn(warn.CSSUnsupported, "list-style-type: %s is not supported and computes to decimal", k)
+		c.warn(warn.CSSUnsupported, warn.Approximated, "list-style-type: %s is not supported and computes to decimal", k)
 		return Decimal, true
 	case tString:
 		return listString(t.value), true
 	case tFunction:
 		if eqFold(t.value, "symbols") {
-			c.warn(warn.CSSUnsupported, "list-style-type: symbols() is not supported and computes to disc")
+			c.warn(warn.CSSUnsupported, warn.Approximated, "list-style-type: symbols() is not supported and computes to disc")
 			return Disc, true
 		}
 	}

@@ -71,17 +71,17 @@ func (r *reader) slide(n int, part string) (*slides.Slide, error) {
 // its transition, its animations and its comments.
 func (r *reader) slideWarnings(part string, root *ooxml.Element) {
 	if root.Child(nsP, "transition") != nil {
-		r.warn(warn.ContentUnsupported, "slide transitions do not print")
+		r.warn(warn.ContentUnsupported, warn.Approximated, "slide transitions do not print")
 	}
 	if root.Child(nsP, "timing") != nil {
-		r.warn(warn.ContentUnsupported, "slide animations do not print: shapes show in their final place")
+		r.warn(warn.ContentUnsupported, warn.Approximated, "slide animations do not print: shapes show in their final place")
 	}
 	// A relationships part that does not parse relates nothing: the slide
 	// has no comments to warn of.
 	rels, _ := r.pkg.Relationships(r.ctx, part)
 	for _, rel := range rels {
 		if rel.Type == relComments || strings.HasSuffix(rel.Type, "/relationships/comments") {
-			r.warn(warn.ContentUnsupported, "slide comments do not print")
+			r.warn(warn.ContentUnsupported, warn.Omitted, "slide comments do not print")
 		}
 	}
 }
@@ -148,7 +148,7 @@ func (r *reader) notes(slidePart string) ([]slides.Paragraph, bool, error) {
 	root, err := r.pkg.ParseXML(r.ctx, part, understood)
 	if err != nil {
 		if isMalformed(err) {
-			r.warn(warn.PartMalformed, fmt.Sprintf("the notes %s do not parse and are left out: %v", part, err))
+			r.warn(warn.PartMalformed, warn.Omitted, fmt.Sprintf("the notes %s do not parse and are left out: %v", part, err))
 			return nil, false, nil
 		}
 		return nil, false, err

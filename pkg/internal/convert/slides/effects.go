@@ -369,7 +369,7 @@ func (b *builder) contentEffects(s *Shape, frags []typeset.Fragment, m typeset.M
 		return frags
 	}
 	if s.SoftEdge > 0 {
-		b.warn(warn.ContentUnsupported, "the soft edge of "+quote(s.Name)+" is not drawn")
+		b.warn(warn.ContentUnsupported, warn.Approximated, "the soft edge of "+quote(s.Name)+" is not drawn")
 	}
 	sm := skewedAboutCentre(s.Box, s.Rotation, s.SkewX, s.FlipH, s.FlipV)
 	t := *s
@@ -412,7 +412,7 @@ func (b *builder) paintEffects(s *Shape, own, text []typeset.Fragment, toSlide t
 			return group(back, b.hardShadow(b.ctx, s.Shadow, nil, text, toSlide, typeset.Rect{})), nil
 		}
 		if s.Shadow != nil && s.Shadow.Blur > 0 && len(text) > 0 {
-			b.warn(warn.ContentUnsupported, "the shadow of the text of "+quote(s.Name)+" is not drawn")
+			b.warn(warn.ContentUnsupported, warn.Approximated, "the shadow of the text of "+quote(s.Name)+" is not drawn")
 		}
 		return nil, nil
 	}
@@ -424,7 +424,7 @@ func (b *builder) paintEffects(s *Shape, own, text []typeset.Fragment, toSlide t
 		if img := p.softEdge(b.ctx); img != nil {
 			drawn = []typeset.Fragment{img}
 		} else {
-			b.warn(warn.ContentUnsupported, "the soft edge of "+quote(s.Name)+" is not drawn: its fill is not a single colour")
+			b.warn(warn.ContentUnsupported, warn.Approximated, "the soft edge of "+quote(s.Name)+" is not drawn: its fill is not a single colour")
 		}
 	}
 	var glows []typeset.Fragment
@@ -444,7 +444,7 @@ func (b *builder) paintEffects(s *Shape, own, text []typeset.Fragment, toSlide t
 				top = append(top, img)
 			}
 			if len(text) > 0 {
-				b.warn(warn.ContentUnsupported, "the shadow of the text of "+quote(s.Name)+" is not drawn")
+				b.warn(warn.ContentUnsupported, warn.Approximated, "the shadow of the text of "+quote(s.Name)+" is not drawn")
 			}
 		} else {
 			hard := own

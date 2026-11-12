@@ -213,25 +213,25 @@ func pageDecls(block []token, c *declCtx) []pageDecl {
 		case "size":
 			s, ok := parsePageSize(significant(it.value))
 			if !ok {
-				c.warn(warn.CSSInvalid, "invalid value for @page size was ignored")
+				c.warn(warn.CSSInvalid, warn.Approximated, "invalid value for @page size was ignored")
 				return true
 			}
 			out = append(out, pageDecl{important: it.important, size: &s})
 		case "margin", "margin-top", "margin-right", "margin-bottom", "margin-left":
 			if containsVar(it.value) {
-				c.warn(warn.CSSUnsupported, "@page %s: var() is not supported in page descriptors", name)
+				c.warn(warn.CSSUnsupported, warn.Approximated, "@page %s: var() is not supported in page descriptors", name)
 				return true
 			}
 			e, ok := c.expand(name, it.value)
 			if !ok {
-				c.warn(warn.CSSInvalid, "invalid value for @page %s was ignored", name)
+				c.warn(warn.CSSInvalid, warn.Approximated, "invalid value for @page %s was ignored", name)
 				return true
 			}
 			out = append(out, pageDecl{important: it.important, margins: e})
 		case "width", "height":
 			d, ok := pageAreaSide(significant(it.value))
 			if !ok {
-				c.warn(warn.CSSInvalid, "invalid value for @page %s was ignored", name)
+				c.warn(warn.CSSInvalid, warn.Approximated, "invalid value for @page %s was ignored", name)
 				return true
 			}
 			pd := pageDecl{important: it.important, areaW: &d}
@@ -242,7 +242,7 @@ func pageDecls(block []token, c *declCtx) []pageDecl {
 		case "bleed", "marks":
 			d, ok := pageMarkDecl(name, significant(it.value))
 			if !ok {
-				c.warn(warn.CSSInvalid, "invalid value for @page %s was ignored", name)
+				c.warn(warn.CSSInvalid, warn.Approximated, "invalid value for @page %s was ignored", name)
 				return true
 			}
 			d.important = it.important
@@ -252,12 +252,12 @@ func pageDecls(block []token, c *declCtx) []pageDecl {
 			"background-attachment":
 			// CSS Page 3 gives the page box the background properties.
 			if containsVar(it.value) {
-				c.warn(warn.CSSUnsupported, "@page %s: var() is not supported in page descriptors", name)
+				c.warn(warn.CSSUnsupported, warn.Approximated, "@page %s: var() is not supported in page descriptors", name)
 				return true
 			}
 			e, ok := c.expand(name, it.value)
 			if !ok {
-				c.warn(warn.CSSInvalid, "invalid value for @page %s was ignored", name)
+				c.warn(warn.CSSInvalid, warn.Approximated, "invalid value for @page %s was ignored", name)
 				return true
 			}
 			out = append(out, pageDecl{important: it.important, background: e})

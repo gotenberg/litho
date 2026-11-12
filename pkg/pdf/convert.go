@@ -386,6 +386,10 @@ type ConvertWarning struct {
 	// Code names the kind of construct: one of the Warning constants (see
 	// [ConvertWarningCode]).
 	Code ConvertWarningCode
+	// Effect says what the construct cost the PDF: content left out or
+	// content printed differently (see [ConvertWarningEffect]). It is
+	// never "".
+	Effect ConvertWarningEffect
 	// Message explains the construct and what was done instead.
 	Message string
 	// Page is the 1-based page the construct lands on, 0 when it has none.
@@ -527,7 +531,7 @@ func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ 
 
 	report := &ConvertReport{Pages: stream.Pages()}
 	for _, w := range tail.Warnings {
-		report.Warnings = append(report.Warnings, ConvertWarning{Code: ConvertWarningCode(w.Code.String()), Message: w.Message, Page: w.Page})
+		report.Warnings = append(report.Warnings, ConvertWarning{Code: ConvertWarningCode(w.Code.String()), Effect: ConvertWarningEffect(w.Effect.String()), Message: w.Message, Page: w.Page})
 	}
 	return report, nil
 }

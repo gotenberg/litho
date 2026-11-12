@@ -118,7 +118,7 @@ func (cs *computeState) substitute(l []token, lookup func(string) ([]token, bool
 			}
 			*budget -= len(v)
 			if *budget < 0 || !cs.m.charge(len(v)) {
-				cs.warns.add(Warning{Code: warn.LimitReached, Message: "a var() substitution grew past the size limit and was dropped"})
+				cs.warns.add(Warning{Code: warn.LimitReached, Effect: warn.Approximated, Message: "a var() substitution grew past the size limit and was dropped"})
 				return nil, false
 			}
 			out = append(out, v...)
@@ -133,7 +133,7 @@ func (cs *computeState) substitute(l []token, lookup func(string) ([]token, bool
 		}
 		*budget--
 		if *budget < 0 {
-			cs.warns.add(Warning{Code: warn.LimitReached, Message: "a var() substitution grew past the size limit and was dropped"})
+			cs.warns.add(Warning{Code: warn.LimitReached, Effect: warn.Approximated, Message: "a var() substitution grew past the size limit and was dropped"})
 			return nil, false
 		}
 		out = append(out, t)
@@ -159,7 +159,7 @@ func (cs *computeState) substituteDecl(d *Declaration, vars map[string][]token) 
 		cs.warns.add(w)
 	}
 	if !ok {
-		cs.warns.add(Warning{Code: warn.CSSInvalid, Message: "a var() value for \"" + d.Property + "\" is invalid after substitution; the property computes as unset"})
+		cs.warns.add(Warning{Code: warn.CSSInvalid, Effect: warn.Approximated, Message: "a var() value for \"" + d.Property + "\" is invalid after substitution; the property computes as unset"})
 		return nil
 	}
 	return entries

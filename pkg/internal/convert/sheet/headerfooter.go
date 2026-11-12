@@ -55,7 +55,7 @@ func (b *builder) spanText(s Span, f hfFields) string {
 		}
 		return b.opts.PrintDate.Format("15:04:05")
 	case FieldFile, FieldPath:
-		b.warn(warn.PageSetupUnsupported, "the file name and path fields of headers and footers show nothing: the conversion has no file name")
+		b.warn(warn.PageSetupUnsupported, warn.Omitted, "the file name and path fields of headers and footers show nothing: the conversion has no file name")
 		return ""
 	case FieldNone:
 	}
@@ -187,7 +187,7 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 		MaxPages: maxSubPages,
 	})
 	if err != nil || len(res.Pages) == 0 {
-		b.warn(warn.PageSetupUnsupported, fmt.Sprintf("a header or footer of sheet %s could not be laid out", quote(p.sp.g.sh.Name)))
+		b.warn(warn.PageSetupUnsupported, warn.Omitted, fmt.Sprintf("a header or footer of sheet %s could not be laid out", quote(p.sp.g.sh.Name)))
 		return nil
 	}
 	frags := artifacts(res.Pages[0].Content)

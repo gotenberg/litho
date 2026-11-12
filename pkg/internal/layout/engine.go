@@ -19,9 +19,10 @@ const eps = 1e-6
 // pendingWarning is a warning whose page is known once the layout ends:
 // y is the flow position it lands at, negative for none.
 type pendingWarning struct {
-	code warn.Code
-	msg  string
-	y    float64
+	code   warn.Code
+	effect warn.Effect
+	msg    string
+	y      float64
 }
 
 // engine is the state of one [Layout] call. It is never shared between
@@ -139,29 +140,31 @@ func (e *engine) shapeFailed(err error, what string, y float64) {
 		e.fail(fmt.Errorf("shaping %s: %w", what, err))
 		return
 	}
-	e.warnOnce(warn.TextNotLaidOut, fmt.Sprintf("a %s is not drawn: %v", what, err), y)
+	e.warnOnce(warn.TextNotLaidOut, warn.Omitted, fmt.Sprintf("a %s is not drawn: %v", what, err), y)
 }
 
-// warn records a warning at flow position y, negative for none.
-func (e *engine) warn(code warn.Code, msg string, y float64) {
-	e.warnings = append(e.warnings, pendingWarning{code: code, msg: msg, y: y})
+// warn records a warning of the given effect at flow position y, negative
+// for none.
+func (e *engine) warn(code warn.Code, effect warn.Effect, msg string, y float64) {
+	e.warnings = append(e.warnings, pendingWarning{code: code, effect: effect, msg: msg, y: y})
 }
 
-// warnOnce records a warning the first time its code and message are met.
-func (e *engine) warnOnce(code warn.Code, msg string, y float64) {
-	key := code.String() + "\x00" + msg
+// warnOnce records a warning the first time its code, effect and message
+// are met.
+func (e *engine) warnOnce(code warn.Code, effect warn.Effect, msg string, y float64) {
+	key := code.String() + "\x00" + effect.String() + "\x00" + msg
 	if e.warned[key] {
 		return
 	}
 	e.warned[key] = true
-	e.warn(code, msg, y)
+	e.warn(code, effect, msg, y)
 }
 
 // relayout reports whether one more layout pass fits the budget, counting
 // it, and warns the first time it does not.
 func (e *engine) relayout(y float64) bool {
 	if e.relayouts >= maxRelayouts {
-		e.warnOnce(warn.LimitReached, fmt.Sprintf("more than %d extra layout passes: later boxes keep their first layout", maxRelayouts), y)
+		e.warnOnce(warn.LimitReached, warn.Approximated, fmt.Sprintf("more than %d extra layout passes: later boxes keep their first layout", maxRelayouts), y)
 		return false
 	}
 	e.relayouts++
@@ -317,7 +320,7 @@ func (e *engine) fontSize(st *css.Style) float64 {
 		return 0
 	}
 	if s > maxFontSize {
-		e.warnOnce(warn.LimitReached, fmt.Sprintf("a font size above %d points was laid out at %d points", maxFontSize, maxFontSize), -1)
+		e.warnOnce(warn.LimitReached, warn.Approximated, fmt.Sprintf("a font size above %d points was laid out at %d points", maxFontSize, maxFontSize), -1)
 		return maxFontSize
 	}
 	return s
@@ -447,14 +450,14 @@ func (e *engine) picture(url string, y float64) *Picture {
 	}
 	var pic *Picture
 	if e.opts.Image == nil {
-		e.warn(warn.PictureUnreadable, fmt.Sprintf("image %q left out: no image loader", url), y)
+		e.warn(warn.PictureUnreadable, warn.Omitted, fmt.Sprintf("image %q left out: no image loader", url), y)
 	} else {
 		p, err := e.opts.Image(e.ctx, url)
 		switch {
 		case err != nil:
-			e.warn(warn.PictureUnreadable, fmt.Sprintf("image %q left out: %v", url, err), y)
+			e.warn(warn.PictureUnreadable, warn.Omitted, fmt.Sprintf("image %q left out: %v", url, err), y)
 		case !validPicture(p):
-			e.warn(warn.PictureUnreadable, fmt.Sprintf("image %q left out: no picture or no intrinsic size", url), y)
+			e.warn(warn.PictureUnreadable, warn.Omitted, fmt.Sprintf("image %q left out: no picture or no intrinsic size", url), y)
 		default:
 			pic = p
 		}

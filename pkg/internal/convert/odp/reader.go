@@ -121,13 +121,14 @@ func newReader(ctx context.Context, pkg *odf.Package, fonts *text.Fonts) *reader
 // warn records a warning once per construct: what is a fixed word that
 // names it, or one with the name of the element or style it reports, never
 // other data of the document, which goes in msg. Several constructs share
-// a code, each warned of once.
-func (r *reader) warn(what string, code warn.Code, msg string) {
-	if r.warned[what] {
+// a code, each warned of once per effect.
+func (r *reader) warn(what string, code warn.Code, effect warn.Effect, msg string) {
+	k := what + "\x00" + effect.String()
+	if r.warned[k] {
 		return
 	}
-	r.warned[what] = true
-	r.warnings = append(r.warnings, typeset.Warning{Code: code, Message: msg})
+	r.warned[k] = true
+	r.warnings = append(r.warnings, typeset.Warning{Code: code, Effect: effect, Message: msg})
 }
 
 // chartWarning returns the construct a chart's warning of code is warned
@@ -194,7 +195,7 @@ func (r *reader) document(body *odf.Element) *slides.Document {
 				r.dates[n] = el
 			}
 		case el.Is(odf.NSPresentation, "show"):
-			r.warn("custom-show", warn.ContentUnsupported, "custom slide shows are not applied: every slide prints in document order")
+			r.warn("custom-show", warn.ContentUnsupported, warn.Approximated, "custom slide shows are not applied: every slide prints in document order")
 		}
 	}
 	first := r.masterOf(nil)
@@ -221,7 +222,7 @@ func (r *reader) document(body *odf.Element) *slides.Document {
 	}
 	for i, pg := range pages {
 		if i >= maxSlides {
-			r.warn("too-many-slides", warn.LimitReached, fmt.Sprintf("slides past %d are not read", maxSlides))
+			r.warn("too-many-slides", warn.LimitReached, warn.Omitted, fmt.Sprintf("slides past %d are not read", maxSlides))
 			break
 		}
 		if !r.tick() {

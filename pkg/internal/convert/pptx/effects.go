@@ -60,7 +60,7 @@ func (r *reader) effectList(chain []*ooxml.Element, style *ooxml.Element, fc *fi
 		}
 		if dag := pr.Child(ooxml.NSA, "effectDag"); dag != nil {
 			if len(dag.Children) > 0 {
-				r.warn(warn.ContentUnsupported, "effect containers (effectDag) are not drawn")
+				r.warn(warn.ContentUnsupported, warn.Approximated, "effect containers (effectDag) are not drawn")
 			}
 			return
 		}
@@ -77,7 +77,7 @@ func (r *reader) effectList(chain []*ooxml.Element, style *ooxml.Element, fc *fi
 		}
 		st := fc.sc.theme.effects[idx-1]
 		if dag := st.Child(ooxml.NSA, "effectDag"); dag != nil && len(dag.Children) > 0 {
-			r.warn(warn.ContentUnsupported, "effect containers (effectDag) are not drawn")
+			r.warn(warn.ContentUnsupported, warn.Approximated, "effect containers (effectDag) are not drawn")
 			return
 		}
 		lst = st.Child(ooxml.NSA, "effectLst")
@@ -129,11 +129,11 @@ func (r *reader) effectList(chain []*ooxml.Element, style *ooxml.Element, fc *fi
 				s.SoftEdge = min(rad, maxEffectRadius)
 			}
 		case "innerShdw", "prstShdw":
-			r.warn(warn.ContentUnsupported, "inner and preset shadows are not drawn")
+			r.warn(warn.ContentUnsupported, warn.Approximated, "inner and preset shadows are not drawn")
 		case "reflection":
-			r.warn(warn.ContentUnsupported, "reflections are not drawn")
+			r.warn(warn.ContentUnsupported, warn.Approximated, "reflections are not drawn")
 		case "blur", "fillOverlay":
-			r.warn(warn.ContentUnsupported, "blur and fill overlay effects are not drawn")
+			r.warn(warn.ContentUnsupported, warn.Approximated, "blur and fill overlay effects are not drawn")
 		}
 	}
 }

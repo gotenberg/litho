@@ -57,7 +57,7 @@ func (p *pages) root(part string) *ooxml.Element {
 	r, err := p.d.part(part)
 	if err != nil {
 		if !p.d.stop(err) {
-			p.d.warn(warn.PartMalformed, "a header or footer does not parse and is left out")
+			p.d.warn(warn.PartMalformed, warn.Omitted, "a header or footer does not parse and is left out")
 		}
 		r = nil
 	}

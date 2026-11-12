@@ -1061,7 +1061,7 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 		e.clampToPage(f, clampPage)
 	}
 	if len(bc.floats) >= maxFloats {
-		e.warnOnce(warn.LimitReached, fmt.Sprintf("more than %d floats in one formatting context: later ones do not push content aside", maxFloats), f.y)
+		e.warnOnce(warn.LimitReached, warn.Approximated, fmt.Sprintf("more than %d floats in one formatting context: later ones do not push content aside", maxFloats), f.y)
 		return -1
 	}
 	r := floatRect{

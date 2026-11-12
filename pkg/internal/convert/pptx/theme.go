@@ -59,7 +59,7 @@ func (r *reader) themeOf(master string) *theme {
 			t.bgFills = fs.Child(ooxml.NSA, "bgFillStyleLst").Kids()
 			t.effects = fs.Child(ooxml.NSA, "effectStyleLst").Kids()
 		} else {
-			r.warn(warn.PartMalformed, fmt.Sprintf("theme %s does not parse: the Office theme stands in: %v", name, err))
+			r.warn(warn.PartMalformed, warn.Approximated, fmt.Sprintf("theme %s does not parse: the Office theme stands in: %v", name, err))
 		}
 	}
 	t.part = name

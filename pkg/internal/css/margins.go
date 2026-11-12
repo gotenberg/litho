@@ -174,7 +174,7 @@ func pageCtxDecls(block []token, c *declCtx) ([]Declaration, []marginRule) {
 				b, ok = noteArea, true
 			}
 			if !ok || !it.hasBlock {
-				c.warn(warn.CSSUnsupported, "the @%s rule inside @page is not supported and was ignored", lower(it.name))
+				c.warn(warn.CSSUnsupported, warn.Approximated, "the @%s rule inside @page is not supported and was ignored", lower(it.name))
 				return true
 			}
 			boxes = append(boxes, marginRule{box: b, decls: parseDeclList(it.block, c)})

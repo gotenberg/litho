@@ -84,7 +84,7 @@ func ParseChart(ctx context.Context, pkg *Package, part string) (*chart.Chart, e
 	if rels, err := pkg.Relationships(ctx, part); err == nil {
 		for _, r := range rels {
 			if strings.HasSuffix(r.Type, "/chartUserShapes") {
-				c.Warnings = append(c.Warnings, typeset.Warning{Code: warn.ContentUnsupported, Message: "the shapes drawn over a chart are not drawn"})
+				c.Warnings = append(c.Warnings, typeset.Warning{Code: warn.ContentUnsupported, Effect: warn.Omitted, Message: "the shapes drawn over a chart are not drawn"})
 			}
 		}
 	}
@@ -209,16 +209,17 @@ type chartReader struct {
 	autoLines []*chart.Series
 }
 
-// warn records a warning once per message.
-func (p *chartReader) warn(code warn.Code, msg string) {
+// warn records a warning once per effect and message.
+func (p *chartReader) warn(code warn.Code, effect warn.Effect, msg string) {
 	if p.warned == nil {
 		p.warned = map[string]bool{}
 	}
-	if p.warned[msg] {
+	k := effect.String() + "\x00" + msg
+	if p.warned[k] {
 		return
 	}
-	p.warned[msg] = true
-	p.c.Warnings = append(p.c.Warnings, typeset.Warning{Code: code, Message: msg})
+	p.warned[k] = true
+	p.c.Warnings = append(p.c.Warnings, typeset.Warning{Code: code, Effect: effect, Message: msg})
 }
 
 // childVal returns the val attribute of e's child c:local, "" for none.
@@ -289,7 +290,7 @@ func (p *chartReader) read(root *Element) {
 		}
 	}
 	if !known {
-		p.warn(warn.ContentUnsupported, "the chart has no chart type the reader draws")
+		p.warn(warn.ContentUnsupported, warn.Omitted, "the chart has no chart type the reader draws")
 	}
 	p.categoryPositions()
 	n := 0

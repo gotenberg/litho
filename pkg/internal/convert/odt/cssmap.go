@@ -408,7 +408,7 @@ func (b *builder) tabStops(ts *odf.Element, indent float64) []css.TabStop {
 			// A leader character the contract has no value for fills
 			// with the nearest: dots.
 			stop.Leader = css.TabLeaderDots
-			b.warn("tab-leader", warn.ContentUnsupported, "a tab leader character other than . - _ · is drawn as dots")
+			b.warn("tab-leader", warn.ContentUnsupported, warn.Approximated, "a tab leader character other than . - _ · is drawn as dots")
 		}
 		out = append(out, stop)
 	}
@@ -431,7 +431,7 @@ func (b *builder) backgroundImage(st *css.Style, bi *odf.Element) {
 	href := bi.A(odf.NSXLink, "href")
 	if href == "" {
 		if bi.Child(odf.NSOffice, "binary-data") != nil {
-			b.warn("background-binary", warn.ContentUnsupported, "an inline background picture is not drawn")
+			b.warn("background-binary", warn.ContentUnsupported, warn.Omitted, "an inline background picture is not drawn")
 		}
 		return
 	}

@@ -114,20 +114,20 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 		return nil, nil, err
 	}
 	var warnings []typeset.Warning
-	report := func(code warn.Code, msg string) {
-		warnings = append(warnings, typeset.Warning{Code: code, Message: msg})
+	report := func(code warn.Code, effect warn.Effect, msg string) {
+		warnings = append(warnings, typeset.Warning{Code: code, Effect: effect, Message: msg})
 	}
 	if lim.rows {
-		report(warn.LimitReached, fmt.Sprintf("rows past %d are not read", maxRows))
+		report(warn.LimitReached, warn.Omitted, fmt.Sprintf("rows past %d are not read", maxRows))
 	}
 	if lim.columns {
-		report(warn.LimitReached, fmt.Sprintf("fields past %d in a row are not read", maxColumns))
+		report(warn.LimitReached, warn.Omitted, fmt.Sprintf("fields past %d in a row are not read", maxColumns))
 	}
 	if lim.bytes {
-		report(warn.LimitReached, fmt.Sprintf("fields are cut at %d bytes", maxFieldBytes))
+		report(warn.LimitReached, warn.Omitted, fmt.Sprintf("fields are cut at %d bytes", maxFieldBytes))
 	}
 	if lim.cells {
-		report(warn.LimitReached, fmt.Sprintf("fields past %d are not read", maxCells))
+		report(warn.LimitReached, warn.Omitted, fmt.Sprintf("fields past %d are not read", maxCells))
 	}
 	year := fallbackYear
 	if !printDate.IsZero() {
@@ -196,7 +196,7 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 		}
 	}
 	if undated {
-		report(warn.ContentUnsupported, fmt.Sprintf("a date without a year takes %d, not the current year", fallbackYear))
+		report(warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("a date without a year takes %d, not the current year", fallbackYear))
 	}
 	sh.Columns = cols.widths(ctx, fonts)
 	return &sheet.Document{Default: def, Sheets: []*sheet.Sheet{sh}}, warnings, nil

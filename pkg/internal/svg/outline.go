@@ -178,12 +178,12 @@ func (r *renderer) outlineFace(face *typeset.Face) *outlineFont {
 		return f
 	}
 	if len(r.outlines) >= maxOutlineFaces {
-		r.d.warn(warn.LimitReached, fmt.Sprintf("glyph outlines of more than %d faces are not drawn", maxOutlineFaces))
+		r.d.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("glyph outlines of more than %d faces are not drawn", maxOutlineFaces))
 		return nil
 	}
 	f, err := parseOutlineFont(face.Program)
 	if err != nil {
-		r.d.warn(warn.TextNotLaidOut, fmt.Sprintf("glyph outlines are not drawn: %v", err))
+		r.d.warn(warn.TextNotLaidOut, warn.Omitted, fmt.Sprintf("glyph outlines are not drawn: %v", err))
 		f = nil
 	}
 	if r.outlines == nil {
@@ -205,7 +205,7 @@ func (r *renderer) runOutline(t *typeset.Text) []typeset.PathOp {
 	var out []typeset.PathOp
 	for _, g := range t.Glyphs {
 		if r.glyphsOutlined >= maxOutlineGlyphs {
-			r.d.warn(warn.LimitReached, fmt.Sprintf("the outlines of more than %d glyphs are not drawn", maxOutlineGlyphs))
+			r.d.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("the outlines of more than %d glyphs are not drawn", maxOutlineGlyphs))
 			return out
 		}
 		r.glyphsOutlined++

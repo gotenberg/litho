@@ -222,6 +222,7 @@ func (l *layouter) run(ctx context.Context, data []byte) error {
 			}
 			l.doc.Warnings = append(l.doc.Warnings, typeset.Warning{
 				Code:    warn.LimitReached,
+				Effect:  warn.Approximated,
 				Message: fmt.Sprintf("a source line longer than %d characters was laid out in pieces, each starting a new line", maxParagraphRunes),
 				Page:    l.pages,
 			})
@@ -264,6 +265,7 @@ func (l *layouter) paragraph(ctx context.Context, s string) error {
 		l.emojiWarned = true
 		l.doc.Warnings = append(l.doc.Warnings, typeset.Warning{
 			Code:    warn.MissingGlyph,
+			Effect:  warn.Omitted,
 			Message: "colour emoji fonts are not supported: emoji no text font covers are drawn blank",
 			Page:    first,
 		})
@@ -351,6 +353,7 @@ func (l *layouter) reportMissing(missing []rune, page int) {
 			l.truncated = true
 			l.doc.Warnings = append(l.doc.Warnings, typeset.Warning{
 				Code:    warn.MissingGlyph,
+				Effect:  warn.Omitted,
 				Message: fmt.Sprintf("more than %d characters no font covers; the others are not listed", maxMissingGlyphWarnings),
 				Page:    page,
 			})
@@ -359,6 +362,7 @@ func (l *layouter) reportMissing(missing []rune, page int) {
 		l.seen[r] = true
 		l.doc.Warnings = append(l.doc.Warnings, typeset.Warning{
 			Code:    warn.MissingGlyph,
+			Effect:  warn.Omitted,
 			Message: fmt.Sprintf("no font covers U+%04X; asked for %s, drawn as the .notdef glyph", r, strings.Join(l.opts.FontFamilies, ", ")),
 			Page:    page,
 		})

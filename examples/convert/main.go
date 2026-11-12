@@ -58,8 +58,15 @@ func run(ctx context.Context, args []string) error {
 	}
 
 	fmt.Printf("%d page(s)\n", report.Pages)
+	omitted := 0
 	for _, w := range report.Warnings {
-		fmt.Printf("page %d: %s: %s\n", w.Page, w.Code, w.Message)
+		fmt.Printf("page %d: %s (%s): %s\n", w.Page, w.Code, w.Effect, w.Message)
+		if w.Effect == pdf.EffectOmitted {
+			omitted++
+		}
+	}
+	if omitted > 0 {
+		fmt.Printf("%d warning(s) left content of the source out of the PDF\n", omitted)
 	}
 	return nil
 }

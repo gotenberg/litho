@@ -81,7 +81,7 @@ func (r *reader) table(t *odf.Element, box typeset.Rect, pc *pageCtx) *slides.Ta
 		budget = 0
 	}
 	if budget <= 0 {
-		r.warn("table-cells", warn.LimitReached, fmt.Sprintf("table cells past %d are not read", maxTableCells))
+		r.warn("table-cells", warn.LimitReached, warn.Omitted, fmt.Sprintf("table cells past %d are not read", maxTableCells))
 	}
 	if len(rows) == 0 {
 		return nil

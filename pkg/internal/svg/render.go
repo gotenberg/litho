@@ -115,7 +115,7 @@ func (r *renderer) stop() bool {
 		r.full = true
 	}
 	if r.count > maxElements {
-		r.d.warn(warn.LimitReached, fmt.Sprintf("the drawing instantiates more than %d elements; the rest were left out", maxElements))
+		r.d.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("the drawing instantiates more than %d elements; the rest were left out", maxElements))
 		r.full = true
 	}
 	return r.full
@@ -156,14 +156,14 @@ var unsupported = map[string]string{
 func (r *renderer) element(n *html.Node, parent *style, s sink, depth int) {
 	name := n.Data
 	if msg, ok := unsupported[name]; ok {
-		r.d.warn(warn.ContentUnsupported, msg)
+		r.d.warn(warn.ContentUnsupported, warn.Omitted, msg)
 		return
 	}
 	if !containers[name] && !shapes[name] && name != "use" && name != "text" && name != "image" {
 		return
 	}
 	if depth > maxDepth {
-		r.d.warn(warn.LimitReached, fmt.Sprintf("elements nested deeper than %d were left out", maxDepth))
+		r.d.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("elements nested deeper than %d were left out", maxDepth))
 		return
 	}
 	if r.stop() || !passes(n) {
@@ -212,13 +212,13 @@ func (r *renderer) element(n *html.Node, parent *style, s sink, depth int) {
 // draw: masks, filters and markers (SVG 1.1, 11.6, 14.4 and 15).
 func (r *renderer) unsupportedProps(n *html.Node, st *style) {
 	if st.mask {
-		r.d.warn(warn.ContentUnsupported, "masks are not drawn; the masked content is drawn unmasked")
+		r.d.warn(warn.ContentUnsupported, warn.Approximated, "masks are not drawn; the masked content is drawn unmasked")
 	}
 	if st.filter {
-		r.d.warn(warn.ContentUnsupported, "filter effects are not drawn; the filtered content is drawn unfiltered")
+		r.d.warn(warn.ContentUnsupported, warn.Approximated, "filter effects are not drawn; the filtered content is drawn unfiltered")
 	}
 	if st.marker && (n.Data == "path" || n.Data == "line" || n.Data == "polyline" || n.Data == "polygon") {
-		r.d.warn(warn.ContentUnsupported, "markers are not drawn")
+		r.d.warn(warn.ContentUnsupported, warn.Omitted, "markers are not drawn")
 	}
 }
 
@@ -302,7 +302,7 @@ func (r *renderer) openUnion(s sink, op float64, regions []clipRegion) (sink, fu
 		depth++
 	}
 	if s.nest+depth > maxGroupNesting {
-		r.d.warn(warn.LimitReached, fmt.Sprintf("opacity and clipping nested deeper than %d levels are approximated", maxGroupNesting))
+		r.d.warn(warn.LimitReached, warn.Approximated, fmt.Sprintf("opacity and clipping nested deeper than %d levels are approximated", maxGroupNesting))
 		return s, nil, false
 	}
 	c := &container{}
@@ -338,7 +338,7 @@ func (r *renderer) openUnion(s sink, op float64, regions []clipRegion) (sink, fu
 // with a warning.
 func (r *renderer) openGroup(s sink, op float64, clip *typeset.Path) (sink, func()) {
 	if s.nest >= maxGroupNesting {
-		r.d.warn(warn.LimitReached, fmt.Sprintf("opacity and clipping nested deeper than %d levels are approximated", maxGroupNesting))
+		r.d.warn(warn.LimitReached, warn.Approximated, fmt.Sprintf("opacity and clipping nested deeper than %d levels are approximated", maxGroupNesting))
 		s.alpha *= op
 		return s, func() {}
 	}
@@ -360,7 +360,7 @@ func (r *renderer) openGroup(s sink, op float64, clip *typeset.Path) (sink, func
 // [transformLeaf]), else under a group for that transform.
 func (r *renderer) emit(s sink, f typeset.Fragment) {
 	if r.frags >= maxFragments {
-		r.d.warn(warn.LimitReached, fmt.Sprintf("the drawing produced more than %d fragments; the rest were left out", maxFragments))
+		r.d.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("the drawing produced more than %d fragments; the rest were left out", maxFragments))
 		r.full = true
 		return
 	}
@@ -543,7 +543,7 @@ func (r *renderer) use(n *html.Node, st *style, s sink, depth int) {
 	}
 	r.uses++
 	if r.uses > maxUseCount || len(r.active) >= maxUseDepth {
-		r.d.warn(warn.LimitReached, fmt.Sprintf("use elements past %d, or chained deeper than %d, were left out", maxUseCount, maxUseDepth))
+		r.d.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("use elements past %d, or chained deeper than %d, were left out", maxUseCount, maxUseDepth))
 		return
 	}
 	r.active[target] = true

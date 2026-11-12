@@ -186,7 +186,7 @@ func (p *painter) blurred(shape []typeset.PathOp, area typeset.Rect, blur float6
 		return nil
 	}
 	if p.shadowPixels+w*h > maxShadowBudget {
-		p.e.warnOnce(warn.LimitReached, fmt.Sprintf("blurred shadows past %d raster pixels drawn sharp", maxShadowBudget), y)
+		p.e.warnOnce(warn.LimitReached, warn.Approximated, fmt.Sprintf("blurred shadows past %d raster pixels drawn sharp", maxShadowBudget), y)
 		return nil
 	}
 	p.shadowPixels += w * h

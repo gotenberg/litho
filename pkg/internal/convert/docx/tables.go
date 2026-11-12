@@ -477,7 +477,7 @@ func rowCells(r *ooxml.Element, depth int) []*ooxml.Element {
 // conditional formatting applied per cell (17.7.6).
 func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	if depth > maxNesting {
-		d.warn(warn.LimitReached, "a table nested too deep is left out")
+		d.warn(warn.LimitReached, warn.Omitted, "a table nested too deep is left out")
 		return nil
 	}
 	direct := d.parseTableProps(t.Child(w, "tblPr"))

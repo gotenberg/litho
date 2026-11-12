@@ -118,7 +118,7 @@ func parseFontFace(block []token, c *declCtx) (FontFace, bool) {
 			// 4.9).
 		default:
 			if ignoredFaceDescriptors[name] {
-				c.warn(warn.CSSUnsupported, "the @font-face descriptor %q is not supported and was ignored", name)
+				c.warn(warn.CSSUnsupported, warn.Approximated, "the @font-face descriptor %q is not supported and was ignored", name)
 			}
 		}
 		return true
