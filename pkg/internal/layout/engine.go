@@ -305,9 +305,9 @@ func (e *engine) fontSize(st *css.Style) float64 {
 	if s <= 0 {
 		return 0
 	}
-	if s > 1000 {
-		e.warnOnce(codeFontSize, "a font size above 1000 points was laid out at 1000 points", -1)
-		return 1000
+	if s > maxFontSize {
+		e.warnOnce(codeFontSize, fmt.Sprintf("a font size above %d points was laid out at %d points", maxFontSize, maxFontSize), -1)
+		return maxFontSize
 	}
 	return s
 }
@@ -319,7 +319,7 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 		if d.Kind != css.Points {
 			return 0
 		}
-		return min(max(clamp(d.Value), -1000), 1000)
+		return min(max(clamp(d.Value), -maxSpacing), maxSpacing)
 	}
 	size := e.fontSize(st)
 	if size <= 0 {
@@ -334,7 +334,7 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 		Weight:            st.FontWeight,
 		Italic:            st.FontStyle == css.FontItalic || oblique != 0,
 		Oblique:           oblique,
-		Stretch:           min(max(st.FontStretch, 0), 1000),
+		Stretch:           min(max(st.FontStretch, 0), maxFontStretch),
 		NoSyntheticBold:   st.NoSynthesizeWeight,
 		NoSyntheticItalic: st.NoSynthesizeStyle,
 		NoSpacingTrim:     st.NoSpacingTrim,

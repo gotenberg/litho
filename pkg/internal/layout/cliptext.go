@@ -17,6 +17,11 @@ import (
 // glyphs, a page of text a few thousand.
 const maxClipGlyphs = 20_000
 
+// maxClipDepth bounds the nesting of the boxes [painter.textClip] walks for
+// the glyphs of one clip. Recursion guard, not spec-mandated: the text a
+// box clips its background to sits a few boxes below it.
+const maxClipDepth = maxGroupDepth * 8
+
 // codeClipText is the warning of a text clip cut short.
 const codeClipText = "background-clip-text"
 
@@ -55,7 +60,7 @@ func (p *painter) textClip(b *box) *compose.Path {
 	}
 	var walk func(c *box, dx, dy float64, depth int)
 	walk = func(c *box, dx, dy float64, depth int) {
-		if depth > maxGroupDepth*8 || c.hidden && c.kind != kindBlock {
+		if depth > maxClipDepth || c.hidden && c.kind != kindBlock {
 			return
 		}
 		for _, l := range c.lines {

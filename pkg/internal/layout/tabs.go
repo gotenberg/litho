@@ -34,7 +34,7 @@ func (e *engine) officeStep(st *css.Style, lang string) float64 {
 		return max(clamp(st.TabSize.Value), 0) * e.spaceWidth(st, lang)
 	case css.Auto, css.Percent, css.None, css.Normal, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch, css.Calc:
 	}
-	return 8 * e.spaceWidth(st, lang)
+	return defaultTabSize * e.spaceWidth(st, lang)
 }
 
 // nextStop returns the stop a tab at offset at goes to in the Office container
@@ -195,11 +195,11 @@ func (e *engine) tabLeader(p *ifcPara, it *lineItem) *compose.Text {
 		return nil
 	}
 	cw := pl.Width
-	twip := math.Floor(cw*20 + 1e-6)
+	twip := math.Floor(cw*twips + 1e-6)
 	if twip < 1 {
 		twip = 1
 	}
-	k := min(math.Floor(it.w*20/twip+1e-6), maxLeaderCopies)
+	k := min(math.Floor(it.w*twips/twip+1e-6), maxLeaderCopies)
 	if k < 1 {
 		return nil
 	}

@@ -109,6 +109,24 @@ const maxGroupDepth = limits.MaxSourceGroupDepth
 // beyond any page.
 const maxLength = 1 << 20
 
+// maxFontSize bounds the font size the engine lays text out at, in
+// points: a larger one is laid out at this one, with a warning. Overflow
+// guard, not spec-mandated: the text stack scales glyph outlines and
+// advances by the size, and 1000 points, 35 centimetres, is taller than a
+// letter page.
+const maxFontSize = 1000
+
+// maxSpacing bounds letter-spacing and word-spacing, in points, either
+// way: a longer one acts as this one. Overflow guard, not spec-mandated:
+// it is added once a character, and 1000 points is wider than any page.
+const maxSpacing = 1000
+
+// maxFontStretch bounds font-stretch, in percent of the normal width: a
+// wider one acts as this one. Overflow guard, not spec-mandated: CSS Fonts
+// 4, 2.3 sets no maximum, and the widest OpenType width class is twice
+// the normal width.
+const maxFontStretch = 1000
+
 // maxPageFragments bounds the fragments, groups included, one page holds:
 // the rest of the page is left out with a warning. It stays below the
 // composition model's bound of a million. Anti-DoS guard, not

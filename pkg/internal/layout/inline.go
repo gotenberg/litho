@@ -275,6 +275,10 @@ func (p *ifcPara) collapsibleSpace(i int) bool {
 	return p.p.Rune(i) == ' ' && collapses(p.wsAt(i)) && p.infos[p.p.RunOf(i)].kind == runText
 }
 
+// defaultTabSize is the initial value of tab-size, in spaces (CSS Text 3,
+// 4.2), which a tab-size of no other kind takes.
+const defaultTabSize = 8
+
 // tabWidth returns the advance of a preserved tab at line offset x: to the
 // next tab stop, a multiple of tab-size (CSS Text 3, 4.2), the next one
 // when closer than half a space. A number of spaces counts the space's
@@ -282,7 +286,7 @@ func (p *ifcPara) collapsibleSpace(i int) bool {
 // already carries.
 func (e *engine) tabWidth(b *box, x float64) float64 {
 	space := e.spaceWidth(b.st, b.lang)
-	step := 8 * space
+	step := defaultTabSize * space
 	switch b.st.TabSize.Kind {
 	case css.Number:
 		step = max(clamp(b.st.TabSize.Value), 0) * space

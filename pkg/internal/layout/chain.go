@@ -25,8 +25,8 @@ const maxChainLinks = 1000
 
 // autoLinkHeight is the height a link without a definite height lays its
 // share of the chain's content out in before it takes the height of what
-// it holds, 200 inches: more than any page.
-const autoLinkHeight = 14400
+// it holds: the tallest page box [Layout] accepts, 200 inches.
+const autoLinkHeight = maxPageSide
 
 // chainEndID marks the end of a chain's content, whose anchor gives the
 // height a link without a definite height holds.

@@ -25,7 +25,7 @@ const maxWrapPasses = 4
 // textMin is the least room, in points, on a side of a box of
 // css.FrameWrapDynamic that takes text: 2 cm, Writer's TEXT_MIN of 1134
 // twips (sw/source/core/text/txtfly.cxx).
-const textMin = 1134.0 / 20
+const textMin = 1134.0 / twips
 
 // wrapSeed is the rectangle a wrapped box took on its page: its border
 // box grown by its wrap gap, relative to the page area's top-left corner,
