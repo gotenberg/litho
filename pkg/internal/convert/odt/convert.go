@@ -65,6 +65,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	}
 	b.changeMarks = marks
 	b.date = opts.PrintDate
+	b.formFields = opts.FormFields
 	b.pages = newPageFlow(b, opts)
 	if lc := odf.Section(pkg.Styles, "styles").Child(odf.NSText, "linenumbering-configuration"); lc.A(odf.NSText, "number-lines") == "true" {
 		b.warn("line-numbering", "line numbers are not drawn")
@@ -324,6 +325,7 @@ func (b *builder) assemble(res *layout.Result, opts office.Options, lang string)
 		return d, d.Page >= 1 && d.Page <= len(res.Pages)
 	}
 	doc := &compose.Document{Metadata: b.metadata(lang), Structure: res.Structure}
+	b.attachControls(res)
 	sink := opts.Sink
 	if sink != nil {
 		sink.Expect(len(res.Pages))

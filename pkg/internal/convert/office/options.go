@@ -101,6 +101,10 @@ type Options struct {
 	// page per printed slide: the slide at the top and its notes below, on
 	// the notes page size. Other documents ignore it.
 	NotesPages bool
+	// FormFields writes the form controls of a text document as
+	// interactive form fields, which a reader fills in; off, the default,
+	// they print as they show. Other documents ignore it.
+	FormFields bool
 	// MaxInputBytes caps the source read, 0 for the converter's default.
 	MaxInputBytes int64
 	// MaxPages caps the pages laid out, 0 for the layout engine's default.

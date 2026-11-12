@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/convert/formfield"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -84,6 +85,10 @@ type builder struct {
 	// L elements [builder.wrapLists] groups the blocks in.
 	listPath map[*layout.Node][]int
 	listNums []compose.ListNumbering
+	// formFields is office.Options FormFields, and controls the form
+	// controls made fields ([builder.fieldControl]).
+	formFields bool
+	controls   []*formfield.Control
 }
 
 // hfFields is the page a header or footer is built for.

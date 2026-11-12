@@ -694,8 +694,11 @@ func (b *builder) drawing(c *odf.Element, depth int) *layout.Node {
 		for i := range st.Padding {
 			st.Padding[i] = css.Pts(0)
 		}
-		b.warn("form-control", "form controls are drawn as their empty boxes")
-		return b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "Form"})
+		n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "Form"})
+		if !b.fieldControl(c, g, n) {
+			b.warn("form-control", "form controls are drawn as their empty boxes")
+		}
+		return n
 	case c.Is(odf.NSDraw, "g"):
 		st := baseStyle()
 		st.Display = css.InlineBlock
