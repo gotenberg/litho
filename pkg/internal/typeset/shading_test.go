@@ -37,7 +37,7 @@ func TestWriteShading_PaintsAxialAndRadial(t *testing.T) {
 		&typeset.Path{Ops: rect(0, 100, 100, 100), Fill: &typeset.Fill{Shading: axial}, Stroke: &typeset.Stroke{Color: typeset.Black, Width: 4}},
 	}}
 	doc := &typeset.Document{Pages: []*typeset.Page{page}}
-	if err := doc.Validate(); err != nil {
+	if err := doc.Validate(t.Context()); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
 	out := write(t, doc)

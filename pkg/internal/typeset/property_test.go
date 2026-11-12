@@ -28,7 +28,7 @@ func TestWriteRandomDocumentsOpen(t *testing.T) {
 			t.Parallel()
 			rng := rand.New(rand.NewSource(seed)) //nolint:gosec // deterministic test data, not security
 			doc := randomDoc(t, rng, font)
-			if err := doc.Validate(); err != nil {
+			if err := doc.Validate(t.Context()); err != nil {
 				t.Fatalf("random document refused: %v", err)
 			}
 			out := write(t, doc)

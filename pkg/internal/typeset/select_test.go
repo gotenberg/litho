@@ -79,7 +79,7 @@ func TestSelectPages_EndsOnAModelValidateRefuses(t *testing.T) {
 
 	doc := &Document{Pages: []*Page{page(), page(), nil}, Structure: &StructElem{Role: "Document"}}
 	SelectPages(doc, []int{1, 3})
-	if err := doc.Validate(); !errors.Is(err, ErrInvalidPage) {
+	if err := doc.Validate(t.Context()); !errors.Is(err, ErrInvalidPage) {
 		t.Errorf("Validate after a selection keeping a nil page = %v, want %v", err, ErrInvalidPage)
 	}
 
@@ -89,7 +89,7 @@ func TestSelectPages_EndsOnAModelValidateRefuses(t *testing.T) {
 	looped.Content = []Fragment{self}
 	doc = &Document{Pages: []*Page{looped, page()}, Structure: &StructElem{Role: "Document"}}
 	SelectPages(doc, []int{1})
-	if err := doc.Validate(); !errors.Is(err, ErrLimitExceeded) {
+	if err := doc.Validate(t.Context()); !errors.Is(err, ErrLimitExceeded) {
 		t.Errorf("Validate after a selection over a group that holds itself = %v, want %v", err, ErrLimitExceeded)
 	}
 	if n := CountGlyphs(looped); n != 0 {
@@ -100,7 +100,7 @@ func TestSelectPages_EndsOnAModelValidateRefuses(t *testing.T) {
 	outline[0].Kids = outline
 	doc = &Document{Pages: []*Page{page(), page()}, Outline: outline, Structure: &StructElem{Role: "Document"}}
 	SelectPages(doc, []int{1})
-	if err := doc.Validate(); !errors.Is(err, ErrNotATree) && !errors.Is(err, ErrLimitExceeded) {
+	if err := doc.Validate(t.Context()); !errors.Is(err, ErrNotATree) && !errors.Is(err, ErrLimitExceeded) {
 		t.Errorf("Validate after a selection over a looping outline = %v, want %v or %v", err, ErrNotATree, ErrLimitExceeded)
 	}
 }

@@ -73,3 +73,7 @@ const maxPageSize = 14400
 // still renders with it. A CSS gradient holds a handful of stops, and a
 // repeating one unrolled over its box a few hundred.
 const maxShadingStops = 1024
+
+// validateCheck is how many fragments, structure elements or outline
+// entries [Document.Validate] checks between two checks of the context.
+const validateCheck = 4096

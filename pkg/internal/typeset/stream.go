@@ -303,7 +303,7 @@ func (s *Stream) keptLinks(p *Page) []Link {
 // writes it.
 func (s *Stream) write(ctx context.Context, n int, p *Page, links []Link) error {
 	if !s.checked {
-		if err := s.v.page(p, links); err != nil {
+		if err := s.v.page(ctx, p, links); err != nil {
 			return fmt.Errorf("page %d: %w", n, err)
 		}
 	}
@@ -377,7 +377,7 @@ func (s *Stream) Close(ctx context.Context, tail *Document, dst io.Writer) error
 	if s.resolve != nil {
 		return s.fail(s.closeWhole(ctx, tail, dst))
 	}
-	dest, err := s.end(tail)
+	dest, err := s.end(ctx, tail)
 	if err != nil {
 		return s.fail(err)
 	}
@@ -397,7 +397,7 @@ func (s *Stream) closeWhole(ctx context.Context, tail *Document, dst io.Writer) 
 	}
 	SelectPages(&doc, pages)
 	tail.Warnings, tail.Structure, tail.Outline = doc.Warnings, doc.Structure, doc.Outline
-	if err := doc.Validate(); err != nil {
+	if err := doc.Validate(ctx); err != nil {
 		return err
 	}
 	s.checked = true
@@ -414,7 +414,7 @@ func (s *Stream) closeWhole(ctx context.Context, tail *Document, dst io.Writer) 
 // end: every element the pages named in the tree, every link's
 // destination on a page written and its element in the tree, the outline.
 // It returns how a link's destination is written.
-func (s *Stream) end(tail *Document) (func(Dest) Dest, error) {
+func (s *Stream) end(ctx context.Context, tail *Document) (func(Dest) Dest, error) {
 	sel := s.sel
 	if sel != nil && sel.next < len(sel.order) {
 		return nil, fmt.Errorf("%w: the selection names page %d of %d handed over", ErrInvalidPage, sel.order[sel.next], s.received)
@@ -465,7 +465,7 @@ func (s *Stream) end(tail *Document) (func(Dest) Dest, error) {
 	if s.checked {
 		return dest, nil
 	}
-	elems, err := structElems(tail.Structure)
+	elems, err := structElems(ctx, tail.Structure)
 	if err != nil {
 		return nil, err
 	}
@@ -484,7 +484,7 @@ func (s *Stream) end(tail *Document) (func(Dest) Dest, error) {
 		}
 	}
 	entries := 0
-	if err := end.outline(tail.Outline, 1, &entries, nil); err != nil {
+	if err := end.outline(ctx, tail.Outline, 1, &entries, nil); err != nil {
 		return nil, fmt.Errorf("outline: %w", err)
 	}
 	return dest, nil
@@ -500,7 +500,10 @@ func (s *Stream) writeFile(ctx context.Context, tail *Document, dst io.Writer, d
 	if err := w.spill(ctx); err != nil {
 		return err
 	}
-	alloc, trailer := w.final(trailer)
+	alloc, trailer, err := w.final(ctx, trailer)
+	if err != nil {
+		return err
+	}
 	if err := writer.WriteRewrite(ctx, dst, writer.RewriteConfig{
 		Version:   string(w.version),
 		Allocator: alloc,

@@ -110,7 +110,7 @@ func runWith(t testing.TB, root *Node, o Options) *Result {
 		t.Fatalf("Layout: %v", err)
 	}
 	doc := document(res)
-	if err := doc.Validate(); err != nil {
+	if err := doc.Validate(t.Context()); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
 	return res

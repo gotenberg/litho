@@ -117,7 +117,7 @@ func TestListMarkers_Image(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := document(res).Validate(); err != nil {
+	if err := document(res).Validate(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	lbl := res.Structure.Kids[0].Kids[0]

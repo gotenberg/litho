@@ -135,7 +135,7 @@ func Write(ctx context.Context, doc *Document, dst io.Writer, opts Options) erro
 	if doc == nil {
 		return fmt.Errorf("%w: nil document", ErrNoPages)
 	}
-	if err := doc.Validate(); err != nil {
+	if err := doc.Validate(ctx); err != nil {
 		return err
 	}
 	s, err := newStream(ctx, opts, doc.Structure != nil, true)
@@ -350,7 +350,11 @@ func (w *docWriter) finish(ctx context.Context, tail *Document, producer string,
 		"Pages": pagesRef,
 	}
 	if len(tail.Outline) > 0 {
-		catalog["Outlines"] = w.outlines(tail.Outline)
+		outlines, err := w.outlines(ctx, tail.Outline)
+		if err != nil {
+			return nil, err
+		}
+		catalog["Outlines"] = outlines
 	}
 	if form := w.finishForm(n); form != nil {
 		catalog["AcroForm"] = form
@@ -407,8 +411,9 @@ func (w *docWriter) finish(ctx context.Context, tail *Document, producer string,
 // final returns the allocator the file is written from and the trailer,
 // every placeholder and every provisional number replaced by the object's
 // number in the file (see [docWriter]). The objects keep their values:
-// only the references they hold change.
-func (w *docWriter) final(trailer ast.PdfDict) (*writer.ObjAllocator, ast.PdfDict) {
+// only the references they hold change. ctx's error stops it every
+// [finalCheck] objects.
+func (w *docWriter) final(ctx context.Context, trailer ast.PdfDict) (*writer.ObjAllocator, ast.PdfDict, error) {
 	n := len(w.heights)
 	reservedCount := 1 + n
 	if w.st != nil {
@@ -431,15 +436,25 @@ func (w *docWriter) final(trailer ast.PdfDict) (*writer.ObjAllocator, ast.PdfDic
 	// Each object leaves the writer's maps as its renumbered copy is made,
 	// so the two sets are never held whole together.
 	out := writer.NewObjAllocator(0)
+	done := 0
 	for _, objs := range []map[int]ast.PdfObject{w.reserved, w.alloc.Pending()} {
 		for num, obj := range objs {
+			if done++; done%finalCheck == 0 {
+				if err := ctx.Err(); err != nil {
+					return nil, nil, err
+				}
+			}
 			out.AllocAt(number(num), relink(obj, number))
 			delete(objs, num)
 		}
 	}
 	t, _ := relink(trailer, number).(ast.PdfDict) // relink returns a dictionary for a dictionary
-	return out, t
+	return out, t, nil
 }
+
+// finalCheck is how many objects [docWriter.final] renumbers between two
+// checks of the context.
+const finalCheck = 4096
 
 // relink returns obj with every indirect reference renumbered by number.
 // A value that holds no reference is returned as it is; a stream keeps its

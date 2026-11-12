@@ -223,18 +223,18 @@ func TestValidateRefusesBadSemantics(t *testing.T) {
 	} {
 		doc, el := semanticDoc(t)
 		mutate(doc, el)
-		if err := doc.Validate(); !errors.Is(err, typeset.ErrInvalidElement) {
+		if err := doc.Validate(t.Context()); !errors.Is(err, typeset.ErrInvalidElement) {
 			t.Errorf("%s: Validate = %v, want ErrInvalidElement", name, err)
 		}
 	}
 	doc, _ := semanticDoc(t)
 	doc.Outline[0].Dest.Elem = &typeset.StructElem{Role: "H1"}
-	if err := doc.Validate(); !errors.Is(err, typeset.ErrInvalidDest) {
+	if err := doc.Validate(t.Context()); !errors.Is(err, typeset.ErrInvalidDest) {
 		t.Errorf("outline to an element outside the tree: Validate = %v, want ErrInvalidDest", err)
 	}
 	doc, _ = semanticDoc(t)
 	doc.Pages[0].Links[0].Dest.Elem = &typeset.StructElem{Role: "H1"}
-	if err := doc.Validate(); !errors.Is(err, typeset.ErrInvalidDest) {
+	if err := doc.Validate(t.Context()); !errors.Is(err, typeset.ErrInvalidDest) {
 		t.Errorf("link to an element outside the tree: Validate = %v, want ErrInvalidDest", err)
 	}
 }
@@ -256,7 +256,7 @@ func TestPruneStructureDropsDanglingDests(t *testing.T) {
 	if doc.Outline[0].Dest.Elem != nil {
 		t.Error("outline destination keeps a pruned element")
 	}
-	if err := doc.Validate(); err != nil {
+	if err := doc.Validate(t.Context()); err != nil {
 		t.Errorf("Validate after pruning: %v", err)
 	}
 }

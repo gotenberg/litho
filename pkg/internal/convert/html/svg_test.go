@@ -21,7 +21,7 @@ func svgPage(t *testing.T, src string, fsys fstest.MapFS) *typeset.Document {
 	if err != nil {
 		t.Fatalf("Convert: %v", err)
 	}
-	if err := doc.Validate(); err != nil {
+	if err := doc.Validate(t.Context()); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
 	return doc

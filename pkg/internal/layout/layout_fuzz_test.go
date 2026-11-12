@@ -333,7 +333,7 @@ func FuzzLayout(f *testing.F) {
 			}
 			t.Fatalf("Layout: %v", err)
 		}
-		if err := document(res).Validate(); err != nil {
+		if err := document(res).Validate(t.Context()); err != nil {
 			t.Fatalf("Validate: %v", err)
 		}
 	})

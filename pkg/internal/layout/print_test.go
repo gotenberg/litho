@@ -70,7 +70,7 @@ func TestFitFirstPage_TrimsToContent(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := document(res).Validate(); err != nil {
+			if err := document(res).Validate(t.Context()); err != nil {
 				t.Fatal(err)
 			}
 			if got := res.Pages[0].Height; !near(got, tt.want) {

@@ -25,7 +25,7 @@ func FuzzParse(f *testing.F) {
 		_ = d.Size()
 		frags := d.Draw(context.Background(), typeset.Rect{X: 1, Y: 2, Width: 30, Height: 40})
 		doc := &typeset.Document{Pages: []*typeset.Page{{Width: 50, Height: 50, Content: frags}}}
-		if err := doc.Validate(); err != nil {
+		if err := doc.Validate(t.Context()); err != nil {
 			t.Fatalf("invalid drawing: %v", err)
 		}
 	})

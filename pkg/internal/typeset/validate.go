@@ -1,6 +1,7 @@
 package typeset
 
 import (
+	"context"
 	"fmt"
 	"image/jpeg"
 	"math"
@@ -21,29 +22,34 @@ import (
 //
 // Validate reads d and never mutates it. It reads the header of each JPEG
 // and the size of each picture, decompresses no samples, and loads no font: a face whose program
-// does not load fails [Write], not Validate.
-func (d *Document) Validate() error {
+// does not load fails [Write], not Validate. ctx's error stops it, checked
+// per page and every [validateCheck] fragments, elements or outline
+// entries.
+func (d *Document) Validate(ctx context.Context) error {
 	if len(d.Pages) == 0 {
 		return ErrNoPages
 	}
 	if len(d.Pages) > maxPages {
 		return fmt.Errorf("%w: %d pages, at most %d", ErrLimitExceeded, len(d.Pages), maxPages)
 	}
-	elems, err := structElems(d.Structure)
+	elems, err := structElems(ctx, d.Structure)
 	if err != nil {
 		return err
 	}
 	v := validator{pages: len(d.Pages), elems: elems, images: make(map[*ImageSource]bool)}
 	for i, page := range d.Pages {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if page == nil {
 			return fmt.Errorf("page %d: %w", i+1, ErrInvalidPage)
 		}
-		if err := v.page(page, page.Links); err != nil {
+		if err := v.page(ctx, page, page.Links); err != nil {
 			return fmt.Errorf("page %d: %w", i+1, err)
 		}
 	}
 	entries := 0
-	if err := v.outline(d.Outline, 1, &entries, nil); err != nil {
+	if err := v.outline(ctx, d.Outline, 1, &entries, nil); err != nil {
 		return fmt.Errorf("outline: %w", err)
 	}
 	return nil
@@ -67,10 +73,12 @@ type validator struct {
 	images map[*ImageSource]bool
 	// count is the fragments and links of the page being checked.
 	count int
+	// steps counts the fragments checked, for the context checks.
+	steps int
 }
 
 // page checks p, with links in place of its own.
-func (v *validator) page(p *Page, links []Link) error {
+func (v *validator) page(ctx context.Context, p *Page, links []Link) error {
 	// ISO 32000-1, Annex C.2, Table C.1 bounds a page side at 14400 units.
 	for _, side := range []float64{p.Width, p.Height} {
 		if !numeric.Finite(side) || side <= 0 || side > maxPageSize {
@@ -81,7 +89,7 @@ func (v *validator) page(p *Page, links []Link) error {
 		return err
 	}
 	v.count = len(links)
-	if err := v.fragments(p.Content, 0); err != nil {
+	if err := v.fragments(ctx, p.Content, 0); err != nil {
 		return err
 	}
 	for i, link := range links {
@@ -93,27 +101,33 @@ func (v *validator) page(p *Page, links []Link) error {
 		return fmt.Errorf("%w: %d form fields on the page, at most %d", ErrLimitExceeded, len(p.Fields), maxFieldsPerPage)
 	}
 	for i := range p.Fields {
-		if err := v.field(&p.Fields[i]); err != nil {
+		if err := v.field(ctx, &p.Fields[i]); err != nil {
 			return fmt.Errorf("form field %d: %w", i, err)
 		}
 	}
 	return nil
 }
 
-func (v *validator) fragments(content []Fragment, depth int) error {
+func (v *validator) fragments(ctx context.Context, content []Fragment, depth int) error {
 	v.count += len(content)
 	if v.count > maxFragmentsPerPage {
 		return fmt.Errorf("%w: more than %d fragments and links on the page", ErrLimitExceeded, maxFragmentsPerPage)
 	}
 	for i, f := range content {
-		if err := v.fragment(f, depth); err != nil {
+		v.steps++
+		if v.steps%validateCheck == 0 {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
+		if err := v.fragment(ctx, f, depth); err != nil {
 			return fmt.Errorf("fragment %d: %w", i, err)
 		}
 	}
 	return nil
 }
 
-func (v *validator) fragment(f Fragment, depth int) error {
+func (v *validator) fragment(ctx context.Context, f Fragment, depth int) error {
 	switch f := f.(type) {
 	case *Text:
 		if f == nil {
@@ -134,7 +148,7 @@ func (v *validator) fragment(f Fragment, depth int) error {
 		if f == nil {
 			return ErrInvalidFragment
 		}
-		return v.group(f, depth)
+		return v.group(ctx, f, depth)
 	default:
 		return fmt.Errorf("%w: %T", ErrInvalidFragment, f)
 	}
@@ -383,7 +397,7 @@ func checkStroke(s *Stroke) error {
 	return nil
 }
 
-func (v *validator) group(g *Group, depth int) error {
+func (v *validator) group(ctx context.Context, g *Group, depth int) error {
 	if depth >= maxGroupDepth {
 		return fmt.Errorf("%w: groups nested deeper than %d", ErrLimitExceeded, maxGroupDepth)
 	}
@@ -407,7 +421,7 @@ func (v *validator) group(g *Group, depth int) error {
 			return fmt.Errorf("%w: clip fill rule %d", ErrInvalidPath, g.Clip.Fill.Rule)
 		}
 	}
-	return v.fragments(g.Content, depth+1)
+	return v.fragments(ctx, g.Content, depth+1)
 }
 
 func (v *validator) link(l Link) error {
@@ -445,7 +459,7 @@ func (v *validator) dest(d Dest) error {
 // the Kids slices on the way down, so an entry whose kids alias an
 // ancestor's slice, a cycle Go values can build, is caught before the walk
 // loops.
-func (v *validator) outline(entries []Outline, depth int, total *int, path []*Outline) error {
+func (v *validator) outline(ctx context.Context, entries []Outline, depth int, total *int, path []*Outline) error {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -456,6 +470,9 @@ func (v *validator) outline(entries []Outline, depth int, total *int, path []*Ou
 	if *total > maxOutlineEntries {
 		return fmt.Errorf("%w: more than %d outline entries", ErrLimitExceeded, maxOutlineEntries)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	for i := range entries {
 		e := &entries[i]
 		if slices.Contains(path, e) {
@@ -464,7 +481,7 @@ func (v *validator) outline(entries []Outline, depth int, total *int, path []*Ou
 		if err := v.dest(e.Dest); err != nil {
 			return fmt.Errorf("entry %q: %w", e.Title, err)
 		}
-		if err := v.outline(e.Kids, depth+1, total, append(path, e)); err != nil {
+		if err := v.outline(ctx, e.Kids, depth+1, total, append(path, e)); err != nil {
 			return err
 		}
 	}
@@ -488,8 +505,9 @@ func (v *validator) parent(e *StructElem) error {
 // structElems returns every element root reaches, or an error when the
 // tree reaches an element twice, holds a nil or roleless element, or passes
 // [MaxStructElems] or [maxTreeDepth]. ISO 32000-1, 14.7.2 makes the
-// structure hierarchy a tree: each element has one parent (/P).
-func structElems(root *StructElem) (map[*StructElem]bool, error) {
+// structure hierarchy a tree: each element has one parent (/P). ctx's
+// error stops it.
+func structElems(ctx context.Context, root *StructElem) (map[*StructElem]bool, error) {
 	seen := make(map[*StructElem]bool)
 	if root == nil {
 		return seen, nil
@@ -517,6 +535,11 @@ func structElems(root *StructElem) (map[*StructElem]bool, error) {
 			return nil, err
 		}
 		seen[it.e] = true
+		if len(seen)%validateCheck == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
 		if len(seen) > MaxStructElems {
 			return nil, fmt.Errorf("%w: more than %d structure elements", ErrLimitExceeded, MaxStructElems)
 		}

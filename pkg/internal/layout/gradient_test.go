@@ -152,7 +152,7 @@ func TestGradient_ColorStops(t *testing.T) {
 	doc := &typeset.Document{Pages: []*typeset.Page{{Width: 10, Height: 10, Content: []typeset.Fragment{
 		&typeset.Path{Ops: rectOps(typeset.Rect{Width: 10, Height: 10}), Fill: &typeset.Fill{Shading: sh}},
 	}}}}
-	if err := doc.Validate(); err != nil {
+	if err := doc.Validate(t.Context()); err != nil {
 		t.Errorf("Validate: %v", err)
 	}
 }

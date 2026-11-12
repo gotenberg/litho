@@ -138,7 +138,7 @@ func TestValidateRefuses(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if err := tc.doc.Validate(); !errors.Is(err, tc.want) {
+			if err := tc.doc.Validate(t.Context()); !errors.Is(err, tc.want) {
 				t.Errorf("Validate = %v, want %v", err, tc.want)
 			}
 		})
@@ -158,7 +158,7 @@ func TestValidateAccepts(t *testing.T) {
 		}}},
 		Outline: []Outline{{Title: "t", Dest: Dest{Page: 1}}},
 	}
-	if err := doc.Validate(); err != nil {
+	if err := doc.Validate(t.Context()); err != nil {
 		t.Errorf("Validate = %v", err)
 	}
 }
@@ -217,7 +217,7 @@ func TestValidateCaps(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if err := tc.doc.Validate(); !errors.Is(err, ErrLimitExceeded) {
+			if err := tc.doc.Validate(t.Context()); !errors.Is(err, ErrLimitExceeded) {
 				t.Errorf("Validate = %v, want ErrLimitExceeded", err)
 			}
 		})
@@ -231,7 +231,7 @@ func TestValidateAcceptsTheDeepestGroups(t *testing.T) {
 		deep = &Group{Content: []Fragment{deep}}
 	}
 	doc := &Document{Pages: []*Page{{Width: 1, Height: 1, Content: []Fragment{deep}}}}
-	if err := doc.Validate(); err != nil {
+	if err := doc.Validate(t.Context()); err != nil {
 		t.Errorf("Validate = %v", err)
 	}
 }
@@ -260,7 +260,7 @@ func TestValidatePageBoxes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		page := &Page{Width: 10, Height: 10, TrimBox: tt.trim, BleedBox: tt.bleed}
-		err := (&Document{Pages: []*Page{page}}).Validate()
+		err := (&Document{Pages: []*Page{page}}).Validate(t.Context())
 		if (err == nil) != tt.ok {
 			t.Errorf("%s: Validate() = %v", tt.name, err)
 		}

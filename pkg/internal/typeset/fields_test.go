@@ -246,7 +246,7 @@ func TestValidateRefusesBadFields(t *testing.T) {
 		mutate(&f)
 		page := letter()
 		page.Fields = []typeset.Field{f}
-		err := (&typeset.Document{Pages: []*typeset.Page{page}}).Validate()
+		err := (&typeset.Document{Pages: []*typeset.Page{page}}).Validate(t.Context())
 		if !errors.Is(err, typeset.ErrInvalidField) {
 			t.Errorf("%s: Validate = %v, want ErrInvalidField", name, err)
 		}

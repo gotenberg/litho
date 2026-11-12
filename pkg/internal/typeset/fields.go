@@ -1,6 +1,7 @@
 package typeset
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -145,7 +146,7 @@ func fieldName(n string) string {
 }
 
 // field checks f.
-func (v *validator) field(f *Field) error {
+func (v *validator) field(ctx context.Context, f *Field) error {
 	if f.Kind > FieldCombo {
 		return fmt.Errorf("%w: kind %d", ErrInvalidField, f.Kind)
 	}
@@ -188,7 +189,7 @@ func (v *validator) field(f *Field) error {
 		}
 	}
 	for _, app := range [][]Fragment{f.Appearance, f.OffAppearance} {
-		if err := v.fragments(app, 0); err != nil {
+		if err := v.fragments(ctx, app, 0); err != nil {
 			return fmt.Errorf("appearance: %w", err)
 		}
 	}

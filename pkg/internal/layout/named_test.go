@@ -38,7 +38,7 @@ func namedRun(t *testing.T, root *Node) (*Result, map[int]PageInfo) {
 	if err != nil {
 		t.Fatalf("Layout: %v", err)
 	}
-	if err := document(res).Validate(); err != nil {
+	if err := document(res).Validate(t.Context()); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
 	return res, seen
