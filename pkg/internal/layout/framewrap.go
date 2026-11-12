@@ -34,6 +34,13 @@ type wrapSeed struct {
 	page           int
 	mode           css.FrameWrap
 	x0, y0, x1, y1 float64
+	// node, shape and gap are the node, contour and wrap gap of a float
+	// of css.Office.WordAnchor, nil for a page-anchored box; bx, by, bw
+	// and bh its border box, by relative to the page area's top.
+	node           *Node
+	shape          []css.WrapPoint
+	gap            [4]float64
+	bx, by, bw, bh float64
 }
 
 // collectWraps returns the rectangles the wrapped boxes of the tree rooted
@@ -69,7 +76,13 @@ func (e *engine) seedWraps(seeds []wrapSeed) []floatRect {
 	out := make([]floatRect, 0, len(seeds))
 	for _, s := range seeds {
 		top := e.pageTop(s.page)
-		out = append(out, floatRect{wrap: s.mode, x0: s.x0, y0: top + s.y0, x1: s.x1, y1: top + s.y1})
+		r := floatRect{wrap: s.mode, x0: s.x0, y0: top + s.y0, x1: s.x1, y1: top + s.y1}
+		if s.node != nil {
+			r.word = true
+			r.border = [4]float64{s.bx, top + s.by, s.bx + s.bw, top + s.by + s.bh}
+			r.shape = newWordShape(s.shape, s.bx, top+s.by, s.bw, s.bh, s.gap)
+		}
+		out = append(out, r)
 	}
 	return out
 }
@@ -102,7 +115,7 @@ func (f floatRect) wrapBand(l, r float64) (float64, float64) {
 		}
 	case css.FrameWrapNone:
 		return l, l
-	case css.FrameWrapThrough, css.FrameWrapParallel, css.FrameWrapLargest:
+	case css.FrameWrapThrough, css.FrameWrapParallel, css.FrameWrapLargest, css.FrameWrapBoth:
 	}
 	if left > right {
 		return l, f.x0

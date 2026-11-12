@@ -51,7 +51,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	var rb *box
 	var seeds []wrapSeed
 	defer func() { e.release() }()
-	for range maxWrapPasses {
+	for pass := 0; ; pass++ {
 		var err error
 		prev := e
 		e, rb, err = layoutFlow(ctx, root, fonts, opts, first, seeds, chains)
@@ -59,8 +59,12 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 		if err != nil {
 			return nil, err
 		}
-		found := e.collectWraps(rb, nil)
-		if sameWraps(found, seeds) {
+		found := e.collectWordWraps(rb, e.collectWraps(rb, nil))
+		limit := maxWrapPasses
+		if hasWordSeed(found) {
+			limit += maxWordPasses
+		}
+		if sameWraps(found, seeds) || pass+1 >= limit {
 			break
 		}
 		seeds = found
@@ -705,6 +709,14 @@ func layoutFlow(ctx context.Context, root *Node, fonts *text.Fonts, opts Options
 	areaW, areaH := areaOf(first)
 	e := newEngine(ctx, fonts, opts, areaW, areaH)
 	e.wraps, e.chains = seeds, chains
+	for _, s := range seeds {
+		if s.node != nil {
+			if e.frozen == nil {
+				e.frozen = map[*Node]wrapSeed{}
+			}
+			e.frozen[s.node] = s
+		}
+	}
 	e.geom.init(e, first)
 	e.rtlRoot = root.Style != nil && root.Style.Direction == css.RTL
 	rb := e.generate(root)

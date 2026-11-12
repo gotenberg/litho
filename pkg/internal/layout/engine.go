@@ -92,6 +92,10 @@ type engine struct {
 	// previous pass, which the root's formatting context starts with
 	// (framewrap.go).
 	wraps []wrapSeed
+	// frozen holds, by node, where the previous pass placed the floats of
+	// css.Office.WordAnchor it seeded: they land there again
+	// (wordanchor.go).
+	frozen map[*Node]wrapSeed
 	// chains maps the links of the chains of linked boxes to what each
 	// paints (chain.go).
 	chains map[*Node]*chainLink

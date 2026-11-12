@@ -14,6 +14,47 @@ type floatRect struct {
 	// exclusion of a wrapped page-anchored box (framewrap.go): it narrows
 	// the lines beside it by its mode, and floats and clearance ignore it.
 	wrap css.FrameWrap
+	// shape, when not nil, is the contour a float of
+	// css.Office.WrapPolygon wraps along within the rectangle.
+	shape *wordShape
+	// word marks the exclusion of a float of css.Office.WordAnchor;
+	// border is its border box, left, top, right and bottom.
+	word   bool
+	border [4]float64
+}
+
+// wordBandTrim is how much of the bottom of a line's band an exclusion of
+// css.Office.WordAnchor may overlap without wrapping the line: Word
+// measures a line against a drawing over its height less about three
+// quarters of a point.
+//
+// # Corpus evidence
+//
+//   - litho/docx images-positioning: a line of 14.5 pt whose bottom
+//     overlaps a picture by 0.2 pt runs beside it unwrapped.
+//   - litho/docx images-wrap: beside the contours of wrapTight and
+//     wrapThrough, the pieces of lines over a contour's upper half end
+//     where the contour lies 2.5 to 3.1 pt below the line, its distB and
+//     distT being 3.6 pt; over its lower half, 3.5 to 3.9 pt above.
+const wordBandTrim = 0.75
+
+// wordBand returns the band [y, y+h) a line of height h at y is measured
+// over against the exclusion f.
+func (f floatRect) wordBand(y, h float64) (float64, float64) {
+	if f.word && h > wordBandTrim {
+		return y, h - wordBandTrim
+	}
+	return y, h
+}
+
+// extentOver returns the left and right edges of the exclusion f over the
+// band [y, y+h): its rectangle's, or its contour's part over the band;
+// false when its contour leaves the band free.
+func (f floatRect) extentOver(y, h float64) (float64, float64, bool) {
+	if f.shape == nil {
+		return f.x0, f.x1, true
+	}
+	return f.shape.extent(y, h)
 }
 
 // bfc is the state of one block formatting context: the floats placed in
@@ -46,16 +87,57 @@ func (c *bfc) band(y, h, left, right float64) (float64, float64) {
 	return c.floatBand(y, h, left, right)
 }
 
+// bandFrom returns the left and right edges of the space beside the
+// floats in the band [y, y+h), within left and right, that ends past
+// from: a piece of a band the floats of css.FrameWrapBoth cut.
+func (c *bfc) bandFrom(y, h, left, right, from float64) (float64, float64) {
+	if c.cols != nil && c.mcol != nil && len(c.cols.frags) > 0 {
+		f := c.cols.frags[min(c.cols.of(y+eps), len(c.cols.frags)-1)]
+		right = max(right-c.mcol.shrink(f.col), left)
+	}
+	return c.floatBandFrom(y, h, left, right, from)
+}
+
+// hasBoth reports whether a float of css.FrameWrapBoth is among c's.
+func (c *bfc) hasBoth() bool {
+	for _, f := range c.floats {
+		if f.wrap == css.FrameWrapBoth {
+			return true
+		}
+	}
+	return false
+}
+
 // floatBand returns the left and right edges of the space beside the
 // floats alone in the band [y, y+h), within left and right.
 func (c *bfc) floatBand(y, h, left, right float64) (float64, float64) {
+	return c.floatBandFrom(y, h, left, right, math.Inf(-1))
+}
+
+// floatBandFrom returns the left and right edges of the space beside the
+// floats in the band [y, y+h), within left and right, that ends past
+// from: the floats of css.FrameWrapBoth cut the band into pieces, the
+// first ending past from taken. Without a piece left, both edges are at
+// the right edge of the band.
+func (c *bfc) floatBandFrom(y, h, left, right, from float64) (float64, float64) {
 	l, r := left, right
+	both := false
 	for _, f := range c.floats {
-		if !f.overlaps(y, h) {
+		if by, bh := f.wordBand(y, h); !f.overlaps(by, bh) {
+			continue
+		}
+		if f.wrap == css.FrameWrapBoth {
+			both = true
 			continue
 		}
 		if f.wrap != css.FrameWrapThrough {
-			l, r = f.wrapBand(l, r)
+			x0, x1, ok := f.extentOver(f.wordBand(y, h))
+			if !ok {
+				continue
+			}
+			g := f
+			g.x0, g.x1 = x0, x1
+			l, r = g.wrapBand(l, r)
 			continue
 		}
 		if f.side == css.FloatLeft {
@@ -64,7 +146,14 @@ func (c *bfc) floatBand(y, h, left, right float64) (float64, float64) {
 			r = min(r, f.x0)
 		}
 	}
-	return l, max(r, l)
+	r = max(r, l)
+	if both {
+		if pl, pr, ok := c.split(y, h, l, r, from); ok {
+			return pl, pr
+		}
+		return r, r
+	}
+	return l, r
 }
 
 // narrowed reports whether a float narrows the band [y, y+h) within left

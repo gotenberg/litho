@@ -182,6 +182,9 @@ type box struct {
 	// block is the page box of page anchorPage (css.Style.PageAnchor).
 	pageAnchored bool
 	anchorPage   int
+	// anchorTop is the top of the first line of the paragraph a float of
+	// css.Office.WordAnchor is positioned from.
+	anchorTop float64
 	// anon reports an anonymous block box (CSS 2.1, 9.2.1.1).
 	anon bool
 	// inlineKids reports a block container whose children are all

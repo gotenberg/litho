@@ -1014,6 +1014,9 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 	if e.err != nil {
 		return -1
 	}
+	if f.st.WordAnchor.Set {
+		return e.layoutWordFloat(f, cb, bc, minY)
+	}
 	f.laidOut = true
 	resolveEdges(f, cb.w)
 	e.resolveSizing(f, cb, -1, -1)

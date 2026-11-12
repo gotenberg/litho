@@ -177,6 +177,20 @@ type Office struct {
 	// distR, distB and distL (ECMA-376 Part 1, 20.4.2.3). It moves the box
 	// none: the insets place the border box.
 	WrapGap [4]float64
+	// WordAnchor, when its Set is true, places a float where Word places
+	// an anchored drawing that wraps the text (ECMA-376 Part 1, 20.4.2.3
+	// anchor), in place of the rules of CSS 2.1, 9.5.1: see
+	// [WordAnchor]. It applies to a float of a block formatting context
+	// other than a table cell's alone.
+	WordAnchor WordAnchor
+	// WrapPolygon is the contour the text wraps along beside a box of
+	// [Office.WordAnchor] (ECMA-376 Part 1, 20.4.2.16 wrapPolygon, the
+	// contour of wrapTight and wrapThrough), its points in fractions of
+	// the box's border box, from its top-left corner: a line beside it
+	// keeps [Office.WrapGap] from the part of the contour over its band
+	// grown by the top and bottom gaps. Nil, or fewer than three points,
+	// wraps along the border box.
+	WrapPolygon []WrapPoint
 	// Chain names the chain of linked boxes the box is a link of, "" for
 	// none (ODF 1.3 Part 3, 19.112 draw:chain-next-name; ECMA-376 Part 1,
 	// 20.4.2.18 wps:linkedTxbx id): the chain's content flows from one
@@ -244,6 +258,33 @@ type Office struct {
 	WriterLines bool
 }
 
+// WordAnchor places a float of [Office.WordAnchor] at a fixed offset, as
+// Word positions an anchored drawing (ECMA-376 Part 1, 20.4.2.10
+// positionH, 20.4.2.11 positionV): its border box's left edge X points
+// right of the start edge of the content box of the root of its block
+// formatting context, the column, whatever its paragraph's indents; its top
+// edge Y points below the top of the first line of its paragraph, or,
+// with FromPage, below the top of the page area of the page that line
+// lies on. Its margins are ignored. Floats of WordAnchor overlap one
+// another and the other floats freely; the lines beside them keep the
+// float's [Office.WrapGap] and take the sides its [Office.FrameWrap]
+// says. A float whose wrap gap reaches above the top of its paragraph's
+// first line wraps the lines before its paragraph on its page too,
+// staying where it was placed when its paragraph moves. With
+// NoOverlap, a replaced float that would overlap the border box of an
+// earlier float of WordAnchor moves right of it, or below it when the
+// containing block has no room there.
+type WordAnchor struct {
+	Set       bool
+	X, Y      float64
+	FromPage  bool
+	NoOverlap bool
+}
+
+// WrapPoint is a point of an [Office.WrapPolygon], in fractions of the
+// border box's width and height.
+type WrapPoint struct{ X, Y float64 }
+
 // MinBorderStroke is the least width, in points, at which a border of
 // [Office.StrokeBorders] is stroked: LibreOffice strokes a border of one
 // twip (0.05 pt), Writer's hairline, two twips wide, and wider borders at
@@ -283,4 +324,9 @@ const (
 	// FrameWrapLargest lets the text on the side with more room alone
 	// (style:wrap biggest, wrapText largest).
 	FrameWrapLargest
+	// FrameWrapBoth lets the text on both sides of the box on one line,
+	// the side before it filled first, as Word wraps a drawing of
+	// wrapText bothSides (ECMA-376 Part 1, 20.4.3.7 ST_WrapText): a line
+	// beside the box breaks into a piece on each side.
+	FrameWrapBoth
 )

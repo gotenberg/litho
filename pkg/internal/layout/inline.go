@@ -415,6 +415,48 @@ type inlineState struct {
 	// keep makes buildLine keep the spaces at the line end, which a line
 	// cut before an overflow mark draws (CSS Overflow 4, 5.1).
 	keep bool
+	// seg is set while the line being laid out is a piece of a line cut
+	// by a float of css.FrameWrapBoth: it starts at segTop, in the piece
+	// of the band past segFrom, and the pieces before it end at
+	// segBottom.
+	seg                     bool
+	segTop, segFrom, segBot float64
+}
+
+// band returns the left and right edges of the space beside the floats in
+// the band [y, y+h) of the containing block, past the pieces of the line
+// laid out at y already.
+func (s *inlineState) band(y, h float64) (float64, float64) {
+	cb := s.cb
+	if s.seg && math.Abs(y-s.segTop) <= eps {
+		return s.bc.bandFrom(y, h, cb.x, cb.x+cb.w, s.segFrom)
+	}
+	return s.bc.band(y, h, cb.x, cb.x+cb.w)
+}
+
+// nextPiece reports whether the line at y of height h has a piece of
+// space past from, the floats of css.FrameWrapBoth cutting it.
+func (s *inlineState) nextPiece(y, h, from float64) bool {
+	if !s.bc.hasBoth() {
+		return false
+	}
+	l, r := s.bc.bandFrom(y, h, s.cb.x, s.cb.x+s.cb.w, from)
+	return r > l+eps && l >= from-eps
+}
+
+// placeWordFloats places the floats of css.Office.WordAnchor of p, top
+// being the top of the first line of its block container.
+func (s *inlineState) placeWordFloats(p *ifcPara, top float64) {
+	if len(s.lines) > 0 {
+		top = s.lines[0].y
+	}
+	for _, f := range p.floats {
+		if s.placed[f.box] || !f.box.st.WordAnchor.Set {
+			continue
+		}
+		s.placed[f.box] = true
+		s.e.layoutWordFloat(f.box, s.cb, s.bc, top)
+	}
 }
 
 // layoutInline lays out the inline formatting context of b in the content
@@ -438,7 +480,8 @@ func (e *engine) layoutInline(b *box, cb cblock, bc *bfc, cursor float64, mc *ma
 		if !e.paginating() || e.err != nil || pass == maxFragmentationPasses-1 {
 			break
 		}
-		if !e.fixOrphans(b, forced) || !e.relayout(cursor) {
+		changed := e.pushWordFloats(b, d, forced) || e.fixOrphans(b, forced)
+		if !changed || !e.relayout(cursor) {
 			break
 		}
 		bc.floats = bc.floats[:floats]
@@ -446,6 +489,40 @@ func (e *engine) layoutInline(b *box, cb cblock, bc *bfc, cursor float64, mc *ma
 		*mc = saved.clone()
 	}
 	return end
+}
+
+// pushWordFloats adds the first line of b to forced when a float of
+// css.Office.WordAnchor positioned from b's paragraph would end below its
+// page's area, b's first line not starting the page: Word moves the
+// paragraph, and the drawing with it, to the next page. It reports
+// whether it added it.
+//
+// # Corpus evidence
+//
+//   - litho/docx images-wrap: a 93.6 pt picture of wrapThrough at the top
+//     of a paragraph whose top lies 60 pt above the bottom margin moves
+//     to the next page with its paragraph and the heading kept with it.
+func (e *engine) pushWordFloats(b *box, d *ifcData, forced map[int]bool) bool {
+	if forced[0] || len(b.lines) == 0 || e.atPageTop(b.lines[0].y) {
+		return false
+	}
+	for _, p := range d.paras {
+		for _, f := range p.floats {
+			a := f.box.st.WordAnchor
+			if !a.Set || a.FromPage || !f.box.laidOut {
+				continue
+			}
+			pg := e.pageOf(f.box.anchorTop + eps)
+			if f.box.anchorTop+a.Y+f.box.borderH() > e.pageTop(pg)+e.areaH(pg)+eps {
+				// The paragraph moves whole: the breaks found for its
+				// lines where it was hold no more.
+				clear(forced)
+				forced[0] = true
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // fixOrphans adds to forced the line indices that must start a page so
@@ -592,6 +669,15 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				top = e.pastMargin(y, mc.strut, mc.kept)
 				mc.commitFloats(top)
 			}
+			if paraFirst {
+				at := top
+				if len(s.lines) == 0 && forced[0] && e.paginating() && !e.atPageTop(at) {
+					// The first line starts the next page: so does the
+					// paragraph the floats are positioned from.
+					at = e.nextPage(at)
+				}
+				s.placeWordFloats(p, at)
+			}
 			s.placeFloats(p, pos, pos, top, mc, false)
 			lineIndent := 0.0
 			if len(s.lines) == 0 {
@@ -602,15 +688,15 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			s.placeFloatsBeside(p, pos, end, l, top)
 			if newTop := s.position(top, l.h-l.slack, forced); newTop != top {
 				top = newTop
-				nl, nw := bandOf(bc, top, l.h, cb)
-				if len(bc.floats) == floatsBefore && (math.Abs(nl-left) > eps || math.Abs(nl+nw-right) > eps) {
+				nl, nr := s.band(top, l.h)
+				if len(bc.floats) == floatsBefore && (math.Abs(nl-left) > eps || math.Abs(nr-right) > eps) {
 					// The page cut moved the line to where the floats
 					// leave another width: break it again there.
 					top, end, _, _, l = s.fitLine(p, w, pos, lineIndent, top, strutH)
 					top = s.position(top, l.h-l.slack, forced)
-					nl, nw = bandOf(bc, top, l.h, cb)
+					nl, nr = s.band(top, l.h)
 				}
-				l.x, l.w = nl, nw
+				l.x, l.w = nl, nr-nl
 			}
 			s.cutSlack(l, top)
 			if e.clampOverflows(top, l.h) {
@@ -638,6 +724,16 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			e.noteLine(p, pos, end, l)
 			s.staticLine(p, pos, end, l)
 			y = top + e.advance(l)
+			if s.seg && math.Abs(top-s.segTop) <= eps {
+				y = max(y, s.segBot)
+			}
+			s.seg = false
+			if end < n && s.nextPiece(top, l.h, l.x+l.w) {
+				// Word sets the text on both sides of a float of
+				// css.FrameWrapBoth: the line goes on in the next piece.
+				s.seg, s.segTop, s.segFrom, s.segBot = true, top, l.x+l.w, y
+				y = top
+			}
 			s.placeFloats(p, pos+1, end, y, mc, false)
 			paraFirst = false
 			pos = end
@@ -670,18 +766,43 @@ func (s *inlineState) fitLine(p *ifcPara, w []float64, pos int, indent, top, h f
 	var end int
 	var left, right float64
 	var l *lineBox
+	tries := len(bc.floats) + 1
+	if bc.hasBoth() {
+		// Each float of css.FrameWrapBoth adds a piece to try.
+		tries *= 2
+	}
 	for range maxFitPasses {
-		for range len(bc.floats) + 1 {
-			left, right = bc.band(top, h, cb.x, cb.x+cb.w)
+		for range tries {
+			left, right = s.band(top, h)
 			org := left - cb.x
 			if s.root.st.Direction == css.RTL {
 				org = cb.x + cb.w - right
 			}
 			var fits bool
 			end, fits = e.breakLine(p, w, pos, indent, right-left, s.root, org)
+			if fits && end < p.p.Len() && !p.allowed(end) && s.nextPiece(top, h, right) {
+				// Word breaks no word in a piece of a line cut by a float
+				// of css.FrameWrapBoth: the word goes to the next piece.
+				fits = false
+			}
 			if fits || !bc.narrowed(top, h, cb.x, cb.x+cb.w) {
 				break
 			}
+			if s.nextPiece(top, h, right) {
+				// The words do not fit in this piece of a line cut by a
+				// float of css.FrameWrapBoth: they try the next.
+				s.seg, s.segTop, s.segFrom = true, top, right
+				if s.segBot < top {
+					s.segBot = top
+				}
+				continue
+			}
+			if s.seg && math.Abs(top-s.segTop) <= eps && s.segBot > top+eps {
+				s.seg = false
+				top = s.segBot
+				continue
+			}
+			s.seg = false
 			next := bc.below(top, h)
 			if math.IsInf(next, 1) {
 				break
@@ -692,7 +813,7 @@ func (s *inlineState) fitLine(p *ifcPara, w []float64, pos int, indent, top, h f
 		if l.h <= h+eps {
 			break
 		}
-		if l2, r2 := bc.band(top, l.h, cb.x, cb.x+cb.w); l2 <= left+eps && r2 >= right-eps {
+		if l2, r2 := s.band(top, l.h); l2 <= left+eps && r2 >= right-eps {
 			break
 		}
 		h = l.h
