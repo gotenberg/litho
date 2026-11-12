@@ -451,7 +451,7 @@ func (s *Stream) end(tail *Document) (func(Dest) Dest, error) {
 				return d, false
 			}
 			return dest(d), true
-		})
+		}, 1)
 		for i := range tail.Warnings {
 			if w := &tail.Warnings[i]; w.Page > 0 {
 				if w.Page < len(sel.at) {
@@ -539,22 +539,28 @@ func (s *Stream) Abort() {
 }
 
 // CountGlyphs returns the glyphs of the text runs of p, its groups'
-// included.
+// included. It counts p before [Document.Validate] checks it: a group
+// nested past the depth Validate allows is not entered, so a group that
+// holds itself ends the count.
 func CountGlyphs(p *Page) int64 {
 	var n int64
-	stack := [][]Fragment{p.Content}
+	type item struct {
+		frags []Fragment
+		depth int
+	}
+	stack := []item{{frags: p.Content}}
 	for len(stack) > 0 {
-		frags := stack[len(stack)-1]
+		it := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
-		for _, f := range frags {
+		for _, f := range it.frags {
 			switch f := f.(type) {
 			case *Text:
 				if f != nil {
 					n += int64(len(f.Glyphs))
 				}
 			case *Group:
-				if f != nil {
-					stack = append(stack, f.Content)
+				if f != nil && it.depth < maxGroupDepth {
+					stack = append(stack, item{frags: f.Content, depth: it.depth + 1})
 				}
 			}
 		}

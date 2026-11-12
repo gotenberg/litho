@@ -44,7 +44,7 @@ func SelectPages(doc *Document, pages []int) {
 	}
 	seen := make(map[*Page]bool, len(kept))
 	for _, pg := range kept {
-		if seen[pg] {
+		if pg == nil || seen[pg] {
 			continue
 		}
 		seen[pg] = true
@@ -62,7 +62,7 @@ func SelectPages(doc *Document, pages []int) {
 		pg.Links = links
 	}
 	doc.Pages = kept
-	doc.Outline = selectOutline(doc.Outline, dest)
+	doc.Outline = selectOutline(doc.Outline, dest, 1)
 	for i := range doc.Warnings {
 		if w := &doc.Warnings[i]; w.Page > 0 {
 			if w.Page < len(at) {
@@ -77,12 +77,18 @@ func SelectPages(doc *Document, pages []int) {
 	}
 }
 
-// selectOutline renumbers the outline entries through dest and replaces
-// an entry whose page is dropped by its kids, in its place.
-func selectOutline(items []Outline, dest func(Dest) (Dest, bool)) []Outline {
+// selectOutline renumbers the outline entries at depth through dest and
+// replaces an entry whose page is dropped by its kids, in its place. The
+// outline has not passed [Document.Validate] yet: past [maxTreeDepth] it
+// returns the entries as they are, for Validate to refuse, so a cycle of
+// aliased Kids slices ends the recursion.
+func selectOutline(items []Outline, dest func(Dest) (Dest, bool), depth int) []Outline {
+	if depth > maxTreeDepth {
+		return items
+	}
 	out := items[:0:0]
 	for _, it := range items {
-		kids := selectOutline(it.Kids, dest)
+		kids := selectOutline(it.Kids, dest, depth+1)
 		d, ok := dest(it.Dest)
 		if !ok {
 			out = append(out, kids...)

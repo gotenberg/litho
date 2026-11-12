@@ -13,9 +13,16 @@ func PruneStructure(doc *Document) {
 		return
 	}
 	used := map[*StructElem]bool{}
-	var frags []Fragment
+	type item struct {
+		frags []Fragment
+		depth int
+	}
+	var stack []item
 	for _, pg := range doc.Pages {
-		frags = append(frags, pg.Content...)
+		if pg == nil {
+			continue
+		}
+		stack = append(stack, item{frags: pg.Content})
 		for _, l := range pg.Links {
 			if l.Parent != nil {
 				used[l.Parent] = true
@@ -27,23 +34,34 @@ func PruneStructure(doc *Document) {
 			}
 		}
 	}
-	for len(frags) > 0 {
-		f := frags[len(frags)-1]
-		frags = frags[:len(frags)-1]
-		switch v := f.(type) {
-		case *Group:
-			frags = append(frags, v.Content...)
-		case *Text:
-			if v.Parent != nil {
-				used[v.Parent] = true
+	// The pages have not passed [Document.Validate] yet: a nil fragment is
+	// skipped, and a group nested past [maxGroupDepth], which Validate
+	// refuses, is not entered, so a group that holds itself ends the walk.
+	for len(stack) > 0 {
+		it := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		for _, f := range it.frags {
+			var parent *StructElem
+			switch v := f.(type) {
+			case *Group:
+				if v != nil && it.depth < maxGroupDepth {
+					stack = append(stack, item{frags: v.Content, depth: it.depth + 1})
+				}
+			case *Text:
+				if v != nil {
+					parent = v.Parent
+				}
+			case *Image:
+				if v != nil {
+					parent = v.Parent
+				}
+			case *Path:
+				if v != nil {
+					parent = v.Parent
+				}
 			}
-		case *Image:
-			if v.Parent != nil {
-				used[v.Parent] = true
-			}
-		case *Path:
-			if v.Parent != nil {
-				used[v.Parent] = true
+			if parent != nil {
+				used[parent] = true
 			}
 		}
 	}
@@ -121,6 +139,9 @@ func dropDanglingDests(doc *Document) {
 		stack = append(stack, e.Kids...)
 	}
 	for _, pg := range doc.Pages {
+		if pg == nil {
+			continue
+		}
 		for i, l := range pg.Links {
 			if l.Dest != nil && l.Dest.Elem != nil && !kept[l.Dest.Elem] {
 				d := *l.Dest
@@ -129,14 +150,19 @@ func dropDanglingDests(doc *Document) {
 			}
 		}
 	}
-	var outline func([]Outline)
-	outline = func(items []Outline) {
+	// Past [maxTreeDepth], which [Document.Validate] refuses, the walk
+	// stops, so a cycle of aliased Kids slices ends it.
+	var outline func([]Outline, int)
+	outline = func(items []Outline, depth int) {
+		if depth > maxTreeDepth {
+			return
+		}
 		for i := range items {
 			if e := items[i].Dest.Elem; e != nil && !kept[e] {
 				items[i].Dest.Elem = nil
 			}
-			outline(items[i].Kids)
+			outline(items[i].Kids, depth+1)
 		}
 	}
-	outline(doc.Outline)
+	outline(doc.Outline, 1)
 }

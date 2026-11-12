@@ -1,6 +1,7 @@
 package compose
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -65,5 +66,41 @@ func TestSelectPages_KeepsTheOrderAndRenumbers(t *testing.T) {
 	SelectPages(all, nil)
 	if len(all.Pages) != 4 || len(all.Outline) != 2 || len(all.Structure.Kids) != 4 {
 		t.Errorf("an empty selection changed the document")
+	}
+}
+
+// TestSelectPages_EndsOnAModelValidateRefuses locks that a selection over a
+// model not yet validated ends, and leaves the faults for Validate to
+// report: a nil page, a nil fragment, a group that holds itself, an
+// outline whose kids alias their own slice.
+func TestSelectPages_EndsOnAModelValidateRefuses(t *testing.T) {
+	t.Parallel()
+	page := func() *Page { return &Page{Width: 100, Height: 100} }
+
+	doc := &Document{Pages: []*Page{page(), page(), nil}, Structure: &StructElem{Role: "Document"}}
+	SelectPages(doc, []int{1, 3})
+	if err := doc.Validate(); !errors.Is(err, ErrInvalidPage) {
+		t.Errorf("Validate after a selection keeping a nil page = %v, want %v", err, ErrInvalidPage)
+	}
+
+	self := &Group{}
+	self.Content = []Fragment{self, (*Text)(nil)}
+	looped := page()
+	looped.Content = []Fragment{self}
+	doc = &Document{Pages: []*Page{looped, page()}, Structure: &StructElem{Role: "Document"}}
+	SelectPages(doc, []int{1})
+	if err := doc.Validate(); !errors.Is(err, ErrLimitExceeded) {
+		t.Errorf("Validate after a selection over a group that holds itself = %v, want %v", err, ErrLimitExceeded)
+	}
+	if n := CountGlyphs(looped); n != 0 {
+		t.Errorf("CountGlyphs of a group that holds itself = %d, want 0", n)
+	}
+
+	outline := []Outline{{Title: "Loop", Dest: Dest{Page: 1}}}
+	outline[0].Kids = outline
+	doc = &Document{Pages: []*Page{page(), page()}, Outline: outline, Structure: &StructElem{Role: "Document"}}
+	SelectPages(doc, []int{1})
+	if err := doc.Validate(); !errors.Is(err, ErrNotATree) && !errors.Is(err, ErrLimitExceeded) {
+		t.Errorf("Validate after a selection over a looping outline = %v, want %v or %v", err, ErrNotATree, ErrLimitExceeded)
 	}
 }
