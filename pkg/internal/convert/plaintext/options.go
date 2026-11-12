@@ -152,6 +152,7 @@ func (o Options) withDefaults() (Options, error) {
 		{"bottom margin", o.MarginBottom},
 		{"left margin", o.MarginLeft},
 	} {
+		// The negated range also refuses NaN.
 		if !(v.value >= 0 && v.value < math.Inf(1)) {
 			return o, fmt.Errorf("%w: %s %v is not a finite number of points, zero or more", ErrInvalidOptions, v.name, v.value)
 		}
