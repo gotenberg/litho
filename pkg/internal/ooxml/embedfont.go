@@ -19,8 +19,8 @@ const obfuscatedBytes = 32
 // DeobfuscateFont restores in place a font program a WordprocessingML
 // document embeds obfuscated (ECMA-376 Part 1, 17.8.1): its first 32 bytes
 // are XORed with the 16 bytes of fontKey, the w:fontKey GUID of the
-// embedding element (17.8.3.3), taken from the last byte of its string
-// form to the first. fontKey is written as ST_Guid,
+// embedding element (17.8.3.3 to 17.8.3.6), taken from the last byte of
+// its string form to the first. fontKey is written as ST_Guid,
 // "{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}".
 //
 // It returns an error wrapping [ErrFontKey] for a key that is not a GUID
