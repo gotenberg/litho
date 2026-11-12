@@ -37,7 +37,9 @@ func (r *reader) readTableStyles() {
 	}
 	root, err := r.pkg.ParseXML(r.ctx, name, understood)
 	if err != nil {
-		r.warn("malformed-part", fmt.Sprintf("the table styles %s do not parse: %v", name, err))
+		if !r.stop(err) {
+			r.warn("malformed-part", fmt.Sprintf("the table styles %s do not parse: %v", name, err))
+		}
 		return
 	}
 	r.defTable = strings.ToUpper(attr(root, "def"))

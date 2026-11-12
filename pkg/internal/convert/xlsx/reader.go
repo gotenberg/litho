@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -98,6 +99,9 @@ type reader struct {
 	// defined names, which a pivot cache's source may name.
 	tableAreas []tableArea
 	allNames   []definedName
+	// err is the first error that ends the conversion met where a
+	// construct is otherwise left out with a warning ([reader.stop]).
+	err error
 }
 
 // tableArea is a table of a sheet (ECMA-376 Part 1, 18.5.1.2): its name,
@@ -154,7 +158,10 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 		return nil, nil, err
 	}
 	doc := &sheet.Document{Default: r.normal(), ExcelRules: true}
-	cp := pkg.CoreProperties(ctx)
+	cp, err := pkg.CoreProperties(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 	subject := cp.Subject
 	if subject == "" {
 		subject = cp.Description
@@ -166,6 +173,9 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	r.keepCachedResults(doc)
 	r.resolveOperands(doc)
 	r.resolvePivots(doc)
+	if r.err != nil {
+		return nil, nil, r.err
+	}
 	return doc, r.warnings, nil
 }
 
@@ -178,6 +188,8 @@ func (r *reader) application() string {
 	}
 	root, err := r.pkg.ParseXML(r.ctx, name, nil)
 	if err != nil {
+		// A part that does not parse names no application.
+		r.stop(err)
 		return ""
 	}
 	for _, c := range root.Kids() {
@@ -308,6 +320,19 @@ func (r *reader) warn(code, msg string) {
 	}
 	r.warned[key] = true
 	r.warnings = append(r.warnings, typeset.Warning{Code: code, Message: msg})
+}
+
+// stop records err as the reader's error when it ends the conversion (see
+// limits.Stops) and reports whether it does. A construct whose error does
+// not stop the conversion is left out with a warning.
+func (r *reader) stop(err error) bool {
+	if !limits.Stops(err) {
+		return false
+	}
+	if r.err == nil {
+		r.err = err
+	}
+	return true
 }
 
 // isMalformed reports an error of a part that does not parse.

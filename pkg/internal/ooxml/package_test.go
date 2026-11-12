@@ -57,7 +57,10 @@ func TestPackage_Relationships(t *testing.T) {
 	if _, err := p.Read("word/missing.xml"); !IsMissing(err) {
 		t.Errorf("Read missing = %v", err)
 	}
-	cp := p.CoreProperties(context.Background())
+	cp, err := p.CoreProperties(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if cp.Title != "A title" || cp.Creator != "Ann" || cp.Keywords != "k1, k2" {
 		t.Errorf("CoreProperties = %+v", cp)
 	}

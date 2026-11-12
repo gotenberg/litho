@@ -156,6 +156,9 @@ func (r *reader) chartOf(dir string, inline *odf.Element) *chart.Chart {
 		c, err = odf.ParseChart(r.ctx, r.pkg, dir)
 	}
 	if err != nil {
+		if r.stop(err) {
+			return nil
+		}
 		r.warn("chart-malformed", "a chart does not parse and is left out: "+err.Error())
 		return nil
 	}
@@ -246,6 +249,8 @@ func (r *reader) decodePicture(img *odf.Element) *layout.Picture {
 	case errors.Is(err, odf.ErrExternalPicture):
 		r.warn("external-picture", "a linked picture outside the package is not fetched")
 		return nil
+	case r.stop(err):
+		return nil
 	case err != nil:
 		r.warn("missing-picture", fmt.Sprintf("a picture is not read: %v", err))
 		return nil
@@ -265,6 +270,9 @@ func (r *reader) decodePicture(img *odf.Element) *layout.Picture {
 	if isSVG(data) {
 		doc, err := svg.Parse(r.ctx, data, svg.Options{Fonts: r.fonts})
 		if err != nil {
+			if r.stop(err) {
+				return nil
+			}
 			r.warn("svg", fmt.Sprintf("an SVG picture is not drawn: %v", err))
 			return nil
 		}
@@ -289,6 +297,9 @@ func (r *reader) decodePicture(img *odf.Element) *layout.Picture {
 	if format == "jpeg" && (cfg.ColorModel == imgcolor.GrayModel || cfg.ColorModel == imgcolor.YCbCrModel || cfg.ColorModel == imgcolor.CMYKModel) {
 		src, err := typeset.JPEGImage(r.ctx, data)
 		if err != nil {
+			if r.stop(err) {
+				return nil
+			}
 			r.warn("picture-decode", "a jpeg picture does not decode")
 			return nil
 		}
@@ -297,7 +308,9 @@ func (r *reader) decodePicture(img *odf.Element) *layout.Picture {
 	}
 	charged, err := mem.ChargePicture(cfg.Width, cfg.Height, cfg.ColorModel)
 	if err != nil {
-		// A refused charge also stops the conversion, which reports it.
+		if r.stop(err) {
+			return nil
+		}
 		r.warn("picture-pixels", fmt.Sprintf("a picture is not drawn: %v", err))
 		return nil
 	}
@@ -309,6 +322,9 @@ func (r *reader) decodePicture(img *odf.Element) *layout.Picture {
 	}
 	src, err := typeset.EncodeImage(r.ctx, im)
 	if err != nil {
+		if r.stop(err) {
+			return nil
+		}
 		r.warn("picture-decode", fmt.Sprintf("a %s picture does not encode: %v", format, err))
 		return nil
 	}

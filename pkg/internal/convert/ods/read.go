@@ -116,6 +116,19 @@ func (r *reader) warn(code, msg string) {
 	r.warnings = append(r.warnings, typeset.Warning{Code: code, Message: msg})
 }
 
+// stop records err as the reader's error when it ends the conversion (see
+// limits.Stops) and reports whether it does. A construct whose error does
+// not stop the conversion is left out with a warning.
+func (r *reader) stop(err error) bool {
+	if !limits.Stops(err) {
+		return false
+	}
+	if r.err == nil {
+		r.err = err
+	}
+	return true
+}
+
 // ctxCheckInterval is the steps between two checks of ctx: 4,096, a
 // check cheap against the work between.
 const ctxCheckInterval = 4096
@@ -542,8 +555,7 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 			row.Cells = append([]sheet.Cell(nil), cells...)
 		}
 		if err := limits.BudgetFrom(r.ctx).ChargeUnits(int64(len(cells)), sheet.CellCost, "cells"); err != nil {
-			// The refusal sticks and cancels the conversion, which stops at
-			// the reader's next context check and reports it.
+			r.stop(err)
 			break
 		}
 		r.cells += len(cells)

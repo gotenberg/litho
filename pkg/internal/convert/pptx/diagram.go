@@ -223,6 +223,9 @@ func (r *reader) diagramDrawing(c *shapeCtx, d *ooxml.Diagram) string {
 		}
 		root, err := r.pkg.ParseXML(r.ctx, rel.Target, understood)
 		if err != nil {
+			if r.stop(err) {
+				return ""
+			}
 			// A drawing that does not parse is no drawing: the layout
 			// engine draws the diagram.
 			continue

@@ -136,6 +136,19 @@ func (r *reader) warnOnce(key, code, msg string) {
 const tickSteps = 1024
 
 // tick checks ctx every [tickSteps] steps, and reports whether reading
+// stop records err as the reader's error when it ends the conversion (see
+// limits.Stops) and reports whether it does. A construct whose error does
+// not stop the conversion is left out with a warning.
+func (r *reader) stop(err error) bool {
+	if !limits.Stops(err) {
+		return false
+	}
+	if r.err == nil {
+		r.err = err
+	}
+	return true
+}
+
 // goes on.
 func (r *reader) tick() bool {
 	if r.err != nil {

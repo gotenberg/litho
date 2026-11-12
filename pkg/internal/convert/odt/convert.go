@@ -81,7 +81,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	layout.ShareStyles(ctx, root)
 	lay := func() (*layout.Result, error) {
 		b.pages.reset()
-		res, err := layout.Layout(ctx, root, fonts, layout.Options{
+		return layout.Layout(ctx, root, fonts, layout.Options{
 			Page:          first,
 			PageFor:       b.pages.pageFor,
 			MarginContent: b.pages.marginContent,
@@ -90,14 +90,13 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 			MaxPages:      opts.MaxPages,
 			Logger:        opts.Logger,
 		})
-		if err != nil {
-			return nil, err
-		}
-		return res, nil
 	}
 	res, err := lay()
 	if err != nil {
 		return nil, err
+	}
+	if b.err != nil {
+		return nil, b.err
 	}
 	// A table of contents is numbered from where the headings landed,
 	// then laid out again until the numbers settle.
@@ -108,6 +107,9 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 		if res, err = lay(); err != nil {
 			return nil, err
 		}
+	}
+	if b.err != nil {
+		return nil, b.err
 	}
 	return b.assemble(res, opts, root.Lang)
 }

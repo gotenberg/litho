@@ -55,7 +55,9 @@ func (p *pages) root(part string) *ooxml.Element {
 	}
 	r, err := p.d.part(part)
 	if err != nil {
-		p.d.warn("malformed-part", "a header or footer does not parse and is left out")
+		if !p.d.stop(err) {
+			p.d.warn("malformed-part", "a header or footer does not parse and is left out")
+		}
 		r = nil
 	}
 	p.hfParts[part] = r
@@ -103,6 +105,8 @@ func (p *pages) measure(s *section, part string, v *fieldValues) float64 {
 		MaxPages: maxSubLayoutPages,
 	})
 	if err != nil {
+		// A header or footer that does not lay out takes no room.
+		p.d.stop(err)
 		return 0
 	}
 	if r, ok := res.Extents[n.ID]; ok {
@@ -290,6 +294,8 @@ func (p *pages) margins(info layout.PageInfo, total int) []typeset.Fragment {
 		MaxPages: maxSubLayoutPages,
 	})
 	if err != nil || len(res.Pages) == 0 {
+		// A header or footer that does not lay out prints nothing.
+		p.d.stop(err)
 		return nil
 	}
 	return artifacts(res.Pages[0].Content)

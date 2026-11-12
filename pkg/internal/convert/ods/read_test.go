@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 func near(a, b float64) bool { return math.Abs(a-b) < 0.01 }
@@ -568,5 +569,29 @@ func TestRead_HeaderGeometry(t *testing.T) {
 		if len(hf.Font.Families) == 0 || hf.Font.Families[0] != "Carlito" || hf.Font.Size != 11 {
 			t.Errorf("%s: header font %+v, want Carlito 11", sh.Name, hf.Font)
 		}
+	}
+}
+
+// TestRead_ChartPastACapStops checks that a chart part past the XML depth
+// cap ends the reading with limits.ErrInputTooLarge, where a chart part
+// that does not parse is left out with a warning.
+func TestRead_ChartPastACapStops(t *testing.T) {
+	manifest := `<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0">` +
+		`<manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/>` +
+		`<manifest:file-entry manifest:full-path="Object 1/" manifest:media-type="application/vnd.oasis.opendocument.chart"/></manifest:manifest>`
+	content := `<office:document-content ` + nsDecl + `><office:body><office:spreadsheet><table:table table:name="S">` +
+		`<table:table-row><table:table-cell><draw:frame svg:width="2in" svg:height="1in"><draw:object xlink:href="./Object 1"/></draw:frame>` +
+		`</table:table-cell></table:table-row></table:table></office:spreadsheet></office:body></office:document-content>`
+	pkg := func(chart string) []byte {
+		return zipOf(t, "mimetype", "application/vnd.oasis.opendocument.spreadsheet", "META-INF/manifest.xml", manifest,
+			"content.xml", content, "Object 1/content.xml", chart)
+	}
+	deep := `<office:document-content ` + nsDecl + `>` + strings.Repeat("<office:body>", 300) + strings.Repeat("</office:body>", 300) + `</office:document-content>`
+	if _, _, err := Read(context.Background(), pkg(deep), nil, office.Options{}); !errors.Is(err, limits.ErrInputTooLarge) {
+		t.Errorf("a chart past the depth cap: %v, want limits.ErrInputTooLarge", err)
+	}
+	_, w := read(t, pkg(`<office:document-content `+nsDecl+`><office:body>`))
+	if !hasWarning(w, "chart-malformed") {
+		t.Errorf("a chart that does not parse: warnings %+v, want chart-malformed", w)
 	}
 }

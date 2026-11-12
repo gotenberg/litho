@@ -73,6 +73,9 @@ type document struct {
 
 	warnings []typeset.Warning
 	warned   map[string]bool
+	// err is the first error that ends the conversion met where a
+	// construct is otherwise left out with a warning ([document.stop]).
+	err      error
 	headings []heading
 	// nextID numbers the anchors the converter makes up.
 	nextID int
@@ -218,6 +221,19 @@ func (d *document) part(name string) (*ooxml.Element, error) {
 		}
 	}
 	return root, nil
+}
+
+// stop records err as the document's error when it ends the conversion
+// (see limits.Stops) and reports whether it does. A construct whose error
+// does not stop the conversion is left out with a warning.
+func (d *document) stop(err error) bool {
+	if !limits.Stops(err) {
+		return false
+	}
+	if d.err == nil {
+		d.err = err
+	}
+	return true
 }
 
 // isSoft reports an error a secondary part may fail with and the

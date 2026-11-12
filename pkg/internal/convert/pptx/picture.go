@@ -203,14 +203,19 @@ func (r *reader) loadPicture(part, id string) *layout.Picture {
 	r.pictures[rel.Target] = nil
 	data, err := r.pkg.Read(rel.Target)
 	if err != nil {
+		if r.stop(err) {
+			return nil
+		}
 		r.warn("missing-picture", fmt.Sprintf("picture %s cannot be read: %v", rel.Target, err))
 		return nil
 	}
 	pic, err := ooxml.DecodePicture(r.ctx, data, r.fonts)
 	if err != nil {
-		if errors.Is(err, ooxml.ErrUnsupportedPicture) {
+		switch {
+		case r.stop(err):
+		case errors.Is(err, ooxml.ErrUnsupportedPicture):
 			r.warn("unsupported-picture", fmt.Sprintf("picture %s is left out: %v", rel.Target, err))
-		} else {
+		default:
 			r.warn("unsupported-picture", fmt.Sprintf("picture %s does not decode: %v", rel.Target, err))
 		}
 		return nil
@@ -248,8 +253,8 @@ func (r *reader) graphicFrame(c *shapeCtx, el *ooxml.Element, depth int) (*slide
 		}
 		ch, err := ooxml.ParseChart(r.ctx, r.pkg, rel.Target)
 		if err != nil {
-			if ctxErr := r.ctx.Err(); ctxErr != nil {
-				return nil, ctxErr
+			if limits.Stops(err) {
+				return nil, err
 			}
 			r.warn("chart-malformed", fmt.Sprintf("chart %s does not parse and is left out: %v", rel.Target, err))
 			return nil, nil

@@ -1,6 +1,7 @@
 package limits
 
 import (
+	"context"
 	"errors"
 	"fmt"
 )
@@ -43,3 +44,14 @@ var (
 	// with a warning.
 	ErrPictureTooLarge = errors.New("picture too large")
 )
+
+// Stops reports whether err ends a conversion wherever it surfaces: the
+// context ended, or the input passed a cap or the memory budget
+// ([ErrInputTooLarge], which [ErrMemoryBudget] wraps). A converter returns
+// such an error. Any other error one construct causes, a picture that does
+// not decode, a part that does not parse, a header that passes the pages a
+// sub-layout may take, becomes a warning and the conversion goes on
+// without the construct.
+func Stops(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrInputTooLarge)
+}

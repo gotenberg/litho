@@ -48,6 +48,9 @@ const maxGroupDepth = limits.MaxSourceGroupDepth
 func (r *reader) chartOf(part string) *chart.Chart {
 	c, err := ooxml.ParseChart(r.ctx, r.pkg, part)
 	if err != nil {
+		if r.stop(err) {
+			return nil
+		}
 		r.warn("chart-malformed", fmt.Sprintf("chart %s does not parse and is left out: %v", part, err))
 		return nil
 	}
@@ -207,6 +210,9 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 				}
 				c, err := ooxml.ParseChartEx(w.r.ctx, w.r.pkg, rel.Target)
 				if err != nil {
+					if w.r.stop(err) {
+						return false
+					}
 					w.r.warn("unsupported-content", fmt.Sprintf("the Office 2016 chart %q is left out: %v", d.Name, err))
 					return false
 				}
@@ -497,14 +503,19 @@ func (r *reader) loadPicture(part, id string) *layout.Picture {
 	r.pictures[rel.Target] = nil
 	data, err := r.pkg.Read(rel.Target)
 	if err != nil {
+		if r.stop(err) {
+			return nil
+		}
 		r.warn("missing-picture", fmt.Sprintf("picture %s cannot be read: %v", rel.Target, err))
 		return nil
 	}
 	pic, err := ooxml.DecodePicture(r.ctx, data, r.fonts)
 	if err != nil {
-		if errors.Is(err, ooxml.ErrUnsupportedPicture) {
+		switch {
+		case r.stop(err):
+		case errors.Is(err, ooxml.ErrUnsupportedPicture):
 			r.warn("unsupported-picture", fmt.Sprintf("picture %s is left out: %v", rel.Target, err))
-		} else {
+		default:
 			r.warn("unsupported-picture", fmt.Sprintf("picture %s does not decode: %v", rel.Target, err))
 		}
 		return nil

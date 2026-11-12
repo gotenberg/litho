@@ -725,6 +725,9 @@ func (r *reader) measureText(el *odf.Element, art *shapeArt) {
 		out := prev(ctx)
 		lines, _, err := fonts.Layout(ctx, []text.Run{{Text: txt, Style: text.Style{Families: families, Size: size, Color: typeset.Color{A: 1}}}}, measureLineWidth, text.Options{Whitespace: text.Preserve})
 		if err != nil || len(lines) == 0 {
+			// The text is left out: a draw function returns no error, and
+			// an error that stops the conversion (its context ended) ends
+			// the layout at its next check.
 			return out
 		}
 		l := lines[0]

@@ -426,8 +426,8 @@ func (f *pageFlow) measure(g *hfGeom, pages int) float64 {
 		Image: f.b.loadPicture,
 	})
 	if err != nil {
-		// A header that does not lay out takes no room. A cancelled
-		// context stops the body's layout too, which reports it.
+		// A header that does not lay out takes no room.
+		f.b.stop(err)
 		return 0
 	}
 	if r, ok := res.Extents["odt-hf-measure"]; ok {
@@ -477,8 +477,8 @@ func (f *pageFlow) marginContent(info layout.PageInfo, pages int) []typeset.Frag
 		Image: f.b.loadPicture,
 	})
 	if err != nil || len(res.Pages) == 0 {
-		// A header or footer that does not lay out prints nothing; the
-		// body's layout reports a cancelled context.
+		// A header or footer that does not lay out prints nothing.
+		f.b.stop(err)
 		return nil
 	}
 	return artifacts(res.Pages[0].Content)

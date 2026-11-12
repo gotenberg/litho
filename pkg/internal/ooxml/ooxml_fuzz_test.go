@@ -20,7 +20,7 @@ func FuzzOpen(f *testing.F) {
 			return
 		}
 		_, _ = p.ParseXML(context.Background(), main, []string{NSWPS})
-		_ = p.CoreProperties(context.Background())
+		_, _ = p.CoreProperties(context.Background()) // a fuzz target checks it does not panic
 		_, _ = p.Relationships(main)
 	})
 }

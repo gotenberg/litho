@@ -550,6 +550,9 @@ func (r *reader) cacheSheet(doc *sheet.Document, pp *pendingPivot) (int, sheet.R
 	}
 	root, err := r.pkg.ParseXML(r.ctx, c.records, understood)
 	if err != nil {
+		// Records that do not parse leave the cache sheet out: a pivot
+		// table needs none to print.
+		r.stop(err)
 		return 0, sheet.Range{}, false
 	}
 	sh := &sheet.Sheet{Name: "DPCache_" + pp.srcSheet, Hidden: true}

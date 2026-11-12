@@ -87,6 +87,9 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 		}
 		d, err := b.pkg.ReadFile(b.ctx, href)
 		if err != nil {
+			if b.stop(err) {
+				return nil
+			}
 			b.warn("missing-picture", fmt.Sprintf("the picture %s is not read: %v", href, err))
 			return nil
 		}
@@ -106,6 +109,9 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 	if isSVG(data) {
 		doc, err := svg.Parse(b.ctx, data, svg.Options{Fonts: b.fonts})
 		if err != nil {
+			if b.stop(err) {
+				return nil
+			}
 			b.warn("svg", fmt.Sprintf("an SVG picture is not drawn: %v", err))
 			return nil
 		}
@@ -130,6 +136,9 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 	if format == "jpeg" && dctModel(cfg.ColorModel) {
 		src, err := typeset.JPEGImage(b.ctx, data)
 		if err != nil {
+			if b.stop(err) {
+				return nil
+			}
 			b.warn("picture-decode", "a jpeg picture does not decode")
 			return nil
 		}
@@ -138,7 +147,9 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 	}
 	charged, err := mem.ChargePicture(cfg.Width, cfg.Height, cfg.ColorModel)
 	if err != nil {
-		// A refused charge also stops the conversion, which reports it.
+		if b.stop(err) {
+			return nil
+		}
 		b.warn("picture-pixels", fmt.Sprintf("a picture is not drawn: %v", err))
 		return nil
 	}
@@ -150,6 +161,9 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 	}
 	src, err := typeset.EncodeImage(b.ctx, img)
 	if err != nil {
+		if b.stop(err) {
+			return nil
+		}
 		b.warn("picture-decode", fmt.Sprintf("a %s picture does not encode: %v", format, err))
 		return nil
 	}

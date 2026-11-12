@@ -36,6 +36,9 @@ func (r *reader) chartExOf(part string, data *ooxml.Element) *chart.Chart {
 	}
 	ch, err := ooxml.ParseChartEx(r.ctx, r.pkg, rel.Target)
 	if err != nil {
+		if r.stop(err) {
+			return nil
+		}
 		r.warn("unsupported-content", fmt.Sprintf("the Office 2016 chart part %q is left out: %v", rel.Target, err))
 		return nil
 	}

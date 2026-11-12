@@ -2,7 +2,10 @@ package ooxml
 
 import (
 	"context"
+	"fmt"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // CoreProperties are the document properties of docProps/core.xml
@@ -18,15 +21,20 @@ const maxPropertyRunes = 4096
 
 // CoreProperties reads the package's core properties part, the target of
 // its core-properties relationship; a missing or broken part yields none.
-func (p *Package) CoreProperties(ctx context.Context) CoreProperties {
+// It fails only with an error that ends the conversion (see
+// limits.Stops): ctx ended, or the part passed a cap.
+func (p *Package) CoreProperties(ctx context.Context) (CoreProperties, error) {
 	var cp CoreProperties
 	name := p.RelatedPart("", RelCoreProperties)
 	if name == "" {
-		return cp
+		return cp, nil
 	}
 	root, err := p.ParseXML(ctx, name, nil)
-	if err != nil {
-		return cp
+	switch {
+	case limits.Stops(err):
+		return cp, fmt.Errorf("reading the core properties: %w", err)
+	case err != nil:
+		return cp, nil //nolint:nilerr // a broken core part yields no properties, as documented
 	}
 	for _, c := range root.Children {
 		v := property(c.Text)
@@ -45,7 +53,7 @@ func (p *Package) CoreProperties(ctx context.Context) CoreProperties {
 			cp.Language = v
 		}
 	}
-	return cp
+	return cp, nil
 }
 
 // property trims s, collapses its whitespace and caps its length.

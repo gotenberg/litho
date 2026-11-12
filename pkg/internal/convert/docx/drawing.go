@@ -63,6 +63,9 @@ func (d *document) chart(s *story, ref *ooxml.Element, st *css.Style, w, h float
 	}
 	c, err := parse(d.ctx, d.pkg, rel.Target)
 	if err != nil {
+		if d.stop(err) {
+			return nil
+		}
 		d.warn("chart-malformed", fmt.Sprintf("chart %s does not parse and is left out: %v", rel.Target, err))
 		return nil
 	}
@@ -240,14 +243,19 @@ func (d *document) loadPicture(part, id string) *layout.Picture {
 	d.pictures[rel.Target] = nil
 	data, err := d.pkg.Read(rel.Target)
 	if err != nil {
+		if d.stop(err) {
+			return nil
+		}
 		d.warn("missing-picture", fmt.Sprintf("picture %s cannot be read: %v", rel.Target, err))
 		return nil
 	}
 	pic, err := ooxml.DecodePicture(d.ctx, data, d.fonts)
 	if err != nil {
-		if errors.Is(err, ooxml.ErrUnsupportedPicture) {
+		switch {
+		case d.stop(err):
+		case errors.Is(err, ooxml.ErrUnsupportedPicture):
 			d.warn("unsupported-picture", fmt.Sprintf("picture %s is left out: %v", rel.Target, err))
-		} else {
+		default:
 			d.warn("unsupported-picture", fmt.Sprintf("picture %s does not decode: %v", rel.Target, err))
 		}
 		return nil

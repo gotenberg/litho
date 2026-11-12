@@ -134,6 +134,19 @@ func (b *builder) warnEach(code, key, msg string) {
 	b.warnings = append(b.warnings, typeset.Warning{Code: "odt-" + code, Message: msg})
 }
 
+// stop records err as the builder's error when it ends the conversion (see
+// limits.Stops) and reports whether it does. A construct whose error does
+// not stop the conversion is left out with a warning.
+func (b *builder) stop(err error) bool {
+	if !limits.Stops(err) {
+		return false
+	}
+	if b.err == nil {
+		b.err = err
+	}
+	return true
+}
+
 // node counts a new node against [maxNodes], recording the error.
 func (b *builder) node(n *layout.Node) *layout.Node {
 	b.nodes++

@@ -126,6 +126,9 @@ type reader struct {
 	notesShapes                 []*slides.Shape
 	warnings                    []typeset.Warning
 	warned                      map[string]bool
+	// err is the first error that ends the conversion met where a
+	// construct is otherwise left out with a warning ([reader.stop]).
+	err error
 }
 
 // warn records a warning, once per message.
@@ -135,6 +138,19 @@ func (r *reader) warn(code, msg string) {
 	}
 	r.warned[msg] = true
 	r.warnings = append(r.warnings, typeset.Warning{Code: code, Message: msg})
+}
+
+// stop records err as the reader's error when it ends the conversion (see
+// limits.Stops) and reports whether it does. A construct whose error does
+// not stop the conversion is left out with a warning.
+func (r *reader) stop(err error) bool {
+	if !limits.Stops(err) {
+		return false
+	}
+	if r.err == nil {
+		r.err = err
+	}
+	return true
 }
 
 // isMalformed reports a part that does not parse, which the reader skips
@@ -173,7 +189,10 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts b
 	r.slideW, r.slideH = doc.Width, doc.Height
 	r.defaultText = root.Child(nsP, "defaultTextStyle")
 	r.readTableStyles()
-	cp := pkg.CoreProperties(ctx)
+	cp, err := pkg.CoreProperties(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 	subject := cp.Subject
 	if subject == "" {
 		subject = cp.Description
@@ -239,6 +258,9 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts b
 		if err := r.handoutMaster(root, doc); err != nil {
 			return nil, nil, err
 		}
+	}
+	if r.err != nil {
+		return nil, nil, r.err
 	}
 	return doc, r.warnings, nil
 }

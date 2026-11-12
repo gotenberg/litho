@@ -68,6 +68,9 @@ func (d *document) convert() (*typeset.Document, error) {
 	if err := d.ctx.Err(); err != nil {
 		return nil, err
 	}
+	if d.err != nil {
+		return nil, d.err
+	}
 	tree := &layout.Node{Kind: layout.Element, Style: d.blockStyle()}
 	for i, s := range secs {
 		var extra []*layout.Node
@@ -92,6 +95,9 @@ func (d *document) convert() (*typeset.Document, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+	if d.err != nil {
+		return nil, d.err
 	}
 	return d.assemble(res)
 }
@@ -128,7 +134,10 @@ func (d *document) assemble(res *layout.Result) (*typeset.Document, error) {
 	dest := func(dd typeset.Dest) (typeset.Dest, bool) {
 		return dd, dd.Page >= 1 && dd.Page <= len(res.Pages)
 	}
-	cp := d.pkg.CoreProperties(d.ctx)
+	cp, err := d.pkg.CoreProperties(d.ctx)
+	if err != nil {
+		return nil, err
+	}
 	subject := cp.Subject
 	if subject == "" {
 		subject = cp.Description
