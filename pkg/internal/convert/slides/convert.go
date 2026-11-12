@@ -117,8 +117,9 @@ func (b *builder) warn(code, msg string) {
 // page of another size than the slide shows the slide scaled down to fit,
 // never up, centred. The outline holds an entry per slide written, titled
 // with the slide's name, and the same entries again after them when notes
-// pages print, as Impress writes them. A notes page is Letter paper with
-// the notes page drawn at its top-left corner: a slide with notes in the
+// pages print, as Impress writes them. A notes page is the notes paper of
+// the options, or its own size without one, with the notes page drawn at
+// its top-left corner: a slide with notes in the
 // notes master's boxes with its shapes, any other in Impress's default
 // notes layout. A shape that jumps to a slide links to that slide's page.
 // The structure tree holds a Sect
@@ -129,7 +130,8 @@ func (b *builder) warn(code, msg string) {
 //
 // A handout page holds Handouts slides, in show order, the last page what
 // is left: the handout page size the document gives (the notes page size,
-// else Letter), its background, the slides laid out on it as Impress lays
+// else the default paper), its background, the slides laid out on it as
+// Impress lays
 // a handout out (see [handoutAreas]), each drawn as its slide page is,
 // scaled into its rectangle, inside a hairline frame, then the handout
 // master's shapes, a page number field showing the handout page's number.
