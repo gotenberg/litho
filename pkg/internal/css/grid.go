@@ -353,8 +353,8 @@ func customIdent(s string) bool {
 type trackListParser struct {
 	out     trackListSpec
 	pending []string
-	// last reports that the last component was a track, so a
-	// <line-names> may follow.
+	// names reports that the last component was a <line-names>, which
+	// another cannot follow.
 	names bool
 }
 

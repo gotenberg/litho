@@ -2,8 +2,8 @@ package css
 
 // This file is the contract between the CSS cascade and the layout engine:
 // every field of [Style] is a computed value (CSS 2.1, 6.1.2) in the units
-// the layout engine works in. A later wave adds fields; it does not change
-// the meaning of one that exists.
+// the layout engine works in. A new field never changes the meaning of one
+// that exists.
 
 // Pt converts a CSS pixel count to points: 1px is 1/96 in and 1pt is 1/72
 // in (CSS Values 4, 6.2).
@@ -75,7 +75,7 @@ var Transparent = Color{}
 
 // Display is the display property (CSS 2.1, 9.2.4). flex and inline-flex
 // are laid out (CSS Flexbox 1, 3), grid and inline-grid too (CSS Grid 1,
-// 5.1); the other CSS 3 values compute to Block until a later wave lays
+// 5.1); the other CSS 3 values compute to Block, as litho does not lay
 // them out.
 type Display uint8
 
@@ -836,8 +836,6 @@ const (
 // Style is the computed style of one element. The zero value is not a
 // valid style: start from [Initial].
 type Style struct {
-	// Box generation.
-
 	Display    Display
 	Position   Position
 	Float      Float
@@ -911,8 +909,6 @@ type Style struct {
 	// element or its contents (CSS Backgrounds 3, 3.5).
 	BackgroundAttachment Attachment
 
-	// Decoration around the box.
-
 	// BoxShadow lists the shadows in the order written, the first painted
 	// on top; nil for none (CSS Backgrounds 3, 7.1).
 	BoxShadow []Shadow
@@ -927,16 +923,12 @@ type Style struct {
 	// canvas (CSS Backgrounds 3, 2.11.2).
 	Contain Containment
 
-	// Replaced content.
-
 	// ObjectFit sizes a replaced element's picture in its content box
 	// (CSS Images 3, 5.5).
 	ObjectFit ObjectFit
 	// ObjectPosition places the picture in the content box, as
 	// BackgroundPosition places a background (CSS Images 3, 5.6).
 	ObjectPosition [2]Dimension
-
-	// Colour and font.
 
 	Color Color
 	// FontFamilies is the family list as written, generic names included;
@@ -970,8 +962,6 @@ type Style struct {
 	// percentage has become Points, a number stays a factor of the
 	// font size of each descendant.
 	LineHeight Dimension
-
-	// Text.
 
 	TextAlign      TextAlign
 	TextDecoration TextDecoration
@@ -1100,8 +1090,6 @@ type Style struct {
 	// and the legacy -webkit-line-clamp (CSS Overflow 4, 6).
 	LineClamp LineClamp
 
-	// Lists.
-
 	ListStyleType     ListStyleType
 	ListStylePosition ListStylePosition
 	// ListStyleImage is the resolved URL of the marker image, "" for none.
@@ -1123,8 +1111,6 @@ type Style struct {
 	CounterSet       []CounterOp
 	// Quotes is inherited.
 	Quotes Quotes
-
-	// Tables.
 
 	BorderCollapse BorderCollapse
 	// BorderSpacing holds the horizontal then the vertical spacing in

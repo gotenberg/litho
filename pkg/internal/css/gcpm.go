@@ -92,9 +92,12 @@ func (ps *PageStyle) UsedBleed() float64 {
 }
 
 // leaderPatterns are the leader() keywords (CSS Generated Content 3,
-// leader()), as WeasyPrint draws them: dotted repeats a full stop alone,
-// the leader drawing of WeasyPrint's draw tests, which litho follows
-// where Chromium draws no leader.
+// leader()), as WeasyPrint draws them: dotted repeats a full stop alone.
+// litho follows WeasyPrint, as Chromium draws no leader.
+//
+// # Corpus evidence
+//
+//   - weasyprint: the draw tests draw a dotted leader as full stops alone.
 var leaderPatterns = map[string]string{"dotted": ".", "solid": "_", "space": " "}
 
 // gcpmItem parses the content items of CSS GCPM 3 and the leader() of CSS

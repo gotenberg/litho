@@ -449,6 +449,8 @@ func (t *tokenizer) consumeString(quote rune) token {
 			next, m := t.at(t.pos)
 			switch {
 			case next < 0:
+				// An escape at the end of the input is dropped (CSS
+				// Syntax 3, 4.3.5).
 			case next == '\n':
 				t.pos += m
 			default:

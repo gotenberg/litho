@@ -105,7 +105,7 @@ func (t *Styles) hash(st *Style) uint64 {
 	}
 	h = mix(h, uint64(st.Display)<<16|uint64(st.Position)<<8|uint64(st.Float))
 	h = mix(h, math.Float64bits(st.FontSize))
-	h = mix(h, uint64(st.FontWeight)<<8|uint64(st.FontStyle)) //nolint:gosec // the bits of the weight, not a size
+	h = mix(h, uint64(st.FontWeight)<<8|uint64(st.FontStyle)) //nolint:gosec // FontWeight is 100 to 900, non-negative
 	for _, f := range st.FontFamilies {
 		h = mix(h, uint64(len(f)))
 		for i := 0; i < len(f); i++ {

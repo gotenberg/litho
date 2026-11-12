@@ -2,7 +2,8 @@ package css
 
 import "math"
 
-// maxGradientStops caps the colour stops and hints of one gradient: 256.
+// maxGradientStops caps the comma-separated stops and hints of one
+// gradient: 256, a stop with two positions counting once.
 // Anti-DoS guard, not spec-mandated: CSS Images 3, 3.4 sets no bound, and
 // real gradients hold two to a dozen stops.
 const maxGradientStops = 256

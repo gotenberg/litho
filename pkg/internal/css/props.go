@@ -1174,8 +1174,8 @@ func textAlignLastProp() propDef {
 }
 
 // originProp defines background-origin. Its initial value is padding-box
-// (CSS Backgrounds 3, 3.8), which [Initial] leaves at the zero BoxEdge,
-// border-box: the cascade computes the specified initial value instead.
+// (CSS Backgrounds 3, 3.8), not the zero BoxEdge, border-box: the initial
+// keyword computes to it.
 func originProp() propDef {
 	def := enumProp("background-origin", false, func(s *Style) *BoxEdge { return &s.BackgroundOrigin }, boxEdges)
 	def.initial = PaddingEdge

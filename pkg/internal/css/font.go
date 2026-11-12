@@ -147,6 +147,8 @@ func fixMonospaceSize(st, parent *Style) {
 	case st.fontSizeKeyword > 0:
 		st.FontSize = keywordSize(st.fontSizeKeyword, mono)
 	case st.fontSizeAbsolute || mono == isMonospace(parent.FontFamilies):
+		// An absolute size, or no change of generic family: the size
+		// stays.
 	case mono:
 		st.FontSize *= fixedFontScale
 	default:

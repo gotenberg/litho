@@ -191,6 +191,7 @@ func (x *selIndex) add(ref selRef) {
 	}
 	switch {
 	case last.never:
+		// A selector that never matches needs no bucket.
 	case len(last.ids) > 0:
 		put(&x.byID, last.ids[0])
 	case len(last.classes) > 0:

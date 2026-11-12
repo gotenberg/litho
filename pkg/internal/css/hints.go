@@ -402,7 +402,8 @@ func documentBody(n *html.Node) *html.Node {
 	return nil
 }
 
-// cellTable returns the table a cell belongs to.
+// cellTable returns the table a cell belongs to, three levels up at most:
+// the row, the row group and the table.
 func cellTable(n *html.Node) *html.Node {
 	p := n.Parent
 	for i := 0; i < 3 && p != nil; i++ {

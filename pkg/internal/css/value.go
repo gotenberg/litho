@@ -406,8 +406,7 @@ func (c *calcCursor) peek() *token {
 // parseCalc parses the contents of calc() or of a parenthesised
 // sub-expression (CSS Values 4, 10.1): <calc-sum>. Multiplication needs a
 // number on one side and division a non-zero number on the right, so every
-// result stays a linear combination. min(), max() and clamp() are not
-// supported.
+// result stays a linear combination.
 func parseCalc(list []token, depth int) (calcValue, bool) {
 	if depth > maxCalcDepth {
 		return calcValue{}, false

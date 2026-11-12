@@ -33,9 +33,14 @@ const (
 )
 
 // textFontProps returns the properties of CSS Text 3 and 4 and CSS Fonts
-// 4 this file adds: text-justify, text-autospace, text-spacing-trim,
-// font-stretch, font-kerning, writing-mode and the font-synthesis
-// longhands.
+// 4 this file adds: text-justify, text-autospace, text-autospace-size,
+// text-spacing-trim, text-shadow, font-stretch, font-kerning,
+// writing-mode and the font-synthesis longhands.
+//
+// # Corpus evidence
+//
+//   - wpt: the text-autospace tests check the amount text-autospace-size
+//     sets, which litho lays out as they check it.
 func textFontProps() map[propID]propDef {
 	return map[propID]propDef{
 		// font-kerning (CSS Fonts 4, 6.3) is inherited; auto, its initial
@@ -106,8 +111,7 @@ func textFontProps() map[propID]propDef {
 			copyFrom: field(func(s *Style) *bool { return &s.NoSpacingTrim }),
 		},
 		// text-autospace-size is Chromium's experimental amount of
-		// text-autospace, a number of ems, 1/8 by default; litho lays it
-		// out as the web-platform-tests check it.
+		// text-autospace, a number of ems, 1/8 by default.
 		pTextAutospaceSize: {
 			name: "text-autospace-size", inherited: true,
 			parse: func(v []token, _ *declCtx) (any, bool) {
@@ -247,7 +251,8 @@ func parseAutospace(v []token, _ *declCtx) (any, bool) {
 }
 
 // textFontShorthands returns font-synthesis (CSS Fonts 4, 5.5): none, or
-// any of weight, style and small-caps, each allowing its synthesis.
+// any of weight, style, small-caps and position, each allowing its
+// synthesis.
 func textFontShorthands() map[string]shorthandDef {
 	return map[string]shorthandDef{
 		"font-synthesis": {

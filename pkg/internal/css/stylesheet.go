@@ -113,7 +113,7 @@ func (sp *sheetParser) count() bool {
 	return true
 }
 
-// ctxFor returns a declaration context for base.
+// flush moves c's warnings into the sheet's warnings.
 func (sp *sheetParser) flush(c *declCtx) {
 	for _, w := range c.warns {
 		sp.warns.add(w)
@@ -343,7 +343,8 @@ func (sp *sheetParser) importRule(ctx context.Context, it item, base string, con
 
 // ParseDeclarations parses a list of declarations, a style attribute's
 // value (CSS Style Attributes, 3). Invalid declarations are dropped; a
-// text past the stylesheet size cap yields nil. Warnings travel with the
+// text past the stylesheet size cap yields nil, and one past the token or
+// nesting cap the declarations read before it. Warnings travel with the
 // declarations and surface in [Computed.Warnings] when they are used.
 func ParseDeclarations(src string, opts ParseOptions) []Declaration {
 	if len(src) > maxStylesheetBytes {
