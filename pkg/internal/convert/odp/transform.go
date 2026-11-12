@@ -79,7 +79,14 @@ const maxTransformOps = 16
 // applied in the order they are listed, as Impress applies them. A
 // rotate angle is in radians, counterclockwise on the page; translate
 // and the matrix's translation are ODF lengths. It returns the composed
-// transform, whether it skews, and whether it parsed.
+// transform, whether it skews, and whether it parsed. A positive skew
+// angle leans a shape's top to the right of its bottom on the page.
+//
+// # Corpus evidence
+//
+//   - probe, odp: skewX (0.5) on a 4 cm square moves its bottom edge tan
+//     0.5 times its height, 2.2 cm, left of its top edge in the pinned
+//     LibreOffice.
 func parseTransform(s string) (matrix, bool, bool) {
 	m := identity
 	skew := false
@@ -144,9 +151,7 @@ func parseTransform(s string) (matrix, bool, bool) {
 			}
 			skew = skew || math.Abs(a) > 1e-9
 			// A positive angle leans a shape's top to the right of its
-			// bottom on the page, y pointing down (measured on the pinned
-			// LibreOffice: skewX (0.5) on a 4 cm square moves its bottom
-			// edge tan 0.5 times its height, 2.2 cm, left of its top edge), as the counterclockwise
+			// bottom on the page, y pointing down, as the counterclockwise
 			// rotate turns it.
 			if name == "skewX" {
 				op = matrix{a: 1, c: -math.Tan(a), d: 1}

@@ -216,7 +216,16 @@ func (r *reader) placementOf(el *odf.Element, def *compose.Rect) placement {
 // frame reads a draw:frame (ODF 1.3, Part 3, 10.4.2) from the first of
 // its contents it draws: a text box, a picture, a chart object, a table;
 // an object it does not draw gives way to its replacement picture, the
-// draw:image after it.
+// draw:image after it. A picture linked outside the package prints
+// nothing, its replacement included; a media object without a
+// replacement picture prints as a #434343 box.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odp: sd/tdf116266's frame of a linked SVG and a PNG
+//     prints nothing.
+//   - libreoffice/odp: sd/tdf53970_linked.odp's linked video prints as a
+//     #434343 box.
 func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 	pl := r.placementOf(el, r.placeholderBox(el, pc))
 	ss := r.shapeStyle(el, pc)
@@ -238,9 +247,7 @@ func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 			if pic == nil && linkedOutside(k.A(odf.NSXLink, "href")) {
 				// A picture linked outside the package prints nothing, its
 				// replacement picture included, as Impress, which does not
-				// fetch the link on a conversion, prints its frame (odp:
-				// sd/tdf116266's frame of a linked SVG and a PNG prints
-				// nothing).
+				// fetch the link on a conversion, prints its frame.
 				return nil
 			}
 			if pic == nil {
@@ -291,8 +298,7 @@ func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 	}
 	if media {
 		// A media object without a replacement picture prints as a dark
-		// grey box, #434343 (measured on the pinned LibreOffice:
-		// sd/tdf53970_linked.odp's linked video).
+		// grey box, #434343.
 		s.Kind = slides.KindGeometry
 		s.Fill = slides.Fill{Kind: slides.FillSolid, Color: css.Color{R: 0x43 / 255.0, G: 0x43 / 255.0, B: 0x43 / 255.0, A: 1}}
 		return s
@@ -357,6 +363,13 @@ func (r *reader) group(el *odf.Element, pc *pageCtx, depth int) *slides.Shape {
 
 // drawShape reads a drawing shape (ODF 1.3, Part 3, 10.3 and 10.6): its
 // geometry, its fill and stroke, and its text.
+//
+// # Corpus evidence
+//
+//   - probe, odp: an L of either draw:mirror-horizontal or
+//     draw:mirror-vertical and draw:transform rotate (-0.349) leans 20
+//     degrees the other way in the pinned LibreOffice; with both mirrors,
+//     a half turn, it does not.
 func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 	ss := r.shapeStyle(el, pc)
 	pl := r.placementOf(el, nil)
@@ -370,11 +383,7 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 		if g := s.Geometry; g != nil && g.MirrorH != g.MirrorV && s.Rotation != 0 {
 			// Impress mirrors a rotated custom shape about the page's axes
 			// through its centre, after the rotation: the mirror of a
-			// shape turned one way is the mirrored shape turned the other
-			// (measured on the pinned LibreOffice, an L of either
-			// draw:mirror-horizontal or draw:mirror-vertical and
-			// draw:transform rotate (-0.349) leans 20 degrees the other way;
-			// with both mirrors, a half turn, it does not).
+			// shape turned one way is the mirrored shape turned the other.
 			s.Rotation = 360 - s.Rotation
 		}
 	case "rect":
@@ -470,7 +479,13 @@ func connectorPreset(typ string) string {
 // 1.3, Part 3, 10.6.2) through the shared OpenDocument geometry reader:
 // its draw:type mapped onto the DrawingML preset of the same shape, or
 // its path, equations and modifiers as a custom geometry, with its
-// mirroring; nil for none.
+// mirroring; nil for none. A freeform of no LibreOffice type fills its
+// open subpaths as if closed.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odp: the open arc of
+//     sd/tdf147978_enhancedPath_viewBox.odp prints filled.
 func (r *reader) enhancedGeometry(eg *odf.Element) *shape.Geometry {
 	if eg == nil {
 		return nil
@@ -478,8 +493,7 @@ func (r *reader) enhancedGeometry(eg *odf.Element) *shape.Geometry {
 	g := odf.ParseGeometry(eg)
 	if g != nil && g.Custom != nil && eg.A(odf.NSDraw, "type") == "non-primitive" {
 		// A freeform of no LibreOffice type fills its open subpaths as if
-		// closed (measured on the pinned LibreOffice: the open arc of
-		// sd/tdf147978_enhancedPath_viewBox.odp prints filled).
+		// closed.
 		g.Custom.OpenUnfilled = false
 	}
 	if g != nil && !shape.Known(g) {
@@ -569,9 +583,13 @@ func connectorRoute(el *odf.Element) (compose.Rect, *shape.Geometry) {
 // draw:kind (19.188) of section, cut or arc the part between
 // draw:start-angle and draw:end-angle, counterclockwise from three
 // o'clock: a section closed through the centre, a cut closed by its
-// chord, an arc open and unfilled, as Impress draws them (measured on the
-// pinned LibreOffice: sd/tdf99497_CircleKind.odp's arc prints its curve
-// alone). The ellipse is drawn in a 2 by 2 space fitted to the box.
+// chord, an arc open and unfilled, as Impress draws them. The ellipse is
+// drawn in a 2 by 2 space fitted to the box.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odp: sd/tdf99497_CircleKind.odp's arc prints its curve
+//     alone.
 func ellipseGeometry(el *odf.Element) *shape.Geometry {
 	kind := el.A(odf.NSDraw, "kind")
 	if kind != "section" && kind != "cut" && kind != "arc" {

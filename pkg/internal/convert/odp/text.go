@@ -161,8 +161,9 @@ type paraState struct {
 //   - probe, odp: frames of a flat presentation whose default graphic style
 //     is rl-tb print right to left with an automatic graphic or
 //     presentation style of lr-tb, left to right with a common graphic
-//     style or a paragraph style of lr-tb (libreoffice/odp: sd/tdf128985's outline,
-//     of an automatic lr-tb style, prints its bullet right of its text).
+//     style or a paragraph style of lr-tb.
+//   - libreoffice/odp: sd/tdf128985's outline, of an automatic lr-tb style,
+//     prints its bullet right of its text.
 func (r *reader) applyPara(ps *paraState, p odf.Props, direction bool) {
 	switch p.Get("fo:text-align") {
 	case "start":

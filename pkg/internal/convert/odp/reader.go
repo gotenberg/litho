@@ -226,7 +226,13 @@ func (r *reader) masterOf(pg *odf.Element) *odf.MasterPage {
 
 // pageSize returns the slide size of a master page: its page layout's
 // fo:page-width and fo:page-height (ODF 1.3, Part 3, 16.5 and 20.215),
-// Impress's default where it gives none.
+// Impress's default where it gives none. A layout of no size takes the
+// printer's paper, A4 in the layout's orientation.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odp: sd/invalidCxAndCyAttribute.odp, 0 cm by 0 cm
+//     portrait, prints 595.28 by 841.89 points.
 func (r *reader) pageSize(mp *odf.MasterPage) (float64, float64) {
 	w, h := defaultSlideWidth, defaultSlideHeight
 	if mp == nil {
@@ -236,10 +242,7 @@ func (r *reader) pageSize(mp *odf.MasterPage) (float64, float64) {
 		pw, okW := odf.Length(pl.Page.Get("fo:page-width"))
 		ph, okH := odf.Length(pl.Page.Get("fo:page-height"))
 		if okW && okH && (pw <= 0 || ph <= 0) {
-			// A layout of no size takes the printer's paper, A4 in the
-			// layout's orientation (measured on the pinned LibreOffice:
-			// sd/invalidCxAndCyAttribute.odp, 0 cm by 0 cm portrait,
-			// prints 595.28 by 841.89 points).
+			// A layout of no size takes the printer's paper.
 			if pl.Page.Get("style:print-orientation") == "landscape" {
 				return a4Height, a4Width
 			}
@@ -287,9 +290,12 @@ func (r *reader) notesSize(mp *odf.MasterPage) (float64, float64) {
 // presentation:class notes as the notes text's, and its shapes of no
 // class as the shapes every notes page draws. Its header, footer,
 // date-time and page-number placeholders are left out: Impress prints
-// none of them on a notes page whose settings it was not given, the
-// date of the notes master of sd/tdf112557.odp among them (measured on
-// the pinned LibreOffice).
+// none of them on a notes page whose settings it was not given.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odp: sd/tdf112557.odp prints no date of its notes master
+//     on its notes pages.
 func (r *reader) notesMaster(doc *slides.Document, mp *odf.MasterPage) {
 	if mp == nil {
 		return

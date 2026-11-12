@@ -188,10 +188,13 @@ func (r *reader) shapeStyle(el *odf.Element, pc *pageCtx) *shapeStyle {
 // presentation style for a placeholder of class (title, subtitle,
 // outline, notes) whose own presentation style chain holds no common
 // style: Impress bases every presentation object on its master's style
-// of its class, "<master>-title", "-subtitle", "-outline1" or "-notes"
-// (measured on the pinned LibreOffice: sd/tdf169979.odp's title, whose
-// automatic style names no parent, prints in its master's title font,
-// centred). nil when the chain reaches a common style already.
+// of its class, "<master>-title", "-subtitle", "-outline1" or "-notes".
+// nil when the chain reaches a common style already.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odp: sd/tdf169979.odp's title, whose automatic style
+//     names no parent, prints in its master's title font, centred.
 func (r *reader) placeholderBase(chain []*odf.Style, class string, pc *pageCtx) []*odf.Style {
 	suffix := map[string]string{"title": "title", "subtitle": "subtitle", "outline": "outline1", "notes": "notes"}[class]
 	if suffix == "" || pc.mp == nil {
