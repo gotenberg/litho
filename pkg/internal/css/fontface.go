@@ -375,11 +375,11 @@ func parseURange(s string) ([2]rune, bool) {
 		if q != len(s) {
 			return [2]rune{}, false
 		}
-		lo, _ := strconv.ParseUint(s[:i]+strings.Repeat("0", q-i), 16, 32) //nolint:errcheck // hex digits checked above
-		hi, _ := strconv.ParseUint(s[:i]+strings.Repeat("F", q-i), 16, 32) //nolint:errcheck // hex digits checked above
+		lo, _ := strconv.ParseUint(s[:i]+strings.Repeat("0", q-i), 16, 32) // cannot fail: at most six hex digits, checked above
+		hi, _ := strconv.ParseUint(s[:i]+strings.Repeat("F", q-i), 16, 32) // cannot fail: at most six hex digits, checked above
 		return checkRange(lo, hi)
 	}
-	lo, _ := strconv.ParseUint(s[:i], 16, 32) //nolint:errcheck // hex digits checked above
+	lo, _ := strconv.ParseUint(s[:i], 16, 32) // cannot fail: at most six hex digits, checked above
 	if i == len(s) {
 		return checkRange(lo, lo)
 	}
@@ -395,7 +395,7 @@ func parseURange(s string) ([2]rune, bool) {
 			return [2]rune{}, false
 		}
 	}
-	hi, _ := strconv.ParseUint(rest, 16, 32) //nolint:errcheck // hex digits checked above
+	hi, _ := strconv.ParseUint(rest, 16, 32) // cannot fail: at most six hex digits, checked above
 	return checkRange(lo, hi)
 }
 

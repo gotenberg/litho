@@ -17,6 +17,6 @@ func HTMLUserAgent() *Stylesheet { return uaSheet() }
 var uaSheet = sync.OnceValue(func() *Stylesheet {
 	// The embedded sheet is far below every cap and fetches nothing, so
 	// Parse cannot fail on it; TestHTMLUserAgent_ParsesClean checks it.
-	s, _ := Parse(context.Background(), uaCSS, ParseOptions{}) //nolint:errcheck // fixed input, checked by a test
+	s, _ := Parse(context.Background(), uaCSS, ParseOptions{})
 	return s
 })

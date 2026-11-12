@@ -382,7 +382,7 @@ func (t *tokenizer) consumeNumber() (repr string, value float64, integer bool) {
 	repr = t.s[start:t.pos]
 	// ParseFloat fails only on range: it then returns the infinity of the
 	// right sign, which the value parsers reject as non-finite.
-	value, _ = strconv.ParseFloat(repr, 64) //nolint:errcheck // a range error keeps the signed infinity, rejected downstream
+	value, _ = strconv.ParseFloat(repr, 64)
 	return repr, value, integer
 }
 
