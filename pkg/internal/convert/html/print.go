@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // maxShrink is the most a document wider than its page area is shrunk to
@@ -96,7 +97,7 @@ func (p *prepared) refit(res *layout.Result) (printSetup, bool) {
 	s := p.setup
 	lw, _ := areaOf(s.layoutBox(p.first))
 	wider := res.ContentWidth-lw > shrinkSlack
-	if !positive(lw) || !wider {
+	if !numeric.Positive(lw) || !wider {
 		return s, false
 	}
 	if s.measure || p.o.NoShrinkToFit {
@@ -146,9 +147,6 @@ func (p *prepared) placement(lp *compose.Page) placement {
 	}
 	return pl
 }
-
-// positive reports whether v is greater than zero. NaN is not.
-func positive(v float64) bool { return v > 0 }
 
 // nearly reports a and b equal to a billionth.
 func nearly(a, b float64) bool {

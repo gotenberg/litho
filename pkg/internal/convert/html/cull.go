@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // Content a clip hides wholly is left out of the page rather than written
@@ -208,7 +209,7 @@ func pointsArea(pts []compose.Point, m compose.Matrix, pad float64) (area, bool)
 		b.y0, b.y1 = min(b.y0, y), max(b.y1, y)
 	}
 	for _, v := range [4]float64{b.x0, b.y0, b.x1, b.y1} {
-		if math.IsNaN(v) || math.IsInf(v, 0) {
+		if !numeric.Finite(v) {
 			return area{}, false
 		}
 	}
