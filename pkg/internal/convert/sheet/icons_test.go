@@ -103,7 +103,7 @@ func TestConvert_IconSetDrawing(t *testing.T) {
 	if len(groups) != 2 {
 		t.Fatalf("%d icons drawn, want 2", len(groups))
 	}
-	if g := groups[0]; !near(g.Transform.E, iconInsetX, 1e-6) || !near(g.Transform.F, 12.78-iconInsetY-10.0*72/254, 1e-6) {
+	if g := groups[0]; !near(g.Transform.E, iconInsetX, 1e-6) || !near(g.Transform.F, calcPrinted(12.78)-iconInsetY-10.0*72/254, 1e-6) {
 		t.Errorf("first icon at (%v, %v)", g.Transform.E, g.Transform.F)
 	}
 	if rs := runs(out.Pages[0]); len(rs) != 0 {

@@ -254,7 +254,7 @@ func TestConvert_ConditionalDrawing(t *testing.T) {
 					bars++
 					x0 := v.Ops[0].P[0].X
 					x1 := v.Ops[1].P[0].X
-					if (bars == 1 && !near(x1-x0, (64-2*dataBarInset)/4, 1e-6)) || !near(x0, dataBarInset, 1e-6) {
+					if (bars == 1 && !near(x1-x0, (calcPrinted(64)-2*dataBarInset)/4, 1e-6)) || !near(x0, dataBarInset, 1e-6) {
 						t.Errorf("bar %d spans %v..%v", bars, x0, x1)
 					}
 				} else if v.Fill != nil && v.Fill.Color == colorOf(green) {

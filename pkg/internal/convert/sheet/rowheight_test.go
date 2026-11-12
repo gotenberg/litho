@@ -22,10 +22,10 @@ func TestOptimalHeights_FallbackFaces(t *testing.T) {
 	b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
 	g := newGrid(t.Context(), doc, sh)
 	b.heightsOf(t, g)
-	if h := g.rowHeight(0); !near(h, 12.78, 1e-9) {
+	if h := g.layoutRowHeight(0); !near(h, 12.78, 1e-9) {
 		t.Errorf("Latin row %v, want 12.78", h)
 	}
-	if h := g.rowHeight(1); !near(h, 15.65, 0.01) {
+	if h := g.layoutRowHeight(1); !near(h, 15.65, 0.01) {
 		t.Errorf("Chinese row %v, want 15.65", h)
 	}
 }

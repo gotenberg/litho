@@ -157,7 +157,7 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 			}
 		}
 		start := false
-		w := g.colWidth(c)
+		w := g.layoutColWidth(c)
 		if (size+w > pageW+epsilon && !sp.single) || colBreak[c] {
 			if c != a.FirstColumn {
 				starts[c] = true
@@ -169,7 +169,7 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 		}
 		if start && repC != nil && c > repC.first && !colFound {
 			for i := repC.first; i <= repC.last; i++ {
-				pageW -= g.colWidth(i)
+				pageW -= g.layoutColWidth(i)
 			}
 			// Calc moves on past the repeated columns when a page
 			// starts among them, the next column's width uncounted.
@@ -211,7 +211,7 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 			}
 		}
 		start := false
-		h := g.rowHeight(r)
+		h := g.layoutRowHeight(r)
 		if (size+h > pageH+epsilon && !sp.single) || rowBreak[r] {
 			if r != a.FirstRow {
 				rstarts[r] = true
@@ -223,7 +223,7 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 		}
 		if start && repR != nil && r > repR.first && !rowFound {
 			for i := repR.first; i <= repR.last; i++ {
-				pageH -= g.rowHeight(i)
+				pageH -= g.layoutRowHeight(i)
 			}
 			for i := r; i <= repR.last; i++ {
 				delete(rstarts, i)
@@ -466,7 +466,9 @@ func (sp *sheetPlan) plan(ctx context.Context) error {
 const maxSheetPages = 1 << 15
 
 // singleSize returns the content size of the sheet's first print range at
-// 100%, for a page the size of its content.
+// 100%, for a page the size of its content: the sum of the layout widths
+// and heights, which the cells, printed truncated ([calcPrinted]), may
+// fall a little short of.
 //
 // # Corpus evidence
 //
@@ -474,6 +476,10 @@ const maxSheetPages = 1 << 15
 //     192.64 by 109.73, 674.14 by 915.02 and 48.19 by 45.04 points, the
 //     sizes of the sheets' cells from A1, the first cell's text a point
 //     from the page's left edge.
+//   - probe, ods: 20 columns of 1,000 twips by 150 rows of 256, converted
+//     by Gotenberg 9.4.1 with singlePage, print on a page of 1,000.03 by
+//     1,920.02 points, the twips' sums, while the rows print 12.784 points
+//     apart.
 func (sp *sheetPlan) singleSize() (float64, float64) {
 	if len(sp.pages) == 0 {
 		return 0, 0
@@ -481,10 +487,10 @@ func (sp *sheetPlan) singleSize() (float64, float64) {
 	p := sp.pages[0]
 	w, h := 0.0, 0.0
 	for c := p.cols.first; c <= p.cols.last; c++ {
-		w += sp.g.colWidth(c)
+		w += sp.g.layoutColWidth(c)
 	}
 	for r := p.rows.first; r <= p.rows.last; r++ {
-		h += sp.g.rowHeight(r)
+		h += sp.g.layoutRowHeight(r)
 	}
 	if sp.g.sh.Page.Headings {
 		w += headingWidth

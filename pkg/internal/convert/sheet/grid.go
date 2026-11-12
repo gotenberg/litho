@@ -51,9 +51,11 @@ type grid struct {
 	covered map[[2]int][2]int
 	// rowOrder lists the indexes of rows with cells, rising.
 	rowOrder []int
-	// colPrefix and rowPrefix are the running sums of the column widths
-	// and row heights, filled on first use.
-	colPrefix, rowPrefix []float64
+	// colPrefix and rowPrefix are the running sums of the printed column
+	// widths and row heights, filled on first use; layoutColPrefix and
+	// layoutRowPrefix those of the layout ones, under Calc's rules.
+	colPrefix, rowPrefix             []float64
+	layoutColPrefix, layoutRowPrefix []float64
 	// cond is the sheet's conditional formatting, nil for none.
 	cond *conditions
 	// need measures the room a text cell needs on one line, nil for no
@@ -151,8 +153,69 @@ func (g *grid) colHidden(c int) bool {
 	return col != nil && col.Hidden
 }
 
-// colWidth returns the width of column c, 0 when hidden.
+// colWidth returns the width column c prints at, 0 when hidden: its
+// layout width ([grid.layoutColWidth]), under Calc's rules as Calc draws
+// it ([calcPrinted]).
 func (g *grid) colWidth(c int) float64 {
+	return g.printed(g.layoutColWidth(c))
+}
+
+// rowHeight returns the height row r prints at, 0 when hidden: its
+// layout height ([grid.layoutRowHeight]), under Calc's rules as Calc
+// draws it ([calcPrinted]).
+func (g *grid) rowHeight(r int) float64 {
+	return g.printed(g.layoutRowHeight(r))
+}
+
+// printed returns a column width or row height of v points as the sheet
+// prints it: v under Excel's rules, [calcPrinted] under Calc's.
+func (g *grid) printed(v float64) float64 {
+	if g.doc.ExcelRules {
+		return v
+	}
+	return calcPrinted(v)
+}
+
+// calcPrinted returns the length Calc prints a row height or column width
+// of v points at. Calc holds both in whole twips (sc/inc/document.hxx,
+// GetRowHeight and GetColWidth) and cuts its pages on their sums
+// (ScTable::UpdatePageBreaks), but its print output works in 1/100 mm
+// (ScPrintFunc sets nScaleX and nScaleY to HMM_PER_TWIPS,
+// sc/source/ui/view/printfun.cxx) and truncates each row and column to
+// whole 1/100 mm on its own (initRowInfo and initColWidths in
+// sc/source/core/data/fillinfo.cxx, ScTable::GetScaledRowHeight), at
+// least one. A zoom scales the truncated lengths: it is the scale of the
+// output's map mode. A zero length stays zero.
+//
+// # Corpus evidence
+//
+//   - probe, ods: rows of 288, 283, 299, 300, 306, 307, 340 and 480 twips,
+//     converted by Gotenberg 9.4.1, print 14.4, 14.145, 14.939, 14.995,
+//     15.279, 15.335, 16.98 and 23.981 points apart: 508, 499, 527, 529,
+//     539, 541, 599 and 846 hundredths of a millimetre. Columns of 960,
+//     1,280, 1,344, 1,406, 1,417 and 1,600 twips print 47.99, 63.978,
+//     67.181, 70.3, 70.838 and 79.994 points wide. Twenty rows of 299
+//     twips span 298.772 points, twenty times 527. At 50% and 73% the same
+//     rows print 0.5 and 0.73 times as far apart.
+//   - probe, ods: 40 sheets of rows of 288 to 361 twips on an A4 body of
+//     14,570 twips print floor(14,570 / height) rows a page, the cut on
+//     whole twips: rows of 324 twips print 44 a page, where their printed
+//     571 hundredths would fit 45 in the body's 25,700.
+//   - probe, csv: rows of the default 256 twips print 12.784 points
+//     apart, 451 hundredths, and its columns 33.392 and 71.235 points
+//     wide, 1,178 and 2,513 hundredths: 668 and 1,425 twips truncated.
+func calcPrinted(v float64) float64 {
+	if !numeric.Positive(v) {
+		return 0
+	}
+	twips := math.Round(v * 20)
+	hmm := max(math.Floor(twips*127/72+1e-9), 1)
+	return hmm * 72 / 2540
+}
+
+// layoutColWidth returns the width of column c Calc and Excel cut pages
+// on, 0 when hidden.
+func (g *grid) layoutColWidth(c int) float64 {
 	col := g.column(c)
 	if col == nil {
 		return g.defW
@@ -172,9 +235,10 @@ func (g *grid) rowHidden(r int) bool {
 	return row != nil && row.Hidden
 }
 
-// rowHeight returns the height of row r, 0 when hidden: the row's own,
-// grown to fit its text when it has no custom height.
-func (g *grid) rowHeight(r int) float64 {
+// layoutRowHeight returns the height of row r Calc and Excel cut pages
+// on, 0 when hidden: the row's own, grown to fit its text when it has no
+// custom height.
+func (g *grid) layoutRowHeight(r int) float64 {
 	row := g.rows[r]
 	if row != nil && row.Hidden {
 		return 0

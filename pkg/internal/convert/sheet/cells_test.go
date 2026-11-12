@@ -83,13 +83,13 @@ func TestConvert_RowHeight(t *testing.T) {
 	b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
 	g := newGrid(t.Context(), doc, sh)
 	b.heightsOf(t, g)
-	if h := g.rowHeight(0); !near(h, 35, 0.05) {
+	if h := g.layoutRowHeight(0); !near(h, 35, 0.05) {
 		t.Errorf("wrapped row %v points, want 35", h)
 	}
-	if h := g.rowHeight(1); h != 12.78 {
+	if h := g.layoutRowHeight(1); h != 12.78 {
 		t.Errorf("plain row %v points, want 12.78", h)
 	}
-	if h := g.rowHeight(2); h != 20 {
+	if h := g.layoutRowHeight(2); h != 20 {
 		t.Errorf("custom row %v points, want 20", h)
 	}
 }
@@ -127,7 +127,9 @@ func TestConvert_Borders(t *testing.T) {
 		t.Fatalf("%d strokes, want the thick one alone", len(strokes))
 	}
 	p := strokes[0].Ops
-	if p[0].P[0].X != 80 || !near(p[0].P[0].Y, -2.25/2, 1e-9) || !near(p[1].P[0].Y, 12.78+2.25/2, 1e-9) {
+	// The edge sits where Calc prints column B: 80 points, 2,822 hundredths
+	// of a millimetre.
+	if !near(p[0].P[0].X, 2822*72/2540.0, 1e-9) || !near(p[0].P[0].Y, -2.25/2, 1e-9) || !near(p[1].P[0].Y, calcPrinted(12.78)+2.25/2, 1e-9) {
 		t.Errorf("edge %+v", p)
 	}
 	if fills != 1 {
@@ -374,7 +376,7 @@ func TestConvert_InvalidCircle(t *testing.T) {
 		t.Fatal("no circle drawn")
 	}
 	// The ellipse's rightmost point is the cell's right edge grown.
-	if p := found.Ops[0].P[0]; !near(p.X, 128+circleGrowX, 1e-6) || !near(found.Stroke.Width, 1.559, 0.001) {
+	if p := found.Ops[0].P[0]; !near(p.X, 2*calcPrinted(64)+circleGrowX, 1e-6) || !near(found.Stroke.Width, 1.559, 0.001) {
 		t.Errorf("circle starts at %+v, width %v", p, found.Stroke.Width)
 	}
 }

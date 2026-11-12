@@ -48,8 +48,8 @@ func (b *pageBuilder) drawings(regs []*region) ([]typeset.Fragment, []*typeset.S
 		drawn := false
 		for _, rg := range regs {
 			// The drawing's box in the region's coordinates.
-			x := rg.x0 + rc.X - g.colX(rg.cols.first)
-			y := rg.y0 + rc.Y - g.rowY(rg.rows.first)
+			x := rg.x0 + rc.X - g.layoutColX(rg.cols.first)
+			y := rg.y0 + rc.Y - g.layoutRowY(rg.rows.first)
 			if x >= rg.x0+rg.w || y >= rg.y0+rg.h || x+rc.Width <= rg.x0 || y+rc.Height <= rg.y0 {
 				continue
 			}

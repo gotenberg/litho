@@ -8,48 +8,94 @@ import (
 )
 
 // colX returns the x of column c's left edge from the sheet's origin, in
-// points, hidden columns taking no room.
+// printed points ([grid.colWidth]), hidden columns taking no room.
 func (g *grid) colX(c int) float64 {
-	c = min(max(c, 0), maxColumns)
-	if g.colPrefix == nil {
-		g.colPrefix = make([]float64, maxColumns+1)
-		for i := range maxColumns {
-			g.colPrefix[i+1] = g.colPrefix[i] + g.colWidth(i)
-		}
-	}
-	return g.colPrefix[c]
+	return colSum(&g.colPrefix, g.colWidth, c)
 }
 
 // rowY returns the y of row r's top edge from the sheet's origin, in
-// points, hidden rows taking no room.
+// printed points ([grid.rowHeight]), hidden rows taking no room.
 func (g *grid) rowY(r int) float64 {
-	r = min(max(r, 0), maxRows)
-	for len(g.rowPrefix) <= r {
-		n := len(g.rowPrefix)
-		if n == 0 {
-			g.rowPrefix = append(g.rowPrefix, 0)
-			continue
-		}
-		g.rowPrefix = append(g.rowPrefix, g.rowPrefix[n-1]+g.rowHeight(n-1))
-	}
-	return g.rowPrefix[r]
+	return rowSum(&g.rowPrefix, g.rowHeight, r)
 }
 
-// colAt returns the column whose span holds x, from the sheet's origin.
+// layoutColX returns the x of column c's left edge from the sheet's
+// origin on the sum of the layout widths ([grid.layoutColWidth]), the
+// coordinates drawings take: Calc keeps a drawing in 1/100 mm on the
+// sheet, and places the drawing layer of a page at the twips of the
+// columns and rows before the page's first, converted whole
+// (ScPrintFunc::LocateArea, sc/source/ui/view/printfun.cxx), where the
+// cells add up truncated widths and heights ([calcPrinted]).
+func (g *grid) layoutColX(c int) float64 {
+	if g.doc.ExcelRules {
+		return g.colX(c)
+	}
+	return colSum(&g.layoutColPrefix, g.layoutColWidth, c)
+}
+
+// layoutRowY is [grid.layoutColX] for row r's top edge.
+func (g *grid) layoutRowY(r int) float64 {
+	if g.doc.ExcelRules {
+		return g.rowY(r)
+	}
+	return rowSum(&g.layoutRowPrefix, g.layoutRowHeight, r)
+}
+
+// colSum returns the running sum of width over the columns before c,
+// filling *prefix for every column on first use.
+func colSum(prefix *[]float64, width func(int) float64, c int) float64 {
+	c = min(max(c, 0), maxColumns)
+	if *prefix == nil {
+		p := make([]float64, maxColumns+1)
+		for i := range maxColumns {
+			p[i+1] = p[i] + width(i)
+		}
+		*prefix = p
+	}
+	return (*prefix)[c]
+}
+
+// rowSum returns the running sum of height over the rows before r,
+// extending *prefix up to r.
+func rowSum(prefix *[]float64, height func(int) float64, r int) float64 {
+	r = min(max(r, 0), maxRows)
+	p := *prefix
+	for len(p) <= r {
+		n := len(p)
+		if n == 0 {
+			p = append(p, 0)
+			continue
+		}
+		p = append(p, p[n-1]+height(n-1))
+	}
+	*prefix = p
+	return p[r]
+}
+
+// colAt returns the column whose span holds x, from the sheet's origin in
+// layout coordinates ([grid.layoutColX]).
 func (g *grid) colAt(x float64) int {
-	g.colX(0)
-	i := sort.SearchFloat64s(g.colPrefix, x)
-	if i > 0 && (i >= len(g.colPrefix) || g.colPrefix[i] > x) {
+	g.layoutColX(0)
+	p := g.layoutColPrefix
+	if g.doc.ExcelRules {
+		p = g.colPrefix
+	}
+	i := sort.SearchFloat64s(p, x)
+	if i > 0 && (i >= len(p) || p[i] > x) {
 		i--
 	}
 	return min(i, maxColumns-1)
 }
 
-// rowAt returns the row whose span holds y, from the sheet's origin,
-// looking no further than limit.
+// rowAt returns the row whose span holds y, from the sheet's origin in
+// layout coordinates ([grid.layoutRowY]), looking no further than limit.
 func (g *grid) rowAt(y float64, limit int) int {
-	g.rowY(limit + 1)
-	p := g.rowPrefix[:limit+2]
+	g.layoutRowY(limit + 1)
+	p := g.layoutRowPrefix
+	if g.doc.ExcelRules {
+		p = g.rowPrefix
+	}
+	p = p[:limit+2]
 	i := sort.SearchFloat64s(p, y)
 	if i > 0 && (i >= len(p) || p[i] > y) {
 		i--
@@ -65,13 +111,13 @@ func (g *grid) anchorPoint(a Anchor, unbounded bool) (float64, float64) {
 	c := min(max(a.Column, 0), maxColumns-1)
 	dx, dy := min(max(a.DX, -maxSide), maxSide), min(max(a.DY, -maxSide), maxSide)
 	if !unbounded {
-		dx, dy = min(max(dx, 0), g.colWidth(c)), min(max(dy, 0), g.rowHeight(r))
+		dx, dy = min(max(dx, 0), g.layoutColWidth(c)), min(max(dy, 0), g.layoutRowHeight(r))
 	}
-	return max(g.colX(c)+dx, 0), max(g.rowY(r)+dy, 0)
+	return max(g.layoutColX(c)+dx, 0), max(g.layoutRowY(r)+dy, 0)
 }
 
 // drawingRect returns a drawing's box on the sheet, in points from the
-// sheet's origin.
+// sheet's origin in layout coordinates ([grid.layoutColX]).
 func (g *grid) drawingRect(d *Drawing) typeset.Rect {
 	if d.Absolute {
 		return typeset.Rect{X: max(d.X, 0), Y: max(d.Y, 0), Width: clampSide(d.Width), Height: clampSide(d.Height)}
