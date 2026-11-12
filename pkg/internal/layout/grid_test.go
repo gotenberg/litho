@@ -1,6 +1,8 @@
 package layout
 
 import (
+	"context"
+	"errors"
 	"image/color"
 	"runtime"
 	"testing"
@@ -410,7 +412,7 @@ func TestGrid_PlacementOccupancyStaysSmall(t *testing.T) {
 	}
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	p := placeGrid(c, items, [2]int{})
+	p, _ := placeGrid(t.Context(), c, items, [2]int{})
 	runtime.ReadMemStats(&after)
 	if got := after.TotalAlloc - before.TotalAlloc; got > 1<<20 {
 		t.Errorf("placement allocated %d bytes, want at most 1 MiB", got)
@@ -418,4 +420,99 @@ func TestGrid_PlacementOccupancyStaysSmall(t *testing.T) {
 	if p.n != [2]int{MaxTracksPerAxis, MaxTracksPerAxis} {
 		t.Errorf("grid = %v tracks, want %d by %d", p.n, MaxTracksPerAxis, MaxTracksPerAxis)
 	}
+}
+
+// fullGrid returns a dense grid container of MaxTracksPerAxis columns and
+// rows of 1px.
+func fullGrid() *box {
+	ts := make([]css.TrackSize, MaxTracksPerAxis)
+	for i := range ts {
+		ts[i] = tpx(1)
+	}
+	return &box{st: gridBox(cols(ts...), rowsT(ts...), flow(css.GridFlowDense))}
+}
+
+// checkerItems returns items taking every other cell of every other row
+// of a full grid, then n auto-placed items of column spans from 2 to 1000,
+// which fit nowhere among them.
+func checkerItems(n int) []*box {
+	var items []*box
+	for r := 1; r <= MaxTracksPerAxis; r += 2 {
+		for c := 1; c <= MaxTracksPerAxis; c += 2 {
+			items = append(items, &box{st: sty(gridAt(r, r+1, c, c+1))})
+		}
+	}
+	for k := range n {
+		span := k%(MaxTracksPerAxis-1) + 2
+		items = append(items, &box{st: sty(func(s *css.Style) { s.GridColumnStart = css.GridLine{Span: true, N: span} })})
+	}
+	return items
+}
+
+// checkPlaced fails t unless every item of p has an area inside the
+// implicit grid's bounds.
+func checkPlaced(t *testing.T, p *gridPlacement) {
+	t.Helper()
+	for i, it := range p.items {
+		for ax := range 2 {
+			if it.start[ax] < 0 || it.end[ax] <= it.start[ax] || it.end[ax] > MaxTracksPerAxis {
+				t.Fatalf("item %d axis %d at [%d, %d)", i, ax, it.start[ax], it.end[ax])
+			}
+		}
+	}
+}
+
+// TestGrid_DensePlacementResumes locks the cost of dense auto-placement:
+// items of one span resume the search where the previous one stopped, so
+// a hundred thousand of them fill the grid in order, well inside the
+// placement's work budget, where a search from the start for each would
+// test about 10^8 words.
+func TestGrid_DensePlacementResumes(t *testing.T) {
+	t.Parallel()
+	items := make([]*box, 100_000)
+	for i := range items {
+		items[i] = &box{st: sty()}
+	}
+	p, err := placeGrid(t.Context(), fullGrid(), items, [2]int{})
+	if err != nil || p.overBudget {
+		t.Fatalf("placement: err %v, over budget %v", err, p.overBudget)
+	}
+	for i, it := range p.items {
+		if r, c := it.start[rowAxis], it.start[colAxis]; r != i/MaxTracksPerAxis || c != i%MaxTracksPerAxis {
+			t.Fatalf("item %d at row %d column %d", i, r, c)
+		}
+	}
+}
+
+// TestGrid_PlacementBudget checks that a dense placement whose searches
+// fit nowhere stops at its work budget, places every item, and gives the
+// rest a track of their own after the grid's.
+func TestGrid_PlacementBudget(t *testing.T) {
+	t.Parallel()
+	items := checkerItems(3000)
+	p, err := placeGrid(t.Context(), fullGrid(), items, [2]int{})
+	if err != nil || !p.overBudget {
+		t.Fatalf("placement: err %v, over budget %v, want over budget", err, p.overBudget)
+	}
+	checkPlaced(t, p)
+	if last := p.items[len(p.items)-1]; last.start[colAxis] != 0 {
+		t.Errorf("last item at column %d, want 0", last.start[colAxis])
+	}
+}
+
+// TestGrid_PlacementStopsOnCancel checks that a cancelled context stops
+// the auto-placement search and returns its error with every item placed.
+func TestGrid_PlacementStopsOnCancel(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	items := make([]*box, 100_000)
+	for i := range items {
+		items[i] = &box{st: sty()}
+	}
+	p, err := placeGrid(ctx, fullGrid(), items, [2]int{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("placement on a cancelled context = %v, want context.Canceled", err)
+	}
+	checkPlaced(t, p)
 }

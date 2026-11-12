@@ -31,6 +31,7 @@ const (
 	codeTooManyFragments = "too-many-fragments"
 	codeTableTooLarge    = "table-too-large"
 	codeTextNotShaped    = "text-not-shaped"
+	codeGridPlacement    = "grid-placement-budget"
 )
 
 // eps absorbs the rounding of float sums when comparing positions.

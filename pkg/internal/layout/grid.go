@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -90,7 +91,7 @@ func (gridFormatter) intrinsic(e *engine, b *box) (float64, float64) {
 		repeatCount(st.GridTemplateRows, 0, false, minH, maxH, rowGap),
 		repeatCount(st.GridTemplateColumns, 0, false, mn, mx, gap),
 	}
-	p := b.grid.placement(b, items, rep)
+	p := b.grid.placement(e, b, items, rep)
 	out := [2]float64{}
 	for i, mode := range []sizing{sizeMin, sizeMax} {
 		tracks := p.tracks(colAxis, 0, false)
@@ -115,10 +116,18 @@ func gridKids(b *box) []*box {
 }
 
 // placement returns the placement of the items of b for the auto repeat
-// counts rep, cached until they change.
-func (g *gridData) placement(b *box, items []*box, rep [2]int) *gridPlacement {
+// counts rep, cached until they change. A placement stopped by the
+// context fails the layout of e; one past its work budget warns.
+func (g *gridData) placement(e *engine, b *box, items []*box, rep [2]int) *gridPlacement {
 	if g.place == nil || g.rep != rep {
-		g.place = placeGrid(b, items, rep)
+		p, err := placeGrid(e.ctx, b, items, rep)
+		if err != nil {
+			e.fail(fmt.Errorf("placing grid items: %w", err))
+		}
+		if p.overBudget {
+			e.warnOnce(codeGridPlacement, "a grid's auto-placement ran past its work budget: the items left each take a track of their own after the grid", -1)
+		}
+		g.place = p
 		g.rep = rep
 	}
 	return g.place
@@ -338,7 +347,7 @@ func (e *engine) layoutGrid(b *box, cb cblock, top float64) float64 {
 		repeatCount(st.GridTemplateRows, pcb.h, pcb.hDefinite, minH, maxH, l.gap[rowAxis]),
 		repeatCount(st.GridTemplateColumns, cb.w, true, 0, inf, l.gap[colAxis]),
 	}
-	p := g.placement(b, items, rep)
+	p := g.placement(e, b, items, rep)
 	l.p = p
 	slices.SortStableFunc(p.items, gridOrder)
 

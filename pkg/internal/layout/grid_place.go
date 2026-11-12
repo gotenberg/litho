@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"context"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -40,6 +41,9 @@ type gridPlacement struct {
 	// the index in it of explicit line 1.
 	n, off [2]int
 	items  []*gitem
+	// overBudget reports a placement that stopped searching past
+	// [maxGridPlacementWork].
+	overBudget bool
 }
 
 // gitem is one grid item: its area in the implicit grid, track indices
@@ -340,10 +344,32 @@ func clampPos(p axisPos) axisPos {
 	return p
 }
 
+// maxGridPlacementWork bounds the work of one grid's auto-placement, in
+// 64-cell words of the occupancy tested. Anti-DoS guard, not
+// spec-mandated: dense auto-placement searches from the grid's start for
+// each item (CSS Grid 1, 8.5), so a million items on a grid of
+// [MaxTracksPerAxis] tracks a side would test about 10^12 cells. The
+// search resumes where the previous item of the same span stopped, which
+// keeps a real grid of thousands of items under a million words; 2^26
+// words take about a quarter of a second.
+const maxGridPlacementWork = 1 << 26
+
+// gridWorkPerCheck is how many words of placement work pass between two
+// checks of the context.
+const gridWorkPerCheck = 1 << 16
+
 // placeGrid resolves the explicit grid of the container b, its auto
 // repeats repeated rep times per axis, and places items, its in-flow
 // children (CSS Grid 1, 8.5).
-func placeGrid(b *box, items []*box, rep [2]int) *gridPlacement {
+//
+// Past [maxGridPlacementWork], or once ctx is done, the search stops: the
+// item it was placing stays where the search stopped, overlapping what
+// is there, and each item left to auto-place goes into a track of its
+// own after the tracks the grid holds in the flow axis, at the cross
+// position its placement names or at the start; the placement reports
+// overBudget. ctx's error is returned with the placement, which places
+// every item.
+func placeGrid(ctx context.Context, b *box, items []*box, rep [2]int) (*gridPlacement, error) {
 	st := b.st
 	p := &gridPlacement{}
 	p.axes[rowAxis] = explicitAxis(st.GridTemplateRows, rep[rowAxis], st.GridTemplateAreas, rowAxis, st.GridAutoRows)
@@ -405,7 +431,30 @@ func placeGrid(b *box, items []*box, rep [2]int) *gridPlacement {
 			occ.mark(q.it)
 		}
 	}
+	var err error
+	// stop reports whether the search must stop: ctx is done or the work
+	// passed its budget. It checks the context every gridWorkPerCheck
+	// words, the first time included.
+	nextCheck := 0
+	stop := func() bool {
+		if err != nil || p.overBudget {
+			return true
+		}
+		if occ.work < nextCheck {
+			return false
+		}
+		nextCheck = occ.work + gridWorkPerCheck
+		if err = ctx.Err(); err != nil {
+			return true
+		}
+		p.overBudget = occ.work > maxGridPlacementWork
+		return p.overBudget
+	}
 	dense := st.GridAutoFlow&css.GridFlowDense != 0
+	// resume holds, per span searched in dense mode, where the search for
+	// the previous item of that span stopped: cells are only ever taken,
+	// so no earlier position fits an item of the same span.
+	resume := map[[3]int]int{}
 	// Step 2: the items locked to a flow-axis track (8.5, step 2), each
 	// at the earliest cross position free of overlap, past the previous
 	// one of the same track unless dense.
@@ -418,13 +467,22 @@ func placeGrid(b *box, items []*box, rep [2]int) *gridPlacement {
 		span := q.pos[cross].span
 		at := q.it.start[flow]
 		c := 0
-		if !dense {
+		key := [3]int{at, q.it.end[flow], span}
+		switch {
+		case stop():
+			c = occ.n[cross]
+		case !dense:
 			c = cursors[at]
+		default:
+			c = resume[key]
 		}
-		for !occ.free(flow, at, q.it.end[flow], c, c+span) && c < MaxTracksPerAxis {
+		for !stop() && !occ.free(flow, at, q.it.end[flow], c, c+span) && c < MaxTracksPerAxis {
 			c++
 		}
 		c = min(c, MaxTracksPerAxis-span)
+		if dense {
+			resume[key] = c
+		}
 		q.it.start[cross], q.it.end[cross] = c, c+span
 		occ.grow(cross, c+span)
 		occ.mark(q.it)
@@ -438,23 +496,37 @@ func placeGrid(b *box, items []*box, rep [2]int) *gridPlacement {
 			continue
 		}
 		spanF := q.pos[flow].span
-		if q.pos[cross].definite {
+		switch {
+		case stop():
+			// No search: a track of its own after the grid's.
+			curF = occ.n[flow]
+			if !q.pos[cross].definite {
+				spanC := max(min(q.pos[cross].span, occ.n[cross]), 1)
+				q.it.start[cross], q.it.end[cross] = 0, spanC
+			}
+		case q.pos[cross].definite:
 			cs, ce := q.it.start[cross], q.it.end[cross]
+			key := [3]int{-1 - cs, ce, spanF}
 			if dense {
-				curF = 0
+				curF = resume[key]
 			} else if cs < curC {
 				curF++
 			}
-			for !occ.free(flow, curF, curF+spanF, cs, ce) && curF < MaxTracksPerAxis {
+			for !stop() && !occ.free(flow, curF, curF+spanF, cs, ce) && curF < MaxTracksPerAxis {
 				curF++
 			}
-		} else {
+			if dense {
+				resume[key] = curF
+			}
+		default:
 			spanC := min(q.pos[cross].span, occ.n[cross])
 			spanC = max(spanC, 1)
+			key := [3]int{-1 - MaxTracksPerAxis, spanF, spanC}
 			if dense {
-				curF, curC = 0, 0
+				at := resume[key]
+				curF, curC = at/MaxTracksPerAxis, at%MaxTracksPerAxis
 			}
-			for curF < MaxTracksPerAxis {
+			for curF < MaxTracksPerAxis && !stop() {
 				if curC+spanC > occ.n[cross] {
 					curF++
 					curC = 0
@@ -464,6 +536,12 @@ func placeGrid(b *box, items []*box, rep [2]int) *gridPlacement {
 					break
 				}
 				curC++
+			}
+			// A search stopped past the budget may have left the cursor
+			// past the cross tracks.
+			curC = min(curC, max(occ.n[cross]-spanC, 0))
+			if dense {
+				resume[key] = curF*MaxTracksPerAxis + curC
 			}
 			q.it.start[cross], q.it.end[cross] = curC, curC+spanC
 		}
@@ -479,7 +557,7 @@ func placeGrid(b *box, items []*box, rep [2]int) *gridPlacement {
 	for _, q := range ps {
 		p.items = append(p.items, q.it)
 	}
-	return p
+	return p, err
 }
 
 // occupancy is the set of grid cells taken by placed items: one bit per
@@ -489,6 +567,9 @@ func placeGrid(b *box, items []*box, rep [2]int) *gridPlacement {
 type occupancy struct {
 	n    [2]int
 	rows [][]uint64
+	// work counts the words [occupancy.free] tested, against
+	// [maxGridPlacementWork].
+	work int
 }
 
 // grow makes the implicit grid at least n tracks in axis ax.
@@ -517,28 +598,35 @@ func (o *occupancy) mark(it *gitem) {
 	}
 }
 
-// taken reports whether the cell at row r and column c is taken.
-func (o *occupancy) taken(r, c int) bool {
-	if r < 0 || r >= len(o.rows) || c < 0 || c/64 >= len(o.rows[r]) {
-		return false
-	}
-	return o.rows[r][c/64]&(1<<(c%64)) != 0
-}
-
 // free reports whether the area of tracks [f0, f1) in axis flow and
-// [c0, c1) in the other is free.
+// [c0, c1) in the other is free, testing a row's columns 64 at a time.
 func (o *occupancy) free(flow, f0, f1, c0, c1 int) bool {
-	for f := f0; f < f1; f++ {
-		for c := c0; c < c1; c++ {
-			r, col := f, c
-			if flow == colAxis {
-				r, col = c, f
+	r0, r1, col0, col1 := f0, f1, c0, c1
+	if flow == colAxis {
+		r0, r1, col0, col1 = c0, c1, f0, f1
+	}
+	r0, col0 = max(r0, 0), max(col0, 0)
+	if col1 <= col0 {
+		o.work++
+		return true
+	}
+	for r := r0; r < min(r1, len(o.rows)); r++ {
+		row := o.rows[r]
+		for w := col0 / 64; w <= (col1-1)/64 && w < len(row); w++ {
+			o.work++
+			mask := ^uint64(0)
+			if w == col0/64 {
+				mask &= ^uint64(0) << (col0 % 64)
 			}
-			if o.taken(r, col) {
+			if w == (col1-1)/64 {
+				mask &= ^uint64(0) >> (63 - (col1-1)%64)
+			}
+			if row[w]&mask != 0 {
 				return false
 			}
 		}
 	}
+	o.work++
 	return true
 }
 
