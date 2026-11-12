@@ -294,7 +294,7 @@ func effectsTwice(s *Shape) bool {
 }
 
 // effects returns what paints under the geometry shape s for its effects
-// (ECMA-376 Part 1, 20.1.8.49 outerShdw, 20.1.8.32 glow, 20.1.8.53
+// (ECMA-376 Part 1, 20.1.8.45 outerShdw, 20.1.8.32 glow, 20.1.8.53
 // softEdge; ODF 1.3 Part 3, 20.158 draw:shadow with LibreOffice's
 // loext:shadow-blur, loext:glow-radius and loext:softedge-radius), paths
 // being the shape's paths in its box, m mapping its parent's coordinates
@@ -466,7 +466,7 @@ func (b *builder) paintEffects(s *Shape, own, text []typeset.Fragment, toSlide t
 
 // shadowMatrix returns the shadow's transform in slide coordinates: the
 // scale about the centre of bounds, then the offsets (ECMA-376 Part 1,
-// 20.1.8.49: sx, sy, dist and dir, which the reader resolves into the
+// 20.1.8.45: sx, sy, dist and dir, which the reader resolves into the
 // scale and the offsets). The shadow does not turn with a turned shape:
 // its offsets are the slide's.
 //

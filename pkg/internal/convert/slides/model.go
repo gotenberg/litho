@@ -132,7 +132,7 @@ type Shape struct {
 	SkewX float64
 	// Shadow is the shape's shadow, nil for none; Glow its glow, nil for
 	// none; SoftEdge the radius in points over which its edge fades to
-	// transparent, 0 for a hard edge (ECMA-376 Part 1, 20.1.8.49 outerShdw,
+	// transparent, 0 for a hard edge (ECMA-376 Part 1, 20.1.8.45 outerShdw,
 	// 20.1.8.32 glow, 20.1.8.53 softEdge; ODF 1.3 Part 3, 20.158
 	// draw:shadow and LibreOffice's loext:shadow-blur, loext:glow-radius,
 	// loext:softedge-radius).
@@ -185,7 +185,7 @@ type Shape struct {
 // Shadow is a shape's drop shadow: a copy of the shape's silhouette,
 // pictures and text included, painted under it in Color at Opacity,
 // moved by OffsetX and OffsetY, scaled about the shape's centre by ScaleX
-// and ScaleY, and blurred over Blur (ECMA-376 Part 1, 20.1.8.49 outerShdw;
+// and ScaleY, and blurred over Blur (ECMA-376 Part 1, 20.1.8.45 outerShdw;
 // ODF 1.3 Part 3, 20.158 to 20.161 draw:shadow, draw:shadow-offset-x,
 // draw:shadow-offset-y, draw:shadow-color, draw:shadow-opacity and
 // LibreOffice's loext:shadow-blur). The reader resolves dist and dir

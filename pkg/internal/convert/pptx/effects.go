@@ -21,7 +21,7 @@ import (
 // resolving the colours. A table's effect list is its a:tblPr's
 // (21.1.3.15), passed as chain with a nil style.
 //
-// The outer shadow (20.1.8.49 outerShdw) fills [slides.Shape.Shadow]: its
+// The outer shadow (20.1.8.45 outerShdw) fills [slides.Shape.Shadow]: its
 // colour and alpha, its blur radius, its distance and direction resolved
 // into offsets, its scale with the alignment it scales about resolved
 // into the offsets too, as the builder scales about the shape's centre.
@@ -149,7 +149,7 @@ const maxEffectRadius = 1000
 // slide.
 const maxShadowScale = 10
 
-// outerShadow reads the geometry of an outer shadow (20.1.8.49
+// outerShadow reads the geometry of an outer shadow (20.1.8.45
 // outerShdw) of a shape of box: blurRad, dist and dir (60,000ths of a
 // degree, clockwise from the x axis, y down), sx and sy (1,000ths of a
 // percent, 100,000 for none), and the alignment algn (20.1.10.3
