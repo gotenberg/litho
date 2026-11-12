@@ -89,7 +89,10 @@ func vmlTrue(v string) bool {
 func rectOps(x, y, w, h float64) []typeset.PathOp {
 	pt := func(x, y float64) [3]typeset.Point { return [3]typeset.Point{{X: x, Y: y}} }
 	return []typeset.PathOp{
-		{Kind: typeset.MoveTo, P: pt(x, y)}, {Kind: typeset.LineTo, P: pt(x+w, y)},
-		{Kind: typeset.LineTo, P: pt(x+w, y+h)}, {Kind: typeset.LineTo, P: pt(x, y+h)}, {Kind: typeset.ClosePath},
+		{Kind: typeset.MoveTo, P: pt(x, y)},
+		{Kind: typeset.LineTo, P: pt(x+w, y)},
+		{Kind: typeset.LineTo, P: pt(x+w, y+h)},
+		{Kind: typeset.LineTo, P: pt(x, y+h)},
+		{Kind: typeset.ClosePath},
 	}
 }

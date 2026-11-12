@@ -230,8 +230,10 @@ func rectGradient(ops []typeset.PathOp, box typeset.Rect, stops []typeset.ColorS
 	tri := func(a, b typeset.Point, edge typeset.Point) typeset.Fragment {
 		return &typeset.Path{
 			Ops: []typeset.PathOp{
-				{Kind: typeset.MoveTo, P: [3]typeset.Point{c}}, {Kind: typeset.LineTo, P: [3]typeset.Point{a}},
-				{Kind: typeset.LineTo, P: [3]typeset.Point{b}}, {Kind: typeset.ClosePath},
+				{Kind: typeset.MoveTo, P: [3]typeset.Point{c}},
+				{Kind: typeset.LineTo, P: [3]typeset.Point{a}},
+				{Kind: typeset.LineTo, P: [3]typeset.Point{b}},
+				{Kind: typeset.ClosePath},
 			},
 			Fill: &typeset.Fill{Rule: typeset.NonZero, Shading: &typeset.Shading{Kind: typeset.Axial, From: c, To: edge, Stops: stops}},
 		}
