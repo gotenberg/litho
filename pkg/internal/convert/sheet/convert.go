@@ -17,11 +17,22 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
-// letterWidth and letterHeight are the paper of a document that prints no
-// page, a blank US Letter page, LibreOffice's en-US default.
+// FallbackWidth and FallbackHeight are the paper, in points, of a sheet
+// whose file names none when the conversion names no default paper
+// (office.Options.DefaultPage), and of the blank page a book that prints
+// no cell prints: ISO 216 A4, the library's default paper and the paper
+// LibreOffice falls back on in a locale that names none.
+//
+// # Corpus evidence
+//
+//   - litho/ods paper-grid-default-portrait and -landscape: a page layout
+//     that names no size prints on 595.3 by 841.89 point pages, landscape
+//     or not.
+//   - litho/csv paper-table and libreoffice/csv: every CSV file prints on
+//     595.3 by 841.89 point pages.
 const (
-	letterWidth  = 612
-	letterHeight = 792
+	FallbackWidth  = 210 * 72 / 25.4
+	FallbackHeight = 297 * 72 / 25.4
 )
 
 // builder holds what one conversion shares.
@@ -212,7 +223,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		// A book that prints no cell prints the first page of its first
 		// sheet, the cells its styles paint, with the sheet's header and
 		// footer and its outline entry, as LibreOffice does.
-		w, h := b.opts.Paper(b.opts.DefaultPage(letterWidth, letterHeight))
+		w, h := b.opts.Paper(b.opts.DefaultPage(FallbackWidth, FallbackHeight))
 		pg := &typeset.Page{Width: w, Height: h}
 		if len(plans) > 0 {
 			sp := plans[0]
@@ -299,7 +310,7 @@ func tableOf(st *typeset.StructElem) *typeset.StructElem {
 func (b *builder) paper(sh *Sheet) (float64, float64) {
 	w, h := sh.Page.Width, sh.Page.Height
 	if !numeric.Positive(w) || !numeric.Positive(h) {
-		w, h = b.opts.DefaultPage(letterWidth, letterHeight)
+		w, h = b.opts.DefaultPage(FallbackWidth, FallbackHeight)
 	}
 	w, h = b.opts.Paper(w, h)
 	return min(w, office.MaxPageSide), min(h, office.MaxPageSide)

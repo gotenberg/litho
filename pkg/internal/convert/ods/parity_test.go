@@ -18,7 +18,7 @@ const corpusSources = "testdata/gotenberg"
 //
 // # Corpus evidence
 //
-//   - gotenberg/ods: figures and figures-flat print 2 Letter pages, the sheet name in
+//   - gotenberg/ods: figures and figures-flat print 2 pages, the sheet name in
 //     the header, "Page 1" and "Page 2" in the footer, "REVENUE-SH" on
 //     page 1 and "COSTS-SHEE" on page 2, 2026-01-31 in ISO form.
 func TestParity_Figures(t *testing.T) {
@@ -62,7 +62,7 @@ func TestParity_Figures(t *testing.T) {
 			}
 			for _, sh := range doc.Sheets {
 				pg, hf := sh.Page, sh.HeaderFooter
-				if pg.Width != 612 || pg.Height != 792 || !near(pg.Margin[css.Left], defaultMargin) || !near(pg.Margin[css.Top], defaultMargin+defaultHFHeight) ||
+				if pg.Width != sheet.FallbackWidth || pg.Height != sheet.FallbackHeight || !near(pg.Margin[css.Left], defaultMargin) || !near(pg.Margin[css.Top], defaultMargin+defaultHFHeight) ||
 					pg.Scale != 100 || pg.FirstPageNumber != 0 {
 					t.Errorf("%s page = %+v", sh.Name, pg)
 				}

@@ -10,22 +10,21 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/odf"
 )
 
-// The defaults of Calc's Default page style, the en-US image's.
+// The defaults of Calc's Default page style. Its paper is the
+// conversion's default paper, sheet.FallbackWidth by sheet.FallbackHeight
+// without one.
 //
 // # Corpus evidence
 //
 //   - gotenberg/ods: figures.ods, whose page layout names no size or margin,
-//     prints on 612 by 792 point pages, its cells' text 1 point right of
-//     56.69 points (2 cm) and its first row's top 77.95 points below the
-//     page's top: the 2 cm margin and the 0.75 cm header.
+//     prints its cells' text 1 point right of 56.69 points (2 cm) and its
+//     first row's top 77.95 points below the page's top: the 2 cm margin
+//     and the 0.75 cm header.
 //   - probe, ods: a sheet with a 1 cm top margin and a header of 2 cm
 //     min-height and 0.5 cm spacing starts its cells 85.04 points down:
 //     the min-height includes the spacing; the header's text is centred
 //     in the 1.5 cm left above the spacing, as the footer's alike.
 const (
-	// letterWidth and letterHeight are the US Letter paper of the en-US
-	// locale.
-	letterWidth, letterHeight = 612, 792
 	// defaultMargin is the 2 cm of every side.
 	defaultMargin = 2 * 72 / 2.54
 	// defaultHFHeight is the 0.75 cm a header or footer takes with its
@@ -95,7 +94,7 @@ func shown(el *odf.Element) bool {
 // # Corpus evidence
 //
 //   - libreoffice/ods: sc/tdf129940.ods, whose page layout says landscape and names no
-//     size, prints on 612 by 792 point pages; chart2/chartWithDotInSheetName
+//     size, prints on 595.3 by 841.89 point pages; chart2/chartWithDotInSheetName
 //     .ods, landscape with an 841.89 by 595.3 point size, on that size.
 func (r *reader) readPage(mp *odf.MasterPage) pageResult {
 	var pl odf.PageLayout

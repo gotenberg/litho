@@ -55,7 +55,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 // read. fonts, which may be nil, parses the text of SVG pictures;
 // opts.Password opens an encrypted package, and the default page of opts
 // (office.Options.DefaultPage) is the paper of a page style that names
-// none, Letter without one; under office.RecalculateNever no cell keeps
+// none, A4 without one (sheet.FallbackWidth); under office.RecalculateNever no cell keeps
 // its formula. It fails as [Convert] does.
 func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Options) (*sheet.Document, []typeset.Warning, error) {
 	pkg, err := odf.Open(ctx, data, odf.Options{Password: opts.Password})
@@ -72,7 +72,7 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 		return nil, nil, fmt.Errorf("reading ODS: %w: the document has no office:spreadsheet body", office.ErrMalformed)
 	}
 	r := newReader(ctx, pkg, fonts)
-	r.paperW, r.paperH = opts.DefaultPage(letterWidth, letterHeight)
+	r.paperW, r.paperH = opts.DefaultPage(sheet.FallbackWidth, sheet.FallbackHeight)
 	r.keepFormulas = opts.Recalculation != office.RecalculateNever
 	doc := r.document(body)
 	if r.err != nil {

@@ -56,22 +56,20 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 }
 
 // The page and cell defaults of a CSV import, Calc's Default page style
-// and Default cell style in the en-US locale, with the page header turned
-// off: Calc's default header shows the sheet name, which a CSV takes from
-// its file name, a name the converter does not know (lok's LokGeometry.xba
-// turns it off alike, since there the name is the upload's
-// file name).
+// and Default cell style, with the page header turned off: Calc's default
+// header shows the sheet name, which a CSV takes from its file name, a
+// name the converter does not know (lok's LokGeometry.xba turns it off
+// alike, since there the name is the upload's file name).
 //
 // # Corpus evidence
 //
-//   - gotenberg/csv: sales.csv and sheet.csv print on one 612 by 792 point page
-//     with "Page 1" centred at 60.35 points from the bottom and no header;
+//   - gotenberg/csv: sales.csv and sheet.csv print on one page with
+//     "Page 1" centred at 60.35 points from the bottom and no header;
 //     the first row's text sits 1 point right of 56.69 points (2 cm) and
 //     its baseline 9.7 points below 56.69 points from the top; the rows
 //     are 12.78 points apart.
 const (
-	pageWidth, pageHeight = 612, 792
-	margin                = 2 * 72 / 2.54
+	margin = 2 * 72 / 2.54
 	// footerHeight is the footer's 0.75 cm with its 0.25 cm spacing.
 	footerHeight  = 0.75 * 72 / 2.54
 	footerSpacing = 0.25 * 72 / 2.54
@@ -100,8 +98,9 @@ const fallbackYear = 2026
 // every field as text, else a field that reads as a value is one
 // ([detect]). fonts measures the column widths; opts.PrintDate gives a
 // date without a year its year (the zero time: [fallbackYear]), and the
-// default page of opts (office.Options.DefaultPage) is the paper, Letter
-// without one. It returns ctx's error when ctx ends first.
+// default page of opts (office.Options.DefaultPage) is the paper, A4
+// without one (sheet.FallbackWidth). It returns ctx's error when ctx ends
+// first.
 func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Options) (*sheet.Document, []typeset.Warning, error) {
 	printDate := opts.PrintDate
 	for _, r := range opts.CSVSeparators {
@@ -142,7 +141,7 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 		Name:               "Sheet1",
 		DefaultColumnWidth: columnWidth,
 		DefaultRowHeight:   rowHeight,
-		Page:               page(opts.DefaultPage(pageWidth, pageHeight)),
+		Page:               page(opts.DefaultPage(sheet.FallbackWidth, sheet.FallbackHeight)),
 	}
 	sh.HeaderFooter.Odd.Footer[1] = []sheet.Span{{Text: "Page "}, {Field: sheet.FieldPage}}
 	sh.HeaderFooter.Even, sh.HeaderFooter.First = sh.HeaderFooter.Odd, sh.HeaderFooter.Odd

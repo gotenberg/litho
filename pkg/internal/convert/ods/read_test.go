@@ -289,11 +289,11 @@ func TestRead_Pages(t *testing.T) {
 	}
 	fit := doc.Sheets[1]
 	if fit.Page.Scale != 0 || fit.Page.FitWidth != 2 || fit.Page.FitHeight != 0 || len(fit.HeaderFooter.Odd.Header[1]) != 0 ||
-		!near(fit.Page.Margin[css.Top], 2*cm) || fit.Page.Width != letterWidth {
+		!near(fit.Page.Margin[css.Top], 2*cm) || fit.Page.Width != sheet.FallbackWidth {
 		t.Errorf("fit = %+v %+v", fit.Page, fit.HeaderFooter)
 	}
 	def := doc.Sheets[2]
-	if def.Page.Width != 612 || def.Page.Height != 792 || !near(def.Page.Margin[css.Top], 2.75*cm) || def.HeaderFooter.Odd.Header[1][0].Field != sheet.FieldSheet ||
+	if def.Page.Width != sheet.FallbackWidth || def.Page.Height != sheet.FallbackHeight || !near(def.Page.Margin[css.Top], 2.75*cm) || def.HeaderFooter.Odd.Header[1][0].Field != sheet.FieldSheet ||
 		def.HeaderFooter.Odd.Footer[1][1].Field != sheet.FieldPage || def.Page.Scale != 100 {
 		t.Errorf("default page = %+v %+v", def.Page, def.HeaderFooter)
 	}

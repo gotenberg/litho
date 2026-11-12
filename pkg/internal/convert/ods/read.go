@@ -103,7 +103,7 @@ func newReader(ctx context.Context, pkg *odf.Package, fonts *text.Fonts) *reader
 	return &reader{
 		ctx: ctx, pkg: pkg, fonts: fonts, styles: odf.NewStyles(pkg), data: odf.NewDataStyles(pkg),
 		keepFormulas: true, cellSty: map[string]*sheet.Style{}, condSty: map[string]*sheet.Style{}, pages: map[string]pageResult{}, pics: map[string]*picResult{},
-		warned: map[string]bool{}, paperW: letterWidth, paperH: letterHeight,
+		warned: map[string]bool{}, paperW: sheet.FallbackWidth, paperH: sheet.FallbackHeight,
 	}
 }
 

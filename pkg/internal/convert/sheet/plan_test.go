@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -280,5 +281,32 @@ func TestDrawingCells_ExcelEndCell(t *testing.T) {
 		if !ok || r.LastRow != tc.lastR || r.LastColumn != tc.lastC {
 			t.Errorf("Excel's rules %v: cells %+v, want to row %d and column %d", tc.excel, r, tc.lastR, tc.lastC)
 		}
+	}
+}
+
+// TestConvert_FallbackPaper prints a sheet that names no paper on A4 when
+// the conversion names no default paper, and on the conversion's default
+// paper when it names one.
+func TestConvert_FallbackPaper(t *testing.T) {
+	doc := func() *Document {
+		return &Document{Sheets: []*Sheet{{
+			Name: "S", Page: PageSetup{Scale: 100},
+			Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "a", nil)}}},
+		}}}
+	}
+	for _, tt := range []struct {
+		name string
+		opts office.Options
+		w, h float64
+	}{
+		{"none", office.Options{}, FallbackWidth, FallbackHeight},
+		{"letter", office.Options{DefaultPageWidth: 612, DefaultPageHeight: 792}, 612, 792},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			out := convert(t, doc(), tt.opts)
+			if pg := out.Pages[0]; math.Abs(pg.Width-tt.w) > 1e-9 || math.Abs(pg.Height-tt.h) > 1e-9 {
+				t.Errorf("page %vx%v, want %vx%v", pg.Width, pg.Height, tt.w, tt.h)
+			}
+		})
 	}
 }

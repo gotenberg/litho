@@ -122,7 +122,8 @@ const substituteFamily = "Noto Sans"
 // read reads the workbook pkg holds into the sheet model, with the
 // warnings of what it left out or approximated. The default page of opts
 // (office.Options.DefaultPage) is the paper of a sheet without a
-// pageSetup, Letter without one.
+// pageSetup, Letter without one, the paperSize SpreadsheetML defaults to
+// (ECMA-376 Part 1, 18.3.1.63).
 func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts office.Options) (*sheet.Document, []typeset.Warning, error) {
 	main, err := pkg.MainPart()
 	if err != nil {
