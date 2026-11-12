@@ -161,7 +161,11 @@ func explicitLevels(text []rune, base int) ([]int, []bool) {
 		case RLE, LRE, RLO, LRO, RLI, LRI, FSI:
 			isolate := c == RLI || c == LRI || c == FSI
 			rtl := c == RLE || c == RLO || c == RLI
-			if c == FSI {
+			// An overflow counter makes the initiator fail whatever its
+			// direction (X5c, X6a), so an FSI resolves its own only when it
+			// may open: the scan up to its PDI then runs for at most
+			// maxDepth unclosed initiators, not for every one of the text.
+			if c == FSI && overflowIsolates == 0 && overflowEmbeddings == 0 {
 				rtl = paragraphDirection(isolated(text[i+1:])) == di.DirectionRTL
 			}
 			if isolate {
@@ -262,20 +266,23 @@ func numericRuns(text []rune, levels []int) []bool {
 			num[i] = true
 		}
 	}
-	for i := range n {
-		if cls[i] != bidi.ET || num[i] {
+	// A sequence of terminators joins the European number on either side
+	// of it as a whole, so each sequence is tested once at its ends.
+	for i := 0; i < n; {
+		if cls[i] != bidi.ET {
+			i++
 			continue
 		}
-		for j := i; j < n && cls[j] == bidi.ET; j++ {
-			if j+1 < n && cls[j+1] == bidi.EN {
-				num[i] = true
+		j := i
+		for j < n && cls[j] == bidi.ET {
+			j++
+		}
+		if (i > 0 && cls[i-1] == bidi.EN) || (j < n && cls[j] == bidi.EN) {
+			for k := i; k < j; k++ {
+				num[k] = true
 			}
 		}
-		for j := i; j >= 0 && cls[j] == bidi.ET; j-- {
-			if j > 0 && cls[j-1] == bidi.EN {
-				num[i] = true
-			}
-		}
+		i = j
 	}
 	out := make([]bool, n)
 	strong := -1 // the class of the last strong character at the level
