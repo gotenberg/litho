@@ -335,6 +335,15 @@ func dctModel(m color.Model) bool {
 	return m == color.GrayModel || m == color.YCbCrModel || m == color.CMYKModel
 }
 
+// svgHeadBytes is how far into a picture an <svg or <?xml start is
+// looked for, past a byte order mark and white space, and svgRootBytes how
+// far an XML start is looked into for its <svg root: a sniff, not a parse,
+// so a picture that starts anything else decodes as a raster.
+const (
+	svgHeadBytes = 512
+	svgRootBytes = 4096
+)
+
 // isSVG reports a picture in SVG, by its URL's extension or media type or
 // by an XML or <svg start.
 func isSVG(u string, data []byte) bool {
@@ -345,6 +354,6 @@ func isSVG(u string, data []byte) bool {
 	if p, err := url.Parse(lu); err == nil && strings.HasSuffix(p.Path, ".svg") {
 		return true
 	}
-	head := bytes.TrimLeft(data[:min(len(data), 512)], "\xef\xbb\xbf \t\r\n")
-	return bytes.HasPrefix(head, []byte("<svg")) || bytes.HasPrefix(head, []byte("<?xml")) && bytes.Contains(data[:min(len(data), 4096)], []byte("<svg"))
+	head := bytes.TrimLeft(data[:min(len(data), svgHeadBytes)], "\xef\xbb\xbf \t\r\n")
+	return bytes.HasPrefix(head, []byte("<svg")) || bytes.HasPrefix(head, []byte("<?xml")) && bytes.Contains(data[:min(len(data), svgRootBytes)], []byte("<svg"))
 }
