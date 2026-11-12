@@ -392,8 +392,8 @@ fields at the date the caller gives. A workbook prints the sheets
 selected by name or number, hidden ones on request, recalculated as
 needed, never or always; a CSV file takes its separators and may keep
 every field as text. A presentation prints as handouts, 1, 2, 3, 4, 6
-or 9 slides a page on its handout page, laid out as LibreOffice lays a
-handout out: the pinned LibreOffice prints no handout without its print
+or 9 slides a page on its handout page, which takes the orientation of
+the page it prints on, laid out as LibreOffice lays a handout out: the pinned LibreOffice prints no handout without its print
 dialog, so the rule is locked to the 48 layouts it stores in a handout
 master instead.
 
