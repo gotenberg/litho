@@ -431,7 +431,7 @@ func (w *drawnStreamWalk) descend(ctx context.Context, s drawnScan, pageRes ast.
 	// text never shows included: veraPDF reaches them all through the font of
 	// the text-showing operator, and none of a font a Tf only selects.
 	fonts, _ := document.ResolveDict(ctx, w.doc, scope["Font"])
-	for _, name := range slices.Sorted(maps.Keys(collectFontUsage(s.ops))) {
+	for _, name := range slices.Sorted(maps.Keys(shownFonts(s.ops))) {
 		fontDict, err := document.ResolveDict(ctx, w.doc, fonts[ast.PdfName(name)])
 		if err != nil || fontDict == nil {
 			continue

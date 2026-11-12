@@ -130,6 +130,33 @@ func shownOperand(op content.Operation) (ast.PdfObject, bool) {
 	return nil, false
 }
 
+// shownFonts returns, for each font a text-showing operator of ops shows
+// text with, whether it shows any visibly: the fonts [collectFontUsage]
+// returns and their visible flags, without the codes and strings it records,
+// which a caller that asks only which fonts show text never reads. It returns
+// nil when ops is empty.
+func shownFonts(ops []content.Operation) map[string]bool {
+	if len(ops) == 0 {
+		return nil
+	}
+	shown := make(map[string]bool)
+	var text textStateWalk
+	for _, op := range ops {
+		text.step(op)
+		operand, isShow := shownOperand(op)
+		if !isShow || text.font == "" {
+			continue
+		}
+		switch {
+		case text.mode != invisibleRenderingMode:
+			shown[text.font] = true
+		case operand != nil && !shown[text.font]:
+			shown[text.font] = false
+		}
+	}
+	return shown
+}
+
 // collectFontUsageAt is [collectFontUsage] for the content stream site names,
 // which keys the marked-content sequences its shows are recorded in; see
 // [markedContentKey].
@@ -967,20 +994,27 @@ func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []
 	if len(fontDict) == 0 {
 		return nil
 	}
-	usage := collectFontUsageAt(ops, showSite{mode: site.mode})
+	// The usage is read only for a Type 3 font, so it is collected at the
+	// first one: most pages select none, and the shows of a text-heavy page
+	// are most of what the collection allocates.
+	var usage map[string]*fontUsageInfo
+	usageRead := false
 
 	var results []Violation
 	for _, fontName := range sortedNames(fontDict) {
-		fontUsage := usage[string(fontName)]
-		if fontUsage == nil || len(fontUsage.charCodes) == 0 || len(fontUsage.shows) == 0 {
-			continue
-		}
 		fontRef := fontDict[fontName]
 		font, err := document.ResolveDict(ctx, doc, fontRef)
 		if err != nil || font == nil {
 			continue
 		}
 		if subtype, _ := document.ResolveName(ctx, doc, font["Subtype"]); subtype != "Type3" {
+			continue
+		}
+		if !usageRead {
+			usage, usageRead = collectFontUsageAt(ops, showSite{mode: site.mode}), true
+		}
+		fontUsage := usage[string(fontName)]
+		if fontUsage == nil || len(fontUsage.charCodes) == 0 || len(fontUsage.shows) == 0 {
 			continue
 		}
 		// Per ISO 32000-1, Table 112, /Resources is optional: a procedure may
@@ -2955,9 +2989,9 @@ func collectVisibleFontObjects(ctx context.Context, doc *document.Document, vctx
 			continue
 		}
 		site := showSite{fonts: pageFontsKey(p, pageIdx+1)}
-		pageUsage := collectFontUsage(p.parsedOps(ctx))
+		pageShown := shownFonts(p.parsedOps(ctx))
 		for name, ref := range fontDict {
-			if u := pageUsage[string(name)]; p.parseFailed || (u != nil && u.visible) {
+			if p.parseFailed || pageShown[string(name)] {
 				visible[fontIdentity(ref, name, site)] = true
 			}
 		}
