@@ -98,11 +98,13 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 
 	// Content stream order: group elements into lines, apply bidi reordering
 	// per line, then join with newlines and inferred spaces.
+	// A line is a run of consecutive elements, so each is a subslice of
+	// elements, its capacity cut at its end.
 	type line struct {
 		elems []models.TextElement
 	}
 	var lines []line
-	cur := line{elems: []models.TextElement{elements[0]}}
+	start := 0
 	if len(fonts) != len(elements) {
 		fonts = nil
 	}
@@ -158,13 +160,11 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 			runs.restart(i, el)
 		}
 		if newLine {
-			lines = append(lines, cur)
-			cur = line{elems: []models.TextElement{el}}
-		} else {
-			cur.elems = append(cur.elems, el)
+			lines = append(lines, line{elems: elements[start:i:i]})
+			start = i
 		}
 	}
-	lines = append(lines, cur)
+	lines = append(lines, line{elems: elements[start:len(elements):len(elements)]})
 
 	var sb strings.Builder
 	// Lines are consecutive runs of elements, so lineStart indexes the first
@@ -175,6 +175,7 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 	// items and lines, so it outlives the line it is on.
 	advAt := -1
 	marks := runs.marks
+	var order []int
 	for lineIdx, ln := range lines {
 		if lineIdx > 0 {
 			sb.WriteString("\n")
@@ -186,7 +187,11 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		base := lineStart
 		lineStart += len(ln.elems)
 
-		indices := make([]int, len(ln.elems))
+		// The order of one line is read before the next line's is built.
+		if cap(order) < len(ln.elems) {
+			order = make([]int, len(ln.elems))
+		}
+		indices := order[:len(ln.elems)]
 		for i := range ln.elems {
 			indices[i] = i
 		}
