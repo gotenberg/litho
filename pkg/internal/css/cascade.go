@@ -603,7 +603,7 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 	}
 	if cl, ok := attr(n, "class"); ok {
 		seen := map[string]bool{}
-		for c := range strings.FieldsSeq(cl) {
+		for c := range asciiFields(cl) {
 			if !seen[c] {
 				seen[c] = true
 				test(r.byClass[c])

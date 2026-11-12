@@ -1,6 +1,7 @@
 package css
 
 import (
+	"iter"
 	"slices"
 	"strings"
 
@@ -274,10 +275,10 @@ func matchAttr(a *attrSel, n *html.Node) bool {
 	case attrEquals:
 		return v == want
 	case attrIncludes:
-		if want == "" || strings.ContainsAny(want, " \t\n\f\r") {
+		if want == "" || strings.ContainsAny(want, asciiWhitespace) {
 			return false
 		}
-		for w := range strings.FieldsSeq(v) {
+		for w := range asciiFields(v) {
 			if w == want {
 				return true
 			}
@@ -421,6 +422,16 @@ func (m *matcher) nthOf(p *pseudoSel, n *html.Node) bool {
 	return nthMatches(p.a, p.b, idx)
 }
 
+// asciiWhitespace separates the words of a class list or of an attribute
+// value ~= reads (HTML, 2.3.8; Selectors 4, 6.3).
+const asciiWhitespace = " \t\n\f\r"
+
+// asciiFields iterates the words of s split on ASCII whitespace: a
+// no-break space stays inside a word.
+func asciiFields(s string) iter.Seq[string] {
+	return strings.FieldsFuncSeq(s, func(r rune) bool { return strings.ContainsRune(asciiWhitespace, r) })
+}
+
 // hasWord reports whether the whitespace-separated list holds word,
 // without splitting it.
 func hasWord(list, word string) bool {
@@ -469,7 +480,7 @@ func elementFeatures(n *html.Node) []uint64 {
 		out = append(out, featureHash('#', id))
 	}
 	if cl, ok := attr(n, "class"); ok {
-		for c := range strings.FieldsSeq(cl) {
+		for c := range asciiFields(cl) {
 			out = append(out, featureHash('.', c))
 		}
 	}

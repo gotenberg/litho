@@ -201,3 +201,19 @@ func TestMatcher_BudgetStopsBacktracking(t *testing.T) {
 		t.Errorf("budget not exhausted after %d steps", m.steps)
 	}
 }
+
+// TestSelector_ClassListSplitsOnASCIIWhitespace locks the class and ~=
+// word lists to ASCII whitespace (Selectors 4, 6.3 and 6.6; HTML,
+// 2.3.8): a no-break space stays inside a class name, for the subject and
+// for its ancestors alike.
+func TestSelector_ClassListSplitsOnASCIIWhitespace(t *testing.T) {
+	t.Parallel()
+	c := compute(t, "<div class=\"a b\"><p id=d>x</p></div><p id=s class=\"a b\">y</p>",
+		`.a\a0 b p { font-size: 20px } p.a\a0 b { text-indent: 2px } [class~=a] { font-weight: 700 }`)
+	if d := c.of("d"); d.FontSize != 15 {
+		t.Errorf("descendant font size %v, want the ancestor's class to match", d.FontSize)
+	}
+	if s := c.of("s"); s.FontWeight != 400 {
+		t.Errorf("[class~=a] matched the class a b: weight %v", s.FontWeight)
+	}
+}
