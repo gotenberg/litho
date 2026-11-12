@@ -111,7 +111,8 @@ func TestLayout_CancelledWhileGenerating(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	item := sty(display(css.ListItem), func(s *css.Style) { s.ListStyleImage = "marker.png" })
-	kids := []*Node{el(item)}
+	kids := make([]*Node, 0, 1+4*ctxCheckEvery)
+	kids = append(kids, el(item))
 	for range 4 * ctxCheckEvery {
 		kids = append(kids, el(sty()))
 	}
