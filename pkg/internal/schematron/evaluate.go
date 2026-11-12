@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -1221,7 +1222,7 @@ func xpathBoolean(v any) bool {
 	case int:
 		return t != 0
 	case float64:
-		return t != 0 && t == t // NaN check
+		return t != 0 && !math.IsNaN(t)
 	case string:
 		return t != ""
 	case *xpath.NodeIterator:
