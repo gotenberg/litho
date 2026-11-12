@@ -70,7 +70,18 @@ var genericFamilies = map[string]string{
 	"decorative": "fantasy", "script": "cursive",
 }
 
-// fold returns t with the text properties layer laid over it.
+// escapements maps the keyword of style:text-position (ODF 1.3, Part 3,
+// 20.374) to [textState]'s auto: +1 for super, -1 for sub, 0 for a
+// percentage.
+var escapements = map[string]int{"super": 1, "sub": -1}
+
+// textTransforms maps fo:text-transform to css, none
+// for any other value.
+var textTransforms = map[string]css.TextTransform{
+	"uppercase": css.Uppercase, "lowercase": css.Lowercase, "capitalize": css.Capitalize,
+}
+
+// foldText returns t with the text properties layer laid over it.
 func (b *builder) foldText(t textState, layer odf.Props) textState {
 	if v, ok := layer.Lookup("fo:font-size"); ok {
 		if pt, ok := odf.Length(v); ok && pt > 0 {
@@ -124,11 +135,11 @@ func (b *builder) foldText(t textState, layer odf.Props) textState {
 		t.pos, t.rel = textPosition(v)
 		t.auto = 0
 		if f := strings.Fields(v); len(f) > 0 && t.rel > 0 {
-			t.auto = map[string]int{"super": 1, "sub": -1}[f[0]]
+			t.auto = escapements[f[0]]
 		}
 	}
 	if v, ok := layer.Lookup("fo:text-transform"); ok {
-		t.transform = map[string]css.TextTransform{"uppercase": css.Uppercase, "lowercase": css.Lowercase, "capitalize": css.Capitalize}[v]
+		t.transform = textTransforms[v]
 	}
 	if v, ok := layer.Lookup("fo:font-variant"); ok {
 		t.smallCaps = v == "small-caps"

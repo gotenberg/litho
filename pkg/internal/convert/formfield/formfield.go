@@ -233,8 +233,10 @@ func locate(pages []*compose.Page, forms []*formElem, owner map[*compose.StructE
 					}
 					continue
 				}
+				// owner holds no nil key: a fragment without a parent has no
+				// Form element.
 				f := owner[parent]
-				if f == nil || parent == nil {
+				if f == nil {
 					continue
 				}
 				if !seen[f] {

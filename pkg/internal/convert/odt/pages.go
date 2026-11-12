@@ -191,7 +191,14 @@ func (f *pageFlow) geom(mp *odf.MasterPage, left, first bool) *pageGeom {
 	if mp != nil {
 		key = mp.Name
 	}
-	key += map[bool]string{true: "L", false: "R"}[left] + map[bool]string{true: "F", false: ""}[first]
+	if left {
+		key += "L"
+	} else {
+		key += "R"
+	}
+	if first {
+		key += "F"
+	}
 	if g, ok := f.geoms[key]; ok {
 		return g
 	}

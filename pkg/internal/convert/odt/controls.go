@@ -282,8 +282,8 @@ func controlText(el *odf.Element) string {
 		v = el.A(odf.NSForm, "value")
 	}
 	if el.Name.Local == "date" && v != "" {
-		for _, layout := range []string{"2006-01-02", "20060102"} {
-			if t, err := time.Parse(layout, v); err == nil {
+		for _, pattern := range []string{"2006-01-02", "20060102"} {
+			if t, err := time.Parse(pattern, v); err == nil {
 				return t.Format("01/02/06")
 			}
 		}

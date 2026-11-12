@@ -187,7 +187,7 @@ func parseXML(ctx context.Context, in *office.TokenReader) (*Element, error) {
 	)
 	for {
 		tok, err := d.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if errors.Is(err, office.ErrInputTooLarge) || errors.Is(err, office.ErrMalformed) {

@@ -48,7 +48,12 @@ func (b *builder) note(c *odf.Element, t textState, out *[]*layout.Node, ws *wsS
 		start, _ := strconv.Atoi(cfg.A(odf.NSText, "start-value"))
 		format := cfg.A(odf.NSStyle, "num-format")
 		if format == "" {
-			format = map[string]string{"footnote": "1", "endnote": "i"}[class]
+			// Writer numbers footnotes in arabic and endnotes in lower-case
+			// roman numerals.
+			format = "1"
+			if class == "endnote" {
+				format = "i"
+			}
 		}
 		label = cfg.A(odf.NSStyle, "num-prefix") + formatNumber(b.notes.counts[class]+start, format) + cfg.A(odf.NSStyle, "num-suffix")
 	}

@@ -636,7 +636,7 @@ func (b *builder) inlineElement(c *odf.Element, t textState, out *[]*layout.Node
 				*out = append(*out, n)
 			}
 		case "page-number", "page-count":
-			b.pageField(c, t, out, ws)
+			b.pageField(c, t, out, ws, depth)
 		case "date", "time":
 			if v, ok := b.dateField(c); ok {
 				*out = append(*out, b.run(v, t))
@@ -723,9 +723,9 @@ func (b *builder) changeMark(c *odf.Element) {
 // 3, 7.3.4 and 7.5.18): in a header or footer the number of the page it
 // is drawn on, in the page layout's number format, else the content the
 // document saved.
-func (b *builder) pageField(c *odf.Element, t textState, out *[]*layout.Node, ws *wsState) {
+func (b *builder) pageField(c *odf.Element, t textState, out *[]*layout.Node, ws *wsState, depth int) {
 	if b.hf == nil {
-		b.inline(c, t, out, ws, 0)
+		b.inline(c, t, out, ws, depth)
 		return
 	}
 	n := b.hf.number

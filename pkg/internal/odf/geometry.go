@@ -1,6 +1,7 @@
 package odf
 
 import (
+	"math"
 	"strconv"
 	"strings"
 
@@ -237,7 +238,7 @@ func (e *enhanced) param(tok string) shape.Arg {
 	} else if b, ok := identifiers[tok]; ok {
 		return shape.Arg{Kind: shape.ArgBuiltin, Ref: int(b)}
 	} else if tok == "pi" {
-		return shape.Arg{Value: 3.141592653589793}
+		return shape.Arg{Value: math.Pi}
 	} else if tok == "xstretch" || tok == "ystretch" {
 		return shape.Arg{}
 	}
