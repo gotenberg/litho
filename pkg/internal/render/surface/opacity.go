@@ -1,5 +1,7 @@
 package surface
 
+import "github.com/gotenberg/litho/pkg/internal/numeric"
+
 // Opacity is a constant alpha, the CA or ca of a graphics state (ISO
 // 32000-1, 11.6.4.4), in [0, 1]. Its zero value is opaque, the initial value
 // Table 52 gives both, so a paint whose caller leaves it unset paints opaque
@@ -16,7 +18,7 @@ var Opaque = Opacity{}
 // constant alpha that is no number paints nothing.
 func NewOpacity(a float64) Opacity {
 	switch {
-	case !(a > 0):
+	case !numeric.Positive(a):
 		return Opacity{transparency: 1}
 	case a >= 1:
 		return Opaque
@@ -31,5 +33,5 @@ func (o Opacity) Alpha() float32 {
 
 // Transparent reports whether the opacity paints nothing.
 func (o Opacity) Transparent() bool {
-	return !(o.Alpha() > 0)
+	return !numeric.Positive(float64(o.Alpha()))
 }

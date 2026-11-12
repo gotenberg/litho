@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/function"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
 )
 
@@ -40,7 +41,7 @@ func (t *transfer) apply(r, g, b float32) (float32, float32, float32) {
 // level returns the table index of a channel value in [0, 1].
 func level(v float32) int {
 	switch {
-	case !(v > 0):
+	case !numeric.Positive(float64(v)):
 		return 0
 	case v >= 1:
 		return transferLevels - 1

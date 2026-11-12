@@ -240,7 +240,7 @@ func arcSteps(r, tol, sweep float64) int {
 		step = min(step, 2*math.Acos(1-tol/r))
 	}
 	f := math.Ceil(sweep / step)
-	if limit := math.Ceil(sweep / (2 * math.Pi) * maxArcSegments); !(f <= limit) {
+	if limit := math.Ceil(sweep / (2 * math.Pi) * maxArcSegments); f > limit || math.IsNaN(f) || math.IsNaN(limit) {
 		f = limit
 	}
 	return max(int(f), 1)

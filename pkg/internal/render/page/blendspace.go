@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/function"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
 )
@@ -143,7 +144,7 @@ func (c *blendConverter) convert(link *icc.Link, rgb [3]float32, tag uint32) ble
 // to8 rounds v, in [0, 1], to an 8-bit level.
 func to8(v float32) uint8 {
 	switch {
-	case !(v > 0):
+	case !numeric.Positive(float64(v)):
 		return 0
 	case v >= 1:
 		return 255

@@ -197,10 +197,10 @@ func (j *job) run(ctx context.Context, dst *surface.Canvas, p Params) error {
 	if err := p.checkClip(dst); err != nil {
 		return err
 	}
-	constAlpha := p.Opacity.Alpha()
-	if !(constAlpha > 0) {
+	if p.Opacity.Transparent() {
 		return nil
 	}
+	constAlpha := p.Opacity.Alpha()
 	inv, ok := p.Matrix.Invert()
 	if !ok {
 		// A singular matrix maps the image to a line or a point, which covers
@@ -238,7 +238,7 @@ func (j *job) run(ctx context.Context, dst *surface.Canvas, p Params) error {
 			v := inv[1]*cx + inv[3]*cy + inv[5]
 			// Image space covers [0, w) × [0, h) samples, so the unit square
 			// is half open: u in [0, 1), v in (0, 1].
-			if !(u >= 0 && u < 1 && v > 0 && v <= 1) {
+			if u < 0 || u >= 1 || v <= 0 || v > 1 || math.IsNaN(u) || math.IsNaN(v) {
 				continue
 			}
 			clip := float32(1)

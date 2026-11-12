@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"image"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // CMYK returns the group's accumulated colour as 8-bit amounts of ink, the
@@ -44,7 +46,7 @@ func (g *Group) CMYK(ctx context.Context) (*image.CMYK, error) {
 // inkByte rounds an amount of ink in [0, 1] to an 8-bit level.
 func inkByte(v float32) uint8 {
 	switch {
-	case !(v > 0):
+	case !numeric.Positive(float64(v)):
 		return 0
 	case v >= 1:
 		return 255

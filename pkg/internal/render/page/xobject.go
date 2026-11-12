@@ -474,7 +474,7 @@ const maskOversample = 2
 func maskFootprint(m geom.Matrix) (cols, rows int) {
 	side := func(x, y float64) int {
 		v := math.Ceil(math.Hypot(x, y) * maskOversample)
-		if !(v >= 1) {
+		if v < 1 || math.IsNaN(v) {
 			return 1
 		}
 		return int(min(v, math.MaxInt32))

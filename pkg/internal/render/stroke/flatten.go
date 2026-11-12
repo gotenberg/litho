@@ -184,7 +184,7 @@ func cubicSteps(p0, p1, p2, p3 geom.Point, tol float64) int {
 		math.Hypot(p1.X-2*p2.X+p3.X, p1.Y-2*p2.Y+p3.Y),
 	)
 	f := math.Ceil(math.Sqrt(0.75 * m / tol))
-	if !(f < maxCurveSegments) { // NaN or past the cap
+	if f >= maxCurveSegments || math.IsNaN(f) {
 		return maxCurveSegments
 	}
 	return max(int(f), 1)

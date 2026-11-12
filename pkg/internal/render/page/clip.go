@@ -145,7 +145,7 @@ const rowSnapTolerance = 1e-6
 //     away by 1 to 6 pixels; no page, flatten or redact-render verdict
 //     changes.
 func snapRows(r geom.Rect) geom.Rect {
-	if !(r.Max.Y > r.Min.Y) {
+	if noSpan(r.Min.Y, r.Max.Y) {
 		return r
 	}
 	r.Min.Y = math.Floor(r.Min.Y + rowSnapTolerance)
@@ -157,7 +157,7 @@ func snapRows(r geom.Rect) geom.Rect {
 // pixels, within [rowSnapTolerance] of a pixel boundary kept on it. A
 // rectangle with no width or height keeps none.
 func pixelRect(r geom.Rect) geom.Rect {
-	if !(r.Max.X > r.Min.X) || !(r.Max.Y > r.Min.Y) {
+	if noSpan(r.Min.X, r.Max.X) || noSpan(r.Min.Y, r.Max.Y) {
 		return r
 	}
 	r.Min.X = math.Floor(r.Min.X + rowSnapTolerance)
@@ -631,4 +631,10 @@ func (c *clip) owns(parent *clip) int {
 		n++
 	}
 	return n
+}
+
+// noSpan reports whether the interval from lo to hi has no length: hi is not
+// past lo, or either end is NaN.
+func noSpan(lo, hi float64) bool {
+	return hi <= lo || math.IsNaN(lo) || math.IsNaN(hi)
 }

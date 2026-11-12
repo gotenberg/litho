@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
 
@@ -97,7 +98,7 @@ func WholePixelGeometry(pg *document.Page, b Box, dpi float64) (Geometry, error)
 }
 
 func boxGeometry(pg *document.Page, b Box, dpi float64, whole bool) (Geometry, error) {
-	if !(dpi > 0) || math.IsInf(dpi, 0) {
+	if !numeric.PositiveFinite(dpi) {
 		return Geometry{}, fmt.Errorf("%w: resolution %v dpi", ErrInvalidOptions, dpi)
 	}
 	box := b.region(pg)
@@ -108,7 +109,7 @@ func boxGeometry(pg *document.Page, b Box, dpi float64, whole bool) (Geometry, e
 	unit := pg.UserUnit
 	// Table 30 makes /UserUnit a positive number; a reader of another value
 	// keeps the default of 1.
-	if !(unit > 0) || math.IsInf(unit, 0) {
+	if !numeric.PositiveFinite(unit) {
 		unit = 1
 	}
 	s := dpi / pointsPerInch * unit

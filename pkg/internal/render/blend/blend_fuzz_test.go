@@ -3,6 +3,7 @@ package blend
 import (
 	"context"
 	"image"
+	"math"
 	"testing"
 )
 
@@ -65,7 +66,7 @@ func FuzzComposite(f *testing.F) {
 			t.Fatal(err)
 		}
 		for i, v := range canvas.Pix {
-			if !(v >= -fuzzTolerance && v <= 1+fuzzTolerance) {
+			if math.IsNaN(float64(v)) || v < -fuzzTolerance || v > 1+fuzzTolerance {
 				t.Fatalf("sRGB value %d is %v", i, v)
 			}
 		}

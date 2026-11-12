@@ -62,7 +62,7 @@ func FuzzFill(f *testing.F) {
 			t.Fatalf("coverage box %d,%d %dx%d (len %d) leaves the raster", c.X, c.Y, c.Width, c.Height, len(c.A))
 		}
 		for _, v := range c.A {
-			if !(v >= 0 && v <= 1) {
+			if math.IsNaN(float64(v)) || v < 0 || v > 1 {
 				t.Fatalf("coverage %v outside [0, 1]", v)
 			}
 		}

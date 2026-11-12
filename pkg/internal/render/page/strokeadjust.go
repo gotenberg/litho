@@ -3,6 +3,7 @@ package page
 import (
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/stroke"
 )
@@ -75,7 +76,7 @@ func adjustOutline(outline, p geom.Path, style stroke.Style, m geom.Matrix) geom
 // vertical and across a horizontal device segment, false when m does not map
 // the axes onto the axes. A width of 0 is one device pixel (8.4.3.2).
 func axisThickness(m geom.Matrix, w float64) (thickX, thickY float64, ok bool) {
-	if !(w >= 0) || math.IsInf(w, 0) {
+	if !numeric.NonNegative(w) || math.IsInf(w, 0) {
 		return 0, 0, false
 	}
 	switch {

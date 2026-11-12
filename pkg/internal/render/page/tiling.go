@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
@@ -263,7 +264,7 @@ func (r *renderer) tilingSource(s *scope, tp *tilingPattern, resources ast.PdfDi
 	p := tp.matrix.Mul(s.base)
 	u := p.ApplyVector(geom.Point{X: tp.xStep})
 	v := p.ApplyVector(geom.Point{Y: tp.yStep})
-	if !(math.Abs(u.X*v.Y-u.Y*v.X) > 0) || !finitePoint(u) || !finitePoint(v) {
+	if !numeric.Positive(math.Abs(u.X*v.Y-u.Y*v.X)) || !finitePoint(u) || !finitePoint(v) {
 		// A singular pattern matrix squeezes the cells to nothing.
 		return nil, nil //nolint:nilnil // nothing to paint is no error
 	}
@@ -434,7 +435,7 @@ func (r *renderer) drawCells(s *scope, tp *tilingPattern, resources ast.PdfDict,
 	}
 	w, h := dst.Bounds().Dx(), dst.Bounds().Dy()
 	i0, i1, j0, j1 := cellRange(tp, regionIn(inv, 0, 0, float64(w), float64(h)))
-	if n := (i1 - i0 + 1) * (j1 - j0 + 1); !(n <= maxPatternCells) {
+	if n := (i1 - i0 + 1) * (j1 - j0 + 1); n > maxPatternCells || math.IsNaN(n) {
 		return fmt.Errorf("pattern of %.0f cells exceeds %d", n, maxPatternCells)
 	}
 	sub := r.sub(w, h, geom.Identity, dst)

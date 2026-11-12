@@ -1,6 +1,10 @@
 package imgpaint
 
-import "math"
+import (
+	"math"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
+)
 
 // maxBoxTaps caps the footprint, in samples per axis, the box filter
 // averages exactly. Not spec-mandated: it bounds the work of drawing a huge
@@ -101,7 +105,7 @@ func axis(s, extent float64, size int, interpolate bool, out *axisTaps) {
 // edge reads the edge sample.
 func clampIndex(f float64, size int) int {
 	switch {
-	case !(f >= 0):
+	case !numeric.NonNegative(f):
 		return 0
 	case f >= float64(size-1):
 		return size - 1

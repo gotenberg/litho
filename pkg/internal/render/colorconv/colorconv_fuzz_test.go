@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -77,7 +78,7 @@ func FuzzForObject(f *testing.F) {
 			}
 			r, g, b := conv.RGB(comps)
 			for _, v := range []float32{r, g, b} {
-				if !(v >= 0 && v <= 1) {
+				if math.IsNaN(float64(v)) || v < 0 || v > 1 {
 					t.Fatalf("intent %q: channel %v outside [0, 1]", intent, v)
 				}
 			}

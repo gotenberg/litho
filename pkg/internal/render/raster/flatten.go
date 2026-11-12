@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
 
@@ -56,7 +57,7 @@ type flattener struct {
 }
 
 func (f *flattener) run(p geom.Path) error {
-	if !(f.tol > 0) || math.IsInf(f.tol, 0) {
+	if !numeric.PositiveFinite(f.tol) {
 		return fmt.Errorf("%w: flattening tolerance %v", ErrInvalidPath, f.tol)
 	}
 	var (

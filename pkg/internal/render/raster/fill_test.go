@@ -53,7 +53,7 @@ func mustFill(t *testing.T, p geom.Path, rule FillRule, w, h int, clip *surface.
 		t.Fatalf("Fill: %v", err)
 	}
 	for _, v := range c.A {
-		if !(v >= 0 && v <= 1) {
+		if math.IsNaN(float64(v)) || v < 0 || v > 1 {
 			t.Fatalf("coverage value %v outside [0, 1]", v)
 		}
 	}
