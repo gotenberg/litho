@@ -760,8 +760,9 @@ func WithTrackedChanges(view TrackedChanges) WordProcessingOption {
 // another; an ODT push button, as a grey box with its label, a hidden,
 // image, grid, file or password control, as its empty frame; any control
 // in a header or a footer, and one whose content breaks across two
-// pages, which [ConvertReport.Warnings] reports. An ODT control in a
-// header or a footer, or one that does not print, prints nothing.
+// pages, which [ConvertReport.Warnings] reports as a
+// [WarningFormFieldOmitted]. An ODT control in a header or a footer, or
+// one that does not print, prints nothing.
 //
 // Each field costs a widget annotation and an appearance stream, two for
 // a check box or a radio button, about a kilobyte. The appearances draw
