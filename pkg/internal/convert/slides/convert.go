@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
@@ -486,7 +487,7 @@ func outlineTitles(slides []*Slide) map[*Slide]string {
 // gives none, each side within the PDF's limits.
 func (b *builder) slideSize() (float64, float64) {
 	w, h := b.doc.Width, b.doc.Height
-	if !positiveFinite(w) || !positiveFinite(h) {
+	if !numeric.PositiveFinite(w) || !numeric.PositiveFinite(h) {
 		w, h = defaultSlideWidth, defaultSlideHeight
 	}
 	return min(w, office.MaxPageSide), min(h, office.MaxPageSide)

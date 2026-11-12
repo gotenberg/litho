@@ -4,6 +4,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
@@ -105,7 +106,7 @@ func handoutAreas(w, h float64, m [4]float64, sw, sh float64, per int) (slides, 
 	partW := (aw - float64(cols-1)*handoutGap) / float64(cols)
 	partH := (ah - float64(rows-1)*handoutGap) / float64(rows)
 	slides, ruled = make([]compose.Rect, len(cells)), make([]compose.Rect, len(ruledCells))
-	if !positive(partW) || !positive(partH) || !positive(sw) || !positive(sh) {
+	if !numeric.Positive(partW) || !numeric.Positive(partH) || !numeric.Positive(sw) || !numeric.Positive(sh) {
 		return slides, ruled
 	}
 	k := min(partW/sw, partH/sh)
@@ -184,7 +185,7 @@ func turned(w, h, pw, ph float64) bool {
 func turnBox(r compose.Rect, flexible bool, w, h float64, m [4]float64) compose.Rect {
 	cw, ch := w-m[css.Left]-m[css.Right], h-m[css.Top]-m[css.Bottom]
 	tw, th := h-m[css.Left]-m[css.Right], w-m[css.Top]-m[css.Bottom]
-	if !positive(cw) || !positive(ch) || !positive(tw) || !positive(th) {
+	if !numeric.Positive(cw) || !numeric.Positive(ch) || !numeric.Positive(tw) || !numeric.Positive(th) {
 		return r
 	}
 	fx, fy := tw/cw, th/ch
@@ -245,7 +246,7 @@ func (b *builder) handoutPage(n int, group []*Slide, numberOf func(*Slide) int) 
 	for i, s := range group {
 		frags, slideLinks, sect := b.slideContent(s, numberOf(s), sw, sh)
 		sects = append(sects, sect)
-		if i >= len(areas) || !positive(areas[i].Width) {
+		if i >= len(areas) || !numeric.Positive(areas[i].Width) {
 			continue
 		}
 		r := areas[i]

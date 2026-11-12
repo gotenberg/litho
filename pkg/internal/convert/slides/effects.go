@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/raster"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
@@ -172,7 +173,7 @@ func silhouetteOf(frags []compose.Fragment, m compose.Matrix) *silhouette {
 	}
 	walk(frags, m, 0)
 	w, h := x1-x0, y1-y0
-	if len(s.paths) == 0 || !positive(w) || !positive(h) {
+	if len(s.paths) == 0 || !numeric.Positive(w) || !numeric.Positive(h) {
 		return nil
 	}
 	s.bounds = compose.Rect{X: x0, Y: y0, Width: w, Height: h}
@@ -210,7 +211,7 @@ func intersect(a, b compose.Rect) (compose.Rect, bool) {
 	x0, y0 := max(a.X, b.X), max(a.Y, b.Y)
 	x1, y1 := min(a.X+a.Width, b.X+b.Width), min(a.Y+a.Height, b.Y+b.Height)
 	w, h := x1-x0, y1-y0
-	if !positive(w) || !positive(h) {
+	if !numeric.Positive(w) || !numeric.Positive(h) {
 		return compose.Rect{}, false
 	}
 	return compose.Rect{X: x0, Y: y0, Width: w, Height: h}, true
@@ -232,7 +233,7 @@ const minDeterminant = 1e-12
 // invert returns the inverse of m, false when m is singular.
 func invert(m compose.Matrix) (compose.Matrix, bool) {
 	det := m.A*m.D - m.B*m.C
-	if math.IsNaN(det) || math.Abs(det) <= minDeterminant || math.IsInf(det, 0) {
+	if !numeric.Finite(det) || math.Abs(det) <= minDeterminant {
 		return compose.Matrix{}, false
 	}
 	return compose.Matrix{
@@ -312,7 +313,7 @@ func effectsTwice(s *Shape) bool {
 //     shadow (a bitmap of the shape and both glows, at 40% opacity), the
 //     outer glow, the glow, then the rectangle.
 func (b *builder) effects(s *Shape, paths []shape.Path, box compose.Rect, m compose.Matrix, txt *textResult) ([]compose.Fragment, []shape.Path) {
-	if s.Shadow == nil && s.Glow == nil && !positive(s.SoftEdge) {
+	if s.Shadow == nil && s.Glow == nil && !numeric.Positive(s.SoftEdge) {
 		return nil, paths
 	}
 	sm := skewedAboutCentre(box, s.Rotation, s.SkewX, s.FlipH, s.FlipV)
@@ -363,7 +364,7 @@ func invertOr(m compose.Matrix) compose.Matrix {
 //   - libreoffice/pptx: oox/table-shadow prints its table's borders again
 //     10 pt down and right in the shadow's red, its text once.
 func (b *builder) contentEffects(s *Shape, frags []compose.Fragment, m compose.Matrix) []compose.Fragment {
-	if s.Shadow == nil && s.Glow == nil && !positive(s.SoftEdge) {
+	if s.Shadow == nil && s.Glow == nil && !numeric.Positive(s.SoftEdge) {
 		return frags
 	}
 	if s.SoftEdge > 0 {
@@ -406,7 +407,7 @@ func (b *builder) paintEffects(s *Shape, own, text []compose.Fragment, toSlide c
 	}
 	sil := silhouetteOf(own, toSlide)
 	if sil == nil {
-		if s.Shadow != nil && s.Shadow.Opacity > 0 && len(text) > 0 && !positive(s.Shadow.Blur) {
+		if s.Shadow != nil && s.Shadow.Opacity > 0 && len(text) > 0 && !numeric.Positive(s.Shadow.Blur) {
 			return group(back, b.hardShadow(b.ctx, s.Shadow, nil, text, toSlide, compose.Rect{})), nil
 		}
 		if s.Shadow != nil && s.Shadow.Blur > 0 && len(text) > 0 {
@@ -475,10 +476,10 @@ func (b *builder) paintEffects(s *Shape, own, text []compose.Fragment, toSlide c
 //     whether rotWithShape is 0 or 1.
 func shadowMatrix(sh *Shadow, bounds compose.Rect) compose.Matrix {
 	sx, sy := sh.ScaleX, sh.ScaleY
-	if sx == 0 || math.IsNaN(sx) || math.IsInf(sx, 0) {
+	if sx == 0 || !numeric.Finite(sx) {
 		sx = 1
 	}
-	if sy == 0 || math.IsNaN(sy) || math.IsInf(sy, 0) {
+	if sy == 0 || !numeric.Finite(sy) {
 		sy = 1
 	}
 	cx, cy := bounds.X+bounds.Width/2, bounds.Y+bounds.Height/2

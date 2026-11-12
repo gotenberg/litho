@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -105,7 +106,7 @@ const maxRise = 1
 //     up, sub 58% 1.4 points down, 33% 58% 6.6 points up.
 func scriptShift(size float64, m text.Metrics, sub bool) float64 {
 	h := m.Ascent + m.Descent
-	if !positive(h) {
+	if !numeric.Positive(h) {
 		return 0
 	}
 	share := m.Ascent / h
@@ -179,7 +180,7 @@ type laidBody struct {
 //     28.35 below its top.
 func insetRect(r compose.Rect, in [4]float64) compose.Rect {
 	side := func(v float64) float64 {
-		if math.IsNaN(v) || math.IsInf(v, 0) {
+		if !numeric.Finite(v) {
 			return 0
 		}
 		return min(max(v, -maxCoordinate), maxCoordinate)
@@ -384,7 +385,7 @@ func (b *builder) stretchText(body *TextBody, inner compose.Rect, res *textResul
 	nb.Wrap, nb.Autofit = false, AutofitNone
 	w := b.naturalWidth(&nb, noFit) + blockSlack
 	lay := b.layoutBody(&nb, w, inner.Height, noFit)
-	if lay == nil || w <= blockSlack || !positive(lay.height) {
+	if lay == nil || w <= blockSlack || !numeric.Positive(lay.height) {
 		return res
 	}
 	sx, sy := inner.Width/w, inner.Height/lay.height
@@ -585,7 +586,7 @@ func roundPt(v float64) float64 {
 // scaledSize returns the size s at the font scale k: s rounded to a
 // point, scaled, and rounded again when k is not 1.
 func scaledSize(s, k float64) float64 {
-	if !positive(s) {
+	if !numeric.Positive(s) {
 		s = defaultFontSize
 	}
 	s = min(s, maxFontSize)
@@ -742,10 +743,10 @@ func (b *builder) lines(p *Paragraph, ts text.Style, f fit, fontLines bool) line
 	sf := f.spacing
 	lb := lineBox{height: n, ascent: a, text: n}
 	switch prop := p.LineSpacing; {
-	case p.LineSpacingPoints > 0 && !math.IsInf(p.LineSpacingPoints, 0):
+	case numeric.PositiveFinite(p.LineSpacingPoints):
 		lb.height = min(p.LineSpacingPoints, maxCoordinate) * sf
 		lb.ascent = a + lb.height - n
-	case !positiveFinite(prop) || prop == 1:
+	case !numeric.PositiveFinite(prop) || prop == 1:
 		if sf < 1 {
 			lb.height = n * sf
 			lb.ascent = min(a, n*sf)
@@ -970,7 +971,7 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 	if body.FontLineSpacing {
 		st.TabSize = css.Pts(odfDefaultTab)
 	}
-	if t := p.DefaultTab; t > 0 && !math.IsInf(t, 0) {
+	if t := p.DefaultTab; numeric.PositiveFinite(t) {
 		st.TabSize = css.Pts(max(min(t, maxCoordinate), minDefaultTab))
 	}
 	st.Orphans, st.Widows = 1, 1
@@ -979,7 +980,7 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 		st.TextAlign = css.AlignStart
 	}
 	sideLen := func(v float64) float64 {
-		if math.IsNaN(v) || math.IsInf(v, 0) {
+		if !numeric.Finite(v) {
 			return 0
 		}
 		return min(max(v, -maxCoordinate), maxCoordinate)
@@ -1007,10 +1008,10 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 	st.TabStops = stops
 	space := func(pts, pct float64) float64 {
 		v := pts
-		if pct > 0 && !positive(pts) {
+		if pct > 0 && !numeric.Positive(pts) {
 			v = pct * size
 		}
-		if !positiveFinite(v) {
+		if !numeric.PositiveFinite(v) {
 			return 0
 		}
 		return min(v, maxCoordinate) * f.spacing
@@ -1027,10 +1028,10 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 				psize = scaledSize(prev.Runs[0].Style.Size, f.font)
 			}
 			after := prev.SpaceAfter
-			if prev.SpaceAfterPct > 0 && !positive(after) {
+			if prev.SpaceAfterPct > 0 && !numeric.Positive(after) {
 				after = prev.SpaceAfterPct * psize
 			}
-			if after > 0 && !math.IsInf(after, 0) {
+			if numeric.PositiveFinite(after) {
 				before = max(before, min(after, maxCoordinate)*f.spacing)
 			}
 		}

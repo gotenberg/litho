@@ -1,13 +1,13 @@
 package slides
 
 import (
-	"math"
 	"strings"
 	"unicode"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/symbolfont"
 )
 
@@ -35,7 +35,7 @@ import (
 func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb lineBox, f fit, number int, indent float64) {
 	bu := p.Bullet
 	rel := bu.Scale
-	if !positive(rel) || rel > maxBulletScale {
+	if !numeric.Positive(rel) || rel > maxBulletScale {
 		rel = 1
 	}
 	size := min(max(first.Size, 0), maxFontSize)
@@ -87,7 +87,7 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 		symbol = false
 	case BulletPicture:
 		pic := bu.Picture
-		if pic == nil || (pic.Source == nil && pic.Vector == nil) || !positive(pic.Width) || !positive(pic.Height) {
+		if pic == nil || (pic.Source == nil && pic.Vector == nil) || !numeric.Positive(pic.Width) || !numeric.Positive(pic.Height) {
 			b.warn(CodePicture, "a picture bullet has no picture and is left out")
 			return
 		}
@@ -113,7 +113,7 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 			bh, bd = m.Ascent+m.Descent, m.Descent
 		}
 		base := lb.height - lb.text + lb.text/2 + bh/2 - bd
-		if r := lb.ascent - base; !math.IsInf(r, 0) && !math.IsNaN(r) {
+		if r := lb.ascent - base; numeric.Finite(r) {
 			raise = r
 		}
 	}

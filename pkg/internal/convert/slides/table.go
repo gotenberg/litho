@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
@@ -64,7 +65,7 @@ func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment
 		rows = rows[:max(maxTableCells/len(cols), 1)]
 	}
 	side := func(v float64) float64 {
-		if !positiveFinite(v) {
+		if !numeric.PositiveFinite(v) {
 			return 0
 		}
 		return min(v, maxCoordinate)

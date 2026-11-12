@@ -6,6 +6,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
@@ -95,7 +96,7 @@ func (b *builder) pictureFill(pic *layout.Picture, tile bool, box compose.Rect) 
 		b.warn(CodePicture, "a picture fill has no picture and paints nothing")
 		return nil
 	}
-	if !tile || !positive(pic.Width) || !positive(pic.Height) {
+	if !tile || !numeric.Positive(pic.Width) || !numeric.Positive(pic.Height) {
 		return b.picture(pic, box)
 	}
 	nx := math.Ceil(box.Width / pic.Width)
@@ -210,7 +211,7 @@ type hatch struct {
 // corner, nil for a hatch without spacing or with too many lines.
 func hatchOps(h hatch, box compose.Rect) []compose.PathOp {
 	d := h.distance * 72 / 2540
-	if !positive(d) || !finite(box) {
+	if !numeric.Positive(d) || !finite(box) {
 		return nil
 	}
 	angles := []float64{h.angle / 10}

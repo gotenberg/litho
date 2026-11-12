@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // then returns the transform that applies a, then b.
@@ -113,19 +114,12 @@ func group(m compose.Matrix, frags []compose.Fragment) []compose.Fragment {
 // negative.
 func finite(r compose.Rect) bool {
 	for _, v := range [4]float64{r.X, r.Y, r.Width, r.Height} {
-		if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > maxCoordinate {
+		if !numeric.Finite(v) || math.Abs(v) > maxCoordinate {
 			return false
 		}
 	}
 	return r.Width >= 0 && r.Height >= 0
 }
-
-// positive reports whether v is greater than zero. NaN is not: a size a
-// source leaves undefined draws as none.
-func positive(v float64) bool { return v > 0 }
-
-// positiveFinite reports whether v is a finite number greater than zero.
-func positiveFinite(v float64) bool { return v > 0 && !math.IsInf(v, 1) }
 
 // maxCoordinate bounds the coordinates of a box drawn, in points.
 // Anti-DoS guard, not spec-mandated: ten times the largest PDF page side
