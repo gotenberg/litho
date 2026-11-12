@@ -82,10 +82,10 @@ func (e *engine) seedWraps(seeds []wrapSeed) []floatRect {
 //
 // # Corpus evidence
 //
-//   - litho/pdf: a flat ODT with 5 cm wide page-anchored frames of dynamic wrap
-//     leaving 1.5, 2.5 and 6 cm on their left and 10.5, 9.5 and 6 cm on
-//     their right prints, through the pinned LibreOffice, every line
-//     beside them on their right alone.
+//   - probe, odt: a flat ODT with 5 cm wide page-anchored frames of
+//     dynamic wrap leaving 1.5, 2.5 and 6 cm on their left and 10.5, 9.5
+//     and 6 cm on their right prints, through the pinned LibreOffice,
+//     every line beside them on their right alone.
 func (f floatRect) wrapBand(l, r float64) (float64, float64) {
 	if f.x1 <= l || f.x0 >= r {
 		return l, r

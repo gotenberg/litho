@@ -550,8 +550,13 @@ func (e *engine) paintPageLayer(pg *compose.Page, st *css.Style, area, whole com
 // over the whole page, its image or gradient positioned in the page box's
 // area, the page inside its margins, which has no border or padding. A
 // root element that generates no box leaves the page blank, background
-// included, as browsers print it (WPT css-page,
-// root-element-display-none-print).
+// included, as browsers print it.
+//
+// # Corpus evidence
+//
+//   - wpt css/css-page/root-element-display-none-print.html: the page of a
+//     root of display: none matches a blank reference, page background
+//     included.
 func (e *engine) paintPageBackground(pg *compose.Page, pb PageBox) {
 	st := pb.Background
 	if st == nil || (e.rootBox != nil && e.rootBox.node != nil && e.rootBox.st.Display == css.DisplayNone) {
