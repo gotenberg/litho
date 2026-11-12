@@ -110,7 +110,7 @@ func TestListMarkers_InlineListItem(t *testing.T) {
 
 // TestListMarkers_TextPastTheCapFails checks that a marker whose text
 // passes the cap of one shaping call fails the layout with an error
-// wrapping limits.ErrInputTooLarge, where it was left out unseen.
+// wrapping limits.ErrInputTooLarge: a cap passed stops the conversion.
 func TestListMarkers_TextPastTheCapFails(t *testing.T) {
 	st := sty(display(css.ListItem), func(s *css.Style) {
 		s.ListStyleType, s.ListStyleString = css.ListString, strings.Repeat("x", text.MaxLayoutRunes+1)
