@@ -70,29 +70,38 @@ func (b *builder) dateField(c *odf.Element) (string, bool) {
 }
 
 // adjusted returns t shifted by the XML Schema duration d, t itself for
-// a duration it does not read or one past [maxAdjustDays].
+// a duration it does not read, one past [maxAdjustDays] or one whose
+// hours, minutes and seconds a time.Duration cannot hold.
 func adjusted(t time.Time, d string) time.Time {
 	m := durationRE.FindStringSubmatch(d)
 	if m == nil {
 		return t
 	}
-	var n [6]int
+	var n [6]int64
 	for i := range n {
 		if m[i+2] != "" {
 			// The pattern matched at most nine digits, which always parse.
-			n[i], _ = strconv.Atoi(m[i+2])
+			n[i], _ = strconv.ParseInt(m[i+2], 10, 64)
 		}
 	}
 	if days := n[0]*366 + n[1]*31 + n[2] + n[3]/24 + n[4]/1440 + n[5]/86400; days > maxAdjustDays {
+		return t
+	}
+	secs := n[3]*3600 + n[4]*60 + n[5]
+	if secs > maxDurationSeconds {
 		return t
 	}
 	sign := 1
 	if m[1] == "-" {
 		sign = -1
 	}
-	t = t.AddDate(sign*n[0], sign*n[1], sign*n[2])
-	return t.Add(time.Duration(sign) * (time.Duration(n[3])*time.Hour + time.Duration(n[4])*time.Minute + time.Duration(n[5])*time.Second))
+	t = t.AddDate(sign*int(n[0]), sign*int(n[1]), sign*int(n[2])) // fits int: each at most maxAdjustDays, checked above
+	return t.Add(time.Duration(sign) * time.Duration(secs) * time.Second)
 }
+
+// maxDurationSeconds is the most seconds a time.Duration holds, some 292
+// years.
+const maxDurationSeconds = math.MaxInt64 / int64(time.Second)
 
 // serialNudge is added to a serial's time of day, in seconds: a serial
 // of this century holds its time of day to about 0.6 microseconds, and a

@@ -41,3 +41,17 @@ func TestConvert_DateFields(t *testing.T) {
 		})
 	}
 }
+
+// TestAdjusted_TimePastDuration leaves a date whose time adjustment a
+// time.Duration cannot hold as it is: 50,000,000 hours, within the days
+// the adjustment allows, overflowed into a date thousands of years off.
+func TestAdjusted_TimePastDuration(t *testing.T) {
+	t.Parallel()
+	date := time.Date(2026, 11, 11, 19, 35, 20, 0, time.UTC)
+	if got := adjusted(date, "PT50000000H"); !got.Equal(date) {
+		t.Errorf("PT50000000H gives %v, want %v", got, date)
+	}
+	if got, want := adjusted(date, "-PT2000000H"), date.Add(-2_000_000*time.Hour); !got.Equal(want) {
+		t.Errorf("-PT2000000H gives %v, want %v", got, want)
+	}
+}
