@@ -275,6 +275,17 @@ func TestParse_LocaleTag(t *testing.T) {
 	}
 }
 
+// TestLCIDOf_Deterministic checks that a tag two identifiers name, es-ES
+// (0x40A, traditional sort, and 0xC0A, modern sort), gives the lower one
+// every time, whatever order the table's map ranges in.
+func TestLCIDOf_Deterministic(t *testing.T) {
+	for range 200 {
+		if id, ok := LCIDOf("es-ES"); !ok || id != 0x40A {
+			t.Fatalf("LCIDOf(es-ES) = %x %v, want 40a", id, ok)
+		}
+	}
+}
+
 // TestFormat_Excel locks the values Excel shows apart from Calc: negative
 // dates and times fill the cell with "#", the 1900 date system's day 0
 // and February 29, whole seconds rounded, and a value too wide filling

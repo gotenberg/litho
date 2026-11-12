@@ -532,15 +532,25 @@ func LCIDOf(lang string) (uint64, bool) {
 		return 0, false
 	}
 	prefix, _, _ := strings.Cut(l, "-")
+	// The lowest identifier wins on either match: two identifiers can name
+	// one tag (es-ES), and the map ranges in no fixed order.
+	exact, exactFound := uint64(0), false
 	best, found := uint64(0), false
 	for id, tag := range lcidTags {
 		t := strings.ToLower(tag)
-		if t == l {
-			return id, true
+		switch {
+		case t == l:
+			if !exactFound || id < exact {
+				exact, exactFound = id, true
+			}
+		case strings.HasPrefix(t, prefix+"-") && LocaleOf(t) == loc:
+			if !found || id < best {
+				best, found = id, true
+			}
 		}
-		if strings.HasPrefix(t, prefix+"-") && LocaleOf(t) == loc && (!found || id < best) {
-			best, found = id, true
-		}
+	}
+	if exactFound {
+		return exact, true
 	}
 	return best, found
 }
