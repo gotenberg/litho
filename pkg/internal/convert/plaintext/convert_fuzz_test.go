@@ -20,7 +20,7 @@ var (
 
 func FuzzConvert(f *testing.F) {
 	f.Add([]byte("Hello world\n\tindented\r\nnext\fpage two\n"))
-	f.Add([]byte("\xEF\xBB\xBF\xff\xfe\x00\r\r\n\f\f\t\x0b Á‮אב\xed\xa0\x80"))
+	f.Add([]byte("\xEF\xBB\xBF\xff\xfe\x00\r\r\n\f\f\t\x0b Á\u202eאב\xed\xa0\x80"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		// The index reads a face's file again on the face's first layout
 		// and first Compose. It outlives the first iteration's directory
