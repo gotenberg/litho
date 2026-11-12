@@ -120,11 +120,11 @@ func readCFB(ctx context.Context, data []byte) (*cfbFile, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := f.readDirectory(firstDir); err != nil {
+	if err := f.readDirectory(ctx, firstDir); err != nil {
 		return nil, err
 	}
 	if nMiniFAT > 0 && firstMiniFAT != cfbEndOfChain {
-		raw, err := f.chainBytes(firstMiniFAT, f.fat, f.nSectors, f.sectorSize, f.sectorBytes)
+		raw, err := f.chainBytes(ctx, firstMiniFAT, f.fat, f.nSectors, f.sectorSize, f.sectorBytes)
 		if err != nil {
 			return nil, fmt.Errorf("reading the mini FAT: %w", err)
 		}
@@ -135,7 +135,7 @@ func readCFB(ctx context.Context, data []byte) (*cfbFile, error) {
 	}
 	root := f.dir[0]
 	if root.size > 0 && root.start != cfbEndOfChain {
-		ms, err := f.chainBytes(root.start, f.fat, f.nSectors, f.sectorSize, f.sectorBytes)
+		ms, err := f.chainBytes(ctx, root.start, f.fat, f.nSectors, f.sectorSize, f.sectorBytes)
 		if err != nil {
 			return nil, fmt.Errorf("reading the mini stream: %w", err)
 		}
@@ -219,14 +219,19 @@ func (f *cfbFile) readFAT(ctx context.Context, nFAT int, firstDIFAT uint32, nDIF
 // table, each of size bytes read through read. A chain that leaves the
 // table, or holds more links than there are units to address (limit) and
 // so loops, fails (MS-CFB, 2.3: a chain ends with ENDOFCHAIN). The result
-// is at most limit times size bytes.
-func (f *cfbFile) chainBytes(start uint32, table []uint32, limit, size int, read func(uint32) ([]byte, error)) ([]byte, error) {
+// is at most limit times size bytes. It checks ctx every 256 sectors.
+func (f *cfbFile) chainBytes(ctx context.Context, start uint32, table []uint32, limit, size int, read func(uint32) ([]byte, error)) ([]byte, error) {
 	var out []byte
 	n := start
 	limit = min(limit, len(table))
 	for steps := 0; n != cfbEndOfChain; steps++ {
 		if steps >= limit {
 			return nil, cfbMalformed("sector chain from %d loops", start)
+		}
+		if steps%256 == 255 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 		}
 		if uint64(n) >= uint64(len(table)) {
 			return nil, cfbMalformed("sector %d outside its allocation table", n)
@@ -246,8 +251,8 @@ func (f *cfbFile) chainBytes(start uint32, table []uint32, limit, size int, read
 
 // readDirectory reads the directory chain (MS-CFB, 2.6) and checks that
 // entry 0 is the root storage.
-func (f *cfbFile) readDirectory(first uint32) error {
-	raw, err := f.chainBytes(first, f.fat, f.nSectors, f.sectorSize, f.sectorBytes)
+func (f *cfbFile) readDirectory(ctx context.Context, first uint32) error {
+	raw, err := f.chainBytes(ctx, first, f.fat, f.nSectors, f.sectorSize, f.sectorBytes)
 	if err != nil {
 		return fmt.Errorf("reading the directory: %w", err)
 	}
@@ -319,7 +324,7 @@ func (f *cfbFile) rootChild(name string) (cfbDirEntry, bool) {
 // stream returns the bytes of the root-level stream named name, and false
 // when there is none. A stream shorter than the mini stream cutoff lives in
 // the mini stream (MS-CFB, 2.4).
-func (f *cfbFile) stream(name string) ([]byte, bool, error) {
+func (f *cfbFile) stream(ctx context.Context, name string) ([]byte, bool, error) {
 	e, ok := f.rootChild(name)
 	if !ok || e.objType != cfbTypeStream {
 		return nil, false, nil
@@ -333,9 +338,9 @@ func (f *cfbFile) stream(name string) ([]byte, bool, error) {
 	var raw []byte
 	var err error
 	if e.size < f.miniCutoff {
-		raw, err = f.chainBytes(e.start, f.miniFAT, len(f.miniStream)/f.miniSize, f.miniSize, f.miniSectorBytes)
+		raw, err = f.chainBytes(ctx, e.start, f.miniFAT, len(f.miniStream)/f.miniSize, f.miniSize, f.miniSectorBytes)
 	} else {
-		raw, err = f.chainBytes(e.start, f.fat, f.nSectors, f.sectorSize, f.sectorBytes)
+		raw, err = f.chainBytes(ctx, e.start, f.fat, f.nSectors, f.sectorSize, f.sectorBytes)
 	}
 	if err != nil {
 		return nil, true, fmt.Errorf("reading stream %s: %w", name, err)

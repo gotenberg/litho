@@ -59,14 +59,14 @@ func OpenOOXML(ctx context.Context, data []byte, password string) ([]byte, error
 	if err != nil {
 		return nil, err
 	}
-	info, ok, err := cf.stream("EncryptionInfo")
+	info, ok, err := cf.stream(ctx, "EncryptionInfo")
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
-		return nil, classifyBinary(cf)
+		return nil, classifyBinary(ctx, cf)
 	}
-	pkg, ok, err := cf.stream("EncryptedPackage")
+	pkg, ok, err := cf.stream(ctx, "EncryptedPackage")
 	if err != nil {
 		return nil, err
 	}
@@ -142,8 +142,8 @@ func parseEncryptionInfo(info []byte) (packageScheme, error) {
 // classifyBinary names what a compound file without EncryptionInfo is: a
 // binary Word, Excel or PowerPoint document, encrypted (office.ErrEncrypted)
 // or not (office.ErrMalformed), or something else (office.ErrMalformed).
-func classifyBinary(cf *cfbFile) error {
-	if wd, ok, err := cf.stream("WordDocument"); err != nil {
+func classifyBinary(ctx context.Context, cf *cfbFile) error {
+	if wd, ok, err := cf.stream(ctx, "WordDocument"); err != nil {
 		return err
 	} else if ok {
 		// MS-DOC, 2.5.2: FibBase.fEncrypted is bit 8 of the flags at offset
@@ -154,7 +154,7 @@ func classifyBinary(cf *cfbFile) error {
 		return fmt.Errorf("%w: a Word 97-2003 binary document (MS-DOC), not an OOXML package", office.ErrMalformed)
 	}
 	for _, name := range []string{"Workbook", "Book"} {
-		wb, ok, err := cf.stream(name)
+		wb, ok, err := cf.stream(ctx, name)
 		if err != nil {
 			return err
 		}
@@ -165,12 +165,12 @@ func classifyBinary(cf *cfbFile) error {
 			return fmt.Errorf("%w: an Excel 97-2003 binary workbook (MS-XLS), not an OOXML package", office.ErrMalformed)
 		}
 	}
-	if _, ok, err := cf.stream("PowerPoint Document"); err != nil {
+	if _, ok, err := cf.stream(ctx, "PowerPoint Document"); err != nil {
 		return err
 	} else if ok {
 		// MS-PPT, 2.3.7: an encrypted presentation carries the
 		// EncryptedSummary stream.
-		if _, enc, err := cf.stream("EncryptedSummary"); err != nil {
+		if _, enc, err := cf.stream(ctx, "EncryptedSummary"); err != nil {
 			return err
 		} else if enc {
 			return fmt.Errorf("%w: an encrypted PowerPoint 97-2003 binary presentation (MS-PPT), whose encryption is not read", office.ErrEncrypted)

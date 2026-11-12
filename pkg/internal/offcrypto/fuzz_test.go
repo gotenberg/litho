@@ -16,11 +16,11 @@ func FuzzReadCFB(f *testing.F) {
 			return
 		}
 		for _, name := range []string{"EncryptionInfo", "EncryptedPackage", "WordDocument", "Workbook"} {
-			if _, _, err := cf.stream(name); err != nil {
+			if _, _, err := cf.stream(context.Background(), name); err != nil {
 				return
 			}
 		}
-		if err := classifyBinary(cf); err == nil {
+		if err := classifyBinary(context.Background(), cf); err == nil {
 			t.Fatal("classifyBinary returned no error")
 		}
 	})

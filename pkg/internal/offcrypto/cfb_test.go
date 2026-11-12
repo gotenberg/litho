@@ -23,12 +23,12 @@ func TestReadCFB_Streams(t *testing.T) {
 			name string
 			want []byte
 		}{{"small", small}, {"BIG", big}, {"Empty", empty}} {
-			got, ok, err := f.stream(tc.name)
+			got, ok, err := f.stream(context.Background(), tc.name)
 			if err != nil || !ok || !bytes.Equal(got, tc.want) {
 				t.Errorf("version %d, stream %s: %d bytes, %v, %v", major, tc.name, len(got), ok, err)
 			}
 		}
-		if _, ok, _ := f.stream("Missing"); ok {
+		if _, ok, _ := f.stream(context.Background(), "Missing"); ok {
 			t.Errorf("version %d: a missing stream was found", major)
 		}
 	}
@@ -43,7 +43,7 @@ func TestReadCFB_TruncatedLastSector(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, _, err := f.stream("Big"); err != nil || !bytes.Equal(got, big) {
+	if got, _, err := f.stream(context.Background(), "Big"); err != nil || !bytes.Equal(got, big) {
 		t.Fatalf("stream after a short last sector: %v", err)
 	}
 }
@@ -78,7 +78,7 @@ func TestReadCFB_DIFAT(t *testing.T) {
 	if len(f.fat) != 110*128 {
 		t.Errorf("FAT of %d entries, want %d", len(f.fat), 110*128)
 	}
-	if got, _, err := f.stream("Big"); err != nil || !bytes.Equal(got, data) {
+	if got, _, err := f.stream(context.Background(), "Big"); err != nil || !bytes.Equal(got, data) {
 		t.Fatalf("stream through the DIFAT: %v", err)
 	}
 	le.PutUint32(doc[0x48:], 0)
@@ -127,7 +127,7 @@ func TestReadCFB_Malformed(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f, err := readCFB(context.Background(), tc.doc)
 			if err == nil && tc.stream != "" {
-				_, _, err = f.stream(tc.stream)
+				_, _, err = f.stream(context.Background(), tc.stream)
 			}
 			if !errors.Is(err, office.ErrMalformed) {
 				t.Fatalf("got %v, want ErrMalformed", err)
@@ -146,10 +146,10 @@ func TestReadCFB_DirectoryCycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, _ := f.stream("Missing"); ok {
+	if _, ok, _ := f.stream(context.Background(), "Missing"); ok {
 		t.Fatal("found a missing stream")
 	}
-	if got, ok, err := f.stream("B"); !ok || err != nil || string(got) != "b" {
+	if got, ok, err := f.stream(context.Background(), "B"); !ok || err != nil || string(got) != "b" {
 		t.Fatalf("stream B in a looping tree: %q %v %v", got, ok, err)
 	}
 }
@@ -163,7 +163,7 @@ func TestReadCFB_Version3IgnoresHighSize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, _, err := f.stream("A"); err != nil || string(got) != "abc" {
+	if got, _, err := f.stream(context.Background(), "A"); err != nil || string(got) != "abc" {
 		t.Fatalf("got %q, %v", got, err)
 	}
 }
