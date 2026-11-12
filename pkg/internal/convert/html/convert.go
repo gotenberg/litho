@@ -521,9 +521,9 @@ func scanDocument(ctx context.Context, doc *dom.Node, docURL string) (*scan, err
 	}
 	s.meta.Lang = s.lang
 	if s.root == nil {
-		// The parser always makes an html element; a document without one
-		// cannot come out of it.
-		return nil, fmt.Errorf("parsing the HTML source: %w: no root element", ErrInvalidOptions)
+		// The parser always makes an html element: a document without one
+		// is a litho bug, not an invalid input.
+		return nil, errors.New("parsing the HTML source: no root element")
 	}
 	return s, nil
 }
