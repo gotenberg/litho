@@ -22,6 +22,11 @@ type ParseOptions struct {
 	// response's URL). nil disables @import. It is called sequentially, in
 	// source order, at most maxImports times per Parse call.
 	Fetch func(ctx context.Context, url string) (body []byte, final string, err error)
+	// FetchCode returns the code of the warning an error of Fetch is
+	// reported with, so that an import left out reads as the caller's
+	// other resources do. nil reports every error as
+	// [warn.ResourceFailed].
+	FetchCode func(err error) warn.Code
 	// Logger receives debug records of dropped imports; nil discards them.
 	Logger *slog.Logger
 }
@@ -323,7 +328,11 @@ func (sp *sheetParser) importRule(ctx context.Context, it item, base string, con
 			return
 		}
 		sp.log.DebugContext(ctx, "css: @import failed", slog.String("url", target), slog.String("error", err.Error()))
-		c.warn(warn.ResourceFailed, "the @import of %s failed: %v", target, err)
+		code := warn.ResourceFailed
+		if sp.opts.FetchCode != nil {
+			code = sp.opts.FetchCode(err)
+		}
+		c.warn(code, "the @import of %s failed: %v", target, err)
 		return
 	}
 	if len(body) > maxStylesheetBytes {

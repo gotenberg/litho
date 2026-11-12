@@ -159,7 +159,7 @@ func (c *collector) parse(ctx context.Context, body []byte, u, media, name strin
 		}
 		src, base = []byte(`@import url("`+cssString(u)+`") `+m+";"), ""
 	}
-	s, err := css.Parse(ctx, src, css.ParseOptions{BaseURL: base, Fetch: fetch, Logger: c.logger})
+	s, err := css.Parse(ctx, src, css.ParseOptions{BaseURL: base, Fetch: fetch, FetchCode: warningCode, Logger: c.logger})
 	if err != nil {
 		if errors.Is(err, css.ErrTooLarge) {
 			// The rules read before the cap still apply, as a browser

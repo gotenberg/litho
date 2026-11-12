@@ -92,7 +92,7 @@ func TestPrepare_ReadsImportsAndURLsThroughTheResources(t *testing.T) {
 	if pic, err := p.layout.Image(t.Context(), x.Style.BackgroundImage); err != nil || pic.Width != 2*css.Pt {
 		t.Errorf("background picture %+v, %v", pic, err)
 	}
-	if !hasWarning(p.warnings, warn.ResourceFailed, "leaves the resources root") {
+	if !hasWarning(p.warnings, warn.ResourceRefused, "leaves the resources root") {
 		t.Errorf("warnings %+v, want the escaping import refused", p.warnings)
 	}
 	for _, w := range p.warnings {
