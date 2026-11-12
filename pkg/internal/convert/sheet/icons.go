@@ -40,7 +40,7 @@ type icon func() []compose.Fragment
 // draws them (sc/source/core/data/colorscale.cxx, ScIconSetFormat's
 // icon tables): drawn as vectors of the silhouettes and colours of the
 // pinned LibreOffice's icon theme.
-var iconSets = map[string][]icon{ //nolint:gochecknoglobals // a read-only table of the icon sets.
+var iconSets = map[string][]icon{
 	"3Arrows":         {arrow(90, iconRed), arrow(0, iconYellow), arrow(-90, iconGreen)},
 	"3ArrowsGray":     {arrow(90, iconGray), arrow(0, iconGray), arrow(-90, iconGray)},
 	"3Flags":          {flag(iconRed), flag(iconYellow), flag(iconGreen)},
