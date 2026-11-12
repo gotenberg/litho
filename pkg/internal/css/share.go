@@ -1,7 +1,6 @@
 package css
 
 import (
-	"hash/maphash"
 	"math"
 	"reflect"
 	"sync"
@@ -27,8 +26,7 @@ import (
 // conversion. The nil *Styles shares nothing: [Styles.Share] returns its
 // argument.
 type Styles struct {
-	mu   sync.Mutex
-	seed maphash.Seed
+	mu sync.Mutex
 	// byHash holds the first style of each hash; more holds the others
 	// of a hash two unequal styles share, which almost never happens.
 	byHash map[uint64]*Style
@@ -38,7 +36,7 @@ type Styles struct {
 
 // NewStyles returns an empty table.
 func NewStyles() *Styles {
-	return &Styles{seed: maphash.MakeSeed(), byHash: map[uint64]*Style{}}
+	return &Styles{byHash: map[uint64]*Style{}}
 }
 
 // Share returns the style t holds equal to st, or adopts st and returns
@@ -109,7 +107,10 @@ func (t *Styles) hash(st *Style) uint64 {
 	h = mix(h, math.Float64bits(st.FontSize))
 	h = mix(h, uint64(st.FontWeight)<<8|uint64(st.FontStyle)) //nolint:gosec // the bits of the weight, not a size
 	for _, f := range st.FontFamilies {
-		h = mix(h, maphash.String(t.seed, f))
+		h = mix(h, uint64(len(f)))
+		for i := 0; i < len(f); i++ {
+			h = (h ^ uint64(f[i])) * fnvPrime64
+		}
 	}
 	dim(st.Width)
 	dim(st.Height)
