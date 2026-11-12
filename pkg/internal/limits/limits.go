@@ -155,10 +155,10 @@ const DefaultMaxEmbeddedFileBytes = 50 << 20
 const DefaultMaxFormDepth = 10
 
 // DefaultMaxCachedObjects is the number of parsed objects a document keeps,
-// 50,000, before its object cache is emptied and starts again. It is an
-// anti-DoS guard, not spec-mandated: the object count comes from the file, and
-// a crafted file with millions of objects would otherwise keep every one the
-// resolver parsed.
+// 50,000: once its cache holds that many, each object it takes replaces one.
+// It is an anti-DoS guard, not spec-mandated: the object count comes from the
+// file, and a crafted file with millions of objects would otherwise keep every
+// one the resolver parsed.
 //
 // Eviction costs a re-parse, never a wrong answer, so the value only has to
 // cover the object table of ordinary documents. Fifty thousand holds every

@@ -35,7 +35,6 @@ func (d *Document) Fork() *Document {
 	f := &Document{
 		r:                       d.r,
 		size:                    d.size,
-		objectCache:             make(map[int]ast.PdfObject),
 		fontCache:               make(map[int]any),
 		cmapCache:               make(map[int]any),
 		maxCacheSize:            d.maxCacheSize,

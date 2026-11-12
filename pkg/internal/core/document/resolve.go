@@ -1542,7 +1542,7 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		d.mu.RUnlock()
 		return nil, fmt.Errorf("%w: object %d", ErrObjectNotFound, ref.ObjectNum)
 	}
-	if obj, ok := d.objectCache[ref.ObjectNum]; ok {
+	if obj, ok := d.objectCache.lookup(ref.ObjectNum); ok {
 		d.mu.RUnlock()
 		d.Logger.Debug("resolve object cache hit",
 			slog.Int("obj", ref.ObjectNum),
@@ -1622,17 +1622,13 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 	// Cache the result. If another goroutine cached the same object while
 	// this one was parsing, use its result for consistency.
 	d.mu.Lock()
-	if existing, ok := d.objectCache[ref.ObjectNum]; ok {
+	if existing, ok := d.objectCache.lookup(ref.ObjectNum); ok {
 		d.mu.Unlock()
 		return existing, nil
 	}
-	// Evict all cached objects when the cache exceeds the size limit.
-	// This prevents unbounded memory growth on very large PDFs while
-	// maintaining cache benefits for typical access patterns.
-	if d.maxCacheSize > 0 && len(d.objectCache) >= d.maxCacheSize {
-		d.objectCache = make(map[int]ast.PdfObject)
-	}
-	d.objectCache[ref.ObjectNum] = obj
+	// Past maxCacheSize objects the cache replaces one (see [objectCache]),
+	// so a file of millions of objects holds no more than the bound.
+	d.objectCache.insert(ref.ObjectNum, obj, d.maxCacheSize)
 	d.mu.Unlock()
 
 	return obj, nil

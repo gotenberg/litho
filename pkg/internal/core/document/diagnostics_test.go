@@ -64,10 +64,9 @@ func TestUndecodableStreams_EndToEnd(t *testing.T) {
 		xrefEntries: map[int]xref.XRefEntry{
 			1: {Type: xref.XRefTypeNormal, Offset: 9}, // "1 0 obj" begins after "%PDF-1.7\n"
 		},
-		objectCache: make(map[int]ast.PdfObject),
-		fontCache:   make(map[int]any),
-		cmapCache:   make(map[int]any),
-		Logger:      slog.New(slog.DiscardHandler),
+		fontCache: make(map[int]any),
+		cmapCache: make(map[int]any),
+		Logger:    slog.New(slog.DiscardHandler),
 	}
 
 	diags, err := doc.UndecodableStreams(context.Background())

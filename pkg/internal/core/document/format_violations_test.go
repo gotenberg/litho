@@ -47,7 +47,6 @@ func formatViolationDoc(data []byte, offsets []int64) *Document {
 		Index: xref.Index{
 			Trailer: ast.PdfDict{"Size": ast.PdfInt(len(offsets)), "Root": ast.PdfIndirectRef{ObjectNum: 1}},
 		},
-		objectCache:  make(map[int]ast.PdfObject),
 		fontCache:    make(map[int]any),
 		cmapCache:    make(map[int]any),
 		maxCacheSize: 50_000,
@@ -95,7 +94,7 @@ func TestRecordFormatViolations_UnparseableObjectRecordedOnce(t *testing.T) {
 
 // TestRecordFormatViolations_SurvivesCacheEviction pins that re-parsing an
 // object after the object cache was evicted does not record its violations a
-// second time. The resolver drops the whole cache once it exceeds
+// second time. The resolver replaces a cached object once the cache holds
 // maxCacheSize, so on a large file any object can be parsed repeatedly.
 func TestRecordFormatViolations_SurvivesCacheEviction(t *testing.T) {
 	t.Parallel()
@@ -106,7 +105,7 @@ func TestRecordFormatViolations_SurvivesCacheEviction(t *testing.T) {
 		"<< /C 3 >>\n",
 	)
 	doc := formatViolationDoc(data, offsets)
-	doc.maxCacheSize = 1 // Evict on every insertion.
+	doc.maxCacheSize = 1 // Replace the cached object on every insertion.
 	doc.SetComplianceMode(true)
 
 	ctx := context.Background()

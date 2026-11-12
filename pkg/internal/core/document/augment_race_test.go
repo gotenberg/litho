@@ -52,10 +52,9 @@ func TestResolve_ConcurrentAugmentation_NoRace(t *testing.T) {
 		Index: xref.Index{
 			Trailer: ast.PdfDict{"Size": ast.PdfInt(5), "Root": ast.PdfIndirectRef{ObjectNum: 1}},
 		},
-		objectCache: make(map[int]ast.PdfObject),
-		fontCache:   make(map[int]any),
-		cmapCache:   make(map[int]any),
-		Logger:      slog.New(slog.DiscardHandler),
+		fontCache: make(map[int]any),
+		cmapCache: make(map[int]any),
+		Logger:    slog.New(slog.DiscardHandler),
 	}
 
 	ctx := context.Background()

@@ -53,7 +53,7 @@ type Document struct {
 	size             int64
 	Index            xref.Index
 	xrefEntries      map[int]xref.XRefEntry // cross-reference entries by object number, see [Document.XRefEntries]
-	objectCache      map[int]ast.PdfObject
+	objectCache      objectCache            // parsed objects by object number, at most maxCacheSize
 	fontCache        map[int]any
 	cmapCache        map[int]any         // parsed CMap by ToUnicode stream object number
 	objStmCache      map[int]*objStmData // parsed object streams by ObjStm object number
@@ -71,7 +71,7 @@ type Document struct {
 	xrefAugment      xrefAugmentation    // runs the raw-bytes augmentation of xrefEntries to completion at most once
 	xrefAugmented    bool                // the augmentation added or overrode an entry; protected by mu
 	xrefAdded        map[int]bool        // object numbers the augmentation added, absent from the index as opened; protected by mu
-	maxCacheSize     int                 // evict all objects when cache exceeds this size
+	maxCacheSize     int                 // objects objectCache holds at most
 	limits           limits.Limits       // resource budgets, set by NewDocument, read-only after
 	Crypto           *crypto.Handler
 	streamCrypt      ast.PdfName // the /StmF crypt filter Crypto decrypts streams with, set by NewDocument, read-only after
@@ -1038,7 +1038,6 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		r:            r,
 		size:         size,
 		xrefEntries:  make(map[int]xref.XRefEntry),
-		objectCache:  make(map[int]ast.PdfObject),
 		fontCache:    make(map[int]any),
 		cmapCache:    make(map[int]any),
 		maxCacheSize: lim.MaxCachedObjects,
@@ -1275,7 +1274,7 @@ func (d *Document) Authenticate(password string) error {
 func (d *Document) resetParsedObjectCaches() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.objectCache = make(map[int]ast.PdfObject)
+	d.objectCache = objectCache{}
 	d.objStmCache = nil
 	d.objStmCacheBytes = 0
 	d.formatViolations = nil
@@ -1394,7 +1393,7 @@ func (d *Document) IsLinearized() bool {
 // ClearCaches must not be called concurrently with other [Document] methods.
 func (d *Document) ClearCaches() {
 	d.mu.Lock()
-	d.objectCache = make(map[int]ast.PdfObject)
+	d.objectCache = objectCache{}
 	d.fontCache = make(map[int]any)
 	d.cmapCache = make(map[int]any)
 	d.objStmCache = nil

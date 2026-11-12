@@ -83,7 +83,7 @@ func TestNewDocument_ReadsItsLimits(t *testing.T) {
 			t.Fatalf("Resolve %d: %v", n, err)
 		}
 		doc.mu.RLock()
-		cached := len(doc.objectCache)
+		cached := len(doc.objectCache.slots)
 		doc.mu.RUnlock()
 		if cached > lim.MaxCachedObjects {
 			t.Fatalf("after object %d the cache holds %d objects, past a budget of %d", n, cached, lim.MaxCachedObjects)
