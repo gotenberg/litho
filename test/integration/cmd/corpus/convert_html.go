@@ -173,42 +173,24 @@ func fixtureFontsRoot() string {
 	return filepath.Join("test", "integration", "testdata", "fonts")
 }
 
-// fixtureFamilyPrefixes are the font directories `corpus fetch --corpus=fonts`
-// installs, the faces every converter oracle draws text with
-// (fixture.FontFamilies). The fonts root also holds the test fonts (Ahem, the
-// WeasyPrint test font), which only the oracles written for them read.
-var fixtureFamilyPrefixes = fixture.FontFamilies
-
 // errFontsMissing reports a font directory a converter feature needs and
 // the testdata lacks.
 var errFontsMissing = errors.New("fixture fonts missing")
 
 // fixtureFontDirs returns the font directories under root a converter
-// feature converts with: the fixture families, then each extra directory
-// (a test font). It fails, naming the make target that fetches them, when one
-// is missing.
+// feature converts with: the Gotenberg image's fonts
+// (fixture.ImageFontsDir), then each extra directory (a test font). It
+// fails, naming the make target that fetches them, when one is missing.
 func fixtureFontDirs(root, target string, extra ...string) ([]string, error) {
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s unreadable (run %s): %w", errFontsMissing, root, target, err)
-	}
 	var dirs []string
-	for _, prefix := range fixtureFamilyPrefixes {
-		found := false
-		for _, e := range entries {
-			if e.IsDir() && strings.HasPrefix(e.Name(), prefix) {
-				dirs = append(dirs, filepath.Join(root, e.Name()))
-				found = true
-			}
-		}
-		if !found {
-			return nil, fmt.Errorf("%w: no %s* directory under %s (run %s)", errFontsMissing, prefix, root, target)
-		}
-	}
-	for _, name := range extra {
+	for _, name := range append([]string{fixture.ImageFontsDir}, extra...) {
 		p := filepath.Join(root, name)
 		if info, err := os.Stat(p); err != nil || !info.IsDir() {
-			return nil, fmt.Errorf("%w: no %s directory under %s (run %s)", errFontsMissing, name, root, target)
+			fetch := target
+			if name == fixture.ImageFontsDir {
+				fetch = diffFontsTarget
+			}
+			return nil, fmt.Errorf("%w: no %s directory under %s (run %s)", errFontsMissing, name, root, fetch)
 		}
 		dirs = append(dirs, p)
 	}

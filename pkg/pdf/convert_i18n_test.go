@@ -11,11 +11,11 @@ import (
 )
 
 // TestConvert_I18nTextExtractsInSourceOrder converts Gotenberg's i18n test
-// page (testdata/gotenberg-i18n) with its pinned fixture fonts and extracts the text back: each
-// paragraph reads in its source order, the Devanagari vowel sign drawn
-// before its consonant included. The word spaces of a line whose glyphs
-// carry nonspacing marks follow PDF.js and may differ, so that line is
-// compared without its spaces.
+// page (testdata/gotenberg-i18n) with the Gotenberg image's fonts the rig
+// copies and extracts the text back: each paragraph reads in its source
+// order, the Devanagari vowel sign drawn before its consonant included. The
+// word spaces of a line whose glyphs carry nonspacing marks follow PDF.js and
+// may differ, so that line is compared without its spaces.
 func TestConvert_I18nTextExtractsInSourceOrder(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join("..", "..", "test", "integration")
@@ -24,15 +24,12 @@ func TestConvert_I18nTextExtractsInSourceOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(fonts, "noto-sans-devanagari-2.007")); err != nil {
+	if _, err := os.Stat(filepath.Join(fonts, "gotenberg")); err != nil {
 		t.Skip("the fixture fonts are not fetched: make corpus-fetch CORPUS=fonts")
 	}
 	ctx := context.Background()
 	var out bytes.Buffer
-	if _, err := FromHTML(bytes.NewReader(src),
-		WithConvertFontDirs(filepath.Join(fonts, "liberation-2.1.5"), filepath.Join(fonts, "dejavu-2.37"),
-			filepath.Join(fonts, "noto-cjk-sans-2.004"), filepath.Join(fonts, "noto-sans-thai-2.002"),
-			filepath.Join(fonts, "noto-sans-devanagari-2.007"))).WriteTo(ctx, &out); err != nil {
+	if _, err := FromHTML(bytes.NewReader(src), WithConvertFontDirs(filepath.Join(fonts, "gotenberg"))).WriteTo(ctx, &out); err != nil {
 		t.Fatalf("WriteTo: %v", err)
 	}
 	data := out.Bytes()

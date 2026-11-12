@@ -33,7 +33,7 @@ LibreOffice's test documents are under the Mozilla Public License 2.0 (some also
 
 ## Fonts
 
-Of the 172 references, 134 draw Liberation Serif and 83 Liberation Sans, Impress's defaults, 27 OpenSymbol (the bullets), 5 Carlito, 5 Noto Sans, 5 DejaVu Sans, 3 Noto Sans CJK and 1 DejaVu Serif; the fixture fonts hold all of them. The image also has Noto Sans Mongolian (1 reference: `sd/Tdf112594.fodp`), which the fixture fonts lack.
+Of the 172 references, 134 draw Liberation Serif and 83 Liberation Sans, Impress's defaults, 27 OpenSymbol (the bullets), 5 Carlito, 5 Noto Sans, 5 DejaVu Sans, 3 Noto Sans CJK and 1 DejaVu Serif; and 1 Noto Sans Mongolian (`sd/Tdf112594.fodp`). The cell converts with the image's fonts, which hold all of them.
 
 ## How the rig was proven
 

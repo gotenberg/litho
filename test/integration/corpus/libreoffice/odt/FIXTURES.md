@@ -32,7 +32,7 @@ LibreOffice's test documents are under the Mozilla Public License 2.0 (some also
 
 ## Fonts
 
-Beyond the fixture fonts (see the docx corpus), `form` and `form-flat` draw some glyphs in OpenSymbol; of the 150 fetched references, 7 draw Noto Sans, 5 OpenSymbol and 1 a URW face (`odfexport/table_styles_2.odt`, Nimbus Mono PS).
+Beyond the fixture fonts (see the docx corpus), `form` and `form-flat` draw some glyphs in OpenSymbol; of the 150 fetched references, 7 draw Noto Sans, 5 OpenSymbol and 1 a URW face (`odfexport/table_styles_2.odt`, Nimbus Mono PS), all of them fonts of the image the cell converts with.
 
 ## How the rig was proven
 

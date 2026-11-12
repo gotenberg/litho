@@ -466,9 +466,11 @@ func Conversion(format Format, src io.Reader, template string, opts ...pdf.HTMLO
 	return pdf.FromHTML(src, opts...)
 }
 
-// FontFamilies are the prefixes of the font directories
-// `corpus fetch --corpus=fonts` installs, the faces every converter oracle
-// and fixture builder draws text with. The fonts directory also holds test
-// fonts (Ahem, the WeasyPrint test font, resvg's Noto faces), which only the
-// oracles written for them read.
-var FontFamilies = []string{"dejavu-", "liberation-", "noto-cjk-sans-", "noto-sans-thai-", "noto-sans-devanagari-", "carlito-", "caladea-", "noto-core-", "opensymbol-"}
+// ImageFontsDir is the directory under the fonts root that
+// `corpus fetch --corpus=fonts` copies the font files of the pinned Gotenberg
+// image into, the fonts every converter oracle draws text with: the files
+// the reference engines drew with. The fonts root also holds test fonts
+// (Ahem, the WeasyPrint test font, resvg's Noto faces), which only the
+// oracles written for them read, and the fonts the litho/text builder
+// converts with.
+const ImageFontsDir = "gotenberg"

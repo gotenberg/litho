@@ -61,7 +61,7 @@ var digestPins = map[string][]string{
 // localToolPins are the pins of tools the host runs rather than the image:
 // the live checks, the litho fixture builders and the outline and ICC golden
 // generators use them, and `corpus tools` compares them. The font archives
-// the compose fixture builder converts with are fetched on the host too. They
+// the litho/text fixture builder converts with are fetched on the host too. They
 // are not build arguments. POPPLER_VERSION is not one of them although
 // `corpus tools` compares the host's pdfsig against it: the image builds the
 // same release for the render goldens.
@@ -77,39 +77,15 @@ var localToolPins = map[string]bool{
 	"DEJAVU_FONTS_URL":         true,
 	"DEJAVU_FONTS_SHA256":      true,
 
-	// The script fonts of the html corpora and the CJK collection the
-	// Gotenberg image draws with, fetched by `corpus fetch --corpus=fonts` on the
-	// host like the two above.
-	"NOTO_SANS_THAI_VERSION":       true,
-	"NOTO_SANS_THAI_URL":           true,
-	"NOTO_SANS_THAI_SHA256":        true,
-	"NOTO_SANS_DEVANAGARI_VERSION": true,
-	"NOTO_SANS_DEVANAGARI_URL":     true,
-	"NOTO_SANS_DEVANAGARI_SHA256":  true,
-	"NOTO_SANS_CJK_OTC_SHA256":     true,
-	// The faces the Gotenberg image draws Calibri and Cambria with, which
-	// the docx and odt documents name.
-	"CARLITO_FONTS_VERSION": true,
-	"CARLITO_FONTS_URL":     true,
-	"CARLITO_FONTS_SHA256":  true,
-	"CALADEA_FONTS_VERSION": true,
-	"CALADEA_FONTS_URL":     true,
-	"CALADEA_FONTS_SHA256":  true,
-	// The face the Gotenberg image draws a family it lacks with, which the
-	// xlsx and ods references name.
-	"NOTO_SANS_CORE_VERSION": true,
-	"NOTO_SANS_CORE_URL":     true,
-	"NOTO_SANS_CORE_SHA256":  true,
-	// LibreOffice's symbol font, which the pptx and odp references draw
-	// bullets with.
-	"OPENSYMBOL_VERSION": true,
-	"OPENSYMBOL_URL":     true,
-	"OPENSYMBOL_SHA256":  true,
+	// The CJK collection the litho/text builder draws with, fetched by
+	// `corpus fetch --corpus=fonts` on the host like the two above.
+	"NOTO_SANS_CJK_OTC_SHA256": true,
 
 	// The converter oracles: the web-platform-tests commit `make corpus-fetch CORPUS=wpt`
 	// downloads, the WeasyPrint release `make corpus-update CORPUS=weasyprint`
 	// extracts, and the Gotenberg image `make corpus-references` converts
-	// with. The host runs all three;
+	// with and `corpus fetch --corpus=fonts` copies the fonts of. The host
+	// runs all three;
 	// `corpus fetch` records WPT_COMMIT in the wpt testdata. The resvg commit
 	// `make corpus-fetch CORPUS=resvg` downloads at, which `corpus fetch` records in the
 	// resvg testdata.

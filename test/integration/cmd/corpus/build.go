@@ -122,7 +122,7 @@ func buildLithoPDF(ctx context.Context, m *Manifest) error {
 // buildLithoText converts the litho/text sources into its committed PDFs
 // with the fixture fonts, fetched first.
 func buildLithoText(ctx context.Context, m *Manifest) error {
-	if err := fetchFixtureFonts(ctx); err != nil {
+	if err := fetchBuilderFonts(ctx); err != nil {
 		return fmt.Errorf("fetching the fixture fonts: %w", err)
 	}
 	return textbuild.Build(ctx, filepath.Join(m.SourceDir(), "sources"), filepath.Join(m.SourceDir(), m.CommittedPDFs), filepath.Join(testdataDir(), fixtureFontsDir))

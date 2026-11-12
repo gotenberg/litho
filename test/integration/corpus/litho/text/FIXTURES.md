@@ -26,11 +26,11 @@ The manifest expands every PDF over `PDF_A-2b` and `PDF_UA-1`, the two profiles 
 | `tabs_and_formfeed.pdf` | 2     | Tab stops every 8 characters, leading tabs, trailing spaces, a form feed that starts page 2                                                          | DejaVu Serif                                                                                       |
 | `latin_accents.pdf`     | 1     | French, German and Spanish accents, guillemets and German quotes, and the `fi`, `fl`, `ff`, `ffi`, `ffl` pairs the shaper turns into ligature glyphs | DejaVu Serif                                                                                       |
 | `greek_cyrillic.pdf`    | 1     | A Greek and a Russian paragraph, with tonos and ё                                                                                                    | DejaVu Serif                                                                                       |
-| `cjk.pdf`               | 1     | A Japanese and a Chinese paragraph: CFF-flavoured OpenType subsets (CIDFontType0C), lines broken between ideographs                                  | Noto Sans JP, Noto Sans SC                                                                         |
+| `cjk.pdf`               | 1     | A Japanese and a Chinese paragraph: CFF-flavoured OpenType subsets (CIDFontType0C), lines broken between ideographs                                  | Noto Sans CJK JP                                                                                   |
 | `arabic_hebrew.pdf`     | 1     | An Arabic and a Hebrew paragraph: right-to-left paragraphs, Arabic joining forms, neutral punctuation between runs, fallback past the serif family   | DejaVu Sans (Arabic), Liberation Serif (Hebrew), DejaVu Serif (the Latin punctuation between runs) |
 | `empty_lines_pages.pdf` | 3     | 150 short lines, one empty in ten and a run of five empty lines: line height and the page breaks across three pages                                  | DejaVu Serif                                                                                       |
 
-Each PDF embeds only the subset of each face it draws, as Type0 fonts over CIDFontType2 (TrueType) or CIDFontType0C (CFF), with Identity-H and a ToUnicode CMap (`pdffonts`). `cjk.pdf` weighs 0.9 MB, nearly all of it the two CFF subsets: the open finding that a CJK CFF subset embeds far more than the glyphs drawn.
+Each PDF embeds only the subset of each face it draws, as Type0 fonts over CIDFontType2 (TrueType) or CIDFontType0C (CFF), with Identity-H and a ToUnicode CMap (`pdffonts`). `cjk.pdf` weighs 1.3 MB, nearly all of it the CFF subset: the open finding that a CJK CFF subset embeds far more than the glyphs drawn.
 
 ## Known divergences
 
@@ -50,10 +50,10 @@ The target runs `corpus build`, which first fetches the fixture fonts: it downlo
 
 The fonts the committed PDFs were built with:
 
-| Family        | Release                                    | Pins in `versions.env`                                                            | Files used                                         |
-| ------------- | ------------------------------------------ | --------------------------------------------------------------------------------- | -------------------------------------------------- |
-| DejaVu        | 2.37, `dejavu-fonts-ttf-2.37.tar.bz2`      | `DEJAVU_FONTS_VERSION`, `DEJAVU_FONTS_URL`, `DEJAVU_FONTS_SHA256`                 | `DejaVuSerif.ttf`, `DejaVuSans.ttf`                |
-| Liberation    | 2.1.5, `liberation-fonts-ttf-2.1.5.tar.gz` | `LIBERATION_FONTS_VERSION`, `LIBERATION_FONTS_URL`, `LIBERATION_FONTS_SHA256`     | `LiberationSerif-Regular.ttf`                      |
-| Noto Sans CJK | `Sans2.004`, the region subset OTFs        | `NOTO_CJK_SANS_VERSION`, `NOTO_SANS_{JP,KR,SC,TC}_SHA256` (shared with the image) | `NotoSansJP-Regular.otf`, `NotoSansSC-Regular.otf` |
+| Family        | Release                                                         | Pins in `versions.env`                                                                                        | Files used                          |
+| ------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| DejaVu        | 2.37, `dejavu-fonts-ttf-2.37.tar.bz2`                           | `DEJAVU_FONTS_VERSION`, `DEJAVU_FONTS_URL`, `DEJAVU_FONTS_SHA256`                                             | `DejaVuSerif.ttf`, `DejaVuSans.ttf` |
+| Liberation    | 2.1.5, `liberation-fonts-ttf-2.1.5.tar.gz`                      | `LIBERATION_FONTS_VERSION`, `LIBERATION_FONTS_URL`, `LIBERATION_FONTS_SHA256`                                 | `LiberationSerif-Regular.ttf`       |
+| Noto Sans CJK | `Sans2.004`, the region subset OTFs and the OpenType Collection | `NOTO_CJK_SANS_VERSION`, `NOTO_SANS_{JP,KR,SC,TC}_SHA256` (shared with the image), `NOTO_SANS_CJK_OTC_SHA256` | `NotoSansCJK-Regular.ttc`           |
 
-The directory holds every face of the three releases (DejaVu's 22, Liberation's 12, the four Noto Sans CJK regions), and the files above are the ones the converter matched or fell back to. All three are under the SIL Open Font License 1.1 or, for DejaVu, the Bitstream Vera licence; no font file is committed.
+The builder reads the directories of the three releases (DejaVu's 22 faces, Liberation's 12, the four Noto Sans CJK regions and the collection), not the Gotenberg image's fonts the converter features draw with, and the files above are the ones the converter matched or fell back to. All three are under the SIL Open Font License 1.1 or, for DejaVu, the Bitstream Vera licence; no font file is committed.

@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -160,35 +159,5 @@ func TestCorpusMatches_NameGlobOrSource(t *testing.T) {
 		if got := corpusMatches(tc.pattern, tc.name); got != tc.want {
 			t.Errorf("corpusMatches(%q, %q) = %v, want %v", tc.pattern, tc.name, got, tc.want)
 		}
-	}
-}
-
-func TestArMember_ReadsADebianPackage(t *testing.T) {
-	t.Parallel()
-
-	member := func(name, body string) string {
-		h := make([]byte, 60)
-		for i := range h {
-			h[i] = ' '
-		}
-		copy(h, name)
-		copy(h[48:], strconv.Itoa(len(body)))
-		copy(h[58:], "`\n")
-		pad := ""
-		if len(body)%2 == 1 {
-			pad = "\n"
-		}
-		return string(h) + body + pad
-	}
-	deb := []byte("!<arch>\n" + member("debian-binary", "2.0\n") + member("data.tar.xz", "xz!"))
-	got, err := arMember(deb, "data.tar.xz")
-	if err != nil || string(got) != "xz!" {
-		t.Errorf("got %q, %v", got, err)
-	}
-	if _, err := arMember(deb, "control.tar.xz"); err == nil {
-		t.Error("a missing member was found")
-	}
-	if _, err := arMember([]byte("not ar"), "data.tar.xz"); err == nil {
-		t.Error("not an ar archive was read")
 	}
 }

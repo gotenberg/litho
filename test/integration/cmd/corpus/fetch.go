@@ -161,13 +161,20 @@ func runFetch(ctx context.Context, args []string) int {
 // fetchFontsName selects the fixture fonts alone in a fetch's --corpus.
 const fetchFontsName = "fonts"
 
-// fetchFixtureFonts installs the fixture fonts that are not at their pins.
-func fetchFixtureFonts(ctx context.Context) error {
-	return fetch(ctx, nil, true, fetchJobs, http.DefaultClient)
+// fetchBuilderFonts installs the font releases the litho/text builder
+// converts with that are not at their pins. The builder reads none of the
+// Gotenberg image's fonts, so it needs no Docker.
+func fetchBuilderFonts(ctx context.Context) error {
+	pins, err := loadPins()
+	if err != nil {
+		return err
+	}
+	return fetchFonts(ctx, http.DefaultClient, pins.Values, filepath.Join(testdataDir(), fixtureFontsDir))
 }
 
-// fetch downloads the fixture fonts when fonts is set, and the files of
-// every corpus of ms that declares a fetch. A file already there with its
+// fetch installs the fixture fonts when fonts is set, the pinned releases and
+// the Gotenberg image's fonts, and downloads the files of every corpus of ms
+// that declares a fetch. A file already there with its
 // listed hash is not downloaded again.
 func fetch(ctx context.Context, ms []*Manifest, fonts bool, jobs int, client *http.Client) error {
 	pins, err := loadPins()
@@ -176,7 +183,11 @@ func fetch(ctx context.Context, ms []*Manifest, fonts bool, jobs int, client *ht
 	}
 	testdata := testdataDir()
 	if fonts {
-		if err := fetchFonts(ctx, client, pins.Values, filepath.Join(testdata, fixtureFontsDir)); err != nil {
+		dir := filepath.Join(testdata, fixtureFontsDir)
+		if err := fetchFonts(ctx, client, pins.Values, dir); err != nil {
+			return fmt.Errorf("fixture fonts: %w", err)
+		}
+		if err := fetchImageFonts(ctx, pins.Values, dir); err != nil {
 			return fmt.Errorf("fixture fonts: %w", err)
 		}
 	}

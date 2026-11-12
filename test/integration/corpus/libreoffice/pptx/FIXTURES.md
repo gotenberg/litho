@@ -45,7 +45,7 @@ LibreOffice's test documents are under the Mozilla Public License 2.0 (some also
 
 ## Fonts
 
-The cell converts with the fixture fonts `corpus fetch --corpus=fonts` installs (see the docx corpus's `FIXTURES.md`). Of the 319 references, 141 draw Carlito (Calibri and Calibri Light, PowerPoint's defaults, and Aptos, which the image lacks), 50 Liberation Sans, 38 Noto Sans (the image's face for a family it does not install: Tahoma, Segoe UI, Trebuchet MS, Century Gothic), 21 OpenSymbol (Impress's bullets: `OPENSYMBOL_*`, Debian's `fonts-opensymbol`, the image's package), 6 Liberation Mono, 2 Liberation Serif, 2 Noto Sans CJK, and DejaVu Serif, DejaVu Sans Mono and Caladea 1 each; the fixture fonts hold all of them. The image also has URW base 35 (Nimbus Sans, 1 reference: `sd/slide-sections.pptx`), which the fixture fonts lack, and one reference draws the font its document embeds (`sd-data/BoldonseFontEmbedded.pptx`, Boldonse).
+The cell converts with the fixture fonts `corpus fetch --corpus=fonts` installs (see the docx corpus's `FIXTURES.md`). Of the 319 references, 141 draw Carlito (Calibri and Calibri Light, PowerPoint's defaults, and Aptos, which the image lacks), 50 Liberation Sans, 38 Noto Sans (the image's face for a family it does not install: Tahoma, Segoe UI, Trebuchet MS, Century Gothic), 21 OpenSymbol (Impress's bullets), 6 Liberation Mono, 2 Liberation Serif, 2 Noto Sans CJK, and DejaVu Serif, DejaVu Sans Mono and Caladea 1 each, and URW base 35 (Nimbus Sans) 1 (`sd/slide-sections.pptx`): the fixture fonts, the image's, hold all of them. One reference draws the font its document embeds (`sd-data/BoldonseFontEmbedded.pptx`, Boldonse).
 
 ## How the rig was proven
 
