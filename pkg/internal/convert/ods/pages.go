@@ -1,6 +1,7 @@
 package ods
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -125,9 +126,9 @@ func (r *reader) readPage(mp *odf.MasterPage) pageResult {
 		// style:print lists what is printed (ODF 1.3, Part 3, 20.325);
 		// a list without zero-values leaves zeros blank.
 		f := strings.Fields(v)
-		pg.GridLines = contains(f, "grid")
-		pg.Headings = contains(f, "headers")
-		hideZeros = !contains(f, "zero-values")
+		pg.GridLines = slices.Contains(f, "grid")
+		pg.Headings = slices.Contains(f, "headers")
+		hideZeros = !slices.Contains(f, "zero-values")
 	}
 	if pp.Get("style:print-page-order") == "ltr" {
 		pg.Order = sheet.OverThenDown
@@ -325,7 +326,7 @@ func (r *reader) spans(el *odf.Element) []sheet.Span {
 				return
 			}
 			if c.IsText() {
-				if t := strings.Join(strings.FieldsFunc(c.Text, func(r rune) bool { return r == '\n' || r == '\r' || r == '\t' }), " "); t != "" {
+				if t := strings.Join(strings.FieldsFunc(c.Text, func(ch rune) bool { return ch == '\n' || ch == '\r' || ch == '\t' }), " "); t != "" {
 					add(sheet.Span{Text: t, Font: f})
 				}
 				continue

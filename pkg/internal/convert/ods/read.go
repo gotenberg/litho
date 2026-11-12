@@ -159,6 +159,7 @@ func (r *reader) document(body *odf.Element) *sheet.Document {
 		case c.Is(odf.NSTable, "content-validations"):
 			r.warn("validations", "cell validations are not applied")
 		case c.Is(odf.NSTable, "database-ranges"), c.Is(odf.NSTable, "calculation-settings"):
+			// They print nothing of their own: no warning.
 		}
 		if r.err != nil {
 			return nil

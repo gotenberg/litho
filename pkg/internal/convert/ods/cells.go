@@ -10,10 +10,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/odf"
 )
 
-// calcExt is the namespace of LibreOffice's Calc extensions, whose
-// calcext:value-type tells an error value from a number.
-const calcExt = "urn:org:documentfoundation:names:experimental:calc:xmlns:calcext:1.0"
-
 // The caps of one cell's text.
 const (
 	// maxCellText bounds the bytes of one cell's text: 32,767, Calc's and
@@ -88,7 +84,8 @@ func visible(st *sheet.Style) bool {
 // days since 1899-12-30; calcext:value-type error the error text.
 func value(el *odf.Element, shown string) sheet.Value {
 	vt := el.A(odf.NSOffice, "value-type")
-	if el.A(calcExt, "value-type") == "error" {
+	// calcext:value-type tells an error value from a number.
+	if el.A(nsCalcExt, "value-type") == "error" {
 		return sheet.Value{Kind: sheet.Error, Text: shown}
 	}
 	num := func(s string) (float64, bool) {

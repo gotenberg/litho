@@ -389,8 +389,11 @@ func cellRef(s string) (ref, bool) {
 	s = strings.ReplaceAll(s, "$", "")
 	i, col := 0, 0
 	for i < len(s) && (s[i] >= 'A' && s[i] <= 'Z' || s[i] >= 'a' && s[i] <= 'z') {
-		ch := s[i] | 0x20
-		col = col*26 + int(ch-'a'+1)
+		ch := s[i]
+		if ch >= 'a' {
+			ch -= 'a' - 'A'
+		}
+		col = col*26 + int(ch-'A'+1)
 		if col > maxColumns {
 			return ref{}, false
 		}

@@ -12,7 +12,8 @@ import (
 )
 
 // nsCalcExt is LibreOffice's Calc extension namespace, which holds the
-// conditional formats Calc writes (calcext:conditional-formats).
+// conditional formats Calc writes (calcext:conditional-formats) and a
+// cell's calcext:value-type.
 const nsCalcExt = "urn:org:documentfoundation:names:experimental:calc:xmlns:calcext:1.0"
 
 // maxCondFormats caps the conditional formats of a table, and
@@ -34,7 +35,10 @@ const (
 // kept with its formula, which the builder does not evaluate.
 func (r *reader) conditionalFormats(sh *sheet.Sheet, el *odf.Element) {
 	for _, cf := range el.Children {
-		if !cf.Is(nsCalcExt, "conditional-format") || len(sh.Conditional) >= maxCondFormats {
+		if len(sh.Conditional) >= maxCondFormats {
+			break
+		}
+		if !cf.Is(nsCalcExt, "conditional-format") {
 			continue
 		}
 		c := sheet.Conditional{Ranges: parseRanges(cf.A(nsCalcExt, "target-range-address"))}

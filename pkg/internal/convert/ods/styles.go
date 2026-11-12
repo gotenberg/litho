@@ -248,16 +248,11 @@ func (r *reader) foldFont(f sheet.Font, layers []odf.Props) sheet.Font {
 	}
 	f.Families = nil
 	for _, n := range fam {
-		if n != "" && !contains(f.Families, n) {
+		if n != "" && !slices.Contains(f.Families, n) {
 			f.Families = append(f.Families, n)
 		}
 	}
 	return f
-}
-
-// contains reports s in list.
-func contains(list []string, s string) bool {
-	return slices.Contains(list, s)
 }
 
 // familyKey returns the font family attribute of a script suffix (ODF
