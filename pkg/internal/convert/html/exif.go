@@ -2,6 +2,7 @@ package html
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"image"
 	"image/draw"
@@ -101,10 +102,11 @@ func tiffOrientation(t []byte) int {
 
 // orientImage returns img with the EXIF orientation o applied, img itself
 // for 1 or a value out of range. The pixels are copied into a grey image
-// for a grey source and an RGBA one otherwise.
-func orientImage(img image.Image, o int) image.Image {
+// for a grey source and an RGBA one otherwise. It checks ctx once a row
+// and returns its error when it ends first.
+func orientImage(ctx context.Context, img image.Image, o int) (image.Image, error) {
 	if o < 2 || o > 8 {
-		return img
+		return img, nil
 	}
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
@@ -119,6 +121,9 @@ func orientImage(img image.Image, o int) image.Image {
 		dst = image.NewRGBA(image.Rect(0, 0, dw, dh))
 	}
 	for y := range h {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		for x := range w {
 			var dx, dy int
 			switch o {
@@ -140,7 +145,7 @@ func orientImage(img image.Image, o int) image.Image {
 			dst.Set(dx, dy, img.At(b.Min.X+x, b.Min.Y+y))
 		}
 	}
-	return dst
+	return dst, nil
 }
 
 // unsupportedFormat names the format of a picture Chromium draws and no

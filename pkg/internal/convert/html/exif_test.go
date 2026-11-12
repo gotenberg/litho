@@ -2,7 +2,9 @@ package html
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
+	"errors"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -87,7 +89,10 @@ func TestOrientImage(t *testing.T) {
 		7: {{60, 30}, {50, 20}, {40, 10}},
 		8: {{30, 60}, {20, 50}, {10, 40}},
 	} {
-		got := orientImage(src, o)
+		got, err := orientImage(context.Background(), src, o)
+		if err != nil {
+			t.Fatalf("orientation %d: %v", o, err)
+		}
 		b := got.Bounds()
 		if b.Dy() != len(want) || b.Dx() != len(want[0]) {
 			t.Errorf("orientation %d: bounds %v", o, b)
@@ -103,8 +108,16 @@ func TestOrientImage(t *testing.T) {
 	}
 	// A colour picture comes out as RGBA.
 	rgb := image.NewRGBA(image.Rect(0, 0, 2, 1))
-	if _, ok := orientImage(rgb, 6).(*image.RGBA); !ok {
+	if got, err := orientImage(context.Background(), rgb, 6); err != nil {
+		t.Errorf("colour picture: %v", err)
+	} else if _, ok := got.(*image.RGBA); !ok {
 		t.Errorf("colour picture not RGBA")
+	}
+	// A conversion that ends stops the copy.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := orientImage(ctx, rgb, 6); !errors.Is(err, context.Canceled) {
+		t.Errorf("cancelled copy: %v, want context.Canceled", err)
 	}
 }
 

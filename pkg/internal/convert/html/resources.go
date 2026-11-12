@@ -316,7 +316,12 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 		mem.Release(charged)
 		return nil, fmt.Errorf("decoding the %s image: %w", format, err)
 	}
-	src, err := compose.EncodeImage(ctx, orientImage(img, orient))
+	oriented, err := orientImage(ctx, img, orient)
+	if err != nil {
+		mem.Release(charged)
+		return nil, err
+	}
+	src, err := compose.EncodeImage(ctx, oriented)
 	if err != nil {
 		return nil, fmt.Errorf("encoding the %s image: %w", format, err)
 	}
