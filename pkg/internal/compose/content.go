@@ -179,7 +179,6 @@ func (p *pageWriter) extent(f Fragment) float64 {
 		return imageExtent(f, p.off)
 	case *Path:
 		return pathExtent(f, p.off)
-	case *Group:
 	}
 	return 0
 }

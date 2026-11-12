@@ -16,11 +16,6 @@ import (
 // samples, charged by [EncodeImage] and held as long as the document, which
 // keeps every [ImageSource] until it is written.
 
-// pixelCost returns what one decoded pixel of colour model m costs.
-func pixelCost(m color.Model) int64 {
-	return limits.PixelCost(m)
-}
-
 // ChargeImage charges ctx's budget for a decoded picture of w by h pixels
 // of colour model m, before the caller allocates it, failing with the
 // budget's refusal. [EncodeImage] releases the charge, as
@@ -29,7 +24,7 @@ func pixelCost(m color.Model) int64 {
 // [limits.Budget.ChargePicture] instead, which also applies the picture
 // cap.
 func ChargeImage(ctx context.Context, w, h int, m color.Model) error {
-	if err := limits.BudgetFrom(ctx).ChargeUnits(int64(w)*int64(h), pixelCost(m), "decoded pictures"); err != nil {
+	if err := limits.BudgetFrom(ctx).ChargeUnits(int64(w)*int64(h), limits.PixelCost(m), "decoded pictures"); err != nil {
 		return fmt.Errorf("decoding image: %w", err)
 	}
 	return nil
@@ -42,5 +37,5 @@ func ReleaseImage(ctx context.Context, img image.Image) {
 		return
 	}
 	b := img.Bounds()
-	limits.BudgetFrom(ctx).Release(int64(b.Dx()) * int64(b.Dy()) * pixelCost(img.ColorModel()))
+	limits.BudgetFrom(ctx).Release(int64(b.Dx()) * int64(b.Dy()) * limits.PixelCost(img.ColorModel()))
 }

@@ -94,7 +94,6 @@ func unparented(f Fragment) Fragment {
 		c := *v
 		c.Parent = nil
 		return &c
-	case *Group:
 	}
 	return f
 }

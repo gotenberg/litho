@@ -46,11 +46,9 @@ func EncodeImage(ctx context.Context, img image.Image) (*ImageSource, error) {
 	return src, nil
 }
 
-// encodeImage is [EncodeImage] without the budget.
+// encodeImage is [EncodeImage] without the budget, for a picture that is
+// not nil.
 func encodeImage(ctx context.Context, img image.Image) (*ImageSource, error) {
-	if img == nil {
-		return nil, fmt.Errorf("%w: nil picture", ErrInvalidImage)
-	}
 	b := img.Bounds()
 	width, height := b.Dx(), b.Dy()
 	if err := checkPixels(width, height); err != nil {
@@ -197,7 +195,7 @@ func (s *ImageSource) Decode(ctx context.Context) (image.Image, error) {
 	}
 	img, err := s.decode(ctx)
 	if err != nil {
-		limits.BudgetFrom(ctx).Release(int64(s.Width) * int64(s.Height) * pixelCost(model))
+		limits.BudgetFrom(ctx).Release(int64(s.Width) * int64(s.Height) * limits.PixelCost(model))
 		return nil, err
 	}
 	return img, nil
