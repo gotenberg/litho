@@ -166,7 +166,7 @@ type diffGolden struct {
 	// outline is the reference's outline, flattened in outline order.
 	outline []diffOutlineItem
 	// missingFonts are the faces a Microsoft reference draws that no
-	// fixture font stands in for (see [missingReferenceFaces]): the
+	// fixture font draws as it does (see [missingReferenceFaces]): the
 	// fixture is then left unscored.
 	missingFonts []string
 	// widgets are the widgets of the reference's interactive form, push
@@ -340,6 +340,20 @@ func (f *diffFeature) LoadGoldens(dir string) error {
 	// The provisioned Chromium PDFs sit at <testdata>/html/pdfs, two levels
 	// above goldens/diff (the manifest's pdf_root).
 	pdfsDir := filepath.Join(filepath.Dir(filepath.Dir(dir)), "pdfs")
+	fonts, err := fixtureFontDirs(fixtureFontsRoot(), diffFontsTarget)
+	if err != nil {
+		return err
+	}
+	var fixture *fixtureFaces
+	var qpdf string
+	if checkFonts {
+		if fixture, err = indexFixtureFaces(context.Background(), fonts); err != nil {
+			return fmt.Errorf("index the fixture fonts: %w", err)
+		}
+		if qpdf, err = exec.LookPath("qpdf"); err != nil {
+			fmt.Fprintln(os.Stderr, "diff: qpdf not found; each face of a reference judged by its name alone")
+		}
+	}
 	goldens := make(map[string]*diffGolden, len(texts))
 	for id, t := range texts {
 		r, l := renders[id], links[id]
@@ -364,21 +378,17 @@ func (f *diffFeature) LoadGoldens(dir string) error {
 			f.referenceForm(g, filepath.Join(pdfsDir, id+".pdf"))
 		}
 		if checkFonts {
-			faces, err := referenceFonts(context.Background(), filepath.Join(pdfsDir, id+".pdf"))
+			missing, err := referenceMissingFaces(context.Background(), qpdf, filepath.Join(pdfsDir, id+".pdf"), fixture)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "diff: reading the fonts of reference %s: %v; scored as it is\n", id, err)
 			} else {
-				g.missingFonts = missingReferenceFaces(faces)
+				g.missingFonts = missing
 			}
 		}
 		goldens[id] = g
 	}
 	if len(goldens) == 0 {
 		return ErrNoGoldens
-	}
-	fonts, err := fixtureFontDirs(fixtureFontsRoot(), diffFontsTarget)
-	if err != nil {
-		return err
 	}
 	f.mu.Lock()
 	f.goldens, f.renderDir, f.fontDirs = goldens, filepath.Join(dir, "render"), fonts
@@ -492,7 +502,7 @@ type diffOutput struct {
 	// scored against, when its options.json borrows one.
 	ReferenceOf string `json:"reference_of,omitempty"`
 	// MissingFonts are the faces the reference draws that no fixture font
-	// stands in for: the fixture is left unscored.
+	// draws as it does: the fixture is left unscored.
 	MissingFonts []string `json:"reference_fonts_missing,omitempty"`
 	// PDFSHA256 is the SHA-256 of litho's PDF, in hexadecimal.
 	PDFSHA256 string `json:"pdf_sha256,omitempty"`
@@ -987,7 +997,7 @@ func (f *diffFeature) Compare(fixtureID string, output []byte) Verdict {
 		// Unscored, outside matched and mismatched, the scores kept for a
 		// reader: no converter can match the metrics of a face it has no
 		// stand-in for.
-		reason := "unscored: the reference draws " + strings.Join(got.MissingFonts, ", ") + ", which no fixture font stands in for"
+		reason := "unscored: the reference draws " + strings.Join(got.MissingFonts, ", ") + ", which no fixture font draws as it does"
 		if got.Reason != "" {
 			reason += "; " + got.Reason
 		}

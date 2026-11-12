@@ -9,13 +9,14 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 // metricReferenceFontsMissing counts the fixtures the diff cell leaves
-// unscored because their reference draws a face no fixture font stands in
-// for (see [missingReferenceFaces]). An inventory, not gated.
+// unscored because their reference draws a face no fixture font draws as it
+// does (see [missingReferenceFaces]). An inventory, not gated.
 const metricReferenceFontsMissing = "reference_fonts_missing"
 
 // baseFontPattern matches the /BaseFont entry of a font dictionary written
@@ -91,38 +92,35 @@ func stripSubsetTag(name string) string {
 	return name
 }
 
-// fixtureFontFamilies are the families the fixture fonts install (see
-// fixture.FontFamilies), as a PostScript name's family part reads once
-// folded (see [foldFace]): any face of them is drawn as the reference draws
-// it.
-var fixtureFontFamilies = []string{
-	"dejavusans", "dejavusanscondensed", "dejavusansmono", "dejavuserif", "dejavuserifcondensed",
-	"liberationsans", "liberationsansnarrow", "liberationserif", "liberationmono",
-	"carlito", "caladea", "opensymbol",
-	"notosans", "notoserif", "notosanscjksc", "notosanscjktc", "notosanscjkjp", "notosanscjkkr", "notosanscjkhk",
-	"notosansthai", "notosansdevanagari",
-}
-
 // fourStyles are the styles a metric-compatible stand-in covers: regular,
 // bold, italic and bold italic, as a PostScript name's style part reads
 // once folded.
 var fourStyles = []string{"", "bold", "italic", "bolditalic", "oblique", "boldoblique"}
 
+// standIn is the fixture family that draws a face the fixture fonts lack,
+// as a PostScript name's family part reads once folded, and the styles it
+// stands in for.
+type standIn struct {
+	family string
+	styles []string
+}
+
 // standIns maps the faces the fixture fonts have a metric-compatible stand-in
-// for, by folded family, to the styles it covers: Carlito for Calibri and
-// Caladea for Cambria, each in four styles only (Calibri Light is another
-// family's metrics), Liberation Sans, Serif and Mono for Arial, Times New
-// Roman and Courier New, and for Helvetica, Times and Courier, the standard
-// 14 fonts whose metrics those three share.
-var standIns = map[string][]string{
-	"calibri":       fourStyles,
-	"cambria":       fourStyles,
-	"arial":         fourStyles,
-	"timesnewroman": fourStyles,
-	"couriernew":    fourStyles,
-	"helvetica":     fourStyles,
-	"times":         append([]string{"roman"}, fourStyles...),
-	"courier":       fourStyles,
+// for, by folded family: Carlito for Calibri and Caladea for Cambria, each in
+// four styles only (Calibri Light is another family's metrics), Liberation
+// Sans, Serif and Mono for Arial, Times New Roman and Courier New, and for
+// Helvetica, Times and Courier, the standard 14 fonts whose metrics those
+// three share. These are the substitutions of the Gotenberg image's
+// fontconfig (conf.d/30-metric-aliases.conf).
+var standIns = map[string]standIn{
+	"calibri":       {"carlito", fourStyles},
+	"cambria":       {"caladea", fourStyles},
+	"arial":         {"liberationsans", fourStyles},
+	"timesnewroman": {"liberationserif", fourStyles},
+	"couriernew":    {"liberationmono", fourStyles},
+	"helvetica":     {"liberationsans", fourStyles},
+	"times":         {"liberationserif", append([]string{"roman"}, fourStyles...)},
+	"courier":       {"liberationmono", fourStyles},
 }
 
 // symbolFaces are the symbol fonts the converters recode into OpenSymbol,
@@ -162,25 +160,59 @@ func foldFace(name string) (family, style string) {
 }
 
 // faceCovered reports whether the fixture fonts draw a face as the
-// reference draws it: a face of their own families, a metric-compatible
-// stand-in in a style it has, a symbol font the converters recode, or a font
-// the source document embeds.
-func faceCovered(name string) bool {
+// reference draws it: a font the source document embeds, a symbol font the
+// converters recode, or a face of the fixture fonts' own families or a
+// metric-compatible stand-in in a style it has, which holds every character
+// of drawn, the text the reference draws in the face. An empty drawn, a face
+// whose text the reference draws only where it cannot be attributed, judges
+// the face by its name alone.
+func faceCovered(name string, drawn []rune, fixture *fixtureFaces) bool {
 	if strings.HasPrefix(name, embeddedSourceFont) {
 		return true
 	}
 	family, style := foldFace(name)
-	if slices.Contains(fixtureFontFamilies, family) || slices.Contains(symbolFaces, family) {
+	if slices.Contains(symbolFaces, family) {
 		return true
 	}
-	styles, ok := standIns[family]
-	return ok && slices.Contains(styles, style)
+	if !fixture.has(family) {
+		in, ok := standIns[family]
+		if !ok || !slices.Contains(in.styles, style) || !fixture.has(in.family) {
+			return false
+		}
+		family = in.family
+	}
+	cover := fixture.face(family, style)
+	for _, r := range drawn {
+		if r >= ' ' && r != unicode.ReplacementChar && !cover.covers(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// referenceMissingFaces reads the reference PDF at path and returns the faces
+// it draws that no face of fixture draws as it does (see
+// [missingReferenceFaces]), the characters of each face read with qpdf at
+// qpdf; an empty qpdf judges every face by its name alone.
+func referenceMissingFaces(ctx context.Context, qpdf, path string, fixture *fixtureFaces) ([]string, error) {
+	faces, err := referenceFonts(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	var drawn map[string][]rune
+	if qpdf != "" {
+		if drawn, err = referenceFaceText(ctx, qpdf, path); err != nil {
+			return nil, fmt.Errorf("read the text of each face: %w", err)
+		}
+	}
+	return missingReferenceFaces(faces, drawn, fixture), nil
 }
 
 // missingReferenceFaces returns the faces of a reference no fixture font
-// draws as the reference does (see [faceCovered]), sorted. No converter can
-// match such a reference's metrics, so the diff cell leaves its fixture
-// unscored rather than holding litho to it.
+// draws as the reference does (see [faceCovered]), in the order of faces,
+// the faces the reference names; drawn holds the characters it draws in
+// each. No converter can match such a reference's metrics or glyphs, so the
+// diff cell leaves its fixture unscored rather than holding litho to it.
 //
 // # Corpus evidence
 //
@@ -202,10 +234,23 @@ func faceCovered(name string) bool {
 //     Trebuchet MS or Cambria Math. Noto Sans Mono CJK matches the advances
 //     of MS Gothic (321 of 321), SimSun (2445 of 2449) and MS Mincho (690
 //     of 697), but its line is 1.448 em high where theirs is 1 em.
-func missingReferenceFaces(faces []string) []string {
+//   - The same corpora, each face's characters read from its ToUnicode
+//     CMap and checked against the Gotenberg image's fonts: 11 more
+//     references draw, in a face with a stand-in, a character the stand-in
+//     lacks, 315 in all. Hebrew or Arabic in Calibri, Arial or Times New
+//     Roman: litho/xlsx alignment and rtl_sheet, litho/pptx table-large,
+//     libreoffice/pptx oox/tdf125085_WordArtFontText.pptx and
+//     WordArtFontTheme.pptx, poi/docx document/rtl.docx, openxmlsdk/docx
+//     Comment028, Comment044, Comment045 and Comment066; Arabic ligatures
+//     in Calibri: poi/xlsx spreadsheet/DataValidationEvaluations.xlsx.
+//     Outside them, govdocs/ppt 000/000725.ppt, 100/100756.ppt,
+//     100/100779.ppt, 200/200105.ppt and 400/400354.ppt and poi/ppt
+//     slideshow/bug58516.ppt draw a private-use bullet in Calibri. No
+//     reference went the other way.
+func missingReferenceFaces(faces []string, drawn map[string][]rune, fixture *fixtureFaces) []string {
 	var out []string
 	for _, f := range faces {
-		if !faceCovered(f) {
+		if !faceCovered(f, drawn[f], fixture) {
 			out = append(out, f)
 		}
 	}

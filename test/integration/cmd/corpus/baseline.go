@@ -218,7 +218,7 @@ var uncomparedMetrics = map[string]bool{
 	metricJPEGSavedKiB: true,
 
 	// The diff fixtures left unscored because their reference draws a face
-	// no fixture font stands in for: an inventory of the references.
+	// no fixture font draws as it does: an inventory of the references.
 	metricReferenceFontsMissing: true,
 }
 

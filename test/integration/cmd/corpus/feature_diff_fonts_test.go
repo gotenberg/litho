@@ -10,7 +10,21 @@ import (
 	"github.com/gotenberg/litho/test/integration/fixture/pdfgen"
 )
 
+// testFixtureFaces is a fixture font index of the families the stand-ins
+// name, each covering Basic Latin, and Noto Sans CJK JP covering the CJK
+// Unified Ideographs too.
+func testFixtureFaces() *fixtureFaces {
+	latin := coverage{{' ', '~'}}
+	f := &fixtureFaces{byFamily: map[string]map[string]coverage{}}
+	for _, family := range []string{"liberationsans", "liberationserif", "liberationmono", "dejavusansmono", "carlito", "caladea", "opensymbol"} {
+		f.byFamily[family] = map[string]coverage{"": latin, "bold": latin}
+	}
+	f.byFamily["notosanscjkjp"] = map[string]coverage{"": {{' ', '~'}, {0x4E00, 0x9FFF}}}
+	return f
+}
+
 func TestFaceCovered(t *testing.T) {
+	fixture := testFixtureFaces()
 	for name, want := range map[string]bool{
 		"Calibri":                  true,
 		"Calibri-Bold":             true,
@@ -44,8 +58,26 @@ func TestFaceCovered(t *testing.T) {
 		"Tahoma":                   false,
 		"SegoeUISymbol":            false,
 	} {
-		if got := faceCovered(name); got != want {
+		if got := faceCovered(name, nil, fixture); got != want {
 			t.Errorf("faceCovered(%q) = %v, want %v", name, got, want)
+		}
+	}
+	for _, tc := range []struct {
+		name  string
+		drawn string
+		want  bool
+	}{
+		{"ArialMT", "Hello, world", true},
+		{"ArialMT", "Hello سلام", false},
+		{"Arial-BoldMT", "שלום", false},
+		{"Calibri", "Tab\tand line\n", true},
+		{"NotoSansCJKjp-Regular", "日本語 text", true},
+		{"NotoSansCJKjp-Regular", "日本語ですね", false},
+		{"Wingdings-Regular", "\uf0a7", true},
+		{"___WRD_EMBED_SUB_1434", "ก", true},
+	} {
+		if got := faceCovered(tc.name, []rune(tc.drawn), fixture); got != tc.want {
+			t.Errorf("faceCovered(%q, %q) = %v, want %v", tc.name, tc.drawn, got, tc.want)
 		}
 	}
 }
@@ -103,7 +135,7 @@ func TestReferenceFonts(t *testing.T) {
 	if want := []string{"Calibri", "Calibri-Light", "MS Gothic"}; !slices.Equal(faces, want) {
 		t.Errorf("referenceFonts = %q, want %q", faces, want)
 	}
-	if got, want := missingReferenceFaces(faces), []string{"Calibri-Light", "MS Gothic"}; !slices.Equal(got, want) {
+	if got, want := missingReferenceFaces(faces, nil, testFixtureFaces()), []string{"Calibri-Light", "MS Gothic"}; !slices.Equal(got, want) {
 		t.Errorf("missingReferenceFaces = %q, want %q", got, want)
 	}
 }
