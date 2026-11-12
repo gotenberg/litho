@@ -2,6 +2,7 @@ package chart
 
 import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // defaultPalette is LibreOffice's own series colours, the automatic
@@ -128,7 +129,7 @@ func (rd *renderer) markerOf(g *Group, s *Series, j int) Marker {
 	if m.Symbol == MarkerAuto {
 		m.Symbol = MarkerSquare + MarkerSymbol(max(s.Index, 0)%int(MarkerVerticalBar-MarkerSquare+1)) //nolint:gosec // under 15 by the modulo
 	}
-	if !positive(m.Size) {
+	if !numeric.Positive(m.Size) {
 		m.Size = 5
 	}
 	m.Size = min(m.Size, maxMarkerSize)

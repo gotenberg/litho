@@ -2,6 +2,8 @@ package chart
 
 import (
 	"math"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // maxTicks caps the major ticks of an axis. Anti-DoS guard, not
@@ -61,7 +63,7 @@ type scaleOptions struct {
 // the axis's fixed bounds and intervals, as LibreOffice's ScaleAutomatism
 // computes it (calculateExplicitIncrementAndScaleForLinear).
 func autoScale(ax *Axis, lo, hi float64, opt scaleOptions) scale {
-	if math.IsNaN(lo) || math.IsNaN(hi) || math.IsInf(lo, 0) || math.IsInf(hi, 0) {
+	if !numeric.Finite(lo) || !numeric.Finite(hi) {
 		lo, hi = 0, 1
 	}
 	fixMin, fixMax, fixMajor := math.NaN(), math.NaN(), math.NaN()
@@ -208,7 +210,7 @@ func autoScale(ax *Axis, lo, hi float64, opt scaleOptions) scale {
 	if !above(sc.max, sc.min) {
 		sc.max = sc.min + 1
 	}
-	if !positive(sc.major) || (sc.max-sc.min)/sc.major > maxTicks {
+	if !numeric.Positive(sc.major) || (sc.max-sc.min)/sc.major > maxTicks {
 		sc.major = (sc.max - sc.min) / maxAutoTicks
 	}
 	return sc
@@ -253,9 +255,6 @@ func finite(v float64) float64 {
 	}
 	return v
 }
-
-// positive reports whether v is greater than 0; NaN is not.
-func positive(v float64) bool { return v > 0 }
 
 // above reports whether v is greater than lim; NaN on either side is not.
 func above(v, lim float64) bool { return v > lim }
@@ -337,7 +336,7 @@ func (s scale) minorTicks() []float64 {
 		return nil
 	}
 	step := s.minor
-	if !positive(step) {
+	if !numeric.Positive(step) {
 		step = s.major / 5
 	}
 	if (s.max-s.min)/step > maxMinorTicks {

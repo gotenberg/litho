@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
@@ -61,7 +62,7 @@ const (
 // Three-dimensional charts are drawn as their two-dimensional kind;
 // trendline equations are not drawn.
 func Render(ctx context.Context, fonts *text.Fonts, c *Chart, r compose.Rect) []compose.Fragment {
-	if c == nil || fonts == nil || !positive(r.Width) || !positive(r.Height) || math.IsInf(r.Width, 0) || math.IsInf(r.Height, 0) {
+	if c == nil || fonts == nil || !numeric.PositiveFinite(r.Width) || !numeric.PositiveFinite(r.Height) {
 		return nil
 	}
 	rd := &renderer{ctx: ctx, fonts: fonts, c: binned(c), page: r}
@@ -218,7 +219,7 @@ func paintPath(ops []compose.PathOp, fill *Paint, border *Stroke) *compose.Path 
 
 // compose returns the stroke s draws, nil for none.
 func (s *Stroke) compose() *compose.Stroke {
-	if s == nil || s.None || s.Color.A <= 0 || s.Width < 0 || math.IsNaN(s.Width) {
+	if s == nil || s.None || s.Color.A <= 0 || !numeric.NonNegative(s.Width) {
 		return nil
 	}
 	return &compose.Stroke{Color: s.Color, Width: min(s.Width, maxStrokeWidth), Dash: s.Dash, Join: compose.RoundJoin}

@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // trendSamples is how many points a curved trendline is drawn through.
@@ -19,7 +20,7 @@ const maxPolynomialOrder = 6
 func trendPoints(xs, ys []float64) ([]float64, []float64) {
 	var fx, fy []float64
 	for i := range min(len(xs), len(ys)) {
-		if math.IsNaN(xs[i]) || math.IsNaN(ys[i]) || math.IsInf(xs[i], 0) || math.IsInf(ys[i], 0) {
+		if !numeric.Finite(xs[i]) || !numeric.Finite(ys[i]) {
 			continue
 		}
 		fx, fy = append(fx, xs[i]), append(fy, ys[i])
@@ -47,15 +48,15 @@ func trendCurve(t Trendline, xs, ys []float64) [][2]float64 {
 	for _, x := range xs {
 		lo, hi = math.Min(lo, x), math.Max(hi, x)
 	}
-	if t.Backward > 0 && !math.IsInf(t.Backward, 0) {
+	if numeric.PositiveFinite(t.Backward) {
 		lo -= t.Backward
 	}
-	if t.Forward > 0 && !math.IsInf(t.Forward, 0) {
+	if numeric.PositiveFinite(t.Forward) {
 		hi += t.Forward
 	}
 	if t.Kind == TrendLogarithmic || t.Kind == TrendPower {
 		lo = math.Max(lo, hi/1e6)
-		if !positive(hi) {
+		if !numeric.Positive(hi) {
 			return nil
 		}
 	}
@@ -66,7 +67,7 @@ func trendCurve(t Trendline, xs, ys []float64) [][2]float64 {
 	var out [][2]float64
 	for i := range n {
 		x := lo + (hi-lo)*float64(i)/float64(n-1)
-		if y := f(x); !math.IsNaN(y) && !math.IsInf(y, 0) {
+		if y := f(x); numeric.Finite(y) {
 			out = append(out, [2]float64{x, y})
 		}
 	}
@@ -211,7 +212,7 @@ func solve(a [][]float64) ([]float64, bool) {
 			s -= a[r][j] * x[j]
 		}
 		x[r] = s / a[r][r]
-		if math.IsNaN(x[r]) || math.IsInf(x[r], 0) {
+		if !numeric.Finite(x[r]) {
 			return nil, false
 		}
 	}

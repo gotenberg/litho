@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // kappa places the control points of a cubic Bézier quarter circle.
@@ -96,7 +97,7 @@ func markerPath(sym MarkerSymbol, x, y, s float64) []compose.PathOp {
 
 // marker draws m centred on (x, y).
 func (rd *renderer) marker(m Marker, x, y float64) {
-	if m.Symbol == MarkerNone || m.Symbol == MarkerAuto || !positive(m.Size) {
+	if m.Symbol == MarkerNone || m.Symbol == MarkerAuto || !numeric.Positive(m.Size) {
 		return
 	}
 	border := m.Border

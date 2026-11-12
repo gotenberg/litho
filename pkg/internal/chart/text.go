@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -80,7 +81,7 @@ func (rd *renderer) measure(s string, st TextStyle, maxW float64) *block {
 	if r := []rune(s); len(r) > maxLabelRunes {
 		s = string(r[:maxLabelRunes])
 	}
-	if !positive(maxW) {
+	if !numeric.Positive(maxW) {
 		maxW = 1e4
 	}
 	ts := textStyle(st)

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // stackedValues are a group's plotted values: for series i and category
@@ -617,7 +618,7 @@ func (rd *renderer) scatter(g *Group, x, y *dim) []func() {
 		}
 	}
 	scaleB := g.BubbleScale
-	if !positive(scaleB) {
+	if !numeric.Positive(scaleB) {
 		scaleB = 100
 	}
 	// The largest bubble's radius is a quarter of the plot area's smaller

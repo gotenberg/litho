@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
 )
 
@@ -702,7 +703,7 @@ func (rd *renderer) placeLabels(d *dim) {
 // (chart2's integer division in lcl_ResizeTextShapeToFitAvailableSpace).
 func truncateLabel(s string, w, excess float64) string {
 	r := []rune(s)
-	if len(r) == 0 || !positive(w) || math.IsNaN(excess) {
+	if len(r) == 0 || !numeric.Positive(w) || math.IsNaN(excess) {
 		return s
 	}
 	avg := w / float64(len(r))

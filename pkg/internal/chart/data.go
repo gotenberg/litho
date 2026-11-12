@@ -1,9 +1,9 @@
 package chart
 
 import (
-	"math"
 	"strconv"
 
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
 )
 
@@ -77,13 +77,13 @@ func (d Data) number(i int) (float64, bool) {
 	v := d.Values[i]
 	switch v.Kind {
 	case Number:
-		if math.IsNaN(v.Number) || math.IsInf(v.Number, 0) {
+		if !numeric.Finite(v.Number) {
 			return 0, false
 		}
 		return v.Number, true
 	case Text:
 		f, err := strconv.ParseFloat(v.Text, 64)
-		if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
+		if err != nil || !numeric.Finite(f) {
 			return 0, false
 		}
 		return f, true

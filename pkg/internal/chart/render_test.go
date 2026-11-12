@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
@@ -266,7 +267,7 @@ func TestRender_MarkerSymbols(t *testing.T) {
 func TestAutoColor_CyclesTinted(t *testing.T) {
 	c := &Chart{Palette: []compose.Color{red}, PaletteCycleTint: true}
 	first, second := c.AutoColor(0, 2), c.AutoColor(1, 2)
-	if math.IsNaN(first.R) || first.R >= 1 || !positive(second.G) {
+	if math.IsNaN(first.R) || first.R >= 1 || !numeric.Positive(second.G) {
 		t.Errorf("cycles %v and %v: want the first shaded and the second tinted", first, second)
 	}
 	if got := (&Chart{}).AutoColor(13, 20); !near(got, defaultPalette[1]) {

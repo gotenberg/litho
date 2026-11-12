@@ -1,9 +1,9 @@
 package chart
 
 import (
-	"math"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
 )
 
@@ -14,7 +14,7 @@ import (
 // the code names a locale of its own ([$-407]). A label is never "###": a
 // chart has no column to fit.
 func formatLabel(code string, v float64, loc numfmt.Locale) string {
-	if math.IsNaN(v) || math.IsInf(v, 0) {
+	if !numeric.Finite(v) {
 		return ""
 	}
 	f := numfmt.General

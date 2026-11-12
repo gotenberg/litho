@@ -4,6 +4,8 @@ import (
 	"math"
 	"sort"
 	"strconv"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // binned returns c with its histogram series counted into bins: each
@@ -96,7 +98,7 @@ func histogram(vals []float64, b Binning) ([]string, []float64) {
 		if !atLeast(count, 1) || math.IsInf(count, 0) {
 			count = 1
 		}
-		if !positive(width) {
+		if !numeric.Positive(width) {
 			width = hi - lo
 		}
 		count = math.Min(count, maxBins)
