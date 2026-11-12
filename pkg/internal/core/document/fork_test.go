@@ -42,6 +42,8 @@ var forkFields = map[string]string{
 	"xrefAugment":             "copied",
 	"xrefAugmented":           "copied",
 	"xrefAdded":               "copied",
+	"openedEntries":           "fresh",
+	"xrefChanges":             "fresh",
 	"maxCacheSize":            "copied",
 	"limits":                  "copied",
 	"Crypto":                  "shared",

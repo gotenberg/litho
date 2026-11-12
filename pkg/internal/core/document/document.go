@@ -71,6 +71,8 @@ type Document struct {
 	xrefAugment      xrefAugmentation    // runs the raw-bytes augmentation of xrefEntries to completion at most once
 	xrefAugmented    bool                // the augmentation added or overrode an entry; protected by mu
 	xrefAdded        map[int]bool        // object numbers the augmentation added, absent from the index as opened; protected by mu
+	openedEntries    []numberedXRefEntry // sorted entries [Document.OpenedXRefEntries] yields, nil until built and after the augmentation changes the index; never modified once stored; protected by mu
+	xrefChanges      uint64              // times the augmentation changed the index, so a snapshot built across a change is not stored; protected by mu
 	maxCacheSize     int                 // objects objectCache holds at most
 	limits           limits.Limits       // resource budgets, set by NewDocument, read-only after
 	Crypto           *crypto.Handler
@@ -1401,8 +1403,9 @@ func (d *Document) IsLinearized() bool {
 	return d.Linearization != nil
 }
 
-// ClearCaches releases the object cache and font cache to free memory.
-// Caches are transparently rebuilt on the next access. The
+// ClearCaches releases the object cache, the font cache and the sorted
+// snapshot of the cross-reference index ([Document.OpenedXRefEntries]) to free
+// memory. Caches are transparently rebuilt on the next access. The
 // format-violation record is dropped with them, since re-parsing an object
 // is what records it again (see [Document.ResetFormatViolations]).
 //
@@ -1424,6 +1427,7 @@ func (d *Document) ClearCaches() {
 	d.textVisBytes = 0
 	d.formatViolations = nil
 	d.integerOverflows = nil
+	d.openedEntries = nil
 	d.mu.Unlock()
 }
 

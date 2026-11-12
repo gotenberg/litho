@@ -950,11 +950,15 @@ func (d *Document) XRefEntries() iter.Seq2[int, xref.XRefEntry] {
 // what runs the augmentation, so a caller that resolves every object before it
 // sweeps reads the same offsets whatever ran before it.
 //
-// The iterator copies the entries under d.mu.RLock, as [Document.XRefEntries]
-// does, so the loop body may resolve objects.
+// The iterator yields from a sorted snapshot of the entries, taken under
+// d.mu.RLock, so the loop body may resolve objects. The snapshot is built once
+// and shared by every range until the augmentation changes the index: a
+// validation sweeps the index several times, and a copy and a sort of every
+// entry at each range cost as much as the sweep's own work on a file of
+// hundreds of thousands of objects.
 func (d *Document) OpenedXRefEntries() iter.Seq2[int, xref.XRefEntry] {
 	return func(yield func(int, xref.XRefEntry) bool) {
-		for _, e := range d.sortedXRefEntries(true) {
+		for _, e := range d.openedXRefSnapshot() {
 			if !yield(e.objNum, e.entry) {
 				return
 			}
@@ -1077,6 +1081,27 @@ func resolvesOpenedOnly(ctx context.Context) bool {
 type numberedXRefEntry struct {
 	objNum int
 	entry  xref.XRefEntry
+}
+
+// openedXRefSnapshot returns the entries [Document.OpenedXRefEntries] yields,
+// in ascending object-number order. The slice is shared and never modified, so
+// a caller only reads it. A snapshot built while the augmentation changed the
+// index is returned to its caller, who began ranging before the change, and
+// not kept for the next.
+func (d *Document) openedXRefSnapshot() []numberedXRefEntry {
+	d.mu.RLock()
+	snapshot, changes := d.openedEntries, d.xrefChanges
+	d.mu.RUnlock()
+	if snapshot != nil {
+		return snapshot
+	}
+	snapshot = d.sortedXRefEntries(true)
+	d.mu.Lock()
+	if d.xrefChanges == changes && d.openedEntries == nil {
+		d.openedEntries = snapshot
+	}
+	d.mu.Unlock()
+	return snapshot
 }
 
 // sortedXRefEntries copies the cross-reference entries under d.mu.RLock and
@@ -1268,6 +1293,10 @@ func (d *Document) runXrefAugmentation(ctx context.Context, running chan struct{
 	// that run complete (see [Document.Fork]), and its own run then finds
 	// nothing left to change: the index is still an augmented one.
 	d.xrefAugmented = d.xrefAugmented || changed
+	if changed {
+		d.openedEntries = nil
+		d.xrefChanges++
+	}
 	d.mu.Unlock()
 	a.done.Store(true)
 	if changed {

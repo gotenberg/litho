@@ -79,3 +79,48 @@ func TestOpenedXRefEntries(t *testing.T) {
 		t.Errorf("XRefEntryCount = %d, want %d", got, want)
 	}
 }
+
+// TestOpenedXRefEntries_SharesSnapshot pins that ranging
+// [Document.OpenedXRefEntries] again, the index unchanged, copies and sorts
+// nothing: the ranges read one snapshot, which the augmentation replaces when
+// it changes the index (see [TestOpenedXRefEntries]).
+func TestOpenedXRefEntries_SharesSnapshot(t *testing.T) {
+	var buf bytes.Buffer
+	buf.WriteString("%PDF-1.4\n")
+	const objects = 200
+	offsets := make([]int64, objects+1)
+	offsets[1] = int64(buf.Len())
+	buf.WriteString("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+	offsets[2] = int64(buf.Len())
+	buf.WriteString("2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n")
+	for n := 3; n <= objects; n++ {
+		offsets[n] = int64(buf.Len())
+		fmt.Fprintf(&buf, "%d 0 obj\n<< /N %d >>\nendobj\n", n, n)
+	}
+	xrefAt := buf.Len()
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f\r\n", objects+1)
+	for n := 1; n <= objects; n++ {
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offsets[n])
+	}
+	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", objects+1, xrefAt)
+
+	data := buf.Bytes()
+	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+
+	count := func() int {
+		n := 0
+		for range doc.OpenedXRefEntries() {
+			n++
+		}
+		return n
+	}
+	if got := count(); got != objects+1 {
+		t.Fatalf("OpenedXRefEntries yields %d entries, want %d", got, objects+1)
+	}
+	if allocs := testing.AllocsPerRun(10, func() { count() }); allocs > 0 {
+		t.Errorf("ranging the unchanged index again allocates %v times, want none", allocs)
+	}
+}
