@@ -315,31 +315,25 @@ func (ab *axisBuilder) children(li int, recs []int, key string, measure int) {
 		}
 		return
 	}
-	f := lv.f.Field
-	ids := ab.pr.src.ids[f]
+	ids := ab.pr.src.ids[lv.f.Field]
+	// Each member's records, gathered in one pass in record order.
+	byItem := map[int][]int{}
+	for _, r := range recs {
+		byItem[ids[r]] = append(byItem[ids[r]], r)
+	}
 	shown := lv.order
 	if !lv.f.ShowEmpty {
 		// Only the members with data, as Calc's late initialisation
 		// creates them (ScDPResultMember::LateInitFrom).
-		present := map[int]bool{}
-		for _, r := range recs {
-			present[ids[r]] = true
-		}
 		shown = nil
 		for _, i := range lv.order {
-			if present[i] {
+			if len(byItem[i]) > 0 {
 				shown = append(shown, i)
 			}
 		}
 	}
 	for _, item := range shown {
-		var sub []int
-		for _, r := range recs {
-			if ids[r] == item {
-				sub = append(sub, r)
-			}
-		}
-		ab.member(li, item, sub, key+strconv.Itoa(item)+",", measure)
+		ab.member(li, item, byItem[item], key+strconv.Itoa(item)+",", measure)
 	}
 }
 
