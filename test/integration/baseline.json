@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-12T08:06:10Z",
+  "captured_at": "2026-11-12T08:37:15Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -61675,12 +61675,12 @@
     "litho/odp": {
       "features": {
         "diff": {
-          "matched": 28,
+          "matched": 30,
           "mismatched": 2,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 28,
+            "pages_equal": 30,
             "reference_fonts_missing": 0
           },
           "scores": {
@@ -61718,6 +61718,22 @@
             },
             "handouts-6": {
               "layout": 0.9909,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "handouts-6-landscape": {
+              "layout": 0.992,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "handouts-6-landscape-ref": {
+              "layout": 0.992,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61928,31 +61944,31 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 30,
+          "matched": 32,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "oracle_targets": 114,
-            "pass_a1a": 30,
-            "pass_a1b": 30,
-            "pass_a2a": 30,
-            "pass_a2a+ua1": 30,
-            "pass_a2b": 30,
-            "pass_a2u": 30,
-            "pass_a3a": 30,
-            "pass_a3b": 30,
-            "pass_a3u": 30,
-            "pass_a4": 30,
-            "pass_a4+ua2": 30,
-            "pass_a4e": 30,
-            "pass_ua1": 30,
-            "pass_ua2": 30,
-            "pass_v1.4": 30,
-            "pass_v1.5": 30,
-            "pass_v1.6": 30,
-            "pass_v1.7": 30,
-            "pass_v2.0": 30,
+            "oracle_targets": 133,
+            "pass_a1a": 32,
+            "pass_a1b": 32,
+            "pass_a2a": 32,
+            "pass_a2a+ua1": 32,
+            "pass_a2b": 32,
+            "pass_a2u": 32,
+            "pass_a3a": 32,
+            "pass_a3b": 32,
+            "pass_a3u": 32,
+            "pass_a4": 32,
+            "pass_a4+ua2": 32,
+            "pass_a4e": 32,
+            "pass_ua1": 32,
+            "pass_ua2": 32,
+            "pass_v1.4": 32,
+            "pass_v1.5": 32,
+            "pass_v1.6": 32,
+            "pass_v1.7": 32,
+            "pass_v2.0": 32,
             "pdfcpu_unavailable": 0,
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
@@ -62047,6 +62063,48 @@
               "v2.0": 1
             },
             "handouts-6": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "handouts-6-landscape": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "handouts-6-landscape-ref": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
