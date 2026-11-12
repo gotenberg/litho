@@ -35,3 +35,23 @@ func TestWordRules_Widows(t *testing.T) {
 		})
 	}
 }
+
+// TestWordRules_WidowsKeepNext moves a heading kept with a paragraph that
+// moves whole for its widows along with it, as Word does.
+//
+// # Corpus evidence
+//
+//   - litho/docx paper-a4-landscape: Word prints the heading "3. Checking
+//     a conversion" and the three lines of the paragraph it keeps with at
+//     the top of page 3, where the heading and two lines fit on page 2.
+func TestWordRules_WidowsKeepNext(t *testing.T) {
+	st := sty(width(10), func(s *css.Style) { s.WordRules = 15 })
+	head := sty(width(10), func(s *css.Style) { s.WordRules = 15; s.BreakAfter = css.BreakAvoidPage })
+	rb := boxes(t, doc(el(st, txt(st, "a")), el(head, txt(head, "a")), el(st, txt(st, "a a a"))), page(10, 40))
+	if got := kid(t, rb, 0, 1).lines[0].y / css.Pt; !near(got, 40) {
+		t.Errorf("heading at %v, want 40", got)
+	}
+	if got := kid(t, rb, 0, 2).lines[0].y / css.Pt; !near(got, 50) {
+		t.Errorf("paragraph's first line at %v, want 50", got)
+	}
+}

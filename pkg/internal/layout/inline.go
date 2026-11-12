@@ -474,7 +474,7 @@ func (e *engine) fixOrphans(b *box, forced map[int]bool) bool {
 			case k2-segStart >= orphans && k2 > segStart && !forced[k2]:
 				forced[k2] = true
 				changed = true
-			case b.st.WordRules > 0 && segStart == 0 && !forced[0] && !e.atPageTop(lines[0].y) && !avoidedBefore(b):
+			case b.st.WordRules > 0 && segStart == 0 && !forced[0] && !e.atPageTop(lines[0].y):
 				// Word moves the whole paragraph instead
 				// (css.Style.WordRules).
 				forced[0] = true
