@@ -6,6 +6,8 @@ import (
 	"math"
 	"slices"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // Validate checks that d can be written as a valid PDF and stays within the
@@ -70,7 +72,7 @@ type validator struct {
 func (v *validator) page(p *Page, links []Link) error {
 	// ISO 32000-1, Annex C.2, Table C.1 bounds a page side at 14400 units.
 	for _, side := range []float64{p.Width, p.Height} {
-		if !finite(side) || side <= 0 || side > maxPageSize {
+		if !numeric.Finite(side) || side <= 0 || side > maxPageSize {
 			return fmt.Errorf("%w: size %v by %v points, each side in (0, %d]", ErrInvalidPage, p.Width, p.Height, maxPageSize)
 		}
 	}
@@ -141,26 +143,26 @@ func (v *validator) text(t *Text) error {
 	if t.Face == nil {
 		return fmt.Errorf("%w: nil face", ErrInvalidText)
 	}
-	if !finite(t.Size) || t.Size <= 0 {
+	if !numeric.Finite(t.Size) || t.Size <= 0 {
 		return fmt.Errorf("%w: size %v", ErrInvalidText, t.Size)
 	}
-	if !finite(t.Origin.X) || !finite(t.Origin.Y) {
+	if !numeric.Finite(t.Origin.X) || !numeric.Finite(t.Origin.Y) {
 		return fmt.Errorf("%w: origin %v", ErrInvalidText, t.Origin)
 	}
-	if !finite(t.Stroke) || t.Stroke < 0 || t.Stroke > t.Size {
+	if !numeric.Finite(t.Stroke) || t.Stroke < 0 || t.Stroke > t.Size {
 		return fmt.Errorf("%w: stroke %v for size %v", ErrInvalidText, t.Stroke, t.Size)
 	}
-	if !finite(t.Skew) || math.Abs(t.Skew) > 1 {
+	if !numeric.Finite(t.Skew) || math.Abs(t.Skew) > 1 {
 		return fmt.Errorf("%w: skew %v", ErrInvalidText, t.Skew)
 	}
-	if t.HScale != 0 && !(t.HScale >= MinHScale && t.HScale <= MaxHScale) {
+	if t.HScale != 0 && (math.IsNaN(t.HScale) || t.HScale < MinHScale || t.HScale > MaxHScale) {
 		return fmt.Errorf("%w: horizontal scale %v outside [%v, %v]", ErrInvalidText, t.HScale, MinHScale, MaxHScale)
 	}
 	if len(t.Glyphs) > maxGlyphsPerRun {
 		return fmt.Errorf("%w: %d glyphs in a run, at most %d", ErrLimitExceeded, len(t.Glyphs), maxGlyphsPerRun)
 	}
 	for i, g := range t.Glyphs {
-		if !finite(g.X) || !finite(g.Y) || !finite(t.Origin.X+g.X) || !finite(t.Origin.Y+g.Y) {
+		if !numeric.Finite(g.X) || !numeric.Finite(g.Y) || !numeric.Finite(t.Origin.X+g.X) || !numeric.Finite(t.Origin.Y+g.Y) {
 			return fmt.Errorf("%w: glyph %d at (%v, %v)", ErrInvalidText, i, g.X, g.Y)
 		}
 	}
@@ -265,7 +267,7 @@ func checkOps(ops []PathOp) error {
 			return fmt.Errorf("%w: operator %d has kind %d", ErrInvalidPath, i, op.Kind)
 		}
 		for _, pt := range op.P[:n] {
-			if !finite(pt.X) || !finite(pt.Y) {
+			if !numeric.Finite(pt.X) || !numeric.Finite(pt.Y) {
 				return fmt.Errorf("%w: operator %d at (%v, %v)", ErrInvalidPath, i, pt.X, pt.Y)
 			}
 		}
@@ -286,11 +288,11 @@ func checkShading(sh *Shading) error {
 	}
 	m := shadingMatrix(sh)
 	for _, c := range []float64{sh.From.X, sh.From.Y, sh.To.X, sh.To.Y, sh.FromRadius, sh.ToRadius, m.A, m.B, m.C, m.D, m.E, m.F} {
-		if !finite(c) {
+		if !numeric.Finite(c) {
 			return fmt.Errorf("%w: coordinates or transform not finite", ErrInvalidShading)
 		}
 	}
-	if det := m.A*m.D - m.B*m.C; det == 0 || !finite(det) {
+	if det := m.A*m.D - m.B*m.C; det == 0 || !numeric.Finite(det) {
 		return fmt.Errorf("%w: transform %v is not invertible", ErrInvalidShading, m)
 	}
 	switch sh.Kind {
@@ -319,12 +321,12 @@ func checkShading(sh *Shading) error {
 	visible := false
 	prev := 0.0
 	for i, st := range sh.Stops {
-		if !(st.Offset >= prev && st.Offset <= 1) {
+		if math.IsNaN(st.Offset) || st.Offset < prev || st.Offset > 1 {
 			return fmt.Errorf("%w: stop %d at offset %v", ErrInvalidShading, i, st.Offset)
 		}
 		prev = st.Offset
 		for _, ch := range []float64{st.Color.R, st.Color.G, st.Color.B, st.Color.A} {
-			if !(ch >= 0 && ch <= 1) {
+			if math.IsNaN(ch) || ch < 0 || ch > 1 {
 				return fmt.Errorf("%w: stop %d: %v", ErrInvalidColor, i, st.Color)
 			}
 		}
@@ -352,13 +354,13 @@ func checkStroke(s *Stroke) error {
 	if err := checkColor(s.Color); err != nil {
 		return err
 	}
-	if !finite(s.Width) || s.Width < 0 {
+	if !numeric.Finite(s.Width) || s.Width < 0 {
 		return fmt.Errorf("%w: line width %v", ErrInvalidPath, s.Width)
 	}
 	if s.Cap > SquareCap || s.Join > BevelJoin {
 		return fmt.Errorf("%w: cap %d, join %d", ErrInvalidPath, s.Cap, s.Join)
 	}
-	if !finite(s.Miter) || (s.Miter != 0 && s.Miter < 1) {
+	if !numeric.Finite(s.Miter) || (s.Miter != 0 && s.Miter < 1) {
 		return fmt.Errorf("%w: miter limit %v", ErrInvalidPath, s.Miter)
 	}
 	if len(s.Dash) > maxDashEntries {
@@ -366,7 +368,7 @@ func checkStroke(s *Stroke) error {
 	}
 	sum := 0.0
 	for _, d := range s.Dash {
-		if !finite(d) || d < 0 {
+		if !numeric.Finite(d) || d < 0 {
 			return fmt.Errorf("%w: dash length %v", ErrInvalidPath, d)
 		}
 		sum += d
@@ -374,7 +376,7 @@ func checkStroke(s *Stroke) error {
 	if len(s.Dash) > 0 && sum == 0 {
 		return fmt.Errorf("%w: dash lengths all zero", ErrInvalidPath)
 	}
-	if !finite(s.DashPhase) {
+	if !numeric.Finite(s.DashPhase) {
 		return fmt.Errorf("%w: dash phase %v", ErrInvalidPath, s.DashPhase)
 	}
 	return nil
@@ -386,11 +388,11 @@ func (v *validator) group(g *Group, depth int) error {
 	}
 	m := g.Transform
 	for _, c := range []float64{m.A, m.B, m.C, m.D, m.E, m.F} {
-		if !finite(c) {
+		if !numeric.Finite(c) {
 			return fmt.Errorf("%w: transform %v", ErrInvalidGroup, m)
 		}
 	}
-	if op := groupOpacity(g); !(op >= 0 && op <= 1) {
+	if op := groupOpacity(g); math.IsNaN(op) || op < 0 || op > 1 {
 		return fmt.Errorf("%w: opacity %v", ErrInvalidGroup, g.Opacity)
 	}
 	if g.Clip != nil {
@@ -426,7 +428,7 @@ func (v *validator) dest(d Dest) error {
 	if v.pages >= 0 && (d.Page < 1 || d.Page > v.pages) {
 		return fmt.Errorf("%w: page %d of %d", ErrInvalidDest, d.Page, v.pages)
 	}
-	if !finite(d.X) || !finite(d.Y) {
+	if !numeric.Finite(d.X) || !numeric.Finite(d.Y) {
 		return fmt.Errorf("%w: position (%v, %v)", ErrInvalidDest, d.X, d.Y)
 	}
 	// ISO 32000-2, 12.3.2.3: a structure destination names an element of
@@ -549,7 +551,7 @@ func checkAttributes(e *StructElem) error {
 // colour write invisible text.
 func checkColor(c Color) error {
 	for _, ch := range []float64{c.R, c.G, c.B, c.A} {
-		if !(ch >= 0 && ch <= 1) {
+		if math.IsNaN(ch) || ch < 0 || ch > 1 {
 			return fmt.Errorf("%w: %v", ErrInvalidColor, c)
 		}
 	}
@@ -567,12 +569,8 @@ func groupOpacity(g *Group) float64 {
 	return g.Opacity
 }
 
-func finite(f float64) bool {
-	return !math.IsNaN(f) && !math.IsInf(f, 0)
-}
-
 func finiteRect(r Rect) bool {
-	return finite(r.X) && finite(r.Y) && finite(r.Width) && finite(r.Height)
+	return numeric.Finite(r.X) && numeric.Finite(r.Y) && numeric.Finite(r.Width) && numeric.Finite(r.Height)
 }
 
 // pageBoxes checks the trim and bleed boxes of p: finite, positive, within
@@ -588,7 +586,7 @@ func pageBoxes(p *Page) error {
 		if b == nil {
 			continue
 		}
-		if !finite(b.X) || !finite(b.Y) || !finite(b.Width) || !finite(b.Height) || b.Width <= 0 || b.Height <= 0 || !inside(*b, whole) {
+		if !numeric.Finite(b.X) || !numeric.Finite(b.Y) || !numeric.Finite(b.Width) || !numeric.Finite(b.Height) || b.Width <= 0 || b.Height <= 0 || !inside(*b, whole) {
 			return fmt.Errorf("%w: page box %+v outside the page", ErrInvalidPage, *b)
 		}
 	}

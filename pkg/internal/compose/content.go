@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // maxTJElements bounds the elements of one TJ array: ISO 32000-1, Annex
@@ -588,7 +589,7 @@ func (p *pageWriter) group(ctx context.Context, g *Group, opacity float64) error
 	case m == (Matrix{}) || m == Identity:
 	case m.A == 1 && m.B == 0 && m.C == 0 && m.D == 1 && !p.onPage(e, f):
 		p.off = Point{X: e, Y: f}
-	case p.limited() && max(math.Abs(e), math.Abs(f)) > realLimit && det != 0 && finite(det):
+	case p.limited() && max(math.Abs(e), math.Abs(f)) > realLimit && det != 0 && numeric.Finite(det):
 		// The translation passes what PDF 1.4 holds: the cm keeps the
 		// linear part alone, and the translation, mapped back through
 		// its inverse, folds into the content, which writes the numbers

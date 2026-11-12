@@ -3,6 +3,7 @@ package compose
 import (
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typography/embed"
 )
 
@@ -144,7 +145,9 @@ func (m *Measurer) Glyph(face *Face, r rune) (uint16, bool) {
 func (m *Measurer) Bounds(frags []Fragment) (Rect, bool) {
 	b := bounds{x0: math.Inf(1), y0: math.Inf(1), x1: math.Inf(-1), y1: math.Inf(-1)}
 	m.add(&b, frags, Identity, 0)
-	if !(b.x1 >= b.x0) || !(b.y1 >= b.y0) {
+	// point adds finite coordinates alone: an empty box keeps its infinite
+	// start, x1 below x0.
+	if b.x1 < b.x0 || b.y1 < b.y0 {
 		return Rect{}, false
 	}
 	return Rect{X: b.x0, Y: b.y0, Width: b.x1 - b.x0, Height: b.y1 - b.y0}, true
@@ -156,7 +159,7 @@ type bounds struct{ x0, y0, x1, y1 float64 }
 // point adds (x, y) under t.
 func (b *bounds) point(t Matrix, x, y float64) {
 	px, py := t.A*x+t.C*y+t.E, t.B*x+t.D*y+t.F
-	if !finite(px) || !finite(py) {
+	if !numeric.Finite(px) || !numeric.Finite(py) {
 		return
 	}
 	b.x0, b.x1 = math.Min(b.x0, px), math.Max(b.x1, px)

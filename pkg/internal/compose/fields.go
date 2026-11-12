@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // FieldKind is the kind of an interactive form [Field]: the field type and
@@ -147,7 +149,7 @@ func (v *validator) field(f *Field) error {
 	if f.Kind > FieldCombo {
 		return fmt.Errorf("%w: kind %d", ErrInvalidField, f.Kind)
 	}
-	if !finiteRect(f.Rect) || !(f.Rect.Width > 0) || !(f.Rect.Height > 0) || f.Rect.Width > maxPageSize || f.Rect.Height > maxPageSize {
+	if !finiteRect(f.Rect) || f.Rect.Width <= 0 || f.Rect.Height <= 0 || f.Rect.Width > maxPageSize || f.Rect.Height > maxPageSize {
 		return fmt.Errorf("%w: rectangle %v", ErrInvalidField, f.Rect)
 	}
 	texts := append([]string{f.Name, f.Description, f.Value, f.OnState}, f.Options...)
@@ -177,7 +179,7 @@ func (v *validator) field(f *Field) error {
 	if f.MaxLen < 0 {
 		return fmt.Errorf("%w: maximum length %d", ErrInvalidField, f.MaxLen)
 	}
-	if !finite(f.FontSize) || f.FontSize < 0 {
+	if !numeric.Finite(f.FontSize) || f.FontSize < 0 {
 		return fmt.Errorf("%w: font size %v", ErrInvalidField, f.FontSize)
 	}
 	if f.Color != (Color{}) {

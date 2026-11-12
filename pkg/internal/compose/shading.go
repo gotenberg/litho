@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // finePrecision is the number of decimals a shading's coordinates and its
@@ -266,7 +267,7 @@ func inverseBBox(ops []PathOp, off Point, m Matrix) [4]float64 {
 			box = [4]float64{min(box[0], x), min(box[1], y), max(box[2], x), max(box[3], y)}
 		}
 	}
-	if !finite(box[0]) || !finite(box[1]) || !finite(box[2]) || !finite(box[3]) {
+	if !numeric.Finite(box[0]) || !numeric.Finite(box[1]) || !numeric.Finite(box[2]) || !numeric.Finite(box[3]) {
 		return [4]float64{}
 	}
 	return [4]float64{box[0] - 1, box[1] - 1, box[2] + 1, box[3] + 1}
