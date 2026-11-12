@@ -165,7 +165,7 @@ func isMalformed(err error) bool {
 func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts bool) (*slides.Document, []typeset.Warning, error) {
 	main, err := pkg.MainPart()
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %w", office.ErrMalformed, err)
+		return nil, nil, err
 	}
 	r := &reader{
 		ctx: ctx, pkg: pkg, fonts: fonts, main: main,

@@ -131,7 +131,7 @@ const substituteFamily = "Noto Sans"
 func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts office.Options) (*sheet.Document, []typeset.Warning, error) {
 	main, err := pkg.MainPart()
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %w", office.ErrMalformed, err)
+		return nil, nil, err
 	}
 	r := &reader{ctx: ctx, pkg: pkg, fonts: fonts, recalculation: opts.Recalculation, warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, caches: map[string]*pivotCache{}}
 	r.paperW, r.paperH = opts.DefaultPage(paperSizes[1].points())

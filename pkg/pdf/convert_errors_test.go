@@ -32,6 +32,8 @@ func TestConvert_ErrorNamesEachFactOnce(t *testing.T) {
 		"DOCX input":     {format: formatDOCX, src: longDOCX(t, 1), opts: []ConvertOption{fonts, WithConvertLimits(Limits{MaxConvertInputBytes: 10})}, want: ErrConvertInputTooLarge, label: "DOCX"},
 		"HTML input":     {format: formatHTML, src: []byte("<p>ABCD"), opts: []ConvertOption{fonts, WithConvertLimits(Limits{MaxConvertInputBytes: 4})}, want: ErrConvertInputTooLarge, label: "HTML"},
 		"DOCX malformed": {format: formatDOCX, src: []byte("PK\x03\x04 not a package"), opts: []ConvertOption{fonts}, want: ErrConvertMalformed, label: "DOCX"},
+		"PPTX no main":   {format: formatPPTX, src: noMainPart(t), opts: []ConvertOption{fonts}, want: ErrConvertMalformed, label: "PPTX"},
+		"XLSX no main":   {format: formatXLSX, src: noMainPart(t), opts: []ConvertOption{fonts}, want: ErrConvertMalformed, label: "XLSX"},
 		"XLSX no sheet":  {format: formatXLSX, src: longXLSX(t, 1), opts: []ConvertOption{fonts}, sheets: []string{"missing"}, want: ErrInvalidConvertOptions, label: "XLSX"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -56,4 +58,14 @@ func TestConvert_ErrorNamesEachFactOnce(t *testing.T) {
 			}
 		})
 	}
+}
+
+// noMainPart returns an OOXML package whose officeDocument relationship
+// names a part it does not hold.
+func noMainPart(t *testing.T) []byte {
+	t.Helper()
+	return zipParts(t, map[string]string{
+		"[Content_Types].xml": `<Types ` + ctNS + `>` + ctXML + `</Types>`,
+		"_rels/.rels":         `<Relationships ` + relsNS + `><Relationship Id="rId1" Type="` + relDoc + `" Target="main.xml"/></Relationships>`,
+	})
 }
