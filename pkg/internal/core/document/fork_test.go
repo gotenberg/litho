@@ -65,6 +65,7 @@ var forkFields = map[string]string{
 	"trailerStream":           "copied",
 	"objectStarts":            "shared",
 	"declaredStarts":          "shared",
+	"startHeaders":            "shared",
 	"XRefTableOffsets":        "shared",
 	"XRefSectionOffsets":      "shared",
 	"Filters":                 "shared",

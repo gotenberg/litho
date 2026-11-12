@@ -1,9 +1,11 @@
 package document
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -111,5 +113,58 @@ func TestResolveUnderReplacementIsConcurrentSafe(t *testing.T) {
 	}
 	if got := len(doc.objectCache.slots); got > doc.maxCacheSize {
 		t.Errorf("the cache holds %d objects, past %d", got, doc.maxCacheSize)
+	}
+}
+
+// countingReaderAt counts the reads of each length at each offset.
+type countingReaderAt struct {
+	r     *bytes.Reader
+	mu    sync.Mutex
+	reads map[[2]int64]int
+}
+
+func (c *countingReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	c.mu.Lock()
+	c.reads[[2]int64{off, int64(len(p))}]++
+	c.mu.Unlock()
+	return c.r.ReadAt(p, off)
+}
+
+// TestHeaderOfEachObjectReadOnce pins that the header check of an object the
+// document was opened with reads the file once for the document's life, both
+// the object's own and the one its parse reads to bound it at the next
+// object, however often a small cache makes resolution parse it again.
+func TestHeaderOfEachObjectReadOnce(t *testing.T) {
+	t.Parallel()
+	const objects = 6
+	bodies := make([]string, objects)
+	for i := range bodies {
+		bodies[i] = fmt.Sprintf("<< /N %d >>\n", i+1)
+	}
+	data, offsets := formatViolationPDF(t, bodies...)
+	doc := formatViolationDoc(data, offsets)
+	counter := &countingReaderAt{r: bytes.NewReader(data), reads: map[[2]int64]int{}}
+	doc.r = counter
+	doc.maxCacheSize = 1
+	doc.objectStarts = declaredObjectStarts(doc.xrefEntries)
+	doc.declaredStarts = doc.objectStarts
+	doc.startHeaders = make([]atomic.Uint32, len(doc.objectStarts))
+
+	ctx := context.Background()
+	for range 5 {
+		for n := 1; n <= objects; n++ {
+			obj, err := doc.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: n})
+			if err != nil {
+				t.Fatalf("Resolve %d: %v", n, err)
+			}
+			if dict, ok := obj.(ast.PdfDict); !ok || dict["N"] != ast.PdfInt(n) {
+				t.Fatalf("object %d resolved as %v", n, obj)
+			}
+		}
+	}
+	for n := 1; n <= objects; n++ {
+		if got := counter.reads[[2]int64{offsets[n], 64}]; got != 1 {
+			t.Errorf("the header of object %d was read %d times over 5 parses, want once", n, got)
+		}
 	}
 }

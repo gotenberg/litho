@@ -57,6 +57,7 @@ func (d *Document) Fork() *Document {
 		trailerStream:           d.trailerStream,
 		objectStarts:            d.objectStarts,
 		declaredStarts:          d.declaredStarts,
+		startHeaders:            d.startHeaders,
 		XRefTableOffsets:        d.XRefTableOffsets,
 		XRefSectionOffsets:      d.XRefSectionOffsets,
 		Filters:                 d.Filters,

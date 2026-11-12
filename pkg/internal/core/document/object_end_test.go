@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -123,12 +124,15 @@ func TestObjectEndSkipsOffsetMissingItsHeader(t *testing.T) {
 		t.Fatalf("objectEnd(object 3) = %d, want object 4's offset %d", got, fourth)
 	}
 
-	// Point the declared start of object 4 one byte into its header.
+	// Point the declared start of object 4 one byte into its header. The
+	// starts are fixed at construction, and so are the header checks
+	// remembered for them, which start over here.
 	for i, s := range doc.declaredStarts {
 		if s.num == 4 {
 			doc.declaredStarts[i].offset++
 		}
 	}
+	doc.startHeaders = make([]atomic.Uint32, len(doc.objectStarts))
 	if got := doc.objectEnd(third); got != fifth {
 		t.Errorf("objectEnd(object 3) = %d with object 4's offset astray, want object 5's offset %d", got, fifth)
 	}

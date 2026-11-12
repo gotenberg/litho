@@ -188,6 +188,12 @@ type Document struct {
 	// once during construction and read-only thereafter.
 	declaredStarts []objectStart
 
+	// startHeaders records, for each entry of objectStarts, whether the
+	// bytes there open the header of the object it names, once a lookup has
+	// read them (see [Document.startHeaderMatches]). Allocated once during
+	// construction; its entries are written once each, atomically.
+	startHeaders []atomic.Uint32
+
 	// XRefTableOffsets records the byte offsets of traditional xref tables
 	// encountered during parsing. Written once during construction and
 	// read-only thereafter.
@@ -1133,6 +1139,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	doc.pruneUnrepresentableEntries()
 
 	doc.objectStarts = declaredObjectStarts(doc.xrefEntries)
+	doc.startHeaders = make([]atomic.Uint32, len(doc.objectStarts))
 	if !doc.Rebuilt {
 		doc.declaredStarts = doc.objectStarts
 	}

@@ -1343,6 +1343,56 @@ func declaredObjectStarts(entries map[int]xref.XRefEntry) []objectStart {
 	return starts
 }
 
+// Header states [Document.startHeaders] records.
+const (
+	headerUnread uint32 = iota
+	headerOpens
+	headerMissed
+)
+
+// startHeaderMatches reports what [objectHeaderMatches] reports for the
+// object starts[i] names at its offset. For the starts the document was opened
+// with, [Document.objectStarts] or [Document.declaredStarts], which share
+// their entries, it reads the file once per start for the document's life and
+// remembers the answer in [Document.startHeaders]: the bytes of the file do
+// not change, and a large file whose cache replaces objects parses the same
+// object, and checks the header of the one after it, many times.
+func (d *Document) startHeaderMatches(starts []objectStart, i int) bool {
+	s := starts[i]
+	if len(starts) != len(d.objectStarts) || len(d.startHeaders) != len(d.objectStarts) || &starts[0] != &d.objectStarts[0] {
+		return objectHeaderMatches(d.r, s.offset, s.num)
+	}
+	switch d.startHeaders[i].Load() {
+	case headerOpens:
+		return true
+	case headerMissed:
+		return false
+	}
+	ok := objectHeaderMatches(d.r, s.offset, s.num)
+	state := headerMissed
+	if ok {
+		state = headerOpens
+	}
+	d.startHeaders[i].Store(state)
+	return ok
+}
+
+// headerMatchesAt reports whether the bytes at offset open the header of
+// object num, as [objectHeaderMatches] does, through [Document.startHeaderMatches]
+// when the document was opened with num at offset.
+func (d *Document) headerMatchesAt(offset int64, num int) bool {
+	i, found := slices.BinarySearchFunc(d.objectStarts, objectStart{offset: offset, num: num}, func(s, t objectStart) int {
+		if c := cmp.Compare(s.offset, t.offset); c != 0 {
+			return c
+		}
+		return cmp.Compare(s.num, t.num)
+	})
+	if !found {
+		return objectHeaderMatches(d.r, offset, num)
+	}
+	return d.startHeaderMatches(d.objectStarts, i)
+}
+
 // maxObjectEndProbes bounds how many later objects [Document.nextObjectStart]
 // checks for a header before it gives up on bounding a parse or an endobj
 // scan. Anti-DoS guard, not spec-mandated: each check is one small read, and a
@@ -1393,7 +1443,7 @@ func (d *Document) nextObjectStart(starts []objectStart, offset int64) (int64, b
 		return 1
 	})
 	for probes := 0; i < len(starts) && probes < maxObjectEndProbes; i, probes = i+1, probes+1 {
-		if objectHeaderMatches(d.r, starts[i].offset, starts[i].num) {
+		if d.startHeaderMatches(starts, i) {
 			return starts[i].offset, true
 		}
 	}
@@ -1650,7 +1700,7 @@ func (d *Document) parseNormalObject(ctx context.Context, ref ast.PdfIndirectRef
 	// writes to xrefEntries stay in its one completed run. A run ctx cancelled
 	// has not moved the entry, and parsing at the offset the table gives would
 	// cache whatever sits there for every later lookup.
-	if !objectHeaderMatches(d.r, entry.Offset, ref.ObjectNum) {
+	if !d.headerMatchesAt(entry.Offset, ref.ObjectNum) {
 		if err := d.augmentXrefFromRawScan(ctx); err != nil {
 			return nil, fmt.Errorf("relocating object %d: %w", ref.ObjectNum, err)
 		}
