@@ -13,7 +13,9 @@
 // style's chain and its own properties. Fonts list the ASCII, high ANSI,
 // East Asian and complex script typefaces in that order, theme fonts
 // resolved, then the fallback face fontconfig gives the family's class
-// (from the font table's family or PANOSE classification). Bold, italic,
+// (from the font table's family or PANOSE classification). A family the
+// font table embeds (17.8.1, obfuscated or not) draws with its embedded
+// faces ahead of any installed one. Bold, italic,
 // underline styles, strike and double strike, colour (theme colours with
 // their tint and shade), size, highlight and shading, caps and small caps,
 // hidden text, letter spacing, horizontal scale, raised and lowered text,

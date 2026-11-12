@@ -188,12 +188,16 @@ func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	}
 	d.numbering = d.parseNumbering(numRoot)
 	var fontRoot *ooxml.Element
-	if name := pkg.RelatedPart(ctx, main, ooxml.RelFontTable); name != "" {
-		if fontRoot, err = d.part(name); err != nil && !isSoft(err) {
+	fontPart := pkg.RelatedPart(ctx, main, ooxml.RelFontTable)
+	if fontPart != "" {
+		if fontRoot, err = d.part(fontPart); err != nil && !isSoft(err) {
 			return nil, err
 		}
 	}
 	d.readFontTable(fontRoot)
+	if d.loadEmbeddedFonts(fontPart, fontRoot); d.err != nil {
+		return nil, d.err
+	}
 	d.footnotesPart = pkg.RelatedPart(ctx, main, ooxml.RelFootnotes)
 	if d.footnotes, err = d.readNotes(d.footnotesPart, "footnote"); err != nil {
 		return nil, err
