@@ -719,6 +719,7 @@ func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *
 		SinglePageSheets:  o.onePagePerSheet,
 		PrintDate:         o.date,
 		TrackedChanges:    office.TrackedChanges(o.trackedChanges),
+		FormFields:        o.formFields,
 		HiddenSheets:      o.hiddenSheets,
 		Recalculation:     office.Recalculation(o.recalculation),
 		CSVKeepText:       o.csvKeepText,

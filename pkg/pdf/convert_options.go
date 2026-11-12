@@ -140,6 +140,7 @@ type convertConfig struct {
 
 	password        string
 	trackedChanges  TrackedChanges
+	formFields      bool
 	onePagePerSheet bool
 	sheets          []string
 	sheetsSet       bool
@@ -705,6 +706,14 @@ func WithOfficePassword(password string) OfficeOption {
 // view.
 func WithTrackedChanges(view TrackedChanges) WordProcessingOption {
 	return wordProcessingOption(func(c *convertConfig) { c.trackedChanges = view })
+}
+
+// WithFormFields writes the form controls of a DOCX or ODT source as
+// interactive form fields (ISO 32000-1, 12.7), which a reader fills in a
+// PDF viewer. false, the default, prints each control as it shows, with
+// nothing to fill in.
+func WithFormFields(fields bool) WordProcessingOption {
+	return wordProcessingOption(func(c *convertConfig) { c.formFields = fields })
 }
 
 // WithOnePagePerSheet lays each sheet of an XLSX, ODS or CSV source out on
