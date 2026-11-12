@@ -105,7 +105,6 @@ func (r *reader) shape(el *odf.Element, pc *pageCtx, depth int, href string) []*
 		s = r.group(el, pc, depth)
 	case "custom-shape", "rect", "ellipse", "circle", "line", "connector", "polygon", "polyline", "path", "regular-polygon", "caption", "measure":
 		s = r.drawShape(el, pc)
-	case "page-thumbnail":
 	default:
 		r.warnOnce("shape-"+el.Name.Local, "unsupported-shape", fmt.Sprintf("draw:%s is not drawn", el.Name.Local))
 	}
