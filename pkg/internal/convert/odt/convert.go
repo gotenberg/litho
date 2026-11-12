@@ -8,12 +8,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Convert reads the ODT package src holds, or a flat .fodt document, and
@@ -26,7 +26,7 @@ import (
 // office.ErrTooManyPages past opts.MaxPages. The output depends on src,
 // fonts' index and opts alone. See the package documentation for what is
 // drawn.
-func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*compose.Document, error) {
+func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*typeset.Document, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
@@ -324,11 +324,11 @@ func (b *builder) masterOf(c *odf.Element) (string, int, bool) {
 // links, the outline of the headings, the metadata and the warnings. The
 // caller selects pages afterwards. With a sink in the options, each page
 // goes to it once its links are resolved, and the document holds no page.
-func (b *builder) assemble(res *layout.Result, opts office.Options, lang string) (*compose.Document, error) {
-	dest := func(d compose.Dest) (compose.Dest, bool) {
+func (b *builder) assemble(res *layout.Result, opts office.Options, lang string) (*typeset.Document, error) {
+	dest := func(d typeset.Dest) (typeset.Dest, bool) {
 		return d, d.Page >= 1 && d.Page <= len(res.Pages)
 	}
-	doc := &compose.Document{Metadata: b.metadata(lang), Structure: res.Structure}
+	doc := &typeset.Document{Metadata: b.metadata(lang), Structure: res.Structure}
 	b.attachControls(res)
 	sink := opts.Sink
 	if sink != nil {
@@ -369,8 +369,8 @@ func (b *builder) assemble(res *layout.Result, opts office.Options, lang string)
 // metadata reads meta.xml's office:meta (ODF 1.3, Part 3, 4): the title,
 // the creator, the subject, else the description, the keywords, the
 // generator and the language; never a date.
-func (b *builder) metadata(lang string) compose.Metadata {
-	m := compose.Metadata{Lang: lang}
+func (b *builder) metadata(lang string) typeset.Metadata {
+	m := typeset.Metadata{Lang: lang}
 	meta := odf.Section(b.pkg.Meta, "meta")
 	if meta == nil {
 		return m

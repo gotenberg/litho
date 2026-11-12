@@ -3,9 +3,9 @@ package sheet
 import (
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // TestUsedRange_FormattedColumns locks where the print range of formatted
@@ -73,13 +73,13 @@ func TestConvert_NoValues(t *testing.T) {
 		t.Fatalf("%d pages, want 1", len(out.Pages))
 	}
 	strokes := 0
-	var walk func([]compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
 			switch f := f.(type) {
-			case *compose.Group:
+			case *typeset.Group:
 				walk(f.Content)
-			case *compose.Path:
+			case *typeset.Path:
 				if f.Stroke != nil || f.Fill != nil {
 					strokes++
 				}

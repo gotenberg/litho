@@ -6,7 +6,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // MaxPageSide is the longest page side in points (ISO 32000-1, Annex
@@ -120,7 +120,7 @@ type Options struct {
 	// as it lays them out, and the document it returns holds no page: a
 	// page leaves memory once it is written. A converter that does not
 	// hand its pages over returns them in the document as without it.
-	Sink compose.PageSink
+	Sink typeset.PageSink
 }
 
 // TrackedChanges is how a text document prints the insertions and the

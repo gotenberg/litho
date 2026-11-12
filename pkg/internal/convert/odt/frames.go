@@ -17,7 +17,6 @@ import (
 	_ "golang.org/x/image/bmp"  // registers BMP with image.Decode
 	_ "golang.org/x/image/tiff" // registers TIFF with image.Decode
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -25,6 +24,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/svg"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // picResult is one decoded picture or the reason it is not drawn.
@@ -128,7 +128,7 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 	}
 	pic := &layout.Picture{Width: float64(cfg.Width) * css.Pt, Height: float64(cfg.Height) * css.Pt}
 	if format == "jpeg" && dctModel(cfg.ColorModel) {
-		src, err := compose.JPEGImage(b.ctx, data)
+		src, err := typeset.JPEGImage(b.ctx, data)
 		if err != nil {
 			b.warn("picture-decode", "a jpeg picture does not decode")
 			return nil
@@ -148,7 +148,7 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 		b.warn("picture-decode", fmt.Sprintf("a %s picture does not decode", format))
 		return nil
 	}
-	src, err := compose.EncodeImage(b.ctx, img)
+	src, err := typeset.EncodeImage(b.ctx, img)
 	if err != nil {
 		b.warn("picture-decode", fmt.Sprintf("a %s picture does not encode: %v", format, err))
 		return nil
@@ -771,29 +771,29 @@ func cropped(pic *layout.Picture, clip string) *layout.Picture {
 	}
 	src := pic
 	out := &layout.Picture{Width: w, Height: h}
-	out.Vector = func(ctx context.Context, r compose.Rect) []compose.Fragment {
+	out.Vector = func(ctx context.Context, r typeset.Rect) []typeset.Fragment {
 		sx, sy := r.Width/w, r.Height/h
-		full := compose.Rect{X: r.X - in[css.Left]*sx, Y: r.Y - in[css.Top]*sy, Width: src.Width * sx, Height: src.Height * sy}
-		var content []compose.Fragment
+		full := typeset.Rect{X: r.X - in[css.Left]*sx, Y: r.Y - in[css.Top]*sy, Width: src.Width * sx, Height: src.Height * sy}
+		var content []typeset.Fragment
 		if src.Vector != nil {
 			content = src.Vector(ctx, full)
 		} else {
-			content = []compose.Fragment{&compose.Image{Rect: full, Source: src.Source}}
+			content = []typeset.Fragment{&typeset.Image{Rect: full, Source: src.Source}}
 		}
-		clip := &compose.Path{Ops: rectOps(r)}
-		return []compose.Fragment{&compose.Group{Clip: clip, Content: content}}
+		clip := &typeset.Path{Ops: rectOps(r)}
+		return []typeset.Fragment{&typeset.Group{Clip: clip, Content: content}}
 	}
 	return out
 }
 
 // rectOps returns the path of the rectangle r.
-func rectOps(r compose.Rect) []compose.PathOp {
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{{X: r.X, Y: r.Y}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X + r.Width, Y: r.Y}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X + r.Width, Y: r.Y + r.Height}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X, Y: r.Y + r.Height}}},
-		{Kind: compose.ClosePath},
+func rectOps(r typeset.Rect) []typeset.PathOp {
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: r.X, Y: r.Y}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X + r.Width, Y: r.Y}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X + r.Width, Y: r.Y + r.Height}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X, Y: r.Y + r.Height}}},
+		{Kind: typeset.ClosePath},
 	}
 }
 
@@ -1013,18 +1013,18 @@ func (b *builder) customShape(c *odf.Element, g frameGeom) *layout.Picture {
 	if err := shape.Check(geom); err != nil {
 		b.warn("shape-custom-shape", fmt.Sprintf("a custom shape's geometry is drawn in part: %v", err))
 	}
-	fill := &compose.Color{R: 0x72 / 255.0, G: 0x9f / 255.0, B: 0xcf / 255.0, A: 1}
+	fill := &typeset.Color{R: 0x72 / 255.0, G: 0x9f / 255.0, B: 0xcf / 255.0, A: 1}
 	if g.props.Get("draw:fill") == "none" {
 		fill = nil
 	} else if col, ok := odf.ParseColor(g.props.Get("draw:fill-color")); ok {
-		fill = &compose.Color{R: float64(col.R) / 255, G: float64(col.G) / 255, B: float64(col.B) / 255, A: 1}
+		fill = &typeset.Color{R: float64(col.R) / 255, G: float64(col.G) / 255, B: float64(col.B) / 255, A: 1}
 	}
-	line := shape.Line{Width: 0.75, Color: compose.Color{R: 0x34 / 255.0, G: 0x65 / 255.0, B: 0xa4 / 255.0, A: 1}, Join: compose.RoundJoin}
+	line := shape.Line{Width: 0.75, Color: typeset.Color{R: 0x34 / 255.0, G: 0x65 / 255.0, B: 0xa4 / 255.0, A: 1}, Join: typeset.RoundJoin}
 	if g.props.Get("draw:stroke") == "none" {
 		line.Width = 0
 	} else {
 		if col, ok := odf.ParseColor(g.props.Get("svg:stroke-color")); ok {
-			line.Color = compose.Color{R: float64(col.R) / 255, G: float64(col.G) / 255, B: float64(col.B) / 255, A: 1}
+			line.Color = typeset.Color{R: float64(col.R) / 255, G: float64(col.G) / 255, B: float64(col.B) / 255, A: 1}
 		}
 		if sw, ok := odf.Length(g.props.Get("svg:stroke-width")); ok && sw > 0 {
 			line.Width = sw
@@ -1032,8 +1032,8 @@ func (b *builder) customShape(c *odf.Element, g frameGeom) *layout.Picture {
 	}
 	w, h := math.Max(g.w, 1), math.Max(g.h, 1)
 	pic := &layout.Picture{Width: w, Height: h}
-	pic.Vector = func(_ context.Context, r compose.Rect) []compose.Fragment {
-		var out, strokes []compose.Fragment
+	pic.Vector = func(_ context.Context, r typeset.Rect) []typeset.Fragment {
+		var out, strokes []typeset.Fragment
 		for _, p := range shape.Paths(geom, r) {
 			if p.Fill && fill != nil {
 				out = append(out, shape.Fill(p.Ops, r, shape.Paint{Kind: shape.PaintSolid, Color: shape.Shade(*fill, p.Mode)})...)

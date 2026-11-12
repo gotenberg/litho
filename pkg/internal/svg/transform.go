@@ -3,7 +3,7 @@ package svg
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxTransforms caps the functions of one transform list. Anti-DoS guard,
@@ -14,7 +14,7 @@ const maxTransforms = 256
 // translate, scale, rotate, skewX and skewY, separated by white space or
 // commas, applied left to right as nested transforms. It reports false
 // for a list in error, which the caller ignores, as browsers do.
-func parseTransform(s string) (compose.Matrix, bool) {
+func parseTransform(s string) (typeset.Matrix, bool) {
 	sc := scanner{s: s}
 	m := identity
 	n := 0
@@ -61,12 +61,12 @@ func parseTransform(s string) (compose.Matrix, bool) {
 
 // transformFunc returns the matrix of one transform function (SVG 1.1,
 // 7.6), false for a wrong name or argument count.
-func transformFunc(name string, a []float64) (compose.Matrix, bool) {
+func transformFunc(name string, a []float64) (typeset.Matrix, bool) {
 	rad := func(deg float64) float64 { return deg * math.Pi / 180 }
 	switch name {
 	case "matrix":
 		if len(a) == 6 {
-			return compose.Matrix{A: a[0], B: a[1], C: a[2], D: a[3], E: a[4], F: a[5]}, true
+			return typeset.Matrix{A: a[0], B: a[1], C: a[2], D: a[3], E: a[4], F: a[5]}, true
 		}
 	case "translate":
 		switch len(a) {
@@ -87,18 +87,18 @@ func transformFunc(name string, a []float64) (compose.Matrix, bool) {
 			return identity, false
 		}
 		c, s := math.Cos(rad(a[0])), math.Sin(rad(a[0]))
-		r := compose.Matrix{A: c, B: s, C: -s, D: c}
+		r := typeset.Matrix{A: c, B: s, C: -s, D: c}
 		if len(a) == 3 {
 			r = mul(translate(a[1], a[2]), mul(r, translate(-a[1], -a[2])))
 		}
 		return r, true
 	case "skewX":
 		if len(a) == 1 {
-			return compose.Matrix{A: 1, C: math.Tan(rad(a[0])), D: 1}, true
+			return typeset.Matrix{A: 1, C: math.Tan(rad(a[0])), D: 1}, true
 		}
 	case "skewY":
 		if len(a) == 1 {
-			return compose.Matrix{A: 1, B: math.Tan(rad(a[0])), D: 1}, true
+			return typeset.Matrix{A: 1, B: math.Tan(rad(a[0])), D: 1}, true
 		}
 	}
 	return identity, false

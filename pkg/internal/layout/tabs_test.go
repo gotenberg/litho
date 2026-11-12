@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // placedGlyph is one glyph of a page with its origin in CSS pixels.
@@ -276,13 +276,13 @@ func TestTabs_Bar(t *testing.T) {
 		_________________________B________________________BBBB______
 		_________________________B________________________BBBB______`)
 	var rules int
-	var walk func([]compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Path:
+			case *typeset.Path:
 				rules++
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content)
 			}
 		}

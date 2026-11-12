@@ -162,8 +162,8 @@ type convertConfig struct {
 	notesPages      bool
 	handouts        int
 
-	// spool is compose.Options.Spool and the hold of the conversion's
-	// compose.PictureStore: zero in every public use, set by tests to
+	// spool is typeset.Options.Spool and the hold of the conversion's
+	// typeset.PictureStore: zero in every public use, set by tests to
 	// force the spool files on or off.
 	spool int64
 }

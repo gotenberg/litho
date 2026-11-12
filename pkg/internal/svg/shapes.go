@@ -6,8 +6,8 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // kappa is the control point distance, in radii, of the cubic Bézier that
@@ -19,7 +19,7 @@ const kappa = 0.5522847498307936
 // nothing: a rect, circle or ellipse of zero size, a polyline of fewer
 // than two points. An error in the attributes renders the shape up to the
 // error, or not at all, as SVG 1.1, F.2 asks.
-func (r *renderer) geometry(n *html.Node, st *style) []compose.PathOp {
+func (r *renderer) geometry(n *html.Node, st *style) []typeset.PathOp {
 	lc := r.lc(st)
 	num := func(key string, a axis) float64 {
 		l, ok := parseLength(attrOf(n, key))
@@ -86,25 +86,25 @@ func (r *renderer) geometry(n *html.Node, st *style) []compose.PathOp {
 		}
 		return ellipseOps(num("cx", axisX), num("cy", axisY), rx, ry)
 	case "line":
-		return []compose.PathOp{
-			{Kind: compose.MoveTo, P: [3]compose.Point{{X: num("x1", axisX), Y: num("y1", axisY)}}},
-			{Kind: compose.LineTo, P: [3]compose.Point{{X: num("x2", axisX), Y: num("y2", axisY)}}},
+		return []typeset.PathOp{
+			{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: num("x1", axisX), Y: num("y1", axisY)}}},
+			{Kind: typeset.LineTo, P: [3]typeset.Point{{X: num("x2", axisX), Y: num("y2", axisY)}}},
 		}
 	case "polyline", "polygon":
 		v, _ := parseNumberList(attrOf(n, "points"), 2*maxPathSegments)
 		if len(v) < 4 {
 			return nil
 		}
-		ops := make([]compose.PathOp, 0, len(v)/2+1)
+		ops := make([]typeset.PathOp, 0, len(v)/2+1)
 		for i := 0; i+1 < len(v); i += 2 {
-			k := compose.LineTo
+			k := typeset.LineTo
 			if i == 0 {
-				k = compose.MoveTo
+				k = typeset.MoveTo
 			}
-			ops = append(ops, compose.PathOp{Kind: k, P: [3]compose.Point{{X: v[i], Y: v[i+1]}}})
+			ops = append(ops, typeset.PathOp{Kind: k, P: [3]typeset.Point{{X: v[i], Y: v[i+1]}}})
 		}
 		if n.Data == "polygon" {
-			ops = append(ops, compose.PathOp{Kind: compose.ClosePath})
+			ops = append(ops, typeset.PathOp{Kind: typeset.ClosePath})
 		}
 		return ops
 	case "path":
@@ -121,8 +121,8 @@ func (r *renderer) geometry(n *html.Node, st *style) []compose.PathOp {
 
 // trimTrailingMove drops moveto operators that end the path: they draw
 // nothing and would leave an empty subpath.
-func trimTrailingMove(ops []compose.PathOp) []compose.PathOp {
-	for len(ops) > 0 && ops[len(ops)-1].Kind == compose.MoveTo {
+func trimTrailingMove(ops []typeset.PathOp) []typeset.PathOp {
+	for len(ops) > 0 && ops[len(ops)-1].Kind == typeset.MoveTo {
 		ops = ops[:len(ops)-1]
 	}
 	return ops
@@ -131,33 +131,33 @@ func trimTrailingMove(ops []compose.PathOp) []compose.PathOp {
 // ellipseOps returns the ellipse of centre (cx, cy) and radii rx, ry as
 // four cubic Béziers, starting at the rightmost point and turning
 // clockwise on screen, the direction SVG 2, 10.4 draws it in.
-func ellipseOps(cx, cy, rx, ry float64) []compose.PathOp {
+func ellipseOps(cx, cy, rx, ry float64) []typeset.PathOp {
 	kx, ky := rx*kappa, ry*kappa
-	pt := func(x, y float64) compose.Point { return compose.Point{X: x, Y: y} }
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{pt(cx+rx, cy)}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx+rx, cy+ky), pt(cx+kx, cy+ry), pt(cx, cy+ry)}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx-kx, cy+ry), pt(cx-rx, cy+ky), pt(cx-rx, cy)}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx-rx, cy-ky), pt(cx-kx, cy-ry), pt(cx, cy-ry)}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx+kx, cy-ry), pt(cx+rx, cy-ky), pt(cx+rx, cy)}},
-		{Kind: compose.ClosePath},
+	pt := func(x, y float64) typeset.Point { return typeset.Point{X: x, Y: y} }
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{pt(cx+rx, cy)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx+rx, cy+ky), pt(cx+kx, cy+ry), pt(cx, cy+ry)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx-kx, cy+ry), pt(cx-rx, cy+ky), pt(cx-rx, cy)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx-rx, cy-ky), pt(cx-kx, cy-ry), pt(cx, cy-ry)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx+kx, cy-ry), pt(cx+rx, cy-ky), pt(cx+rx, cy)}},
+		{Kind: typeset.ClosePath},
 	}
 }
 
 // roundRect returns the rectangle at (x, y) of w by h with corners of
 // radii rx and ry, drawn as SVG 1.1, 9.2 lays it out.
-func roundRect(x, y, w, h, rx, ry float64) []compose.PathOp {
+func roundRect(x, y, w, h, rx, ry float64) []typeset.PathOp {
 	kx, ky := rx*kappa, ry*kappa
-	pt := func(px, py float64) compose.Point { return compose.Point{X: px, Y: py} }
-	line := func(px, py float64) compose.PathOp {
-		return compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{pt(px, py)}}
+	pt := func(px, py float64) typeset.Point { return typeset.Point{X: px, Y: py} }
+	line := func(px, py float64) typeset.PathOp {
+		return typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{pt(px, py)}}
 	}
-	curve := func(a, b, c compose.Point) compose.PathOp {
-		return compose.PathOp{Kind: compose.CurveTo, P: [3]compose.Point{a, b, c}}
+	curve := func(a, b, c typeset.Point) typeset.PathOp {
+		return typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{a, b, c}}
 	}
 	r, b := x+w, y+h
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{pt(x+rx, y)}},
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{pt(x+rx, y)}},
 		line(r-rx, y),
 		curve(pt(r-rx+kx, y), pt(r, y+ry-ky), pt(r, y+ry)),
 		line(r, b-ry),
@@ -166,7 +166,7 @@ func roundRect(x, y, w, h, rx, ry float64) []compose.PathOp {
 		curve(pt(x+rx-kx, b), pt(x, b-ry+ky), pt(x, b-ry)),
 		line(x, y+ry),
 		curve(pt(x, y+ry-ky), pt(x+rx-kx, y), pt(x+rx, y)),
-		{Kind: compose.ClosePath},
+		{Kind: typeset.ClosePath},
 	}
 }
 
@@ -174,7 +174,7 @@ func roundRect(x, y, w, h, rx, ry float64) []compose.PathOp {
 // stroke (SVG 1.1, 11.1). Opacity on a shape that paints only one of the
 // two folds into its colour, which is exact; with both it opens a group.
 // A gradient stroke fills the stroke's outline with the gradient, as the
-// composition model strokes in one colour.
+// typeset model strokes in one colour.
 func (r *renderer) shape(n *html.Node, st *style, s sink) {
 	if !st.visible {
 		return
@@ -184,7 +184,7 @@ func (r *renderer) shape(n *html.Node, st *style, s sink) {
 		return
 	}
 	box := opsBBox(ops)
-	var fill *compose.Fill
+	var fill *typeset.Fill
 	if n.Data != "line" {
 		fill = r.fillOf(st, box)
 	}
@@ -203,37 +203,37 @@ func (r *renderer) shape(n *html.Node, st *style, s sink) {
 		return
 	}
 	fill = withAlpha(fill, s.alpha)
-	var outline *compose.Fill
+	var outline *typeset.Fill
 	if strokeSh != nil {
-		outline = withAlpha(&compose.Fill{Shading: strokeSh}, s.alpha)
+		outline = withAlpha(&typeset.Fill{Shading: strokeSh}, s.alpha)
 	} else {
 		stroke = strokeAlpha(stroke, s.alpha)
 	}
 	if fill == nil && stroke == nil {
 		return
 	}
-	var caps []compose.PathOp
-	if stroke != nil && stroke.Cap != compose.ButtCap {
+	var caps []typeset.PathOp
+	if stroke != nil && stroke.Cap != typeset.ButtCap {
 		ops, caps = zeroLengthCaps(ops, stroke)
 	}
-	capFill := func() *compose.Fill {
+	capFill := func() *typeset.Fill {
 		if outline != nil {
 			return outline
 		}
-		return &compose.Fill{Color: stroke.Color}
+		return &typeset.Fill{Color: stroke.Color}
 	}
 	if strokeSh != nil {
 		if fill != nil && len(ops) > 0 {
-			r.emit(s, &compose.Path{Ops: ops, Fill: fill})
+			r.emit(s, &typeset.Path{Ops: ops, Fill: fill})
 		}
 		if o := strokeOutline(ops, stroke); outline != nil && len(o) > 0 {
-			r.emit(s, &compose.Path{Ops: o, Fill: outline})
+			r.emit(s, &typeset.Path{Ops: o, Fill: outline})
 		}
 	} else if len(ops) > 0 {
-		r.emit(s, &compose.Path{Ops: ops, Fill: fill, Stroke: stroke})
+		r.emit(s, &typeset.Path{Ops: ops, Fill: fill, Stroke: stroke})
 	}
 	if len(caps) > 0 && (strokeSh == nil || outline != nil) {
-		r.emit(s, &compose.Path{Ops: caps, Fill: capFill()})
+		r.emit(s, &typeset.Path{Ops: caps, Fill: capFill()})
 	}
 }
 
@@ -241,17 +241,17 @@ func (r *renderer) shape(n *html.Node, st *style, s sink) {
 // 11.4 draws their round or square cap, a disc or an axis-aligned square
 // of the stroke width centred on the point, which a PDF viewer may leave
 // out. It returns ops without them and the caps' outlines.
-func zeroLengthCaps(ops []compose.PathOp, s *compose.Stroke) ([]compose.PathOp, []compose.PathOp) {
-	var keep, caps []compose.PathOp
+func zeroLengthCaps(ops []typeset.PathOp, s *typeset.Stroke) ([]typeset.PathOp, []typeset.PathOp) {
+	var keep, caps []typeset.PathOp
 	half := s.Width / 2
 	for i := 0; i < len(ops); {
 		j := i + 1
-		for j < len(ops) && ops[j].Kind != compose.MoveTo {
+		for j < len(ops) && ops[j].Kind != typeset.MoveTo {
 			j++
 		}
 		sub := ops[i:j]
 		p := sub[0].P[0]
-		zero := sub[0].Kind == compose.MoveTo && len(sub) > 1
+		zero := sub[0].Kind == typeset.MoveTo && len(sub) > 1
 		for _, op := range sub[1:] {
 			for _, q := range op.P[:pointsOf(op.Kind)] {
 				zero = zero && q == p
@@ -260,7 +260,7 @@ func zeroLengthCaps(ops []compose.PathOp, s *compose.Stroke) ([]compose.PathOp, 
 		switch {
 		case !zero:
 			keep = append(keep, sub...)
-		case s.Cap == compose.RoundCap:
+		case s.Cap == typeset.RoundCap:
 			caps = append(caps, ellipseOps(p.X, p.Y, half, half)...)
 		default:
 			caps = append(caps, rectOps(p.X-half, p.Y-half, s.Width, s.Width)...)
@@ -272,7 +272,7 @@ func zeroLengthCaps(ops []compose.PathOp, s *compose.Stroke) ([]compose.PathOp, 
 
 // withAlpha returns f with its colours' alpha multiplied by a, nil when
 // nothing is left to paint.
-func withAlpha(f *compose.Fill, a float64) *compose.Fill {
+func withAlpha(f *typeset.Fill, a float64) *typeset.Fill {
 	if f == nil || a >= 1 {
 		return f
 	}
@@ -285,7 +285,7 @@ func withAlpha(f *compose.Fill, a float64) *compose.Fill {
 		return &c
 	}
 	sh := *c.Shading
-	sh.Stops = append([]compose.ColorStop(nil), sh.Stops...)
+	sh.Stops = append([]typeset.ColorStop(nil), sh.Stops...)
 	for i := range sh.Stops {
 		sh.Stops[i].Color.A *= a
 	}
@@ -298,7 +298,7 @@ func withAlpha(f *compose.Fill, a float64) *compose.Fill {
 
 // strokeAlpha returns s with its colour's alpha multiplied by a, nil when
 // nothing is left to paint.
-func strokeAlpha(s *compose.Stroke, a float64) *compose.Stroke {
+func strokeAlpha(s *typeset.Stroke, a float64) *typeset.Stroke {
 	if s == nil || a >= 1 {
 		return s
 	}
@@ -314,7 +314,7 @@ func strokeAlpha(s *compose.Stroke, a float64) *compose.Stroke {
 // when it has none: no stroke paint, or a zero width. A gradient stroke
 // also returns the gradient's shading, its stops' alpha multiplied by
 // stroke-opacity, and the stroke's colour is then meaningless.
-func (r *renderer) strokeOf(st *style, box bbox) (*compose.Stroke, *compose.Shading) {
+func (r *renderer) strokeOf(st *style, box bbox) (*typeset.Stroke, *typeset.Shading) {
 	if st.stroke.kind == paintNone || st.strokeOpacity <= 0 {
 		return nil, nil
 	}
@@ -322,8 +322,8 @@ func (r *renderer) strokeOf(st *style, box bbox) (*compose.Stroke, *compose.Shad
 	if !numeric.Positive(w) {
 		return nil, nil
 	}
-	var sh *compose.Shading
-	c := compose.Black
+	var sh *typeset.Shading
+	c := typeset.Black
 	p := st.stroke
 	if p.kind == paintURL {
 		g, fb, ok := r.shading(p, st, box)
@@ -331,7 +331,7 @@ func (r *renderer) strokeOf(st *style, box bbox) (*compose.Stroke, *compose.Shad
 		case ok && g == nil:
 			return nil, nil
 		case ok:
-			f := withAlpha(&compose.Fill{Shading: g}, st.strokeOpacity)
+			f := withAlpha(&typeset.Fill{Shading: g}, st.strokeOpacity)
 			if f == nil {
 				return nil, nil
 			}
@@ -353,7 +353,7 @@ func (r *renderer) strokeOf(st *style, box bbox) (*compose.Stroke, *compose.Shad
 			return nil, nil
 		}
 	}
-	s := &compose.Stroke{Color: c, Width: w, Cap: st.lineCap, Join: st.lineJoin, Miter: st.miterLimit}
+	s := &typeset.Stroke{Color: c, Width: w, Cap: st.lineCap, Join: st.lineJoin, Miter: st.miterLimit}
 	if len(st.dashArray) > 0 {
 		dash := make([]float64, 0, 2*len(st.dashArray))
 		sum := 0.0
@@ -374,7 +374,7 @@ func (r *renderer) strokeOf(st *style, box bbox) (*compose.Stroke, *compose.Shad
 			if len(st.dashArray)%2 == 0 {
 				period = sum
 			}
-			// The composition model takes a phase into the pattern, so a
+			// The typeset model takes a phase into the pattern, so a
 			// negative offset wraps into one period.
 			off = math.Mod(off, period)
 			if off < 0 {

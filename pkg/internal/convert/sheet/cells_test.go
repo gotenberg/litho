@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // texts returns the texts of a page's runs.
-func texts(pg *compose.Page) []string {
+func texts(pg *typeset.Page) []string {
 	var out []string
 	for _, r := range runs(pg) {
 		out = append(out, r.text)
@@ -103,20 +103,20 @@ func TestConvert_Borders(t *testing.T) {
 	bst := &Style{Border: [4]Border{css.Left: thick}}
 	sh := &Sheet{Name: "S", DefaultColumnWidth: 80, Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "a", a), textCell(1, "b", bst)}}}}
 	out := convert(t, newDoc(sh), office.Options{})
-	var strokes []*compose.Path
+	var strokes []*typeset.Path
 	var fills int
-	var walk func([]compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Path:
+			case *typeset.Path:
 				if v.Stroke != nil {
 					strokes = append(strokes, v)
 				}
 				if v.Fill != nil && v.Fill.Color.A > 0 {
 					fills++
 				}
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content)
 			}
 		}
@@ -201,29 +201,29 @@ func TestConvert_Drawings(t *testing.T) {
 		},
 	}
 	out := convert(t, newDoc(sh), office.Options{})
-	var imgs []*compose.Image
-	var walk func([]compose.Fragment, compose.Matrix)
-	walk = func(fs []compose.Fragment, m compose.Matrix) {
+	var imgs []*typeset.Image
+	var walk func([]typeset.Fragment, typeset.Matrix)
+	walk = func(fs []typeset.Fragment, m typeset.Matrix) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Image:
+			case *typeset.Image:
 				r := v.Rect
-				imgs = append(imgs, &compose.Image{Rect: compose.Rect{X: r.X*m.A + m.E, Y: r.Y*m.D + m.F, Width: r.Width * m.A, Height: r.Height * m.D}})
-			case *compose.Group:
+				imgs = append(imgs, &typeset.Image{Rect: typeset.Rect{X: r.X*m.A + m.E, Y: r.Y*m.D + m.F, Width: r.Width * m.A, Height: r.Height * m.D}})
+			case *typeset.Group:
 				t := v.Transform
-				if t == (compose.Matrix{}) {
-					t = compose.Identity
+				if t == (typeset.Matrix{}) {
+					t = typeset.Identity
 				}
 				walk(v.Content, mul(t, m))
 			}
 		}
 	}
-	walk(out.Pages[0].Content, compose.Identity)
+	walk(out.Pages[0].Content, typeset.Identity)
 	if len(imgs) != 1 {
 		t.Fatalf("%d images, want 1", len(imgs))
 	}
 	r := imgs[0].Rect
-	want := compose.Rect{X: 36 + 55, Y: 36 + 12.78 + 2, Width: 55, Height: 2*12.78 - 2}
+	want := typeset.Rect{X: 36 + 55, Y: 36 + 12.78 + 2, Width: 55, Height: 2*12.78 - 2}
 	if !near(r.X, want.X, 1e-6) || !near(r.Y, want.Y, 1e-6) || !near(r.Width, want.Width, 1e-6) || !near(r.Height, want.Height, 1e-6) {
 		t.Errorf("image at %+v, want %+v", r, want)
 	}
@@ -245,24 +245,24 @@ func TestConvert_Rotation(t *testing.T) {
 		Cells: []Cell{textCell(0, "Rotated90", &Style{Align: Alignment{Rotation: 90}})},
 	}}}
 	out := convert(t, newDoc(sh), office.Options{})
-	var txt *compose.Text
-	var m compose.Matrix
-	var walk func([]compose.Fragment, compose.Matrix)
-	walk = func(fs []compose.Fragment, cur compose.Matrix) {
+	var txt *typeset.Text
+	var m typeset.Matrix
+	var walk func([]typeset.Fragment, typeset.Matrix)
+	walk = func(fs []typeset.Fragment, cur typeset.Matrix) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Text:
+			case *typeset.Text:
 				txt, m = v, cur
-			case *compose.Group:
+			case *typeset.Group:
 				tr := v.Transform
-				if tr == (compose.Matrix{}) {
-					tr = compose.Identity
+				if tr == (typeset.Matrix{}) {
+					tr = typeset.Identity
 				}
 				walk(v.Content, mul(tr, cur))
 			}
 		}
 	}
-	walk(out.Pages[0].Content, compose.Identity)
+	walk(out.Pages[0].Content, typeset.Identity)
 	if txt == nil {
 		t.Fatal("no text")
 	}
@@ -337,14 +337,14 @@ func TestConvert_InvalidCircle(t *testing.T) {
 	c.MarkedInvalid = true
 	sh := &Sheet{Name: "S", Rows: []Row{{Index: 1, Cells: []Cell{c}}}}
 	out := convert(t, newDoc(sh), office.Options{})
-	var found *compose.Path
-	var walk func([]compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+	var found *typeset.Path
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
 			switch f := f.(type) {
-			case *compose.Group:
+			case *typeset.Group:
 				walk(f.Content)
-			case *compose.Path:
+			case *typeset.Path:
 				if f.Stroke != nil && f.Stroke.Color.R == 1 && f.Stroke.Color.G == 0 {
 					found = f
 				}
@@ -363,9 +363,9 @@ func TestConvert_InvalidCircle(t *testing.T) {
 
 // source returns img encoded as an image source, failing t when it does
 // not encode.
-func source(t testing.TB, img image.Image) *compose.ImageSource {
+func source(t testing.TB, img image.Image) *typeset.ImageSource {
 	t.Helper()
-	src, err := compose.EncodeImage(context.Background(), img)
+	src, err := typeset.EncodeImage(context.Background(), img)
 	if err != nil {
 		t.Fatalf("EncodeImage: %v", err)
 	}

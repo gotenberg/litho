@@ -7,15 +7,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // conv converts src with the real layout engine and checks the document
 // is valid.
-func conv(t *testing.T, src string, o Options) *compose.Document {
+func conv(t *testing.T, src string, o Options) *typeset.Document {
 	t.Helper()
 	doc, err := Convert(context.Background(), strings.NewReader(src), testFonts(t), o)
 	if err != nil {
@@ -34,30 +34,30 @@ type placedRun struct {
 }
 
 // runs returns the text runs of pg in paint order, placed.
-func runs(pg *compose.Page) []placedRun {
+func runs(pg *typeset.Page) []placedRun {
 	var out []placedRun
-	var walk func(fs []compose.Fragment, m compose.Matrix)
-	walk = func(fs []compose.Fragment, m compose.Matrix) {
+	var walk func(fs []typeset.Fragment, m typeset.Matrix)
+	walk = func(fs []typeset.Fragment, m typeset.Matrix) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content, mul(v.Transform, m))
-			case *compose.Text:
+			case *typeset.Text:
 				x, y := m.A*v.Origin.X+m.C*v.Origin.Y+m.E, m.B*v.Origin.X+m.D*v.Origin.Y+m.F
 				out = append(out, placedRun{x, y, v.Size * math.Hypot(m.A, m.B)})
 			}
 		}
 	}
-	walk(pg.Content, compose.Identity)
+	walk(pg.Content, typeset.Identity)
 	return out
 }
 
 // mul returns the transform a then b.
-func mul(a, b compose.Matrix) compose.Matrix {
-	if a == (compose.Matrix{}) {
-		a = compose.Identity
+func mul(a, b typeset.Matrix) typeset.Matrix {
+	if a == (typeset.Matrix{}) {
+		a = typeset.Identity
 	}
-	return compose.Matrix{
+	return typeset.Matrix{
 		A: a.A*b.A + a.B*b.C, B: a.A*b.B + a.B*b.D,
 		C: a.C*b.A + a.D*b.C, D: a.C*b.B + a.D*b.D,
 		E: a.E*b.A + a.F*b.C + b.E, F: a.E*b.B + a.F*b.D + b.F,
@@ -68,15 +68,15 @@ func mul(a, b compose.Matrix) compose.Matrix {
 // content in, the identity for a page drawn as laid out: [placement.page]
 // makes it the page's only fragment, clipped to the laid out page whose
 // top-left corner is the group's origin.
-func placementOf(pg *compose.Page) compose.Matrix {
+func placementOf(pg *typeset.Page) typeset.Matrix {
 	if len(pg.Content) != 1 {
-		return compose.Identity
+		return typeset.Identity
 	}
 	// The layout's own groups are clipped to the page area, from the left
 	// margin's negative offset, or translated only.
-	g, ok := pg.Content[0].(*compose.Group)
-	if !ok || g.Clip == nil || len(g.Clip.Ops) != 5 || g.Clip.Ops[0].P[0] != (compose.Point{}) || g.Transform == compose.Identity {
-		return compose.Identity
+	g, ok := pg.Content[0].(*typeset.Group)
+	if !ok || g.Clip == nil || len(g.Clip.Ops) != 5 || g.Clip.Ops[0].P[0] != (typeset.Point{}) || g.Transform == typeset.Identity {
+		return typeset.Identity
 	}
 	return g.Transform
 }
@@ -116,26 +116,26 @@ func TestConvert_CSSPageSizeFitsThePaper(t *testing.T) {
 		css    string
 		prefer bool
 		w, h   float64
-		m      compose.Matrix
+		m      typeset.Matrix
 	}{
-		{"no size", "", false, DefaultPageWidth, DefaultPageHeight, compose.Identity},
+		{"no size", "", false, DefaultPageWidth, DefaultPageHeight, typeset.Identity},
 		{
 			"smaller, centred", "size: A5", false, DefaultPageWidth, DefaultPageHeight,
-			compose.Matrix{A: 1, D: 1, E: (DefaultPageWidth - a5w) / 2, F: (DefaultPageHeight - a5h) / 2},
+			typeset.Matrix{A: 1, D: 1, E: (DefaultPageWidth - a5w) / 2, F: (DefaultPageHeight - a5h) / 2},
 		},
-		{"smaller, preferred", "size: A5", true, a5w, a5h, compose.Identity},
+		{"smaller, preferred", "size: A5", true, a5w, a5h, typeset.Identity},
 		{
 			"larger, scaled down", "size: A3", false, DefaultPageWidth, DefaultPageHeight,
-			compose.Matrix{A: DefaultPageWidth / a3w, D: DefaultPageWidth / a3w, F: (DefaultPageHeight - a3h*DefaultPageWidth/a3w) / 2},
+			typeset.Matrix{A: DefaultPageWidth / a3w, D: DefaultPageWidth / a3w, F: (DefaultPageHeight - a3h*DefaultPageWidth/a3w) / 2},
 		},
-		{"orientation alone", "size: landscape", false, DefaultPageHeight, DefaultPageWidth, compose.Identity},
+		{"orientation alone", "size: landscape", false, DefaultPageHeight, DefaultPageWidth, typeset.Identity},
 		{
 			"landscape size turns the sheet", "size: 400pt 200pt", false, DefaultPageHeight, DefaultPageWidth,
-			compose.Matrix{A: 1, D: 1, E: (DefaultPageHeight - 400) / 2, F: (DefaultPageWidth - 200) / 2},
+			typeset.Matrix{A: 1, D: 1, E: (DefaultPageHeight - 400) / 2, F: (DefaultPageWidth - 200) / 2},
 		},
 		{
 			"square keeps the sheet", "size: 300pt", false, DefaultPageWidth, DefaultPageHeight,
-			compose.Matrix{A: 1, D: 1, E: (DefaultPageWidth - 300) / 2, F: (DefaultPageHeight - 300) / 2},
+			typeset.Matrix{A: 1, D: 1, E: (DefaultPageWidth - 300) / 2, F: (DefaultPageHeight - 300) / 2},
 		},
 	}
 	for _, tt := range tests {

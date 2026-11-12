@@ -11,8 +11,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Font files of the repository the tests load: Ahem, public domain, and
@@ -43,15 +43,15 @@ func fontResources(t testing.TB) fstest.MapFS {
 }
 
 // texts returns the text runs of doc in paint order, groups flattened.
-func texts(doc *compose.Document) []*compose.Text {
-	var out []*compose.Text
-	var walkFrags func([]compose.Fragment)
-	walkFrags = func(fs []compose.Fragment) {
+func texts(doc *typeset.Document) []*typeset.Text {
+	var out []*typeset.Text
+	var walkFrags func([]typeset.Fragment)
+	walkFrags = func(fs []typeset.Fragment) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Text:
+			case *typeset.Text:
 				out = append(out, v)
-			case *compose.Group:
+			case *typeset.Group:
 				walkFrags(v.Content)
 			}
 		}
@@ -63,7 +63,7 @@ func texts(doc *compose.Document) []*compose.Text {
 }
 
 // runText returns the characters a run stands for.
-func runText(r *compose.Text) string {
+func runText(r *typeset.Text) string {
 	var b strings.Builder
 	for _, g := range r.Glyphs {
 		b.WriteString(g.Text)
@@ -72,7 +72,7 @@ func runText(r *compose.Text) string {
 }
 
 // convertFonts converts src with the font resources, failing on error.
-func convertFonts(t *testing.T, src string) *compose.Document {
+func convertFonts(t *testing.T, src string) *typeset.Document {
 	t.Helper()
 	doc, err := Convert(context.Background(), strings.NewReader(src), testFonts(t), Options{Resources: fontResources(t)})
 	if err != nil {
@@ -82,7 +82,7 @@ func convertFonts(t *testing.T, src string) *compose.Document {
 }
 
 // faceOfText returns the key of the face drawing the run holding marker.
-func faceOfText(t *testing.T, doc *compose.Document, marker string) *compose.Text {
+func faceOfText(t *testing.T, doc *typeset.Document, marker string) *typeset.Text {
 	t.Helper()
 	for _, r := range texts(doc) {
 		if strings.Contains(runText(r), marker) {
@@ -256,7 +256,7 @@ p { font-family: Web; font-size: 20px }</style><p>Same bytes</p>`
 	var outs [2][]byte
 	for i := range outs {
 		var buf bytes.Buffer
-		if err := compose.Write(context.Background(), convertFonts(t, src), &buf, compose.Options{}); err != nil {
+		if err := typeset.Write(context.Background(), convertFonts(t, src), &buf, typeset.Options{}); err != nil {
 			t.Fatal(err)
 		}
 		outs[i] = buf.Bytes()

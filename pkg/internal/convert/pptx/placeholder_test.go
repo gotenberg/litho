@@ -4,17 +4,17 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestPlaceholders_Inheritance(t *testing.T) {
 	t.Parallel()
-	masterBox := compose.Rect{X: 36, Y: 21.6249, Width: 648, Height: 90}
+	masterBox := typeset.Rect{X: 36, Y: 21.6249, Width: 648, Height: 90}
 	for _, tc := range []struct {
 		name   string
 		deck   testDeck
 		shape  string
-		want   compose.Rect
+		want   typeset.Rect
 		absent bool
 	}{
 		{
@@ -28,12 +28,12 @@ func TestPlaceholders_Inheritance(t *testing.T) {
 				layoutTree: phShape("Title 1", "title", -1, 914400, 914400, 1828800, 457200, para("x")),
 				slides:     []testSlide{{tree: title("T")}},
 			},
-			shape: "Title 1", want: compose.Rect{X: 72, Y: 72, Width: 144, Height: 36},
+			shape: "Title 1", want: typeset.Rect{X: 72, Y: 72, Width: 144, Height: 36},
 		},
 		{
 			name:  "slide's own position wins",
 			deck:  testDeck{slides: []testSlide{{tree: phShape("Own", "title", -1, 0, 0, 12700, 25400, para("T"))}}},
-			shape: "Own", want: compose.Rect{Width: 1, Height: 2},
+			shape: "Own", want: typeset.Rect{Width: 1, Height: 2},
 		},
 		{
 			name: "matched by idx before type",
@@ -41,7 +41,7 @@ func TestPlaceholders_Inheritance(t *testing.T) {
 				layoutTree: phShape("A", "body", 7, 127000, 0, 12700, 12700, para("x")) + phShape("B", "body", 8, 254000, 0, 12700, 12700, para("x")),
 				slides:     []testSlide{{tree: phShape("S", "body", 8, 0, 0, 0, 0, para("text"))}},
 			},
-			shape: "S", want: compose.Rect{X: 20, Width: 1, Height: 1},
+			shape: "S", want: typeset.Rect{X: 20, Width: 1, Height: 1},
 		},
 		{
 			name: "the same type outranks the same index alone",
@@ -49,7 +49,7 @@ func TestPlaceholders_Inheritance(t *testing.T) {
 				layoutTree: phShape("A", "subTitle", 1, 127000, 0, 12700, 12700, para("x")) + phShape("B", "body", -1, 254000, 0, 12700, 12700, para("x")),
 				slides:     []testSlide{{tree: phShape("S", "body", 1, 0, 0, 0, 0, para("text"))}},
 			},
-			shape: "S", want: compose.Rect{X: 20, Width: 1, Height: 1},
+			shape: "S", want: typeset.Rect{X: 20, Width: 1, Height: 1},
 		},
 		{
 			name: "a body of an index its layout lacks inherits no subtitle",
@@ -65,7 +65,7 @@ func TestPlaceholders_Inheritance(t *testing.T) {
 				layoutTree: phShape("T", "title", 4, 127000, 0, 12700, 12700, para("x")) + phShape("B", "body", -1, 254000, 0, 12700, 12700, para("x")),
 				slides:     []testSlide{{tree: phShape("S", "", 4, 0, 0, 0, 0, para("text"))}},
 			},
-			shape: "S", want: compose.Rect{X: 10, Width: 1, Height: 1},
+			shape: "S", want: typeset.Rect{X: 10, Width: 1, Height: 1},
 		},
 		{
 			name: "an obj placeholder takes the master's body",
@@ -73,7 +73,7 @@ func TestPlaceholders_Inheritance(t *testing.T) {
 				layoutTree: phShape("L", "obj", 5, 0, 0, 0, 0, para("x")),
 				slides:     []testSlide{{tree: phShape("S", "", 5, 0, 0, 0, 0, para("text"))}},
 			},
-			shape: "S", want: compose.Rect{X: 36, Y: 126, Width: 648, Height: 356.3750},
+			shape: "S", want: typeset.Rect{X: 36, Y: 126, Width: 648, Height: 356.3750},
 		},
 		{
 			name:  "an empty placeholder prints nothing",
@@ -96,7 +96,7 @@ func TestPlaceholders_Inheritance(t *testing.T) {
 		{
 			name:  "a footer prints when the layout has one",
 			deck:  testDeck{slides: []testSlide{{tree: phShape("F", "ftr", 11, 0, 0, 0, 0, para("FOOT"))}}},
-			shape: "F", want: compose.Rect{X: 246, Y: 500.5, Width: 228, Height: 28.75},
+			shape: "F", want: typeset.Rect{X: 246, Y: 500.5, Width: 228, Height: 28.75},
 		},
 		{
 			name:  "a slide number prints only when the layout has one",
@@ -125,7 +125,7 @@ func TestPlaceholders_Inheritance(t *testing.T) {
 }
 
 // near reports whether two boxes agree to a thousandth of a point.
-func near(a, b compose.Rect) bool {
+func near(a, b typeset.Rect) bool {
 	d := func(x, y float64) bool { return x-y < 1e-3 && y-x < 1e-3 }
 	return d(a.X, b.X) && d(a.Y, b.Y) && d(a.Width, b.Width) && d(a.Height, b.Height)
 }

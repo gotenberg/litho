@@ -7,8 +7,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 var (
@@ -36,20 +36,20 @@ const maxDepth = 5
 
 // walk calls f on every fragment of frags, depth first, with its group
 // depth.
-func walk(frags []compose.Fragment, depth int, f func(compose.Fragment, int)) {
+func walk(frags []typeset.Fragment, depth int, f func(typeset.Fragment, int)) {
 	for _, fr := range frags {
 		f(fr, depth)
-		if g, ok := fr.(*compose.Group); ok {
+		if g, ok := fr.(*typeset.Group); ok {
 			walk(g.Content, depth+1, f)
 		}
 	}
 }
 
 // paths returns the paths of frags filled with col.
-func paths(frags []compose.Fragment, col compose.Color) []*compose.Path {
-	var out []*compose.Path
-	walk(frags, 0, func(fr compose.Fragment, _ int) {
-		if p, ok := fr.(*compose.Path); ok && p.Fill != nil && near(p.Fill.Color, col) {
+func paths(frags []typeset.Fragment, col typeset.Color) []*typeset.Path {
+	var out []*typeset.Path
+	walk(frags, 0, func(fr typeset.Fragment, _ int) {
+		if p, ok := fr.(*typeset.Path); ok && p.Fill != nil && near(p.Fill.Color, col) {
 			out = append(out, p)
 		}
 	})
@@ -57,34 +57,34 @@ func paths(frags []compose.Fragment, col compose.Color) []*compose.Path {
 }
 
 // near compares colours.
-func near(a, b compose.Color) bool {
+func near(a, b typeset.Color) bool {
 	return math.Abs(a.R-b.R)+math.Abs(a.G-b.G)+math.Abs(a.B-b.B)+math.Abs(a.A-b.A) < 1e-6
 }
 
 // bounds returns the bounding box of a path's points.
-func bounds(p *compose.Path) compose.Rect {
+func bounds(p *typeset.Path) typeset.Rect {
 	x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
 	for _, op := range p.Ops {
 		n := 1
 		switch op.Kind {
-		case compose.MoveTo, compose.LineTo:
-		case compose.CurveTo:
+		case typeset.MoveTo, typeset.LineTo:
+		case typeset.CurveTo:
 			n = 3
-		case compose.ClosePath:
+		case typeset.ClosePath:
 			n = 0
 		}
 		for _, pt := range op.P[:n] {
 			x0, y0, x1, y1 = math.Min(x0, pt.X), math.Min(y0, pt.Y), math.Max(x1, pt.X), math.Max(y1, pt.Y)
 		}
 	}
-	return compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
+	return typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
 }
 
 // texts returns the characters of the text runs of frags, a string per run.
-func texts(frags []compose.Fragment) []string {
+func texts(frags []typeset.Fragment) []string {
 	var out []string
-	walk(frags, 0, func(fr compose.Fragment, _ int) {
-		if t, ok := fr.(*compose.Text); ok {
+	walk(frags, 0, func(fr typeset.Fragment, _ int) {
+		if t, ok := fr.(*typeset.Text); ok {
 			s := ""
 			for _, g := range t.Glyphs {
 				s += g.Text
@@ -114,8 +114,8 @@ func strs(vs ...string) []Value {
 }
 
 var (
-	red  = compose.Color{R: 1, A: 1}
-	blue = compose.Color{B: 1, A: 1}
+	red  = typeset.Color{R: 1, A: 1}
+	blue = typeset.Color{B: 1, A: 1}
 )
 
 // plainAxes returns a category and a value axis without labels, lines or

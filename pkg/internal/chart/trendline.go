@@ -4,8 +4,8 @@ import (
 	"math"
 	"slices"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // trendSamples is how many points a curved trendline is drawn through.
@@ -260,7 +260,7 @@ func movingAverage(t Trendline, xs, ys []float64) [][2]float64 {
 // to the plot area.
 func (rd *renderer) trendlines(g *Group, x, y *dim) {
 	xy := g.Kind == Scatter || g.Kind == Bubble
-	var paths []compose.Fragment
+	var paths []typeset.Fragment
 	for _, s := range g.Series {
 		if len(s.Trendlines) == 0 {
 			continue
@@ -287,22 +287,22 @@ func (rd *renderer) trendlines(g *Group, x, y *dim) {
 			if st == nil {
 				continue
 			}
-			var pts []compose.Point
+			var pts []typeset.Point
 			for _, p := range trendCurve(t, xs, ys) {
 				if xy {
-					pts = append(pts, compose.Point{X: x.valuePixel(p[0]), Y: y.valuePixel(p[1])})
+					pts = append(pts, typeset.Point{X: x.valuePixel(p[0]), Y: y.valuePixel(p[1])})
 				} else {
 					pts = append(pts, point(x, y, p[0]-1, p[1]))
 				}
 			}
 			if len(pts) > 1 {
-				st.Join = compose.RoundJoin
-				paths = append(paths, &compose.Path{Ops: polyline(pts, false), Stroke: st})
+				st.Join = typeset.RoundJoin
+				paths = append(paths, &typeset.Path{Ops: polyline(pts, false), Stroke: st})
 			}
 		}
 	}
 	if len(paths) > 0 {
-		rd.out = append(rd.out, &compose.Group{Clip: rectPath(x.inner), Content: paths})
+		rd.out = append(rd.out, &typeset.Group{Clip: rectPath(x.inner), Content: paths})
 	}
 }
 

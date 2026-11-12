@@ -8,8 +8,8 @@ import (
 	"image/png"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // pngBytes returns a 4 by 2 pixel PNG.
@@ -78,7 +78,7 @@ func TestRead_Drawings(t *testing.T) {
 	}
 	if d := ds[2]; !d.Absolute || d.X != 10 || d.Y != 20 || d.Width != 10 || d.Picture == nil || d.Picture.Vector == nil {
 		t.Errorf("shape %+v", d)
-	} else if frags := d.Picture.Vector(context.Background(), compose.Rect{Width: 10, Height: 10}); len(frags) != 1 {
+	} else if frags := d.Picture.Vector(context.Background(), typeset.Rect{Width: 10, Height: 10}); len(frags) != 1 {
 		t.Errorf("shape fragments %+v", frags)
 	}
 	if ds[0].Shape || ds[1].Shape || !ds[2].Shape || !ds[3].Shape {
@@ -113,15 +113,15 @@ func TestRead_ShapeText(t *testing.T) {
 	if len(ds) != 1 || ds[0].Picture == nil || ds[0].Picture.Vector == nil {
 		t.Fatalf("drawings %+v", ds)
 	}
-	frags := ds[0].Picture.Vector(context.Background(), compose.Rect{Width: 200, Height: 100})
-	var texts []*compose.Text
-	var walk func([]compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+	frags := ds[0].Picture.Vector(context.Background(), typeset.Rect{Width: 200, Height: 100})
+	var texts []*typeset.Text
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
 			switch f := f.(type) {
-			case *compose.Text:
+			case *typeset.Text:
 				texts = append(texts, f)
-			case *compose.Group:
+			case *typeset.Group:
 				walk(f.Content)
 			}
 		}
@@ -131,7 +131,7 @@ func TestRead_ShapeText(t *testing.T) {
 		t.Fatalf("%d text runs, want 1", len(texts))
 	}
 	tx := texts[0]
-	if tx.Size != 20 || tx.Color != (compose.Color{R: 1, A: 1}) || tx.Origin.X != 180 || tx.Origin.Y <= 80 || tx.Origin.Y >= 100 {
+	if tx.Size != 20 || tx.Color != (typeset.Color{R: 1, A: 1}) || tx.Origin.X != 180 || tx.Origin.Y <= 80 || tx.Origin.Y >= 100 {
 		t.Errorf("run at %+v size %v colour %+v, want 20-point red text right-aligned at the bottom", tx.Origin, tx.Size, tx.Color)
 	}
 }

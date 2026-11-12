@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // The namespaces of OpenDocument charts (ODF 1.3 Part 3, 11 and
@@ -115,7 +115,7 @@ func (r *chartReader) warn(code, msg string) {
 	}
 	if !r.warned[msg] {
 		r.warned[msg] = true
-		r.c.Warnings = append(r.c.Warnings, compose.Warning{Code: code, Message: msg})
+		r.c.Warnings = append(r.c.Warnings, typeset.Warning{Code: code, Message: msg})
 	}
 }
 
@@ -175,12 +175,12 @@ func (r *chartReader) numProp(name, local string) float64 {
 }
 
 // color converts an ODF colour.
-func color(s string) (compose.Color, bool) {
+func color(s string) (typeset.Color, bool) {
 	c, ok := ParseColor(s)
 	if !ok {
-		return compose.Color{}, false
+		return typeset.Color{}, false
 	}
-	return compose.Color{R: float64(c.R) / 255, G: float64(c.G) / 255, B: float64(c.B) / 255, A: 1}, true
+	return typeset.Color{R: float64(c.R) / 255, G: float64(c.G) / 255, B: float64(c.B) / 255, A: 1}, true
 }
 
 // fill reads a style's area fill (ODF 1.3 Part 3, 20.110 draw:fill and
@@ -212,7 +212,7 @@ func (r *chartReader) stroke(name string, def *chart.Stroke) *chart.Stroke {
 	if hasKind && kind == "none" {
 		return &chart.Stroke{None: true}
 	}
-	s := chart.Stroke{Color: compose.Color{R: 0xb3 / 255.0, G: 0xb3 / 255.0, B: 0xb3 / 255.0, A: 1}}
+	s := chart.Stroke{Color: typeset.Color{R: 0xb3 / 255.0, G: 0xb3 / 255.0, B: 0xb3 / 255.0, A: 1}}
 	if def != nil {
 		s = *def
 	}
@@ -305,8 +305,8 @@ func paraText(e *Element) string {
 func (r *chartReader) read(ch *Element) {
 	c := r.c
 	chStyle := ch.A(NSChart, "style-name")
-	r.textDefault = r.textStyle(chStyle, chart.TextStyle{Families: []string{chartFont}, Size: 10, Color: compose.Black})
-	c.Area = chart.Frame{Fill: r.fill(chStyle, &chart.Paint{Color: compose.Color{R: 1, G: 1, B: 1, A: 1}}), Border: r.lineOf(chStyle, nil)}
+	r.textDefault = r.textStyle(chStyle, chart.TextStyle{Families: []string{chartFont}, Size: 10, Color: typeset.Black})
+	c.Area = chart.Frame{Fill: r.fill(chStyle, &chart.Paint{Color: typeset.Color{R: 1, G: 1, B: 1, A: 1}}), Border: r.lineOf(chStyle, nil)}
 	r.table = readLocalTable(ch.Child(NSTable, "table"))
 	if t := ch.Child(NSChart, "title"); t != nil {
 		c.Title = r.title(t, 13, false)
@@ -606,7 +606,7 @@ func (r *chartReader) axis(ax *Element) *chart.Axis {
 	}
 	a.MajorTicks = ticks(r.boolProp(name, "tick-marks-major-inner", false), r.boolProp(name, "tick-marks-major-outer", true))
 	a.MinorTicks = ticks(r.boolProp(name, "tick-marks-minor-inner", false), r.boolProp(name, "tick-marks-minor-outer", false))
-	a.Line = r.lineOf(name, &chart.Stroke{Color: compose.Color{R: 0xb3 / 255.0, G: 0xb3 / 255.0, B: 0xb3 / 255.0, A: 1}})
+	a.Line = r.lineOf(name, &chart.Stroke{Color: typeset.Color{R: 0xb3 / 255.0, G: 0xb3 / 255.0, B: 0xb3 / 255.0, A: 1}})
 	a.Style = r.textStyle(name, r.textDefault)
 	// Labels break only when the style asks (ODF 1.3 Part 3, 20.25
 	// text:line-break; chart2's axis default is off) and overlap only when
@@ -623,7 +623,7 @@ func (r *chartReader) axis(ax *Element) *chart.Axis {
 	}
 	for _, g := range ax.All(NSChart, "grid") {
 		gName := g.A(NSChart, "style-name")
-		line := r.lineOf(gName, &chart.Stroke{Color: compose.Color{R: 0xb3 / 255.0, G: 0xb3 / 255.0, B: 0xb3 / 255.0, A: 1}})
+		line := r.lineOf(gName, &chart.Stroke{Color: typeset.Color{R: 0xb3 / 255.0, G: 0xb3 / 255.0, B: 0xb3 / 255.0, A: 1}})
 		if g.A(NSChart, "class") == "minor" {
 			a.MinorGrid = line
 		} else {

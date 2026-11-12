@@ -11,8 +11,8 @@ import (
 	dom "golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // collector parses the document's stylesheets. It lives for one [Convert]
@@ -23,7 +23,7 @@ type collector struct {
 	logger *slog.Logger
 
 	styles   int
-	warnings []compose.Warning
+	warnings []typeset.Warning
 }
 
 // stylesheets returns the sheets of the cascade in order (CSS Cascade 4,
@@ -178,7 +178,7 @@ func (c *collector) parse(ctx context.Context, body []byte, u, media, name strin
 
 // warn records a warning.
 func (c *collector) warn(code, msg string) {
-	c.warnings = append(c.warnings, compose.Warning{Code: code, Message: msg})
+	c.warnings = append(c.warnings, typeset.Warning{Code: code, Message: msg})
 }
 
 // cssString escapes s for a double-quoted CSS string (CSS Syntax 3, 4.3.5).

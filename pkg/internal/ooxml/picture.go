@@ -15,12 +15,12 @@ import (
 	_ "golang.org/x/image/bmp"  // registers BMP with image.Decode
 	_ "golang.org/x/image/tiff" // registers TIFF with image.Decode
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/svg"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // minPictureSide is the smallest side a picture takes, in points: the
@@ -92,7 +92,7 @@ func DecodePicture(ctx context.Context, data []byte, fonts *text.Fonts) (*layout
 	}
 	pic := &layout.Picture{Width: float64(cfg.Width) * css.Pt, Height: float64(cfg.Height) * css.Pt}
 	if format == "jpeg" && (cfg.ColorModel == color.GrayModel || cfg.ColorModel == color.YCbCrModel || cfg.ColorModel == color.CMYKModel) {
-		src, err := compose.JPEGImage(ctx, data)
+		src, err := typeset.JPEGImage(ctx, data)
 		if err != nil {
 			return nil, fmt.Errorf("reading the JPEG picture: %w", err)
 		}
@@ -108,7 +108,7 @@ func DecodePicture(ctx context.Context, data []byte, fonts *text.Fonts) (*layout
 		mem.Release(charged)
 		return nil, fmt.Errorf("decoding the %s picture: %w", format, err)
 	}
-	src, err := compose.EncodeImage(ctx, img)
+	src, err := typeset.EncodeImage(ctx, img)
 	if err != nil {
 		return nil, fmt.Errorf("encoding the %s picture: %w", format, err)
 	}
@@ -151,29 +151,29 @@ func Cropped(pic *layout.Picture, crop [4]float64) *layout.Picture {
 	}
 	inner := *pic
 	out := &layout.Picture{Width: max(pic.Width*fw, minPictureSide), Height: max(pic.Height*fh, minPictureSide)}
-	out.Vector = func(ctx context.Context, r compose.Rect) []compose.Fragment {
-		full := compose.Rect{
+	out.Vector = func(ctx context.Context, r typeset.Rect) []typeset.Fragment {
+		full := typeset.Rect{
 			X: r.X - crop[css.Left]*r.Width/fw, Y: r.Y - crop[css.Top]*r.Height/fh,
 			Width: r.Width / fw, Height: r.Height / fh,
 		}
-		var content []compose.Fragment
+		var content []typeset.Fragment
 		if inner.Vector != nil {
 			content = inner.Vector(ctx, full)
 		} else if inner.Source != nil {
-			content = []compose.Fragment{&compose.Image{Rect: full, Source: inner.Source}}
+			content = []typeset.Fragment{&typeset.Image{Rect: full, Source: inner.Source}}
 		}
-		return []compose.Fragment{&compose.Group{Clip: RectPath(r), Content: content}}
+		return []typeset.Fragment{&typeset.Group{Clip: RectPath(r), Content: content}}
 	}
 	return out
 }
 
 // RectPath returns the closed path of the rectangle r.
-func RectPath(r compose.Rect) *compose.Path {
-	return &compose.Path{Ops: []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{{X: r.X, Y: r.Y}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X + r.Width, Y: r.Y}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X + r.Width, Y: r.Y + r.Height}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X, Y: r.Y + r.Height}}},
-		{Kind: compose.ClosePath},
+func RectPath(r typeset.Rect) *typeset.Path {
+	return &typeset.Path{Ops: []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: r.X, Y: r.Y}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X + r.Width, Y: r.Y}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X + r.Width, Y: r.Y + r.Height}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X, Y: r.Y + r.Height}}},
+		{Kind: typeset.ClosePath},
 	}}
 }

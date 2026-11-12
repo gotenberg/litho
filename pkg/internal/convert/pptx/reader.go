@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // The PresentationML namespaces (ECMA-376 Part 1, 19; the Strict ones
@@ -122,9 +122,9 @@ type reader struct {
 	// notesRead marks the notes page layout read from the first notes
 	// slide: notesSlideBox, notesTextBox and notesShapes.
 	notesRead                   bool
-	notesSlideBox, notesTextBox compose.Rect
+	notesSlideBox, notesTextBox typeset.Rect
 	notesShapes                 []*slides.Shape
-	warnings                    []compose.Warning
+	warnings                    []typeset.Warning
 	warned                      map[string]bool
 }
 
@@ -134,7 +134,7 @@ func (r *reader) warn(code, msg string) {
 		return
 	}
 	r.warned[msg] = true
-	r.warnings = append(r.warnings, compose.Warning{Code: code, Message: msg})
+	r.warnings = append(r.warnings, typeset.Warning{Code: code, Message: msg})
 }
 
 // isMalformed reports a part that does not parse, which the reader skips
@@ -146,7 +146,7 @@ func isMalformed(err error) bool {
 // read reads the presentation pkg holds into the slide model, with the
 // warnings of what it left out or approximated, and its handout master
 // when handouts asks for it.
-func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts bool) (*slides.Document, []compose.Warning, error) {
+func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts bool) (*slides.Document, []typeset.Warning, error) {
 	main, err := pkg.MainPart()
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", office.ErrMalformed, err)
@@ -178,7 +178,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts b
 	if subject == "" {
 		subject = cp.Description
 	}
-	doc.Meta = compose.Metadata{Title: cp.Title, Author: cp.Creator, Subject: subject, Keywords: cp.Keywords, Lang: cp.Language}
+	doc.Meta = typeset.Metadata{Title: cp.Title, Author: cp.Creator, Subject: subject, Keywords: cp.Keywords, Lang: cp.Language}
 	first := 1
 	if n, ok := intAttr(root, "firstSlideNum"); ok {
 		first = min(max(n, 1), maxFirstSlideNumber)

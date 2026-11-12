@@ -4,9 +4,9 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 var (
@@ -244,11 +244,11 @@ func TestConvert_ConditionalDrawing(t *testing.T) {
 	}
 	out := convert(t, newDoc(sh), office.Options{})
 	var bars, fills int
-	var walk func([]compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Path:
+			case *typeset.Path:
 				if v.Fill != nil && v.Fill.Shading != nil {
 					bars++
 					x0 := v.Ops[0].P[0].X
@@ -259,7 +259,7 @@ func TestConvert_ConditionalDrawing(t *testing.T) {
 				} else if v.Fill != nil && v.Fill.Color == colorOf(green) {
 					fills++
 				}
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content)
 			}
 		}

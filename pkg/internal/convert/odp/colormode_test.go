@@ -6,9 +6,9 @@ import (
 	imgcolor "image/color"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestAdjusted_ColorModes(t *testing.T) {
@@ -55,9 +55,9 @@ func TestAdjusted_ColorModes(t *testing.T) {
 
 // source returns img encoded as an image source, failing t when it does
 // not encode.
-func source(t testing.TB, img image.Image) *compose.ImageSource {
+func source(t testing.TB, img image.Image) *typeset.ImageSource {
 	t.Helper()
-	src, err := compose.EncodeImage(context.Background(), img)
+	src, err := typeset.EncodeImage(context.Background(), img)
 	if err != nil {
 		t.Fatalf("EncodeImage: %v", err)
 	}
@@ -66,7 +66,7 @@ func source(t testing.TB, img image.Image) *compose.ImageSource {
 
 // decoded returns the pixels of src as an NRGBA picture, failing t when
 // they do not decode to one.
-func decoded(t testing.TB, src *compose.ImageSource) *image.NRGBA {
+func decoded(t testing.TB, src *typeset.ImageSource) *image.NRGBA {
 	t.Helper()
 	img, err := src.Decode(context.Background())
 	if err != nil {

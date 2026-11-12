@@ -4,9 +4,9 @@ import (
 	"math"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // layoutPasses is how often the plot area is fitted to its axis labels:
@@ -40,7 +40,7 @@ type dim struct {
 	other *dim
 
 	// The geometry of the last layout pass.
-	inner  compose.Rect
+	inner  typeset.Rect
 	lineAt float64
 	labels []tickLabel
 	ticks  []float64
@@ -208,7 +208,7 @@ func (d *dim) tickPositions() []float64 {
 }
 
 // cartesian draws the groups of a plot area with axes into avail.
-func (rd *renderer) cartesian(avail compose.Rect) {
+func (rd *renderer) cartesian(avail typeset.Rect) {
 	c := rd.c
 	g0 := c.Groups[0]
 	if g0.Kind == Radar {
@@ -240,7 +240,7 @@ func (rd *renderer) cartesian(avail compose.Rect) {
 	for pass := 0; pass < passes; pass++ {
 		fit()
 		bb := labelBounds(inner, all)
-		next := compose.Rect{X: avail.X + (inner.X - bb.X), Y: avail.Y + (inner.Y - bb.Y)}
+		next := typeset.Rect{X: avail.X + (inner.X - bb.X), Y: avail.Y + (inner.Y - bb.Y)}
 		next.Width = avail.X + avail.Width - (bb.X + bb.Width - (inner.X + inner.Width)) - next.X
 		next.Height = avail.Y + avail.Height - (bb.Y + bb.Height - (inner.Y + inner.Height)) - next.Y
 		if !above(next.Width, 4) || !above(next.Height, 4) {
@@ -298,12 +298,12 @@ func (rd *renderer) cartesian(avail compose.Rect) {
 
 // labelBounds returns the smallest rectangle holding inner and the axis
 // labels of dims.
-func labelBounds(inner compose.Rect, dims []*dim) compose.Rect {
+func labelBounds(inner typeset.Rect, dims []*dim) typeset.Rect {
 	bb := inner
 	for _, d := range dims {
 		for _, l := range d.labels {
 			w, h := l.b.rotated()
-			bb = union(bb, compose.Rect{X: l.cx - w/2, Y: l.cy - h/2, Width: w, Height: h})
+			bb = union(bb, typeset.Rect{X: l.cx - w/2, Y: l.cy - h/2, Width: w, Height: h})
 		}
 	}
 	return bb
@@ -319,10 +319,10 @@ func compatible(g0, g *Group) bool {
 }
 
 // union returns the smallest rectangle holding a and b.
-func union(a, b compose.Rect) compose.Rect {
+func union(a, b typeset.Rect) typeset.Rect {
 	x0, y0 := math.Min(a.X, b.X), math.Min(a.Y, b.Y)
 	x1, y1 := math.Max(a.X+a.Width, b.X+b.Width), math.Max(a.Y+a.Height, b.Y+b.Height)
-	return compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
+	return typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
 }
 
 // axisAt returns axis i of the chart, nil when out of range.
@@ -543,7 +543,7 @@ func (d *dim) style() TextStyle {
 	if d.ax != nil {
 		return d.ax.Style
 	}
-	return TextStyle{Size: defaultFontSize, Color: compose.Black}
+	return TextStyle{Size: defaultFontSize, Color: typeset.Black}
 }
 
 // tickText formats a tick value of d.
@@ -798,7 +798,7 @@ func thin(ls []tickLabel, vertical bool) []tickLabel {
 }
 
 // grids draws d's gridlines across inner.
-func (rd *renderer) grids(d *dim, inner compose.Rect) {
+func (rd *renderer) grids(d *dim, inner typeset.Rect) {
 	if d.ax == nil {
 		return
 	}
@@ -894,7 +894,7 @@ func (rd *renderer) titleBlock(d *dim) *block {
 
 // reserveTitles takes the room of the axis titles from avail, as
 // LibreOffice's createAxisTitleShapes2D does.
-func (rd *renderer) reserveTitles(avail compose.Rect, dims ...*dim) compose.Rect {
+func (rd *renderer) reserveTitles(avail typeset.Rect, dims ...*dim) typeset.Rect {
 	for _, d := range dims {
 		b := rd.titleBlock(d)
 		if b == nil {
@@ -921,7 +921,7 @@ func (rd *renderer) reserveTitles(avail compose.Rect, dims ...*dim) compose.Rect
 
 // axisTitle draws d's title beside ext, the plot area with its axis
 // labels, as LibreOffice's changePositionOfAxisTitle places it.
-func (rd *renderer) axisTitle(d *dim, ext compose.Rect) {
+func (rd *renderer) axisTitle(d *dim, ext typeset.Rect) {
 	b := rd.titleBlock(d)
 	if b == nil {
 		return
@@ -948,6 +948,6 @@ func (rd *renderer) axisTitle(d *dim, ext compose.Rect) {
 	}
 	cx = math.Max(rd.page.X+w/2, math.Min(cx, rd.page.X+rd.page.Width-w/2))
 	cy = math.Max(rd.page.Y+h/2, math.Min(cy, rd.page.Y+rd.page.Height-h/2))
-	rd.frame(compose.Rect{X: cx - w/2, Y: cy - h/2, Width: w, Height: h}, d.ax.Title.Frame)
+	rd.frame(typeset.Rect{X: cx - w/2, Y: cy - h/2, Width: w, Height: h}, d.ax.Title.Frame)
 	rd.out = append(rd.out, b.draw(cx, cy, alignCenter)...)
 }

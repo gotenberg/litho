@@ -6,16 +6,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/plaintext"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // collectSink keeps the pages handed over.
-type collectSink struct{ pages []*compose.Page }
+type collectSink struct{ pages []*typeset.Page }
 
 func (c *collectSink) Expect(int) {}
 
-func (c *collectSink) Page(_ context.Context, p *compose.Page) error {
+func (c *collectSink) Page(_ context.Context, p *typeset.Page) error {
 	c.pages = append(c.pages, p)
 	return nil
 }

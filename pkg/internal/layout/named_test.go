@@ -5,8 +5,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // named sets the page property.
@@ -29,7 +29,7 @@ func namedRun(t *testing.T, root *Node) (*Result, map[int]PageInfo) {
 			}
 			return page(20, 30)
 		},
-		MarginContent: func(info PageInfo, _ int) []compose.Fragment {
+		MarginContent: func(info PageInfo, _ int) []typeset.Fragment {
 			seen[info.Index] = info
 			return nil
 		},
@@ -117,7 +117,7 @@ func TestLayout_Extents(t *testing.T) {
 	if !ok {
 		t.Fatal("no extent for the block")
 	}
-	want := compose.Rect{X: px(4), Y: px(8), Width: px(10), Height: px(6)}
+	want := typeset.Rect{X: px(4), Y: px(8), Width: px(10), Height: px(6)}
 	if !near(r.X, want.X) || !near(r.Y, want.Y) || !near(r.Width, want.Width) || !near(r.Height, want.Height) {
 		t.Errorf("extent %+v, want %+v", r, want)
 	}

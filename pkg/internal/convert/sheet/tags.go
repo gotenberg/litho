@@ -3,8 +3,8 @@ package sheet
 import (
 	"slices"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // tagTable rebuilds the structure of a page's Table element, the first
@@ -38,11 +38,11 @@ import (
 // The structure the engine built stays when the page holds more than
 // [maxPageCells] cells or when the cells it tagged do not match the
 // layout tree.
-func (b *pageBuilder) tagTable(table *layout.Node, root *compose.StructElem, frags []compose.Fragment, links []compose.Link) {
+func (b *pageBuilder) tagTable(table *layout.Node, root *typeset.StructElem, frags []typeset.Fragment, links []typeset.Link) {
 	if root == nil {
 		return
 	}
-	var tbl *compose.StructElem
+	var tbl *typeset.StructElem
 	for _, k := range root.Kids {
 		if k.Role == "Table" {
 			tbl = k
@@ -54,7 +54,7 @@ func (b *pageBuilder) tagTable(table *layout.Node, root *compose.StructElem, fra
 	}
 	var nodes []*layout.Node
 	collectCells(table, &nodes)
-	var elems []*compose.StructElem
+	var elems []*typeset.StructElem
 	collectCellElems(tbl, &elems)
 	if len(nodes) != len(elems) {
 		return
@@ -116,11 +116,11 @@ func (b *pageBuilder) tagTable(table *layout.Node, root *compose.StructElem, fra
 		}
 	}
 	rows = kept
-	cellAt := map[[2]int]*compose.StructElem{}
+	cellAt := map[[2]int]*typeset.StructElem{}
 	taken := make([]bool, len(rows)*len(cols))
-	trs := make([]*compose.StructElem, len(rows))
+	trs := make([]*typeset.StructElem, len(rows))
 	for i := range rows {
-		trs[i] = &compose.StructElem{Role: "TR"}
+		trs[i] = &typeset.StructElem{Role: "TR"}
 	}
 	for i, r := range rows {
 		for j, c := range cols {
@@ -155,14 +155,14 @@ func (b *pageBuilder) tagTable(table *layout.Node, root *compose.StructElem, fra
 					taken[y*len(cols)+x] = true
 				}
 			}
-			el := &compose.StructElem{Role: "TD"}
+			el := &typeset.StructElem{Role: "TD"}
 			switch {
 			case colHead && rowHead:
-				el.Role, el.Scope = "TH", compose.ScopeBoth
+				el.Role, el.Scope = "TH", typeset.ScopeBoth
 			case colHead:
-				el.Role, el.Scope = "TH", compose.ScopeColumn
+				el.Role, el.Scope = "TH", typeset.ScopeColumn
 			case rowHead:
-				el.Role, el.Scope = "TH", compose.ScopeRow
+				el.Role, el.Scope = "TH", typeset.ScopeRow
 			}
 			if cs > 1 {
 				el.ColSpan = cs
@@ -176,7 +176,7 @@ func (b *pageBuilder) tagTable(table *layout.Node, root *compose.StructElem, fra
 			}
 		}
 	}
-	remap := map[*compose.StructElem]*compose.StructElem{tbl: nil}
+	remap := map[*typeset.StructElem]*typeset.StructElem{tbl: nil}
 	for i := range nodes {
 		el := cellAt[target[i]]
 		remap[elems[i]] = el
@@ -271,7 +271,7 @@ func collectCells(n *layout.Node, out *[]*layout.Node) {
 }
 
 // collectCellElems appends the TD elements under the rows of e, in order.
-func collectCellElems(e *compose.StructElem, out *[]*compose.StructElem) {
+func collectCellElems(e *typeset.StructElem, out *[]*typeset.StructElem) {
 	for _, k := range e.Kids {
 		switch k.Role {
 		case "TD":
@@ -284,23 +284,23 @@ func collectCellElems(e *compose.StructElem, out *[]*compose.StructElem) {
 
 // reparent moves the fragments of frags, and those of their groups,
 // whose parent remap names to the element it maps it to.
-func reparent(frags []compose.Fragment, remap map[*compose.StructElem]*compose.StructElem) {
-	stack := append([]compose.Fragment(nil), frags...)
+func reparent(frags []typeset.Fragment, remap map[*typeset.StructElem]*typeset.StructElem) {
+	stack := append([]typeset.Fragment(nil), frags...)
 	for len(stack) > 0 {
 		f := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 		switch v := f.(type) {
-		case *compose.Group:
+		case *typeset.Group:
 			stack = append(stack, v.Content...)
-		case *compose.Text:
+		case *typeset.Text:
 			if p, ok := remap[v.Parent]; ok {
 				v.Parent = p
 			}
-		case *compose.Image:
+		case *typeset.Image:
 			if p, ok := remap[v.Parent]; ok {
 				v.Parent = p
 			}
-		case *compose.Path:
+		case *typeset.Path:
 			if p, ok := remap[v.Parent]; ok {
 				v.Parent = p
 			}

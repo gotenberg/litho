@@ -3,23 +3,23 @@ package layout
 import (
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // strokes returns the stroked paths of page n of res, nested groups
 // included.
-func strokes(res *Result, n int) []*compose.Path {
-	var out []*compose.Path
-	var walk func(fs []compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+func strokes(res *Result, n int) []*typeset.Path {
+	var out []*typeset.Path
+	var walk func(fs []typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Path:
+			case *typeset.Path:
 				if v.Stroke != nil {
 					out = append(out, v)
 				}
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content)
 			}
 		}

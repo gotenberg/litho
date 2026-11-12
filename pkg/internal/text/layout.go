@@ -18,9 +18,9 @@ import (
 	"github.com/go-text/typesetting/shaping"
 	"golang.org/x/image/math/fixed"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // MaxLayoutRunes bounds the characters of one [Fonts.Layout] call, counted
@@ -33,7 +33,7 @@ const MaxLayoutRunes = 1 << 20
 
 // glyphCost is what one glyph of a laid-out line costs the conversion's
 // memory budget, [limits.GlyphCost]. A converter that hands its pages to a
-// [compose.PageSink] gives the charge back once a page is handed over; the
+// [typeset.PageSink] gives the charge back once a page is handed over; the
 // others hold the lines until the document is written.
 const glyphCost = limits.GlyphCost
 
@@ -110,7 +110,7 @@ type Line struct {
 	// Origin is relative to the line's left baseline point: X is the run's
 	// offset from the line start, Y is 0. Parent is nil. A blank line has
 	// no runs.
-	Runs []*compose.Text
+	Runs []*typeset.Text
 	// Width is the advance of the line, in points, without the spaces
 	// that hang at its end.
 	Width float64
@@ -188,7 +188,7 @@ type Report struct {
 // or vanished since [NewFonts], and ctx's error, checked per line. It never
 // truncates text.
 //
-// Layout does not modify runs. The returned lines share [compose.Face]
+// Layout does not modify runs. The returned lines share [typeset.Face]
 // values with other calls on the same Fonts.
 func (f *Fonts) Layout(ctx context.Context, runs []Run, width float64, opts Options) ([]Line, Report, error) {
 	if !numeric.PositiveFinite(width) {
@@ -754,7 +754,7 @@ func (st *layoutState) line(runs shaping.Line, para []rune, styleOf []int, dir d
 			continue
 		}
 		fc := st.byFont[out.Face.Font]
-		cf, err := fc.Compose()
+		cf, err := fc.Typeset()
 		if err != nil {
 			return Line{}, fmt.Errorf("laying out text: %w", err)
 		}
@@ -763,18 +763,18 @@ func (st *layoutState) line(runs shaping.Line, para []rune, styleOf []int, dir d
 		}
 		ss := st.styles[styleOf[out.Runes.Offset]]
 		s := ss.style
-		t := &compose.Text{
+		t := &typeset.Text{
 			Face:   cf,
 			Size:   s.Size,
 			Color:  s.Color,
-			Origin: compose.Point{X: x},
-			Glyphs: make([]compose.Glyph, len(out.Glyphs)),
+			Origin: typeset.Point{X: x},
+			Glyphs: make([]typeset.Glyph, len(out.Glyphs)),
 		}
 		t.Stroke, t.Skew = synthesis(ss.req, fc, s.Size)
 		pen := 0.0
 		cluster := -1
 		for k, g := range out.Glyphs {
-			cg := compose.Glyph{
+			cg := typeset.Glyph{
 				GID: glyphID(g.GlyphID),
 				X:   pen + st.toPoints(g.XOffset),
 				Y:   st.toPoints(-g.YOffset),

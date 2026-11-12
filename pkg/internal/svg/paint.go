@@ -8,8 +8,8 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxHrefChain caps the gradients one gradient's href chain visits.
@@ -19,7 +19,7 @@ const maxHrefChain = 16
 
 // fillOf returns the fill of a shape styled st whose bounding box is box,
 // nil for none (SVG 1.1, 11.3).
-func (r *renderer) fillOf(st *style, box bbox) *compose.Fill {
+func (r *renderer) fillOf(st *style, box bbox) *typeset.Fill {
 	if st.fillOpacity <= 0 {
 		return nil
 	}
@@ -30,7 +30,7 @@ func (r *renderer) fillOf(st *style, box bbox) *compose.Fill {
 			if sh == nil {
 				return nil
 			}
-			f := &compose.Fill{Rule: st.fillRule, Shading: sh}
+			f := &typeset.Fill{Rule: st.fillRule, Shading: sh}
 			return withAlpha(f, st.fillOpacity)
 		}
 		if fb == nil {
@@ -46,12 +46,12 @@ func (r *renderer) fillOf(st *style, box bbox) *compose.Fill {
 	if c.A <= 0 {
 		return nil
 	}
-	return &compose.Fill{Color: c, Rule: st.fillRule}
+	return &typeset.Fill{Color: c, Rule: st.fillRule}
 }
 
 // colorOf returns the flat colour of a paint: a colour, or currentColor
 // resolved to st's color. It reports false for none.
-func (r *renderer) colorOf(p paint, st *style) (compose.Color, bool) {
+func (r *renderer) colorOf(p paint, st *style) (typeset.Color, bool) {
 	switch p.kind {
 	case paintColor:
 		return p.color, p.color.A > 0
@@ -59,32 +59,32 @@ func (r *renderer) colorOf(p paint, st *style) (compose.Color, bool) {
 		return st.color, st.color.A > 0
 	case paintNone, paintURL:
 	}
-	return compose.Color{}, false
+	return typeset.Color{}, false
 }
 
-// flatPaint returns one colour for a paint the composition model cannot
+// flatPaint returns one colour for a paint the typeset model cannot
 // draw with a shading, a stroke's or a glyph run's: a gradient becomes the
 // colour of its middle, with a warning.
-func (r *renderer) flatPaint(p paint, st *style, box bbox, what string) (compose.Color, bool) {
+func (r *renderer) flatPaint(p paint, st *style, box bbox, what string) (typeset.Color, bool) {
 	if p.kind != paintURL {
 		return r.colorOf(p, st)
 	}
 	sh, fb, ok := r.shading(p, st, box)
 	if ok {
 		if sh == nil {
-			return compose.Color{}, false
+			return typeset.Color{}, false
 		}
 		r.d.warn("unsupported-svg-paint", fmt.Sprintf("a gradient %s is drawn in the gradient's middle colour", what))
 		return middleColor(sh.Stops), true
 	}
 	if fb == nil {
-		return compose.Color{}, false
+		return typeset.Color{}, false
 	}
 	return r.colorOf(*fb, st)
 }
 
 // middleColor returns the colour a stop list reaches at offset 0.5.
-func middleColor(stops []compose.ColorStop) compose.Color {
+func middleColor(stops []typeset.ColorStop) typeset.Color {
 	for i := 1; i < len(stops); i++ {
 		a, b := stops[i-1], stops[i]
 		if b.Offset >= 0.5 {
@@ -93,7 +93,7 @@ func middleColor(stops []compose.ColorStop) compose.Color {
 				t = (0.5 - a.Offset) / (b.Offset - a.Offset)
 			}
 			t = min(max(t, 0), 1)
-			return compose.Color{
+			return typeset.Color{
 				R: a.Color.R + t*(b.Color.R-a.Color.R), G: a.Color.G + t*(b.Color.G-a.Color.G),
 				B: a.Color.B + t*(b.Color.B-a.Color.B), A: a.Color.A + t*(b.Color.A-a.Color.A),
 			}
@@ -178,7 +178,7 @@ const focalInside = 0.999
 // st whose bounding box is box (SVG 1.1, 13.2). It reports ok false when
 // the reference names no gradient, with the fallback to use instead; ok
 // true with a nil shading when the gradient paints nothing.
-func (r *renderer) shading(p paint, st *style, box bbox) (*compose.Shading, *paint, bool) {
+func (r *renderer) shading(p paint, st *style, box bbox) (*typeset.Shading, *paint, bool) {
 	g, ok := r.resolveGradient(p.url)
 	if !ok {
 		return nil, p.fallback, false
@@ -204,7 +204,7 @@ func (r *renderer) shading(p paint, st *style, box bbox) (*compose.Shading, *pai
 			// units: the gradient is not drawn (SVG 1.1, 7.11).
 			return nil, nil, true
 		}
-		m = mul(compose.Matrix{A: w, D: h, E: box.x0, F: box.y0}, m)
+		m = mul(typeset.Matrix{A: w, D: h, E: box.x0, F: box.y0}, m)
 		lc = lengthCtx{fontSize: st.fontSize, vw: 1, vh: 1}
 	}
 	if !invertible(m) {
@@ -227,25 +227,25 @@ func (r *renderer) shading(p paint, st *style, box bbox) (*compose.Shading, *pai
 	if sm := g.attrs["spreadMethod"]; sm == "reflect" || sm == "repeat" {
 		r.d.warn("unsupported-svg-paint", "gradient spreadMethod "+sm+" is drawn as pad")
 	}
-	sh := &compose.Shading{Stops: stops, Transform: m}
+	sh := &typeset.Shading{Stops: stops, Transform: m}
 	last := stops[len(stops)-1].Color
-	solid := func() (*compose.Shading, *paint, bool) {
+	solid := func() (*typeset.Shading, *paint, bool) {
 		// A degenerate gradient paints the last stop's colour (SVG 1.1,
 		// 13.2.2 and 13.2.3).
 		c := last
 		if c.A <= 0 {
 			return nil, nil, true
 		}
-		return &compose.Shading{
-			Kind: compose.Axial, From: compose.Point{}, To: compose.Point{X: 1},
-			Stops:     []compose.ColorStop{{Offset: 0, Color: c}, {Offset: 1, Color: c}},
+		return &typeset.Shading{
+			Kind: typeset.Axial, From: typeset.Point{}, To: typeset.Point{X: 1},
+			Stops:     []typeset.ColorStop{{Offset: 0, Color: c}, {Offset: 1, Color: c}},
 			Transform: identity,
 		}, nil, true
 	}
 	if !g.radial {
-		sh.Kind = compose.Axial
-		sh.From = compose.Point{X: coord("x1", axisX, "0%"), Y: coord("y1", axisY, "0%")}
-		sh.To = compose.Point{X: coord("x2", axisX, "100%"), Y: coord("y2", axisY, "0%")}
+		sh.Kind = typeset.Axial
+		sh.From = typeset.Point{X: coord("x1", axisX, "0%"), Y: coord("y1", axisY, "0%")}
+		sh.To = typeset.Point{X: coord("x2", axisX, "100%"), Y: coord("y2", axisY, "0%")}
 		if sh.From == sh.To || len(stops) == 1 {
 			return solid()
 		}
@@ -272,19 +272,19 @@ func (r *renderer) shading(p paint, st *style, box bbox) (*compose.Shading, *pai
 	if fx == cx && fy == cy && fr == rad {
 		return solid()
 	}
-	sh.Kind = compose.Radial
-	sh.From, sh.FromRadius = compose.Point{X: fx, Y: fy}, fr
-	sh.To, sh.ToRadius = compose.Point{X: cx, Y: cy}, rad
+	sh.Kind = typeset.Radial
+	sh.From, sh.FromRadius = typeset.Point{X: fx, Y: fy}, fr
+	sh.To, sh.ToRadius = typeset.Point{X: cx, Y: cy}, rad
 	return sh, nil, true
 }
 
 // stops returns the colour stops of g (SVG 1.1, 13.2.4): each offset a
 // number or a percentage clamped to [0, 1] and to at least the previous
 // one, each colour its stop-color and stop-opacity, padded so that the
-// list starts at 0 and ends at 1 as the composition model asks. A list of
+// list starts at 0 and ends at 1 as the typeset model asks. A list of
 // fully transparent stops paints nothing and yields nil.
-func (r *renderer) stops(g *gradient) []compose.ColorStop {
-	var out []compose.ColorStop
+func (r *renderer) stops(g *gradient) []typeset.ColorStop {
+	var out []typeset.ColorStop
 	prev := 0.0
 	for _, n := range g.stops {
 		ss := r.d.styleOf(n, 0)
@@ -298,25 +298,25 @@ func (r *renderer) stops(g *gradient) []compose.ColorStop {
 		prev = off
 		c, ok := r.colorOf(ss.stopColor, ss)
 		if !ok {
-			c = compose.Color{R: ss.stopColor.color.R, G: ss.stopColor.color.G, B: ss.stopColor.color.B}
+			c = typeset.Color{R: ss.stopColor.color.R, G: ss.stopColor.color.G, B: ss.stopColor.color.B}
 		}
 		c.A *= ss.stopAlpha
-		out = append(out, compose.ColorStop{Offset: off, Color: c})
+		out = append(out, typeset.ColorStop{Offset: off, Color: c})
 	}
 	if len(out) == 0 || !anyOpaque(out) {
 		return nil
 	}
 	if out[0].Offset > 0 {
-		out = append([]compose.ColorStop{{Offset: 0, Color: out[0].Color}}, out...)
+		out = append([]typeset.ColorStop{{Offset: 0, Color: out[0].Color}}, out...)
 	}
 	if out[len(out)-1].Offset < 1 {
-		out = append(out, compose.ColorStop{Offset: 1, Color: out[len(out)-1].Color})
+		out = append(out, typeset.ColorStop{Offset: 1, Color: out[len(out)-1].Color})
 	}
 	return out
 }
 
 // anyOpaque reports whether a stop is not fully transparent.
-func anyOpaque(stops []compose.ColorStop) bool {
+func anyOpaque(stops []typeset.ColorStop) bool {
 	for _, s := range stops {
 		if s.Color.A > 0 {
 			return true
@@ -339,17 +339,17 @@ const maxClipRegions = 8
 
 // clipRegion is one region of a clip path: the intersection of its paths,
 // which nest as clipping groups.
-type clipRegion []*compose.Path
+type clipRegion []*typeset.Path
 
 // clipMember is one child of a clip path: its outline in the clip path's
 // coordinates, its clip rule, and the clip path it names itself, with the
 // element, the transform and the bounding box that clip path resolves in.
 type clipMember struct {
-	ops  []compose.PathOp
-	rule compose.FillRule
+	ops  []typeset.PathOp
+	rule typeset.FillRule
 	clip string
 	el   *html.Node
-	m    compose.Matrix
+	m    typeset.Matrix
 	box  bbox
 }
 
@@ -397,7 +397,7 @@ func (r *renderer) clipPath(n *html.Node, id string, box *bbox, seen []*html.Nod
 		if !b.hasArea() {
 			return nil, true
 		}
-		m = mul(compose.Matrix{A: b.x1 - b.x0, D: b.y1 - b.y0, E: b.x0, F: b.y0}, m)
+		m = mul(typeset.Matrix{A: b.x1 - b.x0, D: b.y1 - b.y0, E: b.x0, F: b.y0}, m)
 	}
 	var members []clipMember
 	for c := cp.FirstChild; c != nil; c = c.NextSibling {
@@ -409,22 +409,22 @@ func (r *renderer) clipPath(n *html.Node, id string, box *bbox, seen []*html.Nod
 		}
 	}
 	var regions []clipRegion
-	var merged []compose.PathOp
+	var merged []typeset.PathOp
 	plain := 0
 	for _, mb := range members {
-		if mb.clip == "" && mb.rule == compose.NonZero {
+		if mb.clip == "" && mb.rule == typeset.NonZero {
 			merged = append(merged, mb.ops...)
 			plain++
 		}
 	}
 	if plain > 0 {
-		regions = append(regions, clipRegion{{Ops: merged, Fill: &compose.Fill{Rule: compose.NonZero}}})
+		regions = append(regions, clipRegion{{Ops: merged, Fill: &typeset.Fill{Rule: typeset.NonZero}}})
 	}
 	for _, mb := range members {
-		if mb.clip == "" && mb.rule == compose.NonZero {
+		if mb.clip == "" && mb.rule == typeset.NonZero {
 			continue
 		}
-		own := &compose.Path{Ops: mb.ops, Fill: &compose.Fill{Rule: mb.rule}}
+		own := &typeset.Path{Ops: mb.ops, Fill: &typeset.Fill{Rule: mb.rule}}
 		if mb.clip == "" {
 			regions = append(regions, clipRegion{own})
 			continue
@@ -441,7 +441,7 @@ func (r *renderer) clipPath(n *html.Node, id string, box *bbox, seen []*html.Nod
 		for _, sr := range sub {
 			reg := clipRegion{own}
 			for _, p := range sr {
-				reg = append(reg, &compose.Path{Ops: transformOps(p.Ops, mb.m), Fill: p.Fill})
+				reg = append(reg, &typeset.Path{Ops: transformOps(p.Ops, mb.m), Fill: p.Fill})
 			}
 			regions = append(regions, reg)
 		}
@@ -475,7 +475,7 @@ func (r *renderer) clipPath(n *html.Node, id string, box *bbox, seen []*html.Nod
 // member of its union: a shape, a use referencing a shape directly (SVG
 // 1.1, 14.3.5) or a text element. It reports false for anything else, or
 // for a child that is not displayed, not visible or empty.
-func (r *renderer) clipChild(c *html.Node, m compose.Matrix) (clipMember, bool) {
+func (r *renderer) clipChild(c *html.Node, m typeset.Matrix) (clipMember, bool) {
 	el := c
 	local := identity
 	if el.Data == "use" {
@@ -507,11 +507,11 @@ func (r *renderer) clipChild(c *html.Node, m compose.Matrix) (clipMember, bool) 
 			local = mul(local, tm)
 		}
 	}
-	var g []compose.PathOp
+	var g []typeset.PathOp
 	rule := es.clipRule
 	if el.Data == "text" {
 		g = r.textOutline(el, es)
-		rule = compose.NonZero
+		rule = typeset.NonZero
 	} else if es.visible {
 		g = r.geometry(el, es)
 	}
@@ -526,7 +526,7 @@ func (r *renderer) clipChild(c *html.Node, m compose.Matrix) (clipMember, bool) 
 // coordinates m maps its user space to (SVG 1.1, 7.11): its outline for a
 // shape, the union of its children's for a container. Text and images
 // count by their positions alone.
-func (r *renderer) bboxOf(n *html.Node, st *style, m compose.Matrix, depth int) bbox {
+func (r *renderer) bboxOf(n *html.Node, st *style, m typeset.Matrix, depth int) bbox {
 	var b bbox
 	r.bboxSteps++
 	if depth > maxDepth || r.bboxSteps > maxBBoxSteps {
@@ -542,8 +542,8 @@ func (r *renderer) bboxOf(n *html.Node, st *style, m compose.Matrix, depth int) 
 	case n.Data == "image":
 		x, y := r.length(n, "x", st, axisX, 0), r.length(n, "y", st, axisY, 0)
 		w, h := r.length(n, "width", st, axisX, 0), r.length(n, "height", st, axisY, 0)
-		b.add(apply(m, compose.Point{X: x, Y: y}))
-		b.add(apply(m, compose.Point{X: x + w, Y: y + h}))
+		b.add(apply(m, typeset.Point{X: x, Y: y}))
+		b.add(apply(m, typeset.Point{X: x + w, Y: y + h}))
 	case containers[n.Data] || n.Data == "use":
 		kids := n
 		km := m
@@ -563,8 +563,8 @@ func (r *renderer) bboxOf(n *html.Node, st *style, m compose.Matrix, depth int) 
 			if c.Type == html.ElementNode && c.Namespace == "svg" {
 				cb := r.childBBox(c, st, km, depth)
 				if cb.ok {
-					b.add(compose.Point{X: cb.x0, Y: cb.y0})
-					b.add(compose.Point{X: cb.x1, Y: cb.y1})
+					b.add(typeset.Point{X: cb.x0, Y: cb.y0})
+					b.add(typeset.Point{X: cb.x1, Y: cb.y1})
 				}
 			}
 		}
@@ -574,7 +574,7 @@ func (r *renderer) bboxOf(n *html.Node, st *style, m compose.Matrix, depth int) 
 
 // childBBox returns the bounding box of c, a child of an element styled
 // parent, under its own transform.
-func (r *renderer) childBBox(c *html.Node, parent *style, m compose.Matrix, depth int) bbox {
+func (r *renderer) childBBox(c *html.Node, parent *style, m typeset.Matrix, depth int) bbox {
 	cs := r.d.computeStyle(c, parent)
 	if !cs.displayed {
 		return bbox{}
@@ -588,13 +588,13 @@ func (r *renderer) childBBox(c *html.Node, parent *style, m compose.Matrix, dept
 }
 
 // pointsOf returns how many points an operator of kind k uses.
-func pointsOf(k compose.OpKind) int {
+func pointsOf(k typeset.OpKind) int {
 	switch k {
-	case compose.MoveTo, compose.LineTo:
+	case typeset.MoveTo, typeset.LineTo:
 		return 1
-	case compose.CurveTo:
+	case typeset.CurveTo:
 		return 3
-	case compose.ClosePath:
+	case typeset.ClosePath:
 	}
 	return 0
 }

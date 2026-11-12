@@ -6,8 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // TestConvert_CellPlacement locks where Calc puts cell text: left and
@@ -67,7 +67,7 @@ func TestConvert_Deterministic(t *testing.T) {
 		sh.Merges = []Range{{FirstRow: 0, LastRow: 1, FirstColumn: 0, LastColumn: 1}}
 		out := convert(t, newDoc(sh), office.Options{})
 		var buf bytes.Buffer
-		if err := compose.Write(context.Background(), out, &buf, compose.Options{}); err != nil {
+		if err := typeset.Write(context.Background(), out, &buf, typeset.Options{}); err != nil {
 			t.Fatalf("Write: %v", err)
 		}
 		if len(out.Structure.Kids) == 0 || out.Structure.Kids[0].Role != "Table" || out.Structure.Kids[0].Kids[0].Role != "TR" {
@@ -86,7 +86,7 @@ type cancelSink struct{ cancel context.CancelFunc }
 
 func (s cancelSink) Expect(int) { s.cancel() }
 
-func (cancelSink) Page(context.Context, *compose.Page) error { return nil }
+func (cancelSink) Page(context.Context, *typeset.Page) error { return nil }
 
 // TestConvert_BlankBookFails checks that the page a book without a printed
 // cell prints fails the conversion when it cannot be laid out, here for a

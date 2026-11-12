@@ -6,10 +6,10 @@ import (
 	imgcolor "image/color"
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // blipEffects returns the raster picture pic with the colour effects of
@@ -80,9 +80,9 @@ func blipEffects(ctx context.Context, pic *layout.Picture, blip *ooxml.Element, 
 		table[v] = uint8(math.Round(max(0, min(255, float64(v)*scale+offset))))
 	}
 	b := src.Bounds()
-	if err := compose.ChargeImage(ctx, b.Dx(), b.Dy(), imgcolor.NRGBAModel); err != nil {
+	if err := typeset.ChargeImage(ctx, b.Dx(), b.Dy(), imgcolor.NRGBAModel); err != nil {
 		// The refusal stops the conversion, which reports it.
-		compose.ReleaseImage(ctx, src)
+		typeset.ReleaseImage(ctx, src)
 		return pic
 	}
 	out := image.NewNRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
@@ -111,8 +111,8 @@ func blipEffects(ctx context.Context, pic *layout.Picture, blip *ooxml.Element, 
 			out.SetNRGBA(x-b.Min.X, y-b.Min.Y, c)
 		}
 	}
-	enc, err := compose.EncodeImage(ctx, out)
-	compose.ReleaseImage(ctx, src)
+	enc, err := typeset.EncodeImage(ctx, out)
+	typeset.ReleaseImage(ctx, src)
 	if err != nil {
 		return pic
 	}

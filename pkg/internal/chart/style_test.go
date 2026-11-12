@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestPoint_FirstOverrideOfAnIndexWins(t *testing.T) {
-	first, second := &Paint{Color: red}, &Paint{Color: compose.Black}
+	first, second := &Paint{Color: red}, &Paint{Color: typeset.Black}
 	s := &Series{Points: []Point{{Index: 2, Fill: first}, {Index: 2, Fill: second}}}
 	rd := &renderer{c: &Chart{}}
 	if p := rd.point(s, 2); p != &s.Points[0] {
@@ -40,7 +40,7 @@ func TestRender_EveryPointOverriddenStaysLinear(t *testing.T) {
 		}}},
 	}
 	fonts := ahem(t)
-	done := make(chan []compose.Fragment, 1)
+	done := make(chan []typeset.Fragment, 1)
 	go func() { done <- Render(context.Background(), fonts, c, chartRect) }()
 	select {
 	case frags := <-done:

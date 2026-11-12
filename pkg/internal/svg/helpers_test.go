@@ -11,8 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // RenderPDF rasterises the first page of a PDF at 96 dpi. The external
@@ -59,11 +59,11 @@ func draw(t testing.TB, src string, w, h int) image.Image {
 func drawDoc(t testing.TB, d *Document, w, h int) image.Image {
 	t.Helper()
 	pw, ph := float64(w)*ptPerPx, float64(h)*ptPerPx
-	frags := d.Draw(context.Background(), compose.Rect{Width: pw, Height: ph})
-	doc := &compose.Document{Pages: []*compose.Page{{Width: pw, Height: ph, Content: frags}}}
+	frags := d.Draw(context.Background(), typeset.Rect{Width: pw, Height: ph})
+	doc := &typeset.Document{Pages: []*typeset.Page{{Width: pw, Height: ph, Content: frags}}}
 	var b bytes.Buffer
-	if err := compose.Write(context.Background(), doc, &b, compose.Options{}); err != nil {
-		t.Fatalf("compose.Write: %v", err)
+	if err := typeset.Write(context.Background(), doc, &b, typeset.Options{}); err != nil {
+		t.Fatalf("typeset.Write: %v", err)
 	}
 	if RenderPDF == nil {
 		t.Fatal("no PDF renderer installed")

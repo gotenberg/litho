@@ -5,13 +5,13 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // The slide size of a document that gives none, Impress's 4:3 screen
@@ -55,7 +55,7 @@ type builder struct {
 	fonts    *text.Fonts
 	opts     office.Options
 	lang     string
-	warnings []compose.Warning
+	warnings []typeset.Warning
 	warned   map[string]bool
 	// metrics caches the font metrics of the faces the text matched.
 	metrics map[string]text.Metrics
@@ -66,12 +66,12 @@ type builder struct {
 	// shapes counts the shapes drawn on the slide.
 	shapes int
 	// links collects the slide's links in slide coordinates.
-	links []compose.Link
+	links []typeset.Link
 	// pages maps each slide printed to its 1-based page number, the
 	// handout page that holds it with handouts; targets maps each
 	// destination a link of the pages leads to, to its slide.
 	pages   map[*Slide]int
-	targets map[*compose.Dest]*Slide
+	targets map[*typeset.Dest]*Slide
 	// autoScript moves the scripts of the body being laid out
 	// automatically, as an OpenDocument text's.
 	autoScript bool
@@ -94,7 +94,7 @@ func (b *builder) warn(code, msg string) {
 		return
 	}
 	b.warned[k] = true
-	b.warnings = append(b.warnings, compose.Warning{Code: code, Message: msg})
+	b.warnings = append(b.warnings, typeset.Warning{Code: code, Message: msg})
 }
 
 // Convert lays doc out as Impress prints a presentation, with the fonts of
@@ -194,7 +194,7 @@ func (b *builder) warn(code, msg string) {
 // shadows, reflections and 3D effects are not drawn, as Impress prints
 // none of them. A text rotated inside its shape and text highlighting are
 // not drawn either.
-func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.Options) (*compose.Document, error) {
+func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.Options) (*typeset.Document, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
@@ -246,9 +246,9 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	if pages > limit {
 		return nil, fmt.Errorf("%w: more than %d pages", office.ErrTooManyPages, limit)
 	}
-	out := &compose.Document{
+	out := &typeset.Document{
 		Metadata:  doc.Meta,
-		Structure: &compose.StructElem{Role: "Document", Lang: b.lang},
+		Structure: &typeset.StructElem{Role: "Document", Lang: b.lang},
 	}
 	out.Metadata.Lang = b.lang
 	// A slide's number is its place in the show, hidden slides counted,
@@ -282,9 +282,9 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	// the slide it leads to as its structure destination (ISO 14289-2,
 	// 8.8). A destination to a slide not laid out yet gets its Sect when that
 	// slide is.
-	sects := make(map[*Slide]*compose.StructElem, len(shown))
-	waiting := map[*Slide][]*compose.Dest{}
-	add := func(pg *compose.Page, held []*Slide, kids []*compose.StructElem) error {
+	sects := make(map[*Slide]*typeset.StructElem, len(shown))
+	waiting := map[*Slide][]*typeset.Dest{}
+	add := func(pg *typeset.Page, held []*Slide, kids []*typeset.StructElem) error {
 		for i, sect := range kids {
 			out.Structure.Kids = append(out.Structure.Kids, sect)
 			s := held[i]
@@ -328,7 +328,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 				return nil, err
 			}
 			pg, sect := b.slidePage(s, numberOf(s))
-			if err := add(pg, []*Slide{s}, []*compose.StructElem{sect}); err != nil {
+			if err := add(pg, []*Slide{s}, []*typeset.StructElem{sect}); err != nil {
 				return nil, err
 			}
 		}
@@ -339,7 +339,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 				return nil, err
 			}
 			pg, sect := b.notesPage(s, numberOf(s))
-			if err := add(pg, []*Slide{s}, []*compose.StructElem{sect}); err != nil {
+			if err := add(pg, []*Slide{s}, []*typeset.StructElem{sect}); err != nil {
 				return nil, err
 			}
 		}
@@ -353,14 +353,14 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		// A deck that prints no slide prints one blank page of the slide
 		// size, as Impress exports an empty show.
 		w, h := b.pageSize(b.slideSize())
-		if err := b.handOver(out, &compose.Page{Width: w, Height: h}); err != nil {
+		if err := b.handOver(out, &typeset.Page{Width: w, Height: h}); err != nil {
 			return nil, err
 		}
 	}
 	if !opts.OmitOutline {
-		dests := make([]compose.Dest, len(shown))
+		dests := make([]typeset.Dest, len(shown))
 		for i, s := range shown {
-			dests[i] = compose.Dest{Page: pageOf(i), Elem: sects[s]}
+			dests[i] = typeset.Dest{Page: pageOf(i), Elem: sects[s]}
 		}
 		out.Outline = outline(doc.Slides, shown, dests)
 		if opts.NotesPages {
@@ -378,10 +378,10 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 // its outline title, and the slides of a section under an entry of the
 // section's name that leads to its first printed slide. A section none of
 // whose slides prints has no entry.
-func outline(all, shown []*Slide, dests []compose.Dest) []compose.Outline {
+func outline(all, shown []*Slide, dests []typeset.Dest) []typeset.Outline {
 	titles := outlineTitles(all)
 	head := sectionHeads(all)
-	var out []compose.Outline
+	var out []typeset.Outline
 	var open *Slide
 	for i, s := range shown {
 		dest := dests[i]
@@ -389,7 +389,7 @@ func outline(all, shown []*Slide, dests []compose.Dest) []compose.Outline {
 		if title == "" {
 			title = titles[s]
 		}
-		entry := compose.Outline{Title: title, Dest: dest}
+		entry := typeset.Outline{Title: title, Dest: dest}
 		h := head[s]
 		if h == nil {
 			open = nil
@@ -397,7 +397,7 @@ func outline(all, shown []*Slide, dests []compose.Dest) []compose.Outline {
 			continue
 		}
 		if h != open {
-			out = append(out, compose.Outline{Title: h.Section, Dest: dest})
+			out = append(out, typeset.Outline{Title: h.Section, Dest: dest})
 			open = h
 		}
 		last := &out[len(out)-1]
@@ -429,14 +429,14 @@ func sectionHeads(all []*Slide) map[*Slide]*Slide {
 
 // dest returns a destination leading to the page the slide s prints on,
 // nil when s does not print.
-func (b *builder) dest(s *Slide) *compose.Dest {
+func (b *builder) dest(s *Slide) *typeset.Dest {
 	pg, ok := b.pages[s]
 	if !ok {
 		return nil
 	}
-	d := &compose.Dest{Page: pg}
+	d := &typeset.Dest{Page: pg}
 	if b.targets == nil {
-		b.targets = map[*compose.Dest]*Slide{}
+		b.targets = map[*typeset.Dest]*Slide{}
 	}
 	b.targets[d] = s
 	return d
@@ -444,7 +444,7 @@ func (b *builder) dest(s *Slide) *compose.Dest {
 
 // handOver gives the page pg, laid out, to the sink of the options, and
 // its glyphs back to the budget, or appends it to out without a sink.
-func (b *builder) handOver(out *compose.Document, pg *compose.Page) error {
+func (b *builder) handOver(out *typeset.Document, pg *typeset.Page) error {
 	sink := b.opts.Sink
 	if sink == nil {
 		out.Pages = append(out.Pages, pg)
@@ -453,7 +453,7 @@ func (b *builder) handOver(out *compose.Document, pg *compose.Page) error {
 	if err := sink.Page(b.ctx, pg); err != nil {
 		return fmt.Errorf("writing a page: %w", err)
 	}
-	b.mem.Release(compose.CountGlyphs(pg) * limits.GlyphCost)
+	b.mem.Release(typeset.CountGlyphs(pg) * limits.GlyphCost)
 	return nil
 }
 
@@ -508,24 +508,24 @@ func (b *builder) pageSize(w, h float64) (float64, float64) {
 
 // fitMatrix returns the transform that places a sheet of size w by h on a
 // page of size pw by ph: scaled down to fit, never up, and centred.
-func fitMatrix(w, h, pw, ph float64) compose.Matrix {
+func fitMatrix(w, h, pw, ph float64) typeset.Matrix {
 	s := min(pw/w, ph/h, 1)
-	return compose.Matrix{A: s, D: s, E: (pw - w*s) / 2, F: (ph - h*s) / 2}
+	return typeset.Matrix{A: s, D: s, E: (pw - w*s) / 2, F: (ph - h*s) / 2}
 }
 
 // slidePage draws the slide s, numbered n, on its page, and returns
 // the page with the slide's structure element.
-func (b *builder) slidePage(s *Slide, n int) (*compose.Page, *compose.StructElem) {
+func (b *builder) slidePage(s *Slide, n int) (*typeset.Page, *typeset.StructElem) {
 	sw, sh := b.slideSize()
 	pw, ph := b.pageSize(sw, sh)
 	content, links, sect := b.slideContent(s, n, sw, sh)
-	pg := &compose.Page{Width: pw, Height: ph}
+	pg := &typeset.Page{Width: pw, Height: ph}
 	m := fitMatrix(sw, sh, pw, ph)
-	if m == compose.Identity {
+	if m == typeset.Identity {
 		pg.Content = content
 		pg.Links = links
 	} else {
-		pg.Content = []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: content}}
+		pg.Content = []typeset.Fragment{&typeset.Group{Transform: m, Opacity: 1, Content: content}}
 		for _, l := range links {
 			l.Rect = transformRect(m, l.Rect)
 			pg.Links = append(pg.Links, l)
@@ -537,18 +537,18 @@ func (b *builder) slidePage(s *Slide, n int) (*compose.Page, *compose.StructElem
 // slideContent draws the slide s, numbered n, w by h, in slide
 // coordinates: its background and shapes, its links and its structure
 // element.
-func (b *builder) slideContent(s *Slide, n int, w, h float64) ([]compose.Fragment, []compose.Link, *compose.StructElem) {
+func (b *builder) slideContent(s *Slide, n int, w, h float64) ([]typeset.Fragment, []typeset.Link, *typeset.StructElem) {
 	b.slide, b.number, b.shapes, b.links = s, n, 0, nil
 	b.groupFit = b.groupFits(s.Shapes)
-	sect := &compose.StructElem{Role: "Sect"}
-	var out []compose.Fragment
-	area := compose.Rect{Width: w, Height: h}
+	sect := &typeset.StructElem{Role: "Sect"}
+	var out []typeset.Fragment
+	area := typeset.Rect{Width: w, Height: h}
 	out = append(out, b.fill(&s.Background, area, rectOps(area), shape.FillNorm)...)
 	for _, sp := range s.Shapes {
 		if err := b.ctx.Err(); err != nil {
 			break
 		}
-		out = append(out, b.shape(sp, compose.Identity, 0, sect)...)
+		out = append(out, b.shape(sp, typeset.Identity, 0, sect)...)
 	}
 	return out, b.links, sect
 }

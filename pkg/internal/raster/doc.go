@@ -3,7 +3,7 @@
 // express, painted as a bitmap whose alpha becomes a soft mask.
 //
 // A mask is an [image.Alpha]: 0 is uncovered, 255 fully covered. [Draw]
-// covers a mask with filled and stroked [compose.PathOp] paths through a
+// covers a mask with filled and stroked [typeset.PathOp] paths through a
 // transform from path units to pixels; [Blur] convolves a mask with a
 // separable [Kernel] ([Tent] or [Gaussian]); [Dilate] and [Erode] grow and
 // shrink its covered area by a square of pixels; [Threshold] and

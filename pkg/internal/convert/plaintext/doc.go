@@ -1,4 +1,4 @@
-// Package plaintext lays plain text out as a [compose.Document]: the
+// Package plaintext lays plain text out as a [typeset.Document]: the
 // smallest complete converter, and the reference for the others.
 //
 // # Input

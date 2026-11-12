@@ -11,8 +11,8 @@ import (
 	gofont "github.com/go-text/typesetting/font"
 	"github.com/go-text/typesetting/shaping"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // objectReplacement is the character an [Object] run stands for in a
@@ -112,7 +112,7 @@ type Span struct {
 	// Text is the piece's glyph run, its Origin.X the piece's offset from
 	// the line start and Origin.Y 0; nil for an object or a piece that draws
 	// no glyph.
-	Text *compose.Text
+	Text *typeset.Text
 	// X is the offset of the piece from the line start, Width its advance,
 	// both in points.
 	X, Width float64
@@ -171,7 +171,7 @@ type shapedItem struct {
 	run        int
 	level      int
 	rtl        bool
-	face       *compose.Face
+	face       *typeset.Face
 	style      Style
 	glyphs     []shapedGlyph
 	// ascent, descent and gap are the face's line bounds at the size;
@@ -420,7 +420,7 @@ func (p *Paragraph) convert(st *layoutState, out *shaping.Output, run int, style
 		it.level = int(p.level[it.start])
 	}
 	if fc := st.byFont[out.Face.Font]; fc != nil {
-		cf, err := fc.Compose()
+		cf, err := fc.Typeset()
 		if err != nil {
 			return shapedItem{}, fmt.Errorf("shaping text: %w", err)
 		}
@@ -639,7 +639,7 @@ func (p *Paragraph) LineTrimmed(start, end, trim int) ParagraphLine {
 // [start, end), the ones from hangFrom on drawing no advance, and returns
 // their advance.
 func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int) float64 {
-	t := &compose.Text{Face: it.face, Size: it.style.Size, Color: it.style.Color, Origin: compose.Point{X: sp.X}, Stroke: it.stroke, Skew: it.skew}
+	t := &typeset.Text{Face: it.face, Size: it.style.Size, Color: it.style.Color, Origin: typeset.Point{X: sp.X}, Stroke: it.stroke, Skew: it.skew}
 	hs := it.style.scale()
 	if hs != 1 {
 		t.HScale = hs
@@ -660,7 +660,7 @@ func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int)
 		}
 		// The positions are written unscaled: the run's HScale scales
 		// them back (ISO 32000-1, 9.3.4).
-		cg := compose.Glyph{GID: g.gid, X: (pen + g.xoff) / hs, Y: g.yoff}
+		cg := typeset.Glyph{GID: g.gid, X: (pen + g.xoff) / hs, Y: g.yoff}
 		if g.cluster != cluster {
 			cluster = g.cluster
 			e := min(g.cluster+max(g.len, 1), len(p.text))

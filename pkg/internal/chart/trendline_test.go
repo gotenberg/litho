@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestTrendCurve_Fits(t *testing.T) {
@@ -75,14 +75,14 @@ func TestTrendCurve_MovingAverage(t *testing.T) {
 }
 
 func TestRender_TrendlineAndLegendEntry(t *testing.T) {
-	green := compose.Color{G: 1, A: 1}
+	green := typeset.Color{G: 1, A: 1}
 	c := barChart(1, 2, 3)
 	c.Groups[0].Series[0].Trendlines = []Trendline{{Kind: TrendLinear, Line: &Stroke{Color: green, Width: 1}}}
 	c.Legend = &Legend{Position: LegendBottom, Style: TextStyle{Size: 10}}
 	frags := Render(context.Background(), ahem(t), c, chartRect)
-	var lines []*compose.Path
-	walk(frags, 0, func(fr compose.Fragment, _ int) {
-		if p, ok := fr.(*compose.Path); ok && p.Stroke != nil && near(p.Stroke.Color, green) {
+	var lines []*typeset.Path
+	walk(frags, 0, func(fr typeset.Fragment, _ int) {
+		if p, ok := fr.(*typeset.Path); ok && p.Stroke != nil && near(p.Stroke.Color, green) {
 			lines = append(lines, p)
 		}
 	})

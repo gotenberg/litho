@@ -1,9 +1,9 @@
 package chart
 
 import (
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Chart is one chart as a reader found it: its title, its legend, its plot
@@ -40,7 +40,7 @@ type Chart struct {
 	// Palette lists the automatic colours of series and, in a group with
 	// VaryColors, of points, used in order for an item with no fill of its
 	// own.
-	Palette []compose.Color
+	Palette []typeset.Color
 	// PaletteCycleTint darkens the automatic colours of the first cycles
 	// through Palette and lightens those of the last, as Office does when
 	// series outnumber its six accent colours (ECMA-376 Part 1, 21.2.2.202
@@ -59,7 +59,7 @@ type Chart struct {
 	// chart's kind.
 	Notice *Title
 	// Warnings lists what the reader did not carry into the model.
-	Warnings []compose.Warning
+	Warnings []typeset.Warning
 }
 
 // Kind is the chart type of a [Group].
@@ -358,7 +358,7 @@ type Paint struct {
 	// Color is the fill colour, and a gradient's or a pattern's
 	// approximation where one colour is drawn (a line, a legend key's
 	// border).
-	Color compose.Color
+	Color typeset.Color
 	// Shape, when set, paints a gradient or a pattern instead of Color,
 	// fitted to the bounding box of each area it fills (a bar, a sector,
 	// the chart area), through [shape.Fill].
@@ -370,7 +370,7 @@ type Stroke struct {
 	// None draws no line.
 	None bool
 	// Color is the line colour.
-	Color compose.Color
+	Color typeset.Color
 	// Width is the line width in points; zero draws the thinnest line.
 	Width float64
 	// Dash is the dash pattern in points, empty for solid.
@@ -396,7 +396,7 @@ type TextStyle struct {
 	// Italic asks for an italic face.
 	Italic bool
 	// Color fills the glyphs.
-	Color compose.Color
+	Color typeset.Color
 	// Rotation turns the text counter-clockwise by this many degrees.
 	Rotation float64
 }
@@ -448,8 +448,8 @@ type ManualLayout struct {
 }
 
 // rect returns the layout's rectangle in r, its size 0 when automatic.
-func (l *ManualLayout) rect(r compose.Rect) compose.Rect {
-	return compose.Rect{X: r.X + l.X*r.Width, Y: r.Y + l.Y*r.Height, Width: l.Width * r.Width, Height: l.Height * r.Height}
+func (l *ManualLayout) rect(r typeset.Rect) typeset.Rect {
+	return typeset.Rect{X: r.X + l.X*r.Width, Y: r.Y + l.Y*r.Height, Width: l.Width * r.Width, Height: l.Height * r.Height}
 }
 
 // LegendPosition is where the legend sits.

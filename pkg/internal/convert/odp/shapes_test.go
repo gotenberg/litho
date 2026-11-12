@@ -6,21 +6,21 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestRead_Placement(t *testing.T) {
 	tests := []struct {
 		name, shape  string
-		box          compose.Rect
+		box          typeset.Rect
 		rot          float64
 		flipH, flipV bool
 	}{
 		{
 			"plain", `<draw:rect svg:x="1cm" svg:y="2cm" svg:width="4cm" svg:height="2cm"/>`,
-			compose.Rect{X: cm(1), Y: cm(2), Width: cm(4), Height: cm(2)},
+			typeset.Rect{X: cm(1), Y: cm(2), Width: cm(4), Height: cm(2)},
 			0, false, false,
 		},
 		// Measured on the pinned LibreOffice: the box's corner at the
@@ -28,24 +28,24 @@ func TestRead_Placement(t *testing.T) {
 		// 5 cm; its centre lands at 346.73, 137.94 points.
 		{
 			"rotated", `<draw:rect draw:transform="rotate (0.5235987756) translate (10cm 5cm)" svg:width="4cm" svg:height="2cm"/>`,
-			compose.Rect{X: 346.73 - cm(2), Y: 137.94 - cm(1), Width: cm(4), Height: cm(2)},
+			typeset.Rect{X: 346.73 - cm(2), Y: 137.94 - cm(1), Width: cm(4), Height: cm(2)},
 			330, false, false,
 		},
 		{
 			"line backwards", `<draw:line svg:x1="5cm" svg:y1="4cm" svg:x2="1cm" svg:y2="2cm"/>`,
-			compose.Rect{X: cm(1), Y: cm(2), Width: cm(4), Height: cm(2)},
+			typeset.Rect{X: cm(1), Y: cm(2), Width: cm(4), Height: cm(2)},
 			0, true, true,
 		},
 		// The geometry carries the mirroring (shape.Geometry.MirrorH), so the
 		// shape itself is not flipped.
 		{
 			"mirrored custom shape", `<draw:custom-shape svg:x="0cm" svg:y="0cm" svg:width="1cm" svg:height="1cm"><draw:enhanced-geometry draw:type="rectangle" draw:mirror-horizontal="true"/></draw:custom-shape>`,
-			compose.Rect{Width: cm(1), Height: cm(1)},
+			typeset.Rect{Width: cm(1), Height: cm(1)},
 			0, false, false,
 		},
 		{
 			"scaled down", `<draw:rect draw:transform="scale (1 -1) translate (1cm 3cm)" svg:width="2cm" svg:height="2cm"/>`,
-			compose.Rect{X: cm(1), Y: cm(1), Width: cm(2), Height: cm(2)},
+			typeset.Rect{X: cm(1), Y: cm(1), Width: cm(2), Height: cm(2)},
 			0, false, true,
 		},
 	}
@@ -80,7 +80,7 @@ func TestRead_StackingAndGroups(t *testing.T) {
 		t.Fatalf("order = %q, want %q", names, want)
 	}
 	g := doc.Slides[0].Shapes[1]
-	want := compose.Rect{X: cm(1), Y: cm(1), Width: cm(3), Height: cm(3)}
+	want := typeset.Rect{X: cm(1), Y: cm(1), Width: cm(3), Height: cm(3)}
 	if g.Kind != slides.KindGroup || len(g.Kids) != 2 || !nearRect(g.Box, want) || !nearRect(g.Child, want) {
 		t.Errorf("group = %+v", g)
 	}
@@ -126,38 +126,38 @@ func TestRead_Outlines(t *testing.T) {
 	// The outline of each shape in a 1 cm square, at the box's corner.
 	tests := []struct {
 		name, shape string
-		box         compose.Rect
+		box         typeset.Rect
 		want        [][2]float64
 		fill        bool
 	}{
 		{
 			"path", `<draw:path svg:x="1cm" svg:y="1cm" svg:width="1cm" svg:height="1cm" svg:viewBox="0 0 10 10" svg:d="M0 0h10v10z"/>`,
-			compose.Rect{X: cm(1), Y: cm(1), Width: cm(1), Height: cm(1)},
+			typeset.Rect{X: cm(1), Y: cm(1), Width: cm(1), Height: cm(1)},
 			[][2]float64{{0, 0}, {1, 0}, {1, 1}},
 			true,
 		},
 		{
 			"polygon", `<draw:polygon svg:width="1cm" svg:height="1cm" svg:viewBox="0 0 100 100" draw:points="0,100 100,100 50,0"/>`,
-			compose.Rect{Width: cm(1), Height: cm(1)},
+			typeset.Rect{Width: cm(1), Height: cm(1)},
 			[][2]float64{{0, 1}, {1, 1}, {0.5, 0}},
 			true,
 		},
 		{
 			"polyline", `<draw:polyline svg:width="1cm" svg:height="1cm" svg:viewBox="0 0 100 100" draw:points="0,0 100,100"/>`,
-			compose.Rect{Width: cm(1), Height: cm(1)},
+			typeset.Rect{Width: cm(1), Height: cm(1)},
 			[][2]float64{{0, 0}, {1, 1}},
 			false,
 		},
 		{
 			"triangle", `<draw:regular-polygon svg:width="1cm" svg:height="1cm" draw:corners="3"/>`,
-			compose.Rect{Width: cm(1), Height: cm(1)},
+			typeset.Rect{Width: cm(1), Height: cm(1)},
 			[][2]float64{{0.5, 0}, {1, 1}, {0, 1}},
 			true,
 		},
 		// The route of a connector is in page coordinates in 1/100 mm.
 		{
 			"connector route", `<draw:connector svg:x1="1cm" svg:y1="1cm" svg:x2="2cm" svg:y2="2cm" svg:viewBox="0 0 1000 1500" svg:d="M1000 1000v-500h1000v1000"/>`,
-			compose.Rect{X: cm(1), Y: cm(0.5), Width: cm(1), Height: cm(1)},
+			typeset.Rect{X: cm(1), Y: cm(0.5), Width: cm(1), Height: cm(1)},
 			[][2]float64{{0, 0.5}, {0, 0}, {1, 0}, {1, 1}},
 			false,
 		},
@@ -171,13 +171,13 @@ func TestRead_Outlines(t *testing.T) {
 			if !nearRect(s.Box, tt.box) {
 				t.Errorf("box = %+v, want %+v", s.Box, tt.box)
 			}
-			paths := shape.Paths(s.Geometry, compose.Rect{Width: 1, Height: 1})
+			paths := shape.Paths(s.Geometry, typeset.Rect{Width: 1, Height: 1})
 			if len(paths) != 1 || paths[0].Fill != tt.fill || !paths[0].Stroke {
 				t.Fatalf("paths = %+v", paths)
 			}
 			var got [][2]float64
 			for _, op := range paths[0].Ops {
-				if op.Kind == compose.MoveTo || op.Kind == compose.LineTo {
+				if op.Kind == typeset.MoveTo || op.Kind == typeset.LineTo {
 					got = append(got, [2]float64{op.P[0].X, op.P[0].Y})
 				}
 			}
@@ -217,7 +217,7 @@ func TestRead_Frames(t *testing.T) {
 			body:   page(`<draw:frame presentation:class="title"><draw:text-box><text:p>T</text:p></draw:text-box></draw:frame>`),
 		}
 		s := firstShape(t, f)
-		if want := (compose.Rect{X: cm(1), Y: cm(2), Width: cm(20), Height: cm(3)}); !nearRect(s.Box, want) {
+		if want := (typeset.Rect{X: cm(1), Y: cm(2), Width: cm(20), Height: cm(3)}); !nearRect(s.Box, want) {
 			t.Errorf("box = %+v, want %+v", s.Box, want)
 		}
 	})
@@ -366,20 +366,20 @@ func TestRead_EllipseKinds(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.kind, func(t *testing.T) {
 			s := firstShape(t, flat{body: page(`<draw:ellipse draw:kind="` + tt.kind + `" draw:start-angle="0" draw:end-angle="90" svg:width="2cm" svg:height="2cm"/>`)})
-			paths := shape.Paths(s.Geometry, compose.Rect{Width: 2, Height: 2})
+			paths := shape.Paths(s.Geometry, typeset.Rect{Width: 2, Height: 2})
 			if len(paths) != 1 || paths[0].Fill != tt.fill {
 				t.Fatalf("paths = %+v", paths)
 			}
 			ops := paths[0].Ops
 			first := ops[0].P[0]
-			var last compose.Point
+			var last typeset.Point
 			for _, op := range ops {
 				switch op.Kind {
-				case compose.MoveTo, compose.LineTo:
+				case typeset.MoveTo, typeset.LineTo:
 					last = op.P[0]
-				case compose.CurveTo:
+				case typeset.CurveTo:
 					last = op.P[2]
-				case compose.ClosePath:
+				case typeset.ClosePath:
 				}
 			}
 			if math.Abs(first.X-tt.first[0]) > 1e-6 || math.Abs(first.Y-tt.first[1]) > 1e-6 || math.Abs(last.X-tt.last[0]) > 1e-6 || math.Abs(last.Y-tt.last[1]) > 1e-6 {
@@ -405,8 +405,8 @@ func TestRead_ImageOpacity(t *testing.T) {
 	if s.Kind != slides.KindPicture || s.Picture == nil || s.Picture.Vector == nil {
 		t.Fatalf("shape = %+v", s)
 	}
-	frags := s.Picture.Vector(context.Background(), compose.Rect{Width: 10, Height: 5})
-	if g, ok := frags[0].(*compose.Group); len(frags) != 1 || !ok || !near(g.Opacity, 0.49) {
+	frags := s.Picture.Vector(context.Background(), typeset.Rect{Width: 10, Height: 5})
+	if g, ok := frags[0].(*typeset.Group); len(frags) != 1 || !ok || !near(g.Opacity, 0.49) {
 		t.Errorf("fragments = %+v, want a group at 49%% opacity", frags)
 	}
 }

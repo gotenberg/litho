@@ -4,9 +4,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxLevels is the number of list levels WordprocessingML defines
@@ -428,30 +428,30 @@ func mapSymbolText(s, family string) (string, bool) {
 // square by its character, in a Unicode or a Symbol and Wingdings font's
 // private-use code, and any other bullet is unordered; a numbering Table
 // 347 has no name for is ordered.
-func numberingSystem(format, label string) compose.ListNumbering {
+func numberingSystem(format, label string) typeset.ListNumbering {
 	switch format {
 	case "decimal", "decimalZero":
-		return compose.NumberingDecimal
+		return typeset.NumberingDecimal
 	case "upperRoman":
-		return compose.NumberingUpperRoman
+		return typeset.NumberingUpperRoman
 	case "lowerRoman":
-		return compose.NumberingLowerRoman
+		return typeset.NumberingLowerRoman
 	case "upperLetter":
-		return compose.NumberingUpperAlpha
+		return typeset.NumberingUpperAlpha
 	case "lowerLetter":
-		return compose.NumberingLowerAlpha
+		return typeset.NumberingLowerAlpha
 	case "none":
-		return compose.NumberingNone
+		return typeset.NumberingNone
 	case "bullet":
 		switch strings.TrimSpace(label) {
 		case "\u2022", "\u25cf", "\uf0b7", "\uf06c":
-			return compose.NumberingDisc
+			return typeset.NumberingDisc
 		case "o", "\u25cb", "\u25e6":
-			return compose.NumberingCircle
+			return typeset.NumberingCircle
 		case "\u25a0", "\u25aa", "\uf0a7", "\uf06e":
-			return compose.NumberingSquare
+			return typeset.NumberingSquare
 		}
-		return compose.NumberingUnordered
+		return typeset.NumberingUnordered
 	}
-	return compose.NumberingOrdered
+	return typeset.NumberingOrdered
 }

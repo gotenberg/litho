@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxShrink is the most a document wider than its page area is shrunk to
@@ -72,7 +72,7 @@ func (s printSetup) layoutBox(b layout.PageBox) layout.PageBox {
 // fitFactor returns the setup with its factor lowered, with a warning, so
 // that the page boxes boxes, in points of the page, stay within the PDF
 // page limit once multiplied.
-func (s printSetup) fitFactor(boxes ...layout.PageBox) (printSetup, []compose.Warning) {
+func (s printSetup) fitFactor(boxes ...layout.PageBox) (printSetup, []typeset.Warning) {
 	side := 0.0
 	for _, b := range boxes {
 		b = s.source(b)
@@ -82,10 +82,10 @@ func (s printSetup) fitFactor(boxes ...layout.PageBox) (printSetup, []compose.Wa
 		return s, nil
 	}
 	limit := maxPageSide / side
-	w := compose.Warning{Code: CodePageBox, Message: fmt.Sprintf(
+	w := typeset.Warning{Code: CodePageBox, Message: fmt.Sprintf(
 		"the page of %v points a side cannot be laid out %.3g times larger, past the PDF page limit; it is laid out %.3g times larger", side, s.factor, limit)}
 	s.factor = limit
-	return s, []compose.Warning{w}
+	return s, []typeset.Warning{w}
 }
 
 // refit returns the setup of a second layout when the first, res, laid
@@ -121,7 +121,7 @@ type placement struct {
 // (blink::TargetPageBorderBoxLogicalRect,
 // blink::PageBoxDefaultSizeWithSourceOrientation). A sheet side is at
 // most the PDF page limit.
-func (p *prepared) placement(lp *compose.Page) placement {
+func (p *prepared) placement(lp *typeset.Page) placement {
 	f := p.setup.factor
 	sw, sh := lp.Width/f, lp.Height/f
 	tw, th := sw, sh
@@ -161,25 +161,25 @@ func (pl placement) identity() bool {
 // page returns the laid out page lp placed on its sheet: its content in a
 // group under the placement's transform, clipped to the source page, its
 // links moved with it.
-func (pl placement) page(lp *compose.Page) *compose.Page {
-	out := &compose.Page{Width: pl.w, Height: pl.h, Content: lp.Content, Links: lp.Links, TrimBox: lp.TrimBox, BleedBox: lp.BleedBox}
+func (pl placement) page(lp *typeset.Page) *typeset.Page {
+	out := &typeset.Page{Width: pl.w, Height: pl.h, Content: lp.Content, Links: lp.Links, TrimBox: lp.TrimBox, BleedBox: lp.BleedBox}
 	if pl.identity() {
 		return out
 	}
-	for _, b := range []**compose.Rect{&out.TrimBox, &out.BleedBox} {
+	for _, b := range []**typeset.Rect{&out.TrimBox, &out.BleedBox} {
 		if *b != nil {
 			r := pl.rect(**b)
 			*b = &r
 		}
 	}
-	src := compose.Rect{Width: lp.Width, Height: lp.Height}
-	out.Content = []compose.Fragment{&compose.Group{
-		Transform: compose.Matrix{A: pl.s, D: pl.s, E: pl.ox, F: pl.oy},
-		Clip:      &compose.Path{Ops: rectPath(src), Fill: &compose.Fill{}},
+	src := typeset.Rect{Width: lp.Width, Height: lp.Height}
+	out.Content = []typeset.Fragment{&typeset.Group{
+		Transform: typeset.Matrix{A: pl.s, D: pl.s, E: pl.ox, F: pl.oy},
+		Clip:      &typeset.Path{Ops: rectPath(src), Fill: &typeset.Fill{}},
 		Opacity:   1,
 		Content:   lp.Content,
 	}}
-	out.Links = make([]compose.Link, len(lp.Links))
+	out.Links = make([]typeset.Link, len(lp.Links))
 	for i, l := range lp.Links {
 		l.Rect = pl.rect(l.Rect)
 		out.Links[i] = l
@@ -188,8 +188,8 @@ func (pl placement) page(lp *compose.Page) *compose.Page {
 }
 
 // rect returns r placed.
-func (pl placement) rect(r compose.Rect) compose.Rect {
-	return compose.Rect{X: r.X*pl.s + pl.ox, Y: r.Y*pl.s + pl.oy, Width: r.Width * pl.s, Height: r.Height * pl.s}
+func (pl placement) rect(r typeset.Rect) typeset.Rect {
+	return typeset.Rect{X: r.X*pl.s + pl.ox, Y: r.Y*pl.s + pl.oy, Width: r.Width * pl.s, Height: r.Height * pl.s}
 }
 
 // point returns the position x, y placed.
@@ -198,12 +198,12 @@ func (pl placement) point(x, y float64) (float64, float64) {
 }
 
 // rectPath returns the path of the rectangle r.
-func rectPath(r compose.Rect) []compose.PathOp {
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{{X: r.X, Y: r.Y}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X + r.Width, Y: r.Y}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X + r.Width, Y: r.Y + r.Height}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X, Y: r.Y + r.Height}}},
-		{Kind: compose.ClosePath},
+func rectPath(r typeset.Rect) []typeset.PathOp {
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: r.X, Y: r.Y}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X + r.Width, Y: r.Y}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X + r.Width, Y: r.Y + r.Height}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X, Y: r.Y + r.Height}}},
+		{Kind: typeset.ClosePath},
 	}
 }

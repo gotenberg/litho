@@ -3,8 +3,8 @@ package layout
 import (
 	"slices"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // placedArea is the painted note area of a page and the offset of its
@@ -168,7 +168,7 @@ func (e *engine) paintNoteAreas() {
 
 // assembleNoteArea adds the note area of page k to pg, whose page box is
 // pb, over the flow.
-func (e *engine) assembleNoteArea(pg *compose.Page, k int, pb PageBox, used map[*compose.StructElem]bool) {
+func (e *engine) assembleNoteArea(pg *typeset.Page, k int, pb PageBox, used map[*typeset.StructElem]bool) {
 	pa, ok := e.foot.ndisp[k]
 	if !ok {
 		return
@@ -177,8 +177,8 @@ func (e *engine) assembleNoteArea(pg *compose.Page, k int, pb PageBox, used map[
 	for _, fr := range frags {
 		markTree(fr, used)
 	}
-	pg.Content = append(pg.Content, &compose.Group{
-		Transform: compose.Matrix{A: 1, D: 1, E: pb.Margin[css.Left] + pa.x, F: pb.Margin[css.Top] + pa.y},
+	pg.Content = append(pg.Content, &typeset.Group{
+		Transform: typeset.Matrix{A: 1, D: 1, E: pb.Margin[css.Left] + pa.x, F: pb.Margin[css.Top] + pa.y},
 		Opacity:   1,
 		Content:   frags,
 	})

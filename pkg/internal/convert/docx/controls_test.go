@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // controlsBody holds inline content controls of every kind a field takes,
@@ -32,7 +32,7 @@ func TestConvertContentControlsAsFields(t *testing.T) {
 	t.Parallel()
 	d := convertBytes(t, docx(t, controlsBody, nil), office.Options{FormFields: true})
 	type got struct {
-		kind    compose.FieldKind
+		kind    typeset.FieldKind
 		name    string
 		value   string
 		checked bool
@@ -45,13 +45,13 @@ func TestConvertContentControlsAsFields(t *testing.T) {
 		}
 	}
 	want := []got{
-		{compose.FieldText, "customer", "ACME", false},
-		{compose.FieldCombo, "", "Green", false},
-		{compose.FieldCombo, "", "Rome", false},
-		{compose.FieldCheckBox, "", "", true},
-		{compose.FieldText, "Text1", "Jane", false},
-		{compose.FieldCombo, "Fruit", "Banana", false},
-		{compose.FieldCheckBox, "Check1", "", true},
+		{typeset.FieldText, "customer", "ACME", false},
+		{typeset.FieldCombo, "", "Green", false},
+		{typeset.FieldCombo, "", "Rome", false},
+		{typeset.FieldCheckBox, "", "", true},
+		{typeset.FieldText, "Text1", "Jane", false},
+		{typeset.FieldCombo, "Fruit", "Banana", false},
+		{typeset.FieldCheckBox, "Check1", "", true},
 	}
 	if !slices.Equal(have, want) {
 		t.Fatalf("fields = %+v\nwant %+v", have, want)
@@ -83,16 +83,16 @@ func TestConvertContentControlsOff(t *testing.T) {
 		t.Errorf("page text = %q", text)
 	}
 	// The legacy check box prints as its square and diagonals.
-	var box *compose.Path
-	var walk func([]compose.Fragment)
-	walk = func(frags []compose.Fragment) {
+	var box *typeset.Path
+	var walk func([]typeset.Fragment)
+	walk = func(frags []typeset.Fragment) {
 		for _, f := range frags {
 			switch v := f.(type) {
-			case *compose.Path:
+			case *typeset.Path:
 				if len(v.Ops) == 9 {
 					box = v
 				}
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content)
 			}
 		}

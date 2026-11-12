@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // title returns a title placeholder of text s.
@@ -142,7 +142,7 @@ func TestPresentation_Warnings(t *testing.T) {
 }
 
 // hasWarning reports a warning of code.
-func hasWarning(ws []compose.Warning, code string) bool {
+func hasWarning(ws []typeset.Warning, code string) bool {
 	for _, w := range ws {
 		if w.Code == code {
 			return true
@@ -174,7 +174,7 @@ func TestPresentation_NotesLayout(t *testing.T) {
 		sp("Rule", `<a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>`, "") +
 		`</p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:notesMaster>`
 	doc := loadFiles(t, files)
-	if doc.NotesSlideBox != (compose.Rect{X: 90, Y: 54, Width: 360, Height: 270}) || doc.NotesTextBox != (compose.Rect{X: 54, Y: 342, Width: 432, Height: 324}) {
+	if doc.NotesSlideBox != (typeset.Rect{X: 90, Y: 54, Width: 360, Height: 270}) || doc.NotesTextBox != (typeset.Rect{X: 54, Y: 342, Width: 432, Height: 324}) {
 		t.Errorf("slide box %+v, text box %+v", doc.NotesSlideBox, doc.NotesTextBox)
 	}
 	if doc.Slides[0].HasNotes || !doc.Slides[1].HasNotes {

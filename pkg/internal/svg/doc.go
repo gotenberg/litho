@@ -1,4 +1,4 @@
-// Package svg draws SVG documents as fragments of the composition model:
+// Package svg draws SVG documents as fragments of the typeset model:
 // paths, shadings, images and glyph runs. It reads a standalone document
 // ([Parse]) or an svg element of an HTML document ([FromNode]), and draws
 // it into any viewport ([Document.Draw]) as a replaced element does (CSS

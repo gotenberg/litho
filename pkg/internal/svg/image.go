@@ -6,8 +6,8 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // image draws an image element styled st (SVG 1.1, 5.7): the raster
@@ -53,11 +53,11 @@ func (r *renderer) image(n *html.Node, st *style, s sink) {
 		// group, which the nesting cap has run out of.
 		r.d.warn("svg-limit", "a translucent image nested too deep is drawn opaque")
 	}
-	img := &compose.Image{Rect: rect, Source: pic.Source}
+	img := &typeset.Image{Rect: rect, Source: pic.Source}
 	if par.slice && !par.none {
 		c := &container{}
 		r.emit(sink{c: c, pending: identity, alpha: 1}, img)
-		g := &compose.Group{Clip: &compose.Path{Ops: rectOps(x, y, w, h), Fill: &compose.Fill{}}, Opacity: 1, Content: c.out}
+		g := &typeset.Group{Clip: &typeset.Path{Ops: rectOps(x, y, w, h), Fill: &typeset.Fill{}}, Opacity: 1, Content: c.out}
 		r.emit(inner, g)
 		return
 	}

@@ -13,7 +13,7 @@ import (
 
 	"github.com/go-text/typesetting/di"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // near reports whether a and b agree within the 1/4096 point precision of
@@ -301,7 +301,7 @@ func TestLayout_IsDeterministic(t *testing.T) {
 	for _, ls := range [][]Line{l1, l3} {
 		for _, l := range ls {
 			for _, r := range l.Runs {
-				r.Face = &compose.Face{Key: filepath.Base(r.Face.Key), Program: r.Face.Program}
+				r.Face = &typeset.Face{Key: filepath.Base(r.Face.Key), Program: r.Face.Program}
 			}
 		}
 	}

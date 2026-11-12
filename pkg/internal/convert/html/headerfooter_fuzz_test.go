@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // FuzzPageDecorations fuzzes the header and footer templates and the
@@ -39,8 +39,8 @@ func FuzzPageDecorations(f *testing.F) {
 			t.Fatalf("Convert: %v", err)
 		}
 		var b bytes.Buffer
-		if err := compose.Write(context.Background(), doc, &b, compose.Options{}); err != nil {
-			t.Fatalf("compose.Write: %v", err)
+		if err := typeset.Write(context.Background(), doc, &b, typeset.Options{}); err != nil {
+			t.Fatalf("typeset.Write: %v", err)
 		}
 	})
 }

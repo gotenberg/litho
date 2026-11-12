@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // row returns a 1-pixel-high mask of the given coverages.
@@ -38,14 +38,14 @@ func middle(m *image.Alpha) *image.Alpha {
 	return row(m.Pix[m.Stride : m.Stride+w]...)
 }
 
-func rect(x0, y0, x1, y1 float64) []compose.PathOp {
-	p := func(x, y float64) [3]compose.Point { return [3]compose.Point{{X: x, Y: y}} }
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: p(x0, y0)},
-		{Kind: compose.LineTo, P: p(x1, y0)},
-		{Kind: compose.LineTo, P: p(x1, y1)},
-		{Kind: compose.LineTo, P: p(x0, y1)},
-		{Kind: compose.ClosePath},
+func rect(x0, y0, x1, y1 float64) []typeset.PathOp {
+	p := func(x, y float64) [3]typeset.Point { return [3]typeset.Point{{X: x, Y: y}} }
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: p(x0, y0)},
+		{Kind: typeset.LineTo, P: p(x1, y0)},
+		{Kind: typeset.LineTo, P: p(x1, y1)},
+		{Kind: typeset.LineTo, P: p(x0, y1)},
+		{Kind: typeset.ClosePath},
 	}
 }
 
@@ -70,48 +70,48 @@ func TestNewMask_Bounds(t *testing.T) {
 }
 
 func TestDraw_Coverage(t *testing.T) {
-	reverse := func(ops []compose.PathOp) []compose.PathOp {
-		return []compose.PathOp{ops[0], ops[3], ops[2], ops[1], ops[4]}
+	reverse := func(ops []typeset.PathOp) []typeset.PathOp {
+		return []typeset.PathOp{ops[0], ops[3], ops[2], ops[1], ops[4]}
 	}
 	for _, tc := range []struct {
 		name  string
 		paths []Path
-		tr    compose.Matrix
+		tr    typeset.Matrix
 		want  []uint8
 	}{
-		{"square", []Path{{Ops: rect(1, 1, 3, 3)}}, compose.Identity, []uint8{
+		{"square", []Path{{Ops: rect(1, 1, 3, 3)}}, typeset.Identity, []uint8{
 			0, 0, 0, 0,
 			0, 255, 255, 0,
 			0, 255, 255, 0,
 			0, 0, 0, 0,
 		}},
-		{"scaled", []Path{{Ops: rect(0.5, 0.5, 1.5, 1.5)}}, compose.Matrix{A: 2, D: 2}, []uint8{
+		{"scaled", []Path{{Ops: rect(0.5, 0.5, 1.5, 1.5)}}, typeset.Matrix{A: 2, D: 2}, []uint8{
 			0, 0, 0, 0,
 			0, 255, 255, 0,
 			0, 255, 255, 0,
 			0, 0, 0, 0,
 		}},
-		{"half pixel", []Path{{Ops: rect(0, 0, 0.5, 4)}}, compose.Identity, []uint8{
+		{"half pixel", []Path{{Ops: rect(0, 0, 0.5, 4)}}, typeset.Identity, []uint8{
 			128, 0, 0, 0,
 			128, 0, 0, 0,
 			128, 0, 0, 0,
 			128, 0, 0, 0,
 		}},
-		{"opposite subpaths cancel", []Path{{Ops: append(rect(0, 0, 4, 4), reverse(rect(1, 1, 3, 3))...)}}, compose.Identity, []uint8{
+		{"opposite subpaths cancel", []Path{{Ops: append(rect(0, 0, 4, 4), reverse(rect(1, 1, 3, 3))...)}}, typeset.Identity, []uint8{
 			255, 255, 255, 255,
 			255, 0, 0, 255,
 			255, 0, 0, 255,
 			255, 255, 255, 255,
 		}},
-		{"same subpaths union", []Path{{Ops: append(rect(0, 0, 4, 4), rect(1, 1, 3, 3)...)}}, compose.Identity, slices.Repeat([]uint8{255}, 16)},
-		{"paths union", []Path{{Ops: rect(0, 0, 2, 4)}, {Ops: reverse(rect(1, 0, 4, 4))}}, compose.Identity, slices.Repeat([]uint8{255}, 16)},
-		{"stroke", []Path{{Ops: []compose.PathOp{{Kind: compose.MoveTo, P: [3]compose.Point{{X: -2, Y: 2}}}, {Kind: compose.LineTo, P: [3]compose.Point{{X: 6, Y: 2}}}}, Width: 2}}, compose.Identity, []uint8{
+		{"same subpaths union", []Path{{Ops: append(rect(0, 0, 4, 4), rect(1, 1, 3, 3)...)}}, typeset.Identity, slices.Repeat([]uint8{255}, 16)},
+		{"paths union", []Path{{Ops: rect(0, 0, 2, 4)}, {Ops: reverse(rect(1, 0, 4, 4))}}, typeset.Identity, slices.Repeat([]uint8{255}, 16)},
+		{"stroke", []Path{{Ops: []typeset.PathOp{{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: -2, Y: 2}}}, {Kind: typeset.LineTo, P: [3]typeset.Point{{X: 6, Y: 2}}}}, Width: 2}}, typeset.Identity, []uint8{
 			0, 0, 0, 0,
 			255, 255, 255, 255,
 			255, 255, 255, 255,
 			0, 0, 0, 0,
 		}},
-		{"non-finite skipped", []Path{{Ops: rect(0, 0, 1e30, 4)}}, compose.Identity, make([]uint8, 16)},
+		{"non-finite skipped", []Path{{Ops: rect(0, 0, 1e30, 4)}}, typeset.Identity, make([]uint8, 16)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := image.NewAlpha(image.Rect(0, 0, 4, 4))
@@ -125,7 +125,7 @@ func TestDraw_Coverage(t *testing.T) {
 
 func TestDraw_StrokeClosedRing(t *testing.T) {
 	m := image.NewAlpha(image.Rect(0, 0, 8, 8))
-	Draw(m, []Path{{Ops: rect(2, 2, 6, 6), Width: 2}}, compose.Identity)
+	Draw(m, []Path{{Ops: rect(2, 2, 6, 6), Width: 2}}, typeset.Identity)
 	for _, tc := range []struct {
 		x, y int
 		want uint8
@@ -243,7 +243,7 @@ func TestThresholdMultiply_Values(t *testing.T) {
 }
 
 func TestTint_Values(t *testing.T) {
-	img := Tint(row(255, 128, 0), compose.Color{R: 1, G: 0.5, B: 0, A: 0.5})
+	img := Tint(row(255, 128, 0), typeset.Color{R: 1, G: 0.5, B: 0, A: 0.5})
 	want := []uint8{255, 128, 0, 128, 255, 128, 0, 64, 255, 128, 0, 0}
 	if !slices.Equal(img.Pix, want) {
 		t.Errorf("Tint = %v, want %v", img.Pix, want)
@@ -252,8 +252,8 @@ func TestTint_Values(t *testing.T) {
 
 func TestPaintMask_Values(t *testing.T) {
 	img := image.NewNRGBA(image.Rect(0, 0, 3, 1))
-	Paint(img, row(255, 255, 0), compose.Color{R: 1, A: 1})
-	Paint(img, row(0, 128, 255), compose.Color{B: 1, A: 1})
+	Paint(img, row(255, 255, 0), typeset.Color{R: 1, A: 1})
+	Paint(img, row(0, 128, 255), typeset.Color{B: 1, A: 1})
 	want := []uint8{255, 0, 0, 255, 127, 0, 128, 255, 0, 0, 255, 255}
 	if !slices.Equal(img.Pix, want) {
 		t.Errorf("Paint = %v, want %v", img.Pix, want)

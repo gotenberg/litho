@@ -4,18 +4,18 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // vec returns a vector picture of natural size w by h px that paints its
 // left half red and its right half blue, changed by mods.
 func vec(w, h float64, mods ...func(*Picture)) *Picture {
-	p := &Picture{Width: px(w), Height: px(h), Vector: func(_ context.Context, r compose.Rect) []compose.Fragment {
+	p := &Picture{Width: px(w), Height: px(h), Vector: func(_ context.Context, r typeset.Rect) []typeset.Fragment {
 		half := r.Width / 2
-		return []compose.Fragment{&compose.Group{Opacity: 1, Content: []compose.Fragment{
-			&compose.Path{Ops: rectOps(compose.Rect{X: r.X, Y: r.Y, Width: half, Height: r.Height}), Fill: &compose.Fill{Color: compose.Color{R: 1, A: 1}}},
-			&compose.Path{Ops: rectOps(compose.Rect{X: r.X + half, Y: r.Y, Width: half, Height: r.Height}), Fill: &compose.Fill{Color: compose.Color{B: 1, A: 1}}},
+		return []typeset.Fragment{&typeset.Group{Opacity: 1, Content: []typeset.Fragment{
+			&typeset.Path{Ops: rectOps(typeset.Rect{X: r.X, Y: r.Y, Width: half, Height: r.Height}), Fill: &typeset.Fill{Color: typeset.Color{R: 1, A: 1}}},
+			&typeset.Path{Ops: rectOps(typeset.Rect{X: r.X + half, Y: r.Y, Width: half, Height: r.Height}), Fill: &typeset.Fill{Color: typeset.Color{B: 1, A: 1}}},
 		}}}
 	}}
 	for _, m := range mods {
@@ -105,16 +105,16 @@ func TestVector_BackgroundWithoutSizeCovers(t *testing.T) {
 func TestVector_DeepGroupsLeftOut(t *testing.T) {
 	deep := vec(4, 2)
 	inner := deep.Vector
-	deep.Vector = func(ctx context.Context, r compose.Rect) []compose.Fragment {
+	deep.Vector = func(ctx context.Context, r typeset.Rect) []typeset.Fragment {
 		f := inner(ctx, r)
 		for range MaxVectorDepth + 1 {
-			f = []compose.Fragment{&compose.Group{Opacity: 1, Content: f}}
+			f = []typeset.Fragment{&typeset.Group{Opacity: 1, Content: f}}
 		}
 		return f
 	}
 	res := run(t, doc(&Node{Kind: Replaced, Style: sty(), Picture: deep}), page(6, 4))
 	for _, pg := range res.Pages {
-		if depthOf(pg.Content) > composeGroupDepth {
+		if depthOf(pg.Content) > typesetGroupDepth {
 			t.Errorf("depth %d", depthOf(pg.Content))
 		}
 	}

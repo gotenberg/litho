@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // changeBars returns the change bars of page n (1-based) of res, as
@@ -15,17 +15,17 @@ import (
 func changeBars(t *testing.T, res *Result, n int) string {
 	t.Helper()
 	var out []string
-	var walk func(fs []compose.Fragment, m compose.Matrix)
-	walk = func(fs []compose.Fragment, m compose.Matrix) {
+	var walk func(fs []typeset.Fragment, m typeset.Matrix)
+	walk = func(fs []typeset.Fragment, m typeset.Matrix) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content, mul(m, v.Transform))
-			case *compose.Path:
+			case *typeset.Path:
 				if v.Stroke == nil || v.Stroke.Width != changeBarWidth {
 					continue
 				}
-				if v.Parent != nil || v.Stroke.Color != compose.Black || len(v.Ops) != 2 {
+				if v.Parent != nil || v.Stroke.Color != typeset.Black || len(v.Ops) != 2 {
 					t.Errorf("change bar %+v: want a black artifact segment", v)
 				}
 				a, b := v.Ops[0].P[0], v.Ops[1].P[0]
@@ -38,7 +38,7 @@ func changeBars(t *testing.T, res *Result, n int) string {
 			}
 		}
 	}
-	walk(res.Pages[n-1].Content, compose.Identity)
+	walk(res.Pages[n-1].Content, typeset.Identity)
 	return strings.Join(out, " ")
 }
 

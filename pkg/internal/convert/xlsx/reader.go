@@ -7,13 +7,13 @@ import (
 	"math"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // nsMain is the SpreadsheetML namespace (ECMA-376 Part 1, 18; the Strict
@@ -78,7 +78,7 @@ type reader struct {
 	// doc is the document being read, which the charts' series read
 	// their values from when their part holds no cache.
 	doc      *sheet.Document
-	warnings []compose.Warning
+	warnings []typeset.Warning
 	warned   map[string]bool
 	// pictures caches decoded pictures by part name.
 	pictures map[string]*layout.Picture
@@ -123,7 +123,7 @@ const substituteFamily = "Noto Sans"
 // warnings of what it left out or approximated. The default page of opts
 // (office.Options.DefaultPage) is the paper of a sheet without a
 // pageSetup, Letter without one.
-func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts office.Options) (*sheet.Document, []compose.Warning, error) {
+func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts office.Options) (*sheet.Document, []typeset.Warning, error) {
 	main, err := pkg.MainPart()
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", office.ErrMalformed, err)
@@ -158,7 +158,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	if subject == "" {
 		subject = cp.Description
 	}
-	doc.Meta = compose.Metadata{Title: cp.Title, Author: cp.Creator, Subject: subject, Keywords: cp.Keywords, Lang: cp.Language}
+	doc.Meta = typeset.Metadata{Title: cp.Title, Author: cp.Creator, Subject: subject, Keywords: cp.Keywords, Lang: cp.Language}
 	if err := r.workbook(main, root, doc, opts); err != nil {
 		return nil, nil, err
 	}
@@ -306,7 +306,7 @@ func (r *reader) warn(code, msg string) {
 		return
 	}
 	r.warned[key] = true
-	r.warnings = append(r.warnings, compose.Warning{Code: code, Message: msg})
+	r.warnings = append(r.warnings, typeset.Warning{Code: code, Message: msg})
 }
 
 // isMalformed reports an error of a part that does not parse.

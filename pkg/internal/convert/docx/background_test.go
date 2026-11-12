@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestPageBackground(t *testing.T) {
@@ -42,7 +42,7 @@ func TestPageBackground(t *testing.T) {
 	files["word/document.xml"] = strings.Replace(files["word/document.xml"], `<w:body>`, `<w:background w:color="92D050"/><w:body>`, 1)
 	doc := convertBytes(t, zipFiles(t, files), office.Options{})
 	pg := doc.Pages[0]
-	p, ok := pg.Content[0].(*compose.Path)
+	p, ok := pg.Content[0].(*typeset.Path)
 	if !ok || p.Fill == nil {
 		t.Fatalf("the page's first fragment is %T, want the background", pg.Content[0])
 	}

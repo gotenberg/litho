@@ -8,9 +8,9 @@ import (
 	"image/png"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // nsDecl declares the namespaces the test documents use.
@@ -70,7 +70,7 @@ func zipOf(t testing.TB, entries ...string) []byte {
 }
 
 // read reads data, failing the test on an error.
-func read(t testing.TB, data []byte) (*sheet.Document, []compose.Warning) {
+func read(t testing.TB, data []byte) (*sheet.Document, []typeset.Warning) {
 	t.Helper()
 	doc, w, err := Read(context.Background(), data, nil, office.Options{})
 	if err != nil {
@@ -100,7 +100,7 @@ func cellAt(sh *sheet.Sheet, row, col int) *sheet.Cell {
 }
 
 // hasWarning reports the warning code among w.
-func hasWarning(w []compose.Warning, code string) bool {
+func hasWarning(w []typeset.Warning, code string) bool {
 	for _, x := range w {
 		if x.Code == code {
 			return true

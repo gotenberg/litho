@@ -8,9 +8,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxParagraphRunes bounds the characters one [text.Fonts.Layout] call lays
@@ -59,7 +59,7 @@ var bom = []byte{0xEF, 0xBB, 0xBF}
 // budget, and the document returned holds no page: its warnings name the
 // pages in the order they were handed over. An error the sink returns ends
 // the conversion with it.
-func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options) (*compose.Document, error) {
+func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options) (*typeset.Document, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 		return nil, err
 	}
 
-	style := text.Style{Families: o.FontFamilies, Size: o.FontSize, Color: compose.Black, Lang: o.DefaultLang}
+	style := text.Style{Families: o.FontFamilies, Size: o.FontSize, Color: typeset.Black, Lang: o.DefaultLang}
 	face := fonts.Match(style)
 	if face == nil {
 		return nil, fmt.Errorf("matching %s: %w", strings.Join(o.FontFamilies, ", "), text.ErrNoFonts)
@@ -90,7 +90,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 		lineHeight: o.FontSize * o.LineHeight,
 		width:      o.PageWidth - o.MarginLeft - o.MarginRight,
 		bottom:     o.PageHeight - o.MarginBottom,
-		root:       &compose.StructElem{Role: "Document"},
+		root:       &typeset.StructElem{Role: "Document"},
 		seen:       make(map[rune]bool),
 		mem:        limits.BudgetFrom(ctx),
 	}
@@ -133,10 +133,10 @@ type layouter struct {
 	// width is the line width, bottom the lowest a line's descent may reach.
 	width, bottom float64
 
-	doc compose.Document
+	doc typeset.Document
 	// page is the page being filled, nil before the first and once handed
 	// over; pages counts the pages begun.
-	page  *compose.Page
+	page  *typeset.Page
 	pages int
 	// mem is the conversion's budget, which the glyphs of a page handed
 	// over are given back to.
@@ -148,10 +148,10 @@ type layouter struct {
 	// breaks counts the form feeds met since the last line placed.
 	breaks int
 
-	root *compose.StructElem
+	root *typeset.StructElem
 	// para is the P element of the source line being laid out, nil until it
 	// places a run.
-	para *compose.StructElem
+	para *typeset.StructElem
 
 	seen map[rune]bool
 	// emojiWarned reports that the missing emoji warning was given.
@@ -230,7 +230,7 @@ func (l *layouter) run(ctx context.Context, data []byte) error {
 			if err := flush(); err != nil {
 				return err
 			}
-			l.doc.Warnings = append(l.doc.Warnings, compose.Warning{
+			l.doc.Warnings = append(l.doc.Warnings, typeset.Warning{
 				Code:    CodeLineSplit,
 				Message: fmt.Sprintf("a source line longer than %d characters was laid out in pieces, each starting a new line", maxParagraphRunes),
 				Page:    l.pages,
@@ -272,7 +272,7 @@ func (l *layouter) paragraph(ctx context.Context, s string) error {
 	l.reportMissing(rep.MissingGlyphs, first)
 	if len(rep.MissingEmoji) > 0 && !l.emojiWarned {
 		l.emojiWarned = true
-		l.doc.Warnings = append(l.doc.Warnings, compose.Warning{
+		l.doc.Warnings = append(l.doc.Warnings, typeset.Warning{
 			Code:    CodeMissingGlyph,
 			Message: "colour emoji fonts are not supported: emoji no text font covers are drawn blank",
 			Page:    first,
@@ -283,7 +283,7 @@ func (l *layouter) paragraph(ctx context.Context, s string) error {
 
 // place puts one line of runs, nil for a blank line, at the next baseline,
 // starting a page when the line does not fit or a form feed asks for one.
-func (l *layouter) place(ctx context.Context, runs []*compose.Text) error {
+func (l *layouter) place(ctx context.Context, runs []*typeset.Text) error {
 	if l.page == nil && l.breaks > 0 {
 		// The source starts with a form feed: the first page stays blank.
 		if err := l.newPage(ctx); err != nil {
@@ -301,11 +301,11 @@ func (l *layouter) place(ctx context.Context, runs []*compose.Text) error {
 		}
 	}
 	if len(runs) > 0 && l.para == nil {
-		l.para = &compose.StructElem{Role: "P"}
+		l.para = &typeset.StructElem{Role: "P"}
 		l.root.Kids = append(l.root.Kids, l.para)
 	}
 	for _, run := range runs {
-		run.Origin = compose.Point{X: l.opts.MarginLeft + run.Origin.X, Y: l.next}
+		run.Origin = typeset.Point{X: l.opts.MarginLeft + run.Origin.X, Y: l.next}
 		run.Parent = l.para
 		l.page.Content = append(l.page.Content, run)
 	}
@@ -323,7 +323,7 @@ func (l *layouter) newPage(ctx context.Context) error {
 	if err := l.handOver(ctx); err != nil {
 		return err
 	}
-	l.page = &compose.Page{Width: l.opts.PageWidth, Height: l.opts.PageHeight}
+	l.page = &typeset.Page{Width: l.opts.PageWidth, Height: l.opts.PageHeight}
 	l.pages++
 	if l.opts.Sink == nil {
 		l.doc.Pages = append(l.doc.Pages, l.page)
@@ -345,7 +345,7 @@ func (l *layouter) handOver(ctx context.Context) error {
 	if err := l.opts.Sink.Page(ctx, p); err != nil {
 		return fmt.Errorf("writing page %d: %w", l.pages, err)
 	}
-	l.mem.Release(compose.CountGlyphs(p) * limits.GlyphCost)
+	l.mem.Release(typeset.CountGlyphs(p) * limits.GlyphCost)
 	return nil
 }
 
@@ -358,7 +358,7 @@ func (l *layouter) reportMissing(missing []rune, page int) {
 		}
 		if len(l.seen) >= maxMissingGlyphWarnings {
 			l.truncated = true
-			l.doc.Warnings = append(l.doc.Warnings, compose.Warning{
+			l.doc.Warnings = append(l.doc.Warnings, typeset.Warning{
 				Code:    CodeMissingGlyph,
 				Message: fmt.Sprintf("more than %d characters no font covers; the others are not listed", maxMissingGlyphWarnings),
 				Page:    page,
@@ -366,7 +366,7 @@ func (l *layouter) reportMissing(missing []rune, page int) {
 			return
 		}
 		l.seen[r] = true
-		l.doc.Warnings = append(l.doc.Warnings, compose.Warning{
+		l.doc.Warnings = append(l.doc.Warnings, typeset.Warning{
 			Code:    CodeMissingGlyph,
 			Message: fmt.Sprintf("no font covers U+%04X; asked for %s, drawn as the .notdef glyph", r, strings.Join(l.opts.FontFamilies, ", ")),
 			Page:    page,

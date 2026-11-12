@@ -11,9 +11,9 @@ import (
 	dom "golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // textDefaultsCSS is chrome://resources/css/text_defaults.css, the first
@@ -177,7 +177,7 @@ type headerFooter struct {
 // Chromium draws them on the printed page, unscaled
 // (PrintRenderFrameHelper::PrintHeaderAndFooter). They paint over the
 // page's content, as artifacts.
-func (p *prepared) decorate(ctx context.Context, pg *compose.Page, k, total int) error {
+func (p *prepared) decorate(ctx context.Context, pg *typeset.Page, k, total int) error {
 	if p.o.HeaderTemplate == "" && p.o.FooterTemplate == "" {
 		return nil
 	}
@@ -203,7 +203,7 @@ func (p *prepared) decorate(ctx context.Context, pg *compose.Page, k, total int)
 		return nil
 	}
 	if t := pg.TrimBox; t != nil && len(frags) > 0 {
-		frags = []compose.Fragment{&compose.Group{Transform: compose.Matrix{A: 1, D: 1, E: t.X, F: t.Y}, Opacity: 1, Content: frags}}
+		frags = []typeset.Fragment{&typeset.Group{Transform: typeset.Matrix{A: 1, D: 1, E: t.X, F: t.Y}, Opacity: 1, Content: frags}}
 	}
 	pg.Content = append(pg.Content, frags...)
 	return nil
@@ -211,7 +211,7 @@ func (p *prepared) decorate(ctx context.Context, pg *compose.Page, k, total int)
 
 // templatePage lays the templates out for page number page of pages,
 // whose page box is pb, and returns what they paint.
-func (p *prepared) templatePage(ctx context.Context, pb layout.PageBox, page, pages int) ([]compose.Fragment, error) {
+func (p *prepared) templatePage(ctx context.Context, pb layout.PageBox, page, pages int) ([]typeset.Fragment, error) {
 	hf, err := p.buildTemplate(pb, page, pages)
 	if err != nil {
 		return nil, err

@@ -7,13 +7,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // The colours of LibreOffice's drawing item pool, which a shape takes when
@@ -51,8 +51,8 @@ func shapeElement(el *odf.Element) bool {
 // shapeArt is what a shape paints, in sheet coordinates: draw returns
 // its fragments, and bounds the box they cover.
 type shapeArt struct {
-	draw   func(ctx context.Context) []compose.Fragment
-	bounds compose.Rect
+	draw   func(ctx context.Context) []typeset.Fragment
+	bounds typeset.Rect
 	// line is a dimension line's ends, which its text follows.
 	line [4]float64
 	// logic, when set, is the shape's unturned box, which the anchors of
@@ -70,8 +70,8 @@ type shapeArt struct {
 // and what local draws in the box (0, 0, w, h).
 type logicBox struct {
 	x, y, w, h float64
-	lin        compose.Matrix
-	local      func(ctx context.Context, box compose.Rect) []compose.Fragment
+	lin        typeset.Matrix
+	local      func(ctx context.Context, box typeset.Rect) []typeset.Fragment
 }
 
 // shape reads a drawing shape (ODF 1.3, Part 3, 10.3 and 10.6) into a
@@ -162,10 +162,10 @@ func (r *reader) place(ts *tableState, el *odf.Element, at *sheet.Anchor, art sh
 	}
 	draw := art.draw
 	pic := &layout.Picture{Width: b.Width, Height: b.Height}
-	pic.Vector = func(ctx context.Context, rect compose.Rect) []compose.Fragment {
+	pic.Vector = func(ctx context.Context, rect typeset.Rect) []typeset.Fragment {
 		sx, sy := rect.Width/b.Width, rect.Height/b.Height
-		m := compose.Matrix{A: sx, D: sy, E: rect.X - b.X*sx, F: rect.Y - b.Y*sy}
-		return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: draw(ctx)}}
+		m := typeset.Matrix{A: sx, D: sy, E: rect.X - b.X*sx, F: rect.Y - b.Y*sy}
+		return []typeset.Fragment{&typeset.Group{Transform: m, Opacity: 1, Content: draw(ctx)}}
 	}
 	d := sheet.Drawing{Name: el.A(odf.NSDraw, "name"), Alt: odf.Describe(el), Decorative: r.decorative(el), Shape: !art.picture, Picture: pic, Width: b.Width, Height: b.Height, Unbounded: true}
 	end, resize := cellRef(el.A(odf.NSTable, "end-cell-address"))
@@ -183,9 +183,9 @@ func (r *reader) place(ts *tableState, el *odf.Element, at *sheet.Anchor, art sh
 		d.To = &sheet.Anchor{Row: end.row, Column: end.col, DX: max(ex, 0), DY: max(ey, 0)}
 		d.Width, d.Height = lb.w, lb.h
 		pic.Width, pic.Height = lb.w, lb.h
-		pic.Vector = func(ctx context.Context, rect compose.Rect) []compose.Fragment {
-			m := mul(translation(rect.X, rect.Y), mul(lb.lin, compose.Matrix{A: rect.Width / lb.w, D: rect.Height / lb.h}))
-			return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: lb.local(ctx, compose.Rect{Width: lb.w, Height: lb.h})}}
+		pic.Vector = func(ctx context.Context, rect typeset.Rect) []typeset.Fragment {
+			m := mul(translation(rect.X, rect.Y), mul(lb.lin, typeset.Matrix{A: rect.Width / lb.w, D: rect.Height / lb.h}))
+			return []typeset.Fragment{&typeset.Group{Transform: m, Opacity: 1, Content: lb.local(ctx, typeset.Rect{Width: lb.w, Height: lb.h})}}
 		}
 	default:
 		d.From = sheet.Anchor{Row: at.Row, Column: at.Column, DX: b.X - ts.colLeft(at.Column), DY: b.Y - ts.rowY}
@@ -215,8 +215,8 @@ func (r *reader) shapePaint(p odf.Props) *shape.Paint {
 	} else if v, ok := odf.Percent(p.Get("draw:transparency")); ok {
 		alpha = math.Max(0, math.Min(1, 1-v))
 	}
-	col := func(c odf.Color) compose.Color {
-		return compose.Color{R: float64(c.R) / 255, G: float64(c.G) / 255, B: float64(c.B) / 255, A: alpha}
+	col := func(c odf.Color) typeset.Color {
+		return typeset.Color{R: float64(c.R) / 255, G: float64(c.G) / 255, B: float64(c.B) / 255, A: alpha}
 	}
 	solid := func() *shape.Paint {
 		c, ok := odf.ParseColor(p.Get("draw:fill-color"))
@@ -239,12 +239,12 @@ func (r *reader) shapePaint(p odf.Props) *shape.Paint {
 		s, e := col(g.Start), col(g.End)
 		switch g.Style {
 		case "", "linear":
-			pt.Stops = []compose.ColorStop{{Offset: 0, Color: s}, {Offset: 1, Color: e}}
+			pt.Stops = []typeset.ColorStop{{Offset: 0, Color: s}, {Offset: 1, Color: e}}
 		case "axial":
-			pt.Stops = []compose.ColorStop{{Offset: 0, Color: e}, {Offset: 0.5, Color: s}, {Offset: 1, Color: e}}
+			pt.Stops = []typeset.ColorStop{{Offset: 0, Color: e}, {Offset: 0.5, Color: s}, {Offset: 1, Color: e}}
 		default:
 			pt.Radial = true
-			pt.Stops = []compose.ColorStop{{Offset: 0, Color: e}, {Offset: 1, Color: s}}
+			pt.Stops = []typeset.ColorStop{{Offset: 0, Color: e}, {Offset: 1, Color: s}}
 		}
 		return pt
 	case "hatch", "bitmap":
@@ -287,7 +287,7 @@ func (r *reader) shapeLine(p odf.Props) *shapeStroke {
 	if !ok {
 		c = poolStroke
 	}
-	s := &shapeStroke{line: shape.Line{Width: w, Color: compose.Color{R: float64(c.R) / 255, G: float64(c.G) / 255, B: float64(c.B) / 255, A: 1}, Join: compose.RoundJoin}}
+	s := &shapeStroke{line: shape.Line{Width: w, Color: typeset.Color{R: float64(c.R) / 255, G: float64(c.G) / 255, B: float64(c.B) / 255, A: 1}, Join: typeset.RoundJoin}}
 	if v, ok := odf.Percent(p.Get("svg:stroke-opacity")); ok {
 		s.line.Color.A = math.Max(0, math.Min(1, v))
 	}
@@ -301,9 +301,9 @@ func (r *reader) shapeLine(p odf.Props) *shapeStroke {
 	}
 	switch p.Get("svg:stroke-linecap") {
 	case "round":
-		s.line.Cap = compose.RoundCap
+		s.line.Cap = typeset.RoundCap
 	case "square":
-		s.line.Cap = compose.SquareCap
+		s.line.Cap = typeset.SquareCap
 	}
 	arrow := func(end string) float64 {
 		if p.Get("draw:marker-"+end) == "" {
@@ -319,14 +319,14 @@ func (r *reader) shapeLine(p odf.Props) *shapeStroke {
 }
 
 // stroke returns the fragments that stroke ops with s.
-func (s *shapeStroke) stroke(ops []compose.PathOp) []compose.Fragment {
+func (s *shapeStroke) stroke(ops []typeset.PathOp) []typeset.Fragment {
 	if s == nil || s.line.Color.A <= 0 || len(ops) < 2 {
 		return nil
 	}
 	out := shape.Stroke(ops, s.line)
 	if s.hairline {
 		for _, f := range out {
-			if p, ok := f.(*compose.Path); ok && p.Stroke != nil {
+			if p, ok := f.(*typeset.Path); ok && p.Stroke != nil {
 				p.Stroke.Width = 0
 			}
 		}
@@ -338,7 +338,7 @@ func (s *shapeStroke) stroke(ops []compose.PathOp) []compose.Fragment {
 // widths whose tip is (x, y), pointing away from (fx, fy), in colour c:
 // the "Arrow" marker of LibreOffice's line ends (its svg:viewBox is 20 by
 // 30).
-func arrowhead(x, y, fx, fy, w float64, c compose.Color) compose.Fragment {
+func arrowhead(x, y, fx, fy, w float64, c typeset.Color) typeset.Fragment {
 	dx, dy := x-fx, y-fy
 	n := math.Hypot(dx, dy)
 	if n == 0 {
@@ -347,34 +347,34 @@ func arrowhead(x, y, fx, fy, w float64, c compose.Color) compose.Fragment {
 	ux, uy := dx/n, dy/n
 	l := 1.5 * w
 	bx, by := x-ux*l, y-uy*l
-	pt := func(px, py float64) [3]compose.Point { return [3]compose.Point{{X: px, Y: py}} }
-	return &compose.Path{Ops: []compose.PathOp{
-		{Kind: compose.MoveTo, P: pt(x, y)},
-		{Kind: compose.LineTo, P: pt(bx-uy*w/2, by+ux*w/2)},
-		{Kind: compose.LineTo, P: pt(bx+uy*w/2, by-ux*w/2)},
-		{Kind: compose.ClosePath},
-	}, Fill: &compose.Fill{Color: c}}
+	pt := func(px, py float64) [3]typeset.Point { return [3]typeset.Point{{X: px, Y: py}} }
+	return &typeset.Path{Ops: []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: pt(x, y)},
+		{Kind: typeset.LineTo, P: pt(bx-uy*w/2, by+ux*w/2)},
+		{Kind: typeset.LineTo, P: pt(bx+uy*w/2, by-ux*w/2)},
+		{Kind: typeset.ClosePath},
+	}, Fill: &typeset.Fill{Color: c}}
 }
 
 // segment returns the path of the line from (x1, y1) to (x2, y2).
-func segment(x1, y1, x2, y2 float64) []compose.PathOp {
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{{X: x1, Y: y1}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: x2, Y: y2}}},
+func segment(x1, y1, x2, y2 float64) []typeset.PathOp {
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x1, Y: y1}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x2, Y: y2}}},
 	}
 }
 
 // bounds returns the bounding box of the points pts, grown by pad.
-func bounds(pts [][2]float64, pad float64) compose.Rect {
+func bounds(pts [][2]float64, pad float64) typeset.Rect {
 	x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
 	for _, p := range pts {
 		x0, y0 = math.Min(x0, p[0]), math.Min(y0, p[1])
 		x1, y1 = math.Max(x1, p[0]), math.Max(y1, p[1])
 	}
 	if math.IsInf(x0, 0) {
-		return compose.Rect{}
+		return typeset.Rect{}
 	}
-	return compose.Rect{X: x0 - pad, Y: y0 - pad, Width: x1 - x0 + 2*pad, Height: y1 - y0 + 2*pad}
+	return typeset.Rect{X: x0 - pad, Y: y0 - pad, Width: x1 - x0 + 2*pad, Height: y1 - y0 + 2*pad}
 }
 
 // lineEnds reads a line's or a connector's svg:x1, svg:y1, svg:x2 and
@@ -397,7 +397,7 @@ func lineArt(el *odf.Element, s *shapeStroke, dx, dy float64) (shapeArt, bool) {
 	pad := math.Max(s.line.Width, math.Max(s.startArrow, s.endArrow))
 	return shapeArt{
 		bounds: bounds([][2]float64{{x1, y1}, {x2, y2}}, pad),
-		draw: func(context.Context) []compose.Fragment {
+		draw: func(context.Context) []typeset.Fragment {
 			out := s.stroke(segment(x1, y1, x2, y2))
 			if s.startArrow > 0 {
 				out = appendFrag(out, arrowhead(x1, y1, x2, y2, s.startArrow, s.line.Color))
@@ -411,7 +411,7 @@ func lineArt(el *odf.Element, s *shapeStroke, dx, dy float64) (shapeArt, bool) {
 }
 
 // appendFrag appends f to out when it is not nil.
-func appendFrag(out []compose.Fragment, f compose.Fragment) []compose.Fragment {
+func appendFrag(out []typeset.Fragment, f typeset.Fragment) []typeset.Fragment {
 	if f == nil {
 		return out
 	}
@@ -454,14 +454,14 @@ func measureArt(el *odf.Element, s *shapeStroke, p odf.Props, dx, dy float64) (s
 	if arrow == 0 {
 		arrow = s.endArrow
 	}
-	guide := func(x, y float64) []compose.PathOp {
+	guide := func(x, y float64) []typeset.PathOp {
 		return segment(x+nx*gap, y+ny*gap, x+nx*(dist+over), y+ny*(dist+over))
 	}
 	pts := [][2]float64{{x1, y1}, {x2, y2}, {x1 + nx*(dist+over), y1 + ny*(dist+over)}, {x2 + nx*(dist+over), y2 + ny*(dist+over)}}
 	return shapeArt{
 		bounds: bounds(pts, math.Max(arrow, s.line.Width)),
 		line:   [4]float64{ax, ay, bx, by},
-		draw: func(context.Context) []compose.Fragment {
+		draw: func(context.Context) []typeset.Fragment {
 			out := s.stroke(segment(ax, ay, bx, by))
 			out = append(out, s.stroke(guide(x1, y1))...)
 			out = append(out, s.stroke(guide(x2, y2))...)
@@ -533,9 +533,9 @@ func (r *reader) geometryArt(el *odf.Element, paint *shape.Paint, s *shapeStroke
 		// through its centre, after the turn: the geometry's own mirror,
 		// undone, then mirrored on the page.
 		cx, cy := apply(m, w/2, h/2)
-		local, page := compose.Matrix{A: -1, D: 1, E: w}, compose.Matrix{A: -1, D: 1, E: 2 * cx}
+		local, page := typeset.Matrix{A: -1, D: 1, E: w}, typeset.Matrix{A: -1, D: 1, E: 2 * cx}
 		if g.MirrorV {
-			local, page = compose.Matrix{A: 1, D: -1, F: h}, compose.Matrix{A: 1, D: -1, F: 2 * cy}
+			local, page = typeset.Matrix{A: 1, D: -1, F: h}, typeset.Matrix{A: 1, D: -1, F: 2 * cy}
 		}
 		m = mul(page, mul(m, local))
 	}
@@ -548,8 +548,8 @@ func (r *reader) geometryArt(el *odf.Element, paint *shape.Paint, s *shapeStroke
 	if s != nil {
 		pad = s.line.Width / 2
 	}
-	local := func(_ context.Context, box compose.Rect) []compose.Fragment {
-		var out []compose.Fragment
+	local := func(_ context.Context, box typeset.Rect) []typeset.Fragment {
+		var out []typeset.Fragment
 		for _, path := range shape.Paths(g, box) {
 			if path.Fill && paint != nil {
 				pt := *paint
@@ -568,8 +568,8 @@ func (r *reader) geometryArt(el *odf.Element, paint *shape.Paint, s *shapeStroke
 	lin.E, lin.F = 0, 0
 	return shapeArt{
 		bounds: bounds(pts, pad),
-		draw: func(ctx context.Context) []compose.Fragment {
-			return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: local(ctx, compose.Rect{Width: w, Height: h})}}
+		draw: func(ctx context.Context) []typeset.Fragment {
+			return []typeset.Fragment{&typeset.Group{Transform: m, Opacity: 1, Content: local(ctx, typeset.Rect{Width: w, Height: h})}}
 		},
 		logic: &logicBox{x: m.E, y: m.F, w: w, h: h, lin: lin, local: local},
 	}, true
@@ -587,9 +587,9 @@ const adjustUnit = 100000
 // does not parse.
 func outline(el *odf.Element) *shape.Geometry {
 	var c *shape.Custom
-	view := compose.Rect{}
+	view := typeset.Rect{}
 	if v, ok := odf.ParseViewBox(el.A(odf.NSSVG, "viewBox")); ok && v[2] > 0 && v[3] > 0 {
-		view = compose.Rect{X: v[0], Y: v[1], Width: v[2], Height: v[3]}
+		view = typeset.Rect{X: v[0], Y: v[1], Width: v[2], Height: v[3]}
 	}
 	switch el.Name.Local {
 	case "path":
@@ -636,7 +636,7 @@ func (r *reader) transformedPicture(ts *tableState, el *odf.Element, at *sheet.A
 	m, ok := parseTransform(tr)
 	if !ok {
 		r.warn("transform", "a draw:transform that does not parse is not applied")
-		m = compose.Identity
+		m = typeset.Identity
 	}
 	x, _ := odf.Length(el.A(odf.NSSVG, "x"))
 	y, _ := odf.Length(el.A(odf.NSSVG, "y"))
@@ -649,12 +649,12 @@ func (r *reader) transformedPicture(ts *tableState, el *odf.Element, at *sheet.A
 		px, py := apply(m, c[0], c[1])
 		pts = append(pts, [2]float64{px, py})
 	}
-	local := func(ctx context.Context, box compose.Rect) []compose.Fragment {
+	local := func(ctx context.Context, box typeset.Rect) []typeset.Fragment {
 		switch {
 		case pic.Vector != nil:
 			return pic.Vector(ctx, box)
 		case pic.Source != nil:
-			return []compose.Fragment{&compose.Image{Rect: box, Source: pic.Source}}
+			return []typeset.Fragment{&typeset.Image{Rect: box, Source: pic.Source}}
 		}
 		return nil
 	}
@@ -662,8 +662,8 @@ func (r *reader) transformedPicture(ts *tableState, el *odf.Element, at *sheet.A
 	lin.E, lin.F = 0, 0
 	r.place(ts, el, at, shapeArt{
 		bounds: bounds(pts, 0),
-		draw: func(ctx context.Context) []compose.Fragment {
-			return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: local(ctx, compose.Rect{Width: w, Height: h})}}
+		draw: func(ctx context.Context) []typeset.Fragment {
+			return []typeset.Fragment{&typeset.Group{Transform: m, Opacity: 1, Content: local(ctx, typeset.Rect{Width: w, Height: h})}}
 		},
 		logic:   &logicBox{x: m.E, y: m.F, w: w, h: h, lin: lin, local: local},
 		picture: true,
@@ -720,20 +720,20 @@ func (r *reader) measureText(el *odf.Element, art *shapeArt) {
 	}
 	sin, cos := math.Sincos(angle)
 	mx, my := (ax+bx)/2, (ay+by)/2
-	art.draw = func(ctx context.Context) []compose.Fragment {
+	art.draw = func(ctx context.Context) []typeset.Fragment {
 		out := prev(ctx)
-		lines, _, err := fonts.Layout(ctx, []text.Run{{Text: txt, Style: text.Style{Families: families, Size: size, Color: compose.Color{A: 1}}}}, measureLineWidth, text.Options{Whitespace: text.Preserve})
+		lines, _, err := fonts.Layout(ctx, []text.Run{{Text: txt, Style: text.Style{Families: families, Size: size, Color: typeset.Color{A: 1}}}}, measureLineWidth, text.Options{Whitespace: text.Preserve})
 		if err != nil || len(lines) == 0 {
 			return out
 		}
 		l := lines[0]
-		var runs []compose.Fragment
+		var runs []typeset.Fragment
 		for _, run := range l.Runs {
 			t := *run
-			t.Origin = compose.Point{X: run.Origin.X - l.Width/2, Y: -measureTextGap}
+			t.Origin = typeset.Point{X: run.Origin.X - l.Width/2, Y: -measureTextGap}
 			runs = append(runs, &t)
 		}
-		return append(out, &compose.Group{Transform: compose.Matrix{A: cos, B: sin, C: -sin, D: cos, E: mx, F: my}, Opacity: 1, Content: runs})
+		return append(out, &typeset.Group{Transform: typeset.Matrix{A: cos, B: sin, C: -sin, D: cos, E: mx, F: my}, Opacity: 1, Content: runs})
 	}
 }
 

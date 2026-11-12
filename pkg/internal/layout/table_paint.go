@@ -1,8 +1,8 @@
 package layout
 
 import (
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // cellStarts returns, for every row of td, the index of its first cell in
@@ -91,7 +91,7 @@ func (e *engine) spanPage(top, bottom float64) int {
 // of a split row shows the slice of the cell within it, and reports which
 // of its top and bottom edges the slice keeps (box-decoration-break:
 // slice, CSS Fragmentation 3, 5.4).
-func (p *painter) cellRect(c *box, pr placedRow) (compose.Rect, bool, bool) {
+func (p *painter) cellRect(c *box, pr placedRow) (typeset.Rect, bool, bool) {
 	r := p.borderRect(c)
 	if !pr.piece {
 		return r, true, true
@@ -200,18 +200,18 @@ func (p *painter) cellBackgrounds(td *tableData, c *box, pr placedRow) {
 // partBackground paints the background of the row, row group, column or
 // column group b where the cell rectangle clip shows it: its image placed
 // on b's own box (CSS 2.1, 17.5.1).
-func (p *painter) partBackground(b *box, clip compose.Rect) {
+func (p *painter) partBackground(b *box, clip typeset.Rect) {
 	st := b.st
 	if !hasBackground(st) || clip.Width <= 0 || clip.Height <= 0 {
 		return
 	}
 	if c, ok := colorOf(st.BackgroundColor); ok {
-		p.emit(b, false, &compose.Path{Ops: rectOps(clip), Fill: &compose.Fill{Color: c}}, clip.Y, clip.Y+clip.Height, -1)
+		p.emit(b, false, &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{Color: c}}, clip.Y, clip.Y+clip.Height, -1)
 	}
 	if st.BackgroundImage == "" && st.BackgroundGradient == nil {
 		return
 	}
-	g := &ditem{group: true, opacity: 1, clip: &compose.Path{Ops: rectOps(clip), Fill: &compose.Fill{}}}
+	g := &ditem{group: true, opacity: 1, clip: &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{}}}
 	if st.BackgroundGradient != nil {
 		for _, pa := range p.e.gradientTiles(st, p.borderRect(b), clip, clip.Y) {
 			g.kids = append(g.kids, &ditem{frag: pa, y0: pa.Ops[0].P[0].Y, y1: pa.Ops[2].P[0].Y, page: p.mono})
@@ -222,7 +222,7 @@ func (p *painter) partBackground(b *box, clip compose.Rect) {
 			return
 		}
 		for _, t := range p.e.tiles(st, pic, p.borderRect(b), clip, clip.Y) {
-			g.kids = append(g.kids, &ditem{frag: &compose.Image{Rect: t, Source: pic.Source}, y0: t.Y, y1: t.Y + t.Height, page: p.mono})
+			g.kids = append(g.kids, &ditem{frag: &typeset.Image{Rect: t, Source: pic.Source}, y0: t.Y, y1: t.Y + t.Height, page: p.mono})
 		}
 	}
 	if len(g.kids) == 0 {
@@ -388,7 +388,7 @@ func (p *painter) collapsedBorders(td *tableData) {
 						y += b.w / 2
 					}
 				}
-				p.segment(t, b, compose.Rect{X: x0, Y: y - b.w/2, Width: x1 - x0, Height: b.w}, true)
+				p.segment(t, b, typeset.Rect{X: x0, Y: y - b.w/2, Width: x1 - x0, Height: b.w}, true)
 			}
 		}
 		for k := range n {
@@ -409,7 +409,7 @@ func (p *painter) collapsedBorders(td *tableData) {
 					y1 -= hh
 				}
 				cx := x(i)
-				p.segment(t, b, compose.Rect{X: cx - b.w/2, Y: y0, Width: b.w, Height: y1 - y0}, false)
+				p.segment(t, b, typeset.Rect{X: cx - b.w/2, Y: y0, Width: b.w, Height: y1 - y0}, false)
 			}
 		}
 		p.mono = mono
@@ -432,7 +432,7 @@ func cutLine(seq []placedRow, k int) bool {
 // segment paints one collapsed border b on the rectangle r, a horizontal
 // or a vertical run of the grid. In the collapsing model inset draws as
 // ridge and outset as groove (CSS 2.1, 17.6.2).
-func (p *painter) segment(t *box, b cborder, r compose.Rect, horizontal bool) {
+func (p *painter) segment(t *box, b cborder, r typeset.Rect, horizontal bool) {
 	if r.Width <= 0 || r.Height <= 0 {
 		return
 	}
@@ -440,14 +440,14 @@ func (p *painter) segment(t *box, b cborder, r compose.Rect, horizontal bool) {
 	if !ok {
 		return
 	}
-	fill := func(rr compose.Rect, c compose.Color) {
+	fill := func(rr typeset.Rect, c typeset.Color) {
 		if rr.Width > 0 && rr.Height > 0 {
-			p.emit(t, false, &compose.Path{Ops: rectOps(rr), Fill: &compose.Fill{Color: c}}, rr.Y, rr.Y+rr.Height, -1)
+			p.emit(t, false, &typeset.Path{Ops: rectOps(rr), Fill: &typeset.Fill{Color: c}}, rr.Y, rr.Y+rr.Height, -1)
 		}
 	}
 	// split returns the first and second part of r across the border's
 	// thickness, the first f of it.
-	split := func(f float64) (compose.Rect, compose.Rect) {
+	split := func(f float64) (typeset.Rect, typeset.Rect) {
 		a, z := r, r
 		if horizontal {
 			a.Height = r.Height * f
@@ -474,30 +474,30 @@ func (p *painter) segment(t *box, b cborder, r compose.Rect, horizontal bool) {
 		fill(z, light)
 	case css.Dashed, css.Dotted:
 		w := b.w
-		a := compose.Point{X: r.X, Y: r.Y + r.Height/2}
-		z := compose.Point{X: r.X + r.Width, Y: a.Y}
+		a := typeset.Point{X: r.X, Y: r.Y + r.Height/2}
+		z := typeset.Point{X: r.X + r.Width, Y: a.Y}
 		if !horizontal {
-			a = compose.Point{X: r.X + r.Width/2, Y: r.Y}
-			z = compose.Point{X: a.X, Y: r.Y + r.Height}
+			a = typeset.Point{X: r.X + r.Width/2, Y: r.Y}
+			z = typeset.Point{X: a.X, Y: r.Y + r.Height}
 		}
-		stroke := &compose.Stroke{Color: col, Width: w, Dash: []float64{3 * w, 3 * w}}
+		stroke := &typeset.Stroke{Color: col, Width: w, Dash: []float64{3 * w, 3 * w}}
 		if b.style == css.Dotted {
 			stroke.Dash = []float64{w, w}
 		}
-		p.emit(t, false, &compose.Path{Ops: []compose.PathOp{
-			{Kind: compose.MoveTo, P: [3]compose.Point{a}},
-			{Kind: compose.LineTo, P: [3]compose.Point{z}},
+		p.emit(t, false, &typeset.Path{Ops: []typeset.PathOp{
+			{Kind: typeset.MoveTo, P: [3]typeset.Point{a}},
+			{Kind: typeset.LineTo, P: [3]typeset.Point{z}},
 		}, Stroke: stroke}, r.Y, r.Y+r.Height, -1)
 	case css.Solid, css.BorderNone, css.BorderHidden:
 		if t.st.StrokeBorders {
 			// Writer strokes a collapsed cell border along its middle
 			// (css.Office.StrokeBorders).
-			a := compose.Point{X: r.X, Y: r.Y + r.Height/2}
-			z := compose.Point{X: r.X + r.Width, Y: a.Y}
+			a := typeset.Point{X: r.X, Y: r.Y + r.Height/2}
+			z := typeset.Point{X: r.X + r.Width, Y: a.Y}
 			w := r.Height
 			if !horizontal {
-				a = compose.Point{X: r.X + r.Width/2, Y: r.Y}
-				z = compose.Point{X: a.X, Y: r.Y + r.Height}
+				a = typeset.Point{X: r.X + r.Width/2, Y: r.Y}
+				z = typeset.Point{X: a.X, Y: r.Y + r.Height}
 				w = r.Width
 			}
 			p.emit(t, false, strokedLine(a, z, w, col), r.Y, r.Y+r.Height, -1)

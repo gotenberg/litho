@@ -5,8 +5,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // stackedValues are a group's plotted values: for series i and category
@@ -144,12 +144,12 @@ func (rd *renderer) series(g *Group, x, y *dim) []func() {
 }
 
 // point maps a category position and a value to the page.
-func point(x, y *dim, cat, v float64) compose.Point {
+func point(x, y *dim, cat, v float64) typeset.Point {
 	cp, vp := x.valuePixel(cat), y.valuePixel(v)
 	if x.vertical {
-		return compose.Point{X: vp, Y: cp}
+		return typeset.Point{X: vp, Y: cp}
 	}
-	return compose.Point{X: cp, Y: vp}
+	return typeset.Point{X: cp, Y: vp}
 }
 
 // bars draws a bar group: per category, the series side by side with the
@@ -207,11 +207,11 @@ func (rd *renderer) bars(g *Group, x, y *dim) []func() {
 			p0 := c + sign*(-total/2+float64(slot)*step)
 			p1 := p0 + sign*barW
 			v0, v1 := y.valuePixel(y.sc.clamp(b)), y.valuePixel(y.sc.clamp(v))
-			var r compose.Rect
+			var r typeset.Rect
 			if x.vertical {
-				r = compose.Rect{X: math.Min(v0, v1), Y: math.Min(p0, p1), Width: math.Abs(v1 - v0), Height: math.Abs(p1 - p0)}
+				r = typeset.Rect{X: math.Min(v0, v1), Y: math.Min(p0, p1), Width: math.Abs(v1 - v0), Height: math.Abs(p1 - p0)}
 			} else {
-				r = compose.Rect{X: math.Min(p0, p1), Y: math.Min(v0, v1), Width: math.Abs(p1 - p0), Height: math.Abs(v1 - v0)}
+				r = typeset.Rect{X: math.Min(p0, p1), Y: math.Min(v0, v1), Width: math.Abs(p1 - p0), Height: math.Abs(v1 - v0)}
 			}
 			rd.paint(rectPath(r).Ops, rd.fillOf(g, s, j), rd.borderOf(g, s, j))
 			lb := rd.labelsAt(g, s, j)
@@ -247,7 +247,7 @@ func mergeLabels(group, s Labels) Labels {
 }
 
 // barLabel draws the data label of a bar r.
-func (rd *renderer) barLabel(g *Group, s *Series, j int, v float64, lb Labels, r compose.Rect, horizontal, neg, stacked bool) {
+func (rd *renderer) barLabel(g *Group, s *Series, j int, v float64, lb Labels, r typeset.Rect, horizontal, neg, stacked bool) {
 	b := rd.measure(rd.labelText(g, s, j, v, lb, 0), lb.Style, 0)
 	if b == nil {
 		return
@@ -321,7 +321,7 @@ func (rd *renderer) labelFrame(b *block, lb Labels, cx, cy float64) {
 	w, h := b.rotated()
 	if lb.Frame.Fill != nil || lb.Frame.Border != nil {
 		pad := 0.18 * b.style.Size
-		rd.frame(compose.Rect{X: cx - w/2 - pad, Y: cy - h/2, Width: w + 2*pad, Height: h}, lb.Frame)
+		rd.frame(typeset.Rect{X: cx - w/2 - pad, Y: cy - h/2, Width: w + 2*pad, Height: h}, lb.Frame)
 	}
 	rd.out = append(rd.out, b.draw(cx, cy, alignCenter)...)
 }
@@ -413,14 +413,14 @@ func (rd *renderer) customLabel(g *Group, s *Series, j int, v float64, lb Labels
 // polyline returns the open path through pts, smoothed as a natural
 // cubic spline through them when smooth is set, each coordinate a spline of
 // the point's index, as LibreOffice smooths lines.
-func polyline(pts []compose.Point, smooth bool) []compose.PathOp {
+func polyline(pts []typeset.Point, smooth bool) []typeset.PathOp {
 	if len(pts) == 0 {
 		return nil
 	}
-	ops := []compose.PathOp{{Kind: compose.MoveTo, P: [3]compose.Point{pts[0]}}}
+	ops := []typeset.PathOp{{Kind: typeset.MoveTo, P: [3]typeset.Point{pts[0]}}}
 	if !smooth || len(pts) < 3 {
 		for _, p := range pts[1:] {
-			ops = append(ops, compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{p}})
+			ops = append(ops, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{p}})
 		}
 		return ops
 	}
@@ -431,9 +431,9 @@ func polyline(pts []compose.Point, smooth bool) []compose.PathOp {
 	dx, dy := splineSlopes(xs), splineSlopes(ys)
 	for i := 1; i < len(pts); i++ {
 		p0, p1 := pts[i-1], pts[i]
-		c1 := compose.Point{X: p0.X + dx[i-1]/3, Y: p0.Y + dy[i-1]/3}
-		c2 := compose.Point{X: p1.X - dx[i]/3, Y: p1.Y - dy[i]/3}
-		ops = append(ops, compose.PathOp{Kind: compose.CurveTo, P: [3]compose.Point{c1, c2, p1}})
+		c1 := typeset.Point{X: p0.X + dx[i-1]/3, Y: p0.Y + dy[i-1]/3}
+		c2 := typeset.Point{X: p1.X - dx[i]/3, Y: p1.Y - dy[i]/3}
+		ops = append(ops, typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{c1, c2, p1}})
 	}
 	return ops
 }
@@ -475,9 +475,9 @@ func (rd *renderer) lines(g *Group, x, y *dim) []func() {
 	sv := rd.stack(g)
 	var labels []func()
 	for i, s := range g.Series {
-		var runs [][]compose.Point
-		var cur []compose.Point
-		var pts []compose.Point
+		var runs [][]typeset.Point
+		var cur []typeset.Point
+		var pts []typeset.Point
 		var idx []int
 		for j := 0; j < sv.n && j < x.n; j++ {
 			v := sv.hi[i][j]
@@ -497,11 +497,11 @@ func (rd *renderer) lines(g *Group, x, y *dim) []func() {
 			runs = append(runs, cur)
 		}
 		if st := rd.borderOf(g, s, -1).compose(); st != nil {
-			st.Join = compose.RoundJoin
-			st.Cap = compose.RoundCap
+			st.Join = typeset.RoundJoin
+			st.Cap = typeset.RoundCap
 			for _, run := range runs {
 				if len(run) > 1 {
-					rd.out = append(rd.out, &compose.Path{Ops: polyline(run, s.Smooth), Stroke: st})
+					rd.out = append(rd.out, &typeset.Path{Ops: polyline(run, s.Smooth), Stroke: st})
 				}
 			}
 		}
@@ -524,7 +524,7 @@ func (rd *renderer) lines(g *Group, x, y *dim) []func() {
 
 // pointLabel draws the data label of a line or scatter point p, beside a
 // marker of size ms.
-func (rd *renderer) pointLabel(g *Group, s *Series, j int, v float64, lb Labels, p compose.Point, ms float64) {
+func (rd *renderer) pointLabel(g *Group, s *Series, j int, v float64, lb Labels, p typeset.Point, ms float64) {
 	b := rd.measure(rd.labelText(g, s, j, v, lb, math.NaN()), lb.Style, 0)
 	if b == nil {
 		return
@@ -556,7 +556,7 @@ func (rd *renderer) areas(g *Group, x, y *dim) []func() {
 	// front (chart2's AreaChart reverses a two-dimensional area chart's
 	// series, ReverseSeriesOrderAreaAndNetChart).
 	for i, s := range slices.Backward(g.Series) {
-		var top, bottom []compose.Point
+		var top, bottom []typeset.Point
 		for j := 0; j < sv.n && j < x.n; j++ {
 			v := sv.hi[i][j]
 			b := sv.lo[i][j]
@@ -579,7 +579,7 @@ func (rd *renderer) areas(g *Group, x, y *dim) []func() {
 			// A single point draws no area.
 			continue
 		}
-		var pts []compose.Point
+		var pts []typeset.Point
 		pts = append(pts, top...)
 		for _, b := range slices.Backward(bottom) {
 			pts = append(pts, b)
@@ -591,7 +591,7 @@ func (rd *renderer) areas(g *Group, x, y *dim) []func() {
 				continue
 			}
 			raw := sv.raw[i][j]
-			p := compose.Point{X: (top[j].X + bottom[j].X) / 2, Y: (top[j].Y + bottom[j].Y) / 2}
+			p := typeset.Point{X: (top[j].X + bottom[j].X) / 2, Y: (top[j].Y + bottom[j].Y) / 2}
 			labels = append(labels, func() {
 				lb2 := lb
 				lb2.Placement = LabelCenter
@@ -626,7 +626,7 @@ func (rd *renderer) scatter(g *Group, x, y *dim) []func() {
 	rmax := math.Min(x.inner.Width, y.inner.Height) / 4 * math.Min(scaleB, 300) / 100
 	for _, s := range g.Series {
 		cats, vals, sizes := rd.data(s.Categories), rd.data(s.Values), rd.data(s.Sizes)
-		var pts []compose.Point
+		var pts []typeset.Point
 		var idx []int
 		for j := range min(vals.Len(), MaxPoints) {
 			yv, ok := vals.number(j)
@@ -637,7 +637,7 @@ func (rd *renderer) scatter(g *Group, x, y *dim) []func() {
 			if !ok {
 				continue
 			}
-			pts = append(pts, compose.Point{X: x.valuePixel(x.sc.clamp(xv)), Y: y.valuePixel(y.sc.clamp(yv))})
+			pts = append(pts, typeset.Point{X: x.valuePixel(x.sc.clamp(xv)), Y: y.valuePixel(y.sc.clamp(yv))})
 			idx = append(idx, j)
 		}
 		if g.Kind == Bubble {
@@ -651,9 +651,9 @@ func (rd *renderer) scatter(g *Group, x, y *dim) []func() {
 			}
 		} else {
 			if st := rd.borderOf(g, s, -1).compose(); st != nil && len(pts) > 1 {
-				st.Join = compose.RoundJoin
-				st.Cap = compose.RoundCap
-				rd.out = append(rd.out, &compose.Path{Ops: polyline(pts, s.Smooth), Stroke: st})
+				st.Join = typeset.RoundJoin
+				st.Cap = typeset.RoundCap
+				rd.out = append(rd.out, &typeset.Path{Ops: polyline(pts, s.Smooth), Stroke: st})
 			}
 			for k, p := range pts {
 				rd.marker(rd.markerOf(g, s, idx[k]), p.X, p.Y)

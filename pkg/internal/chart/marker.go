@@ -3,45 +3,45 @@ package chart
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // kappa places the control points of a cubic Bézier quarter circle.
 const kappa = 0.5522847498
 
 // polygon returns the closed outline through pts.
-func polygon(pts ...compose.Point) []compose.PathOp {
+func polygon(pts ...typeset.Point) []typeset.PathOp {
 	if len(pts) == 0 {
 		return nil
 	}
-	ops := make([]compose.PathOp, 0, len(pts)+1)
-	ops = append(ops, compose.PathOp{Kind: compose.MoveTo, P: [3]compose.Point{pts[0]}})
+	ops := make([]typeset.PathOp, 0, len(pts)+1)
+	ops = append(ops, typeset.PathOp{Kind: typeset.MoveTo, P: [3]typeset.Point{pts[0]}})
 	for _, p := range pts[1:] {
-		ops = append(ops, compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{p}})
+		ops = append(ops, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{p}})
 	}
-	return append(ops, compose.PathOp{Kind: compose.ClosePath})
+	return append(ops, typeset.PathOp{Kind: typeset.ClosePath})
 }
 
 // ellipse returns the outline of the ellipse of centre (cx, cy) and radii
 // rx, ry.
-func ellipse(cx, cy, rx, ry float64) []compose.PathOp {
+func ellipse(cx, cy, rx, ry float64) []typeset.PathOp {
 	kx, ky := rx*kappa, ry*kappa
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{{X: cx + rx, Y: cy}}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{{X: cx + rx, Y: cy + ky}, {X: cx + kx, Y: cy + ry}, {X: cx, Y: cy + ry}}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{{X: cx - kx, Y: cy + ry}, {X: cx - rx, Y: cy + ky}, {X: cx - rx, Y: cy}}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{{X: cx - rx, Y: cy - ky}, {X: cx - kx, Y: cy - ry}, {X: cx, Y: cy - ry}}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{{X: cx + kx, Y: cy - ry}, {X: cx + rx, Y: cy - ky}, {X: cx + rx, Y: cy}}},
-		{Kind: compose.ClosePath},
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: cx + rx, Y: cy}}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{{X: cx + rx, Y: cy + ky}, {X: cx + kx, Y: cy + ry}, {X: cx, Y: cy + ry}}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{{X: cx - kx, Y: cy + ry}, {X: cx - rx, Y: cy + ky}, {X: cx - rx, Y: cy}}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{{X: cx - rx, Y: cy - ky}, {X: cx - kx, Y: cy - ry}, {X: cx, Y: cy - ry}}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{{X: cx + kx, Y: cy - ry}, {X: cx + rx, Y: cy - ky}, {X: cx + rx, Y: cy}}},
+		{Kind: typeset.ClosePath},
 	}
 }
 
 // markerPath returns the outline of symbol sym of size s centred on (x,
 // y), as LibreOffice's ShapeFactory draws its standard symbols.
-func markerPath(sym MarkerSymbol, x, y, s float64) []compose.PathOp {
+func markerPath(sym MarkerSymbol, x, y, s float64) []typeset.PathOp {
 	h := s / 2
-	pt := func(dx, dy float64) compose.Point { return compose.Point{X: x + dx*h, Y: y + dy*h} }
+	pt := func(dx, dy float64) typeset.Point { return typeset.Point{X: x + dx*h, Y: y + dy*h} }
 	switch sym {
 	case MarkerDiamond:
 		return polygon(pt(0, -1), pt(1, 0), pt(0, 1), pt(-1, 0))
@@ -60,7 +60,7 @@ func markerPath(sym MarkerSymbol, x, y, s float64) []compose.PathOp {
 	case MarkerCircle:
 		return ellipse(x, y, h, h)
 	case MarkerStar:
-		var pts []compose.Point
+		var pts []typeset.Point
 		for i := range 8 {
 			a := float64(i)*math.Pi/4 - math.Pi/2
 			r := 1.0
@@ -79,7 +79,7 @@ func markerPath(sym MarkerSymbol, x, y, s float64) []compose.PathOp {
 		return polygon(pt(-t, -1), pt(t, -1), pt(t, -t), pt(1, -t), pt(1, t), pt(t, t), pt(t, 1), pt(-t, 1), pt(-t, t), pt(-1, t), pt(-1, -t), pt(-t, -t))
 	case MarkerAsterisk:
 		t := 0.15
-		var pts []compose.Point
+		var pts []typeset.Point
 		for i := range 6 {
 			a := float64(i) * math.Pi / 3
 			c, s := math.Cos(a), math.Sin(a)

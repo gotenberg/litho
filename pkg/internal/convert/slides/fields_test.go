@@ -3,10 +3,10 @@ package slides
 import (
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // TestText_HorizontalAnchor checks that a block of lines anchored at the
@@ -143,9 +143,9 @@ func TestText_Stretch(t *testing.T) {
 }
 
 // groupScaleX returns the horizontal scale of the first group of pg.
-func groupScaleX(pg *compose.Page) float64 {
+func groupScaleX(pg *typeset.Page) float64 {
 	for _, f := range pg.Content {
-		if g, ok := f.(*compose.Group); ok {
+		if g, ok := f.(*typeset.Group); ok {
 			return g.Transform.A
 		}
 	}
@@ -182,7 +182,7 @@ func TestShape_SkewX(t *testing.T) {
 	pg := convert(t, deck(&Slide{Shapes: []*Shape{sh}}), office.Options{}).Pages[0]
 	n := 0
 	for _, f := range pg.Content {
-		g, ok := f.(*compose.Group)
+		g, ok := f.(*typeset.Group)
 		if !ok {
 			continue
 		}
@@ -206,17 +206,17 @@ func TestShape_SkewX(t *testing.T) {
 func TestNotes_HasNotes(t *testing.T) {
 	doc := deck(&Slide{HasNotes: true}, &Slide{})
 	doc.NotesWidth, doc.NotesHeight = 540, 720
-	doc.NotesSlideBox = compose.Rect{X: 90, Y: 54, Width: 360, Height: 270}
+	doc.NotesSlideBox = typeset.Rect{X: 90, Y: 54, Width: 360, Height: 270}
 	out := convert(t, doc, office.Options{NotesPages: true})
-	frame := func(pg *compose.Page) compose.Rect {
+	frame := func(pg *typeset.Page) typeset.Rect {
 		for _, f := range pg.Content {
-			if p, ok := f.(*compose.Path); ok && p.Stroke != nil && len(p.Ops) > 2 {
+			if p, ok := f.(*typeset.Path); ok && p.Stroke != nil && len(p.Ops) > 2 {
 				x0, y0 := p.Ops[0].P[0].X, p.Ops[0].P[0].Y
 				x1, y1 := p.Ops[2].P[0].X, p.Ops[2].P[0].Y
-				return compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
+				return typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
 			}
 		}
-		return compose.Rect{}
+		return typeset.Rect{}
 	}
 	if got := frame(out.Pages[2]); got != doc.NotesSlideBox {
 		t.Errorf("slide with notes framed at %+v, want the master's box", got)
@@ -234,7 +234,7 @@ func TestNotes_Fill(t *testing.T) {
 	pg := convert(t, deck(s), office.Options{NotesPages: true}).Pages[1]
 	var filled, stroked bool
 	for _, f := range pg.Content {
-		if p, ok := f.(*compose.Path); ok {
+		if p, ok := f.(*typeset.Path); ok {
 			filled = filled || p.Fill != nil && p.Fill.Color.G == 0.6
 			stroked = stroked || p.Stroke != nil && p.Stroke.Color.G == 0.6
 		}
@@ -256,7 +256,7 @@ func TestTable_VerticalCells(t *testing.T) {
 	cell := func(p Paragraph, v css.WritingMode) TableCell {
 		return TableCell{Text: &TextBody{Paragraphs: []Paragraph{p}, Wrap: true, Vertical: v}, Fill: Fill{Kind: FillSolid, Color: css.Color{B: 1, A: 1}}}
 	}
-	tbl := &Shape{Kind: KindTable, Box: compose.Rect{X: 100, Y: 100, Width: 300, Height: 50}, Table: &Table{
+	tbl := &Shape{Kind: KindTable, Box: typeset.Rect{X: 100, Y: 100, Width: 300, Height: 50}, Table: &Table{
 		ColumnWidths: []float64{150, 150},
 		Rows:         []TableRow{{Height: 50, Cells: []TableCell{cell(long, css.SidewaysRL), cell(para("Short", a20), css.SidewaysLR)}}},
 	}}
@@ -264,7 +264,7 @@ func TestTable_VerticalCells(t *testing.T) {
 	// The long line wraps at the cell's width: the row is 150 tall.
 	var bottom float64
 	for _, f := range pg.Content {
-		if p, ok := f.(*compose.Path); ok && p.Fill != nil {
+		if p, ok := f.(*typeset.Path); ok && p.Fill != nil {
 			for _, op := range p.Ops {
 				bottom = max(bottom, op.P[0].Y)
 			}
@@ -282,7 +282,7 @@ func TestTable_VerticalCells(t *testing.T) {
 // TestInsetRect checks the text rectangle of insets that overlap, exceed
 // the box or are negative (sd-data/TextDistancesInsets3.pptx).
 func TestInsetRect(t *testing.T) {
-	box := compose.Rect{X: 0, Y: 100, Width: 200, Height: 56.69}
+	box := typeset.Rect{X: 0, Y: 100, Width: 200, Height: 56.69}
 	ins := func(top, bottom float64) [4]float64 {
 		var in [4]float64
 		in[css.Top], in[css.Bottom] = top, bottom
@@ -336,20 +336,20 @@ func TestText_OverflowAnchor(t *testing.T) {
 // its line over it.
 func TestShape_PictureFill(t *testing.T) {
 	pic := &Shape{
-		Kind: KindPicture, Box: compose.Rect{X: 10, Y: 10, Width: 100, Height: 100}, Picture: tinyPicture(t),
+		Kind: KindPicture, Box: typeset.Rect{X: 10, Y: 10, Width: 100, Height: 100}, Picture: tinyPicture(t),
 		Fill: Fill{Kind: FillSolid, Color: css.Color{A: 1}}, Line: Line{Width: 2, Color: css.Color{R: 1, A: 1}},
 	}
 	pg := convert(t, deck(&Slide{Shapes: []*Shape{pic}}), office.Options{}).Pages[0]
 	var kinds []string
 	for _, f := range pg.Content {
 		switch v := f.(type) {
-		case *compose.Path:
+		case *typeset.Path:
 			if v.Fill != nil {
 				kinds = append(kinds, "fill")
 			} else if v.Stroke != nil {
 				kinds = append(kinds, "line")
 			}
-		case *compose.Image:
+		case *typeset.Image:
 			kinds = append(kinds, "picture")
 		}
 	}

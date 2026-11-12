@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/formfield"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -17,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxNodes bounds the layout nodes one document builds: 4,000,000.
@@ -53,7 +53,7 @@ type builder struct {
 	// use ([builder.cellValueText]).
 	data *odf.DataStyles
 
-	warnings []compose.Warning
+	warnings []typeset.Warning
 	warned   map[string]bool
 	headings []heading
 	nextID   int
@@ -91,7 +91,7 @@ type builder struct {
 	// outermost first, and listNums each list to its numbering, for the
 	// L elements [builder.wrapLists] groups the blocks in.
 	listPath map[*layout.Node][]int
-	listNums []compose.ListNumbering
+	listNums []typeset.ListNumbering
 	// formFields is office.Options FormFields, and controls the form
 	// controls made fields ([builder.fieldControl]).
 	formFields bool
@@ -130,7 +130,7 @@ func (b *builder) warnEach(code, key, msg string) {
 		return
 	}
 	b.warned[k] = true
-	b.warnings = append(b.warnings, compose.Warning{Code: "odt-" + code, Message: msg})
+	b.warnings = append(b.warnings, typeset.Warning{Code: "odt-" + code, Message: msg})
 }
 
 // node counts a new node against [maxNodes], recording the error.

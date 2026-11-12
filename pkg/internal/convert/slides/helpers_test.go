@@ -10,11 +10,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 var (
@@ -40,7 +40,7 @@ func pinnedFonts(t testing.TB) *text.Fonts {
 }
 
 // convert converts doc with the pinned fonts.
-func convert(t testing.TB, doc *Document, opts office.Options) *compose.Document {
+func convert(t testing.TB, doc *Document, opts office.Options) *typeset.Document {
 	t.Helper()
 	out, err := Convert(context.Background(), doc, pinnedFonts(t), opts)
 	if err != nil {
@@ -66,7 +66,7 @@ func para(s string, st RunStyle) Paragraph {
 
 // box returns a text shape at x, y, w, h without insets, wrapping.
 func box(x, y, w, h float64, paras ...Paragraph) *Shape {
-	return &Shape{Box: compose.Rect{X: x, Y: y, Width: w, Height: h}, Text: &TextBody{Paragraphs: paras, Wrap: true}}
+	return &Shape{Box: typeset.Rect{X: x, Y: y, Width: w, Height: h}, Text: &TextBody{Paragraphs: paras, Wrap: true}}
 }
 
 // run is a text run placed on a page: its text, its origin, its size.
@@ -78,13 +78,13 @@ type run struct {
 
 // runs returns the text runs of a page in page coordinates, y down, sorted
 // top down then left to right.
-func runs(pg *compose.Page) []run {
+func runs(pg *typeset.Page) []run {
 	var out []run
-	var walk func(frags []compose.Fragment, m compose.Matrix)
-	walk = func(frags []compose.Fragment, m compose.Matrix) {
+	var walk func(frags []typeset.Fragment, m typeset.Matrix)
+	walk = func(frags []typeset.Fragment, m typeset.Matrix) {
 		for _, f := range frags {
 			switch v := f.(type) {
-			case *compose.Text:
+			case *typeset.Text:
 				var b strings.Builder
 				for _, g := range v.Glyphs {
 					b.WriteString(g.Text)
@@ -94,16 +94,16 @@ func runs(pg *compose.Page) []run {
 					x, y = apply(m, v.Origin.X+v.Glyphs[0].X, v.Origin.Y+v.Glyphs[0].Y)
 				}
 				out = append(out, run{text: b.String(), x: x, y: y, size: v.Size * m.D})
-			case *compose.Group:
+			case *typeset.Group:
 				t := v.Transform
-				if t == (compose.Matrix{}) {
-					t = compose.Identity
+				if t == (typeset.Matrix{}) {
+					t = typeset.Identity
 				}
 				walk(v.Content, then(t, m))
 			}
 		}
 	}
-	walk(pg.Content, compose.Identity)
+	walk(pg.Content, typeset.Identity)
 	sort.SliceStable(out, func(i, j int) bool {
 		if d := out[i].y - out[j].y; d > 0.5 || d < -0.5 {
 			return out[i].y < out[j].y
@@ -114,7 +114,7 @@ func runs(pg *compose.Page) []run {
 }
 
 // find returns the first run whose text starts with s.
-func find(t *testing.T, pg *compose.Page, s string) run {
+func find(t *testing.T, pg *typeset.Page, s string) run {
 	t.Helper()
 	for _, r := range runs(pg) {
 		if strings.HasPrefix(strings.TrimSpace(r.text), s) {
@@ -139,9 +139,9 @@ func tinyPicture(t testing.TB) *layout.Picture {
 
 // source returns img encoded as an image source, failing t when it does
 // not encode.
-func source(t testing.TB, img image.Image) *compose.ImageSource {
+func source(t testing.TB, img image.Image) *typeset.ImageSource {
 	t.Helper()
-	src, err := compose.EncodeImage(context.Background(), img)
+	src, err := typeset.EncodeImage(context.Background(), img)
 	if err != nil {
 		t.Fatalf("EncodeImage: %v", err)
 	}
@@ -150,7 +150,7 @@ func source(t testing.TB, img image.Image) *compose.ImageSource {
 
 // decoded returns the pixels of src as an NRGBA picture, failing t when
 // they do not decode to one.
-func decoded(t testing.TB, src *compose.ImageSource) *image.NRGBA {
+func decoded(t testing.TB, src *typeset.ImageSource) *image.NRGBA {
 	t.Helper()
 	img, err := src.Decode(context.Background())
 	if err != nil {

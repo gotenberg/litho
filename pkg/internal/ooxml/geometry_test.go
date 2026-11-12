@@ -5,8 +5,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // spPrOf parses a shape properties element holding body.
@@ -70,12 +70,12 @@ func TestParseGeometry_Custom(t *testing.T) {
 	if p := c.Paths[0]; p.Fill != shape.FillDarken || p.Stroke {
 		t.Errorf("path 0: %+v", p)
 	}
-	r := compose.Rect{X: 0, Y: 0, Width: 200, Height: 100}
+	r := typeset.Rect{X: 0, Y: 0, Width: 200, Height: 100}
 	paths := shape.Paths(g, r)
 	if got := paths[0].Ops[1].P[0]; math.Abs(got.X-100) > 1e-9 || math.Abs(got.Y-100) > 1e-9 {
 		t.Errorf("line to %v, want (100, 100)", got)
 	}
-	if got := paths[1].Ops[1].P[0]; got != (compose.Point{X: 200, Y: 100}) {
+	if got := paths[1].Ops[1].P[0]; got != (typeset.Point{X: 200, Y: 100}) {
 		t.Errorf("path space end %v", got)
 	}
 	if tr := shape.TextRect(g, r); tr.Width != 100 || tr.Height != 100 {

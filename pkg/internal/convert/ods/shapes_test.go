@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestParseTransform(t *testing.T) {
@@ -107,7 +107,7 @@ func TestRead_Shapes(t *testing.T) {
 		t.Errorf("dim = %+v", d)
 	}
 	box := ds[byName["box"]]
-	frags := box.Picture.Vector(context.Background(), compose.Rect{Width: box.Width, Height: box.Height})
+	frags := box.Picture.Vector(context.Background(), typeset.Rect{Width: box.Width, Height: box.Height})
 	fill := firstFill(frags)
 	if fill == nil || !near(fill.Color.R, 0x72/255.0) || !near(fill.Color.B, 0xcf/255.0) {
 		t.Errorf("box fill = %+v", fill)
@@ -115,14 +115,14 @@ func TestRead_Shapes(t *testing.T) {
 }
 
 // firstFill returns the first fill of frags, nil when none.
-func firstFill(frags []compose.Fragment) *compose.Fill {
+func firstFill(frags []typeset.Fragment) *typeset.Fill {
 	for _, f := range frags {
 		switch f := f.(type) {
-		case *compose.Group:
+		case *typeset.Group:
 			if fl := firstFill(f.Content); fl != nil {
 				return fl
 			}
-		case *compose.Path:
+		case *typeset.Path:
 			if f.Fill != nil {
 				return f.Fill
 			}

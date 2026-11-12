@@ -5,12 +5,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/formfield"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // formState is what the document knows of the form controls it makes
@@ -56,8 +56,8 @@ func (d *document) fieldsOn() bool {
 //     fields "Widget", "_2", "_3" and so on, from no source attribute.
 //   - litho/docx form-fields-legacy, converted by LibreOffice on
 //     gotenberg/gotenberg:9.4.1: no field.
-func sdtField(pr *ooxml.Element, content *ooxml.Element) (compose.Field, bool) {
-	f := compose.Field{Kind: compose.FieldText}
+func sdtField(pr *ooxml.Element, content *ooxml.Element) (typeset.Field, bool) {
+	f := typeset.Field{Kind: typeset.FieldText}
 	tag, alias := attrOr(pr.Child(w, "tag"), "val"), attrOr(pr.Child(w, "alias"), "val")
 	f.Name, f.Description = tag, alias
 	if f.Name == "" {
@@ -78,7 +78,7 @@ func sdtField(pr *ooxml.Element, content *ooxml.Element) (compose.Field, bool) {
 			known = true
 		case k.Is(w, "dropDownList"), k.Is(w, "comboBox"):
 			known = true
-			f.Kind = compose.FieldCombo
+			f.Kind = typeset.FieldCombo
 			f.Editable = k.Is(w, "comboBox")
 			for _, it := range k.Kids() {
 				if it.Is(w, "listItem") {
@@ -91,7 +91,7 @@ func sdtField(pr *ooxml.Element, content *ooxml.Element) (compose.Field, bool) {
 			}
 		case k.Is(ooxml.NSW14, "checkbox"):
 			known = true
-			f.Kind = compose.FieldCheckBox
+			f.Kind = typeset.FieldCheckBox
 			v, _ := k.Child(ooxml.NSW14, "checked").AttrNS(ooxml.NSW14, "val")
 			f.Checked = v == "1" || v == "true"
 		case k.Is(w, "picture"), k.Is(w, "docPartObj"), k.Is(w, "docPartList"), k.Is(w, "group"),
@@ -104,7 +104,7 @@ func sdtField(pr *ooxml.Element, content *ooxml.Element) (compose.Field, bool) {
 		// A rich text control (17.5.2.31 richText, or no kind at all).
 		f.Multiline = true
 	}
-	if f.Kind != compose.FieldCheckBox && pr.Child(w, "showingPlcHdr") == nil {
+	if f.Kind != typeset.FieldCheckBox && pr.Child(w, "showingPlcHdr") == nil {
 		f.Value = runText(content)
 	}
 	return f, true
@@ -112,8 +112,8 @@ func sdtField(pr *ooxml.Element, content *ooxml.Element) (compose.Field, bool) {
 
 // maxControlText bounds the characters [runText] gathers from a control.
 // Anti-DoS guard, not spec-mandated: a field holds at most
-// compose.MaxFieldText bytes.
-const maxControlText = compose.MaxFieldText / 4
+// typeset.MaxFieldText bytes.
+const maxControlText = typeset.MaxFieldText / 4
 
 // runText returns the text the runs under e show: their w:t, a tab for a
 // w:tab and a line break for a w:br or w:cr, a paragraph's end a line
@@ -156,7 +156,7 @@ func runText(e *ooxml.Element) string {
 // [formfield.Attach] turns into the field once laid out.
 func (d *document) inlineControl(s *story, rp resolvedPara, ps *css.Style, lineMult float64, e *ooxml.Element, sink *inlineSink, depth int) {
 	content := e.Child(w, "sdtContent")
-	var f compose.Field
+	var f typeset.Field
 	ok := d.fieldsOn()
 	if ok {
 		f, ok = sdtField(e.Child(w, "sdtPr"), content)
@@ -166,7 +166,7 @@ func (d *document) inlineControl(s *story, rp resolvedPara, ps *css.Style, lineM
 		return
 	}
 	ctl := &formfield.Control{ID: formfield.NodeID(len(d.form.controls)), Field: f}
-	if f.Kind == compose.FieldCheckBox {
+	if f.Kind == typeset.FieldCheckBox {
 		ctl.Other = otherSymbol(e.Child(w, "sdtPr").Child(ooxml.NSW14, "checkbox"), f.Checked)
 	}
 	d.form.open++
@@ -194,7 +194,7 @@ func (d *document) closeControl(sink *inlineSink, ctl *formfield.Control) {
 		ctl.Field.FontSize = st.FontSize
 	}
 	if c := st.Color; c.A > 0 {
-		ctl.Field.Color = compose.Color{R: c.R, G: c.G, B: c.B, A: c.A}
+		ctl.Field.Color = typeset.Color{R: c.R, G: c.G, B: c.B, A: c.A}
 	}
 	sink.add(&layout.Node{Kind: layout.Element, Style: inlineStyle(&st), Role: "Form", ID: ctl.ID, Children: fr.nodes})
 	d.form.controls = append(d.form.controls, ctl)
@@ -206,7 +206,7 @@ func (d *document) closeControl(sink *inlineSink, ctl *formfield.Control) {
 // ST_ShortHexNumber), in place of the shown symbol, in its face, when the
 // face holds it; nothing when it does not. Word's defaults are U+2612 and
 // U+2610.
-func otherSymbol(cb *ooxml.Element, checked bool) func([]compose.Fragment, compose.Rect, *compose.Measurer) []compose.Fragment {
+func otherSymbol(cb *ooxml.Element, checked bool) func([]typeset.Fragment, typeset.Rect, *typeset.Measurer) []typeset.Fragment {
 	state, def := "checkedState", rune(0x2612)
 	if checked {
 		state, def = "uncheckedState", 0x2610
@@ -217,7 +217,7 @@ func otherSymbol(cb *ooxml.Element, checked bool) func([]compose.Fragment, compo
 			r = rune(n) // fits rune: at most 16 bits, parsed above
 		}
 	}
-	return func(shown []compose.Fragment, _ compose.Rect, m *compose.Measurer) []compose.Fragment {
+	return func(shown []typeset.Fragment, _ typeset.Rect, m *typeset.Measurer) []typeset.Fragment {
 		return swapGlyph(shown, r, m)
 	}
 }
@@ -225,24 +225,24 @@ func otherSymbol(cb *ooxml.Element, checked bool) func([]compose.Fragment, compo
 // swapGlyph returns a copy of frags, the runs a symbol draws, whose first
 // glyph draws r instead, in its run's face; nil when no run holds a glyph
 // or the face lacks r.
-func swapGlyph(frags []compose.Fragment, r rune, m *compose.Measurer) []compose.Fragment {
-	out := make([]compose.Fragment, 0, len(frags))
+func swapGlyph(frags []typeset.Fragment, r rune, m *typeset.Measurer) []typeset.Fragment {
+	out := make([]typeset.Fragment, 0, len(frags))
 	done := false
 	for _, f := range frags {
 		switch v := f.(type) {
-		case *compose.Text:
+		case *typeset.Text:
 			if !done && v != nil && len(v.Glyphs) > 0 {
 				gid, ok := m.Glyph(v.Face, r)
 				if !ok {
 					return nil
 				}
 				t := *v
-				t.Glyphs = append([]compose.Glyph{{GID: gid, X: v.Glyphs[0].X, Y: v.Glyphs[0].Y, Text: string(r)}}, v.Glyphs[1:]...)
+				t.Glyphs = append([]typeset.Glyph{{GID: gid, X: v.Glyphs[0].X, Y: v.Glyphs[0].Y, Text: string(r)}}, v.Glyphs[1:]...)
 				out = append(out, &t)
 				done = true
 				continue
 			}
-		case *compose.Group:
+		case *typeset.Group:
 			if !done && v != nil {
 				if k := swapGlyph(v.Content, r, m); k != nil {
 					g := *v
@@ -270,16 +270,16 @@ func swapGlyph(frags []compose.Fragment, r rune, m *compose.Measurer) []compose.
 // w:maxLength (17.16.26); a drop-down's items are its w:listEntry
 // (17.16.23) and its value the w:result-th item (17.16.30); a check box
 // is checked by w:checked, else w:default (17.16.7, 17.16.10).
-func legacyField(instr string, ff *ooxml.Element) (compose.Field, bool) {
-	var f compose.Field
+func legacyField(instr string, ff *ooxml.Element) (typeset.Field, bool) {
+	var f typeset.Field
 	switch strings.ToUpper(firstWord(instr)) {
 	case "FORMTEXT":
-		f.Kind = compose.FieldText
-		if v, err := strconv.Atoi(attrOr(ff.Child(w, "textInput").Child(w, "maxLength"), "val")); err == nil && v > 0 && v <= compose.MaxFieldText {
+		f.Kind = typeset.FieldText
+		if v, err := strconv.Atoi(attrOr(ff.Child(w, "textInput").Child(w, "maxLength"), "val")); err == nil && v > 0 && v <= typeset.MaxFieldText {
 			f.MaxLen = v
 		}
 	case "FORMDROPDOWN":
-		f.Kind = compose.FieldCombo
+		f.Kind = typeset.FieldCombo
 		dd := ff.Child(w, "ddList")
 		for _, e := range dd.Kids() {
 			if e.Is(w, "listEntry") {
@@ -292,7 +292,7 @@ func legacyField(instr string, ff *ooxml.Element) (compose.Field, bool) {
 			f.Value = f.Options[0]
 		}
 	case "FORMCHECKBOX":
-		f.Kind = compose.FieldCheckBox
+		f.Kind = typeset.FieldCheckBox
 		cb := ff.Child(w, "checkBox")
 		on := cb.Child(w, "checked")
 		if on == nil {
@@ -329,7 +329,7 @@ func (d *document) legacyResult(fl *field, st *css.Style, sink *inlineSink) bool
 	}
 	on := d.fieldsOn()
 	ctl := &formfield.Control{ID: formfield.NodeID(len(d.form.controls)), Field: f}
-	if f.Kind != compose.FieldCheckBox {
+	if f.Kind != typeset.FieldCheckBox {
 		if !on {
 			return false
 		}
@@ -341,7 +341,7 @@ func (d *document) legacyResult(fl *field, st *css.Style, sink *inlineSink) bool
 	n := legacyBox(st, f.Checked)
 	if on {
 		ctl.Box = true
-		ctl.Other = func(_ []compose.Fragment, r compose.Rect, _ *compose.Measurer) []compose.Fragment {
+		ctl.Other = func(_ []typeset.Fragment, r typeset.Rect, _ *typeset.Measurer) []typeset.Fragment {
 			return boxMark(r, !f.Checked)
 		}
 		n.ID = ctl.ID
@@ -377,32 +377,32 @@ func legacyBox(st *css.Style, checked bool) *layout.Node {
 	ks.Width, ks.Height = css.Pts(size), css.Pts(size)
 	kid := &layout.Node{Kind: layout.Replaced, Style: &ks, Picture: &layout.Picture{
 		Width: size, Height: size,
-		Vector: func(_ context.Context, r compose.Rect) []compose.Fragment { return boxMark(r, checked) },
+		Vector: func(_ context.Context, r typeset.Rect) []typeset.Fragment { return boxMark(r, checked) },
 	}}
 	return &layout.Node{Kind: layout.Element, Style: &box, Role: "Form", Children: []*layout.Node{kid}}
 }
 
 // boxMark draws a legacy check box in r: its square, and both diagonals
 // when checked.
-func boxMark(r compose.Rect, checked bool) []compose.Fragment {
+func boxMark(r typeset.Rect, checked bool) []typeset.Fragment {
 	const line = 0.1
-	stroke := &compose.Stroke{Color: compose.Black, Width: line}
-	ops := []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{{X: r.X, Y: r.Y}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X + r.Width, Y: r.Y}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X + r.Width, Y: r.Y + r.Height}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X, Y: r.Y + r.Height}}},
-		{Kind: compose.ClosePath},
+	stroke := &typeset.Stroke{Color: typeset.Black, Width: line}
+	ops := []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: r.X, Y: r.Y}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X + r.Width, Y: r.Y}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X + r.Width, Y: r.Y + r.Height}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X, Y: r.Y + r.Height}}},
+		{Kind: typeset.ClosePath},
 	}
 	if checked {
 		ops = append(ops,
-			compose.PathOp{Kind: compose.MoveTo, P: [3]compose.Point{{X: r.X, Y: r.Y}}},
-			compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X + r.Width, Y: r.Y + r.Height}}},
-			compose.PathOp{Kind: compose.MoveTo, P: [3]compose.Point{{X: r.X + r.Width, Y: r.Y}}},
-			compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X, Y: r.Y + r.Height}}},
+			typeset.PathOp{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: r.X, Y: r.Y}}},
+			typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X + r.Width, Y: r.Y + r.Height}}},
+			typeset.PathOp{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: r.X + r.Width, Y: r.Y}}},
+			typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X, Y: r.Y + r.Height}}},
 		)
 	}
-	return []compose.Fragment{&compose.Path{Ops: ops, Stroke: stroke}}
+	return []typeset.Fragment{&typeset.Path{Ops: ops, Stroke: stroke}}
 }
 
 // endLegacy closes the control the result of the legacy form field fl
@@ -411,7 +411,7 @@ func (d *document) endLegacy(fl *field, sink *inlineSink) {
 	ctl := fl.control
 	fl.control = nil
 	d.form.open--
-	if len(sink.links) > 0 && ctl.Field.Kind == compose.FieldText {
+	if len(sink.links) > 0 && ctl.Field.Kind == typeset.FieldText {
 		var b strings.Builder
 		for _, n := range sink.links[len(sink.links)-1].nodes {
 			b.WriteString(office.ShownText([]*layout.Node{n}))

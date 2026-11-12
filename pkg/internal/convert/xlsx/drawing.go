@@ -8,12 +8,12 @@ import (
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // nsXDR is the spreadsheet drawing namespace (ECMA-376 Part 1, 20.5).
@@ -385,21 +385,21 @@ func (r *reader) composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
 	}
 	out := &layout.Picture{Width: w, Height: h}
 	fonts := r.fonts
-	out.Vector = func(ctx context.Context, rect compose.Rect) []compose.Fragment {
-		var frags []compose.Fragment
+	out.Vector = func(ctx context.Context, rect typeset.Rect) []typeset.Fragment {
+		var frags []typeset.Fragment
 		for _, l := range leaves {
-			outer := compose.Rect{X: rect.X + l.x*rect.Width, Y: rect.Y + l.y*rect.Height, Width: l.w * rect.Width, Height: l.h * rect.Height}
+			outer := typeset.Rect{X: rect.X + l.x*rect.Width, Y: rect.Y + l.y*rect.Height, Width: l.w * rect.Width, Height: l.h * rect.Height}
 			box := outer
 			if l.anchored && quarterTurn(l.rot) {
-				box = compose.Rect{X: outer.X + (outer.Width-outer.Height)/2, Y: outer.Y + (outer.Height-outer.Width)/2, Width: outer.Height, Height: outer.Width}
+				box = typeset.Rect{X: outer.X + (outer.Width-outer.Height)/2, Y: outer.Y + (outer.Height-outer.Width)/2, Width: outer.Height, Height: outer.Width}
 			}
-			var content, upright []compose.Fragment
+			var content, upright []typeset.Fragment
 			if l.pic != nil {
 				pic := ooxml.Cropped(l.pic, l.crop)
 				if pic.Vector != nil {
 					content = pic.Vector(ctx, box)
 				} else if pic.Source != nil {
-					content = []compose.Fragment{&compose.Image{Rect: box, Source: pic.Source}}
+					content = []typeset.Fragment{&typeset.Image{Rect: box, Source: pic.Source}}
 				}
 			} else {
 				content = opaque(l.style.Paint(l.geom, box))
@@ -414,13 +414,13 @@ func (r *reader) composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
 				}
 			}
 			if m, ok := transform(box, l.rot, l.flipH, l.flipV); ok && len(content) > 0 {
-				frags = append(frags, &compose.Group{Transform: m, Content: content})
+				frags = append(frags, &typeset.Group{Transform: m, Content: content})
 			} else {
 				frags = append(frags, content...)
 			}
 			frags = append(frags, upright...)
 		}
-		return []compose.Fragment{&compose.Group{Clip: ooxml.RectPath(rect), Content: frags}}
+		return []typeset.Fragment{&typeset.Group{Clip: ooxml.RectPath(rect), Content: frags}}
 	}
 	return out
 }
@@ -433,12 +433,12 @@ func quarterTurn(rot float64) bool {
 }
 
 // opaque returns the paths of frags without their fully transparent fill
-// or outline, which compose refuses, and without the paths left painting
+// or outline, which typeset refuses, and without the paths left painting
 // nothing.
-func opaque(frags []compose.Fragment) []compose.Fragment {
+func opaque(frags []typeset.Fragment) []typeset.Fragment {
 	out := frags[:0]
 	for _, f := range frags {
-		if p, ok := f.(*compose.Path); ok {
+		if p, ok := f.(*typeset.Path); ok {
 			if p.Fill != nil && p.Fill.Shading == nil && p.Fill.Color.A <= 0 {
 				p.Fill = nil
 			}
@@ -457,9 +457,9 @@ func opaque(frags []compose.Fragment) []compose.Fragment {
 // transform returns the matrix rotating box clockwise by rot degrees and
 // mirroring it about its centre (ECMA-376 Part 1, 20.1.7.6), false when it
 // changes nothing.
-func transform(box compose.Rect, rot float64, flipH, flipV bool) (compose.Matrix, bool) {
+func transform(box typeset.Rect, rot float64, flipH, flipV bool) (typeset.Matrix, bool) {
 	if rot == 0 && !flipH && !flipV {
-		return compose.Matrix{}, false
+		return typeset.Matrix{}, false
 	}
 	cx, cy := box.X+box.Width/2, box.Y+box.Height/2
 	sx, sy := 1.0, 1.0
@@ -474,7 +474,7 @@ func transform(box compose.Rect, rot float64, flipH, flipV bool) (compose.Matrix
 	rad := rot * math.Pi / 180
 	cos, sin := math.Cos(rad), math.Sin(rad)
 	a, b, c, dd := cos*sx, sin*sx, -sin*sy, cos*sy
-	return compose.Matrix{A: a, B: b, C: c, D: dd, E: cx - a*cx - c*cy, F: cy - b*cx - dd*cy}, true
+	return typeset.Matrix{A: a, B: b, C: c, D: dd, E: cx - a*cx - c*cy, F: cy - b*cx - dd*cy}, true
 }
 
 // loadPicture decodes the picture the relationship id of part names, once

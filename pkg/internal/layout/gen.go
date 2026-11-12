@@ -6,17 +6,17 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // genCtx is what box generation hands down the content tree.
 type genCtx struct {
-	elem        *compose.StructElem
+	elem        *typeset.StructElem
 	structDepth int
 	// list is the nearest L element, nil outside a list.
-	list  *compose.StructElem
+	list  *typeset.StructElem
 	link  *link
 	lang  string
 	decos []deco
@@ -103,13 +103,13 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 		case ctx.structDepth >= maxStructDepth:
 			e.warnOnce(codeStructTooDeep, fmt.Sprintf("structure roles nested deeper than %d hang from the deepest element", maxStructDepth), -1)
 		default:
-			el := &compose.StructElem{Role: role, Lang: n.Lang, Scope: n.Scope, Numbering: n.Numbering, ActualText: n.ActualText}
+			el := &typeset.StructElem{Role: role, Lang: n.Lang, Scope: n.Scope, Numbering: n.Numbering, ActualText: n.ActualText}
 			if n.Role == "TH" || n.Role == "TD" {
 				// A span is the converter's count of the grid cells the
-				// cell covers; past compose.MaxCellSpan no table holds
+				// cell covers; past typeset.MaxCellSpan no table holds
 				// that many.
-				el.ColSpan = min(max(n.ColSpan, 0), compose.MaxCellSpan)
-				el.RowSpan = min(max(n.RowSpan, 0), compose.MaxCellSpan)
+				el.ColSpan = min(max(n.ColSpan, 0), typeset.MaxCellSpan)
+				el.RowSpan = min(max(n.RowSpan, 0), typeset.MaxCellSpan)
 			}
 			if n.Role == "L" {
 				out.list = el
@@ -510,13 +510,13 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 		(st.ListStyleType == css.Disc || st.ListStyleType == css.Circle || st.ListStyleType == css.Square)
 	markerElem := ctx.elem
 	if n.Role == "LI" && ctx.elem != nil && ctx.elem.Role == "LI" && ctx.structDepth < maxStructDepth {
-		lbl := &compose.StructElem{Role: "Lbl"}
-		body := &compose.StructElem{Role: "LBody"}
+		lbl := &typeset.StructElem{Role: "Lbl"}
+		body := &typeset.StructElem{Role: "LBody"}
 		if pic != nil || symbol {
 			lbl.ActualText = alt
 		}
 		ctx.elem.Kids = append(ctx.elem.Kids, lbl, body)
-		if l := ctx.list; l != nil && l.Numbering == compose.NumberingUnset {
+		if l := ctx.list; l != nil && l.Numbering == typeset.NumberingUnset {
 			// ISO 14289-2, 8.2.5.25: a list whose items carry a Lbl
 			// states its numbering.
 			l.Numbering = listNumbering(st, pic != nil || n.Marker != nil && len(n.Marker.Children) > 0)
@@ -551,32 +551,32 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 // st: the value of its list-style-type when the attribute has one, Ordered
 // or Unordered for the other counter styles, and Unordered for a picture
 // or a marker of authored content (custom).
-func listNumbering(st *css.Style, custom bool) compose.ListNumbering {
+func listNumbering(st *css.Style, custom bool) typeset.ListNumbering {
 	if custom {
-		return compose.NumberingUnordered
+		return typeset.NumberingUnordered
 	}
 	switch st.ListStyleType {
 	case css.Disc:
-		return compose.NumberingDisc
+		return typeset.NumberingDisc
 	case css.Circle:
-		return compose.NumberingCircle
+		return typeset.NumberingCircle
 	case css.Square:
-		return compose.NumberingSquare
+		return typeset.NumberingSquare
 	case css.Decimal:
-		return compose.NumberingDecimal
+		return typeset.NumberingDecimal
 	case css.LowerRoman:
-		return compose.NumberingLowerRoman
+		return typeset.NumberingLowerRoman
 	case css.UpperRoman:
-		return compose.NumberingUpperRoman
+		return typeset.NumberingUpperRoman
 	case css.LowerAlpha:
-		return compose.NumberingLowerAlpha
+		return typeset.NumberingLowerAlpha
 	case css.UpperAlpha:
-		return compose.NumberingUpperAlpha
+		return typeset.NumberingUpperAlpha
 	case css.DecimalLeadingZero, css.LowerGreek, css.Armenian, css.Georgian:
-		return compose.NumberingOrdered
+		return typeset.NumberingOrdered
 	case css.ListNone, css.ListString:
 	}
-	return compose.NumberingUnordered
+	return typeset.NumberingUnordered
 }
 
 // markerStyle returns the style of a list item's marker: the item's, as an

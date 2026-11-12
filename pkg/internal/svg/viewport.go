@@ -5,8 +5,8 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // viewBox is a viewBox attribute (SVG 1.1, 7.7).
@@ -93,7 +93,7 @@ func alignOf(s string) (int, bool) {
 // viewport of w by h at the origin as par asks (SVG 1.1, 7.8): scaled
 // apart with none, else uniformly by the smaller scale for meet or the
 // larger for slice, and aligned. It reports false for an empty viewport.
-func viewBoxTransform(vb viewBox, par aspect, w, h float64) (compose.Matrix, bool) {
+func viewBoxTransform(vb viewBox, par aspect, w, h float64) (typeset.Matrix, bool) {
 	if !numeric.Positive(w) || !numeric.Positive(h) || !vb.ok {
 		return identity, false
 	}
@@ -112,16 +112,16 @@ func viewBoxTransform(vb viewBox, par aspect, w, h float64) (compose.Matrix, boo
 
 // fitRect returns where content of size cw by ch lands in the rectangle
 // (x, y, w, h) under par, for an image element (SVG 1.1, 7.8 and 14.7).
-func fitRect(cw, ch float64, par aspect, x, y, w, h float64) compose.Rect {
+func fitRect(cw, ch float64, par aspect, x, y, w, h float64) typeset.Rect {
 	if par.none || !numeric.Positive(cw) || !numeric.Positive(ch) {
-		return compose.Rect{X: x, Y: y, Width: w, Height: h}
+		return typeset.Rect{X: x, Y: y, Width: w, Height: h}
 	}
 	s := min(w/cw, h/ch)
 	if par.slice {
 		s = max(w/cw, h/ch)
 	}
 	rw, rh := cw*s, ch*s
-	return compose.Rect{
+	return typeset.Rect{
 		X: x + (w-rw)*float64(par.ax)/2, Y: y + (h-rh)*float64(par.ay)/2,
 		Width: rw, Height: rh,
 	}

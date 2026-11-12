@@ -18,9 +18,9 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 )
 
@@ -102,15 +102,15 @@ func prep(t *testing.T, src string, o Options) *prepared {
 // Document root, and every ID of the tree anchored at the top of page 1.
 func stubLayout(_ context.Context, root *layout.Node, _ *text.Fonts, opts layout.Options) (*layout.Result, error) {
 	res := &layout.Result{
-		Pages:     []*compose.Page{{Width: opts.Page.Width, Height: opts.Page.Height}},
-		Structure: &compose.StructElem{Role: "Document", Lang: opts.Lang},
-		Anchors:   map[string]compose.Dest{},
-		Warnings:  []compose.Warning{{Code: "layout-stub", Message: "laid out by the stub"}},
+		Pages:     []*typeset.Page{{Width: opts.Page.Width, Height: opts.Page.Height}},
+		Structure: &typeset.StructElem{Role: "Document", Lang: opts.Lang},
+		Anchors:   map[string]typeset.Dest{},
+		Warnings:  []typeset.Warning{{Code: "layout-stub", Message: "laid out by the stub"}},
 	}
 	y := 0.0
 	eachNode(root, func(n *layout.Node) {
 		if n.ID != "" {
-			res.Anchors[n.ID] = compose.Dest{Page: 1, Y: y}
+			res.Anchors[n.ID] = typeset.Dest{Page: 1, Y: y}
 			y++
 		}
 	})
@@ -158,7 +158,7 @@ func treeText(n *layout.Node) string {
 }
 
 // codes returns the codes of ws in order.
-func codes(ws []compose.Warning) []string {
+func codes(ws []typeset.Warning) []string {
 	var out []string
 	for _, w := range ws {
 		out = append(out, w.Code)
@@ -167,7 +167,7 @@ func codes(ws []compose.Warning) []string {
 }
 
 // hasWarning reports a warning of code whose message holds sub.
-func hasWarning(ws []compose.Warning, code, sub string) bool {
+func hasWarning(ws []typeset.Warning, code, sub string) bool {
 	for _, w := range ws {
 		if w.Code == code && strings.Contains(w.Message, sub) {
 			return true

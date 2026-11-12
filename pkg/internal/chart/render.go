@@ -4,10 +4,10 @@ import (
 	"context"
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // The distances of LibreOffice's automatic chart layout, in points
@@ -52,7 +52,7 @@ const (
 // the title and subtitle at the top, the legend at its side, and the plot
 // area in the space left, with its axes, gridlines, series and data labels.
 // Every fragment lies inside r: the content is clipped to it. Text is shaped
-// with fonts and emitted as [compose.Text] runs, so extraction reads it.
+// with fonts and emitted as [typeset.Text] runs, so extraction reads it.
 //
 // It returns nil for a nil chart, a nil font index, or a rectangle without
 // area, and ctx's error stops it early with what it drew so far. The group
@@ -61,7 +61,7 @@ const (
 //
 // Three-dimensional charts are drawn as their two-dimensional kind;
 // trendline equations are not drawn.
-func Render(ctx context.Context, fonts *text.Fonts, c *Chart, r compose.Rect) []compose.Fragment {
+func Render(ctx context.Context, fonts *text.Fonts, c *Chart, r typeset.Rect) []typeset.Fragment {
 	if c == nil || fonts == nil || !numeric.PositiveFinite(r.Width) || !numeric.PositiveFinite(r.Height) {
 		return nil
 	}
@@ -70,11 +70,11 @@ func Render(ctx context.Context, fonts *text.Fonts, c *Chart, r compose.Rect) []
 	if len(rd.out) == 0 {
 		return nil
 	}
-	return []compose.Fragment{&compose.Group{Clip: rectPath(r), Content: rd.out}}
+	return []typeset.Fragment{&typeset.Group{Clip: rectPath(r), Content: rd.out}}
 }
 
 // render lays the chart out into r and paints it.
-func (rd *renderer) render(r compose.Rect) {
+func (rd *renderer) render(r typeset.Rect) {
 	c := rd.c
 	rd.frame(r, c.Area)
 	if rd.ctx.Err() != nil {
@@ -98,7 +98,7 @@ func (rd *renderer) render(r compose.Rect) {
 	if pie {
 		dx, dy = pieDistance, pieDistance
 	}
-	plot := compose.Rect{X: rem.X + dx, Y: rem.Y + dy, Width: rem.Width - 2*dx, Height: rem.Height - 2*dy}
+	plot := typeset.Rect{X: rem.X + dx, Y: rem.Y + dy, Width: rem.Width - 2*dx, Height: rem.Height - 2*dy}
 	if l := c.PlotLayout; l != nil && l.Width > 0 && l.Height > 0 {
 		// A plot area the file places: its rectangle with the axis labels,
 		// or without them, as a pie's always is (oox's PlotAreaConverter,
@@ -129,20 +129,20 @@ func (rd *renderer) render(r compose.Rect) {
 // width capped at two thirds of the page's). LibreOffice sets the text
 // narrower than the face's advances, by noticeNarrowing, so the lines
 // break where they would at that width.
-func (rd *renderer) notice(t *Title, r compose.Rect) {
+func (rd *renderer) notice(t *Title, r typeset.Rect) {
 	b := rd.measure(t.Text, t.Style, r.Width*2/3/noticeNarrowing)
 	if b == nil {
 		return
 	}
 	w, h := b.rotated()
 	cx, cy := r.X+r.Width/2, r.Y+r.Height/2
-	rd.frame(compose.Rect{X: cx - w/2, Y: cy - h/2, Width: w, Height: h}, t.Frame)
+	rd.frame(typeset.Rect{X: cx - w/2, Y: cy - h/2, Width: w, Height: h}, t.Frame)
 	rd.out = append(rd.out, b.draw(cx, cy, alignCenter)...)
 }
 
 // title places t centred at the top of rem, top distance below rem's top,
 // and takes its height from rem unless it overlays.
-func (rd *renderer) title(t *Title, page compose.Rect, rem *compose.Rect, distance float64) {
+func (rd *renderer) title(t *Title, page typeset.Rect, rem *typeset.Rect, distance float64) {
 	b := rd.measure(t.Text, t.Style, page.Width*0.8-2*titleHPad*t.Style.Size)
 	if b == nil {
 		return
@@ -158,7 +158,7 @@ func (rd *renderer) title(t *Title, page compose.Rect, rem *compose.Rect, distan
 		lr := t.Layout.rect(page)
 		cx, top = lr.X+w/2, lr.Y
 	}
-	rd.frame(compose.Rect{X: cx - w/2, Y: top, Width: w, Height: h}, t.Frame)
+	rd.frame(typeset.Rect{X: cx - w/2, Y: top, Width: w, Height: h}, t.Frame)
 	rd.out = append(rd.out, b.draw(cx, top+h/2, alignCenter)...)
 	if t.Overlay {
 		return
@@ -168,13 +168,13 @@ func (rd *renderer) title(t *Title, page compose.Rect, rem *compose.Rect, distan
 }
 
 // frame paints the fill and border of rect.
-func (rd *renderer) frame(rect compose.Rect, f Frame) {
+func (rd *renderer) frame(rect typeset.Rect, f Frame) {
 	rd.paint(rectPath(rect).Ops, f.Fill, f.Border)
 }
 
 // paint fills the outline ops with fill, a gradient or pattern through
 // the shape package, and strokes it with border.
-func (rd *renderer) paint(ops []compose.PathOp, fill *Paint, border *Stroke) {
+func (rd *renderer) paint(ops []typeset.PathOp, fill *Paint, border *Stroke) {
 	if fill != nil && !fill.None && fill.Shape != nil {
 		rd.out = append(rd.out, shape.Fill(ops, opsBounds(ops), *fill.Shape)...)
 	}
@@ -182,33 +182,33 @@ func (rd *renderer) paint(ops []compose.PathOp, fill *Paint, border *Stroke) {
 }
 
 // opsBounds returns the bounding box of the points of ops.
-func opsBounds(ops []compose.PathOp) compose.Rect {
+func opsBounds(ops []typeset.PathOp) typeset.Rect {
 	x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
 	for _, op := range ops {
 		n := 1
 		switch op.Kind {
-		case compose.CurveTo:
+		case typeset.CurveTo:
 			n = 3
-		case compose.ClosePath:
+		case typeset.ClosePath:
 			n = 0
-		case compose.MoveTo, compose.LineTo:
+		case typeset.MoveTo, typeset.LineTo:
 		}
 		for _, pt := range op.P[:n] {
 			x0, y0, x1, y1 = math.Min(x0, pt.X), math.Min(y0, pt.Y), math.Max(x1, pt.X), math.Max(y1, pt.Y)
 		}
 	}
 	if x0 > x1 || y0 > y1 {
-		return compose.Rect{}
+		return typeset.Rect{}
 	}
-	return compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
+	return typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
 }
 
 // paintPath returns a path of ops filled and stroked, nil when it paints
 // nothing.
-func paintPath(ops []compose.PathOp, fill *Paint, border *Stroke) *compose.Path {
-	p := &compose.Path{Ops: ops}
+func paintPath(ops []typeset.PathOp, fill *Paint, border *Stroke) *typeset.Path {
+	p := &typeset.Path{Ops: ops}
 	if fill != nil && !fill.None && fill.Shape == nil && fill.Color.A > 0 {
-		p.Fill = &compose.Fill{Color: fill.Color}
+		p.Fill = &typeset.Fill{Color: fill.Color}
 	}
 	p.Stroke = border.compose()
 	if p.Fill == nil && p.Stroke == nil {
@@ -218,11 +218,11 @@ func paintPath(ops []compose.PathOp, fill *Paint, border *Stroke) *compose.Path 
 }
 
 // compose returns the stroke s draws, nil for none.
-func (s *Stroke) compose() *compose.Stroke {
+func (s *Stroke) compose() *typeset.Stroke {
 	if s == nil || s.None || s.Color.A <= 0 || !numeric.NonNegative(s.Width) {
 		return nil
 	}
-	return &compose.Stroke{Color: s.Color, Width: min(s.Width, maxStrokeWidth), Dash: s.Dash, Join: compose.RoundJoin}
+	return &typeset.Stroke{Color: s.Color, Width: min(s.Width, maxStrokeWidth), Dash: s.Dash, Join: typeset.RoundJoin}
 }
 
 // noticeNarrowing is the width LibreOffice gives a chart's notice text,
@@ -242,31 +242,31 @@ const noticeNarrowing = 0.9757
 const maxStrokeWidth = 1584
 
 // rectPath returns the outline of r.
-func rectPath(r compose.Rect) *compose.Path {
+func rectPath(r typeset.Rect) *typeset.Path {
 	x0, y0, x1, y1 := r.X, r.Y, r.X+r.Width, r.Y+r.Height
-	return &compose.Path{Ops: []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{{X: x0, Y: y0}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: x1, Y: y0}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: x1, Y: y1}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: x0, Y: y1}}},
-		{Kind: compose.ClosePath},
+	return &typeset.Path{Ops: []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x0, Y: y0}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x1, Y: y0}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x1, Y: y1}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x0, Y: y1}}},
+		{Kind: typeset.ClosePath},
 	}}
 }
 
 // line returns a straight segment stroked with s, nil for no stroke.
-func line(x0, y0, x1, y1 float64, s *Stroke) *compose.Path {
+func line(x0, y0, x1, y1 float64, s *Stroke) *typeset.Path {
 	st := s.compose()
 	if st == nil {
 		return nil
 	}
-	return &compose.Path{Ops: []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{{X: x0, Y: y0}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: x1, Y: y1}}},
+	return &typeset.Path{Ops: []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x0, Y: y0}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x1, Y: y1}}},
 	}, Stroke: st}
 }
 
 // add appends the fragments that are not nil paths.
-func (rd *renderer) add(ps ...*compose.Path) {
+func (rd *renderer) add(ps ...*typeset.Path) {
 	for _, p := range ps {
 		if p != nil {
 			rd.out = append(rd.out, p)

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxOutlineTitleRunes caps an outline entry's title. Anti-DoS guard, not
@@ -18,9 +18,9 @@ const maxOutlineTitleRunes = 512
 // each nested under the closest preceding heading of a higher level: the
 // outline levels of the paragraphs (17.3.1.20), as LibreOffice exports
 // them. A heading that landed on no page or draws no text is left out.
-func outline(headings []heading, anchors map[string]compose.Dest) []compose.Outline {
+func outline(headings []heading, anchors map[string]typeset.Dest) []typeset.Outline {
 	type entry struct {
-		o     compose.Outline
+		o     typeset.Outline
 		level int
 		kids  []*entry
 	}
@@ -34,7 +34,7 @@ func outline(headings []heading, anchors map[string]compose.Dest) []compose.Outl
 		if title == "" {
 			continue
 		}
-		e := &entry{o: compose.Outline{Title: title, Dest: dest}, level: h.level}
+		e := &entry{o: typeset.Outline{Title: title, Dest: dest}, level: h.level}
 		for len(stack) > 0 && stack[len(stack)-1].level >= h.level {
 			stack = stack[:len(stack)-1]
 		}
@@ -47,12 +47,12 @@ func outline(headings []heading, anchors map[string]compose.Dest) []compose.Outl
 		stack = append(stack, e)
 	}
 	// The tree is at most nine levels deep, one an outline level.
-	var flatten func([]*entry) []compose.Outline
-	flatten = func(es []*entry) []compose.Outline {
+	var flatten func([]*entry) []typeset.Outline
+	flatten = func(es []*entry) []typeset.Outline {
 		if len(es) == 0 {
 			return nil
 		}
-		out := make([]compose.Outline, len(es))
+		out := make([]typeset.Outline, len(es))
 		for i, e := range es {
 			out[i] = e.o
 			out[i].Kids = flatten(e.kids)

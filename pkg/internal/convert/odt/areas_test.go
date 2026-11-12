@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // listStyles are a numbered list in label-alignment mode with a second
@@ -143,7 +143,7 @@ func TestConvert_Tables(t *testing.T) {
 	root, _ := b.document(odfBody(b))
 	var ths, spans int
 	walkNodes(root, func(n *layout.Node) {
-		if n.Role == "TH" && n.Scope == compose.ScopeColumn {
+		if n.Role == "TH" && n.Scope == typeset.ScopeColumn {
 			ths++
 		}
 		if n.Role == "TD" && n.ColSpan == 2 {
@@ -156,10 +156,10 @@ func TestConvert_Tables(t *testing.T) {
 }
 
 // roles returns the structure tree's roles in document order.
-func roles(e *compose.StructElem) string {
+func roles(e *typeset.StructElem) string {
 	var out []string
-	var walk func(*compose.StructElem)
-	walk = func(e *compose.StructElem) {
+	var walk func(*typeset.StructElem)
+	walk = func(e *typeset.StructElem) {
 		out = append(out, e.Role)
 		for _, k := range e.Kids {
 			walk(k)
@@ -304,14 +304,14 @@ func TestConvert_Frames(t *testing.T) {
 	body := `<text:p>Inline <draw:frame text:anchor-type="as-char" svg:width="2cm" svg:height="1cm"><draw:image xlink:href="Pictures/a.png"/></draw:frame> picture.</text:p>` +
 		`<text:p><draw:frame draw:style-name="fr1" text:anchor-type="paragraph" svg:width="3cm" svg:height="1.5cm"><draw:image xlink:href="Pictures/a.png"/></draw:frame>` + long + `</text:p>`
 	res := convertDoc(t, doc{contentAuto: auto, body: body, pictures: map[string][]byte{"Pictures/a.png": tinyPNG(t)}}.pack(t), office.Options{})
-	var imgs []compose.Rect
-	var walk func([]compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+	var imgs []typeset.Rect
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Image:
+			case *typeset.Image:
 				imgs = append(imgs, v.Rect)
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content)
 			}
 		}
@@ -525,8 +525,8 @@ func TestConvert_ListsAreTagged(t *testing.T) {
 		}
 	})
 	want := []string{
-		fmt.Sprintf("%d:3", compose.NumberingDecimal), fmt.Sprintf("%d:1", compose.NumberingLowerAlpha),
-		fmt.Sprintf("%d:1", compose.NumberingDisc),
+		fmt.Sprintf("%d:3", typeset.NumberingDecimal), fmt.Sprintf("%d:1", typeset.NumberingLowerAlpha),
+		fmt.Sprintf("%d:1", typeset.NumberingDisc),
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("lists (numbering:kids) %v, want %v", got, want)
@@ -605,13 +605,13 @@ func TestConvert_ListOfSuffixesIsUnordered(t *testing.T) {
 		`<text:list text:style-name="LE"><text:list-item><text:p>b</text:p></text:list-item></text:list>`
 	b := newTestBuilder(t, doc{styles: styles, body: body})
 	root, _ := b.document(odfBody(b))
-	var got []compose.ListNumbering
+	var got []typeset.ListNumbering
 	walkNodes(root, func(n *layout.Node) {
 		if n.Role == "L" {
 			got = append(got, n.Numbering)
 		}
 	})
-	if want := []compose.ListNumbering{compose.NumberingUnordered, compose.NumberingNone}; !slices.Equal(got, want) {
+	if want := []typeset.ListNumbering{typeset.NumberingUnordered, typeset.NumberingNone}; !slices.Equal(got, want) {
 		t.Errorf("numberings %v, want %v", got, want)
 	}
 }

@@ -1,4 +1,4 @@
-// Package markdown lays a Markdown document out as a [compose.Document]: it
+// Package markdown lays a Markdown document out as a [typeset.Document]: it
 // renders the Markdown to HTML, places that in an HTML template and hands
 // the result to the HTML converter, so a Markdown document draws as the
 // same HTML does.

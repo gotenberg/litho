@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"slices"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // This file flows the content of a chain of linked boxes
@@ -37,10 +37,10 @@ const chainEndID = "\x00chain-end"
 // content, and the height its content box takes when its style gives
 // none.
 type chainLink struct {
-	frags []compose.Fragment
+	frags []typeset.Fragment
 	// links are the external links of the link's page, in its content
 	// box's coordinates.
-	links []compose.Link
+	links []typeset.Link
 	auto  bool
 	h     float64
 }
@@ -221,11 +221,11 @@ func (p *painter) chainContent(b *box) {
 		return
 	}
 	x, y := b.contentX()+p.dx, b.contentY()+p.dy
-	g := &compose.Group{Opacity: 1, Transform: compose.Matrix{A: 1, D: 1, E: x, F: y}, Content: adopt(b.chain.frags, b.elem, 0)}
+	g := &typeset.Group{Opacity: 1, Transform: typeset.Matrix{A: 1, D: 1, E: x, F: y}, Content: adopt(b.chain.frags, b.elem, 0)}
 	page := p.e.monoPage(y, b.h)
 	p.emit(b, true, g, y, y+b.h, page)
 	for _, l := range b.chain.links {
-		r := compose.Rect{X: x + l.Rect.X, Y: y + l.Rect.Y, Width: l.Rect.Width, Height: l.Rect.Height}
+		r := typeset.Rect{X: x + l.Rect.X, Y: y + l.Rect.Y, Width: l.Rect.Width, Height: l.Rect.Height}
 		p.links = append(p.links, pendingLink{lk: &link{href: l.URI}, rect: r})
 	}
 }

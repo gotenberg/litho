@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // pngBytes returns a 4 by 2 red PNG.
@@ -72,7 +72,7 @@ func TestShapes_FillsAndLines(t *testing.T) {
 			if l.Head != (slides.Arrow{Kind: slides.ArrowTriangle, Width: 2, Length: 0.5}) || l.Tail.Kind != slides.ArrowOval {
 				t.Errorf("arrows %+v %+v", l.Head, l.Tail)
 			}
-			if s.Box != (compose.Rect{X: 1, Y: 2, Width: 10, Height: 20}) || s.Rotation != 90 || !s.FlipH {
+			if s.Box != (typeset.Rect{X: 1, Y: 2, Width: 10, Height: 20}) || s.Rotation != 90 || !s.FlipH {
 				t.Errorf("placement %+v %v %v", s.Box, s.Rotation, s.FlipH)
 			}
 		}},
@@ -175,10 +175,10 @@ func TestShapes_BackgroundGroupPictureConnector(t *testing.T) {
 		t.Errorf("round picture %+v", r)
 	}
 	g := shapeNamed(s.Shapes, "G")
-	if g == nil || g.Kind != slides.KindGroup || g.Box != (compose.Rect{X: 10, Y: 10, Width: 20, Height: 20}) || g.Child != (compose.Rect{Width: 10, Height: 10}) {
+	if g == nil || g.Kind != slides.KindGroup || g.Box != (typeset.Rect{X: 10, Y: 10, Width: 20, Height: 20}) || g.Child != (typeset.Rect{Width: 10, Height: 10}) {
 		t.Fatalf("group %+v", g)
 	}
-	if m := g.Kids[0]; m.Box != (compose.Rect{X: 1, Width: 1, Height: 1}) || !sameColor(m.Fill.Color, rgb(0xFFFF00)) {
+	if m := g.Kids[0]; m.Box != (typeset.Rect{X: 1, Width: 1, Height: 1}) || !sameColor(m.Fill.Color, rgb(0xFFFF00)) {
 		t.Errorf("member %+v", m)
 	}
 	c := shapeNamed(s.Shapes, "Conn")

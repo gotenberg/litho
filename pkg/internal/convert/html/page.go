@@ -5,10 +5,10 @@ import (
 	"math"
 	"reflect"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // pageSel returns the selector of the unnamed page at a 0-based index:
@@ -24,8 +24,8 @@ func pageSel(index int, rtl bool) css.PageSelector {
 // differ, the function that gives the box of every page for
 // layout.Options.PageAt. Unnamed pages differ only by being the first and
 // by their side, so three boxes cover a document.
-func pageBoxes(r *css.Resolver, o Options, rtl bool) (layout.PageBox, func(int) layout.PageBox, []compose.Warning) {
-	var warns []compose.Warning
+func pageBoxes(r *css.Resolver, o Options, rtl bool) (layout.PageBox, func(int) layout.PageBox, []typeset.Warning) {
+	var warns []typeset.Warning
 	seen := map[string]bool{}
 	boxAt := func(index int) layout.PageBox {
 		b, ws := pageBox(r, o, pageSel(index, rtl))
@@ -63,15 +63,15 @@ func pageBoxes(r *css.Resolver, o Options, rtl bool) (layout.PageBox, func(int) 
 //
 // A size past the PDF page limit is clamped to it, and @page margins that
 // leave no page area give way to o's, with a warning.
-func pageBox(r *css.Resolver, o Options, sel css.PageSelector) (layout.PageBox, []compose.Warning) {
+func pageBox(r *css.Resolver, o Options, sel css.PageSelector) (layout.PageBox, []typeset.Warning) {
 	ps := r.Page(sel)
-	var warns []compose.Warning
+	var warns []typeset.Warning
 	w, h := o.PageWidth, o.PageHeight
 	switch {
 	case ps.Width > 0 && ps.Height > 0:
 		w, h = ps.Width, ps.Height
 		if w > maxPageSide || h > maxPageSide || math.IsInf(w, 0) || math.IsInf(h, 0) {
-			warns = append(warns, compose.Warning{Code: CodePageBox, Message: fmt.Sprintf(
+			warns = append(warns, typeset.Warning{Code: CodePageBox, Message: fmt.Sprintf(
 				"the @page size of %v by %v points was clamped to %v points a side, the PDF limit", w, h, maxPageSide)})
 			w, h = min(w, maxPageSide), min(h, maxPageSide)
 		}
@@ -118,14 +118,14 @@ func pageBox(r *css.Resolver, o Options, sel css.PageSelector) (layout.PageBox, 
 		return box, warns
 	}
 	if fromRules {
-		warns = append(warns, compose.Warning{Code: CodePageBox, Message: fmt.Sprintf(
+		warns = append(warns, typeset.Warning{Code: CodePageBox, Message: fmt.Sprintf(
 			"the @page margins leave no room on a page of %v by %v points; the conversion's margins apply", w, h)})
 	}
 	box.Margin = opt
 	if !fits(box) {
 		// The options' margins were checked against the paper; an @page
 		// size can be smaller than they allow.
-		warns = append(warns, compose.Warning{Code: CodePageBox, Message: fmt.Sprintf(
+		warns = append(warns, typeset.Warning{Code: CodePageBox, Message: fmt.Sprintf(
 			"the margins leave no room on the @page size of %v by %v points; the page has none", w, h)})
 		box.Margin = [4]float64{}
 	}

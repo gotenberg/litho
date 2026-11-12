@@ -12,10 +12,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 )
 
@@ -131,7 +131,7 @@ func oneSheet(t testing.TB, xml string) []byte {
 }
 
 // readBytes reads a workbook into the model with the test fonts.
-func readBytes(t testing.TB, data []byte) (*sheet.Document, []compose.Warning) {
+func readBytes(t testing.TB, data []byte) (*sheet.Document, []typeset.Warning) {
 	t.Helper()
 	doc, warnings, err := load(context.Background(), bytes.NewReader(data), testFonts(t), office.Options{})
 	if err != nil {

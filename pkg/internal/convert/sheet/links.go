@@ -3,7 +3,7 @@ package sheet
 import (
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // sheetLink marks the target of a cell's link into the book itself while
@@ -83,15 +83,15 @@ func sheetIndex(doc *Document, name string) int {
 type sheetLinker struct {
 	doc    *Document
 	pages  []*pagePlan
-	tables []*compose.StructElem
+	tables []*typeset.StructElem
 	// waiting holds, by 1-based page, the destinations to that page made
 	// before it was laid out.
-	waiting map[int][]*compose.Dest
+	waiting map[int][]*typeset.Dest
 }
 
 // table records t as the Table element of the next page laid out and
 // gives it to the destinations waiting for that page.
-func (sl *sheetLinker) table(t *compose.StructElem) {
+func (sl *sheetLinker) table(t *typeset.StructElem) {
 	sl.tables = append(sl.tables, t)
 	page := len(sl.tables)
 	for _, d := range sl.waiting[page] {
@@ -101,7 +101,7 @@ func (sl *sheetLinker) table(t *compose.StructElem) {
 }
 
 // resolve resolves the links of pg, the last page laid out.
-func (sl *sheetLinker) resolve(pg *compose.Page) {
+func (sl *sheetLinker) resolve(pg *typeset.Page) {
 	links := pg.Links[:0]
 	for _, l := range pg.Links {
 		target, ok := strings.CutPrefix(l.URI, sheetLink)
@@ -110,7 +110,7 @@ func (sl *sheetLinker) resolve(pg *compose.Page) {
 			continue
 		}
 		if page := targetPage(sl.doc, target, sl.pages); page > 0 {
-			d := &compose.Dest{Page: page}
+			d := &typeset.Dest{Page: page}
 			if page <= len(sl.tables) {
 				d.Elem = sl.tables[page-1]
 			} else {

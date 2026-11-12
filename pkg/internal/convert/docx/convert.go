@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/offcrypto"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Convert reads the DOCX package src holds and lays it out as a paged
@@ -25,7 +25,7 @@ import (
 // is not a WordprocessingML document or a compound file that cannot be read, office.ErrInputTooLarge past a size cap and
 // office.ErrTooManyPages past the page cap. The output depends on src,
 // fonts' index and opts alone.
-func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*compose.Document, error) {
+func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*typeset.Document, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 }
 
 // convert builds the layout tree, lays it out and assembles the document.
-func (d *document) convert() (*compose.Document, error) {
+func (d *document) convert() (*typeset.Document, error) {
 	root := d.root
 	if !root.Is(w, "document") {
 		return nil, fmt.Errorf("%w: the main part is not a w:document", office.ErrMalformed)
@@ -128,8 +128,8 @@ func (d *document) lang() string {
 // links, the outline, the metadata and the warnings. The caller selects
 // pages afterwards. With a sink in the options, each page goes to it
 // once its links are resolved, and the document holds no page.
-func (d *document) assemble(res *layout.Result) (*compose.Document, error) {
-	dest := func(dd compose.Dest) (compose.Dest, bool) {
+func (d *document) assemble(res *layout.Result) (*typeset.Document, error) {
+	dest := func(dd typeset.Dest) (typeset.Dest, bool) {
 		return dd, dd.Page >= 1 && dd.Page <= len(res.Pages)
 	}
 	cp := d.pkg.CoreProperties(d.ctx)
@@ -143,8 +143,8 @@ func (d *document) assemble(res *layout.Result) (*compose.Document, error) {
 	}
 	padTableRows(res.Structure)
 	d.attachControls(res)
-	doc := &compose.Document{
-		Metadata:  compose.Metadata{Title: cp.Title, Author: cp.Creator, Subject: subject, Keywords: cp.Keywords, Lang: lang},
+	doc := &typeset.Document{
+		Metadata:  typeset.Metadata{Title: cp.Title, Author: cp.Creator, Subject: subject, Keywords: cp.Keywords, Lang: lang},
 		Structure: res.Structure,
 		Warnings:  d.warnings,
 	}
@@ -177,7 +177,7 @@ func (d *document) assemble(res *layout.Result) (*compose.Document, error) {
 		res.Pages[k] = nil
 	}
 	if !d.opts.OmitOutline {
-		anchors := make(map[string]compose.Dest, len(res.Anchors))
+		anchors := make(map[string]typeset.Dest, len(res.Anchors))
 		for id, a := range res.Anchors {
 			if a, ok := dest(a); ok {
 				anchors[id] = a

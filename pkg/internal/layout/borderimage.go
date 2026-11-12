@@ -7,16 +7,16 @@ import (
 	"image/draw"
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // nineSource is the image a border image cuts: a picture, or a gradient
 // sized to the border image area, w by h points.
 type nineSource struct {
 	pic  *Picture
-	fill *compose.Fill
+	fill *typeset.Fill
 	w, h float64
 	// natural reports an image with a natural size, whose slices give the
 	// auto widths (CSS Backgrounds 3, 6.4).
@@ -28,7 +28,7 @@ type nineSource struct {
 // 6). It reports false when st has none to draw, no image or one that
 // failed to load, and the border styles paint instead (6.1). The border
 // image is not clipped by border-radius (6.1).
-func (p *painter) borderImage(b *box, st *css.Style, r compose.Rect, bd [4]float64, draw [4]bool) bool {
+func (p *painter) borderImage(b *box, st *css.Style, r typeset.Rect, bd [4]float64, draw [4]bool) bool {
 	bi := &st.BorderImage
 	if !bi.HasImage() {
 		return false
@@ -38,7 +38,7 @@ func (p *painter) borderImage(b *box, st *css.Style, r compose.Rect, bd [4]float
 		// CSS Backgrounds 3, 6.6 with box-decoration-break: slice: the
 		// image is drawn over the strip of the inline box's fragments
 		// laid end to end, and this fragment shows its part of it.
-		r = compose.Rect{X: r.X - strip.before, Y: r.Y, Width: strip.total, Height: r.Height}
+		r = typeset.Rect{X: r.X - strip.before, Y: r.Y, Width: strip.total, Height: r.Height}
 		bd, draw = b.bd, [4]bool{true, true, true, true}
 	} else {
 		strip = nil
@@ -59,7 +59,7 @@ func (p *painter) borderImage(b *box, st *css.Style, r compose.Rect, bd [4]float
 		}
 		out[s] = max(out[s], 0)
 	}
-	area := compose.Rect{
+	area := typeset.Rect{
 		X: r.X - out[css.Left], Y: r.Y - out[css.Top],
 		Width:  r.Width + out[css.Left] + out[css.Right],
 		Height: r.Height + out[css.Top] + out[css.Bottom],
@@ -79,7 +79,7 @@ func (p *painter) borderImage(b *box, st *css.Style, r compose.Rect, bd [4]float
 	// The picture is decoded once for the nine pieces, on the first cut,
 	// and dropped with them.
 	var pixels image.Image
-	defer func() { compose.ReleaseImage(p.e.ctx, pixels) }()
+	defer func() { typeset.ReleaseImage(p.e.ctx, pixels) }()
 	decode := func() image.Image {
 		if pixels == nil {
 			img, err := src.pic.Source.Decode(p.e.ctx)
@@ -117,7 +117,7 @@ cut:
 		if strip.right {
 			x1 = max(x1, area.X+area.Width)
 		}
-		g.clip = &compose.Path{Ops: rectOps(compose.Rect{X: x0, Y: area.Y, Width: x1 - x0, Height: area.Height}), Fill: &compose.Fill{}}
+		g.clip = &typeset.Path{Ops: rectOps(typeset.Rect{X: x0, Y: area.Y, Width: x1 - x0, Height: area.Height}), Fill: &typeset.Fill{}}
 	}
 	c := p.sync(p.chain(b, false))
 	c.kids = append(c.kids, g)
@@ -139,7 +139,7 @@ type imageStrip struct {
 // imageStrip returns the place of the fragment f, painted over
 // r, on the strip of its box's fragments in the lines of its block
 // container (CSS Backgrounds 3, 6.6 and CSS Fragmentation 3, 5.4).
-func (p *painter) imageStrip(f *inlineFrag, r compose.Rect) *imageStrip {
+func (p *painter) imageStrip(f *inlineFrag, r typeset.Rect) *imageStrip {
 	s := &imageStrip{box: f.box, left: f.left, right: f.right}
 	c := f.box.parent
 	for c != nil && c.kind == kindInline {
@@ -176,7 +176,7 @@ func (p *painter) imageStrip(f *inlineFrag, r compose.Rect) *imageStrip {
 // at its natural size, a vector one without natural dimensions sized to
 // the area, or a gradient, whose concrete size is the area's (CSS
 // Backgrounds 3, 6.2, the default object size).
-func (p *painter) nineSource(bi *css.BorderImage, area compose.Rect, y float64) (nineSource, bool) {
+func (p *painter) nineSource(bi *css.BorderImage, area typeset.Rect, y float64) (nineSource, bool) {
 	if bi.Gradient != nil {
 		fill, ok := p.e.gradientFill(bi.Gradient, area.Width, area.Height, y)
 		if !ok {
@@ -224,7 +224,7 @@ func sliceSizes(bi *css.BorderImage, src nineSource) [4]float64 {
 // size, or the border width for an image without a natural size; widths
 // whose opposite pairs overlap are scaled down together. A side cut away
 // in draw has none.
-func imageWidths(bi *css.BorderImage, src nineSource, slices, bd [4]float64, draw [4]bool, area compose.Rect) [4]float64 {
+func imageWidths(bi *css.BorderImage, src nineSource, slices, bd [4]float64, draw [4]bool, area typeset.Rect) [4]float64 {
 	var w [4]float64
 	for s := range 4 {
 		if !draw[s] {
@@ -267,12 +267,12 @@ func imageWidths(bi *css.BorderImage, src nineSource, slices, bd [4]float64, dra
 // the image drawn into dst, tiled per axis by rep at the scales sx and
 // sy, which turn image points into page points.
 type ninePiece struct {
-	src, dst compose.Rect
+	src, dst typeset.Rect
 	rep      [2]css.ImageRepeat
 	sx, sy   float64
 	// crop is the part src of a raster image cut out as an image of its
 	// own, nil for a vector image, a gradient or a JPEG kept as it is.
-	crop *compose.ImageSource
+	crop *typeset.ImageSource
 }
 
 // scaleOf returns w over s, 0 when either is zero.
@@ -289,7 +289,7 @@ func scaleOf(w, s float64) float64 {
 // tiled along them, and, with fill, the middle, scaled by the factors of
 // the top and left edges, or failing those the bottom and right ones, or
 // not at all.
-func ninePieces(bi *css.BorderImage, src nineSource, sl, w [4]float64, area compose.Rect) []ninePiece {
+func ninePieces(bi *css.BorderImage, src nineSource, sl, w [4]float64, area typeset.Rect) []ninePiece {
 	t, r, b, l := sl[css.Top], sl[css.Right], sl[css.Bottom], sl[css.Left]
 	wt, wr, wb, wl := w[css.Top], w[css.Right], w[css.Bottom], w[css.Left]
 	mw, mh := src.w-l-r, src.h-t-b
@@ -297,7 +297,7 @@ func ninePieces(bi *css.BorderImage, src nineSource, sl, w [4]float64, area comp
 	dx1, dy1 := area.X+wl, area.Y+wt
 	dx2, dy2 := area.X+area.Width-wr, area.Y+area.Height-wb
 	dmw, dmh := dx2-dx1, dy2-dy1
-	rect := func(x, y, rw, rh float64) compose.Rect { return compose.Rect{X: x, Y: y, Width: rw, Height: rh} }
+	rect := func(x, y, rw, rh float64) typeset.Rect { return typeset.Rect{X: x, Y: y, Width: rw, Height: rh} }
 	stretch := [2]css.ImageRepeat{css.ImageStretch, css.ImageStretch}
 	h, v := bi.Repeat[0], bi.Repeat[1]
 	out := []ninePiece{
@@ -392,7 +392,7 @@ func tileSpans(rep css.ImageRepeat, start, size, n, k float64) []span {
 
 // tiles returns the placements of the piece's image part over its
 // region.
-func (pc ninePiece) tiles() []compose.Rect {
+func (pc ninePiece) tiles() []typeset.Rect {
 	if !numeric.Positive(pc.src.Width) || !numeric.Positive(pc.src.Height) || !numeric.Positive(pc.dst.Width) || !numeric.Positive(pc.dst.Height) {
 		return nil
 	}
@@ -401,10 +401,10 @@ func (pc ninePiece) tiles() []compose.Rect {
 	if len(xs)*len(ys) > maxBackgroundTiles {
 		return nil
 	}
-	out := make([]compose.Rect, 0, len(xs)*len(ys))
+	out := make([]typeset.Rect, 0, len(xs)*len(ys))
 	for _, y := range ys {
 		for _, x := range xs {
-			out = append(out, compose.Rect{X: x.at, Y: y.at, Width: x.size, Height: y.size})
+			out = append(out, typeset.Rect{X: x.at, Y: y.at, Width: x.size, Height: y.size})
 		}
 	}
 	return out
@@ -413,55 +413,55 @@ func (pc ninePiece) tiles() []compose.Rect {
 // nineTile returns the display item drawing the piece's image part into
 // the tile t, clipped to the tile and the piece's region: the whole
 // image scaled so the part lands on the tile.
-func (p *painter) nineTile(src nineSource, pc ninePiece, t compose.Rect) *ditem {
+func (p *painter) nineTile(src nineSource, pc ninePiece, t typeset.Rect) *ditem {
 	clip, ok := intersect(t, pc.dst)
 	if !ok {
 		return nil
 	}
 	kx, ky := t.Width/pc.src.Width, t.Height/pc.src.Height
-	img := compose.Rect{X: t.X - pc.src.X*kx, Y: t.Y - pc.src.Y*ky, Width: src.w * kx, Height: src.h * ky}
+	img := typeset.Rect{X: t.X - pc.src.X*kx, Y: t.Y - pc.src.Y*ky, Width: src.w * kx, Height: src.h * ky}
 	// A vector image and a gradient are drawn at the image's size, then
 	// scaled: the image is cut after it is sized (CSS Backgrounds 3,
 	// 6.2), so a vector one keeps its own aspect ratio inside it.
-	natural := compose.Rect{Width: src.w, Height: src.h}
+	natural := typeset.Rect{Width: src.w, Height: src.h}
 	page := -1
 	if p.mono >= 0 {
 		page = p.mono
 	}
-	var inner compose.Fragment
+	var inner typeset.Fragment
 	switch {
 	case pc.crop != nil:
 		// The cut-out part fills the tile: no neighbouring pixel bleeds
 		// into it, as Blink draws each piece from its own sub-image.
-		f := &compose.Image{Rect: t, Source: pc.crop}
+		f := &typeset.Image{Rect: t, Source: pc.crop}
 		if clip == t {
 			return &ditem{frag: f, y0: t.Y, y1: t.Y + t.Height, page: page}
 		}
 		inner = f
 	case src.pic != nil && src.pic.Vector == nil:
-		inner = &compose.Image{Rect: img, Source: src.pic.Source}
+		inner = &typeset.Image{Rect: img, Source: src.pic.Source}
 	case src.pic != nil:
 		inner = p.e.pictureFrag(src.pic, natural, nil)
 	case src.fill != nil:
-		inner = &compose.Path{Ops: rectOps(natural), Fill: src.fill}
+		inner = &typeset.Path{Ops: rectOps(natural), Fill: src.fill}
 	}
 	if inner == nil {
 		return nil
 	}
 	f := inner
-	if _, raster := inner.(*compose.Image); !raster {
-		f = &compose.Group{Opacity: 1, Transform: compose.Matrix{A: kx, D: ky, E: img.X, F: img.Y}, Content: []compose.Fragment{inner}}
+	if _, raster := inner.(*typeset.Image); !raster {
+		f = &typeset.Group{Opacity: 1, Transform: typeset.Matrix{A: kx, D: ky, E: img.X, F: img.Y}, Content: []typeset.Fragment{inner}}
 	}
 	return &ditem{
 		group: true, opacity: 1,
-		clip: &compose.Path{Ops: rectOps(clip), Fill: &compose.Fill{}},
+		clip: &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{}},
 		kids: []*ditem{{frag: f, y0: clip.Y, y1: clip.Y + clip.Height, page: page}},
 	}
 }
 
 // cropKey identifies a part of a raster image cut out by [cropSource].
 type cropKey struct {
-	src  *compose.ImageSource
+	src  *typeset.ImageSource
 	rect image.Rectangle
 }
 
@@ -471,7 +471,7 @@ type cropKey struct {
 // not decode. decode returns the picture's pixels, nil when they do not
 // decode; it is called only for a part to cut. The parts are cut once per
 // paint.
-func (p *painter) cropSource(pic *Picture, r compose.Rect, decode func() image.Image) *compose.ImageSource {
+func (p *painter) cropSource(pic *Picture, r typeset.Rect, decode func() image.Image) *typeset.ImageSource {
 	if pic == nil || pic.Source == nil || pic.Source.IsJPEG() || !numeric.Positive(pic.Width) || !numeric.Positive(pic.Height) {
 		return nil
 	}
@@ -495,18 +495,18 @@ func (p *painter) cropSource(pic *Picture, r compose.Rect, decode func() image.I
 	if img == nil {
 		return nil
 	}
-	if err := compose.ChargeImage(p.e.ctx, rect.Dx(), rect.Dy(), color.NRGBAModel); err != nil {
+	if err := typeset.ChargeImage(p.e.ctx, rect.Dx(), rect.Dy(), color.NRGBAModel); err != nil {
 		// The refusal stops the conversion, which reports it.
 		return nil
 	}
 	out := image.NewNRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))
 	draw.Draw(out, out.Bounds(), img, rect.Min, draw.Src)
-	c, err := compose.EncodeImage(p.e.ctx, out)
+	c, err := typeset.EncodeImage(p.e.ctx, out)
 	if err != nil {
 		return nil
 	}
 	if p.crops == nil {
-		p.crops = map[cropKey]*compose.ImageSource{}
+		p.crops = map[cropKey]*typeset.ImageSource{}
 	}
 	p.crops[key] = c
 	return c
@@ -514,11 +514,11 @@ func (p *painter) cropSource(pic *Picture, r compose.Rect, decode func() image.I
 
 // intersect returns the overlap of a and b, false when they do not
 // overlap.
-func intersect(a, b compose.Rect) (compose.Rect, bool) {
+func intersect(a, b typeset.Rect) (typeset.Rect, bool) {
 	x0, y0 := max(a.X, b.X), max(a.Y, b.Y)
 	x1, y1 := min(a.X+a.Width, b.X+b.Width), min(a.Y+a.Height, b.Y+b.Height)
 	if x1 <= x0 || y1 <= y0 {
-		return compose.Rect{}, false
+		return typeset.Rect{}, false
 	}
-	return compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}, true
+	return typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}, true
 }

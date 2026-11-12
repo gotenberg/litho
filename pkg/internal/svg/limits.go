@@ -32,7 +32,7 @@ const maxUseCount = 20_000
 const maxPathSegments = 200_000
 
 // maxGradientStops caps the stops of one gradient. Anti-DoS guard, not
-// spec-mandated: gradients hold a handful of stops, and the composition
+// spec-mandated: gradients hold a handful of stops, and the typeset
 // model refuses more than 1024.
 const maxGradientStops = 256
 
@@ -54,7 +54,7 @@ const maxFragments = 200_000
 
 // maxGroupNesting caps the groups for opacity and clipping nested in one
 // rendering: deeper ones paint without their group, with a warning. The
-// composition model bounds group nesting at 24 for the whole page, which
+// typeset model bounds group nesting at 24 for the whole page, which
 // the HTML layout's own groups share. Anti-DoS guard, not spec-mandated:
 // drawings rarely nest translucent groups more than twice.
 const maxGroupNesting = 3
@@ -71,7 +71,7 @@ const maxMatchSteps = 1 << 24
 
 // maxDashes caps the entries of a stroke-dasharray. Anti-DoS guard, not
 // spec-mandated: dash patterns hold two to six entries, and the
-// composition model refuses more than 1024.
+// typeset model refuses more than 1024.
 const maxDashes = 64
 
 // maxCoordinate bounds every coordinate and length the renderer reads, in

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Convert reads the ODS package, or the flat FODS document, src holds and
@@ -21,7 +21,7 @@ import (
 // for a document that is not an OpenDocument spreadsheet,
 // office.ErrInputTooLarge past a size cap and office.ErrTooManyPages past
 // the page cap. The output depends on src, fonts' index and opts alone.
-func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*compose.Document, error) {
+func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*typeset.Document, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 // (office.Options.DefaultPage) is the paper of a page style that names
 // none, Letter without one; under office.RecalculateNever no cell keeps
 // its formula. It fails as [Convert] does.
-func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Options) (*sheet.Document, []compose.Warning, error) {
+func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Options) (*sheet.Document, []typeset.Warning, error) {
 	pkg, err := odf.Open(ctx, data, odf.Options{Password: opts.Password})
 	if err != nil {
 		return nil, nil, fmt.Errorf("reading ODS: %w", err)

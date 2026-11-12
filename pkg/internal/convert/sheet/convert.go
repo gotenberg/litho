@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -15,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // letterWidth and letterHeight are the paper of a document that prints no
@@ -33,7 +33,7 @@ type builder struct {
 	m        *measurer
 	lang     string
 	formats  map[string]*numfmt.Format
-	warnings []compose.Warning
+	warnings []typeset.Warning
 	warned   map[string]bool
 }
 
@@ -53,7 +53,7 @@ func (b *builder) warn(code, msg string) {
 		return
 	}
 	b.warned[code+"\x00"+msg] = true
-	b.warnings = append(b.warnings, compose.Warning{Code: code, Message: msg})
+	b.warnings = append(b.warnings, typeset.Warning{Code: code, Message: msg})
 }
 
 // warnOnce records a warning of code once per conversion.
@@ -62,7 +62,7 @@ func (b *builder) warnOnce(code, msg string) {
 		return
 	}
 	b.warned[code] = true
-	b.warnings = append(b.warnings, compose.Warning{Code: code, Message: msg})
+	b.warnings = append(b.warnings, typeset.Warning{Code: code, Message: msg})
 }
 
 // Convert lays doc out as LibreOffice prints a spreadsheet, with the fonts
@@ -124,7 +124,7 @@ func (b *builder) warnOnce(code, msg string) {
 // right with a warning; text rotated by other than a quarter turn starts
 // in the cell's corner, an approximation, with a warning; the accounting
 // underlines draw as plain ones.
-func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.Options) (*compose.Document, error) {
+func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.Options) (*typeset.Document, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
@@ -181,15 +181,15 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 			p.number = n
 		}
 	}
-	out := &compose.Document{
+	out := &typeset.Document{
 		Metadata:  doc.Meta,
-		Structure: &compose.StructElem{Role: "Document", Lang: b.lang},
+		Structure: &typeset.StructElem{Role: "Document", Lang: b.lang},
 	}
 	out.Metadata.Lang = b.lang
 	if opts.Sink != nil {
 		opts.Sink.Expect(max(len(pages), 1))
 	}
-	links := &sheetLinker{doc: doc, pages: pages, waiting: map[int][]*compose.Dest{}}
+	links := &sheetLinker{doc: doc, pages: pages, waiting: map[int][]*typeset.Dest{}}
 	for k, p := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -213,7 +213,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		// sheet, the cells its styles paint, with the sheet's header and
 		// footer and its outline entry, as LibreOffice does.
 		w, h := b.opts.Paper(b.opts.DefaultPage(letterWidth, letterHeight))
-		pg := &compose.Page{Width: w, Height: h}
+		pg := &typeset.Page{Width: w, Height: h}
 		if len(plans) > 0 {
 			sp := plans[0]
 			pg.Width, pg.Height = sp.width, sp.height
@@ -234,7 +234,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 				out.Structure.Kids = append(out.Structure.Kids, st.Kids...)
 			}
 			if !opts.OmitOutline {
-				out.Outline = []compose.Outline{{Title: sp.g.sh.Name, Dest: compose.Dest{Page: 1, Elem: tbl}}}
+				out.Outline = []typeset.Outline{{Title: sp.g.sh.Name, Dest: typeset.Dest{Page: 1, Elem: tbl}}}
 			}
 		}
 		if err := b.handOver(out, pg); err != nil {
@@ -249,7 +249,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 				continue
 			}
 			k := starts[i]
-			out.Outline = append(out.Outline, compose.Outline{Title: sp.g.sh.Name, Dest: compose.Dest{Page: k + 1, Elem: tables[k]}})
+			out.Outline = append(out.Outline, typeset.Outline{Title: sp.g.sh.Name, Dest: typeset.Dest{Page: k + 1, Elem: tables[k]}})
 		}
 	}
 	out.Warnings = b.warnings
@@ -258,7 +258,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 
 // handOver gives the page pg, laid out, to the sink of the options, and
 // its glyphs back to the budget, or appends it to out without a sink.
-func (b *builder) handOver(out *compose.Document, pg *compose.Page) error {
+func (b *builder) handOver(out *typeset.Document, pg *typeset.Page) error {
 	sink := b.opts.Sink
 	if sink == nil {
 		out.Pages = append(out.Pages, pg)
@@ -267,7 +267,7 @@ func (b *builder) handOver(out *compose.Document, pg *compose.Page) error {
 	if err := sink.Page(b.ctx, pg); err != nil {
 		return fmt.Errorf("writing a page: %w", err)
 	}
-	limits.BudgetFrom(b.ctx).Release(compose.CountGlyphs(pg) * limits.GlyphCost)
+	limits.BudgetFrom(b.ctx).Release(typeset.CountGlyphs(pg) * limits.GlyphCost)
 	return nil
 }
 
@@ -276,7 +276,7 @@ func (b *builder) handOver(out *compose.Document, pg *compose.Page) error {
 // 8.8): the Table element among the kids of the page's structure root st,
 // else, on a page that prints only drawings, its first Figure; nil for
 // none.
-func tableOf(st *compose.StructElem) *compose.StructElem {
+func tableOf(st *typeset.StructElem) *typeset.StructElem {
 	if st == nil {
 		return nil
 	}
@@ -349,7 +349,7 @@ func (b *builder) planSheet(i int, sh *Sheet) *sheetPlan {
 
 // renderPage draws the page p, first reporting the first page of its
 // sheet, total the document's page count.
-func (b *builder) renderPage(p *pagePlan, first bool, total int) (*compose.Page, *compose.StructElem, error) {
+func (b *builder) renderPage(p *pagePlan, first bool, total int) (*typeset.Page, *typeset.StructElem, error) {
 	sp := p.sp
 	pb := &pageBuilder{builder: b, g: sp.g, p: p}
 	frags, links, st, err := pb.build()
@@ -385,18 +385,18 @@ func (b *builder) renderPage(p *pagePlan, first bool, total int) (*compose.Page,
 	if ps.CenterVertically {
 		oy += (areaH - pb.dataH*z) / 2
 	}
-	pg := &compose.Page{Width: sp.width, Height: sp.height}
+	pg := &typeset.Page{Width: sp.width, Height: sp.height}
 	if !sp.single {
 		pg.Content = append(pg.Content, b.margins(p, first, p.number, total, sp.width, sp.height)...)
 	}
-	pg.Content = append(pg.Content, &compose.Group{
-		Transform: compose.Matrix{A: z, D: z, E: ox, F: oy},
-		Clip:      &compose.Path{Ops: rectOps(0, 0, pb.dataW, pb.dataH), Fill: &compose.Fill{}},
+	pg.Content = append(pg.Content, &typeset.Group{
+		Transform: typeset.Matrix{A: z, D: z, E: ox, F: oy},
+		Clip:      &typeset.Path{Ops: rectOps(0, 0, pb.dataW, pb.dataH), Fill: &typeset.Fill{}},
 		Opacity:   1,
 		Content:   frags,
 	})
 	for _, l := range links {
-		l.Rect = compose.Rect{X: l.Rect.X*z + ox, Y: l.Rect.Y*z + oy, Width: l.Rect.Width * z, Height: l.Rect.Height * z}
+		l.Rect = typeset.Rect{X: l.Rect.X*z + ox, Y: l.Rect.Y*z + oy, Width: l.Rect.Width * z, Height: l.Rect.Height * z}
 		pg.Links = append(pg.Links, l)
 	}
 	return pg, st, nil

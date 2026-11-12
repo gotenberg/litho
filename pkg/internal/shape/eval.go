@@ -5,8 +5,8 @@ import (
 	"math"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // emuPerPoint is the number of EMUs in a point (ECMA-376 Part 1, 20.1.2.1:
@@ -37,13 +37,13 @@ type evaluator struct {
 	problem string
 	// gx, gy, gsx and gsy map guide space onto the box: x = gx + v*gsx.
 	gx, gy, gsx, gsy float64
-	box              compose.Rect
+	box              typeset.Rect
 	mirrorH, mirrorV bool
 }
 
 // newEvaluator prepares def's guides for the box r, the adjustments of g
 // overriding the defaults by name.
-func newEvaluator(def *Custom, g *Geometry, r compose.Rect) *evaluator {
+func newEvaluator(def *Custom, g *Geometry, r typeset.Rect) *evaluator {
 	nAdj := min(len(def.Adjust), MaxGuides)
 	nGd := min(len(def.Guides), MaxGuides-nAdj)
 	ev := &evaluator{
@@ -185,14 +185,14 @@ func (ev *evaluator) mirror(x, y float64) (float64, float64) {
 // them onto the box.
 type pathBuilder struct {
 	ev                     *evaluator
-	ops                    []compose.PathOp
+	ops                    []typeset.PathOp
 	ox, oy, sx, sy         float64
 	cx, cy, startX, startY float64
 	open                   bool
 }
 
 // path evaluates the commands cmds of pd into box operations.
-func (ev *evaluator) path(pd *PathDef, cmds []Cmd) []compose.PathOp {
+func (ev *evaluator) path(pd *PathDef, cmds []Cmd) []typeset.PathOp {
 	pb := &pathBuilder{ev: ev, ox: ev.gx, oy: ev.gy, sx: ev.gsx, sy: ev.gsy}
 	// A path of its own size w by h maps 0..w onto the box; one of w and
 	// h alone leaves the other axis in guide space (20.1.9.15 path: w and
@@ -218,19 +218,19 @@ func (pb *pathBuilder) at(args []Arg, i int) float64 {
 }
 
 // emit appends an operation of kind k over path-space points.
-func (pb *pathBuilder) emit(k compose.OpKind, pts ...float64) {
-	var op compose.PathOp
+func (pb *pathBuilder) emit(k typeset.OpKind, pts ...float64) {
+	var op typeset.PathOp
 	op.Kind = k
 	for i := 0; i+1 < len(pts) && i/2 < 3; i += 2 {
 		x, y := pb.ev.mirror(pb.ox+pts[i]*pb.sx, pb.oy+pts[i+1]*pb.sy)
-		op.P[i/2] = compose.Point{X: x, Y: y}
+		op.P[i/2] = typeset.Point{X: x, Y: y}
 	}
 	pb.ops = append(pb.ops, op)
 }
 
 // moveTo starts a subpath at (x, y).
 func (pb *pathBuilder) moveTo(x, y float64) {
-	pb.emit(compose.MoveTo, x, y)
+	pb.emit(typeset.MoveTo, x, y)
 	pb.cx, pb.cy, pb.startX, pb.startY = x, y, x, y
 	pb.open = true
 }
@@ -246,14 +246,14 @@ func (pb *pathBuilder) ensure() {
 // lineTo draws a line to (x, y).
 func (pb *pathBuilder) lineTo(x, y float64) {
 	pb.ensure()
-	pb.emit(compose.LineTo, x, y)
+	pb.emit(typeset.LineTo, x, y)
 	pb.cx, pb.cy = x, y
 }
 
 // curveTo draws a cubic Bézier.
 func (pb *pathBuilder) curveTo(x1, y1, x2, y2, x, y float64) {
 	pb.ensure()
-	pb.emit(compose.CurveTo, x1, y1, x2, y2, x, y)
+	pb.emit(typeset.CurveTo, x1, y1, x2, y2, x, y)
 	pb.cx, pb.cy = x, y
 }
 
@@ -272,7 +272,7 @@ func (pb *pathBuilder) cmd(c *Cmd) {
 		pb.curveTo(x0+2*(qx-x0)/3, y0+2*(qy-y0)/3, x+2*(qx-x)/3, y+2*(qy-y)/3, x, y)
 	case CmdClose:
 		if pb.open {
-			pb.ops = append(pb.ops, compose.PathOp{Kind: compose.ClosePath})
+			pb.ops = append(pb.ops, typeset.PathOp{Kind: typeset.ClosePath})
 			pb.cx, pb.cy = pb.startX, pb.startY
 			pb.open = false
 		}
@@ -406,7 +406,7 @@ func Check(g *Geometry) error {
 	if def == nil {
 		return nil
 	}
-	ev := newEvaluator(def, g, compose.Rect{Width: 100, Height: 100})
+	ev := newEvaluator(def, g, typeset.Rect{Width: 100, Height: 100})
 	var probs []string
 	if len(def.Unresolved) > 0 {
 		probs = append(probs, "unknown names "+strings.Join(def.Unresolved, ", "))

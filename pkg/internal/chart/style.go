@@ -1,21 +1,21 @@
 package chart
 
 import (
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // defaultPalette is LibreOffice's own series colours, the automatic
 // colours of a chart whose reader sets no palette (chart2's
 // ChartColorPaletteHelper default palette).
-var defaultPalette = []compose.Color{
+var defaultPalette = []typeset.Color{
 	rgb(0x004586), rgb(0xff420e), rgb(0xffd320), rgb(0x579d1c), rgb(0x7e0021), rgb(0x83caff),
 	rgb(0x314004), rgb(0xaecf00), rgb(0x4b1f6f), rgb(0xff950e), rgb(0xc5000b), rgb(0x0084d1),
 }
 
 // rgb returns the opaque colour 0xRRGGBB.
-func rgb(v uint32) compose.Color {
-	return compose.Color{R: float64(v>>16&0xff) / 255, G: float64(v>>8&0xff) / 255, B: float64(v&0xff) / 255, A: 1}
+func rgb(v uint32) typeset.Color {
+	return typeset.Color{R: float64(v>>16&0xff) / 255, G: float64(v>>8&0xff) / 255, B: float64(v&0xff) / 255, A: 1}
 }
 
 // AutoColor returns the automatic colour of item i of n items: the
@@ -23,7 +23,7 @@ func rgb(v uint32) compose.Color {
 // each cycle through the palette shaded or tinted as Office does: from a
 // 70% shade before the first cycle to a 70% tint after the last, in equal
 // steps (oox's ObjectFormatter, getPhColor).
-func (c *Chart) AutoColor(i, n int) compose.Color {
+func (c *Chart) AutoColor(i, n int) typeset.Color {
 	pal := c.Palette
 	if len(pal) == 0 {
 		pal = defaultPalette

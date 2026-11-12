@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // nsDrawOOO is the namespace of LibreOffice's drawing extensions, whose
@@ -105,7 +105,7 @@ type enhanced struct {
 // parseEnhanced reads the custom geometry of el, whose path is path.
 func parseEnhanced(el *Element, path string) *shape.Custom {
 	c := &shape.Custom{}
-	view := compose.Rect{Width: defaultViewBox, Height: defaultViewBox}
+	view := typeset.Rect{Width: defaultViewBox, Height: defaultViewBox}
 	if f := strings.Fields(strings.ReplaceAll(el.A(NSSVG, "viewBox"), ",", " ")); len(f) == 4 {
 		var v [4]float64
 		ok := true
@@ -117,7 +117,7 @@ func parseEnhanced(el *Element, path string) *shape.Custom {
 		if ok && v[2] >= 0 && v[3] >= 0 {
 			// "0 0 0 0" is kept: the engine reads an empty view as the
 			// shape's size in 1/100 mm, as LibreOffice does.
-			view = compose.Rect{X: v[0], Y: v[1], Width: v[2], Height: v[3]}
+			view = typeset.Rect{X: v[0], Y: v[1], Width: v[2], Height: v[3]}
 		}
 	}
 	c.View = &view

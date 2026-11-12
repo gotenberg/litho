@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 )
 
@@ -289,7 +289,7 @@ func zipFiles(t testing.TB, files map[string]string) []byte {
 }
 
 // readDeck reads a test deck into the model with the test fonts.
-func readDeck(t testing.TB, d testDeck) (*slides.Document, []compose.Warning) {
+func readDeck(t testing.TB, d testDeck) (*slides.Document, []typeset.Warning) {
 	t.Helper()
 	doc, warnings, err := load(context.Background(), bytes.NewReader(zipFiles(t, deckFiles(d))), testFonts(t), office.Options{})
 	if err != nil {

@@ -14,10 +14,10 @@ import (
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/encoding"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // layoutFunc is the layout engine [Convert] calls.
@@ -39,12 +39,12 @@ type layoutFunc func(ctx context.Context, root *layout.Node, fonts *text.Fonts, 
 // The document always has at least one page. Its output depends on the
 // bytes of src, opts, the files of opts.Resources it reads and the faces
 // fonts indexed alone. See the package documentation for what is drawn.
-func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options) (*compose.Document, error) {
+func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options) (*typeset.Document, error) {
 	return convert(ctx, src, fonts, opts, layout.Layout)
 }
 
 // convert is [Convert] with the layout engine as a parameter, for tests.
-func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options, lay layoutFunc) (*compose.Document, error) {
+func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options, lay layoutFunc) (*typeset.Document, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -163,8 +163,8 @@ func declaresCharset(data []byte) bool {
 type prepared struct {
 	root     *layout.Node
 	layout   layout.Options
-	meta     compose.Metadata
-	warnings []compose.Warning
+	meta     typeset.Metadata
+	warnings []typeset.Warning
 	headings []heading
 	// o is the conversion's options, defaults set, setup how the page
 	// boxes became the layout's and first the first page's box as the
@@ -339,7 +339,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	}
 	p.setupPages(ctx, resolver)
 	for _, w := range computed.Warnings() {
-		p.warnings = append(p.warnings, compose.Warning{Code: w.Code, Message: displayURL(w.Message)})
+		p.warnings = append(p.warnings, typeset.Warning{Code: w.Code, Message: displayURL(w.Message)})
 	}
 	p.warnings = append(p.warnings, c.warnings...)
 	p.warnings = append(p.warnings, fontWarns...)
@@ -354,7 +354,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 // [prepared.decorate]), the links, the outline and the structure tree.
 // The caller selects pages afterwards: a page keeps the number it was
 // laid out with in what it shows.
-func (p *prepared) assemble(ctx context.Context, res *layout.Result) (*compose.Document, error) {
+func (p *prepared) assemble(ctx context.Context, res *layout.Result) (*typeset.Document, error) {
 	keep := make([]int, 0, len(res.Pages))
 	for k := range res.Pages {
 		if k > 0 && p.o.SinglePage {
@@ -370,7 +370,7 @@ func (p *prepared) assemble(ctx context.Context, res *layout.Result) (*compose.D
 		at[k] = i + 1
 		places[k] = p.placement(res.Pages[k])
 	}
-	dest := func(d compose.Dest) (compose.Dest, bool) {
+	dest := func(d typeset.Dest) (typeset.Dest, bool) {
 		if d.Page < 1 || d.Page > len(at) || at[d.Page-1] == 0 {
 			return d, false
 		}
@@ -379,7 +379,7 @@ func (p *prepared) assemble(ctx context.Context, res *layout.Result) (*compose.D
 		d.X, d.Y = places[k].point(d.X, d.Y)
 		return d, true
 	}
-	doc := &compose.Document{
+	doc := &typeset.Document{
 		Metadata:  p.meta,
 		Structure: res.Structure,
 		Warnings:  p.warnings,
@@ -406,7 +406,7 @@ func (p *prepared) assemble(ctx context.Context, res *layout.Result) (*compose.D
 		doc.Pages = append(doc.Pages, pg)
 	}
 	if !p.o.OmitOutline {
-		anchors := make(map[string]compose.Dest, len(res.Anchors))
+		anchors := make(map[string]typeset.Dest, len(res.Anchors))
 		for id, d := range res.Anchors {
 			if d, ok := dest(d); ok {
 				anchors[id] = d
@@ -415,7 +415,7 @@ func (p *prepared) assemble(ctx context.Context, res *layout.Result) (*compose.D
 		doc.Outline = outline(p.headings, anchors)
 	}
 	if len(keep) < len(res.Pages) || culled {
-		compose.PruneStructure(doc)
+		typeset.PruneStructure(doc)
 	}
 	if p.svg != nil {
 		doc.Warnings = append(doc.Warnings, p.svg.warnings()...)
@@ -436,7 +436,7 @@ type scan struct {
 	root *dom.Node
 	// lang is the root element's language, "" for unknown.
 	lang string
-	meta compose.Metadata
+	meta typeset.Metadata
 	// sheets lists the <style> and <link> elements in document order.
 	sheets []*dom.Node
 	// ids holds every id attribute and a[name] of the document.

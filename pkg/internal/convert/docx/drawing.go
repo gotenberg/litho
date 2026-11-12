@@ -7,13 +7,13 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // The graphic data URIs (ECMA-376 Part 1, 20.1.2.2.17) the converter
@@ -77,7 +77,7 @@ func (d *document) chart(s *story, ref *ooxml.Element, st *css.Style, w, h float
 	ps.MinLineHeight = 0
 	fonts := d.fonts
 	pic := &layout.Picture{Width: w, Height: h}
-	pic.Vector = func(ctx context.Context, r compose.Rect) []compose.Fragment {
+	pic.Vector = func(ctx context.Context, r typeset.Rect) []typeset.Fragment {
 		return chart.Render(ctx, fonts, c, r)
 	}
 	return &layout.Node{Kind: layout.Replaced, Style: ps, Picture: pic, Role: "Figure", Alt: alt}
@@ -319,7 +319,7 @@ func vectorShape(st *css.Style, g *shape.Geometry, ss ooxml.ShapeStyle, w, h flo
 	ps.Width, ps.Height = css.Pts(max(w, 0.1)), css.Pts(max(h, 0.1))
 	ps.LineHeight = css.Dimension{Kind: css.Normal}
 	pic := &layout.Picture{Width: max(w, 0.1), Height: max(h, 0.1)}
-	pic.Vector = func(_ context.Context, r compose.Rect) []compose.Fragment {
+	pic.Vector = func(_ context.Context, r typeset.Rect) []typeset.Fragment {
 		return ss.Paint(g, r)
 	}
 	return &layout.Node{Kind: layout.Replaced, Style: ps, Picture: pic}

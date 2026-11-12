@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 )
 
@@ -152,7 +152,7 @@ func sansFamily() []fontFile {
 
 // style returns a regular Test Sans style at 10 points.
 func style() Style {
-	return Style{Families: []string{"Test Sans"}, Size: 10, Color: compose.Black}
+	return Style{Families: []string{"Test Sans"}, Size: 10, Color: typeset.Black}
 }
 
 // lineText returns the text a line's glyphs stand for, in visual order.

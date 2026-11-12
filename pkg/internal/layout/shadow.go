@@ -9,9 +9,9 @@ import (
 
 	"golang.org/x/image/vector"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // shadowScale is the resolution of a blurred shadow's raster: 2 pixels per
@@ -36,8 +36,8 @@ const codeShadowBlur = "layout-shadow-blur"
 // shadow's: a growing radius r becomes r + d, scaled by 1 + (r/d - 1)^3
 // when r is under d so a sharp corner stays sharp; a shrinking one r + d,
 // floored at 0.
-func growRect(r compose.Rect, radii [4][2]float64, d float64) (compose.Rect, [4][2]float64) {
-	out := compose.Rect{X: r.X - d, Y: r.Y - d, Width: max(r.Width+2*d, 0), Height: max(r.Height+2*d, 0)}
+func growRect(r typeset.Rect, radii [4][2]float64, d float64) (typeset.Rect, [4][2]float64) {
+	out := typeset.Rect{X: r.X - d, Y: r.Y - d, Width: max(r.Width+2*d, 0), Height: max(r.Height+2*d, 0)}
 	if out.Width == 0 {
 		out.X = r.X + r.Width/2
 	}
@@ -66,7 +66,7 @@ func growRect(r compose.Rect, radii [4][2]float64, d float64) (compose.Rect, [4]
 
 // fitRadii scales radii down so adjacent ones fit their side (CSS
 // Backgrounds 3, 5.5).
-func fitRadii(r compose.Rect, radii [4][2]float64) [4][2]float64 {
+func fitRadii(r typeset.Rect, radii [4][2]float64) [4][2]float64 {
 	f := 1.0
 	ratio := func(side, sum float64) {
 		if sum > 0 {
@@ -91,7 +91,7 @@ func fitRadii(r compose.Rect, radii [4][2]float64) [4][2]float64 {
 // and border widths bd (CSS Backgrounds 3, 7.1): outer shadows under the
 // background, clipped out of the border box, inner ones over it, clipped
 // to the padding box. The first shadow paints on top.
-func (p *painter) shadows(b *box, st *css.Style, r compose.Rect, radii [4][2]float64, bd [4]float64, inset bool) {
+func (p *painter) shadows(b *box, st *css.Style, r typeset.Rect, radii [4][2]float64, bd [4]float64, inset bool) {
 	for _, sh := range slices.Backward(st.BoxShadow) {
 		if sh.Inset != inset {
 			continue
@@ -110,7 +110,7 @@ func (p *painter) shadows(b *box, st *css.Style, r compose.Rect, radii [4][2]flo
 }
 
 // outerShadow paints one outer shadow of the border box r.
-func (p *painter) outerShadow(b *box, r compose.Rect, radii [4][2]float64, x, y, blur, spread float64, col compose.Color) {
+func (p *painter) outerShadow(b *box, r typeset.Rect, radii [4][2]float64, x, y, blur, spread float64, col typeset.Color) {
 	shape, sradii := growRect(r, radii, spread)
 	shape.X += x
 	shape.Y += y
@@ -118,22 +118,22 @@ func (p *painter) outerShadow(b *box, r compose.Rect, radii [4][2]float64, x, y,
 		return
 	}
 	reach := 1.5 * blur
-	bounds := union(r, compose.Rect{X: shape.X - reach, Y: shape.Y - reach, Width: shape.Width + 2*reach, Height: shape.Height + 2*reach})
-	bounds = compose.Rect{X: bounds.X - 1, Y: bounds.Y - 1, Width: bounds.Width + 2, Height: bounds.Height + 2}
+	bounds := union(r, typeset.Rect{X: shape.X - reach, Y: shape.Y - reach, Width: shape.Width + 2*reach, Height: shape.Height + 2*reach})
+	bounds = typeset.Rect{X: bounds.X - 1, Y: bounds.Y - 1, Width: bounds.Width + 2, Height: bounds.Height + 2}
 	// The shadow never shows under the box (CSS Backgrounds 3, 7.1).
-	clip := &compose.Path{Ops: append(rectOps(bounds), roundedRect(r, radii)...), Fill: &compose.Fill{Rule: compose.EvenOdd}}
+	clip := &typeset.Path{Ops: append(rectOps(bounds), roundedRect(r, radii)...), Fill: &typeset.Fill{Rule: typeset.EvenOdd}}
 	g := &ditem{group: true, opacity: 1, clip: clip}
 	if frag := p.blurred(roundedRect(shape, sradii), shape, blur, false, col, r.Y); frag != nil {
 		g.kids = append(g.kids, &ditem{frag: frag, y0: bounds.Y, y1: bounds.Y + bounds.Height, page: -1})
 	} else {
-		g.kids = append(g.kids, &ditem{frag: &compose.Path{Ops: roundedRect(shape, sradii), Fill: &compose.Fill{Color: col}}, y0: shape.Y, y1: shape.Y + shape.Height, page: -1})
+		g.kids = append(g.kids, &ditem{frag: &typeset.Path{Ops: roundedRect(shape, sradii), Fill: &typeset.Fill{Color: col}}, y0: shape.Y, y1: shape.Y + shape.Height, page: -1})
 	}
 	p.emitGroup(b, g)
 }
 
 // innerShadow paints one inner shadow in the padding box of the border box
 // r with border widths bd.
-func (p *painter) innerShadow(b *box, r compose.Rect, radii [4][2]float64, bd [4]float64, x, y, blur, spread float64, col compose.Color) {
+func (p *painter) innerShadow(b *box, r typeset.Rect, radii [4][2]float64, bd [4]float64, x, y, blur, spread float64, col typeset.Color) {
 	pr, pradii := insetRect(r, radii, bd)
 	if pr.Width <= 0 || pr.Height <= 0 {
 		return
@@ -141,7 +141,7 @@ func (p *painter) innerShadow(b *box, r compose.Rect, radii [4][2]float64, bd [4
 	hole, hradii := growRect(pr, pradii, -spread)
 	hole.X += x
 	hole.Y += y
-	clip := &compose.Path{Ops: roundedRect(pr, pradii), Fill: &compose.Fill{}}
+	clip := &typeset.Path{Ops: roundedRect(pr, pradii), Fill: &typeset.Fill{}}
 	g := &ditem{group: true, opacity: 1, clip: clip}
 	y0, y1 := pr.Y, pr.Y+pr.Height
 	if frag := p.blurred(roundedRect(hole, hradii), pr, blur, true, col, r.Y); frag != nil {
@@ -151,7 +151,7 @@ func (p *painter) innerShadow(b *box, r compose.Rect, radii [4][2]float64, bd [4
 		if hole.Width > 0 && hole.Height > 0 {
 			ops = append(ops, roundedRect(hole, hradii)...)
 		}
-		g.kids = append(g.kids, &ditem{frag: &compose.Path{Ops: ops, Fill: &compose.Fill{Color: col, Rule: compose.EvenOdd}}, y0: y0, y1: y1, page: -1})
+		g.kids = append(g.kids, &ditem{frag: &typeset.Path{Ops: ops, Fill: &typeset.Fill{Color: col, Rule: typeset.EvenOdd}}, y0: y0, y1: y1, page: -1})
 	}
 	p.emitGroup(b, g)
 }
@@ -173,12 +173,12 @@ func (p *painter) emitGroup(b *box, g *ditem) {
 // For an outer shadow the shadow is shape, whose bounding box is area; for
 // an inner one (inner true) it is everything outside shape, drawn over
 // area, the padding box.
-func (p *painter) blurred(shape []compose.PathOp, area compose.Rect, blur float64, inner bool, col compose.Color, y float64) compose.Fragment {
+func (p *painter) blurred(shape []typeset.PathOp, area typeset.Rect, blur float64, inner bool, col typeset.Color, y float64) typeset.Fragment {
 	if blur <= 0 {
 		return nil
 	}
 	reach := 1.5 * blur
-	bounds := compose.Rect{X: area.X - reach, Y: area.Y - reach, Width: area.Width + 2*reach, Height: area.Height + 2*reach}
+	bounds := typeset.Rect{X: area.X - reach, Y: area.Y - reach, Width: area.Width + 2*reach, Height: area.Height + 2*reach}
 	k := shadowScale
 	if px := bounds.Width * bounds.Height * k * k; px > maxShadowPixels {
 		k *= math.Sqrt(maxShadowPixels / px)
@@ -199,7 +199,7 @@ func (p *painter) blurred(shape []compose.PathOp, area compose.Rect, blur float6
 		}
 	}
 	blurAlpha(mask, blur/2*k, inner)
-	if err := compose.ChargeImage(p.e.ctx, w, h, color.NRGBAModel); err != nil {
+	if err := typeset.ChargeImage(p.e.ctx, w, h, color.NRGBAModel); err != nil {
 		// The refusal stops the conversion, which reports it.
 		return nil
 	}
@@ -211,38 +211,38 @@ func (p *painter) blurred(shape []compose.PathOp, area compose.Rect, blur float6
 		img.Pix[4*i+2] = b8
 		img.Pix[4*i+3] = uint8(float64(v)*col.A + 0.5)
 	}
-	src, err := compose.EncodeImage(p.e.ctx, img)
+	src, err := typeset.EncodeImage(p.e.ctx, img)
 	if err != nil {
 		return nil
 	}
-	rect := compose.Rect{X: bounds.X, Y: bounds.Y, Width: float64(w) / k, Height: float64(h) / k}
-	return &compose.Image{Rect: rect, Source: src}
+	rect := typeset.Rect{X: bounds.X, Y: bounds.Y, Width: float64(w) / k, Height: float64(h) / k}
+	return &typeset.Image{Rect: rect, Source: src}
 }
 
 // rasterize draws the path ops, in flow coordinates, into a w by h alpha
 // mask of bounds at k pixels per point.
-func rasterize(ops []compose.PathOp, bounds compose.Rect, k float64, w, h int) *image.Alpha {
+func rasterize(ops []typeset.PathOp, bounds typeset.Rect, k float64, w, h int) *image.Alpha {
 	z := vector.NewRasterizer(w, h)
-	pt := func(q compose.Point) (float32, float32) {
+	pt := func(q typeset.Point) (float32, float32) {
 		return float32((q.X - bounds.X) * k), float32((q.Y - bounds.Y) * k)
 	}
 	open := false
 	for _, op := range ops {
 		switch op.Kind {
-		case compose.MoveTo:
+		case typeset.MoveTo:
 			if open {
 				z.ClosePath()
 			}
 			z.MoveTo(pt(op.P[0]))
 			open = true
-		case compose.LineTo:
+		case typeset.LineTo:
 			z.LineTo(pt(op.P[0]))
-		case compose.CurveTo:
+		case typeset.CurveTo:
 			ax, ay := pt(op.P[0])
 			bx, by := pt(op.P[1])
 			cx, cy := pt(op.P[2])
 			z.CubeTo(ax, ay, bx, by, cx, cy)
-		case compose.ClosePath:
+		case typeset.ClosePath:
 			z.ClosePath()
 			open = false
 		}

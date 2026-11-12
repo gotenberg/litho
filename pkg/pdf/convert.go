@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"sync/atomic"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/csv"
 	"github.com/gotenberg/litho/pkg/internal/convert/docx"
 	htmlconv "github.com/gotenberg/litho/pkg/internal/convert/html"
@@ -24,6 +23,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // convertKind is the format of the source a [Conversion] reads.
@@ -482,7 +482,7 @@ func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ 
 	src := &chargedReader{r: c.src, b: mem}
 	// The pictures of a large document wait for the file in a temp file of
 	// their own, removed on every path once the file is written.
-	ctx, pictures := compose.WithPictureStore(ctx, o.tempDir, o.spool)
+	ctx, pictures := typeset.WithPictureStore(ctx, o.tempDir, o.spool)
 	defer func() {
 		if err := pictures.Close(); err != nil && o.logger != nil {
 			o.logger.Debug("convert: removing the picture store failed", slog.Any("error", err))
@@ -500,14 +500,14 @@ func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ 
 
 	// Every converter tags its output, so the stream marks content as it
 	// writes each page.
-	stream, err := compose.NewStream(ctx, compose.Options{Logger: o.logger, Version: version, TempDir: o.tempDir, Spool: o.spool}, true)
+	stream, err := typeset.NewStream(ctx, typeset.Options{Logger: o.logger, Version: version, TempDir: o.tempDir, Spool: o.spool}, true)
 	if err != nil {
 		return nil, fmt.Errorf("converting %s: %w", name, err)
 	}
 	defer stream.Abort()
 	selectPages(stream, &o)
 
-	var doc *compose.Document
+	var doc *typeset.Document
 	switch c.kind {
 	case kindHTML, kindMarkdown:
 		doc, err = convertHTML(ctx, src, c.kind, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages)
@@ -550,12 +550,12 @@ func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ 
 // resolveConvertVersion returns the version v names, 1.7 for "", or an
 // error wrapping [ErrInvalidConvertOptions] for one a conversion does not
 // write (see [WithConvertVersion]).
-func resolveConvertVersion(v string) (compose.Version, error) {
+func resolveConvertVersion(v string) (typeset.Version, error) {
 	if v == "" {
-		return compose.Version17, nil
+		return typeset.Version17, nil
 	}
-	switch version := compose.Version(v); version {
-	case compose.Version14, compose.Version15, compose.Version16, compose.Version17, compose.Version20:
+	switch version := typeset.Version(v); version {
+	case typeset.Version14, typeset.Version15, typeset.Version16, typeset.Version17, typeset.Version20:
 		return version, nil
 	}
 	return "", fmt.Errorf("%w: PDF version %q", ErrInvalidConvertOptions, v)
@@ -599,7 +599,7 @@ func (o *convertConfig) margins() (top, right, bottom, left float64) {
 // convertPlainText lays a text source out, handing its pages to sink as it
 // makes them, mapping the text converter's errors onto the public
 // sentinels.
-func convertPlainText(ctx context.Context, src io.Reader, fonts *text.Fonts, o *convertConfig, maxBytes int64, maxPages int, sink compose.PageSink) (*compose.Document, error) {
+func convertPlainText(ctx context.Context, src io.Reader, fonts *text.Fonts, o *convertConfig, maxBytes int64, maxPages int, sink typeset.PageSink) (*typeset.Document, error) {
 	w, h := o.turned(o.basePaper())
 	top, right, bottom, left := o.margins()
 	doc, err := plaintext.Convert(ctx, src, fonts, plaintext.Options{
@@ -634,7 +634,7 @@ func convertPlainText(ctx context.Context, src io.Reader, fonts *text.Fonts, o *
 // [ErrInvalidConvertOptions], every cap on the document's size or
 // complexity to [ErrConvertInputTooLarge], its page cap to
 // [ErrConvertTooManyPages].
-func convertHTML(ctx context.Context, src io.Reader, kind convertKind, fonts *text.Fonts, o *convertConfig, maxBytes int64, maxPages int) (*compose.Document, error) {
+func convertHTML(ctx context.Context, src io.Reader, kind convertKind, fonts *text.Fonts, o *convertConfig, maxBytes int64, maxPages int) (*typeset.Document, error) {
 	// The converter takes the paper as a portrait sheet and a landscape
 	// switch, which also widens a single page. A paper the caller neither
 	// turns nor names portrait goes as it is.
@@ -679,7 +679,7 @@ func convertHTML(ctx context.Context, src io.Reader, kind convertKind, fonts *te
 		UserStylesheets:       o.userStylesheets,
 	}
 	name := kind.name()
-	var doc *compose.Document
+	var doc *typeset.Document
 	var err error
 	if kind == kindMarkdown {
 		doc, err = markdown.Convert(ctx, src, fonts, markdown.Options{HTML: opts, Template: o.markdownTemplate})
@@ -707,9 +707,9 @@ func convertHTML(ctx context.Context, src io.Reader, kind convertKind, fonts *te
 // [ErrInvalidConvertOptions], their size caps to [ErrConvertInputTooLarge],
 // their page cap to [ErrConvertTooManyPages], a package that is not one to
 // [ErrConvertMalformed], an encrypted one to [ErrConvertEncrypted].
-func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *text.Fonts, o *convertConfig, maxBytes int64, maxPages int, sink compose.PageSink) (*compose.Document, error) {
+func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *text.Fonts, o *convertConfig, maxBytes int64, maxPages int, sink typeset.PageSink) (*typeset.Document, error) {
 	name := kind.name()
-	var conv func(context.Context, io.Reader, *text.Fonts, office.Options) (*compose.Document, error)
+	var conv func(context.Context, io.Reader, *text.Fonts, office.Options) (*typeset.Document, error)
 	switch kind {
 	case kindDOCX:
 		conv = docx.Convert
@@ -786,7 +786,7 @@ func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *
 // with [ParsePageRanges], in the order it lists them; an empty
 // specification keeps every page. A specification [ParsePageRanges] refuses
 // fails the stream with [ErrInvalidConvertOptions] wrapping its error.
-func selectPages(stream *compose.Stream, o *convertConfig) {
+func selectPages(stream *typeset.Stream, o *convertConfig) {
 	if o.pageRanges == "" {
 		return
 	}

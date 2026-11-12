@@ -6,10 +6,10 @@ import (
 	"math"
 	"sort"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Warning codes the engine reports.
@@ -71,7 +71,7 @@ type engine struct {
 	metrics    map[*css.Style]text.Metrics
 	spaces     map[spaceKey]float64
 	missing    map[rune]bool
-	root       *compose.StructElem
+	root       *typeset.StructElem
 	rootBox    *box
 	// pageFrags counts the fragments of every page as they are assembled.
 	pageFrags []int
@@ -101,7 +101,7 @@ type engine struct {
 	balancePasses int
 	// anchorsFound are the anchors of the finished layout, which the
 	// links resolve against.
-	anchorsFound map[string]compose.Dest
+	anchorsFound map[string]typeset.Dest
 	// cols is the fragmentation context of the column set being laid out,
 	// nil outside columns: the page queries answer for its columns.
 	cols *colCtx
@@ -309,9 +309,9 @@ func resolve(d css.Dimension, ref float64) float64 {
 
 // colorOf converts a computed colour, reporting false for one that paints
 // nothing.
-func colorOf(c css.Color) (compose.Color, bool) {
+func colorOf(c css.Color) (typeset.Color, bool) {
 	cl := func(v float64) float64 { return min(max(clamp(v), 0), 1) }
-	out := compose.Color{R: cl(c.R), G: cl(c.G), B: cl(c.B), A: cl(c.A)}
+	out := typeset.Color{R: cl(c.R), G: cl(c.G), B: cl(c.B), A: cl(c.A)}
 	return out, out.A > 0
 }
 
@@ -371,12 +371,12 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 
 // textScale returns the horizontal scale of the text stack for an Office
 // text scale v: 0 for the natural width, else v within the bounds of
-// compose.Text.HScale.
+// typeset.Text.HScale.
 func textScale(v float64) float64 {
 	if v == 0 || v == 1 || math.IsNaN(v) {
 		return 0
 	}
-	return min(max(v, compose.MinHScale), compose.MaxHScale)
+	return min(max(v, typeset.MinHScale), typeset.MaxHScale)
 }
 
 // autospace returns the space text-autospace adds in st at size points:

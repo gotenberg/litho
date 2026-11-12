@@ -5,10 +5,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // tableRow is one table:table-row read, before the columns are known.
@@ -24,7 +24,7 @@ type tableRow struct {
 // table:template-name, 16.13 table:table-template) as the flags
 // table:use-first-row-styles and its siblings select. Columns and rows
 // with no size share the frame's.
-func (r *reader) table(t *odf.Element, box compose.Rect, pc *pageCtx) *slides.Table {
+func (r *reader) table(t *odf.Element, box typeset.Rect, pc *pageCtx) *slides.Table {
 	var cols []float64
 	var rows []tableRow
 	budget := maxTableCells

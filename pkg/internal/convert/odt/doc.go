@@ -1,6 +1,6 @@
 // Package odt converts an OpenDocument text document, an ODT package or
 // a flat .fodt document (ODF 1.3, Part 3 for the document, Part 2 for
-// the package), to the composition model as LibreOffice prints it: it
+// the package), to the typeset model as LibreOffice prints it: it
 // reads the package through the odf package, resolves the automatic and
 // common styles, the page layouts and master pages, builds a layout.Node
 // tree in the vocabulary of css.Style, and lays it out with

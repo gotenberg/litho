@@ -5,24 +5,24 @@ import (
 	"image/color"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // placed is a path or an image of a page in page coordinates, with the
 // opacity of the groups around it.
 type placed struct {
-	path    *compose.Path
-	img     *compose.Image
-	m       compose.Matrix
+	path    *typeset.Path
+	img     *typeset.Image
+	m       typeset.Matrix
 	opacity float64
 }
 
 // bounds returns the page bounds of the fragment.
-func (p placed) bounds() compose.Rect {
+func (p placed) bounds() typeset.Rect {
 	if p.img != nil {
 		return transformRect(p.m, p.img.Rect)
 	}
@@ -30,14 +30,14 @@ func (p placed) bounds() compose.Rect {
 }
 
 // flatten lists the paths and images of frags in paint order.
-func flatten(frags []compose.Fragment, m compose.Matrix, opacity float64, out *[]placed) {
+func flatten(frags []typeset.Fragment, m typeset.Matrix, opacity float64, out *[]placed) {
 	for _, f := range frags {
 		switch v := f.(type) {
-		case *compose.Path:
+		case *typeset.Path:
 			*out = append(*out, placed{path: v, m: m, opacity: opacity})
-		case *compose.Image:
+		case *typeset.Image:
 			*out = append(*out, placed{img: v, m: m, opacity: opacity})
-		case *compose.Group:
+		case *typeset.Group:
 			o := v.Opacity
 			if o == 0 {
 				o = 1
@@ -47,11 +47,11 @@ func flatten(frags []compose.Fragment, m compose.Matrix, opacity float64, out *[
 	}
 }
 
-func effectPage(t *testing.T, shapes ...*Shape) ([]placed, []compose.Warning) {
+func effectPage(t *testing.T, shapes ...*Shape) ([]placed, []typeset.Warning) {
 	t.Helper()
 	doc := convert(t, deck(&Slide{Shapes: shapes}), office.Options{})
 	var ps []placed
-	flatten(doc.Pages[0].Content, compose.Identity, 1, &ps)
+	flatten(doc.Pages[0].Content, typeset.Identity, 1, &ps)
 	return ps, doc.Warnings
 }
 
@@ -71,16 +71,16 @@ func alphaAt(t *testing.T, p placed, x, y float64) uint8 {
 // slide coordinates, scaled about the shape's centre, at the shadow's
 // opacity as a group's.
 func TestShape_HardShadow(t *testing.T) {
-	box := compose.Rect{X: 100, Y: 100, Width: 200, Height: 100}
+	box := typeset.Rect{X: 100, Y: 100, Width: 200, Height: 100}
 	for _, tc := range []struct {
 		name   string
 		shadow Shadow
 		rot    float64
-		want   compose.Rect
+		want   typeset.Rect
 	}{
-		{"offset", Shadow{Color: css.Color{A: 1}, Opacity: 0.5, OffsetX: 10, OffsetY: 20}, 0, compose.Rect{X: 110, Y: 120, Width: 200, Height: 100}},
-		{"scaled", Shadow{Color: css.Color{A: 1}, Opacity: 0.5, ScaleX: 0.5, ScaleY: 2}, 0, compose.Rect{X: 150, Y: 50, Width: 100, Height: 200}},
-		{"turned shape, offsets not turned", Shadow{Color: css.Color{A: 1}, Opacity: 0.5, OffsetX: 10}, 90, compose.Rect{X: 160, Y: 50, Width: 100, Height: 200}},
+		{"offset", Shadow{Color: css.Color{A: 1}, Opacity: 0.5, OffsetX: 10, OffsetY: 20}, 0, typeset.Rect{X: 110, Y: 120, Width: 200, Height: 100}},
+		{"scaled", Shadow{Color: css.Color{A: 1}, Opacity: 0.5, ScaleX: 0.5, ScaleY: 2}, 0, typeset.Rect{X: 150, Y: 50, Width: 100, Height: 200}},
+		{"turned shape, offsets not turned", Shadow{Color: css.Color{A: 1}, Opacity: 0.5, OffsetX: 10}, 90, typeset.Rect{X: 160, Y: 50, Width: 100, Height: 200}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sh := &Shape{Box: box, Rotation: tc.rot, Fill: Fill{Kind: FillSolid, Color: red}, Shadow: &tc.shadow}
@@ -91,7 +91,7 @@ func TestShape_HardShadow(t *testing.T) {
 			if got := ps[0].bounds(); !rectNear(got, tc.want, 0.01) {
 				t.Errorf("shadow bounds %+v, want %+v", got, tc.want)
 			}
-			if ps[0].path.Fill == nil || ps[0].path.Fill.Color != (compose.Color{A: 1}) || !near(ps[0].opacity, 0.5, 1e-9) {
+			if ps[0].path.Fill == nil || ps[0].path.Fill.Color != (typeset.Color{A: 1}) || !near(ps[0].opacity, 0.5, 1e-9) {
 				t.Errorf("shadow fill %+v at opacity %v, want black at 0.5", ps[0].path.Fill, ps[0].opacity)
 			}
 			if len(warns) != 0 {
@@ -112,13 +112,13 @@ func TestShape_HardShadow(t *testing.T) {
 // the shape over its box moved by the offsets and grown by the blur, in
 // the shadow's colour, opaque inside and half covered on the outline.
 func TestShape_BlurredShadow(t *testing.T) {
-	box := compose.Rect{X: 100, Y: 100, Width: 200, Height: 100}
+	box := typeset.Rect{X: 100, Y: 100, Width: 200, Height: 100}
 	sh := &Shape{Box: box, Fill: Fill{Kind: FillSolid, Color: red}, Shadow: &Shadow{Color: css.Color{B: 1, A: 1}, Opacity: 0.5, OffsetX: 10, OffsetY: 20, Blur: 8}}
 	ps, warns := effectPage(t, sh)
 	if len(ps) != 2 || ps[0].img == nil || ps[1].path == nil {
 		t.Fatalf("%d fragments, want the shadow's bitmap then the shape", len(ps))
 	}
-	if got, want := ps[0].bounds(), (compose.Rect{X: 102, Y: 112, Width: 216, Height: 116}); !rectNear(got, want, 0.01) {
+	if got, want := ps[0].bounds(), (typeset.Rect{X: 102, Y: 112, Width: 216, Height: 116}); !rectNear(got, want, 0.01) {
 		t.Errorf("shadow bounds %+v, want %+v", got, want)
 	}
 	img := decoded(t, ps[0].img.Source)
@@ -153,7 +153,7 @@ func abs(v int) int {
 // radius, opaque at its opacity on the outline and fading out, painted
 // under the shape; a rectangle glows twice, an ellipse once.
 func TestShape_Glow(t *testing.T) {
-	box := compose.Rect{X: 100, Y: 100, Width: 100, Height: 60}
+	box := typeset.Rect{X: 100, Y: 100, Width: 100, Height: 60}
 	glow := &Glow{Color: css.Color{G: 1, A: 1}, Opacity: 0.4, Radius: 10}
 	for _, tc := range []struct {
 		name  string
@@ -193,7 +193,7 @@ func TestShape_Glow(t *testing.T) {
 // its fill's colour whose alpha fades from the outline inwards, in place of
 // its paths.
 func TestShape_SoftEdge(t *testing.T) {
-	box := compose.Rect{X: 100, Y: 100, Width: 100, Height: 80}
+	box := typeset.Rect{X: 100, Y: 100, Width: 100, Height: 80}
 	for _, tc := range []struct {
 		name string
 		geom *shape.Geometry
@@ -234,12 +234,12 @@ func TestShape_SoftEdge(t *testing.T) {
 func TestShape_PictureShadow(t *testing.T) {
 	src := image.NewNRGBA(image.Rect(0, 0, 4, 4))
 	pic := &layout.Picture{Source: source(t, src), Width: 4, Height: 4}
-	sh := &Shape{Kind: KindPicture, Box: compose.Rect{X: 50, Y: 50, Width: 80, Height: 40}, Picture: pic, Shadow: &Shadow{Color: css.Color{A: 1}, Opacity: 1, OffsetX: 5, Blur: 4}}
+	sh := &Shape{Kind: KindPicture, Box: typeset.Rect{X: 50, Y: 50, Width: 80, Height: 40}, Picture: pic, Shadow: &Shadow{Color: css.Color{A: 1}, Opacity: 1, OffsetX: 5, Blur: 4}}
 	ps, _ := effectPage(t, sh)
 	if len(ps) != 2 || ps[0].img == nil || ps[1].img == nil {
 		t.Fatalf("%d fragments, want the shadow's bitmap then the picture", len(ps))
 	}
-	if got, want := ps[0].bounds(), (compose.Rect{X: 51, Y: 46, Width: 88, Height: 48}); !rectNear(got, want, 0.01) {
+	if got, want := ps[0].bounds(), (typeset.Rect{X: 51, Y: 46, Width: 88, Height: 48}); !rectNear(got, want, 0.01) {
 		t.Errorf("shadow bounds %+v, want %+v", got, want)
 	}
 	if got := alphaAt(t, ps[0], 95, 70); got != 255 {
@@ -262,7 +262,7 @@ func TestNewGrid_Resolution(t *testing.T) {
 		{170.05, 155.877, 522, 479, true, 3.08},
 		{0.1, 30, 0, 0, false, 0},
 	} {
-		g, ok := newGrid(compose.Rect{Width: tc.w, Height: tc.h})
+		g, ok := newGrid(typeset.Rect{Width: tc.w, Height: tc.h})
 		if ok != tc.ok || g.w != tc.pw || g.h != tc.ph {
 			t.Errorf("newGrid(%v, %v) = %d by %d, %v, want %d by %d, %v", tc.w, tc.h, g.w, g.h, ok, tc.pw, tc.ph, tc.ok)
 		}

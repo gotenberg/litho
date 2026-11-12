@@ -7,15 +7,15 @@ import (
 
 	"golang.org/x/image/vector"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Path is a path to cover: its construction steps in path units, filled
 // when Width is 0, else stroked with that width in path units, with
 // round joins and caps.
 type Path struct {
-	Ops   []compose.PathOp
+	Ops   []typeset.PathOp
 	Width float64
 }
 
@@ -39,7 +39,7 @@ const maxCurveSegments = 64
 // second subpath of the same direction is covered. A stroke's width
 // scales by the square root of tr's determinant. A path with a
 // non-finite coordinate is skipped.
-func Draw(m *image.Alpha, paths []Path, tr compose.Matrix) {
+func Draw(m *image.Alpha, paths []Path, tr typeset.Matrix) {
 	b := m.Bounds()
 	if b.Empty() {
 		return
@@ -68,10 +68,10 @@ func Draw(m *image.Alpha, paths []Path, tr compose.Matrix) {
 // finiteOps reports whether every point of ops maps through tr to a
 // finite pixel position within a range float32 arithmetic keeps exact
 // enough.
-func finiteOps(ops []compose.PathOp, tr compose.Matrix) bool {
+func finiteOps(ops []typeset.PathOp, tr typeset.Matrix) bool {
 	for _, op := range ops {
 		n := 1
-		if op.Kind == compose.CurveTo {
+		if op.Kind == typeset.CurveTo {
 			n = 3
 		}
 		for _, p := range op.P[:n] {
@@ -90,29 +90,29 @@ func finiteOps(ops []compose.PathOp, tr compose.Matrix) bool {
 // path that reaches a mask.
 const maxPixelCoordinate = 1 << 22
 
-func apply(m compose.Matrix, p compose.Point) (float64, float64) {
+func apply(m typeset.Matrix, p typeset.Point) (float64, float64) {
 	return m.A*p.X + m.C*p.Y + m.E, m.B*p.X + m.D*p.Y + m.F
 }
 
 // fill adds the subpaths of ops to z, each closed.
-func fill(z *vector.Rasterizer, ops []compose.PathOp, tr compose.Matrix) {
+func fill(z *vector.Rasterizer, ops []typeset.PathOp, tr typeset.Matrix) {
 	open := false
 	for _, op := range ops {
 		switch op.Kind {
-		case compose.MoveTo:
+		case typeset.MoveTo:
 			if open {
 				z.ClosePath()
 			}
 			x, y := apply(tr, op.P[0])
 			z.MoveTo(float32(x), float32(y))
 			open = true
-		case compose.LineTo:
+		case typeset.LineTo:
 			if !open {
 				continue
 			}
 			x, y := apply(tr, op.P[0])
 			z.LineTo(float32(x), float32(y))
-		case compose.CurveTo:
+		case typeset.CurveTo:
 			if !open {
 				continue
 			}
@@ -120,7 +120,7 @@ func fill(z *vector.Rasterizer, ops []compose.PathOp, tr compose.Matrix) {
 			x2, y2 := apply(tr, op.P[1])
 			x3, y3 := apply(tr, op.P[2])
 			z.CubeTo(float32(x1), float32(y1), float32(x2), float32(y2), float32(x3), float32(y3))
-		case compose.ClosePath:
+		case typeset.ClosePath:
 			if open {
 				z.ClosePath()
 				open = false
@@ -142,7 +142,7 @@ type polyline struct {
 }
 
 // polylines flattens ops mapped by tr into pixel polylines.
-func polylines(ops []compose.PathOp, tr compose.Matrix) []polyline {
+func polylines(ops []typeset.PathOp, tr typeset.Matrix) []polyline {
 	var out []polyline
 	var cur *polyline
 	total := 0
@@ -154,15 +154,15 @@ func polylines(ops []compose.PathOp, tr compose.Matrix) []polyline {
 	}
 	for _, op := range ops {
 		switch op.Kind {
-		case compose.MoveTo:
+		case typeset.MoveTo:
 			out = append(out, polyline{})
 			cur = &out[len(out)-1]
 			x, y := apply(tr, op.P[0])
 			add(pt{x, y})
-		case compose.LineTo:
+		case typeset.LineTo:
 			x, y := apply(tr, op.P[0])
 			add(pt{x, y})
-		case compose.CurveTo:
+		case typeset.CurveTo:
 			if cur == nil || len(cur.pts) == 0 {
 				continue
 			}
@@ -179,7 +179,7 @@ func polylines(ops []compose.PathOp, tr compose.Matrix) []polyline {
 				a, b, c, d := u*u*u, 3*u*u*t, 3*u*t*t, t*t*t
 				add(pt{a*p0.x + b*x1 + c*x2 + d*x3, a*p0.y + b*y1 + c*y2 + d*y3})
 			}
-		case compose.ClosePath:
+		case typeset.ClosePath:
 			if cur != nil {
 				cur.closed = true
 				cur = nil

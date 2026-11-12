@@ -3,7 +3,7 @@ package chart
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // errorCap is half the length of the line across an error bar's end: 100
@@ -100,7 +100,7 @@ func (rd *renderer) errorBars(g *Group, s *Series, x, y *dim, at func(j int) (fl
 		data = rd.data(data)
 		st := e.Line
 		if st == nil {
-			st = &Stroke{Color: compose.Black}
+			st = &Stroke{Color: typeset.Black}
 		}
 		cs := st.compose()
 		if cs == nil {
@@ -113,14 +113,14 @@ func (rd *renderer) errorBars(g *Group, s *Series, x, y *dim, at func(j int) (fl
 				continue
 			}
 			up, down := rd.errorAmounts(e, data, stats, j)
-			pos := func(xv, yv float64) compose.Point {
+			pos := func(xv, yv float64) typeset.Point {
 				if g.Kind == Scatter || g.Kind == Bubble {
-					return compose.Point{X: x.valuePixel(xv), Y: y.valuePixel(yv)}
+					return typeset.Point{X: x.valuePixel(xv), Y: y.valuePixel(yv)}
 				}
 				return point(x, y, xv, yv)
 			}
 			c := pos(cx, cy)
-			var ends []compose.Point
+			var ends []typeset.Point
 			if e.Up && !math.IsNaN(up) {
 				if e.X {
 					ends = append(ends, pos(cx+up, cy))
@@ -136,7 +136,7 @@ func (rd *renderer) errorBars(g *Group, s *Series, x, y *dim, at func(j int) (fl
 				}
 			}
 			for _, p := range ends {
-				rd.out = append(rd.out, &compose.Path{Ops: polyline([]compose.Point{c, p}, false), Stroke: cs})
+				rd.out = append(rd.out, &typeset.Path{Ops: polyline([]typeset.Point{c, p}, false), Stroke: cs})
 				if e.NoCap {
 					continue
 				}
@@ -147,7 +147,7 @@ func (rd *renderer) errorBars(g *Group, s *Series, x, y *dim, at func(j int) (fl
 					continue
 				}
 				nx, ny := -dy/l*errorCap, dx/l*errorCap
-				rd.out = append(rd.out, &compose.Path{Ops: polyline([]compose.Point{{X: p.X - nx, Y: p.Y - ny}, {X: p.X + nx, Y: p.Y + ny}}, false), Stroke: cs})
+				rd.out = append(rd.out, &typeset.Path{Ops: polyline([]typeset.Point{{X: p.X - nx, Y: p.Y - ny}, {X: p.X + nx, Y: p.Y + ny}}, false), Stroke: cs})
 			}
 		}
 	}

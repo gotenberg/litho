@@ -3,8 +3,8 @@ package svg
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // parsePath parses path data (SVG 1.1, 8.3) into path operators in user
@@ -12,14 +12,14 @@ import (
 // raised to cubics (8.3.7) and elliptical arcs converted to cubics (F.6).
 // On an error it returns the path up to the last complete command, as SVG
 // 1.1, F.2 asks, and ok false. It stops at [maxPathSegments] operators.
-func parsePath(d string) (ops []compose.PathOp, ok bool) {
+func parsePath(d string) (ops []typeset.PathOp, ok bool) {
 	sc := scanner{s: d}
-	var cur, start, ctrl compose.Point
+	var cur, start, ctrl typeset.Point
 	var prev byte // the previous command, uppercase, for S and T
 	var cmd byte
 	open := false // a subpath is started
 	closed := false
-	add := func(op compose.PathOp) bool {
+	add := func(op typeset.PathOp) bool {
 		if len(ops) >= maxPathSegments {
 			return false
 		}
@@ -31,7 +31,7 @@ func parsePath(d string) (ops []compose.PathOp, ok bool) {
 	ensure := func() bool {
 		if closed {
 			closed = false
-			return add(compose.PathOp{Kind: compose.MoveTo, P: [3]compose.Point{cur}})
+			return add(typeset.PathOp{Kind: typeset.MoveTo, P: [3]typeset.Point{cur}})
 		}
 		return true
 	}
@@ -51,13 +51,13 @@ func parsePath(d string) (ops []compose.PathOp, ok bool) {
 		}
 		upper := upperASCII(cmd)
 		rel := cmd >= 'a'
-		base := compose.Point{}
+		base := typeset.Point{}
 		if rel {
 			base = cur
 		}
 		switch upper {
 		case 'Z':
-			if !add(compose.PathOp{Kind: compose.ClosePath}) {
+			if !add(typeset.PathOp{Kind: typeset.ClosePath}) {
 				return ops, false
 			}
 			cur, closed, prev = start, true, 'Z'
@@ -73,8 +73,8 @@ func parsePath(d string) (ops []compose.PathOp, ok bool) {
 			if !good {
 				return ops, false
 			}
-			p = compose.Point{X: p.X + base.X, Y: p.Y + base.Y}
-			if !add(compose.PathOp{Kind: compose.MoveTo, P: [3]compose.Point{p}}) {
+			p = typeset.Point{X: p.X + base.X, Y: p.Y + base.Y}
+			if !add(typeset.PathOp{Kind: typeset.MoveTo, P: [3]typeset.Point{p}}) {
 				return ops, false
 			}
 			cur, start, open, closed, prev = p, p, true, false, 'M'
@@ -90,8 +90,8 @@ func parsePath(d string) (ops []compose.PathOp, ok bool) {
 			if !good || !ensure() {
 				return ops, false
 			}
-			p = compose.Point{X: p.X + base.X, Y: p.Y + base.Y}
-			if !add(compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{p}}) {
+			p = typeset.Point{X: p.X + base.X, Y: p.Y + base.Y}
+			if !add(typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{p}}) {
 				return ops, false
 			}
 			cur, prev = p, 'L'
@@ -106,25 +106,25 @@ func parsePath(d string) (ops []compose.PathOp, ok bool) {
 			} else {
 				p.Y = v + base.Y
 			}
-			if !add(compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{p}}) {
+			if !add(typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{p}}) {
 				return ops, false
 			}
 			cur, prev = p, upper
 		case 'C', 'S':
-			var c1 compose.Point
+			var c1 typeset.Point
 			if upper == 'C' {
 				p, good := sc.point()
 				if !good {
 					return ops, false
 				}
-				c1 = compose.Point{X: p.X + base.X, Y: p.Y + base.Y}
+				c1 = typeset.Point{X: p.X + base.X, Y: p.Y + base.Y}
 				sc.skipSep()
 			} else {
 				// S reflects the previous curve's second control point
 				// (SVG 1.1, 8.3.6).
 				c1 = cur
 				if prev == 'C' || prev == 'S' {
-					c1 = compose.Point{X: 2*cur.X - ctrl.X, Y: 2*cur.Y - ctrl.Y}
+					c1 = typeset.Point{X: 2*cur.X - ctrl.X, Y: 2*cur.Y - ctrl.Y}
 				}
 			}
 			p2, good := sc.point()
@@ -136,32 +136,32 @@ func parsePath(d string) (ops []compose.PathOp, ok bool) {
 			if !good || !ensure() {
 				return ops, false
 			}
-			c2 := compose.Point{X: p2.X + base.X, Y: p2.Y + base.Y}
-			end := compose.Point{X: p3.X + base.X, Y: p3.Y + base.Y}
-			if !add(compose.PathOp{Kind: compose.CurveTo, P: [3]compose.Point{c1, c2, end}}) {
+			c2 := typeset.Point{X: p2.X + base.X, Y: p2.Y + base.Y}
+			end := typeset.Point{X: p3.X + base.X, Y: p3.Y + base.Y}
+			if !add(typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{c1, c2, end}}) {
 				return ops, false
 			}
 			cur, ctrl, prev = end, c2, upper
 		case 'Q', 'T':
-			var q compose.Point
+			var q typeset.Point
 			if upper == 'Q' {
 				p, good := sc.point()
 				if !good {
 					return ops, false
 				}
-				q = compose.Point{X: p.X + base.X, Y: p.Y + base.Y}
+				q = typeset.Point{X: p.X + base.X, Y: p.Y + base.Y}
 				sc.skipSep()
 			} else {
 				q = cur
 				if prev == 'Q' || prev == 'T' {
-					q = compose.Point{X: 2*cur.X - ctrl.X, Y: 2*cur.Y - ctrl.Y}
+					q = typeset.Point{X: 2*cur.X - ctrl.X, Y: 2*cur.Y - ctrl.Y}
 				}
 			}
 			p, good := sc.point()
 			if !good || !ensure() {
 				return ops, false
 			}
-			end := compose.Point{X: p.X + base.X, Y: p.Y + base.Y}
+			end := typeset.Point{X: p.X + base.X, Y: p.Y + base.Y}
 			if !add(quadToCubic(cur, q, end)) {
 				return ops, false
 			}
@@ -181,7 +181,7 @@ func parsePath(d string) (ops []compose.PathOp, ok bool) {
 			if !good || !good2 || !good3 || !good4 || !good5 || !good6 || !ensure() {
 				return ops, false
 			}
-			end := compose.Point{X: p.X + base.X, Y: p.Y + base.Y}
+			end := typeset.Point{X: p.X + base.X, Y: p.Y + base.Y}
 			for _, op := range arcToCubics(cur, rx, ry, rot, large, sweep, end) {
 				if !add(op) {
 					return ops, false
@@ -215,25 +215,25 @@ func upperASCII(c byte) byte {
 }
 
 // point reads a coordinate pair.
-func (sc *scanner) point() (compose.Point, bool) {
+func (sc *scanner) point() (typeset.Point, bool) {
 	x, ok := sc.number()
 	if !ok {
-		return compose.Point{}, false
+		return typeset.Point{}, false
 	}
 	sc.skipSep()
 	y, ok := sc.number()
 	if !ok {
-		return compose.Point{}, false
+		return typeset.Point{}, false
 	}
-	return compose.Point{X: x, Y: y}, true
+	return typeset.Point{X: x, Y: y}, true
 }
 
 // quadToCubic raises the quadratic Bézier p0 q p1 to the cubic that draws
 // the same curve.
-func quadToCubic(p0, q, p1 compose.Point) compose.PathOp {
-	c1 := compose.Point{X: p0.X + 2.0/3*(q.X-p0.X), Y: p0.Y + 2.0/3*(q.Y-p0.Y)}
-	c2 := compose.Point{X: p1.X + 2.0/3*(q.X-p1.X), Y: p1.Y + 2.0/3*(q.Y-p1.Y)}
-	return compose.PathOp{Kind: compose.CurveTo, P: [3]compose.Point{c1, c2, p1}}
+func quadToCubic(p0, q, p1 typeset.Point) typeset.PathOp {
+	c1 := typeset.Point{X: p0.X + 2.0/3*(q.X-p0.X), Y: p0.Y + 2.0/3*(q.Y-p0.Y)}
+	c2 := typeset.Point{X: p1.X + 2.0/3*(q.X-p1.X), Y: p1.Y + 2.0/3*(q.Y-p1.Y)}
+	return typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{c1, c2, p1}}
 }
 
 // arcToCubics converts the elliptical arc from p0 to p1 (SVG 1.1, 8.3.8)
@@ -242,13 +242,13 @@ func quadToCubic(p0, q, p1 compose.Point) compose.PathOp {
 // piece approximated with the control distance 4/3 tan(θ/4) of the unit
 // circle. A zero radius draws a line, and coincident ends draw nothing
 // (F.6.2).
-func arcToCubics(p0 compose.Point, rx, ry, rotDeg float64, large, sweep bool, p1 compose.Point) []compose.PathOp {
+func arcToCubics(p0 typeset.Point, rx, ry, rotDeg float64, large, sweep bool, p1 typeset.Point) []typeset.PathOp {
 	if p0 == p1 {
 		return nil
 	}
 	rx, ry = math.Abs(rx), math.Abs(ry)
 	if rx == 0 || ry == 0 {
-		return []compose.PathOp{{Kind: compose.LineTo, P: [3]compose.Point{p1}}}
+		return []typeset.PathOp{{Kind: typeset.LineTo, P: [3]typeset.Point{p1}}}
 	}
 	phi := rotDeg * math.Pi / 180
 	cos, sin := math.Cos(phi), math.Sin(phi)
@@ -286,21 +286,21 @@ func arcToCubics(p0 compose.Point, rx, ry, rotDeg float64, large, sweep bool, p1
 		delta += 2 * math.Pi
 	}
 	if !numeric.Finite(delta) || !numeric.Finite(theta) || !numeric.Finite(cx) || !numeric.Finite(cy) {
-		return []compose.PathOp{{Kind: compose.LineTo, P: [3]compose.Point{p1}}}
+		return []typeset.PathOp{{Kind: typeset.LineTo, P: [3]typeset.Point{p1}}}
 	}
 	n := int(math.Ceil(math.Abs(delta)/(math.Pi/2) - 1e-9)) // at most 4: |delta| <= 2π
 	n = max(n, 1)
 	step := delta / float64(n)
 	t := 4.0 / 3 * math.Tan(step/4)
-	onEllipse := func(a float64) (compose.Point, compose.Point) {
+	onEllipse := func(a float64) (typeset.Point, typeset.Point) {
 		ca, sa := math.Cos(a), math.Sin(a)
 		// The point and the derivative, both rotated by phi.
 		px, py := rx*ca, ry*sa
 		tx, ty := -rx*sa, ry*ca
-		return compose.Point{X: cos*px - sin*py + cx, Y: sin*px + cos*py + cy},
-			compose.Point{X: cos*tx - sin*ty, Y: sin*tx + cos*ty}
+		return typeset.Point{X: cos*px - sin*py + cx, Y: sin*px + cos*py + cy},
+			typeset.Point{X: cos*tx - sin*ty, Y: sin*tx + cos*ty}
 	}
-	ops := make([]compose.PathOp, 0, n)
+	ops := make([]typeset.PathOp, 0, n)
 	a := theta
 	from, d0 := onEllipse(a)
 	for i := range n {
@@ -309,7 +309,7 @@ func arcToCubics(p0 compose.Point, rx, ry, rotDeg float64, large, sweep bool, p1
 		if i == n-1 {
 			to = p1
 		}
-		ops = append(ops, compose.PathOp{Kind: compose.CurveTo, P: [3]compose.Point{
+		ops = append(ops, typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{
 			{X: from.X + t*d0.X, Y: from.Y + t*d0.Y},
 			{X: to.X - t*d1.X, Y: to.Y - t*d1.Y},
 			to,

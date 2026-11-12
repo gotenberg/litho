@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestOptions_RefusesOutOfRange(t *testing.T) {
@@ -103,7 +103,7 @@ func TestConvert_AssemblesMetadataWarningsAndOutline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := compose.Metadata{Title: "The Title", Author: "Ada Lovelace", Subject: "About things", Keywords: "a, b", Lang: "en-GB"}
+	want := typeset.Metadata{Title: "The Title", Author: "Ada Lovelace", Subject: "About things", Keywords: "a, b", Lang: "en-GB"}
 	if doc.Metadata != want {
 		t.Errorf("metadata %+v, want %+v", doc.Metadata, want)
 	}
@@ -111,8 +111,8 @@ func TestConvert_AssemblesMetadataWarningsAndOutline(t *testing.T) {
 		t.Errorf("warning codes %s, want the cascade's, the converter's, then the layout's", got)
 	}
 	var lines []string
-	var walkOutline func([]compose.Outline, string)
-	walkOutline = func(os []compose.Outline, indent string) {
+	var walkOutline func([]typeset.Outline, string)
+	walkOutline = func(os []typeset.Outline, indent string) {
 		for _, o := range os {
 			lines = append(lines, indent+o.Title)
 			walkOutline(o.Kids, indent+"  ")
@@ -128,9 +128,9 @@ func TestConvert_AssemblesMetadataWarningsAndOutline(t *testing.T) {
 	}
 	// Each heading has its own anchor: the synthetic IDs skip the one the
 	// document already carries.
-	seen := map[compose.Dest]bool{}
-	var collect func([]compose.Outline)
-	collect = func(os []compose.Outline) {
+	seen := map[typeset.Dest]bool{}
+	var collect func([]typeset.Outline)
+	collect = func(os []typeset.Outline) {
 		for _, o := range os {
 			if seen[o.Dest] {
 				t.Errorf("two headings share the destination %+v", o.Dest)
@@ -163,8 +163,8 @@ func TestConvert_IsDeterministic(t *testing.T) {
 			t.Fatalf("Convert: %v", err)
 		}
 		var b bytes.Buffer
-		if err := compose.Write(context.Background(), doc, &b, compose.Options{}); err != nil {
-			t.Fatalf("compose.Write: %v", err)
+		if err := typeset.Write(context.Background(), doc, &b, typeset.Options{}); err != nil {
+			t.Fatalf("typeset.Write: %v", err)
 		}
 		outs = append(outs, b.Bytes())
 	}

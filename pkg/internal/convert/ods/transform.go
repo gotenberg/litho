@@ -5,14 +5,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // mul returns m after n: n applied first.
-func mul(m, n compose.Matrix) compose.Matrix {
-	return compose.Matrix{
+func mul(m, n typeset.Matrix) typeset.Matrix {
+	return typeset.Matrix{
 		A: m.A*n.A + m.C*n.B, B: m.B*n.A + m.D*n.B,
 		C: m.A*n.C + m.C*n.D, D: m.B*n.C + m.D*n.D,
 		E: m.A*n.E + m.C*n.F + m.E, F: m.B*n.E + m.D*n.F + m.F,
@@ -20,12 +20,12 @@ func mul(m, n compose.Matrix) compose.Matrix {
 }
 
 // apply maps the point (x, y) by m.
-func apply(m compose.Matrix, x, y float64) (float64, float64) {
+func apply(m typeset.Matrix, x, y float64) (float64, float64) {
 	return m.A*x + m.C*y + m.E, m.B*x + m.D*y + m.F
 }
 
 // translation returns the transform moving by (x, y).
-func translation(x, y float64) compose.Matrix { return compose.Matrix{A: 1, D: 1, E: x, F: y} }
+func translation(x, y float64) typeset.Matrix { return typeset.Matrix{A: 1, D: 1, E: x, F: y} }
 
 // maxTransformOps bounds the operations of one draw:transform read: 16.
 // Anti-DoS guard, not spec-mandated: Calc writes a skew, a rotation and a
@@ -51,8 +51,8 @@ const maxTransformNumber = 1e9
 //     bottom on the page, y pointing down, as the counterclockwise rotate
 //     turns it, in the pinned LibreOffice's Impress, whose drawing layer
 //     Calc shares.
-func parseTransform(s string) (compose.Matrix, bool) {
-	m := compose.Identity
+func parseTransform(s string) (typeset.Matrix, bool) {
+	m := typeset.Identity
 	rest := strings.TrimSpace(s)
 	for n := 0; rest != ""; n++ {
 		if n >= maxTransformOps {
@@ -81,7 +81,7 @@ func parseTransform(s string) (compose.Matrix, bool) {
 			}
 			return v, true
 		}
-		var op compose.Matrix
+		var op typeset.Matrix
 		switch name {
 		case "rotate":
 			a, ok := num(0, false)
@@ -89,7 +89,7 @@ func parseTransform(s string) (compose.Matrix, bool) {
 				return m, false
 			}
 			sin, cos := math.Sincos(a)
-			op = compose.Matrix{A: cos, B: -sin, C: sin, D: cos}
+			op = typeset.Matrix{A: cos, B: -sin, C: sin, D: cos}
 		case "translate":
 			x, ok := num(0, true)
 			if !ok {
@@ -106,7 +106,7 @@ func parseTransform(s string) (compose.Matrix, bool) {
 			if !okY {
 				y = x
 			}
-			op = compose.Matrix{A: x, D: y}
+			op = typeset.Matrix{A: x, D: y}
 		case "skewX", "skewY":
 			a, ok := num(0, false)
 			if !ok {
@@ -116,9 +116,9 @@ func parseTransform(s string) (compose.Matrix, bool) {
 			// the page, y pointing down, as the counterclockwise rotate
 			// turns it.
 			if name == "skewX" {
-				op = compose.Matrix{A: 1, C: -math.Tan(a), D: 1}
+				op = typeset.Matrix{A: 1, C: -math.Tan(a), D: 1}
 			} else {
-				op = compose.Matrix{A: 1, B: -math.Tan(a), D: 1}
+				op = typeset.Matrix{A: 1, B: -math.Tan(a), D: 1}
 			}
 		case "matrix":
 			var v [6]float64
@@ -129,7 +129,7 @@ func parseTransform(s string) (compose.Matrix, bool) {
 				}
 				v[i] = x
 			}
-			op = compose.Matrix{A: v[0], B: v[1], C: v[2], D: v[3], E: v[4], F: v[5]}
+			op = typeset.Matrix{A: v[0], B: v[1], C: v[2], D: v[3], E: v[4], F: v[5]}
 		default:
 			return m, false
 		}

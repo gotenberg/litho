@@ -8,10 +8,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/woff"
 )
 
@@ -77,7 +77,7 @@ type fontLoader struct {
 	// programs caches the decoded program, or the error, of each URL.
 	programs map[string]programResult
 	total    int64
-	warnings []compose.Warning
+	warnings []typeset.Warning
 }
 
 // programResult is the decoded program of one URL or why it failed.
@@ -91,7 +91,7 @@ type programResult struct {
 // in order and the first that loads is its face; a rule none of whose
 // sources loads is reported with [CodeFontFaceSkipped] and still declares
 // its family. fonts may be nil, which loads nothing.
-func loadFontFaces(ctx context.Context, rules []css.FontFace, res *resources, fonts *text.Fonts, logger *slog.Logger) (*text.FaceSet, []compose.Warning) {
+func loadFontFaces(ctx context.Context, rules []css.FontFace, res *resources, fonts *text.Fonts, logger *slog.Logger) (*text.FaceSet, []typeset.Warning) {
 	if fonts == nil || len(rules) == 0 {
 		return nil, nil
 	}
@@ -151,7 +151,7 @@ func (l *fontLoader) load(ctx context.Context, rule css.FontFace) *text.Face {
 func (l *fontLoader) skip(rule css.FontFace, reasons []string) {
 	msg := fmt.Sprintf("the @font-face rule for %q loaded no face (%s); its family falls back to the next one", rule.Family, strings.Join(reasons, "; "))
 	l.logger.Debug("html: skipping an @font-face rule", slog.String("family", rule.Family), slog.String("reasons", strings.Join(reasons, "; ")))
-	l.warnings = append(l.warnings, compose.Warning{Code: CodeFontFaceSkipped, Message: msg})
+	l.warnings = append(l.warnings, typeset.Warning{Code: CodeFontFaceSkipped, Message: msg})
 }
 
 // loadSource loads one src entry: a local() face of the index, or the file

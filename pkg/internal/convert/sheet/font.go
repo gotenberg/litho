@@ -4,10 +4,10 @@ import (
 	"context"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // The font of a cell no style names one for: Calc's default cell style,
@@ -182,7 +182,7 @@ func (f font) textStyle(lang string) text.Style {
 		Italic:   f.italic,
 		Size:     size,
 		Lang:     lang,
-		Color:    compose.Color{R: f.color.R, G: f.color.G, B: f.color.B, A: f.color.A},
+		Color:    typeset.Color{R: f.color.R, G: f.color.G, B: f.color.B, A: f.color.A},
 		// Calc draws cell text without the font's kerning.
 		NoKerning: true,
 	}

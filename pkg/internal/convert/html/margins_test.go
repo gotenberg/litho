@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // placed is a text run as it lands on a page: its text, the left edge of
@@ -21,19 +21,19 @@ type placed struct {
 
 // pageTexts returns the text runs of pg in paint order, groups' transforms
 // applied (translations only, as the layout writes them).
-func pageTexts(pg *compose.Page) []placed {
+func pageTexts(pg *typeset.Page) []placed {
 	var out []placed
-	var walkFrags func(frags []compose.Fragment, dx, dy float64)
-	walkFrags = func(frags []compose.Fragment, dx, dy float64) {
+	var walkFrags func(frags []typeset.Fragment, dx, dy float64)
+	walkFrags = func(frags []typeset.Fragment, dx, dy float64) {
 		for _, f := range frags {
 			switch v := f.(type) {
-			case *compose.Group:
+			case *typeset.Group:
 				m := v.Transform
-				if m == (compose.Matrix{}) {
-					m = compose.Identity
+				if m == (typeset.Matrix{}) {
+					m = typeset.Identity
 				}
 				walkFrags(v.Content, dx+m.E, dy+m.F)
-			case *compose.Text:
+			case *typeset.Text:
 				var b strings.Builder
 				for _, g := range v.Glyphs {
 					b.WriteString(g.Text)
@@ -48,7 +48,7 @@ func pageTexts(pg *compose.Page) []placed {
 
 // find returns the first run of pg that holds s, or with the runs after
 // it on its baseline starts with s, at that run's origin.
-func find(t *testing.T, pg *compose.Page, s string) placed {
+func find(t *testing.T, pg *typeset.Page, s string) placed {
 	t.Helper()
 	runs := pageTexts(pg)
 	for i := range runs {
@@ -65,7 +65,7 @@ func find(t *testing.T, pg *compose.Page, s string) placed {
 }
 
 // hasText reports whether a run of pg contains s.
-func hasText(pg *compose.Page, s string) bool {
+func hasText(pg *typeset.Page, s string) bool {
 	for _, p := range pageTexts(pg) {
 		if strings.Contains(p.text, s) {
 			return true
@@ -76,14 +76,14 @@ func hasText(pg *compose.Page, s string) bool {
 
 // structured reports whether a text run of frags hangs from the structure
 // tree.
-func structured(frags []compose.Fragment) bool {
+func structured(frags []typeset.Fragment) bool {
 	for _, f := range frags {
 		switch v := f.(type) {
-		case *compose.Group:
+		case *typeset.Group:
 			if structured(v.Content) {
 				return true
 			}
-		case *compose.Text:
+		case *typeset.Text:
 			if v.Parent != nil {
 				return true
 			}
@@ -93,7 +93,7 @@ func structured(frags []compose.Fragment) bool {
 }
 
 // convertDoc converts src with o and the test fonts.
-func convertDoc(t *testing.T, src string, o Options) *compose.Document {
+func convertDoc(t *testing.T, src string, o Options) *typeset.Document {
 	t.Helper()
 	doc, err := Convert(context.Background(), strings.NewReader(src), testFonts(t), o)
 	if err != nil {

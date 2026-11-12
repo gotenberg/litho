@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // lineTexts returns the text of every line of page n of res, the runs that
@@ -457,16 +457,16 @@ func TestStructure_RolesAndArtifacts(t *testing.T) {
 		}
 	}
 	var paths int
-	var walk func([]compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Path:
+			case *typeset.Path:
 				paths++
 				if v.Parent != nil {
 					t.Errorf("background hangs from %s", v.Parent.Role)
 				}
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content)
 			}
 		}

@@ -3,15 +3,15 @@ package layout
 import (
 	"fmt"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
-// composeGroupDepth is the composition model's bound on group nesting, 24,
+// typesetGroupDepth is the typeset model's bound on group nesting, 24,
 // which the page group, the engine's own groups (at most maxGroupDepth)
 // and a vector picture's share.
-const composeGroupDepth = maxGroupDepth + 4
+const typesetGroupDepth = maxGroupDepth + 4
 
 // maxVectorNodes bounds the fragments one vector background paints over
 // all its tiles: past it fewer tiles are drawn, with a warning. Anti-DoS
@@ -23,38 +23,38 @@ const maxVectorNodes = 200_000
 // hanging from parent: an image for a raster picture, a group of the
 // vector picture's fragments for a vector one, nil when the vector draws
 // nothing.
-func (e *engine) pictureFrag(pic *Picture, r compose.Rect, parent *compose.StructElem) compose.Fragment {
+func (e *engine) pictureFrag(pic *Picture, r typeset.Rect, parent *typeset.StructElem) typeset.Fragment {
 	if pic.Vector == nil {
-		return &compose.Image{Rect: r, Source: pic.Source, Parent: parent}
+		return &typeset.Image{Rect: r, Source: pic.Source, Parent: parent}
 	}
 	frags := pic.Vector(e.ctx, r)
 	if len(frags) == 0 || depthOf(frags) > MaxVectorDepth {
 		return nil
 	}
-	return &compose.Group{Opacity: 1, Transform: compose.Identity, Content: adopt(frags, parent, 0)}
+	return &typeset.Group{Opacity: 1, Transform: typeset.Identity, Content: adopt(frags, parent, 0)}
 }
 
 // adopt returns a copy of frags whose leaves hang from parent: a vector
 // picture's fragments are shared between its placements.
-func adopt(frags []compose.Fragment, parent *compose.StructElem, depth int) []compose.Fragment {
-	out := make([]compose.Fragment, 0, len(frags))
+func adopt(frags []typeset.Fragment, parent *typeset.StructElem, depth int) []typeset.Fragment {
+	out := make([]typeset.Fragment, 0, len(frags))
 	for _, f := range frags {
 		switch v := f.(type) {
-		case *compose.Group:
+		case *typeset.Group:
 			g := *v
 			if depth < MaxVectorDepth {
 				g.Content = adopt(v.Content, parent, depth+1)
 			}
 			out = append(out, &g)
-		case *compose.Text:
+		case *typeset.Text:
 			c := *v
 			c.Parent = parent
 			out = append(out, &c)
-		case *compose.Image:
+		case *typeset.Image:
 			c := *v
 			c.Parent = parent
 			out = append(out, &c)
-		case *compose.Path:
+		case *typeset.Path:
 			c := *v
 			c.Parent = parent
 			out = append(out, &c)
@@ -64,10 +64,10 @@ func adopt(frags []compose.Fragment, parent *compose.StructElem, depth int) []co
 }
 
 // depthOf returns the group nesting of frags.
-func depthOf(frags []compose.Fragment) int {
+func depthOf(frags []typeset.Fragment) int {
 	d := 0
 	for _, f := range frags {
-		if g, ok := f.(*compose.Group); ok {
+		if g, ok := f.(*typeset.Group); ok {
 			d = max(d, 1+depthOf(g.Content))
 		}
 	}
@@ -76,8 +76,8 @@ func depthOf(frags []compose.Fragment) int {
 
 // fragNodes returns how many fragments f is, its groups' content and the
 // groups themselves counted.
-func fragNodes(f compose.Fragment) int {
-	g, ok := f.(*compose.Group)
+func fragNodes(f typeset.Fragment) int {
+	g, ok := f.(*typeset.Group)
 	if !ok {
 		return 1
 	}
@@ -90,14 +90,14 @@ func fragNodes(f compose.Fragment) int {
 
 // fitLeaf returns f, a leaf of the paint tree under depth open groups, or
 // nil, with a warning, when it is a group too deep for the room the page
-// group and those groups leave in the composition model.
-func (e *engine) fitLeaf(f compose.Fragment, depth int) compose.Fragment {
-	g, ok := f.(*compose.Group)
+// group and those groups leave in the typeset model.
+func (e *engine) fitLeaf(f typeset.Fragment, depth int) typeset.Fragment {
+	g, ok := f.(*typeset.Group)
 	if !ok {
 		return f
 	}
-	if 1+depth+depthOf([]compose.Fragment{g}) > composeGroupDepth {
-		e.warnOnce(codeGroupDepth, fmt.Sprintf("a vector picture under groups nested deeper than %d levels was left out", composeGroupDepth-1-MaxVectorDepth), -1)
+	if 1+depth+depthOf([]typeset.Fragment{g}) > typesetGroupDepth {
+		e.warnOnce(codeGroupDepth, fmt.Sprintf("a vector picture under groups nested deeper than %d levels was left out", typesetGroupDepth-1-MaxVectorDepth), -1)
 		return nil
 	}
 	return f
@@ -143,7 +143,7 @@ func naturalPicture(pic *Picture, w, h float64) *Picture {
 
 // vectorTiles trims the tiles of a vector background to the
 // [maxVectorNodes] budget, one fragment per tile counted at least.
-func (e *engine) vectorTiles(tiles []compose.Rect, nodes int, y float64) []compose.Rect {
+func (e *engine) vectorTiles(tiles []typeset.Rect, nodes int, y float64) []typeset.Rect {
 	limit := max(maxVectorNodes/max(nodes, 1), 1)
 	if len(tiles) <= limit {
 		return tiles

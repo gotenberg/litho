@@ -1,6 +1,6 @@
 package docx
 
-import "github.com/gotenberg/litho/pkg/internal/compose"
+import "github.com/gotenberg/litho/pkg/internal/typeset"
 
 // padTableRows makes every table of the structure tree under root count
 // the same columns in each row, as ISO 14289-1, 7.2 and ISO 32000-1,
@@ -19,11 +19,11 @@ import "github.com/gotenberg/litho/pkg/internal/compose"
 //     rows with gridBefore or gridAfter, and litho/docx tables-merged does
 //     too: veraPDF failed each at PDF/UA-1, 7.2 tests 42 and 43, before the
 //     rows were padded.
-func padTableRows(root *compose.StructElem) {
+func padTableRows(root *typeset.StructElem) {
 	if root == nil {
 		return
 	}
-	stack := []*compose.StructElem{root}
+	stack := []*typeset.StructElem{root}
 	for len(stack) > 0 {
 		e := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
@@ -36,8 +36,8 @@ func padTableRows(root *compose.StructElem) {
 
 // tableRowsOf returns the TR elements of the Table t in order, those of
 // its row groups included (Table 337).
-func tableRowsOf(t *compose.StructElem) []*compose.StructElem {
-	var rows []*compose.StructElem
+func tableRowsOf(t *typeset.StructElem) []*typeset.StructElem {
+	var rows []*typeset.StructElem
 	for _, k := range t.Kids {
 		switch k.Role {
 		case "TR":
@@ -56,7 +56,7 @@ func tableRowsOf(t *compose.StructElem) []*compose.StructElem {
 // padRows inserts in rows, the rows of one table, the empty cells that
 // make each count the columns of the widest ([padTableRows]). A table
 // wider than [maxGridColumns] is left as it is.
-func padRows(rows []*compose.StructElem) {
+func padRows(rows []*typeset.StructElem) {
 	// covered[i] marks the columns of row i a cell takes, its own or one
 	// spanning down from a row above.
 	covered := make([][]bool, len(rows))
@@ -93,16 +93,16 @@ func padRows(rows []*compose.StructElem) {
 		for len(cov) < widest {
 			cov = append(cov, false)
 		}
-		kids := make([]*compose.StructElem, 0, len(r.Kids)+1)
+		kids := make([]*typeset.StructElem, 0, len(r.Kids)+1)
 		next := 0
 		// gap returns an empty cell for the free run starting at col, the
 		// run's end.
-		gap := func(col int) (*compose.StructElem, int) {
+		gap := func(col int) (*typeset.StructElem, int) {
 			end := col
 			for end < widest && !cov[end] {
 				end++
 			}
-			td := &compose.StructElem{Role: "TD"}
+			td := &typeset.StructElem{Role: "TD"}
 			if end-col > 1 {
 				td.ColSpan = end - col
 			}

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // checkFrame reports a page frame whose insets [Layout] cannot draw: not
@@ -34,12 +34,12 @@ func checkFrame(pb PageBox) error {
 // ODF 1.3 Part 3, 20.183 fo:border of a page layout). It paints over the
 // page background and the canvas and under the margin content and the
 // page area.
-func (e *engine) paintFrame(pg *compose.Page, pb PageBox) {
+func (e *engine) paintFrame(pg *typeset.Page, pb PageBox) {
 	f := pb.Frame
 	if f == nil || f.Style == nil {
 		return
 	}
-	r := compose.Rect{
+	r := typeset.Rect{
 		X: f.Inset[css.Left], Y: f.Inset[css.Top],
 		Width:  pb.Width - f.Inset[css.Left] - f.Inset[css.Right],
 		Height: pb.Height - f.Inset[css.Top] - f.Inset[css.Bottom],

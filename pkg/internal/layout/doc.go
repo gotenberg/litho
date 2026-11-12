@@ -1,5 +1,5 @@
 // Package layout lays a styled content tree out on pages: a [Node] tree in,
-// the pages of [compose] fragments, the structure tree, link targets and
+// the pages of [typeset] fragments, the structure tree, link targets and
 // warnings out.
 //
 // It implements the visual formatting model of CSS 2.1 for paged media:

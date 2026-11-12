@@ -16,13 +16,13 @@ import (
 	"github.com/go-text/typesetting/font"
 	"github.com/go-text/typesetting/shaping"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
 
 // maxFontFileBytes bounds a file holding one font program, and the tables of
-// one face of a collection, which [Face.Compose] extracts into a program of
+// one face of a collection, which [Face.Typeset] extracts into a program of
 // its own. Anti-DoS guard, not spec-mandated: the largest font programs in
 // use, pan-CJK families, weigh 20 to 30 MiB. It matches the bound pkg/pdf
 // applies to the font files it indexes.
@@ -71,13 +71,13 @@ const maxLoadedFaces = 32
 // about 20 MiB, so six CJK faces fit beside the Latin ones.
 const maxLoadedFaceBytes int64 = limits.MaxLoadedFontBytes
 
-// maxComposedBytes bounds the programs [Face.Compose] keeps for the faces
+// maxTypesetBytes bounds the programs [Face.Typeset] keeps for the faces
 // of a [Fonts]; the least recently used one leaves first, but the program
 // just read always stays. Memory guard, not spec-mandated: a Latin program
 // weighs well under 1 MiB and a CJK one about 16 MiB, so a document's faces
 // fit many times over. A program that left is read again on its next use,
 // and a document that drew with it keeps it until it is written.
-const maxComposedBytes int64 = 128 << 20
+const maxTypesetBytes int64 = 128 << 20
 
 // maxFallbackLoads bounds the faces one per-character fallback loads to
 // check that their cmap really maps the character. Anti-DoS guard, not
@@ -120,20 +120,20 @@ type Fonts struct {
 	maxLoaded      int
 	maxLoadedBytes int64
 
-	// maxComposed is [maxComposedBytes]; tests lower it.
-	maxComposed int64
+	// maxTypeset is [maxTypesetBytes]; tests lower it.
+	maxTypeset int64
 
 	// mu guards the font, loadErr, prev and next fields of every face and
-	// the cache list and totals below, and the composed, err, cprev and
-	// cnext fields of every face and the composed list.
+	// the cache list and totals below, and the typesetFace, err, cprev and
+	// cnext fields of every face and the typesetFace list.
 	mu          sync.Mutex
 	lruHead     *Face
 	lruTail     *Face
 	loaded      int
 	loadedBytes int64
 
-	composedHead, composedTail *Face
-	composedBytes              int64
+	typesetHead, typesetTail *Face
+	typesetBytes             int64
 
 	// kits holds the [shapingKit] of finished layout calls for later ones;
 	// an overlay uses its base's.
@@ -228,13 +228,13 @@ type Face struct {
 	loadErr    error
 	prev, next *Face
 
-	// idx is the index the face belongs to, which bounds its composed
+	// idx is the index the face belongs to, which bounds its typesetFace
 	// program; nil for a document face, which keeps its program once read.
 	idx *Fonts
-	// once guards composed and err for a document face; the index's mutex
+	// once guards typesetFace and err for a document face; the index's mutex
 	// guards them, cprev and cnext for an indexed one.
 	once         sync.Once
-	composed     *compose.Face
+	typesetFace  *typeset.Face
 	err          error
 	cprev, cnext *Face
 
@@ -278,7 +278,7 @@ type Metrics struct {
 // directories.
 //
 // The files must stay in place while the index is used: [Fonts.Layout] and
-// [Face.Compose] read them again. NewFonts fails only when ctx ends. With
+// [Face.Typeset] read them again. NewFonts fails only when ctx ends. With
 // no usable face it returns an index with no faces, on which [Fonts.Match]
 // returns nil and [Fonts.Layout] returns [ErrNoFonts].
 //
@@ -311,7 +311,7 @@ func newIndex(logger *slog.Logger, open openFunc) *Fonts {
 		byFamily:       make(map[string][]*Face),
 		maxLoaded:      maxLoadedFaces,
 		maxLoadedBytes: maxLoadedFaceBytes,
-		maxComposed:    maxComposedBytes,
+		maxTypeset:     maxTypesetBytes,
 	}
 }
 
@@ -460,11 +460,11 @@ func (fc *Face) Key() string {
 	return fc.src.path + "#" + strconv.Itoa(fc.index)
 }
 
-// Compose returns the face as a [compose.Face]: one sfnt program and
+// Typeset returns the face as a [typeset.Face]: one sfnt program and
 // [Face.Key] as its dedup key.
 //
 // The first call reads the program from the face's file, extracting a face
-// of a collection into a program of its own, and the [compose.Face] keeps
+// of a collection into a program of its own, and the [typeset.Face] keeps
 // it: the backend embeds it. The index keeps the programs of its faces in a
 // cache bounded by bytes, least recently used out first, so calls return
 // the same pointer while the program stays cached and a new one, equal but
@@ -473,47 +473,47 @@ func (fc *Face) Key() string {
 // program for its lifetime. The caller must not modify the program.
 // [NewFonts] indexes only faces it can extract, so the error, returned
 // again on every call, means the file changed or vanished since.
-func (fc *Face) Compose() (*compose.Face, error) {
+func (fc *Face) Typeset() (*typeset.Face, error) {
 	if fc.idx == nil {
 		fc.once.Do(func() {
-			fc.composed, fc.err = fc.readComposed()
+			fc.typesetFace, fc.err = fc.readTypeset()
 		})
-		return fc.composed, fc.err
+		return fc.typesetFace, fc.err
 	}
-	return fc.idx.compose(fc)
+	return fc.idx.typesetOf(fc)
 }
 
-// readComposed reads the face's program as a [compose.Face].
-func (fc *Face) readComposed() (*compose.Face, error) {
+// readTypeset reads the face's program as a [typeset.Face].
+func (fc *Face) readTypeset() (*typeset.Face, error) {
 	program, err := fc.readProgram()
 	if err != nil {
 		return nil, fmt.Errorf("reading the program of face %s: %w", fc.Key(), err)
 	}
-	return &compose.Face{Program: program, Key: fc.Key()}, nil
+	return &typeset.Face{Program: program, Key: fc.Key()}, nil
 }
 
-// compose returns the composed program of fc, a face of f, from the cache
+// typesetOf returns the typeset program of fc, a face of f, from the cache
 // or read from its file. The file is read without holding f.mu.
-func (f *Fonts) compose(fc *Face) (*compose.Face, error) {
+func (f *Fonts) typesetOf(fc *Face) (*typeset.Face, error) {
 	f.mu.Lock()
-	if fc.err != nil || fc.composed != nil {
-		if fc.composed != nil {
-			f.touchComposedLocked(fc)
+	if fc.err != nil || fc.typesetFace != nil {
+		if fc.typesetFace != nil {
+			f.touchTypesetLocked(fc)
 		}
-		cf, err := fc.composed, fc.err
+		cf, err := fc.typesetFace, fc.err
 		f.mu.Unlock()
 		return cf, err
 	}
 	f.mu.Unlock()
 
-	cf, err := fc.readComposed()
+	cf, err := fc.readTypeset()
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if fc.composed != nil {
+	if fc.typesetFace != nil {
 		// Another call read it meanwhile; both read the same bytes.
-		f.touchComposedLocked(fc)
-		return fc.composed, nil
+		f.touchTypesetLocked(fc)
+		return fc.typesetFace, nil
 	}
 	if err != nil {
 		if fc.err == nil {
@@ -521,53 +521,53 @@ func (f *Fonts) compose(fc *Face) (*compose.Face, error) {
 		}
 		return nil, fc.err
 	}
-	fc.composed = cf
-	fc.cprev, fc.cnext = nil, f.composedHead
-	if f.composedHead != nil {
-		f.composedHead.cprev = fc
+	fc.typesetFace = cf
+	fc.cprev, fc.cnext = nil, f.typesetHead
+	if f.typesetHead != nil {
+		f.typesetHead.cprev = fc
 	}
-	f.composedHead = fc
-	if f.composedTail == nil {
-		f.composedTail = fc
+	f.typesetHead = fc
+	if f.typesetTail == nil {
+		f.typesetTail = fc
 	}
-	f.composedBytes += int64(len(cf.Program))
-	for f.composedTail != fc && f.composedBytes > f.maxComposed {
-		old := f.composedTail
-		f.unlinkComposedLocked(old)
-		f.composedBytes -= int64(len(old.composed.Program))
-		old.composed = nil
+	f.typesetBytes += int64(len(cf.Program))
+	for f.typesetTail != fc && f.typesetBytes > f.maxTypeset {
+		old := f.typesetTail
+		f.unlinkTypesetLocked(old)
+		f.typesetBytes -= int64(len(old.typesetFace.Program))
+		old.typesetFace = nil
 	}
 	return cf, nil
 }
 
-// touchComposedLocked moves fc to the front of the composed list. f.mu is
+// touchTypesetLocked moves fc to the front of the typesetFace list. f.mu is
 // held.
-func (f *Fonts) touchComposedLocked(fc *Face) {
-	if f.composedHead == fc {
+func (f *Fonts) touchTypesetLocked(fc *Face) {
+	if f.typesetHead == fc {
 		return
 	}
-	f.unlinkComposedLocked(fc)
-	fc.cprev, fc.cnext = nil, f.composedHead
-	if f.composedHead != nil {
-		f.composedHead.cprev = fc
+	f.unlinkTypesetLocked(fc)
+	fc.cprev, fc.cnext = nil, f.typesetHead
+	if f.typesetHead != nil {
+		f.typesetHead.cprev = fc
 	}
-	f.composedHead = fc
-	if f.composedTail == nil {
-		f.composedTail = fc
+	f.typesetHead = fc
+	if f.typesetTail == nil {
+		f.typesetTail = fc
 	}
 }
 
-// unlinkComposedLocked removes fc from the composed list. f.mu is held.
-func (f *Fonts) unlinkComposedLocked(fc *Face) {
+// unlinkTypesetLocked removes fc from the typesetFace list. f.mu is held.
+func (f *Fonts) unlinkTypesetLocked(fc *Face) {
 	if fc.cprev != nil {
 		fc.cprev.cnext = fc.cnext
 	} else {
-		f.composedHead = fc.cnext
+		f.typesetHead = fc.cnext
 	}
 	if fc.cnext != nil {
 		fc.cnext.cprev = fc.cprev
 	} else {
-		f.composedTail = fc.cprev
+		f.typesetTail = fc.cprev
 	}
 	fc.cprev, fc.cnext = nil, nil
 }

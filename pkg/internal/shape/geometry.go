@@ -1,7 +1,7 @@
 package shape
 
 import (
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Geometry is the outline a shape is drawn with: a preset by name with its
@@ -66,7 +66,7 @@ type Custom struct {
 	// the geometry of a shape it read from DrawingML ("0 0 0 0"). Nil is
 	// DrawingML's guide space: the shape's size in EMUs, with the origin
 	// at its corner.
-	View *compose.Rect
+	View *typeset.Rect
 	// OpenUnfilled leaves the open subpaths of a filled path unfilled,
 	// stroked only, as LibreOffice draws its own OpenDocument shapes (a
 	// bracket pair, a brace); DrawingML fills an open subpath as if
@@ -198,7 +198,7 @@ const (
 // painted: the shape's fill when Fill is set, its line when Stroke is.
 type Path struct {
 	// Ops is the outline in the box's coordinates.
-	Ops []compose.PathOp
+	Ops []typeset.PathOp
 	// Fill and Stroke say whether the outline is filled and stroked.
 	Fill   bool
 	Stroke bool
@@ -210,7 +210,7 @@ type Path struct {
 // FillRule is the rule a geometry's paths fill by: even-odd, as
 // LibreOffice fills a custom shape's polygons, so a ring's inner
 // contour is a hole whichever way it turns.
-const FillRule = compose.EvenOdd
+const FillRule = typeset.EvenOdd
 
 // definition returns the custom geometry g draws, nil for a rectangle.
 func definition(g *Geometry) *Custom {
@@ -228,7 +228,7 @@ func definition(g *Geometry) *Custom {
 // path fill and stroke). A nil g, an empty Preset and a preset the table
 // lacks are the rectangle r; a custom geometry with no path draws nothing.
 // Arcs are turned into cubic Béziers of at most a quarter turn each.
-func Paths(g *Geometry, r compose.Rect) []Path {
+func Paths(g *Geometry, r typeset.Rect) []Path {
 	def := definition(g)
 	if def == nil {
 		return []Path{{Ops: RectOps(r), Fill: true, Stroke: true}}
@@ -260,12 +260,12 @@ func Paths(g *Geometry, r compose.Rect) []Path {
 // splitOpen returns p as a fill of its closed subpaths and a stroke of
 // all of them, when some subpath is open; p itself otherwise.
 func splitOpen(p Path) []Path {
-	var closed []compose.PathOp
+	var closed []typeset.PathOp
 	open := false
 	start := 0
 	for i := 0; i <= len(p.Ops); i++ {
-		if i < len(p.Ops) && (i == start || p.Ops[i].Kind != compose.MoveTo) {
-			if p.Ops[i].Kind == compose.ClosePath {
+		if i < len(p.Ops) && (i == start || p.Ops[i].Kind != typeset.MoveTo) {
+			if p.Ops[i].Kind == typeset.ClosePath {
 				closed = append(closed, p.Ops[start:i+1]...)
 				start = i + 1
 			}
@@ -301,7 +301,7 @@ func Known(g *Geometry) bool {
 // is laid out in (ECMA-376 Part 1, 20.1.9.22 rect, the text rectangle of
 // the presets of Annex D; ODF draw:text-areas), r when the geometry
 // defines none. An inverted rectangle is normalised.
-func TextRect(g *Geometry, r compose.Rect) compose.Rect {
+func TextRect(g *Geometry, r typeset.Rect) typeset.Rect {
 	def := definition(g)
 	if def == nil || def.Text == nil {
 		return r
@@ -315,17 +315,17 @@ func TextRect(g *Geometry, r compose.Rect) compose.Rect {
 	if y1 < y0 {
 		y0, y1 = y1, y0
 	}
-	return compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
+	return typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
 }
 
 // RectOps returns the path of the rectangle r.
-func RectOps(r compose.Rect) []compose.PathOp {
-	pt := func(x, y float64) [3]compose.Point { return [3]compose.Point{{X: x, Y: y}} }
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: pt(r.X, r.Y)},
-		{Kind: compose.LineTo, P: pt(r.X+r.Width, r.Y)},
-		{Kind: compose.LineTo, P: pt(r.X+r.Width, r.Y+r.Height)},
-		{Kind: compose.LineTo, P: pt(r.X, r.Y+r.Height)},
-		{Kind: compose.ClosePath},
+func RectOps(r typeset.Rect) []typeset.PathOp {
+	pt := func(x, y float64) [3]typeset.Point { return [3]typeset.Point{{X: x, Y: y}} }
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: pt(r.X, r.Y)},
+		{Kind: typeset.LineTo, P: pt(r.X+r.Width, r.Y)},
+		{Kind: typeset.LineTo, P: pt(r.X+r.Width, r.Y+r.Height)},
+		{Kind: typeset.LineTo, P: pt(r.X, r.Y+r.Height)},
+		{Kind: typeset.ClosePath},
 	}
 }

@@ -8,34 +8,34 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestParsePath_Commands(t *testing.T) {
-	p := func(x, y float64) compose.Point { return compose.Point{X: x, Y: y} }
-	mv := func(x, y float64) compose.PathOp {
-		return compose.PathOp{Kind: compose.MoveTo, P: [3]compose.Point{p(x, y)}}
+	p := func(x, y float64) typeset.Point { return typeset.Point{X: x, Y: y} }
+	mv := func(x, y float64) typeset.PathOp {
+		return typeset.PathOp{Kind: typeset.MoveTo, P: [3]typeset.Point{p(x, y)}}
 	}
-	ln := func(x, y float64) compose.PathOp {
-		return compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{p(x, y)}}
+	ln := func(x, y float64) typeset.PathOp {
+		return typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{p(x, y)}}
 	}
-	cl := compose.PathOp{Kind: compose.ClosePath}
+	cl := typeset.PathOp{Kind: typeset.ClosePath}
 	tests := []struct {
 		d    string
-		want []compose.PathOp
+		want []typeset.PathOp
 		ok   bool
 	}{
-		{"M10 20 L30 40", []compose.PathOp{mv(10, 20), ln(30, 40)}, true},
-		{"m10 20 l5 5 h10 v-5 z", []compose.PathOp{mv(10, 20), ln(15, 25), ln(25, 25), ln(25, 20), cl}, true},
-		{"M0,0 10,10 20,0", []compose.PathOp{mv(0, 0), ln(10, 10), ln(20, 0)}, true},
-		{"m1 1 2 2", []compose.PathOp{mv(1, 1), ln(3, 3)}, true},
-		{"M0 0L1.5.5", []compose.PathOp{mv(0, 0), ln(1.5, 0.5)}, true},
-		{"M0 0L1-2", []compose.PathOp{mv(0, 0), ln(1, -2)}, true},
-		{"M1e1 2E-1", []compose.PathOp{mv(10, 0.2)}, true},
-		{"M0 0 Z L 5 5", []compose.PathOp{mv(0, 0), cl, mv(0, 0), ln(5, 5)}, true},
+		{"M10 20 L30 40", []typeset.PathOp{mv(10, 20), ln(30, 40)}, true},
+		{"m10 20 l5 5 h10 v-5 z", []typeset.PathOp{mv(10, 20), ln(15, 25), ln(25, 25), ln(25, 20), cl}, true},
+		{"M0,0 10,10 20,0", []typeset.PathOp{mv(0, 0), ln(10, 10), ln(20, 0)}, true},
+		{"m1 1 2 2", []typeset.PathOp{mv(1, 1), ln(3, 3)}, true},
+		{"M0 0L1.5.5", []typeset.PathOp{mv(0, 0), ln(1.5, 0.5)}, true},
+		{"M0 0L1-2", []typeset.PathOp{mv(0, 0), ln(1, -2)}, true},
+		{"M1e1 2E-1", []typeset.PathOp{mv(10, 0.2)}, true},
+		{"M0 0 Z L 5 5", []typeset.PathOp{mv(0, 0), cl, mv(0, 0), ln(5, 5)}, true},
 		{"L 5 5", nil, false},
-		{"M0 0 L 5", []compose.PathOp{mv(0, 0)}, false},
-		{"M0 0 L5 5 X 3", []compose.PathOp{mv(0, 0), ln(5, 5)}, false},
+		{"M0 0 L 5", []typeset.PathOp{mv(0, 0)}, false},
+		{"M0 0 L5 5 X 3", []typeset.PathOp{mv(0, 0), ln(5, 5)}, false},
 		{"", nil, true},
 	}
 	for _, tt := range tests {
@@ -56,24 +56,24 @@ func TestParsePath_CurvesAndArcs(t *testing.T) {
 	tests := []struct {
 		d         string
 		n         int
-		end       compose.Point
+		end       typeset.Point
 		bx0, bx1  float64
 		by0, by1  float64
 		tolerance float64
 	}{
 		// A half circle of radius 10 from (0,10) to (20,10) bulging up.
-		{"M0 10 A10 10 0 0 1 20 10", 2, compose.Point{X: 20, Y: 10}, 0, 20, 0, 10, 0.05},
+		{"M0 10 A10 10 0 0 1 20 10", 2, typeset.Point{X: 20, Y: 10}, 0, 20, 0, 10, 0.05},
 		// The same with the large arc flag set the other way round.
-		{"M0 10 A10 10 0 1 0 20 10", 2, compose.Point{X: 20, Y: 10}, 0, 20, 10, 20, 0.05},
+		{"M0 10 A10 10 0 1 0 20 10", 2, typeset.Point{X: 20, Y: 10}, 0, 20, 10, 20, 0.05},
 		// Radii too small scale up to reach (F.6.6).
-		{"M0 0 A1 1 0 0 1 10 0", 2, compose.Point{X: 10}, 0, 10, -5, 0, 0.05},
+		{"M0 0 A1 1 0 0 1 10 0", 2, typeset.Point{X: 10}, 0, 10, -5, 0, 0.05},
 		// A zero radius draws a line.
-		{"M0 0 A0 5 0 0 1 10 0", 1, compose.Point{X: 10}, 0, 10, 0, 0, 0},
-		{"M0 0 Q10 10 20 0", 1, compose.Point{X: 20}, 0, 20, 0, 5, 0.01},
-		{"M0 0 Q10 10 20 0 T40 0", 2, compose.Point{X: 40}, 0, 40, -5, 5, 0.01},
-		{"M0 0 C0 10 10 10 10 0 S20 -10 20 0", 2, compose.Point{X: 20}, 0, 20, -7.5, 7.5, 0.01},
+		{"M0 0 A0 5 0 0 1 10 0", 1, typeset.Point{X: 10}, 0, 10, 0, 0, 0},
+		{"M0 0 Q10 10 20 0", 1, typeset.Point{X: 20}, 0, 20, 0, 5, 0.01},
+		{"M0 0 Q10 10 20 0 T40 0", 2, typeset.Point{X: 40}, 0, 40, -5, 5, 0.01},
+		{"M0 0 C0 10 10 10 10 0 S20 -10 20 0", 2, typeset.Point{X: 20}, 0, 20, -7.5, 7.5, 0.01},
 		// Arc flags may be written without separators (SVG 1.1, 8.3.9).
-		{"M0 10 a10 10 0 0120 0", 2, compose.Point{X: 20, Y: 10}, 0, 20, 0, 10, 0.05},
+		{"M0 10 a10 10 0 0120 0", 2, typeset.Point{X: 20, Y: 10}, 0, 20, 0, 10, 0.05},
 	}
 	for _, tt := range tests {
 		ops, ok := parsePath(tt.d)
@@ -83,7 +83,7 @@ func TestParsePath_CurvesAndArcs(t *testing.T) {
 		}
 		last := ops[len(ops)-1]
 		end := last.P[0]
-		if last.Kind == compose.CurveTo {
+		if last.Kind == typeset.CurveTo {
 			end = last.P[2]
 		}
 		if math.Abs(end.X-tt.end.X) > 1e-9 || math.Abs(end.Y-tt.end.Y) > 1e-9 {
@@ -100,17 +100,17 @@ func TestParsePath_CurvesAndArcs(t *testing.T) {
 func TestParseTransform_Grammar(t *testing.T) {
 	tests := []struct {
 		s    string
-		want compose.Matrix
+		want typeset.Matrix
 		ok   bool
 	}{
-		{"translate(10)", compose.Matrix{A: 1, D: 1, E: 10}, true},
-		{"translate(10,20) scale(2)", compose.Matrix{A: 2, D: 2, E: 10, F: 20}, true},
-		{"scale(2 3)", compose.Matrix{A: 2, D: 3}, true},
-		{"matrix(1 2 3 4 5 6)", compose.Matrix{A: 1, B: 2, C: 3, D: 4, E: 5, F: 6}, true},
-		{"rotate(90)", compose.Matrix{A: 0, B: 1, C: -1, D: 0}, true},
-		{"rotate(180 5 5)", compose.Matrix{A: -1, D: -1, E: 10, F: 10}, true},
-		{"skewX(45)", compose.Matrix{A: 1, C: 1, D: 1}, true},
-		{"  translate( 1 , 2 ) , scale( 2 )  ", compose.Matrix{A: 2, D: 2, E: 1, F: 2}, true},
+		{"translate(10)", typeset.Matrix{A: 1, D: 1, E: 10}, true},
+		{"translate(10,20) scale(2)", typeset.Matrix{A: 2, D: 2, E: 10, F: 20}, true},
+		{"scale(2 3)", typeset.Matrix{A: 2, D: 3}, true},
+		{"matrix(1 2 3 4 5 6)", typeset.Matrix{A: 1, B: 2, C: 3, D: 4, E: 5, F: 6}, true},
+		{"rotate(90)", typeset.Matrix{A: 0, B: 1, C: -1, D: 0}, true},
+		{"rotate(180 5 5)", typeset.Matrix{A: -1, D: -1, E: 10, F: 10}, true},
+		{"skewX(45)", typeset.Matrix{A: 1, C: 1, D: 1}, true},
+		{"  translate( 1 , 2 ) , scale( 2 )  ", typeset.Matrix{A: 2, D: 2, E: 1, F: 2}, true},
 		{"translate(1 2", identity, false},
 		{"rotate(1 2)", identity, false},
 		{"skew(10)", identity, false},
@@ -124,7 +124,7 @@ func TestParseTransform_Grammar(t *testing.T) {
 	}
 }
 
-func matrixNear(a, b compose.Matrix) bool {
+func matrixNear(a, b typeset.Matrix) bool {
 	e := func(x, y float64) bool { return math.Abs(x-y) < 1e-9 }
 	return e(a.A, b.A) && e(a.B, b.B) && e(a.C, b.C) && e(a.D, b.D) && e(a.E, b.E) && e(a.F, b.F)
 }
@@ -133,16 +133,16 @@ func TestViewBoxTransform_PreserveAspectRatio(t *testing.T) {
 	vb := viewBox{w: 10, h: 20, ok: true}
 	tests := []struct {
 		par  string
-		want compose.Matrix
+		want typeset.Matrix
 	}{
-		{"", compose.Matrix{A: 5, D: 5, E: 25}},
-		{"xMinYMin", compose.Matrix{A: 5, D: 5}},
-		{"xMaxYMax meet", compose.Matrix{A: 5, D: 5, E: 50}},
-		{"xMidYMid slice", compose.Matrix{A: 10, D: 10, F: -50}},
-		{"xMinYMax slice", compose.Matrix{A: 10, D: 10, F: -100}},
-		{"none", compose.Matrix{A: 10, D: 5}},
-		{"defer xMinYMin", compose.Matrix{A: 5, D: 5}},
-		{"bogus", compose.Matrix{A: 5, D: 5, E: 25}},
+		{"", typeset.Matrix{A: 5, D: 5, E: 25}},
+		{"xMinYMin", typeset.Matrix{A: 5, D: 5}},
+		{"xMaxYMax meet", typeset.Matrix{A: 5, D: 5, E: 50}},
+		{"xMidYMid slice", typeset.Matrix{A: 10, D: 10, F: -50}},
+		{"xMinYMax slice", typeset.Matrix{A: 10, D: 10, F: -100}},
+		{"none", typeset.Matrix{A: 10, D: 5}},
+		{"defer xMinYMin", typeset.Matrix{A: 5, D: 5}},
+		{"bogus", typeset.Matrix{A: 5, D: 5, E: 25}},
 	}
 	for _, tt := range tests {
 		got, ok := viewBoxTransform(vb, parseAspect(tt.par), 100, 100)
@@ -252,7 +252,7 @@ func TestDraw_UseRecursionBounded(t *testing.T) {
 	}
 	b.WriteString(`<use href="#l30"/><use id="self" href="#self"/></svg>`)
 	d := parse(t, b.String())
-	if frags := d.Draw(context.Background(), compose.Rect{Width: 10, Height: 10}); len(frags) == 0 {
+	if frags := d.Draw(context.Background(), typeset.Rect{Width: 10, Height: 10}); len(frags) == 0 {
 		t.Errorf("nothing drawn")
 	}
 	found := false
@@ -266,16 +266,16 @@ func TestDraw_UseRecursionBounded(t *testing.T) {
 
 func TestDraw_GroupNestingBounded(t *testing.T) {
 	src := `<svg width="10" height="10">` + strings.Repeat(`<g opacity="0.9">`, 40) + `<rect width="10" height="10"/>` + strings.Repeat(`</g>`, 40) + `</svg>`
-	frags := parse(t, src).Draw(context.Background(), compose.Rect{Width: 10, Height: 10})
+	frags := parse(t, src).Draw(context.Background(), typeset.Rect{Width: 10, Height: 10})
 	if d := groupDepth(frags); d > MaxGroupDepth {
 		t.Errorf("group depth %d, want at most %d", d, MaxGroupDepth)
 	}
 }
 
-func groupDepth(frags []compose.Fragment) int {
+func groupDepth(frags []typeset.Fragment) int {
 	best := 0
 	for _, f := range frags {
-		if g, ok := f.(*compose.Group); ok {
+		if g, ok := f.(*typeset.Group); ok {
 			best = max(best, 1+groupDepth(g.Content))
 		}
 	}

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxOutlineTitleRunes bounds an outline entry's title: 256 characters.
@@ -17,9 +17,9 @@ const maxOutlineTitleRunes = 256
 // closest preceding heading of a lower outline level (ODF 1.3, Part 3,
 // 5.1.2), dest mapping where each landed to the kept pages. A heading
 // that landed on no kept page, or draws no text, is left out.
-func outline(headings []heading, anchors map[string]compose.Dest, dest func(compose.Dest) (compose.Dest, bool)) []compose.Outline {
+func outline(headings []heading, anchors map[string]typeset.Dest, dest func(typeset.Dest) (typeset.Dest, bool)) []typeset.Outline {
 	type entry struct {
-		o     compose.Outline
+		o     typeset.Outline
 		level int
 		kids  []*entry
 	}
@@ -43,7 +43,7 @@ func outline(headings []heading, anchors map[string]compose.Dest, dest func(comp
 				title = lbl + " " + title
 			}
 		}
-		e := &entry{o: compose.Outline{Title: title, Dest: d}, level: h.level}
+		e := &entry{o: typeset.Outline{Title: title, Dest: d}, level: h.level}
 		for len(stack) > 0 && stack[len(stack)-1].level >= h.level {
 			stack = stack[:len(stack)-1]
 		}
@@ -55,12 +55,12 @@ func outline(headings []heading, anchors map[string]compose.Dest, dest func(comp
 		}
 		stack = append(stack, e)
 	}
-	var flatten func([]*entry) []compose.Outline
-	flatten = func(es []*entry) []compose.Outline {
+	var flatten func([]*entry) []typeset.Outline
+	flatten = func(es []*entry) []typeset.Outline {
 		if len(es) == 0 {
 			return nil
 		}
-		out := make([]compose.Outline, len(es))
+		out := make([]typeset.Outline, len(es))
 		for i, e := range es {
 			out[i] = e.o
 			out[i].Kids = flatten(e.kids)

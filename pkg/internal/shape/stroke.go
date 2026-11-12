@@ -4,8 +4,8 @@ import (
 	"math"
 	"slices"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // ArrowKind is an arrowhead kind (ECMA-376 Part 1, 20.1.10.33
@@ -50,13 +50,13 @@ type Arrowhead struct {
 type Line struct {
 	// Width is the line width in points; Color its colour.
 	Width float64
-	Color compose.Color
+	Color typeset.Color
 	// Dash is the dash array in points, nil for a solid line ([PresetDash]
 	// resolves a preset).
 	Dash []float64
 	// Cap and Join are the line's caps and joins.
-	Cap  compose.LineCap
-	Join compose.LineJoin
+	Cap  typeset.LineCap
+	Join typeset.LineJoin
 	// Head and Tail are the arrowheads at the start of the first subpath
 	// and at the end of the last one (20.1.8.38 headEnd, 20.1.8.57
 	// tailEnd).
@@ -78,7 +78,7 @@ var presetDashes = map[string][]float64{ //nolint:gochecknoglobals // a read-onl
 // round or square cap each dash 0.99 width shorter and each gap as much
 // longer, since the caps lengthen the dashes. It returns nil for "solid"
 // and an unknown name; a zero width dashes at 1 point.
-func PresetDash(name string, width float64, c compose.LineCap) []float64 {
+func PresetDash(name string, width float64, c typeset.LineCap) []float64 {
 	rel, ok := presetDashes[name]
 	if !ok {
 		return nil
@@ -88,7 +88,7 @@ func PresetDash(name string, width float64, c compose.LineCap) []float64 {
 	}
 	out := make([]float64, len(rel))
 	for i, v := range rel {
-		if c != compose.ButtCap {
+		if c != typeset.ButtCap {
 			if i%2 == 0 {
 				v -= 0.99
 			} else {
@@ -131,13 +131,13 @@ func arrowFactor(s ArrowSize, open bool) float64 {
 // their tip at the line's end, the diamond and the oval their centre, and
 // the line stops just short of the arrowhead's base, notch or centre. A closed subpath has no
 // arrowheads. A zero width strokes nothing.
-func Stroke(ops []compose.PathOp, l Line) []compose.Fragment {
+func Stroke(ops []typeset.PathOp, l Line) []typeset.Fragment {
 	if len(ops) == 0 || !numeric.PositiveFinite(l.Width) {
 		return nil
 	}
 	// A copy, so shortening leaves the caller's outline alone.
 	line := slices.Clone(ops)
-	var heads []compose.Fragment
+	var heads []typeset.Fragment
 	base := math.Max(l.Width, minArrowBase)
 	if l.Head.Kind != ArrowNone {
 		if tip, dir, ok := startTangent(line); ok {
@@ -153,24 +153,24 @@ func Stroke(ops []compose.PathOp, l Line) []compose.Fragment {
 			shortenEnd(line, back)
 		}
 	}
-	p := &compose.Path{Ops: line, Stroke: &compose.Stroke{
+	p := &typeset.Path{Ops: line, Stroke: &typeset.Stroke{
 		Color: l.Color, Width: l.Width, Cap: l.Cap, Join: l.Join, Dash: l.Dash,
 	}}
-	return append([]compose.Fragment{p}, heads...)
+	return append([]typeset.Fragment{p}, heads...)
 }
 
 // startTangent returns the start of the first subpath and the unit
 // direction pointing out of the line there, when the subpath is open.
-func startTangent(ops []compose.PathOp) (compose.Point, compose.Point, bool) {
-	if len(ops) < 2 || ops[0].Kind != compose.MoveTo {
-		return compose.Point{}, compose.Point{}, false
+func startTangent(ops []typeset.PathOp) (typeset.Point, typeset.Point, bool) {
+	if len(ops) < 2 || ops[0].Kind != typeset.MoveTo {
+		return typeset.Point{}, typeset.Point{}, false
 	}
 	for _, op := range ops[1:] {
-		if op.Kind == compose.MoveTo {
+		if op.Kind == typeset.MoveTo {
 			break
 		}
-		if op.Kind == compose.ClosePath {
-			return compose.Point{}, compose.Point{}, false
+		if op.Kind == typeset.ClosePath {
+			return typeset.Point{}, typeset.Point{}, false
 		}
 	}
 	p0 := ops[0].P[0]
@@ -179,61 +179,61 @@ func startTangent(ops []compose.PathOp) (compose.Point, compose.Point, bool) {
 			return p0, d, true
 		}
 	}
-	return compose.Point{}, compose.Point{}, false
+	return typeset.Point{}, typeset.Point{}, false
 }
 
 // nextPoints returns the points an operation heads through, in order.
-func nextPoints(op compose.PathOp) []compose.Point {
+func nextPoints(op typeset.PathOp) []typeset.Point {
 	switch op.Kind {
-	case compose.LineTo:
+	case typeset.LineTo:
 		return op.P[:1]
-	case compose.CurveTo:
+	case typeset.CurveTo:
 		return op.P[:]
-	case compose.MoveTo, compose.ClosePath:
+	case typeset.MoveTo, typeset.ClosePath:
 	}
 	return nil
 }
 
 // endTangent returns the end of the last subpath and the unit direction
 // pointing out of the line there, when the subpath is open.
-func endTangent(ops []compose.PathOp) (compose.Point, compose.Point, bool) {
+func endTangent(ops []typeset.PathOp) (typeset.Point, typeset.Point, bool) {
 	last := ops[len(ops)-1]
-	if last.Kind == compose.ClosePath || last.Kind == compose.MoveTo || len(ops) < 2 {
-		return compose.Point{}, compose.Point{}, false
+	if last.Kind == typeset.ClosePath || last.Kind == typeset.MoveTo || len(ops) < 2 {
+		return typeset.Point{}, typeset.Point{}, false
 	}
-	var pts []compose.Point
+	var pts []typeset.Point
 	prev := ops[len(ops)-2]
 	switch prev.Kind {
-	case compose.MoveTo, compose.LineTo:
+	case typeset.MoveTo, typeset.LineTo:
 		pts = append(pts, prev.P[0])
-	case compose.CurveTo:
+	case typeset.CurveTo:
 		pts = append(pts, prev.P[2])
-	case compose.ClosePath:
+	case typeset.ClosePath:
 	}
 	end := last.P[0]
-	if last.Kind == compose.CurveTo {
+	if last.Kind == typeset.CurveTo {
 		end = last.P[2]
-		pts = append([]compose.Point{last.P[1], last.P[0]}, pts...)
+		pts = append([]typeset.Point{last.P[1], last.P[0]}, pts...)
 	}
 	for _, q := range pts {
 		if d, ok := unit(end.X-q.X, end.Y-q.Y); ok {
 			return end, d, true
 		}
 	}
-	return compose.Point{}, compose.Point{}, false
+	return typeset.Point{}, typeset.Point{}, false
 }
 
 // unit returns (x, y) scaled to length 1, false for a null vector.
-func unit(x, y float64) (compose.Point, bool) {
+func unit(x, y float64) (typeset.Point, bool) {
 	n := math.Hypot(x, y)
 	if n < 1e-9 || !numeric.Finite(n) {
-		return compose.Point{}, false
+		return typeset.Point{}, false
 	}
-	return compose.Point{X: x / n, Y: y / n}, true
+	return typeset.Point{X: x / n, Y: y / n}, true
 }
 
 // shortenStart moves the first point back along the line by d.
-func shortenStart(ops []compose.PathOp, d float64) {
+func shortenStart(ops []typeset.PathOp, d float64) {
 	if d <= 0 {
 		return
 	}
@@ -247,14 +247,14 @@ func shortenStart(ops []compose.PathOp, d float64) {
 		return
 	}
 	d = math.Min(d, math.Hypot(q[len(q)-1].X-p0.X, q[len(q)-1].Y-p0.Y))
-	ops[0].P[0] = compose.Point{X: p0.X + dir.X*d, Y: p0.Y + dir.Y*d}
-	if ops[1].Kind == compose.CurveTo {
-		ops[1].P[0] = compose.Point{X: ops[1].P[0].X + dir.X*d, Y: ops[1].P[0].Y + dir.Y*d}
+	ops[0].P[0] = typeset.Point{X: p0.X + dir.X*d, Y: p0.Y + dir.Y*d}
+	if ops[1].Kind == typeset.CurveTo {
+		ops[1].P[0] = typeset.Point{X: ops[1].P[0].X + dir.X*d, Y: ops[1].P[0].Y + dir.Y*d}
 	}
 }
 
 // shortenEnd moves the last point back along the line by d.
-func shortenEnd(ops []compose.PathOp, d float64) {
+func shortenEnd(ops []typeset.PathOp, d float64) {
 	if d <= 0 {
 		return
 	}
@@ -263,12 +263,12 @@ func shortenEnd(ops []compose.PathOp, d float64) {
 	if !ok {
 		return
 	}
-	if ops[i].Kind == compose.CurveTo {
-		ops[i].P[2] = compose.Point{X: ops[i].P[2].X - dir.X*d, Y: ops[i].P[2].Y - dir.Y*d}
-		ops[i].P[1] = compose.Point{X: ops[i].P[1].X - dir.X*d, Y: ops[i].P[1].Y - dir.Y*d}
+	if ops[i].Kind == typeset.CurveTo {
+		ops[i].P[2] = typeset.Point{X: ops[i].P[2].X - dir.X*d, Y: ops[i].P[2].Y - dir.Y*d}
+		ops[i].P[1] = typeset.Point{X: ops[i].P[1].X - dir.X*d, Y: ops[i].P[1].Y - dir.Y*d}
 		return
 	}
-	ops[i].P[0] = compose.Point{X: ops[i].P[0].X - dir.X*d, Y: ops[i].P[0].Y - dir.Y*d}
+	ops[i].P[0] = typeset.Point{X: ops[i].P[0].X - dir.X*d, Y: ops[i].P[0].Y - dir.Y*d}
 }
 
 // arrowPolygons are LibreOffice's arrowhead outlines in a 100 by 100
@@ -314,7 +314,7 @@ func openArrow(w, aw float64) [][2]float64 {
 
 // arrowhead returns the filled arrowhead a at tip pointing along dir, and
 // how far the line is shortened under it.
-func arrowhead(a Arrowhead, w, base float64, tip, dir compose.Point, c compose.Color) (compose.Fragment, float64) {
+func arrowhead(a Arrowhead, w, base float64, tip, dir typeset.Point, c typeset.Color) (typeset.Fragment, float64) {
 	open := a.Kind == ArrowOpen
 	aw := arrowFactor(a.Width, open) * base
 	al := arrowFactor(a.Length, open) * base
@@ -329,19 +329,19 @@ func arrowhead(a Arrowhead, w, base float64, tip, dir compose.Point, c compose.C
 	if centred {
 		shift = al / 2
 	}
-	ops := make([]compose.PathOp, 0, len(poly)+1)
+	ops := make([]typeset.PathOp, 0, len(poly)+1)
 	for i, p := range poly {
 		across := (p[0] - 50) / 100 * aw
 		back := p[1]/100*al - shift
-		pt := compose.Point{X: tip.X - dir.X*back + nx*across, Y: tip.Y - dir.Y*back + ny*across}
-		k := compose.LineTo
+		pt := typeset.Point{X: tip.X - dir.X*back + nx*across, Y: tip.Y - dir.Y*back + ny*across}
+		k := typeset.LineTo
 		if i == 0 {
-			k = compose.MoveTo
+			k = typeset.MoveTo
 		}
-		ops = append(ops, compose.PathOp{Kind: k, P: [3]compose.Point{pt}})
+		ops = append(ops, typeset.PathOp{Kind: k, P: [3]typeset.Point{pt}})
 	}
-	ops = append(ops, compose.PathOp{Kind: compose.ClosePath})
-	return &compose.Path{Ops: ops, Fill: &compose.Fill{Color: c}}, max(0, arrowDock[a.Kind]*al-aw/15)
+	ops = append(ops, typeset.PathOp{Kind: typeset.ClosePath})
+	return &typeset.Path{Ops: ops, Fill: &typeset.Fill{Color: c}}, max(0, arrowDock[a.Kind]*al-aw/15)
 }
 
 // arrowDock is where the line meets an arrowhead, as a share of its

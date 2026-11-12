@@ -11,8 +11,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // exifSegment returns an APP1 segment whose IFD0 holds the orientation o,
@@ -154,7 +154,7 @@ func TestPrepare_AppliesEXIFOrientation(t *testing.T) {
 }
 
 // checkSize fails the test when the decoded picture of s is not w by h.
-func checkSize(t *testing.T, id string, s *compose.ImageSource, w, h int) {
+func checkSize(t *testing.T, id string, s *typeset.ImageSource, w, h int) {
 	t.Helper()
 	if len(s.JPEG) > 0 || s.Width != w || s.Height != h {
 		t.Errorf("%s: picture of %d by %d, JPEG %v", id, s.Width, s.Height, len(s.JPEG) > 0)

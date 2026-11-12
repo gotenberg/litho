@@ -3,7 +3,7 @@ package chart
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // dataTable is the laid-out data table of a category dimension.
@@ -93,7 +93,7 @@ func (rd *renderer) drawDataTable(d *dim, t *dataTable) {
 			cx = x0 + indent + titleHPad*b.style.Size + b.w/2
 		}
 		if f := dt.Fill; f != nil && !f.None && f.Color.A > 0 {
-			rd.add(paintPath(rectPath(compose.Rect{X: cx - b.w/2, Y: cy - b.h/2, Width: b.w, Height: b.h}).Ops, f, nil))
+			rd.add(paintPath(rectPath(typeset.Rect{X: cx - b.w/2, Y: cy - b.h/2, Width: b.w, Height: b.h}).Ops, f, nil))
 		}
 		rd.out = append(rd.out, b.draw(cx, cy, alignCenter)...)
 	}
@@ -120,7 +120,7 @@ func (rd *renderer) drawDataTable(d *dim, t *dataTable) {
 		if dt.Keys {
 			indent = t.symW + 2*tableKeyMargin
 			e := rd.entry(ts.g, ts.s, -1, "", st, 0)
-			rd.key(e, compose.Rect{X: t.x + tableKeyMargin, Y: y + (t.rowH-t.symH)/2, Width: t.symW, Height: t.symH})
+			rd.key(e, typeset.Rect{X: t.x + tableKeyMargin, Y: y + (t.rowH-t.symH)/2, Width: t.symW, Height: t.symH})
 		}
 		if ts.s.Name != "" {
 			cell(ts.s.Name, t.x, d.inner.X, y, alignLeft, indent)

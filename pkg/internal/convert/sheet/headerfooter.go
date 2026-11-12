@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // The header and footer text of a span naming no font: Calc's header and
@@ -109,7 +109,7 @@ func (b *builder) partNode(spans []Span, f hfFields, align css.TextAlign) *layou
 // the margins, the left part aligned left, the centre centred and the
 // right right, centred down the header's height, as Calc prints them
 // (ScPrintFunc::PrintHF).
-func (b *builder) margins(p *pagePlan, first bool, number, total int, width, height float64) []compose.Fragment {
+func (b *builder) margins(p *pagePlan, first bool, number, total int, width, height float64) []typeset.Fragment {
 	hf := &p.sp.g.sh.HeaderFooter
 	m := hf.Odd
 	switch {
@@ -194,9 +194,9 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 	if z == 1 {
 		return frags
 	}
-	return []compose.Fragment{&compose.Group{
-		Transform: compose.Matrix{A: z, D: z},
-		Clip:      &compose.Path{Ops: rectOps(0, 0, pageW/z, pageH/z), Fill: &compose.Fill{}},
+	return []typeset.Fragment{&typeset.Group{
+		Transform: typeset.Matrix{A: z, D: z},
+		Clip:      &typeset.Path{Ops: rectOps(0, 0, pageW/z, pageH/z), Fill: &typeset.Fill{}},
 		Opacity:   1,
 		Content:   frags,
 	}}
@@ -245,16 +245,16 @@ const measureHeight = 14400
 
 // artifacts returns frags with no structure element: headers and footers
 // are pagination artifacts (ISO 32000-1, 14.8.2.2.2).
-func artifacts(frags []compose.Fragment) []compose.Fragment {
+func artifacts(frags []typeset.Fragment) []typeset.Fragment {
 	for _, f := range frags {
 		switch v := f.(type) {
-		case *compose.Text:
+		case *typeset.Text:
 			v.Parent = nil
-		case *compose.Image:
+		case *typeset.Image:
 			v.Parent = nil
-		case *compose.Path:
+		case *typeset.Path:
 			v.Parent = nil
-		case *compose.Group:
+		case *typeset.Group:
 			artifacts(v.Content)
 		}
 	}

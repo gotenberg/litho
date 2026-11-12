@@ -272,9 +272,9 @@ func TestLoadFace_Programs(t *testing.T) {
 	if coll.Family() != "Test Digits" {
 		t.Errorf("collection yields %s, want its first face", coll.Family())
 	}
-	cf, err := coll.Compose()
+	cf, err := coll.Typeset()
 	if err != nil || len(cf.Program) == 0 {
-		t.Errorf("Compose: %v", err)
+		t.Errorf("Typeset: %v", err)
 	}
 	for _, bad := range [][]byte{nil, []byte("garbage"), sans[:len(sans)/3]} {
 		if _, err := LoadFace(bad, FaceDescriptor{Family: "X"}); err == nil {

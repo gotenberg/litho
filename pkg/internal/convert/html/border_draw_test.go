@@ -6,7 +6,7 @@ import (
 	"image/color"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestDraw_TwoToneBorderShades(t *testing.T) {
@@ -31,7 +31,7 @@ func TestDraw_TwoToneBorderShades(t *testing.T) {
 			o := Options{PageWidth: 20 * 0.75, PageHeight: 20 * 0.75}
 			doc := conv(t, `<body style="margin:0"><div style="box-sizing:border-box;width:20px;height:20px;`+tt.style+`"></div>`, o)
 			var b bytes.Buffer
-			if err := compose.Write(context.Background(), doc, &b, compose.Options{}); err != nil {
+			if err := typeset.Write(context.Background(), doc, &b, typeset.Options{}); err != nil {
 				t.Fatal(err)
 			}
 			if RenderPDF == nil {

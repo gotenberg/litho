@@ -9,10 +9,10 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // NSChart is the DrawingML chart namespace (ECMA-376 Part 1, 21.2).
@@ -94,7 +94,7 @@ func ParseChart(ctx context.Context, pkg *Package, part string) (*chart.Chart, e
 	if rels, err := pkg.Relationships(part); err == nil {
 		for _, r := range rels {
 			if strings.HasSuffix(r.Type, "/chartUserShapes") {
-				c.Warnings = append(c.Warnings, compose.Warning{Code: CodeChartUnsupported, Message: "the shapes drawn over a chart are not drawn"})
+				c.Warnings = append(c.Warnings, typeset.Warning{Code: CodeChartUnsupported, Message: "the shapes drawn over a chart are not drawn"})
 			}
 		}
 	}
@@ -228,7 +228,7 @@ func (p *chartReader) warn(code, msg string) {
 		return
 	}
 	p.warned[msg] = true
-	p.c.Warnings = append(p.c.Warnings, compose.Warning{Code: code, Message: msg})
+	p.c.Warnings = append(p.c.Warnings, typeset.Warning{Code: code, Message: msg})
 }
 
 // childVal returns the val attribute of e's child c:local, "" for none.
@@ -265,9 +265,9 @@ func parseFloat(s string) float64 {
 	return v
 }
 
-// toCompose converts a css colour.
-func toCompose(c css.Color) compose.Color {
-	return compose.Color{R: c.R, G: c.G, B: c.B, A: c.A}
+// toTypeset converts a css colour.
+func toTypeset(c css.Color) typeset.Color {
+	return typeset.Color{R: c.R, G: c.G, B: c.B, A: c.A}
 }
 
 // read fills the chart from the chart space root.
@@ -402,27 +402,27 @@ func (p *chartReader) categoryPositions() {
 // (2, 10, 18, 26, 34, 42), shades of the dark colour for the grey ones (1,
 // 9, 17, 25, 33, 41), and for the others one accent each series faded from
 // dark to light.
-func (p *chartReader) palette(accents []string) []compose.Color {
-	col := func(name string) compose.Color {
+func (p *chartReader) palette(accents []string) []typeset.Color {
+	col := func(name string) typeset.Color {
 		c, _ := p.theme.Color(name)
-		return toCompose(c)
+		return toTypeset(c)
 	}
 	switch m := (p.style - 1) % 8; {
 	case m == 1 || p.style == 42:
-		out := make([]compose.Color, len(accents))
+		out := make([]typeset.Color, len(accents))
 		for i, a := range accents {
 			out[i] = col(a)
 		}
 		return out
 	case m == 0:
 		dk, _ := p.theme.Color("dk1")
-		var out []compose.Color
+		var out []typeset.Color
 		for _, t := range []float64{0.885, 0.55, 0.78, 0.925, 0.70, 0.30} {
-			out = append(out, toCompose(linearTint(dk, t)))
+			out = append(out, toTypeset(linearTint(dk, t)))
 		}
 		return out
 	default:
-		return []compose.Color{col(accents[(m-2)%6])}
+		return []typeset.Color{col(accents[(m-2)%6])}
 	}
 }
 
@@ -445,7 +445,7 @@ func (p *chartReader) autoFrame(area bool) chart.Frame {
 		if tint < 1 {
 			c = linearTint(c, tint)
 		}
-		return &chart.Paint{Color: toCompose(c)}
+		return &chart.Paint{Color: toTypeset(c)}
 	}
 	switch {
 	case p.impress && p.style <= 32:
@@ -463,7 +463,7 @@ func (p *chartReader) autoFrame(area bool) chart.Frame {
 		f.Fill = col("dk1", 0.95)
 	}
 	if area && !p.impress {
-		f.Border = &chart.Stroke{Color: toCompose(hexColor(0xd9d9d9)), Width: 0.75}
+		f.Border = &chart.Stroke{Color: toTypeset(hexColor(0xd9d9d9)), Width: 0.75}
 	}
 	return f
 }
@@ -480,7 +480,7 @@ func (p *chartReader) autoLine() *chart.Stroke {
 		name = "dk1"
 	}
 	c, _ := p.theme.Color(name)
-	return &chart.Stroke{Color: toCompose(linearTint(c, 0.75)), Width: themeLineWidth}
+	return &chart.Stroke{Color: toTypeset(linearTint(c, 0.75)), Width: themeLineWidth}
 }
 
 // linearTint lightens c as oox's colour tint does for the automatic chart
@@ -535,7 +535,7 @@ func (p *chartReader) fill(spPr *Element) (*chart.Paint, bool) {
 			return &chart.Paint{None: true}, true
 		case "solidFill":
 			if c, ok := SchemeColor(e, p.theme); ok {
-				return &chart.Paint{Color: toCompose(c)}, true
+				return &chart.Paint{Color: toTypeset(c)}, true
 			}
 			return nil, true
 		case "gradFill":
@@ -550,12 +550,12 @@ func (p *chartReader) fill(spPr *Element) (*chart.Paint, bool) {
 		case "pattFill":
 			// A pattern without colours draws black on white (20.1.8.47
 			// pattFill's fgClr and bgClr defaults, as LibreOffice reads them).
-			fg, bg := compose.Black, compose.Color{R: 1, G: 1, B: 1, A: 1}
+			fg, bg := typeset.Black, typeset.Color{R: 1, G: 1, B: 1, A: 1}
 			if c, ok := SchemeColor(e.Child(NSA, "fgClr"), p.theme); ok {
-				fg = toCompose(c)
+				fg = toTypeset(c)
 			}
 			if c, ok := SchemeColor(e.Child(NSA, "bgClr"), p.theme); ok {
-				bg = toCompose(c)
+				bg = toTypeset(c)
 			}
 			prst := attrOr(e, "prst")
 			if prst == "" {
@@ -572,7 +572,7 @@ func (p *chartReader) fill(spPr *Element) (*chart.Paint, bool) {
 // stroke reads an a:ln element over the automatic line def (ECMA-376
 // Part 1, 20.1.2.2.24).
 func (p *chartReader) stroke(ln *Element, def *chart.Stroke) *chart.Stroke {
-	s := chart.Stroke{Width: themeLineWidth, Color: compose.Black}
+	s := chart.Stroke{Width: themeLineWidth, Color: typeset.Black}
 	if def != nil {
 		s = *def
 	}
@@ -595,12 +595,12 @@ func (p *chartReader) stroke(ln *Element, def *chart.Stroke) *chart.Stroke {
 			return &chart.Stroke{None: true}
 		case "solidFill":
 			if c, ok := SchemeColor(e, p.theme); ok {
-				s.Color, s.None, set = toCompose(c), false, true
+				s.Color, s.None, set = toTypeset(c), false, true
 			}
 		case "gradFill":
 			if stops := e.Child(NSA, "gsLst").Kids(); len(stops) > 0 {
 				if c, ok := SchemeColor(stops[0], p.theme); ok {
-					s.Color, s.None, set = toCompose(c), false, true
+					s.Color, s.None, set = toTypeset(c), false, true
 				}
 			}
 		case "prstDash":
@@ -641,7 +641,7 @@ type textProps struct {
 	size             float64
 	bold, italic     bool
 	hasBold, hasItal bool
-	color            *compose.Color
+	color            *typeset.Color
 	rotation         float64
 	hasRotation      bool
 }
@@ -692,7 +692,7 @@ func (p *chartReader) runProps(t *textProps, rp *Element) {
 	}
 	if f := rp.Child(NSA, "solidFill"); f != nil {
 		if c, ok := SchemeColor(f, p.theme); ok {
-			cc := toCompose(c)
+			cc := toTypeset(c)
 			t.color = &cc
 		}
 	}
@@ -715,9 +715,9 @@ func (p *chartReader) textStyle(own textProps, def float64, bold bool, rel float
 		name = "lt1"
 	}
 	if c, ok := p.theme.Color(name); ok {
-		st.Color = toCompose(c)
+		st.Color = toTypeset(c)
 	} else {
-		st.Color = compose.Black
+		st.Color = typeset.Black
 	}
 	family := p.theme.Minor.Latin
 	apply := func(t textProps, scale float64) {
@@ -937,7 +937,7 @@ func (p *chartReader) axis(e *Element, kind chart.AxisKind) *chart.Axis {
 	if g := e.Child(NSChart, "minorGridlines"); g != nil {
 		minor := p.autoLine()
 		tx, _ := p.theme.Color("tx1")
-		minor.Color = toCompose(linearTint(tx, 0.5))
+		minor.Color = toTypeset(linearTint(tx, 0.5))
 		a.MinorGrid = p.lineOf(g.Child(NSChart, "spPr"), minor)
 	}
 	a.Line = p.lineOf(e.Child(NSChart, "spPr"), p.autoLine())

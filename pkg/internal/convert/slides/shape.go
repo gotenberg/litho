@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // shape returns the fragments of s in its parent's coordinates, m mapping
@@ -19,7 +19,7 @@ import (
 //
 //   - libreoffice/pptx: oox/tdf163803_image_with_fill.pptx prints its
 //     picture's fill under it.
-func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.StructElem) []compose.Fragment {
+func (b *builder) shape(s *Shape, m typeset.Matrix, depth int, parent *typeset.StructElem) []typeset.Fragment {
 	if s == nil || !finite(s.Box) {
 		return nil
 	}
@@ -36,7 +36,7 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 		return nil
 	}
 	sm := skewedAboutCentre(s.Box, s.Rotation, s.SkewX, s.FlipH, s.FlipV)
-	var out []compose.Fragment
+	var out []typeset.Fragment
 	box := s.Box
 	switch s.Kind {
 	case KindGeometry:
@@ -46,10 +46,10 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 			b.warn(CodePicture, "picture "+quote(s.Name)+" has nothing to draw")
 			return nil
 		}
-		fig := &compose.StructElem{Role: "Figure", Alt: s.Alt}
+		fig := &typeset.StructElem{Role: "Figure", Alt: s.Alt}
 		frags := b.picture(s.Picture, box)
 		for _, f := range frags {
-			if img, ok := f.(*compose.Image); ok {
+			if img, ok := f.(*typeset.Image); ok {
 				img.Parent = fig
 			}
 		}
@@ -67,7 +67,7 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 		}
 		frags := chart.Render(b.ctx, b.fonts, s.Chart, box)
 		if len(frags) > 0 && parent != nil {
-			fig := &compose.StructElem{Role: "Figure", Alt: chartAlt(s)}
+			fig := &typeset.StructElem{Role: "Figure", Alt: chartAlt(s)}
 			adopt(frags, fig)
 			parent.Kids = append(parent.Kids, fig)
 		}
@@ -85,7 +85,7 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 		}
 		sx, sy := box.Width/child.Width, box.Height/child.Height
 		inner := then(sm, m)
-		var frags []compose.Fragment
+		var frags []typeset.Fragment
 		for _, k := range s.Kids {
 			if k == nil {
 				continue
@@ -93,7 +93,7 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 			// The kid's box mapped from the child space onto the group's
 			// box; the kid keeps its own turn and flips.
 			kk := *k
-			kk.Box = compose.Rect{
+			kk.Box = typeset.Rect{
 				X: box.X + (k.Box.X-child.X)*sx, Y: box.Y + (k.Box.Y-child.Y)*sy,
 				Width: k.Box.Width * sx, Height: k.Box.Height * sy,
 			}
@@ -110,10 +110,10 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 // 7.1): drawn as any shape, with no structure element of its own. The Link
 // elements of its links still hang from parent, since every link
 // annotation needs one (ISO 14289-1, 7.18.1).
-func (b *builder) decorative(s *Shape, m compose.Matrix, depth int, parent *compose.StructElem) []compose.Fragment {
+func (b *builder) decorative(s *Shape, m typeset.Matrix, depth int, parent *typeset.StructElem) []typeset.Fragment {
 	kept := *s
 	kept.Decorative = false
-	scratch := &compose.StructElem{}
+	scratch := &typeset.StructElem{}
 	out := b.shape(&kept, m, depth, scratch)
 	adopt(out, nil)
 	parent.Kids = append(parent.Kids, links(scratch, nil)...)
@@ -121,7 +121,7 @@ func (b *builder) decorative(s *Shape, m compose.Matrix, depth int, parent *comp
 }
 
 // links appends to out the Link elements under e, depth first.
-func links(e *compose.StructElem, out []*compose.StructElem) []*compose.StructElem {
+func links(e *typeset.StructElem, out []*typeset.StructElem) []*typeset.StructElem {
 	for _, k := range e.Kids {
 		if k == nil {
 			continue
@@ -138,16 +138,16 @@ func links(e *compose.StructElem, out []*compose.StructElem) []*compose.StructEl
 
 // adopt hangs every fragment of frags, inside groups too, from parent; a
 // nil parent makes them artifacts.
-func adopt(frags []compose.Fragment, parent *compose.StructElem) {
+func adopt(frags []typeset.Fragment, parent *typeset.StructElem) {
 	for _, fr := range frags {
 		switch v := fr.(type) {
-		case *compose.Text:
+		case *typeset.Text:
 			v.Parent = parent
-		case *compose.Image:
+		case *typeset.Image:
 			v.Parent = parent
-		case *compose.Path:
+		case *typeset.Path:
 			v.Parent = parent
-		case *compose.Group:
+		case *typeset.Group:
 			adopt(v.Content, parent)
 		}
 	}
@@ -168,11 +168,11 @@ func chartAlt(s *Shape) string {
 // slide prints. The annotation hangs from a Link element of its own under
 // parent, as ISO 14289-1, 7.18.1 and ISO 32000-1, 14.8.4.4.2 ask of every
 // link annotation.
-func (b *builder) link(s *Shape, m compose.Matrix, box compose.Rect, parent *compose.StructElem) {
+func (b *builder) link(s *Shape, m typeset.Matrix, box typeset.Rect, parent *typeset.StructElem) {
 	if box.Width <= 0 || box.Height <= 0 {
 		return
 	}
-	l := compose.Link{Rect: transformRect(m, box)}
+	l := typeset.Link{Rect: transformRect(m, box)}
 	switch {
 	case s.Href != "":
 		l.URI = s.Href
@@ -186,7 +186,7 @@ func (b *builder) link(s *Shape, m compose.Matrix, box compose.Rect, parent *com
 		return
 	}
 	if parent != nil {
-		l.Parent = &compose.StructElem{Role: "Link"}
+		l.Parent = &typeset.StructElem{Role: "Link"}
 		parent.Kids = append(parent.Kids, l.Parent)
 	}
 	b.links = append(b.links, l)
@@ -194,7 +194,7 @@ func (b *builder) link(s *Shape, m compose.Matrix, box compose.Rect, parent *com
 
 // geometry returns the fragments of the geometry shape s: its paths
 // filled and stroked, then its text, turned about its box's centre.
-func (b *builder) geometry(s *Shape, m compose.Matrix, parent *compose.StructElem) []compose.Fragment {
+func (b *builder) geometry(s *Shape, m typeset.Matrix, parent *typeset.StructElem) []typeset.Fragment {
 	box := s.Box
 	var txt *textResult
 	if s.Text != nil && len(s.Text.Paragraphs) > 0 {

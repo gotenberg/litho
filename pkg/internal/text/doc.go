@@ -1,5 +1,5 @@
 // Package text shapes and lays out text for the converters: styled runs in,
-// lines of positioned glyph runs ([compose.Text]) out.
+// lines of positioned glyph runs ([typeset.Text]) out.
 //
 // It wraps go-text/typesetting (Unlicense OR BSD-3-Clause), the pure-Go
 // port of HarfBuzz, and nothing else in litho draws text.
@@ -28,7 +28,7 @@
 //
 // # Coordinates
 //
-// Lengths are points, y grows downward, as in [compose]. A [Line] places its
+// Lengths are points, y grows downward, as in [typeset]. A [Line] places its
 // runs relative to its left baseline point.
 //
 // # Concurrency

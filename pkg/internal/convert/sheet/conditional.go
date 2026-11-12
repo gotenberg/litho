@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // The caps of conditional formatting. Anti-DoS guard, not spec-mandated:
@@ -42,7 +42,7 @@ const dataBarInset = 0.3
 //   - libreoffice/xlsx: sc/databar.xlsx, B3:B6 holding -2 to 3, prints a black line
 //     a quarter point wide dotted every quarter point at 2/5 of the cells'
 //     width.
-var dataBarAxis = compose.Stroke{Color: compose.Black, Width: 0.25, Dash: []float64{0.25, 0.25}}
+var dataBarAxis = typeset.Stroke{Color: typeset.Black, Width: 0.25, Dash: []float64{0.25, 0.25}}
 
 // negativeBar is the colour of the bar of a negative value, Calc's default
 // negative colour (ScDataBarFormatData, mxNegativeColor COL_LIGHTRED, the
@@ -871,21 +871,21 @@ func (b *pageBuilder) drawDataBar(u *unit) {
 	if math.Abs(z-a) > epsilon {
 		left, right := min(a, z), max(a, z)
 		c := colorOf(col)
-		fill := &compose.Fill{Color: c}
+		fill := &typeset.Fill{Color: c}
 		if !solid {
 			clear := c
 			clear.A = 0
-			fill = &compose.Fill{Shading: &compose.Shading{
-				Kind: compose.Axial, From: compose.Point{X: a, Y: y}, To: compose.Point{X: z, Y: y},
-				Stops:     []compose.ColorStop{{Offset: 0, Color: c}, {Offset: 1, Color: clear}},
-				Transform: compose.Identity,
+			fill = &typeset.Fill{Shading: &typeset.Shading{
+				Kind: typeset.Axial, From: typeset.Point{X: a, Y: y}, To: typeset.Point{X: z, Y: y},
+				Stops:     []typeset.ColorStop{{Offset: 0, Color: c}, {Offset: 1, Color: clear}},
+				Transform: typeset.Identity,
 			}}
 		}
-		b.fills = append(b.fills, &compose.Path{Ops: rectOps(left, y, right-left, h), Fill: fill})
+		b.fills = append(b.fills, &typeset.Path{Ops: rectOps(left, y, right-left, h), Fill: fill})
 	}
 	if zero > 0 && zero < 1 {
 		stroke := dataBarAxis
-		b.fills = append(b.fills, &compose.Path{Ops: lineOps(at, y, at, y+h), Stroke: &stroke})
+		b.fills = append(b.fills, &typeset.Path{Ops: lineOps(at, y, at, y+h), Stroke: &stroke})
 	}
 }
 

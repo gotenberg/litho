@@ -11,9 +11,9 @@ import (
 	dom "golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxListValue bounds a list ordinal read from an attribute: 2^30, the
@@ -75,7 +75,7 @@ type builder struct {
 	elements  int
 	synthetic int
 	headings  []heading
-	warnings  []compose.Warning
+	warnings  []typeset.Warning
 	warned    map[string]bool
 	// counters holds the CSS counters and the quote depth of the walk.
 	counters counterState
@@ -291,7 +291,7 @@ func (b *builder) semantics(node *layout.Node, n *dom.Node) {
 	case atom.Figure:
 		node.Alt = figureName(n)
 	case atom.Dl:
-		node.Numbering = compose.NumberingDescription
+		node.Numbering = typeset.NumberingDescription
 	case atom.Col, atom.Colgroup:
 		node.Span = spanAttr(n, "span", maxColSpan)
 	case atom.H1, atom.H2, atom.H3, atom.H4, atom.H5, atom.H6:
@@ -308,21 +308,21 @@ func (b *builder) semantics(node *layout.Node, n *dom.Node) {
 // columns' otherwise, as the HTML table model's auto state assigns a
 // header cell to the cells right of it and below it (HTML Standard,
 // 4.9.12.2).
-func headerScope(n *dom.Node) compose.TableScope {
+func headerScope(n *dom.Node) typeset.TableScope {
 	if v, ok := attr(n, "scope"); ok {
 		switch strings.ToLower(strings.TrimSpace(v)) {
 		case "row", "rowgroup":
-			return compose.ScopeRow
+			return typeset.ScopeRow
 		case "col", "colgroup":
-			return compose.ScopeColumn
+			return typeset.ScopeColumn
 		}
 	}
 	tr := n.Parent
 	if tr == nil || tr.DataAtom != atom.Tr {
-		return compose.ScopeColumn
+		return typeset.ScopeColumn
 	}
 	if g := tr.Parent; g != nil && g.DataAtom == atom.Thead {
-		return compose.ScopeColumn
+		return typeset.ScopeColumn
 	}
 	first, data := true, false
 	for c := tr.FirstChild; c != nil; c = c.NextSibling {
@@ -330,7 +330,7 @@ func headerScope(n *dom.Node) compose.TableScope {
 			continue
 		}
 		if c == n && !first {
-			return compose.ScopeColumn
+			return typeset.ScopeColumn
 		}
 		first = false
 		if c.DataAtom == atom.Td {
@@ -338,40 +338,40 @@ func headerScope(n *dom.Node) compose.TableScope {
 		}
 	}
 	if data {
-		return compose.ScopeRow
+		return typeset.ScopeRow
 	}
-	return compose.ScopeColumn
+	return typeset.ScopeColumn
 }
 
 // listNumbering returns the numbering system of a list whose items' marker
 // is t (ISO 32000-1, 14.8.5.5, Table 347; CSS Counter Styles 3, 6),
 // ordered for an ol.
-func listNumbering(t css.ListStyleType, ordered bool) compose.ListNumbering {
+func listNumbering(t css.ListStyleType, ordered bool) typeset.ListNumbering {
 	switch t {
 	case css.Disc:
-		return compose.NumberingDisc
+		return typeset.NumberingDisc
 	case css.Circle:
-		return compose.NumberingCircle
+		return typeset.NumberingCircle
 	case css.Square:
-		return compose.NumberingSquare
+		return typeset.NumberingSquare
 	case css.Decimal, css.DecimalLeadingZero:
-		return compose.NumberingDecimal
+		return typeset.NumberingDecimal
 	case css.LowerRoman:
-		return compose.NumberingLowerRoman
+		return typeset.NumberingLowerRoman
 	case css.UpperRoman:
-		return compose.NumberingUpperRoman
+		return typeset.NumberingUpperRoman
 	case css.LowerAlpha:
-		return compose.NumberingLowerAlpha
+		return typeset.NumberingLowerAlpha
 	case css.UpperAlpha:
-		return compose.NumberingUpperAlpha
+		return typeset.NumberingUpperAlpha
 	case css.ListNone:
-		return compose.NumberingNone
+		return typeset.NumberingNone
 	case css.LowerGreek, css.Armenian, css.Georgian, css.ListString:
 	}
 	if ordered {
-		return compose.NumberingOrdered
+		return typeset.NumberingOrdered
 	}
-	return compose.NumberingUnordered
+	return typeset.NumberingUnordered
 }
 
 // syntheticID returns an anchor ID no element of the document carries, for
@@ -439,7 +439,7 @@ func (b *builder) image(ctx context.Context, n *dom.Node, st, parent *css.Style)
 		if ctx.Err() != nil {
 			return nil
 		}
-		b.warnings = append(b.warnings, compose.Warning{Code: warningCode(err), Message: fmt.Sprintf(
+		b.warnings = append(b.warnings, typeset.Warning{Code: warningCode(err), Message: fmt.Sprintf(
 			"the image %s was left out: %v", displayURL(strings.TrimSpace(src)), err)})
 		return fallback()
 	}
@@ -593,7 +593,7 @@ func (b *builder) warnOnce(code, key, msg string) {
 		return
 	}
 	b.warned[code+"\x00"+key] = true
-	b.warnings = append(b.warnings, compose.Warning{Code: code, Message: msg})
+	b.warnings = append(b.warnings, typeset.Warning{Code: code, Message: msg})
 }
 
 // maxFigureName caps the bytes of the name a figure's Figure carries.

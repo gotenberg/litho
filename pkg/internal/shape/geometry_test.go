@@ -4,8 +4,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // TestPresetTable_EveryPresetEvaluates evaluates every preset of the
@@ -16,7 +16,7 @@ func TestPresetTable_EveryPresetEvaluates(t *testing.T) {
 	if n := len(PresetNames()); n != 187 {
 		t.Fatalf("%d presets, want the 187 of ST_ShapeType", n)
 	}
-	boxes := []compose.Rect{
+	boxes := []typeset.Rect{
 		{X: 10, Y: 20, Width: 200, Height: 100},
 		{X: 0, Y: 0, Width: 50, Height: 300},
 		{X: 5, Y: 5, Width: 0, Height: 40},
@@ -40,7 +40,7 @@ func TestPresetTable_EveryPresetEvaluates(t *testing.T) {
 			// slack each way catches a wrong scale without flagging them.
 			lo, hi := r.X-2*r.Width-r.Height, r.X+3*r.Width+r.Height
 			for _, p := range paths {
-				if p.Ops[0].Kind != compose.MoveTo {
+				if p.Ops[0].Kind != typeset.MoveTo {
 					t.Errorf("%s: a path starts with op %d", name, p.Ops[0].Kind)
 				}
 				for _, op := range p.Ops {
@@ -48,7 +48,7 @@ func TestPresetTable_EveryPresetEvaluates(t *testing.T) {
 						if !numeric.Finite(pt.X) || !numeric.Finite(pt.Y) {
 							t.Fatalf("%s in %v: point %v", name, r, pt)
 						}
-						if op.Kind != compose.ClosePath && r.Width > 0 && (pt.X < lo || pt.X > hi) {
+						if op.Kind != typeset.ClosePath && r.Width > 0 && (pt.X < lo || pt.X > hi) {
 							t.Errorf("%s in %v: x %g far outside the box", name, r, pt.X)
 						}
 					}
@@ -63,51 +63,51 @@ func TestPresetTable_EveryPresetEvaluates(t *testing.T) {
 }
 
 // pts flattens the end points of a path's operations.
-func pts(ops []compose.PathOp) []compose.Point {
-	var out []compose.Point
+func pts(ops []typeset.PathOp) []typeset.Point {
+	var out []typeset.Point
 	for _, op := range ops {
 		switch op.Kind {
-		case compose.MoveTo, compose.LineTo:
+		case typeset.MoveTo, typeset.LineTo:
 			out = append(out, op.P[0])
-		case compose.CurveTo:
+		case typeset.CurveTo:
 			out = append(out, op.P[2])
-		case compose.ClosePath:
+		case typeset.ClosePath:
 		}
 	}
 	return out
 }
 
 // near reports whether a and b are equal to a thousandth of a point.
-func near(a, b compose.Point) bool {
+func near(a, b typeset.Point) bool {
 	return math.Abs(a.X-b.X) < 1e-3 && math.Abs(a.Y-b.Y) < 1e-3
 }
 
 // TestPaths_HandComputed compares presets' outlines to points computed by
 // hand from their Annex D definitions.
 func TestPaths_HandComputed(t *testing.T) {
-	r := compose.Rect{X: 10, Y: 20, Width: 200, Height: 100}
+	r := typeset.Rect{X: 10, Y: 20, Width: 200, Height: 100}
 	tests := []struct {
 		name string
 		g    *Geometry
-		want []compose.Point
+		want []typeset.Point
 	}{
-		{"nil", nil, []compose.Point{{X: 10, Y: 20}, {X: 210, Y: 20}, {X: 210, Y: 120}, {X: 10, Y: 120}}},
-		{"rect", &Geometry{Preset: "rect"}, []compose.Point{{X: 10, Y: 20}, {X: 210, Y: 20}, {X: 210, Y: 120}, {X: 10, Y: 120}}},
+		{"nil", nil, []typeset.Point{{X: 10, Y: 20}, {X: 210, Y: 20}, {X: 210, Y: 120}, {X: 10, Y: 120}}},
+		{"rect", &Geometry{Preset: "rect"}, []typeset.Point{{X: 10, Y: 20}, {X: 210, Y: 20}, {X: 210, Y: 120}, {X: 10, Y: 120}}},
 		// roundRect at adj 25000: the radius is a quarter of the shorter
 		// side, 25 pt; the path starts at (l, dx1) and runs clockwise.
-		{"roundRect", &Geometry{Preset: "roundRect", Adjust: []Adjust{{Name: "adj", Value: 25000}}}, []compose.Point{
+		{"roundRect", &Geometry{Preset: "roundRect", Adjust: []Adjust{{Name: "adj", Value: 25000}}}, []typeset.Point{
 			{X: 10, Y: 45}, {X: 35, Y: 20}, {X: 185, Y: 20}, {X: 210, Y: 45}, {X: 210, Y: 95}, {X: 185, Y: 120}, {X: 35, Y: 120}, {X: 10, Y: 95},
 		}},
 		// ellipse: from (l, vc), four quarter arcs.
-		{"ellipse", &Geometry{Preset: "ellipse"}, []compose.Point{{X: 10, Y: 70}, {X: 110, Y: 20}, {X: 210, Y: 70}, {X: 110, Y: 120}, {X: 10, Y: 70}}},
+		{"ellipse", &Geometry{Preset: "ellipse"}, []typeset.Point{{X: 10, Y: 70}, {X: 110, Y: 20}, {X: 210, Y: 70}, {X: 110, Y: 120}, {X: 10, Y: 70}}},
 		// rightArrow at its defaults: the shaft spans half the height
 		// (y1 = vc - h/4), the head is ss/2 = 50 long.
-		{"rightArrow", &Geometry{Preset: "rightArrow"}, []compose.Point{
+		{"rightArrow", &Geometry{Preset: "rightArrow"}, []typeset.Point{
 			{X: 10, Y: 45}, {X: 160, Y: 45}, {X: 160, Y: 20}, {X: 210, Y: 70}, {X: 160, Y: 120}, {X: 160, Y: 95}, {X: 10, Y: 95},
 		}},
 		// rightArrow with adj1 100000 and adj2 20000: a full-height shaft,
 		// a head 20 long.
-		{"rightArrow adjusted", &Geometry{Preset: "rightArrow", Adjust: []Adjust{{Name: "adj1", Value: 100000}, {Name: "adj2", Value: 20000}}}, []compose.Point{
+		{"rightArrow adjusted", &Geometry{Preset: "rightArrow", Adjust: []Adjust{{Name: "adj1", Value: 100000}, {Name: "adj2", Value: 20000}}}, []typeset.Point{
 			{X: 10, Y: 20}, {X: 190, Y: 20}, {X: 190, Y: 20}, {X: 210, Y: 70}, {X: 190, Y: 120}, {X: 190, Y: 120}, {X: 10, Y: 120},
 		}},
 	}
@@ -131,7 +131,7 @@ func TestPaths_HandComputed(t *testing.T) {
 // degrees above the horizontal, the inner ones at adj/50000 of it, at 54
 // degrees, and the top at (hc, t).
 func TestPaths_Star5(t *testing.T) {
-	r := compose.Rect{Width: 100, Height: 100}
+	r := typeset.Rect{Width: 100, Height: 100}
 	got := pts(Paths(&Geometry{Preset: "star5"}, r)[0].Ops)
 	if len(got) != 10 {
 		t.Fatalf("got %d points, want 10", len(got))
@@ -139,7 +139,7 @@ func TestPaths_Star5(t *testing.T) {
 	rad := func(d float64) float64 { return d * math.Pi / 180 }
 	swd2, shd2, svc := 50*1.05146, 50*1.10557, 50*1.10557
 	iwd2, ihd2 := swd2*19098/50000, shd2*19098/50000
-	want := []compose.Point{
+	want := []typeset.Point{
 		{X: 50 - swd2*math.Cos(rad(18)), Y: svc - shd2*math.Sin(rad(18))},
 		{X: 50 - iwd2*math.Cos(rad(54)), Y: svc - ihd2*math.Sin(rad(54))},
 		{X: 50, Y: 0},
@@ -167,12 +167,12 @@ func TestPaths_CustomGuidesAndArc(t *testing.T) {
 	if len(c.Unresolved) != 0 {
 		t.Fatalf("unresolved %v", c.Unresolved)
 	}
-	r := compose.Rect{X: 0, Y: 0, Width: 100, Height: 50}
+	r := typeset.Rect{X: 0, Y: 0, Width: 100, Height: 50}
 	ops := Paths(&Geometry{Custom: c}, r)[0].Ops
 	got := pts(ops)
 	// From (0, 50) the arc of radii 50 and 50 starts at 180 degrees and
 	// sweeps 180 clockwise: through (50, 0) to (100, 50).
-	want := []compose.Point{{X: 0, Y: 50}, {X: 50, Y: 0}, {X: 100, Y: 50}}
+	want := []typeset.Point{{X: 0, Y: 50}, {X: 50, Y: 0}, {X: 100, Y: 50}}
 	if len(got) != len(want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
@@ -183,7 +183,7 @@ func TestPaths_CustomGuidesAndArc(t *testing.T) {
 	}
 	// The first quarter's control points follow the circle's tangents.
 	c1 := ops[1].P[0]
-	if !near(c1, compose.Point{X: 0, Y: 50 - 50*kappa}) {
+	if !near(c1, typeset.Point{X: 0, Y: 50 - 50*kappa}) {
 		t.Errorf("first control point %v", c1)
 	}
 }
@@ -197,21 +197,21 @@ func TestPaths_PathSpaceAndModes(t *testing.T) {
 	d.Command(CmdLine, "10", "5")
 	d.Path(0, 0, FillNone, true)
 	d.Command(CmdLine, "w", "h")
-	paths := Paths(&Geometry{Custom: d.Custom()}, compose.Rect{X: 1, Y: 2, Width: 20, Height: 40})
+	paths := Paths(&Geometry{Custom: d.Custom()}, typeset.Rect{X: 1, Y: 2, Width: 20, Height: 40})
 	if len(paths) != 2 {
 		t.Fatalf("%d paths", len(paths))
 	}
 	if !paths[0].Fill || paths[0].Stroke || paths[0].Mode != FillDarken {
 		t.Errorf("path 0 modes %+v", paths[0])
 	}
-	if got := pts(paths[0].Ops); !near(got[1], compose.Point{X: 21, Y: 22}) {
+	if got := pts(paths[0].Ops); !near(got[1], typeset.Point{X: 21, Y: 22}) {
 		t.Errorf("path 0 points %v", got)
 	}
 	if paths[1].Fill || !paths[1].Stroke {
 		t.Errorf("path 1 modes %+v", paths[1])
 	}
 	// A line with no move first starts at the origin of the box.
-	if got := pts(paths[1].Ops); len(got) != 2 || !near(got[0], compose.Point{X: 1, Y: 2}) || !near(got[1], compose.Point{X: 21, Y: 42}) {
+	if got := pts(paths[1].Ops); len(got) != 2 || !near(got[0], typeset.Point{X: 1, Y: 2}) || !near(got[1], typeset.Point{X: 21, Y: 42}) {
 		t.Errorf("path 1 points %v", got)
 	}
 }
@@ -238,22 +238,22 @@ func TestCheck_Problems(t *testing.T) {
 	if Known(&Geometry{Preset: "nosuchshape"}) {
 		t.Error("an unknown preset is known")
 	}
-	if got := Paths(&Geometry{Preset: "nosuchshape"}, compose.Rect{Width: 1, Height: 1}); len(got) != 1 || len(got[0].Ops) != 5 {
+	if got := Paths(&Geometry{Preset: "nosuchshape"}, typeset.Rect{Width: 1, Height: 1}); len(got) != 1 || len(got[0].Ops) != 5 {
 		t.Errorf("an unknown preset draws %v", got)
 	}
 }
 
 // TestTextRect_Presets checks the text rectangles of a few presets.
 func TestTextRect_Presets(t *testing.T) {
-	r := compose.Rect{X: 10, Y: 20, Width: 200, Height: 100}
+	r := typeset.Rect{X: 10, Y: 20, Width: 200, Height: 100}
 	il := 200 * 29289.0 / 200000 // ellipse: idx = wd2 * cos(45°) inset
 	tests := []struct {
 		g    *Geometry
-		want compose.Rect
+		want typeset.Rect
 	}{
 		{&Geometry{Preset: "rect"}, r},
-		{&Geometry{Preset: "ellipse"}, compose.Rect{X: 10 + il, Y: 20 + 100*29289.0/200000, Width: 200 - 2*il, Height: 100 - 2*100*29289.0/200000}},
-		{&Geometry{Preset: "rightArrow"}, compose.Rect{X: 10, Y: 45, Width: 175, Height: 50}},
+		{&Geometry{Preset: "ellipse"}, typeset.Rect{X: 10 + il, Y: 20 + 100*29289.0/200000, Width: 200 - 2*il, Height: 100 - 2*100*29289.0/200000}},
+		{&Geometry{Preset: "rightArrow"}, typeset.Rect{X: 10, Y: 45, Width: 175, Height: 50}},
 		{&Geometry{Preset: "rect", MirrorH: true}, r},
 	}
 	for _, tt := range tests {
@@ -266,9 +266,9 @@ func TestTextRect_Presets(t *testing.T) {
 
 // TestPaths_Mirror mirrors a right arrow into a left one.
 func TestPaths_Mirror(t *testing.T) {
-	r := compose.Rect{X: 10, Y: 20, Width: 200, Height: 100}
+	r := typeset.Rect{X: 10, Y: 20, Width: 200, Height: 100}
 	got := pts(Paths(&Geometry{Preset: "rightArrow", MirrorH: true}, r)[0].Ops)
-	if !near(got[3], compose.Point{X: 10, Y: 70}) {
+	if !near(got[3], typeset.Point{X: 10, Y: 70}) {
 		t.Errorf("the tip %v, want (10, 70)", got[3])
 	}
 }

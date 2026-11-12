@@ -4,10 +4,10 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // ShapeStyle is the fill and outline of a DrawingML shape (ECMA-376 Part
@@ -27,8 +27,8 @@ type ShapeStyle struct {
 	CustDash []float64
 	// Cap and Join are the line's cap and join (20.1.10.31 ST_LineCap,
 	// 20.1.8.52 to 20.1.8.54): flat and round unless the file says.
-	Cap  compose.LineCap
-	Join compose.LineJoin
+	Cap  typeset.LineCap
+	Join typeset.LineJoin
 	// Head and Tail are the arrowheads (20.1.8.38 headEnd, 20.1.8.57
 	// tailEnd).
 	Head, Tail shape.Arrowhead
@@ -37,7 +37,7 @@ type ShapeStyle struct {
 // Gradient is a gradient fill: its stops, and a linear gradient's angle
 // in degrees clockwise or a path gradient drawn as radial.
 type Gradient struct {
-	Stops  []compose.ColorStop
+	Stops  []typeset.ColorStop
 	Angle  float64
 	Radial bool
 }
@@ -64,7 +64,7 @@ func ParseShapeStyle(spPr, style *Element, theme *Theme) ShapeStyle {
 		fillSet = true
 	}
 	s.LineWidth = 0.75
-	s.Join = compose.RoundJoin
+	s.Join = typeset.RoundJoin
 	if ln := spPr.Child(NSA, "ln"); ln != nil {
 		if v, ok := EMU(attrOr(ln, "w")); ok && v >= 0 {
 			s.LineWidth = v
@@ -115,15 +115,15 @@ func parseLineStyle(s *ShapeStyle, ln *Element) {
 	}
 	switch attrOr(ln, "cap") {
 	case "rnd":
-		s.Cap = compose.RoundCap
+		s.Cap = typeset.RoundCap
 	case "sq":
-		s.Cap = compose.SquareCap
+		s.Cap = typeset.SquareCap
 	}
 	switch {
 	case ln.Child(NSA, "bevel") != nil:
-		s.Join = compose.BevelJoin
+		s.Join = typeset.BevelJoin
 	case ln.Child(NSA, "miter") != nil:
-		s.Join = compose.MiterJoin
+		s.Join = typeset.MiterJoin
 	}
 	s.Head = arrowhead(ln.Child(NSA, "headEnd"))
 	s.Tail = arrowhead(ln.Child(NSA, "tailEnd"))
@@ -182,7 +182,7 @@ func parseGradient(g *Element, theme *Theme) *Gradient {
 		if err != nil || math.IsNaN(pos) {
 			pos = 0
 		}
-		out.Stops = append(out.Stops, compose.ColorStop{Offset: pos / 100000, Color: compose.Color{R: c.R, G: c.G, B: c.B, A: c.A}})
+		out.Stops = append(out.Stops, typeset.ColorStop{Offset: pos / 100000, Color: typeset.Color{R: c.R, G: c.G, B: c.B, A: c.A}})
 	}
 	if len(out.Stops) == 0 {
 		return nil
@@ -202,18 +202,18 @@ func parseGradient(g *Element, theme *Theme) *Gradient {
 // for a lighten or darken path (ECMA-376 Part 1, 20.1.10.37), then each
 // path it strokes drawn with the line, its dash, cap, join and
 // arrowheads (shape.Fill, shape.Stroke). A nil g is the rectangle r.
-func (s ShapeStyle) Paint(g *shape.Geometry, r compose.Rect) []compose.Fragment {
+func (s ShapeStyle) Paint(g *shape.Geometry, r typeset.Rect) []typeset.Fragment {
 	if s.Fill == nil && s.Gradient == nil && s.Line == nil {
 		return nil
 	}
 	paths := shape.Paths(g, r)
-	var out, strokes []compose.Fragment
+	var out, strokes []typeset.Fragment
 	for _, p := range paths {
 		if p.Fill {
 			out = append(out, shape.Fill(p.Ops, r, s.paint(p.Mode))...)
 		}
 		if p.Stroke && s.Line != nil && s.LineWidth > 0 {
-			c := compose.Color{R: s.Line.R, G: s.Line.G, B: s.Line.B, A: s.Line.A}
+			c := typeset.Color{R: s.Line.R, G: s.Line.G, B: s.Line.B, A: s.Line.A}
 			strokes = append(strokes, shape.Stroke(p.Ops, shape.Line{
 				Width: s.LineWidth, Color: c, Cap: s.Cap, Join: s.Join,
 				Dash: s.dash(), Head: s.Head, Tail: s.Tail,
@@ -255,15 +255,15 @@ func (s ShapeStyle) dash() []float64 {
 // paint returns the fill of a path of fill mode m.
 func (s ShapeStyle) paint(m shape.FillMode) shape.Paint {
 	if s.Gradient != nil {
-		stops := make([]compose.ColorStop, len(s.Gradient.Stops))
+		stops := make([]typeset.ColorStop, len(s.Gradient.Stops))
 		for i, st := range s.Gradient.Stops {
-			stops[i] = compose.ColorStop{Offset: st.Offset, Color: shape.Shade(st.Color, m)}
+			stops[i] = typeset.ColorStop{Offset: st.Offset, Color: shape.Shade(st.Color, m)}
 		}
 		return shape.Paint{Kind: shape.PaintGradient, Stops: stops, Angle: s.Gradient.Angle, Radial: s.Gradient.Radial}
 	}
 	if s.Fill == nil {
 		return shape.Paint{}
 	}
-	c := compose.Color{R: s.Fill.R, G: s.Fill.G, B: s.Fill.B, A: s.Fill.A}
+	c := typeset.Color{R: s.Fill.R, G: s.Fill.G, B: s.Fill.B, A: s.Fill.A}
 	return shape.Paint{Kind: shape.PaintSolid, Color: shape.Shade(c, m)}
 }

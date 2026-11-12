@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // geometryXML wraps an enhanced geometry's attributes and equations.
@@ -27,45 +27,45 @@ func parseGeometryXML(t testing.TB, s string) *shape.Geometry {
 }
 
 // ends returns the end points of a path's operations.
-func ends(ops []compose.PathOp) []compose.Point {
-	var out []compose.Point
+func ends(ops []typeset.PathOp) []typeset.Point {
+	var out []typeset.Point
 	for _, op := range ops {
 		switch op.Kind {
-		case compose.MoveTo, compose.LineTo:
+		case typeset.MoveTo, typeset.LineTo:
 			out = append(out, op.P[0])
-		case compose.CurveTo:
+		case typeset.CurveTo:
 			out = append(out, op.P[2])
-		case compose.ClosePath:
+		case typeset.ClosePath:
 		}
 	}
 	return out
 }
 
 func TestParseGeometry_Enhanced(t *testing.T) {
-	box := compose.Rect{X: 0, Y: 0, Width: 100, Height: 50}
+	box := typeset.Rect{X: 0, Y: 0, Width: 100, Height: 50}
 	tests := []struct {
 		name   string
 		xml    string
 		preset string
-		want   [][]compose.Point
+		want   [][]typeset.Point
 		fill   []bool
 		stroke []bool
 	}{
 		{
 			name: "lines in the default view",
 			xml:  geometryXML(`draw:enhanced-path="M 0 0 L 21600 0 21600 21600 Z N"`, ""),
-			want: [][]compose.Point{{{X: 0, Y: 0}, {X: 100, Y: 0}, {X: 100, Y: 50}}},
+			want: [][]typeset.Point{{{X: 0, Y: 0}, {X: 100, Y: 0}, {X: 100, Y: 50}}},
 		},
 		{
 			name: "equations, modifiers and a view",
 			xml: geometryXML(`svg:viewBox="0 0 200 100" draw:modifiers="50" draw:enhanced-path="M ?f0 0 L ?f1 ?f2"`,
 				`<draw:equation draw:name="f0" draw:formula="$0 * 2"/><draw:equation draw:name="f1" draw:formula="right - ?f0"/><draw:equation draw:name="f2" draw:formula="if(-1, 0, height/2) + max(1, 2) - abs(-2)"/>`),
-			want: [][]compose.Point{{{X: 50, Y: 0}, {X: 50, Y: 25}}},
+			want: [][]typeset.Point{{{X: 50, Y: 0}, {X: 50, Y: 25}}},
 		},
 		{
 			name:   "paths cut at N with F and S",
 			xml:    geometryXML(`svg:viewBox="0 0 10 10" draw:enhanced-path="M 0 0 L 10 10 Z F N M 0 10 L 10 0 Z S N"`, ""),
-			want:   [][]compose.Point{{{X: 0, Y: 0}, {X: 100, Y: 50}}, {{X: 0, Y: 50}, {X: 100, Y: 0}}},
+			want:   [][]typeset.Point{{{X: 0, Y: 0}, {X: 100, Y: 50}}, {{X: 0, Y: 50}, {X: 100, Y: 0}}},
 			fill:   []bool{false, true},
 			stroke: []bool{true, false},
 		},
@@ -73,30 +73,30 @@ func TestParseGeometry_Enhanced(t *testing.T) {
 			name: "a full angle ellipse",
 			xml:  geometryXML(`draw:type="ellipse" draw:enhanced-path="U 10800 10800 10800 10800 0 360 Z N"`, ""),
 			// From angle 0 counter-clockwise: right, top, left, bottom.
-			want:   [][]compose.Point{{{X: 100, Y: 25}, {X: 50, Y: 0}, {X: 0, Y: 25}, {X: 50, Y: 50}, {X: 100, Y: 25}}},
+			want:   [][]typeset.Point{{{X: 100, Y: 25}, {X: 50, Y: 0}, {X: 0, Y: 25}, {X: 50, Y: 50}, {X: 100, Y: 25}}},
 			preset: "ellipse",
 		},
 		{
 			name: "an arc counter-clockwise from right to left",
 			xml:  geometryXML(`svg:viewBox="0 0 20 20" draw:enhanced-path="B 0 0 20 20 20 10 0 10 N"`, ""),
-			want: [][]compose.Point{{{X: 100, Y: 25}, {X: 50, Y: 0}, {X: 0, Y: 25}}},
+			want: [][]typeset.Point{{{X: 100, Y: 25}, {X: 50, Y: 0}, {X: 0, Y: 25}}},
 		},
 		{
 			name: "a quadrant pair",
 			xml:  geometryXML(`svg:viewBox="0 0 20 20" draw:enhanced-path="M 10 0 X 0 10 Y 10 20 N"`, ""),
-			want: [][]compose.Point{{{X: 50, Y: 0}, {X: 0, Y: 25}, {X: 50, Y: 50}}},
+			want: [][]typeset.Point{{{X: 50, Y: 0}, {X: 0, Y: 25}, {X: 50, Y: 50}}},
 		},
 		{
 			name: "LibreOffice's extension path with G, in an empty view",
 			xml: geometryXML(`svg:viewBox="0 0 0 0" draw:type="ooxml-arc" draw:enhanced-path="M 0 0 Z N" drawooo:enhanced-path="M 0 ?f0 G ?f1 ?f0 180 180 N"`,
 				`<draw:equation draw:name="f0" draw:formula="logheight"/><draw:equation draw:name="f1" draw:formula="logwidth/2"/>`),
-			want:   [][]compose.Point{{{X: 0, Y: 50}, {X: 50, Y: 0}, {X: 100, Y: 50}}},
+			want:   [][]typeset.Point{{{X: 0, Y: 50}, {X: 50, Y: 0}, {X: 100, Y: 50}}},
 			preset: "arc",
 		},
 		{
 			name: "commands against numbers and sub-view sizes",
 			xml:  geometryXML(`drawooo:sub-view-size="10 10" draw:enhanced-path="M0 0L10 5N"`, ""),
-			want: [][]compose.Point{{{X: 0, Y: 0}, {X: 100, Y: 25}}},
+			want: [][]typeset.Point{{{X: 0, Y: 0}, {X: 100, Y: 25}}},
 		},
 	}
 	for _, tt := range tests {
@@ -170,7 +170,7 @@ func TestParseGeometry_Problems(t *testing.T) {
 // TestParseGeometry_OpenSubpaths checks a LibreOffice shape's open
 // subpath is stroked, not filled, and a DrawingML one's filled.
 func TestParseGeometry_OpenSubpaths(t *testing.T) {
-	box := compose.Rect{Width: 10, Height: 10}
+	box := typeset.Rect{Width: 10, Height: 10}
 	own := shape.Paths(parseGeometryXML(t, geometryXML(`draw:type="bracket-pair" draw:enhanced-path="M 0 0 L 21600 0 21600 21600 N"`, "")), box)
 	if len(own) != 1 || own[0].Fill || !own[0].Stroke {
 		t.Errorf("LibreOffice shape: %+v", own)

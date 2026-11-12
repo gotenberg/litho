@@ -1,5 +1,5 @@
 // Package csv converts a comma-separated values file (RFC 4180) to the
-// composition model as LibreOffice Calc opens one: it reads fields
+// typeset model as LibreOffice Calc opens one: it reads fields
 // separated by the characters the options name, a comma alone without
 // them, quoted with double quotes, in UTF-8, detects numbers,
 // percentages, currency amounts, booleans, dates and times as Calc's

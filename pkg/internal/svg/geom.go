@@ -3,18 +3,18 @@ package svg
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // identity is the transform that changes nothing.
-var identity = compose.Matrix{A: 1, D: 1}
+var identity = typeset.Matrix{A: 1, D: 1}
 
 // mul returns the transform that applies b, then a: a∘b. With b mapping an
 // element's coordinates to its parent's and a its parent's to the
 // grandparent's, the result maps the element's to the grandparent's.
-func mul(a, b compose.Matrix) compose.Matrix {
-	return compose.Matrix{
+func mul(a, b typeset.Matrix) typeset.Matrix {
+	return typeset.Matrix{
 		A: a.A*b.A + a.C*b.B,
 		B: a.B*b.A + a.D*b.B,
 		C: a.A*b.C + a.C*b.D,
@@ -25,34 +25,34 @@ func mul(a, b compose.Matrix) compose.Matrix {
 }
 
 // apply maps p through m.
-func apply(m compose.Matrix, p compose.Point) compose.Point {
-	return compose.Point{X: m.A*p.X + m.C*p.Y + m.E, Y: m.B*p.X + m.D*p.Y + m.F}
+func apply(m typeset.Matrix, p typeset.Point) typeset.Point {
+	return typeset.Point{X: m.A*p.X + m.C*p.Y + m.E, Y: m.B*p.X + m.D*p.Y + m.F}
 }
 
 // translate returns the translation by (x, y).
-func translate(x, y float64) compose.Matrix { return compose.Matrix{A: 1, D: 1, E: x, F: y} }
+func translate(x, y float64) typeset.Matrix { return typeset.Matrix{A: 1, D: 1, E: x, F: y} }
 
 // scale returns the scaling by (x, y).
-func scale(x, y float64) compose.Matrix { return compose.Matrix{A: x, D: y} }
+func scale(x, y float64) typeset.Matrix { return typeset.Matrix{A: x, D: y} }
 
 // isIdentity reports whether m changes nothing.
-func isIdentity(m compose.Matrix) bool { return m == identity }
+func isIdentity(m typeset.Matrix) bool { return m == identity }
 
 // invertible reports whether m has an inverse and finite entries: a
 // singular transform collapses what it draws to a line or a point, which
 // paints nothing (SVG 1.1, 7.5).
-func invertible(m compose.Matrix) bool {
+func invertible(m typeset.Matrix) bool {
 	det := m.A*m.D - m.B*m.C
 	return det != 0 && numeric.Finite(det) && numeric.Finite(m.A) && numeric.Finite(m.B) && numeric.Finite(m.C) && numeric.Finite(m.D) && numeric.Finite(m.E) && numeric.Finite(m.F)
 }
 
 // invert returns the inverse of m, false when it has none.
-func invert(m compose.Matrix) (compose.Matrix, bool) {
+func invert(m typeset.Matrix) (typeset.Matrix, bool) {
 	det := m.A*m.D - m.B*m.C
 	if det == 0 || !numeric.Finite(det) {
 		return identity, false
 	}
-	inv := compose.Matrix{
+	inv := typeset.Matrix{
 		A: m.D / det, B: -m.B / det, C: -m.C / det, D: m.A / det,
 		E: (m.C*m.F - m.D*m.E) / det, F: (m.B*m.E - m.A*m.F) / det,
 	}
@@ -83,7 +83,7 @@ type bbox struct {
 func (b bbox) hasArea() bool { return b.ok && b.x1 > b.x0 && b.y1 > b.y0 }
 
 // add grows b to hold p.
-func (b *bbox) add(p compose.Point) {
+func (b *bbox) add(p typeset.Point) {
 	if !b.ok {
 		b.x0, b.y0, b.x1, b.y1, b.ok = p.X, p.Y, p.X, p.Y, true
 		return
@@ -95,18 +95,18 @@ func (b *bbox) add(p compose.Point) {
 // opsBBox returns the bounding box of a path, its curves bounded by their
 // extrema (SVG 1.1, 7.11: the bounding box is tight, not the hull of the
 // control points).
-func opsBBox(ops []compose.PathOp) bbox {
+func opsBBox(ops []typeset.PathOp) bbox {
 	var b bbox
-	var cur compose.Point
+	var cur typeset.Point
 	for _, op := range ops {
 		switch op.Kind {
-		case compose.MoveTo, compose.LineTo:
+		case typeset.MoveTo, typeset.LineTo:
 			b.add(op.P[0])
 			cur = op.P[0]
-		case compose.CurveTo:
+		case typeset.CurveTo:
 			cubicExtrema(cur, op.P[0], op.P[1], op.P[2], b.add)
 			cur = op.P[2]
-		case compose.ClosePath:
+		case typeset.ClosePath:
 		}
 	}
 	return b
@@ -114,12 +114,12 @@ func opsBBox(ops []compose.PathOp) bbox {
 
 // cubicExtrema calls add with the end point and every extremum of the
 // cubic Bézier p0 p1 p2 p3 along each axis.
-func cubicExtrema(p0, p1, p2, p3 compose.Point, add func(compose.Point)) {
+func cubicExtrema(p0, p1, p2, p3 typeset.Point, add func(typeset.Point)) {
 	add(p0)
 	add(p3)
-	at := func(t float64) compose.Point {
+	at := func(t float64) typeset.Point {
 		u := 1 - t
-		return compose.Point{
+		return typeset.Point{
 			X: u*u*u*p0.X + 3*u*u*t*p1.X + 3*u*t*t*p2.X + t*t*t*p3.X,
 			Y: u*u*u*p0.Y + 3*u*u*t*p1.Y + 3*u*t*t*p2.Y + t*t*t*p3.Y,
 		}
@@ -159,8 +159,8 @@ func quadRoots(a, b, c float64) []float64 {
 }
 
 // transformOps maps every point of ops through m into a new slice.
-func transformOps(ops []compose.PathOp, m compose.Matrix) []compose.PathOp {
-	out := make([]compose.PathOp, len(ops))
+func transformOps(ops []typeset.PathOp, m typeset.Matrix) []typeset.PathOp {
+	out := make([]typeset.PathOp, len(ops))
 	for i, op := range ops {
 		out[i].Kind = op.Kind
 		for j := range op.P {

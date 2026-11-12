@@ -11,10 +11,10 @@ import (
 	"github.com/gomarkdown/markdown/ast"
 	mdhtml "github.com/gomarkdown/markdown/html"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/html"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxTitleBytes caps the title taken from the first heading: 4 KiB.
@@ -47,7 +47,7 @@ type Options struct {
 // [html.ErrInputTooLarge], and is converted by [html.Convert] with opts
 // under that ceiling, failing as html.Convert does. A cap out of range, or
 // an error executing the template, fails with [html.ErrInvalidOptions].
-func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, o Options) (*compose.Document, error) {
+func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, o Options) (*typeset.Document, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

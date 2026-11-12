@@ -3,8 +3,8 @@ package layout
 import (
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestTextShadow_PaintsAnOffsetCopy(t *testing.T) {
@@ -12,14 +12,14 @@ func TestTextShadow_PaintsAnOffsetCopy(t *testing.T) {
 		s.TextShadow = []css.Shadow{{X: px(2), Y: px(3), Color: css.Color{B: 1, A: 1}}}
 	})
 	res := run(t, doc(el(st, txt(st, "a"))), page(100, 100))
-	var runs []*compose.Text
-	var walk func([]compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+	var runs []*typeset.Text
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Text:
+			case *typeset.Text:
 				runs = append(runs, v)
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content)
 			}
 		}

@@ -3,8 +3,8 @@ package sheet
 import (
 	"sort"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // colX returns the x of column c's left edge from the sheet's origin, in
@@ -72,16 +72,16 @@ func (g *grid) anchorPoint(a Anchor, unbounded bool) (float64, float64) {
 
 // drawingRect returns a drawing's box on the sheet, in points from the
 // sheet's origin.
-func (g *grid) drawingRect(d *Drawing) compose.Rect {
+func (g *grid) drawingRect(d *Drawing) typeset.Rect {
 	if d.Absolute {
-		return compose.Rect{X: max(d.X, 0), Y: max(d.Y, 0), Width: clampSide(d.Width), Height: clampSide(d.Height)}
+		return typeset.Rect{X: max(d.X, 0), Y: max(d.Y, 0), Width: clampSide(d.Width), Height: clampSide(d.Height)}
 	}
 	x, y := g.anchorPoint(d.From, d.Unbounded)
 	if d.To != nil {
 		x2, y2 := g.anchorPoint(*d.To, d.Unbounded)
-		return compose.Rect{X: x, Y: y, Width: max(x2-x, 0), Height: max(y2-y, 0)}
+		return typeset.Rect{X: x, Y: y, Width: max(x2-x, 0), Height: max(y2-y, 0)}
 	}
-	return compose.Rect{X: x, Y: y, Width: clampSide(d.Width), Height: clampSide(d.Height)}
+	return typeset.Rect{X: x, Y: y, Width: clampSide(d.Width), Height: clampSide(d.Height)}
 }
 
 // clampSide returns v within [0, maxSide], 0 for a value that is not a

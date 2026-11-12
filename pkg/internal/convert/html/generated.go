@@ -8,9 +8,9 @@ import (
 	dom "golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // listItem is the implicit counter of list items (CSS Lists 3, 4.6).
@@ -393,7 +393,7 @@ func (b *builder) contentImage(ctx context.Context, u string) *layout.Picture {
 	pic, err := b.res.picture(ctx, u)
 	if err != nil {
 		if ctx.Err() == nil {
-			b.warnings = append(b.warnings, compose.Warning{Code: warningCode(err), Message: fmt.Sprintf(
+			b.warnings = append(b.warnings, typeset.Warning{Code: warningCode(err), Message: fmt.Sprintf(
 				"the generated image %s was left out: %v", displayURL(u), err)})
 		}
 		return nil

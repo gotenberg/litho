@@ -5,11 +5,11 @@ import (
 	"math"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // The graphic data URIs of a graphic frame (ECMA-376 Part 1, 20.1.2.2.17
@@ -145,10 +145,10 @@ func spPr(el *ooxml.Element) *ooxml.Element {
 // parent's coordinates, its rotation and flips, and for a group the child
 // box (20.1.7.5 chOff and chExt).
 type placement struct {
-	box          compose.Rect
+	box          typeset.Rect
 	rot          float64
 	flipH, flipV bool
-	child        compose.Rect
+	child        typeset.Rect
 }
 
 // readXfrm reads an a:xfrm or p:xfrm, false when it lacks off or ext.
@@ -158,10 +158,10 @@ func readXfrm(x *ooxml.Element) (placement, bool) {
 	if off == nil || ext == nil {
 		return p, false
 	}
-	p.box = compose.Rect{X: emuAttr(off, "x"), Y: emuAttr(off, "y"), Width: max(0, emuAttr(ext, "cx")), Height: max(0, emuAttr(ext, "cy"))}
+	p.box = typeset.Rect{X: emuAttr(off, "x"), Y: emuAttr(off, "y"), Width: max(0, emuAttr(ext, "cx")), Height: max(0, emuAttr(ext, "cy"))}
 	p.rot, p.flipH, p.flipV = ooxml.Transform2D(x)
 	if co, ce := x.Child(ooxml.NSA, "chOff"), x.Child(ooxml.NSA, "chExt"); co != nil && ce != nil {
-		p.child = compose.Rect{X: emuAttr(co, "x"), Y: emuAttr(co, "y"), Width: max(0, emuAttr(ce, "cx")), Height: max(0, emuAttr(ce, "cy"))}
+		p.child = typeset.Rect{X: emuAttr(co, "x"), Y: emuAttr(co, "y"), Width: max(0, emuAttr(ce, "cx")), Height: max(0, emuAttr(ce, "cy"))}
 	}
 	return p, true
 }
@@ -378,7 +378,7 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 //
 //   - libreoffice/pptx: sd-data/TextDistancesInsets3's 2 cm boxes with 0 and 4 cm
 //     top and bottom insets print their text above the box.
-func fitInsets(b *slides.TextBody, chain []*ooxml.Element, box compose.Rect, g *shape.Geometry) {
+func fitInsets(b *slides.TextBody, chain []*ooxml.Element, box typeset.Rect, g *shape.Geometry) {
 	var set [4]bool
 	for _, el := range chain {
 		pr := kid(el, "txBody").Child(ooxml.NSA, "bodyPr")
@@ -528,7 +528,7 @@ func (r *reader) group(c *shapeCtx, el *ooxml.Element, depth int) (*slides.Shape
 	if ok {
 		s.Box, s.Rotation, s.FlipH, s.FlipV, s.Child = p.box, p.rot, p.flipH, p.flipV, p.child
 		if s.Child.Width <= 0 || s.Child.Height <= 0 {
-			s.Child = compose.Rect{}
+			s.Child = typeset.Rect{}
 		}
 	}
 	inner := *c
@@ -551,8 +551,8 @@ func (r *reader) group(c *shapeCtx, el *ooxml.Element, depth int) (*slides.Shape
 }
 
 // union returns the bounding box of the shapes' boxes.
-func union(kids []*slides.Shape) compose.Rect {
-	var u compose.Rect
+func union(kids []*slides.Shape) typeset.Rect {
+	var u typeset.Rect
 	for i, k := range kids {
 		b := k.Box
 		if i == 0 {
@@ -561,7 +561,7 @@ func union(kids []*slides.Shape) compose.Rect {
 		}
 		x0, y0 := min(u.X, b.X), min(u.Y, b.Y)
 		x1, y1 := max(u.X+u.Width, b.X+b.Width), max(u.Y+u.Height, b.Y+b.Height)
-		u = compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
+		u = typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
 	}
 	return u
 }

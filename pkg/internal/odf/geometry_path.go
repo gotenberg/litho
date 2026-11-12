@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxPathDataLen caps the length of one svg:d or draw:points attribute
@@ -28,7 +28,7 @@ const maxPolygonCorners = 1024
 // whose open subpaths are stroked only, as LibreOffice draws a path
 // shape. On an error it keeps the path up to the last complete command,
 // as SVG 1.1, F.2 asks. It returns nil for data that draws nothing.
-func PathData(d string, view compose.Rect) *shape.Custom {
+func PathData(d string, view typeset.Rect) *shape.Custom {
 	if len(d) > maxPathDataLen {
 		return nil
 	}
@@ -44,7 +44,7 @@ func PathData(d string, view compose.Rect) *shape.Custom {
 // closed polygon (10.3.5 draw:polygon) or an open polyline (10.3.4
 // draw:polyline), which is stroked only. A pair that does not parse ends
 // the list. It returns nil for fewer than two points.
-func Points(points string, view compose.Rect, closed bool) *shape.Custom {
+func Points(points string, view typeset.Rect, closed bool) *shape.Custom {
 	if len(points) > maxPathDataLen {
 		return nil
 	}
@@ -127,7 +127,7 @@ func RegularPolygon(corners int, concave bool, sharpness float64) *shape.Custom 
 // Bounds returns the bounding box of the points and control points of
 // cmds, which PathData, Points and RegularPolygon write with literal
 // operands, and whether there was a point.
-func Bounds(cmds []shape.Cmd) (compose.Rect, bool) {
+func Bounds(cmds []shape.Cmd) (typeset.Rect, bool) {
 	x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
 	for _, c := range cmds {
 		for i := 0; i+1 < len(c.Args); i += 2 {
@@ -136,9 +136,9 @@ func Bounds(cmds []shape.Cmd) (compose.Rect, bool) {
 		}
 	}
 	if x0 > x1 {
-		return compose.Rect{}, false
+		return typeset.Rect{}, false
 	}
-	return compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}, true
+	return typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}, true
 }
 
 // cmdOf returns a command of literal operands.

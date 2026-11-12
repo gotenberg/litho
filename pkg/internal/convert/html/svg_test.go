@@ -7,13 +7,13 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/svg"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // svgPage converts src on a 400 by 400 point page without margins.
-func svgPage(t *testing.T, src string, fsys fstest.MapFS) *compose.Document {
+func svgPage(t *testing.T, src string, fsys fstest.MapFS) *typeset.Document {
 	t.Helper()
 	doc, err := Convert(context.Background(), strings.NewReader(src), testFonts(t), Options{
 		PageWidth: 400, PageHeight: 400, Resources: fsys,
@@ -29,49 +29,49 @@ func svgPage(t *testing.T, src string, fsys fstest.MapFS) *compose.Document {
 
 // filled returns the page bounding boxes of the paths of page 1 filled
 // with c, in paint order, group transforms applied.
-func filled(doc *compose.Document, c compose.Color) []compose.Rect {
-	var out []compose.Rect
-	var walk func([]compose.Fragment, compose.Matrix)
-	walk = func(frags []compose.Fragment, m compose.Matrix) {
+func filled(doc *typeset.Document, c typeset.Color) []typeset.Rect {
+	var out []typeset.Rect
+	var walk func([]typeset.Fragment, typeset.Matrix)
+	walk = func(frags []typeset.Fragment, m typeset.Matrix) {
 		for _, f := range frags {
 			switch v := f.(type) {
-			case *compose.Group:
+			case *typeset.Group:
 				t := v.Transform
-				if t == (compose.Matrix{}) {
-					t = compose.Identity
+				if t == (typeset.Matrix{}) {
+					t = typeset.Identity
 				}
-				walk(v.Content, compose.Matrix{
+				walk(v.Content, typeset.Matrix{
 					A: m.A*t.A + m.C*t.B, B: m.B*t.A + m.D*t.B,
 					C: m.A*t.C + m.C*t.D, D: m.B*t.C + m.D*t.D,
 					E: m.A*t.E + m.C*t.F + m.E, F: m.B*t.E + m.D*t.F + m.F,
 				})
-			case *compose.Path:
+			case *typeset.Path:
 				if v.Fill == nil || v.Fill.Color != c {
 					continue
 				}
 				x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
 				for _, op := range v.Ops {
-					if op.Kind == compose.ClosePath {
+					if op.Kind == typeset.ClosePath {
 						continue
 					}
 					p := op.P[0]
-					if op.Kind == compose.CurveTo {
+					if op.Kind == typeset.CurveTo {
 						p = op.P[2]
 					}
 					x, y := m.A*p.X+m.C*p.Y+m.E, m.B*p.X+m.D*p.Y+m.F
 					x0, y0, x1, y1 = min(x0, x), min(y0, y), max(x1, x), max(y1, y)
 				}
-				out = append(out, compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0})
+				out = append(out, typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0})
 			}
 		}
 	}
-	walk(doc.Pages[0].Content, compose.Identity)
+	walk(doc.Pages[0].Content, typeset.Identity)
 	return out
 }
 
-var svgRed = compose.Color{R: 1, A: 1}
+var svgRed = typeset.Color{R: 1, A: 1}
 
-func rectNear(a, b compose.Rect) bool {
+func rectNear(a, b typeset.Rect) bool {
 	const eps = 0.01
 	return math.Abs(a.X-b.X) < eps && math.Abs(a.Y-b.Y) < eps && math.Abs(a.Width-b.Width) < eps && math.Abs(a.Height-b.Height) < eps
 }
@@ -89,21 +89,21 @@ func TestSVG_Placement(t *testing.T) {
 	tests := []struct {
 		name string
 		body string
-		want compose.Rect
+		want typeset.Rect
 	}{
-		{"img natural size", `<img src="fixed.svg">`, compose.Rect{Width: 75, Height: 37.5}},
-		{"img ratio fills the width", `<img src="ratio.svg">`, compose.Rect{Width: 400, Height: 100}},
-		{"img ratio with a width", `<img src="ratio.svg" style="width:80px">`, compose.Rect{Width: 60, Height: 15}},
-		{"img default size", `<img src="nosize.svg">`, compose.Rect{Width: 225, Height: 112.5}},
-		{"img scaled content", `<img src="scaled.svg" style="width:20px;height:20px">`, compose.Rect{Width: 7.5, Height: 15}},
-		{"img stretched without a viewBox", `<img src="scaled.svg" style="width:60px;height:40px">`, compose.Rect{Width: 22.5, Height: 30}},
-		{"img data URL", `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Crect width='8' height='8' fill='red'/%3E%3C/svg%3E">`, compose.Rect{Width: 6, Height: 6}},
-		{"inline natural size", `<svg width="40" height="20">` + full + `</svg>`, compose.Rect{Width: 30, Height: 15}},
-		{"inline percent width", `<svg width="50%" height="20">` + full + `</svg>`, compose.Rect{Width: 200, Height: 15}},
-		{"inline viewBox fills the width", `<svg viewBox="0 0 4 1">` + full + `</svg>`, compose.Rect{Width: 400, Height: 100}},
-		{"inline css size", `<svg width="40" height="20" style="width:20px;height:20px">` + full + `</svg>`, compose.Rect{Width: 15, Height: 15}},
-		{"background", `<div style="width:40px;height:40px;background:url(fixed.svg) no-repeat"></div>`, compose.Rect{Width: 75, Height: 37.5}},
-		{"background size", `<div style="width:40px;height:40px;background:url(ratio.svg) no-repeat;background-size:contain"></div>`, compose.Rect{Width: 30, Height: 7.5}},
+		{"img natural size", `<img src="fixed.svg">`, typeset.Rect{Width: 75, Height: 37.5}},
+		{"img ratio fills the width", `<img src="ratio.svg">`, typeset.Rect{Width: 400, Height: 100}},
+		{"img ratio with a width", `<img src="ratio.svg" style="width:80px">`, typeset.Rect{Width: 60, Height: 15}},
+		{"img default size", `<img src="nosize.svg">`, typeset.Rect{Width: 225, Height: 112.5}},
+		{"img scaled content", `<img src="scaled.svg" style="width:20px;height:20px">`, typeset.Rect{Width: 7.5, Height: 15}},
+		{"img stretched without a viewBox", `<img src="scaled.svg" style="width:60px;height:40px">`, typeset.Rect{Width: 22.5, Height: 30}},
+		{"img data URL", `<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Crect width='8' height='8' fill='red'/%3E%3C/svg%3E">`, typeset.Rect{Width: 6, Height: 6}},
+		{"inline natural size", `<svg width="40" height="20">` + full + `</svg>`, typeset.Rect{Width: 30, Height: 15}},
+		{"inline percent width", `<svg width="50%" height="20">` + full + `</svg>`, typeset.Rect{Width: 200, Height: 15}},
+		{"inline viewBox fills the width", `<svg viewBox="0 0 4 1">` + full + `</svg>`, typeset.Rect{Width: 400, Height: 100}},
+		{"inline css size", `<svg width="40" height="20" style="width:20px;height:20px">` + full + `</svg>`, typeset.Rect{Width: 15, Height: 15}},
+		{"background", `<div style="width:40px;height:40px;background:url(fixed.svg) no-repeat"></div>`, typeset.Rect{Width: 75, Height: 37.5}},
+		{"background size", `<div style="width:40px;height:40px;background:url(ratio.svg) no-repeat;background-size:contain"></div>`, typeset.Rect{Width: 30, Height: 7.5}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -120,7 +120,7 @@ func TestSVG_InlineInheritsTheDocument(t *testing.T) {
 	src := `<style>body{margin:0;color:red} .icon .a{fill:currentColor} svg{display:block}</style>` +
 		`<div class="icon"><svg width="10" height="10"><rect class="a" width="10" height="10" fill="blue"/></svg></div>`
 	got := filled(svgPage(t, src, nil), svgRed)
-	if len(got) != 1 || !rectNear(got[0], compose.Rect{Width: 7.5, Height: 7.5}) {
+	if len(got) != 1 || !rectNear(got[0], typeset.Rect{Width: 7.5, Height: 7.5}) {
 		t.Errorf("red paths %v, want the rect in the document's colour", got)
 	}
 }

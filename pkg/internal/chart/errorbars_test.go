@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestErrorAmounts_Kinds(t *testing.T) {
@@ -36,13 +36,13 @@ func TestErrorAmounts_Kinds(t *testing.T) {
 }
 
 func TestRender_ErrorBarsWithCaps(t *testing.T) {
-	green := compose.Color{G: 1, A: 1}
+	green := typeset.Color{G: 1, A: 1}
 	c := barChart(1, 2)
 	c.Groups[0].Series[0].ErrorBars = []ErrorBars{{Kind: ErrorFixed, Plus: 0.5, Minus: 0.5, Up: true, Line: &Stroke{Color: green, Width: 1}}}
 	frags := Render(context.Background(), ahem(t), c, chartRect)
-	var lines []compose.Rect
-	walk(frags, 0, func(fr compose.Fragment, _ int) {
-		if p, ok := fr.(*compose.Path); ok && p.Stroke != nil && near(p.Stroke.Color, green) {
+	var lines []typeset.Rect
+	walk(frags, 0, func(fr typeset.Fragment, _ int) {
+		if p, ok := fr.(*typeset.Path); ok && p.Stroke != nil && near(p.Stroke.Color, green) {
 			lines = append(lines, bounds(p))
 		}
 	})
@@ -59,7 +59,7 @@ func TestRender_SeriesWideErrorBarsStayLinear(t *testing.T) {
 	// A margin or a standard deviation reads every value of the series:
 	// once per point, that is about 2e9 reads here, seconds where once
 	// per series takes milliseconds.
-	green := compose.Color{G: 1, A: 1}
+	green := typeset.Color{G: 1, A: 1}
 	vals := make([]float64, MaxPoints)
 	for i := range vals {
 		vals[i] = float64(i % 7)
@@ -71,13 +71,13 @@ func TestRender_SeriesWideErrorBarsStayLinear(t *testing.T) {
 		{Kind: ErrorMargin, Plus: 10, Down: true, NoCap: true, Line: line},
 	}
 	fonts := ahem(t)
-	done := make(chan []compose.Fragment, 1)
+	done := make(chan []typeset.Fragment, 1)
 	go func() { done <- Render(context.Background(), fonts, c, chartRect) }()
 	select {
 	case frags := <-done:
 		n := 0
-		walk(frags, 0, func(fr compose.Fragment, _ int) {
-			if p, ok := fr.(*compose.Path); ok && p.Stroke != nil && near(p.Stroke.Color, green) {
+		walk(frags, 0, func(fr typeset.Fragment, _ int) {
+			if p, ok := fr.(*typeset.Path); ok && p.Stroke != nil && near(p.Stroke.Color, green) {
 				n++
 			}
 		})

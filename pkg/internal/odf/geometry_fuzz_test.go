@@ -4,8 +4,8 @@ import (
 	"encoding/xml"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func FuzzParseGeometry(f *testing.F) {
@@ -23,9 +23,9 @@ func FuzzParseGeometry(f *testing.F) {
 		}
 		g := ParseGeometry(el)
 		_ = shape.Check(g)
-		r := compose.Rect{Width: 100, Height: 50}
+		r := typeset.Rect{Width: 100, Height: 50}
 		for _, p := range shape.Paths(g, r) {
-			if len(p.Ops) > 0 && p.Ops[0].Kind != compose.MoveTo {
+			if len(p.Ops) > 0 && p.Ops[0].Kind != typeset.MoveTo {
 				t.Fatal("a path does not start with a move")
 			}
 		}

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // FootnoteRule is the separator a page draws between its body and its
@@ -80,7 +80,7 @@ func (e *engine) ruleRoom(p int) float64 {
 // style:footnote-sep (ODF 1.3 Part 3, 17.19): a horizontal line Width
 // times the area's width long at the area's left, centre or right, its
 // top SpaceAbove below top, in its colour or the body's text colour.
-func (e *engine) paintFootnoteRule(pg *compose.Page, pb PageBox, top float64) {
+func (e *engine) paintFootnoteRule(pg *typeset.Page, pb PageBox, top float64) {
 	r := pb.FootnoteRule
 	if r == nil || r.Line == css.BorderNone || r.Line == css.BorderHidden || r.Width <= 0 {
 		return
@@ -128,6 +128,6 @@ func (e *engine) paintFootnoteRule(pg *compose.Page, pb PageBox, top float64) {
 	fb := &box{st: st, kind: kindBlock}
 	p := &painter{e: e, top: &ditem{group: true, opacity: 1}, mono: -1, alpha: 1}
 	p.frames = []*frame{{container: p.top, root: fb}}
-	p.border(fb, st, compose.Rect{X: x, Y: top + r.SpaceAbove, Width: w, Height: t}, [4][2]float64{}, [4]float64{css.Top: t}, [4]bool{css.Top: true})
+	p.border(fb, st, typeset.Rect{X: x, Y: top + r.SpaceAbove, Width: w, Height: t}, [4][2]float64{}, [4]float64{css.Top: t}, [4]bool{css.Top: true})
 	pg.Content = append(pg.Content, e.flatten(p.top, 0, true)...)
 }

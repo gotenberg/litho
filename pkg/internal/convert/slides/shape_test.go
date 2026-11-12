@@ -4,22 +4,22 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // paths returns the paths of a page with the transforms they sit under.
-func paths(frags []compose.Fragment, m compose.Matrix, out *[]placedPath) {
+func paths(frags []typeset.Fragment, m typeset.Matrix, out *[]placedPath) {
 	for _, f := range frags {
 		switch v := f.(type) {
-		case *compose.Path:
+		case *typeset.Path:
 			*out = append(*out, placedPath{v, m})
-		case *compose.Group:
+		case *typeset.Group:
 			t := v.Transform
-			if t == (compose.Matrix{}) {
-				t = compose.Identity
+			if t == (typeset.Matrix{}) {
+				t = typeset.Identity
 			}
 			paths(v.Content, then(t, m), out)
 		}
@@ -27,19 +27,19 @@ func paths(frags []compose.Fragment, m compose.Matrix, out *[]placedPath) {
 }
 
 type placedPath struct {
-	p *compose.Path
-	m compose.Matrix
+	p *typeset.Path
+	m typeset.Matrix
 }
 
 // bounds returns the page bounding box of a placed path.
-func (pp placedPath) bounds() compose.Rect {
+func (pp placedPath) bounds() typeset.Rect {
 	x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
 	for _, op := range pp.p.Ops {
 		n := 1
-		if op.Kind == compose.CurveTo {
+		if op.Kind == typeset.CurveTo {
 			n = 3
 		}
-		if op.Kind == compose.ClosePath {
+		if op.Kind == typeset.ClosePath {
 			continue
 		}
 		for _, q := range op.P[:n] {
@@ -47,10 +47,10 @@ func (pp placedPath) bounds() compose.Rect {
 			x0, y0, x1, y1 = min(x0, x), min(y0, y), max(x1, x), max(y1, y)
 		}
 	}
-	return compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
+	return typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
 }
 
-func rectNear(a, b compose.Rect, tol float64) bool {
+func rectNear(a, b typeset.Rect, tol float64) bool {
 	return near(a.X, b.X, tol) && near(a.Y, b.Y, tol) && near(a.Width, b.Width, tol) && near(a.Height, b.Height, tol)
 }
 
@@ -61,22 +61,22 @@ func TestShape_Geometry(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		sh   *Shape
-		want compose.Rect
+		want typeset.Rect
 	}{
-		{"plain", &Shape{Box: compose.Rect{X: 100, Y: 100, Width: 200, Height: 100}, Fill: solid}, compose.Rect{X: 100, Y: 100, Width: 200, Height: 100}},
+		{"plain", &Shape{Box: typeset.Rect{X: 100, Y: 100, Width: 200, Height: 100}, Fill: solid}, typeset.Rect{X: 100, Y: 100, Width: 200, Height: 100}},
 		// p3.pptx: a 200 by 100 box at 400, 300 turned 90 degrees about its
 		// centre covers 450..550 by 250..450.
-		{"rot90", &Shape{Box: compose.Rect{X: 400, Y: 300, Width: 200, Height: 100}, Rotation: 90, Fill: solid}, compose.Rect{X: 450, Y: 250, Width: 100, Height: 200}},
-		{"flip", &Shape{Box: compose.Rect{X: 10, Y: 20, Width: 30, Height: 40}, FlipH: true, FlipV: true, Fill: solid}, compose.Rect{X: 10, Y: 20, Width: 30, Height: 40}},
+		{"rot90", &Shape{Box: typeset.Rect{X: 400, Y: 300, Width: 200, Height: 100}, Rotation: 90, Fill: solid}, typeset.Rect{X: 450, Y: 250, Width: 100, Height: 200}},
+		{"flip", &Shape{Box: typeset.Rect{X: 10, Y: 20, Width: 30, Height: 40}, FlipH: true, FlipV: true, Fill: solid}, typeset.Rect{X: 10, Y: 20, Width: 30, Height: 40}},
 		{"group", &Shape{
-			Kind: KindGroup, Box: compose.Rect{X: 100, Y: 100, Width: 200, Height: 200}, Child: compose.Rect{Width: 100, Height: 100},
-			Kids: []*Shape{{Box: compose.Rect{X: 50, Y: 50, Width: 50, Height: 25}, Fill: solid}},
-		}, compose.Rect{X: 200, Y: 200, Width: 100, Height: 50}},
+			Kind: KindGroup, Box: typeset.Rect{X: 100, Y: 100, Width: 200, Height: 200}, Child: typeset.Rect{Width: 100, Height: 100},
+			Kids: []*Shape{{Box: typeset.Rect{X: 50, Y: 50, Width: 50, Height: 25}, Fill: solid}},
+		}, typeset.Rect{X: 200, Y: 200, Width: 100, Height: 50}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pg := convert(t, deck(&Slide{Shapes: []*Shape{tc.sh}}), office.Options{}).Pages[0]
 			var ps []placedPath
-			paths(pg.Content, compose.Identity, &ps)
+			paths(pg.Content, typeset.Identity, &ps)
 			if len(ps) != 1 {
 				t.Fatalf("%d paths", len(ps))
 			}
@@ -114,31 +114,31 @@ func TestShape_TextTurns(t *testing.T) {
 }
 
 func TestShape_Fills(t *testing.T) {
-	box := compose.Rect{X: 0, Y: 0, Width: 200, Height: 100}
+	box := typeset.Rect{X: 0, Y: 0, Width: 200, Height: 100}
 	b := &builder{warned: map[string]bool{}}
 	ops := rectOps(box)
 	lin := b.fill(&Fill{Kind: FillGradient, Gradient: &Gradient{Stops: []Stop{{0.2, red}, {1, css.Color{B: 1, A: 1}}}}}, box, ops, shape.FillNorm)
-	sh := lin[0].(*compose.Path).Fill.Shading
-	if sh.Kind != compose.Axial || !near(sh.From.X, 0, 1e-9) || !near(sh.To.X, 200, 1e-9) || len(sh.Stops) != 3 || sh.Stops[0].Offset != 0 {
+	sh := lin[0].(*typeset.Path).Fill.Shading
+	if sh.Kind != typeset.Axial || !near(sh.From.X, 0, 1e-9) || !near(sh.To.X, 200, 1e-9) || len(sh.Stops) != 3 || sh.Stops[0].Offset != 0 {
 		t.Errorf("linear shading %+v", sh)
 	}
 	down := b.fill(&Fill{Kind: FillGradient, Gradient: &Gradient{Angle: 90, Stops: []Stop{{0, red}, {1, red}}}}, box, ops, shape.FillNorm)
-	if sh := down[0].(*compose.Path).Fill.Shading; !near(sh.From.Y, 0, 1e-9) || !near(sh.To.Y, 100, 1e-9) {
+	if sh := down[0].(*typeset.Path).Fill.Shading; !near(sh.From.Y, 0, 1e-9) || !near(sh.To.Y, 100, 1e-9) {
 		t.Errorf("downward shading %+v", sh)
 	}
 	rad := b.fill(&Fill{Kind: FillGradient, Gradient: &Gradient{Radial: true, Stops: []Stop{{0, red}, {1, red}}}}, box, ops, shape.FillNorm)
 	// The engine draws a radial gradient as the unit circle mapped onto
 	// the ellipse through the box's corners, centred on the box.
-	if sh := rad[0].(*compose.Path).Fill.Shading; sh.Kind != compose.Radial || !near(sh.Transform.E, 100, 1e-9) || !near(sh.Transform.F, 50, 1e-9) ||
+	if sh := rad[0].(*typeset.Path).Fill.Shading; sh.Kind != typeset.Radial || !near(sh.Transform.E, 100, 1e-9) || !near(sh.Transform.F, 50, 1e-9) ||
 		!near(sh.Transform.A, 200/math.Sqrt2, 1e-9) || !near(sh.Transform.D, 100/math.Sqrt2, 1e-9) {
 		t.Errorf("radial shading %+v", sh)
 	}
 	off := b.fill(&Fill{Kind: FillGradient, Gradient: &Gradient{Radial: true, CenterX: 0.25, CenterY: 1, Stops: []Stop{{0, red}, {1, red}}}}, box, ops, shape.FillNorm)
-	if sh := off[0].(*compose.Path).Fill.Shading; !near(sh.Transform.E, 50, 1e-9) || !near(sh.Transform.F, 100, 1e-9) || !near(sh.Transform.A, 200/math.Sqrt2, 1e-9) {
+	if sh := off[0].(*typeset.Path).Fill.Shading; !near(sh.Transform.E, 50, 1e-9) || !near(sh.Transform.F, 100, 1e-9) || !near(sh.Transform.A, 200/math.Sqrt2, 1e-9) {
 		t.Errorf("off-centre radial shading %+v", sh)
 	}
 	bordered := b.fill(&Fill{Kind: FillGradient, Gradient: &Gradient{Border: 0.5, Stops: []Stop{{0, red}, {1, css.Color{B: 1, A: 1}}}}}, box, ops, shape.FillNorm)
-	if st := bordered[0].(*compose.Path).Fill.Shading.Stops; len(st) != 3 || st[1].Offset != 0.5 || st[1].Color != st[0].Color || st[2].Offset != 1 {
+	if st := bordered[0].(*typeset.Path).Fill.Shading.Stops; len(st) != 3 || st[1].Offset != 0.5 || st[1].Color != st[0].Color || st[2].Offset != 1 {
 		t.Errorf("bordered stops %+v", st)
 	}
 	// narVert is Impress's hatch of vertical lines 0.5 millimetre apart:
@@ -147,22 +147,22 @@ func TestShape_Fills(t *testing.T) {
 	if len(pat) != 2 {
 		t.Fatalf("pattern %+v", pat)
 	}
-	if bg, ok := pat[0].(*compose.Path); !ok || bg.Fill == nil || bg.Fill.Color.A != 1 {
+	if bg, ok := pat[0].(*typeset.Path); !ok || bg.Fill == nil || bg.Fill.Color.A != 1 {
 		t.Errorf("pattern background %+v", pat[0])
 	}
-	if g, ok := pat[1].(*compose.Group); !ok || g.Clip == nil || len(g.Content) != 1 {
+	if g, ok := pat[1].(*typeset.Group); !ok || g.Clip == nil || len(g.Content) != 1 {
 		t.Errorf("pattern %+v", pat)
-	} else if l := g.Content[0].(*compose.Path); l.Stroke == nil || l.Stroke.Width != 0.1 || inside(l.Ops, -0.01, 200) < 141 || !near(l.Ops[0].P[0].X, l.Ops[1].P[0].X, 1e-9) {
+	} else if l := g.Content[0].(*typeset.Path); l.Stroke == nil || l.Stroke.Width != 0.1 || inside(l.Ops, -0.01, 200) < 141 || !near(l.Ops[0].P[0].X, l.Ops[1].P[0].X, 1e-9) {
 		t.Errorf("hatch lines %d, stroke %+v", len(l.Ops), l.Stroke)
 	}
 	unknown := b.fill(&Fill{Kind: FillPattern, Pattern: "nope", Color: red}, box, ops, shape.FillNorm)
-	if p, ok := unknown[0].(*compose.Path); !ok || p.Fill.Color.A != 0.5 || len(b.warnings) != 1 {
+	if p, ok := unknown[0].(*typeset.Path); !ok || p.Fill.Color.A != 0.5 || len(b.warnings) != 1 {
 		t.Errorf("unknown pattern %+v, warnings %v", unknown, b.warnings)
 	}
 	pic := tinyPicture(t)
 	pic.Width, pic.Height = 8, 8
 	tiles := b.fill(&Fill{Kind: FillPicture, Tile: true, Picture: pic}, box, ops, shape.FillNorm)
-	if g := tiles[0].(*compose.Group); len(g.Content) != 25*13 {
+	if g := tiles[0].(*typeset.Group); len(g.Content) != 25*13 {
 		t.Errorf("%d tiles", len(g.Content))
 	}
 }
@@ -185,14 +185,14 @@ func TestShape_Arrowheads(t *testing.T) {
 			t.Errorf("kind %d: %d fragments", tc.kind, len(out))
 			continue
 		}
-		end := out[0].(*compose.Path).Ops[1].P[0].X
+		end := out[0].(*typeset.Path).Ops[1].P[0].X
 		if tc.docked && !(end < 100) || !tc.docked && !near(end, 100, 1e-9) {
 			t.Errorf("kind %d: line ends at %v", tc.kind, end)
 		}
 		if tc.kind == ArrowTriangle {
 			// The arrowhead's tip sits at the line's end.
 			tip := 0.0
-			for _, op := range out[1].(*compose.Path).Ops {
+			for _, op := range out[1].(*typeset.Path).Ops {
 				for _, pt := range op.P {
 					tip = max(tip, pt.X)
 				}
@@ -202,7 +202,7 @@ func TestShape_Arrowheads(t *testing.T) {
 			}
 		}
 	}
-	if out := b.stroke(&Line{Width: 2, Color: red, Dash: []float64{4, 2}, Head: Arrow{Kind: ArrowTriangle}}, rectOps(compose.Rect{Width: 5, Height: 5})); len(out) != 1 || len(out[0].(*compose.Path).Stroke.Dash) != 2 {
+	if out := b.stroke(&Line{Width: 2, Color: red, Dash: []float64{4, 2}, Head: Arrow{Kind: ArrowTriangle}}, rectOps(typeset.Rect{Width: 5, Height: 5})); len(out) != 1 || len(out[0].(*typeset.Path).Stroke.Dash) != 2 {
 		t.Errorf("closed dashed outline %+v", out)
 	}
 }
@@ -212,7 +212,7 @@ func TestShape_TableGrows(t *testing.T) {
 	cell := func(s string) TableCell {
 		return TableCell{Text: &TextBody{Paragraphs: []Paragraph{para(s, arial(20))}, Wrap: true}, Borders: [4]Line{css.Bottom: {Width: 1, Color: red}}}
 	}
-	tbl := &Shape{Kind: KindTable, Box: compose.Rect{X: 0, Y: 0, Width: 200, Height: 20}, Table: &Table{
+	tbl := &Shape{Kind: KindTable, Box: typeset.Rect{X: 0, Y: 0, Width: 200, Height: 20}, Table: &Table{
 		ColumnWidths: []float64{100, 100},
 		Rows: []TableRow{
 			{Height: 10, Cells: []TableCell{cell("one two three four"), cell("x")}},
@@ -252,7 +252,7 @@ func TestShape_Hairline(t *testing.T) {
 			t.Errorf("%+v: %d fragments, want none", tc.line, len(out))
 		}
 		for _, f := range out {
-			if p, ok := f.(*compose.Path); ok && p.Stroke != nil && p.Stroke.Width != tc.width {
+			if p, ok := f.(*typeset.Path); ok && p.Stroke != nil && p.Stroke.Width != tc.width {
 				t.Errorf("%+v: stroke %+v, want width %v", tc.line, p.Stroke, tc.width)
 			}
 		}
@@ -264,7 +264,7 @@ func TestShape_Hairline(t *testing.T) {
 // page, and that a jump to an unprinted slide links nowhere.
 func TestShape_Jump(t *testing.T) {
 	jump := func(n int) *Shape {
-		return &Shape{Box: compose.Rect{X: 10, Y: 10, Width: 50, Height: 20}, Jump: n}
+		return &Shape{Box: typeset.Rect{X: 10, Y: 10, Width: 50, Height: 20}, Jump: n}
 	}
 	doc := deck(&Slide{Shapes: []*Shape{jump(3), jump(2), jump(9)}}, &Slide{Hidden: true}, &Slide{})
 	pg := convert(t, doc, office.Options{}).Pages[0]
@@ -274,7 +274,7 @@ func TestShape_Jump(t *testing.T) {
 }
 
 // inside counts the vertical lines of ops between x0 and x1.
-func inside(ops []compose.PathOp, x0, x1 float64) int {
+func inside(ops []typeset.PathOp, x0, x1 float64) int {
 	n := 0
 	for i := 0; i+1 < len(ops); i += 2 {
 		if x := ops[i].P[0].X; x >= x0 && x <= x1 && near(x, ops[i+1].P[0].X, 1e-9) {

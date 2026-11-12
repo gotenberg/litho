@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestTables(t *testing.T) {
@@ -43,7 +43,7 @@ func TestTables(t *testing.T) {
 		t.Error("no header row group of three header cells")
 	}
 	for _, th := range role(tbl, "TH") {
-		if th.Scope != compose.ScopeColumn {
+		if th.Scope != typeset.ScopeColumn {
 			t.Errorf("header cell %q scope %d, want column", textOf(th), th.Scope)
 		}
 	}

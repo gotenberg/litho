@@ -5,11 +5,11 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // styledRect returns a document of one rectangle in the automatic
@@ -93,12 +93,12 @@ func TestRead_Fill(t *testing.T) {
 		if got.Kind != slides.FillPicture || got.Tile || got.Picture == nil || got.Picture.Vector == nil {
 			t.Fatalf("fill = %+v", got)
 		}
-		frags := got.Picture.Vector(context.Background(), compose.Rect{X: 10, Y: 20, Width: 300, Height: 200})
-		g, ok := frags[0].(*compose.Group)
+		frags := got.Picture.Vector(context.Background(), typeset.Rect{X: 10, Y: 20, Width: 300, Height: 200})
+		g, ok := frags[0].(*typeset.Group)
 		if !ok || len(g.Content) != 1 {
 			t.Fatalf("fragments = %+v", frags)
 		}
-		if img, ok := g.Content[0].(*compose.Image); !ok || !nearRect(img.Rect, compose.Rect{X: 10, Y: 20, Width: cm(2), Height: cm(1)}) {
+		if img, ok := g.Content[0].(*typeset.Image); !ok || !nearRect(img.Rect, typeset.Rect{X: 10, Y: 20, Width: cm(2), Height: cm(1)}) {
 			t.Errorf("picture placed at %+v", g.Content[0])
 		}
 	})
@@ -226,36 +226,36 @@ func TestHatchPattern_AngleAndSpacing(t *testing.T) {
 }
 
 func TestTiling_Placement(t *testing.T) {
-	area := compose.Rect{X: 0, Y: 0, Width: 10, Height: 10}
+	area := typeset.Rect{X: 0, Y: 0, Width: 10, Height: 10}
 	tests := []struct {
 		name   string
 		tiling tiling
-		want   []compose.Rect
+		want   []typeset.Rect
 	}{
 		// A tile half the area wide, centred: the tiles straddle the
 		// centre lines.
-		{"centred", tiling{ref: "center", size: fillImageSize{relW: 0.5, relH: 1}}, []compose.Rect{
+		{"centred", tiling{ref: "center", size: fillImageSize{relW: 0.5, relH: 1}}, []typeset.Rect{
 			{X: -2.5, Y: 0, Width: 5, Height: 10}, {X: 2.5, Y: 0, Width: 5, Height: 10}, {X: 7.5, Y: 0, Width: 5, Height: 10},
 		}},
 		// Moved by a fifth of a tile, from the corner.
-		{"moved", tiling{refX: 0.2, size: fillImageSize{w: 10, h: 10}}, []compose.Rect{
+		{"moved", tiling{refX: 0.2, size: fillImageSize{w: 10, h: 10}}, []typeset.Rect{
 			{X: -8, Y: 0, Width: 10, Height: 10}, {X: 2, Y: 0, Width: 10, Height: 10},
 		}},
 		// Every other row shifted by half a tile.
-		{"brick", tiling{offset: 0.5, size: fillImageSize{w: 10, h: 5}}, []compose.Rect{
+		{"brick", tiling{offset: 0.5, size: fillImageSize{w: 10, h: 5}}, []typeset.Rect{
 			{X: 0, Y: 0, Width: 10, Height: 5}, {X: -5, Y: 5, Width: 10, Height: 5}, {X: 5, Y: 5, Width: 10, Height: 5},
 		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pic := tt.tiling.picture(&layout.Picture{Width: 1, Height: 1, Source: &compose.ImageSource{}})
+			pic := tt.tiling.picture(&layout.Picture{Width: 1, Height: 1, Source: &typeset.ImageSource{}})
 			frags := pic.Vector(context.Background(), area)
 			if len(frags) != 1 {
 				t.Fatalf("fragments = %d, want a clipped group", len(frags))
 			}
-			var got []compose.Rect
-			for _, f := range frags[0].(*compose.Group).Content {
-				got = append(got, f.(*compose.Image).Rect)
+			var got []typeset.Rect
+			for _, f := range frags[0].(*typeset.Group).Content {
+				got = append(got, f.(*typeset.Image).Rect)
 			}
 			if !slices.EqualFunc(got, tt.want, nearRect) {
 				t.Errorf("tiles = %v, want %v", got, tt.want)

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/plaintext"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // opts asks for the test face and every other default.
@@ -59,7 +59,7 @@ func TestConvert_FirstBaselineAndLineAdvance(t *testing.T) {
 	if len(c) != 2 {
 		t.Fatalf("%d fragments, want 2", len(c))
 	}
-	a, b := c[0].(*compose.Text), c[1].(*compose.Text)
+	a, b := c[0].(*typeset.Text), c[1].(*typeset.Text)
 	if want := plaintext.DefaultMargin + 0.8*12; math.Abs(a.Origin.Y-want) > 1e-3 || a.Origin.X != plaintext.DefaultMargin {
 		t.Errorf("first origin %v, want (%v, %v)", a.Origin, plaintext.DefaultMargin, want)
 	}
@@ -164,7 +164,7 @@ func TestConvert_ExpandsTabsToTabStops(t *testing.T) {
 	}
 	// The last glyph sits at its column: 8 characters of 6 points.
 	doc := convert(t, f, "A\tB", opts())
-	run := doc.Pages[0].Content[0].(*compose.Text)
+	run := doc.Pages[0].Content[0].(*typeset.Text)
 	if g := run.Glyphs[len(run.Glyphs)-1]; math.Abs(g.X-48) > 1e-3 || g.Text != "B" {
 		t.Errorf("B at %v (%q), want 48", g.X, g.Text)
 	}
@@ -200,7 +200,7 @@ func TestConvert_ParagraphContinuesOnTheNextPage(t *testing.T) {
 	}
 	last := paragraphs(t, doc)[per-1]
 	for _, p := range doc.Pages {
-		if run := p.Content[len(p.Content)-1].(*compose.Text); run.Parent != last {
+		if run := p.Content[len(p.Content)-1].(*typeset.Text); run.Parent != last {
 			t.Errorf("the split paragraph's runs point at %p, want %p", run.Parent, last)
 		}
 	}
@@ -218,7 +218,7 @@ func TestConvert_DecodesBOMAndLineEnds(t *testing.T) {
 	}
 	// The blank line between EF and GH takes one line height.
 	c := doc.Pages[0].Content
-	if d := c[3].(*compose.Text).Origin.Y - c[2].(*compose.Text).Origin.Y; math.Abs(d-2*13.8) > 1e-9 {
+	if d := c[3].(*typeset.Text).Origin.Y - c[2].(*typeset.Text).Origin.Y; math.Abs(d-2*13.8) > 1e-9 {
 		t.Errorf("EF to GH %v, want two line heights", d)
 	}
 }
@@ -298,7 +298,7 @@ func TestConvert_TagsEachLineThatDrawsText(t *testing.T) {
 		t.Fatalf("%d paragraphs, want 3: AB, CD EF and the spaces", len(paras))
 	}
 	for i, frag := range doc.Pages[0].Content {
-		if run := frag.(*compose.Text); run.Parent != paras[i] {
+		if run := frag.(*typeset.Text); run.Parent != paras[i] {
 			t.Errorf("run %d points at %p, want %p", i, run.Parent, paras[i])
 		}
 	}
@@ -396,7 +396,7 @@ func TestConvert_DefaultsToSerif(t *testing.T) {
 	if p.Width != 595.276 || p.Height != 841.890 {
 		t.Errorf("page %vx%v, want A4", p.Width, p.Height)
 	}
-	if run := p.Content[0].(*compose.Text); run.Size != 12 || run.Origin.X != 0 {
+	if run := p.Content[0].(*typeset.Text); run.Size != 12 || run.Origin.X != 0 {
 		t.Errorf("run size %v at %v", run.Size, run.Origin)
 	}
 }

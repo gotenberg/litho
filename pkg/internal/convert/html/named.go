@@ -6,9 +6,9 @@ import (
 
 	dom "golang.org/x/net/html"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // pageKey is what selects the @page rules of a page: its name, whether it
@@ -36,7 +36,7 @@ type pageSetup struct {
 	// each.
 	cache    map[pageKey]*pageEntry
 	seen     map[string]bool
-	warnings []compose.Warning
+	warnings []typeset.Warning
 }
 
 // newPageSetup returns the page setup of the document r cascades, whose
@@ -87,12 +87,12 @@ func (p *prepared) setupPages(ctx context.Context, r *css.Resolver) {
 	if boxes && p.b != nil && p.b.gcpm.active() {
 		// The named strings and running elements a page shows follow
 		// where their elements landed (CSS GCPM 3, 2).
-		p.layout.Placed = func(a map[string]compose.Dest) { p.b.gcpm.placed = a }
+		p.layout.Placed = func(a map[string]typeset.Dest) { p.b.gcpm.placed = a }
 	}
 	if !boxes && p.o.HeaderTemplate == "" && p.o.FooterTemplate == "" {
 		return
 	}
-	p.layout.MarginContent = func(info layout.PageInfo, pages int) []compose.Fragment {
+	p.layout.MarginContent = func(info layout.PageInfo, pages int) []typeset.Fragment {
 		// The headers and footers, drawn once the layout is done, need
 		// the page boxes of the pages it laid out.
 		p.infos = append(p.infos, info)

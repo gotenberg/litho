@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestBorderImage_TileSpans(t *testing.T) {
@@ -44,7 +44,7 @@ func TestBorderImage_TileSpans(t *testing.T) {
 }
 
 func TestBorderImage_Widths(t *testing.T) {
-	area := compose.Rect{Width: 10, Height: 6}
+	area := typeset.Rect{Width: 10, Height: 6}
 	bd := [4]float64{1, 2, 1, 2}
 	all := [4]bool{true, true, true, true}
 	src := nineSource{w: 4, h: 4, natural: true}
@@ -183,13 +183,13 @@ func TestBorderImage_CropSource(t *testing.T) {
 	}
 	tests := []struct {
 		name string
-		r    compose.Rect
+		r    typeset.Rect
 		want image.Rectangle
 		same bool
 	}{
-		{"corner", compose.Rect{Width: px(1), Height: px(1)}, image.Rect(0, 0, 1, 1), false},
-		{"middle rounded", compose.Rect{X: px(0.9), Y: px(1.1), Width: px(1.2), Height: px(0.8)}, image.Rect(0, 0, 1, 1), false},
-		{"whole", compose.Rect{Width: px(3), Height: px(3)}, image.Rect(0, 0, 3, 3), true},
+		{"corner", typeset.Rect{Width: px(1), Height: px(1)}, image.Rect(0, 0, 1, 1), false},
+		{"middle rounded", typeset.Rect{X: px(0.9), Y: px(1.1), Width: px(1.2), Height: px(0.8)}, image.Rect(0, 0, 1, 1), false},
+		{"whole", typeset.Rect{Width: px(3), Height: px(3)}, image.Rect(0, 0, 3, 3), true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -199,10 +199,10 @@ func TestBorderImage_CropSource(t *testing.T) {
 			}
 		})
 	}
-	if c := p.cropSource(pic, compose.Rect{Width: px(1), Height: px(1)}, decode); c != p.cropSource(pic, compose.Rect{Width: px(1), Height: px(1)}, decode) {
+	if c := p.cropSource(pic, typeset.Rect{Width: px(1), Height: px(1)}, decode); c != p.cropSource(pic, typeset.Rect{Width: px(1), Height: px(1)}, decode) {
 		t.Error("a part is cut once")
 	}
-	crop, err := p.cropSource(pic, compose.Rect{X: px(1), Width: px(1), Height: px(1)}, decode).Decode(context.Background())
+	crop, err := p.cropSource(pic, typeset.Rect{X: px(1), Width: px(1), Height: px(1)}, decode).Decode(context.Background())
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}

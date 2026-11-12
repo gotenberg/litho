@@ -8,9 +8,9 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxFontSize is the largest font size the text package shapes at; a
@@ -86,19 +86,19 @@ func (r *renderer) textPieces(n *html.Node, st *style) []*piece {
 // styled st, in its user space, to be filled with the nonzero rule: the
 // shape text gives a clip path (SVG 1.1, 14.3.5). Characters that are not
 // visible add nothing.
-func (r *renderer) textOutline(n *html.Node, st *style) []compose.PathOp {
+func (r *renderer) textOutline(n *html.Node, st *style) []typeset.PathOp {
 	if r.d.opts.Fonts == nil {
 		r.d.warn("svg-text", "text is not drawn: no fonts are available")
 		return nil
 	}
-	var out []compose.PathOp
+	var out []typeset.PathOp
 	for _, p := range r.textPieces(n, st) {
 		if !p.st.visible {
 			continue
 		}
 		for _, t := range p.runs {
 			c := *t
-			c.Origin = compose.Point{X: p.x + t.Origin.X, Y: p.y + t.Origin.Y}
+			c.Origin = typeset.Point{X: p.x + t.Origin.X, Y: p.y + t.Origin.Y}
 			out = append(out, r.runOutline(&c)...)
 		}
 	}
@@ -198,7 +198,7 @@ type piece struct {
 	text   []rune
 	st     *style
 	x, y   float64
-	runs   []*compose.Text
+	runs   []*typeset.Text
 	width  float64
 	chunk  int
 	anchor anchor
@@ -319,7 +319,7 @@ func textStyle(st *style) text.Style {
 		Italic:   st.italic,
 		Size:     min(st.fontSize, maxFontSize),
 		Lang:     st.lang,
-		Color:    compose.Black,
+		Color:    typeset.Black,
 	}
 }
 
@@ -358,8 +358,8 @@ func (r *renderer) drawPiece(p *piece, s sink) {
 		return
 	}
 	box := bbox{}
-	box.add(compose.Point{X: p.x, Y: p.y - st.fontSize})
-	box.add(compose.Point{X: p.x + p.width, Y: p.y + st.fontSize/4})
+	box.add(typeset.Point{X: p.x, Y: p.y - st.fontSize})
+	box.add(typeset.Point{X: p.x + p.width, Y: p.y + st.fontSize/4})
 	fill, ok := r.flatPaint(st.fill, st, box, "text fill")
 	if st.fill.kind == paintNone {
 		ok = false
@@ -367,9 +367,9 @@ func (r *renderer) drawPiece(p *piece, s sink) {
 	fill.A *= st.fillOpacity * s.alpha
 	ok = ok && fill.A > 0
 	stroke, strokeSh := r.strokeOf(st, box)
-	var outline *compose.Fill
+	var outline *typeset.Fill
 	if strokeSh != nil {
-		outline = withAlpha(&compose.Fill{Shading: strokeSh}, s.alpha)
+		outline = withAlpha(&typeset.Fill{Shading: strokeSh}, s.alpha)
 		if outline == nil {
 			stroke = nil
 		}
@@ -385,7 +385,7 @@ func (r *renderer) drawPiece(p *piece, s sink) {
 	}
 	for _, t := range p.runs {
 		c := *t
-		c.Origin = compose.Point{X: p.x + t.Origin.X, Y: p.y + t.Origin.Y}
+		c.Origin = typeset.Point{X: p.x + t.Origin.X, Y: p.y + t.Origin.Y}
 		c.Color = fill
 		if strokeW > 0 {
 			c.Stroke = min(max(c.Stroke, strokeW), c.Size)
@@ -402,10 +402,10 @@ func (r *renderer) drawPiece(p *piece, s sink) {
 		}
 		if outline != nil {
 			if o := strokeOutline(ops, stroke); len(o) > 0 {
-				r.emit(s, &compose.Path{Ops: o, Fill: outline})
+				r.emit(s, &typeset.Path{Ops: o, Fill: outline})
 			}
 			continue
 		}
-		r.emit(s, &compose.Path{Ops: ops, Stroke: stroke})
+		r.emit(s, &typeset.Path{Ops: ops, Stroke: stroke})
 	}
 }

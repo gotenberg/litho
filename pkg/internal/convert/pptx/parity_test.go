@@ -10,9 +10,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // paritySources returns the directory Gotenberg's test decks sit under:
@@ -75,7 +75,7 @@ func TestParity_GotenbergDecks(t *testing.T) {
 					t.Errorf("slide %d notes %+v", i+1, n)
 				}
 			}
-			boxes := map[string]compose.Rect{
+			boxes := map[string]typeset.Rect{
 				"Title 1":               {X: 36, Y: 21.6249, Width: 648, Height: 90},
 				"Content Placeholder 2": {X: 36, Y: 126, Width: 648, Height: 356.3750},
 			}
@@ -84,13 +84,13 @@ func TestParity_GotenbergDecks(t *testing.T) {
 					t.Errorf("%s: %+v, want %+v", name, sh, want)
 				}
 			}
-			if tb := shapeNamed(doc.Slides[3].Shapes, "Table 2"); tb == nil || tb.Table == nil || tb.Box != (compose.Rect{X: 72, Y: 144, Width: 720, Height: 144}) {
+			if tb := shapeNamed(doc.Slides[3].Shapes, "Table 2"); tb == nil || tb.Table == nil || tb.Box != (typeset.Rect{X: 72, Y: 144, Width: 720, Height: 144}) {
 				t.Errorf("table %+v", tb)
 			}
 			if ch := shapeNamed(doc.Slides[4].Shapes, "Chart 2"); ch == nil || ch.Chart == nil {
 				t.Errorf("chart %+v", ch)
 			}
-			if p := shapeNamed(doc.Slides[5].Shapes, "Picture 2"); p == nil || p.Picture == nil || p.Box != (compose.Rect{X: 288, Y: 180, Width: 360, Height: 120}) {
+			if p := shapeNamed(doc.Slides[5].Shapes, "Picture 2"); p == nil || p.Picture == nil || p.Box != (typeset.Rect{X: 288, Y: 180, Width: 360, Height: 120}) {
 				t.Errorf("picture %+v", p)
 			}
 		}},
@@ -105,7 +105,7 @@ func TestParity_GotenbergDecks(t *testing.T) {
 				if got := s.Shapes[0].Text.Paragraphs[0].Runs[0].Text; got != "PITCH-"+string(rune('1'+i)) {
 					t.Errorf("slide %d text %q", i+1, got)
 				}
-				if !near(s.Shapes[0].Box, compose.Rect{X: 56.6929, Y: 28.3465, Width: 680.3150, Height: 85.0394}) {
+				if !near(s.Shapes[0].Box, typeset.Rect{X: 56.6929, Y: 28.3465, Width: 680.3150, Height: 85.0394}) {
 					t.Errorf("slide %d box %+v", i+1, s.Shapes[0].Box)
 				}
 			}

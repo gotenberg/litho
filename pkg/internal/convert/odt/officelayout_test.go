@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // TestConvert_LineSpacing lays two lines of 12pt Liberation Serif out in
@@ -250,16 +250,16 @@ func TestConvert_ShapeText(t *testing.T) {
 	res := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{})
 	var order []string
 	fillTop := -1.0
-	var walk func(fs []compose.Fragment, dy float64)
-	walk = func(fs []compose.Fragment, dy float64) {
+	var walk func(fs []typeset.Fragment, dy float64)
+	walk = func(fs []typeset.Fragment, dy float64) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Path:
+			case *typeset.Path:
 				if v.Fill != nil {
 					order = append(order, "fill")
 					fillTop = dy
 				}
-			case *compose.Text:
+			case *typeset.Text:
 				var sb strings.Builder
 				for _, g := range v.Glyphs {
 					sb.WriteString(g.Text)
@@ -268,7 +268,7 @@ func TestConvert_ShapeText(t *testing.T) {
 				if sb.String() == "Mid" && !near(v.Origin.Y+dy, 131.5, 1.5) {
 					t.Errorf("Mid's baseline at %.1f, want 131.5", v.Origin.Y+dy)
 				}
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content, dy+v.Transform.F)
 			}
 		}

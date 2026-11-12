@@ -13,9 +13,9 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Errors [Parse] and [FromNode] return.
@@ -28,7 +28,7 @@ var (
 
 // Raster is a decoded raster picture an image element draws.
 type Raster struct {
-	Source *compose.ImageSource
+	Source *typeset.ImageSource
 	// Width and Height are the picture's size in CSS pixels, both
 	// positive.
 	Width, Height float64
@@ -40,7 +40,7 @@ type Raster struct {
 type Context struct {
 	// Color is the value of color, what currentColor paints. The zero
 	// value means black.
-	Color compose.Color
+	Color typeset.Color
 	// Families is the font-family list, empty for the default sans-serif.
 	Families []string
 	// FontSize is the font size in CSS pixels, 16 when zero.
@@ -99,8 +99,8 @@ type Document struct {
 	// transform is the root's transform, applied in the viewport after
 	// the viewBox mapping (SVG 2, 8.5); background its background colour;
 	// disabled marks a root that draws nothing.
-	transform  compose.Matrix
-	background compose.Color
+	transform  typeset.Matrix
+	background typeset.Color
 	disabled   bool
 	images     map[string]*Raster
 
@@ -108,8 +108,8 @@ type Document struct {
 	decls    map[*html.Node][]declaration
 	domStyle map[*html.Node]*style
 	matcher  *matcherState
-	cache    map[[2]float64][]compose.Fragment
-	warns    []compose.Warning
+	cache    map[[2]float64][]typeset.Fragment
+	warns    []typeset.Warning
 	warned   map[string]bool
 }
 
@@ -233,7 +233,7 @@ func newDocument(ctx context.Context, root *html.Node, opts Options, image bool)
 	d := &Document{
 		root: root, opts: opts, ids: map[string]*html.Node{}, images: map[string]*Raster{},
 		decls: map[*html.Node][]declaration{}, domStyle: map[*html.Node]*style{},
-		cache: map[[2]float64][]compose.Fragment{}, warned: map[string]bool{},
+		cache: map[[2]float64][]typeset.Fragment{}, warned: map[string]bool{},
 	}
 	sheets := append([]string(nil), opts.Sheets...)
 	count := 0
@@ -296,10 +296,10 @@ func (d *Document) Size() Size { return d.size }
 
 // Warnings returns what the drawing holds that is not drawn as the source
 // means it, in the order met. The slice is a copy.
-func (d *Document) Warnings() []compose.Warning {
+func (d *Document) Warnings() []typeset.Warning {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return append([]compose.Warning(nil), d.warns...)
+	return append([]typeset.Warning(nil), d.warns...)
 }
 
 // defaultViewport returns the viewport, in CSS pixels, the drawing takes
@@ -337,7 +337,7 @@ const ptPerPx = 0.75
 // [MaxGroupDepth]. The fragments may be shared between calls: the caller
 // copies one before changing it. An empty viewport, or one whose content
 // cannot be drawn, yields nil.
-func (d *Document) Draw(ctx context.Context, r compose.Rect) []compose.Fragment {
+func (d *Document) Draw(ctx context.Context, r typeset.Rect) []typeset.Fragment {
 	if d.disabled || !numeric.PositiveFinite(r.Width) || !numeric.PositiveFinite(r.Height) || !numeric.Finite(r.X) || !numeric.Finite(r.Y) {
 		return nil
 	}
@@ -365,11 +365,11 @@ func (d *Document) Draw(ctx context.Context, r compose.Rect) []compose.Fragment 
 	}
 	clip := transformOps(rectOps(0, 0, w, h), inv)
 	if d.background.A > 0 {
-		content = append([]compose.Fragment{&compose.Path{Ops: clip, Fill: &compose.Fill{Color: d.background}}}, content...)
+		content = append([]typeset.Fragment{&typeset.Path{Ops: clip, Fill: &typeset.Fill{Color: d.background}}}, content...)
 	}
-	return []compose.Fragment{&compose.Group{
+	return []typeset.Fragment{&typeset.Group{
 		Transform: mul(mul(translate(r.X, r.Y), scale(ptPerPx, ptPerPx)), m),
-		Clip:      &compose.Path{Ops: clip, Fill: &compose.Fill{}},
+		Clip:      &typeset.Path{Ops: clip, Fill: &typeset.Fill{}},
 		Opacity:   1,
 		Content:   content,
 	}}
@@ -377,13 +377,13 @@ func (d *Document) Draw(ctx context.Context, r compose.Rect) []compose.Fragment 
 
 // MaxGroupDepth is the deepest group nesting [Document.Draw] returns, its
 // outer group included: a caller nesting the drawing under its own groups
-// keeps the total within the composition model's bound.
+// keeps the total within the typeset model's bound.
 const MaxGroupDepth = maxGroupNesting + 2
 
 // render returns the drawing's content for a viewport of w by h CSS
 // pixels, in user units, from the cache when the content does not depend
 // on the viewport's size.
-func (d *Document) render(ctx context.Context, w, h float64) ([]compose.Fragment, error) {
+func (d *Document) render(ctx context.Context, w, h float64) ([]typeset.Fragment, error) {
 	key := [2]float64{w, h}
 	vb := d.viewBox
 	if vb.ok {
@@ -420,7 +420,7 @@ func (d *Document) warn(code, msg string) {
 		return
 	}
 	d.warned[msg] = true
-	d.warns = append(d.warns, compose.Warning{Code: code, Message: msg})
+	d.warns = append(d.warns, typeset.Warning{Code: code, Message: msg})
 }
 
 // attrOf returns the value of n's attribute key with no namespace.
@@ -455,12 +455,12 @@ func href(n *html.Node) string {
 }
 
 // rectOps returns the path of the rectangle at (x, y) of size w by h.
-func rectOps(x, y, w, h float64) []compose.PathOp {
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{{X: x, Y: y}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: x + w, Y: y}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: x + w, Y: y + h}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: x, Y: y + h}}},
-		{Kind: compose.ClosePath},
+func rectOps(x, y, w, h float64) []typeset.PathOp {
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x, Y: y}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x + w, Y: y}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x + w, Y: y + h}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x, Y: y + h}}},
+		{Kind: typeset.ClosePath},
 	}
 }

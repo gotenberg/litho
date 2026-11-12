@@ -9,11 +9,11 @@ import (
 
 	dom "golang.org/x/net/html"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/svg"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // errNestedSVG refuses an SVG image an SVG image's image element names:
@@ -28,26 +28,26 @@ type svgState struct {
 	fonts *text.Fonts
 
 	mu    sync.Mutex
-	warns []compose.Warning
+	warns []typeset.Warning
 }
 
 // addWarnings records the warnings of a drawing, the one at u.
-func (s *svgState) addWarnings(u string, ws []compose.Warning) {
+func (s *svgState) addWarnings(u string, ws []typeset.Warning) {
 	if len(ws) == 0 {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, w := range ws {
-		s.warns = append(s.warns, compose.Warning{Code: w.Code, Message: fmt.Sprintf("in the SVG image %s: %s", displayURL(u), w.Message)})
+		s.warns = append(s.warns, typeset.Warning{Code: w.Code, Message: fmt.Sprintf("in the SVG image %s: %s", displayURL(u), w.Message)})
 	}
 }
 
 // warnings returns the recorded warnings.
-func (s *svgState) warnings() []compose.Warning {
+func (s *svgState) warnings() []typeset.Warning {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]compose.Warning(nil), s.warns...)
+	return append([]typeset.Warning(nil), s.warns...)
 }
 
 // svgCtxKey marks a context that is decoding an SVG picture.
@@ -123,7 +123,7 @@ func vectorPicture(doc *svg.Document) *layout.Picture {
 	}
 	if s.HasWidth && s.HasHeight && (s.Width <= 0 || s.Height <= 0) {
 		// A drawing of zero size keeps its box and paints nothing.
-		pic.Vector = func(context.Context, compose.Rect) []compose.Fragment { return nil }
+		pic.Vector = func(context.Context, typeset.Rect) []typeset.Fragment { return nil }
 	}
 	return pic
 }
@@ -154,7 +154,7 @@ func (b *builder) inlineSVG(ctx context.Context, n *dom.Node, st *css.Style) []*
 			return b.res.svgRaster(ctx, resolveRef(b.scan.resourceBase, href))
 		},
 		Context: svg.Context{
-			Color:    compose.Color{R: st.Color.R, G: st.Color.G, B: st.Color.B, A: st.Color.A},
+			Color:    typeset.Color{R: st.Color.R, G: st.Color.G, B: st.Color.B, A: st.Color.A},
 			Families: st.FontFamilies,
 			FontSize: st.FontSize / css.Pt,
 			Weight:   st.FontWeight,
@@ -165,7 +165,7 @@ func (b *builder) inlineSVG(ctx context.Context, n *dom.Node, st *css.Style) []*
 	})
 	if err != nil {
 		if ctx.Err() == nil {
-			b.warnings = append(b.warnings, compose.Warning{Code: CodeResourceFailed, Message: fmt.Sprintf("an inline SVG was left out: %v", err)})
+			b.warnings = append(b.warnings, typeset.Warning{Code: CodeResourceFailed, Message: fmt.Sprintf("an inline SVG was left out: %v", err)})
 		}
 		return nil
 	}

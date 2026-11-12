@@ -4,8 +4,8 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // pageMono is the page of a display item a column cut moved: a line or a
@@ -138,9 +138,9 @@ func (e *engine) cutColumns(g *ditem, b *box, s *colSet, oy float64) []*ditem {
 	for _, i := range slices.Sorted(maps.Keys(per)) {
 		items := per[i]
 		dx, dy := b.mc.shiftOf(s, i)
-		var m *compose.Matrix
+		var m *typeset.Matrix
 		if dx != 0 || dy != 0 {
-			m = &compose.Matrix{A: 1, D: 1, E: dx, F: dy}
+			m = &typeset.Matrix{A: 1, D: 1, E: dx, F: dy}
 		}
 		y0, y1 := s.band(b, i)
 		y0, y1 = y0+oy+dy, y1+oy+dy
@@ -150,7 +150,7 @@ func (e *engine) cutColumns(g *ditem, b *box, s *colSet, oy float64) []*ditem {
 		if i == len(s.frags)-1 {
 			y1 = farEdge
 		}
-		band := &compose.Path{Ops: rectOps(compose.Rect{X: -farEdge, Y: y0, Width: 2 * farEdge, Height: y1 - y0}), Fill: &compose.Fill{}}
+		band := &typeset.Path{Ops: rectOps(typeset.Rect{X: -farEdge, Y: y0, Width: 2 * farEdge, Height: y1 - y0}), Fill: &typeset.Fill{}}
 		for j := 0; j < len(items); {
 			k := j + 1
 			for k < len(items) && items[k].clip == items[j].clip {
@@ -273,7 +273,7 @@ func cutLinks(links []pendingLink, b *box, s *colSet, oy float64) []pendingLink 
 				continue
 			}
 			dx, dy := b.mc.shiftOf(s, i)
-			out = append(out, pendingLink{lk: l.lk, rect: compose.Rect{X: r.X + dx, Y: y0 + dy, Width: r.Width, Height: y1 - y0}})
+			out = append(out, pendingLink{lk: l.lk, rect: typeset.Rect{X: r.X + dx, Y: y0 + dy, Width: r.Width, Height: y1 - y0}})
 		}
 	}
 	return out
@@ -299,7 +299,7 @@ func (p *painter) columnRules(b *box) {
 		for _, r := range s.rows {
 			for j := 0; j+1 < r.cols; j++ {
 				mid := d.ruleX(j)
-				rect := compose.Rect{X: b.contentX() + mid - w/2 + p.dx, Y: b.y + r.top + p.dy, Width: w, Height: r.used}
+				rect := typeset.Rect{X: b.contentX() + mid - w/2 + p.dx, Y: b.y + r.top + p.dy, Width: w, Height: r.used}
 				if rect.Height <= 0 {
 					continue
 				}
@@ -353,10 +353,10 @@ func moveItem(it *ditem, dy float64, depth int) *ditem {
 // one per column of the column set being painted it crosses, each with
 // all its edges (CSS Fragmentation 3, 5.4); pages slice it, as Chromium
 // prints it.
-func (p *painter) fragments(b *box) []compose.Rect {
+func (p *painter) fragments(b *box) []typeset.Rect {
 	r := p.borderRect(b)
 	if !clones(b.st) || b.parent == nil {
-		return []compose.Rect{r}
+		return []typeset.Rect{r}
 	}
 	var top func(i int) (float64, float64)
 	var at func(y float64) int
@@ -373,18 +373,18 @@ func (p *painter) fragments(b *box) []compose.Rect {
 		if b.st.BoxDecorationBreak == css.DecorationCloneAll {
 			return p.pageFragments(r)
 		}
-		return []compose.Rect{r}
+		return []typeset.Rect{r}
 	}
 	i0, i1 := at(r.Y-p.dy+eps), at(r.Y+r.Height-p.dy-eps)
 	if i1 <= i0 || i1-i0 > maxColumns {
-		return []compose.Rect{r}
+		return []typeset.Rect{r}
 	}
-	out := make([]compose.Rect, 0, i1-i0+1)
+	out := make([]typeset.Rect, 0, i1-i0+1)
 	for i := i0; i <= i1; i++ {
 		y0, y1 := top(i)
 		y0, y1 = max(y0+p.dy, r.Y), min(y1+p.dy, r.Y+r.Height)
 		if y1 > y0 {
-			out = append(out, compose.Rect{X: r.X, Y: y0, Width: r.Width, Height: y1 - y0})
+			out = append(out, typeset.Rect{X: r.X, Y: y0, Width: r.Width, Height: y1 - y0})
 		}
 	}
 	return out

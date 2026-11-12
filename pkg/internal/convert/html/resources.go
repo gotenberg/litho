@@ -22,10 +22,10 @@ import (
 	_ "golang.org/x/image/tiff" // registers TIFF with image.Decode
 	_ "golang.org/x/image/webp" // registers WebP with image.Decode
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // rootPrefix is the path every URL of the document resolves under: the
@@ -294,7 +294,7 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 		pic.Width, pic.Height = pic.Height, pic.Width
 	}
 	if format == "jpeg" && orient == 1 && dctModel(cfg.ColorModel) {
-		src, err := compose.JPEGImage(ctx, data)
+		src, err := typeset.JPEGImage(ctx, data)
 		if err != nil {
 			return nil, fmt.Errorf("reading the JPEG image: %w", err)
 		}
@@ -321,7 +321,7 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 		mem.Release(charged)
 		return nil, err
 	}
-	src, err := compose.EncodeImage(ctx, oriented)
+	src, err := typeset.EncodeImage(ctx, oriented)
 	if err != nil {
 		return nil, fmt.Errorf("encoding the %s image: %w", format, err)
 	}

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // slide reads the slide part, the n-th of the show, with its layout and
@@ -94,21 +94,21 @@ func (r *reader) slideWarnings(part string, root *ooxml.Element) {
 //
 //   - libreoffice/pptx: sd/tdf123684's text box filled with the slide's picture
 //     background prints invisible over it.
-func (r *reader) slideWindow(bg *layout.Picture, box compose.Rect) *layout.Picture {
+func (r *reader) slideWindow(bg *layout.Picture, box typeset.Rect) *layout.Picture {
 	w, h := r.slideW, r.slideH
 	if bg == nil || box.Width <= 0 || box.Height <= 0 || w <= 0 || h <= 0 {
 		return bg
 	}
-	return &layout.Picture{Width: box.Width, Height: box.Height, NoRatio: true, Vector: func(ctx context.Context, area compose.Rect) []compose.Fragment {
+	return &layout.Picture{Width: box.Width, Height: box.Height, NoRatio: true, Vector: func(ctx context.Context, area typeset.Rect) []typeset.Fragment {
 		sx, sy := area.Width/box.Width, area.Height/box.Height
-		full := compose.Rect{X: area.X - box.X*sx, Y: area.Y - box.Y*sy, Width: w * sx, Height: h * sy}
-		var content []compose.Fragment
+		full := typeset.Rect{X: area.X - box.X*sx, Y: area.Y - box.Y*sy, Width: w * sx, Height: h * sy}
+		var content []typeset.Fragment
 		if bg.Vector != nil {
 			content = bg.Vector(ctx, full)
 		} else {
-			content = []compose.Fragment{&compose.Image{Rect: full, Source: bg.Source}}
+			content = []typeset.Fragment{&typeset.Image{Rect: full, Source: bg.Source}}
 		}
-		return []compose.Fragment{&compose.Group{Clip: &compose.Path{Ops: shape.RectOps(area)}, Content: content}}
+		return []typeset.Fragment{&typeset.Group{Clip: &typeset.Path{Ops: shape.RectOps(area)}, Content: content}}
 	}}
 }
 

@@ -3,8 +3,8 @@ package layout
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // markLine is the width of a page mark's line: one CSS pixel, as
@@ -15,7 +15,7 @@ const markLine = css.Pt
 // of pb, inside the bleed, and records the page's trim and bleed boxes
 // (CSS Page 3, 7.2; ISO 32000-1, 14.11.2). A page without a bleed is left
 // as it is.
-func trim(pg *compose.Page, pb PageBox, from int) {
+func trim(pg *typeset.Page, pb PageBox, from int) {
 	b := pb.Bleed
 	if b <= 0 {
 		return
@@ -25,11 +25,11 @@ func trim(pg *compose.Page, pb PageBox, from int) {
 		pg.Links[i].Rect.Y += b
 	}
 	if from < len(pg.Content) {
-		inner := append([]compose.Fragment(nil), pg.Content[from:]...)
-		pg.Content = append(pg.Content[:from], &compose.Group{Transform: compose.Matrix{A: 1, D: 1, E: b, F: b}, Opacity: 1, Content: inner})
+		inner := append([]typeset.Fragment(nil), pg.Content[from:]...)
+		pg.Content = append(pg.Content[:from], &typeset.Group{Transform: typeset.Matrix{A: 1, D: 1, E: b, F: b}, Opacity: 1, Content: inner})
 	}
-	pg.TrimBox = &compose.Rect{X: b, Y: b, Width: pb.Width, Height: pb.Height}
-	pg.BleedBox = &compose.Rect{Width: pg.Width, Height: pg.Height}
+	pg.TrimBox = &typeset.Rect{X: b, Y: b, Width: pb.Width, Height: pb.Height}
+	pg.BleedBox = &typeset.Rect{Width: pg.Width, Height: pg.Height}
 }
 
 // paintMarks paints the page marks of pb on the sheet pg, over the page
@@ -41,18 +41,18 @@ func trim(pg *compose.Page, pb PageBox, from int) {
 // from the edge. The straight strokes are filled rectangles covering the
 // CSS pixels the stroke touches, so that a line one pixel wide on a
 // fractional position prints whole rather than as two half-tone halves.
-func (e *engine) paintMarks(pg *compose.Page, pb PageBox) {
+func (e *engine) paintMarks(pg *typeset.Page, pb PageBox) {
 	b := pb.Bleed
 	if b <= 0 || pb.Marks == 0 {
 		return
 	}
 	w, h := pg.Width, pg.Height
 	hb := b / 2
-	var rects []compose.Rect
+	var rects []typeset.Rect
 	// line adds the stroke of width lw from (x0, y0) to (x1, y1), one of
 	// the two coordinates the same.
 	line := func(x0, y0, x1, y1, lw float64) {
-		r := compose.Rect{X: min(x0, x1), Y: min(y0, y1), Width: math.Abs(x1 - x0), Height: math.Abs(y1 - y0)}
+		r := typeset.Rect{X: min(x0, x1), Y: min(y0, y1), Width: math.Abs(x1 - x0), Height: math.Abs(y1 - y0)}
 		if r.Width == 0 {
 			r.X, r.Width = r.X-lw/2, lw
 		} else {
@@ -60,9 +60,9 @@ func (e *engine) paintMarks(pg *compose.Page, pb PageBox) {
 		}
 		rects = append(rects, snapOut(r))
 	}
-	var circles []compose.Fragment
+	var circles []typeset.Fragment
 	circle := func(cx, cy, r, lw float64) {
-		circles = append(circles, &compose.Path{Ops: circleOps(cx, cy, r), Stroke: &compose.Stroke{Color: compose.Black, Width: lw}})
+		circles = append(circles, &typeset.Path{Ops: circleOps(cx, cy, r), Stroke: &typeset.Stroke{Color: typeset.Black, Width: lw}})
 	}
 	if pb.Marks&css.MarksCrop != 0 {
 		for _, c := range [4][2]float64{{0, 0}, {w, 0}, {0, h}, {w, h}} {
@@ -95,35 +95,35 @@ func (e *engine) paintMarks(pg *compose.Page, pb PageBox) {
 		}
 	}
 	for _, r := range rects {
-		pg.Content = append(pg.Content, &compose.Path{Ops: rectOps(r), Fill: &compose.Fill{Color: compose.Black}})
+		pg.Content = append(pg.Content, &typeset.Path{Ops: rectOps(r), Fill: &typeset.Fill{Color: typeset.Black}})
 	}
 	pg.Content = append(pg.Content, circles...)
 }
 
 // snapOut grows r to the CSS pixel grid around it.
-func snapOut(r compose.Rect) compose.Rect {
+func snapOut(r typeset.Rect) typeset.Rect {
 	const slack = 1e-6
 	x0 := math.Floor(r.X/css.Pt+slack) * css.Pt
 	y0 := math.Floor(r.Y/css.Pt+slack) * css.Pt
 	x1 := math.Ceil((r.X+r.Width)/css.Pt-slack) * css.Pt
 	y1 := math.Ceil((r.Y+r.Height)/css.Pt-slack) * css.Pt
-	return compose.Rect{X: x0, Y: y0, Width: max(x1-x0, css.Pt), Height: max(y1-y0, css.Pt)}
+	return typeset.Rect{X: x0, Y: y0, Width: max(x1-x0, css.Pt), Height: max(y1-y0, css.Pt)}
 }
 
 // circleOps returns the path of the circle of radius r centred on (cx,
 // cy), four cubic Béziers.
-func circleOps(cx, cy, r float64) []compose.PathOp {
+func circleOps(cx, cy, r float64) []typeset.PathOp {
 	k := kappa * r
-	pt := func(x, y float64) compose.Point { return compose.Point{X: cx + x, Y: cy + y} }
-	curve := func(a, b, c compose.Point) compose.PathOp {
-		return compose.PathOp{Kind: compose.CurveTo, P: [3]compose.Point{a, b, c}}
+	pt := func(x, y float64) typeset.Point { return typeset.Point{X: cx + x, Y: cy + y} }
+	curve := func(a, b, c typeset.Point) typeset.PathOp {
+		return typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{a, b, c}}
 	}
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{pt(r, 0)}},
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{pt(r, 0)}},
 		curve(pt(r, k), pt(k, r), pt(0, r)),
 		curve(pt(-k, r), pt(-r, k), pt(-r, 0)),
 		curve(pt(-r, -k), pt(-k, -r), pt(0, -r)),
 		curve(pt(k, -r), pt(r, -k), pt(r, 0)),
-		{Kind: compose.ClosePath},
+		{Kind: typeset.ClosePath},
 	}
 }

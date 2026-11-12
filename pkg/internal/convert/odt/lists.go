@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // listCounter numbers the items of one list and the lists that continue
@@ -138,47 +138,47 @@ const maxLists = 1 << 16
 // unordered, a number format Table 347 has no name for is ordered, a
 // level without a number whose prefix or suffix still prints is
 // unordered, and a level without a label is none.
-func listNumbering(ls *odf.ListStyle, level int) compose.ListNumbering {
+func listNumbering(ls *odf.ListStyle, level int) typeset.ListNumbering {
 	if ls == nil || level < 1 || level > odf.MaxListLevels || ls.Levels[level-1] == nil {
-		return compose.NumberingNone
+		return typeset.NumberingNone
 	}
 	lvl := ls.Levels[level-1]
 	switch lvl.Kind {
 	case "bullet":
 		switch lvl.El.A(odf.NSText, "bullet-char") {
 		case "", "\u2022", "\u25cf":
-			return compose.NumberingDisc
+			return typeset.NumberingDisc
 		case "\u25cb", "\u25e6":
-			return compose.NumberingCircle
+			return typeset.NumberingCircle
 		case "\u25a0", "\u25aa":
-			return compose.NumberingSquare
+			return typeset.NumberingSquare
 		}
-		return compose.NumberingUnordered
+		return typeset.NumberingUnordered
 	case "image":
-		return compose.NumberingUnordered
+		return typeset.NumberingUnordered
 	}
 	switch lvl.El.A(odf.NSStyle, "num-format") {
 	case "1":
-		return compose.NumberingDecimal
+		return typeset.NumberingDecimal
 	case "I":
-		return compose.NumberingUpperRoman
+		return typeset.NumberingUpperRoman
 	case "i":
-		return compose.NumberingLowerRoman
+		return typeset.NumberingLowerRoman
 	case "A":
-		return compose.NumberingUpperAlpha
+		return typeset.NumberingUpperAlpha
 	case "a":
-		return compose.NumberingLowerAlpha
+		return typeset.NumberingLowerAlpha
 	case "":
 		if lvl.El.A(odf.NSStyle, "num-prefix") != "" || lvl.El.A(odf.NSStyle, "num-suffix") != "" {
 			// A level without a number still prints its prefix and
 			// suffix as a label: a Lbl, which ISO 14289-2, 8.2.5.25 asks
 			// a numbering other than None of. It marks the items without
 			// ordering them.
-			return compose.NumberingUnordered
+			return typeset.NumberingUnordered
 		}
-		return compose.NumberingNone
+		return typeset.NumberingNone
 	}
-	return compose.NumberingOrdered
+	return typeset.NumberingOrdered
 }
 
 // numberedParagraph builds a text:numbered-paragraph (ODF 1.3, Part 3,

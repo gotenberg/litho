@@ -9,24 +9,24 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
-// Transforms become composition groups rather than being applied to the
+// Transforms become typeset groups rather than being applied to the
 // points: a group transforms a gradient, a dash pattern, a stroke's width
 // and a glyph run exactly as the SVG user space does (SVG 1.1, 7.4), which
 // moving the points alone would not. Consecutive shapes under one
 // transform share one group, and a group opened for opacity or a clip
 // carries the transform in force, so the nesting stays shallow.
 
-// container collects the fragments of one composition group.
+// container collects the fragments of one typeset group.
 type container struct {
-	out []compose.Fragment
+	out []typeset.Fragment
 	// last is the transform group appended last, lastM its transform, so
 	// consecutive shapes under one transform share it.
-	last  *compose.Group
-	lastM compose.Matrix
+	last  *typeset.Group
+	lastM typeset.Matrix
 }
 
 // sink is where an element paints: a container, the transform from the
@@ -34,13 +34,13 @@ type container struct {
 // above it and the opacity folded into its colours.
 type sink struct {
 	c       *container
-	pending compose.Matrix
+	pending typeset.Matrix
 	nest    int
 	alpha   float64
 }
 
 // with returns the sink of a child whose transform is local.
-func (s sink) with(local compose.Matrix) sink {
+func (s sink) with(local typeset.Matrix) sink {
 	s.pending = mul(s.pending, local)
 	return s
 }
@@ -90,7 +90,7 @@ func (r *renderer) length(n *html.Node, key string, st *style, a axis, def float
 }
 
 // root draws the root element and returns its fragments in user units.
-func (r *renderer) root() []compose.Fragment {
+func (r *renderer) root() []typeset.Fragment {
 	c := &container{}
 	st := r.d.computeStyle(r.d.root, initialStyle(r.d.opts.Context))
 	if !st.displayed {
@@ -242,7 +242,7 @@ func passes(n *html.Node) bool {
 	return true
 }
 
-// open starts the composition group of an element styled st, for its
+// open starts the typeset group of an element styled st, for its
 // opacity and its clip-path, and returns the sink of its content and the
 // function that closes the group. Without opacity or clip it opens
 // nothing. The bounding box, for an objectBoundingBox clip, comes from box
@@ -271,8 +271,8 @@ func (r *renderer) open(s sink, n *html.Node, st *style, box *bbox) (sink, func(
 	if op >= 1 && len(regions) == 0 {
 		return s, func() {}
 	}
-	var first *compose.Path
-	var clips []*compose.Path
+	var first *typeset.Path
+	var clips []*typeset.Path
 	if len(regions) > 0 {
 		first, clips = regions[0][0], regions[0][1:]
 	}
@@ -310,7 +310,7 @@ func (r *renderer) openUnion(s sink, op float64, regions []clipRegion) (sink, fu
 		if len(c.out) == 0 {
 			return
 		}
-		var out []compose.Fragment
+		var out []typeset.Fragment
 		for _, reg := range regions {
 			content := c.out
 			for i, r := range slices.Backward(reg) {
@@ -318,30 +318,30 @@ func (r *renderer) openUnion(s sink, op float64, regions []clipRegion) (sink, fu
 				if i == 0 && op >= 1 {
 					m = s.pending
 				}
-				content = []compose.Fragment{&compose.Group{Transform: m, Clip: r, Opacity: 1, Content: content}}
+				content = []typeset.Fragment{&typeset.Group{Transform: m, Clip: r, Opacity: 1, Content: content}}
 			}
 			out = append(out, content...)
 		}
 		if op < 1 {
-			out = []compose.Fragment{&compose.Group{Transform: s.pending, Opacity: op, Content: out}}
+			out = []typeset.Fragment{&typeset.Group{Transform: s.pending, Opacity: op, Content: out}}
 		}
 		s.c.out = append(s.c.out, out...)
 		s.c.last = nil
 	}, true
 }
 
-// openGroup opens a composition group of opacity op clipped to clip, in
+// openGroup opens a typeset group of opacity op clipped to clip, in
 // the coordinates of the sink's element, and returns the sink of its
 // content and the function that closes it. Past the nesting cap it opens
 // nothing: the opacity folds into the colours and the clip is dropped,
 // with a warning.
-func (r *renderer) openGroup(s sink, op float64, clip *compose.Path) (sink, func()) {
+func (r *renderer) openGroup(s sink, op float64, clip *typeset.Path) (sink, func()) {
 	if s.nest >= maxGroupNesting {
 		r.d.warn("svg-limit", fmt.Sprintf("opacity and clipping nested deeper than %d levels are approximated", maxGroupNesting))
 		s.alpha *= op
 		return s, func() {}
 	}
-	g := &compose.Group{Transform: s.pending, Clip: clip, Opacity: op}
+	g := &typeset.Group{Transform: s.pending, Clip: clip, Opacity: op}
 	c := &container{}
 	inner := sink{c: c, pending: identity, nest: s.nest + 1, alpha: s.alpha}
 	return inner, func() {
@@ -357,7 +357,7 @@ func (r *renderer) openGroup(s sink, op float64, clip *compose.Path) (sink, func
 // emit adds a leaf fragment to the sink in its container's coordinates:
 // moved there exactly when the transform in force allows (see
 // [transformLeaf]), else under a group for that transform.
-func (r *renderer) emit(s sink, f compose.Fragment) {
+func (r *renderer) emit(s sink, f typeset.Fragment) {
 	if r.frags >= maxFragments {
 		r.d.warn("svg-limit", fmt.Sprintf("the drawing produced more than %d fragments; the rest were left out", maxFragments))
 		r.full = true
@@ -372,11 +372,11 @@ func (r *renderer) emit(s sink, f compose.Fragment) {
 		if t, ok := transformLeaf(f, s.pending); ok {
 			f = t
 		} else {
-			if c.last != nil && c.lastM == s.pending && len(c.out) > 0 && c.out[len(c.out)-1] == compose.Fragment(c.last) {
+			if c.last != nil && c.lastM == s.pending && len(c.out) > 0 && c.out[len(c.out)-1] == typeset.Fragment(c.last) {
 				c.last.Content = append(c.last.Content, f)
 				return
 			}
-			g := &compose.Group{Transform: s.pending, Opacity: 1, Content: []compose.Fragment{f}}
+			g := &typeset.Group{Transform: s.pending, Opacity: 1, Content: []typeset.Fragment{f}}
 			c.out = append(c.out, g)
 			c.last, c.lastM = g, s.pending
 			return
@@ -393,13 +393,13 @@ func (r *renderer) emit(s sink, f compose.Fragment) {
 // scale, translation); an image's rectangle under a positive axis-aligned
 // scale; a glyph run under a positive uniform scale without rotation; a
 // group absorbs m into its own transform. It reports false otherwise.
-func transformLeaf(f compose.Fragment, m compose.Matrix) (compose.Fragment, bool) {
+func transformLeaf(f typeset.Fragment, m typeset.Matrix) (typeset.Fragment, bool) {
 	switch v := f.(type) {
-	case *compose.Group:
+	case *typeset.Group:
 		g := *v
 		g.Transform = mul(m, v.Transform)
 		return &g, true
-	case *compose.Path:
+	case *typeset.Path:
 		p := *v
 		if v.Stroke != nil {
 			k, ok := similarity(m)
@@ -426,14 +426,14 @@ func transformLeaf(f compose.Fragment, m compose.Matrix) (compose.Fragment, bool
 		}
 		p.Ops = transformOps(v.Ops, m)
 		return &p, true
-	case *compose.Image:
+	case *typeset.Image:
 		if m.B != 0 || m.C != 0 || !numeric.Positive(m.A) || !numeric.Positive(m.D) {
 			return nil, false
 		}
 		im := *v
-		im.Rect = compose.Rect{X: m.A*v.Rect.X + m.E, Y: m.D*v.Rect.Y + m.F, Width: m.A * v.Rect.Width, Height: m.D * v.Rect.Height}
+		im.Rect = typeset.Rect{X: m.A*v.Rect.X + m.E, Y: m.D*v.Rect.Y + m.F, Width: m.A * v.Rect.Width, Height: m.D * v.Rect.Height}
 		return &im, true
-	case *compose.Text:
+	case *typeset.Text:
 		if m.B != 0 || m.C != 0 || m.A != m.D || !numeric.Positive(m.A) || v.Size*m.A > maxFontSize {
 			return nil, false
 		}
@@ -442,7 +442,7 @@ func transformLeaf(f compose.Fragment, m compose.Matrix) (compose.Fragment, bool
 		t.Size *= k
 		t.Stroke *= k
 		t.Origin = apply(m, v.Origin)
-		t.Glyphs = make([]compose.Glyph, len(v.Glyphs))
+		t.Glyphs = make([]typeset.Glyph, len(v.Glyphs))
 		for i, g := range v.Glyphs {
 			g.X *= k
 			g.Y *= k
@@ -455,7 +455,7 @@ func transformLeaf(f compose.Fragment, m compose.Matrix) (compose.Fragment, bool
 
 // similarity reports whether m is a similarity, a rotation or reflection
 // with a uniform scale and a translation, and its scale factor.
-func similarity(m compose.Matrix) (float64, bool) {
+func similarity(m typeset.Matrix) (float64, bool) {
 	const eps = 1e-9
 	k := math.Hypot(m.A, m.B)
 	if !numeric.Positive(k) {
@@ -492,9 +492,9 @@ func (r *renderer) viewport(n *html.Node, st *style, s sink, depth int, x, y, w,
 			return
 		}
 	}
-	var clip *compose.Path
+	var clip *typeset.Path
 	if !cs.overflowOK {
-		clip = &compose.Path{Ops: rectOps(x, y, w, h), Fill: &compose.Fill{}}
+		clip = &typeset.Path{Ops: rectOps(x, y, w, h), Fill: &typeset.Fill{}}
 	}
 	inner, done := r.openClip(s, n, st, clip)
 	inner = inner.with(translate(x, y))
@@ -518,7 +518,7 @@ func (r *renderer) viewport(n *html.Node, st *style, s sink, depth int, x, y, w,
 // openClip opens the group of an element that clips to a viewport, with
 // the element's own opacity and clip-path: the viewport's clip goes on an
 // inner group when both are present.
-func (r *renderer) openClip(s sink, n *html.Node, st *style, clip *compose.Path) (sink, func()) {
+func (r *renderer) openClip(s sink, n *html.Node, st *style, clip *typeset.Path) (sink, func()) {
 	outer, done := r.open(s, n, st, nil)
 	if clip == nil || outer.alpha <= 0 {
 		return outer, done
@@ -583,9 +583,9 @@ func (r *renderer) symbol(sym *html.Node, st *style, s sink, depth int, w, h flo
 	if !numeric.Positive(w) || !numeric.Positive(h) {
 		return
 	}
-	var clip *compose.Path
+	var clip *typeset.Path
 	if !st.overflowOK {
-		clip = &compose.Path{Ops: rectOps(0, 0, w, h), Fill: &compose.Fill{}}
+		clip = &typeset.Path{Ops: rectOps(0, 0, w, h), Fill: &typeset.Fill{}}
 	}
 	inner, done := r.openClip(s, sym, st, clip)
 	ovw, ovh := r.vw, r.vh

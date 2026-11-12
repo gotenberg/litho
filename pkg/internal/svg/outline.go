@@ -7,15 +7,15 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/stroke"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
 
-// The composition model strokes a path in one flat colour and clips with
+// The typeset model strokes a path in one flat colour and clips with
 // paths alone. What it cannot say directly, a gradient stroke, a text
 // stroke unlike the text's fill and text in a clip path, becomes a filled
 // outline here: the stroke's outline, or the glyphs' outlines.
@@ -39,7 +39,7 @@ const maxOutlineGlyphs = 20_000
 // strokeOutline returns the outline of ops stroked with s (SVG 1.1, 11.4),
 // to be filled with the nonzero rule, in ops' coordinates, nil when the
 // stroke paints nothing or the stroker refuses it.
-func strokeOutline(ops []compose.PathOp, s *compose.Stroke) []compose.PathOp {
+func strokeOutline(ops []typeset.PathOp, s *typeset.Stroke) []typeset.PathOp {
 	b := opsBBox(ops)
 	diag := math.Hypot(b.x1-b.x0, b.y1-b.y0) + s.Width
 	if !b.ok || !numeric.PositiveFinite(diag) {
@@ -60,35 +60,35 @@ func strokeOutline(ops []compose.PathOp, s *compose.Stroke) []compose.PathOp {
 	return fromGeom(out, geom.Identity)
 }
 
-// toGeom converts composition path operators to a render path.
-func toGeom(ops []compose.PathOp) geom.Path {
+// toGeom converts typeset path operators to a render path.
+func toGeom(ops []typeset.PathOp) geom.Path {
 	var p geom.Path
-	pt := func(q compose.Point) geom.Point { return geom.Point{X: q.X, Y: q.Y} }
+	pt := func(q typeset.Point) geom.Point { return geom.Point{X: q.X, Y: q.Y} }
 	for _, op := range ops {
 		switch op.Kind {
-		case compose.MoveTo:
+		case typeset.MoveTo:
 			p.MoveTo(pt(op.P[0]))
-		case compose.LineTo:
+		case typeset.LineTo:
 			p.LineTo(pt(op.P[0]))
-		case compose.CurveTo:
+		case typeset.CurveTo:
 			p.CubicTo(pt(op.P[0]), pt(op.P[1]), pt(op.P[2]))
-		case compose.ClosePath:
+		case typeset.ClosePath:
 			p.Close()
 		}
 	}
 	return p
 }
 
-// fromGeom converts a render path to composition path operators, each
+// fromGeom converts a render path to typeset path operators, each
 // point mapped through m. A path whose steps want more points than it
 // holds ends where they run out.
-func fromGeom(p geom.Path, m geom.Matrix) []compose.PathOp {
-	out := make([]compose.PathOp, 0, len(p.Ops))
+func fromGeom(p geom.Path, m geom.Matrix) []typeset.PathOp {
+	out := make([]typeset.PathOp, 0, len(p.Ops))
 	i := 0
-	pt := func() compose.Point {
+	pt := func() typeset.Point {
 		q := m.Apply(p.Pts[i])
 		i++
-		return compose.Point{X: q.X, Y: q.Y}
+		return typeset.Point{X: q.X, Y: q.Y}
 	}
 	for _, op := range p.Ops {
 		switch op {
@@ -96,20 +96,20 @@ func fromGeom(p geom.Path, m geom.Matrix) []compose.PathOp {
 			if i >= len(p.Pts) {
 				return out
 			}
-			k := compose.MoveTo
+			k := typeset.MoveTo
 			if op == geom.LineTo {
-				k = compose.LineTo
+				k = typeset.LineTo
 			}
-			out = append(out, compose.PathOp{Kind: k, P: [3]compose.Point{pt()}})
+			out = append(out, typeset.PathOp{Kind: k, P: [3]typeset.Point{pt()}})
 		case geom.CubicTo:
 			if i+3 > len(p.Pts) {
 				return out
 			}
 			a := pt()
 			b := pt()
-			out = append(out, compose.PathOp{Kind: compose.CurveTo, P: [3]compose.Point{a, b, pt()}})
+			out = append(out, typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{a, b, pt()}})
 		case geom.Close:
-			out = append(out, compose.PathOp{Kind: compose.ClosePath})
+			out = append(out, typeset.PathOp{Kind: typeset.ClosePath})
 		}
 	}
 	return out
@@ -169,7 +169,7 @@ func (f *outlineFont) glyph(ctx context.Context, gid int) (geom.Path, geom.Matri
 
 // outlineFace returns the parsed outlines of face, parsing it on first
 // use, nil when they cannot be read or the face cap is reached.
-func (r *renderer) outlineFace(face *compose.Face) *outlineFont {
+func (r *renderer) outlineFace(face *typeset.Face) *outlineFont {
 	if face == nil {
 		return nil
 	}
@@ -196,12 +196,12 @@ func (r *renderer) outlineFace(face *compose.Face) *outlineFont {
 // y downward, to be filled with the nonzero rule: what the glyphs paint,
 // slanted by the run's skew. The synthetic emboldening stroke is left
 // out.
-func (r *renderer) runOutline(t *compose.Text) []compose.PathOp {
+func (r *renderer) runOutline(t *typeset.Text) []typeset.PathOp {
 	f := r.outlineFace(t.Face)
 	if f == nil {
 		return nil
 	}
-	var out []compose.PathOp
+	var out []typeset.PathOp
 	for _, g := range t.Glyphs {
 		if r.glyphsOutlined >= maxOutlineGlyphs {
 			r.d.warn("svg-limit", fmt.Sprintf("the outlines of more than %d glyphs are not drawn", maxOutlineGlyphs))

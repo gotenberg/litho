@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // The caps of one spreadsheet.
@@ -93,7 +93,7 @@ type reader struct {
 	keepFormulas bool
 
 	warned   map[string]bool
-	warnings []compose.Warning
+	warnings []typeset.Warning
 	err      error
 	steps    int
 }
@@ -113,7 +113,7 @@ func (r *reader) warn(code, msg string) {
 		return
 	}
 	r.warned[code] = true
-	r.warnings = append(r.warnings, compose.Warning{Code: code, Message: msg})
+	r.warnings = append(r.warnings, typeset.Warning{Code: code, Message: msg})
 }
 
 // ctxCheckInterval is the steps between two checks of ctx: 4,096, a
@@ -200,8 +200,8 @@ func hidePrintless(sheets []*sheet.Sheet, noPrint []bool) {
 // metadata reads meta.xml's office:meta (ODF 1.3, Part 3, 4): the title,
 // the creator, the subject, else the description, the keywords, the
 // generator and the language; never a date.
-func (r *reader) metadata() compose.Metadata {
-	var m compose.Metadata
+func (r *reader) metadata() typeset.Metadata {
+	var m typeset.Metadata
 	meta := odf.Section(r.pkg.Meta, "meta")
 	if meta == nil {
 		return m

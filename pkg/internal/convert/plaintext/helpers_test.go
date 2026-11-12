@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/plaintext"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
@@ -60,7 +60,7 @@ func testFonts(t testing.TB) *text.Fonts {
 }
 
 // convert lays src out, failing the test on error.
-func convert(t *testing.T, f *text.Fonts, src string, opts plaintext.Options) *compose.Document {
+func convert(t *testing.T, f *text.Fonts, src string, opts plaintext.Options) *typeset.Document {
 	t.Helper()
 	doc, err := plaintext.Convert(context.Background(), strings.NewReader(src), f, opts)
 	if err != nil {
@@ -70,11 +70,11 @@ func convert(t *testing.T, f *text.Fonts, src string, opts plaintext.Options) *c
 }
 
 // write writes doc as PDF bytes.
-func write(t testing.TB, doc *compose.Document) []byte {
+func write(t testing.TB, doc *typeset.Document) []byte {
 	t.Helper()
 	var b bytes.Buffer
-	if err := compose.Write(context.Background(), doc, &b, compose.Options{}); err != nil {
-		t.Fatalf("compose.Write: %v", err)
+	if err := typeset.Write(context.Background(), doc, &b, typeset.Options{}); err != nil {
+		t.Fatalf("typeset.Write: %v", err)
 	}
 	return b.Bytes()
 }
@@ -92,11 +92,11 @@ func open(t testing.TB, data []byte) *pdf.Reader {
 
 // pageLines returns the text of each line of a page, in order: the runs that
 // share a baseline joined.
-func pageLines(p *compose.Page) []string {
+func pageLines(p *typeset.Page) []string {
 	var lines []string
 	last := -1.0
 	for _, f := range p.Content {
-		run, ok := f.(*compose.Text)
+		run, ok := f.(*typeset.Text)
 		if !ok {
 			continue
 		}
@@ -115,7 +115,7 @@ func pageLines(p *compose.Page) []string {
 }
 
 // paragraphs returns the P elements of doc's structure.
-func paragraphs(t *testing.T, doc *compose.Document) []*compose.StructElem {
+func paragraphs(t *testing.T, doc *typeset.Document) []*typeset.StructElem {
 	t.Helper()
 	if doc.Structure == nil || doc.Structure.Role != "Document" {
 		t.Fatalf("structure root %+v, want a Document element", doc.Structure)

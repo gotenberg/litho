@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // nsDecl declares the namespaces the test documents use.
@@ -83,7 +83,7 @@ func zipOf(t testing.TB, entries ...string) []byte {
 }
 
 // read reads data, failing the test on an error.
-func read(t testing.TB, data []byte) (*slides.Document, []compose.Warning) {
+func read(t testing.TB, data []byte) (*slides.Document, []typeset.Warning) {
 	t.Helper()
 	doc, w, err := Read(context.Background(), data, nil, "")
 	if err != nil {
@@ -111,12 +111,12 @@ func near(a, b float64) bool { return math.Abs(a-b) < 0.01 }
 
 // rect returns the rectangle of corner x, y and size w by h in
 // centimetres, in points.
-func rect(x, y, w, h float64) compose.Rect {
-	return compose.Rect{X: cm(x), Y: cm(y), Width: cm(w), Height: cm(h)}
+func rect(x, y, w, h float64) typeset.Rect {
+	return typeset.Rect{X: cm(x), Y: cm(y), Width: cm(w), Height: cm(h)}
 }
 
 // nearRect reports a and b within a hundredth of a point on every side.
-func nearRect(a, b compose.Rect) bool {
+func nearRect(a, b typeset.Rect) bool {
 	return near(a.X, b.X) && near(a.Y, b.Y) && near(a.Width, b.Width) && near(a.Height, b.Height)
 }
 
@@ -135,7 +135,7 @@ func nearAll(a, b []float64) bool {
 }
 
 // hasWarning reports a warning of code among w.
-func hasWarning(w []compose.Warning, code string) bool {
+func hasWarning(w []typeset.Warning, code string) bool {
 	for _, x := range w {
 		if x.Code == code {
 			return true

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // TestHandoutAreas_Impress locks the handout layouts to the slide
@@ -85,10 +85,10 @@ func TestHandoutAreas_Impress(t *testing.T) {
 		t.Run(fmt.Sprintf("%vx%v/%v/%vx%v/%d", c.page[0], c.page[1], c.margins, c.slide[0], c.slide[1], c.per), func(t *testing.T) {
 			m := [4]float64{css.Top: cm(c.margins[0]), css.Right: cm(c.margins[1]), css.Bottom: cm(c.margins[2]), css.Left: cm(c.margins[3])}
 			got, ruled := handoutAreas(cm(c.page[0]), cm(c.page[1]), m, cm(c.slide[0]), cm(c.slide[1]), c.per)
-			var want []compose.Rect
+			var want []typeset.Rect
 			for _, y := range c.ys {
 				for _, x := range c.xs {
-					want = append(want, compose.Rect{X: cm(x), Y: cm(y), Width: cm(c.w), Height: cm(c.h)})
+					want = append(want, typeset.Rect{X: cm(x), Y: cm(y), Width: cm(c.w), Height: cm(c.h)})
 				}
 			}
 			if len(got) != len(want) {
@@ -124,7 +124,7 @@ func TestHandoutAreas_Grid(t *testing.T) {
 				if len(areas) != per {
 					t.Fatalf("%d areas, want %d", len(areas), per)
 				}
-				inside := func(a compose.Rect) bool {
+				inside := func(a typeset.Rect) bool {
 					return a.X >= margins[css.Left] && a.Y >= margins[css.Top] && a.X+a.Width <= page[0]-margins[css.Right] && a.Y+a.Height <= page[1]-margins[css.Bottom]
 				}
 				for i, a := range areas {
@@ -179,14 +179,14 @@ func TestHandoutAreas_Grid(t *testing.T) {
 // TestNoteLines checks the lines ruled for notes: seven across the
 // rectangle, a seventh of its height apart, the last along its bottom.
 func TestNoteLines(t *testing.T) {
-	ops := noteLines(compose.Rect{X: 10, Y: 20, Width: 100, Height: 70})
+	ops := noteLines(typeset.Rect{X: 10, Y: 20, Width: 100, Height: 70})
 	if len(ops) != 14 {
 		t.Fatalf("%d path steps, want 14", len(ops))
 	}
 	for i := range 7 {
 		from, to := ops[2*i], ops[2*i+1]
 		y := 30 + 10*float64(i)
-		if from.Kind != compose.MoveTo || to.Kind != compose.LineTo || from.P[0] != (compose.Point{X: 10, Y: y}) || to.P[0] != (compose.Point{X: 110, Y: y}) {
+		if from.Kind != typeset.MoveTo || to.Kind != typeset.LineTo || from.P[0] != (typeset.Point{X: 10, Y: y}) || to.P[0] != (typeset.Point{X: 110, Y: y}) {
 			t.Errorf("line %d runs from %+v to %+v, want y %v", i, from.P[0], to.P[0], y)
 		}
 	}
@@ -194,15 +194,15 @@ func TestNoteLines(t *testing.T) {
 
 // ruledPaths returns the black stroked paths of fourteen steps among the
 // fragments frags and the groups they hold: the lines ruled for notes.
-func ruledPaths(frags []compose.Fragment) []*compose.Path {
-	var out []*compose.Path
+func ruledPaths(frags []typeset.Fragment) []*typeset.Path {
+	var out []*typeset.Path
 	for _, f := range frags {
 		switch v := f.(type) {
-		case *compose.Path:
-			if v.Stroke != nil && v.Fill == nil && len(v.Ops) == 2*handoutNoteLines && v.Stroke.Color == (compose.Color{A: 1}) {
+		case *typeset.Path:
+			if v.Stroke != nil && v.Fill == nil && len(v.Ops) == 2*handoutNoteLines && v.Stroke.Color == (typeset.Color{A: 1}) {
 				out = append(out, v)
 			}
-		case *compose.Group:
+		case *typeset.Group:
 			out = append(out, ruledPaths(v.Content)...)
 		}
 	}
@@ -345,24 +345,24 @@ func TestTurnBox(t *testing.T) {
 	// impress returns the four boxes of Impress's rule on a page w by h cm
 	// with the margins m: 43.4% of the width and 5% of the height of the
 	// page less its margins, in the corners of that area.
-	impress := func(w, h float64, m [4]float64) []compose.Rect {
+	impress := func(w, h float64, m [4]float64) []typeset.Rect {
 		cw, ch := w-m[css.Left]-m[css.Right], h-m[css.Top]-m[css.Bottom]
 		bw, bh := cw*0.434, ch*0.05
-		var out []compose.Rect
+		var out []typeset.Rect
 		for _, y := range []float64{m[css.Top], m[css.Top] + ch - bh} {
 			for _, x := range []float64{m[css.Left], m[css.Left] + cw - bw} {
-				out = append(out, compose.Rect{X: cm(x), Y: cm(y), Width: cm(bw), Height: cm(bh)})
+				out = append(out, typeset.Rect{X: cm(x), Y: cm(y), Width: cm(bw), Height: cm(bh)})
 			}
 		}
 		return out
 	}
-	measured := []compose.Rect{
+	measured := []typeset.Rect{
 		{X: 0, Y: 0, Width: cm(9.113), Height: cm(1.484)},
 		{X: cm(11.886), Y: 0, Width: cm(9.113), Height: cm(1.484)},
 		{X: 0, Y: cm(28.215), Width: cm(9.113), Height: cm(1.484)},
 		{X: cm(11.886), Y: cm(28.215), Width: cm(9.113), Height: cm(1.484)},
 	}
-	same := func(a, b compose.Rect, tol float64) bool {
+	same := func(a, b typeset.Rect, tol float64) bool {
 		return near(a.X, b.X, tol) && near(a.Y, b.Y, tol) && near(a.Width, b.Width, tol) && near(a.Height, b.Height, tol)
 	}
 	for i, want := range impress(29.7, 21, [4]float64{}) {
@@ -385,11 +385,11 @@ func TestTurnBox(t *testing.T) {
 	// A picture 60 by 30 in the top right corner of a 540 by 720 page keeps
 	// its size; its centre, at 510 of 540 and 15 of 720, goes to 680 of 720
 	// and 11.25 of 540.
-	if got := turnBox(compose.Rect{X: 480, Y: 0, Width: 60, Height: 30}, false, 540, 720, [4]float64{}); !same(got, compose.Rect{X: 650, Y: -3.75, Width: 60, Height: 30}, 1e-9) {
+	if got := turnBox(typeset.Rect{X: 480, Y: 0, Width: 60, Height: 30}, false, 540, 720, [4]float64{}); !same(got, typeset.Rect{X: 650, Y: -3.75, Width: 60, Height: 30}, 1e-9) {
 		t.Errorf("a picture turns to %+v", got)
 	}
 	// Margins that leave no area keep the box.
-	r := compose.Rect{X: 10, Y: 20, Width: 30, Height: 40}
+	r := typeset.Rect{X: 10, Y: 20, Width: 30, Height: 40}
 	if got := turnBox(r, true, 540, 720, [4]float64{css.Left: 300, css.Right: 300}); got != r {
 		t.Errorf("a page without area moves the box to %+v", got)
 	}
@@ -402,7 +402,7 @@ func TestTurnBox(t *testing.T) {
 // turned page.
 func TestConvert_HandoutsTurned(t *testing.T) {
 	shown := []string{"S1", "S2", "S3", "S5", "S6", "S7"}
-	check := func(t *testing.T, out *compose.Document, w, h float64, cols int) {
+	check := func(t *testing.T, out *typeset.Document, w, h float64, cols int) {
 		t.Helper()
 		if len(out.Pages) != 1 {
 			t.Fatalf("%d pages, want 1", len(out.Pages))
@@ -435,7 +435,7 @@ func TestConvert_HandoutsTurned(t *testing.T) {
 	t.Run("to portrait", func(t *testing.T) {
 		deck := handoutDeck()
 		deck.HandoutWidth, deck.HandoutHeight = 720, 540
-		deck.HandoutShapes[0].Box = compose.Rect{X: 480, Y: 500, Width: 200, Height: 30}
+		deck.HandoutShapes[0].Box = typeset.Rect{X: 480, Y: 500, Width: 200, Height: 30}
 		check(t, convert(t, deck, office.Options{Handouts: 6, Portrait: true}), 540, 720, 2)
 	})
 	t.Run("as it is", func(t *testing.T) {
@@ -452,8 +452,8 @@ func TestConvert_HandoutsTurnedPaper(t *testing.T) {
 	if pg.Width != 842 || pg.Height != 595 || len(pg.Content) != 1 {
 		t.Fatalf("page %v by %v, %d fragments", pg.Width, pg.Height, len(pg.Content))
 	}
-	g, ok := pg.Content[0].(*compose.Group)
-	if !ok || g.Transform != (compose.Matrix{A: 1, D: 1, E: 61, F: 27.5}) {
+	g, ok := pg.Content[0].(*typeset.Group)
+	if !ok || g.Transform != (typeset.Matrix{A: 1, D: 1, E: 61, F: 27.5}) {
 		t.Errorf("handout page placed by %+v", pg.Content[0])
 	}
 	if a, b := find(t, pg, "S1"), find(t, pg, "S3"); !near(a.y, b.y, 0.5) || !(b.x > a.x) {
@@ -469,8 +469,8 @@ func TestConvert_HandoutsPaper(t *testing.T) {
 	if pg.Width != 1080 || pg.Height != 1080 || len(pg.Content) != 1 {
 		t.Fatalf("page %v by %v, %d fragments", pg.Width, pg.Height, len(pg.Content))
 	}
-	g, ok := pg.Content[0].(*compose.Group)
-	if !ok || g.Transform != (compose.Matrix{A: 1, D: 1, E: 270, F: 180}) {
+	g, ok := pg.Content[0].(*typeset.Group)
+	if !ok || g.Transform != (typeset.Matrix{A: 1, D: 1, E: 270, F: 180}) {
 		t.Errorf("handout page placed by %+v", pg.Content[0])
 	}
 }
@@ -510,7 +510,7 @@ type countSink struct{ expect, pages int }
 
 func (s *countSink) Expect(n int) { s.expect = n }
 
-func (s *countSink) Page(context.Context, *compose.Page) error {
+func (s *countSink) Page(context.Context, *typeset.Page) error {
 	s.pages++
 	return nil
 }

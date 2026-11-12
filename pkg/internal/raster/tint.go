@@ -3,14 +3,14 @@ package raster
 import (
 	"image"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Tint returns an image of m's size in the one colour c, its alpha m's
 // coverage times c's alpha: a shadow or a glow ready to place as a
-// [compose.Image], whose alpha becomes the image's soft mask.
-func Tint(m *image.Alpha, c compose.Color) *image.NRGBA {
+// [typeset.Image], whose alpha becomes the image's soft mask.
+func Tint(m *image.Alpha, c typeset.Color) *image.NRGBA {
 	b := m.Bounds()
 	out := image.NewNRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
 	r, g, bl, a := channel(c.R), channel(c.G), channel(c.B), unit(c.A)
@@ -28,7 +28,7 @@ func Tint(m *image.Alpha, c compose.Color) *image.NRGBA {
 // Paint paints the colour c through the coverage m over dst, source-over
 // with straight alpha, pixel by pixel from the two images' origins. The
 // images share a size; the pixels of dst outside m are left as they are.
-func Paint(dst *image.NRGBA, m *image.Alpha, c compose.Color) {
+func Paint(dst *image.NRGBA, m *image.Alpha, c typeset.Color) {
 	b := dst.Bounds().Intersect(m.Bounds())
 	sr, sg, sb, sa := unit(c.R), unit(c.G), unit(c.B), unit(c.A)
 	for y := b.Min.Y; y < b.Max.Y; y++ {

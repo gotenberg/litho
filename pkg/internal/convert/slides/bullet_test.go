@@ -3,9 +3,9 @@ package slides
 import (
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // TestText_Bullets checks bullets and numbers against the places Impress
@@ -97,9 +97,9 @@ func TestText_SymbolBulletText(t *testing.T) {
 	find(t, pg, "\uf06e")
 	find(t, pg, "aaa")
 	// Its Lbl reads as the character drawn, not the private-use code.
-	var lbl *compose.StructElem
-	var walk func(*compose.StructElem)
-	walk = func(e *compose.StructElem) {
+	var lbl *typeset.StructElem
+	var walk func(*typeset.StructElem)
+	walk = func(e *typeset.StructElem) {
 		if e.Role == "Lbl" && lbl == nil {
 			lbl = e
 		}
@@ -145,18 +145,18 @@ func TestText_Autofit(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		anchor Anchor
-		box    compose.Rect
+		box    typeset.Rect
 	}{
-		{AnchorTop, compose.Rect{X: 28.35, Y: 28.35, Width: 150, Height: 96}},
-		{AnchorBottom, compose.Rect{X: 28.35, Y: 28.35 - 46, Width: 150, Height: 96}},
-		{AnchorMiddle, compose.Rect{X: 28.35, Y: 28.35 - 23, Width: 150, Height: 96}},
+		{AnchorTop, typeset.Rect{X: 28.35, Y: 28.35, Width: 150, Height: 96}},
+		{AnchorBottom, typeset.Rect{X: 28.35, Y: 28.35 - 46, Width: 150, Height: 96}},
+		{AnchorMiddle, typeset.Rect{X: 28.35, Y: 28.35 - 23, Width: 150, Height: 96}},
 	} {
 		grow := box(28.35, 28.35, 150, 50, four...)
 		grow.Text.Autofit, grow.Text.Anchor = AutofitGrow, tc.anchor
 		grow.Line = Line{Width: 1, Color: red}
 		pg := convert(t, deck(&Slide{Shapes: []*Shape{grow}}), office.Options{}).Pages[0]
 		var ps []placedPath
-		paths(pg.Content, compose.Identity, &ps)
+		paths(pg.Content, typeset.Identity, &ps)
 		if len(ps) != 1 || !rectNear(ps[0].bounds(), tc.box, 0.05) {
 			t.Errorf("anchor %d: grown box %+v, want %+v", tc.anchor, ps[0].bounds(), tc.box)
 		}

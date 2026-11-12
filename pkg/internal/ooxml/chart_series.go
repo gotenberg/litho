@@ -614,10 +614,10 @@ func (p *chartReader) autoSeriesBorder() *chart.Stroke {
 	switch {
 	case p.style >= 9 && p.style <= 16:
 		c, _ := p.theme.Color("lt1")
-		return &chart.Stroke{Color: toCompose(c), Width: themeLineWidth}
+		return &chart.Stroke{Color: toTypeset(c), Width: themeLineWidth}
 	case p.style == 33:
 		c, _ := p.theme.Color("dk1")
-		return &chart.Stroke{Color: toCompose(Shade(c, 0.5)), Width: themeLineWidth}
+		return &chart.Stroke{Color: toTypeset(Shade(c, 0.5)), Width: themeLineWidth}
 	}
 	return nil
 }

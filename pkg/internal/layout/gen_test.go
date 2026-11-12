@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestGenerate_DisplayNoneAndColumns(t *testing.T) {
@@ -94,7 +94,7 @@ func TestLayout_Deterministic(t *testing.T) {
 			el(sty(float(css.FloatRight), width(20), height(20), bg(blue))), el(sty(), txt(sty(), "ee ff gg hh ii")))
 		res := run(t, root, page(60, 40))
 		var b bytes.Buffer
-		if err := compose.Write(context.Background(), document(res), &b, compose.Options{}); err != nil {
+		if err := typeset.Write(context.Background(), document(res), &b, typeset.Options{}); err != nil {
 			t.Fatal(err)
 		}
 		return b.Bytes()

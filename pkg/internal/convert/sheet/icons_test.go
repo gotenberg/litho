@@ -3,8 +3,8 @@ package sheet
 import (
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // TestConditional_IconSet locks which icon a cell of an icon set shows:
@@ -51,13 +51,13 @@ func fragmentsOf(ic icon) string {
 	out := ""
 	for _, f := range ic() {
 		switch f := f.(type) {
-		case *compose.Path:
+		case *typeset.Path:
 			if f.Fill != nil {
 				out += colorKey(f.Fill.Color)
 			}
-		case *compose.Group:
+		case *typeset.Group:
 			for _, k := range f.Content {
-				if p, ok := k.(*compose.Path); ok && p.Fill != nil {
+				if p, ok := k.(*typeset.Path); ok && p.Fill != nil {
 					out += colorKey(p.Fill.Color)
 				}
 			}
@@ -67,7 +67,7 @@ func fragmentsOf(ic icon) string {
 }
 
 // colorKey returns a colour as text.
-func colorKey(c compose.Color) string {
+func colorKey(c typeset.Color) string {
 	return string(rune('a'+int(c.R*20))) + string(rune('a'+int(c.G*20))) + string(rune('a'+int(c.B*20)))
 }
 
@@ -87,11 +87,11 @@ func TestConvert_IconSetDrawing(t *testing.T) {
 		Kind: RuleIconSet, Icons: "3Arrows", Values: []Value{num(1), num(2), num(3)}, IconsOnly: true,
 	}}}}
 	out := convert(t, newDoc(sh), office.Options{})
-	var groups []*compose.Group
-	var walk func([]compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+	var groups []*typeset.Group
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
-			if g, ok := f.(*compose.Group); ok {
+			if g, ok := f.(*typeset.Group); ok {
 				if near(g.Transform.A, 10.0*72/254/16, 1e-9) {
 					groups = append(groups, g)
 				}
@@ -123,11 +123,11 @@ func TestConvert_IconSetDrawingExcel(t *testing.T) {
 	doc.ExcelRules = true
 	out := convert(t, doc, office.Options{})
 	side := 10 * excelIconScale
-	var found *compose.Group
-	var walk func([]compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+	var found *typeset.Group
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
-			if g, ok := f.(*compose.Group); ok {
+			if g, ok := f.(*typeset.Group); ok {
 				if found == nil && near(g.Transform.A, side/16, 1e-9) {
 					found = g
 				}

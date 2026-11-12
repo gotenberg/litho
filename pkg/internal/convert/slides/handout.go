@@ -1,11 +1,11 @@
 package slides
 
 import (
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // handoutGap is the room between two slides of a handout page, and
@@ -97,7 +97,7 @@ func handoutGrid(per int, landscape bool) (cols, rows int, cells, ruled []int) {
 //     handout option. The order of the slides on a printed page, row by
 //     row, and the ruled rectangles are those of its print path
 //     (InitHandoutTemplate in sd's DocumentRenderer), not measured.
-func handoutAreas(w, h float64, m [4]float64, sw, sh float64, per int) (slides, ruled []compose.Rect) {
+func handoutAreas(w, h float64, m [4]float64, sw, sh float64, per int) (slides, ruled []typeset.Rect) {
 	cols, rows, cells, ruledCells := handoutGrid(per, w > h)
 	band := (h - m[css.Top] - m[css.Left]) * handoutBand
 	top, bottom := m[css.Top]+band, m[css.Bottom]+band
@@ -105,7 +105,7 @@ func handoutAreas(w, h float64, m [4]float64, sw, sh float64, per int) (slides, 
 	ah := h - 2*handoutGap - top - bottom
 	partW := (aw - float64(cols-1)*handoutGap) / float64(cols)
 	partH := (ah - float64(rows-1)*handoutGap) / float64(rows)
-	slides, ruled = make([]compose.Rect, len(cells)), make([]compose.Rect, len(ruledCells))
+	slides, ruled = make([]typeset.Rect, len(cells)), make([]typeset.Rect, len(ruledCells))
 	if !numeric.Positive(partW) || !numeric.Positive(partH) || !numeric.Positive(sw) || !numeric.Positive(sh) {
 		return slides, ruled
 	}
@@ -113,9 +113,9 @@ func handoutAreas(w, h float64, m [4]float64, sw, sh float64, per int) (slides, 
 	tw, th := sw*k, sh*k
 	x0 := handoutGap + m[css.Left] + (partW-tw)/2
 	y0 := handoutGap + top + (partH-th)/2
-	at := func(c int) compose.Rect {
+	at := func(c int) typeset.Rect {
 		col, row := c%cols, c/cols
-		return compose.Rect{X: x0 + float64(col)*(partW+handoutGap), Y: y0 + float64(row)*(partH+handoutGap), Width: tw, Height: th}
+		return typeset.Rect{X: x0 + float64(col)*(partW+handoutGap), Y: y0 + float64(row)*(partH+handoutGap), Width: tw, Height: th}
 	}
 	for i, c := range cells {
 		slides[i] = at(c)
@@ -129,8 +129,8 @@ func handoutAreas(w, h float64, m [4]float64, sw, sh float64, per int) (slides, 
 // noteLines returns the lines ruled across r for notes, as one path:
 // [handoutNoteLines] of them the width of r, a seventh of its height
 // apart, the last along its bottom edge.
-func noteLines(r compose.Rect) []compose.PathOp {
-	var ops []compose.PathOp
+func noteLines(r typeset.Rect) []typeset.PathOp {
+	var ops []typeset.PathOp
 	for i := 1; i <= handoutNoteLines; i++ {
 		y := r.Y + r.Height*float64(i)/handoutNoteLines
 		ops = append(ops, lineOps(r.X, y, r.X+r.Width, y)...)
@@ -182,7 +182,7 @@ func turned(w, h, pw, ph float64) bool {
 //     its page setup alone; a macro that sets the master's size leaves
 //     the boxes where they were, and one that empties the master and
 //     sets its layout brings back the slides without them.
-func turnBox(r compose.Rect, flexible bool, w, h float64, m [4]float64) compose.Rect {
+func turnBox(r typeset.Rect, flexible bool, w, h float64, m [4]float64) typeset.Rect {
 	cw, ch := w-m[css.Left]-m[css.Right], h-m[css.Top]-m[css.Bottom]
 	tw, th := h-m[css.Left]-m[css.Right], w-m[css.Top]-m[css.Bottom]
 	if !numeric.Positive(cw) || !numeric.Positive(ch) || !numeric.Positive(tw) || !numeric.Positive(th) {
@@ -190,14 +190,14 @@ func turnBox(r compose.Rect, flexible bool, w, h float64, m [4]float64) compose.
 	}
 	fx, fy := tw/cw, th/ch
 	if flexible {
-		return compose.Rect{
+		return typeset.Rect{
 			X: m[css.Left] + (r.X-m[css.Left])*fx, Y: m[css.Top] + (r.Y-m[css.Top])*fy,
 			Width: r.Width * fx, Height: r.Height * fy,
 		}
 	}
 	cx := m[css.Left] + (r.X+r.Width/2-m[css.Left])*fx
 	cy := m[css.Top] + (r.Y+r.Height/2-m[css.Top])*fy
-	return compose.Rect{X: cx - r.Width/2, Y: cy - r.Height/2, Width: r.Width, Height: r.Height}
+	return typeset.Rect{X: cx - r.Width/2, Y: cy - r.Height/2, Width: r.Width, Height: r.Height}
 }
 
 // handoutPage draws the handout page numbered n holding the slides group,
@@ -228,7 +228,7 @@ func turnBox(r compose.Rect, flexible bool, w, h float64, m [4]float64) compose.
 //     width of their own. Their printed width is not measured: they are
 //     drawn the width of the frame, where a line of no width would be the
 //     thinnest a device draws, which ISO 32000-1, 8.4.3.2 advises against.
-func (b *builder) handoutPage(n int, group []*Slide, numberOf func(*Slide) int) (*compose.Page, []*compose.StructElem) {
+func (b *builder) handoutPage(n int, group []*Slide, numberOf func(*Slide) int) (*typeset.Page, []*typeset.StructElem) {
 	mw, mh := b.handoutSize()
 	pw, ph := b.pageSize(mw, mh)
 	hw, hh := mw, mh
@@ -238,11 +238,11 @@ func (b *builder) handoutPage(n int, group []*Slide, numberOf func(*Slide) int) 
 	}
 	sw, sh := b.slideSize()
 	areas, ruled := handoutAreas(hw, hh, b.doc.HandoutMargins, sw, sh, b.opts.Handouts)
-	whole := compose.Rect{Width: hw, Height: hh}
+	whole := typeset.Rect{Width: hw, Height: hh}
 	content := b.fill(&b.doc.HandoutBackground, whole, rectOps(whole), shape.FillNorm)
-	var links []compose.Link
-	sects := make([]*compose.StructElem, 0, len(group))
-	gray := compose.Color{R: notesFrameGray, G: notesFrameGray, B: notesFrameGray, A: 1}
+	var links []typeset.Link
+	sects := make([]*typeset.StructElem, 0, len(group))
+	gray := typeset.Color{R: notesFrameGray, G: notesFrameGray, B: notesFrameGray, A: 1}
 	for i, s := range group {
 		frags, slideLinks, sect := b.slideContent(s, numberOf(s), sw, sh)
 		sects = append(sects, sect)
@@ -251,26 +251,26 @@ func (b *builder) handoutPage(n int, group []*Slide, numberOf func(*Slide) int) 
 		}
 		r := areas[i]
 		k := r.Width / sw
-		m := compose.Matrix{A: k, D: k, E: r.X, F: r.Y}
-		content = append(content, &compose.Group{
+		m := typeset.Matrix{A: k, D: k, E: r.X, F: r.Y}
+		content = append(content, &typeset.Group{
 			Transform: m, Opacity: 1,
-			Clip:    &compose.Path{Ops: rectOps(compose.Rect{Width: sw, Height: sh}), Fill: &compose.Fill{}},
+			Clip:    &typeset.Path{Ops: rectOps(typeset.Rect{Width: sw, Height: sh}), Fill: &typeset.Fill{}},
 			Content: frags,
 		})
 		for _, l := range slideLinks {
 			l.Rect = transformRect(m, l.Rect)
 			links = append(links, l)
 		}
-		content = append(content, &compose.Path{Ops: rectOps(r), Stroke: &compose.Stroke{Color: gray, Width: notesFrameWidth}})
+		content = append(content, &typeset.Path{Ops: rectOps(r), Stroke: &typeset.Stroke{Color: gray, Width: notesFrameWidth}})
 		if i < len(ruled) {
-			content = append(content, &compose.Path{Ops: noteLines(ruled[i]), Stroke: &compose.Stroke{Color: compose.Color{A: 1}, Width: notesFrameWidth}})
+			content = append(content, &typeset.Path{Ops: noteLines(ruled[i]), Stroke: &typeset.Stroke{Color: typeset.Color{A: 1}, Width: notesFrameWidth}})
 		}
 	}
 	// The handout master's shapes repeat on every handout page: pagination
 	// artifacts (ISO 32000-1, 14.8.2.2.2), their links left out with their
 	// structure.
 	b.slide, b.number, b.shapes, b.links = nil, n, 0, nil
-	scratch := &compose.StructElem{}
+	scratch := &typeset.StructElem{}
 	for _, sp := range b.doc.HandoutShapes {
 		if sp == nil {
 			continue
@@ -279,19 +279,19 @@ func (b *builder) handoutPage(n int, group []*Slide, numberOf func(*Slide) int) 
 		art.Decorative = true
 		if turn {
 			// A group's shapes stay in the space of the box it had.
-			if art.Kind == KindGroup && art.Child == (compose.Rect{}) {
+			if art.Kind == KindGroup && art.Child == (typeset.Rect{}) {
 				art.Child = art.Box
 			}
 			art.Box = turnBox(art.Box, art.Kind == KindGeometry && art.Geometry == nil, mw, mh, b.doc.HandoutMargins)
 		}
-		content = append(content, b.shape(&art, compose.Identity, 0, scratch)...)
+		content = append(content, b.shape(&art, typeset.Identity, 0, scratch)...)
 	}
 	b.links = nil
-	pg := &compose.Page{Width: pw, Height: ph}
-	if m := fitMatrix(hw, hh, pw, ph); m == compose.Identity {
+	pg := &typeset.Page{Width: pw, Height: ph}
+	if m := fitMatrix(hw, hh, pw, ph); m == typeset.Identity {
 		pg.Content, pg.Links = content, links
 	} else {
-		pg.Content = []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: content}}
+		pg.Content = []typeset.Fragment{&typeset.Group{Transform: m, Opacity: 1, Content: content}}
 		for _, l := range links {
 			l.Rect = transformRect(m, l.Rect)
 			pg.Links = append(pg.Links, l)

@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // asPicture returns a p:pic (or a diagram drawing's) as the DrawingML
@@ -104,7 +104,7 @@ func mediaFrame(s *slides.Shape) *slides.Shape {
 	if pic.Width > 0 && pic.Height > 0 && box.Width > 0 && box.Height > 0 {
 		k := min(box.Width/pic.Width, box.Height/pic.Height)
 		w, h := pic.Width*k, pic.Height*k
-		poster.Box = compose.Rect{X: box.X + (box.Width-w)/2, Y: box.Y + (box.Height-h)/2, Width: w, Height: h}
+		poster.Box = typeset.Rect{X: box.X + (box.Width-w)/2, Y: box.Y + (box.Height-h)/2, Width: w, Height: h}
 	}
 	poster.Href, poster.Jump, poster.Rotation, poster.FlipH, poster.FlipV = "", 0, 0, false, false
 	poster.Fill = slides.Fill{}
@@ -169,16 +169,16 @@ func stretched(pic *layout.Picture) *layout.Picture {
 	}
 	inner := *pic
 	out := *pic
-	out.Vector = func(ctx context.Context, box compose.Rect) []compose.Fragment {
+	out.Vector = func(ctx context.Context, box typeset.Rect) []typeset.Fragment {
 		if !numeric.Positive(box.Width) || !numeric.Positive(box.Height) {
 			return nil
 		}
-		content := inner.Vector(ctx, compose.Rect{Width: inner.Width, Height: inner.Height})
+		content := inner.Vector(ctx, typeset.Rect{Width: inner.Width, Height: inner.Height})
 		if len(content) == 0 {
 			return nil
 		}
-		m := compose.Matrix{A: box.Width / inner.Width, D: box.Height / inner.Height, E: box.X, F: box.Y}
-		return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: content}}
+		m := typeset.Matrix{A: box.Width / inner.Width, D: box.Height / inner.Height, E: box.X, F: box.Y}
+		return []typeset.Fragment{&typeset.Group{Transform: m, Opacity: 1, Content: content}}
 	}
 	return &out
 }

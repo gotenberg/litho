@@ -5,9 +5,9 @@ import (
 	"math"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxLabelRunes caps the characters of one text of the chart laid out.
@@ -65,7 +65,7 @@ func textStyle(st TextStyle) text.Style {
 	}
 	col := st.Color
 	if col.A <= 0 {
-		col = compose.Black
+		col = typeset.Black
 	}
 	return text.Style{Families: st.Families, Size: size, Weight: w, Italic: st.Italic, Color: col}
 }
@@ -123,12 +123,12 @@ const (
 // draw emits b with its unrotated box centred on (cx, cy), its lines
 // aligned within the box by al, rotated about the centre by its style's
 // rotation.
-func (b *block) draw(cx, cy float64, al align) []compose.Fragment {
+func (b *block) draw(cx, cy float64, al align) []typeset.Fragment {
 	if b == nil {
 		return nil
 	}
 	x0, y := cx-b.w/2, cy-b.h/2
-	var out []compose.Fragment
+	var out []typeset.Fragment
 	for i, l := range b.lines {
 		dx := 0.0
 		switch al {
@@ -141,7 +141,7 @@ func (b *block) draw(cx, cy float64, al align) []compose.Fragment {
 		base := y + (b.lineH[i]-l.Ascent-l.Descent)/2 + l.Ascent
 		for _, run := range l.Runs {
 			t := *run
-			t.Origin = compose.Point{X: x0 + dx + run.Origin.X, Y: base}
+			t.Origin = typeset.Point{X: x0 + dx + run.Origin.X, Y: base}
 			out = append(out, &t)
 		}
 		y += b.lineH[i]
@@ -149,15 +149,15 @@ func (b *block) draw(cx, cy float64, al align) []compose.Fragment {
 	if b.style.Rotation == 0 || len(out) == 0 {
 		return out
 	}
-	return []compose.Fragment{&compose.Group{Transform: rotateAbout(b.style.Rotation, cx, cy), Content: out}}
+	return []typeset.Fragment{&typeset.Group{Transform: rotateAbout(b.style.Rotation, cx, cy), Content: out}}
 }
 
 // rotateAbout returns the transform that turns the page counter-clockwise
 // by deg degrees about (cx, cy), in y-down coordinates.
-func rotateAbout(deg, cx, cy float64) compose.Matrix {
+func rotateAbout(deg, cx, cy float64) typeset.Matrix {
 	a := deg * math.Pi / 180
 	c, s := math.Cos(a), math.Sin(a)
-	return compose.Matrix{A: c, B: -s, C: s, D: c, E: cx - cx*c - cy*s, F: cy + cx*s - cy*c}
+	return typeset.Matrix{A: c, B: -s, C: s, D: c, E: cx - cx*c - cy*s, F: cy + cx*s - cy*c}
 }
 
 // renderer holds one [Render] call's state.
@@ -166,11 +166,11 @@ type renderer struct {
 	fonts *text.Fonts
 	c     *Chart
 	// page is the chart's rectangle.
-	page compose.Rect
-	out  []compose.Fragment
+	page typeset.Rect
+	out  []typeset.Fragment
 	// fixed is the plot area's rectangle without its axis labels when the
 	// file fixes it, nil when the layout finds it.
-	fixed *compose.Rect
+	fixed *typeset.Rect
 	// points indexes each series' point overrides by point index.
 	points map[*Series]map[int]*Point
 }

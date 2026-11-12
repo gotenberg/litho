@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // RenderPDF rasterises page n (1-based) of a PDF at 96 dpi. The external
@@ -24,7 +24,7 @@ func drawPage(t *testing.T, src string, w, h float64, o Options) []string {
 	o.PageWidth, o.PageHeight = w*0.75, h*0.75
 	doc := conv(t, src, o)
 	var b bytes.Buffer
-	if err := compose.Write(context.Background(), doc, &b, compose.Options{}); err != nil {
+	if err := typeset.Write(context.Background(), doc, &b, typeset.Options{}); err != nil {
 		t.Fatal(err)
 	}
 	if RenderPDF == nil {

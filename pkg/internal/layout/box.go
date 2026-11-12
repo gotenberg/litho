@@ -4,8 +4,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // boxKind says what a [box] is.
@@ -30,7 +30,7 @@ type link struct {
 	href string
 	// elem is the Link structure element of the subtree, nil when it has
 	// none.
-	elem *compose.StructElem
+	elem *typeset.StructElem
 	// node is the node the Href sits on.
 	node *Node
 	// contents caches [link.describe], and described reports it is set.
@@ -46,7 +46,7 @@ type link struct {
 const maxLinkContents = 1000
 
 // describe returns the description of the link for a reader who cannot see
-// it (compose.Link Contents): the node's Alt, else the text it shows, white
+// it (typeset.Link Contents): the node's Alt, else the text it shows, white
 // space collapsed and cut at [maxLinkContents] characters, a picture's Alt
 // standing for the picture, else the target.
 func (l *link) describe() string {
@@ -202,7 +202,7 @@ type box struct {
 	lang string
 	// elem is the structure element the box's fragments hang from, nil for
 	// artifacts.
-	elem *compose.StructElem
+	elem *typeset.StructElem
 	link *link
 	// decos are the text decorations propagated to the box's text.
 	decos []deco
@@ -279,7 +279,7 @@ type box struct {
 type markerBox struct {
 	text    string
 	picture *Picture
-	elem    *compose.StructElem
+	elem    *typeset.StructElem
 	// st is the marker's style: the ::marker's, else the item's.
 	st *css.Style
 	// boxW, when positive, is the width of the marker box an Office list
@@ -289,12 +289,12 @@ type markerBox struct {
 	// for content: normal, which paints as a shape in sym rather than as
 	// text ([placeSymbol]).
 	symbol bool
-	sym    compose.Rect
+	sym    typeset.Rect
 	// Layout results: the marker's left edge and baseline, flow
 	// coordinates.
 	x, baseline float64
 	// glyph runs, laid out relative to the marker's baseline origin.
-	runs   []*compose.Text
+	runs   []*typeset.Text
 	width  float64
 	ascent float64
 	placed bool

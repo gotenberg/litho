@@ -3,13 +3,13 @@ package slides
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // then returns the transform that applies a, then b.
-func then(a, b compose.Matrix) compose.Matrix {
-	return compose.Matrix{
+func then(a, b typeset.Matrix) typeset.Matrix {
+	return typeset.Matrix{
 		A: b.A*a.A + b.C*a.B,
 		B: b.B*a.A + b.D*a.B,
 		C: b.A*a.C + b.C*a.D,
@@ -20,24 +20,24 @@ func then(a, b compose.Matrix) compose.Matrix {
 }
 
 // apply maps the point (x, y) through m.
-func apply(m compose.Matrix, x, y float64) (float64, float64) {
+func apply(m typeset.Matrix, x, y float64) (float64, float64) {
 	return m.A*x + m.C*y + m.E, m.B*x + m.D*y + m.F
 }
 
 // transformRect returns the bounding box of r mapped through m.
-func transformRect(m compose.Matrix, r compose.Rect) compose.Rect {
+func transformRect(m typeset.Matrix, r typeset.Rect) typeset.Rect {
 	x0, y0 := math.Inf(1), math.Inf(1)
 	x1, y1 := math.Inf(-1), math.Inf(-1)
 	for _, p := range [4][2]float64{{r.X, r.Y}, {r.X + r.Width, r.Y}, {r.X, r.Y + r.Height}, {r.X + r.Width, r.Y + r.Height}} {
 		x, y := apply(m, p[0], p[1])
 		x0, y0, x1, y1 = min(x0, x), min(y0, y), max(x1, x), max(y1, y)
 	}
-	return compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
+	return typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
 }
 
 // translate returns the translation by (x, y).
-func translate(x, y float64) compose.Matrix {
-	return compose.Matrix{A: 1, D: 1, E: x, F: y}
+func translate(x, y float64) typeset.Matrix {
+	return typeset.Matrix{A: 1, D: 1, E: x, F: y}
 }
 
 // skewedAboutCentre returns the transform that mirrors, then shears by
@@ -45,7 +45,7 @@ func translate(x, y float64) compose.Matrix {
 // turns clockwise by deg degrees, about the centre of r (ECMA-376 Part 1,
 // 20.1.7.6 xfrm: the flips apply before the rotation; ODF 1.3 Part 3,
 // 19.228 draw:transform, whose skewX applies before its rotate).
-func skewedAboutCentre(r compose.Rect, deg, skew float64, flipH, flipV bool) compose.Matrix {
+func skewedAboutCentre(r typeset.Rect, deg, skew float64, flipH, flipV bool) typeset.Matrix {
 	deg = math.Mod(deg, 360)
 	if math.IsNaN(deg) {
 		deg = 0
@@ -54,10 +54,10 @@ func skewedAboutCentre(r compose.Rect, deg, skew float64, flipH, flipV bool) com
 		skew = 0
 	}
 	if deg == 0 && skew == 0 && !flipH && !flipV {
-		return compose.Identity
+		return typeset.Identity
 	}
 	cx, cy := r.X+r.Width/2, r.Y+r.Height/2
-	f := compose.Identity
+	f := typeset.Identity
 	if flipH {
 		f.A = -1
 	}
@@ -66,11 +66,11 @@ func skewedAboutCentre(r compose.Rect, deg, skew float64, flipH, flipV bool) com
 	}
 	// With y down, a point above the centre has a negative y: the shear
 	// moves it right for a positive angle.
-	sh := compose.Matrix{A: 1, C: -math.Tan(skew * math.Pi / 180), D: 1}
+	sh := typeset.Matrix{A: 1, C: -math.Tan(skew * math.Pi / 180), D: 1}
 	// In page coordinates, y down, a clockwise turn maps the x axis onto
 	// (cos, sin).
 	s, c := math.Sincos(deg * math.Pi / 180)
-	rot := compose.Matrix{A: c, B: s, C: -s, D: c}
+	rot := typeset.Matrix{A: c, B: s, C: -s, D: c}
 	return then(then(then(then(translate(-cx, -cy), f), sh), rot), translate(cx, cy))
 }
 
@@ -79,40 +79,40 @@ func skewedAboutCentre(r compose.Rect, deg, skew float64, flipH, flipV bool) com
 const maxSkew = 89
 
 // rectOps returns the path of the rectangle r.
-func rectOps(r compose.Rect) []compose.PathOp {
-	pt := func(x, y float64) [3]compose.Point { return [3]compose.Point{{X: x, Y: y}} }
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: pt(r.X, r.Y)},
-		{Kind: compose.LineTo, P: pt(r.X+r.Width, r.Y)},
-		{Kind: compose.LineTo, P: pt(r.X+r.Width, r.Y+r.Height)},
-		{Kind: compose.LineTo, P: pt(r.X, r.Y+r.Height)},
-		{Kind: compose.ClosePath},
+func rectOps(r typeset.Rect) []typeset.PathOp {
+	pt := func(x, y float64) [3]typeset.Point { return [3]typeset.Point{{X: x, Y: y}} }
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: pt(r.X, r.Y)},
+		{Kind: typeset.LineTo, P: pt(r.X+r.Width, r.Y)},
+		{Kind: typeset.LineTo, P: pt(r.X+r.Width, r.Y+r.Height)},
+		{Kind: typeset.LineTo, P: pt(r.X, r.Y+r.Height)},
+		{Kind: typeset.ClosePath},
 	}
 }
 
 // lineOps returns the path of the segment from (x1, y1) to (x2, y2).
-func lineOps(x1, y1, x2, y2 float64) []compose.PathOp {
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{{X: x1, Y: y1}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: x2, Y: y2}}},
+func lineOps(x1, y1, x2, y2 float64) []typeset.PathOp {
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x1, Y: y1}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x2, Y: y2}}},
 	}
 }
 
 // group wraps frags in a group under m, or returns them as they are under
 // the identity.
-func group(m compose.Matrix, frags []compose.Fragment) []compose.Fragment {
+func group(m typeset.Matrix, frags []typeset.Fragment) []typeset.Fragment {
 	if len(frags) == 0 {
 		return nil
 	}
-	if m == compose.Identity {
+	if m == typeset.Identity {
 		return frags
 	}
-	return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: frags}}
+	return []typeset.Fragment{&typeset.Group{Transform: m, Opacity: 1, Content: frags}}
 }
 
 // finite reports whether every side of r is a finite number, its size not
 // negative.
-func finite(r compose.Rect) bool {
+func finite(r typeset.Rect) bool {
 	for _, v := range [4]float64{r.X, r.Y, r.Width, r.Height} {
 		if !numeric.Finite(v) || math.Abs(v) > maxCoordinate {
 			return false

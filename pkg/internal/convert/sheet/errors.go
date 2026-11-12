@@ -1,6 +1,6 @@
 package sheet
 
-// The codes of the warnings the builder records (compose.Warning.Code).
+// The codes of the warnings the builder records (typeset.Warning.Code).
 const (
 	// CodeFormat is a number format code the builder does not read.
 	CodeFormat = "sheet-number-format"

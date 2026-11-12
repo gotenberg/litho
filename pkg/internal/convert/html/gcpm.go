@@ -10,9 +10,9 @@ import (
 
 	dom "golang.org/x/net/html"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxNamedStringBytes bounds the value of one named string: 4 KiB.
@@ -39,7 +39,7 @@ type assignment struct {
 type gcpmState struct {
 	strings, running []assignment
 	// placed are the anchors of the last layout, by ID.
-	placed map[string]compose.Dest
+	placed map[string]typeset.Dest
 	ids    int
 }
 

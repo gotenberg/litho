@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // controlsDoc holds a control of every kind the converter writes as a
@@ -47,7 +47,7 @@ func TestConvertFormControlsAsFields(t *testing.T) {
 	d := convertDoc(t, controlsDoc(t), office.Options{FormFields: true})
 	fields := d.Pages[0].Fields
 	type got struct {
-		kind    compose.FieldKind
+		kind    typeset.FieldKind
 		name    string
 		value   string
 		checked bool
@@ -63,16 +63,16 @@ func TestConvertFormControlsAsFields(t *testing.T) {
 		}
 	}
 	want := []got{
-		{compose.FieldText, "name", "Ada", false},
-		{compose.FieldText, "notes", "One\nTwo", false},
-		{compose.FieldCheckBox, "agree", "", true},
-		{compose.FieldRadio, "color", "", false},
-		{compose.FieldRadio, "color", "", true},
-		{compose.FieldList, "fruit", "Banana", false},
-		{compose.FieldCombo, "country", "France", false},
-		{compose.FieldCombo, "city", "Rome", false},
-		{compose.FieldText, "day", "03/15/24", false},
-		{compose.FieldText, "empty", "", false},
+		{typeset.FieldText, "name", "Ada", false},
+		{typeset.FieldText, "notes", "One\nTwo", false},
+		{typeset.FieldCheckBox, "agree", "", true},
+		{typeset.FieldRadio, "color", "", false},
+		{typeset.FieldRadio, "color", "", true},
+		{typeset.FieldList, "fruit", "Banana", false},
+		{typeset.FieldCombo, "country", "France", false},
+		{typeset.FieldCombo, "city", "Rome", false},
+		{typeset.FieldText, "day", "03/15/24", false},
+		{typeset.FieldText, "empty", "", false},
 	}
 	if !slices.Equal(have, want) {
 		t.Fatalf("fields = %+v\nwant %+v", have, want)
@@ -117,7 +117,7 @@ func TestConvertFormControlsOff(t *testing.T) {
 		t.Errorf("the drop-down list box prints at %v points", r.size)
 	}
 	on := convertDoc(t, controlsDoc(t), office.Options{FormFields: true})
-	pg := &compose.Page{Content: on.Pages[0].Content}
+	pg := &typeset.Page{Content: on.Pages[0].Content}
 	for _, f := range on.Pages[0].Fields {
 		pg.Content = append(pg.Content, f.Appearance...)
 	}
@@ -186,7 +186,7 @@ func FuzzControls(f *testing.F) {
 		b.formFields = true
 		b.document(body)
 		for _, c := range b.controls {
-			if c.ID == "" || c.Field.MaxLen < 0 || c.Field.MaxLen > compose.MaxFieldText {
+			if c.ID == "" || c.Field.MaxLen < 0 || c.Field.MaxLen > typeset.MaxFieldText {
 				t.Fatalf("control %+v", c)
 			}
 		}

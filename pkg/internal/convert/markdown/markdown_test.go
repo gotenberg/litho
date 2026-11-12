@@ -13,9 +13,9 @@ import (
 
 	md "github.com/gomarkdown/markdown"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/html"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 var (
@@ -121,13 +121,13 @@ func TestConvert_LaysOutTheMarkdown(t *testing.T) {
 	images, links := 0, 0
 	for _, p := range doc.Pages {
 		links += len(p.Links)
-		var walk func([]compose.Fragment)
-		walk = func(fs []compose.Fragment) {
+		var walk func([]typeset.Fragment)
+		walk = func(fs []typeset.Fragment) {
 			for _, f := range fs {
 				switch f := f.(type) {
-				case *compose.Image:
+				case *typeset.Image:
 					images++
-				case *compose.Group:
+				case *typeset.Group:
 					walk(f.Content)
 				}
 			}

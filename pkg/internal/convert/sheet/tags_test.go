@@ -8,14 +8,14 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // tableWidths returns the columns each row of the Table tbl counts, the
 // cells a rowspan above carries down included.
-func tableWidths(tbl *compose.StructElem) []int {
+func tableWidths(tbl *typeset.StructElem) []int {
 	carry := map[int]int{}
 	out := make([]int, len(tbl.Kids))
 	for i, tr := range tbl.Kids {
@@ -34,19 +34,19 @@ func tableWidths(tbl *compose.StructElem) []int {
 
 // cellText returns the text of the fragments of pg whose parent is el or
 // one of its kids.
-func cellText(pg *compose.Page, el *compose.StructElem) string {
-	in := map[*compose.StructElem]bool{el: true}
+func cellText(pg *typeset.Page, el *typeset.StructElem) string {
+	in := map[*typeset.StructElem]bool{el: true}
 	for _, k := range el.Kids {
 		in[k] = true
 	}
 	var sb strings.Builder
-	var walk func([]compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content)
-			case *compose.Text:
+			case *typeset.Text:
 				if in[v.Parent] {
 					for _, g := range v.Glyphs {
 						sb.WriteString(g.Text)
@@ -90,7 +90,7 @@ func TestConvert_TableIsRegular(t *testing.T) {
 		}
 	}
 	for _, th := range tbl.Kids[0].Kids {
-		if th.Role != "TH" || th.Scope != compose.ScopeColumn {
+		if th.Role != "TH" || th.Scope != typeset.ScopeColumn {
 			t.Errorf("first row cell %s scope %d, want TH column", th.Role, th.Scope)
 		}
 	}
@@ -111,13 +111,13 @@ func TestConvert_TableIsRegular(t *testing.T) {
 		t.Errorf("link cell %+v, links %+v", l, pg.Links)
 	}
 	// The headings print "A" and "1": no structure holds them.
-	var walk func([]compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content)
-			case *compose.Text:
+			case *typeset.Text:
 				if v.Parent == tbl {
 					t.Error("text hangs from the Table")
 				}
@@ -218,8 +218,8 @@ func TestConvert_DestinationsNameTheTable(t *testing.T) {
 func TestConvert_DrawingsAreFigures(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
 	pic := &layout.Picture{Source: source(t, img), Width: 2, Height: 2}
-	box := &layout.Picture{Width: 2, Height: 2, Vector: func(_ context.Context, r compose.Rect) []compose.Fragment {
-		return []compose.Fragment{&compose.Path{Ops: rectOps(r.X, r.Y, r.Width, r.Height), Fill: &compose.Fill{}}}
+	box := &layout.Picture{Width: 2, Height: 2, Vector: func(_ context.Context, r typeset.Rect) []typeset.Fragment {
+		return []typeset.Fragment{&typeset.Path{Ops: rectOps(r.X, r.Y, r.Width, r.Height), Fill: &typeset.Fill{}}}
 	}}
 	sh := &Sheet{
 		Name: "S",
@@ -234,7 +234,7 @@ func TestConvert_DrawingsAreFigures(t *testing.T) {
 	if len(out.Pages) != 1 {
 		t.Fatalf("%d pages, want 1", len(out.Pages))
 	}
-	var figs []*compose.StructElem
+	var figs []*typeset.StructElem
 	for _, k := range out.Structure.Kids {
 		if k.Role == "Figure" {
 			figs = append(figs, k)
@@ -244,22 +244,22 @@ func TestConvert_DrawingsAreFigures(t *testing.T) {
 		t.Fatalf("figures %+v, want the picture's and the chart's", figs)
 	}
 	var tagged, artifacts, shapes int
-	var walk func([]compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Image:
+			case *typeset.Image:
 				switch v.Parent {
 				case figs[0]:
 					tagged++
 				case nil:
 					artifacts++
 				}
-			case *compose.Path:
+			case *typeset.Path:
 				if v.Fill != nil && v.Parent == nil && len(v.Ops) == 5 {
 					shapes++
 				}
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content)
 			}
 		}

@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestSections_PageBoxes(t *testing.T) {
@@ -120,7 +120,7 @@ func TestHeadersFooters_Fields(t *testing.T) {
 			}
 		}
 		for _, f := range pg.Content {
-			if tx, ok := f.(*compose.Text); ok && strings.HasPrefix(glyphText(tx), "Head") && tx.Parent != nil {
+			if tx, ok := f.(*typeset.Text); ok && strings.HasPrefix(glyphText(tx), "Head") && tx.Parent != nil {
 				t.Errorf("header text is not an artifact")
 			}
 		}
@@ -128,7 +128,7 @@ func TestHeadersFooters_Fields(t *testing.T) {
 }
 
 // glyphText returns the text of a run.
-func glyphText(tx *compose.Text) string {
+func glyphText(tx *typeset.Text) string {
 	var b strings.Builder
 	for _, g := range tx.Glyphs {
 		b.WriteString(g.Text)
@@ -377,18 +377,18 @@ func TestHeaders_PageAnchoredDrawing(t *testing.T) {
 	body := `<w:p><w:r><w:t>body</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rIdheader1"/></w:sectPr>`
 	doc := convertBytes(t, docx(t, body, extra), office.Options{})
 	var found bool
-	var walk func([]compose.Fragment, float64, float64)
-	walk = func(frags []compose.Fragment, dx, dy float64) {
+	var walk func([]typeset.Fragment, float64, float64)
+	walk = func(frags []typeset.Fragment, dx, dy float64) {
 		for _, f := range frags {
 			switch v := f.(type) {
-			case *compose.Text:
+			case *typeset.Text:
 				if glyphText(v) == "WM" {
 					found = true
 					if x, y := v.Origin.X+dx, v.Origin.Y+dy; math.Abs(x-100) > 1 || y < 500 || y > 530 {
 						t.Errorf("the header's drawing draws at %.1f, %.1f, want near 100, 500 to 530", x, y)
 					}
 				}
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content, dx+v.Transform.E, dy+v.Transform.F)
 			}
 		}

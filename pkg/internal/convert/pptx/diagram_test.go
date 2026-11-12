@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 const dgmDecl = `xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ` +
@@ -73,16 +73,16 @@ func TestDiagram(t *testing.T) {
 				t.Fatalf("%d kids, want the background and two ellipses", len(g.Kids))
 			}
 			bg := g.Kids[0]
-			if bg.Box != (compose.Rect{Width: 254, Height: 127}) || bg.Fill.Color != (css.Color{G: 1, A: 1}) {
+			if bg.Box != (typeset.Rect{Width: 254, Height: 127}) || bg.Fill.Color != (css.Color{G: 1, A: 1}) {
 				t.Errorf("background %+v %+v", bg.Box, bg.Fill)
 			}
 			for i, want := range []struct {
-				box  compose.Rect
+				box  typeset.Rect
 				fill css.Color
 				text string
 			}{
-				{compose.Rect{Width: 127, Height: 127}, css.Color{R: 0x4F / 255.0, G: 0x81 / 255.0, B: 0xBD / 255.0, A: 1}, "a"},
-				{compose.Rect{X: 127, Width: 127, Height: 127}, css.Color{R: 0xC0 / 255.0, G: 0x50 / 255.0, B: 0x4D / 255.0, A: 1}, "b"},
+				{typeset.Rect{Width: 127, Height: 127}, css.Color{R: 0x4F / 255.0, G: 0x81 / 255.0, B: 0xBD / 255.0, A: 1}, "a"},
+				{typeset.Rect{X: 127, Width: 127, Height: 127}, css.Color{R: 0xC0 / 255.0, G: 0x50 / 255.0, B: 0x4D / 255.0, A: 1}, "b"},
 			} {
 				k := g.Kids[i+1]
 				if k.Box != want.box || k.Geometry == nil || k.Geometry.Preset != "ellipse" {
@@ -101,7 +101,7 @@ func TestDiagram(t *testing.T) {
 			"drawn from the saved drawing", `<dsp:sp modelId="{1}"><dsp:nvSpPr><dsp:cNvPr id="0" name="saved"/><dsp:cNvSpPr/></dsp:nvSpPr>` +
 				`<dsp:spPr><a:xfrm><a:off x="12700" y="0"/><a:ext cx="254000" cy="127000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="0000FF"/></a:solidFill></dsp:spPr></dsp:sp>`,
 			func(t *testing.T, g *slides.Shape) {
-				if len(g.Kids) != 2 || g.Kids[1].Name != "saved" || g.Kids[1].Box != (compose.Rect{X: 1, Width: 20, Height: 10}) {
+				if len(g.Kids) != 2 || g.Kids[1].Name != "saved" || g.Kids[1].Box != (typeset.Rect{X: 1, Width: 20, Height: 10}) {
 					t.Fatalf("kids %+v", g.Kids)
 				}
 			},
@@ -142,7 +142,7 @@ func TestDiagram(t *testing.T) {
 			if g == nil || g.Kind != slides.KindGroup {
 				t.Fatalf("no diagram group: %+v", doc.Slides[0].Shapes)
 			}
-			if g.Box != (compose.Rect{X: 12.7, Y: 25.4, Width: 254, Height: 127}) || g.Child != (compose.Rect{Width: 254, Height: 127}) {
+			if g.Box != (typeset.Rect{X: 12.7, Y: 25.4, Width: 254, Height: 127}) || g.Child != (typeset.Rect{Width: 254, Height: 127}) {
 				t.Errorf("frame %+v child %+v", g.Box, g.Child)
 			}
 			c.check(t, g)

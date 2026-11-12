@@ -4,10 +4,10 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Control is one form control of a source document.
@@ -18,7 +18,7 @@ type Control struct {
 	ID string
 	// Field is the field the control becomes, its Rect, Appearance,
 	// OffAppearance and Parent left to [Attach].
-	Field compose.Field
+	Field typeset.Field
 	// Box takes the widget's rectangle from the node's box, for a control
 	// of a size of its own laid out as an inline block; false takes it
 	// from what the control shows, for a control whose content flows with
@@ -28,7 +28,7 @@ type Control struct {
 	// or a radio button does not show, from the fragments of the state it
 	// shows, in page coordinates, and the widget's rectangle. nil draws
 	// nothing for that state.
-	Other func(shown []compose.Fragment, r compose.Rect, m *compose.Measurer) []compose.Fragment
+	Other func(shown []typeset.Fragment, r typeset.Rect, m *typeset.Measurer) []typeset.Fragment
 }
 
 // idPrefix starts the IDs [NodeID] makes: a control character no XML
@@ -43,11 +43,11 @@ func NodeID(n int) string {
 // formElem is a Form structure element of the layout and where its
 // content first lands.
 type formElem struct {
-	elem *compose.StructElem
+	elem *typeset.StructElem
 	// page is the 0-based page of its first fragment, -1 for none.
 	page int
 	// at is the origin of its first fragment, in page coordinates.
-	at compose.Point
+	at typeset.Point
 	// pages counts the pages its content lands on.
 	pages int
 	taken bool
@@ -70,7 +70,7 @@ const (
 
 // Attach makes the controls into the form fields of the pages of res: for
 // each control whose content landed on one page, it takes that content off
-// the page (compose.TakeContent) into the field's appearance, with the
+// the page (typeset.TakeContent) into the field's appearance, with the
 // field's rectangle, and appends the field to the page's Fields, in the
 // order of controls. A control whose Form element it does not find, whose
 // content spans pages, or that shows nothing it can measure, stays printed
@@ -87,7 +87,7 @@ func Attach(res *layout.Result, controls []*Control) int {
 			byPage[f.page] = append(byPage[f.page], f)
 		}
 	}
-	m := compose.NewMeasurer()
+	m := typeset.NewMeasurer()
 	missed := 0
 	for _, c := range controls {
 		if !attach(res, c, byPage, m) {
@@ -98,7 +98,7 @@ func Attach(res *layout.Result, controls []*Control) int {
 }
 
 // attach makes c a field of its page, false when it cannot.
-func attach(res *layout.Result, c *Control, byPage map[int][]*formElem, m *compose.Measurer) bool {
+func attach(res *layout.Result, c *Control, byPage map[int][]*formElem, m *typeset.Measurer) bool {
 	anchor, ok := res.Anchors[c.ID]
 	if !ok || anchor.Page < 1 || anchor.Page > len(res.Pages) {
 		return false
@@ -128,9 +128,9 @@ func attach(res *layout.Result, c *Control, byPage map[int][]*formElem, m *compo
 		return false
 	}
 	pg := res.Pages[page]
-	taken := compose.TakeContent(pg, best.elem)
+	taken := typeset.TakeContent(pg, best.elem)
 	best.taken = true
-	var rect compose.Rect
+	var rect typeset.Rect
 	if c.Box && hasBox {
 		rect = box
 	} else if rect, ok = m.Bounds(taken); !ok || !numeric.Positive(rect.Width) || !numeric.Positive(rect.Height) {
@@ -140,8 +140,8 @@ func attach(res *layout.Result, c *Control, byPage map[int][]*formElem, m *compo
 	f := c.Field
 	f.Rect, f.Parent = rect, best.elem
 	switch f.Kind {
-	case compose.FieldCheckBox, compose.FieldRadio:
-		var other []compose.Fragment
+	case typeset.FieldCheckBox, typeset.FieldRadio:
+		var other []typeset.Fragment
 		if c.Other != nil {
 			other = c.Other(taken, rect, m)
 		}
@@ -150,7 +150,7 @@ func attach(res *layout.Result, c *Control, byPage map[int][]*formElem, m *compo
 		} else {
 			f.Appearance, f.OffAppearance = other, taken
 		}
-	case compose.FieldText, compose.FieldList, compose.FieldCombo:
+	case typeset.FieldText, typeset.FieldList, typeset.FieldCombo:
 		f.Appearance = taken
 	}
 	pg.Fields = append(pg.Fields, f)
@@ -159,11 +159,11 @@ func attach(res *layout.Result, c *Control, byPage map[int][]*formElem, m *compo
 
 // formElems returns the Form elements of the tree under root in preorder,
 // and the Form element each element under one belongs to.
-func formElems(root *compose.StructElem) ([]*formElem, map[*compose.StructElem]*formElem) {
+func formElems(root *typeset.StructElem) ([]*formElem, map[*typeset.StructElem]*formElem) {
 	var forms []*formElem
-	owner := map[*compose.StructElem]*formElem{}
+	owner := map[*typeset.StructElem]*formElem{}
 	type item struct {
-		e    *compose.StructElem
+		e    *typeset.StructElem
 		form *formElem
 	}
 	stack := []item{{e: root}}
@@ -190,7 +190,7 @@ func formElems(root *compose.StructElem) ([]*formElem, map[*compose.StructElem]*
 
 // locate records, for each Form element, the page and origin of its first
 // fragment and the pages its content lands on.
-func locate(pages []*compose.Page, forms []*formElem, owner map[*compose.StructElem]*formElem) {
+func locate(pages []*typeset.Page, forms []*formElem, owner map[*typeset.StructElem]*formElem) {
 	if len(forms) == 0 {
 		return
 	}
@@ -200,34 +200,34 @@ func locate(pages []*compose.Page, forms []*formElem, owner map[*compose.StructE
 			continue
 		}
 		seen := map[*formElem]bool{}
-		var walk func(frags []compose.Fragment, t compose.Matrix, depth int)
-		walk = func(frags []compose.Fragment, t compose.Matrix, depth int) {
+		var walk func(frags []typeset.Fragment, t typeset.Matrix, depth int)
+		walk = func(frags []typeset.Fragment, t typeset.Matrix, depth int) {
 			for _, fr := range frags {
 				steps++
 				if steps > maxWalk {
 					return
 				}
-				var parent *compose.StructElem
-				var at compose.Point
+				var parent *typeset.StructElem
+				var at typeset.Point
 				switch v := fr.(type) {
-				case *compose.Text:
+				case *typeset.Text:
 					parent, at = v.Parent, v.Origin
 					if len(v.Glyphs) > 0 {
 						at.X += v.Glyphs[0].X
 						at.Y += v.Glyphs[0].Y
 					}
-				case *compose.Image:
-					parent, at = v.Parent, compose.Point{X: v.Rect.X, Y: v.Rect.Y}
-				case *compose.Path:
+				case *typeset.Image:
+					parent, at = v.Parent, typeset.Point{X: v.Rect.X, Y: v.Rect.Y}
+				case *typeset.Path:
 					parent = v.Parent
 					if len(v.Ops) > 0 {
 						at = v.Ops[0].P[0]
 					}
-				case *compose.Group:
+				case *typeset.Group:
 					if v != nil && depth < limits.MaxGroupDepth {
 						g := v.Transform
-						if g == (compose.Matrix{}) {
-							g = compose.Identity
+						if g == (typeset.Matrix{}) {
+							g = typeset.Identity
 						}
 						walk(v.Content, then(g, t), depth+1)
 					}
@@ -245,17 +245,17 @@ func locate(pages []*compose.Page, forms []*formElem, owner map[*compose.StructE
 				}
 				if f.page < 0 {
 					f.page = i
-					f.at = compose.Point{X: t.A*at.X + t.C*at.Y + t.E, Y: t.B*at.X + t.D*at.Y + t.F}
+					f.at = typeset.Point{X: t.A*at.X + t.C*at.Y + t.E, Y: t.B*at.X + t.D*at.Y + t.F}
 				}
 			}
 		}
-		walk(pg.Content, compose.Identity, 0)
+		walk(pg.Content, typeset.Identity, 0)
 	}
 }
 
 // then returns the transform that applies a, then b.
-func then(a, b compose.Matrix) compose.Matrix {
-	return compose.Matrix{
+func then(a, b typeset.Matrix) typeset.Matrix {
+	return typeset.Matrix{
 		A: a.A*b.A + a.B*b.C,
 		B: a.A*b.B + a.B*b.D,
 		C: a.C*b.A + a.D*b.C,

@@ -7,8 +7,8 @@ import (
 	"github.com/go-text/typesetting/font/opentype"
 	"github.com/go-text/typesetting/shaping"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxFontSize bounds [Style.Size], and the magnitude of [Style.LetterSpacing]
@@ -87,7 +87,7 @@ type Style struct {
 	// Korean, the Noto CJK variant matching and fallback prefer.
 	Lang string
 	// Color fills the glyphs.
-	Color compose.Color
+	Color typeset.Color
 	// LetterSpacing is added after every character cluster, in points,
 	// as CSS letter-spacing does. It may be negative; its magnitude is at
 	// most 1000.
@@ -99,10 +99,10 @@ type Style struct {
 	// Scale scales the glyphs horizontally, the Office formats' text
 	// scale: [Fonts.Shape] shapes at the natural advances, lays the
 	// paragraph out at the scaled ones and writes each run's glyph
-	// positions unscaled with the scale as its [compose.Text.HScale]. Letter
+	// positions unscaled with the scale as its [typeset.Text.HScale]. Letter
 	// spacing is added after scaling, unscaled. 0 and 1 draw at the
-	// natural width; otherwise it lies in [compose.MinHScale,
-	// compose.MaxHScale]. [Fonts.Layout] ignores it.
+	// natural width; otherwise it lies in [typeset.MinHScale,
+	// typeset.MaxHScale]. [Fonts.Layout] ignores it.
 	Scale float64
 	// NoKerning shapes the run without the font's kerning, CSS
 	// font-kerning: none (CSS Fonts 4, 6.3): the shaper is handed the kern
@@ -157,8 +157,8 @@ func (s Style) validate() error {
 	if !finiteWithin(s.WordSpacing, maxFontSize) {
 		return fmt.Errorf("%w: word spacing %v outside [-%d, %d]", ErrInvalidStyle, s.WordSpacing, maxFontSize, maxFontSize)
 	}
-	if s.Scale != 0 && (!numeric.Finite(s.Scale) || s.Scale < compose.MinHScale || s.Scale > compose.MaxHScale) {
-		return fmt.Errorf("%w: scale %v outside [%v, %v]", ErrInvalidStyle, s.Scale, compose.MinHScale, compose.MaxHScale)
+	if s.Scale != 0 && (!numeric.Finite(s.Scale) || s.Scale < typeset.MinHScale || s.Scale > typeset.MaxHScale) {
+		return fmt.Errorf("%w: scale %v outside [%v, %v]", ErrInvalidStyle, s.Scale, typeset.MinHScale, typeset.MaxHScale)
 	}
 	return nil
 }

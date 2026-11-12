@@ -1,4 +1,4 @@
-// Package html lays an HTML document out as a [compose.Document]: it parses
+// Package html lays an HTML document out as a [typeset.Document]: it parses
 // the document with x/net/html, styles it with the css package, builds the
 // layout package's content tree and hands it to the engine.
 //

@@ -3,11 +3,11 @@ package odt
 import (
 	"strconv"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // The page Writer lays a document out on when it names no page layout:
@@ -445,7 +445,7 @@ func wrap(n *layout.Node) *layout.Node {
 
 // marginContent is the layout's MarginContent: the header and footer of
 // the master page a page shows, its page fields resolved, as artifacts.
-func (f *pageFlow) marginContent(info layout.PageInfo, pages int) []compose.Fragment {
+func (f *pageFlow) marginContent(info layout.PageInfo, pages int) []typeset.Fragment {
 	if info.Index >= len(f.entries) {
 		return nil
 	}
@@ -486,16 +486,16 @@ func (f *pageFlow) marginContent(info layout.PageInfo, pages int) []compose.Frag
 
 // artifacts strips the structure from frags: headers and footers are
 // pagination artifacts (ISO 32000-1, 14.8.2.2.2).
-func artifacts(frags []compose.Fragment) []compose.Fragment {
+func artifacts(frags []typeset.Fragment) []typeset.Fragment {
 	for _, fr := range frags {
 		switch v := fr.(type) {
-		case *compose.Text:
+		case *typeset.Text:
 			v.Parent = nil
-		case *compose.Image:
+		case *typeset.Image:
 			v.Parent = nil
-		case *compose.Path:
+		case *typeset.Path:
 			v.Parent = nil
-		case *compose.Group:
+		case *typeset.Group:
 			artifacts(v.Content)
 		}
 	}

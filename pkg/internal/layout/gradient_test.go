@@ -4,8 +4,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // gstops returns gradient stops of colours at px positions, NaN for none.
@@ -122,14 +122,14 @@ func TestGradient_ColorStops(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		g     *css.Gradient
-		solid compose.Color
+		solid typeset.Color
 	}{
-		{"one stop", &css.Gradient{Stops: gstops(red, math.NaN())}, compose.Color{R: 1, A: 1}},
+		{"one stop", &css.Gradient{Stops: gstops(red, math.NaN())}, typeset.Color{R: 1, A: 1}},
 		{
 			"repeating without period: equidistant average", &css.Gradient{Repeating: true, Stops: gstops(black, 3.0, black, 3.0, css.Color{R: 0.5, B: 0.5, A: 1}, 3.0, css.Color{R: 0.5, B: 0.5, A: 1}, 3.0)},
-			compose.Color{R: 0.25, B: 0.25, A: 1},
+			typeset.Color{R: 0.25, B: 0.25, A: 1},
 		},
-		{"radial before its centre", &css.Gradient{Stops: gstops(red, -3.0, blue, -1.0)}, compose.Color{B: 1, A: 1}},
+		{"radial before its centre", &css.Gradient{Stops: gstops(red, -3.0, blue, -1.0)}, typeset.Color{B: 1, A: 1}},
 	} {
 		_, _, _, solid, ok := e.colorStops(tc.g, px(10), 0, px(10), tc.name == "radial before its centre", 0)
 		if ok || math.Abs(solid.R-tc.solid.R) > 1e-6 || math.Abs(solid.B-tc.solid.B) > 1e-6 || solid.A != tc.solid.A {
@@ -148,9 +148,9 @@ func TestGradient_ColorStops(t *testing.T) {
 	if !ok || len(stops) < gradientSplits || !(hi > lo) || stops[0].Offset != 0 || stops[len(stops)-1].Offset != 1 {
 		t.Fatalf("stops %v over [%v, %v]", stops, lo, hi)
 	}
-	sh := &compose.Shading{To: compose.Point{X: 1}, Stops: stops}
-	doc := &compose.Document{Pages: []*compose.Page{{Width: 10, Height: 10, Content: []compose.Fragment{
-		&compose.Path{Ops: rectOps(compose.Rect{Width: 10, Height: 10}), Fill: &compose.Fill{Shading: sh}},
+	sh := &typeset.Shading{To: typeset.Point{X: 1}, Stops: stops}
+	doc := &typeset.Document{Pages: []*typeset.Page{{Width: 10, Height: 10, Content: []typeset.Fragment{
+		&typeset.Path{Ops: rectOps(typeset.Rect{Width: 10, Height: 10}), Fill: &typeset.Fill{Shading: sh}},
 	}}}}
 	if err := doc.Validate(); err != nil {
 		t.Errorf("Validate: %v", err)

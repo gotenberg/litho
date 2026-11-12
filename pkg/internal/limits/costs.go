@@ -20,7 +20,7 @@ import "image/color"
 //     element without text.
 const XMLElementCost = 256
 
-// GlyphCost is what one glyph of a laid-out line costs: its compose.Glyph,
+// GlyphCost is what one glyph of a laid-out line costs: its typeset.Glyph,
 // 40 bytes on a 64-bit platform, the characters of its cluster and its
 // share of the run that holds it. The text stack charges it as it lays a
 // line out; the glyphs live as long as the page that holds them.

@@ -6,10 +6,10 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // emuPerPoint is the EMUs in a point (ECMA-376 Part 1, 20.1.2.1).
@@ -61,7 +61,7 @@ func (r *reader) diagram(c *shapeCtx, data *ooxml.Element, s *slides.Shape, dept
 	s.Kind = slides.KindGroup
 	// The diagram's shapes are placed in the frame's coordinates, from its
 	// top left corner.
-	s.Child = compose.Rect{Width: s.Box.Width, Height: s.Box.Height}
+	s.Child = typeset.Rect{Width: s.Box.Width, Height: s.Box.Height}
 	inner := &shapeCtx{layer: c.layer, sc: c.sc, ns: nsDSP, part: parts.data}
 	if bg := r.diagramShape(inner, &ooxml.DiagramShape{W: emu(s.Box.Width), H: emu(s.Box.Height), FillSpPr: d.Background, LineSpPr: d.Whole}, "rect", 0, 0); bg != nil && (bg.Fill.Kind != slides.FillNone || bg.Line.Width > 0) {
 		s.Kids = append(s.Kids, bg)
@@ -259,7 +259,7 @@ func (r *reader) diagramShapes(out *[]*slides.Shape, c *shapeCtx, ds *ooxml.Diag
 // draws (no preset, a hidden geometry, an unconverted connector) prints
 // its text alone; nil when nothing prints.
 func (r *reader) diagramShape(c *shapeCtx, ds *ooxml.DiagramShape, preset string, x, y int64) *slides.Shape {
-	box := compose.Rect{X: float64(x) / emuPerPoint, Y: float64(y) / emuPerPoint, Width: float64(max(0, ds.W)) / emuPerPoint, Height: float64(max(0, ds.H)) / emuPerPoint}
+	box := typeset.Rect{X: float64(x) / emuPerPoint, Y: float64(y) / emuPerPoint, Width: float64(max(0, ds.W)) / emuPerPoint, Height: float64(max(0, ds.H)) / emuPerPoint}
 	draws := preset != "" && shape.Known(&shape.Geometry{Preset: preset})
 	sp := &ooxml.Element{Space: nsDSP, Local: "sp"}
 	pr := &ooxml.Element{Space: nsDSP, Local: "spPr"}
@@ -310,7 +310,7 @@ func (r *reader) diagramShape(c *shapeCtx, ds *ooxml.DiagramShape, preset string
 		// a quarter turn swaps the box's sides about its centre.
 		if q := math.Mod(math.Abs(rot), 180); q == 90 {
 			cx, cy := s.Box.X+s.Box.Width/2, s.Box.Y+s.Box.Height/2
-			s.Box = compose.Rect{X: cx - s.Box.Height/2, Y: cy - s.Box.Width/2, Width: s.Box.Height, Height: s.Box.Width}
+			s.Box = typeset.Rect{X: cx - s.Box.Height/2, Y: cy - s.Box.Width/2, Width: s.Box.Height, Height: s.Box.Width}
 		}
 		s.Rotation += rot
 	}
@@ -330,7 +330,7 @@ func turnText(s *slides.Shape, rot float64) *slides.Shape {
 	text := &slides.Shape{Kind: slides.KindGeometry, Name: s.Name, Box: s.Box, Rotation: s.Rotation + rot, Text: s.Text}
 	if math.Mod(math.Abs(rot), 180) == 90 {
 		cx, cy := s.Box.X+s.Box.Width/2, s.Box.Y+s.Box.Height/2
-		text.Box = compose.Rect{X: cx - s.Box.Height/2, Y: cy - s.Box.Width/2, Width: s.Box.Height, Height: s.Box.Width}
+		text.Box = typeset.Rect{X: cx - s.Box.Height/2, Y: cy - s.Box.Width/2, Width: s.Box.Height, Height: s.Box.Width}
 	}
 	body := *s
 	body.Text = nil

@@ -3,12 +3,12 @@ package pptx
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // effectList fills the shadow, glow and soft edge of s from the effect
@@ -155,7 +155,7 @@ const maxShadowScale = 10
 // ST_RectAlignment, "b" by default) the scale keeps fixed, folded into
 // the offsets as a scale about box's centre. rotWithShape is not read:
 // Impress keeps a turned shape's shadow at the slide's offsets.
-func outerShadow(e *ooxml.Element, box compose.Rect) *slides.Shadow {
+func outerShadow(e *ooxml.Element, box typeset.Rect) *slides.Shadow {
 	sh := &slides.Shadow{ScaleX: 1, ScaleY: 1}
 	if v := emuAttr(e, "blurRad"); numeric.PositiveFinite(v) {
 		sh.Blur = min(v, maxEffectRadius)

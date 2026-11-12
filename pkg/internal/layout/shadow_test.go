@@ -5,8 +5,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func shadow(x, y, blur, spread float64, c css.Color, inset bool) func(*css.Style) {
@@ -183,14 +183,14 @@ func TestInline_DecorationsInTreeOrder(t *testing.T) {
 
 func TestShades_Blink(t *testing.T) {
 	tests := []struct {
-		in, dark, light compose.Color
+		in, dark, light typeset.Color
 	}{
 		// Too dark to darken (Chromium 9.0.0 print): the lighter shade and
 		// its lighter.
-		{compose.Color{A: 1}, compose.Color{R: 0x54 / 255.0, G: 0x54 / 255.0, B: 0x54 / 255.0, A: 1}, compose.Color{R: 0xa8 / 255.0, G: 0xa8 / 255.0, B: 0xa8 / 255.0, A: 1}},
-		{compose.Color{R: 0x21 / 255.0, A: 1}, compose.Color{R: 117 / 255.0, A: 1}, compose.Color{R: 201 / 255.0, A: 1}},
-		{compose.Color{G: 0x30 / 255.0, A: 1}, compose.Color{A: 1}, compose.Color{G: 132 / 255.0, A: 1}},
-		{compose.Color{B: 1, A: 1}, compose.Color{B: 171 / 255.0, A: 1}, compose.Color{B: 1, A: 1}},
+		{typeset.Color{A: 1}, typeset.Color{R: 0x54 / 255.0, G: 0x54 / 255.0, B: 0x54 / 255.0, A: 1}, typeset.Color{R: 0xa8 / 255.0, G: 0xa8 / 255.0, B: 0xa8 / 255.0, A: 1}},
+		{typeset.Color{R: 0x21 / 255.0, A: 1}, typeset.Color{R: 117 / 255.0, A: 1}, typeset.Color{R: 201 / 255.0, A: 1}},
+		{typeset.Color{G: 0x30 / 255.0, A: 1}, typeset.Color{A: 1}, typeset.Color{G: 132 / 255.0, A: 1}},
+		{typeset.Color{B: 1, A: 1}, typeset.Color{B: 171 / 255.0, A: 1}, typeset.Color{B: 1, A: 1}},
 	}
 	for _, tt := range tests {
 		d, l := shades(tt.in, true)
@@ -199,17 +199,17 @@ func TestShades_Blink(t *testing.T) {
 		}
 	}
 	// Off the Blink rendering, black darkens to black.
-	if d, l := shades(compose.Color{A: 1}, false); d != (compose.Color{A: 1}) || !colorNear(l, compose.Color{R: 0x54 / 255.0, G: 0x54 / 255.0, B: 0x54 / 255.0, A: 1}) {
+	if d, l := shades(typeset.Color{A: 1}, false); d != (typeset.Color{A: 1}) || !colorNear(l, typeset.Color{R: 0x54 / 255.0, G: 0x54 / 255.0, B: 0x54 / 255.0, A: 1}) {
 		t.Errorf("shades(black, false) = %v, %v; want black and #545454", d, l)
 	}
 	// #8d99ae, measured on Chromium's groove: (73, 79, 90) and (207, 225, 255).
-	d, l := shades(compose.Color{R: 141 / 255.0, G: 153 / 255.0, B: 174 / 255.0, A: 1}, true)
+	d, l := shades(typeset.Color{R: 141 / 255.0, G: 153 / 255.0, B: 174 / 255.0, A: 1}, true)
 	if math.Abs(d.R*255-73) > 1 || math.Abs(l.G*255-225) > 1 || math.Abs(l.B*255-255) > 1 {
 		t.Errorf("shades of #8d99ae = %v, %v", d, l)
 	}
 }
 
-func colorNear(a, b compose.Color) bool {
+func colorNear(a, b typeset.Color) bool {
 	return math.Abs(a.R-b.R) < 1e-6 && math.Abs(a.G-b.G) < 1e-6 && math.Abs(a.B-b.B) < 1e-6 && a.A == b.A
 }
 
@@ -217,12 +217,12 @@ func TestDashStroke_FitsTheSide(t *testing.T) {
 	// The Chromium reference of the html borders fixture: a 4px dashed
 	// side 170px long has 15 dashes of 8px; a dotted one 22 dots.
 	w := px(4)
-	st := dashStroke(css.Dashed, compose.Color{A: 1}, w, px(170), false)
+	st := dashStroke(css.Dashed, typeset.Color{A: 1}, w, px(170), false)
 	if dash, gap := st.Dash[0], st.Dash[1]; math.Abs(dash-px(8)) > 1e-9 || math.Abs(15*dash+14*gap-px(170)) > 1e-9 {
 		t.Errorf("dashed pattern %v", st.Dash)
 	}
-	st = dashStroke(css.Dotted, compose.Color{A: 1}, w, px(166), false)
-	if pitch := st.Dash[1]; st.Dash[0] != 0 || st.Cap != compose.RoundCap || math.Abs(21*pitch-px(166)) > 1e-9 {
+	st = dashStroke(css.Dotted, typeset.Color{A: 1}, w, px(166), false)
+	if pitch := st.Dash[1]; st.Dash[0] != 0 || st.Cap != typeset.RoundCap || math.Abs(21*pitch-px(166)) > 1e-9 {
 		t.Errorf("dotted pattern %v, cap %v", st.Dash, st.Cap)
 	}
 }
@@ -230,8 +230,8 @@ func TestDashStroke_FitsTheSide(t *testing.T) {
 func TestDashStroke_ThinDotsAreSquare(t *testing.T) {
 	// Under 3px the dots are squares a width long, butt-capped.
 	w := px(1)
-	st := dashStroke(css.Dotted, compose.Color{A: 1}, w, px(9), false)
-	if st.Cap == compose.RoundCap || st.Dash[0] != w || math.Abs(5*w+4*st.Dash[1]-px(9)) > 1e-9 {
+	st := dashStroke(css.Dotted, typeset.Color{A: 1}, w, px(9), false)
+	if st.Cap == typeset.RoundCap || st.Dash[0] != w || math.Abs(5*w+4*st.Dash[1]-px(9)) > 1e-9 {
 		t.Errorf("thin dotted pattern %v, cap %v", st.Dash, st.Cap)
 	}
 }
@@ -244,7 +244,7 @@ func TestBackgroundRound_KeepsRatio(t *testing.T) {
 		s.BackgroundSize = css.BackgroundSize{Width: css.Pts(6), Height: css.Dimension{Kind: css.Auto}}
 	})
 	e := &engine{}
-	area := compose.Rect{Width: 8, Height: 12}
+	area := typeset.Rect{Width: 8, Height: 12}
 	tiles := e.tiles(st, pic(color.NRGBA{B: 255, A: 255}, 4, 4), area, area, 0)
 	if len(tiles) == 0 || tiles[0].Width != 8 || tiles[0].Height != 8 {
 		t.Errorf("tiles %v, want 8 by 8", tiles)

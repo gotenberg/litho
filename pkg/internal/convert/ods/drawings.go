@@ -15,13 +15,13 @@ import (
 	_ "golang.org/x/image/tiff" // registers TIFF with image.Decode
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/svg"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxShapeGroupDepth bounds the nesting of draw:g shape groups read at
@@ -287,7 +287,7 @@ func (r *reader) decodePicture(img *odf.Element) *layout.Picture {
 	}
 	pic := &layout.Picture{Width: float64(cfg.Width) * css.Pt, Height: float64(cfg.Height) * css.Pt}
 	if format == "jpeg" && (cfg.ColorModel == imgcolor.GrayModel || cfg.ColorModel == imgcolor.YCbCrModel || cfg.ColorModel == imgcolor.CMYKModel) {
-		src, err := compose.JPEGImage(r.ctx, data)
+		src, err := typeset.JPEGImage(r.ctx, data)
 		if err != nil {
 			r.warn("picture-decode", "a jpeg picture does not decode")
 			return nil
@@ -307,7 +307,7 @@ func (r *reader) decodePicture(img *odf.Element) *layout.Picture {
 		r.warn("picture-decode", fmt.Sprintf("a %s picture does not decode", format))
 		return nil
 	}
-	src, err := compose.EncodeImage(r.ctx, im)
+	src, err := typeset.EncodeImage(r.ctx, im)
 	if err != nil {
 		r.warn("picture-decode", fmt.Sprintf("a %s picture does not encode: %v", format, err))
 		return nil

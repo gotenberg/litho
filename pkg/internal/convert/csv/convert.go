@@ -6,12 +6,12 @@ import (
 	"io"
 	"unicode/utf8"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	budget "github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Convert reads the CSV file src holds and lays it out as a paged
@@ -23,7 +23,7 @@ import (
 // office.ErrTooManyPages past the page cap. A CSV file is never encrypted:
 // opts.Password is ignored. The output depends on src, fonts' index and
 // opts alone.
-func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*compose.Document, error) {
+func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*typeset.Document, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ const fallbackYear = 2026
 // date without a year its year (the zero time: [fallbackYear]), and the
 // default page of opts (office.Options.DefaultPage) is the paper, Letter
 // without one. It returns ctx's error when ctx ends first.
-func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Options) (*sheet.Document, []compose.Warning, error) {
+func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Options) (*sheet.Document, []typeset.Warning, error) {
 	printDate := opts.PrintDate
 	for _, r := range opts.CSVSeparators {
 		if r == quote || r == '\n' || r == '\r' || r == utf8.RuneError || !utf8.ValidRune(r) {
@@ -113,8 +113,8 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 	if err != nil {
 		return nil, nil, err
 	}
-	var warnings []compose.Warning
-	warn := func(code, msg string) { warnings = append(warnings, compose.Warning{Code: code, Message: msg}) }
+	var warnings []typeset.Warning
+	warn := func(code, msg string) { warnings = append(warnings, typeset.Warning{Code: code, Message: msg}) }
 	if lim.rows {
 		warn("too-many-rows", fmt.Sprintf("rows past %d are not read", maxRows))
 	}

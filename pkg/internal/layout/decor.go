@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // kappa places the control points of a cubic Bézier that approximates a
@@ -14,13 +14,13 @@ import (
 const kappa = 0.5522847498
 
 // rectOps returns the path of rectangle r.
-func rectOps(r compose.Rect) []compose.PathOp {
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{{X: r.X, Y: r.Y}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X + r.Width, Y: r.Y}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X + r.Width, Y: r.Y + r.Height}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X, Y: r.Y + r.Height}}},
-		{Kind: compose.ClosePath},
+func rectOps(r typeset.Rect) []typeset.PathOp {
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: r.X, Y: r.Y}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X + r.Width, Y: r.Y}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X + r.Width, Y: r.Y + r.Height}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: r.X, Y: r.Y + r.Height}}},
+		{Kind: typeset.ClosePath},
 	}
 }
 
@@ -57,8 +57,8 @@ func radiiOf(b *box, w, h float64) [4][2]float64 {
 
 // insetRect returns r shrunk by d per side and the radii of its corners,
 // reduced by the inset (CSS Backgrounds 3, 5.2).
-func insetRect(r compose.Rect, radii [4][2]float64, d [4]float64) (compose.Rect, [4][2]float64) {
-	out := compose.Rect{
+func insetRect(r typeset.Rect, radii [4][2]float64, d [4]float64) (typeset.Rect, [4][2]float64) {
+	out := typeset.Rect{
 		X: r.X + d[css.Left], Y: r.Y + d[css.Top],
 		Width:  max(r.Width-d[css.Left]-d[css.Right], 0),
 		Height: max(r.Height-d[css.Top]-d[css.Bottom], 0),
@@ -79,19 +79,19 @@ func insetRect(r compose.Rect, radii [4][2]float64, d [4]float64) (compose.Rect,
 
 // roundedRect returns the path of r with elliptical corners of radii,
 // each a cubic Bézier.
-func roundedRect(r compose.Rect, radii [4][2]float64) []compose.PathOp {
+func roundedRect(r typeset.Rect, radii [4][2]float64) []typeset.PathOp {
 	if radii == [4][2]float64{} {
 		return rectOps(r)
 	}
 	x0, y0, x1, y1 := r.X, r.Y, r.X+r.Width, r.Y+r.Height
 	tl, tr, br, bl := radii[css.TopLeft], radii[css.TopRight], radii[css.BottomRight], radii[css.BottomLeft]
-	pt := func(x, y float64) compose.Point { return compose.Point{X: x, Y: y} }
-	ops := []compose.PathOp{{Kind: compose.MoveTo, P: [3]compose.Point{pt(x0+tl[0], y0)}}}
+	pt := func(x, y float64) typeset.Point { return typeset.Point{X: x, Y: y} }
+	ops := []typeset.PathOp{{Kind: typeset.MoveTo, P: [3]typeset.Point{pt(x0+tl[0], y0)}}}
 	line := func(x, y float64) {
-		ops = append(ops, compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{pt(x, y)}})
+		ops = append(ops, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{pt(x, y)}})
 	}
-	curve := func(c1, c2, to compose.Point) {
-		ops = append(ops, compose.PathOp{Kind: compose.CurveTo, P: [3]compose.Point{c1, c2, to}})
+	curve := func(c1, c2, to typeset.Point) {
+		ops = append(ops, typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{c1, c2, to}})
 	}
 	line(x1-tr[0], y0)
 	if tr[0] > 0 {
@@ -109,12 +109,12 @@ func roundedRect(r compose.Rect, radii [4][2]float64) []compose.PathOp {
 	if tl[0] > 0 {
 		curve(pt(x0, y0+tl[1]-kappa*tl[1]), pt(x0+tl[0]-kappa*tl[0], y0), pt(x0+tl[0], y0))
 	}
-	return append(ops, compose.PathOp{Kind: compose.ClosePath})
+	return append(ops, typeset.PathOp{Kind: typeset.ClosePath})
 }
 
 // ring returns the even-odd path between the rounded rectangles outer and
 // inner.
-func ring(outer compose.Rect, oradii [4][2]float64, inner compose.Rect, iradii [4][2]float64) []compose.PathOp {
+func ring(outer typeset.Rect, oradii [4][2]float64, inner typeset.Rect, iradii [4][2]float64) []typeset.PathOp {
 	ops := roundedRect(outer, oradii)
 	if inner.Width > 0 && inner.Height > 0 {
 		ops = append(ops, roundedRect(inner, iradii)...)
@@ -125,7 +125,7 @@ func ring(outer compose.Rect, oradii [4][2]float64, inner compose.Rect, iradii [
 // background paints the background of box b of style st on the border box
 // r with outer corner radii: the colour over the background-clip area, then
 // the image (CSS Backgrounds 3, 3).
-func (p *painter) background(b *box, st *css.Style, r compose.Rect, radii [4][2]float64, bd, pd [4]float64) {
+func (p *painter) background(b *box, st *css.Style, r typeset.Rect, radii [4][2]float64, bd, pd [4]float64) {
 	clipR, clipRadii := r, radii
 	switch st.BackgroundClip {
 	case css.BorderEdge, css.TextEdge:
@@ -156,9 +156,9 @@ func (p *painter) background(b *box, st *css.Style, r compose.Rect, radii [4][2]
 // backgroundInto paints the colour and the image of the background of b
 // clipped to clipR with clipRadii, into the group into, or into the
 // display list when into is nil.
-func (p *painter) backgroundInto(into *ditem, b *box, st *css.Style, r compose.Rect, radii [4][2]float64, bd, pd [4]float64, clipR compose.Rect, clipRadii [4][2]float64) {
+func (p *painter) backgroundInto(into *ditem, b *box, st *css.Style, r typeset.Rect, radii [4][2]float64, bd, pd [4]float64, clipR typeset.Rect, clipRadii [4][2]float64) {
 	if c, ok := colorOf(st.BackgroundColor); ok {
-		path := &compose.Path{Ops: roundedRect(clipR, clipRadii), Fill: &compose.Fill{Color: c}}
+		path := &typeset.Path{Ops: roundedRect(clipR, clipRadii), Fill: &typeset.Fill{Color: c}}
 		if into == nil {
 			p.emit(b, false, path, clipR.Y, clipR.Y+clipR.Height, -1)
 		} else {
@@ -183,7 +183,7 @@ func (p *painter) backgroundInto(into *ditem, b *box, st *css.Style, r compose.R
 	if st.BackgroundAttachment == css.AttachLocal {
 		area = p.localArea(b, area, r, pd)
 	}
-	g := &ditem{group: true, opacity: 1, clip: &compose.Path{Ops: roundedRect(clipR, clipRadii), Fill: &compose.Fill{}}}
+	g := &ditem{group: true, opacity: 1, clip: &typeset.Path{Ops: roundedRect(clipR, clipRadii), Fill: &typeset.Fill{}}}
 	if st.BackgroundGradient != nil {
 		for _, pa := range p.e.gradientTiles(st, area, clipR, r.Y) {
 			t := pa.Ops[0].P[0]
@@ -234,7 +234,7 @@ func addSides(a, b [4]float64) [4]float64 {
 // tiles returns the placements of the background image pic over the
 // positioning area, within the painting area clip: its size (CSS
 // Backgrounds 3, 3.9), position (3.6) and repetition (3.4).
-func (e *engine) tiles(st *css.Style, pic *Picture, area, clip compose.Rect, y float64) []compose.Rect {
+func (e *engine) tiles(st *css.Style, pic *Picture, area, clip typeset.Rect, y float64) []typeset.Rect {
 	out, over := tileRects(st, pic, area, clip)
 	if over {
 		e.warn(codeBackgroundTiles, fmt.Sprintf("a background repeated more than %d times was drawn once", maxBackgroundTiles), y)
@@ -244,7 +244,7 @@ func (e *engine) tiles(st *css.Style, pic *Picture, area, clip compose.Rect, y f
 
 // tileRects returns what [engine.tiles] does, and true with the first
 // tile alone when more than maxBackgroundTiles would cover the clip.
-func tileRects(st *css.Style, pic *Picture, area, clip compose.Rect) ([]compose.Rect, bool) {
+func tileRects(st *css.Style, pic *Picture, area, clip typeset.Rect) ([]typeset.Rect, bool) {
 	iw, ih := pic.Width, pic.Height
 	w, h := iw, ih
 	bs := st.BackgroundSize
@@ -293,12 +293,12 @@ func tileRects(st *css.Style, pic *Picture, area, clip compose.Rect) ([]compose.
 	xs := positions(rep[0], x0, w, area.X, area.Width, clip.X, clip.Width)
 	ys := positions(rep[1], y0, h, area.Y, area.Height, clip.Y, clip.Height)
 	if len(xs)*len(ys) > maxBackgroundTiles || len(xs) > maxBackgroundTiles || len(ys) > maxBackgroundTiles {
-		return []compose.Rect{{X: x0, Y: y0, Width: w, Height: h}}, true
+		return []typeset.Rect{{X: x0, Y: y0, Width: w, Height: h}}, true
 	}
-	var out []compose.Rect
+	var out []typeset.Rect
 	for _, ty := range ys {
 		for _, tx := range xs {
-			out = append(out, compose.Rect{X: tx, Y: ty, Width: w, Height: h})
+			out = append(out, typeset.Rect{X: tx, Y: ty, Width: w, Height: h})
 		}
 	}
 	return out, false
@@ -366,14 +366,14 @@ func positions(rep css.Repeat, start, size, areaStart, areaSize, clipStart, clip
 //   - probe, html: Chromium 9.0.0's print draws #000 as #545454 and
 //     #a8a8a8, #210000 as (117, 0, 0) and (201, 0, 0), and #003000 as
 //     black and (0, 132, 0).
-func shades(c compose.Color, blink bool) (compose.Color, compose.Color) {
+func shades(c typeset.Color, blink bool) (typeset.Color, typeset.Color) {
 	if blink && veryDark(c) {
 		l := lighter(c)
 		return l, lighter(l)
 	}
 	v := max(c.R, c.G, c.B)
 	if v <= 0 {
-		return compose.Color{A: c.A}, lighter(c)
+		return typeset.Color{A: c.A}, lighter(c)
 	}
 	return blinkScale(c, max(v-blinkShift, 0)/v), lighter(c)
 }
@@ -389,19 +389,19 @@ const blinkShift = 0.33
 
 // lighter is Blink's Color::Light: the brightest channel up by 0.33 of the
 // range, the others scaled with it, black to #545454.
-func lighter(c compose.Color) compose.Color {
+func lighter(c typeset.Color) typeset.Color {
 	v := max(c.R, c.G, c.B)
 	if v <= 0 {
-		return compose.Color{R: 0x54 / 255.0, G: 0x54 / 255.0, B: 0x54 / 255.0, A: c.A}
+		return typeset.Color{R: 0x54 / 255.0, G: 0x54 / 255.0, B: 0x54 / 255.0, A: c.A}
 	}
 	return blinkScale(c, min(v+blinkShift, 1)/v)
 }
 
 // blinkScale scales the channels of c by k and truncates them to 8 bits
 // as Blink does (the channel times just under 256, rounded down).
-func blinkScale(c compose.Color, k float64) compose.Color {
+func blinkScale(c typeset.Color, k float64) typeset.Color {
 	ch := func(v float64) float64 { return min(math.Floor(min(max(v*k, 0), 1)*255.99998), 255) / 255 }
-	return compose.Color{R: ch(c.R), G: ch(c.G), B: ch(c.B), A: c.A}
+	return typeset.Color{R: ch(c.R), G: ch(c.G), B: ch(c.B), A: c.A}
 }
 
 // veryDark reports a colour whose relative luminance (WCAG 2, sRGB) is at
@@ -411,7 +411,7 @@ func blinkScale(c compose.Color, k float64) compose.Color {
 //
 //   - probe, html: Chromium's shades take #202020 and #300000 as very
 //     dark, #212121 and #003000 as not.
-func veryDark(c compose.Color) bool {
+func veryDark(c typeset.Color) bool {
 	lin := func(v float64) float64 {
 		v = min(max(v, 0), 1)
 		if v <= 0.04045 {
@@ -436,8 +436,8 @@ func (p *painter) blink() bool { return p.e.opts.BrowserRules }
 //
 //   - probe, html: Chromium 9.0.0's print draws these shades for every
 //     color tried, black and #800000.
-func currentShades(a float64) (compose.Color, compose.Color) {
-	g := func(v float64) compose.Color { return compose.Color{R: v / 255, G: v / 255, B: v / 255, A: a} }
+func currentShades(a float64) (typeset.Color, typeset.Color) {
+	g := func(v float64) typeset.Color { return typeset.Color{R: v / 255, G: v / 255, B: v / 255, A: a} }
 	return g(0x9a), g(0xee)
 }
 
@@ -445,7 +445,7 @@ func currentShades(a float64) (compose.Color, compose.Color) {
 // outer corner radii and used widths bd, the sides in draw (CSS 2.1, 8.5;
 // CSS Backgrounds 3, 4), or its border image in their place (CSS
 // Backgrounds 3, 6).
-func (p *painter) border(b *box, st *css.Style, r compose.Rect, radii [4][2]float64, bd [4]float64, draw [4]bool) {
+func (p *painter) border(b *box, st *css.Style, r typeset.Rect, radii [4][2]float64, bd [4]float64, draw [4]bool) {
 	if p.borderImage(b, st, r, bd, draw) {
 		return
 	}
@@ -506,14 +506,14 @@ func (p *painter) border(b *box, st *css.Style, r compose.Rect, radii [4][2]floa
 		mid, midRadii := insetRect(r, radii, [4]float64{bd[0] / 2, bd[0] / 2, bd[0] / 2, bd[0] / 2})
 		ops := roundedRect(mid, midRadii)
 		stroke := dashStroke(bs, c, bd[0], roundedLength(mid, midRadii), true)
-		p.emit(b, false, &compose.Path{Ops: ops, Stroke: stroke}, r.Y, r.Y+r.Height, -1)
+		p.emit(b, false, &typeset.Path{Ops: ops, Stroke: stroke}, r.Y, r.Y+r.Height, -1)
 		return
 	}
 	for s := range 4 {
 		if !visible[s] {
 			continue
 		}
-		g := &ditem{group: true, opacity: 1, clip: &compose.Path{Ops: sideClip(css.Side(s), r, inner), Fill: &compose.Fill{}}}
+		g := &ditem{group: true, opacity: 1, clip: &typeset.Path{Ops: sideClip(css.Side(s), r, inner), Fill: &typeset.Fill{}}}
 		if bs := st.Border[s].Style; bs == css.Dashed || bs == css.Dotted {
 			// A stroke along the side stays inside it: no clip.
 			g = &ditem{group: true, opacity: 1}
@@ -540,8 +540,8 @@ func (p *painter) border(b *box, st *css.Style, r compose.Rect, radii [4][2]floa
 // the width, stretch or shrink so the pattern starts and ends on a dash or
 // a dot: on the corners of a side. closed reports a closed path, whose
 // pattern repeats a whole number of times around it.
-func dashStroke(bs css.BorderStyle, c compose.Color, w, l float64, closed bool) *compose.Stroke {
-	st := &compose.Stroke{Color: c, Width: w}
+func dashStroke(bs css.BorderStyle, c typeset.Color, w, l float64, closed bool) *typeset.Stroke {
+	st := &typeset.Stroke{Color: c, Width: w}
 	dash := 2 * w
 	if w < 3*css.Pt {
 		dash = 3 * w
@@ -550,7 +550,7 @@ func dashStroke(bs css.BorderStyle, c compose.Color, w, l float64, closed bool) 
 	if bs == css.Dotted {
 		dash = w
 		if round {
-			st.Cap = compose.RoundCap
+			st.Cap = typeset.RoundCap
 		}
 	}
 	gap := w
@@ -605,7 +605,7 @@ func bestGap(l, dash, gap float64) float64 {
 // roundedLength returns the length of the outline of r with elliptical
 // corners of radii, each quarter ellipse measured with Ramanujan's
 // approximation.
-func roundedLength(r compose.Rect, radii [4][2]float64) float64 {
+func roundedLength(r typeset.Rect, radii [4][2]float64) float64 {
 	l := 2 * (r.Width + r.Height)
 	for _, c := range radii {
 		a, b := c[0], c[1]
@@ -622,37 +622,37 @@ func roundedLength(r compose.Rect, radii [4][2]float64) float64 {
 // sideClip returns the trapezoid of side s between the outer box r and the
 // inner box in, its ends cut on the diagonals from the outer to the inner
 // corners.
-func sideClip(s css.Side, r, in compose.Rect) []compose.PathOp {
-	pt := func(x, y float64) compose.Point { return compose.Point{X: x, Y: y} }
+func sideClip(s css.Side, r, in typeset.Rect) []typeset.PathOp {
+	pt := func(x, y float64) typeset.Point { return typeset.Point{X: x, Y: y} }
 	x0, y0, x1, y1 := r.X, r.Y, r.X+r.Width, r.Y+r.Height
 	ix0, iy0, ix1, iy1 := in.X, in.Y, in.X+in.Width, in.Y+in.Height
-	var q [4]compose.Point
+	var q [4]typeset.Point
 	switch s {
 	case css.Top:
-		q = [4]compose.Point{pt(x0, y0), pt(x1, y0), pt(ix1, iy0), pt(ix0, iy0)}
+		q = [4]typeset.Point{pt(x0, y0), pt(x1, y0), pt(ix1, iy0), pt(ix0, iy0)}
 	case css.Right:
-		q = [4]compose.Point{pt(x1, y0), pt(x1, y1), pt(ix1, iy1), pt(ix1, iy0)}
+		q = [4]typeset.Point{pt(x1, y0), pt(x1, y1), pt(ix1, iy1), pt(ix1, iy0)}
 	case css.Bottom:
-		q = [4]compose.Point{pt(x1, y1), pt(x0, y1), pt(ix0, iy1), pt(ix1, iy1)}
+		q = [4]typeset.Point{pt(x1, y1), pt(x0, y1), pt(ix0, iy1), pt(ix1, iy1)}
 	case css.Left:
-		q = [4]compose.Point{pt(x0, y1), pt(x0, y0), pt(ix0, iy0), pt(ix0, iy1)}
+		q = [4]typeset.Point{pt(x0, y1), pt(x0, y0), pt(ix0, iy0), pt(ix0, iy1)}
 	}
-	ops := []compose.PathOp{{Kind: compose.MoveTo, P: [3]compose.Point{q[0]}}}
+	ops := []typeset.PathOp{{Kind: typeset.MoveTo, P: [3]typeset.Point{q[0]}}}
 	for _, v := range q[1:] {
-		ops = append(ops, compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{v}})
+		ops = append(ops, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{v}})
 	}
-	return append(ops, compose.PathOp{Kind: compose.ClosePath})
+	return append(ops, typeset.PathOp{Kind: typeset.ClosePath})
 }
 
 // side draws one border side of style bdr into g, which clips it to the
 // side's trapezoid; current reports a border colour of currentColor,
 // which the two-tone styles paint as [currentShades] say.
-func (p *painter) side(g *ditem, s css.Side, bdr css.Border, current bool, r compose.Rect, radii [4][2]float64, inner compose.Rect, iradii [4][2]float64, bd [4]float64) {
+func (p *painter) side(g *ditem, s css.Side, bdr css.Border, current bool, r typeset.Rect, radii [4][2]float64, inner typeset.Rect, iradii [4][2]float64, bd [4]float64) {
 	c, _ := colorOf(bdr.Color)
-	fill := func(ops []compose.PathOp, col compose.Color) {
-		g.kids = append(g.kids, &ditem{frag: &compose.Path{Ops: ops, Fill: &compose.Fill{Color: col, Rule: compose.EvenOdd}}})
+	fill := func(ops []typeset.PathOp, col typeset.Color) {
+		g.kids = append(g.kids, &ditem{frag: &typeset.Path{Ops: ops, Fill: &typeset.Fill{Color: col, Rule: typeset.EvenOdd}}})
 	}
-	frac := func(f float64) (compose.Rect, [4][2]float64) {
+	frac := func(f float64) (typeset.Rect, [4][2]float64) {
 		var d [4]float64
 		for i := range d {
 			d[i] = bd[i] * f
@@ -689,16 +689,16 @@ func (p *painter) side(g *ditem, s css.Side, bdr css.Border, current bool, r com
 		fill(ring(r, radii, inner, iradii), col)
 	case css.Dashed, css.Dotted:
 		w := bd[s]
-		var a, z compose.Point
+		var a, z typeset.Point
 		switch s {
 		case css.Top:
-			a, z = compose.Point{X: r.X, Y: r.Y + w/2}, compose.Point{X: r.X + r.Width, Y: r.Y + w/2}
+			a, z = typeset.Point{X: r.X, Y: r.Y + w/2}, typeset.Point{X: r.X + r.Width, Y: r.Y + w/2}
 		case css.Right:
-			a, z = compose.Point{X: r.X + r.Width - w/2, Y: r.Y}, compose.Point{X: r.X + r.Width - w/2, Y: r.Y + r.Height}
+			a, z = typeset.Point{X: r.X + r.Width - w/2, Y: r.Y}, typeset.Point{X: r.X + r.Width - w/2, Y: r.Y + r.Height}
 		case css.Bottom:
-			a, z = compose.Point{X: r.X + r.Width, Y: r.Y + r.Height - w/2}, compose.Point{X: r.X, Y: r.Y + r.Height - w/2}
+			a, z = typeset.Point{X: r.X + r.Width, Y: r.Y + r.Height - w/2}, typeset.Point{X: r.X, Y: r.Y + r.Height - w/2}
 		case css.Left:
-			a, z = compose.Point{X: r.X + w/2, Y: r.Y + r.Height}, compose.Point{X: r.X + w/2, Y: r.Y}
+			a, z = typeset.Point{X: r.X + w/2, Y: r.Y + r.Height}, typeset.Point{X: r.X + w/2, Y: r.Y}
 		}
 		l := math.Hypot(z.X-a.X, z.Y-a.Y)
 		if bdr.Style == css.Dotted && !squareDots(w) {
@@ -708,13 +708,13 @@ func (p *painter) side(g *ditem, s css.Side, bdr css.Border, current bool, r com
 				return
 			}
 			ux, uy := (z.X-a.X)/l, (z.Y-a.Y)/l
-			a = compose.Point{X: a.X + ux*w/2, Y: a.Y + uy*w/2}
-			z = compose.Point{X: z.X - ux*w/2, Y: z.Y - uy*w/2}
+			a = typeset.Point{X: a.X + ux*w/2, Y: a.Y + uy*w/2}
+			z = typeset.Point{X: z.X - ux*w/2, Y: z.Y - uy*w/2}
 			l -= w
 		}
-		g.kids = append(g.kids, &ditem{frag: &compose.Path{Ops: []compose.PathOp{
-			{Kind: compose.MoveTo, P: [3]compose.Point{a}},
-			{Kind: compose.LineTo, P: [3]compose.Point{z}},
+		g.kids = append(g.kids, &ditem{frag: &typeset.Path{Ops: []typeset.PathOp{
+			{Kind: typeset.MoveTo, P: [3]typeset.Point{a}},
+			{Kind: typeset.LineTo, P: [3]typeset.Point{z}},
 		}, Stroke: dashStroke(bdr.Style, c, w, l, false)}})
 	case css.Solid, css.BorderNone, css.BorderHidden:
 		fill(ring(r, radii, inner, iradii), c)
@@ -727,17 +727,17 @@ func (p *painter) side(g *ditem, s css.Side, bdr css.Border, current bool, r com
 // other, at least css.MinBorderStroke wide, so that a raster draws a
 // border thinner than a pixel a pixel wide where a filled band would
 // average to grey.
-func strokedSide(s css.Side, r compose.Rect, w float64, c compose.Color) *compose.Path {
-	var a, z compose.Point
+func strokedSide(s css.Side, r typeset.Rect, w float64, c typeset.Color) *typeset.Path {
+	var a, z typeset.Point
 	switch s {
 	case css.Top:
-		a, z = compose.Point{X: r.X, Y: r.Y + w/2}, compose.Point{X: r.X + r.Width, Y: r.Y + w/2}
+		a, z = typeset.Point{X: r.X, Y: r.Y + w/2}, typeset.Point{X: r.X + r.Width, Y: r.Y + w/2}
 	case css.Bottom:
-		a, z = compose.Point{X: r.X, Y: r.Y + r.Height - w/2}, compose.Point{X: r.X + r.Width, Y: r.Y + r.Height - w/2}
+		a, z = typeset.Point{X: r.X, Y: r.Y + r.Height - w/2}, typeset.Point{X: r.X + r.Width, Y: r.Y + r.Height - w/2}
 	case css.Left:
-		a, z = compose.Point{X: r.X + w/2, Y: r.Y}, compose.Point{X: r.X + w/2, Y: r.Y + r.Height}
+		a, z = typeset.Point{X: r.X + w/2, Y: r.Y}, typeset.Point{X: r.X + w/2, Y: r.Y + r.Height}
 	case css.Right:
-		a, z = compose.Point{X: r.X + r.Width - w/2, Y: r.Y}, compose.Point{X: r.X + r.Width - w/2, Y: r.Y + r.Height}
+		a, z = typeset.Point{X: r.X + r.Width - w/2, Y: r.Y}, typeset.Point{X: r.X + r.Width - w/2, Y: r.Y + r.Height}
 	}
 	return strokedLine(a, z, w, c)
 }
@@ -751,9 +751,9 @@ func strokedSide(s css.Side, r compose.Rect, w float64, c compose.Color) *compos
 //     1 pt prints, through the pinned LibreOffice, strokes of 0.1 pt for
 //     every border of one or two twips, 0.15, 0.2, 0.25, 0.3, 0.5, 0.75
 //     and 1 pt at the widths above, and no border for 0.01 pt.
-func strokedLine(a, z compose.Point, w float64, c compose.Color) *compose.Path {
-	return &compose.Path{Ops: []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{a}},
-		{Kind: compose.LineTo, P: [3]compose.Point{z}},
-	}, Stroke: &compose.Stroke{Color: c, Width: max(w, css.MinBorderStroke)}}
+func strokedLine(a, z typeset.Point, w float64, c typeset.Color) *typeset.Path {
+	return &typeset.Path{Ops: []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{a}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{z}},
+	}, Stroke: &typeset.Stroke{Color: c, Width: max(w, css.MinBorderStroke)}}
 }

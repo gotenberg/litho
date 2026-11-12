@@ -55,7 +55,7 @@ const ctxCheckEvery = 1024
 
 // maxStructDepth bounds the depth of the structure tree: a role deeper than
 // this does not start an element, its fragments hang from the deepest one.
-// It stays below the composition model's own bound of 256 levels. Anti-DoS
+// It stays below the typeset model's own bound of 256 levels. Anti-DoS
 // guard, not spec-mandated: a tagged document nests a dozen roles.
 const maxStructDepth = 200
 
@@ -134,7 +134,7 @@ const maxFontStretch = 1000
 
 // maxPageFragments bounds the fragments, groups included, one page holds:
 // the rest of the page is left out with a warning. It stays below the
-// composition model's bound of a million. Anti-DoS guard, not
+// typeset model's bound of a million. Anti-DoS guard, not
 // spec-mandated: a dense page holds a few thousand.
 const maxPageFragments = 500_000
 

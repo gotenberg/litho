@@ -9,8 +9,8 @@ import (
 	"image/png"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // pngBytes returns a w by h PNG.
@@ -58,13 +58,13 @@ func TestCropped(t *testing.T) {
 	if c.Width != pic.Width/2 || c.Height != pic.Height || c.Vector == nil {
 		t.Fatalf("cropped = %v x %v", c.Width, c.Height)
 	}
-	frags := c.Vector(context.Background(), compose.Rect{X: 10, Y: 0, Width: 50, Height: 100})
-	g, ok := frags[0].(*compose.Group)
+	frags := c.Vector(context.Background(), typeset.Rect{X: 10, Y: 0, Width: 50, Height: 100})
+	g, ok := frags[0].(*typeset.Group)
 	if !ok || g.Clip == nil {
 		t.Fatalf("not a clipped group: %#v", frags)
 	}
-	img := g.Content[0].(*compose.Image)
-	if img.Rect != (compose.Rect{X: -15, Y: 0, Width: 100, Height: 100}) {
+	img := g.Content[0].(*typeset.Image)
+	if img.Rect != (typeset.Rect{X: -15, Y: 0, Width: 100, Height: 100}) {
 		t.Errorf("image rect = %+v", img.Rect)
 	}
 }

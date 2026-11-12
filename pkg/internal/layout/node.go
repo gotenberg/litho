@@ -4,16 +4,16 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // This file is the contract between a converter and the layout engine. A
 // converter builds a [Node] tree from its input, HTML with its computed
 // styles or an Office document mapped onto the same vocabulary, and
-// [Layout] turns it into pages of the composition model. A field added to
+// [Layout] turns it into pages of the typeset model. A field added to
 // it never changes the meaning of one that exists.
 
 // Kind says what a [Node] is.
@@ -36,9 +36,9 @@ const (
 // Picture is a picture with its intrinsic size: a raster one, held encoded
 // in its Source, or a vector one its Vector draws.
 type Picture struct {
-	// Source is a raster picture as the file stores it (compose.ImageSource),
+	// Source is a raster picture as the file stores it (typeset.ImageSource),
 	// nil for a vector picture.
-	Source *compose.ImageSource
+	Source *typeset.ImageSource
 	// Width and Height are the intrinsic size in points, both positive.
 	Width, Height float64
 	// Vector, when set, draws a vector picture, such as SVG, in place of
@@ -47,7 +47,7 @@ type Picture struct {
 	// with nothing outside r. Their group nesting is at most
 	// MaxVectorDepth. The engine copies a fragment before changing it, and
 	// calls Vector from its own goroutine with its context.
-	Vector func(ctx context.Context, r compose.Rect) []compose.Fragment
+	Vector func(ctx context.Context, r typeset.Rect) []typeset.Fragment
 	// NoNaturalWidth and NoNaturalHeight mark a vector picture without a
 	// natural width or height (CSS Images 3, 4.1), as an SVG whose width
 	// or height is a percentage or missing. Width and Height then hold the
@@ -80,7 +80,7 @@ type Node struct {
 	// Children are an Element's children in document order.
 	Children []*Node
 
-	// Role is the structure element role the node starts (compose.StructElem
+	// Role is the structure element role the node starts (typeset.StructElem
 	// Role), "" for a node that does not start one. The engine builds the
 	// structure tree from the roles in document order and hangs every
 	// fragment of the node's subtree from the nearest role.
@@ -89,10 +89,10 @@ type Node struct {
 	Lang string
 	// Alt describes a Replaced node, or a Role Figure or Link, for a reader
 	// who cannot see it. A link without one is described by the text it
-	// shows (compose.Link Contents).
+	// shows (typeset.Link Contents).
 	Alt string
 	// ActualText replaces the text of the node's subtree for a reader of
-	// the structure tree (compose.StructElem ActualText): the characters a
+	// the structure tree (typeset.StructElem ActualText): the characters a
 	// run of glyphs stands for when the glyphs' own codes do not say it, as
 	// the private-use codes of a symbol font do not. It needs a Role, which
 	// the engine gives the node a Span for when it has none. Empty replaces
@@ -126,12 +126,12 @@ type Node struct {
 	// engine copies them to the cell's structure element.
 	ColSpan, RowSpan int
 	// Scope says which cells a header cell, a node of Role TH, heads: its
-	// row's, its column's or both (compose.StructElem Scope). The zero
+	// row's, its column's or both (typeset.StructElem Scope). The zero
 	// value says nothing.
-	Scope compose.TableScope
+	Scope typeset.TableScope
 	// Numbering is the numbering system of the labels of a list, a node of
-	// Role L (compose.StructElem Numbering). The zero value says nothing.
-	Numbering compose.ListNumbering
+	// Role L (typeset.StructElem Numbering). The zero value says nothing.
+	Numbering typeset.ListNumbering
 	// Span is the span of a table column or column group, 0 for 1.
 	Span int
 	// Leader marks a leader (CSS Generated Content 3, leader()): an
@@ -208,13 +208,13 @@ type Options struct {
 	// page-margin boxes). pages is the document's page count. Layout calls
 	// it once per page, in page order, from its own goroutine; it may call
 	// Layout itself.
-	MarginContent func(page PageInfo, pages int) []compose.Fragment
+	MarginContent func(page PageInfo, pages int) []typeset.Fragment
 	// Placed, when not nil, receives what [Result.Anchors] will hold,
 	// once the flow is laid out and before the first MarginContent call,
 	// so that page-margin content can follow where anchored nodes landed:
 	// the named strings and running elements of a page (CSS GCPM 3, 2).
 	// Layout calls it once, from its own goroutine.
-	Placed func(anchors map[string]compose.Dest)
+	Placed func(anchors map[string]typeset.Dest)
 	// Lang is the document language as a BCP 47 tag, used for a node
 	// without one in its ancestry, "" for unknown.
 	Lang string
@@ -297,16 +297,16 @@ type PageFrame struct {
 // Result is what [Layout] produced.
 type Result struct {
 	// Pages holds at least one page.
-	Pages []*compose.Page
+	Pages []*typeset.Page
 	// Structure is the structure tree, its root a Document element. A
 	// fragment of a node without a Role in its ancestry is an artifact.
-	Structure *compose.StructElem
+	Structure *typeset.StructElem
 	// Anchors maps every non-empty Node.ID that landed on a page to the
 	// top-left corner of its first box.
-	Anchors map[string]compose.Dest
+	Anchors map[string]typeset.Dest
 	// Warnings lists the constructs the engine did not lay out as the
 	// style asked, in document order.
-	Warnings []compose.Warning
+	Warnings []typeset.Warning
 	// ContentWidth is the right edge of the flow's scrollable overflow,
 	// in points from the left edge of the first page's area (CSS Overflow
 	// 3, 2.2): the border boxes and line contents of every box, those
@@ -320,7 +320,7 @@ type Result struct {
 	// padding, the box that holds its content and borders, on the page
 	// its first box landed on, in that page's coordinates. Inline boxes
 	// are not listed.
-	Extents map[string]compose.Rect
+	Extents map[string]typeset.Rect
 }
 
 // DefaultMaxPages is the page cap when Options.MaxPages is zero: the

@@ -6,9 +6,9 @@ import (
 	imgcolor "image/color"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestBlipEffects(t *testing.T) {
@@ -53,9 +53,9 @@ func TestBlipEffects(t *testing.T) {
 
 // source returns img encoded as an image source, failing t when it does
 // not encode.
-func source(t testing.TB, img image.Image) *compose.ImageSource {
+func source(t testing.TB, img image.Image) *typeset.ImageSource {
 	t.Helper()
-	src, err := compose.EncodeImage(context.Background(), img)
+	src, err := typeset.EncodeImage(context.Background(), img)
 	if err != nil {
 		t.Fatalf("EncodeImage: %v", err)
 	}
@@ -64,7 +64,7 @@ func source(t testing.TB, img image.Image) *compose.ImageSource {
 
 // decoded returns the pixels of src as an NRGBA picture, failing t when
 // they do not decode to one.
-func decoded(t testing.TB, src *compose.ImageSource) *image.NRGBA {
+func decoded(t testing.TB, src *typeset.ImageSource) *image.NRGBA {
 	t.Helper()
 	img, err := src.Decode(context.Background())
 	if err != nil {
@@ -80,17 +80,17 @@ func decoded(t testing.TB, src *compose.ImageSource) *image.NRGBA {
 // TestStretched checks that an SVG picture is drawn stretched over its box,
 // its own aspect ratio ignored.
 func TestStretched(t *testing.T) {
-	var drawn compose.Rect
-	pic := &layout.Picture{Width: 10, Height: 10, Vector: func(_ context.Context, r compose.Rect) []compose.Fragment {
+	var drawn typeset.Rect
+	pic := &layout.Picture{Width: 10, Height: 10, Vector: func(_ context.Context, r typeset.Rect) []typeset.Fragment {
 		drawn = r
-		return []compose.Fragment{ooxml.RectPath(r)}
+		return []typeset.Fragment{ooxml.RectPath(r)}
 	}}
-	out := stretched(pic).Vector(context.Background(), compose.Rect{X: 5, Y: 7, Width: 40, Height: 20})
-	g, ok := out[0].(*compose.Group)
+	out := stretched(pic).Vector(context.Background(), typeset.Rect{X: 5, Y: 7, Width: 40, Height: 20})
+	g, ok := out[0].(*typeset.Group)
 	if len(out) != 1 || !ok {
 		t.Fatalf("fragments %v", out)
 	}
-	if want := (compose.Matrix{A: 4, D: 2, E: 5, F: 7}); g.Transform != want || drawn != (compose.Rect{Width: 10, Height: 10}) {
+	if want := (typeset.Matrix{A: 4, D: 2, E: 5, F: 7}); g.Transform != want || drawn != (typeset.Rect{Width: 10, Height: 10}) {
 		t.Errorf("transform %+v drawing %+v, want %+v over the natural size", g.Transform, drawn, want)
 	}
 	if stretched(nil) != nil {

@@ -1,10 +1,10 @@
 package slides
 
 import (
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // a4Width and a4Height are ISO 216 A4 in points: the paper of a notes or
@@ -81,7 +81,7 @@ const (
 //     of the Letter page, the slide 480 wide at 30, 54.72; slide 1 the
 //     default layout over the whole Letter page, 527.98 wide at 42.01,
 //     60.19. Every frame is a C0C0C0 line 0.1 point wide.
-func (b *builder) notesPage(s *Slide, n int) (*compose.Page, *compose.StructElem) {
+func (b *builder) notesPage(s *Slide, n int) (*typeset.Page, *typeset.StructElem) {
 	size := func() (float64, float64) {
 		if w, h := b.doc.NotesWidth, b.doc.NotesHeight; w > 0 && h > 0 && w <= office.MaxPageSide && h <= office.MaxPageSide {
 			return w, h
@@ -108,36 +108,36 @@ func (b *builder) notesPage(s *Slide, n int) (*compose.Page, *compose.StructElem
 	}
 	master := hasNotes && usable(b.doc.NotesSlideBox)
 	sw, sh := b.slideSize()
-	area := compose.Rect{Y: nh * notesSlideY, Width: nw, Height: nh * notesSlideH}
+	area := typeset.Rect{Y: nh * notesSlideY, Width: nw, Height: nh * notesSlideH}
 	if master {
 		area = b.doc.NotesSlideBox
 	}
 	k := min(area.Width/sw, area.Height/sh)
-	img := compose.Rect{X: area.X + (area.Width-sw*k)/2, Y: area.Y + (area.Height-sh*k)/2, Width: sw * k, Height: sh * k}
+	img := typeset.Rect{X: area.X + (area.Width-sw*k)/2, Y: area.Y + (area.Height-sh*k)/2, Width: sw * k, Height: sh * k}
 	frame := img
 	if master {
 		frame = area
 	}
 	content, _, sect := b.slideContent(s, n, sw, sh)
-	pg := &compose.Page{Width: pw, Height: ph}
-	pg.Content = append(pg.Content, &compose.Group{
-		Transform: compose.Matrix{A: k, D: k, E: img.X, F: img.Y}, Opacity: 1,
-		Clip:    &compose.Path{Ops: rectOps(compose.Rect{Width: sw, Height: sh}), Fill: &compose.Fill{}},
+	pg := &typeset.Page{Width: pw, Height: ph}
+	pg.Content = append(pg.Content, &typeset.Group{
+		Transform: typeset.Matrix{A: k, D: k, E: img.X, F: img.Y}, Opacity: 1,
+		Clip:    &typeset.Path{Ops: rectOps(typeset.Rect{Width: sw, Height: sh}), Fill: &typeset.Fill{}},
 		Content: content,
 	})
-	gray := compose.Color{R: notesFrameGray, G: notesFrameGray, B: notesFrameGray, A: 1}
-	pg.Content = append(pg.Content, &compose.Path{Ops: rectOps(frame), Stroke: &compose.Stroke{Color: gray, Width: notesFrameWidth}})
+	gray := typeset.Color{R: notesFrameGray, G: notesFrameGray, B: notesFrameGray, A: 1}
+	pg.Content = append(pg.Content, &typeset.Path{Ops: rectOps(frame), Stroke: &typeset.Stroke{Color: gray, Width: notesFrameWidth}})
 	if master {
 		// The notes master's other shapes, the slide number among them,
 		// resolve their fields for this slide.
 		b.shapes, b.links = 0, nil
 		for _, sp := range b.doc.NotesShapes {
-			pg.Content = append(pg.Content, b.shape(sp, compose.Identity, 0, sect)...)
+			pg.Content = append(pg.Content, b.shape(sp, typeset.Identity, 0, sect)...)
 		}
 		pg.Links = append(pg.Links, b.links...)
 	}
 	if len(s.Notes) > 0 {
-		box := compose.Rect{X: nw * notesTextX, Y: nh * notesTextY, Width: nw * notesTextW, Height: nh * notesTextH}
+		box := typeset.Rect{X: nw * notesTextX, Y: nh * notesTextY, Width: nw * notesTextW, Height: nh * notesTextH}
 		var in [4]float64
 		in[css.Left], in[css.Right], in[css.Top], in[css.Bottom] = notesInsetX, notesInsetX, notesInsetY, notesInsetY
 		if master && usable(b.doc.NotesTextBox) {
@@ -152,8 +152,8 @@ func (b *builder) notesPage(s *Slide, n int) (*compose.Page, *compose.StructElem
 		pg.Links = append(pg.Links, txt.links...)
 		sect.Kids = append(sect.Kids, txt.structure...)
 	}
-	if m := fitMatrix(nw, nh, pw, ph); !corner && m != compose.Identity {
-		pg.Content = []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: pg.Content}}
+	if m := fitMatrix(nw, nh, pw, ph); !corner && m != typeset.Identity {
+		pg.Content = []typeset.Fragment{&typeset.Group{Transform: m, Opacity: 1, Content: pg.Content}}
 		for i, l := range pg.Links {
 			l.Rect = transformRect(m, l.Rect)
 			pg.Links[i] = l
@@ -163,7 +163,7 @@ func (b *builder) notesPage(s *Slide, n int) (*compose.Page, *compose.StructElem
 }
 
 // usable reports whether r is a box with an area within the page limits.
-func usable(r compose.Rect) bool {
+func usable(r typeset.Rect) bool {
 	return finite(r) && r.Width > 0 && r.Height > 0
 }
 

@@ -3,11 +3,11 @@ package slides
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxTiles caps the copies of a tiled picture drawn over one area.
@@ -16,8 +16,8 @@ import (
 const maxTiles = 4096
 
 // colorOf returns c as a composition colour.
-func colorOf(c css.Color) compose.Color {
-	return compose.Color{R: c.R, G: c.G, B: c.B, A: c.A}
+func colorOf(c css.Color) typeset.Color {
+	return typeset.Color{R: c.R, G: c.G, B: c.B, A: c.A}
 }
 
 // fill returns what paints the area ops encloses, box being the shape's
@@ -26,7 +26,7 @@ func colorOf(c css.Color) compose.Color {
 // (shape.Shade), and a gradient through the shape engine's fill; a
 // picture or a pattern through the builder's own, which draw a vector
 // picture and a pattern's pixel cell the engine does not.
-func (b *builder) fill(f *Fill, box compose.Rect, ops []compose.PathOp, mode shape.FillMode) []compose.Fragment {
+func (b *builder) fill(f *Fill, box typeset.Rect, ops []typeset.PathOp, mode shape.FillMode) []typeset.Fragment {
 	if f == nil || len(ops) == 0 || !finite(box) {
 		return nil
 	}
@@ -47,10 +47,10 @@ func (b *builder) fill(f *Fill, box compose.Rect, ops []compose.PathOp, mode sha
 		border := 0.0
 		if g.Border > 0 && g.Border < 1 {
 			border = g.Border
-			p.Stops = append(p.Stops, compose.ColorStop{Offset: 0, Color: colorOf(g.Stops[0].Color)})
+			p.Stops = append(p.Stops, typeset.ColorStop{Offset: 0, Color: colorOf(g.Stops[0].Color)})
 		}
 		for _, st := range g.Stops {
-			p.Stops = append(p.Stops, compose.ColorStop{Offset: border + st.Position*(1-border), Color: colorOf(st.Color)})
+			p.Stops = append(p.Stops, typeset.ColorStop{Offset: border + st.Position*(1-border), Color: colorOf(st.Color)})
 		}
 		out := shape.Fill(ops, box, p)
 		if g.Radial {
@@ -62,7 +62,7 @@ func (b *builder) fill(f *Fill, box compose.Rect, ops []compose.PathOp, mode sha
 		if len(content) == 0 {
 			return nil
 		}
-		return []compose.Fragment{&compose.Group{Transform: compose.Identity, Opacity: 1, Clip: &compose.Path{Ops: ops, Fill: &compose.Fill{}}, Content: content}}
+		return []typeset.Fragment{&typeset.Group{Transform: typeset.Identity, Opacity: 1, Clip: &typeset.Path{Ops: ops, Fill: &typeset.Fill{}}, Content: content}}
 	case FillPattern:
 		return b.patternFill(f, box, ops)
 	case FillNone:
@@ -75,13 +75,13 @@ func (b *builder) fill(f *Fill, box compose.Rect, ops []compose.PathOp, mode sha
 // their size, as Impress draws a radial gradient whose centre is off the
 // middle (ODF 1.3 Part 3, 20.150 draw:cx and draw:cy; ECMA-376 Part 1,
 // 20.1.8.31 fillToRect). A zero centre is the middle.
-func centreRadial(frags []compose.Fragment, box compose.Rect, cx, cy float64) {
+func centreRadial(frags []typeset.Fragment, box typeset.Rect, cx, cy float64) {
 	if cx == 0 && cy == 0 || math.IsNaN(cx) || math.IsNaN(cy) {
 		return
 	}
 	cx, cy = min(max(cx, -1), 2), min(max(cy, -1), 2)
 	for _, f := range frags {
-		if p, ok := f.(*compose.Path); ok && p.Fill != nil && p.Fill.Shading != nil && p.Fill.Shading.Kind == compose.Radial {
+		if p, ok := f.(*typeset.Path); ok && p.Fill != nil && p.Fill.Shading != nil && p.Fill.Shading.Kind == typeset.Radial {
 			p.Fill.Shading.Transform.E = box.X + cx*box.Width
 			p.Fill.Shading.Transform.F = box.Y + cy*box.Height
 		}
@@ -91,7 +91,7 @@ func centreRadial(frags []compose.Fragment, box compose.Rect, cx, cy float64) {
 // pictureFill returns the fragments of the picture pic over box: stretched
 // to it, or repeated at its natural size from its top-left corner when
 // tile is set.
-func (b *builder) pictureFill(pic *layout.Picture, tile bool, box compose.Rect) []compose.Fragment {
+func (b *builder) pictureFill(pic *layout.Picture, tile bool, box typeset.Rect) []typeset.Fragment {
 	if pic == nil || (pic.Source == nil && pic.Vector == nil) {
 		b.warn(CodePicture, "a picture fill has no picture and paints nothing")
 		return nil
@@ -105,10 +105,10 @@ func (b *builder) pictureFill(pic *layout.Picture, tile bool, box compose.Rect) 
 		b.warn(CodePicture, "a tiled picture fill needs too many copies and is stretched instead")
 		return b.picture(pic, box)
 	}
-	var out []compose.Fragment
+	var out []typeset.Fragment
 	for j := 0.0; j < ny; j++ {
 		for i := 0.0; i < nx; i++ {
-			r := compose.Rect{X: box.X + i*pic.Width, Y: box.Y + j*pic.Height, Width: pic.Width, Height: pic.Height}
+			r := typeset.Rect{X: box.X + i*pic.Width, Y: box.Y + j*pic.Height, Width: pic.Width, Height: pic.Height}
 			out = append(out, b.picture(pic, r)...)
 		}
 	}
@@ -116,7 +116,7 @@ func (b *builder) pictureFill(pic *layout.Picture, tile bool, box compose.Rect) 
 }
 
 // picture returns the fragments that paint pic into r.
-func (b *builder) picture(pic *layout.Picture, r compose.Rect) []compose.Fragment {
+func (b *builder) picture(pic *layout.Picture, r typeset.Rect) []typeset.Fragment {
 	if pic == nil || r.Width <= 0 || r.Height <= 0 {
 		return nil
 	}
@@ -126,7 +126,7 @@ func (b *builder) picture(pic *layout.Picture, r compose.Rect) []compose.Fragmen
 	if pic.Source == nil {
 		return nil
 	}
-	return []compose.Fragment{&compose.Image{Rect: r, Source: pic.Source}}
+	return []typeset.Fragment{&typeset.Image{Rect: r, Source: pic.Source}}
 }
 
 // patternFill returns the pattern fill f of the area ops encloses within
@@ -148,13 +148,13 @@ func (b *builder) picture(pic *layout.Picture, r compose.Rect) []compose.Fragmen
 //   - libreoffice/pptx: sd/tdf107608.pptx, a shape turned 270 degrees,
 //     prints its ltDnDiag lines falling to the right: the hatch keeps its
 //     angle on the page.
-func (b *builder) patternFill(f *Fill, box compose.Rect, ops []compose.PathOp) []compose.Fragment {
+func (b *builder) patternFill(f *Fill, box typeset.Rect, ops []typeset.PathOp) []typeset.Fragment {
 	if f.PatternTile {
 		return shape.Fill(ops, box, shape.Paint{Kind: shape.PaintPattern, Pattern: f.Pattern, Color: colorOf(f.Color), Background: colorOf(f.Background)})
 	}
-	var out []compose.Fragment
+	var out []typeset.Fragment
 	if f.Background.A > 0 {
-		out = append(out, &compose.Path{Ops: ops, Fill: &compose.Fill{Color: colorOf(f.Background)}})
+		out = append(out, &typeset.Path{Ops: ops, Fill: &typeset.Fill{Color: colorOf(f.Background)}})
 	}
 	if f.Color.A <= 0 {
 		return out
@@ -168,12 +168,12 @@ func (b *builder) patternFill(f *Fill, box compose.Rect, ops []compose.PathOp) [
 		b.warn(CodePattern, "the pattern "+quote(f.Pattern)+" is drawn as its foreground at half opacity")
 		c := colorOf(f.Color)
 		c.A /= 2
-		return append(out, &compose.Path{Ops: ops, Fill: &compose.Fill{Color: c}})
+		return append(out, &typeset.Path{Ops: ops, Fill: &typeset.Fill{Color: c}})
 	}
-	return append(out, &compose.Group{
-		Transform: compose.Identity, Opacity: 1,
-		Clip:    &compose.Path{Ops: ops, Fill: &compose.Fill{}},
-		Content: []compose.Fragment{&compose.Path{Ops: lines, Stroke: &compose.Stroke{Color: colorOf(f.Color), Width: hatchLineWidth}}},
+	return append(out, &typeset.Group{
+		Transform: typeset.Identity, Opacity: 1,
+		Clip:    &typeset.Path{Ops: ops, Fill: &typeset.Fill{}},
+		Content: []typeset.Fragment{&typeset.Path{Ops: lines, Stroke: &typeset.Stroke{Color: colorOf(f.Color), Width: hatchLineWidth}}},
 	})
 }
 
@@ -209,7 +209,7 @@ type hatch struct {
 
 // hatchOps returns the lines of the hatch h over box, through its top-left
 // corner, nil for a hatch without spacing or with too many lines.
-func hatchOps(h hatch, box compose.Rect) []compose.PathOp {
+func hatchOps(h hatch, box typeset.Rect) []typeset.PathOp {
 	d := h.distance * 72 / 2540
 	if !numeric.Positive(d) || !finite(box) {
 		return nil
@@ -224,7 +224,7 @@ func hatchOps(h hatch, box compose.Rect) []compose.PathOp {
 	}
 	cx, cy := box.X+box.Width/2, box.Y+box.Height/2
 	r := math.Hypot(box.Width, box.Height) / 2
-	var ops []compose.PathOp
+	var ops []typeset.PathOp
 	for _, a := range angles {
 		// With y down, a counter-clockwise angle runs up the page.
 		s, c := math.Sincos(a * math.Pi / 180)
@@ -241,8 +241,8 @@ func hatchOps(h hatch, box compose.Rect) []compose.PathOp {
 		for k := lo; k <= hi; k++ {
 			px, py := cx+(o+k*d)*nx, cy+(o+k*d)*ny
 			ops = append(ops,
-				compose.PathOp{Kind: compose.MoveTo, P: [3]compose.Point{{X: px - r*dx, Y: py - r*dy}}},
-				compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{{X: px + r*dx, Y: py + r*dy}}})
+				typeset.PathOp{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: px - r*dx, Y: py - r*dy}}},
+				typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: px + r*dx, Y: py + r*dy}}})
 		}
 	}
 	return ops

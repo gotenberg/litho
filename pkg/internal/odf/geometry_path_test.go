@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // cmdString writes commands as a kind letter and their rounded operands.
@@ -48,7 +48,7 @@ func TestPathData_Commands(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := PathData(tt.d, compose.Rect{Width: 10, Height: 10})
+			c := PathData(tt.d, typeset.Rect{Width: 10, Height: 10})
 			if c == nil {
 				t.Fatal("no geometry")
 			}
@@ -61,7 +61,7 @@ func TestPathData_Commands(t *testing.T) {
 
 func TestPathData_Empty(t *testing.T) {
 	for _, d := range []string{"", "  ", "L1 1", "Z", "x"} {
-		if c := PathData(d, compose.Rect{}); c != nil {
+		if c := PathData(d, typeset.Rect{}); c != nil {
 			t.Errorf("PathData(%q) = %+v, want nil", d, c)
 		}
 	}
@@ -80,7 +80,7 @@ func TestPoints_Outline(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := Points(tt.points, compose.Rect{Width: 10, Height: 10}, tt.closed)
+			c := Points(tt.points, typeset.Rect{Width: 10, Height: 10}, tt.closed)
 			if c == nil {
 				t.Fatal("no geometry")
 			}
@@ -89,7 +89,7 @@ func TestPoints_Outline(t *testing.T) {
 			}
 		})
 	}
-	if c := Points("1,1", compose.Rect{}, true); c != nil {
+	if c := Points("1,1", typeset.Rect{}, true); c != nil {
 		t.Errorf("one point = %+v, want nil", c)
 	}
 }

@@ -8,10 +8,10 @@ import (
 	"golang.org/x/text/message"
 	"golang.org/x/text/number"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // officeTabs reports a block container whose tabs follow the Office rules
@@ -177,7 +177,7 @@ func leaderRune(l css.TabLeader) rune {
 //   - libreoffice/docx ooxmlexport/TOC_field_f.docx: the reference draws
 //     145 dots of 2.772 points in a tab of 400.9 points, 2.765 points
 //     apart, where whole advances fit 144.
-func (e *engine) tabLeader(p *ifcPara, it *lineItem) *compose.Text {
+func (e *engine) tabLeader(p *ifcPara, it *lineItem) *typeset.Text {
 	tc, ok := p.tabs[it.start]
 	if !ok {
 		return nil
@@ -206,7 +206,7 @@ func (e *engine) tabLeader(p *ifcPara, it *lineItem) *compose.Text {
 	step := it.w / k
 	src := pl.Spans[0].Text
 	t := *src
-	t.Glyphs = make([]compose.Glyph, 0, int(k)) // fits int: at most maxLeaderCopies
+	t.Glyphs = make([]typeset.Glyph, 0, int(k)) // fits int: at most maxLeaderCopies
 	hs := hscale(src)
 	for c := range int(k) { // fits int: at most maxLeaderCopies
 		g := src.Glyphs[0]
@@ -236,7 +236,7 @@ func barRules(root *box, cb cblock, x float64) []float64 {
 }
 
 // hscale returns the horizontal scale of the glyph run t, 1 for none.
-func hscale(t *compose.Text) float64 {
+func hscale(t *typeset.Text) float64 {
 	if t == nil || t.HScale <= 0 {
 		return 1
 	}
@@ -277,7 +277,7 @@ func (p *painter) barRules(l *lineBox, page int) {
 		return
 	}
 	for _, x := range l.bars {
-		r := compose.Rect{X: l.x + x - css.Pt/2 + p.dx, Y: l.y + p.dy, Width: css.Pt, Height: l.h}
-		p.emit(l.barOwner, true, &compose.Path{Ops: rectOps(r), Fill: &compose.Fill{Color: l.barColor}}, l.y, l.y+l.h, page)
+		r := typeset.Rect{X: l.x + x - css.Pt/2 + p.dx, Y: l.y + p.dy, Width: css.Pt, Height: l.h}
+		p.emit(l.barOwner, true, &typeset.Path{Ops: rectOps(r), Fill: &typeset.Fill{Color: l.barColor}}, l.y, l.y+l.h, page)
 	}
 }

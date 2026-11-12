@@ -1,6 +1,6 @@
 package slides
 
-// The codes of the warnings the builder records (compose.Warning.Code).
+// The codes of the warnings the builder records (typeset.Warning.Code).
 const (
 	// CodeGeometry is a geometry drawn as its bounding rectangle.
 	CodeGeometry = "slides-geometry"

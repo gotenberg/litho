@@ -1,9 +1,9 @@
 package sheet
 
 import (
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // gridWidth is the width of the grid lines Calc prints, in points, and
@@ -139,8 +139,8 @@ func (b *pageBuilder) nextCol(c int) int {
 }
 
 // paths returns the border lines, in edge order.
-func (bs *borders) paths() []compose.Fragment {
-	out := make([]compose.Fragment, 0, len(bs.order))
+func (bs *borders) paths() []typeset.Fragment {
+	out := make([]typeset.Fragment, 0, len(bs.order))
 	for _, k := range bs.order {
 		e := bs.edges[k]
 		out = append(out, linePaths(e.b, e.x1, e.y1, e.x2, e.y2, true)...)
@@ -152,7 +152,7 @@ func (bs *borders) paths() []compose.Fragment {
 // y2): one line, or two for a double one, extended by half its width at
 // both ends when extend is set so that the lines of a corner meet, as Calc
 // draws a cell frame.
-func linePaths(b Border, x1, y1, x2, y2 float64, extend bool) []compose.Fragment {
+func linePaths(b Border, x1, y1, x2, y2 float64, extend bool) []typeset.Fragment {
 	w := b.Width
 	if !numeric.Positive(w) {
 		w = hairline
@@ -168,7 +168,7 @@ func linePaths(b Border, x1, y1, x2, y2 float64, extend bool) []compose.Fragment
 			y1, y2 = min(y1, y2)-w/2, max(y1, y2)+w/2
 		}
 	}
-	stroke := func(lw, off float64) compose.Fragment {
+	stroke := func(lw, off float64) typeset.Fragment {
 		ox, oy := 0.0, 0.0
 		switch {
 		case horizontal:
@@ -176,7 +176,7 @@ func linePaths(b Border, x1, y1, x2, y2 float64, extend bool) []compose.Fragment
 		case vertical:
 			ox = off
 		}
-		s := &compose.Stroke{Color: colorOf(b.Color), Width: lw, Cap: compose.ButtCap}
+		s := &typeset.Stroke{Color: colorOf(b.Color), Width: lw, Cap: typeset.ButtCap}
 		switch b.Line {
 		case LineDashed:
 			s.Dash = []float64{3 * lw, lw}
@@ -189,9 +189,9 @@ func linePaths(b Border, x1, y1, x2, y2 float64, extend bool) []compose.Fragment
 		case LineSolid, LineDouble, LineNone:
 		}
 		if b.Color.A == 0 {
-			s.Color = compose.Black
+			s.Color = typeset.Black
 		}
-		return &compose.Path{Ops: lineOps(x1+ox, y1+oy, x2+ox, y2+oy), Stroke: s}
+		return &typeset.Path{Ops: lineOps(x1+ox, y1+oy, x2+ox, y2+oy), Stroke: s}
 	}
 	if b.Line == LineDouble {
 		gap := b.Gap
@@ -201,9 +201,9 @@ func linePaths(b Border, x1, y1, x2, y2 float64, extend bool) []compose.Fragment
 		gap = min(gap, w)
 		lw := max((w-gap)/2, hairline)
 		off := gap/2 + lw/2
-		return []compose.Fragment{stroke(lw, -off), stroke(lw, off)}
+		return []typeset.Fragment{stroke(lw, -off), stroke(lw, off)}
 	}
-	return []compose.Fragment{stroke(w, 0)}
+	return []typeset.Fragment{stroke(w, 0)}
 }
 
 // maxBorderWidth caps a border line's width, in points. Anti-DoS guard,

@@ -6,10 +6,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxShapeRunes caps the characters of one shape's text. Anti-DoS guard,
@@ -69,10 +69,10 @@ func (r *reader) shapeTextOf(tb, style *ooxml.Element) *shapeText {
 	}
 	st.wrap = attr(body, "wrap") != "none"
 	st.upright = boolAttr(body, "upright")
-	base := text.Style{Families: r.themeFont("+mn-lt"), Size: shapeTextSize, Color: compose.Color{A: 1}}
+	base := text.Style{Families: r.themeFont("+mn-lt"), Size: shapeTextSize, Color: typeset.Color{A: 1}}
 	if fr := style.Child(ooxml.NSA, "fontRef"); fr != nil {
 		if c, ok := ooxml.SchemeColor(fr, r.theme); ok {
-			base.Color = composeColor(c)
+			base.Color = typesetColor(c)
 		}
 		if attr(fr, "idx") == "major" {
 			base.Families = r.themeFont("+mj-lt")
@@ -151,7 +151,7 @@ func (r *reader) runStyle(pr *ooxml.Element, base text.Style) text.Style {
 	}
 	if f := pr.Child(ooxml.NSA, "solidFill"); f != nil {
 		if c, ok := ooxml.SchemeColor(f, r.theme); ok {
-			s.Color = composeColor(c)
+			s.Color = typesetColor(c)
 		}
 	}
 	if l := attr(pr.Child(ooxml.NSA, "latin"), "typeface"); l != "" {
@@ -160,15 +160,15 @@ func (r *reader) runStyle(pr *ooxml.Element, base text.Style) text.Style {
 	return s
 }
 
-// composeColor converts a CSS colour to a compose one.
-func composeColor(c css.Color) compose.Color {
-	return compose.Color{R: c.R, G: c.G, B: c.B, A: c.A}
+// typesetColor converts a CSS colour to a compose one.
+func typesetColor(c css.Color) typeset.Color {
+	return typeset.Color{R: c.R, G: c.G, B: c.B, A: c.A}
 }
 
 // draw lays the text out in box, inside the insets, each paragraph's
 // lines aligned and the whole anchored to the top, middle or bottom, and
 // returns its glyph runs. Text that does not lay out draws nothing.
-func (st *shapeText) draw(ctx context.Context, fonts *text.Fonts, box compose.Rect) []compose.Fragment {
+func (st *shapeText) draw(ctx context.Context, fonts *text.Fonts, box typeset.Rect) []typeset.Fragment {
 	avail := box.Width - st.insets[css.Left] - st.insets[css.Right]
 	w := avail
 	if !st.wrap || w <= 0 {
@@ -202,7 +202,7 @@ func (st *shapeText) draw(ctx context.Context, fonts *text.Fonts, box compose.Re
 	case "b":
 		top += inner - height
 	}
-	var out []compose.Fragment
+	var out []typeset.Fragment
 	y := top
 	for _, pl := range lines {
 		l := pl.line
@@ -221,7 +221,7 @@ func (st *shapeText) draw(ctx context.Context, fonts *text.Fonts, box compose.Re
 				continue
 			}
 			t := *run
-			t.Origin = compose.Point{X: x + run.Origin.X, Y: y}
+			t.Origin = typeset.Point{X: x + run.Origin.X, Y: y}
 			out = append(out, &t)
 		}
 		y += l.Descent + l.LineGap

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // measureSide is the side of the page a measuring layout runs on: 14,400
@@ -44,7 +44,7 @@ type marginBox struct {
 	kids  []*layout.Node
 	// cb is the containing block (CSS Page 3, 5.3.1), x and y the used
 	// axes.
-	cb   compose.Rect
+	cb   typeset.Rect
 	x, y marginAxis
 	// minW and maxW are the outer min- and max-content widths, contentH
 	// the content's height at the used width.
@@ -80,29 +80,29 @@ func marginSide(b css.MarginBox) (int, int) {
 // containingBlock returns the containing block of the page-margin box b on
 // the page box pb (CSS Page 3, 5.3.1): the intersection of two margins for
 // a corner, the margin less the corners for the others.
-func containingBlock(b css.MarginBox, pb layout.PageBox) compose.Rect {
+func containingBlock(b css.MarginBox, pb layout.PageBox) typeset.Rect {
 	w, h := pb.Width, pb.Height
 	mt, mr, mb, ml := pb.Margin[css.Top], pb.Margin[css.Right], pb.Margin[css.Bottom], pb.Margin[css.Left]
 	aw, ah := w-ml-mr, h-mt-mb
 	switch b { //nolint:exhaustive // the side boxes follow their side
 	case css.MarginTopLeftCorner:
-		return compose.Rect{Width: ml, Height: mt}
+		return typeset.Rect{Width: ml, Height: mt}
 	case css.MarginTopRightCorner:
-		return compose.Rect{X: w - mr, Width: mr, Height: mt}
+		return typeset.Rect{X: w - mr, Width: mr, Height: mt}
 	case css.MarginBottomRightCorner:
-		return compose.Rect{X: w - mr, Y: h - mb, Width: mr, Height: mb}
+		return typeset.Rect{X: w - mr, Y: h - mb, Width: mr, Height: mb}
 	case css.MarginBottomLeftCorner:
-		return compose.Rect{Y: h - mb, Width: ml, Height: mb}
+		return typeset.Rect{Y: h - mb, Width: ml, Height: mb}
 	}
 	switch side, _ := marginSide(b); side {
 	case sideTop:
-		return compose.Rect{X: ml, Width: aw, Height: mt}
+		return typeset.Rect{X: ml, Width: aw, Height: mt}
 	case sideBottom:
-		return compose.Rect{X: ml, Y: h - mb, Width: aw, Height: mb}
+		return typeset.Rect{X: ml, Y: h - mb, Width: aw, Height: mb}
 	case sideLeft:
-		return compose.Rect{Y: mt, Width: ml, Height: ah}
+		return typeset.Rect{Y: mt, Width: ml, Height: ah}
 	}
-	return compose.Rect{X: w - mr, Y: mt, Width: mr, Height: ah}
+	return typeset.Rect{X: w - mr, Y: mt, Width: mr, Height: ah}
 }
 
 // usedBorder returns the used width of a border: zero when its style
@@ -252,7 +252,7 @@ func variableSizes(avail float64, s [3]sizing) [3]float64 {
 // marginContent returns the page-margin boxes of the page info names, one
 // of pages, laid out on the page (CSS Page 3, 5), as artifacts: the
 // layout.Options.MarginContent of the document.
-func (p *prepared) marginContent(ctx context.Context, info layout.PageInfo, pages int) []compose.Fragment {
+func (p *prepared) marginContent(ctx context.Context, info layout.PageInfo, pages int) []typeset.Fragment {
 	e := p.pages.entry(info)
 	if len(e.style.MarginBoxes) == 0 {
 		return nil
@@ -295,7 +295,7 @@ func (p *prepared) warnMargins(err error) {
 func (p *prepared) warnOnce(msg string) {
 	if !p.pages.seen[msg] {
 		p.pages.seen[msg] = true
-		p.pages.warnings = append(p.pages.warnings, compose.Warning{Code: CodePageBox, Message: msg})
+		p.pages.warnings = append(p.pages.warnings, typeset.Warning{Code: CodePageBox, Message: msg})
 	}
 }
 
@@ -487,7 +487,7 @@ func (p *prepared) measureHeights(ctx context.Context, boxes []*marginBox) error
 
 // measure lays root out on a measuring page and returns the extents of its
 // boxes.
-func (p *prepared) measure(ctx context.Context, root *layout.Node) (map[string]compose.Rect, error) {
+func (p *prepared) measure(ctx context.Context, root *layout.Node) (map[string]typeset.Rect, error) {
 	res, err := layout.Layout(ctx, wrapRoot(root), p.fonts, layout.Options{
 		Page:  layout.PageBox{Width: measureSide, Height: measureSide},
 		Lang:  p.layout.Lang,
@@ -501,7 +501,7 @@ func (p *prepared) measure(ctx context.Context, root *layout.Node) (map[string]c
 
 // paintMargins lays the boxes out at their used positions on a page of
 // the size of pb and returns what they paint, as artifacts.
-func (p *prepared) paintMargins(ctx context.Context, boxes []*marginBox, pb layout.PageBox) ([]compose.Fragment, error) {
+func (p *prepared) paintMargins(ctx context.Context, boxes []*marginBox, pb layout.PageBox) ([]typeset.Fragment, error) {
 	root := measureRoot()
 	for _, mb := range boxes {
 		st := absStyle(mb.st, mb.cb.X+mb.x.m1, mb.cb.Y+mb.y.m1)
@@ -537,16 +537,16 @@ func (p *prepared) paintMargins(ctx context.Context, boxes []*marginBox, pb layo
 
 // artifacts returns frags with no structure element: page-margin content
 // is a pagination artifact (ISO 32000-1, 14.8.2.2.2).
-func artifacts(frags []compose.Fragment) []compose.Fragment {
+func artifacts(frags []typeset.Fragment) []typeset.Fragment {
 	for _, f := range frags {
 		switch v := f.(type) {
-		case *compose.Text:
+		case *typeset.Text:
 			v.Parent = nil
-		case *compose.Image:
+		case *typeset.Image:
 			v.Parent = nil
-		case *compose.Path:
+		case *typeset.Path:
 			v.Parent = nil
-		case *compose.Group:
+		case *typeset.Group:
 			artifacts(v.Content)
 		}
 	}

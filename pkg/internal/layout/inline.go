@@ -6,9 +6,9 @@ import (
 	"slices"
 	"unicode"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // lineBox is one line box of an inline formatting context (CSS 2.1,
@@ -38,7 +38,7 @@ type lineBox struct {
 	// bars are the line-relative positions of the bar tab stops of an
 	// Office container, drawn across the line in barColor.
 	bars     []float64
-	barColor compose.Color
+	barColor typeset.Color
 	barOwner *box
 	// changed is the block container of a line that holds content a
 	// tracked change touches (Node.ChangeBar), nil for any other line;
@@ -54,7 +54,7 @@ type lineItem struct {
 	box *box
 	// text is the glyph run, its Origin relative to the line box; nil for
 	// an atomic inline or a piece that draws no glyph.
-	text   *compose.Text
+	text   *typeset.Text
 	atomic *box
 	x, w   float64
 	// baseline is the item's baseline below the line top, ascent and
@@ -1308,7 +1308,7 @@ func (s *inlineState) align(l *lineBox, indent float64, last bool) {
 	for _, it := range l.items {
 		it.x += off
 		if it.text != nil {
-			it.text.Origin = compose.Point{X: it.x, Y: it.baseline}
+			it.text.Origin = typeset.Point{X: it.x, Y: it.baseline}
 		}
 	}
 	for _, f := range l.frags {

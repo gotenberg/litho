@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // paintKind says what a fill or stroke paints with (SVG 1.1, 11.2).
@@ -21,7 +21,7 @@ const (
 // paint is a computed fill or stroke.
 type paint struct {
 	kind  paintKind
-	color compose.Color
+	color typeset.Color
 	// url is the fragment a paint server reference names, without "#".
 	url string
 	// fallback is what a url paint falls back to when the reference does
@@ -44,12 +44,12 @@ const (
 type style struct {
 	fill          paint
 	fillOpacity   float64
-	fillRule      compose.FillRule
+	fillRule      typeset.FillRule
 	stroke        paint
 	strokeWidth   length
 	strokeOpacity float64
-	lineCap       compose.LineCap
-	lineJoin      compose.LineJoin
+	lineCap       typeset.LineCap
+	lineJoin      typeset.LineJoin
 	miterLimit    float64
 	dashArray     []length
 	dashOffset    length
@@ -57,9 +57,9 @@ type style struct {
 	opacity    float64
 	visible    bool
 	displayed  bool
-	color      compose.Color
+	color      typeset.Color
 	clipPath   string
-	clipRule   compose.FillRule
+	clipRule   typeset.FillRule
 	stopColor  paint
 	stopAlpha  float64
 	overflowOK bool
@@ -73,7 +73,7 @@ type style struct {
 
 	// background is the CSS background-color of the root element, which
 	// paints its viewport (CSS Backgrounds 3, 3.2); it is not inherited.
-	background compose.Color
+	background typeset.Color
 
 	// mask, filter and marker record the properties the renderer does not
 	// draw, for a warning.
@@ -84,7 +84,7 @@ type style struct {
 // color and the font properties from the embedding context.
 func initialStyle(ctx Context) *style {
 	st := &style{
-		fill:          paint{kind: paintColor, color: compose.Black},
+		fill:          paint{kind: paintColor, color: typeset.Black},
 		fillOpacity:   1,
 		stroke:        paint{kind: paintNone},
 		strokeWidth:   length{v: 1},
@@ -93,15 +93,15 @@ func initialStyle(ctx Context) *style {
 		opacity:       1,
 		visible:       true,
 		displayed:     true,
-		color:         compose.Black,
-		stopColor:     paint{kind: paintColor, color: compose.Black},
+		color:         typeset.Black,
+		stopColor:     paint{kind: paintColor, color: typeset.Black},
 		stopAlpha:     1,
 		families:      ctx.Families,
 		lang:          ctx.Lang,
 		fontSize:      16,
 		weight:        400,
 	}
-	if ctx.Color != (compose.Color{}) {
+	if ctx.Color != (typeset.Color{}) {
 		st.color = ctx.Color
 	}
 	if ctx.FontSize > 0 {
@@ -122,11 +122,11 @@ func (p *style) inherit() *style {
 	st.opacity = 1
 	st.displayed = true
 	st.clipPath = ""
-	st.stopColor = paint{kind: paintColor, color: compose.Black}
+	st.stopColor = paint{kind: paintColor, color: typeset.Black}
 	st.stopAlpha = 1
 	st.overflowOK = false
 	st.mask, st.filter = false, false
-	st.background = compose.Color{}
+	st.background = typeset.Color{}
 	return &st
 }
 
@@ -170,12 +170,12 @@ func (st *style) apply(d declaration, parent *style) bool {
 		}
 		return true
 	case "fill-rule", "clip-rule":
-		var r compose.FillRule
+		var r typeset.FillRule
 		switch strings.ToLower(v) {
 		case "nonzero":
-			r = compose.NonZero
+			r = typeset.NonZero
 		case "evenodd":
-			r = compose.EvenOdd
+			r = typeset.EvenOdd
 		default:
 			return false
 		}
@@ -193,14 +193,14 @@ func (st *style) apply(d declaration, parent *style) bool {
 		st.strokeWidth = l
 		return true
 	case "stroke-linecap":
-		c, ok := map[string]compose.LineCap{"butt": compose.ButtCap, "round": compose.RoundCap, "square": compose.SquareCap}[strings.ToLower(v)]
+		c, ok := map[string]typeset.LineCap{"butt": typeset.ButtCap, "round": typeset.RoundCap, "square": typeset.SquareCap}[strings.ToLower(v)]
 		if ok {
 			st.lineCap = c
 		}
 		return ok
 	case "stroke-linejoin":
 		// SVG 2's miter-clip and arcs fall back to miter (SVG 2, 13.5.4).
-		j, ok := map[string]compose.LineJoin{"miter": compose.MiterJoin, "miter-clip": compose.MiterJoin, "arcs": compose.MiterJoin, "round": compose.RoundJoin, "bevel": compose.BevelJoin}[strings.ToLower(v)]
+		j, ok := map[string]typeset.LineJoin{"miter": typeset.MiterJoin, "miter-clip": typeset.MiterJoin, "arcs": typeset.MiterJoin, "round": typeset.RoundJoin, "bevel": typeset.BevelJoin}[strings.ToLower(v)]
 		if ok {
 			st.lineJoin = j
 		}
@@ -253,7 +253,7 @@ func (st *style) apply(d declaration, parent *style) bool {
 			return false
 		}
 		if !current {
-			st.color = composeColor(c)
+			st.color = typesetColor(c)
 		} else if parent != nil {
 			st.color = parent.color
 		}
@@ -263,7 +263,7 @@ func (st *style) apply(d declaration, parent *style) bool {
 		if !ok {
 			return false
 		}
-		st.background = composeColor(c)
+		st.background = typesetColor(c)
 		if current {
 			st.background = st.color
 		}
@@ -414,9 +414,9 @@ var presentationAttrs = map[string]bool{
 	"font-weight": true, "font-style": true, "text-anchor": true,
 }
 
-// composeColor converts a CSS colour.
-func composeColor(c css.Color) compose.Color {
-	return compose.Color{R: c.R, G: c.G, B: c.B, A: c.A}
+// typesetColor converts a CSS colour.
+func typesetColor(c css.Color) typeset.Color {
+	return typeset.Color{R: c.R, G: c.G, B: c.B, A: c.A}
 }
 
 // parsePaint parses a <paint> (SVG 2, 13.2): none, currentColor, a
@@ -453,7 +453,7 @@ func parsePaint(v string) (paint, bool) {
 	if current {
 		return paint{kind: paintCurrent}, true
 	}
-	return paint{kind: paintColor, color: composeColor(c)}, true
+	return paint{kind: paintColor, color: typesetColor(c)}, true
 }
 
 // parseURLRef parses url(#id), quoted or not, into the id. Only a

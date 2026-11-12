@@ -3,7 +3,7 @@ package chart
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxLegendEntries caps the entries a legend draws. Anti-DoS guard, not
@@ -109,7 +109,7 @@ func (rd *renderer) entry(g *Group, s *Series, j int, name string, st TextStyle,
 
 // legend lays the legend out and places it at its side of the chart, as
 // LibreOffice's VLegend does, taking its room from rem unless it overlays.
-func (rd *renderer) legend(page compose.Rect, rem *compose.Rect) {
+func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 	lg := rd.c.Legend
 	fs := fontSize(lg.Style.Size)
 	xPad := max(minLegendSpacing, fs*0.33)
@@ -210,7 +210,7 @@ func (rd *renderer) legend(page compose.Rect, rem *compose.Rect) {
 	}
 	x = max(page.X, min(x, page.X+page.Width-w))
 	y = max(page.Y, min(y, page.Y+page.Height-h))
-	rd.frame(compose.Rect{X: x, Y: y, Width: w, Height: h}, lg.Frame)
+	rd.frame(typeset.Rect{X: x, Y: y, Width: w, Height: h}, lg.Frame)
 	cx := x + xPad
 	for c := 0; c < cols; c++ {
 		cy := y + yPad
@@ -222,7 +222,7 @@ func (rd *renderer) legend(page compose.Rect, rem *compose.Rect) {
 			e := entries[i]
 			lineH := e.label.lineH[0]
 			sy := cy + (lineH-symH)/2
-			rd.key(e, compose.Rect{X: cx, Y: sy, Width: symW, Height: symH})
+			rd.key(e, typeset.Rect{X: cx, Y: sy, Width: symW, Height: symH})
 			rd.out = append(rd.out, e.label.draw(cx+symPlus+e.label.w/2, cy+e.label.h/2, alignLeft)...)
 			cy += rowH[r] + yOff
 		}
@@ -248,7 +248,7 @@ func (rd *renderer) legend(page compose.Rect, rem *compose.Rect) {
 }
 
 // key draws an entry's legend key into r.
-func (rd *renderer) key(e legendEntry, r compose.Rect) {
+func (rd *renderer) key(e legendEntry, r typeset.Rect) {
 	if e.circleKey {
 		d := math.Min(r.Width, r.Height) / 2
 		rd.paint(ellipse(r.X+r.Width/2, r.Y+r.Height/2, d, d), e.fill, nil)

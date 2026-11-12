@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // NSChartEx is the namespace of the charts Office 2016 added (MS-ODRAWXML,
@@ -213,10 +213,10 @@ func (x *chartExReader) read(root *Element) {
 	if !histogram && len(series) > 0 {
 		// chart2's UnsupportedChart: 10-point text in the default face, in
 		// a white box with a white hairline.
-		white := compose.Color{R: 1, G: 1, B: 1, A: 1}
+		white := typeset.Color{R: 1, G: 1, B: 1, A: 1}
 		c.Notice = &chart.Title{
 			Text:  NoticeUnsupported,
-			Style: chart.TextStyle{Families: []string{"Liberation Serif"}, Size: 10, Color: compose.Black},
+			Style: chart.TextStyle{Families: []string{"Liberation Serif"}, Size: 10, Color: typeset.Black},
 			Frame: chart.Frame{Fill: &chart.Paint{Color: white}, Border: &chart.Stroke{Color: white}},
 		}
 		x.warn(CodeChartUnsupported, "an Office 2016 chart of a kind other than a histogram is drawn without its series")

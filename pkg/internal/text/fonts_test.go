@@ -127,15 +127,15 @@ func TestNewFonts_Collection(t *testing.T) {
 	if !strings.HasSuffix(face.Key(), "coll.ttc#1") {
 		t.Fatalf("bold face %s", face.Key())
 	}
-	cf, err := face.Compose()
+	cf, err := face.Typeset()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if truetype.IsCollection(cf.Program) || !truetype.IsSfnt(cf.Program) || cf.Key != face.Key() {
-		t.Errorf("Compose returns a collection or a wrong key %s", cf.Key)
+		t.Errorf("Typeset returns a collection or a wrong key %s", cf.Key)
 	}
-	if again, _ := face.Compose(); again != cf { // the first call succeeded on the same file
-		t.Error("Compose returns a new value on the second call")
+	if again, _ := face.Typeset(); again != cf { // the first call succeeded on the same file
+		t.Error("Typeset returns a new value on the second call")
 	}
 	widths, err := truetype.GlyphWidths(context.Background(), cf.Program)
 	if err != nil || widths[2] != 700 {
@@ -147,16 +147,16 @@ func TestNewFonts_Collection(t *testing.T) {
 	}
 }
 
-func TestFace_ComposeSingleProgram(t *testing.T) {
+func TestFace_TypesetSingleProgram(t *testing.T) {
 	t.Parallel()
 	data, err := os.ReadFile(dejavuAB)
 	if err != nil {
 		t.Fatal(err)
 	}
 	f := newTestFonts(t, fontFile{name: "dejavu.ttf", data: data})
-	cf, err := f.Match(Style{Size: 10}).Compose()
+	cf, err := f.Match(Style{Size: 10}).Typeset()
 	if err != nil || !bytes.Equal(cf.Program, data) || !strings.HasSuffix(cf.Key, "dejavu.ttf#0") {
-		t.Errorf("Compose = %s, %v", cf.Key, err)
+		t.Errorf("Typeset = %s, %v", cf.Key, err)
 	}
 }
 

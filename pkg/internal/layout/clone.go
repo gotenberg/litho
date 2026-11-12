@@ -1,8 +1,8 @@
 package layout
 
 import (
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // clones reports a box whose fragments each get their own decorations at
@@ -31,18 +31,18 @@ func (s *inlineState) clonedPosition(top, h float64) float64 {
 // pageFragments returns the border boxes of a block whose border box is r,
 // in flow coordinates offset by the painter's, one per page it crosses,
 // each with all its edges ([css.DecorationCloneAll]).
-func (p *painter) pageFragments(r compose.Rect) []compose.Rect {
+func (p *painter) pageFragments(r typeset.Rect) []typeset.Rect {
 	e := p.e
 	y0, y1 := r.Y-p.dy, r.Y+r.Height-p.dy
 	first, last := e.pageOf(y0+eps), e.pageOf(y1-eps)
 	if last <= first || last-first > maxCloneFragments {
-		return []compose.Rect{r}
+		return []typeset.Rect{r}
 	}
-	out := make([]compose.Rect, 0, last-first+1)
+	out := make([]typeset.Rect, 0, last-first+1)
 	for k := first; k <= last; k++ {
 		a, z := max(y0, e.pageTop(k)), min(y1, e.pageTop(k+1))
 		if z > a+eps {
-			out = append(out, compose.Rect{X: r.X, Y: a + p.dy, Width: r.Width, Height: z - a})
+			out = append(out, typeset.Rect{X: r.X, Y: a + p.dy, Width: r.Width, Height: z - a})
 		}
 	}
 	return out

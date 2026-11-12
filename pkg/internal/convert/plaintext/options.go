@@ -5,8 +5,8 @@ import (
 	"math"
 	"slices"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Page setup defaults. A4 is the ISO 216 size, 210 by 297 mm, and the
@@ -97,7 +97,7 @@ type Options struct {
 	// Sink, when set, takes each page as soon as it is full, and the
 	// document [Convert] returns holds no page: a page leaves memory once
 	// it is written. nil keeps every page in the document.
-	Sink compose.PageSink
+	Sink typeset.PageSink
 }
 
 // withDefaults returns o with every zero field set to its default, or an

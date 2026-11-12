@@ -4,10 +4,10 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // near reports whether a length is in points and within a hundredth of
@@ -41,7 +41,7 @@ func TestVML_Shapes(t *testing.T) {
 	if rect.Kind != layout.Replaced || !near(rect.Style.Left, 50) || !near(rect.Style.Top, 50) || !near(rect.Style.Width, 100) || !near(rect.Style.Height, 50) || rect.Style.Position != css.Absolute {
 		t.Errorf("rectangle at %v, %v, %v x %v", rect.Style.Left, rect.Style.Top, rect.Style.Width, rect.Style.Height)
 	}
-	if frags := rect.Picture.Vector(t.Context(), compose.Rect{Width: 100, Height: 50}); len(frags) != 1 {
+	if frags := rect.Picture.Vector(t.Context(), typeset.Rect{Width: 100, Height: 50}); len(frags) != 1 {
 		t.Errorf("rectangle paints %d fragments", len(frags))
 	}
 	if !near(box.Style.Left, 0) || !near(box.Style.Width, 50) || box.Style.Display != css.Block || textOf(box) != "grouped" || box.Style.Padding[css.Left] != css.Pts(0) {

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxPageCells caps the cells one page lays out. Anti-DoS guard, not
@@ -22,9 +22,9 @@ type pageBuilder struct {
 	cellBudget int
 	// fills, borderPaths and gridPaths are the page's vector content in
 	// the coordinates of its cells, under and over the text.
-	fills, borderPaths, gridPaths []compose.Fragment
+	fills, borderPaths, gridPaths []typeset.Fragment
 	// circles are the red ellipses around the cells marked invalid.
-	circles []compose.Fragment
+	circles []typeset.Fragment
 	// dataW and dataH are the size of the page's cells, headings
 	// included, in sheet points.
 	dataW, dataH float64
@@ -79,7 +79,7 @@ func (b *pageBuilder) layoutRegions() []*region {
 
 // build lays the page's cells out and returns their fragments in sheet
 // points from the top-left corner of the cells, with their links.
-func (b *pageBuilder) build() ([]compose.Fragment, []compose.Link, *compose.StructElem, error) {
+func (b *pageBuilder) build() ([]typeset.Fragment, []typeset.Link, *typeset.StructElem, error) {
 	b.cellBudget = maxPageCells
 	b.cellKeys = map[*layout.Node][2]int{}
 	regs := b.layoutRegions()
@@ -107,10 +107,10 @@ func (b *pageBuilder) build() ([]compose.Fragment, []compose.Link, *compose.Stru
 		return nil, nil, nil, fmt.Errorf("laying out a page of sheet %s: %w", quote(b.g.sh.Name), err)
 	}
 	b.warnings = append(b.warnings, res.Warnings...)
-	var frags []compose.Fragment
+	var frags []typeset.Fragment
 	frags = append(frags, b.fills...)
 	frags = append(frags, b.borderPaths...)
-	var links []compose.Link
+	var links []typeset.Link
 	if len(res.Pages) > 0 {
 		frags = append(frags, res.Pages[0].Content...)
 		links = res.Pages[0].Links
@@ -124,7 +124,7 @@ func (b *pageBuilder) build() ([]compose.Fragment, []compose.Link, *compose.Stru
 	if len(figs) > 0 {
 		// The Figures read after the cells they lie over.
 		if st == nil {
-			st = &compose.StructElem{Role: "Document", Lang: b.lang}
+			st = &typeset.StructElem{Role: "Document", Lang: b.lang}
 		}
 		st.Kids = append(st.Kids, figs...)
 	}
@@ -176,7 +176,7 @@ func (b *pageBuilder) region(rg *region) *layout.Node {
 	}
 	b.units(rg, func(u *unit) {
 		if c := u.st.Fill.Color; c.A > 0 {
-			b.fills = append(b.fills, &compose.Path{Ops: rectOps(u.x, u.y, u.w, u.h), Fill: &compose.Fill{Color: colorOf(c)}})
+			b.fills = append(b.fills, &typeset.Path{Ops: rectOps(u.x, u.y, u.w, u.h), Fill: &typeset.Fill{Color: colorOf(c)}})
 		}
 		b.drawDataBar(u)
 		b.drawIcon(u)
@@ -223,9 +223,9 @@ func (b *pageBuilder) region(rg *region) *layout.Node {
 	b.borderPaths = append(b.borderPaths, bs.paths()...)
 	// Fills and borders of a region stay in it.
 	if len(b.fills) > clipFills {
-		grp := &compose.Group{
-			Clip:    &compose.Path{Ops: rectOps(rg.x0, rg.y0, rg.w, rg.h), Fill: &compose.Fill{}},
-			Opacity: 1, Transform: compose.Identity, Content: append([]compose.Fragment(nil), b.fills[clipFills:]...),
+		grp := &typeset.Group{
+			Clip:    &typeset.Path{Ops: rectOps(rg.x0, rg.y0, rg.w, rg.h), Fill: &typeset.Fill{}},
+			Opacity: 1, Transform: typeset.Identity, Content: append([]typeset.Fragment(nil), b.fills[clipFills:]...),
 		}
 		b.fills = append(b.fills[:clipFills], grp)
 	}
@@ -242,9 +242,9 @@ func (b *pageBuilder) region(rg *region) *layout.Node {
 // those inside a merge or crossed by overflowing text, and its frame.
 func (b *pageBuilder) grid(rg *region, spans map[int][][2]float64) {
 	g := b.g
-	stroke := &compose.Stroke{Color: compose.Black, Width: gridWidth}
+	stroke := &typeset.Stroke{Color: typeset.Black, Width: gridWidth}
 	add := func(x1, y1, x2, y2 float64) {
-		b.gridPaths = append(b.gridPaths, &compose.Path{Ops: lineOps(x1, y1, x2, y2), Stroke: stroke})
+		b.gridPaths = append(b.gridPaths, &typeset.Path{Ops: lineOps(x1, y1, x2, y2), Stroke: stroke})
 	}
 	inMerge := func(r, c int, vertical bool) bool {
 		if tl, ok := g.covered[[2]int{r, c}]; ok {
@@ -306,9 +306,9 @@ func (b *pageBuilder) grid(rg *region, spans map[int][][2]float64) {
 func (b *pageBuilder) headings(regs []*region) []*layout.Node {
 	g := b.g
 	var out []*layout.Node
-	stroke := &compose.Stroke{Color: compose.Black, Width: gridWidth}
+	stroke := &typeset.Stroke{Color: typeset.Black, Width: gridWidth}
 	label := func(x, y, w, h float64, s string) {
-		b.gridPaths = append(b.gridPaths, &compose.Path{Ops: rectOps(x, y, w, h), Stroke: stroke})
+		b.gridPaths = append(b.gridPaths, &typeset.Path{Ops: rectOps(x, y, w, h), Stroke: stroke})
 		st := b.style()
 		st.Position = css.Absolute
 		st.Left, st.Top, st.Width, st.Height = css.Pts(x), css.Pts(y), css.Pts(max(w, 0.01)), css.Pts(max(h, 0.01))
@@ -372,9 +372,9 @@ const (
 //   - libreoffice/ods: sc/deleteCirclesInRowAndCol.ods prints a 1.559-point red
 //     ellipse 78.18 by 16.78 points around each 64 by 12.78 point cell
 //     marked invalid.
-func invalidCircle(u *unit) compose.Fragment {
+func invalidCircle(u *unit) typeset.Fragment {
 	x0, y0 := u.x-circleGrowX, u.y-circleGrowY
 	rx, ry := u.w/2+circleGrowX, u.h/2+circleGrowY
 	ops := ellipse(x0+rx, y0+ry, rx, ry)
-	return &compose.Path{Ops: ops, Stroke: &compose.Stroke{Color: compose.Color{R: 1, A: 1}, Width: circleWidth, Join: compose.RoundJoin}}
+	return &typeset.Path{Ops: ops, Stroke: &typeset.Stroke{Color: typeset.Color{R: 1, A: 1}, Width: circleWidth, Join: typeset.RoundJoin}}
 }

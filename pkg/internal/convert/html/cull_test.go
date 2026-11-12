@@ -7,19 +7,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // pageText returns the characters of pg's glyph runs in paint order.
-func pageText(pg *compose.Page) string {
+func pageText(pg *typeset.Page) string {
 	var b strings.Builder
-	var walk func(fs []compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+	var walk func(fs []typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content)
-			case *compose.Text:
+			case *typeset.Text:
 				for _, g := range v.Glyphs {
 					b.WriteString(g.Text)
 				}
@@ -32,39 +32,39 @@ func pageText(pg *compose.Page) string {
 }
 
 func TestCullPage_DropsWhatClipsHide(t *testing.T) {
-	run := func(x, y float64) *compose.Text {
-		return &compose.Text{Size: 10, Color: compose.Black, Origin: compose.Point{X: x, Y: y}, Glyphs: []compose.Glyph{{GID: 1, Text: "a"}}}
+	run := func(x, y float64) *typeset.Text {
+		return &typeset.Text{Size: 10, Color: typeset.Black, Origin: typeset.Point{X: x, Y: y}, Glyphs: []typeset.Glyph{{GID: 1, Text: "a"}}}
 	}
-	clipTo := func(x, y, w, h float64, kids ...compose.Fragment) *compose.Group {
-		return &compose.Group{Clip: &compose.Path{Ops: rectPath(compose.Rect{X: x, Y: y, Width: w, Height: h})}, Opacity: 1, Content: kids}
+	clipTo := func(x, y, w, h float64, kids ...typeset.Fragment) *typeset.Group {
+		return &typeset.Group{Clip: &typeset.Path{Ops: rectPath(typeset.Rect{X: x, Y: y, Width: w, Height: h})}, Opacity: 1, Content: kids}
 	}
 	tests := []struct {
 		name    string
-		content []compose.Fragment
+		content []typeset.Fragment
 		want    int
 		dropped bool
 	}{
-		{"on the page", []compose.Fragment{run(10, 10)}, 1, false},
-		{"below the page", []compose.Fragment{run(10, 500)}, 0, true},
-		{"crossing the page edge", []compose.Fragment{run(10, 205)}, 1, false},
-		{"inside the clip", []compose.Fragment{clipTo(0, 0, 50, 50, run(10, 20))}, 1, false},
-		{"past the clip", []compose.Fragment{clipTo(0, 0, 50, 50, run(10, 20), run(10, 150))}, 1, true},
-		{"clip wholly hidden", []compose.Fragment{clipTo(0, 0, 50, 50, clipTo(100, 100, 10, 10, run(105, 105)))}, 0, true},
-		{"transformed clip", []compose.Fragment{&compose.Group{Transform: compose.Matrix{A: 1, D: 1, F: 150}, Opacity: 1, Content: []compose.Fragment{clipTo(0, 0, 50, 20, run(10, 15), run(10, 100))}}}, 1, true},
-		{"stroke reaching in", []compose.Fragment{clipTo(0, 0, 50, 50, &compose.Path{Ops: rectPath(compose.Rect{X: 52, Y: 10, Width: 10, Height: 10}), Stroke: &compose.Stroke{Color: compose.Black, Width: 6}})}, 1, false},
-		{"empty group kept", []compose.Fragment{clipTo(0, 0, 50, 50)}, 0, false},
+		{"on the page", []typeset.Fragment{run(10, 10)}, 1, false},
+		{"below the page", []typeset.Fragment{run(10, 500)}, 0, true},
+		{"crossing the page edge", []typeset.Fragment{run(10, 205)}, 1, false},
+		{"inside the clip", []typeset.Fragment{clipTo(0, 0, 50, 50, run(10, 20))}, 1, false},
+		{"past the clip", []typeset.Fragment{clipTo(0, 0, 50, 50, run(10, 20), run(10, 150))}, 1, true},
+		{"clip wholly hidden", []typeset.Fragment{clipTo(0, 0, 50, 50, clipTo(100, 100, 10, 10, run(105, 105)))}, 0, true},
+		{"transformed clip", []typeset.Fragment{&typeset.Group{Transform: typeset.Matrix{A: 1, D: 1, F: 150}, Opacity: 1, Content: []typeset.Fragment{clipTo(0, 0, 50, 20, run(10, 15), run(10, 100))}}}, 1, true},
+		{"stroke reaching in", []typeset.Fragment{clipTo(0, 0, 50, 50, &typeset.Path{Ops: rectPath(typeset.Rect{X: 52, Y: 10, Width: 10, Height: 10}), Stroke: &typeset.Stroke{Color: typeset.Black, Width: 6}})}, 1, false},
+		{"empty group kept", []typeset.Fragment{clipTo(0, 0, 50, 50)}, 0, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pg := &compose.Page{Width: 200, Height: 200, Content: tt.content}
+			pg := &typeset.Page{Width: 200, Height: 200, Content: tt.content}
 			if got := cullPage(pg); got != tt.dropped {
 				t.Errorf("cullPage reported %v, want %v", got, tt.dropped)
 			}
 			n := 0
-			var walk func(fs []compose.Fragment)
-			walk = func(fs []compose.Fragment) {
+			var walk func(fs []typeset.Fragment)
+			walk = func(fs []typeset.Fragment) {
 				for _, f := range fs {
-					if g, ok := f.(*compose.Group); ok {
+					if g, ok := f.(*typeset.Group); ok {
 						walk(g.Content)
 						continue
 					}
@@ -94,9 +94,9 @@ func TestConvert_CullsTextPastOverflowClip(t *testing.T) {
 	if strings.Contains(got, "line5") || strings.Contains(got, "line199") {
 		t.Errorf("text %q holds lines the clip hides", got)
 	}
-	size := func(d *compose.Document) int {
+	size := func(d *typeset.Document) int {
 		var b bytes.Buffer
-		if err := compose.Write(context.Background(), d, &b, compose.Options{}); err != nil {
+		if err := typeset.Write(context.Background(), d, &b, typeset.Options{}); err != nil {
 			t.Fatalf("Write: %v", err)
 		}
 		return b.Len()

@@ -1,8 +1,8 @@
 package layout
 
 import (
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // localArea returns the background positioning area of the box b whose
@@ -12,7 +12,7 @@ import (
 // boxes and the end padding past them (CSS Overflow 3, 2.2), as though
 // the area scrolled with the content. Any other box keeps area. Fixed
 // needs nothing here: Chromium prints it as scroll.
-func (p *painter) localArea(b *box, area, r compose.Rect, pd [4]float64) compose.Rect {
+func (p *painter) localArea(b *box, area, r typeset.Rect, pd [4]float64) typeset.Rect {
 	if b.kind != kindBlock || b.st.Overflow == css.OverflowVisible || b == p.viewport {
 		return area
 	}
@@ -35,5 +35,5 @@ func (p *painter) localArea(b *box, area, r compose.Rect, pd [4]float64) compose
 			grow(k.x+k.borderW()+max(k.m[css.Right], 0), k.y+k.borderH()+max(k.m[css.Bottom], 0))
 		}
 	}
-	return compose.Rect{X: area.X, Y: area.Y, Width: right - area.X, Height: bottom - area.Y}
+	return typeset.Rect{X: area.X, Y: area.Y, Width: right - area.X, Height: bottom - area.Y}
 }

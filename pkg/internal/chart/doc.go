@@ -27,7 +27,7 @@
 // renderer does not draw ([Unsupported]) keeps its axes and legend, and
 // the reader's [Chart.Notice] says so over the chart's middle.
 // Gradient and pattern fills paint through the shape package. Every text
-// is shaped through the text package and emitted as [compose.Text], so
+// is shaped through the text package and emitted as [typeset.Text], so
 // extraction reads it.
 //
 // Trendlines fit their series by least squares, or average them, and

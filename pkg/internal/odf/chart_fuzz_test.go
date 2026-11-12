@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func FuzzChartFromDocument(f *testing.F) {
@@ -31,7 +31,7 @@ func FuzzChartFromDocument(f *testing.F) {
 			return
 		}
 		start := time.Now()
-		frags := chart.Render(context.Background(), fonts, c, compose.Rect{X: 5, Y: 5, Width: 300, Height: 200})
+		frags := chart.Render(context.Background(), fonts, c, typeset.Rect{X: 5, Y: 5, Width: 300, Height: 200})
 		if d := time.Since(start); d > 2*time.Second {
 			t.Fatalf("rendering took %v", d)
 		}

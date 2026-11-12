@@ -3,8 +3,8 @@ package layout
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // This file lays out the absolutely positioned boxes (CSS 2.1, 9.6, 10.3.7,
@@ -495,54 +495,54 @@ func (e *engine) absContent(b *box, ccb cblock, h float64, hSet bool) {
 // with, about its origin in the border box r (CSS Transforms 1, 6 and 13),
 // whether b has a transform, and false for a singular one, which paints
 // nothing. A box without a transform takes the identity.
-func transformOf(b *box, r compose.Rect) (compose.Matrix, bool, bool) {
+func transformOf(b *box, r typeset.Rect) (typeset.Matrix, bool, bool) {
 	if !b.transformed() {
-		return compose.Identity, false, true
+		return typeset.Identity, false, true
 	}
 	ox := r.X + resolve(b.st.TransformOrigin[0], r.Width)
 	oy := r.Y + resolve(b.st.TransformOrigin[1], r.Height)
-	m := compose.Matrix{A: 1, D: 1, E: ox, F: oy}
+	m := typeset.Matrix{A: 1, D: 1, E: ox, F: oy}
 	for _, f := range b.st.Transform {
 		m = mul(m, funcMatrix(f, r))
 	}
-	m = mul(m, compose.Matrix{A: 1, D: 1, E: -ox, F: -oy})
+	m = mul(m, typeset.Matrix{A: 1, D: 1, E: -ox, F: -oy})
 	for _, v := range []float64{m.A, m.B, m.C, m.D, m.E, m.F} {
 		if math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > maxLength {
-			return compose.Identity, true, false
+			return typeset.Identity, true, false
 		}
 	}
 	if math.Abs(m.A*m.D-m.B*m.C) < 1e-12 {
-		return compose.Identity, true, false
+		return typeset.Identity, true, false
 	}
 	return m, true, true
 }
 
 // funcMatrix returns the matrix of one transform function on a border box
 // r (CSS Transforms 1, 13.1).
-func funcMatrix(f css.TransformFunc, r compose.Rect) compose.Matrix {
+func funcMatrix(f css.TransformFunc, r typeset.Rect) typeset.Matrix {
 	v := f.V
 	for i := range v {
 		v[i] = clamp(v[i])
 	}
 	switch f.Kind {
 	case css.TransformMatrix:
-		return compose.Matrix{A: v[0], B: v[1], C: v[2], D: v[3], E: v[4], F: v[5]}
+		return typeset.Matrix{A: v[0], B: v[1], C: v[2], D: v[3], E: v[4], F: v[5]}
 	case css.TransformTranslate:
-		return compose.Matrix{A: 1, D: 1, E: resolve(f.X, r.Width), F: resolve(f.Y, r.Height)}
+		return typeset.Matrix{A: 1, D: 1, E: resolve(f.X, r.Width), F: resolve(f.Y, r.Height)}
 	case css.TransformScale:
-		return compose.Matrix{A: v[0], D: v[1]}
+		return typeset.Matrix{A: v[0], D: v[1]}
 	case css.TransformRotate:
 		sin, cos := math.Sincos(v[0])
-		return compose.Matrix{A: cos, B: sin, C: -sin, D: cos}
+		return typeset.Matrix{A: cos, B: sin, C: -sin, D: cos}
 	case css.TransformSkew:
-		return compose.Matrix{A: 1, B: math.Tan(v[1]), C: math.Tan(v[0]), D: 1}
+		return typeset.Matrix{A: 1, B: math.Tan(v[1]), C: math.Tan(v[0]), D: 1}
 	}
-	return compose.Identity
+	return typeset.Identity
 }
 
 // mul returns the matrix that applies b, then a.
-func mul(a, b compose.Matrix) compose.Matrix {
-	return compose.Matrix{
+func mul(a, b typeset.Matrix) typeset.Matrix {
+	return typeset.Matrix{
 		A: a.A*b.A + a.C*b.B,
 		B: a.B*b.A + a.D*b.B,
 		C: a.A*b.C + a.C*b.D,

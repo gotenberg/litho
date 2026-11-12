@@ -2,9 +2,9 @@ package sheet
 
 import (
 	"github.com/gotenberg/litho/pkg/internal/chart"
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Document is a spreadsheet as its reader found it: the sheets in book
@@ -13,7 +13,7 @@ import (
 // model and never changes it.
 type Document struct {
 	// Meta is the document information written to the PDF.
-	Meta compose.Metadata
+	Meta typeset.Metadata
 	// Default is the style a cell, row or column without one draws with:
 	// the book's default font and the General format (ECMA-376 Part 1,
 	// 18.8.11, the Normal cell style; ODF 1.3 Part 3, 16.5, the Default

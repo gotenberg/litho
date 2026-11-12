@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestHistogram_Bins(t *testing.T) {
@@ -74,7 +74,7 @@ func TestRender_HistogramBars(t *testing.T) {
 
 func TestRender_UnsupportedKind(t *testing.T) {
 	nan := plainAxes
-	white := compose.Color{R: 1, G: 1, B: 1, A: 1}
+	white := typeset.Color{R: 1, G: 1, B: 1, A: 1}
 	c := &Chart{
 		Axes: nan(),
 		Groups: []*Group{{Kind: Unsupported, XAxis: 0, YAxis: 1, Series: []*Series{
@@ -97,9 +97,9 @@ func TestRender_UnsupportedKind(t *testing.T) {
 		t.Errorf("texts %q scale to the first series", got)
 	}
 	// The keys are circles, the only red and blue paints: no series.
-	for _, col := range []compose.Color{red, blue} {
+	for _, col := range []typeset.Color{red, blue} {
 		ps := paths(frags, col)
-		if len(ps) != 1 || len(ps[0].Ops) != 6 || ps[0].Ops[1].Kind != compose.CurveTo {
+		if len(ps) != 1 || len(ps[0].Ops) != 6 || ps[0].Ops[1].Kind != typeset.CurveTo {
 			t.Errorf("colour %v paints %d paths, want one circle", col, len(ps))
 		}
 	}

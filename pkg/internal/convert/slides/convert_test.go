@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestConvert_Pages(t *testing.T) {
@@ -95,8 +95,8 @@ func TestConvert_OutlineSections(t *testing.T) {
 		page  int
 	}
 	var got []entry
-	var walk func([]compose.Outline, string)
-	walk = func(list []compose.Outline, indent string) {
+	var walk func([]typeset.Outline, string)
+	walk = func(list []typeset.Outline, indent string) {
 		for _, o := range list {
 			got = append(got, entry{indent + o.Title, o.Dest.Page})
 			walk(o.Kids, indent+"  ")
@@ -193,7 +193,7 @@ func TestConvert_CancelledOnLastSlide(t *testing.T) {
 	fonts := pinnedFonts(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stop := &Shape{Kind: KindPicture, Box: compose.Rect{Width: 10, Height: 10}, Picture: &layout.Picture{Width: 10, Height: 10, Vector: func(context.Context, compose.Rect) []compose.Fragment {
+	stop := &Shape{Kind: KindPicture, Box: typeset.Rect{Width: 10, Height: 10}, Picture: &layout.Picture{Width: 10, Height: 10, Vector: func(context.Context, typeset.Rect) []typeset.Fragment {
 		cancel()
 		return nil
 	}}}
@@ -212,7 +212,7 @@ func TestConvert_Fields(t *testing.T) {
 	formatted := field(FieldDate, "saved")
 	formatted.Runs[0].Format = "MMMM D, YYYY"
 	body := []Paragraph{field(FieldSlideNumber, "9"), field(FieldSlideCount, "9"), field(FieldDate, "saved"), field(FieldTime, "saved"), formatted, field(FieldSlideName, ""), field(FieldAuthor, "")}
-	doc := &Document{Width: 720, Height: 540, Meta: compose.Metadata{Author: "Ada"}, Slides: []*Slide{{Hidden: true}, {Name: "Second", Shapes: []*Shape{box(0, 0, 400, 500, body...)}}}}
+	doc := &Document{Width: 720, Height: 540, Meta: typeset.Metadata{Author: "Ada"}, Slides: []*Slide{{Hidden: true}, {Name: "Second", Shapes: []*Shape{box(0, 0, 400, 500, body...)}}}}
 	pg := convert(t, doc, office.Options{PrintDate: time.Date(2026, 11, 8, 9, 30, 0, 0, time.UTC)}).Pages[0]
 	var got []string
 	for _, r := range runs(pg) {
@@ -238,8 +238,8 @@ func TestConvert_Fields(t *testing.T) {
 // TestConvert_Structure checks the structure tree: a Sect per slide, the
 // paragraphs as P, a picture as a Figure, a table as a Table.
 func TestConvert_Structure(t *testing.T) {
-	pic := &Shape{Kind: KindPicture, Name: "logo", Box: compose.Rect{X: 0, Y: 200, Width: 10, Height: 10}, Picture: tinyPicture(t)}
-	tbl := &Shape{Kind: KindTable, Box: compose.Rect{X: 0, Y: 300, Width: 200, Height: 40}, Table: &Table{
+	pic := &Shape{Kind: KindPicture, Name: "logo", Box: typeset.Rect{X: 0, Y: 200, Width: 10, Height: 10}, Picture: tinyPicture(t)}
+	tbl := &Shape{Kind: KindTable, Box: typeset.Rect{X: 0, Y: 300, Width: 200, Height: 40}, Table: &Table{
 		ColumnWidths: []float64{100, 100},
 		Rows:         []TableRow{{Height: 20, Cells: []TableCell{{Text: &TextBody{Paragraphs: []Paragraph{para("c1", arial(10))}, Wrap: true}}, {}}}},
 	}}
@@ -281,8 +281,8 @@ func TestConvert_NotesMaster(t *testing.T) {
 	withNotes.Notes = []Paragraph{para("NOTE", arial(20))}
 	doc := &Document{
 		Width: 960, Height: 540, NotesWidth: 540, NotesHeight: 720,
-		NotesSlideBox: compose.Rect{X: 90, Y: 54, Width: 360, Height: 270},
-		NotesTextBox:  compose.Rect{X: 54, Y: 342, Width: 432, Height: 324},
+		NotesSlideBox: typeset.Rect{X: 90, Y: 54, Width: 360, Height: 270},
+		NotesTextBox:  typeset.Rect{X: 54, Y: 342, Width: 432, Height: 324},
 		NotesShapes:   []*Shape{num},
 		Slides:        []*Slide{title("First"), withNotes, title("Third")},
 	}
@@ -366,7 +366,7 @@ func TestConvert_ShapeLinksAreTagged(t *testing.T) {
 // lists short is padded to the table's columns (ISO 14289-1, 7.2).
 func TestConvert_TableSpans(t *testing.T) {
 	txt := func(s string) *TextBody { return &TextBody{Paragraphs: []Paragraph{para(s, arial(10))}, Wrap: true} }
-	tbl := &Shape{Kind: KindTable, Box: compose.Rect{X: 0, Y: 0, Width: 300, Height: 60}, Table: &Table{
+	tbl := &Shape{Kind: KindTable, Box: typeset.Rect{X: 0, Y: 0, Width: 300, Height: 60}, Table: &Table{
 		ColumnWidths: []float64{100, 100, 100},
 		Rows: []TableRow{
 			{Height: 20, Cells: []TableCell{{Text: txt("m"), ColSpan: 2, RowSpan: 2}, {Covered: true}, {Text: txt("c")}}},
@@ -395,7 +395,7 @@ func TestConvert_TableSpans(t *testing.T) {
 // has no description, and a decorative picture is an artifact while its
 // link keeps its Link element.
 func TestConvert_Describe(t *testing.T) {
-	at := func(y float64) compose.Rect { return compose.Rect{X: 0, Y: y, Width: 100, Height: 50} }
+	at := func(y float64) typeset.Rect { return typeset.Rect{X: 0, Y: y, Width: 100, Height: 50} }
 	pic := &Shape{Kind: KindPicture, Name: "Picture 3", Alt: "A red square", Box: at(0), Picture: tinyPicture(t)}
 	deco := &Shape{Kind: KindPicture, Name: "Line", Alt: "ignored", Decorative: true, Href: "https://example.com", Box: at(60), Picture: tinyPicture(t)}
 	pie := &chart.Chart{
@@ -413,16 +413,16 @@ func TestConvert_Describe(t *testing.T) {
 		t.Errorf("structure %q, want %q", got, want)
 	}
 	images := 0
-	var walk func([]compose.Fragment)
-	walk = func(frags []compose.Fragment) {
+	var walk func([]typeset.Fragment)
+	walk = func(frags []typeset.Fragment) {
 		for _, f := range frags {
 			switch v := f.(type) {
-			case *compose.Image:
+			case *typeset.Image:
 				images++
 				if images == 2 && v.Parent != nil {
 					t.Errorf("decorative picture hangs from %q", v.Parent.Role)
 				}
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content)
 			}
 		}

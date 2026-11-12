@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/offcrypto"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Convert reads the PPTX package src holds and lays it out as a paged
@@ -22,7 +22,7 @@ import (
 // package that is not a PresentationML presentation,
 // office.ErrInputTooLarge past a size cap and office.ErrTooManyPages past
 // the page cap. The output depends on src, fonts' index and opts alone.
-func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*compose.Document, error) {
+func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*typeset.Document, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 }
 
 // load reads src into the slide model with the reader's warnings.
-func load(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*slides.Document, []compose.Warning, error) {
+func load(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*slides.Document, []typeset.Warning, error) {
 	data, err := office.ReadAll(ctx, src, opts.MaxInputBytes)
 	if err != nil {
 		return nil, nil, fmt.Errorf("reading PPTX: %w", err)

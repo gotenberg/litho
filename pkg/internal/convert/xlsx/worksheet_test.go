@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // TestRead_ColumnsAndRows checks the column widths in digits of the
@@ -210,7 +210,7 @@ func TestRead_PageSetup(t *testing.T) {
 }
 
 // hasWarning reports whether a warning's message holds s.
-func hasWarning(warnings []compose.Warning, s string) bool {
+func hasWarning(warnings []typeset.Warning, s string) bool {
 	for _, w := range warnings {
 		if strings.Contains(w.Message, s) {
 			return true

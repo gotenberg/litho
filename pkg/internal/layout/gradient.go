@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxGradientStops bounds the stops the shading of one gradient holds once
 // a repeating gradient is unrolled over its box and the curved parts are
 // split: past it a repeating gradient is painted with its average colour,
-// with a warning. It is the composition model's own bound. Anti-DoS guard,
+// with a warning. It is the typeset model's own bound. Anti-DoS guard,
 // not spec-mandated: a page-wide stripe pattern of 10 point periods holds
 // some 250 stops.
 const maxGradientStops = 1024
@@ -31,7 +31,7 @@ const codeGradient = "gradient-approximated"
 // its position in points along the gradient line or ray.
 type gstop struct {
 	pos  float64
-	c    compose.Color
+	c    typeset.Color
 	hint bool
 }
 
@@ -39,7 +39,7 @@ type gstop struct {
 // first stop and after the last, a ramp between two stops otherwise.
 type gpiece struct {
 	a, b   float64
-	ca, cb compose.Color
+	ca, cb typeset.Color
 	// hint is the transition hint's position as a fraction of [a, b], -1
 	// for none.
 	hint float64
@@ -47,7 +47,7 @@ type gpiece struct {
 
 // at returns the piece's colour at s, interpolated in premultiplied sRGB
 // (CSS Images 3, 3.4.3) with the hint's curve (CSS Images 4, 3.5.3).
-func (p gpiece) at(s float64) compose.Color {
+func (p gpiece) at(s float64) typeset.Color {
 	if p.ca == p.cb && p.hint < 0 {
 		return p.ca
 	}
@@ -78,15 +78,15 @@ func (p gpiece) curved() bool {
 
 // mix interpolates a and b at t in premultiplied space and returns the
 // straight colour.
-func mix(a, b compose.Color, t float64) compose.Color {
+func mix(a, b typeset.Color, t float64) typeset.Color {
 	al := a.A + (b.A-a.A)*t
 	if al <= 0 {
-		return compose.Color{}
+		return typeset.Color{}
 	}
 	ch := func(x, y float64) float64 {
 		return min(max((x*a.A*(1-t)+y*b.A*t)/al, 0), 1)
 	}
-	return compose.Color{R: ch(a.R, b.R), G: ch(a.G, b.G), B: ch(a.B, b.B), A: min(al, 1)}
+	return typeset.Color{R: ch(a.R, b.R), G: ch(a.G, b.G), B: ch(a.B, b.B), A: min(al, 1)}
 }
 
 // fixStops returns the stops of g with their positions resolved against
@@ -103,7 +103,7 @@ func fixStops(g *css.Gradient, length float64) []gstop {
 		if c.A == 0 {
 			// A transparent stop keeps no colour of its own: its
 			// premultiplied neighbours decide (CSS Images 3, 3.4.3).
-			c = compose.Color{}
+			c = typeset.Color{}
 		}
 		out[i] = gstop{c: c, hint: s.Hint}
 		if s.Position.IsLength() {
@@ -173,10 +173,10 @@ func pieces(stops []gstop) []gpiece {
 // extends past them. ray clamps the span at 0, where a radial gradient
 // starts. ok is false when the gradient paints a single colour, solid,
 // which is then returned.
-func (e *engine) colorStops(g *css.Gradient, length, from, to float64, ray bool, y float64) (stops []compose.ColorStop, lo, hi float64, solid compose.Color, ok bool) {
+func (e *engine) colorStops(g *css.Gradient, length, from, to float64, ray bool, y float64) (stops []typeset.ColorStop, lo, hi float64, solid typeset.Color, ok bool) {
 	gs := fixStops(g, length)
 	ps := pieces(gs)
-	var first, last compose.Color
+	var first, last typeset.Color
 	for _, s := range gs {
 		if !s.hint {
 			last = s.c
@@ -246,7 +246,7 @@ func (e *engine) colorStops(g *css.Gradient, length, from, to float64, ray bool,
 				if i == 0 && p.b <= p.a {
 					c = p.ca
 				}
-				stops = appendStop(stops, compose.ColorStop{Offset: (s - lo) / (hi - lo), Color: c})
+				stops = appendStop(stops, typeset.ColorStop{Offset: (s - lo) / (hi - lo), Color: c})
 			}
 		}
 		if len(stops) <= maxGradientStops {
@@ -268,13 +268,13 @@ func (e *engine) colorStops(g *css.Gradient, length, from, to float64, ray bool,
 		visible = visible || stops[i].Color.A > 0
 	}
 	if !visible {
-		return nil, 0, 0, compose.Color{}, false
+		return nil, 0, 0, typeset.Color{}, false
 	}
-	return stops, lo, hi, compose.Color{}, true
+	return stops, lo, hi, typeset.Color{}, true
 }
 
 // appendStop appends s unless it repeats the last stop.
-func appendStop(stops []compose.ColorStop, s compose.ColorStop) []compose.ColorStop {
+func appendStop(stops []typeset.ColorStop, s typeset.ColorStop) []typeset.ColorStop {
 	if n := len(stops); n > 0 && stops[n-1] == s {
 		return stops
 	}
@@ -284,7 +284,7 @@ func appendStop(stops []compose.ColorStop, s compose.ColorStop) []compose.ColorS
 // average returns the average colour of the ramps ps over their span, in
 // premultiplied space: what CSS Images 3, 3.4.1 paints a repeating
 // gradient with when the device cannot resolve its period.
-func average(ps []gpiece) compose.Color {
+func average(ps []gpiece) typeset.Color {
 	var r, g, b, a, total float64
 	const samples = 16
 	for _, p := range ps {
@@ -303,15 +303,15 @@ func average(ps []gpiece) compose.Color {
 		}
 	}
 	if !numeric.Positive(a) || !numeric.Positive(total) {
-		return compose.Color{}
+		return typeset.Color{}
 	}
-	return compose.Color{R: min(r/a, 1), G: min(g/a, 1), B: min(b/a, 1), A: min(a/total, 1)}
+	return typeset.Color{R: min(r/a, 1), G: min(g/a, 1), B: min(b/a, 1), A: min(a/total, 1)}
 }
 
 // averageEquidistant returns the average colour of the stops gs spread
 // evenly over a unit span: CSS Images 3, 3.4.1 paints a repeating gradient
 // whose stops share one position with it.
-func averageEquidistant(gs []gstop) compose.Color {
+func averageEquidistant(gs []gstop) typeset.Color {
 	var even []gstop
 	for _, s := range gs {
 		if !s.hint {
@@ -330,7 +330,7 @@ func averageEquidistant(gs []gstop) compose.Color {
 // gradientFill returns the fill of the gradient g over a w by h box at the
 // origin: a shading, or a flat colour when the gradient paints one. ok is
 // false when it paints nothing.
-func (e *engine) gradientFill(g *css.Gradient, w, h, y float64) (*compose.Fill, bool) {
+func (e *engine) gradientFill(g *css.Gradient, w, h, y float64) (*typeset.Fill, bool) {
 	if !numeric.Positive(w) || !numeric.Positive(h) || len(g.Stops) == 0 {
 		return nil, false
 	}
@@ -351,21 +351,21 @@ func (e *engine) gradientFill(g *css.Gradient, w, h, y float64) (*compose.Fill, 
 		return flatFill(solid)
 	}
 	sx, sy := w/2-dx*length/2, h/2-dy*length/2
-	return &compose.Fill{Shading: &compose.Shading{
-		Kind:  compose.Axial,
-		From:  compose.Point{X: sx + dx*lo, Y: sy + dy*lo},
-		To:    compose.Point{X: sx + dx*hi, Y: sy + dy*hi},
+	return &typeset.Fill{Shading: &typeset.Shading{
+		Kind:  typeset.Axial,
+		From:  typeset.Point{X: sx + dx*lo, Y: sy + dy*lo},
+		To:    typeset.Point{X: sx + dx*hi, Y: sy + dy*hi},
 		Stops: stops,
 	}}, true
 }
 
 // flatFill returns the fill of a single colour, false for a transparent
 // one.
-func flatFill(c compose.Color) (*compose.Fill, bool) {
+func flatFill(c typeset.Color) (*typeset.Fill, bool) {
 	if c.A <= 0 {
 		return nil, false
 	}
-	return &compose.Fill{Color: c}, true
+	return &typeset.Fill{Color: c}, true
 }
 
 // minRadius is the radius a degenerate ending shape takes: CSS Images 3,
@@ -375,7 +375,7 @@ const minRadius = 0.01
 // radialFill returns the fill of the radial gradient g over a w by h box
 // at the origin (CSS Images 3, 3.2): circles, or ellipses as circles
 // scaled vertically about the centre.
-func (e *engine) radialFill(g *css.Gradient, w, h, y float64) (*compose.Fill, bool) {
+func (e *engine) radialFill(g *css.Gradient, w, h, y float64) (*typeset.Fill, bool) {
 	cx, cy := resolve(g.Center[0], w), resolve(g.Center[1], h)
 	l, r, t, b := math.Abs(cx), math.Abs(w-cx), math.Abs(cy), math.Abs(h-cy)
 	corners := [4][2]float64{{l, t}, {r, t}, {l, b}, {r, b}}
@@ -441,11 +441,11 @@ func (e *engine) radialFill(g *css.Gradient, w, h, y float64) (*compose.Fill, bo
 	if !ok {
 		return flatFill(solid)
 	}
-	c := compose.Point{X: cx, Y: cy}
-	return &compose.Fill{Shading: &compose.Shading{
-		Kind: compose.Radial, From: c, To: c, FromRadius: lo, ToRadius: hi,
+	c := typeset.Point{X: cx, Y: cy}
+	return &typeset.Fill{Shading: &typeset.Shading{
+		Kind: typeset.Radial, From: c, To: c, FromRadius: lo, ToRadius: hi,
 		Stops:     stops,
-		Transform: compose.Matrix{A: 1, D: k, F: cy * (1 - k)},
+		Transform: typeset.Matrix{A: 1, D: k, F: cy * (1 - k)},
 	}}, true
 }
 
@@ -453,7 +453,7 @@ func (e *engine) radialFill(g *css.Gradient, w, h, y float64) (*compose.Fill, bo
 // over the positioning area within the painting area clip: the gradient
 // is an image without intrinsic size or ratio, so its size is the area's
 // (CSS Backgrounds 3, 3.9), placed and repeated as an image is.
-func (e *engine) gradientTiles(st *css.Style, area, clip compose.Rect, y float64) []*compose.Path {
+func (e *engine) gradientTiles(st *css.Style, area, clip typeset.Rect, y float64) []*typeset.Path {
 	if !numeric.Positive(area.Width) || !numeric.Positive(area.Height) {
 		return nil
 	}
@@ -480,42 +480,42 @@ func (e *engine) gradientTiles(st *css.Style, area, clip compose.Rect, y float64
 		if c.A <= 0 {
 			return nil
 		}
-		return []*compose.Path{{Ops: rectOps(clip), Fill: &compose.Fill{Color: c}}}
+		return []*typeset.Path{{Ops: rectOps(clip), Fill: &typeset.Fill{Color: c}}}
 	}
 	fill, ok := e.gradientFill(st.BackgroundGradient, tiles[0].Width, tiles[0].Height, y)
 	if !ok {
 		return nil
 	}
-	out := make([]*compose.Path, 0, len(tiles))
+	out := make([]*typeset.Path, 0, len(tiles))
 	for _, t := range tiles {
-		var f *compose.Fill
+		var f *typeset.Fill
 		if fill.Shading != nil {
 			sh := *fill.Shading
 			m := sh.Transform
-			if m == (compose.Matrix{}) {
-				m = compose.Identity
+			if m == (typeset.Matrix{}) {
+				m = typeset.Identity
 			}
 			m.E += t.X
 			m.F += t.Y
 			sh.Transform = m
-			f = &compose.Fill{Shading: &sh}
+			f = &typeset.Fill{Shading: &sh}
 		} else {
-			f = &compose.Fill{Color: fill.Color}
+			f = &typeset.Fill{Color: fill.Color}
 		}
-		out = append(out, &compose.Path{Ops: rectOps(t), Fill: f})
+		out = append(out, &typeset.Path{Ops: rectOps(t), Fill: f})
 	}
 	return out
 }
 
 // gradientAverage returns the average colour of the gradient g over a w by
 // h box, its stops placed on a line as long as the box's larger side.
-func gradientAverage(g *css.Gradient, w, h float64) compose.Color {
+func gradientAverage(g *css.Gradient, w, h float64) typeset.Color {
 	if len(g.Stops) == 0 {
-		return compose.Color{}
+		return typeset.Color{}
 	}
 	gs := fixStops(g, max(w, h))
 	if len(gs) == 0 {
-		return compose.Color{}
+		return typeset.Color{}
 	}
 	ps := pieces(gs)
 	if len(ps) == 0 {

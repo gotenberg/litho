@@ -1074,7 +1074,7 @@ type Style struct {
 	WordRules int
 	// TextScale scales the glyphs of the text horizontally, 1 for the
 	// natural width, 0 for 1 (WordprocessingML w, ODF style:text-scale). No
-	// CSS property sets it; the engine writes it as compose.Text.HScale.
+	// CSS property sets it; the engine writes it as typeset.Text.HScale.
 	TextScale     float64
 	VerticalAlign VerticalAlign
 	Direction     Direction

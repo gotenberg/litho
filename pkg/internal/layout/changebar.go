@@ -1,8 +1,8 @@
 package layout
 
 import (
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // changeBarGap is the distance in points from the left edge of the column
@@ -49,12 +49,12 @@ func (p *painter) changeBar(l *lineBox, page int) {
 	}
 	x := col.contentX() - changeBarGap + p.dx
 	y := l.y + p.dy
-	path := &compose.Path{
-		Ops: []compose.PathOp{
-			{Kind: compose.MoveTo, P: [3]compose.Point{{X: x, Y: y}}},
-			{Kind: compose.LineTo, P: [3]compose.Point{{X: x, Y: y + l.h}}},
+	path := &typeset.Path{
+		Ops: []typeset.PathOp{
+			{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x, Y: y}}},
+			{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x, Y: y + l.h}}},
 		},
-		Stroke: &compose.Stroke{Color: compose.Black, Width: changeBarWidth},
+		Stroke: &typeset.Stroke{Color: typeset.Black, Width: changeBarWidth},
 	}
 	p.emit(l.changed, true, path, l.y, l.y+l.h, page)
 }

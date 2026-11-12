@@ -7,12 +7,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // shapeList reads the drawing shapes among els (ODF 1.3, Part 3, 10.3 to
@@ -181,7 +181,7 @@ func (r *reader) eventJump(el *odf.Element, pc *pageCtx) int {
 // draw:transform (ODF 1.3, Part 3, 19.228) into its unrotated box, its
 // clockwise rotation about the box's centre and its mirroring.
 type placement struct {
-	box          compose.Rect
+	box          typeset.Rect
 	rotation     float64
 	flipH, flipV bool
 	// skew shears the box about its centre before the rotation, in
@@ -191,7 +191,7 @@ type placement struct {
 
 // placementOf returns the placement of el, the box of def standing in for
 // a missing size.
-func (r *reader) placementOf(el *odf.Element, def *compose.Rect) placement {
+func (r *reader) placementOf(el *odf.Element, def *typeset.Rect) placement {
 	x, _ := odf.Length(el.A(odf.NSSVG, "x"))
 	y, _ := odf.Length(el.A(odf.NSSVG, "y"))
 	w, okW := odf.Length(el.A(odf.NSSVG, "width"))
@@ -202,12 +202,12 @@ func (r *reader) placementOf(el *odf.Element, def *compose.Rect) placement {
 	w, h = max(w, 0), max(h, 0)
 	tr := el.A(odf.NSDraw, "transform")
 	if tr == "" {
-		return placement{box: compose.Rect{X: x, Y: y, Width: w, Height: h}}
+		return placement{box: typeset.Rect{X: x, Y: y, Width: w, Height: h}}
 	}
 	m, _, ok := parseTransform(tr)
 	if !ok {
 		r.warn("transform", "a draw:transform that does not parse is not applied")
-		return placement{box: compose.Rect{X: x, Y: y, Width: w, Height: h}}
+		return placement{box: typeset.Rect{X: x, Y: y, Width: w, Height: h}}
 	}
 	m = m.mul(translation(x, y))
 	return m.place(w, h)
@@ -326,7 +326,7 @@ func hasParagraphs(el *odf.Element) bool {
 // placeholderBox returns the box of the master page's placeholder of the
 // same presentation class as el, which a slide's placeholder without a
 // size of its own takes (ODF 1.3, Part 3, 19.393); nil for none.
-func (r *reader) placeholderBox(el *odf.Element, pc *pageCtx) *compose.Rect {
+func (r *reader) placeholderBox(el *odf.Element, pc *pageCtx) *typeset.Rect {
 	class := el.A(odf.NSPresentation, "class")
 	if class == "" || pc.master || pc.mp == nil {
 		return nil
@@ -337,7 +337,7 @@ func (r *reader) placeholderBox(el *odf.Element, pc *pageCtx) *compose.Rect {
 			y, _ := odf.Length(k.A(odf.NSSVG, "y"))
 			w, _ := odf.Length(k.A(odf.NSSVG, "width"))
 			h, _ := odf.Length(k.A(odf.NSSVG, "height"))
-			return &compose.Rect{X: x, Y: y, Width: w, Height: h}
+			return &typeset.Rect{X: x, Y: y, Width: w, Height: h}
 		}
 	}
 	return nil
@@ -357,7 +357,7 @@ func (r *reader) group(el *odf.Element, pc *pageCtx, depth int) *slides.Shape {
 		x0, y0 = min(x0, b.X), min(y0, b.Y)
 		x1, y1 = max(x1, b.X+b.Width), max(y1, b.Y+b.Height)
 	}
-	box := compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
+	box := typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
 	return &slides.Shape{Kind: slides.KindGroup, Box: box, Child: box, Kids: kids}
 }
 
@@ -399,7 +399,7 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 		y1, _ := odf.Length(el.A(odf.NSSVG, "y1"))
 		x2, _ := odf.Length(el.A(odf.NSSVG, "x2"))
 		y2, _ := odf.Length(el.A(odf.NSSVG, "y2"))
-		s.Box = compose.Rect{X: min(x1, x2), Y: min(y1, y2), Width: math.Abs(x2 - x1), Height: math.Abs(y2 - y1)}
+		s.Box = typeset.Rect{X: min(x1, x2), Y: min(y1, y2), Width: math.Abs(x2 - x1), Height: math.Abs(y2 - y1)}
 		s.FlipH, s.FlipV = x2 < x1, y2 < y1
 		s.Fill = slides.Fill{}
 		s.Geometry = &shape.Geometry{Preset: "line"}
@@ -434,7 +434,7 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 // point to that point, draw:caption-point-x and -y (19.120, 19.121),
 // which are relative to the shape's corner. The line is straight, a
 // caption's simplest kind; nil without a caption point.
-func captionGeometry(el *odf.Element, box compose.Rect) *shape.Geometry {
+func captionGeometry(el *odf.Element, box typeset.Rect) *shape.Geometry {
 	px, okX := odf.Length(el.A(odf.NSDraw, "caption-point-x"))
 	py, okY := odf.Length(el.A(odf.NSDraw, "caption-point-y"))
 	if !okX || !okY || box.Width <= 0 || box.Height <= 0 {
@@ -452,8 +452,8 @@ func captionGeometry(el *odf.Element, box compose.Rect) *shape.Geometry {
 	case dy > 0:
 		sx, sy = w/2, h
 	}
-	rect := odf.Points(fmt.Sprintf("0,0 %g,0 %g,%g 0,%g", w, w, h, h), compose.Rect{Width: w, Height: h}, true)
-	line := odf.Points(fmt.Sprintf("%g,%g %g,%g", sx, sy, px, py), compose.Rect{Width: w, Height: h}, false)
+	rect := odf.Points(fmt.Sprintf("0,0 %g,0 %g,%g 0,%g", w, w, h, h), typeset.Rect{Width: w, Height: h}, true)
+	line := odf.Points(fmt.Sprintf("%g,%g %g,%g", sx, sy, px, py), typeset.Rect{Width: w, Height: h}, false)
 	if rect == nil || line == nil {
 		return nil
 	}
@@ -537,23 +537,23 @@ const maxViewBox = 1e12
 // coordinate space of its svg:d or draw:points. A missing one, or one of
 // zero width or height, is the empty rectangle, which the geometry engine
 // reads as the shape's size in 1/100 mm, LibreOffice's unit.
-func viewBoxOf(el *odf.Element) compose.Rect {
+func viewBoxOf(el *odf.Element) typeset.Rect {
 	f := strings.FieldsFunc(el.A(odf.NSSVG, "viewBox"), func(r rune) bool { return r == ' ' || r == ',' || r == '\t' || r == '\n' || r == '\r' })
 	if len(f) != 4 {
-		return compose.Rect{}
+		return typeset.Rect{}
 	}
 	var v [4]float64
 	for i, x := range f {
 		n, err := strconv.ParseFloat(x, 64)
 		if err != nil || !numeric.Finite(n) || math.Abs(n) > maxViewBox {
-			return compose.Rect{}
+			return typeset.Rect{}
 		}
 		v[i] = n
 	}
 	if v[2] <= 0 || v[3] <= 0 {
-		return compose.Rect{X: v[0], Y: v[1]}
+		return typeset.Rect{X: v[0], Y: v[1]}
 	}
-	return compose.Rect{X: v[0], Y: v[1], Width: v[2], Height: v[3]}
+	return typeset.Rect{X: v[0], Y: v[1], Width: v[2], Height: v[3]}
 }
 
 // hundredthMM is a point in 1/100 mm, the unit of a connector's route.
@@ -564,22 +564,22 @@ const hundredthMM = 2540.0 / 72
 // drawn connector in page coordinates in 1/100 mm, svg:viewBox giving
 // only its size. It returns the route's bounding box in points and the
 // geometry that draws it there; a zero box and nil without a route.
-func connectorRoute(el *odf.Element) (compose.Rect, *shape.Geometry) {
+func connectorRoute(el *odf.Element) (typeset.Rect, *shape.Geometry) {
 	d := el.A(odf.NSSVG, "d")
 	if strings.TrimSpace(d) == "" {
-		return compose.Rect{}, nil
+		return typeset.Rect{}, nil
 	}
-	c := odf.PathData(d, compose.Rect{})
+	c := odf.PathData(d, typeset.Rect{})
 	if c == nil {
-		return compose.Rect{}, nil
+		return typeset.Rect{}, nil
 	}
 	b, ok := odf.Bounds(c.Paths[0].Cmds)
 	if !ok {
-		return compose.Rect{}, nil
+		return typeset.Rect{}, nil
 	}
 	*c.View = b
 	c.Paths[0].Fill = shape.FillNone
-	box := compose.Rect{X: b.X / hundredthMM, Y: b.Y / hundredthMM, Width: b.Width / hundredthMM, Height: b.Height / hundredthMM}
+	box := typeset.Rect{X: b.X / hundredthMM, Y: b.Y / hundredthMM, Width: b.Width / hundredthMM, Height: b.Height / hundredthMM}
 	return box, &shape.Geometry{Custom: c}
 }
 
@@ -625,5 +625,5 @@ func ellipseGeometry(el *odf.Element) *shape.Geometry {
 	if kind == "arc" {
 		pd.Fill = shape.FillNone
 	}
-	return &shape.Geometry{Custom: &shape.Custom{View: &compose.Rect{Width: 2, Height: 2}, Paths: []shape.PathDef{pd}}}
+	return &shape.Geometry{Custom: &shape.Custom{View: &typeset.Rect{Width: 2, Height: 2}, Paths: []shape.PathDef{pd}}}
 }

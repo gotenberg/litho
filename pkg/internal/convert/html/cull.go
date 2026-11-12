@@ -3,8 +3,8 @@ package html
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Content a clip hides wholly is left out of the page rather than written
@@ -15,7 +15,7 @@ import (
 // its clip, or that the bounds below cannot place, stays.
 
 // cullDepth caps the group nesting cullPage walks. Anti-DoS guard, not
-// spec-mandated: the composition model refuses pages nested deeper than
+// spec-mandated: the typeset model refuses pages nested deeper than
 // 24 groups; deeper content is kept as it is.
 const cullDepth = 32
 
@@ -41,22 +41,22 @@ func (a area) cut(b area) area {
 // cullPage drops from pg the fragments wholly outside the clips they are
 // painted under, the page's own bounds included, and the groups culling
 // left empty. It reports whether it dropped anything.
-func cullPage(pg *compose.Page) bool {
+func cullPage(pg *typeset.Page) bool {
 	page := area{0, 0, pg.Width, pg.Height}
-	out, dropped := cullFrags(pg.Content, compose.Identity, page, 0)
+	out, dropped := cullFrags(pg.Content, typeset.Identity, page, 0)
 	pg.Content = out
 	return dropped
 }
 
 // cullFrags returns frags without the fragments wholly outside clip, a
 // page-space area, m mapping their coordinates to the page's.
-func cullFrags(frags []compose.Fragment, m compose.Matrix, clip area, depth int) ([]compose.Fragment, bool) {
+func cullFrags(frags []typeset.Fragment, m typeset.Matrix, clip area, depth int) ([]typeset.Fragment, bool) {
 	dropped := false
 	out := frags[:0:0]
 	for _, f := range frags {
 		keep := f
 		switch v := f.(type) {
-		case *compose.Group:
+		case *typeset.Group:
 			g, d := cullGroup(v, m, clip, depth)
 			dropped = dropped || d
 			if g == nil {
@@ -80,13 +80,13 @@ func cullFrags(frags []compose.Fragment, m compose.Matrix, clip area, depth int)
 
 // cullGroup returns g culled against clip, a copy when its content
 // changed, nil when nothing of it is left.
-func cullGroup(g *compose.Group, m compose.Matrix, clip area, depth int) (*compose.Group, bool) {
+func cullGroup(g *typeset.Group, m typeset.Matrix, clip area, depth int) (*typeset.Group, bool) {
 	if depth >= cullDepth {
 		return g, false
 	}
 	t := g.Transform
-	if t == (compose.Matrix{}) {
-		t = compose.Identity
+	if t == (typeset.Matrix{}) {
+		t = typeset.Identity
 	}
 	gm := then(t, m)
 	inner := clip
@@ -111,8 +111,8 @@ func cullGroup(g *compose.Group, m compose.Matrix, clip area, depth int) (*compo
 }
 
 // then returns the transform that applies a, then b.
-func then(a, b compose.Matrix) compose.Matrix {
-	return compose.Matrix{
+func then(a, b typeset.Matrix) typeset.Matrix {
+	return typeset.Matrix{
 		A: a.A*b.A + a.B*b.C, B: a.A*b.B + a.B*b.D,
 		C: a.C*b.A + a.D*b.C, D: a.C*b.B + a.D*b.D,
 		E: a.E*b.A + a.F*b.C + b.E, F: a.E*b.B + a.F*b.D + b.F,
@@ -122,12 +122,12 @@ func then(a, b compose.Matrix) compose.Matrix {
 // fragmentArea returns a page-space area that holds everything the leaf
 // fragment f paints, m mapping its coordinates to the page's, and false
 // when it cannot bound it.
-func fragmentArea(f compose.Fragment, m compose.Matrix) (area, bool) {
+func fragmentArea(f typeset.Fragment, m typeset.Matrix) (area, bool) {
 	switch v := f.(type) {
-	case *compose.Image:
+	case *typeset.Image:
 		r := v.Rect
-		return pointsArea([]compose.Point{{X: r.X, Y: r.Y}, {X: r.X + r.Width, Y: r.Y}, {X: r.X, Y: r.Y + r.Height}, {X: r.X + r.Width, Y: r.Y + r.Height}}, m, 0)
-	case *compose.Path:
+		return pointsArea([]typeset.Point{{X: r.X, Y: r.Y}, {X: r.X + r.Width, Y: r.Y}, {X: r.X, Y: r.Y + r.Height}, {X: r.X + r.Width, Y: r.Y + r.Height}}, m, 0)
+	case *typeset.Path:
 		pad := 0.0
 		if s := v.Stroke; s != nil {
 			// A miter reaches at most half the miter limit times the line
@@ -140,7 +140,7 @@ func fragmentArea(f compose.Fragment, m compose.Matrix) (area, bool) {
 			pad = s.Width / 2 * max(miter, math.Sqrt2)
 		}
 		return opsArea(v.Ops, m, pad)
-	case *compose.Text:
+	case *typeset.Text:
 		return textArea(v, m)
 	}
 	return area{}, false
@@ -150,7 +150,7 @@ func fragmentArea(f compose.Fragment, m compose.Matrix) (area, bool) {
 // ems before and after it and two ems above and below the baseline, which
 // holds any glyph a text face draws, swashes and stacked marks included,
 // its slant and stroke too.
-func textArea(t *compose.Text, m compose.Matrix) (area, bool) {
+func textArea(t *typeset.Text, m typeset.Matrix) (area, bool) {
 	if len(t.Glyphs) == 0 {
 		return area{}, false
 	}
@@ -162,7 +162,7 @@ func textArea(t *compose.Text, m compose.Matrix) (area, bool) {
 	}
 	em := 2*t.Size + t.Stroke
 	ox, oy := t.Origin.X, t.Origin.Y
-	return pointsArea([]compose.Point{
+	return pointsArea([]typeset.Point{
 		{X: ox + x0 - em, Y: oy + y0 - em},
 		{X: ox + x1 + em, Y: oy + y0 - em},
 		{X: ox + x0 - em, Y: oy + y1 + em},
@@ -173,15 +173,15 @@ func textArea(t *compose.Text, m compose.Matrix) (area, bool) {
 // opsArea bounds a path by its points, curve control points included,
 // which hold the curves (a Bézier lies in the hull of its control points),
 // grown by pad in its own coordinates.
-func opsArea(ops []compose.PathOp, m compose.Matrix, pad float64) (area, bool) {
-	var pts []compose.Point
+func opsArea(ops []typeset.PathOp, m typeset.Matrix, pad float64) (area, bool) {
+	var pts []typeset.Point
 	for _, op := range ops {
 		switch op.Kind {
-		case compose.MoveTo, compose.LineTo:
+		case typeset.MoveTo, typeset.LineTo:
 			pts = append(pts, op.P[0])
-		case compose.CurveTo:
+		case typeset.CurveTo:
 			pts = append(pts, op.P[:]...)
-		case compose.ClosePath:
+		case typeset.ClosePath:
 		}
 	}
 	return pointsArea(pts, m, pad)
@@ -190,7 +190,7 @@ func opsArea(ops []compose.PathOp, m compose.Matrix, pad float64) (area, bool) {
 // pointsArea returns the page-space bounds of pts grown by pad, each
 // corner of the grown box mapped through m, false for no point or a value
 // that is not finite.
-func pointsArea(pts []compose.Point, m compose.Matrix, pad float64) (area, bool) {
+func pointsArea(pts []typeset.Point, m typeset.Matrix, pad float64) (area, bool) {
 	if len(pts) == 0 {
 		return area{}, false
 	}

@@ -10,9 +10,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // px converts CSS pixels to points.
@@ -83,8 +83,8 @@ func pic(c color.Color, w, h int) *Picture {
 
 // source returns img encoded as an image source. A test picture always
 // encodes, so a failure is a broken test.
-func source(img image.Image) *compose.ImageSource {
-	src, err := compose.EncodeImage(context.Background(), img)
+func source(img image.Image) *typeset.ImageSource {
+	src, err := typeset.EncodeImage(context.Background(), img)
 	if err != nil {
 		panic(err)
 	}
@@ -116,9 +116,9 @@ func runWith(t testing.TB, root *Node, o Options) *Result {
 	return res
 }
 
-// document returns the composition document of res.
-func document(res *Result) *compose.Document {
-	return &compose.Document{Pages: res.Pages, Structure: res.Structure, Warnings: res.Warnings}
+// document returns the typeset document of res.
+func document(res *Result) *typeset.Document {
+	return &typeset.Document{Pages: res.Pages, Structure: res.Structure, Warnings: res.Warnings}
 }
 
 // render writes res as PDF and rasterises page n (1-based) at 96 dpi: one
@@ -126,8 +126,8 @@ func document(res *Result) *compose.Document {
 func render(t testing.TB, res *Result, n int) image.Image {
 	t.Helper()
 	var b bytes.Buffer
-	if err := compose.Write(context.Background(), document(res), &b, compose.Options{}); err != nil {
-		t.Fatalf("compose.Write: %v", err)
+	if err := typeset.Write(context.Background(), document(res), &b, typeset.Options{}); err != nil {
+		t.Fatalf("typeset.Write: %v", err)
 	}
 	if RenderPDF == nil {
 		t.Fatal("no PDF renderer installed")
@@ -207,26 +207,26 @@ func assertPixels(t *testing.T, res *Result, n int, want string) {
 // origins in page coordinates, flattening groups.
 func texts(res *Result, n int) []placedText {
 	var out []placedText
-	var walk func([]compose.Fragment, compose.Matrix)
-	walk = func(frags []compose.Fragment, m compose.Matrix) {
+	var walk func([]typeset.Fragment, typeset.Matrix)
+	walk = func(frags []typeset.Fragment, m typeset.Matrix) {
 		for _, f := range frags {
 			switch v := f.(type) {
-			case *compose.Text:
+			case *typeset.Text:
 				var b strings.Builder
 				for _, g := range v.Glyphs {
 					b.WriteString(g.Text)
 				}
 				out = append(out, placedText{text: b.String(), x: m.E + v.Origin.X, y: m.F + v.Origin.Y, run: v})
-			case *compose.Group:
+			case *typeset.Group:
 				tm := v.Transform
-				if tm == (compose.Matrix{}) {
-					tm = compose.Identity
+				if tm == (typeset.Matrix{}) {
+					tm = typeset.Identity
 				}
-				walk(v.Content, compose.Matrix{A: 1, D: 1, E: m.E + tm.E, F: m.F + tm.F})
+				walk(v.Content, typeset.Matrix{A: 1, D: 1, E: m.E + tm.E, F: m.F + tm.F})
 			}
 		}
 	}
-	walk(res.Pages[n-1].Content, compose.Identity)
+	walk(res.Pages[n-1].Content, typeset.Identity)
 	return out
 }
 
@@ -234,7 +234,7 @@ func texts(res *Result, n int) []placedText {
 type placedText struct {
 	text string
 	x, y float64
-	run  *compose.Text
+	run  *typeset.Text
 }
 
 // near reports whether a and b agree within a thousandth of a point.

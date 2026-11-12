@@ -4,8 +4,8 @@ import (
 	"math"
 	"slices"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // PaintKind is how an area is painted.
@@ -26,20 +26,20 @@ type Paint struct {
 	// Kind says which of the fields below paint.
 	Kind PaintKind
 	// Color is a PaintSolid's colour and a PaintPattern's foreground.
-	Color compose.Color
+	Color typeset.Color
 	// Background is a PaintPattern's background.
-	Background compose.Color
+	Background typeset.Color
 	// Stops are a PaintGradient's stops, by position in [0, 1]; Angle
 	// is a linear gradient's direction in degrees, clockwise from the
 	// positive x axis (20.1.8.41 lin ang); Radial makes the gradient run
 	// from the box's centre, stop 0, to its corners, stop 1, instead.
-	Stops  []compose.ColorStop
+	Stops  []typeset.ColorStop
 	Angle  float64
 	Radial bool
 	// Picture is a PaintPicture's image, stretched over the box unless
 	// TileWidth and TileHeight, in points, are both positive, which
 	// repeat it from the box's corner at that size.
-	Picture               *compose.ImageSource
+	Picture               *typeset.ImageSource
 	TileWidth, TileHeight float64
 	// Pattern is a PaintPattern's preset (20.1.10.51 ST_PresetPatternVal:
 	// "pct50", "dkUpDiag", ...).
@@ -50,7 +50,7 @@ type Paint struct {
 // fitted to box, with p, filled by [FillRule]:
 //
 //   - a solid colour as a flat fill;
-//   - a gradient as a [compose.Shading]: linear across the box at the
+//   - a gradient as a [typeset.Shading]: linear across the box at the
 //     angle, the axis long enough that the box's corners meet stops 0 and
 //     1, or radial from the centre as an ellipse through the corners (a
 //     DrawingML path gradient of any shape is drawn so); a box with no
@@ -65,16 +65,16 @@ type Paint struct {
 // would draw its zero-width fill as a hairline. The gradient's scaled and
 // rotWithShape flags (20.1.8.33 gradFill) and a
 // picture's source rectangle and tile alignment are not modelled.
-func Fill(ops []compose.PathOp, box compose.Rect, p Paint) []compose.Fragment {
+func Fill(ops []typeset.PathOp, box typeset.Rect, p Paint) []typeset.Fragment {
 	if !hasArea(ops) {
 		return nil
 	}
-	flat := func(c compose.Color) *compose.Path {
-		return &compose.Path{Ops: ops, Fill: &compose.Fill{Color: c, Rule: FillRule}}
+	flat := func(c typeset.Color) *typeset.Path {
+		return &typeset.Path{Ops: ops, Fill: &typeset.Fill{Color: c, Rule: FillRule}}
 	}
 	switch p.Kind {
 	case PaintSolid:
-		return []compose.Fragment{flat(p.Color)}
+		return []typeset.Fragment{flat(p.Color)}
 	case PaintGradient:
 		stops := normalStops(p.Stops)
 		if len(stops) == 0 {
@@ -82,15 +82,15 @@ func Fill(ops []compose.PathOp, box compose.Rect, p Paint) []compose.Fragment {
 		}
 		sh := gradientShading(box, stops, p.Angle, p.Radial)
 		if sh == nil {
-			return []compose.Fragment{flat(stops[0].Color)}
+			return []typeset.Fragment{flat(stops[0].Color)}
 		}
-		return []compose.Fragment{&compose.Path{Ops: ops, Fill: &compose.Fill{Rule: FillRule, Shading: sh}}}
+		return []typeset.Fragment{&typeset.Path{Ops: ops, Fill: &typeset.Fill{Rule: FillRule, Shading: sh}}}
 	case PaintPicture:
 		if p.Picture == nil || box.Width <= 0 || box.Height <= 0 {
 			return nil
 		}
-		return []compose.Fragment{&compose.Group{
-			Clip:    &compose.Path{Ops: ops, Fill: &compose.Fill{Rule: FillRule}},
+		return []typeset.Fragment{&typeset.Group{
+			Clip:    &typeset.Path{Ops: ops, Fill: &typeset.Fill{Rule: FillRule}},
 			Content: pictureTiles(box, p),
 		}}
 	case PaintPattern:
@@ -103,11 +103,11 @@ func Fill(ops []compose.PathOp, box compose.Rect, p Paint) []compose.Fragment {
 // hasArea reports whether the outline ops encloses any area: the
 // shoelace sum of each subpath over its points, Bézier control points
 // included, is not zero.
-func hasArea(ops []compose.PathOp) bool {
+func hasArea(ops []typeset.PathOp) bool {
 	var area, sub float64
-	var first, last compose.Point
+	var first, last typeset.Point
 	open := false
-	add := func(p compose.Point) {
+	add := func(p typeset.Point) {
 		sub += last.X*p.Y - p.X*last.Y
 		last = p
 	}
@@ -120,16 +120,16 @@ func hasArea(ops []compose.PathOp) bool {
 	}
 	for _, op := range ops {
 		switch op.Kind {
-		case compose.MoveTo:
+		case typeset.MoveTo:
 			closeSub()
 			first, last, open = op.P[0], op.P[0], true
-		case compose.LineTo:
+		case typeset.LineTo:
 			add(op.P[0])
-		case compose.CurveTo:
+		case typeset.CurveTo:
 			add(op.P[0])
 			add(op.P[1])
 			add(op.P[2])
-		case compose.ClosePath:
+		case typeset.ClosePath:
 			closeSub()
 		}
 	}
@@ -139,11 +139,11 @@ func hasArea(ops []compose.PathOp) bool {
 
 // normalStops returns the stops sorted by position, clamped to [0, 1],
 // with a stop at each end, as a shading needs; nil for none.
-func normalStops(in []compose.ColorStop) []compose.ColorStop {
+func normalStops(in []typeset.ColorStop) []typeset.ColorStop {
 	if len(in) == 0 {
 		return nil
 	}
-	s := make([]compose.ColorStop, 0, len(in)+2)
+	s := make([]typeset.ColorStop, 0, len(in)+2)
 	for _, st := range in {
 		if !numeric.Finite(st.Offset) {
 			continue
@@ -154,7 +154,7 @@ func normalStops(in []compose.ColorStop) []compose.ColorStop {
 	if len(s) == 0 {
 		return nil
 	}
-	slices.SortStableFunc(s, func(a, b compose.ColorStop) int {
+	slices.SortStableFunc(s, func(a, b typeset.ColorStop) int {
 		switch {
 		case a.Offset < b.Offset:
 			return -1
@@ -164,35 +164,35 @@ func normalStops(in []compose.ColorStop) []compose.ColorStop {
 		return 0
 	})
 	if s[0].Offset > 0 {
-		s = append([]compose.ColorStop{{Offset: 0, Color: s[0].Color}}, s...)
+		s = append([]typeset.ColorStop{{Offset: 0, Color: s[0].Color}}, s...)
 	}
 	if last := s[len(s)-1]; last.Offset < 1 || len(s) == 1 {
-		s = append(s, compose.ColorStop{Offset: 1, Color: last.Color})
+		s = append(s, typeset.ColorStop{Offset: 1, Color: last.Color})
 	}
 	return s
 }
 
 // gradientShading returns the shading of a gradient over box, nil when
 // the box has no area.
-func gradientShading(box compose.Rect, stops []compose.ColorStop, angle float64, radial bool) *compose.Shading {
+func gradientShading(box typeset.Rect, stops []typeset.ColorStop, angle float64, radial bool) *typeset.Shading {
 	if box.Width <= 0 || box.Height <= 0 || !numeric.Finite(angle) {
 		return nil
 	}
 	cx, cy := box.X+box.Width/2, box.Y+box.Height/2
 	if radial {
 		// The unit circle scaled to the ellipse through the corners.
-		return &compose.Shading{
-			Kind: compose.Radial, From: compose.Point{}, To: compose.Point{}, ToRadius: 1, Stops: stops,
-			Transform: compose.Matrix{A: box.Width / math.Sqrt2, D: box.Height / math.Sqrt2, E: cx, F: cy},
+		return &typeset.Shading{
+			Kind: typeset.Radial, From: typeset.Point{}, To: typeset.Point{}, ToRadius: 1, Stops: stops,
+			Transform: typeset.Matrix{A: box.Width / math.Sqrt2, D: box.Height / math.Sqrt2, E: cx, F: cy},
 		}
 	}
 	a := angle * math.Pi / 180
 	dx, dy := math.Cos(a), math.Sin(a)
 	half := (box.Width*math.Abs(dx) + box.Height*math.Abs(dy)) / 2
-	return &compose.Shading{
-		Kind:  compose.Axial,
-		From:  compose.Point{X: cx - dx*half, Y: cy - dy*half},
-		To:    compose.Point{X: cx + dx*half, Y: cy + dy*half},
+	return &typeset.Shading{
+		Kind:  typeset.Axial,
+		From:  typeset.Point{X: cx - dx*half, Y: cy - dy*half},
+		To:    typeset.Point{X: cx + dx*half, Y: cy + dy*half},
 		Stops: stops,
 	}
 }
@@ -203,13 +203,13 @@ func gradientShading(box compose.Rect, stops []compose.ColorStop, angle float64,
 const maxPictureTiles = 4096
 
 // pictureTiles places a picture fill's image over box.
-func pictureTiles(box compose.Rect, p Paint) []compose.Fragment {
+func pictureTiles(box typeset.Rect, p Paint) []typeset.Fragment {
 	tw, th := p.TileWidth, p.TileHeight
 	if numeric.PositiveFinite(tw) && numeric.PositiveFinite(th) && math.Ceil(box.Width/tw)*math.Ceil(box.Height/th) <= maxPictureTiles {
-		var out []compose.Fragment
+		var out []typeset.Fragment
 		for y := box.Y; y < box.Y+box.Height; y += th {
 			for x := box.X; x < box.X+box.Width; x += tw {
-				out = append(out, &compose.Image{Rect: compose.Rect{X: x, Y: y, Width: tw, Height: th}, Source: p.Picture})
+				out = append(out, &typeset.Image{Rect: typeset.Rect{X: x, Y: y, Width: tw, Height: th}, Source: p.Picture})
 				if !moves(x, tw) {
 					break
 				}
@@ -220,7 +220,7 @@ func pictureTiles(box compose.Rect, p Paint) []compose.Fragment {
 		}
 		return out
 	}
-	return []compose.Fragment{&compose.Image{Rect: box, Source: p.Picture}}
+	return []typeset.Fragment{&typeset.Image{Rect: box, Source: p.Picture}}
 }
 
 // moves reports whether adding step to the coordinate v changes it. Far
@@ -291,9 +291,9 @@ var patternCoverage = map[string]float64{ //nolint:gochecknoglobals // a read-on
 const maxPatternLines = 4096
 
 // patternFill paints a preset pattern.
-func patternFill(ops []compose.PathOp, box compose.Rect, p Paint, flat func(compose.Color) *compose.Path) []compose.Fragment {
+func patternFill(ops []typeset.PathOp, box typeset.Rect, p Paint, flat func(typeset.Color) *typeset.Path) []typeset.Fragment {
 	// A transparent colour paints nothing, and the backend refuses it.
-	var out []compose.Fragment
+	var out []typeset.Fragment
 	if p.Background.A > 0 {
 		out = append(out, flat(p.Background))
 	}
@@ -306,13 +306,13 @@ func patternFill(ops []compose.PathOp, box compose.Rect, p Paint, flat func(comp
 			if lp.down || lp.up {
 				w /= math.Sqrt2
 			}
-			stroke := &compose.Stroke{Color: p.Color, Width: w}
+			stroke := &typeset.Stroke{Color: p.Color, Width: w}
 			if lp.dash {
 				stroke.Dash = []float64{4 * patternPixel, 4 * patternPixel}
 			}
-			return append(out, &compose.Group{
-				Clip:    &compose.Path{Ops: ops, Fill: &compose.Fill{Rule: FillRule}},
-				Content: []compose.Fragment{&compose.Path{Ops: lines, Stroke: stroke}},
+			return append(out, &typeset.Group{
+				Clip:    &typeset.Path{Ops: ops, Fill: &typeset.Fill{Rule: FillRule}},
+				Content: []typeset.Fragment{&typeset.Path{Ops: lines, Stroke: stroke}},
 			})
 		}
 	}
@@ -324,7 +324,7 @@ func patternFill(ops []compose.PathOp, box compose.Rect, p Paint, flat func(comp
 			cov = 0.5
 		}
 	}
-	return append(out, &compose.Group{Opacity: cov, Content: []compose.Fragment{flat(p.Color)}})
+	return append(out, &typeset.Group{Opacity: cov, Content: []typeset.Fragment{flat(p.Color)}})
 }
 
 // btoi is 1 for true.
@@ -337,15 +337,15 @@ func btoi(b bool) float64 {
 
 // patternLines returns the lines of a line pattern over box, nil past
 // maxPatternLines.
-func patternLines(box compose.Rect, lp linePattern) []compose.PathOp {
+func patternLines(box typeset.Rect, lp linePattern) []typeset.PathOp {
 	step := lp.pitch * patternPixel
 	if box.Width <= 0 || box.Height <= 0 || (box.Width+box.Height)/step*4 > maxPatternLines {
 		return nil
 	}
-	pt := func(x, y float64) [3]compose.Point { return [3]compose.Point{{X: x, Y: y}} }
-	var ops []compose.PathOp
+	pt := func(x, y float64) [3]typeset.Point { return [3]typeset.Point{{X: x, Y: y}} }
+	var ops []typeset.PathOp
 	line := func(x0, y0, x1, y1 float64) {
-		ops = append(ops, compose.PathOp{Kind: compose.MoveTo, P: pt(x0, y0)}, compose.PathOp{Kind: compose.LineTo, P: pt(x1, y1)})
+		ops = append(ops, typeset.PathOp{Kind: typeset.MoveTo, P: pt(x0, y0)}, typeset.PathOp{Kind: typeset.LineTo, P: pt(x1, y1)})
 	}
 	x0, y0, x1, y1 := box.X, box.Y, box.X+box.Width, box.Y+box.Height
 	if lp.horz {
@@ -382,9 +382,9 @@ func patternLines(box compose.Rect, lp linePattern) []compose.PathOp {
 // lighter by the shares LibreOffice's custom shape engine uses (darken
 // 40%, darkenLess 20% toward black; lighten 40%, lightenLess 20% toward
 // white); c itself for the other modes.
-func Shade(c compose.Color, m FillMode) compose.Color {
-	toward := func(t, f float64) compose.Color {
-		return compose.Color{R: c.R + (t-c.R)*f, G: c.G + (t-c.G)*f, B: c.B + (t-c.B)*f, A: c.A}
+func Shade(c typeset.Color, m FillMode) typeset.Color {
+	toward := func(t, f float64) typeset.Color {
+		return typeset.Color{R: c.R + (t-c.R)*f, G: c.G + (t-c.G)*f, B: c.B + (t-c.B)*f, A: c.A}
 	}
 	switch m {
 	case FillDarken:

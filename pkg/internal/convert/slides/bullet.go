@@ -4,11 +4,11 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/symbolfont"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // bullet makes the paragraph node a list item with the bullet or number
@@ -169,10 +169,10 @@ const maxRecode = 1024
 // bullet carries the character drawn as its ActualText, a bullet when
 // that one is private-use too (ISO 19005-2, 6.2.11.7.3; ISO 14289-2,
 // 8.4.3).
-func recodeLabels(frags []compose.Fragment, recode map[string]string) {
+func recodeLabels(frags []typeset.Fragment, recode map[string]string) {
 	for _, f := range frags {
 		switch v := f.(type) {
-		case *compose.Text:
+		case *typeset.Text:
 			if v.Parent == nil || v.Parent.Role != "Lbl" {
 				continue
 			}
@@ -184,7 +184,7 @@ func recodeLabels(frags []compose.Fragment, recode map[string]string) {
 					v.Glyphs[i].Text = t
 				}
 			}
-		case *compose.Group:
+		case *typeset.Group:
 			recodeLabels(v.Content, recode)
 		}
 	}

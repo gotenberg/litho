@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestBleed_Draw(t *testing.T) {
@@ -51,10 +51,10 @@ func TestBleed_PageBoxes(t *testing.T) {
 	if pg.Width != px(6) || pg.Height != px(6) {
 		t.Fatalf("sheet %v by %v", pg.Width, pg.Height)
 	}
-	if want := (compose.Rect{X: px(1), Y: px(1), Width: px(4), Height: px(4)}); pg.TrimBox == nil || *pg.TrimBox != want {
+	if want := (typeset.Rect{X: px(1), Y: px(1), Width: px(4), Height: px(4)}); pg.TrimBox == nil || *pg.TrimBox != want {
 		t.Errorf("TrimBox %+v, want %+v", pg.TrimBox, want)
 	}
-	if want := (compose.Rect{Width: px(6), Height: px(6)}); pg.BleedBox == nil || *pg.BleedBox != want {
+	if want := (typeset.Rect{Width: px(6), Height: px(6)}); pg.BleedBox == nil || *pg.BleedBox != want {
 		t.Errorf("BleedBox %+v, want %+v", pg.BleedBox, want)
 	}
 	assertPixels(t, res, 1, `

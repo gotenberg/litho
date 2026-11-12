@@ -16,11 +16,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // nsDecl declares the namespaces the test documents use.
@@ -157,7 +157,7 @@ func fixtureFonts(t testing.TB) *text.Fonts {
 }
 
 // convertDoc converts the package data with opts.
-func convertDoc(t testing.TB, data []byte, opts office.Options) *compose.Document {
+func convertDoc(t testing.TB, data []byte, opts office.Options) *typeset.Document {
 	t.Helper()
 	d, err := Convert(context.Background(), bytes.NewReader(data), fixtureFonts(t), opts)
 	if err != nil {
@@ -179,13 +179,13 @@ type run struct {
 }
 
 // runs returns the text runs of a page, groups' translations applied.
-func runs(pg *compose.Page) []run {
+func runs(pg *typeset.Page) []run {
 	var out []run
-	var walk func(frags []compose.Fragment, dx, dy float64)
-	walk = func(frags []compose.Fragment, dx, dy float64) {
+	var walk func(frags []typeset.Fragment, dx, dy float64)
+	walk = func(frags []typeset.Fragment, dx, dy float64) {
 		for _, f := range frags {
 			switch v := f.(type) {
-			case *compose.Text:
+			case *typeset.Text:
 				var sb strings.Builder
 				for _, g := range v.Glyphs {
 					sb.WriteString(g.Text)
@@ -195,7 +195,7 @@ func runs(pg *compose.Page) []run {
 					x += v.Glyphs[0].X
 				}
 				out = append(out, run{x: x, y: v.Origin.Y + dy, size: v.Size, text: sb.String()})
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content, dx+v.Transform.E, dy+v.Transform.F)
 			}
 		}
@@ -206,7 +206,7 @@ func runs(pg *compose.Page) []run {
 
 // lines returns the text of a page grouped by baseline, top to bottom,
 // each line's runs in x order.
-func lines(pg *compose.Page) []textLine {
+func lines(pg *typeset.Page) []textLine {
 	runs := runs(pg)
 	sort.SliceStable(runs, func(i, j int) bool { return runs[i].y < runs[j].y })
 	var out []textLine
@@ -227,7 +227,7 @@ func lines(pg *compose.Page) []textLine {
 }
 
 // pageText returns a page's lines joined by newlines, each trimmed.
-func pageText(pg *compose.Page) string {
+func pageText(pg *typeset.Page) string {
 	var sb strings.Builder
 	for i, l := range lines(pg) {
 		if i > 0 {
@@ -239,7 +239,7 @@ func pageText(pg *compose.Page) string {
 }
 
 // docText returns every page's text, pages separated by a form feed.
-func docText(d *compose.Document) string {
+func docText(d *typeset.Document) string {
 	var parts []string
 	for _, pg := range d.Pages {
 		parts = append(parts, pageText(pg))

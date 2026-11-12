@@ -4,8 +4,8 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxFootnotesPerPage bounds the footnote bodies one page's footnote area
@@ -451,7 +451,7 @@ func (e *engine) areaOrigin(k int, pb PageBox) float64 {
 // noteAnchors adds to out where the boxes with an ID inside the footnote
 // areas landed, page by page, for a document of n pages, unless an
 // earlier box took the ID.
-func (e *engine) noteAnchors(out map[string]compose.Dest, n int) {
+func (e *engine) noteAnchors(out map[string]typeset.Dest, n int) {
 	f := e.foot
 	if f == nil {
 		return
@@ -475,7 +475,7 @@ func (e *engine) noteAnchors(out map[string]compose.Dest, n int) {
 						x, y, ok = b.x, b.y, true
 					}
 					if ok {
-						out[b.id] = compose.Dest{Page: k + 1, X: pb.Bleed + pb.Margin[css.Left] + clamp(x), Y: pb.Bleed + pb.Margin[css.Top] + top + max(clamp(y), 0)}
+						out[b.id] = typeset.Dest{Page: k + 1, X: pb.Bleed + pb.Margin[css.Left] + clamp(x), Y: pb.Bleed + pb.Margin[css.Top] + top + max(clamp(y), 0)}
 					}
 				}
 			}
@@ -489,7 +489,7 @@ func (e *engine) noteAnchors(out map[string]compose.Dest, n int) {
 
 // noteLinks adds the link regions of the footnote areas to the pages of
 // res, internal targets resolved against res.Anchors.
-func (e *engine) noteLinks(res *Result, used map[*compose.StructElem]bool) {
+func (e *engine) noteLinks(res *Result, used map[*typeset.StructElem]bool) {
 	f := e.foot
 	if f == nil {
 		return
@@ -506,7 +506,7 @@ func (e *engine) noteLinks(res *Result, used map[*compose.StructElem]bool) {
 				continue
 			}
 			r := pl.rect
-			l.Rect = compose.Rect{X: pb.Bleed + pb.Margin[css.Left] + r.X, Y: pb.Bleed + pb.Margin[css.Top] + top + r.Y, Width: r.Width, Height: r.Height}
+			l.Rect = typeset.Rect{X: pb.Bleed + pb.Margin[css.Left] + r.X, Y: pb.Bleed + pb.Margin[css.Top] + top + r.Y, Width: r.Width, Height: r.Height}
 			if l.Parent != nil {
 				used[l.Parent] = true
 			}
@@ -518,7 +518,7 @@ func (e *engine) noteLinks(res *Result, used map[*compose.StructElem]bool) {
 // assembleNotes adds the footnote area of page k to pg, whose page box is
 // pb, at the bottom of the page area (CSS GCPM 3, 3.4.1), over the flow,
 // under the footnote separator of pb and its spaces.
-func (e *engine) assembleNotes(pg *compose.Page, k int, pb PageBox, used map[*compose.StructElem]bool) {
+func (e *engine) assembleNotes(pg *typeset.Page, k int, pb PageBox, used map[*typeset.StructElem]bool) {
 	f := e.foot
 	if f == nil || k >= len(f.pages) {
 		return
@@ -538,8 +538,8 @@ func (e *engine) assembleNotes(pg *compose.Page, k int, pb PageBox, used map[*co
 	if r := pb.FootnoteRule; r != nil {
 		top += r.SpaceAbove + r.Thickness + r.SpaceBelow
 	}
-	pg.Content = append(pg.Content, &compose.Group{
-		Transform: compose.Matrix{A: 1, D: 1, E: pb.Margin[css.Left], F: top},
+	pg.Content = append(pg.Content, &typeset.Group{
+		Transform: typeset.Matrix{A: 1, D: 1, E: pb.Margin[css.Left], F: top},
 		Opacity:   1,
 		Content:   frags,
 	})

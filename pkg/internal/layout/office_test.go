@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // TestOffice_SectionBreaks starts Office sections on odd and even pages:
@@ -79,11 +79,11 @@ func TestOffice_CroppedPicture(t *testing.T) {
 		img.Set(x, 1, c)
 	}
 	src := source(img)
-	crop := &Picture{Width: px(2), Height: px(2), Vector: func(_ context.Context, r compose.Rect) []compose.Fragment {
+	crop := &Picture{Width: px(2), Height: px(2), Vector: func(_ context.Context, r typeset.Rect) []typeset.Fragment {
 		// The picture's right half fills r: the whole is twice as wide.
-		whole := compose.Rect{X: r.X - r.Width, Y: r.Y, Width: 2 * r.Width, Height: r.Height}
-		return []compose.Fragment{&compose.Group{Opacity: 1, Transform: compose.Identity, Clip: &compose.Path{Ops: rectOps(r), Fill: &compose.Fill{}}, Content: []compose.Fragment{
-			&compose.Image{Rect: whole, Source: src},
+		whole := typeset.Rect{X: r.X - r.Width, Y: r.Y, Width: 2 * r.Width, Height: r.Height}
+		return []typeset.Fragment{&typeset.Group{Opacity: 1, Transform: typeset.Identity, Clip: &typeset.Path{Ops: rectOps(r), Fill: &typeset.Fill{}}, Content: []typeset.Fragment{
+			&typeset.Image{Rect: whole, Source: src},
 		}}}
 	}}
 	n := &Node{Kind: Replaced, Style: sty(width(2), height(2)), Picture: crop, Role: "Figure", Alt: "a cropped picture"}
@@ -91,9 +91,9 @@ func TestOffice_CroppedPicture(t *testing.T) {
 	assertPixels(t, res, 1, `
 		__BB__
 		__BB__`)
-	var fig *compose.StructElem
-	var find func(*compose.StructElem)
-	find = func(s *compose.StructElem) {
+	var fig *typeset.StructElem
+	var find func(*typeset.StructElem)
+	find = func(s *typeset.StructElem) {
 		if s == nil || fig != nil {
 			return
 		}
@@ -109,14 +109,14 @@ func TestOffice_CroppedPicture(t *testing.T) {
 	if fig == nil || fig.Alt != "a cropped picture" {
 		t.Fatalf("figure %+v, want one with its Alt", fig)
 	}
-	var parents []*compose.StructElem
-	var walk func([]compose.Fragment)
-	walk = func(fs []compose.Fragment) {
+	var parents []*typeset.StructElem
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
 		for _, f := range fs {
 			switch v := f.(type) {
-			case *compose.Image:
+			case *typeset.Image:
 				parents = append(parents, v.Parent)
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content)
 			}
 		}

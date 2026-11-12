@@ -9,7 +9,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -17,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // defaultFontSize is the size of a run whose style gives none: Impress's
@@ -147,20 +147,20 @@ var scaleLevels = [...]fit{
 // textResult is a text body laid out in its shape.
 type textResult struct {
 	// box is the shape's box, grown to the text when the body asks.
-	box compose.Rect
+	box typeset.Rect
 	// frags, links and structure are the laid-out text, in slide
 	// coordinates before the shape's turn.
-	frags     []compose.Fragment
-	links     []compose.Link
-	structure []*compose.StructElem
+	frags     []typeset.Fragment
+	links     []typeset.Link
+	structure []*typeset.StructElem
 }
 
 // laidBody is a text body laid out at the origin: its fragments, links
 // and structure, and its height.
 type laidBody struct {
-	frags     []compose.Fragment
-	links     []compose.Link
-	structure []*compose.StructElem
+	frags     []typeset.Fragment
+	links     []typeset.Link
+	structure []*typeset.StructElem
 	height    float64
 }
 
@@ -178,7 +178,7 @@ type laidBody struct {
 //     centimetres print their top-anchored text at 28.35 points above the
 //     box, at its bottom edge, and 14.17 points below, 42.52 below and
 //     28.35 below its top.
-func insetRect(r compose.Rect, in [4]float64) compose.Rect {
+func insetRect(r typeset.Rect, in [4]float64) typeset.Rect {
 	side := func(v float64) float64 {
 		if !numeric.Finite(v) {
 			return 0
@@ -196,7 +196,7 @@ func insetRect(r compose.Rect, in [4]float64) compose.Rect {
 	}
 	x, w := axis(r.X, r.Width, side(in[css.Left]), side(in[css.Right]))
 	y, h := axis(r.Y, r.Height, side(in[css.Top]), side(in[css.Bottom]))
-	out := compose.Rect{X: x, Y: y, Width: w, Height: h}
+	out := typeset.Rect{X: x, Y: y, Width: w, Height: h}
 	if out.Width < 1 {
 		out.X, out.Width = out.X+out.Width/2-0.5, 1
 	}
@@ -218,7 +218,7 @@ func insetRect(r compose.Rect, in [4]float64) compose.Rect {
 //     overflows its unwrapped vertical lines past their end.
 //   - libreoffice/odp: sd/style-overflow-behavior-clip.fodp, whose
 //     overflow behaviour is clip, leaves its second line out.
-func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect) *textResult {
+func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box typeset.Rect) *textResult {
 	res := &textResult{box: box}
 	inner := insetRect(shape.TextRect(g, box), body.Insets)
 	vertical := body.Vertical.Vertical()
@@ -299,18 +299,18 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 			dy = max(dy, 0)
 		}
 	}
-	var m compose.Matrix
+	var m typeset.Matrix
 	switch body.Vertical {
 	case css.HorizontalTB:
 		m = translate(inner.X+dx, inner.Y+dy)
 	case css.SidewaysLR:
 		// Turned a quarter turn counter-clockwise: the lines read bottom
 		// to top and stack left to right (21.1.10.83 vert270).
-		m = compose.Matrix{A: 0, B: -1, C: 1, D: 0, E: inner.X + dy, F: inner.Y + inner.Height - dx}
+		m = typeset.Matrix{A: 0, B: -1, C: 1, D: 0, E: inner.X + dy, F: inner.Y + inner.Height - dx}
 	case css.VerticalRL, css.VerticalLR, css.SidewaysRL:
 		// Turned a quarter turn clockwise: the lines read top to bottom
 		// and stack right to left (vert, eaVert).
-		m = compose.Matrix{A: 0, B: 1, C: -1, D: 0, E: inner.X + inner.Width - dy, F: inner.Y + dx}
+		m = typeset.Matrix{A: 0, B: 1, C: -1, D: 0, E: inner.X + inner.Width - dy, F: inner.Y + dx}
 	default:
 		m = translate(inner.X+dx, inner.Y+dy)
 	}
@@ -319,11 +319,11 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 		// A clipped body draws no line whose baseline falls outside its
 		// rectangle and cuts the others at it, as Impress prints a text
 		// whose overflow behaviour is clip.
-		frags = keepLines(frags, compose.Identity, -dy, lh-dy)
+		frags = keepLines(frags, typeset.Identity, -dy, lh-dy)
 		r := shape.TextRect(g, box)
-		res.frags = []compose.Fragment{&compose.Group{
-			Transform: compose.Identity, Opacity: 1,
-			Clip:    &compose.Path{Ops: rectOps(r), Fill: &compose.Fill{}},
+		res.frags = []typeset.Fragment{&typeset.Group{
+			Transform: typeset.Identity, Opacity: 1,
+			Clip:    &typeset.Path{Ops: rectOps(r), Fill: &typeset.Fill{}},
 			Content: group(m, frags),
 		}}
 	} else {
@@ -348,7 +348,7 @@ const jumpPrefix = "\x00slide:"
 // resolveJump turns the link l of a run's jump into a link to the page of
 // the slide it names, and reports whether l is still a link: false for a
 // jump to a slide that does not print.
-func (b *builder) resolveJump(l *compose.Link) bool {
+func (b *builder) resolveJump(l *typeset.Link) bool {
 	n, ok := strings.CutPrefix(l.URI, jumpPrefix)
 	if !ok {
 		return true
@@ -380,7 +380,7 @@ const blockSlack = 0.01
 //   - libreoffice/odp: sd-data/fit-to-size.fodp's frames 2 (true) and 3 (all), 357 by
 //     144 and 357 by 127 points, print "foo" 8 times its width and 2 and
 //     1.78 times its height, the two lines filling the frame.
-func (b *builder) stretchText(body *TextBody, inner compose.Rect, res *textResult) *textResult {
+func (b *builder) stretchText(body *TextBody, inner typeset.Rect, res *textResult) *textResult {
 	nb := *body
 	nb.Wrap, nb.Autofit = false, AutofitNone
 	w := b.naturalWidth(&nb, noFit) + blockSlack
@@ -389,7 +389,7 @@ func (b *builder) stretchText(body *TextBody, inner compose.Rect, res *textResul
 		return res
 	}
 	sx, sy := inner.Width/w, inner.Height/lay.height
-	m := compose.Matrix{A: sx, D: sy, E: inner.X, F: inner.Y}
+	m := typeset.Matrix{A: sx, D: sy, E: inner.X, F: inner.Y}
 	res.frags = group(m, lay.frags)
 	for _, l := range lay.links {
 		if !b.resolveJump(&l) {
@@ -404,19 +404,19 @@ func (b *builder) stretchText(body *TextBody, inner compose.Rect, res *textResul
 
 // keepLines returns the fragments of frags, mapped by m, less the text
 // runs whose baseline lies above top or below bottom.
-func keepLines(frags []compose.Fragment, m compose.Matrix, top, bottom float64) []compose.Fragment {
-	out := make([]compose.Fragment, 0, len(frags))
+func keepLines(frags []typeset.Fragment, m typeset.Matrix, top, bottom float64) []typeset.Fragment {
+	out := make([]typeset.Fragment, 0, len(frags))
 	for _, f := range frags {
 		switch v := f.(type) {
-		case *compose.Text:
+		case *typeset.Text:
 			_, y := apply(m, v.Origin.X, v.Origin.Y)
 			if y < top-0.01 || y > bottom+0.01 {
 				continue
 			}
-		case *compose.Group:
+		case *typeset.Group:
 			t := v.Transform
-			if t == (compose.Matrix{}) {
-				t = compose.Identity
+			if t == (typeset.Matrix{}) {
+				t = typeset.Identity
 			}
 			g := *v
 			g.Content = keepLines(v.Content, then(t, m), top, bottom)
@@ -1221,7 +1221,7 @@ func (b *builder) groupFits(shapes []*Shape) map[int]fit {
 						continue
 					}
 					kk := *k
-					kk.Box = compose.Rect{
+					kk.Box = typeset.Rect{
 						X: s.Box.X + (k.Box.X-child.X)*sx, Y: s.Box.Y + (k.Box.Y-child.Y)*sy,
 						Width: k.Box.Width * sx, Height: k.Box.Height * sy,
 					}

@@ -7,12 +7,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // The colours Impress's item pool paints with when no style gives one:
@@ -457,7 +457,7 @@ func (fillImageSize) read(v string, abs, rel *float64) {
 // style:repeat no-repeat (19.515).
 func placedOnce(pic *layout.Picture, ref string, size fillImageSize) *layout.Picture {
 	src := pic
-	return &layout.Picture{Width: pic.Width, Height: pic.Height, NoRatio: true, Vector: func(ctx context.Context, area compose.Rect) []compose.Fragment {
+	return &layout.Picture{Width: pic.Width, Height: pic.Height, NoRatio: true, Vector: func(ctx context.Context, area typeset.Rect) []typeset.Fragment {
 		w, h := size.w, size.h
 		if size.relW > 0 {
 			w = area.Width * size.relW
@@ -477,14 +477,14 @@ func placedOnce(pic *layout.Picture, ref string, size fillImageSize) *layout.Pic
 		} else if strings.HasPrefix(ref, "bottom") {
 			y = area.Y + area.Height - h
 		}
-		at := compose.Rect{X: x, Y: y, Width: w, Height: h}
-		var content []compose.Fragment
+		at := typeset.Rect{X: x, Y: y, Width: w, Height: h}
+		var content []typeset.Fragment
 		if src.Vector != nil {
 			content = src.Vector(ctx, at)
 		} else {
-			content = []compose.Fragment{&compose.Image{Rect: at, Source: src.Source}}
+			content = []typeset.Fragment{&typeset.Image{Rect: at, Source: src.Source}}
 		}
-		return []compose.Fragment{&compose.Group{Clip: &compose.Path{Ops: shape.RectOps(area)}, Content: content}}
+		return []typeset.Fragment{&typeset.Group{Clip: &typeset.Path{Ops: shape.RectOps(area)}, Content: content}}
 	}}
 }
 
@@ -522,7 +522,7 @@ func (t tiling) plain() bool {
 // the area.
 func (t tiling) picture(pic *layout.Picture) *layout.Picture {
 	src := pic
-	return &layout.Picture{Width: pic.Width, Height: pic.Height, NoRatio: true, Vector: func(ctx context.Context, area compose.Rect) []compose.Fragment {
+	return &layout.Picture{Width: pic.Width, Height: pic.Height, NoRatio: true, Vector: func(ctx context.Context, area typeset.Rect) []typeset.Fragment {
 		w, h := t.size.w, t.size.h
 		if t.size.relW > 0 {
 			w = area.Width * t.size.relW
@@ -551,7 +551,7 @@ func (t tiling) picture(pic *layout.Picture) *layout.Picture {
 		// same parity as the aligned tile's.
 		col0 := 2*math.Floor((area.X-x0)/w/2) - 2
 		row0 := 2*math.Floor((area.Y-y0)/h/2) - 2
-		var content []compose.Fragment
+		var content []typeset.Fragment
 		for row := row0; y0+row*h < area.Y+area.Height+h; row++ {
 			for col := col0; x0+col*w < area.X+area.Width+w; col++ {
 				x, y := x0+col*w, y0+row*h
@@ -566,14 +566,14 @@ func (t tiling) picture(pic *layout.Picture) *layout.Picture {
 				if ctx.Err() != nil {
 					return nil
 				}
-				at := compose.Rect{X: x, Y: y, Width: w, Height: h}
+				at := typeset.Rect{X: x, Y: y, Width: w, Height: h}
 				if src.Vector != nil {
 					content = append(content, src.Vector(ctx, at)...)
 				} else {
-					content = append(content, &compose.Image{Rect: at, Source: src.Source})
+					content = append(content, &typeset.Image{Rect: at, Source: src.Source})
 				}
 			}
 		}
-		return []compose.Fragment{&compose.Group{Clip: &compose.Path{Ops: shape.RectOps(area)}, Content: content}}
+		return []typeset.Fragment{&typeset.Group{Clip: &typeset.Path{Ops: shape.RectOps(area)}, Content: content}}
 	}}
 }

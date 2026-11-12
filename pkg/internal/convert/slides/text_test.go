@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // TestText_LinePlacement checks the baselines of PPTX text against the
@@ -140,7 +140,7 @@ func TestText_Clip(t *testing.T) {
 		if len(got) != want || got[0] != "Kept" {
 			t.Errorf("clip %v: runs %q", clip, got)
 		}
-		if g, ok := pg.Content[0].(*compose.Group); clip && (!ok || g.Clip == nil) {
+		if g, ok := pg.Content[0].(*typeset.Group); clip && (!ok || g.Clip == nil) {
 			t.Errorf("clip %v: no clipping group", clip)
 		}
 	}

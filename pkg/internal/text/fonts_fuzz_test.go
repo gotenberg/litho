@@ -20,7 +20,7 @@ func FuzzLoadFontData(f *testing.F) {
 			return
 		}
 		for _, fc := range fonts.faces {
-			if _, err := fc.Compose(); err != nil {
+			if _, err := fc.Typeset(); err != nil {
 				continue
 			}
 		}

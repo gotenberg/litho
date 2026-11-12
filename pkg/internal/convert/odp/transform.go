@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // matrix is an affine transform of page points, y pointing down:
@@ -67,7 +67,7 @@ func (m matrix) place(w, h float64) placement {
 			skew = 0
 		}
 	}
-	return placement{box: compose.Rect{X: cx - bw/2, Y: cy - bh/2, Width: bw, Height: bh}, rotation: rot, flipV: sy < 0, skew: skew}
+	return placement{box: typeset.Rect{X: cx - bw/2, Y: cy - bh/2, Width: bw, Height: bh}, rotation: rot, flipV: sy < 0, skew: skew}
 }
 
 // maxTransformOps bounds the operations of one draw:transform read: 16.

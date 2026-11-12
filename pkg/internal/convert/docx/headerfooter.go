@@ -3,10 +3,10 @@ package docx
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxSubLayoutPages caps the pages of a header or footer laid out on its
@@ -184,7 +184,7 @@ func footnoteRule(width float64) *layout.FootnoteRule {
 }
 
 // place records where each section starts (Placed).
-func (p *pages) place(anchors map[string]compose.Dest) {
+func (p *pages) place(anchors map[string]typeset.Dest) {
 	for _, s := range p.secs {
 		if d, ok := anchors[s.id]; ok {
 			s.start = d.Page
@@ -241,7 +241,7 @@ func (p *pages) numbering(page, total int) (*section, int) {
 // default; a first or even one the sections leave undefined is empty, or
 // the default one as [section.part] says), with the page fields of the
 // page.
-func (p *pages) margins(info layout.PageInfo, total int) []compose.Fragment {
+func (p *pages) margins(info layout.PageInfo, total int) []typeset.Fragment {
 	if info.Blank {
 		return nil
 	}
@@ -297,16 +297,16 @@ func (p *pages) margins(info layout.PageInfo, total int) []compose.Fragment {
 
 // artifacts returns frags with no structure element: headers and footers
 // are pagination artifacts (ISO 32000-1, 14.8.2.2.2).
-func artifacts(frags []compose.Fragment) []compose.Fragment {
+func artifacts(frags []typeset.Fragment) []typeset.Fragment {
 	for _, f := range frags {
 		switch v := f.(type) {
-		case *compose.Text:
+		case *typeset.Text:
 			v.Parent = nil
-		case *compose.Image:
+		case *typeset.Image:
 			v.Parent = nil
-		case *compose.Path:
+		case *typeset.Path:
 			v.Parent = nil
-		case *compose.Group:
+		case *typeset.Group:
 			artifacts(v.Content)
 		}
 	}

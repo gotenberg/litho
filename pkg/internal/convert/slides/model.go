@@ -2,10 +2,10 @@ package slides
 
 import (
 	"github.com/gotenberg/litho/pkg/internal/chart"
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Document is a presentation as its reader found it. A reader fills every
@@ -14,7 +14,7 @@ import (
 // reads the model and never changes it.
 type Document struct {
 	// Meta is the document information written to the PDF.
-	Meta compose.Metadata
+	Meta typeset.Metadata
 	// Width and Height are the slide size in points (ECMA-376 Part 1,
 	// 19.2.1.36 sldSz; ODF fo:page-width and fo:page-height of the master
 	// pages' page layout), both positive.
@@ -28,7 +28,7 @@ type Document struct {
 	// presentation:notes with its page-thumbnail and notes frames) the
 	// slide picture and the notes text take on a notes page, in notes page
 	// points; both zero for the builder's default layout.
-	NotesSlideBox, NotesTextBox compose.Rect
+	NotesSlideBox, NotesTextBox typeset.Rect
 	// NotesShapes are the notes master's other shapes, drawn on every
 	// notes page: the slide number, date and footer placeholders when they
 	// show, and its decorations.
@@ -121,7 +121,7 @@ type Shape struct {
 	// the flips, which turn the shape about the box's centre (ECMA-376
 	// Part 1, 20.1.7.6 xfrm; ODF svg:x, svg:y, svg:width, svg:height and
 	// draw:transform, resolved by the reader to a box and an angle).
-	Box compose.Rect
+	Box typeset.Rect
 	// Rotation turns the shape clockwise by this many degrees about the
 	// box's centre; FlipH and FlipV mirror it about the centre first.
 	Rotation     float64
@@ -159,7 +159,7 @@ type Shape struct {
 	// group's child coordinate space, which Child maps onto Box
 	// (20.1.7.6 chOff and chExt); a zero Child is Box itself.
 	Kids  []*Shape
-	Child compose.Rect
+	Child typeset.Rect
 	// Href is the hyperlink the shape carries, "" for none.
 	Href string
 	// Jump is the 1-based show position of the slide the shape links to

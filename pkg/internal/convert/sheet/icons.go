@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // The colours of the icons Calc paints, sampled from its icon theme as the
@@ -25,16 +25,16 @@ var (
 )
 
 // iconColors is an icon's fill and outline colours.
-type iconColors struct{ fill, line compose.Color }
+type iconColors struct{ fill, line typeset.Color }
 
 // rgb returns the opaque colour of the 8-bit channels r, g, b.
-func rgb(r, g, b uint8) compose.Color {
-	return compose.Color{R: float64(r) / 255, G: float64(g) / 255, B: float64(b) / 255, A: 1}
+func rgb(r, g, b uint8) typeset.Color {
+	return typeset.Color{R: float64(r) / 255, G: float64(g) / 255, B: float64(b) / 255, A: 1}
 }
 
 // icon draws one icon in a 16 by 16 box whose top-left corner is (0, 0),
 // y pointing down: the grid of Calc's 16-pixel icon bitmaps.
-type icon func() []compose.Fragment
+type icon func() []typeset.Fragment
 
 // iconSets are the icons of each icon set, lowest band first, as Calc
 // draws them (sc/source/core/data/colorscale.cxx, ScIconSetFormat's
@@ -102,63 +102,63 @@ const (
 
 // placeIcon returns ic's fragments in the box of side s whose top-left
 // corner is (x, y).
-func placeIcon(ic icon, x, y, s float64) compose.Fragment {
+func placeIcon(ic icon, x, y, s float64) typeset.Fragment {
 	k := s / 16
-	return &compose.Group{Transform: compose.Matrix{A: k, D: k, E: x, F: y}, Opacity: 1, Content: ic()}
+	return &typeset.Group{Transform: typeset.Matrix{A: k, D: k, E: x, F: y}, Opacity: 1, Content: ic()}
 }
 
 // poly returns the closed polygon of the points xy, pairs of coordinates.
-func poly(xy ...float64) []compose.PathOp {
-	var ops []compose.PathOp
+func poly(xy ...float64) []typeset.PathOp {
+	var ops []typeset.PathOp
 	for i := 0; i+1 < len(xy); i += 2 {
-		k := compose.LineTo
+		k := typeset.LineTo
 		if i == 0 {
-			k = compose.MoveTo
+			k = typeset.MoveTo
 		}
-		ops = append(ops, compose.PathOp{Kind: k, P: [3]compose.Point{{X: xy[i], Y: xy[i+1]}}})
+		ops = append(ops, typeset.PathOp{Kind: k, P: [3]typeset.Point{{X: xy[i], Y: xy[i+1]}}})
 	}
-	return append(ops, compose.PathOp{Kind: compose.ClosePath})
+	return append(ops, typeset.PathOp{Kind: typeset.ClosePath})
 }
 
 // ellipse returns the path of the ellipse of centre (cx, cy) and radii rx
 // and ry, as four cubic Béziers.
-func ellipse(cx, cy, rx, ry float64) []compose.PathOp {
+func ellipse(cx, cy, rx, ry float64) []typeset.PathOp {
 	const k = 0.5522847498
-	pt := func(x, y float64) compose.Point { return compose.Point{X: x, Y: y} }
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{pt(cx+rx, cy)}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx+rx, cy+k*ry), pt(cx+k*rx, cy+ry), pt(cx, cy+ry)}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx-k*rx, cy+ry), pt(cx-rx, cy+k*ry), pt(cx-rx, cy)}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx-rx, cy-k*ry), pt(cx-k*rx, cy-ry), pt(cx, cy-ry)}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx+k*rx, cy-ry), pt(cx+rx, cy-k*ry), pt(cx+rx, cy)}},
-		{Kind: compose.ClosePath},
+	pt := func(x, y float64) typeset.Point { return typeset.Point{X: x, Y: y} }
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{pt(cx+rx, cy)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx+rx, cy+k*ry), pt(cx+k*rx, cy+ry), pt(cx, cy+ry)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx-k*rx, cy+ry), pt(cx-rx, cy+k*ry), pt(cx-rx, cy)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx-rx, cy-k*ry), pt(cx-k*rx, cy-ry), pt(cx, cy-ry)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx+k*rx, cy-ry), pt(cx+rx, cy-k*ry), pt(cx+rx, cy)}},
+		{Kind: typeset.ClosePath},
 	}
 }
 
 // shapeOf returns ops filled with fill and outlined with line, 0.6 of a
 // pixel wide, which draws as light as the theme's antialiased outlines;
 // a transparent colour leaves its part out.
-func shapeOf(ops []compose.PathOp, fill, line compose.Color) compose.Fragment {
-	p := &compose.Path{Ops: ops}
+func shapeOf(ops []typeset.PathOp, fill, line typeset.Color) typeset.Fragment {
+	p := &typeset.Path{Ops: ops}
 	if fill.A > 0 {
-		p.Fill = &compose.Fill{Color: fill}
+		p.Fill = &typeset.Fill{Color: fill}
 	}
 	if line.A > 0 {
-		p.Stroke = &compose.Stroke{Color: line, Width: 0.6, Join: compose.MiterJoin}
+		p.Stroke = &typeset.Stroke{Color: line, Width: 0.6, Join: typeset.MiterJoin}
 	}
 	return p
 }
 
 // strokeOf returns the open path ops stroked in c, w pixels wide.
-func strokeOf(ops []compose.PathOp, c compose.Color, w float64) compose.Fragment {
-	return &compose.Path{Ops: ops, Stroke: &compose.Stroke{Color: c, Width: w, Cap: compose.RoundCap, Join: compose.RoundJoin}}
+func strokeOf(ops []typeset.PathOp, c typeset.Color, w float64) typeset.Fragment {
+	return &typeset.Path{Ops: ops, Stroke: &typeset.Stroke{Color: c, Width: w, Cap: typeset.RoundCap, Join: typeset.RoundJoin}}
 }
 
 // line returns the path from (x0, y0) to (x1, y1).
-func line(x0, y0, x1, y1 float64) []compose.PathOp {
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{{X: x0, Y: y0}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: x1, Y: y1}}},
+func line(x0, y0, x1, y1 float64) []typeset.PathOp {
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x0, Y: y0}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x1, Y: y1}}},
 	}
 }
 
@@ -166,7 +166,7 @@ func line(x0, y0, x1, y1 float64) []compose.PathOp {
 // about the box's centre: 90 points down, -90 up, a diagonal one shrunk
 // to fit the box.
 func arrow(deg float64, c iconColors) icon {
-	return func() []compose.Fragment {
+	return func() []typeset.Fragment {
 		ops := poly(0.5, 4.5, 8.5, 4.5, 8.5, 0.5, 15.5, 8, 8.5, 15.5, 8.5, 11.5, 0.5, 11.5)
 		rad := deg * math.Pi / 180
 		sin, cos := math.Sincos(rad)
@@ -175,17 +175,17 @@ func arrow(deg float64, c iconColors) icon {
 			// A diagonal arrow runs from corner to corner.
 			k = 1.3
 		}
-		m := compose.Matrix{A: k * cos, B: k * sin, C: -k * sin, D: k * cos}
+		m := typeset.Matrix{A: k * cos, B: k * sin, C: -k * sin, D: k * cos}
 		m.E, m.F = 8-m.A*8-m.C*8, 8-m.B*8-m.D*8
-		return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: []compose.Fragment{shapeOf(ops, c.fill, c.line)}}}
+		return []typeset.Fragment{&typeset.Group{Transform: m, Opacity: 1, Content: []typeset.Fragment{shapeOf(ops, c.fill, c.line)}}}
 	}
 }
 
 // flag returns a flag on a dark pole.
 func flag(c iconColors) icon {
-	return func() []compose.Fragment {
-		return []compose.Fragment{
-			shapeOf(poly(2, 0, 4, 0, 4, 16, 2, 16), iconBlack.fill, compose.Color{}),
+	return func() []typeset.Fragment {
+		return []typeset.Fragment{
+			shapeOf(poly(2, 0, 4, 0, 4, 16, 2, 16), iconBlack.fill, typeset.Color{}),
 			shapeOf(poly(4.5, 1.5, 15.5, 1.5, 15.5, 8.5, 4.5, 8.5), c.fill, c.line),
 		}
 	}
@@ -193,67 +193,67 @@ func flag(c iconColors) icon {
 
 // disc returns a disc filling the box.
 func disc(c iconColors) icon {
-	return func() []compose.Fragment { return []compose.Fragment{shapeOf(ellipse(8, 8, 7.5, 7.5), c.fill, c.line)} }
+	return func() []typeset.Fragment { return []typeset.Fragment{shapeOf(ellipse(8, 8, 7.5, 7.5), c.fill, c.line)} }
 }
 
 // smallDisc returns a disc of half the box.
 func smallDisc(c iconColors) icon {
-	return func() []compose.Fragment { return []compose.Fragment{shapeOf(ellipse(8, 8, 5, 5), c.fill, c.line)} }
+	return func() []typeset.Fragment { return []typeset.Fragment{shapeOf(ellipse(8, 8, 5, 5), c.fill, c.line)} }
 }
 
 // lamp returns a coloured disc in a dark square, a traffic light.
-func lamp(c compose.Color) icon {
-	return func() []compose.Fragment {
-		return []compose.Fragment{
-			shapeOf(poly(0, 0, 16, 0, 16, 16, 0, 16), iconBlack.fill, compose.Color{}),
-			shapeOf(ellipse(8, 8, 6.5, 6.5), c, compose.Color{}),
+func lamp(c typeset.Color) icon {
+	return func() []typeset.Fragment {
+		return []typeset.Fragment{
+			shapeOf(poly(0, 0, 16, 0, 16, 16, 0, 16), iconBlack.fill, typeset.Color{}),
+			shapeOf(ellipse(8, 8, 6.5, 6.5), c, typeset.Color{}),
 		}
 	}
 }
 
 // diamond returns a diamond filling the box.
 func diamond(c iconColors) icon {
-	return func() []compose.Fragment {
-		return []compose.Fragment{shapeOf(poly(8, 0.5, 15.5, 8, 8, 15.5, 0.5, 8), c.fill, c.line)}
+	return func() []typeset.Fragment {
+		return []typeset.Fragment{shapeOf(poly(8, 0.5, 15.5, 8, 8, 15.5, 0.5, 8), c.fill, c.line)}
 	}
 }
 
 // triangle returns an upward triangle filling the box.
 func triangle(c iconColors) icon {
-	return func() []compose.Fragment {
-		return []compose.Fragment{shapeOf(poly(8, 1, 15.5, 15.5, 0.5, 15.5), c.fill, c.line)}
+	return func() []typeset.Fragment {
+		return []typeset.Fragment{shapeOf(poly(8, 1, 15.5, 15.5, 0.5, 15.5), c.fill, c.line)}
 	}
 }
 
 // pointer returns the small triangle of 3Triangles, pointing up or down.
 func pointer(up bool, c iconColors) icon {
-	return func() []compose.Fragment {
+	return func() []typeset.Fragment {
 		if up {
-			return []compose.Fragment{shapeOf(poly(8, 1.5, 15.5, 8.5, 0.5, 8.5), c.fill, c.line)}
+			return []typeset.Fragment{shapeOf(poly(8, 1.5, 15.5, 8.5, 0.5, 8.5), c.fill, c.line)}
 		}
-		return []compose.Fragment{shapeOf(poly(0.5, 7.5, 15.5, 7.5, 8, 14.5), c.fill, c.line)}
+		return []typeset.Fragment{shapeOf(poly(0.5, 7.5, 15.5, 7.5, 8, 14.5), c.fill, c.line)}
 	}
 }
 
 // dash returns the flat bar of 3Triangles' middle band.
 func dash(c iconColors) icon {
-	return func() []compose.Fragment {
-		return []compose.Fragment{shapeOf(poly(0.5, 6.5, 15.5, 6.5, 15.5, 9.5, 0.5, 9.5), c.fill, c.line)}
+	return func() []typeset.Fragment {
+		return []typeset.Fragment{shapeOf(poly(0.5, 6.5, 15.5, 6.5, 15.5, 9.5, 0.5, 9.5), c.fill, c.line)}
 	}
 }
 
 // symbol returns a disc with a white glyph: a cross 'x', an exclamation
 // mark '!' or a check mark 'v'.
 func symbol(c iconColors, glyph byte) icon {
-	return func() []compose.Fragment {
-		out := []compose.Fragment{shapeOf(ellipse(8, 8, 7.5, 7.5), c.fill, c.line)}
+	return func() []typeset.Fragment {
+		out := []typeset.Fragment{shapeOf(ellipse(8, 8, 7.5, 7.5), c.fill, c.line)}
 		switch glyph {
 		case 'x':
 			out = append(out, strokeOf(line(5, 5, 11, 11), iconWhite, 2), strokeOf(line(11, 5, 5, 11), iconWhite, 2))
 		case '!':
 			out = append(out, strokeOf(line(8, 3.5, 8, 9), iconWhite, 2), strokeOf(line(8, 12, 8, 12.5), iconWhite, 2))
 		default:
-			out = append(out, strokeOf(append(line(4.5, 8.5, 7, 11), compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{{X: 11.5, Y: 5}}}), iconWhite, 2))
+			out = append(out, strokeOf(append(line(4.5, 8.5, 7, 11), typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: 11.5, Y: 5}}}), iconWhite, 2))
 		}
 		return out
 	}
@@ -262,16 +262,16 @@ func symbol(c iconColors, glyph byte) icon {
 // face returns a disc with eyes and a mouth that frowns (mood -1), is flat
 // (0) or smiles (1).
 func face(c iconColors, mood float64) icon {
-	return func() []compose.Fragment {
+	return func() []typeset.Fragment {
 		feature := c.line
-		mouth := []compose.PathOp{
-			{Kind: compose.MoveTo, P: [3]compose.Point{{X: 4.5, Y: 10.5}}},
-			{Kind: compose.CurveTo, P: [3]compose.Point{{X: 6, Y: 10.5 + 2*mood}, {X: 10, Y: 10.5 + 2*mood}, {X: 11.5, Y: 10.5}}},
+		mouth := []typeset.PathOp{
+			{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: 4.5, Y: 10.5}}},
+			{Kind: typeset.CurveTo, P: [3]typeset.Point{{X: 6, Y: 10.5 + 2*mood}, {X: 10, Y: 10.5 + 2*mood}, {X: 11.5, Y: 10.5}}},
 		}
-		return []compose.Fragment{
+		return []typeset.Fragment{
 			shapeOf(ellipse(8, 8, 7.5, 7.5), c.fill, c.line),
-			shapeOf(ellipse(5.5, 5.5, 1, 1), feature, compose.Color{}),
-			shapeOf(ellipse(10.5, 5.5, 1, 1), feature, compose.Color{}),
+			shapeOf(ellipse(5.5, 5.5, 1, 1), feature, typeset.Color{}),
+			shapeOf(ellipse(10.5, 5.5, 1, 1), feature, typeset.Color{}),
 			strokeOf(mouth, feature, 1),
 		}
 	}
@@ -280,7 +280,7 @@ func face(c iconColors, mood float64) icon {
 // star returns a five-pointed star filled for the share full of its width
 // from the left, the rest grey.
 func star(full float64) icon {
-	return func() []compose.Fragment {
+	return func() []typeset.Fragment {
 		xy := make([]float64, 0, 20)
 		for i := range 10 {
 			r := 7.5
@@ -293,23 +293,23 @@ func star(full float64) icon {
 		ops := poly(xy...)
 		switch {
 		case full <= 0:
-			return []compose.Fragment{shapeOf(ops, iconLightGray.fill, iconBlack.line)}
+			return []typeset.Fragment{shapeOf(ops, iconLightGray.fill, iconBlack.line)}
 		case full >= 1:
-			return []compose.Fragment{shapeOf(ops, iconYellow.fill, iconYellow.line)}
+			return []typeset.Fragment{shapeOf(ops, iconYellow.fill, iconYellow.line)}
 		}
 		w := 16 * full
-		return []compose.Fragment{
-			shapeOf(ops, iconOff.fill, compose.Color{}),
-			&compose.Group{Clip: &compose.Path{Ops: poly(0, 0, w, 0, w, 16, 0, 16), Fill: &compose.Fill{}}, Opacity: 1, Content: []compose.Fragment{shapeOf(ops, iconYellow.fill, compose.Color{})}},
-			shapeOf(ops, compose.Color{}, iconYellow.line),
+		return []typeset.Fragment{
+			shapeOf(ops, iconOff.fill, typeset.Color{}),
+			&typeset.Group{Clip: &typeset.Path{Ops: poly(0, 0, w, 0, w, 16, 0, 16), Fill: &typeset.Fill{}}, Opacity: 1, Content: []typeset.Fragment{shapeOf(ops, iconYellow.fill, typeset.Color{})}},
+			shapeOf(ops, typeset.Color{}, iconYellow.line),
 		}
 	}
 }
 
 // bars returns four bars rising left to right, the first lit ones blue.
 func bars(lit int) icon {
-	return func() []compose.Fragment {
-		out := make([]compose.Fragment, 0, 4)
+	return func() []typeset.Fragment {
+		out := make([]typeset.Fragment, 0, 4)
 		for i := range 4 {
 			c := iconOff
 			if i < lit {
@@ -326,15 +326,15 @@ func bars(lit int) icon {
 // quarters returns a white disc filled grey by n quarters, clockwise from
 // twelve o'clock.
 func quarters(n int) icon {
-	return func() []compose.Fragment {
-		out := []compose.Fragment{shapeOf(ellipse(8, 8, 7.5, 7.5), iconWhite, iconBlack.line)}
+	return func() []typeset.Fragment {
+		out := []typeset.Fragment{shapeOf(ellipse(8, 8, 7.5, 7.5), iconWhite, iconBlack.line)}
 		switch {
 		case n >= 4:
 			out = append(out, shapeOf(ellipse(8, 8, 7.5, 7.5), iconGray.fill, iconBlack.line))
 		case n > 0:
 			clip := map[int][]float64{1: {8, 0, 16, 0, 16, 8, 8, 8}, 2: {8, 0, 16, 0, 16, 16, 8, 16}, 3: {8, 0, 16, 0, 16, 16, 0, 16, 0, 8, 8, 8}}[n]
-			pie := []compose.Fragment{shapeOf(ellipse(8, 8, 7.5, 7.5), iconGray.fill, compose.Color{})}
-			out = append(out, &compose.Group{Clip: &compose.Path{Ops: poly(clip...), Fill: &compose.Fill{}}, Opacity: 1, Content: pie})
+			pie := []typeset.Fragment{shapeOf(ellipse(8, 8, 7.5, 7.5), iconGray.fill, typeset.Color{})}
+			out = append(out, &typeset.Group{Clip: &typeset.Path{Ops: poly(clip...), Fill: &typeset.Fill{}}, Opacity: 1, Content: pie})
 		}
 		return out
 	}
@@ -343,9 +343,9 @@ func quarters(n int) icon {
 // boxes returns four boxes in a square, the first lit ones blue: bottom
 // left, bottom right, top left, then top right.
 func boxes(lit int) icon {
-	return func() []compose.Fragment {
+	return func() []typeset.Fragment {
 		at := [4][2]float64{{0.5, 9.5}, {9.5, 9.5}, {0.5, 0.5}, {9.5, 0.5}}
-		out := make([]compose.Fragment, 0, len(at))
+		out := make([]typeset.Fragment, 0, len(at))
 		for i, p := range at {
 			c := iconOff
 			if i < lit {

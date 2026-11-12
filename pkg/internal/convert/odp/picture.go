@@ -16,7 +16,6 @@ import (
 	_ "golang.org/x/image/tiff" // registers TIFF with image.Decode
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
@@ -24,6 +23,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/svg"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // picResult is one decoded picture, nil when it is not drawn.
@@ -103,7 +103,7 @@ func (r *reader) decodePicture(el *odf.Element) *layout.Picture {
 		pic.Width, pic.Height = float64(cfg.Width)*72/dx, float64(cfg.Height)*72/dy
 	}
 	if format == "jpeg" && (cfg.ColorModel == imgcolor.GrayModel || cfg.ColorModel == imgcolor.YCbCrModel || cfg.ColorModel == imgcolor.CMYKModel) {
-		src, err := compose.JPEGImage(r.ctx, data)
+		src, err := typeset.JPEGImage(r.ctx, data)
 		if err != nil {
 			r.warn("picture-decode", "a jpeg picture does not decode")
 			return nil
@@ -123,7 +123,7 @@ func (r *reader) decodePicture(el *odf.Element) *layout.Picture {
 		r.warn("picture-decode", fmt.Sprintf("a %s picture does not decode", format))
 		return nil
 	}
-	src, err := compose.EncodeImage(r.ctx, im)
+	src, err := typeset.EncodeImage(r.ctx, im)
 	if err != nil {
 		r.warn("picture-decode", fmt.Sprintf("a %s picture does not encode: %v", format, err))
 		return nil
@@ -142,12 +142,12 @@ func (r *reader) decodePicture(el *odf.Element) *layout.Picture {
 //   - libreoffice/odp: sd/tdf105362's master frame of 28.3 by 21.1 cm holding a
 //     square SVG of a viewBox alone prints black over the whole slide.
 func stretchedSVG(doc *svg.Document, w, h float64) *layout.Picture {
-	return &layout.Picture{Width: w, Height: h, NoRatio: true, Vector: func(ctx context.Context, area compose.Rect) []compose.Fragment {
+	return &layout.Picture{Width: w, Height: h, NoRatio: true, Vector: func(ctx context.Context, area typeset.Rect) []typeset.Fragment {
 		if w <= 0 || h <= 0 {
 			return nil
 		}
-		m := compose.Matrix{A: area.Width / w, D: area.Height / h, E: area.X, F: area.Y}
-		return []compose.Fragment{&compose.Group{Transform: m, Opacity: 1, Content: doc.Draw(ctx, compose.Rect{Width: w, Height: h})}}
+		m := typeset.Matrix{A: area.Width / w, D: area.Height / h, E: area.X, F: area.Y}
+		return []typeset.Fragment{&typeset.Group{Transform: m, Opacity: 1, Content: doc.Draw(ctx, typeset.Rect{Width: w, Height: h})}}
 	}}
 }
 
@@ -199,16 +199,16 @@ func (r *reader) cropped(pic *layout.Picture, clip string) *layout.Picture {
 		return pic
 	}
 	src := pic
-	return &layout.Picture{Width: w, Height: h, Vector: func(ctx context.Context, rect compose.Rect) []compose.Fragment {
+	return &layout.Picture{Width: w, Height: h, Vector: func(ctx context.Context, rect typeset.Rect) []typeset.Fragment {
 		sx, sy := rect.Width/w, rect.Height/h
-		full := compose.Rect{X: rect.X - in[css.Left]*sx, Y: rect.Y - in[css.Top]*sy, Width: src.Width * sx, Height: src.Height * sy}
-		var content []compose.Fragment
+		full := typeset.Rect{X: rect.X - in[css.Left]*sx, Y: rect.Y - in[css.Top]*sy, Width: src.Width * sx, Height: src.Height * sy}
+		var content []typeset.Fragment
 		if src.Vector != nil {
 			content = src.Vector(ctx, full)
 		} else {
-			content = []compose.Fragment{&compose.Image{Rect: full, Source: src.Source}}
+			content = []typeset.Fragment{&typeset.Image{Rect: full, Source: src.Source}}
 		}
-		return []compose.Fragment{&compose.Group{Clip: &compose.Path{Ops: shape.RectOps(rect)}, Content: content}}
+		return []typeset.Fragment{&typeset.Group{Clip: &typeset.Path{Ops: shape.RectOps(rect)}, Content: content}}
 	}}
 }
 
@@ -254,16 +254,16 @@ func (r *reader) object(obj *odf.Element) *chart.Chart {
 // of that opacity.
 func translucent(pic *layout.Picture, op float64) *layout.Picture {
 	if op <= 0 {
-		return &layout.Picture{Width: pic.Width, Height: pic.Height, Vector: func(context.Context, compose.Rect) []compose.Fragment { return nil }}
+		return &layout.Picture{Width: pic.Width, Height: pic.Height, Vector: func(context.Context, typeset.Rect) []typeset.Fragment { return nil }}
 	}
 	src := pic
-	return &layout.Picture{Width: pic.Width, Height: pic.Height, Vector: func(ctx context.Context, rect compose.Rect) []compose.Fragment {
-		var content []compose.Fragment
+	return &layout.Picture{Width: pic.Width, Height: pic.Height, Vector: func(ctx context.Context, rect typeset.Rect) []typeset.Fragment {
+		var content []typeset.Fragment
 		if src.Vector != nil {
 			content = src.Vector(ctx, rect)
 		} else {
-			content = []compose.Fragment{&compose.Image{Rect: rect, Source: src.Source}}
+			content = []typeset.Fragment{&typeset.Image{Rect: rect, Source: src.Source}}
 		}
-		return []compose.Fragment{&compose.Group{Opacity: op, Content: content}}
+		return []typeset.Fragment{&typeset.Group{Opacity: op, Content: content}}
 	}}
 }

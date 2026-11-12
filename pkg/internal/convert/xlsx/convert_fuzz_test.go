@@ -5,9 +5,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // fuzzSheet is a worksheet exercising most of the reader.
@@ -61,7 +61,7 @@ func FuzzConvert(f *testing.F) {
 		checkModel(t, doc)
 		for _, d := range doc.Sheets[0].Drawings {
 			if d.Picture != nil && d.Picture.Vector != nil {
-				d.Picture.Vector(context.Background(), compose.Rect{Width: 50, Height: 20})
+				d.Picture.Vector(context.Background(), typeset.Rect{Width: 50, Height: 20})
 			}
 		}
 	})

@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // understood lists the namespaces whose mc:Choice the converter reads
@@ -71,7 +71,7 @@ type document struct {
 	// linesAndChars), 0 for none.
 	linePitch float64
 
-	warnings []compose.Warning
+	warnings []typeset.Warning
 	warned   map[string]bool
 	headings []heading
 	// nextID numbers the anchors the converter makes up.
@@ -293,7 +293,7 @@ func (d *document) warn(code, msg string) {
 		return
 	}
 	d.warned[key] = true
-	d.warnings = append(d.warnings, compose.Warning{Code: code, Message: msg})
+	d.warnings = append(d.warnings, typeset.Warning{Code: code, Message: msg})
 }
 
 // newID returns an anchor ID no document name can take.

@@ -12,11 +12,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 )
 
@@ -197,7 +197,7 @@ func pinnedFonts(t testing.TB) *text.Fonts {
 }
 
 // convertBytes converts a DOCX package with the test fonts.
-func convertBytes(t testing.TB, data []byte, opts office.Options) *compose.Document {
+func convertBytes(t testing.TB, data []byte, opts office.Options) *typeset.Document {
 	t.Helper()
 	doc, err := Convert(context.Background(), bytes.NewReader(data), testFonts(t), opts)
 	if err != nil {
@@ -208,14 +208,14 @@ func convertBytes(t testing.TB, data []byte, opts office.Options) *compose.Docum
 
 // pageText returns the text of a page's fragments in paint order, runs
 // joined by a space, lines by a newline when they start lower.
-func pageText(pg *compose.Page) string {
+func pageText(pg *typeset.Page) string {
 	var b strings.Builder
 	lastY := -1.0
-	var walk func([]compose.Fragment)
-	walk = func(frags []compose.Fragment) {
+	var walk func([]typeset.Fragment)
+	walk = func(frags []typeset.Fragment) {
 		for _, f := range frags {
 			switch v := f.(type) {
-			case *compose.Text:
+			case *typeset.Text:
 				var s strings.Builder
 				for _, g := range v.Glyphs {
 					s.WriteString(g.Text)
@@ -227,7 +227,7 @@ func pageText(pg *compose.Page) string {
 				}
 				b.WriteString(s.String())
 				lastY = v.Origin.Y
-			case *compose.Group:
+			case *typeset.Group:
 				walk(v.Content)
 			}
 		}
@@ -241,7 +241,7 @@ func pageText(pg *compose.Page) string {
 }
 
 // docText returns the text of every page, pages separated by a form feed.
-func docText(doc *compose.Document) string {
+func docText(doc *typeset.Document) string {
 	parts := make([]string, len(doc.Pages))
 	for i, pg := range doc.Pages {
 		parts[i] = pageText(pg)

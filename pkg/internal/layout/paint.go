@@ -7,16 +7,16 @@ import (
 
 	gofont "github.com/go-text/typesetting/font"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // ditem is one node of the display list, in flow coordinates: a fragment,
 // or a group of them under an opacity or a clip.
 type ditem struct {
-	frag compose.Fragment
+	frag typeset.Fragment
 	// y0 and y1 are the flow extent of the fragment; page, when not
 	// negative, is the one page it paints on, else it paints on every page
 	// it overlaps.
@@ -26,8 +26,8 @@ type ditem struct {
 	// opacity, clip and transform are the group's, in flow coordinates;
 	// transform is nil for none.
 	opacity   float64
-	clip      *compose.Path
-	transform *compose.Matrix
+	clip      *typeset.Path
+	transform *typeset.Matrix
 	// fixed reports the group of a fixed box: its content is in the
 	// coordinates of the first page and paints on every page (CSS 2.1,
 	// 9.6.1).
@@ -57,7 +57,7 @@ type frame struct {
 // pendingLink is a link region in flow coordinates.
 type pendingLink struct {
 	lk   *link
-	rect compose.Rect
+	rect typeset.Rect
 }
 
 // painter turns the laid-out box tree into a display list in the painting
@@ -89,9 +89,9 @@ type painter struct {
 	shadowPixels int
 	// outlines caches the parsed faces whose glyph outlines a
 	// background-clip: text clip draws.
-	outlines map[*compose.Face]*gofont.Face
+	outlines map[*typeset.Face]*gofont.Face
 	// crops caches the parts of raster images border images cut out.
-	crops map[cropKey]*compose.ImageSource
+	crops map[cropKey]*typeset.ImageSource
 	// strip is the inline box fragment being painted, laid on the strip
 	// of all its fragments for its border image; nil for none.
 	strip *imageStrip
@@ -240,12 +240,12 @@ func (p *painter) sync(chain []*box) *ditem {
 // A box that is not a scroll container clips at the edge and past it by
 // the margin its overflow-clip-margin names, the corners rounded by the
 // edge's radii grown by that margin (CSS Overflow 4, 3.2).
-func (p *painter) clipPath(b *box) *compose.Path {
+func (p *painter) clipPath(b *box) *typeset.Path {
 	// The clip stays where b's own relative offsets put it, whichever
 	// relatively positioned descendant asks for it.
 	ax, ay := ancestorOffset(b)
 	ox, oy := offset(b)
-	r := compose.Rect{X: b.x + ax + ox, Y: b.y + ay + oy, Width: b.borderW(), Height: b.borderH()}
+	r := typeset.Rect{X: b.x + ax + ox, Y: b.y + ay + oy, Width: b.borderW(), Height: b.borderH()}
 	radii := radiiOf(b, r.Width, r.Height)
 	cm := b.st.OverflowClipMargin
 	if b.st.ScrollContainer() {
@@ -264,19 +264,19 @@ func (p *painter) clipPath(b *box) *compose.Path {
 	case css.ClipBorderBox:
 	}
 	if m := cm.Margin; m > 0 {
-		pr = compose.Rect{X: pr.X - m, Y: pr.Y - m, Width: pr.Width + 2*m, Height: pr.Height + 2*m}
+		pr = typeset.Rect{X: pr.X - m, Y: pr.Y - m, Width: pr.Width + 2*m, Height: pr.Height + 2*m}
 		for c := range pradii {
 			if pradii[c] != [2]float64{} {
 				pradii[c] = [2]float64{pradii[c][0] + m, pradii[c][1] + m}
 			}
 		}
 	}
-	return &compose.Path{Ops: roundedRect(pr, pradii), Fill: &compose.Fill{Rule: compose.NonZero}}
+	return &typeset.Path{Ops: roundedRect(pr, pradii), Fill: &typeset.Fill{Rule: typeset.NonZero}}
 }
 
 // emit adds a fragment of box b to the display list. content reports a
 // fragment of b's content, which b's own clip covers.
-func (p *painter) emit(b *box, content bool, frag compose.Fragment, y0, y1 float64, page int) {
+func (p *painter) emit(b *box, content bool, frag typeset.Fragment, y0, y1 float64, page int) {
 	c := p.sync(p.chain(b, content))
 	if p.mono >= 0 {
 		page = p.mono
@@ -284,13 +284,13 @@ func (p *painter) emit(b *box, content bool, frag compose.Fragment, y0, y1 float
 	if p.artifact {
 		frag = cloneFragment(frag)
 		switch v := frag.(type) {
-		case *compose.Text:
+		case *typeset.Text:
 			v.Parent = nil
-		case *compose.Image:
+		case *typeset.Image:
 			v.Parent = nil
-		case *compose.Path:
+		case *typeset.Path:
 			v.Parent = nil
-		case *compose.Group:
+		case *typeset.Group:
 			v.Content = adopt(v.Content, nil, 0)
 		}
 	}
@@ -298,8 +298,8 @@ func (p *painter) emit(b *box, content bool, frag compose.Fragment, y0, y1 float
 }
 
 // borderRect returns b's border box with the relative offset in force.
-func (p *painter) borderRect(b *box) compose.Rect {
-	return compose.Rect{X: b.x + p.dx, Y: b.y + p.dy, Width: b.borderW(), Height: b.borderH()}
+func (p *painter) borderRect(b *box) typeset.Rect {
+	return typeset.Rect{X: b.x + p.dx, Y: b.y + p.dy, Width: b.borderW(), Height: b.borderH()}
 }
 
 // offset returns the relative positioning offset of b (CSS 2.1, 9.4.3).
@@ -395,7 +395,7 @@ func (p *painter) unit(b *box, own bool) {
 		savedMono := p.mono
 		p.mono = b.anchorPage
 		defer func() { p.mono = savedMono }()
-		id := compose.Identity
+		id := typeset.Identity
 		push(&ditem{group: true, opacity: 1, transform: &id, page: b.anchorPage})
 	}
 	m, has, visible := transformOf(b, p.borderRect(b))
@@ -619,7 +619,7 @@ func (p *painter) replaced(b *box) {
 	if b.hidden || b.picture == nil || b.w <= 0 || b.h <= 0 {
 		return
 	}
-	box := compose.Rect{X: b.contentX() + p.dx, Y: b.contentY() + p.dy, Width: b.w, Height: b.h}
+	box := typeset.Rect{X: b.contentX() + p.dx, Y: b.contentY() + p.dy, Width: b.w, Height: b.h}
 	r := objectRect(b.st, objectPicture(b.st, b.picture, b.w, b.h), box)
 	img := p.e.pictureFrag(b.picture, r, b.elem)
 	if img == nil {
@@ -633,7 +633,7 @@ func (p *painter) replaced(b *box) {
 	if p.mono >= 0 {
 		page = p.mono
 	}
-	g := &ditem{group: true, opacity: 1, clip: &compose.Path{Ops: rectOps(box), Fill: &compose.Fill{}}}
+	g := &ditem{group: true, opacity: 1, clip: &typeset.Path{Ops: rectOps(box), Fill: &typeset.Fill{}}}
 	g.kids = append(g.kids, &ditem{frag: img, y0: box.Y, y1: box.Y + box.Height, page: page})
 	c := p.sync(p.chain(b, false))
 	c.kids = append(c.kids, g)
@@ -644,7 +644,7 @@ func (p *painter) replaced(b *box) {
 // 5.6): fill stretches it over the box, contain and cover scale it keeping
 // its ratio, none keeps its intrinsic size, scale-down the smaller of none
 // and contain.
-func objectRect(st *css.Style, pic *Picture, box compose.Rect) compose.Rect {
+func objectRect(st *css.Style, pic *Picture, box typeset.Rect) typeset.Rect {
 	iw, ih := pic.Width, pic.Height
 	if st.ObjectFit == css.FitFill || !numeric.Positive(iw) || !numeric.Positive(ih) {
 		return box
@@ -661,7 +661,7 @@ func objectRect(st *css.Style, pic *Picture, box compose.Rect) compose.Rect {
 	case css.FitNone, css.FitFill:
 	}
 	w, h := iw*k, ih*k
-	return compose.Rect{
+	return typeset.Rect{
 		X:     box.X + resolve(st.ObjectPosition[0], box.Width-w),
 		Y:     box.Y + resolve(st.ObjectPosition[1], box.Height-h),
 		Width: w, Height: h,
@@ -696,7 +696,7 @@ func (p *painter) marker(b *box) {
 		return
 	}
 	if m.picture != nil {
-		r := compose.Rect{X: m.x + p.dx, Y: m.baseline - m.picture.Height + p.dy, Width: m.picture.Width, Height: m.picture.Height}
+		r := typeset.Rect{X: m.x + p.dx, Y: m.baseline - m.picture.Height + p.dy, Width: m.picture.Width, Height: m.picture.Height}
 		if f := p.e.pictureFrag(m.picture, r, m.elem); f != nil {
 			p.emit(b, false, f, r.Y, r.Y+r.Height, p.e.pageOf(m.baseline-m.ascent))
 		}
@@ -711,7 +711,7 @@ func (p *painter) marker(b *box) {
 			continue
 		}
 		c := *t
-		c.Origin = compose.Point{X: m.x + t.Origin.X + p.dx, Y: m.baseline + p.dy}
+		c.Origin = typeset.Point{X: m.x + t.Origin.X + p.dx, Y: m.baseline + p.dy}
 		c.Parent = m.elem
 		p.emit(b, false, &c, m.baseline-m.ascent, m.baseline, p.e.pageOf(m.baseline-m.ascent+eps))
 	}
@@ -733,15 +733,15 @@ func (p *painter) symbolMarker(b *box, m *markerBox) {
 	r := m.sym
 	r.X += p.dx
 	r.Y += p.dy
-	var path *compose.Path
+	var path *typeset.Path
 	switch mst.ListStyleType { //nolint:exhaustive // a symbol marker is a disc, a circle or a square
 	case css.Square:
-		path = &compose.Path{Ops: rectOps(r), Fill: &compose.Fill{Color: col}}
+		path = &typeset.Path{Ops: rectOps(r), Fill: &typeset.Fill{Color: col}}
 	case css.Circle:
 		sw := min(css.Pt, r.Width/2)
-		path = &compose.Path{Ops: circleOps(r.X+r.Width/2, r.Y+r.Height/2, (r.Width-sw)/2), Stroke: &compose.Stroke{Color: col, Width: sw}}
+		path = &typeset.Path{Ops: circleOps(r.X+r.Width/2, r.Y+r.Height/2, (r.Width-sw)/2), Stroke: &typeset.Stroke{Color: col, Width: sw}}
 	default:
-		path = &compose.Path{Ops: circleOps(r.X+r.Width/2, r.Y+r.Height/2, r.Width/2), Fill: &compose.Fill{Color: col}}
+		path = &typeset.Path{Ops: circleOps(r.X+r.Width/2, r.Y+r.Height/2, r.Width/2), Fill: &typeset.Fill{Color: col}}
 	}
 	path.Parent = m.elem
 	p.emit(b, false, path, r.Y, r.Y+r.Height, p.e.pageOf(m.sym.Y+eps))
@@ -786,7 +786,7 @@ func (p *painter) line(l *lineBox) {
 		}
 	}
 	type span struct {
-		rect compose.Rect
+		rect typeset.Rect
 		set  bool
 	}
 	var linkOrder []*link
@@ -815,7 +815,7 @@ func (p *painter) line(l *lineBox) {
 		p.dx -= ox
 		p.dy -= oy
 		if lk := it.box.link; lk != nil && lk.node != nil && isInlineLink(lk, it.box) {
-			r := compose.Rect{X: l.x + it.x + p.dx, Y: l.y + it.baseline - it.ascent + p.dy, Width: it.w, Height: it.ascent + it.descent}
+			r := typeset.Rect{X: l.x + it.x + p.dx, Y: l.y + it.baseline - it.ascent + p.dy, Width: it.w, Height: it.ascent + it.descent}
 			if it.atomic != nil {
 				r = p.borderRect(it.atomic)
 			}
@@ -846,7 +846,7 @@ func (p *painter) lineFrag(l *lineBox, f *inlineFrag, page int) {
 		return
 	}
 	ox, oy := inlineOffset(f.box)
-	r := compose.Rect{X: l.x + f.x0 + p.dx + ox, Y: l.y + f.top + p.dy + oy, Width: f.x1 - f.x0, Height: f.bottom - f.top}
+	r := typeset.Rect{X: l.x + f.x0 + p.dx + ox, Y: l.y + f.top + p.dy + oy, Width: f.x1 - f.x0, Height: f.bottom - f.top}
 	if r.Width <= 0 && r.Height <= 0 {
 		return
 	}
@@ -895,15 +895,15 @@ func isInlineLink(lk *link, b *box) bool {
 }
 
 // union returns the smallest rectangle holding a and b.
-func union(a, b compose.Rect) compose.Rect {
+func union(a, b typeset.Rect) typeset.Rect {
 	x0, y0 := min(a.X, b.X), min(a.Y, b.Y)
 	x1, y1 := max(a.X+a.Width, b.X+b.Width), max(a.Y+a.Height, b.Y+b.Height)
-	return compose.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
+	return typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
 }
 
 // inlineFrag paints the background and borders of one line fragment of an
 // inline box (CSS 2.1, 8.6; box-decoration-break: slice).
-func (p *painter) inlineFrag(b *box, r compose.Rect, radii [4][2]float64, bd, pd [4]float64, sides [4]bool, page int) {
+func (p *painter) inlineFrag(b *box, r typeset.Rect, radii [4][2]float64, bd, pd [4]float64, sides [4]bool, page int) {
 	saved := p.mono
 	if p.mono < 0 {
 		p.mono = page
@@ -940,7 +940,7 @@ func (p *painter) text(it *lineItem, l *lineBox, page int) {
 	p.textShadows(it, l, page, alpha)
 	p.textDecorations(it, l, page, alpha, css.Underline|css.Overline)
 	c := *t
-	c.Origin = compose.Point{X: l.x + t.Origin.X + p.dx, Y: l.y + t.Origin.Y + p.dy}
+	c.Origin = typeset.Point{X: l.x + t.Origin.X + p.dx, Y: l.y + t.Origin.Y + p.dy}
 	c.Color.A *= alpha
 	c.Parent = it.box.elem
 	top, bottom := l.y+it.baseline-it.ascent, l.y+it.baseline+it.descent
@@ -1040,17 +1040,17 @@ func (p *painter) textDecorations(it *lineItem, l *lineBox, page int, alpha floa
 // overline or line-through, away from the glyphs for an underline),
 // dotted and dashed lines are dashes of one and three thicknesses, a wavy
 // line zigzags over twice the thickness.
-func (p *painter) decoLine(it *lineItem, l *lineBox, page int, st css.DecorationStyle, col compose.Color, y, thick float64, under bool) {
+func (p *painter) decoLine(it *lineItem, l *lineBox, page int, st css.DecorationStyle, col typeset.Color, y, thick float64, under bool) {
 	x0 := l.x + it.x + p.dx
 	w := it.w
 	if w <= 0 {
 		return
 	}
 	top := l.y + y + p.dy
-	add := func(ops []compose.PathOp, fill bool, stroke *compose.Stroke) {
-		path := &compose.Path{Ops: ops, Stroke: stroke}
+	add := func(ops []typeset.PathOp, fill bool, stroke *typeset.Stroke) {
+		path := &typeset.Path{Ops: ops, Stroke: stroke}
 		if fill {
-			path.Fill = &compose.Fill{Color: col}
+			path.Fill = &typeset.Fill{Color: col}
 		}
 		p.emit(it.box, true, path, l.y, l.y+l.h, page)
 	}
@@ -1060,33 +1060,33 @@ func (p *painter) decoLine(it *lineItem, l *lineBox, page int, st css.Decoration
 		if !under {
 			second = top - 2*thick
 		}
-		add(rectOps(compose.Rect{X: x0, Y: top, Width: w, Height: thick}), true, nil)
-		add(rectOps(compose.Rect{X: x0, Y: second, Width: w, Height: thick}), true, nil)
+		add(rectOps(typeset.Rect{X: x0, Y: top, Width: w, Height: thick}), true, nil)
+		add(rectOps(typeset.Rect{X: x0, Y: second, Width: w, Height: thick}), true, nil)
 	case css.DecorationDotted, css.DecorationDashed:
 		dash := []float64{thick, thick}
 		if st == css.DecorationDashed {
 			dash = []float64{3 * thick, 3 * thick}
 		}
 		mid := top + thick/2
-		add([]compose.PathOp{
-			{Kind: compose.MoveTo, P: [3]compose.Point{{X: x0, Y: mid}}},
-			{Kind: compose.LineTo, P: [3]compose.Point{{X: x0 + w, Y: mid}}},
-		}, false, &compose.Stroke{Color: col, Width: thick, Dash: dash})
+		add([]typeset.PathOp{
+			{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x0, Y: mid}}},
+			{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x0 + w, Y: mid}}},
+		}, false, &typeset.Stroke{Color: col, Width: thick, Dash: dash})
 	case css.DecorationWavy:
 		mid := top + thick/2
 		step := 2 * thick
-		ops := []compose.PathOp{{Kind: compose.MoveTo, P: [3]compose.Point{{X: x0, Y: mid}}}}
+		ops := []typeset.PathOp{{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x0, Y: mid}}}}
 		n := min(int(math.Ceil(w/step)), maxWaveSegments) // fits int: capped
 		for k := 1; k <= n; k++ {
 			dy := thick
 			if k%2 == 1 {
 				dy = -thick
 			}
-			ops = append(ops, compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{{X: min(x0+float64(k)*step, x0+w), Y: mid + dy}}})
+			ops = append(ops, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: min(x0+float64(k)*step, x0+w), Y: mid + dy}}})
 		}
-		add(ops, false, &compose.Stroke{Color: col, Width: thick})
+		add(ops, false, &typeset.Stroke{Color: col, Width: thick})
 	case css.DecorationSolid:
-		add(rectOps(compose.Rect{X: x0, Y: top, Width: w, Height: thick}), true, nil)
+		add(rectOps(typeset.Rect{X: x0, Y: top, Width: w, Height: thick}), true, nil)
 	}
 }
 

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // notesPaper returns the paper an OpenDocument notes page prints on: the
@@ -38,7 +38,7 @@ func notesPaper(opts office.Options) (float64, float64) {
 // for a document that is not an OpenDocument presentation,
 // office.ErrInputTooLarge past a size cap and office.ErrTooManyPages past
 // the page cap. The output depends on src, fonts' index and opts alone.
-func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*compose.Document, error) {
+func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*typeset.Document, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
@@ -74,13 +74,13 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 // resolved into every shape (ODF 1.3, Part 3, 10.2 and 16.9). fonts,
 // which may be nil, parses the text of SVG pictures; password opens an
 // encrypted package. It fails as [Convert] does.
-func Read(ctx context.Context, data []byte, fonts *text.Fonts, password string) (*slides.Document, []compose.Warning, error) {
+func Read(ctx context.Context, data []byte, fonts *text.Fonts, password string) (*slides.Document, []typeset.Warning, error) {
 	return readDocument(ctx, data, fonts, password, false)
 }
 
 // readDocument reads data as [Read] does, and the handout master too when
 // handouts asks for it.
-func readDocument(ctx context.Context, data []byte, fonts *text.Fonts, password string, handouts bool) (*slides.Document, []compose.Warning, error) {
+func readDocument(ctx context.Context, data []byte, fonts *text.Fonts, password string, handouts bool) (*slides.Document, []typeset.Warning, error) {
 	pkg, err := odf.Open(ctx, data, odf.Options{Password: password})
 	if err != nil {
 		return nil, nil, fmt.Errorf("reading ODP: %w", err)

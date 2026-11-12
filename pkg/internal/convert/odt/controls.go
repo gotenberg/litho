@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/formfield"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // The faces, sizes and places LibreOffice prints a form control's content
@@ -142,7 +142,7 @@ func (b *builder) formControl(c *odf.Element, g frameGeom) *layout.Node {
 		return n
 	}
 	f, ok := controlField(el, len(b.controls))
-	var other func([]compose.Fragment, compose.Rect, *compose.Measurer) []compose.Fragment
+	var other func([]typeset.Fragment, typeset.Rect, *typeset.Measurer) []typeset.Fragment
 	switch el.Name.Local {
 	case "text", "formatted-text", "date", "time", "number", "combobox":
 		frame(st)
@@ -165,9 +165,9 @@ func (b *builder) formControl(c *odf.Element, g frameGeom) *layout.Node {
 		}
 		n.Children = []*layout.Node{b.node(&layout.Node{Kind: layout.Replaced, Style: markStyle(g), Picture: &layout.Picture{
 			Width: max(g.w, 1), Height: max(g.h, 1),
-			Vector: func(_ context.Context, r compose.Rect) []compose.Fragment { return on(r) },
+			Vector: func(_ context.Context, r typeset.Rect) []typeset.Fragment { return on(r) },
 		}})}
-		other = func(_ []compose.Fragment, r compose.Rect, _ *compose.Measurer) []compose.Fragment { return off(r) }
+		other = func(_ []typeset.Fragment, r typeset.Rect, _ *typeset.Measurer) []typeset.Fragment { return off(r) }
 	case "button":
 		st.BackgroundColor = css.Color{R: 0.753, G: 0.753, B: 0.753, A: 1}
 		n.Children = b.controlLine(el.A(odf.NSForm, "label"), g, controlFamily, controlFontSize, controlLine)
@@ -210,8 +210,8 @@ func frame(st *css.Style) {
 //     control in a page header is neither printed nor exported. The /TU
 //     of every field is its name, form:title set or not. The widget of a
 //     control sits about 2 points inside its frame.
-func controlField(el *odf.Element, n int) (compose.Field, bool) {
-	f := compose.Field{
+func controlField(el *odf.Element, n int) (typeset.Field, bool) {
+	f := typeset.Field{
 		Name:        el.A(odf.NSForm, "name"),
 		Description: el.A(odf.NSForm, "title"),
 		FontSize:    controlFontSize,
@@ -220,27 +220,27 @@ func controlField(el *odf.Element, n int) (compose.Field, bool) {
 	}
 	switch el.Name.Local {
 	case "text", "textarea", "formatted-text", "date", "time", "number":
-		f.Kind = compose.FieldText
+		f.Kind = typeset.FieldText
 		f.Value = controlText(el)
 		f.Multiline = el.Name.Local == "textarea"
-		if v, err := strconv.Atoi(el.A(odf.NSForm, "max-length")); err == nil && v > 0 && v <= compose.MaxFieldText {
+		if v, err := strconv.Atoi(el.A(odf.NSForm, "max-length")); err == nil && v > 0 && v <= typeset.MaxFieldText {
 			// form:max-length is a non-negative integer (ODF 1.3, Part 3,
 			// 19.243); a count past what a field holds is no limit.
 			f.MaxLen = v
 		}
 	case "combobox":
-		f.Kind, f.Editable = compose.FieldCombo, true
+		f.Kind, f.Editable = typeset.FieldCombo, true
 		f.Value = controlText(el)
 		for _, it := range el.All(odf.NSForm, "item") {
 			f.Options = append(f.Options, it.A(odf.NSForm, "label"))
 		}
 	case "listbox":
-		f.Kind = compose.FieldList
+		f.Kind = typeset.FieldList
 		if el.A(odf.NSForm, "dropdown") == "true" {
-			f.Kind = compose.FieldCombo
+			f.Kind = typeset.FieldCombo
 			f.FontSize = dropFontSize
 		}
-		f.MultiSelect = f.Kind == compose.FieldList && el.A(odf.NSForm, "multiple") == "true"
+		f.MultiSelect = f.Kind == typeset.FieldList && el.A(odf.NSForm, "multiple") == "true"
 		for i, o := range el.All(odf.NSForm, "option") {
 			label := o.A(odf.NSForm, "label")
 			f.Options = append(f.Options, label)
@@ -255,9 +255,9 @@ func controlField(el *odf.Element, n int) (compose.Field, bool) {
 			f.Selected = nil
 		}
 	case "checkbox":
-		f.Kind, f.Checked = compose.FieldCheckBox, checkedBox(el)
+		f.Kind, f.Checked = typeset.FieldCheckBox, checkedBox(el)
 	case "radio":
-		f.Kind, f.Checked = compose.FieldRadio, selectedOption(el)
+		f.Kind, f.Checked = typeset.FieldRadio, selectedOption(el)
 		f.OnState = radioState(el, n)
 	default:
 		return f, false
@@ -392,36 +392,36 @@ func markStyle(g frameGeom) *css.Style {
 // its on state (on) or its off state in a rectangle, the control's frame:
 // a square with a cross, or a ring with a dot, of [markScale] of the
 // frame's shorter side at its top-left corner.
-func markVector(kind compose.FieldKind) func(on bool) func(r compose.Rect) []compose.Fragment {
+func markVector(kind typeset.FieldKind) func(on bool) func(r typeset.Rect) []typeset.Fragment {
 	const line = 0.6
-	return func(on bool) func(r compose.Rect) []compose.Fragment {
-		return func(r compose.Rect) []compose.Fragment {
+	return func(on bool) func(r typeset.Rect) []typeset.Fragment {
+		return func(r typeset.Rect) []typeset.Fragment {
 			s := min(r.Width, r.Height) * markScale
 			x0, y0 := r.X, r.Y
-			black, white := compose.Black, compose.Color{R: 1, G: 1, B: 1, A: 1}
-			if kind == compose.FieldRadio {
-				out := []compose.Fragment{
-					&compose.Path{Ops: ellipse(x0, y0, x0+s, y0+s), Fill: &compose.Fill{Color: black}},
-					&compose.Path{Ops: ellipse(x0+line, y0+line, x0+s-line, y0+s-line), Fill: &compose.Fill{Color: white}},
+			black, white := typeset.Black, typeset.Color{R: 1, G: 1, B: 1, A: 1}
+			if kind == typeset.FieldRadio {
+				out := []typeset.Fragment{
+					&typeset.Path{Ops: ellipse(x0, y0, x0+s, y0+s), Fill: &typeset.Fill{Color: black}},
+					&typeset.Path{Ops: ellipse(x0+line, y0+line, x0+s-line, y0+s-line), Fill: &typeset.Fill{Color: white}},
 				}
 				if on {
 					d := s * 0.15
-					out = append(out, &compose.Path{Ops: ellipse(x0+d, y0+d, x0+s-d, y0+s-d), Fill: &compose.Fill{Color: black}})
+					out = append(out, &typeset.Path{Ops: ellipse(x0+d, y0+d, x0+s-d, y0+s-d), Fill: &typeset.Fill{Color: black}})
 				}
 				return out
 			}
-			out := []compose.Fragment{
-				&compose.Path{Ops: box(x0, y0, s, s), Fill: &compose.Fill{Color: black}},
-				&compose.Path{Ops: box(x0+line, y0+line, s-2*line, s-2*line), Fill: &compose.Fill{Color: white}},
+			out := []typeset.Fragment{
+				&typeset.Path{Ops: box(x0, y0, s, s), Fill: &typeset.Fill{Color: black}},
+				&typeset.Path{Ops: box(x0+line, y0+line, s-2*line, s-2*line), Fill: &typeset.Fill{Color: white}},
 			}
 			if on {
 				in := 1.5
-				out = append(out, &compose.Path{Ops: []compose.PathOp{
-					{Kind: compose.MoveTo, P: [3]compose.Point{{X: x0 + in, Y: y0 + in}}},
-					{Kind: compose.LineTo, P: [3]compose.Point{{X: x0 + s - in, Y: y0 + s - in}}},
-					{Kind: compose.MoveTo, P: [3]compose.Point{{X: x0 + s - in, Y: y0 + in}}},
-					{Kind: compose.LineTo, P: [3]compose.Point{{X: x0 + in, Y: y0 + s - in}}},
-				}, Stroke: &compose.Stroke{Color: black, Width: line}})
+				out = append(out, &typeset.Path{Ops: []typeset.PathOp{
+					{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x0 + in, Y: y0 + in}}},
+					{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x0 + s - in, Y: y0 + s - in}}},
+					{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x0 + s - in, Y: y0 + in}}},
+					{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x0 + in, Y: y0 + s - in}}},
+				}, Stroke: &typeset.Stroke{Color: black, Width: line}})
 			}
 			return out
 		}
@@ -429,30 +429,30 @@ func markVector(kind compose.FieldKind) func(on bool) func(r compose.Rect) []com
 }
 
 // box returns the path of the rectangle at (x, y) of size w by h.
-func box(x, y, w, h float64) []compose.PathOp {
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{{X: x, Y: y}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: x + w, Y: y}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: x + w, Y: y + h}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: x, Y: y + h}}},
-		{Kind: compose.ClosePath},
+func box(x, y, w, h float64) []typeset.PathOp {
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x, Y: y}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x + w, Y: y}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x + w, Y: y + h}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x, Y: y + h}}},
+		{Kind: typeset.ClosePath},
 	}
 }
 
 // ellipse returns the path of the ellipse inscribed in the rectangle from
 // (x0, y0) to (x1, y1), four Bézier arcs.
-func ellipse(x0, y0, x1, y1 float64) []compose.PathOp {
+func ellipse(x0, y0, x1, y1 float64) []typeset.PathOp {
 	const k = 0.5522847498 // the control distance of a quarter circle, per radius
 	cx, cy := (x0+x1)/2, (y0+y1)/2
 	rx, ry := (x1-x0)/2, (y1-y0)/2
-	pt := func(x, y float64) compose.Point { return compose.Point{X: x, Y: y} }
-	return []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{pt(cx+rx, cy)}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx+rx, cy+k*ry), pt(cx+k*rx, cy+ry), pt(cx, cy+ry)}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx-k*rx, cy+ry), pt(cx-rx, cy+k*ry), pt(cx-rx, cy)}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx-rx, cy-k*ry), pt(cx-k*rx, cy-ry), pt(cx, cy-ry)}},
-		{Kind: compose.CurveTo, P: [3]compose.Point{pt(cx+k*rx, cy-ry), pt(cx+rx, cy-k*ry), pt(cx+rx, cy)}},
-		{Kind: compose.ClosePath},
+	pt := func(x, y float64) typeset.Point { return typeset.Point{X: x, Y: y} }
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{pt(cx+rx, cy)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx+rx, cy+k*ry), pt(cx+k*rx, cy+ry), pt(cx, cy+ry)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx-k*rx, cy+ry), pt(cx-rx, cy+k*ry), pt(cx-rx, cy)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx-rx, cy-k*ry), pt(cx-k*rx, cy-ry), pt(cx, cy-ry)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx+k*rx, cy-ry), pt(cx+rx, cy-k*ry), pt(cx+rx, cy)}},
+		{Kind: typeset.ClosePath},
 	}
 }
 

@@ -6,8 +6,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // frameOf returns a page frame inset by in px with a solid border w px
@@ -37,9 +37,9 @@ func TestPageFrame_Draws(t *testing.T) {
 			}
 			return pb
 		},
-		MarginContent: func(info PageInfo, _ int) []compose.Fragment {
+		MarginContent: func(info PageInfo, _ int) []typeset.Fragment {
 			// A lime square over the frame's top right corner.
-			return []compose.Fragment{&compose.Path{Ops: rectOps(compose.Rect{X: px(7), Y: 0, Width: px(3), Height: px(3)}), Fill: &compose.Fill{Color: compose.Color{G: 1, A: 1}}}}
+			return []typeset.Fragment{&typeset.Path{Ops: rectOps(typeset.Rect{X: px(7), Y: 0, Width: px(3), Height: px(3)}), Fill: &typeset.Fill{Color: typeset.Color{G: 1, A: 1}}}}
 		},
 	}
 	// The page area content, black, overlaps the frame's inner edge.

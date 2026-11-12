@@ -6,11 +6,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // The caps of one presentation.
@@ -58,7 +58,7 @@ type reader struct {
 	draw     *odf.DrawStyles
 	data     *odf.DataStyles
 	builtin  *odf.Styles
-	warnings []compose.Warning
+	warnings []typeset.Warning
 	warned   map[string]bool
 	err      error
 	steps    int
@@ -129,7 +129,7 @@ func (r *reader) warnOnce(key, code, msg string) {
 		return
 	}
 	r.warned[key] = true
-	r.warnings = append(r.warnings, compose.Warning{Code: code, Message: msg})
+	r.warnings = append(r.warnings, typeset.Warning{Code: code, Message: msg})
 }
 
 // tickSteps is how many reading steps pass between two checks of ctx.
@@ -308,12 +308,12 @@ func (r *reader) notesMaster(doc *slides.Document, mp *odf.MasterPage) {
 	if notes == nil {
 		return
 	}
-	box := func(el *odf.Element) compose.Rect {
+	box := func(el *odf.Element) typeset.Rect {
 		x, _ := odf.Length(el.A(odf.NSSVG, "x"))
 		y, _ := odf.Length(el.A(odf.NSSVG, "y"))
 		w, _ := odf.Length(el.A(odf.NSSVG, "width"))
 		h, _ := odf.Length(el.A(odf.NSSVG, "height"))
-		return compose.Rect{X: x, Y: y, Width: max(w, 0), Height: max(h, 0)}
+		return typeset.Rect{X: x, Y: y, Width: max(w, 0), Height: max(h, 0)}
 	}
 	var decorations []*odf.Element
 	for _, el := range notes.Children {
@@ -492,8 +492,8 @@ func (r *reader) notes(notes *odf.Element, pc *pageCtx) ([]slides.Paragraph, sli
 // metadata reads meta.xml's office:meta (ODF 1.3, Part 3, 4): the title,
 // the creator, the subject, else the description, the keywords, the
 // generator and the language; never a date.
-func (r *reader) metadata() compose.Metadata {
-	var m compose.Metadata
+func (r *reader) metadata() typeset.Metadata {
+	var m typeset.Metadata
 	meta := odf.Section(r.pkg.Meta, "meta")
 	if meta == nil {
 		return m

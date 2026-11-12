@@ -3,10 +3,10 @@ package slides
 import (
 	"fmt"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxTableCells caps the cells of a table drawn. Anti-DoS guard, not
@@ -48,7 +48,7 @@ func (b *builder) verticalCellHeight(body *TextBody, w float64) float64 {
 //   - libreoffice/pptx: sd/tdf100926.pptx and sd/tcPr-vert-roundtrip.pptx
 //     print their vert cells' text anchored at the top against the cell's
 //     left edge.
-func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment {
+func (b *builder) table(s *Shape, parent *typeset.StructElem) []typeset.Fragment {
 	t := s.Table
 	if t == nil || len(t.ColumnWidths) == 0 || len(t.Rows) == 0 {
 		return nil
@@ -85,7 +85,7 @@ func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment
 				continue
 			}
 			w := xs[min(c+max(cell.ColSpan, 1), len(cols))] - xs[c]
-			inner := insetRect(compose.Rect{Width: w, Height: max(hs[r], 1)}, cell.Text.Insets)
+			inner := insetRect(typeset.Rect{Width: w, Height: max(hs[r], 1)}, cell.Text.Insets)
 			tb := side(cell.Text.Insets[css.Top]) + side(cell.Text.Insets[css.Bottom])
 			if cell.Text.Vertical.Vertical() {
 				hs[r] = max(hs[r], b.verticalCellHeight(cell.Text, inner.Width)+tb)
@@ -101,14 +101,14 @@ func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment
 	for r := range rows {
 		ys[r+1] = ys[r] + hs[r]
 	}
-	tbl := &compose.StructElem{Role: "Table"}
+	tbl := &typeset.StructElem{Role: "Table"}
 	parent.Kids = append(parent.Kids, tbl)
 	// spanned marks the cells a span covers, so that a row the source
 	// lists short still counts every column (ISO 14289-1, 7.2).
 	spanned := make([]bool, len(rows)*len(cols))
-	var fills, texts, borders []compose.Fragment
+	var fills, texts, borders []typeset.Fragment
 	for r, row := range rows {
-		tr := &compose.StructElem{Role: "TR"}
+		tr := &typeset.StructElem{Role: "TR"}
 		tbl.Kids = append(tbl.Kids, tr)
 		for c := range min(len(row.Cells), len(cols)) {
 			cell := &row.Cells[c]
@@ -122,7 +122,7 @@ func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment
 					spanned[y*len(cols)+x] = true
 				}
 			}
-			td := &compose.StructElem{Role: "TD"}
+			td := &typeset.StructElem{Role: "TD"}
 			if c1-c > 1 {
 				td.ColSpan = c1 - c
 			}
@@ -130,7 +130,7 @@ func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment
 				td.RowSpan = r1 - r
 			}
 			tr.Kids = append(tr.Kids, td)
-			rc := compose.Rect{X: xs[c], Y: ys[r], Width: xs[c1] - xs[c], Height: ys[r1] - ys[r]}
+			rc := typeset.Rect{X: xs[c], Y: ys[r], Width: xs[c1] - xs[c], Height: ys[r1] - ys[r]}
 			fills = append(fills, b.fill(&cell.Fill, rc, rectOps(rc), shape.FillNorm)...)
 			if cell.Text != nil && len(cell.Text.Paragraphs) > 0 {
 				body := cell.Text
@@ -154,7 +154,7 @@ func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment
 				td.Kids = append(td.Kids, txt.structure...)
 			}
 			x0, y0, x1, y1 := rc.X, rc.Y, rc.X+rc.Width, rc.Y+rc.Height
-			for side, ops := range [4][]compose.PathOp{
+			for side, ops := range [4][]typeset.PathOp{
 				css.Top: lineOps(x0, y0, x1, y0), css.Right: lineOps(x1, y0, x1, y1),
 				css.Bottom: lineOps(x0, y1, x1, y1), css.Left: lineOps(x0, y0, x0, y1),
 			} {
@@ -163,11 +163,11 @@ func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment
 		}
 		for c := len(row.Cells); c < len(cols); c++ {
 			if !spanned[r*len(cols)+c] {
-				tr.Kids = append(tr.Kids, &compose.StructElem{Role: "TD"})
+				tr.Kids = append(tr.Kids, &typeset.StructElem{Role: "TD"})
 			}
 		}
 	}
-	out := make([]compose.Fragment, 0, len(fills)+len(texts)+len(borders))
+	out := make([]typeset.Fragment, 0, len(fills)+len(texts)+len(borders))
 	out = append(out, fills...)
 	out = append(out, texts...)
 	return append(out, borders...)

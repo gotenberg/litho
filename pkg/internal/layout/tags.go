@@ -1,15 +1,15 @@
 package layout
 
 import (
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // tagEvent is one thing a structure element holds, in document order: a
 // child element, met at its first box, or a piece of the element's own
 // content, a box that paints content or an outside list marker.
 type tagEvent struct {
-	kid  *compose.StructElem
+	kid  *typeset.StructElem
 	leaf *box
 	mark *markerBox
 	// run numbers the inline formatting context (CSS 2.1, 9.4.2) the event
@@ -66,12 +66,12 @@ var opaqueRoles = map[string]bool{
 // ([headerScopes]).
 //
 // Anonymous elements add two levels at most below [maxStructDepth], and
-// stop once the tree holds [compose.MaxStructElems] elements: the content
+// stop once the tree holds [typeset.MaxStructElems] elements: the content
 // past that stays with its element.
 func (e *engine) anonymize(rb *box) {
-	parent := map[*compose.StructElem]*compose.StructElem{}
+	parent := map[*typeset.StructElem]*typeset.StructElem{}
 	count := 0
-	stack := []*compose.StructElem{e.root}
+	stack := []*typeset.StructElem{e.root}
 	for len(stack) > 0 {
 		el := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
@@ -84,9 +84,9 @@ func (e *engine) anonymize(rb *box) {
 			headerScopes(el, parent[el])
 		}
 	}
-	t := &tagWalk{parent: parent, seen: map[*compose.StructElem]bool{}, events: map[*compose.StructElem][]tagEvent{}}
+	t := &tagWalk{parent: parent, seen: map[*typeset.StructElem]bool{}, events: map[*typeset.StructElem][]tagEvent{}}
 	t.walk(rb, 0)
-	budget := compose.MaxStructElems - count
+	budget := typeset.MaxStructElems - count
 	for _, el := range t.order {
 		budget = wrapContent(el, t.events[el], budget)
 	}
@@ -97,18 +97,18 @@ func (e *engine) anonymize(rb *box) {
 // when no Headers attribute says which cells it heads. A header cell heads
 // its column in a header row group (ISO 32000-1, 14.8.4.3.4, Table 337) or
 // in a row of header cells alone, and its row otherwise.
-func headerScopes(tr, group *compose.StructElem) {
-	scope := compose.ScopeColumn
+func headerScopes(tr, group *typeset.StructElem) {
+	scope := typeset.ScopeColumn
 	if group == nil || group.Role != "THead" {
 		for _, k := range tr.Kids {
 			if k.Role == "TD" {
-				scope = compose.ScopeRow
+				scope = typeset.ScopeRow
 				break
 			}
 		}
 	}
 	for _, k := range tr.Kids {
-		if k.Role == "TH" && k.Scope == compose.ScopeNone {
+		if k.Role == "TH" && k.Scope == typeset.ScopeNone {
 			k.Scope = scope
 		}
 	}
@@ -116,15 +116,15 @@ func headerScopes(tr, group *compose.StructElem) {
 
 // tagWalk gathers the events of every element in document order.
 type tagWalk struct {
-	parent map[*compose.StructElem]*compose.StructElem
-	seen   map[*compose.StructElem]bool
-	events map[*compose.StructElem][]tagEvent
+	parent map[*typeset.StructElem]*typeset.StructElem
+	seen   map[*typeset.StructElem]bool
+	events map[*typeset.StructElem][]tagEvent
 	// order lists the elements with events, first met first.
-	order []*compose.StructElem
+	order []*typeset.StructElem
 	runs  int
 }
 
-func (t *tagWalk) add(el *compose.StructElem, ev tagEvent) {
+func (t *tagWalk) add(el *typeset.StructElem, ev tagEvent) {
 	if _, ok := t.events[el]; !ok {
 		t.order = append(t.order, el)
 	}
@@ -183,7 +183,7 @@ func (t *tagWalk) walk(b *box, run int) {
 // wrapContent rebuilds the kids of el from its events evs, as
 // [engine.anonymize] says, creating at most budget elements, and returns
 // the budget left.
-func wrapContent(el *compose.StructElem, evs []tagEvent, budget int) int {
+func wrapContent(el *typeset.StructElem, evs []tagEvent, budget int) int {
 	if opaqueRoles[el.Role] {
 		return budget
 	}
@@ -210,9 +210,9 @@ func wrapContent(el *compose.StructElem, evs []tagEvent, budget int) int {
 // own content in an anonymous element: with paragraphs, a P per run of an
 // inline formatting context, its inline-level kids moved into it; without,
 // a Span per run of content between kids.
-func rebuild(el *compose.StructElem, evs []tagEvent, budget int, paragraphs bool) int {
-	var kids []*compose.StructElem
-	placed := map[*compose.StructElem]bool{}
+func rebuild(el *typeset.StructElem, evs []tagEvent, budget int, paragraphs bool) int {
+	var kids []*typeset.StructElem
+	placed := map[*typeset.StructElem]bool{}
 	for i := 0; i < len(evs); {
 		ev := evs[i]
 		key := segment(ev, paragraphs)
@@ -243,7 +243,7 @@ func rebuild(el *compose.StructElem, evs []tagEvent, budget int, paragraphs bool
 		if paragraphs {
 			role = "P"
 		}
-		anon := &compose.StructElem{Role: role}
+		anon := &typeset.StructElem{Role: role}
 		budget--
 		for _, s := range seg {
 			switch {

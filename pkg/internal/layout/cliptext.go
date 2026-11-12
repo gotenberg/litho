@@ -8,8 +8,8 @@ import (
 	gofont "github.com/go-text/typesetting/font"
 	"github.com/go-text/typesetting/font/opentype"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxClipGlyphs bounds the glyphs whose outlines one background-clip:
@@ -30,11 +30,11 @@ const codeClipText = "background-clip-text"
 // Backgrounds 4, 2.4): the outlines of the glyphs b and its in-flow
 // descendants draw, inline blocks and relatively positioned boxes
 // included, in the painter's coordinates; nil when b draws none.
-func (p *painter) textClip(b *box) *compose.Path {
-	var ops []compose.PathOp
+func (p *painter) textClip(b *box) *typeset.Path {
+	var ops []typeset.PathOp
 	glyphs := 0
 	cut := false
-	addRun := func(t *compose.Text, x, y float64) {
+	addRun := func(t *typeset.Text, x, y float64) {
 		if t == nil || t.Face == nil || cut {
 			return
 		}
@@ -105,7 +105,7 @@ func (p *painter) textClip(b *box) *compose.Path {
 	if len(ops) == 0 {
 		return nil
 	}
-	return &compose.Path{Ops: ops, Fill: &compose.Fill{Rule: compose.NonZero}}
+	return &typeset.Path{Ops: ops, Fill: &typeset.Fill{Rule: typeset.NonZero}}
 }
 
 // descends reports whether a is d or lies inside it.
@@ -118,14 +118,14 @@ func descends(a, d *box) bool {
 	return false
 }
 
-// outlineFace returns the parsed program of the composed face cf, nil when
+// outlineFace returns the parsed program of the typeset face cf, nil when
 // it does not parse; each face is parsed once per layout.
-func (p *painter) outlineFace(cf *compose.Face) *gofont.Face {
+func (p *painter) outlineFace(cf *typeset.Face) *gofont.Face {
 	if f, ok := p.outlines[cf]; ok {
 		return f
 	}
 	if p.outlines == nil {
-		p.outlines = map[*compose.Face]*gofont.Face{}
+		p.outlines = map[*typeset.Face]*gofont.Face{}
 	}
 	f, err := gofont.ParseTTF(bytes.NewReader(cf.Program))
 	if err != nil {
@@ -143,42 +143,42 @@ func (p *painter) outlineFace(cf *compose.Face) *gofont.Face {
 // appendGlyph appends the outline of glyph gid of f, drawn at size k
 // points per font unit with its origin at x, y and slanted by skew, to
 // ops. Quadratic segments become the cubic Béziers they equal.
-func appendGlyph(ops []compose.PathOp, f *gofont.Face, gid uint16, x, y, k, hs, skew float64) []compose.PathOp {
+func appendGlyph(ops []typeset.PathOp, f *gofont.Face, gid uint16, x, y, k, hs, skew float64) []typeset.PathOp {
 	data, ok := f.GlyphData(gofont.GID(gid)).(gofont.GlyphOutline)
 	if !ok {
 		return ops
 	}
-	pt := func(s opentype.SegmentPoint) compose.Point {
+	pt := func(s opentype.SegmentPoint) typeset.Point {
 		up := float64(s.Y) * k
-		return compose.Point{X: x + hs*float64(s.X)*k + skew*up, Y: y - up}
+		return typeset.Point{X: x + hs*float64(s.X)*k + skew*up, Y: y - up}
 	}
-	var last compose.Point
+	var last typeset.Point
 	open := false
 	for _, s := range data.Segments {
 		switch s.Op {
 		case opentype.SegmentOpMoveTo:
 			if open {
-				ops = append(ops, compose.PathOp{Kind: compose.ClosePath})
+				ops = append(ops, typeset.PathOp{Kind: typeset.ClosePath})
 			}
 			last = pt(s.Args[0])
-			ops = append(ops, compose.PathOp{Kind: compose.MoveTo, P: [3]compose.Point{last}})
+			ops = append(ops, typeset.PathOp{Kind: typeset.MoveTo, P: [3]typeset.Point{last}})
 			open = true
 		case opentype.SegmentOpLineTo:
 			last = pt(s.Args[0])
-			ops = append(ops, compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{last}})
+			ops = append(ops, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{last}})
 		case opentype.SegmentOpQuadTo:
 			c, to := pt(s.Args[0]), pt(s.Args[1])
-			c1 := compose.Point{X: last.X + 2*(c.X-last.X)/3, Y: last.Y + 2*(c.Y-last.Y)/3}
-			c2 := compose.Point{X: to.X + 2*(c.X-to.X)/3, Y: to.Y + 2*(c.Y-to.Y)/3}
-			ops = append(ops, compose.PathOp{Kind: compose.CurveTo, P: [3]compose.Point{c1, c2, to}})
+			c1 := typeset.Point{X: last.X + 2*(c.X-last.X)/3, Y: last.Y + 2*(c.Y-last.Y)/3}
+			c2 := typeset.Point{X: to.X + 2*(c.X-to.X)/3, Y: to.Y + 2*(c.Y-to.Y)/3}
+			ops = append(ops, typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{c1, c2, to}})
 			last = to
 		case opentype.SegmentOpCubeTo:
 			last = pt(s.Args[2])
-			ops = append(ops, compose.PathOp{Kind: compose.CurveTo, P: [3]compose.Point{pt(s.Args[0]), pt(s.Args[1]), last}})
+			ops = append(ops, typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(s.Args[0]), pt(s.Args[1]), last}})
 		}
 	}
 	if open {
-		ops = append(ops, compose.PathOp{Kind: compose.ClosePath})
+		ops = append(ops, typeset.PathOp{Kind: typeset.ClosePath})
 	}
 	return ops
 }

@@ -8,15 +8,15 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxPageSide is the largest page side [Layout] accepts, in points: the
-// composition model's bound (ISO 32000-1, Annex C.2, Table C.1).
+// typeset model's bound (ISO 32000-1, Annex C.2, Table C.1).
 const maxPageSide = 14400
 
 // layout is [Layout].
@@ -73,7 +73,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 		opts.Placed(e.anchors(rb, e.pageCount(rb, disp)))
 	}
 	res := &Result{Structure: e.root, ContentWidth: e.overflowRight(rb)}
-	used := map[*compose.StructElem]bool{}
+	used := map[*typeset.StructElem]bool{}
 	res.Pages = e.assemble(disp, canvas, rb, used)
 	if len(res.Pages) > e.maxPages {
 		return nil, fmt.Errorf("%w: %d pages, at most %d", ErrTooManyPages, len(res.Pages), e.maxPages)
@@ -82,14 +82,14 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	e.anchorsFound = res.Anchors
 	res.Extents = e.extents(rb, len(res.Pages))
 	e.links(res, links, used)
-	compose.PruneTree(e.root, used)
+	typeset.PruneTree(e.root, used)
 	dropPrunedDests(e.root, res)
 	for _, w := range e.warnings {
 		page := 0
 		if w.y >= 0 {
 			page = min(e.pageOf(w.y)+1, len(res.Pages))
 		}
-		res.Warnings = append(res.Warnings, compose.Warning{Code: w.code, Message: w.msg, Page: page})
+		res.Warnings = append(res.Warnings, typeset.Warning{Code: w.code, Message: w.msg, Page: page})
 		if opts.Logger != nil {
 			opts.Logger.Debug("layout: "+w.msg, slog.String("code", w.code), slog.Int("page", page))
 		}
@@ -108,7 +108,7 @@ func newEngine(ctx context.Context, fonts *text.Fonts, opts Options, w, h float6
 		ctx: ctx, fonts: fonts, opts: opts, pageW: w, pageH: h, maxPages: maxPages, mem: limits.BudgetFrom(ctx),
 		warned: map[string]bool{}, images: map[string]*Picture{},
 		metrics: map[*css.Style]text.Metrics{}, spaces: map[spaceKey]float64{}, missing: map[rune]bool{},
-		root: &compose.StructElem{Role: "Document", Lang: opts.Lang},
+		root: &typeset.StructElem{Role: "Document", Lang: opts.Lang},
 	}
 }
 
@@ -208,16 +208,16 @@ func (e *engine) positionedPages(rb *box, clipped bool) int {
 
 // pathSpan returns the vertical extent of the points of ops, false for no
 // point.
-func pathSpan(ops []compose.PathOp) (float64, float64, bool) {
+func pathSpan(ops []typeset.PathOp) (float64, float64, bool) {
 	lo, hi := math.Inf(1), math.Inf(-1)
 	for _, op := range ops {
 		n := 1
 		switch op.Kind {
-		case compose.CurveTo:
+		case typeset.CurveTo:
 			n = 3
-		case compose.ClosePath:
+		case typeset.ClosePath:
 			n = 0
-		case compose.MoveTo, compose.LineTo:
+		case typeset.MoveTo, typeset.LineTo:
 		}
 		for _, q := range op.P[:n] {
 			lo, hi = min(lo, q.Y), max(hi, q.Y)
@@ -230,11 +230,11 @@ func pathSpan(ops []compose.PathOp) (float64, float64, bool) {
 // then the part of the flow its page area shows, translated to the page and
 // clipped to the page area. used collects the structure elements the
 // fragments hang from.
-func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructElem]bool) []*compose.Page {
+func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructElem]bool) []*typeset.Page {
 	n := e.pageCount(rb, d)
-	pages := make([]*compose.Page, n)
+	pages := make([]*typeset.Page, n)
 	e.pageFrags = make([]int, n)
-	free := map[compose.Fragment]bool{}
+	free := map[typeset.Fragment]bool{}
 	perPage := e.distribute(d, 0, n, used, free)
 	fitH := 0.0
 	if e.opts.FitFirstPage {
@@ -242,7 +242,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 	}
 	for k := range n {
 		pb := e.assembledBox(k, fitH)
-		pg := &compose.Page{Width: pb.Width + 2*pb.Bleed, Height: pb.Height + 2*pb.Bleed}
+		pg := &typeset.Page{Width: pb.Width + 2*pb.Bleed, Height: pb.Height + 2*pb.Bleed}
 		e.paintPageBackground(pg, pb)
 		e.paintMarks(pg, pb)
 		sheet := len(pg.Content)
@@ -265,13 +265,13 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 			for j < len(frags) && free[frags[j]] == free[frags[i]] {
 				j++
 			}
-			clip := compose.Rect{X: -pb.Margin[css.Left], Y: top, Width: pb.Width, Height: e.sliceH(k)}
+			clip := typeset.Rect{X: -pb.Margin[css.Left], Y: top, Width: pb.Width, Height: e.sliceH(k)}
 			if free[frags[i]] {
-				clip = compose.Rect{X: -pb.Margin[css.Left], Y: top - pb.Margin[css.Top], Width: pb.Width, Height: pb.Height}
+				clip = typeset.Rect{X: -pb.Margin[css.Left], Y: top - pb.Margin[css.Top], Width: pb.Width, Height: pb.Height}
 			}
-			pg.Content = append(pg.Content, &compose.Group{
-				Transform: compose.Matrix{A: 1, D: 1, E: pb.Margin[css.Left], F: pb.Margin[css.Top] - top + shift},
-				Clip:      &compose.Path{Ops: rectOps(clip), Fill: &compose.Fill{}},
+			pg.Content = append(pg.Content, &typeset.Group{
+				Transform: typeset.Matrix{A: 1, D: 1, E: pb.Margin[css.Left], F: pb.Margin[css.Top] - top + shift},
+				Clip:      &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{}},
 				Opacity:   1,
 				Content:   frags[i:j],
 			})
@@ -288,8 +288,8 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*compose.StructEle
 // rebuilt on each page they reach, depth the groups already open. free
 // collects the top-level groups of transformed boxes that land on one page
 // and the top-level fragments placed on one page.
-func (e *engine) distribute(it *ditem, depth, n int, used map[*compose.StructElem]bool, free map[compose.Fragment]bool) map[int][]compose.Fragment {
-	out := map[int][]compose.Fragment{}
+func (e *engine) distribute(it *ditem, depth, n int, used map[*typeset.StructElem]bool, free map[typeset.Fragment]bool) map[int][]typeset.Fragment {
+	out := map[int][]typeset.Fragment{}
 	for _, k := range it.kids {
 		if k.group && k.fixed {
 			e.repeat(k, depth, n, used, out)
@@ -305,7 +305,7 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*compose.StructEle
 					continue
 				}
 				if e.admit(p) {
-					g := &compose.Group{Transform: groupTransform(k), Clip: k.clip, Opacity: k.opacity, Content: frags}
+					g := &typeset.Group{Transform: groupTransform(k), Clip: k.clip, Opacity: k.opacity, Content: frags}
 					if depth == 0 && k.transform != nil && len(sub) == 1 {
 						free[g] = true
 					}
@@ -346,17 +346,17 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*compose.StructEle
 }
 
 // groupTransform returns the transform of the group it.
-func groupTransform(it *ditem) compose.Matrix {
+func groupTransform(it *ditem) typeset.Matrix {
 	if it.transform != nil {
 		return *it.transform
 	}
-	return compose.Identity
+	return typeset.Identity
 }
 
 // repeat adds the content of the fixed group it, laid out on the first
 // page, to every one of the n pages of out, moved to each page's place in
 // the flow (CSS 2.1, 9.6.1). The copies after the first are artifacts.
-func (e *engine) repeat(it *ditem, depth, n int, used map[*compose.StructElem]bool, out map[int][]compose.Fragment) {
+func (e *engine) repeat(it *ditem, depth, n int, used map[*typeset.StructElem]bool, out map[int][]typeset.Fragment) {
 	if depth+1 >= maxGroupDepth {
 		e.warnOnce(codeGroupDepth, fmt.Sprintf("opacity and clipping nested deeper than %d levels painted without the inner groups", maxGroupDepth), -1)
 		return
@@ -374,8 +374,8 @@ func (e *engine) repeat(it *ditem, depth, n int, used map[*compose.StructElem]bo
 				markTree(f, used)
 			}
 		}
-		out[p] = append(out[p], &compose.Group{
-			Transform: compose.Matrix{A: 1, D: 1, F: e.pageTop(p)},
+		out[p] = append(out[p], &typeset.Group{
+			Transform: typeset.Matrix{A: 1, D: 1, F: e.pageTop(p)},
 			Opacity:   1,
 			Content:   frags,
 		})
@@ -399,15 +399,15 @@ func countLeaves(it *ditem) int {
 // flatten returns the fragments of the group it whatever their page, its
 // subgroups rebuilt; with artifact set, copies that hang from no structure
 // element.
-func (e *engine) flatten(it *ditem, depth int, artifact bool) []compose.Fragment {
-	var out []compose.Fragment
+func (e *engine) flatten(it *ditem, depth int, artifact bool) []typeset.Fragment {
+	var out []typeset.Fragment
 	for _, k := range it.kids {
 		if k.group {
 			if depth+1 >= maxGroupDepth {
 				out = append(out, e.flatten(k, depth+1, artifact)...)
 				continue
 			}
-			out = append(out, &compose.Group{Transform: groupTransform(k), Clip: k.clip, Opacity: k.opacity, Content: e.flatten(k, depth+1, artifact)})
+			out = append(out, &typeset.Group{Transform: groupTransform(k), Clip: k.clip, Opacity: k.opacity, Content: e.flatten(k, depth+1, artifact)})
 			continue
 		}
 		f := e.fitLeaf(k.frag, depth)
@@ -417,13 +417,13 @@ func (e *engine) flatten(it *ditem, depth int, artifact bool) []compose.Fragment
 		if artifact {
 			f = cloneFragment(f)
 			switch v := f.(type) {
-			case *compose.Text:
+			case *typeset.Text:
 				v.Parent = nil
-			case *compose.Image:
+			case *typeset.Image:
 				v.Parent = nil
-			case *compose.Path:
+			case *typeset.Path:
 				v.Parent = nil
-			case *compose.Group:
+			case *typeset.Group:
 				v.Content = adopt(v.Content, nil, 0)
 			}
 		}
@@ -433,8 +433,8 @@ func (e *engine) flatten(it *ditem, depth int, artifact bool) []compose.Fragment
 }
 
 // markTree records the structure elements the fragments of f hang from.
-func markTree(f compose.Fragment, used map[*compose.StructElem]bool) {
-	if g, ok := f.(*compose.Group); ok {
+func markTree(f typeset.Fragment, used map[*typeset.StructElem]bool) {
+	if g, ok := f.(*typeset.Group); ok {
 		for _, k := range g.Content {
 			markTree(k, used)
 		}
@@ -459,7 +459,7 @@ func (e *engine) admitN(p, n int) bool {
 }
 
 // mapKeys returns the keys of m, for sorting.
-func mapKeys(m map[int][]compose.Fragment) func(func(int) bool) {
+func mapKeys(m map[int][]typeset.Fragment) func(func(int) bool) {
 	return func(yield func(int) bool) {
 		for k := range m {
 			if !yield(k) {
@@ -470,18 +470,18 @@ func mapKeys(m map[int][]compose.Fragment) func(func(int) bool) {
 }
 
 // cloneFragment returns a copy of a fragment painted on several pages.
-func cloneFragment(f compose.Fragment) compose.Fragment {
+func cloneFragment(f typeset.Fragment) typeset.Fragment {
 	switch v := f.(type) {
-	case *compose.Path:
+	case *typeset.Path:
 		c := *v
 		return &c
-	case *compose.Image:
+	case *typeset.Image:
 		c := *v
 		return &c
-	case *compose.Text:
+	case *typeset.Text:
 		c := *v
 		return &c
-	case *compose.Group:
+	case *typeset.Group:
 		c := *v
 		return &c
 	}
@@ -489,17 +489,17 @@ func cloneFragment(f compose.Fragment) compose.Fragment {
 }
 
 // markUsed records the structure element f hangs from.
-func markUsed(f compose.Fragment, used map[*compose.StructElem]bool) {
+func markUsed(f typeset.Fragment, used map[*typeset.StructElem]bool) {
 	switch v := f.(type) {
-	case *compose.Text:
+	case *typeset.Text:
 		if v.Parent != nil {
 			used[v.Parent] = true
 		}
-	case *compose.Image:
+	case *typeset.Image:
 		if v.Parent != nil {
 			used[v.Parent] = true
 		}
-	case *compose.Path:
+	case *typeset.Path:
 		if v.Parent != nil {
 			used[v.Parent] = true
 		}
@@ -509,23 +509,23 @@ func markUsed(f compose.Fragment, used map[*compose.StructElem]bool) {
 // paintCanvas paints the canvas background of the page pg, whose page box
 // is pb, from the box canvas (CSS 2.1, 14.2) over the page box's border
 // box, the page area, not its margins (CSS Page 3, 3.1).
-func (e *engine) paintCanvas(pg *compose.Page, canvas *box, pb PageBox) {
+func (e *engine) paintCanvas(pg *typeset.Page, canvas *box, pb PageBox) {
 	if canvas == nil {
 		return
 	}
 	st := canvas.st
 	w, h := areaOf(pb)
-	area := compose.Rect{X: pb.Margin[css.Left], Y: pb.Margin[css.Top], Width: w, Height: h}
+	area := typeset.Rect{X: pb.Margin[css.Left], Y: pb.Margin[css.Top], Width: w, Height: h}
 	if c, ok := colorOf(st.BackgroundColor); ok {
-		pg.Content = append(pg.Content, &compose.Path{Ops: rectOps(area), Fill: &compose.Fill{Color: c}})
+		pg.Content = append(pg.Content, &typeset.Path{Ops: rectOps(area), Fill: &typeset.Fill{Color: c}})
 	}
 	e.paintPageLayer(pg, st, area, area)
 }
 
 // paintPageLayer paints the background image or gradient of st over the
 // rectangle whole of the page pg, positioned in area.
-func (e *engine) paintPageLayer(pg *compose.Page, st *css.Style, area, whole compose.Rect) {
-	g := &compose.Group{Transform: compose.Identity, Opacity: 1, Clip: &compose.Path{Ops: rectOps(whole), Fill: &compose.Fill{}}}
+func (e *engine) paintPageLayer(pg *typeset.Page, st *css.Style, area, whole typeset.Rect) {
+	g := &typeset.Group{Transform: typeset.Identity, Opacity: 1, Clip: &typeset.Path{Ops: rectOps(whole), Fill: &typeset.Fill{}}}
 	switch {
 	case st.BackgroundGradient != nil:
 		for _, pa := range e.gradientTiles(st, area, whole, -1) {
@@ -537,7 +537,7 @@ func (e *engine) paintPageLayer(pg *compose.Page, st *css.Style, area, whole com
 			return
 		}
 		for _, t := range e.tiles(st, pic, area, whole, -1) {
-			g.Content = append(g.Content, &compose.Image{Rect: t, Source: pic.Source})
+			g.Content = append(g.Content, &typeset.Image{Rect: t, Source: pic.Source})
 		}
 	}
 	if len(g.Content) > 0 {
@@ -557,36 +557,36 @@ func (e *engine) paintPageLayer(pg *compose.Page, st *css.Style, area, whole com
 //   - wpt css/css-page/root-element-display-none-print.html: the page of a
 //     root of display: none matches a blank reference, page background
 //     included.
-func (e *engine) paintPageBackground(pg *compose.Page, pb PageBox) {
+func (e *engine) paintPageBackground(pg *typeset.Page, pb PageBox) {
 	st := pb.Background
 	if st == nil || (e.rootBox != nil && e.rootBox.node != nil && e.rootBox.st.Display == css.DisplayNone) {
 		return
 	}
-	whole := compose.Rect{Width: pg.Width, Height: pg.Height}
+	whole := typeset.Rect{Width: pg.Width, Height: pg.Height}
 	if c, ok := colorOf(st.BackgroundColor); ok {
-		pg.Content = append(pg.Content, &compose.Path{Ops: rectOps(whole), Fill: &compose.Fill{Color: c}})
+		pg.Content = append(pg.Content, &typeset.Path{Ops: rectOps(whole), Fill: &typeset.Fill{Color: c}})
 	}
 	w, h := areaOf(pb)
-	area := compose.Rect{X: pb.Bleed + pb.Margin[css.Left], Y: pb.Bleed + pb.Margin[css.Top], Width: w, Height: h}
+	area := typeset.Rect{X: pb.Bleed + pb.Margin[css.Left], Y: pb.Bleed + pb.Margin[css.Top], Width: w, Height: h}
 	if st.BackgroundAttachment == css.AttachFixed {
 		// A fixed background is positioned in the viewport, which on
 		// paper is the page box (CSS Backgrounds 3, 3.5; CSS Page 3, 3.3).
-		area = compose.Rect{X: pb.Bleed, Y: pb.Bleed, Width: pb.Width, Height: pb.Height}
+		area = typeset.Rect{X: pb.Bleed, Y: pb.Bleed, Width: pb.Width, Height: pb.Height}
 	}
 	e.paintPageLayer(pg, st, area, whole)
 }
 
 // dest converts a flow position to a destination.
-func (e *engine) dest(x, y float64) compose.Dest {
+func (e *engine) dest(x, y float64) typeset.Dest {
 	p := e.pageOf(y)
 	pb := e.box(p)
-	return compose.Dest{Page: p + 1, X: pb.Bleed + pb.Margin[css.Left] + x, Y: pb.Bleed + pb.Margin[css.Top] + y - e.pageTop(p)}
+	return typeset.Dest{Page: p + 1, X: pb.Bleed + pb.Margin[css.Left] + x, Y: pb.Bleed + pb.Margin[css.Top] + y - e.pageTop(p)}
 }
 
 // anchors returns where the first box of every node with an ID landed, in
 // tree order, for a document of n pages.
-func (e *engine) anchors(rb *box, n int) map[string]compose.Dest {
-	out := map[string]compose.Dest{}
+func (e *engine) anchors(rb *box, n int) map[string]typeset.Dest {
+	out := map[string]typeset.Dest{}
 	var walk func(*box)
 	walk = func(b *box) {
 		if b.id != "" {
@@ -620,7 +620,7 @@ func (e *engine) anchors(rb *box, n int) map[string]compose.Dest {
 
 // links adds the link regions to the pages of res, cut at the page cuts,
 // internal targets resolved against res.Anchors.
-func (e *engine) links(res *Result, links []pendingLink, used map[*compose.StructElem]bool) {
+func (e *engine) links(res *Result, links []pendingLink, used map[*typeset.StructElem]bool) {
 	for _, pl := range links {
 		l, ok := e.resolveLink(pl)
 		if !ok {
@@ -635,7 +635,7 @@ func (e *engine) links(res *Result, links []pendingLink, used map[*compose.Struc
 			if y1 <= y0 {
 				continue
 			}
-			l.Rect = compose.Rect{X: pb.Bleed + pb.Margin[css.Left] + r.X, Y: pb.Bleed + pb.Margin[css.Top] + y0 - top, Width: r.Width, Height: y1 - y0}
+			l.Rect = typeset.Rect{X: pb.Bleed + pb.Margin[css.Left] + r.X, Y: pb.Bleed + pb.Margin[css.Top] + y0 - top, Width: r.Width, Height: y1 - y0}
 			if l.Parent != nil {
 				used[l.Parent] = true
 			}
@@ -648,29 +648,29 @@ func (e *engine) links(res *Result, links []pendingLink, used map[*compose.Struc
 // resolveLink returns the link of the region pl, its rectangle unset, its
 // internal target resolved against the anchors e.anchors found; false for
 // an empty region or a target no element names, which it warns about.
-func (e *engine) resolveLink(pl pendingLink) (compose.Link, bool) {
+func (e *engine) resolveLink(pl pendingLink) (typeset.Link, bool) {
 	r := pl.rect
 	if !numeric.Positive(r.Width) || !numeric.Positive(r.Height) {
-		return compose.Link{}, false
+		return typeset.Link{}, false
 	}
 	href := pl.lk.href
 	if id, ok := strings.CutPrefix(href, "#"); ok {
 		d, found := e.anchorsFound[id]
 		if !found || id == "" {
 			e.warnOnce(codeLink, fmt.Sprintf("link to %q left out: no element has that ID", href), r.Y)
-			return compose.Link{}, false
+			return typeset.Link{}, false
 		}
-		return compose.Link{Dest: &d, Parent: pl.lk.elem, Contents: pl.lk.describe()}, true
+		return typeset.Link{Dest: &d, Parent: pl.lk.elem, Contents: pl.lk.describe()}, true
 	}
-	return compose.Link{URI: href, Parent: pl.lk.elem, Contents: pl.lk.describe()}, true
+	return typeset.Link{URI: href, Parent: pl.lk.elem, Contents: pl.lk.describe()}, true
 }
 
 // dropPrunedDests clears the element of every anchor and link destination
-// of res that [compose.PruneTree] dropped from the tree under root: the destination keeps
+// of res that [typeset.PruneTree] dropped from the tree under root: the destination keeps
 // its page position alone.
-func dropPrunedDests(root *compose.StructElem, res *Result) {
-	kept := map[*compose.StructElem]bool{}
-	stack := []*compose.StructElem{root}
+func dropPrunedDests(root *typeset.StructElem, res *Result) {
+	kept := map[*typeset.StructElem]bool{}
+	stack := []*typeset.StructElem{root}
 	for len(stack) > 0 {
 		el := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]

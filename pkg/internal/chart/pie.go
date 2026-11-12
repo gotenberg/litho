@@ -3,8 +3,8 @@ package chart
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxExplosion caps how far a slice is pushed out of its pie, in percent
@@ -24,35 +24,35 @@ const (
 // arc appends to ops the circular arc of centre (cx, cy) and radius r from
 // angle a0 to a1, in radians counter-clockwise from the x axis with y up,
 // as cubic Béziers of at most a quarter turn each.
-func arc(ops []compose.PathOp, cx, cy, r, a0, a1 float64) []compose.PathOp {
+func arc(ops []typeset.PathOp, cx, cy, r, a0, a1 float64) []typeset.PathOp {
 	n := int(math.Ceil(math.Abs(a1-a0) / (math.Pi / 2)))
 	n = max(n, 1)
 	step := (a1 - a0) / float64(n)
 	k := 4.0 / 3 * math.Tan(step/4)
-	at := func(a float64) compose.Point { return compose.Point{X: cx + r*math.Cos(a), Y: cy - r*math.Sin(a)} }
+	at := func(a float64) typeset.Point { return typeset.Point{X: cx + r*math.Cos(a), Y: cy - r*math.Sin(a)} }
 	for i := range n {
 		s, e := a0+float64(i)*step, a0+float64(i+1)*step
 		p0, p3 := at(s), at(e)
-		c1 := compose.Point{X: p0.X - k*r*math.Sin(s), Y: p0.Y - k*r*math.Cos(s)}
-		c2 := compose.Point{X: p3.X + k*r*math.Sin(e), Y: p3.Y + k*r*math.Cos(e)}
-		ops = append(ops, compose.PathOp{Kind: compose.CurveTo, P: [3]compose.Point{c1, c2, p3}})
+		c1 := typeset.Point{X: p0.X - k*r*math.Sin(s), Y: p0.Y - k*r*math.Cos(s)}
+		c2 := typeset.Point{X: p3.X + k*r*math.Sin(e), Y: p3.Y + k*r*math.Cos(e)}
+		ops = append(ops, typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{c1, c2, p3}})
 	}
 	return ops
 }
 
 // sector returns the outline of the ring sector between radii r0 and r1
 // and angles a0 and a1, a pie slice when r0 is 0.
-func sector(cx, cy, r0, r1, a0, a1 float64) []compose.PathOp {
-	start := compose.Point{X: cx + r1*math.Cos(a0), Y: cy - r1*math.Sin(a0)}
-	ops := []compose.PathOp{{Kind: compose.MoveTo, P: [3]compose.Point{start}}}
+func sector(cx, cy, r0, r1, a0, a1 float64) []typeset.PathOp {
+	start := typeset.Point{X: cx + r1*math.Cos(a0), Y: cy - r1*math.Sin(a0)}
+	ops := []typeset.PathOp{{Kind: typeset.MoveTo, P: [3]typeset.Point{start}}}
 	ops = arc(ops, cx, cy, r1, a0, a1)
 	if r0 <= 0 {
-		ops = append(ops, compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{{X: cx, Y: cy}}})
+		ops = append(ops, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: cx, Y: cy}}})
 	} else {
-		ops = append(ops, compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{{X: cx + r0*math.Cos(a1), Y: cy - r0*math.Sin(a1)}}})
+		ops = append(ops, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: cx + r0*math.Cos(a1), Y: cy - r0*math.Sin(a1)}}})
 		ops = arc(ops, cx, cy, r0, a1, a0)
 	}
-	return append(ops, compose.PathOp{Kind: compose.ClosePath})
+	return append(ops, typeset.PathOp{Kind: typeset.ClosePath})
 }
 
 // pieLabel is a data label of a sector, laid out before the pie is sized.
@@ -66,7 +66,7 @@ type pieLabel struct {
 
 // pies draws a pie or doughnut group into plot: the sectors of the first
 // series, or a ring per series, clockwise from the first slice angle.
-func (rd *renderer) pies(plot compose.Rect) {
+func (rd *renderer) pies(plot typeset.Rect) {
 	g := rd.c.Groups[0]
 	if len(g.Series) == 0 {
 		return
@@ -176,7 +176,7 @@ func (rd *renderer) pies(plot compose.Rect) {
 			p := paintPath(ops, fill, rd.borderOf(g, s, j))
 			if p != nil {
 				if p.Fill != nil {
-					p.Fill.Rule = compose.EvenOdd
+					p.Fill.Rule = typeset.EvenOdd
 				}
 				rd.out = append(rd.out, p)
 			}
@@ -229,7 +229,7 @@ func (rd *renderer) placePieLabel(l pieLabel) {
 // radar draws a radar group into avail: a spoke per category clockwise
 // from twelve o'clock, the value gridlines as polygons, each series a
 // closed line or filled polygon.
-func (rd *renderer) radar(avail compose.Rect) {
+func (rd *renderer) radar(avail typeset.Rect) {
 	g := rd.c.Groups[0]
 	x := &dim{ax: rd.c.axisAt(g.XAxis), category: true}
 	y := &dim{ax: rd.c.axisAt(g.YAxis), zero: true, border: true}
@@ -271,14 +271,14 @@ func (rd *renderer) radar(avail compose.Rect) {
 		return
 	}
 	angle := func(i int) float64 { return math.Pi/2 - 2*math.Pi*float64(i)/float64(x.n) }
-	at := func(i int, v float64) compose.Point {
+	at := func(i int, v float64) typeset.Point {
 		f := math.Max(0, math.Min(1, y.sc.frac(v)))
 		a := angle(i)
-		return compose.Point{X: cx + r*f*math.Cos(a), Y: cy - r*f*math.Sin(a)}
+		return typeset.Point{X: cx + r*f*math.Cos(a), Y: cy - r*f*math.Sin(a)}
 	}
 	if y.ax != nil && y.ax.MajorGrid != nil {
 		for _, v := range y.sc.ticks() {
-			var pts []compose.Point
+			var pts []typeset.Point
 			for i := range x.n {
 				pts = append(pts, at(i, v))
 			}
@@ -300,7 +300,7 @@ func (rd *renderer) radar(avail compose.Rect) {
 	}
 	sv := rd.stack(g)
 	for i, s := range g.Series {
-		var pts []compose.Point
+		var pts []typeset.Point
 		var idx []int
 		for j := 0; j < sv.n && j < x.n; j++ {
 			v := sv.hi[i][j]
@@ -317,7 +317,7 @@ func (rd *renderer) radar(avail compose.Rect) {
 			rd.paint(polygon(pts...), rd.fillOf(g, s, -1), rd.borderOf(g, s, -1))
 		} else if st := rd.borderOf(g, s, -1).compose(); st != nil {
 			ops := polygon(pts...)
-			rd.out = append(rd.out, &compose.Path{Ops: ops, Stroke: st})
+			rd.out = append(rd.out, &typeset.Path{Ops: ops, Stroke: st})
 			for k, p := range pts {
 				rd.marker(rd.markerOf(g, s, idx[k]), p.X, p.Y)
 			}

@@ -261,7 +261,7 @@ func readHead(ld *ot.Loader, records []truetype.TableRecord) ([]byte, error) {
 // checkProgram refuses a face go-text could not load or litho could not
 // embed: one without outlines, a colour bitmap face, a face listing a table
 // twice, and a face whose tables sum past [maxFontFileBytes], which a
-// collection face extracted on [Face.Compose] would exceed. It returns the
+// collection face extracted on [Face.Typeset] would exceed. It returns the
 // sum of the face's table lengths.
 func checkProgram(records []truetype.TableRecord) (int64, error) {
 	var total int64
