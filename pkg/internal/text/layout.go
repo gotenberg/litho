@@ -20,6 +20,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // MaxLayoutRunes bounds the characters of one [Fonts.Layout] call, counted
@@ -190,7 +191,7 @@ type Report struct {
 // Layout does not modify runs. The returned lines share [compose.Face]
 // values with other calls on the same Fonts.
 func (f *Fonts) Layout(ctx context.Context, runs []Run, width float64, opts Options) ([]Line, Report, error) {
-	if math.IsNaN(width) || math.IsInf(width, 0) || width <= 0 {
+	if !numeric.PositiveFinite(width) {
 		return nil, Report{}, fmt.Errorf("%w: %v", ErrInvalidWidth, width)
 	}
 	width = min(width, maxLineWidth)
