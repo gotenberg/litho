@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -199,6 +200,11 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages [
 		return
 	}
 
+	// The failures are gathered first and appended at once: a page can fail a
+	// rule once per link, hundreds of thousands of times in a document, and
+	// growing the caller's slice one page at a time copied it again and again.
+	var failures []repeatedViolation
+	total := 0
 	for i := range pages {
 		page := pages[i].dict
 
@@ -228,15 +234,31 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages [
 			}
 			rule := family.rule(part)
 			if n := counts[i].plain[f]; n > 0 {
-				*results = append(*results, repeatViolation(rule, n,
-					fmt.Sprintf(deviceUseContext, i+1, family.name, family.defaultName, intentPhrase(family.intent)))...)
+				context := fmt.Sprintf(deviceUseContext, i+1, family.name, family.defaultName, intentPhrase(family.intent))
+				failures = append(failures, repeatedViolation{n: n, violation: Violation{Rule: rule, Context: context}})
+				total += n
 			}
 			if n := counts[i].group[f]; n > 0 {
-				*results = append(*results, repeatViolation(rule, n,
-					fmt.Sprintf("page %d: transparency group blending colour space is %s without %s", i+1, family.name, intentPhrase(family.intent)))...)
+				context := fmt.Sprintf("page %d: transparency group blending colour space is %s without %s", i+1, family.name, intentPhrase(family.intent))
+				failures = append(failures, repeatedViolation{n: n, violation: Violation{Rule: rule, Context: context}})
+				total += n
 			}
 		}
 	}
+
+	*results = slices.Grow(*results, total)
+	for _, failure := range failures {
+		for range failure.n {
+			*results = append(*results, failure.violation)
+		}
+	}
+}
+
+// repeatedViolation is a violation stated n times, the failures of n links to
+// one colour space on one page.
+type repeatedViolation struct {
+	violation Violation
+	n         int
 }
 
 // deviceUseContext is the context of a violation of the device colour rules
@@ -279,16 +301,6 @@ func intentPhrase(intent string) string {
 		return "CMYK OutputIntent"
 	}
 	return "OutputIntent"
-}
-
-// repeatViolation returns n violations of rule with one context, the
-// failures of n links to one colour space on one page.
-func repeatViolation(rule Rule, n int, context string) []Violation {
-	out := make([]Violation, n)
-	for i := range out {
-		out[i] = Violation{Rule: rule, Context: context}
-	}
-	return out
 }
 
 // pageBlendingColorSpace returns the type of the blending colour space of the
