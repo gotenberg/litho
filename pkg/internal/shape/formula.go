@@ -198,8 +198,8 @@ type Guide struct {
 
 // ParseFormula parses a DrawingML guide formula (ECMA-376 Part 1,
 // 20.1.9.11 gd fmla: an operator name and its operands, space separated).
-// resolve returns the operand a name stands for; a literal operand is an
-// integer. A missing operand is 0. It reports false for an unknown
+// resolve returns the operand a name stands for; a literal operand is a
+// finite decimal number, as [Operand] reads it. A missing operand is 0. It reports false for an unknown
 // operator; the guide is then "val 0".
 func ParseFormula(fmla string, resolve func(name string) Arg) (Op, [3]Arg, bool) {
 	var args [3]Arg

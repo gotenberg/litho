@@ -14,9 +14,7 @@ func PresetNames() []string {
 	return names
 }
 
-// The constructors of the generated table.
-
-// lit is a literal operand.
+// lit is a literal operand of the generated table.
 func lit(v float64) Arg { return Arg{Kind: ArgConst, Value: v} }
 
 // ref is a guide operand.

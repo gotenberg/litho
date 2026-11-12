@@ -345,11 +345,15 @@ func arrowhead(a Arrowhead, w, base float64, tip, dir compose.Point, c compose.C
 // length from the line's end: the base of a triangle or an open arrow,
 // the notch of a stealth arrow, the centre of a diamond or an oval, which
 // sit centred on the end. LibreOffice stops the line a fifteenth of the
-// arrowhead's width short of it, measured on the pinned image: a 2.01 pt
-// line under triangles 6.04 and 4.03 pt long and 6.04 and 10.06 pt wide
-// stops 5.64 and 3.35 pt from their tips, under stealth arrows 3.23 and
-// 1.76 pt, and 2.61 and 1.33 pt short of the centres of diamonds and
-// ovals of the same sizes.
+// arrowhead's width short of it.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: in the pinned image's PDF, a 2.01 pt line under
+//     triangles 6.04 and 4.03 pt long and 6.04 and 10.06 pt wide stops
+//     5.64 and 3.35 pt from their tips, under stealth arrows 3.23 and
+//     1.76 pt, and 2.61 and 1.33 pt short of the centres of diamonds and
+//     ovals of the same sizes.
 var arrowDock = map[ArrowKind]float64{ //nolint:gochecknoglobals // a read-only table of LibreOffice's marker docking.
 	ArrowTriangle: 1, ArrowOpen: 1, ArrowStealth: 0.6, ArrowDiamond: 0.5, ArrowOval: 0.5,
 }
