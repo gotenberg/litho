@@ -51,3 +51,48 @@ func TestScriptTextProperties(t *testing.T) {
 		})
 	}
 }
+
+// TestRuby checks that a ruby annotation prints at 6 points centred above
+// its base, its descent on the base's ascent, and below it under
+// style:ruby-position below; no warning.
+//
+// # Corpus evidence
+//
+//   - litho/odt: ja-ruby prints "にんげん" at 6 points over "人間" at 12,
+//     both 24 points wide, starting where the base starts, its baseline
+//     15.65 points above the base's in Noto Sans CJK JP.
+func TestRuby(t *testing.T) {
+	auto := `<style:style style:name="B" style:family="ruby"><style:ruby-properties style:ruby-position="below"/></style:style>`
+	body := `<text:p>ab<text:ruby><text:ruby-base>xx</text:ruby-base><text:ruby-text>yyyy</text:ruby-text></text:ruby>cd</text:p>` +
+		`<text:p>ab<text:ruby text:style-name="B"><text:ruby-base>xx</text:ruby-base><text:ruby-text>yyyy</text:ruby-text></text:ruby>cd</text:p>`
+	out := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{})
+	if len(out.Warnings) != 0 {
+		t.Errorf("warnings = %+v, want none", out.Warnings)
+	}
+	var bases, annots []run
+	for _, r := range runs(out.Pages[0]) {
+		switch r.text {
+		case "xx":
+			bases = append(bases, r)
+		case "yyyy":
+			annots = append(annots, r)
+		}
+	}
+	if len(bases) != 2 || len(annots) != 2 {
+		t.Fatalf("bases %+v, annotations %+v", bases, annots)
+	}
+	for i, above := range []bool{true, false} {
+		b, a := bases[i], annots[i]
+		if a.size != rubySize {
+			t.Errorf("annotation %d at %v points, want %v", i, a.size, rubySize)
+		}
+		// "xx" at 12 points and "yyyy" at 6 are both 12 points wide in
+		// Liberation Serif: the annotation starts where its base does.
+		if !near(a.x, b.x, 0.05) {
+			t.Errorf("annotation %d at x %.2f, base at %.2f", i, a.x, b.x)
+		}
+		if (a.y < b.y) != above {
+			t.Errorf("annotation %d at y %.2f, base at %.2f, want above %v", i, a.y, b.y, above)
+		}
+	}
+}

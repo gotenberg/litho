@@ -47,6 +47,7 @@ const (
 	HeaderFooterProps = "style:header-footer-properties"
 	ListLevelProps    = "style:list-level-properties"
 	DrawingPageProps  = "style:drawing-page-properties"
+	RubyProps         = "style:ruby-properties"
 )
 
 // maxStyleChain bounds the parent chain resolved for one style: 64.

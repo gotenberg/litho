@@ -67,8 +67,9 @@
 // # What is not
 //
 // WMF, EMF and SVM pictures, the tables of drawing shapes, other custom
-// shape geometries, ruby annotations, line numbering, drop caps and
-// comments are not drawn, each with a warning where the document holds
-// one. The marked view draws no mark in a
+// shape geometries, line numbering, drop caps and comments are not
+// drawn, each with a warning where the document holds one. Ruby
+// annotations are drawn above or below their base, centred or from its
+// start; their other alignments center. The marked view draws no mark in a
 // header or a footer, and no change bar beside the lines of a frame.
 package odt

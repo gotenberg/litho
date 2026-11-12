@@ -811,8 +811,7 @@ func (b *builder) inlineElement(c *odf.Element, t textState, out *[]*layout.Node
 			}
 		case "hidden-paragraph":
 		case "ruby":
-			b.warn("ruby", warn.ContentUnsupported, warn.Omitted, "ruby annotations are left out; the base text is drawn")
-			b.inline(c.Child(odf.NSText, "ruby-base"), t, out, ws, depth)
+			b.ruby(c, t, out, ws, depth)
 		case "conditional-text":
 			b.inline(c, t, out, ws, depth)
 		default:
@@ -830,6 +829,137 @@ func (b *builder) inlineElement(c *odf.Element, t textState, out *[]*layout.Node
 	default:
 		b.inline(c, t, out, ws, depth)
 	}
+}
+
+// rubySize is the font size of ruby text whose style sets none: 6
+// points, the size of Writer's Rubies character style, whatever the size
+// of its base.
+const rubySize = 6
+
+// rubySlack is the room an annotation's box takes past its measured
+// width, so that rounding does not wrap its last character.
+const rubySlack = 0.01
+
+// ruby appends a text:ruby (ODF 1.3, Part 3, 6.4): its base in line, its
+// annotation drawn above it, or below it under style:ruby-position below
+// (20.343), centred on it, or from its start under style:ruby-align left
+// (20.342), in a box as wide as the base. The annotation overhangs the
+// text beside the base when it is wider; the line grows by the
+// annotation's height. The base does not break across lines.
+//
+// # Corpus evidence
+//
+//   - litho/odt: ja-ruby prints its ruby text at 6 points over 12 and 20
+//     point bases, centred on the base, "びょうどう" overhanging "平等" by 3
+//     points on each side without moving it, the ruby's descent on the
+//     base's ascent (15.65 points above a 12 point Noto Sans CJK base
+//     line).
+func (b *builder) ruby(c *odf.Element, t textState, out *[]*layout.Node, ws *wsState, depth int) {
+	var base []*layout.Node
+	b.inline(c.Child(odf.NSText, "ruby-base"), t, &base, ws, depth)
+	rt := c.Child(odf.NSText, "ruby-text")
+	annot := ""
+	if rt != nil {
+		annot = strings.TrimSpace(rt.TextContent())
+	}
+	if annot == "" || len(base) == 0 || t.hidden {
+		*out = append(*out, base...)
+		return
+	}
+	rs := t
+	rs.size, rs.scripts[0].size, rs.scripts[1].size = rubySize, rubySize, rubySize
+	rs.under, rs.through, rs.over = decoLine{}, decoLine{}, decoLine{}
+	if name := rt.A(odf.NSText, "style-name"); name != "" {
+		rs = b.spanText(rs, name)
+	}
+	props := b.styles.Resolve(b.scope, odf.FamilyRuby, c.A(odf.NSText, "style-name"), odf.RubyProps)
+	var baseText strings.Builder
+	for _, n := range base {
+		walkText(n, &baseText)
+	}
+	baseW := b.scriptWidth(baseText.String(), t)
+	annotNodes, annotW, annotH := b.scriptParts(annot, rs)
+	left := (baseW - annotW) / 2
+	if props.Get("style:ruby-align") == "left" {
+		left = 0
+	}
+	// The annotation's block takes the annotation's font, so that no
+	// strut of the body's size lowers its line.
+	ann := baseStyle()
+	applyText(ann, rs, false)
+	ann.Display = css.Block
+	ann.WhiteSpace = css.Pre
+	ann.Position = css.Absolute
+	ann.Left, ann.Top = css.Pts(left), css.Pts(0)
+	// An annotation wider than its base keeps to one line.
+	ann.Width = css.Pts(annotW + rubySlack)
+	band := baseStyle()
+	band.Display = css.Block
+	band.Position = css.Relative
+	band.Height = css.Pts(annotH)
+	bandNode := b.node(&layout.Node{Kind: layout.Element, Style: band, Children: []*layout.Node{
+		b.node(&layout.Node{Kind: layout.Element, Style: ann, Children: annotNodes}),
+	}})
+	bst := baseStyle()
+	bst.Display = css.Block
+	bst.WhiteSpace = css.Pre
+	baseNode := b.node(&layout.Node{Kind: layout.Element, Style: bst, Children: base})
+	wst := baseStyle()
+	wst.Display = css.InlineBlock
+	kids := []*layout.Node{bandNode, baseNode}
+	if props.Get("style:ruby-position") == "below" {
+		kids = []*layout.Node{baseNode, bandNode}
+	}
+	*out = append(*out, b.node(&layout.Node{Kind: layout.Element, Style: wst, Children: kids}))
+}
+
+// walkText appends the text of the text nodes of n to sb, in tree order.
+func walkText(n *layout.Node, sb *strings.Builder) {
+	if n.Kind == layout.Text {
+		sb.WriteString(n.Text)
+	}
+	for _, c := range n.Children {
+		walkText(c, sb)
+	}
+}
+
+// scriptWidth returns the width of the text s in the text properties t,
+// each part in its script's ([odf.SplitScripts]).
+func (b *builder) scriptWidth(s string, t textState) float64 {
+	parts, err := odf.SplitScripts(b.ctx, []string{s}, false)
+	if err != nil || parts == nil {
+		st := baseStyle()
+		applyText(st, t, true)
+		return b.textWidth(s, st)
+	}
+	w := 0.0
+	for _, p := range parts[0] {
+		st := baseStyle()
+		applyText(st, t.forScript(p.Script), true)
+		w += b.textWidth(p.Text, st)
+	}
+	return w
+}
+
+// scriptParts returns the run nodes of the text s in the text properties
+// t, each part of a script in its script's, with their width and the
+// height of their line: the tallest ascent and descent of their faces.
+func (b *builder) scriptParts(s string, t textState) ([]*layout.Node, float64, float64) {
+	parts := [][]odf.ScriptPart{{{Text: s, Script: odf.Western}}}
+	if p, err := odf.SplitScripts(b.ctx, []string{s}, false); err == nil && p != nil {
+		parts = p
+	}
+	nodes := make([]*layout.Node, 0, len(parts[0]))
+	w, h := 0.0, 0.0
+	for _, p := range parts[0] {
+		pt := t.forScript(p.Script)
+		n := b.runNode(p.Text, pt, false)
+		nodes = append(nodes, n)
+		w += b.textWidth(p.Text, n.Style)
+		asc, desc := b.faceMetrics(pt)
+		h = max(h, (asc+desc)*pt.size)
+	}
+	return nodes, w, h
 }
 
 // maxSpaces bounds the spaces one text:s inserts: 10,000. Anti-DoS guard,
