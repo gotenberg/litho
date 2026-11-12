@@ -43,7 +43,9 @@ type structState struct {
 	// order lists the elements in preorder, the order they are written in,
 	// once the tree has arrived.
 	order []*StructElem
-	refs  map[*StructElem]ast.PdfIndirectRef
+	// size is the count of elements, kept once order is let go.
+	size int
+	refs map[*StructElem]ast.PdfIndirectRef
 	// parents holds, at each element's index in order, its parent's index
 	// there, -1 for the root.
 	parents []int
@@ -112,6 +114,7 @@ func (st *structState) number(root *StructElem) {
 		st.refs[it.e] = elemRef(i)
 		st.order = append(st.order, it.e)
 		st.parents = append(st.parents, it.parent)
+		st.size++
 		for _, v := range slices.Backward(it.e.Kids) {
 			stack = append(stack, entry{v, i})
 		}
@@ -348,7 +351,16 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 		root["Namespaces"] = ast.PdfArray{nsRef}
 	}
 	w.reserved[structRootRef.ObjectNum] = root
+	st.release()
 	return nil
+}
+
+// release lets go of what the pages recorded and of the numbering once
+// the tree is written: the dictionaries written hold all of it, and only
+// the count of elements, size, is read after.
+func (st *structState) release() {
+	st.order, st.refs, st.parents, st.annots, st.refers = nil, nil, nil, nil, nil
+	st.pageParents, st.annotParents = nil, nil
 }
 
 // tocKept returns the TOC and TOCI elements a PDF 2.0 file writes as

@@ -417,7 +417,7 @@ func (w *docWriter) final(ctx context.Context, trailer ast.PdfDict) (*writer.Obj
 	n := len(w.heights)
 	reservedCount := 1 + n
 	if w.st != nil {
-		reservedCount += 1 + len(w.st.order)
+		reservedCount += 1 + w.st.size
 	}
 	number := func(num int) int {
 		switch {

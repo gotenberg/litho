@@ -381,6 +381,9 @@ func (s *Stream) Close(ctx context.Context, tail *Document, dst io.Writer) error
 	if err != nil {
 		return s.fail(err)
 	}
+	// The end has checked what the pages named: the file is written
+	// without it.
+	s.v = validator{}
 	return s.fail(s.writeFile(ctx, tail, dst, dest))
 }
 
