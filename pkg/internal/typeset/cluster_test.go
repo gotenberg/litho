@@ -3,12 +3,15 @@ package typeset_test
 import (
 	"bytes"
 	"context"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/embed"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // markFace builds a face with the letters a, b and c, a combining acute
@@ -144,6 +147,127 @@ func TestWriteClusterSpreadsItsText(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestWriteClusterMapsEveryGlyph locks that every glyph a run draws maps to
+// text in the ToUnicode CMap, as ISO 19005-2, 6.2.11.7.2, ISO 19005-1,
+// 6.3.8 and ISO 14289-1, 7.21.7 ask of every rendered code, an ActualText
+// span covering it or not: a glyph left without a character of its cluster
+// maps to the character the font's cmap maps to it, or to U+FFFD when the
+// cmap maps none, and a character drawn in parts maps to its
+// decomposition's characters. The cluster's text stays whole in the
+// ActualText span around its glyphs (ISO 32000-1, 14.9.4).
+//
+// # Corpus evidence
+//
+//   - litho/html, litho/odt th-line-break, litho/odp indic-thai-slides,
+//     litho/ods indic-thai-cells: Noto Sans Thai draws SARA AM (U+0E33) as
+//     NIKHAHIT and SARA AA; the SARA AA glyph had no ToUnicode entry, six
+//     rendered codes on the HTML page failing PDF/A-2u, 6.2.11.7.2 t1.
+//     Chromium's and LibreOffice's references of th-line-break map the two
+//     glyphs to U+0E4D and U+0E32 inside an ActualText span of the
+//     cluster, as litho does.
+//   - probe, html: Noto Sans Tamil and Khmer draw a dotted circle under a
+//     mark with no base, Noto Sans Khmer draws U+17BE as two glyphs, Noto
+//     Sans Bengali U+09CB and Noto Sans Lao U+0EB3 as two; each second
+//     glyph had no entry. veraPDF passes PDF/A-1a, PDF/A-2u and PDF/UA-2 on
+//     the output, its U+25CC entries included.
+func TestWriteClusterMapsEveryGlyph(t *testing.T) {
+	t.Parallel()
+	face, gids := markFace(t)
+	marks := "a" + strings.Repeat("\u0301", 70)
+	long := []shaped{{"a", 5, marks}}
+	for range 70 {
+		long = append(long, shaped{"\u0301", 0, ""})
+	}
+	tests := []struct {
+		name   string
+		glyphs []shaped
+		// mapped are the texts the ToUnicode CMap holds, actual the
+		// ActualText spans the content stream holds, in order.
+		mapped []string
+		actual []string
+	}{
+		{
+			name:   "mark the shaper adds",
+			glyphs: []shaped{{"b", 5, "b"}, {"\u0301", 0, ""}, {"c", 5, "c"}},
+			mapped: []string{"b", "\u0301", "c"},
+			actual: []string{"b"},
+		},
+		{
+			name:   "glyph no cmap entry reaches",
+			glyphs: []shaped{{"b", 5, "b"}, {"alt", 0, ""}, {"c", 5, "c"}},
+			mapped: []string{"b", "\uFFFD", "c"},
+			actual: []string{"b"},
+		},
+		{
+			name:   "precomposed letter drawn in parts",
+			glyphs: []shaped{{"b", 5, "b"}, {"a", 5, "\u00E1"}, {"\u0301", 0, ""}},
+			mapped: []string{"b", "a", "\u0301"},
+			actual: []string{"\u00E1"},
+		},
+		{
+			name:   "glyphs that start a run without text",
+			glyphs: []shaped{{"\u0301", 0, ""}, {"a", 5, "a"}},
+			mapped: []string{"\u0301", "a"},
+		},
+		{
+			name:   "cluster past the cap",
+			glyphs: long,
+			mapped: []string{marks, "\u0301"},
+			actual: []string{marks},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			doc := &typeset.Document{Pages: []*typeset.Page{{Width: 200, Height: 100, Content: []typeset.Fragment{shapedRun(face, gids, tt.glyphs)}}}}
+			out := write(t, doc)
+			got := toUnicodeTexts(t, out)
+			slices.Sort(got)
+			want := slices.Clone(tt.mapped)
+			slices.Sort(want)
+			if !slices.Equal(got, want) {
+				t.Errorf("ToUnicode texts = %q, want %q", got, want)
+			}
+			var spans []string
+			for _, chunk := range bytes.Split(inflated(t, out), []byte("/Span <</ActualText <FEFF"))[1:] {
+				hex, _, _ := bytes.Cut(chunk, []byte(">"))
+				spans = append(spans, utf16Hex(t, string(hex)))
+			}
+			if !slices.Equal(spans, tt.actual) {
+				t.Errorf("ActualText spans = %q, want %q", spans, tt.actual)
+			}
+			violations, err := open(t, out).ValidatePDFAReport(context.Background(), models.PDFA2u)
+			if err != nil {
+				t.Fatalf("ValidatePDFAReport: %v", err)
+			}
+			for _, v := range violations {
+				if v.Clause == "6.2.11.7.2" {
+					t.Errorf("violation: %v", v)
+				}
+			}
+		})
+	}
+}
+
+// bfcharEntry matches one entry of a ToUnicode CMap's bfchar block: a code
+// and the UTF-16BE text it maps to.
+var bfcharEntry = regexp.MustCompile(`<([0-9A-F]{4})> <([0-9A-F]+)>`)
+
+// toUnicodeTexts returns the texts the bfchar entries of the ToUnicode
+// CMaps in out, a file whose CMap streams are not compressed, name, one per
+// code.
+func toUnicodeTexts(t *testing.T, out []byte) []string {
+	t.Helper()
+	var texts []string
+	for _, block := range bytes.Split(out, []byte("beginbfchar"))[1:] {
+		block, _, _ = bytes.Cut(block, []byte("endbfchar"))
+		for _, m := range bfcharEntry.FindAllSubmatch(block, -1) {
+			texts = append(texts, utf16Hex(t, string(m[2])))
+		}
+	}
+	return texts
 }
 
 // utf16Hex decodes hex, UTF-16BE code units as four hex digits each.

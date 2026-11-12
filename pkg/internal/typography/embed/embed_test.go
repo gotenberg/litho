@@ -165,6 +165,12 @@ func TestLoadReadsTheProgram(t *testing.T) {
 	if _, ok := f.GID('Z'); ok {
 		t.Error("GID('Z') found a glyph the program lacks")
 	}
+	if r, ok := f.Rune(2); !ok || r != 'B' {
+		t.Errorf("Rune(2) = %q, %v, want 'B', true", r, ok)
+	}
+	if _, ok := f.Rune(0); ok {
+		t.Error("Rune(0) found a character for .notdef")
+	}
 	if w, ok := f.Width(3); !ok || w != 800 {
 		t.Errorf("Width(3) = %d, %v, want 800, true", w, ok)
 	}

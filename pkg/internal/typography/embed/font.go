@@ -88,6 +88,13 @@ func (f *Font) GID(r rune) (uint16, bool) {
 	return gid, ok
 }
 
+// Rune returns a character the program's Unicode cmap maps to glyph gid,
+// the lowest when several do, and false when it maps none.
+func (f *Font) Rune(gid uint16) (rune, bool) {
+	r, ok := f.gidToUnicode[gid]
+	return r, ok
+}
+
 // Width returns the advance width of glyph gid in font units, and false
 // when the program gives it none.
 func (f *Font) Width(gid uint16) (uint16, bool) {
