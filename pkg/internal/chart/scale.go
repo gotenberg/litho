@@ -19,6 +19,17 @@ const maxMinorTicks = maxTicks * 5
 // ends within twice as many; the cap allows four times.
 const maxMinorSteps = 4 * maxMinorTicks
 
+// maxLogBase bounds the base of a logarithmic axis: an axis whose base is
+// not between 1 and maxLogBase draws linear. Not spec-mandated: ECMA-376's
+// ST_LogBase allows 2 to 1000, and the bound refuses only absurd bases.
+const maxLogBase = 1e6
+
+// maxIntervalSteps caps the search for a major interval whose ticks fit.
+// Anti-DoS guard, not spec-mandated: each step widens the interval to the
+// next of 1, 2 and 5 times a power of ten, so 64 steps widen it by over
+// twenty decades, and the major tick cap bounds what is left.
+const maxIntervalSteps = 64
+
 // maxAutoTicks is the most major intervals the automatic scale chooses,
 // LibreOffice's for a value axis.
 const maxAutoTicks = 10
@@ -59,7 +70,7 @@ func autoScale(ax *Axis, lo, hi float64, opt scaleOptions) scale {
 		fixMin, fixMax, fixMajor = finite(ax.Min), finite(ax.Max), finite(ax.MajorUnit)
 		sc.minor = finite(ax.MinorUnit)
 		sc.reverse = ax.Reverse
-		if ax.Log > 1 && ax.Log < 1e6 {
+		if ax.Log > 1 && ax.Log < maxLogBase {
 			sc.log = ax.Log
 		}
 	}
@@ -133,7 +144,7 @@ func autoScale(ax *Axis, lo, hi float64, opt scaleOptions) scale {
 	norm, mag := 0.0, 0.0
 	haveNorm := false
 	var aMin, aMax float64
-	for range 64 {
+	for range maxIntervalSteps {
 		if autoDist {
 			if !haveNorm {
 				d := (tMax - tMin) / float64(maxCount)

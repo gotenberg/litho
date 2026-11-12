@@ -56,6 +56,11 @@ func (c *Chart) seriesCount() int {
 	return n
 }
 
+// maxMarkerSize caps a marker's size, in points. Anti-DoS guard, not
+// spec-mandated: ECMA-376's ST_MarkerSize allows 2 to 72, and the cap
+// keeps a marker from a lenient file inside its chart.
+const maxMarkerSize = 100
+
 // lined reports a kind whose series draw as lines.
 func lined(k Kind) bool { return k == Line || k == Scatter || k == Radar }
 
@@ -126,7 +131,7 @@ func (rd *renderer) markerOf(g *Group, s *Series, j int) Marker {
 	if !positive(m.Size) {
 		m.Size = 5
 	}
-	m.Size = min(m.Size, 100)
+	m.Size = min(m.Size, maxMarkerSize)
 	if m.Fill == nil {
 		if b := rd.borderOf(g, s, j); b != nil && !b.None {
 			m.Fill = &Paint{Color: b.Color}

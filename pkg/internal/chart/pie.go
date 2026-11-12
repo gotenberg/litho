@@ -7,6 +7,20 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
+// maxExplosion caps how far a slice is pushed out of its pie, in percent
+// of the radius. Anti-DoS guard, not spec-mandated: ECMA-376's explosion
+// has no upper bound, and a pie that makes room for a slice pushed out
+// four radii already draws at a fifth of its radius.
+const maxExplosion = 400
+
+// minHoleSize and maxHoleSize bound a doughnut's hole, in percent of its
+// radius: ECMA-376's ST_HoleSize allows at most 90, and the floor keeps a
+// hole visible.
+const (
+	minHoleSize = 10
+	maxHoleSize = 90
+)
+
 // arc appends to ops the circular arc of centre (cx, cy) and radius r from
 // angle a0 to a1, in radians counter-clockwise from the x axis with y up,
 // as cubic Béziers of at most a quarter turn each.
@@ -72,7 +86,7 @@ func (rd *renderer) pies(plot compose.Rect) {
 			}
 		}
 	}
-	maxExpl = math.Max(0, math.Min(maxExpl, 400)) / 100
+	maxExpl = math.Max(0, math.Min(maxExpl, maxExplosion)) / 100
 	// Labels placed outside take room from the pie.
 	outside := false
 	maxW, maxH := 0.0, 0.0
@@ -97,7 +111,7 @@ func (rd *renderer) pies(plot compose.Rect) {
 	}
 	hole := 0.0
 	if g.Kind == Doughnut {
-		hole = r * math.Max(10, math.Min(holeSize(g), 90)) / 100
+		hole = r * math.Max(minHoleSize, math.Min(holeSize(g), maxHoleSize)) / 100
 	}
 	start := (90 - g.FirstSliceAngle) * math.Pi / 180
 	dir := -1.0
@@ -109,7 +123,7 @@ func (rd *renderer) pies(plot compose.Rect) {
 		// exploded sector takes (chart2's PieChart::getMaxOffset).
 		r = math.Min(plot.Width, plot.Height) / 2 / (1 + maxExpl)
 		if g.Kind == Doughnut {
-			hole = r * math.Max(10, math.Min(holeSize(g), 90)) / 100
+			hole = r * math.Max(minHoleSize, math.Min(holeSize(g), maxHoleSize)) / 100
 		}
 	}
 	ringW := (r - hole) / float64(len(series))
@@ -142,7 +156,7 @@ func (rd *renderer) pies(plot compose.Rect) {
 			if p := rd.point(s, j); p != nil && p.HasExplosion {
 				ex = p.Explosion
 			}
-			ex = math.Max(0, math.Min(ex, 400)) / 100 * r
+			ex = math.Max(0, math.Min(ex, maxExplosion)) / 100 * r
 			if g.Kind == Doughnut && si != len(series)-1 {
 				ex = 0
 			}
