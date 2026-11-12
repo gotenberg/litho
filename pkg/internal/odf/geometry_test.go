@@ -3,6 +3,8 @@ package odf
 import (
 	"context"
 	"math"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -176,5 +178,17 @@ func TestParseGeometry_OpenSubpaths(t *testing.T) {
 	dml := shape.Paths(parseGeometryXML(t, geometryXML(`draw:type="ooxml-rect" draw:enhanced-path="M 0 0 L 21600 0 21600 21600 N"`, "")), box)
 	if len(dml) != 1 || !dml[0].Fill {
 		t.Errorf("DrawingML shape: %+v", dml)
+	}
+}
+
+// TestParseGeometry_SignsNestedTooDeep stops a formula of a long run of
+// signs at the nesting cap: each sign recursed once more, as deep as the
+// formula is long.
+func TestParseGeometry_SignsNestedTooDeep(t *testing.T) {
+	t.Parallel()
+	formula := strings.Repeat("+", 10*maxFormulaDepth) + "1"
+	g := parseGeometryXML(t, geometryXML(`draw:enhanced-path="M ?f0 0 L 1 1"`, `<draw:equation draw:name="f0" draw:formula="`+formula+`"/>`))
+	if g == nil || g.Custom == nil || !slices.Contains(g.Custom.Unresolved, "(formula nested too deep)") {
+		t.Fatalf("geometry %+v, want the formula reported nested too deep", g)
 	}
 }

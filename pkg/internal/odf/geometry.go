@@ -272,12 +272,18 @@ func (p *formulaParser) peek() byte {
 	return 0
 }
 
+// tooDeep gives up on the rest of a formula nested past
+// [maxFormulaDepth].
+func (p *formulaParser) tooDeep() shape.Arg {
+	p.pos = len(p.s)
+	p.e.unresolved("(formula nested too deep)")
+	return shape.Arg{}
+}
+
 // expr parses a sum.
 func (p *formulaParser) expr(depth int) shape.Arg {
 	if depth > maxFormulaDepth {
-		p.pos = len(p.s)
-		p.e.unresolved("(formula nested too deep)")
-		return shape.Arg{}
+		return p.tooDeep()
 	}
 	a := p.term(depth)
 	for {
@@ -323,8 +329,12 @@ var functions = map[string]struct { //nolint:gochecknoglobals // a read-only spe
 	"if": {shape.OpIfElse, 3},
 }
 
-// unary parses a signed primary.
+// unary parses a signed primary. Each sign nests a level, as a
+// parenthesis does.
 func (p *formulaParser) unary(depth int) shape.Arg {
+	if depth > maxFormulaDepth {
+		return p.tooDeep()
+	}
 	switch c := p.peek(); {
 	case c == '-':
 		p.pos++
