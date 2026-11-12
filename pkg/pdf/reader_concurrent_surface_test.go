@@ -50,6 +50,7 @@ func TestConcurrentReaderSurface(t *testing.T) {
 		{"ExtractFormulas", func(c context.Context) { _, _ = r.ExtractFormulas(c) }},
 		{"ExtractPronunciationLexicons", func(c context.Context) { _, _ = r.ExtractPronunciationLexicons(c) }},
 		{"ExtractSignatures", func(c context.Context) { _, _ = r.ExtractSignatures(c) }},
+		{"HasSignatures", func(c context.Context) { _, _ = r.HasSignatures(c) }},
 		{"FormData", func(c context.Context) { _, _ = r.FormData(c) }},
 		{"FormFields", func(c context.Context) { _, _ = r.FormFields(c) }},
 		{"HasAcroForm", func(c context.Context) { _ = r.HasAcroForm(c) }},

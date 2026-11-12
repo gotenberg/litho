@@ -25,6 +25,22 @@ const maxFieldTreeDepth = 64
 // document without registering the field in /AcroForm leaves the signature
 // reachable only from the page, so both are walked.
 func ExtractSignatures(ctx context.Context, doc *document.Document) ([]models.Signature, error) {
+	return extractSignatures(ctx, doc, true)
+}
+
+// HasSignatures reports whether the document carries a signature: a signature
+// field with a value, found where [ExtractSignatures] looks, so it answers yes
+// exactly when ExtractSignatures returns a signature. An empty signature field
+// does not count. It skips the digest of the signed bytes, which costs a read
+// of the whole file per signature.
+func HasSignatures(ctx context.Context, doc *document.Document) (bool, error) {
+	signatures, err := extractSignatures(ctx, doc, false)
+	return len(signatures) > 0, err
+}
+
+// extractSignatures is [ExtractSignatures], computing each DocumentHash only
+// when hash is true.
+func extractSignatures(ctx context.Context, doc *document.Document, hash bool) ([]models.Signature, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
@@ -46,13 +62,13 @@ func ExtractSignatures(ctx context.Context, doc *document.Document) ([]models.Si
 				}
 				if fieldsArr != nil {
 					markSignatureValues(ctx, doc, fieldsArr, seen, 0)
-					extractSigsRecursive(ctx, doc, fieldsArr, "", &signatures, 0)
+					extractSigsRecursive(ctx, doc, fieldsArr, "", &signatures, hash, 0)
 				}
 			}
 		}
 	}
 
-	appendAnnotationSignatures(ctx, doc, catalog, seen, &signatures)
+	appendAnnotationSignatures(ctx, doc, catalog, seen, &signatures, hash)
 
 	return signatures, nil
 }
@@ -115,6 +131,7 @@ func appendAnnotationSignatures(
 	catalog *document.Catalog,
 	seen map[int]bool,
 	sigs *[]models.Signature,
+	hash bool,
 ) {
 	pages, err := document.ResolvePages(ctx, doc, catalog)
 	if err != nil {
@@ -155,12 +172,12 @@ func appendAnnotationSignatures(
 	}
 
 	if len(unregistered) > 0 {
-		extractSigsRecursive(ctx, doc, unregistered, "", sigs, 0)
+		extractSigsRecursive(ctx, doc, unregistered, "", sigs, hash, 0)
 	}
 }
 
-func extractSigsRecursive(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, sigs *[]models.Signature, depth int) {
-	extractSigsRecursiveAt(ctx, doc, fields, parentName, sigs, make(map[int]bool), depth)
+func extractSigsRecursive(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, sigs *[]models.Signature, hash bool, depth int) {
+	extractSigsRecursiveAt(ctx, doc, fields, parentName, sigs, hash, make(map[int]bool), depth)
 }
 
 // extractSigsRecursiveAt is [extractSigsRecursive] carrying the fields already
@@ -176,7 +193,7 @@ func extractSigsRecursive(ctx context.Context, doc *document.Document, fields as
 // bound cannot stand in for it either, since the walk fans out over /Kids and a
 // repeated kid costs 2^depth (ISO 32000-1, 12.7.3 puts no depth on a field
 // tree, so the bound is an anti-DoS guard, not a spec limit).
-func extractSigsRecursiveAt(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, sigs *[]models.Signature, visited map[int]bool, depth int) {
+func extractSigsRecursiveAt(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, sigs *[]models.Signature, hash bool, visited map[int]bool, depth int) {
 	if depth > maxFieldTreeDepth {
 		return
 	}
@@ -280,7 +297,7 @@ func extractSigsRecursiveAt(ctx context.Context, doc *document.Document, fields 
 						sig.MDPPolicy = extractMDPPolicy(ctx, doc, vDict)
 
 						// Calculate hash of the physical bytes defined by ByteRange
-						if sig.ByteRange[1] > 0 && sig.ByteRange[3] > 0 &&
+						if hash && sig.ByteRange[1] > 0 && sig.ByteRange[3] > 0 &&
 							byteRangeReadable(sig.ByteRange, doc.FileSize()) {
 							chunk1, err1 := doc.ReadFileBytes(ctx, sig.ByteRange[0], sig.ByteRange[1])
 							chunk2, err2 := doc.ReadFileBytes(ctx, sig.ByteRange[2], sig.ByteRange[3])
@@ -310,7 +327,7 @@ func extractSigsRecursiveAt(ctx context.Context, doc *document.Document, fields 
 				doc.Logger.Debug("resolving signature field kids", slog.Any("err", err))
 			}
 			if kidsArr != nil {
-				extractSigsRecursiveAt(ctx, doc, kidsArr, fullName, sigs, visited, depth+1)
+				extractSigsRecursiveAt(ctx, doc, kidsArr, fullName, sigs, hash, visited, depth+1)
 			}
 		}
 	}

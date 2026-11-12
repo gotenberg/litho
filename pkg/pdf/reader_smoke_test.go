@@ -65,6 +65,9 @@ func TestReader_Smoke_AllGetters(t *testing.T) {
 	if _, err := r.ExtractSignatures(ctx); err != nil {
 		t.Errorf("ExtractSignatures: %v", err)
 	}
+	if _, err := r.HasSignatures(ctx); err != nil {
+		t.Errorf("HasSignatures: %v", err)
+	}
 	if _, err := r.DSSInfo(ctx); err != nil {
 		t.Errorf("DSSInfo: %v", err)
 	}

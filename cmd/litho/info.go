@@ -27,6 +27,7 @@ type infoResult struct {
 	Encrypted          bool                      `json:"encrypted"`
 	Linearized         bool                      `json:"linearized"`
 	HasForms           bool                      `json:"has_forms"`
+	Signed             bool                      `json:"signed"`
 	IsPortfolio        bool                      `json:"is_portfolio"`
 	UndecodableStreams []models.StreamDiagnostic `json:"undecodableStreams,omitempty"`
 	SalvagedStreams    []models.StreamDiagnostic `json:"salvagedStreams,omitempty"`
@@ -61,6 +62,7 @@ func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 		pageCount, _ := r.PageCount(ctx)
 		hasForms, _ := r.HasFormFields(ctx)
+		signed, _ := r.HasSignatures(ctx)
 		isPortfolio, _ := r.IsPortfolio(ctx)
 
 		res := infoResult{
@@ -70,6 +72,7 @@ func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			Encrypted:   r.IsEncrypted(),
 			Linearized:  r.IsLinearized(),
 			HasForms:    hasForms,
+			Signed:      signed,
 			IsPortfolio: isPortfolio,
 		}
 		if *checkStreams {
@@ -109,6 +112,7 @@ func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "Encrypted:   %t\n", res.Encrypted)
 			fmt.Fprintf(stdout, "Linearized:  %t\n", res.Linearized)
 			fmt.Fprintf(stdout, "Has forms:   %t\n", res.HasForms)
+			fmt.Fprintf(stdout, "Signed:      %t\n", res.Signed)
 			fmt.Fprintf(stdout, "Portfolio:   %t\n", res.IsPortfolio)
 			if *checkStreams {
 				if len(res.UndecodableStreams) == 0 {

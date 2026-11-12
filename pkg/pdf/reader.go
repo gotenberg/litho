@@ -1615,6 +1615,16 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 	return signature.ExtractSignatures(ctx, r.doc)
 }
 
+// HasSignatures reports whether the document carries a digital signature: a
+// signature field with a value, so an empty signature field does not count. It
+// answers yes exactly when [Reader.ExtractSignatures] returns a signature, but
+// skips the digest of the bytes each one covers. It validates nothing; see
+// [Reader.VerifySignatures].
+func (r *Reader) HasSignatures(ctx context.Context) (_ bool, err error) {
+	defer recoverToError(r.logger(), "Reader.HasSignatures", &err)
+	return signature.HasSignatures(ctx, r.doc)
+}
+
 // VerifySignatures validates every digital signature in the document by
 // parsing the embedded PKCS#7/CMS block, extracting the X.509 signer
 // certificates, and verifying the chain against the provided trusted root

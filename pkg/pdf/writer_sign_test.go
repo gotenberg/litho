@@ -51,6 +51,9 @@ func checkSignedOutput(t *testing.T, data []byte, signer *cmsTestSigner) {
 	if len(sigs) != 1 {
 		t.Fatalf("the output holds %d signatures, want 1", len(sigs))
 	}
+	if signed, err := r.HasSignatures(ctx); err != nil || !signed {
+		t.Errorf("HasSignatures = %t, %v; want true for the signed output", signed, err)
+	}
 	br := sigs[0].ByteRange
 	total := int64(len(data))
 	if br[0] != 0 || br[1] <= 0 || br[2] <= br[1] || br[2]+br[3] != total {

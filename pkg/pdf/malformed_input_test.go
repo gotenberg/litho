@@ -30,6 +30,7 @@ var malformedEntryPoints = []struct {
 	{"HasFormFields", func(ctx context.Context, r *Reader) error { _, err := r.HasFormFields(ctx); return err }},
 	{"IsTagged", func(ctx context.Context, r *Reader) error { _, err := r.IsTagged(ctx); return err }},
 	{"ExtractSignatures", func(ctx context.Context, r *Reader) error { _, err := r.ExtractSignatures(ctx); return err }},
+	{"HasSignatures", func(ctx context.Context, r *Reader) error { _, err := r.HasSignatures(ctx); return err }},
 	{"ValidatePDFAReport", func(ctx context.Context, r *Reader) error {
 		_, err := r.ValidatePDFAReport(ctx, models.PDFA2b)
 		return err
