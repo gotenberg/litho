@@ -260,7 +260,7 @@ func calcOf(t *token, depth int) (calcValue, bool) {
 	}
 	if name == "clamp" {
 		inner, ok := compare(vals[1:], false)
-		if !ok {
+		if !ok || inner.l.bad {
 			return calcValue{}, false
 		}
 		return compare([]calcValue{vals[0], inner}, true)

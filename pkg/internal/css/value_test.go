@@ -193,3 +193,15 @@ func TestParseCalc_CompareLengthWithPercentIsInvalid(t *testing.T) {
 		t.Errorf("calc(min(10%%, 5px) + 2px) = %+v, want the value dropped", got)
 	}
 }
+
+// TestClamp_PercentageComparisonInvalid locks clamp() on a percentage
+// mixed with a length, which a [Dimension] cannot defer: the declaration
+// is invalid, as min() and max() make it (CSS Values 4, 10.2).
+func TestClamp_PercentageComparisonInvalid(t *testing.T) {
+	t.Parallel()
+	for _, v := range []string{"min(10px, 50%)", "clamp(10px, 50%, 20px)", "clamp(50%, 10px, 20px)"} {
+		if s := styleOf(t, "width: 5px; width: "+v); s.Width != pts(3.75) {
+			t.Errorf("width: %s computes to %+v, want it rejected", v, s.Width)
+		}
+	}
+}
