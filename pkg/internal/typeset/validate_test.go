@@ -118,6 +118,13 @@ func TestValidateRefuses(t *testing.T) {
 		{"empty clip", page(&Group{Clip: &Path{}}), ErrInvalidPath},
 		{"NaN clip", page(&Group{Clip: &Path{Ops: []PathOp{{Kind: MoveTo, P: [3]Point{{X: nan}}}}}}), ErrInvalidPath},
 		{"nested bad fragment", page(&Group{Content: []Fragment{&Group{Content: []Fragment{&Text{}}}}}), ErrInvalidText},
+		{"unknown blend mode", page(&Group{Blend: BlendLuminosity + 1}), ErrInvalidGroup},
+		{"unknown group colour space", page(&Group{Transparency: &TransparencyGroup{Space: SpaceGray + 1}}), ErrInvalidGroup},
+		{"unknown mask kind", page(&Group{Transparency: &TransparencyGroup{Mask: &SoftMask{Kind: MaskAlpha + 1}}}), ErrInvalidGroup},
+		{"bad mask fragment", page(&Group{Transparency: &TransparencyGroup{Mask: &SoftMask{Content: []Fragment{&Text{}}}}}), ErrInvalidText},
+		{"tagged mask fragment", &Document{Structure: &StructElem{Role: "Document", Kids: []*StructElem{shared}}, Pages: []*Page{{Width: 1, Height: 1, Content: []Fragment{
+			&Group{Transparency: &TransparencyGroup{Mask: &SoftMask{Content: []Fragment{&Path{Ops: square(), Fill: &Fill{Color: Black}, Parent: shared}}}}},
+		}}}}, ErrInvalidGroup},
 		{"link with neither", withLinks(Link{}), ErrInvalidLink},
 		{"link with both", withLinks(Link{URI: "x", Dest: &Dest{Page: 1}}), ErrInvalidLink},
 		{"NaN link rect", withLinks(Link{URI: "x", Rect: Rect{X: nan}}), ErrInvalidLink},
@@ -154,6 +161,9 @@ func TestValidateAccepts(t *testing.T) {
 			&Text{Face: &Face{}, Size: 1, Color: Black, Parent: p},
 			&Group{Opacity: 0, Clip: &Path{Ops: square()}},
 			&Group{Opacity: 1},
+			&Group{Blend: BlendLuminosity, Transparency: &TransparencyGroup{Isolated: true, Knockout: true, Space: SpaceGray, Mask: &SoftMask{Kind: MaskAlpha}}, Content: []Fragment{
+				&Path{Ops: square(), Fill: &Fill{Color: Black}, Parent: p},
+			}},
 			&Path{Ops: square(), Stroke: &Stroke{Color: Black, Miter: 1, Dash: []float64{0, 2}}},
 		}}},
 		Outline: []Outline{{Title: "t", Dest: Dest{Page: 1}}},

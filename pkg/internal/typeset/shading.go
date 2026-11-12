@@ -40,11 +40,14 @@ type shUse struct {
 	ref  ast.PdfIndirectRef
 }
 
-// maskUse is one ExtGState with a soft mask a page's resources name.
+// maskUse is one ExtGState with a soft mask a page's resources name, and
+// the blend mode it sets when withBlend is set.
 type maskUse struct {
-	name  string
-	alpha alphaState
-	smask ast.PdfIndirectRef
+	name      string
+	alpha     alphaState
+	smask     ast.PdfIndirectRef
+	blend     BlendMode
+	withBlend bool
 }
 
 // shadingKey returns what identifies sh's dictionaries: its kind,

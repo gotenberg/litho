@@ -67,6 +67,14 @@ encodes:
 - A `Path` fills with a flat colour or a `Shading`, axial or radial, whose
   stops the backend writes as a stitched PDF function; translucent stops
   paint through a luminosity soft mask.
+- A `Group` paints its content under a transform, a clip, an opacity and
+  a blend mode (the sixteen of ISO 32000-1, 11.3.5), which apply to each
+  fragment on its own. A group with `Transparency` is one transparency
+  group instead: isolated or not, knockout or not, in its parent's colour
+  space, DeviceRGB or DeviceGray, its opacity, blend mode and soft mask
+  applying to its result as a whole, so two overlapping shapes at half
+  opacity show as one. A soft mask is drawn by fragments, by luminosity
+  or by alpha, over a black backdrop.
 - Glyphs are already positioned: the converter applies advances, kerning
   and offsets. The backend only has to write them.
 - `Glyph.Text` carries the characters a glyph stands for, so extraction
@@ -121,7 +129,15 @@ holds every page until the end.
 
 - One content stream per page, Flate-compressed, operators in paint order.
   Groups become `q ... Q` with `cm`, a clip (`W n`) and an ExtGState for
-  opacity.
+  opacity and blend mode. A transparency group is a form XObject with a
+  `/Group` of subtype `/Transparency`, sized to what it paints on the page,
+  painted by `Do` under an ExtGState of its opacity, blend mode and soft
+  mask, whose group is a form XObject of its own. Transparency is PDF 1.4,
+  so every version writes it alike; PDF/A-1 forbids it and its
+  remediation flattens it. Tagged content in a group is marked in the
+  form's stream, which the parent tree reaches through `/StructParents`
+  and the structure elements through marked-content references with
+  `/Stm`.
 - Text runs become `BT`/`ET` blocks with `Tf`, `Tm` and `TJ`; glyph
   positions that differ from the font's advances become kerning
   adjustments or new `Td` moves. A run with a stroke draws in text

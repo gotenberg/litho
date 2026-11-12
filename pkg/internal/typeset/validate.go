@@ -75,6 +75,8 @@ type validator struct {
 	count int
 	// steps counts the fragments checked, for the context checks.
 	steps int
+	// masks counts the soft masks whose content is being checked.
+	masks int
 }
 
 // page checks p, with links in place of its own.
@@ -410,6 +412,25 @@ func (v *validator) group(ctx context.Context, g *Group, depth int) error {
 	if op := groupOpacity(g); math.IsNaN(op) || op < 0 || op > 1 {
 		return fmt.Errorf("%w: opacity %v", ErrInvalidGroup, g.Opacity)
 	}
+	if g.Blend > BlendLuminosity {
+		return fmt.Errorf("%w: blend mode %d", ErrInvalidGroup, g.Blend)
+	}
+	if tg := g.Transparency; tg != nil {
+		if tg.Space > SpaceGray {
+			return fmt.Errorf("%w: colour space %d", ErrInvalidGroup, tg.Space)
+		}
+		if m := tg.Mask; m != nil {
+			if m.Kind > MaskAlpha {
+				return fmt.Errorf("%w: mask kind %d", ErrInvalidGroup, m.Kind)
+			}
+			v.masks++
+			err := v.fragments(ctx, m.Content, depth+1)
+			v.masks--
+			if err != nil {
+				return fmt.Errorf("mask: %w", err)
+			}
+		}
+	}
 	if g.Clip != nil {
 		if len(g.Clip.Ops) == 0 {
 			return fmt.Errorf("%w: clip without operators", ErrInvalidPath)
@@ -489,6 +510,11 @@ func (v *validator) outline(ctx context.Context, entries []Outline, depth int, t
 }
 
 func (v *validator) parent(e *StructElem) error {
+	if e != nil && v.masks > 0 {
+		// A soft mask's content is never shown (ISO 32000-1, 11.6.5.2), so
+		// it is no content of the structure tree.
+		return fmt.Errorf("%w: mask content hangs from a %q element", ErrInvalidGroup, e.Role)
+	}
 	if e != nil && v.elems == nil {
 		if !v.parents[e] {
 			v.parents[e] = true

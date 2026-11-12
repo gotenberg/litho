@@ -32,7 +32,9 @@ var (
 	// operator kind is unknown, or whose stroke parameters are out of range.
 	ErrInvalidPath = errors.New("invalid path")
 	// ErrInvalidGroup is returned for a group whose opacity falls outside
-	// [0, 1] or whose transform is not finite.
+	// [0, 1], whose transform is not finite, whose blend mode, colour space
+	// or mask kind is unknown, or whose mask holds a fragment that hangs
+	// from a structure element.
 	ErrInvalidGroup = errors.New("invalid group")
 	// ErrInvalidLink is returned for a link holding neither or both of URI
 	// and Dest, or whose rectangle is not finite.

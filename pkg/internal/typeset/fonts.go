@@ -2,10 +2,12 @@ package typeset
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/typography/embed"
+	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
 
 // fontEntry is one embedded font: the program of a [Face.Key], the subset
@@ -17,6 +19,39 @@ type fontEntry struct {
 	// unitsPerEm is the program's, 1000 when it leaves it unset, as embed
 	// writes it.
 	unitsPerEm float64
+	// box is the program's glyph bounding box in ems, [xMin yMin xMax
+	// yMax], once boxRead is set; boxOK reports whether the program gives
+	// one that holds an area.
+	box            [4]float64
+	boxRead, boxOK bool
+}
+
+// glyphBox returns the box that holds every glyph of the program, in ems
+// from the glyph origin, y up: the head table's xMin, yMin, xMax and yMax
+// (OpenType, head), which embed writes as the FontBBox (ISO 32000-1,
+// 9.8.1, Table 122). It reports false for a program whose head table is
+// missing or holds an empty box.
+func (fe *fontEntry) glyphBox() ([4]float64, bool) {
+	if fe.boxRead {
+		return fe.box, fe.boxOK
+	}
+	fe.boxRead = true
+	data := fe.font.Program()
+	records, err := truetype.ParseTableDirectory(data)
+	if err != nil {
+		return fe.box, false
+	}
+	head, err := truetype.TableData(data, records, "head")
+	if err != nil || len(head) < 44 {
+		return fe.box, false
+	}
+	for i := range fe.box {
+		// The four FWORDs are signed 16-bit (OpenType, head).
+		v := int16(binary.BigEndian.Uint16(head[36+2*i:])) //nolint:gosec // reinterprets the 16 bits of a signed FWORD
+		fe.box[i] = float64(v) / fe.unitsPerEm
+	}
+	fe.boxOK = fe.box[2] > fe.box[0] && fe.box[3] > fe.box[1]
+	return fe.box, fe.boxOK
 }
 
 // advance returns the advance of gid in text space units at font size 1,

@@ -9,13 +9,40 @@ import (
 )
 
 // structItem is one piece of content an element owns: a marked-content
-// sequence on a page, or an annotation (ISO 32000-1, 14.7.4).
+// sequence on a page or in a form XObject the page paints, or an
+// annotation (ISO 32000-1, 14.7.4).
 type structItem struct {
 	page int
 	mcid int
+	// form is one past the index of the form whose stream holds the
+	// sequence among the state's forms, 0 for the page's stream.
+	form int
+	// seq is how many sequences the pages recorded before this one.
+	seq int
 	// annot is the annotation an object reference names, zero for a
 	// marked-content sequence.
 	annot ast.PdfIndirectRef
+}
+
+// formMarks is the marked content of one transparency group's form
+// XObject (see [pageWriter.groupForm]): its stream numbers its sequences from
+// MCID 0, and the parent tree holds them under the form's /StructParents
+// (ISO 32000-1, 14.7.4.4).
+type formMarks struct {
+	page int
+	// parent is the index of the form whose stream paints this one, -1
+	// for the page's stream.
+	parent int
+	// at is how many sequences the parent's stream held before the Do
+	// that paints the form, which places the form's sequences among the
+	// parent's in paint order.
+	at int
+	// ref and dict are the form XObject's, which takes its
+	// /StructParents once the tree is written.
+	ref  ast.PdfIndirectRef
+	dict ast.PdfDict
+	// parents lists the element of each MCID, in MCID order.
+	parents []*StructElem
 }
 
 // annotItem is an annotation an element owns, and how many marked-content
@@ -60,6 +87,10 @@ type structState struct {
 	// annotParents lists the element of each annotation that has one, in
 	// /StructParent key order after the pages' keys.
 	annotParents []*StructElem
+	// forms lists the transparency group forms in the order they were
+	// opened; those with marked content take /StructParents keys after
+	// the annotations'.
+	forms []formMarks
 	// refers lists, per element, the elements its links lead to, in the
 	// order the links are written: a PDF 2.0 file names them in its /Ref.
 	// A destination's element is read through its pointer, so it may
@@ -81,6 +112,28 @@ func (st *structState) addPage() {
 func (st *structState) addMCID(page int, e *StructElem) {
 	st.pageParents[page] = append(st.pageParents[page], e)
 	st.marks++
+}
+
+// openForm records that the stream of the form parent, -1 for page's own,
+// paints a transparency group's form after its at sequences, and returns
+// the form's index for [structState.addFormMCID].
+func (st *structState) openForm(page, parent, at int) int {
+	st.forms = append(st.forms, formMarks{page: page, parent: parent, at: at})
+	return len(st.forms) - 1
+}
+
+// addFormMCID records that the next marked-content sequence of the form at
+// index form belongs to e.
+func (st *structState) addFormMCID(form int, e *StructElem) {
+	st.forms[form].parents = append(st.forms[form].parents, e)
+	st.marks++
+}
+
+// closeForm records the object of the form at index form: dict is its
+// stream's dictionary, which takes the form's /StructParents when the
+// tree is written.
+func (st *structState) closeForm(form int, ref ast.PdfIndirectRef, dict ast.PdfDict) {
+	st.forms[form].ref, st.forms[form].dict = ref, dict
 }
 
 // addAnnot records that the annotation at ref on page belongs to e, and
@@ -137,34 +190,65 @@ func (st *structState) index(e *StructElem) (int, bool) {
 // hold is left out.
 func (st *structState) marked() (at []int, marks []structItem) {
 	at = make([]int, len(st.order)+1)
-	for _, parents := range st.pageParents {
-		for _, e := range parents {
-			if i, ok := st.index(e); ok {
-				at[i+1]++
-			}
+	st.walk(func(e *StructElem, _ structItem) {
+		if i, ok := st.index(e); ok {
+			at[i+1]++
 		}
-	}
+	})
 	for i := range len(st.order) {
 		at[i+1] += at[i]
 	}
 	marks = make([]structItem, at[len(st.order)])
 	next := slices.Clone(at[:len(st.order)])
-	for page, parents := range st.pageParents {
-		for mcid, e := range parents {
-			if i, ok := st.index(e); ok {
-				marks[next[i]] = structItem{page: page, mcid: mcid}
-				next[i]++
+	st.walk(func(e *StructElem, it structItem) {
+		if i, ok := st.index(e); ok {
+			marks[next[i]] = it
+			next[i]++
+		}
+	})
+	return at, marks
+}
+
+// walk calls fn with every marked-content sequence recorded and its
+// element, in paint order: a page's sequences in MCID order, with the
+// sequences of each form its stream paints where the Do painted it, and
+// the forms' forms alike. Paint order is the order the sequences were
+// recorded in, which numbers them (structItem.seq).
+func (st *structState) walk(fn func(*StructElem, structItem)) {
+	pageForms := make([][]int, len(st.pageParents))
+	formForms := make([][]int, len(st.forms))
+	for i, f := range st.forms {
+		if f.parent < 0 {
+			pageForms[f.page] = append(pageForms[f.page], i)
+		} else {
+			formForms[f.parent] = append(formForms[f.parent], i)
+		}
+	}
+	seq := 0
+	var stream func(page, form int, parents []*StructElem, forms []int)
+	stream = func(page, form int, parents []*StructElem, forms []int) {
+		k := 0
+		for mcid := 0; mcid <= len(parents); mcid++ {
+			// The form nesting is a group nesting, which Validate bounds.
+			for ; k < len(forms) && st.forms[forms[k]].at <= mcid; k++ {
+				f := forms[k]
+				stream(page, f+1, st.forms[f].parents, formForms[f])
+			}
+			if mcid < len(parents) {
+				fn(parents[mcid], structItem{page: page, mcid: mcid, form: form, seq: seq})
+				seq++
 			}
 		}
 	}
-	return at, marks
+	for page, parents := range st.pageParents {
+		stream(page, 0, parents, pageForms[page])
+	}
 }
 
 // items returns the content of e in the order it was
 // recorded: its marked-content sequences, marks, with its annotations
-// placed among them. starts holds the sequences the pages before each page
-// recorded.
-func (st *structState) items(e *StructElem, marks []structItem, starts []int) []structItem {
+// placed among them.
+func (st *structState) items(e *StructElem, marks []structItem) []structItem {
 	annots := st.annots[e]
 	if len(annots) == 0 {
 		return marks
@@ -174,7 +258,7 @@ func (st *structState) items(e *StructElem, marks []structItem, starts []int) []
 	for _, a := range annots {
 		// A sequence recorded before the annotation comes first: it is
 		// one of the a.seq sequences of the pages before it.
-		for k < len(marks) && starts[marks[k].page]+marks[k].mcid < a.seq {
+		for k < len(marks) && marks[k].seq < a.seq {
 			out = append(out, marks[k])
 			k++
 		}
@@ -217,11 +301,6 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 	}
 	written := map[string]bool{}
 	at, marks := st.marked()
-	// starts holds the sequences the pages before each page recorded.
-	starts := make([]int, len(st.pageParents))
-	for i := 1; i < len(starts); i++ {
-		starts[i] = starts[i-1] + len(st.pageParents[i-1])
-	}
 	// The elements and the parent tree are written with their numbers in
 	// the file, each reference made once: a tree of a cell a page element
 	// is too large to copy as [docWriter.final] renumbers the rest.
@@ -272,7 +351,7 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 		} else {
 			written[e.Role] = true
 		}
-		items := st.items(e, marks[at[i]:at[i+1]], starts)
+		items := st.items(e, marks[at[i]:at[i+1]])
 		widget := slices.ContainsFunc(items, func(it structItem) bool { return it.annot.ObjectNum != 0 })
 		if a := attributes(e, role, v, widget); a != nil {
 			dict["A"] = a
@@ -288,6 +367,15 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 						"Type": ast.PdfName("OBJR"),
 						"Obj":  refs.of(it.annot.ObjectNum),
 						"Pg":   refs.page(it.page),
+					})
+				case it.form != 0:
+					// A sequence in a form's stream names the stream
+					// (14.7.4.3, Table 324, Stm).
+					kids = append(kids, ast.PdfDict{
+						"Type": ast.PdfName("MCR"),
+						"Pg":   refs.page(it.page),
+						"Stm":  refs.of(st.forms[it.form-1].ref.ObjectNum),
+						"MCID": ast.PdfInt(it.mcid),
 					})
 				case it.page == pg:
 					kids = append(kids, ast.PdfInt(it.mcid))
@@ -348,6 +436,22 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 	for i, e := range st.annotParents {
 		nums = append(nums, ast.PdfInt(len(st.pageParents)+i), elem(e))
 	}
+	// A form with marked content takes the next key as its /StructParents
+	// (14.7.4.4, ISO 32000-1, 8.10.2, Table 95), its value the array of
+	// the elements of its MCIDs, as a page's.
+	next := len(st.pageParents) + len(st.annotParents)
+	for _, f := range st.forms {
+		if len(f.parents) == 0 {
+			continue
+		}
+		arr := make(ast.PdfArray, len(f.parents))
+		for k, e := range f.parents {
+			arr[k] = elem(e)
+		}
+		f.dict["StructParents"] = ast.PdfInt(next)
+		nums = append(nums, ast.PdfInt(next), arr)
+		next++
+	}
 	// The parent tree takes the next object number, as the object it is
 	// queued as would.
 	parentTree := ast.PdfIndirectRef{ObjectNum: w.alloc.NextObjNum()}
@@ -357,7 +461,7 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 		"Type":              ast.PdfName("StructTreeRoot"),
 		"K":                 st.refs[st.order[0]],
 		"ParentTree":        parentTree,
-		"ParentTreeNextKey": ast.PdfInt(len(st.pageParents) + len(st.annotParents)),
+		"ParentTreeNextKey": ast.PdfInt(next),
 	}
 	if rm := roleMap(written, v); rm != nil {
 		root["RoleMap"] = rm
@@ -427,7 +531,7 @@ func (r *finalRefs) name(n string) ast.PdfObject {
 // the count of elements, size, is read after.
 func (st *structState) release() {
 	st.order, st.refs, st.parents, st.annots, st.refers = nil, nil, nil, nil, nil
-	st.pageParents, st.annotParents = nil, nil
+	st.pageParents, st.annotParents, st.forms = nil, nil, nil
 }
 
 // tocKept returns the TOC and TOCI elements a PDF 2.0 file writes as

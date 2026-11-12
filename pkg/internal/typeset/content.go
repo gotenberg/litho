@@ -32,10 +32,18 @@ type alphaState struct {
 	fill, stroke float64
 }
 
+// gsKey is what an ExtGState of constant alpha sets: the alpha and, when
+// withBlend is set, the blend mode (ISO 32000-1, 8.4.5, Table 58, BM).
+type gsKey struct {
+	alpha     alphaState
+	blend     BlendMode
+	withBlend bool
+}
+
 // gsUse is one ExtGState a page's resources name.
 type gsUse struct {
-	name  string
-	alpha alphaState
+	name string
+	gsKey
 }
 
 // xobjUse is one image XObject a page's resources name.
@@ -58,11 +66,24 @@ type pageWriter struct {
 	xobjs     []xobjUse
 	xobjNames map[*ImageSource]string
 	gstates   []gsUse
-	gsNames   map[alphaState]string
+	gsNames   map[gsKey]string
 	shadings  []shUse
 	masks     []maskUse
 	// alpha is a stack mirroring q/Q: its top is the alpha in force.
 	alpha []alphaState
+	// blend is the blend mode in force, which the group writer saves and
+	// restores around its q/Q.
+	blend BlendMode
+	// ctm maps the coordinates written at the current level to the
+	// model's page coordinates, so a transparency group knows what of it
+	// lies on the page (see [pageWriter.groupBox]).
+	ctm Matrix
+	// forms counts the form XObjects the stream names.
+	forms int
+	// form is the index of the transparency group form whose content the
+	// writer writes among the structure state's forms, -1 for a page or
+	// an appearance (see [structState.openForm]).
+	form int
 	// off is the translation of the groups folded into the coordinates
 	// written: a point of the model's current space is written at its
 	// coordinates plus off (see [pageWriter.group]).
@@ -90,8 +111,10 @@ func newPageWriter(w *docWriter, index int, page *Page) *pageWriter {
 		height:    page.Height,
 		fontNames: make(map[*fontEntry]string),
 		xobjNames: make(map[*ImageSource]string),
-		gsNames:   make(map[alphaState]string),
+		gsNames:   make(map[gsKey]string),
 		alpha:     []alphaState{{fill: 1, stroke: 1}},
+		ctm:       Identity,
+		form:      -1,
 	}
 }
 
@@ -204,6 +227,11 @@ func (p *pageWriter) mark(parent *StructElem) {
 	}
 	mcid := p.nextMCID
 	p.nextMCID++
+	if p.form >= 0 {
+		st.addFormMCID(p.form, parent)
+	} else {
+		st.addMCID(p.index, parent)
+	}
 	// The tag is the element's role (14.7.4.2), escaped as a name.
 	// SerializeName fails only on a NUL byte, which Validate refuses in a
 	// role, and a bytes.Buffer write never fails.
@@ -211,7 +239,6 @@ func (p *pageWriter) mark(parent *StructElem) {
 		p.w.logger.Debug("typeset: structure role not a PDF name", "role", parent.Role, "error", err)
 	}
 	fmt.Fprintf(&p.buf, " <</MCID %d>> BDC\n", mcid)
-	st.addMCID(p.index, parent)
 }
 
 // endMark closes the open marked-content sequence, if any. Sequences never
@@ -227,19 +254,32 @@ func (p *pageWriter) endMark() {
 // differs from the one in force (ISO 32000-1, 8.4.5, Table 58: ca for
 // filling, CA for stroking).
 func (p *pageWriter) setAlpha(a alphaState) {
+	p.setState(a, p.blend)
+}
+
+// setState selects the constant alpha a and the blend mode b through one
+// ExtGState when either differs from the one in force (ISO 32000-1, 8.4.5,
+// Table 58). The state names BM only when the blend mode changes: a gs
+// operator leaves the parameters its dictionary omits as they are.
+func (p *pageWriter) setState(a alphaState, b BlendMode) {
 	a = alphaState{fill: round(a.fill), stroke: round(a.stroke)}
 	top := &p.alpha[len(p.alpha)-1]
-	if *top == a {
+	if *top == a && p.blend == b {
 		return
 	}
-	name, ok := p.gsNames[a]
+	key := gsKey{alpha: a}
+	if b != p.blend {
+		key.blend, key.withBlend = b, true
+	}
+	name, ok := p.gsNames[key]
 	if !ok {
 		name = fmt.Sprintf("GS%d", len(p.gstates)+1)
-		p.gsNames[a] = name
-		p.gstates = append(p.gstates, gsUse{name: name, alpha: a})
+		p.gsNames[key] = name
+		p.gstates = append(p.gstates, gsUse{name: name, gsKey: key})
 	}
 	fmt.Fprintf(&p.buf, "/%s gs\n", name)
 	*top = a
+	p.blend = b
 }
 
 func (p *pageWriter) currentAlpha() alphaState {
@@ -559,10 +599,14 @@ func (p *pageWriter) ops(ctx context.Context, ops []PathOp) error {
 // stays a cm: what the group holds is then near its own origin, and its
 // numbers are shorter as they are.
 //
-// The opacity is a constant alpha (11.6.4.4), not a transparency group
-// (11.4.7): it multiplies into every child's own alpha, so the children
-// blend with the backdrop one by one and two overlapping children show
-// through each other.
+// Without Transparency, the opacity is a constant alpha (11.6.4.4), not a
+// transparency group (11.4.7): it multiplies into every child's own alpha,
+// so the children blend with the backdrop one by one and two overlapping
+// children show through each other. The blend mode is the graphics state's
+// (11.3.5), in force for every child; BlendNormal leaves the enclosing
+// group's in force, as an opacity of 1 leaves its alpha. With
+// Transparency, the content is a form XObject the group paints once (see
+// [pageWriter.transparencyGroup]).
 //
 // # Corpus evidence
 //
@@ -580,7 +624,7 @@ func (p *pageWriter) group(ctx context.Context, g *Group, opacity float64) error
 	p.endMark()
 	p.buf.WriteString("q\n")
 	p.alpha = append(p.alpha, p.currentAlpha())
-	saved := p.off
+	saved, savedCTM, savedBlend := p.off, p.ctm, p.blend
 	m := g.Transform
 	e, f := m.E+p.off.X, m.F+p.off.Y
 	det := m.A*m.D - m.B*m.C
@@ -595,9 +639,11 @@ func (p *pageWriter) group(ctx context.Context, g *Group, opacity float64) error
 		// it still cannot hold under a scale of their own.
 		fmt.Fprintf(&p.buf, "%s %s %s %s 0 0 cm\n", num(m.A), num(m.B), num(m.C), num(m.D))
 		p.off = Point{X: (m.D*e - m.C*f) / det, Y: (m.A*f - m.B*e) / det}
+		p.ctm = multiply(Matrix{A: round(m.A), B: round(m.B), C: round(m.C), D: round(m.D)}, p.ctm)
 	default:
 		fmt.Fprintf(&p.buf, "%s %s %s %s %s %s cm\n", num(m.A), num(m.B), num(m.C), num(m.D), num(e), num(f))
 		p.off = Point{}
+		p.ctm = multiply(Matrix{A: round(m.A), B: round(m.B), C: round(m.C), D: round(m.D), E: round(e), F: round(f)}, p.ctm)
 	}
 	if g.Clip != nil {
 		if err := p.clip(ctx, g.Clip); err != nil {
@@ -605,16 +651,31 @@ func (p *pageWriter) group(ctx context.Context, g *Group, opacity float64) error
 		}
 	}
 	eff := opacity * groupOpacity(g)
-	if eff < 1 {
-		p.setAlpha(alphaState{fill: eff, stroke: eff})
+	blend := p.blend
+	if g.Blend != BlendNormal {
+		blend = g.Blend
 	}
-	if err := p.fragments(ctx, g.Content, eff); err != nil {
-		return err
+	if g.Transparency != nil {
+		if err := p.transparencyGroup(ctx, g, eff, blend); err != nil {
+			return err
+		}
+	} else {
+		switch {
+		case blend != p.blend && eff < 1:
+			p.setState(alphaState{fill: eff, stroke: eff}, blend)
+		case blend != p.blend:
+			p.setState(p.currentAlpha(), blend)
+		case eff < 1:
+			p.setAlpha(alphaState{fill: eff, stroke: eff})
+		}
+		if err := p.fragments(ctx, g.Content, eff); err != nil {
+			return err
+		}
 	}
 	p.endMark()
 	p.buf.WriteString("Q\n")
 	p.alpha = p.alpha[:len(p.alpha)-1]
-	p.off = saved
+	p.off, p.ctm, p.blend = saved, savedCTM, savedBlend
 	return nil
 }
 
@@ -638,19 +699,27 @@ func (p *pageWriter) resources() ast.PdfDict {
 	if len(p.gstates) > 0 || len(p.masks) > 0 {
 		gs := ast.PdfDict{}
 		for _, g := range p.gstates {
-			gs[ast.PdfName(g.name)] = ast.PdfDict{
+			d := ast.PdfDict{
 				"Type": ast.PdfName("ExtGState"),
 				"ca":   pdfReal(g.alpha.fill),
 				"CA":   pdfReal(g.alpha.stroke),
 			}
+			if g.withBlend {
+				d["BM"] = ast.PdfName(blendNames[g.blend])
+			}
+			gs[ast.PdfName(g.name)] = d
 		}
 		for _, m := range p.masks {
-			gs[ast.PdfName(m.name)] = ast.PdfDict{
+			d := ast.PdfDict{
 				"Type":  ast.PdfName("ExtGState"),
 				"ca":    pdfReal(m.alpha.fill),
 				"CA":    pdfReal(m.alpha.stroke),
 				"SMask": m.smask,
 			}
+			if m.withBlend {
+				d["BM"] = ast.PdfName(blendNames[m.blend])
+			}
+			gs[ast.PdfName(m.name)] = d
 		}
 		res["ExtGState"] = gs
 	}

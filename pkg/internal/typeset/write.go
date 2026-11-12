@@ -78,6 +78,11 @@ const defaultSpool = 4 << 20
 //   - One shading dictionary per distinct [Shading] geometry and stops,
 //     painted with sh inside the clip of its path; translucent stops add a
 //     luminosity soft mask per placement.
+//   - One form XObject per placement of a group with Transparency, a
+//     transparency group painted by Do under its opacity, blend mode and
+//     soft mask, whose own form XObject paints the mask's content. Its
+//     tagged content is marked in the form's stream, which the parent
+//     tree names through /StructParents.
 //   - Form fields as an interactive form: a widget annotation per field
 //     with its appearance streams, the radio buttons of one name under one
 //     field, and Helvetica, unembedded, in the form's default resources
@@ -115,12 +120,18 @@ const defaultSpool = 4 << 20
 //     2.0 namespace.
 //
 // At every version, a role that is not a standard structure type of the
-// version is mapped by /RoleMap to one that is.
+// version is mapped by /RoleMap to one that is. Transparency groups,
+// blend modes and soft masks are PDF 1.4 constructs (ISO 32000-1, Table
+// 58 marks BM, SMask, CA and ca PDF 1.4, Table 95 a form's Group), so
+// every version writes them alike; PDF/A-1 forbids them (ISO 19005-1,
+// 6.4) and its remediation flattens them.
 //
 // # Limitations
 //
-//   - A group's opacity is a constant alpha, not a transparency group:
-//     overlapping children blend one by one (see [Group]).
+//   - A group's opacity and blend mode apply to each child on its own
+//     unless the group is a transparency group (see [Group]).
+//   - A soft mask's backdrop is black and its transfer function the
+//     identity.
 //   - An element's own content precedes its child elements in its /K: a
 //     producer that interleaves the two gives the content an element of
 //     its own.

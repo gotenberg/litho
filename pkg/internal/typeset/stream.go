@@ -544,10 +544,10 @@ func (s *Stream) Abort() {
 	}
 }
 
-// CountGlyphs returns the glyphs of the text runs of p, its groups'
-// included. It counts p before [Document.Validate] checks it: a group
-// nested past the depth Validate allows is not entered, so a group that
-// holds itself ends the count.
+// CountGlyphs returns the glyphs of the text runs of p, its groups' and
+// their masks' included. It counts p before [Document.Validate] checks it:
+// a group nested past the depth Validate allows is not entered, so a
+// group that holds itself ends the count.
 func CountGlyphs(p *Page) int64 {
 	var n int64
 	type item struct {
@@ -567,6 +567,9 @@ func CountGlyphs(p *Page) int64 {
 			case *Group:
 				if f != nil && it.depth < maxGroupDepth {
 					stack = append(stack, item{frags: f.Content, depth: it.depth + 1})
+					if tg := f.Transparency; tg != nil && tg.Mask != nil {
+						stack = append(stack, item{frags: tg.Mask.Content, depth: it.depth + 1})
+					}
 				}
 			}
 		}

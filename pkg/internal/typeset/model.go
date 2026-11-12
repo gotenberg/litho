@@ -372,9 +372,20 @@ type Path struct {
 	Parent *StructElem
 }
 
-// Group paints its content under a transform, a clip and a constant
-// opacity. Nested groups compose. A group with Opacity 1, no Clip and the
-// identity transform is a plain sequence.
+// Group paints its content under a transform, a clip, a constant opacity
+// and a blend mode. Nested groups compose. A group with Opacity 1, no
+// Clip, the identity transform, [BlendNormal] and no Transparency is a
+// plain sequence.
+//
+// Without Transparency, Opacity and Blend apply to each fragment of the
+// content on its own (ISO 32000-1, 11.6.4.4 and 11.3.5): two overlapping
+// fragments at opacity 0.5 show the overlap darker, and a blend mode
+// blends each fragment with what lies beneath it, earlier fragments of
+// the group included. With Transparency, the content is painted as one
+// transparency group (11.4), and Opacity, Blend and the group's mask
+// apply to the group's result as a whole: the overlap of two opaque
+// fragments at opacity 0.5 shows as one translucent shape, which is what
+// CSS `opacity` and SVG group opacity mean.
 type Group struct {
 	// Transform maps the group's coordinates to its parent's. The zero
 	// value is replaced by [Identity].
@@ -383,10 +394,118 @@ type Group struct {
 	// coordinates, nil for none. Only the path's Ops and the fill rule of
 	// its Fill, when set, matter.
 	Clip *Path
-	// Opacity applies to the group as a whole, from 0 to 1. Zero is
+	// Opacity is the constant alpha of the content, from 0 to 1. Zero is
 	// replaced by 1, so a converter that wants nothing painted omits the
 	// group.
 	Opacity float64
+	// Blend is the blend mode the content composites with. [BlendNormal]
+	// leaves the enclosing group's blend mode in force, as an Opacity of 1
+	// leaves its alpha: plain painting over outside every blending group.
+	// Inside a transparency group's content the enclosing mode is Normal
+	// again (ISO 32000-1, 11.6.6).
+	Blend BlendMode
+	// Transparency, when set, paints the content as one transparency
+	// group, nil for none. It costs a form XObject in the file and, in a
+	// renderer, a raster of the group's area.
+	Transparency *TransparencyGroup
+	Content      []Fragment
+}
+
+// BlendMode is how a colour painted composites with the backdrop beneath
+// it: the sixteen blend modes of ISO 32000-1, 11.3.5, Tables 136 and 137,
+// which CSS Compositing 1 names alike. Every version a conversion writes,
+// PDF 1.4 on, holds them, and PDF/A-2 and later allow these and no other
+// (ISO 19005-2, 6.2.10). The deprecated Compatible is not one of them.
+type BlendMode uint8
+
+// The blend modes. The separable ones (Table 136) blend each colour
+// component on its own; the non-separable ones (Table 137) blend the hue,
+// saturation and luminosity of the colour as a whole.
+const (
+	// BlendNormal paints the source over the backdrop.
+	BlendNormal BlendMode = iota
+	BlendMultiply
+	BlendScreen
+	BlendOverlay
+	BlendDarken
+	BlendLighten
+	BlendColorDodge
+	BlendColorBurn
+	BlendHardLight
+	BlendSoftLight
+	BlendDifference
+	BlendExclusion
+	BlendHue
+	BlendSaturation
+	BlendColor
+	BlendLuminosity
+)
+
+// GroupSpace is the colour space a transparency group composites its
+// content in: the CS entry of its group attributes (ISO 32000-1, 11.6.6,
+// Table 147).
+type GroupSpace uint8
+
+// The colour spaces of a transparency group.
+const (
+	// SpaceInherit leaves CS out: an isolated group then composites in the
+	// space of the page's group or of the device, a non-isolated one in
+	// its parent's (11.6.6).
+	SpaceInherit GroupSpace = iota
+	// SpaceRGB composites in DeviceRGB, which the model's sRGB colours are
+	// written in.
+	SpaceRGB
+	// SpaceGray composites in DeviceGray: the colours of the content enter
+	// the group as their grey.
+	SpaceGray
+)
+
+// TransparencyGroup is how a [Group] composites as one transparency group
+// (ISO 32000-1, 11.4 and 11.6.6). The zero value is a non-isolated,
+// non-knockout group in its parent's colour space.
+type TransparencyGroup struct {
+	// Isolated composites the content over a fully transparent backdrop
+	// rather than over what the page holds beneath the group (11.4.5), so
+	// a blend mode inside the group blends only with the group's own
+	// content: CSS `isolation: isolate`.
+	Isolated bool
+	// Knockout composites each fragment of the content with the group's
+	// backdrop alone rather than with the fragments painted before it, so
+	// a later fragment replaces an earlier one where it covers it
+	// (11.4.6).
+	Knockout bool
+	// Space is the colour space the group composites in.
+	Space GroupSpace
+	// Mask, when set, masks the group's result by a soft mask, nil for
+	// none.
+	Mask *SoftMask
+}
+
+// MaskKind is how a [SoftMask] derives its mask values from its content
+// (ISO 32000-1, 11.6.5.2, Table 144, entry S).
+type MaskKind uint8
+
+// The kinds of a soft mask.
+const (
+	// MaskLuminosity takes the luminosity of the content painted over
+	// black: white keeps, black masks out, and where the content paints
+	// nothing it masks out. CSS `mask-mode: luminance` and an SVG mask.
+	MaskLuminosity MaskKind = iota
+	// MaskAlpha takes the alpha of the content: where it paints opaque
+	// keeps, where it paints nothing masks out. CSS `mask-mode: alpha`
+	// and a CSS mask image.
+	MaskAlpha
+)
+
+// SoftMask is a mask drawn by fragments: a soft mask dictionary whose
+// group is the content (ISO 32000-1, 11.6.5.2). The mask's backdrop is
+// black and its transfer function the identity: neither is supported
+// otherwise.
+type SoftMask struct {
+	Kind MaskKind
+	// Content draws the mask in the coordinates of the group it masks. It
+	// is painted only to derive the mask, never shown, so its fragments
+	// hang from no structure element.
 	Content []Fragment
 }
 
