@@ -174,6 +174,8 @@ func (c *columns) widths(ctx context.Context, fonts *text.Fonts) []sheet.Column 
 func shape(ctx context.Context, fonts *text.Fonts, s string, size float64) ([]float64, bool) {
 	p, _, err := fonts.Shape(ctx, []text.ParagraphRun{{Text: s, Style: text.Style{Families: []string{fontFamily}, Size: size, NoKerning: true}}}, text.ParagraphOptions{})
 	if err != nil {
+		// A column that cannot be measured keeps the default width; a
+		// cancelled ctx fails the conversion at sheet.Convert's check.
 		return nil, false
 	}
 	adv := make([]float64, p.Len())

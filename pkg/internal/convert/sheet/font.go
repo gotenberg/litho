@@ -243,6 +243,9 @@ func (m *measurer) width(f font, s string) float64 {
 func (m *measurer) runsWidth(runs []text.ParagraphRun) float64 {
 	p, _, err := m.fonts.Shape(m.ctx, runs, text.ParagraphOptions{})
 	if err != nil {
+		// A text that cannot be shaped measures nothing, as an empty one:
+		// the page that draws it reports the failure, a cancelled ctx
+		// included.
 		return 0
 	}
 	return p.MaxContent()

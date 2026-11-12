@@ -26,9 +26,12 @@ const (
 
 // Value is a cell value to format.
 type Value struct {
-	Kind   Kind
+	// Kind says which field holds the value.
+	Kind Kind
+	// Number holds a Number, or a Bool as 0 or 1.
 	Number float64
-	Text   string
+	// Text holds a Text, or an Error's code.
+	Text string
 }
 
 // Result is a formatted value.
