@@ -3,7 +3,9 @@ package text
 import (
 	"math"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/go-text/typesetting/language"
 )
@@ -273,15 +275,21 @@ func (l *familyList) addGeneric(g generic, region string) {
 // requestedFamilies returns the keys of the families style asks for, in
 // preference order: each concrete family followed by its metric-compatible
 // aliases, each generic family replaced by its preference list. An empty
-// list asks for sans-serif.
+// list asks for sans-serif. The list is shared: the caller reads it and
+// never writes it.
 func requestedFamilies(style Style) []string {
+	return resolvedFamilies(style).requested
+}
+
+// buildRequested returns what [requestedFamilies] returns for families in
+// the CJK region region.
+func buildRequested(families []string, region string) []string {
 	var l familyList
-	region := cjkRegion(style.Lang)
-	if len(style.Families) == 0 {
+	if len(families) == 0 {
 		l.addGeneric(genericSansSerif, region)
 		return l.keys
 	}
-	for _, name := range style.Families {
+	for _, name := range families {
 		if g := genericOf(name); g != genericNone {
 			l.addGeneric(g, region)
 			continue
@@ -289,6 +297,68 @@ func requestedFamilies(style Style) []string {
 		l.addWithAliases(name)
 	}
 	return l.keys
+}
+
+// familyLists are the family keys a list of families resolves to in one
+// language: the ones it asks for ([requestedFamilies]) and the ones
+// [Fonts.Match] tries ([matchFamilies]). Both are read and never written,
+// their capacity their length, so an append copies them.
+type familyLists struct {
+	requested, match []string
+}
+
+// maxFamilyCache caps the family lists [resolvedFamilies] keeps. Memory
+// guard, not spec-mandated: a document names a few dozen font lists in a
+// few languages; a list past the cap is resolved again at each call, to
+// the same keys.
+const maxFamilyCache = 4096
+
+// familyCache holds the family lists of each list of families and
+// language resolved, for every conversion of the process: a list resolves
+// alike whatever the index, so a paragraph does not expand the generic
+// families' preference lists again.
+var familyCache = struct {
+	mu sync.RWMutex
+	m  map[string]familyLists
+}{m: map[string]familyLists{}}
+
+// resolvedFamilies returns the family lists of style's families and
+// language.
+func resolvedFamilies(style Style) familyLists {
+	var kb strings.Builder
+	n := len(style.Lang) + 8
+	for _, f := range style.Families {
+		n += len(f) + 8
+	}
+	kb.Grow(n)
+	// Each name is written after its length, so that no two lists, nor a
+	// list and its language, write one key.
+	kb.WriteString(strconv.Itoa(len(style.Lang)))
+	kb.WriteByte(':')
+	kb.WriteString(style.Lang)
+	for _, f := range style.Families {
+		kb.WriteString(strconv.Itoa(len(f)))
+		kb.WriteByte(':')
+		kb.WriteString(f)
+	}
+	key := kb.String()
+	familyCache.mu.RLock()
+	l, ok := familyCache.m[key]
+	familyCache.mu.RUnlock()
+	if ok {
+		return l
+	}
+	region := cjkRegion(style.Lang)
+	requested := slices.Clip(buildRequested(style.Families, region))
+	m := familyList{keys: requested}
+	m.addGeneric(genericSansSerif, region)
+	l = familyLists{requested: requested, match: slices.Clip(m.keys)}
+	familyCache.mu.Lock()
+	if len(familyCache.m) < maxFamilyCache {
+		familyCache.m[key] = l
+	}
+	familyCache.mu.Unlock()
+	return l
 }
 
 // BrowserFamilies returns families as Chromium resolves them, a new list
@@ -332,9 +402,7 @@ func BrowserFamilies(families []string) []string {
 // matchFamilies returns the families [Fonts.Match] tries for style: the
 // requested ones, then sans-serif, which takes an unknown family.
 func matchFamilies(style Style) []string {
-	l := familyList{keys: requestedFamilies(style)}
-	l.addGeneric(genericSansSerif, cjkRegion(style.Lang))
-	return l.keys
+	return resolvedFamilies(style).match
 }
 
 // firstGeneric returns the first generic family style names, sans-serif
