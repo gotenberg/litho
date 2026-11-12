@@ -4,7 +4,7 @@ PDFs litho writes itself: each fixture is a plain text source in `sources/` that
 
 ## Oracles
 
-The manifest expands every PDF over `PDF_A-2b` and `PDF_UA-1`, the two profiles the converter plan (`pkg/internal/compose/README.md`, wave 0) holds its output to.
+The manifest expands every PDF over `PDF_A-2b` and `PDF_UA-1`, the two profiles the converter's output is held to once remediated (`pkg/internal/compose/README.md`).
 
 | Cell                     | What it checks on a converted PDF                                                                                                                                                   |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

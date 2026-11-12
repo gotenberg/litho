@@ -8536,7 +8536,7 @@ replaces PDF.js's `veri cation` with it (see [Scope](#scope)); the `mutate-*`
 cells compare litho's text on the output with litho's on the input, and
 compliance, auto-tagging and remediation do not move when `0C` reads as a
 space. `TestExtractTextKeepsAnUnmappedLigatureInsideItsWord` in `pkg/pdf` also
-reads the fixture, and fails on the wave-54 reading.
+reads the fixture, and fails when `0C` reads as a space.
 
 Code `20` reaches no fallback in litho: a `/Differences` name that maps
 nothing leaves the base encoding's `space` in place, and every base litho
@@ -8828,7 +8828,7 @@ holding the glyphs it shows, and its `/ToUnicode` declares `<0000>` to
 | `Hello world` | `Hello world`         | `HeXYworld`                  |
 
 `TestExtractTextReadsASimpleFontOneByteACode` in `pkg/pdf` reads the fixture,
-and fails on the reading before wave C2. Redacting the first ten glyphs leaves
+and fails when a code is read as two bytes. Redacting the first ten glyphs leaves
 `d`. Every shown code has a Unicode value, so the file conforms at PDF/A-2b and
 PDF/A-2u; elsewhere only the claim and the profile's own structure rules fire.
 veraPDF 1.30.2 and litho report the same rule set in all thirteen cells.
@@ -8925,8 +8925,9 @@ drawn before it so the order holds. The Popup and the opaque Ink stay
 annotations, and the hidden Square loses its appearance with nothing drawn
 (`EmptiedAnnotations` 1). The FreeText's text joins its page's text. The
 `flatten` cell renders the first three pages, and litho and poppler 26.09.0
-draw each like its source; before wave F2 the cell skipped the file as having
-nothing to flatten, with eight annotations left painting with transparency.
+draw each like its source: a file whose only transparency is its annotations'
+is still flattened, where skipping it would leave eight annotations painting
+with transparency.
 Page 4 holds what flattening approximates and reports: the text the Ink line
 crosses draws above it untinted (`TextUnderTransparency` 1), and the
 FreeText's transparent text draws opaque (`TransparentText` 1). No

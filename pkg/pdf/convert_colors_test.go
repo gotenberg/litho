@@ -177,8 +177,8 @@ func TestConvertColors_CMYKTargetAddsTheIntent(t *testing.T) {
 	}
 }
 
-// TestConvertColors_KeepsPDFXIntent pins the wave-62 rule: a PDF/X intent
-// stays as it was, the GTS_PDFA1 intent takes the target's profile.
+// TestConvertColors_KeepsPDFXIntent pins the rule of the output intents: a
+// PDF/X intent stays as it was, the GTS_PDFA1 intent takes the target's profile.
 func TestConvertColors_KeepsPDFXIntent(t *testing.T) {
 	t.Parallel()
 	cmyk := string(icc.CMYKPrinterProfile())

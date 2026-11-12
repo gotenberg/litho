@@ -13,7 +13,7 @@ import (
 // This file is the contract between a converter and the layout engine. A
 // converter builds a [Node] tree from its input, HTML with its computed
 // styles or an Office document mapped onto the same vocabulary, and
-// [Layout] turns it into pages of the composition model. A later wave adds
+// [Layout] turns it into pages of the composition model. A change adds
 // fields; it does not change the meaning of one that exists.
 
 // Kind says what a [Node] is.

@@ -3,42 +3,41 @@
 litho converts documents to PDF without a browser or an office suite. Every
 converter lays its input out into one paged model, `compose.Document`, and
 one backend, `compose.Write`, turns that model into PDF bytes. This document
-is the contract between the converters, the text stack and the backend, and
-the plan the work follows.
+is the contract between the converters, the text stack and the backend.
 
 ## Layout
 
 ```
 pkg/internal/compose/            The model (model.go) and the PDF backend (write.go).
 pkg/internal/typography/embed/   Embeds a font program by glyph IDs: subset, Type0 objects, ToUnicode.
-pkg/internal/typography/woff/    Decodes WOFF and WOFF2 files into sfnt programs, for @font-face (wave 2).
+pkg/internal/typography/woff/    Decodes WOFF and WOFF2 files into sfnt programs, for @font-face.
 pkg/internal/text/               Font matching, shaping, line breaking: text in, positioned glyph runs out.
 pkg/internal/convert/plaintext/  Plain text converter, the smallest complete consumer.
 pkg/internal/css/                CSS parser, selectors, cascade: a DOM in, a computed Style per element out (style.go is the contract).
 pkg/internal/layout/             Box layout and pagination: a styled Node tree in, pages out (node.go is the contract).
-pkg/internal/svg/                SVG renderer: an SVG document in, vector fragments out, for images, backgrounds and inline <svg> (wave 2).
-pkg/internal/convert/html/       HTML converter: parses with x/net/html, styles with css, builds the layout tree (wave 1 onward).
-pkg/internal/convert/markdown/   Markdown converter: renders with gomarkdown at Gotenberg's defaults, lays out through html (wave 2).
-pkg/internal/ooxml/              OOXML package reading (ECMA-376 Part 2): parts, relationships, content types, the shared DrawingML and theme (wave 4 onward).
-pkg/internal/odf/                OpenDocument package reading (ODF 1.3 Part 2): manifest, content and styles, page layouts (wave 4 onward).
-pkg/internal/offcrypto/          Office document encryption: MS-OFFCRYPTO containers and ODF encrypted entries, opened with a password (wave 4).
+pkg/internal/svg/                SVG renderer: an SVG document in, vector fragments out, for images, backgrounds and inline <svg>.
+pkg/internal/convert/html/       HTML converter: parses with x/net/html, styles with css, builds the layout tree.
+pkg/internal/convert/markdown/   Markdown converter: renders with gomarkdown at Gotenberg's defaults, lays out through html.
+pkg/internal/ooxml/              OOXML package reading (ECMA-376 Part 2): parts, relationships, content types, the shared DrawingML and theme.
+pkg/internal/odf/                OpenDocument package reading (ODF 1.3 Part 2): manifest, content and styles, page layouts.
+pkg/internal/offcrypto/          Office document encryption: MS-OFFCRYPTO containers and ODF encrypted entries, opened with a password.
 pkg/internal/convert/office/     What the Office converters share: options, errors, the source read.
-pkg/internal/convert/docx/       DOCX converter: WordprocessingML to the layout tree (wave 4).
-pkg/internal/convert/odt/        ODT converter: OpenDocument text to the layout tree (wave 4).
-pkg/internal/chart/              Chart model and renderer: DrawingML and OpenDocument charts drawn as LibreOffice draws them (wave 5 onward).
-pkg/internal/convert/sheet/      What the spreadsheet converters share: the sheet model, its pagination and layout as Calc prints a sheet (wave 5).
-pkg/internal/convert/xlsx/       XLSX converter: SpreadsheetML to the sheet model (wave 5).
-pkg/internal/convert/ods/        ODS converter: OpenDocument spreadsheets to the sheet model (wave 5).
-pkg/internal/convert/csv/        CSV converter: a CSV file to the sheet model, as Calc imports one (wave 5).
-pkg/internal/shape/              Shape geometry: DrawingML presets and custom geometries, OpenDocument enhanced geometry, fitted to a box (wave 6 onward).
-pkg/internal/raster/             Coverage masks, blurs, morphology and tints: the bitmaps of blurred shadows, glows and soft edges (wave 8).
-pkg/internal/convert/slides/     What the presentation converters share: the slide model and its layout as Impress prints a show (wave 6).
-pkg/internal/convert/pptx/       PPTX converter: PresentationML to the slide model (wave 6).
-pkg/internal/convert/odp/        ODP converter: OpenDocument presentations to the slide model (wave 6).
-pkg/internal/xmp/                The XMP packet writer the backend and the remediation share (wave 9).
-pkg/internal/limits/             The budgets of a conversion, its memory account among them (wave 9).
+pkg/internal/convert/docx/       DOCX converter: WordprocessingML to the layout tree.
+pkg/internal/convert/odt/        ODT converter: OpenDocument text to the layout tree.
+pkg/internal/chart/              Chart model and renderer: DrawingML and OpenDocument charts drawn as LibreOffice draws them.
+pkg/internal/convert/sheet/      What the spreadsheet converters share: the sheet model, its pagination and layout as Calc prints a sheet.
+pkg/internal/convert/xlsx/       XLSX converter: SpreadsheetML to the sheet model.
+pkg/internal/convert/ods/        ODS converter: OpenDocument spreadsheets to the sheet model.
+pkg/internal/convert/csv/        CSV converter: a CSV file to the sheet model, as Calc imports one.
+pkg/internal/shape/              Shape geometry: DrawingML presets and custom geometries, OpenDocument enhanced geometry, fitted to a box.
+pkg/internal/raster/             Coverage masks, blurs, morphology and tints: the bitmaps of blurred shadows, glows and soft edges.
+pkg/internal/convert/slides/     What the presentation converters share: the slide model and its layout as Impress prints a show.
+pkg/internal/convert/pptx/       PPTX converter: PresentationML to the slide model.
+pkg/internal/convert/odp/        ODP converter: OpenDocument presentations to the slide model.
+pkg/internal/xmp/                The XMP packet writer the backend and the remediation share.
+pkg/internal/limits/             The budgets of a conversion, its memory account among them.
 pkg/pdf/convert.go               Public entry points: pdf.FromHTML and its nine siblings, pdf.Conversion.
-pkg/pdf/convert_stage.go         A conversion as the first stage of a pipeline, and pipelines merged (wave 11).
+pkg/pdf/convert_stage.go         A conversion as the first stage of a pipeline, and pipelines merged.
 ```
 
 Dependencies point one way: converters import `layout`, `css`, `text` and
@@ -47,8 +46,8 @@ x/net/html for selector matching and nothing of litho; `text` imports
 `compose` (it produces `compose.Text` runs) and go-text; `compose` imports
 `embed` and the core writer; nothing imports a converter but `pkg/pdf`.
 
-The two wave 1 contracts split the HTML route in three so the Office
-converters of waves 4 to 6 reuse the engine: `css.Style` is every computed
+Two contracts split the HTML route in three so that the Office converters
+reuse the engine: `css.Style` is every computed
 property in points, `layout.Node` is a content tree of elements, text runs,
 forced breaks and pictures carrying a style, a structure role, a language,
 an anchor ID, a link target and table spans. An Office converter builds the
@@ -186,160 +185,108 @@ else draws text:
 - Whitespace is `Collapse` (CSS normal) or `Preserve`; trailing spaces at
   a wrapped line end hang.
 
-## Waves and oracles
+## The converters
 
-Each wave ships behind oracles wired into the corpus matrix
-(`test/integration`), with a baseline a regression fails against.
+Every converter builds the same thing, a tree of `layout.Node` values or a
+model of its own that lays itself out into pages, and reports what it
+could not render as a warning. Where a format's reference engine and its
+specification disagree, the engine is the reference: Chromium for HTML and
+Markdown, Microsoft Office for DOCX, XLSX and PPTX, LibreOffice for ODT,
+ODS, ODP and CSV. A rule that only one engine has applies to its formats
+alone: a workbook read from XLSX prints by Excel's rules
+(`sheet.Document.ExcelRules`), a DOCX flows by Word's (`css.Style.WordRules`),
+and the OpenDocument formats keep LibreOffice's.
 
-| Wave | Deliverable                                                                                                                                   | Oracles                                                                                                                                                  |
-| ---- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | Model, backend, text stack, plain text converter, the public entry point                                                                      | Round trip: extracted text equals the source. PDF/A-2b and PDF/UA-1 clean after remediation. Deterministic bytes. litho and poppler rasters agree. Fuzz. |
-| 1    | HTML and CSS 2.1 visual formatting, css-text, css-page, lists, backgrounds, borders, images, auto tables                                      | WPT reftests through the engine with the render cell's pixel rule. WeasyPrint draw tests. Differential against Chromium on Gotenberg's fixtures.         |
-| 2    | Route parity: headers and footers, page ranges, scale, paper, media type, outline, tags, links, Markdown, URL, @font-face, image formats, SVG | Gotenberg integration features on both routes.                                                                                                           |
-| 3    | Flexbox, grid, positioning, transforms, multicol, generated content, BiDi, CJK                                                                | WPT grid, multicol, writing modes and text pass rates. WeasyPrint's GCPM tests.                                                                          |
-| 4    | DOCX and ODT                                                                                                                                  | Differential against LibreOffice on the docx and odt corpora.                                                                                            |
-| 5    | XLSX, ODS, CSV                                                                                                                                | Differential against LibreOffice.                                                                                                                        |
-| 6    | PPTX and ODP                                                                                                                                  | Differential against LibreOffice.                                                                                                                        |
+### HTML and Markdown
 
-Wave 4 depends on wave 0 alone, so the Office converters run beside waves
-1 to 3 once the model is frozen.
-
-Status: waves 0 to 6 are done, then waves 7 and 8, two fidelity rounds
-over every corpus, wave 9, the output targets, wave 10, the memory of a
-conversion and the Microsoft references, and wave 11, the typed
-conversions and the pipeline.
-`test/integration/baseline.json` records the oracle scores per fixture;
-the whole matrix, the converter cells and the `targets` cell included,
-scores a tree in about fifty minutes on ten cores (`make corpus`).
-Wave 1 also took positioning, transforms, gradients, box-shadow, outlines
-and generated content from wave 3, and wave 2 took flexbox, because the
-reftests, the real pages and Chromium's header template lean on them. Wave
-2 mirrors Chromium's route as Gotenberg drives it: landscape, the paper
-against the @page size (preferCssPageSize), the print scale and the
-shrink-to-fit of wide content, the single page measured on a screen, page
-ranges, printBackground, the outline, headers and footers laid out on
+`convert/html` parses with x/net/html, styles with `css` and lays out with
+`layout`: CSS 2.1 visual formatting, flexbox, grid (CSS Grid 1 without
+subgrid and masonry), multi-column layout with spanners and fragmentation,
+positioning, transforms, gradients, shadows, generated content, BiDi and
+CJK line breaking, and the paged media of CSS Page 3 and CSS GCPM: named
+pages, page-margin boxes, footnotes, leaders, running elements, string
+sets, bleed and crop marks. It prints as Chromium prints through
+Gotenberg's route where the two overlap: the paper against the `@page`
+size, the print scale and the shrink-to-fit of wide content, the single
+page measured on a screen, page ranges, headers and footers laid out on
 Chromium's template page, media features, and font metrics rounded to
-whole pixels as Blink rounds them; and beyond the route, CSS Page 3 named
-pages and page-margin boxes, @font-face in TrueType, OpenType, WOFF and
-WOFF2, SVG, Markdown through gomarkdown, and http(s) resources with srcset
-and <picture>. The html corpus carries the route's parity fixtures, built
-from Gotenberg's test data with per-fixture options. The oracle
-disagreements that are accepted rather than chased are listed in each
-corpus's FIXTURES.md. Wave 3 added grid (CSS Grid 1 without subgrid and
-masonry), multi-column layout with spanners and fragmentation, the sizing
-keywords, the inline logical properties, BiDi and CJK line breaking and
-justification, text decoration and text-overflow, border-image, and the
-paged media of CSS GCPM: footnotes, leaders, running elements, string
-sets, bleed and crop marks, which Chromium does not print and the spec
-and WeasyPrint judge. The wpt corpus grew to 1177 reftests over the grid,
-multicol, writing modes, overflow, text decoration and sizing areas.
+whole pixels as Blink rounds them. Fonts load from `@font-face` in
+TrueType, OpenType, WOFF and WOFF2; pictures in the raster formats and
+SVG; resources over http and https with `srcset` and `<picture>` when the
+caller gives a client. A caller's style sheets enter the cascade at the
+user origin (CSS Cascading 4, 6.2).
 
-Wave 4 added the DOCX and ODT converters, judged against LibreOffice as
-Gotenberg's LibreOffice route prints a document (the pinned image, with
-Carlito and Caladea standing in for Calibri and Cambria): `ooxml` and
-`odf` read the packages with the caps and the markup compatibility the
-later XLSX, PPTX, ODS and ODP converters share, `offcrypto` opens the
-password-protected ones (MS-OFFCRYPTO Agile and Standard, ODF AES, Blowfish
-and Argon2id), and `convert/docx` and `convert/odt` build the layout tree
-from styles, numbering, sections and master pages, headers and footers,
-tables, frames and drawings, footnotes, fields and tracked changes as
-LibreOffice prints them. The engine gained what Office documents need and
-CSS has no syntax for, declared in `css/office.go`: tab stops with
-alignment and leaders, the Office line spacing rules, text scale, page
-frames, fixed-width list markers, page-anchored boxes, borders cloned at
-a page cut, columns of different widths, the footnote separator, kerning
-off, and vertical text in cells and frames. Where LibreOffice and the
-specification disagree, LibreOffice is the reference, and the docx and
-odt corpora hold its own test documents, fetched at the pinned release.
+`convert/markdown` renders with gomarkdown and lays out through
+`convert/html`, inside a template of the caller's (`html/template`, the
+document's HTML where the template calls `toHTML`).
 
-Wave 5 added the spreadsheet converters, judged against LibreOffice Calc
-the same way: `convert/xlsx`, `convert/ods` and `convert/csv` read their
-files into one model, `convert/sheet`'s, which knows cells, styles,
-number format codes, page setups, headers, footers and anchored drawings
-and nothing of any file format, and `convert/sheet` paginates it as Calc
-prints a sheet: the print ranges cut into pages by paper, margins, scale
-or fit-to-pages, page order, repeated rows and columns and manual breaks,
-the cells as absolutely positioned boxes with their own fills, borders
-and grid, text overflowing into empty neighbours and numbers narrowed or
-replaced by "###" to fit, the headers and footers with their fields, and
-each sheet on one page of its content's size for the single-page export.
-`numfmt` formats a value by a SpreadsheetML format code as Calc shows it
-(an ODF data style is translated to the code it means), for cells and
-chart labels alike. `chart` reads DrawingML and OpenDocument charts into
-one model and draws them with LibreOffice's own automatic layout, scaling
-and default colours: bars, lines, areas, pies, scatter, bubbles and
-radars. A CSV file loads as the LibreOffice route loads one: fields split
-at commas, semicolons and tabs, types detected, the page header off. The
-wave also closed wave 4's open engine items: page-anchored boxes count
-their anchor page alone, row spans split across pages, justified Office
-lines shrink their spaces as Word 2013 does, keep-with-next chains and
-proportional spacing at a page cut follow Writer.
+### Text documents
 
-Wave 6 added the presentation converters, judged against LibreOffice
-Impress: `convert/pptx` and `convert/odp` read their files into one model,
+`ooxml` and `odf` read the packages, with the caps and the markup
+compatibility every Office converter shares; `offcrypto` opens the
+password-protected ones (MS-OFFCRYPTO Agile and Standard, ODF AES,
+Blowfish and Argon2id). `convert/docx` and `convert/odt` build the layout
+tree from styles, numbering, sections and master pages, headers and
+footers, tables, frames and drawings, charts, footnotes and fields.
+
+The engine carries what Office documents need and CSS has no syntax for,
+declared in `css/office.go`: tab stops with alignment and leaders, the
+Office line spacing rules, text scale, page frames, fixed-width list
+markers, page-anchored boxes, borders cloned at a page cut, columns of
+different widths, the footnote separator, kerning off, and vertical text
+in cells and frames.
+
+Tracked changes print accepted, rejected or marked. The marked view is
+LibreOffice's for both formats, since neither Word nor LibreOffice prints
+marks unless a person asks: insertions and deletions in their author's
+colour, a bar in the margin beside a changed line, moved text in green,
+changed rows shaded. Form controls print as they show, or, on request,
+become interactive fields.
+
+### Spreadsheets
+
+`convert/xlsx`, `convert/ods` and `convert/csv` read their files into one
+model, `convert/sheet`'s, which knows cells, styles, number format codes,
+page setups, headers, footers and anchored drawings and nothing of any
+file format. `convert/sheet` paginates it as a spreadsheet prints: the
+print ranges cut into pages by paper, margins, scale or fit-to-pages, page
+order, repeated rows and columns and manual breaks, the cells as
+absolutely positioned boxes with their own fills, borders and grid, text
+overflowing into empty neighbours and numbers narrowed or replaced by
+"###" to fit, conditional formatting, pivot tables, and the headers and
+footers with their fields. `numfmt` formats a value by a SpreadsheetML
+format code (an ODF data style is translated to the code it means), for
+cells and chart labels alike. `chart` reads DrawingML and OpenDocument
+charts into one model and draws them. A formula is computed again only
+where its file left no value, unless the caller asks otherwise.
+
+### Presentations
+
+`convert/pptx` and `convert/odp` read their files into one model,
 `convert/slides`', resolving masters, layouts, placeholders and themes so
-that every shape says everything about itself, and `convert/slides` lays
-a slide out as Impress prints it: the background and the shapes in
-stacking order, each a geometry with its fill and line, a picture, a chart,
-a table or a group, the text of a shape in its text rectangle with the
-insets, anchor, wrapping, columns, autofit, bullets, numbering and fields
-the file asks for, the line and paragraph spacing rules of each format,
-hidden slides left out unless asked for, a notes page per slide when asked
-for, and the slide names as the outline. `shape` is the geometry engine
-every Office converter now draws through: the 187 DrawingML presets from
-the specification's own definitions, custom geometries, OpenDocument's
-enhanced geometry with LibreOffice's type mapping, and the fills, dashes
-and arrowheads, each measured against LibreOffice. The wave also gave the
-spreadsheets their conditional formatting, the print range Calc extends
-over overflowing text, and the row heights of East Asian text.
+that every shape says everything about itself. `convert/slides` lays a
+slide out: the background and the shapes in stacking order, each a
+geometry with its fill and line, a picture, a chart, a table or a group,
+the text of a shape in its text rectangle with the insets, anchor,
+wrapping, columns, autofit, bullets, numbering and fields the file asks
+for. On request it prints hidden slides, a notes page per slide, or
+handouts in place of the slides.
 
-Wave 7 was a fidelity round over the eleven corpora, one cell per area:
-SmartArt laid out from its data, layout, style and colour definitions as
-Impress lays it out; the presentation builder's text rules (shrink-to-fit
-recomputed as Impress does, unwrapped text widening its box, bullets and
-numbering, notes pages from the notes master), the OpenDocument shape
-outlines of paths and polygons, charts with manual layouts, gradient and
-pattern fills, data tables and the axis label rules; pivot tables rebuilt
-from their caches as Calc rebuilds them, data bars, a formula evaluator
-for the totals real workbooks leave uncached, locale separators; footnotes
-in table cells, note links, tab leaders, East Asian list formats and the
-document grid in text documents; and in the HTML route the CSS GCPM notes,
-footnotes in columns and overflow-clip-margin.
+`shape` is the geometry engine every Office converter draws through: the
+DrawingML presets from the specification's own definitions, custom
+geometries, and OpenDocument's enhanced geometry. `raster` draws coverage
+masks, blurs them and tints them, for the blurred shadows, glows and soft
+edges a vector path cannot say. `symbolfont` recodes the characters of the
+symbol fonts.
 
-Wave 8 was the second fidelity round, with one capability the first could
-not do without: `pkg/internal/raster` draws coverage masks, blurs them and
-tints them, so a presentation's blurred shadows, glows and soft edges print
-as the masked bitmaps Impress prints, at Impress's resolution and pixel
-budget. Around it: the presentation builder's horizontal anchors, default
-tabs, line-height floors, explicit baseline shifts, text links to slides,
-fit-to-size text, shared SmartArt scales, skews, notes pages for every
-slide, and symbol-font bullets recoded through LibreOffice's tables
-(`pkg/internal/symbolfont`, shared by every converter); the deck readers'
-table styles, theme link colours, picture effects and media frames; Office
-2016 charts (histograms as bars, the other kinds with LibreOffice's
-notice), trendlines, error bars, theme overrides and locale separators;
-in spreadsheets the drawing shapes and turned pictures placed from their
-anchor cells, icon sets as Calc places them, the used range stopped
-before a run of columns formatted alike, cell links to their pages, the
-detective's circles, dimension lines, and the broken CSV quoting Calc
-reads; in text documents the frames the flow wraps around, chains of linked boxes,
-borders stroked as Writer strokes them, exact row heights, nested rows
-split at a page cut, the fonts LibreOffice falls back to, cell values
-through their data styles; and in the HTML route `calc()` mixing lengths
-and percentages, the browser rendering rules of two-tone borders, list
-markers and underlines behind an option of their own, and the
-fragmentation rule of absolutely positioned boxes.
+## What a conversion writes
 
-Wave 9 made the output a choice and the judgement visual. A conversion
-writes the PDF version asked, 1.4 to 2.0, and its output conforms to the
-PDF/A and PDF/UA profiles asked, one or a pair a single file can meet,
-once remediated. The backend
-writes what a producer alone knows: the attributes and the role map of
-the structure tree, the constructs each version has, and page content in
-page coordinates, which keeps every number within what PDF 1.4 reads
-however long the document. The remediation a `Writer` runs, which owns
-conformance for every PDF litho writes, finishes the file through temp
-files, and the report says what the profile still finds. The converters
+A conversion writes the PDF version asked, 1.4 to 2.0, and claims no
+conformance: PDF/A and PDF/UA come from the remediation a `Writer` runs,
+which owns conformance for every PDF litho writes. The backend writes
+what a producer alone knows, so that the remediation has little left to
+do: the attributes and the role map of the structure tree, the constructs
+each version has, and page content in page coordinates. The converters
 say what a reader of the structure tree needs: regular tables with spans
 and header scopes, list numbering, link descriptions, the descriptions
 their sources give pictures and charts, decorative and master drawings as
@@ -349,98 +296,58 @@ description.
 
 One paper rule holds in every format: the caller's paper, else the
 document's own (a CSS `@page` size, a section's, a sheet's, a slide's),
-else the default, A4 unless the caller names another; a caller's paper
-replaces the document's orientation with it. A conversion holds its
-pictures encoded as the file stores them, one decoded at a time, spools a
-large output to a temp file, parses a font face once, and spends memory
-within one budget, `Limits.MaxConvertMemoryBytes`, charged where memory
-is taken and released where it is given back, so a source too large for
-it is refused early rather than after minutes of work.
+else the default, A4 unless the caller names another. A caller's paper
+replaces the document's orientation with it.
 
-Wave 10 took the three memory costs wave 9 measured and left. A text,
-spreadsheet or presentation conversion writes each page as it is laid out,
-through `compose.Stream`, and keeps of a page only what the end of the
-file needs: its size, its links, the glyphs each font draws, its structure
-elements. A package part is parsed as it inflates, never read whole. The
-compressed bytes of pictures wait in a temp file past 8 MiB. Boxes that
-compute the same style share one (`layout.ShareStyles`), and no code
-writes a style after the share. One cost remains: the HTML and text
-document routes lay the whole document out before the first page is
-written, so their peak is the layout's. A 4 MiB HTML source peaks near
-1.25 GiB resident, and a 16 MiB one is refused. Releasing paragraphs as
-they paint is a change to the layout engine, not to the backend.
+A conversion spends memory within one budget,
+`Limits.MaxConvertMemoryBytes`, charged where memory is taken and
+released where it is given back, so a source too large for it is refused
+early. It holds its pictures encoded as the file stores them, one decoded
+at a time, parses a package part as it inflates, parses a font face once,
+shares one style between the boxes that compute the same
+(`layout.ShareStyles`), and spools a large output to a temp file. A plain
+text, spreadsheet or presentation conversion writes each page as it is
+laid out, through `compose.Stream`. The HTML and text document
+conversions lay the whole document out before the first page is written,
+so their peak is the layout's.
 
-The wave also turned the OOXML converters to Microsoft Office, the
-reference of the DOCX, XLSX and PPTX corpora. A workbook read from XLSX
-prints by Excel's rules (`sheet.Document.ExcelRules`): column widths from
-the character grid at 600 dpi, Excel's row heights, cell insets and grid
-line, its 1900 date system and number formats, pivot tables from their
-saved cells. A deck read from PPTX prints by PowerPoint's: an outline
-entry per slide with its number and title, sections above them, Office's
-pattern tiles, and shrunk text at the scale the file saved. A DOCX gained
-its charts, page background, text boxes, gutters and the outline titles
-Word writes. The OpenDocument formats and CSV keep LibreOffice as their
-reference.
+## The public surface
 
-Wave 11 gave the conversions the shape of the rest of the library. litho
-is a library alone: the command line, its installer and its binary
-release left, for Gotenberg to carry one. A format has its constructor,
-`pdf.FromText`, `FromHTML`, `FromMarkdown`, `FromDOCX`, `FromODT`,
-`FromXLSX`, `FromODS`, `FromCSV`, `FromPPTX` and `FromODP`, each
-returning a `Conversion`, and an option names the formats that take it
-in its type, so a paper for any format, margins for the flowed ones, a
-password for the packages or a sheet selection for the workbooks compile
-where they mean something and nowhere else. Options that contradict
-each other fail the conversion; none is ignored. A conversion writes a
-PDF by itself (`Conversion.WriteTo`) or opens a pipeline
-(`Pipeline.Convert`), and `Pipeline.MergePipelines` runs several
-pipelines at once in a bounded pool and merges what they write, the
-same bytes at any concurrency, the peak memory growing with the
-pipelines that run together. Conformance left the conversion, which
-writes PDF 1.7 unless asked another version: PDF/A and PDF/UA are a
-remediation stage of the pipeline, `Writer.RemediatePDFA` and
-`Writer.RemediatePDFUA`, as for any PDF.
+A format has its constructor in `pkg/pdf` (`FromText`, `FromHTML`,
+`FromMarkdown`, `FromDOCX`, `FromODT`, `FromXLSX`, `FromODS`, `FromCSV`,
+`FromPPTX`, `FromODP`), each returning a `Conversion`. An option names the
+formats that take it in its type, so it compiles where it means something
+and nowhere else, and options that contradict each other fail the
+conversion: none is ignored. A conversion writes a PDF by itself
+(`Conversion.WriteTo`) or opens a pipeline (`Pipeline.Convert`), and
+`Pipeline.MergePipelines` runs several pipelines in a bounded pool and
+merges what they write, the same bytes at any concurrency.
 
-The wave also built the options the first design carried and no
-converter honoured. A Markdown document prints through a template of
-the caller's (`html/template`, the document's HTML where the template
-calls `toHTML`), the default one writing what the converter wrote
-before. A caller's style sheets enter the cascade at the user origin
-(CSS Cascading 4, 6.2). A text document prints its tracked changes
-accepted, rejected or marked as LibreOffice marks them, and its date
-fields at the date the caller gives. A workbook prints the sheets
-selected by name or number, hidden ones on request, recalculated as
-needed, never or always; a CSV file takes its separators and may keep
-every field as text. A presentation prints as handouts, 1, 2, 3, 4, 6
-or 9 slides a page on its handout page, which takes the orientation of
-the page it prints on, laid out as LibreOffice lays a handout out: the pinned LibreOffice prints no handout without its print
-dialog, so the rule is locked to the 48 layouts it stores in a handout
-master instead.
+## Oracles
 
-An option no reference engine has is judged through a twin: a fixture
-names, as its `reference_of`, a document whose plain conversion by the
-reference engine is the picture the option should give, such as a
-workbook holding only the sheets a selection keeps. The `diff` cell
-scores the fixture against the twin's reference, and the rig builds no
-reference of its own for it.
+The corpus matrix (`test/integration`) judges every converter, and a
+baseline fails a regression. `test/integration/FEATURES.md` describes the
+cells; each corpus's FIXTURES.md lists its fixtures and the disagreements
+with its oracle that are accepted.
 
-A paper matrix judges the paper rule. `corpus build` generates, from five
-base documents, one document per format on each of eight papers in both
-orientations, and the paper options over three of them, 224 fixtures in
-all. Each is compared with its reference engine printing the same paper:
-Chromium for HTML and Markdown, LibreOffice for ODT, ODS and ODP,
-Microsoft Office for DOCX, XLSX and PPTX.
-
-The differential oracle compares page count, PDF.js text with reading
-order, link sets, outline, tag tree and a layout-tolerant score over
-poppler rasters, and writes a side-by-side PNG with a diff heatmap per
-failure. It leaves unscored a Microsoft reference drawn in a face no
-fixture font stands in for, since no converter without that face can
-match it. The `targets` cell converts every fixture to nineteen flavours
-(five versions, ten PDF/A profiles, both PDF/UA profiles, two pairs) and
-scores each by litho's validator, by the remediation's own report, and by
-whether it still looks and reads like the plain conversion, with veraPDF,
-poppler and pdfcpu judging one fixture in eight.
+- Plain text round-trips: the text extracted from the PDF equals the
+  source.
+- The layout engine draws the WPT reftests and WeasyPrint's draw tests.
+- Every format is compared with its reference engine: page count, text
+  in reading order, links, outline, tags, and a layout-tolerant score
+  over the rendered pages. A reference drawn in a face no fixture font
+  stands in for is left unscored, since no converter without that face
+  can match it.
+- A paper matrix lays one document per format out on each paper, in both
+  orientations, as the document's own size and as the caller's.
+- An option no reference engine has is judged through a twin: a fixture
+  names, as its `reference_of`, a document whose plain conversion by the
+  reference engine is the picture the option should give.
+- Every fixture is converted to every PDF version and remediated to
+  every PDF/A and PDF/UA profile, each output checked by litho's
+  validator and, for a sample, by veraPDF, poppler and pdfcpu.
+- Hostile documents and stress documents bound what a conversion may
+  spend and how it may fail.
 
 ## Scope
 

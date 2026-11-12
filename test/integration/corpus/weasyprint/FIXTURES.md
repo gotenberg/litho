@@ -47,7 +47,7 @@ Of the 372 `assert_pixels` calls of release 70.0, 315 became fixtures:
 | `test_transform`           | 14       |       |
 | `test_whitespace`          | 9        |       |
 
-Many fixtures reach past the converter's first wave (tables, columns, footnotes, transforms, gradients, SVG images): they score as failures until it covers them, and the baseline records which pass.
+A fixture that reaches past what the converter covers scores as a failure until it does, and the baseline records which pass.
 
 ## Known disagreements with Chromium
 
