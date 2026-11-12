@@ -538,18 +538,9 @@ func (b *builder) run(s string, t textState) *layout.Node {
 	if t.relief != "" {
 		b.warn("text-relief", "embossed and engraved text is approximated by a grey shadow")
 	}
-	if n := len(b.openChanges); n > 0 {
-		// The innermost open change of the marked view draws the run in
-		// its author's colour, an insertion underlined and a deletion
-		// struck through, line and text alike.
-		m := b.changeMarks[b.openChanges[n-1]]
-		line := decoLine{on: true, style: css.DecorationSolid}
-		t.color = &m.color
-		if m.insert {
-			t.under = line
-		} else {
-			t.through = line
-		}
+	changed := len(b.openChanges) > 0
+	if changed {
+		markText(&t, b.changeMarks[b.openChanges[len(b.openChanges)-1]])
 	}
 	st := baseStyle()
 	applyText(st, t, true)
@@ -560,7 +551,7 @@ func (b *builder) run(s string, t textState) *layout.Node {
 		// height.
 		st.LineHeight = css.Pts(0)
 	}
-	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Lang: t.langTag()})
+	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Lang: t.langTag(), ChangeBar: changed})
 	tn := &layout.Node{Kind: layout.Text, Style: st, Text: s}
 	if len(st.FontFamilies) > 0 {
 		// The codes of a symbol font name nothing a reader knows (ISO
@@ -632,6 +623,9 @@ func (b *builder) inlineElement(c *odf.Element, t textState, out *[]*layout.Node
 			"user-index-mark-end", "change":
 		case "change-start", "change-end":
 			b.changeMark(c)
+			if n := b.changeBound(c); n != nil {
+				*out = append(*out, n)
+			}
 		case "page-number", "page-count":
 			b.pageField(c, t, out, ws)
 		case "date", "time":

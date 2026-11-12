@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 )
@@ -44,36 +45,11 @@ type change struct {
 	spliced bool
 }
 
-// changeMark is how the marked view draws the text of a change: in its
-// author's colour, underlined for an insertion, struck through for a
-// deletion.
+// changeMark is how the marked view draws the text of a change: its kind
+// and the colour of its author ([office.MarkColor]).
 type changeMark struct {
-	color  css.Color
-	insert bool
-}
-
-// authorColors are the colours of the authors of a marked view, the
-// first author of the document in the first, cycling past the ninth.
-//
-// # Corpus evidence
-//
-//   - probe, odt: LibreOffice 26.8 (the pinned gotenberg/gotenberg:9.0.0
-//     image, soffice --convert-to pdf, changes shown) draws the changes of
-//     eleven authors in these nine colours, in the order the authors
-//     first appear in the body, the tenth and eleventh in the first two
-//     again; an insertion underlined and a deletion struck through, line
-//     and text in the colour.
-//
-//nolint:gochecknoglobals // static palette
-var authorColors = [...]css.Color{
-	rgb(0xC6, 0x92, 0x00), rgb(0x06, 0x46, 0xA2), rgb(0x57, 0x9D, 0x1C),
-	rgb(0x69, 0x2B, 0x9D), rgb(0xC5, 0x00, 0x0B), rgb(0x00, 0x80, 0x80),
-	rgb(0x8C, 0x84, 0x00), rgb(0x35, 0x55, 0x6B), rgb(0xD1, 0x76, 0x00),
-}
-
-// rgb returns the opaque colour of 8-bit components.
-func rgb(r, g, b uint8) css.Color {
-	return css.Color{R: float64(r) / 255, G: float64(g) / 255, B: float64(b) / 255, A: 1}
+	color css.Color
+	kind  office.MarkKind
 }
 
 // changes builds the text of a tracked-changes view of a text body in
@@ -620,6 +596,15 @@ func (c *changes) dropRows(kind changeKind) {
 // rowChanged reports a row each of whose cells a change of kind covers
 // whole.
 func (c *changes) rowChanged(row *odf.Element, kind changeKind) bool {
+	return rowCovered(row, func(id string) bool {
+		r := c.regions[id]
+		return r != nil && r.kind == kind
+	})
+}
+
+// rowCovered reports a row each of whose cells changes covers whole, the
+// changes whose ids of reports.
+func rowCovered(row *odf.Element, of func(id string) bool) bool {
 	cells := 0
 	for _, cell := range row.Children {
 		if !cell.Is(odf.NSTable, "table-cell") {
@@ -641,8 +626,7 @@ func (c *changes) rowChanged(row *odf.Element, kind changeKind) bool {
 						ok = false
 					}
 				case k.Is(odf.NSText, "change-start"):
-					id := k.A(odf.NSText, "change-id")
-					if r := c.regions[id]; r != nil && r.kind == kind {
+					if id := k.A(odf.NSText, "change-id"); of(id) {
 						open[id], seen = true, true
 					}
 				case k.Is(odf.NSText, "change-end"):
@@ -662,8 +646,17 @@ func (c *changes) rowChanged(row *odf.Element, kind changeKind) bool {
 	return cells > 0
 }
 
-// marks returns how the marked view draws each insertion and deletion,
-// the authors coloured in the order the body first names them.
+// marks returns how the marked view draws each change, the authors
+// coloured in the order the body first names them.
+//
+// # Corpus evidence
+//
+//   - probe, odt: LibreOffice 26.8 draws the text a text:format-change
+//     spans in its author's colour, and a line holding it with a change
+//     bar.
+//   - probe, docx: it draws the text of a w:rPrChange or w:pPrChange
+//     bold in its author's colour, a run whose new formatting is not
+//     bold too: the bold is the mark of the change.
 func (c *changes) marks() map[string]changeMark {
 	out := map[string]changeMark{}
 	authors := map[string]int{}
@@ -675,10 +668,15 @@ func (c *changes) marks() map[string]changeMark {
 			n = len(authors)
 			authors[ch.author] = n
 		}
-		if ch.kind == changeFormat {
-			continue
+		kind := office.MarkInsert
+		switch ch.kind {
+		case changeDeletion:
+			kind = office.MarkDelete
+		case changeFormat:
+			kind = office.MarkAttribute
+		case changeInsertion:
 		}
-		out[id] = changeMark{color: authorColors[n%len(authorColors)], insert: ch.kind == changeInsertion}
+		out[id] = changeMark{color: office.RGB(office.MarkColor(kind, n)), kind: kind}
 	}
 	return out
 }
@@ -689,4 +687,69 @@ func (c *changes) marks() map[string]changeMark {
 func (b *builder) rowTracked(row *odf.Element) bool {
 	props := b.styles.Resolve(b.scope, odf.FamilyRow, row.A(odf.NSTable, "style-name"), odf.RowProps)
 	return props.Get("loext:text-changes-only") == "false"
+}
+
+// markText sets in t how the marked view draws the text of the change m:
+// its colour, line and text alike, and its line or weight
+// ([office.MarkKind]).
+func markText(t *textState, m changeMark) {
+	t.color = &m.color
+	switch m.kind {
+	case office.MarkInsert:
+		t.under = decoLine{on: true, style: css.DecorationSolid}
+	case office.MarkDelete:
+		t.through = decoLine{on: true, style: css.DecorationSolid}
+	case office.MarkMoveTo:
+		t.under = decoLine{on: true, style: css.DecorationDouble}
+	case office.MarkMoveFrom:
+		t.through = decoLine{on: true, style: css.DecorationDouble}
+	case office.MarkAttribute:
+		t.weight = 700
+	}
+}
+
+// changeBound returns, at the text:change-start or text:change-end c of
+// a change of the marked view, an empty inline node that gives the line
+// it lands on a change bar, nil for the other views.
+//
+// # Corpus evidence
+//
+//   - probe, odt: LibreOffice 26.8 draws a change bar beside a line a
+//     change only starts or ends on: a paragraph whose inserted break
+//     follows its text, the paragraph after it.
+func (b *builder) changeBound(c *odf.Element) *layout.Node {
+	if _, ok := b.changeMarks[c.A(odf.NSText, "change-id")]; !ok {
+		return nil
+	}
+	return b.node(&layout.Node{Kind: layout.Element, Style: baseStyle(), ChangeBar: true})
+}
+
+// rowFill returns the ground the marked view draws the table row row on:
+// an inserted row's or a deleted one's, a row of a table an insertion or
+// a deletion holds included, and whether it draws one. The ground covers
+// the row's cells, over their own background ([office.RowInsertedFill]).
+func (b *builder) rowFill(row *odf.Element) (css.Color, bool) {
+	if b.changeMarks == nil {
+		return css.Color{}, false
+	}
+	kind := office.MarkKind(0)
+	if n := len(b.openChanges); n > 0 {
+		kind = b.changeMarks[b.openChanges[n-1]].kind
+	}
+	if kind != office.MarkInsert && kind != office.MarkDelete && b.rowTracked(row) {
+		for _, k := range []office.MarkKind{office.MarkInsert, office.MarkDelete} {
+			if rowCovered(row, func(id string) bool { m, ok := b.changeMarks[id]; return ok && m.kind == k }) {
+				kind = k
+				break
+			}
+		}
+	}
+	switch kind {
+	case office.MarkInsert:
+		return office.RGB(office.RowInsertedFill), true
+	case office.MarkDelete:
+		return office.RGB(office.RowDeletedFill), true
+	case office.MarkAttribute, office.MarkMoveTo, office.MarkMoveFrom:
+	}
+	return css.Color{}, false
 }

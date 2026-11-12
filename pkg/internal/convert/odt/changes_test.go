@@ -177,9 +177,9 @@ func TestConvert_TrackedChangesMarks(t *testing.T) {
 		deco  css.TextDecoration
 		color css.Color
 	}{
-		{"ada", css.Underline, authorColors[0]},
-		{"grace", css.Underline, authorColors[1]},
-		{"gone", css.LineThrough, authorColors[1]},
+		{"ada", css.Underline, office.RGB(office.AuthorColor(0))},
+		{"grace", css.Underline, office.RGB(office.AuthorColor(1))},
+		{"gone", css.LineThrough, office.RGB(office.AuthorColor(1))},
 	}
 	for _, tc := range cases {
 		st := got[tc.text]
@@ -199,17 +199,17 @@ func TestConvert_TrackedChangesMarks(t *testing.T) {
 
 func TestConvert_TrackedChangesAuthorsCycle(t *testing.T) {
 	var regions, body strings.Builder
-	for i := range len(authorColors) + 1 {
+	for i := range 9 + 1 {
 		id := string(rune('a' + i))
 		regions.WriteString(region(id, "insertion", "Author "+id, ""))
 		body.WriteString(`<text:p><text:change-start text:change-id="` + id + `"/>run` + id + `<text:change-end text:change-id="` + id + `"/></text:p>`)
 	}
 	got := markedRuns(t, regions.String(), body.String())
-	if c := got["runa"].Color; c != authorColors[0] {
-		t.Errorf("first author %v, want %v", c, authorColors[0])
+	if c := got["runa"].Color; c != office.RGB(office.AuthorColor(0)) {
+		t.Errorf("first author %v, want %v", c, office.RGB(office.AuthorColor(0)))
 	}
-	if c := got["run"+string(rune('a'+len(authorColors)))].Color; c != authorColors[0] {
-		t.Errorf("tenth author %v, want the first colour %v", c, authorColors[0])
+	if c := got["run"+string(rune('a'+9))].Color; c != office.RGB(office.AuthorColor(0)) {
+		t.Errorf("tenth author %v, want the first colour %v", c, office.RGB(office.AuthorColor(0)))
 	}
 }
 

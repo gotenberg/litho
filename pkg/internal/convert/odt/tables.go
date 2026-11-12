@@ -178,6 +178,10 @@ func (b *builder) row(c *odf.Element, tb *tableBuild, header bool) *layout.Node 
 			st.BackgroundColor = cssColor(col)
 		}
 	}
+	fill, filled := b.rowFill(c)
+	if filled {
+		st.BackgroundColor = fill
+	}
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "TR"})
 	for _, cell := range c.Children {
 		if !cell.Is(odf.NSTable, "table-cell") {
@@ -189,7 +193,12 @@ func (b *builder) row(c *odf.Element, tb *tableBuild, header bool) *layout.Node 
 			if tb.cells > maxTableCells {
 				return n
 			}
-			n.Children = append(n.Children, b.cell(cell, tb, header))
+			k := b.cell(cell, tb, header)
+			if filled {
+				// The marked view's ground covers the cell's own.
+				k.Style.BackgroundColor = css.Transparent
+			}
+			n.Children = append(n.Children, k)
 		}
 	}
 	return n
