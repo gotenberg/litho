@@ -77,3 +77,37 @@ func TestJustify_CJK(t *testing.T) {
 		})
 	}
 }
+
+// TestLineBreak_HangPunctuation checks that an ideographic comma or full
+// stop that ends a line and does not fit on it hangs past the line's end
+// in a container of css.Office.HangPunctuation, where it would otherwise
+// take the character before it to the next line.
+//
+// # Corpus evidence
+//
+//   - litho/odt: ja-line-break prints "すべての人間は、" on one line of
+//     seven ideographs' width under style:punctuation-wrap hanging, the
+//     comma past the line's end, and "すべての人間 / は、" under simple.
+func TestLineBreak_HangPunctuation(t *testing.T) {
+	hang := func(s *css.Style) { s.HangPunctuation = true }
+	tests := []struct {
+		name string
+		st   *css.Style
+		text string
+		want []string
+	}{
+		{"hangs a comma", sty(hang), "漢字漢、漢", []string{"漢字漢、", "漢"}},
+		{"hangs a full stop at the end", sty(hang), "漢字漢。", []string{"漢字漢。"}},
+		{"no hang without the flag", sty(), "漢字漢、漢", []string{"漢字", "漢、漢"}},
+		{"hangs no other punctuation", sty(hang), "漢字漢）漢", []string{"漢字", "漢）漢"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := run(t, doc(el(tt.st, txt(tt.st, tt.text))), page(30, 100))
+			got, _ := lineTexts(res, 1)
+			if strings.Join(got, "|") != strings.Join(tt.want, "|") {
+				t.Errorf("lines %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

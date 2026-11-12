@@ -245,6 +245,21 @@ func (p *ifcPara) keptTogether(i int, a, b rune) bool {
 	return p.styleAt(i).WordBreak == css.KeepAll && isWordChar(a) && isWordChar(b)
 }
 
+// hangsPunct reports whether character i of p is punctuation that may
+// hang past the end of a line of the block container root
+// ([css.Office.HangPunctuation]): an ideographic comma or full stop, or
+// a fullwidth comma or full stop, after which the line may break.
+func (p *ifcPara) hangsPunct(root *box, i int) bool {
+	if root == nil || !root.st.HangPunctuation {
+		return false
+	}
+	switch p.p.Rune(i) {
+	case '、', '。', '，', '．':
+		return i+1 >= p.p.Len() || p.allowed(i+1)
+	}
+	return false
+}
+
 // isPreservedSpace reports a space or tab that break-spaces keeps and
 // wraps after.
 func isPreservedSpace(r rune) bool {
@@ -348,7 +363,7 @@ func (e *engine) breakLineIn(p *ifcPara, w []float64, start int, x0, avail float
 				return i, true
 			}
 		}
-		if x+wi > avail+eps && !p.hangs(i) {
+		if x+wi > avail+eps && !p.hangs(i) && !p.hangsPunct(root, i) {
 			if last > start {
 				return last, true
 			}
@@ -1034,6 +1049,17 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 	l := &lineBox{x: left, w: right - left, hangLeft: p.p.Direction() == text.RightToLeft}
 	for i := hangFrom; i < trim; i++ {
 		l.hangW += p.p.Advance(i)
+	}
+	if hangFrom == end && end > start && p.hangsPunct(s.root, end-1) {
+		// The punctuation that ends a wrapped line hangs when the line
+		// holds it only past its end.
+		w := 0.0
+		for i := start; i < end; i++ {
+			w += p.p.Advance(i)
+		}
+		if w > l.w+eps {
+			l.hangW += p.p.Advance(end - 1)
+		}
 	}
 	type extent struct{ x0, x1 float64 }
 	ext := map[*box]*extent{}

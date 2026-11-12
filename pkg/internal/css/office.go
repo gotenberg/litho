@@ -256,6 +256,14 @@ type Office struct {
 	// an empty line is a line of the container's font. It applies to a
 	// block container whose [Style.WordRules] is 0.
 	WriterLines bool
+	// HangPunctuation lets an ideographic comma or full stop, or their
+	// fullwidth forms, that ends a line and does not fit on it hang past
+	// the line's end, drawn but neither fitted nor aligned, as Writer
+	// hangs the punctuation of a paragraph of style:punctuation-wrap
+	// hanging (ODF 1.3, Part 3, 20.335; CSS Text 4, 10.1,
+	// hanging-punctuation: allow-end). It applies to the lines of a block
+	// container.
+	HangPunctuation bool
 }
 
 // WordAnchor places a float of [Office.WordAnchor] at a fixed offset, as
