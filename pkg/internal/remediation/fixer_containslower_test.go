@@ -8,9 +8,9 @@ import (
 func TestContainsLowerMatchesLoweredContains(t *testing.T) {
 	texts := []string{
 		"", "a", "StructTreeRoot", "The document catalog shall contain a StructTreeRoot",
-		"Font widths", "ÉLAN Widget", "straße", "İstanbul", "KELVIN K", "TU of a widget",
+		"Font widths", "ÉLAN Widget", "straße", "İstanbul", "KELVIN K", "TU of a widget", "abcK", "ABCK and more",
 	}
-	subs := []string{"", "a", "structtreeroot", "STRUCTTREEROOT", "widget", "élan", "STRASSE", "i̇stanbul", "kelvin k", "K", "tu", "x"}
+	subs := []string{"", "a", "structtreeroot", "STRUCTTREEROOT", "widget", "élan", "STRASSE", "i̇stanbul", "kelvin k", "K", "tu", "x", "ck", "c", "ck and"}
 	for _, s := range texts {
 		for _, sub := range subs {
 			want := strings.Contains(strings.ToLower(s), strings.ToLower(sub))
