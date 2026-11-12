@@ -145,7 +145,7 @@ func (d *document) graphic(s *story, data *ooxml.Element, st *css.Style, w, h fl
 			return n
 		}
 	case uriDiagram:
-		d.warn(warn.ContentUnsupported, warn.Omitted, "a SmartArt diagram is left out: the document holds no picture of it")
+		return d.diagram(s, data, st, w, h, depth)
 	default:
 		d.warn(warn.ContentUnsupported, warn.Omitted, "a drawing of an unknown kind is left out")
 	}

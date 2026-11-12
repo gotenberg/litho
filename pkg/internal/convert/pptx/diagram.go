@@ -1,10 +1,8 @@
 package pptx
 
 import (
-	"encoding/xml"
 	"fmt"
 	"math"
-	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -265,38 +263,8 @@ func (r *reader) diagramShapes(out *[]*slides.Shape, c *shapeCtx, ds *ooxml.Diag
 func (r *reader) diagramShape(c *shapeCtx, ds *ooxml.DiagramShape, preset string, x, y int64) *slides.Shape {
 	box := typeset.Rect{X: float64(x) / emuPerPoint, Y: float64(y) / emuPerPoint, Width: float64(max(0, ds.W)) / emuPerPoint, Height: float64(max(0, ds.H)) / emuPerPoint}
 	draws := preset != "" && shape.Known(&shape.Geometry{Preset: preset})
-	sp := &ooxml.Element{Space: nsDSP, Local: "sp"}
-	pr := &ooxml.Element{Space: nsDSP, Local: "spPr"}
-	if draws && preset != "rect" {
-		pr.Children = append(pr.Children, el("prstGeom", []string{"prst", preset}, el("avLst", nil)))
-	}
-	if draws {
-		if f := fillChild(ds.FillSpPr); f != nil {
-			pr.Children = append(pr.Children, f)
-		}
-		if ln := ds.LineSpPr.Child(ooxml.NSA, "ln"); ln != nil {
-			pr.Children = append(pr.Children, ln)
-		}
-	}
-	sp.Children = append(sp.Children, pr)
-	style := &ooxml.Element{Space: nsDSP, Local: "style"}
-	for _, ref := range []struct {
-		ref, col *ooxml.Element
-		local    string
-	}{{ds.Style.Line, ds.StyleColor.Line, "lnRef"}, {ds.Style.Fill, ds.StyleColor.Fill, "fillRef"}, {ds.Style.Effect, ds.StyleColor.Effect, "effectRef"}, {ds.Style.Font, ds.StyleColor.Font, "fontRef"}} {
-		if ref.ref == nil {
-			continue
-		}
-		e := &ooxml.Element{Space: ooxml.NSA, Local: ref.local, Attrs: ref.ref.Attrs, Children: ref.ref.Children}
-		if ref.col != nil {
-			e.Children = []*ooxml.Element{ref.col}
-		}
-		style.Children = append(style.Children, e)
-	}
-	sp.Children = append(sp.Children, style)
-	if tb := diagramText(ds); tb != nil {
-		sp.Children = append(sp.Children, tb)
-	}
+	sp := ds.Element(nsDSP, preset, draws)
+	style := sp.Child(nsDSP, "style")
 	s := &slides.Shape{Kind: slides.KindGeometry, Name: ds.Name, Box: box, Rotation: float64(ds.Rot) / 60000}
 	chain := []*ooxml.Element{sp}
 	fc := &fillCtx{sc: c.sc, part: c.part}
@@ -342,131 +310,4 @@ func turnText(s *slides.Shape, rot float64) *slides.Shape {
 	g.Box = union(g.Kids)
 	g.Child = g.Box
 	return g
-}
-
-// fillChild returns the fill among e's children, nil for none.
-func fillChild(e *ooxml.Element) *ooxml.Element {
-	for _, k := range e.Kids() {
-		if k.Space != ooxml.NSA {
-			continue
-		}
-		switch k.Local {
-		case "noFill", "solidFill", "gradFill", "blipFill", "pattFill", "grpFill":
-			return k
-		}
-	}
-	return nil
-}
-
-// el returns a new DrawingML element with the attributes of the name and
-// value pairs kv and the children kids.
-func el(local string, kv []string, kids ...*ooxml.Element) *ooxml.Element {
-	return &ooxml.Element{Space: ooxml.NSA, Local: local, Attrs: attrs(kv...), Children: kids}
-}
-
-// withAttr returns a copy of e with the attribute name set to v.
-func withAttr(e *ooxml.Element, name, v string) *ooxml.Element {
-	out := &ooxml.Element{Space: ooxml.NSA, Local: "pPr"}
-	if e != nil {
-		*out = *e
-		out.Attrs = append([]xml.Attr(nil), e.Attrs...)
-	}
-	out.Attrs = setAttr(out.Attrs, name, v)
-	return out
-}
-
-// diagramText returns a laid out shape's text as a dsp:txBody: its data's
-// body properties with the anchor, insets and autofit the text algorithm
-// set, its data's list style, and its paragraphs with the level, margin,
-// indent, alignment and bullet the algorithm set; nil for no text.
-func diagramText(ds *ooxml.DiagramShape) *ooxml.Element {
-	if len(ds.Paragraphs) == 0 {
-		return nil
-	}
-	body := &ooxml.Element{Space: ooxml.NSA, Local: "bodyPr"}
-	if ds.BodyPr != nil {
-		body.Attrs = append([]xml.Attr(nil), ds.BodyPr.Attrs...)
-		for _, k := range ds.BodyPr.Kids() {
-			if ds.Autofit && (k.Local == "normAutofit" || k.Local == "spAutoFit" || k.Local == "noAutofit") {
-				continue
-			}
-			body.Children = append(body.Children, k)
-		}
-	}
-	if ds.Anchor != "" {
-		body.Attrs = setAttr(body.Attrs, "anchor", ds.Anchor)
-	}
-	for i, name := range [4]string{"lIns", "tIns", "rIns", "bIns"} {
-		if ds.Inset[i] {
-			body.Attrs = setAttr(body.Attrs, name, strconv.FormatInt(ds.Insets[i], 10))
-		}
-	}
-	if ds.Autofit {
-		body.Children = append(body.Children, el("normAutofit", nil))
-	}
-	tb := &ooxml.Element{Space: nsDSP, Local: "txBody", Children: []*ooxml.Element{body}}
-	if ds.ListStyle != nil {
-		tb.Children = append(tb.Children, ds.ListStyle)
-	}
-	for _, p := range ds.Paragraphs {
-		ppr := withAttr(p.PPr, "lvl", strconv.Itoa(max(0, min(p.Level, 8))))
-		if p.HasMarL {
-			ppr.Attrs = setAttr(ppr.Attrs, "marL", strconv.FormatInt(p.MarL, 10))
-		}
-		if p.HasIndent {
-			ppr.Attrs = setAttr(ppr.Attrs, "indent", strconv.FormatInt(p.Indent, 10))
-		}
-		if p.Align != "" {
-			ppr.Attrs = setAttr(ppr.Attrs, "algn", p.Align)
-		}
-		if p.Bullet {
-			var kids []*ooxml.Element
-			for _, k := range ppr.Children {
-				switch k.Local {
-				case "buNone", "buChar", "buAutoNum", "buBlip":
-					continue
-				}
-				kids = append(kids, k)
-			}
-			kids = append(kids, el("buChar", []string{"char", "•"}))
-			ppr.Children = kids
-		} else if ppr.Child(ooxml.NSA, "buChar") == nil && ppr.Child(ooxml.NSA, "buAutoNum") == nil && ppr.Child(ooxml.NSA, "buBlip") == nil {
-			ppr.Children = append(append([]*ooxml.Element(nil), ppr.Children...), el("buNone", nil))
-		}
-		out := &ooxml.Element{Space: ooxml.NSA, Local: "p", Children: []*ooxml.Element{ppr}}
-		for _, k := range p.Source.Kids() {
-			if k.Space != ooxml.NSA || (k.Local != "r" && k.Local != "br" && k.Local != "fld") {
-				continue
-			}
-			if ds.FontSize > 0 {
-				k = sizedRun(k, ds.FontSize)
-			}
-			out.Children = append(out.Children, k)
-		}
-		tb.Children = append(tb.Children, out)
-	}
-	return tb
-}
-
-// sizedRun returns a run whose rPr sets no size with the size pt.
-func sizedRun(run *ooxml.Element, pt float64) *ooxml.Element {
-	rpr := run.Child(ooxml.NSA, "rPr")
-	if _, ok := rpr.Attr("sz"); ok {
-		return run
-	}
-	out := *run
-	out.Children = nil
-	nr := &ooxml.Element{Space: ooxml.NSA, Local: "rPr"}
-	if rpr != nil {
-		*nr = *rpr
-		nr.Attrs = append([]xml.Attr(nil), rpr.Attrs...)
-	}
-	nr.Attrs = setAttr(nr.Attrs, "sz", strconv.Itoa(int(math.Round(pt*100))))
-	out.Children = append(out.Children, nr)
-	for _, k := range run.Children {
-		if k != rpr {
-			out.Children = append(out.Children, k)
-		}
-	}
-	return &out
 }
