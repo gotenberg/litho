@@ -151,9 +151,10 @@ func (b *pageBuilder) display(u *unit) (display, bool) {
 	}
 	if st.Align.Stacked {
 		// Stacked text sets one character a line, centred (ODF
-		// style:direction ttb; ECMA-376 Part 1, 18.8.1 textRotation 255).
+		// style:direction ttb; ECMA-376 Part 1, 18.8.1 textRotation 255),
+		// each in its run's font.
 		d.text = stack(d.text)
-		d.runs = nil
+		d.runs = stackRuns(d.runs)
 		d.wrap = false
 		if d.hAlign == HGeneral {
 			d.hAlign = HCenter
@@ -444,16 +445,61 @@ func (b *pageBuilder) paragraph(d *display, f font, lineH float64, align css.Tex
 	}
 	for _, r := range d.runs {
 		rs := b.style()
-		overlay(f, r.Font).apply(rs)
+		rf := overlay(f, r.Font)
+		rf.apply(rs)
 		rs.Display = css.Inline
 		rs.WhiteSpace = st.WhiteSpace
 		rs.LineHeight = st.LineHeight
+		if !b.doc.ExcelRules && r.Font != nil {
+			rs.LineHeight = css.Dimension{Kind: css.Number, Value: b.runLine(rf, d.wrap) / math.Max(rf.size, 0.01)}
+		}
 		n.Children = append(n.Children, &layout.Node{
 			Kind: layout.Element, Style: rs,
 			Children: []*layout.Node{{Kind: layout.Text, Style: rs, Text: r.Text}},
 		})
 	}
 	return n
+}
+
+// runLine returns the line of a run in the font f, wrapped or not: the
+// face's own ascent and descent, so that a line of runs in several fonts
+// is as tall as its tallest ascent and descent together, as LibreOffice's
+// edit engine sets a line.
+//
+// # Corpus evidence
+//
+//   - litho/ods: cjk-cells prints its stacked Han characters, in Noto
+//     Sans CJK JP 11 under a Liberation Sans 11 cell font, 16.02 points
+//     apart, Noto Sans CJK's ascent and descent; indic-thai-cells its
+//     wrapped Noto Sans Devanagari 11 lines 14.5 points apart.
+func (b *pageBuilder) runLine(f font, wrap bool) float64 {
+	h := b.m.lineHeight(f)
+	if wrap {
+		h = editLine(h)
+	}
+	return h
+}
+
+// stackRuns returns runs with a line break between their characters, for
+// stacked text, nil for none.
+func stackRuns(runs []Run) []Run {
+	if len(runs) == 0 {
+		return nil
+	}
+	out := make([]Run, 0, len(runs))
+	first := true
+	for _, r := range runs {
+		var b strings.Builder
+		for _, c := range r.Text {
+			if !first {
+				b.WriteByte('\n')
+			}
+			first = false
+			b.WriteRune(c)
+		}
+		out = append(out, Run{Text: b.String(), Font: r.Font})
+	}
+	return out
 }
 
 // stack returns s with a line break between its characters, for stacked

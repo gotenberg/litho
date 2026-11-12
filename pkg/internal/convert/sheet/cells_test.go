@@ -310,6 +310,31 @@ func TestConvert_RotatedKeptWhole(t *testing.T) {
 	}
 }
 
+// TestConvert_StackedRunLines checks that the stacked characters of a
+// run in another font than the cell's are as far apart as that font's
+// ascent and descent: DejaVu Sans 10 under a Liberation Sans 10 cell,
+// 11.64 points, not Liberation Sans's 11.17.
+//
+// # Corpus evidence
+//
+//   - litho/ods: cjk-cells prints its stacked Han characters, in Noto
+//     Sans CJK JP 11 under a Liberation Sans 11 cell font, 16.02 points
+//     apart, Noto Sans CJK's ascent and descent.
+func TestConvert_StackedRunLines(t *testing.T) {
+	c := textCell(0, "abc", &Style{Align: Alignment{Stacked: true}})
+	c.Runs = []Run{{Text: "abc", Font: &Font{Families: []string{"DejaVu Sans"}, Size: 10}}}
+	sh := &Sheet{Name: "S", Rows: []Row{{Index: 0, Height: 80, CustomHeight: true, Cells: []Cell{c}}}}
+	got := runs(convert(t, newDoc(sh), office.Options{}).Pages[0])
+	if len(got) != 3 {
+		t.Fatalf("runs = %+v, want three stacked lines", got)
+	}
+	for i := 1; i < len(got); i++ {
+		if d := got[i-1].y - got[i].y; !near(d, 11.64, 0.05) {
+			t.Errorf("lines %d and %d are %.2f points apart, want 11.64", i-1, i, d)
+		}
+	}
+}
+
 // TestConvert_GrowHeader locks Calc's dynamic header and footer heights:
 // content taller than the margin's room, plus the spacing, moves the
 // cells; a fixed height does not. Header text naming no font takes
