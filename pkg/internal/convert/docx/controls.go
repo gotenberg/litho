@@ -49,12 +49,13 @@ func (d *document) fieldsOn() bool {
 // # Corpus evidence
 //
 //   - litho/docx content-controls-choice and content-controls-text,
-//     converted by LibreOffice: every inline text, rich text and date
+//     converted by LibreOffice on gotenberg/gotenberg:9.4.1: every inline text, rich text and date
 //     control becomes a text field, a drop-down list a combo box, a combo
 //     box an editable one with its display texts as options, a check box
 //     a check box; the alias is the field's /TU. LibreOffice names its
 //     fields "Widget", "_2", "_3" and so on, from no source attribute.
-//   - litho/docx form-fields-legacy, converted by LibreOffice: no field.
+//   - litho/docx form-fields-legacy, converted by LibreOffice on
+//     gotenberg/gotenberg:9.4.1: no field.
 func sdtField(pr *ooxml.Element, content *ooxml.Element) (compose.Field, bool) {
 	f := compose.Field{Kind: compose.FieldText}
 	tag, alias := attrOr(pr.Child(w, "tag"), "val"), attrOr(pr.Child(w, "alias"), "val")

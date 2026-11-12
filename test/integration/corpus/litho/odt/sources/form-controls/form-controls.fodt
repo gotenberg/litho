@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:form="urn:oasis:names:tc:opendocument:xmlns:form:1.0" xmlns:script="urn:oasis:names:tc:opendocument:xmlns:script:1.0" xmlns:xforms="http://www.w3.org/2002/xforms" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:loext="urn:org:documentfoundation:names:experimental:office:xmlns:loext:1.0" office:version="1.3" office:mimetype="application/vnd.oasis.opendocument.text">
+  <office:font-face-decls>
+    <style:font-face style:name="Liberation Sans" svg:font-family="'Liberation Sans'"/>
+  </office:font-face-decls>
+  <office:styles>
+    <style:default-style style:family="paragraph">
+      <style:text-properties style:font-name="Liberation Sans" fo:font-size="11pt"/>
+    </style:default-style>
+    <style:style style:name="P" style:family="paragraph">
+      <style:paragraph-properties fo:margin-bottom="0.2cm"/>
+    </style:style>
+    <style:style style:name="Break" style:family="paragraph">
+      <style:paragraph-properties fo:break-before="page"/>
+    </style:style>
+  </office:styles>
+  <office:automatic-styles>
+    <style:style style:name="gr1" style:family="graphic">
+      <style:graphic-properties style:vertical-pos="middle" style:vertical-rel="text"/>
+    </style:style>
+    <style:page-layout style:name="pm1">
+      <style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" fo:margin-left="2cm" fo:margin-right="2cm" fo:margin-top="1.5cm" fo:margin-bottom="2cm"/>
+      <style:header-style/>
+    </style:page-layout>
+  </office:automatic-styles>
+  <office:master-styles>
+    <style:master-page style:name="Standard" style:page-layout-name="pm1">
+      <style:header>
+        <text:p>Header: <draw:control text:anchor-type="as-char" draw:name="Ctl c17" draw:style-name="gr1" svg:width="4cm" svg:height="0.6cm" draw:control="c17"/></text:p>
+      </style:header>
+    </style:master-page>
+  </office:master-styles>
+  <office:body>
+    <office:text>
+      <office:forms form:automatic-focus="false" form:apply-design-mode="false">
+        <form:form form:name="Form1">
+          <form:text form:name="name" form:id="c1" form:value="Ada Lovelace" form:current-value="Ada Lovelace" form:title="Your full name"/>
+          <form:textarea form:name="notes" form:id="c2" form:value="Line one&#10;Line two" form:current-value="Line one&#10;Line two"/>
+          <form:checkbox form:name="agree" form:id="c3" form:value="yes" form:state="checked" form:current-state="checked"/>
+          <form:checkbox form:name="news" form:id="c4" form:value="on" form:state="unchecked"/>
+          <form:radio form:name="color" form:id="c5" form:value="red" form:label="Red"/>
+          <form:radio form:name="color" form:id="c6" form:value="blue" form:label="Blue" form:selected="true" form:current-selected="true"/>
+          <form:listbox form:name="fruit" form:id="c7" form:size="3">
+            <form:option form:label="Apple" form:value="apple"/>
+            <form:option form:label="Banana" form:value="banana" form:selected="true" form:current-selected="true"/>
+            <form:option form:label="Cherry" form:value="cherry"/>
+          </form:listbox>
+          <form:listbox form:name="country" form:id="c8" form:dropdown="true">
+            <form:option form:label="France" form:value="fr"/>
+            <form:option form:label="Germany" form:value="de" form:selected="true" form:current-selected="true"/>
+          </form:listbox>
+          <form:combobox form:name="city" form:id="c9" form:dropdown="true" form:current-value="Paris" form:value="Paris">
+            <form:item form:label="Paris"/>
+            <form:item form:label="Berlin"/>
+          </form:combobox>
+          <form:date form:name="day" form:id="c10" form:value="20240315" form:current-value="20240315" form:dropdown="true"/>
+          <form:text form:name="locked" form:id="c11" form:value="Read only" form:current-value="Read only" form:readonly="true"/>
+          <form:text form:name="noprint" form:id="c12" form:value="No print" form:current-value="No print" form:printable="false"/>
+          <form:text form:name="dup" form:id="c13" form:value="First" form:current-value="First"/>
+          <form:text form:name="dup" form:id="c14" form:value="Second" form:current-value="Second"/>
+          <form:text form:name="incell" form:id="c15" form:value="In cell" form:current-value="In cell"/>
+          <form:text form:name="page2" form:id="c16" form:value="On page two" form:current-value="On page two"/>
+          <form:text form:name="inheader" form:id="c17" form:value="Header value" form:current-value="Header value"/>
+          <form:checkbox form:name="disabledbox" form:id="c18" form:state="checked" form:current-state="checked" form:disabled="true"/>
+          <form:text form:name="empty" form:id="c19"/>
+          <form:text form:name="maxlen" form:id="c20" form:max-length="5" form:value="abc" form:current-value="abc"/>
+          <form:listbox form:name="multi" form:id="c21" form:size="3" form:multiple="true">
+            <form:option form:label="One" form:value="1" form:selected="true" form:current-selected="true"/>
+            <form:option form:label="Two" form:value="2"/>
+            <form:option form:label="Three" form:value="3" form:selected="true" form:current-selected="true"/>
+          </form:listbox>
+          <form:formatted-text form:name="amount" form:id="c22" form:value="42" form:current-value="42"/>
+          <form:button form:name="go" form:id="c23" form:label="Submit"/>
+        </form:form>
+      </office:forms>
+      <text:p text:style-name="P">Name: <draw:control text:anchor-type="as-char" draw:name="Ctl c1" draw:style-name="gr1" svg:width="5cm" svg:height="0.6cm" draw:control="c1"/></text:p>
+      <text:p text:style-name="P">Notes: <draw:control text:anchor-type="as-char" draw:name="Ctl c2" draw:style-name="gr1" svg:width="6cm" svg:height="1.5cm" draw:control="c2"/></text:p>
+      <text:p text:style-name="P">Agree: <draw:control text:anchor-type="as-char" draw:name="Ctl c3" draw:style-name="gr1" svg:width="0.4cm" svg:height="0.4cm" draw:control="c3"/></text:p>
+      <text:p text:style-name="P">News: <draw:control text:anchor-type="as-char" draw:name="Ctl c4" draw:style-name="gr1" svg:width="0.4cm" svg:height="0.4cm" draw:control="c4"/></text:p>
+      <text:p text:style-name="P">Red: <draw:control text:anchor-type="as-char" draw:name="Ctl c5" draw:style-name="gr1" svg:width="0.4cm" svg:height="0.4cm" draw:control="c5"/></text:p>
+      <text:p text:style-name="P">Blue: <draw:control text:anchor-type="as-char" draw:name="Ctl c6" draw:style-name="gr1" svg:width="0.4cm" svg:height="0.4cm" draw:control="c6"/></text:p>
+      <text:p text:style-name="P">Fruit: <draw:control text:anchor-type="as-char" draw:name="Ctl c7" draw:style-name="gr1" svg:width="4cm" svg:height="1.6cm" draw:control="c7"/></text:p>
+      <text:p text:style-name="P">Country: <draw:control text:anchor-type="as-char" draw:name="Ctl c8" draw:style-name="gr1" svg:width="4cm" svg:height="0.6cm" draw:control="c8"/></text:p>
+      <text:p text:style-name="P">City: <draw:control text:anchor-type="as-char" draw:name="Ctl c9" draw:style-name="gr1" svg:width="4cm" svg:height="0.6cm" draw:control="c9"/></text:p>
+      <text:p text:style-name="P">Day: <draw:control text:anchor-type="as-char" draw:name="Ctl c10" draw:style-name="gr1" svg:width="4cm" svg:height="0.6cm" draw:control="c10"/></text:p>
+      <text:p text:style-name="P">Locked: <draw:control text:anchor-type="as-char" draw:name="Ctl c11" draw:style-name="gr1" svg:width="4cm" svg:height="0.6cm" draw:control="c11"/></text:p>
+      <text:p text:style-name="P">Noprint: <draw:control text:anchor-type="as-char" draw:name="Ctl c12" draw:style-name="gr1" svg:width="4cm" svg:height="0.6cm" draw:control="c12"/></text:p>
+      <text:p text:style-name="P">Dup1: <draw:control text:anchor-type="as-char" draw:name="Ctl c13" draw:style-name="gr1" svg:width="4cm" svg:height="0.6cm" draw:control="c13"/></text:p>
+      <text:p text:style-name="P">Dup2: <draw:control text:anchor-type="as-char" draw:name="Ctl c14" draw:style-name="gr1" svg:width="4cm" svg:height="0.6cm" draw:control="c14"/></text:p>
+      <text:p text:style-name="P">Disabled: <draw:control text:anchor-type="as-char" draw:name="Ctl c18" draw:style-name="gr1" svg:width="0.4cm" svg:height="0.4cm" draw:control="c18"/></text:p>
+      <text:p text:style-name="P">Empty: <draw:control text:anchor-type="as-char" draw:name="Ctl c19" draw:style-name="gr1" svg:width="4cm" svg:height="0.6cm" draw:control="c19"/></text:p>
+      <text:p text:style-name="P">Maxlen: <draw:control text:anchor-type="as-char" draw:name="Ctl c20" draw:style-name="gr1" svg:width="4cm" svg:height="0.6cm" draw:control="c20"/></text:p>
+      <text:p text:style-name="P">Multi: <draw:control text:anchor-type="as-char" draw:name="Ctl c21" draw:style-name="gr1" svg:width="4cm" svg:height="1.6cm" draw:control="c21"/></text:p>
+      <text:p text:style-name="P">Amount: <draw:control text:anchor-type="as-char" draw:name="Ctl c22" draw:style-name="gr1" svg:width="4cm" svg:height="0.6cm" draw:control="c22"/></text:p>
+      <text:p text:style-name="P">Button: <draw:control text:anchor-type="as-char" draw:name="Ctl c23" draw:style-name="gr1" svg:width="3cm" svg:height="0.8cm" draw:control="c23"/></text:p>
+      <table:table table:name="T1">
+        <table:table-column table:number-columns-repeated="2"/>
+        <table:table-row>
+          <table:table-cell office:value-type="string">
+            <text:p>Cell</text:p>
+          </table:table-cell>
+          <table:table-cell office:value-type="string">
+            <text:p>
+              <draw:control text:anchor-type="as-char" draw:name="Ctl c15" draw:style-name="gr1" svg:width="4cm" svg:height="0.6cm" draw:control="c15"/>
+            </text:p>
+          </table:table-cell>
+        </table:table-row>
+      </table:table>
+      <text:p text:style-name="Break">Page two: <draw:control text:anchor-type="as-char" draw:name="Ctl c16" draw:style-name="gr1" svg:width="4cm" svg:height="0.6cm" draw:control="c16"/></text:p>
+    </office:text>
+  </office:body>
+</office:document>

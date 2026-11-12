@@ -21,10 +21,10 @@ import (
 //
 //   - libreoffice/odt odfimport__dateFormFormats.odt: twelve date fields,
 //     each /DA (0 0 0 rg /He 8 Tf).
-//   - probe, odt: a text field, a text area, a list box, a drop-down list
-//     box, a combo box and a date field of a document that sets no font
-//     on its controls export with /DA at 8 points, Helvetica for a text
-//     field and DejaVu Sans for a list.
+//   - probe, odt: on gotenberg/gotenberg:9.4.1, a text field, a text area,
+//     a list box, a drop-down list box, a combo box and a date field of a
+//     document that sets no font on its controls export with /DA at 8
+//     points, Helvetica for a text field and DejaVu Sans for a list.
 const controlFontSize = 8
 
 // controlFamily is the face a form control's text is set in: Liberation
@@ -75,17 +75,19 @@ func (b *builder) controlElem(c *odf.Element) *odf.Element {
 //
 // # Corpus evidence
 //
-//   - probe, odt: LibreOffice exports a form:text, form:textarea,
-//     form:formatted-text and form:date as a text field, the text area
-//     multiline; a form:checkbox as a check box; the form:radio of one
-//     form:name as one radio button group with the Radio and
-//     NoToggleToOff flags; a form:listbox as a list box, a drop-down one
-//     as a combo box, a form:multiple one with MultiSelect; a
-//     form:combobox as an editable combo box; form:readonly as ReadOnly.
+//   - probe, odt: on gotenberg/gotenberg:9.4.1, LibreOffice exports a
+//     form:text, form:textarea, form:formatted-text and form:date as a
+//     text field, the text area multiline; a form:checkbox as a check
+//     box; the form:radio of one form:name as one radio button group with
+//     the Radio and NoToggleToOff flags; a form:listbox as a list box, a
+//     drop-down one as a combo box, a form:multiple one with MultiSelect;
+//     a form:combobox as an editable combo box; form:readonly as ReadOnly.
 //     The options are written by their labels. A second control of one
 //     name takes the suffix _2. A control with form:printable false is
 //     neither printed nor exported, a form:button is a push button, and a
-//     control in a page header is neither printed nor exported.
+//     control in a page header is neither printed nor exported. The /TU
+//     of every field is its name, form:title set or not. The widget of a
+//     control sits about 2 points inside its frame.
 func (b *builder) fieldControl(c *odf.Element, g frameGeom, n *layout.Node) bool {
 	if !b.formFields || b.hf != nil {
 		return false
