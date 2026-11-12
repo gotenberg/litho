@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
@@ -105,25 +107,6 @@ func mergeDeleted(kids []*ooxml.Element) []*ooxml.Element {
 	return out
 }
 
-// revisionColors are the colours of the authors of a marked view, the
-// first author of the document in the first, cycling past the ninth.
-// Word's own colours are not measured: no reference prints a document's
-// changes shown; these are LibreOffice's, which prints a DOCX document's
-// changes as an OpenDocument one's.
-//
-// # Corpus evidence
-//
-//   - probe, odt: LibreOffice 26.8 (the pinned gotenberg/gotenberg:9.0.0
-//     image, soffice --convert-to pdf, changes shown) draws the changes of
-//     eleven authors in these nine colours, in the order the authors
-//     first appear in the body, the tenth and eleventh in the first two
-//     again.
-//   - litho/docx tracked-changes: Microsoft's reference prints the
-//     accepted text, without marks.
-//
-//nolint:gochecknoglobals // static palette
-var revisionColors = [...]string{"C69200", "0646A2", "579D1C", "692B9D", "C5000B", "008080", "8C8400", "35556B", "D17600"}
-
 // revisions rewrites the revisions of a part into the view
 // office.Options.TrackedChanges asks for (ECMA-376 Part 1, 17.13.5).
 type revisions struct {
@@ -132,8 +115,13 @@ type revisions struct {
 	// converter meets them, the main part first.
 	authors map[string]int
 	// marked holds the runs a revision marked already: an inner one
-	// keeps its own mark.
+	// keeps its own mark. The lines that hold them draw a change bar.
 	marked map[*ooxml.Element]bool
+	// markEnd and markStart hold the paragraphs of the marked view whose
+	// mark a revision inserted or deleted, and the paragraphs after them:
+	// the last line of the first and the first line of the second draw a
+	// change bar.
+	markEnd, markStart map[*ooxml.Element]bool
 	// added counts the elements the view made, which the caller charges
 	// to the conversion's memory budget as parsed ones.
 	added int64
@@ -179,6 +167,7 @@ func (r *revisions) resolve(el *ooxml.Element, depth int) {
 	}
 	var kids []*ooxml.Element
 	changed := false
+	markChanged := false
 	for _, k := range el.Children {
 		if k.Space != w {
 			r.resolve(k, depth+1)
@@ -193,7 +182,11 @@ func (r *revisions) resolve(el *ooxml.Element, depth int) {
 			}
 			r.resolve(k, depth+1)
 			if r.view == office.ChangesMarked {
-				r.mark(k, attrOr(k, "author"), true, depth+1)
+				kind := office.MarkInsert
+				if k.Local == "moveTo" {
+					kind = office.MarkMoveTo
+				}
+				r.mark(k, attrOr(k, "author"), kind, depth+1)
 			}
 			kids = append(kids, k.Children...)
 		case "del", "moveFrom":
@@ -204,7 +197,11 @@ func (r *revisions) resolve(el *ooxml.Element, depth int) {
 			r.resolve(k, depth+1)
 			undelete(k, depth+1)
 			if r.view == office.ChangesMarked {
-				r.mark(k, attrOr(k, "author"), false, depth+1)
+				kind := office.MarkDelete
+				if k.Local == "moveFrom" {
+					kind = office.MarkMoveFrom
+				}
+				r.mark(k, attrOr(k, "author"), kind, depth+1)
 			}
 			kids = append(kids, k.Children...)
 		case "tr":
@@ -214,10 +211,22 @@ func (r *revisions) resolve(el *ooxml.Element, depth int) {
 				continue
 			}
 			r.resolve(k, depth+1)
+			if r.view == office.ChangesMarked {
+				r.rowGround(k)
+			}
 			kids = append(kids, k)
 		case "p":
-			r.paragraphMark(k)
+			if markChanged {
+				r.markStart[k] = true
+			}
+			markChanged = r.paragraphMark(k) && r.view == office.ChangesMarked
+			if markChanged {
+				r.markEnd[k] = true
+			}
 			r.resolve(k, depth+1)
+			if r.view == office.ChangesMarked {
+				r.markAttributes(k, k.Child(w, "pPr").Child(w, "pPrChange"), depth+1)
+			}
 			kids = append(kids, k)
 		default:
 			r.resolve(k, depth+1)
@@ -230,11 +239,12 @@ func (r *revisions) resolve(el *ooxml.Element, depth int) {
 }
 
 // paragraphMark leaves in the run properties of p's mark a w:del when the
-// view deletes the mark, and no other revision mark.
-func (r *revisions) paragraphMark(p *ooxml.Element) {
+// view deletes the mark, and no other revision mark. It reports a mark a
+// revision inserted or deleted.
+func (r *revisions) paragraphMark(p *ooxml.Element) bool {
 	rpr := p.Child(w, "pPr").Child(w, "rPr")
 	if rpr == nil {
-		return
+		return false
 	}
 	var deleted, any bool
 	kids := rpr.Children[:0:0]
@@ -254,12 +264,13 @@ func (r *revisions) paragraphMark(p *ooxml.Element) {
 		kids = append(kids, c)
 	}
 	if !any {
-		return
+		return false
 	}
 	if deleted {
 		kids = append(kids, &ooxml.Element{Space: w, Local: "del"})
 	}
 	rpr.Children = kids
+	return true
 }
 
 // undelete renames the deleted text and field instructions under el to
@@ -280,12 +291,32 @@ func undelete(el *ooxml.Element, depth int) {
 	}
 }
 
-// mark draws the runs under el in author's colour, underlined for an
-// insertion and struck through for a deletion, as direct run properties
-// that override the run's own (17.3.2.6 color, 17.3.2.40 u, 17.3.2.37
-// strike). A run an inner revision marked keeps its mark.
-func (r *revisions) mark(el *ooxml.Element, author string, insert bool, depth int) {
+// mark draws the runs under el as the marked view draws a change of kind
+// by author ([office.MarkKind]), as direct run properties that override
+// the run's own: an insertion underlined, a deletion struck through, a
+// move doubly so, an attribute change bold (17.3.2.6 color, 17.3.2.40 u,
+// 17.3.2.37 strike, 17.3.2.9 dstrike, 17.3.2.1 b). A run an inner
+// revision marked keeps its mark.
+func (r *revisions) mark(el *ooxml.Element, author string, kind office.MarkKind, depth int) {
 	if depth > ooxml.MaxDepth {
+		return
+	}
+	if _, ok := r.authors[author]; !ok {
+		r.authors[author] = len(r.authors)
+	}
+	for _, k := range el.Children {
+		if !k.Is(w, "r") {
+			r.mark(k, author, kind, depth+1)
+			continue
+		}
+		r.markRun(k, author, kind)
+	}
+}
+
+// markRun draws the run k as [revisions.mark] does, unless a revision
+// marked it already.
+func (r *revisions) markRun(k *ooxml.Element, author string, kind office.MarkKind) {
+	if r.marked[k] {
 		return
 	}
 	n, ok := r.authors[author]
@@ -293,40 +324,135 @@ func (r *revisions) mark(el *ooxml.Element, author string, insert bool, depth in
 		n = len(r.authors)
 		r.authors[author] = n
 	}
-	color := revisionColors[n%len(revisionColors)]
-	for _, k := range el.Children {
-		if !k.Is(w, "r") {
-			r.mark(k, author, insert, depth+1)
-			continue
-		}
-		if r.marked[k] {
-			continue
-		}
-		r.marked[k] = true
-		r.added += 3
-		rpr := k.Child(w, "rPr")
-		if rpr == nil {
-			rpr = &ooxml.Element{Space: w, Local: "rPr"}
-			k.Children = append([]*ooxml.Element{rpr}, k.Children...)
-		}
-		props := rpr.Children[:0:0]
-		for _, c := range rpr.Children {
-			if c.Space == w && (c.Local == "color" || c.Local == "u" || c.Local == "strike" || c.Local == "dstrike") {
-				continue
-			}
-			props = append(props, c)
-		}
-		props = append(props, valElement("color", color))
-		if insert {
-			props = append(props, valElement("u", "single"))
-		} else {
-			props = append(props, valElement("strike", "1"))
-		}
-		rpr.Children = props
+	r.marked[k] = true
+	r.added += 3
+	rpr := k.Child(w, "rPr")
+	if rpr == nil {
+		rpr = &ooxml.Element{Space: w, Local: "rPr"}
+		k.Children = append([]*ooxml.Element{rpr}, k.Children...)
 	}
+	props := rpr.Children[:0:0]
+	for _, c := range rpr.Children {
+		if c.Space == w && (c.Local == "color" || c.Local == "u" || c.Local == "strike" || c.Local == "dstrike" ||
+			kind == office.MarkAttribute && (c.Local == "b" || c.Local == "bCs")) {
+			continue
+		}
+		props = append(props, c)
+	}
+	props = append(props, valElement("color", office.Hex(office.MarkColor(kind, n))))
+	switch kind {
+	case office.MarkInsert:
+		props = append(props, valElement("u", "single"))
+	case office.MarkDelete:
+		props = append(props, valElement("strike", "1"))
+	case office.MarkMoveTo:
+		props = append(props, valElement("u", "double"))
+	case office.MarkMoveFrom:
+		props = append(props, valElement("dstrike", "1"))
+	case office.MarkAttribute:
+		props = append(props, valElement("b", "1"))
+	}
+	rpr.Children = props
+}
+
+// markAttributes draws, in the marked view, the runs of paragraph p that
+// no insertion or deletion marked as an attribute change: every run when
+// the paragraph's properties changed (pPrChange, 17.13.5.29, by its
+// author), else each run whose properties changed (w:rPrChange,
+// 17.13.5.31).
+//
+// # Corpus evidence
+//
+//   - probe, docx: LibreOffice 26.8 draws litho/docx tracked-changes's
+//     w:rPrChange runs and the paragraphs of its w:pPrChange, the
+//     centred paragraph and the numbered one, bold in the author's
+//     colour, each line with a change bar; its w:sectPrChange paragraph
+//     unmarked.
+func (r *revisions) markAttributes(p, pChange *ooxml.Element, depth int) {
+	if depth > ooxml.MaxDepth {
+		return
+	}
+	for _, k := range p.Children {
+		switch {
+		case k.Is(w, "r"):
+			if pChange != nil {
+				r.markRun(k, attrOr(pChange, "author"), office.MarkAttribute)
+			} else if c := k.Child(w, "rPr").Child(w, "rPrChange"); c != nil {
+				r.markRun(k, attrOr(c, "author"), office.MarkAttribute)
+			}
+		case k.Is(w, "pPr"), k.Is(w, "tbl"), k.Is(w, "p"):
+		default:
+			r.markAttributes(k, pChange, depth+1)
+		}
+	}
+}
+
+// rowGround gives the cells of the table row tr the ground of the marked
+// view when its properties hold an insertion or a deletion (w:ins,
+// 17.13.5.17; w:del, 17.13.5.12): a cell shading (17.4.32 shd) over the
+// cell's own ([office.RowInsertedFill]).
+func (r *revisions) rowGround(tr *ooxml.Element) {
+	t := tr.Child(w, "trPr")
+	fill := uint32(0)
+	switch {
+	case t.Child(w, "ins") != nil:
+		fill = office.RowInsertedFill
+	case t.Child(w, "del") != nil:
+		fill = office.RowDeletedFill
+	default:
+		return
+	}
+	shd := &ooxml.Element{Space: w, Local: "shd", Attrs: []xml.Attr{
+		{Name: xml.Name{Space: w, Local: "val"}, Value: "clear"},
+		{Name: xml.Name{Space: w, Local: "color"}, Value: "auto"},
+		{Name: xml.Name{Space: w, Local: "fill"}, Value: office.Hex(fill)},
+	}}
+	for _, tc := range tr.Children {
+		if !tc.Is(w, "tc") {
+			continue
+		}
+		tcPr := tc.Child(w, "tcPr")
+		if tcPr == nil {
+			tcPr = &ooxml.Element{Space: w, Local: "tcPr"}
+			tc.Children = append([]*ooxml.Element{tcPr}, tc.Children...)
+			r.added++
+		}
+		kids := tcPr.Children[:0:0]
+		for _, c := range tcPr.Children {
+			if !c.Is(w, "shd") {
+				kids = append(kids, c)
+			}
+		}
+		tcPr.Children = append(kids, shd)
+		r.added++
+	}
+}
+
+// changed reports a run the marked view marked: the lines that hold it
+// draw a change bar.
+func (r *revisions) changed(run *ooxml.Element) bool {
+	return r.marked[run]
 }
 
 // valElement returns a WordprocessingML element local with a w:val.
 func valElement(local, val string) *ooxml.Element {
 	return &ooxml.Element{Space: w, Local: local, Attrs: []xml.Attr{{Name: xml.Name{Space: w, Local: "val"}, Value: val}}}
+}
+
+// bound adds to sink, at the start of paragraph p when start, else at its
+// end, an empty node that draws a change bar beside the line it lands on,
+// when a revision inserted or deleted the mark of p or of the paragraph
+// before it ([revisions.markEnd]).
+//
+// # Corpus evidence
+//
+//   - probe, docx: LibreOffice 26.8 draws a change bar beside the
+//     paragraph of litho/docx tracked-changes whose mark is inserted and
+//     beside the first line of the paragraph after it, and beside both
+//     lines its deleted mark joins.
+func (r *revisions) bound(p *ooxml.Element, ps *css.Style, sink *inlineSink, start bool) {
+	if start && !r.markStart[p] || !start && !r.markEnd[p] {
+		return
+	}
+	sink.add(&layout.Node{Kind: layout.Element, Style: inlineStyle(ps), ChangeBar: true})
 }

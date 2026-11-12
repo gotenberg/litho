@@ -109,21 +109,14 @@ func TestRevisions_Marks(t *testing.T) {
 		`<w:ins w:id="2" w:author="Grace">` + r("grace ") + `</w:ins>` +
 		`<w:del w:id="3" w:author="Ada"><w:r><w:delText>gone</w:delText></w:r></w:del></w:p>`
 	b := buildWith(t, body, nil, office.Options{TrackedChanges: office.ChangesMarked})
-	color := func(hex string) css.Color {
-		c, _, ok := css.ParseColor("#" + hex)
-		if !ok {
-			t.Fatalf("colour %s", hex)
-		}
-		return c
-	}
 	for _, tc := range []struct {
 		text  string
 		deco  css.TextDecoration
 		color css.Color
 	}{
-		{"ada", css.Underline, color(revisionColors[0])},
-		{"grace", css.Underline, color(revisionColors[1])},
-		{"gone", css.LineThrough, color(revisionColors[0])},
+		{"ada", css.Underline, office.RGB(office.AuthorColor(0))},
+		{"grace", css.Underline, office.RGB(office.AuthorColor(1))},
+		{"gone", css.LineThrough, office.RGB(office.AuthorColor(0))},
 	} {
 		st := runWith(t, b.root, tc.text).Style
 		if st.TextDecoration != tc.deco || st.TextDecorationStyle != css.DecorationSolid || st.Color != tc.color {

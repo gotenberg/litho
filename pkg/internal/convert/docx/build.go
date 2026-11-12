@@ -274,7 +274,9 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 	}
 	st, lineMult := d.paraStyle(pp, rp.mark)
 	sink := &inlineSink{}
+	d.revisions.bound(p, st, sink, true)
 	d.inlines(s, rp, st, lineMult, p, sink, depth)
+	d.revisions.bound(p, st, sink, false)
 	segs := sink.finish()
 	var out []blockNode
 	breaksOnly := true
@@ -776,6 +778,9 @@ type inlineSink struct {
 	// positioned is set when a drawing is positioned from the paragraph,
 	// which then becomes its containing block.
 	positioned bool
+	// changed is set while the nodes of a run the marked view marked are
+	// added: they draw a change bar (layout.Node ChangeBar).
+	changed bool
 }
 
 // segment is one piece of a paragraph between page breaks.
@@ -794,6 +799,9 @@ type linkFrame struct {
 
 // add appends n to the open hyperlink, else the current segment.
 func (k *inlineSink) add(n *layout.Node) {
+	if k.changed {
+		n.ChangeBar = true
+	}
 	if len(k.links) > 0 {
 		f := k.links[len(k.links)-1]
 		f.nodes = append(f.nodes, n)
@@ -868,7 +876,10 @@ func (d *document) inlines(s *story, rp resolvedPara, ps *css.Style, lineMult fl
 	for _, e := range parent.Kids() {
 		switch {
 		case e.Is(w, "r"):
+			was := sink.changed
+			sink.changed = was || d.revisions.changed(e)
 			d.run(s, rp, ps, lineMult, e, sink, depth)
+			sink.changed = was
 		case e.Is(w, "hyperlink"):
 			href := d.hyperlink(s, e)
 			sink.openLink(href)
