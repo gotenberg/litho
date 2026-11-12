@@ -327,3 +327,24 @@ func TestTables_RowTops(t *testing.T) {
 		}
 	}
 }
+
+// TestTables_OwnShading locks a table's own shading: left out of the
+// cells of a table without cell spacing, the table style's shading kept.
+func TestTables_OwnShading(t *testing.T) {
+	t.Parallel()
+	styles := stylesPart(`<w:style w:type="table" w:styleId="Shaded"><w:tblPr><w:shd w:val="clear" w:fill="00FF00"/></w:tblPr></w:style>`)
+	for _, tc := range []struct {
+		name, tblPr string
+		want        css.Color
+	}{
+		{"own shading", `<w:shd w:val="clear" w:fill="FF0000"/>`, css.Color{}},
+		{"style shading under own", `<w:tblStyle w:val="Shaded"/><w:shd w:val="clear" w:fill="FF0000"/>`, css.Color{G: 1, A: 1}},
+		{"own shading with cell spacing", `<w:tblCellSpacing w:w="20" w:type="dxa"/><w:shd w:val="clear" w:fill="FF0000"/>`, css.Color{R: 1, A: 1}},
+	} {
+		body := `<w:tbl><w:tblPr>` + tc.tblPr + `</w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>`
+		td := role(build(t, body, map[string]string{"word/styles.xml": styles}).root, "TD")
+		if c := td[0].Style.BackgroundColor; c != tc.want {
+			t.Errorf("%s: cell background %+v, want %+v", tc.name, c, tc.want)
+		}
+	}
+}

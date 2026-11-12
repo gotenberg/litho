@@ -493,7 +493,20 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 		styleRun = styleRun.merge(st.rpr)
 		maps.Copy(conds, st.cond)
 	}
+	styleShading := tp.shading
 	tp = tp.merge(direct)
+	if direct.shading != nil && (tp.cellSpacing == nil || *tp.cellSpacing <= 0) {
+		// Word fills the cells of a table without cell spacing with no
+		// shading of the table's own properties (17.4.60 tblPr, its
+		// shd): the table style's, if any, fills them.
+		//
+		// # Corpus evidence
+		//
+		//   - litho/docx tables-diagonal-shading, tables-nested and
+		//     tables-floating: Word prints white the cells without their
+		//     own shading of tables whose tblPr sets a light fill.
+		tp.shading = styleShading
+	}
 	look := tableLook{}
 	if tp.look != nil {
 		look = *tp.look
