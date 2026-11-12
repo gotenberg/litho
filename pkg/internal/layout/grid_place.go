@@ -482,10 +482,13 @@ func placeGrid(b *box, items []*box, rep [2]int) *gridPlacement {
 	return p
 }
 
-// occupancy is the set of grid cells taken by placed items.
+// occupancy is the set of grid cells taken by placed items: one bit per
+// cell, rows[r] holding the columns of row r. An item spanning every track
+// of a grid at [MaxTracksPerAxis] covers a million cells, which take
+// 128 KiB.
 type occupancy struct {
-	n     [2]int
-	cells map[[2]int]bool
+	n    [2]int
+	rows [][]uint64
 }
 
 // grow makes the implicit grid at least n tracks in axis ax.
@@ -493,16 +496,33 @@ func (o *occupancy) grow(ax, n int) { o.n[ax] = min(max(o.n[ax], n), MaxTracksPe
 
 // mark takes the cells of it.
 func (o *occupancy) mark(it *gitem) {
-	if o.cells == nil {
-		o.cells = map[[2]int]bool{}
-	}
 	o.grow(rowAxis, it.end[rowAxis])
 	o.grow(colAxis, it.end[colAxis])
-	for r := it.start[rowAxis]; r < it.end[rowAxis]; r++ {
-		for c := it.start[colAxis]; c < it.end[colAxis]; c++ {
-			o.cells[[2]int{r, c}] = true
-		}
+	c0, c1 := it.start[colAxis], it.end[colAxis]
+	if c1 <= c0 {
+		return
 	}
+	for r := it.start[rowAxis]; r < it.end[rowAxis]; r++ {
+		for len(o.rows) <= r {
+			o.rows = append(o.rows, nil)
+		}
+		row := o.rows[r]
+		for len(row) <= (c1-1)/64 {
+			row = append(row, 0)
+		}
+		for c := c0; c < c1; c++ {
+			row[c/64] |= 1 << (c % 64)
+		}
+		o.rows[r] = row
+	}
+}
+
+// taken reports whether the cell at row r and column c is taken.
+func (o *occupancy) taken(r, c int) bool {
+	if r < 0 || r >= len(o.rows) || c < 0 || c/64 >= len(o.rows[r]) {
+		return false
+	}
+	return o.rows[r][c/64]&(1<<(c%64)) != 0
 }
 
 // free reports whether the area of tracks [f0, f1) in axis flow and
@@ -510,11 +530,11 @@ func (o *occupancy) mark(it *gitem) {
 func (o *occupancy) free(flow, f0, f1, c0, c1 int) bool {
 	for f := f0; f < f1; f++ {
 		for c := c0; c < c1; c++ {
-			k := [2]int{f, c}
+			r, col := f, c
 			if flow == colAxis {
-				k = [2]int{c, f}
+				r, col = c, f
 			}
-			if o.cells[k] {
+			if o.taken(r, col) {
 				return false
 			}
 		}

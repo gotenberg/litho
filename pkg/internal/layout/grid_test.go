@@ -2,6 +2,7 @@ package layout
 
 import (
 	"image/color"
+	"runtime"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -384,5 +385,32 @@ func TestSizing_MinHeightContent(t *testing.T) {
 	c := kid(t, boxes(t, root, page(100, 100)), 0, 0)
 	if got := rect(c)[3]; got != 25 {
 		t.Errorf("height = %v, want 25", got)
+	}
+}
+
+// TestGrid_PlacementOccupancyStaysSmall locks the memory the placement
+// takes to record the cells its items cover: items spanning a grid of
+// MaxTracksPerAxis tracks per axis cover a million cells each, which the
+// placement records in a few bits apiece. It runs alone, so the
+// allocations it measures are its own.
+func TestGrid_PlacementOccupancyStaysSmall(t *testing.T) {
+	ts := make([]css.TrackSize, MaxTracksPerAxis)
+	for i := range ts {
+		ts[i] = tpx(1)
+	}
+	c := &box{st: gridBox(cols(ts...), rowsT(ts...))}
+	items := make([]*box, 20)
+	for i := range items {
+		items[i] = &box{st: sty(gridAt(1, MaxTracksPerAxis+1, 1, MaxTracksPerAxis+1))}
+	}
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	p := placeGrid(c, items, [2]int{})
+	runtime.ReadMemStats(&after)
+	if got := after.TotalAlloc - before.TotalAlloc; got > 1<<20 {
+		t.Errorf("placement allocated %d bytes, want at most 1 MiB", got)
+	}
+	if p.n != [2]int{MaxTracksPerAxis, MaxTracksPerAxis} {
+		t.Errorf("grid = %v tracks, want %d by %d", p.n, MaxTracksPerAxis, MaxTracksPerAxis)
 	}
 }
