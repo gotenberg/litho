@@ -36,13 +36,16 @@ pkg/internal/convert/pptx/       PPTX converter: PresentationML to the slide mod
 pkg/internal/convert/odp/        ODP converter: OpenDocument presentations to the slide model.
 pkg/internal/xmp/                The XMP packet writer the backend and the remediation share.
 pkg/internal/limits/             The budgets of a conversion, its memory account among them.
+pkg/internal/warn/               The codes of the warnings a conversion reports: one closed set.
 pkg/pdf/convert.go               Public entry points: pdf.FromHTML and its nine siblings, pdf.Conversion.
+pkg/pdf/convert_warnings.go      The warning codes as public constants, one for each code of warn.
 pkg/pdf/convert_stage.go         A conversion as the first stage of a pipeline, and pipelines merged.
 ```
 
 Dependencies point one way: converters import `layout`, `css`, `text` and
 `typeset`; `layout` imports `css`, `text` and `typeset`; `css` imports
-x/net/html for selector matching and nothing of litho; `text` imports
+x/net/html for selector matching and, of litho, only `warn`, a leaf that
+declares the warning codes and imports nothing; `text` imports
 `typeset` (it produces `typeset.Text` runs) and go-text; `typeset` imports
 `embed` and the core writer; nothing imports a converter but `pkg/pdf`.
 
@@ -87,7 +90,11 @@ encodes:
 - Dates never enter the model. Output bytes depend on input and options
   alone.
 - `Warnings` records what a converter could not render. Nothing fails
-  silently.
+  silently. Each warning carries a code of `warn`: one closed set, each
+  code named by what happened to which kind of construct, whichever
+  converter met it, and the message names the construct. A code cannot be
+  made outside `warn`, so no converter reports one outside the set, and
+  `pkg/pdf` mirrors every code as a public constant.
 
 ## The backend
 
