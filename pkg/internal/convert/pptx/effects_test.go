@@ -60,6 +60,7 @@ func TestEffects_EffectList(t *testing.T) {
 		{"reflection", `<a:effectLst><a:reflection/></a:effectLst>`, "", nil, nil, 0, false, "reflections"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			theme := strings.Replace(testTheme, `<a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>`,
 				`<a:effectStyle><a:effectLst><a:outerShdw blurRad="38100" dist="25400"><a:schemeClr val="phClr"/></a:outerShdw></a:effectLst></a:effectStyle></a:effectStyleLst>`, 1)
 			doc, warnings := readDeck(t, testDeck{slides: []testSlide{{tree: sp("S", `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>`+tc.spPr, tc.style)}}, parts: map[string]string{"ppt/theme/theme1.xml": theme}})

@@ -351,7 +351,7 @@ func testSans() []byte {
 var (
 	sharedFontsOnce sync.Once
 	sharedFonts     *text.Fonts
-	sharedFontsErr  error
+	errSharedFonts  error
 	// sharedFontsDir is the directory testFonts made, "" when it made none.
 	sharedFontsDir string
 )
@@ -375,18 +375,18 @@ func testFonts(t testing.TB) *text.Fonts {
 	sharedFontsOnce.Do(func() {
 		dir, err := os.MkdirTemp("", "litho-pptx-fonts")
 		if err != nil {
-			sharedFontsErr = err
+			errSharedFonts = err
 			return
 		}
 		sharedFontsDir = dir
 		if err := os.WriteFile(filepath.Join(dir, "test_sans.ttf"), testSans(), 0o600); err != nil {
-			sharedFontsErr = err
+			errSharedFonts = err
 			return
 		}
-		sharedFonts, sharedFontsErr = text.NewFonts(context.Background(), nil, []string{dir})
+		sharedFonts, errSharedFonts = text.NewFonts(context.Background(), nil, []string{dir})
 	})
-	if sharedFontsErr != nil {
-		t.Fatalf("indexing the test font: %v", sharedFontsErr)
+	if errSharedFonts != nil {
+		t.Fatalf("indexing the test font: %v", errSharedFonts)
 	}
 	return sharedFonts
 }

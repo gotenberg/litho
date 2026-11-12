@@ -379,6 +379,7 @@ func TestRead_EllipseKinds(t *testing.T) {
 					last = op.P[0]
 				case compose.CurveTo:
 					last = op.P[2]
+				case compose.ClosePath:
 				}
 			}
 			if math.Abs(first.X-tt.first[0]) > 1e-6 || math.Abs(first.Y-tt.first[1]) > 1e-6 || math.Abs(last.X-tt.last[0]) > 1e-6 || math.Abs(last.Y-tt.last[1]) > 1e-6 {

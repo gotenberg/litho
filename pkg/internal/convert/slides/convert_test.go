@@ -103,9 +103,13 @@ func TestConvert_OutlineSections(t *testing.T) {
 	}
 	walk(out.Outline, "")
 	want := []entry{
-		{"Intro", 1}, {"  Slide 1: Intro", 1},
-		{"Body", 2}, {"  Slide 3: Body", 2}, {"  Slide 4: Body", 3},
-		{"Intro", 4}, {"  Slide 6: Again", 4},
+		{"Intro", 1},
+		{"  Slide 1: Intro", 1},
+		{"Body", 2},
+		{"  Slide 3: Body", 2},
+		{"  Slide 4: Body", 3},
+		{"Intro", 4},
+		{"  Slide 6: Again", 4},
 		{"same (7)", 5},
 	}
 	if !slices.Equal(got, want) {
