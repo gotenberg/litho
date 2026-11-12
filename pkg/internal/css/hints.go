@@ -233,38 +233,48 @@ const maxDirAutoRunes = 4096
 // class L, R or AL in its text, skipping bdi, script, style and textarea
 // elements and the elements with a dir attribute of their own, is R or
 // AL, ltr when it is L, and false when there is none.
+//
+// The walk keeps its own stack of the siblings left to read, so a deep
+// tree costs memory, not goroutine stack.
 func autoDirection(n *html.Node) (string, bool) {
 	budget := maxDirAutoRunes
-	var walk func(*html.Node) (string, bool)
-	walk = func(k *html.Node) (string, bool) {
-		for c := k.FirstChild; c != nil && budget > 0; c = c.NextSibling {
-			switch c.Type { //nolint:exhaustive // only text and elements carry characters
-			case html.TextNode:
-				for _, r := range c.Data {
-					budget--
-					if budget < 0 {
-						return "", false
-					}
-					p, _ := bidi.LookupRune(r)
-					switch p.Class() { //nolint:exhaustive // the weak and neutral classes are skipped
-					case bidi.L:
-						return "ltr", true
-					case bidi.R, bidi.AL:
-						return "rtl", true
-					}
+	var rest []*html.Node
+	for c := n.FirstChild; c != nil || len(rest) > 0; {
+		if c == nil {
+			c, rest = rest[len(rest)-1], rest[:len(rest)-1]
+			continue
+		}
+		if budget <= 0 {
+			return "", false
+		}
+		next := c.NextSibling
+		switch c.Type { //nolint:exhaustive // only text and elements carry characters
+		case html.TextNode:
+			for _, r := range c.Data {
+				budget--
+				if budget < 0 {
+					return "", false
 				}
-			case html.ElementNode:
-				if c.Namespace != "" || c.Data == "bdi" || c.Data == "script" || c.Data == "style" || c.Data == "textarea" || hasAttr(c, "dir") {
-					continue
-				}
-				if d, ok := walk(c); ok {
-					return d, true
+				p, _ := bidi.LookupRune(r)
+				switch p.Class() { //nolint:exhaustive // the weak and neutral classes are skipped
+				case bidi.L:
+					return "ltr", true
+				case bidi.R, bidi.AL:
+					return "rtl", true
 				}
 			}
+		case html.ElementNode:
+			if c.Namespace != "" || c.Data == "bdi" || c.Data == "script" || c.Data == "style" || c.Data == "textarea" || hasAttr(c, "dir") {
+				break
+			}
+			if c.FirstChild != nil {
+				rest = append(rest, next)
+				next = c.FirstChild
+			}
 		}
-		return "", false
+		c = next
 	}
-	return walk(n)
+	return "", false
 }
 
 // hints accumulates declarations.
