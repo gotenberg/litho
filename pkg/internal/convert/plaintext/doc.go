@@ -29,10 +29,11 @@
 // The document is tagged (ISO 32000-1, 14.8): its structure is one Document
 // element holding one P element per source line that draws text, in source
 // order, and every glyph run points at its P. An empty line has no element.
-// Its language is left unknown.
+// Its language is [Options.DefaultLang], unknown when that is empty.
 //
 // # Warnings
 //
 // Each character no indexed face covers is reported once, as a
-// "missing-glyph" warning naming it and the families asked for.
+// "missing-glyph" warning naming it and the families asked for, and a
+// source line laid out in pieces as a "line-split" warning.
 package plaintext
