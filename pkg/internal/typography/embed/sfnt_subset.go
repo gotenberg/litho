@@ -155,7 +155,7 @@ func subsetTTF(raw []byte, keepGIDs map[uint16]bool) ([]byte, error) {
 
 	// Compute head.checkSumAdjustment = 0xB1B0AFBA - checksum(entire file).
 	// The head checksum was computed with a zeroed checkSumAdjustment,
-	// which is what the formula expects. Now patch the final value into
+	// which is what the formula expects. Patch the final value into
 	// the head table's bytes in-place.
 	adjustment := uint32(0xB1B0AFBA) - tableChecksum(subset)
 	headOffset := findTableOffset(subset, "head")
@@ -226,10 +226,10 @@ func expandCompositeClosure(keep map[uint16]bool, glyfData []byte, offsets []uin
 			end := offsets[gid+1]
 			// The offsets come from the file's loca table, so they need not be
 			// ordered or in range. Compare them before doing any arithmetic:
-			// start+10 is a uint32 addition, and a loca entry of 0xFFFFFFFF
-			// wrapped it to 9, which passed the length test and panicked the
-			// slice below. The rebuild loop already rejects start > end; this
-			// walk has to survive it too, since it runs first.
+			// start+10 is a uint32 addition, which a loca entry of 0xFFFFFFFF
+			// wraps to 9, past the length test and into a slice that panics.
+			// The rebuild loop rejects start > end too, but this walk runs
+			// first.
 			if start > end || end > glyfLen || end-start <= 10 {
 				// Out of range, or too short to have a composite header.
 				continue
@@ -414,9 +414,9 @@ func sfntSearchParams(numTables int) (searchRange, entrySelector, rangeShift uin
 	// representable past maxSearchableTables. The table count comes from the
 	// source font's directory, which is untrusted: its own count is a uint16
 	// and each entry costs 16 bytes, so a crafted font reaches 4096 tables
-	// with a 64 KB directory. Left unguarded the multiply wrapped, and 5000
-	// tables produced searchRange 0 with rangeShift 14464 instead of a
-	// monotonically growing hint. Clamp instead of wrapping: the fields are a
+	// with a 64 KB directory, and a wrapping multiply would give 5000 tables
+	// searchRange 0 with rangeShift 14464 instead of a monotonically growing
+	// hint. Clamp instead of wrapping: the fields are a
 	// binary-search hint that readers may ignore, so the honest answer for a
 	// font too large to describe is the largest describable one.
 	if numTables > maxSearchableTables {

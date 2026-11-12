@@ -176,8 +176,8 @@ func parse(data []byte) (*Font, error) {
 		return nil, fmt.Errorf("reading glyph widths: %w", err)
 	}
 	// An hmtx advance is a whole number; truetype.GlyphWidths shares its
-	// return type with CFF charstring advances, which are real. Keep the /W
-	// array integral so the writer emits the same bytes it always has.
+	// return type with CFF charstring advances, which are real. The /W
+	// array keeps the whole numbers the hmtx table holds.
 	widths := make(map[uint16]uint16, len(programWidths))
 	for gid, w := range programWidths {
 		if w < 0 || w > math.MaxUint16 {

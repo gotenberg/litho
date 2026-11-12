@@ -528,8 +528,8 @@ func overlappingTTF(numGlyphs, glyfLen int, spanAll bool, extra int) []byte {
 // TestSubsetTTF_RefusesOverlapPastTheProgram pins that a program whose
 // glyphs or tables overlap, each spanning the whole of what holds them,
 // falls back to whole embedding instead of copying it once per glyph or
-// table kept, which made the subset of a program grow with the square of
-// its size.
+// table kept, which would make the subset of a program grow with the square
+// of its size.
 func TestSubsetTTF_RefusesOverlapPastTheProgram(t *testing.T) {
 	t.Parallel()
 	every := func(n, step int) map[uint16]bool {

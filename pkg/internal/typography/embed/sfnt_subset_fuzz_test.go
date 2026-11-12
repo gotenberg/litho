@@ -14,8 +14,8 @@ import (
 // readers beside it this one BUILDS a font from what it reads, so a length it
 // trusts too far corrupts the written document rather than only the report.
 //
-// [FuzzLoad] covers the parser that runs before it; measured
-// against the fuzz corpora, every function of the subsetter sat at zero.
+// [FuzzLoad] covers the parser that runs before it, and reaches none of the
+// subsetter's functions.
 func FuzzSubsetTTF(f *testing.F) {
 	f.Add([]byte{})
 	f.Add([]byte("\x00\x01\x00\x00"))

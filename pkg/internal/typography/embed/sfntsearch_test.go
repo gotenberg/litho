@@ -9,8 +9,8 @@ import "testing"
 // down to a power of two, times 16, so the arithmetic stops fitting past
 // [maxSearchableTables]. The count comes from the source font's table
 // directory, which is untrusted: a crafted font reaches 4096 tables with a
-// 64 KB directory, and the multiply used to wrap. 5000 tables produced
-// searchRange 0 and rangeShift 14464, a hint that points nowhere.
+// 64 KB directory. A wrapping multiply would give 5000 tables searchRange 0
+// and rangeShift 14464, a hint that points nowhere.
 func TestSfntSearchParamsStayRepresentable(t *testing.T) {
 	for _, numTables := range []int{-1, 0, 1, 2, 10, 4094, 4095, 4096, 5000, 65535} {
 		searchRange, entrySelector, rangeShift := sfntSearchParams(numTables)

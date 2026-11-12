@@ -403,8 +403,8 @@ func (l Limits) Validate() error {
 // ScaleImageCap returns base, a codec's pixel or sample cap under the default
 // image budget, scaled by MaxImagePixels over [DefaultMaxImagePixels], and
 // never below 1. A zero MaxImagePixels reads as its default, so the default
-// configuration returns base exactly and every codec admits the images it
-// always admitted, while a raised or lowered budget moves each codec cap with
+// configuration returns base exactly and every codec admits the images its
+// base cap admits, while a raised or lowered budget moves each codec cap with
 // it. The product stays within int64 for any base up to 2^32, the codec caps
 // being 4 x 10^8 samples at most, under [MaxImagePixelsCeiling].
 func (l Limits) ScaleImageCap(base int64) int64 {
@@ -447,7 +447,7 @@ const pageContentShare = 4
 //   - pdfjs issue21089.pdf: page 1 decodes to 28,846,545 bytes across 55
 //     streams and parses into 608,043 operators that retain 152 MB, 5.3 bytes
 //     per content byte.
-//   - pdfjs issue21089.pdf: page 1 came within 16% of the former 32 MB bound.
+//   - pdfjs issue21089.pdf: page 1 comes within 16% of a 32 MB bound.
 func (l Limits) MaxPageContentBytes() int64 {
 	return max(l.WithDefaults().MaxStreamBytes/pageContentShare, 1)
 }
@@ -485,9 +485,9 @@ const fontProgCacheShare = 4
 // caller that raises the budget to read a document of heavy fonts caches them
 // too, and one that lowers it shrinks the cache. It is a quarter of the
 // budget, not the whole of it as the object-stream cache is, because the
-// default then stays the 64 MiB the cache always had, well over the fonts of
-// the heaviest real document, and the document's caches together stay within
-// a small multiple of one budget.
+// default is then 64 MiB, well over the fonts of the heaviest real
+// document, and the document's caches together stay within a small
+// multiple of one budget.
 //
 // # Corpus evidence
 //
@@ -515,10 +515,10 @@ const colorCacheShare = 4
 // It moves with MaxStreamBytes, which bounds each profile stream a transform
 // is built from: a caller that raises the budget to read a document of heavy
 // profiles caches their transforms too, and one that lowers it shrinks the
-// cache. It is a quarter of the budget, as the font-program cache is, because
-// the default then stays the 64 MiB the cache always had. The densest lookup
-// table in common use, 33 points over four inputs, builds a transform of
-// about 29 MB, and a document rarely holds more than one or two profiles.
+// cache. It is a quarter of the budget, as the font-program cache is, which
+// makes the default 64 MiB. The densest lookup table in common use, 33
+// points over four inputs, builds a transform of about 29 MB, and a
+// document rarely holds more than one or two profiles.
 func (l Limits) MaxColorCacheBytes() int64 {
 	return max(l.WithDefaults().MaxStreamBytes/colorCacheShare, 1)
 }

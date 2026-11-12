@@ -24,8 +24,8 @@ import (
 // twice what the account holds at its peak.
 //
 // A Budget is safe for the goroutines of one conversion. The nil *Budget
-// is unlimited: its charges always succeed, so code a conversion did not
-// give a budget runs as before.
+// is unlimited: its charges always succeed, so code that runs without a
+// budget never fails a charge.
 type Budget struct {
 	limits Limits
 	limit  int64

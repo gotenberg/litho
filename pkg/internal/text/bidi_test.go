@@ -49,16 +49,15 @@ func TestShape_IsolateSkippedForBaseDirection(t *testing.T) {
 // TestExplicitAndNumericLevels_Linear pins that litho's own rules of UAX
 // #9 cost time linear in the paragraph when it holds long runs of the
 // characters whose rules look past themselves: European terminators (W5),
-// which once rescanned their whole sequence for each of its characters,
-// and first strong isolates (X5c), which once scanned to the end of the
-// text for each of them, though past the depth limit none can open. A
-// paragraph of [MaxLayoutRunes] characters of either took minutes.
+// tested once a sequence rather than once a character, and first strong
+// isolates (X5c), which scan to their PDI only while one can open. A scan
+// per character would take minutes over [MaxLayoutRunes] characters.
 //
 // # Corpus evidence
 //
-//   - probe, text: 40,000 terminators took 2.1 s in the W5 rule and 20,000
-//     unclosed first strong isolates 0.43 s in the explicit levels, four
-//     times as long for twice the text.
+//   - probe, text: a scan per character takes 2.1 s over 40,000
+//     terminators and 0.43 s over 20,000 unclosed first strong isolates,
+//     four times as long for twice the text.
 func TestExplicitAndNumericLevels_Linear(t *testing.T) {
 	t.Parallel()
 	const n = MaxLayoutRunes / 4

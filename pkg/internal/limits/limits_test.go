@@ -10,10 +10,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
-// TestDefault_KeepsThePreviousCaps pins every default, and every codec cap
-// scaled from the image budget, to the constant it replaced, so the default
-// configuration reads documents exactly as before.
-func TestDefault_KeepsThePreviousCaps(t *testing.T) {
+// TestDefault_PinsTheCaps pins every default, and every codec cap scaled
+// from the image budget, to its value, so the default configuration reads
+// every document with the same caps.
+func TestDefault_PinsTheCaps(t *testing.T) {
 	t.Parallel()
 
 	want := limits.Limits{
