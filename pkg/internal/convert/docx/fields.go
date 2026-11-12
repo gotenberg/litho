@@ -230,8 +230,9 @@ func hiddenField(instr string) bool {
 //   - litho/docx fields-ref-bookmarks: Word links the results of REF \h,
 //     PAGEREF \h and NOTEREF \h to their bookmarks' pages, and not those
 //     of a REF or a bare bookmark field without \h.
-//   - litho/docx fields-seq-captions, poi/docx document/65099: so linked,
-//     their link recall reaches 1.
+//   - litho/docx fields-seq-captions: so linked, their link recall
+//     reaches 1.
+//   - poi/docx document/65099: the same.
 func fieldLink(instr string, sink *inlineSink) string {
 	if href := hyperlinkTarget(instr); href != "" {
 		return href

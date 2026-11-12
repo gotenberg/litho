@@ -140,11 +140,12 @@ func koreanNative(n int) string {
 //
 // # Corpus evidence
 //
-//   - libreoffice/docx: ooxmlexport/cjklist30.docx to cjklist44.docx, and a probe of
-//     every format at 1, 9 to 12, 20, 21, 99 to 101, 110, 1000 and 10000:
-//     the counting formats print 十, 十一, 一百零一, 一百一十, 一万; the
-//     legal ones 壹拾, 壹佰零壹; koreanDigital2 一零; the stems and
-//     branches stop after 癸 and 亥; taiwaneseDigital,
+//   - libreoffice/docx: ooxmlexport/cjklist30.docx to cjklist44.docx print
+//     their labels in these formats as the probe below does.
+//   - probe, docx: every format at 1, 9 to 12, 20, 21, 99 to 101, 110, 1000
+//     and 10000: the counting formats print 十, 十一, 一百零一, 一百一十,
+//     一万; the legal ones 壹拾, 壹佰零壹; koreanDigital2 一零; the stems
+//     and branches stop after 癸 and 亥; taiwaneseDigital,
 //     japaneseDigitalTenThousand and decimalFullWidth print ASCII digits.
 func cjkFormat(n int, format string) (string, bool) {
 	switch format {

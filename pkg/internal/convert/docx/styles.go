@@ -47,19 +47,19 @@ type styleSheet struct {
 
 // parseStyles reads the styles part's root, w:styles; nil yields the
 // built-in defaults alone.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx: ooxmlimport/tdf108350.docx, tdf108714.docx,
+//     tdf108806.docx, layout/tdf117188.docx and
+//     ooxmlimport/linked-picture.docx, which have no styles part, print in
+//     Carlito 11; the documents whose styles part lacks docDefaults print
+//     in Liberation Serif.
 func (d *document) parseStyles(root *ooxml.Element) *styleSheet {
 	s := &styleSheet{byID: map[string]*style{}}
 	if root == nil {
 		// A document without a styles part prints in Calibri 11, Word
 		// 2007's defaults, as LibreOffice imports it.
-		//
-		// # Corpus evidence
-		//
-		//   - libreoffice/docx: ooxmlimport/tdf108350.docx, tdf108714.docx,
-		//     tdf108806.docx, layout/tdf117188.docx and
-		//     ooxmlimport/linked-picture.docx print in Carlito 11; the
-		//     documents whose styles part lacks docDefaults print in
-		//     Liberation Serif.
 		s.defRun.fonts = fontSpec{ascii: "Calibri", hAnsi: "Calibri"}
 		s.defRun.size = new(11.0)
 		return s
@@ -238,9 +238,10 @@ func (s *styleSheet) tableStyle(id string) []*style {
 //
 // # Corpus evidence
 //
-//   - poi/docx document/61787, libreoffice/docx ooxmlimport/tdf104167:
-//     Word bookmarks the paragraphs of heading styles whose definitions
-//     carry no w:outlineLvl, at the level their names say.
+//   - poi/docx document/61787: Word bookmarks the paragraphs of heading
+//     styles whose definitions carry no w:outlineLvl, at the level their
+//     names say.
+//   - libreoffice/docx ooxmlimport/tdf104167: the same.
 func builtinHeading(st *style) (int, bool) {
 	if st.typ != "paragraph" {
 		return 0, false

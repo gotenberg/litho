@@ -8,7 +8,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
-// Default pictures of the date fields without a \@ switch.
+// Default pictures of the date fields without a \@ switch. TIME's, Word's
+// en-US time h:mm AM/PM, is not measured.
 //
 // # Corpus evidence
 //
@@ -16,7 +17,6 @@ import (
 //     Word caches DATE \* MERGEFORMAT as 2/15/2008.
 //   - litho/docx fields-date-doc-info: Word caches a PRINTDATE of a
 //     document never printed as 0/0/0000 0:00:00 AM.
-//   - TIME's default is not measured: Word's en-US time, h:mm AM/PM.
 const (
 	defaultDatePicture      = "M/d/yyyy"
 	defaultTimePicture      = "h:mm AM/PM"

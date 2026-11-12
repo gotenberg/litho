@@ -437,6 +437,16 @@ func breakAnywhere(n *layout.Node, depth int) {
 // drop cap's letter floats at the start of the next paragraph's lines, a
 // text frame floats on the side its xAlign says, as wide as its w. Frames
 // positioned at absolute page coordinates float too, an approximation.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx layout/fdo48718-1.docx: Word writes a floating
+//     table's position on its cells' paragraphs.
+//   - libreoffice/docx ooxmlexport/fdo60957-2.docx: a table whose cells
+//     repeat the frame properties of the paragraphs around it is part of
+//     their frame.
+//   - libreoffice/docx layout/tdf135035.docx: Writer breaks a word longer
+//     than the column inside a frame without a width.
 func (d *document) frame(n *layout.Node, pp paraProps) {
 	f := pp.framePr
 	if f == nil || len(f.Attrs) == 0 {
@@ -447,9 +457,9 @@ func (d *document) frame(n *layout.Node, pp paraProps) {
 	if d.inCell > 0 {
 		// LibreOffice makes no frame of a paragraph inside a table cell:
 		// it stays in the cell's flow. Word writes the floating table's
-		// position on its cells' paragraphs (fdo48718-1), and a table
-		// whose cells repeat the frame properties of the paragraphs
-		// around it is part of their frame (fdo60957-2).
+		// position on its cells' paragraphs, and a table whose cells
+		// repeat the frame properties of the paragraphs around it is part
+		// of their frame.
 		return
 	}
 	st := n.Style
@@ -471,9 +481,9 @@ func (d *document) frame(n *layout.Node, pp paraProps) {
 		st.Width = css.Pts(v)
 	} else {
 		// A frame without a width is as wide as its text, at most its
-		// column: Writer breaks a word longer than the column inside it
-		// (tdf135035), which a float's shrink-to-fit width allows only
-		// when the word's letters are break opportunities.
+		// column: Writer breaks a word longer than the column inside it,
+		// which a float's shrink-to-fit width allows only when the word's
+		// letters are break opportunities.
 		breakAnywhere(n, 0)
 	}
 	if v, ok := ooxml.Twips(attrOr(f, "hSpace")); ok && v > 0 {

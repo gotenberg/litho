@@ -264,6 +264,11 @@ func (d *document) resolvePara(direct *paraProps, c *cond) resolvedPara {
 // paragraph builds a w:p: one block per piece its page breaks cut it into
 // (a page break inside a paragraph splits it, as LibreOffice imports it),
 // numbered as a list item when its numbering says so.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx layout/fdo48718-1.docx: the paragraph of a logo
+//     positioned in front of the text keeps its empty line.
 func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []blockNode {
 	direct := d.parseParaProps(p.Child(w, "pPr"))
 	rp := d.resolvePara(direct, c)
@@ -330,8 +335,7 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 			// would be, spaced as its lines are, and draws nothing a
 			// reader would extract: a line break in the mark's font. One
 			// holding only floating or positioned drawings keeps its line
-			// too, as Writer gives every paragraph one (fdo48718-1: the
-			// paragraph of a logo positioned in front of the text).
+			// too, as Writer gives every paragraph one.
 			ms := inlineStyle(pst)
 			d.applyRun(ms, rp.mark, lineMult)
 			pst.FontFamilies, pst.FontSize, pst.FontWeight, pst.FontStyle = ms.FontFamilies, ms.FontSize, ms.FontWeight, ms.FontStyle

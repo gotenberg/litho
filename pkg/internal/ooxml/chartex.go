@@ -31,9 +31,11 @@ const NoticeUnsupported = "One or more chart types are unsupported in this versi
 //
 // # Corpus evidence
 //
-//   - libreoffice/pptx: chart2/funnel-pp1.pptx prints its category axis 0.510 points
-//     wide; libreoffice/xlsx: chart2/SimpleHistogram.xlsx and chart2/boxWhisker.xlsx
-//     0.509 at the sheet's 98% print scale.
+//   - libreoffice/pptx: chart2/funnel-pp1.pptx prints its category axis
+//     0.510 points wide.
+//   - libreoffice/xlsx: chart2/SimpleHistogram.xlsx and
+//     chart2/boxWhisker.xlsx print it 0.509 points wide at the sheet's 98%
+//     print scale.
 const chartExLineWidth = 18 * 72.0 / 2540
 
 // ParseChartEx reads the Office 2016 chart part of pkg (MS-ODRAWXML,

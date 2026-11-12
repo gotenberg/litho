@@ -61,9 +61,13 @@ const justifyShrink = 0.22
 // then the East Asian and complex script typefaces, so the text stack's
 // per-character fallback picks the East Asian face for CJK text. Latin
 // text in a missing face takes its class's fallback, as LibreOffice
-// substitutes it, never the East Asian face (fdo73550: Segoe UI, a
-// roman face in the font table, prints in a serif where its East Asian
-// Calibri is installed).
+// substitutes it, never the East Asian face.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/fdo73550.docx: Segoe UI, a roman face
+//     in the font table, prints in a serif where its East Asian Calibri is
+//     installed.
 func (d *document) families(r runProps) []string {
 	var out []string
 	add := func(f string) {
