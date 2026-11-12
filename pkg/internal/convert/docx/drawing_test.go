@@ -318,3 +318,22 @@ func TestTextBox_ShapeAndAnchor(t *testing.T) {
 		t.Errorf("a bottom-anchored box justifies %v", bottom.Children[0].Style.JustifyContent)
 	}
 }
+
+// TestTextBox_AnchorInGroup checks that a centred text box inside a group,
+// an absolutely positioned box, gives its text area a height in points:
+// the box's height less its insets, which a percentage would leave
+// unresolved there.
+func TestTextBox_AnchorInGroup(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="3657600" cy="1828800"/><wp:docPr id="1" name="g"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup">` +
+		`<wpg:wgp xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup"><wpg:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="3657600" cy="1828800"/><a:chOff x="0" y="0"/><a:chExt cx="3657600" cy="1828800"/></a:xfrm></wpg:grpSpPr>` +
+		`<wps:wsp><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1270000" cy="762000"/></a:xfrm><a:prstGeom prst="rect"/></wps:spPr>` +
+		`<wps:txbx><w:txbxContent><w:p><w:r><w:t>centred</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr anchor="ctr"/></wps:wsp></wpg:wgp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+	figs := role(build(t, body, nil).root, "Figure")
+	if len(figs) != 1 || len(figs[0].Children) != 1 {
+		t.Fatalf("%d figures", len(figs))
+	}
+	if area := figs[0].Children[0]; area.Style.JustifyContent != css.BoxCenter || area.Style.Height != css.Pts(60-2*3.6) {
+		t.Errorf("text area justify %v height %v, want centred and 52.8 points", area.Style.JustifyContent, area.Style.Height)
+	}
+}

@@ -448,7 +448,13 @@ func (d *document) shapeTextBox(n *layout.Node, g *shape.Geometry, ss ooxml.Shap
 		area := d.blockStyle()
 		area.Display = css.Flex
 		area.FlexDirection = css.FlexColumn
-		area.Height = css.Dimension{Kind: css.Percent, Value: 1}
+		// The area's height in points rather than a percentage, which an
+		// absolutely positioned box, a group's shape, leaves unresolved.
+		inner := h - bs.Padding[css.Top].Value - bs.Padding[css.Bottom].Value
+		if rect || !shape.Known(g) {
+			inner -= bs.Border[css.Top].Width + bs.Border[css.Bottom].Width
+		}
+		area.Height = css.Pts(max(inner, 0))
 		// Positioned, the text paints over the shape before it (CSS 2.1,
 		// Appendix E).
 		area.Position = css.Relative
@@ -456,8 +462,7 @@ func (d *document) shapeTextBox(n *layout.Node, g *shape.Geometry, ss ooxml.Shap
 		if anchor == "b" {
 			area.JustifyContent = css.BoxFlexEnd
 		}
-		inner := d.blockStyle()
-		kids = []*layout.Node{{Kind: layout.Element, Style: area, Children: []*layout.Node{{Kind: layout.Element, Style: inner, Children: kids}}}}
+		kids = []*layout.Node{{Kind: layout.Element, Style: area, Children: []*layout.Node{{Kind: layout.Element, Style: d.blockStyle(), Children: kids}}}}
 	}
 	if !rect && shape.Known(g) {
 		bs.BackgroundColor = css.Transparent
