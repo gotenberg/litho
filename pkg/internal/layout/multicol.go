@@ -1257,7 +1257,12 @@ func (e *engine) balanceBudget(y float64) bool {
 // box-decoration-break is clone, by its top and bottom borders and padding
 // at each column break it crosses: each fragment holds them whole (CSS
 // Fragmentation 3, 5.4). At page breaks the box stays sliced, as Chromium
-// prints it (WPT css-page, monolithic-overflow-031-print).
+// prints it.
+//
+// # Corpus evidence
+//
+//   - wpt, css/css-page/monolithic-overflow-031-print.html: Chromium
+//     prints the box sliced at the page break.
 func (e *engine) cloneEdges(b *box, hSet bool) {
 	if !hSet || !clones(b.st) || !e.paginating() || e.cols == nil {
 		return

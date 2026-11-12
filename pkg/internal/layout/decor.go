@@ -357,11 +357,15 @@ func positions(rep css.Repeat, start, size, areaStart, areaSize, clipStart, clip
 // references draw: the brightest channel moved down or up by 0.33 of the
 // range, the others scaled with it, and black lightened to #545454. A
 // colour of a relative luminance at most #202020's is too dark to darken:
-// its shades are its lighter one and that one's lighter, as Chromium
-// 9.0.0's print measures (#000 draws #545454 and #a8a8a8, #210000 (117, 0,
-// 0) and (201, 0, 0), #003000 black and (0, 132, 0)). blink selects that
-// rule; off, as the Office formats draw them, a dark colour darkens to
-// black like any other.
+// its shades are its lighter one and that one's lighter. blink selects
+// that rule; off, as the Office formats draw them, a dark colour darkens
+// to black like any other.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 9.0.0's print draws #000 as #545454 and
+//     #a8a8a8, #210000 as (117, 0, 0) and (201, 0, 0), and #003000 as
+//     black and (0, 132, 0).
 func shades(c compose.Color, blink bool) (compose.Color, compose.Color) {
 	if blink && veryDark(c) {
 		l := lighter(c)
@@ -375,8 +379,12 @@ func shades(c compose.Color, blink bool) (compose.Color, compose.Color) {
 }
 
 // blinkShift is the step of Blink's Color::Dark and Color::Light, 0.33 of
-// the range rather than a third: Chromium draws #210000's lighter shade
-// as 117, which a third would round to 118.
+// the range rather than a third.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium draws #210000's lighter shade as 117, which a
+//     third would round to 118.
 const blinkShift = 0.33
 
 // lighter is Blink's Color::Light: the brightest channel up by 0.33 of the
@@ -397,8 +405,12 @@ func blinkScale(c compose.Color, k float64) compose.Color {
 }
 
 // veryDark reports a colour whose relative luminance (WCAG 2, sRGB) is at
-// most #202020's, the bound Chromium's measured shades switch at: #202020
-// and #300000 are very dark, #212121 and #003000 are not.
+// most #202020's, the bound Chromium's shades switch at.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium's shades take #202020 and #300000 as very
+//     dark, #212121 and #003000 as not.
 func veryDark(c compose.Color) bool {
 	lin := func(v float64) float64 {
 		v = min(max(v, 0), 1)
@@ -418,8 +430,12 @@ func (p *painter) blink() bool { return p.e.opts.BrowserRules }
 
 // currentShades are the dark and light shades of a two-tone border whose
 // colour is currentColor: Blink paints #eeeeee and its darker #9a9a9a
-// whatever the color property, a legacy quirk Chromium 9.0.0's print
-// measures on every color tried (black, #800000).
+// whatever the color property, a legacy quirk.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 9.0.0's print draws these shades for every
+//     color tried, black and #800000.
 func currentShades(a float64) (compose.Color, compose.Color) {
 	g := func(v float64) compose.Color { return compose.Color{R: v / 255, G: v / 255, B: v / 255, A: a} }
 	return g(0x9a), g(0xee)

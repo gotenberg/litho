@@ -954,6 +954,16 @@ func (p *painter) text(it *lineItem, l *lineBox, page int) {
 func roundPx(v float64) float64 { return math.Round(v/css.Pt) * css.Pt }
 
 // textDecorations paints the decoration lines of item it among which.
+// With [Options.BrowserRules] an underline lies as Blink places it for a
+// face without an underline position, whatever the face's: half its
+// unrounded thickness below the baseline, rounded up to whole pixels, at
+// least one.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 9.0.0 draws the underline of every face tried,
+//     Liberation Serif and Sans, DejaVu Sans and Ahem from 13 to 64px, at
+//     that gap whatever the face's underline position.
 func (p *painter) textDecorations(it *lineItem, l *lineBox, page int, alpha float64, which css.TextDecoration) {
 	size := it.text.Size
 	for _, d := range it.box.decos {
@@ -995,12 +1005,8 @@ func (p *painter) textDecorations(it *lineItem, l *lineBox, page int, alpha floa
 			}
 			pos = roundPx(pos)
 			if p.blink() {
-				// Chromium 9.0.0 draws the underline of every face
-				// tried (Liberation Serif and Sans, DejaVu Sans, Ahem,
-				// 13 to 64px) half its unrounded thickness below the
-				// baseline, rounded up to whole pixels, at least one,
-				// whatever the face's underline position: Blink's gap
-				// for a face without one.
+				// Blink's gap for a face without an underline position,
+				// whatever the face's.
 				t := thick / css.Pt
 				if auto {
 					t = size / 10 / css.Pt
