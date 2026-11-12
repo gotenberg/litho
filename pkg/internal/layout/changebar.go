@@ -70,27 +70,6 @@ func changeMarked(b, root *box) bool {
 	return false
 }
 
-// changeBounds gives the line prev and the line l after it in the same
-// paragraph a change bar each when a change touches the break between
-// them: when l opens with changed content, or prev ends with it, the
-// spaces hanging at its end aside.
-//
-// # Corpus evidence
-//
-//   - probe, odt: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) bars the line
-//     before one an insertion opens, the insertion starting after that line's
-//     last space, and the line after one an insertion ends, with or without the
-//     space that ends the line; it leaves unbarred the lines before and after
-//     one an insertion starts and ends inside, in the middle of a word.
-func changeBounds(prev, l *lineBox, root *box) {
-	if l.changeHead {
-		prev.changed = root
-	}
-	if prev.changeTail {
-		l.changed = root
-	}
-}
-
 // emptyChanged reports a paragraph of no character that holds an empty
 // inline node marked Node.ChangeBar: its line draws a change bar.
 func emptyChanged(p *ifcPara, root *box) bool {

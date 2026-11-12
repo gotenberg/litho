@@ -42,10 +42,10 @@ type lineBox struct {
 	barOwner *box
 	// changed is the block container of a line that holds content a
 	// tracked change touches (Node.ChangeBar), nil for any other line;
-	// changeHead and changeTail report a line whose first or last item
-	// is such content ([changeBounds]).
-	changed                *box
-	changeHead, changeTail bool
+	// changeHead reports a line whose first item is such content: the
+	// line before it in its paragraph draws a bar too.
+	changed    *box
+	changeHead bool
 }
 
 // lineItem is one piece of a line: a glyph run of a text box, or an
@@ -623,8 +623,9 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			}
 			l.y = top
 			s.settle(l)
-			if !paraFirst {
-				changeBounds(s.lines[len(s.lines)-1], l, s.root)
+			if !paraFirst && l.changeHead {
+				// The line before one a change opens draws a bar too.
+				s.lines[len(s.lines)-1].changed = s.root
 			}
 			s.lines = append(s.lines, l)
 			s.recordAnchors(l)
@@ -972,14 +973,9 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 		}
 	}
 	for i, it := range l.items {
-		marked := changeMarked(it.box, s.root)
-		if marked {
+		if changeMarked(it.box, s.root) {
 			l.changed = s.root
 			l.changeHead = l.changeHead || i == 0
-		}
-		if it.atomic != nil || it.end-it.start > it.hang {
-			// The spaces hanging at the line's end do not end it.
-			l.changeTail = marked
 		}
 	}
 	l.frags = nil

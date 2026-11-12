@@ -59,16 +59,18 @@ func barPage() PageBox {
 }
 
 // TestChangeBar_Lines locks the lines a change bars: the lines that hold
-// changed content, the line before one that opens with it and the line
-// after one that ends with it, the space hanging there aside, each bar
-// 7.05 points left of the page area over the line box's height.
+// changed content and the line before one that opens with it, not the
+// line after one that ends with it, each bar 7.05 points left of the
+// page area over the line box's height.
 //
 // # Corpus evidence
 //
-//   - probe, odt: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) strokes the bars
-//     of a page whose left margin is 3 cm at 78 pt, 0.1 pt wide, one a line box;
-//     an insertion opening a line bars the line before, one ending a line, with
-//     or without the space after it, the line after; one inside a word neither.
+//   - probe, odt: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) strokes the
+//     bars of a page whose left margin is 3 cm at 78 pt, 0.1 pt wide, one
+//     a line box; an insertion opening a line, after the last space of the
+//     line before, bars that line too; one ending a line, a whole word or
+//     the end of one, leaves the next line unbarred, and one inside a word
+//     bars its own line alone.
 func TestChangeBar_Lines(t *testing.T) {
 	t.Parallel()
 	x := px(40) - changeBarGap
@@ -82,8 +84,9 @@ func TestChangeBar_Lines(t *testing.T) {
 		kids []*Node
 		want string
 	}{
-		{"word on line two", []*Node{txt(st, "aaa "), changed("bbb"), txt(st, " ccc ddd")}, line(0) + " " + line(1) + " " + line(2)},
-		{"word with its space", []*Node{txt(st, "aaa "), changed("bbb "), txt(st, "ccc ddd")}, line(0) + " " + line(1) + " " + line(2)},
+		{"word on line two", []*Node{txt(st, "aaa "), changed("bbb"), txt(st, " ccc ddd")}, line(0) + " " + line(1)},
+		{"word with its space", []*Node{txt(st, "aaa "), changed("bbb "), txt(st, "ccc ddd")}, line(0) + " " + line(1)},
+		{"end of line one", []*Node{txt(st, "a"), changed("aa"), txt(st, " bbb ccc ddd")}, line(0)},
 		{"inside a word", []*Node{txt(st, "aaa b"), changed("b"), txt(st, "b ccc ddd")}, line(1)},
 		{"last line", []*Node{txt(st, "aaa bbb ccc "), changed("ddd")}, line(2) + " " + line(3)},
 		{"none", []*Node{txt(st, "aaa bbb ccc ddd")}, ""},
