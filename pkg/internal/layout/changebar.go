@@ -12,19 +12,20 @@ import (
 //
 // # Corpus evidence
 //
-//   - probe, odt: LibreOffice 26.8 (the pinned gotenberg/gotenberg:9.0.0
-//     image, changes shown) strokes the change bar of a line in black at
-//     78 pt on a page whose left margin is 3 cm (85.04 pt) and at 49.65
-//     pt with 2 cm, on odd and even pages, beside a paragraph indented by
-//     2 cm, a right-aligned one, a table cell and a footnote alike; in
-//     the second of two columns 7.05 pt left of that column. Its line
-//     width is the 0.1 pt the PDF stream opens with.
-//   - probe, odt: each line box draws its own bar, from its top to its
-//     bottom, 13.8 pt for a 12 pt Liberation Serif line: consecutive
-//     changed lines join, the space between two paragraphs stays blank.
-//   - probe, docx: LibreOffice 26.8 strokes the bar of a DOCX document
-//     with a 1 in margin at 64.95 pt.
-//   - probe, odt: it draws no bar beside the lines of a text frame.
+//   - probe, odt: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1, changes shown)
+//     strokes the change bar of a line in black at 78 pt on a page whose left
+//     margin is 3 cm (85.04 pt) and at 49.65 pt with 2 cm, on odd and even
+//     pages, beside a paragraph indented by 2 cm, a right-aligned one, a table
+//     cell and a footnote alike; in the second of two columns 7.05 pt left of
+//     that column. Its line width is the 0.1 pt the PDF stream opens with.
+//   - probe, odt: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) draws a bar
+//     for each line box, from its top to its bottom, 13.8 pt for a 12 pt
+//     Liberation Serif line: consecutive changed lines join, the space
+//     between two paragraphs stays blank.
+//   - probe, docx: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) strokes the bar
+//     of a DOCX document with a 1 in margin at 64.95 pt.
+//   - probe, odt: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) draws no bar
+//     beside the lines of a text frame.
 const (
 	changeBarGap   = 7.05
 	changeBarWidth = 0.1
@@ -76,11 +77,11 @@ func changeMarked(b, root *box) bool {
 //
 // # Corpus evidence
 //
-//   - probe, odt: LibreOffice 26.8 bars the line before one an insertion
-//     opens, the insertion starting after that line's last space, and the
-//     line after one an insertion ends, with or without the space that
-//     ends the line; it leaves unbarred the lines before and after one an
-//     insertion starts and ends inside, in the middle of a word.
+//   - probe, odt: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) bars the line
+//     before one an insertion opens, the insertion starting after that line's
+//     last space, and the line after one an insertion ends, with or without the
+//     space that ends the line; it leaves unbarred the lines before and after
+//     one an insertion starts and ends inside, in the middle of a word.
 func changeBounds(prev, l *lineBox, root *box) {
 	if l.changeHead {
 		prev.changed = root

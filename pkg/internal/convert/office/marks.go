@@ -47,6 +47,8 @@ const (
 //     first appear in the body, the tenth and eleventh in the first two
 //     again; an insertion underlined and a deletion struck through, line
 //     and text in the colour.
+//   - probe, odt: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) draws the
+//     same probe in the same nine colours.
 //   - litho/docx tracked-changes: Microsoft's reference prints the
 //     accepted text, without marks.
 //
@@ -57,18 +59,19 @@ var authorColors = [...]uint32{0xC69200, 0x0646A2, 0x579D1C, 0x692B9D, 0xC5000B,
 //
 // # Corpus evidence
 //
-//   - probe, docx: LibreOffice 26.8 draws the w:moveFrom and w:moveTo runs
-//     of litho/docx tracked-changes in 008000, double struck through and
-//     double underlined, whatever their author's colour.
-//   - probe, odt: LibreOffice 26.8 draws a table row whose style sets
-//     loext:text-changes-only false and whose every cell an insertion
-//     spans on an E1F2FA ground, one a deletion spans on FCE6F4, over the
-//     background of its cells, from the table's left border edge to its
-//     right and over the row's height; a table inside an insertion or a
-//     deletion so for every row. A row whose style leaves the attribute
-//     out keeps its own ground.
-//   - probe, docx: LibreOffice 26.8 draws a row whose w:trPr holds a
-//     w:ins on E1F2FA and one holding a w:del on FCE6F4.
+//   - probe, docx: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) draws the
+//     w:moveFrom and w:moveTo runs of litho/docx tracked-changes in 008000,
+//     double struck through and double underlined, whatever their author's
+//     colour.
+//   - probe, odt: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) draws a table row
+//     whose style sets loext:text-changes-only false and whose every cell an
+//     insertion spans on an E1F2FA ground, one a deletion spans on FCE6F4, over
+//     the background of its cells, from the table's left border edge to its
+//     right and over the row's height; a table inside an insertion or a deletion
+//     so for every row. A row whose style leaves the attribute out keeps its own
+//     ground.
+//   - probe, docx: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) draws a row
+//     whose w:trPr holds a w:ins on E1F2FA and one holding a w:del on FCE6F4.
 const (
 	MovedColor      uint32 = 0x008000
 	RowInsertedFill uint32 = 0xE1F2FA
@@ -114,11 +117,11 @@ const minMoveRunes = 6
 //
 // # Corpus evidence
 //
-//   - probe, odt: LibreOffice 26.8 draws as moved a deletion and an
-//     insertion of the same author whose texts are equal once trimmed
-//     ("abc de", "  Padded words  "), whatever their dates; not one word
-//     of thirteen letters, not "ab cd", not two authors, not two texts
-//     differing in case.
+//   - probe, odt: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) draws as moved a
+//     deletion and an insertion of the same author whose texts are equal once
+//     trimmed ("abc de", "  Padded words  "), whatever their dates; not one word
+//     of thirteen letters, not "ab cd", not two authors, not two texts differing
+//     in case.
 func MoveKey(author, text string) (string, bool) {
 	t := strings.TrimSpace(text)
 	if utf8.RuneCountInString(t) < minMoveRunes || !strings.ContainsAny(t, " \t") {

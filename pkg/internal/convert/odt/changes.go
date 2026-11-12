@@ -652,12 +652,13 @@ func rowCovered(row *odf.Element, of func(id string) bool) bool {
 //
 // # Corpus evidence
 //
-//   - probe, odt: LibreOffice 26.8 draws the text a text:format-change
-//     spans in its author's colour, and a line holding it with a change
-//     bar.
-//   - probe, docx: it draws the text of a w:rPrChange or w:pPrChange
-//     bold in its author's colour, a run whose new formatting is not
-//     bold too: the bold is the mark of the change.
+//   - probe, odt: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) draws the text a
+//     text:format-change spans in its author's colour, and a line holding it
+//     with a change bar.
+//   - probe, docx: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) draws the
+//     text of a w:rPrChange or w:pPrChange bold in its author's colour, a run
+//     whose new formatting is not bold too: the bold is the mark of the
+//     change.
 func (c *changes) marks() map[string]changeMark {
 	out := map[string]changeMark{}
 	authors := map[string]int{}
@@ -722,9 +723,9 @@ func markText(t *textState, m changeMark) {
 //
 // # Corpus evidence
 //
-//   - probe, odt: LibreOffice 26.8 draws a change bar beside a line a
-//     change only starts or ends on: a paragraph whose inserted break
-//     follows its text, the paragraph after it.
+//   - probe, odt: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) draws a change
+//     bar beside a line a change only starts or ends on: a paragraph whose
+//     inserted break follows its text, the paragraph after it.
 func (b *builder) changeBound(c *odf.Element) *layout.Node {
 	if _, ok := b.changeMarks[c.A(odf.NSText, "change-id")]; !ok {
 		return nil

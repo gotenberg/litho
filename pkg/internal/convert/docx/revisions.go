@@ -370,11 +370,10 @@ func (r *revisions) markRun(k *ooxml.Element, author string, kind office.MarkKin
 //
 // # Corpus evidence
 //
-//   - probe, docx: LibreOffice 26.8 draws litho/docx tracked-changes's
-//     w:rPrChange runs and the paragraphs of its w:pPrChange, the
-//     centred paragraph and the numbered one, bold in the author's
-//     colour, each line with a change bar; its w:sectPrChange paragraph
-//     unmarked.
+//   - probe, docx: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) draws litho/docx
+//     tracked-changes's w:rPrChange runs and the paragraphs of its w:pPrChange,
+//     the centred paragraph and the numbered one, bold in the author's colour,
+//     each line with a change bar; its w:sectPrChange paragraph unmarked.
 func (r *revisions) markAttributes(p, pChange *ooxml.Element, depth int) {
 	if depth > ooxml.MaxDepth {
 		return
@@ -453,10 +452,10 @@ func valElement(local, val string) *ooxml.Element {
 //
 // # Corpus evidence
 //
-//   - probe, docx: LibreOffice 26.8 draws a change bar beside the
-//     paragraph of litho/docx tracked-changes whose mark is inserted and
-//     beside the first line of the paragraph after it, and beside both
-//     lines its deleted mark joins.
+//   - probe, docx: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) draws a change
+//     bar beside the paragraph of litho/docx tracked-changes whose mark is
+//     inserted and beside the first line of the paragraph after it, and beside
+//     both lines its deleted mark joins.
 func (r *revisions) bound(p *ooxml.Element, ps *css.Style, sink *inlineSink, start bool) {
 	if start && !r.markStart[p] || !start && !r.markEnd[p] {
 		return
@@ -477,9 +476,9 @@ const maxMoveText = 4096
 //
 // # Corpus evidence
 //
-//   - probe, docx: LibreOffice 26.8 draws a w:del and a w:ins of one
-//     author holding the same sentence, dated two days apart, in green,
-//     double struck through and double underlined.
+//   - probe, docx: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) draws a w:del
+//     and a w:ins of one author holding the same sentence, dated two days apart,
+//     in green, double struck through and double underlined.
 func (r *revisions) findMoves(root *ooxml.Element) {
 	type pair struct{ del, ins []*ooxml.Element }
 	keys := map[string]*pair{}

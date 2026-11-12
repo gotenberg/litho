@@ -65,11 +65,10 @@ func barPage() PageBox {
 //
 // # Corpus evidence
 //
-//   - probe, odt: LibreOffice 26.8 strokes the bars of a page whose left
-//     margin is 3 cm at 78 pt, 0.1 pt wide, one a line box; an insertion
-//     opening a line bars the line before, one ending a line, with or
-//     without the space after it, the line after; one inside a word
-//     neither.
+//   - probe, odt: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) strokes the bars
+//     of a page whose left margin is 3 cm at 78 pt, 0.1 pt wide, one a line box;
+//     an insertion opening a line bars the line before, one ending a line, with
+//     or without the space after it, the line after; one inside a word neither.
 func TestChangeBar_Lines(t *testing.T) {
 	t.Parallel()
 	x := px(40) - changeBarGap
@@ -120,8 +119,8 @@ func TestChangeBar_EmptyNode(t *testing.T) {
 //
 // # Corpus evidence
 //
-//   - probe, odt: LibreOffice 26.8 bars a changed line of the second of
-//     two columns 7.05 pt left of that column.
+//   - probe, odt: LibreOffice 26.8 (gotenberg/gotenberg:9.4.1) bars a changed
+//     line of the second of two columns 7.05 pt left of that column.
 func TestChangeBar_Columns(t *testing.T) {
 	t.Parallel()
 	st := sty()
