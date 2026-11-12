@@ -203,3 +203,22 @@ func TestRecordedObjectIsNotCheckedAgain(t *testing.T) {
 		t.Errorf("recorded %d violations, want 2: %v", len(got), got)
 	}
 }
+
+// BenchmarkResolveCacheHit measures a resolution the object cache answers,
+// as each of the lookups of a validation's tree walks is, with debug logging
+// off.
+func BenchmarkResolveCacheHit(b *testing.B) {
+	data, offsets := formatViolationPDF(b, "<< /Type /Catalog >>\n", "<< /A 1 >>\n")
+	doc := formatViolationDoc(data, offsets)
+	ctx := context.Background()
+	ref := ast.PdfIndirectRef{ObjectNum: 2}
+	if _, err := doc.Resolve(ctx, ref); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := doc.Resolve(ctx, ref); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

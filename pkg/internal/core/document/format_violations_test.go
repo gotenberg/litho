@@ -20,7 +20,7 @@ import (
 // written as "N 0 obj\n<body>endobj\n" so that endobj is preceded by the last
 // byte of the body. A body that does not end with an EOL is an §6.1.8/§6.1.9
 // defect and makes validateObjectHeaderFormat report it.
-func formatViolationPDF(t *testing.T, bodies ...string) ([]byte, []int64) {
+func formatViolationPDF(t testing.TB, bodies ...string) ([]byte, []int64) {
 	t.Helper()
 	var buf bytes.Buffer
 	buf.WriteString("%PDF-1.7\n")

@@ -1594,11 +1594,16 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 	}
 	if obj, ok := d.objectCache.lookup(ref.ObjectNum); ok {
 		d.mu.RUnlock()
-		d.Logger.Debug("resolve object cache hit",
-			slog.Int("obj", ref.ObjectNum),
-			slog.Int("gen", ref.GenNum),
-			slog.String("type", fmt.Sprintf("%T", obj)),
-		)
+		// The attributes are built only for a logger that keeps the record:
+		// a validation of a large file answers tens of millions of lookups
+		// here, and building them allocated for each.
+		if d.Logger.Enabled(ctx, slog.LevelDebug) {
+			d.Logger.Debug("resolve object cache hit",
+				slog.Int("obj", ref.ObjectNum),
+				slog.Int("gen", ref.GenNum),
+				slog.String("type", fmt.Sprintf("%T", obj)),
+			)
+		}
 		return obj, nil
 	}
 	d.mu.RUnlock()
@@ -1661,12 +1666,14 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 			return nil, fmt.Errorf("failed to extract object %d from stream %d: %w", ref.ObjectNum, entry.ObjStmNum, err)
 		}
 
-		d.Logger.Debug("resolve object from object stream",
-			slog.Int("obj", ref.ObjectNum),
-			slog.Int("stream_obj", entry.ObjStmNum),
-			slog.Int("index", entry.ObjStmIndex),
-			slog.String("type", fmt.Sprintf("%T", obj)),
-		)
+		if d.Logger.Enabled(ctx, slog.LevelDebug) {
+			d.Logger.Debug("resolve object from object stream",
+				slog.Int("obj", ref.ObjectNum),
+				slog.Int("stream_obj", entry.ObjStmNum),
+				slog.Int("index", entry.ObjStmIndex),
+				slog.String("type", fmt.Sprintf("%T", obj)),
+			)
+		}
 
 	default:
 		return nil, fmt.Errorf("unknown xref entry type: %d", entry.Type)
@@ -1769,13 +1776,15 @@ func (d *Document) parseNormalObject(ctx context.Context, ref ast.PdfIndirectRef
 	}
 	d.recordIntegerOverflows(ref.ObjectNum, p.IntegerOverflows)
 
-	d.Logger.Debug("object parsed",
-		slog.Int("obj", ref.ObjectNum),
-		slog.Int("gen", ref.GenNum),
-		slog.Int64("offset", entry.Offset),
-		slog.Bool("format_checked", checkFormat),
-		slog.String("type", fmt.Sprintf("%T", obj)),
-	)
+	if d.Logger.Enabled(ctx, slog.LevelDebug) {
+		d.Logger.Debug("object parsed",
+			slog.Int("obj", ref.ObjectNum),
+			slog.Int("gen", ref.GenNum),
+			slog.Int64("offset", entry.Offset),
+			slog.Bool("format_checked", checkFormat),
+			slog.String("type", fmt.Sprintf("%T", obj)),
+		)
+	}
 	return obj, nil
 }
 
