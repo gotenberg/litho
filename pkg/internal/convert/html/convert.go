@@ -237,6 +237,9 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	// right one is not known before the cascade: the viewport takes a
 	// left-to-right document's.
 	first, _ := pageBox(resolver, o, pageSel(0, false))
+	// The fit of the first page sizes the viewport; its warning comes from
+	// the fit of every page box below, against the conversion's own factor.
+	unfit := setup
 	setup, _ = setup.fitFactor(first)
 	// The media features measure the paper's page area ([paperArea]) and
 	// the viewport units the page area of the first page, the size and
@@ -290,7 +293,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	if pageAt != nil {
 		boxes = append(boxes, pageAt(1), pageAt(2))
 	}
-	setup, fitWarns := setup.fitFactor(boxes...)
+	setup, fitWarns := unfit.fitFactor(append(boxes, first)...)
 	pageWarns = append(pageWarns, fitWarns...)
 	sourceFirst := page
 	page = setup.layoutBox(page)

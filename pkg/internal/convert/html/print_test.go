@@ -189,6 +189,22 @@ func TestConvert_ScaleDividesTheLayoutArea(t *testing.T) {
 	}
 }
 
+func TestConvert_ScaleWarnsPastThePageLimit(t *testing.T) {
+	t.Parallel()
+	// A 10,000 point page laid out 10 times larger passes the 14,400 point
+	// limit: the factor drops to 1.44, with a warning naming the scale asked.
+	doc := conv(t, `<style>@page { size: 10000pt }</style><p>x`, Options{Scale: 0.1, PreferCSSPageSize: true})
+	var msgs []string
+	for _, w := range doc.Warnings {
+		if w.Code == CodePageBox {
+			msgs = append(msgs, w.Message)
+		}
+	}
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "cannot be laid out 10 times larger") {
+		t.Errorf("page box warnings %q, want one about the factor of 10", msgs)
+	}
+}
+
 func TestConvert_ShrinksWideContentToFit(t *testing.T) {
 	t.Parallel()
 	w := DefaultPageWidth
