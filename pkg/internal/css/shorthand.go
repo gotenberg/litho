@@ -202,6 +202,7 @@ func initShorthands() {
 		"page-break-before": legacyBreak(pBreakBefore),
 		"page-break-after":  legacyBreak(pBreakAfter),
 		"all":               {longhands: allLonghands(), expand: expandAll},
+		"font-variant":      {longhands: []propID{pFontVariant}, expand: expandFontVariant},
 	}
 	maps.Copy(shorthands, flexShorthands())
 	maps.Copy(shorthands, gridShorthands())

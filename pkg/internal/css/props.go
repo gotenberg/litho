@@ -749,7 +749,7 @@ func init() {
 		{pFontStyle, propDef{name: "font-style", inherited: true, parse: parseFontStyle, compute: computeFontStyle, copyFrom: func(dst, src *Style) {
 			dst.FontStyle, dst.FontObliqueAngle = src.FontStyle, src.FontObliqueAngle
 		}}},
-		{pFontVariant, enumProp("font-variant", true, func(s *Style) *FontVariant { return &s.FontVariant }, map[string]FontVariant{
+		{pFontVariant, enumProp("font-variant-caps", true, func(s *Style) *FontVariant { return &s.FontVariant }, map[string]FontVariant{
 			"normal": VariantNormal, "small-caps": SmallCaps, "all-small-caps": SmallCaps,
 		})},
 		{pLineHeight, propDef{name: "line-height", inherited: true, parse: parseLineHeight, compute: computeLineHeight, copyFrom: field(func(s *Style) *Dimension { return &s.LineHeight })}},

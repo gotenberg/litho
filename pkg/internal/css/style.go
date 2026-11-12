@@ -436,10 +436,12 @@ const (
 	FontOblique
 )
 
-// FontVariant is the font-variant property (CSS 2.1, 15.5).
+// FontVariant is the font-variant-caps property (CSS Fonts 4, 6.6), which
+// the font-variant and font shorthands set. all-small-caps computes as
+// small-caps.
 type FontVariant uint8
 
-// The font-variant values.
+// The font-variant-caps values.
 const (
 	VariantNormal FontVariant = iota
 	SmallCaps
