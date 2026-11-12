@@ -18,20 +18,36 @@ type Reader struct {
 	buf    []byte
 	bufPos int
 	bufLen int
+
+	// want is the size of the next fill with no limit set: it starts at
+	// [minBufSize] and doubles up to [maxBufSize] each time a fill reads at
+	// least that much.
+	want int
 }
 
-// defaultBufSize balances syscall overhead and per-Reader memory at 32 KB.
-const defaultBufSize = 32768
+// minBufSize is the first fill of a [Reader] with no limit set. Most readers
+// parse one object and read a few hundred bytes, and a buffer the size of a
+// long sequential read would be allocated and cleared for each of them.
+const minBufSize = 512
+
+// maxBufSize balances syscall overhead and per-Reader memory at 32 KB. A
+// Reader reaches it after a few fills of a long sequential read.
+const maxBufSize = 32768
 
 // NewReader returns a buffered [Reader] over the first size bytes of r,
 // positioned at offset. The returned Reader is not safe for concurrent use.
+//
+// The buffer grows with the reads: the first fill reads 512 bytes at most,
+// and each fill that reads its whole size doubles the next, up to 32 KB. A
+// fill under a limit ([Reader.SetLimit]) reads up to the limit, 32 KB at
+// most.
 func NewReader(r io.ReaderAt, size int64, offset int64) *Reader {
 	return &Reader{
 		r:      r,
 		size:   size,
 		limit:  size,
 		offset: offset,
-		buf:    make([]byte, defaultBufSize),
+		want:   minBufSize,
 	}
 }
 
@@ -65,14 +81,26 @@ func (b *Reader) fill() error {
 		return io.EOF
 	}
 
-	buf := b.buf
-	if remaining := b.limit - b.offset; remaining < int64(len(buf)) {
-		buf = buf[:remaining]
+	size := b.want
+	if b.limit < b.size {
+		// A limit says where the data ends, so reading up to it at once
+		// costs no more memory than the read needs.
+		size = maxBufSize
 	}
+	if remaining := b.limit - b.offset; remaining < int64(size) {
+		size = int(remaining) // fits int: below size, at most maxBufSize
+	}
+	if cap(b.buf) < size {
+		b.buf = make([]byte, size)
+	}
+	buf := b.buf[:size]
 	n, err := b.r.ReadAt(buf, b.offset)
 	b.bufPos = 0
 	b.bufLen = n
 	b.offset += int64(n)
+	if n >= b.want && b.want < maxBufSize {
+		b.want = min(2*b.want, maxBufSize)
+	}
 
 	if n > 0 {
 		return nil

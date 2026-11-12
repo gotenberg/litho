@@ -226,3 +226,86 @@ func TestSetLimitOutsideSizeRestoresSize(t *testing.T) {
 		}
 	}
 }
+
+// TestReadAcrossGrowingFills pins that the bytes a Reader returns do not
+// depend on the size of its fills: a long read crosses fills of every size
+// from the first to the largest, byte by byte and through Read, and the byte
+// just read can be unread at each of them.
+func TestReadAcrossGrowingFills(t *testing.T) {
+	data := make([]byte, 3*maxBufSize+17)
+	for i := range data {
+		data[i] = byte(i * 7)
+	}
+
+	r := NewReader(bytes.NewReader(data), int64(len(data)), 5)
+	for i := 5; i < len(data); i++ {
+		b, err := r.ReadByte()
+		if err != nil {
+			t.Fatalf("ReadByte at %d: %v", i, err)
+		}
+		if b != data[i] {
+			t.Fatalf("ReadByte at %d = %d, want %d", i, b, data[i])
+		}
+		if err := r.UnreadByte(); err != nil {
+			t.Fatalf("UnreadByte at %d: %v", i, err)
+		}
+		if b, _ := r.ReadByte(); b != data[i] {
+			t.Fatalf("ReadByte after UnreadByte at %d = %d, want %d", i, b, data[i])
+		}
+		if pos := r.Position(); pos != int64(i+1) {
+			t.Fatalf("Position after byte %d = %d, want %d", i, pos, i+1)
+		}
+	}
+
+	r = NewReader(bytes.NewReader(data), int64(len(data)), 0)
+	got, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if !bytes.Equal(got, data) {
+		t.Error("ReadAll returned other bytes than the source")
+	}
+}
+
+// TestShortReadAllocatesLittle pins that a Reader reading a few bytes under a
+// limit allocates a buffer of their size, not one of a long sequential read.
+func TestShortReadAllocatesLittle(t *testing.T) {
+	data := make([]byte, 4*maxBufSize)
+	src := bytes.NewReader(data)
+	allocs := testing.AllocsPerRun(100, func() {
+		r := NewReader(src, int64(len(data)), 100)
+		r.SetLimit(164)
+		if _, err := io.Copy(io.Discard, r); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if allocs > 2 {
+		t.Errorf("reading 64 bytes made %.0f allocations, want at most 2", allocs)
+	}
+	r := NewReader(src, int64(len(data)), 100)
+	r.SetLimit(164)
+	if _, err := r.ReadByte(); err != nil {
+		t.Fatal(err)
+	}
+	if c := cap(r.buf); c > 64 {
+		t.Errorf("buffer of %d bytes for a 64-byte read, want at most 64", c)
+	}
+}
+
+// BenchmarkSmallObjectRead measures a Reader made, as each object parse makes
+// one, to read a 200-byte object bounded by the next object's offset.
+func BenchmarkSmallObjectRead(b *testing.B) {
+	data := bytes.Repeat([]byte("<< /Type /Page /Parent 3 0 R >>\n"), 4096)
+	src := bytes.NewReader(data)
+	b.ReportAllocs()
+	for i := 0; b.Loop(); i++ {
+		off := int64(i%1000) * 64
+		r := NewReader(src, int64(len(data)), off)
+		r.SetLimit(off + 200)
+		for {
+			if _, err := r.ReadByte(); err != nil {
+				break
+			}
+		}
+	}
+}
