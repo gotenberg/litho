@@ -80,9 +80,15 @@ func TestPaperDocsStatePageSetup(t *testing.T) {
 		{"litho/docx", "paper-executive-portrait", docxPaperPart, []string{`<w:pgSz w:w="10440" w:h="15120"/>`}},
 		{"litho/docx", "paper-mixed-orientation", docxPaperPart, []string{`<w:pgSz w:w="12240" w:h="15840"/>`, `<w:pgSz w:w="15840" w:h="12240" w:orient="landscape"/>`}},
 		{"litho/docx", "paper-mixed-sizes", docxPaperPart, []string{`<w:pgSz w:w="11906" w:h="16838"/>`, `<w:pgSz w:w="8391" w:h="11906"/>`}},
+		{"litho/docx", "paper-default-portrait", docxPaperPart, []string{`<w:footerReference w:type="default" r:id="rId7"/><w:pgMar w:top="1440"`}},
+		{"litho/docx", "paper-margins-none-a5-landscape", docxPaperPart, []string{`<w:pgSz w:w="11906" w:h="8391" w:orient="landscape"/><w:pgMar w:top="0" w:right="0" w:bottom="0" w:left="0" w:header="0" w:footer="0" w:gutter="0"/>`}},
+		{"litho/docx", "paper-margins-uneven-letter-portrait", docxPaperPart, []string{`<w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="360" w:bottom="1080" w:left="720" w:header="720" w:footer="360" w:gutter="0"/>`}},
 		{"litho/xlsx", "paper-grid-b5-portrait", xlsxPaperPart, []string{`paperSize="13" orientation="portrait"`}},
 		{"litho/xlsx", "paper-grid-tabloid-landscape", xlsxPaperPart, []string{`paperSize="3" orientation="landscape"`}},
 		{"litho/xlsx", "paper-fit-a3-landscape", xlsxPaperPart, []string{`paperSize="8" orientation="landscape" fitToWidth="1" fitToHeight="0"`}},
+		{"litho/xlsx", "paper-grid-default-landscape", xlsxPaperPart, []string{`<pageSetup orientation="landscape"/>`}},
+		{"litho/xlsx", "paper-grid-margins-narrow-a3-portrait", xlsxPaperPart, []string{`<pageMargins left="0.5" right="0.5" top="0.5" bottom="0.5" header="0.25" footer="0.25"/>`, `<pageSetup paperSize="8" orientation="portrait"/>`}},
+		{"litho/xlsx", "paper-grid-margins-uneven-letter-landscape", xlsxPaperPart, []string{`<pageMargins left="0.5" right="0.25" top="1" bottom="0.75" header="0.5" footer="0.25"/>`, `<pageSetup paperSize="1" orientation="landscape"/>`}},
 		{"litho/pptx", "paper-deck-a3", pptxPaperPart, []string{`<p:sldSz cx="15120000" cy="10692000" type="A3"/>`}},
 		{"litho/pptx", "paper-deck-hagaki", pptxPaperPart, []string{`<p:sldSz cx="3600000" cy="5328000" type="hagakiCard"/>`}},
 		{"litho/pptx", "paper-deck-widescreen", pptxPaperPart, []string{`<p:sldSz cx="12192000" cy="6858000"/>`}},
@@ -156,11 +162,14 @@ func TestPaperDocsOptionsBorrowTheirPaper(t *testing.T) {
 			parts := strings.Split(o.ReferenceOf, "-")
 			key, orient := parts[len(parts)-2], parts[len(parts)-1]
 			p := paperByKey(key)
+			if corpus == "litho/xlsx" {
+				p = sheetPaper(p)
+			}
 			if *o.PaperWidth != inches(p.w) || *o.PaperHeight != inches(p.h) || o.Landscape != (orient == "landscape") {
 				t.Errorf("%s: paper %v by %v landscape %v, want %s %s", d.name, *o.PaperWidth, *o.PaperHeight, o.Landscape, key, orient)
 			}
 		}
-		if want := 6; corpus == "litho/docx" && options != want {
+		if want := map[string]int{"litho/docx": 16, "litho/xlsx": 22}[corpus]; options != want {
 			t.Errorf("%s: %d option fixtures, want %d", corpus, options, want)
 		}
 	}
@@ -192,7 +201,7 @@ func TestPaperDocsDeterministic(t *testing.T) {
 // of a committed fixture or of another paper document of its corpus.
 func TestPaperDocsNamesAreUnique(t *testing.T) {
 	t.Parallel()
-	for _, corpus := range []string{"litho/docx", "litho/xlsx", "litho/pptx", "litho/odt", "litho/ods", "litho/odp", "litho/html"} {
+	for _, corpus := range []string{"litho/docx", "litho/xlsx", "litho/pptx", "litho/odt", "litho/ods", "litho/odp", "litho/html", "litho/csv"} {
 		seen := map[string]bool{}
 		dir := "parts"
 		if !buildFormats[filepath.Base(corpus)] {
@@ -241,15 +250,25 @@ func TestFlatPaperDocsStatePageSetup(t *testing.T) {
 		{"litho/odt", "paper-executive-portrait", odtPaperPart, []string{`fo:page-width="184.15mm" fo:page-height="266.7mm" style:print-orientation="portrait"`}},
 		{"litho/odt", "paper-mixed-orientation", odtPaperPart, []string{`style:name="pm2"><style:page-layout-properties fo:page-width="279.4mm" fo:page-height="215.9mm" style:print-orientation="landscape"`, `style:name="PartTwo" style:family="paragraph" style:parent-style-name="Heading_20_1" style:master-page-name="Second"/>`}},
 		{"litho/odt", "paper-option-a3-landscape", fixture.OptionsFile, []string{`"paperWidth": 11.6929`, `"paperHeight": 16.5354`, `"landscape": true`}},
+		{"litho/odt", "paper-default-landscape", odtPaperPart, []string{`style:name="pm1"><style:page-layout-properties style:print-orientation="landscape" fo:margin-top="0.5in"`}},
+		{"litho/odt", "paper-margins-uneven-a4-landscape", odtPaperPart, []string{`style:name="pm1"><style:page-layout-properties fo:page-width="297mm" fo:page-height="210mm" style:print-orientation="landscape" fo:margin-top="1in" fo:margin-bottom="0.75in" fo:margin-left="0.5in" fo:margin-right="0.25in"/>`}},
 		{"litho/ods", "paper-grid-b5-portrait", odsGridPart, []string{`fo:page-width="176mm" fo:page-height="250mm" style:print-orientation="portrait"`}},
-		{"litho/ods", "paper-fit-letter-landscape", odsFitPart, []string{`fo:page-width="279.4mm" fo:page-height="215.9mm" style:print-orientation="landscape"`, `style:scale-to-X="1" style:scale-to-Y="0"`}},
+		{"litho/ods", "paper-fit-a4-landscape", odsFitPart, []string{`fo:page-width="297mm" fo:page-height="210mm" style:print-orientation="landscape"`, `style:scale-to-X="1" style:scale-to-Y="0"`}},
+		{"litho/ods", "paper-grid-default-portrait", odsGridPart, []string{`style:name="pm1"><style:page-layout-properties style:print-orientation="portrait" fo:margin-top="0.75in"`}},
+		{"litho/ods", "paper-grid-margins-none-a5-portrait", odsGridPart, []string{`fo:page-width="148mm" fo:page-height="210mm" style:print-orientation="portrait" fo:margin-top="0in" fo:margin-bottom="0in" fo:margin-left="0in" fo:margin-right="0in"/>`}},
+		{"litho/csv", "paper-table-option-executive-landscape", fixture.OptionsFile, []string{`"paperWidth": 7.25`, `"paperHeight": 10.5`, `"landscape": true`}},
+		{"litho/csv", "paper-table-default-landscape", fixture.OptionsFile, []string{"{\n  \"landscape\": true\n}\n"}},
 		{"litho/odp", "paper-deck-dia", odpPaperPart, []string{`fo:page-width="3.6cm" fo:page-height="2.4cm" style:print-orientation="landscape"`}},
 		{"litho/odp", "paper-deck-postcard", odpPaperPart, []string{`fo:page-width="10cm" fo:page-height="14.8cm" style:print-orientation="portrait"`}},
 		{"litho/html", "paper-option-legal-landscape", fixture.OptionsFile, []string{`"paperWidth": 8.5`, `"paperHeight": 14`, `"landscape": true`}},
 		{"litho/html", "paper-css-jis-b4-landscape-paper", htmlPaperPart, []string{"@page { size: JIS-B4 landscape; }"}},
 		{"litho/html", "paper-css-jis-b4-landscape-paper", fixture.OptionsFile, []string{`"preferCssPageSize": false`}},
 		{"litho/html", "paper-css-lengths-wide-prefer", htmlPaperPart, []string{"@page { size: 25cm 15cm; }"}},
-		{"litho/html", "paper-markdown-a5", fixture.OptionsFile, []string{`"paperWidth": 5.8268`, `"paperHeight": 8.2677`}},
+		{"litho/html", "paper-markdown-a5-portrait", fixture.OptionsFile, []string{`"paperWidth": 5.8268`, `"paperHeight": 8.2677`}},
+		{"litho/html", "paper-default-landscape", fixture.OptionsFile, []string{"{\n  \"landscape\": true\n}\n"}},
+		{"litho/html", "paper-margins-uneven-a3-landscape", fixture.OptionsFile, []string{"{\n  \"paperWidth\": 11.6929,\n  \"paperHeight\": 16.5354,\n  \"landscape\": true,\n  \"marginTop\": 1,\n  \"marginRight\": 0.25,\n  \"marginBottom\": 0.75,\n  \"marginLeft\": 0.5\n}\n"}},
+		{"litho/html", "paper-margins-none-a4-portrait", fixture.OptionsFile, []string{"{\n  \"marginTop\": 0,\n  \"marginRight\": 0,\n  \"marginBottom\": 0,\n  \"marginLeft\": 0\n}\n"}},
+		{"litho/html", "paper-markdown-margins-narrow-landscape", fixture.OptionsFile, []string{"{\n  \"landscape\": true,\n  \"marginTop\": 0.5,\n  \"marginRight\": 0.5,\n  \"marginBottom\": 0.5,\n  \"marginLeft\": 0.5\n}\n"}},
 	}
 	outs := map[string]string{}
 	for _, c := range cases {
@@ -273,7 +292,7 @@ func TestFlatPaperDocsStatePageSetup(t *testing.T) {
 // route accepts, and that two builds write the same bytes.
 func TestFlatPaperDocsLoad(t *testing.T) {
 	t.Parallel()
-	for _, corpus := range []string{"litho/odt", "litho/ods", "litho/odp", "litho/html"} {
+	for _, corpus := range []string{"litho/odt", "litho/ods", "litho/odp", "litho/html", "litho/csv"} {
 		a, b := buildFlatPaperCorpus(t, corpus), buildFlatPaperCorpus(t, corpus)
 		for _, name := range paperDocNames(corpus) {
 			dir := filepath.Join(a, name)
@@ -297,6 +316,93 @@ func TestFlatPaperDocsLoad(t *testing.T) {
 					t.Errorf("%s: %s differs between two builds", name, e.Name())
 				}
 			}
+		}
+	}
+}
+
+// TestPaperDocsMatrix locks the size of the paper matrix and the names of
+// its documents per format: each name matches exactly one row of its
+// corpus, and each row holds the count of documents it states.
+func TestPaperDocsMatrix(t *testing.T) {
+	t.Parallel()
+	const (
+		papers = `(a3|a4|a5|b5|letter|legal|tabloid|executive)`
+		orient = `(portrait|landscape)`
+		sets   = `(none|narrow|uneven)`
+	)
+	type row struct {
+		pattern string
+		count   int
+	}
+	cases := []struct {
+		corpus string
+		rows   []row
+	}{
+		{"litho/docx", []row{
+			{`paper-` + papers + `-` + orient, 16},
+			{`paper-option-` + papers + `-` + orient, 16},
+			{`paper-mixed-(orientation|sizes)`, 2},
+			{`paper-default-portrait`, 1},
+			{`paper-margins-` + sets + `-(a5|letter|a3)-` + orient, 18},
+		}},
+		{"litho/xlsx", []row{
+			{`paper-grid-` + papers + `-` + orient, 16},
+			{`paper-fit-(a5|letter|a3)-` + orient, 6},
+			{`paper-grid-default-` + orient, 2},
+			{`paper-grid-option-` + papers + `-` + orient, 16},
+			{`paper-fit-option-(a5|letter|a3)-` + orient, 6},
+			{`paper-grid-margins-` + sets + `-(a5|letter|a3)-` + orient, 18},
+		}},
+		{"litho/odt", []row{
+			{`paper-` + papers + `-` + orient, 16},
+			{`paper-option-` + papers + `-` + orient, 16},
+			{`paper-mixed-(orientation|sizes)`, 2},
+			{`paper-default-` + orient, 2},
+			{`paper-margins-` + sets + `-(a5|a4|a3)-` + orient, 18},
+		}},
+		{"litho/ods", []row{
+			{`paper-grid-` + papers + `-` + orient, 16},
+			{`paper-fit-(a5|a4|a3)-` + orient, 6},
+			{`paper-grid-default-` + orient, 2},
+			{`paper-grid-option-` + papers + `-` + orient, 16},
+			{`paper-fit-option-(a5|a4|a3)-` + orient, 6},
+			{`paper-grid-margins-` + sets + `-(a5|a4|a3)-` + orient, 18},
+		}},
+		{"litho/csv", []row{
+			{`paper-table-option-` + papers + `-` + orient, 16},
+			{`paper-table-default-landscape`, 1},
+		}},
+		{"litho/html", []row{
+			{`paper-option-` + papers + `-` + orient, 16},
+			{`paper-default-landscape`, 1},
+			{`paper-css-(a5|a4|a3|b5|b4|jis-b5|jis-b4|letter|legal|ledger)-` + orient + `-(prefer|paper)`, 40},
+			{`paper-css-lengths-(narrow|wide)-(prefer|paper)`, 4},
+			{`paper-markdown-` + papers + `-` + orient, 16},
+			{`paper-markdown-default-landscape`, 1},
+			{`paper-margins-` + sets + `-(a5|a4|a3)-` + orient, 18},
+			{`paper-markdown-margins-` + sets + `-` + orient, 6},
+		}},
+		{"litho/pptx", []row{{`paper-deck-[a-z0-9-]+`, 18}}},
+		{"litho/odp", []row{{`paper-deck-[a-z0-9-]+`, 17}}},
+	}
+	for _, c := range cases {
+		names := paperDocNames(c.corpus)
+		total := 0
+		for _, r := range c.rows {
+			re := regexp.MustCompile(`^` + r.pattern + `$`)
+			n := 0
+			for _, name := range names {
+				if re.MatchString(name) {
+					n++
+				}
+			}
+			if n != r.count {
+				t.Errorf("%s: %d documents match %s, want %d", c.corpus, n, r.pattern, r.count)
+			}
+			total += r.count
+		}
+		if len(names) != total {
+			t.Errorf("%s: %d paper documents, want %d", c.corpus, len(names), total)
 		}
 	}
 }

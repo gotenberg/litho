@@ -77,18 +77,74 @@ var paperSizes = []paperSize{
 	{key: "executive", w: 184.15, h: 266.7, code: 7},
 }
 
-// paperSpan are the papers whose layout is drawn and compared through the
-// options and the fitted sheets: the smallest, the references' default and
-// the largest common paper, so a layout that holds on these holds between.
+// The paper each reference engine prints a document on when the document
+// names none, as the fixture names spell it.
 //
-//nolint:gochecknoglobals // static list
-var paperSpan = []string{"a5", "letter", "a3"}
+// # Corpus evidence
+//
+//   - litho/odt paper-default-portrait: the LibreOffice route of
+//     gotenberg/gotenberg:9.4.1 prints a page layout with no fo:page-width or fo:page-height on
+//     A4, 595.3 by 841.9 points.
+//   - litho/csv paper-table: the same route prints a CSV file on A4.
+//   - litho/html paper-base: the corpus posts A4 (210 by 297 mm) to the
+//     Chromium route for a source that names no paper, so Chromium's own
+//     default (Letter) never applies.
+const (
+	// defaultPaperMicrosoft is Letter, the paper of the account that builds
+	// the Microsoft references (fixture.ReferencePaper).
+	defaultPaperMicrosoft = "letter"
+	// defaultPaperLibreOffice is A4: the pinned image leaves LibreOffice's
+	// locale empty.
+	defaultPaperLibreOffice = "a4"
+	// defaultPaperChromium is A4, the paper the corpus posts for a source
+	// without options.json.
+	defaultPaperChromium = "a4"
+)
+
+// paperSpan returns the papers a dimension of the matrix that does not
+// need every paper is laid out on: A5, the smallest, the engine's default
+// paper, and A3, the largest ISO paper. A content box that holds on these
+// holds on the papers between, which add documents and no information.
+func paperSpan(defaultPaper string) []string { return []string{"a5", defaultPaper, "a3"} }
 
 // orientations are the two ways a paper is turned, as fixture names spell
 // them.
 //
 //nolint:gochecknoglobals // static list
 var orientations = []string{"portrait", "landscape"}
+
+// marginSet is a set of page margins the margin documents are laid out
+// with, in inches: the four sides and the distances from the paper's edge
+// to the header and to the footer, which a DOCX section and a sheet state
+// beside their margins.
+type marginSet struct {
+	key                      string
+	top, right, bottom, left float64
+	header, footer           float64
+}
+
+// marginSets are the margins of the margin documents: none at all, a
+// narrow set even on the four sides, and an uneven one whose four sides
+// differ, so a side read for another (top for bottom, left for right)
+// moves the content box. Every side is a whole multiple of a quarter inch,
+// 18 points or 24 CSS pixels, which Chromium lays out exactly (see
+// fixture.Source.Margins), and a whole number of twentieths of a point.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlimport/bnc779620: a section with w:top="0"
+//     prints its first line 2.25 points below the paper's edge in Word's
+//     reference, so Word keeps a zero margin.
+//   - libreoffice/xlsx sc/tdf145054: a sheet with left="0" prints its first
+//     column's text 1.29 points from the paper's edge in Excel's reference,
+//     so Excel keeps a zero margin.
+//
+//nolint:gochecknoglobals // static table
+var marginSets = []marginSet{
+	{key: "none"},
+	{key: "narrow", top: 0.5, right: 0.5, bottom: 0.5, left: 0.5, header: 0.25, footer: 0.25},
+	{key: "uneven", top: 1, right: 0.25, bottom: 0.75, left: 0.5, header: 0.5, footer: 0.25},
+}
 
 // paperByKey returns the paper named key.
 func paperByKey(key string) paperSize {
@@ -152,20 +208,47 @@ func insertPaperBefore(files map[string][]byte, part, anchor string, nth int, te
 // by landscape) and, when ref is set, the fixture whose reference stands
 // for the document's, its keys in a fixed order.
 func paperOptions(p paperSize, landscape bool, ref string) []byte {
-	var b strings.Builder
-	fmt.Fprintf(&b, "{\n  \"paperWidth\": %s,\n  \"paperHeight\": %s", formatInches(p.w), formatInches(p.h))
+	return pageOptions(&p, landscape, nil, ref)
+}
+
+// pageOptions returns an options.json naming paper, nil to leave the
+// corpus's default paper, landscape when it is set, the margins of m, nil
+// for none, and ref under reference_of when it is set, its keys in a fixed
+// order.
+func pageOptions(paper *paperSize, landscape bool, m *marginSet, ref string) []byte {
+	var fields [][2]string
+	if paper != nil {
+		fields = append(fields, [2]string{"paperWidth", formatInches(paper.w)}, [2]string{"paperHeight", formatInches(paper.h)})
+	}
 	if landscape {
-		b.WriteString(",\n  \"landscape\": true")
+		fields = append(fields, [2]string{"landscape", "true"})
+	}
+	if m != nil {
+		fields = append(fields,
+			[2]string{"marginTop", formatFloat(m.top)}, [2]string{"marginRight", formatFloat(m.right)},
+			[2]string{"marginBottom", formatFloat(m.bottom)}, [2]string{"marginLeft", formatFloat(m.left)})
 	}
 	if ref != "" {
-		fmt.Fprintf(&b, ",\n  \"reference_of\": %q", ref)
+		fields = append(fields, [2]string{fixture.ReferenceOfName, strconv.Quote(ref)})
+	}
+	var b strings.Builder
+	b.WriteString("{")
+	for i, f := range fields {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		fmt.Fprintf(&b, "\n  %q: %s", f[0], f[1])
 	}
 	b.WriteString("\n}\n")
 	return []byte(b.String())
 }
 
+// formatFloat spells a number as an options.json or a page setup does: the
+// fewest digits that read back as the same float64.
+func formatFloat(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
+
 // formatInches spells a paper side in inches as an options.json does.
-func formatInches(mm float64) string { return strconv.FormatFloat(inches(mm), 'f', -1, 64) }
+func formatInches(mm float64) string { return formatFloat(inches(mm)) }
 
 // paperDocs returns the paper documents of a corpus, in name order within
 // each group, nil for a corpus without any.
@@ -185,6 +268,8 @@ func paperDocs(corpus string) []paperDoc {
 		return odpPaperDocs()
 	case "litho/html":
 		return htmlPaperDocs()
+	case "litho/csv":
+		return csvPaperDocs()
 	}
 	return nil
 }
@@ -200,11 +285,13 @@ func paperDocNames(corpus string) []string {
 }
 
 // The page setup of the DOCX base, paper-base: one section, portrait
-// Letter, whose sectPr closes the body (ECMA-376 Part 1, 17.6.17).
+// Letter, one-inch margins and half-inch header and footer distances,
+// whose sectPr closes the body (ECMA-376 Part 1, 17.6.17).
 const (
 	docxPaperBase     = "paper-base"
 	docxPaperPart     = "word/document.xml"
 	docxBasePgSz      = `<w:pgSz w:w="12240" w:h="15840"/>`
+	docxBasePgMar     = `<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>`
 	docxHeading1      = `<w:p><w:pPr><w:pStyle w:val="Heading1"/>`
 	docxSectPrOpen    = "<w:sectPr>"
 	docxSectPrClose   = "</w:sectPr>"
@@ -222,10 +309,22 @@ func docxPgSz(p paperSize, landscape bool) string {
 	return fmt.Sprintf(`<w:pgSz w:w="%d" w:h="%d"/>`, w, h)
 }
 
+// docxPgMar returns the pgMar of a margin set (ECMA-376 Part 1, 17.6.11):
+// the four sides and the header and footer distances in twentieths of a
+// point, no gutter.
+func docxPgMar(m marginSet) string {
+	t := func(in float64) int { return twips(in * 25.4) }
+	return fmt.Sprintf(`<w:pgMar w:top="%d" w:right="%d" w:bottom="%d" w:left="%d" w:header="%d" w:footer="%d" w:gutter="0"/>`,
+		t(m.top), t(m.right), t(m.bottom), t(m.left), t(m.header), t(m.footer))
+}
+
 // docxPaperDocs are the DOCX paper documents: paper-base on each paper in
-// each orientation, the base with the paper of [paperSpan] named as an
-// option, borrowing the reference of the document of that paper, and two
-// documents of two sections, the second starting at the second Heading 1.
+// each orientation; the base with each of those papers named as an option,
+// borrowing the reference of the document of that paper; two documents of
+// two sections, the second starting at the second Heading 1; the base with
+// no pgSz, which Word prints on its default paper; and the base with each
+// margin set on the papers of [paperSpan] around Word's default, in each
+// orientation.
 func docxPaperDocs() []paperDoc {
 	var docs []paperDoc
 	for _, p := range paperSizes {
@@ -240,12 +339,12 @@ func docxPaperDocs() []paperDoc {
 			})
 		}
 	}
-	for _, key := range paperSpan {
+	for _, p := range paperSizes {
 		for _, o := range orientations {
 			docs = append(docs, paperDoc{
-				name:    fmt.Sprintf("paper-option-%s-%s", key, o),
+				name:    fmt.Sprintf("paper-option-%s-%s", p.key, o),
 				base:    docxPaperBase,
-				options: paperOptions(paperByKey(key), o == "landscape", fmt.Sprintf("paper-%s-%s", key, o)),
+				options: paperOptions(p, o == "landscape", fmt.Sprintf("paper-%s-%s", p.key, o)),
 			})
 		}
 	}
@@ -253,7 +352,26 @@ func docxPaperDocs() []paperDoc {
 	docs = append(docs,
 		paperDoc{name: "paper-mixed-orientation", base: docxPaperBase, edit: docxTwoSections(docxPgSz(letter, false), docxPgSz(letter, true))},
 		paperDoc{name: "paper-mixed-sizes", base: docxPaperBase, edit: docxTwoSections(docxPgSz(a4, false), docxPgSz(a5, false))},
+		// A sectPr may leave pgSz out (17.6.17): the application then
+		// chooses the paper.
+		paperDoc{name: "paper-default-portrait", base: docxPaperBase, edit: func(files map[string][]byte) error {
+			return replaceOnce(files, docxPaperPart, docxBasePgSz, "")
+		}},
 	)
+	for _, m := range marginSets {
+		for _, key := range paperSpan(defaultPaperMicrosoft) {
+			for _, o := range orientations {
+				setup := docxPgSz(paperByKey(key), o == "landscape") + docxPgMar(m)
+				docs = append(docs, paperDoc{
+					name: fmt.Sprintf("paper-margins-%s-%s-%s", m.key, key, o),
+					base: docxPaperBase,
+					edit: func(files map[string][]byte) error {
+						return replaceOnce(files, docxPaperPart, docxBasePgSz+docxBasePgMar, setup)
+					},
+				})
+			}
+		}
+	}
 	return docs
 }
 
@@ -283,54 +401,118 @@ func docxTwoSections(first, second string) func(map[string][]byte) error {
 }
 
 // The page setup of the XLSX bases: one sheet each, portrait Letter
-// (paperSize 1), paper-fit fitted to one page wide (fitToWidth 1,
-// fitToHeight 0: as many pages down as it needs, ECMA-376 Part 1,
-// 18.3.1.63).
+// (paperSize 1), Excel's default margins, paper-fit fitted to one page wide
+// (fitToWidth 1, fitToHeight 0: as many pages down as it needs, ECMA-376
+// Part 1, 18.3.1.63).
 const (
-	xlsxGridBase      = "paper-grid"
-	xlsxFitBase       = "paper-fit"
-	xlsxPaperPart     = "xl/worksheets/sheet1.xml"
-	xlsxBasePageSetup = `paperSize="1" orientation="portrait"`
+	xlsxGridBase       = "paper-grid"
+	xlsxFitBase        = "paper-fit"
+	xlsxPaperPart      = "xl/worksheets/sheet1.xml"
+	xlsxBasePageSetup  = `paperSize="1" orientation="portrait"`
+	xlsxBasePageMargin = `<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>`
 )
 
+// xlsxPageMargins returns the pageMargins of a margin set (ECMA-376 Part 1,
+// 18.3.1.62), in inches.
+func xlsxPageMargins(m marginSet) string {
+	return fmt.Sprintf(`<pageMargins left="%s" right="%s" top="%s" bottom="%s" header="%s" footer="%s"/>`,
+		formatFloat(m.left), formatFloat(m.right), formatFloat(m.top), formatFloat(m.bottom), formatFloat(m.header), formatFloat(m.footer))
+}
+
 // xlsxPaperDocs are the XLSX paper documents: paper-grid on each paper in
-// each orientation, paper-fit on the papers of [paperSpan] in each, and
-// both bases with those papers named as options, borrowing the reference of
-// the workbook of that paper.
+// each orientation, paper-fit on the papers of [paperSpan] around Excel's
+// default in each, paper-grid with no paperSize in each orientation, which
+// Excel prints on its default paper, paper-grid with each paper and
+// paper-fit with the papers of its span named as options, borrowing the
+// reference of the workbook of that paper, and paper-grid with each margin
+// set on the papers of the span in each orientation.
 func xlsxPaperDocs() []paperDoc {
-	docs := make([]paperDoc, 0, len(orientations)*(len(paperSizes)+3*len(paperSpan)))
-	sheet := func(base string, p paperSize, o string) paperDoc {
-		setup := fmt.Sprintf(`paperSize="%d" orientation="%s"`, p.code, o)
+	span := paperSpan(defaultPaperMicrosoft)
+	var docs []paperDoc
+	sheet := func(base, name, setup, margins string) paperDoc {
 		return paperDoc{
-			name: fmt.Sprintf("%s-%s-%s", base, p.key, o),
+			name: name,
 			base: base,
 			edit: func(files map[string][]byte) error {
-				return replaceOnce(files, xlsxPaperPart, xlsxBasePageSetup, setup)
+				if err := replaceOnce(files, xlsxPaperPart, xlsxBasePageSetup, setup); err != nil {
+					return err
+				}
+				if margins == "" {
+					return nil
+				}
+				return replaceOnce(files, xlsxPaperPart, xlsxBasePageMargin, margins)
 			},
 		}
 	}
+	setup := func(p paperSize, o string) string { return fmt.Sprintf(`paperSize="%d" orientation="%s"`, p.code, o) }
 	for _, p := range paperSizes {
 		for _, o := range orientations {
-			docs = append(docs, sheet(xlsxGridBase, p, o))
+			docs = append(docs, sheet(xlsxGridBase, fmt.Sprintf("%s-%s-%s", xlsxGridBase, p.key, o), setup(p, o), ""))
 		}
 	}
-	for _, key := range paperSpan {
+	for _, key := range span {
 		for _, o := range orientations {
-			docs = append(docs, sheet(xlsxFitBase, paperByKey(key), o))
+			docs = append(docs, sheet(xlsxFitBase, fmt.Sprintf("%s-%s-%s", xlsxFitBase, key, o), setup(paperByKey(key), o), ""))
 		}
 	}
-	for _, base := range []string{xlsxGridBase, xlsxFitBase} {
-		for _, key := range paperSpan {
+	// paperSize is optional (18.3.1.63): a sheet without it prints on the
+	// application's default paper.
+	for _, o := range orientations {
+		docs = append(docs, sheet(xlsxGridBase, fmt.Sprintf("%s-default-%s", xlsxGridBase, o), fmt.Sprintf(`orientation="%s"`, o), ""))
+	}
+	for _, b := range []struct {
+		base   string
+		papers []string
+	}{{xlsxGridBase, paperKeys()}, {xlsxFitBase, span}} {
+		for _, key := range b.papers {
 			for _, o := range orientations {
 				docs = append(docs, paperDoc{
-					name:    fmt.Sprintf("%s-option-%s-%s", base, key, o),
-					base:    base,
-					options: paperOptions(paperByKey(key), o == "landscape", fmt.Sprintf("%s-%s-%s", base, key, o)),
+					name:    fmt.Sprintf("%s-option-%s-%s", b.base, key, o),
+					base:    b.base,
+					options: paperOptions(sheetPaper(paperByKey(key)), o == "landscape", fmt.Sprintf("%s-%s-%s", b.base, key, o)),
 				})
 			}
 		}
 	}
+	for _, m := range marginSets {
+		for _, key := range span {
+			for _, o := range orientations {
+				docs = append(docs, sheet(xlsxGridBase, fmt.Sprintf("%s-margins-%s-%s-%s", xlsxGridBase, m.key, key, o), setup(paperByKey(key), o), xlsxPageMargins(m)))
+			}
+		}
+	}
 	return docs
+}
+
+// jisB5 is the paper Excel prints paperSize code 13 on: JIS B5, 182 by 257
+// mm (see [paperSizes]).
+//
+//nolint:gochecknoglobals // static value
+var jisB5 = paperSize{key: "b5", w: 182, h: 257, code: 13}
+
+// sheetPaper returns the paper a workbook's sheet prints p on: JIS B5 for
+// B5, p for the others. An option fixture names it, so that it asks for
+// the paper of the workbook whose reference it borrows.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx paper-grid-b5-portrait: Excel prints code 13 on 515.88 by
+//     728.52 points, so an option of ISO B5 (498.9 by 708.66) scores 0 on
+//     pages against its reference, whatever the layout.
+func sheetPaper(p paperSize) paperSize {
+	if p.code == jisB5.code {
+		return jisB5
+	}
+	return p
+}
+
+// paperKeys returns the keys of [paperSizes], in their order.
+func paperKeys() []string {
+	keys := make([]string, 0, len(paperSizes))
+	for _, p := range paperSizes {
+		keys = append(keys, p.key)
+	}
+	return keys
 }
 
 // slideSize is a slide size a deck is generated on: its sldSz type
@@ -570,14 +752,17 @@ func flatPaperReferenceJobs(m *Manifest, only []string) []referenceJob {
 // Letter, that the Standard (text) or Default (spreadsheet) master page
 // uses; paper-base also holds pm2, of the master page Second, which no
 // paragraph uses until a mixed document's PartTwo style names it (ODF 1.3
-// Part 3, 16.5 style:page-layout, 16.9 style:master-page-name).
+// Part 3, 16.5 style:page-layout, 16.9 style:master-page-name). The page
+// margins follow the orientation in each page layout.
 const (
 	odfBasePageLayout = `style:name="%s"><style:page-layout-properties fo:page-width="8.5in" fo:page-height="11in" style:print-orientation="portrait"`
 	odtPaperBase      = "paper-base"
 	odtPaperPart      = "paper-base.fodt"
+	odtBaseMargins    = ` fo:margin-top="0.5in" fo:margin-bottom="0.5in" fo:margin-left="1in" fo:margin-right="1in"`
 	odtPartTwo        = `<style:style style:name="PartTwo" style:family="paragraph" style:parent-style-name="Heading_20_1"/>`
 	odsGridPart       = "paper-grid.fods"
 	odsFitPart        = "paper-fit.fods"
+	odsBaseMargins    = ` fo:margin-top="0.75in" fo:margin-bottom="0.75in" fo:margin-left="0.7in" fo:margin-right="0.7in"`
 )
 
 // odfPageLayout returns the start of a page layout named name on paper p,
@@ -590,7 +775,7 @@ func odfPageLayout(name string, p paperSize, landscape bool) string {
 		w, h, o = p.h, p.w, "landscape"
 	}
 	return fmt.Sprintf(`style:name="%s"><style:page-layout-properties fo:page-width="%smm" fo:page-height="%smm" style:print-orientation="%s"`,
-		name, strconv.FormatFloat(w, 'f', -1, 64), strconv.FormatFloat(h, 'f', -1, 64), o)
+		name, formatFloat(w), formatFloat(h), o)
 }
 
 // odfRepaper returns an edit that lays the page layout name of part out on
@@ -601,11 +786,61 @@ func odfRepaper(part, name string, p paperSize, landscape bool) func(map[string]
 	}
 }
 
+// odfMargins returns the page margins of a margin set as a page layout
+// states them, fo:margin-top, -bottom, -left and -right (ODF 1.3 Part 3,
+// 17.2 style:page-layout-properties). The set's header and footer distances
+// have no counterpart: an OpenDocument header lies inside the page margins,
+// its height and spacing taken from the body (17.4
+// style:header-footer-properties), so a margin document keeps the base's
+// header and footer styles.
+func odfMargins(m marginSet) string {
+	return fmt.Sprintf(` fo:margin-top="%sin" fo:margin-bottom="%sin" fo:margin-left="%sin" fo:margin-right="%sin"`,
+		formatFloat(m.top), formatFloat(m.bottom), formatFloat(m.left), formatFloat(m.right))
+}
+
+// odfRemargin returns an edit that lays the page layout pm1 of part out on
+// p, turned by landscape, with the margins of m in place of base's.
+func odfRemargin(part, base string, p paperSize, landscape bool, m marginSet) func(map[string][]byte) error {
+	return func(files map[string][]byte) error {
+		layout := odfPageLayout("pm1", p, landscape)
+		if err := odfRepaper(part, "pm1", p, landscape)(files); err != nil {
+			return err
+		}
+		return replaceOnce(files, part, layout+base, layout+odfMargins(m))
+	}
+}
+
+// odfUnpaper returns an edit that drops fo:page-width and fo:page-height
+// from the page layout pm1 of part, keeping its orientation, turned by
+// landscape: both are optional attributes of
+// style:page-layout-properties (ODF 1.3 Part 3, 17.2), so the application
+// chooses the paper.
+//
+// # Corpus evidence
+//
+//   - litho/odt paper-default-landscape and litho/ods
+//     paper-grid-default-landscape: the LibreOffice route of
+//     gotenberg/gotenberg:9.4.1 prints them on A4 portrait, as the
+//     portrait documents: an orientation without a size turns nothing.
+func odfUnpaper(part string, landscape bool) func(map[string][]byte) error {
+	o := "portrait"
+	if landscape {
+		o = "landscape"
+	}
+	return func(files map[string][]byte) error {
+		return replaceOnce(files, part, fmt.Sprintf(odfBasePageLayout, "pm1"),
+			`style:name="pm1"><style:page-layout-properties style:print-orientation="`+o+`"`)
+	}
+}
+
 // odtPaperDocs are the ODT paper documents: paper-base on each paper in
-// each orientation, the base with the papers of [paperSpan] named as
-// options, and two documents of two page styles, the second from the
-// second Heading 1. The LibreOffice route takes the options, so an option
-// fixture has a reference of its own.
+// each orientation, the base with each of those papers named as options,
+// two documents of two page styles, the second from the second Heading 1,
+// the base with no paper in each orientation, which LibreOffice prints on
+// its default paper, and the base with each margin set on the papers of
+// [paperSpan] around LibreOffice's default in each orientation. The
+// LibreOffice route takes the options, so an option fixture has a
+// reference of its own.
 func odtPaperDocs() []paperDoc {
 	var docs []paperDoc
 	for _, p := range paperSizes {
@@ -617,12 +852,12 @@ func odtPaperDocs() []paperDoc {
 			})
 		}
 	}
-	for _, key := range paperSpan {
+	for _, p := range paperSizes {
 		for _, o := range orientations {
 			docs = append(docs, paperDoc{
-				name:    fmt.Sprintf("paper-option-%s-%s", key, o),
+				name:    fmt.Sprintf("paper-option-%s-%s", p.key, o),
 				base:    odtPaperBase,
-				options: paperOptions(paperByKey(key), o == "landscape", ""),
+				options: paperOptions(p, o == "landscape", ""),
 			})
 		}
 	}
@@ -638,35 +873,68 @@ func odtPaperDocs() []paperDoc {
 		}
 	}
 	letter, a4, a5 := paperByKey("letter"), paperByKey("a4"), paperByKey("a5")
-	return append(docs,
+	docs = append(docs,
 		paperDoc{name: "paper-mixed-orientation", base: odtPaperBase, edit: twoStyles(letter, letter, true)},
 		paperDoc{name: "paper-mixed-sizes", base: odtPaperBase, edit: twoStyles(a4, a5, false)},
 	)
+	for _, o := range orientations {
+		docs = append(docs, paperDoc{name: "paper-default-" + o, base: odtPaperBase, edit: odfUnpaper(odtPaperPart, o == "landscape")})
+	}
+	for _, m := range marginSets {
+		for _, key := range paperSpan(defaultPaperLibreOffice) {
+			for _, o := range orientations {
+				docs = append(docs, paperDoc{
+					name: fmt.Sprintf("paper-margins-%s-%s-%s", m.key, key, o),
+					base: odtPaperBase,
+					edit: odfRemargin(odtPaperPart, odtBaseMargins, paperByKey(key), o == "landscape", m),
+				})
+			}
+		}
+	}
+	return docs
 }
 
 // odsPaperDocs are the ODS paper documents, as [xlsxPaperDocs] makes the
-// XLSX ones, the option fixtures with references of their own. paper-fit
-// is fitted to one page wide (style:scale-to-X 1, style:scale-to-Y 0).
+// XLSX ones on LibreOffice's default paper rather than Excel's, the option
+// fixtures with references of their own. paper-fit is fitted to one page
+// wide (style:scale-to-X 1, style:scale-to-Y 0).
 func odsPaperDocs() []paperDoc {
-	docs := make([]paperDoc, 0, len(orientations)*(len(paperSizes)+3*len(paperSpan)))
-	bases := []struct{ name, part string }{{xlsxGridBase, odsGridPart}, {xlsxFitBase, odsFitPart}}
+	span := paperSpan(defaultPaperLibreOffice)
+	var docs []paperDoc
 	for _, p := range paperSizes {
 		for _, o := range orientations {
 			docs = append(docs, paperDoc{name: fmt.Sprintf("%s-%s-%s", xlsxGridBase, p.key, o), base: xlsxGridBase, edit: odfRepaper(odsGridPart, "pm1", p, o == "landscape")})
 		}
 	}
-	for _, key := range paperSpan {
+	for _, key := range span {
 		for _, o := range orientations {
 			docs = append(docs, paperDoc{name: fmt.Sprintf("%s-%s-%s", xlsxFitBase, key, o), base: xlsxFitBase, edit: odfRepaper(odsFitPart, "pm1", paperByKey(key), o == "landscape")})
 		}
 	}
-	for _, b := range bases {
-		for _, key := range paperSpan {
+	for _, o := range orientations {
+		docs = append(docs, paperDoc{name: fmt.Sprintf("%s-default-%s", xlsxGridBase, o), base: xlsxGridBase, edit: odfUnpaper(odsGridPart, o == "landscape")})
+	}
+	for _, b := range []struct {
+		base   string
+		papers []string
+	}{{xlsxGridBase, paperKeys()}, {xlsxFitBase, span}} {
+		for _, key := range b.papers {
 			for _, o := range orientations {
 				docs = append(docs, paperDoc{
-					name:    fmt.Sprintf("%s-option-%s-%s", b.name, key, o),
-					base:    b.name,
+					name:    fmt.Sprintf("%s-option-%s-%s", b.base, key, o),
+					base:    b.base,
 					options: paperOptions(paperByKey(key), o == "landscape", ""),
+				})
+			}
+		}
+	}
+	for _, m := range marginSets {
+		for _, key := range span {
+			for _, o := range orientations {
+				docs = append(docs, paperDoc{
+					name: fmt.Sprintf("%s-margins-%s-%s-%s", xlsxGridBase, m.key, key, o),
+					base: xlsxGridBase,
+					edit: odfRemargin(odsGridPart, odsBaseMargins, paperByKey(key), o == "landscape", m),
 				})
 			}
 		}
@@ -763,10 +1031,16 @@ const (
 
 // htmlPaperDocs are the HTML and Markdown paper documents: paper-base on
 // each paper in each orientation through the route's paperWidth,
-// paperHeight and landscape; paper-base with an @page size of each keyword,
-// with and without landscape, and of two sizes in lengths, each once with
-// preferCssPageSize and once without; and paper-markdown on the papers of
-// [paperSpan].
+// paperHeight and landscape, and on the corpus's default paper turned by
+// landscape alone; paper-base with an @page size of each keyword, with and
+// without landscape, and of two sizes in lengths, each once with
+// preferCssPageSize and once without; paper-markdown alike on each paper
+// and on the default one turned; paper-base with each margin set, through
+// marginTop and its siblings, on the papers of [paperSpan] around the
+// corpus's default, which it leaves out of the options, in each
+// orientation; and paper-markdown with each margin set on the default
+// paper in each orientation, since Markdown reaches the page through the
+// same layout as HTML.
 func htmlPaperDocs() []paperDoc {
 	var docs []paperDoc
 	for _, p := range paperSizes {
@@ -778,6 +1052,7 @@ func htmlPaperDocs() []paperDoc {
 			})
 		}
 	}
+	docs = append(docs, paperDoc{name: "paper-default-landscape", base: htmlPaperBase, options: pageOptions(nil, true, nil, "")})
 	css := func(key, size string) {
 		rule := "@page { size: " + size + "; }"
 		for _, prefer := range []bool{true, false} {
@@ -803,12 +1078,65 @@ func htmlPaperDocs() []paperDoc {
 	for _, l := range cssLengthSizes {
 		css(l.key, l.size)
 	}
-	for _, key := range paperSpan {
-		docs = append(docs, paperDoc{
-			name:    "paper-markdown-" + key,
-			base:    markdownPaperBase,
-			options: paperOptions(paperByKey(key), false, ""),
-		})
+	for _, p := range paperSizes {
+		for _, o := range orientations {
+			docs = append(docs, paperDoc{
+				name:    fmt.Sprintf("paper-markdown-%s-%s", p.key, o),
+				base:    markdownPaperBase,
+				options: paperOptions(p, o == "landscape", ""),
+			})
+		}
+	}
+	docs = append(docs, paperDoc{name: "paper-markdown-default-landscape", base: markdownPaperBase, options: pageOptions(nil, true, nil, "")})
+	for _, m := range marginSets {
+		for _, key := range paperSpan(defaultPaperChromium) {
+			var paper *paperSize
+			if key != defaultPaperChromium {
+				p := paperByKey(key)
+				paper = &p
+			}
+			for _, o := range orientations {
+				docs = append(docs, paperDoc{
+					name:    fmt.Sprintf("paper-margins-%s-%s-%s", m.key, key, o),
+					base:    htmlPaperBase,
+					options: pageOptions(paper, o == "landscape", &m, ""),
+				})
+			}
+		}
+	}
+	for _, m := range marginSets {
+		for _, o := range orientations {
+			docs = append(docs, paperDoc{
+				name:    fmt.Sprintf("paper-markdown-margins-%s-%s", m.key, o),
+				base:    markdownPaperBase,
+				options: pageOptions(nil, o == "landscape", &m, ""),
+			})
+		}
 	}
 	return docs
+}
+
+// The CSV base, paper-table: the cells of paper-grid, 20 columns by 130
+// rows, as a CSV file, which names no paper.
+const csvPaperBase = "paper-table"
+
+// csvPaperDocs are the CSV paper documents: paper-table with each paper
+// named as options in each orientation, and on the default paper turned by
+// landscape alone. A CSV file states no page setup (RFC 4180 defines
+// records and fields alone), so it has no paper documents of its own and no
+// margins, and the LibreOffice route has no margin field: the options are
+// the only paper a CSV conversion takes, and the LibreOffice route takes
+// them, so each option fixture has a reference of its own.
+func csvPaperDocs() []paperDoc {
+	var docs []paperDoc
+	for _, p := range paperSizes {
+		for _, o := range orientations {
+			docs = append(docs, paperDoc{
+				name:    fmt.Sprintf("%s-option-%s-%s", csvPaperBase, p.key, o),
+				base:    csvPaperBase,
+				options: paperOptions(p, o == "landscape", ""),
+			})
+		}
+	}
+	return append(docs, paperDoc{name: csvPaperBase + "-default-landscape", base: csvPaperBase, options: pageOptions(nil, true, nil, "")})
 }
