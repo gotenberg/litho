@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
@@ -544,7 +545,7 @@ func viewBoxOf(el *odf.Element) compose.Rect {
 	var v [4]float64
 	for i, x := range f {
 		n, err := strconv.ParseFloat(x, 64)
-		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) || math.Abs(n) > maxViewBox {
+		if err != nil || !numeric.Finite(n) || math.Abs(n) > maxViewBox {
 			return compose.Rect{}
 		}
 		v[i] = n

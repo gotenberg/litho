@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 )
 
@@ -118,7 +119,7 @@ func parseTransform(s string) (matrix, bool, bool) {
 				}
 			}
 			v, err := strconv.ParseFloat(args[i], 64)
-			if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > maxTransformValue {
+			if err != nil || !numeric.Finite(v) || math.Abs(v) > maxTransformValue {
 				return 0, false
 			}
 			return v, true
