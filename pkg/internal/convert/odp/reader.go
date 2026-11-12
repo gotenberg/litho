@@ -3,7 +3,7 @@ package odp
 import (
 	"context"
 	"fmt"
-	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -315,16 +315,37 @@ func (r *reader) notesMaster(doc *slides.Document, mp *odf.MasterPage) {
 	doc.NotesShapes = r.shapeList(decorations, pc, 0)
 }
 
-// defaultPageName matches the names Impress writes for a page the user
-// did not name, "page1": it shows such a page as "Slide 1" (sd's API
-// names, "page" and the number).
-var defaultPageName = regexp.MustCompile(`^page[0-9]+$`)
+// defaultSlidePrefix starts the name Impress shows for a page the user did
+// not name, "Slide" and the page's position.
+const defaultSlidePrefix = "Slide "
 
-// slideName returns the name of the n-th slide: its draw:name, "Slide n"
-// for none or for a default one.
+// slideName returns the name Impress shows for the n-th slide, named name
+// in the file: "Slide n" for no name, for "page" and the number n, which
+// is how Impress stores a page the user did not name (sd's API names), and
+// for any name that starts with "Slide ", which Impress takes for one it
+// showed and numbers again; else the name.
+//
+// # Corpus evidence
+//
+//   - probe, odp: the bookmarks of the pinned LibreOffice for a deck of
+//     pages named on purpose. "page4" in fourth place and "page08" in
+//     eighth read "Slide 4" and "Slide 8"; "page7" in first place,
+//     "page13" in fifteenth and "page12x" keep their names. "Slide 9" in
+//     second place, "Slide x", "Slide 07" and "Slide 10 end" read "Slide"
+//     and their position. "Slides", "Slide", "slide 2" and "Page 12" keep
+//     their names.
 func slideName(name string, n int) string {
-	if name == "" || defaultPageName.MatchString(name) {
-		return fmt.Sprintf("Slide %d", n)
+	shown := fmt.Sprintf("%s%d", defaultSlidePrefix, n)
+	if name == "" || strings.HasPrefix(name, defaultSlidePrefix) {
+		return shown
+	}
+	digits, ok := strings.CutPrefix(name, "page")
+	if !ok || digits == "" || strings.Trim(digits, "0123456789") != "" {
+		return name
+	}
+	// A number past int's range names no position.
+	if v, err := strconv.Atoi(digits); err == nil && v == n {
+		return shown
 	}
 	return name
 }
