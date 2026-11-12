@@ -45,6 +45,8 @@ type pendingWarning struct {
 // engine is the state of one [Layout] call. It is never shared between
 // goroutines.
 type engine struct {
+	// ctx is the context of the [Layout] call, which the engine does not
+	// outlive.
 	ctx   context.Context
 	fonts *text.Fonts
 	opts  Options

@@ -152,12 +152,12 @@ func contentHeightBounds(b *box, h, content float64) float64 {
 	return h
 }
 
-// keywordIntrinsic applies the sizing keywords of b's computed width,
-// min-width and max-width to the min- and max-content widths lo and hi
-// of its content box (CSS Sizing 3, 5.2): min-content and max-content
-// take that width of the content; fit-content and stretch behave as
-// auto, the intrinsic contributions being made under a min- or
-// max-content constraint.
+// keywordIntrinsic applies the sizing keywords of the computed width,
+// min-width and max-width of st to the min- and max-content widths lo and
+// hi of a content box, whose content alone takes clo and chi (CSS Sizing
+// 3, 5.2): min-content and max-content take that width of the content;
+// fit-content and stretch behave as auto, the intrinsic contributions
+// being made under a min- or max-content constraint.
 func keywordIntrinsic(st *css.Style, lo, hi, clo, chi float64) (float64, float64) {
 	switch st.Width.Kind { //nolint:exhaustive // the other kinds are handled by the caller
 	case css.MinContent:

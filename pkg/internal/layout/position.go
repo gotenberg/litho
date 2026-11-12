@@ -493,8 +493,8 @@ func (e *engine) absContent(b *box, ccb cblock, h float64, hSet bool) {
 
 // transformOf returns the matrix the transform of b maps flow coordinates
 // with, about its origin in the border box r (CSS Transforms 1, 6 and 13),
-// and false for a box without a transform or with a singular one, which
-// paints nothing.
+// whether b has a transform, and false for a singular one, which paints
+// nothing. A box without a transform takes the identity.
 func transformOf(b *box, r compose.Rect) (compose.Matrix, bool, bool) {
 	if !b.transformed() {
 		return compose.Identity, false, true

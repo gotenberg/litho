@@ -33,7 +33,7 @@ type link struct {
 	elem *compose.StructElem
 	// node is the node the Href sits on.
 	node *Node
-	// contents caches [link.describe], described its being set.
+	// contents caches [link.describe], and described reports it is set.
 	contents  string
 	described bool
 }

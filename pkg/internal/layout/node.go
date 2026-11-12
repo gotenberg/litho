@@ -65,6 +65,7 @@ const MaxVectorDepth = 5
 
 // Node is one node of the content tree.
 type Node struct {
+	// Kind says what the node is.
 	Kind Kind
 	// Style is the node's computed style. It is set on every node: a Text or
 	// LineBreak node shares its parent's, a Replaced node carries its own
@@ -242,6 +243,7 @@ type PageInfo struct {
 
 // PageBox is a page's size and margins in points.
 type PageBox struct {
+	// Width and Height are the page box's size in points.
 	Width, Height float64
 	// Margin is indexed by [css.Side].
 	Margin [4]float64

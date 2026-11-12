@@ -41,6 +41,7 @@
 // of the flow adds pages, as Chromium paginates it. WeasyPrint keeps such
 // a box on the page it starts on and drops what overflows it; its
 // references disagree there.
+//
 // [Options.MarginContent] paints each page's margins, the page-margin
 // boxes, under the page area's content.
 //
@@ -138,6 +139,7 @@
 // the margins (CSS Sizing 3, 3; CSS Sizing 4, 3.1), when a box is laid out;
 // in the block axis they size as auto, and bound min-height and max-height
 // to the content height.
+//
 // # Multi-column layout
 //
 // A multi-column container lays its content out in columns (CSS Multicol

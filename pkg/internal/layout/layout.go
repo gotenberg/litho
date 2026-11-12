@@ -661,7 +661,7 @@ func (e *engine) resolveLink(pl pendingLink) (compose.Link, bool) {
 }
 
 // dropPrunedDests clears the element of every anchor and link destination
-// of res that [prune] dropped from the tree under root: the destination keeps
+// of res that [compose.PruneTree] dropped from the tree under root: the destination keeps
 // its page position alone.
 func dropPrunedDests(root *compose.StructElem, res *Result) {
 	kept := map[*compose.StructElem]bool{}
