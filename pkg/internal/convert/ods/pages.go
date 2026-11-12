@@ -272,6 +272,12 @@ func (r *reader) regions(el *odf.Element) [3][]sheet.Span {
 // guard, not spec-mandated.
 const maxSpans = 256
 
+// maxPartText bounds the bytes of text one header or footer part holds:
+// [maxCellText]. Anti-DoS guard, not spec-mandated: a part holds a line or
+// two, and each text:s asks for up to [maxSpaces] spaces, so a small file
+// would otherwise ask for gigabytes.
+const maxPartText = maxCellText
+
 // spans reads the paragraphs of a header or footer part: the text, the
 // spans with their fonts (the styles.xml text styles), and the fields
 // (ODF 1.3, Part 3, 7.3 and 7.5) a header shows.
@@ -286,10 +292,12 @@ func (r *reader) spans(el *odf.Element) []sheet.Span {
 			out[n-1].Text = tail.String()
 		}
 	}
+	size := 0
 	add := func(s sheet.Span) {
-		if len(out) >= maxSpans {
+		if len(out) >= maxSpans || size+len(s.Text) > maxPartText {
 			return
 		}
+		size += len(s.Text)
 		if n := len(out); n > 0 && s.Field == sheet.FieldNone && out[n-1].Field == sheet.FieldNone && out[n-1].Font == s.Font {
 			tail.WriteString(s.Text)
 			return

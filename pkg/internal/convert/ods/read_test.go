@@ -516,7 +516,25 @@ func TestRead_HeaderOfManySpaces(t *testing.T) {
 		t.Fatal(res.err)
 	}
 	spans := res.doc.Sheets[0].HeaderFooter.Odd.Header[1]
-	if len(spans) != 1 || spans[0].Text != strings.Repeat(" ", n) {
-		t.Errorf("%d spans, want one of %d spaces", len(spans), n)
+	if len(spans) != 1 || spans[0].Text != strings.Repeat(" ", min(n, maxPartText)) {
+		t.Errorf("%d spans, want one of %d spaces", len(spans), min(n, maxPartText))
+	}
+}
+
+// TestRead_HeaderTextCap locks the bound on a header part's text: spaces
+// past [maxPartText] bytes are left out.
+func TestRead_HeaderTextCap(t *testing.T) {
+	f := flat{
+		auto:   `<style:style style:name="ta1" style:family="table" style:master-page-name="Long"/>`,
+		master: `<style:master-page style:name="Long"><style:header><text:p>a` + strings.Repeat(`<text:s text:c="1024"/>`, 2000) + `</text:p></style:header></style:master-page>`,
+		body:   `<table:table table:name="S" table:style-name="ta1"/>`,
+	}
+	doc, _ := read(t, f.bytes())
+	n := 0
+	for _, s := range doc.Sheets[0].HeaderFooter.Odd.Header[1] {
+		n += len(s.Text)
+	}
+	if n == 0 || n > maxPartText {
+		t.Errorf("%d bytes of header text, want at most %d", n, maxPartText)
 	}
 }
