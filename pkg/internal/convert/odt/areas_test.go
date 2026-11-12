@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -362,27 +363,37 @@ func TestConvert_TableOfContentsRegenerated(t *testing.T) {
 	}
 }
 
-// TestConvert_TextAlignStartEndAreAbsolute prints start at the left and
-// end at the right in either writing mode, as Writer does.
+// TestConvert_TextAlignStartEnd prints start and end by the writing
+// mode in a document no LibreOffice wrote, start on the right of a
+// right-to-left paragraph, and at the left and right margins in either
+// writing mode in one LibreOffice wrote.
 //
 // # Corpus evidence
 //
-//   - probe, odt: LibreOffice prints start at 56.7pt and end at the right
-//     margin in both writing modes.
-func TestConvert_TextAlignStartEndAreAbsolute(t *testing.T) {
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, right-to-left
+//     paragraphs print start at the right margin and end at the left one
+//     under no generator, start at the left margin and end at the right
+//     one under LibreOffice 7.6; left-to-right ones start at the left
+//     margin under both.
+func TestConvert_TextAlignStartEnd(t *testing.T) {
 	margin := 2 * 72 / 2.54
+	const lo = `<meta:generator>LibreOffice/7.6.4.1$Linux_X86_64 LibreOffice_project/e19e193f88cd6c0525a17fb7a176ed8e6a3e2aa1</meta:generator>`
 	for _, tc := range []struct {
-		align, mode string
-		left        bool
+		align, mode, meta string
+		left              bool
 	}{
-		{"start", "lr-tb", true},
-		{"end", "lr-tb", false},
-		{"start", "rl-tb", true},
-		{"end", "rl-tb", false},
+		{"start", "lr-tb", "", true},
+		{"end", "lr-tb", "", false},
+		{"start", "rl-tb", "", false},
+		{"end", "rl-tb", "", true},
+		{"start", "lr-tb", lo, true},
+		{"end", "lr-tb", lo, false},
+		{"start", "rl-tb", lo, true},
+		{"end", "rl-tb", lo, false},
 	} {
-		t.Run(tc.align+" "+tc.mode, func(t *testing.T) {
+		t.Run(tc.align+" "+tc.mode+" "+strconv.FormatBool(tc.meta != ""), func(t *testing.T) {
 			auto := `<style:style style:name="A" style:family="paragraph"><style:paragraph-properties fo:text-align="` + tc.align + `" style:writing-mode="` + tc.mode + `"/></style:style>`
-			rs := runs(convertDoc(t, doc{contentAuto: auto, body: `<text:p text:style-name="A">xx</text:p>`}.pack(t), office.Options{}).Pages[0])
+			rs := runs(convertDoc(t, doc{contentAuto: auto, meta: tc.meta, body: `<text:p text:style-name="A">xx</text:p>`}.pack(t), office.Options{}).Pages[0])
 			if len(rs) == 0 {
 				t.Fatal("no text")
 			}
@@ -391,6 +402,44 @@ func TestConvert_TextAlignStartEndAreAbsolute(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestConvert_RightToLeftMargins checks that a right-to-left paragraph
+// takes fo:margin-left on its right and fo:margin-right on its left, its
+// first line indented on the right.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a right-to-left
+//     paragraph of fo:margin-left 50 mm, fo:margin-right 10 mm and
+//     fo:text-indent 20 mm aligned left starts its lines 10 mm right of
+//     the left margin and ends its first one 70 mm left of the right one.
+func TestConvert_RightToLeftMargins(t *testing.T) {
+	auto := `<style:style style:name="A" style:family="paragraph"><style:paragraph-properties fo:text-align="right" style:writing-mode="rl-tb" ` +
+		`fo:margin-left="50mm" fo:margin-right="10mm" fo:text-indent="20mm"/></style:style>` +
+		`<style:style style:name="B" style:family="paragraph"><style:paragraph-properties fo:text-align="left" style:writing-mode="rl-tb" ` +
+		`fo:margin-left="50mm" fo:margin-right="10mm"/></style:style>`
+	pg := convertDoc(t, doc{contentAuto: auto, body: `<text:p text:style-name="A">xx</text:p><text:p text:style-name="B">xx</text:p>`}.pack(t), office.Options{}).Pages[0]
+	rs := runs(pg)
+	if len(rs) != 2 {
+		t.Fatalf("runs = %+v, want 2", rs)
+	}
+	mm := 72 / 25.4
+	right := 210*mm - 20*mm
+	if end := rs[0].x + measureXX(t, rs[0]); !near(end, right-70*mm, 0.5) {
+		t.Errorf("first line ends at %.2f, want %.2f", end, right-70*mm)
+	}
+	if !near(rs[1].x, 30*mm, 0.5) {
+		t.Errorf("left-aligned line starts at %.2f, want %.2f", rs[1].x, 30*mm)
+	}
+}
+
+// measureXX returns the width of the run r of "xx" in Liberation Serif,
+// from its glyphs' advance.
+func measureXX(t *testing.T, r run) float64 {
+	t.Helper()
+	// Liberation Serif's x is 0.5 em wide.
+	return 2 * 0.5 * r.size
 }
 
 // TestConvert_FrameCentredOnParagraph puts a frame anchored to its
@@ -613,5 +662,46 @@ func TestConvert_ListOfSuffixesIsUnordered(t *testing.T) {
 	})
 	if want := []typeset.ListNumbering{typeset.NumberingUnordered, typeset.NumberingNone}; !slices.Equal(got, want) {
 		t.Errorf("numberings %v, want %v", got, want)
+	}
+}
+
+// TestConvert_RightToLeftListLabel checks that the label of a
+// right-to-left list item sits right of its text, from the first line's
+// start, 4 mm left of the right margin, its text ending on the list tab,
+// the list's indent counted from the right.
+//
+// # Corpus evidence
+//
+//   - litho/odt: ar-rtl prints the labels of its right-to-left list of
+//     fo:margin-left 10 mm, fo:text-indent -6 mm and a list tab at 10 mm
+//     at 527.3 points, their text ending at 510.3.
+func TestConvert_RightToLeftListLabel(t *testing.T) {
+	auto := `<text:list-style style:name="L"><text:list-level-style-number text:level="1" style:num-format="1" style:num-suffix=".">` +
+		`<style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="listtab" ` +
+		`text:list-tab-stop-position="10mm" fo:text-indent="-6mm" fo:margin-left="10mm"/></style:list-level-properties></text:list-level-style-number></text:list-style>` +
+		`<style:style style:name="R" style:family="paragraph" style:list-style-name="L"><style:paragraph-properties style:writing-mode="rl-tb"/></style:style>`
+	body := `<text:list text:style-name="L"><text:list-item><text:p text:style-name="R">abc</text:p></text:list-item></text:list>`
+	rs := runs(convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{}).Pages[0])
+	mm := 72 / 25.4
+	right := 190 * mm
+	var label, txt *run
+	for i := range rs {
+		switch {
+		case strings.Contains(rs[i].text, "1"):
+			label = &rs[i]
+		case strings.Contains(rs[i].text, "abc"):
+			txt = &rs[i]
+		}
+	}
+	if label == nil || txt == nil {
+		t.Fatalf("runs = %+v", rs)
+	}
+	if label.x <= txt.x || label.x < right-10*mm || label.x > right-4*mm {
+		t.Errorf("label at x %.2f, text at %.2f, want the label right of the text, between %.2f and %.2f", label.x, txt.x, right-10*mm, right-4*mm)
+	}
+	// "abc" in Liberation Serif 12 is 16.65 points wide: its end sits on
+	// the list tab, 10 mm from the right margin.
+	if end := txt.x + 16.65; !near(end, right-10*mm, 0.5) {
+		t.Errorf("text ends at %.2f, want %.2f", end, right-10*mm)
 	}
 }

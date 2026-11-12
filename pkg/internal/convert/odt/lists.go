@@ -416,16 +416,22 @@ func (item *itemCtx) attach(b *builder, n *layout.Node, t textState) {
 			// listtab: the text starts at the list tab stop, else at the
 			// paragraph's indent; the label sits from the first line's
 			// start (margin plus text indent) in a box that reaches it.
-			ml := st.Margin[css.Left].Value
-			start := ml + st.TextIndent.Value
+			// The start margin of a right-to-left paragraph is its
+			// right one.
+			start := css.Left
+			if st.Direction == css.RTL {
+				start = css.Right
+			}
+			ml := st.Margin[start].Value
+			first := ml + st.TextIndent.Value
 			stop := ml
 			if v, ok := odf.Length(lp.Get("text:list-tab-stop-position")); ok && lp.Get("text:label-followed-by") == "listtab" {
 				stop = v
 			}
-			if stop <= start {
+			if stop <= first {
 				stop = ml
 			}
-			if end := start + b.textWidth(label, mst); end > stop {
+			if end := first + b.textWidth(label, mst); end > stop {
 				// A label past the list tab stop pushes the text to the
 				// next default tab stop, counted from the indent, as
 				// Writer does.
@@ -441,13 +447,13 @@ func (item *itemCtx) attach(b *builder, n *layout.Node, t textState) {
 				st.TextIndent = css.Pts(0)
 			}
 			st.ListStylePosition = css.Outside
-			mst.Width = css.Pts(max(stop-start, 0))
+			mst.Width = css.Pts(max(stop-first, 0))
 			if stop > ml && align == css.AlignStart {
 				// The label box ends on the content edge: a label that
 				// starts before it begins at the first line's start, and
 				// one at or past it begins on it, the text indent moving
 				// the text on, as Writer sets a label wider than the gap.
-				mst.Width = css.Pts(max(ml-start, 0))
+				mst.Width = css.Pts(max(ml-first, 0))
 			}
 		}
 	} else {

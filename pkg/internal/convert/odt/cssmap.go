@@ -283,35 +283,62 @@ func (b *builder) lineRule(st *css.Style, p paraState, t textState) {
 }
 
 // textAligns maps fo:text-align (ODF 1.3, Part 3, 20.216; XSL 1.0, 7.16.9)
-// to css. Writer reads start as left and end as right whatever the
-// paragraph's writing mode, where XSL makes them relative to it: a
-// right-to-left paragraph aligned end prints on the right.
+// to css: start and end follow the paragraph's writing mode, start the
+// right edge of a right-to-left paragraph, and a paragraph that sets no
+// alignment is aligned start. A document LibreOffice or OpenOffice.org
+// wrote reads start and end as left and right ([odf.AbsoluteStartEnd]).
 //
 // # Corpus evidence
 //
-//   - libreoffice/odt: odfexport/tdf131812.odt: start and left print at
-//     the left margin, end and right at the right one.
-//   - probe, odt: every value in lr-tb and rl-tb paragraphs: start and
-//     left print at the left margin, end and right at the right one, in
-//     both writing modes.
+//   - libreoffice/odt: odfexport/tdf131812.odt, written by LibreOfficeDev
+//     7.0: start and left print at the left margin, end and right at the
+//     right one.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a document naming no
+//     generator prints right-to-left paragraphs aligned start, and those
+//     that set no alignment, at the right margin, aligned end at the left
+//     one, left, right and center as they say.
 var textAligns = map[string]css.TextAlign{
-	"start": css.AlignLeft, "end": css.AlignRight, "left": css.AlignLeft,
+	"start": css.AlignStart, "end": css.AlignEnd, "left": css.AlignLeft,
 	"right": css.AlignRight, "center": css.AlignCenter, "justify": css.AlignJustify,
 }
 
+// absoluteAligns are [textAligns]'s start and end in a document that
+// reads them as left and right.
+var absoluteAligns = map[string]css.TextAlign{"start": css.AlignLeft, "end": css.AlignRight}
+
 // applyPara sets the paragraph properties p gives on the block st, whose
-// text properties t are already set.
+// text properties t are already set. A right-to-left paragraph runs
+// right to left with its margins mirrored.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a right-to-left
+//     paragraph of fo:margin-left 50 mm, fo:margin-right 10 mm and
+//     fo:text-indent 20 mm sets its lines 50 mm from the right margin and
+//     10 mm from the left one, its first line indented on the right; its
+//     fo:padding-left and fo:border-left stay on the left, under no
+//     generator and under LibreOffice 7.6 alike.
 func (b *builder) applyPara(st *css.Style, p paraState, t textState) {
 	st.Display = css.Block
+	rtl := strings.HasPrefix(p.writing, "rl")
 	for i := range st.Margin {
 		st.Margin[i] = css.Pts(p.margin[i])
 		st.Padding[i] = css.Pts(p.padding[i])
+	}
+	if rtl {
+		// Writer gives fo:margin-left to the start of a right-to-left
+		// paragraph, its right, and fo:margin-right to its left, its
+		// padding and borders staying where they are.
+		st.Margin[css.Left], st.Margin[css.Right] = st.Margin[css.Right], st.Margin[css.Left]
 	}
 	st.Border = p.border
 	strokeBorders(st)
 	st.TextIndent = css.Pts(p.indent)
 	if a, ok := textAligns[p.align]; ok {
 		st.TextAlign = a
+		if a, ok := absoluteAligns[p.align]; ok && b.absoluteAlign {
+			st.TextAlign = a
+		}
 	}
 	st.TextAlignLast = css.AlignAuto
 	if st.TextAlign == css.AlignJustify {
@@ -352,7 +379,7 @@ func (b *builder) applyPara(st *css.Style, p paraState, t textState) {
 	if p.tabDist > 0 {
 		st.TabSize = css.Pts(p.tabDist)
 	}
-	if strings.HasPrefix(p.writing, "rl") {
+	if rtl {
 		st.Direction = css.RTL
 	}
 }

@@ -360,6 +360,30 @@ func LegacyAngles(p *Package) bool {
 	return false
 }
 
+// AbsoluteStartEnd reports a package whose fo:text-align start and end
+// mean left and right whatever the paragraph's writing mode: one that
+// LibreOffice or OpenOffice.org wrote, as its meta:generator says, which
+// LibreOffice reads so since those programs wrote left and right as
+// start and end. Any other producer's start and end follow the writing
+// mode (ODF 1.3, Part 3, 20.216; XSL 1.0, 7.16.9): start is the right
+// edge of a right-to-left paragraph.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, right-to-left
+//     paragraphs aligned start print at the left margin and those aligned
+//     end at the right one under the generators LibreOffice 6.4, 7.0,
+//     7.1, 7.6 and 24.8, LibreOfficeDev 7.0 and OpenOffice.org 3.3; at
+//     the right and left margins under none, Apache OpenOffice 4.1 and
+//     MicrosoftOffice 16.0.
+//   - libreoffice/odt: odfexport/tdf131812.odt, written by LibreOfficeDev
+//     7.0, prints its right-to-left paragraph aligned end at the right
+//     margin.
+func AbsoluteStartEnd(p *Package) bool {
+	gen := strings.TrimSpace(Section(p.Meta, "meta").Child(NSMeta, "generator").TextContent())
+	return strings.HasPrefix(gen, "LibreOffice") || strings.HasPrefix(gen, "OpenOffice.org")
+}
+
 // maxViewBox bounds a number of an svg:viewBox read: 1e12. Anti-DoS
 // guard, not spec-mandated: a coordinate space of real drawings spans a
 // few hundred thousand units, and a bounded value keeps the scale finite.

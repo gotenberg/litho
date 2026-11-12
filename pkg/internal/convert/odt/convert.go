@@ -61,7 +61,8 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	b := &builder{
 		ctx: ctx, pkg: pkg, styles: odf.NewStyles(pkg), fonts: fonts,
 		metricsCache: map[string][2]float64{}, warned: map[string]bool{}, pics: map[string]picResult{}, meta: map[*layout.Node]paraMeta{},
-		tabsRelative: configBool(pkg.Settings, "TabsRelativeToIndent", true),
+		tabsRelative:  configBool(pkg.Settings, "TabsRelativeToIndent", true),
+		absoluteAlign: odf.AbsoluteStartEnd(pkg),
 	}
 	marks, err := resolveChanges(ctx, body, opts.TrackedChanges, b.rowTracked, b.warn)
 	if err != nil {

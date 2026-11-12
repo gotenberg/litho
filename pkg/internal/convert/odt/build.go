@@ -76,6 +76,9 @@ type builder struct {
 	// tabsRelative is settings.xml's TabsRelativeToIndent: tab positions
 	// count from the paragraph's indent, Writer's default.
 	tabsRelative bool
+	// absoluteAlign reads fo:text-align start and end as left and right
+	// in every writing mode ([odf.AbsoluteStartEnd]).
+	absoluteAlign bool
 	// changeMarks is how the marked view draws each tracked change, by
 	// id, nil for the other views; openChanges are the ids of the
 	// changes open where the builder is, innermost last.
