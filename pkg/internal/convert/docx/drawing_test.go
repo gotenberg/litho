@@ -2,8 +2,10 @@ package docx
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/png"
+	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -355,5 +357,58 @@ func TestCanvas(t *testing.T) {
 	}
 	if sh := pics[1]; sh.Style.Position != css.Absolute || sh.Style.Left != css.Pts(10) || sh.Style.Top != css.Pts(20) {
 		t.Errorf("shape at %v, %v", sh.Style.Left, sh.Style.Top)
+	}
+}
+
+// TestDrawings_WordAnchor positions a drawing that wraps the text as Word
+// does: a percentage of the margin box (MS-ODRAWXML, 2.3.2.3, 2.3.2.4),
+// simplePos from the page's corner (20.4.2.13), an alignment in the
+// first column of a section of columns, and a tight wrap along its wrap
+// polygon (20.4.2.16) in fractions of the drawing.
+func TestDrawings_WordAnchor(t *testing.T) {
+	t.Parallel()
+	const sect = `<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720"/>%s</w:sectPr>`
+	const wp14 = `xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing"`
+	anchor := func(attrs, h, v, wrap string) string {
+		return `<w:p><w:r><w:drawing><wp:anchor behindDoc="0" ` + attrs + `>` + h + v + `<wp:extent cx="1270000" cy="635000"/>` + wrap +
+			`<wp:docPr id="2" name="q"/>` + graphic("") + `</wp:anchor></w:drawing></w:r><w:r><w:t>text</w:t></w:r></w:p>`
+	}
+	square := `<wp:wrapSquare wrapText="bothSides"/>`
+	for _, tc := range []struct {
+		name, body, cols string
+		want             css.WordAnchor
+		poly             []css.WrapPoint
+	}{
+		{"percentages of the margin", anchor(``,
+			`<wp:positionH relativeFrom="margin" `+wp14+`><wp14:pctPosHOffset>40000</wp14:pctPosHOffset></wp:positionH>`,
+			`<wp:positionV relativeFrom="margin" `+wp14+`><wp14:pctPosVOffset>60000</wp14:pctPosVOffset></wp:positionV>`, square),
+			"", css.WordAnchor{Set: true, X: 0.4 * 468, Y: 0.6 * 648, FromPage: true}, nil},
+		{"simplePos", anchor(`simplePos="1"`, `<wp:simplePos x="5486400" y="457200"/>`, ``, square),
+			"", css.WordAnchor{Set: true, X: 432 - 72, Y: 36 - 72, FromPage: true}, nil},
+		{"centered in a column", anchor(``, `<wp:positionH relativeFrom="column"><wp:align>center</wp:align></wp:positionH>`,
+			`<wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV>`, square),
+			`<w:cols w:num="2" w:space="720"/>`, css.WordAnchor{Set: true, X: (216 - 100) / 2.0}, nil},
+		{"tight along its polygon", anchor(`allowOverlap="0"`, `<wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH>`,
+			`<wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV>`,
+			`<wp:wrapTight wrapText="bothSides"><wp:wrapPolygon edited="0"><wp:start x="0" y="0"/><wp:lineTo x="21600" y="10800"/><wp:lineTo x="0" y="21600"/><wp:lineTo x="0" y="0"/></wp:wrapPolygon></wp:wrapTight>`),
+			"", css.WordAnchor{Set: true, NoOverlap: true}, []css.WrapPoint{{X: 0, Y: 0}, {X: 1, Y: 0.5}, {X: 0, Y: 1}, {X: 0, Y: 0}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			b := build(t, tc.body+fmt.Sprintf(sect, tc.cols), map[string]string{"word/media/a.png": pngData(t, 4, 2)})
+			pics := find(b.root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+			if len(pics) != 1 {
+				t.Fatalf("%d pictures", len(pics))
+			}
+			st := pics[0].Style
+			got := st.WordAnchor
+			if got.Set != tc.want.Set || got.FromPage != tc.want.FromPage || got.NoOverlap != tc.want.NoOverlap ||
+				math.Abs(got.X-tc.want.X) > 0.01 || math.Abs(got.Y-tc.want.Y) > 0.01 {
+				t.Errorf("anchor %+v, want %+v", got, tc.want)
+			}
+			if fmt.Sprint(st.WrapPolygon) != fmt.Sprint(tc.poly) {
+				t.Errorf("polygon %v, want %v", st.WrapPolygon, tc.poly)
+			}
+		})
 	}
 }
