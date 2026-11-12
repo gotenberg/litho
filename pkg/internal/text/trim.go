@@ -1,6 +1,7 @@
 package text
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -40,8 +41,8 @@ func (p *Paragraph) trimAdjacent() {
 		size := it.style.Size
 		for gi := range it.glyphs {
 			g := &it.glyphs[gi]
-			i := g.cluster
-			if g.len != 1 || i < 0 || i >= n || g.advance < size*0.95 || g.advance > size*1.05 {
+			i := g.cluster()
+			if g.clusterLen() != 1 || i < 0 || i >= n || g.advance < size*0.95 || g.advance > size*1.05 {
 				continue
 			}
 			c := p.text[i]
@@ -82,7 +83,7 @@ func trimsAfter(r rune) bool {
 // first character decides whether and how much.
 func (p *Paragraph) autospace() {
 	n := len(p.text)
-	if n < 2 {
+	if n < 2 || !slices.ContainsFunc(p.items, func(it shapedItem) bool { return it.style.Autospace != 0 }) {
 		return
 	}
 	// last[i] is the last glyph of the cluster that starts at i.
@@ -92,7 +93,7 @@ func (p *Paragraph) autospace() {
 		it := &p.items[k]
 		for gi := range it.glyphs {
 			g := &it.glyphs[gi]
-			if c := g.cluster; c >= 0 && c < n {
+			if c := g.cluster(); c >= 0 && c < n {
 				last[c], lastItem[c] = g, it
 			}
 		}

@@ -147,15 +147,18 @@ type ParagraphLine struct {
 //
 // A Paragraph is not safe for concurrent use.
 type Paragraph struct {
-	text  []rune
-	runOf []int
+	text []rune
+	// runOf is the run of each character: a run index fits 16 bits, since
+	// a paragraph holds at most [MaxLayoutRuns] runs.
+	runOf []uint16
 	adv   []float64
 	brk   []Break
 	graph []bool
-	// object holds the object of each object character, nil elsewhere.
-	object []*Object
-	base   Direction
-	items  []shapedItem
+	// objects holds the object of each object run, nil for a text run: an
+	// object run is one character.
+	objects []*Object
+	base    Direction
+	items   []shapedItem
 	// level is each character's resolved embedding level (UAX #9, X1 to
 	// I2).
 	level []int8
@@ -163,6 +166,11 @@ type Paragraph struct {
 	// are charged to, nil for none.
 	mem *limits.Budget
 }
+
+// The largest run index of a [Paragraph] fits the 16 bits a character's
+// run takes: the constant fails the build if [MaxLayoutRuns] outgrows
+// them.
+const _ uint16 = MaxLayoutRuns - 1
 
 // shapedItem is one shaped piece of a paragraph, in logical order: a run of
 // one style, face and direction, or one object.
@@ -184,13 +192,43 @@ type shapedItem struct {
 	object       bool
 }
 
-// shapedGlyph is one glyph of a [shapedItem], in points.
+// shapedGlyph is one glyph of a [shapedItem], in points. A paragraph
+// holds one for each glyph of its text as long as its lines may be laid
+// out again, so the glyph ID, the first character of the glyph's cluster
+// and the cluster's length share one word ([packGlyph]).
 type shapedGlyph struct {
-	gid          uint16
-	xoff, yoff   float64
-	advance      float64
-	cluster, len int
+	xoff, yoff float64
+	advance    float64
+	packed     uint64
 }
+
+// clusterBits is the width of each of the two character counts a
+// [shapedGlyph] packs, a cluster's first character and its length, both
+// at most [MaxLayoutRunes]; the glyph ID takes the 16 bits above them.
+const clusterBits = 24
+
+// The packed counts hold every character index of a paragraph: an array
+// of negative length fails the build if [MaxLayoutRunes] outgrows them.
+var _ [1<<clusterBits - 1 - MaxLayoutRunes]struct{}
+
+// clusterMask keeps one count of a packed [shapedGlyph].
+const clusterMask = 1<<clusterBits - 1
+
+// packGlyph returns the packed word of a glyph of ID gid whose cluster
+// starts at character cluster and spans n characters, both in [0,
+// MaxLayoutRunes].
+func packGlyph(gid uint16, cluster, n int) uint64 {
+	return uint64(gid)<<(2*clusterBits) | uint64(n&clusterMask)<<clusterBits | uint64(cluster&clusterMask) //nolint:gosec // both in [0, MaxLayoutRunes], checked above
+}
+
+// gid returns the glyph's ID.
+func (g *shapedGlyph) gid() uint16 { return uint16(g.packed >> (2 * clusterBits)) }
+
+// cluster returns the first character of the glyph's cluster.
+func (g *shapedGlyph) cluster() int { return int(g.packed & clusterMask) }
+
+// clusterLen returns the number of characters of the glyph's cluster.
+func (g *shapedGlyph) clusterLen() int { return int(g.packed >> clusterBits & clusterMask) }
 
 // Shape shapes runs into one bidirectional paragraph for a caller that
 // breaks lines itself: the HTML layout engine, which needs per-line widths,
@@ -255,14 +293,22 @@ func (f *Fonts) Shape(ctx context.Context, runs []ParagraphRun, opts ParagraphOp
 		return nil, Report{}, err
 	}
 	defer st.release()
-	p := &Paragraph{mem: limits.BudgetFrom(ctx)}
-	var shapeText []rune
+	// total is the paragraph's character count: the per-character
+	// slices, held as long as the paragraph, take no spare capacity.
+	p := &Paragraph{
+		mem:     limits.BudgetFrom(ctx),
+		text:    make([]rune, 0, total),
+		runOf:   make([]uint16, 0, total),
+		objects: make([]*Object, len(runs)),
+	}
+	shapeText := make([]rune, 0, total)
 	for i, r := range runs {
+		run := uint16(i) //nolint:gosec // fits uint16: at most MaxLayoutRuns runs, checked above
 		if r.Object != nil {
 			p.text = append(p.text, objectReplacement)
 			shapeText = append(shapeText, objectReplacement)
-			p.runOf = append(p.runOf, i)
-			p.object = append(p.object, r.Object)
+			p.runOf = append(p.runOf, run)
+			p.objects[i] = r.Object
 			continue
 		}
 		for _, c := range r.Text {
@@ -271,8 +317,7 @@ func (f *Fonts) Shape(ctx context.Context, runs []ParagraphRun, opts ParagraphOp
 				c = wordJoiner
 			}
 			shapeText = append(shapeText, c)
-			p.runOf = append(p.runOf, i)
-			p.object = append(p.object, nil)
+			p.runOf = append(p.runOf, run)
 		}
 	}
 	n := len(p.text)
@@ -335,10 +380,10 @@ func (p *Paragraph) shape(ctx context.Context, st *layoutState, text []rune) err
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("shaping text: %w", err)
 		}
-		if o := p.object[start]; o != nil {
+		if o := p.object(start); o != nil {
 			lv := int(p.level[start])
 			p.items = append(p.items, shapedItem{
-				start: start, end: start + 1, run: p.runOf[start], level: lv, rtl: lv%2 == 1,
+				start: start, end: start + 1, run: int(p.runOf[start]), level: lv, rtl: lv%2 == 1,
 				ascent: o.Ascent, descent: o.Descent, object: true,
 			})
 			p.adv[start] = o.Width
@@ -346,7 +391,7 @@ func (p *Paragraph) shape(ctx context.Context, st *layoutState, text []rune) err
 			continue
 		}
 		end := start + 1
-		for end < len(text) && p.object[end] == nil {
+		for end < len(text) && p.object(end) == nil {
 			end++
 		}
 		if err := p.shapeSegment(ctx, st, text, start, end, baseDir); err != nil {
@@ -382,7 +427,7 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 			for e < item.RunEnd && p.runOf[e] == p.runOf[s] && p.level[e] == p.level[s] {
 				e++
 			}
-			idx := p.runOf[s]
+			idx := int(p.runOf[s])
 			ss := st.styles[idx]
 			piece := item
 			piece.RunStart, piece.RunEnd = s, e
@@ -462,12 +507,10 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 			gid = blankEmoji(out.Face, p.text[start:end])
 		}
 		it.glyphs[k] = shapedGlyph{
-			gid:     gid,
 			xoff:    st.toPoints(g.XOffset) * style.scale(),
 			yoff:    st.toPoints(-g.YOffset),
 			advance: st.toPoints(g.Advance) * style.scale(),
-			cluster: start,
-			len:     end - start,
+			packed:  packGlyph(gid, start, end-start),
 		}
 	}
 	if style.LetterSpacing != 0 {
@@ -475,21 +518,22 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 		// character unit, which is the visually last glyph of a cluster in
 		// a left-to-right run and the visually first in a right-to-left one.
 		for k := range it.glyphs {
-			last := k == len(it.glyphs)-1 || it.glyphs[k+1].cluster != it.glyphs[k].cluster
+			last := k == len(it.glyphs)-1 || it.glyphs[k+1].cluster() != it.glyphs[k].cluster()
 			if it.rtl {
-				last = k == 0 || it.glyphs[k-1].cluster != it.glyphs[k].cluster
+				last = k == 0 || it.glyphs[k-1].cluster() != it.glyphs[k].cluster()
 			}
 			// A default ignorable character, a format control such as a
 			// zero width space or a bidi control, is no typographic
 			// character unit: it takes no spacing.
-			if c := it.glyphs[k].cluster; last && c < n && !unicode.Is(unicode.Cf, p.text[c]) {
+			if c := it.glyphs[k].cluster(); last && c < n && !unicode.Is(unicode.Cf, p.text[c]) {
 				it.glyphs[k].advance += style.LetterSpacing
 			}
 		}
 	}
-	for _, g := range it.glyphs {
-		if g.cluster < n {
-			p.adv[g.cluster] += g.advance
+	for k := range it.glyphs {
+		g := &it.glyphs[k]
+		if c := g.cluster(); c < n {
+			p.adv[c] += g.advance
 		}
 	}
 	return it, nil
@@ -502,7 +546,11 @@ func (p *Paragraph) Len() int { return len(p.text) }
 func (p *Paragraph) Rune(i int) rune { return p.text[i] }
 
 // RunOf returns the index of the run the character at i comes from.
-func (p *Paragraph) RunOf(i int) int { return p.runOf[i] }
+func (p *Paragraph) RunOf(i int) int { return int(p.runOf[i]) }
+
+// object returns the object of the character at i, nil for a character
+// of text.
+func (p *Paragraph) object(i int) *Object { return p.objects[p.runOf[i]] }
 
 // Advance returns the advance the character at i contributes, in points: a
 // cluster's advance sits on its first character, 0 on the others.
@@ -513,7 +561,7 @@ func (p *Paragraph) Advance(i int) float64 { return p.adv[i] }
 // character that is not an object or for a width that is not finite and
 // positive.
 func (p *Paragraph) SetAdvance(i int, w float64) {
-	if i < 0 || i >= len(p.text) || p.object[i] == nil || !finiteWithin(w, maxLineWidth) || w < 0 {
+	if i < 0 || i >= len(p.text) || p.object(i) == nil || !finiteWithin(w, maxLineWidth) || w < 0 {
 		return
 	}
 	p.adv[i] = w
@@ -657,8 +705,8 @@ func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int)
 		t.HScale = hs
 	}
 	drawn := 0
-	for _, g := range it.glyphs {
-		if g.cluster >= start && g.cluster < end && !p.control(g.cluster) {
+	for k := range it.glyphs {
+		if c := it.glyphs[k].cluster(); c >= start && c < end && !p.control(c) {
 			drawn++
 		}
 	}
@@ -667,25 +715,27 @@ func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int)
 	}
 	pen := 0.0
 	cluster := -1
-	for _, g := range it.glyphs {
-		if g.cluster < start || g.cluster >= end {
+	for k := range it.glyphs {
+		g := &it.glyphs[k]
+		c := g.cluster()
+		if c < start || c >= end {
 			continue
 		}
 		adv := g.advance
-		if g.cluster >= hangFrom {
+		if c >= hangFrom {
 			adv = 0
 		}
-		if p.control(g.cluster) {
+		if p.control(c) {
 			pen += adv
 			continue
 		}
 		// The positions are written unscaled: the run's HScale scales
 		// them back (ISO 32000-1, 9.3.4).
-		cg := typeset.Glyph{GID: g.gid, X: (pen + g.xoff) / hs, Y: g.yoff}
-		if g.cluster != cluster {
-			cluster = g.cluster
-			e := min(g.cluster+max(g.len, 1), len(p.text))
-			cg.Text = clusterText(p.text[g.cluster:e])
+		cg := typeset.Glyph{GID: g.gid(), X: (pen + g.xoff) / hs, Y: g.yoff}
+		if c != cluster {
+			cluster = c
+			e := min(c+max(g.clusterLen(), 1), len(p.text))
+			cg.Text = clusterText(p.text[c:e])
 		}
 		t.Glyphs = append(t.Glyphs, cg)
 		pen += adv

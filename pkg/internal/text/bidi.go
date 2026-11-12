@@ -42,16 +42,16 @@ func isOpener(r rune) bool {
 // the explicit formatting characters each run opens and closes around its
 // characters, an override run's LRO or RLO and PDF among them, and the
 // index of every character of text in it.
-func bidiInput(runs []ParagraphRun, text []rune, runOf []int) ([]rune, []int) {
+func bidiInput(runs []ParagraphRun, text []rune, runOf []uint16) ([]rune, []int) {
 	out := make([]rune, 0, len(text))
 	at := make([]int, len(text))
 	for i, c := range text {
 		r := -1
 		if i < len(runOf) {
-			r = runOf[i]
+			r = int(runOf[i])
 		}
-		first := i == 0 || i-1 < len(runOf) && runOf[i-1] != r
-		last := i == len(text)-1 || i+1 < len(runOf) && runOf[i+1] != r
+		first := i == 0 || i-1 < len(runOf) && int(runOf[i-1]) != r
+		last := i == len(text)-1 || i+1 < len(runOf) && int(runOf[i+1]) != r
 		if first && r >= 0 && r < len(runs) {
 			out = appendControls(out, runs[r].Open, true)
 			switch runs[r].Override {

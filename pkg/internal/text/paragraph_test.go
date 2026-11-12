@@ -261,3 +261,39 @@ func TestClusterText_MatchesItsCharacters(t *testing.T) {
 		}
 	}
 }
+
+func TestPackGlyph_KeepsEveryIndex(t *testing.T) {
+	for _, tc := range []struct {
+		gid        uint16
+		cluster, n int
+	}{
+		{0, 0, 0},
+		{1, 2, 3},
+		{0xffff, MaxLayoutRunes, MaxLayoutRunes},
+		{0x8000, MaxLayoutRunes - 1, 1},
+	} {
+		g := shapedGlyph{packed: packGlyph(tc.gid, tc.cluster, tc.n)}
+		if g.gid() != tc.gid || g.cluster() != tc.cluster || g.clusterLen() != tc.n {
+			t.Errorf("packGlyph(%d, %d, %d) reads back %d, %d, %d", tc.gid, tc.cluster, tc.n, g.gid(), g.cluster(), g.clusterLen())
+		}
+	}
+}
+
+func TestShape_EveryRunIndexFits(t *testing.T) {
+	f := newTestFonts(t, sansFamily()...)
+	runs := make([]ParagraphRun, MaxLayoutRuns)
+	for i := range runs {
+		runs[i] = ParagraphRun{Text: "A", Style: style()}
+	}
+	runs[len(runs)-1] = ParagraphRun{Object: &Object{Width: 7}}
+	p := shape(t, f, runs, ParagraphOptions{})
+	last := p.Len() - 1
+	if p.Len() != MaxLayoutRuns || p.RunOf(last) != MaxLayoutRuns-1 || p.Rune(last) != objectReplacement || p.Advance(last) != 7 {
+		t.Fatalf("len %d, last run %d, rune %q, advance %v", p.Len(), p.RunOf(last), p.Rune(last), p.Advance(last))
+	}
+	p.SetAdvance(last, 9)
+	p.SetAdvance(0, 9)
+	if p.Advance(last) != 9 || p.Advance(0) == 9 {
+		t.Errorf("SetAdvance moved the object to %v and the text to %v", p.Advance(last), p.Advance(0))
+	}
+}
