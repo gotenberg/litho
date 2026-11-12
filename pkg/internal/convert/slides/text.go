@@ -1168,8 +1168,6 @@ func (b *builder) fieldText(r *Run) string {
 //
 // # Corpus evidence
 //
-//   - libreoffice/pptx: sd/numfmt.pptx's plain datetime field prints 11/8/26 on 8
-//     November 2026.
 //   - probe, odp: a text:date and a text:time without a data style print
 //     11/8/26 and 11:05:48 AM.
 const (

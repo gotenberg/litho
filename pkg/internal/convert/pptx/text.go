@@ -497,9 +497,9 @@ func percentAny(v string) float64 {
 	return max(0, min(maxSpacingPercent, float64(n)/100000))
 }
 
-// fieldOf maps a field type (21.1.2.3.6 fld type) to the model's field:
-// slidenum, the datetime formats (datetime10 to datetime13 being times),
-// and anything else as the text the file saved.
+// fieldOf maps a field type (ECMA-376 Part 1, 21.1.2.2.4 fld type) to
+// the model's field: slidenum, the datetime formats (datetime10 to
+// datetime13 being times), and anything else as the text the file saved.
 func fieldOf(typ string) slides.Field {
 	switch {
 	case typ == "slidenum":
@@ -512,40 +512,57 @@ func fieldOf(typ string) slides.Field {
 	return slides.FieldNone
 }
 
-// The number format codes the date and time fields print in (21.1.2.3.6
-// fld type datetime and datetime1 to datetime13), as Impress maps them
-// to its date and time formats and prints them in the en-US locale.
+// The number format codes the date and time fields print in, in the
+// en-US locale (ECMA-376 Part 1, 21.1.2.2.4 fld type datetime and
+// datetime1 to datetime13; [MS-OI29500] 2.1.1385 gives datetimeFigureOut
+// as datetime1): the clause's formats, as PowerPoint prints them, a
+// 12-hour clock's hour without a leading zero. datetime, "the default
+// date time format for the rendering application", prints as datetime1.
+// The leading zero of a day or a month under ten is not measured: the
+// day of the text formats and the month and day of the numeric ones keep
+// the clause's letters.
 //
 // # Corpus evidence
 //
-//   - probe, pptx: a deck of the fourteen fields, en-US, converted by the
-//     pinned image on 2026-11-08 at 11:25:38 prints "11/8/26",
-//     "11/08/2026", "Sunday, November 8, 2026", "November 8, 2026" (3, 4
-//     and 6), "Nov 8, 2026" (5 and 7), "11/08/2026 11:25 AM", "11/08/2026
-//     11:25:38 AM", "11:25", "11:25:38 AM", "11:25 AM" and "11:25:38 AM".
+//   - litho/pptx: text-fields prints in PowerPoint on 12 November 2026 at
+//     7:17:36 "11/12/2026", "Thursday, November 12, 2026", "12 November
+//     2026", "November 12, 2026", "12-Nov-26", "November 26", "Nov-26",
+//     "11/12/2026 7:17 AM", "11/12/2026 7:17:36 AM", "07:17", "07:17:36",
+//     "7:17 AM" and "7:17:36 AM", and "11/12/2026" for datetime and
+//     datetimeFigureOut.
+//   - libreoffice/pptx: sd/numfmt.pptx prints in PowerPoint its datetime
+//     field 11/10/2026 and its en-US datetime5 and datetime6 10-Nov-26 and
+//     November 26.
 var usDateFormats = map[string]string{
-	"datetime": "M/D/YY", "datetime1": "MM/DD/YYYY", "datetime2": "DDDD, MMMM D, YYYY",
-	"datetime3": "MMMM D, YYYY", "datetime4": "MMMM D, YYYY", "datetime5": "MMM D, YYYY",
-	"datetime6": "MMMM D, YYYY", "datetime7": "MMM D, YYYY", "datetime8": "MM/DD/YYYY HH:MM AM/PM",
-	"datetime9": "MM/DD/YYYY HH:MM:SS AM/PM", "datetime10": "HH:MM", "datetime11": "HH:MM:SS AM/PM",
-	"datetime12": "HH:MM AM/PM", "datetime13": "HH:MM:SS AM/PM",
+	"datetime": "MM/DD/YYYY", "datetime1": "MM/DD/YYYY", "datetime2": "DDDD, MMMM D, YYYY",
+	"datetime3": "D MMMM YYYY", "datetime4": "MMMM D, YYYY", "datetime5": "D-MMM-YY",
+	"datetime6": "MMMM YY", "datetime7": "MMM-YY", "datetime8": "MM/DD/YYYY H:MM AM/PM",
+	"datetime9": "MM/DD/YYYY H:MM:SS AM/PM", "datetime10": "HH:MM", "datetime11": "HH:MM:SS",
+	"datetime12": "H:MM AM/PM", "datetime13": "H:MM:SS AM/PM",
 }
 
 // dayFirstFormats are the codes of a field in a language that writes the
 // day first, as en-GB, de-DE and fr-FR print them; the names stay
-// English, the language's own the format codes cannot say.
+// English, the language's own the format codes cannot say. A 12-hour
+// clock's hour has no leading zero, as PowerPoint prints en-IN's.
 //
 // # Corpus evidence
 //
-//   - probe, pptx: the same deck in en-GB prints "08/11/26", "08/11/2026",
-//     "Sunday 8 November 2026", "8 November 2026", "8 Nov 2026" and
-//     "11:25:53"; in de-DE the dates with full stops ("08.11.2026").
+//   - libreoffice/pptx: sd/numfmt.pptx prints in PowerPoint its en-IN
+//     datetime11, datetime10, datetime12 and datetime13 as "19:07:11",
+//     "19:07", "7:07 PM" and "7:07:11 PM", and its datetime1 as
+//     "10-11-2026", where this table writes 10/11/2026.
+//   - probe, pptx: in Impress, a deck of the fourteen fields in en-GB,
+//     converted by the pinned image on 2026-11-08, prints "08/11/26",
+//     "08/11/2026", "Sunday 8 November 2026", "8 November 2026", "8 Nov
+//     2026" and "11:25:53"; in de-DE the dates with full stops
+//     ("08.11.2026").
 var dayFirstFormats = map[string]string{
 	"datetime": "DD/MM/YY", "datetime1": "DD/MM/YYYY", "datetime2": "DDDD D MMMM YYYY",
 	"datetime3": "D MMMM YYYY", "datetime4": "D MMMM YYYY", "datetime5": "D MMM YYYY",
-	"datetime6": "D MMMM YYYY", "datetime7": "D MMM YYYY", "datetime8": "DD/MM/YYYY HH:MM AM/PM",
-	"datetime9": "DD/MM/YYYY HH:MM:SS AM/PM", "datetime10": "HH:MM", "datetime11": "HH:MM:SS",
-	"datetime12": "HH:MM AM/PM", "datetime13": "HH:MM:SS AM/PM",
+	"datetime6": "D MMMM YYYY", "datetime7": "D MMM YYYY", "datetime8": "DD/MM/YYYY H:MM AM/PM",
+	"datetime9": "DD/MM/YYYY H:MM:SS AM/PM", "datetime10": "HH:MM", "datetime11": "HH:MM:SS",
+	"datetime12": "H:MM AM/PM", "datetime13": "H:MM:SS AM/PM",
 }
 
 // dateFormat returns the format code a date or time field of type typ

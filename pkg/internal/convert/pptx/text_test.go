@@ -264,24 +264,37 @@ func TestText_OrphanPlaceholder(t *testing.T) {
 	}
 }
 
+// TestText_DateFieldFormats locks the formats of the date and time
+// fields (ECMA-376 Part 1, 21.1.2.2.4 fld type).
+//
+// # Corpus evidence
+//
+//   - litho/pptx: text-fields prints in PowerPoint on 12 November 2026 at
+//     7:17:36 the en-US strings below.
+//   - libreoffice/pptx: sd/numfmt.pptx prints in PowerPoint en-IN's
+//     datetime12 and datetime13 with an hour of one digit.
 func TestText_DateFieldFormats(t *testing.T) {
-	// 2026-11-08 11:25:38, the moment the measurements were printed.
-	serial := float64(time.Date(2026, 11, 8, 11, 25, 38, 0, time.UTC).Sub(time.Date(1899, 12, 30, 0, 0, 0, 0, time.UTC))) / float64(24*time.Hour)
+	serial := float64(time.Date(2026, 11, 12, 7, 17, 36, 0, time.UTC).Sub(time.Date(1899, 12, 30, 0, 0, 0, 0, time.UTC))) / float64(24*time.Hour)
 	cases := []struct{ typ, lang, want string }{
-		{"datetime", "en-US", "11/8/26"},
-		{"datetime1", "en-US", "11/08/2026"},
-		{"datetime2", "", "Sunday, November 8, 2026"},
-		{"datetime3", "en-US", "November 8, 2026"},
-		{"datetime5", "en-US", "Nov 8, 2026"},
-		{"datetime8", "en-US", "11/08/2026 11:25 AM"},
-		{"datetime9", "en-US", "11/08/2026 11:25:38 AM"},
-		{"datetime10", "en-US", "11:25"},
-		{"datetime11", "en-US", "11:25:38 AM"},
-		{"datetime12", "en-US", "11:25 AM"},
-		{"datetime1", "en-GB", "08/11/2026"},
-		{"datetime2", "en-GB", "Sunday 8 November 2026"},
-		{"datetime11", "en-GB", "11:25:38"},
-		{"datetime1", "de-DE", "08.11.2026"},
+		{"datetime", "en-US", "11/12/2026"},
+		{"datetime1", "en-US", "11/12/2026"},
+		{"datetime2", "", "Thursday, November 12, 2026"},
+		{"datetime3", "en-US", "12 November 2026"},
+		{"datetime4", "en-US", "November 12, 2026"},
+		{"datetime5", "en-US", "12-Nov-26"},
+		{"datetime6", "en-US", "November 26"},
+		{"datetime7", "en-US", "Nov-26"},
+		{"datetime8", "en-US", "11/12/2026 7:17 AM"},
+		{"datetime9", "en-US", "11/12/2026 7:17:36 AM"},
+		{"datetime10", "en-US", "07:17"},
+		{"datetime11", "en-US", "07:17:36"},
+		{"datetime12", "en-US", "7:17 AM"},
+		{"datetime13", "en-US", "7:17:36 AM"},
+		{"datetime1", "en-GB", "12/11/2026"},
+		{"datetime2", "en-GB", "Thursday 12 November 2026"},
+		{"datetime11", "en-GB", "07:17:36"},
+		{"datetime12", "en-IN", "7:17 AM"},
+		{"datetime1", "de-DE", "12.11.2026"},
 		{"slidenum", "en-US", ""},
 	}
 	for _, c := range cases {
