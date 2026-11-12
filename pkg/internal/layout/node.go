@@ -231,6 +231,9 @@ type Options struct {
 	MaxPages int
 	// Logger receives diagnostics, nil for none.
 	Logger *slog.Logger
+	// release is when the layout releases the shaped text of its inline
+	// formatting contexts, for a test that compares the policies.
+	release releasePolicy
 }
 
 // PageInfo names a page for [Options.PageFor] and [Options.MarginContent].

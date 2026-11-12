@@ -102,7 +102,10 @@ func run(t testing.TB, root *Node, pb PageBox) *Result {
 	return runWith(t, root, Options{Page: pb})
 }
 
-// runWith lays root out with o and checks the document is valid.
+// runWith lays root out with o and checks the document is valid. When o
+// calls nothing back, it also checks that the layout writes the same PDF
+// whether it keeps its shaped text to the end, releases it once final,
+// or releases it after every layout (release.go).
 func runWith(t testing.TB, root *Node, o Options) *Result {
 	t.Helper()
 	res, err := Layout(context.Background(), root, ahem(t), o)
@@ -112,6 +115,9 @@ func runWith(t testing.TB, root *Node, o Options) *Result {
 	doc := document(res)
 	if err := doc.Validate(t.Context()); err != nil {
 		t.Fatalf("Validate: %v", err)
+	}
+	if o.PageAt == nil && o.PageFor == nil && o.MarginContent == nil && o.Placed == nil && o.Image == nil {
+		assertReleaseKeepsOutput(t, root, o, res)
 	}
 	return res
 }

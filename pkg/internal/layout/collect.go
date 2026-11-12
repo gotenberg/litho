@@ -96,6 +96,9 @@ type ifcData struct {
 	// indices in it.
 	boxes []*box
 	order map[*box]int
+	// released reports paragraphs whose shaped text [engine.releaseShaped]
+	// gave back: a layout that comes back to them shapes them again.
+	released bool
 }
 
 // collector walks an inline formatting context in tree order, applying the
@@ -121,6 +124,9 @@ type collector struct {
 // use.
 func (e *engine) ifcOf(b *box) *ifcData {
 	if b.ifc != nil {
+		if b.ifc.released {
+			e.reshape(b, b.ifc)
+		}
 		return b.ifc
 	}
 	c := &collector{e: e, root: b, d: &ifcData{}, space: true}

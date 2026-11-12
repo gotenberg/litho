@@ -33,7 +33,8 @@ const styleCost = 4 << 10
 
 // paraRuneCost is what one character of a shaped paragraph costs the
 // conversion's memory budget: its shaped glyphs, advances, breaks and
-// levels, which the layout holds until the engine is dropped.
+// levels, which the layout holds until block flow releases them
+// (release.go) or the engine is dropped.
 //
 // # Corpus evidence
 //

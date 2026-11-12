@@ -106,6 +106,9 @@ type engine struct {
 	// shared holds the styles of the boxes the engine makes of its own
 	// and what it charged for the styles its boxes hold (share.go).
 	shared sharedStyles
+	// reshaped counts the inline contents shaped again after their
+	// release (release.go).
+	reshaped int
 }
 
 // charge charges the conversion's budget n bytes for what, failing the

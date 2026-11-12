@@ -488,6 +488,11 @@ func (e *engine) layoutInline(b *box, cb cblock, bc *bfc, cursor float64, mc *ma
 		e.warnings = e.warnings[:warnings]
 		*mc = saved.clone()
 	}
+	if e.opts.release == releaseEagerly && e.clamp == nil {
+		// A line clamp marks its last line once its container is laid
+		// out, from the shaped text.
+		e.releaseShaped(b)
+	}
 	return end
 }
 

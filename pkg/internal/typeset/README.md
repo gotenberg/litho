@@ -323,7 +323,9 @@ shares one style between the boxes that compute the same
 text, spreadsheet or presentation conversion writes each page as it is
 laid out, through `typeset.Stream`. The HTML and text document
 conversions lay the whole document out before the first page is written,
-so their peak is the layout's.
+so their peak is the layout's; the layout releases a block's shaped text
+once block flow will not lay the block out again, and keeps the glyph
+runs of its lines.
 
 ## The public surface
 

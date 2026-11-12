@@ -235,6 +235,11 @@ type box struct {
 	anchorSet        bool
 	// ifc is the shaped inline content of a block container.
 	ifc *ifcData
+	// settled reports a block that no layout around it lays out again,
+	// whose children release their shaped text once final, and released
+	// a box whose shaped text and its descendants' is released
+	// (release.go).
+	settled, released bool
 	// intrinsic caches the min- and max-content border box widths.
 	minW, maxW float64
 	measured   bool

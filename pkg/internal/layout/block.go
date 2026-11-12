@@ -467,6 +467,8 @@ func (e *engine) layoutRoot(rb *box) {
 	cb := cblock{x: 0, w: e.pageW, h: e.pageH, hDefinite: true}
 	bc := &bfc{}
 	mc := &marginState{}
+	// The root is laid out once a pass.
+	rb.settled = true
 	e.layoutBlock(rb, cb, bc, 0, mc, breakNone)
 }
 
@@ -803,7 +805,8 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 	// filled reports an in-flow child with a border box before the one
 	// being laid out.
 	filled := false
-	for _, k := range b.kids {
+	release := e.releasing(b)
+	for i, k := range b.kids {
 		if e.err != nil {
 			return cursor
 		}
@@ -842,6 +845,8 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		}
 		start := e.startPage(cursor+mc.strut.sum(), mode)
 		kcb := cbFor(start)
+		k.settled = e.settles(b, prev, k, nextInFlow(b.kids, i), bc)
+		last := prev
 		cursor = e.layoutBlock(k, kcb, bc, cursor, mc, mode)
 		if e.clampBlock(k) {
 			cursor = restore(snap)
@@ -899,6 +904,11 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 			placed = append(placed, k)
 		}
 		filled = filled || k.borderH() > 0
+		if release && last != nil && last != prev {
+			// The loop lays out again only the child being placed and
+			// the one before it: last is final.
+			e.releaseShaped(last)
+		}
 	}
 	return cursor
 }
