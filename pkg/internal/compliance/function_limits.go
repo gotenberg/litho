@@ -71,7 +71,7 @@ func checkFunctionLimits(ctx context.Context, vctx *validationCtx) []Violation {
 	if integerRangeRule(profile).Specification == "" {
 		return nil
 	}
-	breaking := breakingType4Functions(ctx, doc, vctx.part, profile)
+	breaking := breakingType4Functions(ctx, doc, profile)
 	if len(breaking) == 0 {
 		return nil
 	}
@@ -89,33 +89,22 @@ func checkFunctionLimits(ctx context.Context, vctx *validationCtx) []Violation {
 
 // breakingType4Functions returns, by object number, the implementation-limit
 // violations of every type 4 function the file lists whose program breaks a
-// limit, reading the objects [sweptXRefEntries] yields as the object sweep of
-// [checkNumericLimits] does.
-func breakingType4Functions(ctx context.Context, doc *document.Document, part int, profile string) map[int][]Violation {
-	var breaking map[int][]Violation
-	for objNum, entry := range sweptXRefEntries(doc) {
-		if ctx.Err() != nil {
-			return breaking
-		}
-		if entry.Free {
-			continue
-		}
-		obj, err := document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
-		if err != nil {
-			continue
-		}
-		stream, ok := obj.(ast.PdfStream)
-		if !ok || !isType4Function(ctx, doc, stream.Dict) {
-			continue
-		}
-		if found := type4ProgramLimits(ctx, doc, stream, objNum, part, profile); len(found) > 0 {
-			if breaking == nil {
-				breaking = make(map[int][]Violation)
-			}
-			breaking[objNum] = found
-		}
+// limit, as the object sweep read them ([type4FunctionLimitsAt]), the sweep
+// that also judges every object for [checkNumericLimits]. The caller only
+// reads the map.
+func breakingType4Functions(ctx context.Context, doc *document.Document, profile string) map[int][]Violation {
+	return sweptStructureFindings(ctx, doc, profile).type4
+}
+
+// type4FunctionLimitsAt returns the implementation-limit violations of object
+// objNum, which resolved to obj, when it is a type 4 function stream, for a
+// profile of ISO 19005 part part.
+func type4FunctionLimitsAt(ctx context.Context, doc *document.Document, objNum int, obj ast.PdfObject, part int, profile string) []Violation {
+	stream, ok := obj.(ast.PdfStream)
+	if !ok || !isType4Function(ctx, doc, stream.Dict) {
+		return nil
 	}
-	return breaking
+	return type4ProgramLimits(ctx, doc, stream, objNum, part, profile)
 }
 
 // isType4Function reports whether dict, a stream dictionary, declares a

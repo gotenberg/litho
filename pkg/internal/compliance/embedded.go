@@ -293,45 +293,11 @@ func (fs fileSpecEntry) label() string {
 //     2b, 3b, 4, 4f and PDF/UA-1: those three files are the only counts the
 //     wider walk moves, and it costs no measurable time.
 func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []fileSpecEntry {
-	var specs []fileSpecEntry
-
-	for objNum, entry := range sweptXRefEntries(doc) {
-		if ctx.Err() != nil {
-			return specs
-		}
-		if entry.Free {
-			continue
-		}
-
-		obj, err := document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
-		if err != nil {
-			continue
-		}
-		// A stream is never a file specification, but its dictionary can hold
-		// one inline, as a reference XObject's /Ref does.
-		if stream, ok := obj.(ast.PdfStream); ok {
-			specs = append(specs, directFileSpecsIn(ctx, doc, stream.Dict, objNum, "", 0)...)
-			continue
-		}
-		specs = append(specs, directFileSpecsIn(ctx, doc, obj, objNum, "", 0)...)
-
-		dict, ok := obj.(ast.PdfDict)
-		if !ok || dict == nil {
-			continue
-		}
-		if typeName, _ := document.ResolveName(ctx, doc, dict["Type"]); typeName != "Filespec" {
-			continue
-		}
-
-		// ISO 19005-3 §6.8 t3/t4 apply to every /Type /Filespec dict,
-		// embedded or not, so a plain filespec without /EF can still fail
-		// those rules. Callers gate the embedded-only checks on hasEF, which,
-		// as veraPDF's containsEF (a knownKey on /EF) reads it, is false for an
-		// /EF written as null (ISO 32000-1, 7.3.7): measured on PDF/A-1b, 2b,
-		// 3b, 4 and 4f, where a null /EF fired 6.1.11 t1, 6.8 t2 or 6.9 t2.
-		hasEF := knownKey(dict, "EF")
-
-		specs = append(specs, fileSpecEntry{dict: dict, objNum: objNum, hasEF: hasEF})
+	// The object sweep reads every object once for every check that judges
+	// every object ([objectSweep]).
+	specs := sweptFileSpecs(ctx, doc)
+	if ctx.Err() != nil {
+		return specs
 	}
 
 	gathered := make(map[int]bool, len(specs))
@@ -353,6 +319,37 @@ func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.P
 	})
 
 	return specs
+}
+
+// fileSpecsAt returns the file specifications [collectFileSpecs] finds in
+// object objNum, which resolved to obj: those written inline in its direct
+// values ([directFileSpecsIn]), and the object itself when it is a /Type
+// /Filespec dictionary.
+func fileSpecsAt(ctx context.Context, doc *document.Document, objNum int, obj ast.PdfObject) []fileSpecEntry {
+	// A stream is never a file specification, but its dictionary can hold
+	// one inline, as a reference XObject's /Ref does.
+	if stream, ok := obj.(ast.PdfStream); ok {
+		return directFileSpecsIn(ctx, doc, stream.Dict, objNum, "", 0)
+	}
+	specs := directFileSpecsIn(ctx, doc, obj, objNum, "", 0)
+
+	dict, ok := obj.(ast.PdfDict)
+	if !ok || dict == nil {
+		return specs
+	}
+	if typeName, _ := document.ResolveName(ctx, doc, dict["Type"]); typeName != "Filespec" {
+		return specs
+	}
+
+	// ISO 19005-3 §6.8 t3/t4 apply to every /Type /Filespec dict,
+	// embedded or not, so a plain filespec without /EF can still fail
+	// those rules. Callers gate the embedded-only checks on hasEF, which,
+	// as veraPDF's containsEF (a knownKey on /EF) reads it, is false for an
+	// /EF written as null (ISO 32000-1, 7.3.7): measured on PDF/A-1b, 2b,
+	// 3b, 4 and 4f, where a null /EF fired 6.1.11 t1, 6.8 t2 or 6.9 t2.
+	hasEF := knownKey(dict, "EF")
+
+	return append(specs, fileSpecEntry{dict: dict, objNum: objNum, hasEF: hasEF})
 }
 
 // collectNameTreeFileSpecs gathers the file specifications the catalog's

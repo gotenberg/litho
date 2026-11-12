@@ -528,33 +528,19 @@ func resolveCatalog(ctx context.Context, doc *document.Document) (ast.PdfDict, e
 //     three are rebuilt, which parses their objects while opening, and
 //     veraPDF parses none of the three. poppler-742-0-fuzzed.pdf gains 60
 //     odd-digit and 129 non-hex strings.
-func resolveAllObjects(ctx context.Context, doc *document.Document) {
+func resolveAllObjects(ctx context.Context, doc *document.Document, sweep *objectSweep) {
 	doc.Logger.Debug("compliance: resolving all objects for format checks")
-	count := 0
-	// The iterator yields from a copy: this warming pass resolves each
+	// The iterator yields from a snapshot: this warming pass resolves each
 	// object, and one whose offset misses its header runs the lazy xref
 	// augmentation write on a damaged file, as a concurrent reader (e.g.
 	// ExtractText on the same Document) can. Resolving every listed object
 	// here settles those offsets before the check groups fan out, see
-	// runCheckGroups.
-	for objNum, entry := range sweptXRefEntries(doc) {
-		if count%100 == 0 {
-			if ctx.Err() != nil {
-				return
-			}
-		}
-		if entry.Free {
-			continue
-		}
-		// Prefetch: the object is warmed into the resolver cache here.
-		// Individual parse failures are tolerated. The per-group
-		// checks below will surface them as structural violations if
-		// they matter. Aggregate failure would stop compliance mode
-		// from seeing a broken doc at all, which is worse.
-		_, _ = document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum}) // Warming the cache; resolve errors are tolerated.
-		doc.CheckObjectFormat(ctx, objNum)
-		count++
-	}
+	// runCheckGroups. Individual parse failures are tolerated: the per-group
+	// checks surface them as structural violations if they matter, where an
+	// aggregate failure would stop compliance mode from seeing a broken
+	// document at all. Each object resolved is handed to the checks that judge
+	// every object while it is in hand ([objectSweep]).
+	count := sweep.walk(ctx, true)
 	doc.Logger.Debug("compliance: resolved all objects", "count", count)
 }
 

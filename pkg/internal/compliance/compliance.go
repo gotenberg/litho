@@ -105,7 +105,9 @@ func runValidationViolations(ctx context.Context, doc *document.Document, profil
 		return nil, fmt.Errorf("compliance: failed to get catalog: %w", err)
 	}
 
-	resolveAllObjects(ctx, doc)
+	sweep := newObjectSweep(doc, catalog, profile)
+	resolveAllObjects(ctx, doc, sweep)
+	ctx = withSweptObjects(ctx, sweep)
 
 	violations, err := runCheckGroups(ctx, doc, catalog, profile, groups)
 	if err != nil {

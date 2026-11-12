@@ -543,29 +543,10 @@ func xmpCollectMetadataStreams(ctx context.Context, doc *document.Document, cata
 	// builds a non-main PDMetadata only when the container's /Type is not
 	// /Catalog. Matching on the reference as well covers a catalog dict that
 	// omits /Type, which would otherwise be reported twice.
-	catalogMetaNum := -1
-	if ref, ok := catalog["Metadata"].(ast.PdfIndirectRef); ok {
-		catalogMetaNum = ref.ObjectNum
-	}
-
-	seen := make(map[int]bool)
-	var metaNums []int
-
-	for objNum, entry := range sweptXRefEntries(doc) {
-		if ctx.Err() != nil || len(metaNums) >= maxXMPMetadataStreams {
-			break
-		}
-		if entry.Free {
-			continue
-		}
-		obj, err := document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
-		if err != nil {
-			doc.Logger.Debug("compliance.xmp: cannot resolve object for metadata scan", "object", objNum, "error", err)
-			continue
-		}
-		xmpCollectMetadataRefs(obj, catalogMetaNum, seen, &metaNums, 0)
-	}
-
+	//
+	// The object sweep reads every object once for every check that judges
+	// every object ([objectSweep]).
+	metaNums := sweptMetadataStreams(ctx, doc, catalogMetadataNum(catalog))
 	slices.Sort(metaNums)
 	return metaNums
 }

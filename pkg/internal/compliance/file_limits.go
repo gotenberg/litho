@@ -162,29 +162,14 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 		})
 	}
 
-	// Walk all objects checking names, strings, integers, reals, arrays, dicts.
-	// In object-number order: the walk appends violations, and Go randomises map
-	// iteration, so an unsorted walk reported the same findings in a different
-	// order on consecutive runs of the same binary.
-	for objNum, entry := range sweptXRefEntries(doc) {
-		if ctx.Err() != nil {
-			return results
-		}
-		if entry.Free {
-			continue
-		}
-
-		obj, err := document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
-		if err != nil {
-			doc.Logger.Debug("compliance.file_structure: cannot resolve object", "error", err)
-			continue
-		}
-
-		where := fmt.Sprintf("object %d", objNum)
-		overflow := countOverflows(doc.IntegerOverflows(objNum))
-		found := checkObjectNumericLimits(obj, where, part, profile, overflow)
-		found = append(found, streamFilterLimits(ctx, doc, obj, where, profile)...)
-		results = append(results, asReached(twice, objNum, found)...)
+	// Every object's names, strings, integers, reals, arrays and dicts, as
+	// the object sweep judged them ([numericLimitsAt]). In object-number order:
+	// the walk appends violations, and Go randomises map iteration, so an
+	// unsorted walk reported the same findings in a different order on
+	// consecutive runs of the same binary.
+	results = append(results, reachedFindings(twice, sweptStructureFindings(ctx, doc, profile).numericLimits)...)
+	if ctx.Err() != nil {
+		return results
 	}
 
 	// A value a typed object of veraPDF's model reads again is judged again;
@@ -221,6 +206,16 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 
 	// The content streams are scanned by checkContentStreamLimits.
 	return withoutZeroRule(results)
+}
+
+// numericLimitsAt returns the violations of [checkNumericLimits] on object
+// objNum, which resolved to obj, for a profile of ISO 19005 part part: its
+// values against the implementation limits, and its /Filter names read again.
+func numericLimitsAt(ctx context.Context, doc *document.Document, objNum int, obj ast.PdfObject, part int, profile string) []Violation {
+	where := fmt.Sprintf("object %d", objNum)
+	overflow := countOverflows(doc.IntegerOverflows(objNum))
+	found := checkObjectNumericLimits(obj, where, part, profile, overflow)
+	return append(found, streamFilterLimits(ctx, doc, obj, where, profile)...)
 }
 
 // withoutZeroRule drops the violations carrying the zero Rule. PDF/A-4 drops

@@ -570,62 +570,37 @@ func checkPostEOFData(ctx context.Context, doc *document.Document, profile strin
 // /F, /FFilter, or /FDecodeParms. A stream in twice fails it twice; see
 // [cosReachedTwice].
 func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profile string, twice map[int]bool) []Violation {
-	forbiddenKeys := []ast.PdfName{"F", "FFilter", "FDecodeParms"}
-	var results []Violation
+	return reachedFindings(twice, sweptStructureFindings(ctx, doc, profile).externalKeys)
+}
 
-	for objNum, entry := range sweptXRefEntries(doc) {
-		if ctx.Err() != nil {
-			return results
-		}
-		if entry.Free {
-			continue
-		}
-
-		stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
-		if err != nil || stream.Dict == nil {
-			continue
-		}
-
-		var found []string
-		for _, key := range forbiddenKeys {
-			if _, ok := stream.Dict[key]; ok {
-				found = append(found, string(key))
-			}
-		}
-		if len(found) > 0 {
-			results = append(results, asReached(twice, objNum, failf(streamExternalKeysRule(profile),
-				"object %d: stream dict contains %v", objNum, found))...)
+// streamExternalKeysAt returns the violations of [checkStreamExternalKeys] on
+// stream object objNum.
+func streamExternalKeysAt(objNum int, stream ast.PdfStream, profile string) []Violation {
+	var found []string
+	for _, key := range []ast.PdfName{"F", "FFilter", "FDecodeParms"} {
+		if _, ok := stream.Dict[key]; ok {
+			found = append(found, string(key))
 		}
 	}
-
-	return results
+	if len(found) == 0 {
+		return nil
+	}
+	return failf(streamExternalKeysRule(profile), "object %d: stream dict contains %v", objNum, found)
 }
 
 // checkStreamLZW validates §6.1.10: LZWDecode filter is not permitted. A
 // stream in twice fails it twice; see [cosReachedTwice].
 func checkStreamLZW(ctx context.Context, doc *document.Document, profile string, twice map[int]bool) []Violation {
-	var results []Violation
+	return reachedFindings(twice, sweptStructureFindings(ctx, doc, profile).lzw)
+}
 
-	for objNum, entry := range sweptXRefEntries(doc) {
-		if ctx.Err() != nil {
-			return results
-		}
-		if entry.Free {
-			continue
-		}
-
-		stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
-		if err != nil || stream.Dict == nil {
-			continue
-		}
-
-		if hasLZWFilter(ctx, doc, stream.Dict) {
-			results = append(results, asReached(twice, objNum, failf(lzwFilterRule(profile),
-				"object %d uses LZWDecode filter", objNum))...)
-		}
+// streamLZWAt returns the violations of [checkStreamLZW] on stream object
+// objNum.
+func streamLZWAt(ctx context.Context, doc *document.Document, objNum int, stream ast.PdfStream, profile string) []Violation {
+	if !hasLZWFilter(ctx, doc, stream.Dict) {
+		return nil
 	}
-
-	return results
+	return failf(lzwFilterRule(profile), "object %d uses LZWDecode filter", objNum)
 }
 
 // hasLZWFilter checks if a stream dictionary's /Filter contains LZWDecode.
@@ -682,46 +657,42 @@ var standardFilters = map[string]bool{
 // §6.1.6.2) do require the standard filter set, so the same name fails there.
 // A stream in twice fails it twice; see [cosReachedTwice].
 func checkNonStandardFilters(ctx context.Context, doc *document.Document, profile string, twice map[int]bool) []Violation {
-	if PDFAPart(profile) == 1 {
+	if PDFAPart(profile) == 1 || streamFilterRule(profile).Specification == "" {
+		return nil
+	}
+	return reachedFindings(twice, sweptStructureFindings(ctx, doc, profile).nonStandardFilters)
+}
+
+// nonStandardFiltersAt returns the violations of [checkNonStandardFilters] on
+// stream object objNum, for a profile of ISO 19005 part part.
+func nonStandardFiltersAt(ctx context.Context, doc *document.Document, objNum int, stream ast.PdfStream, part int, profile string) []Violation {
+	if part == 1 {
 		return nil
 	}
 	rule := streamFilterRule(profile)
 	if rule.Specification == "" {
 		return nil
 	}
-
+	filterObj, ok := stream.Dict["Filter"]
+	if !ok {
+		return nil
+	}
 	var results []Violation
-	for objNum, entry := range sweptXRefEntries(doc) {
-		if ctx.Err() != nil {
-			return results
+	// Single filter name.
+	if name, err := document.ResolveName(ctx, doc, filterObj); err == nil && name != "" {
+		if !standardFilters[string(name)] {
+			results = append(results, failf(rule,
+				"object %d uses non-standard filter /%s", objNum, name)...)
 		}
-		if entry.Free {
-			continue
-		}
-		stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
-		if err != nil || stream.Dict == nil {
-			continue
-		}
-		filterObj, ok := stream.Dict["Filter"]
-		if !ok {
-			continue
-		}
-		// Single filter name.
-		if name, err := document.ResolveName(ctx, doc, filterObj); err == nil && name != "" {
-			if !standardFilters[string(name)] {
-				results = append(results, asReached(twice, objNum, failf(rule,
-					"object %d uses non-standard filter /%s", objNum, name))...)
-			}
-			continue
-		}
-		// Array of filter names.
-		if arr, err := document.ResolveArray(ctx, doc, filterObj); err == nil {
-			for _, elem := range arr {
-				if n, err := document.ResolveName(ctx, doc, elem); err == nil && n != "" {
-					if !standardFilters[string(n)] {
-						results = append(results, asReached(twice, objNum, failf(rule,
-							"object %d uses non-standard filter /%s", objNum, n))...)
-					}
+		return results
+	}
+	// Array of filter names.
+	if arr, err := document.ResolveArray(ctx, doc, filterObj); err == nil {
+		for _, elem := range arr {
+			if n, err := document.ResolveName(ctx, doc, elem); err == nil && n != "" {
+				if !standardFilters[string(n)] {
+					results = append(results, failf(rule,
+						"object %d uses non-standard filter /%s", objNum, n)...)
 				}
 			}
 		}
@@ -843,6 +814,10 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 	var results []Violation
 	rule := streamLengthRule(profile)
 
+	// The object sweep read each stream's /Length; the offsets are read from
+	// the entries as they stand now, once the sweep has settled them.
+	lengths := sweptStructureFindings(ctx, doc, profile).streamLengths
+	next := 0
 	for objNum, entry := range sweptXRefEntries(doc) {
 		if ctx.Err() != nil {
 			return results
@@ -851,21 +826,16 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 			continue
 		}
 
-		// Resolve the object to check if it's a stream with a /Length key.
-		stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
-		if err != nil || stream.Dict == nil {
+		// Both lists are in object-number order: find the stream's /Length,
+		// absent when the object is not a stream, has no /Length, or has one
+		// that cannot be judged.
+		for next < len(lengths) && lengths[next].objNum < objNum {
+			next++
+		}
+		if next == len(lengths) || lengths[next].objNum != objNum {
 			continue
 		}
-
-		lengthObj, ok := stream.Dict["Length"]
-		if !ok {
-			continue
-		}
-
-		declaredLen, judged := declaredStreamLength(ctx, doc, lengthObj)
-		if !judged {
-			continue
-		}
+		declaredLen := lengths[next].length
 
 		if declaredLen < 0 {
 			results = append(results, asReached(twice, objNum, failf(rule,
