@@ -242,7 +242,7 @@ func (rd *renderer) cartesian(avail compose.Rect) {
 		next := compose.Rect{X: avail.X + (inner.X - bb.X), Y: avail.Y + (inner.Y - bb.Y)}
 		next.Width = avail.X + avail.Width - (bb.X + bb.Width - (inner.X + inner.Width)) - next.X
 		next.Height = avail.Y + avail.Height - (bb.Y + bb.Height - (inner.Y + inner.Height)) - next.Y
-		if !(next.Width > 4) || !(next.Height > 4) {
+		if !above(next.Width, 4) || !above(next.Height, 4) {
 			break
 		}
 		if math.Abs(next.X-inner.X)+math.Abs(next.Y-inner.Y)+math.Abs(next.Width-inner.Width)+math.Abs(next.Height-inner.Height) < 0.01 {
@@ -542,7 +542,7 @@ func (d *dim) style() TextStyle {
 	if d.ax != nil {
 		return d.ax.Style
 	}
-	return TextStyle{Size: 10, Color: compose.Black}
+	return TextStyle{Size: defaultFontSize, Color: compose.Black}
 }
 
 // tickText formats a tick value of d.
@@ -702,7 +702,7 @@ func (rd *renderer) placeLabels(d *dim) {
 // (chart2's integer division in lcl_ResizeTextShapeToFitAvailableSpace).
 func truncateLabel(s string, w, excess float64) string {
 	r := []rune(s)
-	if len(r) == 0 || !(w > 0) || math.IsNaN(excess) {
+	if len(r) == 0 || !positive(w) || math.IsNaN(excess) {
 		return s
 	}
 	avg := w / float64(len(r))

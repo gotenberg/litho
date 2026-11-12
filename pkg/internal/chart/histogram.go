@@ -93,10 +93,10 @@ func histogram(vals []float64, b Binning) ([]string, []float64) {
 			width = 3.5 * sd / math.Cbrt(n)
 			count = math.Ceil((hi - lo) / width)
 		}
-		if !(count >= 1) || math.IsInf(count, 0) {
+		if !atLeast(count, 1) || math.IsInf(count, 0) {
 			count = 1
 		}
-		if !(width > 0) {
+		if !positive(width) {
 			width = hi - lo
 		}
 		count = math.Min(count, maxBins)

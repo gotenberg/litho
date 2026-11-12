@@ -92,7 +92,7 @@ func (rd *renderer) pies(plot compose.Rect) {
 		r = math.Min((plot.Width-2*maxW)/2, (plot.Height-2*maxH)/2) - labelSpacing
 	}
 	r /= 1 + maxExpl
-	if !(r > 1) {
+	if !above(r, 1) {
 		return
 	}
 	hole := 0.0
@@ -253,7 +253,7 @@ func (rd *renderer) radar(avail compose.Rect) {
 	}
 	cx, cy := avail.X+avail.Width/2, avail.Y+avail.Height/2
 	r := math.Min(avail.Width/2-maxW-labelSpacing, avail.Height/2-maxH-labelSpacing)
-	if !(r > 1) {
+	if !above(r, 1) {
 		return
 	}
 	angle := func(i int) float64 { return math.Pi/2 - 2*math.Pi*float64(i)/float64(x.n) }

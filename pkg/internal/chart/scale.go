@@ -194,10 +194,10 @@ func autoScale(ax *Axis, lo, hi float64, opt scaleOptions) scale {
 		aMin, aMax = -aMax, -aMin
 	}
 	sc.min, sc.max, sc.major = aMin, aMax, dist
-	if !(sc.max > sc.min) {
+	if !above(sc.max, sc.min) {
 		sc.max = sc.min + 1
 	}
-	if !(sc.major > 0) || (sc.max-sc.min)/sc.major > maxTicks {
+	if !positive(sc.major) || (sc.max-sc.min)/sc.major > maxTicks {
 		sc.major = (sc.max - sc.min) / maxAutoTicks
 	}
 	return sc
@@ -242,6 +242,15 @@ func finite(v float64) float64 {
 	}
 	return v
 }
+
+// positive reports whether v is greater than 0; NaN is not.
+func positive(v float64) bool { return v > 0 }
+
+// above reports whether v is greater than lim; NaN on either side is not.
+func above(v, lim float64) bool { return v > lim }
+
+// atLeast reports whether v is at least lim; NaN on either side is not.
+func atLeast(v, lim float64) bool { return v >= lim }
 
 // floorAt rounds v down to a multiple of dist from base.
 func floorAt(v, dist, base float64) float64 {
@@ -317,7 +326,7 @@ func (s scale) minorTicks() []float64 {
 		return nil
 	}
 	step := s.minor
-	if !(step > 0) {
+	if !positive(step) {
 		step = s.major / 5
 	}
 	if (s.max-s.min)/step > maxMinorTicks {

@@ -61,7 +61,7 @@ const (
 // Three-dimensional charts are drawn as their two-dimensional kind;
 // trendline equations are not drawn.
 func Render(ctx context.Context, fonts *text.Fonts, c *Chart, r compose.Rect) []compose.Fragment {
-	if c == nil || fonts == nil || !(r.Width > 0) || !(r.Height > 0) || math.IsInf(r.Width, 0) || math.IsInf(r.Height, 0) {
+	if c == nil || fonts == nil || !positive(r.Width) || !positive(r.Height) || math.IsInf(r.Width, 0) || math.IsInf(r.Height, 0) {
 		return nil
 	}
 	rd := &renderer{ctx: ctx, fonts: fonts, c: binned(c), page: r}
@@ -107,7 +107,7 @@ func (rd *renderer) render(r compose.Rect) {
 			rd.fixed = &plot
 		}
 	}
-	if !(plot.Width > 1) || !(plot.Height > 1) {
+	if !above(plot.Width, 1) || !above(plot.Height, 1) {
 		return
 	}
 	switch {

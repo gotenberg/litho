@@ -55,7 +55,7 @@ func trendCurve(t Trendline, xs, ys []float64) [][2]float64 {
 	}
 	if t.Kind == TrendLogarithmic || t.Kind == TrendPower {
 		lo = math.Max(lo, hi/1e6)
-		if !(hi > 0) {
+		if !positive(hi) {
 			return nil
 		}
 	}

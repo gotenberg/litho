@@ -123,7 +123,7 @@ func (rd *renderer) markerOf(g *Group, s *Series, j int) Marker {
 	if m.Symbol == MarkerAuto {
 		m.Symbol = MarkerSquare + MarkerSymbol(max(s.Index, 0)%int(MarkerVerticalBar-MarkerSquare+1)) //nolint:gosec // under 15 by the modulo
 	}
-	if !(m.Size > 0) {
+	if !positive(m.Size) {
 		m.Size = 5
 	}
 	m.Size = min(m.Size, 100)

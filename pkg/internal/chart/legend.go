@@ -111,10 +111,7 @@ func (rd *renderer) entry(g *Group, s *Series, j int, name string, st TextStyle,
 // LibreOffice's VLegend does, taking its room from rem unless it overlays.
 func (rd *renderer) legend(page compose.Rect, rem *compose.Rect) {
 	lg := rd.c.Legend
-	fs := lg.Style.Size
-	if !(fs >= minFontSize) {
-		fs = 10
-	}
+	fs := fontSize(lg.Style.Size)
 	xPad := max(minLegendSpacing, fs*0.33)
 	xOff := max(minLegendSpacing, fs*0.66)
 	yPad := max(minLegendSpacing, fs*0.2)

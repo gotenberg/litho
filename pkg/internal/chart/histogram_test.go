@@ -2,6 +2,7 @@ package chart
 
 import (
 	"context"
+	"math"
 	"reflect"
 	"slices"
 	"strings"
@@ -109,7 +110,7 @@ func TestRender_UnsupportedKind(t *testing.T) {
 	}
 	b := bounds(boxes[len(boxes)-1])
 	cx, cy := b.X+b.Width/2, b.Y+b.Height/2
-	if d := (cx-210)*(cx-210) + (cy-120)*(cy-120); d > 1e-6 || !(b.Width < chartRect.Width*2/3/noticeNarrowing+1e-6) {
+	if d := (cx-210)*(cx-210) + (cy-120)*(cy-120); d > 1e-6 || math.IsNaN(b.Width) || b.Width >= chartRect.Width*2/3/noticeNarrowing+1e-6 {
 		t.Errorf("notice box %+v, want it centred on (210, 120)", b)
 	}
 }

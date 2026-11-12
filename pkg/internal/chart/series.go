@@ -620,7 +620,7 @@ func (rd *renderer) scatter(g *Group, x, y *dim) []func() {
 		}
 	}
 	scaleB := g.BubbleScale
-	if !(scaleB > 0) {
+	if !positive(scaleB) {
 		scaleB = 100
 	}
 	// The largest bubble's radius is a quarter of the plot area's smaller

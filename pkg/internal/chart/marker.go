@@ -96,7 +96,7 @@ func markerPath(sym MarkerSymbol, x, y, s float64) []compose.PathOp {
 
 // marker draws m centred on (x, y).
 func (rd *renderer) marker(m Marker, x, y float64) {
-	if m.Symbol == MarkerNone || m.Symbol == MarkerAuto || !(m.Size > 0) {
+	if m.Symbol == MarkerNone || m.Symbol == MarkerAuto || !positive(m.Size) {
 		return
 	}
 	border := m.Border

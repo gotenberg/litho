@@ -21,6 +21,19 @@ const (
 	maxFontSize = 400
 )
 
+// defaultFontSize is the size of a chart text whose style gives none
+// drawable, in points.
+const defaultFontSize = 10
+
+// fontSize returns the size v of a chart text, defaultFontSize when v is
+// under minFontSize or NaN.
+func fontSize(v float64) float64 {
+	if !atLeast(v, minFontSize) {
+		return defaultFontSize
+	}
+	return v
+}
+
 // block is a laid-out text: its lines, unrotated size and style.
 type block struct {
 	lines []text.Line
@@ -43,10 +56,7 @@ func (b *block) rotated() (float64, float64) {
 
 // textStyle maps a chart text style to the text stack's.
 func textStyle(st TextStyle) text.Style {
-	size := st.Size
-	if !(size >= minFontSize) {
-		size = 10
-	}
+	size := fontSize(st.Size)
 	size = min(size, maxFontSize)
 	w := 400
 	if st.Bold {
@@ -70,7 +80,7 @@ func (rd *renderer) measure(s string, st TextStyle, maxW float64) *block {
 	if r := []rune(s); len(r) > maxLabelRunes {
 		s = string(r[:maxLabelRunes])
 	}
-	if !(maxW > 0) {
+	if !positive(maxW) {
 		maxW = 1e4
 	}
 	ts := textStyle(st)
