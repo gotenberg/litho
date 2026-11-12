@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -89,7 +90,7 @@ func overdrawAngleGap(a, b float64) float64 {
 // its em's top by [overdrawMaxOffset] ems, never under [overdrawAngleSlack].
 func overdrawTurnBound(em, w float64) float64 {
 	reach := math.Max(em, w)
-	if !(reach > 0) {
+	if !numeric.Positive(reach) {
 		return overdrawAngleSlack
 	}
 	return math.Max(overdrawAngleSlack, overdrawMaxTurn*em/reach)
@@ -366,7 +367,7 @@ func overdrawPieceOf(elements []models.TextElement) []int {
 // curve by under [overdrawMaxBend] from one glyph to the next.
 func overdrawSameLine(a, b models.TextElement) bool {
 	em := math.Max(math.Abs(a.FontSize), math.Abs(b.FontSize))
-	if a.Vertical != b.Vertical || overdrawAngleGap(a.Angle, b.Angle) > overdrawMaxBend || !(em > 0) {
+	if a.Vertical != b.Vertical || overdrawAngleGap(a.Angle, b.Angle) > overdrawMaxBend || !numeric.Positive(em) {
 		return false
 	}
 	dx, dy := b.X-a.X, b.Y-a.Y
@@ -382,7 +383,7 @@ func overdrawSameLine(a, b models.TextElement) bool {
 // no character or has no size.
 func overdrawKey(el models.TextElement) (overdrawCell, bool) {
 	size := math.Abs(el.FontSize)
-	if el.Text == "" || !(size > 0) || math.IsInf(size, 0) || math.IsNaN(el.X) || math.IsNaN(el.Y) {
+	if el.Text == "" || !numeric.PositiveFinite(size) || math.IsNaN(el.X) || math.IsNaN(el.Y) {
 		return overdrawCell{}, false
 	}
 	cell := overdrawMaxOffset * size

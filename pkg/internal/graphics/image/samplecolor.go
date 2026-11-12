@@ -181,7 +181,7 @@ func iccRanges(ctx context.Context, doc *document.Document, csObj ast.PdfObject,
 		return unitRanges(n)
 	}
 	for i := range n {
-		if !(rng[2*i] < rng[2*i+1]) {
+		if lo, hi := rng[2*i], rng[2*i+1]; lo >= hi || math.IsNaN(lo) || math.IsNaN(hi) {
 			return unitRanges(n)
 		}
 	}

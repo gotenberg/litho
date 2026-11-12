@@ -229,7 +229,7 @@ func (p *Profile) destinationBlackPoint(intent Intent) [3]float64 {
 		out[i] = min(out[i], out[i+1])
 	}
 	lo, hi := out[0], out[blackRampSteps-1]
-	if !(lo < hi) {
+	if lo >= hi || math.IsNaN(lo) || math.IsNaN(hi) {
 		return [3]float64{}
 	}
 	if intent == RelativeColorimetric {

@@ -3,6 +3,7 @@ package recolor
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -135,7 +136,7 @@ func orderedRanges(ctx context.Context, doc *document.Document, obj ast.PdfObjec
 		out[i] = f
 	}
 	for i := range n {
-		if !(out[2*i] < out[2*i+1]) {
+		if lo, hi := out[2*i], out[2*i+1]; lo >= hi || math.IsNaN(lo) || math.IsNaN(hi) {
 			return nil, false
 		}
 	}

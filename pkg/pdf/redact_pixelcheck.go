@@ -685,7 +685,7 @@ func newDrawnGlyphs(m geom.Matrix, origins [][2]float64) *drawnGlyphs {
 // cell holds: one past the range of the cell index, or not a number.
 func cellOf(p geom.Point) (drawnCell, bool) {
 	x, y := math.Floor(p.X/redactCheckOriginTolerance), math.Floor(p.Y/redactCheckOriginTolerance)
-	if !(math.Abs(x) < 1<<52 && math.Abs(y) < 1<<52) {
+	if math.Abs(x) >= 1<<52 || math.Abs(y) >= 1<<52 || math.IsNaN(x) || math.IsNaN(y) {
 		return drawnCell{}, false
 	}
 	return drawnCell{int64(x), int64(y)}, true

@@ -21,6 +21,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
@@ -257,7 +258,7 @@ func Document(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Doc
 	if dpi == 0 {
 		dpi = DefaultDPI
 	}
-	if !(dpi > 0) || math.IsInf(dpi, 0) {
+	if !numeric.PositiveFinite(dpi) {
 		return nil, fmt.Errorf("%w: resolution %v dpi", ErrInvalidOptions, dpi)
 	}
 	if opts.JPEGQuality < 0 || opts.JPEGQuality > 100 {

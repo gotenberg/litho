@@ -130,7 +130,7 @@ func (c *coverage) renders(ctx context.Context, a *Analysis) error {
 	}
 	for y := units.Min.Y; y < units.Max.Y; y++ {
 		for x := units.Min.X; x < units.Max.X; x++ {
-			if i := y*size.X + x; within.A[i] != 0 && !(c.text.Alpha(x, y) >= glyphAlpha) {
+			if i := y*size.X + x; within.A[i] != 0 && belowGlyphAlpha(c.text.Alpha(x, y)) {
 				within.A[i] = 0
 			}
 		}
@@ -446,4 +446,10 @@ func abs32(v float32) float32 {
 		return -v
 	}
 	return v
+}
+
+// belowGlyphAlpha reports whether a, the coverage of a pixel of the text drawn
+// alone, falls short of [glyphAlpha]. A NaN coverage falls short.
+func belowGlyphAlpha(a float32) bool {
+	return a < glyphAlpha || math.IsNaN(float64(a))
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -66,9 +67,8 @@ func checkUA2VersionGroup(ctx context.Context, vctx *validationCtx) []Violation 
 		return nil
 	}
 	msg := fmt.Sprintf("file version %s is not 2.0 (header %q)", strconv.FormatFloat(float64(version), 'f', -1, 32), string(line))
-	// NaN compares false to everything, so it takes this branch too: no
-	// catalog entry replaces it.
-	if !(header <= 2.0) {
+	// A NaN header takes this branch too: no catalog entry replaces it.
+	if header > 2.0 || math.IsNaN(float64(header)) {
 		msg += ": " + UA2LaterHeaderContext
 	}
 	return fail(Rule_14289_2_6_1_t01, msg)

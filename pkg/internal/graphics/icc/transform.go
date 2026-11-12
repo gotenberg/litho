@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"sync"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // Intent is an ICC rendering intent (ICC.1:2010, 6.2), the values of the
@@ -534,7 +536,7 @@ var srgb = sync.OnceValue(func() *srgbTable {
 // encode is encode through the table. A NaN, which clamp01 lets through,
 // reads as 0.
 func (s *srgbTable) encode(v float64) uint8 {
-	if !(v > 0) {
+	if !numeric.Positive(v) {
 		return 0
 	}
 	if v >= 1 {

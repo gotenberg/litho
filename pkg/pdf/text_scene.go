@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"math"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -176,7 +177,7 @@ func (s *textScene) frame(pg *document.Page, region [4]float64) (*document.Page,
 			math.Max(region[0], math.Min(crop[0], crop[2])), math.Max(region[1], math.Min(crop[1], crop[3])),
 			math.Min(region[2], math.Max(crop[0], crop[2])), math.Min(region[3], math.Max(crop[1], crop[3])),
 		}
-		if !(region[0] < region[2] && region[1] < region[3]) {
+		if region[0] >= region[2] || region[1] >= region[3] || slices.ContainsFunc(region[:], math.IsNaN) {
 			return nil, 0, errSceneOutsidePage
 		}
 		// The renderer draws a named page boundary, so the region stands in

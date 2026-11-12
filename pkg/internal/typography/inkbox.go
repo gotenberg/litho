@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/graphics"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 )
 
@@ -220,7 +221,8 @@ func strokeReach(lw float64, join, lineCap int, miterLimit float64, m [6]float64
 func clippedInkBox(state *graphics.State, originX, originY float64) [4]float64 {
 	box := [4]float64{originX, originY, originX, originY}
 	c := state.ClippingPath
-	if !(c.MinX <= c.MaxX && c.MinY <= c.MaxY) {
+	if c.MinX > c.MaxX || c.MinY > c.MaxY ||
+		math.IsNaN(c.MinX) || math.IsNaN(c.MinY) || math.IsNaN(c.MaxX) || math.IsNaN(c.MaxY) {
 		return box
 	}
 	return [4]float64{min(box[0], c.MinX), min(box[1], c.MinY), max(box[2], c.MaxX), max(box[3], c.MaxY)}
@@ -316,7 +318,7 @@ func rectCorners(x0, y0, x1, y1 float64) [4][2]float64 {
 func (f *Font) descriptorBBox() ([4]float64, bool) {
 	bb := f.FontBBox
 	w, h := bb[2]-bb[0], bb[3]-bb[1]
-	if f.Subtype == "Type3" || !(w > 0 && h > 0) || w > maxFontBBoxEm*1000 || h > maxFontBBoxEm*1000 {
+	if f.Subtype == "Type3" || !numeric.Positive(w) || !numeric.Positive(h) || w > maxFontBBoxEm*1000 || h > maxFontBBoxEm*1000 {
 		return [4]float64{}, false
 	}
 	return bb, true

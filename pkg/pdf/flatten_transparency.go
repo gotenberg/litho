@@ -5,11 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/flatten"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // FlattenOption configures [Writer.FlattenTransparency].
@@ -301,7 +301,7 @@ func (w *Writer) FlattenTransparency(ctx context.Context, opts ...FlattenOption)
 	for _, opt := range opts {
 		opt(&o)
 	}
-	if !(o.dpi > 0) || math.IsInf(o.dpi, 0) {
+	if !numeric.PositiveFinite(o.dpi) {
 		return nil, fmt.Errorf("%w: resolution %v dpi", ErrInvalidFlattenOptions, o.dpi)
 	}
 	if o.jpegQuality < 0 || o.jpegQuality > 100 {

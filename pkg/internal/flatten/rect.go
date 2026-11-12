@@ -14,7 +14,8 @@ type Rect struct {
 
 // Empty reports whether r has no area.
 func (r Rect) Empty() bool {
-	return !(r.MinX < r.MaxX && r.MinY < r.MaxY)
+	return r.MinX >= r.MaxX || r.MinY >= r.MaxY ||
+		math.IsNaN(r.MinX) || math.IsNaN(r.MinY) || math.IsNaN(r.MaxX) || math.IsNaN(r.MaxY)
 }
 
 // Overlaps reports whether r and o share area.
