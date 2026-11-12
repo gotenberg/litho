@@ -3,6 +3,7 @@ package sheet
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -76,5 +77,26 @@ func TestConvert_Deterministic(t *testing.T) {
 	}
 	if !bytes.Equal(write(), write()) {
 		t.Error("two conversions differ")
+	}
+}
+
+// cancelSink cancels the conversion's context as the page count is
+// announced, before the first page is laid out.
+type cancelSink struct{ cancel context.CancelFunc }
+
+func (s cancelSink) Expect(int) { s.cancel() }
+
+func (cancelSink) Page(context.Context, *compose.Page) error { return nil }
+
+// TestConvert_BlankBookFails checks that the page a book without a printed
+// cell prints fails the conversion when it cannot be laid out, here for a
+// cancelled context, rather than printing a blank page in its place.
+func TestConvert_BlankBookFails(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	doc := newDoc(&Sheet{Name: "Empty"})
+	_, err := Convert(ctx, doc, pinnedFonts(t), office.Options{Sink: cancelSink{cancel}})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
 	}
 }

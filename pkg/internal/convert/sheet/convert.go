@@ -223,12 +223,14 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 				p = &pagePlan{sp: sp}
 			}
 			p.number = max(sp.g.sh.Page.FirstPageNumber, 1)
-			var tbl *compose.StructElem
-			if r, st, err := b.renderPage(p, true, 1); err == nil {
-				pg = r
-				if tbl = tableOf(st); tbl != nil {
-					out.Structure.Kids = append(out.Structure.Kids, st.Kids...)
-				}
+			r, st, err := b.renderPage(p, true, 1)
+			if err != nil {
+				return nil, err
+			}
+			pg = r
+			tbl := tableOf(st)
+			if tbl != nil {
+				out.Structure.Kids = append(out.Structure.Kids, st.Kids...)
 			}
 			if !opts.OmitOutline {
 				out.Outline = []compose.Outline{{Title: sp.g.sh.Name, Dest: compose.Dest{Page: 1, Elem: tbl}}}
