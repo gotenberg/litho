@@ -55,7 +55,7 @@ func (t *TokenReader) ReadByte() (byte, error) {
 	if err == nil {
 		t.since++
 	}
-	return b, err //nolint:wrapcheck // the decoder reports io.EOF as the end of the part: wrapping would hide it
+	return b, err // the decoder reports io.EOF as the end of the part: wrapping would hide it
 }
 
 // Read reads into p, failing with an error wrapping [ErrInputTooLarge]
@@ -70,7 +70,7 @@ func (t *TokenReader) Read(p []byte) (int, error) {
 	}
 	n, err := t.r.Read(p)
 	t.since += int64(n)
-	return n, err //nolint:wrapcheck // the decoder reports io.EOF as the end of the part: wrapping would hide it
+	return n, err // the decoder reports io.EOF as the end of the part: wrapping would hide it
 }
 
 // tooLarge is the error past the cap.

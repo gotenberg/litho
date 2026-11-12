@@ -7,7 +7,7 @@ package odf
 // ST_ShapeType), as LibreOffice's filter maps them when it writes a shape
 // to OOXML (filter/source/msfilter/util.cxx, GetOOXMLPresetGeometry). A
 // type "ooxml-" followed by a preset name is that preset.
-var presetTypes = map[string]string{ //nolint:gochecknoglobals // a read-only table, LibreOffice's GetOOXMLPresetGeometry.
+var presetTypes = map[string]string{
 	"frame":                           "frame",
 	"rectangle":                       "rect",
 	"round-rectangle":                 "roundRect",

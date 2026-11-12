@@ -405,7 +405,7 @@ func (p *Package) readRaw(name string) ([]byte, error) {
 	defer func() { _ = rc.Close() }() // a read-only zip entry reports nothing worth handling on close
 	data, err := io.ReadAll(rc)
 	if err != nil {
-		return nil, err //nolint:wrapcheck // entryReader's errors name the entry already
+		return nil, err // entryReader's errors name the entry already
 	}
 	return data, nil
 }
@@ -459,7 +459,7 @@ func (r *entryReader) Read(b []byte) (int, error) {
 	if err != nil && !errors.Is(err, io.EOF) {
 		return n, fmt.Errorf("%w: reading the package entry %s: %w", office.ErrMalformed, r.name, err)
 	}
-	return n, err //nolint:wrapcheck // io.EOF ends the entry and must stay unwrapped
+	return n, err // io.EOF ends the entry and must stay unwrapped
 }
 
 // tooLarge is the error one byte past the entry's room.
@@ -467,7 +467,7 @@ func (r *entryReader) tooLarge() error {
 	return fmt.Errorf("%w: the package entry %s inflates past the caps", office.ErrInputTooLarge, r.name)
 }
 
-func (r *entryReader) Close() error { return r.rc.Close() } //nolint:wrapcheck // a read-only zip entry has nothing to flush
+func (r *entryReader) Close() error { return r.rc.Close() } // a read-only zip entry has nothing to flush
 
 // parseManifest reads META-INF/manifest.xml (ODF 1.3, Part 2, 4).
 func (p *Package) parseManifest(ctx context.Context, data []byte) error {

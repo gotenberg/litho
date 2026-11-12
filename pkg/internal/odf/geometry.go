@@ -219,7 +219,7 @@ func (e *enhanced) node(op shape.Op, args ...shape.Arg) shape.Arg {
 // identifiers maps the identifiers of a formula (ODF 1.3 Part 3, 19.171
 // draw:formula) to the built-ins; pi is a literal. xstretch and ystretch,
 // the stretch points, are 0, which keeps the geometry unstretched.
-var identifiers = map[string]shape.Builtin{ //nolint:gochecknoglobals // a read-only spec table, ODF 1.3 Part 3, 19.171.
+var identifiers = map[string]shape.Builtin{
 	"left": shape.BuiltinL, "top": shape.BuiltinT, "right": shape.BuiltinR, "bottom": shape.BuiltinB,
 	"width": shape.BuiltinW, "height": shape.BuiltinH, "logwidth": shape.BuiltinLogWidth,
 	"logheight": shape.BuiltinLogHeight, "hasstroke": shape.BuiltinHasStroke, "hasfill": shape.BuiltinHasFill,
@@ -323,7 +323,7 @@ func (p *formulaParser) term(depth int) shape.Arg {
 
 // functions are the functions of a formula with their operators and
 // argument counts (19.171).
-var functions = map[string]struct { //nolint:gochecknoglobals // a read-only spec table, ODF 1.3 Part 3, 19.171.
+var functions = map[string]struct {
 	op shape.Op
 	n  int
 }{
@@ -434,13 +434,13 @@ func isCommand(c byte) bool { return strings.IndexByte("MLCZNFSTUABWVXYQGHIJK", 
 
 // commandArgs is the number of parameters of one segment of each path
 // command (19.145).
-var commandArgs = map[byte]int{ //nolint:gochecknoglobals // a read-only spec table, ODF 1.3 Part 3, 19.145.
+var commandArgs = map[byte]int{
 	'M': 2, 'L': 2, 'C': 6, 'Q': 4, 'T': 6, 'U': 6, 'A': 8, 'B': 8, 'W': 8, 'V': 8, 'X': 2, 'Y': 2,
 	'G': 4, 'Z': 0, 'N': 0, 'F': 0, 'S': 0, 'H': 0, 'I': 0, 'J': 0, 'K': 0,
 }
 
 // commandKinds maps the drawing commands to the engine's.
-var commandKinds = map[byte]shape.CmdKind{ //nolint:gochecknoglobals // a read-only spec table, ODF 1.3 Part 3, 19.145.
+var commandKinds = map[byte]shape.CmdKind{
 	'M': shape.CmdMove, 'L': shape.CmdLine, 'C': shape.CmdCubic, 'Q': shape.CmdQuad,
 	'T': shape.CmdAngleEllipseTo, 'U': shape.CmdAngleEllipse, 'A': shape.CmdArcTo, 'B': shape.CmdArcMove,
 	'W': shape.CmdClockwiseArcTo, 'V': shape.CmdClockwiseArcMove, 'X': shape.CmdQuadrantX, 'Y': shape.CmdQuadrantY,
@@ -448,7 +448,7 @@ var commandKinds = map[byte]shape.CmdKind{ //nolint:gochecknoglobals // a read-o
 }
 
 // shadeModes maps LibreOffice's shade commands to the fill modes.
-var shadeModes = map[byte]shape.FillMode{ //nolint:gochecknoglobals // a read-only table of LibreOffice's path extensions.
+var shadeModes = map[byte]shape.FillMode{
 	'H': shape.FillDarken, 'I': shape.FillDarkenLess, 'J': shape.FillLighten, 'K': shape.FillLightenLess,
 }
 

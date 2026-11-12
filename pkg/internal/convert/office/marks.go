@@ -51,8 +51,6 @@ const (
 //     same probe in the same nine colours.
 //   - litho/docx tracked-changes: Microsoft's reference prints the
 //     accepted text, without marks.
-//
-//nolint:gochecknoglobals // static palette
 var authorColors = [...]uint32{0xC69200, 0x0646A2, 0x579D1C, 0x692B9D, 0xC5000B, 0x008080, 0x8C8400, 0x35556B, 0xD17600}
 
 // The fixed colours of the marked view, 0xRRGGBB.
