@@ -14,7 +14,7 @@ import (
 // PageSink takes the pages of a document as a converter lays them out, so
 // a page leaves memory once it is written instead of when the whole
 // document is. [Stream] is the sink a conversion writes through; a
-// converter given none appends its pages to its [Document] as before.
+// converter given none appends its pages to its [Document].
 type PageSink interface {
 	// Expect announces, before the first page, that the document has n
 	// pages. A converter that knows its page count before it paints calls

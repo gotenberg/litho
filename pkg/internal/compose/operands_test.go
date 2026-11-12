@@ -154,7 +154,7 @@ func TestWriteFitsOperandsInPDF14(t *testing.T) {
 		t.Errorf("largest operand at PDF 1.4 %v, want at most 32767", got)
 	}
 	if got := largestOperand(t, at17); got <= 32767 {
-		t.Errorf("largest operand at PDF 1.7 %v: the test no longer reaches the PDF 1.4 limit", got)
+		t.Errorf("largest operand at PDF 1.7 %v: the test does not reach the PDF 1.4 limit", got)
 	}
 	img14, img17 := render(t, open(t, at14), 1), render(t, open(t, at17), 1)
 	samePixels(t, img17, img14, 8)

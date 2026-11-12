@@ -152,9 +152,8 @@ func (w *docWriter) fields(ctx context.Context, page int, height float64, fields
 }
 
 // widget writes the field f of the page at index page, height points
-// tall: its appearance
-// streams now, its widget annotation (ISO 32000-1, 12.5.6.19, Table 188)
-// at the end. A field of any kind but a radio button is one dictionary,
+// tall: its appearance streams at once, its widget annotation (ISO
+// 32000-1, 12.5.6.19, Table 188) at the end. A field of any kind but a radio button is one dictionary,
 // the field merged with its widget (12.7.3.1); a radio button is a widget
 // whose /Parent is its group's field.
 func (w *docWriter) widget(ctx context.Context, page int, height float64, f *Field) (ast.PdfIndirectRef, error) {

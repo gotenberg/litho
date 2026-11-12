@@ -13,8 +13,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
-// oneShot returns data compressed in one write, as the backend compressed
-// a decoded picture before sources were encoded when met.
+// oneShot returns data compressed in one write: the stream a whole decoded
+// picture compresses to.
 func oneShot(t *testing.T, data []byte) []byte {
 	t.Helper()
 	var buf bytes.Buffer

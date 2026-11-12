@@ -109,8 +109,8 @@ func PruneTree(root *StructElem, used map[*StructElem]bool) {
 }
 
 // dropDanglingDests clears the [Dest.Elem] of every link and outline entry
-// of doc that names an element doc.Structure no longer reaches. A link's
-// destination is copied before it changes: the model may share it.
+// of doc that names an element the pruned doc.Structure does not reach. A
+// link's destination is copied before it changes: the model may share it.
 func dropDanglingDests(doc *Document) {
 	kept := map[*StructElem]bool{}
 	stack := []*StructElem{doc.Structure}

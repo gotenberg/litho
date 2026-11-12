@@ -132,7 +132,7 @@ func cmpString(a, b string) int {
 }
 
 // TestWriteFieldsDrawTheirValue renders the page: the widget's appearance
-// draws the value the page no longer holds.
+// draws the value taken off the page.
 func TestWriteFieldsDrawTheirValue(t *testing.T) {
 	t.Parallel()
 	img := render(t, open(t, write(t, formDoc(t))), 1)
