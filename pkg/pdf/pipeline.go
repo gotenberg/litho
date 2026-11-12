@@ -236,7 +236,7 @@ func (p *Pipeline) buildValidationErrors() []error {
 		case *convertStage:
 			if st.c == nil {
 				errs = append(errs, &PipelineStageError{
-					Index: i, Name: s.name(), Err: fmt.Errorf("%w: nil conversion", ErrInvalidConvertOptions),
+					Index: i, Name: s.name(), Err: fmt.Errorf("nil conversion: %w", ErrNilSource),
 				})
 			}
 		case *mergePipelinesStage:

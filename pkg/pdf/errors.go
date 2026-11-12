@@ -146,8 +146,17 @@ var (
 	ErrEmptyPageList = errors.New("empty page list")
 
 	// ErrNilSource is returned when a nil [Reader] is passed where a
-	// source document is required.
+	// source document is required, and, wrapped, by [Conversion.WriteTo]
+	// for a nil Conversion or one made from a nil io.Reader, and by
+	// [Pipeline.WriteTo] and [Pipeline.Validate] for a nil Conversion given
+	// to [Pipeline.Convert]. It is the calling program's mistake, not its
+	// input's: [IsInvalidInput] does not report it.
 	ErrNilSource = errors.New("source reader is nil")
+
+	// ErrNilDestination is returned, wrapped, by [Conversion.WriteTo] when
+	// its destination is nil. Like [ErrNilSource], it is the calling
+	// program's mistake: [IsInvalidInput] does not report it.
+	ErrNilDestination = errors.New("destination writer is nil")
 
 	// ErrEmptyText is returned when a text stamp has an empty string, and,
 	// wrapped, by [Writer.WriteTo] for a bookmark [Writer.SetBookmarks] gave

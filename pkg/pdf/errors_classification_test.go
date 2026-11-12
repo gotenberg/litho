@@ -21,6 +21,7 @@ var otherErrors = []error{
 	ErrInvalidPipelineConcurrency,
 	ErrOCRFailed,
 	ErrNilSource,
+	ErrNilDestination,
 	ErrWriterConsumed,
 	ErrWriterClosed,
 	ErrTimestampAuthority,

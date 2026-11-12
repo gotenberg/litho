@@ -415,7 +415,8 @@ type ConvertWarning struct {
 // does not read back, leaves dst holding part of the file.
 //
 // It returns an error wrapping [ErrConversionReused] when the conversion
-// already ran, [ErrNilSource] for a nil source, [ErrInvalidLimits] or
+// already ran, [ErrNilSource] for a nil Conversion or a nil source,
+// [ErrNilDestination] for a nil dst, [ErrInvalidLimits] or
 // [ErrInvalidConvertOptions] for an option out of range, two options that
 // exclude each other or a page range the document has no pages for,
 // [ErrConvertInputTooLarge] past [Limits.MaxConvertInputBytes] or
@@ -441,7 +442,7 @@ type convertEnv struct {
 // [Conversion.WriteTo]).
 func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ *ConvertReport, err error) {
 	if c == nil {
-		return nil, fmt.Errorf("converting: %w: nil conversion", ErrInvalidConvertOptions)
+		return nil, fmt.Errorf("converting: nil conversion: %w", ErrNilSource)
 	}
 	o := c.cfg
 	if o.logger == nil {
@@ -457,10 +458,10 @@ func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ 
 		return nil, fmt.Errorf("converting %s: %w", name, ErrNilSource)
 	}
 	if dst == nil {
-		return nil, fmt.Errorf("converting %s: %w: nil destination", name, ErrInvalidConvertOptions)
+		return nil, fmt.Errorf("converting %s: %w", name, ErrNilDestination)
 	}
 	if err := o.limits.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("converting %s: %w", name, err)
 	}
 	if err := o.validate(); err != nil {
 		return nil, fmt.Errorf("converting %s: %w", name, err)

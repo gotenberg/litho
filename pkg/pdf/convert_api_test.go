@@ -136,12 +136,12 @@ func TestConvert_RefusesANilSourceOrDestination(t *testing.T) {
 	if _, err := FromText(nil).WriteTo(ctx, &out); !errors.Is(err, ErrNilSource) {
 		t.Errorf("nil source: %v, want ErrNilSource", err)
 	}
-	if _, err := FromText(strings.NewReader("A")).WriteTo(ctx, nil); !errors.Is(err, ErrInvalidConvertOptions) {
-		t.Errorf("nil destination: %v, want ErrInvalidConvertOptions", err)
+	if _, err := FromText(strings.NewReader("A")).WriteTo(ctx, nil); !errors.Is(err, ErrNilDestination) || IsInvalidInput(err) {
+		t.Errorf("nil destination: %v, want ErrNilDestination, not invalid input", err)
 	}
 	var c *Conversion
-	if _, err := c.WriteTo(ctx, &out); !errors.Is(err, ErrInvalidConvertOptions) {
-		t.Errorf("nil conversion: %v, want ErrInvalidConvertOptions", err)
+	if _, err := c.WriteTo(ctx, &out); !errors.Is(err, ErrNilSource) || IsInvalidInput(err) {
+		t.Errorf("nil conversion: %v, want ErrNilSource, not invalid input", err)
 	}
 }
 
@@ -280,11 +280,11 @@ func TestPipeline_ConvertRefusals(t *testing.T) {
 	if !errors.Is(err, ErrPipelineNoSource) || !errors.As(err, &stageErr) || stageErr.Index != 1 || stageErr.Name != "convert" {
 		t.Errorf("Convert after Open: %v, want ErrPipelineNoSource at stage 1", err)
 	}
-	if _, err := NewPipeline().Convert(nil).WriteTo(ctx, &out); !errors.Is(err, ErrInvalidConvertOptions) {
-		t.Errorf("nil conversion: %v, want ErrInvalidConvertOptions", err)
+	if _, err := NewPipeline().Convert(nil).WriteTo(ctx, &out); !errors.Is(err, ErrNilSource) || IsInvalidInput(err) {
+		t.Errorf("nil conversion: %v, want ErrNilSource, not invalid input", err)
 	}
-	if err := NewPipeline().Convert(nil).Validate(); !errors.Is(err, ErrInvalidConvertOptions) {
-		t.Errorf("Validate with a nil conversion: %v, want ErrInvalidConvertOptions", err)
+	if err := NewPipeline().Convert(nil).Validate(); !errors.Is(err, ErrNilSource) {
+		t.Errorf("Validate with a nil conversion: %v, want ErrNilSource", err)
 	}
 	bad := FromText(strings.NewReader("A"), WithConvertFontDirs(dir), WithFontSize(0))
 	if _, err := NewPipeline().Convert(bad).WriteTo(ctx, &out); !errors.Is(err, ErrInvalidConvertOptions) || !errors.As(err, &stageErr) || stageErr.Name != "convert" {
