@@ -1,10 +1,8 @@
 package css
 
-import (
-	"math"
-	"reflect"
-	"sync"
-)
+import "sync"
+
+//go:generate go run ../../../cmd/gen-style-equal
 
 // Styles is a table of computed styles that lets equal styles be one
 // value: [Styles.Share] returns the style the table already holds for a
@@ -15,8 +13,11 @@ import (
 //
 // Two styles are equal when every field holds the same value: numbers bit
 // for bit, strings and the elements of slices by content, a nil slice
-// apart from an empty one, and pointers by the address they hold. Equal
-// styles lay out alike, so sharing one changes no output.
+// apart from an empty one, pointers by the address they hold, and a map,
+// func, channel or interface as equal to another only when both are nil.
+// Equal styles lay out alike, so sharing one changes no output. The
+// comparison and the hash are generated from the fields of [Style]
+// (cmd/gen-style-equal): a new field joins both.
 //
 // A shared style is read and never written: the code that shares a style
 // gives up writing it, and code that needs another value copies it first.
@@ -57,11 +58,11 @@ func (t *Styles) share(st *Style) (*Style, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if old, ok := t.byHash[h]; ok {
-		if old == st || equalStyles(old, st) {
+		if old == st || equalStyle(old, st) {
 			return old, false
 		}
 		for _, o := range t.more[h] {
-			if o == st || equalStyles(o, st) {
+			if o == st || equalStyle(o, st) {
 				return o, false
 			}
 		}
@@ -86,53 +87,11 @@ func (t *Styles) Len() int {
 	return t.held
 }
 
-// hash returns a hash of st's value consistent with [equalStyles]: equal
-// styles hash alike. It reads the properties that most often tell two
-// styles apart, not every field, so it stays cheap; styles that differ
-// elsewhere alone share a hash and [equalStyles] tells them apart.
+// hash returns a hash of st's value consistent with [equalStyle]: equal
+// styles hash alike. It folds every field, so styles that differ almost
+// never share a hash.
 func (t *Styles) hash(st *Style) uint64 {
-	h := uint64(fnvOffset64)
-	dim := func(d Dimension) {
-		h = mix(h, uint64(d.Kind))
-		h = mix(h, math.Float64bits(d.Value))
-		h = mix(h, math.Float64bits(d.Fraction))
-	}
-	col := func(c Color) {
-		h = mix(h, math.Float64bits(c.R))
-		h = mix(h, math.Float64bits(c.G))
-		h = mix(h, math.Float64bits(c.B))
-		h = mix(h, math.Float64bits(c.A))
-	}
-	h = mix(h, uint64(st.Display)<<16|uint64(st.Position)<<8|uint64(st.Float))
-	h = mix(h, math.Float64bits(st.FontSize))
-	h = mix(h, uint64(st.FontWeight)<<8|uint64(st.FontStyle)) //nolint:gosec // FontWeight is 100 to 900, non-negative
-	for _, f := range st.FontFamilies {
-		h = mix(h, uint64(len(f)))
-		for i := 0; i < len(f); i++ {
-			h = (h ^ uint64(f[i])) * fnvPrime64
-		}
-	}
-	dim(st.Width)
-	dim(st.Height)
-	dim(st.Left)
-	dim(st.Top)
-	dim(st.LineHeight)
-	dim(st.TextIndent)
-	for i := range 4 {
-		dim(st.Margin[i])
-		dim(st.Padding[i])
-		h = mix(h, math.Float64bits(st.Border[i].Width))
-	}
-	col(st.Color)
-	col(st.BackgroundColor)
-	h = mix(h, uint64(st.TextAlign)<<8|uint64(st.VerticalAlign.Kind))
-	return h
-}
-
-// equalStyles reports whether a and b hold equal values, as [Styles]
-// defines them.
-func equalStyles(a, b *Style) bool {
-	return equalValues(reflect.ValueOf(a).Elem(), reflect.ValueOf(b).Elem())
+	return hashStyle(fnvOffset64, st)
 }
 
 // mix folds the word u into the hash h, FNV-1a fashion a word at a time.
@@ -140,58 +99,19 @@ func mix(h, u uint64) uint64 {
 	return (h ^ u) * fnvPrime64
 }
 
-// equalValues reports whether a and b, of one type, hold equal values:
-// numbers bit for bit, strings and slice elements by content, a nil slice
-// apart from an empty one, pointers by address. A map, func, channel or
-// interface is equal to another only when both are nil, so a field of
-// such a kind never makes two styles share wrongly.
-func equalValues(a, b reflect.Value) bool {
-	switch a.Kind() {
-	case reflect.Bool:
-		return a.Bool() == b.Bool()
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return a.Int() == b.Int()
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return a.Uint() == b.Uint()
-	case reflect.Float32, reflect.Float64:
-		return math.Float64bits(a.Float()) == math.Float64bits(b.Float())
-	case reflect.String:
-		return a.String() == b.String()
-	case reflect.Array:
-		for i := range a.Len() {
-			if !equalValues(a.Index(i), b.Index(i)) {
-				return false
-			}
-		}
-		return true
-	case reflect.Slice:
-		if a.IsNil() || b.IsNil() {
-			return a.IsNil() == b.IsNil()
-		}
-		if a.Len() != b.Len() {
-			return false
-		}
-		for i := range a.Len() {
-			if !equalValues(a.Index(i), b.Index(i)) {
-				return false
-			}
-		}
-		return true
-	case reflect.Struct:
-		for i := range a.NumField() {
-			if !equalValues(a.Field(i), b.Field(i)) {
-				return false
-			}
-		}
-		return true
-	case reflect.Complex64, reflect.Complex128:
-		x, y := a.Complex(), b.Complex()
-		return math.Float64bits(real(x)) == math.Float64bits(real(y)) && math.Float64bits(imag(x)) == math.Float64bits(imag(y))
-	case reflect.Pointer:
-		return a.Pointer() == b.Pointer()
-	case reflect.Map, reflect.Func, reflect.Chan, reflect.Interface, reflect.UnsafePointer:
-		return a.IsNil() && b.IsNil()
-	case reflect.Invalid:
+// mixBool folds b into the hash h.
+func mixBool(h uint64, b bool) uint64 {
+	if b {
+		return mix(h, 1)
 	}
-	return false
+	return mix(h, 0)
+}
+
+// mixString folds the length and the bytes of s into the hash h.
+func mixString(h uint64, s string) uint64 {
+	h = mix(h, uint64(len(s)))
+	for i := 0; i < len(s); i++ {
+		h = (h ^ uint64(s[i])) * fnvPrime64
+	}
+	return h
 }
