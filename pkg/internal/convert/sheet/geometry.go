@@ -111,7 +111,12 @@ func (g *grid) drawingCells(d *Drawing) (Range, bool) {
 	var limit int
 	switch {
 	case d.Absolute:
-		limit = min(int(rc.Y+rc.Height)+1, maxRows-1)
+		// A bottom edge past the sheet, infinite or not a number looks
+		// down to the last row: converting it to int would overflow.
+		limit = maxRows - 1
+		if bottom := rc.Y + rc.Height; bottom < maxRows-2 {
+			limit = int(bottom) + 1 // fits int: below maxRows, checked above
+		}
 	case d.To != nil:
 		limit = min(max(d.To.Row, 0)+1, maxRows-1)
 	default:
