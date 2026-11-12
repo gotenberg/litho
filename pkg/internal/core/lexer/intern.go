@@ -5,12 +5,12 @@ package lexer
 const internSlots = 256
 
 // maxInternedLen is the longest text [Lexer.WithInterning] remembers. The
-// operators, numbers and resource names a content stream repeats are short;
-// a longer text is copied for its token as it is without interning.
+// operators, numbers, resource names and strings a content stream repeats are
+// short; a longer text is copied for its token as it is without interning.
 const maxInternedLen = 32
 
-// WithInterning has the lexer hand out one copy of each short keyword, number
-// and name it reads again and again, rather than a new copy for each token:
+// WithInterning has the lexer hand out one copy of each short keyword, number,
+// name and string it reads again and again, rather than a new copy for each token:
 // it remembers the last text read into each of [internSlots] slots, chosen by
 // a hash of the text, and returns the remembered copy when the bytes read
 // match it. A token's text is the same either way. Interning costs a table of

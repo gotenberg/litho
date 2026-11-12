@@ -37,6 +37,7 @@ func FuzzInterningReadsTheSame(f *testing.F) {
 	}
 	f.Add([]byte("1.5e2 1.5e2 w 99999999999999999999 99999999999999999999 w /F1 1 Tf /F1 1 Tf 0.5 0.5 g"))
 	f.Add([]byte("/F1 1 Tf /F1"))
+	f.Add([]byte("[(a) 1 (a) <41> <41> <4G1> <4G1> (a\\n) (a\\n)] TJ <<>> BDC"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > maxFuzzInput {
 			return
@@ -53,12 +54,12 @@ func FuzzInterningReadsTheSame(f *testing.F) {
 	})
 }
 
-// TestInterningRecordsEachOccurrence locks that a number whose reading records
-// a format violation or an integer overflow records it at each occurrence when
-// the parse shares the operands it reads again, and that a repeated operand
-// reads as the same value.
+// TestInterningRecordsEachOccurrence locks that a number or a string whose
+// reading records a format violation or an integer overflow records it at each
+// occurrence when the parse shares the operands it reads again, and that a
+// repeated operand reads as the same value.
 func TestInterningRecordsEachOccurrence(t *testing.T) {
-	data := []byte("1.5e2 1.5e2 w 99999999999999999999 99999999999999999999 w /F1 1 Tf /F1 1 Tf")
+	data := []byte("1.5e2 1.5e2 w 99999999999999999999 99999999999999999999 w /F1 1 Tf /F1 1 Tf <4G1> <4G1> 0 Tz")
 	ctx := context.Background()
 	o := optionsOf(ctx, []Option{ForRepair()})
 	if plain, interned := readInterned(ctx, data, o, false), readInterned(ctx, data, o, true); plain != interned {
@@ -70,13 +71,15 @@ func TestInterningRecordsEachOccurrence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := len(p.FormatViolations); got != 2 {
-		t.Errorf("recorded %d exponent violations, want 2", got)
+	// Two exponents, and an invalid character and an odd count in each hex
+	// string.
+	if got := len(p.FormatViolations); got != 6 {
+		t.Errorf("recorded %d format violations, want 6", got)
 	}
 	if got := len(p.IntegerOverflows); got != 2 {
 		t.Errorf("recorded %d integer overflows, want 2", got)
 	}
-	if len(ops) != 4 || ops[2].Operands[0] != ops[3].Operands[0] {
+	if len(ops) != 5 || ops[2].Operands[0] != ops[3].Operands[0] {
 		t.Errorf("repeated font name reads %#v", ops)
 	}
 }

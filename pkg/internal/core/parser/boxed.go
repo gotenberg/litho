@@ -7,24 +7,27 @@ import "github.com/gotenberg/litho/pkg/internal/core/ast"
 const boxedSlots = 256
 
 // maxBoxedLen is the longest token text [Parser.WithBoxedOperands] remembers
-// an object for: the numbers and names a content stream repeats are short.
+// an object for: the numbers, names and strings a content stream repeats are
+// short.
 const maxBoxedLen = 32
 
 // boxedOperands remembers, for each of [boxedSlots] slots chosen by a hash of
-// a token's text, the last number or name object read from that text.
+// a token's text, the last number, name or string object read from that
+// text.
 type boxedOperands struct {
 	texts   [boxedSlots]string
 	objects [boxedSlots]ast.PdfObject
 }
 
-// WithBoxedOperands has the parser hand out one object for each short number
-// and name token it reads again and again, rather than a new one for each:
-// an [ast.PdfObject] holding a number or a name is a heap value the
-// interface points at, and a content stream repeats its operands. The object
+// WithBoxedOperands has the parser hand out one object for each short number,
+// name and string token it reads again and again, rather than a new one for
+// each: an [ast.PdfObject] holding a number, a name or a string is a heap
+// value the interface points at, and a content stream repeats its operands. The object
 // is the one the parser would read anyway, and is never changed, so the
-// operations sharing it read what they would read apart. Only a number read
-// with no side effect is remembered: one that records a format violation or
-// an integer overflow is read again each time. It costs a table of
+// operations sharing it read what they would read apart. Only an object read
+// with no side effect is remembered: a number or a string whose reading
+// records a format violation or an integer overflow, or decrypts, is read
+// again each time. It costs a table of
 // [boxedSlots] entries, which pays for itself on a stream, and not on one
 // object.
 func (p *Parser) WithBoxedOperands() *Parser {

@@ -510,7 +510,7 @@ func (l *Lexer) NextToken() (Token, error) {
 				}
 			}
 			l.scratch = buf
-			return Token{Type: TokenString, Value: string(buf)}, nil
+			return Token{Type: TokenString, Value: l.text(buf)}, nil
 
 		case ')', '{', '}':
 			if l.atOperator() {
@@ -549,7 +549,7 @@ func (l *Lexer) NextToken() (Token, error) {
 				}
 			}
 			l.scratch = buf
-			return Token{Type: TokenHexString, Value: string(buf)}, nil
+			return Token{Type: TokenHexString, Value: l.text(buf)}, nil
 
 		case '>':
 			if l.atOperator() {

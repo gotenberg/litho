@@ -591,10 +591,8 @@ func (p *Parser) parseObject(ctx context.Context) (ast.PdfObject, error) {
 			return nil, err
 		}
 		return p.remember(slot, t0.Value, ast.PdfInt(i)), nil
-	case lexer.TokenString:
-		return p.parseString(t0.Value)
-	case lexer.TokenHexString:
-		return p.parseHexString(t0.Value)
+	case lexer.TokenString, lexer.TokenHexString:
+		return p.parseStringToken(t0)
 	case lexer.TokenDelimiter:
 		switch t0.Value {
 		case "<<":
@@ -1599,6 +1597,36 @@ func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
 func (p *Parser) popElements(base int) {
 	clear(p.elements[base:])
 	p.elements = p.elements[:base]
+}
+
+// parseStringToken reads the literal or hex string of tok. Under
+// [Parser.WithBoxedOperands] it hands out again the object it read from the
+// same text, when reading it decrypted nothing and recorded no format
+// violation: reading that text again would give the same string and record
+// nothing.
+func (p *Parser) parseStringToken(tok lexer.Token) (ast.PdfObject, error) {
+	slot := -1
+	if p.decryptFn == nil {
+		slot = p.boxedSlot(tok.Value)
+		if obj, ok := p.rememberedObject(slot, tok.Value); ok {
+			return obj, nil
+		}
+	}
+	recorded := len(p.FormatViolations)
+	var str ast.PdfString
+	var err error
+	if tok.Type == lexer.TokenString {
+		str, err = p.parseString(tok.Value)
+	} else {
+		str, err = p.parseHexString(tok.Value)
+	}
+	if err != nil {
+		return str, err
+	}
+	if len(p.FormatViolations) != recorded {
+		return str, nil
+	}
+	return p.remember(slot, tok.Value, str), nil
 }
 
 func (p *Parser) parseString(val string) (ast.PdfString, error) {
