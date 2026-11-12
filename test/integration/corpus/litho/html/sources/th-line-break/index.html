@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>การตัดคำภาษาไทย</title>
+<style>
+body { font-family: "Noto Sans Thai", sans-serif; font-size: 12pt; margin: 0; color: #222; }
+h1 { font-size: 16pt; margin: 0 0 8pt; }
+h2 { font-size: 11pt; color: #555; margin: 6pt 0 2pt; }
+h3 { font-family: "Liberation Mono", monospace; font-size: 8pt; font-weight: normal; color: #c33; margin: 8pt 0 2pt; }
+p { margin: 0 0 4pt; line-height: 1.8; text-align: start; }
+.lat { font-family: "Liberation Sans", sans-serif; font-size: 8pt; color: #c33; }
+.col { border-left: 0.75pt solid #c33; padding-left: 4pt; }
+.narrow { width: 10em; }
+.wide { width: 22em; }
+.big { font-size: 20pt; line-height: 2; }
+</style>
+</head>
+<body>
+<h1>ปฏิญญาสากลว่าด้วยสิทธิมนุษยชน</h1>
+<h3>width: 22em</h3>
+<div class="col wide"><h2>ข้อ 1</h2><p>มนุษย์ทั้งหลายเกิดมามีอิสระและเสมอภาคกันในเกียรติศักดิ์และสิทธิ ต่างมีเหตุผลและมโนธรรม และควรปฏิบัติต่อกันด้วยเจตนารมณ์แห่งภราดรภาพ</p>
+<h2>ข้อ 2</h2><p>ทุกคนย่อมมีสิทธิและอิสรภาพบรรดาที่กำหนดไว้ในปฏิญญานี้ โดยปราศจากความแตกต่างไม่ว่าชนิดใด ๆ ดังเช่น เชื้อชาติ ผิว เพศ ภาษา ศาสนา ความคิดเห็นทางการเมืองหรือทางอื่น เผ่าพันธุ์แห่งชาติ หรือสังคม ทรัพย์สิน กำเนิด หรือสถานะอื่น ๆ</p><p>อนึ่งจะไม่มีความแตกต่างใด ๆ ตามมูลฐานแห่งสถานะทางการเมือง ทางการศาล หรือทางการระหว่างประเทศของประเทศหรือดินแดนที่บุคคลสังกัด ไม่ว่าดินแดนนี้จะเป็นเอกราช อยู่ในความพิทักษ์มิได้ปกครองตนเอง หรืออยู่ภายใต้การจำกัดอธิปไตยใด ๆ ทั้งสิ้น</p></div>
+<h3>width: 10em</h3>
+<div class="col narrow"><h2>ข้อ 1</h2><p>มนุษย์ทั้งหลายเกิดมามีอิสระและเสมอภาคกันในเกียรติศักดิ์และสิทธิ ต่างมีเหตุผลและมโนธรรม และควรปฏิบัติต่อกันด้วยเจตนารมณ์แห่งภราดรภาพ</p>
+<h2>ข้อ 3</h2><p>คนทุกคนมีสิทธิในการดำรงชีวิต เสรีภาพ และความมั่นคงแห่งตัวตน</p></div>
+<h2>สระและวรรณยุกต์ <span class="lat">(The Unicode Standard 16.0, 16.1, Table 16-1 and Rendering of Thai Combining Marks)</span></h2>
+<p class="big">กะ กา กิ กี กุ กู กึ กื เกะ เก แกะ แก โกะ โก เกาะ กอ เกอะ เกอ เกีย เกือ กัว เกา เกย ไก ใก กำ กฤ</p>
+<p class="big">ที่ น้ำ ก็ ปฏิญญา กิ่ง ญี่ปุ่น</p>
+<h2>ZERO WIDTH SPACE <span class="lat">(16.1, Spacing)</span></h2>
+<p class="col narrow">มนุษย์​ทั้งหลาย​เกิด​มา​มี​อิสระ​และ​เสมอภาค​กัน</p>
+</body>
+</html>

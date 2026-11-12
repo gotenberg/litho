@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>和欧文間と約物</title>
+<style>
+body { font-family: "Noto Sans CJK JP", sans-serif; font-size: 11pt; margin: 0; color: #222; }
+h1 { font-size: 15pt; font-weight: normal; margin: 0 0 8pt; }
+h2 { font-size: 11pt; font-weight: normal; color: #555; margin: 12pt 0 4pt; border-bottom: 0.75pt solid #ccc; }
+.prop { font-family: "Liberation Mono", monospace; font-size: 8pt; color: #c33; margin: 4pt 0 0; }
+p { margin: 0 0 2pt; line-height: 1.7; text-align: start; }
+.auto { text-autospace: normal; }
+.noauto { text-autospace: no-autospace; }
+.trim { text-spacing-trim: normal; }
+.all { text-spacing-trim: space-all; }
+.box { width: 20em; border-left: 0.75pt solid #c33; }
+table { border-collapse: collapse; }
+td, th { border: 0.75pt solid #aaa; padding: 2pt 6pt; font-weight: normal; text-align: start; }
+</style>
+</head>
+<body>
+<h1>和文と欧文の混植、全角と半角、約物の詰め</h1>
+<h2>和欧文間：text-autospace</h2>
+<p class="prop">text-autospace: no-autospace</p>
+<p class="noauto box">世界人権宣言（Universal Declaration of Human Rights）は、1948年12月10日にパリで開かれた第3回国際連合総会で採択された。</p>
+<p class="prop">text-autospace: normal</p>
+<p class="auto box">世界人権宣言（Universal Declaration of Human Rights）は、1948年12月10日にパリで開かれた第3回国際連合総会で採択された。</p>
+<h2>全角形と半角形</h2>
+<table>
+<tr><th>半角</th><td>UDHR 1948 / ｾｶｲｼﾞﾝｹﾝｾﾝｹﾞﾝ</td></tr>
+<tr><th>全角</th><td>ＵＤＨＲ　１９４８ / セカイジンケンセンゲン</td></tr>
+</table>
+<h2>約物の詰め：text-spacing-trim</h2>
+<p class="prop">text-spacing-trim: space-all</p>
+<p class="all box">「世界人権宣言」（1948年）の第１条は、「すべての人間は、生まれながらにして自由であり……」と始まる。</p>
+<p class="prop">text-spacing-trim: normal</p>
+<p class="trim box">「世界人権宣言」（1948年）の第１条は、「すべての人間は、生まれながらにして自由であり……」と始まる。</p>
+</body>
+</html>

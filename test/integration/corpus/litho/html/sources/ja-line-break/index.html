@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>行頭禁則</title>
+<style>
+  body { font-family: "Noto Sans CJK JP", sans-serif; font-size: 10pt; margin: 0; color: #222; }
+  h1 { font-size: 15pt; font-weight: normal; margin: 0 0 4pt; }
+  p.intro { margin: 0 0 8pt; line-height: 1.6; }
+  table { border-collapse: collapse; }
+  th { font-weight: normal; text-align: left; vertical-align: top; width: 9.5em; padding: 2pt 6pt 2pt 0; font-size: 8pt; color: #555; }
+  td { padding: 2pt 0; }
+  .head span { display: inline-block; width: 12.5em; font-size: 8pt; color: #555; }
+  .box { display: inline-block; vertical-align: top; margin-right: 12pt; line-height: 1.5; text-align: start;
+         text-spacing-trim: space-all; border-left: 0.75pt solid #c33; padding-left: 0; }
+  .strict { line-break: strict; }
+  .normal { line-break: normal; }
+  .loose { line-break: loose; }
+</style>
+</head>
+<body>
+<h1>行頭禁則：line-break の三つの強さ</h1>
+<p class="intro">各行の箱は、印の文字の前にある文字と同じ幅です。左から strict、normal、loose。</p>
+<table>
+<tr><th></th><td class="head"><span>strict</span><span>normal</span><span>loose</span></td></tr>
+<tr><th>読点 、 (UAX #14 CL)</th><td><div class="box strict" style="width: 7em">すべての人間は、生まれながらにして自由であり</div><div class="box normal" style="width: 7em">すべての人間は、生まれながらにして自由であり</div><div class="box loose" style="width: 7em">すべての人間は、生まれながらにして自由であり</div></td></tr>
+<tr><th>句点 。 (UAX #14 CL)</th><td><div class="box strict" style="width: 5em">平等である。人間は、理性と良心とを授けられており</div><div class="box normal" style="width: 5em">平等である。人間は、理性と良心とを授けられており</div><div class="box loose" style="width: 5em">平等である。人間は、理性と良心とを授けられており</div></td></tr>
+<tr><th>閉じ括弧 ） (UAX #14 CL)</th><td><div class="box strict" style="width: 7em">（世界人権宣言）を採択した</div><div class="box normal" style="width: 7em">（世界人権宣言）を採択した</div><div class="box loose" style="width: 7em">（世界人権宣言）を採択した</div></td></tr>
+<tr><th>小書きの仮名 っ (CJ)</th><td><div class="box strict" style="width: 10em">互いに同胞の精神をもって行動しなければならない</div><div class="box normal" style="width: 10em">互いに同胞の精神をもって行動しなければならない</div><div class="box loose" style="width: 10em">互いに同胞の精神をもって行動しなければならない</div></td></tr>
+<tr><th>小書きの仮名 ュ (CJ)</th><td><div class="box strict" style="width: 6em">国際連合のニュースを読む</div><div class="box normal" style="width: 6em">国際連合のニュースを読む</div><div class="box loose" style="width: 6em">国際連合のニュースを読む</div></td></tr>
+<tr><th>長音記号 ー (CJ)</th><td><div class="box strict" style="width: 8em">宣言のテキストデータを読む</div><div class="box normal" style="width: 8em">宣言のテキストデータを読む</div><div class="box loose" style="width: 8em">宣言のテキストデータを読む</div></td></tr>
+<tr><th>繰返し記号 々 (CSS Text 3)</th><td><div class="box strict" style="width: 4em">一般の人々の最高の願望</div><div class="box normal" style="width: 4em">一般の人々の最高の願望</div><div class="box loose" style="width: 4em">一般の人々の最高の願望</div></td></tr>
+<tr><th>リーダーの前 (IN)</th><td><div class="box strict" style="width: 5em">理性と良心……と書かれている</div><div class="box normal" style="width: 5em">理性と良心……と書かれている</div><div class="box loose" style="width: 5em">理性と良心……と書かれている</div></td></tr>
+<tr><th>リーダーの間 …|… (IN)</th><td><div class="box strict" style="width: 6em">理性と良心……と書かれている</div><div class="box normal" style="width: 6em">理性と良心……と書かれている</div><div class="box loose" style="width: 6em">理性と良心……と書かれている</div></td></tr>
+<tr><th>中点 ・ (CSS Text 3)</th><td><div class="box strict" style="width: 4em">国際連合・加盟国の人民</div><div class="box normal" style="width: 4em">国際連合・加盟国の人民</div><div class="box loose" style="width: 4em">国際連合・加盟国の人民</div></td></tr>
+<tr><th>全角コロン ： (CSS Text 3)</th><td><div class="box strict" style="width: 9em">世界人権宣言第１条：すべての人間</div><div class="box normal" style="width: 9em">世界人権宣言第１条：すべての人間</div><div class="box loose" style="width: 9em">世界人権宣言第１条：すべての人間</div></td></tr>
+<tr><th>波ダッシュ 〜 (CSS Text 3)</th><td><div class="box strict" style="width: 9em">世界人権宣言第１条〜第３０条</div><div class="box normal" style="width: 9em">世界人権宣言第１条〜第３０条</div><div class="box loose" style="width: 9em">世界人権宣言第１条〜第３０条</div></td></tr>
+<tr><th>全角パーセント ％ (PO)</th><td><div class="box strict" style="width: 11em">賛成は四十八か国で５０％を超えた</div><div class="box normal" style="width: 11em">賛成は四十八か国で５０％を超えた</div><div class="box loose" style="width: 11em">賛成は四十八か国で５０％を超えた</div></td></tr>
+<tr><th>全角円記号 ￥ (PR)</th><td><div class="box strict" style="width: 8em">会員の年会費は￥１０００です</div><div class="box normal" style="width: 8em">会員の年会費は￥１０００です</div><div class="box loose" style="width: 8em">会員の年会費は￥１０００です</div></td></tr>
+</table>
+</body>
+</html>
