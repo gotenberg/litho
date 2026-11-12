@@ -156,11 +156,11 @@ func (rd *renderer) errorBars(g *Group, s *Series, x, y *dim, at func(j int) (fl
 // groupErrorBars draws the error bars of g's series: at each point's
 // plotted value, the top of its stack in a stacked group.
 func (rd *renderer) groupErrorBars(g *Group, x, y *dim) {
-	any := false
+	has := false
 	for _, s := range g.Series {
-		any = any || len(s.ErrorBars) > 0
+		has = has || len(s.ErrorBars) > 0
 	}
-	if !any {
+	if !has {
 		return
 	}
 	if g.Kind == Scatter || g.Kind == Bubble {

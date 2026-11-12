@@ -574,11 +574,8 @@ func (rd *renderer) areas(g *Group, x, y *dim) []func() {
 			top = append(top, point(x, y, float64(j), y.sc.clamp(v)))
 			bottom = append(bottom, point(x, y, float64(j), y.sc.clamp(b)))
 		}
-		if len(top) == 0 {
-			continue
-		}
-		if len(top) == 1 {
-			// One point spreads over its category.
+		if len(top) < 2 {
+			// A single point draws no area.
 			continue
 		}
 		var pts []compose.Point

@@ -11,13 +11,13 @@ import (
 // bins' ranges and whose values are their counts. It returns c itself
 // when no series asks for bins, so c stays read-only.
 func binned(c *Chart) *Chart {
-	any := false
+	has := false
 	for _, g := range c.Groups {
 		for _, s := range g.Series {
-			any = any || s.Bins != nil
+			has = has || s.Bins != nil
 		}
 	}
-	if !any {
+	if !has {
 		return c
 	}
 	cc := *c

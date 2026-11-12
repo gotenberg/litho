@@ -287,7 +287,7 @@ func (rd *renderer) radar(avail compose.Rect) {
 			}
 		}
 	}
-	spoke := (*Stroke)(nil)
+	var spoke *Stroke
 	if x.ax != nil {
 		spoke = x.ax.MajorGrid
 		if spoke == nil {

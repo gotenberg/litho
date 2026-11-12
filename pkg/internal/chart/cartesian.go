@@ -773,7 +773,7 @@ func thin(ls []tickLabel, vertical bool) []tickLabel {
 		}
 		return labelsOverlap(a, b)
 	}
-	for step := 1; step <= len(ls); step++ {
+	for step := 1; step < len(ls); step++ {
 		ok := true
 		for i := step; i < len(ls); i += step {
 			if overlaps(ls[i-step], ls[i]) {
@@ -792,6 +792,7 @@ func thin(ls []tickLabel, vertical bool) []tickLabel {
 			return out
 		}
 	}
+	// Only the first label fits.
 	return ls[:1]
 }
 
@@ -837,9 +838,6 @@ func (rd *renderer) axisLine(d *dim) {
 		return
 	}
 	tick := func(fs []float64, kind TickMark, length float64) {
-		if kind == TickNone {
-			return
-		}
 		out, in := 0.0, 0.0
 		switch kind {
 		case TickOut:
@@ -849,14 +847,15 @@ func (rd *renderer) axisLine(d *dim) {
 		case TickCross:
 			out, in = length, length
 		case TickNone:
+			return
 		}
 		for _, f := range fs {
 			p := d.pixel(f)
-			a, b := at+d.outside*-in, at+d.outside*out
+			a, b := at-d.outside*in, at+d.outside*out
 			if d.vertical {
 				rd.add(line(a, p, b, p, d.ax.Line))
 			} else {
-				rd.add(line(p, at-d.outside*-in, p, at-d.outside*out, d.ax.Line))
+				rd.add(line(p, at+d.outside*in, p, at-d.outside*out, d.ax.Line))
 			}
 		}
 	}
