@@ -100,3 +100,39 @@ jobs:
 
       - name: Vet linux/arm/v7
         run: GOOS=linux GOARCH=arm GOARM=7 go vet ./...
+
+  # The corpus converts with a copy of the Gotenberg image's fonts, passed as
+  # font directories. This job runs the same conversions inside the image
+  # itself, with no directory, so litho must find the fonts by its own
+  # discovery where Gotenberg runs it: one source per script the image has
+  # fonts for, failing on a conversion error, on no font found, or on a
+  # character reported missing.
+  test-system-fonts:
+    needs:
+      - lint
+      - lint-prettier
+    name: Convert inside the Gotenberg image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Build the corpus command
+        run: go build -o corpus ./test/integration/cmd/corpus
+
+      - name: Pull the pinned Gotenberg image
+        run: docker pull "$(sed -n 's/^GOTENBERG_IMAGE=//p' test/integration/corpus/versions.env)"
+
+      - name: Convert with the image's fonts
+        run: |
+          docker run --rm \
+            -v "$PWD:/src:ro" -w /src \
+            --entrypoint /src/corpus \
+            "$(sed -n 's/^GOTENBERG_IMAGE=//p' test/integration/corpus/versions.env)" \
+            system-fonts test/integration/cmd/corpus/testdata/system-fonts/*

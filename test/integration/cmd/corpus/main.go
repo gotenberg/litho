@@ -56,6 +56,8 @@ func dispatch(ctx context.Context, cmd string, args []string) int {
 		return runTools(ctx, args)
 	case "cost":
 		return runCost(ctx, args)
+	case "system-fonts":
+		return runSystemFonts(ctx, args)
 	// Internal: the provisioning image runs provision and scan-claims, the
 	// robustness feature and cost run convert-one.
 	case "provision":
@@ -89,7 +91,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  prepare       Run every missing or stale step below, in order")
-	fmt.Fprintln(w, "  fetch         Download the fixture fonts and the files of the fetched corpora (--jobs=N; --corpus=fonts: the fonts alone)")
+	fmt.Fprintln(w, "  fetch         Copy the Gotenberg image's fonts, download the other fixture fonts and the files of the fetched corpora (--jobs=N; --corpus=fonts: the fonts alone)")
 	fmt.Fprintln(w, "  build         Generate the inputs kept as sources in git: Office and hostile documents, litho/pdf and litho/text PDFs")
 	fmt.Fprintln(w, "  references    Convert the sources with the pinned Gotenberg image: the Chromium and LibreOffice PDFs the diff compares to (--fixtures=a,b)")
 	fmt.Fprintln(w, "  goldens       Derive the goldens the corpora lack in the provisioning image (Docker)")
@@ -99,6 +101,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  update        Rewrite one corpus's committed lists from its source at its pin (--checkout=DIR)")
 	fmt.Fprintln(w, "  versions      Print the pinned tool and source versions (--build-args: as docker build arguments)")
 	fmt.Fprintln(w, "  tools         Compare the local verapdf, node, java, qpdf, pdfsig, fontTools and Pillow with the pins")
+	fmt.Fprintln(w, "  system-fonts  Convert sources with the fonts litho finds on the system; fail on a conversion error or a missing glyph")
 	fmt.Fprintln(w, "  cost          Measure what each conversion and PDF operation costs, one process a run (--rows, --runs, --profile; --compare BEFORE AFTER)")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Every subcommand takes:")
