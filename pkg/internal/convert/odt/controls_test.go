@@ -1,11 +1,13 @@
 package odt
 
 import (
+	"context"
 	"slices"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/odf"
 )
 
 // controlsDoc holds a control of every kind the converter writes as a
@@ -99,4 +101,38 @@ func TestConvertFormControlsOff(t *testing.T) {
 	if len(runs(d.Pages[0])) != 0 {
 		t.Error("a control draws text without the option")
 	}
+}
+
+// FuzzControls builds the layout tree of a flat document whose form
+// controls become fields: every control the builder makes a field of has
+// a node that holds content and an ID.
+func FuzzControls(f *testing.F) {
+	flat := []byte(`<office:document ` + nsDecl + ` xmlns:form="urn:oasis:names:tc:opendocument:xmlns:form:1.0"><office:body><office:text>` +
+		`<office:forms><form:form><form:text form:name="a" form:id="c1" form:current-value="v" form:max-length="3"/>` +
+		`<form:radio form:name="r" form:id="c2" form:current-selected="true"/>` +
+		`<form:listbox form:name="l" form:id="c3" form:multiple="true"><form:option form:label="x" form:selected="true"/></form:listbox>` +
+		`<form:date form:name="d" form:id="c4" form:current-value="20240315"/></form:form></office:forms>` +
+		`<text:p><draw:control svg:width="2cm" svg:height="0.5cm" draw:control="c1"/><draw:control draw:control="c2"/>` +
+		`<draw:control svg:width="2cm" svg:height="1cm" draw:control="c3"/><draw:control draw:control="c4"/></text:p>` +
+		`</office:text></office:body></office:document>`)
+	f.Add(flat)
+	f.Add(flat[:len(flat)/2])
+	f.Fuzz(func(t *testing.T, data []byte) {
+		pkg, err := odf.Open(context.Background(), data, odf.Options{})
+		if err != nil {
+			return
+		}
+		body := odf.Section(pkg.Content, "body").Child(odf.NSOffice, "text")
+		if body == nil {
+			return
+		}
+		b := newFuzzBuilder(pkg)
+		b.formFields = true
+		b.document(body)
+		for _, c := range b.controls {
+			if c.ID == "" || c.Field.MaxLen < 0 || c.Field.MaxLen > compose.MaxFieldText {
+				t.Fatalf("control %+v", c)
+			}
+		}
+	})
 }
