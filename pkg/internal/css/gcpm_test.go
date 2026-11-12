@@ -78,7 +78,7 @@ func TestGCPM_PageBleedAndMarks(t *testing.T) {
 	}
 	for _, tt := range tests {
 		r := NewResolver(a4, []Sheet{{Sheet: mustParse(t, tt.css), Origin: Author}})
-		ps := r.Page(PageSelector{First: true, Right: true})
+		ps := r.pageOf(t, PageSelector{First: true, Right: true})
 		fixed := ps.Background != nil && ps.Background.BackgroundAttachment == AttachFixed
 		if ps.Bleed != tt.bleed || ps.Marks != tt.marks || fixed != tt.fixed {
 			t.Errorf("%s: bleed %+v marks %v fixed %v", tt.css, ps.Bleed, ps.Marks, fixed)
@@ -109,7 +109,7 @@ func TestNesting_AmpersandRules(t *testing.T) {
 func TestPage_AreaWidthAndHeight(t *testing.T) {
 	t.Parallel()
 	r := NewResolver(a4, []Sheet{{Sheet: mustParse(t, `@page { width: 200px; height: auto } @page :first { height: 30pt; width: -1px }`), Origin: Author}})
-	ps := r.Page(PageSelector{First: true, Right: true})
+	ps := r.pageOf(t, PageSelector{First: true, Right: true})
 	if ps.AreaWidth != Pts(150) || ps.AreaHeight != Pts(30) {
 		t.Errorf("area %+v by %+v", ps.AreaWidth, ps.AreaHeight)
 	}

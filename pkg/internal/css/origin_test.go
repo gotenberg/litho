@@ -176,7 +176,7 @@ func TestPage_UserOrigin(t *testing.T) {
 	user := `@page { size: A5; margin-top: 1in; margin-left: 2in !important; @top-center { content: "user" } }`
 	author := `@page { margin-top: 0.5in; margin-left: 0.25in !important }`
 	r := NewResolver(a4, []Sheet{{Sheet: mustParse(t, user), Origin: User}, {Sheet: mustParse(t, author), Origin: Author}})
-	pg := r.Page(PageSelector{First: true, Right: true})
+	pg := r.pageOf(t, PageSelector{First: true, Right: true})
 	if !near(pg.Width, 148*72/25.4) {
 		t.Errorf("page width %v, want the user's A5", pg.Width)
 	}

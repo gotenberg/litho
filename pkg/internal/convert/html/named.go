@@ -28,6 +28,9 @@ type pageEntry struct {
 // pages differ by name, blankness or page-margin boxes, as the layout
 // discovers its pages. Each key is resolved once.
 type pageSetup struct {
+	// ctx is the conversion's context: a page setup does not outlive the
+	// conversion it serves.
+	ctx  context.Context
 	r    *css.Resolver
 	o    Options
 	rtl  bool
@@ -37,12 +40,17 @@ type pageSetup struct {
 	cache    map[pageKey]*pageEntry
 	seen     map[string]bool
 	warnings []typeset.Warning
+	// err is ctx's error, which stopped a page's resolution. The layout
+	// callbacks that ask for a page return no error: the layout stops at
+	// its own next check of ctx, and [prepared.assemble] reports err.
+	err error
 }
 
 // newPageSetup returns the page setup of the document r cascades, whose
-// root element's style is root and direction rtl, on the paper of o.
-func newPageSetup(r *css.Resolver, o Options, rtl bool, root *css.Style) *pageSetup {
-	return &pageSetup{r: r, o: o, rtl: rtl, root: root, cache: map[pageKey]*pageEntry{}, seen: map[string]bool{}}
+// root element's style is root and direction rtl, on the paper of o,
+// resolved under ctx.
+func newPageSetup(ctx context.Context, r *css.Resolver, o Options, rtl bool, root *css.Style) *pageSetup {
+	return &pageSetup{ctx: ctx, r: r, o: o, rtl: rtl, root: root, cache: map[pageKey]*pageEntry{}, seen: map[string]bool{}}
 }
 
 // key returns the key of the page info names: the first page is a right
@@ -53,23 +61,45 @@ func (s *pageSetup) key(info layout.PageInfo) pageKey {
 	return pageKey{name: info.Name, first: info.Index == 0, right: right, blank: info.Blank}
 }
 
-// entry returns the resolved box and style of the page info names.
+// entry returns the resolved box and style of the page info names. When
+// ctx's error stops the resolution, it records the error in s.err and
+// returns the paper of the options, with no page-margin box.
 func (s *pageSetup) entry(info layout.PageInfo) *pageEntry {
 	k := s.key(info)
 	if e, ok := s.cache[k]; ok {
 		return e
 	}
 	sel := css.PageSelector{Name: k.name, First: k.first, Right: k.right, Left: !k.right, Blank: k.blank}
-	b, ws := pageBox(s.r, s.o, sel)
+	b, ws, err := pageBox(s.ctx, s.r, s.o, sel)
+	if err != nil {
+		return s.stopped(err)
+	}
 	for _, w := range ws {
 		if !s.seen[w.Message] {
 			s.seen[w.Message] = true
 			s.warnings = append(s.warnings, w)
 		}
 	}
-	e := &pageEntry{box: b, style: s.r.PageIn(sel, s.root)}
+	style, err := s.r.PageIn(s.ctx, sel, s.root)
+	if err != nil {
+		return s.stopped(err)
+	}
+	e := &pageEntry{box: b, style: style}
 	s.cache[k] = e
 	return e
+}
+
+// stopped records err, which stopped a page's resolution, and returns the
+// entry of the options' paper and margins.
+func (s *pageSetup) stopped(err error) *pageEntry {
+	if s.err == nil {
+		s.err = err
+	}
+	o := s.o
+	return &pageEntry{box: layout.PageBox{
+		Width: o.PageWidth, Height: o.PageHeight,
+		Margin: [4]float64{css.Top: o.MarginTop, css.Right: o.MarginRight, css.Bottom: o.MarginBottom, css.Left: o.MarginLeft},
+	}}
 }
 
 // box returns the page box of the page info names, in points of the page:

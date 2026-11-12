@@ -2,6 +2,7 @@ package css
 
 import (
 	"cmp"
+	"context"
 	"slices"
 )
 
@@ -267,8 +268,9 @@ func pageDecls(block []token, c *declCtx) []pageDecl {
 // Page returns the computed style of the page sel names: the @page rules
 // that match it cascaded by origin, importance, page selector specificity
 // and order (CSS Page 3, 4.2 and 3.3). Margin percentages stay Percent of
-// the page size; em units resolve against medium, 16px.
-func (r *Resolver) Page(sel PageSelector) PageStyle {
+// the page size; em units resolve against medium, 16px. ctx's error stops
+// it.
+func (r *Resolver) Page(ctx context.Context, sel PageSelector) (PageStyle, error) {
 	type cand struct {
 		d    *pageDecl
 		rank int
@@ -277,6 +279,11 @@ func (r *Resolver) Page(sel PageSelector) PageStyle {
 	}
 	var cands []cand
 	for i := range r.pages {
+		if i%pageRulesPerCheck == 0 {
+			if err := ctx.Err(); err != nil {
+				return PageStyle{}, err
+			}
+		}
 		pr := &r.pages[i]
 		var spec uint32
 		matched := false
@@ -346,8 +353,12 @@ func (r *Resolver) Page(sel PageSelector) PageStyle {
 			pageBackground(ps.Background, e, lc)
 		}
 	}
-	return ps
+	return ps, ctx.Err()
 }
+
+// pageRulesPerCheck is how many @page rules [Resolver.Page] and
+// [Resolver.PageIn] match between two checks of the context.
+const pageRulesPerCheck = 1024
 
 // pageBackground computes the background longhand e into st, a style
 // whose other properties keep their initial values: the page box has no

@@ -234,7 +234,10 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	// The direction that decides whether the first page is a left or a
 	// right one is not known before the cascade: the viewport takes a
 	// left-to-right document's.
-	first, _ := pageBox(resolver, o, pageSel(0, false))
+	first, _, err := pageBox(ctx, resolver, o, pageSel(0, false))
+	if err != nil {
+		return nil, err
+	}
 	// The fit of the first page sizes the viewport; its warning comes from
 	// the fit of every page box below, against the conversion's own factor.
 	unfit := setup
@@ -271,7 +274,10 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 		// The first page takes the root's start page value (CSS Page 3,
 		// 4.1), and the viewport units its page area: compute again when
 		// that page's area is not the one assumed.
-		named, _ := pageBox(resolver, o, css.PageSelector{Name: name, First: true, Right: true})
+		named, _, err := pageBox(ctx, resolver, o, css.PageSelector{Name: name, First: true, Right: true})
+		if err != nil {
+			return nil, err
+		}
 		vw, vh := media.ViewportWidth, media.ViewportHeight
 		if vw == 0 && vh == 0 {
 			vw, vh = media.Width, media.Height
@@ -286,7 +292,10 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	}
 	rootStyle := computed.Style(scan.root)
 	rtl := rootStyle != nil && rootStyle.Direction == css.RTL
-	page, pageAt, pageWarns := pageBoxes(resolver, o, rtl)
+	page, pageAt, pageWarns, err := pageBoxes(ctx, resolver, o, rtl)
+	if err != nil {
+		return nil, err
+	}
 	boxes := []layout.PageBox{page}
 	if pageAt != nil {
 		boxes = append(boxes, pageAt(1), pageAt(2))
@@ -331,7 +340,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 		setup:    setup,
 		first:    sourceFirst,
 		svg:      &res.svg,
-		pages:    newPageSetup(resolver, o, rtl, rootStyle),
+		pages:    newPageSetup(ctx, resolver, o, rtl, rootStyle),
 		fonts:    fonts,
 		b:        b,
 	}
@@ -417,6 +426,9 @@ func (p *prepared) assemble(ctx context.Context, res *layout.Result) (*typeset.D
 	}
 	if p.svg != nil {
 		doc.Warnings = append(doc.Warnings, p.svg.warnings()...)
+	}
+	if err := p.pages.err; err != nil {
+		return nil, err
 	}
 	doc.Warnings = append(doc.Warnings, p.pages.warnings...)
 	for _, w := range res.Warnings {

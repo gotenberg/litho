@@ -1,6 +1,7 @@
 package html
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"reflect"
@@ -23,24 +24,28 @@ func pageSel(index int, rtl bool) css.PageSelector {
 // pageBoxes returns the page box of the first page and, when the pages
 // differ, the function that gives the box of every page for
 // layout.Options.PageAt. Unnamed pages differ only by being the first and
-// by their side, so three boxes cover a document.
-func pageBoxes(r *css.Resolver, o Options, rtl bool) (layout.PageBox, func(int) layout.PageBox, []typeset.Warning) {
+// by their side, so three boxes cover a document. ctx's error stops it.
+func pageBoxes(ctx context.Context, r *css.Resolver, o Options, rtl bool) (layout.PageBox, func(int) layout.PageBox, []typeset.Warning, error) {
 	var warns []typeset.Warning
 	seen := map[string]bool{}
-	boxAt := func(index int) layout.PageBox {
-		b, ws := pageBox(r, o, pageSel(index, rtl))
+	var boxes [3]layout.PageBox
+	for index := range boxes {
+		b, ws, err := pageBox(ctx, r, o, pageSel(index, rtl))
+		if err != nil {
+			return layout.PageBox{}, nil, nil, err
+		}
 		for _, w := range ws {
 			if !seen[w.Message] {
 				seen[w.Message] = true
 				warns = append(warns, w)
 			}
 		}
-		return b
+		boxes[index] = b
 	}
-	first, second, third := boxAt(0), boxAt(1), boxAt(2)
+	first, second, third := boxes[0], boxes[1], boxes[2]
 	// Each box holds its own copy of the page background: compare values.
 	if reflect.DeepEqual(first, second) && reflect.DeepEqual(second, third) {
-		return first, nil, warns
+		return first, nil, warns, nil
 	}
 	return first, func(index int) layout.PageBox {
 		switch {
@@ -50,7 +55,7 @@ func pageBoxes(r *css.Resolver, o Options, rtl bool) (layout.PageBox, func(int) 
 			return second
 		}
 		return third
-	}, warns
+	}, warns, nil
 }
 
 // pageBox returns the box of the page sel names: the paper and margins of
@@ -62,9 +67,13 @@ func pageBoxes(r *css.Resolver, o Options, rtl bool) (layout.PageBox, func(int) 
 // properties), and the page's background properties paint it.
 //
 // A size past the PDF page limit is clamped to it, and @page margins that
-// leave no page area give way to o's, with a warning.
-func pageBox(r *css.Resolver, o Options, sel css.PageSelector) (layout.PageBox, []typeset.Warning) {
-	ps := r.Page(sel)
+// leave no page area give way to o's, with a warning. ctx's error stops
+// it.
+func pageBox(ctx context.Context, r *css.Resolver, o Options, sel css.PageSelector) (layout.PageBox, []typeset.Warning, error) {
+	ps, err := r.Page(ctx, sel)
+	if err != nil {
+		return layout.PageBox{}, nil, err
+	}
 	var warns []typeset.Warning
 	w, h := o.PageWidth, o.PageHeight
 	switch {
@@ -80,7 +89,10 @@ func pageBox(r *css.Resolver, o Options, sel css.PageSelector) (layout.PageBox, 
 	}
 	box := layout.PageBox{Width: w, Height: h, Background: ps.Background, Marks: ps.Marks}
 	if r.HasFootnoteArea() || r.HasNoteArea() {
-		in := r.PageIn(sel, nil)
+		in, err := r.PageIn(ctx, sel, nil)
+		if err != nil {
+			return layout.PageBox{}, nil, err
+		}
 		box.Footnote, box.NoteArea = in.Footnote, in.NoteArea
 	}
 	// The bleed grows the sheet past the page box (CSS Page 3, 7.2), up
@@ -115,7 +127,7 @@ func pageBox(r *css.Resolver, o Options, sel css.PageSelector) (layout.PageBox, 
 		box.Height = min(box.Margin[css.Top]+a.Value+box.Margin[css.Bottom], maxPageSide)
 	}
 	if fits(box) {
-		return box, warns
+		return box, warns, nil
 	}
 	if fromRules {
 		warns = append(warns, typeset.Warning{Code: CodePageBox, Message: fmt.Sprintf(
@@ -129,7 +141,7 @@ func pageBox(r *css.Resolver, o Options, sel css.PageSelector) (layout.PageBox, 
 			"the margins leave no room on the @page size of %v by %v points; the page has none", w, h)})
 		box.Margin = [4]float64{}
 	}
-	return box, warns
+	return box, warns, nil
 }
 
 // areaOf returns the size of the page area of b, its size less its

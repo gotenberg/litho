@@ -2,12 +2,14 @@ package html
 
 import (
 	"context"
+	"errors"
 	"math"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -331,5 +333,31 @@ func TestHeaderFooter_Artifacts(t *testing.T) {
 	n := len(pg.Content)
 	if structured(pg.Content[n-1:]) {
 		t.Error("the header hangs from the structure tree")
+	}
+}
+
+// TestPageSetup_StopsOnCancel checks that a page the layout asks for under
+// a cancelled context gets the paper of the options and leaves the
+// context's error for the conversion to report.
+func TestPageSetup_StopsOnCancel(t *testing.T) {
+	t.Parallel()
+	sheet, err := css.Parse(t.Context(), []byte(`@page wide { size: 900pt 300pt; @top-center { content: "x" } }`), css.ParseOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := css.NewResolver(css.Media{Type: "print", Width: 500, Height: 700}, []css.Sheet{{Sheet: sheet, Origin: css.Author}})
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	o := Options{PageWidth: 500, PageHeight: 700, MarginTop: 10}
+	s := newPageSetup(ctx, r, o, false, nil)
+	e := s.entry(layout.PageInfo{Name: "wide"})
+	if !errors.Is(s.err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled", s.err)
+	}
+	if e.box.Width != 500 || e.box.Height != 700 || e.box.Margin[css.Top] != 10 || len(e.style.MarginBoxes) != 0 {
+		t.Errorf("entry = %+v, want the paper of the options", e)
+	}
+	if _, _, err := pageBox(ctx, r, o, css.PageSelector{Name: "wide"}); !errors.Is(err, context.Canceled) {
+		t.Errorf("pageBox on a cancelled context = %v, want context.Canceled", err)
 	}
 }

@@ -1,6 +1,8 @@
 package css
 
 import (
+	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -38,7 +40,7 @@ func TestPageIn_MarginBoxes(t *testing.T) {
 	if !r.HasMarginBoxes() || !r.HasNamedPages() {
 		t.Fatal("margin boxes or named pages not reported")
 	}
-	ps := r.PageIn(PageSelector{Right: true}, nil)
+	ps := r.pageInOf(t, PageSelector{Right: true}, nil)
 	if len(ps.MarginBoxes) != 2 {
 		t.Fatalf("%d boxes, want 2: content normal, none and absent generate nothing", len(ps.MarginBoxes))
 	}
@@ -64,7 +66,7 @@ func TestPageIn_MarginBoxes(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			got := ""
-			if st := r.PageIn(tt.sel, nil).MarginBoxes[MarginTopLeft]; st != nil {
+			if st := r.pageInOf(t, tt.sel, nil).MarginBoxes[MarginTopLeft]; st != nil {
 				got = st.Content.Items[0].Text
 			}
 			if got != tt.want {
@@ -79,7 +81,7 @@ func TestPageIn_Defaults(t *testing.T) {
 	for _, n := range marginBoxNames {
 		src += "@" + n + " { content: 'x' } "
 	}
-	ps := resolverOf(t, "@page { "+src+"}").PageIn(PageSelector{}, nil)
+	ps := resolverOf(t, "@page { "+src+"}").pageInOf(t, PageSelector{}, nil)
 	if len(ps.MarginBoxes) != int(NumMarginBoxes) {
 		t.Fatalf("%d boxes, want %d", len(ps.MarginBoxes), NumMarginBoxes)
 	}
@@ -101,7 +103,7 @@ func TestPageIn_InheritsFromRoot(t *testing.T) {
 	// medium keyword the initial style carries, which fixMonospaceSize
 	// would size the page context from again.
 	root.FontSize, root.fontSizeKeyword, root.fontSizeAbsolute = 30, 0, true
-	ps := resolverOf(t, `@page { @top-center { content: "x" } }`).PageIn(PageSelector{}, &root)
+	ps := resolverOf(t, `@page { @top-center { content: "x" } }`).pageInOf(t, PageSelector{}, &root)
 	if got := ps.MarginBoxes[MarginTopCenter].FontSize; got != 30 {
 		t.Errorf("font size %v, want 30 from the root element", got)
 	}
@@ -109,10 +111,10 @@ func TestPageIn_InheritsFromRoot(t *testing.T) {
 
 func TestPage_BlankSelector(t *testing.T) {
 	r := resolverOf(t, `@page :blank { margin: 1pt }`)
-	if m := r.Page(PageSelector{}).Margin[Top]; m.Kind != Auto {
+	if m := r.pageOf(t, PageSelector{}).Margin[Top]; m.Kind != Auto {
 		t.Errorf("non-blank margin %+v, want auto", m)
 	}
-	if m := r.Page(PageSelector{Blank: true}).Margin[Top]; m.Kind != Points || m.Value != 1 {
+	if m := r.pageOf(t, PageSelector{Blank: true}).Margin[Top]; m.Kind != Points || m.Value != 1 {
 		t.Errorf("blank margin %+v, want 1pt", m)
 	}
 }
@@ -129,7 +131,7 @@ func TestPageIn_NoteArea(t *testing.T) {
 	if !r.HasNoteArea() || r.HasMarginBoxes() || r.HasFootnoteArea() {
 		t.Fatalf("HasNoteArea %v, HasMarginBoxes %v, HasFootnoteArea %v", r.HasNoteArea(), r.HasMarginBoxes(), r.HasFootnoteArea())
 	}
-	st := r.PageIn(PageSelector{}, nil).NoteArea
+	st := r.pageInOf(t, PageSelector{}, nil).NoteArea
 	if st == nil {
 		t.Fatal("no note area style")
 	}
@@ -147,7 +149,7 @@ func TestPageIn_VarInMarginBox(t *testing.T) {
 		{`@page { --x: "b"; @top-center { content: var(--x) } }`, "b"},
 		{`@page { @top-center { --y: "c"; content: var(--y) } }`, "c"},
 	} {
-		ps := resolverOf(t, tt.src).PageIn(PageSelector{Right: true}, nil)
+		ps := resolverOf(t, tt.src).pageInOf(t, PageSelector{Right: true}, nil)
 		tc := ps.MarginBoxes[MarginTopCenter]
 		if tc == nil || len(tc.Content.Items) != 1 || tc.Content.Items[0].Text != tt.want {
 			t.Errorf("%s: top-center %+v, want content %q", tt.src, tc, tt.want)
@@ -165,12 +167,27 @@ func TestPageIn_ManyDeclarationsKeepOrder(t *testing.T) {
 		b.WriteString("color:red;")
 	}
 	b.WriteString(`content: "x" } @top-center { content: "y" } }`)
-	ps := resolverOf(t, b.String()).PageIn(PageSelector{Right: true}, nil)
+	ps := resolverOf(t, b.String()).pageInOf(t, PageSelector{Right: true}, nil)
 	tc := ps.MarginBoxes[MarginTopCenter]
 	if tc == nil {
 		t.Fatal("no top-center box")
 	}
 	if len(tc.Content.Items) != 1 || tc.Content.Items[0].Text != "y" {
 		t.Errorf("top-center content %+v, want the later block's", tc.Content)
+	}
+}
+
+// TestPage_StopsOnCancel checks that a cancelled context stops the match
+// of the @page rules before it runs through them.
+func TestPage_StopsOnCancel(t *testing.T) {
+	t.Parallel()
+	r := resolverOf(t, strings.Repeat("@page:first{margin:1px;@top-center{content:'x'}}", 20_000))
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := r.Page(ctx, PageSelector{First: true}); !errors.Is(err, context.Canceled) {
+		t.Errorf("Page on a cancelled context = %v, want context.Canceled", err)
+	}
+	if _, err := r.PageIn(ctx, PageSelector{First: true}, nil); !errors.Is(err, context.Canceled) {
+		t.Errorf("PageIn on a cancelled context = %v, want context.Canceled", err)
 	}
 }

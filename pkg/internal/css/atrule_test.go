@@ -137,22 +137,22 @@ func TestPage_Cascade(t *testing.T) {
 `
 	r := NewResolver(a4, []Sheet{{Sheet: mustParse(t, css), Origin: Author}})
 	cm := 72 / 2.54
-	first := r.Page(PageSelector{First: true, Right: true})
+	first := r.pageOf(t, PageSelector{First: true, Right: true})
 	if !near(first.Width, 210*72/25.4) || !near(first.Height, 297*72/25.4) {
 		t.Errorf("first page size %v x %v", first.Width, first.Height)
 	}
 	if !dimEq(first.Margin[Top], pts(4*cm)) || first.Margin[Right].Kind != Auto || !dimEq(first.Margin[Bottom], pts(36)) {
 		t.Errorf("first page margins %+v", first.Margin)
 	}
-	left := r.Page(PageSelector{Left: true})
+	left := r.pageOf(t, PageSelector{Left: true})
 	if !dimEq(left.Margin[Left], pts(3*cm)) || !dimEq(left.Margin[Right], pct(0.1)) || !dimEq(left.Margin[Top], pts(2*cm)) || !dimEq(left.Margin[Bottom], pts(72)) {
 		t.Errorf("left page margins %+v", left.Margin)
 	}
-	wide := r.Page(PageSelector{Name: "wide", First: true})
+	wide := r.pageOf(t, PageSelector{Name: "wide", First: true})
 	if wide.Width <= wide.Height || !dimEq(wide.Margin[Top], pts(0)) || !dimEq(wide.Margin[Bottom], pts(0)) {
 		t.Errorf("wide first page %+v", wide)
 	}
-	none := NewResolver(a4, nil).Page(PageSelector{})
+	none := NewResolver(a4, nil).pageOf(t, PageSelector{})
 	if none.Width != 0 || none.Margin[Top].Kind != Auto {
 		t.Errorf("no rules page %+v", none)
 	}
@@ -354,7 +354,7 @@ func TestPage_Background(t *testing.T) {
 @page :first { background-color: blue; background-size: 1em }
 `
 	r := NewResolver(a4, []Sheet{{Sheet: mustParse(t, css), Origin: Author}})
-	first := r.Page(PageSelector{First: true})
+	first := r.pageOf(t, PageSelector{First: true})
 	bg := first.Background
 	if bg == nil {
 		t.Fatal("no page background")
@@ -370,7 +370,7 @@ func TestPage_Background(t *testing.T) {
 	if bg.Display != initialStyle.Display || bg.FontSize != initialStyle.FontSize {
 		t.Error("page background style is not initial outside the background")
 	}
-	if NewResolver(a4, nil).Page(PageSelector{}).Background != nil {
+	if NewResolver(a4, nil).pageOf(t, PageSelector{}).Background != nil {
 		t.Error("background without rules")
 	}
 }

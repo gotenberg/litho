@@ -1,6 +1,7 @@
 package css
 
 import (
+	"context"
 	"slices"
 	"sync"
 )
@@ -261,11 +262,11 @@ func (r *Resolver) hasPageAreas() bool {
 // initial style), and each page-margin box from the page context (CSS Page
 // 3, 4.4 and 5). [PageStyle.MarginBoxes] holds the boxes whose content
 // computes to a list: content normal computes to none on a page-margin box
-// and generates nothing (CSS Page 3, 5.2).
-func (r *Resolver) PageIn(sel PageSelector, root *Style) PageStyle {
-	ps := r.Page(sel)
-	if !r.hasPageAreas() {
-		return ps
+// and generates nothing (CSS Page 3, 5.2). ctx's error stops it.
+func (r *Resolver) PageIn(ctx context.Context, sel PageSelector, root *Style) (PageStyle, error) {
+	ps, err := r.Page(ctx, sel)
+	if err != nil || !r.hasPageAreas() {
+		return ps, err
 	}
 	type src struct {
 		rule *resolvedPage
@@ -273,6 +274,11 @@ func (r *Resolver) PageIn(sel PageSelector, root *Style) PageStyle {
 	}
 	var srcs []src
 	for i := range r.pages {
+		if i%pageRulesPerCheck == 0 {
+			if err := ctx.Err(); err != nil {
+				return PageStyle{}, err
+			}
+		}
 		pr := &r.pages[i]
 		var spec uint32
 		matched := false
@@ -309,6 +315,9 @@ func (r *Resolver) PageIn(sel PageSelector, root *Style) PageStyle {
 			}
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		return PageStyle{}, err
+	}
 	pageCtx, vars := cs.cascade(ctxCands, root, nil, false)
 	if fc := boxCands[footnoteArea]; len(fc) > 0 {
 		st, _ := cs.cascade(slices.Clone(fc), pageCtx, vars, false)
@@ -323,6 +332,10 @@ func (r *Resolver) PageIn(sel PageSelector, root *Style) PageStyle {
 	for b := range NumMarginBoxes {
 		if len(boxCands[b]) == 0 {
 			continue
+		}
+		// Each box cascades every declaration of its blocks.
+		if err := ctx.Err(); err != nil {
+			return PageStyle{}, err
 		}
 		cands := slices.Clone(boxCands[b])
 		defaults := &marginDefaultDecls()[b]
@@ -341,5 +354,5 @@ func (r *Resolver) PageIn(sel PageSelector, root *Style) PageStyle {
 		}
 		ps.MarginBoxes[b] = st
 	}
-	return ps
+	return ps, ctx.Err()
 }

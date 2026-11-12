@@ -31,8 +31,8 @@ func FuzzParse(f *testing.F) {
 			t.Fatalf("nil stylesheet (err %v)", err)
 		}
 		r := NewResolver(a4, []Sheet{{Sheet: s, Origin: Author}})
-		r.Page(PageSelector{First: true, Left: true})
-		r.PageIn(PageSelector{Name: "n", Right: true, Blank: true}, nil)
+		r.pageOf(t, PageSelector{First: true, Left: true})
+		r.pageInOf(t, PageSelector{Name: "n", Right: true, Blank: true}, nil)
 		r.FontFaces()
 	})
 }

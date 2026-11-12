@@ -123,3 +123,23 @@ func hasWarning(ws []Warning, code, part string) bool {
 	}
 	return false
 }
+
+// pageOf is [Resolver.Page] that fails t on an error.
+func (r *Resolver) pageOf(t testing.TB, sel PageSelector) PageStyle {
+	t.Helper()
+	ps, err := r.Page(t.Context(), sel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ps
+}
+
+// pageInOf is [Resolver.PageIn] that fails t on an error.
+func (r *Resolver) pageInOf(t testing.TB, sel PageSelector, root *Style) PageStyle {
+	t.Helper()
+	ps, err := r.PageIn(t.Context(), sel, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ps
+}
