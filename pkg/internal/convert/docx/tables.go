@@ -750,7 +750,7 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 			if isHeader {
 				role = "TH"
 			}
-			if boolOf(tp.layoutFixed) {
+			if boolOf(tp.layoutFixed) && !holdsAnchored(kids, 0) {
 				// A cell of a table of fixed layout (17.4.53 tblLayout)
 				// clips what is wider than it, as Word prints it.
 				//
@@ -758,6 +758,9 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 				//
 				//   - litho/docx tables-images-lists: Word cuts a picture
 				//     wider than its fixed cell at the cell's right edge.
+				//   - libreoffice/docx layout/tdf136613.docx: it leaves whole
+				//     the pictures anchored in a fixed cell, floated or
+				//     positioned, which a clip would cut away.
 				cst.Overflow = css.OverflowHidden
 			}
 			cn := &layout.Node{Kind: layout.Element, Style: cst, Role: role, Children: kids}
@@ -819,6 +822,24 @@ func endsWithTableMark(tc *ooxml.Element) bool {
 		prev, last = last, k
 	}
 	return last != nil && prev != nil && last.Is(w, "p") && prev.Is(w, "tbl") && emptyParagraph(last) && last.Child(w, "pPr").Child(w, "numPr") == nil
+}
+
+// holdsAnchored reports whether the nodes or their descendants hold a
+// floated or positioned box, a drawing anchored in a cell that Word lays
+// out whole wherever it sits.
+func holdsAnchored(ns []*layout.Node, depth int) bool {
+	if depth > maxNesting {
+		return true
+	}
+	for _, n := range ns {
+		if st := n.Style; st != nil && (st.Float != css.FloatNone || st.Position != css.Static || st.PageClamp) {
+			return true
+		}
+		if holdsAnchored(n.Children, depth+1) {
+			return true
+		}
+	}
+	return false
 }
 
 // alignRowTops starts the content of every cell of a row below the

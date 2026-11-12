@@ -363,3 +363,17 @@ func TestTables_FixedCellsClip(t *testing.T) {
 		}
 	}
 }
+
+func TestHoldsAnchored(t *testing.T) {
+	t.Parallel()
+	floated := css.Initial()
+	floated.Float = css.FloatLeft
+	plain := css.Initial()
+	deep := &layout.Node{Style: plain, Children: []*layout.Node{{Style: floated}}}
+	if !holdsAnchored([]*layout.Node{deep}, 0) {
+		t.Error("a nested float not found")
+	}
+	if holdsAnchored([]*layout.Node{{Style: plain}}, 0) {
+		t.Error("a plain block taken for an anchored one")
+	}
+}
