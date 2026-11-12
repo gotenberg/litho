@@ -409,20 +409,42 @@ func TestPrepare_RefusesTooDeepADocument(t *testing.T) {
 	}
 }
 
+// TestScanDocument_CapsTheElements checks the element count a document may
+// hold to the element: [MaxElements] pass, one more does not.
+func TestScanDocument_CapsTheElements(t *testing.T) {
+	t.Parallel()
+	// html, head and body come with the parser.
+	for n, want := range map[int]error{MaxElements - 3: nil, MaxElements - 2: ErrTooManyElements} {
+		doc, err := parse([]byte(strings.Repeat("<p>", n)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := scanDocument(t.Context(), doc, documentURL); !errors.Is(err, want) {
+			t.Errorf("%d elements: %v, want %v", n+3, err, want)
+		}
+	}
+}
+
+// TestPrepare_CapsTheElements checks that a document at the element cap
+// prepares whole and that one past it is refused before anything is built.
 func TestPrepare_CapsTheElements(t *testing.T) {
 	t.Parallel()
 	o, err := Options{}.withDefaults()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// html, head and body come with the parser.
-	_, err = prepare(context.Background(), []byte(strings.Repeat("<p>", MaxElements-3)), o, nil)
-	if err != nil {
-		t.Fatalf("at the cap: %v", err)
-	}
 	_, err = prepare(context.Background(), []byte(strings.Repeat("<p>", MaxElements-2)), o, nil)
 	if !errors.Is(err, ErrTooManyElements) {
 		t.Fatalf("past the cap: %v", err)
+	}
+	if raceEnabled {
+		// The race detector makes the cascade of 262,144 elements take
+		// minutes; TestScanDocument_CapsTheElements holds the count.
+		t.Skip("a document at the cap is prepared without the race detector")
+	}
+	_, err = prepare(context.Background(), []byte(strings.Repeat("<p>", MaxElements-3)), o, nil)
+	if err != nil {
+		t.Fatalf("at the cap: %v", err)
 	}
 }
 
