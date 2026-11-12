@@ -14,8 +14,9 @@ const maxShadows = 32
 // 6.1.1, "snap as a border width"), one CSS pixel standing for a device
 // pixel as browsers do at their default zoom: a width above 0 and under 1px
 // becomes 1px, a wider one rounds down to a whole number of pixels.
+// A NaN width snaps to 0 like a negative one.
 func snapBorderWidth(pt float64) float64 {
-	if !(pt > 0) {
+	if pt <= 0 || math.IsNaN(pt) {
 		return 0
 	}
 	px := pt / Pt

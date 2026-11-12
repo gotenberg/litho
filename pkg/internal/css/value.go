@@ -253,7 +253,7 @@ func calcOf(t *token, depth int) (calcValue, bool) {
 	vals := make([]calcValue, len(parts))
 	for i, p := range parts {
 		v, ok := parseCalc(p, depth+1)
-		if !ok || v.isNum != vals[0].isNum && i > 0 || v.l.bad {
+		if !ok || (i > 0 && v.isNum != vals[0].isNum) || v.l.bad {
 			return calcValue{}, false
 		}
 		vals[i] = v

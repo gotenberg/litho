@@ -295,7 +295,7 @@ func expandBorderImage(first propID) func(v []token, c *declCtx) ([]entry, bool)
 			// outsets; either list may be the one left out, not both.
 			i++
 			k := i
-			for k < len(v) && !v[k].isDelim('/') && quadToken(v[k], true) {
+			for k < len(v) && quadToken(v[k], true) {
 				k++
 			}
 			if k > i {

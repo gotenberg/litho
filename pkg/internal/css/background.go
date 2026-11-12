@@ -83,13 +83,14 @@ func repeatValue(v []token) ([2]Repeat, int) {
 	if len(v) == 0 || v[0].typ != tIdent {
 		return [2]Repeat{}, 0
 	}
-	switch k := lower(v[0].value); k {
+	k := lower(v[0].value)
+	switch k {
 	case "repeat-x":
 		return [2]Repeat{RepeatRepeat, RepeatNoRepeat}, 1
 	case "repeat-y":
 		return [2]Repeat{RepeatNoRepeat, RepeatRepeat}, 1
 	}
-	x, ok := repeatKeywords[lower(v[0].value)]
+	x, ok := repeatKeywords[k]
 	if !ok {
 		return [2]Repeat{}, 0
 	}

@@ -286,7 +286,6 @@ type pendingRef struct{ d *Declaration }
 // computeState is the state of one Compute call.
 type computeState struct {
 	r      *Resolver
-	ctx    context.Context
 	opts   ComputeOptions
 	m      *matcher
 	anc    *ancestorFilter
@@ -377,7 +376,7 @@ var computeOrder = func() []propID {
 // maxComputeSteps steps, and ctx's error when it is done.
 func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOptions) (*Computed, error) {
 	cs := &computeState{
-		r: r, ctx: ctx, opts: opts, m: newMatcher(opts.Lang, maxComputeSteps), mem: limits.BudgetFrom(ctx), styles: NewStyles(),
+		r: r, opts: opts, m: newMatcher(opts.Lang, maxComputeSteps), mem: limits.BudgetFrom(ctx), styles: NewStyles(),
 		out: map[*html.Node]*Style{}, pseudo: map[pseudoKey]*Style{}, vars: map[*html.Node]map[string][]token{}, anc: &ancestorFilter{},
 		stamp: make([]int, len(r.rules)), spec: make([]uint32, len(r.rules)),
 	}

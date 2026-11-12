@@ -583,10 +583,10 @@ func legacyColor(input string) (string, bool) {
 
 // validDir reports an element whose dir attribute is ltr, rtl or auto.
 func validDir(n *html.Node) bool {
-	v, ok := attr(n, "dir")
+	v, _ := attr(n, "dir")
 	switch lower(strings.TrimSpace(v)) {
 	case "ltr", "rtl", "auto":
-		return ok
+		return true
 	}
 	return false
 }

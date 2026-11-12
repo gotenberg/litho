@@ -65,20 +65,11 @@ func prevElement(n *html.Node) *html.Node {
 	return nil
 }
 
-// sameName compares element or attribute names: ASCII case-insensitively
-// for HTML elements in an HTML document, exactly otherwise (Selectors 4,
-// 5.1 and HTML, 4.16.2).
-func sameName(n *html.Node, got, want string) bool {
-	if n.Namespace == "" {
-		return got == want || eqFold(got, want)
-	}
-	return eqFold(got, want)
-}
-
-// attr returns the value of n's attribute name with no namespace.
+// attr returns the value of n's attribute name with no namespace, the
+// names compared ASCII case-insensitively.
 func attr(n *html.Node, name string) (string, bool) {
 	for _, a := range n.Attr {
-		if a.Namespace == "" && sameName(n, a.Key, name) {
+		if a.Namespace == "" && eqFold(a.Key, name) {
 			return a.Val, true
 		}
 	}
@@ -211,7 +202,11 @@ func (m *matcher) compound(c *compound, n *html.Node) bool {
 	if !m.charge(1) || c.never {
 		return false
 	}
-	if c.tag != "" && !sameName(n, n.Data, c.tag) {
+	// Names compare ASCII case-insensitively (Selectors 4, 5.1 and HTML,
+	// 4.16.2), a foreign element's too: the selector's names are
+	// lowercased when it parses, and SVG names such as foreignObject keep
+	// their case in the tree.
+	if c.tag != "" && !eqFold(n.Data, c.tag) {
 		return false
 	}
 	for _, id := range c.ids {

@@ -63,11 +63,6 @@ func parseAlign(v []token, set alignSet, justify bool) (BoxAlign, bool) {
 			return BoxBaseline, !justify
 		case w == "stretch" && set != alignContent:
 			return BoxStretch, true
-		case (w == "left" || w == "right") && justify:
-			if w == "left" {
-				return BoxLeft, true
-			}
-			return BoxRight, true
 		}
 	}
 	if len(words) == 2 && (words[0] == "first" || words[0] == "last") && words[1] == "baseline" {
@@ -380,16 +375,10 @@ func expandGap(v []token, c *declCtx) ([]entry, bool) {
 
 // placeShorthand expands place-content, place-items or place-self (CSS
 // Box Alignment 3, 5.3, 6.3 and 6.4): the align value, then the justify
-// one, which defaults to the align one. justify is the justify longhand,
-// or numProps for a shorthand whose justify half is checked for its shape
-// alone.
+// one, which defaults to the align one.
 func placeShorthand(align, justify propID) shorthandDef {
-	ids := []propID{align}
-	if justify != numProps {
-		ids = append(ids, justify)
-	}
 	return shorthandDef{
-		longhands: ids,
+		longhands: []propID{align, justify},
 		expand: func(v []token, c *declCtx) ([]entry, bool) {
 			for split := 1; split <= min(len(v), 2); split++ {
 				a, ok := props[align].parse(v[:split], c)
@@ -402,20 +391,15 @@ func placeShorthand(align, justify propID) shorthandDef {
 				}
 				out := make([]entry, 0, 2)
 				out = append(out, entry{align, a})
-				if justify == numProps {
-					for _, t := range rest {
-						if t.typ != tIdent {
-							return nil, false
-						}
-					}
-					return out, true
-				}
 				if len(rest) == 0 {
 					rest = v[:split]
 				}
 				j, ok := props[justify].parse(rest, c)
 				if !ok {
-					if x, _ := a.(BoxAlign); x != BoxBaseline && x != BoxLastBaseline || len(rest) != split {
+					// A baseline value copied to the justify half, which
+					// the justify longhand rejects, sets it to start (CSS
+					// Box Alignment 3, 5.3).
+					if x, _ := a.(BoxAlign); (x != BoxBaseline && x != BoxLastBaseline) || len(rest) != split {
 						return nil, false
 					}
 					j = BoxStart

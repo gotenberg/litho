@@ -157,7 +157,6 @@ func parseStringSet(v []token, c *declCtx) (any, bool) {
 	}
 	var out []NamedString
 	for _, part := range parts {
-		part = trimWS(part)
 		part = significant(part)
 		if len(part) < 2 || part[0].typ != tIdent || part[0].isIdent("none") || len(part) > maxContentItems+1 {
 			return nil, false

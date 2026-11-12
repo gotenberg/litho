@@ -290,11 +290,9 @@ func expandColumns(v []token, c *declCtx) ([]entry, bool) {
 	}
 	var width, count any = columnAuto{}, columnAuto{}
 	var hasW, hasC bool
-	autos := 0
 	for _, t := range v {
 		one := []token{t}
 		if t.typ == tIdent && lower(t.value) == "auto" {
-			autos++
 			continue
 		}
 		if !hasC {

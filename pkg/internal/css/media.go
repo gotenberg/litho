@@ -71,7 +71,7 @@ func evalMediaQuery(q []token, m Media) (bool, bool) {
 	if len(q) == 0 {
 		return false, false
 	}
-	if q[0].typ != tIdent || q[0].isIdent("not") && len(q) > 1 && q[1].typ != tIdent {
+	if q[0].typ != tIdent || (q[0].isIdent("not") && len(q) > 1 && q[1].typ != tIdent) {
 		return evalCondition(q, func(t token) (bool, bool) { return evalFeature(t, m) })
 	}
 	neg := false

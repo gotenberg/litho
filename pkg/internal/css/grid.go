@@ -421,7 +421,7 @@ func parseTrackList(v []token, explicit bool) (trackListSpec, bool) {
 		return trackListSpec{}, false
 	}
 	p.out.names = append(p.out.names, p.pending)
-	if a := p.out.auto; a != nil {
+	if p.out.auto != nil {
 		// An <auto-track-list> holds <fixed-size> tracks alone (7.2.3).
 		for _, s := range p.out.sizes {
 			if !s.fixed() {
@@ -1095,7 +1095,7 @@ func parseTemplate(v []token) (trackListSpec, trackListSpec, *GridAreas, bool) {
 	}
 	rows.names = append(rows.names, carry)
 	areas, ok := parseAreas(strs)
-	if !ok || len(rows.sizes) != len(strs) || len(rows.sizes) > MaxGridTracks {
+	if !ok {
 		return trackListSpec{}, trackListSpec{}, nil, false
 	}
 	return rows, cols, areas, true

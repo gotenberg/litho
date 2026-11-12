@@ -151,7 +151,6 @@ var simplePseudos = map[string]pseudoKind{
 // failing whole (Selectors 4, 4.3).
 func parseSelectorList(list []token, depth int, forgiving bool) ([]*complexSel, *selectorError) {
 	var out []*complexSel
-	var firstErr *selectorError
 	start := 0
 	for i := 0; i <= len(list); i++ {
 		if i < len(list) && list[i].typ != tComma {
@@ -162,9 +161,6 @@ func parseSelectorList(list []token, depth int, forgiving bool) ([]*complexSel, 
 		if err != nil {
 			if !forgiving {
 				return nil, err
-			}
-			if firstErr == nil {
-				firstErr = err
 			}
 			continue
 		}
@@ -318,7 +314,7 @@ func parseCompound(c *selCursor, depth int) (compound, string, *selectorError) {
 		if t == nil {
 			break
 		}
-		if pseudoElement != "" && !t.isDelim(':') && t.typ != tColon {
+		if pseudoElement != "" && t.typ != tColon {
 			break
 		}
 		switch {
