@@ -150,6 +150,18 @@ func TestRead_Hyperlinks(t *testing.T) {
 	}
 }
 
+// TestRead_HyperlinksWholeColumns checks hyperlinks over whole columns:
+// they mark the cells the sheet holds, and the reading follows those
+// cells, not the million rows of each link's range.
+func TestRead_HyperlinksWholeColumns(t *testing.T) {
+	t.Parallel()
+	links := strings.Repeat(`<hyperlink ref="A:A" location="top"/>`, 20_000)
+	doc, _ := readBytes(t, oneSheet(t, `<sheetData><row r="1048576"><c r="A1048576"><v>1</v></c></row></sheetData><hyperlinks>`+links+`</hyperlinks>`))
+	if c, _ := cellAt(doc.Sheets[0], 1048575, 0); c.Href != "#top" {
+		t.Errorf("last cell links %q, want #top", c.Href)
+	}
+}
+
 // TestRead_PageSetup checks the page setup over LibreOffice's defaults.
 func TestRead_PageSetup(t *testing.T) {
 	t.Parallel()

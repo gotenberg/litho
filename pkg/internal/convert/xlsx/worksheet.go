@@ -518,6 +518,7 @@ const maxHyperlinkCells = 4096
 // LibreOffice links it.
 func (w *sheetReader) hyperlinks(e *ooxml.Element) {
 	r, sh := w.r, w.sh
+	visits := 0
 	for _, h := range e.Kids() {
 		if !h.Is(nsMain, "hyperlink") {
 			continue
@@ -539,21 +540,25 @@ func (w *sheetReader) hyperlinks(e *ooxml.Element) {
 			continue
 		}
 		n := 0
-		for ri := rg.FirstRow; ri <= rg.LastRow && n < maxHyperlinkCells; ri++ {
-			at, ok := w.rowAt[ri]
-			if !ok {
-				continue
+		rows := sh.Rows
+		for at := sort.Search(len(rows), func(i int) bool { return rows[i].Index >= rg.FirstRow }); at < len(rows) && rows[at].Index <= rg.LastRow && n < maxHyperlinkCells; at++ {
+			if visits++; visits > maxHyperlinkRows {
+				return
 			}
-			cells := sh.Rows[at].Cells
-			for i := range cells {
-				if cells[i].Column >= rg.FirstColumn && cells[i].Column <= rg.LastColumn {
-					cells[i].Href = target
-					n++
-				}
+			cells := rows[at].Cells
+			for i := columnIndex(cells, rg.FirstColumn); i < len(cells) && cells[i].Column <= rg.LastColumn; i++ {
+				cells[i].Href = target
+				n++
 			}
 		}
 	}
 }
+
+// maxHyperlinkRows caps the rows a sheet's hyperlinks visit in all.
+// Anti-DoS guard, not spec-mandated: a link covers a cell or a merged
+// range, and four million rows cover Excel's 65,530 links a sheet of 64
+// rows each.
+const maxHyperlinkRows = 1 << 22
 
 // maxBreaks caps the manual page breaks of one axis. Anti-DoS guard, not
 // spec-mandated: Excel holds at most 1,026 breaks a sheet.
