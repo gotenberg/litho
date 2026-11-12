@@ -108,7 +108,7 @@ const (
 	// leave no room, a vertical alignment, a fit to a page count, the
 	// borders of a header, a header, footer or page-margin box that does
 	// not lay out. The message says what printed instead. HTML, Markdown,
-	// DOCX, ODT, XLSX and ODS report it.
+	// DOCX, ODT, XLSX, ODS and CSV report it.
 	WarningPageSetupUnsupported ConvertWarningCode = "page-setup-unsupported"
 	// WarningContentUnsupported is any other construct litho does not
 	// render as the source asks: an element, shape, effect, chart type,
