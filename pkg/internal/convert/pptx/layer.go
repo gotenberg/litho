@@ -40,7 +40,7 @@ func newLayer(part string, root *ooxml.Element, parent *layer) *layer {
 	return l
 }
 
-// master returns the slide master part, read once.
+// master returns the slide, notes or handout master part, read once.
 func (r *reader) master(part string) (*layer, error) {
 	if l, ok := r.layers[part]; ok {
 		return l, nil
@@ -49,7 +49,7 @@ func (r *reader) master(part string) (*layer, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !root.Is(nsP, "sldMaster") && !root.Is(nsP, "notesMaster") {
+	if !root.Is(nsP, "sldMaster") && !root.Is(nsP, "notesMaster") && !root.Is(nsP, "handoutMaster") {
 		return nil, fmt.Errorf("%w: %s is not a master", errNotPresentationPart, part)
 	}
 	l := newLayer(part, root, nil)

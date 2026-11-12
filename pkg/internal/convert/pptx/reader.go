@@ -33,6 +33,7 @@ const (
 	relSlideMaster    = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster"
 	relNotesSlide     = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide"
 	relNotesMaster    = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster"
+	relHandoutMaster  = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/handoutMaster"
 	relTableStyles    = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/tableStyles"
 	relComments       = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments"
 	relDiagramDrawing = "http://schemas.microsoft.com/office/2007/relationships/diagramDrawing"
@@ -151,8 +152,9 @@ func isMalformed(err error) bool {
 }
 
 // read reads the presentation pkg holds into the slide model, with the
-// warnings of what it left out or approximated.
-func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*slides.Document, []compose.Warning, error) {
+// warnings of what it left out or approximated, and its handout master
+// when handouts asks for it.
+func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, handouts bool) (*slides.Document, []compose.Warning, error) {
 	main, err := pkg.MainPart()
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", office.ErrMalformed, err)
@@ -241,6 +243,11 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts) (*slides.D
 	}
 	uniqueNames(doc.Slides)
 	doc.NotesSlideBox, doc.NotesTextBox, doc.NotesShapes = r.notesSlideBox, r.notesTextBox, r.notesShapes
+	if handouts {
+		if err := r.handoutMaster(root, doc); err != nil {
+			return nil, nil, err
+		}
+	}
 	return doc, r.warnings, nil
 }
 
