@@ -1,6 +1,9 @@
 package odt
 
 import (
+	"maps"
+	"slices"
+
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 )
@@ -79,7 +82,10 @@ const maxChain = 1 << 12
 // scanChains maps the name of every frame of a chain of linked text
 // boxes under root (ODF 1.3 Part 3, 19.112 draw:chain-next-name) onto
 // its place in the chain, counted from the frame no other names. A
-// chain closed on itself has no first frame and links none.
+// chain closed on itself has no first frame and links none. Two chains
+// that run into one frame share it from there on, and the frame keeps
+// the place of the chain whose first frame's name sorts first, so the
+// map's order decides nothing.
 func scanChains(root *odf.Element) map[string]chainLink {
 	next := map[string]string{}
 	named := map[string]bool{}
@@ -104,7 +110,7 @@ func scanChains(root *odf.Element) map[string]chainLink {
 		return nil
 	}
 	out := map[string]chainLink{}
-	for head := range next {
+	for _, head := range slices.Sorted(maps.Keys(next)) {
 		if named[head] {
 			continue
 		}

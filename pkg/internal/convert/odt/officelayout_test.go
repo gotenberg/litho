@@ -2,6 +2,7 @@ package odt
 
 import (
 	"context"
+	"encoding/xml"
 	"strconv"
 	"strings"
 	"testing"
@@ -446,6 +447,28 @@ func TestApplyFrameWrap_PageAnchoredFrames(t *testing.T) {
 	})
 	if !found {
 		t.Fatal("no page-anchored frame")
+	}
+}
+
+// TestScanChains_MergingChainsDeterministic gives the frame two chains
+// run into the same place every time: the chain whose first frame's name
+// sorts first.
+func TestScanChains_MergingChainsDeterministic(t *testing.T) {
+	t.Parallel()
+	frame := func(name, next string) *odf.Element {
+		tb := &odf.Element{Name: xmlName(odf.NSDraw, "text-box")}
+		if next != "" {
+			tb.Attr = []xml.Attr{xmlAttr(odf.NSDraw, "chain-next-name", next)}
+		}
+		return &odf.Element{Name: xmlName(odf.NSDraw, "frame"), Attr: []xml.Attr{xmlAttr(odf.NSDraw, "name", name)}, Children: []*odf.Element{tb}}
+	}
+	root := &odf.Element{Name: xmlName(odf.NSText, "p"), Children: []*odf.Element{
+		frame("B", "C"), frame("A", "C"), frame("D", "C"), frame("C", ""),
+	}}
+	for range 64 {
+		if got := scanChains(root)["C"]; got != (chainLink{name: "A", index: 1}) {
+			t.Fatalf("C = %+v, want the place of A's chain", got)
+		}
 	}
 }
 
