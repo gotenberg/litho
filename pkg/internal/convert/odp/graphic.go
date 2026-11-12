@@ -185,7 +185,7 @@ func (r *reader) gradient(g *odf.Gradient, alpha float64) *slides.Gradient {
 		out.Angle = axisAngle(g.Angle)
 	case "radial", "ellipsoid", "square", "rectangular":
 		if g.Style != "radial" {
-			r.warn("gradient-"+g.Style, g.Style+" gradients are drawn radial")
+			r.warnOnce("gradient-"+g.Style, "gradient-style", g.Style+" gradients are drawn radial")
 		}
 		out.Radial = true
 		out.CenterX, out.CenterY = g.CX, g.CY

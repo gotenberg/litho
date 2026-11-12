@@ -463,3 +463,19 @@ func TestRead_Describe(t *testing.T) {
 		}
 	}
 }
+
+// TestRead_WarningCodesAreFixed checks that a construct the reader leaves
+// out names itself in the warning's message, never in its code.
+func TestRead_WarningCodesAreFixed(t *testing.T) {
+	t.Parallel()
+	_, warnings := read(t, flat{body: page(`<draw:unknown-shape svg:width="1cm" svg:height="1cm"/><draw:other-shape/>` +
+		`<draw:frame svg:width="1cm" svg:height="1cm"><draw:applet/></draw:frame>`)}.bytes())
+	var got []string
+	for _, w := range warnings {
+		got = append(got, w.Code+": "+w.Message)
+	}
+	want := []string{"unsupported-shape: draw:unknown-shape is not drawn", "unsupported-shape: draw:other-shape is not drawn", "unsupported-frame: draw:applet is not drawn"}
+	if !slices.Equal(got, want) {
+		t.Errorf("warnings = %q, want %q", got, want)
+	}
+}

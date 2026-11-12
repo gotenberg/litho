@@ -119,10 +119,16 @@ func newReader(ctx context.Context, pkg *odf.Package, fonts *text.Fonts) *reader
 
 // warn records a warning once per code.
 func (r *reader) warn(code, msg string) {
-	if r.warned[code] {
+	r.warnOnce(code, code, msg)
+}
+
+// warnOnce records a warning once per key: a code a document's element or
+// style names several constructs under, each warned of once.
+func (r *reader) warnOnce(key, code, msg string) {
+	if r.warned[key] {
 		return
 	}
-	r.warned[code] = true
+	r.warned[key] = true
 	r.warnings = append(r.warnings, compose.Warning{Code: code, Message: msg})
 }
 

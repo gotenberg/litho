@@ -65,7 +65,7 @@ func (r *reader) decodePicture(el *odf.Element) *layout.Picture {
 		return nil
 	}
 	if name := vectorFormat(data); name != "" {
-		r.warn("picture-"+strings.ToLower(name), fmt.Sprintf("%s pictures are not drawn", name))
+		r.warnOnce("picture-"+strings.ToLower(name), "metafile", fmt.Sprintf("%s pictures are not drawn", name))
 		return nil
 	}
 	if isSVG(data) {

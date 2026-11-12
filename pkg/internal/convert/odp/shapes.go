@@ -107,7 +107,7 @@ func (r *reader) shape(el *odf.Element, pc *pageCtx, depth int, href string) []*
 		s = r.drawShape(el, pc)
 	case "page-thumbnail":
 	default:
-		r.warn("shape-"+el.Name.Local, fmt.Sprintf("draw:%s is not drawn", el.Name.Local))
+		r.warnOnce("shape-"+el.Name.Local, "unsupported-shape", fmt.Sprintf("draw:%s is not drawn", el.Name.Local))
 	}
 	if s == nil {
 		return nil
@@ -286,7 +286,7 @@ func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 			r.warn("media", "audio and video are drawn as their replacement picture")
 			media = true
 		case k.Is(odf.NSDraw, "applet"), k.Is(odf.NSDraw, "floating-frame"):
-			r.warn("frame-"+k.Name.Local, fmt.Sprintf("draw:%s is not drawn", k.Name.Local))
+			r.warnOnce("frame-"+k.Name.Local, "unsupported-frame", fmt.Sprintf("draw:%s is not drawn", k.Name.Local))
 		}
 	}
 	if media {
