@@ -114,12 +114,20 @@ type heading struct {
 	label, text string
 }
 
-// warn records a warning once per code.
+// warn records a warning once per code. The code is a fixed identifier,
+// never the document's data, which goes in msg.
 func (b *builder) warn(code, msg string) {
-	if b.warned[code] {
+	b.warnEach(code, "", msg)
+}
+
+// warnEach records a warning once per code and key: once per element
+// name for a code that reports elements of any name.
+func (b *builder) warnEach(code, key, msg string) {
+	k := code + "\x00" + key
+	if b.warned[k] {
 		return
 	}
-	b.warned[code] = true
+	b.warned[k] = true
 	b.warnings = append(b.warnings, compose.Warning{Code: "odt-" + code, Message: msg})
 }
 
@@ -348,7 +356,7 @@ func (b *builder) block(c *odf.Element, ctx *blockCtx) []*layout.Node {
 		}
 	}
 	if !c.IsText() && c.Name.Local != "" {
-		b.warn("unknown-"+c.Name.Local, fmt.Sprintf("the element %s is not drawn", c.Name.Local))
+		b.warnEach("unknown-element", c.Name.Local, fmt.Sprintf("the element %s is not drawn", c.Name.Local))
 	}
 	return nil
 }

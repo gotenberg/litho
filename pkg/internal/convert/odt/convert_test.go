@@ -165,3 +165,22 @@ func TestConvert_MisnamedTextBody(t *testing.T) {
 		t.Errorf("no media type: err = %v, want office.ErrMalformed", err)
 	}
 }
+
+// TestConvert_UnknownElementWarningCode reports each unknown element
+// under one fixed code, its name in the message, once per name.
+func TestConvert_UnknownElementWarningCode(t *testing.T) {
+	t.Parallel()
+	res := convertDoc(t, doc{body: `<text:p>a</text:p><text:frobnicate/><text:widget/><text:frobnicate/>`}.pack(t), office.Options{})
+	var msgs []string
+	for _, w := range res.Warnings {
+		if strings.HasPrefix(w.Code, "odt-unknown") {
+			if w.Code != "odt-unknown-element" {
+				t.Errorf("code %q, want odt-unknown-element", w.Code)
+			}
+			msgs = append(msgs, w.Message)
+		}
+	}
+	if len(msgs) != 2 || !strings.Contains(msgs[0], "frobnicate") || !strings.Contains(msgs[1], "widget") {
+		t.Errorf("warnings %q, want one for frobnicate and one for widget", msgs)
+	}
+}

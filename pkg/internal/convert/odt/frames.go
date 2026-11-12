@@ -1050,7 +1050,7 @@ func (b *builder) shapeBody(c *odf.Element, g frameGeom) *layout.Node {
 	}
 	src := shapeSVG(c, g)
 	if src == "" {
-		b.warn("shape-"+c.Name.Local, fmt.Sprintf("the shape %s is drawn as its empty box", c.Name.Local))
+		b.warnEach("shape-box", c.Name.Local, fmt.Sprintf("the shape %s is drawn as its empty box", c.Name.Local))
 		st := b.frameBox(g)
 		st.Display = css.InlineBlock
 		return b.node(&layout.Node{Kind: layout.Element, Style: st})
