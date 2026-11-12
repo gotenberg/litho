@@ -16,7 +16,7 @@ func leaderNode(s string, c css.Color) *Node {
 
 func TestLeader_Draw(t *testing.T) {
 	t.Parallel()
-	line := func(st *css.Style, kids ...*Node) *Node { return el(st, kids...) }
+	line := el
 	red2 := sty(font(2), fg(red))
 	nowrap := sty(font(2), fg(red), func(s *css.Style) { s.WhiteSpace = css.Nowrap })
 	rtl := sty(font(2), fg(red), func(s *css.Style) { s.Direction = css.RTL })

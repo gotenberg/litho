@@ -20,6 +20,7 @@ func TestFootnote_BalancedColumnsKeepBodiesOnTheirPage(t *testing.T) {
 	}
 	for _, n := range []int{1, 3} {
 		t.Run(fmt.Sprintf("%d sets", n), func(t *testing.T) {
+			t.Parallel()
 			var sets []*Node
 			for range n {
 				sets = append(sets, el(mc, paras...))
