@@ -836,10 +836,7 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 	// extraction. Annotation appearances are visual overlays, not page content.
 	annotAppearances := collectAnnotAppearanceObjects(ctx, doc, page.Dict)
 
-	// Pre-allocate with a capacity estimate: roughly 1 text element per 3 operators.
-	estimatedCap := max(len(ops)/3,
-		// Minimum capacity to avoid early reallocations.
-		64)
+	estimatedCap := shownCodeBound(ops)
 	elements := make([]models.TextElement, 0, estimatedCap)
 	var origins []int
 	var originsPtr *[]int
@@ -943,6 +940,58 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 		runFonts = runs.fonts
 	}
 	return extraction{elements: elements, origins: origins, fontRefs: fontRefs, pageOps: pageOps, runFonts: runFonts}, nil
+}
+
+// minElementCapacity is the least capacity [extractElements] gives the slices
+// it fills, so a page with little text grows none of them.
+const minElementCapacity = 64
+
+// maxElementCapacity bounds the capacity [shownCodeBound] gives the slices
+// [extractElements] fills ahead of the glyphs they hold. Anti-DoS guard, not
+// spec-mandated: string operands whose codes place no glyph, under a font
+// that maps none of them, would otherwise reserve an element for every byte.
+// A dense printed page shows a few thousand glyphs, so 1<<15 covers a page set
+// in a small size; a page past it still extracts, its slices grown by append.
+const maxElementCapacity = 1 << 15
+
+// shownCodeBound returns the capacity [extractElements] gives the slices it
+// fills: the bytes of the strings the page's own text-showing operators show,
+// within [minElementCapacity] and [maxElementCapacity]. Each glyph
+// [processText] places takes at least one byte of its string (ISO 32000-1,
+// 9.4.3), so the bytes bound the glyphs the page's operators place. A form
+// XObject's glyphs and an annotation's are not counted: their slices grow.
+func shownCodeBound(ops []content.Operation) int {
+	n := 0
+	for _, op := range ops {
+		switch op.Operator {
+		case "Tj", "'":
+			if len(op.Operands) > 0 {
+				if s, ok := op.Operands[0].(ast.PdfString); ok {
+					n += len(s)
+				}
+			}
+		case "\"":
+			if len(op.Operands) > 2 {
+				if s, ok := op.Operands[2].(ast.PdfString); ok {
+					n += len(s)
+				}
+			}
+		case "TJ":
+			if len(op.Operands) == 1 {
+				if arr, ok := op.Operands[0].(ast.PdfArray); ok {
+					for _, item := range arr {
+						if s, ok := item.(ast.PdfString); ok {
+							n += len(s)
+						}
+					}
+				}
+			}
+		}
+		if n >= maxElementCapacity {
+			return maxElementCapacity
+		}
+	}
+	return max(n, minElementCapacity)
 }
 
 // extractionRecord names what [extractElements] records beside the
