@@ -91,6 +91,9 @@ type builder struct {
 	// tocs are the tables of contents, regenerated once the layout
 	// placed the headings.
 	tocs []*toc
+	// lineBreak is the line breaking rule of the paragraph being built,
+	// which its runs take ([lineBreak]).
+	lineBreak css.LineBreak
 	// scriptRuns records the runs of the paragraph being built, which
 	// [builder.splitScripts] cuts by script; nil outside a paragraph.
 	scriptRuns *[]scriptRun
@@ -449,12 +452,13 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 	b.meta[n] = paraMeta{style: b.commonStyle(name), contextual: p.contextual, join: p.joinBorder}
 	ws := &wsState{space: true}
 	var kids []*layout.Node
-	outer := b.scriptRuns
+	outer, outerBreak := b.scriptRuns, b.lineBreak
 	var runs []scriptRun
-	b.scriptRuns = &runs
+	b.scriptRuns, b.lineBreak = &runs, st.LineBreak
 	b.inline(el, t, &kids, ws, ctx.depth)
 	b.scriptRuns = outer
 	kids = b.splitScripts(kids, runs, strings.HasPrefix(p.writing, "rl"))
+	b.lineBreak = outerBreak
 	if st.TextAlign == css.AlignJustify && slices.ContainsFunc(runs, func(r scriptRun) bool { return hasArabic(r.text) }) {
 		b.warn("kashida", warn.ContentUnsupported, warn.Approximated, "justified Arabic text is stretched at its spaces, without kashida")
 	}
@@ -608,6 +612,7 @@ func (b *builder) run(s string, t textState) *layout.Node {
 func (b *builder) runNode(s string, t textState, changed bool) *layout.Node {
 	st := baseStyle()
 	applyText(st, t, true)
+	st.LineBreak = b.lineBreak
 	if t.auto != 0 {
 		st.VerticalAlign = css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(b.raise(t))}
 		// Automatic escapement keeps the run inside the full-size line:

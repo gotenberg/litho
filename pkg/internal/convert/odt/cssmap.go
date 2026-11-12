@@ -382,6 +382,28 @@ func (b *builder) applyPara(st *css.Style, p paraState, t textState) {
 	if rtl {
 		st.Direction = css.RTL
 	}
+	st.LineBreak = lineBreak(p)
+	st.HangPunctuation = p.punctWrap != "simple"
+}
+
+// lineBreak returns the line breaking rule of the paragraph p: Writer's
+// list of the characters a line does not start with under
+// style:line-break strict, which is also its default, CSS's strict rule
+// (CSS Text 3, 5.3: no break before a small kana or a prolonged sound
+// mark), and none under normal, CSS's loose rule nearest it (ODF 1.3,
+// Part 3, 20.334).
+//
+// # Corpus evidence
+//
+//   - litho/odt: ja-line-break: under strict, and under neither
+//     attribute, Writer starts no line with 、, 。, ）, っ, ュ, ー or 々;
+//     under normal, a line starts with each of them. Loose keeps 、, 。
+//     and ） off a line's start.
+func lineBreak(p paraState) css.LineBreak {
+	if p.lineBreak == "normal" {
+		return css.LineBreakLoose
+	}
+	return css.LineBreakStrict
 }
 
 // pageBreak maps fo:break-before and fo:break-after (ODF 1.3, Part 3,

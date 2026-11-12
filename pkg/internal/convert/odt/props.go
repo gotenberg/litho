@@ -468,6 +468,9 @@ type paraState struct {
 	vAlign                  string
 	dropCap                 *odf.Element
 	contextual              bool
+	// lineBreak and punctWrap are style:line-break and
+	// style:punctuation-wrap, "" where no style sets them.
+	lineBreak, punctWrap string
 }
 
 // sideNames are the side suffixes of the fo:margin, fo:padding and
@@ -581,6 +584,12 @@ func foldPara(p paraState, layer odf.Props) paraState {
 	}
 	if v, ok := layer.Lookup("style:vertical-align"); ok {
 		p.vAlign = v
+	}
+	if v, ok := layer.Lookup("style:line-break"); ok {
+		p.lineBreak = v
+	}
+	if v, ok := layer.Lookup("style:punctuation-wrap"); ok {
+		p.punctWrap = v
 	}
 	if dc := layer.Child("style:drop-cap"); dc != nil {
 		p.dropCap = dc

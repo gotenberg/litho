@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -749,6 +750,46 @@ func TestConvert_KashidaWarning(t *testing.T) {
 		got := slices.ContainsFunc(res.Warnings, func(w typeset.Warning) bool { return strings.Contains(w.Message, "kashida") })
 		if got != tc.want {
 			t.Errorf("%s %q: kashida warning %v, want %v", tc.align, tc.text, got, tc.want)
+		}
+	}
+}
+
+// TestConvert_LineBreakOptions checks the line breaking a paragraph's
+// style:line-break and style:punctuation-wrap give it and its runs:
+// strict with hanging punctuation where it sets neither.
+//
+// # Corpus evidence
+//
+//   - litho/odt: ja-line-break: with neither attribute, Writer starts no
+//     line with っ, ュ or ー and hangs 、 and 。 past the line's end;
+//     under line-break normal, a line starts with each of them.
+func TestConvert_LineBreakOptions(t *testing.T) {
+	for _, tc := range []struct {
+		props string
+		lb    css.LineBreak
+		hang  bool
+	}{
+		{"", css.LineBreakStrict, true},
+		{`style:line-break="strict" style:punctuation-wrap="simple"`, css.LineBreakStrict, false},
+		{`style:line-break="normal" style:punctuation-wrap="hanging"`, css.LineBreakLoose, true},
+	} {
+		auto := `<style:style style:name="A" style:family="paragraph"><style:paragraph-properties ` + tc.props + `/></style:style>`
+		b := newTestBuilder(t, doc{contentAuto: auto, body: `<text:p text:style-name="A">漢字</text:p>`})
+		root, _ := b.document(odfBody(b))
+		var para, run *layout.Node
+		walkNodes(root, func(n *layout.Node) {
+			switch {
+			case n.Role == "P" && para == nil:
+				para = n
+			case n.Kind == layout.Text && run == nil:
+				run = n
+			}
+		})
+		if para == nil || run == nil {
+			t.Fatalf("%q: no paragraph or text", tc.props)
+		}
+		if para.Style.LineBreak != tc.lb || run.Style.LineBreak != tc.lb || para.Style.HangPunctuation != tc.hang {
+			t.Errorf("%q: line-break %v, run %v, hang %v; want %v, %v", tc.props, para.Style.LineBreak, run.Style.LineBreak, para.Style.HangPunctuation, tc.lb, tc.hang)
 		}
 	}
 }
