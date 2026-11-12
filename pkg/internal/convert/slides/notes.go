@@ -61,8 +61,9 @@ const (
 //
 //   - litho/pptx: deck-training and notes-pages (notes size 540 by 720)
 //     print every notes page, with notes or without, 540 by 720 in the
-//     pinned LibreOffice; probe, odp: a deck whose notes masters are A4
-//     and 540 by 720 prints its notes pages on Letter.
+//     pinned LibreOffice.
+//   - probe, odp: a deck whose notes masters are A4 and 540 by 720 prints
+//     its notes pages on Letter.
 //   - gotenberg/pptx: deck-notes (notes size 540 by 720, a master slide picture box
 //     of 360 by 270 at 90, 54): the slides with notes print the slide in
 //     that box framed whole and the slide number placeholder; slides 3 to 6,

@@ -144,6 +144,9 @@ func (b *builder) picture(pic *layout.Picture, r compose.Rect) []compose.Fragmen
 //     reference as diagonal bands 3 points apart, the preset's 4-pixel
 //     pitch at 96 pixels to the inch, where the 0.1-point hatch lines
 //     print the slide nearly white.
+//   - libreoffice/pptx: sd/tdf107608.pptx, a shape turned 270 degrees,
+//     prints its ltDnDiag lines falling to the right: the hatch keeps its
+//     angle on the page.
 func (b *builder) patternFill(f *Fill, box compose.Rect, ops []compose.PathOp) []compose.Fragment {
 	if f.PatternTile {
 		return shape.Fill(ops, box, shape.Paint{Kind: shape.PaintPattern, Pattern: f.Pattern, Color: colorOf(f.Color), Background: colorOf(f.Background)})
@@ -157,8 +160,7 @@ func (b *builder) patternFill(f *Fill, box compose.Rect, ops []compose.PathOp) [
 	}
 	h, ok := presetHatches[f.Pattern]
 	// The hatch keeps its angle on the page: the shape's clockwise turn
-	// turns it back (sd/tdf107608.pptx, a shape turned 270 degrees, prints
-	// its ltDnDiag lines falling to the right).
+	// turns it back.
 	h.angle += 10 * b.hatchTurn
 	lines := hatchOps(h, box)
 	if !ok || lines == nil {

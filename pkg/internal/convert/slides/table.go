@@ -37,7 +37,16 @@ func (b *builder) verticalCellHeight(body *TextBody, w float64) float64 {
 // merged cell one TD with its spans and nothing for the cells it covers,
 // a row the source lists short padded with empty TDs, so every row counts
 // the table's columns (ISO 14289-1, 7.2; ISO 32000-1, 14.8.5.7). The
-// model carries no header row, so every cell is a TD.
+// model carries no header row, so every cell is a TD. A cell's text turned
+// a quarter turn clockwise (vert) sits at the cell's left edge when
+// anchored at its top, at its right edge at its bottom, as Impress prints
+// it.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/tdf100926.pptx and sd/tcPr-vert-roundtrip.pptx
+//     print their vert cells' text anchored at the top against the cell's
+//     left edge.
 func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment {
 	t := s.Table
 	if t == nil || len(t.ColumnWidths) == 0 || len(t.Rows) == 0 {
@@ -123,11 +132,9 @@ func (b *builder) table(s *Shape, parent *compose.StructElem) []compose.Fragment
 			if cell.Text != nil && len(cell.Text.Paragraphs) > 0 {
 				body := cell.Text
 				if body.Vertical == css.SidewaysRL {
-					// A cell's text turned a quarter turn clockwise (vert)
-					// sits at the cell's left edge when anchored at its
-					// top, at its right edge at its bottom, as Impress
-					// prints sd/tdf100926.pptx and
-					// sd/tcPr-vert-roundtrip.pptx.
+					// Impress puts a vert cell's text at the left edge
+					// anchored at its top, at the right edge at its bottom:
+					// the two anchors swap.
 					vb := *body
 					switch body.Anchor {
 					case AnchorTop:

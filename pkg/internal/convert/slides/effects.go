@@ -358,10 +358,10 @@ func invertOr(m compose.Matrix) compose.Matrix {
 //
 // # Corpus evidence
 //
-//   - probe, libreoffice/pptx: a picture with a shadow blurred over 6 pt prints its shadow
-//     as a bitmap of its box grown by 6 pt, opaque inside; oox/table-shadow
-//     prints its table's borders again 10 pt down and right in the
-//     shadow's red, its text once.
+//   - probe, pptx: a picture with a shadow blurred over 6 pt prints its
+//     shadow as a bitmap of its box grown by 6 pt, opaque inside.
+//   - libreoffice/pptx: oox/table-shadow prints its table's borders again
+//     10 pt down and right in the shadow's red, its text once.
 func (b *builder) contentEffects(s *Shape, frags []compose.Fragment, m compose.Matrix) []compose.Fragment {
 	if s.Shadow == nil && s.Glow == nil && !positive(s.SoftEdge) {
 		return frags

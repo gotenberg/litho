@@ -33,8 +33,9 @@ const maxFontSize = 1000
 //
 // # Corpus evidence
 //
-//   - libreoffice/pptx: sd/bnc862510_7.pptx (Segoe UI) prints in Noto Sans; probe, odp: frames
-//     in NoSuchFont, Segoe UI and Tahoma print in Noto Sans.
+//   - libreoffice/pptx: sd/bnc862510_7.pptx (Segoe UI) prints in Noto Sans.
+//   - probe, odp: frames in NoSuchFont, Segoe UI and Tahoma print in Noto
+//     Sans.
 const fallbackFamily = "Noto Sans"
 
 // defaultTab is the distance between the default tab stops of a
@@ -209,9 +210,13 @@ func insetRect(r compose.Rect, in [4]float64) compose.Rect {
 //   - libreoffice/odp: sd/tdf99729-new.odp's bottom-anchored frame of 1 centimetre,
 //     sd/tdf150966_hugeInset.odp's bottom-anchored shape whose insets meet
 //     in the middle print their overflowing text from the rectangle's top;
-//     sd/invalidAudio.odp's middle-anchored title overflows both ways;
-//     pptx: sd-data/TextFittingComparisonWithMSO_TopBottomMiddleAlignment.pptx
-//     overflows a bottom-anchored body upwards.
+//     sd/invalidAudio.odp's middle-anchored title overflows both ways.
+//   - libreoffice/pptx:
+//     sd-data/TextFittingComparisonWithMSO_TopBottomMiddleAlignment.pptx
+//     overflows a bottom-anchored body upwards; oox/tdf151008_eaVertAnchor.pptx
+//     overflows its unwrapped vertical lines past their end.
+//   - libreoffice/odp: sd/style-overflow-behavior-clip.fodp, whose
+//     overflow behaviour is clip, leaves its second line out.
 func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect) *textResult {
 	res := &textResult{box: box}
 	inner := insetRect(shape.TextRect(g, box), body.Insets)
@@ -250,7 +255,7 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 		// paragraph's alignment leaves free: right of a start-aligned text,
 		// both sides of a centred one, left of an end-aligned one
 		// (SdrObjCustomShape::TakeTextRect), and past the end of a vertical
-		// text's lines alike (oox/tdf151008_eaVertAnchor.pptx).
+		// text's lines alike.
 		if nat := b.naturalWidth(body, f); nat > lw {
 			dx = (lw - nat) * overflowShare(body)
 			lw = nat
@@ -312,8 +317,7 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box compose.Rect)
 	if body.Clip && !vertical {
 		// A clipped body draws no line whose baseline falls outside its
 		// rectangle and cuts the others at it, as Impress prints a text
-		// whose overflow behaviour is clip (sd/style-overflow-behavior-clip.fodp
-		// leaves its second line out).
+		// whose overflow behaviour is clip.
 		frags = keepLines(frags, compose.Identity, -dy, lh-dy)
 		r := shape.TextRect(g, box)
 		res.frags = []compose.Fragment{&compose.Group{
@@ -1145,8 +1149,9 @@ func (b *builder) fieldText(r *Run) string {
 // # Corpus evidence
 //
 //   - libreoffice/pptx: sd/numfmt.pptx's plain datetime field prints 11/8/26 on 8
-//     November 2026; probe, odp: a text:date and a text:time without a data
-//     style print 11/8/26 and 11:05:48 AM.
+//     November 2026.
+//   - probe, odp: a text:date and a text:time without a data style print
+//     11/8/26 and 11:05:48 AM.
 const (
 	defaultDateFormat = "M/D/YY"
 	defaultTimeFormat = "HH:MM:SS AM/PM"

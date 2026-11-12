@@ -11,7 +11,14 @@ import (
 
 // shape returns the fragments of s in its parent's coordinates, m mapping
 // those to the slide's, depth the groups it sits in, recording its links
-// and hanging its structure from parent.
+// and hanging its structure from parent. A picture's own fill paints under
+// it and its line over it, as Impress draws a picture whose shape
+// properties fill and stroke it.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: oox/tdf163803_image_with_fill.pptx prints its
+//     picture's fill under it.
 func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.StructElem) []compose.Fragment {
 	if s == nil || !finite(s.Box) {
 		return nil
@@ -49,9 +56,7 @@ func (b *builder) shape(s *Shape, m compose.Matrix, depth int, parent *compose.S
 		if len(frags) > 0 {
 			parent.Kids = append(parent.Kids, fig)
 		}
-		// A picture's own fill paints under it and its line over it, as
-		// Impress draws a picture whose shape properties fill and stroke
-		// it (oox/tdf163803_image_with_fill.pptx).
+		// The picture's own fill paints under it and its line over it.
 		ops := rectOps(box)
 		frags = append(b.fill(&s.Fill, box, ops, shape.FillNorm), frags...)
 		frags = append(frags, b.stroke(&s.Line, ops)...)
