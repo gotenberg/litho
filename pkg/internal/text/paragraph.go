@@ -704,10 +704,15 @@ func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int)
 	if hs != 1 {
 		t.HScale = hs
 	}
-	drawn := 0
+	// first and last bound the glyphs of the range, which the second pass
+	// alone visits.
+	drawn, first, last := 0, len(it.glyphs), -1
 	for k := range it.glyphs {
-		if c := it.glyphs[k].cluster(); c >= start && c < end && !p.control(c) {
-			drawn++
+		if c := it.glyphs[k].cluster(); c >= start && c < end {
+			first, last = min(first, k), k
+			if !p.control(c) {
+				drawn++
+			}
 		}
 	}
 	if drawn > 0 {
@@ -715,7 +720,7 @@ func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int)
 	}
 	pen := 0.0
 	cluster := -1
-	for k := range it.glyphs {
+	for k := first; k <= last; k++ {
 		g := &it.glyphs[k]
 		c := g.cluster()
 		if c < start || c >= end {
