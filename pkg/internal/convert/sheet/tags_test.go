@@ -249,9 +249,10 @@ func TestConvert_DrawingsAreFigures(t *testing.T) {
 		for _, f := range fs {
 			switch v := f.(type) {
 			case *compose.Image:
-				if v.Parent == figs[0] {
+				switch v.Parent {
+				case figs[0]:
 					tagged++
-				} else if v.Parent == nil {
+				case nil:
 					artifacts++
 				}
 			case *compose.Path:

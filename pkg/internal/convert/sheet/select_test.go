@@ -63,8 +63,10 @@ func selectionBook() *Document {
 	one.HeaderFooter.Odd.Footer[1] = []Span{{Text: "P:"}, {Field: FieldPage}, {Text: "/"}, {Field: FieldPages}}
 	doc := newDoc(one)
 	for i, name := range []string{"Two", "Three", "Four", "Five"} {
-		sh := &Sheet{Name: name, Hidden: name == "Two", DefaultColumnWidth: 64, DefaultRowHeight: 12.78, Page: a4(),
-			Rows: []Row{{Index: 0, Cells: []Cell{numCell(0, float64(i+2), nil)}}}}
+		sh := &Sheet{
+			Name: name, Hidden: name == "Two", DefaultColumnWidth: 64, DefaultRowHeight: 12.78, Page: a4(),
+			Rows: []Row{{Index: 0, Cells: []Cell{numCell(0, float64(i+2), nil)}}},
+		}
 		doc.Sheets = append(doc.Sheets, sh)
 	}
 	return doc

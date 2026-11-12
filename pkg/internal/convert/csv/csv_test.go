@@ -92,7 +92,7 @@ func TestRead_Options(t *testing.T) {
 	if len(r) != 3 || r[0].Value != (sheet.Value{Kind: sheet.Number, Number: 7}) || r[1].Value != (sheet.Value{Kind: sheet.Text, Text: "1,5"}) || r[2].Style == nil || r[2].Style.Format != "yyyy-mm-dd" {
 		t.Errorf("detected row = %+v", r)
 	}
-	doc, w, err := Read(context.Background(), in, nil, office.Options{CSVSeparators: []rune{';'}, CSVKeepText: true})
+	doc, _, err = Read(context.Background(), in, nil, office.Options{CSVSeparators: []rune{';'}, CSVKeepText: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestRead_Options(t *testing.T) {
 			t.Errorf("text cell %d = %+v, want %q", i, r[i], want)
 		}
 	}
-	if _, w, _ = Read(context.Background(), []byte("1/10,TRUE\n"), nil, office.Options{CSVKeepText: true}); len(w) != 0 {
+	if _, w, _ := Read(context.Background(), []byte("1/10,TRUE\n"), nil, office.Options{CSVKeepText: true}); len(w) != 0 {
 		t.Errorf("text warnings = %+v", w)
 	}
 	for _, r := range []rune{'"', '\n', '\r', utf8.RuneError, -1} {
