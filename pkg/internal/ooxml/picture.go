@@ -59,18 +59,21 @@ func PictureFormat(data []byte) string {
 // size (96 pixels an inch for a raster picture, as Word and LibreOffice
 // size one without a resolution). JPEG pictures keep their bytes, other
 // raster pictures are encoded as they decode and keep no decoded pixels,
-// SVG draws as vectors with fonts. EMF and WMF fail with
-// [ErrUnsupportedPicture], as does any other format; a raster picture past
-// the conversion's Limits.MaxImagePixels fails too. The decoded pixels are
-// charged to the conversion's memory budget before they are decoded, and
-// a refused charge fails with the budget's error.
-func DecodePicture(ctx context.Context, data []byte, fonts *text.Fonts) (*layout.Picture, error) {
+// SVG draws as vectors with fonts, its drawing added to the conversion's
+// collector of SVG warnings (see svg.Collect) under the part name name.
+// EMF and WMF fail with [ErrUnsupportedPicture], as does any other
+// format; a raster picture past the conversion's Limits.MaxImagePixels
+// fails too. The decoded pixels are charged to the conversion's memory
+// budget before they are decoded, and a refused charge fails with the
+// budget's error.
+func DecodePicture(ctx context.Context, data []byte, fonts *text.Fonts, name string) (*layout.Picture, error) {
 	switch f := PictureFormat(data); f {
 	case "svg":
 		doc, err := svg.Parse(ctx, data, svg.Options{Fonts: fonts})
 		if err != nil {
 			return nil, fmt.Errorf("parsing the SVG picture: %w", err)
 		}
+		svg.Collect(ctx, doc, svg.PictureLabel(name))
 		return vectorPicture(doc), nil
 	case "emf", "wmf", "":
 		if f == "" {

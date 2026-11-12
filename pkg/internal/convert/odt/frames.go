@@ -116,6 +116,7 @@ func (b *builder) decodePicture(href string, bin *odf.Element) *layout.Picture {
 			b.warn("svg", warn.PictureUnreadable, warn.Omitted, fmt.Sprintf("an SVG picture is not drawn: %v", err))
 			return nil
 		}
+		svg.Collect(b.ctx, doc, svg.PictureLabel(href))
 		s := doc.Size()
 		w, h := s.Width, s.Height
 		if !s.HasWidth || !s.HasHeight || w <= 0 || h <= 0 {

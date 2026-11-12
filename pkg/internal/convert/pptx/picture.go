@@ -210,7 +210,7 @@ func (r *reader) loadPicture(part, id string) *layout.Picture {
 		r.warn(warn.PictureMissing, warn.Omitted, fmt.Sprintf("picture %s cannot be read: %v", rel.Target, err))
 		return nil
 	}
-	pic, err := ooxml.DecodePicture(r.ctx, data, r.fonts)
+	pic, err := ooxml.DecodePicture(r.ctx, data, r.fonts, rel.Target)
 	if err != nil {
 		switch {
 		case r.stop(err):

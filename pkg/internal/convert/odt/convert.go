@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/internal/svg"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -39,6 +40,9 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if fonts.Len() == 0 {
 		return nil, text.ErrNoFonts
 	}
+	// The readers add the SVG pictures they parse to the collector; laying
+	// the pages out draws them, which may add warnings the reader never saw.
+	ctx, drawings := svg.WithCollector(ctx)
 	data, err := office.ReadAll(ctx, src, opts.MaxInputBytes)
 	if err != nil {
 		return nil, err
@@ -112,7 +116,12 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if b.err != nil {
 		return nil, b.err
 	}
-	return b.assemble(res, opts, root.Lang)
+	doc, err := b.assemble(res, opts, root.Lang)
+	if err != nil {
+		return nil, err
+	}
+	doc.Warnings = append(doc.Warnings, drawings.Take()...)
+	return doc, nil
 }
 
 // textBody returns the office:text of office:body (ODF 1.3, Part 3,

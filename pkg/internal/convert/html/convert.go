@@ -425,7 +425,10 @@ func (p *prepared) assemble(ctx context.Context, res *layout.Result) (*typeset.D
 		typeset.PruneStructure(doc)
 	}
 	if p.svg != nil {
-		doc.Warnings = append(doc.Warnings, p.svg.warnings()...)
+		// The drawings are laid out: what drawing them at their laid-out
+		// size added joins what parsing found.
+		doc.Warnings = append(doc.Warnings, p.svg.images.Take()...)
+		doc.Warnings = append(doc.Warnings, p.svg.inline.Take()...)
 	}
 	if err := p.pages.err; err != nil {
 		return nil, err

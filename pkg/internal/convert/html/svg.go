@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 
 	dom "golang.org/x/net/html"
 
@@ -23,32 +22,14 @@ import (
 var errNestedSVG = errors.New("an SVG image inside an SVG image is not drawn")
 
 // svgState is what the SVG pictures of one conversion share: the fonts
-// their text is shaped with and the warnings they produce. It is safe for
-// concurrent use.
+// their text is shaped with and the drawings whose warnings the conversion
+// reports. It is safe for concurrent use.
 type svgState struct {
 	fonts *text.Fonts
-
-	mu    sync.Mutex
-	warns []typeset.Warning
-}
-
-// addWarnings records the warnings of a drawing, the one at u.
-func (s *svgState) addWarnings(u string, ws []typeset.Warning) {
-	if len(ws) == 0 {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, w := range ws {
-		s.warns = append(s.warns, typeset.Warning{Code: w.Code, Effect: w.Effect, Message: fmt.Sprintf("in the SVG image %s: %s", displayURL(u), w.Message)})
-	}
-}
-
-// warnings returns the recorded warnings.
-func (s *svgState) warnings() []typeset.Warning {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]typeset.Warning(nil), s.warns...)
+	// images are the SVG images, read once every page is laid out; inline
+	// are the svg elements of the document, read as the tree is built and
+	// again once every page is laid out.
+	images, inline svg.Collector
 }
 
 // svgCtxKey marks a context that is decoding an SVG picture.
@@ -71,7 +52,7 @@ func (r *resources) decodeSVG(ctx context.Context, u string, data []byte) (*layo
 	if err != nil {
 		return nil, pictureDataError{fmt.Errorf("parsing the SVG image: %w", err)}
 	}
-	r.svg.addWarnings(u, doc.Warnings())
+	r.svg.images.Add(doc, fmt.Sprintf("in the SVG image %s: ", displayURL(u)))
 	return vectorPicture(doc), nil
 }
 
@@ -170,9 +151,8 @@ func (b *builder) inlineSVG(ctx context.Context, n *dom.Node, st *css.Style) []*
 		}
 		return nil
 	}
-	for _, w := range doc.Warnings() {
-		b.warnOnce(w.Code, w.Effect, w.Message, "in an inline SVG: "+w.Message)
-	}
+	b.res.svg.inline.Add(doc, "in an inline SVG: ")
+	b.warnings = append(b.warnings, b.res.svg.inline.Take()...)
 	sized := *st
 	for i, key := range [2]string{"width", "height"} {
 		v, ok := attr(n, key)

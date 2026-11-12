@@ -98,7 +98,10 @@ encodes:
   carries an effect of `warn`, stated where it is made: content of the
   source left out, or content printed differently. A helper that makes
   warnings takes the effect from its caller, and a test reads the source
-  so that no warning literal leaves it out.
+  so that no warning literal leaves it out. An SVG drawing records
+  warnings when it is parsed and when a layout draws it at another size,
+  after its reader is done: every converter adds the drawings it parses to
+  an `svg.Collector` and takes their warnings once every page is laid out.
 
 ## The backend
 

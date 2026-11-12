@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/offcrypto"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/svg"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -35,6 +36,9 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if fonts.Len() == 0 {
 		return nil, text.ErrNoFonts
 	}
+	// The readers add the SVG pictures they parse to the collector; laying
+	// the pages out draws them, which may add warnings the reader never saw.
+	ctx, drawings := svg.WithCollector(ctx)
 	doc, warnings, err := load(ctx, src, fonts, opts)
 	if err != nil {
 		return nil, err
@@ -44,6 +48,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 		return nil, err
 	}
 	out.Warnings = append(warnings, out.Warnings...)
+	out.Warnings = append(out.Warnings, drawings.Take()...)
 	return out, nil
 }
 

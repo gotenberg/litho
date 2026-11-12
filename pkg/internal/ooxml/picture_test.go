@@ -27,7 +27,7 @@ func pngBytes(t testing.TB, w, h int) []byte {
 
 func TestDecodePicture(t *testing.T) {
 	t.Parallel()
-	pic, err := DecodePicture(context.Background(), pngBytes(t, 96, 48), nil)
+	pic, err := DecodePicture(context.Background(), pngBytes(t, 96, 48), nil, "p")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,10 +37,10 @@ func TestDecodePicture(t *testing.T) {
 	emf := make([]byte, 64)
 	emf[0] = 1
 	copy(emf[40:], " EMF")
-	if _, err := DecodePicture(context.Background(), emf, nil); !errors.Is(err, ErrUnsupportedPicture) {
+	if _, err := DecodePicture(context.Background(), emf, nil, "p"); !errors.Is(err, ErrUnsupportedPicture) {
 		t.Errorf("EMF = %v", err)
 	}
-	svgPic, err := DecodePicture(context.Background(), []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20"/></svg>`), nil)
+	svgPic, err := DecodePicture(context.Background(), []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20"/></svg>`), nil, "p")
 	if err != nil || svgPic.Vector == nil || svgPic.Width != 30 {
 		t.Errorf("SVG = %+v, %v", svgPic, err)
 	}
@@ -48,7 +48,7 @@ func TestDecodePicture(t *testing.T) {
 
 func TestCropped(t *testing.T) {
 	t.Parallel()
-	pic, err := DecodePicture(context.Background(), pngBytes(t, 100, 100), nil)
+	pic, err := DecodePicture(context.Background(), pngBytes(t, 100, 100), nil, "p")
 	if err != nil {
 		t.Fatal(err)
 	}
