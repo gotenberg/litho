@@ -101,7 +101,6 @@ func near(a, b [3]uint8, tol int) bool {
 var (
 	white = [3]uint8{255, 255, 255}
 	red   = [3]uint8{255, 0, 0}
-	green = [3]uint8{0, 128, 0}
 	lime  = [3]uint8{0, 255, 0}
 	blue  = [3]uint8{0, 0, 255}
 	black = [3]uint8{0, 0, 0}
