@@ -106,6 +106,11 @@ var (
 	x14Names  = cfNames{rule: nsX14, formulaNS: nsXM, formula: "f"}
 )
 
+// maxRuleFormulas is the most formulas a rule holds (ECMA-376 Part 1,
+// 18.3.1.10 cfRule: formula occurs at most three times); the reader
+// keeps no more.
+const maxRuleFormulas = 3
+
 // pendingOperand is an operand of a rule that refers to a cell, read once
 // the workbook is: the rule (its sheet, format and index), the operand's
 // index among its values, the sheet the reference names ("" for the
@@ -132,7 +137,7 @@ func (w *sheetReader) cfRule(e *ooxml.Element, ranges []sheet.Range, ext *dataBa
 	}
 	var formulas []string
 	for _, f := range e.Kids() {
-		if f.Is(ns.formulaNS, ns.formula) && len(formulas) < 3 {
+		if f.Is(ns.formulaNS, ns.formula) && len(formulas) < maxRuleFormulas {
 			formulas = append(formulas, textOf(f))
 		}
 	}

@@ -158,7 +158,7 @@ func parseHeaderFooter(s string, base sheet.Font, theme *ooxml.Theme) [3][]sheet
 				for j < len(s) && s[j] >= '0' && s[j] <= '9' {
 					j++
 				}
-				if n, err := strconv.Atoi(s[i:j]); err == nil && j-i <= 4 && n > 0 && n <= 1000 {
+				if n, err := strconv.Atoi(s[i:j]); err == nil && j-i <= 4 && n > 0 && n <= maxFontSize {
 					p.flush()
 					p.font.Size = float64(n)
 				}
@@ -306,11 +306,11 @@ func dynamicHeights(sh *sheet.Sheet, base float64) {
 	mm := func(pt float64) float64 { return math.Round(pt * 2540 / 72) }
 	if h, ok := estimate(false); ok {
 		dist := mm(sh.Page.Margin[css.Top]-sh.Page.HeaderTop) - mm(h)
-		hf.GrowHeader, hf.HeaderSpacing = dist >= 0, max(dist, 0)*72/2540
+		hf.GrowHeader, hf.HeaderSpacing = dist >= 0, hmmPt(max(dist, 0))
 	}
 	if h, ok := estimate(true); ok {
 		dist := mm(sh.Page.Margin[css.Bottom]-sh.Page.FooterBottom) - mm(h)
-		hf.GrowFooter, hf.FooterSpacing = dist >= 0, max(dist, 0)*72/2540
+		hf.GrowFooter, hf.FooterSpacing = dist >= 0, hmmPt(max(dist, 0))
 	}
 }
 
