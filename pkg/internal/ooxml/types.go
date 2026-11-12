@@ -67,8 +67,8 @@ func Int(s string) (int, bool) {
 }
 
 // OnOff parses an ST_OnOff value (ECMA-376 Part 1, 22.9.2.7): an absent
-// or empty value is true, as an empty element is; "0", "false" and "off"
-// are false.
+// or empty value is true, as an empty element is; "0", "false", "off" and
+// "none" are false.
 func OnOff(s string, present bool) bool {
 	if !present {
 		return true

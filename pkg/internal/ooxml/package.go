@@ -80,11 +80,14 @@ type Package struct {
 // Relationship is one relationship of a package or a part (ECMA-376
 // Part 2, 9.3).
 type Relationship struct {
+	// ID is the relationship's Id, Type its type, Strict ones in their
+	// Transitional name.
 	ID   string
 	Type string
 	// Target is the target part's name, absolute and without its leading
 	// slash, or the URI as written for an external target.
-	Target   string
+	Target string
+	// External marks a target outside the package (TargetMode External).
 	External bool
 }
 

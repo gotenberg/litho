@@ -72,6 +72,8 @@ type Diagram struct {
 // transition or a presentation point with its presentation properties
 // (21.4.3.5 prSet) and layout variables (21.4.2.30 presLayoutVars).
 type DiagramPoint struct {
+	// ModelID is the point's modelId; Type its type ("node" when absent);
+	// CxnID the connection a transition point stands for.
 	ModelID, Type, CxnID string
 	// PresName, PresStyleLbl and PresAssocID are a presentation point's
 	// layout node name, style label and data point.
@@ -89,8 +91,13 @@ type DiagramPoint struct {
 
 // DiagramConnection is a connection of the data model (21.4.3.2 cxn).
 type DiagramConnection struct {
+	// Type is the connection's type ("parOf" when absent), ModelID its
+	// modelId, Src and Dest the model ids of its points, ParTrans and
+	// SibTrans those of its transition points.
 	Type, ModelID, Src, Dest, ParTrans, SibTrans string
-	SrcOrd, DestOrd                              int
+	// SrcOrd and DestOrd order the connection among the source's and the
+	// destination's.
+	SrcOrd, DestOrd int
 }
 
 // DiagramStyle is the quick style of one style label: the style matrix
@@ -128,6 +135,7 @@ const (
 // a choose (21.4.2.3) or one of its if and else branches (21.4.2.11,
 // 21.4.2.7).
 type DiagramAtom struct {
+	// Kind is the atom's kind, Name its name, Kids the atoms it holds.
 	Kind AtomKind
 	Name string
 	Kids []*DiagramAtom
@@ -167,6 +175,10 @@ type DiagramAtom struct {
 
 // DiagramConstraint is a constraint of a layout node (21.4.2.6 constr).
 type DiagramConstraint struct {
+	// For, ForName, PtType and Type name the property the constraint sets
+	// and the nodes it sets it on; the Ref fields the property it reads;
+	// Op its operator; Factor scales the property read, Value stands for
+	// it when none is read.
 	For, ForName, PtType, Type  string
 	RefFor, RefForName, RefType string
 	RefPtType, Op               string
