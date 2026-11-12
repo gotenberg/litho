@@ -1,15 +1,17 @@
 package docx
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestSetWritingMode_TurnsCellsAndTextBoxes(t *testing.T) {
 	t.Parallel()
-	for dir, want := range map[string]css.WritingMode{"btLr": css.SidewaysLR, "tbRl": css.VerticalRL, "lrTb": css.HorizontalTB, "": css.HorizontalTB} {
+	for dir, want := range map[string]css.WritingMode{"btLr": css.SidewaysLR, "tbRl": css.VerticalRL, "tbLrV": css.VerticalLR, "lrTb": css.HorizontalTB, "": css.HorizontalTB} {
 		st := css.Initial()
 		setWritingMode(st, dir)
 		if st.WritingMode != want {
@@ -18,20 +20,31 @@ func TestSetWritingMode_TurnsCellsAndTextBoxes(t *testing.T) {
 	}
 	body := `<w:tbl><w:tr><w:tc><w:tcPr><w:textDirection w:val="btLr"/></w:tcPr><w:p><w:r><w:t>up</w:t></w:r></w:p></w:tc>` +
 		`<w:tc><w:tcPr><w:textDirection w:val="tbRlV"/></w:tcPr><w:p><w:r><w:t>down</w:t></w:r></w:p></w:tc>` +
+		`<w:tc><w:tcPr><w:textDirection w:val="lrTbV"/></w:tcPr><w:p><w:r><w:t>across</w:t></w:r></w:p></w:tc>` +
+		`<w:tc><w:tcPr><w:textDirection w:val="tbLrV"/></w:tcPr><w:p><w:r><w:t>down, lines left to right</w:t></w:r></w:p></w:tc>` +
 		`<w:tc><w:p><w:r><w:t>flat</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`
 	b := build(t, body, nil)
 	cells := role(b.root, "TD")
-	if len(cells) != 3 {
-		t.Fatalf("%d cells, want 3", len(cells))
+	if len(cells) != 5 {
+		t.Fatalf("%d cells, want 5", len(cells))
 	}
-	for i, want := range []css.WritingMode{css.SidewaysLR, css.VerticalRL, css.HorizontalTB} {
+	for i, want := range []css.WritingMode{css.SidewaysLR, css.VerticalRL, css.HorizontalTB, css.VerticalLR, css.HorizontalTB} {
 		if cells[i].Style.WritingMode != want {
 			t.Errorf("cell %d writing mode %v, want %v", i, cells[i].Style.WritingMode, want)
 		}
 	}
+	approximated := 0
+	for _, w := range b.d.warnings {
+		if w.Effect == warn.Approximated && (strings.Contains(w.Message, "text direction lrTbV") || strings.Contains(w.Message, "lines from left to right")) {
+			approximated++
+		}
+	}
+	if approximated != 2 {
+		t.Errorf("warnings %v, want the upright East Asian characters of lrTbV and the line order of tbLrV approximated", b.d.warnings)
+	}
 	n := &layout.Node{Kind: layout.Element, Style: css.Initial()}
-	turn(n, "btLr")
-	turn(nil, "btLr")
+	b.d.turn(n, "btLr")
+	b.d.turn(nil, "btLr")
 	if n.Style.WritingMode != css.SidewaysLR {
 		t.Errorf("text box writing mode %v, want sideways-lr", n.Style.WritingMode)
 	}

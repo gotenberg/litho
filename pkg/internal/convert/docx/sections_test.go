@@ -230,14 +230,27 @@ func TestSections_UnequalColumns(t *testing.T) {
 	}
 }
 
+// TestTextDirections locks the mapping of ECMA-376 Part 1, 17.18.93
+// ST_TextDirection and its transitional names (Part 4, 14.11.7): tbV and
+// lrTbV keep horizontal lines, lrV and tbLrV flow their vertical lines
+// left to right, and 20.1.10.83 mongolianVert does as tbLrV.
+//
+// # Corpus evidence
+//
+//   - litho/docx: tables-text-direction-valign prints in Word its lrTbV
+//     cell horizontal and its tbLrV cell top to bottom at the cell's left
+//     edge.
 func TestTextDirections(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct{ in, want string }{{"btLr", "btLr"}, {"lrV", "btLr"}, {"tbRl", "tbRl"}, {"tbV", "tbRl"}} {
+	for _, tc := range []struct{ in, want string }{
+		{"btLr", "btLr"}, {"lr", "btLr"}, {"tbRl", "tbRl"}, {"rl", "tbRl"}, {"tbRlV", "tbRl"}, {"rlV", "tbRl"},
+		{"lrV", "tbLrV"}, {"tbLrV", "tbLrV"}, {"tbV", ""}, {"lrTbV", ""}, {"tb", ""}, {"lrTb", ""}, {"", ""},
+	} {
 		if got := textDirection(tc.in); got != tc.want {
 			t.Errorf("textDirection(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
-	for _, tc := range []struct{ in, want string }{{"", ""}, {"horz", ""}, {"vert270", "btLr"}, {"vert", "tbRl"}, {"eaVert", "tbRl"}} {
+	for _, tc := range []struct{ in, want string }{{"", ""}, {"horz", ""}, {"vert270", "btLr"}, {"vert", "tbRl"}, {"eaVert", "tbRl"}, {"mongolianVert", "tbLrV"}} {
 		if got := bodyVert(tc.in); got != tc.want {
 			t.Errorf("bodyVert(%q) = %q, want %q", tc.in, got, tc.want)
 		}

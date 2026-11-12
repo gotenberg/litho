@@ -30,14 +30,16 @@ func setColumnTracks(st *css.Style, tracks []columnTrack) {
 // text direction, dir in the names of 17.18.93 ST_TextDirection (the
 // DrawingML bodyPr vert and the VML layout-flow are mapped onto them by
 // [textDirection]): btLr reads bottom to top, tbRl top to bottom, a
-// quarter turn of horizontal lines. Any other value keeps them
-// horizontal.
+// quarter turn of horizontal lines, and tbLrV top to bottom with its
+// lines flowing left to right. Any other value keeps them horizontal.
 func setWritingMode(st *css.Style, dir string) {
 	switch dir {
 	case "btLr":
 		st.WritingMode = css.SidewaysLR
 	case "tbRl":
 		st.WritingMode = css.VerticalRL
+	case "tbLrV":
+		st.WritingMode = css.VerticalLR
 	}
 }
 

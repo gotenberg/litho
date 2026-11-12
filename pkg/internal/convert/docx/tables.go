@@ -999,9 +999,8 @@ func (d *document) cellStyle(cp cellProps, tableMar map[string]float64, tb map[s
 	// the bottom border at the cut, the top border again on the next
 	// page.
 	st.BoxDecorationBreak = css.DecorationCloneAll
-	if cp.textDir != "" && cp.textDir != "lrTb" && cp.textDir != "tb" {
-		setWritingMode(st, textDirection(cp.textDir))
-	}
+	d.warnTextDirection(cp.textDir)
+	setWritingMode(st, textDirection(cp.textDir))
 	return st
 }
 

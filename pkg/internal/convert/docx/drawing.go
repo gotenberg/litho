@@ -296,7 +296,7 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 			d.checkGeometry(g)
 			d.shapeTextBox(n, g, ss, w, h, attrOr(bodyPr, "anchor"), bodyPr.Child(ooxml.NSA, "spAutoFit") != nil)
 		}
-		turn(n, bodyVert(attrOr(bodyPr, "vert")))
+		d.turn(n, bodyVert(attrOr(bodyPr, "vert")))
 		return n
 	}
 	if l := sp.Child(ooxml.NSWPS, "linkedTxbx"); l != nil && attrOr(l, "id") != "" {
@@ -306,7 +306,7 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 		n := d.textBox(s, nil, w, h, ss, bodyInsets(bodyPr), "", depth)
 		seq, _ := ooxml.Int(attrOr(l, "seq"))
 		setChain(n.Style, attrOr(l, "id"), seq, h)
-		turn(n, bodyVert(attrOr(bodyPr, "vert")))
+		d.turn(n, bodyVert(attrOr(bodyPr, "vert")))
 		return n
 	}
 	g := ooxml.ParseGeometry(spPr)
@@ -375,32 +375,63 @@ func vectorShape(st *css.Style, g *shape.Geometry, ss ooxml.ShapeStyle, w, h flo
 }
 
 // bodyVert maps a text box's bodyPr vert (20.1.10.83 ST_TextVerticalType)
-// onto a text direction: vert270 reads bottom to top, the vertical types
-// top to bottom, horz none.
+// onto a text direction: vert270 reads bottom to top, mongolianVert top
+// to bottom with its lines flowing left to right, the other vertical
+// types top to bottom with their lines flowing right to left, horz none.
 func bodyVert(v string) string {
 	switch v {
 	case "", "horz":
 		return ""
 	case "vert270":
 		return "btLr"
+	case "mongolianVert":
+		return "tbLrV"
 	}
 	return "tbRl"
 }
 
-// textDirection maps a w:textDirection value (17.18.93) onto the two
-// directions [setWritingMode] reads: the transitional names btLr and
-// tbRl, and the strict ones, tbV and lrV among them, as Word writes them.
+// textDirection maps a w:textDirection value (ECMA-376 Part 1, 17.18.93
+// ST_TextDirection, and Part 4, 14.11.7 for the transitional names) onto
+// the directions [setWritingMode] reads, "" for horizontal lines: lr and
+// btLr read bottom to top; rl, rlV, tbRl and tbRlV top to bottom, lines
+// flowing right to left; lrV and tbLrV top to bottom, lines flowing left
+// to right; tb, tbV, lrTb and lrTbV are horizontal, tbV and lrTbV only
+// turning East Asian characters.
+//
+// # Corpus evidence
+//
+//   - litho/docx: tables-text-direction-valign prints in Word its lrTbV
+//     cell horizontal and its tbLrV cell top to bottom at the cell's left
+//     edge, its tbRl cell's line at the right edge.
 func textDirection(v string) string {
 	switch v {
-	case "btLr", "lr", "lrV":
+	case "btLr", "lr":
 		return "btLr"
+	case "tbLrV", "lrV":
+		return "tbLrV"
+	case "", "lrTb", "tb", "lrTbV", "tbV":
+		return ""
 	}
 	return "tbRl"
+}
+
+// warnTextDirection warns of what a text direction of 17.18.93 draws
+// approximately: the turned East Asian characters of tbV and lrTbV are
+// drawn upright, and the lines of lrV and tbLrV flow right to left as
+// the layout stacks every vertical flow.
+func (d *document) warnTextDirection(v string) {
+	switch v {
+	case "tbV", "lrTbV":
+		d.warn(warn.ContentUnsupported, warn.Approximated, "East Asian characters of text direction "+v+" are drawn upright")
+	case "lrV", "tbLrV":
+		d.warn(warn.ContentUnsupported, warn.Approximated, "vertical text with lines from left to right is laid out as from right to left")
+	}
 }
 
 // turn sets the writing mode of a text box's block n for the text
 // direction dir, "" for horizontal text.
-func turn(n *layout.Node, dir string) {
+func (d *document) turn(n *layout.Node, dir string) {
+	d.warnTextDirection(dir)
 	if dir == "" || n == nil {
 		return
 	}
