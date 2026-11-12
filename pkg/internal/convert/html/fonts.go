@@ -52,6 +52,11 @@ var (
 	errUnknownProgram = errors.New("not a TrueType, OpenType, collection, WOFF or WOFF2 file")
 )
 
+// maxShownDataURL caps the bytes of a data: URL a warning quotes: its
+// scheme and media type, enough to tell which source failed, not the
+// font's whole payload.
+const maxShownDataURL = 64
+
 // fontFormats are the format() hints litho reads (CSS Fonts 4, 4.3.1,
 // Table 1): TrueType, OpenType with glyf or CFF outlines, collections, WOFF
 // and WOFF2. embedded-opentype and svg are refused, as are the
@@ -129,8 +134,8 @@ func (l *fontLoader) load(ctx context.Context, rule css.FontFace) *text.Face {
 		name := "local(" + src.Local + ")"
 		if src.Local == "" {
 			name = displayURL(src.URL)
-			if len(name) > 64 && strings.HasPrefix(strings.ToLower(name), "data:") {
-				name = name[:64] + "..."
+			if len(name) > maxShownDataURL && strings.HasPrefix(strings.ToLower(name), "data:") {
+				name = name[:maxShownDataURL] + "..."
 			}
 		}
 		reasons = append(reasons, name+": "+displayURL(err.Error()))
