@@ -1,6 +1,9 @@
 package ioat
 
-import "io"
+import (
+	"bytes"
+	"io"
+)
 
 // Reader is a stateful, buffered reader built on an [io.ReaderAt]. It
 // is NOT safe for concurrent use. Each goroutine must create its own
@@ -18,6 +21,11 @@ type Reader struct {
 	buf    []byte
 	bufPos int
 	bufLen int
+
+	// data holds the whole input when [NewBytesReader] made the Reader, and
+	// a fill then slices it instead of copying into a buffer of its own.
+	data     []byte
+	inMemory bool
 
 	// want is the size of the next fill with no limit set: it starts at
 	// [minBufSize] and doubles up to [maxBufSize] each time a fill reads at
@@ -51,6 +59,20 @@ func NewReader(r io.ReaderAt, size int64, offset int64) *Reader {
 	}
 }
 
+// NewBytesReader returns a [Reader] over data, positioned at offset. It reads
+// data in place: it allocates no buffer and copies nothing, so data must not
+// change while the Reader, or a stream parsed through it, reads it. It reads
+// as [NewReader] over a [bytes.Reader] of data does.
+func NewBytesReader(data []byte, offset int64) *Reader {
+	return &Reader{
+		size:     int64(len(data)),
+		limit:    int64(len(data)),
+		offset:   offset,
+		data:     data,
+		inMemory: true,
+	}
+}
+
 // SetLimit ends the data at limit: a read that reaches it reports [io.EOF], as
 // though the underlying reader stopped there. A limit outside [0, size]
 // restores the size given to [NewReader], which [Reader.ClearLimit] also does.
@@ -79,6 +101,17 @@ func (b *Reader) ClearLimit() {
 func (b *Reader) fill() error {
 	if b.offset >= b.limit {
 		return io.EOF
+	}
+
+	if b.inMemory {
+		if b.offset < 0 {
+			return ErrNegativeOffset
+		}
+		b.buf = b.data[b.offset:b.limit]
+		b.bufPos = 0
+		b.bufLen = len(b.buf)
+		b.offset = b.limit
+		return nil
 	}
 
 	size := b.want
@@ -158,8 +191,12 @@ func (b *Reader) Position() int64 {
 	return b.offset - int64(b.bufLen-b.bufPos)
 }
 
-// ReaderAt returns the underlying [io.ReaderAt].
+// ReaderAt returns the underlying [io.ReaderAt]: for a Reader
+// [NewBytesReader] made, a [bytes.Reader] of its data.
 func (b *Reader) ReaderAt() io.ReaderAt {
+	if b.inMemory {
+		return bytes.NewReader(b.data)
+	}
 	return b.r
 }
 

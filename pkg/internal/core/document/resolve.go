@@ -1,7 +1,6 @@
 package document
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"fmt"
@@ -511,10 +510,11 @@ func (o *objStmData) objectEnd(off int) int {
 }
 
 // parser returns a parser over the object stored at [off, end) of the bytes
-// after /First, which reaches the end of its data at end.
+// after /First, which reaches the end of its data at end. It reads the
+// decoded bytes in place, which nothing writes once decoded.
 func (o *objStmData) parser(off, end int) *parser.Parser {
 	limit := o.first + end
-	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(o.decoded[:limit]), int64(limit), int64(o.first+off)))
+	lex := lexer.NewLexer(ioat.NewBytesReader(o.decoded[:limit], int64(o.first+off)))
 	return parser.NewParser(lex)
 }
 
@@ -791,7 +791,7 @@ const maxObjStmHeaderPrealloc = 1 << 16
 // header pairs than fit in the bytes, per the untrusted-size rule. An
 // unparseable object number is stored as -1, which never matches a real lookup.
 func parseObjStmHeader(ctx context.Context, decoded []byte, n int) (objNums, offsets []int, err error) {
-	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(decoded), int64(len(decoded)), 0))
+	lex := lexer.NewLexer(ioat.NewBytesReader(decoded, 0))
 
 	capHint := n
 	if capHint < 0 || capHint > len(decoded) {

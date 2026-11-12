@@ -15,4 +15,8 @@ var (
 	// ErrSeekNegativePosition is returned when Seek would result in a
 	// negative read position.
 	ErrSeekNegativePosition = errors.New("ioat.Reader.Seek: negative position")
+
+	// ErrNegativeOffset is returned when a Reader [NewBytesReader] made
+	// is asked to read from a negative offset.
+	ErrNegativeOffset = errors.New("ioat.Reader: negative offset")
 )
