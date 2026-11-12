@@ -2,6 +2,7 @@ package css
 
 import (
 	"math"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
@@ -26,9 +27,12 @@ type Media struct {
 	// Features are the discrete media features (Media Queries 5, 2.4) the
 	// @media rules evaluate against, by name, such as
 	// "prefers-color-scheme": "dark" or "hover": "hover". A feature absent
-	// from the map keeps its default: light, no-preference and none, what
-	// a printer and a headless browser report. Keys are lowercase; values
-	// are compared case-insensitively.
+	// from the map keeps the value a printed page has, or a screen's where
+	// the two differ and Type is "screen": paged and scroll overflow,
+	// no and fast updates, an sRGB gamut, a standard dynamic range, the
+	// browser display mode, no forced colours, a light colour scheme, no
+	// preference, no pointer and no hover. Keys are lowercase; values are
+	// compared case-insensitively.
 	Features map[string]string
 }
 
@@ -226,7 +230,8 @@ func evalFeature(t token, m Media) (bool, bool) {
 		case "color", "orientation", "aspect-ratio":
 			return true, true
 		}
-		return false, true
+		v, ok := discreteFeature(name, m)
+		return ok && discreteTrue(name, v), true
 	}
 	if len(in) >= 3 && in[1].typ == tDelim {
 		return evalRange(in, m)
@@ -276,8 +281,8 @@ func evalFeature(t token, m Media) (bool, bool) {
 		return false, true
 	}
 	v := lower(val[0].value)
-	if want, ok := m.Features[name]; ok {
-		return v == lower(want), true
+	if got, ok := discreteFeature(name, m); ok {
+		return discreteMatches(name, v, got), true
 	}
 	switch name {
 	case "orientation":
@@ -285,18 +290,100 @@ func evalFeature(t token, m Media) (bool, bool) {
 			return v == "portrait", true
 		}
 		return v == "landscape", true
-	case "prefers-color-scheme":
-		return v == "light", true
-	case "hover", "any-hover", "pointer", "any-pointer", "update", "scripting":
-		return v == "none", true
-	case "prefers-reduced-motion", "prefers-contrast", "prefers-reduced-transparency":
-		return v == "no-preference", true
 	case "color":
 		return val[0].typ == tNumber && val[0].num <= mediaColorBits, true
 	case "monochrome", "grid":
 		return val[0].typ == tNumber && val[0].num == 0, true
 	}
 	return false, true
+}
+
+// discreteFeature returns the value of a discrete media feature for m:
+// the caller's, else the value a printed page has, else, when m is a
+// screen, a screen's where the two differ. It is false for a feature
+// litho does not evaluate, which no value matches.
+//
+//   - overflow-block is paged on a printer and scroll on a screen, and
+//     overflow-inline none and scroll (Media Queries 4, 5.5 and 5.6).
+//   - update is none for a document printed on paper and fast on a
+//     computer screen (Media Queries 4, 5.4).
+//   - color-gamut is srgb (Media Queries 4, 6.4): a converted page holds
+//     sRGB colours.
+//   - dynamic-range is standard, which matches on any visual device
+//     (Media Queries 5, 6.5).
+//   - display-mode is browser, which matches in any context that is not
+//     an application (Media Queries 5, 4.9).
+//   - forced-colors is none (Media Queries 5, 12.4): no palette is forced
+//     on a converted document.
+//   - prefers-color-scheme is light, the preferences are no-preference,
+//     and hover and pointer are none: no user and no pointing device take
+//     part in a conversion.
+//   - scripting is none: litho runs no script.
+func discreteFeature(name string, m Media) (string, bool) {
+	if v, ok := m.Features[name]; ok {
+		return lower(v), true
+	}
+	screen := lower(m.Type) == "screen"
+	switch name {
+	case "overflow-block":
+		if screen {
+			return "scroll", true
+		}
+		return "paged", true
+	case "overflow-inline":
+		if screen {
+			return "scroll", true
+		}
+		return "none", true
+	case "update":
+		if screen {
+			return "fast", true
+		}
+		return "none", true
+	case "color-gamut":
+		return "srgb", true
+	case "dynamic-range":
+		return "standard", true
+	case "display-mode":
+		return "browser", true
+	case "prefers-color-scheme":
+		return "light", true
+	case "hover", "any-hover", "pointer", "any-pointer", "scripting", "forced-colors":
+		return "none", true
+	case "prefers-reduced-motion", "prefers-contrast", "prefers-reduced-transparency":
+		return "no-preference", true
+	}
+	return "", false
+}
+
+// nestedFeatureValues are the discrete features whose values include the
+// ones before them: a p3 device also matches srgb (Media Queries 4, 6.4),
+// a high dynamic range device also standard (Media Queries 5, 6.5).
+var nestedFeatureValues = map[string][]string{
+	"color-gamut":   {"srgb", "p3", "rec2020"},
+	"dynamic-range": {"standard", "high"},
+}
+
+// discreteMatches reports whether a query for the value want of a
+// discrete feature matches the medium's value got.
+func discreteMatches(name, want, got string) bool {
+	if order, ok := nestedFeatureValues[name]; ok {
+		w, g := slices.Index(order, want), slices.Index(order, got)
+		return w >= 0 && g >= 0 && w <= g
+	}
+	return want == got
+}
+
+// discreteTrue evaluates a discrete feature of value v in a boolean
+// context (Media Queries 4, 2.4.2): true unless the value is none, or
+// no-preference, which the preference features define to evaluate as
+// false there (Media Queries 5, 12.1 to 12.3).
+func discreteTrue(name, v string) bool {
+	switch name {
+	case "prefers-reduced-motion", "prefers-contrast", "prefers-reduced-transparency":
+		return v != "no-preference"
+	}
+	return v != "none"
 }
 
 // evalRange evaluates the range form of width and height (Media Queries
