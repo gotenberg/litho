@@ -3,6 +3,7 @@ package embed
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"testing"
 )
 
@@ -478,4 +479,80 @@ func buildSubsetTestTTF(t *testing.T) []byte {
 		"glyf": glyf,
 	}
 	return encodeTTF(tables)
+}
+
+// overlappingTTF returns a TrueType program of numGlyphs glyphs and a glyf
+// table of glyfLen bytes, whose directory adds extra tables that each span
+// the whole program. When spanAll is set, the loca entries, in the long
+// format, alternate between 0 and glyfLen: every even glyph spans the whole
+// table, and every odd one runs backwards.
+func overlappingTTF(numGlyphs, glyfLen int, spanAll bool, extra int) []byte {
+	head := make([]byte, 54)
+	binary.BigEndian.PutUint16(head[18:], 1000) // unitsPerEm
+	binary.BigEndian.PutUint16(head[50:], 1)    // indexToLocFormat: long
+	maxp := make([]byte, 6)
+	binary.BigEndian.PutUint32(maxp[0:], 0x00005000)
+	binary.BigEndian.PutUint16(maxp[4:], uint16(numGlyphs)) //nolint:gosec // a test count under 65536
+	glyf := make([]byte, glyfLen)
+	loca := make([]byte, 4*(numGlyphs+1))
+	for g := range numGlyphs + 1 {
+		off := g * glyfLen / numGlyphs
+		if spanAll {
+			off = glyfLen * (g % 2)
+		}
+		binary.BigEndian.PutUint32(loca[4*g:], uint32(off)) //nolint:gosec // a test table of a few kilobytes
+	}
+	tables := []struct {
+		tag  string
+		data []byte
+	}{{"glyf", glyf}, {"head", head}, {"loca", loca}, {"maxp", maxp}}
+	n := len(tables) + extra
+	out := make([]byte, 12+16*n)
+	binary.BigEndian.PutUint32(out[0:], 0x00010000)
+	binary.BigEndian.PutUint16(out[4:], uint16(n)) //nolint:gosec // a test count under 65536
+	for i, t := range tables {
+		rec := 12 + 16*i
+		copy(out[rec:], t.tag)
+		binary.BigEndian.PutUint32(out[rec+8:], uint32(len(out))) //nolint:gosec // a test program of a few kilobytes
+		binary.BigEndian.PutUint32(out[rec+12:], uint32(len(t.data)))
+		out = append(out, t.data...)
+	}
+	for i := range extra {
+		rec := 12 + 16*(len(tables)+i)
+		copy(out[rec:], fmt.Sprintf("x%03d", i))
+		binary.BigEndian.PutUint32(out[rec+12:], uint32(len(out))) //nolint:gosec // a test program of a few kilobytes
+	}
+	return out
+}
+
+// TestSubsetTTF_RefusesOverlapPastTheProgram pins that a program whose
+// glyphs or tables overlap, each spanning the whole of what holds them,
+// falls back to whole embedding instead of copying it once per glyph or
+// table kept, which made the subset of a program grow with the square of
+// its size.
+func TestSubsetTTF_RefusesOverlapPastTheProgram(t *testing.T) {
+	t.Parallel()
+	every := func(n, step int) map[uint16]bool {
+		keep := make(map[uint16]bool, n)
+		for g := 0; g < n; g += step {
+			keep[uint16(g)] = true //nolint:gosec // a test count under 65536
+		}
+		return keep
+	}
+	for _, tc := range []struct {
+		name string
+		raw  []byte
+		keep map[uint16]bool
+	}{
+		{"glyphs", overlappingTTF(1000, 4096, true, 0), every(1000, 2)},
+		{"tables", overlappingTTF(10, 4096, false, 64), every(10, 1)},
+	} {
+		out, err := subsetTTF(tc.raw, tc.keep)
+		if err == nil {
+			t.Errorf("%s: a %d-byte program subsets to %d bytes, want an error", tc.name, len(tc.raw), len(out))
+		}
+	}
+	if _, err := subsetTTF(overlappingTTF(1000, 4096, false, 0), every(1000, 1)); err != nil {
+		t.Errorf("a program whose glyphs and tables lie apart: %v", err)
+	}
 }

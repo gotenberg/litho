@@ -85,6 +85,13 @@ func subsetTTF(raw []byte, keepGIDs map[uint16]bool) ([]byte, error) {
 			// Corrupt offsets, bail out.
 			return raw, fmt.Errorf("corrupt loca offsets at gid %d", gid)
 		}
+		// The glyphs of a well-formed loca table do not overlap (ISO/IEC
+		// 14496-22, loca table), so the kept ones and their padding fit in
+		// the glyf table plus a byte a glyph. A table whose glyphs all span
+		// the whole of it would otherwise copy it once per glyph kept.
+		if uint64(len(newGlyf))+uint64(glyphEnd-glyphStart) > uint64(len(glyfData))+uint64(numGlyphs) {
+			return raw, fmt.Errorf("loca ranges overlap past the %d-byte glyf table at gid %d", len(glyfData), gid)
+		}
 		newGlyf = append(newGlyf, glyfData[glyphStart:glyphEnd]...)
 		// Pad to 2-byte alignment (required for short loca format).
 		if len(newGlyf)%2 != 0 {
@@ -110,15 +117,29 @@ func subsetTTF(raw []byte, keepGIDs map[uint16]bool) ([]byte, error) {
 	binary.BigEndian.PutUint32(newHead[8:12], 0)
 
 	// Assemble the subset font: every table is kept, with head, loca and
-	// glyf replaced by the rebuilt versions.
+	// glyf replaced by the rebuilt versions. A tag listed twice keeps its
+	// first table, as truetype.TableData reads it. The tables copied lie
+	// within the program and, in a well-formed one, apart, so they sum to
+	// at most its length: a directory whose entries all span the whole
+	// program would otherwise write it once per entry.
 	tables := make(map[string][]byte, len(records))
+	var copied uint64
 	for _, rec := range records {
 		tag := rec.Tag
-		data, err := truetype.TableData(raw, records, tag)
-		if err != nil {
-			return raw, fmt.Errorf("read table %q: %w", tag, err)
+		if _, seen := tables[tag]; seen {
+			continue
 		}
-		tables[tag] = data
+		end := uint64(rec.Offset) + uint64(rec.Length)
+		if end > uint64(len(raw)) {
+			return raw, fmt.Errorf("read table %q: %w: table extends beyond data", tag, truetype.ErrInvalidFont)
+		}
+		tables[tag] = raw[rec.Offset:end]
+		if tag != "head" && tag != "loca" && tag != "glyf" {
+			copied += uint64(rec.Length)
+		}
+	}
+	if copied > uint64(len(raw)) {
+		return raw, fmt.Errorf("tables of %d bytes overlap in a %d-byte program", copied, len(raw))
 	}
 	tables["head"] = newHead
 	tables["loca"] = newLoca
