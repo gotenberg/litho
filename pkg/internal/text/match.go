@@ -543,13 +543,28 @@ func stretchOrder(want, have float64) (int, float64) {
 	return 2, math.Abs(have - want)
 }
 
-// skewOf returns the synthetic shear of a slanted request: its oblique
-// angle's tangent, else Chromium's default.
+// skewOf returns the synthetic shear of a slanted request. CSS Fonts 4,
+// 2.4 has a synthetic oblique face generated where no oblique face exists,
+// slanted clockwise for a positive angle and counter-clockwise for a
+// negative one, and leaves the slant to the user agent. Chromium shears
+// by [syntheticItalicSkew] whatever the angle, so the shear is the
+// angle's tangent up to that much, signed as the angle: an angle up to
+// 90 degrees, which the grammar allows, never shears the glyphs flat.
+// italic and oblique without an angle take [syntheticItalicSkew].
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium in gotenberg/gotenberg:9.4.1 draws an
+//     @font-face face with no oblique (Ahem) sheared by 0.25 for oblique
+//     14, 15, 20, 30, 45, 60, 80, 89 and 90 degrees and for italic, and
+//     upright for oblique 0.5 to 13.9 degrees and for every negative
+//     angle tried (-1 to -90 degrees).
 func skewOf(req request) float64 {
-	if req.oblique != 0 {
-		return math.Tan(req.oblique * math.Pi / 180)
+	if req.oblique == 0 {
+		return syntheticItalicSkew
 	}
-	return syntheticItalicSkew
+	t := math.Tan(math.Abs(req.oblique) * math.Pi / 180)
+	return math.Copysign(min(t, syntheticItalicSkew), req.oblique)
 }
 
 // aspectRank orders fc for req: lower is better, compared field by field.
