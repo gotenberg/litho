@@ -103,9 +103,10 @@ type Limits struct {
 	MaxFormDepth int
 
 	// MaxCachedObjects bounds how many parsed objects the [Reader] keeps.
-	// When the cache is full it is emptied and refilled, which costs
-	// re-parsing, never a wrong answer. Default 50,000, at most 8,388,607, the
-	// most indirect objects ISO 32000-1, Annex C allows a file.
+	// When the cache is full, an object not used lately makes room for the
+	// next one, which costs parsing it again if it is asked for, never a
+	// wrong answer. Default 50,000, at most 8,388,607, the most indirect
+	// objects ISO 32000-1, Annex C allows a file.
 	MaxCachedObjects int
 
 	// MaxRenderPixels bounds Width x Height of one page [Reader.RenderPage]
