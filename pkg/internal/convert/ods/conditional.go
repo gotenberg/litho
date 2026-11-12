@@ -293,10 +293,10 @@ func (r *reader) condition(sh *sheet.Sheet, v string, ranges []sheet.Range, rel 
 	return sheet.Rule{Kind: sheet.RuleExpression, Formula: v}
 }
 
-// saturatedCount truncates v toward zero, saturated to the int64 range, NaN read
-// as 0. A conversion of v to int would leave a value out of range to the
-// platform (The Go Programming Language Specification, Conversions), and
-// a document's percentage may be any number.
+// saturatedCount truncates v toward zero, saturated to the int64 range,
+// NaN read as 0. A conversion of v to int would leave a value out of
+// range to the platform (The Go Programming Language Specification,
+// Conversions), and a document's percentage may be any number.
 func saturatedCount(v float64) float64 {
 	switch {
 	case math.IsNaN(v):

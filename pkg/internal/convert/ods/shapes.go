@@ -142,10 +142,10 @@ func (r *reader) place(ts *tableState, el *odf.Element, at *sheet.Anchor, art sh
 		// nowhere (sc/formula-across-sheets.ods).
 		return
 	}
-	if !(b.Width > 0) {
+	if !positive(b.Width) {
 		b.Width = 1
 	}
-	if !(b.Height > 0) {
+	if !positive(b.Height) {
 		b.Height = 1
 	}
 	draw := art.draw
@@ -181,6 +181,9 @@ func (r *reader) place(ts *tableState, el *odf.Element, at *sheet.Anchor, art sh
 	r.drawings++
 	ts.sh.Drawings = append(ts.sh.Drawings, d)
 }
+
+// positive reports whether v is greater than 0; NaN is not.
+func positive(v float64) bool { return v > 0 }
 
 // shapePaint reads the fill of graphic properties p (ODF 1.3, Part 3,
 // 20.118 draw:fill and the properties it selects), nil for none: a fill
