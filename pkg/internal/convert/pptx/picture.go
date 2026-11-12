@@ -232,7 +232,7 @@ func (r *reader) graphicFrame(c *shapeCtx, el *ooxml.Element, depth int) (*slide
 	data := el.Child(ooxml.NSA, "graphic").Child(ooxml.NSA, "graphicData")
 	switch attr(data, "uri") {
 	case uriTable:
-		t := r.table(c, data.Child(ooxml.NSA, "tbl"), s.Box)
+		t := r.table(c, data.Child(ooxml.NSA, "tbl"))
 		if t == nil {
 			return nil, nil
 		}

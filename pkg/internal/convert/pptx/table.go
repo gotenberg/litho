@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -85,7 +84,7 @@ func (r *reader) tableStyle(pr *ooxml.Element) *ooxml.Element {
 // properties over the parts of the table style the table's flags turn on
 // (20.1.4.2: wholeTbl, the row then the column bands, firstCol, lastCol,
 // firstRow, lastRow and the corner cells, in that order).
-func (r *reader) table(c *shapeCtx, tbl *ooxml.Element, _ compose.Rect) *slides.Table {
+func (r *reader) table(c *shapeCtx, tbl *ooxml.Element) *slides.Table {
 	if tbl == nil {
 		return nil
 	}
@@ -418,7 +417,7 @@ func (r *reader) cell(c *shapeCtx, tc *ooxml.Element, ts *tableStyle, i, j int) 
 			body.Vertical = css.VerticalRL
 		}
 		body.Paragraphs = r.paragraphs(tb, tstyles)
-		if !empty(body) || len(body.Paragraphs) > 0 {
+		if len(body.Paragraphs) > 0 {
 			cell.Text = body
 		}
 	}

@@ -115,7 +115,7 @@ func (r *reader) fillChoice(fc *fillCtx, k *ooxml.Element) (slides.Fill, bool) {
 // off; a positive one leaves blank room.
 func fillRectCrop(fr *ooxml.Element) [4]float64 {
 	var in [4]float64
-	for side, name := range map[css.Side]string{css.Top: "t", css.Right: "r", css.Bottom: "b", css.Left: "l"} {
+	for side, name := range [4]string{css.Top: "t", css.Right: "r", css.Bottom: "b", css.Left: "l"} {
 		if v, ok := intAttr(fr, name); ok {
 			in[side] = max(-10, min(0.99, float64(v)/100000))
 		}
@@ -209,10 +209,10 @@ func (r *reader) styleFill(fc *fillCtx, ref *ooxml.Element) slides.Fill {
 	if idx > 1000 {
 		list, idx = fc.sc.theme.bgFills, idx-1000
 	}
-	ph, _ := fc.sc.color(ref, nil)
+	ph, has := fc.sc.color(ref, nil)
 	if idx < 1 || idx > len(list) {
 		// A theme without the style: the reference's colour, solid.
-		if _, has := fc.sc.color(ref, nil); has {
+		if has {
 			return slides.Fill{Kind: slides.FillSolid, Color: ph}
 		}
 		return slides.Fill{}

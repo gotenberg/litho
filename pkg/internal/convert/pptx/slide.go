@@ -75,7 +75,9 @@ func (r *reader) slideWarnings(part string, root *ooxml.Element) {
 	if root.Child(nsP, "timing") != nil {
 		r.warn("unsupported-content", "slide animations do not print: shapes show in their final place")
 	}
-	rels, _ := r.pkg.Relationships(part) //nolint:errcheck // a relationships part that does not parse relates nothing
+	// A relationships part that does not parse relates nothing: the slide
+	// has no comments to warn of.
+	rels, _ := r.pkg.Relationships(part)
 	for _, rel := range rels {
 		if rel.Type == relComments || strings.HasSuffix(rel.Type, "/relationships/comments") {
 			r.warn("unsupported-content", "slide comments do not print")
