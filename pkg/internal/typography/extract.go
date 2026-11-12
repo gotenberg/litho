@@ -1308,12 +1308,18 @@ func ExtractShownText(ctx context.Context, doc *document.Document, machine *grap
 	}
 
 	// Filter elements based on config, keeping each element's run font
-	// and drawing operation beside it. Fonts that do not pair one to one
-	// with the elements are dropped rather than misattributed.
+	// beside it. Fonts that do not pair one to one with the elements are
+	// dropped rather than misattributed. The extraction owns both slices,
+	// so the kept entries move down in place: a kept entry is written at
+	// or before the index it is read from.
 	if len(runFonts) != len(elements) {
 		runFonts = nil
 	}
-	var kept []int
+	filtered := elements[:0]
+	var filteredFonts []runFont
+	if runFonts != nil {
+		filteredFonts = runFonts[:0]
+	}
 	for i, el := range elements {
 		if config.StripInvisible && el.Invisible {
 			continue
