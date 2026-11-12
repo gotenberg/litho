@@ -296,7 +296,7 @@ func expandFont(v []token, c *declCtx) ([]entry, bool) {
 		return out, true
 	}
 	i := 0
-	var style, variant, weight bool
+	var style, variant, weight, stretch bool
 	for n := 0; i < len(v) && n < 4; n++ {
 		t := v[i]
 		one := v[i : i+1]
@@ -323,8 +323,8 @@ func expandFont(v []token, c *declCtx) ([]entry, bool) {
 				continue
 			}
 		}
-		if p, ok := stretchKeywords[lower(t.value)]; ok && t.typ == tIdent {
-			out[6].v = p
+		if p, ok := stretchKeywords[lower(t.value)]; ok && !stretch && t.typ == tIdent {
+			out[6].v, stretch = p, true
 			i++
 			continue
 		}

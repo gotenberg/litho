@@ -373,3 +373,12 @@ func TestFont_ShorthandCoversKerning(t *testing.T) {
 		t.Errorf("font: var() leaves font-kerning %v, want it reset to auto", k)
 	}
 }
+
+// TestFont_StretchOnce locks the font shorthand grammar (CSS Fonts 4,
+// 2.8): the stretch keyword appears at most once.
+func TestFont_StretchOnce(t *testing.T) {
+	t.Parallel()
+	if s := styleOf(t, "font: 10px serif; font: condensed expanded 12px serif"); s.FontSize != 7.5 {
+		t.Errorf("font size %v, want the declaration rejected", s.FontSize)
+	}
+}
