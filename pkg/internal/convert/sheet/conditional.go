@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // The caps of conditional formatting. Anti-DoS guard, not spec-mandated:
@@ -826,7 +827,7 @@ func (g *grid) dataBar(r, c int, cell *Cell) (zero, length float64, col css.Colo
 			length = (v - pos) / (hi - pos)
 		}
 	}
-	if !finite(length) || length == 0 {
+	if !numeric.Finite(length) || length == 0 {
 		return 0, 0, css.Color{}, false, false
 	}
 	col = rule.Bar

@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // The frame widths of Calc's DataPilot output, in points: the inner lines
@@ -310,7 +311,7 @@ func (pr *pivotRun) pageFields(o *pivotOut) {
 func (pr *pivotRun) headerCell(o *pivotOut, r, c int, pc *pivotCell, colHeader bool, level int) {
 	if pc.has {
 		x := o.at(r, c)
-		if !pc.sub && (pc.value.Kind == Number || pc.value.Kind == Bool) && finite(pc.value.Number) {
+		if !pc.sub && (pc.value.Kind == Number || pc.value.Kind == Bool) && numeric.Finite(pc.value.Number) {
 			x.value = pc.value
 		} else {
 			x.value = Value{Kind: Text, Text: pc.caption}

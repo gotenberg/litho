@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
@@ -54,10 +55,10 @@ func resolveFont(f, def Font) font {
 	if len(out.families) == 0 {
 		out.families = []string{defaultFamily}
 	}
-	if !positive(out.size) {
+	if !numeric.Positive(out.size) {
 		out.size = def.Size
 	}
-	if !positive(out.size) {
+	if !numeric.Positive(out.size) {
 		out.size = defaultFontSize
 	}
 	out.size = min(out.size, maxFontSize)

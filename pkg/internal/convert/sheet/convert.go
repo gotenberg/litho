@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/text"
 )
@@ -297,7 +298,7 @@ func tableOf(st *compose.StructElem) *compose.StructElem {
 // (office.Options.Paper).
 func (b *builder) paper(sh *Sheet) (float64, float64) {
 	w, h := sh.Page.Width, sh.Page.Height
-	if !positive(w) || !positive(h) {
+	if !numeric.Positive(w) || !numeric.Positive(h) {
 		w, h = b.opts.DefaultPage(letterWidth, letterHeight)
 	}
 	w, h = b.opts.Paper(w, h)

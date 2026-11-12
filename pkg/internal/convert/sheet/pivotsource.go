@@ -1,7 +1,6 @@
 package sheet
 
 import (
-	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -245,6 +244,3 @@ func (b *builder) cellText(cell *Cell, st *Style) string {
 	}
 	return b.format(st.Format).Apply(numValue(cell.Value)).Text
 }
-
-// finite reports a value that is neither NaN nor infinite.
-func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }

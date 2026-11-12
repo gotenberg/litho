@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // The sheet limits, Excel's and Calc's: 1,048,576 rows by 16,384 columns
@@ -75,10 +77,10 @@ func newPlainGrid(doc *Document, sh *Sheet) *grid {
 		sh: sh, doc: doc, defW: sh.DefaultColumnWidth, defH: sh.DefaultRowHeight,
 		rows: map[int]*Row{}, heights: map[int]float64{}, overflows: map[[2]int]int{}, merges: map[[2]int]Range{}, covered: map[[2]int][2]int{},
 	}
-	if !positive(g.defW) || g.defW > maxSide {
+	if !numeric.Positive(g.defW) || g.defW > maxSide {
 		g.defW = defaultColumnWidth
 	}
-	if !positive(g.defH) || g.defH > maxSide {
+	if !numeric.Positive(g.defH) || g.defH > maxSide {
 		g.defH = defaultRowHeight
 	}
 	for i := range sh.Rows {

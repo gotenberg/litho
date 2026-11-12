@@ -3,6 +3,7 @@ package sheet
 import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // gridWidth is the width of the grid lines Calc prints, in points, and
@@ -153,7 +154,7 @@ func (bs *borders) paths() []compose.Fragment {
 // draws a cell frame.
 func linePaths(b Border, x1, y1, x2, y2 float64, extend bool) []compose.Fragment {
 	w := b.Width
-	if !positive(w) {
+	if !numeric.Positive(w) {
 		w = hairline
 	}
 	w = min(w, maxBorderWidth)
@@ -194,7 +195,7 @@ func linePaths(b Border, x1, y1, x2, y2 float64, extend bool) []compose.Fragment
 	}
 	if b.Line == LineDouble {
 		gap := b.Gap
-		if !positive(gap) {
+		if !numeric.Positive(gap) {
 			gap = w / 3
 		}
 		gap = min(gap, w)

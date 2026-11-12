@@ -8,6 +8,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // maxFormulaLen caps the characters of a formula evaluated. Anti-DoS
@@ -812,7 +814,7 @@ func arith(op byte, a, b fval) fval {
 	case '^':
 		r = math.Pow(x, y)
 	}
-	if !finite(r) {
+	if !numeric.Finite(r) {
 		return fval{v: Value{Kind: Error, Text: "#NUM!"}}
 	}
 	out.v = Value{Kind: Number, Number: r}
@@ -1024,7 +1026,7 @@ func (p *fparser) scalarFunction(fn string, args []fval) (fval, bool) {
 		return number(scalar(args[i]))
 	}
 	val := func(x float64) (fval, bool) {
-		if !finite(x) {
+		if !numeric.Finite(x) {
 			return fval{v: Value{Kind: Error, Text: "#NUM!"}}, true
 		}
 		return fval{v: Value{Kind: Number, Number: x}}, true

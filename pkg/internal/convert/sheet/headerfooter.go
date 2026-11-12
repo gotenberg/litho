@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // The header and footer text of a span naming no font: Calc's header and
@@ -124,7 +125,7 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 	// laid out on the page divided by the zoom and drawn multiplied by
 	// it, their distances from the edges kept.
 	z := p.sp.zoom
-	if !positive(z) {
+	if !numeric.Positive(z) {
 		z = 1
 	}
 	pageW, pageH := width, height

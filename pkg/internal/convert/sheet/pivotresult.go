@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // maxPivotEntries caps the rows or the columns of one pivot table's
@@ -629,7 +631,7 @@ func (g *pivotAgg) result(fn PivotFunction) (Value, bool) {
 	case PivotAuto:
 		return Value{}, false
 	}
-	if !finite(x) {
+	if !numeric.Finite(x) {
 		return errV, true
 	}
 	return Value{Kind: Number, Number: x}, true

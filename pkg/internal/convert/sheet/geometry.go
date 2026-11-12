@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // colX returns the x of column c's left edge from the sheet's origin, in
@@ -86,7 +87,7 @@ func (g *grid) drawingRect(d *Drawing) compose.Rect {
 // clampSide returns v within [0, maxSide], 0 for a value that is not a
 // number.
 func clampSide(v float64) float64 {
-	if !positive(v) {
+	if !numeric.Positive(v) {
 		return 0
 	}
 	return min(v, maxSide)
