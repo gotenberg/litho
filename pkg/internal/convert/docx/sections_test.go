@@ -301,6 +301,7 @@ func TestSections_DocGridSpacesLines(t *testing.T) {
 		{"exact spacing kept", `<w:spacing w:line="300" w:lineRule="exact"/>`, css.LineRuleExact, 15},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			body := `<w:p><w:pPr>` + tc.ppr + `</w:pPr><w:r><w:t>Text</w:t></w:r></w:p>` + sect
 			ps := role(build(t, body, nil).root, "P")
 			if len(ps) != 1 {

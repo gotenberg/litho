@@ -128,6 +128,7 @@ func TestNumbering_LabelWiderThanHangPushesTheText(t *testing.T) {
 		{"label too wide", 2, 24},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			body := `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="` + strconv.Itoa(tc.num) + `"/></w:numPr></w:pPr><w:r><w:t>Item</w:t></w:r></w:p>`
 			b := build(t, body, map[string]string{"word/numbering.xml": numbering, "word/settings.xml": settings})
 			items := find(b.root, func(n *layout.Node) bool { return n.Marker != nil })
@@ -143,7 +144,7 @@ func TestNumbering_LabelWiderThanHangPushesTheText(t *testing.T) {
 
 func TestNumbering_SoftHyphenBulletPrints(t *testing.T) {
 	t.Parallel()
-	numbering := `<w:numbering ` + nsDecl + `><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:lvlText w:val="` + "­" + `"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`
+	numbering := `<w:numbering ` + nsDecl + `><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:lvlText w:val="` + "\u00ad" + `"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`
 	body := `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Item</w:t></w:r></w:p>`
 	items := find(build(t, body, map[string]string{"word/numbering.xml": numbering}).root, func(n *layout.Node) bool { return n.Marker != nil })
 	if len(items) != 1 || textOf(items[0].Marker) != "-" {

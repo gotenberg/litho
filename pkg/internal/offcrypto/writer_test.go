@@ -18,7 +18,7 @@ import (
 	"unicode/utf16"
 
 	"golang.org/x/crypto/argon2"
-	"golang.org/x/crypto/blowfish"
+	"golang.org/x/crypto/blowfish" //nolint:staticcheck // ODF 1.3 Part 2, 4.16.1 requires consumers to read Blowfish CFB
 )
 
 // The test encryptors run each scheme forward, so every branch of the
@@ -350,9 +350,16 @@ func odfEncrypt(t testing.TB, plain []byte, password string, o odfOptions, seed 
 	t.Helper()
 	rnd := testRand(seed)
 	var z bytes.Buffer
-	w, _ := flate.NewWriter(&z, flate.BestCompression)
-	w.Write(plain)
-	w.Close()
+	w, err := flate.NewWriter(&z, flate.BestCompression)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write(plain); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
 	deflated := z.Bytes()
 
 	b64 := base64.StdEncoding.EncodeToString

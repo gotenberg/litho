@@ -95,7 +95,7 @@ func TestSymbolsAndBreaks(t *testing.T) {
 		`<m:oMath><m:r><m:t>x=1</m:t></m:r></m:oMath></w:p>`
 	b := build(t, body, nil)
 	p := role(b.root, "P")[0]
-	if got := textOf(p); got != "a\tbc•‑­x=1" {
+	if got := textOf(p); got != "a\tbc•\u2011\u00adx=1" {
 		t.Errorf("text %q", got)
 	}
 	if n := len(find(p, func(n *layout.Node) bool { return n.Kind == layout.LineBreak })); n != 2 {
@@ -141,6 +141,7 @@ func TestTOCEntriesDropTheHyperlinkStyle(t *testing.T) {
 		{"outside", `<w:p>` + link + `</w:p>`, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			b := build(t, tc.body, map[string]string{"word/styles.xml": styles})
 			texts := find(b.root, func(n *layout.Node) bool { return n.Kind == layout.Text && n.Text == "Entry" })
 			if len(texts) != 1 {

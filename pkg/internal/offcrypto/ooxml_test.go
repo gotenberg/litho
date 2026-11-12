@@ -22,7 +22,9 @@ func testPackage(t testing.TB, n int) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w.Write(bytes.Repeat([]byte("<w:p/>"), n/6+1))
+	if _, err := w.Write(bytes.Repeat([]byte("<w:p/>"), n/6+1)); err != nil {
+		t.Fatal(err)
+	}
 	if err := zw.Close(); err != nil {
 		t.Fatal(err)
 	}

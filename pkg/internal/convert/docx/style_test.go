@@ -359,6 +359,7 @@ func TestDefaults_WithoutStylesPart(t *testing.T) {
 		{"styles without defaults", map[string]string{"word/styles.xml": stylesPart(``)}, defaultFontSize, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			ps := role(build(t, `<w:p><w:r><w:t>x</w:t></w:r></w:p>`, tc.extra).root, "P")
 			if len(ps) != 1 {
 				t.Fatalf("%d paragraphs", len(ps))

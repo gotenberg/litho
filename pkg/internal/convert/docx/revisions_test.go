@@ -72,22 +72,30 @@ func TestRevisions_Views(t *testing.T) {
 	}{
 		{"insertion", p(``, r("the ")+ins("Ada", r("quick "))+r("fox")), [3]string{"the quick fox", "the fox", "the quick fox"}},
 		{"deletion", p(``, r("the ")+del("Ada", dr("slow "))+r("fox")), [3]string{"the fox", "the slow fox", "the slow fox"}},
-		{"move", p(``, `<w:moveFrom w:id="4" w:author="Ada">`+r("moved ")+`</w:moveFrom>`+r("stays")) + p(``, r("to ")+`<w:moveTo w:id="5" w:author="Ada">`+r("moved")+`</w:moveTo>`),
-			[3]string{"stays|to moved", "moved stays|to ", "moved stays|to moved"}},
+		{
+			"move", p(``, `<w:moveFrom w:id="4" w:author="Ada">`+r("moved ")+`</w:moveFrom>`+r("stays")) + p(``, r("to ")+`<w:moveTo w:id="5" w:author="Ada">`+r("moved")+`</w:moveTo>`),
+			[3]string{"stays|to moved", "moved stays|to ", "moved stays|to moved"},
+		},
 		{"deleted paragraph mark", p(mark("del"), r("a")) + p(``, r("b")), [3]string{"ab", "a|b", "a|b"}},
 		{"inserted paragraph mark", p(mark("ins"), r("a")) + p(``, r("b")), [3]string{"a|b", "ab", "a|b"}},
 		{"moved paragraph mark", p(mark("moveFrom"), r("a")) + p(mark("moveTo"), r("b")) + p(``, r("c")), [3]string{"ab|c", "a|bc", "a|b|c"}},
 		{"inserted paragraph", p(mark("ins"), ins("Ada", r("new"))) + p(``, r("next")), [3]string{"new|next", "next", "new|next"}},
 		{"block-level insertion", ins("Ada", p(``, r("block"))) + p(``, r("after")), [3]string{"block|after", "after", "block|after"}},
-		{"deleted field", p(``, r("page ")+del("Ada", `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:delInstrText> PAGE </w:delInstrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>`+dr("7")+`<w:r><w:fldChar w:fldCharType="end"/></w:r>`)),
-			[3]string{"page ", "page 7", "page 7"}},
-		{"property change keeps the new properties", p(`<w:jc w:val="center"/><w:pPrChange w:id="6" w:author="Ada"><w:pPr><w:jc w:val="right"/></w:pPr></w:pPrChange>`, `<w:r><w:rPr><w:b/><w:rPrChange w:id="7" w:author="Ada"><w:rPr><w:i/></w:rPr></w:rPrChange></w:rPr><w:t>bold</w:t></w:r>`),
-			[3]string{"bold", "bold", "bold"}},
-		{"rows", `<w:tbl><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>` +
-			row(``, r("kept"), r("kept")) + row(`<w:ins w:id="8" w:author="Ada"/>`, ins("Ada", r("in")), ins("Ada", r("in"))) +
-			row(`<w:del w:id="9" w:author="Ada"/>`, del("Ada", dr("out")), del("Ada", dr("out"))) +
-			`<w:tr><w:tc><w:tcPr><w:cellDel w:id="10" w:author="Ada"/></w:tcPr><w:p>` + r("cell") + `</w:p></w:tc><w:tc><w:tcPr><w:cellIns w:id="11" w:author="Ada"/></w:tcPr><w:p>` + r("cell") + `</w:p></w:tc></w:tr></w:tbl>`,
-			[3]string{"kept|kept|in|in|cell|cell", "kept|kept|out|out|cell|cell", "kept|kept|in|in|out|out|cell|cell"}},
+		{
+			"deleted field", p(``, r("page ")+del("Ada", `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:delInstrText> PAGE </w:delInstrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>`+dr("7")+`<w:r><w:fldChar w:fldCharType="end"/></w:r>`)),
+			[3]string{"page ", "page 7", "page 7"},
+		},
+		{
+			"property change keeps the new properties", p(`<w:jc w:val="center"/><w:pPrChange w:id="6" w:author="Ada"><w:pPr><w:jc w:val="right"/></w:pPr></w:pPrChange>`, `<w:r><w:rPr><w:b/><w:rPrChange w:id="7" w:author="Ada"><w:rPr><w:i/></w:rPr></w:rPrChange></w:rPr><w:t>bold</w:t></w:r>`),
+			[3]string{"bold", "bold", "bold"},
+		},
+		{
+			"rows", `<w:tbl><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>` +
+				row(``, r("kept"), r("kept")) + row(`<w:ins w:id="8" w:author="Ada"/>`, ins("Ada", r("in")), ins("Ada", r("in"))) +
+				row(`<w:del w:id="9" w:author="Ada"/>`, del("Ada", dr("out")), del("Ada", dr("out"))) +
+				`<w:tr><w:tc><w:tcPr><w:cellDel w:id="10" w:author="Ada"/></w:tcPr><w:p>` + r("cell") + `</w:p></w:tc><w:tc><w:tcPr><w:cellIns w:id="11" w:author="Ada"/></w:tcPr><w:p>` + r("cell") + `</w:p></w:tc></w:tr></w:tbl>`,
+			[3]string{"kept|kept|in|in|cell|cell", "kept|kept|out|out|cell|cell", "kept|kept|in|in|out|out|cell|cell"},
+		},
 	} {
 		for i, view := range views {
 			b := buildWith(t, tc.body, nil, office.Options{TrackedChanges: view})
