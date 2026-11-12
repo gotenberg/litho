@@ -3,6 +3,7 @@ package woff
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -78,13 +79,16 @@ func Sniff(data []byte) Kind {
 //
 // Decode returns an error wrapping [ErrNotWOFF] for data of another format,
 // [ErrInvalid] for a malformed file and [ErrTooLarge] for a file past
-// [MaxSfntBytes] or the table bound.
-func Decode(data []byte) ([]byte, error) {
+// [MaxSfntBytes] or the table bound. ctx's error stops the decompression.
+//
+// The glyph rebuild of a WOFF 2.0 glyf table checks no context: it is
+// bounded by the 65,535 glyphs numGlyphs can count.
+func Decode(ctx context.Context, data []byte) ([]byte, error) {
 	switch Sniff(data) {
 	case WOFF:
-		return decodeWOFF(data)
+		return decodeWOFF(ctx, data)
 	case WOFF2:
-		return decodeWOFF2(data)
+		return decodeWOFF2(ctx, data)
 	case Other:
 	}
 	return nil, ErrNotWOFF
@@ -212,7 +216,7 @@ const (
 // decodeWOFF reconstructs the program of a WOFF 1.0 file (WOFF 1.0, 4 to
 // 6): each table is stored as is when its compressed length equals its
 // original length and as a zlib stream when it is shorter.
-func decodeWOFF(data []byte) ([]byte, error) {
+func decodeWOFF(ctx context.Context, data []byte) ([]byte, error) {
 	if len(data) < woffHeaderSize {
 		return nil, invalid("a WOFF header of %d bytes, %d expected", len(data), woffHeaderSize)
 	}
@@ -258,13 +262,19 @@ func decodeWOFF(data []byte) ([]byte, error) {
 	}
 	tables := make([]table, numTables)
 	for i, e := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		stored := data[e.offset : e.offset+e.compLength]
 		t := table{tag: e.tag, checksum: e.checksum}
 		if e.compLength == e.origLength {
 			t.data = slices.Clone(stored)
 		} else {
-			inflated, err := inflate(stored, int(e.origLength)) // fits int: at most MaxSfntBytes, checked above
+			inflated, err := inflate(ctx, stored, int(e.origLength)) // fits int: at most MaxSfntBytes, checked above
 			if err != nil {
+				if ctx.Err() != nil {
+					return nil, err // the context's error, not the table's
+				}
 				return nil, fmt.Errorf("%w: table %s: %w", ErrInvalid, tagString(e.tag), err)
 			}
 			t.data = inflated
@@ -275,21 +285,25 @@ func decodeWOFF(data []byte) ([]byte, error) {
 }
 
 // inflate decompresses the zlib stream src, which must hold exactly n bytes.
-func inflate(src []byte, n int) ([]byte, error) {
+func inflate(ctx context.Context, src []byte, n int) ([]byte, error) {
 	zr, err := zlib.NewReader(bytes.NewReader(src))
 	if err != nil {
 		return nil, err
 	}
 	defer zr.Close() // reading from memory: Close reports nothing a read did not
-	return readExactly(zr, n)
+	return readExactly(ctx, zr, n)
 }
 
 // readExactly reads r to its end and returns its bytes, which must number
 // exactly n. The buffer grows with what r delivers, so a header claiming
-// more than a stream holds costs no memory up front.
-func readExactly(r io.Reader, n int) ([]byte, error) {
+// more than a stream holds costs no memory up front. ctx's error stops it
+// between two reads.
+func readExactly(ctx context.Context, r io.Reader, n int) ([]byte, error) {
 	var buf bytes.Buffer
-	got, err := buf.ReadFrom(io.LimitReader(r, int64(n)+1))
+	got, err := buf.ReadFrom(io.LimitReader(ctxReader{ctx: ctx, r: r}, int64(n)+1))
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, ctxErr
+	}
 	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, err
 	}
@@ -297,4 +311,19 @@ func readExactly(r io.Reader, n int) ([]byte, error) {
 		return nil, fmt.Errorf("a stream of %d bytes, %d expected", got, n)
 	}
 	return buf.Bytes(), nil
+}
+
+// ctxReader is r that fails with ctx's error once ctx is done: a
+// decompressor's output is read a buffer at a time, so the check runs once
+// per buffer, not per byte.
+type ctxReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (c ctxReader) Read(p []byte) (int, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return c.r.Read(p)
 }

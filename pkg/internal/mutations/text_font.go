@@ -133,7 +133,7 @@ func (t *textFonts) draw(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		if len(data) == 0 {
 			continue
 		}
-		font, err := t.load(doc, data)
+		font, err := t.load(ctx, doc, data)
 		if err != nil {
 			continue
 		}
@@ -160,13 +160,13 @@ func (t *textFonts) use(s *sharedTextFont, text string) drawnText {
 	}
 }
 
-// load parses data, once per distinct program.
-func (t *textFonts) load(doc *document.Document, data []byte) (*embed.Font, error) {
+// load parses data under ctx, once per distinct program.
+func (t *textFonts) load(ctx context.Context, doc *document.Document, data []byte) (*embed.Font, error) {
 	key := sha256.Sum256(data)
 	if f, ok := t.loaded[key]; ok {
 		return f, nil
 	}
-	f, err := embed.Load(data)
+	f, err := embed.Load(ctx, data)
 	if err != nil {
 		if doc != nil {
 			doc.Logger.Debug("text font: skipping a program that does not parse", "err", err)

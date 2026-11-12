@@ -34,7 +34,7 @@ func FuzzLoad(f *testing.F) {
 		if len(data) > 1<<20 {
 			return
 		}
-		font, err := Load(data)
+		font, err := Load(t.Context(), data)
 		if err != nil {
 			return
 		}
@@ -111,7 +111,7 @@ func stampableTTF() []byte {
 func TestStampableTTFIsAccepted(t *testing.T) {
 	t.Parallel()
 
-	if _, err := Load(stampableTTF()); err != nil {
+	if _, err := Load(t.Context(), stampableTTF()); err != nil {
 		t.Fatalf("the seed font was rejected: %v", err)
 	}
 }

@@ -19,7 +19,7 @@ const ahemPath = "../layout/testdata/Ahem.ttf"
 func docFace(t *testing.T, program []byte, family string, d FaceDescriptor) *Face {
 	t.Helper()
 	d.Family = family
-	fc, err := LoadFace(program, d)
+	fc, err := LoadFace(t.Context(), program, d)
 	if err != nil {
 		t.Fatalf("LoadFace: %v", err)
 	}
@@ -254,31 +254,31 @@ func TestLocalFace_ByName(t *testing.T) {
 func TestLoadFace_Programs(t *testing.T) {
 	t.Parallel()
 	sans := testSans("Regular", 400, false, 100)
-	a, err := LoadFace(sans, FaceDescriptor{Family: "A"})
+	a, err := LoadFace(t.Context(), sans, FaceDescriptor{Family: "A"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := LoadFace(sans, FaceDescriptor{Family: "B"})
+	b, err := LoadFace(t.Context(), sans, FaceDescriptor{Family: "B"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if a.Key() != b.Key() || a == b {
 		t.Errorf("same bytes, keys %s and %s", a.Key(), b.Key())
 	}
-	coll, err := LoadFace(fontbuild.Collection(testDigits(), sans), FaceDescriptor{Family: "C"})
+	coll, err := LoadFace(t.Context(), fontbuild.Collection(testDigits(), sans), FaceDescriptor{Family: "C"})
 	if err != nil {
 		t.Fatalf("collection: %v", err)
 	}
 	if coll.Family() != "Test Digits" {
 		t.Errorf("collection yields %s, want its first face", coll.Family())
 	}
-	cf, err := coll.Typeset()
+	cf, err := coll.Typeset(t.Context())
 	if err != nil || len(cf.Program) == 0 {
 		t.Errorf("Typeset: %v", err)
 	}
 	for _, bad := range [][]byte{nil, []byte("garbage"), sans[:len(sans)/3]} {
-		if _, err := LoadFace(bad, FaceDescriptor{Family: "X"}); err == nil {
-			t.Errorf("LoadFace(%d bytes) succeeded", len(bad))
+		if _, err := LoadFace(t.Context(), bad, FaceDescriptor{Family: "X"}); err == nil {
+			t.Errorf("LoadFace(t.Context(), %d bytes) succeeded", len(bad))
 		}
 	}
 }
@@ -290,7 +290,7 @@ func TestWithFaces_ConcurrentLayouts(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range 8 {
 		wg.Go(func() {
-			doc, err := LoadFace(sans, FaceDescriptor{Family: "Doc"})
+			doc, err := LoadFace(t.Context(), sans, FaceDescriptor{Family: "Doc"})
 			if err != nil {
 				t.Error(err)
 				return
@@ -307,4 +307,25 @@ func TestWithFaces_ConcurrentLayouts(t *testing.T) {
 		})
 	}
 	wg.Wait()
+}
+
+// TestFonts_StopOnCancel checks that a cancelled context stops LoadFace
+// and Typeset before they read the program, and that Typeset keeps no
+// trace of it: the face reads under a live context afterwards.
+func TestFonts_StopOnCancel(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	sans := testSans("Regular", 400, false, 100)
+	if _, err := LoadFace(ctx, sans, FaceDescriptor{Family: "A"}); !errors.Is(err, context.Canceled) {
+		t.Errorf("LoadFace on a cancelled context = %v, want context.Canceled", err)
+	}
+	fonts := memoryFonts(map[string][]byte{"sans.ttf": sans})
+	fc := fonts.Match(Style{Size: 10})
+	if _, err := fc.Typeset(ctx); !errors.Is(err, context.Canceled) {
+		t.Errorf("Typeset on a cancelled context = %v, want context.Canceled", err)
+	}
+	if cf, err := fc.Typeset(t.Context()); err != nil || len(cf.Program) == 0 {
+		t.Errorf("Typeset after a cancelled call = %v, %v", cf, err)
+	}
 }

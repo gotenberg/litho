@@ -20,7 +20,7 @@ func FuzzLoadFontData(f *testing.F) {
 			return
 		}
 		for _, fc := range fonts.faces {
-			if _, err := fc.Typeset(); err != nil {
+			if _, err := fc.Typeset(t.Context()); err != nil {
 				continue
 			}
 		}
@@ -40,7 +40,7 @@ func FuzzLoadFace(f *testing.F) {
 	f.Add(fontbuild.Collection(valid, testDigits()))
 	base := memoryFonts(map[string][]byte{"sans.ttf": valid})
 	f.Fuzz(func(t *testing.T, data []byte) {
-		fc, err := LoadFace(data, FaceDescriptor{Family: "Doc"})
+		fc, err := LoadFace(t.Context(), data, FaceDescriptor{Family: "Doc"})
 		if err != nil {
 			return
 		}

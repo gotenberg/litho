@@ -19,7 +19,7 @@ import (
 // opens with its page count and extracts without error.
 func TestWriteRandomDocumentsOpen(t *testing.T) {
 	t.Parallel()
-	font, err := embed.Load(sans.Program)
+	font, err := embed.Load(t.Context(), sans.Program)
 	if err != nil {
 		t.Fatalf("embed.Load: %v", err)
 	}

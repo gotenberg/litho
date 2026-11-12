@@ -473,7 +473,14 @@ func (fc *Face) Key() string {
 // program for its lifetime. The caller must not modify the program.
 // [NewFonts] indexes only faces it can extract, so the error, returned
 // again on every call, means the file changed or vanished since.
-func (fc *Face) Typeset() (*typeset.Face, error) {
+//
+// ctx's error stops a call before it reads the file, and is never kept:
+// the face reads again on the next call. The read itself is one read of
+// at most the index's per-file bound.
+func (fc *Face) Typeset(ctx context.Context) (*typeset.Face, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if fc.idx == nil {
 		fc.once.Do(func() {
 			fc.typesetFace, fc.err = fc.readTypeset()

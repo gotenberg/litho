@@ -2,6 +2,7 @@ package text
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -126,8 +127,12 @@ func (memFile) Close() error { return nil }
 // program and the caller must not modify it.
 //
 // It returns an error for a program past the index's per-file bounds, one
-// it cannot read and one without a usable face.
-func LoadFace(program []byte, d FaceDescriptor) (*Face, error) {
+// it cannot read and one without a usable face. ctx's error stops it
+// before each step: reading the faces' tables, then parsing the face.
+func LoadFace(ctx context.Context, program []byte, d FaceDescriptor) (*Face, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	size := int64(len(program))
 	if size > maxFontCollectionBytes {
 		return nil, fmt.Errorf("a font of %d bytes past the %d-byte bound", size, maxFontCollectionBytes)
@@ -146,6 +151,9 @@ func LoadFace(program []byte, d FaceDescriptor) (*Face, error) {
 	}
 	if len(faces) == 0 {
 		return nil, errors.New("the font holds no face litho can use")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	return pinFace(faces[0], d)
 }

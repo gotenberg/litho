@@ -1,6 +1,7 @@
 package typeset
 
 import (
+	"context"
 	"fmt"
 	"math"
 
@@ -103,13 +104,17 @@ func unparented(f Fragment) Fragment {
 // face's program once. A face whose program does not load measures
 // nothing, and [Measurer.Err] reports it. It is used by one goroutine.
 type Measurer struct {
+	// ctx is the context the programs load under: a Measurer does not
+	// outlive the call it was made for.
+	ctx   context.Context
 	fonts map[string]*embed.Font
 	err   error
 }
 
-// NewMeasurer returns an empty Measurer.
-func NewMeasurer() *Measurer {
-	return &Measurer{fonts: map[string]*embed.Font{}}
+// NewMeasurer returns an empty Measurer that loads the programs of faces
+// under ctx: once ctx is done, a face not loaded yet measures nothing.
+func NewMeasurer(ctx context.Context) *Measurer {
+	return &Measurer{ctx: ctx, fonts: map[string]*embed.Font{}}
 }
 
 // font returns the loaded program of face, nil when it does not load.
@@ -120,9 +125,15 @@ func (m *Measurer) font(face *Face) *embed.Font {
 	if f, ok := m.fonts[face.Key]; ok {
 		return f
 	}
-	f, err := embed.Load(face.Program)
+	f, err := embed.Load(m.ctx, face.Program)
 	if err != nil {
-		if m.err == nil {
+		switch ctxErr := m.ctx.Err(); {
+		case m.err != nil:
+		case ctxErr != nil:
+			// A program that did not load because ctx ended is no fault
+			// of the face.
+			m.err = ctxErr
+		default:
 			m.err = fmt.Errorf("%w: face %q: %w", ErrInvalidFont, face.Key, err)
 		}
 		f = nil
@@ -132,8 +143,9 @@ func (m *Measurer) font(face *Face) *embed.Font {
 }
 
 // Err returns the error of the first face whose program did not load,
-// wrapping [ErrInvalidFont], nil while every face loads. [Write] refuses
-// such a face with the same error.
+// wrapping [ErrInvalidFont], or the context's error when it ended before
+// the program loaded; nil while every face loads. [Write] refuses a face
+// that does not load with the same error.
 func (m *Measurer) Err() error {
 	return m.err
 }

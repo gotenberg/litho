@@ -105,7 +105,7 @@ func StampText(
 	)
 	if len(opts.TTFBytes) > 0 {
 		var f *embed.Font
-		f, err = embed.Load(opts.TTFBytes)
+		f, err = embed.Load(ctx, opts.TTFBytes)
 		if err != nil {
 			return fmt.Errorf("parsing TTF for stamp: %w", err)
 		}

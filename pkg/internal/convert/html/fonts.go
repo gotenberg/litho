@@ -173,7 +173,7 @@ func (l *fontLoader) loadSource(ctx context.Context, src css.FontSource, d text.
 	if err != nil {
 		return nil, err
 	}
-	return text.LoadFace(program, d)
+	return text.LoadFace(ctx, program, d)
 }
 
 // program returns the sfnt program the URL u holds, WOFF and WOFF2 decoded,
@@ -207,7 +207,7 @@ func (l *fontLoader) decode(ctx context.Context, u string) ([]byte, error) {
 		return nil, err
 	}
 	if woff.Sniff(data) != woff.Other {
-		program, err := woff.Decode(data)
+		program, err := woff.Decode(ctx, data)
 		if errors.Is(err, woff.ErrTooLarge) {
 			return nil, errFontTooLarge
 		}

@@ -2,6 +2,7 @@ package woff
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 
@@ -149,7 +150,7 @@ func (r *reader) u255() uint16 {
 // decodeWOFF2 reconstructs the program of a WOFF 2.0 file (WOFF 2.0, 4 to
 // 5): the table directory, the optional collection directory, then one
 // Brotli stream holding every table in directory order.
-func decodeWOFF2(data []byte) ([]byte, error) {
+func decodeWOFF2(ctx context.Context, data []byte) ([]byte, error) {
 	if len(data) < woff2HeaderSize {
 		return nil, invalid("a WOFF2 header of %d bytes, %d expected", len(data), woff2HeaderSize)
 	}
@@ -196,7 +197,7 @@ func decodeWOFF2(data []byte) ([]byte, error) {
 			return nil, fmt.Errorf("%w: a decompressed stream of more than %d bytes", ErrTooLarge, MaxSfntBytes)
 		}
 	}
-	stream, err := unbrotli(data[r.pos:r.pos+int(compressedSize)], int(streamLen)) // fits int: compressedSize within the file, streamLen at most MaxSfntBytes
+	stream, err := unbrotli(ctx, data[r.pos:r.pos+int(compressedSize)], int(streamLen)) // fits int: compressedSize within the file, streamLen at most MaxSfntBytes
 	if err != nil {
 		return nil, err
 	}
@@ -296,9 +297,12 @@ func readCollectionFirstFont(r *reader, numTables int) (uint32, []int, error) {
 
 // unbrotli decompresses src, which must hold exactly n bytes (WOFF 2.0,
 // 5.4: the stream's length is the sum of the table lengths).
-func unbrotli(src []byte, n int) ([]byte, error) {
-	out, err := readExactly(brotli.NewReader(bytes.NewReader(src)), n)
+func unbrotli(ctx context.Context, src []byte, n int) ([]byte, error) {
+	out, err := readExactly(ctx, brotli.NewReader(bytes.NewReader(src)), n)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, err // the context's error, not the stream's
+		}
 		return nil, fmt.Errorf("%w: Brotli stream: %w", ErrInvalid, err)
 	}
 	return out, nil

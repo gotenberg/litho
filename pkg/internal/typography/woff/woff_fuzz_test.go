@@ -33,7 +33,7 @@ func FuzzDecodeWOFF(f *testing.F) {
 	fuzzSeeds(f, "Ahem.woff")
 	f.Fuzz(func(t *testing.T, data []byte) {
 		fixLength(data)
-		out, err := decodeWOFF(data)
+		out, err := decodeWOFF(t.Context(), data)
 		if err == nil && (len(out) < 12 || len(out) > MaxSfntBytes) {
 			t.Fatalf("a program of %d bytes", len(out))
 		}
@@ -46,7 +46,7 @@ func FuzzDecodeWOFF2(f *testing.F) {
 	fuzzSeeds(f, "Ahem.woff2", "Ahem-hmtx.woff2")
 	f.Fuzz(func(t *testing.T, data []byte) {
 		fixLength(data)
-		out, err := decodeWOFF2(data)
+		out, err := decodeWOFF2(t.Context(), data)
 		if err == nil && (len(out) < 12 || len(out) > MaxSfntBytes) {
 			t.Fatalf("a program of %d bytes", len(out))
 		}

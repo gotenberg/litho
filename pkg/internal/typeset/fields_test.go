@@ -274,7 +274,7 @@ func TestTakeContentAndBounds(t *testing.T) {
 	if len(page.Content) != 1 || len(group.Content) != 2 {
 		t.Errorf("page = %+v, shared group changed: %d", page.Content, len(group.Content))
 	}
-	m := typeset.NewMeasurer()
+	m := typeset.NewMeasurer(t.Context())
 	r, ok := m.Bounds(taken[1:])
 	if !ok || r != (typeset.Rect{X: 109, Y: 9, Width: 7, Height: 7}) {
 		t.Errorf("Bounds of the path = %v, %v", r, ok)

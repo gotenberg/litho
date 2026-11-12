@@ -264,7 +264,7 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 	if len(t.Glyphs) == 0 {
 		return nil
 	}
-	fe, err := p.w.font(t.Face)
+	fe, err := p.w.font(ctx, t.Face)
 	if err != nil {
 		return err
 	}

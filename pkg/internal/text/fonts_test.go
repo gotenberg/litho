@@ -127,14 +127,14 @@ func TestNewFonts_Collection(t *testing.T) {
 	if !strings.HasSuffix(face.Key(), "coll.ttc#1") {
 		t.Fatalf("bold face %s", face.Key())
 	}
-	cf, err := face.Typeset()
+	cf, err := face.Typeset(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if truetype.IsCollection(cf.Program) || !truetype.IsSfnt(cf.Program) || cf.Key != face.Key() {
 		t.Errorf("Typeset returns a collection or a wrong key %s", cf.Key)
 	}
-	if again, _ := face.Typeset(); again != cf { // the first call succeeded on the same file
+	if again, _ := face.Typeset(t.Context()); again != cf { // the first call succeeded on the same file
 		t.Error("Typeset returns a new value on the second call")
 	}
 	widths, err := truetype.GlyphWidths(context.Background(), cf.Program)
@@ -154,7 +154,7 @@ func TestFace_TypesetSingleProgram(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := newTestFonts(t, fontFile{name: "dejavu.ttf", data: data})
-	cf, err := f.Match(Style{Size: 10}).Typeset()
+	cf, err := f.Match(Style{Size: 10}).Typeset(t.Context())
 	if err != nil || !bytes.Equal(cf.Program, data) || !strings.HasSuffix(cf.Key, "dejavu.ttf#0") {
 		t.Errorf("Typeset = %s, %v", cf.Key, err)
 	}

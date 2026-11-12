@@ -656,7 +656,7 @@ func TestFlattenDrawsAGlyphTwoCharactersShare(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RewriteCmap: %v", err)
 	}
-	font, err := embed.Load(program)
+	font, err := embed.Load(t.Context(), program)
 	if err != nil {
 		t.Fatalf("embed.Load: %v", err)
 	}

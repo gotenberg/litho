@@ -16,14 +16,14 @@ func TestFace_TypesetEvictsPastTheByteCap(t *testing.T) {
 	bold := style()
 	bold.Weight = 700
 	regular, heavy := f.Match(style()), f.Match(bold)
-	first, err := regular.Typeset()
+	first, err := regular.Typeset(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again, _ := regular.Typeset(); again != first { // the first call succeeded on the same file
+	if again, _ := regular.Typeset(t.Context()); again != first { // the first call succeeded on the same file
 		t.Error("a cached program is read again")
 	}
-	if _, err := heavy.Typeset(); err != nil {
+	if _, err := heavy.Typeset(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	f.mu.Lock()
@@ -35,7 +35,7 @@ func TestFace_TypesetEvictsPastTheByteCap(t *testing.T) {
 	if held != int64(len(heavy.typesetFace.Program)) {
 		t.Errorf("cache holds %d bytes, want the last program's %d", held, len(heavy.typesetFace.Program))
 	}
-	back, err := regular.Typeset()
+	back, err := regular.Typeset(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestFace_TypesetConcurrent(t *testing.T) {
 			for i := range 30 {
 				k := (g + i) % len(styles)
 				fc := f.Match(styles[k])
-				cf, err := fc.Typeset()
+				cf, err := fc.Typeset(t.Context())
 				if err != nil || cf.Key != fc.Key() {
 					errs <- "typeset " + fc.Key()
 				}

@@ -61,7 +61,7 @@ func TestDecode_RebuildsAhem(t *testing.T) {
 	}
 	for _, name := range []string{"Ahem.woff", "Ahem.woff2", "Ahem-hmtx.woff2"} {
 		t.Run(name, func(t *testing.T) {
-			got, err := Decode(readFile(t, "testdata/"+name))
+			got, err := Decode(t.Context(), readFile(t, "testdata/"+name))
 			if err != nil {
 				t.Fatalf("Decode: %v", err)
 			}
@@ -113,11 +113,11 @@ func TestDecode_RebuildsAhem(t *testing.T) {
 
 func TestDecode_Deterministic(t *testing.T) {
 	data := readFile(t, "testdata/Ahem.woff2")
-	a, err := Decode(data)
+	a, err := Decode(t.Context(), data)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := Decode(data)
+	b, err := Decode(t.Context(), data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestDecode_Deterministic(t *testing.T) {
 
 func TestDecode_RefusesOtherFormats(t *testing.T) {
 	for _, data := range [][]byte{nil, []byte("wOF"), readFile(t, ahemTTF), []byte("<html>")} {
-		if _, err := Decode(data); !errors.Is(err, ErrNotWOFF) {
+		if _, err := Decode(t.Context(), data); !errors.Is(err, ErrNotWOFF) {
 			t.Errorf("Decode(%.8q): %v, want ErrNotWOFF", data, err)
 		}
 	}
@@ -156,7 +156,7 @@ func TestDecode_TruncatedFails(t *testing.T) {
 		data := readFile(t, "testdata/"+name)
 		for _, n := range []int{5, 43, 47, 60, len(data) / 2, len(data) - 1} {
 			cut := data[:n]
-			if _, err := Decode(cut); err == nil {
+			if _, err := Decode(t.Context(), cut); err == nil {
 				t.Errorf("%s cut to %d bytes decodes", name, n)
 			}
 		}
@@ -196,7 +196,7 @@ func TestDecode_RefusesMalformedHeaders(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := Decode(tt.data); !errors.Is(err, tt.want) {
+			if _, err := Decode(t.Context(), tt.data); !errors.Is(err, tt.want) {
 				t.Errorf("Decode: %v, want %v", err, tt.want)
 			}
 		})
@@ -452,5 +452,20 @@ func TestReconstructHmtx_Flags(t *testing.T) {
 	}
 	if _, err := reconstructHmtx([]byte{3, 0, 1}, 4, xMin); err == nil {
 		t.Error("more metrics than glyphs accepted")
+	}
+}
+
+// TestDecode_StopsOnCancel checks that a cancelled context stops the
+// decompression of both formats with the context's error, not a
+// malformed-file one.
+func TestDecode_StopsOnCancel(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	for _, name := range []string{"Ahem.woff", "Ahem.woff2"} {
+		_, err := Decode(ctx, readFile(t, "testdata/"+name))
+		if !errors.Is(err, context.Canceled) || errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: Decode on a cancelled context = %v, want context.Canceled alone", name, err)
+		}
 	}
 }

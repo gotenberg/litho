@@ -362,7 +362,7 @@ func TestSubsetTTF_RoundTripMinimalTTF(t *testing.T) {
 	if err != nil {
 		t.Fatalf("subsetTTF: %v", err)
 	}
-	if _, err := parse(subset); err != nil {
+	if _, err := parse(t.Context(), subset); err != nil {
 		t.Fatalf("subset re-parse: %v", err)
 	}
 	// Subset should be the same size or smaller than the input (it

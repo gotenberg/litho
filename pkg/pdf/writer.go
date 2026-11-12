@@ -903,7 +903,10 @@ func NewTTFFont(data []byte) (StampFont, error) {
 	if len(data) < 12 {
 		return StampFont{}, fmt.Errorf("%w: data too short (%d bytes)", ErrInvalidFont, len(data))
 	}
-	if err := mutations.ValidateTTFForStamp(data); err != nil {
+	// NewTTFFont takes no context: the program is the caller's own, and
+	// the walks over its cmap stop at the 0x10FFFF code points a cmap can
+	// map.
+	if err := mutations.ValidateTTFForStamp(context.Background(), data); err != nil {
 		// Wrap with the public sentinel. ErrInvalidFont is documented as
 		// covering data that is "too short or structurally invalid", but only
 		// the length check above ever returned it: every parse failure came

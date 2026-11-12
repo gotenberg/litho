@@ -345,7 +345,7 @@ func (p *Paragraph) shape(ctx context.Context, st *layoutState, text []rune) err
 		for end < len(text) && p.object[end] == nil {
 			end++
 		}
-		if err := p.shapeSegment(st, text, start, end, baseDir); err != nil {
+		if err := p.shapeSegment(ctx, st, text, start, end, baseDir); err != nil {
 			return err
 		}
 		start = end
@@ -353,8 +353,9 @@ func (p *Paragraph) shape(ctx context.Context, st *layoutState, text []rune) err
 	return nil
 }
 
-// shapeSegment shapes text[start:end], which holds no object.
-func (p *Paragraph) shapeSegment(st *layoutState, text []rune, start, end int, baseDir di.Direction) error {
+// shapeSegment shapes text[start:end], which holds no object. ctx's
+// error stops it between two items.
+func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []rune, start, end int, baseDir di.Direction) error {
 	first := st.styles[p.runOf[start]]
 	items := slices.Clone(st.seg.Split(shaping.Input{
 		Text:      text,
@@ -366,6 +367,9 @@ func (p *Paragraph) shapeSegment(st *layoutState, text []rune, start, end int, b
 		Language:  first.lang,
 	}, fixedFontmap{face: st.face(first.primary)}))
 	for _, item := range items {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("shaping text: %w", err)
+		}
 		for s := item.RunStart; s < item.RunEnd; {
 			e := s + 1
 			for e < item.RunEnd && p.runOf[e] == p.runOf[s] && p.level[e] == p.level[s] {
@@ -393,7 +397,7 @@ func (p *Paragraph) shapeSegment(st *layoutState, text []rune, start, end int, b
 				if ss.word != 0 {
 					out.AddWordSpacing(text, ss.word)
 				}
-				it, err := p.convert(st, &out, idx, ss.style)
+				it, err := p.convert(ctx, st, &out, idx, ss.style)
 				if err != nil {
 					return err
 				}
@@ -408,7 +412,7 @@ func (p *Paragraph) shapeSegment(st *layoutState, text []rune, start, end int, b
 // convert turns one shaped output into a [shapedItem] in points, adding the
 // letter spacing after each cluster and recording every cluster's advance
 // on its first character.
-func (p *Paragraph) convert(st *layoutState, out *shaping.Output, run int, style Style) (shapedItem, error) {
+func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.Output, run int, style Style) (shapedItem, error) {
 	it := shapedItem{
 		start: out.Runes.Offset, end: out.Runes.Offset + out.Runes.Count, run: run, style: style,
 		rtl:     out.Direction.Progression() == di.TowardTopLeft,
@@ -420,7 +424,7 @@ func (p *Paragraph) convert(st *layoutState, out *shaping.Output, run int, style
 		it.level = int(p.level[it.start])
 	}
 	if fc := st.byFont[out.Face.Font]; fc != nil {
-		cf, err := fc.Typeset()
+		cf, err := fc.Typeset(ctx)
 		if err != nil {
 			return shapedItem{}, fmt.Errorf("shaping text: %w", err)
 		}

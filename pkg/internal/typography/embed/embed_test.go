@@ -88,7 +88,7 @@ func testOpenTypeCFF(t *testing.T) []byte {
 
 func mustLoad(t *testing.T, program []byte) *Font {
 	t.Helper()
-	f, err := Load(program)
+	f, err := Load(t.Context(), program)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -144,9 +144,9 @@ func pendingBytes(t *testing.T, alloc *writer.ObjAllocator, obj ast.PdfObject) [
 
 func TestLoadRefusesACollection(t *testing.T) {
 	t.Parallel()
-	_, err := Load(fontbuild.Collection(testTrueType(), testTrueType()))
+	_, err := Load(t.Context(), fontbuild.Collection(testTrueType(), testTrueType()))
 	if !errors.Is(err, ErrCollection) {
-		t.Fatalf("Load(collection) = %v, want ErrCollection", err)
+		t.Fatalf("Load(t.Context(), collection) = %v, want ErrCollection", err)
 	}
 }
 
@@ -350,7 +350,7 @@ func TestWriteIdentityKeepsGlyphIDs(t *testing.T) {
 		t.Error("the program is compressed")
 	}
 	program := pendingBytes(t, alloc, fd["FontFile2"])
-	if _, err := Load(program); err != nil {
+	if _, err := Load(t.Context(), program); err != nil {
 		t.Errorf("the written program does not load: %v", err)
 	}
 	if n, err := truetype.NumGlyphs(program); err != nil || n != 4 {
@@ -359,5 +359,16 @@ func TestWriteIdentityKeepsGlyphIDs(t *testing.T) {
 	cmap := string(pendingBytes(t, alloc, font["ToUnicode"]))
 	if !strings.Contains(cmap, "<0001> <0041>\n<0002> <0042>\n") {
 		t.Errorf("ToUnicode does not name every mapped glyph by its ID:\n%s", cmap)
+	}
+}
+
+// TestLoad_StopsOnCancel checks that a cancelled context stops the walk
+// over the program's cmap.
+func TestLoad_StopsOnCancel(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := Load(ctx, testTrueType()); !errors.Is(err, context.Canceled) {
+		t.Errorf("Load on a cancelled context = %v, want context.Canceled", err)
 	}
 }

@@ -149,7 +149,7 @@ func Attach(ctx context.Context, res *layout.Result, controls []*Control) (int, 
 			byPage[f.page] = append(byPage[f.page], f)
 		}
 	}
-	m := typeset.NewMeasurer()
+	m := typeset.NewMeasurer(ctx)
 	missed := 0
 	for _, c := range controls {
 		// Each control takes its content off a whole page.

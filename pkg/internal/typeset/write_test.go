@@ -97,7 +97,7 @@ func TestWriteKerningKeepsPositions(t *testing.T) {
 	t.Parallel()
 	const size = 20
 	txt := run(t, sans, size, typeset.Point{X: 50, Y: 100}, "AVATARkerned")
-	f, err := embed.Load(sans.Program)
+	f, err := embed.Load(t.Context(), sans.Program)
 	if err != nil {
 		t.Fatalf("embed.Load: %v", err)
 	}
@@ -642,7 +642,7 @@ func TestWritePageBoxes(t *testing.T) {
 // reads the scaled advances, and the glyphs draw narrower or wider.
 func TestWriteHorizontalScaling(t *testing.T) {
 	t.Parallel()
-	f, err := embed.Load(sans.Program)
+	f, err := embed.Load(t.Context(), sans.Program)
 	if err != nil {
 		t.Fatalf("embed.Load: %v", err)
 	}

@@ -42,7 +42,7 @@ var (
 // run lays text out on one baseline from origin at its natural advances.
 func run(t *testing.T, face *typeset.Face, size float64, origin typeset.Point, text string) *typeset.Text {
 	t.Helper()
-	f, err := embed.Load(face.Program)
+	f, err := embed.Load(t.Context(), face.Program)
 	if err != nil {
 		t.Fatalf("embed.Load: %v", err)
 	}

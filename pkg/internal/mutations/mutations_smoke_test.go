@@ -235,17 +235,17 @@ func TestValidateTTFForStamp_AcceptsAFont(t *testing.T) {
 		PostScriptName: "TestSans", Family: "Test Sans", Subfamily: "Regular",
 		Glyphs: []fontbuild.Glyph{{Name: "A", Unicode: 'A', Advance: 600}}, NotdefAdvance: 500,
 	}.Build()
-	if err := ValidateTTFForStamp(program); err != nil {
+	if err := ValidateTTFForStamp(t.Context(), program); err != nil {
 		t.Fatalf("ValidateTTFForStamp: %v", err)
 	}
 }
 
 func TestValidateTTFForStamp_RejectsShort(t *testing.T) {
 	t.Parallel()
-	if err := ValidateTTFForStamp([]byte{0, 1}); err == nil {
+	if err := ValidateTTFForStamp(t.Context(), []byte{0, 1}); err == nil {
 		t.Error("expected error for short TTF")
 	}
-	if err := ValidateTTFForStamp(nil); err == nil {
+	if err := ValidateTTFForStamp(t.Context(), nil); err == nil {
 		t.Error("expected error for nil TTF")
 	}
 }

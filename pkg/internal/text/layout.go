@@ -631,7 +631,7 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 		}
 		wrapped, done := st.wrapper.WrapNextLineF(maxWidth)
 		if len(wrapped.Line) > 0 {
-			line, err := st.line(wrapped.Line, para, styleOf, dir)
+			line, err := st.line(ctx, wrapped.Line, para, styleOf, dir)
 			if err != nil {
 				return nil, err
 			}
@@ -735,7 +735,7 @@ func clusterRange(g shaping.Glyph, n int) (int, int) {
 }
 
 // line converts one wrapped line to a [Line].
-func (st *layoutState) line(runs shaping.Line, para []rune, styleOf []int, dir di.Direction) (Line, error) {
+func (st *layoutState) line(ctx context.Context, runs shaping.Line, para []rune, styleOf []int, dir di.Direction) (Line, error) {
 	hangTrailingSpaces(runs, para, dir)
 	order := make([]int, len(runs))
 	for i := range order {
@@ -754,7 +754,7 @@ func (st *layoutState) line(runs shaping.Line, para []rune, styleOf []int, dir d
 			continue
 		}
 		fc := st.byFont[out.Face.Font]
-		cf, err := fc.Typeset()
+		cf, err := fc.Typeset(ctx)
 		if err != nil {
 			return Line{}, fmt.Errorf("laying out text: %w", err)
 		}

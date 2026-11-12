@@ -47,12 +47,12 @@ type Font struct {
 //
 // It fails with [ErrCollection] for a collection, and with a descriptive
 // error for a program missing a table it needs or whose tables are
-// truncated.
-func Load(program []byte) (*Font, error) {
+// truncated. ctx's error stops it.
+func Load(ctx context.Context, program []byte) (*Font, error) {
 	if truetype.IsCollection(program) {
 		return nil, ErrCollection
 	}
-	f, err := parse(program)
+	f, err := parse(ctx, program)
 	if err != nil {
 		return nil, err
 	}
@@ -130,8 +130,8 @@ func (f *Font) cid(gid uint16) uint16 {
 }
 
 // parse reads the sfnt tables TrueType and OpenType share that embedding a
-// program needs.
-func parse(data []byte) (*Font, error) {
+// program needs. ctx's error stops the walks over the glyphs and the cmap.
+func parse(ctx context.Context, data []byte) (*Font, error) {
 	if len(data) < 12 {
 		return nil, fmt.Errorf("ttf data too short")
 	}
@@ -170,7 +170,6 @@ func parse(data []byte) (*Font, error) {
 		italicAngle = float64(raw) / 65536
 	}
 
-	ctx := context.Background()
 	programWidths, err := truetype.GlyphWidths(ctx, data)
 	if err != nil {
 		return nil, fmt.Errorf("reading glyph widths: %w", err)

@@ -27,7 +27,7 @@ func markFace(t *testing.T) (*typeset.Face, map[string]uint16) {
 	}
 	prog := fontbuild.TrueType{PostScriptName: "TypesetMarks", Family: "TypesetMarks", Subfamily: "Regular", Glyphs: glyphs, NotdefAdvance: 500}.Build()
 	face := &typeset.Face{Program: prog, Key: "TypesetMarks"}
-	f, err := embed.Load(prog)
+	f, err := embed.Load(t.Context(), prog)
 	if err != nil {
 		t.Fatalf("embed.Load: %v", err)
 	}

@@ -1,6 +1,7 @@
 package typeset
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -36,12 +37,15 @@ func (fe *fontEntry) advance(gid uint16) (float64, bool) {
 // faces with one Key share the entry of the first: the model makes the key
 // the identity of the program. The Type0 font is written once per entry,
 // after every page, so its subset holds every glyph the document draws.
-func (w *docWriter) font(face *Face) (*fontEntry, error) {
+func (w *docWriter) font(ctx context.Context, face *Face) (*fontEntry, error) {
 	if fe, ok := w.fonts[face.Key]; ok {
 		return fe, nil
 	}
-	f, err := embed.Load(face.Program)
+	f, err := embed.Load(ctx, face.Program)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, err // the context's error, not the program's
+		}
 		return nil, fmt.Errorf("%w: face %q: %w", ErrInvalidFont, face.Key, err)
 	}
 	upem := float64(f.UnitsPerEm())

@@ -1,6 +1,7 @@
 package mutations
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -11,8 +12,9 @@ import (
 // the tables required for embedding (head, hhea, maxp, cmap, hmtx). It is
 // exported so the public pdf package can surface parse errors at
 // pdf.NewTTFFont call time instead of deferring them to write time.
-func ValidateTTFForStamp(data []byte) error {
-	_, err := embed.Load(data)
+// ctx's error stops it.
+func ValidateTTFForStamp(ctx context.Context, data []byte) error {
+	_, err := embed.Load(ctx, data)
 	return err
 }
 
