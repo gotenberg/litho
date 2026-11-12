@@ -49,6 +49,11 @@ func structParentEntry(ctx context.Context, doc *document.Document, treeRoot, ho
 	if err != nil || ptDict == nil {
 		return nil, true
 	}
+	// A validation run reads the tree once for every holder it looks up
+	// ([numberTreeIndex]).
+	if index := parentTreeIndexOf(ctx, doc, treeRoot["ParentTree"], ptDict); index != nil {
+		return index.value(intconv.Clamp(key))
+	}
 	return numberTreeValue(ctx, doc, ptDict, intconv.Clamp(key), 0, make(map[int]bool))
 }
 

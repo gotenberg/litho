@@ -108,6 +108,7 @@ func runValidationViolations(ctx context.Context, doc *document.Document, profil
 	sweep := newObjectSweep(doc, catalog, profile)
 	resolveAllObjects(ctx, doc, sweep)
 	ctx = withSweptObjects(ctx, sweep)
+	ctx = withParentTreeIndexes(ctx, doc)
 
 	violations, err := runCheckGroups(ctx, doc, catalog, profile, groups)
 	if err != nil {
