@@ -6,6 +6,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
@@ -116,14 +117,14 @@ func (r *reader) effectList(chain []*ooxml.Element, style *ooxml.Element, fc *fi
 				s.Shadow.Color, s.Shadow.Opacity = css.Color{R: 1, G: 1, B: 1, A: 1}, 1
 			}
 		case "glow":
-			if rad := emuAttr(e, "rad"); rad > 0 && !math.IsInf(rad, 0) {
+			if rad := emuAttr(e, "rad"); numeric.PositiveFinite(rad) {
 				// A glow without a colour prints nothing.
 				if c, a := color(e); a > 0 {
 					s.Glow = &slides.Glow{Color: c, Opacity: a, Radius: min(rad, maxEffectRadius)}
 				}
 			}
 		case "softEdge":
-			if rad := emuAttr(e, "rad"); rad > 0 && !math.IsInf(rad, 0) {
+			if rad := emuAttr(e, "rad"); numeric.PositiveFinite(rad) {
 				s.SoftEdge = min(rad, maxEffectRadius)
 			}
 		case "innerShdw", "prstShdw":
@@ -156,11 +157,11 @@ const maxShadowScale = 10
 // Impress keeps a turned shape's shadow at the slide's offsets.
 func outerShadow(e *ooxml.Element, box compose.Rect) *slides.Shadow {
 	sh := &slides.Shadow{ScaleX: 1, ScaleY: 1}
-	if v := emuAttr(e, "blurRad"); v > 0 && !math.IsInf(v, 0) {
+	if v := emuAttr(e, "blurRad"); numeric.PositiveFinite(v) {
 		sh.Blur = min(v, maxEffectRadius)
 	}
 	dist := emuAttr(e, "dist")
-	if !positive(dist) || math.IsInf(dist, 0) {
+	if !numeric.PositiveFinite(dist) {
 		dist = 0
 	}
 	dist = min(dist, maxEffectRadius)

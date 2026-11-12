@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
@@ -163,13 +164,13 @@ func (r *reader) pictureOf(part string, ref ooxml.PictureRef) *layout.Picture {
 //     wide prints as an ellipse filling the frame in PowerPoint's
 //     reference, and its frame scaled wide as a wide ellipse.
 func stretched(pic *layout.Picture) *layout.Picture {
-	if pic == nil || pic.Vector == nil || !positive(pic.Width) || !positive(pic.Height) {
+	if pic == nil || pic.Vector == nil || !numeric.Positive(pic.Width) || !numeric.Positive(pic.Height) {
 		return pic
 	}
 	inner := *pic
 	out := *pic
 	out.Vector = func(ctx context.Context, box compose.Rect) []compose.Fragment {
-		if !positive(box.Width) || !positive(box.Height) {
+		if !numeric.Positive(box.Width) || !numeric.Positive(box.Height) {
 			return nil
 		}
 		content := inner.Vector(ctx, compose.Rect{Width: inner.Width, Height: inner.Height})
