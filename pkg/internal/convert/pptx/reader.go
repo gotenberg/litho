@@ -87,14 +87,6 @@ const (
 	defaultSlideHeight = 540.0
 )
 
-// errNotPresentationPart reports a part whose root is not the
-// PresentationML element its relationship promises.
-var errNotPresentationPart = fmt.Errorf("%w: not the expected PresentationML part", office.ErrMalformed)
-
-// errStop ends the reading of a presentation past a cap: the slides read
-// so far are kept.
-var errStop = errors.New("presentation cap reached")
-
 // reader is one presentation's reading state.
 type reader struct {
 	ctx   context.Context

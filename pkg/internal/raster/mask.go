@@ -1,7 +1,6 @@
 package raster
 
 import (
-	"errors"
 	"fmt"
 	"image"
 )
@@ -12,10 +11,6 @@ import (
 // than the resolution any caller asks for, and keeps a blur's work and
 // memory bounded on hostile sizes.
 const MaxPixels = 1 << 22
-
-// ErrTooLarge is returned for a mask whose size is not positive or
-// exceeds [MaxPixels].
-var ErrTooLarge = errors.New("raster: mask size out of range")
 
 // NewMask returns an uncovered mask of w by h pixels, or [ErrTooLarge].
 func NewMask(w, h int) (*image.Alpha, error) {
