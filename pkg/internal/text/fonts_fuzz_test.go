@@ -30,6 +30,27 @@ func FuzzLoadFontData(f *testing.F) {
 	})
 }
 
+// FuzzLoadFace feeds the program of a document face, the bytes an
+// @font-face rule names, to [LoadFace], and lays text out with the face it
+// returns.
+func FuzzLoadFace(f *testing.F) {
+	valid := testSans("Regular", 400, false, 100)
+	f.Add(valid)
+	f.Add(valid[:len(valid)/2])
+	f.Add(fontbuild.Collection(valid, testDigits()))
+	base := memoryFonts(map[string][]byte{"sans.ttf": valid})
+	f.Fuzz(func(t *testing.T, data []byte) {
+		fc, err := LoadFace(data, FaceDescriptor{Family: "Doc"})
+		if err != nil {
+			return
+		}
+		fonts := base.WithFaces(NewFaceSet([]*Face{fc}))
+		if _, _, err := fonts.Layout(context.Background(), []Run{{Text: "AB Cé D", Style: Style{Families: []string{"Doc"}, Size: 10}}}, 20, Options{}); err != nil {
+			t.Fatalf("Layout on a fuzzed document face: %v", err)
+		}
+	})
+}
+
 // memoryFile is a font file held in memory.
 type memoryFile struct {
 	*bytes.Reader
