@@ -727,3 +727,28 @@ func TestConvert_RightToLeftListLabel(t *testing.T) {
 		t.Errorf("text ends at %.2f, want %.2f", end, right-10*mm)
 	}
 }
+
+// TestConvert_KashidaWarning checks that a justified paragraph of Arabic
+// text warns that it is stretched at its spaces alone.
+//
+// # Corpus evidence
+//
+//   - litho/odt: ar-rtl prints the lines of its justified Arabic
+//     paragraph with kashida glyphs inserted between joined letters.
+func TestConvert_KashidaWarning(t *testing.T) {
+	for _, tc := range []struct {
+		align, text string
+		want        bool
+	}{
+		{"justify", "لكل إنسان حق التمتع", true},
+		{"start", "لكل إنسان حق التمتع", false},
+		{"justify", "plain text", false},
+	} {
+		auto := `<style:style style:name="A" style:family="paragraph"><style:paragraph-properties fo:text-align="` + tc.align + `" style:writing-mode="rl-tb"/></style:style>`
+		res := convertDoc(t, doc{contentAuto: auto, body: `<text:p text:style-name="A">` + tc.text + `</text:p>`}.pack(t), office.Options{})
+		got := slices.ContainsFunc(res.Warnings, func(w typeset.Warning) bool { return strings.Contains(w.Message, "kashida") })
+		if got != tc.want {
+			t.Errorf("%s %q: kashida warning %v, want %v", tc.align, tc.text, got, tc.want)
+		}
+	}
+}

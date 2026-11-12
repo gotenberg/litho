@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/formfield"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -454,6 +455,9 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 	b.inline(el, t, &kids, ws, ctx.depth)
 	b.scriptRuns = outer
 	kids = b.splitScripts(kids, runs, strings.HasPrefix(p.writing, "rl"))
+	if st.TextAlign == css.AlignJustify && slices.ContainsFunc(runs, func(r scriptRun) bool { return hasArabic(r.text) }) {
+		b.warn("kashida", warn.ContentUnsupported, warn.Approximated, "justified Arabic text is stretched at its spaces, without kashida")
+	}
 	if !hasText(kids) && b.floatCount(kids) > 1 {
 		b.pinFloats(kids, p)
 	}
@@ -620,6 +624,23 @@ func (b *builder) runNode(s string, t textState, changed bool) *layout.Node {
 	}
 	n.Children = []*layout.Node{b.node(tn)}
 	return n
+}
+
+// hasArabic reports a text holding an Arabic letter, which Writer
+// stretches with kashida in a justified paragraph, where litho widens the
+// spaces alone.
+//
+// # Corpus evidence
+//
+//   - litho/odt: ar-rtl prints the lines of its justified Arabic
+//     paragraph with kashida glyphs inserted between joined letters.
+func hasArabic(s string) bool {
+	for _, r := range s {
+		if r >= 0x0600 && unicode.Is(unicode.Arabic, r) && unicode.IsLetter(r) {
+			return true
+		}
+	}
+	return false
 }
 
 // scriptRun is a run [builder.run] made in the paragraph being built: its
