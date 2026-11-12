@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
@@ -482,5 +483,40 @@ func TestRead_TableGroupDepth(t *testing.T) {
 		if got := hasWarning(w, "table-group-depth"); got != tc.warning {
 			t.Errorf("depth %d: warnings %+v, want a table-group-depth warning %v", tc.depth, w, tc.warning)
 		}
+	}
+}
+
+// TestRead_HeaderOfManySpaces locks that a header part's text is joined
+// in time linear in its nodes: a paragraph of 900,000 text:s, each
+// merged into one span, is read within seconds, where joining the
+// span's string at each node copies it as many times.
+func TestRead_HeaderOfManySpaces(t *testing.T) {
+	const n = 900_000
+	f := flat{
+		auto:   `<style:style style:name="ta1" style:family="table" style:master-page-name="Long"/>`,
+		master: `<style:master-page style:name="Long"><style:header><text:p>` + strings.Repeat(`<text:s/>`, n) + `</text:p></style:header></style:master-page>`,
+		body:   `<table:table table:name="S" table:style-name="ta1"/>`,
+	}
+	type result struct {
+		doc *sheet.Document
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		doc, _, err := Read(context.Background(), f.bytes(), nil, office.Options{})
+		done <- result{doc, err}
+	}()
+	var res result
+	select {
+	case res = <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the header is not read within 30 s")
+	}
+	if res.err != nil {
+		t.Fatal(res.err)
+	}
+	spans := res.doc.Sheets[0].HeaderFooter.Odd.Header[1]
+	if len(spans) != 1 || spans[0].Text != strings.Repeat(" ", n) {
+		t.Errorf("%d spans, want one of %d spaces", len(spans), n)
 	}
 }

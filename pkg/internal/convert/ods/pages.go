@@ -277,15 +277,27 @@ const maxSpans = 256
 // (ODF 1.3, Part 3, 7.3 and 7.5) a header shows.
 func (r *reader) spans(el *odf.Element) []sheet.Span {
 	var out []sheet.Span
+	// tail collects the text of the last span while text of its font
+	// follows: adding to the span's string at each text node would copy
+	// it whole each time.
+	var tail strings.Builder
+	settle := func() {
+		if n := len(out); n > 0 && out[n-1].Field == sheet.FieldNone {
+			out[n-1].Text = tail.String()
+		}
+	}
 	add := func(s sheet.Span) {
 		if len(out) >= maxSpans {
 			return
 		}
 		if n := len(out); n > 0 && s.Field == sheet.FieldNone && out[n-1].Field == sheet.FieldNone && out[n-1].Font == s.Font {
-			out[n-1].Text += s.Text
+			tail.WriteString(s.Text)
 			return
 		}
+		settle()
 		out = append(out, s)
+		tail.Reset()
+		tail.WriteString(s.Text)
 	}
 	var walk func(e *odf.Element, f *sheet.Font, depth int)
 	walk = func(e *odf.Element, f *sheet.Font, depth int) {
@@ -293,6 +305,10 @@ func (r *reader) spans(el *odf.Element) []sheet.Span {
 			return
 		}
 		for _, c := range e.Children {
+			if len(out) >= maxSpans {
+				// Past the cap add keeps nothing.
+				return
+			}
 			if c.IsText() {
 				if t := strings.Join(strings.FieldsFunc(c.Text, func(r rune) bool { return r == '\n' || r == '\r' || r == '\t' }), " "); t != "" {
 					add(sheet.Span{Text: t, Font: f})
@@ -343,11 +359,15 @@ func (r *reader) spans(el *odf.Element) []sheet.Span {
 		}
 	}
 	for i, p := range el.All(odf.NSText, "p") {
+		if len(out) >= maxSpans {
+			break
+		}
 		if i > 0 {
 			add(sheet.Span{Text: "\n"})
 		}
 		walk(p, nil, 0)
 	}
+	settle()
 	return out
 }
 
