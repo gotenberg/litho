@@ -157,7 +157,10 @@ func (r *reader) pivotCache(name string) (*pivotCache, error) {
 		}
 	}
 	for _, f := range root.Child(nsMain, "cacheFields").Kids() {
-		if !f.Is(nsMain, "cacheField") || len(c.fields) >= maxPivotItems {
+		if len(c.fields) >= maxPivotItems {
+			break
+		}
+		if !f.Is(nsMain, "cacheField") {
 			continue
 		}
 		cf := cacheField{name: decodeXString(attr(f, "name")), database: attr(f, "formula") == ""}
@@ -558,7 +561,10 @@ func (r *reader) cacheSheet(doc *sheet.Document, pp *pendingPivot) (int, sheet.R
 	}
 	sh.Rows = append(sh.Rows, head)
 	for _, rec := range root.Kids() {
-		if !rec.Is(nsMain, "r") || len(sh.Rows) > maxPivotRecords || r.cells > sheet.MaxCells {
+		if len(sh.Rows) > maxPivotRecords || r.cells > sheet.MaxCells {
+			break
+		}
+		if !rec.Is(nsMain, "r") {
 			continue
 		}
 		row := sheet.Row{Index: len(sh.Rows)}

@@ -50,7 +50,10 @@ func (w *sheetReader) conditionalFormats(root *ooxml.Element) {
 		c := sheet.Conditional{Ranges: ranges}
 		var refs []pendingOperand
 		for _, e := range cf.Kids() {
-			if !e.Is(ns.rule, "cfRule") || len(c.Rules) >= maxCondRules {
+			if len(c.Rules) >= maxCondRules {
+				break
+			}
+			if !e.Is(ns.rule, "cfRule") {
 				continue
 			}
 			if ns.rule == nsX14 && attr(e, "type") == "dataBar" && ext.used[attr(e, "id")] {
@@ -426,7 +429,10 @@ func (w *sheetReader) dataBarExtensions(root *ooxml.Element) *dataBarExt {
 				continue
 			}
 			for _, cf := range cfs.Kids() {
-				if !cf.Is(nsX14, "conditionalFormatting") || len(out.formats) >= maxCondFormats {
+				if len(out.formats) >= maxCondFormats {
+					break
+				}
+				if !cf.Is(nsX14, "conditionalFormatting") {
 					continue
 				}
 				out.formats = append(out.formats, cf)

@@ -159,7 +159,10 @@ func (r *reader) readStyles(main string) error {
 		}
 	}
 	for _, c := range root.Child(nsMain, "numFmts").Kids() {
-		if !c.Is(nsMain, "numFmt") || len(s.numFmts) >= maxStyleRecords {
+		if len(s.numFmts) >= maxStyleRecords {
+			break
+		}
+		if !c.Is(nsMain, "numFmt") {
 			continue
 		}
 		if id, ok := ooxml.Int(attr(c, "numFmtId")); ok {
@@ -171,17 +174,26 @@ func (r *reader) readStyles(main string) error {
 		}
 	}
 	for _, c := range root.Child(nsMain, "fonts").Kids() {
-		if c.Is(nsMain, "font") && len(s.fonts) < maxStyleRecords {
+		if len(s.fonts) >= maxStyleRecords {
+			break
+		}
+		if c.Is(nsMain, "font") {
 			s.fonts = append(s.fonts, r.font(c))
 		}
 	}
 	for _, c := range root.Child(nsMain, "fills").Kids() {
-		if c.Is(nsMain, "fill") && len(s.fills) < maxStyleRecords {
+		if len(s.fills) >= maxStyleRecords {
+			break
+		}
+		if c.Is(nsMain, "fill") {
 			s.fills = append(s.fills, r.fill(c))
 		}
 	}
 	for _, c := range root.Child(nsMain, "borders").Kids() {
-		if c.Is(nsMain, "border") && len(s.borders) < maxStyleRecords {
+		if len(s.borders) >= maxStyleRecords {
+			break
+		}
+		if c.Is(nsMain, "border") {
 			s.borders = append(s.borders, r.border(c))
 		}
 	}
@@ -189,12 +201,18 @@ func (r *reader) readStyles(main string) error {
 	s.cellXfs = r.xfs(root.Child(nsMain, "cellXfs"), true)
 	dxfs := root.Child(nsMain, "dxfs").Kids()
 	for _, d := range dxfs {
-		if d.Is(nsMain, "dxf") && len(s.dxfs) < maxStyleRecords {
+		if len(s.dxfs) >= maxStyleRecords {
+			break
+		}
+		if d.Is(nsMain, "dxf") {
 			s.dxfs = append(s.dxfs, d)
 		}
 	}
 	for _, ts := range root.Child(nsMain, "tableStyles").Kids() {
-		if ts.Is(nsMain, "tableStyle") && len(s.tables) < maxStyleRecords && attr(ts, "pivot") != "1" {
+		if len(s.tables) >= maxStyleRecords {
+			break
+		}
+		if ts.Is(nsMain, "tableStyle") && attr(ts, "pivot") != "1" {
 			s.tables[attr(ts, "name")] = r.parseTableStyle(ts, dxfs, 0)
 		}
 	}
@@ -214,7 +232,10 @@ func (r *reader) readStyles(main string) error {
 func (r *reader) xfs(table *ooxml.Element, cell bool) []xf {
 	var out []xf
 	for _, c := range table.Kids() {
-		if !c.Is(nsMain, "xf") || len(out) >= maxStyleRecords {
+		if len(out) >= maxStyleRecords {
+			break
+		}
+		if !c.Is(nsMain, "xf") {
 			continue
 		}
 		x := xf{numFmt: intAttr(c, "numFmtId", -1), font: intAttr(c, "fontId", -1), fill: intAttr(c, "fillId", -1), border: intAttr(c, "borderId", -1), styleXf: -1}

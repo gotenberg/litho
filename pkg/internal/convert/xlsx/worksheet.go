@@ -572,7 +572,10 @@ func breaks(e *ooxml.Element, limit int) []int {
 	var out []int
 	seen := map[int]bool{}
 	for _, b := range e.Kids() {
-		if !b.Is(nsMain, "brk") || len(out) >= maxBreaks {
+		if len(out) >= maxBreaks {
+			break
+		}
+		if !b.Is(nsMain, "brk") {
 			continue
 		}
 		id := intAttr(b, "id", 0)

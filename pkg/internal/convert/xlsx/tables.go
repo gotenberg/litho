@@ -33,7 +33,10 @@ func (w *sheetReader) tables(parts *ooxml.Element) error {
 	r := w.r
 	n := 0
 	for _, tp := range parts.Kids() {
-		if !tp.Is(nsMain, "tablePart") || n >= maxTables {
+		if n >= maxTables {
+			break
+		}
+		if !tp.Is(nsMain, "tablePart") {
 			continue
 		}
 		n++
