@@ -21,17 +21,17 @@ import (
 var (
 	ahemOnce  sync.Once
 	ahemFonts *text.Fonts
-	ahemErr   error
+	errAhem   error
 )
 
 // ahem returns an index of the Ahem font, the one font in git.
 func ahem(t testing.TB) *text.Fonts {
 	t.Helper()
 	ahemOnce.Do(func() {
-		ahemFonts, ahemErr = text.NewFonts(context.Background(), nil, []string{"../../layout/testdata"})
+		ahemFonts, errAhem = text.NewFonts(context.Background(), nil, []string{"../../layout/testdata"})
 	})
-	if ahemErr != nil {
-		t.Fatalf("indexing Ahem: %v", ahemErr)
+	if errAhem != nil {
+		t.Fatalf("indexing Ahem: %v", errAhem)
 	}
 	return ahemFonts
 }
