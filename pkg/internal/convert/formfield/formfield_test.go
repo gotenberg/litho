@@ -44,8 +44,8 @@ func TestAttach(t *testing.T) {
 		{ID: NodeID(1), Box: true, Field: typeset.Field{Kind: typeset.FieldText, Name: "spans pages"}},
 		{ID: NodeID(2), Box: true, Field: typeset.Field{Kind: typeset.FieldText, Name: "never laid out"}},
 	}
-	if missed := Attach(res, controls); missed != 2 {
-		t.Errorf("Attach missed %d controls, want 2", missed)
+	if missed, err := Attach(res, controls); err != nil || missed != 2 {
+		t.Errorf("Attach missed %d controls (%v), want 2", missed, err)
 	}
 	if len(page1.Fields) != 1 {
 		t.Fatalf("page 1 has %d fields, want 1", len(page1.Fields))

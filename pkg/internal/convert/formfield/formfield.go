@@ -1,6 +1,7 @@
 package formfield
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -122,10 +123,12 @@ const (
 // field's rectangle, and appends the field to the page's Fields, in the
 // order of controls. A control whose Form element it does not find, whose
 // content spans pages, or that shows nothing it can measure, stays printed
-// as it is, with no field; the count of those is returned.
-func Attach(res *layout.Result, controls []*Control) int {
+// as it is, with no field; the count of those is returned. It fails with
+// an error wrapping typeset.ErrInvalidFont when a face the controls show
+// does not load, which the PDF backend refuses too.
+func Attach(res *layout.Result, controls []*Control) (int, error) {
 	if len(controls) == 0 || res == nil || res.Structure == nil {
-		return len(controls)
+		return len(controls), nil
 	}
 	forms, owner := formElems(res.Structure)
 	locate(res.Pages, forms, owner)
@@ -142,7 +145,10 @@ func Attach(res *layout.Result, controls []*Control) int {
 			missed++
 		}
 	}
-	return missed
+	if err := m.Err(); err != nil {
+		return missed, fmt.Errorf("measuring form controls: %w", err)
+	}
+	return missed, nil
 }
 
 // attach makes c a field of its page, false when it cannot.

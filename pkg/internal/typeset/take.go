@@ -1,6 +1,7 @@
 package typeset
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/numeric"
@@ -99,9 +100,11 @@ func unparented(f Fragment) Fragment {
 }
 
 // Measurer measures fragments with the metrics of their faces, loading each
-// face's program once. It is used by one goroutine.
+// face's program once. A face whose program does not load measures
+// nothing, and [Measurer.Err] reports it. It is used by one goroutine.
 type Measurer struct {
 	fonts map[string]*embed.Font
+	err   error
 }
 
 // NewMeasurer returns an empty Measurer.
@@ -119,10 +122,20 @@ func (m *Measurer) font(face *Face) *embed.Font {
 	}
 	f, err := embed.Load(face.Program)
 	if err != nil {
+		if m.err == nil {
+			m.err = fmt.Errorf("%w: face %q: %w", ErrInvalidFont, face.Key, err)
+		}
 		f = nil
 	}
 	m.fonts[face.Key] = f
 	return f
+}
+
+// Err returns the error of the first face whose program did not load,
+// wrapping [ErrInvalidFont], nil while every face loads. [Write] refuses
+// such a face with the same error.
+func (m *Measurer) Err() error {
+	return m.err
 }
 
 // Glyph returns the glyph of face that draws r, false when the face lacks

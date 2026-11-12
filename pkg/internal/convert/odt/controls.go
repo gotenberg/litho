@@ -489,9 +489,15 @@ func ellipse(x0, y0, x1, y1 float64) []typeset.PathOp {
 }
 
 // attachControls makes the controls of b into the form fields of the pages
-// of res, warning of those that stay printed without a field.
-func (b *builder) attachControls(res *layout.Result) {
-	if missed := formfield.Attach(res, b.controls); missed > 0 && len(b.controls) > 0 {
+// of res, warning of those that stay printed without a field. It fails as
+// formfield.Attach does.
+func (b *builder) attachControls(res *layout.Result) error {
+	missed, err := formfield.Attach(res, b.controls)
+	if err != nil {
+		return err
+	}
+	if missed > 0 && len(b.controls) > 0 {
 		b.warn("form-field", "a form control that spans pages or shows nothing is printed without its field")
 	}
+	return nil
 }

@@ -433,9 +433,15 @@ func (d *document) endLegacy(fl *field, sink *inlineSink) {
 }
 
 // attachControls makes the controls of d into the form fields of the
-// pages of res, warning of those that stay printed without a field.
-func (d *document) attachControls(res *layout.Result) {
-	if missed := formfield.Attach(res, d.form.controls); missed > 0 {
+// pages of res, warning of those that stay printed without a field. It
+// fails as formfield.Attach does.
+func (d *document) attachControls(res *layout.Result) error {
+	missed, err := formfield.Attach(res, d.form.controls)
+	if err != nil {
+		return err
+	}
+	if missed > 0 {
 		d.warn("form-field", "a form control that spans pages or shows nothing is printed without its field")
 	}
+	return nil
 }

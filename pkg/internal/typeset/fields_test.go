@@ -289,4 +289,14 @@ func TestTakeContentAndBounds(t *testing.T) {
 	if gid, ok := m.Glyph(sans, 'A'); !ok || gid == 0 {
 		t.Errorf("Glyph('A') = %d, %v", gid, ok)
 	}
+	if err := m.Err(); err != nil {
+		t.Errorf("Err() = %v after faces that load", err)
+	}
+	broken := &typeset.Face{Key: "broken", Program: []byte("not a font")}
+	if _, ok := m.Glyph(broken, 'A'); ok {
+		t.Error("a face that does not load gives a glyph")
+	}
+	if err := m.Err(); !errors.Is(err, typeset.ErrInvalidFont) {
+		t.Errorf("Err() = %v after a face that does not load, want ErrInvalidFont", err)
+	}
 }

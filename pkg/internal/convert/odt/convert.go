@@ -327,7 +327,9 @@ func (b *builder) assemble(res *layout.Result, opts office.Options, lang string)
 		return d, d.Page >= 1 && d.Page <= len(res.Pages)
 	}
 	doc := &typeset.Document{Metadata: b.metadata(lang), Structure: res.Structure}
-	b.attachControls(res)
+	if err := b.attachControls(res); err != nil {
+		return nil, err
+	}
 	sink := opts.Sink
 	if sink != nil {
 		sink.Expect(len(res.Pages))
