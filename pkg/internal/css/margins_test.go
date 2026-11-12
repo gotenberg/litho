@@ -2,6 +2,7 @@ package css
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -151,5 +152,25 @@ func TestPageIn_VarInMarginBox(t *testing.T) {
 		if tc == nil || len(tc.Content.Items) != 1 || tc.Content.Items[0].Text != tt.want {
 			t.Errorf("%s: top-center %+v, want content %q", tt.src, tc, tt.want)
 		}
+	}
+}
+
+// TestPageIn_ManyDeclarationsKeepOrder locks the order of the
+// declarations of one @page rule's margin blocks past 65,536 in one
+// block: the later block wins (CSS Cascade 4, 6.1, order of appearance).
+func TestPageIn_ManyDeclarationsKeepOrder(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("@page { @top-center { ")
+	for range 1<<16 + 1 {
+		b.WriteString("color:red;")
+	}
+	b.WriteString(`content: "x" } @top-center { content: "y" } }`)
+	ps := resolverOf(t, b.String()).PageIn(PageSelector{Right: true}, nil)
+	tc := ps.MarginBoxes[MarginTopCenter]
+	if tc == nil {
+		t.Fatal("no top-center box")
+	}
+	if len(tc.Content.Items) != 1 || tc.Content.Items[0].Text != "y" {
+		t.Errorf("top-center content %+v, want the later block's", tc.Content)
 	}
 }

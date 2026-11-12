@@ -297,11 +297,15 @@ func (r *Resolver) PageIn(sel PageSelector, root *Style) PageStyle {
 			d := &s.rule.rule.context[i]
 			ctxCands = append(ctxCands, cand{d: d, rank: rank(s.rule.origin, d.Important), spec: uint64(s.spec), ord: s.rule.order, idx: i})
 		}
+		// idx orders the declarations of the rule's margin blocks by
+		// appearance, whatever their count.
+		idx := 0
 		for j := range s.rule.rule.margins {
 			m := &s.rule.rule.margins[j]
 			for i := range m.decls {
 				d := &m.decls[i]
-				boxCands[m.box] = append(boxCands[m.box], cand{d: d, rank: rank(s.rule.origin, d.Important), spec: uint64(s.spec), ord: s.rule.order, idx: j<<16 | i})
+				boxCands[m.box] = append(boxCands[m.box], cand{d: d, rank: rank(s.rule.origin, d.Important), spec: uint64(s.spec), ord: s.rule.order, idx: idx})
+				idx++
 			}
 		}
 	}
