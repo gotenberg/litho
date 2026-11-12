@@ -227,3 +227,15 @@ func TestCompute_ContextAndBudget(t *testing.T) {
 		t.Errorf("element root: %v", err)
 	}
 }
+
+func TestComputeMatchesEveryClassOfALongList(t *testing.T) {
+	c := compute(t, `<p id=a class="c0 c1 c2 c3 c4 c5 c6 c7 c8 c9 c1 c10 c0 c11">x</p><p id=b class="c11 c11">y</p>`,
+		`.c0 { font-weight: bold } .c10 { font-size: 20px } .c11 { text-indent: 3px }`)
+	a := c.of("a")
+	if a.FontWeight != 700 || a.FontSize != 15 || a.TextIndent != Pts(2.25) {
+		t.Errorf("weight %d, size %v, indent %v", a.FontWeight, a.FontSize, a.TextIndent)
+	}
+	if c.of("b").TextIndent != Pts(2.25) {
+		t.Error("a repeated class does not match")
+	}
+}

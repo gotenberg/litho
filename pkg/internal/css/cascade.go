@@ -310,8 +310,15 @@ type computeState struct {
 	styles *Styles
 	// scratch is the style computeStyle computes into: a style equal to
 	// one the tree holds costs no allocation, and a new one is copied
-	// out of it.
+	// out of it. sty is the styler it computes with.
 	scratch Style
+	sty     styler
+	// cands, matched and classes are the buffers of match, reused from
+	// one element to the next: an element's declarations are cascaded
+	// before the next match.
+	cands   []cand
+	matched []int
+	classes []string
 }
 
 // fontKey is what selects a font for the ex and ch units.
@@ -462,6 +469,7 @@ func (cs *computeState) element(n, parent *html.Node) {
 		}
 	}
 	st, vars := cs.cascade(cands, parentStyle, parentVars, parent == nil)
+	cs.cands = cands[:0]
 	cs.out[n] = st
 	cs.vars[n] = vars
 	if parent == nil {
@@ -583,9 +591,15 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 	return cs.computeStyle(&winners, parentStyle, isRoot), vars
 }
 
-// match returns the declarations of the rules matching n.
+// linearClasses is how many distinct classes of an element match tells
+// apart by scanning them before it keeps them in a map: an element names a
+// few classes, and a scan of a few costs less than a map.
+const linearClasses = 8
+
+// match returns the declarations of the rules matching n, in a buffer the
+// next call reuses.
 func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
-	var matched []int
+	matched := cs.matched[:0]
 	test := func(refs []selRef) {
 		for _, ref := range refs {
 			if cs.m.over {
@@ -607,17 +621,36 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 		test(r.byID[id])
 	}
 	if cl, ok := attr(n, "class"); ok {
-		seen := map[string]bool{}
+		// The classes seen are scanned while they are few and kept in a
+		// map past linearClasses, so a long class list costs linear time.
+		seen := cs.classes[:0]
+		var many map[string]bool
 		for c := range asciiFields(cl) {
-			if !seen[c] {
-				seen[c] = true
-				test(r.byClass[c])
+			switch {
+			case many != nil:
+				if many[c] {
+					continue
+				}
+				many[c] = true
+			case slices.Contains(seen, c):
+				continue
+			default:
+				seen = append(seen, c)
+				if len(seen) > linearClasses {
+					many = make(map[string]bool, 2*len(seen))
+					for _, x := range seen {
+						many[x] = true
+					}
+				}
 			}
+			test(r.byClass[c])
 		}
+		cs.classes = seen[:0]
 	}
 	test(r.byTag[lower(n.Data)])
 	test(r.universal)
-	var out []cand
+	cs.matched = matched[:0]
+	out := cs.cands[:0]
 	for _, ri := range matched {
 		rr := &cs.r.rules[ri]
 		for i := range rr.rule.decls {
@@ -625,6 +658,7 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 			out = append(out, cand{d: d, rank: rank(rr.origin, d.Important), spec: uint64(cs.spec[ri]), ord: rr.order, idx: i})
 		}
 	}
+	cs.cands = out[:0]
 	return out
 }
 
@@ -636,7 +670,8 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRoot bool) *Style {
 	st := &cs.scratch
 	*st = *parent
-	s := &styler{parent: parent, root: cs.root}
+	s := &cs.sty
+	*s = styler{parent: parent, root: cs.root}
 	rootFS := mediumFontSize
 	if cs.root != nil {
 		rootFS = cs.root.FontSize
