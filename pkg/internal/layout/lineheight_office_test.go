@@ -87,19 +87,20 @@ func TestLineRule_EmptyLine(t *testing.T) {
 	}
 }
 
-// TestLineRule_InlinePicture sizes a line holding a picture taller than
-// its text as Writer does: the picture's height and the text's descent at
-// 100%, the room of a proportional spacing above 100% added for the text
-// alone, below it, and the whole line shrunk below 100%.
+// TestLineRule_InlinePicture sizes a line holding a picture alone, taller
+// than its text, as Writer does: the picture's height at 100%, the room of
+// a proportional spacing above 100% added for the text alone, below it,
+// and below 100% the whole natural line, the font's descent included,
+// shrunk.
 //
 // # Corpus evidence
 //
-//   - probe, odt: through gotenberg/gotenberg:9.0.0, a .fodt in Liberation
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a .fodt in Liberation
 //     Serif 12pt, whose line is 13.8pt, holding an as-char picture 1cm
-//     tall: at 100% the line is the picture plus the 2.6pt descent, at 115%
-//     and 200% 2.07pt and 13.8pt more, the picture's top at the line's top;
-//     at 80% four fifths of the natural line, the baseline at four fifths
-//     of it.
+//     tall between line breaks: at 100% the line is the picture alone, at
+//     115% and 200% 2.07pt and 13.8pt more, the picture's top at the
+//     line's top. At 80% Writer makes the line 25.56pt, which four fifths
+//     of the natural line, 24.76pt, misses.
 func TestLineRule_InlinePicture(t *testing.T) {
 	multiple := func(f float64) func(*css.Style) {
 		return func(s *css.Style) {
@@ -113,8 +114,8 @@ func TestLineRule_InlinePicture(t *testing.T) {
 		// baselines are those of the lines before and after the picture's.
 		baselines [2]float64
 	}{
-		{"100%", 1, [2]float64{8, 50}},
-		{"150%", 1.5, [2]float64{8, 60}},
+		{"100%", 1, [2]float64{8, 48}},
+		{"150%", 1.5, [2]float64{8, 58}},
 		{"60%", 0.6, [2]float64{4.8, 30}},
 	}
 	for _, tt := range tests {

@@ -52,6 +52,9 @@ func (s *inlineState) officeLine(l *lineBox) {
 			f = clamp(st.LineHeight.Value)
 		}
 		above, below, text := s.naturalExtent(l)
+		if f >= 1 && st.WordRules == 0 {
+			below = s.picturesDescent(l, below)
+		}
 		// Writer adds the room of a proportional spacing above 100% for
 		// the text of the line alone: an as-character picture taller than
 		// the text keeps its height, the room going below it; below 100%
@@ -128,6 +131,41 @@ func (s *inlineState) naturalExtent(l *lineBox) (above, below, text float64) {
 		below = max(below, it.descent+shift)
 	}
 	return above, below, textAbove + textBelow
+}
+
+// picturesDescent returns the extent below the baseline of a line l
+// whose natural extent below it is below, as Writer measures a line of
+// pictures alone at a proportional spacing of 100% or more: the deepest
+// descent of its atomic inlines, the container's font left out, so a
+// picture on the baseline ends the line. A line holding a glyph run, a
+// space included, keeps below. A picture shorter than the font's ascent
+// is not measured.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a 108 point
+//     as-character picture alone in a Carlito 11 point paragraph, or on a
+//     line of its own between line breaks, makes the line 108 points tall
+//     at 100%, 109.07 at 108% and 114.7 at 150%, the room of the text
+//     alone added; the 2.9 point descent counts only when
+//     a space follows the picture. A 1 cm picture between line breaks in
+//     Liberation Serif 12 point loses the 2.6 point descent at 100%, 115%
+//     and 200% alike.
+//   - litho/odt paper-margins-none-a4-landscape: the caption under the
+//     picture of each paper document sits 3 points higher than the
+//     descent would put it, which keeps the last line on the first page.
+func (s *inlineState) picturesDescent(l *lineBox, below float64) float64 {
+	runs, atomics := lineContent(l)
+	if runs || !atomics {
+		return below
+	}
+	below = 0
+	for _, it := range l.items {
+		if it.atomic != nil {
+			below = max(below, it.descent+it.baseline-l.baseline)
+		}
+	}
+	return below
 }
 
 // wordPictureStrut is the first Word compatibility mode that sizes a line
