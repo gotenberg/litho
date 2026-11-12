@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
@@ -163,7 +164,7 @@ func (r *reader) defaultSetup(sh *sheet.Sheet) {
 // padding in) to points as Excel prints it: the characters times the
 // digit's printer pixels, rounded to a pixel.
 func (r *reader) columnWidth(chars float64) float64 {
-	if math.IsNaN(chars) || chars <= 0 {
+	if !numeric.Positive(chars) {
 		return 0
 	}
 	return printerPixels(min(chars, maxColumnChars) * r.digitWidth)
@@ -194,7 +195,7 @@ func (w *sheetReader) formatPr(f *ooxml.Element) {
 	} else if base := intAttr(f, "baseColWidth", defaultBaseColumn); base > 0 {
 		sh.DefaultColumnWidth = r.baseColumnWidth(min(base, maxColumnChars))
 	}
-	if v, err := strconv.ParseFloat(attr(f, "defaultRowHeight"), 64); err == nil && v > 0 && !math.IsInf(v, 0) {
+	if v, err := strconv.ParseFloat(attr(f, "defaultRowHeight"), 64); err == nil && numeric.PositiveFinite(v) {
 		if h := r.rowHeight(v); h > 0 {
 			sh.DefaultRowHeight = h
 		}
@@ -279,7 +280,7 @@ func (w *sheetReader) sheetData(data *ooxml.Element) error {
 		}
 		next = idx + 1
 		row := sheet.Row{Index: idx, CustomHeight: boolAttr(re, "customHeight"), Hidden: boolAttr(re, "hidden")}
-		if v, err := strconv.ParseFloat(attr(re, "ht"), 64); err == nil && v > 0 && !math.IsInf(v, 0) {
+		if v, err := strconv.ParseFloat(attr(re, "ht"), 64); err == nil && numeric.PositiveFinite(v) {
 			row.Height = r.rowHeight(v)
 		}
 		if boolAttr(re, "customFormat") {
@@ -402,7 +403,7 @@ func (w *sheetReader) cell(c *ooxml.Element, col int, row *sheet.Row) (sheet.Cel
 		}
 	default:
 		if v != nil {
-			if n, err := strconv.ParseFloat(strings.TrimSpace(v.Text), 64); err == nil && !math.IsNaN(n) && !math.IsInf(n, 0) {
+			if n, err := strconv.ParseFloat(strings.TrimSpace(v.Text), 64); err == nil && numeric.Finite(n) {
 				cell.Value = sheet.Value{Kind: sheet.Number, Number: n}
 				if r.date1904 {
 					cell.Value.Number += w.dateShift(cell.Style, row, col)

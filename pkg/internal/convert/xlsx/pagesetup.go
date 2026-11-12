@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
@@ -91,7 +92,7 @@ func defaultPage(w, h float64) sheet.PageSetup {
 // marginPt converts a margin in inches to points through the hundredths
 // of a millimetre LibreOffice rounds it to.
 func marginPt(in float64) float64 {
-	if math.IsNaN(in) || in < 0 {
+	if !numeric.NonNegative(in) {
 		return 0
 	}
 	return hmmPt(math.Round(min(in, maxMarginInches) * 2540))
