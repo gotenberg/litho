@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -429,13 +430,35 @@ func xhtParsesAsHTML(text string) bool {
 
 var errWPTRejected = errors.New("rejected")
 
-func wptForbids(text string, rules wptAreaRules) bool {
+// wptRejectionError is errWPTRejected with the rule that kept a file out.
+type wptRejectionError struct{ reason string }
+
+func (r *wptRejectionError) Error() string        { return "rejected: " + r.reason }
+func (r *wptRejectionError) Is(target error) bool { return target == errWPTRejected }
+
+func rejectWPT(reason string) error { return &wptRejectionError{reason: reason} }
+
+// wptRejectReason returns the rule a rejection names, empty for another
+// error.
+func wptRejectReason(err error) string {
+	var r *wptRejectionError
+	if errors.As(err, &r) {
+		return r.reason
+	}
+	return ""
+}
+
+// wptForbids returns the forbidden pattern text holds, empty when none.
+func wptForbids(text string, rules wptAreaRules) string {
 	for _, re := range append(slices.Clone(wptForbidden), rules.forbidden...) {
 		if re.MatchString(text) {
-			return true
+			return strings.TrimPrefix(re.String(), "(?i)")
 		}
 	}
-	return rules.writingMode && wptOtherWritingMode(text)
+	if rules.writingMode && wptOtherWritingMode(text) {
+		return "writing-mode other than horizontal-tb"
+	}
+	return ""
 }
 
 func readText(p string) (string, error) {
@@ -448,19 +471,22 @@ func readText(p string) (string, error) {
 func checkWPTFile(root, rel string, rules wptAreaRules) (*wptScan, []string, error) {
 	p := filepath.Join(root, filepath.FromSlash(rel))
 	if info, err := os.Stat(p); err != nil || !info.Mode().IsRegular() {
-		return nil, nil, errWPTRejected
+		return nil, nil, rejectWPT("missing file")
 	}
 	text, err := readText(p)
 	if err != nil {
 		return nil, nil, err
 	}
-	if wptForbids(text, rules) || (strings.HasSuffix(rel, ".xht") && !xhtParsesAsHTML(text)) {
-		return nil, nil, errWPTRejected
+	if why := wptForbids(text, rules); why != "" {
+		return nil, nil, rejectWPT(why)
+	}
+	if strings.HasSuffix(rel, ".xht") && !xhtParsesAsHTML(text) {
+		return nil, nil, rejectWPT("XHTML that does not parse as HTML")
 	}
 	s := scanWPT(text)
 	for _, f := range wptBadFlags {
 		if s.flags[f] {
-			return nil, nil, errWPTRejected
+			return nil, nil, rejectWPT("flag " + f)
 		}
 	}
 	base := path.Dir(rel)
@@ -484,17 +510,17 @@ func checkWPTFile(root, rel string, rules wptAreaRules) (*wptScan, []string, err
 			continue
 		}
 		if strings.HasPrefix(u, "/") || wptScheme.MatchString(u) {
-			return nil, nil, errWPTRejected
+			return nil, nil, rejectWPT("absolute or remote URL")
 		}
 		u, _, _ = strings.Cut(u, "#")
 		u, _, _ = strings.Cut(u, "?")
 		target := path.Clean(path.Join(base, u))
 		if base != "" && !strings.HasPrefix(target+"/", base+"/") {
-			return nil, nil, errWPTRejected
+			return nil, nil, rejectWPT("resource outside the test's directory")
 		}
 		tp := filepath.Join(root, filepath.FromSlash(target))
 		if info, err := os.Stat(tp); err != nil || !info.Mode().IsRegular() {
-			return nil, nil, errWPTRejected
+			return nil, nil, rejectWPT("missing resource")
 		}
 		resources[target] = true
 		if !strings.HasSuffix(target, ".css") {
@@ -504,16 +530,16 @@ func checkWPTFile(root, rel string, rules wptAreaRules) (*wptScan, []string, err
 		if err != nil {
 			return nil, nil, err
 		}
-		if wptForbids(css, rules) {
-			return nil, nil, errWPTRejected
+		if why := wptForbids(css, rules); why != "" {
+			return nil, nil, rejectWPT(why)
 		}
 		for _, cu := range cssURLs(css) {
 			if strings.HasPrefix(cu, "/") || wptScheme.MatchString(cu) {
-				return nil, nil, errWPTRejected
+				return nil, nil, rejectWPT("absolute or remote URL")
 			}
 			r, err := filepath.Rel(filepath.FromSlash("/"+base), filepath.FromSlash("/"+path.Clean(path.Join(path.Dir(target), cu))))
 			if err != nil {
-				return nil, nil, errWPTRejected
+				return nil, nil, rejectWPT("resource outside the test's directory")
 			}
 			pending = append(pending, filepath.ToSlash(r))
 		}
@@ -607,11 +633,16 @@ type wptEntry struct {
 // the test's path.
 func selectWPT(_ context.Context, checkout, _, dir string, _ map[string]string) error {
 	var tests []wptEntry
+	rejected := map[string]int{}
 	for _, top := range wptDirs {
 		err := walkWPT(checkout, top, func(rel string) error {
-			e, ok, err := wptCandidate(checkout, rel)
-			if ok {
+			e, why, err := wptCandidate(checkout, rel, wptAreas[wptArea(rel)])
+			switch {
+			case err != nil, why == wptNotReftest:
+			case why == "":
 				tests = append(tests, e)
+			default:
+				rejected[why]++
 			}
 			return err
 		})
@@ -635,6 +666,9 @@ func selectWPT(_ context.Context, checkout, _, dir string, _ map[string]string) 
 	}
 	sort.Slice(kept, func(i, j int) bool { return kept[i].ID < kept[j].ID })
 	fmt.Fprintf(os.Stderr, "wpt: %d candidates, %d kept after the per-area caps\n", len(tests), len(kept))
+	for _, r := range wptTopReasons(rejected, 5) {
+		fmt.Fprintf(os.Stderr, "wpt: %d test files rejected for %s\n", rejected[r], r)
+	}
 	paths := []string{"LICENSE.md", "fonts/Ahem.ttf"}
 	for _, t := range kept {
 		paths = append(paths, t.ID)
@@ -648,6 +682,17 @@ func selectWPT(_ context.Context, checkout, _, dir string, _ map[string]string) 
 		return err
 	}
 	return writeHashList(checkout, dir, paths)
+}
+
+// wptTopReasons returns the n reasons that rejected the most reftests, the
+// most first, ties in name order.
+func wptTopReasons(rejected map[string]int, n int) []string {
+	reasons := slices.Collect(maps.Keys(rejected))
+	sort.Slice(reasons, func(i, j int) bool {
+		a, b := reasons[i], reasons[j]
+		return rejected[a] > rejected[b] || (rejected[a] == rejected[b] && a < b)
+	})
+	return reasons[:min(n, len(reasons))]
 }
 
 // walkWPT calls fn on each test file under top: its files in name order
@@ -680,21 +725,24 @@ func walkWPT(checkout, top string, fn func(rel string) error) error {
 	return nil
 }
 
-// wptCandidate checks one test and its references.
-func wptCandidate(root, rel string) (wptEntry, bool, error) {
-	rules := wptAreas[wptArea(rel)]
+// wptCandidate checks one test and its references under rules. It returns
+// the entry, or the reason the test is kept out.
+func wptCandidate(root, rel string, rules wptAreaRules) (wptEntry, string, error) {
 	s, resources, err := checkWPTFile(root, rel, rules)
 	if err != nil {
-		return wptEntry{}, false, ignoreRejected(err)
+		return wptEntry{}, wptRejectReason(err), ignoreRejected(err)
 	}
 	if rules.required != nil {
 		text, err := readText(filepath.Join(root, filepath.FromSlash(rel)))
-		if err != nil || !rules.required.MatchString(text) {
-			return wptEntry{}, false, err
+		if err != nil {
+			return wptEntry{}, "", err
+		}
+		if !rules.required.MatchString(text) {
+			return wptEntry{}, "lacks " + strings.TrimPrefix(rules.required.String(), "(?i)"), nil
 		}
 	}
 	if len(s.match) == 0 && len(s.mismatch) == 0 {
-		return wptEntry{}, false, nil
+		return wptEntry{}, wptNotReftest, nil
 	}
 	e := wptEntry{ID: rel, Print: wptIsPrint(rel, s), Resources: resources, Pages: s.pages}
 	for _, kind := range []struct {
@@ -708,20 +756,23 @@ func wptCandidate(root, rel string) (wptEntry, bool, error) {
 			}
 			rs, rres, err := checkWPTFile(root, ref, rules)
 			if err != nil {
-				return wptEntry{}, false, ignoreRejected(err)
+				return wptEntry{}, "reference: " + wptRejectReason(err), ignoreRejected(err)
 			}
 			if len(rs.match) > 0 || len(rs.mismatch) > 0 {
-				return wptEntry{}, false, nil
+				return wptEntry{}, "chained reference", nil
 			}
 			fuzzy, ok := parseFuzzy(s.fuzzy, ref)
 			if !ok {
-				return wptEntry{}, false, nil
+				return wptEntry{}, "unparsed fuzziness", nil
 			}
 			e.Refs = append(e.Refs, wptRef{Rel: kind.rel, Path: ref, Resources: rres, Fuzzy: fuzzy})
 		}
 	}
-	return e, true, nil
+	return e, "", nil
 }
+
+// wptNotReftest is the reason given for a file that links no reference.
+const wptNotReftest = "not a reftest"
 
 func ignoreRejected(err error) error {
 	if errors.Is(err, errWPTRejected) {
