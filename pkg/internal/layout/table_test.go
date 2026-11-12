@@ -422,6 +422,37 @@ func TestTable_TallRowOverflows(t *testing.T) {
 	}
 }
 
+// TestTable_HeaderCrossingPageEnd moves a table to the next page when its
+// header group, of cells that clone their decorations as Writer's do, does
+// not fit what is left of the page, and keeps it where it starts when the
+// header group fits.
+//
+// # Corpus evidence
+//
+//   - litho/odt paper-a4-portrait: Writer starts the table on the second
+//     page, its heading row repeated there, when the heading row would
+//     reach 11 points past the end of the first page's body.
+func TestTable_HeaderCrossingPageEnd(t *testing.T) {
+	tests := []struct {
+		name     string
+		above    float64
+		wantHead float64
+	}{
+		{"fits", 10, 10},
+		{"crosses", 40, 50},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cell := mods(padding(3), border(1, css.Solid, black), func(s *css.Style) { s.BoxDecorationBreak = css.DecorationCloneAll })
+			tbl := table(nil, thead(nil, tr(nil, td(cell, "a"))), tbody(nil, tr(nil, td(cell, "b"))))
+			tm := tableOf(t, doc(el(sty(height(tt.above))), tbl), page(100, 50))
+			if got := pxOf(tm.rows[0].box.y); got != tt.wantHead {
+				t.Errorf("header row at %v, want %v", got, tt.wantHead)
+			}
+		})
+	}
+}
+
 func TestTable_BreakProperties(t *testing.T) {
 	forced := tr(nil, td(nil, "b"))
 	forced.Style.BreakBefore = css.Page

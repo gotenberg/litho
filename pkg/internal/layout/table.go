@@ -1126,6 +1126,15 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 	var foots []footCopy
 	place(0, headN)
 	headTop := td.rows[0].box.y
+	if paginate && headN > 0 && td.clonesHead() && !e.atPageTop(td.table.y) {
+		// A header group of cells that clone their decorations, which
+		// the page cuts split rather than move, and that does not fit
+		// what is left of the page moves the table to the next page, as
+		// Writer moves a table whose repeated heading does not fit.
+		if end := y - gap; end > e.pageTop(e.pageOf(headTop)+1)+eps && end-td.table.y <= e.pageH+eps {
+			return y, true
+		}
+	}
 	page := e.pageOf(y)
 	onPage := 0
 	// endPage ends the current page: a copy of the footer group at top,
@@ -1300,6 +1309,21 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 		end = last.y + rowH[nr-1]
 	}
 	return end, false
+}
+
+// clonesHead reports whether a cell of the header group of td clones its
+// decorations at every break (css.DecorationCloneAll), as Writer's cells
+// do, the table's own value deciding in the collapsing border model.
+func (td *tableData) clonesHead() bool {
+	if td.collapse {
+		return td.table.st.BoxDecorationBreak == css.DecorationCloneAll
+	}
+	for _, c := range td.cells {
+		if c.cell.row < td.headN && c.st.BoxDecorationBreak == css.DecorationCloneAll {
+			return true
+		}
+	}
+	return false
 }
 
 // avoidsSplit reports a row of td that avoids breaks inside it (CSS
