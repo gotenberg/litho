@@ -735,7 +735,9 @@ func (p *fparser) call(fn string) (fval, bool) {
 }
 
 // eachCell calls fn with the value of each cell of rg holding something,
-// row by row, until fn returns false or the read cap is reached. Once
+// row by row, until fn returns false or the read cap is reached. It
+// starts at the range's first row: a walk from the sheet's first row for
+// each range is quadratic in a column of formulas over short ranges. Once
 // ctx is done it reads nothing and records ctx's error in e.err.
 func (e *formulaEval) eachCell(rg *frange, depth int, fn func(fval) bool) {
 	if rg.sheet < 0 || rg.sheet >= len(e.grids) || e.grids[rg.sheet] == nil {
@@ -743,13 +745,8 @@ func (e *formulaEval) eachCell(rg *frange, depth int, fn func(fval) bool) {
 		return
 	}
 	g := e.grids[rg.sheet]
-	for _, r := range g.rowOrder {
-		if !e.live() {
-			return
-		}
-		if r < rg.rg.FirstRow || r > rg.rg.LastRow {
-			continue
-		}
+	for i := sort.SearchInts(g.rowOrder, rg.rg.FirstRow); i < len(g.rowOrder) && g.rowOrder[i] <= rg.rg.LastRow; i++ {
+		r := g.rowOrder[i]
 		for _, c := range g.rows[r].Cells {
 			if !e.live() {
 				return

@@ -111,3 +111,23 @@ func FuzzFormula(f *testing.F) {
 		e.evalAt(s, 0, 5, 1, 0, 0)
 	})
 }
+
+// TestFormulaRanges_StartAtTheirRow locks the cost of a formula's range: it
+// visits the rows it covers, not the sheet's rows above it, so a column of
+// short sums visits a number of rows and cells linear in its length. A
+// walk from the sheet's first row for each range took 0.22 s at 20,000
+// rows and grows with their square.
+func TestFormulaRanges_StartAtTheirRow(t *testing.T) {
+	t.Parallel()
+	const n = 20_000
+	doc := columnOfSums(n)
+	e := newFormulaEval(t.Context(), doc)
+	for r := range n {
+		if v := e.cellValue(0, r, 1, 0); v.v.Kind != Number {
+			t.Fatalf("row %d sums to %+v", r+1, v.v)
+		}
+	}
+	if e.steps > 10*n {
+		t.Errorf("the sums visited %d rows and cells, want at most %d", e.steps, 10*n)
+	}
+}
