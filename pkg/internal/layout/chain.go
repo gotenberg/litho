@@ -3,6 +3,7 @@ package layout
 import (
 	"cmp"
 	"context"
+	"log/slog"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -147,6 +148,9 @@ func layoutChain(ctx context.Context, links []linkNode, fonts *text.Fonts, opts 
 		// Content too long for the links' pages, or a page cap: the chain
 		// paints what the first pass could not; its first link lays its
 		// content out alone.
+		if opts.Logger != nil {
+			opts.Logger.Debug("layout: chain laid out in its first link", slog.Any("error", err))
+		}
 		delete(out, first)
 		return
 	}

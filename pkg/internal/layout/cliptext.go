@@ -3,6 +3,7 @@ package layout
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 
 	gofont "github.com/go-text/typesetting/font"
 	"github.com/go-text/typesetting/font/opentype"
@@ -128,6 +129,11 @@ func (p *painter) outlineFace(cf *compose.Face) *gofont.Face {
 	}
 	f, err := gofont.ParseTTF(bytes.NewReader(cf.Program))
 	if err != nil {
+		// The text stack shaped with this program, so it parses; one that
+		// does not adds no glyph to the clip, as a face without outlines.
+		if lg := p.e.opts.Logger; lg != nil {
+			lg.Debug("layout: face left out of a text clip", slog.Any("error", err))
+		}
 		f = nil
 	}
 	p.outlines[cf] = f
