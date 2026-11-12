@@ -86,8 +86,8 @@ type pendingFloat struct {
 }
 
 // collapsedThrough hands the floats of b, an empty box whose margins
-// collapse through and which no longer waits, to the box still waiting
-// around it, or lets them keep their place when none does.
+// collapse through and which has left the waiting boxes, to the box still
+// waiting around it, or lets them keep their place when none does.
 func (mc *marginState) collapsedThrough(b *box) {
 	kept := mc.floats[:0]
 	for _, f := range mc.floats {

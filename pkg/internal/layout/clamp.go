@@ -23,7 +23,7 @@ type clampState struct {
 	sized bool
 	mark  css.OverflowMark
 	// count is the lines kept so far; done reports the content after the
-	// last one discarded, marked whether that line now ends with the mark.
+	// last one discarded, marked whether that line ends with the mark.
 	count  int
 	done   bool
 	marked bool
@@ -93,7 +93,7 @@ func (e *engine) clampRestore(c *clampState) {
 	}
 }
 
-// clampDiscards reports whether the content the flow reaches now is
+// clampDiscards reports whether the content the flow has reached is
 // discarded, after the last line of a clamp container: the last line kept
 // then ends with the container's mark (CSS Overflow 4, 6.4).
 func (e *engine) clampDiscards() bool {

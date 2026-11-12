@@ -18,7 +18,7 @@ const shareCheckEvery = 1024
 // of them alike, keeps the few distinct ones.
 //
 // The caller calls it on a finished tree and writes no node's style
-// afterwards: a style can now be shared by many nodes. It writes nothing
+// afterwards, since many nodes may share one style. It writes nothing
 // else, and stops early, leaving the rest of the tree as it was, when ctx
 // is done.
 func ShareStyles(ctx context.Context, root *Node) {
