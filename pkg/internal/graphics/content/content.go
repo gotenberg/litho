@@ -46,7 +46,6 @@ type ByteRange struct {
 func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data []byte, ranges *[]ByteRange, placer *violationPlacer) ([]Operation, error) {
 	stops := o.readsAsVeraPDF()
 	ops := newOperationList(len(data))
-	operands := newOperandStore(len(data))
 	tokenCount := 0
 	var prevEnd int64
 	// images reads the data of inline images, made on the first one the
@@ -94,7 +93,7 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 					return nil, fmt.Errorf("failed to consume BI: %w", err)
 				}
 				placer.dropOperands()
-				operands.drop()
+				ops.dropOperands()
 				if images == nil {
 					images = newStreamImages(data, o)
 				}
@@ -113,11 +112,11 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 				if o.samples != nil && images.samples.End > images.samples.Start {
 					*o.samples = append(*o.samples, images.samples)
 				}
-				biOperands := []ast.PdfObject{dict}
+				ops.addOperand(dict)
 				if o.inlineData {
-					biOperands = append(biOperands, ast.PdfString(inlineImageData(data, idEnd, intconv.Clamp(p.Position()))))
+					ops.addOperand(ast.PdfString(inlineImageData(data, idEnd, intconv.Clamp(p.Position()))))
 				}
-				op := ops.add(Operation{Operator: "BI", Operands: biOperands})
+				op := ops.add("BI")
 				placer.place("BI", op.Operands)
 				// The image data is consumed off-token, and the token buffer is
 				// empty before raw bytes are read, so the reader position is
@@ -130,7 +129,7 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 			// veraPDF reads an ID no BI begins as it reads the ID of an inline
 			// image: the data after it is no operator (see [inlineImages]).
 			if tok.Value == "ID" && stops {
-				op := ops.add(Operation{Operator: tok.Value, Operands: operands.take()})
+				op := ops.add(tok.Value)
 				placer.place(tok.Value, op.Operands)
 				if _, err := p.Consume(); err != nil {
 					return nil, fmt.Errorf("failed to consume operator token: %w", err)
@@ -150,7 +149,7 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 			}
 
 			opEnd := p.PeekEnd(0) // end offset of the operator token, before consuming it
-			op := ops.add(Operation{Operator: tok.Value, Operands: operands.take()})
+			op := ops.add(tok.Value)
 			placer.place(tok.Value, op.Operands)
 			if _, err := p.Consume(); err != nil {
 				return nil, fmt.Errorf("failed to consume operator token: %w", err)
@@ -171,15 +170,14 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 				placer.take(noOperand)
 				continue
 			}
-			placer.take(operands.pending())
-			operands.add(obj)
+			placer.take(ops.pendingOperands())
+			ops.addOperand(obj)
 		}
 	}
 
 	if gaveUp(p, o) {
 		return nil, nil
 	}
-	operands.drop()
 	return ops.finish(), nil
 }
 

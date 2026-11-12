@@ -57,46 +57,19 @@ const (
 //     saves 2.7% of its objects for 4 MiB more allocated.
 const minInterningBytes = 4096
 
-// operationList collects the operations of one parse.
-type operationList struct {
-	ops []Operation
-}
-
 // reservedOperations returns the operations a stream of n bytes is expected
 // to hold ([contentBytesPerOperation]), within [maxReservedOperations].
 func reservedOperations(n int) int {
 	return min(max(n/contentBytesPerOperation, 16), maxReservedOperations)
 }
 
-// newOperationList returns a list sized for the operations a stream of n
-// bytes is expected to hold.
-func newOperationList(n int) operationList {
-	return operationList{ops: make([]Operation, 0, reservedOperations(n))}
-}
-
-// add appends op and returns where the list holds it.
-func (l *operationList) add(op Operation) *Operation {
-	l.ops = append(l.ops, op)
-	return &l.ops[len(l.ops)-1]
-}
-
-// finish returns the operations collected. A list that reserved more than a
-// quarter beyond what it holds is copied to its length, so that the
-// operations a caller keeps hold no more room than append would have left
-// them.
-func (l *operationList) finish() []Operation {
-	if slack := cap(l.ops) - len(l.ops); slack > len(l.ops)/4+16 {
-		return append(make([]Operation, 0, len(l.ops)), l.ops...)
-	}
-	return l.ops
-}
-
-// operandStore holds the operands of one parse in shared blocks, rather than
-// in one slice an operation grows by append. The operands of an operation are
-// one run of a block, and [operandStore.take] hands them over as a slice whose
-// capacity ends at its length: an append to it copies, and a write to one of
-// its elements writes that operation's operand only, as it would to a slice of
-// its own.
+// operationList collects the operations of one parse and their operands.
+//
+// The operands are stored in shared blocks rather than in one slice each
+// operation grows by append. The operands of an operation are one run of a
+// block, which the operation holds as a slice whose capacity ends at its
+// length: an append to it copies, and a write to one of its elements writes
+// that operation's operand only, as it would to a slice of its own.
 //
 // The blocks hold interfaces, never the bytes of the stream: an operand the
 // parser read is a value of its own, so the operations live as long as their
@@ -104,56 +77,88 @@ func (l *operationList) finish() []Operation {
 // operation a caller keeps keeps its block, and the other operations' operands
 // the block holds, alive; the operations of a parse are kept or dropped
 // together by every reader of them.
-type operandStore struct {
-	block []ast.PdfObject
-	// start is the index in block of the first operand of the operation being
-	// read.
-	start int
+type operationList struct {
+	ops []Operation
+	// block holds the operands of the operations from blockOps on, and those
+	// of the operation being read from start on.
+	block    []ast.PdfObject
+	start    int
+	blockOps int
 	// next is the capacity of the next block.
 	next int
 }
 
-// newOperandStore returns a store whose first block is sized for the operands
-// a stream of n bytes is expected to hold ([contentBytesPerOperand]).
-func newOperandStore(n int) operandStore {
-	return operandStore{next: min(max(n/contentBytesPerOperand, minOperandBlock), maxOperandBlock)}
+// newOperationList returns a list sized for the operations and the operands
+// a stream of n bytes is expected to hold ([contentBytesPerOperation],
+// [contentBytesPerOperand]).
+func newOperationList(n int) operationList {
+	return operationList{
+		ops:  make([]Operation, 0, reservedOperations(n)),
+		next: min(max(n/contentBytesPerOperand, minOperandBlock), maxOperandBlock),
+	}
 }
 
-// add stores obj as the next operand of the operation being read.
-func (s *operandStore) add(obj ast.PdfObject) {
-	if len(s.block) == cap(s.block) {
-		pending := s.block[s.start:]
-		size := max(s.next, 2*len(pending))
-		block := make([]ast.PdfObject, len(pending), size)
+// addOperand stores obj as the next operand of the operation being read.
+func (l *operationList) addOperand(obj ast.PdfObject) {
+	if len(l.block) == cap(l.block) {
+		pending := l.block[l.start:]
+		block := make([]ast.PdfObject, len(pending), max(l.next, 2*len(pending)))
 		copy(block, pending)
 		// The pending operands move to the new block: the old one, kept alive
 		// by the operations stored in it, does not keep them too.
 		clear(pending)
-		s.block, s.start = block, 0
-		s.next = min(2*s.next, maxOperandBlock)
+		l.block, l.start, l.blockOps = block, 0, len(l.ops)
+		l.next = min(2*l.next, maxOperandBlock)
 	}
-	s.block = append(s.block, obj)
+	l.block = append(l.block, obj)
 }
 
-// pending returns how many operands the operation being read holds so far.
-func (s *operandStore) pending() int {
-	return len(s.block) - s.start
+// pendingOperands returns how many operands the operation being read holds so
+// far.
+func (l *operationList) pendingOperands() int {
+	return len(l.block) - l.start
 }
 
-// take returns the operands of the operation being read, nil when it has none,
-// and starts the next operation.
-func (s *operandStore) take() []ast.PdfObject {
-	end := len(s.block)
-	if end == s.start {
-		return nil
+// dropOperands discards the operands of the operation being read.
+func (l *operationList) dropOperands() {
+	clear(l.block[l.start:])
+	l.block = l.block[:l.start]
+}
+
+// add appends the operation of operator over the operands read since the last
+// one, none when there are none, and returns where the list holds it.
+func (l *operationList) add(operator string) *Operation {
+	var operands []ast.PdfObject
+	if end := len(l.block); end > l.start {
+		operands = l.block[l.start:end:end]
+		l.start = end
 	}
-	operands := s.block[s.start:end:end]
-	s.start = end
-	return operands
+	l.ops = append(l.ops, Operation{Operator: operator, Operands: operands})
+	return &l.ops[len(l.ops)-1]
 }
 
-// drop discards the operands of the operation being read.
-func (s *operandStore) drop() {
-	clear(s.block[s.start:])
-	s.block = s.block[:s.start]
+// finish drops the operands no operator took and returns the operations
+// collected. Room reserved beyond a quarter of what was used is given back:
+// the operations are copied to their number, and the operands of the last
+// block to theirs, so that the operations a caller keeps hold no more room
+// than append would have left them.
+func (l *operationList) finish() []Operation {
+	l.dropOperands()
+	if used := len(l.block); cap(l.block)-used > used/4+minOperandBlock {
+		block := make([]ast.PdfObject, used)
+		copy(block, l.block)
+		// Every operation from blockOps on holds the next run of the block.
+		off := 0
+		for i := l.blockOps; i < len(l.ops); i++ {
+			if n := len(l.ops[i].Operands); n > 0 {
+				l.ops[i].Operands = block[off : off+n : off+n]
+				off += n
+			}
+		}
+		l.block = block
+	}
+	if slack := cap(l.ops) - len(l.ops); slack > len(l.ops)/4+16 {
+		return append(make([]Operation, 0, len(l.ops)), l.ops...)
+	}
+	return l.ops
 }
