@@ -551,9 +551,15 @@ func parseNumber(t token) (float64, bool) {
 	return 0, false
 }
 
+// maxInteger bounds the magnitude of an <integer>: 2^30. Anti-DoS guard,
+// not spec-mandated (CSS Values 4, 5.3 sets no range): it keeps the value
+// inside a 32-bit int, and counters, z-indexes and column counts stay far
+// below it.
+const maxInteger = 1 << 30
+
 // parseInteger parses an <integer> (CSS Values 4, 5.3).
 func parseInteger(t token) (int, bool) {
-	if t.typ == tNumber && t.integer && finite(t.num) && math.Abs(t.num) < 1<<30 {
+	if t.typ == tNumber && t.integer && finite(t.num) && math.Abs(t.num) < maxInteger {
 		return int(t.num), true
 	}
 	return 0, false

@@ -453,17 +453,29 @@ func hasWord(list, word string) bool {
 // tree, as browsers do. A false positive only sends a selector on to the
 // full match.
 type ancestorFilter struct {
-	counts [1 << 12]uint32
+	counts [1 << bloomBits]uint32
 }
 
-const bloomMask = 1<<12 - 1
+// bloomBits is the width of a slot index of [ancestorFilter]: a feature
+// hash gives two indexes, its low bloomBits bits and the next ones.
+const (
+	bloomBits = 12
+	bloomMask = 1<<bloomBits - 1
+)
+
+// fnvOffset64 and fnvPrime64 are the 64-bit FNV-1a offset basis and
+// prime.
+const (
+	fnvOffset64 = 0xcbf29ce484222325
+	fnvPrime64  = 0x100000001b3
+)
 
 // featureHash hashes a feature: kind is 't', '#' or '.'.
 func featureHash(kind byte, s string) uint64 {
-	h := uint64(14695981039346656037)
-	h = (h ^ uint64(kind)) * 1099511628211
+	h := uint64(fnvOffset64)
+	h = (h ^ uint64(kind)) * fnvPrime64
 	for i := 0; i < len(s); i++ {
-		h = (h ^ uint64(s[i])) * 1099511628211
+		h = (h ^ uint64(s[i])) * fnvPrime64
 	}
 	return h
 }
@@ -485,21 +497,21 @@ func elementFeatures(n *html.Node) []uint64 {
 func (f *ancestorFilter) push(n *html.Node) {
 	for _, h := range elementFeatures(n) {
 		f.counts[h&bloomMask]++
-		f.counts[h>>12&bloomMask]++
+		f.counts[h>>bloomBits&bloomMask]++
 	}
 }
 
 func (f *ancestorFilter) pop(n *html.Node) {
 	for _, h := range elementFeatures(n) {
 		f.counts[h&bloomMask]--
-		f.counts[h>>12&bloomMask]--
+		f.counts[h>>bloomBits&bloomMask]--
 	}
 }
 
 // admits reports whether every feature in need may be present.
 func (f *ancestorFilter) admits(need []uint64) bool {
 	for _, h := range need {
-		if f.counts[h&bloomMask] == 0 || f.counts[h>>12&bloomMask] == 0 {
+		if f.counts[h&bloomMask] == 0 || f.counts[h>>bloomBits&bloomMask] == 0 {
 			return false
 		}
 	}

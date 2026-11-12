@@ -93,7 +93,7 @@ func (t *Styles) Len() int {
 // styles apart, not every field, so it stays cheap; styles that differ
 // elsewhere alone share a hash and [equalStyles] tells them apart.
 func (t *Styles) hash(st *Style) uint64 {
-	h := uint64(0xcbf29ce484222325)
+	h := uint64(fnvOffset64)
 	dim := func(d Dimension) {
 		h = mix(h, uint64(d.Kind))
 		h = mix(h, math.Float64bits(d.Value))
@@ -136,7 +136,7 @@ func equalStyles(a, b *Style) bool {
 
 // mix folds the word u into the hash h, FNV-1a fashion a word at a time.
 func mix(h, u uint64) uint64 {
-	return (h ^ u) * 0x100000001b3
+	return (h ^ u) * fnvPrime64
 }
 
 // equalValues reports whether a and b, of one type, hold equal values:

@@ -165,6 +165,11 @@ func copyTextShadows(dst, src *Style) {
 	dst.TextShadow, dst.BoxShadow = dst.BoxShadow, saved
 }
 
+// maxFontStretch caps a font-stretch percentage: 1000%. Not
+// spec-mandated, CSS Fonts 4, 2.3 takes any non-negative percentage: a
+// larger value is rejected. Real faces span 50% to 200%.
+const maxFontStretch = 1000
+
 // parseStretch parses a font-stretch value (CSS Fonts 4, 2.3): a keyword
 // or a non-negative percentage, as a percentage, normal being 100.
 func parseStretch(t token) (float64, bool) {
@@ -173,7 +178,7 @@ func parseStretch(t token) (float64, bool) {
 		p, ok := stretchKeywords[lower(t.value)]
 		return p, ok
 	case tPercentage:
-		return t.num, finite(t.num) && t.num >= 0 && t.num <= 1000
+		return t.num, finite(t.num) && t.num >= 0 && t.num <= maxFontStretch
 	}
 	return 0, false
 }

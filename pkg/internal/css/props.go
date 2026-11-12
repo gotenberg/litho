@@ -568,7 +568,7 @@ func borderProps(side Side, name string) (style, width, colour propDef) {
 			}
 		},
 		copyFrom: field(func(s *Style) *float64 { return &s.Border[side].Width }),
-		initial:  length{pt: 3 * Pt, hasLen: true},
+		initial:  length{pt: borderWidthKeywords["medium"] * Pt, hasLen: true},
 	}
 	colour = colorProp(name+"-color", func(s *Style) *Color { return &s.Border[side].Color }, slotBorderTop<<side, colorValue{current: true})
 	return style, width, colour

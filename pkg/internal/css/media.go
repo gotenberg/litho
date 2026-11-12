@@ -194,6 +194,10 @@ func mediaRatio(l []token) (float64, bool) {
 	return 0, false
 }
 
+// mediaColorBits is the bits per colour component the color media feature
+// reports for a printed page (Media Queries 4, 6.1).
+const mediaColorBits = 8
+
 // evalFeature evaluates a <media-in-parens> holding a feature (Media
 // Queries 4, 4): width, height, aspect-ratio and orientation against the
 // page box, a handful of discrete features with the values of a static
@@ -284,7 +288,7 @@ func evalFeature(t token, m Media) (bool, bool) {
 	case "prefers-reduced-motion", "prefers-contrast", "prefers-reduced-transparency":
 		return v == "no-preference", true
 	case "color":
-		return val[0].typ == tNumber && val[0].num <= 8, true
+		return val[0].typ == tNumber && val[0].num <= mediaColorBits, true
 	case "monochrome", "grid":
 		return val[0].typ == tNumber && val[0].num == 0, true
 	}

@@ -103,20 +103,27 @@ type selectorError struct {
 	unsupported string
 }
 
-// spec packs a specificity (Selectors 4, 17): a, b and c each saturate at
-// 1023.
+// specBits is the width of each of the three components of a packed
+// specificity, and specMax the value each saturates at.
+const (
+	specBits = 10
+	specMax  = 1<<specBits - 1
+)
+
+// packSpec packs a specificity (Selectors 4, 17): a, b and c each saturate
+// at specMax.
 func packSpec(a, b, c int) uint32 {
 	sat := func(v int) uint32 {
-		if v > 1023 {
-			return 1023
+		if v > specMax {
+			return specMax
 		}
-		return uint32(v) //nolint:gosec // non-negative and at most 1023, checked above
+		return uint32(v) //nolint:gosec // non-negative and at most specMax, checked above
 	}
-	return sat(a)<<20 | sat(b)<<10 | sat(c)
+	return sat(a)<<(2*specBits) | sat(b)<<specBits | sat(c)
 }
 
 func unpackSpec(s uint32) (a, b, c int) {
-	return int(s >> 20 & 1023), int(s >> 10 & 1023), int(s & 1023) // fits int: each masked to 10 bits
+	return int(s >> (2 * specBits) & specMax), int(s >> specBits & specMax), int(s & specMax) // fits int: each masked to specBits bits
 }
 
 func addSpec(x, y uint32) uint32 {

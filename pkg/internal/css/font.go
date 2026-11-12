@@ -44,7 +44,7 @@ func keywordSize(k int8, mono bool) float64 {
 	if mono {
 		row = 1
 	}
-	return keywordSizes[row][max(1, min(k, 8))-1] * Pt
+	return keywordSizes[row][max(1, min(int(k), len(keywordSizes[row])))-1] * Pt
 }
 
 // fontSizeSpec is a specified font-size: an absolute keyword's number, a
