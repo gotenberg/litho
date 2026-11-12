@@ -239,7 +239,7 @@ type familyList struct {
 	keys []string
 }
 
-// add appends the key of name, unless it is already listed.
+// add appends key, unless it is empty or already listed.
 func (l *familyList) add(key string) {
 	if key != "" && !slices.Contains(l.keys, key) {
 		l.keys = append(l.keys, key)
