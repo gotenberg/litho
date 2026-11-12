@@ -1,6 +1,11 @@
 package typeset
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+
+	"github.com/gotenberg/litho/pkg/internal/limits"
+)
 
 // Sentinel errors [Document.Validate] and [Write] wrap. Match them with
 // [errors.Is]; the wrapping message names the page, fragment or element at
@@ -62,8 +67,10 @@ var (
 	// package's anti-DoS caps: pages, fragments per page, glyphs per run,
 	// operators per path, dash entries, shading stops, group nesting,
 	// outline entries, form fields, their options and texts, structure
-	// elements, tree depth or image pixels.
-	ErrLimitExceeded = errors.New("typeset limit exceeded")
+	// elements, tree depth or image pixels. It wraps
+	// limits.ErrInputTooLarge: the model grows with the source, and a
+	// source that takes it past a cap is too large.
+	ErrLimitExceeded = fmt.Errorf("%w: past a cap of the PDF model", limits.ErrInputTooLarge)
 	// ErrInvalidFont is returned by [Write] for a face whose program does
 	// not load, or a glyph the program does not hold.
 	ErrInvalidFont = errors.New("invalid font")
