@@ -275,9 +275,11 @@ var recalculationModes = map[string]pdf.Recalculation{
 }
 
 // ReferencePaperWidth and ReferencePaperHeight are the paper, in points,
-// the references print a document on when it names none: US Letter, the
-// paper of the LibreOffice image's locale and of the Microsoft account
-// that builds the references, where litho's own default is A4.
+// Microsoft's references print a document on when it names none: US
+// Letter, the paper of the account that builds them, where litho's own
+// default is A4. LibreOffice's references print such a document on A4
+// (the pinned image leaves LibreOffice's locale empty), so a format it
+// judges takes no default paper from here.
 const (
 	ReferencePaperWidth  = 612.0
 	ReferencePaperHeight = 792.0
@@ -369,7 +371,7 @@ type officeOptions struct {
 func (o *Office) options() officeOptions {
 	var opts officeOptions
 	opts.common = []pdf.ConvertOption{pdf.WithOutline(o.Options.NativeBookmarks == nil || *o.Options.NativeBookmarks)}
-	if !isPresentation(o.Format) {
+	if !isPresentation(o.Format) && !judgedByLibreOffice(o.Format) {
 		opts.common = append(opts.common, pdf.WithDefaultPaper(ReferencePaper))
 	}
 	if o.Options.NativePages != "" {
@@ -496,6 +498,13 @@ func (o *Office) LithoOptions() []string {
 // carry their own size.
 func isPresentation(f Format) bool {
 	return f == FormatPPTX || f == FormatODP || f == Format("ppt")
+}
+
+// judgedByLibreOffice reports whether a format's references are
+// LibreOffice's: the OpenDocument formats and CSV. Microsoft's judge the
+// others.
+func judgedByLibreOffice(f Format) bool {
+	return f == FormatODT || f == FormatODS || f == FormatCSV || f == FormatODP
 }
 
 // isSheets reports whether a format is laid out as sheets, which

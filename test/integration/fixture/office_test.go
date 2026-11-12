@@ -71,8 +71,10 @@ func TestLoadOffice_ReadsADirectoryOrADocument(t *testing.T) {
 	if o.Format != FormatODT || o.Document != filepath.Join(dir, "memo.fodt") || !o.Options.Landscape {
 		t.Errorf("source %+v", o)
 	}
-	if n := optionCount(o); n != 6 {
-		t.Errorf("%d convert options, want landscape, outline, the default paper, pages, password and paper", n)
+	// An OpenDocument text takes no default paper: LibreOffice's fallback
+	// is litho's own.
+	if n := optionCount(o); n != 5 {
+		t.Errorf("%d convert options, want landscape, outline, pages, password and paper", n)
 	}
 
 	doc := filepath.Join(t.TempDir(), "fetched.DOCX")
@@ -136,14 +138,16 @@ func TestLoadOffice_MapsEveryExtension(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 			continue
 		}
-		// A sheet takes the outline, the default paper and one page per
-		// sheet; a text document no single page; a presentation no
-		// default paper either: its slides carry their size.
+		// A workbook takes the outline, the default paper of Microsoft's
+		// references and one page per sheet; a text document no single
+		// page; a presentation no default paper either: its slides carry
+		// their size. A format LibreOffice judges takes no default paper:
+		// LibreOffice's fallback is litho's own.
 		n := 3
 		switch want {
-		case FormatDOCX, FormatODT:
+		case FormatDOCX, FormatODS, FormatCSV:
 			n = 2
-		case FormatPPTX, FormatODP:
+		case FormatODT, FormatPPTX, FormatODP:
 			n = 1
 		}
 		if o.Format != want || !o.Options.SinglePage || optionCount(o) != n {
