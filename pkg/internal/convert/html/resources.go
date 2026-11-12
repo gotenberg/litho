@@ -152,7 +152,7 @@ func (r *resources) fetch(ctx context.Context, u string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening %s: %w", rel, err)
 	}
-	defer f.Close() //nolint:errcheck // read-only file
+	defer f.Close() // read-only: a close error loses nothing
 	data, err := io.ReadAll(io.LimitReader(f, maxResourceBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", rel, err)

@@ -187,7 +187,7 @@ func (r *resources) request(ctx context.Context, u string) (fetched, error) {
 	if err != nil {
 		return fetched{}, fmt.Errorf("fetching: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck // read-only body
+	defer resp.Body.Close() // read-only: a close error loses nothing
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return fetched{}, &httpStatusError{code: resp.StatusCode}
 	}
