@@ -139,6 +139,16 @@ type Node struct {
 	// it in its parent on its line, and fills the room the line leaves
 	// with copies of the string aligned on the line's end edge.
 	Leader bool
+	// ChangeBar, set on an inline Element or a Replaced node, marks
+	// content a tracked change touches, as an Office marked view shows
+	// it: every line box that holds part of the node's subtree, an empty
+	// Element included, draws a change bar, a black hairline over the
+	// line box's height 7.05 points left of the column the line sits in.
+	// So does the line before one the node's content opens, and the line
+	// after one it ends, in the same paragraph. The lines of an inline
+	// block, a float or a positioned box draw none. The bar is an
+	// artifact.
+	ChangeBar bool
 	// Footnote, set on an inline Element, makes it a footnote call: the
 	// node is laid out in the flow, and the footnote body Footnote holds
 	// is laid out in the footnote area of the page the call lands on, or

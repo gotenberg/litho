@@ -40,6 +40,12 @@ type lineBox struct {
 	bars     []float64
 	barColor compose.Color
 	barOwner *box
+	// changed is the block container of a line that holds content a
+	// tracked change touches (Node.ChangeBar), nil for any other line;
+	// changeHead and changeTail report a line whose first or last item
+	// is such content ([changeBounds]).
+	changed                *box
+	changeHead, changeTail bool
 }
 
 // lineItem is one piece of a line: a glyph run of a text box, or an
@@ -521,6 +527,9 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 					mc.commitFloats(top)
 				}
 				l := &lineBox{x: cb.x, w: cb.w, h: strutH, baseline: s.rootV.above}
+				if emptyChanged(p, s.root) {
+					l.changed = s.root
+				}
 				s.officeLine(l)
 				top = s.position(top, l.h-l.slack, forced)
 				s.cutSlack(l, top)
@@ -614,6 +623,9 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			}
 			l.y = top
 			s.settle(l)
+			if !paraFirst {
+				changeBounds(s.lines[len(s.lines)-1], l, s.root)
+			}
 			s.lines = append(s.lines, l)
 			s.recordAnchors(l)
 			s.recordEmptyAnchors(p, pos, end, l)
@@ -951,6 +963,24 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 		l.bars = barRules(s.root, s.cb, left)
 		l.barColor, _ = colorOf(s.root.st.Color)
 		l.barOwner = s.root
+	}
+	for k := range ext {
+		// Any box on the line will do: the loop only finds whether one is
+		// changed.
+		if k.node != nil && k.node.ChangeBar {
+			l.changed = s.root
+		}
+	}
+	for i, it := range l.items {
+		marked := changeMarked(it.box, s.root)
+		if marked {
+			l.changed = s.root
+			l.changeHead = l.changeHead || i == 0
+		}
+		if it.atomic != nil || it.end-it.start > it.hang {
+			// The spaces hanging at the line's end do not end it.
+			l.changeTail = marked
+		}
 	}
 	l.frags = nil
 	present := make([]*box, 0, len(ext))
